@@ -1,9 +1,13 @@
-FRONTEND_HTML = r"""<!DOCTYPE html>
+from config import APP_VERSION, APP_META_DESCRIPTION, APP_PAGE_TITLE, THEME_COLOR_META
+
+_FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'><circle cx='50' cy='50' r='50' fill='%23ffffff'/><text x='50' y='67' font-family='Segoe UI,system-ui,sans-serif' font-size='46' font-weight='800' text-anchor='middle' letter-spacing='-2'><tspan fill='%230f172a'>My</tspan><tspan fill='%230891b2'>P</tspan></text></svg>">
-<title>MyProd by SIFA</title>
+<meta name="description" content="__META_DESCRIPTION__">
+<meta name="theme-color" content="__THEME_COLOR__">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'><circle cx='50' cy='50' r='50' fill='%23ffffff'/><text x='50' y='67' font-family='Segoe UI,system-ui,sans-serif' font-size='46' font-weight='800' text-anchor='middle' letter-spacing='-2'><tspan fill='%230f172a'>My</tspan><tspan fill='%230891b2'>S</tspan></text></svg>">
+<title>__PAGE_TITLE__</title>
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -19,6 +23,9 @@ body.light{
   --c1:#0891b2;--c2:#7c3aed;--c3:#059669;--c4:#d97706;--c5:#dc2626
 }
 body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+button:focus-visible,.nav-btn:focus-visible,.login-btn:focus-visible,.portal-logout:focus-visible,.theme-btn:focus-visible,.logout-btn:focus-visible,a:focus-visible{
+  outline:2px solid var(--accent);outline-offset:2px}
+button:focus:not(:focus-visible){outline:none}
 ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
 #saisies-scroll-top{overflow-x:auto}
 #saisies-scroll-top::-webkit-scrollbar{height:6px}
@@ -35,7 +42,8 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .field label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
 .field input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 16px;color:var(--text);font-size:14px;font-family:inherit;outline:none;transition:border-color .15s}
 .field input:focus{border-color:var(--accent)}
-.login-btn{width:100%;background:var(--accent);color:var(--bg);border:none;border-radius:10px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:8px}
+.login-btn{width:100%;background:var(--accent);color:var(--bg);border:none;border-radius:10px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:8px;transition:opacity .15s}
+.login-btn:disabled{opacity:.65;cursor:not-allowed}
 .login-error{background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.3);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--danger);margin-bottom:16px;display:none}
 .login-error.show{display:block}
 .login-footer{text-align:center;margin-top:20px;font-size:11px;color:var(--muted)}
@@ -139,7 +147,10 @@ tr.data-row:hover td{background:rgba(34,211,238,0.025)}
 .ec-detail{font-size:11px;color:var(--muted);font-family:monospace}
 .ec-meta{display:flex;gap:12px;margin-top:6px;font-size:11px;color:var(--text2)}
 .section-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin:20px 0 10px}
-.toast{position:fixed;bottom:24px;right:24px;z-index:9999;background:var(--card);border-radius:10px;padding:12px 20px;display:flex;align-items:center;gap:10px;box-shadow:0 8px 32px rgba(0,0,0,.4);animation:fadeUp .3s ease-out}
+.toast{position:fixed;bottom:max(24px,env(safe-area-inset-bottom,0px));right:max(24px,env(safe-area-inset-right,0px));left:auto;z-index:9999;max-width:min(420px,calc(100vw - 32px));background:var(--card);border-radius:10px;padding:12px 20px;display:flex;align-items:center;gap:10px;box-shadow:0 8px 32px rgba(0,0,0,.4);animation:fadeUp .3s ease-out}
+@media (max-width:480px){
+  .toast{left:16px;right:16px;bottom:max(16px,env(safe-area-inset-bottom,0px));max-width:none}
+}
 @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 input[type=text],input[type=number],input[type=email],input[type=password]{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;width:100%;outline:none;font-family:inherit}
@@ -234,6 +245,11 @@ select.form-sel{background:var(--bg);border:1px solid var(--border);border-radiu
   min-width:200px}
 .portal-app:hover{border-color:var(--accent);background:var(--accent-bg);
   transform:translateY(-4px);box-shadow:0 12px 40px rgba(34,211,238,.15)}
+.portal-app--busy{pointer-events:none;opacity:.8;position:relative;transform:none!important;box-shadow:none!important}
+.portal-app--busy::after{
+  content:'Chargement…';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  background:rgba(10,14,23,.72);border-radius:24px;font-size:13px;font-weight:700;color:var(--accent);letter-spacing:.02em}
+body.light .portal-app--busy::after{background:rgba(255,255,255,.88);color:var(--accent)}
 .portal-app-icon{font-size:48px;line-height:1}
 .portal-app-name{font-size:20px;font-weight:800;color:var(--text)}
 .portal-app-desc{font-size:12px;color:var(--muted);text-align:center}
@@ -244,6 +260,8 @@ select.form-sel{background:var(--bg);border:1px solid var(--border);border-radiu
 
 /* ── MyStock ────────────────────────────────────────────────────── */
 .stock-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px}
+@media (max-width:900px){.stock-grid{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:520px){.stock-grid{grid-template-columns:1fr}}
 .stock-cell{background:var(--card);border:1px solid var(--border);border-radius:12px;
   padding:16px;cursor:pointer;transition:all .15s}
 .stock-cell:hover{border-color:var(--accent)}
@@ -312,6 +330,7 @@ function getYesterday(){
 
 let S={
   app:'login',page:'historique',user:null,
+  loginSubmitting:false,loginError:null,portalLoading:null,
   stockView:'grille',
   stockProduits:[],stockSelProduit:null,stockSelEmpl:null,
   stockGlobale:null,stockSearch:'',stockMvtType:'entree',
@@ -362,11 +381,13 @@ async function checkAuth(){
   if(user){S.user=user;S.app='portal';await loadFilters();await loadHist();}
   render();
 }
-async function doLogin(email,password,errEl){
+async function doLogin(email,password){
+  set({loginSubmitting:true,loginError:null});
   try{
     const r=await api('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});
     if(!r)return;
     S.user=r.user;S.app='portal';
+    S.loginError=null;
     // Réinitialiser les filtres et état par connexion (évite cache entre comptes)
     S.fv={
       operateurs:[],
@@ -381,13 +402,15 @@ async function doLogin(email,password,errEl){
     S.sortState={col:null,asc:true};
     await loadFilters();
     await loadHist();
-    render();
-  }catch(e){errEl.textContent=e.message;errEl.classList.add('show');}
+  }catch(e){
+    S.loginError=e.message||'Erreur de connexion';
+  }finally{S.loginSubmitting=false;render();}
 }
 async function doLogout(){
   await api('/api/auth/logout',{method:'POST'});
   S.user=null;S.app='login';S.historique=null;S.production=null;
   S.stockGlobale=null;S.stockProduits=[];S.stockSelProduit=null;S.stockSelEmpl=null;
+  S.loginSubmitting=false;S.loginError=null;S.portalLoading=null;
   render();
 }
 
@@ -436,7 +459,20 @@ function renderPortal(){
   const apps=[];
 
   if(isProd){
-    apps.push(h('div',{className:'portal-app',onClick:async()=>{await loadHist();set({app:'prod',page:'historique'});}},
+    apps.push(h('div',{
+      className:'portal-app'+(S.portalLoading==='prod'?' portal-app--busy':''),
+      onClick:async()=>{
+        if(S.portalLoading)return;
+        set({portalLoading:'prod'});
+        try{
+          await loadHist();
+          set({app:'prod',page:'historique',portalLoading:null});
+        }catch(e){
+          set({portalLoading:null});
+          toast(e.message,'error');
+        }
+      }
+    },
       h('div',{className:'portal-app-icon'},'📊'),
       h('div',{className:'portal-app-name'},'MyProd'),
       h('div',{className:'portal-app-desc'},'Suivi de production — Historique et saisies')
@@ -444,11 +480,21 @@ function renderPortal(){
   }
 
   if(isStock){
-    apps.push(h('div',{className:'portal-app',onClick:async()=>{
-      await loadStockGlobale();
-      await loadStockProduits();
-      set({app:'stock',stockView:'grille'});
-    }},
+    apps.push(h('div',{
+      className:'portal-app'+(S.portalLoading==='stock'?' portal-app--busy':''),
+      onClick:async()=>{
+        if(S.portalLoading)return;
+        set({portalLoading:'stock'});
+        try{
+          await loadStockGlobale();
+          await loadStockProduits();
+          set({app:'stock',stockView:'grille',portalLoading:null});
+        }catch(e){
+          set({portalLoading:null});
+          toast(e.message,'error');
+        }
+      }
+    },
       h('div',{className:'portal-app-icon'},'📦'),
       h('div',{className:'portal-app-name'},'MyStock'),
       h('div',{className:'portal-app-desc'},'Gestion des stocks — Emplacements et références')
@@ -775,20 +821,32 @@ function applyF(){loadHist();loadProd();if(S.page==='saisies')loadSaisies();rend
 
 // ── Login ───────────────────────────────────────────────────────
 function renderLogin(){
-  const errEl=h('div',{className:'login-error'});
-  const emailI=h('input',{type:'email',placeholder:'votre@email.fr'});
-  const pwdI=h('input',{type:'password',placeholder:'••••••••'});
-  pwdI.addEventListener('keydown',e=>{if(e.key==='Enter')doLogin(emailI.value,pwdI.value,errEl);});
+  const errEl=h('div',{className:'login-error'+(S.loginError?' show':''),id:'login-error'},S.loginError||'');
+  const emailI=h('input',{type:'email',id:'login-email',name:'email',autocomplete:'username',placeholder:'votre@email.fr'});
+  const pwdI=h('input',{type:'password',id:'login-password',name:'password',autocomplete:'current-password',placeholder:'••••••••'});
+  const busy=S.loginSubmitting;
+  const submit=e=>{
+    e.preventDefault();
+    if(busy)return;
+    doLogin(emailI.value,pwdI.value);
+  };
   return h('div',{className:'login-page'},
     h('div',{className:'login-box'},
-      h('div',{className:'login-logo'},h('div',{className:'brand'},'My',h('span',null,'Prod')),h('div',{className:'tagline'},'by SIFA — Suivi de production')),
-      h('div',{className:'login-card'},
-        h('h2',null,'Connexion'),h('p',null,'Accès réservé au personnel SIFA'),errEl,
-        h('div',{className:'field'},h('label',null,'Adresse e-mail'),emailI),
-        h('div',{className:'field'},h('label',null,'Mot de passe'),pwdI),
-        h('button',{className:'login-btn',onClick:()=>doLogin(emailI.value,pwdI.value,errEl)},'Se connecter')
+      h('div',{className:'login-logo'},
+        h('div',{className:'brand'},'My',h('span',null,'Sifa')),
+        h('div',{className:'tagline'},'Portail interne — Production, stocks et outils métier')
       ),
-      h('div',{className:'login-footer'},'© SIFA — MyProd v0.6.1')
+      h('div',{className:'login-card'},
+        h('h2',null,'Connexion'),
+        h('p',null,'Accès réservé au personnel SIFA'),
+        errEl,
+        h('form',{onSubmit:submit},
+          h('div',{className:'field'},h('label',{'for':'login-email'},'Adresse e-mail'),emailI),
+          h('div',{className:'field'},h('label',{'for':'login-password'},'Mot de passe'),pwdI),
+          h('button',{type:'submit',className:'login-btn',disabled:!!busy},busy?'Connexion…':'Se connecter')
+        )
+      ),
+      h('div',{className:'login-footer'},'© SIFA — MySifa __V_LABEL__')
     )
   );
 }
@@ -829,7 +887,7 @@ function renderSidebar(){
       ),
       h('button',{className:'theme-btn',onClick:()=>{document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');render();}},isLight?'☀ Mode clair':'🌙 Mode sombre'),
       h('button',{className:'logout-btn',onClick:doLogout},'⎋  Déconnexion'),
-      h('div',{className:'version'},'v0.6.1')
+      h('div',{className:'version'},'__V_LABEL__')
     )
   );
 }
@@ -2249,3 +2307,10 @@ checkAuth();
 </script>
 </body>
 </html>"""
+
+FRONTEND_HTML = (
+    _FRONTEND_HTML_TEMPLATE.replace("__META_DESCRIPTION__", APP_META_DESCRIPTION)
+    .replace("__THEME_COLOR__", THEME_COLOR_META)
+    .replace("__PAGE_TITLE__", APP_PAGE_TITLE)
+    .replace("__V_LABEL__", f"v{APP_VERSION}")
+)

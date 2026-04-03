@@ -10,6 +10,7 @@ Accès : /planning  ou  /planning?machine=1
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from services.auth_service import require_admin
+from config import APP_META_DESCRIPTION, APP_PLANNING_PAGE_TITLE, APP_VERSION, THEME_COLOR_META
 
 router = APIRouter()
 
@@ -17,7 +18,14 @@ router = APIRouter()
 @router.get("/planning", response_class=HTMLResponse)
 def planning_page(request: Request, machine: int = 1):
     require_admin(request)
-    return HTMLResponse(content=PLANNING_HTML.replace("__MACHINE_ID__", str(machine)))
+    html = (
+        PLANNING_HTML.replace("__MACHINE_ID__", str(machine))
+        .replace("__PLANNING_TITLE__", APP_PLANNING_PAGE_TITLE)
+        .replace("__META_DESCRIPTION__", APP_META_DESCRIPTION)
+        .replace("__THEME_COLOR__", THEME_COLOR_META)
+        .replace("__V_LABEL__", f"v{APP_VERSION}")
+    )
+    return HTMLResponse(content=html)
 
 
 PLANNING_HTML = r"""<!DOCTYPE html>
@@ -25,8 +33,10 @@ PLANNING_HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'><circle cx='50' cy='50' r='50' fill='%23ffffff'/><text x='50' y='67' font-family='Segoe UI,system-ui,sans-serif' font-size='46' font-weight='800' text-anchor='middle' letter-spacing='-2'><tspan fill='%230f172a'>My</tspan><tspan fill='%230891b2'>P</tspan></text></svg>">
-<title>Planning — MyProd by SIFA</title>
+<meta name="description" content="__META_DESCRIPTION__">
+<meta name="theme-color" content="__THEME_COLOR__">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'><circle cx='50' cy='50' r='50' fill='%23ffffff'/><text x='50' y='67' font-family='Segoe UI,system-ui,sans-serif' font-size='46' font-weight='800' text-anchor='middle' letter-spacing='-2'><tspan fill='%230f172a'>My</tspan><tspan fill='%230891b2'>S</tspan></text></svg>">
+<title>__PLANNING_TITLE__</title>
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -326,7 +336,7 @@ function renderSidebar(){
   const isLight=document.body.classList.contains("light");
   return`<nav class="sidebar"><div class="logo"><div class="logo-brand">My<span>Prod</span></div><div class="logo-sub">by SIFA</div></div>${
     items.map(i=>`<button type="button" class="nav-btn${i.key==="_planning"?" active":""}" onclick="location.href='${i.href}'">${i.icon}  ${i.label}</button>`).join("")
-  }<div class="sidebar-bottom"><div class="user-chip" onclick="location.href='/'" title="Retour à l'accueil MyProd"><div class="uc-name">${escAttr(ME.nom||"")}</div><div class="uc-role">${roleLabel(ME.role)}</div><div style="font-size:10px;color:var(--accent);margin-top:3px">✎ Mon profil</div></div><button type="button" class="theme-btn" onclick="toggleTheme()">${isLight?"☀ Mode clair":"🌙 Mode sombre"}</button><button type="button" class="logout-btn" onclick="doLogout()">⎋  Déconnexion</button><div class="version">v0.6.1</div></div></nav>`;
+  }<div class="sidebar-bottom"><div class="user-chip" onclick="location.href='/'" title="Retour à l'accueil MySifa"><div class="uc-name">${escAttr(ME.nom||"")}</div><div class="uc-role">${roleLabel(ME.role)}</div><div style="font-size:10px;color:var(--accent);margin-top:3px">✎ Mon profil</div></div><button type="button" class="theme-btn" onclick="toggleTheme()">${isLight?"☀ Mode clair":"🌙 Mode sombre"}</button><button type="button" class="logout-btn" onclick="doLogout()">⎋  Déconnexion</button><div class="version">__V_LABEL__</div></div></nav>`;
 }
 function toggleTheme(){document.body.classList.toggle("light");localStorage.setItem("theme",document.body.classList.contains("light")?"light":"dark");render();}
 async function doLogout(){try{await fetch("/api/auth/logout",{method:"POST",credentials:"include"});}catch(e){}location.href="/";}

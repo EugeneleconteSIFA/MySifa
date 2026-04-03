@@ -16,8 +16,18 @@ os.makedirs(DATA_DIR,   exist_ok=True)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # ─── App ──────────────────────────────────────────────────────────
-APP_VERSION = "0.6.0"
-APP_TITLE   = "MyProd by SIFA"
+APP_VERSION = "0.6.1"
+# Titre API / OpenAPI
+APP_TITLE = "MySifa"
+# Onglet navigateur & SEO (injecté dans frontend/html.py)
+APP_PAGE_TITLE = "MySifa — Portail interne SIFA"
+APP_META_DESCRIPTION = (
+    "Portail interne SIFA : production, stocks, planning et outils métier."
+)
+# Couleur barre d’état mobile (thème sombre par défaut)
+THEME_COLOR_META = "#0a0e17"
+# Page planning (/planning) — titre d’onglet
+APP_PLANNING_PAGE_TITLE = "Planning — MySifa"
 HOST        = "0.0.0.0"
 PORT        = 8000
 
