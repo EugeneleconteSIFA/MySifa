@@ -53,6 +53,14 @@ def get_user_by_token(token: str) -> Optional[dict]:
 
 
 # ─── Résolution utilisateur ───────────────────────────────────────
+def get_optional_user(request: Request) -> Optional[dict]:
+    """Session valide ou None — sans lever d'exception (pour /api/auth/me)."""
+    token = request.cookies.get(COOKIE_NAME)
+    if not token:
+        return None
+    return get_user_by_token(token)
+
+
 def get_current_user(request: Request) -> dict:
     token = request.cookies.get(COOKIE_NAME)
     if not token:

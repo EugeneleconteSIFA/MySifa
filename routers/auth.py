@@ -2,11 +2,11 @@
 from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, Request, Response, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response as PlainResponse
 
 from database import get_db
 from services.auth_service import (
-    login_user, delete_session, get_current_user,
+    login_user, delete_session, get_current_user, get_optional_user,
     require_admin, hash_password
 )
 from config import COOKIE_NAME, SESSION_HOURS
@@ -52,13 +52,18 @@ def logout(request: Request, response: Response):
 # ─── Profil courant ───────────────────────────────────────────────
 @router.get("/api/auth/me")
 def me(request: Request):
-    user = get_current_user(request)
+    """200 + JSON utilisateur, ou 200 + `null` si pas de session (pas de 401 : évite le bruit console / DevTools)."""
+    user = get_optional_user(request)
+    if not user:
+        return PlainResponse(content=b"null", media_type="application/json")
     with get_db() as conn:
         row = conn.execute(
             "SELECT id,email,nom,role,operateur_lie,telephone FROM users WHERE id=?",
             (user["id"],)
         ).fetchone()
-    return dict(row) if row else {}
+    if not row:
+        return PlainResponse(content=b"null", media_type="application/json")
+    return dict(row)
 
 
 @router.put("/api/auth/me")
