@@ -383,7 +383,10 @@ function h(t,a,...c){
     if(k==='className')el.className=v;
     else if(k==='style'&&typeof v==='object')Object.assign(el.style,v);
     else if(k.startsWith('on'))el.addEventListener(k.slice(2).toLowerCase(),v);
-    else el.setAttribute(k,v);
+    else if(k==='disabled'||k==='checked'||k==='readonly'||k==='selected'){
+      if(v)el.setAttribute(k,'');
+      else el.removeAttribute(k);
+    }else el.setAttribute(k,v);
   });
   c.flat().forEach(c=>{
     if(c==null)return;
@@ -412,14 +415,22 @@ async function checkAuth(){
   render();
 }
 async function doLogin(email,password){
-  set({loginSubmitting:true,loginError:null});
+  if(S.loginSubmitting)return;
+  S.loginError=null;
+  S.loginSubmitting=true;
+  render();
   try{
     const r=await api('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});
-    if(!r)return;
+    if(!r||!r.user){
+      S.loginSubmitting=false;
+      if(r&&!r.user)S.loginError='Réponse serveur invalide';
+      render();
+      return;
+    }
     authEpoch++;
-    S.user=r.user;S.app='portal';
+    S.user=r.user;
+    S.app='portal';
     S.loginError=null;
-    // Réinitialiser les filtres et état par connexion (évite cache entre comptes)
     S.fv={
       operateurs:[],
       dossiers:[],
@@ -431,11 +442,17 @@ async function doLogin(email,password){
     S.saisies=null;
     S.selectedRows=new Set();
     S.sortState={col:null,asc:true};
+    // Déverrouiller tout de suite — avant loadFilters/loadHist (sinon bouton « Connexion… » bloqué le temps des APIs)
+    S.loginSubmitting=false;
+    render();
     await loadFilters();
     await loadHist();
+    render();
   }catch(e){
     S.loginError=e.message||'Erreur de connexion';
-  }finally{S.loginSubmitting=false;render();}
+    S.loginSubmitting=false;
+    render();
+  }
 }
 async function doLogout(){
   await stopStockBarcodeScanner();
@@ -964,10 +981,9 @@ function renderLogin(){
   const errEl=h('div',{className:'login-error'+(S.loginError?' show':''),id:'login-error'},S.loginError||'');
   const emailI=h('input',{type:'email',id:'login-email',name:'email',autocomplete:'username',placeholder:'votre@email.fr'});
   const pwdI=h('input',{type:'password',id:'login-password',name:'password',autocomplete:'current-password',placeholder:'••••••••'});
-  const busy=S.loginSubmitting;
   const submit=e=>{
     e.preventDefault();
-    if(busy)return;
+    if(S.loginSubmitting)return;
     doLogin(emailI.value,pwdI.value);
   };
   return h('div',{className:'login-page'},
@@ -983,7 +999,7 @@ function renderLogin(){
         h('form',{onSubmit:submit},
           h('div',{className:'field'},h('label',{'for':'login-email'},'Adresse e-mail'),emailI),
           h('div',{className:'field'},h('label',{'for':'login-password'},'Mot de passe'),pwdI),
-          h('button',{type:'submit',className:'login-btn',disabled:!!busy},busy?'Connexion…':'Se connecter')
+          h('button',{type:'submit',className:'login-btn',disabled:!!S.loginSubmitting},S.loginSubmitting?'Connexion…':'Se connecter')
         )
       ),
       h('div',{className:'login-footer'},'© SIFA — MySifa __V_LABEL__')
