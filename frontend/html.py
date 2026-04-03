@@ -325,10 +325,19 @@ body.light .portal-app--busy::after{background:rgba(255,255,255,.88);color:var(-
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 const API=window.location.origin;
+function isAuthMePath(p){
+  return p==='/api/auth/me'||p.startsWith('/api/auth/me?');
+}
+let authEpoch=0;
 async function api(p,o){
   try{
     const r=await fetch(API+p,{credentials:'include',...o});
-    if(r.status===401){S.user=null;S.app='login';render();return null;}
+    if(r.status===401){
+      // Ne pas forcer la déconnexion sur /me : une réponse 401 tardive (requête lancée avant la connexion)
+      // écrasait l’état après un login réussi. checkAuth() gère l’absence de session via authEpoch.
+      if(!isAuthMePath(p)){S.user=null;S.app='login';render();}
+      return null;
+    }
     if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.detail||'Erreur '+r.status);}
     const ct=r.headers.get('content-type')||'';
     if(ct.includes('spreadsheet')||ct.includes('octet-stream'))return r.blob();
@@ -395,8 +404,11 @@ const ROLE_BADGE={direction:'badge-direction',administration:'badge-administrati
 
 // ── Auth ────────────────────────────────────────────────────────
 async function checkAuth(){
+  const epoch=authEpoch;
   const user=await api('/api/auth/me');
+  if(epoch!==authEpoch)return;
   if(user){S.user=user;S.app='portal';await loadFilters();await loadHist();}
+  else{S.user=null;S.app='login';}
   render();
 }
 async function doLogin(email,password){
@@ -404,6 +416,7 @@ async function doLogin(email,password){
   try{
     const r=await api('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});
     if(!r)return;
+    authEpoch++;
     S.user=r.user;S.app='portal';
     S.loginError=null;
     // Réinitialiser les filtres et état par connexion (évite cache entre comptes)
@@ -426,6 +439,7 @@ async function doLogin(email,password){
 }
 async function doLogout(){
   await stopStockBarcodeScanner();
+  authEpoch++;
   await api('/api/auth/logout',{method:'POST'});
   S.user=null;S.app='login';S.historique=null;S.production=null;
   S.stockGlobale=null;S.stockProduits=[];S.stockSelProduit=null;S.stockSelEmpl=null;
