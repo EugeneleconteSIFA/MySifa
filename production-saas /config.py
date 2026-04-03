@@ -30,12 +30,15 @@ COOKIE_NAME   = "sifa_token"
 # direction     : accès total (même droits qu'administration pour l'instant)
 # administration: gestion complète sauf rien de plus que direction
 # fabrication   : lecture seule sur ses propres données
-ROLE_DIRECTION     = "direction"
+ROLE_DIRECTION      = "direction"
 ROLE_ADMINISTRATION = "administration"
-ROLE_FABRICATION   = "fabrication"
+ROLE_FABRICATION    = "fabrication"
+ROLE_LOGISTIQUE     = "logistique"
 
 # Rôles ayant accès aux fonctions d'administration
 ROLES_ADMIN = {ROLE_DIRECTION, ROLE_ADMINISTRATION}
+ROLES_STOCK = {ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_LOGISTIQUE}
+ROLES_PROD  = {ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_FABRICATION}
 
 # Admin par défaut
 DEFAULT_ADMIN_EMAIL = "admin@sifa.fr"

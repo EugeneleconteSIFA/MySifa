@@ -13,7 +13,7 @@ from config import COOKIE_NAME, SESSION_HOURS
 
 router = APIRouter()
 
-VALID_ROLES = {"fabrication", "administration", "direction"}
+VALID_ROLES = {"fabrication", "administration", "direction", "logistique"}
 
 
 # ─── Login ────────────────────────────────────────────────────────

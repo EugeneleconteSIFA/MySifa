@@ -315,6 +315,49 @@ def _migrate(conn):
         "CREATE INDEX IF NOT EXISTS idx_pdw_lookup ON planning_day_worked(machine_id, date)"
     )
 
+    # Tables MyStock
+    existing_tables = {row[0] for row in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+    ).fetchall()}
+
+    if "produits" not in existing_tables:
+        conn.execute("""CREATE TABLE produits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            reference TEXT UNIQUE NOT NULL,
+            designation TEXT NOT NULL,
+            description TEXT,
+            unite TEXT DEFAULT 'unité',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )""")
+
+    if "stock_emplacements" not in existing_tables:
+        conn.execute("""CREATE TABLE stock_emplacements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            produit_id INTEGER NOT NULL,
+            emplacement TEXT NOT NULL,
+            quantite REAL DEFAULT 0,
+            updated_at TEXT NOT NULL,
+            updated_by TEXT,
+            FOREIGN KEY (produit_id) REFERENCES produits(id),
+            UNIQUE(produit_id, emplacement)
+        )""")
+
+    if "mouvements_stock" not in existing_tables:
+        conn.execute("""CREATE TABLE mouvements_stock (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            produit_id INTEGER NOT NULL,
+            emplacement TEXT NOT NULL,
+            type_mouvement TEXT NOT NULL,
+            quantite REAL NOT NULL,
+            quantite_avant REAL DEFAULT 0,
+            quantite_apres REAL DEFAULT 0,
+            note TEXT,
+            created_at TEXT NOT NULL,
+            created_by TEXT,
+            FOREIGN KEY (produit_id) REFERENCES produits(id)
+        )""")
+
     try:
         conn.execute("UPDATE machines SET nom='Cohésio 1' WHERE nom='Cohésion 1'")
     except sqlite3.Error:
