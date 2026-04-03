@@ -339,7 +339,11 @@ function h(t,a,...c){
     else if(k.startsWith('on'))el.addEventListener(k.slice(2).toLowerCase(),v);
     else el.setAttribute(k,v);
   });
-  c.flat().forEach(c=>{if(c!=null)el.appendChild(typeof c==='string'?document.createTextNode(c):c);});
+  c.flat().forEach(c=>{
+    if(c==null)return;
+    const prim=typeof c==='string'||typeof c==='number'||typeof c==='boolean';
+    el.appendChild(prim?document.createTextNode(String(c)):c);
+  });
   return el;
 }
 const fN=n=>n?Number(n).toLocaleString('fr-FR'):'0';
