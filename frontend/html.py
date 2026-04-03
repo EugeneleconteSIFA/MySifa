@@ -302,10 +302,27 @@ body.light .portal-app--busy::after{background:rgba(255,255,255,.88);color:var(-
   border-color:var(--danger)}
 .mvt-btn.active-inventaire{background:rgba(167,139,250,.15);color:var(--c2);
   border-color:var(--c2)}
+.stock-search-row{display:flex;gap:10px;align-items:stretch;margin-bottom:16px;flex-wrap:wrap}
+.stock-search-row .search-bar{margin-bottom:0;flex:1;min-width:180px}
+.stock-scan-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:10000;
+  display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box}
+.stock-scan-dialog{background:var(--card);border:1px solid var(--border);border-radius:16px;
+  max-width:440px;width:100%;padding:20px;max-height:calc(100vh - 32px);overflow:auto}
+.stock-scan-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:12px}
+.stock-scan-head h3{font-size:16px;font-weight:700;margin:0}
+.stock-scan-close{background:none;border:none;color:var(--muted);cursor:pointer;font-size:22px;
+  line-height:1;padding:4px;font-family:inherit}
+.stock-scan-close:hover{color:var(--text)}
+.stock-scan-hint{font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.4}
+#stock-barcode-reader{border-radius:12px;overflow:hidden;border:1px solid var(--border);
+  min-height:220px;background:#000}
+.stock-scan-actions{margin-top:16px;display:flex;justify-content:flex-end;gap:8px}
+.stock-scan-bar{font-size:11px;color:var(--muted);margin-top:10px;text-align:center}
 </style>
 </head>
 <body>
 <div id="root"></div>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 const API=window.location.origin;
 async function api(p,o){
@@ -334,6 +351,7 @@ let S={
   stockView:'grille',
   stockProduits:[],stockSelProduit:null,stockSelEmpl:null,
   stockGlobale:null,stockSearch:'',stockMvtType:'entree',
+  stockBarcodeOpen:false,stockBarcodeMode:null,stockPendingRef:null,
   filters:{},OPS_CONFIG:{},
   fv:{operateurs:[],dossiers:[],date_from:getYesterday(),date_to:getYesterday()},
   historique:null,production:null,
@@ -407,11 +425,104 @@ async function doLogin(email,password){
   }finally{S.loginSubmitting=false;render();}
 }
 async function doLogout(){
+  await stopStockBarcodeScanner();
   await api('/api/auth/logout',{method:'POST'});
   S.user=null;S.app='login';S.historique=null;S.production=null;
   S.stockGlobale=null;S.stockProduits=[];S.stockSelProduit=null;S.stockSelEmpl=null;
   S.loginSubmitting=false;S.loginError=null;S.portalLoading=null;
+  S.stockBarcodeOpen=false;S.stockBarcodeMode=null;S.stockPendingRef=null;
   render();
+}
+
+let __stockScanBusy=false;
+async function stopStockBarcodeScanner(){
+  const h5=window.__stockH5;
+  if(!h5)return;
+  window.__stockH5=null;
+  try{await h5.stop();}catch(e){}
+  try{await h5.clear();}catch(e){}
+}
+function renderStockBarcodeModal(){
+  const title=S.stockBarcodeMode==='newRef'?'Scanner — nouvelle référence':'Scanner — recherche produit';
+  return h('div',{className:'stock-scan-backdrop',onClick:async e=>{
+    if(e.target===e.currentTarget){await stopStockBarcodeScanner();set({stockBarcodeOpen:false,stockBarcodeMode:null});}
+  }},
+    h('div',{className:'stock-scan-dialog',onClick:e=>e.stopPropagation()},
+      h('div',{className:'stock-scan-head'},
+        h('h3',null,title),
+        h('button',{type:'button',className:'stock-scan-close',title:'Fermer',
+          onClick:async()=>{await stopStockBarcodeScanner();set({stockBarcodeOpen:false,stockBarcodeMode:null});}},'×')
+      ),
+      h('p',{className:'stock-scan-hint'},'Autorisez la caméra si le navigateur le demande. Placez le code-barres ou le QR dans le cadre.'),
+      h('div',{id:'stock-barcode-reader'}),
+      h('div',{className:'stock-scan-bar'},'HTTPS requis • Caméra arrière si disponible'),
+      h('div',{className:'stock-scan-actions'},
+        h('button',{type:'button',className:'btn-ghost',
+          onClick:async()=>{await stopStockBarcodeScanner();set({stockBarcodeOpen:false,stockBarcodeMode:null});}},'Fermer')
+      )
+    )
+  );
+}
+function initStockBarcodeScanner(){
+  if(!S.stockBarcodeOpen)return;
+  if(typeof Html5Qrcode==='undefined'){
+    toast('Bibliothèque scanner non chargée — rechargez la page','error');
+    set({stockBarcodeOpen:false,stockBarcodeMode:null});
+    return;
+  }
+  stopStockBarcodeScanner().then(()=>{
+    if(!S.stockBarcodeOpen)return;
+    const box=document.getElementById('stock-barcode-reader');
+    if(!box)return;
+    const h5=new Html5Qrcode('stock-barcode-reader');
+    window.__stockH5=h5;
+    const cfg={fps:8,qrbox:{width:Math.min(300,Math.max(200,window.innerWidth-96)),height:160}};
+    h5.start({facingMode:'environment'},cfg,
+      (text)=>{applyStockBarcodeResult(text);},
+      ()=>{}
+    ).catch(err=>{
+      toast((err&&err.message)||'Caméra inaccessible (permissions ou HTTPS)','error');
+      set({stockBarcodeOpen:false,stockBarcodeMode:null});
+    });
+  });
+}
+function openStockBarcodeScanner(mode){
+  set({stockBarcodeOpen:true,stockBarcodeMode:mode||'search'});
+  requestAnimationFrame(()=>requestAnimationFrame(()=>initStockBarcodeScanner()));
+}
+async function openStockBarcodeFromGrille(){
+  try{await loadStockProduits();}catch(e){}
+  set({stockView:'produit',stockSelProduit:null,stockBarcodeOpen:true,stockBarcodeMode:'search'});
+  requestAnimationFrame(()=>requestAnimationFrame(()=>initStockBarcodeScanner()));
+}
+async function applyStockBarcodeResult(text){
+  if(__stockScanBusy)return;
+  const code=String(text||'').trim();
+  if(!code)return;
+  __stockScanBusy=true;
+  try{
+    await stopStockBarcodeScanner();
+    const mode=S.stockBarcodeMode||'search';
+    if(mode==='newRef'){
+      set({stockBarcodeOpen:false,stockBarcodeMode:null,stockPendingRef:code});
+      toast('Référence : '+code);
+      return;
+    }
+    const d=await api('/api/stock/produits?q='+encodeURIComponent(code));
+    if(!d){set({stockBarcodeOpen:false,stockBarcodeMode:null,stockSearch:code,stockProduits:[]});toast('Aucun produit trouvé','error');return;}
+    const exact=d.find(p=>p.reference&&p.reference.toUpperCase()===code.toUpperCase());
+    const only=d.length===1?d[0]:null;
+    const pick=exact||only;
+    let sel=null;
+    if(pick) sel=await api('/api/stock/produits/'+pick.id+'/emplacements');
+    set({stockBarcodeOpen:false,stockBarcodeMode:null,stockSearch:code,stockProduits:d,stockSelProduit:sel});
+    toast(pick?('Ouvert : '+pick.reference):('Code : '+code+' — '+d.length+' résultat(s)'));
+  }catch(e){
+    toast(e.message||'Erreur scan','error');
+    set({stockBarcodeOpen:false,stockBarcodeMode:null});
+  }finally{
+    __stockScanBusy=false;
+  }
 }
 
 async function loadStockProduits(q=''){
@@ -594,33 +705,44 @@ function renderStock(){
       ))
     ):null;
 
-    content=h('div',null,statBar,grid,mvtTable);
+    const scanGrille=h('div',{style:{marginBottom:'8px'}},
+      h('button',{type:'button',className:'btn-sm',onClick:()=>openStockBarcodeFromGrille()},
+        '📷 Scanner un code-barres (caméra)')
+    );
+
+    content=h('div',null,statBar,scanGrille,grid,mvtTable);
   }
 
   else if(S.stockView==='produit'){
     const produits=S.stockProduits||[];
     const sel=S.stockSelProduit;
 
-    const newRef=h('input',{type:'text',placeholder:'Référence *',style:{textTransform:'uppercase'}});
+    const newRef=h('input',{type:'text',placeholder:'Référence *',style:{textTransform:'uppercase',flex:'1',minWidth:'140px'},value:S.stockPendingRef||''});
+    newRef.addEventListener('input',()=>{S.stockPendingRef=newRef.value;});
     const newDes=h('input',{type:'text',placeholder:'Désignation *'});
     const newUnit=h('input',{type:'text',placeholder:'Unité (ex: m, rouleau, carton)',value:'unité'});
     const newForm=h('div',{className:'card',style:{padding:'16px',marginBottom:'16px'}},
       h('div',{className:'form-section-title'},'Nouveau produit'),
-      h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap'}},newRef,newDes,newUnit,
+      h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center'}},newRef,
+        h('button',{type:'button',className:'btn-sm',title:'Remplir la référence par scan',onClick:()=>openStockBarcodeScanner('newRef')},'📷'),
+        newDes,newUnit,
         h('button',{className:'btn-sm',onClick:()=>{
           if(!newRef.value||!newDes.value)return;
           createProduit({reference:newRef.value,designation:newDes.value,unite:newUnit.value||'unité'});
-          newRef.value='';newDes.value='';
+          newRef.value='';newDes.value='';S.stockPendingRef=null;
         }},'+ Créer')
       )
     );
 
     const searchI=h('input',{type:'text',className:'search-bar',
-      placeholder:'🔍 Rechercher une référence ou désignation...',value:S.stockSearch||''});
+      placeholder:'🔍 Référence, désignation ou code-barres…',value:S.stockSearch||''});
     searchI.addEventListener('input',e=>{
       S.stockSearch=e.target.value;
       loadStockProduits(e.target.value);
     });
+    const searchRow=h('div',{className:'stock-search-row'},searchI,
+      h('button',{type:'button',className:'btn-sm',title:'Lire un code-barres / QR avec la caméra',onClick:()=>openStockBarcodeScanner('search')},'📷 Scanner')
+    );
 
     const liste=h('div',{className:'card',style:{maxHeight:'500px',overflowY:'auto'}},
       produits.length===0?h('div',{className:'card-empty'},'Aucun produit'):
@@ -699,7 +821,7 @@ function renderStock(){
     }
 
     content=h('div',null,
-      newForm,searchI,
+      newForm,searchRow,
       h('div',{className:'stock-panel'},
         h('div',{className:'stock-left'},liste),
         h('div',{className:'stock-right'},detail)
@@ -745,16 +867,20 @@ function renderStock(){
     content=h('div',null,empl_list,detail);
   }
 
-  return h('div',{className:'app'},sidebar,
-    h('main',{className:'main'},h('div',{className:'container'},
-      h('h1',null,S.stockView==='grille'?'Vue globale':S.stockView==='produit'?'Par référence':'Par emplacement'),
-      h('div',{className:'subtitle'},
-        S.stockView==='grille'?'Tous les emplacements et leur contenu':
-        S.stockView==='produit'?'Rechercher une référence, voir ses emplacements et gérer les mouvements':
-        'Voir le contenu d\'un emplacement'
-      ),
-      content
-    ))
+  const scanModal=S.stockBarcodeOpen?renderStockBarcodeModal():null;
+  return h('div',null,
+    h('div',{className:'app'},sidebar,
+      h('main',{className:'main'},h('div',{className:'container'},
+        h('h1',null,S.stockView==='grille'?'Vue globale':S.stockView==='produit'?'Par référence':'Par emplacement'),
+        h('div',{className:'subtitle'},
+          S.stockView==='grille'?'Tous les emplacements et leur contenu — raccourci scan ci-dessous':
+          S.stockView==='produit'?'Recherche, scan code-barres (caméra), mouvements de stock':
+          'Voir le contenu d\'un emplacement'
+        ),
+        content
+      ))
+    ),
+    scanModal
   );
 }
 
