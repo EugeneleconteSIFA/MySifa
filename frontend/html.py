@@ -219,6 +219,71 @@ select.form-sel{background:var(--bg);border:1px solid var(--border);border-radiu
 .dos-add-row select{flex:1;background:var(--bg);border:1px solid var(--border);
   border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;
   font-family:inherit;outline:none}
+
+/* ── Portail MySifa ─────────────────────────────────────────────── */
+.portal-page{min-height:100vh;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:48px;padding:40px}
+.portal-logo{text-align:center}
+.portal-logo .brand{font-size:42px;font-weight:800;letter-spacing:-2px}
+.portal-logo .brand span{color:var(--accent)}
+.portal-logo .tagline{font-size:14px;color:var(--muted);margin-top:8px;letter-spacing:1px}
+.portal-apps{display:flex;gap:32px;flex-wrap:wrap;justify-content:center}
+.portal-app{display:flex;flex-direction:column;align-items:center;gap:16px;
+  background:var(--card);border:1px solid var(--border);border-radius:24px;
+  padding:40px 48px;cursor:pointer;transition:all .2s;text-decoration:none;
+  min-width:200px}
+.portal-app:hover{border-color:var(--accent);background:var(--accent-bg);
+  transform:translateY(-4px);box-shadow:0 12px 40px rgba(34,211,238,.15)}
+.portal-app-icon{font-size:48px;line-height:1}
+.portal-app-name{font-size:20px;font-weight:800;color:var(--text)}
+.portal-app-desc{font-size:12px;color:var(--muted);text-align:center}
+.portal-user{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px}
+.portal-logout{background:none;border:none;color:var(--muted);cursor:pointer;
+  font-size:12px;font-family:inherit;text-decoration:underline}
+.portal-logout:hover{color:var(--danger)}
+
+/* ── MyStock ────────────────────────────────────────────────────── */
+.stock-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px}
+.stock-cell{background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:16px;cursor:pointer;transition:all .15s}
+.stock-cell:hover{border-color:var(--accent)}
+.stock-cell.active{border-color:var(--accent);background:var(--accent-bg)}
+.stock-cell-label{font-size:16px;font-weight:800;font-family:monospace;
+  color:var(--accent);margin-bottom:8px}
+.stock-cell-items{font-size:11px;color:var(--muted);line-height:1.6}
+.stock-cell-empty{font-size:11px;color:var(--border);font-style:italic}
+.stock-badge{display:inline-block;background:var(--accent-bg);color:var(--accent);
+  border-radius:20px;padding:2px 8px;font-size:10px;font-weight:700;
+  font-family:monospace;margin-left:4px}
+.mvt-type-entree{color:var(--success);font-weight:700}
+.mvt-type-sortie{color:var(--danger);font-weight:700}
+.mvt-type-inventaire{color:var(--c2);font-weight:700}
+.search-bar{width:100%;background:var(--bg);border:1px solid var(--border);
+  border-radius:10px;padding:10px 16px;color:var(--text);font-size:14px;
+  font-family:inherit;outline:none;margin-bottom:16px}
+.search-bar:focus{border-color:var(--accent)}
+.stock-panel{display:flex;gap:20px;align-items:flex-start}
+.stock-left{flex:0 0 280px}
+.stock-right{flex:1}
+.produit-row{padding:10px 16px;border-bottom:1px solid var(--border);
+  cursor:pointer;display:flex;justify-content:space-between;align-items:center;
+  transition:background .12s}
+.produit-row:hover{background:var(--accent-bg)}
+.produit-row.active{background:var(--accent-bg);border-left:3px solid var(--accent)}
+.produit-ref{font-family:monospace;font-weight:700;font-size:13px;color:var(--text)}
+.produit-des{font-size:11px;color:var(--muted);margin-top:2px}
+.mouvement-form{background:var(--card);border:1px solid var(--border);
+  border-radius:12px;padding:20px;margin-bottom:16px}
+.mvt-btns{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.mvt-btn{padding:8px 16px;border-radius:8px;border:1px solid var(--border);
+  background:transparent;color:var(--text2);cursor:pointer;font-size:12px;
+  font-weight:600;font-family:inherit;transition:all .15s}
+.mvt-btn.active-entree{background:rgba(52,211,153,.15);color:var(--success);
+  border-color:var(--success)}
+.mvt-btn.active-sortie{background:rgba(248,113,113,.15);color:var(--danger);
+  border-color:var(--danger)}
+.mvt-btn.active-inventaire{background:rgba(167,139,250,.15);color:var(--c2);
+  border-color:var(--c2)}
 </style>
 </head>
 <body>
@@ -228,7 +293,7 @@ const API=window.location.origin;
 async function api(p,o){
   try{
     const r=await fetch(API+p,{credentials:'include',...o});
-    if(r.status===401){S.user=null;S.page='login';render();return null;}
+    if(r.status===401){S.user=null;S.app='login';render();return null;}
     if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.detail||'Erreur '+r.status);}
     const ct=r.headers.get('content-type')||'';
     if(ct.includes('spreadsheet')||ct.includes('octet-stream'))return r.blob();
@@ -246,7 +311,10 @@ function getYesterday(){
 }
 
 let S={
-  page:'login',user:null,
+  app:'login',page:'historique',user:null,
+  stockView:'grille',
+  stockProduits:[],stockSelProduit:null,stockSelEmpl:null,
+  stockGlobale:null,stockSearch:'',stockMvtType:'entree',
   filters:{},OPS_CONFIG:{},
   fv:{operateurs:[],dossiers:[],date_from:getYesterday(),date_to:getYesterday()},
   historique:null,production:null,
@@ -281,20 +349,20 @@ const fMin=m=>{if(!m&&m!==0)return'-';const hh=Math.floor(m/60),mm=Math.round(m%
 const isAdmin=u=>u&&(u.role==='direction'||u.role==='administration');
 const isFab=u=>u&&u.role==='fabrication';
 
-const ROLE_LABELS={direction:'👑 Direction',administration:'🔧 Administration',fabrication:'⚙ Fabrication'};
-const ROLE_BADGE={direction:'badge-direction',administration:'badge-administration',fabrication:'badge-fabrication'};
+const ROLE_LABELS={direction:'👑 Direction',administration:'🔧 Administration',fabrication:'⚙ Fabrication',logistique:'📦 Logistique'};
+const ROLE_BADGE={direction:'badge-direction',administration:'badge-administration',fabrication:'badge-fabrication',logistique:'badge-fabrication'};
 
 // ── Auth ────────────────────────────────────────────────────────
 async function checkAuth(){
   const user=await api('/api/auth/me');
-  if(user){S.user=user;S.page='historique';await loadFilters();await loadHist();}
+  if(user){S.user=user;S.app='portal';await loadFilters();await loadHist();}
   render();
 }
 async function doLogin(email,password,errEl){
   try{
     const r=await api('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});
     if(!r)return;
-    S.user=r.user;S.page='historique';
+    S.user=r.user;S.app='portal';
     // Réinitialiser les filtres et état par connexion (évite cache entre comptes)
     S.fv={
       operateurs:[],
@@ -314,7 +382,330 @@ async function doLogin(email,password,errEl){
 }
 async function doLogout(){
   await api('/api/auth/logout',{method:'POST'});
-  S.user=null;S.page='login';S.historique=null;S.production=null;render();
+  S.user=null;S.app='login';S.historique=null;S.production=null;
+  S.stockGlobale=null;S.stockProduits=[];S.stockSelProduit=null;S.stockSelEmpl=null;
+  render();
+}
+
+async function loadStockProduits(q=''){
+  const url='/api/stock/produits'+(q?'?q='+encodeURIComponent(q):'');
+  const d=await api(url);
+  if(d)set({stockProduits:d});
+}
+async function loadStockGlobale(){
+  const d=await api('/api/stock/vue-globale');
+  if(d)set({stockGlobale:d});
+}
+async function loadStockProduit(id){
+  const d=await api('/api/stock/produits/'+id+'/emplacements');
+  if(d)set({stockSelProduit:d});
+}
+async function loadStockEmplacement(empl){
+  const d=await api('/api/stock/emplacements/'+encodeURIComponent(empl));
+  if(d)set({stockSelEmpl:d});
+}
+
+async function createProduit(body){
+  try{
+    await api('/api/stock/produits',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    toast('Produit créé');await loadStockProduits();await loadStockGlobale();
+  }catch(e){toast(e.message,'error');}
+}
+
+async function doMouvement(body){
+  try{
+    const r=await api('/api/stock/mouvement',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!r)return;
+    toast('Stock mis à jour — Avant: '+r.quantite_avant+' → Après: '+r.quantite_apres);
+    await loadStockGlobale();
+    if(S.stockSelProduit) await loadStockProduit(S.stockSelProduit.produit.id);
+    if(S.stockSelEmpl) await loadStockEmplacement(S.stockSelEmpl.emplacement);
+  }catch(e){toast(e.message,'error');}
+}
+
+function renderPortal(){
+  const isStock = S.user?.role && ['direction','administration','logistique'].includes(S.user.role);
+  const isProd  = S.user?.role && ['direction','administration','fabrication'].includes(S.user.role);
+
+  const apps=[];
+
+  if(isProd){
+    apps.push(h('div',{className:'portal-app',onClick:async()=>{await loadHist();set({app:'prod',page:'historique'});}},
+      h('div',{className:'portal-app-icon'},'📊'),
+      h('div',{className:'portal-app-name'},'MyProd'),
+      h('div',{className:'portal-app-desc'},'Suivi de production — Historique et saisies')
+    ));
+  }
+
+  if(isStock){
+    apps.push(h('div',{className:'portal-app',onClick:async()=>{
+      await loadStockGlobale();
+      await loadStockProduits();
+      set({app:'stock',stockView:'grille'});
+    }},
+      h('div',{className:'portal-app-icon'},'📦'),
+      h('div',{className:'portal-app-name'},'MyStock'),
+      h('div',{className:'portal-app-desc'},'Gestion des stocks — Emplacements et références')
+    ));
+  }
+
+  return h('div',{className:'portal-page'},
+    h('div',{className:'portal-logo'},
+      h('div',{className:'brand'},'My',h('span',null,'Sifa')),
+      h('div',{className:'tagline'},'Choisissez votre application')
+    ),
+    h('div',{className:'portal-apps'},...apps),
+    h('div',{className:'portal-user'},
+      '👤 '+S.user?.nom,
+      h('button',{className:'portal-logout',onClick:doLogout},'Déconnexion')
+    )
+  );
+}
+
+function renderStock(){
+  const g=S.stockGlobale;
+
+  const sidebar=h('nav',{className:'sidebar'},
+    h('div',{className:'logo'},
+      h('div',{className:'logo-brand'},'My',h('span',null,'Stock')),
+      h('div',{className:'logo-sub'},'by SIFA')
+    ),
+    h('button',{className:'nav-btn'+(S.stockView==='grille'?' active':''),
+      onClick:async()=>{await loadStockGlobale();set({stockView:'grille',stockSelProduit:null,stockSelEmpl:null});}},
+      '🗺  Vue globale'),
+    h('button',{className:'nav-btn'+(S.stockView==='produit'?' active':''),
+      onClick:async()=>{await loadStockProduits();set({stockView:'produit',stockSelProduit:null});}},
+      '🏷  Par référence'),
+    h('button',{className:'nav-btn'+(S.stockView==='emplacement'?' active':''),
+      onClick:()=>set({stockView:'emplacement',stockSelEmpl:null})},
+      '📍  Par emplacement'),
+    h('div',{className:'sidebar-bottom'},
+      h('button',{className:'nav-btn',onClick:()=>set({app:'portal'})},
+        '← Retour MySifa'),
+      h('div',{className:'user-chip'},
+        h('div',{className:'uc-name'},S.user?.nom||''),
+        h('div',{className:'uc-role'},ROLE_LABELS[S.user?.role]||S.user?.role||'')
+      ),
+      h('button',{className:'logout-btn',onClick:doLogout},'⎋  Déconnexion'),
+      h('div',{className:'version'},'MyStock v1.0')
+    )
+  );
+
+  let content;
+
+  if(S.stockView==='grille'){
+    const grille=g?.grille||[];
+    const stats=g?.stats||{};
+    const mvts=g?.derniers_mouvements||[];
+
+    const byEmpl={};
+    ['A121','A122','A123','B121','B122','B123','C121','C122','C123'].forEach(e=>{byEmpl[e]=[];});
+    grille.forEach(r=>{if(byEmpl[r.emplacement])byEmpl[r.emplacement].push(r);});
+
+    const statBar=h('div',{className:'stats',style:{marginBottom:'20px'}},
+      h('div',{className:'stat'},h('div',{className:'stat-label'},'Références'),h('div',{className:'stat-value',style:{color:'var(--c1)'}},stats.nb_refs||0)),
+      h('div',{className:'stat'},h('div',{className:'stat-label'},'Emplacements occupés'),h('div',{className:'stat-value',style:{color:'var(--c2)'}},stats.nb_empl||0)),
+      h('div',{className:'stat'},h('div',{className:'stat-label'},'Total unités'),h('div',{className:'stat-value',style:{color:'var(--c3)'}},fN(stats.total_unites||0)))
+    );
+
+    const grid=h('div',{className:'stock-grid'},
+      ...Object.entries(byEmpl).map(([empl,items])=>
+        h('div',{className:'stock-cell',onClick:async()=>{
+          await loadStockEmplacement(empl);
+          set({stockView:'emplacement'});
+        }},
+          h('div',{className:'stock-cell-label'},empl),
+          items.length===0
+            ? h('div',{className:'stock-cell-empty'},'Vide')
+            : h('div',{className:'stock-cell-items'},
+                ...items.map(i=>h('div',null,
+                  i.reference,
+                  h('span',{className:'stock-badge'},fN(i.quantite)+' '+i.unite)
+                ))
+              )
+        )
+      )
+    );
+
+    const mvtTable=mvts.length?h('div',{className:'card'},
+      h('div',{className:'card-header'},h('h3',null,'Derniers mouvements')),
+      h('div',{style:{overflowX:'auto'}},h('table',null,
+        h('thead',null,h('tr',null,h('th',null,'Date'),h('th',null,'Réf'),h('th',null,'Emplacement'),h('th',null,'Type'),h('th',null,'Qté'),h('th',null,'Par'))),
+        h('tbody',null,...mvts.map(m=>h('tr',null,
+          h('td',{style:{fontFamily:'monospace',fontSize:'11px'}},fD(m.created_at)),
+          h('td',{style:{fontFamily:'monospace',fontWeight:'700'}},m.reference),
+          h('td',{style:{fontFamily:'monospace'}},m.emplacement),
+          h('td',null,h('span',{className:'mvt-type-'+m.type_mouvement},m.type_mouvement)),
+          h('td',{style:{fontFamily:'monospace'}},fN(m.quantite)),
+          h('td',{style:{fontSize:'11px',color:'var(--muted)'}},m.created_by||'')
+        )))
+      ))
+    ):null;
+
+    content=h('div',null,statBar,grid,mvtTable);
+  }
+
+  else if(S.stockView==='produit'){
+    const produits=S.stockProduits||[];
+    const sel=S.stockSelProduit;
+
+    const newRef=h('input',{type:'text',placeholder:'Référence *',style:{textTransform:'uppercase'}});
+    const newDes=h('input',{type:'text',placeholder:'Désignation *'});
+    const newUnit=h('input',{type:'text',placeholder:'Unité (ex: m, rouleau, carton)',value:'unité'});
+    const newForm=h('div',{className:'card',style:{padding:'16px',marginBottom:'16px'}},
+      h('div',{className:'form-section-title'},'Nouveau produit'),
+      h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap'}},newRef,newDes,newUnit,
+        h('button',{className:'btn-sm',onClick:()=>{
+          if(!newRef.value||!newDes.value)return;
+          createProduit({reference:newRef.value,designation:newDes.value,unite:newUnit.value||'unité'});
+          newRef.value='';newDes.value='';
+        }},'+ Créer')
+      )
+    );
+
+    const searchI=h('input',{type:'text',className:'search-bar',
+      placeholder:'🔍 Rechercher une référence ou désignation...',value:S.stockSearch||''});
+    searchI.addEventListener('input',e=>{
+      S.stockSearch=e.target.value;
+      loadStockProduits(e.target.value);
+    });
+
+    const liste=h('div',{className:'card',style:{maxHeight:'500px',overflowY:'auto'}},
+      produits.length===0?h('div',{className:'card-empty'},'Aucun produit'):
+      h('div',null,...produits.map(p=>h('div',{
+        className:'produit-row'+(sel?.produit?.id===p.id?' active':''),
+        onClick:async()=>await loadStockProduit(p.id)
+      },
+        h('div',null,
+          h('div',{className:'produit-ref'},p.reference),
+          h('div',{className:'produit-des'},p.designation)
+        ),
+        h('span',{className:'stock-badge'},fN(p.stock_total)+' '+p.unite)
+      )))
+    );
+
+    let detail=h('div',{className:'card-empty',style:{padding:'40px'}},'← Sélectionnez un produit');
+    if(sel){
+      const p=sel.produit;
+      const empls=sel.emplacements||[];
+
+      const empl_sel=h('select',{className:'form-sel'},
+        h('option',{value:''},'— Emplacement —'),
+        ...['A121','A122','A123','B121','B122','B123','C121','C122','C123'].map(e=>h('option',{value:e},e))
+      );
+      const qte_inp=h('input',{type:'number',placeholder:'Quantité',min:'0',style:{width:'120px'}});
+      const note_inp=h('input',{type:'text',placeholder:'Note (optionnel)',style:{flex:1}});
+
+      const mvtBtns=h('div',{className:'mvt-btns'},
+        ...[['entree','Entrée ↓'],['sortie','Sortie ↑'],['inventaire','Inventaire =']].map(([t,l])=>{
+          const btn=h('button',{className:'mvt-btn'+(S.stockMvtType===t?' active-'+t:'')},l);
+          btn.addEventListener('click',()=>{S.stockMvtType=t;render();});
+          return btn;
+        })
+      );
+
+      const sendBtn=h('button',{className:'btn-sm',onClick:()=>{
+        if(!empl_sel.value||!qte_inp.value)return;
+        doMouvement({produit_id:p.id,emplacement:empl_sel.value,
+          type_mouvement:S.stockMvtType,quantite:parseFloat(qte_inp.value),
+          note:note_inp.value});
+        qte_inp.value='';note_inp.value='';
+      }},'✓ Valider');
+
+      const mvtForm=h('div',{className:'mouvement-form'},
+        h('div',{className:'form-section-title'},'Mouvement de stock'),
+        mvtBtns,
+        h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center'}},
+          empl_sel,qte_inp,note_inp,sendBtn)
+      );
+
+      const emplTable=empls.length?h('div',{className:'card'},
+        h('div',{className:'card-header'},
+          h('h3',null,'Localisations'),
+          h('span',{className:'stock-badge'},fN(sel.stock_total)+' '+p.unite+' total')
+        ),
+        h('table',null,
+          h('thead',null,h('tr',null,h('th',null,'Emplacement'),h('th',null,'Quantité'),h('th',null,'Mis à jour'),h('th',null,'Par'))),
+          h('tbody',null,...empls.map(e=>h('tr',null,
+            h('td',{style:{fontFamily:'monospace',fontWeight:'700',color:'var(--accent)'}},e.emplacement),
+            h('td',{style:{fontFamily:'monospace',fontWeight:'700'}},fN(e.quantite)+' '+p.unite),
+            h('td',{style:{fontSize:'11px',color:'var(--muted)'}},fD(e.updated_at)),
+            h('td',{style:{fontSize:'11px',color:'var(--muted)'}},e.updated_by||'')
+          )))
+        )
+      ):h('div',{className:'card-empty'},'Aucun stock pour ce produit');
+
+      detail=h('div',null,
+        h('div',{className:'card',style:{padding:'16px',marginBottom:'12px'}},
+          h('h3',{style:{fontSize:'16px',fontWeight:'800',marginBottom:'4px'}},p.reference),
+          h('p',{style:{fontSize:'13px',color:'var(--muted)'}},p.designation),
+          h('p',{style:{fontSize:'11px',color:'var(--muted)',marginTop:'4px'}},'Unité : '+p.unite)
+        ),
+        mvtForm,
+        emplTable
+      );
+    }
+
+    content=h('div',null,
+      newForm,searchI,
+      h('div',{className:'stock-panel'},
+        h('div',{className:'stock-left'},liste),
+        h('div',{className:'stock-right'},detail)
+      )
+    );
+  }
+
+  else if(S.stockView==='emplacement'){
+    const EMPLS=['A121','A122','A123','B121','B122','B123','C121','C122','C123'];
+    const sel=S.stockSelEmpl;
+
+    const empl_list=h('div',{className:'card',style:{marginBottom:'16px'}},
+      h('div',{className:'card-header'},h('h3',null,'Sélectionner un emplacement')),
+      h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',padding:'16px'}},
+        ...EMPLS.map(e=>h('button',{
+          className:'mvt-btn'+(sel?.emplacement===e?' active-entree':''),
+          onClick:async()=>await loadStockEmplacement(e)
+        },e))
+      )
+    );
+
+    let detail=h('div',{className:'card-empty',style:{padding:'40px'}},'← Sélectionnez un emplacement');
+    if(sel&&sel.produits!==undefined){
+      const produits=sel.produits||[];
+      detail=h('div',{className:'card'},
+        h('div',{className:'card-header'},
+          h('h3',null,'Emplacement '+sel.emplacement),
+          h('span',{className:'stock-badge'},produits.length+' référence'+(produits.length>1?'s':''))
+        ),
+        produits.length===0?h('div',{className:'card-empty'},'Emplacement vide'):
+        h('table',null,
+          h('thead',null,h('tr',null,h('th',null,'Référence'),h('th',null,'Désignation'),h('th',null,'Quantité'),h('th',null,'Mis à jour'))),
+          h('tbody',null,...produits.map(p=>h('tr',null,
+            h('td',{style:{fontFamily:'monospace',fontWeight:'700',color:'var(--accent)'}},p.reference),
+            h('td',null,p.designation),
+            h('td',{style:{fontFamily:'monospace',fontWeight:'700'}},fN(p.quantite)+' '+p.unite),
+            h('td',{style:{fontSize:'11px',color:'var(--muted)'}},fD(p.updated_at))
+          )))
+        )
+      );
+    }
+
+    content=h('div',null,empl_list,detail);
+  }
+
+  return h('div',{className:'app'},sidebar,
+    h('main',{className:'main'},h('div',{className:'container'},
+      h('h1',null,S.stockView==='grille'?'Vue globale':S.stockView==='produit'?'Par référence':'Par emplacement'),
+      h('div',{className:'subtitle'},
+        S.stockView==='grille'?'Tous les emplacements et leur contenu':
+        S.stockView==='produit'?'Rechercher une référence, voir ses emplacements et gérer les mouvements':
+        'Voir le contenu d\'un emplacement'
+      ),
+      content
+    ))
+  );
 }
 
 // ── Loaders ─────────────────────────────────────────────────────
@@ -416,6 +807,7 @@ function renderSidebar(){
   const isLight=document.body.classList.contains('light');
   return h('nav',{className:'sidebar'},
     h('div',{className:'logo'},h('div',{className:'logo-brand'},'My',h('span',null,'Prod')),h('div',{className:'logo-sub'},'by SIFA')),
+    h('button',{className:'nav-btn',onClick:()=>set({app:'portal'})},'← MySifa'),
     ...items.map(i=>h('button',{className:'nav-btn'+(S.page===i.key?' active':''),onClick:()=>{
       if(i.key==='_planning'){window.location.href='/planning';return;}
       set({page:i.key});nav();
@@ -1375,7 +1767,7 @@ function renderUsers(){
   const inputs={};
   const ops=S.filters.operators||[];
   const opSel=h('select',{className:'form-sel'},h('option',{value:''},'— Lier un opérateur (optionnel) —'),...ops.map(o=>h('option',{value:o},opName(o))));inputs.operateur_lie=opSel;
-  const roleSel=h('select',{className:'form-sel'},h('option',{value:'fabrication'},'⚙ Fabrication'),h('option',{value:'administration'},'🔧 Administration'),h('option',{value:'direction'},'👑 Direction'));inputs.role=roleSel;
+  const roleSel=h('select',{className:'form-sel'},h('option',{value:'fabrication'},'⚙ Fabrication'),h('option',{value:'administration'},'🔧 Administration'),h('option',{value:'direction'},'👑 Direction'),h('option',{value:'logistique'},'📦 Logistique'));inputs.role=roleSel;
   const form=h('div',{className:'card',style:{padding:'20px'}},h('h3',{style:{fontSize:'14px',fontWeight:'600',marginBottom:'16px'}},'Créer un compte'),
     h('div',{className:'form-grid'},...[['nom','Nom complet *','text'],['email','Email *','email'],['password','Mot de passe * (min. 8 car.)','password']].map(([k,l,t])=>{const i=h('input',{placeholder:l,type:t});inputs[k]=i;return i;}),roleSel,opSel),
     h('p',{style:{fontSize:'12px',color:'var(--muted)',marginTop:'10px'}},'💡 Fabrication = lecture seule. Sans opérateur lié → accès bloqué.'),
@@ -1455,6 +1847,7 @@ function renderProfil(userData, isAdminView=false, onSave=null){
       h('option',{value:'fabrication'},'⚙ Fabrication'),
       h('option',{value:'administration'},'🔧 Administration'),
       h('option',{value:'direction'},'👑 Direction'),
+      h('option',{value:'logistique'},'📦 Logistique'),
     );
     roleSel.value=userData?.role||'fabrication';
     inputs.role=roleSel;
@@ -1810,10 +2203,13 @@ function renderRentabilite(){
 // ── Render ──────────────────────────────────────────────────────
 function render(){
   const root=document.getElementById('root');root.innerHTML='';
-  if(!S.user||S.page==='login'){root.appendChild(renderLogin());}
-  else{
-    const titles={historique:'Historique & Erreurs',production:'Production',saisies:'Saisies',import:'Import XLSX',rentabilite:'Rentabilité',dossiers:'Dossiers',users:'Utilisateurs',profil:'Mon profil'};
-    const subs={historique:'Sanity Score, incidents et erreurs de saisie',production:'KPIs, temps et quantités',saisies:'Consulter et corriger les saisies',import:'Importer, exporter et supprimer',rentabilite:'Comparaison devis / production réelle',dossiers:'Suivi des dossiers',users:'Gestion des comptes et accès',profil:'Informations personnelles et mot de passe'};
+
+  if(!S.user||S.app==='login'){root.appendChild(renderLogin());}
+  else if(S.app==='portal'){root.appendChild(renderPortal());}
+  else if(S.app==='stock'){root.appendChild(renderStock());}
+  else if(S.app==='prod'){
+    const titles={historique:'Historique & Erreurs',production:'Production',saisies:'Saisies',import:'Import XLSX',dossiers:'Dossiers',users:'Utilisateurs',rentabilite:'Rentabilité',profil:'Mon profil'};
+    const subs={historique:'Sanity Score, incidents et erreurs de saisie',production:'KPIs, temps et quantités',saisies:'Consulter et corriger les saisies',import:'Importer, exporter et supprimer',dossiers:'Suivi des dossiers',users:'Gestion des comptes et accès',rentabilite:'Comparaison devis / production réelle',profil:'Informations personnelles et mot de passe'};
     root.appendChild(h('div',{className:'app'},renderSidebar(),
       h('main',{className:'main'},h('div',{className:'container'},
         h('h1',null,titles[S.page]||''),h('div',{className:'subtitle'},subs[S.page]||''),
@@ -1822,13 +2218,14 @@ function render(){
         S.page==='production'?renderProd():null,
         S.page==='saisies'?renderSaisies():null,
         S.page==='import'?renderImport():null,
-        S.page==='rentabilite'?renderRentabilite():null,
         S.page==='dossiers'?renderDos():null,
         S.page==='users'?renderUsers():null,
-        S.page==='profil'?renderProfil(S.user, false):null,
+        S.page==='rentabilite'?renderRentabilite():null,
+        S.page==='profil'?renderProfil(S.user,false):null,
       ))
     ));
   }
+
   if(S.toast){const c={success:'var(--success)',error:'var(--danger)'};root.appendChild(h('div',{className:'toast',style:{borderLeft:'3px solid '+(c[S.toast.type]||'var(--accent)')}},h('span',{style:{fontSize:'14px',color:c[S.toast.type]||'var(--accent)'}},S.toast.message)));}
 }
 

@@ -18,6 +18,7 @@ from routers.dossiers   import router as router_dossiers
 from routers.saisies    import router as router_saisies
 from routers.rentabilite import router as router_rentabilite
 from routers.planning import router as planning_router
+from routers.stock import router as router_stock
 from frontend.planning_page import router as planning_page_router
 
 app = FastAPI(title=APP_TITLE, version=APP_VERSION)
@@ -40,6 +41,7 @@ app.include_router(router_dossiers)
 app.include_router(router_saisies)
 app.include_router(router_rentabilite)
 app.include_router(planning_router)
+app.include_router(router_stock)
 app.include_router(planning_page_router)
 
 @app.get("/", response_class=HTMLResponse)
