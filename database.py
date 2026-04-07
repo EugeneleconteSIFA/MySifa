@@ -202,6 +202,16 @@ def _migrate(conn):
         )""")
         conn.execute("INSERT OR IGNORE INTO machines (nom, code) VALUES ('Cohésio 1', 'C1')")
 
+    # Machines par défaut (compat planning multi-machines)
+    # Ne force pas les IDs : s'appuie sur nom/code uniques.
+    for nom, code in [
+        ("Cohésio 1", "C1"),
+        ("Cohésio 2", "C2"),
+        ("DSI", "DSI"),
+        ("Repiquage", "REP"),
+    ]:
+        conn.execute("INSERT OR IGNORE INTO machines (nom, code) VALUES (?, ?)", (nom, code))
+
     if "planning_entries" not in existing_tables:
         conn.execute("""CREATE TABLE planning_entries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

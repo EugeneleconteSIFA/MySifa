@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from config import APP_TITLE, APP_VERSION, HOST, PORT
-from frontend.html import FRONTEND_HTML
+from frontend.html import render_frontend_html
 
 from routers.auth       import router as auth_router
 from routers.imports    import router as router_imports
@@ -22,6 +22,8 @@ from routers.planning import router as planning_router
 from routers.stock import router as router_stock
 from routers.chat import router as chat_router
 from frontend.planning_page import router as planning_page_router
+from frontend.prod_page import router as prod_page_router
+from frontend.stock_page import router as stock_page_router
 
 app = FastAPI(title=APP_TITLE, version=APP_VERSION)
 
@@ -49,10 +51,12 @@ app.include_router(planning_router)
 app.include_router(router_stock)
 app.include_router(chat_router)
 app.include_router(planning_page_router)
+app.include_router(prod_page_router)
+app.include_router(stock_page_router)
 
 @app.get("/", response_class=HTMLResponse)
 def serve_frontend():
-    return FRONTEND_HTML
+    return render_frontend_html("portal")
 
 if __name__ == "__main__":
     import uvicorn

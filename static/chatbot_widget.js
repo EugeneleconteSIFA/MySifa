@@ -7,6 +7,13 @@
 (function () {
   "use strict";
 
+  function shouldHideHere() {
+    const app = window.__MYSIFA_APP__;
+    if (app === "portal" || app === "login") return true;
+    if (!app && window.location && window.location.pathname === "/") return true;
+    return false;
+  }
+
   const css = `
     :root {
       --chat-accent:    #f59e0b;
@@ -369,6 +376,7 @@
   }
 
   function init() {
+    if (shouldHideHere()) return;
     const style = document.createElement("style");
     style.textContent = css;
     document.head.appendChild(style);
@@ -519,10 +527,20 @@
     }
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
-  } else {
+  function boot() {
+    // Attendre que l'app (SPA) publie son état
+    if (window.__MYSIFA_APP__ == null) {
+      setTimeout(boot, 150);
+      return;
+    }
+    if (shouldHideHere()) return;
     init();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot);
+  } else {
+    boot();
   }
 })();
 

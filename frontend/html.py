@@ -11,14 +11,7 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="MySifa">
 <meta name="theme-color" content="#0a0e17">
-<meta name="theme-color" content="__THEME_COLOR__">
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'><rect width='100' height='100' rx='22' fill='%230a0e17'/><text x='50' y='67' font-family='Segoe UI,system-ui,sans-serif' font-size='38' font-weight='800' text-anchor='middle' letter-spacing='-1.5'><tspan fill='%23f1f5f9'>My</tspan><tspan fill='%2322d3ee'>S</tspan></text></svg>">
-
-<link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAAC0CAYAAAAi5cpMAAAACXBIWXMAAAsTAAALEwEAmpwYAAAF8mlUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPD94cGFja2V0IGJlZ2luPSLvu78iIGlkPSJXNU0wTXBDZWhpSHpyZVN6TlRjemtjOWQiPz4gPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iQWRvYmUgWE1QIENvcmUgOS4xLWMwMDEgNzkuYThkNGU1MSwgMjAyMy8xMC8yNi0xNzoyNjowMCAgICAgICAgIj4gPHJkZjpSREYgeG1sbnM6cmRmPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5LzAyLzIyLXJkZi1zeW50YXgtbnMjIj4gPHJkZjpEZXNjcmlwdGlvbiByZGY6YWJvdXQ9IiIgeG1sbnM6eG1wPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvIiB4bWxuczp4bXBNTT0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL21tLyIgeG1sbnM6c3RSZWY9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9zVHlwZS9SZXNvdXJjZVJlZiMiIHhtcDpDcmVhdG9yVG9vbD0iQWRvYmUgUGhvdG9zaG9wIDI1LjIgKE1hY2ludG9zaCkiIHhtcE1NOkluc3RhbmNlSUQ9InhtcC5paWQ6OEM5OEQ0NkI4NkQwMTFFRUJFMkNBRDM4NTdFMzg1M0IiIHhtcE1NOkRvY3VtZW50SUQ9InhtcC5kaWQ6OEM5OEQ0NkM4NkQwMTFFRUJFMkNBRDM4NTdFMzg1M0IiPiA8eG1wTU06RGVyaXZlZEZyb20gc3RSZWY6aW5zdGFuY2VJRD0ieG1wLmlpZDo4Qzk4RDQ2OTg2RDAxMUVFQkUyQ0FEMzg1N0UzODUzQiIgc3RSZWY6ZG9jdW1lbnRJRD0ieG1wLmRpZDo4Qzk4RDQ2QTg2RDAxMUVFQkUyQ0FEMzg1N0UzODUzQiIvPiA8L3JkZjpEZXNjcmlwdGlvbj4gPC9yZGY6UkRGPiA8L3g6eG1wbWV0YT4gPD94cGFja2V0IGVuZD0iciI/Pjj0GykAAAXpSURBVHja7Z1byFVVFMf3nNTSyjQzLTPNMkvLyjIzLUvLi5llWqZlZZqWpWVaWpZpWZaWaWlapmVpWaaWaZmWpWVampaZlqVpWZqWpWVaWqZlaZmaZWqZlmVqmZZpWqZlaZqWZWqalmVqmpZlaZqWZWqalqVpmpalaVqWpWlaWqZlWZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpalaVqWpWlaWqZlWZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZGkZCDAAPyfrkMAAAAASUVORK5CYII=">
-
-<meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="MySifa">
 <meta name="mobile-web-app-capable" content="yes">
 <title>__PAGE_TITLE__</title>
 <style>
@@ -65,19 +58,23 @@ button:focus:not(:focus-visible){outline:none}
 .sidebar::-webkit-scrollbar{width:0}
 .sidebar{scrollbar-width:none}
 .mobile-topbar{display:none;align-items:center;gap:10px;margin-bottom:14px}
-.mobile-menu-btn{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;
+.mobile-menu-btn{display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;
   border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;font-family:inherit}
 .mobile-menu-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 .mobile-topbar-title{font-size:14px;font-weight:800}
 .mobile-topbar-sub{font-size:11px;color:var(--muted);margin-top:2px}
 .sidebar-overlay{display:none}
+.back-mysifa{border:1px solid rgba(34,211,238,.55)!important;background:rgba(34,211,238,.10)!important;color:var(--accent)!important;font-weight:800!important}
+.back-mysifa:hover{filter:brightness(1.08)}
 @media (max-width: 900px){
   .sidebar{position:fixed;left:0;top:0;bottom:0;z-index:9000;transform:translateX(-105%);transition:transform .18s ease;box-shadow:0 16px 48px rgba(0,0,0,.55)}
   body.sb-open .sidebar{transform:translateX(0)}
   .main{padding:18px}
-  .mobile-topbar{display:flex}
+  .mobile-topbar{display:flex;position:fixed;top:0;left:0;right:0;z-index:120;background:var(--bg);padding:10px 18px;border-bottom:1px solid var(--border)}
+  .mobile-menu-btn{display:inline-flex}
   .sidebar-overlay{display:block;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:8999}
   body:not(.sb-open) .sidebar-overlay{display:none}
+  body.has-topbar .main{padding-top:74px}
 }
 .logo{padding:0 8px;margin-bottom:32px}
 .logo-brand{font-size:15px;font-weight:800}.logo-brand span{color:var(--accent)}
@@ -333,11 +330,16 @@ body.light .portal-app--busy::after{background:rgba(255,255,255,.88);color:var(-
 .stock-search-row{display:flex;gap:10px;align-items:stretch;margin-bottom:16px;flex-wrap:wrap}
 .stock-search-row .search-bar{margin-bottom:0;flex:1;min-width:180px}
 .stock-search-bar{
-  position:sticky;top:0;z-index:50;
+  position:sticky;top:0;z-index:80;
+  width:100%;
   background:var(--card);
   border-bottom:1px solid var(--border);
   padding:10px 20px;
   display:flex;align-items:center;gap:10px;
+}
+@media (max-width: 900px){
+  /* La topbar mobile est fixe : on colle la search juste dessous */
+  .stock-search-bar{top:74px;z-index:110}
 }
 .stock-search-input{
   flex:1;background:var(--bg);
@@ -411,6 +413,8 @@ body.light .portal-app--busy::after{background:rgba(255,255,255,.88);color:var(-
 <div id="root"></div>
 <script>
 const API=window.location.origin;
+const INITIAL_APP="__INITIAL_APP_VALUE__";
+const HAS_INITIAL_APP = !!(INITIAL_APP && INITIAL_APP !== "__INITIAL_APP__");
 function isAuthMePath(p){
   return p==='/api/auth/me'||p.startsWith('/api/auth/me?');
 }
@@ -441,7 +445,8 @@ function getYesterday(){
 }
 
 let S={
-  app:'login',page:'historique',user:null,
+  app: HAS_INITIAL_APP ? INITIAL_APP : 'login',
+  page:'historique',user:null,
   loginSubmitting:false,loginError:null,portalLoading:null,
   sidebarOpen:false,
   stockView:'grille',
@@ -499,7 +504,24 @@ async function checkAuth(){
   const epoch=authEpoch;
   const user=await api('/api/auth/me');
   if(epoch!==authEpoch)return;
-  if(user){S.user=user;S.app='portal';await loadFilters();await loadHist();}
+  if(user){
+    S.user=user;
+    S.app=HAS_INITIAL_APP ? INITIAL_APP : 'portal';
+    // Permet d'ouvrir directement une section depuis /planning → /prod?page=users
+    try{
+      const sp=new URLSearchParams(window.location.search||'');
+      const p=(sp.get('page')||'').trim();
+      const allowed=new Set(['historique','production','saisies','import','rentabilite','dossiers','users','profil']);
+      if(S.app==='prod' && allowed.has(p)) S.page=p;
+    }catch(e){}
+    if(S.app==='prod'){
+      await loadFilters();
+      await loadHist();
+    }else if(S.app==='stock'){
+      await loadStockGlobale();
+      await loadStockProduits();
+    }
+  }
   else{S.user=null;S.app='login';}
   render();
 }
@@ -518,7 +540,14 @@ async function doLogin(email,password){
     }
     authEpoch++;
     S.user=r.user;
-    S.app='portal';
+    S.app=HAS_INITIAL_APP ? INITIAL_APP : 'portal';
+    // Support /prod?page=xxx après login
+    try{
+      const sp=new URLSearchParams(window.location.search||'');
+      const p=(sp.get('page')||'').trim();
+      const allowed=new Set(['historique','production','saisies','import','rentabilite','dossiers','users','profil']);
+      if(S.app==='prod' && allowed.has(p)) S.page=p;
+    }catch(e){}
     S.loginError=null;
     S.fv={
       operateurs:[],
@@ -534,8 +563,13 @@ async function doLogin(email,password){
     // Déverrouiller tout de suite — avant loadFilters/loadHist (sinon bouton « Connexion… » bloqué le temps des APIs)
     S.loginSubmitting=false;
     render();
-    await loadFilters();
-    await loadHist();
+    if(S.app==='prod'){
+      await loadFilters();
+      await loadHist();
+    }else if(S.app==='stock'){
+      await loadStockGlobale();
+      await loadStockProduits();
+    }
     render();
   }catch(e){
     S.loginError=e.message||'Erreur de connexion';
@@ -793,6 +827,7 @@ function renderStockSearchBar() {
 
   const input = document.createElement('input');
   input.type = 'text';
+  input.id = 'stock-search-input';
   input.className = 'stock-search-input';
   input.placeholder = '🔍  Emplacement (A121) ou référence…';
   input.value = stockSearchState.query || S.stockSearch || '';
@@ -866,6 +901,7 @@ function initStockSearchBar() {
 function renderPortal(){
   const isStock = S.user?.role && ['direction','administration','logistique'].includes(S.user.role);
   const isProd  = S.user?.role && ['direction','administration','fabrication'].includes(S.user.role);
+  const isLight=document.body.classList.contains('light');
 
   const apps=[];
 
@@ -873,15 +909,7 @@ function renderPortal(){
     apps.push(h('div',{
       className:'portal-app'+(S.portalLoading==='prod'?' portal-app--busy':''),
       onClick:async()=>{
-        if(S.portalLoading)return;
-        set({portalLoading:'prod'});
-        try{
-          await loadHist();
-          set({app:'prod',page:'historique',portalLoading:null});
-        }catch(e){
-          set({portalLoading:null});
-          toast(e.message,'error');
-        }
+        window.location.href='/prod';
       }
     },
       h('div',{className:'portal-app-icon'},'📊'),
@@ -894,16 +922,7 @@ function renderPortal(){
     apps.push(h('div',{
       className:'portal-app'+(S.portalLoading==='stock'?' portal-app--busy':''),
       onClick:async()=>{
-        if(S.portalLoading)return;
-        set({portalLoading:'stock'});
-        try{
-          await loadStockGlobale();
-          await loadStockProduits();
-          set({app:'stock',stockView:'grille',portalLoading:null});
-        }catch(e){
-          set({portalLoading:null});
-          toast(e.message,'error');
-        }
+        window.location.href='/stock';
       }
     },
       h('div',{className:'portal-app-icon'},'📦'),
@@ -920,6 +939,7 @@ function renderPortal(){
     h('div',{className:'portal-apps'},...apps),
     h('div',{className:'portal-user'},
       '👤 '+S.user?.nom,
+      h('button',{className:'portal-logout',onClick:()=>{document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');render();}},isLight?'☀ Mode clair':'🌙 Mode sombre'),
       h('button',{className:'portal-logout',onClick:doLogout},'Déconnexion')
     )
   );
@@ -927,6 +947,7 @@ function renderPortal(){
 
 function renderStock(){
   const g=S.stockGlobale;
+  const isLight=document.body.classList.contains('light');
 
   const sidebar=h('nav',{className:'sidebar'},
     h('div',{className:'logo'},
@@ -943,12 +964,13 @@ function renderStock(){
       onClick:()=>set({stockView:'emplacement',stockSelEmpl:null})},
       '📍  Par emplacement'),
     h('div',{className:'sidebar-bottom'},
-      h('button',{className:'nav-btn',onClick:()=>set({app:'portal'})},
+      h('button',{className:'nav-btn back-mysifa',onClick:()=>{window.location.href='/' }},
         '← Retour MySifa'),
       h('div',{className:'user-chip'},
         h('div',{className:'uc-name'},S.user?.nom||''),
         h('div',{className:'uc-role'},ROLE_LABELS[S.user?.role]||S.user?.role||'')
       ),
+      h('button',{className:'theme-btn',onClick:()=>{document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');render();}},isLight?'☀ Mode clair':'🌙 Mode sombre'),
       h('button',{className:'logout-btn',onClick:doLogout},'⎋  Déconnexion'),
       h('div',{className:'version'},'MyStock v1.0')
     )
@@ -1158,18 +1180,18 @@ function renderStock(){
   }
 
   const topbar=h('div',{className:'mobile-topbar'},
-    h('button',{type:'button',className:'mobile-menu-btn',onClick:toggleSidebar,'aria-label':'Menu'},'☰'),
-    h('div',null,
+    h('button',{type:'button',className:'mobile-menu-btn',onClick:toggleSidebar,'aria-label':'Menu'},S.sidebarOpen?'✕':'☰'),
+    h('div',{style:{flex:1,minWidth:0}},
       h('div',{className:'mobile-topbar-title'},'MyStock'),
       h('div',{className:'mobile-topbar-sub'},
         S.stockView==='grille'?'Vue globale':S.stockView==='produit'?'Par référence':'Par emplacement'
-      )
+      ),
+      h('div',{id:'stock-search-bar',className:'stock-search-bar'})
     )
   );
-  const mainEl=h('main',{className:'main',style:{padding:0}},
-    h('div',{id:'stock-search-bar',className:'stock-search-bar'}),
+  const mainEl=h('main',{className:'main'},
+    topbar,
     h('div',{className:'container',style:{padding:'24px 28px'}},
-      topbar,
       h('h1',null,S.stockView==='grille'?'Vue globale':S.stockView==='produit'?'Par référence':'Par emplacement'),
       h('div',{className:'subtitle'},
         S.stockView==='grille'?'Tous les emplacements et leur contenu — raccourci scan ci-dessous':
@@ -1298,13 +1320,13 @@ function renderSidebar(){
   const isLight=document.body.classList.contains('light');
   return h('nav',{className:'sidebar'},
     h('div',{className:'logo'},h('div',{className:'logo-brand'},'My',h('span',null,'Prod')),h('div',{className:'logo-sub'},'by SIFA')),
-    h('button',{className:'nav-btn',onClick:()=>set({app:'portal'})},'← MySifa'),
     ...items.map(i=>h('button',{className:'nav-btn'+(S.page===i.key?' active':''),onClick:()=>{
       if(i.key==='_planning'){window.location.href='/planning';return;}
       S.sidebarOpen=false;
       set({page:i.key});nav();
     }},i.icon+'  '+i.label)),
     h('div',{className:'sidebar-bottom'},
+      h('button',{className:'nav-btn back-mysifa',onClick:()=>{window.location.href='/' }},'← Retour MySifa'),
       h('div',{
         className:'user-chip',
         style:{cursor:'pointer'},
@@ -2260,19 +2282,35 @@ function renderUsers(){
   const ops=S.filters.operators||[];
   const opSel=h('select',{className:'form-sel'},h('option',{value:''},'— Lier un opérateur (optionnel) —'),...ops.map(o=>h('option',{value:o},opName(o))));inputs.operateur_lie=opSel;
   const roleSel=h('select',{className:'form-sel'},h('option',{value:'fabrication'},'⚙ Fabrication'),h('option',{value:'administration'},'🔧 Administration'),h('option',{value:'direction'},'👑 Direction'),h('option',{value:'logistique'},'📦 Logistique'));inputs.role=roleSel;
+  const hint=h('p',{style:{fontSize:'12px',color:'var(--muted)',marginTop:'10px'}},'');
+  const opWrap=h('div',null,opSel);
+  const syncRoleUI=()=>{
+    const r=inputs.role.value;
+    const hideOp=(r==='direction'||r==='administration');
+    opWrap.style.display = hideOp ? 'none' : '';
+    hint.textContent = (r==='fabrication')
+      ? '💡 Fabrication = lecture seule. Sans opérateur lié → accès bloqué.'
+      : '💡 Direction / Administration : pas de liaison opérateur. Logistique : liaison optionnelle.';
+    if(hideOp) opSel.value='';
+  };
+  roleSel.addEventListener('change',syncRoleUI);
   const form=h('div',{className:'card',style:{padding:'20px'}},h('h3',{style:{fontSize:'14px',fontWeight:'600',marginBottom:'16px'}},'Créer un compte'),
-    h('div',{className:'form-grid'},...[['nom','Nom complet *','text'],['email','Email *','email'],['password','Mot de passe * (min. 8 car.)','password']].map(([k,l,t])=>{const i=h('input',{placeholder:l,type:t});inputs[k]=i;return i;}),roleSel,opSel),
-    h('p',{style:{fontSize:'12px',color:'var(--muted)',marginTop:'10px'}},'💡 Fabrication = lecture seule. Sans opérateur lié → accès bloqué.'),
+    h('div',{className:'form-grid'},...[['nom','Nom complet *','text'],['email','Email *','email'],['password','Mot de passe * (min. 8 car.)','password']].map(([k,l,t])=>{const i=h('input',{placeholder:l,type:t});inputs[k]=i;return i;}),roleSel,opWrap),
+    hint,
     h('button',{className:'btn',onClick:()=>{if(!inputs.nom.value||!inputs.email.value||!inputs.password.value)return;createUser({nom:inputs.nom.value,email:inputs.email.value,password:inputs.password.value,role:inputs.role.value,operateur_lie:inputs.operateur_lie.value||null});['nom','email','password'].forEach(k=>inputs[k].value='');}},'Créer le compte')
   );
+  setTimeout(syncRoleUI,0);
   const list=h('div',{className:'card'},h('div',{className:'card-header'},h('h3',null,'Utilisateurs ('+S.users.length+')'),h('span',{style:{fontSize:'11px',color:'var(--muted)'}},'Dernière connexion')),
     S.users.length===0?h('div',{className:'card-empty'},'Aucun utilisateur'):
     h('div',null,...S.users.map(u=>{
       const rb=h('span',{className:ROLE_BADGE[u.role]||'badge'},ROLE_LABELS[u.role]||u.role);
       const ab=!u.actif?h('span',{className:'badge-inactif'},'Inactif'):null;
-      const lb=u.operateur_lie
-        ? h('span',{style:{fontSize:'11px',color:'var(--accent)',cursor:'pointer',textDecoration:'underline'},onClick:()=>openUserDetail(u.id)},'🔗 '+opName(u.operateur_lie))
-        : h('span',{style:{fontSize:'11px',color:'var(--danger)',cursor:'pointer',textDecoration:'underline'},onClick:()=>openUserDetail(u.id)},'⚠ Non lié — Configurer');
+      const showOpLink = !(u.role==='direction'||u.role==='administration');
+      const lb=!showOpLink
+        ? h('span',{style:{fontSize:'11px',color:'var(--muted)'}},'—')
+        : (u.operateur_lie
+          ? h('span',{style:{fontSize:'11px',color:'var(--accent)',cursor:'pointer',textDecoration:'underline'},onClick:()=>openUserDetail(u.id)},'🔗 '+opName(u.operateur_lie))
+          : h('span',{style:{fontSize:'11px',color:'var(--danger)',cursor:'pointer',textDecoration:'underline'},onClick:()=>openUserDetail(u.id)},'⚠ Non lié — Configurer'));
       return h('div',{className:'user-row'},
         h('div',null,h('div',{className:'ui-name'},u.nom,rb,ab),h('div',{className:'ui-email'},u.email),h('div',{className:'ui-last'},lb),h('div',{className:'ui-last'},u.last_login?'🕐 '+fD(u.last_login):'🕐 Jamais connecté')),
         h('div',{className:'user-actions'},u.actif?h('button',{className:'btn-danger',onClick:()=>toggleUser(u.id,false)},'Désactiver'):h('button',{className:'btn-sm',onClick:()=>toggleUser(u.id,true)},'Réactiver'))
@@ -2356,9 +2394,19 @@ function renderProfil(userData, isAdminView=false, onSave=null){
     actifChk.checked=userData?.actif!==0;
     inputs.actif=actifChk;
 
+    const opFieldWrap=h('div',{style:{marginBottom:'14px'}},h('label',{style:{display:'block',fontSize:'11px',fontWeight:'600',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'5px'}},'Opérateur lié'),opSel);
+    const syncAdminRole=()=>{
+      const r=roleSel.value;
+      const hide=(r==='direction'||r==='administration');
+      opFieldWrap.style.display = hide ? 'none' : '';
+      if(hide) opSel.value='';
+    };
+    roleSel.addEventListener('change',syncAdminRole);
+    syncAdminRole();
+
     adminFields.push(
       h('div',{style:{marginBottom:'14px'}},h('label',{style:{display:'block',fontSize:'11px',fontWeight:'600',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'5px'}},'Rôle'),roleSel),
-      h('div',{style:{marginBottom:'14px'}},h('label',{style:{display:'block',fontSize:'11px',fontWeight:'600',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'5px'}},'Opérateur lié'),opSel),
+      opFieldWrap,
       h('label',{style:{display:'flex',alignItems:'center',gap:'8px',fontSize:'13px',color:'var(--text2)',marginBottom:'14px'}},actifChk,'Compte actif')
     );
   }
@@ -2696,6 +2744,8 @@ function renderRentabilite(){
 function render(){
   const root=document.getElementById('root');root.innerHTML='';
   document.body.classList.toggle('sb-open', !!S.sidebarOpen);
+  document.body.classList.toggle('has-topbar', S.app==='prod' || S.app==='stock');
+  window.__MYSIFA_APP__ = S.app;
 
   if(!S.user||S.app==='login'){root.appendChild(renderLogin());}
   else if(S.app==='portal'){root.appendChild(renderPortal());}
@@ -2751,9 +2801,14 @@ checkAuth();
 </body>
 </html>"""
 
-FRONTEND_HTML = (
-    _FRONTEND_HTML_TEMPLATE.replace("__META_DESCRIPTION__", APP_META_DESCRIPTION)
-    .replace("__THEME_COLOR__", THEME_COLOR_META)
-    .replace("__PAGE_TITLE__", APP_PAGE_TITLE)
-    .replace("__V_LABEL__", f"v{APP_VERSION}")
-)
+def render_frontend_html(initial_app: str = "portal") -> str:
+    return (
+        _FRONTEND_HTML_TEMPLATE.replace("__META_DESCRIPTION__", APP_META_DESCRIPTION)
+        .replace("__THEME_COLOR__", THEME_COLOR_META)
+        .replace("__PAGE_TITLE__", APP_PAGE_TITLE)
+        .replace("__V_LABEL__", f"v{APP_VERSION}")
+        .replace("__INITIAL_APP_VALUE__", initial_app)
+    )
+
+
+FRONTEND_HTML = render_frontend_html("portal")

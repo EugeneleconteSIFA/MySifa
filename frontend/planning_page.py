@@ -35,7 +35,9 @@ PLANNING_HTML = r"""<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="__META_DESCRIPTION__">
 <meta name="theme-color" content="__THEME_COLOR__">
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'><circle cx='50' cy='50' r='50' fill='%23ffffff'/><text x='50' y='67' font-family='Segoe UI,system-ui,sans-serif' font-size='46' font-weight='800' text-anchor='middle' letter-spacing='-2'><tspan fill='%230f172a'>My</tspan><tspan fill='%230891b2'>S</tspan></text></svg>">
+<link rel="icon" type="image/png" sizes="512x512" href="/static/mys_icon_512.png">
+<link rel="apple-touch-icon" href="/static/mys_icon_180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <title>__PLANNING_TITLE__</title>
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
@@ -80,8 +82,34 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
   justify-content:space-between;flex-wrap:wrap;gap:12px}
 .h-left{display:flex;align-items:center;gap:16px}
 .m-title{font-size:22px;font-weight:700;color:var(--text)}
+.m-sel{
+  font-size:14px;font-weight:800;color:var(--text);
+  font-family:var(--mono);
+  background:var(--card);border:1px solid var(--border2);border-radius:12px;
+  padding:10px 12px;cursor:pointer;outline:none;
+  transition:all .15s;max-width:min(520px,72vw)
+}
+.m-sel:hover{border-color:var(--accent);background:var(--accent-bg)}
+.m-sel:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.m-sel option{background:var(--card);color:var(--text)}
 .m-sub{font-size:12px;color:var(--muted)}
 .h-right{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.gear-btn{
+  width:36px;height:36px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;
+  border:1px solid var(--border2);background:var(--card);color:var(--dim);cursor:pointer;
+  transition:all .15s;font-size:16px;line-height:1
+}
+.gear-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.back-top{
+  display:flex;align-items:center;gap:8px;
+  padding:8px 14px;border-radius:10px;
+  border:1px solid var(--border2);
+  color:var(--accent);text-decoration:none;
+  font-size:12px;font-weight:700;font-family:var(--mono);
+  transition:all .15s;
+}
+.back-top{background:var(--accent-bg);border-color:rgba(34,211,238,.55)}
+.back-top:hover{border-color:var(--accent);color:var(--accent);background:rgba(34,211,238,.18)}
 
 .sat-tog{display:flex;align-items:center;gap:10px;padding:8px 16px;border-radius:10px;cursor:pointer;
   border:1px solid var(--border2);background:var(--card);transition:all .3s;user-select:none}
@@ -220,14 +248,20 @@ body.light .btn-p{color:#fff}
 <body>
 <div id="app"></div>
 <script>
-const MID=__MACHINE_ID__;
+let MID=__MACHINE_ID__;
 const DN=["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"];
 const MIND=2,MAXD=30;
 const CC=["#2563eb","#7c3aed","#059669","#d97706","#dc2626","#0891b2","#4f46e5","#65a30d","#c026d3","#ea580c"];
-const WH_FB={1:[5,21],2:[5,21],3:[5,21],4:[5,21],5:[6,20],6:[6,18]};
+const MACHINE_ORDER=["Cohésio 1","Cohésio 2","DSI","Repiquage"];
+const DEFAULTS_BY_KEY={
+  "C1":{pair:{week:{s:5,e:20},fri:{s:7,e:19}},impair:{week:{s:5,e:20},fri:{s:7,e:19}}}, // Cohésio 1
+  "C2":{pair:{week:{s:5,e:13},fri:{s:5,e:13}},impair:{week:{s:13,e:20},fri:{s:5,e:13}}}, // Cohésio 2
+  "DSI":{pair:{week:{s:8,e:14},fri:{s:8,e:14}},impair:{week:{s:8,e:14},fri:{s:8,e:14}}}, // DSI
+  "REP":{pair:{week:{s:6,e:20},fri:{s:7,e:19}},impair:{week:{s:6,e:20},fri:{s:7,e:19}}}, // Repiquage
+};
 const DAY_API={1:"lundi",2:"mardi",3:"mercredi",4:"jeudi",5:"vendredi",6:"samedi"};
 const DAY_FIELD={1:"horaires_lundi",2:"horaires_mardi",3:"horaires_mercredi",4:"horaires_jeudi",5:"horaires_vendredi",6:"horaires_samedi"};
-let S={machine:null,entries:[],timeline:[],wo:0,loading:true,holidays:{},dayWorked:{}};
+let S={machine:null,machines:[],entries:[],timeline:[],wo:0,loading:true,holidays:{},dayWorked:{}};
 let ME=null;
 
 const api=(p,o={})=>fetch(`/api/planning${p}`,{headers:{"Content-Type":"application/json",...(o.headers||{})},...o}).then(r=>{if(!r.ok)throw r;return r.json()});
@@ -288,7 +322,7 @@ function addD(d,n){const r=new Date(d);r.setDate(r.getDate()+n);return r}
 function fmtDl(s){if(!s)return"—";const p=String(s).slice(0,10).split("-");return p.length===3?p[2]+"/"+p[1]+"/"+p[0]:s;}
 
 function parseHorairesPair(raw,di){
-  const fb=WH_FB[di]||[5,21];
+  const fb=[5,21];
   const d=String(raw??"").trim();
   if(!d)return{s:fb[0],e:fb[1]};
   const parts=d.split(",");
@@ -302,10 +336,58 @@ function parseHorairesPair(raw,di){
   if(!(e>s))return{s:fb[0],e:fb[1]};
   return{s,e};
 }
-function getWhForDi(di){
+function floatFromTimeInput(hm){
+  const s=String(hm||"").trim();
+  if(!s||s.indexOf(":")<0)return null;
+  const [h,m]=s.split(":");
+  const hh=+h,mm=+m;
+  if(!isFinite(hh)||!isFinite(mm))return null;
+  return hh+(mm/60);
+}
+function timeInputFromFloat(f){
+  const h=Math.floor(f+1e-6),m=Math.round((f-h)*60);
+  const hh=h+(m>=60?1:0),mm=((m%60)+60)%60;
+  return pad(hh)+":"+pad(mm);
+}
+function machineKey(){
+  const m=S.machine||{};
+  return (m.code||m.nom||String(MID));
+}
+function getMachineDefaults(){
+  const mk=machineKey();
+  const key=`mysifa.planning.defaults.${mk}`;
+  try{
+    const raw=localStorage.getItem(key);
+    if(raw){
+      const j=JSON.parse(raw);
+      if(j&&j.pair&&j.impair)return j;
+    }
+  }catch(e){}
+  return DEFAULTS_BY_KEY[mk]||DEFAULTS_BY_KEY["C1"];
+}
+function saveMachineDefaults(defs){
+  const mk=machineKey();
+  const key=`mysifa.planning.defaults.${mk}`;
+  localStorage.setItem(key,JSON.stringify(defs));
+}
+function isWeekPair(d){
+  const w=wkNum(d);
+  return (w%2)===0;
+}
+function getWhForDate(di,dateObj){
+  // Priorité: horaires “hebdo” stockés en base pour cette machine (si non vides)
   const m=S.machine,key=DAY_FIELD[di];
   const raw=m&&m[key]!=null?String(m[key]):"";
-  return parseHorairesPair(raw||null,di);
+  if(raw && raw.trim()){
+    return parseHorairesPair(raw||null,di);
+  }
+
+  // Fallback: défauts par machine (semaine paire/impair + vendredi)
+  const defs=getMachineDefaults();
+  const par=isWeekPair(dateObj)?"pair":"impair";
+  const isFri=(di===5);
+  const w=isFri?(defs[par].fri):(defs[par].week);
+  return {s:w.s,e:w.e};
 }
 function fmtHm(f){
   const h=Math.floor(f+1e-6),m=Math.round((f-h)*60);
@@ -325,21 +407,21 @@ function roleLabel(role){const R={direction:"👑 Direction",administration:"�
 function renderSidebar(){
   const admin=isAdmin(ME);
   const items=[
-    {key:"historique",label:"Historique & Erreurs",icon:"⚠",href:"/"},
-    {key:"production",label:"Production",icon:"📊",href:"/"},
-    {key:"saisies",label:"Saisies",icon:"✏",href:"/"},
+    {key:"historique",label:"Historique & Erreurs",icon:"⚠",href:"/prod?page=historique"},
+    {key:"production",label:"Production",icon:"📊",href:"/prod?page=production"},
+    {key:"saisies",label:"Saisies",icon:"✏",href:"/prod?page=saisies"},
     ...(admin?[
-      {key:"import",label:"Import XLSX",icon:"↑",href:"/"},
+      {key:"import",label:"Import XLSX",icon:"↑",href:"/prod?page=import"},
       {key:"_planning",label:"Planning",icon:"🗓",href:"/planning"},
-      {key:"rentabilite",label:"Rentabilité",icon:"📈",href:"/"},
-      {key:"dossiers",label:"Dossiers",icon:"◫",href:"/"},
-      {key:"users",label:"Utilisateurs",icon:"👥",href:"/"},
+      {key:"rentabilite",label:"Rentabilité",icon:"📈",href:"/prod?page=rentabilite"},
+      {key:"dossiers",label:"Dossiers",icon:"◫",href:"/prod?page=dossiers"},
+      {key:"users",label:"Utilisateurs",icon:"👥",href:"/prod?page=users"},
     ]:[]),
   ];
   const isLight=document.body.classList.contains("light");
   return`<nav class="sidebar"><div class="logo"><div class="logo-brand">My<span>Prod</span></div><div class="logo-sub">by SIFA</div></div>${
     items.map(i=>`<button type="button" class="nav-btn${i.key==="_planning"?" active":""}" onclick="location.href='${i.href}'">${i.icon}  ${i.label}</button>`).join("")
-  }<div class="sidebar-bottom"><div class="user-chip" onclick="location.href='/'" title="Retour à l'accueil MySifa"><div class="uc-name">${escAttr(ME.nom||"")}</div><div class="uc-role">${roleLabel(ME.role)}</div><div style="font-size:10px;color:var(--accent);margin-top:3px">✎ Mon profil</div></div><button type="button" class="theme-btn" onclick="toggleTheme()">${isLight?"☀ Mode clair":"🌙 Mode sombre"}</button><button type="button" class="logout-btn" onclick="doLogout()">⎋  Déconnexion</button><div class="version">__V_LABEL__</div></div></nav>`;
+  }<div class="sidebar-bottom"><button type="button" class="nav-btn" onclick="location.href='/'">← Retour MySifa</button><div class="user-chip" onclick="location.href='/'" title="Retour à l'accueil MySifa"><div class="uc-name">${escAttr(ME.nom||"")}</div><div class="uc-role">${roleLabel(ME.role)}</div><div style="font-size:10px;color:var(--accent);margin-top:3px">✎ Mon profil</div></div><button type="button" class="theme-btn" onclick="toggleTheme()">${isLight?"☀ Mode clair":"🌙 Mode sombre"}</button><button type="button" class="logout-btn" onclick="doLogout()">⎋  Déconnexion</button><div class="version">__V_LABEL__</div></div></nav>`;
 }
 function toggleTheme(){document.body.classList.toggle("light");localStorage.setItem("theme",document.body.classList.contains("light")?"light":"dark");render();}
 async function doLogout(){try{await fetch("/api/auth/logout",{method:"POST",credentials:"include"});}catch(e){}location.href="/";}
@@ -362,9 +444,16 @@ function render(){
   a.innerHTML=`<div class="app">${renderSidebar()}<main class="main"><div class="planning-container">
   <header class="header">
     <div class="h-left">
-      <div><div class="m-title">${escAttr(m.nom||"")}</div><div class="m-sub">Planning de production — MyProd by SIFA</div></div>
+      <div>
+        <select class="m-sel" onchange="changeMachine(this.value)" aria-label="Sélection de la machine">
+          ${(S.machines||[]).map(x=>`<option value="${x.id}" ${x.id===MID?"selected":""}>${escAttr(x.nom||'')}</option>`).join("")}
+        </select>
+        <div class="m-sub">Planning de production — MyProd by SIFA</div>
+      </div>
     </div>
     <div class="h-right">
+      <a class="back-top" href="/" title="Retour au portail">← MySifa</a>
+      <button type="button" class="gear-btn" onclick="openDefaultsModal()" title="Réglages horaires par défaut" aria-label="Réglages">⚙</button>
       ${run?`<div class="badge badge-run"><div class="dot"></div>${escAttr(runLbl)}</div>`:""}
       <div class="badge badge-info">${totH}h · ${nb} dossiers</div>
     </div>
@@ -412,7 +501,7 @@ function mkTL(mon,slots){
     if(di===0)continue;
     const ds=ymd(d);
     const isSat=di===6;
-    const w=getWhForDi(di);
+    const w=getWhForDate(di,d);
     if(!w)continue;
     const off=isSat?!S.dayWorked[ds]:!!S.holidays[ds];
     const dayT=off?0:(w.e-w.s);
@@ -674,9 +763,16 @@ async function submitInsert(afterId){
 
 function closeM(){document.getElementById("mroot").innerHTML=""}
 
+function changeMachine(v){
+  const id=parseInt(v,10);
+  if(!id||!isFinite(id))return;
+  localStorage.setItem("mysifa.planning.lastMachine",String(id));
+  location.href=`/planning?machine=${encodeURIComponent(String(id))}`;
+}
+
 function openHorairesModal(di){
   if(!S.machine)return;
-  const {s,e}=getWhForDi(di);
+  const {s,e}=getWhForDate(di,new Date());
   const dn={1:"Lundi",2:"Mardi",3:"Mercredi",4:"Jeudi",5:"Vendredi",6:"Samedi"}[di]||"Jour";
   document.getElementById("mroot").innerHTML=modalHTML(
     `Plage horaire — ${dn}`,
@@ -701,12 +797,95 @@ async function submitHoraires(di){
   }
 }
 
+function openDefaultsModal(){
+  const defs=getMachineDefaults();
+  function row(lbl,id,val){
+    return `<div class="fd"><label>${lbl}</label><input type="time" id="${id}" value="${timeInputFromFloat(val)}"></div>`;
+  }
+  const f=`
+    <p style="font-size:12px;color:var(--muted);margin:-8px 0 16px">
+      Valeurs par défaut utilisées quand les horaires hebdo (base) sont vides. Elles impactent les fuseaux affichés sur le planning.
+    </p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div style="border:1px solid var(--border2);border-radius:14px;padding:14px">
+        <div style="font-family:var(--mono);font-size:12px;color:var(--text);margin-bottom:10px">Semaine paire</div>
+        ${row("Semaine paire — début","dp-w-s",defs.pair.week.s)}
+        ${row("Semaine paire — fin","dp-w-e",defs.pair.week.e)}
+        ${row("Vendredi (paire) — début","dp-f-s",defs.pair.fri.s)}
+        ${row("Vendredi (paire) — fin","dp-f-e",defs.pair.fri.e)}
+      </div>
+      <div style="border:1px solid var(--border2);border-radius:14px;padding:14px">
+        <div style="font-family:var(--mono);font-size:12px;color:var(--text);margin-bottom:10px">Semaine impaire</div>
+        ${row("Semaine impaire — début","di-w-s",defs.impair.week.s)}
+        ${row("Semaine impaire — fin","di-w-e",defs.impair.week.e)}
+        ${row("Vendredi (impaire) — début","di-f-s",defs.impair.fri.s)}
+        ${row("Vendredi (impaire) — fin","di-f-e",defs.impair.fri.e)}
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+      <button class="btn-s" onclick="resetDefaults()">Réinitialiser</button>
+    </div>
+  `;
+  const lbl=(S.machine&&S.machine.nom)?S.machine.nom:("Machine "+MID);
+  document.getElementById("mroot").innerHTML=modalHTML(
+    `Réglages — ${escAttr(lbl)}`,
+    f,
+    "Enregistrer",
+    "submitDefaults()"
+  );
+}
+function resetDefaults(){
+  const mk=machineKey();
+  const d=DEFAULTS_BY_KEY[mk]||DEFAULTS_BY_KEY["C1"];
+  saveMachineDefaults(d);
+  closeM();render();
+}
+function submitDefaults(){
+  function v(id){
+    const f=floatFromTimeInput(document.getElementById(id).value);
+    return (f==null)?0:f;
+  }
+  const nd={
+    pair:{week:{s:v("dp-w-s"),e:v("dp-w-e")},fri:{s:v("dp-f-s"),e:v("dp-f-e")}},
+    impair:{week:{s:v("di-w-s"),e:v("di-w-e")},fri:{s:v("di-f-s"),e:v("di-f-e")}},
+  };
+  function okRange(r){return isFinite(r.s)&&isFinite(r.e)&&r.e>r.s&&r.s>=0&&r.e<=24;}
+  if(!okRange(nd.pair.week)||!okRange(nd.pair.fri)||!okRange(nd.impair.week)||!okRange(nd.impair.fri)){
+    return alert("Plages invalides (fin > début, entre 0 et 24).");
+  }
+  saveMachineDefaults(nd);
+  closeM();render();
+}
+
 async function boot(){
   if(localStorage.getItem("theme")==="light")document.body.classList.add("light");
   let r;
   try{r=await fetch("/api/auth/me",{credentials:"include"});}catch(e){location.href="/";return;}
   if(!r.ok){location.href="/";return;}
   ME=await r.json();
+  try{
+    const list=await api(`/machines`);
+    const byName=new Map((list||[]).map(m=>[String(m.nom||""),m]));
+    const ordered=[];
+    MACHINE_ORDER.forEach(n=>{if(byName.has(n))ordered.push(byName.get(n));});
+    (list||[]).forEach(m=>{if(!ordered.find(x=>x.id===m.id))ordered.push(m);});
+    S.machines=ordered;
+
+    const sp=new URLSearchParams(location.search||"");
+    const raw=sp.get("machine");
+    const num=raw?parseInt(raw,10):NaN;
+    const ids=new Set(ordered.map(m=>m.id));
+    if(isFinite(num)&&ids.has(num)){
+      MID=num;
+    }else if(isFinite(num)&&num>=1&&num<=4){
+      const wantedName=MACHINE_ORDER[num-1];
+      const wanted=ordered.find(m=>String(m.nom||"")===wantedName);
+      if(wanted) MID=wanted.id;
+    }else{
+      const wanted=ordered[0];
+      if(wanted) MID=wanted.id;
+    }
+  }catch(e){console.error(e)}
   await load();
 }
 boot();
