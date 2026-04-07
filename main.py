@@ -1,7 +1,7 @@
 """
 MyProd by SIFA — v0.5.0
 """
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -37,6 +37,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def no_cache_planning(request: Request, call_next):
+    """Évite cache navigateur / proxy sur le planning (données toujours lues en base)."""
+    response = await call_next(request)
+    p = request.url.path
+    if p.startswith("/api/planning") or p == "/planning":
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+    return response
+
 
 app.include_router(auth_router)
 app.include_router(router_imports)
