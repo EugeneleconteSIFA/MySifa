@@ -1,4 +1,5 @@
 import csv
+import os
 import re
 import sys
 from dataclasses import dataclass
@@ -6,9 +7,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+# Répertoire contenant config.py / database.py du *même* déploiement que l’app (ex. …/app).
+# Sur le VPS si le service tourne sous WorkingDirectory=…/production-saas/app, définir
+# MYSIFA_CODE_ROOT vers ce chemin — sinon l’import peut cibler une autre production.db.
+_TOOL_PARENT = Path(__file__).resolve().parents[1]
+_CODE_ROOT = Path(os.environ.get("MYSIFA_CODE_ROOT", str(_TOOL_PARENT))).resolve()
+sys.path.insert(0, str(_CODE_ROOT))
 
 from config import DB_PATH
 from database import get_db

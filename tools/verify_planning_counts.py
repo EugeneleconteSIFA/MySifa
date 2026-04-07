@@ -1,9 +1,10 @@
+import os
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+_TOOL_PARENT = Path(__file__).resolve().parents[1]
+_CODE_ROOT = Path(os.environ.get("MYSIFA_CODE_ROOT", str(_TOOL_PARENT))).resolve()
+sys.path.insert(0, str(_CODE_ROOT))
 
 from database import get_db
 

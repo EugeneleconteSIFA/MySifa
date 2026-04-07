@@ -5,7 +5,8 @@
 param(
     [string]$Server = "root@168.231.85.64",
     [string]$CsvPath = "$env:USERPROFILE\Downloads\Untitled spreadsheet - Sheet2.csv",
-    [string]$RemoteCsv = "/home/sifa/production-saas/data/planning_cohesio_import.csv"
+    # VPS avec code sous app/ : même répertoire que db_path …/app/data/production.db
+    [string]$RemoteCsv = "/home/sifa/production-saas/app/data/planning_cohesio_import.csv"
 )
 
 $ErrorActionPreference = "Stop"
