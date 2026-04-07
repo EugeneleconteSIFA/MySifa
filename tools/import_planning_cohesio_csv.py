@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from config import DB_PATH
 from database import get_db
 
 
@@ -226,6 +227,8 @@ def main(argv: List[str]) -> int:
     if not csv_path.exists():
         print(f"CSV introuvable: {csv_path}")
         return 2
+
+    print(f"Base SQLite utilisée: {DB_PATH}")
 
     rows = _read_grid_csv(csv_path)
     c1s, c1e = _find_block(rows, "Cohésio 1")
