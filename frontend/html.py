@@ -436,7 +436,12 @@ body.light .portal-app--busy::after{background:rgba(255,255,255,.88);color:var(-
 .stock-add-empl-input{text-transform:uppercase}
 .stock-add-empl-input::placeholder{
   text-transform:none;
-  opacity:.72;
+  color:var(--text2);
+  opacity:.88;
+}
+body.light .stock-add-empl-input::placeholder{
+  color:#64748b;
+  opacity:.95;
 }
 .stock-empl-suggest-add{
   padding:10px 16px;cursor:pointer;font-size:13px;font-weight:700;
@@ -1027,6 +1032,69 @@ function isStockEmplacementCode(s){
   }
   return true;
 }
+/** Corrige la reco vocale FR (ex. « à 212 » → A212) et resserre lettre + chiffres. */
+function stockNormalizeVoiceTranscript(raw){
+  if(raw==null)return '';
+  let s=String(raw).trim();
+  if(!s)return '';
+  s=s.normalize('NFD').replace(/\p{M}+/gu,'');
+  s=s.replace(/\s+/g,' ');
+  s=s.replace(/\b(?:a|ah|ha|as)\s+(\d{2,4})\b/gi,'A$1');
+  s=s.replace(/\b([a-z])\s+(\d{2,4})\b/gi,(_,L,d)=>L.toUpperCase()+d);
+  s=s.replace(/\b([A-Z])\s+(\d{2,4})\b/g,'$1$2');
+  return s.trim();
+}
+function stockVoiceSilenceStop(recog,ms){
+  const gap=ms||3800;
+  let iv=null,touched=Date.now();
+  const touch=()=>{touched=Date.now();};
+  const clearIv=()=>{if(iv){clearInterval(iv);iv=null;}};
+  const start=()=>{
+    touch();
+    clearIv();
+    iv=setInterval(()=>{
+      if(Date.now()-touched>=gap){
+        clearIv();
+        try{recog&&recog.stop();}catch(e){}
+      }
+    },350);
+  };
+  const stop=()=>{clearIv();};
+  return {start,stop,touch};
+}
+async function stockResolveVoiceSearchBestQuery(raw){
+  const cand=tryStockVoiceCandidates(raw);
+  for(const q of cand){
+    if(q.length<1)continue;
+    try{
+      const r=await api('/api/stock/search?q='+encodeURIComponent(q)+'&limit=14');
+      const empls=r&&r.emplacements||[];
+      const prods=r&&r.produits||[];
+      if(empls.length||prods.length){
+        const compact=q.replace(/\s+/g,'').toUpperCase();
+        if(/^[A-Z]\d{2,4}$/.test(compact)){
+          const ex=empls.find(e=>String(e.emplacement||'').replace(/\s+/g,'').toUpperCase()===compact);
+          if(ex)return{q:ex.emplacement,r};
+        }
+        return{q,r};
+      }
+    }catch(e){}
+  }
+  return{q:cand[0]||String(raw||'').trim(),r:null};
+}
+function tryStockVoiceCandidates(raw){
+  const base=String(raw||'').trim();
+  const norm=stockNormalizeVoiceTranscript(base);
+  const list=[];
+  const add=x=>{const t=String(x||'').trim();if(t&&!list.includes(t))list.push(t);};
+  add(norm);
+  add(base);
+  const cu=base.replace(/\s+/g,'').toUpperCase();
+  const nu=norm.replace(/\s+/g,'').toUpperCase();
+  if(cu)add(cu);
+  if(nu&&nu!==cu)add(nu);
+  return list;
+}
 function hideStockAddEmplDropdown(){
   const list=document.getElementById('stock-add-empl-suggestions');
   if(list)list.style.display='none';
@@ -1092,27 +1160,47 @@ function startVoiceSearch() {
   if (!document.getElementById('stock-search-input')) renderStockSearchBar();
   if (!document.getElementById('stock-search-input')) return;
 
+  if (window.__mysifaStockRecog) {
+    try { window.__mysifaStockRecog.stop(); } catch (e) {}
+    window.__mysifaStockRecog = null;
+  }
+
   const recog = new SpeechRecognition();
+  window.__mysifaStockRecog = recog;
   recog.lang = 'fr-FR';
   recog.interimResults = true;
   recog.maxAlternatives = 1;
+
+  const silence = stockVoiceSilenceStop(recog, 3800);
 
   stockSearchState.listening = true;
   renderStockSearchBar();
 
   recog.onresult = (e) => {
+    silence.touch();
     const transcript = stockVoiceFullTranscript(e.results);
+    const fixed = stockNormalizeVoiceTranscript(transcript);
     const field = document.getElementById('stock-search-input');
-    if (field) field.value = transcript;
-    stockSearchState.query = transcript;
+    const show = fixed || transcript;
+    if (field) field.value = show;
+    stockSearchState.query = show;
     let hasFinal = false;
     for (let i = e.resultIndex; i < e.results.length; i++) {
       if (e.results[i].isFinal) { hasFinal = true; break; }
     }
-    if (hasFinal) doStockSearch(transcript.trim());
+    if (hasFinal) {
+      (async () => {
+        const { q } = await stockResolveVoiceSearchBestQuery(transcript);
+        const f = document.getElementById('stock-search-input');
+        if (f) f.value = q;
+        stockSearchState.query = q;
+        doStockSearch(q.trim());
+      })();
+    }
   };
-  recog.onerror = () => { stockSearchState.listening = false; renderStockSearchBar(); };
-  recog.onend = () => { stockSearchState.listening = false; renderStockSearchBar(); };
+  recog.onerror = () => { silence.stop(); window.__mysifaStockRecog = null; stockSearchState.listening = false; renderStockSearchBar(); };
+  recog.onend = () => { silence.stop(); window.__mysifaStockRecog = null; stockSearchState.listening = false; renderStockSearchBar(); };
+  recog.onstart = () => { silence.start(); };
   recog.start();
 }
 
