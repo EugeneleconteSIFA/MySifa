@@ -6,7 +6,14 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="__META_DESCRIPTION__">
 <meta name="theme-color" content="__THEME_COLOR__">
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'><circle cx='50' cy='50' r='50' fill='%23ffffff'/><text x='50' y='67' font-family='Segoe UI,system-ui,sans-serif' font-size='46' font-weight='800' text-anchor='middle' letter-spacing='-2'><tspan fill='%230f172a'>My</tspan><tspan fill='%230891b2'>S</tspan></text></svg>">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'><rect width='100' height='100' rx='22' fill='%230a0e17'/><text x='50' y='67' font-family='Segoe UI,system-ui,sans-serif' font-size='38' font-weight='800' text-anchor='middle' letter-spacing='-1.5'><tspan fill='%23f1f5f9'>My</tspan><tspan fill='%2322d3ee'>S</tspan></text></svg>">
+
+<link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAAC0CAYAAAAi5cpMAAAACXBIWXMAAAsTAAALEwEAmpwYAAAF8mlUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPD94cGFja2V0IGJlZ2luPSLvu78iIGlkPSJXNU0wTXBDZWhpSHpyZVN6TlRjemtjOWQiPz4gPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iQWRvYmUgWE1QIENvcmUgOS4xLWMwMDEgNzkuYThkNGU1MSwgMjAyMy8xMC8yNi0xNzoyNjowMCAgICAgICAgIj4gPHJkZjpSREYgeG1sbnM6cmRmPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5LzAyLzIyLXJkZi1zeW50YXgtbnMjIj4gPHJkZjpEZXNjcmlwdGlvbiByZGY6YWJvdXQ9IiIgeG1sbnM6eG1wPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvIiB4bWxuczp4bXBNTT0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL21tLyIgeG1sbnM6c3RSZWY9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9zVHlwZS9SZXNvdXJjZVJlZiMiIHhtcDpDcmVhdG9yVG9vbD0iQWRvYmUgUGhvdG9zaG9wIDI1LjIgKE1hY2ludG9zaCkiIHhtcE1NOkluc3RhbmNlSUQ9InhtcC5paWQ6OEM5OEQ0NkI4NkQwMTFFRUJFMkNBRDM4NTdFMzg1M0IiIHhtcE1NOkRvY3VtZW50SUQ9InhtcC5kaWQ6OEM5OEQ0NkM4NkQwMTFFRUJFMkNBRDM4NTdFMzg1M0IiPiA8eG1wTU06RGVyaXZlZEZyb20gc3RSZWY6aW5zdGFuY2VJRD0ieG1wLmlpZDo4Qzk4RDQ2OTg2RDAxMUVFQkUyQ0FEMzg1N0UzODUzQiIgc3RSZWY6ZG9jdW1lbnRJRD0ieG1wLmRpZDo4Qzk4RDQ2QTg2RDAxMUVFQkUyQ0FEMzg1N0UzODUzQiIvPiA8L3JkZjpEZXNjcmlwdGlvbj4gPC9yZGY6UkRGPiA8L3g6eG1wbWV0YT4gPD94cGFja2V0IGVuZD0iciI/Pjj0GykAAAXpSURBVHja7Z1byFVVFMf3nNTSyjQzLTPNMkvLyjIzLUvLi5llWqZlZZqWpWVaWpZpWZaWaWlapmVpWaaWaZmWpWVampaZlqVpWZqWpWVaWqZlaZmaZWqZlmVqmZZpWqZlaZqWZWqalmVqmpZlaZqWZWqalqVpmpalaVqWpWlaWqZlWZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpalaVqWpWlaWqZlWZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZGkZCDAAPyfrkMAAAAASUVORK5CYII=">
+
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="MySifa">
+<meta name="mobile-web-app-capable" content="yes">
 <title>__PAGE_TITLE__</title>
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
@@ -319,25 +326,83 @@ body.light .portal-app--busy::after{background:rgba(255,255,255,.88);color:var(-
   border-color:var(--c2)}
 .stock-search-row{display:flex;gap:10px;align-items:stretch;margin-bottom:16px;flex-wrap:wrap}
 .stock-search-row .search-bar{margin-bottom:0;flex:1;min-width:180px}
-.stock-scan-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:10000;
-  display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box}
-.stock-scan-dialog{background:var(--card);border:1px solid var(--border);border-radius:16px;
-  max-width:440px;width:100%;padding:20px;max-height:calc(100vh - 32px);overflow:auto}
-.stock-scan-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:12px}
-.stock-scan-head h3{font-size:16px;font-weight:700;margin:0}
-.stock-scan-close{background:none;border:none;color:var(--muted);cursor:pointer;font-size:22px;
-  line-height:1;padding:4px;font-family:inherit}
-.stock-scan-close:hover{color:var(--text)}
-.stock-scan-hint{font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.4}
-#stock-barcode-reader{border-radius:12px;overflow:hidden;border:1px solid var(--border);
-  min-height:220px;background:#000}
-.stock-scan-actions{margin-top:16px;display:flex;justify-content:flex-end;gap:8px}
-.stock-scan-bar{font-size:11px;color:var(--muted);margin-top:10px;text-align:center}
+.stock-search-bar{
+  position:sticky;top:0;z-index:50;
+  background:var(--card);
+  border-bottom:1px solid var(--border);
+  padding:10px 20px;
+  display:flex;align-items:center;gap:10px;
+}
+.stock-search-input{
+  flex:1;background:var(--bg);
+  border:1px solid var(--border);border-radius:10px;
+  padding:10px 16px;color:var(--text);font-size:14px;
+  font-family:inherit;outline:none;transition:border-color .15s;
+}
+.stock-search-input:focus{border-color:var(--accent)}
+.stock-search-btn{
+  width:40px;height:40px;border-radius:10px;
+  border:1px solid var(--border);background:var(--bg);
+  color:var(--text2);cursor:pointer;font-size:18px;
+  display:flex;align-items:center;justify-content:center;
+  transition:all .15s;flex-shrink:0;
+}
+.stock-search-btn:hover{border-color:var(--accent);color:var(--accent)}
+.stock-search-btn.active{
+  border-color:var(--accent);color:var(--accent);
+  background:var(--accent-bg);animation:pulse 1s infinite;
+}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(34,211,238,.3)}50%{box-shadow:0 0 0 6px rgba(34,211,238,0)}}
+.camera-modal{
+  position:fixed;inset:0;background:rgba(0,0,0,.85);
+  z-index:200;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:16px;padding:20px;
+}
+.camera-video-wrap{
+  position:relative;width:100%;max-width:400px;
+  border-radius:16px;overflow:hidden;background:#000;
+}
+.camera-video{width:100%;border-radius:16px;display:block}
+.camera-overlay{
+  position:absolute;inset:0;display:flex;
+  align-items:center;justify-content:center;pointer-events:none;
+}
+.camera-frame{
+  width:200px;height:200px;border-radius:12px;
+  border:2px solid var(--accent);
+  box-shadow:0 0 0 2000px rgba(0,0,0,.4);
+}
+.camera-hint{font-size:13px;color:var(--text2);text-align:center;max-width:320px}
+.camera-result{
+  background:var(--accent-bg);border:1px solid var(--accent);
+  border-radius:10px;padding:12px 20px;
+  font-family:monospace;font-size:14px;color:var(--accent);
+  min-width:200px;text-align:center;
+}
+.camera-close{
+  background:var(--danger);color:#fff;border:none;
+  border-radius:10px;padding:10px 28px;font-size:14px;
+  font-weight:600;cursor:pointer;font-family:inherit;
+}
+.search-suggestions{
+  position:absolute;top:100%;left:0;right:0;z-index:100;
+  background:var(--card);border:1px solid var(--border);
+  border-radius:0 0 10px 10px;max-height:200px;overflow-y:auto;
+  box-shadow:0 8px 24px rgba(0,0,0,.3);
+}
+.search-suggestion-item{
+  padding:10px 16px;cursor:pointer;font-size:13px;
+  border-bottom:1px solid var(--border);display:flex;
+  justify-content:space-between;align-items:center;
+}
+.search-suggestion-item:hover{background:var(--accent-bg);color:var(--accent)}
+.search-suggestion-ref{font-family:monospace;font-weight:700}
+.search-suggestion-des{font-size:11px;color:var(--muted)}
+.stock-search-wrap{position:relative;flex:1}
 </style>
 </head>
 <body>
 <div id="root"></div>
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 const API=window.location.origin;
 function isAuthMePath(p){
@@ -376,7 +441,6 @@ let S={
   stockView:'grille',
   stockProduits:[],stockSelProduit:null,stockSelEmpl:null,
   stockGlobale:null,stockSearch:'',stockMvtType:'entree',
-  stockBarcodeOpen:false,stockBarcodeMode:null,stockPendingRef:null,
   filters:{},OPS_CONFIG:{},
   fv:{operateurs:[],dossiers:[],date_from:getYesterday(),date_to:getYesterday()},
   historique:null,production:null,
@@ -474,105 +538,12 @@ async function doLogin(email,password){
   }
 }
 async function doLogout(){
-  await stopStockBarcodeScanner();
   authEpoch++;
   await api('/api/auth/logout',{method:'POST'});
   S.user=null;S.app='login';S.historique=null;S.production=null;
   S.stockGlobale=null;S.stockProduits=[];S.stockSelProduit=null;S.stockSelEmpl=null;
   S.loginSubmitting=false;S.loginError=null;S.portalLoading=null;
-  S.stockBarcodeOpen=false;S.stockBarcodeMode=null;S.stockPendingRef=null;
   render();
-}
-
-let __stockScanBusy=false;
-async function stopStockBarcodeScanner(){
-  const h5=window.__stockH5;
-  if(!h5)return;
-  window.__stockH5=null;
-  try{await h5.stop();}catch(e){}
-  try{await h5.clear();}catch(e){}
-}
-function renderStockBarcodeModal(){
-  const title=S.stockBarcodeMode==='newRef'?'Scanner — nouvelle référence':'Scanner — recherche produit';
-  return h('div',{className:'stock-scan-backdrop',onClick:async e=>{
-    if(e.target===e.currentTarget){await stopStockBarcodeScanner();set({stockBarcodeOpen:false,stockBarcodeMode:null});}
-  }},
-    h('div',{className:'stock-scan-dialog',onClick:e=>e.stopPropagation()},
-      h('div',{className:'stock-scan-head'},
-        h('h3',null,title),
-        h('button',{type:'button',className:'stock-scan-close',title:'Fermer',
-          onClick:async()=>{await stopStockBarcodeScanner();set({stockBarcodeOpen:false,stockBarcodeMode:null});}},'×')
-      ),
-      h('p',{className:'stock-scan-hint'},'Autorisez la caméra si le navigateur le demande. Placez le code-barres ou le QR dans le cadre.'),
-      h('div',{id:'stock-barcode-reader'}),
-      h('div',{className:'stock-scan-bar'},'HTTPS requis • Caméra arrière si disponible'),
-      h('div',{className:'stock-scan-actions'},
-        h('button',{type:'button',className:'btn-ghost',
-          onClick:async()=>{await stopStockBarcodeScanner();set({stockBarcodeOpen:false,stockBarcodeMode:null});}},'Fermer')
-      )
-    )
-  );
-}
-function initStockBarcodeScanner(){
-  if(!S.stockBarcodeOpen)return;
-  if(typeof Html5Qrcode==='undefined'){
-    toast('Bibliothèque scanner non chargée — rechargez la page','error');
-    set({stockBarcodeOpen:false,stockBarcodeMode:null});
-    return;
-  }
-  stopStockBarcodeScanner().then(()=>{
-    if(!S.stockBarcodeOpen)return;
-    const box=document.getElementById('stock-barcode-reader');
-    if(!box)return;
-    const h5=new Html5Qrcode('stock-barcode-reader');
-    window.__stockH5=h5;
-    const cfg={fps:8,qrbox:{width:Math.min(300,Math.max(200,window.innerWidth-96)),height:160}};
-    h5.start({facingMode:'environment'},cfg,
-      (text)=>{applyStockBarcodeResult(text);},
-      ()=>{}
-    ).catch(err=>{
-      toast((err&&err.message)||'Caméra inaccessible (permissions ou HTTPS)','error');
-      set({stockBarcodeOpen:false,stockBarcodeMode:null});
-    });
-  });
-}
-function openStockBarcodeScanner(mode){
-  set({stockBarcodeOpen:true,stockBarcodeMode:mode||'search'});
-  requestAnimationFrame(()=>requestAnimationFrame(()=>initStockBarcodeScanner()));
-}
-async function openStockBarcodeFromGrille(){
-  try{await loadStockProduits();}catch(e){}
-  set({stockView:'produit',stockSelProduit:null,stockBarcodeOpen:true,stockBarcodeMode:'search'});
-  requestAnimationFrame(()=>requestAnimationFrame(()=>initStockBarcodeScanner()));
-}
-async function applyStockBarcodeResult(text){
-  if(__stockScanBusy)return;
-  const code=String(text||'').trim();
-  if(!code)return;
-  __stockScanBusy=true;
-  try{
-    await stopStockBarcodeScanner();
-    const mode=S.stockBarcodeMode||'search';
-    if(mode==='newRef'){
-      set({stockBarcodeOpen:false,stockBarcodeMode:null,stockPendingRef:code});
-      toast('Référence : '+code);
-      return;
-    }
-    const d=await api('/api/stock/produits?q='+encodeURIComponent(code));
-    if(!d){set({stockBarcodeOpen:false,stockBarcodeMode:null,stockSearch:code,stockProduits:[]});toast('Aucun produit trouvé','error');return;}
-    const exact=d.find(p=>p.reference&&p.reference.toUpperCase()===code.toUpperCase());
-    const only=d.length===1?d[0]:null;
-    const pick=exact||only;
-    let sel=null;
-    if(pick) sel=await api('/api/stock/produits/'+pick.id+'/emplacements');
-    set({stockBarcodeOpen:false,stockBarcodeMode:null,stockSearch:code,stockProduits:d,stockSelProduit:sel});
-    toast(pick?('Ouvert : '+pick.reference):('Code : '+code+' — '+d.length+' résultat(s)'));
-  }catch(e){
-    toast(e.message||'Erreur scan','error');
-    set({stockBarcodeOpen:false,stockBarcodeMode:null});
-  }finally{
-    __stockScanBusy=false;
-  }
 }
 
 async function loadStockProduits(q=''){
@@ -611,6 +582,279 @@ async function doMouvement(body){
     if(S.stockSelProduit) await loadStockProduit(S.stockSelProduit.produit.id);
     if(S.stockSelEmpl) await loadStockEmplacement(S.stockSelEmpl.emplacement);
   }catch(e){toast(e.message,'error');}
+}
+
+// ── Barre de recherche MyStock (texte + micro + caméra ZXing) ────────────────
+let stockSearchState = {
+  query: '',
+  listening: false,
+  scanning: false,
+  suggestions: [],
+  cameraStream: null,
+  barcodeReader: null,
+};
+
+const STOCK_EMPLACEMENTS = ['A121','A122','A123','B121','B122','B123','C121','C122','C123'];
+const isValidStockEmplacement = (s) => STOCK_EMPLACEMENTS.includes(String(s||'').trim().toUpperCase());
+
+function startVoiceSearch(inputEl) {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    toast('Reconnaissance vocale non supportée sur ce navigateur', 'error');
+    return;
+  }
+  const recog = new SpeechRecognition();
+  recog.lang = 'fr-FR';
+  recog.interimResults = false;
+  recog.maxAlternatives = 1;
+
+  stockSearchState.listening = true;
+  renderStockSearchBar();
+
+  recog.onresult = (e) => {
+    const transcript = e.results[0][0].transcript;
+    inputEl.value = transcript;
+    stockSearchState.query = transcript;
+    stockSearchState.listening = false;
+    doStockSearch(transcript);
+    renderStockSearchBar();
+  };
+  recog.onerror = () => { stockSearchState.listening = false; renderStockSearchBar(); };
+  recog.onend = () => { stockSearchState.listening = false; renderStockSearchBar(); };
+  recog.start();
+}
+
+async function loadZXing() {
+  return new Promise((resolve, reject) => {
+    if (typeof ZXing !== 'undefined') { resolve(); return; }
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js';
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
+
+async function startCameraSearch() {
+  if (stockSearchState.scanning) return;
+  try {
+    if (typeof ZXing === 'undefined') {
+      toast('Chargement du scanner...', 'warn');
+      await loadZXing();
+    }
+  } catch (e) {
+    toast('Impossible de charger le scanner', 'error');
+    return;
+  }
+
+  stockSearchState.scanning = true;
+  renderStockSearchBar();
+
+  const modal = document.createElement('div');
+  modal.className = 'camera-modal';
+
+  const videoWrap = document.createElement('div');
+  videoWrap.className = 'camera-video-wrap';
+
+  const video = document.createElement('video');
+  video.className = 'camera-video';
+  video.autoplay = true;
+  video.playsInline = true;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'camera-overlay';
+  const frame = document.createElement('div');
+  frame.className = 'camera-frame';
+  overlay.appendChild(frame);
+
+  videoWrap.appendChild(video);
+  videoWrap.appendChild(overlay);
+
+  const hint = document.createElement('p');
+  hint.className = 'camera-hint';
+  hint.textContent = 'Pointez la caméra vers un code — emplacement (A121) ou référence produit';
+
+  const resultEl = document.createElement('div');
+  resultEl.className = 'camera-result';
+  resultEl.textContent = 'En attente de scan...';
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'camera-close';
+  closeBtn.textContent = '✕ Fermer';
+  closeBtn.onclick = () => stopCamera(modal);
+
+  modal.appendChild(videoWrap);
+  modal.appendChild(hint);
+  modal.appendChild(resultEl);
+  modal.appendChild(closeBtn);
+  document.body.appendChild(modal);
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+    stockSearchState.cameraStream = stream;
+    video.srcObject = stream;
+
+    const hints = new Map();
+    const formats = [
+      ZXing.BarcodeFormat.CODE_128,
+      ZXing.BarcodeFormat.EAN_13,
+      ZXing.BarcodeFormat.EAN_8,
+      ZXing.BarcodeFormat.QR_CODE,
+      ZXing.BarcodeFormat.DATA_MATRIX,
+    ];
+    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
+    const reader = new ZXing.BrowserMultiFormatReader(hints);
+    stockSearchState.barcodeReader = reader;
+
+    reader.decodeFromVideoDevice(null, video, (result) => {
+      if (result) {
+        const text = result.getText();
+        resultEl.textContent = '✅ ' + text;
+        resultEl.style.borderColor = 'var(--success)';
+        resultEl.style.color = 'var(--success)';
+        setTimeout(() => { stopCamera(modal); handleBarcodeResult(text); }, 600);
+      }
+    });
+  } catch (err) {
+    toast('Accès caméra refusé ou non disponible', 'error');
+    stopCamera(modal);
+  }
+}
+
+function stopCamera(modal) {
+  if (stockSearchState.cameraStream) {
+    stockSearchState.cameraStream.getTracks().forEach(t => t.stop());
+    stockSearchState.cameraStream = null;
+  }
+  if (stockSearchState.barcodeReader) {
+    try { stockSearchState.barcodeReader.reset(); } catch(e) {}
+    stockSearchState.barcodeReader = null;
+  }
+  stockSearchState.scanning = false;
+  if (modal) modal.remove();
+  renderStockSearchBar();
+}
+
+function handleBarcodeResult(text) {
+  const cleaned = String(text || '').trim().toUpperCase();
+  if (!cleaned) return;
+
+  if (isValidStockEmplacement(cleaned)) {
+    toast('Emplacement détecté : ' + cleaned);
+    set({ stockView: 'emplacement' });
+    loadStockEmplacement(cleaned).then(() => render()).catch(()=>{});
+  } else {
+    toast('Référence détectée : ' + cleaned);
+    set({ stockView: 'produit', stockSearch: cleaned });
+    loadStockProduits(cleaned).then(() => render());
+  }
+}
+
+async function doStockSearch(q) {
+  stockSearchState.query = q;
+  const cleaned = String(q || '').trim().toUpperCase();
+  if (!cleaned || cleaned.length < 2) {
+    stockSearchState.suggestions = [];
+    renderStockSearchBar();
+    return;
+  }
+
+  // Emplacements : ne déclencher la vue emplacement QUE si l'emplacement est valide (sinon ça spam l'API en 404)
+  if (/^[ABC]\d{3}$/i.test(cleaned) && isValidStockEmplacement(cleaned)) {
+    try{
+      await loadStockEmplacement(cleaned);
+      set({ stockView: 'emplacement' });
+    }catch(e){/* ignore */}
+    stockSearchState.suggestions = [];
+    renderStockSearchBar();
+    return;
+  }
+
+  await loadStockProduits(cleaned);
+  stockSearchState.suggestions = (S.stockProduits || []).slice(0, 6);
+  renderStockSearchBar();
+}
+
+function renderStockSearchBar() {
+  const bar = document.getElementById('stock-search-bar');
+  if (!bar) return;
+  bar.innerHTML = '';
+
+  const wrap = document.createElement('div');
+  wrap.className = 'stock-search-wrap';
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'stock-search-input';
+  input.placeholder = '🔍  Emplacement (A121) ou référence…';
+  input.value = stockSearchState.query || S.stockSearch || '';
+  input.addEventListener('input', (e) => doStockSearch(e.target.value));
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      stockSearchState.suggestions = [];
+      renderStockSearchBar();
+      const q = String(stockSearchState.query || '').trim();
+      if (q) {
+        set({ stockView: 'produit', stockSearch: q });
+        loadStockProduits(q).then(() => render());
+      }
+    }
+    if (e.key === 'Escape') {
+      stockSearchState.suggestions = [];
+      renderStockSearchBar();
+    }
+  });
+
+  // Dropdown suggestions
+  if (stockSearchState.suggestions && stockSearchState.suggestions.length > 0) {
+    const sugg = document.createElement('div');
+    sugg.className = 'search-suggestions';
+    stockSearchState.suggestions.forEach(p => {
+      const item = document.createElement('div');
+      item.className = 'search-suggestion-item';
+      item.innerHTML = `
+        <div>
+          <div class="search-suggestion-ref">${p.reference}</div>
+          <div class="search-suggestion-des">${p.designation}</div>
+        </div>
+        <span class="stock-badge">${p.stock_total || 0} ${p.unite}</span>
+      `;
+      item.addEventListener('click', () => {
+        stockSearchState.query = p.reference;
+        stockSearchState.suggestions = [];
+        loadStockProduit(p.id).then(() => { set({ stockView: 'produit' }); });
+      });
+      sugg.appendChild(item);
+    });
+    wrap.appendChild(sugg);
+  }
+
+  wrap.appendChild(input);
+
+  const micBtn = document.createElement('button');
+  micBtn.className = 'stock-search-btn' + (stockSearchState.listening ? ' active' : '');
+  micBtn.type = 'button';
+  micBtn.title = 'Recherche vocale';
+  micBtn.textContent = stockSearchState.listening ? '🔴' : '🎤';
+  micBtn.addEventListener('click', () => startVoiceSearch(input));
+
+  const camBtn = document.createElement('button');
+  camBtn.className = 'stock-search-btn' + (stockSearchState.scanning ? ' active' : '');
+  camBtn.type = 'button';
+  camBtn.title = 'Scanner un code';
+  camBtn.textContent = '📷';
+  camBtn.addEventListener('click', () => startCameraSearch());
+
+  bar.appendChild(wrap);
+  bar.appendChild(micBtn);
+  bar.appendChild(camBtn);
+}
+
+function initStockSearchBar() {
+  const bar = document.getElementById('stock-search-bar');
+  if (bar) renderStockSearchBar();
 }
 
 function renderPortal(){
@@ -755,31 +999,23 @@ function renderStock(){
       ))
     ):null;
 
-    const scanGrille=h('div',{style:{marginBottom:'8px'}},
-      h('button',{type:'button',className:'btn-sm',onClick:()=>openStockBarcodeFromGrille()},
-        '📷 Scanner un code-barres (caméra)')
-    );
-
-    content=h('div',null,statBar,scanGrille,grid,mvtTable);
+    content=h('div',null,statBar,grid,mvtTable);
   }
 
   else if(S.stockView==='produit'){
     const produits=S.stockProduits||[];
     const sel=S.stockSelProduit;
 
-    const newRef=h('input',{type:'text',placeholder:'Référence *',style:{textTransform:'uppercase',flex:'1',minWidth:'140px'},value:S.stockPendingRef||''});
-    newRef.addEventListener('input',()=>{S.stockPendingRef=newRef.value;});
+    const newRef=h('input',{type:'text',placeholder:'Référence *',style:{textTransform:'uppercase',flex:'1',minWidth:'140px'}});
     const newDes=h('input',{type:'text',placeholder:'Désignation *'});
     const newUnit=h('input',{type:'text',placeholder:'Unité (ex: m, rouleau, carton)',value:'unité'});
     const newForm=h('div',{className:'card',style:{padding:'16px',marginBottom:'16px'}},
       h('div',{className:'form-section-title'},'Nouveau produit'),
-      h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center'}},newRef,
-        h('button',{type:'button',className:'btn-sm',title:'Remplir la référence par scan',onClick:()=>openStockBarcodeScanner('newRef')},'📷'),
-        newDes,newUnit,
+      h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center'}},newRef,newDes,newUnit,
         h('button',{className:'btn-sm',onClick:()=>{
           if(!newRef.value||!newDes.value)return;
           createProduit({reference:newRef.value,designation:newDes.value,unite:newUnit.value||'unité'});
-          newRef.value='';newDes.value='';S.stockPendingRef=null;
+          newRef.value='';newDes.value='';
         }},'+ Créer')
       )
     );
@@ -790,9 +1026,7 @@ function renderStock(){
       S.stockSearch=e.target.value;
       loadStockProduits(e.target.value);
     });
-    const searchRow=h('div',{className:'stock-search-row'},searchI,
-      h('button',{type:'button',className:'btn-sm',title:'Lire un code-barres / QR avec la caméra',onClick:()=>openStockBarcodeScanner('search')},'📷 Scanner')
-    );
+    const searchRow=h('div',{className:'stock-search-row'},searchI);
 
     const liste=h('div',{className:'card',style:{maxHeight:'500px',overflowY:'auto'}},
       produits.length===0?h('div',{className:'card-empty'},'Aucun produit'):
@@ -917,7 +1151,6 @@ function renderStock(){
     content=h('div',null,empl_list,detail);
   }
 
-  const scanModal=S.stockBarcodeOpen?renderStockBarcodeModal():null;
   const topbar=h('div',{className:'mobile-topbar'},
     h('button',{type:'button',className:'mobile-menu-btn',onClick:toggleSidebar,'aria-label':'Menu'},'☰'),
     h('div',null,
@@ -927,21 +1160,25 @@ function renderStock(){
       )
     )
   );
+  const mainEl=h('main',{className:'main',style:{padding:0}},
+    h('div',{id:'stock-search-bar',className:'stock-search-bar'}),
+    h('div',{className:'container',style:{padding:'24px 28px'}},
+      topbar,
+      h('h1',null,S.stockView==='grille'?'Vue globale':S.stockView==='produit'?'Par référence':'Par emplacement'),
+      h('div',{className:'subtitle'},
+        S.stockView==='grille'?'Tous les emplacements et leur contenu — raccourci scan ci-dessous':
+        S.stockView==='produit'?'Recherche, micro, scan code (caméra), mouvements de stock':
+        'Voir le contenu d\'un emplacement'
+      ),
+      content
+    )
+  );
+  requestAnimationFrame(()=>initStockSearchBar());
   return h('div',null,
     S.sidebarOpen?h('div',{className:'sidebar-overlay',onClick:closeSidebar}):null,
     h('div',{className:'app'},sidebar,
-      h('main',{className:'main'},h('div',{className:'container'},
-        topbar,
-        h('h1',null,S.stockView==='grille'?'Vue globale':S.stockView==='produit'?'Par référence':'Par emplacement'),
-        h('div',{className:'subtitle'},
-          S.stockView==='grille'?'Tous les emplacements et leur contenu — raccourci scan ci-dessous':
-          S.stockView==='produit'?'Recherche, scan code-barres (caméra), mouvements de stock':
-          'Voir le contenu d\'un emplacement'
-        ),
-        content
-      ))
+      mainEl
     ),
-    scanModal
   );
 }
 
