@@ -7,6 +7,7 @@ from fastapi.responses import StreamingResponse
 from database import get_db, parse_file, map_columns, parse_french_number, is_duplicate, parse_datetime
 from config import UPLOAD_DIR, classify_operation
 from services.auth_service import require_admin
+from services.path_safety import path_is_under_directory, safe_upload_dest
 
 router = APIRouter()
 
@@ -56,7 +57,10 @@ async def import_file(request: Request, file: UploadFile = File(...)):
     require_admin(request)
     contents = await file.read()
     filename = file.filename or "unknown"
-    save_path = os.path.join(UPLOAD_DIR, f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{filename}")
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    save_path = safe_upload_dest(UPLOAD_DIR, filename, ts)
+    if not path_is_under_directory(save_path, UPLOAD_DIR):
+        raise HTTPException(status_code=400, detail="Chemin de sauvegarde invalide")
     with open(save_path, "wb") as f:
         f.write(contents)
 
@@ -191,7 +195,7 @@ def delete_import(import_id: int, request: Request):
         conn.execute("DELETE FROM imports WHERE id=?", (import_id,))
         conn.commit()
     fp = imp["file_path"]
-    if fp and os.path.exists(fp):
+    if fp and os.path.exists(fp) and path_is_under_directory(fp, UPLOAD_DIR):
         try:
             os.remove(fp)
         except Exception:

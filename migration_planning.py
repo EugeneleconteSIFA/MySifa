@@ -9,11 +9,14 @@ Exécuter une seule fois :
 """
 
 import sqlite3
-import os
+import sys
+from pathlib import Path
 
-# ⚠️ Adapter le chemin si besoin (même chemin que dans ton database.py)
-DB_PATH = os.path.join(os.path.dirname(__file__), "data", "production.db")
-# Si ta base est à la racine : DB_PATH = "production.db"
+ROOT = Path(__file__).resolve().parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from config import DB_PATH  # noqa: E402 — aligné sur data/production.db ou $DB_PATH
 
 MIGRATION_SQL = """
 -- ═══════════════════════════════════════════════════════════════

@@ -12,9 +12,17 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Request, HTTPException
 from database import get_db
-from services.auth_service import require_admin
+from services.auth_service import require_admin, get_current_user
 
 router = APIRouter(prefix="/api/planning", tags=["planning"])
+
+
+def require_planning_view(request: Request) -> dict:
+    """Accès lecture planning : direction/administration/fabrication."""
+    user = get_current_user(request)
+    if user.get("role") not in {"direction", "administration", "fabrication"}:
+        raise HTTPException(status_code=403, detail="Accès réservé au planning")
+    return user
 
 
 def compute_statut(entry: dict) -> str:
@@ -335,7 +343,7 @@ def _compute_timeline_slots(
 @router.get("/machines")
 def list_machines(request: Request):
     """Liste des machines actives."""
-    require_admin(request)
+    require_planning_view(request)
     with get_db() as conn:
         rows = conn.execute(
             "SELECT * FROM machines WHERE actif=1 ORDER BY nom"
@@ -343,9 +351,36 @@ def list_machines(request: Request):
     return [dict(r) for r in rows]
 
 
+@router.get("/summary")
+def planning_summary(request: Request):
+    """Diagnostic : total dossiers planning + répartition par machine (vérif local vs VPS)."""
+    user = require_planning_view(request)
+    from config import DB_PATH
+
+    with get_db() as conn:
+        total = conn.execute("SELECT COUNT(*) FROM planning_entries").fetchone()[0]
+        rows = conn.execute(
+            """
+            SELECT m.id AS machine_id, m.nom, COUNT(e.id) AS entries_count
+            FROM machines m
+            LEFT JOIN planning_entries e ON e.machine_id = m.id
+            WHERE m.actif = 1
+            GROUP BY m.id, m.nom
+            ORDER BY m.nom
+            """
+        ).fetchall()
+    out: Dict[str, Any] = {
+        "planning_entries_total": int(total),
+        "per_machine": [dict(r) for r in rows],
+    }
+    if user.get("role") in {"direction", "administration"}:
+        out["db_path"] = DB_PATH
+    return out
+
+
 @router.get("/machines/{machine_id}")
 def get_machine(machine_id: int, request: Request):
-    require_admin(request)
+    require_planning_view(request)
     with get_db() as conn:
         row = conn.execute("SELECT * FROM machines WHERE id=?", (machine_id,)).fetchone()
     if not row:
@@ -389,7 +424,7 @@ async def set_machine_horaires(machine_id: int, request: Request):
 
 @router.get("/machines/{machine_id}/entries")
 def list_entries(machine_id: int, request: Request):
-    require_admin(request)
+    require_planning_view(request)
     with get_db() as conn:
         _auto_complete_en_cours(conn, machine_id)
         conn.commit()
@@ -508,9 +543,25 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
             raise HTTPException(404, "Entrée non trouvée")
 
         exd = dict(ex)
-        # Entrées verrouillées : empêcher les modifications "mécaniques" (drag & drop / cohérence)
-        # L'admin peut quand même forcer un statut via /statut si besoin.
-        if compute_statut(exd) in ("en_cours", "termine"):
+        statut_auto = compute_statut(exd)
+        # Entrées verrouillées : on autorise uniquement la modification de durée sur "en cours"
+        # (utile pour ajuster l'estimation) mais on bloque le reste.
+        if statut_auto in ("en_cours", "termine"):
+            if statut_auto == "en_cours" and duree is not None and float(duree) != float(ex["duree_heures"]):
+                ps = exd.get("planned_start")
+                st = _parse_planned_dt(ps)
+                if st:
+                    pe = _fmt_ts(st + timedelta(hours=float(duree)))
+                else:
+                    pe = exd.get("planned_end")
+                conn.execute(
+                    """UPDATE planning_entries
+                       SET duree_heures=?, updated_at=?, planned_end=?
+                       WHERE id=? AND machine_id=?""",
+                    (float(duree), now, pe, entry_id, machine_id),
+                )
+                conn.commit()
+                return {"success": True, "partial": "duree_heures"}
             raise HTTPException(400, "Ce dossier est verrouillé — statut en cours ou terminé")
         if (
             exd.get("statut") == "attente"
@@ -597,9 +648,33 @@ async def reorder_entries(machine_id: int, request: Request):
 
     now = datetime.now().isoformat()
     with get_db() as conn:
-        # Bloquer tout réordonnancement impliquant des entrées verrouillées
-        for eid in entry_ids:
-            _assert_not_locked(conn, machine_id, int(eid))
+        # Autoriser le reorder même si des entrées sont verrouillées,
+        # à condition que les entrées verrouillées (en_cours/termine) restent
+        # exactement à la même position (index) dans la liste.
+        rows = conn.execute(
+            """SELECT id, statut, statut_force, planned_start, planned_end
+               FROM planning_entries
+               WHERE machine_id=?
+               ORDER BY position ASC""",
+            (machine_id,),
+        ).fetchall()
+        cur_ids = [int(r["id"]) for r in rows]
+        wanted_ids = [int(x) for x in entry_ids]
+
+        if set(wanted_ids) != set(cur_ids) or len(wanted_ids) != len(cur_ids):
+            raise HTTPException(400, "entry_ids doit contenir toutes les entrées de la machine")
+
+        locked_pos = {}
+        for idx, r in enumerate(rows):
+            st = compute_statut(dict(r))
+            if st in ("en_cours", "termine"):
+                locked_pos[int(r["id"])] = idx
+
+        wanted_index = {eid: i for i, eid in enumerate(wanted_ids)}
+        for eid, old_idx in locked_pos.items():
+            if wanted_index.get(eid) != old_idx:
+                raise HTTPException(400, "Impossible de déplacer un dossier en cours/terminé")
+
         for pos, eid in enumerate(entry_ids, start=1):
             conn.execute(
                 "UPDATE planning_entries SET position=?, updated_at=? WHERE id=? AND machine_id=?",
@@ -680,7 +755,7 @@ async def insert_after(machine_id: int, after_entry_id: int, request: Request):
 @router.get("/machines/{machine_id}/holidays")
 def list_holidays(machine_id: int, request: Request, start: str, end: str):
     """Liste des jours off entre start/end (YYYY-MM-DD)."""
-    require_admin(request)
+    require_planning_view(request)
     with get_db() as conn:
         rows = conn.execute(
             """SELECT date,is_off,label FROM planning_holidays
@@ -693,7 +768,7 @@ def list_holidays(machine_id: int, request: Request, start: str, end: str):
 @router.get("/machines/{machine_id}/day-work")
 def list_day_work(machine_id: int, request: Request, start: str, end: str):
     """Dates travaillées (is_worked) entre start et end. Samedi : is_worked=1 = travaillé."""
-    require_admin(request)
+    require_planning_view(request)
     with get_db() as conn:
         rows = conn.execute(
             """SELECT date, is_worked FROM planning_day_worked
@@ -764,7 +839,7 @@ async def set_holiday(machine_id: int, request: Request):
 @router.get("/machines/{machine_id}/config")
 def get_week_config(machine_id: int, request: Request, semaine: Optional[str] = None):
     """Récupérer la config d'une semaine (ou semaine courante)."""
-    require_admin(request)
+    require_planning_view(request)
     if not semaine:
         today = datetime.now()
         semaine = f"{today.year}-W{today.isocalendar()[1]:02d}"
@@ -816,7 +891,7 @@ async def set_week_config(machine_id: int, request: Request):
 @router.get("/machines/{machine_id}/timeline")
 def get_timeline(machine_id: int, request: Request, semaine: Optional[str] = None):
     """Calcule la timeline : créneaux figés (terminé / en cours avec dates) ou recalculés (en attente)."""
-    require_admin(request)
+    require_planning_view(request)
 
     with get_db() as conn:
         machine = conn.execute("SELECT * FROM machines WHERE id=?", (machine_id,)).fetchone()

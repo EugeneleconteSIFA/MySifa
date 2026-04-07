@@ -1,9 +1,8 @@
 """SIFA — Stats v0.6"""
-import json, os
 from fastapi import APIRouter, Request
 from database import get_db
 from services.auth_service import require_admin
-from config import APP_VERSION, BASE_DIR
+from config import APP_VERSION, OPERATION_SEVERITY
 
 router = APIRouter()
 
@@ -22,10 +21,8 @@ def dashboard_stats(request: Request):
 
 @router.get("/api/config/operations")
 def get_ops_config():
-    try:
-        with open(os.path.join(BASE_DIR,"operations.json"),"r",encoding="utf-8") as f:
-            return json.load(f)
-    except: return {}
+    """Même source que le moteur d’import (config.OPERATION_SEVERITY — operations.json validé au démarrage)."""
+    return OPERATION_SEVERITY
 
 @router.get("/api/health")
 def health():

@@ -9,6 +9,8 @@ import secrets
 # ─── Chemins ──────────────────────────────────────────────────────
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR   = os.path.join(BASE_DIR, "data")
+# Une seule base applicative : défaut data/production.db. Surcharge : variable d'environnement DB_PATH.
+# Sauvegarde : copier ce fichier + data/uploads/ ; optionnel : operations.json, data/emplacements_plan.csv
 DB_PATH    = os.getenv("DB_PATH", os.path.join(DATA_DIR, "production.db"))
 UPLOAD_DIR = os.path.join(DATA_DIR, "uploads")
 
@@ -65,10 +67,45 @@ CODE_PRODUCTION = "03"
 CODE_REPRISE    = "88"
 
 # ─── Classification opérations ────────────────────────────────────
+_ALLOWED_SEVERITY = frozenset({"info", "attention", "critique"})
+
+
+def validate_operations_config(data: object) -> None:
+    """Lève ValueError si la structure de operations.json est invalide."""
+    if not isinstance(data, dict) or len(data) == 0:
+        raise ValueError("operations.json doit être un objet JSON non vide.")
+    for code, entry in data.items():
+        ck = str(code).strip()
+        if not ck or not re.match(r"^\d+$", ck):
+            raise ValueError(f"operations.json : clé de code invalide « {code} ».")
+        if not isinstance(entry, dict):
+            raise ValueError(f"operations.json : l'entrée « {ck} » doit être un objet.")
+        for k in ("severity", "label", "category"):
+            if k not in entry:
+                raise ValueError(f"operations.json : « {ck} » manque le champ « {k} ».")
+            if not isinstance(entry[k], str):
+                raise ValueError(f"operations.json : « {ck} ».{k} doit être une chaîne.")
+        if entry["severity"] not in _ALLOWED_SEVERITY:
+            raise ValueError(
+                f"operations.json : « {ck} ».severity invalide (« {entry['severity']} »)."
+            )
+
+
 def load_operations():
     path = os.path.join(BASE_DIR, "operations.json")
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except FileNotFoundError as e:
+        raise RuntimeError(f"Fichier manquant : {path}") from e
+    except json.JSONDecodeError as e:
+        raise RuntimeError(f"JSON invalide : {path} — {e}") from e
+    try:
+        validate_operations_config(data)
+    except ValueError as e:
+        raise RuntimeError(f"operations.json : {e}") from e
+    return data
+
 
 OPERATION_SEVERITY = load_operations()
 

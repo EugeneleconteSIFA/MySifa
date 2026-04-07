@@ -7,9 +7,33 @@ import pandas as pd
 import io
 import json
 import os
+from pathlib import Path
+from typing import Optional
 from datetime import datetime
 from contextlib import contextmanager
 from config import DB_PATH, UPLOAD_DIR, classify_operation
+from services.emplacements_plan import reload_emplacements_plan, sync_emplacements_plan_to_db
+
+# Baselinage des migrations SQL déjà regroupées dans _migrate (historique).
+SCHEMA_MIGRATION_VERSION_BASELINE = 1
+
+
+def _ensure_schema_migrations_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS schema_migrations (
+            version INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            applied_at TEXT NOT NULL
+        )"""
+    )
+
+
+def _record_schema_migration(conn: sqlite3.Connection, version: int, name: str) -> None:
+    _ensure_schema_migrations_table(conn)
+    conn.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version, name, applied_at) VALUES (?,?,?)",
+        (version, name, datetime.now().isoformat()),
+    )
 
 
 @contextmanager
@@ -129,8 +153,19 @@ def init_db():
         conn.commit()
 
 
+def sync_emplacements_plan_from_csv(csv_path: Optional[Path] = None) -> int:
+    """Recharge la table emplacements_plan depuis data/emplacements_plan.csv (voir services/emplacements_plan.py)."""
+    return sync_emplacements_plan_to_db(DB_PATH, csv_path)
+
+
+def _migrate_emplacements_plan(conn):
+    """Référentiel plan MyStock (recherche, suggestions)."""
+    reload_emplacements_plan(conn)
+
+
 def _migrate(conn):
     """Ajoute colonnes manquantes sur base existante sans tout recréer."""
+    _ensure_schema_migrations_table(conn)
     existing_pd = {row[1] for row in conn.execute("PRAGMA table_info(production_data)").fetchall()}
     for col, sql in [
         ("est_manuel",    "ALTER TABLE production_data ADD COLUMN est_manuel INTEGER DEFAULT 0"),
@@ -156,6 +191,7 @@ def _migrate(conn):
     existing_users = {row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
     for col, sql in [
         ("telephone", "ALTER TABLE users ADD COLUMN telephone TEXT"),
+        ("machine_id", "ALTER TABLE users ADD COLUMN machine_id INTEGER"),
     ]:
         if col not in existing_users:
             conn.execute(sql)
@@ -202,6 +238,16 @@ def _migrate(conn):
         )""")
         conn.execute("INSERT OR IGNORE INTO machines (nom, code) VALUES ('Cohésio 1', 'C1')")
 
+    # Machines par défaut (compat planning multi-machines)
+    # Ne force pas les IDs : s'appuie sur nom/code uniques.
+    for nom, code in [
+        ("Cohésio 1", "C1"),
+        ("Cohésio 2", "C2"),
+        ("DSI", "DSI"),
+        ("Repiquage", "REP"),
+    ]:
+        conn.execute("INSERT OR IGNORE INTO machines (nom, code) VALUES (?, ?)", (nom, code))
+
     if "planning_entries" not in existing_tables:
         conn.execute("""CREATE TABLE planning_entries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -235,7 +281,11 @@ def _migrate(conn):
     conn.execute("CREATE INDEX IF NOT EXISTS idx_planning_config_lookup ON planning_config(machine_id, semaine)")
 
     # Migration v1 -> v1.1 (standalone) : planning_entries stocke ref/client/description
-    if "planning_entries" in existing_tables:
+    # Ne pas utiliser `existing_tables` ici : il est figé avant la création éventuelle de
+    # planning_entries ; sinon la table est créée sans colonnes v1.2 et les ALTER ne s’exécutent jamais.
+    if conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='planning_entries'"
+    ).fetchone():
         pe_cols = {row[1] for row in conn.execute("PRAGMA table_info(planning_entries)").fetchall()}
         if "dossier_id" in pe_cols:
             conn.execute("ALTER TABLE planning_entries RENAME TO planning_entries_old")
@@ -359,10 +409,61 @@ def _migrate(conn):
             FOREIGN KEY (produit_id) REFERENCES produits(id)
         )""")
 
+    # MyStock v2 — lots FIFO + inventaires
+    existing_tables = {row[0] for row in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+    ).fetchall()}
+
+    if "lots_stock" not in existing_tables:
+        conn.execute("""CREATE TABLE lots_stock (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            produit_id INTEGER NOT NULL,
+            emplacement TEXT NOT NULL,
+            quantite_initiale REAL NOT NULL,
+            quantite_restante REAL DEFAULT 0,
+            date_entree TEXT NOT NULL,
+            note TEXT,
+            created_by TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (produit_id) REFERENCES produits(id)
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_lots_produit ON lots_stock(produit_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_lots_empl ON lots_stock(emplacement)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_lots_date ON lots_stock(date_entree)")
+
+        # Migration v2 : convertir stock_emplacements existants en lots
+        rows = conn.execute(
+            "SELECT produit_id, emplacement, quantite, updated_at, updated_by FROM stock_emplacements WHERE quantite > 0"
+        ).fetchall()
+        now = datetime.now().isoformat()
+        for r in rows:
+            conn.execute(
+                """INSERT INTO lots_stock
+                   (produit_id,emplacement,quantite_initiale,quantite_restante,date_entree,note,created_by,created_at)
+                   VALUES (?,?,?,?,?,?,?,?)""",
+                (r["produit_id"], r["emplacement"], r["quantite"], r["quantite"],
+                 r["updated_at"] or now, "Migration v2", r["updated_by"] or "system", now)
+            )
+
+    # Colonnes inventaire / commentaire sur stock_emplacements
+    se_cols = {row[1] for row in conn.execute("PRAGMA table_info(stock_emplacements)").fetchall()}
+    if "derniere_inventaire" not in se_cols:
+        conn.execute("ALTER TABLE stock_emplacements ADD COLUMN derniere_inventaire TEXT")
+    if "commentaire" not in se_cols:
+        conn.execute("ALTER TABLE stock_emplacements ADD COLUMN commentaire TEXT")
+
+    _migrate_emplacements_plan(conn)
+
     try:
         conn.execute("UPDATE machines SET nom='Cohésio 1' WHERE nom='Cohésion 1'")
     except sqlite3.Error:
         pass
+
+    _record_schema_migration(
+        conn,
+        SCHEMA_MIGRATION_VERSION_BASELINE,
+        "mysifa_aggregate_migrations_v1",
+    )
 
 
 def create_default_admin():

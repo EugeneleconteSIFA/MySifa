@@ -5,14 +5,13 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="__META_DESCRIPTION__">
-<meta name="theme-color" content="__THEME_COLOR__">
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'><rect width='100' height='100' rx='22' fill='%230a0e17'/><text x='50' y='67' font-family='Segoe UI,system-ui,sans-serif' font-size='38' font-weight='800' text-anchor='middle' letter-spacing='-1.5'><tspan fill='%23f1f5f9'>My</tspan><tspan fill='%2322d3ee'>S</tspan></text></svg>">
-
-<link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAAC0CAYAAAAi5cpMAAAACXBIWXMAAAsTAAALEwEAmpwYAAAF8mlUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPD94cGFja2V0IGJlZ2luPSLvu78iIGlkPSJXNU0wTXBDZWhpSHpyZVN6TlRjemtjOWQiPz4gPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iQWRvYmUgWE1QIENvcmUgOS4xLWMwMDEgNzkuYThkNGU1MSwgMjAyMy8xMC8yNi0xNzoyNjowMCAgICAgICAgIj4gPHJkZjpSREYgeG1sbnM6cmRmPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5LzAyLzIyLXJkZi1zeW50YXgtbnMjIj4gPHJkZjpEZXNjcmlwdGlvbiByZGY6YWJvdXQ9IiIgeG1sbnM6eG1wPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvIiB4bWxuczp4bXBNTT0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL21tLyIgeG1sbnM6c3RSZWY9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9zVHlwZS9SZXNvdXJjZVJlZiMiIHhtcDpDcmVhdG9yVG9vbD0iQWRvYmUgUGhvdG9zaG9wIDI1LjIgKE1hY2ludG9zaCkiIHhtcE1NOkluc3RhbmNlSUQ9InhtcC5paWQ6OEM5OEQ0NkI4NkQwMTFFRUJFMkNBRDM4NTdFMzg1M0IiIHhtcE1NOkRvY3VtZW50SUQ9InhtcC5kaWQ6OEM5OEQ0NkM4NkQwMTFFRUJFMkNBRDM4NTdFMzg1M0IiPiA8eG1wTU06RGVyaXZlZEZyb20gc3RSZWY6aW5zdGFuY2VJRD0ieG1wLmlpZDo4Qzk4RDQ2OTg2RDAxMUVFQkUyQ0FEMzg1N0UzODUzQiIgc3RSZWY6ZG9jdW1lbnRJRD0ieG1wLmRpZDo4Qzk4RDQ2QTg2RDAxMUVFQkUyQ0FEMzg1N0UzODUzQiIvPiA8L3JkZjpEZXNjcmlwdGlvbj4gPC9yZGY6UkRGPiA8L3g6eG1wbWV0YT4gPD94cGFja2V0IGVuZD0iciI/Pjj0GykAAAXpSURBVHja7Z1byFVVFMf3nNTSyjQzLTPNMkvLyjIzLUvLi5llWqZlZZqWpWVaWpZpWZaWaWlapmVpWaaWaZmWpWVampaZlqVpWZqWpWVaWqZlaZmaZWqZlmVqmZZpWqZlaZqWZWqalmVqmpZlaZqWZWqalqVpmpalaVqWpWlaWqZlWZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpalaVqWpWlaWqZlWZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZWmalmVqmpZlaZqWZGkZCDAAPyfrkMAAAAASUVORK5CYII=">
-
+<link rel="icon" type="image/png" sizes="512x512" href="/static/mys_icon_512.png">
+<link rel="apple-touch-icon" href="/static/mys_icon_180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="MySifa">
+<meta name="theme-color" content="#0a0e17">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
 <title>__PAGE_TITLE__</title>
 <style>
@@ -59,19 +58,31 @@ button:focus:not(:focus-visible){outline:none}
 .sidebar::-webkit-scrollbar{width:0}
 .sidebar{scrollbar-width:none}
 .mobile-topbar{display:none;align-items:center;gap:10px;margin-bottom:14px}
-.mobile-menu-btn{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;
+.mobile-menu-btn{display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;
   border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;font-family:inherit}
 .mobile-menu-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 .mobile-topbar-title{font-size:14px;font-weight:800}
 .mobile-topbar-sub{font-size:11px;color:var(--muted);margin-top:2px}
 .sidebar-overlay{display:none}
+.back-mysifa{
+  border:none!important;
+  background:transparent!important;
+  font-weight:400!important;
+  color:var(--text2)!important;
+  padding:8px 10px!important;
+}
+.back-mysifa:hover{color:var(--text)!important;background:transparent!important}
+.back-mysifa .wm{font-weight:800;color:var(--text)}
+.back-mysifa .wm span{color:var(--accent)}
 @media (max-width: 900px){
   .sidebar{position:fixed;left:0;top:0;bottom:0;z-index:9000;transform:translateX(-105%);transition:transform .18s ease;box-shadow:0 16px 48px rgba(0,0,0,.55)}
   body.sb-open .sidebar{transform:translateX(0)}
   .main{padding:18px}
-  .mobile-topbar{display:flex}
+  .mobile-topbar{display:flex;position:fixed;top:0;left:0;right:0;z-index:120;background:var(--bg);padding:10px 18px;border-bottom:1px solid var(--border)}
+  .mobile-menu-btn{display:inline-flex}
   .sidebar-overlay{display:block;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:8999}
   body:not(.sb-open) .sidebar-overlay{display:none}
+  body.has-topbar .main{padding-top:74px}
 }
 .logo{padding:0 8px;margin-bottom:32px}
 .logo-brand{font-size:15px;font-weight:800}.logo-brand span{color:var(--accent)}
@@ -84,6 +95,12 @@ button:focus:not(:focus-visible){outline:none}
 .user-chip .uc-role{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px}
 .theme-btn,.logout-btn{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-size:12px;width:100%;font-family:inherit;transition:all .15s}
 .theme-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+.theme-btn .theme-ico{font-size:14px;line-height:1}
+.theme-btn .theme-label{white-space:nowrap}
+@media (display-mode: standalone), (max-width: 900px){
+  .theme-btn .theme-label{display:none}
+  .theme-btn{justify-content:center}
+}
 .logout-btn{border:none}.logout-btn:hover{color:var(--danger);background:rgba(248,113,113,.1)}
 .version{font-size:10px;color:var(--muted);font-family:monospace;padding:4px 12px}
 .main{flex:1;padding:28px;overflow-y:auto}.container{max-width:1200px;margin:0 auto}
@@ -176,7 +193,15 @@ tr.data-row:hover td{background:rgba(34,211,238,0.025)}
 @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 input[type=text],input[type=number],input[type=email],input[type=password]{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;width:100%;outline:none;font-family:inherit}
-select.form-sel{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;width:100%;outline:none;font-family:inherit}
+select.form-sel{
+  background:var(--bg);border:1px solid var(--border);border-radius:8px;
+  padding:8px 12px;padding-right:32px;
+  color:var(--text);font-size:13px;outline:none;font-family:inherit;
+  cursor:pointer;appearance:none;-webkit-appearance:none;
+  background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E\");
+  background-repeat:no-repeat;background-position:right 10px center;
+}
+select.form-sel:focus{border-color:var(--accent)}
 .btn{background:var(--accent);color:var(--bg);border:none;border-radius:8px;padding:10px 24px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:12px}
 .btn-sm{background:var(--accent);color:var(--bg);border:none;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
 .btn-ghost{background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:6px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
@@ -327,11 +352,16 @@ body.light .portal-app--busy::after{background:rgba(255,255,255,.88);color:var(-
 .stock-search-row{display:flex;gap:10px;align-items:stretch;margin-bottom:16px;flex-wrap:wrap}
 .stock-search-row .search-bar{margin-bottom:0;flex:1;min-width:180px}
 .stock-search-bar{
-  position:sticky;top:0;z-index:50;
+  position:sticky;top:0;z-index:80;
+  width:100%;
   background:var(--card);
   border-bottom:1px solid var(--border);
   padding:10px 20px;
   display:flex;align-items:center;gap:10px;
+}
+@media (max-width: 900px){
+  /* La topbar mobile est fixe : on colle la search juste dessous */
+  .stock-search-bar{top:74px;z-index:110}
 }
 .stock-search-input{
   flex:1;background:var(--bg);
@@ -398,13 +428,33 @@ body.light .portal-app--busy::after{background:rgba(255,255,255,.88);color:var(-
 .search-suggestion-item:hover{background:var(--accent-bg);color:var(--accent)}
 .search-suggestion-ref{font-family:monospace;font-weight:700}
 .search-suggestion-des{font-size:11px;color:var(--muted)}
+.search-suggestion-empl .search-suggestion-ref{color:var(--c2)}
+.search-suggestion-section{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.06em;padding:8px 16px 4px;background:var(--bg);border-bottom:1px solid var(--border)}
 .stock-search-wrap{position:relative;flex:1}
+/* Saisie emplacement en majuscules, placeholder en « phrase » (seule la 1ʳᵉ lettre en capitale). */
+.stock-add-empl-input{text-transform:uppercase}
+.stock-add-empl-input::placeholder{
+  text-transform:none;
+  opacity:.72;
+}
+.stock-empl-suggest-add{
+  padding:10px 16px;cursor:pointer;font-size:13px;font-weight:700;
+  border-top:2px solid var(--border);
+  background:rgba(167,139,250,.14);color:var(--c2);
+  transition:background .12s,color .12s;
+}
+.stock-empl-suggest-add:hover{background:rgba(167,139,250,.26);color:var(--text)}
+body.light .stock-empl-suggest-add{background:rgba(124,58,237,.12);color:#5b21b6}
+body.light .stock-empl-suggest-add:hover{background:rgba(124,58,237,.2);color:#1e1b4b}
 </style>
 </head>
 <body>
 <div id="root"></div>
 <script>
 const API=window.location.origin;
+const INITIAL_APP="__INITIAL_APP_VALUE__";
+const HAS_INITIAL_APP = !!(INITIAL_APP && INITIAL_APP !== "__INITIAL_APP__");
 function isAuthMePath(p){
   return p==='/api/auth/me'||p.startsWith('/api/auth/me?');
 }
@@ -435,12 +485,13 @@ function getYesterday(){
 }
 
 let S={
-  app:'login',page:'historique',user:null,
+  app: HAS_INITIAL_APP ? INITIAL_APP : 'login',
+  page:'historique',user:null,
   loginSubmitting:false,loginError:null,portalLoading:null,
   sidebarOpen:false,
   stockView:'grille',
   stockProduits:[],stockSelProduit:null,stockSelEmpl:null,
-  stockGlobale:null,stockSearch:'',stockMvtType:'entree',
+  stockGlobale:null,stockSearch:'',stockGrilleFilter:'',stockMvtType:'entree',
   filters:{},OPS_CONFIG:{},
   fv:{operateurs:[],dossiers:[],date_from:getYesterday(),date_to:getYesterday()},
   historique:null,production:null,
@@ -493,7 +544,33 @@ async function checkAuth(){
   const epoch=authEpoch;
   const user=await api('/api/auth/me');
   if(epoch!==authEpoch)return;
-  if(user){S.user=user;S.app='portal';await loadFilters();await loadHist();}
+  if(user){
+    S.user=user;
+    S.app=HAS_INITIAL_APP ? INITIAL_APP : 'portal';
+    // Support : redirection post-login (ex: /?next=/planning)
+    try{
+      const sp=new URLSearchParams(window.location.search||'');
+      const nxt=(sp.get('next')||'').trim();
+      if(nxt && nxt.startsWith('/')){
+        window.location.href=nxt;
+        return;
+      }
+    }catch(e){}
+    // Permet d'ouvrir directement une section depuis /planning → /prod?page=users
+    try{
+      const sp=new URLSearchParams(window.location.search||'');
+      const p=(sp.get('page')||'').trim();
+      const allowed=new Set(['historique','production','saisies','import','rentabilite','dossiers','users','profil']);
+      if(S.app==='prod' && allowed.has(p)) S.page=p;
+    }catch(e){}
+    if(S.app==='prod'){
+      await loadFilters();
+      await loadHist();
+    }else if(S.app==='stock'){
+      await loadStockGlobale();
+      await loadStockProduits();
+    }
+  }
   else{S.user=null;S.app='login';}
   render();
 }
@@ -512,7 +589,23 @@ async function doLogin(email,password){
     }
     authEpoch++;
     S.user=r.user;
-    S.app='portal';
+    S.app=HAS_INITIAL_APP ? INITIAL_APP : 'portal';
+    // Support : redirection post-login (ex: /?next=/planning)
+    try{
+      const sp=new URLSearchParams(window.location.search||'');
+      const nxt=(sp.get('next')||'').trim();
+      if(nxt && nxt.startsWith('/')){
+        window.location.href=nxt;
+        return;
+      }
+    }catch(e){}
+    // Support /prod?page=xxx après login
+    try{
+      const sp=new URLSearchParams(window.location.search||'');
+      const p=(sp.get('page')||'').trim();
+      const allowed=new Set(['historique','production','saisies','import','rentabilite','dossiers','users','profil']);
+      if(S.app==='prod' && allowed.has(p)) S.page=p;
+    }catch(e){}
     S.loginError=null;
     S.fv={
       operateurs:[],
@@ -528,8 +621,13 @@ async function doLogin(email,password){
     // Déverrouiller tout de suite — avant loadFilters/loadHist (sinon bouton « Connexion… » bloqué le temps des APIs)
     S.loginSubmitting=false;
     render();
-    await loadFilters();
-    await loadHist();
+    if(S.app==='prod'){
+      await loadFilters();
+      await loadHist();
+    }else if(S.app==='stock'){
+      await loadStockGlobale();
+      await loadStockProduits();
+    }
     render();
   }catch(e){
     S.loginError=e.message||'Erreur de connexion';
@@ -552,23 +650,41 @@ async function loadStockProduits(q=''){
   if(d)set({stockProduits:d});
 }
 async function loadStockGlobale(){
-  const d=await api('/api/stock/vue-globale');
-  if(d)set({stockGlobale:d});
+  try{
+    const d=await api('/api/stock/vue-globale');
+    if(d)set({stockGlobale:d});
+  }catch(e){
+    console.warn('loadStockGlobale',e.message);
+    set({stockGlobale:{grille:[],stats:{nb_refs:0,nb_empl:0,total_unites:0},derniers_mouvements:[]}});
+  }
 }
 async function loadStockProduit(id){
-  const d=await api('/api/stock/produits/'+id+'/emplacements');
+  const d=await api('/api/stock/produits/'+encodeURIComponent(id));
   if(d)set({stockSelProduit:d});
 }
 async function loadStockEmplacement(empl){
   const d=await api('/api/stock/emplacements/'+encodeURIComponent(empl));
-  if(d)set({stockSelEmpl:d});
+  if(d)set({stockSelEmpl:d,stockView:'emplacement'});
 }
 
 async function createProduit(body){
   try{
-    await api('/api/stock/produits',{method:'POST',
-      headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    toast('Produit créé');await loadStockProduits();await loadStockGlobale();
+    const empl=String(body.emplacement||'').trim().toUpperCase();
+    const qRaw=body.quantite_emplacement;
+    if(!empl||!isStockEmplacementCode(empl)){toast('Emplacement obligatoire (ex. A121)','error');return;}
+    const q=(qRaw!=null&&String(qRaw).trim()!==''&&!Number.isNaN(Number(String(qRaw).replace(',','.'))))
+      ?Number(String(qRaw).replace(',','.')):NaN;
+    if(Number.isNaN(q)||q<=0){toast('Quantité obligatoire (nombre > 0)','error');return;}
+    const apiBody={reference:body.reference,designation:body.designation,unite:body.unite||'unité',quantite:q};
+    const r=await api('/api/stock/produits',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify(apiBody)});
+    if(!r||r.id==null)return;
+    await api('/api/stock/mouvement',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({
+        produit_id:r.id,emplacement:empl,type_mouvement:'entree',quantite:q,note:''
+      })});
+    const msg=(r.existing?'Référence déjà en base — entrée de stock':'Produit créé')+' — '+fN(q)+' '+apiBody.unite+' en '+empl;
+    toast(msg);await loadStockProduits();await loadStockGlobale();
   }catch(e){toast(e.message,'error');}
 }
 
@@ -579,9 +695,229 @@ async function doMouvement(body){
     if(!r)return;
     toast('Stock mis à jour — Avant: '+r.quantite_avant+' → Après: '+r.quantite_apres);
     await loadStockGlobale();
-    if(S.stockSelProduit) await loadStockProduit(S.stockSelProduit.produit.id);
-    if(S.stockSelEmpl) await loadStockEmplacement(S.stockSelEmpl.emplacement);
+    if(S.stockView==='produit'&&S.stockSelProduit) await loadStockProduit(S.stockSelProduit.produit.id);
+    else if(S.stockView==='emplacement'&&S.stockSelEmpl) await loadStockEmplacement(S.stockSelEmpl.emplacement);
   }catch(e){toast(e.message,'error');}
+}
+
+/** Inventaire ciblé depuis le tableau de bord (une case = emplacement, une réf. = produit). */
+async function openInventaireCibleModal(cible){
+  document.querySelector('.stock-inv-cible-modal')?.remove();
+  const wrap=document.createElement('div');
+  wrap.className='add-row-modal stock-inv-cible-modal';
+  wrap.addEventListener('click',e=>{if(e.target===wrap)wrap.remove();});
+
+  const box=document.createElement('div');
+  box.className='add-row-form';
+  box.style.maxWidth='640px';
+  const title=document.createElement('h3');
+  const noteI=document.createElement('input');
+  noteI.type='text';
+  noteI.placeholder='Note (optionnel)';
+  noteI.style.width='100%';
+  noteI.style.marginBottom='12px';
+
+  let rows=[];
+  let subtitle='';
+  try{
+    if(cible.type==='empl'){
+      title.textContent='Inventaire — emplacement '+cible.code;
+      const d=await api('/api/stock/emplacements/'+encodeURIComponent(cible.code));
+      if(!d){wrap.remove();return;}
+      rows=(d.refs||[]).map(r=>({
+        produit_id:r.id,
+        ref:r.reference,
+        des:r.designation||'',
+        unite:r.unite||'',
+        empl:cible.code,
+        sys:Number(r.quantite)||0,
+      }));
+      subtitle=rows.length?('Comptage pour '+rows.length+' référence(s) en '+cible.code+'.'):('Aucun lot actif en '+cible.code+'.');
+    }else{
+      title.textContent='Inventaire — réf. '+cible.reference;
+      const plist=await api('/api/stock/produits?q='+encodeURIComponent(cible.reference)+'&limit=8');
+      if(!plist||!plist.length){toast('Produit introuvable','error');wrap.remove();return;}
+      const ru=cible.reference.toUpperCase();
+      let p=plist.find(x=>String(x.reference||'').toUpperCase()===ru)||plist[0];
+      const detail=await api('/api/stock/produits/'+encodeURIComponent(p.id));
+      if(!detail){toast('Fiche produit introuvable','error');wrap.remove();return;}
+      rows=(detail.emplacements||[]).map(e=>({
+        produit_id:p.id,
+        ref:p.reference,
+        des:detail.produit&&detail.produit.designation||'',
+        unite:detail.produit&&detail.produit.unite||'',
+        empl:e.emplacement,
+        sys:Number(e.quantite)||0,
+      }));
+      subtitle=rows.length?('Comptage sur '+rows.length+' emplacement(s) pour '+p.reference+'.'):('Aucun stock actif pour cette référence.');
+    }
+  }catch(e){
+    toast(e.message||'Erreur','error');
+    wrap.remove();
+    return;
+  }
+
+  const sub=document.createElement('p');
+  sub.style.fontSize='12px';
+  sub.style.color='var(--muted)';
+  sub.style.marginBottom='14px';
+  sub.textContent=subtitle;
+
+  const tbl=document.createElement('div');
+  tbl.style.maxHeight='320px';
+  tbl.style.overflowY='auto';
+  tbl.style.marginBottom='16px';
+  tbl.style.border='1px solid var(--border)';
+  tbl.style.borderRadius='10px';
+
+  const inputs=[];
+  if(rows.length===0){
+    tbl.appendChild(document.createTextNode(''));
+  }else{
+    const table=document.createElement('table');
+    table.style.width='100%';
+    table.style.borderCollapse='collapse';
+    table.style.fontSize='12px';
+    const thead=document.createElement('thead');
+    const hr=document.createElement('tr');
+    if(cible.type==='empl'){
+      ['Référence','Désignation','Qté système','Qté comptée'].forEach(l=>{
+        const th=document.createElement('th');
+        th.textContent=l;
+        th.style.textAlign='left';
+        th.style.padding='8px 10px';
+        th.style.borderBottom='1px solid var(--border)';
+        th.style.color='var(--accent)';
+        hr.appendChild(th);
+      });
+    }else{
+      ['Emplacement','Qté système','Qté comptée'].forEach(l=>{
+        const th=document.createElement('th');
+        th.textContent=l;
+        th.style.textAlign='left';
+        th.style.padding='8px 10px';
+        th.style.borderBottom='1px solid var(--border)';
+        th.style.color='var(--accent)';
+        hr.appendChild(th);
+      });
+    }
+    thead.appendChild(hr);
+    table.appendChild(thead);
+    const tb=document.createElement('tbody');
+    rows.forEach((R)=>{
+      const tr=document.createElement('tr');
+      if(cible.type==='empl'){
+        const td1=document.createElement('td');
+        td1.style.padding='8px 10px';
+        td1.style.fontFamily='monospace';
+        td1.style.fontWeight='700';
+        td1.textContent=R.ref;
+        tr.appendChild(td1);
+        const td2=document.createElement('td');
+        td2.style.padding='8px 10px';
+        td2.style.color='var(--text2)';
+        td2.textContent=R.des;
+        tr.appendChild(td2);
+      }else{
+        const td0=document.createElement('td');
+        td0.style.padding='8px 10px';
+        td0.style.fontFamily='monospace';
+        td0.style.fontWeight='700';
+        td0.textContent=R.empl;
+        tr.appendChild(td0);
+      }
+      const tdSys=document.createElement('td');
+      tdSys.style.padding='8px 10px';
+      tdSys.style.fontFamily='monospace';
+      tdSys.textContent=String(R.sys)+' '+R.unite;
+      tr.appendChild(tdSys);
+      const tdIn=document.createElement('td');
+      tdIn.style.padding='6px 10px';
+      const inp=document.createElement('input');
+      inp.type='number';
+      inp.min='0';
+      inp.step='any';
+      inp.placeholder=String(R.sys);
+      inp.value=String(R.sys);
+      inp.style.width='100%';
+      inp.style.maxWidth='120px';
+      inp.dataset.produitId=String(R.produit_id);
+      inp.dataset.emplacement=R.empl;
+      inputs.push(inp);
+      tdIn.appendChild(inp);
+      tr.appendChild(tdIn);
+      tb.appendChild(tr);
+    });
+    table.appendChild(tb);
+    tbl.appendChild(table);
+  }
+
+  const actions=document.createElement('div');
+  actions.className='form-actions';
+  actions.style.marginTop='8px';
+  const btnAnn=document.createElement('button');
+  btnAnn.className='btn-ghost';
+  btnAnn.textContent='Annuler';
+  btnAnn.onclick=()=>wrap.remove();
+  const btnOk=document.createElement('button');
+  btnOk.className='btn-sm';
+  btnOk.textContent='Valider inventaire';
+  if(rows.length===0)btnOk.setAttribute('disabled','');
+  btnOk.onclick=async()=>{
+    const noteFin=(noteI.value||'').trim()||'Inventaire ciblé (tableau de bord)';
+    const lignes=[];
+    inputs.forEach(inp=>{
+      const raw=String(inp.value||'').replace(',','.');
+      if(raw===''||raw===null)return;
+      const q=parseFloat(raw);
+      if(!isFinite(q)||q<=0)return;
+      lignes.push({
+        produit_id:parseInt(inp.dataset.produitId,10),
+        emplacement:inp.dataset.emplacement,
+        quantite:q,
+      });
+    });
+    if(!lignes.length){
+      toast('Indiquez au moins une quantité comptée (> 0)','warn');
+      return;
+    }
+    btnOk.disabled=true;
+    let ok=0;
+    try{
+      for(const L of lignes){
+        const r=await api('/api/stock/mouvement',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            produit_id:L.produit_id,
+            emplacement:L.emplacement,
+            type_mouvement:'inventaire',
+            quantite:L.quantite,
+            note:noteFin,
+          }),
+        });
+        if(r)ok++;
+      }
+      toast(ok+' ligne(s) d’inventaire enregistrée(s)');
+      wrap.remove();
+      await loadStockGlobale();
+      render();
+    }catch(e){
+      toast(e.message||'Erreur','error');
+    }finally{
+      btnOk.disabled=false;
+    }
+  };
+  actions.appendChild(btnAnn);
+  actions.appendChild(btnOk);
+
+  box.appendChild(title);
+  box.appendChild(sub);
+  box.appendChild(noteI);
+  box.appendChild(tbl);
+  box.appendChild(actions);
+  wrap.appendChild(box);
+  document.body.appendChild(wrap);
 }
 
 // ── Barre de recherche MyStock (texte + micro + caméra ZXing) ────────────────
@@ -589,35 +925,191 @@ let stockSearchState = {
   query: '',
   listening: false,
   scanning: false,
-  suggestions: [],
+  suggestionProduits: [],
+  suggestionEmplacements: [],
   cameraStream: null,
   barcodeReader: null,
 };
+let stockGrilleFilterTimer = null;
+let stockSearchCaret = [0, 0];
 
 const STOCK_EMPLACEMENTS = ['A121','A122','A123','B121','B122','B123','C121','C122','C123'];
-const isValidStockEmplacement = (s) => STOCK_EMPLACEMENTS.includes(String(s||'').trim().toUpperCase());
+/** Emplacements ajoutés côté navigateur (localStorage — non synchronisés avec le serveur). */
+const LS_STOCK_EMPL_CUSTOM='mysifa_stock_empl_custom';
+function loadStockEmplCustom(){
+  try{
+    const j=localStorage.getItem(LS_STOCK_EMPL_CUSTOM);
+    const a=j?JSON.parse(j):[];
+    if(!Array.isArray(a))return [];
+    return [...new Set(a.map(x=>String(x||'').trim().toUpperCase()).filter(Boolean))];
+  }catch(e){return [];}
+}
+function saveStockEmplCustom(arr){
+  try{localStorage.setItem(LS_STOCK_EMPL_CUSTOM,JSON.stringify([...new Set(arr)]));}catch(e){}
+}
+function addCustomStockEmplacement(code){
+  const t=String(code||'').trim().toUpperCase();
+  if(!isStockEmplacementCode(t))return false;
+  const cur=loadStockEmplCustom();
+  if(cur.includes(t))return false;
+  cur.push(t);saveStockEmplCustom(cur);return true;
+}
+function allStockEmplacementChoices(){
+  return [...new Set([...STOCK_EMPLACEMENTS,...loadStockEmplCustom()])].sort();
+}
+/** Fusionne les emplacements locaux (ex. Z123) avec la réponse /api/stock/search. */
+function mergeCustomEmplIntoSearch(apiEmpl, cleaned) {
+  const qu = String(cleaned || '').trim().toUpperCase();
+  const base = apiEmpl || [];
+  if (!qu) return base.slice();
+  const have = new Set(base.map(e => String(e.emplacement || '').toUpperCase()));
+  const out = base.slice();
+  for (const c of loadStockEmplCustom()) {
+    const cu = String(c || '').trim().toUpperCase();
+    if (!cu || have.has(cu)) continue;
+    if (cu.includes(qu) || qu.includes(cu)) {
+      out.push({ emplacement: cu, nb_refs: 0, total_unites: 0 });
+      have.add(cu);
+    }
+  }
+  return out.sort((a, b) => String(a.emplacement).localeCompare(String(b.emplacement), 'fr'));
+}
+function stockBoardRefMatches(i, f) {
+  if (!f) return true;
+  const u = f.toUpperCase();
+  return String(i.reference || '').toUpperCase().includes(u) ||
+    String(i.designation || '').toUpperCase().includes(u);
+}
+function stockBoardEmplVisible(empl, items, f) {
+  if (!f) return true;
+  const u = f.toUpperCase();
+  if (String(empl).toUpperCase().includes(u)) return true;
+  return items.some(i => stockBoardRefMatches(i, f));
+}
+function stockBoardItemsForCell(empl, items, f) {
+  if (!f) return items;
+  const u = f.toUpperCase();
+  if (String(empl).toUpperCase().includes(u)) return items;
+  return items.filter(i => stockBoardRefMatches(i, f));
+}
+function scheduleGrilleFilterFromSearch() {
+  if (S.stockView !== 'grille') return;
+  const el = document.getElementById('stock-search-input');
+  if (el && typeof el.selectionStart === 'number') {
+    stockSearchCaret = [el.selectionStart, el.selectionEnd];
+  }
+  clearTimeout(stockGrilleFilterTimer);
+  stockGrilleFilterTimer = setTimeout(() => {
+    const raw = String(stockSearchState.query || '').trim();
+    const v = raw.length >= 2 ? raw.toUpperCase() : '';
+    set({ stockGrilleFilter: v });
+    requestAnimationFrame(() => {
+      const ne = document.getElementById('stock-search-input');
+      if (!ne) return;
+      try {
+        const a = Math.min(stockSearchCaret[0] != null ? stockSearchCaret[0] : 0, ne.value.length);
+        const b = Math.min(stockSearchCaret[1] != null ? stockSearchCaret[1] : a, ne.value.length);
+        ne.focus();
+        ne.setSelectionRange(a, b);
+      } catch (e) {}
+    });
+  }, 200);
+}
+/** Même règle que l’API : 1 lettre + chiffres (ex. A121, Z999). */
+function isStockEmplacementCode(s){
+  const t=String(s||'').trim().toUpperCase();
+  if(t.length<2)return false;
+  const c0=t.charCodeAt(0);
+  if(c0<65||c0>90)return false;
+  for(let i=1;i<t.length;i++){
+    const c=t.charCodeAt(i);
+    if(c<48||c>57)return false;
+  }
+  return true;
+}
+function hideStockAddEmplDropdown(){
+  const list=document.getElementById('stock-add-empl-suggestions');
+  if(list)list.style.display='none';
+}
+function refreshStockAddEmplDropdownInner(){
+  const input=document.getElementById('stock-add-empl-input');
+  const list=document.getElementById('stock-add-empl-suggestions');
+  if(!input||!list)return;
+  const q=String(input.value||'').trim().toUpperCase();
+  const all=allStockEmplacementChoices();
+  let filtered=q?all.filter(c=>c.startsWith(q)):all.slice();
+  filtered=filtered.slice(0,24);
+  list.innerHTML='';
+  filtered.forEach(code=>{
+    const row=document.createElement('div');
+    row.className='search-suggestion-item';
+    row.textContent=code;
+    row.addEventListener('mousedown',e=>{e.preventDefault();input.value=code;hideStockAddEmplDropdown();});
+    list.appendChild(row);
+  });
+  const addRow=document.createElement('div');
+  addRow.className='stock-empl-suggest-add';
+  addRow.textContent='+ Ajouter emplacement';
+  addRow.addEventListener('mousedown',e=>{
+    e.preventDefault();
+    const raw=String(input.value||'').trim().toUpperCase();
+    if(!isStockEmplacementCode(raw)){toast('Format invalide : une lettre puis des chiffres (ex. Z999)','error');return;}
+    if(addCustomStockEmplacement(raw))toast('Emplacement ajouté : '+raw);
+    else toast('Emplacement déjà dans la liste','warn');
+    input.value=raw;
+    hideStockAddEmplDropdown();
+    refreshStockAddEmplDropdownInner();
+  });
+  list.appendChild(addRow);
+}
+function wireStockAddEmplCombo(){
+  const input=document.getElementById('stock-add-empl-input');
+  if(!input||input.dataset.wired==='1')return;
+  input.dataset.wired='1';
+  const list=document.getElementById('stock-add-empl-suggestions');
+  input.addEventListener('focus',()=>{if(list){list.style.display='block';refreshStockAddEmplDropdownInner();}});
+  input.addEventListener('input',()=>{if(list){list.style.display='block';refreshStockAddEmplDropdownInner();}});
+  input.addEventListener('blur',()=>{setTimeout(hideStockAddEmplDropdown,200);});
+}
 
-function startVoiceSearch(inputEl) {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
-    toast('Reconnaissance vocale non supportée sur ce navigateur', 'error');
+function stockVoiceFullTranscript(results) {
+  let t = '';
+  for (let i = 0; i < results.length; i++) t += results[i][0].transcript;
+  return t;
+}
+
+function startVoiceSearch() {
+  // HTTPS requis pour le micro
+  if (location.protocol !== 'https:') {
+    toast('Le micro nécessite HTTPS (mysifa.com)', 'warn');
     return;
   }
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    toast('Reconnaissance vocale non supportée — utilisez Chrome ou Safari', 'error');
+    return;
+  }
+  if (!document.getElementById('stock-search-input')) renderStockSearchBar();
+  if (!document.getElementById('stock-search-input')) return;
+
   const recog = new SpeechRecognition();
   recog.lang = 'fr-FR';
-  recog.interimResults = false;
+  recog.interimResults = true;
   recog.maxAlternatives = 1;
 
   stockSearchState.listening = true;
   renderStockSearchBar();
 
   recog.onresult = (e) => {
-    const transcript = e.results[0][0].transcript;
-    inputEl.value = transcript;
+    const transcript = stockVoiceFullTranscript(e.results);
+    const field = document.getElementById('stock-search-input');
+    if (field) field.value = transcript;
     stockSearchState.query = transcript;
-    stockSearchState.listening = false;
-    doStockSearch(transcript);
-    renderStockSearchBar();
+    let hasFinal = false;
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) { hasFinal = true; break; }
+    }
+    if (hasFinal) doStockSearch(transcript.trim());
   };
   recog.onerror = () => { stockSearchState.listening = false; renderStockSearchBar(); };
   recog.onend = () => { stockSearchState.listening = false; renderStockSearchBar(); };
@@ -741,9 +1233,8 @@ function handleBarcodeResult(text) {
   const cleaned = String(text || '').trim().toUpperCase();
   if (!cleaned) return;
 
-  if (isValidStockEmplacement(cleaned)) {
+  if (isStockEmplacementCode(cleaned)) {
     toast('Emplacement détecté : ' + cleaned);
-    set({ stockView: 'emplacement' });
     loadStockEmplacement(cleaned).then(() => render()).catch(()=>{});
   } else {
     toast('Référence détectée : ' + cleaned);
@@ -754,91 +1245,159 @@ function handleBarcodeResult(text) {
 
 async function doStockSearch(q) {
   stockSearchState.query = q;
-  const cleaned = String(q || '').trim().toUpperCase();
-  if (!cleaned || cleaned.length < 2) {
-    stockSearchState.suggestions = [];
+  const cleaned = String(q || '').trim();
+  // Suggestions : ≥1 caractère (appel /api/stock/search). Filtre grille seul : toujours ≥2 (scheduleGrilleFilterFromSearch).
+  if (!cleaned) {
+    stockSearchState.suggestionProduits = [];
+    stockSearchState.suggestionEmplacements = [];
+    clearTimeout(stockGrilleFilterTimer);
     renderStockSearchBar();
+    if (S.stockView === 'grille') set({ stockGrilleFilter: '' });
     return;
   }
-
-  // Emplacements : ne déclencher la vue emplacement QUE si l'emplacement est valide (sinon ça spam l'API en 404)
-  if (/^[ABC]\d{3}$/i.test(cleaned) && isValidStockEmplacement(cleaned)) {
-    try{
-      await loadStockEmplacement(cleaned);
-      set({ stockView: 'emplacement' });
-    }catch(e){/* ignore */}
-    stockSearchState.suggestions = [];
-    renderStockSearchBar();
-    return;
+  try {
+    const r = await api('/api/stock/search?q=' + encodeURIComponent(cleaned) + '&limit=14');
+    if (!r) {
+      stockSearchState.suggestionProduits = [];
+      stockSearchState.suggestionEmplacements = mergeCustomEmplIntoSearch([], cleaned);
+    } else {
+      stockSearchState.suggestionProduits = r.produits || [];
+      stockSearchState.suggestionEmplacements = mergeCustomEmplIntoSearch(r.emplacements || [], cleaned);
+    }
+  } catch (e) {
+    stockSearchState.suggestionProduits = [];
+    stockSearchState.suggestionEmplacements = mergeCustomEmplIntoSearch([], cleaned);
   }
-
-  await loadStockProduits(cleaned);
-  stockSearchState.suggestions = (S.stockProduits || []).slice(0, 6);
   renderStockSearchBar();
+  if (S.stockView === 'grille') scheduleGrilleFilterFromSearch();
 }
 
 function renderStockSearchBar() {
   const bar = document.getElementById('stock-search-bar');
   if (!bar) return;
-  bar.innerHTML = '';
 
+  // Si la barre existe déjà avec l'input, ne recréer que les suggestions
+  const existingInput = document.getElementById('stock-search-input');
+  if (existingInput) {
+    // Mettre à jour seulement le bouton micro (état listening)
+    const micBtn = document.getElementById('stock-mic-btn');
+    if (micBtn) {
+      micBtn.className = 'stock-search-btn' + (stockSearchState.listening ? ' active' : '');
+      micBtn.textContent = stockSearchState.listening ? '🔴' : '🎤';
+    }
+    let suggEl = document.getElementById('stock-suggestions');
+    const pList = stockSearchState.suggestionProduits || [];
+    const eList = stockSearchState.suggestionEmplacements || [];
+    const hasSug = pList.length > 0 || eList.length > 0;
+    if (hasSug) {
+      if (!suggEl) {
+        suggEl = document.createElement('div');
+        suggEl.id = 'stock-suggestions';
+        suggEl.className = 'search-suggestions';
+        existingInput.parentNode.appendChild(suggEl);
+      }
+      suggEl.innerHTML = '';
+      const clearSug = () => {
+        stockSearchState.suggestionProduits = [];
+        stockSearchState.suggestionEmplacements = [];
+        document.getElementById('stock-suggestions')?.remove();
+      };
+      if (eList.length) {
+        const sec = document.createElement('div');
+        sec.className = 'search-suggestion-section';
+        sec.textContent = 'Emplacements';
+        suggEl.appendChild(sec);
+        eList.forEach(em => {
+          const code = em.emplacement || '';
+          const nb = em.nb_refs != null ? em.nb_refs : 0;
+          const tu = em.total_unites != null ? em.total_unites : 0;
+          const item = document.createElement('div');
+          item.className = 'search-suggestion-item search-suggestion-empl';
+          item.innerHTML = `<div><div class="search-suggestion-ref">${code}</div><div class="search-suggestion-des">${nb} réf. · ${Number(tu).toLocaleString('fr-FR')} u. stock</div></div><span class="stock-badge">📍</span>`;
+          item.addEventListener('mousedown', ev => { ev.preventDefault(); });
+          item.addEventListener('click', () => {
+            existingInput.value = code;
+            stockSearchState.query = code;
+            clearSug();
+            loadStockEmplacement(code).then(() => render());
+          });
+          suggEl.appendChild(item);
+        });
+      }
+      if (pList.length) {
+        const sec = document.createElement('div');
+        sec.className = 'search-suggestion-section';
+        sec.textContent = 'Produits';
+        suggEl.appendChild(sec);
+        pList.forEach(p => {
+          const item = document.createElement('div');
+          item.className = 'search-suggestion-item';
+          item.innerHTML = `<div><div class="search-suggestion-ref">${p.reference}</div><div class="search-suggestion-des">${p.designation}</div></div><span class="stock-badge">${p.stock_total||0} ${p.unite}</span>`;
+          item.addEventListener('mousedown', ev => { ev.preventDefault(); });
+          item.addEventListener('click', async () => {
+            stockSearchState.query = p.reference;
+            if (existingInput) existingInput.value = p.reference;
+            clearSug();
+            await loadStockProduit(p.id);
+            set({ stockView: 'produit' });
+          });
+          suggEl.appendChild(item);
+        });
+      }
+    } else {
+      if (suggEl) suggEl.remove();
+    }
+    return;
+  }
+
+  // Première création
+  bar.innerHTML = '';
   const wrap = document.createElement('div');
   wrap.className = 'stock-search-wrap';
 
   const input = document.createElement('input');
   input.type = 'text';
+  input.id = 'stock-search-input';
   input.className = 'stock-search-input';
   input.placeholder = '🔍  Emplacement (A121) ou référence…';
   input.value = stockSearchState.query || S.stockSearch || '';
   input.addEventListener('input', (e) => doStockSearch(e.target.value));
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
-      stockSearchState.suggestions = [];
-      renderStockSearchBar();
-      const q = String(stockSearchState.query || '').trim();
+      stockSearchState.suggestionProduits = [];
+      stockSearchState.suggestionEmplacements = [];
+      document.getElementById('stock-suggestions')?.remove();
+      const q = String(input.value || '').trim();
+      const qu = q.toUpperCase();
       if (q) {
-        set({ stockView: 'produit', stockSearch: q });
-        loadStockProduits(q).then(() => render());
+        if (S.stockView === 'grille') {
+          clearTimeout(stockGrilleFilterTimer);
+          set({ stockGrilleFilter: q.length >= 2 ? qu : '' });
+          return;
+        }
+        if (isStockEmplacementCode(qu)) {
+          loadStockEmplacement(qu).then(() => render());
+        } else {
+          set({ stockView: 'produit', stockSearch: q });
+          loadStockProduits(q).then(() => render());
+        }
       }
     }
     if (e.key === 'Escape') {
-      stockSearchState.suggestions = [];
-      renderStockSearchBar();
+      stockSearchState.suggestionProduits = [];
+      stockSearchState.suggestionEmplacements = [];
+      document.getElementById('stock-suggestions')?.remove();
     }
   });
-
-  // Dropdown suggestions
-  if (stockSearchState.suggestions && stockSearchState.suggestions.length > 0) {
-    const sugg = document.createElement('div');
-    sugg.className = 'search-suggestions';
-    stockSearchState.suggestions.forEach(p => {
-      const item = document.createElement('div');
-      item.className = 'search-suggestion-item';
-      item.innerHTML = `
-        <div>
-          <div class="search-suggestion-ref">${p.reference}</div>
-          <div class="search-suggestion-des">${p.designation}</div>
-        </div>
-        <span class="stock-badge">${p.stock_total || 0} ${p.unite}</span>
-      `;
-      item.addEventListener('click', () => {
-        stockSearchState.query = p.reference;
-        stockSearchState.suggestions = [];
-        loadStockProduit(p.id).then(() => { set({ stockView: 'produit' }); });
-      });
-      sugg.appendChild(item);
-    });
-    wrap.appendChild(sugg);
-  }
-
   wrap.appendChild(input);
 
   const micBtn = document.createElement('button');
+  micBtn.id = 'stock-mic-btn';
   micBtn.className = 'stock-search-btn' + (stockSearchState.listening ? ' active' : '');
   micBtn.type = 'button';
   micBtn.title = 'Recherche vocale';
   micBtn.textContent = stockSearchState.listening ? '🔴' : '🎤';
-  micBtn.addEventListener('click', () => startVoiceSearch(input));
+  micBtn.addEventListener('click', () => startVoiceSearch());
 
   const camBtn = document.createElement('button');
   camBtn.className = 'stock-search-btn' + (stockSearchState.scanning ? ' active' : '');
@@ -860,6 +1419,7 @@ function initStockSearchBar() {
 function renderPortal(){
   const isStock = S.user?.role && ['direction','administration','logistique'].includes(S.user.role);
   const isProd  = S.user?.role && ['direction','administration','fabrication'].includes(S.user.role);
+  const isLight=document.body.classList.contains('light');
 
   const apps=[];
 
@@ -867,15 +1427,7 @@ function renderPortal(){
     apps.push(h('div',{
       className:'portal-app'+(S.portalLoading==='prod'?' portal-app--busy':''),
       onClick:async()=>{
-        if(S.portalLoading)return;
-        set({portalLoading:'prod'});
-        try{
-          await loadHist();
-          set({app:'prod',page:'historique',portalLoading:null});
-        }catch(e){
-          set({portalLoading:null});
-          toast(e.message,'error');
-        }
+        window.location.href='/prod';
       }
     },
       h('div',{className:'portal-app-icon'},'📊'),
@@ -888,16 +1440,7 @@ function renderPortal(){
     apps.push(h('div',{
       className:'portal-app'+(S.portalLoading==='stock'?' portal-app--busy':''),
       onClick:async()=>{
-        if(S.portalLoading)return;
-        set({portalLoading:'stock'});
-        try{
-          await loadStockGlobale();
-          await loadStockProduits();
-          set({app:'stock',stockView:'grille',portalLoading:null});
-        }catch(e){
-          set({portalLoading:null});
-          toast(e.message,'error');
-        }
+        window.location.href='/stock';
       }
     },
       h('div',{className:'portal-app-icon'},'📦'),
@@ -914,6 +1457,10 @@ function renderPortal(){
     h('div',{className:'portal-apps'},...apps),
     h('div',{className:'portal-user'},
       '👤 '+S.user?.nom,
+      h('button',{className:'portal-logout',onClick:()=>{document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');render();}},
+        h('span',{className:'theme-ico'},isLight?'☀':'🌙'),
+        h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')
+      ),
       h('button',{className:'portal-logout',onClick:doLogout},'Déconnexion')
     )
   );
@@ -921,6 +1468,7 @@ function renderPortal(){
 
 function renderStock(){
   const g=S.stockGlobale;
+  const isLight=document.body.classList.contains('light');
 
   const sidebar=h('nav',{className:'sidebar'},
     h('div',{className:'logo'},
@@ -928,8 +1476,13 @@ function renderStock(){
       h('div',{className:'logo-sub'},'by SIFA')
     ),
     h('button',{className:'nav-btn'+(S.stockView==='grille'?' active':''),
-      onClick:async()=>{await loadStockGlobale();set({stockView:'grille',stockSelProduit:null,stockSelEmpl:null});}},
-      '🗺  Vue globale'),
+      onClick:async()=>{
+        clearTimeout(stockGrilleFilterTimer);
+        stockSearchState.query='';
+        await loadStockGlobale();
+        set({stockView:'grille',stockSelProduit:null,stockSelEmpl:null,stockGrilleFilter:''});
+      }},
+      '🗺  Tableau de bord'),
     h('button',{className:'nav-btn'+(S.stockView==='produit'?' active':''),
       onClick:async()=>{await loadStockProduits();set({stockView:'produit',stockSelProduit:null});}},
       '🏷  Par référence'),
@@ -937,11 +1490,17 @@ function renderStock(){
       onClick:()=>set({stockView:'emplacement',stockSelEmpl:null})},
       '📍  Par emplacement'),
     h('div',{className:'sidebar-bottom'},
-      h('button',{className:'nav-btn',onClick:()=>set({app:'portal'})},
-        '← Retour MySifa'),
+      h('button',{className:'nav-btn back-mysifa',onClick:()=>{window.location.href='/' }},
+        '← Retour ',
+        h('span',{className:'wm'},'My',h('span',null,'Sifa'))
+      ),
       h('div',{className:'user-chip'},
         h('div',{className:'uc-name'},S.user?.nom||''),
         h('div',{className:'uc-role'},ROLE_LABELS[S.user?.role]||S.user?.role||'')
+      ),
+      h('button',{className:'theme-btn',onClick:()=>{document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');render();}},
+        h('span',{className:'theme-ico'},isLight?'☀':'🌙'),
+        h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')
       ),
       h('button',{className:'logout-btn',onClick:doLogout},'⎋  Déconnexion'),
       h('div',{className:'version'},'MyStock v1.0')
@@ -953,39 +1512,102 @@ function renderStock(){
   if(S.stockView==='grille'){
     const grille=g?.grille||[];
     const stats=g?.stats||{};
-    const mvts=g?.derniers_mouvements||[];
+    let mvts=g?.derniers_mouvements||[];
+    const filt=(S.stockGrilleFilter||'').trim().toUpperCase();
 
     const byEmpl={};
-    ['A121','A122','A123','B121','B122','B123','C121','C122','C123'].forEach(e=>{byEmpl[e]=[];});
-    grille.forEach(r=>{if(byEmpl[r.emplacement])byEmpl[r.emplacement].push(r);});
+    grille.forEach(r=>{
+      if(!byEmpl[r.emplacement])byEmpl[r.emplacement]=[];
+      byEmpl[r.emplacement].push(r);
+    });
+    for(const e of [...STOCK_EMPLACEMENTS,...loadStockEmplCustom()]){
+      if(!byEmpl[e])byEmpl[e]=[];
+    }
 
-    const statBar=h('div',{className:'stats',style:{marginBottom:'20px'}},
-      h('div',{className:'stat'},h('div',{className:'stat-label'},'Références'),h('div',{className:'stat-value',style:{color:'var(--c1)'}},stats.nb_refs||0)),
-      h('div',{className:'stat'},h('div',{className:'stat-label'},'Emplacements occupés'),h('div',{className:'stat-value',style:{color:'var(--c2)'}},stats.nb_empl||0)),
-      h('div',{className:'stat'},h('div',{className:'stat-label'},'Total unités'),h('div',{className:'stat-value',style:{color:'var(--c3)'}},fN(stats.total_unites||0)))
-    );
+    let statBar;
+    let invBarRow=null;
+    if(filt){
+      const nref=new Set();
+      const visibleEmpl=[];
+      let nempl=0,tun=0;
+      Object.entries(byEmpl).forEach(([empl,items])=>{
+        if(!stockBoardEmplVisible(empl,items,filt))return;
+        visibleEmpl.push(empl);
+        nempl++;
+        stockBoardItemsForCell(empl,items,filt).forEach(i=>{
+          nref.add(i.reference);
+          tun+=Number(i.quantite)||0;
+        });
+      });
+      visibleEmpl.sort((a,b)=>String(a).localeCompare(String(b),'fr'));
+      let invCible=null;
+      if(visibleEmpl.length===1){
+        invCible={type:'empl',code:visibleEmpl[0]};
+      }else if(nref.size===1){
+        invCible={type:'prod',reference:[...nref][0]};
+      }
+      statBar=h('div',{className:'stats',style:{marginBottom:'20px'}},
+        h('div',{className:'stat'},h('div',{className:'stat-label'},'Filtre actif'),h('div',{className:'stat-value',style:{color:'var(--warn)'}},filt)),
+        h('div',{className:'stat'},h('div',{className:'stat-label'},'Réf. correspondantes'),h('div',{className:'stat-value',style:{color:'var(--c1)'}},nref.size)),
+        h('div',{className:'stat'},h('div',{className:'stat-label'},'Cases affichées'),h('div',{className:'stat-value',style:{color:'var(--c2)'}},nempl)),
+        h('div',{className:'stat'},h('div',{className:'stat-label'},'Unités (filtre)'),h('div',{className:'stat-value',style:{color:'var(--c3)'}},fN(tun)))
+      );
+      if(invCible){
+        const bt=(invCible.type==='empl')
+          ?('📋 Inventaire emplacement '+invCible.code)
+          :('📋 Inventaire réf. '+invCible.reference);
+        invBarRow=h('div',{style:{marginBottom:'16px',display:'flex',flexWrap:'wrap',gap:'12px',alignItems:'center',justifyContent:'space-between'}},
+          h('p',{style:{fontSize:'12px',color:'var(--muted)',margin:0,maxWidth:'560px',lineHeight:'1.5'}},
+            invCible.type==='empl'
+              ?'Une seule case est affichée : vous pouvez lancer un inventaire ciblé sur tous les articles à cet emplacement.'
+              :'Une seule référence ressort du filtre : vous pouvez inventorier cette référence sur tous les emplacements où elle est stockée.'),
+          h('button',{
+            className:'btn-sm',
+            style:{border:'1px solid var(--c2)',color:'var(--c2)',background:'rgba(167,139,250,.14)',fontWeight:'700',flexShrink:'0'},
+            onClick:()=>{openInventaireCibleModal(invCible);}
+          },bt)
+        );
+      }
+    }else{
+      statBar=h('div',{className:'stats',style:{marginBottom:'20px'}},
+        h('div',{className:'stat'},h('div',{className:'stat-label'},'Références'),h('div',{className:'stat-value',style:{color:'var(--c1)'}},stats.nb_refs||0)),
+        h('div',{className:'stat'},h('div',{className:'stat-label'},'Emplacements occupés'),h('div',{className:'stat-value',style:{color:'var(--c2)'}},stats.nb_empl||0)),
+        h('div',{className:'stat'},h('div',{className:'stat-label'},'Total unités'),h('div',{className:'stat-value',style:{color:'var(--c3)'}},fN(stats.total_unites||0)))
+      );
+    }
 
     const grid=h('div',{className:'stock-grid'},
-      ...Object.entries(byEmpl).map(([empl,items])=>
-        h('div',{className:'stock-cell',onClick:async()=>{
-          await loadStockEmplacement(empl);
-          set({stockView:'emplacement'});
-        }},
-          h('div',{className:'stock-cell-label'},empl),
-          items.length===0
-            ? h('div',{className:'stock-cell-empty'},'Vide')
-            : h('div',{className:'stock-cell-items'},
-                ...items.map(i=>h('div',null,
-                  i.reference,
-                  h('span',{className:'stock-badge'},fN(i.quantite)+' '+i.unite)
-                ))
-              )
-        )
-      )
+      ...Object.entries(byEmpl)
+        .filter(([empl,items])=>stockBoardEmplVisible(empl,items,filt))
+        .sort((a,b)=>String(a[0]).localeCompare(String(b[0]),'fr'))
+        .map(([empl,items])=>{
+          const shown=stockBoardItemsForCell(empl,items,filt);
+          return h('div',{className:'stock-cell',onClick:async()=>{
+            await loadStockEmplacement(empl);
+          }},
+            h('div',{className:'stock-cell-label'},empl),
+            shown.length===0
+              ? h('div',{className:'stock-cell-empty'},'Vide')
+              : h('div',{className:'stock-cell-items'},
+                  ...shown.map(i=>h('div',null,
+                    i.reference,
+                    h('span',{className:'stock-badge'},fN(i.quantite)+' '+i.unite)
+                  ))
+                )
+          );
+        })
     );
 
+    if(filt){
+      const u=filt;
+      mvts=mvts.filter(m=>
+        String(m.reference||'').toUpperCase().includes(u)||
+        String(m.emplacement||'').toUpperCase().includes(u)||
+        String(m.created_by||'').toUpperCase().includes(u));
+    }
+
     const mvtTable=mvts.length?h('div',{className:'card'},
-      h('div',{className:'card-header'},h('h3',null,'Derniers mouvements')),
+      h('div',{className:'card-header'},h('h3',null,filt?'Mouvements (filtre)':'Derniers mouvements')),
       h('div',{style:{overflowX:'auto'}},h('table',null,
         h('thead',null,h('tr',null,h('th',null,'Date'),h('th',null,'Réf'),h('th',null,'Emplacement'),h('th',null,'Type'),h('th',null,'Qté'),h('th',null,'Par'))),
         h('tbody',null,...mvts.map(m=>h('tr',null,
@@ -999,7 +1621,7 @@ function renderStock(){
       ))
     ):null;
 
-    content=h('div',null,statBar,grid,mvtTable);
+    content=h('div',null,statBar,invBarRow,grid,mvtTable);
   }
 
   else if(S.stockView==='produit'){
@@ -1009,14 +1631,34 @@ function renderStock(){
     const newRef=h('input',{type:'text',placeholder:'Référence *',style:{textTransform:'uppercase',flex:'1',minWidth:'140px'}});
     const newDes=h('input',{type:'text',placeholder:'Désignation *'});
     const newUnit=h('input',{type:'text',placeholder:'Unité (ex: m, rouleau, carton)',value:'unité'});
-    const newForm=h('div',{className:'card',style:{padding:'16px',marginBottom:'16px'}},
-      h('div',{className:'form-section-title'},'Nouveau produit'),
-      h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center'}},newRef,newDes,newUnit,
-        h('button',{className:'btn-sm',onClick:()=>{
-          if(!newRef.value||!newDes.value)return;
-          createProduit({reference:newRef.value,designation:newDes.value,unite:newUnit.value||'unité'});
-          newRef.value='';newDes.value='';
-        }},'+ Créer')
+    const emplInput=h('input',{type:'text',id:'stock-add-empl-input',
+      className:'stock-search-input stock-add-empl-input',
+      placeholder:'Emplacement * (ex. a121…)',autocomplete:'off',title:'Obligatoire — suggestions ou + Ajouter emplacement',
+      style:{width:'100%',minWidth:'160px'}});
+    const emplSugg=h('div',{id:'stock-add-empl-suggestions',className:'search-suggestions',style:{display:'none'}});
+    const emplComboWrap=h('div',{className:'stock-search-wrap',style:{flex:'1',minWidth:'180px'}},emplInput,emplSugg);
+    const newQtyEmpl=h('input',{type:'number',placeholder:'Qté *',min:'0',step:'any',style:{width:'110px'},title:'Quantité d’entrée en stock à l’emplacement (obligatoire, > 0)'});
+    const newFormBtn=h('button',{className:'btn-sm',onClick:()=>{
+      if(!newRef.value||!newDes.value)return;
+      const empl=String((document.getElementById('stock-add-empl-input')||{}).value||'').trim().toUpperCase();
+      if(!empl||!isStockEmplacementCode(empl)){toast('Emplacement obligatoire (ex. Z999)','error');return;}
+      const qv=newQtyEmpl.value;
+      const qn=parseFloat(String(qv||'').replace(',','.'));
+      if(qv===''||qv==null||Number.isNaN(qn)||qn<=0){toast('Quantité obligatoire (nombre > 0)','error');return;}
+      createProduit({
+        reference:newRef.value,designation:newDes.value,unite:newUnit.value||'unité',
+        emplacement:empl,
+        quantite_emplacement:qv
+      });
+      newRef.value='';newDes.value='';newQtyEmpl.value='';
+      const ei=document.getElementById('stock-add-empl-input');if(ei)ei.value='';
+    }},'+ Créer');
+    const newForm=h('div',{className:'card',style:{padding:'16px',marginBottom:'16px',overflow:'visible'}},
+      h('div',{className:'form-section-title'},'Nouveau produit (ou entrée sur réf. existante)'),
+      h('div',{style:{display:'flex',flexDirection:'column',gap:'8px'}},
+        h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center'}},
+          newRef,newDes,newUnit,emplComboWrap,newQtyEmpl),
+        h('div',{style:{display:'flex',alignItems:'center'}},newFormBtn)
       )
     );
 
@@ -1079,28 +1721,66 @@ function renderStock(){
 
       const emplTable=empls.length?h('div',{className:'card'},
         h('div',{className:'card-header'},
-          h('h3',null,'Localisations'),
-          h('span',{className:'stock-badge'},fN(sel.stock_total)+' '+p.unite+' total')
+          h('h3',null,'Stock par emplacement'),
+          h('span',{className:'stock-badge'},fN(sel.stock_total)+' '+p.unite+' total · '+empls.length+' empl.')
         ),
         h('table',null,
-          h('thead',null,h('tr',null,h('th',null,'Emplacement'),h('th',null,'Quantité'),h('th',null,'Mis à jour'),h('th',null,'Par'))),
+          h('thead',null,h('tr',null,h('th',null,'Emplacement'),h('th',null,'Quantité'),h('th',null,'FIFO lot'),h('th',null,'Dernier mouv.'),h('th',null,'Par'))),
           h('tbody',null,...empls.map(e=>h('tr',null,
             h('td',{style:{fontFamily:'monospace',fontWeight:'700',color:'var(--accent)'}},e.emplacement),
             h('td',{style:{fontFamily:'monospace',fontWeight:'700'}},fN(e.quantite)+' '+p.unite),
-            h('td',{style:{fontSize:'11px',color:'var(--muted)'}},fD(e.updated_at)),
-            h('td',{style:{fontSize:'11px',color:'var(--muted)'}},e.updated_by||'')
+            h('td',{style:{fontSize:'11px',color:'var(--muted)'}},fD(e.date_fifo_empl)),
+            h('td',{style:{fontSize:'11px',color:'var(--muted)'}},fD(e.updated_at||e.date_fifo_empl)),
+            h('td',{style:{fontSize:'11px',color:'var(--muted)'}},e.updated_by||'—')
           )))
         )
       ):h('div',{className:'card-empty'},'Aucun stock pour ce produit');
+
+      const mvts=sel.mouvements||[];
+      const mvtHistory=mvts.length?h('div',{className:'card',style:{marginTop:'12px'}},
+        h('div',{className:'card-header'},
+          h('h3',null,'Historique des mouvements'),
+          h('span',{className:'stock-badge'},mvts.length+' enregistrement'+(mvts.length>1?'s':''))
+        ),
+        h('div',{style:{overflowX:'auto'}},h('table',null,
+          h('thead',null,h('tr',null,
+            h('th',null,'Date'),h('th',null,'Type'),h('th',null,'Empl.'),
+            h('th',null,'Qté'),h('th',null,'Avant → Après'),h('th',null,'Note'),h('th',null,'Utilisateur'))),
+          h('tbody',null,...mvts.map(m=>h('tr',null,
+            h('td',{style:{fontSize:'11px',fontFamily:'monospace',whiteSpace:'nowrap'}},fD(m.created_at)),
+            h('td',null,h('span',{className:'mvt-type-'+m.type_mouvement},m.type_mouvement)),
+            h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},m.emplacement),
+            h('td',{style:{fontFamily:'monospace'}},fN(m.quantite)),
+            h('td',{style:{fontSize:'11px',fontFamily:'monospace'}},fN(m.quantite_avant)+' → '+fN(m.quantite_apres)),
+            h('td',{style:{fontSize:'11px',color:'var(--muted)',maxWidth:'140px'}},m.note||'—'),
+            h('td',{style:{fontSize:'11px',color:'var(--muted)'}},m.created_by||'—')
+          )))
+        ))
+      ):null;
 
       detail=h('div',null,
         h('div',{className:'card',style:{padding:'16px',marginBottom:'12px'}},
           h('h3',{style:{fontSize:'16px',fontWeight:'800',marginBottom:'4px'}},p.reference),
           h('p',{style:{fontSize:'13px',color:'var(--muted)'}},p.designation),
-          h('p',{style:{fontSize:'11px',color:'var(--muted)',marginTop:'4px'}},'Unité : '+p.unite)
+          h('p',{style:{fontSize:'11px',color:'var(--muted)',marginTop:'4px'}},'Unité : '+p.unite),
+          h('div',{style:{display:'flex',gap:'20px',flexWrap:'wrap',marginTop:'14px'}},
+            h('div',null,
+              h('div',{style:{fontSize:'10px',fontWeight:'700',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.04em'}},'Stock total'),
+              h('div',{style:{fontSize:'18px',fontWeight:'800',fontFamily:'monospace',color:'var(--accent)'}},fN(sel.stock_total)+' '+p.unite)),
+            h('div',null,
+              h('div',{style:{fontSize:'10px',fontWeight:'700',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.04em'}},'Lots actifs'),
+              h('div',{style:{fontSize:'16px',fontWeight:'700',fontFamily:'monospace'}},String(sel.nb_lots||0))),
+            sel.date_fifo?h('div',null,
+              h('div',{style:{fontSize:'10px',fontWeight:'700',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.04em'}},'Plus ancien lot (FIFO)'),
+              h('div',{style:{fontSize:'13px',fontFamily:'monospace'}},fD(sel.date_fifo))):null,
+            sel.jours_stock!=null?h('div',null,
+              h('div',{style:{fontSize:'10px',fontWeight:'700',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.04em'}},'Ancienneté stock'),
+              h('div',{style:{fontSize:'16px',fontWeight:'700'}},String(sel.jours_stock)+' j')):null
+          )
         ),
         mvtForm,
-        emplTable
+        emplTable,
+        mvtHistory
       );
     }
 
@@ -1114,37 +1794,82 @@ function renderStock(){
   }
 
   else if(S.stockView==='emplacement'){
-    const EMPLS=['A121','A122','A123','B121','B122','B123','C121','C122','C123'];
+    const EMPL_GRID=[...new Set([...STOCK_EMPLACEMENTS,...loadStockEmplCustom()])].sort();
     const sel=S.stockSelEmpl;
 
-    const empl_list=h('div',{className:'card',style:{marginBottom:'16px'}},
-      h('div',{className:'card-header'},h('h3',null,'Sélectionner un emplacement')),
+    const empl_list=h('div',{className:'card',style:{marginBottom:'16px',overflow:'visible'}},
+      h('div',{className:'card-header'},h('h3',null,'Raccourcis emplacements')),
       h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',padding:'16px'}},
-        ...EMPLS.map(e=>h('button',{
+        ...EMPL_GRID.map(e=>h('button',{
           className:'mvt-btn'+(sel?.emplacement===e?' active-entree':''),
           onClick:async()=>await loadStockEmplacement(e)
         },e))
       )
     );
 
-    let detail=h('div',{className:'card-empty',style:{padding:'40px'}},'← Sélectionnez un emplacement');
-    if(sel&&sel.produits!==undefined){
-      const produits=sel.produits||[];
-      detail=h('div',{className:'card'},
+    let detail=h('div',{className:'card-empty',style:{padding:'40px'}},
+      'Recherchez un emplacement dans la barre en haut, ou choisissez un raccourci.');
+
+    if(sel&&sel.emplacement!=null){
+      const refs=sel.refs||[];
+      const mvts=sel.mouvements||[];
+      const refsTable=refs.length===0
+        ? h('div',{className:'card-empty'},'Aucune unité stockée à cet emplacement.')
+        : h('div',{style:{overflowX:'auto'}},h('table',null,
+            h('thead',null,h('tr',null,h('th',null,'Référence'),h('th',null,'Désignation'),h('th',null,'Quantité'),h('th',null,'FIFO lot'),h('th',null,'Dernier mouv.'),h('th',null,'Par'))),
+            h('tbody',null,...refs.map(pr=>h('tr',{
+              className:'produit-row',
+              style:{cursor:'pointer'},
+              title:'Voir la fiche produit',
+              onClick:async()=>{await loadStockProduit(pr.id);set({stockView:'produit'});}
+            },
+              h('td',{style:{fontFamily:'monospace',fontWeight:'700',color:'var(--accent)'}},pr.reference),
+              h('td',null,pr.designation),
+              h('td',{style:{fontFamily:'monospace',fontWeight:'700'}},fN(pr.quantite)+' '+pr.unite),
+              h('td',{style:{fontSize:'11px',color:'var(--muted)'}},fD(pr.date_fifo)),
+              h('td',{style:{fontSize:'11px',color:'var(--muted)'}},fD(pr.updated_at||pr.date_fifo)),
+              h('td',{style:{fontSize:'11px',color:'var(--muted)'}},pr.updated_by||'—')
+            )))
+          ));
+
+      const mvtBlock=mvts.length?h('div',{className:'card',style:{marginTop:'12px'}},
         h('div',{className:'card-header'},
-          h('h3',null,'Emplacement '+sel.emplacement),
-          h('span',{className:'stock-badge'},produits.length+' référence'+(produits.length>1?'s':''))
+          h('h3',null,'Historique des mouvements'),
+          h('span',{className:'stock-badge'},mvts.length+' enregistrements')
         ),
-        produits.length===0?h('div',{className:'card-empty'},'Emplacement vide'):
-        h('table',null,
-          h('thead',null,h('tr',null,h('th',null,'Référence'),h('th',null,'Désignation'),h('th',null,'Quantité'),h('th',null,'Mis à jour'))),
-          h('tbody',null,...produits.map(p=>h('tr',null,
-            h('td',{style:{fontFamily:'monospace',fontWeight:'700',color:'var(--accent)'}},p.reference),
-            h('td',null,p.designation),
-            h('td',{style:{fontFamily:'monospace',fontWeight:'700'}},fN(p.quantite)+' '+p.unite),
-            h('td',{style:{fontSize:'11px',color:'var(--muted)'}},fD(p.updated_at))
+        h('div',{style:{overflowX:'auto'}},h('table',null,
+          h('thead',null,h('tr',null,
+            h('th',null,'Date'),h('th',null,'Type'),h('th',null,'Réf.'),h('th',null,'Qté'),
+            h('th',null,'Avant → Après'),h('th',null,'Note'),h('th',null,'Utilisateur'))),
+          h('tbody',null,...mvts.map(m=>h('tr',null,
+            h('td',{style:{fontSize:'11px',fontFamily:'monospace',whiteSpace:'nowrap'}},fD(m.created_at)),
+            h('td',null,h('span',{className:'mvt-type-'+m.type_mouvement},m.type_mouvement)),
+            h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},m.reference||'—'),
+            h('td',{style:{fontFamily:'monospace'}},fN(m.quantite)),
+            h('td',{style:{fontSize:'11px',fontFamily:'monospace'}},fN(m.quantite_avant)+' → '+fN(m.quantite_apres)),
+            h('td',{style:{fontSize:'11px',color:'var(--muted)',maxWidth:'120px'}},m.note||'—'),
+            h('td',{style:{fontSize:'11px',color:'var(--muted)'}},m.created_by||'—')
           )))
-        )
+        ))
+      ):h('div',{className:'card',style:{marginTop:'12px'}},
+        h('div',{className:'card-header'},h('h3',null,'Historique des mouvements')),
+        h('div',{className:'card-empty'},'Aucun mouvement enregistré pour cet emplacement.')
+      );
+
+      detail=h('div',null,
+        h('div',{className:'card',style:{marginBottom:'12px'}},
+          h('div',{className:'card-header'},
+            h('h3',null,'Emplacement '+sel.emplacement),
+            h('span',{className:'stock-badge'},fN(sel.total_unites||0)+' u. · '+refs.length+' réf.')
+          ),
+          h('p',{style:{fontSize:'12px',color:'var(--muted)',padding:'0 16px 14px'}},
+            'Stocks actifs (lots FIFO) et historique des mouvements en base.')
+        ),
+        h('div',{className:'card',style:{marginBottom:'12px'}},
+          h('div',{className:'card-header'},h('h3',null,'Produits stockés')),
+          refsTable
+        ),
+        mvtBlock
       );
     }
 
@@ -1152,28 +1877,33 @@ function renderStock(){
   }
 
   const topbar=h('div',{className:'mobile-topbar'},
-    h('button',{type:'button',className:'mobile-menu-btn',onClick:toggleSidebar,'aria-label':'Menu'},'☰'),
-    h('div',null,
+    h('button',{type:'button',className:'mobile-menu-btn',onClick:toggleSidebar,'aria-label':'Menu'},S.sidebarOpen?'✕':'☰'),
+    h('div',{style:{flex:1,minWidth:0}},
       h('div',{className:'mobile-topbar-title'},'MyStock'),
       h('div',{className:'mobile-topbar-sub'},
-        S.stockView==='grille'?'Vue globale':S.stockView==='produit'?'Par référence':'Par emplacement'
-      )
+        S.stockView==='grille'?'Tableau de bord':S.stockView==='produit'?'Par référence':'Par emplacement'
+      ),
+      h('div',{id:'stock-search-bar',className:'stock-search-bar'})
     )
   );
-  const mainEl=h('main',{className:'main',style:{padding:0}},
-    h('div',{id:'stock-search-bar',className:'stock-search-bar'}),
+  const mainEl=h('main',{className:'main'},
+    topbar,
     h('div',{className:'container',style:{padding:'24px 28px'}},
-      topbar,
-      h('h1',null,S.stockView==='grille'?'Vue globale':S.stockView==='produit'?'Par référence':'Par emplacement'),
+      h('h1',null,S.stockView==='grille'?'Tableau de bord':S.stockView==='produit'?'Par référence':'Par emplacement'),
       h('div',{className:'subtitle'},
-        S.stockView==='grille'?'Tous les emplacements et leur contenu — raccourci scan ci-dessous':
+        S.stockView==='grille'?(S.stockGrilleFilter&&String(S.stockGrilleFilter).trim().length>=2
+          ? 'Données filtrées sur « '+String(S.stockGrilleFilter).trim().toUpperCase()+' » — grille, stats et mouvements'
+          : 'Tous les emplacements et leur contenu — suggestions dès 1 caractère ; filtre grille à partir de 2 caractères'):
         S.stockView==='produit'?'Recherche, micro, scan code (caméra), mouvements de stock':
         'Voir le contenu d\'un emplacement'
       ),
       content
     )
   );
-  requestAnimationFrame(()=>initStockSearchBar());
+  requestAnimationFrame(()=>{
+    initStockSearchBar();
+    if(S.stockView==='produit')wireStockAddEmplCombo();
+  });
   return h('div',null,
     S.sidebarOpen?h('div',{className:'sidebar-overlay',onClick:closeSidebar}):null,
     h('div',{className:'app'},sidebar,
@@ -1200,6 +1930,7 @@ async function loadProd(){const d=await api('/api/dashboard/production?'+buildPa
 async function loadImports(){const d=await api('/api/imports');if(d)set({imports:d});}
 async function loadDos(){const d=await api('/api/dossiers');if(d)set({dossiers:d});}
 async function loadUsers(){const d=await api('/api/users');if(d)set({users:d});}
+async function loadMachines(){try{const d=await api('/api/planning/machines');if(d)set({machines:d});}catch(e){}}
 async function loadSaisies(){const d=await api('/api/saisies?'+buildParams()+'&limit=500');if(d)set({saisies:d});}
 async function loadDevis(){const d=await api('/api/rentabilite/devis');if(d)set({devisList:d});}
 
@@ -1292,13 +2023,16 @@ function renderSidebar(){
   const isLight=document.body.classList.contains('light');
   return h('nav',{className:'sidebar'},
     h('div',{className:'logo'},h('div',{className:'logo-brand'},'My',h('span',null,'Prod')),h('div',{className:'logo-sub'},'by SIFA')),
-    h('button',{className:'nav-btn',onClick:()=>set({app:'portal'})},'← MySifa'),
     ...items.map(i=>h('button',{className:'nav-btn'+(S.page===i.key?' active':''),onClick:()=>{
       if(i.key==='_planning'){window.location.href='/planning';return;}
       S.sidebarOpen=false;
       set({page:i.key});nav();
     }},i.icon+'  '+i.label)),
     h('div',{className:'sidebar-bottom'},
+      h('button',{className:'nav-btn back-mysifa',onClick:()=>{window.location.href='/' }},
+        '← Retour ',
+        h('span',{className:'wm'},'My',h('span',null,'Sifa'))
+      ),
       h('div',{
         className:'user-chip',
         style:{cursor:'pointer'},
@@ -1309,7 +2043,10 @@ function renderSidebar(){
         h('div',{className:'uc-role'},ROLE_LABELS[S.user?.role]||S.user?.role||''),
         h('div',{style:{fontSize:'10px',color:'var(--accent)',marginTop:'3px'}},'✎ Mon profil')
       ),
-      h('button',{className:'theme-btn',onClick:()=>{document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');render();}},isLight?'☀ Mode clair':'🌙 Mode sombre'),
+      h('button',{className:'theme-btn',onClick:()=>{document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');render();}},
+        h('span',{className:'theme-ico'},isLight?'☀':'🌙'),
+        h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')
+      ),
       h('button',{className:'logout-btn',onClick:doLogout},'⎋  Déconnexion'),
       h('div',{className:'version'},'__V_LABEL__')
     )
@@ -2254,21 +2991,54 @@ function renderUsers(){
   const ops=S.filters.operators||[];
   const opSel=h('select',{className:'form-sel'},h('option',{value:''},'— Lier un opérateur (optionnel) —'),...ops.map(o=>h('option',{value:o},opName(o))));inputs.operateur_lie=opSel;
   const roleSel=h('select',{className:'form-sel'},h('option',{value:'fabrication'},'⚙ Fabrication'),h('option',{value:'administration'},'🔧 Administration'),h('option',{value:'direction'},'👑 Direction'),h('option',{value:'logistique'},'📦 Logistique'));inputs.role=roleSel;
-  const form=h('div',{className:'card',style:{padding:'20px'}},h('h3',{style:{fontSize:'14px',fontWeight:'600',marginBottom:'16px'}},'Créer un compte'),
-    h('div',{className:'form-grid'},...[['nom','Nom complet *','text'],['email','Email *','email'],['password','Mot de passe * (min. 8 car.)','password']].map(([k,l,t])=>{const i=h('input',{placeholder:l,type:t});inputs[k]=i;return i;}),roleSel,opSel),
-    h('p',{style:{fontSize:'12px',color:'var(--muted)',marginTop:'10px'}},'💡 Fabrication = lecture seule. Sans opérateur lié → accès bloqué.'),
-    h('button',{className:'btn',onClick:()=>{if(!inputs.nom.value||!inputs.email.value||!inputs.password.value)return;createUser({nom:inputs.nom.value,email:inputs.email.value,password:inputs.password.value,role:inputs.role.value,operateur_lie:inputs.operateur_lie.value||null});['nom','email','password'].forEach(k=>inputs[k].value='');}},'Créer le compte')
+  const hint=h('p',{style:{fontSize:'12px',color:'var(--muted)',marginTop:'10px'}},'');
+  const opWrap=h('div',null,opSel);
+  // Charger les machines depuis l'API planning
+  const machines = S.machines || [];
+  const machineSel = h('select', {className:'form-sel'},
+    h('option', {value:''}, '— Machine par défaut (Fabrication) —'),
+    ...machines.map(m => h('option', {value: String(m.id)}, m.nom))
   );
+  inputs.machine_id = machineSel;
+  // Wrapper machine — visible seulement pour Fabrication
+  const machineWrap = h('div', null,
+    h('label', {style:{display:'block',fontSize:'11px',fontWeight:'600',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'4px'}}, 'Machine par défaut'),
+    machineSel
+  );
+  const syncRoleUI=()=>{
+    const r=inputs.role.value;
+    const hideOp=(r==='direction'||r==='administration'||r==='logistique');
+    const showMachine = r === 'fabrication';
+    opWrap.style.display = hideOp ? 'none' : '';
+    machineWrap.style.display = showMachine ? '' : 'none';
+    hint.textContent = (r==='fabrication')
+      ? '💡 Fabrication = lecture seule. Sans opérateur lié → accès bloqué.'
+      : '💡 Direction / Administration / Logistique : pas de liaison opérateur.';
+    if(hideOp) opSel.value='';
+  };
+  roleSel.addEventListener('change',syncRoleUI);
+  const form=h('div',{className:'card',style:{padding:'20px'}},h('h3',{style:{fontSize:'14px',fontWeight:'600',marginBottom:'16px'}},'Créer un compte'),
+    h('div',{className:'form-grid'},...[['nom','Nom complet *','text'],['email','Email *','email'],['password','Mot de passe * (min. 8 car.)','password']].map(([k,l,t])=>{const i=h('input',{placeholder:l,type:t});inputs[k]=i;return i;}),roleSel,opWrap,machineWrap),
+    hint,
+    h('button',{className:'btn',onClick:()=>{if(!inputs.nom.value||!inputs.email.value||!inputs.password.value)return;createUser({nom:inputs.nom.value,email:inputs.email.value,password:inputs.password.value,role:inputs.role.value,operateur_lie:inputs.operateur_lie.value||null,machine_id: inputs.machine_id?.value || null});['nom','email','password'].forEach(k=>inputs[k].value='');}},'Créer le compte')
+  );
+  setTimeout(syncRoleUI,0);
   const list=h('div',{className:'card'},h('div',{className:'card-header'},h('h3',null,'Utilisateurs ('+S.users.length+')'),h('span',{style:{fontSize:'11px',color:'var(--muted)'}},'Dernière connexion')),
     S.users.length===0?h('div',{className:'card-empty'},'Aucun utilisateur'):
     h('div',null,...S.users.map(u=>{
       const rb=h('span',{className:ROLE_BADGE[u.role]||'badge'},ROLE_LABELS[u.role]||u.role);
       const ab=!u.actif?h('span',{className:'badge-inactif'},'Inactif'):null;
-      const lb=u.operateur_lie
-        ? h('span',{style:{fontSize:'11px',color:'var(--accent)',cursor:'pointer',textDecoration:'underline'},onClick:()=>openUserDetail(u.id)},'🔗 '+opName(u.operateur_lie))
-        : h('span',{style:{fontSize:'11px',color:'var(--danger)',cursor:'pointer',textDecoration:'underline'},onClick:()=>openUserDetail(u.id)},'⚠ Non lié — Configurer');
+      const showOpLink = !(u.role==='direction'||u.role==='administration'||u.role==='logistique');
+      const lb=!showOpLink
+        ? h('span',{style:{fontSize:'11px',color:'var(--muted)'}},'—')
+        : (u.operateur_lie
+          ? h('span',{style:{fontSize:'11px',color:'var(--accent)',cursor:'pointer',textDecoration:'underline'},onClick:()=>openUserDetail(u.id)},'🔗 '+opName(u.operateur_lie))
+          : h('span',{style:{fontSize:'11px',color:'var(--danger)',cursor:'pointer',textDecoration:'underline'},onClick:()=>openUserDetail(u.id)},'⚠ Non lié — Configurer'));
+      const mach = (u.role==='fabrication' && (u.machine_nom || u.machine_id))
+        ? h('div',{className:'ui-last'},'🧷 '+(u.machine_nom || ('Machine #'+u.machine_id)))
+        : null;
       return h('div',{className:'user-row'},
-        h('div',null,h('div',{className:'ui-name'},u.nom,rb,ab),h('div',{className:'ui-email'},u.email),h('div',{className:'ui-last'},lb),h('div',{className:'ui-last'},u.last_login?'🕐 '+fD(u.last_login):'🕐 Jamais connecté')),
+        h('div',null,h('div',{className:'ui-name'},u.nom,rb,ab),h('div',{className:'ui-email'},u.email),h('div',{className:'ui-last'},lb),mach,h('div',{className:'ui-last'},u.last_login?'🕐 '+fD(u.last_login):'🕐 Jamais connecté')),
         h('div',{className:'user-actions'},u.actif?h('button',{className:'btn-danger',onClick:()=>toggleUser(u.id,false)},'Désactiver'):h('button',{className:'btn-sm',onClick:()=>toggleUser(u.id,true)},'Réactiver'))
       );
     }))
@@ -2345,14 +3115,41 @@ function renderProfil(userData, isAdminView=false, onSave=null){
     );
     inputs.operateur_lie=opSel;
 
+    // Machine par défaut (Fabrication)
+    const machines = S.machines || [];
+    const machineSel = h('select', {className:'form-sel'},
+      h('option', {value:''}, '— Machine par défaut (Fabrication) —'),
+      ...machines.map(m => {
+        const opt=h('option', {value: String(m.id)}, m.nom);
+        if(String(m.id)===String(userData?.machine_id||'')) opt.selected=true;
+        return opt;
+      })
+    );
+    inputs.machine_id = machineSel;
+
     // Actif
     const actifChk=h('input',{type:'checkbox'});
     actifChk.checked=userData?.actif!==0;
     inputs.actif=actifChk;
 
+    const opFieldWrap=h('div',{style:{marginBottom:'14px'}},h('label',{style:{display:'block',fontSize:'11px',fontWeight:'600',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'5px'}},'Opérateur lié'),opSel);
+    const machineWrap=h('div',{style:{marginBottom:'14px'}},h('label',{style:{display:'block',fontSize:'11px',fontWeight:'600',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'5px'}},'Machine par défaut'),machineSel);
+    const syncAdminRole=()=>{
+      const r=roleSel.value;
+      const hide=(r==='direction'||r==='administration'||r==='logistique');
+      opFieldWrap.style.display = hide ? 'none' : '';
+      if(hide) opSel.value='';
+      const showMachine = (r==='fabrication');
+      machineWrap.style.display = showMachine ? '' : 'none';
+      if(!showMachine) machineSel.value='';
+    };
+    roleSel.addEventListener('change',syncAdminRole);
+    syncAdminRole();
+
     adminFields.push(
       h('div',{style:{marginBottom:'14px'}},h('label',{style:{display:'block',fontSize:'11px',fontWeight:'600',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'5px'}},'Rôle'),roleSel),
-      h('div',{style:{marginBottom:'14px'}},h('label',{style:{display:'block',fontSize:'11px',fontWeight:'600',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'5px'}},'Opérateur lié'),opSel),
+      opFieldWrap,
+      machineWrap,
       h('label',{style:{display:'flex',alignItems:'center',gap:'8px',fontSize:'13px',color:'var(--text2)',marginBottom:'14px'}},actifChk,'Compte actif')
     );
   }
@@ -2690,6 +3487,8 @@ function renderRentabilite(){
 function render(){
   const root=document.getElementById('root');root.innerHTML='';
   document.body.classList.toggle('sb-open', !!S.sidebarOpen);
+  document.body.classList.toggle('has-topbar', S.app==='prod' || S.app==='stock');
+  window.__MYSIFA_APP__ = S.app;
 
   if(!S.user||S.app==='login'){root.appendChild(renderLogin());}
   else if(S.app==='portal'){root.appendChild(renderPortal());}
@@ -2734,20 +3533,25 @@ async function nav(){
   else if(S.page==='import')await loadImports();
   else if(S.page==='rentabilite')await loadDevis();
   else if(S.page==='dossiers')await loadDos();
-  else if(S.page==='users')await loadUsers();
+  else if(S.page==='users'){await loadMachines();await loadUsers();}
   render();
 }
 
 if(localStorage.getItem('theme')==='light')document.body.classList.add('light');
 checkAuth();
 </script>
-<script src="/static/chatbot_widget.js"></script>
+<!-- Chatbot temporairement désactivé -->
 </body>
 </html>"""
 
-FRONTEND_HTML = (
-    _FRONTEND_HTML_TEMPLATE.replace("__META_DESCRIPTION__", APP_META_DESCRIPTION)
-    .replace("__THEME_COLOR__", THEME_COLOR_META)
-    .replace("__PAGE_TITLE__", APP_PAGE_TITLE)
-    .replace("__V_LABEL__", f"v{APP_VERSION}")
-)
+def render_frontend_html(initial_app: str = "portal") -> str:
+    return (
+        _FRONTEND_HTML_TEMPLATE.replace("__META_DESCRIPTION__", APP_META_DESCRIPTION)
+        .replace("__THEME_COLOR__", THEME_COLOR_META)
+        .replace("__PAGE_TITLE__", APP_PAGE_TITLE)
+        .replace("__V_LABEL__", f"v{APP_VERSION}")
+        .replace("__INITIAL_APP_VALUE__", initial_app)
+    )
+
+
+FRONTEND_HTML = render_frontend_html("portal")

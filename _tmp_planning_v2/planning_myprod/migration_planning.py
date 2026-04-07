@@ -9,11 +9,14 @@ Exécuter une seule fois :
 """
 
 import sqlite3
-import os
+import sys
+from pathlib import Path
 
-# ⚠️ Adapter le chemin si besoin
-DB_PATH = os.path.join(os.path.dirname(__file__), "data", "production.db")
-# Si ta base est à la racine : DB_PATH = "production.db"
+# Racine du dépôt MySifa (…/_tmp_planning_v2/planning_myprod → 2 niveaux au-dessus)
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from config import DB_PATH  # noqa: E402
 
 MIGRATION_SQL = """
 -- ═══════════════════════════════════════════════════════════════

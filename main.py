@@ -1,13 +1,15 @@
 """
 MyProd by SIFA — v0.5.0
 """
-from fastapi import FastAPI
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from config import APP_TITLE, APP_VERSION, HOST, PORT
-from frontend.html import FRONTEND_HTML
+from frontend.html import render_frontend_html
 
 from routers.auth       import router as auth_router
 from routers.imports    import router as router_imports
@@ -22,8 +24,24 @@ from routers.planning import router as planning_router
 from routers.stock import router as router_stock
 from routers.chat import router as chat_router
 from frontend.planning_page import router as planning_page_router
+from frontend.prod_page import router as prod_page_router
+from frontend.stock_page import router as stock_page_router
 
-app = FastAPI(title=APP_TITLE, version=APP_VERSION)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup / shutdown — remplace @app.on_event('startup') (déprécié)."""
+    try:
+        from database import sync_emplacements_plan_from_csv
+
+        n = sync_emplacements_plan_from_csv()
+        print(f"[MySifa] emplacements_plan : {n} code(s) depuis CSV")
+    except Exception as e:
+        print(f"[MySifa] emplacements_plan : import CSV ignoré ({e})")
+    yield
+
+
+app = FastAPI(title=APP_TITLE, version=APP_VERSION, lifespan=lifespan)
 
 # Static assets (chat widget, etc.)
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -35,6 +53,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def no_cache_planning(request: Request, call_next):
+    """Évite cache navigateur / proxy sur le planning (données toujours lues en base)."""
+    response = await call_next(request)
+    p = request.url.path
+    if p.startswith("/api/planning") or p == "/planning":
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+    return response
+
 
 app.include_router(auth_router)
 app.include_router(router_imports)
@@ -49,10 +79,13 @@ app.include_router(planning_router)
 app.include_router(router_stock)
 app.include_router(chat_router)
 app.include_router(planning_page_router)
+app.include_router(prod_page_router)
+app.include_router(stock_page_router)
+
 
 @app.get("/", response_class=HTMLResponse)
 def serve_frontend():
-    return FRONTEND_HTML
+    return render_frontend_html("portal")
 
 if __name__ == "__main__":
     import uvicorn
