@@ -11,8 +11,9 @@ CSV_PATH="${1:-$APP_DIR/data/planning_cohesio_import.csv}"
 PY="$APP_DIR/venv/bin/python"
 IMPORTER="$APP_DIR/tools/import_planning_cohesio_csv.py"
 
-# Même base que le service systemd mysifa (sinon l’import part dans data/production.db
-# pendant que l’app lit production.db à la racine — vous ne voyez rien dans l’UI).
+# Même base que le service mysifa. Par défaut, config.py utilise data/production.db
+# (pas la racine). Privilégier data/ évite d’importer dans un second fichier SQLite
+# que l’UI ne lit pas.
 resolve_db_path() {
   if [[ -n "${DB_PATH:-}" ]]; then
     echo "DB_PATH (déjà défini): $DB_PATH"
@@ -31,12 +32,18 @@ resolve_db_path() {
       done
     fi
   fi
-  if [[ -f "$APP_DIR/production.db" ]]; then
-    export DB_PATH="$APP_DIR/production.db"
-    echo "DB_PATH (fichier à la racine du projet, déploiement courant): $DB_PATH"
+  if [[ -f "$APP_DIR/data/production.db" ]]; then
+    export DB_PATH="$APP_DIR/data/production.db"
+    echo "DB_PATH (défaut MySifa — data/production.db): $DB_PATH"
     return
   fi
-  echo "DB_PATH: (non forcé → défaut Python : $APP_DIR/data/production.db)" >&2
+  if [[ -f "$APP_DIR/production.db" ]]; then
+    export DB_PATH="$APP_DIR/production.db"
+    echo "DB_PATH (legacy — production.db à la racine, data/ absent): $DB_PATH"
+    return
+  fi
+  export DB_PATH="$APP_DIR/data/production.db"
+  echo "DB_PATH (standard — data/production.db, sera créé si besoin): $DB_PATH"
 }
 
 if [[ ! -f "$IMPORTER" ]]; then
