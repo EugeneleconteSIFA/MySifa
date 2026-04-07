@@ -5,6 +5,12 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="__META_DESCRIPTION__">
+<link rel="icon" type="image/png" sizes="512x512" href="/static/mys_icon_512.png">
+<link rel="apple-touch-icon" href="/static/mys_icon_180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="MySifa">
+<meta name="theme-color" content="#0a0e17">
 <meta name="theme-color" content="__THEME_COLOR__">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'><rect width='100' height='100' rx='22' fill='%230a0e17'/><text x='50' y='67' font-family='Segoe UI,system-ui,sans-serif' font-size='38' font-weight='800' text-anchor='middle' letter-spacing='-1.5'><tspan fill='%23f1f5f9'>My</tspan><tspan fill='%2322d3ee'>S</tspan></text></svg>">
 
