@@ -351,6 +351,33 @@ def list_machines(request: Request):
     return [dict(r) for r in rows]
 
 
+@router.get("/summary")
+def planning_summary(request: Request):
+    """Diagnostic : total dossiers planning + répartition par machine (vérif local vs VPS)."""
+    user = require_planning_view(request)
+    from config import DB_PATH
+
+    with get_db() as conn:
+        total = conn.execute("SELECT COUNT(*) FROM planning_entries").fetchone()[0]
+        rows = conn.execute(
+            """
+            SELECT m.id AS machine_id, m.nom, COUNT(e.id) AS entries_count
+            FROM machines m
+            LEFT JOIN planning_entries e ON e.machine_id = m.id
+            WHERE m.actif = 1
+            GROUP BY m.id, m.nom
+            ORDER BY m.nom
+            """
+        ).fetchall()
+    out: Dict[str, Any] = {
+        "planning_entries_total": int(total),
+        "per_machine": [dict(r) for r in rows],
+    }
+    if user.get("role") in {"direction", "administration"}:
+        out["db_path"] = DB_PATH
+    return out
+
+
 @router.get("/machines/{machine_id}")
 def get_machine(machine_id: int, request: Request):
     require_planning_view(request)

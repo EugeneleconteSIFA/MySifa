@@ -4,8 +4,10 @@ Ajouter dans main.py :
     from frontend.planning_page import router as planning_page_router
     app.include_router(planning_page_router)
 
-Accès : /planning  ou  /planning?machine=1
+Accès : /planning  ou  /planning?machine=<id SQLite réel>
 """
+
+from typing import Optional
 
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -16,20 +18,23 @@ router = APIRouter()
 
 
 @router.get("/planning", response_class=HTMLResponse)
-def planning_page(request: Request, machine: int = 1):
+def planning_page(request: Request, machine: Optional[int] = None):
     try:
         user = get_current_user(request)
     except HTTPException as e:
         if e.status_code == 401:
             nxt = "/planning"
-            if machine and machine != 1:
+            if machine is not None:
                 nxt = f"/planning?machine={machine}"
             return RedirectResponse(url=f"/?next={nxt}", status_code=302)
         raise
     if user.get("role") not in {"direction", "administration", "fabrication"}:
         raise HTTPException(status_code=403, detail="Accès réservé au planning")
+    # 0 = laisser le JS choisir l’id réel après /api/planning/machines (évite de forcer
+    # ?machine=1 implicite alors que l’id SQLite « Cohésio 1 » n’est pas 1 en prod).
+    ssr_mid = str(machine) if machine is not None else "0"
     html = (
-        PLANNING_HTML.replace("__MACHINE_ID__", str(machine))
+        PLANNING_HTML.replace("__MACHINE_ID__", ssr_mid)
         .replace("__PLANNING_TITLE__", APP_PLANNING_PAGE_TITLE)
         .replace("__META_DESCRIPTION__", APP_META_DESCRIPTION)
         .replace("__THEME_COLOR__", THEME_COLOR_META)
@@ -310,6 +315,12 @@ let CAN_EDIT=false;
 const api=(p,o={})=>fetch(`/api/planning${p}`,{credentials:"include",headers:{"Content-Type":"application/json",...(o.headers||{})},...o}).then(r=>{if(!r.ok)throw r;return r.json()});
 
 async function load(){
+  if(!MID){
+    console.warn("Planning: aucune machine sélectionnée (MID=0)");
+    S.loading=false;
+    render();
+    return;
+  }
   S.loading=true;render();
   try{
     const[m,en,tl]=await Promise.all([api(`/machines/${MID}`),api(`/machines/${MID}/entries`),api(`/machines/${MID}/timeline`)]);
@@ -1025,12 +1036,15 @@ async function boot(){
     const raw=sp.get("machine");
     const num=raw?parseInt(raw,10):NaN;
     const ids=new Set(ordered.map(m=>m.id));
+    const saved=parseInt(localStorage.getItem("mysifa.planning.lastMachine")||"",10);
     if(isFinite(num)&&ids.has(num)){
       MID=num;
     }else if(isFinite(num)&&num>=1&&num<=4){
       const wantedName=MACHINE_ORDER[num-1];
       const wanted=ordered.find(m=>String(m.nom||"")===wantedName);
       if(wanted) MID=wanted.id;
+    }else if(isFinite(saved)&&ids.has(saved)){
+      MID=saved;
     }else{
       const wanted=ordered[0];
       if(wanted) MID=wanted.id;
