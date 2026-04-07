@@ -1,296 +1,5 @@
-"""SIFA — Page Planning v1.1 (standalone)
 
-Ajouter dans main.py :
-    from frontend.planning_page import router as planning_page_router
-    app.include_router(planning_page_router)
-
-Accès : /planning  ou  /planning?machine=1
-"""
-
-from fastapi import APIRouter, Request, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse
-from services.auth_service import get_current_user
-from config import APP_META_DESCRIPTION, APP_PLANNING_PAGE_TITLE, APP_VERSION, THEME_COLOR_META
-
-router = APIRouter()
-
-
-@router.get("/planning", response_class=HTMLResponse)
-def planning_page(request: Request, machine: int = 1):
-    try:
-        user = get_current_user(request)
-    except HTTPException as e:
-        if e.status_code == 401:
-            nxt = "/planning"
-            if machine and machine != 1:
-                nxt = f"/planning?machine={machine}"
-            return RedirectResponse(url=f"/?next={nxt}", status_code=302)
-        raise
-    if user.get("role") not in {"direction", "administration", "fabrication"}:
-        raise HTTPException(status_code=403, detail="Accès réservé au planning")
-    html = (
-        PLANNING_HTML.replace("__MACHINE_ID__", str(machine))
-        .replace("__PLANNING_TITLE__", APP_PLANNING_PAGE_TITLE)
-        .replace("__META_DESCRIPTION__", APP_META_DESCRIPTION)
-        .replace("__THEME_COLOR__", THEME_COLOR_META)
-        .replace("__V_LABEL__", f"v{APP_VERSION}")
-    )
-    return HTMLResponse(content=html)
-
-
-PLANNING_HTML = r"""<!DOCTYPE html>
-<html lang="fr">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="__META_DESCRIPTION__">
-<meta name="theme-color" content="__THEME_COLOR__">
-<link rel="icon" type="image/png" sizes="512x512" href="/static/mys_icon_512.png">
-<link rel="apple-touch-icon" href="/static/mys_icon_180.png">
-<link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
-<title>__PLANNING_TITLE__</title>
-<style>
-*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-:root{
-  --bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#94a3b8;
-  --muted:#64748b;--accent:#22d3ee;--accent-bg:rgba(34,211,238,0.12);
-  --success:#34d399;--warn:#fbbf24;--danger:#f87171;
-  --c1:#22d3ee;--c2:#a78bfa;--c3:#34d399;--c4:#fbbf24;--c5:#f87171;
-  --blue:#38bdf8;--purple:#a78bfa;--mono:ui-monospace,'Cascadia Code',monospace;--sans:'Segoe UI',system-ui,sans-serif;
-  --bg-dark:#080c12;--border2:#334155;--dim:#94a3b8;
-  --green:var(--success);--red:var(--danger);--amber:var(--warn);
-}
-body.light{
-  --bg:#f1f5f9;--card:#ffffff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;
-  --muted:#94a3b8;--accent:#0891b2;--accent-bg:rgba(8,145,178,0.10);
-  --success:#059669;--warn:#d97706;--danger:#dc2626;
-  --c1:#0891b2;--c2:#7c3aed;--c3:#059669;--c4:#d97706;--c5:#dc2626;
-  --blue:#0ea5e9;--purple:#7c3aed;--bg-dark:#e2e8f0;--border2:#cbd5e1;--dim:#64748b;
-}
-body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh}
-::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
-.app{display:flex;min-height:100vh}
-.sidebar{width:220px;background:var(--card);border-right:1px solid var(--border);padding:20px 12px;display:flex;flex-direction:column;flex-shrink:0;height:100vh;position:sticky;top:0;overflow-y:auto}
-.sidebar::-webkit-scrollbar{width:0}.sidebar{scrollbar-width:none}
-.logo{padding:0 8px;margin-bottom:32px}
-.logo-brand{font-size:15px;font-weight:800}.logo-brand span{color:var(--accent)}
-.logo-sub{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase}
-.nav-btn{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:13px;font-weight:500;width:100%;text-align:left;font-family:inherit;transition:all .15s;margin-bottom:2px}
-.nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
-.sidebar-bottom{margin-top:auto;display:flex;flex-direction:column;gap:6px;padding-bottom:8px}
-.user-chip{padding:10px 12px;border-radius:8px;background:var(--accent-bg);cursor:pointer}
-.user-chip .uc-name{font-size:12px;font-weight:600;color:var(--text)}
-.user-chip .uc-role{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px}
-.theme-btn,.logout-btn{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-size:12px;width:100%;font-family:inherit;transition:all .15s}
-.theme-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
-.theme-btn .theme-ico{font-size:14px;line-height:1}
-.theme-btn .theme-label{white-space:nowrap}
-@media (display-mode: standalone), (max-width: 900px){
-  .theme-btn .theme-label{display:none}
-  .theme-btn{justify-content:center}
-}
-.logout-btn{border:none}.logout-btn:hover{color:var(--danger);background:rgba(248,113,113,.1)}
-.version{font-size:10px;color:var(--muted);font-family:monospace;padding:4px 12px}
-.main{flex:1;padding:28px;overflow-y:auto}
-.planning-container{max-width:1400px;margin:0 auto}
-
-.header{padding:0 0 20px;margin-bottom:4px;border-bottom:1px solid var(--border);display:flex;align-items:center;
-  justify-content:space-between;flex-wrap:wrap;gap:12px}
-.h-left{display:flex;align-items:center;gap:16px}
-.m-title{font-size:22px;font-weight:700;color:var(--text)}
-.m-sel{
-  font-size:14px;font-weight:800;color:var(--text);
-  font-family:var(--mono);
-  background:var(--card);border:1px solid var(--border2);border-radius:12px;
-  padding:10px 12px;cursor:pointer;outline:none;
-  transition:all .15s;max-width:min(520px,72vw)
-}
-.m-sel:hover{border-color:var(--accent);background:var(--accent-bg)}
-.m-sel:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
-.m-sel option{background:var(--card);color:var(--text)}
-.m-sub{font-size:12px;color:var(--muted)}
-.h-right{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.gear-btn{
-  width:36px;height:36px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;
-  border:1px solid var(--border2);background:var(--card);color:var(--dim);cursor:pointer;
-  transition:all .15s;font-size:16px;line-height:1
-}
-.gear-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
-.back-top{
-  display:flex;align-items:center;gap:8px;
-  padding:8px 14px;border-radius:10px;
-  border:none;
-  color:var(--text2);text-decoration:none;
-  font-size:12px;font-weight:400;font-family:var(--sans);
-  transition:all .15s;
-}
-.back-top:hover{color:var(--text);background:transparent}
-.back-top .wm{font-weight:800;color:var(--text);letter-spacing:-.2px}
-.back-top .wm span{color:var(--accent)}
-
-.sat-tog{display:flex;align-items:center;gap:10px;padding:8px 16px;border-radius:10px;cursor:pointer;
-  border:1px solid var(--border2);background:var(--card);transition:all .3s;user-select:none}
-.sat-tog.on{background:#1a1a3a;border-color:rgba(124,58,237,.4)}
-.track{width:38px;height:20px;border-radius:10px;position:relative;background:#3a3a5a;transition:background .3s}
-.sat-tog.on .track{background:var(--purple)}
-.thumb{width:16px;height:16px;border-radius:50%;background:#fff;position:absolute;top:2px;left:2px;
-  transition:left .3s;box-shadow:0 1px 4px rgba(0,0,0,.3)}
-.sat-tog.on .thumb{left:20px}
-.sat-lbl{font-size:12px;font-weight:600;font-family:var(--mono);color:#6b7280;transition:color .3s}
-.sat-tog.on .sat-lbl{color:#c4b5fd}
-
-.badge{padding:8px 16px;border-radius:10px;font-size:13px;font-family:var(--mono)}
-.badge-run{background:#0f2a1a;border:1px solid #166534;color:#86efac;display:flex;align-items:center;gap:8px}
-body.light .badge-run{background:rgba(16,185,129,.14);border-color:#059669;color:#047857}
-.badge-run .dot{width:8px;height:8px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
-.badge-info{background:var(--card);border:1px solid var(--border2);color:var(--dim)}
-
-.sec{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:28px}
-.sec-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
-.sec-title{font-size:16px;font-weight:600;color:var(--text2)}
-
-.wk-nav{display:flex;gap:0;align-items:center}
-.wk-nav button{padding:6px 12px;background:var(--card);border:1px solid var(--border2);
-  color:var(--dim);cursor:pointer;font-size:14px;font-family:var(--mono)}
-.wk-nav button:first-child{border-radius:8px 0 0 8px}
-.wk-nav button:last-child{border-radius:0 8px 8px 0}
-.wk-nav button:hover{background:var(--border)}
-.wk-nav .today{padding:6px 16px;font-size:12px}
-
-.wk-lbl{font-size:13px;font-weight:600;font-family:var(--mono);margin-bottom:8px}
-.wk-lbl.cur{color:var(--blue)}.wk-lbl.nxt{color:var(--dim)}
-.tl-wrap{position:relative;margin-bottom:16px}
-.dh{display:flex;margin-bottom:4px}
-.dh-cell{text-align:center;padding:6px 0;font-size:12px;font-weight:600;font-family:var(--mono);
-  color:var(--muted);border-bottom:1px solid var(--border)}
-.dh-cell.today{color:var(--blue);border-bottom:2px solid var(--accent)}
-.dh-cell.sat{color:#c084fc;border-bottom:2px solid rgba(124,58,237,.3)}
-.dh-cell small{display:block;font-size:10px;opacity:.6;margin-top:2px}
-.dh-hours-btn{display:block;margin:2px auto 0;padding:2px 8px;border-radius:6px;border:1px solid var(--border2);
-  background:transparent;color:var(--muted);font-size:10px;font-family:var(--mono);cursor:pointer;opacity:.85;transition:all .15s}
-.dh-hours-btn:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-bg);opacity:1}
-.tl-bar{position:relative;height:56px;background:var(--bg-dark);border-radius:8px;
-  border:1px solid var(--border);overflow:visible}
-.d-sep{position:absolute;top:0;bottom:0;width:1px;background:var(--border2)}
-.slot{position:absolute;top:6px;bottom:6px;border-radius:6px;display:flex;align-items:center;
-  justify-content:center;cursor:pointer;transition:all .15s;overflow:hidden;padding:2px 4px}
-.slot:hover{top:4px;bottom:4px;z-index:20}
-.slot-inner{display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.15;
-  text-align:center;max-width:100%;pointer-events:none}
-.slot .line1{font-size:11px;color:#fff;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-.slot .line2{font-size:9px;font-weight:500;color:rgba(255,255,255,.88);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-body.light .slot .line1{color:#0f172a}body.light .slot .line2{color:#334155}
-.now-l{position:absolute;top:0;bottom:0;width:2px;background:var(--red);z-index:15;box-shadow:0 0 8px var(--red)}
-.now-d{position:absolute;top:-4px;left:-4px;width:10px;height:10px;border-radius:50%;background:var(--red)}
-
-.tip{position:absolute;z-index:100;background:var(--card);border:1px solid var(--border2);border-radius:12px;padding:14px 18px;
-  min-width:240px;max-width:320px;pointer-events:none;animation:tipIn .15s ease;
-  box-shadow:0 12px 40px rgba(0,0,0,.6)}
-.tip-hdr{display:flex;align-items:center;gap:10px;margin-bottom:10px}
-.tip-bar{width:6px;height:32px;border-radius:3px;flex-shrink:0}
-.tip-ref{font-size:13px;font-weight:700;color:var(--text);font-family:var(--mono)}
-.tip-lbl{font-size:12px;color:var(--text2);margin-top:2px}
-.tip-grid{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:11px;
-  border-top:1px solid var(--border2);padding-top:10px}
-.tip-grid .k{color:var(--muted)}.tip-grid .v{color:var(--text2);font-family:var(--mono)}
-
-.legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}
-.lg-i{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dim)}
-.lg-d{width:10px;height:10px;border-radius:3px}.lg-i span{font-family:var(--mono)}
-
-.th{display:grid;grid-template-columns:22px 22px 14px minmax(96px,1.2fr) minmax(64px,.75fr) minmax(64px,.75fr) minmax(64px,.75fr) minmax(44px,.45fr) minmax(72px,.65fr) 40px minmax(110px,1.0fr) 74px;
-  gap:6px;padding:10px 10px;background:var(--bg-dark);border-radius:10px 10px 0 0;
-  font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600;font-family:var(--mono);align-items:center}
-.th>span{min-width:0}
-.th .act-c{text-align:right}
-.tr{display:grid;grid-template-columns:22px 22px 14px minmax(96px,1.2fr) minmax(64px,.75fr) minmax(64px,.75fr) minmax(64px,.75fr) minmax(44px,.45fr) minmax(72px,.65fr) 40px minmax(110px,1.0fr) 74px;
-  gap:6px;padding:10px 10px;border-bottom:1px solid var(--border);font-size:12px;align-items:center;
-  cursor:grab;transition:background .2s;background:var(--bg-dark)}
-.tr:first-child{background:var(--accent-bg)}
-.tr.dov{background:var(--accent-bg);opacity:.95}.tr.dra{opacity:.5}
-.tr.drop-before{box-shadow:0 -3px 0 0 var(--accent) inset}
-.tr.drop-after{box-shadow:0 3px 0 0 var(--accent) inset}
-.dh-handle{color:var(--muted);font-size:14px;cursor:grab;user-select:none}
-body.light .tr{background:var(--card)}
-body.light .tr:first-child{background:var(--accent-bg)}
-body.light .th{background:var(--bg)}
-.cd{width:8px;height:8px;border-radius:50%}
-.ref{font-family:var(--mono);font-weight:600;color:var(--text2)}
-.cell-mini{font-size:11px;color:var(--text2);font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.ref.run{color:var(--blue)}
-.lbl{overflow:hidden;max-width:100%}
-.lbl-main{display:block;font-weight:600;color:var(--text);font-size:13px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
-.lbl-sub{display:block;font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
-.lbl-meta{display:block;font-size:11px;color:var(--text2);margin-top:2px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
-.fmt{font-family:var(--mono);color:var(--dim);font-size:12px}
-.dur{font-family:var(--mono);color:var(--dim)}
-.st{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
-.st.run{background:#0f2a1a;color:var(--green);border:1px solid #166534}
-.st.att{background:#1a1520;color:var(--amber);border:1px solid #78350f}
-.st.ter{background:var(--card);color:#6b7280;border:1px solid var(--border2)}
-.statut-select{width:100%;padding:6px 10px;background:var(--bg);border:1px solid var(--border2);
-  border-radius:10px;color:var(--text2);font-size:11px;font-family:var(--mono);outline:none}
-.statut-select:focus{border-color:var(--accent);color:var(--text)}
-.acts{display:flex;gap:6px;justify-content:flex-end}
-.ab{padding:4px 8px;background:transparent;border:1px solid var(--border2);color:var(--text2);
-  cursor:pointer;font-size:11px;border-radius:6px;font-family:var(--mono)}
-.ab:hover{background:var(--accent-bg);color:var(--accent)}
-.ab.del{color:var(--red)}.ab.del:hover{background:rgba(248,113,113,.12)}
-.ab.mov{width:28px;display:none;align-items:center;justify-content:center;padding:4px 0}
-.ab.mov{display:none}
-@media (max-width:900px){
-  .ab.mov{display:inline-flex}
-}
-.ab:disabled{opacity:.45;cursor:not-allowed}
-.ab:disabled:hover{background:transparent;color:var(--text2);border-color:var(--border2)}
-
-.btn-p{padding:8px 20px;background:var(--accent);color:var(--bg);border:none;border-radius:8px;
-  cursor:pointer;font-size:13px;font-weight:600;font-family:var(--mono);display:flex;align-items:center;gap:8px}
-.btn-p:hover{filter:brightness(1.08)}
-body.light .btn-p{color:#fff}
-
-.mo{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;
-  justify-content:center;z-index:1000;backdrop-filter:blur(4px)}
-.md{background:var(--card);border:1px solid var(--border2);border-radius:16px;padding:32px;
-  width:480px;max-width:90vw;box-shadow:0 24px 80px rgba(0,0,0,.5)}
-.md h3{color:var(--text);font-size:18px;font-family:var(--mono);margin-bottom:24px}
-.fd{margin-bottom:16px}
-.fd label{display:block;margin-bottom:6px;color:var(--dim);font-size:12px;text-transform:uppercase;letter-spacing:1px}
-.fd input,.fd select{width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border2);
-  border-radius:8px;color:var(--text);font-size:14px;font-family:var(--mono);outline:none}
-.fd select option{background:var(--card);color:var(--text)}
-.dur-b{margin-top:6px;height:4px;border-radius:2px;background:var(--border);overflow:hidden}
-.dur-f{height:100%;border-radius:2px;background:linear-gradient(90deg,#059669,#d97706,#dc2626);transition:width .2s}
-.md-acts{display:flex;gap:12px;justify-content:flex-end;margin-top:28px}
-.btn-s{padding:10px 24px;background:transparent;color:var(--dim);border:1px solid var(--border2);
-  border-radius:8px;cursor:pointer;font-size:14px;font-family:var(--mono)}
-.empty{text-align:center;padding:48px;color:var(--muted);font-size:14px;width:100%}
-
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
-@keyframes tipIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
-@keyframes slideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-</style>
-</head>
-<body>
-<div id="app"></div>
-<script>
-// Handler d'erreurs installé *avant* le script principal (capte aussi les erreurs de parsing).
-function showFatal(message, lineno, colno, extra){
-  try{
-    const msg = message ? String(message) : "Erreur inconnue";
-    const loc = (lineno||colno) ? (`\\n\\nLigne: ${lineno||'?'}, Col: ${colno||'?'}`) : "";
-    const more = extra ? (`\\n\\n${String(extra)}`) : "";
-    const pre = document.createElement("pre");
-    pre.style.cssText="position:fixed;inset:12px;z-index:9999;background:rgba(17,24,39,.96);color:#f1f5f9;border:1px solid rgba(148,163,184,.25);border-radius:14px;padding:14px;overflow:auto;font:12px/1.45 ui-monospace,Consolas,monospace;white-space:pre-wrap";
-    pre.textContent="MySifa / Planning — erreur JS\\n\\n"+msg+loc+more+"\\n\\nOuvrez la console (F12) pour le détail.";
-    document.body.appendChild(pre);
-  }catch(e){}
-}
-window.addEventListener("error", (e)=>showFatal(e.message, e.lineno, e.colno, (e.error && e.error.stack) ? e.error.stack : ""));
-window.addEventListener("unhandledrejection", (e)=>showFatal("Promise rejection", 0, 0, e.reason||""));
-</script>
-<script>
-let MID=__MACHINE_ID__;
+let MID=1;
 const DN=["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"];
 const MIND=2,MAXD=30;
 const CC=["#2563eb","#7c3aed","#059669","#d97706","#dc2626","#0891b2","#4f46e5","#65a30d","#c026d3","#ea580c"];
@@ -455,7 +164,7 @@ function renderSidebar(){
       <div style="padding:10px 12px;color:var(--muted);font-size:12px">Chargement…</div>
       <div class="sidebar-bottom">
         <button type="button" class="nav-btn" onclick="location.href='/'">← Retour <span class="wm">My<span>Sifa</span></span></button>
-        <div class="version">__V_LABEL__</div>
+        <div class="version">v0.6.1</div>
       </div></nav>`;
   }
   const admin=isAdmin(ME);
@@ -474,7 +183,7 @@ function renderSidebar(){
   const isLight=document.body.classList.contains("light");
   return`<nav class="sidebar"><div class="logo"><div class="logo-brand">My<span>Prod</span></div><div class="logo-sub">by SIFA</div></div>${
     items.map(i=>`<button type="button" class="nav-btn${i.key==="_planning"?" active":""}" onclick="location.href='${i.href}'">${i.icon}  ${i.label}</button>`).join("")
-  }<div class="sidebar-bottom"><button type="button" class="nav-btn" onclick="location.href='/'">← Retour <span class="wm">My<span>Sifa</span></span></button><div class="user-chip" onclick="location.href='/'" title="Retour à l'accueil MySifa"><div class="uc-name">${escAttr(ME.nom||"")}</div><div class="uc-role">${roleLabel(ME.role)}</div><div style="font-size:10px;color:var(--accent);margin-top:3px">✎ Mon profil</div></div><button type="button" class="theme-btn" onclick="toggleTheme()"><span class="theme-ico">${isLight?"☀":"🌙"}</span><span class="theme-label">${isLight?"Mode clair":"Mode sombre"}</span></button><button type="button" class="logout-btn" onclick="doLogout()">⎋  Déconnexion</button><div class="version">__V_LABEL__</div></div></nav>`;
+  }<div class="sidebar-bottom"><button type="button" class="nav-btn" onclick="location.href='/'">← Retour <span class="wm">My<span>Sifa</span></span></button><div class="user-chip" onclick="location.href='/'" title="Retour à l'accueil MySifa"><div class="uc-name">${escAttr(ME.nom||"")}</div><div class="uc-role">${roleLabel(ME.role)}</div><div style="font-size:10px;color:var(--accent);margin-top:3px">✎ Mon profil</div></div><button type="button" class="theme-btn" onclick="toggleTheme()"><span class="theme-ico">${isLight?"☀":"🌙"}</span><span class="theme-label">${isLight?"Mode clair":"Mode sombre"}</span></button><button type="button" class="logout-btn" onclick="doLogout()">⎋  Déconnexion</button><div class="version">v0.6.1</div></div></nav>`;
 }
 function toggleTheme(){document.body.classList.toggle("light");localStorage.setItem("theme",document.body.classList.contains("light")?"light":"dark");render();}
 async function doLogout(){try{await fetch("/api/auth/logout",{method:"POST",credentials:"include"});}catch(e){}location.href="/";}
@@ -631,8 +340,6 @@ function mkRow(e,i,slots){
   const sc=e.statut==="en_cours"?"run":e.statut==="termine"?"ter":"att";
   const sl={run:"En cours",ter:"Terminé",att:"En attente"}[sc];
   const isLocked=(e.statut==="en_cours"||e.statut==="termine");
-  const next = S.entries && S.entries[i+1] ? S.entries[i+1] : null;
-  const nextLocked = !!(next && (next.statut==="en_cours" || next.statut==="termine"));
   const co=colorForId(e.id||i+1);
   const cli=(e.client||"").trim()||"—";
   const of=escAttr(e.numero_of||e.reference||"—");
@@ -663,7 +370,7 @@ function mkRow(e,i,slots){
       ${CAN_EDIT?`
       <button type="button" class="ab mov" onclick="moveEntry(${e.id},-1)" title="Monter" ${i<=0||isLocked?"disabled":""}>▲</button>
       <button type="button" class="ab mov" onclick="moveEntry(${e.id},+1)" title="Descendre" ${i>=S.entries.length-1||isLocked?"disabled":""}>▼</button>
-      <button type="button" class="ab" onclick="openInsert(${e.id})" title="${nextLocked?"⦸ Impossible : dossier En cours / Terminé juste après":"Insérer après"}" ${isLocked||nextLocked?"disabled":""}>${nextLocked?"⦸":"↳+"}</button>
+      <button type="button" class="ab" onclick="openInsert(${e.id})" title="Insérer après">↳+</button>
       <button type="button" class="ab" onclick="openEdit(${e.id})" title="Modifier">✎</button>
       <button type="button" class="ab del" onclick="if(confirm('Supprimer ?'))delEntry(${e.id})" title="Supprimer">✕</button>`:""}
     </div></div>`;
@@ -738,32 +445,22 @@ function setupDD(){
     });
     r.addEventListener("dragleave",()=>{
       r.classList.remove("dov");
-      // Ne pas clearOver ici : le navigateur peut déclencher dragleave juste avant drop,
-      // et on perdrait l'information "avant/après" (trait bleu).
+      if(overEl===r) clearOver();
     });
-    r.addEventListener("drop", async (e)=>{
-      e.preventDefault();
-      r.classList.remove("dov");
-      const ti = +r.dataset.idx;
-      if(di===null){ clearOver(); return; }
-      if(di===ti){ clearOver(); return; }
-      const ids = S.entries.map(e=>e.id);
-      const [m] = ids.splice(di, 1);
-      let insertAt = ti;
+    r.addEventListener("drop",e=>{e.preventDefault();r.classList.remove("dov");
+      const ti=+r.dataset.idx;
+      if(di===null){clearOver();return;}
+      if(di===ti){clearOver();return;}
+      const ids=S.entries.map(e=>e.id);
+      const [m]=ids.splice(di,1);
+      let insertAt=ti;
       // si on dépose "après", et qu'on vient d'enlever un item avant ti, ajuster
-      const rect=r.getBoundingClientRect();
-      const before = (e.clientY - rect.top) < rect.height/2;
-      const after = !before;
+      const after = overPos==="after";
       if(after) insertAt = ti + 1;
       if(di < insertAt) insertAt -= 1;
-      ids.splice(insertAt, 0, m);
+      ids.splice(insertAt,0,m);
       clearOver();
-      try{
-        await api(`/machines/${MID}/reorder`,{method:"POST",body:JSON.stringify({entry_ids:ids})});
-      }finally{
-        await load();
-      }
-    });
+      api(`/machines/${MID}/reorder`,{method:"POST",body:JSON.stringify({entry_ids:ids})}).then(()=>load())}});
     r.addEventListener("dragend",()=>{
       r.classList.remove("dra");
       di=null;
@@ -879,16 +576,6 @@ async function submitEdit(id){
 
 function openInsert(afterId){
   if(!CAN_EDIT) return;
-  try{
-    const idx = S.entries.findIndex(e=>e.id===afterId);
-    if(idx>=0){
-      const nxt = S.entries[idx+1];
-      if(nxt && (nxt.statut==="en_cours" || nxt.statut==="termine")){
-        alert("⦸ Impossible d'insérer une ligne avant un dossier En cours / Terminé.");
-        return;
-      }
-    }
-  }catch(e){}
   document.getElementById("mroot").innerHTML=modalHTML(
     "Insérer un dossier après",
     dossierFields("","","","","","","","",8,"attente",false),
@@ -1039,7 +726,3 @@ async function boot(){
   await load();
 }
 boot();
-</script>
-</body>
-</html>
-"""

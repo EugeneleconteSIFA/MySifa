@@ -113,8 +113,12 @@ def list_users(request: Request):
     require_admin(request)
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT id,email,nom,role,operateur_lie,actif,telephone,created_at,last_login
-               FROM users ORDER BY role DESC, nom ASC"""
+            """SELECT u.id,u.email,u.nom,u.role,u.operateur_lie,u.actif,u.telephone,u.machine_id,
+                      u.created_at,u.last_login,
+                      m.nom AS machine_nom
+               FROM users u
+               LEFT JOIN machines m ON m.id = u.machine_id
+               ORDER BY u.role DESC, u.nom ASC"""
         ).fetchall()
     return [dict(r) for r in rows]
 
@@ -125,8 +129,13 @@ def get_user(user_id: int, request: Request):
     require_admin(request)
     with get_db() as conn:
         row = conn.execute(
-            """SELECT id,email,nom,role,operateur_lie,actif,telephone,created_at,last_login
-               FROM users WHERE id=?""", (user_id,)
+            """SELECT u.id,u.email,u.nom,u.role,u.operateur_lie,u.actif,u.telephone,u.machine_id,
+                      u.created_at,u.last_login,
+                      m.nom AS machine_nom
+               FROM users u
+               LEFT JOIN machines m ON m.id = u.machine_id
+               WHERE u.id=?""",
+            (user_id,)
         ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
@@ -144,6 +153,7 @@ async def create_user(request: Request):
     role  = body.get("role", "fabrication")
     op    = (body.get("operateur_lie") or "").strip() or None
     tel   = (body.get("telephone") or "").strip() or None
+    machine_id = body.get("machine_id") or None
 
     if not email or not nom or not pwd:
         raise HTTPException(status_code=400, detail="Email, nom et mot de passe requis")
@@ -155,9 +165,9 @@ async def create_user(request: Request):
     with get_db() as conn:
         try:
             conn.execute(
-                """INSERT INTO users (email,nom,password_hash,role,operateur_lie,telephone,actif,created_at)
-                   VALUES (?,?,?,?,?,?,1,?)""",
-                (email, nom, hash_password(pwd), role, op, tel, datetime.now().isoformat())
+                """INSERT INTO users (email,nom,password_hash,role,operateur_lie,telephone,machine_id,actif,created_at)
+                   VALUES (?,?,?,?,?,?,?,1,?)""",
+                (email, nom, hash_password(pwd), role, op, tel, machine_id, datetime.now().isoformat())
             )
             conn.commit()
         except Exception:

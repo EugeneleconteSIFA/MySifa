@@ -64,8 +64,16 @@ button:focus:not(:focus-visible){outline:none}
 .mobile-topbar-title{font-size:14px;font-weight:800}
 .mobile-topbar-sub{font-size:11px;color:var(--muted);margin-top:2px}
 .sidebar-overlay{display:none}
-.back-mysifa{border:1px solid rgba(34,211,238,.55)!important;background:rgba(34,211,238,.10)!important;color:var(--accent)!important;font-weight:800!important}
-.back-mysifa:hover{filter:brightness(1.08)}
+.back-mysifa{
+  border:none!important;
+  background:transparent!important;
+  font-weight:400!important;
+  color:var(--text2)!important;
+  padding:8px 10px!important;
+}
+.back-mysifa:hover{color:var(--text)!important;background:transparent!important}
+.back-mysifa .wm{font-weight:800;color:var(--text)}
+.back-mysifa .wm span{color:var(--accent)}
 @media (max-width: 900px){
   .sidebar{position:fixed;left:0;top:0;bottom:0;z-index:9000;transform:translateX(-105%);transition:transform .18s ease;box-shadow:0 16px 48px rgba(0,0,0,.55)}
   body.sb-open .sidebar{transform:translateX(0)}
@@ -87,6 +95,12 @@ button:focus:not(:focus-visible){outline:none}
 .user-chip .uc-role{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px}
 .theme-btn,.logout-btn{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-size:12px;width:100%;font-family:inherit;transition:all .15s}
 .theme-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+.theme-btn .theme-ico{font-size:14px;line-height:1}
+.theme-btn .theme-label{white-space:nowrap}
+@media (display-mode: standalone), (max-width: 900px){
+  .theme-btn .theme-label{display:none}
+  .theme-btn{justify-content:center}
+}
 .logout-btn{border:none}.logout-btn:hover{color:var(--danger);background:rgba(248,113,113,.1)}
 .version{font-size:10px;color:var(--muted);font-family:monospace;padding:4px 12px}
 .main{flex:1;padding:28px;overflow-y:auto}.container{max-width:1200px;margin:0 auto}
@@ -179,7 +193,15 @@ tr.data-row:hover td{background:rgba(34,211,238,0.025)}
 @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 input[type=text],input[type=number],input[type=email],input[type=password]{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;width:100%;outline:none;font-family:inherit}
-select.form-sel{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;width:100%;outline:none;font-family:inherit}
+select.form-sel{
+  background:var(--bg);border:1px solid var(--border);border-radius:8px;
+  padding:8px 12px;padding-right:32px;
+  color:var(--text);font-size:13px;outline:none;font-family:inherit;
+  cursor:pointer;appearance:none;-webkit-appearance:none;
+  background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E\");
+  background-repeat:no-repeat;background-position:right 10px center;
+}
+select.form-sel:focus{border-color:var(--accent)}
 .btn{background:var(--accent);color:var(--bg);border:none;border-radius:8px;padding:10px 24px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:12px}
 .btn-sm{background:var(--accent);color:var(--bg);border:none;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
 .btn-ghost{background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:6px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
@@ -507,6 +529,15 @@ async function checkAuth(){
   if(user){
     S.user=user;
     S.app=HAS_INITIAL_APP ? INITIAL_APP : 'portal';
+    // Support : redirection post-login (ex: /?next=/planning)
+    try{
+      const sp=new URLSearchParams(window.location.search||'');
+      const nxt=(sp.get('next')||'').trim();
+      if(nxt && nxt.startsWith('/')){
+        window.location.href=nxt;
+        return;
+      }
+    }catch(e){}
     // Permet d'ouvrir directement une section depuis /planning → /prod?page=users
     try{
       const sp=new URLSearchParams(window.location.search||'');
@@ -541,6 +572,15 @@ async function doLogin(email,password){
     authEpoch++;
     S.user=r.user;
     S.app=HAS_INITIAL_APP ? INITIAL_APP : 'portal';
+    // Support : redirection post-login (ex: /?next=/planning)
+    try{
+      const sp=new URLSearchParams(window.location.search||'');
+      const nxt=(sp.get('next')||'').trim();
+      if(nxt && nxt.startsWith('/')){
+        window.location.href=nxt;
+        return;
+      }
+    }catch(e){}
     // Support /prod?page=xxx après login
     try{
       const sp=new URLSearchParams(window.location.search||'');
@@ -638,9 +678,14 @@ const STOCK_EMPLACEMENTS = ['A121','A122','A123','B121','B122','B123','C121','C1
 const isValidStockEmplacement = (s) => STOCK_EMPLACEMENTS.includes(String(s||'').trim().toUpperCase());
 
 function startVoiceSearch(inputEl) {
+  // HTTPS requis pour le micro
+  if (location.protocol !== 'https:') {
+    toast('Le micro nécessite HTTPS (mysifa.com)', 'warn');
+    return;
+  }
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
-    toast('Reconnaissance vocale non supportée sur ce navigateur', 'error');
+    toast('Reconnaissance vocale non supportée — utilisez Chrome ou Safari', 'error');
     return;
   }
   const recog = new SpeechRecognition();
@@ -820,8 +865,48 @@ async function doStockSearch(q) {
 function renderStockSearchBar() {
   const bar = document.getElementById('stock-search-bar');
   if (!bar) return;
-  bar.innerHTML = '';
 
+  // Si la barre existe déjà avec l'input, ne recréer que les suggestions
+  const existingInput = document.getElementById('stock-search-input');
+  if (existingInput) {
+    // Mettre à jour seulement le bouton micro (état listening)
+    const micBtn = document.getElementById('stock-mic-btn');
+    if (micBtn) {
+      micBtn.className = 'stock-search-btn' + (stockSearchState.listening ? ' active' : '');
+      micBtn.textContent = stockSearchState.listening ? '🔴' : '🎤';
+    }
+    // Mettre à jour suggestions
+    let suggEl = document.getElementById('stock-suggestions');
+    if (stockSearchState.suggestions && stockSearchState.suggestions.length > 0) {
+      if (!suggEl) {
+        suggEl = document.createElement('div');
+        suggEl.id = 'stock-suggestions';
+        suggEl.className = 'search-suggestions';
+        existingInput.parentNode.appendChild(suggEl);
+      }
+      suggEl.innerHTML = '';
+      stockSearchState.suggestions.forEach(p => {
+        const item = document.createElement('div');
+        item.className = 'search-suggestion-item';
+        item.innerHTML = `<div><div class="search-suggestion-ref">${p.reference}</div><div class="search-suggestion-des">${p.designation}</div></div><span class="stock-badge">${p.stock_total||0} ${p.unite}</span>`;
+        item.addEventListener('click', () => {
+          stockSearchState.query = p.reference;
+          stockSearchState.suggestions = [];
+          if (existingInput) existingInput.value = p.reference;
+          const s = document.getElementById('stock-suggestions');
+          if (s) s.remove();
+          loadStockProduit(p.id).then(() => set({ stockView: 'produit' }));
+        });
+        suggEl.appendChild(item);
+      });
+    } else {
+      if (suggEl) suggEl.remove();
+    }
+    return;
+  }
+
+  // Première création
+  bar.innerHTML = '';
   const wrap = document.createElement('div');
   wrap.className = 'stock-search-wrap';
 
@@ -835,46 +920,21 @@ function renderStockSearchBar() {
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       stockSearchState.suggestions = [];
-      renderStockSearchBar();
-      const q = String(stockSearchState.query || '').trim();
-      if (q) {
-        set({ stockView: 'produit', stockSearch: q });
-        loadStockProduits(q).then(() => render());
-      }
+      const s = document.getElementById('stock-suggestions');
+      if (s) s.remove();
+      const q = String(input.value || '').trim();
+      if (q) { set({ stockView: 'produit', stockSearch: q }); loadStockProduits(q).then(() => render()); }
     }
     if (e.key === 'Escape') {
       stockSearchState.suggestions = [];
-      renderStockSearchBar();
+      const s = document.getElementById('stock-suggestions');
+      if (s) s.remove();
     }
   });
-
-  // Dropdown suggestions
-  if (stockSearchState.suggestions && stockSearchState.suggestions.length > 0) {
-    const sugg = document.createElement('div');
-    sugg.className = 'search-suggestions';
-    stockSearchState.suggestions.forEach(p => {
-      const item = document.createElement('div');
-      item.className = 'search-suggestion-item';
-      item.innerHTML = `
-        <div>
-          <div class="search-suggestion-ref">${p.reference}</div>
-          <div class="search-suggestion-des">${p.designation}</div>
-        </div>
-        <span class="stock-badge">${p.stock_total || 0} ${p.unite}</span>
-      `;
-      item.addEventListener('click', () => {
-        stockSearchState.query = p.reference;
-        stockSearchState.suggestions = [];
-        loadStockProduit(p.id).then(() => { set({ stockView: 'produit' }); });
-      });
-      sugg.appendChild(item);
-    });
-    wrap.appendChild(sugg);
-  }
-
   wrap.appendChild(input);
 
   const micBtn = document.createElement('button');
+  micBtn.id = 'stock-mic-btn';
   micBtn.className = 'stock-search-btn' + (stockSearchState.listening ? ' active' : '');
   micBtn.type = 'button';
   micBtn.title = 'Recherche vocale';
@@ -939,7 +999,10 @@ function renderPortal(){
     h('div',{className:'portal-apps'},...apps),
     h('div',{className:'portal-user'},
       '👤 '+S.user?.nom,
-      h('button',{className:'portal-logout',onClick:()=>{document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');render();}},isLight?'☀ Mode clair':'🌙 Mode sombre'),
+      h('button',{className:'portal-logout',onClick:()=>{document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');render();}},
+        h('span',{className:'theme-ico'},isLight?'☀':'🌙'),
+        h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')
+      ),
       h('button',{className:'portal-logout',onClick:doLogout},'Déconnexion')
     )
   );
@@ -965,12 +1028,17 @@ function renderStock(){
       '📍  Par emplacement'),
     h('div',{className:'sidebar-bottom'},
       h('button',{className:'nav-btn back-mysifa',onClick:()=>{window.location.href='/' }},
-        '← Retour MySifa'),
+        '← Retour ',
+        h('span',{className:'wm'},'My',h('span',null,'Sifa'))
+      ),
       h('div',{className:'user-chip'},
         h('div',{className:'uc-name'},S.user?.nom||''),
         h('div',{className:'uc-role'},ROLE_LABELS[S.user?.role]||S.user?.role||'')
       ),
-      h('button',{className:'theme-btn',onClick:()=>{document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');render();}},isLight?'☀ Mode clair':'🌙 Mode sombre'),
+      h('button',{className:'theme-btn',onClick:()=>{document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');render();}},
+        h('span',{className:'theme-ico'},isLight?'☀':'🌙'),
+        h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')
+      ),
       h('button',{className:'logout-btn',onClick:doLogout},'⎋  Déconnexion'),
       h('div',{className:'version'},'MyStock v1.0')
     )
@@ -1228,6 +1296,7 @@ async function loadProd(){const d=await api('/api/dashboard/production?'+buildPa
 async function loadImports(){const d=await api('/api/imports');if(d)set({imports:d});}
 async function loadDos(){const d=await api('/api/dossiers');if(d)set({dossiers:d});}
 async function loadUsers(){const d=await api('/api/users');if(d)set({users:d});}
+async function loadMachines(){try{const d=await api('/api/planning/machines');if(d)set({machines:d});}catch(e){}}
 async function loadSaisies(){const d=await api('/api/saisies?'+buildParams()+'&limit=500');if(d)set({saisies:d});}
 async function loadDevis(){const d=await api('/api/rentabilite/devis');if(d)set({devisList:d});}
 
@@ -1326,7 +1395,10 @@ function renderSidebar(){
       set({page:i.key});nav();
     }},i.icon+'  '+i.label)),
     h('div',{className:'sidebar-bottom'},
-      h('button',{className:'nav-btn back-mysifa',onClick:()=>{window.location.href='/' }},'← Retour MySifa'),
+      h('button',{className:'nav-btn back-mysifa',onClick:()=>{window.location.href='/' }},
+        '← Retour ',
+        h('span',{className:'wm'},'My',h('span',null,'Sifa'))
+      ),
       h('div',{
         className:'user-chip',
         style:{cursor:'pointer'},
@@ -1337,7 +1409,10 @@ function renderSidebar(){
         h('div',{className:'uc-role'},ROLE_LABELS[S.user?.role]||S.user?.role||''),
         h('div',{style:{fontSize:'10px',color:'var(--accent)',marginTop:'3px'}},'✎ Mon profil')
       ),
-      h('button',{className:'theme-btn',onClick:()=>{document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');render();}},isLight?'☀ Mode clair':'🌙 Mode sombre'),
+      h('button',{className:'theme-btn',onClick:()=>{document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');render();}},
+        h('span',{className:'theme-ico'},isLight?'☀':'🌙'),
+        h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')
+      ),
       h('button',{className:'logout-btn',onClick:doLogout},'⎋  Déconnexion'),
       h('div',{className:'version'},'__V_LABEL__')
     )
@@ -2284,20 +2359,34 @@ function renderUsers(){
   const roleSel=h('select',{className:'form-sel'},h('option',{value:'fabrication'},'⚙ Fabrication'),h('option',{value:'administration'},'🔧 Administration'),h('option',{value:'direction'},'👑 Direction'),h('option',{value:'logistique'},'📦 Logistique'));inputs.role=roleSel;
   const hint=h('p',{style:{fontSize:'12px',color:'var(--muted)',marginTop:'10px'}},'');
   const opWrap=h('div',null,opSel);
+  // Charger les machines depuis l'API planning
+  const machines = S.machines || [];
+  const machineSel = h('select', {className:'form-sel'},
+    h('option', {value:''}, '— Machine par défaut (Fabrication) —'),
+    ...machines.map(m => h('option', {value: String(m.id)}, m.nom))
+  );
+  inputs.machine_id = machineSel;
+  // Wrapper machine — visible seulement pour Fabrication
+  const machineWrap = h('div', null,
+    h('label', {style:{display:'block',fontSize:'11px',fontWeight:'600',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'4px'}}, 'Machine par défaut'),
+    machineSel
+  );
   const syncRoleUI=()=>{
     const r=inputs.role.value;
-    const hideOp=(r==='direction'||r==='administration');
+    const hideOp=(r==='direction'||r==='administration'||r==='logistique');
+    const showMachine = r === 'fabrication';
     opWrap.style.display = hideOp ? 'none' : '';
+    machineWrap.style.display = showMachine ? '' : 'none';
     hint.textContent = (r==='fabrication')
       ? '💡 Fabrication = lecture seule. Sans opérateur lié → accès bloqué.'
-      : '💡 Direction / Administration : pas de liaison opérateur. Logistique : liaison optionnelle.';
+      : '💡 Direction / Administration / Logistique : pas de liaison opérateur.';
     if(hideOp) opSel.value='';
   };
   roleSel.addEventListener('change',syncRoleUI);
   const form=h('div',{className:'card',style:{padding:'20px'}},h('h3',{style:{fontSize:'14px',fontWeight:'600',marginBottom:'16px'}},'Créer un compte'),
-    h('div',{className:'form-grid'},...[['nom','Nom complet *','text'],['email','Email *','email'],['password','Mot de passe * (min. 8 car.)','password']].map(([k,l,t])=>{const i=h('input',{placeholder:l,type:t});inputs[k]=i;return i;}),roleSel,opWrap),
+    h('div',{className:'form-grid'},...[['nom','Nom complet *','text'],['email','Email *','email'],['password','Mot de passe * (min. 8 car.)','password']].map(([k,l,t])=>{const i=h('input',{placeholder:l,type:t});inputs[k]=i;return i;}),roleSel,opWrap,machineWrap),
     hint,
-    h('button',{className:'btn',onClick:()=>{if(!inputs.nom.value||!inputs.email.value||!inputs.password.value)return;createUser({nom:inputs.nom.value,email:inputs.email.value,password:inputs.password.value,role:inputs.role.value,operateur_lie:inputs.operateur_lie.value||null});['nom','email','password'].forEach(k=>inputs[k].value='');}},'Créer le compte')
+    h('button',{className:'btn',onClick:()=>{if(!inputs.nom.value||!inputs.email.value||!inputs.password.value)return;createUser({nom:inputs.nom.value,email:inputs.email.value,password:inputs.password.value,role:inputs.role.value,operateur_lie:inputs.operateur_lie.value||null,machine_id: inputs.machine_id?.value || null});['nom','email','password'].forEach(k=>inputs[k].value='');}},'Créer le compte')
   );
   setTimeout(syncRoleUI,0);
   const list=h('div',{className:'card'},h('div',{className:'card-header'},h('h3',null,'Utilisateurs ('+S.users.length+')'),h('span',{style:{fontSize:'11px',color:'var(--muted)'}},'Dernière connexion')),
@@ -2305,14 +2394,17 @@ function renderUsers(){
     h('div',null,...S.users.map(u=>{
       const rb=h('span',{className:ROLE_BADGE[u.role]||'badge'},ROLE_LABELS[u.role]||u.role);
       const ab=!u.actif?h('span',{className:'badge-inactif'},'Inactif'):null;
-      const showOpLink = !(u.role==='direction'||u.role==='administration');
+      const showOpLink = !(u.role==='direction'||u.role==='administration'||u.role==='logistique');
       const lb=!showOpLink
         ? h('span',{style:{fontSize:'11px',color:'var(--muted)'}},'—')
         : (u.operateur_lie
           ? h('span',{style:{fontSize:'11px',color:'var(--accent)',cursor:'pointer',textDecoration:'underline'},onClick:()=>openUserDetail(u.id)},'🔗 '+opName(u.operateur_lie))
           : h('span',{style:{fontSize:'11px',color:'var(--danger)',cursor:'pointer',textDecoration:'underline'},onClick:()=>openUserDetail(u.id)},'⚠ Non lié — Configurer'));
+      const mach = (u.role==='fabrication' && (u.machine_nom || u.machine_id))
+        ? h('div',{className:'ui-last'},'🧷 '+(u.machine_nom || ('Machine #'+u.machine_id)))
+        : null;
       return h('div',{className:'user-row'},
-        h('div',null,h('div',{className:'ui-name'},u.nom,rb,ab),h('div',{className:'ui-email'},u.email),h('div',{className:'ui-last'},lb),h('div',{className:'ui-last'},u.last_login?'🕐 '+fD(u.last_login):'🕐 Jamais connecté')),
+        h('div',null,h('div',{className:'ui-name'},u.nom,rb,ab),h('div',{className:'ui-email'},u.email),h('div',{className:'ui-last'},lb),mach,h('div',{className:'ui-last'},u.last_login?'🕐 '+fD(u.last_login):'🕐 Jamais connecté')),
         h('div',{className:'user-actions'},u.actif?h('button',{className:'btn-danger',onClick:()=>toggleUser(u.id,false)},'Désactiver'):h('button',{className:'btn-sm',onClick:()=>toggleUser(u.id,true)},'Réactiver'))
       );
     }))
@@ -2389,17 +2481,33 @@ function renderProfil(userData, isAdminView=false, onSave=null){
     );
     inputs.operateur_lie=opSel;
 
+    // Machine par défaut (Fabrication)
+    const machines = S.machines || [];
+    const machineSel = h('select', {className:'form-sel'},
+      h('option', {value:''}, '— Machine par défaut (Fabrication) —'),
+      ...machines.map(m => {
+        const opt=h('option', {value: String(m.id)}, m.nom);
+        if(String(m.id)===String(userData?.machine_id||'')) opt.selected=true;
+        return opt;
+      })
+    );
+    inputs.machine_id = machineSel;
+
     // Actif
     const actifChk=h('input',{type:'checkbox'});
     actifChk.checked=userData?.actif!==0;
     inputs.actif=actifChk;
 
     const opFieldWrap=h('div',{style:{marginBottom:'14px'}},h('label',{style:{display:'block',fontSize:'11px',fontWeight:'600',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'5px'}},'Opérateur lié'),opSel);
+    const machineWrap=h('div',{style:{marginBottom:'14px'}},h('label',{style:{display:'block',fontSize:'11px',fontWeight:'600',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'5px'}},'Machine par défaut'),machineSel);
     const syncAdminRole=()=>{
       const r=roleSel.value;
-      const hide=(r==='direction'||r==='administration');
+      const hide=(r==='direction'||r==='administration'||r==='logistique');
       opFieldWrap.style.display = hide ? 'none' : '';
       if(hide) opSel.value='';
+      const showMachine = (r==='fabrication');
+      machineWrap.style.display = showMachine ? '' : 'none';
+      if(!showMachine) machineSel.value='';
     };
     roleSel.addEventListener('change',syncAdminRole);
     syncAdminRole();
@@ -2407,6 +2515,7 @@ function renderProfil(userData, isAdminView=false, onSave=null){
     adminFields.push(
       h('div',{style:{marginBottom:'14px'}},h('label',{style:{display:'block',fontSize:'11px',fontWeight:'600',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'5px'}},'Rôle'),roleSel),
       opFieldWrap,
+      machineWrap,
       h('label',{style:{display:'flex',alignItems:'center',gap:'8px',fontSize:'13px',color:'var(--text2)',marginBottom:'14px'}},actifChk,'Compte actif')
     );
   }
@@ -2790,14 +2899,14 @@ async function nav(){
   else if(S.page==='import')await loadImports();
   else if(S.page==='rentabilite')await loadDevis();
   else if(S.page==='dossiers')await loadDos();
-  else if(S.page==='users')await loadUsers();
+  else if(S.page==='users'){await loadMachines();await loadUsers();}
   render();
 }
 
 if(localStorage.getItem('theme')==='light')document.body.classList.add('light');
 checkAuth();
 </script>
-<script src="/static/chatbot_widget.js"></script>
+<!-- Chatbot temporairement désactivé -->
 </body>
 </html>"""
 
