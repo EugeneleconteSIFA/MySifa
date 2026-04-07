@@ -294,7 +294,11 @@ def _migrate(conn):
     conn.execute("CREATE INDEX IF NOT EXISTS idx_planning_config_lookup ON planning_config(machine_id, semaine)")
 
     # Migration v1 -> v1.1 (standalone) : planning_entries stocke ref/client/description
-    if "planning_entries" in existing_tables:
+    # Ne pas utiliser `existing_tables` ici : il est figé avant la création éventuelle de
+    # planning_entries ; sinon la table est créée sans colonnes v1.2 et les ALTER ne s’exécutent jamais.
+    if conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='planning_entries'"
+    ).fetchone():
         pe_cols = {row[1] for row in conn.execute("PRAGMA table_info(planning_entries)").fetchall()}
         if "dossier_id" in pe_cols:
             conn.execute("ALTER TABLE planning_entries RENAME TO planning_entries_old")
