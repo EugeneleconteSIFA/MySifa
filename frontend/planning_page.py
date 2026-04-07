@@ -181,6 +181,9 @@ body.light .th{background:var(--bg)}
 .st.run{background:#0f2a1a;color:var(--green);border:1px solid #166534}
 .st.att{background:#1a1520;color:var(--amber);border:1px solid #78350f}
 .st.ter{background:var(--card);color:#6b7280;border:1px solid var(--border2)}
+.statut-select{width:100%;padding:6px 10px;background:var(--bg);border:1px solid var(--border2);
+  border-radius:10px;color:var(--text2);font-size:11px;font-family:var(--mono);outline:none}
+.statut-select:focus{border-color:var(--accent);color:var(--text)}
 .acts{display:flex;gap:6px;justify-content:flex-end}
 .ab{padding:4px 8px;background:transparent;border:1px solid var(--border2);color:var(--text2);
   cursor:pointer;font-size:11px;border-radius:6px;font-family:var(--mono)}
@@ -399,6 +402,7 @@ function render(){
     </section>
   </div></main></div><div id="mroot"></div>`;
   setupDD();
+  setupStatutSelects();
 }
 
 function mkTL(mon,slots){
@@ -483,13 +487,22 @@ function mkRow(e,i,slots){
   const fm=e.format_l&&e.format_h?`${e.format_l}×${e.format_h}`:"—";
   const sc=e.statut==="en_cours"?"run":e.statut==="termine"?"ter":"att";
   const sl={run:"En cours",ter:"Terminé",att:"En attente"}[sc];
+  const isLocked=(e.statut==="en_cours"||e.statut==="termine");
   const co=colorForId(e.id||i+1);
   const cli=(e.client||"").trim()||"—";
   const of=escAttr(e.numero_of||e.reference||"—");
   const rfp=escAttr(e.ref_produit||"")||"—";
   const lz=e.laize!=null&&e.laize!==""?escAttr(String(e.laize)):"—";
+  const statutCell=isLocked
+    ? `<span class="st ${sc}">${sc==="run"?'<span style="width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite;display:inline-block"></span>':""}${sl} 🔒</span>`
+    : `<select class="statut-select" data-eid="${e.id}">
+         <option value="attente" ${e.statut==="attente"?"selected":""}>⏳ Attente</option>
+         <option value="en_cours" ${e.statut==="en_cours"?"selected":""}>▶ En cours</option>
+         <option value="termine" ${e.statut==="termine"?"selected":""}>✅ Terminé</option>
+       </select>`;
   return`<div class="tr" draggable="true" data-eid="${e.id}" data-idx="${i}"
-    style="animation:slideIn .3s ease ${i*.03}s both;${i===0?`border-left:3px solid ${co}`:"border-left:3px solid transparent"}">
+    data-statut="${escAttr(e.statut||'attente')}"
+    style="animation:slideIn .3s ease ${i*.03}s both;${i===0?`border-left:3px solid ${co}`:"border-left:3px solid transparent"};${isLocked?"cursor:not-allowed;opacity:.9":""}">
     <span class="dh-handle">⠿</span>
     <span class="cell-mini">${i+1}</span>
     <div><div class="cd" style="background:${co}"></div></div>
@@ -500,7 +513,7 @@ function mkRow(e,i,slots){
     <span class="cell-mini">${lz}</span>
     <span class="cell-mini">${escAttr(fmtDl(e.date_livraison||""))}</span>
     <span class="cell-mini">${e.duree_heures}h</span>
-    <span class="st ${sc}">${sc==="run"?'<span style="width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite;display:inline-block"></span>':""}${sl}</span>
+    ${statutCell}
     <div class="acts">
       <button type="button" class="ab" onclick="openInsert(${e.id})" title="Insérer après">↳+</button>
       <button type="button" class="ab" onclick="openEdit(${e.id})" title="Modifier">✎</button>
@@ -528,6 +541,12 @@ function hideTip(){if(tipEl){tipEl.remove();tipEl=null}}
 function setupDD(){
   const rows=document.querySelectorAll(".tr[draggable]");let di=null;
   rows.forEach(r=>{
+    const st=(r.dataset.statut||"").toLowerCase();
+    const locked=(st==="en_cours"||st==="termine");
+    if(locked){
+      r.removeAttribute("draggable");
+      return;
+    }
     r.addEventListener("dragstart",e=>{di=+r.dataset.idx;r.classList.add("dra");e.dataTransfer.effectAllowed="move"});
     r.addEventListener("dragover",e=>{e.preventDefault();r.classList.add("dov")});
     r.addEventListener("dragleave",()=>r.classList.remove("dov"));
@@ -536,6 +555,24 @@ function setupDD(){
         api(`/machines/${MID}/reorder`,{method:"POST",body:JSON.stringify({entry_ids:ids})}).then(()=>load())}});
     r.addEventListener("dragend",()=>{r.classList.remove("dra");di=null})
   })
+}
+
+function setupStatutSelects(){
+  document.querySelectorAll(".statut-select").forEach(sel=>{
+    sel.addEventListener("change", async()=>{
+      const eid=sel.dataset.eid;
+      try{
+        await api(`/machines/${MID}/entries/${eid}/statut`,{
+          method:"PUT",
+          body: JSON.stringify({statut: sel.value, force: true})
+        });
+        await load();
+      }catch(e){
+        alert("Erreur statut");
+        await load();
+      }
+    });
+  });
 }
 
 // ── API actions ──

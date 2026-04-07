@@ -282,6 +282,7 @@ def _migrate(conn):
             ("commentaire", "ALTER TABLE planning_entries ADD COLUMN commentaire TEXT"),
             ("planned_start", "ALTER TABLE planning_entries ADD COLUMN planned_start TEXT"),
             ("planned_end", "ALTER TABLE planning_entries ADD COLUMN planned_end TEXT"),
+            ("statut_force", "ALTER TABLE planning_entries ADD COLUMN statut_force INTEGER DEFAULT 0"),
         ]:
             if col not in pe_cols:
                 conn.execute(sql)

@@ -51,6 +51,21 @@ button:focus:not(:focus-visible){outline:none}
 .sidebar{width:220px;background:var(--card);border-right:1px solid var(--border);padding:20px 12px;display:flex;flex-direction:column;flex-shrink:0;height:100vh;position:sticky;top:0;overflow-y:auto}
 .sidebar::-webkit-scrollbar{width:0}
 .sidebar{scrollbar-width:none}
+.mobile-topbar{display:none;align-items:center;gap:10px;margin-bottom:14px}
+.mobile-menu-btn{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;
+  border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;font-family:inherit}
+.mobile-menu-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.mobile-topbar-title{font-size:14px;font-weight:800}
+.mobile-topbar-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.sidebar-overlay{display:none}
+@media (max-width: 900px){
+  .sidebar{position:fixed;left:0;top:0;bottom:0;z-index:9000;transform:translateX(-105%);transition:transform .18s ease;box-shadow:0 16px 48px rgba(0,0,0,.55)}
+  body.sb-open .sidebar{transform:translateX(0)}
+  .main{padding:18px}
+  .mobile-topbar{display:flex}
+  .sidebar-overlay{display:block;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:8999}
+  body:not(.sb-open) .sidebar-overlay{display:none}
+}
 .logo{padding:0 8px;margin-bottom:32px}
 .logo-brand{font-size:15px;font-weight:800}.logo-brand span{color:var(--accent)}
 .logo-sub{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase}
@@ -357,6 +372,7 @@ function getYesterday(){
 let S={
   app:'login',page:'historique',user:null,
   loginSubmitting:false,loginError:null,portalLoading:null,
+  sidebarOpen:false,
   stockView:'grille',
   stockProduits:[],stockSelProduit:null,stockSelEmpl:null,
   stockGlobale:null,stockSearch:'',stockMvtType:'entree',
@@ -376,6 +392,9 @@ let S={
 
 function set(u){Object.assign(S,u);render();}
 function toast(m,t='success'){set({toast:{message:m,type:t}});setTimeout(()=>set({toast:null}),3500);}
+
+function closeSidebar(){if(S.sidebarOpen){S.sidebarOpen=false;render();}}
+function toggleSidebar(){S.sidebarOpen=!S.sidebarOpen;render();}
 
 function h(t,a,...c){
   const el=document.createElement(t);
@@ -899,9 +918,20 @@ function renderStock(){
   }
 
   const scanModal=S.stockBarcodeOpen?renderStockBarcodeModal():null;
+  const topbar=h('div',{className:'mobile-topbar'},
+    h('button',{type:'button',className:'mobile-menu-btn',onClick:toggleSidebar,'aria-label':'Menu'},'☰'),
+    h('div',null,
+      h('div',{className:'mobile-topbar-title'},'MyStock'),
+      h('div',{className:'mobile-topbar-sub'},
+        S.stockView==='grille'?'Vue globale':S.stockView==='produit'?'Par référence':'Par emplacement'
+      )
+    )
+  );
   return h('div',null,
+    S.sidebarOpen?h('div',{className:'sidebar-overlay',onClick:closeSidebar}):null,
     h('div',{className:'app'},sidebar,
       h('main',{className:'main'},h('div',{className:'container'},
+        topbar,
         h('h1',null,S.stockView==='grille'?'Vue globale':S.stockView==='produit'?'Par référence':'Par emplacement'),
         h('div',{className:'subtitle'},
           S.stockView==='grille'?'Tous les emplacements et leur contenu — raccourci scan ci-dessous':
@@ -1028,6 +1058,7 @@ function renderSidebar(){
     h('button',{className:'nav-btn',onClick:()=>set({app:'portal'})},'← MySifa'),
     ...items.map(i=>h('button',{className:'nav-btn'+(S.page===i.key?' active':''),onClick:()=>{
       if(i.key==='_planning'){window.location.href='/planning';return;}
+      S.sidebarOpen=false;
       set({page:i.key});nav();
     }},i.icon+'  '+i.label)),
     h('div',{className:'sidebar-bottom'},
@@ -2421,6 +2452,7 @@ function renderRentabilite(){
 // ── Render ──────────────────────────────────────────────────────
 function render(){
   const root=document.getElementById('root');root.innerHTML='';
+  document.body.classList.toggle('sb-open', !!S.sidebarOpen);
 
   if(!S.user||S.app==='login'){root.appendChild(renderLogin());}
   else if(S.app==='portal'){root.appendChild(renderPortal());}
@@ -2428,9 +2460,19 @@ function render(){
   else if(S.app==='prod'){
     const titles={historique:'Historique & Erreurs',production:'Production',saisies:'Saisies',import:'Import XLSX',dossiers:'Dossiers',users:'Utilisateurs',rentabilite:'Rentabilité',profil:'Mon profil'};
     const subs={historique:'Sanity Score, incidents et erreurs de saisie',production:'KPIs, temps et quantités',saisies:'Consulter et corriger les saisies',import:'Importer, exporter et supprimer',dossiers:'Suivi des dossiers',users:'Gestion des comptes et accès',rentabilite:'Comparaison devis / production réelle',profil:'Informations personnelles et mot de passe'};
-    root.appendChild(h('div',{className:'app'},renderSidebar(),
-      h('main',{className:'main'},h('div',{className:'container'},
-        h('h1',null,titles[S.page]||''),h('div',{className:'subtitle'},subs[S.page]||''),
+    const topbar=h('div',{className:'mobile-topbar'},
+      h('button',{type:'button',className:'mobile-menu-btn',onClick:toggleSidebar,'aria-label':'Menu'},'☰'),
+      h('div',null,
+        h('div',{className:'mobile-topbar-title'},titles[S.page]||''),
+        h('div',{className:'mobile-topbar-sub'},subs[S.page]||'')
+      )
+    );
+    root.appendChild(h('div',null,
+      S.sidebarOpen?h('div',{className:'sidebar-overlay',onClick:closeSidebar}):null,
+      h('div',{className:'app'},renderSidebar(),
+        h('main',{className:'main'},h('div',{className:'container'},
+          topbar,
+          h('h1',null,titles[S.page]||''),h('div',{className:'subtitle'},subs[S.page]||''),
         (S.page==='historique'||S.page==='production'||S.page==='saisies')?renderFilters():null,
         S.page==='historique'?renderHist():null,
         S.page==='production'?renderProd():null,
@@ -2440,7 +2482,8 @@ function render(){
         S.page==='users'?renderUsers():null,
         S.page==='rentabilite'?renderRentabilite():null,
         S.page==='profil'?renderProfil(S.user,false):null,
-      ))
+        ))
+      )
     ));
   }
 
@@ -2461,6 +2504,7 @@ async function nav(){
 if(localStorage.getItem('theme')==='light')document.body.classList.add('light');
 checkAuth();
 </script>
+<script src="/static/chatbot_widget.js"></script>
 </body>
 </html>"""
 

@@ -4,6 +4,7 @@ MyProd by SIFA — v0.5.0
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 
 from config import APP_TITLE, APP_VERSION, HOST, PORT
 from frontend.html import FRONTEND_HTML
@@ -19,9 +20,13 @@ from routers.saisies    import router as router_saisies
 from routers.rentabilite import router as router_rentabilite
 from routers.planning import router as planning_router
 from routers.stock import router as router_stock
+from routers.chat import router as chat_router
 from frontend.planning_page import router as planning_page_router
 
 app = FastAPI(title=APP_TITLE, version=APP_VERSION)
+
+# Static assets (chat widget, etc.)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 app.add_middleware(
     CORSMiddleware,
@@ -42,6 +47,7 @@ app.include_router(router_saisies)
 app.include_router(router_rentabilite)
 app.include_router(planning_router)
 app.include_router(router_stock)
+app.include_router(chat_router)
 app.include_router(planning_page_router)
 
 @app.get("/", response_class=HTMLResponse)

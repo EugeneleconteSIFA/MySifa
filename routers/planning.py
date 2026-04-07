@@ -16,6 +16,42 @@ from services.auth_service import require_admin
 
 router = APIRouter(prefix="/api/planning", tags=["planning"])
 
+
+def compute_statut(entry: dict) -> str:
+    """
+    Calcule le statut automatique basé sur l'heure actuelle.
+    Si statut_force=1, retourne le statut stocké tel quel.
+    """
+    if int(entry.get("statut_force") or 0) == 1:
+        return entry.get("statut") or "attente"
+
+    start = entry.get("planned_start")
+    end = entry.get("planned_end")
+    st = _parse_planned_dt(start)
+    en = _parse_planned_dt(end)
+    if not st or not en:
+        return "attente"
+
+    now = datetime.now()
+    if now > en:
+        return "termine"
+    if now >= st:
+        return "en_cours"
+    return "attente"
+
+
+def _assert_not_locked(conn, machine_id: int, entry_id: int) -> None:
+    """Empêche réordonnancement / déplacement d'un dossier en_cours ou terminé."""
+    row = conn.execute(
+        "SELECT statut, statut_force, planned_start, planned_end FROM planning_entries WHERE id=? AND machine_id=?",
+        (entry_id, machine_id),
+    ).fetchone()
+    if not row:
+        return
+    statut_actuel = compute_statut(dict(row))
+    if statut_actuel in ("en_cours", "termine"):
+        raise HTTPException(400, "Ce dossier est verrouillé — statut en cours ou terminé")
+
 _HORAIRES_COL = {
     "lundi": "horaires_lundi",
     "mardi": "horaires_mardi",
@@ -362,7 +398,30 @@ def list_entries(machine_id: int, request: Request):
             WHERE machine_id = ?
             ORDER BY position ASC
         """, (machine_id,)).fetchall()
-    return [dict(r) for r in rows]
+    entries = []
+    for r in rows:
+        e = dict(r)
+        e["statut"] = compute_statut(e)
+        entries.append(e)
+    return entries
+
+
+@router.put("/machines/{machine_id}/entries/{entry_id}/statut")
+async def force_statut(machine_id: int, entry_id: int, request: Request):
+    """Forcer un statut manuellement depuis la liste."""
+    require_admin(request)
+    body = await request.json()
+    statut = body.get("statut", "attente")
+    force = bool(body.get("force", True))
+    if statut not in ("attente", "en_cours", "termine"):
+        raise HTTPException(400, "Statut invalide")
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE planning_entries SET statut=?, statut_force=?, updated_at=? WHERE id=? AND machine_id=?",
+            (statut, 1 if force else 0, datetime.now().isoformat(), entry_id, machine_id),
+        )
+        conn.commit()
+    return {"success": True}
 
 
 @router.post("/machines/{machine_id}/entries")
@@ -449,6 +508,10 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
             raise HTTPException(404, "Entrée non trouvée")
 
         exd = dict(ex)
+        # Entrées verrouillées : empêcher les modifications "mécaniques" (drag & drop / cohérence)
+        # L'admin peut quand même forcer un statut via /statut si besoin.
+        if compute_statut(exd) in ("en_cours", "termine"):
+            raise HTTPException(400, "Ce dossier est verrouillé — statut en cours ou terminé")
         if (
             exd.get("statut") == "attente"
             and duree is not None
@@ -534,6 +597,9 @@ async def reorder_entries(machine_id: int, request: Request):
 
     now = datetime.now().isoformat()
     with get_db() as conn:
+        # Bloquer tout réordonnancement impliquant des entrées verrouillées
+        for eid in entry_ids:
+            _assert_not_locked(conn, machine_id, int(eid))
         for pos, eid in enumerate(entry_ids, start=1):
             conn.execute(
                 "UPDATE planning_entries SET position=?, updated_at=? WHERE id=? AND machine_id=?",
@@ -555,6 +621,7 @@ async def insert_after(machine_id: int, after_entry_id: int, request: Request):
     body = await request.json()
 
     with get_db() as conn:
+        _assert_not_locked(conn, machine_id, after_entry_id)
         ref_entry = conn.execute(
             "SELECT position FROM planning_entries WHERE id=? AND machine_id=?",
             (after_entry_id, machine_id)
