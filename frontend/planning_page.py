@@ -54,6 +54,7 @@ PLANNING_HTML = r"""<!DOCTYPE html>
 <link rel="apple-touch-icon" href="/static/mys_icon_180.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <title>__PLANNING_TITLE__</title>
+<link rel="stylesheet" href="/static/support_widget.css">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -271,10 +272,19 @@ body.light .btn-p{color:#fff}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
 @keyframes tipIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 @keyframes slideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.view-tabs{display:flex;gap:0;align-items:center}
+.view-tab{padding:6px 14px;background:var(--card);border:1px solid var(--border2);color:var(--dim);
+  cursor:pointer;font-size:12px;font-family:var(--mono);transition:all .15s}
+.view-tab:first-child{border-radius:8px 0 0 8px}
+.view-tab:last-child{border-radius:0 8px 8px 0}
+.view-tab:not(:first-child){margin-left:-1px}
+.view-tab.active{background:var(--accent-bg);color:var(--accent);border-color:var(--accent);z-index:1;position:relative}
+.view-tab:hover:not(.active){background:var(--border);color:var(--text2)}
 </style>
 </head>
 <body>
 <div id="app"></div>
+<script src="/static/support_widget.js"></script>
 <script>
 // Handler d'erreurs installé *avant* le script principal (capte aussi les erreurs de parsing).
 function showFatal(message, lineno, colno, extra){
@@ -305,7 +315,7 @@ const DEFAULTS_BY_KEY={
 };
 const DAY_API={1:"lundi",2:"mardi",3:"mercredi",4:"jeudi",5:"vendredi",6:"samedi"};
 const DAY_FIELD={1:"horaires_lundi",2:"horaires_mardi",3:"horaires_mercredi",4:"horaires_jeudi",5:"horaires_vendredi",6:"horaires_samedi"};
-let S={machine:null,machines:[],entries:[],timeline:[],wo:0,loading:true,holidays:{},dayWorked:{}};
+let S={machine:null,machines:[],entries:[],timeline:[],wo:0,loading:true,holidays:{},dayWorked:{},view:localStorage.getItem("mysifa.planning.view")||"2w"};
 let ME=null;
 let CAN_EDIT=false;
 
@@ -320,8 +330,14 @@ async function load(){
   }
   S.loading=true;render();
   try{
-    const[m,en,tl]=await Promise.all([api(`/machines/${MID}`),api(`/machines/${MID}/entries`),api(`/machines/${MID}/timeline`)]);
-    S.machine=m;S.entries=en;S.timeline=tl.slots||[];
+    // Important: la timeline persiste planned_start/planned_end en DB.
+    // Pour que les statuts calculés (en_cours/termine) soient à jour après un reorder,
+    // on charge d'abord la timeline, puis la liste des entrées.
+    const [m, tl] = await Promise.all([api(`/machines/${MID}`), api(`/machines/${MID}/timeline`)]);
+    S.machine = m;
+    S.timeline = (tl && tl.slots) ? tl.slots : [];
+    const en = await api(`/machines/${MID}/entries`);
+    S.entries = en || [];
     await Promise.all([loadHolidays(),loadDayWorked()]);
   }catch(e){console.error(e)}
   S.loading=false;render();
@@ -329,7 +345,8 @@ async function load(){
 
 async function loadDayWorked(){
   const mon=addD(getMon(new Date()),S.wo*7);
-  const start=ymd(mon), end=ymd(addD(mon,13));
+  const nb=S.view==="1w"?6:S.view==="4w"?27:13;
+  const start=ymd(mon), end=ymd(addD(mon,nb));
   const rows=await api(`/machines/${MID}/day-work?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
   const map={};
   (rows||[]).forEach(r=>{map[String(r.date)]=!!(+r.is_worked);});
@@ -339,7 +356,8 @@ async function loadDayWorked(){
 async function loadHolidays(){
   const mon=addD(getMon(new Date()),S.wo*7);
   const start=ymd(mon);
-  const end=ymd(addD(mon,13));
+  const nb=S.view==="1w"?6:S.view==="4w"?27:13;
+  const end=ymd(addD(mon,nb));
   const rows=await api(`/machines/${MID}/holidays?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
   const map={};
   (rows||[]).forEach(r=>{map[String(r.date)]=!!(+r.is_off);});
@@ -365,6 +383,23 @@ const pad=n=>String(n).padStart(2,"0");
 function ymdate(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());}
 const ymd=ymdate;
 function escAttr(s){return String(s??"").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;");}
+
+// ── Icônes SVG (Feather style) ───────────────────────────────────
+function icon(name,size=16){
+  const a=`width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"`;
+  const p={
+    'bar-chart-2': '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+    'calendar': '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
+    'trending-up': '<polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>',
+    'users': '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+    'sun': '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>',
+    'moon': '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
+    'log-out': '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
+    'edit': '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
+    'settings': '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+  };
+  return `<svg ${a} aria-hidden="true" style="display:inline-block;vertical-align:middle;flex-shrink:0">${p[name]||p['calendar']}</svg>`;
+}
 const fd=d=>`${pad(d.getDate())}/${pad(d.getMonth()+1)}`;
 const fdt=d=>`${DN[d.getDay()]} ${pad(d.getDate())}/${pad(d.getMonth()+1)} ${d.getHours()}h`;
 function getMon(d){const x=new Date(d),dy=x.getDay();x.setDate(x.getDate()-dy+(dy===0?-6:1));x.setHours(0,0,0,0);return x}
@@ -403,7 +438,16 @@ function timeInputFromFloat(f){
 }
 function machineKey(){
   const m=S.machine||{};
-  return (m.code||m.nom||String(MID));
+  const raw=String(m.code||m.nom||String(MID)||"").trim();
+  const norm=raw
+    .normalize("NFD").replace(/[\u0300-\u036f]/g,"") // remove accents (Cohésio -> Cohesio)
+    .toLowerCase();
+  // Map human names → known default keys
+  if(norm.includes("cohesio 1")||norm==="c1") return "C1";
+  if(norm.includes("cohesio 2")||norm==="c2") return "C2";
+  if(norm.includes("repiquage")||norm==="rep") return "REP";
+  if(norm.includes("dsi")) return "DSI";
+  return raw;
 }
 function getMachineDefaults(){
   const mk=machineKey();
@@ -456,7 +500,7 @@ function fracToTimeInput(f){
 function isHHMM(s){return /^\d{2}:\d{2}$/.test(String(s||"").trim());}
 
 function isAdmin(u){return u&&(u.role==="direction"||u.role==="administration");}
-function roleLabel(role){const R={direction:"👑 Direction",administration:"🔧 Administration",fabrication:"⚙ Fabrication"};return R[role]||role||"";}
+function roleLabel(role){const R={direction:"Direction",administration:"Administration",fabrication:"Fabrication"};return R[role]||role||"";}
 function renderSidebar(){
   if(!ME){
     return `<nav class="sidebar"><div class="logo"><div class="logo-brand">My<span>Prod</span></div><div class="logo-sub">by SIFA</div></div>
@@ -468,24 +512,36 @@ function renderSidebar(){
   }
   const admin=isAdmin(ME);
   const items=[
-    {key:"historique",label:"Historique & Erreurs",icon:"⚠",href:"/prod?page=historique"},
-    {key:"production",label:"Production",icon:"📊",href:"/prod?page=production"},
-    {key:"saisies",label:"Saisies",icon:"✏",href:"/prod?page=saisies"},
+    {key:"production",label:"Production",icon:"bar-chart-2",href:"/prod?page=production"},
     ...(admin?[
-      {key:"import",label:"Import XLSX",icon:"↑",href:"/prod?page=import"},
-      {key:"_planning",label:"Planning",icon:"🗓",href:"/planning"},
-      {key:"rentabilite",label:"Rentabilité",icon:"📈",href:"/prod?page=rentabilite"},
-      {key:"dossiers",label:"Dossiers",icon:"◫",href:"/prod?page=dossiers"},
-      {key:"users",label:"Utilisateurs",icon:"👥",href:"/prod?page=users"},
+      {key:"_planning",label:"Planning",icon:"calendar",href:"/planning"},
+      {key:"suivi",label:"Rentabilité",icon:"trending-up",href:"/prod?page=suivi"},
+      {key:"users",label:"Utilisateurs",icon:"users",href:"/prod?page=users"},
     ]:[]),
   ];
   const isLight=document.body.classList.contains("light");
   return`<nav class="sidebar"><div class="logo"><div class="logo-brand">My<span>Prod</span></div><div class="logo-sub">by SIFA</div></div>${
-    items.map(i=>`<button type="button" class="nav-btn${i.key==="_planning"?" active":""}" onclick="location.href='${i.href}'">${i.icon}  ${i.label}</button>`).join("")
-  }<div class="sidebar-bottom"><button type="button" class="nav-btn nav-btn--mysifa-portal" onclick="location.href='/'"><span class="mysifa-back-preamble">← Retour </span><span class="mysifa-back-brand">My<span class="mysifa-back-accent">Sifa</span></span></button><div class="user-chip" onclick="location.href='/'" title="Retour à l'accueil MySifa"><div class="uc-name">${escAttr(ME.nom||"")}</div><div class="uc-role">${roleLabel(ME.role)}</div><div style="font-size:10px;color:var(--accent);margin-top:3px">✎ Mon profil</div></div><button type="button" class="theme-btn" onclick="toggleTheme()"><span class="theme-ico">${isLight?"☀":"🌙"}</span><span class="theme-label">${isLight?"Mode clair":"Mode sombre"}</span></button><button type="button" class="logout-btn" onclick="doLogout()">⎋  Déconnexion</button><div class="version">__V_LABEL__</div></div></nav>`;
+    items.map(i=>`<button type="button" class="nav-btn${i.key==="_planning"?" active":""}" onclick="location.href='${i.href}'"><span style="display:inline-flex;align-items:center;gap:10px">${icon(i.icon,16)}${i.label}</span></button>`).join("")
+  }<div class="sidebar-bottom"><button type="button" class="nav-btn nav-btn--mysifa-portal" onclick="location.href='/'"><span class="mysifa-back-preamble">← Retour </span><span class="mysifa-back-brand">My<span class="mysifa-back-accent">Sifa</span></span></button><div class="user-chip" onclick="location.href='/'" title="Retour à l'accueil MySifa"><div class="uc-name">${escAttr(ME.nom||"")}</div><div class="uc-role">${roleLabel(ME.role)}</div><div style="font-size:10px;color:var(--accent);margin-top:3px;display:flex;align-items:center;gap:4px">${icon('edit',12)}Mon profil</div></div><button type="button" class="support-btn" onclick="openSupport()"><span class="support-ico">${(window.MySifaSupport&&window.MySifaSupport.iconSvg)?window.MySifaSupport.iconSvg():""}</span><span>Contacter le support</span></button><button type="button" class="theme-btn" onclick="toggleTheme()"><span class="theme-ico">${isLight?icon('sun',16):icon('moon',16)}</span><span class="theme-label">${isLight?"Mode clair":"Mode sombre"}</span></button><button type="button" class="logout-btn" onclick="doLogout()">${icon('log-out',14)} Déconnexion</button><div class="version">__V_LABEL__</div></div></nav>`;
 }
 function toggleTheme(){document.body.classList.toggle("light");localStorage.setItem("theme",document.body.classList.contains("light")?"light":"dark");render();}
 async function doLogout(){try{await fetch("/api/auth/logout",{method:"POST",credentials:"include"});}catch(e){}location.href="/";}
+
+function openSupport(){
+  try{
+    if(!window.MySifaSupport||!window.MySifaSupport.open){
+      alert("Support indisponible (widget non chargé).");
+      return;
+    }
+    window.MySifaSupport.open({
+      user: ME || {},
+      page: "Planning",
+      notify: (m)=>alert(String(m||"")),
+    });
+  }catch(e){
+    alert("Erreur ouverture support");
+  }
+}
 
 function render(){
   const a=document.getElementById("app");
@@ -502,6 +558,17 @@ function render(){
   const sl=S.timeline;
   const m1=addD(getMon(new Date()),S.wo*7),m2=addD(m1,7);
   const w1=wkNum(m1),w2=wkNum(m2);
+  const nw=S.view==="1w"?1:S.view==="4w"?4:2;
+  const navLbl=S.wo===0?"actuelle":(S.view==="4w"?`${fd(m1)}–${fd(addD(m1,27))}`:`S${w1}`);
+  let tlBlocks="";
+  for(let wi=0;wi<nw;wi++){
+    const mn=addD(m1,wi*7),wn=wkNum(mn);
+    const lblCls=wi===0?"cur":"nxt";
+    tlBlocks+=`<div ${wi<nw-1?'style="margin-bottom:16px"':""}>
+      <div class="wk-lbl ${lblCls}">S${wn} — ${fd(mn)} au ${fd(addD(mn,4))}</div>
+      ${mkTL(mn,sl)}
+    </div>`;
+  }
 
   a.innerHTML=`<div class="app">${renderSidebar()}<main class="main"><div class="planning-container">
   <header class="header">
@@ -514,7 +581,7 @@ function render(){
       </div>
     </div>
     <div class="h-right">
-      ${CAN_EDIT?`<button type="button" class="gear-btn" onclick="openDefaultsModal()" title="Réglages horaires par défaut" aria-label="Réglages">⚙</button>`:""}
+      ${CAN_EDIT?`<button type="button" class="gear-btn" onclick="openDefaultsModal()" title="Réglages horaires par défaut" aria-label="Réglages">${icon('settings',16)}</button>`:""}
       ${run?`<div class="badge badge-run"><div class="dot"></div>${escAttr(runLbl)}</div>`:""}
       <div class="badge badge-info">${totH}h · ${nb} dossiers</div>
     </div>
@@ -522,22 +589,21 @@ function render(){
     <section class="sec">
       <div class="sec-hdr">
         <div class="sec-title">Vue Planning</div>
-        <div class="wk-nav">
-          <button type="button" onclick="S.wo--;load()">◀</button>
-          <button type="button" class="today" onclick="S.wo=0;load()">${S.wo===0?"actuelle":"S"+w1}</button>
-          <button type="button" onclick="S.wo++;load()">▶</button>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <div class="view-tabs">
+            <button type="button" class="view-tab ${S.view==="1w"?"active":""}" onclick="setView('1w')">Semaine</button>
+            <button type="button" class="view-tab ${S.view==="2w"?"active":""}" onclick="setView('2w')">2 semaines</button>
+            <button type="button" class="view-tab ${S.view==="4w"?"active":""}" onclick="setView('4w')">Mois</button>
+          </div>
+          <div class="wk-nav">
+            <button type="button" onclick="S.wo--;load()">◀</button>
+            <button type="button" class="today" onclick="S.wo=0;load()">${navLbl}</button>
+            <button type="button" onclick="S.wo++;load()">▶</button>
+          </div>
         </div>
       </div>
-      <div style="margin-bottom:16px">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-          <div class="wk-lbl cur">S${w1} — ${fd(m1)} au ${fd(addD(m1,5))}</div>
-          <span style="font-size:11px;color:var(--muted);max-width:420px">Chaque jour : « non travaillé » est enregistré. Samedi affiché par défaut comme non travaillé ; décochez pour indiquer un samedi travaillé.</span>
-        </div>
-        ${mkTL(m1,sl)}
-      </div>
-      <div>
-        <div class="wk-lbl nxt">S${w2} — ${fd(m2)} au ${fd(addD(m2,4))}</div>${mkTL(m2,sl)}
-      </div>
+      <div style="font-size:11px;color:var(--muted);margin:-8px 0 12px">Samedi non travaillé par défaut — décochez pour l'activer.</div>
+      ${tlBlocks}
       <div class="legend">${sl.slice(0,8).map(s=>{const co=colorForId(s.entry_id||0);const lb=escAttr(s.client||s.numero_of||s.reference||"—");return`<div class="lg-i"><div class="lg-d" style="background:${co}"></div><span>${lb}</span></div>`;}).join("")}</div>
     </section>
     <section class="sec">
@@ -629,7 +695,21 @@ function mkTL(mon,slots){
   });
 
   const np=gp(now);
-  if(np>0&&np<tot)h+=`<div class="now-l" style="left:${(np/tot)*100}%"><div class="now-d"></div></div>`;
+  if(np>0&&np<tot){
+    let state="En pause";
+    try{
+      for(const col of cols){
+        const sod=new Date(col.date);sod.setHours(0,0,0,0);
+        const dStart=new Date(sod.getTime()+col.s*36e5);
+        const dEnd=new Date(sod.getTime()+col.e*36e5);
+        if(now>=dStart && now<=dEnd){ state="En prod"; break; }
+      }
+    }catch(e){}
+    const tLabel=`${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    h+=`<div class="now-l" style="left:${(np/tot)*100}%"
+      onmouseenter="showNowTip(event,this)" onmousemove="moveNowTip(event)" onmouseleave="hideNowTip()"
+      data-time="${tLabel}" data-state="${state}"><div class="now-d"></div></div>`;
+  }
   h+=`</div></div>`;return h;
 }
 
@@ -648,9 +728,9 @@ function mkRow(e,i,slots){
   const statutCell=(isLocked||!CAN_EDIT)
     ? `<span class="st ${sc}">${sc==="run"?'<span style="width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite;display:inline-block"></span>':""}${sl} 🔒</span>`
     : `<select class="statut-select" data-eid="${e.id}">
-         <option value="attente" ${e.statut==="attente"?"selected":""}>⏳ Attente</option>
-         <option value="en_cours" ${e.statut==="en_cours"?"selected":""}>▶ En cours</option>
-         <option value="termine" ${e.statut==="termine"?"selected":""}>✅ Terminé</option>
+         <option value="attente" ${e.statut==="attente"?"selected":""}>Attente</option>
+         <option value="en_cours" ${e.statut==="en_cours"?"selected":""}>En cours</option>
+         <option value="termine" ${e.statut==="termine"?"selected":""}>Terminé</option>
        </select>`;
   return`<div class="tr" draggable="true" data-eid="${e.id}" data-idx="${i}"
     data-statut="${escAttr(e.statut||'attente')}"
@@ -671,7 +751,7 @@ function mkRow(e,i,slots){
       <button type="button" class="ab mov" onclick="moveEntry(${e.id},-1)" title="Monter" ${i<=0||isLocked?"disabled":""}>▲</button>
       <button type="button" class="ab mov" onclick="moveEntry(${e.id},+1)" title="Descendre" ${i>=S.entries.length-1||isLocked?"disabled":""}>▼</button>
       <button type="button" class="ab" onclick="openInsert(${e.id})" title="${nextLocked?"⦸ Impossible : dossier En cours / Terminé juste après":"Insérer après"}" ${isLocked||nextLocked?"disabled":""}>${nextLocked?"⦸":"↳+"}</button>
-      <button type="button" class="ab" onclick="openEdit(${e.id})" title="Modifier">✎</button>
+      <button type="button" class="ab" onclick="openEdit(${e.id})" title="Modifier">${icon('edit',14)}</button>
       <button type="button" class="ab del" onclick="if(confirm('Supprimer ?'))delEntry(${e.id})" title="Supprimer">✕</button>`:""}
     </div></div>`;
 }
@@ -715,6 +795,33 @@ function moveTip(ev){if(!tipEl)return;const c=tipEl.parentElement.getBoundingCli
   tipEl.style.left=x+"px";tipEl.style.top=y+"px"}
 function hideTip(){if(tipEl){tipEl.remove();tipEl=null}}
 
+// ── Tooltip "ligne maintenant" ──
+let nowTipEl=null;
+function showNowTip(ev,el){
+  hideNowTip();
+  const d=el.dataset||{};
+  nowTipEl=document.createElement("div");
+  nowTipEl.className="tip";
+  nowTipEl.style.borderColor="rgba(248,113,113,.35)";
+  nowTipEl.innerHTML=`<div class="tip-hdr"><div class="tip-bar" style="background:var(--red)"></div><div>
+    <div class="tip-ref">${escAttr(d.time||"—")}</div>
+    <div class="tip-lbl">${escAttr(d.state||"")}</div>
+  </div></div>`;
+  el.closest(".tl-wrap").appendChild(nowTipEl);
+  moveNowTip(ev);
+}
+function moveNowTip(ev){
+  if(!nowTipEl)return;
+  const c=nowTipEl.parentElement.getBoundingClientRect();
+  let x=ev.clientX-c.left+12,y=ev.clientY-c.top-nowTipEl.offsetHeight-12;
+  if(x+nowTipEl.offsetWidth>c.width)x=c.width-nowTipEl.offsetWidth-8;
+  if(x<0)x=8;
+  if(y<0)y=ev.clientY-c.top+20;
+  nowTipEl.style.left=x+"px";
+  nowTipEl.style.top=y+"px";
+}
+function hideNowTip(){if(nowTipEl){nowTipEl.remove();nowTipEl=null}}
+
 // ── Drag & Drop ──
 function setupDD(){
   if(!CAN_EDIT) return;
@@ -751,16 +858,15 @@ function setupDD(){
     r.addEventListener("drop", async (e)=>{
       e.preventDefault();
       r.classList.remove("dov");
-      const ti = +r.dataset.idx;
+      const tgt = overEl || r;
+      const ti = +(tgt.dataset.idx||r.dataset.idx||"0");
       if(di===null){ clearOver(); return; }
       if(di===ti){ clearOver(); return; }
       const ids = S.entries.map(e=>e.id);
       const [m] = ids.splice(di, 1);
       let insertAt = ti;
-      // si on dépose "après", et qu'on vient d'enlever un item avant ti, ajuster
-      const rect=r.getBoundingClientRect();
-      const before = (e.clientY - rect.top) < rect.height/2;
-      const after = !before;
+      // Se fier EXACTEMENT au trait bleu (overPos) calculé au dragover.
+      const after = (tgt===overEl && overPos==="after");
       if(after) insertAt = ti + 1;
       if(di < insertAt) insertAt -= 1;
       ids.splice(insertAt, 0, m);
@@ -916,6 +1022,12 @@ function changeMachine(v){
   if(!id||!isFinite(id))return;
   localStorage.setItem("mysifa.planning.lastMachine",String(id));
   location.href=`/planning?machine=${encodeURIComponent(String(id))}`;
+}
+
+function setView(v){
+  S.view=v;
+  localStorage.setItem("mysifa.planning.view",v);
+  load();
 }
 
 function openHorairesModal(di){

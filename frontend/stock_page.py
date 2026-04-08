@@ -31,6 +31,7 @@ STOCK_HTML = r"""<!DOCTYPE html>
 <link rel="icon" type="image/png" sizes="512x512" href="/static/mys_icon_512.png">
 <link rel="apple-touch-icon" href="/static/mys_icon_180.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
+<link rel="stylesheet" href="/static/support_widget.css">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -128,6 +129,7 @@ body.sb-open .sidebar-overlay{display:block}
 .search-icon-btn{width:44px;height:44px;border-radius:12px;border:1.5px solid var(--border);
   background:var(--card);color:var(--text2);cursor:pointer;font-size:20px;
   display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s}
+.search-icon-btn svg{width:20px;height:20px;display:block}
 .search-icon-btn:hover,.search-icon-btn.active{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 .search-icon-btn.listening{animation:pulse-ring 1s infinite}
 @keyframes pulse-ring{0%,100%{box-shadow:0 0 0 0 rgba(34,211,238,.4)}50%{box-shadow:0 0 0 8px rgba(34,211,238,0)}}
@@ -191,13 +193,16 @@ body.light .field-input.empl-upper::placeholder{
   opacity:.95;
 }
 .btn{background:var(--accent);color:#0a0e17;border:none;border-radius:10px;padding:10px 20px;
-  font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:opacity .15s;white-space:nowrap}
-.btn:hover{opacity:.85}
+  font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:filter .15s,box-shadow .15s,transform .05s;white-space:nowrap}
+.btn:hover{filter:brightness(1.05);box-shadow:0 0 0 4px rgba(34,211,238,.18)}
+.btn:active{transform:translateY(1px)}
 .btn-ghost{background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:10px;
   padding:10px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
 .btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
 .btn-sm{background:var(--accent);color:#0a0e17;border:none;border-radius:8px;padding:7px 14px;
-  font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+  font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:filter .15s,box-shadow .15s,transform .05s}
+.btn-sm:hover{filter:brightness(1.05);box-shadow:0 0 0 4px rgba(34,211,238,.18)}
+.btn-sm:active{transform:translateY(1px)}
 .btn-danger{background:rgba(248,113,113,.15);color:var(--danger);border:1px solid rgba(248,113,113,.3);
   border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
 
@@ -335,6 +340,7 @@ body.light .field-input.empl-upper::placeholder{
 </head>
 <body>
 <div id="root"></div>
+<script src="/static/support_widget.js"></script>
 <script>
 const API = window.location.origin;
 
@@ -687,7 +693,21 @@ function startVoiceSearch() {
   const silence = stockVoiceSilenceStop(r, 3800);
   S.listening = true;
   const micBtn = document.getElementById('mic-btn');
-  if (micBtn) { micBtn.classList.add('listening', 'active'); micBtn.textContent = '🔴'; }
+  const iconSvg = (kind) => {
+    const common = `fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"`;
+    if (kind === 'dictaphone') {
+      return `<svg viewBox="0 0 24 24" aria-hidden="true"><path ${common} d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3z"/><path ${common} d="M19 11a7 7 0 0 1-14 0"/><path ${common} d="M12 18v3"/><path ${common} d="M8 21h8"/></svg>`;
+    }
+    if (kind === 'record') {
+      return `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="5.5" fill="currentColor"/></svg>`;
+    }
+    return '';
+  };
+  if (micBtn) {
+    micBtn.classList.add('listening', 'active');
+    micBtn.innerHTML = iconSvg('record');
+    micBtn.style.color = 'var(--danger)';
+  }
   r.onresult = e => {
     silence.touch();
     const raw = voiceFullTranscript(e.results);
@@ -714,7 +734,11 @@ function startVoiceSearch() {
     silence.stop();
     window.__mysifaPageVoiceRecog = null;
     S.listening = false;
-    if (micBtn) { micBtn.classList.remove('listening', 'active'); micBtn.textContent = '🎤'; }
+    if (micBtn) {
+      micBtn.classList.remove('listening', 'active');
+      micBtn.innerHTML = iconSvg('dictaphone');
+      micBtn.style.color = '';
+    }
   };
   r.onerror = end;
   r.onend = end;
@@ -875,8 +899,26 @@ function buildSearchBar() {
   inp.addEventListener('input', e => doSearch(e.target.value));
   inp.addEventListener('keydown', e => { if (e.key === 'Escape') clearSearch(); });
 
-  const micBtn = el('button', { cls:'search-icon-btn', id:'mic-btn', on:{ click:startVoiceSearch } }, S.listening ? '🔴' : '🎤');
-  const camBtn = el('button', { cls:'search-icon-btn', on:{ click:startCamera } }, '📷');
+  const iconSvg = (kind) => {
+    const common = `fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"`;
+    if (kind === 'dictaphone') {
+      return `<svg viewBox="0 0 24 24" aria-hidden="true"><path ${common} d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3z"/><path ${common} d="M19 11a7 7 0 0 1-14 0"/><path ${common} d="M12 18v3"/><path ${common} d="M8 21h8"/></svg>`;
+    }
+    if (kind === 'camera') {
+      return `<svg viewBox="0 0 24 24" aria-hidden="true"><path ${common} d="M20 18a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V9a3 3 0 0 1 3-3h1.2a2 2 0 0 0 1.6-.8l.6-.8A2 2 0 0 1 12.9 4h2.2a2 2 0 0 1 1.5.7l.6.7a2 2 0 0 0 1.6.8H17a3 3 0 0 1 3 3z"/><circle cx="12" cy="13" r="3.5" ${common}/><path ${common} d="M17.5 9.5h.01"/></svg>`;
+    }
+    if (kind === 'record') {
+      return `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="5.5" fill="currentColor"/></svg>`;
+    }
+    return '';
+  };
+
+  const micBtn = el('button', { cls:'search-icon-btn', id:'mic-btn', on:{ click:startVoiceSearch } });
+  micBtn.innerHTML = S.listening ? iconSvg('record') : iconSvg('dictaphone');
+  if (S.listening) micBtn.style.color = 'var(--danger)';
+
+  const camBtn = el('button', { cls:'search-icon-btn', id:'cam-btn', on:{ click:startCamera } });
+  camBtn.innerHTML = iconSvg('camera');
 
   row.append(inp, micBtn, camBtn);
   wrap.appendChild(row);
@@ -1169,6 +1211,12 @@ function render() {
         el('div', { cls:'uc-name' }, S.user.nom||''),
         el('div', { cls:'uc-role' }, S.user.role||'')
       ) : null,
+      (() => {
+        const b=el('button',{cls:'support-btn',type:'button',on:{click:()=>window.MySifaSupport?.open?.({user:S.user,page:'MyStock',notify:(m,t)=>showToast(m,t),api})}});
+        const ico=el('span',{cls:'support-ico'}); ico.innerHTML=window.MySifaSupport?.iconSvg?.()||'';
+        b.append(ico, el('span',null,'Contacter le support'));
+        return b;
+      })(),
       el('button', { cls:'theme-btn', on:{ click:()=>{ document.body.classList.toggle('light'); localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark'); render(); } } },
         el('span', { cls:'theme-ico' }, isLight ? '☀' : '🌙'),
         el('span', { cls:'theme-label' }, isLight ? 'Mode clair' : 'Mode sombre')

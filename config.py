@@ -33,6 +33,27 @@ APP_PLANNING_PAGE_TITLE = "Planning — MySifa"
 HOST        = "0.0.0.0"
 PORT        = 8000
 
+# ─── Support (email) ───────────────────────────────────────────────
+# Objectif: permettre au front d’envoyer un message au support via un endpoint FastAPI.
+# Configuration SMTP via variables d’environnement (prod).
+SUPPORT_TO_EMAIL = os.getenv("SUPPORT_TO_EMAIL", "eleconte@sifa.pro")
+SUPPORT_EMAIL_PROVIDER = os.getenv("SUPPORT_EMAIL_PROVIDER", "graph")  # graph | smtp
+
+# ─── Support (Microsoft Graph) ─────────────────────────────────────
+# Envoi sans SMTP (recommandé quand SMTP AUTH est désactivé sur le tenant).
+MS_TENANT_ID = os.getenv("MS_TENANT_ID", "")
+MS_CLIENT_ID = os.getenv("MS_CLIENT_ID", "")
+MS_CLIENT_SECRET = os.getenv("MS_CLIENT_SECRET", "")
+MS_SENDER_UPN = os.getenv("MS_SENDER_UPN", "")  # ex: eleconte@sifa.pro (mailbox autorisée à envoyer)
+
+SMTP_HOST = os.getenv("SMTP_HOST", "")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER", "")
+SMTP_PASS = os.getenv("SMTP_PASS", "")
+SMTP_FROM = os.getenv("SMTP_FROM", "")  # ex: "MySifa <no-reply@mysifa.com>"
+SMTP_TLS = os.getenv("SMTP_TLS", "1") not in {"0", "false", "False", "no", "NO"}
+SUPPORT_EMAIL_DEBUG = os.getenv("SUPPORT_EMAIL_DEBUG", "0") in {"1", "true", "True", "yes", "YES"}
+
 # ─── Sécurité ─────────────────────────────────────────────────────
 SECRET_KEY    = os.getenv("SECRET_KEY", secrets.token_hex(32))
 SESSION_HOURS = 6
