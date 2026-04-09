@@ -153,6 +153,22 @@ body.sb-open .sidebar-overlay{display:block}
 .card-title{font-size:14px;font-weight:700}
 .card-empty{padding:32px 16px;text-align:center;color:var(--muted);font-size:13px}
 
+/* ── Users (admin) ── */
+.users-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;width:100%}
+.users-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.users-filter{background:var(--bg);border:1.5px solid var(--border);border-radius:12px;padding:10px 12px;color:var(--text);font-size:13px;outline:none;min-width:220px}
+.users-filter:focus{border-color:var(--accent)}
+.users-row{padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid var(--border)}
+.users-row:last-child{border-bottom:none}
+.users-main{min-width:0}
+.users-name{font-size:13px;font-weight:800;color:var(--text);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.users-meta{font-size:11px;color:var(--muted);margin-top:2px;display:flex;gap:10px;flex-wrap:wrap}
+.users-meta code{font-family:monospace;color:var(--text2)}
+.users-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.pill{font-size:10px;font-weight:800;border-radius:999px;padding:3px 9px;border:1px solid var(--border);color:var(--text2);background:transparent;text-transform:uppercase;letter-spacing:.04em}
+.pill.ok{border-color:rgba(52,211,153,.45);color:var(--success);background:rgba(52,211,153,.10)}
+.pill.off{border-color:rgba(248,113,113,.45);color:var(--danger);background:rgba(248,113,113,.10)}
+
 /* ── Formulaire ajout produit ── */
 .add-form{padding:16px;display:flex;flex-direction:column;gap:10px}
 .add-form-inner{display:flex;flex-direction:column;gap:10px}
@@ -364,6 +380,8 @@ let S = {
   barcodeReader: null,
   emplSuggestions: [],
   showAddForm: false,
+  users: null,
+  usersFilter: '',
 };
 
 // ── API ─────────────────────────────────────────────────────────
@@ -389,6 +407,30 @@ function showToast(m, t='success') {
 const fN = n => n != null ? Number(n).toLocaleString('fr-FR') : '0';
 const fD = d => d ? d.slice(0,10).split('-').reverse().join('/') : '—';
 const joursDepuis = d => { if (!d) return null; return Math.round((Date.now() - new Date(d).getTime()) / 86400000); };
+const isAdmin = u => u && (u.role === 'direction' || u.role === 'administration');
+
+// ── Icons (Feather-ish, inline SVG) ─────────────────────────────
+function icon(name, size=16){
+  const a = `width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"`;
+  const p = {
+    'grid': '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
+    'clipboard': '<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>',
+    'users': '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+    'sun': '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>',
+    'moon': '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
+    'log-out': '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
+    'menu': '<line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/>',
+    'home': '<path d="M3 9l9-7 9 7"/><path d="M9 22V12h6v10"/>',
+    'refresh-ccw': '<polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.5"/>',
+  };
+  return `<svg ${a} aria-hidden="true" style="display:inline-block;vertical-align:middle;flex-shrink:0">${p[name]||p['grid']}</svg>`;
+}
+function iconEl(name, size=16){
+  const s = document.createElement('span');
+  s.style.cssText = 'display:inline-flex;align-items:center;flex-shrink:0';
+  s.innerHTML = icon(name, size);
+  return s;
+}
 
 // ── DOM helper — safe contre null/false ─────────────────────────
 function el(tag, attrs, ...children) {
@@ -450,6 +492,30 @@ async function loadDashboard() {
 
 async function loadInventaireList() {
   try { const d = await api('/api/stock/inventaire/produits-a-inventorier'); if (d) { S.inventaireList = d; renderContent(); } } catch(e) {}
+}
+
+async function loadUsers() {
+  try { const d = await api('/api/users'); if (d) { S.users = d; renderContent(); } } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function createUser(body) {
+  await api('/api/users', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  showToast('Utilisateur créé');
+  await loadUsers();
+}
+
+async function updateUser(id, body) {
+  await api('/api/users/' + id, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  showToast('Utilisateur mis à jour');
+  await loadUsers();
+}
+
+async function resetUserPassword(id) {
+  const r = await api('/api/users/' + id + '/reset-password', { method:'POST' });
+  if (r && r.temp_password) {
+    alert('Mot de passe temporaire : ' + r.temp_password);
+    showToast('Mot de passe temporaire généré');
+  }
 }
 
 async function submitMouvement(body) {
@@ -594,6 +660,7 @@ function goToTab(tab) {
   renderContent();
   if (tab === 'dashboard') loadDashboard();
   else if (tab === 'inventaire') loadInventaireList();
+  else if (tab === 'users') loadUsers();
 }
 
 function updateNavActive() {
@@ -1151,7 +1218,7 @@ function buildInventaire() {
     el('div',{cls:'card',style:{marginBottom:'12px'}},
       el('div',{cls:'card-header'},
         el('div',{cls:'card-title'},'⚠ À inventorier ('+list.length+')'),
-        el('button',{cls:'btn-sm',on:{click:()=>loadInventaireList()}},'↺ Rafraîchir')
+        el('button',{cls:'btn-sm',on:{click:()=>loadInventaireList()}}, iconEl('refresh-ccw',14), ' Rafraîchir')
       ),
       el('div',{style:{padding:'10px 16px 12px',fontSize:'12px',color:'var(--muted)'}},'Non inventoriés depuis plus de 6 mois. Cliquez pour inventorier.')
     ),
@@ -1169,6 +1236,149 @@ function buildInventaire() {
   );
 }
 
+function openUserFormModal(opts) {
+  const o = opts || {};
+  const isNew = !!o.isNew;
+  // Pour "Ajouter" : ne pas pré-remplir.
+  // Pour "Modifier" : pré-remplir avec la fiche utilisateur.
+  const u = isNew ? {} : (o.user || {});
+  const onSave = typeof o.onSave === 'function' ? o.onSave : null;
+
+  document.querySelector('.modal-overlay')?.remove();
+  const overlay = el('div', { cls:'modal-overlay', on:{ click: e => { if (e.target === overlay) overlay.remove(); } } });
+  const sheet = el('div', { cls:'modal-sheet' });
+
+  const nomI = el('input', { cls:'field-input', type:'text', value: u.nom || '', placeholder:'Nom / prénom' });
+  const emailI = el('input', { cls:'field-input', type:'email', value: u.email || '', placeholder:'Email' });
+  const telI = el('input', { cls:'field-input', type:'text', value: u.telephone || '', placeholder:'Téléphone (optionnel)' });
+  const roleS = el('select', { cls:'field-input' },
+    ...['fabrication','logistique','administration','direction'].map(r =>
+      el('option', { value:r, selected: (u.role || 'fabrication') === r }, r)
+    )
+  );
+  const actifS = el('select', { cls:'field-input' },
+    el('option', { value:'1', selected: String(u.actif ?? 1) === '1' }, 'Actif'),
+    el('option', { value:'0', selected: String(u.actif ?? 1) === '0' }, 'Inactif')
+  );
+  const pwdI = el('input', { cls:'field-input', type:'password', value:'', placeholder: isNew ? 'Mot de passe (min 8)' : 'Nouveau mot de passe (optionnel)' });
+
+  const title = isNew ? 'Nouvel utilisateur' : 'Modifier utilisateur';
+  const sub = isNew ? 'Création (admin uniquement)' : 'Mise à jour (admin uniquement)';
+
+  const saveBtn = el('button', { cls:'btn', on:{ click: async () => {
+    const body = {
+      nom: String(nomI.value || '').trim(),
+      email: String(emailI.value || '').trim().toLowerCase(),
+      telephone: String(telI.value || '').trim(),
+      role: String(roleS.value || 'fabrication'),
+      actif: Number(String(actifS.value || '1')),
+    };
+    const pwd = String(pwdI.value || '').trim();
+    if (pwd) body.password = pwd;
+    if (!body.nom || !body.email) { showToast('Nom + email requis', 'error'); return; }
+    if (isNew && !pwd) { showToast('Mot de passe requis', 'error'); return; }
+    try {
+      saveBtn.disabled = true;
+      await onSave?.(body);
+      overlay.remove();
+    } catch(e) {
+      showToast(e.message || 'Erreur', 'error');
+    } finally {
+      saveBtn.disabled = false;
+    }
+  } } }, isNew ? 'Créer' : 'Enregistrer');
+
+  sheet.append(
+    el('span', { cls:'modal-handle' }),
+    el('div', { cls:'modal-title' }, title),
+    el('div', { cls:'modal-sub' }, sub),
+    el('div', { cls:'modal-field' }, el('label', { cls:'field-label' }, 'Nom'), nomI),
+    el('div', { cls:'modal-field' }, el('label', { cls:'field-label' }, 'Email'), emailI),
+    el('div', { cls:'modal-field' }, el('label', { cls:'field-label' }, 'Téléphone'), telI),
+    el('div', { cls:'modal-field' }, el('label', { cls:'field-label' }, 'Rôle'), roleS),
+    el('div', { cls:'modal-field' }, el('label', { cls:'field-label' }, 'Statut'), actifS),
+    el('div', { cls:'modal-field' }, el('label', { cls:'field-label' }, 'Mot de passe'), pwdI),
+    el('div', { cls:'modal-actions' },
+      el('button', { cls:'btn-cancel', on:{ click: () => overlay.remove() } }, 'Annuler'),
+      saveBtn
+    )
+  );
+
+  overlay.appendChild(sheet);
+  document.body.appendChild(overlay);
+  setTimeout(() => { try { (nomI.value ? emailI : nomI).focus(); } catch(e) {} }, 0);
+}
+
+function buildUsers() {
+  const wrap = el('div', { cls:'content' });
+  if (!isAdmin(S.user)) {
+    wrap.appendChild(el('div', { cls:'card' }, el('div', { cls:'card-empty' }, 'Accès réservé (admin).')));
+    return wrap;
+  }
+
+  const filterI = el('input', { cls:'users-filter', type:'text', placeholder:'Filtrer (nom, email, rôle)…', value: S.usersFilter || '',
+    on:{ input: (e)=>{ S.usersFilter = e.target.value; renderContent(); } }
+  });
+  const addBtn = el('button', { cls:'btn-sm', on:{ click: () => openUserFormModal({ isNew:true, onSave: createUser }) } }, '＋ Ajouter');
+
+  const list = Array.isArray(S.users) ? S.users.slice() : [];
+  const q = String(S.usersFilter || '').trim().toLowerCase();
+  const filtered = !q ? list : list.filter(u => {
+    const blob = [u.nom,u.email,u.role,u.operateur_lie,u.telephone].filter(Boolean).join(' ').toLowerCase();
+    return blob.includes(q);
+  });
+
+  wrap.appendChild(
+    el('div', { cls:'card' },
+      el('div', { cls:'card-header' },
+        el('div', { cls:'users-head' },
+          el('div', { cls:'card-title' }, 'Utilisateurs'),
+          el('div', { cls:'users-tools' }, filterI, addBtn)
+        )
+      ),
+      !filtered.length
+        ? el('div', { cls:'card-empty' }, (S.users ? 'Aucun utilisateur' : 'Chargement…'))
+        : el('div', null, ...filtered.map(u => {
+          const actif = Number(u.actif ?? 1) === 1;
+          const pill = el('span', { cls:'pill ' + (actif ? 'ok' : 'off') }, actif ? 'actif' : 'inactif');
+
+          const editBtn = el('button', { cls:'btn-ghost', on:{ click: async () => {
+            try {
+              const full = await api('/api/users/' + u.id);
+              if (!full) return;
+              openUserFormModal({ isNew:false, user: full, onSave: (body)=>updateUser(u.id, body) });
+            } catch(e) { showToast(e.message, 'error'); }
+          } } }, 'Modifier');
+
+          const resetBtn = el('button', { cls:'btn-ghost', on:{ click: async () => {
+            if (!confirm('Générer un mot de passe temporaire pour ' + (u.nom||u.email||('user#'+u.id)) + ' ?')) return;
+            try { await resetUserPassword(u.id); } catch(e) { showToast(e.message, 'error'); }
+          } } }, 'Reset MDP');
+
+          const disableBtn = el('button', { cls:'btn-danger', on:{ click: async () => {
+            if (S.user && Number(S.user.id) === Number(u.id)) { showToast('Impossible de désactiver votre compte', 'error'); return; }
+            if (!confirm('Désactiver ' + (u.nom||u.email||('user#'+u.id)) + ' ?')) return;
+            try { await updateUser(u.id, { actif: 0 }); } catch(e) { showToast(e.message, 'error'); }
+          } } }, 'Désactiver');
+
+          return el('div', { cls:'users-row' },
+            el('div', { cls:'users-main' },
+              el('div', { cls:'users-name' }, u.nom || '(sans nom)', pill),
+              el('div', { cls:'users-meta' },
+                el('span', null, u.email || ''),
+                el('code', null, (u.role || '')),
+                u.telephone ? el('span', null, u.telephone) : null
+              )
+            ),
+            el('div', { cls:'users-actions' }, editBtn, resetBtn, actif ? disableBtn : null)
+          );
+        }))
+    )
+  );
+
+  return wrap;
+}
+
 function renderContent() {
   const area = document.getElementById('scroll-area');
   if (!area) return;
@@ -1177,7 +1387,9 @@ function renderContent() {
   let content;
   if (S.selProduit) content = buildProduitDetail();
   else if (S.selEmpl) content = buildEmplacementDetail();
-  else if (S.tab === 'dashboard') content = buildDashboard();  else if (S.tab === 'inventaire') content = buildInventaire();
+  else if (S.tab === 'dashboard') content = buildDashboard();
+  else if (S.tab === 'inventaire') content = buildInventaire();
+  else if (S.tab === 'users') content = buildUsers();
   else content = buildDashboard();
 
   if (content) area.appendChild(content);
@@ -1199,9 +1411,13 @@ function render() {
     ),
     el('div', { cls:'sidebar-nav' },
       ...[
-        { tab:'dashboard',  icon:'📊', label:'Dashboard' },
-        { tab:'inventaire', icon:'📋', label:'Inventaire' },
-      ].map(n => el('button', { cls:'nav-btn'+(S.tab===n.tab?' active':''), 'data-tab':n.tab, on:{ click:()=>goToTab(n.tab) } }, n.icon+'  '+n.label))
+        { tab:'dashboard',  icon:'grid', label:'Dashboard' },
+        { tab:'inventaire', icon:'clipboard', label:'Inventaire' },
+        ...(isAdmin(S.user) ? [{ tab:'users', icon:'users', label:'Utilisateurs' }] : []),
+      ].map(n => el('button', { cls:'nav-btn'+(S.tab===n.tab?' active':''), 'data-tab':n.tab, on:{ click:()=>goToTab(n.tab) } },
+        iconEl(n.icon,16),
+        el('span', null, ' ' + n.label)
+      ))
     ),
     el('div', { cls:'sidebar-bottom' },
       el('button', { cls:'nav-btn nav-btn--mysifa-portal', on:{ click:()=>{ window.location.href='/'; } } },
@@ -1218,18 +1434,18 @@ function render() {
         return b;
       })(),
       el('button', { cls:'theme-btn', on:{ click:()=>{ document.body.classList.toggle('light'); localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark'); render(); } } },
-        el('span', { cls:'theme-ico' }, isLight ? '☀' : '🌙'),
+        el('span', { cls:'theme-ico' }, iconEl(isLight ? 'sun' : 'moon', 16)),
         el('span', { cls:'theme-label' }, isLight ? 'Mode clair' : 'Mode sombre')
-      ),      el('button', { cls:'logout-btn', on:{ click: async ()=>{ await api('/api/auth/logout',{method:'POST'}); window.location.href='/'; } } }, '⎋  Déconnexion'),
+      ),      el('button', { cls:'logout-btn', on:{ click: async ()=>{ await api('/api/auth/logout',{method:'POST'}); window.location.href='/'; } } }, iconEl('log-out',14), ' Déconnexion'),
       el('div', { cls:'version' }, 'MyStock v2.1')
     )
   );
 
   const main = el('div', { cls:'main-area' },
     el('div', { cls:'mobile-topbar' },
-      el('button', { cls:'burger-btn', on:{ click:toggleSidebar } }, '☰'),
+      el('button', { cls:'burger-btn', on:{ click:toggleSidebar } }, iconEl('menu',18)),
       el('div', { cls:'mobile-title' }, 'My', el('span',null,'Stock')),
-      el('button', { cls:'burger-btn', on:{ click:()=>window.location.href='/' } }, '⌂')
+      el('button', { cls:'burger-btn', on:{ click:()=>window.location.href='/' } }, iconEl('home',18))
     ),
     buildSearchBar(),
     el('div', { cls:'scroll-area', id:'scroll-area' })

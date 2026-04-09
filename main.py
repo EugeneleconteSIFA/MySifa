@@ -24,9 +24,11 @@ from routers.planning import router as planning_router
 from routers.stock import router as router_stock
 from routers.chat import router as chat_router
 from routers.support import router as support_router
+from routers.pwa import router as pwa_router
 from frontend.planning_page import router as planning_page_router
 from frontend.prod_page import router as prod_page_router
 from frontend.stock_page import router as stock_page_router
+from frontend.compta_page import router as compta_page_router
 
 
 @asynccontextmanager
@@ -80,9 +82,11 @@ app.include_router(planning_router)
 app.include_router(router_stock)
 app.include_router(chat_router)
 app.include_router(support_router)
+app.include_router(pwa_router)
 app.include_router(planning_page_router)
 app.include_router(prod_page_router)
 app.include_router(stock_page_router)
+app.include_router(compta_page_router)
 
 
 @app.get("/", response_class=HTMLResponse)

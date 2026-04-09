@@ -258,6 +258,7 @@ def _migrate(conn):
             description TEXT DEFAULT '',
             format_l REAL,
             format_h REAL,
+            dos_rvgi TEXT,
             duree_heures REAL NOT NULL DEFAULT 8,
             statut TEXT NOT NULL DEFAULT 'attente',
             notes TEXT DEFAULT '',
@@ -298,6 +299,7 @@ def _migrate(conn):
                 description TEXT DEFAULT '',
                 format_l REAL,
                 format_h REAL,
+                dos_rvgi TEXT,
                 duree_heures REAL NOT NULL DEFAULT 8,
                 statut TEXT NOT NULL DEFAULT 'attente',
                 notes TEXT DEFAULT '',
@@ -325,6 +327,7 @@ def _migrate(conn):
         # Colonnes v1.2 (standalone enrichi)
         pe_cols = {row[1] for row in conn.execute("PRAGMA table_info(planning_entries)").fetchall()}
         for col, sql in [
+            ("dos_rvgi", "ALTER TABLE planning_entries ADD COLUMN dos_rvgi TEXT"),
             ("numero_of", "ALTER TABLE planning_entries ADD COLUMN numero_of TEXT"),
             ("ref_produit", "ALTER TABLE planning_entries ADD COLUMN ref_produit TEXT"),
             ("laize", "ALTER TABLE planning_entries ADD COLUMN laize REAL"),

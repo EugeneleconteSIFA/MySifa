@@ -130,6 +130,17 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
   transition:all .15s;font-size:16px;line-height:1
 }
 .gear-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.reset-days-btn{
+  height:36px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;
+  padding:0 12px;gap:8px;
+  border:1px solid rgba(248,113,113,.35);
+  background:rgba(248,113,113,.10);
+  color:rgba(248,113,113,.95);
+  cursor:pointer;font-size:12px;font-family:var(--mono);font-weight:700;
+  transition:all .15s;line-height:1;white-space:nowrap
+}
+.reset-days-btn:hover{border-color:rgba(248,113,113,.55);background:rgba(248,113,113,.16)}
+.reset-days-btn:active{transform:translateY(1px)}
 
 .sat-tog{display:flex;align-items:center;gap:10px;padding:8px 16px;border-radius:10px;cursor:pointer;
   border:1px solid var(--border2);background:var(--card);transition:all .3s;user-select:none}
@@ -149,7 +160,7 @@ body.light .badge-run{background:rgba(16,185,129,.14);border-color:#059669;color
 .badge-info{background:var(--card);border:1px solid var(--border2);color:var(--dim)}
 
 .sec{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:28px}
-.sec-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.sec-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px}
 .sec-title{font-size:16px;font-weight:600;color:var(--text2)}
 
 .wk-nav{display:flex;gap:0;align-items:center}
@@ -201,12 +212,12 @@ body.light .slot .line1{color:#0f172a}body.light .slot .line2{color:#334155}
 .lg-i{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dim)}
 .lg-d{width:10px;height:10px;border-radius:3px}.lg-i span{font-family:var(--mono)}
 
-.th{display:grid;grid-template-columns:22px 22px 14px minmax(96px,1.2fr) minmax(64px,.75fr) minmax(64px,.75fr) minmax(64px,.75fr) minmax(44px,.45fr) minmax(72px,.65fr) 40px minmax(110px,1.0fr) 74px;
+.th{display:grid;grid-template-columns:22px 22px 14px minmax(96px,1.2fr) minmax(64px,.75fr) minmax(72px,.7fr) minmax(64px,.75fr) minmax(64px,.75fr) minmax(44px,.45fr) minmax(72px,.65fr) 40px minmax(110px,1.0fr) 74px;
   gap:6px;padding:10px 10px;background:var(--bg-dark);border-radius:10px 10px 0 0;
   font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600;font-family:var(--mono);align-items:center}
 .th>span{min-width:0}
 .th .act-c{text-align:right}
-.tr{display:grid;grid-template-columns:22px 22px 14px minmax(96px,1.2fr) minmax(64px,.75fr) minmax(64px,.75fr) minmax(64px,.75fr) minmax(44px,.45fr) minmax(72px,.65fr) 40px minmax(110px,1.0fr) 74px;
+.tr{display:grid;grid-template-columns:22px 22px 14px minmax(96px,1.2fr) minmax(64px,.75fr) minmax(72px,.7fr) minmax(64px,.75fr) minmax(64px,.75fr) minmax(44px,.45fr) minmax(72px,.65fr) 40px minmax(110px,1.0fr) 74px;
   gap:6px;padding:10px 10px;border-bottom:1px solid var(--border);font-size:12px;align-items:center;
   cursor:grab;transition:background .2s;background:var(--bg-dark)}
 .tr:first-child{background:var(--accent-bg)}
@@ -231,10 +242,11 @@ body.light .th{background:var(--bg)}
 .st.run{background:#0f2a1a;color:var(--green);border:1px solid #166534}
 .st.att{background:#1a1520;color:var(--amber);border:1px solid #78350f}
 .st.ter{background:var(--card);color:#6b7280;border:1px solid var(--border2)}
-.statut-select{width:100%;padding:6px 10px;background:var(--bg);border:1px solid var(--border2);
+.statut-select{width:100%;min-width:110px;max-width:140px;padding:6px 10px;background:var(--bg);border:1px solid var(--border2);
   border-radius:10px;color:var(--text2);font-size:11px;font-family:var(--mono);outline:none}
 .statut-select:focus{border-color:var(--accent);color:var(--text)}
-.acts{display:flex;gap:6px;justify-content:flex-end}
+.acts{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;align-items:center}
+.acts .ab{flex:0 0 auto}
 .ab{padding:4px 8px;background:transparent;border:1px solid var(--border2);color:var(--text2);
   cursor:pointer;font-size:11px;border-radius:6px;font-family:var(--mono)}
 .ab:hover{background:var(--accent-bg);color:var(--accent)}
@@ -304,12 +316,15 @@ window.addEventListener("unhandledrejection", (e)=>showFatal("Promise rejection"
 <script>
 let MID=__MACHINE_ID__;
 const DN=["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"];
-const MIND=2,MAXD=30;
+const MIND=2,MAXD=720;
 const CC=["#2563eb","#7c3aed","#059669","#d97706","#dc2626","#0891b2","#4f46e5","#65a30d","#c026d3","#ea580c"];
 const MACHINE_ORDER=["Cohésio 1","Cohésio 2","DSI","Repiquage"];
 const DEFAULTS_BY_KEY={
   "C1":{pair:{week:{s:5,e:20},fri:{s:7,e:19}},impair:{week:{s:5,e:20},fri:{s:7,e:19}}}, // Cohésio 1
-  "C2":{pair:{week:{s:5,e:13},fri:{s:5,e:13}},impair:{week:{s:13,e:20},fri:{s:5,e:13}}}, // Cohésio 2
+  // Cohésio 2
+  // - semaine paire  : lun–jeu 05:00–13:00 ; ven 06:00–13:00
+  // - semaine impaire: lun–jeu 13:00–20:00 ; ven 14:00–20:00
+  "C2":{pair:{week:{s:5,e:13},fri:{s:6,e:13}},impair:{week:{s:13,e:20},fri:{s:14,e:20}}},
   "DSI":{pair:{week:{s:8,e:14},fri:{s:8,e:14}},impair:{week:{s:8,e:14},fri:{s:8,e:14}}}, // DSI
   "REP":{pair:{week:{s:6,e:20},fri:{s:7,e:19}},impair:{week:{s:6,e:20},fri:{s:7,e:19}}}, // Repiquage
 };
@@ -339,6 +354,7 @@ async function load(){
     const en = await api(`/machines/${MID}/entries`);
     S.entries = en || [];
     await Promise.all([loadHolidays(),loadDayWorked()]);
+    // Cohésio 2: les horaires alternent paire/impair → ne pas les "figer" en base.
   }catch(e){console.error(e)}
   S.loading=false;render();
 }
@@ -374,6 +390,42 @@ async function setDayNonTravail(dateStr,isSaturday,nonTravailChecked){
   await load();
 }
 
+async function resetDefaultDaysCohesio2(){
+  if(!CAN_EDIT) return;
+  if(machineKey()!=="C2") return;
+  if(!confirm("Réinitialiser Cohésio 2 : remettre tous les jours sur la base des réglages (horaires + samedi travaillé) ?\\n\\nCela supprime les jours off et overrides (samedi) saisis manuellement pour cette machine.")) return;
+  try{
+    await api(`/machines/${MID}/reset-default-days`,{method:"POST"});
+    await load();
+  }catch(e){
+    console.error(e);
+    alert("Réinitialisation impossible (voir console).");
+  }
+}
+
+function isDefaultMachineHoursC2(m){
+  if(!m) return false;
+  // Valeurs “génériques” issues du schéma (pas spécifiques Cohésio 2)
+  return String(m.horaires_lundi||"").trim()==="5,21"
+    && String(m.horaires_mardi||"").trim()==="5,21"
+    && String(m.horaires_mercredi||"").trim()==="5,21"
+    && String(m.horaires_jeudi||"").trim()==="5,21"
+    && String(m.horaires_vendredi||"").trim()==="6,20";
+}
+
+function hhmmFromFloat(f){
+  const h=Math.floor(f+1e-6),m=Math.round((f-h)*60);
+  const hh=h+(m>=60?1:0),mm=((m%60)+60)%60;
+  return pad(hh)+":"+pad(mm);
+}
+
+async function bootstrapCohesio2HoursFromDefaultsIfNeeded(){
+  // Désactivé volontairement.
+  // Cohésio 2 alterne les horaires selon semaine paire/impair.
+  // Écrire un seul bloc horaires_* en base fige un seul planning et provoque des mélanges.
+  return;
+}
+
 function colorForId(id){
   const n=(id*2654435761)>>>0;
   return CC[n%CC.length];
@@ -389,6 +441,8 @@ function icon(name,size=16){
   const a=`width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"`;
   const p={
     'bar-chart-2': '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+    'package': '<line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
+    'wrench': '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
     'calendar': '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
     'trending-up': '<polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>',
     'users': '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
@@ -456,7 +510,22 @@ function getMachineDefaults(){
     const raw=localStorage.getItem(key);
     if(raw){
       const j=JSON.parse(raw);
-      if(j&&j.pair&&j.impair)return j;
+      if(j&&j.pair&&j.impair){
+        // Migration Cohésio 2: corrige d'anciens défauts erronés (vendredi figé à 05:00–13:00)
+        if(mk==="C2"){
+          const isOld =
+            j?.pair?.week?.s===5 && j?.pair?.week?.e===13 &&
+            j?.pair?.fri?.s===5  && j?.pair?.fri?.e===13 &&
+            j?.impair?.week?.s===13 && j?.impair?.week?.e===20 &&
+            j?.impair?.fri?.s===5   && j?.impair?.fri?.e===13;
+          if(isOld){
+            const fixed = DEFAULTS_BY_KEY["C2"];
+            localStorage.setItem(key, JSON.stringify(fixed));
+            return fixed;
+          }
+        }
+        return j;
+      }
     }
   }catch(e){}
   return DEFAULTS_BY_KEY[mk]||DEFAULTS_BY_KEY["C1"];
@@ -475,7 +544,17 @@ function getWhForDate(di,dateObj){
   const m=S.machine,key=DAY_FIELD[di];
   const raw=m&&m[key]!=null?String(m[key]):"";
   if(raw && raw.trim()){
-    return parseHorairesPair(raw||null,di);
+    // Cohésio 2: ignorer les valeurs génériques de schéma (sinon on casse paire/impair)
+    if(machineKey()==="C2"){
+      const v = raw.trim();
+      if(v==="5,21" || v==="6,20" || v==="05:00,21:00" || v==="06:00,20:00"){
+        // fallback vers les réglages paire/impair
+      }else{
+        return parseHorairesPair(raw||null,di);
+      }
+    }else{
+      return parseHorairesPair(raw||null,di);
+    }
   }
 
   // Fallback: défauts par machine (semaine paire/impair + vendredi)
@@ -512,7 +591,7 @@ function renderSidebar(){
   }
   const admin=isAdmin(ME);
   const items=[
-    {key:"production",label:"Production",icon:"bar-chart-2",href:"/prod?page=production"},
+    {key:"production",label:"Production",icon:"wrench",href:"/prod?page=production"},
     ...(admin?[
       {key:"_planning",label:"Planning",icon:"calendar",href:"/planning"},
       {key:"suivi",label:"Rentabilité",icon:"trending-up",href:"/prod?page=suivi"},
@@ -581,6 +660,7 @@ function render(){
       </div>
     </div>
     <div class="h-right">
+      ${CAN_EDIT&&machineKey()==="C2"?`<button type="button" class="reset-days-btn" onclick="resetDefaultDaysCohesio2()" title="Réinitialiser jours (Cohésio 2)">↺ Base jours</button>`:""}
       ${CAN_EDIT?`<button type="button" class="gear-btn" onclick="openDefaultsModal()" title="Réglages horaires par défaut" aria-label="Réglages">${icon('settings',16)}</button>`:""}
       ${run?`<div class="badge badge-run"><div class="dot"></div>${escAttr(runLbl)}</div>`:""}
       <div class="badge badge-info">${totH}h · ${nb} dossiers</div>
@@ -611,7 +691,7 @@ function render(){
         <div class="sec-title">Dossiers de production</div>
         ${CAN_EDIT?`<button type="button" class="btn-p" onclick="openAdd()"><span style="font-size:18px;line-height:1">+</span> Ajouter</button>`:""}
       </div>
-      <div class="th"><span></span><span>#</span><span></span><span>Client</span><span>Format prod.</span><span>Ref OF</span><span>Ref prod.</span><span>Laize</span><span>Livraison</span><span>Durée</span><span>Statut</span><span class="act-c">Actions</span></div>
+      <div class="th"><span></span><span>#</span><span></span><span>Client</span><span>Format prod.</span><span>Dos. RVGI</span><span>Ref OF</span><span>Ref prod.</span><span>Laize</span><span>Livraison</span><span>Durée</span><span>Statut</span><span class="act-c">Actions</span></div>
       <div id="tbody">${S.entries.length===0?'<div class="empty">Aucun dossier au planning</div>':""}
         ${S.entries.map((e,i)=>mkRow(e,i,sl)).join("")}
       </div>
@@ -722,6 +802,7 @@ function mkRow(e,i,slots){
   const nextLocked = !!(next && (next.statut==="en_cours" || next.statut==="termine"));
   const co=colorForId(e.id||i+1);
   const cli=(e.client||"").trim()||"—";
+  const rvgi=escAttr(e.dos_rvgi||"")||"—";
   const of=escAttr(e.numero_of||e.reference||"—");
   const rfp=escAttr(e.ref_produit||"")||"—";
   const lz=e.laize!=null&&e.laize!==""?escAttr(String(e.laize)):"—";
@@ -740,6 +821,7 @@ function mkRow(e,i,slots){
     <div><div class="cd" style="background:${co}"></div></div>
     <span class="lbl-main">${escAttr(cli)}</span>
     <span class="cell-mini">${escAttr(fm)}${fm!=="—"?" mm":""}</span>
+    <span class="cell-mini">${rvgi}</span>
     <span class="cell-mini">${of}</span>
     <span class="cell-mini">${rfp}</span>
     <span class="cell-mini">${lz}</span>
@@ -751,6 +833,7 @@ function mkRow(e,i,slots){
       <button type="button" class="ab mov" onclick="moveEntry(${e.id},-1)" title="Monter" ${i<=0||isLocked?"disabled":""}>▲</button>
       <button type="button" class="ab mov" onclick="moveEntry(${e.id},+1)" title="Descendre" ${i>=S.entries.length-1||isLocked?"disabled":""}>▼</button>
       <button type="button" class="ab" onclick="openInsert(${e.id})" title="${nextLocked?"⦸ Impossible : dossier En cours / Terminé juste après":"Insérer après"}" ${isLocked||nextLocked?"disabled":""}>${nextLocked?"⦸":"↳+"}</button>
+      <button type="button" class="ab" onclick="splitEntry(${e.id})" title="Spliter en 2">½</button>
       <button type="button" class="ab" onclick="openEdit(${e.id})" title="Modifier">${icon('edit',14)}</button>
       <button type="button" class="ab del" onclick="if(confirm('Supprimer ?'))delEntry(${e.id})" title="Supprimer">✕</button>`:""}
     </div></div>`;
@@ -907,6 +990,21 @@ function setupStatutSelects(){
 
 // ── API actions ──
 async function delEntry(id){await api(`/machines/${MID}/entries/${id}`,{method:"DELETE"});load()}
+async function splitEntry(id){
+  if(!CAN_EDIT) return;
+  const e=S.entries.find(x=>x.id===id);
+  if(!e) return;
+  if(e.statut==="en_cours"||e.statut==="termine") return alert("Dossier verrouillé");
+  if(!confirm("Spliter ce dossier en 2 (mêmes infos) avec durée /2 ?")) return;
+  try{
+    await api(`/machines/${MID}/entries/${id}/split`,{method:"POST"});
+    await load();
+  }catch(e){
+    console.error(e);
+    alert("Split impossible");
+    await load();
+  }
+}
 
 // ── Modals ──
 function durBar(v){return((v-MIND)/(MAXD-MIND)*100)+"%"}
@@ -918,9 +1016,10 @@ function modalHTML(title,fields,submitLabel,onSubmitFn){
     <button class="btn-p" onclick="${onSubmitFn}">${submitLabel}</button></div></div></div>`
 }
 
-function dossierFields(numero_of,client,ref_produit,laize,date_livraison,commentaire,fl,fh,dur,statut,showStatut){
+function dossierFields(numero_of,dos_rvgi,client,ref_produit,laize,date_livraison,commentaire,fl,fh,dur,statut,showStatut){
   return`
     <div class="fd"><label>Numéro d'OF</label><input id="f-of" value="${numero_of}" placeholder="961/0001"></div>
+    <div class="fd"><label>Dos. RVGI</label><input id="f-rvgi" value="${dos_rvgi}" placeholder="N° dossier production"></div>
     <div class="fd"><label>Client</label><input id="f-cli" value="${client}" placeholder="Nom du client"></div>
     <div class="fd"><label>Réf produit</label><input id="f-rp" value="${ref_produit}" placeholder="REF-PROD"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
@@ -946,6 +1045,7 @@ function dossierFields(numero_of,client,ref_produit,laize,date_livraison,comment
 function getFormData(withStatut){
   const d={
     numero_of:(document.getElementById("f-of").value||"").trim(),
+    dos_rvgi:(document.getElementById("f-rvgi").value||"").trim(),
     client:document.getElementById("f-cli").value||"",
     ref_produit:document.getElementById("f-rp").value||"",
     format_l:parseFloat(document.getElementById("f-fl").value)||null,
@@ -963,7 +1063,7 @@ function openAdd(){
   if(!CAN_EDIT) return;
   document.getElementById("mroot").innerHTML=modalHTML(
     "Ajouter un dossier",
-    dossierFields("","","","","","","","",8,"attente",false),
+    dossierFields("","","","","","","","","",8,"attente",false),
     "Ajouter","submitAdd()"
   );
 }
@@ -979,7 +1079,7 @@ function openEdit(id){
   const e=S.entries.find(x=>x.id===id);if(!e)return;
   document.getElementById("mroot").innerHTML=modalHTML(
     `Modifier — ${(e.numero_of||e.reference)||''}`,
-    dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.format_l||"",e.format_h||"",e.duree_heures,e.statut,true),
+    dossierFields(e.numero_of||e.reference||"",e.dos_rvgi||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.format_l||"",e.format_h||"",e.duree_heures,e.statut,true),
     "Enregistrer",`submitEdit(${id})`
   );
 }
@@ -1004,7 +1104,7 @@ function openInsert(afterId){
   }catch(e){}
   document.getElementById("mroot").innerHTML=modalHTML(
     "Insérer un dossier après",
-    dossierFields("","","","","","","","",8,"attente",false),
+    dossierFields("","","","","","","","","",8,"attente",false),
     "Insérer",`submitInsert(${afterId})`
   );
 }

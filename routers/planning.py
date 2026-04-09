@@ -211,6 +211,9 @@ def _compute_timeline_slots(
 
     sat_hours_t = _parse_horaires_val(m.get("horaires_samedi"), "6,18")
 
+    def week_key(dt: datetime) -> str:
+        return f"{dt.year}-W{dt.isocalendar()[1]:02d}"
+
     def get_hours_for_date(dt):
         dkey = dt.strftime("%Y-%m-%d")
         wd = dt.weekday()
@@ -224,7 +227,14 @@ def _compute_timeline_slots(
                 return None
             return base_hours[wd]
         if wd == 5:
-            if dw is None or int(dw) == 0:
+            # Samedi:
+            # - planning_day_worked force 0/1 sur une date donnée
+            # - sinon, utiliser le réglage hebdo planning_config.samedi_travaille (base fonctionnelle)
+            if dw is None:
+                if int(configs.get(week_key(dt), 0) or 0) == 0:
+                    return None
+                return sat_hours_t
+            if int(dw) == 0:
                 return None
             return sat_hours_t
         return None
@@ -418,6 +428,50 @@ async def set_machine_horaires(machine_id: int, request: Request):
     return {"success": True, "field": col, "value": val}
 
 
+@router.put("/machines/{machine_id}/horaires-bulk")
+async def set_machine_horaires_bulk(machine_id: int, request: Request):
+    """Modifier plusieurs horaires_* en une fois.
+
+    Body: { horaires_lundi: "HH:MM,HH:MM", ..., horaires_samedi: "HH:MM,HH:MM" }
+    """
+    require_admin(request)
+    body = await request.json()
+    if not isinstance(body, dict) or not body:
+        raise HTTPException(400, "Body invalide")
+
+    allowed = set(_HORAIRES_COL.values())
+    updates: Dict[str, str] = {}
+    for k, v in body.items():
+        if k not in allowed:
+            continue
+        raw = (v or "").strip()
+        if not raw:
+            continue
+        # Valider/normaliser: "HH:MM,HH:MM"
+        try:
+            start, end = raw.split(",", 1)
+            val = _normalize_horaires_pair(start, end)
+            hs, he = _parse_horaires_val(val, "0,1")
+        except Exception:
+            raise HTTPException(400, f"Horaire invalide: {k}")
+        if he <= hs:
+            raise HTTPException(400, f"Horaire invalide (fin<=début): {k}")
+        updates[k] = val
+
+    if not updates:
+        raise HTTPException(400, "Aucun champ horaires_* à mettre à jour")
+
+    with get_db() as conn:
+        ex = conn.execute("SELECT id FROM machines WHERE id=?", (machine_id,)).fetchone()
+        if not ex:
+            raise HTTPException(404, "Machine non trouvée")
+        sets = ", ".join([f"{col}=?" for col in updates.keys()])
+        conn.execute(f"UPDATE machines SET {sets} WHERE id=?", (*updates.values(), machine_id))
+        _invalidate_attente_plans(conn, machine_id)
+        conn.commit()
+    return {"success": True, "updated": updates}
+
+
 # ═══════════════════════════════════════════════════════════════
 # PLANNING ENTRIES — CRUD
 # ═══════════════════════════════════════════════════════════════
@@ -469,8 +523,8 @@ async def add_entry(machine_id: int, request: Request):
         raise HTTPException(400, "Référence requise")
 
     duree = body.get("duree_heures", 8)
-    if duree < 2 or duree > 30:
-        raise HTTPException(400, "Durée entre 2 et 30 heures")
+    if duree < 2 or duree > 720:
+        raise HTTPException(400, "Durée entre 2 et 720 heures")
 
     now = datetime.now().isoformat()
     with get_db() as conn:
@@ -498,8 +552,8 @@ async def add_entry(machine_id: int, request: Request):
             INSERT INTO planning_entries
                 (machine_id, position, reference, client, description, format_l, format_h,
                  duree_heures, statut, notes, created_at, updated_at,
-                 numero_of, ref_produit, laize, date_livraison, commentaire)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 dos_rvgi, numero_of, ref_produit, laize, date_livraison, commentaire)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             machine_id, position,
             reference,
@@ -511,6 +565,7 @@ async def add_entry(machine_id: int, request: Request):
             body.get("statut", "attente"),
             body.get("notes", ""),
             now, now,
+            (body.get("dos_rvgi") or "").strip() or None,
             body.get("numero_of"),
             body.get("ref_produit"),
             body.get("laize"),
@@ -531,8 +586,8 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
     now = datetime.now().isoformat()
 
     duree = body.get("duree_heures")
-    if duree is not None and (duree < 2 or duree > 30):
-        raise HTTPException(400, "Durée entre 2 et 30 heures")
+    if duree is not None and (duree < 2 or duree > 720):
+        raise HTTPException(400, "Durée entre 2 et 720 heures")
 
     with get_db() as conn:
         ex = conn.execute(
@@ -585,7 +640,7 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
             UPDATE planning_entries
             SET reference=?, client=?, description=?, format_l=?, format_h=?,
                 duree_heures=?, statut=?, notes=?, updated_at=?,
-                numero_of=?, ref_produit=?, laize=?, date_livraison=?, commentaire=?,
+                dos_rvgi=?, numero_of=?, ref_produit=?, laize=?, date_livraison=?, commentaire=?,
                 planned_start=?, planned_end=?
             WHERE id=?
         """, (
@@ -598,6 +653,7 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
             new_statut,
             body.get("notes", ex["notes"]),
             now,
+            (body.get("dos_rvgi") or "").strip() or None,
             body.get("numero_of", ex["numero_of"] if "numero_of" in ex.keys() else None),
             body.get("ref_produit", ex["ref_produit"] if "ref_produit" in ex.keys() else None),
             body.get("laize", ex["laize"] if "laize" in ex.keys() else None),
@@ -609,6 +665,103 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
         ))
         conn.commit()
     return {"success": True}
+
+
+@router.post("/machines/{machine_id}/entries/{entry_id}/split")
+def split_entry(machine_id: int, entry_id: int, request: Request):
+    """Duplique un dossier en 2 dossiers consécutifs (mêmes infos), durée /2.
+
+    Si la durée n'est pas divisible par 2 :
+    - 1er dossier = arrondi supérieur
+    - 2e dossier  = arrondi inférieur
+    """
+    require_admin(request)
+    now = datetime.now().isoformat()
+    with get_db() as conn:
+        ex = conn.execute(
+            "SELECT * FROM planning_entries WHERE id=? AND machine_id=?",
+            (entry_id, machine_id),
+        ).fetchone()
+        if not ex:
+            raise HTTPException(404, "Entrée non trouvée")
+        exd = dict(ex)
+        statut_auto = compute_statut(exd)
+        if statut_auto in ("en_cours", "termine"):
+            raise HTTPException(400, "Ce dossier est verrouillé — statut en cours ou terminé")
+
+        # Durées (heures) : on split sur un entier (UI) → mais on garde robuste
+        try:
+            d = float(exd.get("duree_heures") or 0.0)
+        except Exception:
+            d = 0.0
+        if d < 2 or d > 720:
+            raise HTTPException(400, "Durée invalide (2..720h)")
+
+        # Règle de split : ceil / floor, somme = d si d entier
+        import math
+
+        d1 = float(math.ceil(d / 2.0))
+        d2 = float(math.floor(d / 2.0))
+        if d1 < 2:
+            d1 = 2.0
+        if d2 < 2:
+            # Si d=3 → d2=1 => on force 2 et on réduit d1 pour garder total
+            d2 = 2.0
+            d1 = max(2.0, d - d2)
+
+        # Insérer un duplicat juste après (position+1)
+        pos = int(exd.get("position") or 1)
+        new_position = pos + 1
+        conn.execute(
+            "UPDATE planning_entries SET position = position + 1 WHERE machine_id=? AND position >= ?",
+            (machine_id, new_position),
+        )
+
+        # Mettre à jour la durée du premier (entry_id)
+        conn.execute(
+            """UPDATE planning_entries
+               SET duree_heures=?, updated_at=?, planned_start=NULL, planned_end=NULL
+               WHERE id=? AND machine_id=?""",
+            (d1, now, entry_id, machine_id),
+        )
+
+        # Dupliquer la ligne
+        cols = [
+            "reference", "client", "description", "format_l", "format_h",
+            "dos_rvgi", "numero_of", "ref_produit", "laize", "date_livraison", "commentaire",
+            "notes",
+        ]
+        payload = {c: exd.get(c) for c in cols}
+        conn.execute(
+            """INSERT INTO planning_entries
+               (machine_id, position, reference, client, description, format_l, format_h,
+                dos_rvgi, duree_heures, statut, notes, created_at, updated_at,
+                numero_of, ref_produit, laize, date_livraison, commentaire)
+               VALUES (?,?,?,?,?,?,?,?,?,'attente',?,?,?,?,?,?,?,?)""",
+            (
+                machine_id,
+                new_position,
+                payload.get("reference") or "",
+                payload.get("client") or "",
+                payload.get("description") or "",
+                payload.get("format_l"),
+                payload.get("format_h"),
+                payload.get("dos_rvgi"),
+                d2,
+                payload.get("notes") or "",
+                now,
+                now,
+                payload.get("numero_of"),
+                payload.get("ref_produit"),
+                payload.get("laize"),
+                payload.get("date_livraison"),
+                payload.get("commentaire"),
+            ),
+        )
+
+        _invalidate_attente_plans(conn, machine_id)
+        conn.commit()
+    return {"success": True, "split": [d1, d2]}
 
 
 @router.delete("/machines/{machine_id}/entries/{entry_id}")
@@ -711,8 +864,8 @@ async def insert_after(machine_id: int, after_entry_id: int, request: Request):
         raise HTTPException(400, "Référence requise")
 
     duree = body.get("duree_heures", 8)
-    if duree < 2 or duree > 30:
-        raise HTTPException(400, "Durée entre 2 et 30 heures")
+    if duree < 2 or duree > 720:
+        raise HTTPException(400, "Durée entre 2 et 720 heures")
 
     now = datetime.now().isoformat()
     with get_db() as conn:
@@ -724,8 +877,8 @@ async def insert_after(machine_id: int, after_entry_id: int, request: Request):
             INSERT INTO planning_entries
                 (machine_id, position, reference, client, description, format_l, format_h,
                  duree_heures, statut, notes, created_at, updated_at,
-                 numero_of, ref_produit, laize, date_livraison, commentaire)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'attente', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 dos_rvgi, numero_of, ref_produit, laize, date_livraison, commentaire)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'attente', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             machine_id, new_position,
             reference,
@@ -736,6 +889,7 @@ async def insert_after(machine_id: int, after_entry_id: int, request: Request):
             duree,
             body.get("notes", ""),
             now, now,
+            (body.get("dos_rvgi") or "").strip() or None,
             body.get("numero_of"),
             body.get("ref_produit"),
             body.get("laize"),
@@ -767,15 +921,94 @@ def list_holidays(machine_id: int, request: Request, start: str, end: str):
 
 @router.get("/machines/{machine_id}/day-work")
 def list_day_work(machine_id: int, request: Request, start: str, end: str):
-    """Dates travaillées (is_worked) entre start et end. Samedi : is_worked=1 = travaillé."""
+    """Dates travaillées (is_worked) entre start et end.
+
+    - Lun–ven : seules les exceptions sont stockées (0 = forcé non travaillé). Sans ligne => travaillé selon horaires machine + fériés.
+    - Samedi  : valeur effective = exception planning_day_worked si présente, sinon planning_config.samedi_travaille de la semaine.
+    """
     require_planning_view(request)
+    try:
+        dt_start = datetime.strptime(start, "%Y-%m-%d")
+        dt_end = datetime.strptime(end, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(400, "start/end invalides (YYYY-MM-DD)")
+    if dt_end < dt_start:
+        raise HTTPException(400, "end < start")
+
     with get_db() as conn:
         rows = conn.execute(
             """SELECT date, is_worked FROM planning_day_worked
                WHERE machine_id=? AND date>=? AND date<=? ORDER BY date""",
             (machine_id, start, end),
         ).fetchall()
-    return [dict(r) for r in rows]
+        explicit = {str(r["date"]): int(r["is_worked"] or 0) for r in rows}
+
+        # Compléter les samedis sans override avec planning_config.samedi_travaille.
+        # (La UI planning se base sur ce endpoint pour cocher/décocher le samedi.)
+        saturdays: list[str] = []
+        cur = dt_start
+        while cur <= dt_end:
+            if cur.weekday() == 5:
+                dkey = cur.strftime("%Y-%m-%d")
+                if dkey not in explicit:
+                    saturdays.append(dkey)
+            cur += timedelta(days=1)
+
+        if saturdays:
+            week_keys = sorted({f"{datetime.strptime(d, '%Y-%m-%d').year}-W{datetime.strptime(d, '%Y-%m-%d').isocalendar()[1]:02d}" for d in saturdays})
+            cfg_rows = conn.execute(
+                f"""SELECT semaine, samedi_travaille
+                    FROM planning_config
+                    WHERE machine_id=? AND semaine IN ({",".join("?" * len(week_keys))})""",
+                (machine_id, *week_keys),
+            ).fetchall()
+            cfg = {str(r["semaine"]): int(r["samedi_travaille"] or 0) for r in cfg_rows}
+            for d in saturdays:
+                dt = datetime.strptime(d, "%Y-%m-%d")
+                wk = f"{dt.year}-W{dt.isocalendar()[1]:02d}"
+                explicit[d] = 1 if int(cfg.get(wk, 0) or 0) == 1 else 0
+
+    return [{"date": d, "is_worked": w} for d, w in sorted(explicit.items())]
+
+
+@router.post("/machines/{machine_id}/reset-default-days")
+def reset_default_days(machine_id: int, request: Request):
+    """Réinitialise les jours off / overrides pour repartir d'une base fonctionnelle.
+
+    Spécialement destiné à Cohésio 2 : supprime planning_holidays et planning_day_worked,
+    afin que le planning reparte sur:
+    - horaires_* de la machine pour lun–ven
+    - planning_config.samedi_travaille pour les samedis
+    """
+    require_admin(request)
+    with get_db() as conn:
+        m = conn.execute("SELECT id, nom, code FROM machines WHERE id=?", (machine_id,)).fetchone()
+        if not m:
+            raise HTTPException(404, "Machine non trouvée")
+        nom = str(m["nom"] or "")
+        code = str(m["code"] or "")
+        if code != "C2" and nom != "Cohésio 2":
+            raise HTTPException(400, "Cette réinitialisation est réservée à Cohésio 2")
+
+        # Repartir d'une base saine:
+        # - supprimer les overrides jours off / samedis
+        # - remettre les horaires_* sur les valeurs "génériques" de schéma
+        #   (la UI Planning appliquera ensuite les défauts Cohésio 2 paire/impair en fallback)
+        conn.execute("DELETE FROM planning_holidays WHERE machine_id=?", (machine_id,))
+        conn.execute("DELETE FROM planning_day_worked WHERE machine_id=?", (machine_id,))
+        conn.execute(
+            """UPDATE machines
+               SET horaires_lundi=?,
+                   horaires_mardi=?,
+                   horaires_mercredi=?,
+                   horaires_jeudi=?,
+                   horaires_vendredi=?
+               WHERE id=?""",
+            ("5,21", "5,21", "5,21", "5,21", "6,20", machine_id),
+        )
+        _invalidate_attente_plans(conn, machine_id)
+        conn.commit()
+    return {"success": True}
 
 
 @router.put("/machines/{machine_id}/day-work")

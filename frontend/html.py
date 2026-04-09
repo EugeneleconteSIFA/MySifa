@@ -5,9 +5,13 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="__META_DESCRIPTION__">
+<link rel="icon" href="/static/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16.png">
 <link rel="icon" type="image/png" sizes="512x512" href="/static/mys_icon_512.png">
 <link rel="apple-touch-icon" href="/static/mys_icon_180.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
+<link rel="icon" type="image/png" sizes="1024x1024" href="/static/mys_icon_1024.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="MySifa">
 <meta name="theme-color" content="#0a0e17">
@@ -130,7 +134,15 @@ h1{font-size:22px;font-weight:700;margin-bottom:4px}
 .filter-group label{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
 .filters select,.filters input[type=date]{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;font-family:inherit;min-width:140px}
 .filters select:focus,.filters input:focus{border-color:var(--accent);outline:none}
-.filters button{background:var(--accent);color:var(--bg);border:none;border-radius:8px;padding:9px 16px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;align-self:flex-end}
+.filters button{
+  background:var(--accent);color:var(--bg);
+  border:none;border-radius:8px;
+  padding:9px 16px;font-size:12px;font-weight:600;
+  cursor:pointer;font-family:inherit;align-self:flex-end;
+  transition:filter .15s,box-shadow .15s,transform .05s;
+}
+.filters button:hover{filter:brightness(1.05);box-shadow:0 0 0 4px rgba(34,211,238,.18)}
+.filters button:active{transform:translateY(1px)}
 .drop-zone{border:2px dashed var(--border);border-radius:16px;padding:48px 24px;text-align:center;cursor:pointer;background:var(--card);transition:all .2s;margin-bottom:20px}
 .drop-zone:hover,.drop-zone.drag{border-color:var(--accent);background:var(--accent-bg)}
 .dz-icon{font-size:36px;opacity:.4;margin-bottom:12px}
@@ -290,11 +302,45 @@ select.form-sel:focus{border-color:var(--accent)}
 .portal-logo .brand{font-size:42px;font-weight:800;letter-spacing:-2px}
 .portal-logo .brand span{color:var(--accent)}
 .portal-logo .tagline{font-size:14px;color:var(--muted);margin-top:8px;letter-spacing:1px}
+.portal-search{width:100%;max-width:720px}
+.portal-search form{display:flex;gap:10px;align-items:center}
+.portal-search input{
+  flex:1;
+  background:var(--card);
+  border:1.5px solid var(--border);
+  border-radius:14px;
+  padding:14px 16px;
+  color:var(--text);
+  font-size:14px;
+  font-family:inherit;
+  outline:none;
+  transition:border-color .15s, box-shadow .15s;
+}
+.portal-search input:focus{border-color:var(--accent);box-shadow:0 0 0 4px rgba(34,211,238,.14)}
+.portal-search .portal-search-submit{position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden}
+.portal-search button{
+  background:var(--accent);
+  color:var(--bg);
+  border:none;
+  border-radius:14px;
+  padding:14px 16px;
+  font-size:13px;
+  font-weight:800;
+  cursor:pointer;
+  font-family:inherit;
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  transition:filter .15s, box-shadow .15s, transform .05s;
+}
+.portal-search button:hover{filter:brightness(1.05);box-shadow:0 0 0 4px rgba(34,211,238,.18)}
+.portal-search button:active{transform:translateY(1px)}
+.portal-search-hint{font-size:11px;color:var(--muted);margin-top:8px;text-align:left}
 .portal-apps{display:flex;gap:32px;flex-wrap:wrap;justify-content:center}
 .portal-app{display:flex;flex-direction:column;align-items:center;gap:16px;
   background:var(--card);border:1px solid var(--border);border-radius:24px;
   padding:40px 48px;cursor:pointer;transition:all .2s;text-decoration:none;
-  min-width:200px}
+  min-width:200px;min-height:218px;justify-content:center}
 .portal-app:hover{border-color:var(--accent);background:var(--accent-bg);
   transform:translateY(-4px);box-shadow:0 12px 40px rgba(34,211,238,.15)}
 .portal-app--busy{pointer-events:none;opacity:.8;position:relative;transform:none!important;box-shadow:none!important}
@@ -304,10 +350,12 @@ select.form-sel:focus{border-color:var(--accent)}
 body.light .portal-app--busy::after{background:rgba(255,255,255,.88);color:var(--accent)}
 .portal-app-icon{font-size:48px;line-height:1}
 .portal-app-name{font-size:20px;font-weight:800;color:var(--text)}
-.portal-app-desc{font-size:12px;color:var(--muted);text-align:center}
+.portal-app-desc{font-size:12px;color:var(--muted);text-align:center;max-width:240px;line-height:1.35;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:calc(1.35em * 2)}
 .portal-user{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px}
 .portal-logout{background:none;border:none;color:var(--muted);cursor:pointer;
-  font-size:12px;font-family:inherit;text-decoration:underline}
+  font-size:12px;font-family:inherit;text-decoration:underline;
+  display:inline-flex;align-items:center;gap:6px;line-height:1;padding:0}
 .portal-logout:hover{color:var(--danger)}
 
 /* ── MyStock ────────────────────────────────────────────────────── */
@@ -565,6 +613,7 @@ function icon(name,size=16){
     'alert-circle': '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
     'wrench': '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
     'package': '<line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
+    'search': '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
     'sun': '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>',
     'moon': '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
     'log-out': '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
@@ -588,6 +637,7 @@ function icon(name,size=16){
     'rotate-cw': '<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.49-4.5"/>',
     'lock': '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
     'box': '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>',
+    'calculator': '<rect x="6" y="2.5" width="12" height="19" rx="2"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="9" y1="11" x2="10" y2="11"/><line x1="12" y1="11" x2="13" y2="11"/><line x1="15" y1="11" x2="16" y2="11"/><line x1="9" y1="14" x2="10" y2="14"/><line x1="12" y1="14" x2="13" y2="14"/><line x1="15" y1="14" x2="16" y2="14"/><line x1="9" y1="17" x2="10" y2="17"/><line x1="12" y1="17" x2="13" y2="17"/><line x1="15" y1="17" x2="16" y2="17"/>',
   };
   return `<svg ${a} aria-hidden="true" style="display:inline-block;vertical-align:middle;flex-shrink:0">${p[name]||p['alert-circle']}</svg>`;
 }
@@ -605,8 +655,8 @@ const fMin=m=>{if(!m&&m!==0)return'-';const hh=Math.floor(m/60),mm=Math.round(m%
 const isAdmin=u=>u&&(u.role==='direction'||u.role==='administration');
 const isFab=u=>u&&u.role==='fabrication';
 
-const ROLE_LABELS={direction:'Direction',administration:'Administration',fabrication:'Fabrication',logistique:'Logistique'};
-const ROLE_BADGE={direction:'badge-direction',administration:'badge-administration',fabrication:'badge-fabrication',logistique:'badge-fabrication'};
+const ROLE_LABELS={direction:'Direction',administration:'Administration',fabrication:'Fabrication',logistique:'Logistique',comptabilite:'Comptabilité'};
+const ROLE_BADGE={direction:'badge-direction',administration:'badge-administration',fabrication:'badge-fabrication',logistique:'badge-fabrication',comptabilite:'badge-administration'};
 
 // ── Auth ────────────────────────────────────────────────────────
 async function checkAuth(){
@@ -773,7 +823,10 @@ async function doMouvement(body){
 
 /** Inventaire ciblé depuis le tableau de bord (une case = emplacement, une réf. = produit). */
 async function openInventaireCibleModal(cible){
-  document.querySelector('.stock-inv-cible-modal')?.remove();
+  try{
+    const prev = document.querySelector('.stock-inv-cible-modal');
+    if(prev) prev.remove();
+  }catch(e){}
   const wrap=document.createElement('div');
   wrap.className='add-row-modal stock-inv-cible-modal';
   wrap.addEventListener('click',e=>{if(e.target===wrap)wrap.remove();});
@@ -1477,7 +1530,10 @@ function renderStockSearchBar() {
       const clearSug = () => {
         stockSearchState.suggestionProduits = [];
         stockSearchState.suggestionEmplacements = [];
-        document.getElementById('stock-suggestions')?.remove();
+        try{
+          const s = document.getElementById('stock-suggestions');
+          if(s) s.remove();
+        }catch(e){}
       };
       if (eList.length) {
         const sec = document.createElement('div');
@@ -1543,7 +1599,10 @@ function renderStockSearchBar() {
     if (e.key === 'Enter') {
       stockSearchState.suggestionProduits = [];
       stockSearchState.suggestionEmplacements = [];
-      document.getElementById('stock-suggestions')?.remove();
+      try{
+        const s = document.getElementById('stock-suggestions');
+        if(s) s.remove();
+      }catch(e){}
       const q = String(input.value || '').trim();
       const qu = q.toUpperCase();
       if (q) {
@@ -1563,7 +1622,10 @@ function renderStockSearchBar() {
     if (e.key === 'Escape') {
       stockSearchState.suggestionProduits = [];
       stockSearchState.suggestionEmplacements = [];
-      document.getElementById('stock-suggestions')?.remove();
+      try{
+        const s = document.getElementById('stock-suggestions');
+        if(s) s.remove();
+      }catch(e){}
     }
   });
   wrap.appendChild(input);
@@ -1598,8 +1660,10 @@ function initStockSearchBar() {
 }
 
 function renderPortal(){
-  const isStock = S.user?.role && ['direction','administration','logistique'].includes(S.user.role);
-  const isProd  = S.user?.role && ['direction','administration','fabrication'].includes(S.user.role);
+  const urole = S.user && S.user.role ? S.user.role : '';
+  const isStock = !!(urole && ['direction','administration','logistique'].includes(urole));
+  const isProd  = !!(urole && ['direction','administration','fabrication'].includes(urole));
+  const isCompta = !!(urole && ['direction','administration','comptabilite'].includes(urole));
   const isLight=document.body.classList.contains('light');
 
   const apps=[];
@@ -1611,9 +1675,9 @@ function renderPortal(){
         window.location.href='/prod';
       }
     },
-      h('div',{className:'portal-app-icon'},iconEl('bar-chart-2',36)),
+      h('div',{className:'portal-app-icon'},iconEl('wrench',36)),
       h('div',{className:'portal-app-name'},'MyProd'),
-      h('div',{className:'portal-app-desc'},'Suivi de production — Historique et saisies')
+      h('div',{className:'portal-app-desc'},'Suivi de production & Planning')
     ));
   }
 
@@ -1626,18 +1690,60 @@ function renderPortal(){
     },
       h('div',{className:'portal-app-icon'},iconEl('package',36)),
       h('div',{className:'portal-app-name'},'MyStock'),
-      h('div',{className:'portal-app-desc'},'Gestion des stocks — Emplacements et références')
+      h('div',{className:'portal-app-desc'},'Gestion des stocks produits')
     ));
   }
+
+  if(isCompta){
+    apps.push(h('div',{
+      className:'portal-app'+(S.portalLoading==='compta'?' portal-app--busy':''),
+      onClick:async()=>{
+        window.location.href='/compta';
+      }
+    },
+      h('div',{className:'portal-app-icon'},iconEl('calculator',36)),
+      h('div',{className:'portal-app-name'},'MyCompta'),
+      h('div',{className:'portal-app-desc'},'Comptabilité — accès réservé')
+    ));
+  }
+
+  function openGoogle(q){
+    const query = String(q||'').trim();
+    if(!query) return;
+    const url = 'https://www.google.com/search?q=' + encodeURIComponent(query);
+    // Ouvre un nouvel onglet (Chrome)
+    window.open(url, '_blank', 'noopener');
+  }
+
+  const gForm = h('form',{onSubmit:(e)=>{
+    e.preventDefault();
+    const inp = e.target && e.target.querySelector && e.target.querySelector('input');
+    openGoogle(inp ? inp.value : '');
+  }});
+  const gInp = h('input',{type:'search',placeholder:'Rechercher sur Google…',autocomplete:'off',spellcheck:'false'});
+  gInp.addEventListener('keydown',(e)=>{
+    if(e.key==='Enter'){
+      e.preventDefault();
+      openGoogle(gInp.value);
+    }
+  });
+  gForm.appendChild(gInp);
+  // Bouton invisible pour conserver le submit natif du form (Entrée)
+  gForm.appendChild(h('input',{type:'submit',className:'portal-search-submit',value:'Rechercher'}));
+  const gBox = h('div',{className:'portal-search'},
+    gForm,
+    h('div',{className:'portal-search-hint'},'Astuce : tape puis Entrée pour ouvrir Google.')
+  );
 
   return h('div',{className:'portal-page'},
     h('div',{className:'portal-logo'},
       h('div',{className:'brand'},'My',h('span',null,'Sifa')),
-      h('div',{className:'tagline'},'Choisissez votre application')
+      h('div',{className:'tagline'},'Portail interne — Production, stocks et outils métier')
     ),
+    gBox,
     h('div',{className:'portal-apps'},...apps),
     h('div',{className:'portal-user'},
-      h('span',{style:{display:'inline-flex',alignItems:'center',gap:'8px'}},iconEl('user',14),document.createTextNode(' '+(S.user?.nom||''))),
+      h('span',{style:{display:'inline-flex',alignItems:'center',gap:'8px'}},iconEl('user',14),document.createTextNode(' '+((S.user&&S.user.nom)?S.user.nom:''))),
       h('button',{className:'portal-logout',onClick:()=>{document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');render();}},
         h('span',{className:'theme-ico'},iconEl(isLight?'sun':'moon',16)),
         h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')
@@ -1676,17 +1782,25 @@ function renderStock(){
         h('span',{className:'wm'},'My',h('span',null,'Sifa'))
       ),
       h('div',{className:'user-chip'},
-        h('div',{className:'uc-name'},S.user?.nom||''),
-        h('div',{className:'uc-role'},ROLE_LABELS[S.user?.role]||S.user?.role||'')
+        h('div',{className:'uc-name'},(S.user&&S.user.nom)?S.user.nom:''),
+        h('div',{className:'uc-role'},(S.user&&S.user.role)?(ROLE_LABELS[S.user.role]||S.user.role):'')
       ),
       (() => {
         const b=h('button',{
           className:'support-btn',
           title:'Contacter le support (email)',
-          onClick:()=>window.MySifaSupport?.open?.({user:S.user,page:'MyStock',notify:(m,t)=>toast(m,t),api})
+          onClick:()=>{
+            try{
+              if(window.MySifaSupport && typeof window.MySifaSupport.open === 'function'){
+                window.MySifaSupport.open({user:S.user,page:'MyStock',notify:(m,t)=>toast(m,t),api});
+              }
+            }catch(e){}
+          }
         });
         const ico=h('span',{className:'support-ico'});
-        ico.innerHTML=window.MySifaSupport?.iconSvg?.()||'';
+        try{
+          ico.innerHTML=(window.MySifaSupport && typeof window.MySifaSupport.iconSvg==='function')?window.MySifaSupport.iconSvg():'';
+        }catch(e){ ico.innerHTML=''; }
         b.appendChild(ico);
         b.appendChild(h('span',null,'Contacter le support'));
         return b;
@@ -1703,9 +1817,9 @@ function renderStock(){
   let content;
 
   if(S.stockView==='grille'){
-    const grille=g?.grille||[];
-    const stats=g?.stats||{};
-    let mvts=g?.derniers_mouvements||[];
+    const grille=(g&&g.grille)?g.grille:[];
+    const stats=(g&&g.stats)?g.stats:{};
+    let mvts=(g&&g.derniers_mouvements)?g.derniers_mouvements:[];
     const filt=(S.stockGrilleFilter||'').trim().toUpperCase();
 
     const byEmpl={};
@@ -1866,7 +1980,7 @@ function renderStock(){
     const liste=h('div',{className:'card',style:{maxHeight:'500px',overflowY:'auto'}},
       produits.length===0?h('div',{className:'card-empty'},'Aucun produit'):
       h('div',null,...produits.map(p=>h('div',{
-        className:'produit-row'+(sel?.produit?.id===p.id?' active':''),
+        className:'produit-row'+(((sel&&sel.produit&&sel.produit.id)===p.id)?' active':''),
         onClick:async()=>await loadStockProduit(p.id)
       },
         h('div',null,
@@ -1994,7 +2108,7 @@ function renderStock(){
       h('div',{className:'card-header'},h('h3',null,'Raccourcis emplacements')),
       h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',padding:'16px'}},
         ...EMPL_GRID.map(e=>h('button',{
-          className:'mvt-btn'+(sel?.emplacement===e?' active-entree':''),
+          className:'mvt-btn'+(((sel&&sel.emplacement)===e)?' active-entree':''),
           onClick:async()=>await loadStockEmplacement(e)
         },e))
       )
@@ -2105,6 +2219,57 @@ function renderStock(){
   );
 }
 
+// ── MyCompta (placeholder v0) ─────────────────────────────────────
+function renderCompta(){
+  const isLight=document.body.classList.contains('light');
+  const sidebar=h('nav',{className:'sidebar'},
+    h('div',{className:'logo'},
+      h('div',{className:'logo-brand'},'My',h('span',null,'Compta')),
+      h('div',{className:'logo-sub'},'by SIFA')
+    ),
+    h('button',{className:'nav-btn back-mysifa',onClick:()=>{window.location.href='/' }},
+      '← Retour ',
+      h('span',{className:'wm'},'My',h('span',null,'Sifa'))
+    ),
+    h('div',{className:'sidebar-bottom'},
+      h('div',{className:'user-chip'},
+        h('div',{className:'uc-name'},(S.user&&S.user.nom)?S.user.nom:''),
+        h('div',{className:'uc-role'},(S.user&&S.user.role)?(ROLE_LABELS[S.user.role]||S.user.role):'')
+      ),
+      h('button',{className:'theme-btn',onClick:()=>{document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');render();}},
+        h('span',{className:'theme-ico'},iconEl(isLight?'sun':'moon',16)),
+        h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')
+      ),
+      h('button',{className:'logout-btn',onClick:doLogout},iconEl('log-out',14),' Déconnexion')
+    )
+  );
+
+  const topbar=h('div',{className:'mobile-topbar'},
+    h('button',{type:'button',className:'mobile-menu-btn',onClick:toggleSidebar,'aria-label':'Menu'},iconEl('menu',20)),
+    h('div',null,
+      h('div',{className:'mobile-topbar-title'},'MyCompta'),
+      h('div',{className:'mobile-topbar-sub'},'Comptabilité')
+    )
+  );
+
+  const body=h('div',{className:'app'},
+    sidebar,
+    h('main',{className:'main'},
+      h('div',{className:'container'},
+        topbar,
+        h('h1',null,'MyCompta'),
+        h('div',{className:'subtitle'},'Comptabilité — application en cours de construction'),
+        h('div',{className:'card-empty'},'Aucun onglet pour le moment. La structure est prête.')
+      )
+    )
+  );
+
+  return h('div',null,
+    S.sidebarOpen?h('div',{className:'sidebar-overlay',onClick:closeSidebar}):null,
+    body
+  );
+}
+
 // ── Loaders ─────────────────────────────────────────────────────
 async function loadFilters(){try{S.filters=await api('/api/filters')||{};S.OPS_CONFIG=await api('/api/config/operations')||{};}catch{}}
 function buildParams(){
@@ -2165,7 +2330,13 @@ async function updStatut(id,s){try{await api('/api/dossiers/'+id,{method:'PUT',h
 async function createUser(u){try{await api('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(u)});toast('Utilisateur créé');loadUsers();}catch(e){toast(e.message,'error');}}
 async function toggleUser(id,actif){try{await api('/api/users/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({actif:actif?1:0})});loadUsers();}catch(e){toast(e.message,'error');}}
 
-function applyF(){loadHist();loadProd();if(S.page==='saisies')loadSaisies();render();}
+function applyF(){
+  loadHist();
+  loadProd();
+  // Saisies: page dédiée OU sous-onglet Production → Saisies
+  if(S.page==='saisies' || (S.page==='production' && (S.subPage||'kpis')==='saisies')) loadSaisies();
+  render();
+}
 
 // ── Login ───────────────────────────────────────────────────────
 function renderLogin(){
@@ -2202,7 +2373,7 @@ function renderLogin(){
 function renderSidebar(){
   const admin=isAdmin(S.user);
   const items=[
-    {key:'production',label:'Production',icon:'bar-chart-2'},
+    {key:'production',label:'Production',icon:'wrench'},
     ...(admin?[
       {key:'_planning',label:'Planning',icon:'calendar'},
       {key:'suivi',label:'Rentabilité',icon:'trending-up'},
@@ -2233,18 +2404,26 @@ function renderSidebar(){
         title:'Modifier mon profil',
         onClick:()=>{set({page:'profil'});}
       },
-        h('div',{className:'uc-name'},S.user?.nom||''),
-        h('div',{className:'uc-role'},ROLE_LABELS[S.user?.role]||S.user?.role||''),
+        h('div',{className:'uc-name'},(S.user&&S.user.nom)?S.user.nom:''),
+        h('div',{className:'uc-role'},(S.user&&S.user.role)?(ROLE_LABELS[S.user.role]||S.user.role):''),
         h('div',{style:{fontSize:'10px',color:'var(--accent)',marginTop:'3px',display:'flex',alignItems:'center',gap:'4px'}},iconEl('edit',10),' Mon profil')
       ),
       (() => {
         const b=h('button',{
           className:'support-btn',
           title:'Contacter le support (email)',
-          onClick:()=>window.MySifaSupport?.open?.({user:S.user,page:'MyProd',notify:(m,t)=>toast(m,t),api})
+          onClick:()=>{
+            try{
+              if(window.MySifaSupport && typeof window.MySifaSupport.open === 'function'){
+                window.MySifaSupport.open({user:S.user,page:'MyProd',notify:(m,t)=>toast(m,t),api});
+              }
+            }catch(e){}
+          }
         });
         const ico=h('span',{className:'support-ico'});
-        ico.innerHTML=window.MySifaSupport?.iconSvg?.()||'';
+        try{
+          ico.innerHTML=(window.MySifaSupport && typeof window.MySifaSupport.iconSvg==='function')?window.MySifaSupport.iconSvg():'';
+        }catch(e){ ico.innerHTML=''; }
         b.appendChild(ico);
         b.appendChild(h('span',null,'Contacter le support'));
         return b;
@@ -2415,7 +2594,7 @@ function makeMultiSelect(label, options, selected, onChange){
 }
 
 // ── Sanity ──────────────────────────────────────────────────────
-function renderSanity(sanity){
+function renderSanity(sanity, title){
   if(!sanity)return null;
   const score=sanity.score||0;
   const colorMap={success:'var(--success)',warn:'var(--warn)',danger:'var(--danger)'};
@@ -2425,32 +2604,55 @@ function renderSanity(sanity){
   svg.setAttribute('width','80');svg.setAttribute('height','80');svg.setAttribute('viewBox','0 0 80 80');svg.style.transform='rotate(-90deg)';
   const bg=document.createElementNS('http://www.w3.org/2000/svg','circle');bg.setAttribute('cx','40');bg.setAttribute('cy','40');bg.setAttribute('r',String(r));bg.setAttribute('fill','none');bg.setAttribute('stroke','var(--border)');bg.setAttribute('stroke-width','8');svg.appendChild(bg);
   const fill=document.createElementNS('http://www.w3.org/2000/svg','circle');fill.setAttribute('cx','40');fill.setAttribute('cy','40');fill.setAttribute('r',String(r));fill.setAttribute('fill','none');fill.setAttribute('stroke',col);fill.setAttribute('stroke-width','8');fill.setAttribute('stroke-linecap','round');fill.setAttribute('stroke-dasharray',String(circ));fill.setAttribute('stroke-dashoffset',String(offset));svg.appendChild(fill);
-  const pills=(sanity.penalites||[]).map(p=>h('div',{className:'sanity-pill'},'-'+p.total+' '+p.label+' ×'+p.count));
   return h('div',{className:'sanity-banner'},
     h('div',{className:'sanity-circle'},svg,h('div',{className:'sanity-num',style:{color:col}},String(score))),
-    h('div',null,h('div',{className:'si-mention',style:{color:col}},sanity.mention||''),h('div',{className:'si-label'},'Qualité de saisie — Sanity Score'),h('div',{className:'sanity-pills'},...(pills.length?pills:[h('span',{style:{fontSize:'12px',color:'var(--success)',display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('check-circle',14),'Aucune pénalité')])))
+    h('div',null,
+      h('div',{className:'si-mention',style:{color:col}},(title?title+' — ':'')+(sanity.mention||'')),
+      h('div',{className:'si-label'},'Qualité de saisie — Sanity Score')
+    )
   );
 }
 
-// ── Erreurs saisie ──────────────────────────────────────────────
-const ERROR_LABELS={absence_arrivee:{icon:'🔴',label:'Arrivée manquante'},absence_depart:{icon:'🔴',label:'Départ manquant'},dossier_sans_debut:{icon:'🔴',label:'Début dossier manquant'},dossier_sans_fin:{icon:'🔴',label:'Fin dossier manquante'},dossier_sans_debut_fin:{icon:'🔴',label:'Début + Fin manquants'}};
-function renderSaisieErrors(errors){
-  if(!errors||!errors.length)return h('div',{className:'card-empty',style:{display:'flex',alignItems:'center',gap:'8px',justifyContent:'center'}},iconEl('check-circle',18),'Aucune erreur de saisie détectée');
-  const typeCount={};errors.forEach(e=>{typeCount[e.type]=(typeCount[e.type]||0)+1;});
-  const summary=h('div',{style:{display:'flex',gap:'10px',flexWrap:'wrap',padding:'14px 20px',borderBottom:'1px solid var(--border)'}},
-    ...Object.entries(typeCount).map(([t,c])=>{const info=ERROR_LABELS[t]||{icon:'🔴',label:t};return h('div',{style:{background:'rgba(248,113,113,.1)',borderRadius:'8px',padding:'6px 12px',fontSize:'12px',color:'var(--danger)',fontWeight:'600'}},info.icon+' '+info.label+' ('+c+')');})
-  );
-  const list=h('div',{style:{padding:'16px 20px',display:'flex',flexDirection:'column',gap:'8px'}},
-    ...errors.slice(0,50).map(e=>{const info=ERROR_LABELS[e.type]||{icon:'🔴',label:e.type};return h('div',{className:'error-card'},h('div',{className:'ec-type'},info.icon+' '+info.label),h('div',{className:'ec-msg'},e.message),h('div',{className:'ec-detail'},e.detail||''),h('div',{className:'ec-meta'},h('span',null,'👤 '+opName(e.operateur)),h('span',null,'📅 '+e.jour),e.no_dossier?h('span',null,'📁 Dos. '+e.no_dossier):null,e.machine?h('span',null,'⚙ '+e.machine):null));})
-  );
-  return h('div',null,summary,list);
+// ── Détails sanity (liste par type) ──────────────────────────────
+const SANITY_LABELS={
+  jour_first_last:{label:"Arrivée personnel / Départ personnel"},
+  jour_second_penult:{label:"Début de dossier / Fin de dossier"},
+  jour_need_prod_cal_tech:{label:"Saisie vide"},
+  jour_short_shift:{label:"Arrivée → Départ < 5h"},
+  jour_arret_50:{label:"Arrêt machine (code 50)"},
+  jour_missing_metrage:{label:"Métrage manquant (fin dossier)"},
+  jour_missing_etiquettes:{label:"Nombre d’étiquettes manquant (fin dossier)"},
+};
+function renderSanityEventsBlock(sanity){
+  const events=sanity&&sanity.events?sanity.events:{};
+  const keys=Object.keys(events||{}).filter(k=>(events[k]||[]).length>0);
+  if(!keys.length){
+    return h('div',{className:'card-empty',style:{display:'flex',alignItems:'center',gap:'8px',justifyContent:'center'}},iconEl('check-circle',18),'Aucune anomalie détectée');
+  }
+  const blocks=keys.map(k=>{
+    const lbl=(SANITY_LABELS[k]&&SANITY_LABELS[k].label)?SANITY_LABELS[k].label:k;
+    const rows=(events[k]||[]).slice(0,120);
+    const items=rows.map(e=>{
+      const dos=(e.no_dossier||"").trim();
+      return h('div',{style:{display:'flex',gap:'10px',flexWrap:'wrap',alignItems:'center',padding:'6px 0',borderBottom:'1px solid var(--border)'}},
+        h('span',{style:{fontFamily:'monospace',fontSize:'11px',color:'var(--muted)'}},e.jour||''),
+        h('span',{style:{fontWeight:'700'}},opName(e.operateur||'')),
+        dos?h('span',{style:{fontFamily:'monospace',color:'var(--text2)'}},'Dos. '+dos):null
+      );
+    });
+    return h('div',{style:{padding:'14px 20px',borderBottom:'1px solid var(--border)'}},
+      h('div',{style:{fontSize:'12px',fontWeight:'800',color:'var(--danger)',marginBottom:'8px'}},lbl+' ('+rows.length+')'),
+      h('div',null,...items)
+    );
+  });
+  return h('div',null,...blocks);
 }
 
 // ── Production (page wrapper avec sous-onglets) ───────────────────
 function renderProdPage(){
   const subPage = S.subPage || 'kpis';
   const tabs = [
-    {key:'kpis',    label:"Vue d'ensemble", icon:'bar-chart-2'},
+    {key:'kpis',    label:"Vue d'ensemble", icon:'wrench'},
     {key:'saisies', label:'Saisies', icon:'pencil'},
     {key:'erreurs', label:'Erreurs & Qualité', icon:'alert-triangle'},
   ];
@@ -2480,7 +2682,12 @@ function renderHist(){
   if(!d)return h('div',{className:'card-empty'},'Importez un fichier XLSX pour voir les données');
   if(d.blocked)return h('div',{className:'card'},h('div',{className:'card-blocked'},h('div',{className:'cb-icon'},iconEl('lock',32)),h('div',{className:'cb-msg'},d.message)));
   const sc=d.severity_counts||{};const seCount=d.saisie_errors_count||0;const parts=[];
-  if(d.sanity)parts.push(renderSanity(d.sanity));
+  if(d.sanity_by_operateur){
+    const ops=Object.keys(d.sanity_by_operateur||{});
+    ops.forEach(op=>parts.push(renderSanity(d.sanity_by_operateur[op], opName(op))));
+  }else if(d.sanity){
+    parts.push(renderSanity(d.sanity));
+  }
   parts.push(h('div',{className:'stats'},
     h('div',{className:'stat'},h('div',{className:'stat-label'},'Total opérations'),h('div',{className:'stat-value',style:{color:'var(--c1)'}},fN(d.total_operations))),
     h('div',{className:'stat',style:{borderColor:'var(--danger)33'}},h('div',{className:'stat-label'},'🔴 Critique'),h('div',{className:'stat-value',style:{color:'var(--danger)'}},fN(sc.critique))),
@@ -2489,17 +2696,66 @@ function renderHist(){
     h('div',{className:'stat',style:{borderColor:'var(--danger)55'}},h('div',{className:'stat-label'},'⛔ Erreurs saisie'),h('div',{className:'stat-value',style:{color:seCount>0?'var(--danger)':'var(--success)'}},fN(seCount))),
   ));
   parts.push(h('div',{className:'section-title'},'⛔ Erreurs de saisie'));
-  parts.push(h('div',{className:'card'},h('div',{className:'card-header'},h('h3',null,'Contrôle Arrivée / Départ / Dossiers'),seCount>0?h('span',{className:'badge-danger'},seCount+' erreur'+(seCount>1?'s':'')):h('span',{className:'badge'},'OK')),renderSaisieErrors(d.saisie_errors||[])));
-  if(d.operator_issues&&d.operator_issues.length){
-    const m={};d.operator_issues.forEach(r=>{if(!m[r.operateur])m[r.operateur]={critique:0,attention:0};m[r.operateur][r.operation_severity]=r.c;});
-    const mx=Math.max(...Object.values(m).map(v=>v.critique+v.attention),1);
-    parts.push(h('div',{className:'card'},h('div',{className:'card-header'},h('h3',null,'Incidents par opérateur')),h('div',{style:{padding:'16px 0'}},...Object.entries(m).map(([op,v])=>{const t=v.critique+v.attention;return h('div',{className:'bar-row'},h('div',{className:'bar-label'},opName(op)),h('div',{className:'bar-track'},h('div',{className:'bar-fill',style:{width:(t/mx*100)+'%',background:v.critique>0?'var(--danger)':'var(--warn)',minWidth:'30px'}},h('span',{className:'bar-val'},String(t)))));}))));
+  const sanityForList = (d.sanity_by_operateur && d.sanity_by_operateur[Object.keys(d.sanity_by_operateur||{})[0]]) ? null : d.sanity;
+  parts.push(h('div',{className:'card'},
+    h('div',{className:'card-header'},
+      h('h3',null,'Contrôles de saisie'),
+      seCount>0?h('span',{className:'badge-danger'},seCount+' erreur'+(seCount>1?'s':'')):h('span',{className:'badge'},'OK')
+    ),
+    d.sanity_by_operateur
+      ? h('div',null,
+          ...Object.keys(d.sanity_by_operateur||{}).map(op=>
+            h('div',{style:{borderTop:'1px solid var(--border)'}},
+              h('div',{style:{padding:'12px 20px',fontWeight:'800',color:'var(--text)'}},opName(op)),
+              renderSanityEventsBlock(d.sanity_by_operateur[op])
+            )
+          )
+        )
+      : renderSanityEventsBlock(sanityForList||d.sanity)
+  ));
+  if(d.operator_arrets&&d.operator_arrets.length){
+    const byOp={};
+    (d.operator_arrets||[]).forEach(r=>{
+      const op=String(r.operateur||'?');
+      if(!byOp[op]) byOp[op]=[];
+      byOp[op].push(r);
+    });
+    const ops=Object.keys(byOp).sort((a,b)=>opName(a).localeCompare(opName(b)));
+    parts.push(h('div',{className:'card'},
+      h('div',{className:'card-header'},h('h3',null,'Arrêts machine')),
+      h('div',{style:{padding:'10px 16px'}},
+        ...ops.map(op=>{
+          const rows=byOp[op]||[];
+          const total=rows.reduce((s,x)=>s+(+x.c||0),0);
+          return h('div',{style:{padding:'12px 4px',borderBottom:'1px solid var(--border)'}},
+            h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'12px',flexWrap:'wrap'}},
+              h('div',{style:{fontWeight:'800',color:'var(--text)'}},opName(op)),
+              h('span',{className:'badge-danger',style:{background:'rgba(251,191,36,.12)',border:'1px solid rgba(251,191,36,.25)',color:'var(--warn)'}},total+' arrêt'+(total>1?'s':''))
+            ),
+            h('div',{style:{marginTop:'8px',overflowX:'auto'}},
+              h('table',null,
+                h('thead',null,h('tr',null,h('th',null,'Type'),h('th',null,'Nb'),h('th',null,'Durée'))),
+                h('tbody',null,...rows.map(x=>{
+                  const code=String(x.operation_code||'');
+                  const lbl=(x.operation||'') || (S.OPS_CONFIG && S.OPS_CONFIG[code] && S.OPS_CONFIG[code].label) || ('Code '+code);
+                  return h('tr',null,
+                    h('td',null,lbl),
+                    h('td',{style:{fontFamily:'monospace',fontWeight:'800',color:'var(--warn)'}},String(x.c||0)),
+                    h('td',{style:{fontFamily:'monospace',fontWeight:'800',color:'var(--warn)'}},fMin(x.duree_min))
+                  );
+                }))
+              )
+            )
+          );
+        })
+      )
+    ));
   }
   if(d.issues&&d.issues.length){
     parts.push(h('div',{className:'card'},h('div',{className:'card-header'},h('h3',null,'Détail incidents ('+d.issues.length+')')),
       h('div',{style:{overflowX:'auto'}},h('table',null,
-        h('thead',null,h('tr',null,h('th',null,'Sévérité'),h('th',null,'Date'),h('th',null,'Opérateur'),h('th',null,'Opération'),h('th',null,'Machine'),h('th',null,'Dossier'))),
-        h('tbody',null,...d.issues.map(r=>h('tr',null,h('td',null,h('span',{className:'sev-dot '+r.operation_severity}),h('span',{className:'sev-'+r.operation_severity},r.operation_severity.toUpperCase())),h('td',null,fD(r.date_operation)),h('td',null,opName(r.operateur)),h('td',null,r.operation||''),h('td',null,r.machine||''),h('td',null,r.no_dossier||''))))
+        h('thead',null,h('tr',null,h('th',null,'Sévérité'),h('th',null,'Date'),h('th',null,'Opérateur'),h('th',null,'Opération'),h('th',null,'Machine'),h('th',null,'Dossier'),h('th',null,'Durée'))),
+        h('tbody',null,...d.issues.map(r=>h('tr',null,h('td',null,h('span',{className:'sev-dot '+r.operation_severity}),h('span',{className:'sev-'+r.operation_severity},r.operation_severity.toUpperCase())),h('td',null,fD(r.date_operation)),h('td',null,opName(r.operateur)),h('td',null,r.operation||''),h('td',null,r.machine||''),h('td',null,r.no_dossier||''),h('td',null,fMin(r.duree_min)))))
       ))
     ));
   }
@@ -2511,7 +2767,7 @@ function renderProdKpis(){
   const d=S.production;
   if(!d)return h('div',{className:'card-empty'},'Chargement des données de production…');
   if(d.blocked)return h('div',{className:'card'},h('div',{className:'card-blocked'},h('div',{className:'cb-icon'},iconEl('lock',32)),h('div',{className:'cb-msg'},d.message)));
-  const taux=d.total_prevue>0?Math.round(d.total_realisee/d.total_prevue*100):0;
+  const prod = d.produit||{};
   const tt=d.temps_totaux||{};const parts=[];
 
   // ── Sanity score cliquable ─────────────────────────────────────
@@ -2531,26 +2787,68 @@ function renderProdKpis(){
   }
   parts.push(h('div',{className:'section-title'},iconEl('box',13),' Quantités'));
   parts.push(h('div',{className:'stats'},
-    h('div',{className:'stat'},h('div',{className:'stat-label'},'Dossiers'),h('div',{className:'stat-value',style:{color:'var(--c1)'}},fN(d.dossier_count))),
-    h('div',{className:'stat'},h('div',{className:'stat-label'},'Qté prévue'),h('div',{className:'stat-value',style:{color:'var(--c2)'}},fN(d.total_prevue))),
-    h('div',{className:'stat'},h('div',{className:'stat-label'},'Qté réalisée'),h('div',{className:'stat-value',style:{color:'var(--c3)'}},fN(d.total_realisee))),
-    h('div',{className:'stat'},h('div',{className:'stat-label'},'Taux'),h('div',{className:'stat-value',style:{color:taux>=90?'var(--success)':taux>=50?'var(--warn)':'var(--danger)'}},taux+'%')),
+    h('div',{className:'stat'},h('div',{className:'stat-label'},'Dossiers produits'),h('div',{className:'stat-value',style:{color:'var(--c1)'}},fN(prod.dossiers||0))),
+    h('div',{className:'stat'},h('div',{className:'stat-label'},'Qté étiquettes'),h('div',{className:'stat-value',style:{color:'var(--c3)'}},fN(prod.etiquettes||0))),
+    h('div',{className:'stat'},h('div',{className:'stat-label'},'Métrage'),h('div',{className:'stat-value',style:{color:'var(--c2)'}},fN(prod.metrage_m||0)+' m')),
+    h('div',{className:'stat'},h('div',{className:'stat-label'},'Vitesse'),h('div',{className:'stat-value',style:{color:'var(--warn)'}},((d.vitesse_m_min!=null)?Number(d.vitesse_m_min).toFixed(2):'0.00')+' m/min')),
   ));
   parts.push(h('div',{className:'section-title'},iconEl('clock',13),' Temps'));
+  const prodInclArrets = (Number(tt.production_min||0) + Number(tt.arret_min||0));
   parts.push(h('div',{className:'time-kpi'},
-    h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('wrench',12),' Calage'),h('div',{className:'tc-value',style:{color:'var(--c4)'}},fMin(tt.calage_min)),h('div',{className:'tc-sub'},'Code 02')),
-    h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('play',12),' Production'),h('div',{className:'tc-value',style:{color:'var(--c3)'}},fMin(tt.production_min)),h('div',{className:'tc-sub'},'Codes 03+88')),
-    h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('folder',12),' Hors calage'),h('div',{className:'tc-value',style:{color:'var(--c1)'}},fMin(tt.hors_calage_min)),h('div',{className:'tc-sub'},'01→89 - calage')),
-    h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('folder',12),' Total'),h('div',{className:'tc-value',style:{color:'var(--c2)'}},fMin(tt.avec_calage_min)),h('div',{className:'tc-sub'},'01→89')),
+    h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('wrench',12),' Calage'),h('div',{className:'tc-value',style:{color:'var(--c4)'}},fMin(tt.calage_min))),
+    h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('play',12),' Production'),h('div',{className:'tc-value',style:{color:'var(--c3)'}},fMin(prodInclArrets))),
+    h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('alert-triangle',12),' Arrêts'),h('div',{className:'tc-value',style:{color:'var(--warn)'}},fMin(tt.arret_min))),
   ));
-  if(d.dossier_times&&d.dossier_times.length){
-    parts.push(h('div',{className:'card'},h('div',{className:'card-header'},h('h3',null,'Temps par dossier'),h('span',{style:{fontSize:'11px',color:'var(--muted)'}},d.dossier_times.length+' dossiers')),
+  const byDos = d.by_dossier || d.dossier_times || [];
+
+  function renderAggCard(title, rows, keyLabel){
+    if(!rows||!rows.length) return null;
+    return h('div',{className:'card'},
+      h('div',{className:'card-header'},h('h3',null,title),h('span',{style:{fontSize:'11px',color:'var(--muted)'}},rows.length+' items')),
       h('div',{style:{overflowX:'auto'}},h('table',null,
-        h('thead',null,h('tr',null,h('th',null,'Dossier'),h('th',null,'Opérateur'),h('th',null,'Machine'),h('th',null,'Date'),h('th',null,'Total'),h('th',null,'Calage'),h('th',null,'Prod'),h('th',null,'Hors calage'))),
-        h('tbody',null,...d.dossier_times.map(r=>h('tr',null,h('td',{style:{fontWeight:'600',fontFamily:'monospace',color:'var(--text)'}},r.no_dossier||''),h('td',null,opName(r.operateur)),h('td',null,r.machine||''),h('td',{style:{fontFamily:'monospace',fontSize:'11px'}},r.jour||''),h('td',{style:{fontFamily:'monospace',color:'var(--c2)',fontWeight:'600'}},fMin(r.temps_total_calage_min)),h('td',{style:{fontFamily:'monospace',color:r.temps_calage_min>30?'var(--warn)':'var(--text2)'}},fMin(r.temps_calage_min)),h('td',{style:{fontFamily:'monospace',color:'var(--c3)'}},fMin(r.temps_prod_min)),h('td',{style:{fontFamily:'monospace',color:'var(--c1)'}},fMin(r.temps_total_min)))))
+        h('thead',null,h('tr',null,h('th',null,keyLabel),h('th',null,'Dossiers'),h('th',null,'Étiquettes'),h('th',null,'Métrage'),h('th',null,'Calage'),h('th',null,'Prod'),h('th',null,'Arrêts'),h('th',null,'Vitesse'))),
+        h('tbody',null,...rows.map(r=>h('tr',null,
+          h('td',{style:{fontWeight:'700'}},keyLabel==='Opérateur'?opName(r.key):r.key),
+          h('td',{style:{fontFamily:'monospace'}},fN(r.dossiers||0)),
+          h('td',{style:{fontFamily:'monospace'}},fN(r.etiquettes||0)),
+          h('td',{style:{fontFamily:'monospace'}},fN(r.metrage_m||0)+' m'),
+          h('td',{style:{fontFamily:'monospace'}},fMin(r.calage_min)),
+          h('td',{style:{fontFamily:'monospace'}},fMin(r.prod_min)),
+          h('td',{style:{fontFamily:'monospace'}},fMin(r.arret_min)),
+          h('td',{style:{fontFamily:'monospace',fontWeight:'800',color:'var(--warn)'}},String(r.vitesse_m_min||0)+' m/min')
+        )))
+      ))
+    );
+  }
+
+  parts.push(h('div',{className:'section-title'},'📌 Synthèse détaillée'));
+  const byOp=d.by_operator||[];
+  const byMach=d.by_machine||[];
+  const byDay=d.by_day||[];
+  parts.push(renderAggCard('Par opérateur',byOp,'Opérateur'));
+  parts.push(renderAggCard('Par machine',byMach,'Machine'));
+  parts.push(renderAggCard('Par jour',byDay,'Jour'));
+
+  // Détail (liste)
+  if(byDos&&byDos.length){
+    parts.push(h('div',{className:'card'},h('div',{className:'card-header'},h('h3',null,'Par numéro de dossier'),h('span',{style:{fontSize:'11px',color:'var(--muted)'}},byDos.length+' dossiers')),
+      h('div',{style:{overflowX:'auto'}},h('table',null,
+        h('thead',null,h('tr',null,h('th',null,'Dossier'),h('th',null,'Opérateur'),h('th',null,'Machine'),h('th',null,'Jour'),h('th',null,'Étiquettes'),h('th',null,'Métrage'),h('th',null,'Calage'),h('th',null,'Prod'),h('th',null,'Arrêts'))),
+        h('tbody',null,...byDos.map(r=>h('tr',null,
+          h('td',{style:{fontWeight:'600',fontFamily:'monospace',color:'var(--text)'}},r.no_dossier||''),
+          h('td',null,opName(r.operateur)),
+          h('td',null,r.machine||''),
+          h('td',{style:{fontFamily:'monospace',fontSize:'11px'}},r.jour||''),
+          h('td',{style:{fontFamily:'monospace'}},fN(r.etiquettes||0)),
+          h('td',{style:{fontFamily:'monospace'}},fN(r.metrage_m||0)+' m'),
+          h('td',{style:{fontFamily:'monospace',color:r.temps_calage_min>30?'var(--warn)':'var(--text2)'}},fMin(r.temps_calage_min)),
+          h('td',{style:{fontFamily:'monospace',color:'var(--c3)'}},fMin(r.temps_prod_min)),
+          h('td',{style:{fontFamily:'monospace',color:'var(--warn)'}},fMin(r.temps_arret_min))
+        )))
       ))
     ));
   }
+
   return h('div',null,...parts);
 }
 
@@ -2579,7 +2877,8 @@ function updateUndoRedoBtns() {
 async function doUndo() {
   if (!undoStack.length) return;
   const entry = undoStack.pop();
-  const current = (S.saisies?.rows || []).find(r => r.id === entry.data.id);
+  const curRows = (S.saisies && S.saisies.rows) ? S.saisies.rows : [];
+  const current = curRows.find(r => r.id === entry.data.id);
 
   // Pour edit : sauvegarder l'état actuel avant restauration
   if (entry.action === 'edit' && current) {
@@ -2597,7 +2896,8 @@ async function doUndo() {
 async function doRedo() {
   if (!redoStack.length) return;
   const entry = redoStack.pop();
-  const current = (S.saisies?.rows || []).find(r => r.id === entry.data.id);
+  const curRows2 = (S.saisies && S.saisies.rows) ? S.saisies.rows : [];
+  const current = curRows2.find(r => r.id === entry.data.id);
   if (entry.action === 'edit' && current) {
     undoStack.push({ action: 'edit', data: JSON.parse(JSON.stringify(current)) });
     await api('/api/saisies/' + entry.data.id, {
@@ -2732,7 +3032,7 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
     ...Object.entries(ops).map(([code, cfg]) => {
       const opt = h('option', { value: code+'           '+cfg.label }, code+' — '+cfg.label);
       // Pré-sélection si edit
-      if (prefill?.operation && prefill.operation.startsWith(code)) opt.selected = true;
+      if (prefill && prefill.operation && prefill.operation.startsWith(code)) opt.selected = true;
       return opt;
     })
   );
@@ -2745,8 +3045,9 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
       : '';
   });
   // Déclencher preview si pré-rempli
-  if (prefill?.operation) {
-    const code = prefill.operation.match(/^(\d+)/)?.[1];
+  if (prefill && prefill.operation) {
+    const m = prefill.operation.match(/^(\d+)/);
+    const code = (m && m[1]) ? m[1] : null;
     const cfg = code && ops[code];
     if (cfg) opPreview.textContent = cfg.severity==='critique'?'🔴 Critique':cfg.severity==='attention'?'🟡 Attention':'🟢 '+cfg.category;
   }
@@ -2758,26 +3059,26 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
       h('option', { value: '' }, '— Choisir —'),
       ...ops_list.map(o => {
         const opt = h('option', { value: o }, opName(o));
-        if (o === (prefill?.operateur || '')) opt.selected = true;
+        if (o === ((prefill && prefill.operateur) ? prefill.operateur : '')) opt.selected = true;
         return opt;
       })
     );
   } else {
-    opField = h('input', { type: 'text', value: S.user?.operateur_lie || '' });
+    opField = h('input', { type: 'text', value: (S.user && S.user.operateur_lie) ? S.user.operateur_lie : '' });
     opField.disabled = true;
   }
  
   // Date 24h
-  const { wrapper: dateWrapper, getVal: getDateVal } = makeDateTimeFields(prefill?.date_operation || '');
+  const { wrapper: dateWrapper, getVal: getDateVal } = makeDateTimeFields((prefill && prefill.date_operation) ? prefill.date_operation : '');
  
-  const machI  = h('input', { type: 'text', placeholder: 'ex: 1 - COHESIO 1', value: prefill?.machine      || '' });
-  const dosI   = h('input', { type: 'text', placeholder: 'ex: 1060',           value: prefill?.no_dossier  || '' });
-  const qteAI  = h('input', { type: 'number', placeholder: '0',                value: prefill?.quantite_a_traiter ?? 0 });
-  const qteTI  = h('input', { type: 'number', placeholder: '0',                value: prefill?.quantite_traitee   ?? 0 });
+  const machI  = h('input', { type: 'text', placeholder: 'ex: 1 - COHESIO 1', value: (prefill && prefill.machine) ? prefill.machine : '' });
+  const dosI   = h('input', { type: 'text', placeholder: 'ex: 1060',           value: (prefill && prefill.no_dossier) ? prefill.no_dossier : '' });
+  const qteAI  = h('input', { type: 'number', placeholder: '0',                value: (prefill && prefill.quantite_a_traiter!=null) ? prefill.quantite_a_traiter : 0 });
+  const qteTI  = h('input', { type: 'number', placeholder: '0',                value: (prefill && prefill.quantite_traitee!=null)   ? prefill.quantite_traitee   : 0 });
   const noteI  = h('input', { type: 'text', placeholder: 'Raison (optionnel)',  value: '' });
-  const commentaireI = h('input', { type: 'text', placeholder: 'Observation, remarque...', value: prefill?.commentaire || '' });
-  const metragePrevuI = h('input', { type: 'number', placeholder: '0', value: prefill?.metrage_prevu ?? '' });
-  const metrageReelI  = h('input', { type: 'number', placeholder: '0', value: prefill?.metrage_reel  ?? '' });
+  const commentaireI = h('input', { type: 'text', placeholder: 'Observation, remarque...', value: (prefill && prefill.commentaire) ? prefill.commentaire : '' });
+  const metragePrevuI = h('input', { type: 'number', placeholder: '0', value: (prefill && prefill.metrage_prevu!=null) ? prefill.metrage_prevu : '' });
+  const metrageReelI  = h('input', { type: 'number', placeholder: '0', value: (prefill && prefill.metrage_reel!=null)  ? prefill.metrage_reel  : '' });
   inputs.metrage_prevu = metragePrevuI;
   inputs.metrage_reel  = metrageReelI;
  
@@ -2834,8 +3135,8 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
               quantite_traitee:   parseFloat(qteTI.value) || 0,
               note:               noteI.value  || '',
               commentaire:       commentaireI.value || '',
-              metrage_prevu:     parseFloat(inputs.metrage_prevu?.value) || null,
-              metrage_reel:      parseFloat(inputs.metrage_reel?.value)  || null,
+              metrage_prevu:     parseFloat((inputs.metrage_prevu && inputs.metrage_prevu.value) ? inputs.metrage_prevu.value : '') || null,
+              metrage_reel:      parseFloat((inputs.metrage_reel  && inputs.metrage_reel.value)  ? inputs.metrage_reel.value  : '') || null,
             });
           }}, submitLabel)
         )
@@ -2846,11 +3147,17 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
 }
  
 function closeModal() {
-  document.querySelector('.add-row-modal')?.remove();
+  try{
+    const m = document.querySelector('.add-row-modal');
+    if(m) m.remove();
+  }catch(e){}
 }
  
 function openAddModal(templateRow) {
-  document.querySelector('.add-row-modal')?.remove();
+  try{
+    const m = document.querySelector('.add-row-modal');
+    if(m) m.remove();
+  }catch(e){}
   const modal = buildSaisieForm(
     templateRow,
     '➕ Ajouter une saisie',
@@ -2861,7 +3168,10 @@ function openAddModal(templateRow) {
 }
  
 function openEditModal(row) {
-  document.querySelector('.add-row-modal')?.remove();
+  try{
+    const m = document.querySelector('.add-row-modal');
+    if(m) m.remove();
+  }catch(e){}
  
   const deleteBtn = h('button', {
     className: 'btn-danger',
@@ -2996,7 +3306,7 @@ async function bulkDelete(){
   if(!confirm('Supprimer '+ids.length+' saisie(s) ?')) return;
  
   // Sauvegarder pour undo
-  const snaps=(S.saisies?.rows||[]).filter(r=>ids.includes(r.id));
+  const snaps=(((S.saisies && S.saisies.rows) ? S.saisies.rows : [])).filter(r=>ids.includes(r.id));
   snaps.forEach(row=>pushUndo('delete',row));
  
   try{
@@ -3015,7 +3325,7 @@ async function bulkDelete(){
 function renderSaisies(){
   const d=S.saisies;
   if(!d) return h('div',{className:'card-empty'},'Chargement...');
-  if(!isAdmin(S.user)&&!S.user?.operateur_lie)
+  if(!isAdmin(S.user)&&!(S.user && S.user.operateur_lie))
     return h('div',{className:'card'},h('div',{className:'card-blocked'},h('div',{className:'cb-icon'},iconEl('lock',32)),h('div',{className:'cb-msg'},'Compte non lié à un opérateur.')));
  
   const readOnly=isFab(S.user);
@@ -3284,7 +3594,13 @@ function renderUsers(){
   const inputs={};
   const ops=S.filters.operators||[];
   const opSel=h('select',{className:'form-sel'},h('option',{value:''},'— Lier un opérateur (optionnel) —'),...ops.map(o=>h('option',{value:o},opName(o))));inputs.operateur_lie=opSel;
-  const roleSel=h('select',{className:'form-sel'},h('option',{value:'fabrication'},'Fabrication'),h('option',{value:'administration'},'Administration'),h('option',{value:'direction'},'Direction'),h('option',{value:'logistique'},'Logistique'));inputs.role=roleSel;
+  const roleSel=h('select',{className:'form-sel'},
+    h('option',{value:'fabrication'},'Fabrication'),
+    h('option',{value:'administration'},'Administration'),
+    h('option',{value:'direction'},'Direction'),
+    h('option',{value:'logistique'},'Logistique'),
+    h('option',{value:'comptabilite'},'Comptabilité')
+  );inputs.role=roleSel;
   const hint=h('p',{style:{fontSize:'12px',color:'var(--muted)',marginTop:'10px'}},'');
   const opWrap=h('div',null,opSel);
   // Charger les machines depuis l'API planning
@@ -3301,20 +3617,23 @@ function renderUsers(){
   );
   const syncRoleUI=()=>{
     const r=inputs.role.value;
-    const hideOp=(r==='direction'||r==='administration'||r==='logistique');
+    const hideOp=(r==='direction'||r==='administration'||r==='logistique'||r==='comptabilite');
     const showMachine = r === 'fabrication';
     opWrap.style.display = hideOp ? 'none' : '';
     machineWrap.style.display = showMachine ? '' : 'none';
     hint.textContent = (r==='fabrication')
       ? '💡 Fabrication = lecture seule. Sans opérateur lié → accès bloqué.'
-      : '💡 Direction / Administration / Logistique : pas de liaison opérateur.';
+      : (r==='comptabilite'
+          ? '💡 Comptabilité : accès à MyCompta uniquement.'
+          : '💡 Direction / Administration / Logistique : pas de liaison opérateur.'
+        );
     if(hideOp) opSel.value='';
   };
   roleSel.addEventListener('change',syncRoleUI);
   const form=h('div',{className:'card',style:{padding:'20px'}},h('h3',{style:{fontSize:'14px',fontWeight:'600',marginBottom:'16px'}},'Créer un compte'),
     h('div',{className:'form-grid'},...[['nom','Nom complet *','text'],['email','Email *','email'],['password','Mot de passe * (min. 8 car.)','password']].map(([k,l,t])=>{const i=h('input',{placeholder:l,type:t});inputs[k]=i;return i;}),roleSel,opWrap,machineWrap),
     hint,
-    h('button',{className:'btn',onClick:()=>{if(!inputs.nom.value||!inputs.email.value||!inputs.password.value)return;createUser({nom:inputs.nom.value,email:inputs.email.value,password:inputs.password.value,role:inputs.role.value,operateur_lie:inputs.operateur_lie.value||null,machine_id: inputs.machine_id?.value || null});['nom','email','password'].forEach(k=>inputs[k].value='');}},'Créer le compte')
+    h('button',{className:'btn',onClick:()=>{if(!inputs.nom.value||!inputs.email.value||!inputs.password.value)return;createUser({nom:inputs.nom.value,email:inputs.email.value,password:inputs.password.value,role:inputs.role.value,operateur_lie:inputs.operateur_lie.value||null,machine_id: (inputs.machine_id && inputs.machine_id.value) ? inputs.machine_id.value : null});['nom','email','password'].forEach(k=>inputs[k].value='');}},'Créer le compte')
   );
   setTimeout(syncRoleUI,0);
   const list=h('div',{className:'card'},h('div',{className:'card-header'},h('h3',null,'Utilisateurs ('+S.users.length+')'),h('span',{style:{fontSize:'11px',color:'var(--muted)'}},'Dernière connexion')),
@@ -3360,7 +3679,7 @@ function renderProfil(userData, isAdminView=false, onSave=null){
   const inputs={};
 
   const mkField=(label,key,type='text',val='')=>{
-    const i=h('input',{type,placeholder:label,value:userData?.[key]||val});
+    const i=h('input',{type,placeholder:label,value:(userData && (key in userData) ? (userData[key]||'') : '') || val});
     inputs[key]=i;
     return h('div',{style:{marginBottom:'14px'}},
       h('label',{style:{display:'block',fontSize:'11px',fontWeight:'600',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'5px'}},label),
@@ -3399,13 +3718,13 @@ function renderProfil(userData, isAdminView=false, onSave=null){
       h('option',{value:'direction'},'👑 Direction'),
       h('option',{value:'logistique'},'📦 Logistique'),
     );
-    roleSel.value=userData?.role||'fabrication';
+    roleSel.value=(userData && userData.role) ? userData.role : 'fabrication';
     inputs.role=roleSel;
 
     // Opérateur lié
     const opSel=h('select',{className:'form-sel'},
       h('option',{value:''},'— Sans liaison —'),
-      ...ops.map(o=>{const opt=h('option',{value:o},opName(o));if(o===userData?.operateur_lie)opt.selected=true;return opt;})
+      ...ops.map(o=>{const opt=h('option',{value:o},opName(o));if(o===((userData&&userData.operateur_lie)?userData.operateur_lie:null))opt.selected=true;return opt;})
     );
     inputs.operateur_lie=opSel;
 
@@ -3415,7 +3734,7 @@ function renderProfil(userData, isAdminView=false, onSave=null){
       h('option', {value:''}, '— Machine par défaut (Fabrication) —'),
       ...machines.map(m => {
         const opt=h('option', {value: String(m.id)}, m.nom);
-        if(String(m.id)===String(userData?.machine_id||'')) opt.selected=true;
+        if(String(m.id)===String((userData&&userData.machine_id)?userData.machine_id:'')) opt.selected=true;
         return opt;
       })
     );
@@ -3423,7 +3742,7 @@ function renderProfil(userData, isAdminView=false, onSave=null){
 
     // Actif
     const actifChk=h('input',{type:'checkbox'});
-    actifChk.checked=userData?.actif!==0;
+    actifChk.checked=!(userData && userData.actif === 0);
     inputs.actif=actifChk;
 
     const opFieldWrap=h('div',{style:{marginBottom:'14px'}},h('label',{style:{display:'block',fontSize:'11px',fontWeight:'600',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'5px'}},'Opérateur lié'),opSel);
@@ -3558,7 +3877,7 @@ function renderDevisForm(preview){
   return h('div',{className:'card',style:{padding:'24px'}},
     h('h3',{style:{fontSize:'16px',fontWeight:'700',marginBottom:'4px'}},'📋 Valider le devis importé'),
     h('p',{style:{fontSize:'12px',color:'var(--muted)',marginBottom:'20px'}},
-      preview.filename+(preview.parse_errors?.length?' — ⚠ '+preview.parse_errors.length+' avertissement(s)':' — Données extraites automatiquement')),
+      preview.filename+(((preview && preview.parse_errors && preview.parse_errors.length)?preview.parse_errors.length:0)?' — ⚠ '+preview.parse_errors.length+' avertissement(s)':' — Données extraites automatiquement')),
 
     h('div',{className:'form-section'},
       h('div',{className:'form-section-title'},'Informations générales'),
@@ -3859,7 +4178,8 @@ function renderSuivi(){
       );
       const dzInp=h('input',{type:'file',accept:'.xlsx,.xls',style:{display:'none'}});
       dzInp.addEventListener('change',async e=>{
-        const f=e.target.files?.[0];if(!f)return;
+        const f=(e && e.target && e.target.files && e.target.files[0]) ? e.target.files[0] : null;
+        if(!f)return;
         try{
           const fd=new FormData();fd.append('file',f);
           const preview=await api('/api/rentabilite/devis/import',{method:'POST',body:fd});
@@ -3878,7 +4198,8 @@ function renderSuivi(){
       dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
       dz.addEventListener('drop',e=>{
         e.preventDefault();dz.classList.remove('drag');
-        const f=e.dataTransfer.files?.[0];if(!f)return;
+        const f=(e && e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) ? e.dataTransfer.files[0] : null;
+        if(!f)return;
         dzInp.files=e.dataTransfer.files;
         dzInp.dispatchEvent(new Event('change'));
       });
@@ -3930,12 +4251,13 @@ function renderSuivi(){
 function render(){
   const root=document.getElementById('root');root.innerHTML='';
   document.body.classList.toggle('sb-open', !!S.sidebarOpen);
-  document.body.classList.toggle('has-topbar', S.app==='prod' || S.app==='stock');
+  document.body.classList.toggle('has-topbar', S.app==='prod' || S.app==='stock' || S.app==='compta');
   window.__MYSIFA_APP__ = S.app;
 
   if(!S.user||S.app==='login'){root.appendChild(renderLogin());}
   else if(S.app==='portal'){root.appendChild(renderPortal());}
   else if(S.app==='stock'){root.appendChild(renderStock());}
+  else if(S.app==='compta'){root.appendChild(renderCompta());}
   else if(S.app==='prod'){
     const titles={
       production: S.subPage==='saisies'?'Saisies':S.subPage==='erreurs'?'Historique & Erreurs':'Production',
@@ -3985,6 +4307,9 @@ function render(){
   }
 
   if(S.toast){const c={success:'var(--success)',error:'var(--danger)'};root.appendChild(h('div',{className:'toast',style:{borderLeft:'3px solid '+(c[S.toast.type]||'var(--accent)')}},h('span',{style:{fontSize:'14px',color:c[S.toast.type]||'var(--accent)'}},S.toast.message)));}
+
+  // Après (re)render : bouton installer PWA
+  setupInstallButton();
 }
 
 async function nav(){

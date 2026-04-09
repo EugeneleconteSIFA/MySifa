@@ -1,4 +1,4 @@
-"""SIFA — Production v0.7 — multi-select opérateurs/dossiers"""
+"""SIFA — Production v0.8 — KPIs basé sur réalisé (production)"""
 from typing import Optional, List
 from fastapi import APIRouter, Request, Query
 from database import get_db
@@ -18,8 +18,14 @@ def dashboard_production(
     user = get_current_user(request)
     if not is_admin(user) and not user.get("operateur_lie"):
         return {"blocked": True, "message": "Compte non lié à un opérateur.",
-                "completed_dossiers":[],"total_prevue":0,"total_realisee":0,
-                "dossier_count":0,"by_machine":[],"by_operator":[],"temps_totaux":{},"dossier_times":[]}
+                "completed_dossiers": [],
+                "produit": {"dossiers": 0, "etiquettes": 0, "metrage_m": 0},
+                "temps_totaux": {},
+                "vitesse_m_min": 0,
+                "by_machine": [],
+                "by_operator": [],
+                "by_dossier": [],
+                "by_day": []}
 
     operateurs = [o for o in (operateur or []) if o]
     dossiers   = [d for d in (no_dossier or []) if d]
@@ -39,33 +45,115 @@ def dashboard_production(
     wc = " AND ".join(where)
 
     with get_db() as conn:
-        completed   = conn.execute(f"SELECT no_dossier,operateur,machine,client,designation,quantite_a_traiter,quantite_traitee,date_operation FROM production_data WHERE {wc} AND operation_code='89' ORDER BY date_operation DESC", params).fetchall()
-        totals      = conn.execute(f"SELECT COALESCE(SUM(quantite_a_traiter),0) as total_prevue,COALESCE(SUM(quantite_traitee),0) as total_realisee FROM production_data WHERE {wc} AND operation_code='89'", params).fetchone()
-        dc          = conn.execute(f"SELECT COUNT(DISTINCT no_dossier) as c FROM production_data WHERE {wc} AND no_dossier IS NOT NULL AND no_dossier!='0'", params).fetchone()["c"]
-        by_machine  = conn.execute(f"SELECT machine,COUNT(DISTINCT no_dossier) as dossiers,SUM(CASE WHEN operation_code='89' THEN quantite_traitee ELSE 0 END) as total_prod FROM production_data WHERE {wc} AND machine IS NOT NULL AND machine!='' GROUP BY machine ORDER BY total_prod DESC", params).fetchall()
-        by_operator = conn.execute(f"SELECT operateur,COUNT(DISTINCT no_dossier) as dossiers,SUM(CASE WHEN operation_code='89' THEN quantite_traitee ELSE 0 END) as total_prod FROM production_data WHERE {wc} AND operateur IS NOT NULL GROUP BY operateur ORDER BY total_prod DESC", params).fetchall()
-        all_rows    = conn.execute(f"SELECT operateur,date_operation,operation_code,machine,no_dossier,client,designation,quantite_a_traiter,quantite_traitee FROM production_data WHERE {wc} ORDER BY operateur,date_operation", params).fetchall()
+        completed = conn.execute(
+            f"""SELECT no_dossier,operateur,machine,client,designation,
+                       quantite_traitee,metrage_reel,date_operation
+                FROM production_data
+                WHERE {wc} AND operation_code='89'
+                ORDER BY date_operation DESC""",
+            params,
+        ).fetchall()
 
-    dossier_times = compute_dossier_times([dict(r) for r in all_rows])
-    total_calage  = sum(d["temps_calage_min"]       for d in dossier_times)
-    total_prod    = sum(d["temps_prod_min"]         for d in dossier_times)
-    total_hors    = sum(d["temps_total_min"]        for d in dossier_times if d["temps_total_min"])
-    total_avec    = sum(d["temps_total_calage_min"] for d in dossier_times if d["temps_total_calage_min"])
+        totals = conn.execute(
+            f"""SELECT
+                  COUNT(DISTINCT no_dossier) as dossiers,
+                  COALESCE(SUM(quantite_traitee),0) as etiquettes,
+                  COALESCE(SUM(metrage_reel),0) as metrage_m
+                FROM production_data
+                WHERE {wc} AND operation_code='89' AND no_dossier IS NOT NULL AND no_dossier!='0'""",
+            params,
+        ).fetchone()
+
+        # Pour le "ligne par ligne" et les temps : inclure operation_category
+        all_rows = conn.execute(
+            f"""SELECT operateur,date_operation,operation_code,operation_category,
+                       machine,no_dossier,client,designation,
+                       quantite_traitee,metrage_reel
+                FROM production_data
+                WHERE {wc}
+                ORDER BY operateur,date_operation""",
+            params,
+        ).fetchall()
+
+    all_list = [dict(r) for r in all_rows]
+    dossier_times = compute_dossier_times(all_list)
+
+    # Enrichir dossier_times avec réalisé (étiquettes + métrage) depuis fin dossier (89)
+    by_key = {}
+    for r in all_list:
+        if str(r.get("operation_code") or "") != "89":
+            continue
+        dos = str(r.get("no_dossier") or "")
+        if not dos or dos == "0":
+            continue
+        op = str(r.get("operateur") or "?")
+        dt = str(r.get("date_operation") or "")[:10]
+        by_key[(op, dt, dos)] = r
+
+    by_dossier = []
+    for d in dossier_times:
+        key = (str(d.get("operateur") or "?"), str(d.get("jour") or ""), str(d.get("no_dossier") or ""))
+        fin = by_key.get(key, {})
+        # "produit" : basé sur le fin dossier (89) quand présent
+        d["etiquettes"] = fin.get("quantite_traitee", 0) or d.get("quantite_traitee", 0) or 0
+        d["metrage_m"] = fin.get("metrage_reel", 0) or 0
+        by_dossier.append(d)
+
+    total_calage = sum(float(d.get("temps_calage_min") or 0) for d in by_dossier)
+    total_prod = sum(float(d.get("temps_prod_min") or 0) for d in by_dossier)
+    total_arret = sum(float(d.get("temps_arret_min") or 0) for d in by_dossier)
+
+    metrage_total = float(totals["metrage_m"] or 0)
+    denom = float(total_prod + total_arret)
+    vitesse_m_min = round(metrage_total / denom, 3) if denom > 0 else 0.0
+
+    # Agrégations
+    def agg_key(rows, key_name):
+        out = {}
+        for r in rows:
+            k = str(r.get(key_name) or "").strip() or "?"
+            x = out.setdefault(k, {"key": k, "dossiers": 0, "etiquettes": 0.0, "metrage_m": 0.0,
+                                   "calage_min": 0.0, "prod_min": 0.0, "arret_min": 0.0})
+            x["dossiers"] += 1
+            x["etiquettes"] += float(r.get("etiquettes") or 0)
+            x["metrage_m"] += float(r.get("metrage_m") or 0)
+            x["calage_min"] += float(r.get("temps_calage_min") or 0)
+            x["prod_min"] += float(r.get("temps_prod_min") or 0)
+            x["arret_min"] += float(r.get("temps_arret_min") or 0)
+        # vitesse par groupe
+        res = []
+        for k, v in out.items():
+            den = v["prod_min"] + v["arret_min"]
+            v["vitesse_m_min"] = round((v["metrage_m"] / den), 3) if den > 0 else 0.0
+            v["etiquettes"] = round(v["etiquettes"], 1)
+            v["metrage_m"] = round(v["metrage_m"], 1)
+            v["calage_min"] = round(v["calage_min"], 1)
+            v["prod_min"] = round(v["prod_min"], 1)
+            v["arret_min"] = round(v["arret_min"], 1)
+            res.append(v)
+        return sorted(res, key=lambda x: x["metrage_m"], reverse=True)
+
+    by_operator = agg_key(by_dossier, "operateur")
+    by_machine = agg_key(by_dossier, "machine")
+    by_day = agg_key(by_dossier, "jour")
 
     return {
         "blocked": False,
         "completed_dossiers": [dict(r) for r in completed],
-        "total_prevue":   totals["total_prevue"],
-        "total_realisee": totals["total_realisee"],
-        "dossier_count":  dc,
-        "by_machine":     [dict(r) for r in by_machine],
-        "by_operator":    [dict(r) for r in by_operator],
+        "produit": {
+            "dossiers": int(totals["dossiers"] or 0),
+            "etiquettes": float(totals["etiquettes"] or 0),
+            "metrage_m": float(totals["metrage_m"] or 0),
+        },
         "temps_totaux": {
             "calage_min":      round(total_calage, 1),
             "production_min":  round(total_prod,   1),
-            "hors_calage_min": round(total_hors,   1),
-            "avec_calage_min": round(total_avec,   1),
+            "arret_min":       round(total_arret,  1),
         },
-        "dossier_times": sorted([d for d in dossier_times if d["temps_total_calage_min"]],
-                                 key=lambda x: x["temps_total_calage_min"], reverse=True),
+        "vitesse_m_min": vitesse_m_min,
+        "by_machine": by_machine,
+        "by_operator": by_operator,
+        "by_dossier": sorted([d for d in by_dossier if d.get("temps_total_calage_min")],
+                             key=lambda x: x["temps_total_calage_min"], reverse=True),
+        "by_day": by_day,
     }

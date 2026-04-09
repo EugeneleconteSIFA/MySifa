@@ -190,8 +190,8 @@ def _append_entries(conn, machine_id: int, items: List[PlanningRow], machine_lab
             INSERT INTO planning_entries
                 (machine_id, position, reference, client, description, format_l, format_h,
                  duree_heures, statut, notes, created_at, updated_at,
-                 numero_of, ref_produit, laize, date_livraison, commentaire)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'attente', '', ?, ?, ?, ?, ?, ?, ?)
+                 dos_rvgi, numero_of, ref_produit, laize, date_livraison, commentaire)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'attente', '', ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 machine_id,
@@ -204,6 +204,7 @@ def _append_entries(conn, machine_id: int, items: List[PlanningRow], machine_lab
                 duree,
                 now,
                 now,
+                None,
                 numero_of,
                 it.ref_produit,
                 laize_mm,

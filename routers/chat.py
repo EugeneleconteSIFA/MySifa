@@ -165,8 +165,8 @@ def _tool_planning_add(user: dict, inp: dict) -> tuple[str, str]:
     if not reference:
         return ("Il me faut une référence (ex: 4521).", "info")
     duree = float(inp.get("duree_heures") or 8)
-    if duree < 2 or duree > 30:
-        return ("Durée invalide (entre 2 et 30 heures).", "err")
+    if duree < 2 or duree > 720:
+        return ("Durée invalide (entre 2 et 720 heures).", "err")
     commentaire = (inp.get("commentaire") or "").strip()
     now = datetime.now().isoformat()
     with get_db() as conn:
@@ -181,14 +181,15 @@ def _tool_planning_add(user: dict, inp: dict) -> tuple[str, str]:
         conn.execute(
             """INSERT INTO planning_entries
                (machine_id, position, reference, client, description, format_l, format_h,
-                duree_heures, statut, notes, created_at, updated_at, commentaire)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                dos_rvgi, duree_heures, statut, notes, created_at, updated_at, commentaire)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 machine_id,
                 pos,
                 reference,
                 "",
                 "",
+                None,
                 None,
                 None,
                 duree,
