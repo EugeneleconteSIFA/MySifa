@@ -1,7 +1,15 @@
 (function(){
   function iconSvg(){
     const common = `fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"`;
-    return `<svg viewBox="0 0 24 24" aria-hidden="true"><path ${common} d="M7.5 18.5h-1A3.5 3.5 0 0 1 3 15v-3a9 9 0 1 1 18 0v3a3.5 3.5 0 0 1-3.5 3.5h-1"/><path ${common} d="M7.5 12v6.5"/><path ${common} d="M16.5 12v6.5"/><path ${common} d="M9.5 20h5"/></svg>`;
+    // Headset plus explicite (arceau + oreillettes + micro)
+    return `<svg viewBox="0 0 24 24" aria-hidden="true">
+      <path ${common} d="M4 12a8 8 0 0 1 16 0"/>
+      <path ${common} d="M6 12v5a2 2 0 0 0 2 2h1v-7H8a2 2 0 0 0-2 2z"/>
+      <path ${common} d="M18 12v5a2 2 0 0 1-2 2h-1v-7h1a2 2 0 0 1 2 2z"/>
+      <path ${common} d="M14.5 20.5h-2.5"/>
+      <path ${common} d="M14.5 20.5a3.5 3.5 0 0 0 3.5-3.5"/>
+      <path ${common} d="M18 17.5l2 1.5"/>
+    </svg>`;
   }
 
   function open(opts){

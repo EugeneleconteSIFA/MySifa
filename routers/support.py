@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Request
 
 from config import (
     SUPPORT_TO_EMAIL,
+    SUPPORT_EMAIL_DISABLED,
     SUPPORT_EMAIL_DEBUG,
     SUPPORT_EMAIL_PROVIDER,
     MS_TENANT_ID,
@@ -167,11 +168,48 @@ async def contact_support(request: Request):
     )
 
     try:
-        provider = (SUPPORT_EMAIL_PROVIDER or "graph").strip().lower()
-        if provider == "smtp":
-            _send_support_email(subject=full_subject, text=text, reply_to=email or None)
+        if SUPPORT_EMAIL_DISABLED:
+            raise RuntimeError("Contact support désactivé (SUPPORT_EMAIL_DISABLED=1)")
+
+        provider = (SUPPORT_EMAIL_PROVIDER or "").strip().lower()
+        reply_to = email or None
+
+        def can_graph() -> bool:
+            return bool(MS_TENANT_ID and MS_CLIENT_ID and MS_CLIENT_SECRET and MS_SENDER_UPN)
+
+        def can_smtp() -> bool:
+            return bool(SMTP_HOST and SMTP_USER and SMTP_PASS)
+
+        # Stratégie:
+        # - si provider forcé => essayer d'abord celui-ci, puis fallback raisonnable
+        # - si provider vide => choisir automatiquement le meilleur candidat
+        order: list[str]
+        if provider in {"graph", "smtp"}:
+            order = [provider, "smtp" if provider == "graph" else "graph"]
         else:
-            _send_support_graph(subject=full_subject, text=text, reply_to=email or None)
+            # Auto: Graph si complet, sinon SMTP si complet, sinon Graph (pour message d'erreur explicite)
+            order = ["graph", "smtp"] if can_graph() else (["smtp", "graph"] if can_smtp() else ["graph", "smtp"])
+
+        last_err: Optional[Exception] = None
+        for p in order:
+            try:
+                if p == "graph":
+                    if not can_graph():
+                        raise RuntimeError("Microsoft Graph non configuré (MS_* manquants)")
+                    _send_support_graph(subject=full_subject, text=text, reply_to=reply_to)
+                    last_err = None
+                    break
+                else:
+                    if not can_smtp():
+                        raise RuntimeError("SMTP non configuré (SMTP_* manquants)")
+                    _send_support_email(subject=full_subject, text=text, reply_to=reply_to)
+                    last_err = None
+                    break
+            except Exception as e:
+                last_err = e
+                continue
+        if last_err is not None:
+            raise last_err
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:

@@ -38,6 +38,7 @@ PORT        = 8000
 # Configuration SMTP via variables d’environnement (prod).
 SUPPORT_TO_EMAIL = os.getenv("SUPPORT_TO_EMAIL", "eleconte@sifa.pro")
 SUPPORT_EMAIL_PROVIDER = os.getenv("SUPPORT_EMAIL_PROVIDER", "graph")  # graph | smtp
+SUPPORT_EMAIL_DISABLED = os.getenv("SUPPORT_EMAIL_DISABLED", "0") in {"1", "true", "True", "yes", "YES"}
 
 # ─── Support (Microsoft Graph) ─────────────────────────────────────
 # Envoi sans SMTP (recommandé quand SMTP AUTH est désactivé sur le tenant).
