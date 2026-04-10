@@ -358,6 +358,10 @@ body.light .portal-app--busy::after{background:rgba(255,255,255,.88);color:var(-
   display:inline-flex;align-items:center;gap:6px;line-height:1;padding:0}
 .portal-logout:hover{color:var(--danger)}
 
+.page-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.top-userbar{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted);padding-top:2px}
+.top-userbar .who{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+
 /* ── MyStock ────────────────────────────────────────────────────── */
 .stock-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px}
 @media (max-width:900px){.stock-grid{grid-template-columns:repeat(2,1fr)}}
@@ -1753,6 +1757,18 @@ function renderPortal(){
   );
 }
 
+function renderTopUserBar(){
+  const isLight=document.body.classList.contains('light');
+  return h('div',{className:'top-userbar'},
+    h('span',{className:'who'},iconEl('user',14),document.createTextNode(' '+((S.user&&S.user.nom)?S.user.nom:''))),
+    h('button',{className:'portal-logout',onClick:()=>{document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');render();}},
+      h('span',{className:'theme-ico'},iconEl(isLight?'sun':'moon',16)),
+      h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')
+    ),
+    h('button',{className:'portal-logout',onClick:doLogout},'Déconnexion')
+  );
+}
+
 function renderStock(){
   const g=S.stockGlobale;
   const isLight=document.body.classList.contains('light');
@@ -2257,7 +2273,10 @@ function renderCompta(){
     h('main',{className:'main'},
       h('div',{className:'container'},
         topbar,
-        h('h1',null,'MyCompta'),
+        h('div',{className:'page-head'},
+          h('h1',null,'MyCompta'),
+          renderTopUserBar()
+        ),
         h('div',{className:'subtitle'},'Comptabilité — application en cours de construction'),
         h('div',{className:'card-empty'},'Aucun onglet pour le moment. La structure est prête.')
       )
@@ -4289,7 +4308,13 @@ function render(){
       h('div',{className:'app'},renderSidebar(),
         h('main',{className:'main'},h('div',{className:'container'},
           topbar,
-          h('h1',null,titles[S.page]||''),h('div',{className:'subtitle'},subs[S.page]||''),
+            h('div',{className:'page-head'},
+              h('div',null,
+                h('h1',null,titles[S.page]||''),
+                h('div',{className:'subtitle'},subs[S.page]||'')
+              ),
+              renderTopUserBar()
+            ),
         (S.page==='production'||S.page==='historique'||S.page==='saisies')?renderFilters():null,
         S.page==='production'?renderProdPage():null,
         S.page==='suivi'?renderSuivi():null,
@@ -4308,8 +4333,7 @@ function render(){
 
   if(S.toast){const c={success:'var(--success)',error:'var(--danger)'};root.appendChild(h('div',{className:'toast',style:{borderLeft:'3px solid '+(c[S.toast.type]||'var(--accent)')}},h('span',{style:{fontSize:'14px',color:c[S.toast.type]||'var(--accent)'}},S.toast.message)));}
 
-  // Après (re)render : bouton installer PWA
-  setupInstallButton();
+  // PWA: feature temporairement retirée. (setupInstallButton supprimé)
 }
 
 async function nav(){
@@ -4329,6 +4353,19 @@ async function nav(){
 }
 
 if(localStorage.getItem('theme')==='light')document.body.classList.add('light');
+// Désactive temporairement toute trace PWA (service worker) pour éviter des effets de cache.
+// Certains navigateurs gardent un SW enregistré même après suppression du manifest.
+try{
+  if('serviceWorker' in navigator){
+    const k='mysifa_sw_unreg_v1';
+    if(!sessionStorage.getItem(k)){
+      sessionStorage.setItem(k,'1');
+      navigator.serviceWorker.getRegistrations()
+        .then(rs=>Promise.all(rs.map(r=>r.unregister().catch(()=>false))))
+        .then(()=>{ try{ location.reload(); }catch(e){} });
+    }
+  }
+}catch(e){}
 checkAuth();
 </script>
 <!-- Chatbot temporairement désactivé -->
