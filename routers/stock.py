@@ -1,3 +1,11 @@
+"""Compatibility shim.
+
+Ce module reste à l'ancien emplacement pour ne pas casser les imports existants.
+L'implémentation réelle est dans `app/routers/stock.py`.
+"""
+
+from app.routers.stock import *  # noqa: F401,F403
+
 """SIFA — MyStock v2.0
 FIFO lots, inventaire, recherche instantanée, mobile-first.
 Accès : direction, administration, logistique.

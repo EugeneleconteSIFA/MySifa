@@ -1,22 +1,8 @@
-"""MySifa — Page MyProd (standalone)
+"""Compatibility shim.
 
-Accès : /prod
+Ce module reste à l'ancien emplacement pour ne pas casser les imports existants.
+L'implémentation réelle est dans `app/web/prod_page.py`.
 """
 
-from fastapi import APIRouter, Request, HTTPException
-from fastapi.responses import HTMLResponse
-
-from frontend.html import render_frontend_html
-from services.auth_service import get_current_user
-
-
-router = APIRouter()
-
-
-@router.get("/prod", response_class=HTMLResponse)
-def prod_page(request: Request):
-    user = get_current_user(request)
-    if user.get("role") not in {"direction", "administration", "fabrication"}:
-        raise HTTPException(status_code=403, detail="Accès réservé à MyProd")
-    return HTMLResponse(content=render_frontend_html("prod"))
+from app.web.prod_page import *  # noqa: F401,F403
 

@@ -4,7 +4,11 @@ VPS_USER="root"
 VPS_IP="168.231.85.64"   # ← à remplacer
 VPS_PATH="/home/sifa/production-saas"
 LOCAL_DB="data/production.db"
-REMOTE_DB="$VPS_PATH/app/data/production.db"
+# IMPORTANT: le service systemd lance depuis $VPS_PATH et la config par défaut lit `data/production.db`.
+# Donc on copie la DB au même endroit, sauf si ton .env VPS surcharge DB_PATH.
+REMOTE_DB="$VPS_PATH/data/production.db"
+LOCAL_UPLOADS="data/uploads"
+REMOTE_UPLOADS="$VPS_PATH/data/uploads"
 
 echo "🚀 Déploiement MySifa..."
 
@@ -28,6 +32,13 @@ if [[ "$1" == "--db" ]]; then
   echo "\n🗄️  Transfert de la base de données..."
   scp $LOCAL_DB $VPS_USER@$VPS_IP:$REMOTE_DB
   echo "✅ DB transférée."
+fi
+
+# 4. Transfert uploads (seulement si --uploads passé en argument)
+if [[ "$1" == "--uploads" || "$2" == "--uploads" ]]; then
+  echo "\n📎 Transfert des uploads (CSV/XLSX importés)..."
+  rsync -az --delete "$LOCAL_UPLOADS/" "$VPS_USER@$VPS_IP:$REMOTE_UPLOADS/"
+  echo "✅ Uploads transférés."
 fi
 
 echo "\n✅ Déploiement terminé."

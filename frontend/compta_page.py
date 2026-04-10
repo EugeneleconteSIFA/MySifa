@@ -1,24 +1,8 @@
-"""MySifa — Page MyCompta (standalone)
+"""Compatibility shim.
 
-Accès : direction, administration, comptabilite
-URL   : /compta
+Ce module reste à l'ancien emplacement pour ne pas casser les imports existants.
+L'implémentation réelle est dans `app/web/compta_page.py`.
 """
 
-from fastapi import APIRouter, Request, HTTPException
-from fastapi.responses import HTMLResponse
-
-from frontend.html import render_frontend_html
-from services.auth_service import get_current_user
-from config import ROLES_COMPTA
-
-
-router = APIRouter()
-
-
-@router.get("/compta", response_class=HTMLResponse)
-def compta_page(request: Request):
-    user = get_current_user(request)
-    if user.get("role") not in ROLES_COMPTA:
-        raise HTTPException(status_code=403, detail="Accès réservé à MyCompta")
-    return HTMLResponse(content=render_frontend_html("compta"))
+from app.web.compta_page import *  # noqa: F401,F403
 

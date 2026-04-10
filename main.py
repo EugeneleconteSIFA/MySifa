@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from config import APP_TITLE, APP_VERSION, HOST, PORT
@@ -24,10 +24,12 @@ from routers.planning import router as planning_router
 from routers.stock import router as router_stock
 from routers.chat import router as chat_router
 from routers.support import router as support_router
+from app.routers.compta import router as compta_router
 from frontend.planning_page import router as planning_page_router
 from frontend.prod_page import router as prod_page_router
 from frontend.stock_page import router as stock_page_router
 from frontend.compta_page import router as compta_page_router
+from app.web.expe_page import router as expe_page_router
 
 
 @asynccontextmanager
@@ -81,15 +83,22 @@ app.include_router(planning_router)
 app.include_router(router_stock)
 app.include_router(chat_router)
 app.include_router(support_router)
+app.include_router(compta_router)
 app.include_router(planning_page_router)
 app.include_router(prod_page_router)
 app.include_router(stock_page_router)
 app.include_router(compta_page_router)
+app.include_router(expe_page_router)
 
 
 @app.get("/", response_class=HTMLResponse)
 def serve_frontend():
     return render_frontend_html("portal")
+
+# URL stable pour l'onglet "Utilisateurs" (quelque soit l'app courante)
+@app.get("/users")
+def users_redirect():
+    return RedirectResponse(url="/prod?page=users", status_code=302)
 
 if __name__ == "__main__":
     import uvicorn
