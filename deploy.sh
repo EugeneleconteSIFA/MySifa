@@ -1,6 +1,6 @@
 #!/bin/bash
 
-VPS_USER="sifa"
+VPS_USER="root"
 VPS_IP="168.231.85.64"   # ← à remplacer
 VPS_PATH="/home/sifa/production-saas"
 LOCAL_DB="data/production.db"
