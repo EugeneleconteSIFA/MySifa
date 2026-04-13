@@ -81,14 +81,15 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 .sidebar::-webkit-scrollbar{width:0}.sidebar{scrollbar-width:none}
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200}
 body.sb-open .sidebar-overlay{display:block}
-.mobile-topbar{display:none;align-items:center;gap:10px;padding:12px 14px;
-  background:var(--card);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:120}
-.burger-btn{background:none;border:1px solid var(--border);border-radius:10px;
-  width:38px;height:38px;display:flex;align-items:center;justify-content:center;
-  cursor:pointer;color:var(--muted);font-size:18px;flex-shrink:0}
-.burger-btn:hover{border-color:var(--accent);color:var(--accent)}
-.mobile-title{font-size:14px;font-weight:900;letter-spacing:-.2px}
-.mobile-title span{color:var(--accent)}
+.mobile-topbar{display:none;align-items:center;gap:10px;margin-bottom:14px}
+.mobile-menu-btn{display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;
+  border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;font-family:inherit}
+.mobile-menu-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.mobile-home-btn{display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;
+  border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;font-family:inherit;margin-left:auto}
+.mobile-home-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.mobile-topbar-title{font-size:14px;font-weight:800}
+.mobile-topbar-sub{font-size:11px;color:var(--muted);margin-top:2px}
 .logo{padding:0 8px;margin-bottom:32px}
 .logo-brand{font-size:15px;font-weight:800}.logo-brand span{color:var(--accent)}
 .logo-sub{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase}
@@ -319,7 +320,10 @@ body.light .btn-p{color:#fff}
 .view-tab:hover:not(.active){background:var(--border);color:var(--text2)}
 
 @media (max-width:900px){
-  .mobile-topbar{display:flex}
+  .mobile-topbar{display:flex;position:fixed;top:0;left:0;right:0;z-index:120;background:var(--bg);padding:10px 18px;border-bottom:1px solid var(--border)}
+  .mobile-menu-btn{display:inline-flex}
+  .mobile-home-btn{display:inline-flex}
+  body.has-topbar .main{padding-top:74px}
   .main{padding:14px}
   .header{padding:0 0 14px}
   .sec{padding:16px}
@@ -488,6 +492,7 @@ function escAttr(s){return String(s??"").replace(/&/g,"&amp;").replace(/"/g,"&qu
 function icon(name,size=16){
   const a=`width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"`;
   const p={
+    'menu': '<line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line>',
     'bar-chart-2': '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
     'package': '<line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
     'wrench': '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
@@ -672,7 +677,7 @@ function openSupport(){
 function render(){
   const a=document.getElementById("app");
   if(S.loading){
-    a.innerHTML=`<div class="app">${renderSidebar()}<main class="main"><div class="mobile-topbar"><button type="button" class="burger-btn" onclick="toggleSidebar()" aria-label="Menu">☰</button><div class="mobile-title">Planning <span>MyProd</span></div><button type="button" class="burger-btn" onclick="location.href='/'" aria-label="Accueil">${icon('home',18)}</button></div><div class="planning-container" style="display:flex;align-items:center;justify-content:center;min-height:50vh;color:var(--muted)">Chargement…</div></main></div><div id="mroot"></div>`;
+    a.innerHTML=`<div class="app">${renderSidebar()}<main class="main"><div class="mobile-topbar"><button type="button" class="mobile-menu-btn" onclick="toggleSidebar()" aria-label="Menu"><span style="display: inline-flex; align-items: center; flex-shrink: 0;">${icon('menu',20)}</span></button><div><div class="mobile-topbar-title">Planning</div><div class="mobile-topbar-sub">KPIs, temps, quantités et qualité de saisie</div></div><button type="button" class="mobile-home-btn" onclick="location.href='/'" aria-label="Accueil"><span style="display: inline-flex; align-items: center; flex-shrink: 0;">${icon('home',20)}</span></button></div><div class="planning-container" style="display:flex;align-items:center;justify-content:center;min-height:50vh;color:var(--muted)">Chargement…</div></main></div><div id="mroot"></div>`;
     return;
   }
   const m=S.machine||{nom:"?"};
@@ -718,14 +723,14 @@ function render(){
     const fabMsg=`<p style="color:var(--muted);line-height:1.5;margin:0">Aucune machine n’est associée à votre compte pour l’instant. Les machines s’affichent lorsque le champ <strong>machine</strong> de vos <strong>saisies de production</strong> correspond au nom ou au code d’une machine du planning, ou lorsqu’une machine par défaut est renseignée sur votre fiche utilisateur.</p>`;
     const admMsg=`<p style="color:var(--muted);line-height:1.5;margin:0">Aucune machine active n’est disponible dans l’application.</p>`;
     const isFab=ME&&ME.role==="fabrication";
-    a.innerHTML=`<div class="app">${renderSidebar()}<main class="main"><div class="mobile-topbar"><button type="button" class="burger-btn" onclick="toggleSidebar()" aria-label="Menu">☰</button><div class="mobile-title">Planning <span>MyProd</span></div><button type="button" class="burger-btn" onclick="location.href='/'" aria-label="Accueil">${icon('home',18)}</button></div><div class="planning-container" style="max-width:560px;margin:40px auto;padding:0 16px;color:var(--text)">
+    a.innerHTML=`<div class="app">${renderSidebar()}<main class="main"><div class="mobile-topbar"><button type="button" class="mobile-menu-btn" onclick="toggleSidebar()" aria-label="Menu"><span style="display: inline-flex; align-items: center; flex-shrink: 0;">${icon('menu',20)}</span></button><div><div class="mobile-topbar-title">Planning</div><div class="mobile-topbar-sub">KPIs, temps, quantités et qualité de saisie</div></div><button type="button" class="mobile-home-btn" onclick="location.href='/'" aria-label="Accueil"><span style="display: inline-flex; align-items: center; flex-shrink: 0;">${icon('home',20)}</span></button></div><div class="planning-container" style="max-width:560px;margin:40px auto;padding:0 16px;color:var(--text)">
       <h1 style="font-size:18px;margin:0 0 12px">Planning</h1>
       ${isFab?fabMsg:admMsg}
     </div></main></div><div id="mroot"></div>`;
     return;
   }
 
-  a.innerHTML=`<div class="app">${renderSidebar()}<main class="main"><div class="mobile-topbar"><button type="button" class="burger-btn" onclick="toggleSidebar()" aria-label="Menu">☰</button><div class="mobile-title">Planning <span>MyProd</span></div><button type="button" class="burger-btn" onclick="location.href='/'" aria-label="Accueil">${icon('home',18)}</button></div><div class="planning-container">
+  a.innerHTML=`<div class="app">${renderSidebar()}<main class="main"><div class="mobile-topbar"><button type="button" class="mobile-menu-btn" onclick="toggleSidebar()" aria-label="Menu"><span style="display: inline-flex; align-items: center; flex-shrink: 0;">${icon('menu',20)}</span></button><div><div class="mobile-topbar-title">Planning</div><div class="mobile-topbar-sub">KPIs, temps, quantités et qualité de saisie</div></div><button type="button" class="mobile-home-btn" onclick="location.href='/'" aria-label="Accueil"><span style="display: inline-flex; align-items: center; flex-shrink: 0;">${icon('home',20)}</span></button></div><div class="planning-container">
   <header class="header">
     <div class="h-left">
       <div>
@@ -1349,6 +1354,7 @@ function submitDefaults(){
 
 async function boot(){
   if(localStorage.getItem("theme")==="light")document.body.classList.add("light");
+  document.body.classList.add("has-topbar");
   try{ render(); }catch(e){}
   let r;
   try{r=await fetch("/api/auth/me",{credentials:"include"});}catch(e){location.href="/";return;}

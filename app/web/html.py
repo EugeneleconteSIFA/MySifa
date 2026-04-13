@@ -2255,8 +2255,8 @@ function renderStock(){
         h('div',{className:'card',style:{padding:'16px',marginBottom:'12px'}},
           h('div',{style:{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:'12px',flexWrap:'wrap'}},
             h('div',{style:{flex:'1',minWidth:'200px'}},
-              h('h3',{style:{fontSize:'16px',fontWeight:'800',marginBottom:'4px'}},p.reference),
-              h('p',{style:{fontSize:'13px',color:'var(--muted)'}},p.designation),
+          h('h3',{style:{fontSize:'16px',fontWeight:'800',marginBottom:'4px'}},p.reference),
+          h('p',{style:{fontSize:'13px',color:'var(--muted)'}},p.designation),
               h('p',{style:{fontSize:'11px',color:'var(--muted)',marginTop:'4px'}},'Unité : '+p.unite)
             ),
             btnAddQty
@@ -2666,7 +2666,7 @@ function renderCompta(){
     h('main',{className:'main'},
       h('div',{className:'container'},
         topbar,
-        h('h1',null,'MyCompta'),
+          h('h1',null,'MyCompta'),
         h('div',{className:'subtitle'},'Import Factor → mise en forme → copier vers CW'),
         content
       )
@@ -3920,7 +3920,7 @@ function attachModalDrag(modal){
   modal._dragMoveHandler = onMove;
   modal._dragUpHandler = onUp;
 }
-
+ 
 function closeModal() {
   try{
     const m = document.querySelector('.add-row-modal');
@@ -3975,7 +3975,7 @@ function openEditModal(row) {
     h('h3',null,'Modifier la saisie'),
     counter
   );
-
+ 
   const deleteBtn = h('button', {
     className: 'btn-danger',
     onClick: async e => {
@@ -4177,7 +4177,7 @@ function renderSaisies(){
     });
     return rows;
   }
-
+ 
   // ── Tri ──────────────────────────────────────────────────────
   let rows=addDurations(d.rows||[]);
   if(S.sortState.col) rows=sortRows(rows,S.sortState.col,S.sortState.asc);
@@ -5058,7 +5058,7 @@ function render(){
       h('div',{className:'app'},renderSidebar(),
         h('main',{className:'main'},h('div',{className:'container'},
           topbar,
-            h('h1',null,titles[S.page]||''),
+                h('h1',null,titles[S.page]||''),
             h('div',{className:'subtitle'},subs[S.page]||''),
         (S.page==='production'||S.page==='historique'||S.page==='saisies')?renderFilters():null,
         S.page==='production'?renderProdPage():null,

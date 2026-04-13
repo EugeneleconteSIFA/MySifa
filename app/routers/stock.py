@@ -18,7 +18,7 @@ INVENTAIRE_ALERTE_JOURS = 180  # 6 mois
 # Colonnes mouvements (évite m.* + collision avec join users)
 _MVT_FIELDS = (
     "m.id, m.produit_id, m.emplacement, m.type_mouvement, m.quantite, "
-    "m.quantite_avant, m.quantite_apres, m.note, m.created_at, m.created_by"
+    "m.quantite_avant, m.quantite_apres, m.note, m.created_at, m.created_by, m.created_by_name"
 )
 
 _STOCK_USER_JOIN = (
@@ -80,6 +80,7 @@ def apply_fifo_sortie(
     emplacement: str,
     quantite: float,
     user_email: str,
+    user_name: Optional[str] = None,
     note: str = "",
 ) -> dict:
     """
@@ -126,9 +127,9 @@ def apply_fifo_sortie(
     # Historique
     conn.execute(
         """INSERT INTO mouvements_stock
-           (produit_id,emplacement,type_mouvement,quantite,quantite_avant,quantite_apres,note,created_at,created_by)
-           VALUES (?,?,?,?,?,?,?,?,?)""",
-        (produit_id, emplacement, "sortie", quantite, quantite_avant, quantite_apres, note, now, user_email),
+           (produit_id,emplacement,type_mouvement,quantite,quantite_avant,quantite_apres,note,created_at,created_by,created_by_name)
+           VALUES (?,?,?,?,?,?,?,?,?,?)""",
+        (produit_id, emplacement, "sortie", quantite, quantite_avant, quantite_apres, note, now, user_email, user_name),
     )
     return {"quantite_avant": quantite_avant, "quantite_apres": quantite_apres}
 
@@ -222,7 +223,8 @@ def vue_globale(request: Request):
                LEFT JOIN stock_emplacements s ON s.produit_id = p.id"""
         ).fetchone()
         mvts = conn.execute(
-            f"""SELECT {_MVT_FIELDS}, p.reference, p.designation, u.nom AS created_by_nom
+            f"""SELECT {_MVT_FIELDS}, p.reference, p.designation,
+                      COALESCE(NULLIF(TRIM(m.created_by_name),''), u.nom) AS created_by_nom
                FROM mouvements_stock m
                JOIN produits p ON p.id = m.produit_id
                {_STOCK_USER_JOIN}
@@ -290,7 +292,8 @@ def get_produit(produit_id: int, request: Request):
 
         # Historique mouvements
         mvts = conn.execute(
-            f"""SELECT {_MVT_FIELDS}, u.nom AS created_by_nom
+            f"""SELECT {_MVT_FIELDS},
+                      COALESCE(NULLIF(TRIM(m.created_by_name),''), u.nom) AS created_by_nom
                FROM mouvements_stock m
                {_STOCK_USER_JOIN}
                WHERE m.produit_id=?
@@ -425,7 +428,8 @@ def get_emplacement(emplacement: str, request: Request):
         ).fetchall()
 
         mvts = conn.execute(
-            f"""SELECT {_MVT_FIELDS}, p.reference, p.designation, u.nom AS created_by_nom
+            f"""SELECT {_MVT_FIELDS}, p.reference, p.designation,
+                      COALESCE(NULLIF(TRIM(m.created_by_name),''), u.nom) AS created_by_nom
                FROM mouvements_stock m
                JOIN produits p ON p.id=m.produit_id
                {_STOCK_USER_JOIN}
@@ -483,6 +487,7 @@ async def mouvement_stock(request: Request):
         raise HTTPException(400, "Quantité doit être positive")
 
     now = datetime.now().isoformat()
+    created_by_name = (user.get("nom") or "").strip() or None
 
     with get_db() as conn:
         # Vérifier produit
@@ -525,14 +530,14 @@ async def mouvement_stock(request: Request):
             # Historique
             conn.execute(
                 """INSERT INTO mouvements_stock
-                   (produit_id,emplacement,type_mouvement,quantite,quantite_avant,quantite_apres,note,created_at,created_by)
-                   VALUES (?,?,?,?,?,?,?,?,?)""",
-                (produit_id, emplacement, "entree", quantite, qte_avant, qte_apres, note, now, user["email"]),
+                   (produit_id,emplacement,type_mouvement,quantite,quantite_avant,quantite_apres,note,created_at,created_by,created_by_name)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                (produit_id, emplacement, "entree", quantite, qte_avant, qte_apres, note, now, user["email"], created_by_name),
             )
             result = {"quantite_avant": qte_avant, "quantite_apres": qte_apres}
 
         elif type_mvt == "sortie":
-            result = apply_fifo_sortie(conn, produit_id, emplacement, quantite, user["email"], note)
+            result = apply_fifo_sortie(conn, produit_id, emplacement, quantite, user["email"], created_by_name, note)
             qte_apres = result["quantite_apres"]
 
         elif type_mvt == "inventaire":
@@ -565,9 +570,9 @@ async def mouvement_stock(request: Request):
                 )
             conn.execute(
                 """INSERT INTO mouvements_stock
-                   (produit_id,emplacement,type_mouvement,quantite,quantite_avant,quantite_apres,note,created_at,created_by)
-                   VALUES (?,?,?,?,?,?,?,?,?)""",
-                (produit_id, emplacement, "inventaire", quantite, qte_avant, quantite, note, now, user["email"]),
+                   (produit_id,emplacement,type_mouvement,quantite,quantite_avant,quantite_apres,note,created_at,created_by,created_by_name)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                (produit_id, emplacement, "inventaire", quantite, qte_avant, quantite, note, now, user["email"], created_by_name),
             )
             result = {"quantite_avant": qte_avant, "quantite_apres": quantite}
             qte_apres = quantite
@@ -642,7 +647,8 @@ def dashboard(request: Request):
         ).fetchone()
 
         derniers_mvts = conn.execute(
-            f"""SELECT {_MVT_FIELDS}, p.reference, p.designation, u.nom AS created_by_nom
+            f"""SELECT {_MVT_FIELDS}, p.reference, p.designation,
+                      COALESCE(NULLIF(TRIM(m.created_by_name),''), u.nom) AS created_by_nom
                FROM mouvements_stock m
                JOIN produits p ON p.id=m.produit_id
                {_STOCK_USER_JOIN}

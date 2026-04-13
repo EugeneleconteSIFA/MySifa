@@ -509,6 +509,14 @@ def _migrate(conn):
     if "commentaire" not in se_cols:
         conn.execute("ALTER TABLE stock_emplacements ADD COLUMN commentaire TEXT")
 
+    # Traçabilité mouvements MyStock : snapshot du nom (Nom Prénom) de l'auteur
+    try:
+        mvt_cols = {row[1] for row in conn.execute("PRAGMA table_info(mouvements_stock)").fetchall()}
+        if "created_by_name" not in mvt_cols:
+            conn.execute("ALTER TABLE mouvements_stock ADD COLUMN created_by_name TEXT")
+    except Exception:
+        pass
+
     # Tables MyCompta (Factor -> CW)
     existing_tables = {row[0] for row in conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table'"

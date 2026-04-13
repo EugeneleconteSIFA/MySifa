@@ -70,15 +70,17 @@ body.light .theme-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 18px rg
 .logout-btn{border:none}.logout-btn:hover{color:var(--danger);background:rgba(248,113,113,.1);box-shadow:0 0 0 1px rgba(248,113,113,.35),0 0 18px rgba(248,113,113,.12)}
 .version{font-size:10px;color:var(--muted);font-family:monospace;padding:4px 12px}
 .main{flex:1;padding:24px 28px;overflow:auto}
-.mobile-topbar{display:none;align-items:center;gap:10px;padding:12px 14px;
-  background:var(--card);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:120}
-.burger-btn{background:none;border:1px solid var(--border);border-radius:10px;
-  width:38px;height:38px;display:flex;align-items:center;justify-content:center;
-  cursor:pointer;color:var(--muted);font-size:18px;flex-shrink:0}
-.burger-btn:hover{border-color:var(--accent);color:var(--accent)}
-.home-btn{margin-left:auto}
-.mobile-title{font-size:14px;font-weight:900;letter-spacing:-.2px}
-.mobile-title span{color:var(--accent)}
+.mobile-topbar{display:none;align-items:center;gap:10px;margin-bottom:14px}
+.mobile-menu-btn{display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;
+  border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;font-family:inherit;flex-shrink:0}
+.mobile-menu-btn:hover{border-color:var(--accent);color:var(--accent);background:rgba(34,211,238,.12)}
+body.light .mobile-menu-btn:hover{background:rgba(8,145,178,.12)}
+.mobile-home-btn{display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;
+  border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;font-family:inherit;margin-left:auto;flex-shrink:0}
+.mobile-home-btn:hover{border-color:var(--accent);color:var(--accent);background:rgba(34,211,238,.12)}
+body.light .mobile-home-btn:hover{background:rgba(8,145,178,.12)}
+.mobile-topbar-title{font-size:14px;font-weight:800}
+.mobile-topbar-sub{font-size:11px;color:var(--muted);margin-top:2px}
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200}
 body.sb-open .sidebar-overlay{display:block}
 h1{font-size:22px;margin:0 0 6px}
@@ -126,7 +128,10 @@ body.light .users-search input:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .legend .item strong{display:block;margin-bottom:6px;font-size:13px}
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--border);padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;box-shadow:0 8px 32px rgba(0,0,0,.35);z-index:900}.toast.err{border-left:3px solid var(--danger)}
 @media(max-width:900px){
-  .mobile-topbar{display:flex}
+  .mobile-topbar{display:flex;position:fixed;top:0;left:0;right:0;z-index:120;background:var(--bg);padding:10px 18px;border-bottom:1px solid var(--border)}
+  .mobile-menu-btn{display:inline-flex}
+  .mobile-home-btn{display:inline-flex}
+  body.has-topbar .main{padding-top:74px}
   .main{padding:16px}
   .desktop-head{display:none}
   .sidebar{position:fixed;left:0;top:0;bottom:0;height:auto;max-height:100vh;z-index:300;
@@ -175,12 +180,19 @@ body.light .users-search input:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
   </aside>
   <main class="main">
     <div class="mobile-topbar">
-      <button type="button" class="burger-btn" id="sb-burger" aria-label="Menu">☰</button>
-      <div class="mobile-title">Paramètres <span>MySifa</span></div>
-      <button type="button" class="burger-btn home-btn" id="sb-home" aria-label="Accueil">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/><path d="M10 21v-6h4v6"/>
-        </svg>
+      <button type="button" class="mobile-menu-btn" id="sb-burger" aria-label="Menu">
+        <span style="display: inline-flex; align-items: center; flex-shrink: 0;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:inline-block;vertical-align:middle;flex-shrink:0"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+        </span>
+      </button>
+      <div>
+        <div class="mobile-topbar-title">Paramètres</div>
+        <div class="mobile-topbar-sub">Gestion des comptes et des accès</div>
+      </div>
+      <button type="button" class="mobile-home-btn" id="sb-home" aria-label="Accueil">
+        <span style="display: inline-flex; align-items: center; flex-shrink: 0;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M3 10.5L12 3l9 7.5"></path><path d="M5 10v11h14V10"></path><path d="M10 21v-6h4v6"></path></svg>
+        </span>
       </button>
     </div>
     <div class="desktop-head">
@@ -312,6 +324,7 @@ function setSidebarOpen(open){
   document.body.classList.toggle('sb-open', !!open);
 }
 try{
+  document.body.classList.add('has-topbar');
   const ov = document.getElementById('sb-ov');
   if(ov) ov.addEventListener('click', ()=>setSidebarOpen(false));
   const burger = document.getElementById('sb-burger');
