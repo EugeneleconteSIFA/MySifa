@@ -79,6 +79,16 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 .app{display:flex;min-height:100vh}
 .sidebar{width:220px;background:var(--card);border-right:1px solid var(--border);padding:20px 12px;display:flex;flex-direction:column;flex-shrink:0;height:100vh;position:sticky;top:0;overflow-y:auto}
 .sidebar::-webkit-scrollbar{width:0}.sidebar{scrollbar-width:none}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200}
+body.sb-open .sidebar-overlay{display:block}
+.mobile-topbar{display:none;align-items:center;gap:10px;padding:12px 14px;
+  background:var(--card);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:120}
+.burger-btn{background:none;border:1px solid var(--border);border-radius:10px;
+  width:38px;height:38px;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;color:var(--muted);font-size:18px;flex-shrink:0}
+.burger-btn:hover{border-color:var(--accent);color:var(--accent)}
+.mobile-title{font-size:14px;font-weight:900;letter-spacing:-.2px}
+.mobile-title span{color:var(--accent)}
 .logo{padding:0 8px;margin-bottom:32px}
 .logo-brand{font-size:15px;font-weight:800}.logo-brand span{color:var(--accent)}
 .logo-sub{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase}
@@ -307,9 +317,25 @@ body.light .btn-p{color:#fff}
 .view-tab:not(:first-child){margin-left:-1px}
 .view-tab.active{background:var(--accent-bg);color:var(--accent);border-color:var(--accent);z-index:1;position:relative}
 .view-tab:hover:not(.active){background:var(--border);color:var(--text2)}
+
+@media (max-width:900px){
+  .mobile-topbar{display:flex}
+  .main{padding:14px}
+  .header{padding:0 0 14px}
+  .sec{padding:16px}
+  .wk-nav button{padding:6px 10px}
+  .tl-bar{height:52px}
+  .dh-cell{font-size:11px}
+  /* Sidebar en tiroir */
+  .sidebar{position:fixed;left:0;top:0;bottom:0;height:auto;max-height:100vh;z-index:300;
+    transform:translateX(-105%);transition:transform .18s ease;
+    box-shadow:0 16px 48px rgba(0,0,0,.55)}
+  body.sb-open .sidebar{transform:translateX(0)}
+}
 </style>
 </head>
 <body>
+<div class="sidebar-overlay" id="sb-ov"></div>
 <div id="app"></div>
 <script src="/static/support_widget.js"></script>
 <script>
@@ -645,7 +671,7 @@ function openSupport(){
 function render(){
   const a=document.getElementById("app");
   if(S.loading){
-    a.innerHTML=`<div class="app">${renderSidebar()}<main class="main"><div class="planning-container" style="display:flex;align-items:center;justify-content:center;min-height:50vh;color:var(--muted)">Chargement…</div></main></div><div id="mroot"></div>`;
+    a.innerHTML=`<div class="app">${renderSidebar()}<main class="main"><div class="mobile-topbar"><button type="button" class="burger-btn" onclick="toggleSidebar()" aria-label="Menu">☰</button><div class="mobile-title">Planning <span>MyProd</span></div></div><div class="planning-container" style="display:flex;align-items:center;justify-content:center;min-height:50vh;color:var(--muted)">Chargement…</div></main></div><div id="mroot"></div>`;
     return;
   }
   const m=S.machine||{nom:"?"};
@@ -691,14 +717,14 @@ function render(){
     const fabMsg=`<p style="color:var(--muted);line-height:1.5;margin:0">Aucune machine n’est associée à votre compte pour l’instant. Les machines s’affichent lorsque le champ <strong>machine</strong> de vos <strong>saisies de production</strong> correspond au nom ou au code d’une machine du planning, ou lorsqu’une machine par défaut est renseignée sur votre fiche utilisateur.</p>`;
     const admMsg=`<p style="color:var(--muted);line-height:1.5;margin:0">Aucune machine active n’est disponible dans l’application.</p>`;
     const isFab=ME&&ME.role==="fabrication";
-    a.innerHTML=`<div class="app">${renderSidebar()}<main class="main"><div class="planning-container" style="max-width:560px;margin:40px auto;padding:0 16px;color:var(--text)">
+    a.innerHTML=`<div class="app">${renderSidebar()}<main class="main"><div class="mobile-topbar"><button type="button" class="burger-btn" onclick="toggleSidebar()" aria-label="Menu">☰</button><div class="mobile-title">Planning <span>MyProd</span></div></div><div class="planning-container" style="max-width:560px;margin:40px auto;padding:0 16px;color:var(--text)">
       <h1 style="font-size:18px;margin:0 0 12px">Planning</h1>
       ${isFab?fabMsg:admMsg}
     </div></main></div><div id="mroot"></div>`;
     return;
   }
 
-  a.innerHTML=`<div class="app">${renderSidebar()}<main class="main"><div class="planning-container">
+  a.innerHTML=`<div class="app">${renderSidebar()}<main class="main"><div class="mobile-topbar"><button type="button" class="burger-btn" onclick="toggleSidebar()" aria-label="Menu">☰</button><div class="mobile-title">Planning <span>MyProd</span></div></div><div class="planning-container">
   <header class="header">
     <div class="h-left">
       <div>
@@ -779,6 +805,17 @@ function autoScrollDossiersIfNeeded(){
     requestAnimationFrame(()=>requestAnimationFrame(scrollIt));
   }catch(e){}
 }
+
+function setSidebarOpen(open){
+  document.body.classList.toggle("sb-open", !!open);
+}
+function toggleSidebar(){
+  setSidebarOpen(!document.body.classList.contains("sb-open"));
+}
+try{
+  const ov=document.getElementById("sb-ov");
+  if(ov) ov.addEventListener("click",()=>setSidebarOpen(false));
+}catch(e){}
 
 function mkTL(mon,slots){
   const we=addD(mon,7),HF=.42,days=[];

@@ -69,6 +69,16 @@ body.light .theme-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 18px rg
 .logout-btn{border:none}.logout-btn:hover{color:var(--danger);background:rgba(248,113,113,.1);box-shadow:0 0 0 1px rgba(248,113,113,.35),0 0 18px rgba(248,113,113,.12)}
 .version{font-size:10px;color:var(--muted);font-family:monospace;padding:4px 12px}
 .main{flex:1;padding:24px 28px;overflow:auto}
+.mobile-topbar{display:none;align-items:center;gap:10px;padding:12px 14px;
+  background:var(--card);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:120}
+.burger-btn{background:none;border:1px solid var(--border);border-radius:10px;
+  width:38px;height:38px;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;color:var(--muted);font-size:18px;flex-shrink:0}
+.burger-btn:hover{border-color:var(--accent);color:var(--accent)}
+.mobile-title{font-size:14px;font-weight:900;letter-spacing:-.2px}
+.mobile-title span{color:var(--accent)}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200}
+body.sb-open .sidebar-overlay{display:block}
 h1{font-size:22px;margin:0 0 6px}
 .sub{color:var(--muted);font-size:13px;margin-bottom:22px}
 .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px 20px;margin-bottom:16px}
@@ -83,24 +93,50 @@ td.chk{text-align:center}.dot{display:inline-block;width:8px;height:8px;border-r
 .cell-ov{font-size:9px;color:var(--accent);font-weight:700;letter-spacing:.02em}
 .form-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:12px}
 input,select{width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit}
-.btn{background:var(--accent);color:#0f172a;border:none;border-radius:10px;padding:10px 18px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit}
+.btn{background:var(--accent);color:var(--text);border:none;border-radius:10px;padding:10px 18px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit}
 .btn:hover{filter:brightness(1.06)}
 .btn-sec{background:transparent;border:1px solid var(--border);color:var(--muted);transition:box-shadow .2s,border-color .15s,color .15s,filter .15s}
 .btn-sec:hover{box-shadow:0 0 0 1px rgba(34,211,238,.32),0 0 20px rgba(34,211,238,.2);border-color:rgba(34,211,238,.45);color:var(--accent)}
 body.light .btn-sec:hover{box-shadow:0 0 0 1px rgba(8,145,178,.35),0 0 18px rgba(8,145,178,.15);border-color:rgba(8,145,178,.4);color:var(--accent)}
 .row-user{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)}
 .row-user:last-child{border-bottom:none}
-.pill{font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;border:1px solid var(--border)}
+.pill{font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;border:1px solid var(--border);display:inline-flex;align-items:center;gap:6px;line-height:1.4}
+.pill--direction{border-color:rgba(244,114,182,.35);color:#f472b6;background:rgba(244,114,182,.12)}
+.pill--administration{border-color:rgba(167,139,250,.38);color:#a78bfa;background:rgba(167,139,250,.12)}
+.pill--fabrication{border-color:rgba(52,211,153,.35);color:var(--ok);background:rgba(52,211,153,.12)}
+.pill--logistique{border-color:rgba(96,165,250,.35);color:#60a5fa;background:rgba(96,165,250,.12)}
+.pill--comptabilite{border-color:rgba(251,191,36,.38);color:var(--accent);background:rgba(251,191,36,.12)}
+.pill--expedition{border-color:rgba(248,113,113,.38);color:var(--danger);background:rgba(248,113,113,.12)}
+.pill--superadmin{border-color:rgba(34,211,238,.45);color:var(--accent);background:rgba(34,211,238,.14)}
+.pill--inactive{border-color:rgba(148,163,184,.35);color:var(--muted);background:rgba(148,163,184,.10)}
+.users-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.users-head h2{margin:0}
+.users-search{display:flex;align-items:center;gap:8px;min-width:min(520px,100%)}
+.users-search input{flex:1;min-width:220px;padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);
+  background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;outline:none}
+.users-search input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.14)}
+body.light .users-search input:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
+.users-search .hint{font-size:11px;color:var(--muted);white-space:nowrap}
 .tabs{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
 .hidden{display:none}
 .legend{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
 .legend .item{padding:12px;border:1px solid var(--border);border-radius:10px;font-size:12px}
 .legend .item strong{display:block;margin-bottom:6px;font-size:13px}
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--border);padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;box-shadow:0 8px 32px rgba(0,0,0,.35);z-index:900}.toast.err{border-left:3px solid var(--danger)}
-@media(max-width:760px){.layout{flex-direction:column}.sidebar{width:100%;flex-direction:row;flex-wrap:wrap;align-items:center}}
+@media(max-width:900px){
+  .mobile-topbar{display:flex}
+  .main{padding:16px}
+  .desktop-head{display:none}
+  .sidebar{position:fixed;left:0;top:0;bottom:0;height:auto;max-height:100vh;z-index:300;
+    transform:translateX(-105%);transition:transform .18s ease;
+    box-shadow:0 16px 48px rgba(0,0,0,.55);padding:20px 12px}
+  body.sb-open .sidebar{transform:translateX(0)}
+  .layout{min-height:100vh}
+}
 </style>
 </head>
 <body>
+<div class="sidebar-overlay" id="sb-ov"></div>
 <div class="layout">
   <aside class="sidebar">
     <div class="logo">My<span>Sifa</span></div>
@@ -136,14 +172,21 @@ body.light .btn-sec:hover{box-shadow:0 0 0 1px rgba(8,145,178,.35),0 0 18px rgba
     </div>
   </aside>
   <main class="main">
-    <h1>Paramètres</h1>
-    <p class="sub">Gestion des comptes et visualisation des accès applications — réservé au super administrateur.</p>
+    <div class="mobile-topbar">
+      <button type="button" class="burger-btn" id="sb-burger" aria-label="Menu">☰</button>
+      <div class="mobile-title">Paramètres <span>MySifa</span></div>
+    </div>
+    <div class="desktop-head">
+      <h1>Paramètres</h1>
+      <p class="sub">Gestion des comptes et visualisation des accès applications — réservé au super administrateur.</p>
+    </div>
 
     <section id="panel-users">
       <div class="card">
         <h2>Ajouter un utilisateur</h2>
         <div class="form-grid">
           <input type="text" id="cu-nom" placeholder="Nom complet" autocomplete="name">
+          <input type="text" id="cu-ident" placeholder="Identifiant (auto si vide)" autocomplete="off">
           <input type="email" id="cu-email" placeholder="Email" autocomplete="off">
           <input type="password" id="cu-pwd" placeholder="Mot de passe (8+)" autocomplete="new-password">
           <select id="cu-role"></select>
@@ -153,7 +196,13 @@ body.light .btn-sec:hover{box-shadow:0 0 0 1px rgba(8,145,178,.35),0 0 18px rgba
         <button type="button" class="btn" id="cu-go">Créer le compte</button>
       </div>
       <div class="card">
-        <h2>Utilisateurs</h2>
+        <div class="users-head">
+          <h2>Utilisateurs</h2>
+          <div class="users-search">
+            <input type="search" id="users-q" placeholder="Rechercher (nom, email, rôle, opérateur, machine…)" autocomplete="off" spellcheck="false">
+            <span class="hint" id="users-q-hint"></span>
+          </div>
+        </div>
         <div id="users-list"></div>
       </div>
     </section>
@@ -200,6 +249,44 @@ let operators = [];
 let machines = [];
 let matrixSnapshot = [];
 let superadminEmailRef = '';
+let usersAll = [];
+let usersQuery = '';
+
+function _norm(s){
+  return String(s||'')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-z0-9@._\- ]+/g,' ')
+    .replace(/\s+/g,' ')
+    .trim();
+}
+
+function userHaystack(u){
+  const role = (u && u.role) ? String(u.role) : '';
+  const roleLbl = (roleLabels && roleLabels[role]) ? String(roleLabels[role]) : role;
+  return _norm([
+    u && u.nom,
+    u && u.email,
+    role,
+    roleLbl,
+    u && u.operateur_lie,
+    u && u.telephone,
+    u && u.machine_nom,
+    u && u.machine_id,
+    (u && Number(u.actif)===1) ? 'actif' : 'inactif',
+  ].filter(Boolean).join(' '));
+}
+
+function scoreMatch(hay, tokens){
+  let score = 0;
+  for(const t of tokens){
+    const i = hay.indexOf(t);
+    if(i < 0) return null;
+    score += i;
+    if(i === 0) score -= 6;
+  }
+  return score;
+}
 
 function setTab(id) {
   document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
@@ -213,6 +300,20 @@ function setTab(id) {
 document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
   b.addEventListener('click', () => setTab(b.dataset.tab));
 });
+
+function setSidebarOpen(open){
+  document.body.classList.toggle('sb-open', !!open);
+}
+try{
+  const ov = document.getElementById('sb-ov');
+  if(ov) ov.addEventListener('click', ()=>setSidebarOpen(false));
+  const burger = document.getElementById('sb-burger');
+  if(burger) burger.addEventListener('click', ()=>setSidebarOpen(!document.body.classList.contains('sb-open')));
+  // Fermer le menu après clic sur un onglet (mobile)
+  document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
+    b.addEventListener('click', () => setSidebarOpen(false));
+  });
+}catch(e){}
 
 function iconSvg(name, size) {
   const s = size || 16;
@@ -312,17 +413,55 @@ function fillRoleSelect() {
 
 async function loadUsers() {
   const list = await api('/api/users');
+  usersAll = Array.isArray(list) ? list.slice() : [];
+  usersAll.sort((a,b)=>{
+    const an = _norm(a && a.nom);
+    const bn = _norm(b && b.nom);
+    if(an !== bn) return an.localeCompare(bn,'fr');
+    return _norm(a && a.email).localeCompare(_norm(b && b.email),'fr');
+  });
+  renderUsersList();
+}
+
+function renderUsersList(){
   const box = document.getElementById('users-list');
-  if (!Array.isArray(list) || !list.length) {
+  const hint = document.getElementById('users-q-hint');
+  if(!box) return;
+  if(!usersAll.length){
     box.innerHTML = '<p class="sub">Aucun utilisateur.</p>';
+    if(hint) hint.textContent = '';
     return;
   }
+
+  const q = _norm(usersQuery);
+  const tokens = q ? q.split(' ').filter(Boolean) : [];
+  let list = usersAll;
+  if(tokens.length){
+    const scored = [];
+    for(const u of usersAll){
+      const hay = userHaystack(u);
+      const sc = scoreMatch(hay, tokens);
+      if(sc != null) scored.push({u, sc});
+    }
+    scored.sort((a,b)=> (a.sc - b.sc) || _norm(a.u.nom).localeCompare(_norm(b.u.nom),'fr'));
+    list = scored.map(x=>x.u);
+  }
+  if(hint) hint.textContent = tokens.length ? (list.length + '/' + usersAll.length) : (usersAll.length + '');
+
   box.innerHTML = list.map(u => {
     const act = Number(u.actif) === 1;
+    const role = String(u.role || '').toLowerCase().trim();
+    const pillCls = 'pill pill--' + esc(role || 'fabrication');
+    const meta = [
+      u.identifiant ? ('Id: ' + esc(u.identifiant)) : '',
+      u.operateur_lie ? ('Op: ' + esc(u.operateur_lie)) : '',
+      u.machine_nom ? ('Machine: ' + esc(u.machine_nom)) : '',
+      u.telephone ? ('Tel: ' + esc(u.telephone)) : '',
+    ].filter(Boolean).join(' · ');
     return '<div class="row-user">' +
-      '<div><strong>' + esc(u.nom) + '</strong> <span class="pill">' + esc(roleLabels[u.role] || u.role) + '</span>' +
-      (act ? '' : ' <span class="pill">Inactif</span>') +
-      '<div style="font-size:11px;color:var(--muted);margin-top:4px">' + esc(u.email) + '</div></div>' +
+      '<div><strong>' + esc(u.nom) + '</strong> <span class="' + pillCls + '">' + esc(roleLabels[u.role] || u.role) + '</span>' +
+      (act ? '' : ' <span class="pill pill--inactive">Inactif</span>') +
+      '<div style="font-size:11px;color:var(--muted);margin-top:4px">' + esc(u.email) + (meta ? (' · ' + meta) : '') + '</div></div>' +
       '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
       '<button type="button" class="btn btn-sec" data-edit="' + u.id + '">Modifier</button>' +
       '<button type="button" class="btn btn-sec" data-reset="' + u.id + '">Reset MDP</button>' +
@@ -366,6 +505,7 @@ document.getElementById('cu-role').addEventListener('change', syncCuRoleUI);
 
 document.getElementById('cu-go').onclick = async () => {
   const nom = document.getElementById('cu-nom').value.trim();
+  const identifiant = document.getElementById('cu-ident').value.trim();
   const email = document.getElementById('cu-email').value.trim();
   const password = document.getElementById('cu-pwd').value;
   const role = document.getElementById('cu-role').value;
@@ -375,15 +515,27 @@ document.getElementById('cu-go').onclick = async () => {
   if (!nom || !email || !password || !role) return toast('Champs requis', true);
   try {
     await api('/api/users', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nom, email, password, role, operateur_lie, machine_id }) });
+      body: JSON.stringify({ nom, identifiant, email, password, role, operateur_lie, machine_id }) });
     toast('Utilisateur créé');
     document.getElementById('cu-nom').value = '';
+    document.getElementById('cu-ident').value = '';
     document.getElementById('cu-email').value = '';
     document.getElementById('cu-pwd').value = '';
     await loadUsers();
     await loadMatrix();
   } catch (e) { toast(e.message, true); }
 };
+
+// Recherche utilisateurs (client-side, sur toutes les colonnes)
+try{
+  const uq = document.getElementById('users-q');
+  if(uq){
+    uq.addEventListener('input', ()=>{
+      usersQuery = uq.value || '';
+      renderUsersList();
+    });
+  }
+}catch(e){}
 
 async function openEdit(id) {
   let u;
@@ -399,6 +551,7 @@ async function openEdit(id) {
 
   dlg.innerHTML = '<h3 style="margin:0 0 12px;font-size:16px">Modifier</h3>' +
     '<label class="sub">Nom</label><input id="ed-nom" value="' + esc(u.nom) + '" style="margin-bottom:10px">' +
+    '<label class="sub">Identifiant</label><input id="ed-ident" value="' + esc(u.identifiant || '') + '" style="margin-bottom:10px" placeholder="auto si vide">' +
     '<label class="sub">Email</label><input id="ed-email" type="email" value="' + esc(u.email) + '" style="margin-bottom:10px"' + (isDesignatedSup ? ' disabled' : '') + '>' +
     '<label class="sub">Rôle</label><select id="ed-role" style="margin-bottom:10px"' + (isDesignatedSup ? ' disabled' : '') + '>' + roleOpts + '</select>' +
     '<div id="ed-op-wrap"><label class="sub">Opérateur lié</label><select id="ed-op" style="margin-bottom:10px">' +
@@ -424,6 +577,7 @@ async function openEdit(id) {
   dlg.querySelector('#ed-save').onclick = async () => {
     const body = {
       nom: dlg.querySelector('#ed-nom').value.trim(),
+      identifiant: dlg.querySelector('#ed-ident').value.trim(),
       email: dlg.querySelector('#ed-email').value.trim(),
       role: dlg.querySelector('#ed-role').value,
       operateur_lie: dlg.querySelector('#ed-op').value || null,

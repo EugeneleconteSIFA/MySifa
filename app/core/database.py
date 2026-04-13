@@ -7,6 +7,8 @@ import pandas as pd
 import io
 import json
 import os
+import re
+import unicodedata
 from pathlib import Path
 from typing import Optional
 from datetime import datetime
@@ -193,9 +195,60 @@ def _migrate(conn):
         ("telephone", "ALTER TABLE users ADD COLUMN telephone TEXT"),
         ("machine_id", "ALTER TABLE users ADD COLUMN machine_id INTEGER"),
         ("access_overrides", "ALTER TABLE users ADD COLUMN access_overrides TEXT"),
+        ("identifiant", "ALTER TABLE users ADD COLUMN identifiant TEXT"),
     ]:
         if col not in existing_users:
             conn.execute(sql)
+
+    # Générer identifiant pour les comptes existants si absent.
+    def _slug(s: str) -> str:
+        s = unicodedata.normalize("NFD", str(s or ""))
+        s = "".join(ch for ch in s if unicodedata.category(ch) != "Mn")
+        s = s.lower().strip()
+        s = re.sub(r"[^a-z0-9]+", " ", s)
+        s = re.sub(r"\s+", " ", s).strip()
+        return s
+
+    def _compute_identifiant(nom: str) -> str:
+        parts = _slug(nom).split(" ")
+        parts = [p for p in parts if p]
+        if not parts:
+            return ""
+        if len(parts) == 1:
+            return parts[0]
+        # "premier mot du champ nom et prenom" → token1.token2
+        return f"{parts[0]}.{parts[1]}"
+
+    try:
+        rows = conn.execute(
+            "SELECT id, nom, identifiant FROM users"
+        ).fetchall()
+        used = set()
+        for r in rows:
+            ident = str(r["identifiant"] or "").strip().lower()
+            if ident:
+                used.add(ident)
+        for r in rows:
+            cur = str(r["identifiant"] or "").strip()
+            if cur:
+                continue
+            base = _compute_identifiant(str(r["nom"] or ""))
+            if not base:
+                continue
+            cand = base
+            i = 2
+            while cand in used:
+                cand = f"{base}{i}"
+                i += 1
+            conn.execute("UPDATE users SET identifiant=? WHERE id=?", (cand, int(r["id"])))
+            used.add(cand)
+        # Index unique (ignore vides / null)
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_identifiant ON users(identifiant) WHERE identifiant IS NOT NULL AND identifiant != ''"
+        )
+    except Exception:
+        # Ne jamais bloquer le démarrage sur une migration d'identifiants.
+        pass
 
     # Tables devis — créées si absentes
     existing_tables = {row[0] for row in conn.execute(

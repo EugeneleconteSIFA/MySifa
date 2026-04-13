@@ -84,16 +84,16 @@ def require_planning_machine(request: Request, conn, machine_id: int) -> dict:
 def compute_statut(entry: dict) -> str:
     """
     Calcule le statut automatique basé sur l'heure actuelle.
-    Si statut_force=1, retourne le statut stocké tel quel.
+    Si planned_start/planned_end existent et sont valides, le statut est dérivé de ces dates.
+    Sinon, si statut_force=1, retourne le statut stocké tel quel.
     """
-    if int(entry.get("statut_force") or 0) == 1:
-        return entry.get("statut") or "attente"
-
     start = entry.get("planned_start")
     end = entry.get("planned_end")
     st = _parse_planned_dt(start)
     en = _parse_planned_dt(end)
     if not st or not en:
+        if int(entry.get("statut_force") or 0) == 1:
+            return entry.get("statut") or "attente"
         return "attente"
 
     now = datetime.now()
@@ -238,7 +238,7 @@ def _slot_payload(e: dict, start_iso: str, end_iso: str) -> dict:
         "ref_produit": e.get("ref_produit"),
         "commentaire": e.get("commentaire"),
         "duree_heures": e["duree_heures"],
-        "statut": e["statut"],
+        "statut": compute_statut({**e, "planned_start": start_iso, "planned_end": end_iso}),
         "notes": e["notes"],
         "start": start_iso,
         "end": end_iso,

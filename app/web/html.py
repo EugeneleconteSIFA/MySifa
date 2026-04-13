@@ -175,8 +175,20 @@ tr.data-row:hover td{background:rgba(34,211,238,0.025)}
 
 /* Formulaire ajout ligne — modal style */
 .add-row-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;display:flex;align-items:center;justify-content:center}
-.add-row-form{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;width:100%;max-width:540px;box-shadow:0 24px 64px rgba(0,0,0,.4)}
-.add-row-form h3{font-size:16px;font-weight:700;margin-bottom:20px}
+.add-row-form{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;width:100%;max-width:540px;box-shadow:0 24px 64px rgba(0,0,0,.4);position:relative}
+.add-row-form h3{font-size:16px;font-weight:700;margin-bottom:20px;padding-right:34px}
+.add-row-close{position:absolute;top:14px;right:14px;width:32px;height:32px;border-radius:10px;
+  border:1px solid var(--border);background:var(--bg);color:var(--muted);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;font-size:18px;line-height:1}
+.add-row-close:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.add-row-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:20px;padding-right:34px;cursor:grab;user-select:none}
+.add-row-header:active{cursor:grabbing}
+.add-row-header h3{margin:0;padding:0}
+.add-row-counter{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:800;color:var(--muted);font-family:monospace;white-space:nowrap}
+.add-row-nav-btn{width:22px;height:22px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);
+  display:inline-flex;align-items:center;justify-content:center;cursor:pointer;line-height:1;font-size:14px;padding:0}
+.add-row-nav-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.add-row-nav-btn:active{transform:translateY(1px)}
 .add-row-form .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
 .add-row-form label{display:block;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
 .add-row-form input,.add-row-form select{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none}
@@ -399,6 +411,22 @@ body.light .portal-app--busy::after{background:rgba(255,255,255,.88);color:var(-
 .portal-logout:hover:last-of-type{color:var(--danger);text-shadow:0 0 12px rgba(248,113,113,.4);background:rgba(248,113,113,.08)}
 body.light .portal-logout:hover{text-shadow:0 0 12px rgba(8,145,178,.35)}
 body.light .portal-logout:hover:last-of-type{text-shadow:0 0 12px rgba(220,38,38,.35)}
+
+@media (max-width:420px){
+  /* Portail mobile : 2 colonnes au lieu d'une pile */
+  .portal-apps{
+    display:grid;
+    grid-template-columns:repeat(2, minmax(0, 1fr));
+    gap:12px;
+    width:100%;
+    max-width:420px;
+  }
+  .portal-app{
+    width:auto;
+    flex:none;
+  }
+  .portal-app-desc{max-width:100%}
+}
 
 /* ── MyStock ────────────────────────────────────────────────────── */
 .stock-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px}
@@ -2892,7 +2920,7 @@ async function applyF(){
 // ── Login ───────────────────────────────────────────────────────
 function renderLogin(){
   const errEl=h('div',{className:'login-error'+(S.loginError?' show':''),id:'login-error'},S.loginError||'');
-  const emailI=h('input',{type:'email',id:'login-email',name:'email',autocomplete:'username',placeholder:'votre@email.fr'});
+  const emailI=h('input',{type:'text',id:'login-email',name:'email',autocomplete:'username',placeholder:'identifiant ou email'});
   const pwdI=h('input',{type:'password',id:'login-password',name:'password',autocomplete:'current-password',placeholder:'••••••••'});
   const submit=e=>{
     e.preventDefault();
@@ -2910,7 +2938,7 @@ function renderLogin(){
         h('p',null,'Accès réservé au personnel SIFA'),
         errEl,
         h('form',{onSubmit:submit},
-          h('div',{className:'field'},h('label',{'for':'login-email'},'Adresse e-mail'),emailI),
+          h('div',{className:'field'},h('label',{'for':'login-email'},'Identifiant ou email'),emailI),
           h('div',{className:'field'},h('label',{'for':'login-password'},'Mot de passe'),pwdI),
           h('button',{type:'submit',className:'login-btn',disabled:!!S.loginSubmitting},S.loginSubmitting?'Connexion…':'Se connecter')
         )
@@ -3032,6 +3060,36 @@ function makeDateSelect(value, onChange){
   return h('div',{style:{display:'flex',gap:'4px',alignItems:'center'}},jSel,mSel,aSel);
 }
 
+function makeDateInput(value, onChange){
+  const inp = h('input',{
+    type:'date',
+    value: value || '',
+    style:{
+      background:'var(--bg)',
+      border:'1px solid var(--border)',
+      borderRadius:'8px',
+      padding:'8px 10px',
+      color:'var(--text)',
+      fontSize:'12px',
+      fontFamily:'inherit',
+      outline:'none',
+      minWidth:'148px',
+    }
+  });
+  inp.addEventListener('change',()=>onChange(inp.value||''));
+  // Ouvrir le calendrier au clic (Chrome/Safari supportent showPicker).
+  const openPicker = ()=>{
+    try{
+      if(typeof inp.showPicker === 'function') inp.showPicker();
+      else inp.focus();
+    }catch(e){ try{inp.focus();}catch(_){} }
+  };
+  inp.addEventListener('click',openPicker);
+  // Sur certains navigateurs, click ouvre déjà; mousedown améliore la réactivité.
+  inp.addEventListener('mousedown',()=>{ /* user gesture */ });
+  return inp;
+}
+
 function renderFilters(){
   const admin=isAdmin(S.user);
   const ops=S.filters.operators||[];
@@ -3056,8 +3114,8 @@ function renderFilters(){
     ));
   }
  
-  const df=makeDateSelect(S.fv.date_from, v=>{S.fv.date_from=v;});
-  const dt=makeDateSelect(S.fv.date_to,   v=>{S.fv.date_to=v;});
+  const df=makeDateInput(S.fv.date_from, v=>{S.fv.date_from=v;});
+  const dt=makeDateInput(S.fv.date_to,   v=>{S.fv.date_to=v;});
   parts.push(h('div',{className:'filter-group'},h('label',null,'Du'),df));
   parts.push(h('div',{className:'filter-group'},h('label',null,'Au'),dt));
   parts.push(h('button',{onClick:applyF},'Filtrer'));
@@ -3561,11 +3619,59 @@ function makeDateTimeFields(existingDateStr) {
   // Retourne {wrapper, getVal()} avec deux inputs date + time en 24h
   const { date: dv, time: tv } = dateToInputVal(existingDateStr);
   const dateI = h('input', { type: 'date', value: dv, lang: 'fr', style: { flex: '1' } });
-  const timeI = h('input', { type: 'time', value: tv, style: { width: '110px' } });
-  // force 24h sur Safari via pattern
-  timeI.setAttribute('step', '60');
+  // IMPORTANT: input[type=time] peut afficher AM/PM selon OS/locale (iOS/Safari).
+  // On force donc une saisie manuelle HH:MM (24h) via un input texte.
+  const timeI = h('input', {
+    type: 'text',
+    inputmode: 'numeric',
+    autocomplete: 'off',
+    placeholder: 'HH:MM',
+    value: (String(tv || '00:00').slice(0,5) || ''),
+    style: { width: '110px', fontFamily: 'monospace' }
+  });
+  timeI.setAttribute('maxlength', '5');
+
+  function normalizeTime(raw){
+    const s = String(raw||'').trim().replace(/[^\d:]/g,'');
+    // Accepter "930" => "09:30", "9:30" => "09:30"
+    if(/^\d{3,4}$/.test(s)){
+      const z = s.padStart(4,'0');
+      return z.slice(0,2)+':'+z.slice(2,4);
+    }
+    const m = s.match(/^(\d{1,2}):(\d{1,2})$/);
+    if(m){
+      const hh = String(m[1]).padStart(2,'0');
+      const mm = String(m[2]).padStart(2,'0');
+      return hh+':'+mm;
+    }
+    if(/^\d{2}:\d{2}$/.test(s)) return s;
+    return '';
+  }
+  function isValidHHMM(s){
+    const m = String(s||'').match(/^(\d{2}):(\d{2})$/);
+    if(!m) return false;
+    const hh = parseInt(m[1],10), mm = parseInt(m[2],10);
+    return hh>=0 && hh<=23 && mm>=0 && mm<=59;
+  }
+  function getTimeVal(){
+    const norm = normalizeTime(timeI.value);
+    if(norm) timeI.value = norm;
+    return isValidHHMM(timeI.value) ? timeI.value : null;
+  }
+  timeI.addEventListener('input', ()=>{
+    // Filtrer et auto-inserer ":" après 2 chiffres (sans être intrusif).
+    let v = String(timeI.value||'').replace(/[^\d]/g,'').slice(0,4);
+    if(v.length >= 3) v = v.slice(0,2)+':'+v.slice(2);
+    timeI.value = v;
+  });
+  timeI.addEventListener('blur', ()=>{ getTimeVal(); });
+
   const wrapper = h('div', { style: { display:'flex', gap:'8px' } }, dateI, timeI);
-  return { wrapper, getVal: () => inputValToFrDate(dateI.value, timeI.value) };
+  return { wrapper, getVal: () => {
+    const t = getTimeVal();
+    if(!t) return null;
+    return inputValToFrDate(dateI.value, t);
+  }};
 }
  
 // ── Modal générique (add + edit) ───────────────────────────────
@@ -3630,9 +3736,14 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
   inputs.metrage_prevu = metragePrevuI;
   inputs.metrage_reel  = metrageReelI;
  
-  const modal = h('div', { className: 'add-row-modal', onClick: e => { if (e.target === modal) closeModal(); } },
-    h('div', { className: 'add-row-form' },
-      h('h3', null, title),
+  const form = h('div', { className: 'add-row-form' },
+      h('button',{type:'button',className:'add-row-close',title:'Fermer',onClick:(e)=>{e.stopPropagation();closeModal();}},'×'),
+      // Header (sert aussi de zone "grab" pour déplacer la fenêtre)
+      (title && typeof title === 'object' && title.nodeType)
+        ? h('div',{className:'add-row-header'}, title)
+        : (title && title.tagName)
+          ? h('div',{className:'add-row-header'}, title)
+          : h('div',{className:'add-row-header'}, h('h3', null, title)),
       h('div', { className: 'form-row' },
         h('div', null, h('label', null, 'Opération *'), opSel, opPreview),
         h('div', null, h('label', null, 'Opérateur *'), opField)
@@ -3673,10 +3784,12 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
             const opVal = opSel.value;
             if (!opVal) { toast('Sélectionnez une opération', 'error'); return; }
             const opText = opVal.replace('           ', ' ');
+            const dtVal = getDateVal();
+            if(!dtVal){ toast('Heure invalide (format HH:MM, 24h)', 'error'); return; }
             onSubmit({
               operation:          opText,
               operateur:          opField.value || '',
-              date_operation:     getDateVal(),
+              date_operation:     dtVal,
               machine:            machI.value  || '',
               no_dossier:         dosI.value   || '',
               quantite_a_traiter: parseFloat(qteAI.value) || 0,
@@ -3690,13 +3803,119 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
         )
       )
     )
-  );
+  ;
+  const modal = h('div', { className: 'add-row-modal', onClick: e => { if (e.target === modal) closeModal(); } }, form);
+  modal._formEl = form;
   return modal;
 }
  
+function getVisibleSaisiesRowsForNav(){
+  // Base : déjà filtré côté API (/api/saisies + filtres). Ici on applique seulement tri + enrichissements UI.
+  const d = S.saisies;
+  if(!d) return [];
+  let rows = (d.rows || []).slice();
+  // Reprend la logique UI (durées) si la fonction existe (ajoutée dans renderSaisies).
+  try{
+    if(typeof addDurations === 'function') rows = addDurations(rows);
+  }catch(e){}
+  if(S.sortState && S.sortState.col) rows = sortRows(rows, S.sortState.col, S.sortState.asc);
+  return rows;
+}
+
+function attachSaisieNav(modal, currentId){
+  // Ctrl+← / Ctrl+→ : naviguer sur la liste affichée (bouclage).
+  const handler = (e)=>{
+    if(!e || !e.ctrlKey) return;
+    if(e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    const list = getVisibleSaisiesRowsForNav();
+    if(!list || !list.length) return;
+    const idx = list.findIndex(r=>String(r.id)===String(currentId));
+    if(idx < 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const nextIdx = (e.key === 'ArrowRight')
+      ? ((idx + 1) % list.length)
+      : ((idx - 1 + list.length) % list.length);
+    const nxt = list[nextIdx];
+    if(nxt) openEditModal(nxt);
+  };
+  // Éviter d'empiler des listeners si on remplace la modale.
+  document.addEventListener('keydown', handler, true);
+  modal._navKeyHandler = handler;
+}
+
+function attachModalDrag(modal){
+  const form = modal && modal._formEl ? modal._formEl : (modal ? modal.querySelector('.add-row-form') : null);
+  if(!form) return;
+  // Appliquer la dernière position (si l'utilisateur a déjà déplacé la fenêtre)
+  try{
+    if(S && S._saisieModalPos && isFinite(S._saisieModalPos.left) && isFinite(S._saisieModalPos.top)){
+      form.style.position = 'fixed';
+      form.style.margin = '0';
+      form.style.left = S._saisieModalPos.left + 'px';
+      form.style.top  = S._saisieModalPos.top + 'px';
+      form.style.transform = 'none';
+    }
+  }catch(e){}
+  let dragging = false;
+  let sx = 0, sy = 0, startLeft = 0, startTop = 0;
+  const onMove = (e)=>{
+    if(!dragging) return;
+    const dx = e.clientX - sx;
+    const dy = e.clientY - sy;
+    const left = (startLeft + dx);
+    const top  = (startTop  + dy);
+    form.style.left = left + 'px';
+    form.style.top  = top  + 'px';
+    try{ S._saisieModalPos = { left, top }; }catch(_){}
+  };
+  const onUp = ()=>{
+    if(!dragging) return;
+    dragging = false;
+    document.removeEventListener('mousemove', onMove, true);
+    document.removeEventListener('mouseup', onUp, true);
+  };
+  const onDown = (e)=>{
+    // Drag uniquement si on clique sur une zone qui n'est pas un champ/bouton.
+    const t = e.target;
+    if(t && (t.closest && t.closest('input,select,textarea,button'))) return;
+    // Laisser la sélection de texte dans un champ intacte.
+    if(e.button !== 0) return;
+    const r = form.getBoundingClientRect();
+    // Passer en position fixe pour pouvoir bouger, sans dépendre du flex-center.
+    form.style.position = 'fixed';
+    form.style.margin = '0';
+    form.style.left = r.left + 'px';
+    form.style.top  = r.top  + 'px';
+    form.style.transform = 'none';
+    dragging = true;
+    sx = e.clientX; sy = e.clientY;
+    startLeft = r.left; startTop = r.top;
+    try{ S._saisieModalPos = { left: startLeft, top: startTop }; }catch(_){}
+    document.addEventListener('mousemove', onMove, true);
+    document.addEventListener('mouseup', onUp, true);
+    e.preventDefault();
+  };
+  form.addEventListener('mousedown', onDown, true);
+  modal._dragDownHandler = onDown;
+  modal._dragMoveHandler = onMove;
+  modal._dragUpHandler = onUp;
+}
+
 function closeModal() {
   try{
     const m = document.querySelector('.add-row-modal');
+    if(m && m._navKeyHandler){
+      try{ document.removeEventListener('keydown', m._navKeyHandler, true); }catch(e){}
+    }
+    if(m && m._dragDownHandler){
+      try{
+        const form = m._formEl || m.querySelector('.add-row-form');
+        if(form) form.removeEventListener('mousedown', m._dragDownHandler, true);
+      }catch(e){}
+      try{ document.removeEventListener('mousemove', m._dragMoveHandler, true); }catch(e){}
+      try{ document.removeEventListener('mouseup', m._dragUpHandler, true); }catch(e){}
+    }
     if(m) m.remove();
   }catch(e){}
 }
@@ -3710,7 +3929,7 @@ function openAddModal(templateRow) {
     templateRow,
     '➕ Ajouter une saisie',
     '✓ Ajouter',
-    (body) => { addSaisie(body); closeModal(); }
+    async (body) => { await addSaisie(body); }
   );
   document.getElementById('root').appendChild(modal);
 }
@@ -3721,6 +3940,23 @@ function openEditModal(row) {
     if(m) m.remove();
   }catch(e){}
  
+  const list = getVisibleSaisiesRowsForNav();
+  const total = list.length || 0;
+  const curIdx0 = total ? list.findIndex(r=>String(r.id)===String(row.id)) : -1;
+  const idx = (curIdx0>=0) ? (curIdx0 + 1) : 0;
+  const prevRow = (total && curIdx0>=0) ? list[(curIdx0 - 1 + total) % total] : null;
+  const nextRow = (total && curIdx0>=0) ? list[(curIdx0 + 1) % total] : null;
+
+  const counter = h('span',{className:'add-row-counter',title:'Ctrl+← / Ctrl+→'},
+    h('button',{type:'button',className:'add-row-nav-btn',title:'Précédente (Ctrl+←)',onClick:(e)=>{e.stopPropagation(); if(prevRow) openEditModal(prevRow);}},'‹'),
+    h('span',null,(idx>0?String(idx):'—')+'/'+String(total)),
+    h('button',{type:'button',className:'add-row-nav-btn',title:'Suivante (Ctrl+→)',onClick:(e)=>{e.stopPropagation(); if(nextRow) openEditModal(nextRow);}},'›')
+  );
+  const titleNode = h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'12px',width:'100%'}},
+    h('h3',null,'Modifier la saisie'),
+    counter
+  );
+
   const deleteBtn = h('button', {
     className: 'btn-danger',
     onClick: async e => {
@@ -3740,11 +3976,10 @@ function openEditModal(row) {
  
   const modal = buildSaisieForm(
     row,
-    'Modifier la saisie',
+    titleNode,
     'Enregistrer',
     async (body) => {
       pushUndo('edit', row);  //
-      closeModal();
       try {
         await api('/api/saisies/' + row.id, {
           method: 'PUT',
@@ -3757,6 +3992,8 @@ function openEditModal(row) {
     },
     deleteBtn
   );
+  attachSaisieNav(modal, row.id);
+  attachModalDrag(modal);
   document.getElementById('root').appendChild(modal);
 }
 
@@ -3878,19 +4115,62 @@ function renderSaisies(){
  
   const readOnly=isFab(S.user);
  
+  function fmtDurMin(m){
+    if(m==null||!isFinite(m)||m<=0) return '-';
+    const mm = Math.round(Number(m));
+    if(mm < 60) return mm+' min';
+    const hh = Math.floor(mm/60);
+    const rm = mm%60;
+    return hh+' h '+String(rm).padStart(2,'0')+' min';
+  }
+
+  function addDurations(baseRows){
+    const rows = (baseRows||[]).slice();
+    // Durée = écart avec la saisie suivante du même opérateur (en minutes)
+    const byOp = new Map();
+    rows.forEach(r=>{
+      const k = String(r.operateur||'').trim();
+      if(!byOp.has(k)) byOp.set(k, []);
+      byOp.get(k).push(r);
+    });
+    byOp.forEach(list=>{
+      list.sort((a,b)=>{
+        const da = Date.parse(String(a.date_operation||'')) || 0;
+        const db = Date.parse(String(b.date_operation||'')) || 0;
+        if(da !== db) return da - db;
+        return (Number(a.id)||0) - (Number(b.id)||0);
+      });
+      for(let i=0;i<list.length;i++){
+        const cur = list[i];
+        const nxt = list[i+1];
+        let dur = null;
+        if(nxt){
+          const t1 = Date.parse(String(cur.date_operation||'')) || NaN;
+          const t2 = Date.parse(String(nxt.date_operation||'')) || NaN;
+          if(isFinite(t1) && isFinite(t2) && t2 >= t1){
+            const m = Math.round((t2 - t1)/60000);
+            // Filtre anti-absurde (ex: oubli badgeage) : > 12h => on masque
+            dur = (m > 0 && m <= 12*60) ? m : null;
+          }
+        }
+        cur.duree_min = dur;
+      }
+    });
+    return rows;
+  }
+
   // ── Tri ──────────────────────────────────────────────────────
-  let rows=d.rows||[];
+  let rows=addDurations(d.rows||[]);
   if(S.sortState.col) rows=sortRows(rows,S.sortState.col,S.sortState.asc);
  
   const COLS=[
     {key:'date_operation',  label:'Date'},
     {key:'operation',       label:'Opération'},
+    {key:'duree_min',       label:'Durée'},
     {key:'operateur',       label:'Opérateur'},
     {key:'machine',         label:'Machine'},
     {key:'no_dossier',      label:'Dossier'},
-    {key:'quantite_a_traiter', label:'Qté prévue'},
     {key:'quantite_traitee',   label:'Qté traitée'},
-    {key:'metrage_prevu',   label:'Métrage prévu (m)'},
     {key:'metrage_reel',    label:'Métrage réel (m)'},
     {key:'commentaire',     label:'Commentaire'},
     {key:'_badge',          label:''},
@@ -3965,16 +4245,14 @@ function renderSaisies(){
     if(row.est_manuel) badge=h('span',{className:'badge-manuel'},'+ Manuel');
     else if(row.modifie_par) badge=h('span',{className:'badge-modif',title:'Modifié par '+row.modifie_par+' le '+fD(row.modifie_le)},'✏ Corrigé');
  
-    tr.appendChild(h('td',{style:{fontFamily:'monospace',fontSize:'11px',color:'var(--muted)',whiteSpace:'nowrap'}},fD(row.date_operation)));
+    tr.appendChild(h('td',{style:{fontSize:'11px',color:'var(--muted)',whiteSpace:'nowrap'}},fD(row.date_operation)));
     tr.appendChild(h('td',null,row.operation||'-'));
+    tr.appendChild(h('td',{style:{whiteSpace:'nowrap',color:'var(--muted)'}},fmtDurMin(row.duree_min)));
     tr.appendChild(h('td',null,opName(row.operateur)));
     tr.appendChild(h('td',null,row.machine||'-'));
-    tr.appendChild(h('td',{style:{fontFamily:'monospace'}},row.no_dossier||'-'));
-    tr.appendChild(h('td',{style:{fontFamily:'monospace'}},fN(row.quantite_a_traiter)));
-    tr.appendChild(h('td',{style:{fontFamily:'monospace'}},fN(row.quantite_traitee)));
-    tr.appendChild(h('td',{style:{fontFamily:'monospace',color:'var(--c2)'}},
-      row.metrage_prevu!=null ? fN(row.metrage_prevu)+' m' : '-'));
-    tr.appendChild(h('td',{style:{fontFamily:'monospace',color:'var(--c3)'}},
+    tr.appendChild(h('td',null,row.no_dossier||'-'));
+    tr.appendChild(h('td',null,fN(row.quantite_traitee)));
+    tr.appendChild(h('td',{style:{color:'var(--c3)'}},
       row.metrage_reel!=null  ? fN(row.metrage_reel) +' m' : '-'));
     if(readOnly){
       tr.appendChild(h('td',{style:{maxWidth:'200px',overflow:'hidden',textOverflow:'ellipsis'}},row.commentaire||''));

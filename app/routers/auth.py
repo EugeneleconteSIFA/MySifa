@@ -2,6 +2,8 @@
 import json
 from datetime import datetime
 from typing import Optional
+import re
+import unicodedata
 from fastapi import APIRouter, Request, Response, HTTPException
 from fastapi.responses import JSONResponse, Response as PlainResponse
 
@@ -83,6 +85,43 @@ def _normalize_access_overrides_payload(raw: object) -> Optional[str]:
     return json.dumps(clean)
 
 
+def _slug_ident(s: str) -> str:
+    s = unicodedata.normalize("NFD", str(s or ""))
+    s = "".join(ch for ch in s if unicodedata.category(ch) != "Mn")
+    s = s.lower().strip()
+    s = re.sub(r"[^a-z0-9]+", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+
+def _default_identifiant_from_nom(nom: str) -> str:
+    parts = _slug_ident(nom).split(" ")
+    parts = [p for p in parts if p]
+    if not parts:
+        return ""
+    if len(parts) == 1:
+        return parts[0]
+    return f"{parts[0]}.{parts[1]}"
+
+
+def _ensure_unique_identifiant(conn, ident: str, exclude_user_id: Optional[int] = None) -> str:
+    base = _slug_ident(ident).replace(" ", ".")
+    base = base.replace("..", ".").strip(".")
+    if not base:
+        return ""
+    cand = base
+    i = 2
+    while True:
+        if exclude_user_id is None:
+            row = conn.execute("SELECT id FROM users WHERE identifiant=?", (cand,)).fetchone()
+        else:
+            row = conn.execute("SELECT id FROM users WHERE identifiant=? AND id!=?", (cand, exclude_user_id)).fetchone()
+        if not row:
+            return cand
+        cand = f"{base}{i}"
+        i += 1
+
+
 def _user_public_dict(row: dict) -> dict:
     d = dict(row)
     if "password_hash" in d:
@@ -100,7 +139,7 @@ async def login(request: Request):
     email    = body.get("email", "")
     password = body.get("password", "")
     if not email or not password:
-        raise HTTPException(status_code=400, detail="Email et mot de passe requis")
+        raise HTTPException(status_code=400, detail="Identifiant/email et mot de passe requis")
     result = login_user(email, password)
     user   = result["user"]
     token  = result["token"]
@@ -143,7 +182,7 @@ def me(request: Request):
         return PlainResponse(content=b"null", media_type="application/json")
     with get_db() as conn:
         row = conn.execute(
-            "SELECT id,email,nom,role,operateur_lie,machine_id,telephone,access_overrides FROM users WHERE id=?",
+            "SELECT id,email,identifiant,nom,role,operateur_lie,machine_id,telephone,access_overrides FROM users WHERE id=?",
             (user["id"],)
         ).fetchone()
     if not row:
@@ -202,7 +241,7 @@ def list_users(request: Request):
     require_superadmin(request)
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT u.id,u.email,u.nom,u.role,u.operateur_lie,u.actif,u.telephone,u.machine_id,
+            """SELECT u.id,u.email,u.identifiant,u.nom,u.role,u.operateur_lie,u.actif,u.telephone,u.machine_id,
                       u.created_at,u.last_login,u.access_overrides,
                       m.nom AS machine_nom
                FROM users u
@@ -225,7 +264,7 @@ def get_user(user_id: int, request: Request):
     require_superadmin(request)
     with get_db() as conn:
         row = conn.execute(
-            """SELECT u.id,u.email,u.nom,u.role,u.operateur_lie,u.actif,u.telephone,u.machine_id,
+            """SELECT u.id,u.email,u.identifiant,u.nom,u.role,u.operateur_lie,u.actif,u.telephone,u.machine_id,
                       u.created_at,u.last_login,u.access_overrides,
                       m.nom AS machine_nom
                FROM users u
@@ -248,6 +287,7 @@ async def create_user(request: Request):
     body = await request.json()
 
     email = (body.get("email") or "").strip().lower()
+    ident = (body.get("identifiant") or "").strip().lower()
     nom   = (body.get("nom")   or "").strip()
     pwd   = (body.get("password") or "").strip()
     role  = body.get("role", "fabrication")
@@ -269,10 +309,13 @@ async def create_user(request: Request):
 
     with get_db() as conn:
         try:
+            if not ident:
+                ident = _default_identifiant_from_nom(nom)
+            ident = _ensure_unique_identifiant(conn, ident) if ident else ""
             conn.execute(
-                """INSERT INTO users (email,nom,password_hash,role,operateur_lie,telephone,machine_id,actif,created_at)
-                   VALUES (?,?,?,?,?,?,?,1,?)""",
-                (email, nom, hash_password(pwd), role, op, tel, machine_id, datetime.now().isoformat())
+                """INSERT INTO users (email,identifiant,nom,password_hash,role,operateur_lie,telephone,machine_id,actif,created_at)
+                   VALUES (?,?,?,?,?,?,?,?,1,?)""",
+                (email, ident or None, nom, hash_password(pwd), role, op, tel, machine_id, datetime.now().isoformat())
             )
             conn.commit()
         except Exception:
@@ -297,6 +340,8 @@ async def update_user(user_id: int, request: Request):
         actif    = body.get("actif",         ex["actif"])
         tel      = body.get("telephone")     or (ex["telephone"] if "telephone" in ex.keys() else "") or ""
         email    = (body.get("email") or ex["email"]).strip().lower()
+        ident_in = (body.get("identifiant") if "identifiant" in body else ex.get("identifiant")) or ""
+        ident_in = str(ident_in).strip().lower()
         pwd_hash = ex["password_hash"]
 
         role_eff = _validate_user_role_write(
@@ -317,17 +362,22 @@ async def update_user(user_id: int, request: Request):
         else:
             ao_sql = None
 
+        # identifiant: générer si vide (ou si absent en base) à partir du nom, puis assurer unicité.
+        if not ident_in:
+            ident_in = _default_identifiant_from_nom(str(nom or ""))
+        ident_sql = _ensure_unique_identifiant(conn, ident_in, exclude_user_id=user_id) if ident_in else ""
+
         if "access_overrides" in body:
             conn.execute(
-                """UPDATE users SET nom=?,email=?,role=?,operateur_lie=?,actif=?,telephone=?,
+                """UPDATE users SET nom=?,email=?,identifiant=?,role=?,operateur_lie=?,actif=?,telephone=?,
                    password_hash=?,access_overrides=? WHERE id=?""",
-                (nom, email, role_eff, op, actif, tel, pwd_hash, ao_sql, user_id),
+                (nom, email, ident_sql or None, role_eff, op, actif, tel, pwd_hash, ao_sql, user_id),
             )
         else:
             conn.execute(
-                """UPDATE users SET nom=?,email=?,role=?,operateur_lie=?,actif=?,telephone=?,
+                """UPDATE users SET nom=?,email=?,identifiant=?,role=?,operateur_lie=?,actif=?,telephone=?,
                    password_hash=? WHERE id=?""",
-                (nom, email, role_eff, op, actif, tel, pwd_hash, user_id),
+                (nom, email, ident_sql or None, role_eff, op, actif, tel, pwd_hash, user_id),
             )
         conn.commit()
 

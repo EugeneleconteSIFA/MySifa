@@ -215,14 +215,14 @@ body.light .field-input.empl-upper::placeholder{
   color:#64748b;
   opacity:.95;
 }
-.btn{background:var(--accent);color:#0a0e17;border:none;border-radius:10px;padding:10px 20px;
+.btn{background:var(--accent);color:var(--text);border:none;border-radius:10px;padding:10px 20px;
   font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:filter .15s,box-shadow .15s,transform .05s;white-space:nowrap}
 .btn:hover{filter:brightness(1.05);box-shadow:0 0 0 4px rgba(34,211,238,.18)}
 .btn:active{transform:translateY(1px)}
 .btn-ghost{background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:10px;
   padding:10px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
 .btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
-.btn-sm{background:var(--accent);color:#0a0e17;border:none;border-radius:8px;padding:7px 14px;
+.btn-sm{background:var(--accent);color:var(--text);border:none;border-radius:8px;padding:7px 14px;
   font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:filter .15s,box-shadow .15s,transform .05s}
 .btn-sm:hover{filter:brightness(1.05);box-shadow:0 0 0 4px rgba(34,211,238,.18)}
 .btn-sm:active{transform:translateY(1px)}
@@ -1120,7 +1120,7 @@ function buildProduitDetail() {
         el('div',{cls:'card-header'},el('div',{cls:'card-title'},'Stock par emplacement')),
         el('div',null,...empls.map(e => el('div',{
           cls:'empl-row',
-          on:{click:()=>openMvtModal(p.id,p.reference,e.emplacement,'entree')}
+          on:{click:()=>loadEmplacement(e.emplacement)}
         },
           el('div',null,
             el('div',{cls:'empl-code'},e.emplacement),

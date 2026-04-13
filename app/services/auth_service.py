@@ -52,7 +52,7 @@ def get_user_by_token(token: str) -> Optional[dict]:
     now = datetime.now().isoformat()
     with get_db() as conn:
         row = conn.execute(
-            """SELECT u.id, u.email, u.nom, u.role, u.operateur_lie, u.machine_id, u.actif, u.access_overrides
+            """SELECT u.id, u.email, u.identifiant, u.nom, u.role, u.operateur_lie, u.machine_id, u.actif, u.access_overrides
                FROM sessions s JOIN users u ON s.user_id=u.id
                WHERE s.token=? AND s.expires_at>? AND u.actif=1""",
             (token, now)
@@ -140,15 +140,15 @@ def is_fabrication(user: dict) -> bool:
 
 
 # ─── Login ────────────────────────────────────────────────────────
-def login_user(email: str, password: str) -> dict:
+def login_user(login: str, password: str) -> dict:
     with get_db() as conn:
         user = conn.execute(
-            "SELECT * FROM users WHERE email=? AND actif=1",
-            (email.strip().lower(),)
+            "SELECT * FROM users WHERE (email=? OR identifiant=?) AND actif=1",
+            (str(login or "").strip().lower(), str(login or "").strip().lower()),
         ).fetchone()
     if not user:
-        raise HTTPException(status_code=401, detail="Email ou mot de passe incorrect")
+        raise HTTPException(status_code=401, detail="Identifiant/email ou mot de passe incorrect")
     if not verify_password(password, user["password_hash"]):
-        raise HTTPException(status_code=401, detail="Email ou mot de passe incorrect")
+        raise HTTPException(status_code=401, detail="Identifiant/email ou mot de passe incorrect")
     token = create_session(user["id"])
     return {"user": dict(user), "token": token}
