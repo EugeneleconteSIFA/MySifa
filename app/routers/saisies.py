@@ -73,21 +73,32 @@ async def update_saisie(row_id: int, request: Request):
         if not is_admin(user) and ex["operateur"] != user.get("operateur_lie"):
             raise HTTPException(status_code=403, detail="Modification non autorisée")
 
+        # Opérateur : modifiable uniquement par admin.
+        operateur_new = (body.get("operateur") if "operateur" in body else ex["operateur"]) or ""
+        operateur_new = str(operateur_new).strip()
+        if not is_admin(user):
+            operateur_new = ex["operateur"]
+        if not operateur_new:
+            raise HTTPException(status_code=400, detail="Opérateur manquant")
+
         op_str = body.get("operation", ex["operation"]) or ""
         cl = classify_operation(op_str)
         new_data = json.loads(ex["data"]) if ex["data"] else {}
         date_op = normalize_date_operation(body.get("date_operation", ex["date_operation"]))
         new_data.update(body)
         new_data["date_operation"] = date_op
+        new_data["operateur"] = operateur_new
 
         conn.execute(
             """UPDATE production_data SET
+               operateur=?,
                operation=?,operation_code=?,operation_severity=?,operation_category=?,
                date_operation=?,machine=?,no_dossier=?,client=?,designation=?,
                quantite_a_traiter=?,quantite_traitee=?,
                metrage_prevu=?,metrage_reel=?,commentaire=?,
                modifie_par=?,modifie_le=?,modifie_note=?,data=? WHERE id=?""",
-            (op_str, cl["code"], cl["severity"], cl["category"],
+            (operateur_new,
+             op_str, cl["code"], cl["severity"], cl["category"],
              date_op,
              body.get("machine",        ex["machine"]),
              body.get("no_dossier",     ex["no_dossier"]),

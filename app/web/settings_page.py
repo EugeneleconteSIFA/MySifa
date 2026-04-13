@@ -34,19 +34,20 @@ SETTINGS_HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" content="#0f172a">
+<meta name="theme-color" content="#0a0e17">
 <title>Paramètres — MySifa</title>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <link rel="stylesheet" href="/static/support_widget.css">
 <style>
-:root{--bg:#0f172a;--card:#1e293b;--border:#334155;--text:#f1f5f9;--muted:#cbd5e1;--accent:#22d3ee;--ok:#34d399;--danger:#f87171;}
-body.light{--bg:#f8fafc;--card:#fff;--border:#e2e8f0;--text:#0f172a;--muted:#64748b;--accent:#0891b2;--ok:#059669;--danger:#dc2626;}
+:root{--bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;--muted:#94a3b8;--accent:#22d3ee;--ok:#34d399;--danger:#f87171;}
+body.light{--bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--muted:#64748b;--accent:#0891b2;--ok:#059669;--danger:#dc2626;}
 *{box-sizing:border-box}
 body{margin:0;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
 .layout{display:flex;min-height:100vh}
 .sidebar{width:220px;background:var(--card);border-right:1px solid var(--border);padding:20px 12px;display:flex;flex-direction:column;flex-shrink:0;height:100vh;position:sticky;top:0;overflow-y:auto;scrollbar-width:none}
 .sidebar::-webkit-scrollbar{width:0}
 .logo{font-size:15px;font-weight:800;margin-bottom:20px;padding:0 8px}.logo span{color:var(--accent)}
+.logo-sub{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px}
 .nav-scroll{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
 .nav-btn{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 12px;border-radius:8px;border:none;background:transparent;color:var(--text2);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s,color .15s,box-shadow .2s;margin-bottom:2px}
 .nav-btn:hover,.nav-btn.active{background:rgba(34,211,238,.12);color:var(--accent)}
@@ -75,6 +76,7 @@ body.light .theme-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 18px rg
   width:38px;height:38px;display:flex;align-items:center;justify-content:center;
   cursor:pointer;color:var(--muted);font-size:18px;flex-shrink:0}
 .burger-btn:hover{border-color:var(--accent);color:var(--accent)}
+.home-btn{margin-left:auto}
 .mobile-title{font-size:14px;font-weight:900;letter-spacing:-.2px}
 .mobile-title span{color:var(--accent)}
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200}
@@ -105,7 +107,7 @@ body.light .btn-sec:hover{box-shadow:0 0 0 1px rgba(8,145,178,.35),0 0 18px rgba
 .pill--administration{border-color:rgba(167,139,250,.38);color:#a78bfa;background:rgba(167,139,250,.12)}
 .pill--fabrication{border-color:rgba(52,211,153,.35);color:var(--ok);background:rgba(52,211,153,.12)}
 .pill--logistique{border-color:rgba(96,165,250,.35);color:#60a5fa;background:rgba(96,165,250,.12)}
-.pill--comptabilite{border-color:rgba(251,191,36,.38);color:var(--accent);background:rgba(251,191,36,.12)}
+.pill--comptabilite{border-color:rgba(251,191,36,.38);color:#fbbf24;background:rgba(251,191,36,.12)}
 .pill--expedition{border-color:rgba(248,113,113,.38);color:var(--danger);background:rgba(248,113,113,.12)}
 .pill--superadmin{border-color:rgba(34,211,238,.45);color:var(--accent);background:rgba(34,211,238,.14)}
 .pill--inactive{border-color:rgba(148,163,184,.35);color:var(--muted);background:rgba(148,163,184,.10)}
@@ -139,7 +141,7 @@ body.light .users-search input:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 <div class="sidebar-overlay" id="sb-ov"></div>
 <div class="layout">
   <aside class="sidebar">
-    <div class="logo">My<span>Sifa</span></div>
+    <div class="logo">My<span>Sifa</span><div class="logo-sub">by SIFA</div></div>
     <div class="nav-scroll tabs" style="width:100%;margin:0">
       <button type="button" class="nav-btn active" data-tab="users">Utilisateurs</button>
       <button type="button" class="nav-btn" data-tab="matrix">Matrice d'accès</button>
@@ -175,6 +177,11 @@ body.light .users-search input:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
     <div class="mobile-topbar">
       <button type="button" class="burger-btn" id="sb-burger" aria-label="Menu">☰</button>
       <div class="mobile-title">Paramètres <span>MySifa</span></div>
+      <button type="button" class="burger-btn home-btn" id="sb-home" aria-label="Accueil">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/><path d="M10 21v-6h4v6"/>
+        </svg>
+      </button>
     </div>
     <div class="desktop-head">
       <h1>Paramètres</h1>
@@ -309,6 +316,8 @@ try{
   if(ov) ov.addEventListener('click', ()=>setSidebarOpen(false));
   const burger = document.getElementById('sb-burger');
   if(burger) burger.addEventListener('click', ()=>setSidebarOpen(!document.body.classList.contains('sb-open')));
+  const home = document.getElementById('sb-home');
+  if(home) home.addEventListener('click', ()=>{ window.location.href = '/'; });
   // Fermer le menu après clic sur un onglet (mobile)
   document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
     b.addEventListener('click', () => setSidebarOpen(false));

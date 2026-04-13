@@ -41,6 +41,9 @@ button:focus:not(:focus-visible){outline:none}
 #saisies-scroll-top{overflow-x:auto}
 #saisies-scroll-top::-webkit-scrollbar{height:6px}
 #saisies-scroll-top::-webkit-scrollbar-thumb{background:var(--accent);border-radius:3px}
+.saisies-table-wrap{border-radius:10px;border:1px solid var(--border);overflow:hidden}
+.saisies-table-wrap .saisies-bot{max-height:68vh;overflow:auto}
+.saisies-table-wrap table thead th{position:sticky;top:0;z-index:5;background:var(--card)}
 .login-page{min-height:100vh;display:flex;align-items:center;justify-content:center}
 .login-box{width:100%;max-width:420px;padding:24px}
 .login-logo{text-align:center;margin-bottom:40px}
@@ -66,6 +69,9 @@ button:focus:not(:focus-visible){outline:none}
 .mobile-menu-btn{display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;
   border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;font-family:inherit}
 .mobile-menu-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.mobile-home-btn{display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;
+  border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;font-family:inherit;margin-left:auto}
+.mobile-home-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 .mobile-topbar-title{font-size:14px;font-weight:800}
 .mobile-topbar-sub{font-size:11px;color:var(--muted);margin-top:2px}
 .sidebar-overlay{display:none}
@@ -85,6 +91,7 @@ button:focus:not(:focus-visible){outline:none}
   .main{padding:18px}
   .mobile-topbar{display:flex;position:fixed;top:0;left:0;right:0;z-index:120;background:var(--bg);padding:10px 18px;border-bottom:1px solid var(--border)}
   .mobile-menu-btn{display:inline-flex}
+  .mobile-home-btn{display:inline-flex}
   .sidebar-overlay{display:block;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:8999}
   body:not(.sb-open) .sidebar-overlay{display:none}
   body.has-topbar .main{padding-top:74px}
@@ -641,6 +648,8 @@ let S={
   stockPrefillEmpl:null,stockPrefillRef:null,stockPrefillDes:null,stockPrefillUnit:null,
   filters:{},OPS_CONFIG:{},
   fv:{operateurs:[],dossiers:[],date_from:getYesterday(),date_to:getYesterday()},
+  saisiesOffset:0,
+  saisiesLimit:200,
   historique:null,production:null,
   imports:[],selImp:null,impData:null,
   saisies:null,
@@ -710,6 +719,7 @@ function icon(name,size=16){
     'x': '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
     'arrow-right': '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',
     'menu': '<line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/>',
+    'home': '<path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/><path d="M10 21v-6h4v6"/>',
     'plus': '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
     'edit': '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
     'rotate-ccw': '<polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.5"/>',
@@ -2389,7 +2399,8 @@ function renderStock(){
         S.stockView==='grille'?'Tableau de bord':S.stockView==='produit'?'Par référence':'Par emplacement'
       ),
       h('div',{id:'stock-search-bar',className:'stock-search-bar'})
-    )
+    ),
+    h('button',{type:'button',className:'mobile-home-btn',onClick:()=>{window.location.href='/'},'aria-label':'Accueil'},iconEl('home',20))
   );
   const mainEl=h('main',{className:'main'},
     topbar,
@@ -2454,7 +2465,8 @@ function renderCompta(){
     h('div',null,
       h('div',{className:'mobile-topbar-title'},'MyCompta'),
       h('div',{className:'mobile-topbar-sub'},'Comptabilité')
-    )
+    ),
+    h('button',{type:'button',className:'mobile-home-btn',onClick:()=>{window.location.href='/'},'aria-label':'Accueil'},iconEl('home',20))
   );
 
   let content;
@@ -2726,7 +2738,8 @@ function renderExpe(){
       h('div',{className:'mobile-topbar-title'},'MyExpé'),
       h('div',{className:'mobile-topbar-sub'},
         tab==='transporteurs'?'Transporteurs':tab==='comparateur'?'Comparateur délais & coûts':'Suivis')
-    )
+    ),
+    h('button',{type:'button',className:'mobile-home-btn',onClick:()=>{window.location.href='/'},'aria-label':'Accueil'},iconEl('home',20))
   );
 
   let content;
@@ -2788,8 +2801,12 @@ async function loadImports(){const d=await api('/api/imports');if(d)set({imports
 async function loadDos(){const d=await api('/api/dossiers');if(d)set({dossiers:d});}
 async function loadMachines(){try{const d=await api('/api/planning/machines');if(d)set({machines:d});}catch(e){}}
 async function loadSaisies(opts){
-  const d=await api('/api/saisies?'+buildParams()+'&limit=500');
+  const off = (opts && typeof opts.offset==='number') ? opts.offset : (S.saisiesOffset||0);
+  const lim = (opts && typeof opts.limit==='number') ? opts.limit : (S.saisiesLimit||200);
+  const d=await api('/api/saisies?'+buildParams()+'&limit='+encodeURIComponent(String(lim))+'&offset='+encodeURIComponent(String(off)));
   if(!d)return;
+  S.saisiesOffset = off;
+  S.saisiesLimit = lim;
   if(opts&&opts.noRender)S.saisies=d;
   else set({saisies:d});
 }
@@ -2909,6 +2926,8 @@ async function createDos(d){try{await api('/api/dossiers',{method:'POST',headers
 async function updStatut(id,s){try{await api('/api/dossiers/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({statut:s})});loadDos();}catch{}}
 async function applyF(){
   const needSais=S.page==='saisies' || (S.page==='production' && (S.subPage||'kpis')==='saisies');
+  // Quand on change les filtres, repartir en haut (offset 0)
+  S.saisiesOffset = 0;
   await Promise.all([
     loadHist(),
     loadProd(),
@@ -4284,6 +4303,27 @@ function renderSaisies(){
   // ── Barre d'actions ──────────────────────────────────────────
   const selCount=S.selectedRows.size;
   const headerRight=h('div',{style:{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap'}});
+
+  // Pagination (offset/limit) : évite de scroller toute la page
+  const total = Number(d.total||0);
+  const off = Number(S.saisiesOffset||0);
+  const lim = Number(S.saisiesLimit||200);
+  const from = total ? Math.min(total, off+1) : 0;
+  const to = total ? Math.min(total, off + (rows||[]).length) : 0;
+  const pager = h('div',{style:{display:'inline-flex',alignItems:'center',gap:'6px'}},
+    h('button',{className:'btn-ghost',title:'Page précédente',disabled:off<=0,onClick:async()=>{
+      const n = Math.max(0, off - lim);
+      await loadSaisies({offset:n,limit:lim});
+      render();
+    }},'‹'),
+    h('span',{style:{fontSize:'11px',color:'var(--muted)',fontFamily:'monospace'}}, total?(`${from}-${to}/${total}`):'0'),
+    h('button',{className:'btn-ghost',title:'Page suivante',disabled:(off+lim)>=total,onClick:async()=>{
+      const n = Math.min(Math.max(0,total-lim), off + lim);
+      await loadSaisies({offset:n,limit:lim});
+      render();
+    }},'›'),
+  );
+  headerRight.appendChild(pager);
  
   if(readOnly){
     headerRight.appendChild(h('span',{className:'readonly-notice'},iconEl('eye',13),' Lecture seule'));
@@ -4306,7 +4346,7 @@ function renderSaisies(){
   return h('div',null,
     h('div',{className:'card'},
       h('div',{className:'card-header'},
-        h('h3',null,'Saisies ('+d.total+')'),
+        h('h3',null,'Saisies'),
         h('div',{style:{display:'flex',gap:'12px',alignItems:'center'}},
           !readOnly?h('span',{style:{fontSize:'11px',color:'var(--muted)'}},'Clic pour modifier'):null,
           headerRight
@@ -4318,17 +4358,18 @@ function renderSaisies(){
           h('thead',null,h('tr',null,...ths)),
           tbody
         );
-        const bot = h('div',{style:{overflowX:'auto',paddingBottom:'4px'}},tableEl);
+        const bot = h('div',{className:'saisies-bot'},h('div',{style:{overflowX:'auto',paddingBottom:'4px'}},tableEl));
         const topInner = h('div',{style:{height:'1px',width:tableEl.scrollWidth+'px'}});
         const top = h('div',{style:{overflowX:'auto',height:'10px',marginBottom:'0'}},topInner);
         // Synchronisation scroll
-        top.addEventListener('scroll',()=>{ bot.scrollLeft = top.scrollLeft; });
-        bot.addEventListener('scroll',()=>{ top.scrollLeft = bot.scrollLeft; });
+        const botX = bot.firstChild;
+        top.addEventListener('scroll',()=>{ botX.scrollLeft = top.scrollLeft; });
+        botX.addEventListener('scroll',()=>{ top.scrollLeft = botX.scrollLeft; });
         // Mettre à jour la largeur fantôme après rendu
         requestAnimationFrame(()=>{
           topInner.style.width = tableEl.offsetWidth+'px';
         });
-        return h('div',null,top,bot);
+        return h('div',{className:'saisies-table-wrap'},top,bot);
       })()
     )
   );
@@ -5009,7 +5050,8 @@ function render(){
       h('div',null,
         h('div',{className:'mobile-topbar-title'},titles[S.page]||''),
         h('div',{className:'mobile-topbar-sub'},subs[S.page]||'')
-      )
+      ),
+      h('button',{type:'button',className:'mobile-home-btn',onClick:()=>{window.location.href='/'},'aria-label':'Accueil'},iconEl('home',20))
     );
     root.appendChild(h('div',null,
       S.sidebarOpen?h('div',{className:'sidebar-overlay',onClick:closeSidebar}):null,

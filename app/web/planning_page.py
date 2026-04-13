@@ -499,6 +499,7 @@ function icon(name,size=16){
     'log-out': '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
     'edit': '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
     'settings': '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+    'home': '<path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/><path d="M10 21v-6h4v6"/>',
   };
   return `<svg ${a} aria-hidden="true" style="display:inline-block;vertical-align:middle;flex-shrink:0">${p[name]||p['calendar']}</svg>`;
 }
@@ -671,7 +672,7 @@ function openSupport(){
 function render(){
   const a=document.getElementById("app");
   if(S.loading){
-    a.innerHTML=`<div class="app">${renderSidebar()}<main class="main"><div class="mobile-topbar"><button type="button" class="burger-btn" onclick="toggleSidebar()" aria-label="Menu">☰</button><div class="mobile-title">Planning <span>MyProd</span></div></div><div class="planning-container" style="display:flex;align-items:center;justify-content:center;min-height:50vh;color:var(--muted)">Chargement…</div></main></div><div id="mroot"></div>`;
+    a.innerHTML=`<div class="app">${renderSidebar()}<main class="main"><div class="mobile-topbar"><button type="button" class="burger-btn" onclick="toggleSidebar()" aria-label="Menu">☰</button><div class="mobile-title">Planning <span>MyProd</span></div><button type="button" class="burger-btn" onclick="location.href='/'" aria-label="Accueil">${icon('home',18)}</button></div><div class="planning-container" style="display:flex;align-items:center;justify-content:center;min-height:50vh;color:var(--muted)">Chargement…</div></main></div><div id="mroot"></div>`;
     return;
   }
   const m=S.machine||{nom:"?"};
@@ -717,14 +718,14 @@ function render(){
     const fabMsg=`<p style="color:var(--muted);line-height:1.5;margin:0">Aucune machine n’est associée à votre compte pour l’instant. Les machines s’affichent lorsque le champ <strong>machine</strong> de vos <strong>saisies de production</strong> correspond au nom ou au code d’une machine du planning, ou lorsqu’une machine par défaut est renseignée sur votre fiche utilisateur.</p>`;
     const admMsg=`<p style="color:var(--muted);line-height:1.5;margin:0">Aucune machine active n’est disponible dans l’application.</p>`;
     const isFab=ME&&ME.role==="fabrication";
-    a.innerHTML=`<div class="app">${renderSidebar()}<main class="main"><div class="mobile-topbar"><button type="button" class="burger-btn" onclick="toggleSidebar()" aria-label="Menu">☰</button><div class="mobile-title">Planning <span>MyProd</span></div></div><div class="planning-container" style="max-width:560px;margin:40px auto;padding:0 16px;color:var(--text)">
+    a.innerHTML=`<div class="app">${renderSidebar()}<main class="main"><div class="mobile-topbar"><button type="button" class="burger-btn" onclick="toggleSidebar()" aria-label="Menu">☰</button><div class="mobile-title">Planning <span>MyProd</span></div><button type="button" class="burger-btn" onclick="location.href='/'" aria-label="Accueil">${icon('home',18)}</button></div><div class="planning-container" style="max-width:560px;margin:40px auto;padding:0 16px;color:var(--text)">
       <h1 style="font-size:18px;margin:0 0 12px">Planning</h1>
       ${isFab?fabMsg:admMsg}
     </div></main></div><div id="mroot"></div>`;
     return;
   }
 
-  a.innerHTML=`<div class="app">${renderSidebar()}<main class="main"><div class="mobile-topbar"><button type="button" class="burger-btn" onclick="toggleSidebar()" aria-label="Menu">☰</button><div class="mobile-title">Planning <span>MyProd</span></div></div><div class="planning-container">
+  a.innerHTML=`<div class="app">${renderSidebar()}<main class="main"><div class="mobile-topbar"><button type="button" class="burger-btn" onclick="toggleSidebar()" aria-label="Menu">☰</button><div class="mobile-title">Planning <span>MyProd</span></div><button type="button" class="burger-btn" onclick="location.href='/'" aria-label="Accueil">${icon('home',18)}</button></div><div class="planning-container">
   <header class="header">
     <div class="h-left">
       <div>
