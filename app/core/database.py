@@ -514,6 +514,17 @@ def _migrate(conn):
         mvt_cols = {row[1] for row in conn.execute("PRAGMA table_info(mouvements_stock)").fetchall()}
         if "created_by_name" not in mvt_cols:
             conn.execute("ALTER TABLE mouvements_stock ADD COLUMN created_by_name TEXT")
+        # Backfill (best-effort) : si created_by est un email connu, copier users.nom
+        conn.execute(
+            """UPDATE mouvements_stock
+               SET created_by_name = (
+                 SELECT u.nom FROM users u
+                 WHERE LOWER(TRIM(COALESCE(u.email,''))) = LOWER(TRIM(COALESCE(mouvements_stock.created_by,'')))
+                 LIMIT 1
+               )
+               WHERE (created_by_name IS NULL OR TRIM(COALESCE(created_by_name,'')) = '')
+                 AND TRIM(COALESCE(created_by,'')) != ''"""
+        )
     except Exception:
         pass
 
