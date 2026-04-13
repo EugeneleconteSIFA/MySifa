@@ -24,7 +24,15 @@ def stock_page(request: Request):
         raise
     if not user_has_app_access(user, "stock"):
         return access_denied_response("MyStock")
-    return HTMLResponse(content=STOCK_HTML)
+    # Important: prevent iOS/PWA from serving stale HTML/JS.
+    return HTMLResponse(
+        content=STOCK_HTML,
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
 
 
 STOCK_HTML = r"""<!DOCTYPE html>
