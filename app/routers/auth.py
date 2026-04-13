@@ -1,4 +1,5 @@
 """SIFA — Auth v0.8 — profil utilisateur + fiche admin"""
+import json
 from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, Request, Response, HTTPException
@@ -6,14 +7,90 @@ from fastapi.responses import JSONResponse, Response as PlainResponse
 
 from database import get_db
 from services.auth_service import (
-    login_user, delete_session, get_current_user, get_optional_user,
-    require_admin, hash_password
+    login_user,
+    delete_session,
+    get_current_user,
+    get_optional_user,
+    hash_password,
+    merged_app_access,
+    parse_access_overrides_raw,
+    require_superadmin,
 )
-from config import COOKIE_NAME, SESSION_HOURS
+from config import (
+    ACCESS_OVERRIDABLE_APPS,
+    ASSIGNABLE_ROLES,
+    COOKIE_NAME,
+    ROLE_SUPERADMIN,
+    SESSION_HOURS,
+    SUPERADMIN_EMAIL,
+)
 
 router = APIRouter()
 
-VALID_ROLES = {"fabrication", "administration", "direction", "logistique", "comptabilite", "expedition"}
+def _norm_email(s: str) -> str:
+    return (s or "").strip().lower()
+
+
+def _is_designated_superadmin_row(row_email: str, row_role: str) -> bool:
+    return _norm_email(row_email) == _norm_email(SUPERADMIN_EMAIL) and row_role == ROLE_SUPERADMIN
+
+
+def _validate_user_role_write(*, target_email: str, target_role: str, existing_email: str, existing_role: str) -> str:
+    """Retourne le rôle effectif à enregistrer. Lève HTTPException si interdit."""
+    t_em = _norm_email(target_email)
+    sup_em = _norm_email(SUPERADMIN_EMAIL)
+
+    if _is_designated_superadmin_row(existing_email, existing_role):
+        if t_em != sup_em:
+            raise HTTPException(status_code=400, detail="L'email du compte super administrateur ne peut pas être modifié.")
+        if target_role != ROLE_SUPERADMIN:
+            raise HTTPException(
+                status_code=400,
+                detail="Le compte super administrateur désigné ne peut pas être rétrogradé.",
+            )
+        return ROLE_SUPERADMIN
+
+    if target_role == ROLE_SUPERADMIN:
+        return ROLE_SUPERADMIN
+
+    if t_em == sup_em:
+        raise HTTPException(
+            status_code=400,
+            detail="Cet email est réservé au compte super administrateur.",
+        )
+
+    if target_role not in ASSIGNABLE_ROLES:
+        raise HTTPException(status_code=400, detail="Rôle invalide")
+
+    return target_role
+
+
+def _normalize_access_overrides_payload(raw: object) -> Optional[str]:
+    """Retourne JSON à stocker ou None si aucune surcharge."""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise HTTPException(status_code=400, detail="access_overrides doit être un objet")
+    clean = {}
+    for k, v in raw.items():
+        if k not in ACCESS_OVERRIDABLE_APPS:
+            continue
+        if not isinstance(v, bool):
+            raise HTTPException(status_code=400, detail=f"Valeur booléenne attendue pour {k}")
+        clean[k] = v
+    if not clean:
+        return None
+    return json.dumps(clean)
+
+
+def _user_public_dict(row: dict) -> dict:
+    d = dict(row)
+    if "password_hash" in d:
+        del d["password_hash"]
+    ov = d.get("access_overrides")
+    d["access_overrides"] = parse_access_overrides_raw(ov)
+    d["app_access"] = merged_app_access(d.get("role"), ov)
+    return d
 
 
 # ─── Login ────────────────────────────────────────────────────────
@@ -27,11 +104,19 @@ async def login(request: Request):
     result = login_user(email, password)
     user   = result["user"]
     token  = result["token"]
-    response = JSONResponse({"success": True, "user": {
-        "id": user["id"], "nom": user["nom"], "email": user["email"],
-        "role": user["role"], "operateur_lie": user["operateur_lie"],
-        "telephone": user.get("telephone", ""),
-    }})
+    u_pub = _user_public_dict(user)
+    response = JSONResponse({
+        "success": True,
+        "user": {
+            "id": u_pub["id"],
+            "nom": u_pub["nom"],
+            "email": u_pub["email"],
+            "role": u_pub["role"],
+            "operateur_lie": u_pub.get("operateur_lie"),
+            "telephone": u_pub.get("telephone", ""),
+            "app_access": u_pub.get("app_access", {}),
+        },
+    })
     response.set_cookie(
         key=COOKIE_NAME, value=token, httponly=True,
         samesite="lax", secure=False, max_age=SESSION_HOURS * 3600,
@@ -58,12 +143,16 @@ def me(request: Request):
         return PlainResponse(content=b"null", media_type="application/json")
     with get_db() as conn:
         row = conn.execute(
-            "SELECT id,email,nom,role,operateur_lie,telephone FROM users WHERE id=?",
+            "SELECT id,email,nom,role,operateur_lie,machine_id,telephone,access_overrides FROM users WHERE id=?",
             (user["id"],)
         ).fetchone()
     if not row:
         return PlainResponse(content=b"null", media_type="application/json")
-    return dict(row)
+    d = dict(row)
+    ov_raw = d.get("access_overrides")
+    d["access_overrides"] = parse_access_overrides_raw(ov_raw)
+    d["app_access"] = merged_app_access(d.get("role"), ov_raw)
+    return d
 
 
 @router.put("/api/auth/me")
@@ -107,30 +196,37 @@ async def update_me(request: Request):
     return {"success": True}
 
 
-# ─── Gestion utilisateurs (admin only) ───────────────────────────
+# ─── Gestion utilisateurs (super admin uniquement) ──────────────
 @router.get("/api/users")
 def list_users(request: Request):
-    require_admin(request)
+    require_superadmin(request)
     with get_db() as conn:
         rows = conn.execute(
             """SELECT u.id,u.email,u.nom,u.role,u.operateur_lie,u.actif,u.telephone,u.machine_id,
-                      u.created_at,u.last_login,
+                      u.created_at,u.last_login,u.access_overrides,
                       m.nom AS machine_nom
                FROM users u
                LEFT JOIN machines m ON m.id = u.machine_id
                ORDER BY u.role DESC, u.nom ASC"""
         ).fetchall()
-    return [dict(r) for r in rows]
+    out = []
+    for r in rows:
+        d = dict(r)
+        raw = d.get("access_overrides")
+        d["access_overrides"] = parse_access_overrides_raw(raw)
+        d["app_access"] = merged_app_access(d.get("role"), raw)
+        out.append(d)
+    return out
 
 
 @router.get("/api/users/{user_id}")
 def get_user(user_id: int, request: Request):
-    """Fiche détaillée d'un utilisateur — admin uniquement."""
-    require_admin(request)
+    """Fiche détaillée d'un utilisateur — super admin uniquement."""
+    require_superadmin(request)
     with get_db() as conn:
         row = conn.execute(
             """SELECT u.id,u.email,u.nom,u.role,u.operateur_lie,u.actif,u.telephone,u.machine_id,
-                      u.created_at,u.last_login,
+                      u.created_at,u.last_login,u.access_overrides,
                       m.nom AS machine_nom
                FROM users u
                LEFT JOIN machines m ON m.id = u.machine_id
@@ -139,12 +235,16 @@ def get_user(user_id: int, request: Request):
         ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
-    return dict(row)
+    d = dict(row)
+    raw = d.get("access_overrides")
+    d["access_overrides"] = parse_access_overrides_raw(raw)
+    d["app_access"] = merged_app_access(d.get("role"), raw)
+    return d
 
 
 @router.post("/api/users")
 async def create_user(request: Request):
-    require_admin(request)
+    require_superadmin(request)
     body = await request.json()
 
     email = (body.get("email") or "").strip().lower()
@@ -157,8 +257,13 @@ async def create_user(request: Request):
 
     if not email or not nom or not pwd:
         raise HTTPException(status_code=400, detail="Email, nom et mot de passe requis")
-    if role not in VALID_ROLES:
+    if role not in ASSIGNABLE_ROLES and role != ROLE_SUPERADMIN:
         raise HTTPException(status_code=400, detail="Rôle invalide")
+    if _norm_email(email) == _norm_email(SUPERADMIN_EMAIL) and role != ROLE_SUPERADMIN:
+        raise HTTPException(
+            status_code=400,
+            detail="Cet email est réservé au compte super administrateur.",
+        )
     if len(pwd) < 8:
         raise HTTPException(status_code=400, detail="Mot de passe minimum 8 caractères")
 
@@ -178,7 +283,7 @@ async def create_user(request: Request):
 
 @router.put("/api/users/{user_id}")
 async def update_user(user_id: int, request: Request):
-    require_admin(request)
+    require_superadmin(request)
     body = await request.json()
 
     with get_db() as conn:
@@ -187,26 +292,43 @@ async def update_user(user_id: int, request: Request):
             raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
 
         nom      = body.get("nom")           or ex["nom"]
-        role     = body.get("role")          or ex["role"]
+        role_req = body.get("role")          or ex["role"]
         op       = body.get("operateur_lie", ex["operateur_lie"])
         actif    = body.get("actif",         ex["actif"])
         tel      = body.get("telephone")     or (ex["telephone"] if "telephone" in ex.keys() else "") or ""
         email    = (body.get("email") or ex["email"]).strip().lower()
         pwd_hash = ex["password_hash"]
 
-        if role not in VALID_ROLES:
-            raise HTTPException(status_code=400, detail="Rôle invalide")
+        role_eff = _validate_user_role_write(
+            target_email=email,
+            target_role=role_req,
+            existing_email=ex["email"],
+            existing_role=ex["role"],
+        )
 
         if "password" in body and body["password"]:
             if len(body["password"]) < 8:
                 raise HTTPException(status_code=400, detail="Mot de passe minimum 8 caractères")
             pwd_hash = hash_password(body["password"])
 
-        conn.execute(
-            """UPDATE users SET nom=?,email=?,role=?,operateur_lie=?,actif=?,telephone=?,
-               password_hash=? WHERE id=?""",
-            (nom, email, role, op, actif, tel, pwd_hash, user_id)
-        )
+        ao_sql: Optional[str]
+        if "access_overrides" in body:
+            ao_sql = _normalize_access_overrides_payload(body.get("access_overrides"))
+        else:
+            ao_sql = None
+
+        if "access_overrides" in body:
+            conn.execute(
+                """UPDATE users SET nom=?,email=?,role=?,operateur_lie=?,actif=?,telephone=?,
+                   password_hash=?,access_overrides=? WHERE id=?""",
+                (nom, email, role_eff, op, actif, tel, pwd_hash, ao_sql, user_id),
+            )
+        else:
+            conn.execute(
+                """UPDATE users SET nom=?,email=?,role=?,operateur_lie=?,actif=?,telephone=?,
+                   password_hash=? WHERE id=?""",
+                (nom, email, role_eff, op, actif, tel, pwd_hash, user_id),
+            )
         conn.commit()
 
     return {"success": True}
@@ -214,8 +336,8 @@ async def update_user(user_id: int, request: Request):
 
 @router.post("/api/users/{user_id}/reset-password")
 def reset_password(user_id: int, request: Request):
-    """Admin génère un mot de passe temporaire pour un utilisateur."""
-    require_admin(request)
+    """Super admin génère un mot de passe temporaire pour un utilisateur."""
+    require_superadmin(request)
     import secrets, string
 
     # Génère un mdp lisible : 10 caractères alphanumériques
@@ -238,10 +360,13 @@ def reset_password(user_id: int, request: Request):
 
 @router.delete("/api/users/{user_id}")
 def deactivate_user(user_id: int, request: Request):
-    admin = require_admin(request)
-    if admin["id"] == user_id:
+    actor = require_superadmin(request)
+    if actor["id"] == user_id:
         raise HTTPException(status_code=400, detail="Impossible de désactiver votre propre compte")
     with get_db() as conn:
+        ex = conn.execute("SELECT email, role FROM users WHERE id=?", (user_id,)).fetchone()
+        if ex and _is_designated_superadmin_row(ex["email"], ex["role"]):
+            raise HTTPException(status_code=400, detail="Impossible de désactiver le compte super administrateur")
         conn.execute("UPDATE users SET actif=0 WHERE id=?", (user_id,))
         conn.commit()
     return {"success": True}

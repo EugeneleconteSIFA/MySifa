@@ -3,13 +3,21 @@ SIFA — Service authentification v0.6
 Gestion des 3 rôles : direction, administration, fabrication
 """
 import bcrypt
+import json
 import secrets
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Any, Optional
 from fastapi import Request, HTTPException
 
 from database import get_db
-from config import SESSION_HOURS, COOKIE_NAME, ROLES_ADMIN
+from config import (
+    SESSION_HOURS,
+    COOKIE_NAME,
+    ROLES_ADMIN,
+    ACCESS_OVERRIDABLE_APPS,
+    ROLE_SUPERADMIN,
+    default_app_access_for_role,
+)
 
 
 # ─── Passwords ────────────────────────────────────────────────────
@@ -44,12 +52,46 @@ def get_user_by_token(token: str) -> Optional[dict]:
     now = datetime.now().isoformat()
     with get_db() as conn:
         row = conn.execute(
-            """SELECT u.id, u.email, u.nom, u.role, u.operateur_lie, u.actif
+            """SELECT u.id, u.email, u.nom, u.role, u.operateur_lie, u.machine_id, u.actif, u.access_overrides
                FROM sessions s JOIN users u ON s.user_id=u.id
                WHERE s.token=? AND s.expires_at>? AND u.actif=1""",
             (token, now)
         ).fetchone()
     return dict(row) if row else None
+
+
+def parse_access_overrides_raw(raw: Any) -> dict:
+    if raw is None or raw == "":
+        return {}
+    if isinstance(raw, dict):
+        return {k: bool(v) for k, v in raw.items() if k in ACCESS_OVERRIDABLE_APPS and isinstance(v, bool)}
+    try:
+        o = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return {}
+    if not isinstance(o, dict):
+        return {}
+    return {k: bool(v) for k, v in o.items() if k in ACCESS_OVERRIDABLE_APPS and isinstance(v, bool)}
+
+
+def merged_app_access(role: str, overrides_raw: Any) -> dict:
+    if role == ROLE_SUPERADMIN:
+        return default_app_access_for_role(ROLE_SUPERADMIN)
+    base = default_app_access_for_role(role)
+    ov = parse_access_overrides_raw(overrides_raw)
+    out = dict(base)
+    for k, v in ov.items():
+        if k in out:
+            out[k] = v
+    return out
+
+
+def user_has_app_access(user: dict, app: str) -> bool:
+    """Accès effectif à une application (inclut surcharges par utilisateur sauf Paramètres)."""
+    if app == "settings":
+        return user.get("role") == ROLE_SUPERADMIN
+    acc = merged_app_access(user.get("role"), user.get("access_overrides"))
+    return bool(acc.get(app))
 
 
 # ─── Résolution utilisateur ───────────────────────────────────────
@@ -71,14 +113,27 @@ def get_current_user(request: Request) -> dict:
     return user
 
 def require_admin(request: Request) -> dict:
-    """Exige direction ou administration."""
+    """Exige direction, administration ou super admin."""
     user = get_current_user(request)
     if user["role"] not in ROLES_ADMIN:
         raise HTTPException(status_code=403, detail="Accès réservé à l'administration")
     return user
 
+
+def is_superadmin(user: dict) -> bool:
+    """Super admin : tout compte avec le rôle superadmin."""
+    return bool(user and user.get("role") == ROLE_SUPERADMIN)
+
+
+def require_superadmin(request: Request) -> dict:
+    user = get_current_user(request)
+    if not is_superadmin(user):
+        raise HTTPException(status_code=403, detail="Accès réservé au super administrateur")
+    return user
+
+
 def is_admin(user: dict) -> bool:
-    return user["role"] in ROLES_ADMIN
+    return user.get("role") in ROLES_ADMIN
 
 def is_fabrication(user: dict) -> bool:
     return user["role"] == "fabrication"

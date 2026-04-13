@@ -5,18 +5,25 @@ Fixes:
 - Navigation / back button
 - Add product/emplacement button restored
 """
-from fastapi import APIRouter, Request, HTTPException
-from fastapi.responses import HTMLResponse
-from services.auth_service import get_current_user
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+
+from services.auth_service import get_current_user, user_has_app_access
+from app.web.access_denied import access_denied_response
 
 router = APIRouter()
 
 
 @router.get("/stock", response_class=HTMLResponse)
 def stock_page(request: Request):
-    user = get_current_user(request)
-    if user.get("role") not in {"direction", "administration", "logistique"}:
-        raise HTTPException(403, "Accès réservé à MyStock")
+    try:
+        user = get_current_user(request)
+    except HTTPException as e:
+        if e.status_code == 401:
+            return RedirectResponse(url="/?next=/stock", status_code=302)
+        raise
+    if not user_has_app_access(user, "stock"):
+        return access_denied_response("MyStock")
     return HTMLResponse(content=STOCK_HTML)
 
 
@@ -35,8 +42,8 @@ STOCK_HTML = r"""<!DOCTYPE html>
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
-  --bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#94a3b8;
-  --muted:#64748b;--accent:#22d3ee;--accent-bg:rgba(34,211,238,.12);
+  --bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;
+  --muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,.12);
   --success:#34d399;--warn:#fbbf24;--danger:#f87171;--c2:#a78bfa;
 }
 body.light{
@@ -380,8 +387,6 @@ let S = {
   barcodeReader: null,
   emplSuggestions: [],
   showAddForm: false,
-  users: null,
-  usersFilter: '',
 };
 
 // ── API ─────────────────────────────────────────────────────────
@@ -407,8 +412,6 @@ function showToast(m, t='success') {
 const fN = n => n != null ? Number(n).toLocaleString('fr-FR') : '0';
 const fD = d => d ? d.slice(0,10).split('-').reverse().join('/') : '—';
 const joursDepuis = d => { if (!d) return null; return Math.round((Date.now() - new Date(d).getTime()) / 86400000); };
-const isAdmin = u => u && (u.role === 'direction' || u.role === 'administration');
-
 // ── Icons (Feather-ish, inline SVG) ─────────────────────────────
 function icon(name, size=16){
   const a = `width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"`;
@@ -492,30 +495,6 @@ async function loadDashboard() {
 
 async function loadInventaireList() {
   try { const d = await api('/api/stock/inventaire/produits-a-inventorier'); if (d) { S.inventaireList = d; renderContent(); } } catch(e) {}
-}
-
-async function loadUsers() {
-  try { const d = await api('/api/users'); if (d) { S.users = d; renderContent(); } } catch(e) { showToast(e.message, 'error'); }
-}
-
-async function createUser(body) {
-  await api('/api/users', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
-  showToast('Utilisateur créé');
-  await loadUsers();
-}
-
-async function updateUser(id, body) {
-  await api('/api/users/' + id, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
-  showToast('Utilisateur mis à jour');
-  await loadUsers();
-}
-
-async function resetUserPassword(id) {
-  const r = await api('/api/users/' + id + '/reset-password', { method:'POST' });
-  if (r && r.temp_password) {
-    alert('Mot de passe temporaire : ' + r.temp_password);
-    showToast('Mot de passe temporaire généré');
-  }
 }
 
 async function submitMouvement(body) {
@@ -660,7 +639,6 @@ function goToTab(tab) {
   renderContent();
   if (tab === 'dashboard') loadDashboard();
   else if (tab === 'inventaire') loadInventaireList();
-  else if (tab === 'users') loadUsers();
 }
 
 function updateNavActive() {
@@ -1236,149 +1214,6 @@ function buildInventaire() {
   );
 }
 
-function openUserFormModal(opts) {
-  const o = opts || {};
-  const isNew = !!o.isNew;
-  // Pour "Ajouter" : ne pas pré-remplir.
-  // Pour "Modifier" : pré-remplir avec la fiche utilisateur.
-  const u = isNew ? {} : (o.user || {});
-  const onSave = typeof o.onSave === 'function' ? o.onSave : null;
-
-  document.querySelector('.modal-overlay')?.remove();
-  const overlay = el('div', { cls:'modal-overlay', on:{ click: e => { if (e.target === overlay) overlay.remove(); } } });
-  const sheet = el('div', { cls:'modal-sheet' });
-
-  const nomI = el('input', { cls:'field-input', type:'text', value: u.nom || '', placeholder:'Nom / prénom' });
-  const emailI = el('input', { cls:'field-input', type:'email', value: u.email || '', placeholder:'Email' });
-  const telI = el('input', { cls:'field-input', type:'text', value: u.telephone || '', placeholder:'Téléphone (optionnel)' });
-  const roleS = el('select', { cls:'field-input' },
-    ...['fabrication','logistique','administration','direction'].map(r =>
-      el('option', { value:r, selected: (u.role || 'fabrication') === r }, r)
-    )
-  );
-  const actifS = el('select', { cls:'field-input' },
-    el('option', { value:'1', selected: String(u.actif ?? 1) === '1' }, 'Actif'),
-    el('option', { value:'0', selected: String(u.actif ?? 1) === '0' }, 'Inactif')
-  );
-  const pwdI = el('input', { cls:'field-input', type:'password', value:'', placeholder: isNew ? 'Mot de passe (min 8)' : 'Nouveau mot de passe (optionnel)' });
-
-  const title = isNew ? 'Nouvel utilisateur' : 'Modifier utilisateur';
-  const sub = isNew ? 'Création (admin uniquement)' : 'Mise à jour (admin uniquement)';
-
-  const saveBtn = el('button', { cls:'btn', on:{ click: async () => {
-    const body = {
-      nom: String(nomI.value || '').trim(),
-      email: String(emailI.value || '').trim().toLowerCase(),
-      telephone: String(telI.value || '').trim(),
-      role: String(roleS.value || 'fabrication'),
-      actif: Number(String(actifS.value || '1')),
-    };
-    const pwd = String(pwdI.value || '').trim();
-    if (pwd) body.password = pwd;
-    if (!body.nom || !body.email) { showToast('Nom + email requis', 'error'); return; }
-    if (isNew && !pwd) { showToast('Mot de passe requis', 'error'); return; }
-    try {
-      saveBtn.disabled = true;
-      await onSave?.(body);
-      overlay.remove();
-    } catch(e) {
-      showToast(e.message || 'Erreur', 'error');
-    } finally {
-      saveBtn.disabled = false;
-    }
-  } } }, isNew ? 'Créer' : 'Enregistrer');
-
-  sheet.append(
-    el('span', { cls:'modal-handle' }),
-    el('div', { cls:'modal-title' }, title),
-    el('div', { cls:'modal-sub' }, sub),
-    el('div', { cls:'modal-field' }, el('label', { cls:'field-label' }, 'Nom'), nomI),
-    el('div', { cls:'modal-field' }, el('label', { cls:'field-label' }, 'Email'), emailI),
-    el('div', { cls:'modal-field' }, el('label', { cls:'field-label' }, 'Téléphone'), telI),
-    el('div', { cls:'modal-field' }, el('label', { cls:'field-label' }, 'Rôle'), roleS),
-    el('div', { cls:'modal-field' }, el('label', { cls:'field-label' }, 'Statut'), actifS),
-    el('div', { cls:'modal-field' }, el('label', { cls:'field-label' }, 'Mot de passe'), pwdI),
-    el('div', { cls:'modal-actions' },
-      el('button', { cls:'btn-cancel', on:{ click: () => overlay.remove() } }, 'Annuler'),
-      saveBtn
-    )
-  );
-
-  overlay.appendChild(sheet);
-  document.body.appendChild(overlay);
-  setTimeout(() => { try { (nomI.value ? emailI : nomI).focus(); } catch(e) {} }, 0);
-}
-
-function buildUsers() {
-  const wrap = el('div', { cls:'content' });
-  if (!isAdmin(S.user)) {
-    wrap.appendChild(el('div', { cls:'card' }, el('div', { cls:'card-empty' }, 'Accès réservé (admin).')));
-    return wrap;
-  }
-
-  const filterI = el('input', { cls:'users-filter', type:'text', placeholder:'Filtrer (nom, email, rôle)…', value: S.usersFilter || '',
-    on:{ input: (e)=>{ S.usersFilter = e.target.value; renderContent(); } }
-  });
-  const addBtn = el('button', { cls:'btn-sm', on:{ click: () => openUserFormModal({ isNew:true, onSave: createUser }) } }, '＋ Ajouter');
-
-  const list = Array.isArray(S.users) ? S.users.slice() : [];
-  const q = String(S.usersFilter || '').trim().toLowerCase();
-  const filtered = !q ? list : list.filter(u => {
-    const blob = [u.nom,u.email,u.role,u.operateur_lie,u.telephone].filter(Boolean).join(' ').toLowerCase();
-    return blob.includes(q);
-  });
-
-  wrap.appendChild(
-    el('div', { cls:'card' },
-      el('div', { cls:'card-header' },
-        el('div', { cls:'users-head' },
-          el('div', { cls:'card-title' }, 'Utilisateurs'),
-          el('div', { cls:'users-tools' }, filterI, addBtn)
-        )
-      ),
-      !filtered.length
-        ? el('div', { cls:'card-empty' }, (S.users ? 'Aucun utilisateur' : 'Chargement…'))
-        : el('div', null, ...filtered.map(u => {
-          const actif = Number(u.actif ?? 1) === 1;
-          const pill = el('span', { cls:'pill ' + (actif ? 'ok' : 'off') }, actif ? 'actif' : 'inactif');
-
-          const editBtn = el('button', { cls:'btn-ghost', on:{ click: async () => {
-            try {
-              const full = await api('/api/users/' + u.id);
-              if (!full) return;
-              openUserFormModal({ isNew:false, user: full, onSave: (body)=>updateUser(u.id, body) });
-            } catch(e) { showToast(e.message, 'error'); }
-          } } }, 'Modifier');
-
-          const resetBtn = el('button', { cls:'btn-ghost', on:{ click: async () => {
-            if (!confirm('Générer un mot de passe temporaire pour ' + (u.nom||u.email||('user#'+u.id)) + ' ?')) return;
-            try { await resetUserPassword(u.id); } catch(e) { showToast(e.message, 'error'); }
-          } } }, 'Reset MDP');
-
-          const disableBtn = el('button', { cls:'btn-danger', on:{ click: async () => {
-            if (S.user && Number(S.user.id) === Number(u.id)) { showToast('Impossible de désactiver votre compte', 'error'); return; }
-            if (!confirm('Désactiver ' + (u.nom||u.email||('user#'+u.id)) + ' ?')) return;
-            try { await updateUser(u.id, { actif: 0 }); } catch(e) { showToast(e.message, 'error'); }
-          } } }, 'Désactiver');
-
-          return el('div', { cls:'users-row' },
-            el('div', { cls:'users-main' },
-              el('div', { cls:'users-name' }, u.nom || '(sans nom)', pill),
-              el('div', { cls:'users-meta' },
-                el('span', null, u.email || ''),
-                el('code', null, (u.role || '')),
-                u.telephone ? el('span', null, u.telephone) : null
-              )
-            ),
-            el('div', { cls:'users-actions' }, editBtn, resetBtn, actif ? disableBtn : null)
-          );
-        }))
-    )
-  );
-
-  return wrap;
-}
-
 function renderContent() {
   const area = document.getElementById('scroll-area');
   if (!area) return;
@@ -1389,7 +1224,6 @@ function renderContent() {
   else if (S.selEmpl) content = buildEmplacementDetail();
   else if (S.tab === 'dashboard') content = buildDashboard();
   else if (S.tab === 'inventaire') content = buildInventaire();
-  else if (S.tab === 'users') content = buildUsers();
   else content = buildDashboard();
 
   if (content) area.appendChild(content);
@@ -1413,7 +1247,6 @@ function render() {
       ...[
         { tab:'dashboard',  icon:'grid', label:'Dashboard' },
         { tab:'inventaire', icon:'clipboard', label:'Inventaire' },
-        ...(isAdmin(S.user) ? [{ tab:'users', icon:'users', label:'Utilisateurs' }] : []),
       ].map(n => el('button', { cls:'nav-btn'+(S.tab===n.tab?' active':''), 'data-tab':n.tab, on:{ click:()=>goToTab(n.tab) } },
         iconEl(n.icon,16),
         el('span', null, ' ' + n.label)

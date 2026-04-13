@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Optional
 from datetime import datetime
 from contextlib import contextmanager
-from config import DB_PATH, UPLOAD_DIR, classify_operation
+from config import DB_PATH, UPLOAD_DIR, ROLE_SUPERADMIN, SUPERADMIN_EMAIL, classify_operation
 from app.services.emplacements_plan import reload_emplacements_plan, sync_emplacements_plan_to_db
 
 # Baselinage des migrations SQL déjà regroupées dans _migrate (historique).
@@ -192,6 +192,7 @@ def _migrate(conn):
     for col, sql in [
         ("telephone", "ALTER TABLE users ADD COLUMN telephone TEXT"),
         ("machine_id", "ALTER TABLE users ADD COLUMN machine_id INTEGER"),
+        ("access_overrides", "ALTER TABLE users ADD COLUMN access_overrides TEXT"),
     ]:
         if col not in existing_users:
             conn.execute(sql)
@@ -488,6 +489,14 @@ def _migrate(conn):
         conn.execute("UPDATE machines SET nom='Cohésio 1' WHERE nom='Cohésion 1'")
     except sqlite3.Error:
         pass
+
+    _ensure_schema_migrations_table(conn)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=2 LIMIT 1").fetchone():
+        conn.execute(
+            "UPDATE users SET role=? WHERE LOWER(TRIM(email))=?",
+            (ROLE_SUPERADMIN, SUPERADMIN_EMAIL.strip().lower()),
+        )
+        _record_schema_migration(conn, 2, "superadmin_eleconte")
 
     _record_schema_migration(
         conn,

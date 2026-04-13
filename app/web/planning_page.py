@@ -11,8 +11,9 @@ from typing import Optional
 
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
-from services.auth_service import get_current_user
+from services.auth_service import get_current_user, user_has_app_access
 from config import APP_META_DESCRIPTION, APP_PLANNING_PAGE_TITLE, APP_VERSION, THEME_COLOR_META
+from app.web.access_denied import access_denied_response
 
 router = APIRouter()
 
@@ -28,8 +29,8 @@ def planning_page(request: Request, machine: Optional[int] = None):
                 nxt = f"/planning?machine={machine}"
             return RedirectResponse(url=f"/?next={nxt}", status_code=302)
         raise
-    if user.get("role") not in {"direction", "administration", "fabrication"}:
-        raise HTTPException(status_code=403, detail="Accès réservé au planning")
+    if not user_has_app_access(user, "planning"):
+        return access_denied_response("Planning (MyProd)")
     # 0 = laisser le JS choisir l’id réel après /api/planning/machines (évite de forcer
     # ?machine=1 implicite alors que l’id SQLite « Cohésio 1 » n’est pas 1 en prod).
     ssr_mid = str(machine) if machine is not None else "0"
@@ -58,12 +59,12 @@ PLANNING_HTML = r"""<!DOCTYPE html>
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
-  --bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#94a3b8;
-  --muted:#64748b;--accent:#22d3ee;--accent-bg:rgba(34,211,238,0.12);
+  --bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;
+  --muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,0.12);
   --success:#34d399;--warn:#fbbf24;--danger:#f87171;
   --c1:#22d3ee;--c2:#a78bfa;--c3:#34d399;--c4:#fbbf24;--c5:#f87171;
   --blue:#38bdf8;--purple:#a78bfa;--mono:ui-monospace,'Cascadia Code',monospace;--sans:'Segoe UI',system-ui,sans-serif;
-  --bg-dark:#080c12;--border2:#334155;--dim:#94a3b8;
+  --bg-dark:#080c12;--border2:#334155;--dim:#cbd5e1;
   --green:var(--success);--red:var(--danger);--amber:var(--warn);
 }
 body.light{
@@ -347,6 +348,7 @@ const DAY_FIELD={1:"horaires_lundi",2:"horaires_mardi",3:"horaires_mercredi",4:"
 let S={machine:null,machines:[],entries:[],timeline:[],wo:0,loading:true,holidays:{},dayWorked:{},view:localStorage.getItem("mysifa.planning.view")||"2w"};
 let ME=null;
 let CAN_EDIT=false;
+let SHOW_DOSSIERS=false;
 let _autoScrollKey=null;
 
 const api=(p,o={})=>fetch(`/api/planning${p}`,{credentials:"include",headers:{"Content-Type":"application/json",...(o.headers||{})},...o}).then(r=>{if(!r.ok)throw r;return r.json()});
@@ -360,14 +362,19 @@ async function load(){
   }
   S.loading=true;render();
   try{
+    const showDossiers = !!(ME && isAdmin(ME));
     // Important: la timeline persiste planned_start/planned_end en DB.
     // Pour que les statuts calculés (en_cours/termine) soient à jour après un reorder,
-    // on charge d'abord la timeline, puis la liste des entrées.
+    // on charge d'abord la timeline, puis la liste des entrées (admin uniquement).
     const [m, tl] = await Promise.all([api(`/machines/${MID}`), api(`/machines/${MID}/timeline`)]);
     S.machine = m;
     S.timeline = (tl && tl.slots) ? tl.slots : [];
-    const en = await api(`/machines/${MID}/entries`);
-    S.entries = en || [];
+    if(showDossiers){
+      const en = await api(`/machines/${MID}/entries`);
+      S.entries = en || [];
+    }else{
+      S.entries = [];
+    }
     await Promise.all([loadHolidays(),loadDayWorked()]);
     // Cohésio 2: les horaires alternent paire/impair → ne pas les "figer" en base.
   }catch(e){console.error(e)}
@@ -593,8 +600,9 @@ function fracToTimeInput(f){
 }
 function isHHMM(s){return /^\d{2}:\d{2}$/.test(String(s||"").trim());}
 
-function isAdmin(u){return u&&(u.role==="direction"||u.role==="administration");}
-function roleLabel(role){const R={direction:"Direction",administration:"Administration",fabrication:"Fabrication"};return R[role]||role||"";}
+function isAdmin(u){return u&&(u.role==="direction"||u.role==="administration"||u.role==="superadmin");}
+function canPlanningNav(u){return !!(u&&u.app_access&&u.app_access.planning);}
+function roleLabel(role){const R={direction:"Direction",administration:"Administration",fabrication:"Fabrication",superadmin:"Super admin"};return R[role]||role||"";}
 function renderSidebar(){
   if(!ME){
     return `<nav class="sidebar"><div class="logo"><div class="logo-brand">My<span>Prod</span></div><div class="logo-sub">by SIFA</div></div>
@@ -606,12 +614,9 @@ function renderSidebar(){
   }
   const admin=isAdmin(ME);
   const items=[
+    ...(canPlanningNav(ME)?[{key:"_planning",label:"Planning",icon:"calendar",href:"/planning"}]:[]),
     {key:"production",label:"Production",icon:"wrench",href:"/prod?page=production"},
-    ...(admin?[
-      {key:"_planning",label:"Planning",icon:"calendar",href:"/planning"},
-      {key:"suivi",label:"Rentabilité",icon:"trending-up",href:"/prod?page=suivi"},
-      {key:"users",label:"Utilisateurs",icon:"users",href:"/prod?page=users"},
-    ]:[]),
+    ...(admin?[{key:"suivi",label:"Rentabilité",icon:"trending-up",href:"/prod?page=suivi"}]:[]),
   ];
   const isLight=document.body.classList.contains("light");
   return`<nav class="sidebar"><div class="logo"><div class="logo-brand">My<span>Prod</span></div><div class="logo-sub">by SIFA</div></div>${
@@ -645,8 +650,15 @@ function render(){
   }
   const m=S.machine||{nom:"?"};
   CAN_EDIT = isAdmin(ME);
-  const run=S.entries.find(e=>e.statut==="en_cours");
-  const runLbl=run?(run.client||run.numero_of||run.reference||""):"";
+  SHOW_DOSSIERS = CAN_EDIT;
+  let runLbl="";
+  if(SHOW_DOSSIERS){
+    const run=S.entries.find(e=>e.statut==="en_cours");
+    runLbl=run?(run.client||run.numero_of||run.reference||""):"";
+  }else{
+    const runSlot=(S.timeline||[]).find(s=>s.statut==="en_cours");
+    runLbl=runSlot?(runSlot.client||runSlot.numero_of||runSlot.reference||""):"";
+  }
   const totH=S.entries.filter(e=>e.statut!=="termine").reduce((s,e)=>s+e.duree_heures,0);
   const nb=S.entries.filter(e=>e.statut!=="termine").length;
   const sl=S.timeline;
@@ -664,16 +676,27 @@ function render(){
     </div>`;
   }
 
-  // Calculer l'ancre de scroll (table dossiers) avant de rendre les lignes.
-  // Ancre = première ligne visible en haut: N derniers terminés (N<=2) puis en cours puis attente.
-  try{
-    const ent = S.entries || [];
-    let firstNonTerm = ent.findIndex(e => (e && e.statut) !== "termine");
-    let anchorIdx;
-    if(firstNonTerm === -1) anchorIdx = Math.max(0, ent.length - 2);
-    else anchorIdx = Math.max(0, firstNonTerm - 2);
-    S._scrollAnchorIdx = anchorIdx;
-  }catch(e){ S._scrollAnchorIdx = null; }
+  if(SHOW_DOSSIERS){
+    try{
+      const ent = S.entries || [];
+      let firstNonTerm = ent.findIndex(e => (e && e.statut) !== "termine");
+      let anchorIdx;
+      if(firstNonTerm === -1) anchorIdx = Math.max(0, ent.length - 2);
+      else anchorIdx = Math.max(0, firstNonTerm - 2);
+      S._scrollAnchorIdx = anchorIdx;
+    }catch(e){ S._scrollAnchorIdx = null; }
+  }else S._scrollAnchorIdx = null;
+
+  if(!MID || !(S.machines&&S.machines.length)){
+    const fabMsg=`<p style="color:var(--muted);line-height:1.5;margin:0">Aucune machine n’est associée à votre compte pour l’instant. Les machines s’affichent lorsque le champ <strong>machine</strong> de vos <strong>saisies de production</strong> correspond au nom ou au code d’une machine du planning, ou lorsqu’une machine par défaut est renseignée sur votre fiche utilisateur.</p>`;
+    const admMsg=`<p style="color:var(--muted);line-height:1.5;margin:0">Aucune machine active n’est disponible dans l’application.</p>`;
+    const isFab=ME&&ME.role==="fabrication";
+    a.innerHTML=`<div class="app">${renderSidebar()}<main class="main"><div class="planning-container" style="max-width:560px;margin:40px auto;padding:0 16px;color:var(--text)">
+      <h1 style="font-size:18px;margin:0 0 12px">Planning</h1>
+      ${isFab?fabMsg:admMsg}
+    </div></main></div><div id="mroot"></div>`;
+    return;
+  }
 
   a.innerHTML=`<div class="app">${renderSidebar()}<main class="main"><div class="planning-container">
   <header class="header">
@@ -688,8 +711,8 @@ function render(){
     <div class="h-right">
       ${CAN_EDIT&&machineKey()==="C2"?`<button type="button" class="reset-days-btn" onclick="resetDefaultDaysCohesio2()" title="Réinitialiser jours (Cohésio 2)">↺ Base jours</button>`:""}
       ${CAN_EDIT?`<button type="button" class="gear-btn" onclick="openDefaultsModal()" title="Réglages horaires par défaut" aria-label="Réglages">${icon('settings',16)}</button>`:""}
-      ${run?`<div class="badge badge-run"><div class="dot"></div>${escAttr(runLbl)}</div>`:""}
-      <div class="badge badge-info">${totH}h · ${nb} dossiers</div>
+      ${runLbl?`<div class="badge badge-run"><div class="dot"></div>${escAttr(runLbl)}</div>`:""}
+      ${SHOW_DOSSIERS?`<div class="badge badge-info">${totH}h · ${nb} dossiers</div>`:""}
     </div>
   </header>
     <section class="sec">
@@ -712,7 +735,7 @@ function render(){
       ${tlBlocks}
       <div class="legend">${sl.slice(0,8).map(s=>{const co=colorForId(s.entry_id||0);const lb=escAttr(s.client||s.numero_of||s.reference||"—");return`<div class="lg-i"><div class="lg-d" style="background:${co}"></div><span>${lb}</span></div>`;}).join("")}</div>
     </section>
-    <section class="sec">
+    ${SHOW_DOSSIERS?`<section class="sec">
       <div class="sec-hdr">
         <div class="sec-title">Dossiers de production</div>
         ${CAN_EDIT?`<button type="button" class="btn-p" onclick="openAdd()"><span style="font-size:18px;line-height:1">+</span> Ajouter</button>`:""}
@@ -721,11 +744,11 @@ function render(){
       <div id="tbody">${S.entries.length===0?'<div class="empty">Aucun dossier au planning</div>':""}
         ${S.entries.map((e,i)=>mkRow(e,i,sl)).join("")}
       </div>
-    </section>
+    </section>`:""}
   </div></main></div><div id="mroot"></div>`;
   setupDD();
   setupStatutSelects();
-  autoScrollDossiersIfNeeded();
+  if(SHOW_DOSSIERS)autoScrollDossiersIfNeeded();
 }
 
 function autoScrollDossiersIfNeeded(){
@@ -1306,7 +1329,9 @@ async function boot(){
     const num=raw?parseInt(raw,10):NaN;
     const ids=new Set(ordered.map(m=>m.id));
     const saved=parseInt(localStorage.getItem("mysifa.planning.lastMachine")||"",10);
-    if(isFinite(num)&&ids.has(num)){
+    if(!ordered.length){
+      MID=0;
+    }else if(isFinite(num)&&ids.has(num)){
       MID=num;
     }else if(isFinite(num)&&num>=1&&num<=4){
       const wantedName=MACHINE_ORDER[num-1];
@@ -1318,7 +1343,7 @@ async function boot(){
       const wanted=ordered[0];
       if(wanted) MID=wanted.id;
     }
-  }catch(e){console.error(e)}
+  }catch(e){console.error(e);MID=0;}
   await load();
 }
 boot();

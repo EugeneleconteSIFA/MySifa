@@ -70,13 +70,55 @@ ROLE_FABRICATION    = "fabrication"
 ROLE_LOGISTIQUE     = "logistique"
 ROLE_COMPTABILITE   = "comptabilite"
 ROLE_EXPEDITION     = "expedition"
+ROLE_SUPERADMIN     = "superadmin"
 
-# Rôles ayant accès aux fonctions d'administration
-ROLES_ADMIN = {ROLE_DIRECTION, ROLE_ADMINISTRATION}
-ROLES_STOCK = {ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_LOGISTIQUE}
-ROLES_PROD  = {ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_FABRICATION}
-ROLES_COMPTA = {ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_COMPTABILITE}
-ROLES_EXPE  = {ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_EXPEDITION}
+# Compte technique : seul cet email peut porter le rôle superadmin (contrôlé côté API).
+SUPERADMIN_EMAIL = "eleconte@sifa.pro"
+
+# Rôles ayant accès aux fonctions d'administration (imports, dossiers, stats, etc.)
+ROLES_ADMIN = {ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_SUPERADMIN}
+ROLES_STOCK = {ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_LOGISTIQUE, ROLE_SUPERADMIN}
+ROLES_PROD  = {ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_FABRICATION, ROLE_SUPERADMIN}
+ROLES_COMPTA = {ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_COMPTABILITE, ROLE_SUPERADMIN}
+ROLES_EXPE  = {ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_EXPEDITION, ROLE_SUPERADMIN}
+ROLES_PLANNING_VIEW = {ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_FABRICATION, ROLE_SUPERADMIN}
+ROLES_SETTINGS = {ROLE_SUPERADMIN}
+
+# Applications dont l'accès peut être surchargé par utilisateur (hors Paramètres : réservé au rôle super admin).
+ACCESS_OVERRIDABLE_APPS = frozenset({"prod", "planning", "stock", "compta", "expe"})
+
+# Rôles assignables lors de la création / édition d'utilisateurs (hors super admin).
+ASSIGNABLE_ROLES = frozenset(
+    {
+        ROLE_FABRICATION,
+        ROLE_ADMINISTRATION,
+        ROLE_DIRECTION,
+        ROLE_LOGISTIQUE,
+        ROLE_COMPTABILITE,
+        ROLE_EXPEDITION,
+    }
+)
+
+
+def default_app_access_for_role(role: str) -> dict:
+    """Accès applications issus du seul rôle (avant surcharges utilisateur)."""
+    if role == ROLE_SUPERADMIN:
+        return {
+            "prod": True,
+            "planning": True,
+            "stock": True,
+            "compta": True,
+            "expe": True,
+            "settings": True,
+        }
+    return {
+        "prod": role in ROLES_PROD,
+        "planning": role in ROLES_PLANNING_VIEW,
+        "stock": role in ROLES_STOCK,
+        "compta": role in ROLES_COMPTA,
+        "expe": role in ROLES_EXPE,
+        "settings": role in ROLES_SETTINGS,
+    }
 
 # Admin par défaut
 DEFAULT_ADMIN_EMAIL = "admin@sifa.fr"

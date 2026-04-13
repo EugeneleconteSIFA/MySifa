@@ -12,16 +12,72 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Request, HTTPException
 from database import get_db
-from services.auth_service import require_admin, get_current_user
+from config import ROLE_FABRICATION
+from services.auth_service import require_admin, get_current_user, user_has_app_access
 
 router = APIRouter(prefix="/api/planning", tags=["planning"])
 
 
 def require_planning_view(request: Request) -> dict:
-    """Accès lecture planning : direction/administration/fabrication."""
+    """Accès lecture planning : selon rôle ou surcharge utilisateur."""
     user = get_current_user(request)
-    if user.get("role") not in {"direction", "administration", "fabrication"}:
+    if not user_has_app_access(user, "planning"):
         raise HTTPException(status_code=403, detail="Accès réservé au planning")
+    return user
+
+
+def _norm_key(val: Any) -> str:
+    return str(val or "").strip().lower()
+
+
+def fabrication_planning_machine_ids(conn, user: dict) -> set[int]:
+    """Machines autorisées pour le rôle fabrication : saisies production + machine du profil."""
+    ids: set[int] = set()
+    mid_user = user.get("machine_id")
+    if mid_user is not None:
+        try:
+            mid_i = int(mid_user)
+        except (TypeError, ValueError):
+            mid_i = None
+        if mid_i is not None:
+            row = conn.execute(
+                "SELECT id FROM machines WHERE id=? AND actif=1",
+                (mid_i,),
+            ).fetchone()
+            if row:
+                ids.add(mid_i)
+
+    op_key = _norm_key(user.get("operateur_lie"))
+    if op_key:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT m.id
+            FROM production_data pd
+            JOIN machines m ON m.actif = 1
+              AND pd.machine IS NOT NULL AND trim(pd.machine) != ''
+              AND (
+                lower(trim(pd.machine)) = lower(trim(m.nom))
+                OR (
+                  m.code IS NOT NULL AND trim(m.code) != ''
+                  AND lower(trim(pd.machine)) = lower(trim(m.code))
+                )
+              )
+            WHERE lower(trim(pd.operateur)) = ?
+            """,
+            (op_key,),
+        ).fetchall()
+        for r in rows:
+            ids.add(int(r["id"]))
+    return ids
+
+
+def require_planning_machine(request: Request, conn, machine_id: int) -> dict:
+    """Vérifie l’accès planning puis, pour la fabrication, que la machine est autorisée."""
+    user = require_planning_view(request)
+    if user.get("role") == ROLE_FABRICATION:
+        allowed = fabrication_planning_machine_ids(conn, user)
+        if machine_id not in allowed:
+            raise HTTPException(status_code=403, detail="Accès non autorisé à cette machine")
     return user
 
 
@@ -352,12 +408,22 @@ def _compute_timeline_slots(
 
 @router.get("/machines")
 def list_machines(request: Request):
-    """Liste des machines actives."""
-    require_planning_view(request)
+    """Liste des machines actives (filtrée pour le rôle fabrication)."""
+    user = require_planning_view(request)
     with get_db() as conn:
-        rows = conn.execute(
-            "SELECT * FROM machines WHERE actif=1 ORDER BY nom"
-        ).fetchall()
+        if user.get("role") == ROLE_FABRICATION:
+            allowed = fabrication_planning_machine_ids(conn, user)
+            if not allowed:
+                return []
+            ph = ",".join("?" * len(allowed))
+            rows = conn.execute(
+                f"SELECT * FROM machines WHERE actif=1 AND id IN ({ph}) ORDER BY nom",
+                tuple(allowed),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM machines WHERE actif=1 ORDER BY nom"
+            ).fetchall()
     return [dict(r) for r in rows]
 
 
@@ -368,17 +434,38 @@ def planning_summary(request: Request):
     from config import DB_PATH
 
     with get_db() as conn:
-        total = conn.execute("SELECT COUNT(*) FROM planning_entries").fetchone()[0]
-        rows = conn.execute(
-            """
-            SELECT m.id AS machine_id, m.nom, COUNT(e.id) AS entries_count
-            FROM machines m
-            LEFT JOIN planning_entries e ON e.machine_id = m.id
-            WHERE m.actif = 1
-            GROUP BY m.id, m.nom
-            ORDER BY m.nom
-            """
-        ).fetchall()
+        if user.get("role") == ROLE_FABRICATION:
+            allowed = fabrication_planning_machine_ids(conn, user)
+            if not allowed:
+                return {"planning_entries_total": 0, "per_machine": []}
+            ph = ",".join("?" * len(allowed))
+            total = conn.execute(
+                f"SELECT COUNT(*) FROM planning_entries WHERE machine_id IN ({ph})",
+                tuple(allowed),
+            ).fetchone()[0]
+            rows = conn.execute(
+                f"""
+                SELECT m.id AS machine_id, m.nom, COUNT(e.id) AS entries_count
+                FROM machines m
+                LEFT JOIN planning_entries e ON e.machine_id = m.id
+                WHERE m.actif = 1 AND m.id IN ({ph})
+                GROUP BY m.id, m.nom
+                ORDER BY m.nom
+                """,
+                tuple(allowed),
+            ).fetchall()
+        else:
+            total = conn.execute("SELECT COUNT(*) FROM planning_entries").fetchone()[0]
+            rows = conn.execute(
+                """
+                SELECT m.id AS machine_id, m.nom, COUNT(e.id) AS entries_count
+                FROM machines m
+                LEFT JOIN planning_entries e ON e.machine_id = m.id
+                WHERE m.actif = 1
+                GROUP BY m.id, m.nom
+                ORDER BY m.nom
+                """
+            ).fetchall()
     out: Dict[str, Any] = {
         "planning_entries_total": int(total),
         "per_machine": [dict(r) for r in rows],
@@ -390,8 +477,8 @@ def planning_summary(request: Request):
 
 @router.get("/machines/{machine_id}")
 def get_machine(machine_id: int, request: Request):
-    require_planning_view(request)
     with get_db() as conn:
+        require_planning_machine(request, conn, machine_id)
         row = conn.execute("SELECT * FROM machines WHERE id=?", (machine_id,)).fetchone()
     if not row:
         raise HTTPException(404, "Machine non trouvée")
@@ -478,8 +565,13 @@ async def set_machine_horaires_bulk(machine_id: int, request: Request):
 
 @router.get("/machines/{machine_id}/entries")
 def list_entries(machine_id: int, request: Request):
-    require_planning_view(request)
     with get_db() as conn:
+        user = require_planning_machine(request, conn, machine_id)
+        if user.get("role") == ROLE_FABRICATION:
+            raise HTTPException(
+                status_code=403,
+                detail="Liste des dossiers réservée à l'administration",
+            )
         _auto_complete_en_cours(conn, machine_id)
         conn.commit()
         rows = conn.execute("""
@@ -909,8 +1001,8 @@ async def insert_after(machine_id: int, after_entry_id: int, request: Request):
 @router.get("/machines/{machine_id}/holidays")
 def list_holidays(machine_id: int, request: Request, start: str, end: str):
     """Liste des jours off entre start/end (YYYY-MM-DD)."""
-    require_planning_view(request)
     with get_db() as conn:
+        require_planning_machine(request, conn, machine_id)
         rows = conn.execute(
             """SELECT date,is_off,label FROM planning_holidays
                WHERE machine_id=? AND date>=? AND date<=?""",
@@ -926,7 +1018,6 @@ def list_day_work(machine_id: int, request: Request, start: str, end: str):
     - Lun–ven : seules les exceptions sont stockées (0 = forcé non travaillé). Sans ligne => travaillé selon horaires machine + fériés.
     - Samedi  : valeur effective = exception planning_day_worked si présente, sinon planning_config.samedi_travaille de la semaine.
     """
-    require_planning_view(request)
     try:
         dt_start = datetime.strptime(start, "%Y-%m-%d")
         dt_end = datetime.strptime(end, "%Y-%m-%d")
@@ -936,6 +1027,7 @@ def list_day_work(machine_id: int, request: Request, start: str, end: str):
         raise HTTPException(400, "end < start")
 
     with get_db() as conn:
+        require_planning_machine(request, conn, machine_id)
         rows = conn.execute(
             """SELECT date, is_worked FROM planning_day_worked
                WHERE machine_id=? AND date>=? AND date<=? ORDER BY date""",
@@ -1072,12 +1164,12 @@ async def set_holiday(machine_id: int, request: Request):
 @router.get("/machines/{machine_id}/config")
 def get_week_config(machine_id: int, request: Request, semaine: Optional[str] = None):
     """Récupérer la config d'une semaine (ou semaine courante)."""
-    require_planning_view(request)
     if not semaine:
         today = datetime.now()
         semaine = f"{today.year}-W{today.isocalendar()[1]:02d}"
 
     with get_db() as conn:
+        require_planning_machine(request, conn, machine_id)
         row = conn.execute(
             "SELECT * FROM planning_config WHERE machine_id=? AND semaine=?",
             (machine_id, semaine)
@@ -1124,9 +1216,8 @@ async def set_week_config(machine_id: int, request: Request):
 @router.get("/machines/{machine_id}/timeline")
 def get_timeline(machine_id: int, request: Request, semaine: Optional[str] = None):
     """Calcule la timeline : créneaux figés (terminé / en cours avec dates) ou recalculés (en attente)."""
-    require_planning_view(request)
-
     with get_db() as conn:
+        require_planning_machine(request, conn, machine_id)
         machine = conn.execute("SELECT * FROM machines WHERE id=?", (machine_id,)).fetchone()
         if not machine:
             raise HTTPException(404, "Machine non trouvée")

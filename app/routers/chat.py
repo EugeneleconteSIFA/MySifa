@@ -27,9 +27,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from config import ROLES_STOCK
 from database import get_db
-from services.auth_service import get_current_user
+from services.auth_service import get_current_user, user_has_app_access
 
 router = APIRouter(prefix="/api", tags=["chatbot"])
 
@@ -149,13 +148,13 @@ Règles:
 
 
 def _require_stock(user: dict) -> None:
-    if user.get("role") not in ROLES_STOCK:
+    if not user_has_app_access(user, "stock"):
         raise HTTPException(status_code=403, detail="Accès stock réservé (direction/administration/logistique).")
 
 
 def _require_admin(user: dict) -> None:
-    if user.get("role") not in ("direction", "administration"):
-        raise HTTPException(status_code=403, detail="Accès planning réservé (direction/administration).")
+    if not user_has_app_access(user, "planning"):
+        raise HTTPException(status_code=403, detail="Accès planning réservé.")
 
 
 def _tool_planning_add(user: dict, inp: dict) -> tuple[str, str]:

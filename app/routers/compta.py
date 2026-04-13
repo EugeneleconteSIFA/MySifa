@@ -6,16 +6,15 @@ from typing import Any, Dict, List, Optional, Tuple
 import sqlite3
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 
-from config import ROLES_COMPTA
 from database import get_db
-from services.auth_service import get_current_user
+from services.auth_service import get_current_user, user_has_app_access
 
 router = APIRouter()
 
 
 def _require_compta(request: Request) -> dict:
     u = get_current_user(request)
-    if u.get("role") not in ROLES_COMPTA:
+    if not user_has_app_access(u, "compta"):
         raise HTTPException(status_code=403, detail="Accès réservé à MyCompta")
     return u
 

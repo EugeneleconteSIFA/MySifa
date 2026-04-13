@@ -9,12 +9,22 @@ from typing import Optional
 from fastapi import APIRouter, Request, HTTPException
 
 from database import get_db
-from services.auth_service import get_current_user
-from config import ROLES_STOCK
+from services.auth_service import get_current_user, user_has_app_access
 
 router = APIRouter()
 
 INVENTAIRE_ALERTE_JOURS = 180  # 6 mois
+
+# Colonnes mouvements (évite m.* + collision avec join users)
+_MVT_FIELDS = (
+    "m.id, m.produit_id, m.emplacement, m.type_mouvement, m.quantite, "
+    "m.quantite_avant, m.quantite_apres, m.note, m.created_at, m.created_by"
+)
+
+_STOCK_USER_JOIN = (
+    "LEFT JOIN users u ON LOWER(TRIM(COALESCE(u.email,''))) = "
+    "LOWER(TRIM(COALESCE(m.created_by,'')))"
+)
 
 # Références type XXXX-XXXX / XXXX/XXXX : même résultat si l’utilisateur omet ou change -, /, espaces.
 _NORM_REF_SQL = (
@@ -44,7 +54,7 @@ def _produit_search_where_args(q: str) -> tuple[str, list]:
 
 def require_stock(request: Request) -> dict:
     user = get_current_user(request)
-    if user["role"] not in ROLES_STOCK:
+    if not user_has_app_access(user, "stock"):
         raise HTTPException(403, "Accès réservé à la Direction, Administration et Logistique")
     return user
 
@@ -212,9 +222,10 @@ def vue_globale(request: Request):
                LEFT JOIN stock_emplacements s ON s.produit_id = p.id"""
         ).fetchone()
         mvts = conn.execute(
-            """SELECT m.*, p.reference, p.designation
+            f"""SELECT {_MVT_FIELDS}, p.reference, p.designation, u.nom AS created_by_nom
                FROM mouvements_stock m
                JOIN produits p ON p.id = m.produit_id
+               {_STOCK_USER_JOIN}
                ORDER BY m.created_at DESC LIMIT 15"""
         ).fetchall()
     return {
@@ -279,8 +290,11 @@ def get_produit(produit_id: int, request: Request):
 
         # Historique mouvements
         mvts = conn.execute(
-            """SELECT * FROM mouvements_stock WHERE produit_id=?
-               ORDER BY created_at DESC LIMIT 80""",
+            f"""SELECT {_MVT_FIELDS}, u.nom AS created_by_nom
+               FROM mouvements_stock m
+               {_STOCK_USER_JOIN}
+               WHERE m.produit_id=?
+               ORDER BY m.created_at DESC LIMIT 80""",
             (produit_id,),
         ).fetchall()
 
@@ -411,9 +425,10 @@ def get_emplacement(emplacement: str, request: Request):
         ).fetchall()
 
         mvts = conn.execute(
-            """SELECT m.*, p.reference, p.designation
+            f"""SELECT {_MVT_FIELDS}, p.reference, p.designation, u.nom AS created_by_nom
                FROM mouvements_stock m
                JOIN produits p ON p.id=m.produit_id
+               {_STOCK_USER_JOIN}
                WHERE m.emplacement=? ORDER BY m.created_at DESC LIMIT 80""",
             (emplacement,),
         ).fetchall()
@@ -495,16 +510,16 @@ async def mouvement_stock(request: Request):
             if ex:
                 conn.execute(
                     """UPDATE stock_emplacements
-                       SET quantite=?,updated_at=?,updated_by=?,commentaire=?
+                       SET quantite=?,updated_at=?,updated_by=?,derniere_inventaire=?,commentaire=?
                        WHERE produit_id=? AND emplacement=?""",
-                    (qte_apres, now, user["email"], note or None, produit_id, emplacement),
+                    (qte_apres, now, user["email"], now, note or None, produit_id, emplacement),
                 )
             else:
                 conn.execute(
                     """INSERT INTO stock_emplacements
-                       (produit_id,emplacement,quantite,updated_at,updated_by,commentaire)
-                       VALUES (?,?,?,?,?,?)""",
-                    (produit_id, emplacement, qte_apres, now, user["email"], note or None),
+                       (produit_id,emplacement,quantite,updated_at,updated_by,derniere_inventaire,commentaire)
+                       VALUES (?,?,?,?,?,?,?)""",
+                    (produit_id, emplacement, qte_apres, now, user["email"], now, note or None),
                 )
 
             # Historique
@@ -563,6 +578,31 @@ async def mouvement_stock(request: Request):
 
 
 # ── Inventaire en chaîne ──────────────────────────────────────────
+@router.get("/api/stock/inventaire/priorites")
+def inventaire_priorites(request: Request):
+    """Toutes les lignes en stock (quantite > 0), tri : jamais / le plus ancien inventaire d'abord."""
+    require_stock(request)
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT p.id AS produit_id, p.reference, p.designation, p.unite,
+                      s.emplacement, s.quantite, s.derniere_inventaire,
+                      CASE
+                        WHEN s.derniere_inventaire IS NULL
+                          OR TRIM(COALESCE(s.derniere_inventaire, '')) = ''
+                          THEN 999999
+                        ELSE CAST(
+                          julianday('now') - julianday(SUBSTR(s.derniere_inventaire, 1, 10))
+                          AS INTEGER
+                        )
+                      END AS jours_depuis_inv
+               FROM stock_emplacements s
+               JOIN produits p ON p.id = s.produit_id
+               WHERE s.quantite > 0
+               ORDER BY jours_depuis_inv DESC, s.quantite DESC, p.reference, s.emplacement"""
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 @router.get("/api/stock/inventaire/produits-a-inventorier")
 def produits_a_inventorier(request: Request, jours: int = 180):
     """Produits avec emplacements non inventoriés depuis > jours."""
@@ -602,9 +642,10 @@ def dashboard(request: Request):
         ).fetchone()
 
         derniers_mvts = conn.execute(
-            """SELECT m.*, p.reference, p.designation
+            f"""SELECT {_MVT_FIELDS}, p.reference, p.designation, u.nom AS created_by_nom
                FROM mouvements_stock m
                JOIN produits p ON p.id=m.produit_id
+               {_STOCK_USER_JOIN}
                ORDER BY m.created_at DESC LIMIT 15""",
         ).fetchall()
 

@@ -3,9 +3,9 @@
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from config import ROLES_EXPE
-from services.auth_service import get_current_user
+from services.auth_service import get_current_user, user_has_app_access
 from frontend.html import render_frontend_html
+from app.web.access_denied import access_denied_response
 
 router = APIRouter()
 
@@ -19,8 +19,8 @@ def expe_page(request: Request):
             return RedirectResponse(url="/?next=/expe", status_code=302)
         raise
 
-    if user.get("role") not in ROLES_EXPE:
-        raise HTTPException(status_code=403, detail="Accès réservé à MyExpé")
+    if not user_has_app_access(user, "expe"):
+        return access_denied_response("MyExpé")
 
     return HTMLResponse(content=render_frontend_html("expe"))
 

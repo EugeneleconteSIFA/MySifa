@@ -30,6 +30,8 @@ from frontend.prod_page import router as prod_page_router
 from frontend.stock_page import router as stock_page_router
 from frontend.compta_page import router as compta_page_router
 from app.web.expe_page import router as expe_page_router
+from app.routers.settings import router as settings_api_router
+from frontend.settings_page import router as settings_page_router
 
 
 @asynccontextmanager
@@ -89,16 +91,17 @@ app.include_router(prod_page_router)
 app.include_router(stock_page_router)
 app.include_router(compta_page_router)
 app.include_router(expe_page_router)
+app.include_router(settings_api_router)
+app.include_router(settings_page_router)
 
 
 @app.get("/", response_class=HTMLResponse)
 def serve_frontend():
     return render_frontend_html("portal")
 
-# URL stable pour l'onglet "Utilisateurs" (quelque soit l'app courante)
 @app.get("/users")
 def users_redirect():
-    return RedirectResponse(url="/prod?page=users", status_code=302)
+    return RedirectResponse(url="/settings", status_code=302)
 
 if __name__ == "__main__":
     import uvicorn
