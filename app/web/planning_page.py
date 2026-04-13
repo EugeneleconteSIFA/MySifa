@@ -104,6 +104,10 @@ body.sb-open .sidebar-overlay{display:block}
 .mysifa-back-brand{font-size:14px;font-weight:800;letter-spacing:-.5px;color:var(--text);white-space:nowrap}
 .mysifa-back-accent{color:var(--accent)}
 .sidebar-bottom{margin-top:auto;display:flex;flex-direction:column;gap:6px;padding-bottom:8px}
+.support-btn{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);
+  background:transparent;color:var(--text2);cursor:pointer;font-size:12px;width:100%;font-family:inherit;transition:all .15s}
+.support-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+.support-ico{display:inline-flex;align-items:center;justify-content:center}
 .user-chip{padding:10px 12px;border-radius:8px;background:var(--accent-bg);cursor:pointer}
 .user-chip .uc-name{font-size:12px;font-weight:600;color:var(--text)}
 .user-chip .uc-role{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px}
@@ -119,6 +123,31 @@ body.sb-open .sidebar-overlay{display:block}
 .version{font-size:10px;color:var(--muted);font-family:monospace;padding:4px 12px}
 .main{flex:1;padding:28px;overflow-y:auto}
 .planning-container{max-width:1400px;margin:0 auto}
+
+/* Contact support (messagerie interne) */
+.contact-ov{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:950;display:flex;align-items:center;justify-content:center;padding:18px}
+.contact-box{width:100%;max-width:560px;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px 18px 16px;box-shadow:0 24px 64px rgba(0,0,0,.4);position:relative}
+.contact-box h3{font-size:16px;font-weight:800;margin:0 0 12px;padding-right:34px}
+.contact-close{position:absolute;top:14px;right:14px;width:32px;height:32px;border-radius:10px;border:1px solid var(--border);
+  background:var(--bg);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:18px;line-height:1}
+.contact-close:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.contact-box label{display:block;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:10px 0 4px}
+.contact-box input,.contact-box textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none}
+.contact-box textarea{min-height:140px;resize:vertical}
+.contact-box input:focus,.contact-box textarea:focus{border-color:var(--accent)}
+.contact-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:14px}
+.btn-sec{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:12px;
+  padding:12px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:box-shadow .2s,border-color .15s,color .15s,filter .15s}
+.btn-sec:hover{box-shadow:0 0 0 1px rgba(34,211,238,.32),0 0 20px rgba(34,211,238,.2);border-color:rgba(34,211,238,.45);color:var(--accent)}
+.btn-sec:active{transform:translateY(1px)}
+.btn-ghost{background:transparent;border:1px solid var(--border);border-radius:8px;padding:9px 14px;font-size:12px;font-weight:600;
+  color:var(--text2);cursor:pointer;font-family:inherit;transition:border-color .15s,color .15s,box-shadow .2s,transform .05s}
+.btn-ghost:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg);
+  box-shadow:0 0 0 1px rgba(34,211,238,.22),0 0 18px rgba(34,211,238,.12)}
+.btn-ghost:active{transform:translateY(1px)}
+.btn{background:var(--accent);color:var(--bg);border:none;border-radius:12px;padding:12px 16px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit}
+.btn:disabled{opacity:.7;cursor:not-allowed}
+.btn:hover{filter:brightness(1.05)}
 
 .header{padding:0 0 20px;margin-bottom:4px;border-bottom:1px solid var(--border);display:flex;align-items:center;
   justify-content:space-between;flex-wrap:wrap;gap:12px}
@@ -237,7 +266,8 @@ body.light .slot .line1{color:#0f172a}body.light .slot .line2{color:#334155}
 .th>span{min-width:0}
 .th .act-c{text-align:right}
 #tbody{
-  max-height:min(560px, calc(100vh - 360px));
+  /* Plus haut pour afficher ~10 dossiers visibles */
+  max-height:min(820px, calc(100vh - 260px));
   overflow:auto;
   border-radius:0 0 10px 10px;
   scroll-behavior:auto;
@@ -375,7 +405,8 @@ const DEFAULTS_BY_KEY={
 };
 const DAY_API={1:"lundi",2:"mardi",3:"mercredi",4:"jeudi",5:"vendredi",6:"samedi"};
 const DAY_FIELD={1:"horaires_lundi",2:"horaires_mardi",3:"horaires_mercredi",4:"horaires_jeudi",5:"horaires_vendredi",6:"horaires_samedi"};
-let S={machine:null,machines:[],entries:[],timeline:[],wo:0,loading:true,holidays:{},dayWorked:{},view:localStorage.getItem("mysifa.planning.view")||"2w"};
+let S={machine:null,machines:[],entries:[],timeline:[],wo:0,loading:true,holidays:{},dayWorked:{},view:localStorage.getItem("mysifa.planning.view")||"2w",
+  contactOpen:false,contactSubject:"",contactMessage:"",contactSending:false};
 let ME=null;
 let CAN_EDIT=false;
 let SHOW_DOSSIERS=false;
@@ -487,6 +518,12 @@ const pad=n=>String(n).padStart(2,"0");
 function ymdate(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());}
 const ymd=ymdate;
 function escAttr(s){return String(s??"").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;");}
+function escHtml(s){
+  return String(s??"")
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;");
+}
 
 // ── Icônes SVG (Feather style) ───────────────────────────────────
 function icon(name,size=16){
@@ -659,25 +696,58 @@ function toggleTheme(){document.body.classList.toggle("light");localStorage.setI
 async function doLogout(){try{await fetch("/api/auth/logout",{method:"POST",credentials:"include"});}catch(e){}location.href="/";}
 
 function openSupport(){
+  if(!ME) return;
+  S.contactOpen=true;
+  render();
+}
+function closeSupport(){
+  S.contactOpen=false;
+  S.contactSending=false;
+  render();
+}
+async function sendSupport(){
+  if(S.contactSending) return;
+  const subject=String(S.contactSubject||"").trim();
+  const message=String(S.contactMessage||"").trim();
+  if(!message){ alert("Message obligatoire"); return; }
+  S.contactSending=true; render();
   try{
-    if(!window.MySifaSupport||!window.MySifaSupport.open){
-      alert("Support indisponible (widget non chargé).");
-      return;
-    }
-    window.MySifaSupport.open({
-      user: ME || {},
-      page: "Planning",
-      notify: (m)=>alert(String(m||"")),
-    });
+    const r=await fetch("/api/messages/contact",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({subject,message})});
+    if(!r.ok){ throw new Error("err"); }
+    S.contactOpen=false;
+    S.contactSending=false;
+    S.contactSubject="";
+    S.contactMessage="";
+    render();
+    alert("Message envoyé au support");
   }catch(e){
-    alert("Erreur ouverture support");
+    S.contactSending=false; render();
+    alert("Envoi impossible");
   }
+}
+
+function renderContactModal(){
+  if(!S.contactOpen) return "";
+  return `<div class="contact-ov" onclick="if(event.target===this)closeSupport()">
+    <div class="contact-box" onclick="event.stopPropagation()">
+      <button type="button" class="contact-close" onclick="closeSupport()">×</button>
+      <h3>Contacter le support</h3>
+      <label>Objet (facultatif)</label>
+      <input type="text" value="${escAttr(S.contactSubject||"")}" oninput="S.contactSubject=this.value" placeholder="Ex: Problème sur MyStock…">
+      <label>Message *</label>
+      <textarea oninput="S.contactMessage=this.value" placeholder="Décris ton besoin, avec contexte.">${escHtml(S.contactMessage||"")}</textarea>
+      <div class="contact-actions">
+        <button type="button" class="btn-ghost" onclick="closeSupport()">Annuler</button>
+        <button type="button" class="btn" onclick="sendSupport()" ${S.contactSending?"disabled":""}>${S.contactSending?"Envoi…":"Envoyer"}</button>
+      </div>
+    </div>
+  </div>`;
 }
 
 function render(){
   const a=document.getElementById("app");
   if(S.loading){
-    a.innerHTML=`<div class="app">${renderSidebar()}<main class="main"><div class="mobile-topbar"><button type="button" class="mobile-menu-btn" onclick="toggleSidebar()" aria-label="Menu"><span style="display: inline-flex; align-items: center; flex-shrink: 0;">${icon('menu',20)}</span></button><div><div class="mobile-topbar-title">Planning</div><div class="mobile-topbar-sub">KPIs, temps, quantités et qualité de saisie</div></div><button type="button" class="mobile-home-btn" onclick="location.href='/'" aria-label="Accueil"><span style="display: inline-flex; align-items: center; flex-shrink: 0;">${icon('home',20)}</span></button></div><div class="planning-container" style="display:flex;align-items:center;justify-content:center;min-height:50vh;color:var(--muted)">Chargement…</div></main></div><div id="mroot"></div>`;
+    a.innerHTML=`<div class="app">${renderSidebar()}<main class="main"><div class="mobile-topbar"><button type="button" class="mobile-menu-btn" onclick="toggleSidebar()" aria-label="Menu"><span style="display: inline-flex; align-items: center; flex-shrink: 0;">${icon('menu',20)}</span></button><div><div class="mobile-topbar-title">Planning</div><div class="mobile-topbar-sub">KPIs, temps, quantités et qualité de saisie</div></div><button type="button" class="mobile-home-btn" onclick="location.href='/'" aria-label="Accueil"><span style="display: inline-flex; align-items: center; flex-shrink: 0;">${icon('home',20)}</span></button></div><div class="planning-container" style="display:flex;align-items:center;justify-content:center;min-height:50vh;color:var(--muted)">Chargement…</div>${renderContactModal()}</main></div><div id="mroot"></div>`;
     return;
   }
   const m=S.machine||{nom:"?"};
@@ -726,7 +796,7 @@ function render(){
     a.innerHTML=`<div class="app">${renderSidebar()}<main class="main"><div class="mobile-topbar"><button type="button" class="mobile-menu-btn" onclick="toggleSidebar()" aria-label="Menu"><span style="display: inline-flex; align-items: center; flex-shrink: 0;">${icon('menu',20)}</span></button><div><div class="mobile-topbar-title">Planning</div><div class="mobile-topbar-sub">KPIs, temps, quantités et qualité de saisie</div></div><button type="button" class="mobile-home-btn" onclick="location.href='/'" aria-label="Accueil"><span style="display: inline-flex; align-items: center; flex-shrink: 0;">${icon('home',20)}</span></button></div><div class="planning-container" style="max-width:560px;margin:40px auto;padding:0 16px;color:var(--text)">
       <h1 style="font-size:18px;margin:0 0 12px">Planning</h1>
       ${isFab?fabMsg:admMsg}
-    </div></main></div><div id="mroot"></div>`;
+    </div>${renderContactModal()}</main></div><div id="mroot"></div>`;
     return;
   }
 
@@ -777,7 +847,7 @@ function render(){
         ${S.entries.map((e,i)=>mkRow(e,i,sl)).join("")}
       </div>
     </section>`:""}
-  </div></main></div><div id="mroot"></div>`;
+  ${renderContactModal()}</div></main></div><div id="mroot"></div>`;
   setupDD();
   setupStatutSelects();
   if(SHOW_DOSSIERS)autoScrollDossiersIfNeeded();

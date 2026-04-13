@@ -528,6 +528,30 @@ def _migrate(conn):
     except Exception:
         pass
 
+    # ── Messagerie interne (contact support → super admin) ───────────────
+    existing_tables = {row[0] for row in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+    ).fetchall()}
+    if "messages" not in existing_tables:
+        conn.execute(
+            """CREATE TABLE messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                from_user_id INTEGER,
+                from_email TEXT,
+                from_name TEXT,
+                to_email TEXT NOT NULL,
+                subject TEXT,
+                body TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                read_at TEXT,
+                deleted INTEGER DEFAULT 0,
+                FOREIGN KEY (from_user_id) REFERENCES users(id)
+            )"""
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_to_email ON messages(to_email)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_unread ON messages(to_email, read_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at)")
+
     # Tables MyCompta (Factor -> CW)
     existing_tables = {row[0] for row in conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table'"

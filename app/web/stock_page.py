@@ -41,6 +41,7 @@ STOCK_HTML = r"""<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0a0e17">
 <title>MyStock — MySifa</title>
 <link rel="icon" type="image/png" sizes="512x512" href="/static/mys_icon_512.png">
@@ -131,8 +132,8 @@ body.sb-open .sidebar-overlay{display:block}
   .mobile-topbar{display:flex;position:fixed;top:0;left:0;right:0;z-index:120;background:var(--bg);padding:10px 18px;border-bottom:1px solid var(--border)}
   .mobile-menu-btn{display:inline-flex}
   .mobile-home-btn{display:inline-flex}
-  body.has-topbar .main-area{padding-top:74px}
-  body.has-topbar .search-bar-wrap{top:74px}
+  /* La topbar est fixed → on décale uniquement la barre de recherche. */
+  body.has-topbar .search-bar-wrap{margin-top:74px}
 }
 
 /* Scroll area */
@@ -337,6 +338,27 @@ body.light .field-input.empl-upper::placeholder{
 .modal-actions{display:grid;grid-template-columns:1fr 2fr;gap:10px;margin-top:16px}
 .btn-cancel{background:transparent;border:1.5px solid var(--border);border-radius:12px;
   padding:13px;font-size:14px;font-weight:700;color:var(--text2);cursor:pointer;font-family:inherit}
+.support-btn{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);
+  background:transparent;color:var(--text2);cursor:pointer;font-size:12px;width:100%;font-family:inherit;transition:all .15s}
+.support-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+.support-ico{display:inline-flex;align-items:center;justify-content:center}
+
+/* Modal contact support (messagerie interne) */
+.contact-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:650;display:flex;align-items:center;justify-content:center;padding:18px}
+.contact-modal{width:100%;max-width:560px;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px 18px 16px;box-shadow:0 24px 64px rgba(0,0,0,.4);position:relative}
+.contact-modal h3{font-size:16px;font-weight:800;margin:0 0 12px;padding-right:34px}
+.contact-close{position:absolute;top:14px;right:14px;width:32px;height:32px;border-radius:10px;border:1px solid var(--border);
+  background:var(--bg);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:18px;line-height:1}
+.contact-close:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.contact-modal label{display:block;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:10px 0 4px}
+.contact-modal input,.contact-modal textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none}
+.contact-modal textarea{min-height:140px;resize:vertical}
+.contact-modal input:focus,.contact-modal textarea:focus{border-color:var(--accent)}
+.contact-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:14px}
+.btn-sec{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:12px;
+  padding:12px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:box-shadow .2s,border-color .15s,color .15s,filter .15s}
+.btn-sec:hover{box-shadow:0 0 0 1px rgba(34,211,238,.32),0 0 20px rgba(34,211,238,.2);border-color:rgba(34,211,238,.45);color:var(--accent)}
+.btn-sec:active{transform:translateY(1px)}
 .btn-confirm{border:none;border-radius:12px;padding:13px;font-size:14px;font-weight:700;
   cursor:pointer;font-family:inherit;color:#0a0e17}
 .btn-confirm.entree{background:var(--success)}
@@ -400,6 +422,11 @@ let S = {
   barcodeReader: null,
   emplSuggestions: [],
   showAddForm: false,
+  // Nouveau support (messagerie interne)
+  contactOpen: false,
+  contactSubject: '',
+  contactMessage: '',
+  contactSending: false,
 };
 
 // ── API ─────────────────────────────────────────────────────────
@@ -1246,6 +1273,12 @@ function renderContent() {
   if (S.tab === 'dashboard' && !S.selProduit && !S.selEmpl) requestAnimationFrame(() => wireStockPageAddEmplCombo());}
 
 function render() {
+  // La modale "contact support" est montée sur <body> : il faut la synchroniser
+  // avec l'état à chaque rendu pour éviter un overlay "figé" (ex: reste sur "Envoi…").
+  try{
+    document.querySelectorAll('.contact-modal-overlay').forEach(n=>n.remove());
+  }catch(e){}
+
   const root = document.getElementById('root');
   root.innerHTML = '';
 
@@ -1277,7 +1310,8 @@ function render() {
         el('div', { cls:'uc-role' }, S.user.role||'')
       ) : null,
       (() => {
-        const b=el('button',{cls:'support-btn',type:'button',on:{click:()=>window.MySifaSupport?.open?.({user:S.user,page:'MyStock',notify:(m,t)=>showToast(m,t),api})}});
+        if(!S.user || S.user.role==='superadmin') return null;
+        const b=el('button',{cls:'support-btn',type:'button',on:{click:()=>{S.contactOpen=true; render();}}});
         const ico=el('span',{cls:'support-ico'}); ico.innerHTML=window.MySifaSupport?.iconSvg?.()||'';
         b.append(ico, el('span',null,'Contacter le support'));
         return b;
@@ -1309,6 +1343,50 @@ function render() {
 
   layout.append(sidebar, main);
   root.appendChild(layout);
+
+  if(S.contactOpen){
+    const ov = el('div', { cls:'contact-modal-overlay', on:{ click:(e)=>{ if(e.target===ov){ S.contactOpen=false; render(); } } } });
+    const box = el('div', { cls:'contact-modal' });
+    box.appendChild(el('button',{cls:'contact-close',type:'button',on:{click:()=>{S.contactOpen=false; render();}}},'×'));
+    box.appendChild(el('h3',null,'Contacter le support'));
+
+    const subj = el('input',{type:'text',placeholder:'Objet (facultatif)'});
+    subj.value = S.contactSubject || '';
+    subj.addEventListener('input', ()=>{ S.contactSubject = subj.value; });
+    box.appendChild(el('label',null,'Objet'));
+    box.appendChild(subj);
+
+    const msg = el('textarea',{placeholder:'Message *'});
+    msg.value = S.contactMessage || '';
+    msg.addEventListener('input', ()=>{ S.contactMessage = msg.value; });
+    box.appendChild(el('label',null,'Message'));
+    box.appendChild(msg);
+
+    const actions = el('div',{cls:'contact-actions'});
+    actions.appendChild(el('button',{cls:'btn-cancel',type:'button',on:{click:()=>{S.contactOpen=false; render();}}},'Annuler'));
+    const send = el('button',{cls:'btn',type:'button'}, S.contactSending ? 'Envoi…' : 'Envoyer');
+    send.disabled = !!S.contactSending;
+    send.addEventListener('click', async ()=>{
+      if(S.contactSending) return;
+      const message = String(S.contactMessage||'').trim();
+      const subject = String(S.contactSubject||'').trim();
+      if(!message){ showToast('Message obligatoire','error'); return; }
+      S.contactSending = true; render();
+      try{
+        await api('/api/messages/contact',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({subject,message})});
+        showToast('Message envoyé au support','success');
+        S.contactOpen=false; S.contactSending=false; S.contactSubject=''; S.contactMessage='';
+        render();
+      }catch(e){
+        S.contactSending=false; render();
+        showToast('Envoi impossible','error');
+      }
+    });
+    actions.appendChild(send);
+    box.appendChild(actions);
+    ov.appendChild(box);
+    document.body.appendChild(ov);
+  }
 
   renderContent();
 }

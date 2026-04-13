@@ -24,6 +24,7 @@ from routers.planning import router as planning_router
 from routers.stock import router as router_stock
 from routers.chat import router as chat_router
 from routers.support import router as support_router
+from app.routers.messages import router as messages_router
 from app.routers.compta import router as compta_router
 from frontend.planning_page import router as planning_page_router
 from frontend.prod_page import router as prod_page_router
@@ -85,6 +86,7 @@ app.include_router(planning_router)
 app.include_router(router_stock)
 app.include_router(chat_router)
 app.include_router(support_router)
+app.include_router(messages_router)
 app.include_router(compta_router)
 app.include_router(planning_page_router)
 app.include_router(prod_page_router)

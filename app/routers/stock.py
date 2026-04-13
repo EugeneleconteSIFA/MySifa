@@ -487,9 +487,24 @@ async def mouvement_stock(request: Request):
         raise HTTPException(400, "Quantité doit être positive")
 
     now = datetime.now().isoformat()
+    # Toujours tracer un "Nom Prénom" fiable (champ #ed-nom → users.nom).
+    # Certains contextes peuvent renvoyer un user.nom vide : on complète via la DB.
     created_by_name = (user.get("nom") or "").strip() or None
 
     with get_db() as conn:
+        if not created_by_name:
+            try:
+                if user.get("id") is not None:
+                    r = conn.execute("SELECT nom FROM users WHERE id=? LIMIT 1", (int(user["id"]),)).fetchone()
+                else:
+                    r = conn.execute(
+                        "SELECT nom FROM users WHERE LOWER(TRIM(COALESCE(email,'')))=? LIMIT 1",
+                        (str(user.get("email") or "").strip().lower(),),
+                    ).fetchone()
+                created_by_name = (str(r["nom"] or "").strip() if r else "") or None
+            except Exception:
+                created_by_name = None
+
         # Vérifier produit
         p = conn.execute("SELECT id FROM produits WHERE id=?", (produit_id,)).fetchone()
         if not p:

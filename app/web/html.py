@@ -99,10 +99,21 @@ button:focus:not(:focus-visible){outline:none}
 .logo{padding:0 8px;margin-bottom:32px}
 .logo-brand{font-size:15px;font-weight:800}.logo-brand span{color:var(--accent)}
 .logo-sub{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase}
+.logo-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.theme-btn--logo{width:auto;padding:8px 10px}
+.theme-btn--logo .theme-ico{display:inline-flex;align-items:center}
 .nav-btn{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:13px;font-weight:500;width:100%;text-align:left;font-family:inherit;transition:background .15s,color .15s,box-shadow .2s;margin-bottom:2px}
 .nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
 .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(34,211,238,.25),0 0 18px rgba(34,211,238,.15)}
 body.light .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(8,145,178,.32),0 0 16px rgba(8,145,178,.12)}
+.nav-badge{margin-left:auto;min-width:22px;height:18px;padding:0 6px;border-radius:999px;
+  background:rgba(248,113,113,.14);border:1px solid rgba(248,113,113,.35);color:var(--danger);
+  display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;font-family:monospace}
+.nav-badge.hidden{display:none}
+.msg-grid{display:flex;gap:12px;align-items:stretch}
+@media (max-width: 900px){
+  .msg-grid{flex-direction:column}
+}
 .sidebar-bottom{margin-top:auto;display:flex;flex-direction:column;gap:6px;padding-bottom:8px}
 .user-chip{padding:10px 12px;border-radius:8px;background:var(--accent-bg)}
 .user-chip .uc-name{font-size:12px;font-weight:600;color:var(--text)}
@@ -266,6 +277,29 @@ select.form-sel:focus{border-color:var(--accent)}
 .btn-ghost{background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:6px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:border-color .15s,color .15s,box-shadow .2s}
 .btn-ghost:hover{border-color:var(--accent);color:var(--accent);box-shadow:0 0 0 1px rgba(34,211,238,.28),0 0 20px rgba(34,211,238,.16)}
 body.light .btn-ghost:hover{box-shadow:0 0 0 1px rgba(8,145,178,.32),0 0 18px rgba(8,145,178,.14)}
+.btn-sec{
+  background:transparent;
+  color:var(--text2);
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:9px 14px;
+  font-size:12px;
+  font-weight:600;
+  cursor:pointer;
+  font-family:inherit;
+  transition:border-color .15s,color .15s,box-shadow .2s,transform .05s,filter .15s;
+}
+.btn-sec:hover{
+  border-color:var(--accent);
+  color:var(--accent);
+  background:var(--accent-bg);
+  box-shadow:0 0 0 1px rgba(34,211,238,.22),0 0 18px rgba(34,211,238,.12);
+}
+body.light .btn-sec:hover{
+  box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 16px rgba(8,145,178,.10);
+}
+.btn-sec:active{transform:translateY(1px)}
+.btn-sec:disabled{opacity:.7;cursor:not-allowed}
 .btn-danger{background:rgba(248,113,113,.15);color:var(--danger);border:1px solid rgba(248,113,113,.3);border-radius:6px;padding:5px 12px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit}
 .import-row{padding:12px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px}
 .import-row:hover{background:rgba(255,255,255,.02)}
@@ -391,6 +425,12 @@ body.light .btn-ghost:hover{box-shadow:0 0 0 1px rgba(8,145,178,.32),0 0 18px rg
   box-shadow:0 8px 28px rgba(34,211,238,.12)}
 .portal-settings-corner:active{transform:translateY(1px)}
 .portal-settings-corner:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.portal-corner-stack{position:fixed;top:20px;right:20px;z-index:120;display:flex;flex-direction:column;gap:10px}
+/* Important: must be relative so the badge positions on the right button. */
+.portal-corner-stack .portal-settings-corner{position:relative;top:auto;right:auto}
+.portal-corner-badge{position:absolute;top:8px;left:8px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;
+  background:rgba(248,113,113,.95);color:#fff;font-size:10px;font-weight:800;font-family:monospace;
+  display:inline-flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(0,0,0,.25)}
 .portal-apps{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;align-items:stretch}
 .portal-app{display:flex;flex-direction:column;align-items:center;gap:8px;
   background:var(--card);border:1px solid var(--border);border-radius:16px;
@@ -659,6 +699,16 @@ let S={
   selectedRows:new Set(),   // ids des lignes sélectionnées
   sortState:{col:null,asc:true}, // tri tableau saisies
   addRowTemplate:null,
+  // Messagerie interne (support)
+  msgUnread:0,
+  msgList:null,
+  msgSelId:null,
+  msgLoading:false,
+  msgFilter:'unread',
+  contactOpen:false,
+  contactSubject:'',
+  contactMessage:'',
+  contactSending:false,
 };
 
 function set(u){Object.assign(S,u);render();}
@@ -720,6 +770,9 @@ function icon(name,size=16){
     'arrow-right': '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',
     'menu': '<line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/>',
     'home': '<path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/><path d="M10 21v-6h4v6"/>',
+    // Icône enveloppe (plus explicite qu'un simple "carré + trait")
+    'mail': '<path d="M4 6h16v12H4z"/><path d="M4 7l8 6 8-6"/><path d="M4 17l6-5"/><path d="M20 17l-6-5"/>',
+    'send': '<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>',
     'plus': '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
     'edit': '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
     'rotate-ccw': '<polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.5"/>',
@@ -758,6 +811,8 @@ async function checkAuth(){
   if(user){
     S.user=user;
     S.app=HAS_INITIAL_APP ? INITIAL_APP : 'portal';
+    // Garder le badge Messagerie à jour, même sur le portail
+    try{ startMessagesPolling(); }catch(e){}
     // Support : redirection post-login (ex: /?next=/planning)
     try{
       const sp=new URLSearchParams(window.location.search||'');
@@ -785,6 +840,73 @@ async function checkAuth(){
   }
   else{S.user=null;S.app='login';}
   render();
+}
+
+let _msgPollStarted=false;
+function isSuperAdmin(u){return !!(u && u.role==='superadmin');}
+async function loadMessagesUnread(){
+  if(!isSuperAdmin(S.user))return;
+  const r=await api('/api/messages/unread-count');
+  if(r && typeof r.count==='number') set({msgUnread:r.count});
+}
+function startMessagesPolling(){
+  if(_msgPollStarted)return;
+  _msgPollStarted=true;
+  loadMessagesUnread().catch(()=>{});
+  setInterval(()=>{loadMessagesUnread().catch(()=>{});},30000);
+}
+
+async function refreshPortalData(){
+  // Rafraîchit les données clés quand on revient sur l'accueil MySifa
+  try{
+    const u=await api('/api/auth/me');
+    if(u) S.user=u;
+  }catch(e){}
+  try{ await loadMessagesUnread(); }catch(e){}
+  render();
+}
+async function loadMessages(){
+  if(!isSuperAdmin(S.user))return;
+  set({msgLoading:true});
+  const rows=await api('/api/messages?limit=200');
+  set({msgList:Array.isArray(rows)?rows:[],msgLoading:false});
+}
+async function markMessageRead(id){
+  if(!id)return;
+  await api('/api/messages/'+id+'/mark-read',{method:'POST'});
+  await loadMessagesUnread();
+  // Optimistic local update
+  try{
+    const list=(S.msgList||[]).map(m=>m.id===id?({...m,read_at:m.read_at||new Date().toISOString()}):m);
+    set({msgList:list});
+  }catch(e){}
+}
+async function deleteMessage(id){
+  if(!id)return;
+  await api('/api/messages/'+id,{method:'DELETE'});
+  await loadMessagesUnread();
+  await loadMessages();
+  if(S.msgSelId===id)set({msgSelId:null});
+}
+async function markAllRead(){
+  await api('/api/messages/mark-all-read',{method:'POST'});
+  await loadMessagesUnread();
+  await loadMessages();
+}
+async function sendContact(){
+  if(S.contactSending)return;
+  const subj=(S.contactSubject||'').trim();
+  const msg=(S.contactMessage||'').trim();
+  if(!msg){toast('Message obligatoire','error');return;}
+  set({contactSending:true});
+  try{
+    await api('/api/messages/contact',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({subject:subj,message:msg})});
+    toast('Message envoyé au support');
+    set({contactOpen:false,contactSubject:'',contactMessage:'',contactSending:false});
+  }catch(e){
+    set({contactSending:false});
+    toast('Envoi impossible','error');
+  }
 }
 async function doLogin(email,password){
   if(S.loginSubmitting)return;
@@ -1801,6 +1923,8 @@ function renderPortal(){
     ));
   }
 
+  // Messagerie: icône dans le coin (sous Paramètres) pour le super admin
+
   if(isCompta){
     apps.push(h('div',{
       className:'portal-app'+(S.portalLoading==='compta'?' portal-app--busy':''),
@@ -1856,13 +1980,29 @@ function renderPortal(){
   );
 
   return h('div',{className:'portal-page'},
-    isSuper?h('button',{
-      type:'button',
-      className:'portal-settings-corner',
-      'aria-label':'Paramètres',
-      title:'Paramètres',
-      onClick:()=>{window.location.href='/settings';}
-    },iconEl('sliders',24)):null,
+    isSuper?h('div',{className:'portal-corner-stack'},
+      h('button',{
+        type:'button',
+        className:'portal-settings-corner',
+        'aria-label':'Paramètres',
+        title:'Paramètres',
+        onClick:()=>{window.location.href='/settings';}
+      },iconEl('sliders',24)),
+      h('button',{
+        type:'button',
+        className:'portal-settings-corner',
+        'aria-label':'Messagerie',
+        title:'Messagerie',
+        onClick:async()=>{
+          set({app:'messages'});
+          await loadMessagesUnread().catch(()=>{});
+          await loadMessages().catch(()=>{});
+        }
+      },
+        (S.msgUnread>0)?h('span',{className:'portal-corner-badge'},S.msgUnread>9?'9+':String(S.msgUnread)):null,
+        iconEl('mail',24)
+      )
+    ):null,
     h('div',{className:'portal-logo'},
       h('div',{className:'brand'},'My',h('span',null,'Sifa')),
       h('div',{className:'tagline'},'Portail interne — Production, stocks et outils métier')
@@ -1915,14 +2055,8 @@ function renderStock(){
       (() => {
         const b=h('button',{
           className:'support-btn',
-          title:'Contacter le support (email)',
-          onClick:()=>{
-            try{
-              if(window.MySifaSupport && typeof window.MySifaSupport.open === 'function'){
-                window.MySifaSupport.open({user:S.user,page:'MyStock',notify:(m,t)=>toast(m,t),api});
-              }
-            }catch(e){}
-          }
+          title:'Contacter le support',
+          onClick:()=>set({contactOpen:true})
         });
         const ico=h('span',{className:'support-ico'});
         try{
@@ -2434,7 +2568,18 @@ function renderCompta(){
   const tab = S.comptaTab || 'factor';
   const sidebar=h('nav',{className:'sidebar'},
     h('div',{className:'logo'},
-      h('div',{className:'logo-brand'},'My',h('span',null,'Compta')),
+      h('div',{className:'logo-row'},
+        h('div',{className:'logo-brand'},'My',h('span',null,'Compta')),
+        h('button',{
+          type:'button',
+          className:'theme-btn theme-btn--logo',
+          onClick:()=>{document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');render();},
+          title:'Changer le thème'
+        },
+          h('span',{className:'theme-ico'},iconEl(isLight?'sun':'moon',16)),
+          h('span',null,isLight?'Mode sombre':'Mode clair')
+        )
+      ),
       h('div',{className:'logo-sub'},'by SIFA')
     ),
     h('button',{className:'nav-btn'+(tab==='factor'?' active':''),onClick:()=>{set({comptaTab:'factor'});}},
@@ -2443,19 +2588,29 @@ function renderCompta(){
       iconEl('users',15),'  Acheteurs'),
     h('button',{className:'nav-btn'+(tab==='comptes'?' active':''),onClick:()=>{set({comptaTab:'comptes'});loadComptaComptes();}},
       iconEl('file',15),'  Table des comptes'),
-    h('button',{className:'nav-btn back-mysifa',onClick:()=>{window.location.href='/' }},
-      '← Retour ',
-      h('span',{className:'wm'},'My',h('span',null,'Sifa'))
-    ),
     h('div',{className:'sidebar-bottom'},
+      h('button',{className:'nav-btn back-mysifa',onClick:()=>{window.location.href='/' }},
+        '← Retour ',
+        h('span',{className:'wm'},'My',h('span',null,'Sifa'))
+      ),
       h('div',{className:'user-chip'},
         h('div',{className:'uc-name'},(S.user&&S.user.nom)?S.user.nom:''),
         h('div',{className:'uc-role'},(S.user&&S.user.role)?(ROLE_LABELS[S.user.role]||S.user.role):'')
       ),
-      h('button',{className:'theme-btn',onClick:()=>{document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');render();}},
-        h('span',{className:'theme-ico'},iconEl(isLight?'sun':'moon',16)),
-        h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')
-      ),
+      (() => {
+        const b=h('button',{
+          className:'support-btn',
+          title:'Contacter le support',
+          onClick:()=>set({contactOpen:true})
+        });
+        const ico=h('span',{className:'support-ico'});
+        try{
+          ico.innerHTML=(window.MySifaSupport && typeof window.MySifaSupport.iconSvg==='function')?window.MySifaSupport.iconSvg():'';
+        }catch(e){ ico.innerHTML=''; }
+        b.appendChild(ico);
+        b.appendChild(h('span',null,'Contacter le support'));
+        return b;
+      })(),
       h('button',{className:'logout-btn',onClick:doLogout},iconEl('log-out',14),' Déconnexion')
     )
   );
@@ -2707,14 +2862,8 @@ function renderExpe(){
       (() => {
         const b=h('button',{
           className:'support-btn',
-          title:'Contacter le support (email)',
-          onClick:()=>{
-            try{
-              if(window.MySifaSupport && typeof window.MySifaSupport.open === 'function'){
-                window.MySifaSupport.open({user:S.user,page:'MyExpe',notify:(m,t)=>toast(m,t),api});
-              }
-            }catch(e){}
-          }
+          title:'Contacter le support',
+          onClick:()=>set({contactOpen:true})
         });
         const ico=h('span',{className:'support-ico'});
         try{
@@ -2970,6 +3119,7 @@ function renderLogin(){
 // ── Sidebar ─────────────────────────────────────────────────────
 function renderSidebar(){
   const admin=isAdmin(S.user);
+  const isSuper=isSuperAdmin(S.user);
   const items=[
     ...(canPlanningNav(S.user)?[{key:'_planning',label:'Planning',icon:'calendar'}]:[]),
     {key:'production',label:'Production',icon:'wrench'},
@@ -3006,14 +3156,8 @@ function renderSidebar(){
       (() => {
         const b=h('button',{
           className:'support-btn',
-          title:'Contacter le support (email)',
-          onClick:()=>{
-            try{
-              if(window.MySifaSupport && typeof window.MySifaSupport.open === 'function'){
-                window.MySifaSupport.open({user:S.user,page:'MyProd',notify:(m,t)=>toast(m,t),api});
-              }
-            }catch(e){}
-          }
+          title:'Contacter le support',
+          onClick:()=>set({contactOpen:true})
         });
         const ico=h('span',{className:'support-ico'});
         try{
@@ -3030,6 +3174,209 @@ function renderSidebar(){
       h('button',{className:'logout-btn',onClick:doLogout},iconEl('log-out',14),' Déconnexion'),
       h('div',{className:'version'},'__V_LABEL__')
     )
+  );
+}
+
+// ── Messagerie interne (support) ─────────────────────────────────
+function renderContactModal(){
+  const box=h('div',{className:'add-row-modal',onClick:(e)=>{if(e.target===box)set({contactOpen:false});}});
+  const form=h('div',{className:'add-row-form',style:{maxWidth:'520px'}});
+  const close=h('button',{type:'button',className:'add-row-close',onClick:()=>set({contactOpen:false})},'×');
+  form.appendChild(close);
+  form.appendChild(h('div',{className:'add-row-header',style:{cursor:'default'}},
+    h('h3',null,'Contacter le support')
+  ));
+  form.appendChild(h('div',null,
+    h('label',null,'Objet (facultatif)'),
+    h('input',{type:'text',value:S.contactSubject||'',onInput:(e)=>{S.contactSubject=e.target.value;},placeholder:'Ex: Problème sur MyStock…'})
+  ));
+  form.appendChild(h('div',{style:{marginTop:'10px'}},
+    h('label',null,'Message *'),
+    h('textarea',{rows:'6',style:{width:'100%',background:'var(--bg)',border:'1px solid var(--border)',borderRadius:'8px',padding:'9px 12px',color:'var(--text)',fontSize:'13px',fontFamily:'inherit',outline:'none',resize:'vertical'},
+      onInput:(e)=>{S.contactMessage=e.target.value;},placeholder:'Décris ton besoin, avec contexte.'},S.contactMessage||'')
+  ));
+  form.appendChild(h('div',{className:'form-actions'},
+    h('button',{type:'button',className:'btn-ghost',onClick:()=>set({contactOpen:false})},'Annuler'),
+    h('button',{type:'button',className:'btn',disabled:!!S.contactSending,onClick:sendContact},S.contactSending?'Envoi…':'Envoyer')
+  ));
+  box.appendChild(form);
+  return box;
+}
+
+function renderMessages(){
+  if(!isSuperAdmin(S.user)){
+    return h('div',{className:'card-blocked'},
+      h('div',{className:'cb-icon'},'🔒'),
+      h('div',{className:'cb-msg'},'Accès réservé au super administrateur.')
+    );
+  }
+  const list=S.msgList||[];
+  const sel=list.find(x=>x.id===S.msgSelId)||null;
+  const left=h('div',{style:{width:'360px',maxWidth:'40vw',borderRight:'1px solid var(--border)',paddingRight:'12px'}},
+    h('div',{className:'card-header',style:{padding:'0 0 12px',borderBottom:'none'}},
+      h('div',{className:'card-title'},'📨 Messages'),
+      h('div',null,
+        h('button',{className:'btn-sec',type:'button',onClick:markAllRead,style:{padding:'8px 10px',fontSize:'12px'}},'Tout lire')
+      )
+    ),
+    S.msgLoading?h('div',{className:'card-empty'},'Chargement…'):
+    (list.length? h('div',{style:{display:'flex',flexDirection:'column',gap:'6px',maxHeight:'520px',overflow:'auto'}},
+      ...list.map(m=>{
+        const unread=!m.read_at;
+        const row=h('button',{type:'button',className:'nav-btn'+(S.msgSelId===m.id?' active':''),onClick:async()=>{
+          set({msgSelId:m.id});
+          if(unread) await markMessageRead(m.id);
+        }});
+        row.appendChild(iconEl('mail',15));
+        const who=(m.from_name||m.from_email||'Utilisateur').trim();
+        const subj=(m.subject||'Sans objet').trim();
+        row.appendChild(h('div',{style:{display:'flex',flexDirection:'column',gap:'2px',minWidth:'0'}},
+          h('div',{style:{fontSize:'12px',fontWeight:'700',color:unread?'var(--text)':'var(--text2)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},who+' — '+subj),
+          h('div',{style:{fontSize:'11px',color:'var(--muted)'}},fD(m.created_at))
+        ));
+        if(unread) row.appendChild(h('span',{className:'nav-badge'},'NEW'));
+        return row;
+      })
+    ) : h('div',{className:'card-empty'},'Aucun message'))
+  );
+  const right=h('div',{style:{flex:'1',paddingLeft:'12px'}},
+    !sel? h('div',{className:'card-empty'},'Sélectionne un message à gauche.'):
+    h('div',{className:'card'},
+      h('div',{className:'card-header'},
+        h('div',null,
+          h('h3',null,(sel.subject||'Sans objet')),
+          h('div',{style:{fontSize:'12px',color:'var(--muted)',marginTop:'4px'}},
+            (sel.from_name||sel.from_email||'Utilisateur')+' · '+fD(sel.created_at)
+          )
+        ),
+        h('div',{style:{display:'flex',gap:'8px'}},
+          h('button',{className:'btn-sec',type:'button',onClick:()=>deleteMessage(sel.id)},'Supprimer')
+        )
+      ),
+      h('div',{style:{padding:'16px 20px',whiteSpace:'pre-wrap',color:'var(--text)'}},sel.body||'')
+    )
+  );
+  return h('div',{style:{display:'flex',gap:'12px'}},left,right);
+}
+
+function renderMessagesApp(){
+  // App dédiée (portail MySifa) — super admin uniquement
+  if(!isSuperAdmin(S.user)){
+    return h('div',{className:'portal-page'},
+      h('div',{className:'card-blocked'},
+        h('div',{className:'cb-icon'},'🔒'),
+        h('div',{className:'cb-msg'},'Accès réservé au super administrateur.')
+      )
+    );
+  }
+  const isLight=document.body.classList.contains('light');
+  const sidebar=h('nav',{className:'sidebar'},
+    h('div',{className:'logo'},h('div',{className:'logo-brand'},'My',h('span',null,'Sifa')),h('div',{className:'logo-sub'},'by SIFA')),
+      h('button',{className:'nav-btn back-mysifa',onClick:()=>{set({app:'portal',sidebarOpen:false});}},
+      '← Retour ',h('span',{className:'wm'},'My',h('span',null,'Sifa'))
+    ),
+    h('div',{className:'sidebar-bottom'},
+      h('div',{className:'user-chip'},
+        h('div',{className:'uc-name'},(S.user&&S.user.nom)?S.user.nom:''),
+        h('div',{className:'uc-role'},'Super admin')
+      ),
+      h('button',{className:'theme-btn',onClick:()=>{document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');render();}},
+        h('span',{className:'theme-ico'},iconEl(isLight?'sun':'moon',16)),
+        h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')
+      ),
+      h('button',{className:'logout-btn',onClick:doLogout},iconEl('log-out',14),' Déconnexion'),
+      h('div',{className:'version'},'Messagerie · __V_LABEL__')
+    )
+  );
+  const topbar=h('div',{className:'mobile-topbar'},
+    h('button',{type:'button',className:'mobile-menu-btn',onClick:toggleSidebar,'aria-label':'Menu'},iconEl('menu',20)),
+    h('div',null,
+      h('div',{className:'mobile-topbar-title'},'Messagerie'),
+      h('div',{className:'mobile-topbar-sub'},'Support interne — messages reçus')
+    ),
+    h('button',{type:'button',className:'mobile-home-btn',onClick:()=>{set({app:'portal',sidebarOpen:false});},'aria-label':'Accueil'},iconEl('home',20))
+  );
+
+  const filterRow=h('div',{className:'card',style:{padding:'12px 14px'}},
+    h('div',{style:{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}},
+      h('span',{className:'badge'},'Filtre'),
+      h('button',{type:'button',className:'btn-sec',onClick:()=>set({msgFilter:'unread'})},'Non traités'),
+      h('button',{type:'button',className:'btn-sec',onClick:()=>set({msgFilter:'read'})},'Traités'),
+      h('button',{type:'button',className:'btn-sec',onClick:()=>set({msgFilter:'all'})},'Tous'),
+      h('div',{style:{marginLeft:'auto',display:'flex',gap:'8px'}},
+        h('button',{type:'button',className:'btn-sec',onClick:async()=>{await loadMessagesUnread();await loadMessages();}},'Rafraîchir'),
+        h('button',{type:'button',className:'btn-sec',onClick:markAllRead},'Tout lire')
+      )
+    )
+  );
+
+  const listAll=(S.msgList||[]);
+  const filt=(S.msgFilter||'unread');
+  const list=listAll.filter(m=>{
+    if(filt==='all')return true;
+    if(filt==='read')return !!m.read_at;
+    return !m.read_at;
+  });
+  const sel=listAll.find(x=>x.id===S.msgSelId)||null;
+
+  const left=h('div',{style:{flex:'0 0 360px',maxWidth:'42vw',minWidth:'260px'}},
+    h('div',{className:'card'},
+      h('div',{className:'card-header'},h('div',{className:'card-title'},'📨 Messages')),
+      S.msgLoading?h('div',{className:'card-empty'},'Chargement…'):
+      (list.length? h('div',{style:{display:'flex',flexDirection:'column',gap:'6px',padding:'12px'}},
+        ...list.map(m=>{
+          const unread=!m.read_at;
+          const row=h('button',{type:'button',className:'nav-btn'+(S.msgSelId===m.id?' active':''),onClick:async()=>{
+            set({msgSelId:m.id});
+          }});
+          row.appendChild(iconEl('mail',15));
+          const who=(m.from_name||m.from_email||'Utilisateur').trim();
+          const subj=(m.subject||'Sans objet').trim();
+          row.appendChild(h('div',{style:{display:'flex',flexDirection:'column',gap:'2px',minWidth:'0'}},
+            h('div',{style:{fontSize:'12px',fontWeight:'700',color:unread?'var(--text)':'var(--text2)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},who+' — '+subj),
+            h('div',{style:{fontSize:'11px',color:'var(--muted)'}},fD(m.created_at))
+          ));
+          if(unread) row.appendChild(h('span',{className:'nav-badge'},'NEW'));
+          return row;
+        })
+      ) : h('div',{className:'card-empty'},'Aucun message'))
+    )
+  );
+  const right=h('div',{style:{flex:'1',minWidth:'0'}},
+    !sel? h('div',{className:'card-empty'},'Sélectionne un message.'):
+    h('div',{className:'card'},
+      h('div',{className:'card-header'},
+        h('div',null,
+          h('h3',null,(sel.subject||'Sans objet')),
+          h('div',{style:{fontSize:'12px',color:'var(--muted)',marginTop:'4px'}},
+            (sel.from_name||sel.from_email||'Utilisateur')+' · '+fD(sel.created_at)
+          )
+        ),
+        h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',justifyContent:'flex-end'}},
+          h('button',{className:'btn-sec',type:'button',onClick:async()=>{
+            // toggle traité/non-traité via API (ajouté côté backend)
+            await api('/api/messages/'+sel.id+'/toggle-treated',{method:'POST'});
+            await loadMessagesUnread();
+            await loadMessages();
+          }}, sel.read_at?'Non traité':'Traité'),
+          h('button',{className:'btn-danger',type:'button',onClick:()=>deleteMessage(sel.id)},'Supprimer')
+        )
+      ),
+      h('div',{style:{padding:'16px 20px',whiteSpace:'pre-wrap',color:'var(--text)'}},sel.body||'')
+    )
+  );
+
+  // Layout responsive: sur mobile, colonne unique
+  const content=h('div',{className:'container'},
+    topbar,
+    h('h1',null,'Messagerie'),
+    h('div',{className:'subtitle'},'Support interne — messages reçus'),
+    filterRow,
+    h('div',{className:'msg-grid',style:{display:'flex',gap:'12px',alignItems:'stretch'}},left,right)
+  );
+  return h('div',null,
+    S.sidebarOpen?h('div',{className:'sidebar-overlay',onClick:closeSidebar}):null,
+    h('div',{className:'app'},sidebar,h('main',{className:'main'},content))
   );
 }
 
@@ -5028,6 +5375,7 @@ function render(){
   else if(S.app==='stock'){root.appendChild(renderStock());}
   else if(S.app==='compta'){root.appendChild(renderCompta());}
   else if(S.app==='expe'){root.appendChild(renderExpe());}
+  else if(S.app==='messages'){root.appendChild(renderMessagesApp());}
   else if(S.app==='prod'){
     const titles={
       production: S.subPage==='saisies'?'Saisies':S.subPage==='erreurs'?'Historique & Erreurs':'Production',
@@ -5077,6 +5425,10 @@ function render(){
 
   if(S.toast){const c={success:'var(--success)',error:'var(--danger)'};root.appendChild(h('div',{className:'toast',style:{borderLeft:'3px solid '+(c[S.toast.type]||'var(--accent)')}},h('span',{style:{fontSize:'14px',color:c[S.toast.type]||'var(--accent)'}},S.toast.message)));}
 
+  if(S.contactOpen){
+    root.appendChild(renderContactModal());
+  }
+
   if(S.user&&S.app==='expe'&&(S.expeTab||'suivis')==='comparateur'){
     queueMicrotask(()=>{initTransportComparateurIfNeeded();});
   }
@@ -5112,6 +5464,20 @@ try{
         .then(()=>{ try{ location.reload(); }catch(e){} });
     }
   }
+}catch(e){}
+
+// Quand on revient sur l'accueil (bfcache / retour onglet), on rafraîchit le badge et la session.
+try{
+  window.addEventListener('pageshow', ()=>{
+    if(S && S.user && S.app==='portal'){
+      refreshPortalData().catch(()=>{});
+    }
+  });
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState==='visible' && S && S.user && S.app==='portal'){
+      refreshPortalData().catch(()=>{});
+    }
+  });
 }catch(e){}
 checkAuth();
 </script>
