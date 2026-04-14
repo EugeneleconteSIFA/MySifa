@@ -434,10 +434,22 @@ def _migrate(conn):
             reference TEXT UNIQUE NOT NULL,
             designation TEXT NOT NULL,
             description TEXT,
-            unite TEXT DEFAULT 'unité',
+            unite TEXT DEFAULT 'étiquettes',
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         )""")
+    else:
+        # Migration: anciens libellés par défaut → "étiquettes"
+        try:
+            conn.execute(
+                """UPDATE produits
+                   SET unite='étiquettes'
+                   WHERE unite IS NULL
+                      OR TRIM(COALESCE(unite,'')) = ''
+                      OR LOWER(TRIM(unite)) IN ('unité','unite','unites','unités','u.','u')"""
+            )
+        except Exception:
+            pass
 
     if "stock_emplacements" not in existing_tables:
         conn.execute("""CREATE TABLE stock_emplacements (

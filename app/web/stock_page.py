@@ -287,6 +287,10 @@ body.light .field-input.empl-upper::placeholder{
   font-weight:800;font-family:inherit;text-align:left}
 .mvt-ref-link:hover{text-decoration:underline;filter:brightness(1.05)}
 .mvt-ref-link:active{transform:translateY(1px)}
+.mvt-empl-link{background:none;border:none;padding:0;margin:0;color:var(--text);cursor:pointer;
+  font-weight:700;font-family:inherit;text-align:left}
+.mvt-empl-link:hover{text-decoration:underline;filter:brightness(1.05)}
+.mvt-empl-link:active{transform:translateY(1px)}
 .mvt-qte-entree{color:var(--success);font-family:monospace;font-weight:700}
 .mvt-qte-sortie{color:var(--danger);font-family:monospace;font-weight:700}
 .mvt-qte-inventaire{color:var(--c2);font-family:monospace;font-weight:700}
@@ -1190,7 +1194,7 @@ function renderToast() {
   document.body.appendChild(t);
 }
 
-function buildMvtHistory(mouvements, unite='u.') {
+function buildMvtHistory(mouvements, unite='éti.', opts=null) {
   return el('div',{cls:'card'},
     el('div',{cls:'card-header'},el('div',{cls:'card-title'},'🕐 Historique')),
     mouvements.length===0?el('div',{cls:'card-empty'},'Aucun mouvement'):
@@ -1198,15 +1202,18 @@ function buildMvtHistory(mouvements, unite='u.') {
       const icons={entree:'↓',sortie:'↑',inventaire:'='};
       const signe=m.type_mouvement==='entree'?'+':m.type_mouvement==='sortie'?'-':'=';
       const actor = (m.created_by_nom || m.created_by_name || '').trim();
-      const unit = (m.unite || unite || 'u.').trim();
+      const unit = (m.unite || unite || 'éti.').trim();
       const refTxt = m.reference || m.emplacement || '';
+      const primary = (opts && opts.primary) ? String(opts.primary) : '';
       return el('div',{cls:'mvt-row'},
         el('div',{cls:'mvt-icon '+m.type_mouvement},icons[m.type_mouvement]||'·'),
         el('div',{cls:'mvt-body'},
           el('div',{cls:'mvt-line1'},
-            (m.produit_id && m.reference)
-              ? el('button',{cls:'mvt-ref-link',type:'button',on:{click:()=>loadProduit(m.produit_id)}},refTxt)
-              : el('span',null,refTxt),
+            (primary === 'emplacement' && m.emplacement)
+              ? el('button',{cls:'mvt-empl-link',type:'button',on:{click:()=>loadEmplacement(m.emplacement)}},m.emplacement)
+              : ((m.produit_id && m.reference)
+                ? el('button',{cls:'mvt-ref-link',type:'button',on:{click:()=>loadProduit(m.produit_id)}},refTxt)
+                : el('span',null,refTxt)),
             el('span',{cls:'mvt-qte-'+m.type_mouvement},signe+fN(m.quantite)+' '+unit)
           ),
           el('div',{cls:'mvt-line2'},
@@ -1305,7 +1312,7 @@ function buildProduitDetail() {
   if (!sel || !sel.produit) return el('div',{cls:'content'},el('div',{cls:'card-empty'},'Données produit indisponibles'));
   const p = sel.produit;
   const empls = sel.emplacements || [];
-  const unite = p.unite || 'u.';
+  const unite = p.unite || 'étiquettes';
 
   const back = el('button',{cls:'btn-ghost',style:{marginBottom:'14px'},on:{click:clearSel}},'← Retour au tableau de bord');
 
@@ -1349,7 +1356,7 @@ function buildProduitDetail() {
     ),
     actions,
     emplBlock,
-    buildMvtHistory(sel.mouvements||[], unite)
+    buildMvtHistory(sel.mouvements||[], unite, { primary:'emplacement' })
   );
 }
 
@@ -1383,7 +1390,7 @@ function buildEmplacementDetail() {
         )))
       );
 
-  return el('div',{cls:'content'}, back, head, refBlock, buildMvtHistory(sel.mouvements||[], 'u.'));
+  return el('div',{cls:'content'}, back, head, refBlock, buildMvtHistory(sel.mouvements||[], 'éti.', { primary:'emplacement' }));
 }
 function buildInventaire() {
   const list = S.inventaireList||[];
