@@ -135,6 +135,13 @@ def require_superadmin(request: Request) -> dict:
 def is_admin(user: dict) -> bool:
     return user.get("role") in ROLES_ADMIN
 
+def is_commercial(user: dict) -> bool:
+    return user.get("role") == "commercial"
+
+def can_view_all_prod(user: dict) -> bool:
+    """Admin et commercial voient toute la production (le commercial en lecture seule)."""
+    return is_admin(user) or is_commercial(user)
+
 def is_fabrication(user: dict) -> bool:
     return user["role"] == "fabrication"
 

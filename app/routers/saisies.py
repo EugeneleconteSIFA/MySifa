@@ -8,7 +8,7 @@ from fastapi import APIRouter, Request, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from database import get_db, parse_french_number, parse_datetime
 from config import classify_operation
-from services.auth_service import get_current_user, is_admin, is_fabrication
+from services.auth_service import get_current_user, is_admin, is_fabrication, can_view_all_prod
 
 router = APIRouter()
 
@@ -31,7 +31,7 @@ def list_saisies(
     dossiers   = [d for d in (no_dossier or []) if d]
 
     where, params = ["1=1"], []
-    if is_admin(user):
+    if can_view_all_prod(user):
         if operateurs:
             where.append(f"operateur IN ({','.join('?'*len(operateurs))})")
             params.extend(operateurs)

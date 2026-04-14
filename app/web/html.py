@@ -134,8 +134,8 @@ h1{font-size:22px;font-weight:700;margin-bottom:4px}
 .subtitle{font-size:13px;color:var(--muted);margin-bottom:24px}
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:14px;margin-bottom:24px}
 .stat{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 20px}
-.stat-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
-.stat-value{font-size:26px;font-weight:700;font-family:monospace;line-height:1.1}
+.stat-label{font-size:12px;color:var(--text2);font-weight:800;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+.stat-value{font-size:26px;font-weight:700;font-family:monospace;line-height:1.1;color:var(--text2)}
 .stat-sub{font-size:11px;color:var(--muted);margin-top:4px}
 .sanity-banner{display:flex;align-items:center;gap:24px;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px 28px;margin-bottom:24px}
 .sanity-circle{position:relative;width:80px;height:80px;flex-shrink:0}
@@ -232,8 +232,8 @@ tr.data-row:hover td{background:rgba(34,211,238,0.025)}
 .bar-val{font-size:10px;color:var(--bg);font-weight:600;font-family:monospace;white-space:nowrap}
 .time-kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:14px;margin-bottom:24px}
 .time-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px}
-.tc-label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
-.tc-value{font-size:22px;font-weight:700;font-family:monospace}
+.tc-label{font-size:11px;color:var(--text2);font-weight:800;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+.tc-value{font-size:22px;font-weight:700;font-family:monospace;color:var(--text2)}
 .tc-sub{font-size:11px;color:var(--muted);margin-top:3px}
 .error-card{border-left:3px solid var(--danger);background:rgba(248,113,113,.06);border-radius:0 8px 8px 0;padding:12px 16px;margin-bottom:8px}
 .ec-type{font-size:10px;font-weight:700;color:var(--danger);text-transform:uppercase;letter-spacing:.5px}
@@ -300,7 +300,29 @@ body.light .btn-sec:hover{
 }
 .btn-sec:active{transform:translateY(1px)}
 .btn-sec:disabled{opacity:.7;cursor:not-allowed}
+.btn-sec.is-active{
+  border-color:var(--accent);
+  color:var(--accent);
+  background:var(--accent-bg);
+  box-shadow:0 0 0 1px rgba(34,211,238,.22),0 0 18px rgba(34,211,238,.12);
+}
+body.light .btn-sec.is-active{
+  box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 16px rgba(8,145,178,.10);
+}
 .btn-danger{background:rgba(248,113,113,.15);color:var(--danger);border:1px solid rgba(248,113,113,.3);border-radius:6px;padding:5px 12px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit}
+.msg-sel-btn{
+  width:22px;height:22px;border-radius:8px;
+  border:1px solid var(--border);
+  background:transparent;
+  color:var(--muted);
+  display:inline-flex;align-items:center;justify-content:center;
+  cursor:pointer;
+  flex-shrink:0;
+  transition:border-color .15s,color .15s,background .15s,box-shadow .2s,transform .05s;
+}
+.msg-sel-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.msg-sel-btn:active{transform:translateY(1px)}
+.msg-sel-btn.on{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 .import-row{padding:12px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px}
 .import-row:hover{background:rgba(255,255,255,.02)}
 .dossier-row{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
@@ -437,6 +459,9 @@ body.light .btn-sec:hover{
   padding:16px 14px;cursor:pointer;transition:all .2s;text-decoration:none;
   width:168px;height:152px;flex:0 0 168px;box-sizing:border-box;
   justify-content:center}
+.portal-app--disabled{cursor:default;opacity:.6;position:relative}
+.portal-app--disabled:hover{border-color:var(--border);background:var(--card)}
+.badge-dev{position:absolute;top:8px;right:8px;font-size:9px;font-weight:700;padding:2px 8px;border-radius:20px;background:var(--warn);color:#0a0e17;text-transform:uppercase;letter-spacing:.5px}
 .portal-app:hover{border-color:var(--accent);background:var(--accent-bg);
   transform:translateY(-3px);box-shadow:0 10px 32px rgba(34,211,238,.14)}
 .portal-app--busy{pointer-events:none;opacity:.8;position:relative;transform:none!important;box-shadow:none!important}
@@ -629,6 +654,24 @@ body.light .stock-empl-suggest-add:hover{background:rgba(124,58,237,.2);color:#1
   transition:all .15s;margin-bottom:-1px}
 .nav-tab:hover{color:var(--text);background:var(--accent-bg)}
 .nav-tab.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+
+/* ── MyExpé ─────────────────────────────────────────────────────── */
+.expe-fields{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:12px}
+@media(max-width:1100px){.expe-fields{grid-template-columns:repeat(2,minmax(150px,1fr))}}
+@media(max-width:520px){.expe-fields{grid-template-columns:1fr}}
+.expe-field label{display:block;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px}
+.expe-field input,.expe-field select{width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;font-family:inherit;outline:none}
+.expe-field input:focus,.expe-field select:focus{border-color:var(--accent)}
+.expe-help{font-size:10px;color:var(--muted);margin-top:4px}
+.expe-top3{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-bottom:18px}
+.expe-score{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;position:relative}
+.expe-score .stripe{height:4px}
+.expe-score .body{padding:16px 20px}
+.expe-score .carrier{font-size:18px;font-weight:800;letter-spacing:-.5px}
+.expe-score .price{font-size:28px;font-weight:800;font-family:monospace;margin:8px 0}
+.expe-score .price .unit{font-size:13px;font-weight:500;color:var(--muted);margin-left:4px}
+.expe-score .medal{font-size:24px;flex-shrink:0}
+.expe-note{font-size:10px;color:rgba(148,163,184,.8);margin-top:12px}
 </style>
 </head>
 <body>
@@ -675,7 +718,17 @@ let S={
   selDossier:null,
   loginSubmitting:false,loginError:null,portalLoading:null,
   sidebarOpen:false,
-  expeTab:'suivis',
+  expeTab:'comparateur',
+  expeDept:'59',
+  expeKg:'',
+  expeNbPal:'',
+  expeFuelPct:'12.80',
+  expeResults:null,
+  expeShowContacts:false,
+  expeContacts:null,
+  expeRaw:null,
+  expeRawLoading:false,
+  expeRawError:null,
   comptaTab:'factor',
   comptaAcheteurs:[],
   comptaComptes:[],
@@ -695,6 +748,15 @@ let S={
   saisies:null,
   dossiers:[],
   devisList:[],selDevis:null,comparaison:null,devisPreview:null,
+  // Rentabilité v2 (planning-based)
+  rentList:null,
+  rentSelEntryId:null,
+  rentLinksById:{}, // { [planning_entry_id]: {devis_id, no_dossiers[]} }
+  rentCompById:{},  // { [planning_entry_id]: comparaison }
+  rentQuery:'',
+  rentTags:[],      // [{kind,value,label}]
+  rentOffset:0,
+  rentLimit:12,
   toast:null,
   selectedRows:new Set(),   // ids des lignes sélectionnées
   sortState:{col:null,asc:true}, // tri tableau saisies
@@ -703,6 +765,7 @@ let S={
   msgUnread:0,
   msgList:null,
   msgSelId:null,
+  msgSelIds:[],
   msgLoading:false,
   msgFilter:'unread',
   contactOpen:false,
@@ -800,7 +863,8 @@ const isAdmin=u=>u&&(u.role==='direction'||u.role==='administration'||u.role==='
 const canPlanningNav=u=>!!(u&&u.app_access&&u.app_access.planning);
 const isFab=u=>u&&u.role==='fabrication';
 
-const ROLE_LABELS={direction:'Direction',administration:'Administration',fabrication:'Fabrication',logistique:'Logistique',comptabilite:'Comptabilité',expedition:'Expédition',superadmin:'Super admin'};
+const ROLE_LABELS={direction:'Direction',administration:'Administration',fabrication:'Fabrication',logistique:'Logistique',comptabilite:'Comptabilité',expedition:'Expédition',commercial:'Commercial',superadmin:'Super admin'};
+const isCommercial=u=>u&&u.role==='commercial';
 const ROLE_BADGE={direction:'badge-direction',administration:'badge-administration',fabrication:'badge-fabrication',logistique:'badge-fabrication',comptabilite:'badge-administration',expedition:'badge-administration',superadmin:'badge-direction'};
 
 // ── Auth ────────────────────────────────────────────────────────
@@ -1889,10 +1953,11 @@ function renderPortal(){
   const aa = S.user && S.user.app_access ? S.user.app_access : null;
   const urole = S.user && S.user.role ? S.user.role : '';
   const isSuper = urole === 'superadmin';
-  const isStock = aa ? !!aa.stock : (isSuper || !!(urole && ['direction','administration','logistique'].includes(urole)));
-  const isProd  = aa ? !!aa.prod : (isSuper || !!(urole && ['direction','administration','fabrication'].includes(urole)));
+  const isStock = aa ? !!aa.stock : (isSuper || !!(urole && ['direction','administration','logistique','commercial'].includes(urole)));
+  const isProd  = aa ? !!aa.prod : (isSuper || !!(urole && ['direction','administration','fabrication','commercial'].includes(urole)));
   const isCompta = aa ? !!aa.compta : (isSuper || !!(urole && ['direction','administration','comptabilite'].includes(urole)));
   const isExpe = aa ? !!aa.expe : (isSuper || !!(urole && ['direction','administration','expedition'].includes(urole)));
+  const isCom = urole==='commercial';
   const isLight=document.body.classList.contains('light');
 
   const apps=[];
@@ -1948,6 +2013,21 @@ function renderPortal(){
       h('div',{className:'portal-app-icon'},iconEl('truck',28)),
       h('div',{className:'portal-app-name'},'MyExpé'),
       h('div',{className:'portal-app-desc'},'Expédition & Suivi')
+    ));
+  }
+
+  if(isCom){
+    apps.push(h('div',{className:'portal-app portal-app--disabled'},
+      h('div',{className:'portal-app-icon',style:{opacity:.4}},iconEl('truck',28)),
+      h('div',{className:'portal-app-name',style:{opacity:.5}},'MyExpé'),
+      h('div',{className:'portal-app-desc'},'Expédition & Suivi'),
+      h('span',{className:'badge-dev'},'En développement')
+    ));
+    apps.push(h('div',{className:'portal-app portal-app--disabled'},
+      h('div',{className:'portal-app-icon',style:{opacity:.4}},iconEl('file-text',28)),
+      h('div',{className:'portal-app-name',style:{opacity:.5}},'MyDevis'),
+      h('div',{className:'portal-app-desc'},'Devis & Chiffrage'),
+      h('span',{className:'badge-dev'},'En développement')
     ));
   }
 
@@ -2570,15 +2650,6 @@ function renderCompta(){
     h('div',{className:'logo'},
       h('div',{className:'logo-row'},
         h('div',{className:'logo-brand'},'My',h('span',null,'Compta')),
-        h('button',{
-          type:'button',
-          className:'theme-btn theme-btn--logo',
-          onClick:()=>{document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');render();},
-          title:'Changer le thème'
-        },
-          h('span',{className:'theme-ico'},iconEl(isLight?'sun':'moon',16)),
-          h('span',null,isLight?'Mode sombre':'Mode clair')
-        )
       ),
       h('div',{className:'logo-sub'},'by SIFA')
     ),
@@ -2611,6 +2682,14 @@ function renderCompta(){
         b.appendChild(h('span',null,'Contacter le support'));
         return b;
       })(),
+      h('button',{
+        className:'theme-btn',
+        onClick:()=>{document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');render();},
+        title:'Changer le thème'
+      },
+        h('span',{className:'theme-ico'},iconEl(isLight?'sun':'moon',16)),
+        h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')
+      ),
       h('button',{className:'logout-btn',onClick:doLogout},iconEl('log-out',14),' Déconnexion')
     )
   );
@@ -2834,44 +2913,306 @@ function renderCompta(){
   );
 }
 
-// ── MyExpé (placeholder v0) ───────────────────────────────────────
+// ── MyExpé ────────────────────────────────────────────────────────
+const EXPE_CONTACTS_KEY='mysifa_transport_contacts';
+const EXPE_DEFAULT_CONTACTS={
+  'Coupé':{type:'url',value:'https://coupe.station-chargeur.com/coupe/',label:'Portail Coupé'},
+  'Ceva':{type:'url',value:'https://connect.gefco.net/psc-portal/login.html#LogIn',label:'Portail Ceva/Gefco'},
+  'Coquelle':{type:'email',value:'eugeneleconte@outlook.com',label:'Mail Coquelle'},
+  'Dimotrans':{type:'email',value:'eugeneleconte@outlook.com',label:'Mail Dimotrans'},
+};
+const EXPE_COLORS={'Coupé':'#22d3ee','Coquelle':'#a78bfa','Ceva':'#34d399','Dimotrans':'#fbbf24'};
+function expeCC(c){return EXPE_COLORS[c]||'#94a3b8';}
+function expeLoadContacts(){
+  try{return {...EXPE_DEFAULT_CONTACTS,...JSON.parse(localStorage.getItem(EXPE_CONTACTS_KEY)||'{}')};}
+  catch(e){return {...EXPE_DEFAULT_CONTACTS};}
+}
+function expeEnsureContacts(){if(!S.expeContacts)S.expeContacts=expeLoadContacts();return S.expeContacts;}
+function expeOpenContact(carrier){
+  const c=expeEnsureContacts()[carrier];if(!c)return;
+  if(c.type==='url')window.open(c.value,'_blank','noopener');
+  else{
+    const s=encodeURIComponent('Demande de tarif SIFA - '+carrier);
+    const b=encodeURIComponent('Bonjour,\n\nNous souhaitons obtenir un tarif pour :\n- Département : '+(S.expeDept||'')+'\n- Poids : '+(S.expeKg||'?')+' kg\n- Palettes : '+(S.expeNbPal||'?')+'\n\nCordialement,\nSIFA Roubaix');
+    window.location.href='mailto:'+c.value+'?subject='+s+'&body='+b;
+  }
+}
+async function ensureExpeRawData(){
+  if(S.expeRaw||S.expeRawLoading)return;
+  S.expeRawLoading=true;S.expeRawError=null;render();
+  try{
+    const r=await fetch('/static/transport_tarifs.json?v=4',{credentials:'same-origin'});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    S.expeRaw=await r.json();S.expeRawLoading=false;render();
+  }catch(e){S.expeRawLoading=false;S.expeRawError='Impossible de charger les grilles.';render();}
+}
+
+// ── Calcul poids ─────────────────────────────────────────────────
+function _calcCoupePoids(raw,dept,kg){
+  const p=raw.coupe_poids&&raw.coupe_poids[dept];if(!p)return null;
+  const b=raw.coupe_poids_brackets;
+  for(let i=0;i<b.length;i++){
+    if(kg<=b[i]){
+      if(i<10)return p[i];
+      return p[i]!=null?(kg/100)*p[i]:null;
+    }
+  }
+  return null;
+}
+function _calcCevaPoids(raw,dept,kg){
+  const p=raw.ceva_poids&&raw.ceva_poids[dept];if(!p)return null;
+  const b=raw.ceva_poids_brackets;
+  for(let i=0;i<b.length;i++){
+    if(kg<=b[i]){
+      if(i<10)return p[i];
+      return p[i]!=null?(kg/100)*p[i]:null;
+    }
+  }
+  return null;
+}
+
+// ── Calcul palette ───────────────────────────────────────────────
+function _calcCoupePal(raw,dept,n){
+  const p=raw.coupe_pal&&raw.coupe_pal[dept];
+  if(!p||n<1||n>5)return null;
+  return p[n-1]||null;
+}
+function _calcCevaPal(raw,dept,n){
+  const p=raw.ceva_pal&&raw.ceva_pal[dept];
+  if(!p||n<1||n>4)return null;
+  return p[n-1]||null;
+}
+function _calcCoquellePal(raw,dept,n){
+  const p=raw.coquelle_pal&&raw.coquelle_pal[dept];
+  if(!p||n<1||n>33)return null;
+  return p[n-1]||null;
+}
+function _calcDimotransPal(raw,dept,n){
+  const p=raw.dimotrans_pal&&raw.dimotrans_pal[dept];
+  if(!p||n<1||n>28)return null;
+  return p[Math.min(n,28)-1]||null;
+}
+
+function expeCompute(){
+  if(!S.expeRaw){toast('Grilles non chargées','warn');return;}
+  const raw=S.expeRaw;
+  const d=String(S.expeDept||'').trim().padStart(2,'0');
+  const kg=Number(S.expeKg)||0;
+  const nbPal=parseInt(S.expeNbPal,10)||0;
+  const fuel=(Number(S.expeFuelPct)||0)/100;
+  const r2=v=>v!=null?Math.round(v*100)/100:null;
+  const af=v=>v!=null?r2(v*(1+fuel)):null;
+
+  const poids=[];
+  if(kg>0){
+    [{c:'Coupé',fn:_calcCoupePoids},{c:'Ceva',fn:_calcCevaPoids}].forEach(({c,fn})=>{
+      const p=af(fn(raw,d,kg));
+      if(p!=null&&p>0)poids.push({carrier:c,price:p});
+    });
+    poids.sort((a,b)=>a.price-b.price);
+  }
+  const palette=[];
+  if(nbPal>0){
+    [
+      {c:'Coupé',fn:_calcCoupePal,max:5},
+      {c:'Coquelle',fn:_calcCoquellePal,max:33},
+      {c:'Ceva',fn:_calcCevaPal,max:4},
+      {c:'Dimotrans',fn:_calcDimotransPal,max:28},
+    ].forEach(({c,fn})=>{
+      const p=af(fn(raw,d,nbPal));
+      if(p!=null&&p>0)palette.push({carrier:c,price:p});
+    });
+    palette.sort((a,b)=>a.price-b.price);
+  }
+  set({expeResults:{dept:d,kg,nbPal,fuel:Number(S.expeFuelPct)||0,poids,palette}});
+}
+
+// ── UI helpers ───────────────────────────────────────────────────
+function renderExpeScore(item,rank){
+  const col=expeCC(item.carrier);
+  const medals=['\u{1F947}','\u{1F948}','\u{1F949}'];
+  return h('div',{className:'expe-score'},
+    h('div',{className:'stripe',style:{background:col}}),
+    h('div',{className:'body'},
+      h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}},
+        h('div',{className:'carrier',style:{color:col}},item.carrier),
+        rank<3?h('span',{className:'medal'},medals[rank]):null
+      ),
+      h('div',{className:'price',style:{color:'var(--text)'}},
+        item.price.toFixed(2),
+        h('span',{className:'unit'},'\u20ac HT')
+      ),
+      h('button',{className:'btn-ghost',
+        style:{width:'100%',borderColor:col+'55',color:col},
+        onClick:()=>expeOpenContact(item.carrier)
+      },expeEnsureContacts()[item.carrier]&&expeEnsureContacts()[item.carrier].type==='url'?'Portail':'Contacter')
+    )
+  );
+}
+function renderExpeRankTable(title,rows){
+  if(!rows||!rows.length)return h('div',{className:'card-empty'},'Aucun tarif disponible.');
+  return h('div',{className:'card',style:{marginTop:10}},
+    h('div',{className:'card-header'},h('h3',null,title+' ('+rows.length+')')),
+    h('div',{style:{overflowX:'auto'}},
+      h('table',{style:{minWidth:500}},
+        h('thead',null,h('tr',null,
+          h('th',null,'#'),h('th',null,'Transporteur'),h('th',null,'Prix HT'),h('th',null,'Contact')
+        )),
+        h('tbody',null,...rows.map((r,i)=>{
+          const col=expeCC(r.carrier);
+          return h('tr',null,
+            h('td',null,String(i+1)),
+            h('td',null,h('span',{style:{fontWeight:700,color:col}},r.carrier)),
+            h('td',null,h('span',{style:{fontFamily:'monospace',fontWeight:800,color:col}},r.price.toFixed(2)+' \u20ac')),
+            h('td',null,h('button',{className:'btn-ghost',style:{borderColor:col+'44',color:col},
+              onClick:()=>expeOpenContact(r.carrier)
+            },expeEnsureContacts()[r.carrier]&&expeEnsureContacts()[r.carrier].type==='url'?'Portail':'Email'))
+          );
+        }))
+      )
+    )
+  );
+}
+function renderExpeContactModal(){
+  const cur=JSON.parse(JSON.stringify(expeEnsureContacts()));
+  const overlay=h('div',{className:'contact-modal-overlay'});
+  const box=h('div',{className:'contact-modal',style:{maxWidth:520}});
+  box.appendChild(h('div',{className:'contact-modal-head'},
+    h('h3',null,'Contacts transporteurs'),
+    h('button',{className:'contact-close-btn',onClick:()=>set({expeShowContacts:false})},'\u2715')
+  ));
+  const body=h('div',{className:'contact-modal-body',style:{display:'grid',gap:10}});
+  Object.keys(cur).forEach(name=>{
+    const row=h('div',{style:{border:'1px solid var(--border)',borderRadius:10,padding:10}});
+    row.appendChild(h('div',{style:{fontSize:13,fontWeight:700,color:expeCC(name),marginBottom:8}},name));
+    const sel=h('select',{className:'form-sel',style:{width:110}},
+      h('option',{value:'email',selected:cur[name].type==='email'},'Email'),
+      h('option',{value:'url',selected:cur[name].type==='url'},'Site web'));
+    const inp=h('input',{value:cur[name].value||'',placeholder:cur[name].type==='url'?'https://...':'contact@...',style:{flex:1,minWidth:0}});
+    sel.addEventListener('change',e=>{cur[name].type=e.target.value;});
+    inp.addEventListener('input',e=>{cur[name].value=e.target.value;});
+    row.appendChild(h('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},sel,inp));
+    body.appendChild(row);
+  });
+  box.appendChild(body);
+  box.appendChild(h('div',{className:'contact-modal-actions'},
+    h('button',{className:'btn-ghost',onClick:()=>set({expeShowContacts:false})},'Annuler'),
+    h('button',{className:'btn-sm',onClick:()=>{
+      try{localStorage.setItem(EXPE_CONTACTS_KEY,JSON.stringify(cur));}catch(e){}
+      set({expeContacts:{...EXPE_DEFAULT_CONTACTS,...cur},expeShowContacts:false});
+    }},'Enregistrer')
+  ));
+  overlay.appendChild(box);
+  overlay.addEventListener('click',e=>{if(e.target===overlay)set({expeShowContacts:false});});
+  return overlay;
+}
+function renderExpeComparateur(){
+  if(!S.expeRaw&&!S.expeRawLoading&&!S.expeRawError)queueMicrotask(()=>ensureExpeRawData());
+  const results=S.expeResults;
+
+  const deptInp=h('input',{type:'text',value:S.expeDept||'',placeholder:'59',onInput:e=>{S.expeDept=e.target.value;}});
+  const fuelInp=h('input',{type:'number',step:'0.01',value:S.expeFuelPct||'',placeholder:'12.80',onInput:e=>{S.expeFuelPct=e.target.value;}});
+  const kgInp=h('input',{type:'number',step:'1',value:S.expeKg||'',placeholder:'500',onInput:e=>{S.expeKg=e.target.value;}});
+  const palInp=h('input',{type:'number',step:'1',value:S.expeNbPal||'',placeholder:'3',onInput:e=>{S.expeNbPal=e.target.value;}});
+  [deptInp,fuelInp,kgInp,palInp].forEach(el=>el.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();expeCompute();}}));
+
+  const form=h('div',{className:'card'},
+    h('div',{className:'card-header'},
+      h('h3',null,'Param\u00e8tres'),
+      h('div',{style:{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}},
+        S.expeRawLoading?h('span',{className:'readonly-notice'},'Chargement des grilles\u2026'):null,
+        S.expeRawError?h('span',{className:'badge-danger'},S.expeRawError):null,
+        h('button',{className:'btn-ghost',onClick:()=>set({expeShowContacts:true})},iconEl('settings',13),' Contacts')
+      )
+    ),
+    h('div',{style:{padding:'14px 18px'}},
+      h('div',{className:'expe-fields'},
+        h('div',{className:'expe-field'},h('label',null,'D\u00e9partement',h('span',{style:{fontWeight:400,marginLeft:6,fontSize:9,letterSpacing:0,textTransform:'none',color:'var(--text2)'}},'01 \u00e0 95')),deptInp),
+        h('div',{className:'expe-field'},h('label',null,'Taxe carburant (%)'),fuelInp,h('div',{className:'expe-help'},'Appliqu\u00e9e au tarif de base')),
+        h('div',{className:'expe-field'},h('label',null,'Poids (kg)'),kgInp,h('div',{className:'expe-help'},'Pour classement poids')),
+        h('div',{className:'expe-field'},h('label',null,'Palettes'),palInp,h('div',{className:'expe-help'},'Coup\u00e9 max 5 / Ceva max 4'))
+      ),
+      h('div',{style:{display:'flex',gap:16,marginTop:14,flexWrap:'wrap'}},
+        h('button',{className:'btn-sm',onClick:expeCompute,disabled:!!S.expeRawLoading||!S.expeRaw},'Calculer'),
+        h('button',{className:'btn-sec',style:{marginLeft:4},onClick:()=>set({expeResults:null})},'R\u00e9initialiser')
+      ),
+      h('div',{className:'expe-note'},'Tarifs HT \u00b7 taxe carburant appliqu\u00e9e \u00b7 Coup\u00e9 max 5 pal \u00b7 Ceva max 4 pal \u00b7 Coquelle max 33 pal \u00b7 Dimotrans max 28 pal')
+    )
+  );
+
+  if(!results)return h('div',null,form);
+
+  const poidsCards=results.poids&&results.poids.length
+    ? h('div',null,
+        h('div',{className:'section-title'},'Classement au poids \u00b7 '+results.kg+' kg \u00b7 dept '+results.dept+' \u00b7 taxe '+results.fuel+'%'),
+        h('div',{className:'expe-top3'},...results.poids.slice(0,3).map((r,i)=>renderExpeScore(r,i))),
+        results.poids.length>3?renderExpeRankTable('Tous les tarifs (poids)',results.poids):null
+      )
+    : h('div',{className:'card-empty'},'Renseigne le poids pour voir le classement.');
+
+  const palCards=results.palette&&results.palette.length
+    ? h('div',{style:{marginTop:18}},
+        h('div',{className:'section-title'},'Classement palette \u00b7 '+results.nbPal+' palette'+(results.nbPal>1?'s':'')+' \u00b7 dept '+results.dept+' \u00b7 taxe '+results.fuel+'%'),
+        h('div',{className:'expe-top3'},...results.palette.slice(0,3).map((r,i)=>renderExpeScore(r,i))),
+        results.palette.length>3?renderExpeRankTable('Tous les tarifs (palette)',results.palette):null
+      )
+    : h('div',{className:'card-empty',style:{marginTop:14}},'Renseigne le nombre de palettes pour voir le classement.');
+
+  return h('div',null,form,poidsCards,palCards);
+}
+function renderExpeTransporteurs(){
+  const contacts=expeEnsureContacts();
+  const carriers=[
+    {name:'Coupé',desc:'Express messagerie France, 24h',services:'Poids (max 1000 kg) \u00b7 Palette (max 5)'},
+    {name:'Ceva',desc:'Messagerie France (Gefco)',services:'Poids (max 2000 kg) \u00b7 Palette (max 4)'},
+    {name:'Coquelle',desc:'Réseau France, palette uniquement',services:'Palette (max 33)'},
+    {name:'Dimotrans',desc:'France palette, 80\u00d7120',services:'Palette (max 28)'},
+  ];
+  return h('div',{className:'card'},
+    h('div',{className:'card-header'},
+      h('h3',null,'Mes transporteurs ('+carriers.length+')'),
+      h('button',{className:'btn-ghost',onClick:()=>set({expeShowContacts:true})},iconEl('settings',13),' Modifier les contacts')
+    ),
+    h('div',{style:{padding:0}},...carriers.map(c=>{
+      const col=expeCC(c.name);const ct=contacts[c.name];
+      return h('div',{className:'import-row',style:{gap:14}},
+        h('div',{style:{flex:1,minWidth:0}},
+          h('div',{style:{fontWeight:700,color:'var(--text)',fontSize:14}},c.name),
+          h('div',{style:{fontSize:11,color:'var(--muted)',marginTop:2}},c.desc),
+          h('div',{style:{fontSize:10,color:'var(--text2)',marginTop:4,fontFamily:'monospace'}},c.services)
+        ),
+        ct?h('button',{className:'btn-ghost',style:{borderColor:col+'55',color:col,flexShrink:0},
+          onClick:()=>expeOpenContact(c.name)},ct.type==='url'?'Portail':'Email'):null
+      );
+    }))
+  );
+}
 function renderExpe(){
   const isLight=document.body.classList.contains('light');
-  const tab=(S.expeTab||'suivis');
+  const tab=S.expeTab||'comparateur';
 
   const sidebar=h('nav',{className:'sidebar'},
     h('div',{className:'logo'},
       h('div',{className:'logo-brand'},'My',h('span',null,'Expé')),
       h('div',{className:'logo-sub'},'by SIFA')
     ),
-    h('button',{className:'nav-btn'+(tab==='suivis'?' active':''),onClick:()=>{set({expeTab:'suivis'});}},
-      iconEl('search',15),'  Mes suivis'),
-    h('button',{className:'nav-btn'+(tab==='comparateur'?' active':''),onClick:()=>{set({expeTab:'comparateur'});}},
-      iconEl('package',15),'  Comparateur transport'),
-    h('button',{className:'nav-btn'+(tab==='transporteurs'?' active':''),onClick:()=>{set({expeTab:'transporteurs'});}},
-      iconEl('truck',15),'  Mes transporteurs'),
+    h('button',{className:'nav-btn'+(tab==='comparateur'?' active':''),onClick:()=>set({expeTab:'comparateur'})},
+      iconEl('package',15),'  Comparateur'),
+    h('button',{className:'nav-btn'+(tab==='transporteurs'?' active':''),onClick:()=>set({expeTab:'transporteurs'})},
+      iconEl('truck',15),'  Transporteurs'),
     h('div',{className:'sidebar-bottom'},
-      h('button',{className:'nav-btn back-mysifa',onClick:()=>{window.location.href='/' }},
-        '← Retour ',
-        h('span',{className:'wm'},'My',h('span',null,'Sifa'))
+      h('button',{className:'nav-btn back-mysifa',onClick:()=>{window.location.href='/'}},
+        '← Retour ',h('span',{className:'wm'},'My',h('span',null,'Sifa'))
       ),
       h('div',{className:'user-chip'},
         h('div',{className:'uc-name'},(S.user&&S.user.nom)?S.user.nom:''),
         h('div',{className:'uc-role'},(S.user&&S.user.role)?(ROLE_LABELS[S.user.role]||S.user.role):'')
       ),
-      (() => {
-        const b=h('button',{
-          className:'support-btn',
-          title:'Contacter le support',
-          onClick:()=>set({contactOpen:true})
-        });
+      (()=>{
+        const b=h('button',{className:'support-btn',title:'Contacter le support',onClick:()=>set({contactOpen:true})});
         const ico=h('span',{className:'support-ico'});
-        try{
-          ico.innerHTML=(window.MySifaSupport && typeof window.MySifaSupport.iconSvg==='function')?window.MySifaSupport.iconSvg():'';
-        }catch(e){ ico.innerHTML=''; }
-        b.appendChild(ico);
-        b.appendChild(h('span',null,'Contacter le support'));
-        return b;
+        try{ico.innerHTML=(window.MySifaSupport&&typeof window.MySifaSupport.iconSvg==='function')?window.MySifaSupport.iconSvg():'';}catch(e){ico.innerHTML='';}
+        b.appendChild(ico);b.appendChild(h('span',null,'Contacter le support'));return b;
       })(),
       h('button',{className:'theme-btn',onClick:()=>{document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');render();}},
         h('span',{className:'theme-ico'},iconEl(isLight?'sun':'moon',16)),
@@ -2880,54 +3221,33 @@ function renderExpe(){
       h('button',{className:'logout-btn',onClick:doLogout},iconEl('log-out',14),' Déconnexion')
     )
   );
-
   const topbar=h('div',{className:'mobile-topbar'},
     h('button',{type:'button',className:'mobile-menu-btn',onClick:toggleSidebar,'aria-label':'Menu'},iconEl('menu',20)),
     h('div',null,
       h('div',{className:'mobile-topbar-title'},'MyExpé'),
-      h('div',{className:'mobile-topbar-sub'},
-        tab==='transporteurs'?'Transporteurs':tab==='comparateur'?'Comparateur délais & coûts':'Suivis')
+      h('div',{className:'mobile-topbar-sub'},tab==='transporteurs'?'Transporteurs':'Comparateur tarifs')
     ),
     h('button',{type:'button',className:'mobile-home-btn',onClick:()=>{window.location.href='/'},'aria-label':'Accueil'},iconEl('home',20))
   );
 
-  let content;
-  if(tab==='comparateur'){
-    content=h('div',{className:'card',style:{padding:0,overflow:'hidden',borderRadius:12,minHeight:640}},
-      h('div',{
-        id:'transport-comparateur-root',
-        style:{width:'100%',minHeight:640,height:'85vh',maxHeight:920},
-        title:'Comparateur transport',
-      }),
-      h('p',{
-        className:'card-empty',
-        id:'transport-comparateur-hint',
-        style:{margin:0,padding:'10px 14px',fontSize:12},
-      },'Chargement du comparateur… Connexion internet requise (React / Babel en CDN).')
-    );
-  }else if(tab==='transporteurs'){
-    content=h('div',{className:'card-empty'},'Aucun transporteur configuré pour le moment.');
-  }else{
-    content=h('div',{className:'card-empty'},'Aucun suivi pour le moment.');
-  }
-
-  const body=h('div',{className:'app'},
-    sidebar,
-    h('main',{className:'main'},
-      h('div',{className:'container'},
-        topbar,
-        h('h1',null,'MyExpé'),
-        h('div',{className:'subtitle'},
-          tab==='comparateur'?'Comparez délais, services (express / standard) et coûts entre transporteurs.':
-          'Expédition — suivis, transporteurs et outils'),
-        content
-      )
-    )
-  );
+  const content=tab==='transporteurs'?renderExpeTransporteurs():renderExpeComparateur();
 
   return h('div',null,
     S.sidebarOpen?h('div',{className:'sidebar-overlay',onClick:closeSidebar}):null,
-    body
+    h('div',{className:'app'},
+      sidebar,
+      h('main',{className:'main'},
+        h('div',{className:'container'},
+          topbar,
+          h('h1',null,'MyExpé'),
+          h('div',{className:'subtitle'},tab==='comparateur'
+            ?'Coupé · Coquelle · Ceva · Dimotrans — meilleur prix au poids et à la palette'
+            :'Vos transporteurs et moyens de contact'),
+          content
+        )
+      )
+    ),
+    S.expeShowContacts?renderExpeContactModal():null
   );
 }
 
@@ -2949,6 +3269,14 @@ async function loadProd(){const d=await api('/api/dashboard/production?'+buildPa
 async function loadImports(){const d=await api('/api/imports');if(d)set({imports:d});}
 async function loadDos(){const d=await api('/api/dossiers');if(d)set({dossiers:d});}
 async function loadMachines(){try{const d=await api('/api/planning/machines');if(d)set({machines:d});}catch(e){}}
+async function loadRentPlanning(){
+  try{
+    const d=await api('/api/rentabilite/planning-entries');
+    if(d)set({rentList:d});
+  }catch(e){
+    toast(e.message,'error');
+  }
+}
 async function loadSaisies(opts){
   const off = (opts && typeof opts.offset==='number') ? opts.offset : (S.saisiesOffset||0);
   const lim = (opts && typeof opts.limit==='number') ? opts.limit : (S.saisiesLimit||200);
@@ -2971,6 +3299,32 @@ async function comptaTransform(file){
     const r=await api('/api/compta/transform',{method:'POST',body:fd});
     if(!r)return;
     set({comptaResult:r});
+    // Télécharger une copie du fichier importé (trace)
+    try{
+      const rows = Array.isArray(r.rows) ? r.rows : [];
+      const dates = rows.map(x=>String((x&&x.date)||'').slice(0,10)).filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d));
+      const dateFrom = dates.length ? dates.reduce((a,b)=>a<b?a:b) : '';
+      const dateTo   = dates.length ? dates.reduce((a,b)=>a>b?a:b) : '';
+      const sellers = [...new Set(rows.map(x=>String((x&&x.code_vendeur)||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
+      const sellersTag = sellers.slice(0,6).join('-') + (sellers.length>6?('-'+String(sellers.length)+'v'):'');
+      const errCount = rows.filter(x=>x && x.problem && String(x.compte||'').trim()==='').length;
+      const today = (new Date()).toISOString().slice(0,10);
+      const safe = (s)=>String(s||'').replace(/[\\/:*?"<>|]+/g,'_').replace(/\s+/g,' ').trim();
+      const base = safe((file && file.name) ? file.name.replace(/\.(xlsx|xlsm|xls)$/i,'') : 'factor');
+      const parts = [
+        base,
+        today,
+        (dateFrom&&dateTo)?('du_'+dateFrom+'_au_'+dateTo):'',
+        sellersTag?('vendeurs-'+sellersTag):'',
+        'erreurs-'+String(errCount||0),
+      ].filter(Boolean);
+      const ext = (file && file.name && /\.[A-Za-z0-9]+$/.test(file.name)) ? file.name.slice(file.name.lastIndexOf('.')) : '.xlsx';
+      const fname = safe(parts.join('_')) + ext;
+      const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(file), download: fname });
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(()=>{ try{URL.revokeObjectURL(a.href);}catch(e){}; try{a.remove();}catch(e){}; }, 800);
+    }catch(e){}
     toast('Transformation OK');
   }catch(e){
     toast(e.message,'error');
@@ -3123,7 +3477,7 @@ function renderSidebar(){
   const items=[
     ...(canPlanningNav(S.user)?[{key:'_planning',label:'Planning',icon:'calendar'}]:[]),
     {key:'production',label:'Production',icon:'wrench'},
-    ...(admin?[{key:'suivi',label:'Rentabilité',icon:'trending-up'}]:[]),
+    ...(admin?[{key:'rentabilite',label:'Rentabilité',icon:'trending-up'}]:[]),
   ];
   const isLight=document.body.classList.contains('light');
   return h('nav',{className:'sidebar'},
@@ -3300,9 +3654,9 @@ function renderMessagesApp(){
   const filterRow=h('div',{className:'card',style:{padding:'12px 14px'}},
     h('div',{style:{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}},
       h('span',{className:'badge'},'Filtre'),
-      h('button',{type:'button',className:'btn-sec',onClick:()=>set({msgFilter:'unread'})},'Non traités'),
-      h('button',{type:'button',className:'btn-sec',onClick:()=>set({msgFilter:'read'})},'Traités'),
-      h('button',{type:'button',className:'btn-sec',onClick:()=>set({msgFilter:'all'})},'Tous'),
+      h('button',{type:'button',className:'btn-sec'+(S.msgFilter==='unread'?' is-active':''),onClick:()=>set({msgFilter:'unread',msgSelIds:[]})},'Non traités'),
+      h('button',{type:'button',className:'btn-sec'+(S.msgFilter==='read'?' is-active':''),onClick:()=>set({msgFilter:'read',msgSelIds:[]})},'Traités'),
+      h('button',{type:'button',className:'btn-sec'+(S.msgFilter==='all'?' is-active':''),onClick:()=>set({msgFilter:'all',msgSelIds:[]})},'Tous'),
       h('div',{style:{marginLeft:'auto',display:'flex',gap:'8px'}},
         h('button',{type:'button',className:'btn-sec',onClick:async()=>{await loadMessagesUnread();await loadMessages();}},'Rafraîchir'),
         h('button',{type:'button',className:'btn-sec',onClick:markAllRead},'Tout lire')
@@ -3319,13 +3673,123 @@ function renderMessagesApp(){
   });
   const sel=listAll.find(x=>x.id===S.msgSelId)||null;
 
+  const visIds=list.map(m=>m.id);
+  const selIdx= S.msgSelId ? visIds.indexOf(S.msgSelId) : -1;
+  const selPos=(selIdx>=0)? (selIdx+1)+'/'+visIds.length : '—/'+visIds.length;
+
+  const selSet=new Set((S.msgSelIds||[]).filter(id=>visIds.includes(id)));
+  const selectedIds=[...selSet];
+  const allVisibleSelected = visIds.length>0 && selectedIds.length===visIds.length;
+
+  function toggleSelect(id){
+    const a=[...selSet];
+    const i=a.indexOf(id);
+    if(i>=0)a.splice(i,1); else a.push(id);
+    set({msgSelIds:a});
+  }
+  function toggleSelectAllVisible(){
+    if(allVisibleSelected){ set({msgSelIds:[]}); return; }
+    set({msgSelIds:[...visIds]});
+  }
+  async function bulkSetTreated(toTreated){
+    if(!selectedIds.length) return;
+    // Traité => read_at non-null ; Non traité => read_at null
+    for(const id of selectedIds){
+      const m=listAll.find(x=>x.id===id);
+      if(!m) continue;
+      const isRead=!!m.read_at;
+      if(toTreated && !isRead){
+        await api('/api/messages/'+id+'/toggle-treated',{method:'POST'});
+      }else if(!toTreated && isRead){
+        await api('/api/messages/'+id+'/toggle-treated',{method:'POST'});
+      }
+    }
+    set({msgSelIds:[]});
+    await loadMessagesUnread();
+    await loadMessages();
+  }
+  async function bulkDelete(){
+    if(!selectedIds.length) return;
+    if(!confirm('Supprimer '+selectedIds.length+' message(s) ?')) return;
+    for(const id of selectedIds){
+      await deleteMessage(id);
+    }
+    set({msgSelIds:[]});
+    await loadMessagesUnread();
+    await loadMessages();
+  }
+  function goPrev(){
+    if(!visIds.length) return;
+    const i = (selIdx>=0?selIdx:0);
+    const ni = (i-1+visIds.length)%visIds.length;
+    set({msgSelId:visIds[ni]});
+  }
+  function goNext(){
+    if(!visIds.length) return;
+    const i = (selIdx>=0?selIdx:-1);
+    const ni = (i+1)%visIds.length;
+    set({msgSelId:visIds[ni]});
+  }
+
+  // Raccourcis clavier (Ctrl+←/→ peut être capturé par le navigateur selon OS)
+  // - Alt+← / Alt+→
+  // - PageUp / PageDown
+  if(!S._msgKeyHandler){
+    S._msgKeyHandler = (e)=>{
+      try{
+        if(!e) return;
+        if(S.app!=='messages') return;
+        const t = e.target;
+        if(t && t.closest && t.closest('input,textarea,select,[contenteditable=true]')) return;
+
+        const isPrev = (e.altKey && e.key==='ArrowLeft') || (e.key==='PageUp') || (e.ctrlKey && e.key==='ArrowLeft');
+        const isNext = (e.altKey && e.key==='ArrowRight') || (e.key==='PageDown') || (e.ctrlKey && e.key==='ArrowRight');
+        if(!isPrev && !isNext) return;
+
+        const all = (S.msgList||[]);
+        const f = (S.msgFilter||'unread');
+        const visible = all.filter(m=>{
+          if(f==='all') return true;
+          if(f==='read') return !!m.read_at;
+          return !m.read_at;
+        });
+        const ids = visible.map(m=>m.id);
+        if(!ids.length) return;
+        const idx = S.msgSelId ? ids.indexOf(S.msgSelId) : -1;
+        const i = (idx>=0?idx:(isPrev?0:-1));
+        const ni = isNext ? ((i+1)%ids.length) : ((i-1+ids.length)%ids.length);
+        e.preventDefault();
+        e.stopPropagation();
+        set({msgSelId:ids[ni]});
+      }catch(err){}
+    };
+    document.addEventListener('keydown', S._msgKeyHandler, true);
+  }
+
   const left=h('div',{style:{flex:'0 0 360px',maxWidth:'42vw',minWidth:'260px'}},
     h('div',{className:'card'},
-      h('div',{className:'card-header'},h('div',{className:'card-title'},'📨 Messages')),
+      h('div',{className:'card-header',style:{display:'flex',gap:'10px',alignItems:'center',justifyContent:'space-between'}},
+        h('div',{className:'card-title'},'📨 Messages'),
+        h('div',{style:{display:'flex',gap:'8px',alignItems:'center'}},
+          h('button',{type:'button',className:'add-row-nav-btn',title:'Précédent (Alt+← / PageUp)',onClick:(e)=>{e.stopPropagation();goPrev();}},'‹'),
+          h('div',{style:{fontSize:'12px',fontWeight:'700',color:'var(--text2)',minWidth:'56px',textAlign:'center'}},selPos),
+          h('button',{type:'button',className:'add-row-nav-btn',title:'Suivant (Alt+→ / PageDown)',onClick:(e)=>{e.stopPropagation();goNext();}},'›')
+        )
+      ),
+      h('div',{style:{display:'flex',gap:'8px',alignItems:'center',padding:'0 12px 10px 12px',flexWrap:'wrap'}},
+        h('button',{type:'button',className:'btn-sec',onClick:toggleSelectAllVisible,disabled:!visIds.length},
+          allVisibleSelected?'Tout désélectionner':'Tout sélectionner'
+        ),
+        h('button',{type:'button',className:'btn-sec',onClick:()=>bulkSetTreated(true),disabled:!selectedIds.length},'Traité'),
+        h('button',{type:'button',className:'btn-sec',onClick:()=>bulkSetTreated(false),disabled:!selectedIds.length},'Non traité'),
+        h('button',{type:'button',className:'btn-danger',onClick:bulkDelete,disabled:!selectedIds.length},'Supprimer')
+      ),
       S.msgLoading?h('div',{className:'card-empty'},'Chargement…'):
       (list.length? h('div',{style:{display:'flex',flexDirection:'column',gap:'6px',padding:'12px'}},
         ...list.map(m=>{
           const unread=!m.read_at;
+          const wrap=h('div',{style:{display:'flex',gap:'8px',alignItems:'center'}});
+          const selBtn=h('button',{type:'button',className:'msg-sel-btn'+(selSet.has(m.id)?' on':''),title:selSet.has(m.id)?'Désélectionner':'Sélectionner',onClick:(e)=>{e.stopPropagation();toggleSelect(m.id);}}, selSet.has(m.id)?'✓':'');
           const row=h('button',{type:'button',className:'nav-btn'+(S.msgSelId===m.id?' active':''),onClick:async()=>{
             set({msgSelId:m.id});
           }});
@@ -3337,7 +3801,9 @@ function renderMessagesApp(){
             h('div',{style:{fontSize:'11px',color:'var(--muted)'}},fD(m.created_at))
           ));
           if(unread) row.appendChild(h('span',{className:'nav-badge'},'NEW'));
-          return row;
+          wrap.appendChild(selBtn);
+          wrap.appendChild(row);
+          return wrap;
         })
       ) : h('div',{className:'card-empty'},'Aucun message'))
     )
@@ -3353,6 +3819,11 @@ function renderMessagesApp(){
           )
         ),
         h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',justifyContent:'flex-end'}},
+          h('div',{style:{display:'flex',gap:'8px',alignItems:'center',marginRight:'4px'}},
+            h('button',{type:'button',className:'add-row-nav-btn',title:'Précédent (Alt+← / PageUp)',onClick:(e)=>{e.stopPropagation();goPrev();}},'‹'),
+            h('div',{style:{fontSize:'12px',fontWeight:'700',color:'var(--text2)',minWidth:'56px',textAlign:'center'}},selPos),
+            h('button',{type:'button',className:'add-row-nav-btn',title:'Suivant (Alt+→ / PageDown)',onClick:(e)=>{e.stopPropagation();goNext();}},'›')
+          ),
           h('button',{className:'btn-sec',type:'button',onClick:async()=>{
             // toggle traité/non-traité via API (ajouté côté backend)
             await api('/api/messages/'+sel.id+'/toggle-treated',{method:'POST'});
@@ -3490,8 +3961,11 @@ function renderFilters(){
  
 // ── Composant multi-select avec cases à cocher ──────────────────
 function makeMultiSelect(label, options, selected, onChange){
-  const isSelected = v => selected.includes(v);
-  const count = selected.length;
+  // NOTE: `selected` est un tableau stocké dans S.fv.* et muté via onChange(sel).
+  // Ce composant doit rester fluide (multi-clic) => on lit toujours la valeur actuelle via getSelected().
+  const getSelected = ()=> Array.isArray(selected) ? selected : [];
+  const isSelected = v => getSelected().includes(v);
+  const count = getSelected().length;
  
   // Bouton déclencheur
   const trigger = h('button',{
@@ -3541,7 +4015,8 @@ function makeMultiSelect(label, options, selected, onChange){
     const chk = lbl.querySelector('input');
     chk.checked = isSelected(opt.value);
     chk.addEventListener('change',()=>{
-      let newSel = selected.filter(v=>v!==opt.value);
+      const curSel = getSelected();
+      let newSel = curSel.filter(v=>v!==opt.value);
       if(chk.checked) newSel.push(opt.value);
       onChange(newSel);
       trigger.querySelector('span').textContent = newSel.length>0?label+' ('+newSel.length+')':label;
@@ -3557,7 +4032,18 @@ function makeMultiSelect(label, options, selected, onChange){
     open=!open;
     dropdown.style.display=open?'block':'none';
   });
-  document.addEventListener('click',()=>{open=false;dropdown.style.display='none';},{once:false,capture:true,passive:true});
+  // Fermer uniquement si le clic est en dehors du composant (trigger + dropdown).
+  // Important: on garde `capture:true` car l'app a d'autres listeners globaux,
+  // donc on doit filtrer correctement plutôt que compter sur stopPropagation().
+  const onDocClick = (e)=>{
+    try{
+      if(!open) return;
+      if(rel && rel.contains && rel.contains(e.target)) return;
+      open=false;
+      dropdown.style.display='none';
+    }catch(_){}
+  };
+  document.addEventListener('click', onDocClick, {once:false,capture:true,passive:true});
  
   const wrapper=h('div',{className:'filter-group'},h('label',null,label));
   const rel=h('div',{style:{position:'relative'}},trigger,dropdown);
@@ -3759,17 +4245,17 @@ function renderProdKpis(){
   }
   parts.push(h('div',{className:'section-title'},iconEl('box',13),' Quantités'));
   parts.push(h('div',{className:'stats'},
-    h('div',{className:'stat'},h('div',{className:'stat-label'},'Dossiers produits'),h('div',{className:'stat-value',style:{color:'var(--c1)'}},fN(prod.dossiers||0))),
-    h('div',{className:'stat'},h('div',{className:'stat-label'},'Qté étiquettes'),h('div',{className:'stat-value',style:{color:'var(--c3)'}},fN(prod.etiquettes||0))),
-    h('div',{className:'stat'},h('div',{className:'stat-label'},'Métrage'),h('div',{className:'stat-value',style:{color:'var(--c2)'}},fN(prod.metrage_m||0)+' m')),
-    h('div',{className:'stat'},h('div',{className:'stat-label'},'Vitesse'),h('div',{className:'stat-value',style:{color:'var(--warn)'}},((d.vitesse_m_min!=null)?Number(d.vitesse_m_min).toFixed(2):'0.00')+' m/min')),
+    h('div',{className:'stat'},h('div',{className:'stat-label'},'Dossiers produits'),h('div',{className:'stat-value'},fN(prod.dossiers||0))),
+    h('div',{className:'stat'},h('div',{className:'stat-label'},'Qté étiquettes'),h('div',{className:'stat-value'},fN(prod.etiquettes||0))),
+    h('div',{className:'stat'},h('div',{className:'stat-label'},'Métrage'),h('div',{className:'stat-value'},fN(prod.metrage_m||0)+' m')),
+    h('div',{className:'stat'},h('div',{className:'stat-label'},'Vitesse'),h('div',{className:'stat-value'},((d.vitesse_m_min!=null)?Number(d.vitesse_m_min).toFixed(2):'0.00')+' m/min')),
   ));
   parts.push(h('div',{className:'section-title'},iconEl('clock',13),' Temps'));
   const prodInclArrets = (Number(tt.production_min||0) + Number(tt.arret_min||0));
   parts.push(h('div',{className:'time-kpi'},
-    h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('wrench',12),' Calage'),h('div',{className:'tc-value',style:{color:'var(--c4)'}},fMin(tt.calage_min))),
-    h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('play',12),' Production'),h('div',{className:'tc-value',style:{color:'var(--c3)'}},fMin(prodInclArrets))),
-    h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('alert-triangle',12),' Arrêts'),h('div',{className:'tc-value',style:{color:'var(--warn)'}},fMin(tt.arret_min))),
+    h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('wrench',12),' Calage'),h('div',{className:'tc-value'},fMin(tt.calage_min))),
+    h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('play',12),' Production'),h('div',{className:'tc-value'},fMin(prodInclArrets))),
+    h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('alert-triangle',12),' Arrêts'),h('div',{className:'tc-value'},fMin(tt.arret_min))),
   ));
   const byDos = d.by_dossier || d.dossier_times || [];
 
@@ -3794,32 +4280,60 @@ function renderProdKpis(){
   }
 
   parts.push(h('div',{className:'section-title'},'📌 Synthèse détaillée'));
+  // Détail par dossier en premier
+  if(byDos&&byDos.length){
+    // Agrégation par no_dossier
+    const byRef = {};
+    byDos.forEach(r=>{
+      const k = String(r.no_dossier||'').trim();
+      if(!k) return;
+      if(!byRef[k]){
+        byRef[k] = {
+          no_dossier: k,
+          etiquettes: 0,
+          metrage_m: 0,
+          temps_calage_min: 0,
+          temps_prod_min: 0,
+          temps_arret_min: 0,
+        };
+      }
+      byRef[k].etiquettes += Number(r.etiquettes||0);
+      byRef[k].metrage_m += Number(r.metrage_m||0);
+      byRef[k].temps_calage_min += Number(r.temps_calage_min||0);
+      byRef[k].temps_prod_min += Number(r.temps_prod_min||0);
+      byRef[k].temps_arret_min += Number(r.temps_arret_min||0);
+    });
+    const rowsAgg = Object.values(byRef).sort((a,b)=>String(a.no_dossier).localeCompare(String(b.no_dossier), 'fr', {numeric:true,sensitivity:'base'}));
+
+    parts.push(h('div',{className:'card'},h('div',{className:'card-header'},h('h3',null,'Par numéro de dossier'),h('span',{style:{fontSize:'11px',color:'var(--muted)'}},rowsAgg.length+' dossiers')),
+      h('div',{style:{overflowX:'auto'}},h('table',null,
+        h('thead',null,h('tr',null,
+          h('th',null,'Dossier'),
+          h('th',null,'Étiquettes'),
+          h('th',null,'Métrage'),
+          h('th',null,'Calage'),
+          h('th',null,'Prod'),
+          h('th',null,'Arrêts'),
+          h('th',null,'Vitesse')
+        )),
+        h('tbody',null,...rowsAgg.map(r=>h('tr',null,
+          h('td',{style:{fontWeight:'600',fontFamily:'monospace',color:'var(--text)'}},r.no_dossier||''),
+          h('td',{style:{fontFamily:'monospace'}},fN(r.etiquettes||0)),
+          h('td',{style:{fontFamily:'monospace'}},fN(r.metrage_m||0)+' m'),
+          h('td',{style:{fontFamily:'monospace',color:'var(--text2)'}},fMin(r.temps_calage_min)),
+          h('td',{style:{fontFamily:'monospace',color:'var(--text2)'}},fMin(r.temps_prod_min)),
+          h('td',{style:{fontFamily:'monospace',color:'var(--text2)'}},fMin(r.temps_arret_min)),
+          h('td',{style:{fontFamily:'monospace',fontWeight:'800',color:'var(--warn)'}},(Number(r.temps_prod_min||0)>0? (Number(r.metrage_m||0)/Number(r.temps_prod_min||1)).toFixed(2):'0.00')+' m/min')
+        )))
+      ))
+    ));
+  }
   const byOp=d.by_operator||[];
   const byMach=d.by_machine||[];
   const byDay=d.by_day||[];
   parts.push(renderAggCard('Par opérateur',byOp,'Opérateur'));
   parts.push(renderAggCard('Par machine',byMach,'Machine'));
   parts.push(renderAggCard('Par jour',byDay,'Jour'));
-
-  // Détail (liste)
-  if(byDos&&byDos.length){
-    parts.push(h('div',{className:'card'},h('div',{className:'card-header'},h('h3',null,'Par numéro de dossier'),h('span',{style:{fontSize:'11px',color:'var(--muted)'}},byDos.length+' dossiers')),
-      h('div',{style:{overflowX:'auto'}},h('table',null,
-        h('thead',null,h('tr',null,h('th',null,'Dossier'),h('th',null,'Opérateur'),h('th',null,'Machine'),h('th',null,'Jour'),h('th',null,'Étiquettes'),h('th',null,'Métrage'),h('th',null,'Calage'),h('th',null,'Prod'),h('th',null,'Arrêts'))),
-        h('tbody',null,...byDos.map(r=>h('tr',null,
-          h('td',{style:{fontWeight:'600',fontFamily:'monospace',color:'var(--text)'}},r.no_dossier||''),
-          h('td',null,opName(r.operateur)),
-          h('td',null,r.machine||''),
-          h('td',{style:{fontFamily:'monospace',fontSize:'11px'}},r.jour||''),
-          h('td',{style:{fontFamily:'monospace'}},fN(r.etiquettes||0)),
-          h('td',{style:{fontFamily:'monospace'}},fN(r.metrage_m||0)+' m'),
-          h('td',{style:{fontFamily:'monospace',color:r.temps_calage_min>30?'var(--warn)':'var(--text2)'}},fMin(r.temps_calage_min)),
-          h('td',{style:{fontFamily:'monospace',color:'var(--c3)'}},fMin(r.temps_prod_min)),
-          h('td',{style:{fontFamily:'monospace',color:'var(--warn)'}},fMin(r.temps_arret_min))
-        )))
-      ))
-    ));
-  }
 
   return h('div',null,...parts);
 }
@@ -4695,7 +5209,6 @@ function renderSaisies(){
       h('div',{className:'card-header'},
         h('h3',null,'Saisies'),
         h('div',{style:{display:'flex',gap:'12px',alignItems:'center'}},
-          !readOnly?h('span',{style:{fontSize:'11px',color:'var(--muted)'}},'Clic pour modifier'):null,
           headerRight
         )
       ),
@@ -5005,10 +5518,8 @@ function renderComparaison(comp){
   };
 
   const colMap={success:'var(--success)',warn:'var(--warn)',danger:'var(--danger)'};
-  const iconMap={success:icon('check-circle',14),warn:icon('alert-triangle',14),danger:icon('alert-circle',14)};
   const concl=h('div',{className:'conclusion-card',
     style:{borderColor:colMap[co.color]+'66',background:colMap[co.color]+'0D'}},
-    h('div',{className:'conclusion-icon'},iconMap[co.color]),
     h('div',null,
       h('div',{className:'conclusion-label',style:{color:colMap[co.color]}},co.label),
       h('div',{className:'conclusion-sub'},'Dossier'+(dossiers.length>1?'s':'')+' : '+dossiers.join(', '))
@@ -5073,87 +5584,410 @@ function renderLiaisonDossiers(devisId, dossiersLies, allDossiers){
 }
 
 function renderRentabilite(){
-  const devisList=S.devisList||[];
-  const allDossiers=S.filters.dossiers||[];
-  const parts=[];
+  const list = S.rentList || [];
+  const devisList = S.devisList || [];
 
-  if(S.devisPreview){
-    parts.push(renderDevisForm(S.devisPreview));
-    return h('div',null,...parts);
+  const tags = Array.isArray(S.rentTags) ? S.rentTags : [];
+  const q = String(S.rentQuery||'').trim().toLowerCase();
+
+  function norm(x){return String(x||'').toLowerCase().trim();}
+  function fmtFormat(e){
+    const l=e.format_l!=null?String(e.format_l):'';
+    const h=e.format_h!=null?String(e.format_h):'';
+    if(!l&&!h) return '';
+    return l+'×'+h;
   }
 
-  const zone=h('div',{className:'drop-zone',style:{marginBottom:'20px',padding:'28px'}},
-    h('div',{className:'dz-icon',style:{fontSize:'28px'}},'📋'),
-    h('div',{className:'dz-title'},'Importer un devis'),
-    h('div',{className:'dz-sub'},'Fichiers Excel (.xlsx, .xls) — glisser ou cliquer')
-  );
-  const inp=h('input',{type:'file',accept:'.xlsx,.xls',style:{display:'none'}});
-  inp.addEventListener('change',e=>{if(e.target.files[0])uploadDevis(e.target.files[0]);});
-  zone.addEventListener('click',()=>inp.click());
-  zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('drag');});
-  zone.addEventListener('dragleave',()=>zone.classList.remove('drag'));
-  zone.addEventListener('drop',e=>{e.preventDefault();zone.classList.remove('drag');if(e.dataTransfer.files[0])uploadDevis(e.dataTransfer.files[0]);});
-  zone.appendChild(inp);
-  parts.push(zone);
+  // Suggestions (machines, clients, refs, format, laize, date)
+  const pool=[];
+  const pushSug=(kind,value,label)=>{
+    if(!value) return;
+    const k=kind+'|'+String(value);
+    if(pool.some(x=>x._k===k)) return;
+    pool.push({_k:k,kind,value,label});
+  };
+  list.forEach(e=>{
+    pushSug('machine', e.machine_nom||e.machine_code, e.machine_nom||e.machine_code);
+    if(e.reference) pushSug('ref', e.reference, e.reference);
+    if(e.client) pushSug('client', e.client, e.client);
+    const ff=fmtFormat(e); if(ff) pushSug('format', ff, 'Format '+ff);
+    if(e.laize!=null && String(e.laize)!=='') pushSug('laize', String(e.laize), 'Laize '+String(e.laize));
+    if(e.date_livraison) pushSug('date', e.date_livraison, 'Livraison '+e.date_livraison);
+  });
 
-  const liste=h('div',{style:{flex:'0 0 320px'}});
-  const detail=h('div',{style:{flex:1}});
+  const kindLabel = {machine:'Machine',client:'Client',ref:'Dossier',format:'Format',laize:'Laize',date:'Date'};
+  const kindOrder = {machine:0,client:1,ref:2,format:3,laize:4,date:5};
+  const filteredSuggestions = q
+    ? pool
+        .filter(s=>norm(s.label).includes(q) || norm(s.value).includes(q))
+        .sort((a,b)=>{
+          const ka = (kindOrder[a.kind]!=null)?kindOrder[a.kind]:99;
+          const kb = (kindOrder[b.kind]!=null)?kindOrder[b.kind]:99;
+          if(ka!==kb) return ka-kb;
+          return String(a.label||'').localeCompare(String(b.label||''), 'fr', {sensitivity:'base'});
+        })
+        .slice(0,12)
+    : [];
 
-  if(devisList.length===0){
-    liste.appendChild(h('div',{className:'card-empty'},'Aucun devis importé'));
-  }else{
-    devisList.forEach(dv=>{
-      const isSelected=S.selDevis===dv.id;
-      const card=h('div',{
-        className:'devis-card'+(isSelected?' selected':''),
-        onClick:async()=>{
-          set({selDevis:dv.id,comparaison:null});
-          await loadComparaison(dv.id);
-        }
-      },
-        h('div',{className:'devis-title'},dv.client||dv.filename),
-        h('div',{className:'devis-meta'},dv.filename),
-        h('div',{className:'devis-meta'},dv.date_devis?'📅 '+dv.date_devis:''),
-        h('div',{className:'devis-badges'},
-          h('span',{className:dv.statut==='lie'?'badge-lie':'badge-attente'},
-            dv.statut==='lie'
-              ? '✅ Lié ('+dv.nb_dossiers_lies+' dossier'+(dv.nb_dossiers_lies>1?'s':'')+')'
-              : '⏳ En attente de liaison'
-          ),
-          dv.format_h&&dv.format_v?h('span',{className:'badge'},dv.format_h+'×'+dv.format_v+' mm'):null
-        )
-      );
-      liste.appendChild(card);
-    });
+  function addTag(sug){
+    const exists = tags.some(t=>t.kind===sug.kind && String(t.value)===String(sug.value));
+    if(exists) return;
+    set({rentTags:[...tags,{kind:sug.kind,value:sug.value,label:sug.label}],rentQuery:'',rentOffset:0});
+  }
+  function removeTag(i){
+    const nt=tags.slice(); nt.splice(i,1);
+    set({rentTags:nt,rentOffset:0});
   }
 
-  if(S.selDevis&&S.comparaison){
-    const comp=S.comparaison;
-    const dosLies=(comp.dossiers||[]);
-    detail.appendChild(h('div',{className:'card',style:{padding:'20px',marginBottom:'16px'}},
-      h('div',{className:'form-section-title'},'🔗 Dossiers de production liés'),
-      renderLiaisonDossiers(S.selDevis, dosLies, allDossiers)
-    ));
-    if(comp.reel){
-      detail.appendChild(renderComparaison(comp));
-    }else{
-      detail.appendChild(h('div',{className:'card-empty',style:{padding:'32px'}},
-        '📂 Liez des dossiers de production pour voir la comparaison'));
+  // Group split entries by group_id (same dossier). Display group row.
+  const groups = {};
+  list.forEach(e=>{
+    const gid = String(e.group_id||e.id);
+    if(!groups[gid]) groups[gid]=[];
+    groups[gid].push(e);
+  });
+  const groupList = Object.entries(groups).map(([group_id, entries])=>{
+    entries.sort((a,b)=>Number(a.position||0)-Number(b.position||0));
+    const head=entries[0];
+    return {group_id, entries, head};
+  });
+
+  function matchesTags(g){
+    for(const t of tags){
+      const head=g.head;
+      if(t.kind==='machine'){
+        const v = norm(head.machine_nom||head.machine_code);
+        if(!v.includes(norm(t.value))) return false;
+      }else if(t.kind==='ref'){
+        if(!norm(head.reference).includes(norm(t.value))) return false;
+      }else if(t.kind==='client'){
+        const v = norm(head.client);
+        if(!v.includes(norm(t.value))) return false;
+      }else if(t.kind==='format'){
+        if(norm(fmtFormat(head))!==norm(t.value)) return false;
+      }else if(t.kind==='laize'){
+        if(norm(String(head.laize||''))!==norm(String(t.value))) return false;
+      }else if(t.kind==='date'){
+        if(norm(head.date_livraison)!==norm(t.value)) return false;
+      }
     }
-    detail.appendChild(
-      h('button',{className:'btn-danger',style:{marginTop:'8px'},onClick:()=>deleteDevis(S.selDevis)},
-        '🗑 Supprimer ce devis'
+    return true;
+  }
+
+  const shown = groupList.filter(matchesTags);
+  const totalShown = shown.length;
+  const lim = Number(S.rentLimit||12) || 12;
+  const off = Math.max(0, Number(S.rentOffset||0) || 0);
+  const pageStart = Math.min(totalShown, off);
+  const pageEnd = Math.min(totalShown, off + lim);
+  const shownPage = shown.slice(pageStart, pageEnd);
+
+  const searchBox = (()=>{
+    const wrap=h('div',{className:'card',style:{padding:'12px 14px',marginBottom:'14px'}});
+    const row=h('div',{style:{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}});
+    const inp=h('input',{type:'text',placeholder:'Rechercher (machine, dossier, format, client, date, laize)…',value:S.rentQuery||'',style:{flex:'1',minWidth:'260px'}});
+    inp.addEventListener('input',()=>set({rentQuery:inp.value}));
+    const chips=h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap'}},
+      ...tags.map((t,i)=>h('span',{className:'dos-chip',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},
+        t.label,
+        h('button',{onClick:()=>removeTag(i)},'×')
+      ))
+    );
+    row.appendChild(inp);
+    wrap.appendChild(row);
+    if(tags.length) wrap.appendChild(h('div',{style:{marginTop:'10px'}},chips));
+    if(filteredSuggestions.length){
+      const dd=h('div',{style:{marginTop:'10px',display:'flex',gap:'8px',flexWrap:'wrap'}},
+        ...filteredSuggestions.map(s=>h('button',{type:'button',className:'btn-sec',onClick:()=>addTag(s)},
+          (kindLabel[s.kind]? (kindLabel[s.kind]+' · ') : ''),
+          s.label
+        ))
+      );
+      wrap.appendChild(dd);
+    }
+    return wrap;
+  })();
+
+  function getLink(entryId){
+    const m = (S.rentLinksById||{})[entryId];
+    return m || {devis_id:null,no_dossiers:[]};
+  }
+
+  // In-flight de-duplication: évite de lancer 2x la même requête si ensureLinks est appelé
+  // depuis le clic + le prefetch simultanément.
+  if(!window._rentLinksPending) window._rentLinksPending = {};
+  async function ensureLinks(entryId){
+    const mp = S.rentLinksById || {};
+    if(mp[entryId]) return mp[entryId];
+    const key = String(entryId);
+    if(window._rentLinksPending[key]) return window._rentLinksPending[key];
+    const p = api('/api/rentabilite/links/'+entryId).then(d=>{
+      delete window._rentLinksPending[key];
+      const entry = {devis_id:d.devis_id||null,no_dossiers:d.no_dossiers||[]};
+      S.rentLinksById = {...(S.rentLinksById||{}), [entryId]:entry};
+      render();
+      return entry;
+    }).catch(e=>{
+      delete window._rentLinksPending[key];
+      throw e;
+    });
+    window._rentLinksPending[key] = p;
+    return p;
+  }
+
+  async function saveLinks(entryId, devis_id, no_dossiers){
+    await api('/api/rentabilite/links/'+entryId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({devis_id,no_dossiers})});
+    const mp = S.rentLinksById || {};
+    set({rentLinksById:{...mp,[entryId]:{devis_id:devis_id||null,no_dossiers:no_dossiers||[]}}});
+    toast('Liaisons enregistrées');
+  }
+
+  async function loadRentComparaison(entryId){
+    const d = await api('/api/rentabilite/planning/'+entryId+'/comparaison');
+    const mp = S.rentCompById || {};
+    set({rentCompById:{...mp,[entryId]:d}});
+  }
+
+  async function rentSuggestNoDossiers(q){
+    try{
+      const qq=String(q||'').trim();
+      if(!qq) return [];
+      const d = await api('/api/rentabilite/no-dossiers?q='+encodeURIComponent(qq)+'&limit=12');
+      return Array.isArray(d)?d:[];
+    }catch(e){return [];}
+  }
+
+  function renderPanel(g){
+    const head=g.head;
+    const entryId = Number(head.id);
+    const panel=h('div',{style:{borderLeft:'3px solid var(--accent)',background:'rgba(34,211,238,.04)',padding:'16px 20px',marginBottom:'2px'}});
+
+    // Links editor
+    const linkState = getLink(entryId);
+    const curDevis = linkState.devis_id;
+    let curDossiers = (linkState.no_dossiers||[]).slice();
+
+    const devisSel=h('select',{className:'form-sel',style:{minWidth:'280px'}},
+      h('option',{value:''},'Relier à un devis existant…'),
+      ...devisList.map(dv=>{
+        const opt=h('option',{value:String(dv.id)},(dv.client||dv.filename||('Devis #'+dv.id))+' (#'+dv.id+')');
+        if(curDevis && Number(curDevis)===Number(dv.id)) opt.selected=true;
+        return opt;
+      })
+    );
+    devisSel.addEventListener('change',()=>{ /* local */ });
+
+    const dosInput=h('input',{type:'text',placeholder:'Ajouter un n° dossier production (ex: 1003/0002)…',style:{minWidth:'260px'}});
+    const dosSugWrap=h('div',{style:{display:'none',gap:'8px',flexWrap:'wrap'}});
+    let dosSugToken=0;
+    const refreshDosSug=async()=>{
+      const v=String(dosInput.value||'').trim();
+      const tok=++dosSugToken;
+      if(v.length<2){ dosSugWrap.style.display='none'; dosSugWrap.innerHTML=''; return; }
+      const sugs=await rentSuggestNoDossiers(v);
+      if(tok!==dosSugToken) return;
+      dosSugWrap.innerHTML='';
+      if(!sugs.length){ dosSugWrap.style.display='none'; return; }
+      dosSugWrap.style.display='flex';
+      sugs.slice(0,8).forEach(s=>{
+        dosSugWrap.appendChild(h('button',{type:'button',className:'btn-sec',onClick:()=>{
+          const vv=String(s||'').trim();
+          if(vv && !curDossiers.includes(vv)){curDossiers.push(vv);refreshChips();}
+          dosInput.value='';
+          dosSugWrap.style.display='none';
+          dosSugWrap.innerHTML='';
+        }},s));
+      });
+    };
+    dosInput.addEventListener('input',()=>{ refreshDosSug(); });
+    const addDosBtn=h('button',{type:'button',className:'btn-sec',onClick:()=>{
+      const v=String(dosInput.value||'').trim();
+      if(!v) return;
+      if(!curDossiers.includes(v)){curDossiers.push(v);refreshChips();}
+      dosInput.value='';
+      dosSugWrap.style.display='none';
+      dosSugWrap.innerHTML='';
+    }},'+ Ajouter');
+
+    const chipsWrap=h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap'}});
+    const refreshChips=()=>{
+      chipsWrap.innerHTML='';
+      curDossiers.forEach((d,i)=>{
+        chipsWrap.appendChild(h('span',{className:'dos-chip'},'Dos. '+d,h('button',{onClick:()=>{curDossiers.splice(i,1);refreshChips();}},'×')));
+      });
+    };
+    refreshChips();
+
+    const saveBtn=h('button',{type:'button',className:'btn-sm',onClick:async()=>{
+      const did = devisSel.value ? Number(devisSel.value) : null;
+      await saveLinks(entryId, did, curDossiers);
+      await loadRentComparaison(entryId).catch(()=>{});
+    }},'💾 Enregistrer');
+
+    const compBtn=h('button',{type:'button',className:'btn-sec',onClick:async()=>{
+      await ensureLinks(entryId);
+      await loadRentComparaison(entryId);
+    }},'Comparer');
+
+    // Import devis: keep existing workflow (creates devis + links via old devis_dossiers)
+    // For v2, we still allow import, then we set rent_links.devis_id to the created devis.
+    const dz=h('div',{className:'drop-zone',style:{padding:'20px',marginTop:'12px'}},
+      h('div',{className:'dz-icon',style:{fontSize:'24px'}},'📄'),
+      h('div',{className:'dz-title',style:{fontSize:'13px'}},'Importer un devis (Excel)'),
+      h('div',{className:'dz-sub'},'Le devis pourra être lié à cette ligne rentabilité')
+    );
+    const dzInp=h('input',{type:'file',accept:'.xlsx,.xls',style:{display:'none'}});
+    dzInp.addEventListener('change',async e=>{
+      const f=(e && e.target && e.target.files && e.target.files[0]) ? e.target.files[0] : null;
+      if(!f) return;
+      try{
+        const fd=new FormData();fd.append('file',f);
+        const preview=await api('/api/rentabilite/devis/import',{method:'POST',body:fd});
+        if(!preview||!preview.preview) return toast('Erreur import','error');
+        const r=await api('/api/rentabilite/devis',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...preview.preview,filename:f.name})});
+        if(!r||!r.devis_id) return toast('Erreur sauvegarde devis','error');
+        // Link in rent_links
+        await saveLinks(entryId, Number(r.devis_id), curDossiers);
+        toast('Devis importé');
+        await loadDevis();
+        await loadRentComparaison(entryId).catch(()=>{});
+      }catch(err){toast(err.message,'error');}
+    });
+    dz.addEventListener('click',()=>dzInp.click());
+    dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag');});
+    dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
+    dz.addEventListener('drop',e=>{
+      e.preventDefault();dz.classList.remove('drag');
+      const f=(e && e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) ? e.dataTransfer.files[0] : null;
+      if(!f) return;
+      dzInp.files=e.dataTransfer.files;
+      dzInp.dispatchEvent(new Event('change'));
+    });
+    panel.appendChild(h('div',{className:'form-section-title'},'🔗 Liaisons'));
+    panel.appendChild(h('div',{style:{display:'flex',gap:'10px',flexWrap:'wrap',alignItems:'center'}},devisSel,dosInput,addDosBtn,saveBtn,compBtn));
+    panel.appendChild(h('div',{style:{marginTop:'10px'}},dosSugWrap));
+    panel.appendChild(h('div',{style:{marginTop:'10px'}},chipsWrap));
+    panel.appendChild(dz);
+    panel.appendChild(dzInp);
+
+    const comp = (S.rentCompById||{})[entryId];
+    if(comp){
+      if(comp.reel) panel.appendChild(renderComparaison(comp));
+      else panel.appendChild(h('div',{className:'card-empty',style:{padding:'18px'}},comp.message||'Aucune donnée.'));
+    }else{
+      panel.appendChild(h('div',{className:'card-empty',style:{padding:'18px'}},'Clique sur “Comparer” après avoir lié un devis + des dossiers production.'));
+    }
+    return panel;
+  }
+
+  const rows = shownPage.map(g=>{
+    const head=g.head;
+    const isExp = String(S.rentSelEntryId||'')===String(head.id);
+    const topLine = [
+      (head.client||'').trim(),
+      (fmtFormat(head)?(fmtFormat(head)+' mm'):''),
+      (head.reference||'').trim()
+    ].filter(Boolean).join(' - ') || (head.reference||'(sans référence)');
+    const subBits = [
+      (head.machine_nom||'').trim(),
+      (head.duree_heures!=null?('durée '+String(head.duree_heures)+'h'):''),
+      (head.laize!=null?('laize '+head.laize):''),
+      (head.date_livraison?('date '+head.date_livraison):'')
+    ].filter(Boolean);
+
+    const link = (S.rentLinksById||{})[Number(head.id)] || null;
+    const devisLinked = link ? !!link.devis_id : null;
+    const prodLinked = link ? ((link.no_dossiers||[]).length>0) : null;
+    const stRaw = String(head.statut||'attente');
+    const stLbl = (stRaw==='en_cours')?'En cours':(stRaw==='termine')?'Terminé':'En attente';
+    const stCol = (stRaw==='termine')?'var(--success)':(stRaw==='en_cours')?'var(--warn)':'var(--muted)';
+    const mkBadge=(txt, okNull, okCol, noCol)=>{
+      const isOk = okNull===true;
+      const isNo = okNull===false;
+      const col = isOk?okCol:(isNo?noCol:'var(--muted)');
+      const bg = isOk?(okCol+'1A'):(isNo?(noCol+'1A'):'rgba(100,116,139,.10)');
+      return h('span',{style:{fontSize:'10px',fontWeight:'800',color:col,background:bg,border:'1px solid '+(col+'33'),padding:'3px 8px',borderRadius:'999px',whiteSpace:'nowrap'}},txt);
+    };
+    const row = h('div',{
+      className:'dossier-row',
+      style:{cursor:'pointer',background:isExp?'var(--accent-bg)':'',
+             borderLeft:isExp?'3px solid var(--accent)':'3px solid transparent',
+             transition:'all .15s'},
+      onClick:async()=>{
+        const next = isExp ? null : head.id;
+        set({rentSelEntryId:next});
+        if(next){
+          await ensureLinks(Number(next)).catch(()=>{});
+        }
+      }
+    },
+      h('div',{style:{flex:'1',minWidth:0}},
+        h('div',{style:{fontWeight:'700',color:'var(--text)',fontSize:'13px'}},topLine),
+        h('div',{style:{fontSize:'11px',color:'var(--muted)',marginTop:'2px'}},
+          subBits.length?subBits.join(' — '):'—')
+      ),
+      h('div',{style:{display:'flex',alignItems:'center',gap:'10px',flexShrink:0}},
+        h('div',{style:{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:'6px'}},
+          mkBadge(stLbl, true, stCol, stCol),
+          mkBadge(devisLinked===null?'Devis …':(devisLinked?'Devis lié':'Devis non lié'), devisLinked, 'var(--success)', 'var(--danger)'),
+          (stRaw==='termine')
+            ? mkBadge(prodLinked===null?'Prod …':(prodLinked?'Prod liée':'Prod non liée'), prodLinked, 'var(--success)', 'var(--danger)')
+            : null
+        ),
+        h('span',{style:{fontSize:'14px',color:'var(--muted)',transition:'transform .15s',
+          transform:isExp?'rotate(180deg)':'rotate(0deg)'}},'▾')
       )
     );
-  }else if(S.selDevis){
-    detail.appendChild(h('div',{className:'card-empty'},'Chargement...'));
-  }else{
-    detail.appendChild(h('div',{className:'card-empty',style:{padding:'48px'}},
-      '← Sélectionnez un devis pour voir la comparaison'));
-  }
+    if(!isExp) return row;
+    return h('div',null,row,renderPanel(g));
+  });
 
-  parts.push(h('div',{style:{display:'flex',gap:'16px',alignItems:'flex-start'}},liste,detail));
-  return h('div',null,...parts);
+  // Précharger les liens avec une concurrence max de 3 pour ne pas saturer le navigateur.
+  try{
+    const CONCURRENCY = 3;
+    const toFetch = shownPage
+      .map(g=>Number(g.head&&g.head.id))
+      .filter(id=>id && !(S.rentLinksById||{})[id] && !((window._rentLinksPending||{})[id]));
+    if(toFetch.length){
+      queueMicrotask(async()=>{
+        let i = 0;
+        async function runNext(){
+          if(i >= toFetch.length) return;
+          const id = toFetch[i++];
+          await ensureLinks(id).catch(()=>{});
+          await runNext();
+        }
+        const workers = Array.from({length:Math.min(CONCURRENCY,toFetch.length)},()=>runNext());
+        await Promise.allSettled(workers);
+      });
+    }
+  }catch(e){}
+
+  const pager=h('div',{style:{display:'inline-flex',alignItems:'center',gap:'6px'}},
+    h('button',{className:'btn-ghost',title:'Page précédente',disabled:off<=0,onClick:()=>{
+      set({rentOffset:Math.max(0, off - lim)});
+    }},'‹'),
+    h('span',{style:{fontSize:'11px',color:'var(--muted)',fontFamily:'monospace'}},
+      totalShown?(`${pageStart+1}-${pageEnd}/${totalShown}`):'0'
+    ),
+    h('button',{className:'btn-ghost',title:'Page suivante',disabled:(off+lim)>=totalShown,onClick:()=>{
+      set({rentOffset:Math.min(Math.max(0,totalShown-lim), off + lim)});
+    }},'›'),
+  );
+
+  return h('div',null,
+    searchBox,
+    h('div',{className:'card'},
+      h('div',{className:'card-header'},
+        h('h3',null,'Rentabilité — Dossiers planning ('+totalShown+')'),
+        h('div',{style:{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}},
+          pager,
+          h('button',{type:'button',className:'btn-sec',onClick:async()=>{await loadRentPlanning();toast('Planning rechargé');}},'Rafraîchir')
+        )
+      ),
+      rows.length? h('div',null,...rows) : h('div',{className:'card-empty'},'Aucun dossier ne correspond aux filtres.')
+    )
+  );
 }
 
 // ── Suivi (fusion Dossiers + Rentabilité) ─────────────────────────
@@ -5307,64 +6141,8 @@ function renderSuivi(){
   return h('div',null,...parts);
 }
 
-// ── Comparateur transport (React + Babel, sans iframe) ───────────
-function _loadScript(src, cross){
-  return new Promise((res,rej)=>{
-    const s=document.createElement('script');
-    s.src=src;
-    if(cross)s.crossOrigin='anonymous';
-    s.onload=()=>res();
-    s.onerror=()=>rej(new Error('script '+src));
-    document.head.appendChild(s);
-  });
-}
-function _scheduleTransportComparateurMount(left){
-  const mount=document.getElementById('transport-comparateur-root');
-  const hint=document.getElementById('transport-comparateur-hint');
-  if(window.__mysifaTransportTryMount)window.__mysifaTransportTryMount();
-  const ok=mount&&(mount.childElementCount>0||(mount.textContent&&mount.textContent.trim().length>3));
-  if(ok){if(hint)hint.style.display='none';return;}
-  if(left>0)setTimeout(()=>_scheduleTransportComparateurMount(left-1),120);
-  else if(hint)hint.textContent='Le comparateur n’a pas pu s’initialiser. Vérifiez la connexion ou la console.';
-}
-async function initTransportComparateurIfNeeded(){
-  if(S.app!=='expe'||(S.expeTab||'suivis')!=='comparateur')return;
-  const mount=document.getElementById('transport-comparateur-root');
-  if(!mount)return;
-  const hint=document.getElementById('transport-comparateur-hint');
-  try{
-    if(typeof React==='undefined')await _loadScript('https://unpkg.com/react@18/umd/react.production.min.js',true);
-    if(!window.ReactDOM)await _loadScript('https://unpkg.com/react-dom@18/umd/react-dom.production.min.js',true);
-    if(!window.Babel)await _loadScript('https://unpkg.com/@babel/standalone@7/babel.min.js',false);
-    if(!window.__transportComparateurJsxLoaded){
-      await new Promise((res,rej)=>{
-        const s=document.createElement('script');
-        s.type='text/babel';
-        s.setAttribute('data-presets','react');
-        s.src='/static/transport_comparateur.jsx?v=2';
-        s.onerror=()=>rej(new Error('jsx'));
-        document.body.appendChild(s);
-        let n=0;
-        const iv=setInterval(()=>{
-          n++;
-          if(window.__mysifaTransportTryMount){clearInterval(iv);res();}
-          else if(n>100){clearInterval(iv);rej(new Error('timeout'));}
-        },50);
-      });
-      window.__transportComparateurJsxLoaded=true;
-    }
-    _scheduleTransportComparateurMount(15);
-  }catch(e){
-    if(hint)hint.textContent='Impossible de charger le comparateur (réseau ou scripts bloqués).';
-  }
-}
-
 // ── Render ──────────────────────────────────────────────────────
 function render(){
-  if(window.__transportReactRoot){
-    try{window.__transportReactRoot.unmount();}catch(e){}
-    window.__transportReactRoot=null;
-  }
   const root=document.getElementById('root');root.innerHTML='';
   document.body.classList.toggle('sb-open', !!S.sidebarOpen);
   document.body.classList.toggle('has-topbar', S.app==='prod' || S.app==='stock' || S.app==='compta' || S.app==='expe');
@@ -5428,10 +6206,7 @@ function render(){
   if(S.contactOpen){
     root.appendChild(renderContactModal());
   }
-
-  if(S.user&&S.app==='expe'&&(S.expeTab||'suivis')==='comparateur'){
-    queueMicrotask(()=>{initTransportComparateurIfNeeded();});
-  }
+  // contact modal for expe is rendered inside renderExpe()
 
   // PWA: feature temporairement retirée. (setupInstallButton supprimé)
 }
@@ -5446,7 +6221,7 @@ async function nav(){
   else if(S.page==='historique')await loadHist();
   else if(S.page==='saisies')await loadSaisies();
   else if(S.page==='import')await loadImports();
-  else if(S.page==='rentabilite')await loadDevis();
+  else if(S.page==='rentabilite'){await loadDevis();await loadRentPlanning();}
   else if(S.page==='dossiers')await loadDos();
   render();
 }

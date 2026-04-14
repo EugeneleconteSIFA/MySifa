@@ -390,9 +390,44 @@ def _migrate(conn):
             ("planned_start", "ALTER TABLE planning_entries ADD COLUMN planned_start TEXT"),
             ("planned_end", "ALTER TABLE planning_entries ADD COLUMN planned_end TEXT"),
             ("statut_force", "ALTER TABLE planning_entries ADD COLUMN statut_force INTEGER DEFAULT 0"),
+            # Rentabilité v2: groupement split + liaison devis/production
+            ("group_id", "ALTER TABLE planning_entries ADD COLUMN group_id TEXT"),
+            ("split_parent_id", "ALTER TABLE planning_entries ADD COLUMN split_parent_id INTEGER"),
         ]:
             if col not in pe_cols:
                 conn.execute(sql)
+
+        # Backfill group_id pour les entrées existantes (valeur stable et unique par ligne)
+        try:
+            conn.execute(
+                "UPDATE planning_entries SET group_id=CAST(id AS TEXT) WHERE group_id IS NULL OR TRIM(group_id)=''"
+            )
+        except Exception:
+            pass
+
+    # Tables Rentabilité v2 (liens planning -> devis + no_dossier production)
+    existing_tables = {row[0] for row in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+    ).fetchall()}
+    if "rent_links" not in existing_tables:
+        conn.execute("""CREATE TABLE rent_links (
+            planning_entry_id INTEGER PRIMARY KEY,
+            devis_id INTEGER,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (planning_entry_id) REFERENCES planning_entries(id) ON DELETE CASCADE,
+            FOREIGN KEY (devis_id) REFERENCES devis(id) ON DELETE SET NULL
+        )""")
+    if "rent_prod_links" not in existing_tables:
+        conn.execute("""CREATE TABLE rent_prod_links (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            planning_entry_id INTEGER NOT NULL,
+            no_dossier TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (planning_entry_id) REFERENCES planning_entries(id) ON DELETE CASCADE,
+            UNIQUE(planning_entry_id, no_dossier)
+        )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_rent_links_devis ON rent_links(devis_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_rent_prod_links_entry ON rent_prod_links(planning_entry_id)")
 
     # Jours fériés / jours off par machine (standalone planning)
     existing_tables = {row[0] for row in conn.execute(

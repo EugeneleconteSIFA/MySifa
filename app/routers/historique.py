@@ -6,7 +6,7 @@ from typing import Optional, List, Any, Dict
 from fastapi import APIRouter, Request, Query
 from database import get_db, parse_datetime
 from services.analyse import analyse_saisie_errors
-from services.auth_service import get_current_user, is_admin
+from services.auth_service import get_current_user, is_admin, can_view_all_prod
 from config import CODE_ARRIVEE, CODE_DEPART, CODE_DEBUT_DOS, CODE_FIN_DOS, CODE_CALAGE, CODE_PRODUCTION, CODE_REPRISE
 
 router = APIRouter()
@@ -189,7 +189,7 @@ def dashboard_historique(
     date_to: Optional[str] = None,
 ):
     user = get_current_user(request)
-    if not is_admin(user) and not user.get("operateur_lie"):
+    if not can_view_all_prod(user) and not user.get("operateur_lie"):
         return {**BLOCKED}
 
     operateurs = [o for o in (operateur or []) if o]
@@ -197,7 +197,7 @@ def dashboard_historique(
 
     # ── Filtre principal (avec dossiers) ──────────────────────────
     where, params = ["1=1"], []
-    if is_admin(user):
+    if can_view_all_prod(user):
         if operateurs:
             where.append(f"operateur IN ({','.join('?'*len(operateurs))})")
             params.extend(operateurs)
@@ -212,7 +212,7 @@ def dashboard_historique(
 
     # ── Filtre Sanity (sans filtre dossier) ───────────────────────
     ws, ps = ["1=1"], []
-    if is_admin(user):
+    if can_view_all_prod(user):
         if operateurs:
             ws.append(f"operateur IN ({','.join('?'*len(operateurs))})")
             ps.extend(operateurs)
@@ -324,7 +324,7 @@ def dashboard_historique(
     sanity        = compute_sanity_score_v2(san_list)
 
     sanity_by_operateur = None
-    if is_admin(user):
+    if can_view_all_prod(user):
         # Si multi-sélection opérateurs => un sanity score par opérateur
         sel_ops = operateurs
         if sel_ops and len(sel_ops) > 1:

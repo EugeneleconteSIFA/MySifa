@@ -11,6 +11,7 @@ from config import (
     ROLE_LOGISTIQUE,
     ROLE_COMPTABILITE,
     ROLE_EXPEDITION,
+    ROLE_COMMERCIAL,
     SUPERADMIN_EMAIL,
     default_app_access_for_role,
 )
@@ -64,6 +65,7 @@ def access_matrix(request: Request):
         ROLE_LOGISTIQUE: "Logistique",
         ROLE_COMPTABILITE: "Comptabilité",
         ROLE_EXPEDITION: "Expédition",
+        ROLE_COMMERCIAL: "Commercial",
         ROLE_SUPERADMIN: "Super admin",
     }
 

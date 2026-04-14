@@ -3,7 +3,7 @@ from typing import Optional, List
 from fastapi import APIRouter, Request, Query
 from database import get_db
 from services.timings import compute_dossier_times
-from services.auth_service import get_current_user, is_admin
+from services.auth_service import get_current_user, is_admin, can_view_all_prod
 
 router = APIRouter()
 
@@ -16,7 +16,7 @@ def dashboard_production(
     date_to: Optional[str] = None,
 ):
     user = get_current_user(request)
-    if not is_admin(user) and not user.get("operateur_lie"):
+    if not can_view_all_prod(user) and not user.get("operateur_lie"):
         return {"blocked": True, "message": "Compte non lié à un opérateur.",
                 "completed_dossiers": [],
                 "produit": {"dossiers": 0, "etiquettes": 0, "metrage_m": 0},
@@ -31,7 +31,7 @@ def dashboard_production(
     dossiers   = [d for d in (no_dossier or []) if d]
 
     where, params = ["1=1"], []
-    if is_admin(user):
+    if can_view_all_prod(user):
         if operateurs:
             where.append(f"operateur IN ({','.join('?'*len(operateurs))})")
             params.extend(operateurs)

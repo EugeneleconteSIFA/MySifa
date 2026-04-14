@@ -573,7 +573,7 @@ async function submitMouvement(body) {
 
 const STOCK_EMPL_BASE = ['A121','A122','A123','B121','B122','B123','C121','C122','C123'];
 const LS_STOCK_EMPL_CUSTOM = 'mysifa_stock_empl_custom';
-const STOCK_UNITS_BASE = ['cartons','bobines','étiquettes','palettes'];
+const STOCK_UNITS_BASE = ['cartons','bobines','étiquettes','palettes','paravents','boîtes'];
 const LS_STOCK_UNITS_CUSTOM = 'mysifa_stock_units_custom_v1';
 
 function loadPageEmplCustom() {
@@ -1237,7 +1237,7 @@ function buildDashboard() {
       el('div',{cls:'stat-card'},el('div',{cls:'stat-label'},'Total unités'),el('div',{cls:'stat-value'},fN(s.total_unites||0))),
       el('div',{cls:'stat-card'},el('div',{cls:'stat-label'},'À inventorier'),el('div',{cls:'stat-value warn'},s.nb_a_inventorier||0))
     ),
-    el('div',{cls:'card',style:{overflow:'visible'}},
+    ...(!S.stockReadOnly ? [el('div',{cls:'card',style:{overflow:'visible'}},
       el('div',{cls:'card-header'},el('div',{cls:'card-title'},'➕ Ajouter au stock')),
       el('div',{cls:'add-form'},
         (function(){
@@ -1295,7 +1295,7 @@ function buildDashboard() {
             )          );
         })()
       )
-    ),
+    )] : []),
     buildMvtHistory(d.derniers_mouvements||[])
   );
 }
@@ -1335,7 +1335,7 @@ function buildProduitDetail() {
         )))
       );
 
-  const actions = el('div',{cls:'action-bar',style:{marginTop:'14px'}},
+  const actions = S.stockReadOnly ? el('div') : el('div',{cls:'action-bar',style:{marginTop:'14px'}},
     el('button',{cls:'action-btn entree',on:{click:()=>openMvtModal(p.id,p.reference,'','entree')}},'↓ Entrée'),
     el('button',{cls:'action-btn sortie',on:{click:()=>openMvtModal(p.id,p.reference,'','sortie')}},'↑ Sortie'),
     el('button',{cls:'action-btn inventaire',on:{click:()=>openMvtModal(p.id,p.reference,'','inventaire')}},'= Inventaire')
@@ -1461,7 +1461,7 @@ function render() {
     el('div', { cls:'sidebar-nav' },
       ...[
         { tab:'dashboard',  icon:'grid', label:'Dashboard' },
-        { tab:'inventaire', icon:'clipboard', label:'Inventaire' },
+        ...(!S.stockReadOnly ? [{ tab:'inventaire', icon:'clipboard', label:'Inventaire' }] : []),
       ].map(n => el('button', { cls:'nav-btn'+(S.tab===n.tab?' active':''), 'data-tab':n.tab, on:{ click:()=>goToTab(n.tab) } },
         iconEl(n.icon,16),
         el('span', null, ' ' + n.label)
@@ -1476,7 +1476,7 @@ function render() {
         el('div', { cls:'uc-role' }, S.user.role||'')
       ) : null,
       (() => {
-        if(!S.user || S.user.role==='superadmin') return null;
+        if(!S.user) return null;
         const b=el('button',{cls:'support-btn',type:'button',on:{click:()=>{S.contactOpen=true; render();}}});
         const ico=el('span',{cls:'support-ico'}); ico.innerHTML=window.MySifaSupport?.iconSvg?.()||'';
         b.append(ico, el('span',null,'Contacter le support'));
@@ -1633,6 +1633,7 @@ async function init() {
   const user = await api('/api/auth/me').catch(()=>null);
   if (!user) { window.location.href='/'; return; }
   S.user = user;
+  S.stockReadOnly = (user.role === 'commercial');
   render();
   await loadDashboard();
 }

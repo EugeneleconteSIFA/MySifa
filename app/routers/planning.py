@@ -810,11 +810,13 @@ def split_entry(machine_id: int, entry_id: int, request: Request):
         )
 
         # Mettre à jour la durée du premier (entry_id)
+        group_id = str(exd.get("group_id") or "").strip() or str(entry_id)
+        # S'assurer que l'entrée source a bien un group_id stable (utilisé par Rentabilité pour regrouper un split)
         conn.execute(
             """UPDATE planning_entries
-               SET duree_heures=?, updated_at=?, planned_start=NULL, planned_end=NULL
+               SET duree_heures=?, updated_at=?, planned_start=NULL, planned_end=NULL, group_id=?
                WHERE id=? AND machine_id=?""",
-            (d1, now, entry_id, machine_id),
+            (d1, now, group_id, entry_id, machine_id),
         )
 
         # Dupliquer la ligne
@@ -850,6 +852,15 @@ def split_entry(machine_id: int, entry_id: int, request: Request):
                 payload.get("commentaire"),
             ),
         )
+        # Assigner group_id identique + split_parent_id sur la nouvelle entrée
+        new_id = conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
+        try:
+            conn.execute(
+                "UPDATE planning_entries SET group_id=?, split_parent_id=? WHERE id=? AND machine_id=?",
+                (group_id, entry_id, int(new_id), machine_id),
+            )
+        except Exception:
+            pass
 
         _invalidate_attente_plans(conn, machine_id)
         conn.commit()

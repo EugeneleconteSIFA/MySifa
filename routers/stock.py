@@ -57,6 +57,13 @@ def require_stock(request: Request) -> dict:
     return user
 
 
+def require_stock_write(request: Request) -> dict:
+    user = require_stock(request)
+    if user.get("role") == "commercial":
+        raise HTTPException(403, "Accès en lecture seule pour le rôle commercial")
+    return user
+
+
 # ── Helpers FIFO ──────────────────────────────────────────────────
 def get_stock_produit_total(conn, produit_id: int) -> dict:
     """Quantité totale + date FIFO (lot le plus ancien avec restant > 0)."""
@@ -338,7 +345,7 @@ def get_produit_emplacements_compat(produit_id: int, request: Request):
 
 @router.post("/api/stock/produits")
 async def create_produit(request: Request):
-    user = require_stock(request)
+    user = require_stock_write(request)
     body = await request.json()
     ref = (body.get("reference") or "").strip().upper()
     if not ref:
@@ -371,7 +378,7 @@ async def create_produit(request: Request):
 
 @router.put("/api/stock/produits/{produit_id}")
 async def update_produit(produit_id: int, request: Request):
-    require_stock(request)
+    require_stock_write(request)
     body = await request.json()
     now = datetime.now().isoformat()
     with get_db() as conn:
@@ -385,7 +392,7 @@ async def update_produit(produit_id: int, request: Request):
 
 @router.delete("/api/stock/produits/{produit_id}")
 def delete_produit(produit_id: int, request: Request):
-    require_stock(request)
+    require_stock_write(request)
     with get_db() as conn:
         conn.execute("DELETE FROM lots_stock WHERE produit_id=?", (produit_id,))
         conn.execute("DELETE FROM stock_emplacements WHERE produit_id=?", (produit_id,))
@@ -458,7 +465,7 @@ def get_emplacement(emplacement: str, request: Request):
 # ── Mouvement de stock ────────────────────────────────────────────
 @router.post("/api/stock/mouvement")
 async def mouvement_stock(request: Request):
-    user = require_stock(request)
+    user = require_stock_write(request)
     body = await request.json()
 
     produit_id = body.get("produit_id")
