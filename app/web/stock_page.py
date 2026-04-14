@@ -283,6 +283,10 @@ body.light .field-input.empl-upper::placeholder{
 .mvt-icon.inventaire{background:rgba(167,139,250,.15);color:var(--c2)}
 .mvt-body{flex:1;min-width:0}
 .mvt-line1{font-size:13px;font-weight:600;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mvt-ref-link{background:none;border:none;padding:0;margin:0;color:var(--text);cursor:pointer;
+  font-weight:800;font-family:inherit;text-align:left}
+.mvt-ref-link:hover{text-decoration:underline;filter:brightness(1.05)}
+.mvt-ref-link:active{transform:translateY(1px)}
 .mvt-qte-entree{color:var(--success);font-family:monospace;font-weight:700}
 .mvt-qte-sortie{color:var(--danger);font-family:monospace;font-weight:700}
 .mvt-qte-inventaire{color:var(--c2);font-family:monospace;font-weight:700}
@@ -335,6 +339,13 @@ body.light .field-input.empl-upper::placeholder{
   font-weight:700;border-bottom:1px solid var(--border);transition:background .1s}
 .empl-sugg-item:last-child{border-bottom:none}
 .empl-sugg-item:hover{background:var(--accent-bg);color:var(--accent)}
+.unit-suggest-item{padding:10px 14px;cursor:pointer;font-family:inherit;font-size:13px;
+  font-weight:700;border-bottom:1px solid var(--border);transition:background .1s}
+.unit-suggest-item:last-child{border-bottom:none}
+.unit-suggest-item:hover{background:var(--accent-bg);color:var(--accent)}
+.unit-suggest-add{padding:10px 14px;cursor:pointer;font-size:12px;font-weight:800;color:var(--c2);
+  background:rgba(167,139,250,.10);border-top:1px solid rgba(167,139,250,.35)}
+.unit-suggest-add:hover{background:rgba(167,139,250,.16)}
 .modal-actions{display:grid;grid-template-columns:1fr 2fr;gap:10px;margin-top:16px}
 .btn-cancel{background:transparent;border:1.5px solid var(--border);border-radius:12px;
   padding:13px;font-size:14px;font-weight:700;color:var(--text2);cursor:pointer;font-family:inherit}
@@ -427,6 +438,11 @@ let S = {
   contactSubject: '',
   contactMessage: '',
   contactSending: false,
+  // Unités de vente personnalisées
+  unitModalOpen: false,
+  unitNewLabel: '',
+  unitNewBase: 'cartons',
+  unitNewQty: '',
 };
 
 // ── API ─────────────────────────────────────────────────────────
@@ -553,6 +569,8 @@ async function submitMouvement(body) {
 
 const STOCK_EMPL_BASE = ['A121','A122','A123','B121','B122','B123','C121','C122','C123'];
 const LS_STOCK_EMPL_CUSTOM = 'mysifa_stock_empl_custom';
+const STOCK_UNITS_BASE = ['cartons','bobines','étiquettes','palettes'];
+const LS_STOCK_UNITS_CUSTOM = 'mysifa_stock_units_custom_v1';
 
 function loadPageEmplCustom() {
   try {
@@ -638,7 +656,116 @@ function wireStockPageAddEmplCombo() {
   input.addEventListener('blur', () => { setTimeout(hidePageAddEmplDropdown, 200); });
 }
 
-async function createProduit(ref, commentaire, quantite, emplacement) {
+function loadPageUnitCustom(){
+  try{
+    const j=localStorage.getItem(LS_STOCK_UNITS_CUSTOM);
+    const a=j?JSON.parse(j):[];
+    if(!Array.isArray(a)) return [];
+    return a
+      .map(x=>({
+        label:String(x&&x.label||'').trim(),
+        base:String(x&&x.base||'').trim().toLowerCase(),
+        qty:Number(x&&x.qty),
+      }))
+      .filter(x=>x.label && STOCK_UNITS_BASE.includes(x.base) && isFinite(x.qty) && x.qty>0);
+  }catch(e){ return []; }
+}
+function savePageUnitCustom(arr){
+  try{ localStorage.setItem(LS_STOCK_UNITS_CUSTOM, JSON.stringify(arr)); }catch(e){}
+}
+function addPageCustomUnit(label, base, qty){
+  const l=String(label||'').trim();
+  const b=String(base||'').trim().toLowerCase();
+  const q=Number(qty);
+  if(!l) return {ok:false, reason:"Libellé obligatoire"};
+  if(!STOCK_UNITS_BASE.includes(b)) return {ok:false, reason:"Base invalide"};
+  if(!isFinite(q) || q<=0) return {ok:false, reason:"Quantité invalide"};
+  const cur=loadPageUnitCustom();
+  const key=l.toLowerCase();
+  if(cur.some(x=>String(x.label||'').trim().toLowerCase()===key)){
+    return {ok:false, reason:"Unité déjà existante"};
+  }
+  cur.push({label:l, base:b, qty:q});
+  savePageUnitCustom(cur);
+  return {ok:true};
+}
+function getUnitBase(label){
+  const l=String(label||'').trim().toLowerCase();
+  if(!l) return '';
+  if(STOCK_UNITS_BASE.includes(l)) return l;
+  const u=loadPageUnitCustom().find(x=>String(x.label||'').trim().toLowerCase()===l);
+  return u ? u.base : l;
+}
+function allUnitLabels(){
+  const custom=loadPageUnitCustom().map(x=>x.label);
+  return [...new Set([...STOCK_UNITS_BASE, ...custom])];
+}
+function hidePageAddUnitDropdown(){
+  const list=document.getElementById('stock-page-add-unit-suggestions');
+  if(list) list.style.display='none';
+}
+function refreshPageAddUnitDropdownInner(){
+  const input=document.getElementById('stock-page-add-unit-input');
+  const list=document.getElementById('stock-page-add-unit-suggestions');
+  if(!input || !list) return;
+  const q=String(input.value||'').trim().toLowerCase();
+  const all=allUnitLabels();
+  let filtered=q ? all.filter(x=>String(x||'').toLowerCase().includes(q)) : all.slice();
+  filtered = filtered.slice(0, 24);
+  list.innerHTML='';
+  filtered.forEach(lbl=>{
+    const row=document.createElement('div');
+    row.className='unit-suggest-item';
+    row.textContent=lbl;
+    row.addEventListener('mousedown', e=>{ e.preventDefault(); input.value=lbl; hidePageAddUnitDropdown(); });
+    list.appendChild(row);
+  });
+  const addRow=document.createElement('div');
+  addRow.className='unit-suggest-add';
+  addRow.textContent='+ Autre (créer unité)';
+  addRow.addEventListener('mousedown', e=>{
+    e.preventDefault();
+    S.unitModalOpen=true;
+    S.unitNewLabel=String(input.value||'').trim();
+    S.unitNewBase=STOCK_UNITS_BASE.includes(q)?q:'cartons';
+    S.unitNewQty='';
+    render();
+  });
+  list.appendChild(addRow);
+}
+function wireStockPageAddUnitCombo(){
+  const input=document.getElementById('stock-page-add-unit-input');
+  if(!input || input.dataset.wired==='1') return;
+  input.dataset.wired='1';
+  const list=document.getElementById('stock-page-add-unit-suggestions');
+  input.addEventListener('focus', ()=>{
+    if(list){ list.style.display='block'; refreshPageAddUnitDropdownInner(); }
+  });
+  input.addEventListener('input', ()=>{
+    if(list){ list.style.display='block'; refreshPageAddUnitDropdownInner(); }
+  });
+  input.addEventListener('blur', ()=>{ setTimeout(hidePageAddUnitDropdown, 200); });
+}
+
+function _checkUnitQtyRange(unite, qte){
+  const u=String(unite||'').trim().toLowerCase();
+  const n=Number(qte);
+  if(!u || !isFinite(n)) return null;
+  const rules=[
+    {u:'étiquettes',min:10000,max:10000000,label:'étiquettes'},
+    {u:'bobines',min:10,max:2000,label:'bobines'},
+    {u:'cartons',min:1,max:1000,label:'cartons'},
+    {u:'palettes',min:1,max:3,label:'palettes'},
+  ];
+  const r=rules.find(x=>x.u===u);
+  if(!r) return null;
+  if(n<r.min || n>r.max){
+    return `Alerte unité/quantité : pour ${r.label}, la quantité attendue est entre ${r.min} et ${r.max}.`;
+  }
+  return null;
+}
+
+async function createProduit(ref, commentaire, quantite, emplacement, uniteVente) {
   try {
     const empl = (emplacement || '').trim().toUpperCase();
     if (!empl || !isStockEmplacementCode(empl)) {
@@ -650,7 +777,18 @@ async function createProduit(ref, commentaire, quantite, emplacement) {
       showToast('Quantité obligatoire (nombre supérieur à 0)', 'error');
       return;
     }
-    const body = { reference: ref, quantite: qte };
+    const unite = (uniteVente || '').trim();
+    if(!unite){
+      showToast("Unité de vente obligatoire", "error");
+      return;
+    }
+    const base = getUnitBase(unite);
+    const warn = _checkUnitQtyRange(base, qte);
+    if(warn){
+      const ok = confirm(warn + "\n\nVoulez-vous continuer quand même ?");
+      if(!ok) return;
+    }
+    const body = { reference: ref, quantite: qte, unite };
     if (commentaire) body.commentaire = commentaire;
     const r = await api('/api/stock/produits', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
     if (!r || r.id == null) return;
@@ -658,8 +796,8 @@ async function createProduit(ref, commentaire, quantite, emplacement) {
       produit_id: r.id, emplacement: empl, type_mouvement: 'entree', quantite: qte
     }) });
     const msg = r.existing
-      ? ('Référence déjà en base — ' + fN(qte) + ' u. ajoutée(s) en ' + empl)
-      : ('Produit créé — ' + fN(qte) + ' u. en ' + empl);
+      ? ('Référence déjà en base — ' + fN(qte) + ' ' + unite + ' ajoutée(s) en ' + empl)
+      : ('Produit créé — ' + fN(qte) + ' ' + unite + ' en ' + empl);
     showToast(msg);
     S.showAddForm = false;
     await loadDashboard();
@@ -1060,12 +1198,16 @@ function buildMvtHistory(mouvements, unite='u.') {
       const icons={entree:'↓',sortie:'↑',inventaire:'='};
       const signe=m.type_mouvement==='entree'?'+':m.type_mouvement==='sortie'?'-':'=';
       const actor = (m.created_by_nom || m.created_by_name || '').trim();
+      const unit = (m.unite || unite || 'u.').trim();
+      const refTxt = m.reference || m.emplacement || '';
       return el('div',{cls:'mvt-row'},
         el('div',{cls:'mvt-icon '+m.type_mouvement},icons[m.type_mouvement]||'·'),
         el('div',{cls:'mvt-body'},
           el('div',{cls:'mvt-line1'},
-            el('span',null,m.reference||m.emplacement||''),
-            el('span',{cls:'mvt-qte-'+m.type_mouvement},signe+fN(m.quantite)+' '+unite)
+            (m.produit_id && m.reference)
+              ? el('button',{cls:'mvt-ref-link',type:'button',on:{click:()=>loadProduit(m.produit_id)}},refTxt)
+              : el('span',null,refTxt),
+            el('span',{cls:'mvt-qte-'+m.type_mouvement},signe+fN(m.quantite)+' '+unit)
           ),
           el('div',{cls:'mvt-line2'},
             fD(m.created_at)+' · '+(m.emplacement||'')+(actor?' · '+actor:'')
@@ -1094,6 +1236,13 @@ function buildDashboard() {
         (function(){
           const refI = el('input',{cls:'field-input',placeholder:'Référence (neuve ou déjà en base)',autocomplete:'off',style:{direction:'ltr'}});
           const qtyI = el('input',{cls:'field-input',type:'text',inputmode:'decimal',placeholder:'Quantité *',autocomplete:'off',style:{direction:'ltr'}});
+          const unitWrap = el('div', { cls: 'empl-combo-wrap' });
+          const unitInp = el('input', { cls: 'field-input', type: 'text', id: 'stock-page-add-unit-input',
+            placeholder: 'Unité de vente * (ex. cartons, 500 cartons…)', autocomplete: 'off',
+            title: 'Obligatoire — suggestions + ligne violette « Autre »', style: { direction: 'ltr' } });
+          const unitList = el('div', { cls: 'empl-suggestions', id: 'stock-page-add-unit-suggestions', style: { display: 'none' } });
+          unitWrap.appendChild(unitInp);
+          unitWrap.appendChild(unitList);
           const emplWrap = el('div', { cls: 'empl-combo-wrap' });
           const emplInp = el('input', { cls: 'field-input empl-upper', type: 'text', id: 'stock-page-add-empl-input',
             placeholder: 'Emplacement * (ex. a121, z999…)', autocomplete: 'off',
@@ -1105,9 +1254,12 @@ function buildDashboard() {
           return el('div',{cls:'add-form-inner'},
             el('div',{style:{fontSize:'12px',color:'var(--muted)',marginBottom:'10px',lineHeight:'1.45'}},
               'Même référence qu’un produit existant : une entrée de stock est enregistrée, sans dupliquer la fiche.'),
+            el('div',{cls:'add-form-row',style:{gridTemplateColumns:'1fr'}},
+              el('div',null,el('label',{cls:'field-label'},'Référence *'),refI)
+            ),
             el('div',{cls:'add-form-row'},
-              el('div',null,el('label',{cls:'field-label'},'Référence *'),refI),
-              el('div',null,el('label',{cls:'field-label'},'Quantité *'),qtyI)
+              el('div',null,el('label',{cls:'field-label'},'Quantité *'),qtyI),
+              el('div',null,el('label',{cls:'field-label'},'Unité de vente *'),unitWrap)
             ),
             el('div',{cls:'add-form-row',style:{gridTemplateColumns:'1fr'}},
               el('div',null,el('label',{cls:'field-label'},'Emplacement *'),emplWrap)
@@ -1130,8 +1282,8 @@ function buildDashboard() {
                   showToast('Quantité obligatoire (nombre supérieur à 0)', 'error');
                   return;
                 }
-                await createProduit(ref, com, qte, emplVal);
-                refI.value=''; qtyI.value=''; comI.value=''; emplInp.value='';
+                await createProduit(ref, com, qte, emplVal, unitInp.value);
+                refI.value=''; qtyI.value=''; comI.value=''; emplInp.value=''; unitInp.value='';
               }}},'Ajouter au stock')
             )          );
         })()
@@ -1270,13 +1422,20 @@ function renderContent() {
   else content = buildDashboard();
 
   if (content) area.appendChild(content);
-  if (S.tab === 'dashboard' && !S.selProduit && !S.selEmpl) requestAnimationFrame(() => wireStockPageAddEmplCombo());}
+  if (S.tab === 'dashboard' && !S.selProduit && !S.selEmpl){
+    requestAnimationFrame(() => {
+      wireStockPageAddEmplCombo();
+      wireStockPageAddUnitCombo();
+    });
+  }
+}
 
 function render() {
   // La modale "contact support" est montée sur <body> : il faut la synchroniser
   // avec l'état à chaque rendu pour éviter un overlay "figé" (ex: reste sur "Envoi…").
   try{
     document.querySelectorAll('.contact-modal-overlay').forEach(n=>n.remove());
+    document.querySelectorAll('.unit-modal-overlay').forEach(n=>n.remove());
   }catch(e){}
 
   const root = document.getElementById('root');
@@ -1384,6 +1543,76 @@ function render() {
     });
     actions.appendChild(send);
     box.appendChild(actions);
+    ov.appendChild(box);
+    document.body.appendChild(ov);
+  }
+
+  if(S.unitModalOpen){
+    const ov=el('div',{cls:'unit-modal-overlay contact-modal-overlay',on:{click:(e)=>{ if(e.target===ov){ S.unitModalOpen=false; render(); } }}});
+    const box=el('div',{cls:'contact-modal'});
+    box.appendChild(el('button',{cls:'contact-close',type:'button',on:{click:()=>{S.unitModalOpen=false; render();}}},'×'));
+    box.appendChild(el('h3',null,'Créer une unité de vente'));
+
+    const lab=el('input',{type:'text',placeholder:'Libellé (ex. 500 cartons)'});
+    lab.value=S.unitNewLabel||'';
+    lab.addEventListener('input',()=>{S.unitNewLabel=lab.value;});
+    box.appendChild(el('label',null,'Libellé *'));
+    box.appendChild(lab);
+
+    // Base: même UX que "Unité de vente" (champ + suggestions), sans option "Autre"
+    const baseWrap = el('div', { cls: 'empl-combo-wrap' });
+    const baseInp = el('input', { cls:'field-input', type:'text', id:'stock-page-unit-base-input',
+      placeholder:'Base * (cartons, bobines, étiquettes, palettes)', autocomplete:'off', style:{direction:'ltr'} });
+    const baseList = el('div', { cls:'empl-suggestions', id:'stock-page-unit-base-suggestions', style:{ display:'none' } });
+    baseInp.value = String(S.unitNewBase || 'cartons');
+    baseInp.addEventListener('input', ()=>{ S.unitNewBase = baseInp.value; });
+    baseInp.addEventListener('focus', ()=>{ baseList.style.display='block'; refreshUnitBaseDropdown(); });
+    baseInp.addEventListener('blur', ()=>{ setTimeout(()=>{ baseList.style.display='none'; }, 200); });
+    baseWrap.appendChild(baseInp);
+    baseWrap.appendChild(baseList);
+    box.appendChild(el('label',null,'Base *'));
+    box.appendChild(baseWrap);
+
+    function refreshUnitBaseDropdown(){
+      const q = String(baseInp.value||'').trim().toLowerCase();
+      baseList.innerHTML='';
+      let filtered = q ? STOCK_UNITS_BASE.filter(x=>String(x).toLowerCase().includes(q)) : STOCK_UNITS_BASE.slice();
+      filtered.slice(0, 24).forEach(lbl=>{
+        const row=document.createElement('div');
+        row.className='unit-suggest-item';
+        row.textContent=lbl;
+        row.addEventListener('mousedown', e=>{ e.preventDefault(); baseInp.value=lbl; S.unitNewBase=lbl; baseList.style.display='none'; });
+        baseList.appendChild(row);
+      });
+    }
+
+    const qty=el('input',{type:'text',inputmode:'numeric',placeholder:'Quantité (ex. 500)'});
+    qty.value=String(S.unitNewQty||'');
+    qty.addEventListener('input',()=>{S.unitNewQty=qty.value;});
+    box.appendChild(el('label',null,'Quantité *'));
+    box.appendChild(qty);
+
+    const actions=el('div',{cls:'contact-actions'});
+    actions.appendChild(el('button',{cls:'btn-cancel',type:'button',on:{click:()=>{S.unitModalOpen=false; render();}}},'Annuler'));
+    const create=el('button',{cls:'btn',type:'button'},'Créer');
+    create.addEventListener('click',()=>{
+      const l=String(S.unitNewLabel||'').trim();
+      const b=String(S.unitNewBase||'cartons').trim().toLowerCase();
+      const q=Number(String(S.unitNewQty||'').trim().replace(',','.'));
+      const r=addPageCustomUnit(l,b,q);
+      if(!r.ok){ showToast(r.reason||'Erreur','error'); return; }
+      // affecte dans le champ unité si présent
+      try{
+        const inp=document.getElementById('stock-page-add-unit-input');
+        if(inp) inp.value=l;
+      }catch(e){}
+      S.unitModalOpen=false;
+      render();
+      showToast('Unité ajoutée : '+l,'success');
+    });
+    actions.appendChild(create);
+    box.appendChild(actions);
+
     ov.appendChild(box);
     document.body.appendChild(ov);
   }

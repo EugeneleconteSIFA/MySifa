@@ -223,7 +223,7 @@ def vue_globale(request: Request):
                LEFT JOIN stock_emplacements s ON s.produit_id = p.id"""
         ).fetchone()
         mvts = conn.execute(
-            f"""SELECT {_MVT_FIELDS}, p.reference, p.designation,
+            f"""SELECT {_MVT_FIELDS}, p.reference, p.designation, p.unite,
                       COALESCE(NULLIF(TRIM(m.created_by_name),''), u.nom) AS created_by_nom
                FROM mouvements_stock m
                JOIN produits p ON p.id = m.produit_id
@@ -292,9 +292,10 @@ def get_produit(produit_id: int, request: Request):
 
         # Historique mouvements
         mvts = conn.execute(
-            f"""SELECT {_MVT_FIELDS},
+            f"""SELECT {_MVT_FIELDS}, p.reference, p.designation, p.unite,
                       COALESCE(NULLIF(TRIM(m.created_by_name),''), u.nom) AS created_by_nom
                FROM mouvements_stock m
+               JOIN produits p ON p.id=m.produit_id
                {_STOCK_USER_JOIN}
                WHERE m.produit_id=?
                ORDER BY m.created_at DESC LIMIT 80""",
@@ -428,7 +429,7 @@ def get_emplacement(emplacement: str, request: Request):
         ).fetchall()
 
         mvts = conn.execute(
-            f"""SELECT {_MVT_FIELDS}, p.reference, p.designation,
+            f"""SELECT {_MVT_FIELDS}, p.reference, p.designation, p.unite,
                       COALESCE(NULLIF(TRIM(m.created_by_name),''), u.nom) AS created_by_nom
                FROM mouvements_stock m
                JOIN produits p ON p.id=m.produit_id
@@ -662,7 +663,7 @@ def dashboard(request: Request):
         ).fetchone()
 
         derniers_mvts = conn.execute(
-            f"""SELECT {_MVT_FIELDS}, p.reference, p.designation,
+            f"""SELECT {_MVT_FIELDS}, p.reference, p.designation, p.unite,
                       COALESCE(NULLIF(TRIM(m.created_by_name),''), u.nom) AS created_by_nom
                FROM mouvements_stock m
                JOIN produits p ON p.id=m.produit_id
