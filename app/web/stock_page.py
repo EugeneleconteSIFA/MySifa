@@ -366,6 +366,22 @@ body.light .field-input.empl-upper::placeholder{
 .traca-dev-banner{display:flex;align-items:center;gap:10px;background:var(--accent-bg);
   border:1px solid var(--accent);border-radius:10px;padding:10px 14px;
   font-size:12px;color:var(--accent);margin-bottom:14px;font-weight:600}
+/* ── Formulaire étiquette palettes ── */
+.etiq-form-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.etiq-form-field{display:flex;flex-direction:column;gap:4px}
+.etiq-form-label{font-size:11px;font-weight:600;opacity:0.6;text-transform:uppercase;letter-spacing:.4px}
+.etiq-preview-section{margin-top:4px;margin-bottom:4px}
+.etiq-preview-title{font-size:11px;opacity:0.5;margin-bottom:8px;font-style:italic}
+.etiq-preview-grid{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:4px}
+.etiq-label-card{width:105px;height:50px;border:1.5px solid #444;border-radius:2px;
+  padding:3px 5px;display:flex;flex-direction:column;justify-content:space-between;
+  background:#fff;color:#000;font-family:Arial,sans-serif;flex-shrink:0;position:relative}
+.etiq-lbl-brand{font-size:6px;color:#888;letter-spacing:.3px;text-transform:uppercase}
+.etiq-lbl-ref{font-size:8.5px;font-weight:700;line-height:1.15;flex:1;display:flex;align-items:center;
+  overflow:hidden;word-break:break-all}
+.etiq-lbl-palette{font-size:11px;font-weight:900;text-align:right;letter-spacing:.5px;line-height:1}
+.etiq-lbl-num{font-size:7px;position:absolute;top:3px;right:5px;color:#aaa;font-style:italic}
+.etiq-more-note{font-size:11px;opacity:0.5;padding:8px 0;font-style:italic}
 
 /* ── Inventaire chaîne ── */
 .inv-item{padding:13px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s}
@@ -566,6 +582,7 @@ function icon(name, size=16){
     'settings': '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
     'tag': '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>',
     'chevron-right': '<polyline points="9 18 15 12 9 6"/>',
+    'atelier': '<path d="M2 20h20"/><path d="M4 20V10l8-6 8 6v10"/><path d="M9 20v-5h6v5"/><path d="M10 10h4"/><path d="M12 10v5"/>',
   };
   return `<svg ${a} aria-hidden="true" style="display:inline-block;vertical-align:middle;flex-shrink:0">${p[name]||p['grid']}</svg>`;
 }
@@ -1571,8 +1588,8 @@ const TRACA_POSTES = [
   { id:'bureaux',    label:'Bureaux',      icon:'briefcase', color:'#6366f1', colorBg:'rgba(99,102,241,.12)' },
   { id:'cohesio1',   label:'Cohésio 1',    icon:'cpu',       color:'#f59e0b', colorBg:'rgba(245,158,11,.12)' },
   { id:'cohesio2',   label:'Cohésio 2',    icon:'cpu',       color:'#f59e0b', colorBg:'rgba(245,158,11,.12)' },
-  { id:'machine3',   label:'Machine 3',    icon:'cpu',       color:'#64748b', colorBg:'rgba(100,116,139,.12)' },
-  { id:'machine4',   label:'Machine 4',    icon:'cpu',       color:'#64748b', colorBg:'rgba(100,116,139,.12)' },
+  { id:'dsi',        label:'DSI',          icon:'cpu',       color:'#64748b', colorBg:'rgba(100,116,139,.12)' },
+  { id:'repiquage',  label:'Repiquage',    icon:'atelier',   color:'#64748b', colorBg:'rgba(100,116,139,.12)' },
   { id:'logistique', label:'Logistique',   icon:'truck',     color:'#10b981', colorBg:'rgba(16,185,129,.12)' },
 ];
 
@@ -1591,20 +1608,119 @@ const TRACA_ETIQUETTES = [
   { id:'id_plaque',    label:'Identification plaques de découpe', format:'a4',  postes:['bureaux'],                         printer:null },
 ];
 
+function buildNbPalettesForm(etiq) {
+  let _ref = '';
+  let _n = '';
+
+  const previewGrid = el('div',{cls:'etiq-preview-grid'});
+  const previewTitle = el('div',{cls:'etiq-preview-title'},'Renseignez la référence et le nombre de palettes pour voir l\'aperçu.');
+
+  function updatePreview() {
+    previewGrid.innerHTML = '';
+    const n = parseInt(_n) || 0;
+    const ref = _ref.trim();
+    if (!ref || n < 1) {
+      previewTitle.textContent = 'Renseignez la référence et le nombre de palettes pour voir l\'aperçu.';
+      return;
+    }
+    previewTitle.textContent = n + ' étiquette' + (n > 1 ? 's' : '') + ' — ' + ref;
+    const shown = Math.min(n, 10);
+    for (let i = 1; i <= shown; i++) {
+      const card = el('div',{cls:'etiq-label-card'},
+        el('div',{cls:'etiq-lbl-brand'},'MySifa'),
+        el('div',{cls:'etiq-lbl-ref'}, ref),
+        el('div',{cls:'etiq-lbl-palette'}, 'PALETTE\u00a0' + i + '/' + n)
+      );
+      previewGrid.appendChild(card);
+    }
+    if (n > 10) {
+      previewGrid.appendChild(
+        el('div',{cls:'etiq-more-note'}, '+ ' + (n-10) + ' étiquette' + (n-10>1?'s':'') + ' supplémentaire' + (n-10>1?'s':'') + ' (non affichées)')
+      );
+    }
+  }
+
+  function doPrint() {
+    const n = parseInt(_n) || 0;
+    const ref = _ref.trim();
+    if (!ref) { showToast('Référence produit requise', 'error'); return; }
+    if (n < 1 || n > 500) { showToast('Nombre de palettes invalide (1–500)', 'error'); return; }
+
+    let labelsHtml = '';
+    for (let i = 1; i <= n; i++) {
+      labelsHtml += `<div class="label"><div class="brand">MySifa</div><div class="ref">${ref}</div><div class="palette">PALETTE&nbsp;${i}/${n}</div></div>`;
+    }
+    const printWin = window.open('', '_blank');
+    if (!printWin) { showToast('Le navigateur a bloqué la fenêtre d\'impression — autorisez les popups.', 'error'); return; }
+    printWin.document.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
+<title>Palettes — ${ref}</title>
+<style>
+  @page { size: 105mm 50mm; margin: 0; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; background: #fff; }
+  .label { width: 105mm; height: 50mm; padding: 3mm 4mm; display: flex;
+           flex-direction: column; justify-content: space-between;
+           page-break-after: always; page-break-inside: avoid;
+           border: 0.3mm solid #000; }
+  .label:last-child { page-break-after: auto; }
+  .brand { font-size: 7pt; color: #999; letter-spacing: 0.3pt; text-transform: uppercase; }
+  .ref { font-size: 16pt; font-weight: 700; letter-spacing: 0.3pt;
+         flex: 1; display: flex; align-items: center; word-break: break-all; }
+  .palette { font-size: 22pt; font-weight: 900; letter-spacing: 1pt; text-align: right; }
+</style></head><body>${labelsHtml}
+<script>window.onload = function(){ window.focus(); window.print(); }<\/script>
+</body></html>`);
+    printWin.document.close();
+  }
+
+  const refInp = el('input',{cls:'field-input',placeholder:'Ex. 1077/0026',autocomplete:'off',style:{direction:'ltr',textTransform:'uppercase'}});
+  refInp.addEventListener('input', e => { _ref = e.target.value.toUpperCase(); updatePreview(); });
+
+  const nInp = el('input',{cls:'field-input',type:'number',min:'1',max:'500',placeholder:'Ex. 4',style:{width:'110px'}});
+  nInp.addEventListener('input', e => { _n = e.target.value; updatePreview(); });
+
+  const printBtn = el('button',{cls:'traca-print-btn',style:{width:'100%',padding:'12px',fontSize:'14px',marginTop:'14px',justifyContent:'center'}},
+    iconEl('printer',16), '\u00a0 Imprimer les étiquettes');
+  printBtn.addEventListener('click', doPrint);
+
+  return el('div',null,
+    el('div',{cls:'etiq-form-row'},
+      el('div',{cls:'etiq-form-field',style:{flex:'1',minWidth:'160px'}},
+        el('label',{cls:'etiq-form-label'},'Référence produit *'), refInp),
+      el('div',{cls:'etiq-form-field'},
+        el('label',{cls:'etiq-form-label'},'Nb palettes *'), nInp)
+    ),
+    el('div',{cls:'etiq-preview-section'},
+      previewTitle,
+      previewGrid
+    ),
+    printBtn
+  );
+}
+
 function openTracaPrint(etiq) {
   S.tracaPrintModal = etiq;
   const overlay = el('div', { cls:'modal-overlay', on:{ click:e=>{ if(e.target===overlay){ S.tracaPrintModal=null; overlay.remove(); } } } });
   const fmtObj = TRACA_FORMATS.find(f=>f.id===etiq.format)||{label:etiq.format,dims:''};
+
+  // Contenu du formulaire selon le type d'étiquette
+  let formContent;
+  if (etiq.id === 'nb_palettes') {
+    formContent = buildNbPalettesForm(etiq);
+  } else {
+    formContent = el('div',{cls:'traca-dev-banner'},
+      iconEl('settings',14),
+      'Formulaire en cours de développement — disponible prochainement.'
+    );
+  }
+
   const sheet = el('div', { cls:'modal-sheet' },
     el('span',{cls:'modal-handle'}),
     el('div',{cls:'modal-title'}, iconEl('printer',17), '\u00a0'+etiq.label),
     el('div',{cls:'modal-sub'}, 'Format\u00a0: ',el('strong',null,fmtObj.label),
       etiq.printer ? '\u00a0·\u00a0'+etiq.printer : '\u00a0·\u00a0Imprimante non configurée'),
-    el('div',{cls:'traca-dev-banner'},
-      iconEl('settings',14),
-      'Formulaire en cours de développement — disponible prochainement.'
-    ),
-    el('button',{cls:'btn',style:{width:'100%',marginTop:'4px'},on:{click:()=>{ overlay.remove(); S.tracaPrintModal=null; }}},'Fermer')
+    formContent,
+    el('button',{cls:'btn-ghost',style:{width:'100%',marginTop:'10px'},on:{click:()=>{ overlay.remove(); S.tracaPrintModal=null; }}},'Fermer')
   );
   overlay.appendChild(sheet);
   document.body.appendChild(overlay);
