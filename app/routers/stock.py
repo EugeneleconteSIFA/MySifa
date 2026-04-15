@@ -368,8 +368,8 @@ async def create_produit(request: Request):
     description = ""
     if q is not None and str(q).strip() != "":
         description = f"Quantité: {str(q).strip()}"
-    # Par défaut, l'unité de vente est "étiquettes" (anciennement "unité").
-    unite = (body.get("unite") or "étiquettes").strip() or "étiquettes"
+    # Par défaut, l'unité de vente est "étiquette" (singulier ; le pluriel est géré côté frontend).
+    unite = (body.get("unite") or "étiquette").strip() or "étiquette"
     now = datetime.now().isoformat()
     with get_db() as conn:
         try:

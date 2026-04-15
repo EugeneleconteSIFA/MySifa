@@ -242,6 +242,23 @@ tr.data-row:hover td{background:rgba(34,211,238,0.025)}
 .ec-meta{display:flex;gap:12px;margin-top:6px;font-size:11px;color:var(--text2)}
 .section-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin:20px 0 10px}
 .toast{position:fixed;bottom:max(24px,env(safe-area-inset-bottom,0px));right:max(24px,env(safe-area-inset-right,0px));left:auto;z-index:9999;max-width:min(420px,calc(100vw - 32px));background:var(--card);border-radius:10px;padding:12px 20px;display:flex;align-items:center;gap:10px;box-shadow:0 8px 32px rgba(0,0,0,.4);animation:fadeUp .3s ease-out}
+/* ── Calculette flottante ── */
+.calc-fab{position:fixed;bottom:max(24px,env(safe-area-inset-bottom,0px));right:max(24px,env(safe-area-inset-right,0px));width:52px;height:52px;border-radius:50%;background:var(--accent);color:var(--bg);border:none;font-size:22px;cursor:pointer;z-index:8000;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 18px rgba(0,0,0,.35);transition:transform .15s,filter .15s}
+.calc-fab:hover{filter:brightness(1.1);transform:scale(1.07)}
+.calc-fab:active{transform:scale(.96)}
+.calc-panel{position:fixed;bottom:86px;right:max(20px,env(safe-area-inset-right,0px));width:260px;background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.45);z-index:7999;overflow:hidden;animation:fadeUp .2s ease-out}
+.calc-display{background:var(--bg);padding:10px 14px 6px;text-align:right}
+.calc-expr{font-size:11px;color:var(--muted);min-height:16px;font-family:monospace;word-break:break-all}
+.calc-val{font-size:26px;font-weight:700;color:var(--text);font-family:monospace;line-height:1.2;word-break:break-all}
+.calc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border)}
+.calc-key{background:var(--card);border:none;padding:0;height:52px;font-size:17px;font-weight:600;color:var(--text);cursor:pointer;font-family:inherit;transition:background .1s}
+.calc-key:hover{background:var(--accent-bg)}
+.calc-key:active{background:var(--border)}
+.calc-key.op{color:var(--accent)}
+.calc-key.eq{background:var(--accent);color:var(--bg)}
+.calc-key.eq:hover{filter:brightness(1.08)}
+.calc-key.fn{color:var(--text2);font-size:14px}
+@media(max-width:480px){.calc-panel{right:12px;width:calc(100vw - 24px);bottom:80px}}
 @media (max-width:480px){
   .toast{left:16px;right:16px;bottom:max(16px,env(safe-area-inset-bottom,0px));max-width:none}
 }
@@ -772,6 +789,11 @@ let S={
   contactSubject:'',
   contactMessage:'',
   contactSending:false,
+  expePoidsGram:'155',
+  expePoidsCoeff:'1.05',
+  expePoidsRows:[{qty:'',laize:'',dev:''},{qty:'',laize:'',dev:''},{qty:'',laize:'',dev:''},{qty:'',laize:'',dev:''}],
+  expoPoidsPalNb:'',
+  expoPoidsPalKg:'',
 };
 
 function set(u){Object.assign(S,u);render();}
@@ -3187,6 +3209,145 @@ function renderExpeTransporteurs(){
     }))
   );
 }
+function renderExpePoids(){
+  const gram=parseFloat(S.expePoidsGram)||155;
+  const coeff=parseFloat(S.expePoidsCoeff)||1.05;
+  const rows=S.expePoidsRows||[];
+  const rowWeights=rows.map(r=>{
+    const q=parseFloat(r.qty)||0,l=parseFloat(r.laize)||0,d=parseFloat(r.dev)||0;
+    if(!q||!l||!d)return null;
+    return q*l*d*coeff*gram/1e6;
+  });
+  const palNb=parseFloat(S.expoPoidsPalNb)||0;
+  const palKg=parseFloat(S.expoPoidsPalKg)||0;
+  const palTotal=palNb*palKg;
+  const etiqTotal=rowWeights.reduce((a,w)=>a+(w||0),0);
+  const grandTotal=etiqTotal+palTotal;
+  const fKg=v=>v.toFixed(3)+'\u00a0kg';
+  const inp=(val,cb,extra={})=>{
+    const el=h('input',Object.assign({type:'number',min:'0',step:'any',placeholder:'0',value:val,
+      style:{width:'100%',padding:'0.3rem 0.5rem',borderRadius:'6px',border:'1px solid var(--border)',
+             background:'var(--card)',color:'var(--fg)',fontSize:'0.85rem',boxSizing:'border-box'}},extra));
+    el.addEventListener('input',e=>cb(e.target.value));
+    return el;
+  };
+  const gramPresets=[{label:'ETO (60)',v:'60'},{label:'Thermique (80)',v:'80'},{label:'SOVAB (120)',v:'120'},{label:'Standard (155)',v:'155'}];
+  const activeGram=gramPresets.some(p=>p.v===String(S.expePoidsGram));
+
+  const paramCard=h('div',{className:'card',style:{marginBottom:'1rem'}},
+    h('div',{className:'card-header'},h('span',null,'Paramètres')),
+    h('div',{style:{padding:'1rem 1rem 1.25rem'}},
+      h('div',{style:{marginBottom:'1rem'}},
+        h('label',{style:{display:'block',fontSize:'0.75rem',opacity:0.65,marginBottom:'0.45rem'}},'Grammage (g/m²)'),
+        h('div',{style:{display:'flex',gap:'0.4rem',flexWrap:'wrap',alignItems:'center'}},
+          ...gramPresets.map(p=>{
+            const active=S.expePoidsGram===p.v;
+            const btn=h('button',{style:{padding:'0.3rem 0.7rem',fontSize:'0.8rem',borderRadius:'6px',cursor:'pointer',
+              border:'1px solid var(--accent)',
+              background:active?'var(--accent)':'transparent',
+              color:active?'#fff':'var(--accent)',fontWeight:active?'600':'normal'}},p.label);
+            btn.addEventListener('click',()=>set({expePoidsGram:p.v}));
+            return btn;
+          }),
+          (()=>{
+            const el=h('input',{type:'number',min:'1',placeholder:'Autre…',
+              value:activeGram?'':S.expePoidsGram,
+              style:{width:'80px',padding:'0.3rem 0.5rem',borderRadius:'6px',border:'1px solid var(--border)',
+                     background:'var(--card)',color:'var(--fg)',fontSize:'0.8rem'}});
+            el.addEventListener('input',e=>set({expePoidsGram:e.target.value}));
+            return el;
+          })()
+        )
+      ),
+      h('div',null,
+        h('label',{style:{display:'block',fontSize:'0.75rem',opacity:0.65,marginBottom:'0.45rem'}},'Coefficient'),
+        (()=>{const el=h('input',{type:'number',step:'0.01',min:'0.1',value:S.expePoidsCoeff,
+          style:{width:'90px',padding:'0.3rem 0.5rem',borderRadius:'6px',border:'1px solid var(--border)',
+                 background:'var(--card)',color:'var(--fg)',fontSize:'0.85rem'}});
+          el.addEventListener('input',e=>set({expePoidsCoeff:e.target.value}));return el;})()
+      )
+    )
+  );
+
+  const thStyle={padding:'0.4rem 0.5rem',textAlign:'left',fontSize:'0.75rem',opacity:0.6,fontWeight:'600',borderBottom:'1px solid var(--border)'};
+  const tdStyle={padding:'0.3rem 0.4rem',verticalAlign:'middle'};
+  const thead=h('thead',null,h('tr',null,
+    h('th',{style:{...thStyle,width:'1.8rem',textAlign:'center'}},'#'),
+    h('th',{style:thStyle},'Qté (mille)'),
+    h('th',{style:thStyle},'Laize (mm)'),
+    h('th',{style:thStyle},'Développé (mm)'),
+    h('th',{style:{...thStyle,textAlign:'right'}},'Poids (kg)')
+  ));
+  const tbody=h('tbody',null,...rows.map((r,i)=>{
+    const w=rowWeights[i];
+    const updateRow=(key,val)=>{const nr=rows.map((row,j)=>j===i?{...row,[key]:val}:row);set({expePoidsRows:nr});};
+    return h('tr',null,
+      h('td',{style:{...tdStyle,textAlign:'center',fontSize:'0.75rem',opacity:0.4}},String(i+1)),
+      h('td',{style:tdStyle},inp(r.qty,v=>updateRow('qty',v))),
+      h('td',{style:tdStyle},inp(r.laize,v=>updateRow('laize',v))),
+      h('td',{style:tdStyle},inp(r.dev,v=>updateRow('dev',v))),
+      h('td',{style:{...tdStyle,textAlign:'right',fontWeight:w?'600':'normal',opacity:w?1:0.25,fontSize:'0.85rem',whiteSpace:'nowrap'}},
+        w?fKg(w):'—')
+    );
+  }));
+
+  const addBtn=h('button',{style:{padding:'0.25rem 0.65rem',fontSize:'0.8rem',borderRadius:'6px',cursor:'pointer',
+    border:'1px solid var(--border)',background:'transparent',color:'var(--fg)'}},'+\u00a0Ligne');
+  addBtn.addEventListener('click',()=>set({expePoidsRows:[...rows,{qty:'',laize:'',dev:''}]}));
+  const delBtn=(rows.length>1)?h('button',{style:{padding:'0.25rem 0.65rem',fontSize:'0.8rem',borderRadius:'6px',cursor:'pointer',
+    border:'1px solid var(--border)',background:'transparent',color:'var(--fg)',marginLeft:'0.4rem'}},'\u2212\u00a0Ligne'):null;
+  if(delBtn)delBtn.addEventListener('click',()=>set({expePoidsRows:rows.slice(0,-1)}));
+
+  const rowsCard=h('div',{className:'card',style:{marginBottom:'1rem'}},
+    h('div',{className:'card-header',style:{display:'flex',alignItems:'center',justifyContent:'space-between'}},
+      h('span',null,'Étiquettes'),
+      h('div',null,addBtn,delBtn||null)
+    ),
+    h('div',{style:{overflowX:'auto',padding:'0.25rem 0.75rem 0.75rem'}},
+      h('table',{style:{width:'100%',borderCollapse:'collapse',fontSize:'0.88rem'}},thead,tbody)
+    ),
+    etiqTotal>0?h('div',{style:{padding:'0.1rem 1rem 0.75rem',textAlign:'right',fontSize:'0.88rem',opacity:0.75}},
+      'Sous-total étiquettes\u00a0: ',h('strong',null,fKg(etiqTotal))):null
+  );
+
+  const palCard=h('div',{className:'card',style:{marginBottom:'1rem'}},
+    h('div',{className:'card-header'},h('span',null,'Palette (optionnel)')),
+    h('div',{style:{padding:'1rem',display:'flex',gap:'1rem',flexWrap:'wrap',alignItems:'flex-end'}},
+      h('div',{style:{flex:'0 0 100px'}},
+        h('label',{style:{display:'block',fontSize:'0.75rem',opacity:0.65,marginBottom:'0.4rem'}},'Nb palettes'),
+        (()=>{const el=h('input',{type:'number',min:'0',step:'1',placeholder:'0',value:S.expoPoidsPalNb,
+          style:{width:'100%',padding:'0.3rem 0.5rem',borderRadius:'6px',border:'1px solid var(--border)',
+                 background:'var(--card)',color:'var(--fg)',fontSize:'0.85rem'}});
+          el.addEventListener('input',e=>set({expoPoidsPalNb:e.target.value}));return el;})()
+      ),
+      h('div',{style:{flex:'0 0 120px'}},
+        h('label',{style:{display:'block',fontSize:'0.75rem',opacity:0.65,marginBottom:'0.4rem'}},'Poids / palette (kg)'),
+        (()=>{const el=h('input',{type:'number',min:'0',step:'any',placeholder:'0',value:S.expoPoidsPalKg,
+          style:{width:'100%',padding:'0.3rem 0.5rem',borderRadius:'6px',border:'1px solid var(--border)',
+                 background:'var(--card)',color:'var(--fg)',fontSize:'0.85rem'}});
+          el.addEventListener('input',e=>set({expoPoidsPalKg:e.target.value}));return el;})()
+      ),
+      palTotal>0?h('div',{style:{paddingBottom:'0.2rem',fontSize:'0.88rem',opacity:0.75}},
+        'Sous-total\u00a0: ',h('strong',null,fKg(palTotal))):null
+    )
+  );
+
+  const totalCard=h('div',{className:'card',style:{textAlign:'center',padding:'1.5rem 1rem',
+    background:'var(--accent)',color:'#fff',borderRadius:'12px',marginBottom:'0.5rem'}},
+    h('div',{style:{fontSize:'0.78rem',letterSpacing:'0.08em',opacity:0.85,marginBottom:'0.4rem'}},'POIDS TOTAL ESTIMÉ'),
+    h('div',{style:{fontSize:'2.4rem',fontWeight:'700',letterSpacing:'-1px',lineHeight:1.1}},
+      grandTotal>0?grandTotal.toFixed(3)+'\u00a0kg':'—'),
+    grandTotal>0&&palTotal>0?h('div',{style:{fontSize:'0.8rem',opacity:0.8,marginTop:'0.35rem'}},
+      'dont palette\u00a0: '+fKg(palTotal)):null
+  );
+
+  return h('div',{style:{maxWidth:'680px'}},
+    h('p',{style:{opacity:0.55,fontSize:'0.82rem',marginBottom:'1.25rem',fontStyle:'italic'}},
+      'Formule\u00a0: Qté\u2009(mille)\u2009×\u2009Laize\u2009×\u2009Développé\u2009×\u2009Coeff\u2009×\u2009Grammage\u2009/\u20091\u202f000\u202f000'),
+    paramCard,rowsCard,palCard,totalCard
+  );
+}
+
 function renderExpe(){
   const isLight=document.body.classList.contains('light');
   const tab=S.expeTab||'comparateur';
@@ -3200,6 +3361,8 @@ function renderExpe(){
       iconEl('package',15),'  Comparateur'),
     h('button',{className:'nav-btn'+(tab==='transporteurs'?' active':''),onClick:()=>set({expeTab:'transporteurs'})},
       iconEl('truck',15),'  Transporteurs'),
+    h('button',{className:'nav-btn'+(tab==='poids'?' active':''),onClick:()=>set({expeTab:'poids'})},
+      iconEl('calculator',15),'  Poids envoi'),
     h('div',{className:'sidebar-bottom'},
       h('button',{className:'nav-btn back-mysifa',onClick:()=>{window.location.href='/'}},
         '← Retour ',h('span',{className:'wm'},'My',h('span',null,'Sifa'))
@@ -3225,12 +3388,12 @@ function renderExpe(){
     h('button',{type:'button',className:'mobile-menu-btn',onClick:toggleSidebar,'aria-label':'Menu'},iconEl('menu',20)),
     h('div',null,
       h('div',{className:'mobile-topbar-title'},'MyExpé'),
-      h('div',{className:'mobile-topbar-sub'},tab==='transporteurs'?'Transporteurs':'Comparateur tarifs')
+      h('div',{className:'mobile-topbar-sub'},tab==='transporteurs'?'Transporteurs':tab==='poids'?'Poids envoi':'Comparateur tarifs')
     ),
     h('button',{type:'button',className:'mobile-home-btn',onClick:()=>{window.location.href='/'},'aria-label':'Accueil'},iconEl('home',20))
   );
 
-  const content=tab==='transporteurs'?renderExpeTransporteurs():renderExpeComparateur();
+  const content=tab==='transporteurs'?renderExpeTransporteurs():tab==='poids'?renderExpePoids():renderExpeComparateur();
 
   return h('div',null,
     S.sidebarOpen?h('div',{className:'sidebar-overlay',onClick:closeSidebar}):null,
@@ -3242,6 +3405,7 @@ function renderExpe(){
           h('h1',null,'MyExpé'),
           h('div',{className:'subtitle'},tab==='comparateur'
             ?'Coupé · Coquelle · Ceva · Dimotrans — meilleur prix au poids et à la palette'
+            :tab==='poids'?'Estimation du poids d\'un envoi d\'étiquettes'
             :'Vos transporteurs et moyens de contact'),
           content
         )
@@ -6141,6 +6305,87 @@ function renderSuivi(){
   return h('div',null,...parts);
 }
 
+// ── Calculette flottante (MyStock + MyExpé) ──────────────────────
+(function(){
+  let _open = false, _expr = '', _val = '0', _justEq = false;
+  const KEYS = [
+    ['C','⌫','%','÷'],
+    ['7','8','9','×'],
+    ['4','5','6','−'],
+    ['1','2','3','+'],
+    ['0','.','='],
+  ];
+  function _calc_press(k){
+    if(k==='C'){_expr='';_val='0';_justEq=false;return;}
+    if(k==='⌫'){_val=_val.length>1?_val.slice(0,-1):'0';return;}
+    if(k==='±'){_val=_val.startsWith('-')?_val.slice(1):'-'+_val;return;}
+    if(k==='%'){try{_val=String(parseFloat(_val)/100);}catch(e){}return;}
+    if(k==='='){
+      try{
+        let expr=(_justEq?_val:_expr+_val)
+          .replace(/÷/g,'/').replace(/×/g,'*').replace(/−/g,'-');
+        // eslint-disable-next-line no-new-func
+        let r=Function('"use strict";return ('+expr+')')();
+        _expr=expr+'=';_val=String(Math.round(r*1e10)/1e10);_justEq=true;
+      }catch(e){_val='Err';_expr='';_justEq=false;}
+      return;
+    }
+    if(['+','-','×','÷','−'].includes(k)){
+      if(_justEq){_expr=_val+k;_val='0';_justEq=false;return;}
+      _expr+=_val+k;_val='0';return;
+    }
+    if(_justEq){_expr='';_justEq=false;}
+    if(k==='.'){if(_val.includes('.'))return;_val+='.';return;}
+    _val=(_val==='0'||_val==='-0')?(_val.startsWith('-')?'-'+k:k):_val+k;
+  }
+  function _calc_render(){
+    const fab=document.getElementById('_calc_fab');
+    if(!fab)return;
+    const panel=document.getElementById('_calc_panel');
+    if(!panel)return;
+    panel.style.display=_open?'':'none';
+    panel.querySelector('._cv').textContent=_val;
+    panel.querySelector('._ce').textContent=_expr;
+  }
+  function _calc_mount(){
+    if(document.getElementById('_calc_fab'))return;
+    const fab=document.createElement('button');
+    fab.id='_calc_fab';fab.className='calc-fab';fab.title='Calculette';
+    fab.innerHTML='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><circle cx="8.5" cy="11" r=".8" fill="currentColor" stroke="none"/><circle cx="12" cy="11" r=".8" fill="currentColor" stroke="none"/><circle cx="15.5" cy="11" r=".8" fill="currentColor" stroke="none"/><circle cx="8.5" cy="15" r=".8" fill="currentColor" stroke="none"/><circle cx="12" cy="15" r=".8" fill="currentColor" stroke="none"/><circle cx="15.5" cy="15" r=".8" fill="currentColor" stroke="none"/><line x1="8" y1="19" x2="16" y2="19"/></svg>';
+    fab.onclick=()=>{_open=!_open;_calc_render();};
+    document.body.appendChild(fab);
+    const panel=document.createElement('div');
+    panel.id='_calc_panel';panel.className='calc-panel';panel.style.display='none';
+    const disp=document.createElement('div');disp.className='calc-display';
+    const ce=document.createElement('div');ce.className='calc-expr _ce';
+    const cv=document.createElement('div');cv.className='calc-val _cv';cv.textContent='0';
+    disp.append(ce,cv);panel.appendChild(disp);
+    const grid=document.createElement('div');grid.className='calc-grid';
+    KEYS.forEach(row=>row.forEach(k=>{
+      const btn=document.createElement('button');
+      btn.className='calc-key'+(k==='='?' eq':['+','-','×','÷','−'].includes(k)?' op':['C','⌫','±','%'].includes(k)?' fn':'');
+      btn.textContent=k;
+      if(k==='0'){btn.style.gridColumn='span 2';}
+      btn.onclick=()=>{_calc_press(k);_calc_render();};
+      grid.appendChild(btn);
+    }));
+    panel.appendChild(grid);document.body.appendChild(panel);
+    // keyboard support
+    document.addEventListener('keydown',e=>{
+      if(!_open)return;
+      if(e.key>='0'&&e.key<='9'){_calc_press(e.key);_calc_render();}
+      else if(e.key==='.'){_calc_press('.');_calc_render();}
+      else if(e.key==='+'||e.key==='-'){_calc_press(e.key==='+'?'+':'−');_calc_render();}
+      else if(e.key==='*'){_calc_press('×');_calc_render();}
+      else if(e.key==='/'){e.preventDefault();_calc_press('÷');_calc_render();}
+      else if(e.key==='Enter'||e.key==='='){_calc_press('=');_calc_render();}
+      else if(e.key==='Escape'){_open=false;_calc_render();}
+      else if(e.key==='Backspace'){_calc_press('⌫');_calc_render();}
+    });
+  }
+  window._calc_mount=_calc_mount;
+})();
+
 // ── Render ──────────────────────────────────────────────────────
 function render(){
   const root=document.getElementById('root');root.innerHTML='';
@@ -6207,6 +6452,16 @@ function render(){
     root.appendChild(renderContactModal());
   }
   // contact modal for expe is rendered inside renderExpe()
+
+  // Calculette flottante (MyStock + MyExpé)
+  if(S.app==='stock'||S.app==='expe'){
+    window._calc_mount && window._calc_mount();
+  } else {
+    const fab=document.getElementById('_calc_fab');
+    const panel=document.getElementById('_calc_panel');
+    if(fab)fab.remove();
+    if(panel)panel.remove();
+  }
 
   // PWA: feature temporairement retirée. (setupInstallButton supprimé)
 }

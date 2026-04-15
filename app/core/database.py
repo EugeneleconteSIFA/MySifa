@@ -469,22 +469,45 @@ def _migrate(conn):
             reference TEXT UNIQUE NOT NULL,
             designation TEXT NOT NULL,
             description TEXT,
-            unite TEXT DEFAULT 'étiquettes',
+            unite TEXT DEFAULT 'étiquette',
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         )""")
     else:
-        # Migration: anciens libellés par défaut → "étiquettes"
+        # Migration: anciens libellés vides/génériques → "étiquette"
         try:
             conn.execute(
                 """UPDATE produits
-                   SET unite='étiquettes'
+                   SET unite='étiquette'
                    WHERE unite IS NULL
                       OR TRIM(COALESCE(unite,'')) = ''
                       OR LOWER(TRIM(unite)) IN ('unité','unite','unites','unités','u.','u')"""
             )
         except Exception:
             pass
+
+    # Migration: unités obsolètes (forfait/mille/mille A4) → "étiquette"
+    try:
+        conn.execute(
+            """UPDATE produits
+               SET unite='étiquette', updated_at=datetime('now')
+               WHERE LOWER(TRIM(COALESCE(unite,''))) IN ('forfait','mille','mille a4')"""
+        )
+    except Exception:
+        pass
+
+    # Migration: suppression du "s" final pour stocker les unités au singulier
+    # (idempotent : après strip le mot ne se termine plus par "s")
+    try:
+        conn.execute(
+            """UPDATE produits
+               SET unite = SUBSTR(unite, 1, LENGTH(unite) - 1),
+                   updated_at = datetime('now')
+               WHERE LENGTH(TRIM(COALESCE(unite,''))) > 1
+                 AND SUBSTR(TRIM(unite), -1) = 's'"""
+        )
+    except Exception:
+        pass
 
     if "stock_emplacements" not in existing_tables:
         conn.execute("""CREATE TABLE stock_emplacements (

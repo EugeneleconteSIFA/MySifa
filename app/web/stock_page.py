@@ -119,6 +119,9 @@ input,select{font-family:inherit}
 .mobile-home-btn{display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;
   border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;font-family:inherit;margin-left:auto;flex-shrink:0}
 .mobile-home-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.mobile-print-btn{display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;
+  border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;font-family:inherit;flex-shrink:0}
+.mobile-print-btn:hover,.mobile-print-btn.active{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 .mobile-topbar-title{font-size:14px;font-weight:800}
 .mobile-topbar-sub{font-size:11px;color:var(--muted);margin-top:2px}
 
@@ -132,6 +135,7 @@ body.sb-open .sidebar-overlay{display:block}
   .mobile-topbar{display:flex;position:fixed;top:0;left:0;right:0;z-index:120;background:var(--bg);padding:10px 18px;border-bottom:1px solid var(--border)}
   .mobile-menu-btn{display:inline-flex}
   .mobile-home-btn{display:inline-flex}
+  .mobile-print-btn{display:inline-flex}
   /* La topbar est fixed → on décale uniquement la barre de recherche. */
   body.has-topbar .search-bar-wrap{margin-top:74px}
 }
@@ -190,11 +194,31 @@ body.sb-open .sidebar-overlay{display:block}
 .pill.ok{border-color:rgba(52,211,153,.45);color:var(--success);background:rgba(52,211,153,.10)}
 .pill.off{border-color:rgba(248,113,113,.45);color:var(--danger);background:rgba(248,113,113,.10)}
 
+/* ── Calculette flottante ── */
+.calc-fab{position:fixed;bottom:max(24px,env(safe-area-inset-bottom,0px));right:max(24px,env(safe-area-inset-right,0px));width:52px;height:52px;border-radius:50%;background:var(--accent);color:var(--bg);border:none;cursor:pointer;z-index:8000;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 18px rgba(0,0,0,.35);transition:transform .15s,filter .15s}
+.calc-fab:hover{filter:brightness(1.1);transform:scale(1.07)}
+.calc-fab:active{transform:scale(.96)}
+.calc-panel{position:fixed;bottom:86px;right:max(20px,env(safe-area-inset-right,0px));width:260px;background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.45);z-index:7999;overflow:hidden;animation:calcUp .2s ease-out}
+@keyframes calcUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.calc-display{background:var(--bg);padding:10px 14px 6px;text-align:right}
+.calc-expr{font-size:11px;color:var(--muted);min-height:16px;font-family:monospace;word-break:break-all}
+.calc-val{font-size:26px;font-weight:700;color:var(--text);font-family:monospace;line-height:1.2;word-break:break-all}
+.calc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border)}
+.calc-key{background:var(--card);border:none;padding:0;height:52px;font-size:17px;font-weight:600;color:var(--text);cursor:pointer;font-family:inherit;transition:background .1s}
+.calc-key:hover{background:var(--accent-bg)}
+.calc-key:active{background:var(--border)}
+.calc-key.op{color:var(--accent)}
+.calc-key.eq{background:var(--accent);color:var(--bg)}
+.calc-key.eq:hover{filter:brightness(1.08)}
+.calc-key.fn{color:var(--text2);font-size:14px}
+@media(max-width:480px){.calc-panel{right:12px;width:calc(100vw - 24px);bottom:80px}}
+
 /* ── Formulaire ajout produit ── */
 .add-form{padding:16px;display:flex;flex-direction:column;gap:10px}
 .add-form-inner{display:flex;flex-direction:column;gap:10px}
 .add-form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .add-form-actions{display:flex;align-items:center}
+.add-form-actions .btn{color:var(--card)}
 .empl-combo-wrap{position:relative;width:100%}
 .empl-suggestions{
   position:absolute;top:100%;left:0;right:0;z-index:120;
@@ -304,6 +328,44 @@ body.light .field-input.empl-upper::placeholder{
 .stat-value{font-size:26px;font-weight:800;font-family:monospace}
 .stat-value.accent{color:var(--accent)}
 .stat-value.warn{color:var(--warn)}
+
+/* ── Étiquettes traçabilité ── */
+.traca-section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:16px 0 10px;padding:0 2px}
+.traca-postes-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:8px}
+.traca-poste-card{background:var(--card);border:1.5px solid var(--border);border-radius:14px;
+  padding:16px 12px;cursor:pointer;transition:all .15s;text-align:center;user-select:none}
+.traca-poste-card:hover{border-color:var(--accent);background:var(--accent-bg);transform:translateY(-1px)}
+.traca-poste-card:active{transform:scale(.97)}
+.traca-poste-icon{display:flex;align-items:center;justify-content:center;
+  width:44px;height:44px;border-radius:12px;margin:0 auto 10px;font-size:22px}
+.traca-poste-label{font-size:12px;font-weight:700;color:var(--text);line-height:1.3}
+.traca-poste-count{font-size:10px;color:var(--muted);margin-top:3px}
+.traca-back-bar{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.traca-back-btn{display:flex;align-items:center;gap:5px;background:none;border:none;
+  padding:6px 10px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;
+  color:var(--text2);font-family:inherit;transition:background .1s}
+.traca-back-btn:hover{background:var(--accent-bg);color:var(--accent)}
+.traca-poste-heading{font-size:16px;font-weight:800;color:var(--text)}
+.traca-etiq-list{display:flex;flex-direction:column;gap:10px}
+.traca-etiq-card{background:var(--card);border:1.5px solid var(--border);border-radius:14px;
+  padding:14px 16px;display:flex;align-items:center;gap:14px;transition:border-color .15s}
+.traca-etiq-card:hover{border-color:var(--accent)}
+.traca-etiq-icon-wrap{width:40px;height:40px;border-radius:10px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center}
+.traca-etiq-body{flex:1;min-width:0}
+.traca-etiq-label{font-size:14px;font-weight:700;margin-bottom:3px}
+.traca-etiq-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.traca-format-badge{font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;
+  background:var(--accent-bg);color:var(--accent);letter-spacing:.3px}
+.traca-printer-badge{font-size:10px;color:var(--muted);display:flex;align-items:center;gap:3px}
+.traca-print-btn{flex-shrink:0;display:flex;align-items:center;gap:6px;
+  padding:8px 14px;border-radius:10px;border:none;cursor:pointer;
+  font-size:12px;font-weight:700;font-family:inherit;
+  background:var(--accent);color:#fff;transition:opacity .15s}
+.traca-print-btn:active{opacity:.75}
+.traca-dev-banner{display:flex;align-items:center;gap:10px;background:var(--accent-bg);
+  border:1px solid var(--accent);border-radius:10px;padding:10px 14px;
+  font-size:12px;color:var(--accent);margin-bottom:14px;font-weight:600}
 
 /* ── Inventaire chaîne ── */
 .inv-item{padding:13px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s}
@@ -447,6 +509,9 @@ let S = {
   unitNewLabel: '',
   unitNewBase: 'cartons',
   unitNewQty: '',
+  // Étiquettes traçabilité
+  tracaPoste: null,
+  tracaPrintModal: null,
 };
 
 // ── API ─────────────────────────────────────────────────────────
@@ -472,6 +537,13 @@ function showToast(m, t='success') {
 const fN = n => n != null ? Number(n).toLocaleString('fr-FR') : '0';
 const fD = d => d ? d.slice(0,10).split('-').reverse().join('/') : '—';
 const joursDepuis = d => { if (!d) return null; return Math.round((Date.now() - new Date(d).getTime()) / 86400000); };
+// Singulier si 0 ou 1, pluriel (base + "s") si > 1
+function fU(qty, unite) {
+  const u = String(unite || '').trim();
+  if (!u) return fN(qty);
+  const n = parseFloat(qty) || 0;
+  return fN(n) + '\u00a0' + (Math.abs(n) > 1 ? u + 's' : u);
+}
 // ── Icons (Feather-ish, inline SVG) ─────────────────────────────
 function icon(name, size=16){
   const a = `width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"`;
@@ -485,6 +557,15 @@ function icon(name, size=16){
     'menu': '<line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/>',
     'home': '<path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/><path d="M10 21v-6h4v6"/>',
     'refresh-ccw': '<polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.5"/>',
+    'printer': '<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>',
+    'package': '<line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
+    'briefcase': '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="12"/>',
+    'cpu': '<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/>',
+    'truck': '<rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>',
+    'arrow-left': '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
+    'settings': '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+    'tag': '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>',
+    'chevron-right': '<polyline points="9 18 15 12 9 6"/>',
   };
   return `<svg ${a} aria-hidden="true" style="display:inline-block;vertical-align:middle;flex-shrink:0">${p[name]||p['grid']}</svg>`;
 }
@@ -800,8 +881,8 @@ async function createProduit(ref, commentaire, quantite, emplacement, uniteVente
       produit_id: r.id, emplacement: empl, type_mouvement: 'entree', quantite: qte
     }) });
     const msg = r.existing
-      ? ('Référence déjà en base — ' + fN(qte) + ' ' + unite + ' ajoutée(s) en ' + empl)
-      : ('Produit créé — ' + fN(qte) + ' ' + unite + ' en ' + empl);
+      ? ('Référence déjà en base — ' + fU(qte, unite) + ' ajoutée(s) en ' + empl)
+      : ('Produit créé — ' + fU(qte, unite) + ' en ' + empl);
     showToast(msg);
     S.showAddForm = false;
     await loadDashboard();
@@ -816,6 +897,7 @@ function closeSidebar() { S.sidebarOpen = false; document.body.classList.remove(
 // ── Navigation ──────────────────────────────────────────────────
 function goToTab(tab) {
   S.tab = tab; S.selProduit = null; S.selEmpl = null; S.searchResults = null; S.showAddForm = false;
+  if (tab !== 'traca') S.tracaPoste = null;
   clearSearch(); closeSidebar();
   updateNavActive();
   renderContent();
@@ -1026,6 +1108,94 @@ function handleScan(text) {
   else { const inp = document.getElementById('main-search'); if(inp) inp.value = text; doSearch(text); }
 }
 
+// ── Modal entrée depuis un emplacement ───────────────────────────
+function openEmplEntreeModal(codeEmpl) {
+  document.querySelector('.modal-overlay')?.remove();
+  let _pid = null; // produit_id résolu après lookup
+
+  const overlay = el('div', { cls:'modal-overlay', on:{ click: e => { if(e.target===overlay) overlay.remove(); }}});
+  const sheet   = el('div', { cls:'modal-sheet' });
+  sheet.addEventListener('click', e => e.stopPropagation());
+
+  // Champ référence avec suggestions
+  const refInp   = el('input', { cls:'field-input', type:'text', placeholder:'Référence existante (ex. 973/0019)', autocomplete:'off', style:{direction:'ltr'} });
+  const suggWrap = el('div', { cls:'empl-suggestions' });
+  const refError = el('div', { cls:'field-error', style:{color:'var(--danger)',fontSize:'12px',marginTop:'4px',display:'none'} });
+
+  let refTimer = null;
+  refInp.addEventListener('input', () => {
+    _pid = null; refError.style.display = 'none';
+    clearTimeout(refTimer);
+    const q = refInp.value.trim();
+    if (!q) { suggWrap.innerHTML = ''; suggWrap.style.display = 'none'; return; }
+    refTimer = setTimeout(async () => {
+      try {
+        const r = await api('/api/stock/search?q=' + encodeURIComponent(q) + '&limit=6');
+        const prods = (r && r.produits) || [];
+        suggWrap.innerHTML = '';
+        if (!prods.length) { suggWrap.style.display = 'none'; return; }
+        prods.forEach(p => {
+          const item = el('div', { cls:'empl-suggestion-item',
+            on:{ click: () => {
+              refInp.value = p.reference; _pid = p.id;
+              refError.style.display = 'none';
+              suggWrap.innerHTML = ''; suggWrap.style.display = 'none';
+            }}
+          }, el('span',{style:{fontWeight:'600',marginRight:'8px'}},p.reference), el('span',{style:{color:'var(--muted)',fontSize:'12px'}},p.designation||''));
+          suggWrap.appendChild(item);
+        });
+        suggWrap.style.display = '';
+      } catch(e) {}
+    }, 200);
+  });
+
+  const qteInp  = el('input', { cls:'field-input', type:'number', placeholder:'0', min:'0', inputmode:'numeric', style:{direction:'ltr'} });
+  const today   = new Date().toISOString().slice(0,10);
+  const dateInp = el('input', { cls:'field-input', type:'date', value:today });
+  const noteInp = el('input', { cls:'field-input', type:'text', placeholder:'Réf BL, lot…', style:{direction:'ltr'} });
+
+  const confirmBtn = el('button', { cls:'btn-confirm entree', on:{ click: async () => {
+    const ref  = refInp.value.trim().toUpperCase();
+    const qte  = parseFloat(qteInp.value);
+    const empl = codeEmpl;
+    if (!ref) { showToast('Référence requise', 'error'); return; }
+    if (!qte || qte <= 0) { showToast('Quantité requise', 'error'); return; }
+    // Résolution produit_id si non connu via suggestion
+    if (!_pid) {
+      try {
+        const r = await api('/api/stock/search?q=' + encodeURIComponent(ref) + '&limit=10');
+        const match = (r && r.produits || []).find(p => p.reference.toUpperCase() === ref);
+        if (!match) {
+          refError.textContent = 'Référence produit non existante';
+          refError.style.display = '';
+          return;
+        }
+        _pid = match.id;
+      } catch(e) { showToast(e.message, 'error'); return; }
+    }
+    await submitMouvement({ produit_id: _pid, emplacement: empl, type_mouvement:'entree', quantite: qte, date_entree: dateInp.value||today, note: noteInp.value.trim() });
+    overlay.remove();
+  }}}, '↓ Valider entrée');
+
+  sheet.append(
+    el('span',{cls:'modal-handle'}),
+    el('div',{cls:'modal-title'},'↓ Entrée — '+codeEmpl),
+    el('div',{cls:'modal-sub'},'Ajouter du stock à cet emplacement'),
+    el('div',{cls:'modal-field'}, el('label',{cls:'field-label'},'Référence produit *'),
+      el('div',{style:{position:'relative'}}, refInp, suggWrap), refError),
+    el('div',{cls:'modal-field'}, el('label',{cls:'field-label'},'Quantité *'), qteInp),
+    el('div',{cls:'modal-field'}, el('label',{cls:'field-label'},'Date du stock'), dateInp),
+    el('div',{cls:'modal-field'}, el('label',{cls:'field-label'},'Commentaire (optionnel)'), noteInp),
+    el('div',{cls:'modal-actions'},
+      el('button',{cls:'btn-cancel',on:{click:()=>overlay.remove()}},'Annuler'),
+      confirmBtn
+    )
+  );
+  overlay.appendChild(sheet);
+  document.body.appendChild(overlay);
+  setTimeout(()=>refInp.focus(), 80);
+}
+
 // ── Modal mouvement ──────────────────────────────────────────────
 function openMvtModal(produit_id, ref, emplacement, type='entree') {
   S.modalMvt = { produit_id, ref, emplacement: emplacement || '' };
@@ -1171,7 +1341,7 @@ function updateSearchResults() {
     produits.forEach(p => box.appendChild(
       el('div',{cls:'search-item',on:{click:()=>loadProduit(p.id)}},
         el('div',null,el('div',{cls:'si-ref'},p.reference),el('div',{cls:'si-des'},p.designation)),
-        el('div',{cls:'si-badge'},fN(p.stock_total)+' '+p.unite)
+        el('div',{cls:'si-badge'},fU(p.stock_total, p.unite))
       )
     ));
   }
@@ -1180,7 +1350,7 @@ function updateSearchResults() {
     emplacements.forEach(e => box.appendChild(
       el('div',{cls:'search-item',on:{click:()=>loadEmplacement(e.emplacement)}},
         el('div',null,el('div',{cls:'si-ref'},e.emplacement),el('div',{cls:'si-des'},e.nb_refs+' référence'+(e.nb_refs>1?'s':''))),
-        el('div',{cls:'si-badge'},fN(e.total_unites)+' u.')
+        el('div',{cls:'si-badge'},fN(e.total_unites))
       )
     ));
   }
@@ -1194,7 +1364,7 @@ function renderToast() {
   document.body.appendChild(t);
 }
 
-function buildMvtHistory(mouvements, unite='éti.', opts=null) {
+function buildMvtHistory(mouvements, unite='', opts=null) {
   return el('div',{cls:'card'},
     el('div',{cls:'card-header'},el('div',{cls:'card-title'},'🕐 Historique')),
     mouvements.length===0?el('div',{cls:'card-empty'},'Aucun mouvement'):
@@ -1202,7 +1372,7 @@ function buildMvtHistory(mouvements, unite='éti.', opts=null) {
       const icons={entree:'↓',sortie:'↑',inventaire:'='};
       const signe=m.type_mouvement==='entree'?'+':m.type_mouvement==='sortie'?'-':'=';
       const actor = (m.created_by_nom || m.created_by_name || '').trim();
-      const unit = (m.unite || unite || 'éti.').trim();
+      const unit = (m.unite || unite || '').trim();
       const refTxt = m.reference || m.emplacement || '';
       const primary = (opts && opts.primary) ? String(opts.primary) : '';
       return el('div',{cls:'mvt-row'},
@@ -1214,7 +1384,7 @@ function buildMvtHistory(mouvements, unite='éti.', opts=null) {
               : ((m.produit_id && m.reference)
                 ? el('button',{cls:'mvt-ref-link',type:'button',on:{click:()=>loadProduit(m.produit_id)}},refTxt)
                 : el('span',null,refTxt)),
-            el('span',{cls:'mvt-qte-'+m.type_mouvement},signe+fN(m.quantite)+' '+unit)
+            el('span',{cls:'mvt-qte-'+m.type_mouvement},signe+fU(m.quantite, unit))
           ),
           el('div',{cls:'mvt-line2'},
             fD(m.created_at)+' · '+(m.emplacement||'')+(actor?' · '+actor:'')
@@ -1329,7 +1499,7 @@ function buildProduitDetail() {
             el('div',{cls:'empl-info'},'FIFO lot : '+fD(e.date_fifo_empl)+(e.alerte_inventaire?' · inventaire':'')+(e.jours_stock!=null?' · ~'+e.jours_stock+'j':''))
           ),
           el('div',null,
-            el('div',{cls:'empl-qte'},fN(e.quantite)+' '+unite),
+            el('div',{cls:'empl-qte'},fU(e.quantite, unite)),
             el('div',{cls:'empl-date'},fD(e.updated_at||e.date_fifo_empl))
           )
         )))
@@ -1347,7 +1517,7 @@ function buildProduitDetail() {
       el('div',{cls:'sc-ref'},p.reference),
       el('div',{cls:'sc-des'},p.designation||'—'),
       el('div',{cls:'sc-stats'},
-        el('div',{cls:'sc-stat'},el('div',{cls:'sc-stat-label'},'Stock total'),el('div',{cls:'sc-stat-value'},fN(sel.stock_total)+' '+unite)),
+        el('div',{cls:'sc-stat'},el('div',{cls:'sc-stat-label'},'Stock total'),el('div',{cls:'sc-stat-value'},fU(sel.stock_total, unite))),
         el('div',{cls:'sc-stat'},el('div',{cls:'sc-stat-label'},'Lots actifs'),el('div',{cls:'sc-stat-value'},String(sel.nb_lots||0))),
         sel.jours_stock != null
           ? el('div',{cls:'sc-stat'},el('div',{cls:'sc-stat-label'},'Ancienneté'),el('div',{cls:'sc-stat-value'},String(sel.jours_stock)+' j'))
@@ -1368,6 +1538,10 @@ function buildEmplacementDetail() {
 
   const back = el('button',{cls:'btn-ghost',style:{marginBottom:'14px'},on:{click:clearSel}},'← Retour au tableau de bord');
 
+  const actions = S.stockReadOnly ? null : el('div',{cls:'action-bar',style:{marginTop:'14px'}},
+    el('button',{cls:'action-btn entree',on:{click:()=>openEmplEntreeModal(code)}},'↓ Entrée')
+  );
+
   const head = el('div',{cls:'scorecard'},
     el('div',{cls:'sc-ref'},code),
     el('div',{cls:'sc-des'},(sel.nb_refs||0)+' réf. · '+fN(sel.total_unites)+' u. en stock'),
@@ -1386,12 +1560,113 @@ function buildEmplacementDetail() {
           on:{click:()=>loadProduit(r.id)}
         },
           el('div',null,el('div',{cls:'empl-code'},r.reference),el('div',{cls:'empl-info'},r.designation||'')),
-          el('div',null,el('div',{cls:'empl-qte'},fN(r.quantite)+' '+(r.unite||'')),el('div',{cls:'empl-date'},fD(r.date_fifo)))
+          el('div',null,el('div',{cls:'empl-qte'},fU(r.quantite, r.unite||'')),el('div',{cls:'empl-date'},fD(r.date_fifo)))
         )))
       );
 
-  return el('div',{cls:'content'}, back, head, refBlock, buildMvtHistory(sel.mouvements||[], 'éti.', { primary:'emplacement' }));
+  return el('div',{cls:'content'}, back, head, actions, refBlock, buildMvtHistory(sel.mouvements||[], '', { primary:'emplacement' }));
 }
+// ── Config traçabilité ────────────────────────────────────────────
+const TRACA_POSTES = [
+  { id:'bureaux',    label:'Bureaux',      icon:'briefcase', color:'#6366f1', colorBg:'rgba(99,102,241,.12)' },
+  { id:'cohesio1',   label:'Cohésio 1',    icon:'cpu',       color:'#f59e0b', colorBg:'rgba(245,158,11,.12)' },
+  { id:'cohesio2',   label:'Cohésio 2',    icon:'cpu',       color:'#f59e0b', colorBg:'rgba(245,158,11,.12)' },
+  { id:'machine3',   label:'Machine 3',    icon:'cpu',       color:'#64748b', colorBg:'rgba(100,116,139,.12)' },
+  { id:'machine4',   label:'Machine 4',    icon:'cpu',       color:'#64748b', colorBg:'rgba(100,116,139,.12)' },
+  { id:'logistique', label:'Logistique',   icon:'truck',     color:'#10b981', colorBg:'rgba(16,185,129,.12)' },
+];
+
+const TRACA_FORMATS = [
+  { id:'a4',     label:'A4',        dims:'210×297 mm' },
+  { id:'105x50', label:'105×50 mm', dims:'105×50 mm'  },
+  { id:'40x20',  label:'40×20 mm',  dims:'40×20 mm'   },
+];
+
+// { id, label, format, postes[], printer (null=non configurée) }
+const TRACA_ETIQUETTES = [
+  { id:'nb_palettes',  label:'Nombre de palettes',            format:'105x50', postes:['logistique','cohesio1','cohesio2'], printer:null },
+  { id:'id_palette',   label:'Identification palette',         format:'105x50', postes:['logistique'],                      printer:null },
+  { id:'id_carton',    label:'Identification carton',          format:'40x20',  postes:['cohesio1','cohesio2'],             printer:null },
+  { id:'id_bobine',    label:'Identification bobine',          format:'40x20',  postes:['cohesio1','cohesio2'],             printer:null },
+  { id:'id_plaque',    label:'Identification plaques de découpe', format:'a4',  postes:['bureaux'],                         printer:null },
+];
+
+function openTracaPrint(etiq) {
+  S.tracaPrintModal = etiq;
+  const overlay = el('div', { cls:'modal-overlay', on:{ click:e=>{ if(e.target===overlay){ S.tracaPrintModal=null; overlay.remove(); } } } });
+  const fmtObj = TRACA_FORMATS.find(f=>f.id===etiq.format)||{label:etiq.format,dims:''};
+  const sheet = el('div', { cls:'modal-sheet' },
+    el('span',{cls:'modal-handle'}),
+    el('div',{cls:'modal-title'}, iconEl('printer',17), '\u00a0'+etiq.label),
+    el('div',{cls:'modal-sub'}, 'Format\u00a0: ',el('strong',null,fmtObj.label),
+      etiq.printer ? '\u00a0·\u00a0'+etiq.printer : '\u00a0·\u00a0Imprimante non configurée'),
+    el('div',{cls:'traca-dev-banner'},
+      iconEl('settings',14),
+      'Formulaire en cours de développement — disponible prochainement.'
+    ),
+    el('button',{cls:'btn',style:{width:'100%',marginTop:'4px'},on:{click:()=>{ overlay.remove(); S.tracaPrintModal=null; }}},'Fermer')
+  );
+  overlay.appendChild(sheet);
+  document.body.appendChild(overlay);
+}
+
+function buildTracaPosteView(poste) {
+  const etiquettes = TRACA_ETIQUETTES.filter(e=>e.postes.includes(poste.id));
+  const backBar = el('div',{cls:'traca-back-bar'},
+    el('button',{cls:'traca-back-btn',on:{click:()=>{ S.tracaPoste=null; renderContent(); }}},
+      iconEl('arrow-left',15), ' Postes'),
+    el('span',{cls:'traca-poste-heading'}, poste.label)
+  );
+  let listEl;
+  if (etiquettes.length===0) {
+    listEl = el('div',{cls:'card'},el('div',{cls:'card-empty'},'Aucune étiquette configurée pour ce poste.'));
+  } else {
+    const cards = etiquettes.map(etiq=>{
+      const fmtObj = TRACA_FORMATS.find(f=>f.id===etiq.format)||{label:etiq.format,dims:''};
+      const card = el('div',{cls:'traca-etiq-card'},
+        el('div',{cls:'traca-etiq-icon-wrap',style:{background:poste.colorBg,color:poste.color}},
+          iconEl('tag',18)),
+        el('div',{cls:'traca-etiq-body'},
+          el('div',{cls:'traca-etiq-label'},etiq.label),
+          el('div',{cls:'traca-etiq-meta'},
+            el('span',{cls:'traca-format-badge'},fmtObj.label),
+            el('span',{cls:'traca-printer-badge'},
+              iconEl('printer',10),
+              '\u00a0'+(etiq.printer||'Non configurée'))
+          )
+        ),
+        el('button',{cls:'traca-print-btn',on:{click:()=>openTracaPrint(etiq)}},
+          iconEl('printer',13),' Imprimer')
+      );
+      return card;
+    });
+    listEl = el('div',{cls:'traca-etiq-list'},...cards);
+  }
+  return el('div',{cls:'content'}, backBar, listEl);
+}
+
+function buildTraca() {
+  if (S.tracaPoste) {
+    const poste = TRACA_POSTES.find(p=>p.id===S.tracaPoste);
+    if (poste) return buildTracaPosteView(poste);
+  }
+  // Vue sélection poste
+  const cards = TRACA_POSTES.map(poste=>{
+    const count = TRACA_ETIQUETTES.filter(e=>e.postes.includes(poste.id)).length;
+    const card = el('div',{cls:'traca-poste-card',on:{click:()=>{ S.tracaPoste=poste.id; renderContent(); }}},
+      el('div',{cls:'traca-poste-icon',style:{background:poste.colorBg,color:poste.color}},
+        iconEl(poste.icon,22)),
+      el('div',{cls:'traca-poste-label'},poste.label),
+      el('div',{cls:'traca-poste-count'},count+' étiquette'+(count>1?'s':''))
+    );
+    return card;
+  });
+  return el('div',{cls:'content'},
+    el('div',{cls:'traca-section-title'},'Sélectionner un poste de travail'),
+    el('div',{cls:'traca-postes-grid'},...cards)
+  );
+}
+
 function buildInventaire() {
   const list = S.inventaireList||[];
   return el('div',{cls:'content'},
@@ -1426,6 +1701,7 @@ function renderContent() {
   else if (S.selEmpl) content = buildEmplacementDetail();
   else if (S.tab === 'dashboard') content = buildDashboard();
   else if (S.tab === 'inventaire') content = buildInventaire();
+  else if (S.tab === 'traca') content = buildTraca();
   else content = buildDashboard();
 
   if (content) area.appendChild(content);
@@ -1436,6 +1712,77 @@ function renderContent() {
     });
   }
 }
+
+// ── Calculette flottante ────────────────────────────────────────
+(function(){
+  let _open=false, _expr='', _val='0', _justEq=false;
+  const CALC_SVG='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><circle cx="8.5" cy="11" r=".8" fill="currentColor" stroke="none"/><circle cx="12" cy="11" r=".8" fill="currentColor" stroke="none"/><circle cx="15.5" cy="11" r=".8" fill="currentColor" stroke="none"/><circle cx="8.5" cy="15" r=".8" fill="currentColor" stroke="none"/><circle cx="12" cy="15" r=".8" fill="currentColor" stroke="none"/><circle cx="15.5" cy="15" r=".8" fill="currentColor" stroke="none"/><line x1="8" y1="19" x2="16" y2="19"/></svg>';
+  const KEYS=[['C','⌫','%','÷'],['7','8','9','×'],['4','5','6','−'],['1','2','3','+'],[  '0','.','=']];
+  function _press(k){
+    if(k==='C'){_expr='';_val='0';_justEq=false;return;}
+    if(k==='⌫'){_val=_val.length>1?_val.slice(0,-1):'0';return;}
+    if(k==='%'){try{_val=String(parseFloat(_val)/100);}catch(e){}return;}
+    if(k==='='){
+      try{
+        const e=(_justEq?_val:_expr+_val).replace(/÷/g,'/').replace(/×/g,'*').replace(/−/g,'-');
+        const r=Function('"use strict";return ('+e+')')();
+        _expr=e+'=';_val=String(Math.round(r*1e10)/1e10);_justEq=true;
+      }catch(e){_val='Err';_expr='';_justEq=false;}
+      return;
+    }
+    if(['+','-','×','÷','−'].includes(k)){
+      if(_justEq){_expr=_val+k;_val='0';_justEq=false;return;}
+      _expr+=_val+k;_val='0';return;
+    }
+    if(_justEq){_expr='';_justEq=false;}
+    if(k==='.'){if(_val.includes('.'))return;_val+='.';return;}
+    _val=(_val==='0'||_val==='-0')?(_val.startsWith('-')?'-'+k:k):_val+k;
+  }
+  function _upd(){
+    const cv=document.querySelector('#_calc_panel ._cv');
+    const ce=document.querySelector('#_calc_panel ._ce');
+    const p=document.getElementById('_calc_panel');
+    if(cv)cv.textContent=_val;
+    if(ce)ce.textContent=_expr;
+    if(p)p.style.display=_open?'':'none';
+  }
+  function _mount(){
+    if(document.getElementById('_calc_fab'))return;
+    const fab=document.createElement('button');
+    fab.id='_calc_fab';fab.className='calc-fab';fab.title='Calculette';
+    fab.innerHTML=CALC_SVG;
+    fab.onclick=()=>{_open=!_open;_upd();};
+    document.body.appendChild(fab);
+    const panel=document.createElement('div');
+    panel.id='_calc_panel';panel.className='calc-panel';panel.style.display='none';
+    const disp=document.createElement('div');disp.className='calc-display';
+    const ce=document.createElement('div');ce.className='calc-expr _ce';
+    const cv=document.createElement('div');cv.className='calc-val _cv';cv.textContent='0';
+    disp.append(ce,cv);panel.appendChild(disp);
+    const grid=document.createElement('div');grid.className='calc-grid';
+    KEYS.forEach(row=>row.forEach(k=>{
+      const b=document.createElement('button');
+      b.className='calc-key'+(k==='='?' eq':['+','-','×','÷','−'].includes(k)?' op':['C','⌫','%'].includes(k)?' fn':'');
+      b.textContent=k;
+      if(k==='0')b.style.gridColumn='span 2';
+      b.onclick=()=>{_press(k);_upd();};
+      grid.appendChild(b);
+    }));
+    panel.appendChild(grid);document.body.appendChild(panel);
+    document.addEventListener('keydown',e=>{
+      if(!_open)return;
+      if(e.key>='0'&&e.key<='9'){_press(e.key);_upd();}
+      else if(e.key==='.'){_press('.');_upd();}
+      else if(e.key==='+'||e.key==='-'){_press(e.key==='+'?'+':'−');_upd();}
+      else if(e.key==='*'){_press('×');_upd();}
+      else if(e.key==='/'){e.preventDefault();_press('÷');_upd();}
+      else if(e.key==='Enter'||e.key==='='){_press('=');_upd();}
+      else if(e.key==='Escape'){_open=false;_upd();}
+      else if(e.key==='Backspace'){_press('⌫');_upd();}
+    });
+  }
+  window._calcMountStock=_mount;
+})();
 
 function render() {
   // La modale "contact support" est montée sur <body> : il faut la synchroniser
@@ -1462,6 +1809,7 @@ function render() {
       ...[
         { tab:'dashboard',  icon:'grid', label:'Dashboard' },
         ...(!S.stockReadOnly ? [{ tab:'inventaire', icon:'clipboard', label:'Inventaire' }] : []),
+        { tab:'traca', icon:'printer', label:'Étiquettes traça' },
       ].map(n => el('button', { cls:'nav-btn'+(S.tab===n.tab?' active':''), 'data-tab':n.tab, on:{ click:()=>goToTab(n.tab) } },
         iconEl(n.icon,16),
         el('span', null, ' ' + n.label)
@@ -1498,6 +1846,9 @@ function render() {
       el('div', null,
         el('div', { cls:'mobile-topbar-title' }, 'Stock'),
         el('div', { cls:'mobile-topbar-sub' }, 'Inventaire, mouvements et emplacements')
+      ),
+      el('button', { cls:'mobile-print-btn'+(S.tab==='traca'?' active':''), on:{ click:()=>goToTab('traca') }, attrs:{ 'aria-label':'Étiquettes traça', type:'button', title:'Étiquettes traçabilité' } },
+        el('span', { attrs:{ style:'display: inline-flex; align-items: center; flex-shrink: 0;' } }, iconEl('printer',20))
       ),
       el('button', { cls:'mobile-home-btn', on:{ click:()=>window.location.href='/' }, attrs:{ 'aria-label':'Accueil', type:'button' } },
         el('span', { attrs:{ style:'display: inline-flex; align-items: center; flex-shrink: 0;' } }, iconEl('home',20))
@@ -1625,6 +1976,9 @@ function render() {
   }
 
   renderContent();
+
+  // Calculette flottante (montée une seule fois, persiste entre les rendus)
+  window._calcMountStock && window._calcMountStock();
 }
 
 async function init() {
