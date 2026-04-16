@@ -667,7 +667,7 @@ function icon(name, size=16){
     'tag': '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>',
     'chevron-right': '<polyline points="9 18 15 12 9 6"/>',
     'atelier': '<path d="M2 20h20"/><path d="M4 20V10l8-6 8 6v10"/><path d="M9 20v-5h6v5"/><path d="M10 10h4"/><path d="M12 10v5"/>',
-    'scan': '<rect x="3" y="7" width="5" height="5" rx="1"/><rect x="16" y="7" width="5" height="5" rx="1"/><rect x="3" y="16" width="5" height="5" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M3 12v-1"/><path d="M12 3h1"/><path d="M12 21v-1"/><path d="M21 12v-1"/>',
+    'scan': '<rect x="3" y="3" width="5" height="5"/><rect x="16" y="3" width="5" height="5"/><rect x="3" y="16" width="5" height="5"/><line x1="21" y1="16" x2="21" y2="21"/><line x1="16" y1="21" x2="21" y2="21"/><line x1="11" y1="3" x2="11" y2="7"/><line x1="11" y1="11" x2="11" y2="17"/><line x1="3" y1="11" x2="7" y2="11"/><line x1="11" y1="11" x2="17" y2="11"/>',
     'inbox': '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
     'check-circle': '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
   };
@@ -2264,7 +2264,7 @@ function buildReception() {
     }, 80);
   } else {
     const placeholder = el('div', { cls: 'recep-cam-placeholder' },
-      el('div', { cls: 'recep-cam-icon' }, '📷'),
+      iconEl('scan', 40),
       el('div', null, 'Appuyez sur "Démarrer" pour activer la caméra')
     );
     camCard.appendChild(placeholder);

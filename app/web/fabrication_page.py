@@ -234,14 +234,18 @@ table.fab-table tr.fab-row-last td{
 .fab-btn:hover{filter:brightness(1.1);transform:translateY(-1px)}
 .fab-btn:active{transform:translateY(0);filter:brightness(.95)}
 .fab-btn:disabled{opacity:.4;cursor:not-allowed;transform:none;filter:none}
-.fab-btn-primary{background:var(--accent);color:#0a0e17}
-.fab-btn-success{background:var(--success);color:#0a0e17}
-.fab-btn-warn{background:var(--warn);color:#0a0e17}
+.fab-btn-primary{background:var(--accent);color:var(--bg)}
+.fab-btn-success{background:var(--success);color:var(--bg)}
+.fab-btn-warn{background:var(--warn);color:var(--bg)}
 .fab-btn-danger{background:var(--danger);color:#fff}
 .fab-btn-ghost{background:var(--accent-bg);color:var(--accent);border:1px solid rgba(34,211,238,.3)}
 .fab-btn-muted{background:transparent;color:var(--text2);border:1px solid var(--border)}
 .fab-btn-muted:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 .fab-btn-sm{padding:7px 12px;font-size:12px;border-radius:8px}
+
+/* Theme toggle button */
+.fab-theme-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-size:12px;font-family:inherit;transition:all .15s}
+.fab-theme-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 
 /* Right: search + comment */
 .fab-footer-tools{
@@ -684,6 +688,8 @@ function icon(name,size=16){
     'log-out':'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
     edit:'<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
     alert:'<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+    sun:'<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>',
+    moon:'<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
     'plus-circle':'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>',
     printer:'<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>',
     scan:'<rect x="3" y="3" width="5" height="5"/><rect x="16" y="3" width="5" height="5"/><rect x="3" y="16" width="5" height="5"/><line x1="21" y1="16" x2="21" y2="21"/><line x1="16" y1="21" x2="21" y2="21"/><line x1="11" y1="3" x2="11" y2="7"/><line x1="11" y1="11" x2="11" y2="17"/><line x1="3" y1="11" x2="7" y2="11"/><line x1="11" y1="11" x2="17" y2="11"/>',
@@ -868,7 +874,7 @@ function renderSidebar(){
   return h('nav',{className:'fab-sidebar'},
     h('div',{className:'fab-sidebar-head'},
       h('div',{className:'fab-sidebar-brand'},'Saisie',h('span',null,' Prod')),
-      h('div',{className:'fab-sidebar-sub'},'by MySifa')
+      h('div',{className:'fab-sidebar-sub'},'by SIFA')
     ),
     h('div',{className:'fab-sidebar-list'},...groups),
     h('div',{className:'fab-sidebar-bottom'},
@@ -1416,6 +1422,10 @@ function renderFooter(){
       className:'fab-btn fab-btn-success',
       onClick:()=>handleOpTrigger('01','Début dossier','personnel')
     }, svgIcon('plus-circle',16),' Début de dossier'));
+    btns.push(h('button',{
+      className:'fab-btn fab-btn-muted fab-btn-sm',
+      onClick:()=>triggerOp('87','Départ personnel')
+    }, svgIcon('log-out',14),' Départ personnel'));
   }
 
   // ── État : en production (dossier actif, aucun arrêt) ──
@@ -1482,7 +1492,6 @@ function renderFooter(){
       searchInput,
     ),
     h('div',{className:'fab-comment-row'},
-      h('span',{className:'fab-comment-hint'},'Commenter la saisie en cours'),
       commentBtn
     )
   );
@@ -1501,6 +1510,17 @@ function renderFooter(){
   const tabNavWrap = h('div',{style:{display:'flex',justifyContent:'center',
     alignItems:'center',padding:'6px 0 8px'}}, tabNav);
 
+  // Theme toggle button
+  const isLight = document.body.classList.contains('light');
+  const themeBtn = h('button',{
+    className:'fab-theme-btn',
+    onClick:()=>{
+      document.body.classList.toggle('light');
+      localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');
+      render();
+    }
+  }, svgIcon(isLight?'sun':'moon',14), isLight?'Clair':'Sombre');
+
   // When on non-saisie tabs, show a minimal status line instead of full footer
   if(S.fabTab!=='saisie'){
     const machineName = (S.machine&&S.machine.nom)||(S.user&&S.user.machine_nom)||'—';
@@ -1512,7 +1532,9 @@ function renderFooter(){
         h('span',{style:{color:'var(--border)'}},'/'),
         h('span',null,dossierLabel),
         h('span',{style:{color:'var(--border)'}},'/'),
-        h('span',{className:'fab-etat-badge '+etatClass(S.etat),style:{fontSize:'9px',padding:'2px 8px'}}, etatLabel(S.etat))
+        h('span',{className:'fab-etat-badge '+etatClass(S.etat),style:{fontSize:'9px',padding:'2px 8px'}}, etatLabel(S.etat)),
+        h('span',{style:{color:'var(--border)'}},'/'),
+        themeBtn
       ),
       tabNavWrap
     );
@@ -1523,7 +1545,7 @@ function renderFooter(){
     h('div',{className:'fab-footer-actions',style:{display:'flex',flexDirection:'column',alignItems:'center',gap:'8px'}},
       machineSelectorRow,
       h('div',{className:'fab-footer-btns'},...btns),
-      tabNavWrap
+      h('div',{style:{display:'flex',alignItems:'center',gap:'8px'}}, tabNavWrap, themeBtn)
     ),
     toolsSection
   );
@@ -1552,6 +1574,12 @@ function handleSearchSubmit(query){
   }
 
   if(found){
+    // Vérifier qu'une machine est sélectionnée avant de déclencher l'opération
+    const hasMachine = S.machine || S.adminMachineId || (S.user && S.user.machine_nom);
+    if(!hasMachine && found.code!=='86' && found.code!=='87'){
+      showToast('Sélectionnez une machine avant de saisir une opération','warn');
+      return;
+    }
     set({searchQuery:''});
     handleOpTrigger(found.code, found.label, found.category);
   } else {

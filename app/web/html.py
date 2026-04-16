@@ -925,7 +925,7 @@ async function checkAuth(){
       const sp=new URLSearchParams(window.location.search||'');
       const p=(sp.get('page')||'').trim();
       if(S.app==='prod' && p==='users'){window.location.href='/settings';return;}
-      const allowed=new Set(['production','suivi','profil','historique','saisies','import','rentabilite','dossiers']);
+      const allowed=new Set(['production','suivi','profil','historique','saisies','import','rentabilite','dossiers','traceabilite']);
       if(S.app==='prod' && allowed.has(p)) S.page=p;
     }catch(e){}
     if(S.app==='prod'){
@@ -1037,7 +1037,7 @@ async function doLogin(email,password){
       const sp=new URLSearchParams(window.location.search||'');
       const p=(sp.get('page')||'').trim();
       if(S.app==='prod' && p==='users'){window.location.href='/settings';return;}
-      const allowed=new Set(['production','suivi','profil','historique','saisies','import','rentabilite','dossiers']);
+      const allowed=new Set(['production','suivi','profil','historique','saisies','import','rentabilite','dossiers','traceabilite']);
       if(S.app==='prod' && allowed.has(p)) S.page=p;
     }catch(e){}
     S.loginError=null;
@@ -2005,7 +2005,7 @@ function renderPortal(){
       className:'portal-app',
       onClick:()=>{ window.location.href='/fabrication'; }
     },
-      h('div',{className:'portal-app-icon'},iconEl('activity',28)),
+      h('div',{className:'portal-app-icon'},iconEl('edit',28)),
       h('div',{className:'portal-app-name'},'Saisie Prod'),
       h('div',{className:'portal-app-desc'},'Saisie opérateur — machine')
     ));
@@ -3679,6 +3679,7 @@ function renderSidebar(){
   const items=[
     ...(canPlanningNav(S.user)?[{key:'_planning',label:'Planning',icon:'calendar'}]:[]),
     {key:'production',label:'Production',icon:'wrench'},
+    {key:'traceabilite',label:'Traçabilité',icon:'layers'},
     ...(admin?[{key:'rentabilite',label:'Rentabilité',icon:'trending-up'}]:[]),
   ];
   const isLight=document.body.classList.contains('light');
@@ -4473,7 +4474,6 @@ function renderProdPage(){
     {key:'kpis',    label:"Vue d'ensemble", icon:'wrench'},
     {key:'saisies', label:'Saisies', icon:'pencil'},
     {key:'erreurs', label:'Erreurs & Qualité', icon:'alert-triangle'},
-    {key:'traceabilite', label:'Traçabilité', icon:'layers'},
   ];
   const subNav = h('div',{className:'nav-tabs'},
     ...tabs.map(t=>h('button',{
@@ -4484,7 +4484,6 @@ function renderProdPage(){
         if(t.key==='kpis'&&!S.production) await loadProd();
         if(t.key==='saisies'&&!S.saisies)  await loadSaisies();
         if(t.key==='erreurs'&&!S.historique) await loadHist();
-        if(t.key==='traceabilite') await loadTracabilite();
         render();
       }
     }, iconEl(t.icon,14),' '+t.label))
@@ -4492,7 +4491,6 @@ function renderProdPage(){
   let content;
   if(subPage==='saisies')  content = renderSaisiesWithImport();
   else if(subPage==='erreurs') content = renderHist();
-  else if(subPage==='traceabilite') content = renderTracabilite();
   else content = renderProdKpis();
   return h('div',null, subNav, content);
 }
@@ -6626,6 +6624,7 @@ function render(){
       production: S.subPage==='saisies'?'Saisies':S.subPage==='erreurs'?'Historique & Erreurs':'Production',
       suivi:'Rentabilité & Dossiers',
       profil:'Mon profil',
+      traceabilite:'Traçabilité',
       // rétrocompat URL directe
       historique:'Historique & Erreurs',saisies:'Saisies',import:'Import XLSX',
       dossiers:'Dossiers',rentabilite:'Rentabilité',
@@ -6636,6 +6635,7 @@ function render(){
                   'KPIs, temps, quantités et qualité de saisie',
       suivi:'Dossiers de production et comparaison devis / réel',
       profil:'Informations personnelles et mot de passe',
+      traceabilite:'Matières utilisées par dossier',
       historique:'',saisies:'',import:'',dossiers:'',rentabilite:'',
     };
     const topbar=h('div',{className:'mobile-topbar'},
@@ -6657,6 +6657,7 @@ function render(){
         S.page==='production'?renderProdPage():null,
         S.page==='suivi'?renderSuivi():null,
         S.page==='profil'?renderProfil(S.user):null,
+        S.page==='traceabilite'?renderTracabilite():null,
         // Rétrocompat accès direct par URL :
         S.page==='historique'?renderHist():null,
         S.page==='saisies'?renderSaisies():null,
@@ -6700,6 +6701,7 @@ async function nav(){
   else if(S.page==='import')await loadImports();
   else if(S.page==='rentabilite'){await loadDevis();await loadRentPlanning();}
   else if(S.page==='dossiers')await loadDos();
+  else if(S.page==='traceabilite'){S.traceabilite=null;S.traceabiliteDossier=undefined;await loadTracabilite();}
   render();
 }
 
