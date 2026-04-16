@@ -656,6 +656,45 @@ def _migrate(conn):
     except sqlite3.Error:
         pass
 
+    # Migration : colonne dernier_metrage sur machines
+    existing_machines = {row[1] for row in conn.execute("PRAGMA table_info(machines)").fetchall()}
+    if "dernier_metrage" not in existing_machines:
+        conn.execute("ALTER TABLE machines ADD COLUMN dernier_metrage REAL")
+
+    # Tables réception matière (bobines)
+    if "stock_receptions" not in existing_tables:
+        conn.execute("""CREATE TABLE stock_receptions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL,
+            created_by TEXT,
+            created_by_name TEXT,
+            note TEXT,
+            nb_bobines INTEGER DEFAULT 0
+        )""")
+    if "stock_reception_items" not in existing_tables:
+        conn.execute("""CREATE TABLE stock_reception_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            reception_id INTEGER NOT NULL,
+            code_barre TEXT NOT NULL,
+            scanned_at TEXT NOT NULL,
+            FOREIGN KEY (reception_id) REFERENCES stock_receptions(id)
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_recp_items ON stock_reception_items(reception_id)")
+
+    # Traçabilité matières utilisées en fabrication
+    if "fab_matieres_utilisees" not in existing_tables:
+        conn.execute("""CREATE TABLE fab_matieres_utilisees (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            machine_id INTEGER,
+            machine_nom TEXT,
+            operateur TEXT,
+            no_dossier TEXT,
+            code_barre TEXT NOT NULL,
+            scanned_at TEXT NOT NULL
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_fab_mat_dossier ON fab_matieres_utilisees(no_dossier)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_fab_mat_machine ON fab_matieres_utilisees(machine_id, scanned_at)")
+
     _ensure_schema_migrations_table(conn)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=2 LIMIT 1").fetchone():
         conn.execute(

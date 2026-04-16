@@ -33,6 +33,8 @@ from frontend.compta_page import router as compta_page_router
 from app.web.expe_page import router as expe_page_router
 from app.routers.settings import router as settings_api_router
 from frontend.settings_page import router as settings_page_router
+from app.routers.fabrication import router as fabrication_api_router
+from app.web.fabrication_page import router as fabrication_page_router
 
 
 @asynccontextmanager
@@ -95,6 +97,8 @@ app.include_router(compta_page_router)
 app.include_router(expe_page_router)
 app.include_router(settings_api_router)
 app.include_router(settings_page_router)
+app.include_router(fabrication_api_router)
+app.include_router(fabrication_page_router)
 
 
 @app.get("/", response_class=HTMLResponse)

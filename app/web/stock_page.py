@@ -22,8 +22,13 @@ def stock_page(request: Request):
         if e.status_code == 401:
             return RedirectResponse(url="/?next=/stock", status_code=302)
         raise
+    # Les fabricants peuvent accéder uniquement via ?tab=traca (outil d'étiquettes)
+    tab_param = request.query_params.get("tab", "")
     if not user_has_app_access(user, "stock"):
-        return access_denied_response("MyStock")
+        if user.get("role") == "fabrication" and tab_param == "traca":
+            pass  # autorisé → accès limité au traça dans le JS
+        else:
+            return access_denied_response("MyStock")
     # Important: prevent iOS/PWA from serving stale HTML/JS.
     return HTMLResponse(
         content=STOCK_HTML,
@@ -487,6 +492,74 @@ body.light .field-input.empl-upper::placeholder{
   padding:12px 20px;font-family:monospace;font-size:14px;color:var(--accent);text-align:center;min-width:200px}
 .btn-close-cam{background:var(--danger);color:#fff;border:none;border-radius:12px;
   padding:12px 32px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
+
+/* ── Réception matière ─────────────────────────────────────── */
+.recep-page{padding:20px;max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+.recep-title{font-size:18px;font-weight:800}
+.recep-title span{color:var(--accent)}
+.recep-layout{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:700px){.recep-layout{grid-template-columns:1fr}}
+.recep-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.recep-card-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);display:flex;align-items:center;gap:7px}
+/* Scanner vidéo */
+.recep-video-wrap{position:relative;border-radius:12px;overflow:hidden;background:#000;aspect-ratio:4/3;max-height:260px;display:flex;align-items:center;justify-content:center}
+.recep-video{width:100%;height:100%;object-fit:cover}
+.recep-scan-frame{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:65%;max-width:200px;aspect-ratio:1;border:2.5px solid var(--accent);border-radius:10px;pointer-events:none}
+.recep-scan-frame::before,.recep-scan-frame::after{content:'';position:absolute;width:20px;height:20px}
+.recep-scan-line{position:absolute;top:50%;left:6%;right:6%;height:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent);animation:scanline 1.8s ease-in-out infinite}
+@keyframes scanline{0%,100%{top:15%}50%{top:85%}}
+.recep-cam-placeholder{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--muted);padding:30px;text-align:center;aspect-ratio:4/3;max-height:260px}
+.recep-cam-icon{font-size:40px;opacity:.4}
+/* Tableau scannés */
+.recep-table-wrap{overflow-x:auto}
+.recep-table{width:100%;border-collapse:collapse}
+.recep-table th{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;padding:6px 10px;border-bottom:1px solid var(--border);text-align:left;font-weight:700}
+.recep-table td{padding:7px 10px;font-size:13px;border-bottom:1px solid rgba(255,255,255,.04);color:var(--text2);vertical-align:middle}
+.recep-table tr:last-child td{border-bottom:none}
+.recep-table tr.recep-row-new td{animation:rowflash .5s ease-out}
+@keyframes rowflash{from{background:rgba(34,211,238,.18)}to{background:transparent}}
+.recep-code{font-family:monospace;font-size:13px;font-weight:700;color:var(--text)}
+.recep-del-btn{border:none;background:transparent;color:var(--muted);cursor:pointer;padding:3px 6px;border-radius:4px;font-size:13px;line-height:1;transition:color .1s}
+.recep-del-btn:hover{color:var(--danger)}
+.recep-empty{padding:30px;text-align:center;color:var(--muted);font-size:13px}
+/* Actions */
+.recep-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:flex-end}
+.recep-count{font-size:12px;color:var(--muted);flex:1}
+.recep-count strong{color:var(--accent)}
+.recep-note-inp{width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--text);font-family:inherit;outline:none;transition:border-color .15s}
+.recep-note-inp:focus{border-color:var(--accent)}
+.recep-note-inp::placeholder{color:var(--muted)}
+/* Historique */
+.recep-hist{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.recep-hist-head{padding:12px 16px;border-bottom:1px solid var(--border);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);display:flex;align-items:center;gap:7px}
+.recep-hist-row{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid rgba(255,255,255,.04);transition:background .1s;cursor:pointer}
+.recep-hist-row:last-child{border-bottom:none}
+.recep-hist-row:hover{background:rgba(34,211,238,.04)}
+.recep-hist-date{font-size:12px;font-family:monospace;color:var(--text2);white-space:nowrap;flex-shrink:0}
+.recep-hist-count{background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;white-space:nowrap;flex-shrink:0}
+.recep-hist-note{font-size:12px;color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.recep-hist-user{font-size:11px;color:var(--muted);flex-shrink:0}
+.recep-hist-empty{padding:24px;text-align:center;color:var(--muted);font-size:13px}
+/* Détail lot (expandable) */
+.recep-hist-detail{padding:8px 16px 12px;display:flex;flex-wrap:wrap;gap:6px}
+.recep-hist-chip{font-family:monospace;font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:3px 9px;color:var(--text2)}
+/* Input manuel */
+.recep-manual-wrap{display:flex;gap:8px}
+.recep-manual-inp{flex:1;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;color:var(--text);font-family:monospace;outline:none;transition:border-color .15s}
+.recep-manual-inp:focus{border-color:var(--accent)}
+.recep-manual-inp::placeholder{color:var(--muted)}
+.btn-recep{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:9px;border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;transition:all .15s;white-space:nowrap}
+.btn-recep:hover{filter:brightness(1.1);transform:translateY(-1px)}
+.btn-recep:active{transform:translateY(0)}
+.btn-recep:disabled{opacity:.4;cursor:not-allowed;transform:none;filter:none}
+.btn-recep-primary{background:var(--accent);color:#0a0e17}
+.btn-recep-success{background:var(--success);color:#0a0e17}
+.btn-recep-danger{background:var(--danger);color:#fff}
+.btn-recep-ghost{background:var(--accent-bg);color:var(--accent);border:1px solid rgba(34,211,238,.3)}
+.btn-recep-muted{background:transparent;color:var(--text2);border:1px solid var(--border)}
+.btn-recep-muted:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.recep-dup-badge{font-size:10px;padding:2px 6px;border-radius:5px;background:rgba(251,191,36,.2);color:var(--warn);font-weight:700;margin-left:6px}
 </style>
 </head>
 <body>
@@ -499,6 +572,8 @@ const API = window.location.origin;
 let S = {
   user: null,
   tab: 'dashboard',
+  stockReadOnly: false,
+  tracaOnly: false,   // fabrication : accès limité à l'onglet traça
   sidebarOpen: false,
   searchQuery: '',
   searchResults: null,
@@ -528,6 +603,15 @@ let S = {
   // Étiquettes traçabilité
   tracaPoste: null,
   tracaPrintModal: null,
+  // Réception matière
+  recepItems: [],          // [{code, ts, isNew}] — tableau temporaire en cours de scan
+  recepNote: '',           // note optionnelle sur la réception
+  recepScanning: false,    // caméra active
+  recepStream: null,       // MediaStream (caméra)
+  recepHistory: [],        // lots passés (chargés depuis API)
+  recepHistLoading: false,
+  recepExpandedId: null,   // lot ouvert dans l'historique
+  recepManual: '',         // valeur du champ saisie manuelle
 };
 
 // ── API ─────────────────────────────────────────────────────────
@@ -583,6 +667,9 @@ function icon(name, size=16){
     'tag': '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>',
     'chevron-right': '<polyline points="9 18 15 12 9 6"/>',
     'atelier': '<path d="M2 20h20"/><path d="M4 20V10l8-6 8 6v10"/><path d="M9 20v-5h6v5"/><path d="M10 10h4"/><path d="M12 10v5"/>',
+    'scan': '<rect x="3" y="7" width="5" height="5" rx="1"/><rect x="16" y="7" width="5" height="5" rx="1"/><rect x="3" y="16" width="5" height="5" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M3 12v-1"/><path d="M12 3h1"/><path d="M12 21v-1"/><path d="M21 12v-1"/>',
+    'inbox': '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+    'check-circle': '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
   };
   return `<svg ${a} aria-hidden="true" style="display:inline-block;vertical-align:middle;flex-shrink:0">${p[name]||p['grid']}</svg>`;
 }
@@ -913,6 +1000,10 @@ function closeSidebar() { S.sidebarOpen = false; document.body.classList.remove(
 
 // ── Navigation ──────────────────────────────────────────────────
 function goToTab(tab) {
+  // Fabrication : accès limité au traça
+  if (S.tracaOnly && tab !== 'traca') return;
+  // Arrêter la caméra si on quitte l'onglet réception
+  if (tab !== 'reception' && S.recepScanning) recepStopCamera();
   S.tab = tab; S.selProduit = null; S.selEmpl = null; S.searchResults = null; S.showAddForm = false;
   if (tab !== 'traca') S.tracaPoste = null;
   clearSearch(); closeSidebar();
@@ -920,6 +1011,7 @@ function goToTab(tab) {
   renderContent();
   if (tab === 'dashboard') loadDashboard();
   else if (tab === 'inventaire') loadInventaireList();
+  else if (tab === 'reception') loadRecepHistory();
 }
 
 function updateNavActive() {
@@ -1420,9 +1512,7 @@ function buildDashboard() {
   return el('div',{cls:'content'},
     el('div',{cls:'stats-grid'},
       el('div',{cls:'stat-card'},el('div',{cls:'stat-label'},'Références'),el('div',{cls:'stat-value accent'},s.nb_refs||0)),
-      el('div',{cls:'stat-card'},el('div',{cls:'stat-label'},'Emplacements occupés'),el('div',{cls:'stat-value accent'},s.nb_empl_occupes||0)),
-      el('div',{cls:'stat-card'},el('div',{cls:'stat-label'},'Total unités'),el('div',{cls:'stat-value'},fN(s.total_unites||0))),
-      el('div',{cls:'stat-card'},el('div',{cls:'stat-label'},'À inventorier'),el('div',{cls:'stat-value warn'},s.nb_a_inventorier||0))
+      el('div',{cls:'stat-card'},el('div',{cls:'stat-label'},'Emplacements occupés'),el('div',{cls:'stat-value accent'},s.nb_empl_occupes||0))
     ),
     ...(!S.stockReadOnly ? [el('div',{cls:'card',style:{overflow:'visible'}},
       el('div',{cls:'card-header'},el('div',{cls:'card-title'},'➕ Ajouter au stock')),
@@ -1588,139 +1678,274 @@ const TRACA_POSTES = [
   { id:'bureaux',    label:'Bureaux',      icon:'briefcase', color:'#6366f1', colorBg:'rgba(99,102,241,.12)' },
   { id:'cohesio1',   label:'Cohésio 1',    icon:'cpu',       color:'#f59e0b', colorBg:'rgba(245,158,11,.12)' },
   { id:'cohesio2',   label:'Cohésio 2',    icon:'cpu',       color:'#f59e0b', colorBg:'rgba(245,158,11,.12)' },
-  { id:'dsi',        label:'DSI',          icon:'cpu',       color:'#64748b', colorBg:'rgba(100,116,139,.12)' },
-  { id:'repiquage',  label:'Repiquage',    icon:'atelier',   color:'#64748b', colorBg:'rgba(100,116,139,.12)' },
   { id:'logistique', label:'Logistique',   icon:'truck',     color:'#10b981', colorBg:'rgba(16,185,129,.12)' },
 ];
 
 const TRACA_FORMATS = [
-  { id:'a4',     label:'A4',        dims:'210×297 mm' },
-  { id:'105x50', label:'105×50 mm', dims:'105×50 mm'  },
-  { id:'40x20',  label:'40×20 mm',  dims:'40×20 mm'   },
+  { id:'a4p',     label:'A4 paysage',   dims:'297×210 mm' },
+  { id:'120x105', label:'120×105 mm',   dims:'120×105 mm' },
+  { id:'105x50',  label:'105×50 mm',    dims:'105×50 mm'  },
+  { id:'40x20',   label:'40×20 mm',     dims:'40×20 mm'   },
+  { id:'40x30',   label:'40×30 mm',     dims:'40×30 mm'   },
 ];
 
-// { id, label, format, postes[], printer (null=non configurée) }
 const TRACA_ETIQUETTES = [
-  { id:'nb_palettes',  label:'Nombre de palettes',            format:'105x50', postes:['logistique','cohesio1','cohesio2'], printer:null },
-  { id:'id_palette',   label:'Identification palette',         format:'105x50', postes:['logistique'],                      printer:null },
-  { id:'id_carton',    label:'Identification carton',          format:'40x20',  postes:['cohesio1','cohesio2'],             printer:null },
-  { id:'id_bobine',    label:'Identification bobine',          format:'40x20',  postes:['cohesio1','cohesio2'],             printer:null },
-  { id:'id_plaque',    label:'Identification plaques de découpe', format:'a4',  postes:['bureaux'],                         printer:null },
+  // Logistique
+  { id:'id_palette_a4',   label:'Identification palette',  format:'a4p',    postes:['logistique']               },
+  { id:'nb_palettes_logi',label:'Nombre de palettes',      format:'120x105',postes:['logistique']               },
+  // Bureaux
+  { id:'id_plaque',       label:'Identification plaques',  format:'105x50', postes:['bureaux']                  },
+  { id:'id_cliche',       label:'Identification clichés',  format:'105x50', postes:['bureaux']                  },
+  // Cohésio
+  { id:'nb_palettes_c',   label:'Nombre de palettes',      format:'105x50', postes:['cohesio1','cohesio2']      },
+  { id:'id_carton',       label:'Identification carton',   format:'105x50', postes:['cohesio1','cohesio2']      },
+  { id:'id_bobine',       label:'Identification bobine',   format:'40x20',  postes:['cohesio1','cohesio2']      },
 ];
 
-function buildNbPalettesForm(etiq) {
-  let _ref = '';
-  let _n = '';
-
-  const previewGrid = el('div',{cls:'etiq-preview-grid'});
-  const previewTitle = el('div',{cls:'etiq-preview-title'},'Renseignez la référence et le nombre de palettes pour voir l\'aperçu.');
-
-  function updatePreview() {
-    previewGrid.innerHTML = '';
-    const n = parseInt(_n) || 0;
-    const ref = _ref.trim();
-    if (!ref || n < 1) {
-      previewTitle.textContent = 'Renseignez la référence et le nombre de palettes pour voir l\'aperçu.';
-      return;
-    }
-    previewTitle.textContent = n + ' étiquette' + (n > 1 ? 's' : '') + ' — ' + ref;
-    const shown = Math.min(n, 10);
-    for (let i = 1; i <= shown; i++) {
-      const card = el('div',{cls:'etiq-label-card'},
-        el('div',{cls:'etiq-lbl-brand'},'MySifa'),
-        el('div',{cls:'etiq-lbl-ref'}, ref),
-        el('div',{cls:'etiq-lbl-palette'}, 'PALETTE\u00a0' + i + '/' + n)
-      );
-      previewGrid.appendChild(card);
-    }
-    if (n > 10) {
-      previewGrid.appendChild(
-        el('div',{cls:'etiq-more-note'}, '+ ' + (n-10) + ' étiquette' + (n-10>1?'s':'') + ' supplémentaire' + (n-10>1?'s':'') + ' (non affichées)')
-      );
-    }
-  }
-
-  function doPrint() {
-    const n = parseInt(_n) || 0;
-    const ref = _ref.trim();
-    if (!ref) { showToast('Référence produit requise', 'error'); return; }
-    if (n < 1 || n > 500) { showToast('Nombre de palettes invalide (1–500)', 'error'); return; }
-
-    let labelsHtml = '';
-    for (let i = 1; i <= n; i++) {
-      labelsHtml += `<div class="label"><div class="brand">MySifa</div><div class="ref">${ref}</div><div class="palette">PALETTE&nbsp;${i}/${n}</div></div>`;
-    }
-    const printWin = window.open('', '_blank');
-    if (!printWin) { showToast('Le navigateur a bloqué la fenêtre d\'impression — autorisez les popups.', 'error'); return; }
-    printWin.document.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
-<title>Palettes — ${ref}</title>
+// ── Helpers impression ────────────────────────────────────────────
+function _printWin(title, pageSize, css, body) {
+  const w = window.open('', '_blank');
+  if (!w) { showToast('Autorisez les popups pour imprimer', 'error'); return null; }
+  w.document.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
+<title>${title}</title>
 <style>
-  @page { size: 105mm 50mm; margin: 0; }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: Arial, Helvetica, sans-serif; background: #fff; }
-  .label { width: 105mm; height: 50mm; padding: 3mm 4mm; display: flex;
-           flex-direction: column; justify-content: space-between;
-           page-break-after: always; page-break-inside: avoid;
-           border: 0.3mm solid #000; }
-  .label:last-child { page-break-after: auto; }
-  .brand { font-size: 7pt; color: #999; letter-spacing: 0.3pt; text-transform: uppercase; }
-  .ref { font-size: 16pt; font-weight: 700; letter-spacing: 0.3pt;
-         flex: 1; display: flex; align-items: center; word-break: break-all; }
-  .palette { font-size: 22pt; font-weight: 900; letter-spacing: 1pt; text-align: right; }
-</style></head><body>${labelsHtml}
-<script>window.onload = function(){ window.focus(); window.print(); }<\/script>
-</body></html>`);
-    printWin.document.close();
+@page { size: ${pageSize}; margin: 0; }
+*{ margin:0; padding:0; box-sizing:border-box; }
+body{ font-family: Arial, Helvetica, sans-serif; background:#fff; }
+${css}
+</style>
+</head><body>${body}<script>window.onload=function(){window.focus();window.print();}<\/script></body></html>`);
+  w.document.close();
+  return w;
+}
+
+function _inp(placeholder, opts={}) {
+  return el('input', { cls:'field-input', attrs:{ type: opts.type||'text', placeholder, autocomplete:'off', ...(opts.attrs||{}) }, style: opts.style||{} });
+}
+
+// ── 1. Logistique — Identification palette (A4 paysage) ───────────
+function buildIdPaletteA4Form() {
+  let _ref='', _quv='', _qctn='';
+  function doPrint() {
+    const ref = _ref.trim(), quv = _quv.trim(), qctn = _qctn.trim();
+    if (!ref) { showToast('Référence requise', 'error'); return; }
+    _printWin('Palette — '+ref, '297mm 210mm',
+      `.label{width:297mm;height:210mm;padding:12mm 16mm;display:flex;flex-direction:column;justify-content:space-evenly;page-break-after:always;page-break-inside:avoid}
+       .ref{font-size:72pt;font-weight:900;letter-spacing:1pt;word-break:break-all;line-height:1.1}
+       .quv{font-size:48pt;font-weight:700;color:#222}
+       .qctn{font-size:36pt;font-weight:600;color:#444}`,
+      `<div class="label">
+         <div class="ref">${ref}</div>
+         ${quv?`<div class="quv">${quv}</div>`:''}
+         ${qctn?`<div class="qctn">${qctn} cartons</div>`:''}
+       </div>`);
   }
+  const rInp=_inp('Référence produit — ex. 1077/0026'); rInp.addEventListener('input',e=>{_ref=e.target.value;});
+  const qInp=_inp('Quantité unité de vente — ex. 500 unités'); qInp.addEventListener('input',e=>{_quv=e.target.value;});
+  const cInp=_inp('Quantité cartons — ex. 20',{type:'text'}); cInp.addEventListener('input',e=>{_qctn=e.target.value;});
+  const btn=el('button',{cls:'traca-print-btn',style:{width:'100%',marginTop:'12px',justifyContent:'center'}},iconEl('printer',15),' Imprimer');
+  btn.addEventListener('click',doPrint);
+  return el('div',null,
+    el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Référence produit *'),rInp),
+    el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Quantité (unité de vente)'),qInp),
+    el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Quantité cartons'),cInp),
+    btn);
+}
 
-  const refInp = el('input',{cls:'field-input',placeholder:'Ex. 1077/0026',autocomplete:'off',style:{direction:'ltr',textTransform:'uppercase'}});
-  refInp.addEventListener('input', e => { _ref = e.target.value.toUpperCase(); updatePreview(); });
+// ── 2. Logistique — Nombre de palettes (120mm × 105mm) ────────────
+function buildNbPalettesLogiForm() {
+  let _n='';
+  function doPrint() {
+    const n=parseInt(_n)||0;
+    if(n<1||n>500){showToast('Nombre invalide (1–500)','error');return;}
+    let html='';
+    for(let i=1;i<=n;i++)
+      html+=`<div class="label"><div class="head">PALETTE</div><div class="num">${i}/${n}</div></div>`;
+    _printWin('Palettes','120mm 105mm',
+      `.label{width:120mm;height:105mm;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6mm;page-break-after:always;page-break-inside:avoid}
+       .head{font-size:28pt;font-weight:900;letter-spacing:3pt;text-transform:uppercase}
+       .num{font-size:52pt;font-weight:900;letter-spacing:2pt}`,html);
+  }
+  const nInp=_inp('Nombre de palettes — ex. 8',{type:'number',attrs:{min:'1',max:'500'},style:{width:'140px'}});
+  nInp.addEventListener('input',e=>{_n=e.target.value;});
+  const btn=el('button',{cls:'traca-print-btn',style:{width:'100%',marginTop:'12px',justifyContent:'center'}},iconEl('printer',15),' Imprimer');
+  btn.addEventListener('click',doPrint);
+  return el('div',null,
+    el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Nombre de palettes *'),nInp),
+    btn);
+}
 
-  const nInp = el('input',{cls:'field-input',type:'number',min:'1',max:'500',placeholder:'Ex. 4',style:{width:'110px'}});
-  nInp.addEventListener('input', e => { _n = e.target.value; updatePreview(); });
+// ── 3. Bureaux — Identification plaques (105mm × 50mm + EAN128) ───
+function buildIdPlaqueForm() {
+  let _num='', _fl='', _fw='';
+  const JSBARCODE_CDN='https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js';
+  function doPrint() {
+    const num=_num.trim(), fl=_fl.trim(), fw=_fw.trim();
+    if(!num){showToast('Numéro de plaque requis','error');return;}
+    const fmt=fl&&fw?`${fl} × ${fw} mm`:'';
+    const w=_printWin('Plaque '+num,'105mm 50mm',
+      `.label{width:105mm;height:50mm;padding:3mm 4mm;display:flex;flex-direction:column;justify-content:space-between;page-break-after:always;page-break-inside:avoid}
+       .head{font-size:9pt;font-weight:700;text-transform:uppercase;letter-spacing:.5pt;color:#555}
+       .num{font-size:22pt;font-weight:900;letter-spacing:.5pt}
+       .fmt{font-size:10pt;font-weight:600;color:#333}
+       .bar{display:flex;justify-content:center;margin-top:1mm}
+       svg{max-width:97mm;height:12mm}`,
+      `<div class="label">
+         <div><div class="head">Plaque N°</div><div class="num">${num}</div>${fmt?`<div class="fmt">${fmt}</div>`:''}</div>
+         <div class="bar"><svg id="bc"></svg></div>
+       </div>
+       <script src="${JSBARCODE_CDN}"><\/script>
+       <script>window.onload=function(){try{JsBarcode('#bc','${num}',{format:'CODE128',displayValue:false,margin:0,height:40});}catch(e){}window.focus();window.print();}<\/script>`);
+    if(w) w.document.close();
+  }
+  const nInp=_inp('N° de plaque — ex. 1234'); nInp.addEventListener('input',e=>{_num=e.target.value;});
+  const lInp=_inp('L (mm)',{style:{width:'90px'}}); lInp.addEventListener('input',e=>{_fl=e.target.value;});
+  const wInp=_inp('l (mm)',{style:{width:'90px'}}); wInp.addEventListener('input',e=>{_fw=e.target.value;});
+  const btn=el('button',{cls:'traca-print-btn',style:{width:'100%',marginTop:'12px',justifyContent:'center'}},iconEl('printer',15),' Imprimer');
+  btn.addEventListener('click',doPrint);
+  return el('div',null,
+    el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Numéro de plaque *'),nInp),
+    el('div',{cls:'etiq-form-row'},
+      el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Format L (mm)'),lInp),
+      el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Format l (mm)'),wInp)),
+    btn);
+}
 
-  const printBtn = el('button',{cls:'traca-print-btn',style:{width:'100%',padding:'12px',fontSize:'14px',marginTop:'14px',justifyContent:'center'}},
-    iconEl('printer',16), '\u00a0 Imprimer les étiquettes');
-  printBtn.addEventListener('click', doPrint);
+// ── 4. Bureaux — Identification clichés (105mm × 50mm + EAN128) ───
+function buildIdClicheForm() {
+  let _num='';
+  const JSBARCODE_CDN='https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js';
+  function doPrint() {
+    const num=_num.trim();
+    if(!num){showToast('Numéro de cliché requis','error');return;}
+    const w=_printWin('Cliché '+num,'105mm 50mm',
+      `.label{width:105mm;height:50mm;padding:3mm 4mm;display:flex;flex-direction:column;justify-content:space-between;page-break-after:always;page-break-inside:avoid}
+       .head{font-size:9pt;font-weight:700;text-transform:uppercase;letter-spacing:.5pt;color:#555}
+       .num{font-size:26pt;font-weight:900;letter-spacing:.5pt}
+       .bar{display:flex;justify-content:center;margin-top:2mm}
+       svg{max-width:97mm;height:14mm}`,
+      `<div class="label">
+         <div><div class="head">Cliché N°</div><div class="num">${num}</div></div>
+         <div class="bar"><svg id="bc"></svg></div>
+       </div>
+       <script src="${JSBARCODE_CDN}"><\/script>
+       <script>window.onload=function(){try{JsBarcode('#bc','${num}',{format:'CODE128',displayValue:false,margin:0,height:44});}catch(e){}window.focus();window.print();}<\/script>`);
+    if(w) w.document.close();
+  }
+  const nInp=_inp('N° de cliché — ex. 5678'); nInp.addEventListener('input',e=>{_num=e.target.value;});
+  const btn=el('button',{cls:'traca-print-btn',style:{width:'100%',marginTop:'12px',justifyContent:'center'}},iconEl('printer',15),' Imprimer');
+  btn.addEventListener('click',doPrint);
+  return el('div',null,
+    el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Numéro de cliché *'),nInp),
+    btn);
+}
 
+// ── 5. Cohésio 1 & 2 — Nombre de palettes (105mm × 50mm) ─────────
+function buildNbPalettesCForm() {
+  let _ref='', _n='';
+  function doPrint() {
+    const ref=_ref.trim(), n=parseInt(_n)||0;
+    if(!ref){showToast('Référence requise','error');return;}
+    if(n<1||n>500){showToast('Nombre invalide (1–500)','error');return;}
+    let html='';
+    for(let i=1;i<=n;i++)
+      html+=`<div class="label"><div class="ref">${ref}</div><div class="pal">PALETTE&nbsp;${i}/${n}</div></div>`;
+    _printWin('Palettes — '+ref,'105mm 50mm',
+      `.label{width:105mm;height:50mm;padding:3mm 4mm;display:flex;flex-direction:column;justify-content:space-between;page-break-after:always;page-break-inside:avoid}
+       .ref{font-size:16pt;font-weight:700;word-break:break-all}
+       .pal{font-size:24pt;font-weight:900;text-align:right;letter-spacing:1pt}`,html);
+  }
+  const rInp=_inp('Référence — ex. 1077/0026'); rInp.addEventListener('input',e=>{_ref=e.target.value.toUpperCase();});
+  const nInp=_inp('Nb palettes',{type:'number',attrs:{min:'1',max:'500'},style:{width:'120px'}}); nInp.addEventListener('input',e=>{_n=e.target.value;});
+  const btn=el('button',{cls:'traca-print-btn',style:{width:'100%',marginTop:'12px',justifyContent:'center'}},iconEl('printer',15),' Imprimer');
+  btn.addEventListener('click',doPrint);
   return el('div',null,
     el('div',{cls:'etiq-form-row'},
-      el('div',{cls:'etiq-form-field',style:{flex:'1',minWidth:'160px'}},
-        el('label',{cls:'etiq-form-label'},'Référence produit *'), refInp),
-      el('div',{cls:'etiq-form-field'},
-        el('label',{cls:'etiq-form-label'},'Nb palettes *'), nInp)
-    ),
-    el('div',{cls:'etiq-preview-section'},
-      previewTitle,
-      previewGrid
-    ),
-    printBtn
-  );
+      el('div',{cls:'etiq-form-field',style:{flex:'1'}},el('label',{cls:'etiq-form-label'},'Référence produit *'),rInp),
+      el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Nb palettes *'),nInp)),
+    btn);
+}
+
+// ── 6. Cohésio 1 & 2 — Identification carton (105mm × 50mm) ──────
+function buildIdCartonForm() {
+  let _ref='', _bpc='', _epb='';
+  function doPrint() {
+    const ref=_ref.trim(), bpc=_bpc.trim(), epb=_epb.trim();
+    if(!ref){showToast('Référence requise','error');return;}
+    const cond=[bpc?bpc+' bob/ctn':'', epb?epb+' étiq/bob':''].filter(Boolean).join(' · ');
+    _printWin('Carton — '+ref,'105mm 50mm',
+      `.label{width:105mm;height:50mm;padding:3mm 4mm;display:flex;flex-direction:column;justify-content:space-between;page-break-after:always;page-break-inside:avoid}
+       .ref{font-size:20pt;font-weight:900;word-break:break-all}
+       .cond{font-size:13pt;font-weight:600;color:#333}`,
+      `<div class="label"><div class="ref">${ref}</div>${cond?`<div class="cond">${cond}</div>`:''}</div>`);
+  }
+  const rInp=_inp('Référence — ex. 1077/0026'); rInp.addEventListener('input',e=>{_ref=e.target.value.toUpperCase();});
+  const bInp=_inp('Bobines/carton — ex. 12',{type:'number',style:{width:'130px'}}); bInp.addEventListener('input',e=>{_bpc=e.target.value;});
+  const eInp=_inp('Étiquettes/bobine — ex. 500',{type:'number',style:{width:'160px'}}); eInp.addEventListener('input',e=>{_epb=e.target.value;});
+  const btn=el('button',{cls:'traca-print-btn',style:{width:'100%',marginTop:'12px',justifyContent:'center'}},iconEl('printer',15),' Imprimer');
+  btn.addEventListener('click',doPrint);
+  return el('div',null,
+    el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Référence produit *'),rInp),
+    el('div',{cls:'etiq-form-row'},
+      el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Bobines / carton'),bInp),
+      el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Étiquettes / bobine'),eInp)),
+    btn);
+}
+
+// ── 7. Cohésio 1 & 2 — Identification bobine (40×20 ou 40×30) ────
+function buildIdBobineForm() {
+  let _ref='', _epb='', _fmt='40x20';
+  function doPrint() {
+    const ref=_ref.trim(), epb=_epb.trim();
+    if(!ref){showToast('Référence requise','error');return;}
+    const [pw, ph] = _fmt==='40x30' ? ['40mm','30mm'] : ['40mm','20mm'];
+    const fsRef = _fmt==='40x30' ? '10pt' : '8pt';
+    const fsCond = _fmt==='40x30' ? '9pt' : '7pt';
+    _printWin('Bobine — '+ref,`${pw} ${ph}`,
+      `.label{width:${pw};height:${ph};padding:1.5mm 2mm;display:flex;flex-direction:column;justify-content:space-between;page-break-after:always;page-break-inside:avoid}
+       .ref{font-size:${fsRef};font-weight:900;word-break:break-all;line-height:1.2}
+       .cond{font-size:${fsCond};font-weight:600;color:#333}`,
+      `<div class="label"><div class="ref">${ref}</div>${epb?`<div class="cond">${epb} étiq/bob</div>`:''}</div>`);
+  }
+  const rInp=_inp('Référence — ex. 1077/0026'); rInp.addEventListener('input',e=>{_ref=e.target.value.toUpperCase();});
+  const eInp=_inp('Étiquettes/bobine — ex. 500',{type:'number',style:{width:'170px'}}); eInp.addEventListener('input',e=>{_epb=e.target.value;});
+  // Sélecteur format
+  const fmtSel = el('select',{cls:'field-input',style:{width:'140px'}},
+    el('option',{attrs:{value:'40x20',selected:'true'}},'40 × 20 mm'),
+    el('option',{attrs:{value:'40x30'}},'40 × 30 mm'));
+  fmtSel.addEventListener('change',e=>{_fmt=e.target.value;});
+  const btn=el('button',{cls:'traca-print-btn',style:{width:'100%',marginTop:'12px',justifyContent:'center'}},iconEl('printer',15),' Imprimer');
+  btn.addEventListener('click',doPrint);
+  return el('div',null,
+    el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Référence produit *'),rInp),
+    el('div',{cls:'etiq-form-row'},
+      el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Étiquettes / bobine'),eInp),
+      el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Format'),fmtSel)),
+    btn);
 }
 
 function openTracaPrint(etiq) {
-  S.tracaPrintModal = etiq;
-  const overlay = el('div', { cls:'modal-overlay', on:{ click:e=>{ if(e.target===overlay){ S.tracaPrintModal=null; overlay.remove(); } } } });
+  const overlay = el('div', { cls:'modal-overlay', on:{ click:e=>{ if(e.target===overlay){ overlay.remove(); } } } });
   const fmtObj = TRACA_FORMATS.find(f=>f.id===etiq.format)||{label:etiq.format,dims:''};
 
-  // Contenu du formulaire selon le type d'étiquette
-  let formContent;
-  if (etiq.id === 'nb_palettes') {
-    formContent = buildNbPalettesForm(etiq);
-  } else {
-    formContent = el('div',{cls:'traca-dev-banner'},
-      iconEl('settings',14),
-      'Formulaire en cours de développement — disponible prochainement.'
-    );
-  }
+  const formBuilders = {
+    id_palette_a4:    buildIdPaletteA4Form,
+    nb_palettes_logi: buildNbPalettesLogiForm,
+    id_plaque:        buildIdPlaqueForm,
+    id_cliche:        buildIdClicheForm,
+    nb_palettes_c:    buildNbPalettesCForm,
+    id_carton:        buildIdCartonForm,
+    id_bobine:        buildIdBobineForm,
+  };
+  const builder = formBuilders[etiq.id];
+  const formContent = builder ? builder() : el('div',{cls:'traca-dev-banner'},iconEl('settings',14),' À venir.');
 
   const sheet = el('div', { cls:'modal-sheet' },
     el('span',{cls:'modal-handle'}),
     el('div',{cls:'modal-title'}, iconEl('printer',17), '\u00a0'+etiq.label),
-    el('div',{cls:'modal-sub'}, 'Format\u00a0: ',el('strong',null,fmtObj.label),
-      etiq.printer ? '\u00a0·\u00a0'+etiq.printer : '\u00a0·\u00a0Imprimante non configurée'),
+    el('div',{cls:'modal-sub'}, 'Format\u00a0: ', el('strong',null,fmtObj.label+' ('+fmtObj.dims+')')),
     formContent,
-    el('button',{cls:'btn-ghost',style:{width:'100%',marginTop:'10px'},on:{click:()=>{ overlay.remove(); S.tracaPrintModal=null; }}},'Fermer')
+    el('button',{cls:'btn-ghost',style:{width:'100%',marginTop:'10px'},on:{click:()=>overlay.remove()}},'Fermer')
   );
   overlay.appendChild(sheet);
   document.body.appendChild(overlay);
@@ -1818,6 +2043,7 @@ function renderContent() {
   else if (S.tab === 'dashboard') content = buildDashboard();
   else if (S.tab === 'inventaire') content = buildInventaire();
   else if (S.tab === 'traca') content = buildTraca();
+  else if (S.tab === 'reception') content = buildReception();
   else content = buildDashboard();
 
   if (content) area.appendChild(content);
@@ -1900,6 +2126,272 @@ function renderContent() {
   window._calcMountStock=_mount;
 })();
 
+// ── Réception matière ───────────────────────────────────────────
+
+async function loadRecepHistory() {
+  S.recepHistLoading = true; renderContent();
+  try {
+    const d = await api('/api/stock/receptions?limit=50');
+    if (d) S.recepHistory = d.receptions || [];
+  } catch(e) { showToast('Erreur chargement historique : ' + e.message, 'error'); }
+  S.recepHistLoading = false; renderContent();
+}
+
+function recepAddCode(code) {
+  const c = (code || '').trim();
+  if (!c) return;
+  // Doublon dans la session en cours → juste signaler, on ajoute quand même (deux bobines peuvent avoir le même code dans des cas rares)
+  const isDup = S.recepItems.some(i => i.code === c);
+  const now = new Date();
+  const ts = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0') + ':' + String(now.getSeconds()).padStart(2,'0');
+  S.recepItems = [...S.recepItems, { code: c, ts, isNew: true, isDup }];
+  // Effacer le flag "nouveau" après 600ms (animation CSS)
+  setTimeout(() => {
+    S.recepItems = S.recepItems.map(i => i.code === c ? { ...i, isNew: false } : i);
+    renderContent();
+  }, 600);
+  renderContent();
+}
+
+async function recepStartCamera() {
+  const video = document.getElementById('recep-video');
+  if (!video) return;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+    S.recepStream = stream;
+    S.recepScanning = true;
+    video.srcObject = stream;
+    await video.play();
+    renderContent();
+    recepScanLoop();
+  } catch(e) {
+    showToast('Caméra non disponible : ' + e.message, 'error');
+    S.recepScanning = false; S.recepStream = null; renderContent();
+  }
+}
+
+function recepStopCamera() {
+  if (S.recepStream) { S.recepStream.getTracks().forEach(t => t.stop()); S.recepStream = null; }
+  S.recepScanning = false;
+  renderContent();
+}
+
+let _recepLastCode = null;
+let _recepLastCodeTs = 0;
+
+async function recepScanLoop() {
+  if (!S.recepScanning) return;
+  const video = document.getElementById('recep-video');
+  if (!video || video.readyState < 2) { setTimeout(recepScanLoop, 200); return; }
+
+  if (!('BarcodeDetector' in window)) {
+    // BarcodeDetector non disponible — l'utilisateur doit utiliser la saisie manuelle
+    showToast('Scan automatique non disponible sur ce navigateur — utilisez la saisie manuelle', 'error');
+    recepStopCamera(); return;
+  }
+
+  const detector = new BarcodeDetector({ formats: [
+    'code_128','code_39','ean_13','ean_8','upc_a','upc_e','qr_code','data_matrix','aztec','pdf417'
+  ]});
+
+  const loop = async () => {
+    if (!S.recepScanning) return;
+    try {
+      const barcodes = await detector.detect(video);
+      if (barcodes.length > 0) {
+        const code = barcodes[0].rawValue;
+        const now = Date.now();
+        // Éviter les doublons immédiats (même code dans les 2 secondes)
+        if (code !== _recepLastCode || now - _recepLastCodeTs > 2000) {
+          _recepLastCode = code;
+          _recepLastCodeTs = now;
+          recepAddCode(code);
+        }
+      }
+    } catch(e) { /* ignore frame errors */ }
+    if (S.recepScanning) requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
+}
+
+async function recepValider() {
+  if (!S.recepItems.length) return;
+  try {
+    const codes = S.recepItems.map(i => i.code);
+    const d = await api('/api/stock/receptions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ codes, note: S.recepNote }),
+    });
+    if (d && d.success) {
+      showToast(d.nb_bobines + ' bobine' + (d.nb_bobines > 1 ? 's' : '') + ' enregistrée' + (d.nb_bobines > 1 ? 's' : ''));
+      S.recepItems = []; S.recepNote = '';
+      recepStopCamera();
+      await loadRecepHistory();
+    }
+  } catch(e) { showToast('Erreur : ' + e.message, 'error'); }
+}
+
+function buildReception() {
+  const wrap = el('div', { cls: 'recep-page' });
+
+  // Titre
+  wrap.appendChild(el('div', { cls: 'recep-title' }, 'Réception ', el('span', null, 'matière')));
+
+  // ── Grille scanner + saisie manuelle ──
+  const grid = el('div', { cls: 'recep-layout' });
+
+  // Colonne gauche : caméra
+  const camCard = el('div', { cls: 'recep-card' },
+    el('div', { cls: 'recep-card-title' }, iconEl('scan', 14), ' Scanner une bobine')
+  );
+
+  if (S.recepScanning) {
+    const videoWrap = el('div', { cls: 'recep-video-wrap' });
+    const video = el('video', { id: 'recep-video', cls: 'recep-video', attrs: { autoplay: 'true', playsinline: 'true', muted: 'true' } });
+    const frame = el('div', { cls: 'recep-scan-frame' });
+    const line  = el('div', { cls: 'recep-scan-line' });
+    frame.appendChild(line);
+    videoWrap.append(video, frame);
+    camCard.appendChild(videoWrap);
+    camCard.appendChild(el('button', { cls: 'btn-recep btn-recep-danger', on: { click: recepStopCamera } }, iconEl('x', 14), ' Arrêter le scan'));
+    // Démarrer le flux après rendu
+    setTimeout(() => {
+      const v = document.getElementById('recep-video');
+      if (v && S.recepStream) { v.srcObject = S.recepStream; v.play().catch(() => {}); recepScanLoop(); }
+    }, 80);
+  } else {
+    const placeholder = el('div', { cls: 'recep-cam-placeholder' },
+      el('div', { cls: 'recep-cam-icon' }, '📷'),
+      el('div', null, 'Appuyez sur "Démarrer" pour activer la caméra')
+    );
+    camCard.appendChild(placeholder);
+    camCard.appendChild(el('button', { cls: 'btn-recep btn-recep-primary', on: { click: () => {
+      // Monter la vidéo avant de démarrer le stream
+      S.recepScanning = true; renderContent();
+      setTimeout(recepStartCamera, 80);
+    }}}, iconEl('scan', 14), ' Démarrer le scan'));
+  }
+  grid.appendChild(camCard);
+
+  // Colonne droite : saisie manuelle + note
+  const manCard = el('div', { cls: 'recep-card' },
+    el('div', { cls: 'recep-card-title' }, iconEl('tag', 14), ' Saisie manuelle'),
+    el('div', { style: { fontSize: '11px', color: 'var(--muted)', marginBottom: '2px' } }, 'Saisissez ou collez un code-barres puis appuyez sur Entrée'),
+    (() => {
+      const wrap2 = el('div', { cls: 'recep-manual-wrap' });
+      const inp = el('input', { cls: 'recep-manual-inp', attrs: { type: 'text', placeholder: 'Ex: 3700123456789', autocomplete: 'off', autocorrect: 'off', spellcheck: 'false' } });
+      inp.value = S.recepManual || '';
+      inp.addEventListener('input', e => { S.recepManual = e.target.value; });
+      inp.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (S.recepManual.trim()) { recepAddCode(S.recepManual); S.recepManual = ''; inp.value = ''; inp.focus(); }
+        }
+      });
+      const btn = el('button', { cls: 'btn-recep btn-recep-ghost', on: { click: () => {
+        if (S.recepManual.trim()) { recepAddCode(S.recepManual); S.recepManual = ''; inp.value = ''; inp.focus(); }
+      }}}, '+ Ajouter');
+      wrap2.append(inp, btn);
+      return wrap2;
+    })(),
+    el('div', { cls: 'recep-card-title', style: { marginTop: '8px' } }, iconEl('inbox', 14), ' Note (optionnel)'),
+    (() => {
+      const inp = el('input', { cls: 'recep-note-inp', attrs: { type: 'text', placeholder: 'Ex: Livraison fournisseur X, bon de livraison 123…' } });
+      inp.value = S.recepNote || '';
+      inp.addEventListener('input', e => { S.recepNote = e.target.value; });
+      return inp;
+    })()
+  );
+  grid.appendChild(manCard);
+  wrap.appendChild(grid);
+
+  // ── Tableau bobines scannées ──
+  const tableCard = el('div', { cls: 'recep-card' });
+  const tableHead = el('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' } },
+    el('div', { cls: 'recep-card-title', style: { flex: '1' } }, iconEl('package', 14), ' Bobines scannées'),
+    el('div', { cls: 'recep-count' }, 'Total : ', el('strong', null, String(S.recepItems.length)), ' bobine' + (S.recepItems.length !== 1 ? 's' : ''))
+  );
+  tableCard.appendChild(tableHead);
+
+  if (S.recepItems.length === 0) {
+    tableCard.appendChild(el('div', { cls: 'recep-empty' }, 'Aucune bobine scannée — commencez par activer le scan ou saisissez un code manuellement'));
+  } else {
+    const tableWrap = el('div', { cls: 'recep-table-wrap' });
+    const table = el('table', { cls: 'recep-table' });
+    table.appendChild(el('thead', null, el('tr', null,
+      el('th', null, '#'),
+      el('th', null, 'Code-barres'),
+      el('th', null, 'Heure'),
+      el('th', null, '')
+    )));
+    const tbody = el('tbody');
+    S.recepItems.forEach((item, i) => {
+      const tr = el('tr', { cls: item.isNew ? 'recep-row-new' : '' },
+        el('td', null, String(i + 1)),
+        el('td', null,
+          el('span', { cls: 'recep-code' }, item.code),
+          item.isDup ? el('span', { cls: 'recep-dup-badge' }, 'doublon') : null
+        ),
+        el('td', null, item.ts),
+        el('td', null, el('button', { cls: 'recep-del-btn', attrs: { title: 'Supprimer' }, on: { click: () => {
+          S.recepItems = S.recepItems.filter((_, j) => j !== i);
+          renderContent();
+        }}}, '✕'))
+      );
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    tableWrap.appendChild(table);
+    tableCard.appendChild(tableWrap);
+
+    // Actions
+    const actions = el('div', { cls: 'recep-actions', style: { marginTop: '12px' } },
+      el('button', { cls: 'btn-recep btn-recep-muted', on: { click: () => {
+        if (confirm('Vider la liste des ' + S.recepItems.length + ' bobines scannées ?')) { S.recepItems = []; renderContent(); }
+      }}}, '🗑 Vider la liste'),
+      el('button', { cls: 'btn-recep btn-recep-success', on: { click: recepValider } },
+        iconEl('check-circle', 15), ' Valider la réception (' + S.recepItems.length + ')')
+    );
+    tableCard.appendChild(actions);
+  }
+  wrap.appendChild(tableCard);
+
+  // ── Historique ──
+  const hist = el('div', { cls: 'recep-hist' });
+  hist.appendChild(el('div', { cls: 'recep-hist-head' }, iconEl('truck', 14), ' Historique des réceptions'));
+
+  if (S.recepHistLoading) {
+    hist.appendChild(el('div', { cls: 'recep-hist-empty' }, '⏳ Chargement…'));
+  } else if (!S.recepHistory.length) {
+    hist.appendChild(el('div', { cls: 'recep-hist-empty' }, 'Aucune réception enregistrée'));
+  } else {
+    S.recepHistory.forEach(lot => {
+      const dateStr = lot.created_at ? lot.created_at.slice(0,16).replace('T', ' ') : '—';
+      const isOpen = S.recepExpandedId === lot.id;
+      const row = el('div', { cls: 'recep-hist-row', on: { click: () => {
+        S.recepExpandedId = isOpen ? null : lot.id;
+        renderContent();
+      }}},
+        el('span', { cls: 'recep-hist-date' }, dateStr),
+        el('span', { cls: 'recep-hist-count' }, lot.nb_bobines + ' bobine' + (lot.nb_bobines !== 1 ? 's' : '')),
+        el('span', { cls: 'recep-hist-note' }, lot.note || ''),
+        el('span', { cls: 'recep-hist-user' }, lot.created_by_name || '')
+      );
+      hist.appendChild(row);
+      if (isOpen && lot.items && lot.items.length) {
+        const detail = el('div', { cls: 'recep-hist-detail' });
+        lot.items.forEach(code => detail.appendChild(el('span', { cls: 'recep-hist-chip' }, code)));
+        hist.appendChild(detail);
+      }
+    });
+  }
+  wrap.appendChild(hist);
+  return wrap;
+}
+
 function render() {
   // La modale "contact support" est montée sur <body> : il faut la synchroniser
   // avec l'état à chaque rendu pour éviter un overlay "figé" (ex: reste sur "Envoi…").
@@ -1922,11 +2414,15 @@ function render() {
       el('div', { cls:'logo-sub' }, 'by SIFA')
     ),
     el('div', { cls:'sidebar-nav' },
-      ...[
-        { tab:'dashboard',  icon:'grid', label:'Dashboard' },
-        ...(!S.stockReadOnly ? [{ tab:'inventaire', icon:'clipboard', label:'Inventaire' }] : []),
-        { tab:'traca', icon:'printer', label:'Étiquettes traça' },
-      ].map(n => el('button', { cls:'nav-btn'+(S.tab===n.tab?' active':''), 'data-tab':n.tab, on:{ click:()=>goToTab(n.tab) } },
+      ...(S.tracaOnly
+        ? [{ tab:'traca', icon:'printer', label:'Étiquettes traça' }]
+        : [
+            { tab:'dashboard',  icon:'grid', label:'Dashboard' },
+            ...(!S.stockReadOnly ? [{ tab:'inventaire', icon:'clipboard', label:'Inventaire' }] : []),
+            { tab:'reception', icon:'inbox', label:'Réception matière' },
+            { tab:'traca', icon:'printer', label:'Étiquettes traça' },
+          ]
+      ).map(n => el('button', { cls:'nav-btn'+(S.tab===n.tab?' active':''), 'data-tab':n.tab, on:{ click:()=>goToTab(n.tab) } },
         iconEl(n.icon,16),
         el('span', null, ' ' + n.label)
       ))
@@ -1970,7 +2466,7 @@ function render() {
         el('span', { attrs:{ style:'display: inline-flex; align-items: center; flex-shrink: 0;' } }, iconEl('home',20))
       )
     ),
-    buildSearchBar(),
+    S.tracaOnly ? null : buildSearchBar(),
     el('div', { cls:'scroll-area', id:'scroll-area' })
   );
 
@@ -2104,8 +2600,20 @@ async function init() {
   if (!user) { window.location.href='/'; return; }
   S.user = user;
   S.stockReadOnly = (user.role === 'commercial');
+  // Fabrication : accès restreint à l'onglet traça uniquement
+  S.tracaOnly = (user.role === 'fabrication');
+  // Onglet initial via URL param ?tab=...
+  const urlTab = new URLSearchParams(window.location.search).get('tab');
+  if (urlTab && ['dashboard','stock','inventaire','reception','traca'].includes(urlTab)) {
+    S.tab = urlTab;
+  }
+  // Forcer traça si accès restreint
+  if (S.tracaOnly) S.tab = 'traca';
   render();
-  await loadDashboard();
+  if (S.tab === 'traca') { /* rien à charger */ }
+  else if (S.tab === 'reception') { await loadRecepHistory(); }
+  else if (S.tab === 'inventaire') { await loadInventaireList(); }
+  else { await loadDashboard(); }
 }
 
 init();

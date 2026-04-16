@@ -33,7 +33,7 @@ body.light{
   --success:#059669;--warn:#d97706;--danger:#dc2626;
   --c1:#0891b2;--c2:#7c3aed;--c3:#059669;--c4:#d97706;--c5:#dc2626
 }
-body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
 button:focus-visible,.nav-btn:focus-visible,.login-btn:focus-visible,.portal-logout:focus-visible,.theme-btn:focus-visible,.logout-btn:focus-visible,a:focus-visible{
   outline:2px solid var(--accent);outline-offset:2px}
 button:focus:not(:focus-visible){outline:none}
@@ -218,6 +218,13 @@ tr.data-row:hover td{background:rgba(34,211,238,0.025)}
 .sev-dot.critique{background:var(--danger)}.sev-dot.attention{background:var(--warn)}.sev-dot.info{background:var(--c1)}
 .sev-critique{color:var(--danger);font-weight:600}.sev-attention{color:var(--warn);font-weight:600}
 .badge{font-size:11px;color:var(--accent);background:var(--accent-bg);padding:3px 10px;border-radius:20px;font-family:monospace}
+.badge-ok{color:var(--success);background:rgba(52,211,153,.12)}
+.badge-warn{color:var(--warn);background:rgba(251,191,36,.12)}
+table.table-std{width:100%;border-collapse:collapse;font-size:13px}
+table.table-std th{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:8px 16px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap}
+table.table-std td{padding:10px 16px;border-bottom:1px solid var(--border)}
+table.table-std tr:last-child td{border-bottom:none}
+table.table-std tr:hover td{background:var(--accent-bg)}
 .badge-danger{font-size:11px;color:var(--danger);background:rgba(248,113,113,.12);padding:3px 10px;border-radius:20px;font-family:monospace;font-weight:700}
 .badge-manuel{font-size:10px;color:var(--c3);background:rgba(52,211,153,.12);padding:2px 7px;border-radius:12px;font-weight:600}
 .badge-modif{font-size:10px;color:var(--c4);background:rgba(251,191,36,.12);padding:2px 7px;border-radius:12px;font-weight:600;cursor:help}
@@ -413,7 +420,7 @@ body.light .btn-sec.is-active{
 
 /* ── Portail MySifa ─────────────────────────────────────────────── */
 .portal-page{min-height:100vh;display:flex;flex-direction:column;
-  align-items:center;justify-content:center;gap:32px;padding:32px 20px}
+  align-items:center;justify-content:flex-start;gap:32px;padding:48px 20px 32px}
 .portal-logo{text-align:center}
 .portal-logo .brand{font-size:42px;font-weight:800;letter-spacing:-2px}
 .portal-logo .brand span{color:var(--accent)}
@@ -760,7 +767,7 @@ let S={
   fv:{operateurs:[],dossiers:[],date_from:getYesterday(),date_to:getYesterday()},
   saisiesOffset:0,
   saisiesLimit:200,
-  historique:null,production:null,
+  historique:null,production:null,traceabilite:null,
   imports:[],selImp:null,impData:null,
   saisies:null,
   dossiers:[],
@@ -867,6 +874,12 @@ function icon(name,size=16){
     'calculator': '<rect x="6" y="2.5" width="12" height="19" rx="2"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="9" y1="11" x2="10" y2="11"/><line x1="12" y1="11" x2="13" y2="11"/><line x1="15" y1="11" x2="16" y2="11"/><line x1="9" y1="14" x2="10" y2="14"/><line x1="12" y1="14" x2="13" y2="14"/><line x1="15" y1="14" x2="16" y2="14"/><line x1="9" y1="17" x2="10" y2="17"/><line x1="12" y1="17" x2="13" y2="17"/><line x1="15" y1="17" x2="16" y2="17"/>',
     'truck': '<path d="M3 7h11v10H3z"/><path d="M14 10h4l3 3v4h-7z"/><circle cx="7.5" cy="17" r="2"/><circle cx="17.5" cy="17" r="2"/>',
     'sliders': '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>',
+    'layers': '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
+    'arrow-left': '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
+    'printer': '<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>',
+    'clipboard': '<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>',
+    'activity': '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+    'tool': '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
   };
   return `<svg ${a} aria-hidden="true" style="display:inline-block;vertical-align:middle;flex-shrink:0">${p[name]||p['alert-circle']}</svg>`;
 }
@@ -1036,6 +1049,7 @@ async function doLogin(email,password){
     };
     S.historique=null;
     S.production=null;
+    S.traceabilite=null;
     S.saisies=null;
     S.selectedRows=new Set();
     S.sortState={col:null,asc:true};
@@ -1060,7 +1074,7 @@ async function doLogin(email,password){
 async function doLogout(){
   authEpoch++;
   await api('/api/auth/logout',{method:'POST'});
-  S.user=null;S.app='login';S.historique=null;S.production=null;
+  S.user=null;S.app='login';S.historique=null;S.production=null;S.traceabilite=null;
   S.stockGlobale=null;S.stockInvPriorites=[];S.stockProduits=[];S.stockSelProduit=null;S.stockSelEmpl=null;
   S.stockPrefillEmpl=null;S.stockPrefillRef=null;S.stockPrefillDes=null;S.stockPrefillUnit=null;
   S.loginSubmitting=false;S.loginError=null;S.portalLoading=null;
@@ -1979,10 +1993,23 @@ function renderPortal(){
   const isProd  = aa ? !!aa.prod : (isSuper || !!(urole && ['direction','administration','fabrication','commercial'].includes(urole)));
   const isCompta = aa ? !!aa.compta : (isSuper || !!(urole && ['direction','administration','comptabilite'].includes(urole)));
   const isExpe = aa ? !!aa.expe : (isSuper || !!(urole && ['direction','administration','expedition'].includes(urole)));
+  const isFab = aa ? !!aa.fabrication : (isSuper || urole==='fabrication' || !!(urole && ['direction','administration'].includes(urole)));
+  const isPrint = isSuper || !!(urole && ['fabrication','logistique'].includes(urole));
   const isCom = urole==='commercial';
   const isLight=document.body.classList.contains('light');
 
   const apps=[];
+
+  if(isFab){
+    apps.push(h('div',{
+      className:'portal-app',
+      onClick:()=>{ window.location.href='/fabrication'; }
+    },
+      h('div',{className:'portal-app-icon'},iconEl('activity',28)),
+      h('div',{className:'portal-app-name'},'Saisie Prod'),
+      h('div',{className:'portal-app-desc'},'Saisie opérateur — machine')
+    ));
+  }
 
   if(isProd){
     apps.push(h('div',{
@@ -2007,6 +2034,17 @@ function renderPortal(){
       h('div',{className:'portal-app-icon'},iconEl('package',28)),
       h('div',{className:'portal-app-name'},'MyStock'),
       h('div',{className:'portal-app-desc'},'Gestion des stocks produits')
+    ));
+  }
+
+  if(isPrint){
+    apps.push(h('div',{
+      className:'portal-app',
+      onClick:()=>{ window.location.href='/stock?tab=traca'; }
+    },
+      h('div',{className:'portal-app-icon'},iconEl('printer',28)),
+      h('div',{className:'portal-app-name'},'MyPrint'),
+      h('div',{className:'portal-app-desc'},'Étiquettes de traçabilité')
     ));
   }
 
@@ -4271,12 +4309,171 @@ function renderSanityEventsBlock(sanity){
 }
 
 // ── Production (page wrapper avec sous-onglets) ───────────────────
+// ── Traçabilité ─────────────────────────────────────────────────
+async function loadTracabilite(machineId){
+  S.traceabilite = null; render();
+  try{
+    let url = '/api/fabrication/traceability';
+    const params = [];
+    if(machineId) params.push('machine_id='+machineId);
+    if(params.length) url += '?'+params.join('&');
+    const d = await api(url);
+    S.traceabilite = d;
+  }catch(e){ S.traceabilite = {error:e.message}; }
+  render();
+}
+
+async function loadTracabiliteDossier(ref){
+  S.traceabiliteDossier = null; render();
+  try{
+    const d = await api('/api/fabrication/traceability?no_dossier='+encodeURIComponent(ref));
+    S.traceabiliteDossier = d;
+  }catch(e){ S.traceabiliteDossier = {error:e.message}; }
+  render();
+}
+
+function renderTracabilite(){
+  // Si on a un dossier sélectionné, afficher son détail
+  if(S.traceabiliteDossier !== undefined && S.traceabiliteDossier !== null){
+    return renderTracabiliteDossierDetail();
+  }
+
+  const d = S.traceabilite;
+  if(!d) return h('div',{className:'card-empty'},'Chargement de la traçabilité…');
+  if(d.error) return h('div',{className:'card'},h('div',{style:{padding:'20px',color:'var(--danger)'}},d.error));
+
+  const dossiers = d.dossiers||[];
+
+  const rows = dossiers.map(dos=>{
+    const hasMatieres = (dos.nb_matieres||0)>0;
+    const hasFin = (dos.nb_fins||0)>0;
+    return h('tr',{style:{cursor:'pointer'},
+      onClick:async()=>{
+        S.traceabiliteDossier = null;
+        render();
+        await loadTracabiliteDossier(dos.reference);
+      }
+    },
+      h('td',null, h('span',{style:{fontWeight:'800',color:'var(--accent)'}}, dos.reference||'—')),
+      h('td',null, dos.client||'—'),
+      h('td',null, dos.designation||'—'),
+      h('td',null, dos.machine_nom||'—'),
+      h('td',null, h('span',{className:'badge'+(hasFin?' badge-ok':' badge-warn')},
+        hasFin?'Terminé':'En cours')),
+      h('td',null,
+        hasMatieres
+          ? h('span',{className:'badge badge-ok'}, (dos.nb_matieres||0)+' bobine'+(dos.nb_matieres>1?'s':''))
+          : h('span',{className:'badge',style:{opacity:.5}},'Aucune')
+      )
+    );
+  });
+
+  const table = rows.length
+    ? h('table',{className:'table-std'},
+        h('thead',null,h('tr',null,
+          h('th',null,'Référence'),h('th',null,'Client'),h('th',null,'Désignation'),
+          h('th',null,'Machine'),h('th',null,'Statut'),h('th',null,'Matières')
+        )),
+        h('tbody',null,...rows)
+      )
+    : h('div',{className:'card-empty'},'Aucun dossier dans le planning');
+
+  return h('div',{className:'card'},
+    h('div',{className:'card-header'},
+      h('h3',null,'Traçabilité par dossier'),
+      h('span',{className:'badge'},dossiers.length+' dossier'+(dossiers.length!==1?'s':''))
+    ),
+    h('div',{style:{overflowX:'auto',padding:'0 0 8px'}}, table)
+  );
+}
+
+function renderTracabiliteDossierDetail(){
+  const d = S.traceabiliteDossier;
+
+  const backBtn = h('button',{
+    className:'btn btn-sm btn-ghost',
+    style:{marginBottom:'12px'},
+    onClick:()=>{ S.traceabiliteDossier=undefined; render(); }
+  }, iconEl('arrow-left',14),' Retour');
+
+  if(!d) return h('div',null, backBtn, h('div',{className:'card-empty'},'Chargement…'));
+  if(d.error) return h('div',null, backBtn, h('div',{style:{color:'var(--danger)',padding:'20px'}},d.error));
+
+  const dos = d.dossier||{};
+  const matieres = d.matieres||[];
+  const prod = d.production||[];
+
+  // Production summary
+  const debutRow = prod.find(r=>r.operation_code==='01');
+  const finRow   = prod.filter(r=>r.operation_code==='89').pop();
+  const operateurs = [...new Set(prod.map(r=>r.operateur).filter(Boolean))];
+
+  const metrageDebut = debutRow ? debutRow.metrage_prevu : null;
+  const metrageFin   = finRow   ? finRow.metrage_reel : null;
+  const metrageCalc  = (metrageDebut!=null&&metrageFin!=null) ? Math.max(0,metrageFin-metrageDebut) : null;
+  const etiquettes   = finRow   ? finRow.quantite_traitee : null;
+
+  const infoGrid = h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:'8px',margin:'12px 0'}},
+    ...[
+      {label:'Référence',  val:dos.reference||'—'},
+      {label:'Client',     val:dos.client||'—'},
+      {label:'Machine',    val:dos.machine_nom||dos.machine||'—'},
+      {label:'Opérateur(s)', val:operateurs.join(', ')||'—'},
+      {label:'Métrage produit', val:metrageCalc!=null ? fN(metrageCalc)+' m' : '—'},
+      {label:'Étiquettes', val:etiquettes!=null ? fN(etiquettes) : '—'},
+    ].map(item=>h('div',{style:{background:'var(--bg2)',borderRadius:'8px',padding:'10px 12px'}},
+      h('div',{style:{fontSize:'10px',color:'var(--muted)',fontWeight:'700',textTransform:'uppercase',letterSpacing:'.4px',marginBottom:'3px'}},item.label),
+      h('div',{style:{fontSize:'13px',fontWeight:'800',color:'var(--text)'}},item.val)
+    ))
+  );
+
+  // Matières table
+  const matiereRows = matieres.map(m=>{
+    const dt = m.scanned_at ? new Date(m.scanned_at) : null;
+    const dateStr = dt&&!isNaN(dt) ? dt.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
+    return h('tr',null,
+      h('td',null,h('span',{style:{fontFamily:'monospace',fontWeight:'700',color:'var(--accent)'}},m.code_barre)),
+      h('td',null,m.machine_nom||'—'),
+      h('td',null,m.operateur||'—'),
+      h('td',null,dateStr)
+    );
+  });
+
+  const matiereTable = matieres.length
+    ? h('table',{className:'table-std'},
+        h('thead',null,h('tr',null,
+          h('th',null,'Code barre'),h('th',null,'Machine'),h('th',null,'Opérateur'),h('th',null,'Heure scan')
+        )),
+        h('tbody',null,...matiereRows)
+      )
+    : h('div',{className:'card-empty',style:{padding:'16px'}},'Aucune bobine matière scannée pour ce dossier');
+
+  return h('div',null,
+    backBtn,
+    h('div',{className:'card'},
+      h('div',{className:'card-header'},
+        h('h3',null,dos.reference||'Dossier'),
+        h('span',{className:'badge badge-ok'},finRow?'Terminé':'En cours')
+      ),
+      infoGrid,
+      h('div',{style:{padding:'0 20px 16px'}},
+        h('div',{style:{fontWeight:'800',fontSize:'12px',color:'var(--text2)',
+          textTransform:'uppercase',letterSpacing:'.4px',marginBottom:'10px'}},
+          iconEl('box',12),' Bobines matières utilisées ('+matieres.length+')'
+        ),
+        h('div',{style:{overflowX:'auto'}}, matiereTable)
+      )
+    )
+  );
+}
+
 function renderProdPage(){
   const subPage = S.subPage || 'kpis';
   const tabs = [
     {key:'kpis',    label:"Vue d'ensemble", icon:'wrench'},
     {key:'saisies', label:'Saisies', icon:'pencil'},
     {key:'erreurs', label:'Erreurs & Qualité', icon:'alert-triangle'},
+    {key:'traceabilite', label:'Traçabilité', icon:'layers'},
   ];
   const subNav = h('div',{className:'nav-tabs'},
     ...tabs.map(t=>h('button',{
@@ -4287,6 +4484,7 @@ function renderProdPage(){
         if(t.key==='kpis'&&!S.production) await loadProd();
         if(t.key==='saisies'&&!S.saisies)  await loadSaisies();
         if(t.key==='erreurs'&&!S.historique) await loadHist();
+        if(t.key==='traceabilite') await loadTracabilite();
         render();
       }
     }, iconEl(t.icon,14),' '+t.label))
@@ -4294,6 +4492,7 @@ function renderProdPage(){
   let content;
   if(subPage==='saisies')  content = renderSaisiesWithImport();
   else if(subPage==='erreurs') content = renderHist();
+  else if(subPage==='traceabilite') content = renderTracabilite();
   else content = renderProdKpis();
   return h('div',null, subNav, content);
 }
@@ -5206,7 +5405,25 @@ function renderSaisies(){
   // ── Tri ──────────────────────────────────────────────────────
   let rows=addDurations(d.rows||[]);
   if(S.sortState.col) rows=sortRows(rows,S.sortState.col,S.sortState.asc);
- 
+
+  // ── Calcul métrage dossier (Fin dossier = compteur fin - compteur début) ──
+  // Pour chaque dossier on cherche la saisie "Début dossier" (code 01) et on
+  // soustrait son metrage_prevu au metrage_reel de la saisie "Fin dossier" (code 89).
+  (function(){
+    const debutByDossier = {}; // no_dossier → metrage_prevu (dernier début)
+    // Parcours chronologique pour associer début/fin
+    const chrono = [...rows].sort((a,b)=>(a.date_operation||'').localeCompare(b.date_operation||''));
+    chrono.forEach(r=>{
+      if(r.operation_code==='01' && r.no_dossier && r.metrage_prevu!=null){
+        debutByDossier[r.no_dossier] = r.metrage_prevu;
+      }
+      if(r.operation_code==='89' && r.no_dossier && r.metrage_reel!=null){
+        const debut = debutByDossier[r.no_dossier];
+        if(debut!=null) r._metrage_dossier = r.metrage_reel - debut;
+      }
+    });
+  })();
+
   const COLS=[
     {key:'date_operation',  label:'Date'},
     {key:'operation',       label:'Opération'},
@@ -5215,7 +5432,7 @@ function renderSaisies(){
     {key:'machine',         label:'Machine'},
     {key:'no_dossier',      label:'Dossier'},
     {key:'quantite_traitee',   label:'Qté traitée'},
-    {key:'metrage_reel',    label:'Métrage réel (m)'},
+    {key:'metrage_reel',    label:'Métrage (m)'},
     {key:'commentaire',     label:'Commentaire'},
     {key:'_badge',          label:''},
   ];
@@ -5297,7 +5514,12 @@ function renderSaisies(){
     tr.appendChild(h('td',null,row.no_dossier||'-'));
     tr.appendChild(h('td',null,fN(row.quantite_traitee)));
     tr.appendChild(h('td',{style:{color:'var(--c3)'}},
-      row.metrage_reel!=null  ? fN(row.metrage_reel) +' m' : '-'));
+      row._metrage_dossier!=null
+        ? h('span',{title:'Métrage dossier = compteur fin − compteur début\nFin: '+fN(row.metrage_reel)+' m — Début: '+fN(row.metrage_reel - row._metrage_dossier)+' m'},
+            '⇒ '+fN(row._metrage_dossier)+' m')
+        : row.metrage_reel!=null ? fN(row.metrage_reel)+' m'
+        : row.metrage_prevu!=null ? h('span',{style:{color:'var(--muted)',fontSize:'11px'}},fN(row.metrage_prevu)+' m (déb.)')
+        : '-'));
     if(readOnly){
       tr.appendChild(h('td',{style:{maxWidth:'200px',overflow:'hidden',textOverflow:'ellipsis'}},row.commentaire||''));
     }else{

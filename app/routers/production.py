@@ -1,4 +1,4 @@
-"""SIFA — Production v0.8 — KPIs basé sur réalisé (production)"""
+"""SIFA — Production v0.9 — métrage produit = fin_machine - debut_machine"""
 from typing import Optional, List
 from fastapi import APIRouter, Request, Query
 from database import get_db
@@ -47,28 +47,18 @@ def dashboard_production(
     with get_db() as conn:
         completed = conn.execute(
             f"""SELECT no_dossier,operateur,machine,client,designation,
-                       quantite_traitee,metrage_reel,date_operation
+                       quantite_traitee,metrage_reel,metrage_prevu,date_operation
                 FROM production_data
                 WHERE {wc} AND operation_code='89'
                 ORDER BY date_operation DESC""",
             params,
         ).fetchall()
 
-        totals = conn.execute(
-            f"""SELECT
-                  COUNT(DISTINCT no_dossier) as dossiers,
-                  COALESCE(SUM(quantite_traitee),0) as etiquettes,
-                  COALESCE(SUM(metrage_reel),0) as metrage_m
-                FROM production_data
-                WHERE {wc} AND operation_code='89' AND no_dossier IS NOT NULL AND no_dossier!='0'""",
-            params,
-        ).fetchone()
-
-        # Pour le "ligne par ligne" et les temps : inclure operation_category
+        # Toutes les lignes pour calculs temps + métrages
         all_rows = conn.execute(
             f"""SELECT operateur,date_operation,operation_code,operation_category,
                        machine,no_dossier,client,designation,
-                       quantite_traitee,metrage_reel
+                       quantite_traitee,metrage_reel,metrage_prevu
                 FROM production_data
                 WHERE {wc}
                 ORDER BY operateur,date_operation""",
@@ -78,72 +68,138 @@ def dashboard_production(
     all_list = [dict(r) for r in all_rows]
     dossier_times = compute_dossier_times(all_list)
 
-    # Enrichir dossier_times avec réalisé (étiquettes + métrage) depuis fin dossier (89)
-    by_key = {}
+    # ── Construire les maps début / fin par (operateur, no_dossier) ──────────
+    # Pour chaque dossier : métrage produit = compteur_machine_fin (89) - compteur_machine_debut (01)
+    # On prend la dernière saisie 01 (début) précédant la saisie 89 (fin) pour chaque (op, dos).
+    # Structure : {(op, dos): [{"date":..., "metrage":...}, ...]} triés chronologiquement
+    debut_entries = {}   # (op, dos) -> list of (date_operation, metrage_prevu)
+    fin_entries   = {}   # (op, dt_jour, dos) -> fin row dict
+
     for r in all_list:
-        if str(r.get("operation_code") or "") != "89":
-            continue
-        dos = str(r.get("no_dossier") or "")
+        code = str(r.get("operation_code") or "")
+        dos  = str(r.get("no_dossier") or "").strip()
         if not dos or dos == "0":
             continue
         op = str(r.get("operateur") or "?")
-        dt = str(r.get("date_operation") or "")[:10]
-        by_key[(op, dt, dos)] = r
+        dt_op = str(r.get("date_operation") or "")
 
+        if code == "01" and r.get("metrage_prevu") is not None:
+            key = (op, dos)
+            debut_entries.setdefault(key, []).append((dt_op, float(r["metrage_prevu"])))
+
+        if code == "89":
+            dt_jour = dt_op[:10]
+            fin_entries[(op, dt_jour, dos)] = r
+
+    # Pour chaque fin, trouver le début juste avant (chronologiquement)
+    def find_debut_metrage(op, dos, fin_date):
+        """Retourne le metrage_prevu du dernier début 01 avant fin_date, ou None."""
+        key = (op, dos)
+        entries = debut_entries.get(key, [])
+        # Filtrer ceux antérieurs ou égaux à fin_date
+        candidates = [(dt, m) for dt, m in entries if dt <= fin_date]
+        if not candidates:
+            # Si aucun antérieur, prendre le plus proche disponible
+            candidates = entries
+        if not candidates:
+            return None
+        # Prendre le plus récent parmi les candidats
+        candidates.sort(key=lambda x: x[0], reverse=True)
+        return candidates[0][1]
+
+    # ── Enrichir by_dossier avec le métrage produit calculé ─────────────────
     by_dossier = []
     for d in dossier_times:
-        key = (str(d.get("operateur") or "?"), str(d.get("jour") or ""), str(d.get("no_dossier") or ""))
-        fin = by_key.get(key, {})
-        # "produit" : basé sur le fin dossier (89) quand présent
-        d["etiquettes"] = fin.get("quantite_traitee", 0) or d.get("quantite_traitee", 0) or 0
-        d["metrage_m"] = fin.get("metrage_reel", 0) or 0
+        op  = str(d.get("operateur") or "?")
+        dos = str(d.get("no_dossier") or "")
+        dt  = str(d.get("jour") or "")
+
+        fin = fin_entries.get((op, dt, dos), {})
+
+        etiquettes = fin.get("quantite_traitee") or d.get("quantite_traitee") or 0
+
+        metrage_fin = fin.get("metrage_reel")
+        if metrage_fin is not None:
+            fin_date = str(fin.get("date_operation") or "")
+            metrage_debut = find_debut_metrage(op, dos, fin_date)
+            if metrage_debut is not None:
+                metrage_produit = max(0.0, float(metrage_fin) - metrage_debut)
+            else:
+                # Pas de début enregistré : on ne peut pas calculer → 0
+                metrage_produit = 0.0
+        else:
+            metrage_produit = 0.0
+
+        d["etiquettes"] = etiquettes
+        d["metrage_m"]  = round(metrage_produit, 1)
         by_dossier.append(d)
 
-    total_calage = sum(float(d.get("temps_calage_min") or 0) for d in by_dossier)
-    total_prod = sum(float(d.get("temps_prod_min") or 0) for d in by_dossier)
-    total_arret = sum(float(d.get("temps_arret_min") or 0) for d in by_dossier)
+    # ── Enrichir completed_dossiers avec le métrage produit ─────────────────
+    completed_list = []
+    for r in completed:
+        row = dict(r)
+        op  = str(row.get("operateur") or "?")
+        dos = str(row.get("no_dossier") or "").strip()
+        fin_date = str(row.get("date_operation") or "")
+        metrage_fin = row.get("metrage_reel")
+        if metrage_fin is not None and dos and dos != "0":
+            metrage_debut = find_debut_metrage(op, dos, fin_date)
+            if metrage_debut is not None:
+                row["metrage_produit"] = max(0.0, float(metrage_fin) - metrage_debut)
+            else:
+                row["metrage_produit"] = 0.0
+        else:
+            row["metrage_produit"] = 0.0
+        completed_list.append(row)
 
-    metrage_total = float(totals["metrage_m"] or 0)
+    # ── Totaux (recalculés depuis by_dossier pour cohérence) ─────────────────
+    total_calage  = sum(float(d.get("temps_calage_min") or 0) for d in by_dossier)
+    total_prod    = sum(float(d.get("temps_prod_min")   or 0) for d in by_dossier)
+    total_arret   = sum(float(d.get("temps_arret_min")  or 0) for d in by_dossier)
+
+    metrage_total     = round(sum(float(d.get("metrage_m") or 0) for d in by_dossier), 1)
+    etiquettes_total  = round(sum(float(d.get("etiquettes") or 0) for d in by_dossier), 1)
+    nb_dossiers_total = len([d for d in by_dossier if d.get("no_dossier")])
+
     denom = float(total_prod + total_arret)
     vitesse_m_min = round(metrage_total / denom, 3) if denom > 0 else 0.0
 
-    # Agrégations
+    # ── Agrégations ──────────────────────────────────────────────────────────
     def agg_key(rows, key_name):
         out = {}
         for r in rows:
             k = str(r.get(key_name) or "").strip() or "?"
             x = out.setdefault(k, {"key": k, "dossiers": 0, "etiquettes": 0.0, "metrage_m": 0.0,
                                    "calage_min": 0.0, "prod_min": 0.0, "arret_min": 0.0})
-            x["dossiers"] += 1
+            x["dossiers"]   += 1
             x["etiquettes"] += float(r.get("etiquettes") or 0)
-            x["metrage_m"] += float(r.get("metrage_m") or 0)
+            x["metrage_m"]  += float(r.get("metrage_m")  or 0)
             x["calage_min"] += float(r.get("temps_calage_min") or 0)
-            x["prod_min"] += float(r.get("temps_prod_min") or 0)
-            x["arret_min"] += float(r.get("temps_arret_min") or 0)
-        # vitesse par groupe
+            x["prod_min"]   += float(r.get("temps_prod_min")   or 0)
+            x["arret_min"]  += float(r.get("temps_arret_min")  or 0)
         res = []
         for k, v in out.items():
             den = v["prod_min"] + v["arret_min"]
             v["vitesse_m_min"] = round((v["metrage_m"] / den), 3) if den > 0 else 0.0
             v["etiquettes"] = round(v["etiquettes"], 1)
-            v["metrage_m"] = round(v["metrage_m"], 1)
-            v["calage_min"] = round(v["calage_min"], 1)
-            v["prod_min"] = round(v["prod_min"], 1)
-            v["arret_min"] = round(v["arret_min"], 1)
+            v["metrage_m"]  = round(v["metrage_m"],  1)
+            v["calage_min"] = round(v["calage_min"],  1)
+            v["prod_min"]   = round(v["prod_min"],    1)
+            v["arret_min"]  = round(v["arret_min"],   1)
             res.append(v)
         return sorted(res, key=lambda x: x["metrage_m"], reverse=True)
 
     by_operator = agg_key(by_dossier, "operateur")
-    by_machine = agg_key(by_dossier, "machine")
-    by_day = agg_key(by_dossier, "jour")
+    by_machine  = agg_key(by_dossier, "machine")
+    by_day      = agg_key(by_dossier, "jour")
 
     return {
         "blocked": False,
-        "completed_dossiers": [dict(r) for r in completed],
+        "completed_dossiers": completed_list,
         "produit": {
-            "dossiers": int(totals["dossiers"] or 0),
-            "etiquettes": float(totals["etiquettes"] or 0),
-            "metrage_m": float(totals["metrage_m"] or 0),
+            "dossiers":   nb_dossiers_total,
+            "etiquettes": etiquettes_total,
+            "metrage_m":  metrage_total,
         },
         "temps_totaux": {
             "calage_min":      round(total_calage, 1),
@@ -151,9 +207,9 @@ def dashboard_production(
             "arret_min":       round(total_arret,  1),
         },
         "vitesse_m_min": vitesse_m_min,
-        "by_machine": by_machine,
+        "by_machine":  by_machine,
         "by_operator": by_operator,
-        "by_dossier": sorted([d for d in by_dossier if d.get("temps_total_calage_min")],
-                             key=lambda x: x["temps_total_calage_min"], reverse=True),
+        "by_dossier":  sorted([d for d in by_dossier if d.get("temps_total_calage_min")],
+                               key=lambda x: x["temps_total_calage_min"], reverse=True),
         "by_day": by_day,
     }

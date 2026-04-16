@@ -102,6 +102,9 @@ ASSIGNABLE_ROLES = frozenset(
 )
 
 
+ROLES_FABRICATION_APP = {ROLE_FABRICATION, ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_SUPERADMIN}
+
+
 def default_app_access_for_role(role: str) -> dict:
     """Accès applications issus du seul rôle (avant surcharges utilisateur)."""
     if role == ROLE_SUPERADMIN:
@@ -111,6 +114,7 @@ def default_app_access_for_role(role: str) -> dict:
             "stock": True,
             "compta": True,
             "expe": True,
+            "fabrication": True,
             "settings": True,
         }
     return {
@@ -119,6 +123,7 @@ def default_app_access_for_role(role: str) -> dict:
         "stock": role in ROLES_STOCK,
         "compta": role in ROLES_COMPTA,
         "expe": role in ROLES_EXPE,
+        "fabrication": role in ROLES_FABRICATION_APP,
         "settings": role in ROLES_SETTINGS,
     }
 

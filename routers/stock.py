@@ -636,3 +636,55 @@ def dashboard(request: Request):
         "derniers_mouvements": [dict(r) for r in derniers_mvts],
         "top_refs": [dict(r) for r in top_refs],
     }
+
+
+# ─── Réception matière ─────────────────────────────────────────────────────────
+
+@router.get("/api/stock/receptions")
+def list_receptions(request: Request, limit: int = 50):
+    """Historique des réceptions de bobines."""
+    user = get_current_user(request)
+    with get_db() as conn:
+        lots = conn.execute(
+            """SELECT r.*, GROUP_CONCAT(i.code_barre, '||') as codes
+               FROM stock_receptions r
+               LEFT JOIN stock_reception_items i ON i.reception_id = r.id
+               GROUP BY r.id
+               ORDER BY r.created_at DESC LIMIT ?""",
+            (limit,),
+        ).fetchall()
+    result = []
+    for lot in lots:
+        d = dict(lot)
+        raw = d.pop("codes", None)
+        d["items"] = raw.split("||") if raw else []
+        result.append(d)
+    return {"receptions": result}
+
+
+@router.post("/api/stock/receptions")
+async def create_reception(request: Request):
+    """Enregistre une réception de bobines (lot de codes-barres)."""
+    user = get_current_user(request)
+    body = await request.json()
+    codes = [str(c).strip() for c in (body.get("codes") or []) if str(c).strip()]
+    if not codes:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Aucun code-barres fourni")
+    note = (body.get("note") or "").strip() or None
+    now = datetime.now().isoformat()
+
+    with get_db() as conn:
+        cur = conn.execute(
+            """INSERT INTO stock_receptions (created_at, created_by, created_by_name, note, nb_bobines)
+               VALUES (?,?,?,?,?)""",
+            (now, user.get("email"), user.get("nom"), note, len(codes)),
+        )
+        reception_id = cur.lastrowid
+        conn.executemany(
+            "INSERT INTO stock_reception_items (reception_id, code_barre, scanned_at) VALUES (?,?,?)",
+            [(reception_id, code, now) for code in codes],
+        )
+        conn.commit()
+
+    return {"success": True, "id": reception_id, "nb_bobines": len(codes)}

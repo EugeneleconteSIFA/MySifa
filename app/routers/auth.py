@@ -343,6 +343,12 @@ async def update_user(user_id: int, request: Request):
         ident_in = (body.get("identifiant") if "identifiant" in body else ex.get("identifiant")) or ""
         ident_in = str(ident_in).strip().lower()
         pwd_hash = ex["password_hash"]
+        # machine_id : None si la clé est présente et vide, sinon valeur existante
+        if "machine_id" in body:
+            raw_mid = body["machine_id"]
+            machine_id = int(raw_mid) if raw_mid not in (None, "", 0, "0") else None
+        else:
+            machine_id = ex["machine_id"] if "machine_id" in ex.keys() else None
 
         role_eff = _validate_user_role_write(
             target_email=email,
@@ -370,14 +376,14 @@ async def update_user(user_id: int, request: Request):
         if "access_overrides" in body:
             conn.execute(
                 """UPDATE users SET nom=?,email=?,identifiant=?,role=?,operateur_lie=?,actif=?,telephone=?,
-                   password_hash=?,access_overrides=? WHERE id=?""",
-                (nom, email, ident_sql or None, role_eff, op, actif, tel, pwd_hash, ao_sql, user_id),
+                   password_hash=?,access_overrides=?,machine_id=? WHERE id=?""",
+                (nom, email, ident_sql or None, role_eff, op, actif, tel, pwd_hash, ao_sql, machine_id, user_id),
             )
         else:
             conn.execute(
                 """UPDATE users SET nom=?,email=?,identifiant=?,role=?,operateur_lie=?,actif=?,telephone=?,
-                   password_hash=? WHERE id=?""",
-                (nom, email, ident_sql or None, role_eff, op, actif, tel, pwd_hash, user_id),
+                   password_hash=?,machine_id=? WHERE id=?""",
+                (nom, email, ident_sql or None, role_eff, op, actif, tel, pwd_hash, machine_id, user_id),
             )
         conn.commit()
 
