@@ -642,6 +642,11 @@ function fU(qty, unite) {
   const u = String(unite || '').trim();
   if (!u) return fN(qty);
   const n = parseFloat(qty) || 0;
+  // Abréviation pour les unités longues
+  const uLow = u.toLowerCase();
+  if(uLow === 'étiquettes' || uLow === 'etiquettes' || uLow === 'étiquette' || uLow === 'etiquette'){
+    return fN(n) + '\u00a0eti.';
+  }
   return fN(n) + '\u00a0' + (Math.abs(n) > 1 ? u + 's' : u);
 }
 // ── Icons (Feather-ish, inline SVG) ─────────────────────────────
@@ -1725,29 +1730,56 @@ function _inp(placeholder, opts={}) {
 
 // ── 1. Logistique — Identification palette (A4 paysage) ───────────
 function buildIdPaletteA4Form() {
-  let _ref='', _quv='', _qctn='';
+  let _ref='', _qty='', _unit=allUnitLabels()[0]||'étiquettes', _qctn='';
   function doPrint() {
-    const ref = _ref.trim(), quv = _quv.trim(), qctn = _qctn.trim();
+    const ref = _ref.trim(), qty = _qty.trim(), qctn = _qctn.trim();
     if (!ref) { showToast('Référence requise', 'error'); return; }
+    const quv = qty ? qty + '\u00a0' + _unit : '';
+    const unitLow = _unit.toLowerCase().replace(/s$/, '');  // 'cartons' → 'carton'
+    const showCtn = !!qctn && unitLow !== 'carton';
+    const qctnNum = parseInt(qctn) || 0;
+    const ctnLabel = qctnNum === 1 ? '1\u00a0carton' : (qctn + '\u00a0cartons');
     _printWin('Palette — '+ref, '297mm 210mm',
-      `.label{width:297mm;height:210mm;padding:12mm 16mm;display:flex;flex-direction:column;justify-content:space-evenly;page-break-after:always;page-break-inside:avoid}
-       .ref{font-size:72pt;font-weight:900;letter-spacing:1pt;word-break:break-all;line-height:1.1}
-       .quv{font-size:48pt;font-weight:700;color:#222}
-       .qctn{font-size:36pt;font-weight:600;color:#444}`,
+      `.label{width:297mm;height:210mm;padding:14mm 18mm;display:flex;flex-direction:column;
+              align-items:center;justify-content:center;gap:10mm;
+              text-align:center;page-break-after:always;page-break-inside:avoid}
+       .ref{font-size:80pt;font-weight:900;letter-spacing:1pt;word-break:break-all;line-height:1.1}
+       .quv{font-size:56pt;font-weight:800;color:#111}
+       .qctn{font-size:38pt;font-weight:700;color:#333}`,
       `<div class="label">
          <div class="ref">${ref}</div>
          ${quv?`<div class="quv">${quv}</div>`:''}
-         ${qctn?`<div class="qctn">${qctn} cartons</div>`:''}
+         ${showCtn?`<div class="qctn">(${ctnLabel})</div>`:''}
        </div>`);
   }
   const rInp=_inp('Référence produit — ex. 1077/0026'); rInp.addEventListener('input',e=>{_ref=e.target.value;});
-  const qInp=_inp('Quantité unité de vente — ex. 500 unités'); qInp.addEventListener('input',e=>{_quv=e.target.value;});
+  // Quantité
+  const qtyInp=_inp('Quantité — ex. 500',{type:'number',attrs:{min:'1',step:'1'}});
+  qtyInp.style.width='100%';
+  qtyInp.addEventListener('input',e=>{_qty=e.target.value;});
+  // Sélecteur unité de vente (même liste que le dashboard add-form)
+  const unitSel=document.createElement('select');
+  unitSel.className='field-input';
+  unitSel.style.cssText='width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;color:var(--text);font-family:inherit;cursor:pointer;outline:none';
+  allUnitLabels().forEach(u=>{
+    const opt=document.createElement('option');
+    opt.value=u; opt.textContent=u;
+    if(u===_unit) opt.selected=true;
+    unitSel.appendChild(opt);
+  });
+  unitSel.addEventListener('change',e=>{_unit=e.target.value;});
+  // Cartons
   const cInp=_inp('Quantité cartons — ex. 20',{type:'text'}); cInp.addEventListener('input',e=>{_qctn=e.target.value;});
   const btn=el('button',{cls:'traca-print-btn',style:{width:'100%',marginTop:'12px',justifyContent:'center'}},iconEl('printer',15),' Imprimer');
   btn.addEventListener('click',doPrint);
+  // Ligne qty + unité côte-à-côte
+  const qtyUnitRow=el('div',{cls:'etiq-form-row'},
+    el('div',{cls:'etiq-form-field',style:{flex:'1'}},el('label',{cls:'etiq-form-label'},'Quantité'),qtyInp),
+    el('div',{cls:'etiq-form-field',style:{flex:'1.6'}},el('label',{cls:'etiq-form-label'},'Unité de vente'),unitSel)
+  );
   return el('div',null,
     el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Référence produit *'),rInp),
-    el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Quantité (unité de vente)'),qInp),
+    qtyUnitRow,
     el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Quantité cartons'),cInp),
     btn);
 }
@@ -1762,9 +1794,11 @@ function buildNbPalettesLogiForm() {
     for(let i=1;i<=n;i++)
       html+=`<div class="label"><div class="head">PALETTE</div><div class="num">${i}/${n}</div></div>`;
     _printWin('Palettes','120mm 105mm',
-      `.label{width:120mm;height:105mm;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6mm;page-break-after:always;page-break-inside:avoid}
-       .head{font-size:28pt;font-weight:900;letter-spacing:3pt;text-transform:uppercase}
-       .num{font-size:52pt;font-weight:900;letter-spacing:2pt}`,html);
+      `.label{width:120mm;height:105mm;display:flex;flex-direction:column;align-items:center;
+              justify-content:center;gap:7mm;text-align:center;
+              page-break-after:always;page-break-inside:avoid}
+       .head{font-size:34pt;font-weight:900;letter-spacing:4pt;text-transform:uppercase}
+       .num{font-size:62pt;font-weight:900;letter-spacing:2pt}`,html);
   }
   const nInp=_inp('Nombre de palettes — ex. 8',{type:'number',attrs:{min:'1',max:'500'},style:{width:'140px'}});
   nInp.addEventListener('input',e=>{_n=e.target.value;});
@@ -1849,11 +1883,19 @@ function buildNbPalettesCForm() {
     if(n<1||n>500){showToast('Nombre invalide (1–500)','error');return;}
     let html='';
     for(let i=1;i<=n;i++)
-      html+=`<div class="label"><div class="ref">${ref}</div><div class="pal">PALETTE&nbsp;${i}/${n}</div></div>`;
+      html+=`<div class="label">
+        <div class="l1">Produit\u00a0: ${ref}</div>
+        <div class="l2">Palette n.\u00a0:</div>
+        <div class="l3">${i}/${n}</div>
+      </div>`;
     _printWin('Palettes — '+ref,'105mm 50mm',
-      `.label{width:105mm;height:50mm;padding:3mm 4mm;display:flex;flex-direction:column;justify-content:space-between;page-break-after:always;page-break-inside:avoid}
-       .ref{font-size:16pt;font-weight:700;word-break:break-all}
-       .pal{font-size:24pt;font-weight:900;text-align:right;letter-spacing:1pt}`,html);
+      `.label{width:105mm;height:50mm;padding:2mm 3mm;display:flex;flex-direction:column;
+              align-items:center;justify-content:center;gap:1mm;
+              page-break-after:always;page-break-inside:avoid;text-align:center}
+       .l1{font-size:13pt;font-weight:700;word-break:break-all;line-height:1.2}
+       .l2{font-size:13pt;font-weight:700;line-height:1.2}
+       .l3{font-size:28pt;font-weight:900;line-height:1.1;margin-top:1.5mm}`,
+      html);
   }
   const rInp=_inp('Référence — ex. 1077/0026'); rInp.addEventListener('input',e=>{_ref=e.target.value.toUpperCase();});
   const nInp=_inp('Nb palettes',{type:'number',attrs:{min:'1',max:'500'},style:{width:'120px'}}); nInp.addEventListener('input',e=>{_n=e.target.value;});

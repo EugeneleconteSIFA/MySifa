@@ -118,10 +118,12 @@ input,select,textarea{font-family:inherit;color:var(--text)}
 }
 .fab-back-btn{
   display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:8px;
-  border:1px solid var(--border);background:transparent;color:var(--text2);
-  cursor:pointer;font-size:12px;font-family:inherit;transition:all .15s;width:100%;
+  border:none;background:transparent;color:var(--text2);
+  cursor:pointer;font-size:12px;font-family:inherit;transition:color .15s;width:100%;
 }
-.fab-back-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.fab-back-btn:hover{color:var(--text);background:transparent}
+.fab-back-btn .wm{font-weight:800;color:var(--text)}
+.fab-back-btn .wm span{color:var(--accent)}
 .fab-user-chip{padding:8px 10px;border-radius:8px;background:var(--accent-bg)}
 .fab-user-name{font-size:11px;font-weight:700;color:var(--text)}
 .fab-user-machine{font-size:10px;color:var(--accent);font-weight:600;margin-top:1px}
@@ -309,9 +311,12 @@ table.fab-table tr.fab-row-last td{
   display:flex;flex-direction:column;gap:3px;
 }
 .fab-picker-item:hover{border-color:var(--accent);background:var(--accent-bg)}
-.fab-picker-ref{font-size:13px;font-weight:800;color:var(--accent)}
-.fab-picker-client{font-size:12px;color:var(--text)}
-.fab-picker-meta{font-size:10px;color:var(--muted);display:flex;gap:10px}
+.fab-picker-line1{font-size:13px;font-weight:800;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fab-picker-line1 .fab-picker-ref{color:var(--accent)}
+.fab-picker-line1 .fab-picker-sep{color:var(--muted);font-weight:400;margin:0 4px}
+.fab-picker-line1 .fab-picker-client{color:var(--text);font-weight:600}
+.fab-picker-line2{font-size:12px;color:var(--text2);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fab-picker-meta{font-size:10px;color:var(--muted);display:flex;gap:10px;margin-top:2px;flex-wrap:wrap}
 .fab-picker-empty{font-size:12px;color:var(--muted);padding:20px;text-align:center}
 .fab-picker-search{
   width:100%;background:var(--bg);border:1.5px solid var(--border);
@@ -883,7 +888,8 @@ function renderSidebar(){
         h('div',{className:'fab-user-machine'},machineName)
       ),
       h('button',{className:'fab-back-btn',onClick:()=>{window.location.href='/'}},
-        svgIcon('arrow-left',13),' Retour portail'
+        '← Retour ',
+        h('span',{className:'wm'},'My',h('span',null,'Sifa'))
       )
     )
   );
@@ -1375,8 +1381,8 @@ function renderFooter(){
 
   // Résoudre la machine effective (liée au compte ou sélectionnée par l'admin)
   const isAdminUser = S.user && (S.user.role==='superadmin'||S.user.role==='administration'||S.user.role==='direction');
-  // Admin/direction/superadmin peuvent sélectionner une machine sur place → toujours autorisés
-  const hasMachine = isAdminUser ? true : !!(S.user && S.user.machine_id);
+  // Admin/direction/superadmin : machine liée au compte OU machine sélectionnée via le sélecteur
+  const hasMachine = !!(S.user && S.user.machine_id) || !!(isAdminUser && S.adminMachineId);
 
   // ── Sélecteur machine admin ──────────────────────────────────────────────
   // Affiché dans la zone centre si l'utilisateur est admin et n'a pas de machine liée
@@ -1598,17 +1604,31 @@ function renderDossierPickerModal(){
   });
 
   const items = filtered.length
-    ? filtered.map(d=>
-        h('div',{className:'fab-picker-item',onClick:()=>selectDossier(d)},
-          h('div',{className:'fab-picker-ref'},d.reference),
-          h('div',{className:'fab-picker-client'},d.client||'Client non renseigné'),
-          h('div',{className:'fab-picker-meta'},
-            d.machine_nom ? h('span',null,'🖨 '+d.machine_nom) : null,
-            d.laize ? h('span',null,'📏 Laize '+d.laize+' mm') : null,
-            d.date_livraison ? h('span',null,'📅 '+fmtDate(d.date_livraison)) : null
-          )
-        )
-      )
+    ? filtered.map(d=>{
+        // Ligne 2 : réf produit + format
+        const refProd = d.ref_produit||d.description||'';
+        const fmtParts = [];
+        if(d.format_l) fmtParts.push(d.format_l+' mm');
+        if(d.format_h) fmtParts.push(d.format_h+' mm');
+        if(d.laize && !fmtParts.length) fmtParts.push('Laize '+d.laize+' mm');
+        const line2 = [refProd, fmtParts.join(' x ')].filter(Boolean).join('  —  ');
+        // Ligne 3 : machine + date livraison, lisible, sans emojis
+        const metaParts = [];
+        if(d.machine_nom) metaParts.push(d.machine_nom);
+        if(d.date_livraison) metaParts.push('Livr. '+fmtDate(d.date_livraison));
+        if(d.duree_heures) metaParts.push(d.duree_heures+' h');
+        return h('div',{className:'fab-picker-item',onClick:()=>selectDossier(d)},
+          h('div',{className:'fab-picker-line1'},
+            h('span',{className:'fab-picker-ref'},d.reference),
+            h('span',{className:'fab-picker-sep'},'|'),
+            h('span',{className:'fab-picker-client'},d.client||'Client non renseigné')
+          ),
+          line2 ? h('div',{className:'fab-picker-line2'},line2) : null,
+          metaParts.length ? h('div',{className:'fab-picker-meta'},
+            ...metaParts.map(s=>h('span',null,s))
+          ) : null
+        );
+      })
     : [h('div',{className:'fab-picker-empty'},
         S.dossiers.length===0
           ? 'Aucun dossier disponible dans le planning'

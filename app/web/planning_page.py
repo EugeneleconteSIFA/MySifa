@@ -411,6 +411,7 @@ let ME=null;
 let CAN_EDIT=false;
 let SHOW_DOSSIERS=false;
 let _autoScrollKey=null;
+let _suppressAutoScroll=false;
 
 const api=(p,o={})=>fetch(`/api/planning${p}`,{credentials:"include",headers:{"Content-Type":"application/json",...(o.headers||{})},...o}).then(r=>{if(!r.ok)throw r;return r.json()});
 
@@ -542,6 +543,7 @@ function icon(name,size=16){
     'edit': '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
     'settings': '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
     'home': '<path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/><path d="M10 21v-6h4v6"/>',
+    'layers': '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
   };
   return `<svg ${a} aria-hidden="true" style="display:inline-block;vertical-align:middle;flex-shrink:0">${p[name]||p['calendar']}</svg>`;
 }
@@ -633,24 +635,19 @@ function isWeekPair(d){
 function getWhForDate(di,dateObj){
   // Priorité: horaires “hebdo” stockés en base pour cette machine (si non vides)
   const m=S.machine,key=DAY_FIELD[di];
-  const raw=m&&m[key]!=null?String(m[key]):"";
+  const raw=m&&m[key]!=null?String(m[key]):””;
   if(raw && raw.trim()){
-    // Cohésio 2: ignorer les valeurs génériques de schéma (sinon on casse paire/impair)
-    if(machineKey()==="C2"){
-      const v = raw.trim();
-      if(v==="5,21" || v==="6,20" || v==="05:00,21:00" || v==="06:00,20:00"){
-        // fallback vers les réglages paire/impair
-      }else{
-        return parseHorairesPair(raw||null,di);
-      }
-    }else{
+    // Cohésio 2 : les horaires alternent selon semaine paire/impaire.
+    // Les valeurs DB sont volontairement génériques — toujours utiliser les défauts paire/impaire.
+    if(machineKey()!==”C2”){
       return parseHorairesPair(raw||null,di);
     }
+    // C2 : fall-through vers la logique paire/impaire ci-dessous
   }
 
-  // Fallback: défauts par machine (semaine paire/impair + vendredi)
+  // Défauts par machine (semaine paire/impair + vendredi)
   const defs=getMachineDefaults();
-  const par=isWeekPair(dateObj)?"pair":"impair";
+  const par=isWeekPair(dateObj)?”pair”:”impair”;
   const isFri=(di===5);
   const w=isFri?(defs[par].fri):(defs[par].week);
   return {s:w.s,e:w.e};
@@ -685,7 +682,8 @@ function renderSidebar(){
   const items=[
     ...(canPlanningNav(ME)?[{key:"_planning",label:"Planning",icon:"calendar",href:"/planning"}]:[]),
     {key:"production",label:"Production",icon:"wrench",href:"/prod?page=production"},
-    ...(admin?[{key:"suivi",label:"Rentabilité",icon:"trending-up",href:"/prod?page=suivi"}]:[]),
+    {key:"traceabilite",label:"Traçabilité",icon:"layers",href:"/prod?page=traceabilite"},
+    ...(admin?[{key:"rentabilite",label:"Rentabilité",icon:"trending-up",href:"/prod?page=rentabilite"}]:[]),
   ];
   const isLight=document.body.classList.contains("light");
   return`<nav class="sidebar"><div class="logo"><div class="logo-brand">My<span>Prod</span></div><div class="logo-sub">by SIFA</div></div>${
@@ -855,6 +853,7 @@ function render(){
 
 function autoScrollDossiersIfNeeded(){
   try{
+    if(_suppressAutoScroll) return;
     const ent = S.entries || [];
     if(!ent.length) return;
     const main = document.querySelector(".main");
@@ -1032,7 +1031,7 @@ function mkRow(e,i,slots){
       <button type="button" class="ab" onclick="openInsert(${e.id})" title="${nextLocked?"⦸ Impossible : dossier En cours / Terminé juste après":"Insérer après"}" ${isLocked||nextLocked?"disabled":""}>${nextLocked?"⦸":"↳+"}</button>
       <button type="button" class="ab" onclick="splitEntry(${e.id})" title="Spliter en 2">½</button>
       <button type="button" class="ab" onclick="openEdit(${e.id})" title="Modifier">${icon('edit',14)}</button>
-      <button type="button" class="ab del" onclick="if(confirm('Supprimer ?'))delEntry(${e.id})" title="Supprimer">✕</button>`:""}
+      ${(e.statut==="en_cours")?`<button type="button" class="ab del" onclick="if(confirm('Supprimer ce dossier en cours ? Le suivant passera automatiquement en cours.'))delEntry(${e.id})" title="Supprimer (en cours)">✕</button>`:`<button type="button" class="ab del" onclick="if(confirm('Supprimer ?'))delEntry(${e.id})" title="Supprimer" ${e.statut==="termine"?"disabled":""}>✕</button>`}`:""}
     </div></div>`;
 }
 
@@ -1050,12 +1049,20 @@ async function moveEntry(entryId,delta){
   const ids=S.entries.map(e=>e.id);
   const [m]=ids.splice(idx,1);
   ids.splice(ni,0,m);
+  const savedScroll = document.querySelector(".main")?.scrollTop ?? 0;
+  _suppressAutoScroll = true;
   try{
     await api(`/machines/${MID}/reorder`,{method:"POST",body:JSON.stringify({entry_ids:ids})});
     await load();
   }catch(e){
     alert("Réordonnancement impossible");
     await load();
+  }finally{
+    _suppressAutoScroll = false;
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      const main=document.querySelector(".main");
+      if(main) main.scrollTop=savedScroll;
+    }));
   }
 }
 
@@ -1151,10 +1158,17 @@ function setupDD(){
       if(di < insertAt) insertAt -= 1;
       ids.splice(insertAt, 0, m);
       clearOver();
+      const savedScroll = document.querySelector(".main")?.scrollTop ?? 0;
+      _suppressAutoScroll = true;
       try{
         await api(`/machines/${MID}/reorder`,{method:"POST",body:JSON.stringify({entry_ids:ids})});
       }finally{
         await load();
+        _suppressAutoScroll = false;
+        requestAnimationFrame(()=>requestAnimationFrame(()=>{
+          const main=document.querySelector(".main");
+          if(main) main.scrollTop=savedScroll;
+        }));
       }
     });
     r.addEventListener("dragend",()=>{
@@ -1225,7 +1239,7 @@ function dossierFields(numero_of,dos_rvgi,client,ref_produit,laize,date_livraiso
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
       <div class="fd"><label>Laize (mm)</label><input type="number" id="f-laize" value="${laize}" placeholder="510"></div>
-      <div class="fd"><label>Date livraison</label><input type="date" id="f-dl" value="${date_livraison}"></div>
+      <div class="fd"><label>Date livraison</label><input type="date" id="f-dl" value="${/^\d{4}-\d{2}-\d{2}$/.test(date_livraison)?date_livraison:''}"></div>
     </div>
     <div class="fd"><label>Commentaire</label><input id="f-com" value="${commentaire}" placeholder="Bobine, contraintes, etc."></div>
     <div class="fd"><label>Durée (${MIND}–${MAXD}h)</label>

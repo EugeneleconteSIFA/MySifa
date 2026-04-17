@@ -8,6 +8,7 @@ Ajouter dans main.py :
     app.include_router(planning_router)
 """
 
+import unicodedata
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Request, HTTPException
@@ -224,6 +225,36 @@ def _invalidate_attente_plans(conn, machine_id: int) -> None:
     )
 
 
+def _normalize_str(s: str) -> str:
+    nfkd = unicodedata.normalize("NFD", s)
+    return "".join(c for c in nfkd if not unicodedata.combining(c)).lower().strip()
+
+
+def _machine_key_from_record(m: dict) -> str:
+    """Identifie la clé machine (C1/C2/DSI/REP) depuis le dict machine — miroir du JS machineKey()."""
+    raw = str(m.get("code") or m.get("nom") or "").strip()
+    norm = _normalize_str(raw)
+    if "cohesio 2" in norm or norm == "c2":
+        return "C2"
+    if "cohesio 1" in norm or norm == "c1":
+        return "C1"
+    if "repiquage" in norm or norm == "rep":
+        return "REP"
+    if "dsi" in norm:
+        return "DSI"
+    return norm or raw
+
+
+# Horaires paire/impaire — miroir exact du JS DEFAULTS_BY_KEY.
+# Clés : (heure_début, heure_fin) en heures décimales depuis minuit.
+_PARITY_DEFAULTS: Dict[str, Any] = {
+    "C1":  {"pair": {"week": (5, 20), "fri": (7, 19)}, "impair": {"week": (5, 20), "fri": (7, 19)}},
+    "C2":  {"pair": {"week": (5, 13), "fri": (6, 13)}, "impair": {"week": (13, 20), "fri": (14, 20)}},
+    "DSI": {"pair": {"week": (8, 14), "fri": (8, 14)}, "impair": {"week": (8, 14), "fri": (8, 14)}},
+    "REP": {"pair": {"week": (6, 20), "fri": (7, 19)}, "impair": {"week": (6, 20), "fri": (7, 19)}},
+}
+
+
 def _slot_payload(e: dict, start_iso: str, end_iso: str) -> dict:
     return {
         "entry_id": e["id"],
@@ -267,6 +298,13 @@ def _compute_timeline_slots(
 
     sat_hours_t = _parse_horaires_val(m.get("horaires_samedi"), "6,18")
 
+    # Machines à horaires alternés selon la parité de la semaine ISO.
+    mk = _machine_key_from_record(m)
+    _parity_defs = _PARITY_DEFAULTS.get(mk)  # None si machine non reconnue
+
+    def _is_pair_week(dt: datetime) -> bool:
+        return dt.isocalendar()[1] % 2 == 0
+
     def week_key(dt: datetime) -> str:
         return f"{dt.year}-W{dt.isocalendar()[1]:02d}"
 
@@ -281,6 +319,13 @@ def _compute_timeline_slots(
         if wd in base_hours:
             if dw is not None and int(dw) == 0:
                 return None
+            # Cohésio 2 (et futures machines à horaires alternés) : les valeurs DB sont des
+            # génériques — toujours appliquer la logique paire/impaire.
+            if _parity_defs is not None:
+                par = "pair" if _is_pair_week(dt) else "impair"
+                slot = "fri" if wd == 4 else "week"
+                h = _parity_defs[par][slot]
+                return (h[0], h[1])
             return base_hours[wd]
         if wd == 5:
             # Samedi:
@@ -869,15 +914,20 @@ def split_entry(machine_id: int, entry_id: int, request: Request):
 
 @router.delete("/machines/{machine_id}/entries/{entry_id}")
 def delete_entry(machine_id: int, entry_id: int, request: Request):
-    """Supprimer une entrée et recompacter les positions."""
+    """Supprimer une entrée et recompacter les positions.
+    Si l'entrée supprimée était en_cours, le premier dossier attente suivant est promu en_cours.
+    """
     require_admin(request)
     with get_db() as conn:
         ex = conn.execute(
-            "SELECT position FROM planning_entries WHERE id=? AND machine_id=?",
+            """SELECT id, position, statut, statut_force, planned_start, planned_end
+               FROM planning_entries WHERE id=? AND machine_id=?""",
             (entry_id, machine_id)
         ).fetchone()
         if not ex:
             raise HTTPException(404, "Entrée non trouvée")
+
+        was_en_cours = (compute_statut(dict(ex)) == "en_cours")
 
         conn.execute("DELETE FROM planning_entries WHERE id=?", (entry_id,))
         conn.execute(
@@ -885,6 +935,24 @@ def delete_entry(machine_id: int, entry_id: int, request: Request):
             (machine_id, ex["position"])
         )
         _invalidate_attente_plans(conn, machine_id)
+
+        # Si le dossier supprimé était en cours, promouvoir le premier dossier en attente.
+        if was_en_cours:
+            next_e = conn.execute(
+                """SELECT id FROM planning_entries
+                   WHERE machine_id=? AND statut='attente'
+                   ORDER BY position ASC LIMIT 1""",
+                (machine_id,),
+            ).fetchone()
+            if next_e:
+                conn.execute(
+                    """UPDATE planning_entries
+                       SET statut='en_cours', statut_force=1,
+                           planned_start=NULL, planned_end=NULL, updated_at=?
+                       WHERE id=?""",
+                    (_fmt_ts(datetime.now()), next_e["id"]),
+                )
+
         conn.commit()
     return {"success": True}
 
@@ -981,7 +1049,7 @@ async def insert_after(machine_id: int, after_entry_id: int, request: Request):
                 (machine_id, position, reference, client, description, format_l, format_h,
                  duree_heures, statut, notes, created_at, updated_at,
                  dos_rvgi, numero_of, ref_produit, laize, date_livraison, commentaire)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'attente', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'attente', ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             machine_id, new_position,
             reference,

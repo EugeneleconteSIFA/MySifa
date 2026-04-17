@@ -768,6 +768,8 @@ let S={
   saisiesOffset:0,
   saisiesLimit:200,
   historique:null,production:null,traceabilite:null,
+  tracFilters:{ref:'',client:'',machine:'',statut:''},
+  tracSort:{col:null,dir:'asc'},
   imports:[],selImp:null,impData:null,
   saisies:null,
   dossiers:[],
@@ -1075,6 +1077,7 @@ async function doLogout(){
   authEpoch++;
   await api('/api/auth/logout',{method:'POST'});
   S.user=null;S.app='login';S.historique=null;S.production=null;S.traceabilite=null;
+  S.tracFilters={ref:'',client:'',machine:'',statut:''};S.tracSort={col:null,dir:'asc'};
   S.stockGlobale=null;S.stockInvPriorites=[];S.stockProduits=[];S.stockSelProduit=null;S.stockSelEmpl=null;
   S.stockPrefillEmpl=null;S.stockPrefillRef=null;S.stockPrefillDes=null;S.stockPrefillUnit=null;
   S.loginSubmitting=false;S.loginError=null;S.portalLoading=null;
@@ -4343,11 +4346,114 @@ function renderTracabilite(){
   if(!d) return h('div',{className:'card-empty'},'Chargement de la traçabilité…');
   if(d.error) return h('div',{className:'card'},h('div',{style:{padding:'20px',color:'var(--danger)'}},d.error));
 
-  const dossiers = d.dossiers||[];
+  const allDossiers = d.dossiers||[];
 
+  // ── Valeurs uniques pour les selects ───────────────────────────
+  const machinesUniq = [...new Set(allDossiers.map(x=>x.machine_nom).filter(Boolean))].sort();
+  const statuts = [
+    {val:'',label:'Tous statuts'},
+    {val:'attente',label:'En attente'},
+    {val:'en_cours',label:'En cours'},
+    {val:'termine',label:'Terminé'},
+  ];
+
+  // ── État filtres ────────────────────────────────────────────────
+  if(!S.tracFilters) S.tracFilters={ref:'',client:'',machine:'',statut:''};
+  if(!S.tracSort)    S.tracSort={col:null,dir:'asc'};
+  const F = S.tracFilters;
+  const Srt = S.tracSort;
+
+  // ── Filtre ──────────────────────────────────────────────────────
+  let dossiers = allDossiers.filter(dos=>{
+    if(F.ref    && !(dos.reference||'').toLowerCase().includes(F.ref.toLowerCase()))    return false;
+    if(F.client && !(dos.client||'').toLowerCase().includes(F.client.toLowerCase()))    return false;
+    if(F.machine && dos.machine_nom !== F.machine) return false;
+    if(F.statut  && dos.statut !== F.statut)       return false;
+    return true;
+  });
+
+  // ── Tri ─────────────────────────────────────────────────────────
+  const COL_KEY = {ref:'reference',client:'client',designation:'designation',machine:'machine_nom',statut:'statut',matieres:'nb_matieres'};
+  if(Srt.col){
+    const key = COL_KEY[Srt.col]||Srt.col;
+    dossiers = [...dossiers].sort((a,b)=>{
+      let av=a[key]||'', bv=b[key]||'';
+      if(typeof av==='number'||typeof bv==='number'){av=Number(av)||0;bv=Number(bv)||0;}
+      else{av=String(av).toLowerCase();bv=String(bv).toLowerCase();}
+      return Srt.dir==='asc'?(av>bv?1:av<bv?-1:0):(av<bv?1:av>bv?-1:0);
+    });
+  }
+
+  // ── Helper : badge statut ───────────────────────────────────────
+  function statutBadge(st){
+    if(st==='en_cours')  return h('span',{className:'badge',style:{color:'var(--success)',background:'rgba(52,211,153,.12)',display:'inline-flex',alignItems:'center',gap:'5px'}},
+      h('span',{style:{width:'6px',height:'6px',borderRadius:'50%',background:'var(--success)',display:'inline-block',animation:'pulse 2s infinite'}}),
+      'En cours');
+    if(st==='termine')   return h('span',{className:'badge badge-ok'},'Terminé');
+    return h('span',{className:'badge badge-warn'},'En attente');
+  }
+
+  // ── Header cliquable (tri) ──────────────────────────────────────
+  function thSort(colKey, label){
+    const active = Srt.col===colKey;
+    const arrow  = active ? (Srt.dir==='asc'?'↑':'↓') : '';
+    return h('th',{
+      style:{cursor:'pointer',userSelect:'none',whiteSpace:'nowrap',color:active?'var(--accent)':''},
+      onClick:()=>{
+        if(Srt.col===colKey) S.tracSort={col:colKey,dir:Srt.dir==='asc'?'desc':'asc'};
+        else S.tracSort={col:colKey,dir:'asc'};
+        render();
+      }
+    }, label+(arrow?' '+arrow:''));
+  }
+
+  // ── Barre de filtres ────────────────────────────────────────────
+  // Helper : input texte avec conservation du focus et position du curseur
+  const filterInput = (inputId, label, val, onChange)=>{
+    const inp = h('input',{
+      type:'text', id:inputId, value:val, placeholder:'Rechercher…'
+    });
+    inp.addEventListener('input', e=>{
+      const selStart = e.target.selectionStart;
+      onChange(e.target.value);
+      render();
+      // Restaurer le focus et la position du curseur après le re-render
+      const restored = document.getElementById(inputId);
+      if(restored){ restored.focus(); try{restored.setSelectionRange(selStart,selStart);}catch(ex){} }
+    });
+    return h('div',{className:'filter-group'},
+      h('label',null,label),
+      inp
+    );
+  };
+  const filterSelect = (inputId, label, options, val, onChange)=>{
+    const sel = h('select',{id:inputId},
+      ...options.map(o=>h('option',{value:o.val,selected:val===o.val},o.label)));
+    sel.addEventListener('change', e=>{ onChange(e.target.value); render(); });
+    return h('div',{className:'filter-group'},
+      h('label',null,label),
+      sel
+    );
+  };
+  const hasActiveFilter = !!(F.ref||F.client||F.machine||F.statut);
+
+  const filterBar = h('div',{className:'filters',style:{marginBottom:'18px'}},
+    filterInput('trac-f-ref',    'Référence',  F.ref,    v=>{S.tracFilters.ref=v;}),
+    filterInput('trac-f-client', 'Client',     F.client, v=>{S.tracFilters.client=v;}),
+    filterSelect('trac-f-machine','Machine',
+      [{val:'',label:'Toutes machines'},...machinesUniq.map(m=>({val:m,label:m}))],
+      F.machine, v=>{S.tracFilters.machine=v;}
+    ),
+    filterSelect('trac-f-statut','Statut', statuts, F.statut, v=>{S.tracFilters.statut=v;}),
+    hasActiveFilter ? h('button',{
+      style:{alignSelf:'flex-end'},
+      onClick:()=>{ S.tracFilters={ref:'',client:'',machine:'',statut:''}; render(); }
+    },'✕ Effacer') : null
+  );
+
+  // ── Lignes tableau ──────────────────────────────────────────────
   const rows = dossiers.map(dos=>{
     const hasMatieres = (dos.nb_matieres||0)>0;
-    const hasFin = (dos.nb_fins||0)>0;
     return h('tr',{style:{cursor:'pointer'},
       onClick:async()=>{
         S.traceabiliteDossier = null;
@@ -4359,8 +4465,7 @@ function renderTracabilite(){
       h('td',null, dos.client||'—'),
       h('td',null, dos.designation||'—'),
       h('td',null, dos.machine_nom||'—'),
-      h('td',null, h('span',{className:'badge'+(hasFin?' badge-ok':' badge-warn')},
-        hasFin?'Terminé':'En cours')),
+      h('td',null, statutBadge(dos.statut||'attente')),
       h('td',null,
         hasMatieres
           ? h('span',{className:'badge badge-ok'}, (dos.nb_matieres||0)+' bobine'+(dos.nb_matieres>1?'s':''))
@@ -4372,18 +4477,23 @@ function renderTracabilite(){
   const table = rows.length
     ? h('table',{className:'table-std'},
         h('thead',null,h('tr',null,
-          h('th',null,'Référence'),h('th',null,'Client'),h('th',null,'Désignation'),
-          h('th',null,'Machine'),h('th',null,'Statut'),h('th',null,'Matières')
+          thSort('ref','Référence'),
+          thSort('client','Client'),
+          thSort('designation','Désignation'),
+          thSort('machine','Machine'),
+          thSort('statut','Statut'),
+          thSort('matieres','Matières')
         )),
         h('tbody',null,...rows)
       )
-    : h('div',{className:'card-empty'},'Aucun dossier dans le planning');
+    : h('div',{className:'card-empty'},allDossiers.length?'Aucun résultat pour ces filtres':'Aucun dossier dans le planning');
 
   return h('div',{className:'card'},
     h('div',{className:'card-header'},
       h('h3',null,'Traçabilité par dossier'),
-      h('span',{className:'badge'},dossiers.length+' dossier'+(dossiers.length!==1?'s':''))
+      h('span',{className:'badge'},dossiers.length+(dossiers.length!==allDossiers.length?'/'+allDossiers.length:'')+' dossier'+(allDossiers.length!==1?'s':''))
     ),
+    filterBar,
     h('div',{style:{overflowX:'auto',padding:'0 0 8px'}}, table)
   );
 }
