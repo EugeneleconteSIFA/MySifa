@@ -1743,9 +1743,9 @@ function buildIdPaletteA4Form() {
       `.label{width:297mm;height:210mm;padding:14mm 18mm;display:flex;flex-direction:column;
               align-items:center;justify-content:center;gap:10mm;
               text-align:center;page-break-after:always;page-break-inside:avoid}
-       .ref{font-size:80pt;font-weight:900;letter-spacing:1pt;word-break:break-all;line-height:1.1}
-       .quv{font-size:56pt;font-weight:800;color:#111}
-       .qctn{font-size:38pt;font-weight:700;color:#333}`,
+       .ref{font-size:96pt;font-weight:900;letter-spacing:1pt;word-break:break-all;line-height:1.1}
+       .quv{font-size:85pt;font-weight:800;color:#111}
+       .qctn{font-size:60pt;font-weight:700;color:#333}`,
       `<div class="label">
          <div class="ref">${ref}</div>
          ${quv?`<div class="quv">${quv}</div>`:''}
@@ -1797,8 +1797,8 @@ function buildNbPalettesLogiForm() {
       `.label{width:120mm;height:105mm;display:flex;flex-direction:column;align-items:center;
               justify-content:center;gap:7mm;text-align:center;
               page-break-after:always;page-break-inside:avoid}
-       .head{font-size:34pt;font-weight:900;letter-spacing:4pt;text-transform:uppercase}
-       .num{font-size:62pt;font-weight:900;letter-spacing:2pt}`,html);
+       .head{font-size:62pt;font-weight:900;letter-spacing:4pt;text-transform:uppercase}
+       .num{font-size:86pt;font-weight:900;letter-spacing:2pt}`,html);
   }
   const nInp=_inp('Nombre de palettes — ex. 8',{type:'number',attrs:{min:'1',max:'500'},style:{width:'140px'}});
   nInp.addEventListener('input',e=>{_n=e.target.value;});
@@ -1892,9 +1892,9 @@ function buildNbPalettesCForm() {
       `.label{width:105mm;height:50mm;padding:2mm 3mm;display:flex;flex-direction:column;
               align-items:center;justify-content:center;gap:1mm;
               page-break-after:always;page-break-inside:avoid;text-align:center}
-       .l1{font-size:13pt;font-weight:700;word-break:break-all;line-height:1.2}
-       .l2{font-size:13pt;font-weight:700;line-height:1.2}
-       .l3{font-size:28pt;font-weight:900;line-height:1.1;margin-top:1.5mm}`,
+       .l1{font-size:74pt;font-weight:700;word-break:break-all;line-height:1.2}
+       .l2{font-size:62pt;font-weight:700;line-height:1.2}
+       .l3{font-size:86pt;font-weight:900;line-height:1.1;margin-top:1.5mm}`,
       html);
   }
   const rInp=_inp('Référence — ex. 1077/0026'); rInp.addEventListener('input',e=>{_ref=e.target.value.toUpperCase();});

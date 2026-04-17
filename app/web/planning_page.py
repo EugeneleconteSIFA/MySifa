@@ -489,7 +489,7 @@ async function resetDefaultDaysCohesio2(){
 
 function isDefaultMachineHoursC2(m){
   if(!m) return false;
-  // Valeurs “génériques” issues du schéma (pas spécifiques Cohésio 2)
+  // Valeurs « génériques » issues du schéma (pas spécifiques Cohésio 2)
   return String(m.horaires_lundi||"").trim()==="5,21"
     && String(m.horaires_mardi||"").trim()==="5,21"
     && String(m.horaires_mercredi||"").trim()==="5,21"
@@ -633,13 +633,13 @@ function isWeekPair(d){
   return (w%2)===0;
 }
 function getWhForDate(di,dateObj){
-  // Priorité: horaires “hebdo” stockés en base pour cette machine (si non vides)
+  // Priorité: horaires "hebdo" stockés en base pour cette machine (si non vides)
   const m=S.machine,key=DAY_FIELD[di];
-  const raw=m&&m[key]!=null?String(m[key]):””;
+  const raw=m&&m[key]!=null?String(m[key]):"";
   if(raw && raw.trim()){
-    // Cohésio 2 : les horaires alternent selon semaine paire/impaire.
+    // Cohesio 2 : les horaires alternent selon semaine paire/impaire.
     // Les valeurs DB sont volontairement génériques — toujours utiliser les défauts paire/impaire.
-    if(machineKey()!==”C2”){
+    if(machineKey()!=="C2"){
       return parseHorairesPair(raw||null,di);
     }
     // C2 : fall-through vers la logique paire/impaire ci-dessous
@@ -647,7 +647,7 @@ function getWhForDate(di,dateObj){
 
   // Défauts par machine (semaine paire/impair + vendredi)
   const defs=getMachineDefaults();
-  const par=isWeekPair(dateObj)?”pair”:”impair”;
+  const par=isWeekPair(dateObj)?"pair":"impair";
   const isFri=(di===5);
   const w=isFri?(defs[par].fri):(defs[par].week);
   return {s:w.s,e:w.e};
