@@ -1734,11 +1734,15 @@ function buildIdPaletteA4Form() {
   function doPrint() {
     const ref = _ref.trim(), qty = _qty.trim(), qctn = _qctn.trim();
     if (!ref) { showToast('Référence requise', 'error'); return; }
-    const quv = qty ? qty + '\u00a0' + _unit : '';
+    // Format nombre avec espaces entre milliers
+    function fmtNb(n){return String(n).replace(/\B(?=(\d{3})+(?!\d))/g,' ');}
+    // Abréviation étiquettes
+    const unitDisplay = (_unit||'').toLowerCase()==='étiquettes'?'éti.':_unit;
+    const quv = qty ? fmtNb(qty) + '\u00a0' + unitDisplay : '';
     const unitLow = _unit.toLowerCase().replace(/s$/, '');  // 'cartons' → 'carton'
     const showCtn = !!qctn && unitLow !== 'carton';
     const qctnNum = parseInt(qctn) || 0;
-    const ctnLabel = qctnNum === 1 ? '1\u00a0carton' : (qctn + '\u00a0cartons');
+    const ctnLabel = qctnNum === 1 ? '1\u00a0carton' : (fmtNb(qctn) + '\u00a0cartons');
     _printWin('Palette — '+ref, '297mm 210mm',
       `.label{width:297mm;height:210mm;padding:14mm 18mm;display:flex;flex-direction:column;
               align-items:center;justify-content:center;gap:10mm;
@@ -1892,9 +1896,9 @@ function buildNbPalettesCForm() {
       `.label{width:105mm;height:50mm;padding:2mm 3mm;display:flex;flex-direction:column;
               align-items:center;justify-content:center;gap:1mm;
               page-break-after:always;page-break-inside:avoid;text-align:center}
-       .l1{font-size:74pt;font-weight:700;word-break:break-all;line-height:1.2}
-       .l2{font-size:62pt;font-weight:700;line-height:1.2}
-       .l3{font-size:86pt;font-weight:900;line-height:1.1;margin-top:1.5mm}`,
+       .l1{font-size:37pt;font-weight:700;word-break:break-all;line-height:1.2}
+       .l2{font-size:31pt;font-weight:700;line-height:1.2}
+       .l3{font-size:43pt;font-weight:900;line-height:1.1;margin-top:1.5mm}`,
       html);
   }
   const rInp=_inp('Référence — ex. 1077/0026'); rInp.addEventListener('input',e=>{_ref=e.target.value.toUpperCase();});

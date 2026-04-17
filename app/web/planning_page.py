@@ -840,7 +840,7 @@ function render(){
         <div class="sec-title">Dossiers de production</div>
         ${CAN_EDIT?`<button type="button" class="btn-p" onclick="openAdd()"><span style="font-size:18px;line-height:1">+</span> Ajouter</button>`:""}
       </div>
-      <div class="th"><span></span><span>#</span><span></span><span>Client</span><span>Format prod.</span><span>Dos. RVGI</span><span>Ref OF</span><span>Ref prod.</span><span>Laize</span><span>Livraison</span><span>Durée</span><span>Statut</span><span class="act-c">Actions</span></div>
+      <div class="th"><span></span><span>#</span><span></span><span>Client</span><span>Format prod.</span><span>Ref OF</span><span>Ref prod.</span><span>Laize</span><span>Livraison</span><span>Durée</span><span>Statut</span><span class="act-c">Actions</span></div>
       <div id="tbody">${S.entries.length===0?'<div class="empty">Aucun dossier au planning</div>':""}
         ${S.entries.map((e,i)=>mkRow(e,i,sl)).join("")}
       </div>
@@ -998,7 +998,6 @@ function mkRow(e,i,slots){
   const isAnchor = (S._scrollAnchorIdx!=null) && (i===S._scrollAnchorIdx);
   const co=colorForId(e.id||i+1);
   const cli=(e.client||"").trim()||"—";
-  const rvgi=escAttr(e.dos_rvgi||"")||"—";
   const of=escAttr(e.numero_of||e.reference||"—");
   const rfp=escAttr(e.ref_produit||"")||"—";
   const lz=e.laize!=null&&e.laize!==""?escAttr(String(e.laize)):"—";
@@ -1017,7 +1016,6 @@ function mkRow(e,i,slots){
     <div><div class="cd" style="background:${co}"></div></div>
     <span class="lbl-main">${escAttr(cli)}</span>
     <span class="cell-mini">${escAttr(fm)}${fm!=="—"?" mm":""}</span>
-    <span class="cell-mini">${rvgi}</span>
     <span class="cell-mini">${of}</span>
     <span class="cell-mini">${rfp}</span>
     <span class="cell-mini">${lz}</span>
@@ -1227,10 +1225,9 @@ function modalHTML(title,fields,submitLabel,onSubmitFn){
     <button class="btn-p" onclick="${onSubmitFn}">${submitLabel}</button></div></div></div>`
 }
 
-function dossierFields(numero_of,dos_rvgi,client,ref_produit,laize,date_livraison,commentaire,fl,fh,dur,statut,showStatut){
+function dossierFields(numero_of,client,ref_produit,laize,date_livraison,commentaire,fl,fh,dur,statut,showStatut){
   return`
     <div class="fd"><label>Numéro d'OF</label><input id="f-of" value="${numero_of}" placeholder="961/0001"></div>
-    <div class="fd"><label>Dos. RVGI</label><input id="f-rvgi" value="${dos_rvgi}" placeholder="N° dossier production"></div>
     <div class="fd"><label>Client</label><input id="f-cli" value="${client}" placeholder="Nom du client"></div>
     <div class="fd"><label>Réf produit</label><input id="f-rp" value="${ref_produit}" placeholder="REF-PROD"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
@@ -1256,7 +1253,6 @@ function dossierFields(numero_of,dos_rvgi,client,ref_produit,laize,date_livraiso
 function getFormData(withStatut){
   const d={
     numero_of:(document.getElementById("f-of").value||"").trim(),
-    dos_rvgi:(document.getElementById("f-rvgi").value||"").trim(),
     client:document.getElementById("f-cli").value||"",
     ref_produit:document.getElementById("f-rp").value||"",
     format_l:parseFloat(document.getElementById("f-fl").value)||null,
@@ -1274,7 +1270,7 @@ function openAdd(){
   if(!CAN_EDIT) return;
   document.getElementById("mroot").innerHTML=modalHTML(
     "Ajouter un dossier",
-    dossierFields("","","","","","","","","",8,"attente",false),
+    dossierFields("","","","","","","","",8,"attente",false),
     "Ajouter","submitAdd()"
   );
 }
@@ -1290,7 +1286,7 @@ function openEdit(id){
   const e=S.entries.find(x=>x.id===id);if(!e)return;
   document.getElementById("mroot").innerHTML=modalHTML(
     `Modifier — ${(e.numero_of||e.reference)||''}`,
-    dossierFields(e.numero_of||e.reference||"",e.dos_rvgi||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.format_l||"",e.format_h||"",e.duree_heures,e.statut,true),
+    dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.format_l||"",e.format_h||"",e.duree_heures,e.statut,true),
     "Enregistrer",`submitEdit(${id})`
   );
 }
@@ -1315,7 +1311,7 @@ function openInsert(afterId){
   }catch(e){}
   document.getElementById("mroot").innerHTML=modalHTML(
     "Insérer un dossier après",
-    dossierFields("","","","","","","","","",8,"attente",false),
+    dossierFields("","","","","","","","",8,"attente",false),
     "Insérer",`submitInsert(${afterId})`
   );
 }
