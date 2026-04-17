@@ -1896,8 +1896,8 @@ function buildNbPalettesCForm() {
       `.label{width:105mm;height:50mm;padding:2mm 3mm;display:flex;flex-direction:column;
               align-items:center;justify-content:center;gap:1mm;
               page-break-after:always;page-break-inside:avoid;text-align:center}
-       .l1{font-size:37pt;font-weight:700;word-break:break-all;line-height:1.2}
-       .l2{font-size:31pt;font-weight:700;line-height:1.2}
+       .l1{font-size:28pt;font-weight:700;word-break:break-all;line-height:1.2}
+       .l2{font-size:28pt;font-weight:700;line-height:1.2}
        .l3{font-size:43pt;font-weight:900;line-height:1.1;margin-top:1.5mm}`,
       html);
   }
