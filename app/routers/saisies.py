@@ -53,6 +53,7 @@ def list_saisies(
             f"""SELECT id,import_id,operateur,date_operation,operation,operation_code,
                        operation_severity,operation_category,machine,no_dossier,client,designation,
                        quantite_a_traiter,quantite_traitee,metrage_prevu,metrage_reel,
+                       metrage_total_debut,metrage_total_fin,
                        commentaire,service,est_manuel,modifie_par,modifie_le,modifie_note
                 FROM production_data WHERE {wc}
                 ORDER BY date_operation ASC, id ASC LIMIT ? OFFSET ?""",
@@ -89,26 +90,31 @@ async def update_saisie(row_id: int, request: Request):
         new_data["date_operation"] = date_op
         new_data["operateur"] = operateur_new
 
+        def _ex(col): return ex[col] if col in ex.keys() else None
         conn.execute(
             """UPDATE production_data SET
                operateur=?,
                operation=?,operation_code=?,operation_severity=?,operation_category=?,
                date_operation=?,machine=?,no_dossier=?,client=?,designation=?,
                quantite_a_traiter=?,quantite_traitee=?,
-               metrage_prevu=?,metrage_reel=?,commentaire=?,
+               metrage_prevu=?,metrage_reel=?,
+               metrage_total_debut=?,metrage_total_fin=?,
+               commentaire=?,
                modifie_par=?,modifie_le=?,modifie_note=?,data=? WHERE id=?""",
             (operateur_new,
              op_str, cl["code"], cl["severity"], cl["category"],
              date_op,
-             body.get("machine",        ex["machine"]),
-             body.get("no_dossier",     ex["no_dossier"]),
-             body.get("client",         ex["client"]),
-             body.get("designation",    ex["designation"]),
-             parse_french_number(body.get("quantite_a_traiter", ex["quantite_a_traiter"])),
-             parse_french_number(body.get("quantite_traitee",   ex["quantite_traitee"])),
-             body.get("metrage_prevu") if "metrage_prevu" in body else ex["metrage_prevu"] if "metrage_prevu" in ex.keys() else None,
-             body.get("metrage_reel")  if "metrage_reel"  in body else ex["metrage_reel"]  if "metrage_reel"  in ex.keys() else None,
-             body.get("commentaire")   if "commentaire"  in body else ex["commentaire"] if "commentaire" in ex.keys() else None,
+             body.get("machine",     _ex("machine")),
+             body.get("no_dossier",  _ex("no_dossier")),
+             body.get("client",      _ex("client")),
+             body.get("designation", _ex("designation")),
+             parse_french_number(body.get("quantite_a_traiter", _ex("quantite_a_traiter"))),
+             parse_french_number(body.get("quantite_traitee",   _ex("quantite_traitee"))),
+             body.get("metrage_prevu")       if "metrage_prevu"       in body else _ex("metrage_prevu"),
+             body.get("metrage_reel")        if "metrage_reel"        in body else _ex("metrage_reel"),
+             body.get("metrage_total_debut") if "metrage_total_debut" in body else _ex("metrage_total_debut"),
+             body.get("metrage_total_fin")   if "metrage_total_fin"   in body else _ex("metrage_total_fin"),
+             body.get("commentaire")         if "commentaire"         in body else _ex("commentaire"),
              user["email"], datetime.now().isoformat(), body.get("note", ""),
              json.dumps(new_data, default=str), row_id)
         )
@@ -147,8 +153,10 @@ async def add_saisie(request: Request):
     commentaire  = (body.get("commentaire") or "").strip() or None
     qte_a = parse_french_number(body.get("quantite_a_traiter", 0))
     qte_t = parse_french_number(body.get("quantite_traitee",   0))
-    met_p = body.get("metrage_prevu") or None
-    met_r = body.get("metrage_reel")  or None
+    met_p   = body.get("metrage_prevu")       or None
+    met_r   = body.get("metrage_reel")        or None
+    met_td  = body.get("metrage_total_debut") or None
+    met_tf  = body.get("metrage_total_fin")   or None
 
     row_dict = {"operateur": operateur, "date_operation": date_op,
                 "operation": op_str, "no_dossier": no_dossier,
@@ -161,12 +169,12 @@ async def add_saisie(request: Request):
                    (import_id,operateur,date_operation,operation,operation_code,
                     operation_severity,operation_category,machine,no_dossier,client,
                     designation,quantite_a_traiter,quantite_traitee,service,
-                    metrage_prevu,metrage_reel,commentaire,
-                    data,est_manuel,modifie_par,modifie_le,modifie_note)
-                   VALUES (NULL,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?)""",
+                    metrage_prevu,metrage_reel,metrage_total_debut,metrage_total_fin,
+                    commentaire,data,est_manuel,modifie_par,modifie_le,modifie_note)
+                   VALUES (NULL,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?)""",
                 (operateur, date_op, op_str, cl["code"], cl["severity"], cl["category"],
                  machine, no_dossier, client, designation, qte_a, qte_t, service,
-                 met_p, met_r, commentaire,
+                 met_p, met_r, met_td, met_tf, commentaire,
                  json.dumps(row_dict, default=str),
                  user["email"], datetime.now().isoformat(),
                  body.get("note", "Ajout manuel"))
@@ -243,6 +251,7 @@ def export_saisies_modifiees(request: Request):
         "no_dossier":"No Dossier","client":"Client","designation":"Désignation",
         "quantite_a_traiter":"Qté prévue","quantite_traitee":"Qté traitée",
         "metrage_prevu":"Métrage prévu (m)","metrage_reel":"Métrage réel (m)",
+        "metrage_total_debut":"Métrage total début (m)","metrage_total_fin":"Métrage total fin (m)",
         "commentaire":"Commentaire",
         "est_manuel":"Ajout manuel","modifie_par":"Modifié par",
         "modifie_le":"Modifié le","modifie_note":"Note",

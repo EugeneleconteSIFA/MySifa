@@ -58,8 +58,9 @@ def dashboard_production(
         # Toutes les lignes pour calculs temps + métrages
         all_rows = conn.execute(
             f"""SELECT operateur,date_operation,operation_code,operation_category,
-                       machine,no_dossier,client,designation,
-                       quantite_traitee,metrage_reel,metrage_prevu
+                       machine,no_dossier,client,designation,quantite_traitee,
+                       COALESCE(metrage_total_debut, metrage_prevu) AS metrage_prevu,
+                       COALESCE(metrage_total_fin,   metrage_reel)  AS metrage_reel
                 FROM production_data
                 WHERE {wc}
                 ORDER BY operateur,date_operation""",

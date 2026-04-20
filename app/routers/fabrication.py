@@ -303,14 +303,15 @@ async def create_saisie(request: Request):
             # Fin dossier : métrage fin >= métrage début du même dossier
             if no_dossier:
                 debut_row = conn.execute(
-                    """SELECT metrage_prevu FROM production_data
+                    """SELECT COALESCE(metrage_total_debut, metrage_prevu) AS ctr_debut
+                       FROM production_data
                        WHERE no_dossier = ? AND operation_code = '01'
-                         AND metrage_prevu IS NOT NULL
+                         AND COALESCE(metrage_total_debut, metrage_prevu) IS NOT NULL
                        ORDER BY date_operation DESC LIMIT 1""",
                     (no_dossier,),
                 ).fetchone()
-                if debut_row and debut_row["metrage_prevu"] is not None:
-                    m_debut_ref = float(debut_row["metrage_prevu"])
+                if debut_row and debut_row["ctr_debut"] is not None:
+                    m_debut_ref = float(debut_row["ctr_debut"])
                     if m_fin < m_debut_ref:
                         raise HTTPException(
                             status_code=400,
@@ -335,9 +336,10 @@ async def create_saisie(request: Request):
                (import_id, operateur, date_operation, operation, operation_code,
                 operation_severity, operation_category, machine, no_dossier, client,
                 designation, quantite_a_traiter, quantite_traitee, service,
-                metrage_prevu, metrage_reel, commentaire,
-                data, est_manuel, modifie_par, modifie_le, modifie_note)
-               VALUES (NULL,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,NULL,NULL,?)""",
+                metrage_prevu, metrage_reel,
+                metrage_total_debut, metrage_total_fin,
+                commentaire, data, est_manuel, modifie_par, modifie_le, modifie_note)
+               VALUES (NULL,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,NULL,NULL,?)""",
             (
                 operateur, date_op,
                 op_str, cl["code"], cl["severity"], cl["category"],
@@ -345,8 +347,10 @@ async def create_saisie(request: Request):
                 0,
                 m_etiq or 0,
                 "fabrication",
-                m_debut,
-                m_fin,
+                m_debut,          # metrage_prevu  (backward compat)
+                m_fin,            # metrage_reel   (backward compat)
+                m_debut,          # metrage_total_debut
+                m_fin,            # metrage_total_fin
                 commentaire,
                 json.dumps(row_dict, default=str),
                 "Saisie opérateur fabrication",

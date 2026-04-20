@@ -5087,12 +5087,15 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
  
   const machI  = h('input', { type: 'text', placeholder: 'ex: 1 - COHESIO 1', value: (prefill && prefill.machine) ? prefill.machine : '' });
   const dosI   = h('input', { type: 'text', placeholder: 'ex: 1060',           value: (prefill && prefill.no_dossier) ? prefill.no_dossier : '' });
-  const qteAI  = h('input', { type: 'number', placeholder: '0',                value: (prefill && prefill.quantite_a_traiter!=null) ? prefill.quantite_a_traiter : 0 });
   const qteTI  = h('input', { type: 'number', placeholder: '0',                value: (prefill && prefill.quantite_traitee!=null)   ? prefill.quantite_traitee   : 0 });
   const noteI  = h('input', { type: 'text', placeholder: 'Raison (optionnel)',  value: '' });
   const commentaireI = h('input', { type: 'text', placeholder: 'Observation, remarque...', value: (prefill && prefill.commentaire) ? prefill.commentaire : '' });
-  const metrageReelI  = h('input', { type: 'number', placeholder: '0', value: (prefill && prefill.metrage_reel!=null)  ? prefill.metrage_reel  : '' });
-  inputs.metrage_reel  = metrageReelI;
+  const metrageReelI      = h('input', { type: 'number', placeholder: '0', value: (prefill && prefill.metrage_reel!=null)        ? prefill.metrage_reel        : '' });
+  const metrageDebutI     = h('input', { type: 'number', placeholder: '0', value: (prefill && prefill.metrage_total_debut!=null) ? prefill.metrage_total_debut : '' });
+  const metrageFinI       = h('input', { type: 'number', placeholder: '0', value: (prefill && prefill.metrage_total_fin!=null)   ? prefill.metrage_total_fin   : '' });
+  inputs.metrage_reel         = metrageReelI;
+  inputs.metrage_total_debut  = metrageDebutI;
+  inputs.metrage_total_fin    = metrageFinI;
  
   const form = h('div', { className: 'add-row-form' },
       h('button',{type:'button',className:'add-row-close',title:'Fermer',onClick:(e)=>{e.stopPropagation();closeModal();}},'×'),
@@ -5111,8 +5114,7 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
         h('div', null, h('label', null, 'Machine'), machI)
       ),
       h('div', { className: 'form-row' },
-        h('div', null, h('label', null, 'No Dossier'), dosI),
-        h('div', null, h('label', null, 'Qté à traiter'), qteAI)
+        h('div', null, h('label', null, 'No Dossier'), dosI)
       ),
       h('div', { className: 'form-row' },
         h('div', null, h('label', null, 'Qté traitée'), qteTI),
@@ -5122,6 +5124,16 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
         h('div', null,
           h('label', null, 'Métrage réel (m)'),
           metrageReelI
+        )
+      ),
+      h('div', { className: 'form-row' },
+        h('div', null,
+          h('label', null, 'Compteur début (m)'),
+          metrageDebutI
+        ),
+        h('div', null,
+          h('label', null, 'Compteur fin (m)'),
+          metrageFinI
         )
       ),
       h('div', { className: 'form-row' },
@@ -5146,11 +5158,12 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
               date_operation:     dtVal,
               machine:            machI.value  || '',
               no_dossier:         dosI.value   || '',
-              quantite_a_traiter: parseFloat(qteAI.value) || 0,
               quantite_traitee:   parseFloat(qteTI.value) || 0,
               note:               noteI.value  || '',
               commentaire:       commentaireI.value || '',
-              metrage_reel:      parseFloat((inputs.metrage_reel  && inputs.metrage_reel.value)  ? inputs.metrage_reel.value  : '') || null,
+              metrage_reel:         parseFloat((inputs.metrage_reel         && inputs.metrage_reel.value)         ? inputs.metrage_reel.value         : '') || null,
+              metrage_total_debut:  parseFloat((inputs.metrage_total_debut  && inputs.metrage_total_debut.value)  ? inputs.metrage_total_debut.value  : '') || null,
+              metrage_total_fin:    parseFloat((inputs.metrage_total_fin    && inputs.metrage_total_fin.value)    ? inputs.metrage_total_fin.value    : '') || null,
             });
           }}, submitLabel)
         )

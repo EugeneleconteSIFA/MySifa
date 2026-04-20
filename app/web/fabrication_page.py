@@ -1283,8 +1283,10 @@ function renderMain(){
         const chipColor = severityColor(s.operation_severity) || catColor(cat);
 
         let metrageText = '';
-        if(s.metrage_prevu!=null) metrageText += 'Déb. '+fN(s.metrage_prevu)+' m';
-        if(s.metrage_reel!=null) metrageText += (metrageText?' | ':'')+' Fin '+fN(s.metrage_reel)+' m';
+        const mDeb = s.metrage_total_debut ?? s.metrage_prevu;
+        const mFin = s.metrage_total_fin   ?? s.metrage_reel;
+        if(mDeb!=null) metrageText += 'Déb. '+fN(mDeb)+' m';
+        if(mFin!=null) metrageText += (metrageText?' | ':'')+' Fin '+fN(mFin)+' m';
         if(s.quantite_traitee&&Number(s.quantite_traitee)>0) metrageText += (metrageText?' | ':'')+fN(s.quantite_traitee)+' étiq.';
 
         const commentBtn = h('button',{
@@ -1781,9 +1783,10 @@ function renderFinModal(){
 
     // Validation locale 2 : métrage fin < métrage début du dossier
     if(mFin !== null && S.saisies.length){
-      const debutRow = [...S.saisies].reverse().find(s=>s.operation_code==='01'&&s.metrage_prevu!=null);
-      if(debutRow && mFin < parseFloat(debutRow.metrage_prevu)){
-        showToast('Métrage fin ('+Math.round(mFin).toLocaleString('fr-FR')+' m) inférieur au début de dossier ('+Math.round(debutRow.metrage_prevu).toLocaleString('fr-FR')+' m)','danger');
+      const debutRow = [...S.saisies].reverse().find(s=>s.operation_code==='01'&&(s.metrage_total_debut??s.metrage_prevu)!=null);
+      const debutCtr = debutRow ? parseFloat(debutRow.metrage_total_debut ?? debutRow.metrage_prevu) : null;
+      if(debutCtr !== null && mFin < debutCtr){
+        showToast('Métrage fin ('+Math.round(mFin).toLocaleString('fr-FR')+' m) inférieur au début de dossier ('+Math.round(debutCtr).toLocaleString('fr-FR')+' m)','danger');
         return;
       }
     }

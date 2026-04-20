@@ -175,11 +175,26 @@ def _migrate(conn):
         ("modifie_le",    "ALTER TABLE production_data ADD COLUMN modifie_le TEXT"),
         ("modifie_note",  "ALTER TABLE production_data ADD COLUMN modifie_note TEXT"),
         ("commentaire",   "ALTER TABLE production_data ADD COLUMN commentaire TEXT"),
-        ("metrage_prevu", "ALTER TABLE production_data ADD COLUMN metrage_prevu REAL"),
-        ("metrage_reel",  "ALTER TABLE production_data ADD COLUMN metrage_reel REAL"),
+        ("metrage_prevu",        "ALTER TABLE production_data ADD COLUMN metrage_prevu REAL"),
+        ("metrage_reel",         "ALTER TABLE production_data ADD COLUMN metrage_reel REAL"),
+        ("metrage_total_debut",  "ALTER TABLE production_data ADD COLUMN metrage_total_debut REAL"),
+        ("metrage_total_fin",    "ALTER TABLE production_data ADD COLUMN metrage_total_fin REAL"),
     ]:
         if col not in existing_pd:
             conn.execute(sql)
+
+    # Migration : recopie metrage_prevu → metrage_total_debut et metrage_reel → metrage_total_fin
+    # pour les lignes fabrication déjà existantes (exécution idempotente grâce au WHERE IS NULL)
+    conn.execute("""UPDATE production_data
+                    SET metrage_total_debut = metrage_prevu
+                    WHERE operation_code = '01'
+                      AND metrage_prevu IS NOT NULL
+                      AND metrage_total_debut IS NULL""")
+    conn.execute("""UPDATE production_data
+                    SET metrage_total_fin = metrage_reel
+                    WHERE operation_code = '89'
+                      AND metrage_reel IS NOT NULL
+                      AND metrage_total_fin IS NULL""")
 
     # Index composites : accélèrent les filtres par opérateur/dossier + date
     conn.execute("CREATE INDEX IF NOT EXISTS idx_prod_operateur_date ON production_data(operateur,date_operation)")
