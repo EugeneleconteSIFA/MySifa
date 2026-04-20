@@ -110,9 +110,17 @@ body.light .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(8,145,178,.32),
   background:rgba(248,113,113,.14);border:1px solid rgba(248,113,113,.35);color:var(--danger);
   display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;font-family:monospace}
 .nav-badge.hidden{display:none}
-.msg-grid{display:flex;gap:12px;align-items:stretch}
-@media (max-width: 900px){
-  .msg-grid{flex-direction:column}
+.msg-grid{display:flex;gap:16px;align-items:flex-start}
+.msg-left{flex:0 0 340px;min-width:240px;max-width:340px}
+.msg-right{flex:1;min-width:0}
+.msg-list-scroll{display:flex;flex-direction:column;gap:4px;max-height:calc(100vh - 310px);min-height:120px;overflow-y:auto;padding:10px 12px}
+@media (max-width:900px){
+  .msg-grid{flex-direction:column;gap:0}
+  .msg-left{flex:none;width:100%;max-width:100%;min-width:0}
+  .msg-right{flex:none;width:100%;min-width:0}
+  .msg-list-scroll{max-height:50vh}
+  .msg-filter-wrap{flex-direction:column;gap:8px!important;align-items:stretch!important}
+  .msg-filter-actions{margin-left:0!important;justify-content:flex-end}
 }
 .sidebar-bottom{margin-top:auto;display:flex;flex-direction:column;gap:6px;padding-bottom:8px}
 .user-chip{padding:10px 12px;border-radius:8px;background:var(--accent-bg)}
@@ -3272,32 +3280,20 @@ function renderExpePoids(){
     el.addEventListener('input',e=>cb(e.target.value));
     return el;
   };
-  const gramPresets=[{label:'ETO (60)',v:'60'},{label:'Thermique (80)',v:'80'},{label:'SOVAB (120)',v:'120'},{label:'Standard (155)',v:'155'}];
-  const activeGram=gramPresets.some(p=>p.v===String(S.expePoidsGram));
-
   const paramCard=h('div',{className:'card',style:{marginBottom:'1rem'}},
     h('div',{className:'card-header'},h('span',null,'Paramètres')),
     h('div',{style:{padding:'1rem 1rem 1.25rem'}},
       h('div',{style:{marginBottom:'1rem'}},
-        h('label',{style:{display:'block',fontSize:'0.75rem',opacity:0.65,marginBottom:'0.45rem'}},'Grammage (g/m²)'),
-        h('div',{style:{display:'flex',gap:'0.4rem',flexWrap:'wrap',alignItems:'center'}},
-          ...gramPresets.map(p=>{
-            const active=S.expePoidsGram===p.v;
-            const btn=h('button',{style:{padding:'0.3rem 0.7rem',fontSize:'0.8rem',borderRadius:'6px',cursor:'pointer',
-              border:'1px solid var(--accent)',
-              background:active?'var(--accent)':'transparent',
-              color:active?'#fff':'var(--accent)',fontWeight:active?'600':'normal'}},p.label);
-            btn.addEventListener('click',()=>set({expePoidsGram:p.v}));
-            return btn;
-          }),
+        h('div',{style:{display:'flex',alignItems:'center',gap:'0.5rem'}},
           (()=>{
-            const el=h('input',{type:'number',min:'1',placeholder:'Autre…',
-              value:activeGram?'':S.expePoidsGram,
-              style:{width:'80px',padding:'0.3rem 0.5rem',borderRadius:'6px',border:'1px solid var(--border)',
-                     background:'var(--card)',color:'var(--fg)',fontSize:'0.8rem'}});
+            const el=h('input',{type:'number',min:'1',step:'any',placeholder:'155',
+              value:S.expePoidsGram||'',
+              style:{width:'90px',padding:'0.3rem 0.5rem',borderRadius:'6px',border:'1px solid var(--border)',
+                     background:'var(--card)',color:'var(--fg)',fontSize:'0.85rem'}});
             el.addEventListener('input',e=>set({expePoidsGram:e.target.value}));
             return el;
-          })()
+          })(),
+          h('span',{style:{fontSize:'0.85rem',opacity:0.75}},'g/m²')
         )
       ),
       h('div',null,
@@ -3857,13 +3853,15 @@ function renderMessagesApp(){
     h('button',{type:'button',className:'mobile-home-btn',onClick:()=>{set({app:'portal',sidebarOpen:false});},'aria-label':'Accueil'},iconEl('home',20))
   );
 
-  const filterRow=h('div',{className:'card',style:{padding:'12px 14px'}},
-    h('div',{style:{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}},
-      h('span',{className:'badge'},'Filtre'),
-      h('button',{type:'button',className:'btn-sec'+(S.msgFilter==='unread'?' is-active':''),onClick:()=>set({msgFilter:'unread',msgSelIds:[]})},'Non traités'),
-      h('button',{type:'button',className:'btn-sec'+(S.msgFilter==='read'?' is-active':''),onClick:()=>set({msgFilter:'read',msgSelIds:[]})},'Traités'),
-      h('button',{type:'button',className:'btn-sec'+(S.msgFilter==='all'?' is-active':''),onClick:()=>set({msgFilter:'all',msgSelIds:[]})},'Tous'),
-      h('div',{style:{marginLeft:'auto',display:'flex',gap:'8px'}},
+  const filterRow=h('div',{className:'card',style:{padding:'10px 14px',marginBottom:'12px'}},
+    h('div',{className:'msg-filter-wrap',style:{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap',justifyContent:'space-between'}},
+      h('div',{style:{display:'flex',gap:'6px',alignItems:'center',flexWrap:'wrap'}},
+        h('span',{className:'badge'},'Filtre'),
+        h('button',{type:'button',className:'btn-sec'+(S.msgFilter==='unread'?' is-active':''),onClick:()=>set({msgFilter:'unread',msgSelIds:[],msgMobileView:'list'})},'Non traités'),
+        h('button',{type:'button',className:'btn-sec'+(S.msgFilter==='read'?' is-active':''),onClick:()=>set({msgFilter:'read',msgSelIds:[],msgMobileView:'list'})},'Traités'),
+        h('button',{type:'button',className:'btn-sec'+(S.msgFilter==='all'?' is-active':''),onClick:()=>set({msgFilter:'all',msgSelIds:[],msgMobileView:'list'})},'Tous')
+      ),
+      h('div',{className:'msg-filter-actions',style:{display:'flex',gap:'8px',flexShrink:0}},
         h('button',{type:'button',className:'btn-sec',onClick:async()=>{await loadMessagesUnread();await loadMessages();}},'Rafraîchir'),
         h('button',{type:'button',className:'btn-sec',onClick:markAllRead},'Tout lire')
       )
@@ -3972,32 +3970,35 @@ function renderMessagesApp(){
     document.addEventListener('keydown', S._msgKeyHandler, true);
   }
 
-  const left=h('div',{style:{flex:'0 0 360px',maxWidth:'42vw',minWidth:'260px'}},
+  const isMobile = window.innerWidth <= 900;
+  const mobileView = S.msgMobileView || 'list';
+
+  const left=h('div',{className:'msg-left'},
     h('div',{className:'card'},
-      h('div',{className:'card-header',style:{display:'flex',gap:'10px',alignItems:'center',justifyContent:'space-between'}},
-        h('div',{className:'card-title'},'📨 Messages'),
-        h('div',{style:{display:'flex',gap:'8px',alignItems:'center'}},
+      h('div',{className:'card-header',style:{gap:'8px',flexWrap:'nowrap'}},
+        h('div',{className:'card-title',style:{flexShrink:0}},'📨 Messages'),
+        h('div',{style:{display:'flex',gap:'6px',alignItems:'center',marginLeft:'auto',flexShrink:0}},
           h('button',{type:'button',className:'add-row-nav-btn',title:'Précédent (Alt+← / PageUp)',onClick:(e)=>{e.stopPropagation();goPrev();}},'‹'),
-          h('div',{style:{fontSize:'12px',fontWeight:'700',color:'var(--text2)',minWidth:'56px',textAlign:'center'}},selPos),
+          h('div',{style:{fontSize:'12px',fontWeight:'700',color:'var(--text2)',minWidth:'44px',textAlign:'center'}},selPos),
           h('button',{type:'button',className:'add-row-nav-btn',title:'Suivant (Alt+→ / PageDown)',onClick:(e)=>{e.stopPropagation();goNext();}},'›')
         )
       ),
-      h('div',{style:{display:'flex',gap:'8px',alignItems:'center',padding:'0 12px 10px 12px',flexWrap:'wrap'}},
-        h('button',{type:'button',className:'btn-sec',onClick:toggleSelectAllVisible,disabled:!visIds.length},
-          allVisibleSelected?'Tout désélectionner':'Tout sélectionner'
+      h('div',{style:{display:'flex',gap:'6px',alignItems:'center',padding:'0 12px 10px 12px',flexWrap:'wrap'}},
+        h('button',{type:'button',className:'btn-sec',style:{fontSize:'11px',padding:'5px 8px'},onClick:toggleSelectAllVisible,disabled:!visIds.length},
+          allVisibleSelected?'Tout -':'Tout +'
         ),
-        h('button',{type:'button',className:'btn-sec',onClick:()=>bulkSetTreated(true),disabled:!selectedIds.length},'Traité'),
-        h('button',{type:'button',className:'btn-sec',onClick:()=>bulkSetTreated(false),disabled:!selectedIds.length},'Non traité'),
-        h('button',{type:'button',className:'btn-danger',onClick:bulkDelete,disabled:!selectedIds.length},'Supprimer')
+        h('button',{type:'button',className:'btn-sec',style:{fontSize:'11px',padding:'5px 8px'},onClick:()=>bulkSetTreated(true),disabled:!selectedIds.length},'Traité'),
+        h('button',{type:'button',className:'btn-sec',style:{fontSize:'11px',padding:'5px 8px'},onClick:()=>bulkSetTreated(false),disabled:!selectedIds.length},'Non traité'),
+        h('button',{type:'button',className:'btn-danger',style:{fontSize:'11px'},onClick:bulkDelete,disabled:!selectedIds.length},'Supprimer')
       ),
       S.msgLoading?h('div',{className:'card-empty'},'Chargement…'):
-      (list.length? h('div',{style:{display:'flex',flexDirection:'column',gap:'6px',padding:'12px'}},
+      (list.length? h('div',{className:'msg-list-scroll'},
         ...list.map(m=>{
           const unread=!m.read_at;
           const wrap=h('div',{style:{display:'flex',gap:'8px',alignItems:'center'}});
           const selBtn=h('button',{type:'button',className:'msg-sel-btn'+(selSet.has(m.id)?' on':''),title:selSet.has(m.id)?'Désélectionner':'Sélectionner',onClick:(e)=>{e.stopPropagation();toggleSelect(m.id);}}, selSet.has(m.id)?'✓':'');
           const row=h('button',{type:'button',className:'nav-btn'+(S.msgSelId===m.id?' active':''),onClick:async()=>{
-            set({msgSelId:m.id});
+            set({msgSelId:m.id,...(isMobile?{msgMobileView:'detail'}:{})});
           }});
           row.appendChild(iconEl('mail',15));
           const who=(m.from_name||m.from_email||'Utilisateur').trim();
@@ -4014,42 +4015,50 @@ function renderMessagesApp(){
       ) : h('div',{className:'card-empty'},'Aucun message'))
     )
   );
-  const right=h('div',{style:{flex:'1',minWidth:'0'}},
-    !sel? h('div',{className:'card-empty'},'Sélectionne un message.'):
+  const right=h('div',{className:'msg-right'},
+    !sel? h('div',{className:'card-empty',style:{marginTop:'8px'}},
+      isMobile?h('button',{className:'btn-sec',style:{marginBottom:'12px'},type:'button',onClick:()=>set({msgMobileView:'list'})},iconEl('arrow-left',13),' Retour'):null,
+      h('div',null,'Sélectionne un message.')
+    ):
     h('div',{className:'card'},
-      h('div',{className:'card-header'},
-        h('div',null,
-          h('h3',null,(sel.subject||'Sans objet')),
+      h('div',{className:'card-header',style:{flexWrap:'wrap',gap:'8px'}},
+        h('div',{style:{minWidth:0,flex:'1'}},
+          h('h3',{style:{wordBreak:'break-word'}},(sel.subject||'Sans objet')),
           h('div',{style:{fontSize:'12px',color:'var(--muted)',marginTop:'4px'}},
             (sel.from_name||sel.from_email||'Utilisateur')+' · '+fD(sel.created_at)
           )
         ),
-        h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',justifyContent:'flex-end'}},
-          h('div',{style:{display:'flex',gap:'8px',alignItems:'center',marginRight:'4px'}},
+        h('div',{style:{display:'flex',gap:'6px',flexWrap:'wrap',justifyContent:'flex-end',alignItems:'center',flexShrink:0}},
+          isMobile?h('button',{className:'btn-sec',type:'button',style:{fontSize:'11px',padding:'5px 8px'},onClick:()=>set({msgMobileView:'list'})},iconEl('arrow-left',11),' Liste'):null,
+          h('div',{style:{display:'flex',gap:'6px',alignItems:'center'}},
             h('button',{type:'button',className:'add-row-nav-btn',title:'Précédent (Alt+← / PageUp)',onClick:(e)=>{e.stopPropagation();goPrev();}},'‹'),
-            h('div',{style:{fontSize:'12px',fontWeight:'700',color:'var(--text2)',minWidth:'56px',textAlign:'center'}},selPos),
+            h('div',{style:{fontSize:'12px',fontWeight:'700',color:'var(--text2)',minWidth:'44px',textAlign:'center'}},selPos),
             h('button',{type:'button',className:'add-row-nav-btn',title:'Suivant (Alt+→ / PageDown)',onClick:(e)=>{e.stopPropagation();goNext();}},'›')
           ),
-          h('button',{className:'btn-sec',type:'button',onClick:async()=>{
-            // toggle traité/non-traité via API (ajouté côté backend)
+          h('button',{className:'btn-sec',type:'button',style:{fontSize:'11px',padding:'5px 10px'},onClick:async()=>{
             await api('/api/messages/'+sel.id+'/toggle-treated',{method:'POST'});
             await loadMessagesUnread();
             await loadMessages();
           }}, sel.read_at?'Non traité':'Traité'),
-          h('button',{className:'btn-danger',type:'button',onClick:()=>deleteMessage(sel.id)},'Supprimer')
+          h('button',{className:'btn-danger',type:'button',style:{fontSize:'11px'},onClick:()=>deleteMessage(sel.id)},'Supprimer')
         )
       ),
-      h('div',{style:{padding:'16px 20px',whiteSpace:'pre-wrap',color:'var(--text)'}},sel.body||'')
+      h('div',{style:{padding:'14px 16px',whiteSpace:'pre-wrap',color:'var(--text)',lineHeight:'1.55',wordBreak:'break-word',overflowWrap:'break-word'}},sel.body||'')
     )
   );
 
-  // Layout responsive: sur mobile, colonne unique
+  // Layout responsive: sur mobile, vue unique liste ou détail
   const content=h('div',{className:'container'},
     topbar,
-    h('h1',null,'Messagerie'),
-    h('div',{className:'subtitle'},'Support interne — messages reçus'),
+    !isMobile?h('div',{style:{marginBottom:'14px'}},
+      h('h1',{style:{marginBottom:'2px'}},'Messagerie'),
+      h('div',{className:'subtitle'},'Support interne — messages reçus')
+    ):null,
     filterRow,
-    h('div',{className:'msg-grid',style:{display:'flex',gap:'12px',alignItems:'stretch'}},left,right)
+    h('div',{className:'msg-grid'},
+      (!isMobile || mobileView==='list') ? left : null,
+      (!isMobile || mobileView==='detail') ? right : null
+    )
   );
   return h('div',null,
     S.sidebarOpen?h('div',{className:'sidebar-overlay',onClick:closeSidebar}):null,

@@ -1734,24 +1734,25 @@ function buildIdPaletteA4Form() {
   function doPrint() {
     const ref = _ref.trim(), qty = _qty.trim(), qctn = _qctn.trim();
     if (!ref) { showToast('Référence requise', 'error'); return; }
-    // Format nombre avec espaces entre milliers
-    function fmtNb(n){return String(n).replace(/\B(?=(\d{3})+(?!\d))/g,' ');}
-    // Abréviation étiquettes
-    const unitDisplay = (_unit||'').toLowerCase()==='étiquettes'?'éti.':_unit;
+    // Format nombre avec points entre milliers
+    function fmtNb(n){return String(n).replace(/\B(?=(\d{3})+(?!\d))/g,'.');}
+    // Abréviation étiquettes → ETQ
+    const unitDisplay = (_unit||'').toLowerCase()==='étiquettes'?'ETQ':(_unit||'').toUpperCase();
     const quv = qty ? fmtNb(qty) + '\u00a0' + unitDisplay : '';
     const unitLow = _unit.toLowerCase().replace(/s$/, '');  // 'cartons' → 'carton'
     const showCtn = !!qctn && unitLow !== 'carton';
     const qctnNum = parseInt(qctn) || 0;
-    const ctnLabel = qctnNum === 1 ? '1\u00a0carton' : (fmtNb(qctn) + '\u00a0cartons');
+    const ctnLabel = qctnNum === 1 ? '1\u00a0CARTON' : (fmtNb(qctn) + '\u00a0CARTONS');
     _printWin('Palette — '+ref, '297mm 210mm',
       `.label{width:297mm;height:210mm;padding:14mm 18mm;display:flex;flex-direction:column;
               align-items:center;justify-content:center;gap:10mm;
-              text-align:center;page-break-after:always;page-break-inside:avoid}
-       .ref{font-size:96pt;font-weight:900;letter-spacing:1pt;word-break:break-all;line-height:1.1}
-       .quv{font-size:85pt;font-weight:800;color:#111}
-       .qctn{font-size:60pt;font-weight:700;color:#333}`,
+              text-align:center;page-break-after:always;page-break-inside:avoid;
+              font-family:'Berlin Sans FB','Berlin Sans FB Demi',Arial,sans-serif;text-transform:uppercase}
+       .ref{font-size:112pt;font-weight:900;letter-spacing:1pt;word-break:break-all;line-height:1.1;text-decoration:underline}
+       .quv{font-size:100pt;font-weight:800;color:#111}
+       .qctn{font-size:72pt;font-weight:700;color:#333}`,
       `<div class="label">
-         <div class="ref">${ref}</div>
+         <div class="ref">${ref} FS</div>
          ${quv?`<div class="quv">${quv}</div>`:''}
          ${showCtn?`<div class="qctn">(${ctnLabel})</div>`:''}
        </div>`);
@@ -1813,7 +1814,7 @@ function buildNbPalettesLogiForm() {
     btn);
 }
 
-// ── 3. Bureaux — Identification plaques (105mm × 50mm + EAN128) ───
+// ── 3. Bureaux — Identification plaques (105mm × 74mm + EAN128) ───
 function buildIdPlaqueForm() {
   let _num='', _fl='', _fw='';
   const JSBARCODE_CDN='https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js';
@@ -1821,19 +1822,23 @@ function buildIdPlaqueForm() {
     const num=_num.trim(), fl=_fl.trim(), fw=_fw.trim();
     if(!num){showToast('Numéro de plaque requis','error');return;}
     const fmt=fl&&fw?`${fl} × ${fw} mm`:'';
-    const w=_printWin('Plaque '+num,'105mm 50mm',
-      `.label{width:105mm;height:50mm;padding:3mm 4mm;display:flex;flex-direction:column;justify-content:space-between;page-break-after:always;page-break-inside:avoid}
-       .head{font-size:9pt;font-weight:700;text-transform:uppercase;letter-spacing:.5pt;color:#555}
-       .num{font-size:22pt;font-weight:900;letter-spacing:.5pt}
-       .fmt{font-size:10pt;font-weight:600;color:#333}
-       .bar{display:flex;justify-content:center;margin-top:1mm}
-       svg{max-width:97mm;height:12mm}`,
+    const w=_printWin('Plaque '+num,'105mm 74mm',
+      `.label{width:105mm;height:74mm;padding:3mm 4mm;display:flex;flex-direction:column;
+              align-items:center;justify-content:center;text-align:center;gap:1.5mm;
+              page-break-after:always;page-break-inside:avoid}
+       .head{font-size:14pt;font-weight:700;text-transform:uppercase;letter-spacing:.5pt;color:#555}
+       .num{font-size:88pt;font-weight:900;letter-spacing:.5pt;line-height:0.95}
+       .fmt{font-size:16pt;font-weight:600;color:#333}
+       .bar{display:flex;justify-content:center;margin-top:1.5mm}
+       svg{max-width:97mm;height:10mm}`,
       `<div class="label">
-         <div><div class="head">Plaque N°</div><div class="num">${num}</div>${fmt?`<div class="fmt">${fmt}</div>`:''}</div>
+         <div class="head">Plaque N°</div>
+         <div class="num">${num}</div>
+         ${fmt?`<div class="fmt">${fmt}</div>`:''}
          <div class="bar"><svg id="bc"></svg></div>
        </div>
        <script src="${JSBARCODE_CDN}"><\/script>
-       <script>window.onload=function(){try{JsBarcode('#bc','${num}',{format:'CODE128',displayValue:false,margin:0,height:40});}catch(e){}window.focus();window.print();}<\/script>`);
+       <script>window.onload=function(){try{JsBarcode('#bc','${num}',{format:'CODE128',displayValue:false,margin:0,height:36});}catch(e){}window.focus();window.print();}<\/script>`);
     if(w) w.document.close();
   }
   const nInp=_inp('N° de plaque — ex. 1234'); nInp.addEventListener('input',e=>{_num=e.target.value;});
@@ -1849,32 +1854,43 @@ function buildIdPlaqueForm() {
     btn);
 }
 
-// ── 4. Bureaux — Identification clichés (105mm × 50mm + EAN128) ───
+// ── 4. Bureaux — Identification clichés (105mm × 74mm + EAN128) ───
 function buildIdClicheForm() {
-  let _num='';
+  let _num='', _fl='', _fw='';
   const JSBARCODE_CDN='https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js';
   function doPrint() {
-    const num=_num.trim();
+    const num=_num.trim(), fl=_fl.trim(), fw=_fw.trim();
     if(!num){showToast('Numéro de cliché requis','error');return;}
-    const w=_printWin('Cliché '+num,'105mm 50mm',
-      `.label{width:105mm;height:50mm;padding:3mm 4mm;display:flex;flex-direction:column;justify-content:space-between;page-break-after:always;page-break-inside:avoid}
-       .head{font-size:9pt;font-weight:700;text-transform:uppercase;letter-spacing:.5pt;color:#555}
-       .num{font-size:26pt;font-weight:900;letter-spacing:.5pt}
-       .bar{display:flex;justify-content:center;margin-top:2mm}
-       svg{max-width:97mm;height:14mm}`,
+    const fmt=fl&&fw?`${fl} × ${fw} mm`:'';
+    const w=_printWin('Cliché '+num,'105mm 74mm',
+      `.label{width:105mm;height:74mm;padding:3mm 4mm;display:flex;flex-direction:column;
+              align-items:center;justify-content:center;text-align:center;gap:1.5mm;
+              page-break-after:always;page-break-inside:avoid}
+       .head{font-size:14pt;font-weight:700;text-transform:uppercase;letter-spacing:.5pt;color:#555}
+       .num{font-size:88pt;font-weight:900;letter-spacing:.5pt;line-height:0.95}
+       .fmt{font-size:16pt;font-weight:600;color:#333}
+       .bar{display:flex;justify-content:center;margin-top:1.5mm}
+       svg{max-width:97mm;height:10mm}`,
       `<div class="label">
-         <div><div class="head">Cliché N°</div><div class="num">${num}</div></div>
+         <div class="head">Cliché N°</div>
+         <div class="num">${num}</div>
+         ${fmt?`<div class="fmt">${fmt}</div>`:''}
          <div class="bar"><svg id="bc"></svg></div>
        </div>
        <script src="${JSBARCODE_CDN}"><\/script>
-       <script>window.onload=function(){try{JsBarcode('#bc','${num}',{format:'CODE128',displayValue:false,margin:0,height:44});}catch(e){}window.focus();window.print();}<\/script>`);
+       <script>window.onload=function(){try{JsBarcode('#bc','${num}',{format:'CODE128',displayValue:false,margin:0,height:36});}catch(e){}window.focus();window.print();}<\/script>`);
     if(w) w.document.close();
   }
   const nInp=_inp('N° de cliché — ex. 5678'); nInp.addEventListener('input',e=>{_num=e.target.value;});
+  const lInp=_inp('L (mm)',{style:{width:'90px'}}); lInp.addEventListener('input',e=>{_fl=e.target.value;});
+  const wInp=_inp('l (mm)',{style:{width:'90px'}}); wInp.addEventListener('input',e=>{_fw=e.target.value;});
   const btn=el('button',{cls:'traca-print-btn',style:{width:'100%',marginTop:'12px',justifyContent:'center'}},iconEl('printer',15),' Imprimer');
   btn.addEventListener('click',doPrint);
   return el('div',null,
     el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Numéro de cliché *'),nInp),
+    el('div',{cls:'etiq-form-row'},
+      el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Format L (mm)'),lInp),
+      el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Format l (mm)'),wInp)),
     btn);
 }
 
