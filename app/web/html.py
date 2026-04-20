@@ -5530,19 +5530,26 @@ function renderSaisies(){
   if(S.sortState.col) rows=sortRows(rows,S.sortState.col,S.sortState.asc);
 
   // ── Calcul métrage dossier (Fin dossier = compteur fin - compteur début) ──
-  // Pour chaque dossier on cherche la saisie "Début dossier" (code 01) et on
-  // soustrait son metrage_prevu au metrage_reel de la saisie "Fin dossier" (code 89).
+  // Priorité aux colonnes dédiées metrage_total_debut / metrage_total_fin.
+  // Fallback sur metrage_prevu / metrage_reel pour les anciennes lignes sans compteurs.
   (function(){
-    const debutByDossier = {}; // no_dossier → metrage_prevu (dernier début)
-    // Parcours chronologique pour associer début/fin
+    const debutByDossier = {}; // no_dossier → compteur début (metrage_total_debut ?? metrage_prevu)
     const chrono = [...rows].sort((a,b)=>(a.date_operation||'').localeCompare(b.date_operation||''));
     chrono.forEach(r=>{
-      if(r.operation_code==='01' && r.no_dossier && r.metrage_prevu!=null){
-        debutByDossier[r.no_dossier] = r.metrage_prevu;
+      if(r.operation_code==='01' && r.no_dossier){
+        const ctr = r.metrage_total_debut ?? r.metrage_prevu;
+        if(ctr!=null) debutByDossier[r.no_dossier] = parseFloat(ctr);
       }
-      if(r.operation_code==='89' && r.no_dossier && r.metrage_reel!=null){
-        const debut = debutByDossier[r.no_dossier];
-        if(debut!=null) r._metrage_dossier = r.metrage_reel - debut;
+      if(r.operation_code==='89' && r.no_dossier){
+        const finCtr  = r.metrage_total_fin ?? null;   // compteur fin uniquement
+        const debutCtr = debutByDossier[r.no_dossier] ?? null;
+        if(finCtr!=null && debutCtr!=null){
+          r._metrage_dossier = parseFloat(finCtr) - debutCtr;  // fin_counter − debut_counter
+        } else if(r.metrage_reel!=null && debutCtr!=null && !r.metrage_total_fin){
+          // Ancien format : metrage_reel était le compteur fin (avant introduction des nouvelles colonnes)
+          r._metrage_dossier = parseFloat(r.metrage_reel) - debutCtr;
+        }
+        // Si metrage_total_fin absent et metrage_reel = valeur directe produite : pas de calcul
       }
     });
   })();
@@ -5638,10 +5645,20 @@ function renderSaisies(){
     tr.appendChild(h('td',null,fN(row.quantite_traitee)));
     tr.appendChild(h('td',{style:{color:'var(--c3)'}},
       row._metrage_dossier!=null
-        ? h('span',{title:'Métrage dossier = compteur fin − compteur début\nFin: '+fN(row.metrage_reel)+' m — Début: '+fN(row.metrage_reel - row._metrage_dossier)+' m'},
-            '⇒ '+fN(row._metrage_dossier)+' m')
-        : row.metrage_reel!=null ? fN(row.metrage_reel)+' m'
-        : row.metrage_prevu!=null ? h('span',{style:{color:'var(--muted)',fontSize:'11px'}},fN(row.metrage_prevu)+' m (déb.)')
+        ? (()=>{
+            const finCtr   = row.metrage_total_fin   ?? row.metrage_reel;
+            const debutCtr = row.metrage_total_debut != null
+              ? row.metrage_total_debut
+              : (finCtr!=null ? finCtr - row._metrage_dossier : null);
+            const tip = 'Métrage produit = compteur fin − compteur début'
+              + (finCtr!=null   ? '\nFin : '+fN(finCtr)+' m'   : '')
+              + (debutCtr!=null ? '\nDébut : '+fN(debutCtr)+' m' : '');
+            return h('span',{title:tip},'⇒ '+fN(row._metrage_dossier)+' m');
+          })()
+        : row.metrage_total_fin!=null   ? fN(row.metrage_total_fin)+' m (cpt fin)'
+        : row.metrage_reel!=null        ? fN(row.metrage_reel)+' m'
+        : row.metrage_total_debut!=null ? h('span',{style:{color:'var(--muted)',fontSize:'11px'}},fN(row.metrage_total_debut)+' m (déb.)')
+        : row.metrage_prevu!=null       ? h('span',{style:{color:'var(--muted)',fontSize:'11px'}},fN(row.metrage_prevu)+' m (déb.)')
         : '-'));
     if(readOnly){
       tr.appendChild(h('td',{style:{maxWidth:'200px',overflow:'hidden',textOverflow:'ellipsis'}},row.commentaire||''));
