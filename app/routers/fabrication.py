@@ -4,7 +4,10 @@ Accessible : fabrication, admin, superadmin
 """
 import json
 from datetime import datetime, date
+from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Request, HTTPException
+
+_PARIS = ZoneInfo("Europe/Paris")
 
 from database import get_db
 from config import classify_operation
@@ -243,7 +246,7 @@ async def create_saisie(request: Request):
             detail="Compte non lié à un opérateur — contacter un administrateur",
         )
 
-    date_op = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    date_op = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
 
     no_dossier  = (body.get("no_dossier")   or "").strip() or None
     client      = (body.get("client")       or "").strip() or None
@@ -423,7 +426,7 @@ async def add_matiere(request: Request):
         operateur = str(body["operateur"]).strip()
 
     no_dossier = (body.get("no_dossier") or "").strip() or None
-    scanned_at = datetime.now().isoformat()
+    scanned_at = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
 
     with get_db() as conn:
         machine_obj = _resolve_machine(user, body, conn)
@@ -561,7 +564,7 @@ async def update_commentaire(saisie_id: int, request: Request):
             (
                 commentaire,
                 user["email"],
-                datetime.now().isoformat(),
+                datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S"),
                 "Commentaire opérateur fabrication",
                 saisie_id,
             ),
