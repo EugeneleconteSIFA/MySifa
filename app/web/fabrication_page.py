@@ -1594,50 +1594,73 @@ function handleSearchSubmit(query){
 }
 
 /* ── Modals ──────────────────────────────────────────────────── */
-function renderDossierPickerModal(){
-  const q = (S.pickerQuery||'').toLowerCase();
-  const filtered = S.dossiers.filter(d=>{
-    if(!q) return true;
-    return (d.reference||'').toLowerCase().includes(q)||
-           (d.client||'').toLowerCase().includes(q)||
-           (d.description||'').toLowerCase().includes(q);
-  });
 
-  const items = filtered.length
-    ? filtered.map(d=>{
-        // Ligne 2 : réf produit + format
-        const refProd = d.ref_produit||d.description||'';
-        const fmtParts = [];
-        if(d.format_l) fmtParts.push(d.format_l+' mm');
-        if(d.format_h) fmtParts.push(d.format_h+' mm');
-        if(d.laize && !fmtParts.length) fmtParts.push('Laize '+d.laize+' mm');
-        const line2 = [refProd, fmtParts.join(' x ')].filter(Boolean).join('  —  ');
-        // Ligne 3 : machine + date livraison, lisible, sans emojis
-        const metaParts = [];
-        if(d.machine_nom) metaParts.push(d.machine_nom);
-        if(d.date_livraison) metaParts.push('Livr. '+fmtDate(d.date_livraison));
-        if(d.duree_heures) metaParts.push(d.duree_heures+' h');
-        return h('div',{className:'fab-picker-item',onClick:()=>selectDossier(d)},
-          h('div',{className:'fab-picker-line1'},
-            h('span',{className:'fab-picker-ref'},d.reference),
-            h('span',{className:'fab-picker-sep'},'|'),
-            h('span',{className:'fab-picker-client'},d.client||'Client non renseigné')
-          ),
-          line2 ? h('div',{className:'fab-picker-line2'},line2) : null,
-          metaParts.length ? h('div',{className:'fab-picker-meta'},
-            ...metaParts.map(s=>h('span',null,s))
-          ) : null
-        );
-      })
-    : [h('div',{className:'fab-picker-empty'},
-        S.dossiers.length===0
-          ? 'Aucun dossier disponible dans le planning'
-          : 'Aucun dossier ne correspond à la recherche'
-      )];
+// Variable locale pour la query du picker — mise à jour sans re-render complet
+let _pickerQ = '';
+
+function _buildPickerItems(q){
+  const lq = (q||'').toLowerCase();
+  const filtered = S.dossiers.filter(d=>{
+    if(!lq) return true;
+    return (d.reference||'').toLowerCase().includes(lq)||
+           (d.client||'').toLowerCase().includes(lq)||
+           (d.description||'').toLowerCase().includes(lq);
+  });
+  if(!filtered.length){
+    const empty = document.createElement('div');
+    empty.className = 'fab-picker-empty';
+    empty.textContent = S.dossiers.length===0
+      ? 'Aucun dossier disponible dans le planning'
+      : 'Aucun dossier ne correspond à la recherche';
+    return [empty];
+  }
+  return filtered.map(d=>{
+    const refProd = d.ref_produit||d.description||'';
+    const fmtParts = [];
+    if(d.format_l) fmtParts.push(d.format_l+' mm');
+    if(d.format_h) fmtParts.push(d.format_h+' mm');
+    if(d.laize && !fmtParts.length) fmtParts.push('Laize '+d.laize+' mm');
+    const line2 = [refProd, fmtParts.join(' x ')].filter(Boolean).join('  —  ');
+    const metaParts = [];
+    if(d.machine_nom) metaParts.push(d.machine_nom);
+    if(d.date_livraison) metaParts.push('Livr. '+fmtDate(d.date_livraison));
+    if(d.duree_heures) metaParts.push(d.duree_heures+' h');
+    return h('div',{className:'fab-picker-item',onClick:()=>selectDossier(d)},
+      h('div',{className:'fab-picker-line1'},
+        h('span',{className:'fab-picker-ref'},d.reference),
+        h('span',{className:'fab-picker-sep'},'|'),
+        h('span',{className:'fab-picker-client'},d.client||'Client non renseigné')
+      ),
+      line2 ? h('div',{className:'fab-picker-line2'},line2) : null,
+      metaParts.length ? h('div',{className:'fab-picker-meta'},
+        ...metaParts.map(s=>h('span',null,s))
+      ) : null
+    );
+  });
+}
+
+function renderDossierPickerModal(){
+  // Réinitialise la query locale à l'ouverture du picker
+  _pickerQ = '';
+
+  const listEl = h('div',{className:'fab-picker-list',id:'fab-picker-list-inner'},
+    ..._buildPickerItems(''));
 
   const searchInp = h('input',{type:'text',className:'fab-picker-search',
-    placeholder:'Rechercher un dossier…',value:S.pickerQuery||''});
-  searchInp.addEventListener('input',e=>{ S.pickerQuery=e.target.value; render(); });
+    placeholder:'Rechercher un dossier…'});
+
+  searchInp.addEventListener('input',e=>{
+    _pickerQ = e.target.value;
+    // Met à jour uniquement la liste — sans toucher au reste de la page
+    const list = document.getElementById('fab-picker-list-inner');
+    if(list){
+      list.innerHTML = '';
+      _buildPickerItems(_pickerQ).forEach(item=>list.appendChild(item));
+    }
+  });
+
+  // Autofocus à l'ouverture (après insertion dans le DOM)
+  requestAnimationFrame(()=>{ searchInp.focus(); });
 
   return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)set({showDossierPicker:false});}},
     h('div',{className:'fab-modal'},
@@ -1646,7 +1669,7 @@ function renderDossierPickerModal(){
         'Choisissez le dossier à démarrer parmi ceux disponibles dans le planning.'
       ),
       searchInp,
-      h('div',{className:'fab-picker-list'},...items),
+      listEl,
       h('div',{className:'fab-modal-btns'},
         h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',
           onClick:()=>set({showDossierPicker:false})},'Annuler')

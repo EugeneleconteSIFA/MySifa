@@ -1,6 +1,7 @@
 """SIFA — Production v0.9 — métrage produit = fin_machine - debut_machine"""
 from typing import Optional, List
 from fastapi import APIRouter, Request, Query
+from datetime import datetime as _dt_cls
 from database import get_db
 from services.timings import compute_dossier_times
 from services.auth_service import get_current_user, is_admin, can_view_all_prod
@@ -68,6 +69,21 @@ def dashboard_production(
     all_list = [dict(r) for r in all_rows]
     dossier_times = compute_dossier_times(all_list)
 
+    # ── Helper : normalise n'importe quel format de date → 'YYYY-MM-DD' ────────
+    _FMTS = (
+        "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S",
+        "%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M",
+        "%Y-%m-%d", "%d/%m/%Y",
+    )
+    def _norm_date(dt_raw: str) -> str:
+        s = str(dt_raw or "").strip()
+        for fmt in _FMTS:
+            try:
+                return _dt_cls.strptime(s, fmt).date().isoformat()
+            except ValueError:
+                continue
+        return s[:10]   # dernier recours
+
     # ── Construire les maps début / fin par (operateur, no_dossier) ──────────
     # Pour chaque dossier : métrage produit = compteur_machine_fin (89) - compteur_machine_debut (01)
     # On prend la dernière saisie 01 (début) précédant la saisie 89 (fin) pour chaque (op, dos).
@@ -88,7 +104,7 @@ def dashboard_production(
             debut_entries.setdefault(key, []).append((dt_op, float(r["metrage_prevu"])))
 
         if code == "89":
-            dt_jour = dt_op[:10]
+            dt_jour = _norm_date(dt_op)
             fin_entries[(op, dt_jour, dos)] = r
 
     # Pour chaque fin, trouver le début juste avant (chronologiquement)
@@ -209,7 +225,7 @@ def dashboard_production(
         "vitesse_m_min": vitesse_m_min,
         "by_machine":  by_machine,
         "by_operator": by_operator,
-        "by_dossier":  sorted([d for d in by_dossier if d.get("temps_total_calage_min")],
-                               key=lambda x: x["temps_total_calage_min"], reverse=True),
+        "by_dossier":  sorted([d for d in by_dossier if d.get("no_dossier")],
+                               key=lambda x: x.get("temps_total_calage_min") or 0, reverse=True),
         "by_day": by_day,
     }
