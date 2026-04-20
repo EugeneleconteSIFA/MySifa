@@ -84,44 +84,27 @@ def dashboard_production(
                 continue
         return s[:10]   # dernier recours
 
-    # ── Construire les maps début / fin par (operateur, no_dossier) ──────────
-    # Pour chaque dossier : métrage produit = compteur_machine_fin (89) - compteur_machine_debut (01)
-    # On prend la dernière saisie 01 (début) précédant la saisie 89 (fin) pour chaque (op, dos).
-    # Structure : {(op, dos): [{"date":..., "metrage":...}, ...]} triés chronologiquement
-    debut_entries = {}   # (op, dos) -> list of (date_operation, metrage_prevu)
-    fin_entries   = {}   # (op, dt_jour, dos) -> fin row dict
+    # ── Map des fins : somme de tous les metrage_reel (code-89) par jour ────────
+    # Chaque entrée fin contient directement les mètres produits lors de la session.
+    # On additionne toutes les fins du même (opérateur, jour, dossier).
+    fin_data = {}   # (op, jour_iso, dos) -> {"metrage_m": float, "etiquettes": float}
 
     for r in all_list:
         code = str(r.get("operation_code") or "")
         dos  = str(r.get("no_dossier") or "").strip()
         if not dos or dos == "0":
             continue
-        op = str(r.get("operateur") or "?")
+        op    = str(r.get("operateur") or "?")
         dt_op = str(r.get("date_operation") or "")
 
-        if code == "01" and r.get("metrage_prevu") is not None:
-            key = (op, dos)
-            debut_entries.setdefault(key, []).append((dt_op, float(r["metrage_prevu"])))
-
         if code == "89":
-            dt_jour = _norm_date(dt_op)
-            fin_entries[(op, dt_jour, dos)] = r
-
-    # Pour chaque fin, trouver le début juste avant (chronologiquement)
-    def find_debut_metrage(op, dos, fin_date):
-        """Retourne le metrage_prevu du dernier début 01 avant fin_date, ou None."""
-        key = (op, dos)
-        entries = debut_entries.get(key, [])
-        # Filtrer ceux antérieurs ou égaux à fin_date
-        candidates = [(dt, m) for dt, m in entries if dt <= fin_date]
-        if not candidates:
-            # Si aucun antérieur, prendre le plus proche disponible
-            candidates = entries
-        if not candidates:
-            return None
-        # Prendre le plus récent parmi les candidats
-        candidates.sort(key=lambda x: x[0], reverse=True)
-        return candidates[0][1]
+            jour_iso = _norm_date(dt_op)
+            key      = (op, jour_iso, dos)
+            entry    = fin_data.setdefault(key, {"metrage_m": 0.0, "etiquettes": 0.0})
+            if r.get("metrage_reel") is not None:
+                entry["metrage_m"] += float(r["metrage_reel"])
+            if r.get("quantite_traitee") is not None:
+                entry["etiquettes"] = float(r["quantite_traitee"])  # dernière valeur du jour
 
     # ── Enrichir by_dossier avec le métrage produit calculé ─────────────────
     by_dossier = []
@@ -130,42 +113,17 @@ def dashboard_production(
         dos = str(d.get("no_dossier") or "")
         dt  = str(d.get("jour") or "")
 
-        fin = fin_entries.get((op, dt, dos), {})
+        entry = fin_data.get((op, dt, dos), {})
 
-        etiquettes = fin.get("quantite_traitee") or d.get("quantite_traitee") or 0
-
-        metrage_fin = fin.get("metrage_reel")
-        if metrage_fin is not None:
-            fin_date = str(fin.get("date_operation") or "")
-            metrage_debut = find_debut_metrage(op, dos, fin_date)
-            if metrage_debut is not None:
-                metrage_produit = max(0.0, float(metrage_fin) - metrage_debut)
-            else:
-                # Pas de début enregistré : on ne peut pas calculer → 0
-                metrage_produit = 0.0
-        else:
-            metrage_produit = 0.0
-
-        d["etiquettes"] = etiquettes
-        d["metrage_m"]  = round(metrage_produit, 1)
+        d["etiquettes"] = entry.get("etiquettes") or d.get("quantite_traitee") or 0
+        d["metrage_m"]  = round(entry.get("metrage_m", 0.0), 1)
         by_dossier.append(d)
 
     # ── Enrichir completed_dossiers avec le métrage produit ─────────────────
     completed_list = []
     for r in completed:
         row = dict(r)
-        op  = str(row.get("operateur") or "?")
-        dos = str(row.get("no_dossier") or "").strip()
-        fin_date = str(row.get("date_operation") or "")
-        metrage_fin = row.get("metrage_reel")
-        if metrage_fin is not None and dos and dos != "0":
-            metrage_debut = find_debut_metrage(op, dos, fin_date)
-            if metrage_debut is not None:
-                row["metrage_produit"] = max(0.0, float(metrage_fin) - metrage_debut)
-            else:
-                row["metrage_produit"] = 0.0
-        else:
-            row["metrage_produit"] = 0.0
+        row["metrage_produit"] = float(row.get("metrage_reel") or 0)
         completed_list.append(row)
 
     # ── Totaux (recalculés depuis by_dossier pour cohérence) ─────────────────
