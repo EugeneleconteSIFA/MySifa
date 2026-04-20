@@ -69,42 +69,69 @@ def dashboard_production(
     all_list = [dict(r) for r in all_rows]
     dossier_times = compute_dossier_times(all_list)
 
-    # ── Helper : normalise n'importe quel format de date → 'YYYY-MM-DD' ────────
+    # ── Helpers : normalisation des dates ───────────────────────────────────
+    # metrage_prevu (code-01) = compteur machine au DÉBUT de session
+    # metrage_reel  (code-89) = compteur machine à la FIN de session
+    # → métrage produit par session = fin_counter − debut_counter
     _FMTS = (
         "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S",
         "%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M",
         "%Y-%m-%d", "%d/%m/%Y",
     )
     def _norm_date(dt_raw: str) -> str:
+        """Retourne 'YYYY-MM-DD' depuis n'importe quel format."""
         s = str(dt_raw or "").strip()
         for fmt in _FMTS:
             try:
                 return _dt_cls.strptime(s, fmt).date().isoformat()
             except ValueError:
                 continue
-        return s[:10]   # dernier recours
+        return s[:10]
 
-    # ── Map des fins : somme de tous les metrage_reel (code-89) par jour ────────
-    # Chaque entrée fin contient directement les mètres produits lors de la session.
-    # On additionne toutes les fins du même (opérateur, jour, dossier).
-    fin_data = {}   # (op, jour_iso, dos) -> {"metrage_m": float, "etiquettes": float}
+    def _norm_dt(dt_raw: str) -> str:
+        """Retourne 'YYYY-MM-DDTHH:MM:SS' depuis n'importe quel format."""
+        s = str(dt_raw or "").strip()
+        for fmt in _FMTS:
+            try:
+                return _dt_cls.strptime(s, fmt).isoformat()
+            except ValueError:
+                continue
+        return s
+
+    # ── Construire debut_entries et fin_data ─────────────────────────────────
+    # all_list est trié par (operateur, date_operation), donc quand on traite
+    # un code-89, tous les code-01 antérieurs pour cet opérateur sont déjà indexés.
+    debut_entries = {}   # (op, dos) -> [(norm_dt_iso, compteur_debut_float), ...]
+    fin_data      = {}   # (op, jour_iso, dos) -> {"metrage_m": float, "etiquettes": float}
 
     for r in all_list:
-        code = str(r.get("operation_code") or "")
-        dos  = str(r.get("no_dossier") or "").strip()
+        code  = str(r.get("operation_code") or "")
+        dos   = str(r.get("no_dossier") or "").strip()
         if not dos or dos == "0":
             continue
         op    = str(r.get("operateur") or "?")
         dt_op = str(r.get("date_operation") or "")
 
-        if code == "89":
+        if code == "01":
+            # Compteur début = metrage_prevu, ou 0 si absent (1re session du dossier)
+            ctr = float(r["metrage_prevu"]) if r.get("metrage_prevu") is not None else 0.0
+            debut_entries.setdefault((op, dos), []).append((_norm_dt(dt_op), ctr))
+
+        elif code == "89" and r.get("metrage_reel") is not None:
+            fin_dt   = _norm_dt(dt_op)
             jour_iso = _norm_date(dt_op)
             key      = (op, jour_iso, dos)
             entry    = fin_data.setdefault(key, {"metrage_m": 0.0, "etiquettes": 0.0})
-            if r.get("metrage_reel") is not None:
-                entry["metrage_m"] += float(r["metrage_reel"])
+
+            # Compteur début = dernier code-01 dont l'heure ≤ heure de cette fin
+            debuts   = debut_entries.get((op, dos), [])
+            before   = [(dt, m) for dt, m in debuts if dt <= fin_dt]
+            debut_ctr = sorted(before, reverse=True)[0][1] if before else 0.0
+
+            produit = max(0.0, float(r["metrage_reel"]) - debut_ctr)
+            entry["metrage_m"] += produit
             if r.get("quantite_traitee") is not None:
-                entry["etiquettes"] = float(r["quantite_traitee"])  # dernière valeur du jour
+                entry["etiquettes"] = float(r["quantite_traitee"])
 
     # ── Enrichir by_dossier avec le métrage produit calculé ─────────────────
     by_dossier = []
@@ -120,10 +147,16 @@ def dashboard_production(
         by_dossier.append(d)
 
     # ── Enrichir completed_dossiers avec le métrage produit ─────────────────
+    # Pour chaque fin (code-89) dans completed, calculer fin − début via fin_data
     completed_list = []
     for r in completed:
-        row = dict(r)
-        row["metrage_produit"] = float(row.get("metrage_reel") or 0)
+        row      = dict(r)
+        op       = str(row.get("operateur") or "?")
+        dos      = str(row.get("no_dossier") or "").strip()
+        jour_iso = _norm_date(str(row.get("date_operation") or ""))
+        # Récupérer le métrage produit déjà calculé dans fin_data
+        entry    = fin_data.get((op, jour_iso, dos), {})
+        row["metrage_produit"] = round(entry.get("metrage_m", 0.0), 1)
         completed_list.append(row)
 
     # ── Totaux (recalculés depuis by_dossier pour cohérence) ─────────────────

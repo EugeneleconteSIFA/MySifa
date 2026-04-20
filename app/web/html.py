@@ -5091,9 +5091,7 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
   const qteTI  = h('input', { type: 'number', placeholder: '0',                value: (prefill && prefill.quantite_traitee!=null)   ? prefill.quantite_traitee   : 0 });
   const noteI  = h('input', { type: 'text', placeholder: 'Raison (optionnel)',  value: '' });
   const commentaireI = h('input', { type: 'text', placeholder: 'Observation, remarque...', value: (prefill && prefill.commentaire) ? prefill.commentaire : '' });
-  const metragePrevuI = h('input', { type: 'number', placeholder: '0', value: (prefill && prefill.metrage_prevu!=null) ? prefill.metrage_prevu : '' });
   const metrageReelI  = h('input', { type: 'number', placeholder: '0', value: (prefill && prefill.metrage_reel!=null)  ? prefill.metrage_reel  : '' });
-  inputs.metrage_prevu = metragePrevuI;
   inputs.metrage_reel  = metrageReelI;
  
   const form = h('div', { className: 'add-row-form' },
@@ -5121,10 +5119,6 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
         h('div', null, h('label', null, 'Note'), noteI)
       ),
       h('div', { className: 'form-row' },
-        h('div', null,
-          h('label', null, 'Métrage prévu (m)'),
-          metragePrevuI
-        ),
         h('div', null,
           h('label', null, 'Métrage réel (m)'),
           metrageReelI
@@ -5156,7 +5150,6 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
               quantite_traitee:   parseFloat(qteTI.value) || 0,
               note:               noteI.value  || '',
               commentaire:       commentaireI.value || '',
-              metrage_prevu:     parseFloat((inputs.metrage_prevu && inputs.metrage_prevu.value) ? inputs.metrage_prevu.value : '') || null,
               metrage_reel:      parseFloat((inputs.metrage_reel  && inputs.metrage_reel.value)  ? inputs.metrage_reel.value  : '') || null,
             });
           }}, submitLabel)
