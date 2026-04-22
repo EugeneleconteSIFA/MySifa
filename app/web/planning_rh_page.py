@@ -667,7 +667,7 @@ async function submitSolde(){
 // ── Fonctions utilisateur ──────────────────────────────
 async function loadMe(){
   try{const d=await fetch('/api/auth/me',{credentials:'include'}).then(r=>r.json());
-  if(d&&d.user){S.user=d.user;S.isEditor=(['direction','superadmin'].includes(S.user.role));}}
+  if(d&&d.role){S.user=d;S.isEditor=(['direction','superadmin'].includes(d.role));}}
   catch(e){}
 }
 
