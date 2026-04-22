@@ -86,7 +86,7 @@ ROLES_PLANNING_VIEW = {ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_FABRICATION, RO
 ROLES_SETTINGS = {ROLE_SUPERADMIN}
 
 # Applications dont l'accès peut être surchargé par utilisateur (hors Paramètres : réservé au rôle super admin).
-ACCESS_OVERRIDABLE_APPS = frozenset({"prod", "planning", "stock", "compta", "expe"})
+ACCESS_OVERRIDABLE_APPS = frozenset({"prod", "planning", "planning_rh", "stock", "compta", "expe"})
 
 # Rôles assignables lors de la création / édition d'utilisateurs (hors super admin).
 ASSIGNABLE_ROLES = frozenset(

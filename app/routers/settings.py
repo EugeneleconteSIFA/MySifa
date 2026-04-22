@@ -33,8 +33,13 @@ def access_matrix(request: Request):
         },
         {
             "id": "planning",
-            "label": "Planning",
+            "label": "Planning machine",
             "hint": "Planning atelier (même périmètre que MyProd pour les rôles)",
+        },
+        {
+            "id": "planning_rh",
+            "label": "Planning RH",
+            "hint": "Planning personnel (affectation opérateurs)",
         },
         {
             "id": "stock",
