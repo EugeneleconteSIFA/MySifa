@@ -93,11 +93,23 @@ input,select,textarea{font-family:inherit;color:var(--text)}
 .rh-user-chip .ucn{font-size:12px;font-weight:600;color:var(--text)}
 .rh-user-chip .ucr{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px}
 .rh-theme-btn,.rh-back-btn{
-  display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:8px;
-  border:1px solid var(--border);background:transparent;color:var(--text2);
-  cursor:pointer;font-size:12px;width:100%;font-family:inherit;transition:all .15s;
+  display:flex;align-items:center;gap:5px;padding:6px 10px;border-radius:10px;
+  border:none;background:transparent;color:var(--text2);cursor:pointer;
+  font-size:13px;font-weight:600;font-family:inherit;transition:background .1s
 }
-.rh-theme-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+.rh-theme-btn:hover,.rh-back-btn:hover{background:var(--accent-bg);color:var(--accent)}
+.nav-btn{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;
+  border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:13px;
+  font-weight:500;width:100%;text-align:left;font-family:inherit;transition:all .15s;margin-bottom:2px}
+.nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
+.nav-btn--mysifa-portal{align-items:baseline;flex-wrap:wrap;gap:4px 8px;line-height:1.35}
+.nav-btn--mysifa-portal:hover{background:var(--accent-bg)}
+.nav-btn--mysifa-portal:hover .mysifa-back-preamble{color:var(--text2)}
+.nav-btn--mysifa-portal:hover .mysifa-back-brand{color:var(--text)}
+.nav-btn--mysifa-portal:hover .mysifa-back-accent{color:var(--accent)}
+.mysifa-back-preamble{font-size:13px;font-weight:500;color:var(--text2);letter-spacing:0}
+.mysifa-back-brand{font-size:14px;font-weight:800;letter-spacing:-.5px;color:var(--text);white-space:nowrap}
+.mysifa-back-accent{color:var(--accent)}
 .rh-back-btn:hover{color:var(--danger);background:rgba(248,113,113,.08);border-color:var(--danger)}
 
 /* ── Main ──────────────────────────────────────────── */
@@ -160,7 +172,7 @@ input,select,textarea{font-family:inherit;color:var(--text)}
   color:var(--muted);text-align:center;position:sticky;top:0;z-index:5;
   white-space:nowrap;
 }
-.rh-grid thead th.rh-poste-col{text-align:left;min-width:160px;position:sticky;left:0;z-index:6;background:var(--card)}
+.rh-grid thead th.rh-poste-col{text-align:left;width:180px;position:sticky;left:0;z-index:6;background:var(--card)}
 .rh-grid thead th.rh-week-col{min-width:160px}
 .rh-week-num{font-size:13px;font-weight:800;color:var(--text)}
 .rh-week-dates{font-size:10px;color:var(--muted);margin-top:2px}
@@ -194,6 +206,7 @@ input,select,textarea{font-family:inherit;color:var(--text)}
   padding:6px 12px 6px 28px!important;font-size:12px;font-weight:600;
   color:var(--text2);white-space:nowrap;
   position:sticky;left:0;z-index:2;background:var(--bg)!important;
+  height:100%;
 }
 .rh-cell{min-height:36px;display:flex;flex-wrap:wrap;gap:5px;align-items:center;padding:4px 6px}
 .rh-chip{
@@ -838,7 +851,7 @@ function render(){
 function icon(name,sz=14){
   const icons={
     calendar:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
-    umbrella:'<polyline points="23 12 11 12 11 19a1 1 0 0 0 2 0"/><path d="M12 2a10 10 0 0 1 10 10H2A10 10 0 0 1 12 2z"/>',
+    umbrella:'<path d="M12 2a10 10 0 0 1 10 10H2A10 10 0 0 1 12 2z"/><line x1="12" y1="12" x2="12" y2="19"/>',
     users:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
     sun:'<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>',
     moon:'<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
@@ -878,8 +891,9 @@ function renderSidebar(){
     <button class="rh-theme-btn" onclick="toggleTheme()">
       ${icon(isLight?'moon':'sun',13)} ${isLight?'Mode sombre':'Mode clair'}
     </button>
-    <button class="rh-back-btn" onclick="window.location.href='/'">
-      ${icon('home',13)} Retour MySifa
+    <button class="nav-btn nav-btn--mysifa-portal" onclick="window.location.href='/'">
+      <span class="mysifa-back-preamble">← Retour </span>
+      <span class="mysifa-back-brand">My<span class="mysifa-back-accent">Sifa</span></span>
     </button>
   `;
 }
