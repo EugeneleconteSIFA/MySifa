@@ -838,6 +838,22 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 5, "clear_rh_planning_assignments")
 
+    # Migration v6 : Autoriser mlesaffre@sifa.pro à éditer le planning RH
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=6 LIMIT 1").fetchone():
+        import json
+        user_row = conn.execute("SELECT id, access_overrides FROM users WHERE LOWER(TRIM(email)) = ?", ("mlesaffre@sifa.pro",)).fetchone()
+        if user_row:
+            user_id = user_row[0]
+            overrides_raw = user_row[1]
+            try:
+                overrides = json.loads(overrides_raw) if overrides_raw else {}
+            except:
+                overrides = {}
+            overrides["planning_rh"] = True
+            conn.execute("UPDATE users SET access_overrides = ? WHERE id = ?", (json.dumps(overrides), user_id))
+            conn.commit()
+        _record_schema_migration(conn, 6, "mlesaffre_planning_rh_edit_access")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,
