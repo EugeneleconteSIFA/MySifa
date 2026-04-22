@@ -237,6 +237,18 @@ input,select,textarea{font-family:inherit;color:var(--text)}
 }
 .rh-sep-dup-btn:hover{background:var(--accent);color:var(--bg)}
 .rh-sep-dup-icon{font-size:14px}
+.rh-machine-toolbar{
+  display:flex;gap:8px;padding:8px 12px;background:var(--bg);
+  border-bottom:1px solid var(--border);
+}
+.rh-toolbar-btn{
+  background:var(--card);border:1px solid var(--border);color:var(--text);
+  border-radius:6px;padding:6px 12px;font-size:12px;font-weight:600;
+  cursor:pointer;display:inline-flex;align-items:center;gap:6px;
+  transition:all .15s;
+}
+.rh-toolbar-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.rh-toolbar-icon{font-size:14px}
 
 /* Congé indicator on cell */
 .rh-conge-badge{
@@ -773,7 +785,11 @@ async function submitSolde(){
 // ── Fonctions utilisateur ──────────────────────────────
 async function loadMe(){
   try{const d=await fetch('/api/auth/me',{credentials:'include'}).then(r=>r.json());
-  if(d&&d.role){S.user=d;S.isEditor=(['direction','superadmin'].includes(d.role));}}
+  if(d&&d.role){
+    S.user=d;
+    const hasPlanningRHOverride = d.access_overrides && d.access_overrides.planning_rh === true;
+    S.isEditor=(['direction','superadmin'].includes(d.role) || hasPlanningRHOverride);
+  }}
   catch(e){}
 }
 
@@ -925,6 +941,18 @@ function buildPlanningGrid(){
     mhdr.innerHTML=`<span class="rh-machine-dot" style="background:${mdef.color}"></span>${mdef.label}`;
     block.appendChild(mhdr);
 
+    // Toolbar avec bouton de duplication (au-dessus du tableau)
+    if(S.isEditor){
+      const toolbar=document.createElement('div');
+      toolbar.className='rh-machine-toolbar';
+      const dupBtn=document.createElement('button');
+      dupBtn.className='rh-toolbar-btn';
+      dupBtn.innerHTML=`<span class="rh-toolbar-icon">↓</span> Copier vers semaine suivante`;
+      dupBtn.onclick=()=>duplicateAllAssignmentsToNextWeek(weeks[0],mdef.code,getMachineId(mdef.code));
+      toolbar.appendChild(dupBtn);
+      block.appendChild(toolbar);
+    }
+
     const table=document.createElement('table');
     table.className='rh-grid';
 
@@ -1012,22 +1040,6 @@ function buildPlanningGrid(){
 
         tbody.appendChild(row);
       });
-
-      // Ligne de séparation avec bouton de duplication (entre semaines)
-      if(S.isEditor && idx < weeks.length - 1){
-        const sepRow=document.createElement('tr');
-        sepRow.className='rh-sep-row';
-        const sepTd=document.createElement('td');
-        sepTd.colSpan=allPostes.length+1;
-        sepTd.className='rh-sep-cell';
-        const dupBtn=document.createElement('button');
-        dupBtn.className='rh-sep-dup-btn';
-        dupBtn.innerHTML=`<span class="rh-sep-dup-icon">↓</span> Copier S${weeks[idx].split('W')[1]} → S${weeks[idx+1].split('W')[1]}`;
-        dupBtn.onclick=()=>duplicateAllAssignmentsToNextWeek(weeks[idx],mdef.code,getMachineId(mdef.code));
-        sepTd.appendChild(dupBtn);
-        sepRow.appendChild(sepTd);
-        tbody.appendChild(sepRow);
-      }
     });
 
     table.appendChild(tbody);

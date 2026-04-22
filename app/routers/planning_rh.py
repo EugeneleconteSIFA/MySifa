@@ -26,7 +26,17 @@ def _require_view(request: Request) -> dict:
 
 def _require_edit(request: Request) -> dict:
     user = get_current_user(request)
-    if user.get("role") not in ROLES_PLANNING_RH_EDIT:
+    # Check role OR planning_rh override
+    has_override = False
+    overrides_raw = user.get("access_overrides")
+    if overrides_raw:
+        try:
+            import json
+            overrides = json.loads(overrides_raw) if isinstance(overrides_raw, str) else overrides_raw
+            has_override = overrides.get("planning_rh") is True
+        except:
+            pass
+    if user.get("role") not in ROLES_PLANNING_RH_EDIT and not has_override:
         raise HTTPException(403, "Modification réservée aux configurateurs (direction / superadmin)")
     return user
 
