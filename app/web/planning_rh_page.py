@@ -250,22 +250,22 @@ input,select,textarea{font-family:inherit;color:var(--text)}
 .rh-toolbar-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 .rh-toolbar-icon{font-size:14px}
 .rh-row-dup-btn{
-  background:var(--card);border:1px solid var(--border);color:var(--text);
-  border-radius:4px;width:20px;height:20px;font-size:12px;font-weight:700;
-  cursor:pointer;display:inline-flex;align-items:center;justify-content:center;
-  transition:all .15s;margin-left:8px;flex-shrink:0;
-}
-.rh-row-dup-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
-.rh-row-btns{
-  display:flex;gap:4px;margin-left:8px;flex-shrink:0;
-}
-.rh-row-del-btn{
-  background:var(--card);border:1px solid var(--border);color:var(--text);
-  border-radius:4px;width:20px;height:20px;font-size:14px;font-weight:700;
+  background:transparent;border:1px solid #666;color:#666;
+  border-radius:4px;width:18px;height:18px;font-size:12px;font-weight:700;
   cursor:pointer;display:inline-flex;align-items:center;justify-content:center;
   transition:all .15s;
 }
-.rh-row-del-btn:hover{border-color:var(--danger);color:var(--danger);background:rgba(248,113,113,.1)}
+.rh-row-dup-btn:hover{border-color:var(--accent);color:var(--accent)}
+.rh-row-btns{
+  display:inline-flex;gap:4px;margin-left:8px;vertical-align:middle;
+}
+.rh-row-del-btn{
+  background:transparent;border:1px solid #666;color:#666;
+  border-radius:4px;width:18px;height:18px;font-size:14px;font-weight:700;
+  cursor:pointer;display:inline-flex;align-items:center;justify-content:center;
+  transition:all .15s;
+}
+.rh-row-del-btn:hover{border-color:var(--danger);color:var(--danger)}
 
 /* Congé indicator on cell */
 .rh-conge-badge{
@@ -1010,13 +1010,16 @@ function buildPlanningGrid(){
         // Label de ligne
         const lbl=document.createElement('td');
         lbl.className='rh-poste-label';
+        lbl.style.display='flex';
+        lbl.style.alignItems='center';
+        lbl.style.justifyContent='space-between';
         if(S.detailMode){
           const hrsStr=cr.hours
             ?`<div style="font-size:9px;color:var(--muted);font-weight:400;margin-top:1px">Lun-Jeu ${cr.hours}${cr.hours_fri?' · Ven '+cr.hours_fri:''}</div>`
             :'';
-          lbl.innerHTML=`<div class="${isCur?'rh-week-cur':''}"><strong>S${wn}</strong> <span style="font-weight:400;font-size:10px">${fmtDateShort(mon)}–${fmtDateShort(sun)}</span></div><div style="font-size:11px;color:var(--muted)">${cr.label}</div>${hrsStr}`;
+          lbl.innerHTML=`<div><div class="${isCur?'rh-week-cur':''}"><strong>S${wn}</strong> <span style="font-weight:400;font-size:10px">${fmtDateShort(mon)}–${fmtDateShort(sun)}</span></div><div style="font-size:11px;color:var(--muted)">${cr.label}</div>${hrsStr}</div>`;
         }else{
-          lbl.innerHTML=`<div class="${isCur?'rh-week-cur':''}"><strong>S${wn}</strong></div><div style="font-size:11px;color:var(--muted)">${cr.label}</div>`;
+          lbl.innerHTML=`<div><div class="${isCur?'rh-week-cur':''}"><strong>S${wn}</strong></div><div style="font-size:11px;color:var(--muted)">${cr.label}</div></div>`;
         }
         // Boutons d'action dans la première colonne
         if(S.isEditor){
@@ -1070,10 +1073,13 @@ function buildPlanningGrid(){
             cell.appendChild(chip);
           });
 
-          // Bouton d'ajout (clic sur la cellule vide)
           if(S.isEditor){
-            cell.onclick=()=>openAddPersonModal({semaine:ws,machineCode:mdef.code,poste,creneau:cr.key,machineId:getMachineId(mdef.code)});
-            cell.style.cursor='pointer';
+            const addBtn=document.createElement('button');
+            addBtn.className='rh-add-btn';
+            addBtn.title='Ajouter';
+            addBtn.innerHTML='+';
+            addBtn.onclick=()=>openAddPersonModal({semaine:ws,machineCode:mdef.code,poste,creneau:cr.key,machineId:getMachineId(mdef.code)});
+            cell.appendChild(addBtn);
           }
 
           td.appendChild(cell);
