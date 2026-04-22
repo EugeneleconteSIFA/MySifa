@@ -553,6 +553,11 @@ function isCurrentWeek(ws){return ws===weekStr(new Date());}
 // ── Helpers planning ───────────────────────────────────
 function planningKey(a){
   let mc=a.machine_code;
+  if(!mc&&a.machine_id){
+    // fallback : retrouver le code depuis S.machines (cas où la JOIN n'a pas retourné le code)
+    const m=S.machines.find(x=>x.id===a.machine_id||x.id===Number(a.machine_id));
+    if(m)mc=m.code;
+  }
   if(!mc){ if(a.poste==='logistique')mc='LOG'; else if(a.poste==='resp_atelier')mc='RESP'; else mc='NULL'; }
   return`${mc}|${a.creneau}|${a.poste}|${a.semaine}`;
 }
@@ -583,8 +588,12 @@ async function api(path,opts={}){
 }
 
 async function loadMachines(){
-  try{const d=await fetch('/api/planning/machines',{credentials:'include'}).then(r=>r.json());
-  if(d&&d.machines)S.machines=d.machines;}catch(e){}
+  try{
+    const d=await fetch('/api/planning/machines',{credentials:'include'}).then(r=>r.json());
+    // L'API retourne un tableau plat (pas enveloppé dans {machines:[...]})
+    if(Array.isArray(d)) S.machines=d;
+    else if(d&&d.machines) S.machines=d.machines;
+  }catch(e){}
 }
 
 async function loadData(){
@@ -732,15 +741,6 @@ function renderSidebar(){
     ${S.isEditor?`<button class="rh-nav-btn${S.tab==='conges'?' active':''}" onclick="setTab('conges')">
       ${icon('umbrella',14)} Congés
     </button>`:''}
-    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
-      <div class="rh-sb-section-title">Autres applis</div>
-      <button class="rh-nav-btn" onclick="window.location.href='/planning'">
-        ${icon('calendar',14)} Planning Machine
-      </button>
-      <button class="rh-nav-btn" onclick="window.location.href='/stock'">
-        ${icon('users',14)} Stock
-      </button>
-    </div>
   `;
 
   const isLight=document.body.classList.contains('light');
