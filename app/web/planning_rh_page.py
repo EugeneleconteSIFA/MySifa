@@ -224,6 +224,19 @@ input,select,textarea{font-family:inherit;color:var(--text)}
   transition:all .15s;margin-left:4px;
 }
 .rh-dup-btn:hover{background:var(--success);color:var(--bg)}
+.rh-sep-row{border:none}
+.rh-sep-cell{
+  padding:8px 12px;background:var(--accent-bg);border:1px solid var(--border);
+  text-align:center;
+}
+.rh-sep-dup-btn{
+  background:var(--card);border:1px solid var(--accent);color:var(--accent);
+  border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;
+  cursor:pointer;display:inline-flex;align-items:center;gap:6px;
+  transition:all .15s;
+}
+.rh-sep-dup-btn:hover{background:var(--accent);color:var(--bg)}
+.rh-sep-dup-icon{font-size:14px}
 
 /* Congé indicator on cell */
 .rh-conge-badge{
@@ -657,6 +670,11 @@ async function duplicateAssignmentsToNextWeek(semaine, machineCode, poste, crene
     toast('Aucune affectation à dupliquer','warn');
     return;
   }
+  // Pour Cohésio, alterner matin/aprem
+  let targetCreneau = creneau;
+  if(machineCode === 'C1' || machineCode === 'C2'){
+    targetCreneau = creneau === 'matin' ? 'aprem' : 'matin';
+  }
   let count = 0;
   for(const a of assignments){
     try{
@@ -664,7 +682,36 @@ async function duplicateAssignmentsToNextWeek(semaine, machineCode, poste, crene
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
           user_id:a.user_id,semaine:nextWeek,
-          machine_id:machineId,poste:poste,creneau:creneau
+          machine_id:machineId,poste:poste,creneau:targetCreneau
+        })
+      });
+      if(d){S.planning.push(d);count++;}
+    }catch(e){toast('Erreur pour '+a.user_nom+': '+e.message,'error');}
+  }
+  if(count>0) toast(count+' affectation(s) copiée(s) vers '+nextWeek,'success');
+  render();
+}
+
+async function duplicateAllAssignmentsToNextWeek(semaine, machineCode, machineId){
+  const nextWeek = addWeeks(semaine, 1);
+  const weekAssignments = S.planning.filter(a => a.semaine === semaine && (a.machine_code === machineCode || (machineCode === 'LOG' && a.poste === 'logistique') || (machineCode === 'RESP' && a.poste === 'resp_atelier')));
+  if(!weekAssignments.length){
+    toast('Aucune affectation à dupliquer','warn');
+    return;
+  }
+  let count = 0;
+  for(const a of weekAssignments){
+    // Pour Cohésio, alterner matin/aprem
+    let targetCreneau = a.creneau;
+    if(machineCode === 'C1' || machineCode === 'C2'){
+      targetCreneau = a.creneau === 'matin' ? 'aprem' : 'matin';
+    }
+    try{
+      const d = await api('/planning',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          user_id:a.user_id,semaine:nextWeek,
+          machine_id:machineId,poste:a.poste,creneau:targetCreneau
         })
       });
       if(d){S.planning.push(d);count++;}
@@ -957,16 +1004,6 @@ function buildPlanningGrid(){
             addBtn.innerHTML='+';
             addBtn.onclick=()=>openAddPersonModal({semaine:ws,machineCode:mdef.code,poste,creneau:cr.key,machineId:getMachineId(mdef.code)});
             cell.appendChild(addBtn);
-
-            // Bouton de duplication vers semaine suivante
-            if(assignments.length > 0 && idx < weeks.length - 1){
-              const dupBtn=document.createElement('button');
-              dupBtn.className='rh-dup-btn';
-              dupBtn.title='Copier vers semaine suivante';
-              dupBtn.innerHTML='↓';
-              dupBtn.onclick=()=>duplicateAssignmentsToNextWeek(ws,mdef.code,poste,cr.key,getMachineId(mdef.code));
-              cell.appendChild(dupBtn);
-            }
           }
 
           td.appendChild(cell);
@@ -975,6 +1012,22 @@ function buildPlanningGrid(){
 
         tbody.appendChild(row);
       });
+
+      // Ligne de séparation avec bouton de duplication (entre semaines)
+      if(S.isEditor && idx < weeks.length - 1){
+        const sepRow=document.createElement('tr');
+        sepRow.className='rh-sep-row';
+        const sepTd=document.createElement('td');
+        sepTd.colSpan=allPostes.length+1;
+        sepTd.className='rh-sep-cell';
+        const dupBtn=document.createElement('button');
+        dupBtn.className='rh-sep-dup-btn';
+        dupBtn.innerHTML=`<span class="rh-sep-dup-icon">↓</span> Copier S${weeks[idx].split('W')[1]} → S${weeks[idx+1].split('W')[1]}`;
+        dupBtn.onclick=()=>duplicateAllAssignmentsToNextWeek(weeks[idx],mdef.code,getMachineId(mdef.code));
+        sepTd.appendChild(dupBtn);
+        sepRow.appendChild(sepTd);
+        tbody.appendChild(sepRow);
+      }
     });
 
     table.appendChild(tbody);
