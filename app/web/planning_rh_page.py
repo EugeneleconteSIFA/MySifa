@@ -217,6 +217,13 @@ input,select,textarea{font-family:inherit;color:var(--text)}
   transition:all .15s;
 }
 .rh-add-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.rh-dup-btn{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:22px;height:22px;border-radius:6px;border:1px solid var(--success);
+  background:var(--success-bg);color:var(--success);cursor:pointer;font-size:14px;
+  transition:all .15s;margin-left:4px;
+}
+.rh-dup-btn:hover{background:var(--success);color:var(--bg)}
 
 /* Congé indicator on cell */
 .rh-conge-badge{
@@ -643,6 +650,30 @@ async function removeAssignment(id){
   render();
 }
 
+async function duplicateAssignmentsToNextWeek(semaine, machineCode, poste, creneau, machineId){
+  const nextWeek = addWeeks(semaine, 1);
+  const assignments = getAssignments(machineCode, creneau, poste, semaine);
+  if(!assignments.length){
+    toast('Aucune affectation à dupliquer','warn');
+    return;
+  }
+  let count = 0;
+  for(const a of assignments){
+    try{
+      const d = await api('/planning',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          user_id:a.user_id,semaine:nextWeek,
+          machine_id:machineId,poste:poste,creneau:creneau
+        })
+      });
+      if(d){S.planning.push(d);count++;}
+    }catch(e){toast('Erreur pour '+a.user_nom+': '+e.message,'error');}
+  }
+  if(count>0) toast(count+' affectation(s) copiée(s) vers '+nextWeek,'success');
+  render();
+}
+
 async function submitConge(){
   const f=S.congeForm;
   if(!f.user_id||!f.date_debut||!f.date_fin||!f.nb_jours){toast('Remplissez tous les champs obligatoires','error');return;}
@@ -869,7 +900,7 @@ function buildPlanningGrid(){
     const tbody=document.createElement('tbody');
 
     // Une ligne par (semaine × créneau)
-    weeks.forEach(ws=>{
+    weeks.forEach((ws, idx)=>{
       const isCur=isCurrentWeek(ws);
       const wn=ws.split('W')[1];
       const mon=weekMonday(ws),sun=new Date(mon);sun.setDate(mon.getDate()+6);
@@ -926,6 +957,16 @@ function buildPlanningGrid(){
             addBtn.innerHTML='+';
             addBtn.onclick=()=>openAddPersonModal({semaine:ws,machineCode:mdef.code,poste,creneau:cr.key,machineId:getMachineId(mdef.code)});
             cell.appendChild(addBtn);
+
+            // Bouton de duplication vers semaine suivante
+            if(assignments.length > 0 && idx < weeks.length - 1){
+              const dupBtn=document.createElement('button');
+              dupBtn.className='rh-dup-btn';
+              dupBtn.title='Copier vers semaine suivante';
+              dupBtn.innerHTML='↓';
+              dupBtn.onclick=()=>duplicateAssignmentsToNextWeek(ws,mdef.code,poste,cr.key,getMachineId(mdef.code));
+              cell.appendChild(dupBtn);
+            }
           }
 
           td.appendChild(cell);
