@@ -448,20 +448,31 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 
 /* ── Print ──────────────────────────────────────────── */
 @media print{
-  body{background:#fff!important;color:#000!important;overflow:auto!important}
+  body{background:#fff!important;color:#000!important;overflow:auto!important;font-size:9px}
   html,body{height:auto!important;overflow:visible!important}
   #root{display:block!important;height:auto!important;overflow:visible!important}
   .rh-sb,.rh-hdr,.rh-conges-wrap .rh-section:not(.print-target){display:none!important}
-  .rh-main{overflow:visible!important}
-  .rh-content{overflow:visible!important;padding:0!important}
-  .rh-grid-wrap{border:none!important;overflow:visible!important}
-  .rh-add-btn,.rh-chip-del{display:none!important}
-  .rh-grid th,.rh-grid td{font-size:10px!important;padding:4px 6px!important}
+  .rh-main{overflow:visible!important;padding:0!important;margin:0!important}
+  .rh-content{overflow:visible!important;padding:0!important;margin:0!important}
+  .rh-grid-wrap{border:none!important;overflow:visible!important;padding:0!important;margin:0!important}
+  .rh-machine-block{page-break-inside:avoid;margin-bottom:8px}
+  .rh-machine-section-hdr{padding:4px 8px;margin-bottom:4px;font-size:11px}
+  .rh-grid{border:1px solid #000!important;border-collapse:collapse!important;width:100%}
+  .rh-grid th{font-size:8px!important;padding:2px 4px!important;border:1px solid #000!important;background:#f5f5f5!important}
+  .rh-grid td{font-size:8px!important;padding:0!important;border:1px solid #ddd!important}
+  .rh-poste-col{width:70px!important;padding:2px 4px!important}
+  .rh-week-col{min-width:45px!important}
+  .rh-poste-label{padding:2px 4px!important;font-size:8px!important;white-space:normal!important}
+  .rh-label-content{font-size:8px}
+  .rh-week-hdr{padding:4px 8px;font-size:10px}
+  .rh-creneau-hdr td{padding:2px 4px!important;font-size:8px}
+  .rh-chip{font-size:7px!important;padding:1px 3px!important;border:1px solid #000!important}
+  .rh-conge-badge{font-size:7px!important;padding:1px 3px!important}
+  .rh-add-btn,.rh-chip-del,.rh-row-btns,.rh-act-btn{display:none!important}
   .rh-section.print-target{display:block!important}
   .rh-section-hdr .rh-icon-btn{display:none!important}
-  .rh-act-btn{display:none!important}
-  .print-header{display:block!important;margin-bottom:12px;font-size:14px;font-weight:800}
-  @page{margin:1cm;size:A4 landscape}
+  .print-header{display:block!important;margin-bottom:8px;font-size:12px;font-weight:800}
+  @page{margin:0.5cm;size:A4 landscape}
 }
 .print-header{display:none}
 
