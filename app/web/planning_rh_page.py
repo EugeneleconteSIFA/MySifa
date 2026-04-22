@@ -423,6 +423,24 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
   border-radius:8px;color:var(--text);font-size:12px;font-family:inherit;outline:none;
 }
 .rh-annee-sel:focus{border-color:var(--accent)}
+
+/* ── Grille inversée (colonne=poste, ligne=horaire) ── */
+.rh-machine-block{border-bottom:2px solid var(--border)}
+.rh-machine-block:last-child{border-bottom:none}
+.rh-machine-section-hdr{
+  padding:8px 14px;font-size:12px;font-weight:800;text-transform:uppercase;
+  letter-spacing:1px;background:var(--bg);color:var(--text2);
+  display:flex;align-items:center;border-bottom:1px solid var(--border);
+}
+.rh-week-cur{color:var(--accent)}
+.rh-cur-week-row td{background:var(--accent-bg)!important}
+.rh-cur-week-row .rh-poste-label{background:var(--accent-bg)!important}
+
+/* ── Cross-app sidebar section ──────────────────────── */
+.rh-sb-section-title{
+  font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;
+  color:var(--muted);padding:0 10px 4px;margin-top:12px;
+}
 </style>
 </head>
 <body>
@@ -450,14 +468,14 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 const GRID_DEF = [
   { code:'C1',  label:'Cohésio 1',             color:'var(--c1)',
     creneaux:[
-      { key:'matin', label:'Matin',       hours:'05:25 – 13:00', hours_fri:'06:40 – 13:00', postes:['conducteur','emballage'] },
-      { key:'aprem', label:'Après-midi',  hours:'13:00 – 20:35', hours_fri:'13:00 – 19:20', postes:['conducteur','emballage'] }
+      { key:'matin', label:'Matin',       hours:'05:25 – 13:00', hours_fri:'06:40 – 13:00', postes:['conducteur','aide','emballage'] },
+      { key:'aprem', label:'Après-midi',  hours:'13:00 – 20:35', hours_fri:'13:00 – 19:20', postes:['conducteur','aide','emballage'] }
     ]
   },
   { code:'C2',  label:'Cohésio 2',             color:'var(--c2)',
     creneaux:[
-      { key:'matin', label:'Matin',       hours:'05:25 – 13:00', hours_fri:'06:40 – 13:00', postes:['conducteur','aide','emballage'] },
-      { key:'aprem', label:'Après-midi',  hours:'13:00 – 20:35', hours_fri:'13:00 – 19:20', postes:['conducteur','aide','emballage'] }
+      { key:'matin', label:'Matin',       hours:'05:25 – 13:00', hours_fri:'06:40 – 13:00', postes:['conducteur','emballage'] },
+      { key:'aprem', label:'Après-midi',  hours:'13:00 – 20:35', hours_fri:'13:00 – 19:20', postes:['conducteur','emballage'] }
     ]
   },
   { code:'DSI', label:'DSI',                   color:'var(--c3)',
@@ -477,7 +495,7 @@ const POSTE_LABELS = {
   conducteur:'Conducteur', aide:'Aide', emballage:'Emballage',
   resp_atelier:"Resp. d'atelier", logistique:'Logistique'
 };
-const TYPE_CONGE_LABELS = { CP:'Congés payés', RTT:'RTT', maladie:'Maladie', autre:'Autre' };
+const TYPE_CONGE_LABELS = { CP:'Congés payés', maladie:'Maladie', autre:'Autre' };
 const STATUT_CONGE_LABELS = { pose:'Posé', valide:'Validé', refuse:'Refusé' };
 
 // ── État global ────────────────────────────────────────
@@ -637,6 +655,7 @@ async function submitConge(){
     S.modal=null; S.editConge=null;
     S.congeForm={user_id:'',date_debut:'',date_fin:'',nb_jours:'',type_conge:'CP',note:''};
     await loadData();
+    await loadSoldes();
   }catch(e){toast(e.message,'error');}
   render();
 }
@@ -713,6 +732,15 @@ function renderSidebar(){
     ${S.isEditor?`<button class="rh-nav-btn${S.tab==='conges'?' active':''}" onclick="setTab('conges')">
       ${icon('umbrella',14)} Congés
     </button>`:''}
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+      <div class="rh-sb-section-title">Autres applis</div>
+      <button class="rh-nav-btn" onclick="window.location.href='/planning'">
+        ${icon('calendar',14)} Planning Machine
+      </button>
+      <button class="rh-nav-btn" onclick="window.location.href='/stock'">
+        ${icon('users',14)} Stock
+      </button>
+    </div>
   `;
 
   const isLight=document.body.classList.contains('light');
@@ -790,81 +818,96 @@ function renderContent(){
 }
 
 // ── Grille planning (configurateur) ───────────────────
+// Nouvelle disposition : colonnes = postes, lignes = semaine × créneau
 function buildPlanningGrid(){
   const weeks=getWeeksToShow();
-  const wrap=document.createElement('div');
-  wrap.className='print-header';
-  wrap.innerHTML='Planning du personnel — '+fmtWeekLabel(weeks[0])+(weeks.length>1?' au '+fmtWeekLabel(weeks[weeks.length-1]):'');
+  const outer=document.createElement('div');
+
+  const ph=document.createElement('div');
+  ph.className='print-header';
+  ph.textContent='Planning du personnel — '+fmtWeekLabel(weeks[0])+(weeks.length>1?' au '+fmtWeekLabel(weeks[weeks.length-1]):'');
+  outer.appendChild(ph);
 
   const gw=document.createElement('div');
   gw.className='rh-grid-wrap';
 
-  const table=document.createElement('table');
-  table.className='rh-grid';
-
-  // Thead
-  const thead=document.createElement('thead');
-  const headRow=document.createElement('tr');
-  const thPoste=document.createElement('th');
-  thPoste.className='rh-poste-col';
-  thPoste.textContent='Poste';
-  headRow.appendChild(thPoste);
-  weeks.forEach(ws=>{
-    const th=document.createElement('th');
-    th.className='rh-week-col'+(isCurrentWeek(ws)?' current-week':'');
-    const mon=weekMonday(ws),sun=new Date(mon);sun.setDate(mon.getDate()+6);
-    th.innerHTML=`<div class="rh-week-num">S${ws.split('W')[1]}</div><div class="rh-week-dates">${fmtDateShort(mon)} – ${fmtDateShort(sun)}</div>`;
-    headRow.appendChild(th);
-  });
-  thead.appendChild(headRow);
-  table.appendChild(thead);
-
-  // Tbody
-  const tbody=document.createElement('tbody');
-
   GRID_DEF.forEach(mdef=>{
-    // Machine section header row
-    const mhdr=document.createElement('tr');
-    mhdr.className='rh-machine-hdr';
-    const mhdrTd=document.createElement('td');
-    mhdrTd.colSpan=weeks.length+1;
-    mhdrTd.innerHTML=`<span class="rh-machine-dot" style="background:${mdef.color}"></span>${mdef.label}`;
-    mhdr.appendChild(mhdrTd);
-    tbody.appendChild(mhdr);
-
+    // Postes uniques (union de tous les creneaux de cette machine)
+    const allPostes=[];
     mdef.creneaux.forEach(cr=>{
-      // Créneau subheader
-      const chdr=document.createElement('tr');
-      chdr.className='rh-creneau-hdr';
-      const chdrTd=document.createElement('td');
-      chdrTd.colSpan=weeks.length+1;
-      const hrsStr=cr.hours?`<span class="rh-creneau-hrs">Lun-Jeu ${cr.hours}${cr.hours_fri?' · Ven '+cr.hours_fri:''}</span>`:'';
-      chdrTd.innerHTML=`${cr.label}${hrsStr}`;
-      chdr.appendChild(chdrTd);
-      tbody.appendChild(chdr);
+      cr.postes.forEach(p=>{if(!allPostes.includes(p))allPostes.push(p);});
+    });
 
-      cr.postes.forEach(poste=>{
+    const block=document.createElement('div');
+    block.className='rh-machine-block';
+
+    // En-tête machine
+    const mhdr=document.createElement('div');
+    mhdr.className='rh-machine-section-hdr';
+    mhdr.innerHTML=`<span class="rh-machine-dot" style="background:${mdef.color}"></span>${mdef.label}`;
+    block.appendChild(mhdr);
+
+    const table=document.createElement('table');
+    table.className='rh-grid';
+
+    // Thead : Semaine/Créneau | Poste1 | Poste2 | ...
+    const thead=document.createElement('thead');
+    const headRow=document.createElement('tr');
+    const thLabel=document.createElement('th');
+    thLabel.className='rh-poste-col';
+    thLabel.textContent='Semaine / Créneau';
+    headRow.appendChild(thLabel);
+    allPostes.forEach(poste=>{
+      const th=document.createElement('th');
+      th.className='rh-week-col';
+      th.textContent=POSTE_LABELS[poste]||poste;
+      headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    const tbody=document.createElement('tbody');
+
+    // Une ligne par (semaine × créneau)
+    weeks.forEach(ws=>{
+      const isCur=isCurrentWeek(ws);
+      const wn=ws.split('W')[1];
+      const mon=weekMonday(ws),sun=new Date(mon);sun.setDate(mon.getDate()+6);
+
+      mdef.creneaux.forEach(cr=>{
         const row=document.createElement('tr');
-        row.className='rh-poste-row';
+        row.className='rh-poste-row'+(isCur?' rh-cur-week-row':'');
 
-        // Poste label cell
+        // Label de ligne
         const lbl=document.createElement('td');
         lbl.className='rh-poste-label';
-        lbl.textContent=POSTE_LABELS[poste]||poste;
+        if(S.detailMode){
+          const hrsStr=cr.hours
+            ?`<div style="font-size:9px;color:var(--muted);font-weight:400;margin-top:1px">Lun-Jeu ${cr.hours}${cr.hours_fri?' · Ven '+cr.hours_fri:''}</div>`
+            :'';
+          lbl.innerHTML=`<div class="${isCur?'rh-week-cur':''}"><strong>S${wn}</strong> <span style="font-weight:400;font-size:10px">${fmtDateShort(mon)}–${fmtDateShort(sun)}</span></div><div style="font-size:11px;color:var(--muted)">${cr.label}</div>${hrsStr}`;
+        }else{
+          lbl.innerHTML=`<div class="${isCur?'rh-week-cur':''}"><strong>S${wn}</strong></div><div style="font-size:11px;color:var(--muted)">${cr.label}</div>`;
+        }
         row.appendChild(lbl);
 
-        // Week cells
-        weeks.forEach(ws=>{
+        // Cellule par poste
+        allPostes.forEach(poste=>{
           const td=document.createElement('td');
+          if(!cr.postes.includes(poste)){
+            // Poste absent de ce créneau : cellule grisée
+            td.style.cssText='background:var(--bg);opacity:.2';
+            row.appendChild(td);
+            return;
+          }
           const cell=document.createElement('div');
           cell.className='rh-cell';
 
           const assignments=getAssignments(mdef.code,cr.key,poste,ws);
-
           assignments.forEach(a=>{
             const chip=document.createElement('span');
             chip.className='rh-chip';
-            chip.innerHTML=a.user_nom;
+            chip.textContent=a.user_nom;
             if(S.isEditor){
               const delBtn=document.createElement('button');
               delBtn.className='rh-chip-del';
@@ -876,27 +919,10 @@ function buildPlanningGrid(){
             cell.appendChild(chip);
           });
 
-          // Indicateur congés pour cette case (personnes en congé cette semaine)
-          if(S.isEditor){
-            const congesWeek=S.conges.filter(c=>{
-              if(c.statut==='refuse')return false;
-              const mon=weekMonday(ws); const sun=new Date(mon); sun.setDate(mon.getDate()+6);
-              const monS=mon.toISOString().split('T')[0]; const sunS=sun.toISOString().split('T')[0];
-              return c.date_debut<=sunS&&c.date_fin>=monS;
-            });
-            if(congesWeek.length>0){
-              const badge=document.createElement('span');
-              badge.className='rh-conge-badge';
-              badge.title=congesWeek.map(c=>c.user_nom+' ('+TYPE_CONGE_LABELS[c.type_conge]+')').join('\n');
-              badge.innerHTML='🏖 '+congesWeek.length+' congé'+(congesWeek.length>1?'s':'');
-              cell.appendChild(badge);
-            }
-          }
-
           if(S.isEditor){
             const addBtn=document.createElement('button');
             addBtn.className='rh-add-btn';
-            addBtn.title='Ajouter une personne';
+            addBtn.title='Ajouter';
             addBtn.innerHTML='+';
             addBtn.onclick=()=>openAddPersonModal({semaine:ws,machineCode:mdef.code,poste,creneau:cr.key,machineId:getMachineId(mdef.code)});
             cell.appendChild(addBtn);
@@ -909,12 +935,12 @@ function buildPlanningGrid(){
         tbody.appendChild(row);
       });
     });
+
+    table.appendChild(tbody);
+    block.appendChild(table);
+    gw.appendChild(block);
   });
 
-  table.appendChild(tbody);
-  gw.appendChild(table);
-  const outer=document.createElement('div');
-  outer.appendChild(wrap);
   outer.appendChild(gw);
   return outer;
 }
@@ -998,12 +1024,12 @@ function buildCongesTab(){
   const soldeTable=document.createElement('table'); soldeTable.className='rh-table';
   soldeTable.innerHTML=`<thead><tr>
     <th>Employé</th><th>CP — Quota</th><th>CP — Posé</th><th>CP — Restant</th>
-    <th>RTT — Quota</th><th>RTT — Restant</th><th>Maladie</th>
+    <th>Maladie</th>
     ${S.isEditor?'<th>Actions</th>':''}
   </tr></thead>`;
   const stbody=document.createElement('tbody');
   if(!S.soldes.length){
-    stbody.innerHTML=`<tr><td colspan="8" class="rh-empty">Aucun employé planifiable — vérifiez les rôles utilisateurs</td></tr>`;
+    stbody.innerHTML=`<tr><td colspan="${S.isEditor?6:5}" class="rh-empty">Aucun employé planifiable — vérifiez les rôles utilisateurs</td></tr>`;
   }else{
     S.soldes.forEach(s=>{
       const pctCP=s.quota_cp>0?Math.min(100,s.poses_cp/s.quota_cp*100):0;
@@ -1019,8 +1045,6 @@ function buildCongesTab(){
             <span style="font-size:12px;font-weight:700;color:${s.restant_cp<0?'var(--danger)':s.restant_cp<5?'var(--warn)':'var(--success)'}">${s.restant_cp}j</span>
           </div>
         </td>
-        <td>${s.quota_rtt}j</td>
-        <td style="font-size:12px;font-weight:700;color:${s.restant_rtt<0?'var(--danger)':'var(--text2)'}">${s.restant_rtt}j</td>
         <td><span class="rh-badge mal">${s.poses_maladie}j</span></td>
         ${S.isEditor?`<td><button class="rh-act-btn" onclick="openSoldeModal(${s.user_id})">Modifier</button></td>`:''}
       `;
@@ -1050,7 +1074,7 @@ function buildCongesTab(){
         <div class="rh-field" style="margin:0">
           <label>Type</label>
           <select onchange="S.congeForm.type_conge=this.value">
-            ${Object.entries(TYPE_CONGE_LABELS).map(([k,v])=>`<option value="${k}"${S.congeForm.type_conge===k?' selected':''}>${v}</option>`).join('')}
+            ${Object.entries(TYPE_CONGE_LABELS).map(([k,v])=>`<option value="${k}"${(S.congeForm.type_conge||'CP')===k?' selected':''}>${v}</option>`).join('')}
           </select>
         </div>
         <div class="rh-field" style="margin:0">
@@ -1155,11 +1179,6 @@ function buildSoldeModal(){
       <label>Quota CP (jours)</label>
       <input type="number" min="0" step="0.5" value="${S.soldeForm.quota_cp}"
         onchange="S.soldeForm.quota_cp=parseFloat(this.value)||0">
-    </div>
-    <div class="rh-field">
-      <label>Quota RTT (jours)</label>
-      <input type="number" min="0" step="0.5" value="${S.soldeForm.quota_rtt}"
-        onchange="S.soldeForm.quota_rtt=parseFloat(this.value)||0">
     </div>
     <div class="rh-field">
       <label>Note</label>
@@ -1293,7 +1312,7 @@ function navWeeks(n){
 }
 function toggleDetail(){S.detailMode=!S.detailMode;render();}
 function changeAnnee(y){S.annee=parseInt(y);loadSoldes();render();}
-function toggleTheme(){document.body.classList.toggle('light');renderSidebar();}
+function toggleTheme(){document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');renderSidebar();}
 function openSidebar(){document.getElementById('rh-sb').classList.add('open');}
 function closeSidebar(){document.getElementById('rh-sb').classList.remove('open');}
 function printPlanning(){window.print();}
@@ -1305,6 +1324,7 @@ function printConges(){
 
 // ── Init ───────────────────────────────────────────────
 (async()=>{
+  if(localStorage.getItem('theme')==='light') document.body.classList.add('light');
   await loadMe();
   if(S.isEditor)S.viewRange=4; else S.viewRange=1;
   await loadMachines();

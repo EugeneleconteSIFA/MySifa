@@ -2207,6 +2207,10 @@ function renderStock(){
       onClick:()=>set({stockView:'emplacement',stockSelEmpl:null})},
       iconEl('map-pin',15),'  Par emplacement'),
     h('div',{className:'sidebar-bottom'},
+      (S.user&&['direction','fabrication','logistique','superadmin'].includes(S.user.role))?
+        h('button',{className:'nav-btn',onClick:()=>{window.location.href='/planning-rh'}},
+          iconEl('users',15),'  Planning RH')
+        :null,
       h('button',{className:'nav-btn back-mysifa',onClick:()=>{window.location.href='/' }},
         '← Retour ',
         h('span',{className:'wm'},'My',h('span',null,'Sifa'))
@@ -3413,6 +3417,10 @@ function renderExpe(){
     h('button',{className:'nav-btn'+(tab==='poids'?' active':''),onClick:()=>set({expeTab:'poids'})},
       iconEl('calculator',15),'  Poids envoi'),
     h('div',{className:'sidebar-bottom'},
+      (S.user&&['direction','fabrication','logistique','superadmin'].includes(S.user.role))?
+        h('button',{className:'nav-btn',onClick:()=>{window.location.href='/planning-rh'}},
+          iconEl('users',15),'  Planning RH')
+        :null,
       h('button',{className:'nav-btn back-mysifa',onClick:()=>{window.location.href='/'}},
         '← Retour ',h('span',{className:'wm'},'My',h('span',null,'Sifa'))
       ),
