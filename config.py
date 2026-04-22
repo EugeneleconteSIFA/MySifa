@@ -104,6 +104,11 @@ ASSIGNABLE_ROLES = frozenset(
 
 ROLES_FABRICATION_APP = {ROLE_FABRICATION, ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_SUPERADMIN}
 
+# Planning RH (Personnel)
+ROLES_PLANNING_RH_VIEW  = {ROLE_DIRECTION, ROLE_FABRICATION, ROLE_LOGISTIQUE, ROLE_SUPERADMIN}
+ROLES_PLANNING_RH_EDIT  = {ROLE_DIRECTION, ROLE_SUPERADMIN}
+ROLES_PLANNING_RH_STAFF = {ROLE_FABRICATION, ROLE_LOGISTIQUE, ROLE_EXPEDITION}
+
 
 def default_app_access_for_role(role: str) -> dict:
     """Accès applications issus du seul rôle (avant surcharges utilisateur)."""
@@ -116,6 +121,7 @@ def default_app_access_for_role(role: str) -> dict:
             "expe": True,
             "fabrication": True,
             "settings": True,
+            "planning_rh": True,
         }
     return {
         "prod": role in ROLES_PROD,
@@ -125,6 +131,7 @@ def default_app_access_for_role(role: str) -> dict:
         "expe": role in ROLES_EXPE,
         "fabrication": role in ROLES_FABRICATION_APP,
         "settings": role in ROLES_SETTINGS,
+        "planning_rh": role in ROLES_PLANNING_RH_VIEW,
     }
 
 # Admin par défaut

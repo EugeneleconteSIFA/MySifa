@@ -2512,9 +2512,11 @@ function buildReception() {
       setTimeout(() => { const i = document.querySelector('.recep-fourn-inp:not([readonly])'); if (i) { i.focus(); i.setSelectionRange(e.target.value.length, e.target.value.length); } }, 30);
     });
     fourInp.addEventListener('focus', () => {
-      S.recepFournisseurOpen = true;
-      renderContent();
-      setTimeout(() => { const i = document.querySelector('.recep-fourn-inp:not([readonly])'); if (i) i.focus(); }, 30);
+      if (!S.recepFournisseurOpen) {
+        S.recepFournisseurOpen = true;
+        renderContent();
+        setTimeout(() => { const i = document.querySelector('.recep-fourn-inp:not([readonly])'); if (i) i.focus(); }, 30);
+      }
     });
     fourInp.addEventListener('blur', () => {
       // Petit délai pour laisser le temps au mousedown sur un item

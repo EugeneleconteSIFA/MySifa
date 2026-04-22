@@ -679,7 +679,7 @@ async def create_reception(request: Request):
     with get_db() as conn:
         cur = conn.execute(
             """INSERT INTO stock_receptions (created_at, created_by, created_by_name, note, nb_bobines, fournisseur, certificat_fsc)
-               VALUES (?,?,?,?,?,?,?,?)""",
+               VALUES (?,?,?,?,?,?,?)""",
             (now, user.get("email"), user.get("nom"), note, len(codes), fournisseur, certificat_fsc),
         )
         reception_id = cur.lastrowid
