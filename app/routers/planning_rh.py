@@ -60,7 +60,7 @@ def get_personnel(request: Request):
         rows = conn.execute(
             """SELECT id, nom, email, role, machine_id, actif
                FROM users
-               WHERE role IN ('fabrication','logistique','expedition') AND actif = 1
+               WHERE role IN ('fabrication','logistique') AND actif = 1
                ORDER BY nom COLLATE NOCASE"""
         ).fetchall()
     return {"personnel": [dict(r) for r in rows]}
@@ -372,7 +372,7 @@ def get_soldes(request: Request, annee: Optional[int] = None):
     with get_db() as conn:
         staff = conn.execute(
             """SELECT id, nom FROM users
-               WHERE role IN ('fabrication','logistique','expedition') AND actif = 1
+               WHERE role IN ('fabrication','logistique') AND actif = 1
                ORDER BY nom COLLATE NOCASE"""
         ).fetchall()
 

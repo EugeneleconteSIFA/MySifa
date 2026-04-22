@@ -1039,13 +1039,21 @@ function buildPlanningGrid(){
         if(S.isEditor){
           const btns=document.createElement('div');
           btns.className='rh-row-btns';
-          // Bouton de suppression
-          const delBtn=document.createElement('button');
-          delBtn.className='rh-row-del-btn';
-          delBtn.title='Supprimer toutes les affectations';
-          delBtn.innerHTML='×';
-          delBtn.onclick=()=>deleteRowAssignments(ws,mdef.code,cr.key);
-          btns.appendChild(delBtn);
+          // Vérifier s'il y a des affectations dans cette ligne (tous postes)
+          let hasAssignments=false;
+          allPostes.forEach(poste=>{
+            const ass=getAssignments(mdef.code,cr.key,poste,ws);
+            if(ass.length>0)hasAssignments=true;
+          });
+          // Bouton de suppression (seulement s'il y a des affectations)
+          if(hasAssignments){
+            const delBtn=document.createElement('button');
+            delBtn.className='rh-row-del-btn';
+            delBtn.title='Supprimer toutes les affectations';
+            delBtn.innerHTML='×';
+            delBtn.onclick=()=>deleteRowAssignments(ws,mdef.code,cr.key);
+            btns.appendChild(delBtn);
+          }
           // Bouton de duplication (sauf dernière semaine)
           if(idx < weeks.length - 1){
             const dupBtn=document.createElement('button');
@@ -1055,7 +1063,7 @@ function buildPlanningGrid(){
             dupBtn.onclick=()=>duplicateAllAssignmentsToNextWeek(ws,mdef.code,getMachineId(mdef.code));
             btns.appendChild(dupBtn);
           }
-          lbl.appendChild(btns);
+          if(btns.children.length>0)lbl.appendChild(btns);
         }
         row.appendChild(lbl);
 
