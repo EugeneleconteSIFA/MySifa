@@ -402,8 +402,8 @@ def get_soldes(request: Request, annee: Optional[int] = None):
             uid = s["id"]
             sol = soldes_map.get(uid, {})
             pos = poses_map.get(uid, {"CP": 0.0, "RTT": 0.0, "maladie": 0.0, "autre": 0.0})
-            quota_cp  = float(sol.get("quota_cp")  or 25)
-            quota_rtt = float(sol.get("quota_rtt") or 0)
+            quota_cp  = float(sol.get("quota_cp") if "quota_cp" in sol else 25)
+            quota_rtt = float(sol.get("quota_rtt") if "quota_rtt" in sol else 0)
             result.append({
                 "user_id":       uid,
                 "user_nom":      s["nom"],

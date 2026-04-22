@@ -200,13 +200,14 @@ input,select,textarea{font-family:inherit;color:var(--text)}
 
 /* Poste row */
 .rh-poste-row td{
-  padding:6px 8px;vertical-align:top;background:var(--bg);
+  padding:6px 8px;vertical-align:middle;background:var(--bg);
 }
 .rh-poste-label{
   padding:6px 12px 6px 28px!important;font-size:12px;font-weight:600;
   color:var(--text2);white-space:nowrap;
   position:sticky;left:0;z-index:2;background:var(--bg)!important;
   display:flex;align-items:center;justify-content:space-between;gap:8px;
+  height:100%;
 }
 .rh-label-content{flex:1}
 .rh-cell{min-height:36px;display:flex;flex-wrap:wrap;gap:5px;align-items:center;padding:4px 6px}
