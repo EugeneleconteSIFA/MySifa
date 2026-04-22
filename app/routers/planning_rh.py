@@ -19,7 +19,17 @@ router = APIRouter(prefix="/api/rh", tags=["planning_rh"])
 # ── Helpers accès ────────────────────────────────────────────────
 def _require_view(request: Request) -> dict:
     user = get_current_user(request)
-    if user.get("role") not in ROLES_PLANNING_RH_VIEW:
+    # Check role OR planning_rh override
+    has_override = False
+    overrides_raw = user.get("access_overrides")
+    if overrides_raw:
+        try:
+            import json
+            overrides = json.loads(overrides_raw) if isinstance(overrides_raw, str) else overrides_raw
+            has_override = overrides.get("planning_rh") is True
+        except:
+            pass
+    if user.get("role") not in ROLES_PLANNING_RH_VIEW and not has_override:
         raise HTTPException(403, "Accès non autorisé au planning RH")
     return user
 
