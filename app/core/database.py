@@ -727,6 +727,71 @@ def _migrate(conn):
         )
         _record_schema_migration(conn, 2, "superadmin_eleconte")
 
+    # Migration v4 : Planning RH Personnel
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=4 LIMIT 1").fetchone():
+        existing_tables_v4 = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+
+        if "rh_planning_postes" not in existing_tables_v4:
+            conn.execute("""CREATE TABLE rh_planning_postes (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id     INTEGER NOT NULL,
+                semaine     TEXT NOT NULL,
+                machine_id  INTEGER,
+                poste       TEXT NOT NULL,
+                creneau     TEXT NOT NULL DEFAULT 'journee',
+                created_by  TEXT,
+                created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(user_id, semaine),
+                FOREIGN KEY (user_id)    REFERENCES users(id),
+                FOREIGN KEY (machine_id) REFERENCES machines(id)
+            )""")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_rh_planning_semaine ON rh_planning_postes(semaine)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_rh_planning_user   ON rh_planning_postes(user_id)")
+
+        if "rh_conges" not in existing_tables_v4:
+            conn.execute("""CREATE TABLE rh_conges (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id     INTEGER NOT NULL,
+                date_debut  TEXT NOT NULL,
+                date_fin    TEXT NOT NULL,
+                nb_jours    REAL NOT NULL,
+                type_conge  TEXT NOT NULL DEFAULT 'CP',
+                note        TEXT,
+                statut      TEXT NOT NULL DEFAULT 'pose',
+                created_by  TEXT,
+                created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )""")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_rh_conges_user ON rh_conges(user_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_rh_conges_dates ON rh_conges(date_debut, date_fin)")
+
+        if "rh_conges_soldes" not in existing_tables_v4:
+            conn.execute("""CREATE TABLE rh_conges_soldes (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id     INTEGER NOT NULL,
+                annee       INTEGER NOT NULL,
+                quota_cp    REAL DEFAULT 25,
+                quota_rtt   REAL DEFAULT 0,
+                note        TEXT,
+                updated_by  TEXT,
+                updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(user_id, annee),
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )""")
+
+        # Compte Manuel Lesaffre (configurateur planning RH — rôle direction)
+        import bcrypt as _bcrypt
+        _pwd = _bcrypt.hashpw("Lesaffre2026!".encode(), _bcrypt.gensalt()).decode()
+        _now = datetime.now().isoformat()
+        conn.execute(
+            """INSERT OR IGNORE INTO users (email, nom, password_hash, role, actif, created_at)
+               VALUES ('mlesaffre@sifa.pro', 'Manuel Lesaffre', ?, 'direction', 1, ?)""",
+            (_pwd, _now)
+        )
+
+        conn.commit()
+        _record_schema_migration(conn, 4, "planning_rh_tables_and_lesaffre")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

@@ -2007,6 +2007,7 @@ function renderPortal(){
   const isFab = aa ? !!aa.fabrication : (isSuper || urole==='fabrication' || !!(urole && ['direction','administration'].includes(urole)));
   const isPrint = isSuper || !!(urole && ['fabrication','logistique'].includes(urole));
   const isCom = urole==='commercial';
+  const isRH = aa ? !!aa.planning_rh : (isSuper || !!(urole && ['direction','fabrication','logistique'].includes(urole)));
   const isLight=document.body.classList.contains('light');
 
   const apps=[];
@@ -2084,6 +2085,17 @@ function renderPortal(){
       h('div',{className:'portal-app-icon'},iconEl('truck',28)),
       h('div',{className:'portal-app-name'},'MyExpé'),
       h('div',{className:'portal-app-desc'},'Expédition & Suivi')
+    ));
+  }
+
+  if(isRH){
+    apps.push(h('div',{
+      className:'portal-app',
+      onClick:()=>{ window.location.href='/planning-rh'; }
+    },
+      h('div',{className:'portal-app-icon'},iconEl('users',28)),
+      h('div',{className:'portal-app-name'},'Planning RH'),
+      h('div',{className:'portal-app-desc'},'Planning personnel & Congés')
     ));
   }
 
