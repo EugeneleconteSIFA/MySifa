@@ -832,6 +832,12 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 4, "planning_rh_tables_and_lesaffre")
 
+    # Migration v5 : Désaffecter tout le personnel planning RH (nettoyage avant déploiement)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=5 LIMIT 1").fetchone():
+        conn.execute("DELETE FROM rh_planning_postes")
+        conn.commit()
+        _record_schema_migration(conn, 5, "clear_rh_planning_assignments")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

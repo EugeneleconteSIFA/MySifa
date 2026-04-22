@@ -428,8 +428,8 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 .rh-machine-block{border-bottom:2px solid var(--border)}
 .rh-machine-block:last-child{border-bottom:none}
 .rh-machine-section-hdr{
-  padding:8px 14px;font-size:12px;font-weight:800;text-transform:uppercase;
-  letter-spacing:1px;background:var(--bg);color:var(--text2);
+  padding:8px 14px;font-size:13px;font-weight:800;text-transform:uppercase;
+  letter-spacing:1px;background:var(--card);color:var(--text);
   display:flex;align-items:center;border-bottom:1px solid var(--border);
 }
 .rh-week-cur{color:var(--accent)}
@@ -466,6 +466,12 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 <script>
 // ── Constantes grille ─────────────────────────────────────
 const GRID_DEF = [
+  { code:'RESP', label:"Responsable d'atelier", color:'var(--c5)', special:true,
+    creneaux:[ { key:'journee', label:'Journée', hours:null, postes:['resp_atelier'] } ]
+  },
+  { code:'LOG', label:'Logistique / Expédition', color:'var(--accent)', special:true,
+    creneaux:[ { key:'journee', label:'Journée', hours:'08:00 – 16:00', postes:['logistique'], multi:true } ]
+  },
   { code:'C1',  label:'Cohésio 1',             color:'var(--c1)',
     creneaux:[
       { key:'matin', label:'Matin',       hours:'05:25 – 13:00', hours_fri:'06:40 – 13:00', postes:['conducteur','aide','emballage'] },
@@ -483,12 +489,6 @@ const GRID_DEF = [
   },
   { code:'REP', label:'Repiquage',             color:'var(--c4)',
     creneaux:[ { key:'journee', label:'Journée', hours:null, postes:['conducteur'] } ]
-  },
-  { code:'RESP', label:"Responsable d'atelier", color:'var(--c5)', special:true,
-    creneaux:[ { key:'journee', label:'Journée', hours:null, postes:['resp_atelier'] } ]
-  },
-  { code:'LOG', label:'Logistique / Expédition', color:'var(--accent)', special:true,
-    creneaux:[ { key:'journee', label:'Journée', hours:'08:00 – 16:00', postes:['logistique'], multi:true } ]
   },
 ];
 const POSTE_LABELS = {
