@@ -472,6 +472,10 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
   .rh-section.print-target{display:block!important}
   .rh-section-hdr .rh-icon-btn{display:none!important}
   .print-header{display:block!important;margin-bottom:8px;font-size:12px;font-weight:800}
+  .rh-print-pivot-wrap{display:block}
+  .rh-print-header{font-size:14px;font-weight:800;margin-bottom:12px}
+  .rh-pivot-table{border-collapse:collapse;width:100%;margin-bottom:16px}
+  .rh-pivot-table th,.rh-pivot-table td{border:1px solid #000;font-size:8px;padding:2px 4px}
   @page{margin:0.5cm;size:A4 landscape}
 }
 .print-header{display:none}
@@ -1503,7 +1507,134 @@ function changeAnnee(y){S.annee=parseInt(y);loadSoldes();render();}
 function toggleTheme(){document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');renderSidebar();}
 function openSidebar(){document.getElementById('rh-sb').classList.add('open');}
 function closeSidebar(){document.getElementById('rh-sb').classList.remove('open');}
-function printPlanning(){window.print();}
+function printPlanning(){
+  const c=document.getElementById('rh-content');
+  if(!c)return;
+  const originalContent=c.innerHTML;
+  c.innerHTML='';
+  c.appendChild(buildPrintPivotLayout());
+  window.print();
+  c.innerHTML=originalContent;
+}
+
+function buildPrintPivotLayout(){
+  const weeks=getWeeksToShow();
+  const wrap=document.createElement('div');
+  wrap.className='rh-print-pivot-wrap';
+  
+  const header=document.createElement('div');
+  header.className='rh-print-header';
+  header.textContent='Planning du personnel — '+fmtWeekLabel(weeks[0])+(weeks.length>1?' au '+fmtWeekLabel(weeks[weeks.length-1]):'');
+  wrap.appendChild(header);
+  
+  // Group 1: LOG, RESP, REP (all have journee only)
+  const group1Machines=GRID_DEF.filter(m=>['LOG','RESP','REP'].includes(m.code));
+  if(group1Machines.length){
+    wrap.appendChild(buildPivotTable(group1Machines,weeks,false));
+  }
+  
+  // Group 2: C1, C2, DSI (C1/C2 have matin/aprem, DSI has journee only)
+  const group2Machines=GRID_DEF.filter(m=>['C1','C2','DSI'].includes(m.code));
+  if(group2Machines.length){
+    wrap.appendChild(buildPivotTable(group2Machines,weeks,true));
+  }
+  
+  return wrap;
+}
+
+function buildPivotTable(machines,weeks,hasMatinAprem){
+  const table=document.createElement('table');
+  table.className='rh-pivot-table';
+  
+  // Get all unique creneaux from all machines
+  const allCreneaux=[];
+  machines.forEach(m=>{
+    m.creneaux.forEach(cr=>{
+      if(!allCreneaux.find(c=>c.key===cr.key))allCreneaux.push(cr);
+    });
+  });
+  
+  // Header row: first cell (empty) + machine headers with their postes
+  const thead=document.createElement('thead');
+  const headerRow=document.createElement('tr');
+  headerRow.innerHTML='<th style="border:1px solid #000;background:#f5f5f5"></th>';
+  machines.forEach(m=>{
+    m.creneaux.forEach(cr=>{
+      cr.postes.forEach(p=>{
+        const th=document.createElement('th');
+        th.style.cssText='border:1px solid #000;background:#f5f5f5;font-size:8px;padding:2px 4px';
+        th.textContent=m.label+' - '+POSTE_LABELS[p]||p;
+        headerRow.appendChild(th);
+      });
+    });
+  });
+  thead.appendChild(headerRow);
+  table.appendChild(thead);
+  
+  const tbody=document.createElement('tbody');
+  
+  weeks.forEach(ws=>{
+    const wn=ws.split('W')[1];
+    const mon=weekMonday(ws);
+    const sun=new Date(mon);sun.setDate(mon.getDate()+6);
+    
+    allCreneaux.forEach(cr=>{
+      const row=document.createElement('tr');
+      
+      // First column: week + creneau label
+      const firstCell=document.createElement('td');
+      firstCell.style.cssText='border:1px solid #ddd;font-size:8px;padding:2px 4px;background:#f9f9f9';
+      firstCell.innerHTML=`<strong>S${wn}</strong><br><span style="font-size:7px;color:#666">${cr.label}</span>`;
+      row.appendChild(firstCell);
+      
+      // Add cells for each machine/poste combination
+      machines.forEach(m=>{
+        const machineCreneaux=m.creneaux.find(c=>c.key===cr.key);
+        if(machineCreneaux){
+          machineCreneaux.postes.forEach(poste=>{
+            const td=document.createElement('td');
+            td.style.cssText='border:1px solid #ddd;font-size:8px;padding:2px 4px;min-width:40px';
+            const ass=getAssignments(m.code,cr.key,poste,ws);
+            if(ass.length){
+              ass.forEach(a=>{
+                const chip=document.createElement('span');
+                chip.style.cssText='display:inline-block;font-size:6px;padding:1px 2px;border:1px solid #000;background:#fff;margin:1px';
+                chip.textContent=a.user_nom.split(' ')[0];
+                td.appendChild(chip);
+              });
+            }
+            row.appendChild(td);
+          });
+        }else{
+          // Machine doesn't have this creneau (e.g., DSI doesn't have matin/aprem)
+          // Add empty cells for each poste
+          const journeeCr=m.creneaux.find(c=>c.key==='journee');
+          if(journeeCr && cr.key!=='journee'){
+            journeeCr.postes.forEach(poste=>{
+              const td=document.createElement('td');
+              td.style.cssText='border:1px solid #ddd;font-size:8px;padding:2px 4px;min-width:40px;background:#fafafa';
+              row.appendChild(td);
+            });
+          }
+        }
+      });
+      
+      tbody.appendChild(row);
+    });
+  });
+  
+  table.appendChild(tbody);
+  return table;
+}
+
+function userCongesThisWeekForUser(userId,ws){
+  if(!userId)return[];
+  const mon=weekMonday(ws);
+  const sun=new Date(mon);sun.setDate(mon.getDate()+6);
+  const monS=mon.toISOString().split('T')[0];
+  const sunS=sun.toISOString().split('T')[0];
+  return S.conges.filter(c=>c.user_id===userId&&c.statut!=='refuse'&&c.date_debut<=sunS&&c.date_fin>=monS);
+}
 function printConges(){
   document.querySelectorAll('.rh-section').forEach(s=>s.classList.remove('print-target'));
   document.querySelectorAll('.rh-conges-wrap .rh-section').forEach(s=>s.classList.add('print-target'));
