@@ -22,7 +22,8 @@ def planning_rh_page(request: Request):
         if e.status_code == 401:
             return RedirectResponse(url="/?next=/planning-rh", status_code=302)
         raise
-    if user.get("role") not in ROLES_PLANNING_RH_VIEW:
+    from app.services.auth_service import user_has_app_access
+    if not user_has_app_access(user, "planning_rh"):
         from app.web.access_denied import access_denied_response
         return access_denied_response("Planning RH")
     return HTMLResponse(
