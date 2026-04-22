@@ -838,21 +838,48 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 5, "clear_rh_planning_assignments")
 
-    # Migration v6 : Autoriser mlesaffre@sifa.pro à éditer le planning RH
+    # Migration v6 : Configurer les overrides d'accès pour les utilisateurs spécifiques
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=6 LIMIT 1").fetchone():
         import json
-        user_row = conn.execute("SELECT id, access_overrides FROM users WHERE LOWER(TRIM(email)) = ?", ("mlesaffre@sifa.pro",)).fetchone()
-        if user_row:
-            user_id = user_row[0]
-            overrides_raw = user_row[1]
-            try:
-                overrides = json.loads(overrides_raw) if overrides_raw else {}
-            except:
-                overrides = {}
-            overrides["planning_rh"] = True
-            conn.execute("UPDATE users SET access_overrides = ? WHERE id = ?", (json.dumps(overrides), user_id))
+        # S'assurer que la colonne access_overrides existe
+        existing_columns = {row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
+        if "access_overrides" not in existing_columns:
+            conn.execute("ALTER TABLE users ADD COLUMN access_overrides TEXT")
             conn.commit()
-        _record_schema_migration(conn, 6, "mlesaffre_planning_rh_edit_access")
+        
+        # Liste des utilisateurs avec leurs overrides d'accès
+        access_overrides_config = [
+            {"email": "mlesaffre@sifa.pro", "overrides": {"planning_rh": True}}
+        ]
+        
+        for config in access_overrides_config:
+            user_row = conn.execute(
+                "SELECT id, access_overrides FROM users WHERE LOWER(TRIM(email)) = ?",
+                (config["email"].lower().strip(),)
+            ).fetchone()
+            
+            if user_row:
+                user_id = user_row[0]
+                overrides_raw = user_row[1]
+                
+                # Parser les overrides existants
+                try:
+                    overrides = json.loads(overrides_raw) if overrides_raw and overrides_raw.strip() else {}
+                except (json.JSONDecodeError, TypeError):
+                    overrides = {}
+                
+                # Fusionner avec les nouveaux overrides
+                for key, value in config["overrides"].items():
+                    overrides[key] = value
+                
+                # Mettre à jour
+                conn.execute(
+                    "UPDATE users SET access_overrides = ? WHERE id = ?",
+                    (json.dumps(overrides), user_id)
+                )
+                conn.commit()
+        
+        _record_schema_migration(conn, 6, "configure_user_access_overrides")
 
     _record_schema_migration(
         conn,

@@ -1205,7 +1205,7 @@ function buildCongesTab(){
         <td style="font-weight:600">${s.user_nom}</td>
         <td>${s.quota_cp}j</td>
         <td><span class="rh-badge cp">${s.poses_cp}j</span></td>
-        <td>
+        <td onclick="openSoldeModal(${s.user_id})" style="cursor:pointer" title="Cliquer pour modifier">
           <div class="rh-solde-bar">
             <div class="rh-bar-wrap"><div class="rh-bar-fill ${fillCls}" style="width:${pctCP}%"></div></div>
             <span style="font-size:12px;font-weight:700;color:${s.restant_cp<0?'var(--danger)':s.restant_cp<5?'var(--warn)':'var(--success)'}">${s.restant_cp}j</span>
@@ -1345,6 +1345,7 @@ function buildSoldeModal(){
       <label>Quota CP (jours)</label>
       <input type="number" min="0" step="0.5" value="${S.soldeForm.quota_cp}"
         onchange="S.soldeForm.quota_cp=parseFloat(this.value)||0">
+      <small style="color:var(--muted);font-size:11px">Mettez 0 pour désactiver les congés payés</small>
     </div>
     <div class="rh-field">
       <label>Note</label>
