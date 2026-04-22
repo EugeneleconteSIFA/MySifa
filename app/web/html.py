@@ -4153,15 +4153,15 @@ function renderFilters(){
     parts.push(makeMultiSelect(
       'Opérateurs',
       ops.map(o=>({value:o,label:opName(o)})),
-      S.fv.operateurs,
+      ()=>S.fv.operateurs,
       (sel)=>{ S.fv.operateurs=sel; }
     ));
- 
+
     // ── Multi-select dossiers ────────────────────────────────────
     parts.push(makeMultiSelect(
       'Dossiers',
       dos.map(d=>({value:d,label:'Dos. '+d})),
-      S.fv.dossiers,
+      ()=>S.fv.dossiers,
       (sel)=>{ S.fv.dossiers=sel; }
     ));
   }
@@ -4176,9 +4176,12 @@ function renderFilters(){
  
 // ── Composant multi-select avec cases à cocher ──────────────────
 function makeMultiSelect(label, options, selected, onChange){
-  // NOTE: `selected` est un tableau stocké dans S.fv.* et muté via onChange(sel).
-  // Ce composant doit rester fluide (multi-clic) => on lit toujours la valeur actuelle via getSelected().
-  const getSelected = ()=> Array.isArray(selected) ? selected : [];
+  // NOTE: `selected` peut être un getter () => array ou un array direct.
+  // On utilise toujours le getter pour lire la valeur courante après chaque onChange,
+  // sinon la closure capturait l'ancienne référence de tableau.
+  const getSelected = typeof selected === 'function'
+    ? ()=>{ const v=selected(); return Array.isArray(v)?v:[]; }
+    : ()=> Array.isArray(selected) ? selected : [];
   const isSelected = v => getSelected().includes(v);
   const count = getSelected().length;
  
@@ -6343,6 +6346,19 @@ function renderRentabilite(){
       });
     };
     refreshChips();
+
+    // Auto-détection : si aucun dossier n'est lié, chercher dans la prod via la référence planning
+    if(curDossiers.length===0 && (head.reference||'').trim()){
+      queueMicrotask(async()=>{
+        try{
+          const sugs = await rentSuggestNoDossiers((head.reference||'').trim());
+          if(sugs.length && curDossiers.length===0){
+            sugs.forEach(s=>{ if(!curDossiers.includes(s)) curDossiers.push(s); });
+            refreshChips();
+          }
+        }catch(_){}
+      });
+    }
 
     const saveBtn=h('button',{type:'button',className:'btn-sm',onClick:async()=>{
       const did = devisSel.value ? Number(devisSel.value) : null;

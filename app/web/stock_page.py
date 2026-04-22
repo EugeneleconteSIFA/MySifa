@@ -539,7 +539,27 @@ body.light .field-input.empl-upper::placeholder{
 .recep-hist-date{font-size:12px;font-family:monospace;color:var(--text2);white-space:nowrap;flex-shrink:0}
 .recep-hist-count{background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;white-space:nowrap;flex-shrink:0}
 .recep-hist-note{font-size:12px;color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.recep-hist-four{font-size:11px;color:var(--accent);font-weight:600;flex-shrink:0;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .recep-hist-user{font-size:11px;color:var(--muted);flex-shrink:0}
+/* Fournisseur search */
+.recep-fourn-wrap{margin-top:8px}
+.recep-fourn-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:4px;display:flex;align-items:center;gap:6px}
+.recep-fourn-search-wrap{position:relative}
+.recep-fourn-inp{width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;color:var(--text);outline:none;transition:border-color .15s;box-sizing:border-box}
+.recep-fourn-inp:focus{border-color:var(--accent)}
+.recep-fourn-inp::placeholder{color:var(--muted)}
+.recep-fourn-inp.recep-fourn-selected{border-color:var(--accent);background:var(--accent-bg);font-weight:600}
+.recep-fourn-clear{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:var(--border);border:none;border-radius:50%;width:22px;height:22px;cursor:pointer;font-size:12px;color:var(--text2);display:flex;align-items:center;justify-content:center}
+.recep-fourn-clear:hover{background:var(--danger);color:#fff}
+.recep-fourn-dropdown{position:absolute;top:100%;left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:8px;max-height:220px;overflow-y:auto;z-index:50;display:none;box-shadow:0 8px 24px rgba(0,0,0,.12)}
+.recep-fourn-dropdown.open{display:block}
+.recep-fourn-item{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;cursor:pointer;font-size:13px;transition:background .1s}
+.recep-fourn-item:hover{background:var(--accent-bg)}
+.recep-fourn-item-nom{font-weight:600;color:var(--text)}
+.recep-fourn-item-cert{font-size:10px;color:var(--muted);font-family:monospace}
+.recep-fourn-empty{padding:12px;text-align:center;color:var(--muted);font-size:12px}
+.recep-fourn-fsc{margin-top:4px;font-size:11px;color:var(--muted);padding-left:2px}
+.recep-fourn-fsc strong{color:var(--text2)}
 .recep-hist-empty{padding:24px;text-align:center;color:var(--muted);font-size:13px}
 /* Détail lot (expandable) */
 .recep-hist-detail{padding:8px 16px 12px;display:flex;flex-wrap:wrap;gap:6px}
@@ -612,7 +632,51 @@ let S = {
   recepHistLoading: false,
   recepExpandedId: null,   // lot ouvert dans l'historique
   recepManual: '',         // valeur du champ saisie manuelle
+  recepFournisseur: '',     // fournisseur sélectionné
+  recepFournisseurSearch: '', // texte de recherche fournisseur
+  recepFournisseurOpen: false, // dropdown ouvert
 };
+
+// ── Fournisseurs FSC (issus du tableau Certifications) ──
+const FOURNISSEURS_FSC = [
+  { nom: 'Avery', licence: 'FSC-C004451', certificat: 'CU-COC-807907' },
+  { nom: 'Fedrigoni', licence: 'FSC-C011937', certificat: 'FCBA-COC-000059' },
+  { nom: 'Feys', licence: 'FSC-C017070', certificat: 'SGSCH-COC-004366' },
+  { nom: 'Burgo / Mosaico', licence: 'FSC-C004657', certificat: 'SGSCH-COC-002122' },
+  { nom: 'Foucherf', licence: 'FSC-C215283', certificat: 'BV-COC-215283' },
+  { nom: 'Frimpeks UK', licence: 'FSC-C160714', certificat: 'INT-COC-002144' },
+  { nom: 'Frimpeks Italy', licence: 'FSC-C164660', certificat: 'INT-COC-001611' },
+  { nom: 'Frimpeks Turkey', licence: 'FSC-C129558', certificat: 'NEO-COC-129558' },
+  { nom: 'Grand Ouest', licence: 'FSC-C148933', certificat: 'IMO-COC-209345' },
+  { nom: 'Guyenne', licence: 'FSC-C114338', certificat: 'FCBA-COC-000352' },
+  { nom: 'Itasa', licence: 'FSC-C160893', certificat: 'AEN-COC-000369' },
+  { nom: 'Kanzan', licence: 'FSC-C007179', certificat: 'TUVDC-COC-100605' },
+  { nom: 'Lefrancq', licence: 'FSC-C135176', certificat: 'FCBA-COC-000478' },
+  { nom: 'Likexin', licence: 'FSC-C128270', certificat: 'ESTS-COC-242264' },
+  { nom: 'Mitsubishi', licence: 'FSC-C014541', certificat: 'SGSCH-COC-002664' },
+  { nom: 'Rheno', licence: 'FSC-C104291', certificat: 'CU-COC-815304' },
+  { nom: 'Ricoh', licence: 'FSC-C001858', certificat: 'IMO-COC-261828' },
+  { nom: 'Sato', licence: 'FSC-C207483', certificat: 'TUEV-COC-002274' },
+  { nom: 'Shine', licence: 'FSC-C210420', certificat: 'ESTS-COC-241843' },
+  { nom: 'Suzhou', licence: 'FSC-C140235', certificat: 'RR-COC-000252' },
+  { nom: 'Techmay', licence: 'FSC-C199493', certificat: 'FCBA-COC-000616' },
+  { nom: 'Torrespapel', licence: 'FSC-C011032', certificat: 'SGSCH-COC-003753' },
+  { nom: 'UPM', licence: 'FSC-C012530', certificat: 'SGSCH-COC-004879' },
+  { nom: 'Xinzhu', licence: 'FSC-C177953', certificat: 'SGSHK-COC-331526' },
+];
+
+function fournisseurSuggestions(query) {
+  if (!query) return [];
+  const q = query.toLowerCase();
+  return FOURNISSEURS_FSC
+    .filter(f => f.nom.toLowerCase().includes(q))
+    .sort((a, b) => {
+      const aStarts = a.nom.toLowerCase().startsWith(q) ? 0 : 1;
+      const bStarts = b.nom.toLowerCase().startsWith(q) ? 0 : 1;
+      if (aStarts !== bStarts) return aStarts - bStarts;
+      return a.nom.localeCompare(b.nom, 'fr');
+    });
+}
 
 // ── API ─────────────────────────────────────────────────────────
 async function api(p, o) {
@@ -1816,10 +1880,10 @@ function buildNbPalettesLogiForm() {
 
 // ── 3. Bureaux — Identification plaques (105mm × 74mm + EAN128) ───
 function buildIdPlaqueForm() {
-  let _num='', _fl='', _fw='';
+  let _num='', _fl='', _fw='', _note='';
   const JSBARCODE_CDN='https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js';
   function doPrint() {
-    const num=_num.trim(), fl=_fl.trim(), fw=_fw.trim();
+    const num=_num.trim(), fl=_fl.trim(), fw=_fw.trim(), note=_note.trim();
     if(!num){showToast('Numéro de plaque requis','error');return;}
     const fmt=fl&&fw?`${fl} × ${fw} mm`:'';
     const w=_printWin('Plaque '+num,'105mm 74mm',
@@ -1829,12 +1893,14 @@ function buildIdPlaqueForm() {
        .head{font-size:14pt;font-weight:700;text-transform:uppercase;letter-spacing:.5pt;color:#555}
        .num{font-size:88pt;font-weight:900;letter-spacing:.5pt;line-height:0.95}
        .fmt{font-size:16pt;font-weight:600;color:#333}
+       .note{font-size:12pt;font-weight:500;color:#444;margin-top:1mm}
        .bar{display:flex;justify-content:center;margin-top:1.5mm}
        svg{max-width:97mm;height:10mm}`,
       `<div class="label">
          <div class="head">Plaque N°</div>
          <div class="num">${num}</div>
          ${fmt?`<div class="fmt">${fmt}</div>`:''}
+         ${note?`<div class="note">${note}</div>`:''}
          <div class="bar"><svg id="bc"></svg></div>
        </div>
        <script src="${JSBARCODE_CDN}"><\/script>
@@ -1844,6 +1910,7 @@ function buildIdPlaqueForm() {
   const nInp=_inp('N° de plaque — ex. 1234'); nInp.addEventListener('input',e=>{_num=e.target.value;});
   const lInp=_inp('L (mm)',{style:{width:'90px'}}); lInp.addEventListener('input',e=>{_fl=e.target.value;});
   const wInp=_inp('l (mm)',{style:{width:'90px'}}); wInp.addEventListener('input',e=>{_fw=e.target.value;});
+  const noteInp=_inp('Note (optionnel)'); noteInp.addEventListener('input',e=>{_note=e.target.value;});
   const btn=el('button',{cls:'traca-print-btn',style:{width:'100%',marginTop:'12px',justifyContent:'center'}},iconEl('printer',15),' Imprimer');
   btn.addEventListener('click',doPrint);
   return el('div',null,
@@ -1851,6 +1918,7 @@ function buildIdPlaqueForm() {
     el('div',{cls:'etiq-form-row'},
       el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Format L (mm)'),lInp),
       el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Format l (mm)'),wInp)),
+    el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Note'),noteInp),
     btn);
 }
 
@@ -2280,16 +2348,21 @@ async function recepScanLoop() {
 
 async function recepValider() {
   if (!S.recepItems.length) return;
+  if (!S.recepFournisseur) {
+    showToast('Veuillez sélectionner un fournisseur avant de valider la réception', 'error');
+    return;
+  }
+  const fsc = FOURNISSEURS_FSC.find(f => f.nom === S.recepFournisseur);
   try {
     const codes = S.recepItems.map(i => i.code);
     const d = await api('/api/stock/receptions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ codes, note: S.recepNote }),
+      body: JSON.stringify({ codes, note: S.recepNote, fournisseur: S.recepFournisseur, certificat_fsc: fsc ? fsc.certificat : '' }),
     });
     if (d && d.success) {
       showToast(d.nb_bobines + ' bobine' + (d.nb_bobines > 1 ? 's' : '') + ' enregistrée' + (d.nb_bobines > 1 ? 's' : ''));
-      S.recepItems = []; S.recepNote = '';
+      S.recepItems = []; S.recepNote = ''; S.recepFournisseur = ''; S.recepFournisseurSearch = ''; S.recepFournisseurOpen = false;
       recepStopCamera();
       await loadRecepHistory();
     }
@@ -2378,6 +2451,86 @@ function buildReception() {
   );
   tableCard.appendChild(tableHead);
 
+  // ── Barre de recherche fournisseur ──
+  const fourWrap = el('div', { cls: 'recep-fourn-wrap' });
+  const fourLabel = el('div', { cls: 'recep-fourn-label' }, iconEl('truck', 13), ' Fournisseur', el('span', { style: { color: 'var(--danger)', marginLeft: '4px' } }, '*'));
+  fourWrap.appendChild(fourLabel);
+  const fourSearchWrap = el('div', { cls: 'recep-fourn-search-wrap' });
+  const fourInp = el('input', {
+    cls: 'recep-fourn-inp' + (S.recepFournisseur ? ' recep-fourn-selected' : ''),
+    attrs: {
+      type: 'text',
+      placeholder: S.recepFournisseur || 'Rechercher un fournisseur…',
+      autocomplete: 'off',
+      autocorrect: 'off',
+      spellcheck: 'false',
+      readonly: S.recepFournisseur ? 'true' : null,
+    },
+  });
+  fourInp.value = S.recepFournisseurSearch || '';
+  if (S.recepFournisseur) {
+    // Afficher le fournisseur sélectionné + bouton pour changer
+    fourInp.value = S.recepFournisseur;
+    fourInp.setAttribute('readonly', 'true');
+    const clearBtn = el('button', { cls: 'recep-fourn-clear', on: { click: (e) => {
+      e.stopPropagation();
+      S.recepFournisseur = ''; S.recepFournisseurSearch = ''; S.recepFournisseurOpen = false;
+      renderContent();
+      setTimeout(() => { const i = document.querySelector('.recep-fourn-inp'); if (i) { i.focus(); } }, 50);
+    }}}, '✕');
+    fourSearchWrap.append(fourInp, clearBtn);
+  } else {
+    fourSearchWrap.appendChild(fourInp);
+    // Dropdown suggestions
+    const dropdown = el('div', { cls: 'recep-fourn-dropdown' + (S.recepFournisseurOpen ? ' open' : '') });
+    const query = S.recepFournisseurSearch || '';
+    const suggestions = query ? fournisseurSuggestions(query) : [];
+    if (S.recepFournisseurOpen && suggestions.length > 0) {
+      suggestions.forEach(f => {
+        const item = el('div', { cls: 'recep-fourn-item', on: { mousedown: (e) => {
+          e.preventDefault(); // évite blur avant click
+          S.recepFournisseur = f.nom;
+          S.recepFournisseurSearch = '';
+          S.recepFournisseurOpen = false;
+          renderContent();
+        }}},
+          el('span', { cls: 'recep-fourn-item-nom' }, f.nom),
+          el('span', { cls: 'recep-fourn-item-cert' }, f.certificat)
+        );
+        dropdown.appendChild(item);
+      });
+      fourSearchWrap.appendChild(dropdown);
+    } else if (S.recepFournisseurOpen && query && suggestions.length === 0) {
+      dropdown.appendChild(el('div', { cls: 'recep-fourn-empty' }, 'Aucun fournisseur trouvé'));
+      fourSearchWrap.appendChild(dropdown);
+    }
+    // Events sur l'input
+    fourInp.addEventListener('input', (e) => {
+      S.recepFournisseurSearch = e.target.value;
+      S.recepFournisseurOpen = true;
+      renderContent();
+      setTimeout(() => { const i = document.querySelector('.recep-fourn-inp:not([readonly])'); if (i) { i.focus(); i.setSelectionRange(e.target.value.length, e.target.value.length); } }, 30);
+    });
+    fourInp.addEventListener('focus', () => {
+      S.recepFournisseurOpen = true;
+      renderContent();
+      setTimeout(() => { const i = document.querySelector('.recep-fourn-inp:not([readonly])'); if (i) i.focus(); }, 30);
+    });
+    fourInp.addEventListener('blur', () => {
+      // Petit délai pour laisser le temps au mousedown sur un item
+      setTimeout(() => { S.recepFournisseurOpen = false; renderContent(); }, 200);
+    });
+  }
+  fourWrap.appendChild(fourSearchWrap);
+  // Afficher le certificat FSC si fournisseur sélectionné
+  if (S.recepFournisseur) {
+    const fsc = FOURNISSEURS_FSC.find(f => f.nom === S.recepFournisseur);
+    if (fsc) {
+      fourWrap.appendChild(el('div', { cls: 'recep-fourn-fsc' }, 'Certificat FSC : ', el('strong', null, fsc.certificat), ' — Licence : ', el('strong', null, fsc.licence)));
+    }
+  }
+  tableCard.appendChild(fourWrap);
+
   if (S.recepItems.length === 0) {
     tableCard.appendChild(el('div', { cls: 'recep-empty' }, 'Aucune bobine scannée — commencez par activer le scan ou saisissez un code manuellement'));
   } else {
@@ -2440,6 +2593,7 @@ function buildReception() {
         el('span', { cls: 'recep-hist-date' }, dateStr),
         el('span', { cls: 'recep-hist-count' }, lot.nb_bobines + ' bobine' + (lot.nb_bobines !== 1 ? 's' : '')),
         el('span', { cls: 'recep-hist-note' }, lot.note || ''),
+        el('span', { cls: 'recep-hist-four' }, lot.fournisseur || ''),
         el('span', { cls: 'recep-hist-user' }, lot.created_by_name || '')
       );
       hist.appendChild(row);

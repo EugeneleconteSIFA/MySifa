@@ -711,6 +711,15 @@ def _migrate(conn):
         conn.execute("CREATE INDEX IF NOT EXISTS idx_fab_mat_machine ON fab_matieres_utilisees(machine_id, scanned_at)")
 
     _ensure_schema_migrations_table(conn)
+    # Migration v3 : ajout colonnes fournisseur / certificat_fsc sur stock_receptions
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=3 LIMIT 1").fetchone():
+        existing_sr = {row[1] for row in conn.execute("PRAGMA table_info(stock_receptions)").fetchall()}
+        if "fournisseur" not in existing_sr:
+            conn.execute("ALTER TABLE stock_receptions ADD COLUMN fournisseur TEXT")
+        if "certificat_fsc" not in existing_sr:
+            conn.execute("ALTER TABLE stock_receptions ADD COLUMN certificat_fsc TEXT")
+        _record_schema_migration(conn, 3, "add_fournisseur_certificat_fsc_to_receptions")
+
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=2 LIMIT 1").fetchone():
         conn.execute(
             "UPDATE users SET role=? WHERE LOWER(TRIM(email))=?",
