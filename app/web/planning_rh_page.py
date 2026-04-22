@@ -206,8 +206,9 @@ input,select,textarea{font-family:inherit;color:var(--text)}
   padding:6px 12px 6px 28px!important;font-size:12px;font-weight:600;
   color:var(--text2);white-space:nowrap;
   position:sticky;left:0;z-index:2;background:var(--bg)!important;
-  height:100%;
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
 }
+.rh-label-content{flex:1}
 .rh-cell{min-height:36px;display:flex;flex-wrap:wrap;gap:5px;align-items:center;padding:4px 6px}
 .rh-chip{
   display:inline-flex;align-items:center;gap:5px;padding:4px 8px;
@@ -1024,16 +1025,13 @@ function buildPlanningGrid(){
         // Label de ligne
         const lbl=document.createElement('td');
         lbl.className='rh-poste-label';
-        lbl.style.display='flex';
-        lbl.style.alignItems='center';
-        lbl.style.justifyContent='space-between';
         if(S.detailMode){
           const hrsStr=cr.hours
             ?`<div style="font-size:9px;color:var(--muted);font-weight:400;margin-top:1px">Lun-Jeu ${cr.hours}${cr.hours_fri?' · Ven '+cr.hours_fri:''}</div>`
             :'';
-          lbl.innerHTML=`<div><div class="${isCur?'rh-week-cur':''}"><strong>S${wn}</strong> <span style="font-weight:400;font-size:10px">${fmtDateShort(mon)}–${fmtDateShort(sun)}</span></div><div style="font-size:11px;color:var(--muted)">${cr.label}</div>${hrsStr}</div>`;
+          lbl.innerHTML=`<div class="rh-label-content"><div class="${isCur?'rh-week-cur':''}"><strong>S${wn}</strong> <span style="font-weight:400;font-size:10px">${fmtDateShort(mon)}–${fmtDateShort(sun)}</span></div><div style="font-size:11px;color:var(--muted)">${cr.label}</div>${hrsStr}</div>`;
         }else{
-          lbl.innerHTML=`<div><div class="${isCur?'rh-week-cur':''}"><strong>S${wn}</strong></div><div style="font-size:11px;color:var(--muted)">${cr.label}</div></div>`;
+          lbl.innerHTML=`<div class="rh-label-content"><div class="${isCur?'rh-week-cur':''}"><strong>S${wn}</strong></div><div style="font-size:11px;color:var(--muted)">${cr.label}</div></div>`;
         }
         // Boutons d'action dans la première colonne
         if(S.isEditor){

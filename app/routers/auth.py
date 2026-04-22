@@ -366,25 +366,18 @@ async def update_user(user_id: int, request: Request):
         if "access_overrides" in body:
             ao_sql = _normalize_access_overrides_payload(body.get("access_overrides"))
         else:
-            ao_sql = None
+            ao_sql = ex.get("access_overrides")
 
         # identifiant: générer si vide (ou si absent en base) à partir du nom, puis assurer unicité.
         if not ident_in:
             ident_in = _default_identifiant_from_nom(str(nom or ""))
         ident_sql = _ensure_unique_identifiant(conn, ident_in, exclude_user_id=user_id) if ident_in else ""
 
-        if "access_overrides" in body:
-            conn.execute(
-                """UPDATE users SET nom=?,email=?,identifiant=?,role=?,operateur_lie=?,actif=?,telephone=?,
-                   password_hash=?,access_overrides=?,machine_id=? WHERE id=?""",
-                (nom, email, ident_sql or None, role_eff, op, actif, tel, pwd_hash, ao_sql, machine_id, user_id),
-            )
-        else:
-            conn.execute(
-                """UPDATE users SET nom=?,email=?,identifiant=?,role=?,operateur_lie=?,actif=?,telephone=?,
-                   password_hash=?,machine_id=? WHERE id=?""",
-                (nom, email, ident_sql or None, role_eff, op, actif, tel, pwd_hash, machine_id, user_id),
-            )
+        conn.execute(
+            """UPDATE users SET nom=?,email=?,identifiant=?,role=?,operateur_lie=?,actif=?,telephone=?,
+               password_hash=?,access_overrides=?,machine_id=? WHERE id=?""",
+            (nom, email, ident_sql or None, role_eff, op, actif, tel, pwd_hash, ao_sql, machine_id, user_id),
+        )
         conn.commit()
 
     return {"success": True}
