@@ -249,6 +249,23 @@ input,select,textarea{font-family:inherit;color:var(--text)}
 }
 .rh-toolbar-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 .rh-toolbar-icon{font-size:14px}
+.rh-row-dup-btn{
+  background:var(--card);border:1px solid var(--border);color:var(--text);
+  border-radius:4px;width:20px;height:20px;font-size:12px;font-weight:700;
+  cursor:pointer;display:inline-flex;align-items:center;justify-content:center;
+  transition:all .15s;margin-left:8px;flex-shrink:0;
+}
+.rh-row-dup-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.rh-row-btns{
+  display:flex;gap:4px;margin-left:8px;flex-shrink:0;
+}
+.rh-row-del-btn{
+  background:var(--card);border:1px solid var(--border);color:var(--text);
+  border-radius:4px;width:20px;height:20px;font-size:14px;font-weight:700;
+  cursor:pointer;display:inline-flex;align-items:center;justify-content:center;
+  transition:all .15s;
+}
+.rh-row-del-btn:hover{border-color:var(--danger);color:var(--danger);background:rgba(248,113,113,.1)}
 
 /* Congé indicator on cell */
 .rh-conge-badge{
@@ -733,6 +750,24 @@ async function duplicateAllAssignmentsToNextWeek(semaine, machineCode, machineId
   render();
 }
 
+async function deleteRowAssignments(semaine, machineCode, creneau){
+  const rowAssignments = S.planning.filter(a => a.semaine === semaine && (a.machine_code === machineCode || (machineCode === 'LOG' && a.poste === 'logistique') || (machineCode === 'RESP' && a.poste === 'resp_atelier')) && a.creneau === creneau);
+  if(!rowAssignments.length){
+    toast('Aucune affectation à supprimer','warn');
+    return;
+  }
+  let count = 0;
+  for(const a of rowAssignments){
+    try{
+      await api('/planning/'+a.id,{method:'DELETE'});
+      S.planning = S.planning.filter(p => p.id !== a.id);
+      count++;
+    }catch(e){toast('Erreur pour '+a.user_nom+': '+e.message,'error');}
+  }
+  if(count>0) toast(count+' affectation(s) supprimée(s)','success');
+  render();
+}
+
 async function submitConge(){
   const f=S.congeForm;
   if(!f.user_id||!f.date_debut||!f.date_fin||!f.nb_jours){toast('Remplissez tous les champs obligatoires','error');return;}
@@ -941,18 +976,6 @@ function buildPlanningGrid(){
     mhdr.innerHTML=`<span class="rh-machine-dot" style="background:${mdef.color}"></span>${mdef.label}`;
     block.appendChild(mhdr);
 
-    // Toolbar avec bouton de duplication (au-dessus du tableau)
-    if(S.isEditor){
-      const toolbar=document.createElement('div');
-      toolbar.className='rh-machine-toolbar';
-      const dupBtn=document.createElement('button');
-      dupBtn.className='rh-toolbar-btn';
-      dupBtn.innerHTML=`<span class="rh-toolbar-icon">↓</span> Copier vers semaine suivante`;
-      dupBtn.onclick=()=>duplicateAllAssignmentsToNextWeek(weeks[0],mdef.code,getMachineId(mdef.code));
-      toolbar.appendChild(dupBtn);
-      block.appendChild(toolbar);
-    }
-
     const table=document.createElement('table');
     table.className='rh-grid';
 
@@ -995,6 +1018,28 @@ function buildPlanningGrid(){
         }else{
           lbl.innerHTML=`<div class="${isCur?'rh-week-cur':''}"><strong>S${wn}</strong></div><div style="font-size:11px;color:var(--muted)">${cr.label}</div>`;
         }
+        // Boutons d'action dans la première colonne
+        if(S.isEditor){
+          const btns=document.createElement('div');
+          btns.className='rh-row-btns';
+          // Bouton de suppression
+          const delBtn=document.createElement('button');
+          delBtn.className='rh-row-del-btn';
+          delBtn.title='Supprimer toutes les affectations';
+          delBtn.innerHTML='×';
+          delBtn.onclick=()=>deleteRowAssignments(ws,mdef.code,cr.key);
+          btns.appendChild(delBtn);
+          // Bouton de duplication (sauf dernière semaine)
+          if(idx < weeks.length - 1){
+            const dupBtn=document.createElement('button');
+            dupBtn.className='rh-row-dup-btn';
+            dupBtn.title='Copier vers semaine suivante';
+            dupBtn.innerHTML='↓';
+            dupBtn.onclick=()=>duplicateAllAssignmentsToNextWeek(ws,mdef.code,getMachineId(mdef.code));
+            btns.appendChild(dupBtn);
+          }
+          lbl.appendChild(btns);
+        }
         row.appendChild(lbl);
 
         // Cellule par poste
@@ -1025,13 +1070,10 @@ function buildPlanningGrid(){
             cell.appendChild(chip);
           });
 
+          // Bouton d'ajout (clic sur la cellule vide)
           if(S.isEditor){
-            const addBtn=document.createElement('button');
-            addBtn.className='rh-add-btn';
-            addBtn.title='Ajouter';
-            addBtn.innerHTML='+';
-            addBtn.onclick=()=>openAddPersonModal({semaine:ws,machineCode:mdef.code,poste,creneau:cr.key,machineId:getMachineId(mdef.code)});
-            cell.appendChild(addBtn);
+            cell.onclick=()=>openAddPersonModal({semaine:ws,machineCode:mdef.code,poste,creneau:cr.key,machineId:getMachineId(mdef.code)});
+            cell.style.cursor='pointer';
           }
 
           td.appendChild(cell);
