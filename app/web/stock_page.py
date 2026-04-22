@@ -628,6 +628,7 @@ let S = {
   recepNote: '',           // note optionnelle sur la réception
   recepScanning: false,    // caméra active
   recepStream: null,       // MediaStream (caméra)
+  recepBarcodeReader: null, // ZXing reader instance
   recepHistory: [],        // lots passés (chargés depuis API)
   recepHistLoading: false,
   recepExpandedId: null,   // lot ouvert dans l'historique
@@ -638,7 +639,32 @@ let S = {
 };
 
 // ── Fournisseurs FSC (chargés depuis la base via API) ──
-let FOURNISSEURS_FSC = [];
+let FOURNISSEURS_FSC = [
+  { nom: 'Avery', licence: 'FSC-C004451', certificat: 'CU-COC-807907' },
+  { nom: 'Fedrigoni', licence: 'FSC-C011937', certificat: 'FCBA-COC-000059' },
+  { nom: 'Feys', licence: 'FSC-C017070', certificat: 'SGSCH-COC-004366' },
+  { nom: 'Burgo / Mosaico', licence: 'FSC-C004657', certificat: 'SGSCH-COC-002122' },
+  { nom: 'Foucherf', licence: 'FSC-C215283', certificat: 'BV-COC-215283' },
+  { nom: 'Frimpeks UK', licence: 'FSC-C160714', certificat: 'INT-COC-002144' },
+  { nom: 'Frimpeks Italy', licence: 'FSC-C164660', certificat: 'INT-COC-001611' },
+  { nom: 'Frimpeks Turkey', licence: 'FSC-C129558', certificat: 'NEO-COC-129558' },
+  { nom: 'Grand Ouest', licence: 'FSC-C148933', certificat: 'IMO-COC-209345' },
+  { nom: 'Guyenne', licence: 'FSC-C114338', certificat: 'FCBA-COC-000352' },
+  { nom: 'Itasa', licence: 'FSC-C160893', certificat: 'AEN-COC-000369' },
+  { nom: 'Kanzan', licence: 'FSC-C007179', certificat: 'TUVDC-COC-100605' },
+  { nom: 'Lefrancq', licence: 'FSC-C135176', certificat: 'FCBA-COC-000478' },
+  { nom: 'Likexin', licence: 'FSC-C128270', certificat: 'ESTS-COC-242264' },
+  { nom: 'Mitsubishi', licence: 'FSC-C014541', certificat: 'SGSCH-COC-002664' },
+  { nom: 'Rheno', licence: 'FSC-C104291', certificat: 'CU-COC-815304' },
+  { nom: 'Ricoh', licence: 'FSC-C001858', certificat: 'IMO-COC-261828' },
+  { nom: 'Sato', licence: 'FSC-C207483', certificat: 'TUEV-COC-002274' },
+  { nom: 'Shine', licence: 'FSC-C210420', certificat: 'ESTS-COC-241843' },
+  { nom: 'Suzhou', licence: 'FSC-C140235', certificat: 'RR-COC-000252' },
+  { nom: 'Techmay', licence: 'FSC-C199493', certificat: 'FCBA-COC-000616' },
+  { nom: 'Torrespapel', licence: 'FSC-C011032', certificat: 'SGSCH-COC-003753' },
+  { nom: 'UPM', licence: 'FSC-C012530', certificat: 'SGSCH-COC-004879' },
+  { nom: 'Xinzhu', licence: 'FSC-C177953', certificat: 'SGSHK-COC-331526' },
+];
 
 async function loadFournisseursFSC() {
   try {
@@ -2269,6 +2295,14 @@ async function recepStartCamera() {
   const video = document.getElementById('recep-video');
   if (!video) return;
   try {
+    // Charger ZXing si nécessaire
+    if (typeof ZXing === 'undefined') {
+      await new Promise((res, rej) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js';
+        s.onload = res; s.onerror = rej; document.head.appendChild(s);
+      });
+    }
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
     });
@@ -2286,6 +2320,7 @@ async function recepStartCamera() {
 
 function recepStopCamera() {
   if (S.recepStream) { S.recepStream.getTracks().forEach(t => t.stop()); S.recepStream = null; }
+  if (S.recepBarcodeReader) { try { S.recepBarcodeReader.reset(); } catch(e) {} S.recepBarcodeReader = null; }
   S.recepScanning = false;
   renderContent();
 }
@@ -2298,22 +2333,33 @@ async function recepScanLoop() {
   const video = document.getElementById('recep-video');
   if (!video || video.readyState < 2) { setTimeout(recepScanLoop, 200); return; }
 
-  if (!('BarcodeDetector' in window)) {
-    // BarcodeDetector non disponible — l'utilisateur doit utiliser la saisie manuelle
-    showToast('Scan automatique non disponible sur ce navigateur — utilisez la saisie manuelle', 'error');
-    recepStopCamera(); return;
+  if (typeof ZXing === 'undefined') {
+    showToast('Chargement du scanner...', 'warn');
+    setTimeout(recepScanLoop, 500);
+    return;
   }
 
-  const detector = new BarcodeDetector({ formats: [
-    'code_128','code_39','ean_13','ean_8','upc_a','upc_e','qr_code','data_matrix','aztec','pdf417'
-  ]});
+  const hints = new Map();
+  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+    ZXing.BarcodeFormat.CODE_128,
+    ZXing.BarcodeFormat.CODE_39,
+    ZXing.BarcodeFormat.EAN_13,
+    ZXing.BarcodeFormat.EAN_8,
+    ZXing.BarcodeFormat.UPC_A,
+    ZXing.BarcodeFormat.UPC_E,
+    ZXing.BarcodeFormat.QR_CODE,
+    ZXing.BarcodeFormat.DATA_MATRIX,
+    ZXing.BarcodeFormat.AZTEC,
+    ZXing.BarcodeFormat.PDF_417
+  ]);
+  S.recepBarcodeReader = new ZXing.BrowserMultiFormatReader(hints);
 
   const loop = async () => {
     if (!S.recepScanning) return;
     try {
-      const barcodes = await detector.detect(video);
-      if (barcodes.length > 0) {
-        const code = barcodes[0].rawValue;
+      const result = await S.recepBarcodeReader.decodeFromVideoElement(video);
+      if (result) {
+        const code = result.getText().trim();
         const now = Date.now();
         // Éviter les doublons immédiats (même code dans les 2 secondes)
         if (code !== _recepLastCode || now - _recepLastCodeTs > 2000) {

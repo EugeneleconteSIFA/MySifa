@@ -6846,8 +6846,8 @@ function render(){
   }
   // contact modal for expe is rendered inside renderExpe()
 
-  // Calculette flottante (MyStock + MyExpé)
-  if(S.app==='stock'||S.app==='expe'){
+  // Calculette flottante (MyStock + MyProd + MyCompta + MyExpé)
+  if(S.app==='stock'||S.app==='prod'||S.app==='compta'||S.app==='expe'){
     window._calc_mount && window._calc_mount();
   } else {
     const fab=document.getElementById('_calc_fab');
