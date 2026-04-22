@@ -637,33 +637,15 @@ let S = {
   recepFournisseurOpen: false, // dropdown ouvert
 };
 
-// ── Fournisseurs FSC (issus du tableau Certifications) ──
-const FOURNISSEURS_FSC = [
-  { nom: 'Avery', licence: 'FSC-C004451', certificat: 'CU-COC-807907' },
-  { nom: 'Fedrigoni', licence: 'FSC-C011937', certificat: 'FCBA-COC-000059' },
-  { nom: 'Feys', licence: 'FSC-C017070', certificat: 'SGSCH-COC-004366' },
-  { nom: 'Burgo / Mosaico', licence: 'FSC-C004657', certificat: 'SGSCH-COC-002122' },
-  { nom: 'Foucherf', licence: 'FSC-C215283', certificat: 'BV-COC-215283' },
-  { nom: 'Frimpeks UK', licence: 'FSC-C160714', certificat: 'INT-COC-002144' },
-  { nom: 'Frimpeks Italy', licence: 'FSC-C164660', certificat: 'INT-COC-001611' },
-  { nom: 'Frimpeks Turkey', licence: 'FSC-C129558', certificat: 'NEO-COC-129558' },
-  { nom: 'Grand Ouest', licence: 'FSC-C148933', certificat: 'IMO-COC-209345' },
-  { nom: 'Guyenne', licence: 'FSC-C114338', certificat: 'FCBA-COC-000352' },
-  { nom: 'Itasa', licence: 'FSC-C160893', certificat: 'AEN-COC-000369' },
-  { nom: 'Kanzan', licence: 'FSC-C007179', certificat: 'TUVDC-COC-100605' },
-  { nom: 'Lefrancq', licence: 'FSC-C135176', certificat: 'FCBA-COC-000478' },
-  { nom: 'Likexin', licence: 'FSC-C128270', certificat: 'ESTS-COC-242264' },
-  { nom: 'Mitsubishi', licence: 'FSC-C014541', certificat: 'SGSCH-COC-002664' },
-  { nom: 'Rheno', licence: 'FSC-C104291', certificat: 'CU-COC-815304' },
-  { nom: 'Ricoh', licence: 'FSC-C001858', certificat: 'IMO-COC-261828' },
-  { nom: 'Sato', licence: 'FSC-C207483', certificat: 'TUEV-COC-002274' },
-  { nom: 'Shine', licence: 'FSC-C210420', certificat: 'ESTS-COC-241843' },
-  { nom: 'Suzhou', licence: 'FSC-C140235', certificat: 'RR-COC-000252' },
-  { nom: 'Techmay', licence: 'FSC-C199493', certificat: 'FCBA-COC-000616' },
-  { nom: 'Torrespapel', licence: 'FSC-C011032', certificat: 'SGSCH-COC-003753' },
-  { nom: 'UPM', licence: 'FSC-C012530', certificat: 'SGSCH-COC-004879' },
-  { nom: 'Xinzhu', licence: 'FSC-C177953', certificat: 'SGSHK-COC-331526' },
-];
+// ── Fournisseurs FSC (chargés depuis la base via API) ──
+let FOURNISSEURS_FSC = [];
+
+async function loadFournisseursFSC() {
+  try {
+    const data = await api('/api/stock/fournisseurs');
+    if (Array.isArray(data) && data.length) FOURNISSEURS_FSC = data;
+  } catch(e) { /* fallback: keep existing array */ }
+}
 
 function fournisseurSuggestions(query) {
   if (!query) return [];
@@ -2460,14 +2442,40 @@ function buildReception() {
     cls: 'recep-fourn-inp' + (S.recepFournisseur ? ' recep-fourn-selected' : ''),
     attrs: {
       type: 'text',
-      placeholder: S.recepFournisseur || 'Rechercher un fournisseur…',
+      placeholder: 'Rechercher un fournisseur…',
       autocomplete: 'off',
       autocorrect: 'off',
       spellcheck: 'false',
-      readonly: S.recepFournisseur ? 'true' : null,
     },
   });
-  fourInp.value = S.recepFournisseurSearch || '';
+  const dropdown = el('div', { cls: 'recep-fourn-dropdown' });
+
+  // Helper: update dropdown content without destroying the input
+  function updateFourDropdown(query) {
+    dropdown.innerHTML = '';
+    dropdown.classList.add('open');
+    const suggestions = query ? fournisseurSuggestions(query) : [];
+    if (suggestions.length > 0) {
+      suggestions.forEach(f => {
+        const item = el('div', { cls: 'recep-fourn-item', on: { mousedown: (e) => {
+          e.preventDefault(); // évite blur avant click
+          S.recepFournisseur = f.nom;
+          S.recepFournisseurSearch = '';
+          S.recepFournisseurOpen = false;
+          renderContent(); // full re-render only on selection
+        }}},
+          el('span', { cls: 'recep-fourn-item-nom' }, f.nom),
+          el('span', { cls: 'recep-fourn-item-cert' }, f.certificat)
+        );
+        dropdown.appendChild(item);
+      });
+    } else if (query) {
+      dropdown.appendChild(el('div', { cls: 'recep-fourn-empty' }, 'Aucun fournisseur trouvé'));
+    } else {
+      dropdown.classList.remove('open');
+    }
+  }
+
   if (S.recepFournisseur) {
     // Afficher le fournisseur sélectionné + bouton pour changer
     fourInp.value = S.recepFournisseur;
@@ -2476,51 +2484,24 @@ function buildReception() {
       e.stopPropagation();
       S.recepFournisseur = ''; S.recepFournisseurSearch = ''; S.recepFournisseurOpen = false;
       renderContent();
-      setTimeout(() => { const i = document.querySelector('.recep-fourn-inp'); if (i) { i.focus(); } }, 50);
+      setTimeout(() => { const i = document.querySelector('.recep-fourn-inp:not([readonly])'); if (i) i.focus(); }, 50);
     }}}, '✕');
     fourSearchWrap.append(fourInp, clearBtn);
   } else {
-    fourSearchWrap.appendChild(fourInp);
-    // Dropdown suggestions
-    const dropdown = el('div', { cls: 'recep-fourn-dropdown' + (S.recepFournisseurOpen ? ' open' : '') });
-    const query = S.recepFournisseurSearch || '';
-    const suggestions = query ? fournisseurSuggestions(query) : [];
-    if (S.recepFournisseurOpen && suggestions.length > 0) {
-      suggestions.forEach(f => {
-        const item = el('div', { cls: 'recep-fourn-item', on: { mousedown: (e) => {
-          e.preventDefault(); // évite blur avant click
-          S.recepFournisseur = f.nom;
-          S.recepFournisseurSearch = '';
-          S.recepFournisseurOpen = false;
-          renderContent();
-        }}},
-          el('span', { cls: 'recep-fourn-item-nom' }, f.nom),
-          el('span', { cls: 'recep-fourn-item-cert' }, f.certificat)
-        );
-        dropdown.appendChild(item);
-      });
-      fourSearchWrap.appendChild(dropdown);
-    } else if (S.recepFournisseurOpen && query && suggestions.length === 0) {
-      dropdown.appendChild(el('div', { cls: 'recep-fourn-empty' }, 'Aucun fournisseur trouvé'));
-      fourSearchWrap.appendChild(dropdown);
-    }
-    // Events sur l'input
+    fourInp.value = S.recepFournisseurSearch || '';
+    fourSearchWrap.append(fourInp, dropdown);
+    // Events sur l'input — DOM patching, NO renderContent
     fourInp.addEventListener('input', (e) => {
       S.recepFournisseurSearch = e.target.value;
       S.recepFournisseurOpen = true;
-      renderContent();
-      setTimeout(() => { const i = document.querySelector('.recep-fourn-inp:not([readonly])'); if (i) { i.focus(); i.setSelectionRange(e.target.value.length, e.target.value.length); } }, 30);
+      updateFourDropdown(e.target.value);
     });
     fourInp.addEventListener('focus', () => {
-      if (!S.recepFournisseurOpen) {
-        S.recepFournisseurOpen = true;
-        renderContent();
-        setTimeout(() => { const i = document.querySelector('.recep-fourn-inp:not([readonly])'); if (i) i.focus(); }, 30);
-      }
+      S.recepFournisseurOpen = true;
+      if (S.recepFournisseurSearch) updateFourDropdown(S.recepFournisseurSearch);
     });
     fourInp.addEventListener('blur', () => {
-      // Petit délai pour laisser le temps au mousedown sur un item
-      setTimeout(() => { S.recepFournisseurOpen = false; renderContent(); }, 200);
+      setTimeout(() => { dropdown.classList.remove('open'); S.recepFournisseurOpen = false; }, 200);
     });
   }
   fourWrap.appendChild(fourSearchWrap);
@@ -2820,6 +2801,8 @@ async function init() {
   S.stockReadOnly = (user.role === 'commercial');
   // Fabrication : accès restreint à l'onglet traça uniquement
   S.tracaOnly = (user.role === 'fabrication');
+  // Charger les fournisseurs FSC
+  await loadFournisseursFSC();
   // Onglet initial via URL param ?tab=...
   const urlTab = new URLSearchParams(window.location.search).get('tab');
   if (urlTab && ['dashboard','stock','inventaire','reception','traca'].includes(urlTab)) {

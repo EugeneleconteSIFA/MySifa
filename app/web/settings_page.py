@@ -122,6 +122,7 @@ body.light .btn-sec:hover{box-shadow:0 0 0 1px rgba(8,145,178,.35),0 0 18px rgba
 body.light .users-search input:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .users-search .hint{font-size:11px;color:var(--muted);white-space:nowrap}
 .tabs{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
+.nav-group-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);padding:8px 12px 2px;opacity:.7}
 .hidden{display:none}
 .legend{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
 .legend .item{padding:12px;border:1px solid var(--border);border-radius:10px;font-size:12px}
@@ -148,7 +149,10 @@ body.light .users-search input:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
   <aside class="sidebar">
     <div class="logo">My<span>Sifa</span><div class="logo-sub">by SIFA</div></div>
     <div class="nav-scroll tabs" style="width:100%;margin:0">
+      <div class="nav-group-label">Base</div>
       <button type="button" class="nav-btn active" data-tab="users">Utilisateurs</button>
+      <button type="button" class="nav-btn" data-tab="fournisseurs">Fournisseurs</button>
+      <div class="nav-group-label" style="margin-top:8px">Accès</div>
       <button type="button" class="nav-btn" data-tab="matrix">Matrice d'accès</button>
       <button type="button" class="nav-btn" data-tab="defaults">Référentiel rôles</button>
     </div>
@@ -201,6 +205,11 @@ body.light .users-search input:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
     </div>
 
     <section id="panel-users">
+    <div class="tabs" style="margin-bottom:14px">
+      <button type="button" class="btn btn-sec sub-tab-btn active" data-subtab="users-list">Liste</button>
+      <button type="button" class="btn btn-sec sub-tab-btn" data-subtab="users-matrix">Matrice</button>
+      <button type="button" class="btn btn-sec sub-tab-btn" data-subtab="users-defaults">Référentiel</button>
+    </div>
       <div class="card">
         <h2>Ajouter un utilisateur</h2>
         <div class="form-grid">
@@ -227,6 +236,11 @@ body.light .users-search input:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
     </section>
 
     <section id="panel-matrix" class="hidden">
+    <div class="tabs" style="margin-bottom:14px">
+      <button type="button" class="btn btn-sec sub-tab-btn" data-subtab="users-list">Liste</button>
+      <button type="button" class="btn btn-sec sub-tab-btn active" data-subtab="users-matrix">Matrice</button>
+      <button type="button" class="btn btn-sec sub-tab-btn" data-subtab="users-defaults">Référentiel</button>
+    </div>
       <div class="card">
         <h2>Qui a accès à quoi</h2>
         <p class="sub" style="margin-top:-8px">Cases à cocher : accès effectif (héritage du rôle ou surcharges). « Perso » = différent du défaut du rôle. Paramètres reste réservé au rôle super admin. Les super admins ont tout ; la ligne est en lecture seule.</p>
@@ -235,10 +249,47 @@ body.light .users-search input:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
     </section>
 
     <section id="panel-defaults" class="hidden">
+    <div class="tabs" style="margin-bottom:14px">
+      <button type="button" class="btn btn-sec sub-tab-btn" data-subtab="users-list">Liste</button>
+      <button type="button" class="btn btn-sec sub-tab-btn" data-subtab="users-matrix">Matrice</button>
+      <button type="button" class="btn btn-sec sub-tab-btn active" data-subtab="users-defaults">Référentiel</button>
+    </div>
       <div class="card">
         <h2>Accès par défaut selon le rôle</h2>
         <p class="sub" style="margin-top:-8px">Chaque utilisateur hérite de ces accès selon son rôle assigné.</p>
         <div class="legend" id="role-legend"></div>
+      </div>
+    </section>
+
+    <section id="panel-fournisseurs" class="hidden">
+    <div class="tabs" style="margin-bottom:14px">
+      <button type="button" class="btn btn-sec four-sub-btn active" data-foursub="four-certifs">Certifications</button>
+      <button type="button" class="btn btn-sec four-sub-btn" data-foursub="four-hist">Historique</button>
+    </div>
+      <div id="four-certifs">
+        <div class="card">
+          <h2>Ajouter un fournisseur</h2>
+          <div class="form-grid">
+            <input type="text" id="cf-nom" placeholder="Nom du fournisseur" autocomplete="off">
+            <input type="text" id="cf-licence" placeholder="Code Licence FSC (ex: FSC-C004451)" autocomplete="off">
+            <input type="text" id="cf-certificat" placeholder="Code Certificat FSC (ex: CU-COC-807907)" autocomplete="off">
+          </div>
+          <button type="button" class="btn" id="cf-go">Ajouter</button>
+        </div>
+        <div class="card">
+          <h2>Fournisseurs enregistrés</h2>
+          <div class="table-wrap" id="four-table-wrap"></div>
+        </div>
+      </div>
+      <div id="four-hist" class="hidden">
+        <div class="card">
+          <h2>Historique des réceptions par fournisseur</h2>
+          <p class="sub" style="margin-top:-8px">Sélectionnez un fournisseur pour voir ses réceptions.</p>
+          <div class="form-grid" style="margin-bottom:12px">
+            <select id="fh-four"><option value="">— Choisir un fournisseur —</option></select>
+          </div>
+          <div id="fh-results"></div>
+        </div>
       </div>
     </section>
   </main>
@@ -311,9 +362,11 @@ function setTab(id) {
   document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === id);
   });
-  ['users', 'matrix', 'defaults'].forEach(p => {
-    document.getElementById('panel-' + p).classList.toggle('hidden', p !== id);
+  ['users', 'matrix', 'defaults', 'fournisseurs'].forEach(p => {
+    const el = document.getElementById('panel-' + p);
+    if (el) el.classList.toggle('hidden', p !== id);
   });
+  if (id === 'fournisseurs') loadFournisseurs();
 }
 
 document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
@@ -481,9 +534,14 @@ function renderUsersList(){
       u.telephone ? ('Tel: ' + esc(u.telephone)) : '',
     ].filter(Boolean).join(' · ');
     return '<div class="row-user">' +
-      '<div><strong>' + esc(u.nom) + '</strong> <span class="' + pillCls + '">' + esc(roleLabels[u.role] || u.role) + '</span>' +
-      (act ? '' : ' <span class="pill pill--inactive">Inactif</span>') +
-      '<div style="font-size:11px;color:var(--muted);margin-top:4px">' + esc(u.email) + (meta ? (' · ' + meta) : '') + '</div></div>' +
+      '<div style="display:flex;align-items:flex-start;gap:8px">' +
+        '<div><strong>' + esc(u.nom) + '</strong> <span class="' + pillCls + '">' + esc(roleLabels[u.role] || u.role) + '</span>' +
+        (act ? '' : ' <span class="pill pill--inactive">Inactif</span>') +
+        '<div style="font-size:11px;color:var(--muted);margin-top:4px">' + esc(u.email) + (meta ? (' · ' + meta) : '') + '</div></div>' +
+        '<button type="button" class="btn btn-sec copy-user-btn" data-copy="' + u.id + '" title="Copier les identifiants" style="padding:6px 8px">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>' +
+        '</button>' +
+      '</div>' +
       '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
       '<button type="button" class="btn btn-sec" data-edit="' + u.id + '">Modifier</button>' +
       '<button type="button" class="btn btn-sec" data-reset="' + u.id + '">Reset MDP</button>' +
@@ -496,6 +554,7 @@ function renderUsersList(){
   box.querySelectorAll('[data-reset]').forEach(b => b.onclick = () => resetPwd(Number(b.dataset.reset)));
   box.querySelectorAll('[data-off]').forEach(b => b.onclick = () => setActif(Number(b.dataset.off), 0));
   box.querySelectorAll('[data-on]').forEach(b => b.onclick = () => setActif(Number(b.dataset.on), 1));
+  box.querySelectorAll('[data-copy]').forEach(b => b.onclick = () => copyUserCredentials(Number(b.dataset.copy)));
 }
 
 async function setActif(id, v) {
@@ -515,6 +574,27 @@ async function resetPwd(id) {
     if (r && r.temp_password) alert('Mot de passe temporaire : ' + r.temp_password);
     toast('Mot de passe régénéré');
   } catch (e) { toast(e.message, true); }
+}
+
+async function copyUserCredentials(id) {
+  const u = usersAll.find(x => x.id === id);
+  if (!u) return;
+  const lines = [
+    'Nom : ' + (u.nom || ''),
+    'Email : ' + (u.email || ''),
+    'Identifiant : ' + (u.identifiant || ''),
+    'Rôle : ' + (roleLabels[u.role] || u.role || ''),
+  ];
+  if (u.operateur_lie) lines.push('Opérateur : ' + u.operateur_lie);
+  if (u.machine_nom) lines.push('Machine : ' + u.machine_nom);
+  if (u.telephone) lines.push('Téléphone : ' + u.telephone);
+  const text = lines.join('\n');
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('Identifiants copiés');
+  } catch (e) {
+    toast('Erreur copie : ' + e.message, true);
+  }
 }
 
 function syncCuRoleUI() {
@@ -687,6 +767,153 @@ async function loadMatrix() {
     return '<div class="item"><strong>' + esc(d.label) + '</strong> <code style="font-size:11px">' + esc(d.role) + '</code><div style="margin-top:8px;line-height:1.6">' + bits + '</div></div>';
   }).join('');
 }
+
+// ─── Fournisseurs FSC ──────────────────────────────────────────────
+
+let fournisseursAll = [];
+
+// Sub-tab navigation for fournisseurs
+document.querySelectorAll('.four-sub-btn').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.four-sub-btn').forEach(x => x.classList.toggle('active', x.dataset.foursub === b.dataset.foursub));
+    ['four-certifs', 'four-hist'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.toggle('hidden', id !== b.dataset.foursub);
+    });
+    if (b.dataset.foursub === 'four-hist') fillFourHistSelect();
+  });
+});
+
+async function loadFournisseurs() {
+  try {
+    const data = await api('/api/fournisseurs');
+    fournisseursAll = Array.isArray(data) ? data : [];
+  } catch (e) { fournisseursAll = []; toast(e.message, true); }
+  renderFournisseursTable();
+  fillFourHistSelect();
+}
+
+function renderFournisseursTable() {
+  const wrap = document.getElementById('four-table-wrap');
+  if (!wrap) return;
+  if (!fournisseursAll.length) {
+    wrap.innerHTML = '<p class="sub" style="padding:12px">Aucun fournisseur enregistré.</p>';
+    return;
+  }
+  wrap.innerHTML = '<table><thead><tr><th>Nom</th><th>Licence FSC</th><th>Certificat FSC</th><th></th></tr></thead><tbody>' +
+    fournisseursAll.map(f => '<tr>' +
+      '<td><strong>' + esc(f.nom) + '</strong></td>' +
+      '<td><code>' + esc(f.licence || '—') + '</code></td>' +
+      '<td><code>' + esc(f.certificat || '—') + '</code></td>' +
+      '<td style="display:flex;gap:6px;justify-content:flex-end">' +
+        '<button type="button" class="btn btn-sec" data-fedit="' + f.id + '">Modifier</button>' +
+        '<button type="button" class="btn btn-sec" data-fdel="' + f.id + '" style="color:var(--danger)">Supprimer</button>' +
+      '</td></tr>'
+    ).join('') + '</tbody></table>';
+  wrap.querySelectorAll('[data-fedit]').forEach(b => b.onclick = () => openEditFournisseur(Number(b.dataset.fedit)));
+  wrap.querySelectorAll('[data-fdel]').forEach(b => b.onclick = () => deleteFournisseur(Number(b.dataset.fdel)));
+}
+
+document.getElementById('cf-go').onclick = async () => {
+  const nom = document.getElementById('cf-nom').value.trim();
+  const licence = document.getElementById('cf-licence').value.trim();
+  const certificat = document.getElementById('cf-certificat').value.trim();
+  if (!nom) return toast('Nom du fournisseur requis', true);
+  try {
+    await api('/api/fournisseurs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nom, licence, certificat }),
+    });
+    toast('Fournisseur ajouté');
+    document.getElementById('cf-nom').value = '';
+    document.getElementById('cf-licence').value = '';
+    document.getElementById('cf-certificat').value = '';
+    await loadFournisseurs();
+  } catch (e) { toast(e.message, true); }
+};
+
+async function openEditFournisseur(id) {
+  const f = fournisseursAll.find(x => x.id === id);
+  if (!f) return;
+  const backdrop = document.createElement('div');
+  backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:800;display:flex;align-items:center;justify-content:center;padding:16px';
+  const dlg = document.createElement('div');
+  dlg.style.cssText = 'background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;max-width:440px;width:100%;max-height:90vh;overflow:auto';
+  dlg.innerHTML = '<h3 style="margin:0 0 12px;font-size:16px">Modifier le fournisseur</h3>' +
+    '<label class="sub">Nom</label><input id="ef-nom" value="' + esc(f.nom) + '" style="margin-bottom:10px">' +
+    '<label class="sub">Licence FSC</label><input id="ef-licence" value="' + esc(f.licence || '') + '" style="margin-bottom:10px" placeholder="ex: FSC-C004451">' +
+    '<label class="sub">Certificat FSC</label><input id="ef-certificat" value="' + esc(f.certificat || '') + '" style="margin-bottom:10px" placeholder="ex: CU-COC-807907">' +
+    '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">' +
+    '<button type="button" class="btn btn-sec" id="ef-cancel">Annuler</button>' +
+    '<button type="button" class="btn" id="ef-save">Enregistrer</button></div>';
+  dlg.querySelector('#ef-cancel').onclick = () => backdrop.remove();
+  dlg.querySelector('#ef-save').onclick = async () => {
+    const body = {
+      nom: dlg.querySelector('#ef-nom').value.trim(),
+      licence: dlg.querySelector('#ef-licence').value.trim(),
+      certificat: dlg.querySelector('#ef-certificat').value.trim(),
+    };
+    if (!body.nom) return toast('Nom requis', true);
+    try {
+      await api('/api/fournisseurs/' + id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      toast('Fournisseur mis à jour');
+      backdrop.remove();
+      await loadFournisseurs();
+    } catch (e) { toast(e.message, true); }
+  };
+  backdrop.appendChild(dlg);
+  backdrop.onclick = (e) => { if (e.target === backdrop) backdrop.remove(); };
+  document.body.appendChild(backdrop);
+}
+
+async function deleteFournisseur(id) {
+  const f = fournisseursAll.find(x => x.id === id);
+  if (!f) return;
+  if (!confirm('Supprimer le fournisseur "' + f.nom + '" ?')) return;
+  try {
+    await api('/api/fournisseurs/' + id, { method: 'DELETE' });
+    toast('Fournisseur supprimé');
+    await loadFournisseurs();
+  } catch (e) { toast(e.message, true); }
+}
+
+// Historique par fournisseur
+function fillFourHistSelect() {
+  const sel = document.getElementById('fh-four');
+  if (!sel) return;
+  const val = sel.value;
+  sel.innerHTML = '<option value="">— Choisir un fournisseur —</option>' +
+    fournisseursAll.map(f => '<option value="' + f.id + '">' + esc(f.nom) + '</option>').join('');
+  sel.value = val;
+}
+
+document.getElementById('fh-four').addEventListener('change', async function() {
+  const id = Number(this.value);
+  const box = document.getElementById('fh-results');
+  if (!id) { box.innerHTML = ''; return; }
+  box.innerHTML = '<p class="sub">Chargement…</p>';
+  try {
+    const data = await api('/api/fournisseurs/' + id + '/receptions');
+    const recs = data.receptions || [];
+    if (!recs.length) {
+      box.innerHTML = '<p class="sub">Aucune réception pour ce fournisseur.</p>';
+      return;
+    }
+    box.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Opérateur</th><th>Bobines</th><th>Certificat FSC</th><th>Note</th></tr></thead><tbody>' +
+      recs.map(r => '<tr>' +
+        '<td style="font-family:monospace;font-size:12px">' + esc((r.created_at || '').slice(0, 16).replace('T', ' ')) + '</td>' +
+        '<td>' + esc(r.created_by_name || '—') + '</td>' +
+        '<td>' + esc(r.nb_bobines) + '</td>' +
+        '<td><code>' + esc(r.certificat_fsc || '—') + '</code></td>' +
+        '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">' + esc(r.note || '') + '</td>' +
+      '</tr>').join('') + '</tbody></table></div>';
+  } catch (e) { box.innerHTML = '<p class="sub" style="color:var(--danger)">' + esc(e.message) + '</p>'; }
+});
 
 (async function init() {
   try {

@@ -696,6 +696,17 @@ def dashboard(request: Request):
 
 # ─── Réception matière ─────────────────────────────────────────────────────────
 
+@router.get("/api/stock/fournisseurs")
+def list_fournisseurs_stock(request: Request):
+    """Liste des fournisseurs FSC pour la réception matière (accès stock)."""
+    user = require_stock(request)
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT id, nom, licence, certificat FROM fournisseurs_fsc ORDER BY nom COLLATE NOCASE ASC"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 @router.get("/api/stock/receptions")
 def list_receptions(request: Request, limit: int = 50):
     """Historique des réceptions de bobines."""

@@ -1,6 +1,6 @@
 """Paramètres & matrice d'accès — super administrateur uniquement."""
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, HTTPException
 
 from config import (
     ASSIGNABLE_ROLES,
@@ -114,3 +114,106 @@ def access_matrix(request: Request):
         "matrix": matrix,
         "role_defaults": defaults,
     }
+
+
+# ─── Fournisseurs FSC ──────────────────────────────────────────────
+
+@router.get("/api/fournisseurs")
+def list_fournisseurs(request: Request):
+    require_superadmin(request)
+    from database import get_db
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT id, nom, licence, certificat FROM fournisseurs_fsc ORDER BY nom COLLATE NOCASE ASC"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+@router.post("/api/fournisseurs")
+async def create_fournisseur(request: Request):
+    require_superadmin(request)
+    from database import get_db
+    body = await request.json()
+    nom = (body.get("nom") or "").strip()
+    licence = (body.get("licence") or "").strip() or None
+    certificat = (body.get("certificat") or "").strip() or None
+    if not nom:
+        raise HTTPException(status_code=400, detail="Nom du fournisseur requis")
+    with get_db() as conn:
+        try:
+            cur = conn.execute(
+                "INSERT INTO fournisseurs_fsc (nom, licence, certificat) VALUES (?,?,?)",
+                (nom, licence, certificat),
+            )
+            conn.commit()
+            return {"success": True, "id": cur.lastrowid}
+        except Exception:
+            raise HTTPException(status_code=409, detail="Ce fournisseur existe déjà")
+
+
+@router.put("/api/fournisseurs/{fournisseur_id}")
+async def update_fournisseur(fournisseur_id: int, request: Request):
+    require_superadmin(request)
+    from database import get_db
+    body = await request.json()
+    with get_db() as conn:
+        ex = conn.execute("SELECT * FROM fournisseurs_fsc WHERE id=?", (fournisseur_id,)).fetchone()
+        if not ex:
+            raise HTTPException(status_code=404, detail="Fournisseur non trouvé")
+        nom = (body.get("nom") or ex["nom"]).strip()
+        licence = body.get("licence") if "licence" in body else ex["licence"]
+        certificat = body.get("certificat") if "certificat" in body else ex["certificat"]
+        if isinstance(licence, str): licence = licence.strip() or None
+        if isinstance(certificat, str): certificat = certificat.strip() or None
+        if not nom:
+            raise HTTPException(status_code=400, detail="Nom du fournisseur requis")
+        try:
+            conn.execute(
+                "UPDATE fournisseurs_fsc SET nom=?, licence=?, certificat=? WHERE id=?",
+                (nom, licence, certificat, fournisseur_id),
+            )
+            conn.commit()
+            return {"success": True}
+        except Exception:
+            raise HTTPException(status_code=409, detail="Ce nom de fournisseur existe déjà")
+
+
+@router.delete("/api/fournisseurs/{fournisseur_id}")
+async def delete_fournisseur(fournisseur_id: int, request: Request):
+    require_superadmin(request)
+    from database import get_db
+    with get_db() as conn:
+        ex = conn.execute("SELECT * FROM fournisseurs_fsc WHERE id=?", (fournisseur_id,)).fetchone()
+        if not ex:
+            raise HTTPException(status_code=404, detail="Fournisseur non trouvé")
+        conn.execute("DELETE FROM fournisseurs_fsc WHERE id=?", (fournisseur_id,))
+        conn.commit()
+        return {"success": True}
+
+
+@router.get("/api/fournisseurs/{fournisseur_id}/receptions")
+def fournisseur_receptions(fournisseur_id: int, request: Request):
+    """Historique des réceptions pour un fournisseur donné."""
+    require_superadmin(request)
+    from database import get_db
+    with get_db() as conn:
+        four = conn.execute("SELECT nom FROM fournisseurs_fsc WHERE id=?", (fournisseur_id,)).fetchone()
+        if not four:
+            raise HTTPException(status_code=404, detail="Fournisseur non trouvé")
+        rows = conn.execute(
+            """SELECT r.id, r.created_at, r.created_by_name, r.nb_bobines, r.certificat_fsc, r.note,
+                      GROUP_CONCAT(i.code_barre, '||') as codes
+               FROM stock_receptions r
+               LEFT JOIN stock_reception_items i ON i.reception_id = r.id
+               WHERE r.fournisseur = ?
+               GROUP BY r.id
+               ORDER BY r.created_at DESC LIMIT 50""",
+            (four["nom"],),
+        ).fetchall()
+    result = []
+    for d in rows:
+        raw = d.pop("codes", None)
+        d = dict(d)
+        d["items"] = raw.split("||") if raw else []
+        result.append(d)
+    return {"fournisseur": four["nom"], "receptions": result}

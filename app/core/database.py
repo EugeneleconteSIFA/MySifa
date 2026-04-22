@@ -720,6 +720,46 @@ def _migrate(conn):
             conn.execute("ALTER TABLE stock_receptions ADD COLUMN certificat_fsc TEXT")
         _record_schema_migration(conn, 3, "add_fournisseur_certificat_fsc_to_receptions")
 
+    # Table fournisseurs FSC
+    if "fournisseurs_fsc" not in existing_tables:
+        conn.execute("""CREATE TABLE fournisseurs_fsc (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nom TEXT NOT NULL UNIQUE,
+            licence TEXT,
+            certificat TEXT
+        )""")
+        # Insérer les fournisseurs par défaut
+        default_fournisseurs = [
+            ('Avery', 'FSC-C004451', 'CU-COC-807907'),
+            ('Fedrigoni', 'FSC-C011937', 'FCBA-COC-000059'),
+            ('Feys', 'FSC-C017070', 'SGSCH-COC-004366'),
+            ('Burgo / Mosaico', 'FSC-C004657', 'SGSCH-COC-002122'),
+            ('Foucherf', 'FSC-C215283', 'BV-COC-215283'),
+            ('Frimpeks UK', 'FSC-C160714', 'INT-COC-002144'),
+            ('Frimpeks Italy', 'FSC-C164660', 'INT-COC-001611'),
+            ('Frimpeks Turkey', 'FSC-C129558', 'NEO-COC-129558'),
+            ('Grand Ouest', 'FSC-C148933', 'IMO-COC-209345'),
+            ('Guyenne', 'FSC-C114338', 'FCBA-COC-000352'),
+            ('Itasa', 'FSC-C160893', 'AEN-COC-000369'),
+            ('Kanzan', 'FSC-C007179', 'TUVDC-COC-100605'),
+            ('Lefrancq', 'FSC-C135176', 'FCBA-COC-000478'),
+            ('Likexin', 'FSC-C128270', 'ESTS-COC-242264'),
+            ('Mitsubishi', 'FSC-C014541', 'SGSCH-COC-002664'),
+            ('Rheno', 'FSC-C104291', 'CU-COC-815304'),
+            ('Ricoh', 'FSC-C001858', 'IMO-COC-261828'),
+            ('Sato', 'FSC-C207483', 'TUEV-COC-002274'),
+            ('Shine', 'FSC-C210420', 'ESTS-COC-241843'),
+            ('Suzhou', 'FSC-C140235', 'RR-COC-000252'),
+            ('Techmay', 'FSC-C199493', 'FCBA-COC-000616'),
+            ('Torrespapel', 'FSC-C011032', 'SGSCH-COC-003753'),
+            ('UPM', 'FSC-C012530', 'SGSCH-COC-004879'),
+            ('Xinzhu', 'FSC-C177953', 'SGSHK-COC-331526'),
+        ]
+        conn.executemany(
+            "INSERT INTO fournisseurs_fsc (nom, licence, certificat) VALUES (?,?,?)",
+            default_fournisseurs,
+        )
+
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=2 LIMIT 1").fetchone():
         conn.execute(
             "UPDATE users SET role=? WHERE LOWER(TRIM(email))=?",
