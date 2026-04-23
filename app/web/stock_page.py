@@ -2393,7 +2393,8 @@ async function recepStartScanning(stream) {
           _recepLastCodeTs = now;
           recepAddCode(code);
           showToast('Code scanné: ' + code, 'success');
-          // Arrêter la caméra après scan réussi
+          // Arrêter immédiatement le reader et la caméra
+          try { S.recepBarcodeReader.reset(); } catch(e) {}
           recepStopCamera();
         }
       }
@@ -2430,7 +2431,8 @@ async function recepScanLoopFallback() {
         _recepLastCodeTs = now;
         recepAddCode(code);
         showToast('Code scanné: ' + code, 'success');
-        // Arrêter la caméra après scan réussi
+        // Arrêter immédiatement le reader et la caméra
+        try { S.recepBarcodeReader.reset(); } catch(e) {}
         recepStopCamera();
         return;
       }
