@@ -1632,7 +1632,7 @@ function buildPrintCongesList(weeks){
   
   // Create table for congés
   const table=document.createElement('table');
-  table.style.cssText='width:100%;border-collapse:collapse;font-size:10px';
+  table.style.cssText='border-collapse:collapse;font-size:10px';
   
   // Helper for short date format (DD/MM)
   const fmtDateShortFromIso=(iso)=>{
@@ -1645,7 +1645,7 @@ function buildPrintCongesList(weeks){
   const thead=document.createElement('thead');
   thead.innerHTML=`
     <tr style="background:#f5f5f5">
-      <th style="border:1px solid #000;padding:4px 6px;text-align:left;font-weight:bold">Employé</th>
+      <th style="border:1px solid #000;padding:4px 6px;text-align:left;font-weight:bold;width:120px">Employé</th>
       <th style="border:1px solid #000;padding:4px 6px;text-align:left;font-weight:bold">Du</th>
       <th style="border:1px solid #000;padding:4px 6px;text-align:left;font-weight:bold">Au</th>
       <th style="border:1px solid #000;padding:4px 6px;text-align:center;font-weight:bold">Jours</th>
@@ -1662,8 +1662,7 @@ function buildPrintCongesList(weeks){
     
     const tr=document.createElement('tr');
     tr.style.background=bgColor;
-    tr.innerHTML=`
-      <td style="border:1px solid #000;padding:4px 6px">${userName}</td>
+    tr.innerHTML=`<td style="border:1px solid #000;padding:4px 6px;width:120px">${userName}</td>
       <td style="border:1px solid #000;padding:4px 6px">${fmtDateShortFromIso(c.date_debut)}</td>
       <td style="border:1px solid #000;padding:4px 6px">${fmtDateShortFromIso(c.date_fin)}</td>
       <td style="border:1px solid #000;padding:4px 6px;text-align:center">${c.nb_jours}j</td>
@@ -1756,7 +1755,7 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
         // Week number cell with date details (only on first row, rowspan=2) - left black, right none
         if(isFirstRow){
           const weekCell=document.createElement('td');
-          weekCell.style.cssText='border-top:none;border-bottom:1px solid #000;border-left:1px solid #000;border-right:none;font-size:9px;padding:2px 4px;background:#f0f0f0;font-weight:bold;vertical-align:middle;min-width:36px';
+          weekCell.style.cssText='border-top:none;border-bottom:1px solid #000;border-left:1px solid #000;border-right:none;font-size:8px;padding:1px 2px;background:#f0f0f0;font-weight:bold;vertical-align:middle;width:50px;white-space:nowrap;overflow:hidden';
           weekCell.rowSpan=2;
           weekCell.textContent=fmtWeekLabel(ws);
           row.appendChild(weekCell);
