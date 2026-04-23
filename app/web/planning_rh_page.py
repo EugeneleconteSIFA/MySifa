@@ -1645,10 +1645,10 @@ function buildPrintCongesList(weeks){
   const thead=document.createElement('thead');
   thead.innerHTML=`
     <tr style="background:#f5f5f5">
-      <th style="border:1px solid #000;padding:4px 6px;text-align:left;font-weight:bold;width:120px">Employé</th>
-      <th style="border:1px solid #000;padding:4px 6px;text-align:left;font-weight:bold">Du</th>
-      <th style="border:1px solid #000;padding:4px 6px;text-align:left;font-weight:bold">Au</th>
-      <th style="border:1px solid #000;padding:4px 6px;text-align:center;font-weight:bold">Jours</th>
+      <th style="border:1px solid #000;padding:4px 6px;text-align:left;font-weight:bold;width:150px">Employé</th>
+      <th style="border:1px solid #000;padding:4px 6px;text-align:left;font-weight:bold;width:70px">Du</th>
+      <th style="border:1px solid #000;padding:4px 6px;text-align:left;font-weight:bold;width:70px">Au</th>
+      <th style="border:1px solid #000;padding:4px 6px;text-align:center;font-weight:bold;width:50px">Jours</th>
     </tr>
   `;
   table.appendChild(thead);
@@ -1662,10 +1662,10 @@ function buildPrintCongesList(weeks){
     
     const tr=document.createElement('tr');
     tr.style.background=bgColor;
-    tr.innerHTML=`<td style="border:1px solid #000;padding:4px 6px;width:120px">${userName}</td>
-      <td style="border:1px solid #000;padding:4px 6px">${fmtDateShortFromIso(c.date_debut)}</td>
-      <td style="border:1px solid #000;padding:4px 6px">${fmtDateShortFromIso(c.date_fin)}</td>
-      <td style="border:1px solid #000;padding:4px 6px;text-align:center">${c.nb_jours}j</td>
+    tr.innerHTML=`<td style="border:1px solid #000;padding:4px 6px;width:150px">${userName}</td>
+      <td style="border:1px solid #000;padding:4px 6px;width:70px">${fmtDateShortFromIso(c.date_debut)}</td>
+      <td style="border:1px solid #000;padding:4px 6px;width:70px">${fmtDateShortFromIso(c.date_fin)}</td>
+      <td style="border:1px solid #000;padding:4px 6px;text-align:center;width:50px">${c.nb_jours}j</td>
     `;
     tbody.appendChild(tr);
   });
@@ -1699,13 +1699,13 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
   // Week column - no top/left/right border (first cell), keep bottom
   const emptyTh=document.createElement('th');
   emptyTh.style.cssText='border-top:none;border-left:none;border-right:none;border-bottom:1px solid #000;background:#e8e8e8;font-size:9px;padding:2px 4px;font-weight:bold;min-width:36px';
-  emptyTh.rowSpan=2;
+  emptyTh.rowSpan=hasMatinAprem?2:1;
   machineRow.appendChild(emptyTh);
   
   if(hasMatinAprem){
     // Creneau column - no top/left border (transparent left to merge with week col), keep bottom/right
     const creneauTh=document.createElement('th');
-    creneauTh.style.cssText='border-top:none;border-left:1px solid transparent;border-bottom:1px solid #000;border-right:1px solid #000;background:#e8e8e8;font-size:9px;padding:2px 4px;font-weight:bold;min-width:40px';
+    creneauTh.style.cssText='border-top:none;border-left:1px solid transparent;border-bottom:1px solid #000;border-right:1px solid #000;background:#e8e8e8;font-size:9px;padding:2px;font-weight:bold;min-width:24px';
     creneauTh.rowSpan=2;
     machineRow.appendChild(creneauTh);
   }
@@ -1721,17 +1721,19 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
   });
   thead.appendChild(machineRow);
   
-  // Row 2: Poste headers (unique postes only)
-  const posteRow=document.createElement('tr');
-  machineCols.forEach(mc=>{
-    mc.uniquePostes.forEach(p=>{
-      const th=document.createElement('th');
-      th.style.cssText='border:1px solid #000;background:#e8e8e8;font-size:9px;padding:3px 5px;font-weight:bold';
-      th.textContent=POSTE_LABELS[p]||p;
-      posteRow.appendChild(th);
+  // Row 2: Poste headers (unique postes only) - only for matin/aprem tables
+  if(hasMatinAprem){
+    const posteRow=document.createElement('tr');
+    machineCols.forEach(mc=>{
+      mc.uniquePostes.forEach(p=>{
+        const th=document.createElement('th');
+        th.style.cssText='border:1px solid #000;background:#e8e8e8;font-size:9px;padding:3px 5px;font-weight:bold';
+        th.textContent=POSTE_LABELS[p]||p;
+        posteRow.appendChild(th);
+      });
     });
-  });
-  thead.appendChild(posteRow);
+    thead.appendChild(posteRow);
+  }
   table.appendChild(thead);
   
   const tbody=document.createElement('tbody');
@@ -1763,7 +1765,7 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
         
         // Creneau label cell - no top/left border, transparent left to merge with week
         const creneauCell=document.createElement('td');
-        creneauCell.style.cssText='border-top:none;border-left:1px solid transparent;border-bottom:1px solid #000;border-right:1px solid #000;font-size:8px;padding:2px 4px;background:#f0f0f0;font-weight:bold;min-width:40px';
+        creneauCell.style.cssText='border-top:none;border-left:1px solid transparent;border-bottom:1px solid #000;border-right:1px solid #000;font-size:8px;padding:2px;background:#f0f0f0;font-weight:bold;min-width:24px';
         creneauCell.textContent=cr.label;
         row.appendChild(creneauCell);
         
