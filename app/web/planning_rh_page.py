@@ -1699,7 +1699,7 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
   const machineRow=document.createElement('tr');
   // Week column - no top/left/right border (first cell), keep bottom
   const emptyTh=document.createElement('th');
-  emptyTh.style.cssText='border-top:none;border-left:none;border-right:none;border-bottom:1px solid #000;background:#e8e8e8;font-size:9px;padding:2px 4px;font-weight:bold;min-width:60px';
+  emptyTh.style.cssText='border-top:none;border-left:none;border-right:none;border-bottom:1px solid #000;background:#e8e8e8;font-size:9px;padding:2px 4px;font-weight:bold;min-width:36px';
   emptyTh.rowSpan=2;
   machineRow.appendChild(emptyTh);
   
@@ -1756,7 +1756,7 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
         // Week number cell with date details (only on first row, rowspan=2) - left black, right none
         if(isFirstRow){
           const weekCell=document.createElement('td');
-          weekCell.style.cssText='border-top:none;border-bottom:1px solid #000;border-left:1px solid #000;border-right:none;font-size:9px;padding:2px 4px;background:#f0f0f0;font-weight:bold;vertical-align:middle;min-width:60px';
+          weekCell.style.cssText='border-top:none;border-bottom:1px solid #000;border-left:1px solid #000;border-right:none;font-size:9px;padding:2px 4px;background:#f0f0f0;font-weight:bold;vertical-align:middle;min-width:36px';
           weekCell.rowSpan=2;
           weekCell.textContent=fmtWeekLabel(ws);
           row.appendChild(weekCell);
