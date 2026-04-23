@@ -2341,11 +2341,36 @@ async function recepStartCamera() {
   const loaded = await loadZXing();
   if (!loaded) { showToast('Impossible de charger le scanner', 'error'); return; }
 
+  // 2. Essayer différentes contraintes caméra (compatibilité iOS/Android)
+  let stream = null;
+  const constraints = [
+    // Option 1: facingMode environment avec résolution (iOS/Android récents)
+    { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } },
+    // Option 2: facingMode environment sans résolution
+    { video: { facingMode: { ideal: 'environment' } } },
+    // Option 3: juste caméra arrière sans facingMode (fallback Android)
+    { video: { width: { ideal: 1280 }, height: { ideal: 720 } } },
+    // Option 4: n'importe quelle caméra
+    { video: true }
+  ];
+
+  for (let i = 0; i < constraints.length; i++) {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia(constraints[i]);
+      console.log('Caméra ok avec contraintes:', i);
+      break;
+    } catch(e) {
+      console.log('Contrainte', i, 'échouée:', e.message);
+      if (i === constraints.length - 1) throw e;
+    }
+  }
+
+  if (!stream) {
+    showToast('Aucune caméra disponible', 'error');
+    return;
+  }
+
   try {
-    // 2. Obtenir le flux caméra
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
-    });
     S.recepStream = stream;
     S.recepScanning = true;
     video.srcObject = stream;
@@ -2355,7 +2380,7 @@ async function recepStartCamera() {
     // 3. Démarrer le scan avec decodeFromStream
     recepStartScanning(stream);
   } catch(e) {
-    showToast('Caméra non disponible : ' + e.message, 'error');
+    showToast('Erreur caméra : ' + e.message, 'error');
     S.recepScanning = false; S.recepStream = null; renderContent();
   }
 }
