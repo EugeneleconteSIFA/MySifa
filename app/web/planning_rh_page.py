@@ -587,6 +587,7 @@ const S = {
   annee: new Date().getFullYear(),
   modal: null, toast: null, loading: false,
   opOffset: 0,          // opérateur : décalage semaine
+  opViewRange: 1,       // opérateur : plage de vue (1, 2 ou 4 semaines)
   editConge: null,      // congé en cours d'édition
   editSolde: null,      // solde en cours d'édition
   congeForm: { user_id:'', date_debut:'', date_fin:'', nb_jours:'', type_conge:'CP', note:'' },
@@ -1401,14 +1402,15 @@ function cancelEditConge(){S.editConge=null;S.congeForm={user_id:'',date_debut:'
 // ── Vue opérateur ──────────────────────────────────────
 function buildOperatorView(){
   const wrap=document.createElement('div'); wrap.className='rh-op-wrap';
-  const ws=addWeeks(weekStr(new Date()),S.opOffset);
+  const baseWeek=addWeeks(weekStr(new Date()),S.opOffset);
+  const weeks=Array.from({length:S.opViewRange},(_,i)=>addWeeks(baseWeek,i));
 
-  // Nav semaine
+  // Nav semaine + sélecteur de plage
   const nav=document.createElement('div'); nav.className='rh-op-wk-nav';
   nav.innerHTML=`
-    <button class="rh-op-nav-btn" onclick="S.opOffset--;renderContent();">${icon('chevron_left',14)}</button>
-    <div class="rh-op-wk-lbl">${fmtWeekLong(ws)}</div>
-    <button class="rh-op-nav-btn" onclick="S.opOffset++;renderContent();">${icon('chevron_right',14)}</button>
+    <button class="rh-op-nav-btn" onclick="S.opOffset-=S.opViewRange;renderContent();">${icon('chevron_left',14)}</button>
+    <div class="rh-op-wk-lbl">${S.opViewRange===1?fmtWeekLong(weeks[0]):fmtWeekLong(weeks[0])+' → '+fmtWeekLong(weeks[weeks.length-1])}</div>
+    <button class="rh-op-nav-btn" onclick="S.opOffset+=S.opViewRange;renderContent();">${icon('chevron_right',14)}</button>
   `;
   if(S.opOffset!==0){
     const todayBtn=document.createElement('button');
@@ -1416,31 +1418,63 @@ function buildOperatorView(){
     todayBtn.onclick=()=>{S.opOffset=0;renderContent();};
     nav.appendChild(todayBtn);
   }
+  
+  // Sélecteur de plage (1/2/4 semaines)
+  const rangeSelector=document.createElement('div');
+  rangeSelector.className='rh-op-range-tabs';
+  rangeSelector.style.cssText='display:flex;gap:4px;margin-left:12px;';
+  [1,2,4].forEach(n=>{
+    const btn=document.createElement('button');
+    btn.className='rh-op-range-btn'+(S.opViewRange===n?' active':'');
+    btn.textContent=n+' sem.';
+    btn.style.cssText='padding:4px 8px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:'+(S.opViewRange===n?'var(--accent)':'var(--card)')+';color:'+(S.opViewRange===n?'#fff':'var(--text1)')+';cursor:pointer;font-weight:600;';
+    btn.onclick=()=>{S.opViewRange=n;renderContent();};
+    rangeSelector.appendChild(btn);
+  });
+  nav.appendChild(rangeSelector);
   wrap.appendChild(nav);
 
-  // Planning de la semaine
+  // Planning des semaines
   const planCard=document.createElement('div'); planCard.className='rh-op-card';
-  planCard.innerHTML=`<div class="rh-op-card-title">${icon('calendar',13)} Mon planning</div>`;
+  planCard.innerHTML=`<div class="rh-op-card-title">${icon('calendar',13)} Mon planning (${S.opViewRange} semaine${S.opViewRange>1?'s':''})</div>`;
 
-  const myPlan=S.planning.find(p=>S.user&&p.user_id===S.user.id&&p.semaine===ws);
-  if(myPlan){
-    const rows=[
-      {k:'Machine',v:myPlan.machine_nom||'—'},
-      {k:'Poste',v:POSTE_LABELS[myPlan.poste]||myPlan.poste},
-      {k:'Créneau',v:myPlan.creneau==='matin'?'Matin':myPlan.creneau==='aprem'?'Après-midi':'Journée'},
-    ];
-    // Trouver les horaires
-    const gdef=GRID_DEF.find(g=>g.code===myPlan.machine_code||(myPlan.poste==='logistique'&&g.code==='LOG')||(myPlan.poste==='resp_atelier'&&g.code==='RESP'));
-    if(gdef){
-      const cr=gdef.creneaux.find(c=>c.key===myPlan.creneau);
-      if(cr&&cr.hours) rows.push({k:'Horaires',v:cr.hours});
+  let hasAnyPlan=false;
+  weeks.forEach(ws=>{
+    const myPlan=S.planning.find(p=>S.user&&p.user_id===S.user.id&&p.semaine===ws);
+    const weekHeader=document.createElement('div');
+    weekHeader.className='rh-op-week-header';
+    weekHeader.style.cssText='font-size:12px;font-weight:700;color:var(--muted);margin:8px 0 4px;padding-top:4px;border-top:1px solid var(--border);';
+    weekHeader.textContent=fmtWeekLong(ws);
+    if(isCurrentWeek(ws)) weekHeader.innerHTML+=' <span style="color:var(--accent)">(cette semaine)</span>';
+    planCard.appendChild(weekHeader);
+    
+    if(myPlan){
+      hasAnyPlan=true;
+      const rows=[
+        {k:'Machine',v:myPlan.machine_nom||'—'},
+        {k:'Poste',v:POSTE_LABELS[myPlan.poste]||myPlan.poste},
+        {k:'Créneau',v:myPlan.creneau==='matin'?'Matin':myPlan.creneau==='aprem'?'Après-midi':'Journée'},
+      ];
+      // Trouver les horaires
+      const gdef=GRID_DEF.find(g=>g.code===myPlan.machine_code||(myPlan.poste==='logistique'&&g.code==='LOG')||(myPlan.poste==='resp_atelier'&&g.code==='RESP'));
+      if(gdef){
+        const cr=gdef.creneaux.find(c=>c.key===myPlan.creneau);
+        if(cr&&cr.hours) rows.push({k:'Horaires',v:cr.hours});
+      }
+      rows.forEach(r=>{
+        const row=document.createElement('div'); row.className='rh-op-row';
+        row.innerHTML=`<span class="rh-op-key">${r.k}</span><span class="rh-op-val accent">${r.v}</span>`;
+        planCard.appendChild(row);
+      });
+    }else{
+      const noPlanDiv=document.createElement('div');
+      noPlanDiv.className='rh-op-no-plan';
+      noPlanDiv.style.cssText='font-size:12px;color:var(--muted);font-style:italic;padding:4px 0;';
+      noPlanDiv.textContent='Aucune affectation';
+      planCard.appendChild(noPlanDiv);
     }
-    rows.forEach(r=>{
-      const row=document.createElement('div'); row.className='rh-op-row';
-      row.innerHTML=`<span class="rh-op-key">${r.k}</span><span class="rh-op-val accent">${r.v}</span>`;
-      planCard.appendChild(row);
-    });
-  }else{
+  });
+  if(!hasAnyPlan && weeks.length===1){
     planCard.innerHTML+=`<div class="rh-op-no-plan">Aucune affectation cette semaine</div>`;
   }
   wrap.appendChild(planCard);
@@ -1553,14 +1587,16 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
   table.className='rh-pivot-table';
   table.style.cssText='border-collapse:collapse;width:100%;margin-bottom:16px';
   
-  // Calculate total postes per machine for colspan
+  // Calculate total UNIQUE postes per machine for colspan
   const machineCols=[];
   machines.forEach(m=>{
-    let posteCount=0;
+    const uniquePostes=[];
     m.creneaux.forEach(cr=>{
-      posteCount+=cr.postes.length;
+      cr.postes.forEach(p=>{
+        if(!uniquePostes.includes(p))uniquePostes.push(p);
+      });
     });
-    machineCols.push({machine:m,posteCount});
+    machineCols.push({machine:m,posteCount:uniquePostes.length,uniquePostes});
   });
   
   const thead=document.createElement('thead');
@@ -1590,16 +1626,14 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
   });
   thead.appendChild(machineRow);
   
-  // Row 2: Poste headers
+  // Row 2: Poste headers (unique postes only)
   const posteRow=document.createElement('tr');
-  machines.forEach(m=>{
-    m.creneaux.forEach(cr=>{
-      cr.postes.forEach(p=>{
-        const th=document.createElement('th');
-        th.style.cssText='border:1px solid #000;background:#d0d0d0;font-size:9px;padding:3px 5px;font-weight:bold';
-        th.textContent=POSTE_LABELS[p]||p;
-        posteRow.appendChild(th);
-      });
+  machineCols.forEach(mc=>{
+    mc.uniquePostes.forEach(p=>{
+      const th=document.createElement('th');
+      th.style.cssText='border:1px solid #000;background:#d0d0d0;font-size:9px;padding:3px 5px;font-weight:bold';
+      th.textContent=POSTE_LABELS[p]||p;
+      posteRow.appendChild(th);
     });
   });
   thead.appendChild(posteRow);
@@ -1638,15 +1672,38 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
         creneauCell.textContent=cr.label;
         row.appendChild(creneauCell);
         
-        // Add cells for each machine/poste
-        machines.forEach(m=>{
+        // Add cells for each machine's unique postes
+        machineCols.forEach(mc=>{
+          const m=mc.machine;
           const machineCreneaux=m.creneaux.find(c=>c.key===cr.key);
+          
           if(machineCreneaux){
-            // Machine has this creneau (C1, C2)
-            machineCreneaux.postes.forEach(poste=>{
+            // Machine has this creneau (C1, C2) - iterate through UNIQUE postes
+            mc.uniquePostes.forEach(poste=>{
               const td=document.createElement('td');
               td.style.cssText='border:1px solid #000;font-size:9px;padding:3px 5px;min-width:60px;background:'+bgColor;
-              const ass=getAssignments(m.code,cr.key,poste,ws);
+              // Check if this poste exists in current creneau
+              if(machineCreneaux.postes.includes(poste)){
+                const ass=getAssignments(m.code,cr.key,poste,ws);
+                if(ass.length){
+                  ass.forEach(a=>{
+                    const chip=document.createElement('span');
+                    chip.style.cssText='display:inline-block;font-size:9px;padding:2px 4px;border:1px solid #666;background:#fff;margin:1px;font-weight:bold;color:#000';
+                    chip.textContent=a.user_nom.split(' ')[0];
+                    td.appendChild(chip);
+                  });
+                }
+              }
+              row.appendChild(td);
+            });
+          }else if(m.creneaux.length===1 && m.creneaux[0].key==='journee' && isFirstRow){
+            // DSI-like machine with only journee - merge both rows
+            const journeeCr=m.creneaux[0];
+            journeeCr.postes.forEach(poste=>{
+              const td=document.createElement('td');
+              td.style.cssText='border:1px solid #000;font-size:9px;padding:3px 5px;min-width:60px;background:'+bgColor+';vertical-align:middle';
+              td.rowSpan=2;
+              const ass=getAssignments(m.code,'journee',poste,ws);
               if(ass.length){
                 ass.forEach(a=>{
                   const chip=document.createElement('span');
@@ -1657,28 +1714,8 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
               }
               row.appendChild(td);
             });
-          }else if(m.code==='DSI' && isFirstRow){
-            // DSI - merge both rows, only add on first row
-            const journeeCr=m.creneaux.find(c=>c.key==='journee');
-            if(journeeCr){
-              journeeCr.postes.forEach(poste=>{
-                const td=document.createElement('td');
-                td.style.cssText='border:1px solid #000;font-size:9px;padding:3px 5px;min-width:60px;background:'+bgColor+';vertical-align:middle';
-                td.rowSpan=2;
-                const ass=getAssignments(m.code,'journee',poste,ws);
-                if(ass.length){
-                  ass.forEach(a=>{
-                    const chip=document.createElement('span');
-                    chip.style.cssText='display:inline-block;font-size:9px;padding:2px 4px;border:1px solid #666;background:#fff;margin:1px;font-weight:bold;color:#000';
-                    chip.textContent=a.user_nom.split(' ')[0];
-                    td.appendChild(chip);
-                  });
-                }
-                row.appendChild(td);
-              });
-            }
           }
-          // DSI second row: don't add cells (they were merged)
+          // For journee-only machines on second row: cells were merged, skip
         });
         
         tbody.appendChild(row);
