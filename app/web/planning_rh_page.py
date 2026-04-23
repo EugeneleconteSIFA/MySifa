@@ -1634,16 +1634,21 @@ function buildPrintCongesList(weeks){
   const table=document.createElement('table');
   table.style.cssText='width:100%;border-collapse:collapse;font-size:10px';
   
+  // Helper for short date format (DD/MM)
+  const fmtDateShortFromIso=(iso)=>{
+    if(!iso)return'';
+    const d=new Date(iso);
+    return`${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}`;
+  };
+
   // Header
   const thead=document.createElement('thead');
   thead.innerHTML=`
     <tr style="background:#f5f5f5">
-      <th style="border:1px solid #ccc;padding:4px 6px;text-align:left;font-weight:bold">Employé</th>
-      <th style="border:1px solid #ccc;padding:4px 6px;text-align:left;font-weight:bold">Du</th>
-      <th style="border:1px solid #ccc;padding:4px 6px;text-align:left;font-weight:bold">Au</th>
-      <th style="border:1px solid #ccc;padding:4px 6px;text-align:center;font-weight:bold">Jours</th>
-      <th style="border:1px solid #ccc;padding:4px 6px;text-align:left;font-weight:bold">Type</th>
-      <th style="border:1px solid #ccc;padding:4px 6px;text-align:left;font-weight:bold">Statut</th>
+      <th style="border:1px solid #000;padding:4px 6px;text-align:left;font-weight:bold">Employé</th>
+      <th style="border:1px solid #000;padding:4px 6px;text-align:left;font-weight:bold">Du</th>
+      <th style="border:1px solid #000;padding:4px 6px;text-align:left;font-weight:bold">Au</th>
+      <th style="border:1px solid #000;padding:4px 6px;text-align:center;font-weight:bold">Jours</th>
     </tr>
   `;
   table.appendChild(thead);
@@ -1658,12 +1663,10 @@ function buildPrintCongesList(weeks){
     const tr=document.createElement('tr');
     tr.style.background=bgColor;
     tr.innerHTML=`
-      <td style="border:1px solid #ccc;padding:4px 6px">${userName}</td>
-      <td style="border:1px solid #ccc;padding:4px 6px">${fmtDateFull(c.date_debut)}</td>
-      <td style="border:1px solid #ccc;padding:4px 6px">${fmtDateFull(c.date_fin)}</td>
-      <td style="border:1px solid #ccc;padding:4px 6px;text-align:center">${c.nb_jours}j</td>
-      <td style="border:1px solid #ccc;padding:4px 6px">${TYPE_CONGE_LABELS[c.type_conge]||c.type_conge}</td>
-      <td style="border:1px solid #ccc;padding:4px 6px">${STATUT_CONGE_LABELS[c.statut]||c.statut}</td>
+      <td style="border:1px solid #000;padding:4px 6px">${userName}</td>
+      <td style="border:1px solid #000;padding:4px 6px">${fmtDateShortFromIso(c.date_debut)}</td>
+      <td style="border:1px solid #000;padding:4px 6px">${fmtDateShortFromIso(c.date_fin)}</td>
+      <td style="border:1px solid #000;padding:4px 6px;text-align:center">${c.nb_jours}j</td>
     `;
     tbody.appendChild(tr);
   });
@@ -1694,9 +1697,9 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
   
   // Row 1: Machine headers with colspan
   const machineRow=document.createElement('tr');
-  // Week column - no top/left border, keep bottom/right
+  // Week column - no top/left/right border (first cell), keep bottom
   const emptyTh=document.createElement('th');
-  emptyTh.style.cssText='border-top:none;border-left:none;border-bottom:1px solid #000;border-right:1px solid #000;background:#e8e8e8;font-size:9px;padding:2px 4px;font-weight:bold;min-width:60px';
+  emptyTh.style.cssText='border-top:none;border-left:none;border-right:none;border-bottom:1px solid #000;background:#e8e8e8;font-size:9px;padding:2px 4px;font-weight:bold;min-width:60px';
   emptyTh.rowSpan=2;
   machineRow.appendChild(emptyTh);
   
@@ -1750,10 +1753,10 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
         const isFirstRow=crIdx===0;
         const bgColor=isEvenWeek?'#f5f5f5':'#ffffff';
         
-        // Week number cell with date details (only on first row, rowspan=2) - no top/left border
+        // Week number cell with date details (only on first row, rowspan=2) - left black, right none
         if(isFirstRow){
           const weekCell=document.createElement('td');
-          weekCell.style.cssText='border-top:none;border-left:none;border-bottom:1px solid #000;border-right:1px solid #000;font-size:9px;padding:2px 4px;background:#f0f0f0;font-weight:bold;vertical-align:middle;min-width:60px';
+          weekCell.style.cssText='border-top:none;border-bottom:1px solid #000;border-left:1px solid #000;border-right:none;font-size:9px;padding:2px 4px;background:#f0f0f0;font-weight:bold;vertical-align:middle;min-width:60px';
           weekCell.rowSpan=2;
           weekCell.textContent=fmtWeekLabel(ws);
           row.appendChild(weekCell);
@@ -1818,9 +1821,9 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
       const row=document.createElement('tr');
       const bgColor=isEvenWeek?'#f5f5f5':'#ffffff';
       
-      // Week number cell with date details - no top/left border
+      // Week number cell with date details - full black borders
       const weekCell=document.createElement('td');
-      weekCell.style.cssText='border-top:none;border-left:none;border-bottom:1px solid #000;border-right:1px solid #000;font-size:9px;padding:2px 4px;background:#f0f0f0;font-weight:bold;min-width:60px';
+      weekCell.style.cssText='border:1px solid #000;font-size:9px;padding:2px 4px;background:#f0f0f0;font-weight:bold;min-width:60px';
       weekCell.textContent=fmtWeekLabel(ws);
       row.appendChild(weekCell);
       
