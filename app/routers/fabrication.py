@@ -157,11 +157,16 @@ def get_session(request: Request, machine_id: int = None):
     user = get_current_user(request)
     _check_fab_access(user)
 
-    operateur = user.get("operateur_lie") or ""
     # machine_id : préférence compte utilisateur, sinon query param (admin)
     mid = user.get("machine_id") or machine_id
-
-    if not operateur and not is_admin(user):
+    
+    # Opérateur : operateur_lie si défini, sinon nom de l'utilisateur si machine liée
+    operateur = user.get("operateur_lie") or ""
+    if not operateur and mid:
+        operateur = user.get("nom") or ""
+    
+    # Bloquer uniquement si pas d'opérateur ET pas de machine ET pas admin
+    if not operateur and not mid and not is_admin(user):
         return {
             "saisies": [],
             "etat": "sans_session",
@@ -177,13 +182,14 @@ def get_session(request: Request, machine_id: int = None):
     with get_db() as conn:
         if operateur:
             # Filtre : format ISO (YYYY-MM-DD…) OU format français (DD/MM/YYYY…)
+            # Cherche soit par operateur_lie, soit par nom d'utilisateur
             rows = conn.execute(
                 """SELECT * FROM production_data
-                   WHERE operateur = ? AND (
+                   WHERE (operateur = ? OR operateur = ?) AND (
                      date_operation LIKE ? OR date_operation LIKE ?
                    )
                    ORDER BY date_operation ASC, id ASC""",
-                (operateur, today + "%", today_fr + "%"),
+                (operateur, user.get("nom") or operateur, today + "%", today_fr + "%"),
             ).fetchall()
         else:
             rows = []
@@ -237,13 +243,19 @@ async def create_saisie(request: Request):
     cl = classify_operation(op_str)
 
     # Opérateur : issu du compte sauf si admin
+    # machine_id : préférence compte utilisateur
+    mid = user.get("machine_id")
+    
     operateur = user.get("operateur_lie") or ""
     if is_admin(user) and body.get("operateur"):
         operateur = str(body["operateur"]).strip()
+    # Si pas d'opérateur_lié mais machine liée, utiliser le nom de l'utilisateur
+    if not operateur and mid:
+        operateur = user.get("nom") or ""
     if not operateur:
         raise HTTPException(
             status_code=400,
-            detail="Compte non lié à un opérateur — contacter un administrateur",
+            detail="Compte non lié à un opérateur ou machine — contacter un administrateur",
         )
 
     date_op = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")

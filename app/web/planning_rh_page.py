@@ -1551,58 +1551,157 @@ function buildPrintPivotLayout(){
 function buildPivotTable(machines,weeks,hasMatinAprem){
   const table=document.createElement('table');
   table.className='rh-pivot-table';
+  table.style.cssText='border-collapse:collapse;width:100%;margin-bottom:16px';
   
-  // Get all unique creneaux from all machines
-  const allCreneaux=[];
+  // Calculate total postes per machine for colspan
+  const machineCols=[];
   machines.forEach(m=>{
+    let posteCount=0;
     m.creneaux.forEach(cr=>{
-      if(!allCreneaux.find(c=>c.key===cr.key))allCreneaux.push(cr);
+      posteCount+=cr.postes.length;
     });
+    machineCols.push({machine:m,posteCount});
   });
   
-  // Header row: first cell (empty) + machine headers with their postes
   const thead=document.createElement('thead');
-  const headerRow=document.createElement('tr');
-  headerRow.innerHTML='<th style="border:1px solid #000;background:#e0e0e0;font-weight:bold"></th>';
+  
+  // Row 1: Machine headers with colspan
+  const machineRow=document.createElement('tr');
+  // Empty cell for week column
+  const emptyTh=document.createElement('th');
+  emptyTh.style.cssText='border:1px solid #000;background:#e0e0e0;font-size:9px;padding:3px 5px;font-weight:bold';
+  emptyTh.rowSpan=2;
+  machineRow.appendChild(emptyTh);
+  
+  if(hasMatinAprem){
+    // Empty cell for creneau column (matin/aprem)
+    const creneauTh=document.createElement('th');
+    creneauTh.style.cssText='border:1px solid #000;background:#e0e0e0;font-size:9px;padding:3px 5px;font-weight:bold';
+    creneauTh.rowSpan=2;
+    machineRow.appendChild(creneauTh);
+  }
+  
+  machineCols.forEach(mc=>{
+    const th=document.createElement('th');
+    th.style.cssText='border:1px solid #000;background:#e0e0e0;font-size:10px;padding:4px 6px;font-weight:bold;text-align:center';
+    th.colSpan=mc.posteCount;
+    th.textContent=mc.machine.label;
+    machineRow.appendChild(th);
+  });
+  thead.appendChild(machineRow);
+  
+  // Row 2: Poste headers
+  const posteRow=document.createElement('tr');
   machines.forEach(m=>{
     m.creneaux.forEach(cr=>{
       cr.postes.forEach(p=>{
         const th=document.createElement('th');
-        th.style.cssText='border:1px solid #000;background:#e0e0e0;font-size:9px;padding:3px 5px;font-weight:bold';
-        th.textContent=m.label+' - '+POSTE_LABELS[p]||p;
-        headerRow.appendChild(th);
+        th.style.cssText='border:1px solid #000;background:#d0d0d0;font-size:9px;padding:3px 5px;font-weight:bold';
+        th.textContent=POSTE_LABELS[p]||p;
+        posteRow.appendChild(th);
       });
     });
   });
-  thead.appendChild(headerRow);
+  thead.appendChild(posteRow);
   table.appendChild(thead);
   
   const tbody=document.createElement('tbody');
-  let rowIndex=0;
   
-  weeks.forEach(ws=>{
+  weeks.forEach((ws,weekIdx)=>{
     const wn=ws.split('W')[1];
-    const mon=weekMonday(ws);
-    const sun=new Date(mon);sun.setDate(mon.getDate()+6);
+    const isEvenWeek=weekIdx%2===0;
     
-    allCreneaux.forEach(cr=>{
+    if(hasMatinAprem){
+      // Two rows per week: matin and après-midi
+      const creneauxList=[
+        {key:'matin',label:'Matin'},
+        {key:'aprem',label:'Après-midi'}
+      ];
+      
+      creneauxList.forEach((cr,crIdx)=>{
+        const row=document.createElement('tr');
+        const isFirstRow=crIdx===0;
+        const bgColor=isEvenWeek?'#f5f5f5':'#ffffff';
+        
+        // Week number cell (only on first row, rowspan=2)
+        if(isFirstRow){
+          const weekCell=document.createElement('td');
+          weekCell.style.cssText='border:1px solid #000;font-size:10px;padding:4px 6px;background:#d8d8d8;font-weight:bold;vertical-align:middle';
+          weekCell.rowSpan=2;
+          weekCell.textContent='S'+wn;
+          row.appendChild(weekCell);
+        }
+        
+        // Creneau label cell
+        const creneauCell=document.createElement('td');
+        creneauCell.style.cssText='border:1px solid #000;font-size:9px;padding:3px 5px;background:#e8e8e8;font-weight:bold';
+        creneauCell.textContent=cr.label;
+        row.appendChild(creneauCell);
+        
+        // Add cells for each machine/poste
+        machines.forEach(m=>{
+          const machineCreneaux=m.creneaux.find(c=>c.key===cr.key);
+          if(machineCreneaux){
+            // Machine has this creneau (C1, C2)
+            machineCreneaux.postes.forEach(poste=>{
+              const td=document.createElement('td');
+              td.style.cssText='border:1px solid #000;font-size:9px;padding:3px 5px;min-width:60px;background:'+bgColor;
+              const ass=getAssignments(m.code,cr.key,poste,ws);
+              if(ass.length){
+                ass.forEach(a=>{
+                  const chip=document.createElement('span');
+                  chip.style.cssText='display:inline-block;font-size:9px;padding:2px 4px;border:1px solid #666;background:#fff;margin:1px;font-weight:bold;color:#000';
+                  chip.textContent=a.user_nom.split(' ')[0];
+                  td.appendChild(chip);
+                });
+              }
+              row.appendChild(td);
+            });
+          }else if(m.code==='DSI' && isFirstRow){
+            // DSI - merge both rows, only add on first row
+            const journeeCr=m.creneaux.find(c=>c.key==='journee');
+            if(journeeCr){
+              journeeCr.postes.forEach(poste=>{
+                const td=document.createElement('td');
+                td.style.cssText='border:1px solid #000;font-size:9px;padding:3px 5px;min-width:60px;background:'+bgColor+';vertical-align:middle';
+                td.rowSpan=2;
+                const ass=getAssignments(m.code,'journee',poste,ws);
+                if(ass.length){
+                  ass.forEach(a=>{
+                    const chip=document.createElement('span');
+                    chip.style.cssText='display:inline-block;font-size:9px;padding:2px 4px;border:1px solid #666;background:#fff;margin:1px;font-weight:bold;color:#000';
+                    chip.textContent=a.user_nom.split(' ')[0];
+                    td.appendChild(chip);
+                  });
+                }
+                row.appendChild(td);
+              });
+            }
+          }
+          // DSI second row: don't add cells (they were merged)
+        });
+        
+        tbody.appendChild(row);
+      });
+    }else{
+      // One row per week (LOG, RESP, REP)
       const row=document.createElement('tr');
-      const isEven=rowIndex%2===0;
+      const bgColor=isEvenWeek?'#f5f5f5':'#ffffff';
       
-      // First column: week + creneau label
-      const firstCell=document.createElement('td');
-      firstCell.style.cssText='border:1px solid #000;font-size:9px;padding:3px 5px;background:'+(isEven?'#f5f5f5':'#ffffff')+';font-weight:bold';
-      firstCell.innerHTML=`S${wn}<br><span style="font-size:8px;font-weight:normal">${cr.label}</span>`;
-      row.appendChild(firstCell);
+      // Week number cell
+      const weekCell=document.createElement('td');
+      weekCell.style.cssText='border:1px solid #000;font-size:10px;padding:4px 6px;background:#d8d8d8;font-weight:bold';
+      weekCell.textContent='S'+wn;
+      row.appendChild(weekCell);
       
-      // Add cells for each machine/poste combination
+      // Add cells for each machine/poste (all use 'journee')
       machines.forEach(m=>{
-        const machineCreneaux=m.creneaux.find(c=>c.key===cr.key);
-        if(machineCreneaux){
-          machineCreneaux.postes.forEach(poste=>{
+        const journeeCr=m.creneaux.find(c=>c.key==='journee');
+        if(journeeCr){
+          journeeCr.postes.forEach(poste=>{
             const td=document.createElement('td');
-            td.style.cssText='border:1px solid #000;font-size:9px;padding:3px 5px;min-width:50px;background:'+(isEven?'#f5f5f5':'#ffffff');
-            const ass=getAssignments(m.code,cr.key,poste,ws);
+            td.style.cssText='border:1px solid #000;font-size:9px;padding:3px 5px;min-width:60px;background:'+bgColor;
+            const ass=getAssignments(m.code,'journee',poste,ws);
             if(ass.length){
               ass.forEach(a=>{
                 const chip=document.createElement('span');
@@ -1613,23 +1712,11 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
             }
             row.appendChild(td);
           });
-        }else{
-          // Machine doesn't have this creneau (e.g., DSI doesn't have matin/aprem)
-          // Add empty cells for each poste
-          const journeeCr=m.creneaux.find(c=>c.key==='journee');
-          if(journeeCr && cr.key!=='journee'){
-            journeeCr.postes.forEach(poste=>{
-              const td=document.createElement('td');
-              td.style.cssText='border:1px solid #000;font-size:9px;padding:3px 5px;min-width:50px;background:'+(isEven?'#f5f5f5':'#ffffff');
-              row.appendChild(td);
-            });
-          }
         }
       });
       
       tbody.appendChild(row);
-      rowIndex++;
-    });
+    }
   });
   
   table.appendChild(tbody);
