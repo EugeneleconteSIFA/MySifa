@@ -1448,10 +1448,11 @@ function buildMvtModal() {
   let expCheckbox = null;
   let expWrap = null;
   if (type === 'sortie') {
-    expWrap = el('div', { cls:'modal-field', style:{display:'flex',alignItems:'center',gap:'8px',marginTop:'8px'} });
-    expCheckbox = el('input', { type:'checkbox', id:'expedition-check', style:{cursor:'pointer'} });
-    const expLabel = el('label', { htmlFor:'expedition-check', style:{cursor:'pointer',fontSize:'13px',color:'var(--text1)'} }, 'Expédition');
-    expWrap.append(expCheckbox, expLabel);
+    expCheckbox = el('input', { cls:'field-input', type:'checkbox', id:'expedition-check', style:{cursor:'pointer',width:'auto',height:'auto',marginLeft:'4px'} });
+    expWrap = el('div', { cls:'modal-field', style:{display:'flex',alignItems:'center',marginTop:'4px'} },
+      el('label', { cls:'field-label', htmlFor:'expedition-check', style:{marginBottom:'0',cursor:'pointer'} }, 'Expédition'),
+      expCheckbox
+    );
     
     // Toggle note input based on checkbox
     expCheckbox.addEventListener('change', e => {
@@ -1484,7 +1485,8 @@ function buildMvtModal() {
     el('div',{cls:'modal-field'}, el('label',{cls:'field-label'},'Emplacement'), emplInp, suggWrap),
     el('div',{cls:'modal-field'}, el('label',{cls:'field-label'},'Quantité'), qteInp),
     dateField,
-    el('div',{cls:'modal-field'}, el('label',{cls:'field-label'},'Commentaire (optionnel)'), noteInp, expWrap||null),
+    expWrap,
+    el('div',{cls:'modal-field'}, el('label',{cls:'field-label'},'Commentaire (optionnel)'), noteInp),
     el('div',{cls:'modal-actions'},
       el('button',{cls:'btn-cancel', on:{click:()=>{S.modalMvt=null;overlay.remove();}}},'Annuler'),
       confirmBtn
@@ -2315,18 +2317,32 @@ function recepAddCode(code) {
   renderContent();
 }
 
+// ── ZXing Loader ─────────────────────────────────────────────────
+async function loadZXing() {
+  if (typeof ZXing !== 'undefined') return true;
+  return new Promise((resolve) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js';
+    s.onload = () => resolve(true);
+    s.onerror = () => { showToast('Erreur chargement scanner', 'error'); resolve(false); };
+    document.head.appendChild(s);
+  });
+}
+
+let _recepLastCode = null;
+let _recepLastCodeTs = 0;
+
 async function recepStartCamera() {
   const video = document.getElementById('recep-video');
   if (!video) return;
+
+  // 1. Charger ZXing d'abord
+  showToast('Chargement du scanner...', 'warn');
+  const loaded = await loadZXing();
+  if (!loaded) { showToast('Impossible de charger le scanner', 'error'); return; }
+
   try {
-    // Charger ZXing si nécessaire
-    if (typeof ZXing === 'undefined') {
-      await new Promise((res, rej) => {
-        const s = document.createElement('script');
-        s.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js';
-        s.onload = res; s.onerror = rej; document.head.appendChild(s);
-      });
-    }
+    // 2. Obtenir le flux caméra
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
     });
@@ -2335,7 +2351,9 @@ async function recepStartCamera() {
     video.srcObject = stream;
     await video.play();
     renderContent();
-    recepScanLoop();
+
+    // 3. Démarrer le scan avec decodeFromStream
+    recepStartScanning(stream);
   } catch(e) {
     showToast('Caméra non disponible : ' + e.message, 'error');
     S.recepScanning = false; S.recepStream = null; renderContent();
@@ -2349,53 +2367,75 @@ function recepStopCamera() {
   renderContent();
 }
 
-let _recepLastCode = null;
-let _recepLastCodeTs = 0;
-
-async function recepScanLoop() {
-  if (!S.recepScanning) return;
-  const video = document.getElementById('recep-video');
-  if (!video || video.readyState < 2) { setTimeout(recepScanLoop, 200); return; }
-
-  if (typeof ZXing === 'undefined') {
-    showToast('Chargement du scanner...', 'warn');
-    setTimeout(recepScanLoop, 500);
-    return;
-  }
+async function recepStartScanning(stream) {
+  if (!S.recepScanning || !stream) return;
+  if (typeof ZXing === 'undefined') { showToast('Scanner non chargé', 'error'); return; }
 
   const hints = new Map();
   hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-    ZXing.BarcodeFormat.CODE_128,
-    ZXing.BarcodeFormat.CODE_39,
-    ZXing.BarcodeFormat.EAN_13,
-    ZXing.BarcodeFormat.EAN_8,
-    ZXing.BarcodeFormat.UPC_A,
-    ZXing.BarcodeFormat.UPC_E,
-    ZXing.BarcodeFormat.QR_CODE,
-    ZXing.BarcodeFormat.DATA_MATRIX,
-    ZXing.BarcodeFormat.AZTEC,
-    ZXing.BarcodeFormat.PDF_417
+    ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.CODE_39,
+    ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
+    ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.UPC_E,
+    ZXing.BarcodeFormat.QR_CODE, ZXing.BarcodeFormat.DATA_MATRIX,
+    ZXing.BarcodeFormat.AZTEC, ZXing.BarcodeFormat.PDF_417
   ]);
-  S.recepBarcodeReader = new ZXing.BrowserMultiFormatReader(hints);
 
-  const loop = async () => {
-    if (!S.recepScanning) return;
-    try {
-      const result = await S.recepBarcodeReader.decodeFromVideoElement(video);
+  try {
+    S.recepBarcodeReader = new ZXing.BrowserMultiFormatReader(hints);
+    // Utiliser decodeFromStream avec un callback
+    await S.recepBarcodeReader.decodeFromStream(stream, 'recep-video', (result, err) => {
+      if (!S.recepScanning) return;
       if (result) {
         const code = result.getText().trim();
         const now = Date.now();
-        // Éviter les doublons immédiats (même code dans les 2 secondes)
         if (code !== _recepLastCode || now - _recepLastCodeTs > 2000) {
           _recepLastCode = code;
           _recepLastCodeTs = now;
           recepAddCode(code);
+          showToast('Code scanné: ' + code, 'success');
         }
       }
-    } catch(e) { /* ignore frame errors */ }
-    if (S.recepScanning) requestAnimationFrame(loop);
-  };
-  requestAnimationFrame(loop);
+    });
+  } catch(e) {
+    console.error('Scan error:', e);
+    // Fallback: utiliser decodeFromVideoDevice
+    recepScanLoopFallback();
+  }
+}
+
+// Fallback avec la méthode originale si decodeFromStream échoue
+async function recepScanLoopFallback() {
+  if (!S.recepScanning) return;
+  const video = document.getElementById('recep-video');
+  if (!video || video.readyState < 2) { setTimeout(recepScanLoopFallback, 200); return; }
+  if (typeof ZXing === 'undefined') { setTimeout(recepScanLoopFallback, 500); return; }
+
+  const hints = new Map();
+  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+    ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.QR_CODE
+  ]);
+
+  try {
+    if (!S.recepBarcodeReader) {
+      S.recepBarcodeReader = new ZXing.BrowserMultiFormatReader(hints);
+    }
+    const result = await S.recepBarcodeReader.decodeOnceFromVideoElement(video);
+    if (result && S.recepScanning) {
+      const code = result.getText().trim();
+      const now = Date.now();
+      if (code !== _recepLastCode || now - _recepLastCodeTs > 2000) {
+        _recepLastCode = code;
+        _recepLastCodeTs = now;
+        recepAddCode(code);
+        showToast('Code scanné: ' + code, 'success');
+      }
+      // Continuer le scan après un délai
+      setTimeout(() => { if (S.recepScanning) recepScanLoopFallback(); }, 500);
+    }
+  } catch(e) {
+    // Pas de code détecté, continuer
+    if (S.recepScanning) requestAnimationFrame(recepScanLoopFallback);
+  }
 }
 
 async function recepValider() {
@@ -2447,7 +2487,7 @@ function buildReception() {
     // Démarrer le flux après rendu
     setTimeout(() => {
       const v = document.getElementById('recep-video');
-      if (v && S.recepStream) { v.srcObject = S.recepStream; v.play().catch(() => {}); recepScanLoop(); }
+      if (v && S.recepStream) { v.srcObject = S.recepStream; v.play().catch(() => {}); recepStartScanning(S.recepStream); }
     }, 80);
   } else {
     const placeholder = el('div', { cls: 'recep-cam-placeholder' },
