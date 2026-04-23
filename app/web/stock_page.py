@@ -2393,6 +2393,8 @@ async function recepStartScanning(stream) {
           _recepLastCodeTs = now;
           recepAddCode(code);
           showToast('Code scanné: ' + code, 'success');
+          // Arrêter la caméra après scan réussi
+          recepStopCamera();
         }
       }
     });
@@ -2428,9 +2430,10 @@ async function recepScanLoopFallback() {
         _recepLastCodeTs = now;
         recepAddCode(code);
         showToast('Code scanné: ' + code, 'success');
+        // Arrêter la caméra après scan réussi
+        recepStopCamera();
+        return;
       }
-      // Continuer le scan après un délai
-      setTimeout(() => { if (S.recepScanning) recepScanLoopFallback(); }, 500);
     }
   } catch(e) {
     // Pas de code détecté, continuer
