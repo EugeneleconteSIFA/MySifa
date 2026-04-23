@@ -1603,9 +1603,9 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
   
   // Row 1: Machine headers with colspan
   const machineRow=document.createElement('tr');
-  // Empty cell for week column
+  // Week column - wider for date details
   const emptyTh=document.createElement('th');
-  emptyTh.style.cssText='border:1px solid #000;background:#e0e0e0;font-size:9px;padding:3px 5px;font-weight:bold';
+  emptyTh.style.cssText='border:1px solid #000;background:#e0e0e0;font-size:9px;padding:3px 5px;font-weight:bold;min-width:100px';
   emptyTh.rowSpan=2;
   machineRow.appendChild(emptyTh);
   
@@ -1619,7 +1619,9 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
   
   machineCols.forEach(mc=>{
     const th=document.createElement('th');
-    th.style.cssText='border:1px solid #000;background:#e0e0e0;font-size:10px;padding:4px 6px;font-weight:bold;text-align:center';
+    // Smaller width for RESP and DSI columns
+    const isNarrow=['RESP','DSI'].includes(mc.machine.code);
+    th.style.cssText='border:1px solid #000;background:#e0e0e0;font-size:10px;padding:4px 6px;font-weight:bold;text-align:center;min-width:'+(isNarrow?'50px':'70px');
     th.colSpan=mc.posteCount;
     th.textContent=mc.machine.label;
     machineRow.appendChild(th);
@@ -1657,12 +1659,12 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
         const isFirstRow=crIdx===0;
         const bgColor=isEvenWeek?'#f5f5f5':'#ffffff';
         
-        // Week number cell (only on first row, rowspan=2)
+        // Week number cell with date details (only on first row, rowspan=2)
         if(isFirstRow){
           const weekCell=document.createElement('td');
-          weekCell.style.cssText='border:1px solid #000;font-size:10px;padding:4px 6px;background:#d8d8d8;font-weight:bold;vertical-align:middle';
+          weekCell.style.cssText='border:1px solid #000;font-size:10px;padding:4px 6px;background:#d8d8d8;font-weight:bold;vertical-align:middle;min-width:100px';
           weekCell.rowSpan=2;
-          weekCell.textContent='S'+wn;
+          weekCell.textContent=fmtWeekLabel(ws);
           row.appendChild(weekCell);
         }
         
@@ -1688,7 +1690,7 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
                 if(ass.length){
                   ass.forEach(a=>{
                     const chip=document.createElement('span');
-                    chip.style.cssText='display:inline-block;font-size:9px;padding:2px 4px;border:1px solid #666;background:#fff;margin:1px;font-weight:bold;color:#000';
+                    chip.style.cssText='display:inline-block;font-size:11px;padding:2px 4px;background:transparent;margin:1px;font-weight:bold;color:#000';
                     chip.textContent=a.user_nom.split(' ')[0];
                     td.appendChild(chip);
                   });
@@ -1701,13 +1703,13 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
             const journeeCr=m.creneaux[0];
             journeeCr.postes.forEach(poste=>{
               const td=document.createElement('td');
-              td.style.cssText='border:1px solid #000;font-size:9px;padding:3px 5px;min-width:60px;background:'+bgColor+';vertical-align:middle';
+              td.style.cssText='border:1px solid #000;font-size:9px;padding:3px 5px;min-width:50px;background:'+bgColor+';vertical-align:middle';
               td.rowSpan=2;
               const ass=getAssignments(m.code,'journee',poste,ws);
               if(ass.length){
                 ass.forEach(a=>{
                   const chip=document.createElement('span');
-                  chip.style.cssText='display:inline-block;font-size:9px;padding:2px 4px;border:1px solid #666;background:#fff;margin:1px;font-weight:bold;color:#000';
+                  chip.style.cssText='display:inline-block;font-size:11px;padding:2px 4px;background:transparent;margin:1px;font-weight:bold;color:#000';
                   chip.textContent=a.user_nom.split(' ')[0];
                   td.appendChild(chip);
                 });
@@ -1725,10 +1727,10 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
       const row=document.createElement('tr');
       const bgColor=isEvenWeek?'#f5f5f5':'#ffffff';
       
-      // Week number cell
+      // Week number cell with date details
       const weekCell=document.createElement('td');
-      weekCell.style.cssText='border:1px solid #000;font-size:10px;padding:4px 6px;background:#d8d8d8;font-weight:bold';
-      weekCell.textContent='S'+wn;
+      weekCell.style.cssText='border:1px solid #000;font-size:10px;padding:4px 6px;background:#d8d8d8;font-weight:bold;min-width:100px';
+      weekCell.textContent=fmtWeekLabel(ws);
       row.appendChild(weekCell);
       
       // Add cells for each machine/poste (all use 'journee')
@@ -1737,12 +1739,14 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
         if(journeeCr){
           journeeCr.postes.forEach(poste=>{
             const td=document.createElement('td');
-            td.style.cssText='border:1px solid #000;font-size:9px;padding:3px 5px;min-width:60px;background:'+bgColor;
+            // Smaller width for RESP columns
+            const isNarrow=m.code==='RESP';
+            td.style.cssText='border:1px solid #000;font-size:9px;padding:3px 5px;min-width:'+(isNarrow?'50px':'60px')+';background:'+bgColor;
             const ass=getAssignments(m.code,'journee',poste,ws);
             if(ass.length){
               ass.forEach(a=>{
                 const chip=document.createElement('span');
-                chip.style.cssText='display:inline-block;font-size:9px;padding:2px 4px;border:1px solid #666;background:#fff;margin:1px;font-weight:bold;color:#000';
+                chip.style.cssText='display:inline-block;font-size:11px;padding:2px 4px;background:transparent;margin:1px;font-weight:bold;color:#000';
                 chip.textContent=a.user_nom.split(' ')[0];
                 td.appendChild(chip);
               });
