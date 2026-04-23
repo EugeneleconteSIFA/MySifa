@@ -1444,12 +1444,36 @@ function buildMvtModal() {
 
   const noteInp = el('input', { cls:'field-input', type:'text', placeholder:'Réf BL, raison…', style:{direction:'ltr'} });
 
+  // Checkbox Expédition (uniquement pour les sorties)
+  let expCheckbox = null;
+  let expWrap = null;
+  if (type === 'sortie') {
+    expWrap = el('div', { cls:'modal-field', style:{display:'flex',alignItems:'center',gap:'8px',marginTop:'8px'} });
+    expCheckbox = el('input', { type:'checkbox', id:'expedition-check', style:{cursor:'pointer'} });
+    const expLabel = el('label', { htmlFor:'expedition-check', style:{cursor:'pointer',fontSize:'13px',color:'var(--text1)'} }, 'Expédition');
+    expWrap.append(expCheckbox, expLabel);
+    
+    // Toggle note input based on checkbox
+    expCheckbox.addEventListener('change', e => {
+      if (e.target.checked) {
+        noteInp.value = 'Expédition';
+        noteInp.disabled = true;
+        noteInp.style.opacity = '0.5';
+      } else {
+        noteInp.value = '';
+        noteInp.disabled = false;
+        noteInp.style.opacity = '1';
+      }
+    });
+  }
+
   const confirmBtn = el('button', { cls:'btn-confirm '+type, on:{ click: async () => {
     const qte = parseFloat(qteInp.value);
     const empl = emplInp.value.trim().toUpperCase();
     if (!empl) { showToast('Emplacement requis','error'); return; }
     if (!qte||qte<=0) { showToast('Quantité requise','error'); return; }
-    await submitMouvement({ produit_id, emplacement:empl, type_mouvement:S.modalType, quantite:qte, date_entree:dateInp.value||today, note:noteInp.value.trim() });
+    const finalNote = (expCheckbox && expCheckbox.checked) ? 'Expédition' : noteInp.value.trim();
+    await submitMouvement({ produit_id, emplacement:empl, type_mouvement:S.modalType, quantite:qte, date_entree:dateInp.value||today, note:finalNote });
   }}}, type==='entree'?'Valider entrée':type==='sortie'?'Valider sortie':'Valider inventaire');
 
   sheet.append(
@@ -1460,7 +1484,7 @@ function buildMvtModal() {
     el('div',{cls:'modal-field'}, el('label',{cls:'field-label'},'Emplacement'), emplInp, suggWrap),
     el('div',{cls:'modal-field'}, el('label',{cls:'field-label'},'Quantité'), qteInp),
     dateField,
-    el('div',{cls:'modal-field'}, el('label',{cls:'field-label'},'Commentaire (optionnel)'), noteInp),
+    el('div',{cls:'modal-field'}, el('label',{cls:'field-label'},'Commentaire (optionnel)'), noteInp, expWrap||null),
     el('div',{cls:'modal-actions'},
       el('button',{cls:'btn-cancel', on:{click:()=>{S.modalMvt=null;overlay.remove();}}},'Annuler'),
       confirmBtn

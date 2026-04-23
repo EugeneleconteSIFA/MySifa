@@ -629,8 +629,12 @@ function fmtWeekLong(ws){
   return`Semaine ${wn} — ${mon.getDate()} ${mois[mon.getMonth()]} au ${sun.getDate()} ${mois[sun.getMonth()]} ${yr}`;
 }
 function getWeeksToShow(){
-  const base=addWeeks(weekStr(new Date()),S.baseOffset);
-  return Array.from({length:S.viewRange},(_,i)=>addWeeks(base,i));
+  // For operators in read-only view, use opViewRange and opOffset
+  const isOperator = !S.isEditor && S.user;
+  const range = isOperator ? S.opViewRange : S.viewRange;
+  const offset = isOperator ? S.opOffset : S.baseOffset;
+  const base=addWeeks(weekStr(new Date()),offset);
+  return Array.from({length:range},(_,i)=>addWeeks(base,i));
 }
 function isCurrentWeek(ws){return ws===weekStr(new Date());}
 
@@ -1414,14 +1418,14 @@ function buildOperatorView(){
   // Nav semaine + sélecteur de plage
   const nav=document.createElement('div'); nav.className='rh-op-wk-nav';
   nav.innerHTML=`
-    <button class="rh-op-nav-btn" onclick="S.opOffset-=S.opViewRange;renderContent();">${icon('chevron_left',14)}</button>
+    <button class="rh-op-nav-btn" onclick="S.opOffset-=S.opViewRange;loadData();">${icon('chevron_left',14)}</button>
     <div class="rh-op-wk-lbl">${S.opViewRange===1?fmtWeekLong(weeks[0]):fmtWeekLong(weeks[0])+' → '+fmtWeekLong(weeks[weeks.length-1])}</div>
-    <button class="rh-op-nav-btn" onclick="S.opOffset+=S.opViewRange;renderContent();">${icon('chevron_right',14)}</button>
+    <button class="rh-op-nav-btn" onclick="S.opOffset+=S.opViewRange;loadData();">${icon('chevron_right',14)}</button>
   `;
   if(S.opOffset!==0){
     const todayBtn=document.createElement('button');
     todayBtn.className='rh-op-nav-btn'; todayBtn.textContent='Cette semaine';
-    todayBtn.onclick=()=>{S.opOffset=0;renderContent();};
+    todayBtn.onclick=()=>{S.opOffset=0;loadData();};
     nav.appendChild(todayBtn);
   }
   
@@ -1434,7 +1438,7 @@ function buildOperatorView(){
     btn.className='rh-op-range-btn'+(S.opViewRange===n?' active':'');
     btn.textContent=n+' sem.';
     btn.style.cssText='padding:4px 8px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:'+(S.opViewRange===n?'var(--accent)':'var(--card)')+';color:'+(S.opViewRange===n?'#fff':'var(--text1)')+';cursor:pointer;font-weight:600;';
-    btn.onclick=()=>{S.opViewRange=n;renderContent();};
+    btn.onclick=()=>{S.opViewRange=n;loadData();};
     rangeSelector.appendChild(btn);
   });
   nav.appendChild(rangeSelector);
@@ -1598,7 +1602,7 @@ function buildPrintCongesList(weeks){
   
   const title=document.createElement('div');
   title.style.cssText='font-size:14px;font-weight:bold;color:#333;margin-bottom:12px';
-  title.textContent='Congés sur la période affichée';
+  title.textContent='Congés sur la période';
   section.appendChild(title);
   
   // Get date range of displayed weeks
@@ -1690,16 +1694,16 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
   
   // Row 1: Machine headers with colspan
   const machineRow=document.createElement('tr');
-  // Week column - no border, smaller, transparent right border
+  // Week column - no top/left border, keep bottom/right
   const emptyTh=document.createElement('th');
-  emptyTh.style.cssText='border:none;border-right:1px solid transparent;background:#f5f5f5;font-size:9px;padding:2px 4px;font-weight:bold;min-width:60px';
+  emptyTh.style.cssText='border-top:none;border-left:none;border-bottom:1px solid #000;border-right:1px solid #000;background:#e8e8e8;font-size:9px;padding:2px 4px;font-weight:bold;min-width:60px';
   emptyTh.rowSpan=2;
   machineRow.appendChild(emptyTh);
   
   if(hasMatinAprem){
-    // Creneau column - no border, smaller, transparent left border
+    // Creneau column - no top/left border (transparent left to merge with week col), keep bottom/right
     const creneauTh=document.createElement('th');
-    creneauTh.style.cssText='border:none;border-left:1px solid transparent;background:#f5f5f5;font-size:9px;padding:2px 4px;font-weight:bold;min-width:40px';
+    creneauTh.style.cssText='border-top:none;border-left:1px solid transparent;border-bottom:1px solid #000;border-right:1px solid #000;background:#e8e8e8;font-size:9px;padding:2px 4px;font-weight:bold;min-width:40px';
     creneauTh.rowSpan=2;
     machineRow.appendChild(creneauTh);
   }
@@ -1708,7 +1712,7 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
     const th=document.createElement('th');
     // Smaller width for RESP and DSI columns
     const isNarrow=['RESP','DSI'].includes(mc.machine.code);
-    th.style.cssText='border:1px solid #000;background:#f5f5f5;font-size:10px;padding:4px 6px;font-weight:bold;text-align:center;min-width:'+(isNarrow?'50px':'70px');
+    th.style.cssText='border:1px solid #000;background:#e8e8e8;font-size:10px;padding:4px 6px;font-weight:bold;text-align:center;min-width:'+(isNarrow?'50px':'70px');
     th.colSpan=mc.posteCount;
     th.textContent=mc.machine.label;
     machineRow.appendChild(th);
@@ -1720,7 +1724,7 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
   machineCols.forEach(mc=>{
     mc.uniquePostes.forEach(p=>{
       const th=document.createElement('th');
-      th.style.cssText='border:1px solid #000;background:#f5f5f5;font-size:9px;padding:3px 5px;font-weight:bold';
+      th.style.cssText='border:1px solid #000;background:#e8e8e8;font-size:9px;padding:3px 5px;font-weight:bold';
       th.textContent=POSTE_LABELS[p]||p;
       posteRow.appendChild(th);
     });
@@ -1746,18 +1750,18 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
         const isFirstRow=crIdx===0;
         const bgColor=isEvenWeek?'#f5f5f5':'#ffffff';
         
-        // Week number cell with date details (only on first row, rowspan=2) - no border, transparent right border
+        // Week number cell with date details (only on first row, rowspan=2) - no top/left border
         if(isFirstRow){
           const weekCell=document.createElement('td');
-          weekCell.style.cssText='border:none;border-right:1px solid transparent;font-size:9px;padding:2px 4px;background:transparent;font-weight:bold;vertical-align:middle;min-width:60px';
+          weekCell.style.cssText='border-top:none;border-left:none;border-bottom:1px solid #000;border-right:1px solid #000;font-size:9px;padding:2px 4px;background:#f0f0f0;font-weight:bold;vertical-align:middle;min-width:60px';
           weekCell.rowSpan=2;
           weekCell.textContent=fmtWeekLabel(ws);
           row.appendChild(weekCell);
         }
         
-        // Creneau label cell - no border, transparent left border
+        // Creneau label cell - no top/left border, transparent left to merge with week
         const creneauCell=document.createElement('td');
-        creneauCell.style.cssText='border:none;border-left:1px solid transparent;font-size:8px;padding:2px 4px;background:transparent;font-weight:bold;min-width:40px';
+        creneauCell.style.cssText='border-top:none;border-left:1px solid transparent;border-bottom:1px solid #000;border-right:1px solid #000;font-size:8px;padding:2px 4px;background:#f0f0f0;font-weight:bold;min-width:40px';
         creneauCell.textContent=cr.label;
         row.appendChild(creneauCell);
         
@@ -1814,9 +1818,9 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
       const row=document.createElement('tr');
       const bgColor=isEvenWeek?'#f5f5f5':'#ffffff';
       
-      // Week number cell with date details - no border (no creneau column in this table)
+      // Week number cell with date details - no top/left border
       const weekCell=document.createElement('td');
-      weekCell.style.cssText='border:none;font-size:9px;padding:2px 4px;background:transparent;font-weight:bold;min-width:60px';
+      weekCell.style.cssText='border-top:none;border-left:none;border-bottom:1px solid #000;border-right:1px solid #000;font-size:9px;padding:2px 4px;background:#f0f0f0;font-weight:bold;min-width:60px';
       weekCell.textContent=fmtWeekLabel(ws);
       row.appendChild(weekCell);
       
