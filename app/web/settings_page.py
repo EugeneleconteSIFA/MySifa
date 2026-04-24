@@ -232,6 +232,7 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
           <h2>Utilisateurs</h2>
           <div class="users-search">
             <input type="search" id="users-q" placeholder="Rechercher (nom, email, rôle, opérateur, machine…)" autocomplete="off" spellcheck="false">
+            <select id="users-role-filter"><option value="">Tous les services</option></select>
             <span class="hint" id="users-q-hint"></span>
           </div>
         </div>
@@ -655,6 +656,23 @@ try{
   }
 }catch(e){}
 
+// Filtre par service
+function fillRoleFilterSelect() {
+  const sel = document.getElementById('users-role-filter');
+  if(!sel) return;
+  sel.innerHTML = '<option value="">Tous les services</option>' +
+    assignableRoles.map(r => '<option value="' + esc(r) + '">' + esc(roleLabels[r] || r) + '</option>').join('');
+}
+try{
+  const rf = document.getElementById('users-role-filter');
+  if(rf){
+    rf.addEventListener('change', ()=>{
+      usersRoleFilter = rf.value || '';
+      renderUsersList();
+    });
+  }
+}catch(e){}
+
 async function openEdit(id) {
   let u;
   try { u = await api('/api/users/' + id); } catch (e) { toast(e.message, true); return; }
@@ -940,6 +958,7 @@ document.getElementById('fh-four').addEventListener('change', async function() {
     roleLabels = meta.role_labels || {};
     apps = meta.apps || [];
     fillRoleSelect();
+    fillRoleFilterSelect();
     await refreshSidebarUser();
     initSupportSidebar();
     await loadFilters();
