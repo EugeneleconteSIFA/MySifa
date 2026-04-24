@@ -2332,29 +2332,49 @@ async function loadZXing() {
 let _recepLastCode = null;
 let _recepLastCodeTs = 0;
 
+// Détection plateforme
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+const isAndroid = /Android/.test(navigator.userAgent);
+
 async function recepStartCamera() {
   const video = document.getElementById('recep-video');
   if (!video) return;
 
-  // 1. Charger ZXing d'abord
+  // Android : utiliser BarcodeDetector natif si disponible
+  if (isAndroid && 'BarcodeDetector' in window) {
+    showToast('Démarrage caméra Android...', 'warn');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } }
+      });
+      S.recepStream = stream;
+      S.recepScanning = true;
+      video.srcObject = stream;
+      await video.play();
+      renderContent();
+      // Démarrer le scan avec BarcodeDetector natif
+      recepStartScanningAndroid(video);
+      return;
+    } catch(e) {
+      showToast('Caméra inaccessible', 'error');
+      S.recepScanning = false; renderContent();
+      return;
+    }
+  }
+
+  // iOS et autres : utiliser ZXing
   showToast('Chargement du scanner...', 'warn');
   const loaded = await loadZXing();
   if (!loaded) { showToast('Impossible de charger le scanner', 'error'); return; }
 
-  // 2. Essayer différentes contraintes caméra (compatibilité iOS/Android)
+  // Essayer différentes contraintes caméra (compatibilité iOS/Android)
   let stream = null;
   const constraints = [
-    // Option 1: facingMode environment + autofocus (Samsung/Android)
     { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 }, focusMode: { ideal: 'continuous' } } },
-    // Option 2: facingMode avec focusMode auto
     { video: { facingMode: { ideal: 'environment' }, focusMode: { ideal: 'continuous' } } },
-    // Option 3: facingMode environment + résolution (iOS/Android récents)
     { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } },
-    // Option 4: facingMode environment sans résolution
     { video: { facingMode: { ideal: 'environment' } } },
-    // Option 5: juste caméra arrière sans facingMode (fallback Android)
     { video: { width: { ideal: 1280 }, height: { ideal: 720 } } },
-    // Option 6: n'importe quelle caméra
     { video: true }
   ];
 
@@ -2380,12 +2400,47 @@ async function recepStartCamera() {
     video.srcObject = stream;
     await video.play();
     renderContent();
-
-    // 3. Démarrer le scan avec decodeFromStream
     recepStartScanning(stream);
   } catch(e) {
     showToast('Erreur caméra : ' + e.message, 'error');
     S.recepScanning = false; S.recepStream = null; renderContent();
+  }
+}
+
+// Scan avec BarcodeDetector natif (Android)
+async function recepStartScanningAndroid(video) {
+  if (!S.recepScanning || !video) return;
+  try {
+    const detector = new BarcodeDetector({
+      formats: ['code_128', 'ean_13', 'ean_8', 'qr_code', 'data_matrix', 'code_39']
+    });
+    let lastCode = null;
+    let lastTime = 0;
+
+    async function tick() {
+      if (!S.recepScanning) return;
+      try {
+        const codes = await detector.detect(video);
+        if (codes.length > 0) {
+          const code = codes[0].rawValue;
+          const now = Date.now();
+          // Anti-doublon : ignorer si même code dans les 1200ms
+          if (code !== lastCode || (now - lastTime) > 1200) {
+            lastCode = code;
+            lastTime = now;
+            recepAddCode(code);
+            showToast('Code scanné: ' + code, 'success');
+            recepStopCamera();
+            return;
+          }
+        }
+      } catch(e) {}
+      if (S.recepScanning) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  } catch(e) {
+    showToast('Erreur scanner Android', 'error');
+    recepStopCamera();
   }
 }
 
