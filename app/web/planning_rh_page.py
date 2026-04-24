@@ -1740,11 +1740,6 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
   // Row 2: Poste headers (unique postes only) - only for matin/aprem tables
   if(hasMatinAprem){
     const posteRow=document.createElement('tr');
-    // Première case vide de la ligne 2 - background transparent
-    const emptyTh2=document.createElement('th');
-    emptyTh2.style.cssText='border-top:none;border-left:none;border-right:1px solid #000;border-bottom:1px solid #000;background:transparent;font-size:9px;padding:2px;font-weight:bold;min-width:24px';
-    posteRow.appendChild(emptyTh2);
-
     machineCols.forEach((mc,midx)=>{
       mc.uniquePostes.forEach((p,pidx)=>{
         const th=document.createElement('th');
@@ -1779,13 +1774,13 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
         // Matin = lightgrey, Aprem = transparent (tableau 2 uniquement)
         const bgColor=cr.key==='matin'?'#d3d3d3':'transparent';
 
-        // Week number cell with date details (only on first row, rowspan=2) - left black, right none - dates soulignées
+        // Week number cell with date details (only on first row, rowspan=2) - left black, right none - dates soulignées - background transparent
         if(isFirstRow){
           const weekCell=document.createElement('td');
           const mon=weekMonday(ws),sun=new Date(mon);sun.setDate(mon.getDate()+6);
           const wn=ws.split('W')[1];
           const weekLabelHtml=`S${wn} · <u>${fmtDateShort(mon)}</u>–<u>${fmtDateShort(sun)}</u>`;
-          weekCell.style.cssText='border-top:none;border-bottom:1px solid #000;border-left:1px solid #000;border-right:none;font-size:8px;padding:1px 2px;background:'+bgColor+';font-weight:bold;vertical-align:middle;width:50px;white-space:nowrap;overflow:hidden';
+          weekCell.style.cssText='border-top:none;border-bottom:1px solid #000;border-left:1px solid #000;border-right:none;font-size:8px;padding:1px 2px;background:transparent;font-weight:bold;vertical-align:middle;width:50px;white-space:nowrap;overflow:hidden';
           weekCell.rowSpan=2;
           weekCell.innerHTML=weekLabelHtml;
           row.appendChild(weekCell);
@@ -1808,7 +1803,10 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
               const td=document.createElement('td');
               // Bordure plus épaisse à gauche du premier poste de chaque machine (sauf première)
               const borderLeft=(pidx===0&&midx>0)?'3px':'1px';
-              td.style.cssText='border-top:1px solid #000;border-bottom:1px solid #000;border-left:'+borderLeft+' solid #000;border-right:1px solid #000;font-size:9px;padding:3px 5px;min-width:60px;background:'+bgColor;
+              // Colonne DSI avec background transparent
+              const isDSI=m.code==='DSI';
+              const cellBg=isDSI?'transparent':bgColor;
+              td.style.cssText='border-top:1px solid #000;border-bottom:1px solid #000;border-left:'+borderLeft+' solid #000;border-right:1px solid #000;font-size:9px;padding:3px 5px;min-width:60px;background:'+cellBg;
               // Check if this poste exists in current creneau
               if(machineCreneaux.postes.includes(poste)){
                 const ass=getAssignments(m.code,cr.key,poste,ws);
