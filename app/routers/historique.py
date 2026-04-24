@@ -76,7 +76,6 @@ def compute_sanity_score_v2(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     c_short_shift = 0
     c_arret_50 = 0
     c_missing_metrage = 0
-    c_missing_etiquettes = 0
 
     prod_codes = {CODE_PRODUCTION, CODE_REPRISE}
     calage_codes = {CODE_CALAGE, "10", "11", "59", "60", "74", "75"}
@@ -125,26 +124,19 @@ def compute_sanity_score_v2(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
             c_arret_50 += 1
             add_event("jour_arret_50", op, jour)
 
-        # -7 : manque métrage / nb étiquettes sur fin dossier (89)
+        # -7 : manque métrage sur fin dossier (89)
         # Règle appliquée par journée: si au moins une fin dossier est incomplète.
         miss_m = False
-        miss_q = False
         for x in lignes_sorted:
             if str(x.get("operation_code") or "") != CODE_FIN_DOS:
                 continue
             mr = x.get("metrage_reel", None)
-            qt = x.get("quantite_traitee", None)
             dos = x.get("no_dossier") or ""
             if mr is None or (isinstance(mr, (int, float)) and float(mr) == 0.0) or str(mr).strip() == "":
                 miss_m = True
                 add_event("jour_missing_metrage", op, jour, str(dos))
-            if qt is None or (isinstance(qt, (int, float)) and float(qt) == 0.0) or str(qt).strip() == "":
-                miss_q = True
-                add_event("jour_missing_etiquettes", op, jour, str(dos))
         if miss_m:
             c_missing_metrage += 1
-        if miss_q:
-            c_missing_etiquettes += 1
 
     add_pen("jour_first_last", "Journée: arrivée 1ère étape / départ dernière étape", -5, c_first_last)
     add_pen("jour_second_penult", "Journée: début dossier 2e étape / fin dossier avant-dernière", -5, c_second_penult)
@@ -152,7 +144,6 @@ def compute_sanity_score_v2(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     add_pen("jour_short_shift", "Journée: arrivée→départ < 5h", -5, c_short_shift)
     add_pen("jour_arret_50", "Arrêt machine (code 50)", -2, c_arret_50)
     add_pen("jour_missing_metrage", "Fin dossier: métrage manquant", -7, c_missing_metrage)
-    add_pen("jour_missing_etiquettes", "Fin dossier: nombre d’étiquettes manquant", -7, c_missing_etiquettes)
 
     # pts négatifs => total_pen négatif : on soustrait via addition
     score = 100 + total_pen
