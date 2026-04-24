@@ -2344,13 +2344,17 @@ async function recepStartCamera() {
   // 2. Essayer différentes contraintes caméra (compatibilité iOS/Android)
   let stream = null;
   const constraints = [
-    // Option 1: facingMode environment avec résolution (iOS/Android récents)
+    // Option 1: facingMode environment + autofocus (Samsung/Android)
+    { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 }, focusMode: { ideal: 'continuous' } } },
+    // Option 2: facingMode avec focusMode auto
+    { video: { facingMode: { ideal: 'environment' }, focusMode: { ideal: 'continuous' } } },
+    // Option 3: facingMode environment + résolution (iOS/Android récents)
     { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } },
-    // Option 2: facingMode environment sans résolution
+    // Option 4: facingMode environment sans résolution
     { video: { facingMode: { ideal: 'environment' } } },
-    // Option 3: juste caméra arrière sans facingMode (fallback Android)
+    // Option 5: juste caméra arrière sans facingMode (fallback Android)
     { video: { width: { ideal: 1280 }, height: { ideal: 720 } } },
-    // Option 4: n'importe quelle caméra
+    // Option 6: n'importe quelle caméra
     { video: true }
   ];
 
