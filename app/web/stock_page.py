@@ -2417,6 +2417,22 @@ async function recepStartScanningAndroid(video) {
     let lastCode = null;
     let lastTime = 0;
 
+    // Focus manuel au tap sur l'écran
+    video.style.cursor = 'pointer';
+    video.addEventListener('click', async () => {
+      try {
+        const track = S.recepStream.getVideoTracks()[0];
+        if (track && track.applyConstraints) {
+          await track.applyConstraints({
+            advanced: [{ focusMode: 'continuous' }]
+          });
+          showToast('Focus activé', 'success');
+        }
+      } catch(e) {
+        console.log('Focus manual failed:', e);
+      }
+    });
+
     async function tick() {
       if (!S.recepScanning) return;
       try {
