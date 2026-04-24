@@ -5116,7 +5116,9 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
       })
     );
   } else {
-    opField = h('input', { type: 'text', value: (S.user && S.user.operateur_lie) ? S.user.operateur_lie : '' });
+    // Pour fabrication: utiliser nom si operateur_lie n'est pas défini
+    const userOp = (S.user && (S.user.operateur_lie || S.user.nom)) || '';
+    opField = h('input', { type: 'text', value: userOp });
     opField.disabled = true;
   }
  
@@ -5514,7 +5516,9 @@ async function bulkDelete(){
 function renderSaisies(){
   const d=S.saisies;
   if(!d) return h('div',{className:'card-empty'},'Chargement...');
-  if(!isAdmin(S.user)&&!(S.user && S.user.operateur_lie))
+  // Pour fabrication: utiliser nom si operateur_lie n'est pas défini
+  const userOperateur = (S.user && (S.user.operateur_lie || S.user.nom)) || '';
+  if(!isAdmin(S.user) && !userOperateur)
     return h('div',{className:'card'},h('div',{className:'card-blocked'},h('div',{className:'cb-icon'},iconEl('lock',32)),h('div',{className:'cb-msg'},'Compte non lié à un opérateur.')));
  
   const readOnly=isFab(S.user);
