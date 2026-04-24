@@ -1714,11 +1714,13 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
     machineRow.appendChild(creneauTh);
   }
   
-  machineCols.forEach(mc=>{
+  machineCols.forEach((mc,idx)=>{
     const th=document.createElement('th');
     // Smaller width for RESP and DSI columns
     const isNarrow=['RESP','DSI'].includes(mc.machine.code);
-    th.style.cssText='border:1px solid #000;background:#e8e8e8;font-size:10px;padding:4px 6px;font-weight:bold;text-align:center;min-width:'+(isNarrow?'50px':'70px');
+    // Bordure plus épaisse entre machines (3px) sauf première
+    const borderLeft=idx===0?'1px':'3px';
+    th.style.cssText='border-top:1px solid #000;border-bottom:1px solid #000;border-left:'+borderLeft+' solid #000;border-right:1px solid #000;background:#e8e8e8;font-size:10px;padding:4px 6px;font-weight:bold;text-align:center;min-width:'+(isNarrow?'50px':'70px');
     th.colSpan=mc.posteCount;
     th.textContent=mc.machine.label;
     machineRow.appendChild(th);
@@ -1728,10 +1730,13 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
   // Row 2: Poste headers (unique postes only) - only for matin/aprem tables
   if(hasMatinAprem){
     const posteRow=document.createElement('tr');
-    machineCols.forEach(mc=>{
-      mc.uniquePostes.forEach(p=>{
+    machineCols.forEach((mc,midx)=>{
+      mc.uniquePostes.forEach((p,pidx)=>{
         const th=document.createElement('th');
-        th.style.cssText='border:1px solid #000;background:#e8e8e8;font-size:9px;padding:3px 5px;font-weight:bold';
+        // Bordure plus épaisse à gauche du premier poste de chaque machine (sauf première)
+        const isFirstPosteOfMachine=pidx===0;
+        const borderLeft=(isFirstPosteOfMachine&&midx>0)?'3px':'1px';
+        th.style.cssText='border-top:1px solid #000;border-bottom:1px solid #000;border-left:'+borderLeft+' solid #000;border-right:1px solid #000;background:#e8e8e8;font-size:9px;padding:3px 5px;font-weight:bold';
         th.textContent=POSTE_LABELS[p]||p;
         posteRow.appendChild(th);
       });
@@ -1756,33 +1761,36 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
       creneauxList.forEach((cr,crIdx)=>{
         const row=document.createElement('tr');
         const isFirstRow=crIdx===0;
-        const bgColor=isEvenWeek?'#f5f5f5':'#ffffff';
-        
+        // Matin = lightgrey, Aprem = transparent (tableau 2 uniquement)
+        const bgColor=cr.key==='matin'?'#d3d3d3':'transparent';
+
         // Week number cell with date details (only on first row, rowspan=2) - left black, right none
         if(isFirstRow){
           const weekCell=document.createElement('td');
-          weekCell.style.cssText='border-top:none;border-bottom:1px solid #000;border-left:1px solid #000;border-right:none;font-size:8px;padding:1px 2px;background:#f0f0f0;font-weight:bold;vertical-align:middle;width:50px;white-space:nowrap;overflow:hidden';
+          weekCell.style.cssText='border-top:none;border-bottom:1px solid #000;border-left:1px solid #000;border-right:none;font-size:8px;padding:1px 2px;background:'+bgColor+';font-weight:bold;vertical-align:middle;width:50px;white-space:nowrap;overflow:hidden';
           weekCell.rowSpan=2;
           weekCell.textContent=fmtWeekLabel(ws);
           row.appendChild(weekCell);
         }
-        
+
         // Creneau label cell - no top/left border, transparent left to merge with week
         const creneauCell=document.createElement('td');
-        creneauCell.style.cssText='border-top:none;border-left:1px solid transparent;border-bottom:1px solid #000;border-right:1px solid #000;font-size:8px;padding:2px;background:#f0f0f0;font-weight:bold;min-width:24px';
+        creneauCell.style.cssText='border-top:none;border-left:1px solid transparent;border-bottom:1px solid #000;border-right:1px solid #000;font-size:8px;padding:2px;background:'+bgColor+';font-weight:bold;min-width:24px';
         creneauCell.textContent=cr.label;
         row.appendChild(creneauCell);
         
         // Add cells for each machine's unique postes
-        machineCols.forEach(mc=>{
+        machineCols.forEach((mc,midx)=>{
           const m=mc.machine;
           const machineCreneaux=m.creneaux.find(c=>c.key===cr.key);
-          
+
           if(machineCreneaux){
             // Machine has this creneau (C1, C2) - iterate through UNIQUE postes
-            mc.uniquePostes.forEach(poste=>{
+            mc.uniquePostes.forEach((poste,pidx)=>{
               const td=document.createElement('td');
-              td.style.cssText='border:1px solid #000;font-size:9px;padding:3px 5px;min-width:60px;background:'+bgColor;
+              // Bordure plus épaisse à gauche du premier poste de chaque machine (sauf première)
+              const borderLeft=(pidx===0&&midx>0)?'3px':'1px';
+              td.style.cssText='border-top:1px solid #000;border-bottom:1px solid #000;border-left:'+borderLeft+' solid #000;border-right:1px solid #000;font-size:9px;padding:3px 5px;min-width:60px;background:'+bgColor;
               // Check if this poste exists in current creneau
               if(machineCreneaux.postes.includes(poste)){
                 const ass=getAssignments(m.code,cr.key,poste,ws);
@@ -1800,9 +1808,11 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
           }else if(m.creneaux.length===1 && m.creneaux[0].key==='journee' && isFirstRow){
             // DSI-like machine with only journee - merge both rows
             const journeeCr=m.creneaux[0];
-            journeeCr.postes.forEach(poste=>{
+            journeeCr.postes.forEach((poste,pidx)=>{
               const td=document.createElement('td');
-              td.style.cssText='border:1px solid #000;font-size:9px;padding:3px 5px;min-width:50px;background:'+bgColor+';vertical-align:middle';
+              // Bordure plus épaisse à gauche du premier poste de chaque machine (sauf première)
+              const borderLeft=(pidx===0&&midx>0)?'3px':'1px';
+              td.style.cssText='border-top:1px solid #000;border-bottom:1px solid #000;border-left:'+borderLeft+' solid #000;border-right:1px solid #000;font-size:9px;padding:3px 5px;min-width:50px;background:'+bgColor+';vertical-align:middle';
               td.rowSpan=2;
               const ass=getAssignments(m.code,'journee',poste,ws);
               if(ass.length){
@@ -1828,19 +1838,22 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
       
       // Week number cell with date details - full black borders
       const weekCell=document.createElement('td');
-      weekCell.style.cssText='border:1px solid #000;font-size:9px;padding:2px 4px;background:#f0f0f0;font-weight:bold;min-width:60px';
+      weekCell.style.cssText='border:1px solid #000;font-size:9px;padding:2px 4px;background:'+bgColor+';font-weight:bold;min-width:60px';
       weekCell.textContent=fmtWeekLabel(ws);
       row.appendChild(weekCell);
       
       // Add cells for each machine/poste (all use 'journee')
-      machines.forEach(m=>{
+      machines.forEach((m,midx)=>{
         const journeeCr=m.creneaux.find(c=>c.key==='journee');
         if(journeeCr){
-          journeeCr.postes.forEach(poste=>{
+          journeeCr.postes.forEach((poste,pidx)=>{
             const td=document.createElement('td');
+            // Bordure plus épaisse à gauche du premier poste de chaque machine (sauf première)
+            const isFirstPosteOfMachine=pidx===0;
+            const borderLeft=(isFirstPosteOfMachine&&midx>0)?'3px':'1px';
             // Smaller width for RESP columns
             const isNarrow=m.code==='RESP';
-            td.style.cssText='border:1px solid #000;font-size:9px;padding:3px 5px;min-width:'+(isNarrow?'50px':'60px')+';background:'+bgColor;
+            td.style.cssText='border-top:1px solid #000;border-bottom:1px solid #000;border-left:'+borderLeft+' solid #000;border-right:1px solid #000;font-size:9px;padding:3px 5px;min-width:'+(isNarrow?'50px':'60px')+';background:'+bgColor;
             const ass=getAssignments(m.code,'journee',poste,ws);
             if(ass.length){
               ass.forEach(a=>{
