@@ -27,6 +27,8 @@ def list_saisies(
     limit: int = 500, offset: int = 0,
 ):
     user = get_current_user(request)
+    # Pour fabrication: utiliser nom si operateur_lie n'est pas défini
+    user_operateur = user.get("operateur_lie") or user.get("nom") or ""
     operateurs = [o for o in (operateur or []) if o]
     dossiers   = [d for d in (no_dossier or []) if d]
 
@@ -39,8 +41,9 @@ def list_saisies(
             where.append(f"no_dossier IN ({','.join('?'*len(dossiers))})")
             params.extend(dossiers)
     else:
-        if user.get("operateur_lie"):
-            where.append("operateur = ?"); params.append(user["operateur_lie"])
+        # Pour fabrication: filtrer par operateur_lie ou nom utilisateur
+        if user_operateur:
+            where.append("operateur = ?"); params.append(user_operateur)
         else:
             where.append("1=0")
     if date_from: where.append("date_operation >= ?"); params.append(date_from)
@@ -71,7 +74,9 @@ async def update_saisie(row_id: int, request: Request):
     with get_db() as conn:
         ex = conn.execute("SELECT * FROM production_data WHERE id=?", (row_id,)).fetchone()
         if not ex: raise HTTPException(status_code=404, detail="Ligne non trouvée")
-        if not is_admin(user) and ex["operateur"] != user.get("operateur_lie"):
+        # Pour fabrication: utiliser nom si operateur_lie n'est pas défini
+        user_operateur = user.get("operateur_lie") or user.get("nom") or ""
+        if not is_admin(user) and ex["operateur"] != user_operateur:
             raise HTTPException(status_code=403, detail="Modification non autorisée")
 
         # Opérateur : modifiable uniquement par admin.
@@ -226,11 +231,13 @@ def delete_saisie(row_id: int, request: Request):
 @router.get("/api/saisies/export-modifiees")
 def export_saisies_modifiees(request: Request):
     user = get_current_user(request)
+    # Pour fabrication: utiliser nom si operateur_lie n'est pas défini
+    user_operateur = user.get("operateur_lie") or user.get("nom") or ""
     where = ["(est_manuel=1 OR modifie_par IS NOT NULL)"]
     params = []
     if is_fabrication(user):
-        if user.get("operateur_lie"):
-            where.append("operateur=?"); params.append(user["operateur_lie"])
+        if user_operateur:
+            where.append("operateur=?"); params.append(user_operateur)
         else:
             raise HTTPException(status_code=403, detail="Compte non lié")
     with get_db() as conn:
@@ -263,3 +270,73 @@ def export_saisies_modifiees(request: Request):
     return StreamingResponse(buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": 'attachment; filename="saisies_modifiees.xlsx"'})
+
+
+@router.get("/api/saisies/export")
+def export_saisies(
+    request: Request,
+    operateur: Optional[List[str]] = Query(default=None),
+    no_dossier: Optional[List[str]] = Query(default=None),
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+):
+    """Export Excel des saisies avec les filtres appliqués (même filtres que /api/saisies)."""
+    user = get_current_user(request)
+    # Pour fabrication: utiliser nom si operateur_lie n'est pas défini
+    user_operateur = user.get("operateur_lie") or user.get("nom") or ""
+    operateurs = [o for o in (operateur or []) if o]
+    dossiers   = [d for d in (no_dossier or []) if d]
+
+    where, params = ["1=1"], []
+    if can_view_all_prod(user):
+        if operateurs:
+            where.append(f"operateur IN ({','.join('?'*len(operateurs))})")
+            params.extend(operateurs)
+        if dossiers:
+            where.append(f"no_dossier IN ({','.join('?'*len(dossiers))})")
+            params.extend(dossiers)
+    else:
+        # Pour fabrication: filtrer par operateur_lie ou nom utilisateur
+        if user_operateur:
+            where.append("operateur = ?"); params.append(user_operateur)
+        else:
+            where.append("1=0")
+    if date_from: where.append("date_operation >= ?"); params.append(date_from)
+    if date_to:   where.append("date_operation <= ?"); params.append(date_to+'T23:59:59')
+    wc = " AND ".join(where)
+
+    with get_db() as conn:
+        rows = conn.execute(
+            f"""SELECT id,operateur,date_operation,operation,operation_code,
+                       operation_severity,operation_category,machine,no_dossier,client,designation,
+                       quantite_a_traiter,quantite_traitee,metrage_prevu,metrage_reel,
+                       metrage_total_debut,metrage_total_fin,
+                       commentaire,service,est_manuel,modifie_par,modifie_le,modifie_note
+                FROM production_data WHERE {wc}
+                ORDER BY date_operation ASC, id ASC""",
+            params
+        ).fetchall()
+
+    if not rows:
+        raise HTTPException(status_code=404, detail="Aucune saisie à exporter")
+
+    df = pd.DataFrame([dict(r) for r in rows])
+    df.rename(columns={
+        "id":"ID","operateur":"Opérateur","date_operation":"Date","operation":"Opération",
+        "operation_code":"Code","operation_severity":"Sévérité","operation_category":"Catégorie",
+        "machine":"Machine","no_dossier":"No Dossier","client":"Client","designation":"Désignation",
+        "quantite_a_traiter":"Qté prévue","quantite_traitee":"Qté traitée",
+        "metrage_prevu":"Métrage prévu (m)","metrage_reel":"Métrage réel (m)",
+        "metrage_total_debut":"Métrage total début (m)","metrage_total_fin":"Métrage total fin (m)",
+        "commentaire":"Commentaire","service":"Service",
+        "est_manuel":"Ajout manuel","modifie_par":"Modifié par",
+        "modifie_le":"Modifié le","modifie_note":"Note",
+    }, inplace=True)
+
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Saisies")
+    buf.seek(0)
+    return StreamingResponse(buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="saisies.xlsx"'})

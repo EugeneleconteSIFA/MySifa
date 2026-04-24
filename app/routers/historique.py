@@ -189,7 +189,9 @@ def dashboard_historique(
     date_to: Optional[str] = None,
 ):
     user = get_current_user(request)
-    if not can_view_all_prod(user) and not user.get("operateur_lie"):
+    # Pour fabrication: utiliser nom si operateur_lie n'est pas défini
+    user_operateur = user.get("operateur_lie") or user.get("nom") or ""
+    if not can_view_all_prod(user) and not user_operateur:
         return {**BLOCKED}
 
     operateurs = [o for o in (operateur or []) if o]
@@ -205,7 +207,8 @@ def dashboard_historique(
             where.append(f"no_dossier IN ({','.join('?'*len(dossiers))})")
             params.extend(dossiers)
     else:
-        where.append("operateur = ?"); params.append(user["operateur_lie"])
+        # Pour fabrication: filtrer par operateur_lie ou nom utilisateur
+        where.append("operateur = ?"); params.append(user_operateur)
     if date_from: where.append("date_operation >= ?"); params.append(date_from)
     if date_to:   where.append("date_operation <= ?"); params.append(date_to+'T23:59:59')
     wc = " AND ".join(where)
@@ -217,7 +220,8 @@ def dashboard_historique(
             ws.append(f"operateur IN ({','.join('?'*len(operateurs))})")
             ps.extend(operateurs)
     else:
-        ws.append("operateur = ?"); ps.append(user["operateur_lie"])
+        # Pour fabrication: filtrer par operateur_lie ou nom utilisateur
+        ws.append("operateur = ?"); ps.append(user_operateur)
     if date_from: ws.append("date_operation >= ?"); ps.append(date_from)
     if date_to:   ws.append("date_operation <= ?"); ps.append(date_to+'T23:59:59')
     wc_san = " AND ".join(ws)

@@ -160,9 +160,9 @@ def get_session(request: Request, machine_id: int = None):
     # machine_id : préférence compte utilisateur, sinon query param (admin)
     mid = user.get("machine_id") or machine_id
     
-    # Opérateur : operateur_lie si défini, sinon nom de l'utilisateur si machine liée
+    # Opérateur : operateur_lie si défini, sinon nom de l'utilisateur
     operateur = user.get("operateur_lie") or ""
-    if not operateur and mid:
+    if not operateur:
         operateur = user.get("nom") or ""
     
     # Bloquer uniquement si pas d'opérateur ET pas de machine ET pas admin
@@ -242,20 +242,20 @@ async def create_saisie(request: Request):
 
     cl = classify_operation(op_str)
 
-    # Opérateur : issu du compte sauf si admin
+    # Opérateur : operateur_lie si défini, sinon nom de l'utilisateur
     # machine_id : préférence compte utilisateur
     mid = user.get("machine_id")
     
     operateur = user.get("operateur_lie") or ""
     if is_admin(user) and body.get("operateur"):
         operateur = str(body["operateur"]).strip()
-    # Si pas d'opérateur_lié mais machine liée, utiliser le nom de l'utilisateur
-    if not operateur and mid:
+    # Si pas d'opérateur_lié, utiliser le nom de l'utilisateur
+    if not operateur:
         operateur = user.get("nom") or ""
     if not operateur:
         raise HTTPException(
             status_code=400,
-            detail="Compte non lié à un opérateur ou machine — contacter un administrateur",
+            detail="Compte utilisateur sans nom — contacter un administrateur",
         )
 
     date_op = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
@@ -401,7 +401,10 @@ def list_matieres(request: Request, machine_id: int = None, no_dossier: str = No
     _check_fab_access(user)
 
     mid = user.get("machine_id") or machine_id
+    # Opérateur : operateur_lie si défini, sinon nom de l'utilisateur
     operateur = user.get("operateur_lie") or ""
+    if not operateur:
+        operateur = user.get("nom") or ""
 
     with get_db() as conn:
         if no_dossier:
@@ -437,7 +440,10 @@ async def add_matiere(request: Request):
     if not code_barre:
         raise HTTPException(status_code=400, detail="Code barre manquant")
 
+    # Opérateur : operateur_lie si défini, sinon nom de l'utilisateur
     operateur = user.get("operateur_lie") or ""
+    if not operateur:
+        operateur = user.get("nom") or ""
     if is_admin(user) and body.get("operateur"):
         operateur = str(body["operateur"]).strip()
 
@@ -470,7 +476,10 @@ async def delete_matiere(matiere_id: int, request: Request):
     user = get_current_user(request)
     _check_fab_access(user)
 
+    # Opérateur : operateur_lie si défini, sinon nom de l'utilisateur
     operateur = user.get("operateur_lie") or ""
+    if not operateur:
+        operateur = user.get("nom") or ""
 
     with get_db() as conn:
         ex = conn.execute(
@@ -569,8 +578,9 @@ async def update_commentaire(saisie_id: int, request: Request):
         if not ex:
             raise HTTPException(status_code=404, detail="Saisie non trouvée")
 
-        operateur = user.get("operateur_lie") or ""
-        if not is_admin(user) and ex["operateur"] != operateur:
+        # Opérateur : operateur_lie si défini, sinon nom de l'utilisateur
+        user_operateur = user.get("operateur_lie") or user.get("nom") or ""
+        if not is_admin(user) and ex["operateur"] != user_operateur:
             raise HTTPException(status_code=403, detail="Non autorisé")
 
         conn.execute(

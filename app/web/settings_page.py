@@ -599,7 +599,8 @@ async function copyUserCredentials(id) {
 
 function syncCuRoleUI() {
   const r = document.getElementById('cu-role').value;
-  const hideOp = ['direction', 'administration', 'logistique', 'comptabilite', 'expedition', 'superadmin'].indexOf(r) >= 0;
+  // Cacher opérateur lié pour fabrication et les autres rôles hors production
+  const hideOp = ['fabrication', 'direction', 'administration', 'logistique', 'comptabilite', 'expedition', 'superadmin'].indexOf(r) >= 0;
   document.getElementById('cu-op').style.display = hideOp ? 'none' : '';
   document.getElementById('cu-mac').style.display = r === 'fabrication' ? '' : 'none';
 }
@@ -668,7 +669,8 @@ async function openEdit(id) {
 
   function syncEd() {
     const r = dlg.querySelector('#ed-role').value;
-    const hideOp = ['direction', 'administration', 'logistique', 'comptabilite', 'expedition', 'superadmin'].indexOf(r) >= 0;
+    // Cacher opérateur lié pour fabrication et les autres rôles hors production
+    const hideOp = ['fabrication', 'direction', 'administration', 'logistique', 'comptabilite', 'expedition', 'superadmin'].indexOf(r) >= 0;
     dlg.querySelector('#ed-op-wrap').style.display = hideOp ? 'none' : '';
     dlg.querySelector('#ed-mac-wrap').style.display = (r === 'fabrication') ? '' : 'none';
   }
