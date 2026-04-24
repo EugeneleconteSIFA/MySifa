@@ -1566,15 +1566,24 @@ function printPlanning(){
   c.innerHTML=originalContent;
 }
 
+function fmtWeekLabelPrint(ws){
+  const mon=weekMonday(ws),sun=new Date(mon);sun.setDate(mon.getDate()+6);
+  const wn=ws.split('W')[1];
+  return`S${wn} · <u>${fmtDateShort(mon)}</u>–<u>${fmtDateShort(sun)}</u>`;
+}
+
 function buildPrintPivotLayout(){
   const weeks=getWeeksToShow();
   const wrap=document.createElement('div');
   wrap.className='rh-print-pivot-wrap';
-  
+
   const header=document.createElement('div');
   header.className='rh-print-header';
   header.style.cssText='text-align:center;font-size:18px;font-weight:bold;margin-bottom:16px';
-  header.textContent='Planning du personnel — '+fmtWeekLabel(weeks[0])+(weeks.length>1?' au '+fmtWeekLabel(weeks[weeks.length-1]):'');
+  // Dates soulignées dans le titre
+  const weekLabel1=fmtWeekLabelPrint(weeks[0]);
+  const weekLabel2=weeks.length>1?fmtWeekLabelPrint(weeks[weeks.length-1]):'';
+  header.innerHTML='Planning du personnel — '+weekLabel1+(weeks.length>1?' au '+weekLabel2:'');
   wrap.appendChild(header);
   
   // Group 1: LOG, RESP, REP (all have journee only)
@@ -1700,27 +1709,28 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
   
   // Row 1: Machine headers with colspan
   const machineRow=document.createElement('tr');
-  // Week column - no top/left/right border (first cell), keep bottom
+  // Week column - no top/left/right border (first cell), keep bottom - background transparent
   const emptyTh=document.createElement('th');
-  emptyTh.style.cssText='border-top:none;border-left:none;border-right:none;border-bottom:1px solid #000;background:#e8e8e8;font-size:9px;padding:2px 4px;font-weight:bold;min-width:36px';
+  emptyTh.style.cssText='border-top:none;border-left:none;border-right:none;border-bottom:1px solid #000;background:transparent;font-size:9px;padding:2px 4px;font-weight:bold;min-width:36px';
   emptyTh.rowSpan=hasMatinAprem?2:1;
   machineRow.appendChild(emptyTh);
-  
+
   if(hasMatinAprem){
-    // Creneau column - no top/left border (transparent left to merge with week col), keep bottom/right
+    // Creneau column - no top/left border (transparent left to merge with week col), keep bottom/right - background transparent
     const creneauTh=document.createElement('th');
-    creneauTh.style.cssText='border-top:none;border-left:1px solid transparent;border-bottom:1px solid #000;border-right:1px solid #000;background:#e8e8e8;font-size:9px;padding:2px;font-weight:bold;min-width:24px';
+    creneauTh.style.cssText='border-top:none;border-left:1px solid transparent;border-bottom:1px solid #000;border-right:1px solid #000;background:transparent;font-size:9px;padding:2px;font-weight:bold;min-width:24px';
     creneauTh.rowSpan=2;
     machineRow.appendChild(creneauTh);
   }
-  
+
   machineCols.forEach((mc,idx)=>{
     const th=document.createElement('th');
     // Smaller width for RESP and DSI columns
     const isNarrow=['RESP','DSI'].includes(mc.machine.code);
     // Bordure plus épaisse entre machines (3px) sauf première
     const borderLeft=idx===0?'1px':'3px';
-    th.style.cssText='border-top:1px solid #000;border-bottom:1px solid #000;border-left:'+borderLeft+' solid #000;border-right:1px solid #000;background:#e8e8e8;font-size:10px;padding:4px 6px;font-weight:bold;text-align:center;min-width:'+(isNarrow?'50px':'70px');
+    // Taille de police augmentée pour les machines
+    th.style.cssText='border-top:1px solid #000;border-bottom:1px solid #000;border-left:'+borderLeft+' solid #000;border-right:1px solid #000;background:#e8e8e8;font-size:12px;padding:4px 6px;font-weight:bold;text-align:center;min-width:'+(isNarrow?'50px':'70px');
     th.colSpan=mc.posteCount;
     th.textContent=mc.machine.label;
     machineRow.appendChild(th);
@@ -1730,6 +1740,11 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
   // Row 2: Poste headers (unique postes only) - only for matin/aprem tables
   if(hasMatinAprem){
     const posteRow=document.createElement('tr');
+    // Première case vide de la ligne 2 - background transparent
+    const emptyTh2=document.createElement('th');
+    emptyTh2.style.cssText='border-top:none;border-left:none;border-right:1px solid #000;border-bottom:1px solid #000;background:transparent;font-size:9px;padding:2px;font-weight:bold;min-width:24px';
+    posteRow.appendChild(emptyTh2);
+
     machineCols.forEach((mc,midx)=>{
       mc.uniquePostes.forEach((p,pidx)=>{
         const th=document.createElement('th');
@@ -1741,7 +1756,7 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
         posteRow.appendChild(th);
       });
     });
-    thead.appendChild(posteRow);
+    thead.appendChild(posteRow)
   }
   table.appendChild(thead);
   
@@ -1764,12 +1779,15 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
         // Matin = lightgrey, Aprem = transparent (tableau 2 uniquement)
         const bgColor=cr.key==='matin'?'#d3d3d3':'transparent';
 
-        // Week number cell with date details (only on first row, rowspan=2) - left black, right none
+        // Week number cell with date details (only on first row, rowspan=2) - left black, right none - dates soulignées
         if(isFirstRow){
           const weekCell=document.createElement('td');
+          const mon=weekMonday(ws),sun=new Date(mon);sun.setDate(mon.getDate()+6);
+          const wn=ws.split('W')[1];
+          const weekLabelHtml=`S${wn} · <u>${fmtDateShort(mon)}</u>–<u>${fmtDateShort(sun)}</u>`;
           weekCell.style.cssText='border-top:none;border-bottom:1px solid #000;border-left:1px solid #000;border-right:none;font-size:8px;padding:1px 2px;background:'+bgColor+';font-weight:bold;vertical-align:middle;width:50px;white-space:nowrap;overflow:hidden';
           weekCell.rowSpan=2;
-          weekCell.textContent=fmtWeekLabel(ws);
+          weekCell.innerHTML=weekLabelHtml;
           row.appendChild(weekCell);
         }
 
@@ -1832,16 +1850,19 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
         tbody.appendChild(row);
       });
     }else{
-      // One row per week (LOG, RESP, REP)
+      // One row per week (LOG, RESP, REP) - Tableau 1
       const row=document.createElement('tr');
       const bgColor=isEvenWeek?'#f5f5f5':'#ffffff';
-      
-      // Week number cell with date details - full black borders
+
+      // Week number cell with date details - full black borders - background transparent, dates soulignées
       const weekCell=document.createElement('td');
-      weekCell.style.cssText='border:1px solid #000;font-size:9px;padding:2px 4px;background:'+bgColor+';font-weight:bold;min-width:60px';
-      weekCell.textContent=fmtWeekLabel(ws);
+      const mon=weekMonday(ws),sun=new Date(mon);sun.setDate(mon.getDate()+6);
+      const wn=ws.split('W')[1];
+      const weekLabelHtml=`S${wn} · <u>${fmtDateShort(mon)}</u>–<u>${fmtDateShort(sun)}</u>`;
+      weekCell.style.cssText='border:1px solid #000;font-size:9px;padding:2px 4px;background:transparent;font-weight:bold;min-width:60px';
+      weekCell.innerHTML=weekLabelHtml;
       row.appendChild(weekCell);
-      
+
       // Add cells for each machine/poste (all use 'journee')
       machines.forEach((m,midx)=>{
         const journeeCr=m.creneaux.find(c=>c.key==='journee');
@@ -1853,7 +1874,10 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
             const borderLeft=(isFirstPosteOfMachine&&midx>0)?'3px':'1px';
             // Smaller width for RESP columns
             const isNarrow=m.code==='RESP';
-            td.style.cssText='border-top:1px solid #000;border-bottom:1px solid #000;border-left:'+borderLeft+' solid #000;border-right:1px solid #000;font-size:9px;padding:3px 5px;min-width:'+(isNarrow?'50px':'60px')+';background:'+bgColor;
+            // Colonne DSI avec background transparent
+            const isDSI=m.code==='DSI';
+            const cellBg=isDSI?'transparent':bgColor;
+            td.style.cssText='border-top:1px solid #000;border-bottom:1px solid #000;border-left:'+borderLeft+' solid #000;border-right:1px solid #000;font-size:9px;padding:3px 5px;min-width:'+(isNarrow?'50px':'60px')+';background:'+cellBg;
             const ass=getAssignments(m.code,'journee',poste,ws);
             if(ass.length){
               ass.forEach(a=>{
@@ -1867,7 +1891,7 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
           });
         }
       });
-      
+
       tbody.appendChild(row);
     }
   });
