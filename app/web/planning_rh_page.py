@@ -458,20 +458,11 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
   .rh-content{overflow:visible!important;padding:0!important;margin:0!important}
   .rh-grid-wrap{border:none!important;overflow:visible!important;padding:0!important;margin:0!important}
 
-  /* Espace entre blocs machines - colonne transparente de séparation */
-  .rh-machine-block{page-break-inside:avoid;margin-bottom:8px;border-left:4px solid transparent!important}
-  .rh-machine-block+.rh-machine-block{margin-left:4px!important}
-  .rh-machine-block-separator{display:block!important;width:4px!important;background:transparent!important;border:none!important}
-
+  .rh-machine-block{page-break-inside:avoid;margin-bottom:8px}
   .rh-machine-section-hdr{padding:4px 8px;margin-bottom:4px;font-size:11px}
   .rh-grid{border:1px solid #000!important;border-collapse:collapse!important;width:100%}
   .rh-grid th{font-size:8px!important;padding:2px 4px!important;border:1px solid #000!important;background:#f5f5f5!important}
   .rh-grid td{font-size:8px!important;padding:0!important;border:1px solid #ddd!important}
-
-  /* Zebra striping - contraste une ligne sur deux */
-  .rh-grid tbody tr:nth-child(even){background:#f9f9f9!important}
-  .rh-grid tbody tr:nth-child(odd){background:#fff!important}
-  .rh-grid tbody tr.rh-cur-week-row{background:#e6f7ff!important}
 
   .rh-poste-col{width:70px!important;padding:2px 4px!important}
   .rh-week-col{min-width:45px!important}
@@ -490,10 +481,6 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
   .rh-pivot-table{border-collapse:collapse;width:100%;margin-bottom:16px}
   .rh-pivot-table th,.rh-pivot-table td{border:1px solid #000;font-size:9px;padding:3px 5px}
   .rh-pivot-table th{background:#e0e0e0!important;font-weight:bold!important}
-
-  /* Zebra striping pour table pivot */
-  .rh-pivot-table tbody tr:nth-child(even){background:#f5f5f5!important}
-  .rh-pivot-table tbody tr:nth-child(odd){background:#fff!important}
 
   @page{margin:0.5cm;size:A4 landscape}
 }
@@ -524,10 +511,8 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 .rh-annee-sel:focus{border-color:var(--accent)}
 
 /* ── Grille inversée (colonne=poste, ligne=horaire) ── */
-.rh-machine-block{border-bottom:2px solid var(--border);border-left:4px solid transparent}
+.rh-machine-block{border-bottom:2px solid var(--border)}
 .rh-machine-block:last-child{border-bottom:none}
-.rh-machine-block-separator{width:4px;background:transparent;flex-shrink:0;display:block}
-.rh-grid-wrap{display:flex;flex-direction:row;align-items:flex-start}
 .rh-machine-section-hdr{
   padding:8px 14px;font-size:13px;font-weight:800;text-transform:uppercase;
   letter-spacing:1px;background:var(--card);color:var(--text);
@@ -537,10 +522,6 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 .rh-cur-week-row td{background:var(--accent-bg)!important}
 .rh-cur-week-row .rh-poste-label{background:var(--accent-bg)!important}
 
-/* Zebra striping pour tableau - contraste une ligne sur deux */
-.rh-grid tbody tr:nth-child(even){background:rgba(255,255,255,.03)}
-.rh-grid tbody tr:nth-child(odd){background:transparent}
-body.light .rh-grid tbody tr:nth-child(even){background:rgba(0,0,0,.02)}
 
 /* ── Cross-app sidebar section ──────────────────────── */
 .rh-sb-section-title{
@@ -1023,24 +1004,15 @@ function buildPlanningGrid(){
   const gw=document.createElement('div');
   gw.className='rh-grid-wrap';
 
-  GRID_DEF.forEach((mdef, idx)=>{
+  GRID_DEF.forEach(mdef=>{
     // Postes uniques (union de tous les creneaux de cette machine)
     const allPostes=[];
     mdef.creneaux.forEach(cr=>{
       cr.postes.forEach(p=>{if(!allPostes.includes(p))allPostes.push(p);});
     });
 
-    // Séparateur entre blocs machines (sauf premier)
-    if(idx>0){
-      const sep=document.createElement('div');
-      sep.className='rh-machine-block-separator';
-      sep.style.cssText='width:4px;background:transparent;flex-shrink:0;';
-      gw.appendChild(sep);
-    }
-
     const block=document.createElement('div');
     block.className='rh-machine-block';
-    block.style.cssText='border-left:4px solid transparent;';
 
     // En-tête machine
     const mhdr=document.createElement('div');
