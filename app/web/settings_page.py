@@ -49,10 +49,10 @@ body{margin:0;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;backgrou
 .logo{font-size:15px;font-weight:800;margin-bottom:20px;padding:0 8px}.logo span{color:var(--accent)}
 .logo-sub{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px}
 .nav-scroll{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
-.nav-btn{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 12px;border-radius:8px;border:none;background:transparent;color:var(--text2);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s,color .15s,box-shadow .2s;margin-bottom:2px}
+.nav-btn{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 12px;border-radius:8px;border:none;background:transparent;color:var(--text2);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s,color .15s,box-shadow .2s;margin-bottom:2px;position:relative;z-index:1}
 .nav-btn:hover,.nav-btn.active{background:rgba(34,211,238,.12);color:var(--accent)}
-.nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(34,211,238,.25),0 0 18px rgba(34,211,238,.15)}
-body.light .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(8,145,178,.32),0 0 16px rgba(8,145,178,.12)}
+.nav-btn:hover:not(.active){box-shadow:inset 0 0 0 1.5px rgba(34,211,238,.45),0 0 12px rgba(34,211,238,.2)}
+body.light .nav-btn:hover:not(.active){box-shadow:inset 0 0 0 1.5px rgba(8,145,178,.5),0 0 10px rgba(8,145,178,.15)}
 .back-mysifa{border:none!important;background:transparent!important;font-weight:400!important;color:var(--text2)!important;padding:8px 10px!important}
 .back-mysifa:hover{color:var(--text)!important;background:transparent!important}
 .back-mysifa .wm{font-weight:800;color:var(--text)}.back-mysifa .wm span{color:var(--accent)}
@@ -121,6 +121,10 @@ body.light .btn-sec:hover{box-shadow:0 0 0 1px rgba(8,145,178,.35),0 0 18px rgba
 .users-search input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.14)}
 body.light .users-search input:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .users-search .hint{font-size:11px;color:var(--muted);white-space:nowrap}
+.users-search select{min-width:140px;padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);
+  background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;outline:none}
+.users-search select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.14)}
+body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .tabs{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
 .nav-group-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);padding:8px 12px 2px;opacity:.7}
 .hidden{display:none}
@@ -321,6 +325,7 @@ let matrixSnapshot = [];
 let superadminEmailRef = '';
 let usersAll = [];
 let usersQuery = '';
+let usersRoleFilter = '';
 
 function _norm(s){
   return String(s||'')
@@ -490,6 +495,10 @@ async function loadUsers() {
   const list = await api('/api/users');
   usersAll = Array.isArray(list) ? list.slice() : [];
   usersAll.sort((a,b)=>{
+    // Tri par service (rôle) d'abord, puis par nom alphabétique
+    const roleA = String(a && a.role || '').toLowerCase();
+    const roleB = String(b && b.role || '').toLowerCase();
+    if(roleA !== roleB) return roleA.localeCompare(roleB,'fr');
     const an = _norm(a && a.nom);
     const bn = _norm(b && b.nom);
     if(an !== bn) return an.localeCompare(bn,'fr');
@@ -511,9 +520,15 @@ function renderUsersList(){
   const q = _norm(usersQuery);
   const tokens = q ? q.split(' ').filter(Boolean) : [];
   let list = usersAll;
+
+  // Filtrage par service (rôle)
+  if(usersRoleFilter && usersRoleFilter !== ''){
+    list = list.filter(u => (u.role || '') === usersRoleFilter);
+  }
+
   if(tokens.length){
     const scored = [];
-    for(const u of usersAll){
+    for(const u of list){
       const hay = userHaystack(u);
       const sc = scoreMatch(hay, tokens);
       if(sc != null) scored.push({u, sc});
@@ -521,7 +536,7 @@ function renderUsersList(){
     scored.sort((a,b)=> (a.sc - b.sc) || _norm(a.u.nom).localeCompare(_norm(b.u.nom),'fr'));
     list = scored.map(x=>x.u);
   }
-  if(hint) hint.textContent = tokens.length ? (list.length + '/' + usersAll.length) : (usersAll.length + '');
+  if(hint) hint.textContent = (list.length + '/' + usersAll.length);
 
   box.innerHTML = list.map(u => {
     const act = Number(u.actif) === 1;
