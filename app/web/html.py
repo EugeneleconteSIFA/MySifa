@@ -3473,7 +3473,22 @@ function renderExpe(){
 }
 
 // ── Loaders ─────────────────────────────────────────────────────
-async function loadFilters(){try{S.filters=await api('/api/filters')||{};S.OPS_CONFIG=await api('/api/config/operations')||{};}catch{}}
+async function loadFilters(){
+  try{
+    S.filters=await api('/api/filters')||{};
+    S.OPS_CONFIG=await api('/api/config/operations')||{};
+    // Pour utilisateur fabrication: auto-sélectionner son nom comme filtre opérateur
+    // pour qu'il voie immédiatement ses données de saisie
+    if(isFab(S.user) && S.user && S.user.nom){
+      const userOp = S.user.nom;
+      const ops = S.filters.operators || [];
+      // Si l'utilisateur n'est pas déjà dans la sélection et qu'il existe dans la liste
+      if(!S.fv.operateurs.length && ops.includes(userOp)){
+        S.fv.operateurs = [userOp];
+      }
+    }
+  }catch{}
+}
 function buildParams(){
   const p=new URLSearchParams();
   if(isAdmin(S.user)){

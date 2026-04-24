@@ -17,11 +17,18 @@ def get_filters(request: Request):
             """).fetchall()
         elif is_fabrication(user):
             # Fabrication: uniquement son propre nom (operateur_lie ou nom utilisateur)
+            # Toujours inclure le nom de l'utilisateur même s'il n'a pas encore de données
             user_operateur = user.get("operateur_lie") or user.get("nom") or ""
-            ops = conn.execute("""
+            rows = conn.execute("""
                 SELECT DISTINCT operateur FROM production_data
                 WHERE operateur=? ORDER BY operateur
             """, (user_operateur,)).fetchall()
+            # S'assurer que le nom de l'utilisateur est toujours dans la liste
+            # même s'il n'a pas encore de données en production
+            if user_operateur and user_operateur not in [r["operateur"] for r in rows]:
+                ops = [{"operateur": user_operateur}] + list(rows)
+            else:
+                ops = rows
         else:
             # Autres rôles: voir les utilisateurs qui ont saisi (basé sur modifie_par email -> nom)
             # On retourne les noms d'utilisateurs qui ont fait des saisies manuelles
