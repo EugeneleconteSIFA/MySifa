@@ -2890,10 +2890,22 @@ async function paieLoadVars(){
 }
 
 function paieGetFixed(userId){
+  const pk=S.paieAnnee+'_'+S.paieMois;
+  // Priorité aux données fixes historiques pour ce mois, sinon les données globales
+  const cached=((S.paieVarsCache[pk]||{})[String(userId)]||{}).fixed||{};
   const e=S.paieEmployes.find(x=>x.user_id===userId)||{};
-  return {matricule:e.matricule,contrat_type:e.contrat_type||'CDI',date_debut:e.date_debut,date_fin:e.date_fin,
-    nb_heures_base:e.nb_heures_base,taux_horaire:e.taux_horaire,salaire_mensuel:e.salaire_mensuel,
-    prime_anciennete:e.prime_anciennete,mutuelle:e.mutuelle||'Non',avantage_voiture:e.avantage_voiture};
+  return {
+    matricule:cached.matricule??e.matricule,
+    contrat_type:cached.contrat_type??e.contrat_type??'CDI',
+    date_debut:cached.date_debut??e.date_debut,
+    date_fin:cached.date_fin??e.date_fin,
+    nb_heures_base:cached.nb_heures_base??e.nb_heures_base,
+    taux_horaire:cached.taux_horaire??e.taux_horaire,
+    salaire_mensuel:cached.salaire_mensuel??e.salaire_mensuel,
+    prime_anciennete:cached.prime_anciennete??e.prime_anciennete,
+    mutuelle:cached.mutuelle??e.mutuelle??'Non',
+    avantage_voiture:cached.avantage_voiture??e.avantage_voiture
+  };
 }
 function paieGetVar(userId){
   const pk=S.paieAnnee+'_'+S.paieMois;
@@ -2904,27 +2916,35 @@ function paieGetVar(userId){
 async function paieSaveEmp(userId,btnEl){
   if(btnEl){btnEl.disabled=true;btnEl.textContent='Enregistrement…';}
   try{
-    const fixPending=S.paiePendingFixed[userId]||{};
-    const emp=S.paieEmployes.find(x=>x.user_id===userId)||{};
-    const fixBody={
-      matricule:fixPending.matricule??emp.matricule,
-      contrat_type:fixPending.contrat_type??emp.contrat_type,
-      date_debut:fixPending.date_debut??emp.date_debut,
-      date_fin:fixPending.date_fin??emp.date_fin,
-      nb_heures_base:fixPending.nb_heures_base??emp.nb_heures_base,
-      taux_horaire:fixPending.taux_horaire??emp.taux_horaire,
-      salaire_mensuel:fixPending.salaire_mensuel??emp.salaire_mensuel,
-      prime_anciennete:fixPending.prime_anciennete??emp.prime_anciennete,
-      mutuelle:fixPending.mutuelle??emp.mutuelle,
-      avantage_voiture:fixPending.avantage_voiture??emp.avantage_voiture,
-    };
-    await api('/api/paie/employes/'+userId+'/fixed',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(fixBody)});
+    const isReadonly=S.paieMonthReadonly;
+    
+    // Si mois passé, ne pas sauvegarder les données fixes (elles sont historiques)
+    if(!isReadonly){
+      const fixPending=S.paiePendingFixed[userId]||{};
+      const emp=S.paieEmployes.find(x=>x.user_id===userId)||{};
+      const fixBody={
+        matricule:fixPending.matricule??emp.matricule,
+        contrat_type:fixPending.contrat_type??emp.contrat_type,
+        date_debut:fixPending.date_debut??emp.date_debut,
+        date_fin:fixPending.date_fin??emp.date_fin,
+        nb_heures_base:fixPending.nb_heures_base??emp.nb_heures_base,
+        taux_horaire:fixPending.taux_horaire??emp.taux_horaire,
+        salaire_mensuel:fixPending.salaire_mensuel??emp.salaire_mensuel,
+        prime_anciennete:fixPending.prime_anciennete??emp.prime_anciennete,
+        mutuelle:fixPending.mutuelle??emp.mutuelle,
+        avantage_voiture:fixPending.avantage_voiture??emp.avantage_voiture,
+      };
+      await api('/api/paie/employes/'+userId+'/fixed',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(fixBody)});
+      Object.assign(emp,fixBody);
+    }
+    
+    // Sauvegarder toujours les variables (même pour mois passés si on veut corriger une erreur)
     const varData=paieGetVar(userId);
     await api('/api/paie/variables/'+S.paieAnnee+'/'+S.paieMois+'/'+userId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:varData})});
     const pk=S.paieAnnee+'_'+S.paieMois;
     if(!S.paieVarsCache[pk])S.paieVarsCache[pk]={};
     S.paieVarsCache[pk][String(userId)]={data:varData};
-    Object.assign(emp,fixBody);
+    
     delete S.paiePendingFixed[userId];
     delete S.paiePendingVar[userId];
     toast('Enregistré','success');
@@ -3038,16 +3058,36 @@ function renderPaieTab(){
   // Load data if needed
   if(!S.paieEmpLoaded){paieLoadEmployes();return h('div',{className:'paie-ph'},'Chargement…');}
 
+  // Déterminer le type de mois (passé, en cours, futur)
+  const now=new Date();
+  const currentYear=now.getFullYear();
+  const currentMonth=now.getMonth()+1;
+  let monthStatus='';
+  let monthStatusColor='';
+  if(S.paieAnnee<currentYear||(S.paieAnnee===currentYear&&S.paieMois<currentMonth)){
+    monthStatus='Mois passé - Lecture seule';
+    monthStatusColor='var(--warn)';
+  }else if(S.paieAnnee===currentYear&&S.paieMois===currentMonth){
+    monthStatus='Mois en cours';
+    monthStatusColor='var(--ok)';
+  }else{
+    monthStatus='Mois futur';
+    monthStatusColor='var(--accent)';
+  }
+  S.paieMonthStatus=monthStatus;
+  S.paieMonthReadonly=(monthStatus==='Mois passé - Lecture seule');
+
   // Period bar
   const periodStr=PAIE_MOIS_FR[S.paieMois]+' '+S.paieAnnee;
   const prevBtn=h('button',{className:'paie-pbtn',onClick:()=>paieChangePeriod(-1)});prevBtn.textContent='‹';
   const nextBtn=h('button',{className:'paie-pbtn',onClick:()=>paieChangePeriod(+1)});nextBtn.textContent='›';
   const lbl=h('div',{className:'paie-plbl'});lbl.textContent=periodStr;
+  const statusBadge=h('div',{style:{fontSize:'11px',padding:'4px 10px',borderRadius:'12px',background:monthStatusColor,color:'#000',fontWeight:600,whiteSpace:'nowrap'}},monthStatus);
   const histBtn=h('button',{className:'paie-hist-btn',onClick:paieShowHistory});histBtn.innerHTML=icon('clock',13)+' Historique';
   const xBtn=h('button',{className:'paie-xbtn',disabled:S.paieExporting,onClick:paieExport});
   xBtn.innerHTML=icon('download',13)+' Exporter Excel';
   if(S.paieExporting)xBtn.innerHTML='Génération…';
-  const periodBar=h('div',{className:'paie-period-bar'},h('div',{className:'paie-period-nav'},prevBtn,lbl,nextBtn),histBtn,xBtn);
+  const periodBar=h('div',{className:'paie-period-bar'},h('div',{className:'paie-period-nav'},prevBtn,lbl,statusBadge),histBtn,xBtn);
 
   // Employee list panel
   const srch=h('input',{type:'search',placeholder:'Rechercher un employé…',style:{width:'100%',padding:'7px 10px',background:'var(--bg)',border:'1.5px solid var(--border)',borderRadius:'8px',color:'var(--text)',fontSize:'12px',fontFamily:'inherit',outline:'none'}});

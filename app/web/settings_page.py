@@ -558,11 +558,14 @@ function renderUsersList(){
           '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>' +
         '</button>' +
       '</div>' +
-      '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">' +
       '<button type="button" class="btn btn-sec" data-edit="' + u.id + '">Modifier</button>' +
       '<button type="button" class="btn btn-sec" data-reset="' + u.id + '">Reset MDP</button>' +
       (act ? '<button type="button" class="btn btn-sec" data-off="' + u.id + '">Désactiver</button>'
         : '<button type="button" class="btn btn-sec" data-on="' + u.id + '">Réactiver</button>') +
+      '<button type="button" class="btn btn-sec" data-del="' + u.id + '" title="Supprimer" style="color:var(--danger);padding:6px 8px">' +
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>' +
+      '</button>' +
       '</div></div>';
   }).join('');
 
@@ -571,6 +574,28 @@ function renderUsersList(){
   box.querySelectorAll('[data-off]').forEach(b => b.onclick = () => setActif(Number(b.dataset.off), 0));
   box.querySelectorAll('[data-on]').forEach(b => b.onclick = () => setActif(Number(b.dataset.on), 1));
   box.querySelectorAll('[data-copy]').forEach(b => b.onclick = () => copyUserCredentials(Number(b.dataset.copy)));
+  box.querySelectorAll('[data-del]').forEach(b => b.onclick = () => deleteUser(Number(b.dataset.del)));
+}
+
+async function deleteUser(id) {
+  const u = usersAll.find(x => x.id === id);
+  if (!u) return;
+  const isAdmin = (u.email || '').toLowerCase().includes('admin') || (u.nom || '').toLowerCase() === 'administrateur';
+  if (isAdmin) {
+    toast('Impossible de supprimer un administrateur', 'error');
+    return;
+  }
+  const hasLinkages = u.operateur_lie || u.identifiant || (u.machine_nom && u.machine_nom !== '—');
+  const warningMsg = hasLinkages ? '\n\n⚠️ Cet utilisateur est lié à des données (opérateur, machine...). La suppression peut affecter l\'historique.' : '';
+  if (!confirm('Supprimer définitivement l\'utilisateur "' + u.nom + '" (' + u.email + ') ?' + warningMsg + '\n\nCette action est irréversible.')) return;
+  try {
+    await api('/api/users/' + id, { method: 'DELETE' });
+    toast('Utilisateur supprimé', 'success');
+    await loadUsers();
+    await loadMatrix();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
 }
 
 async function setActif(id, v) {

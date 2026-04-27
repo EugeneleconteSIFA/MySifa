@@ -115,6 +115,7 @@ def list_employes(request: Request):
             FROM users u
             LEFT JOIN paie_employes pe ON pe.user_id = u.id
             WHERE pe.user_id IS NOT NULL
+              AND LOWER(u.nom) != 'administrateur'
             ORDER BY u.nom COLLATE NOCASE
         """).fetchall()
 
@@ -196,23 +197,64 @@ async def update_employe_fixed(user_id: int, request: Request):
 def get_variables(annee: int, mois: int, request: Request):
     _require_paie(request)
     with get_db() as conn:
+        # Récupérer les variables mensuelles
         rows = conn.execute("""
             SELECT pv.user_id, pv.data, pv.updated_at, pv.updated_by
             FROM paie_variables pv
             WHERE pv.annee=? AND pv.mois=?
         """, (annee, mois)).fetchall()
 
+        # Récupérer les données fixes actuelles
+        fixed_rows = conn.execute("""
+            SELECT pe.user_id, pe.matricule, pe.contrat_type, pe.date_debut, pe.date_fin,
+                   pe.nb_heures_base, pe.taux_horaire, pe.salaire_mensuel,
+                   pe.prime_anciennete, pe.mutuelle, pe.avantage_voiture
+            FROM paie_employes pe
+            JOIN users u ON u.id = pe.user_id
+            WHERE LOWER(u.nom) != 'administrateur'
+        """).fetchall()
+
+    # Construire le mapping des données fixes
+    fixed_data = {}
+    for r in fixed_rows:
+        fixed_data[str(r["user_id"])] = {
+            "matricule": r["matricule"],
+            "contrat_type": r["contrat_type"] or "CDI",
+            "date_debut": r["date_debut"],
+            "date_fin": r["date_fin"],
+            "nb_heures_base": r["nb_heures_base"],
+            "taux_horaire": r["taux_horaire"],
+            "salaire_mensuel": r["salaire_mensuel"],
+            "prime_anciennete": r["prime_anciennete"],
+            "mutuelle": "Oui" if r["mutuelle"] else "Non",
+            "avantage_voiture": r["avantage_voiture"],
+        }
+
+    # Construire le résultat avec variables et données fixes
     result = {}
     for r in rows:
         try:
             data = json.loads(r["data"]) if r["data"] else {}
         except Exception:
             data = {}
-        result[str(r["user_id"])] = {
+        uid = str(r["user_id"])
+        result[uid] = {
             "data": data,
             "updated_at": r["updated_at"],
             "updated_by": r["updated_by"],
+            "fixed": fixed_data.get(uid, {}),
         }
+
+    # Ajouter les utilisateurs qui n'ont pas encore de variables mais ont des données fixes
+    for uid, fixed in fixed_data.items():
+        if uid not in result:
+            result[uid] = {
+                "data": {},
+                "updated_at": None,
+                "updated_by": None,
+                "fixed": fixed,
+            }
+
     return {"annee": annee, "mois": mois, "variables": result}
 
 
