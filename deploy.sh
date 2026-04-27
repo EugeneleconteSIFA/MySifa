@@ -14,7 +14,9 @@ echo "🚀 Déploiement MySifa..."
 
 # 1. Push du code vers GitHub
 echo "\n📦 Push du code..."
-git add -A && git commit -m "deploy $(date '+%Y-%m-%d %H:%M')" && git push origin main
+git add -A
+git commit -m "deploy $(date '+%Y-%m-%d %H:%M')" || true
+git push origin main
 
 # 2. Sur le VPS : pull + redémarrage
 echo "\n🖥️  Mise à jour VPS..."
