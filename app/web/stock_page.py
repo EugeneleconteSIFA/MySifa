@@ -1266,49 +1266,58 @@ async function startCamera() {
     S.cameraStream = stream;
     video.srcObject = stream;
 
-    // Android Chrome 83+ → BarcodeDetector (ML Kit natif), iOS → ZXing
     const useNativeDetector = isAndroid && ('BarcodeDetector' in window);
 
+    // Callback partagé entre les deux moteurs
+    let searchDetected = false;
+    const onSearchCode = (text) => {
+      if (!S.scanning || searchDetected) return;
+      searchDetected = true;
+      const upper = text.trim().toUpperCase();
+      resultEl.textContent = '✅ ' + upper; resultEl.style.color = 'var(--success)';
+      setTimeout(() => { stopCamera(overlay); handleScan(upper); }, 600);
+    };
+
+    // ZXing nécessaire sur iOS et pour les QR codes sur Android
+    if (typeof ZXing === 'undefined') {
+      resultEl.textContent = 'Chargement scanner…';
+      await new Promise((res, rej) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js';
+        s.onload = res; s.onerror = rej; document.head.appendChild(s);
+      });
+      resultEl.textContent = 'En attente…';
+    }
+
     if (useNativeDetector) {
+      // Android : BarcodeDetector (codes 1D) + ZXing (QR uniquement) en parallèle
       const detector = new BarcodeDetector({
-        formats: ['code_128', 'ean_13', 'ean_8', 'qr_code', 'data_matrix', 'code_39', 'upc_a', 'upc_e']
+        formats: ['code_128', 'ean_13', 'ean_8', 'data_matrix', 'code_39', 'upc_a', 'upc_e']
       });
       const scanLoop = async () => {
         if (!S.scanning) return;
         if (video.readyState < 2 || !video.videoWidth) { setTimeout(scanLoop, 100); return; }
         try {
           const barcodes = await detector.detect(video);
-          if (barcodes.length > 0) {
-            const text = barcodes[0].rawValue.trim().toUpperCase();
-            resultEl.textContent = '✅ ' + text; resultEl.style.color = 'var(--success)';
-            setTimeout(() => { stopCamera(overlay); handleScan(text); }, 600);
-            return;
-          }
+          if (barcodes.length > 0) { onSearchCode(barcodes[0].rawValue); return; }
         } catch(e) {}
         if (S.scanning) setTimeout(scanLoop, 150);
       };
       setTimeout(scanLoop, 500);
+
+      const qrHints = new Map();
+      qrHints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.QR_CODE]);
+      qrHints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+      const qrReader = new ZXing.BrowserMultiFormatReader(qrHints);
+      S.barcodeReader = qrReader;
+      qrReader.decodeFromVideoDevice(null, video, result => { if (result) onSearchCode(result.getText()); });
     } else {
-      // ZXing chargé APRÈS getUserMedia — le plus risqué est passé
-      if (typeof ZXing === 'undefined') {
-        resultEl.textContent = 'Chargement scanner…';
-        await new Promise((res, rej) => {
-          const s = document.createElement('script');
-          s.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js';
-          s.onload = res; s.onerror = rej; document.head.appendChild(s);
-        });
-        resultEl.textContent = 'En attente…';
-      }
+      // iOS + fallback : ZXing tous formats
       const hints = new Map();
       hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.CODE_128,ZXing.BarcodeFormat.EAN_13,ZXing.BarcodeFormat.QR_CODE]);
       const reader = new ZXing.BrowserMultiFormatReader(hints);
       S.barcodeReader = reader;
-      reader.decodeFromVideoDevice(null, video, result => {
-        if (!result) return;
-        const text = result.getText().trim().toUpperCase();
-        resultEl.textContent = '✅ ' + text; resultEl.style.color = 'var(--success)';
-        setTimeout(() => { stopCamera(overlay); handleScan(text); }, 600);
-      });
+      reader.decodeFromVideoDevice(null, video, result => { if (result) onSearchCode(result.getText()); });
     }
   } catch(e) {
     showToast(e.message.includes('HTTPS') ? e.message : 'Accès caméra refusé', 'error');
@@ -2428,40 +2437,58 @@ async function recepStartCamera() {
     // iOS + fallback Android → ZXing (BarcodeDetector absent sur Safari)
     const useNativeDetector = isAndroid && ('BarcodeDetector' in window);
 
+    // Callback partagé — le premier des deux moteurs à détecter remporte
+    let recepDetected = false;
+    const onRecepCode = (code) => {
+      if (!S.recepScanning || recepDetected) return;
+      recepDetected = true;
+      resultEl.textContent = '✅ ' + code;
+      resultEl.style.color = 'var(--success)';
+      setTimeout(() => { recepStopCamera(overlay); recepAddCode(code); }, 600);
+    };
+
+    // ZXing est nécessaire sur iOS (seul moteur dispo) et sur Android pour les QR codes
+    if (typeof ZXing === 'undefined') {
+      resultEl.textContent = 'Chargement scanner…';
+      await new Promise((res, rej) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js';
+        s.onload = res; s.onerror = rej; document.head.appendChild(s);
+      });
+      resultEl.textContent = 'En attente…';
+    }
+
     if (useNativeDetector) {
-      // ── Android : BarcodeDetector (ML Kit) ──────────────────────────────────────
-      // Pas besoin de charger ZXing, pas de gestion d'autofocus manuelle
+      // ── Android : hybride BarcodeDetector + ZXing ───────────────────────────────
+      // BarcodeDetector (ML Kit) : codes 1D — autofocus natif, bien supérieur à ZXing pour les barres fines
+      // ZXing : QR Code uniquement — BarcodeDetector ne supporte pas qr_code sur tous les appareils Android
+      // Les deux tournent en parallèle sur le même flux, le premier à détecter l'emporte.
+
+      // Moteur 1 : BarcodeDetector pour codes 1D
       const detector = new BarcodeDetector({
-        formats: ['code_128', 'ean_13', 'ean_8', 'qr_code', 'data_matrix', 'code_39', 'upc_a', 'upc_e']
+        formats: ['code_128', 'ean_13', 'ean_8', 'data_matrix', 'code_39', 'upc_a', 'upc_e']
       });
       const scanLoop = async () => {
         if (!S.recepScanning) return;
         if (video.readyState < 2 || !video.videoWidth) { setTimeout(scanLoop, 100); return; }
         try {
           const barcodes = await detector.detect(video);
-          if (barcodes.length > 0) {
-            const code = barcodes[0].rawValue;
-            resultEl.textContent = '✅ ' + code;
-            resultEl.style.color = 'var(--success)';
-            setTimeout(() => { recepStopCamera(overlay); recepAddCode(code); }, 600);
-            return;
-          }
-        } catch(e) { /* pas de code dans la frame, on continue */ }
+          if (barcodes.length > 0) { onRecepCode(barcodes[0].rawValue); return; }
+        } catch(e) {}
         if (S.recepScanning) setTimeout(scanLoop, 150);
       };
-      setTimeout(scanLoop, 500); // laisser la caméra stabiliser la mise au point
+      setTimeout(scanLoop, 500);
+
+      // Moteur 2 : ZXing pour QR codes seulement
+      const qrHints = new Map();
+      qrHints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.QR_CODE]);
+      qrHints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+      const qrReader = new ZXing.BrowserMultiFormatReader(qrHints);
+      S.recepBarcodeReader = qrReader;
+      qrReader.decodeFromStream(stream, video, (result) => { if (result) onRecepCode(result.getText().trim()); });
 
     } else {
-      // ── iOS + fallback Android : ZXing ──────────────────────────────────────────
-      if (typeof ZXing === 'undefined') {
-        resultEl.textContent = 'Chargement scanner…';
-        await new Promise((res, rej) => {
-          const s = document.createElement('script');
-          s.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js';
-          s.onload = res; s.onerror = rej; document.head.appendChild(s);
-        });
-        resultEl.textContent = 'En attente…';
-      }
+      // ── iOS + fallback : ZXing tous formats ─────────────────────────────────────
       const hints = new Map();
       hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
         ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
@@ -2470,13 +2497,7 @@ async function recepStartCamera() {
       hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
       const reader = new ZXing.BrowserMultiFormatReader(hints);
       S.recepBarcodeReader = reader;
-      reader.decodeFromStream(stream, video, (result) => {
-        if (!result) return;
-        const code = result.getText().trim();
-        resultEl.textContent = '✅ ' + code;
-        resultEl.style.color = 'var(--success)';
-        setTimeout(() => { recepStopCamera(overlay); recepAddCode(code); }, 600);
-      });
+      reader.decodeFromStream(stream, video, (result) => { if (result) onRecepCode(result.getText().trim()); });
     }
   } catch(e) {
     showToast(e.message.includes('HTTPS') ? e.message : 'Accès caméra refusé', 'error');
