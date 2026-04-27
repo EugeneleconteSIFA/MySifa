@@ -112,7 +112,7 @@ def list_employes(request: Request):
                    pe.prime_anciennete, pe.mutuelle, pe.avantage_voiture
             FROM users u
             LEFT JOIN paie_employes pe ON pe.user_id = u.id
-            WHERE u.actif = 1
+            WHERE pe.user_id IS NOT NULL
             ORDER BY u.nom COLLATE NOCASE
         """).fetchall()
 

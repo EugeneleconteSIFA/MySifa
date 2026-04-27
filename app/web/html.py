@@ -2164,16 +2164,6 @@ function renderPortal(){
     ));
   }
 
-  if(isPaie){
-    apps.push(h('div',{
-      className:'portal-app',
-      onClick:()=>{ window.location.href='/compta'; }
-    },
-      h('div',{className:'portal-app-icon'},iconEl('credit-card',28)),
-      h('div',{className:'portal-app-name'},'Paies'),
-      h('div',{className:'portal-app-desc'},'Saisie mensuelle via MyCompta')
-    ));
-  }
 
   if(isCom){
     apps.push(h('div',{className:'portal-app portal-app--disabled'},
@@ -3394,8 +3384,8 @@ function renderCompta(){
     h('main',{className:'main'},
       h('div',{className:'container'},
         topbar,
-          h('h1',null,'MyCompta'),
-        h('div',{className:'subtitle'},'Import Factor → mise en forme → copier vers CW'),
+          h('h1',null,S.comptaTab==='paie'?'Gestion des Paies':'MyCompta'),
+        h('div',{className:'subtitle'},S.comptaTab==='paie'?'Saisie mensuelle · Export xlsx':'Import Factor → mise en forme → copier vers CW'),
         content
       )
     )
