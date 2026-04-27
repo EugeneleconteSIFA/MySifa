@@ -890,6 +890,11 @@ function icon(name,size=16){
     'clipboard': '<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>',
     'activity': '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
     'tool': '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+    'credit-card': '<rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>',
+    'file-text': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>',
+    'grid': '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>',
+    'tag': '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>',
+    'map-pin': '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>',
   };
   return `<svg ${a} aria-hidden="true" style="display:inline-block;vertical-align:middle;flex-shrink:0">${p[name]||p['alert-circle']}</svg>`;
 }
@@ -2007,7 +2012,8 @@ function renderPortal(){
   const isFab = aa ? !!aa.fabrication : (isSuper || urole==='fabrication' || !!(urole && ['direction','administration'].includes(urole)));
   const isPrint = isSuper || !!(urole && ['fabrication','logistique'].includes(urole));
   const isCom = urole==='commercial';
-  const isRH = aa ? !!aa.planning_rh : (isSuper || !!(urole && ['direction','fabrication','logistique'].includes(urole)));
+  const isRH   = aa ? !!aa.planning_rh : (isSuper || !!(urole && ['direction','fabrication','logistique'].includes(urole)));
+  const isPaie = isSuper || !!(urole && ['direction','administration'].includes(urole));
   const isLight=document.body.classList.contains('light');
 
   const apps=[];
@@ -2096,6 +2102,17 @@ function renderPortal(){
       h('div',{className:'portal-app-icon'},iconEl('users',28)),
       h('div',{className:'portal-app-name'},'Planning RH'),
       h('div',{className:'portal-app-desc'},'Planning personnel & Congés')
+    ));
+  }
+
+  if(isPaie){
+    apps.push(h('div',{
+      className:'portal-app',
+      onClick:()=>{ window.location.href='/paie'; }
+    },
+      h('div',{className:'portal-app-icon'},iconEl('credit-card',28)),
+      h('div',{className:'portal-app-name'},'Paies'),
+      h('div',{className:'portal-app-desc'},'Saisie & export mensuel — accès restreint')
     ));
   }
 
