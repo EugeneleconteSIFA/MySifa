@@ -1707,18 +1707,21 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
   
   const thead=document.createElement('thead');
   
+  // Couleur grise standard pour DSI, matin, semaines impaires
+  const GREY_BG = '#e8e8e8';
+
   // Row 1: Machine headers with colspan
   const machineRow=document.createElement('tr');
-  // Week column - no top/left/right border (first cell), keep bottom - background transparent
+  // Week column - no top/left/right border (first cell), keep bottom - FORCER transparent
   const emptyTh=document.createElement('th');
-  emptyTh.style.cssText='border-top:none;border-left:none;border-right:none;border-bottom:1px solid #000;background:transparent;font-size:9px;padding:2px 4px;font-weight:bold;min-width:36px';
+  emptyTh.style.cssText='border-top:none;border-left:none;border-right:none;border-bottom:1px solid #000;background:transparent!important;font-size:9px;padding:2px 4px;font-weight:bold;min-width:36px';
   emptyTh.rowSpan=hasMatinAprem?2:1;
   machineRow.appendChild(emptyTh);
 
   if(hasMatinAprem){
-    // Creneau column - no top/left border (transparent left to merge with week col), keep bottom/right - background transparent
+    // Creneau column - no top/left border (transparent left to merge with week col), keep bottom/right - FORCER transparent
     const creneauTh=document.createElement('th');
-    creneauTh.style.cssText='border-top:none;border-left:1px solid transparent;border-bottom:1px solid #000;border-right:1px solid #000;background:transparent;font-size:9px;padding:2px;font-weight:bold;min-width:24px';
+    creneauTh.style.cssText='border-top:none;border-left:1px solid transparent;border-bottom:1px solid #000;border-right:1px solid #000;background:transparent!important;font-size:9px;padding:2px;font-weight:bold;min-width:24px';
     creneauTh.rowSpan=2;
     machineRow.appendChild(creneauTh);
   }
@@ -1771,8 +1774,8 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
       creneauxList.forEach((cr,crIdx)=>{
         const row=document.createElement('tr');
         const isFirstRow=crIdx===0;
-        // Matin = lightgrey, Aprem = transparent (tableau 2 uniquement)
-        const bgColor=cr.key==='matin'?'#d3d3d3':'transparent';
+        // Matin = gris standard, Aprem = transparent (tableau 2)
+        const bgColor=cr.key==='matin'?GREY_BG:'transparent';
 
         // Week number cell with date details (only on first row, rowspan=2) - left black, right none - dates soulignées - background transparent
         if(isFirstRow){
@@ -1803,9 +1806,9 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
               const td=document.createElement('td');
               // Bordure plus épaisse à gauche du premier poste de chaque machine (sauf première)
               const borderLeft=(pidx===0&&midx>0)?'3px':'1px';
-              // Colonne DSI avec background transparent
+              // Colonne DSI = gris standard (comme demandé)
               const isDSI=m.code==='DSI';
-              const cellBg=isDSI?'transparent':bgColor;
+              const cellBg=isDSI?GREY_BG:bgColor;
               td.style.cssText='border-top:1px solid #000;border-bottom:1px solid #000;border-left:'+borderLeft+' solid #000;border-right:1px solid #000;font-size:9px;padding:3px 5px;min-width:60px;background:'+cellBg;
               // Check if this poste exists in current creneau
               if(machineCreneaux.postes.includes(poste)){
@@ -1828,7 +1831,9 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
               const td=document.createElement('td');
               // Bordure plus épaisse à gauche du premier poste de chaque machine (sauf première)
               const borderLeft=(pidx===0&&midx>0)?'3px':'1px';
-              td.style.cssText='border-top:1px solid #000;border-bottom:1px solid #000;border-left:'+borderLeft+' solid #000;border-right:1px solid #000;font-size:9px;padding:3px 5px;min-width:50px;background:'+bgColor+';vertical-align:middle';
+              // DSI = gris standard
+              const cellBg=isDSI?GREY_BG:bgColor;
+              td.style.cssText='border-top:1px solid #000;border-bottom:1px solid #000;border-left:'+borderLeft+' solid #000;border-right:1px solid #000;font-size:9px;padding:3px 5px;min-width:50px;background:'+cellBg+';vertical-align:middle';
               td.rowSpan=2;
               const ass=getAssignments(m.code,'journee',poste,ws);
               if(ass.length){
@@ -1850,7 +1855,8 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
     }else{
       // One row per week (LOG, RESP, REP) - Tableau 1
       const row=document.createElement('tr');
-      const bgColor=isEvenWeek?'#f5f5f5':'#ffffff';
+      // Semaines impaires = gris standard, paires = transparent
+      const bgColor=isEvenWeek?'transparent':GREY_BG;
 
       // Week number cell with date details - full black borders - background transparent, dates soulignées
       const weekCell=document.createElement('td');
@@ -1872,9 +1878,9 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
             const borderLeft=(isFirstPosteOfMachine&&midx>0)?'3px':'1px';
             // Smaller width for RESP columns
             const isNarrow=m.code==='RESP';
-            // Colonne DSI avec background transparent
+            // Colonne DSI = gris standard
             const isDSI=m.code==='DSI';
-            const cellBg=isDSI?'transparent':bgColor;
+            const cellBg=isDSI?GREY_BG:bgColor;
             td.style.cssText='border-top:1px solid #000;border-bottom:1px solid #000;border-left:'+borderLeft+' solid #000;border-right:1px solid #000;font-size:9px;padding:3px 5px;min-width:'+(isNarrow?'50px':'60px')+';background:'+cellBg;
             const ass=getAssignments(m.code,'journee',poste,ws);
             if(ass.length){

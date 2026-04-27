@@ -44,6 +44,7 @@ FABRICATION_HTML = r"""<!DOCTYPE html>
 <title>Saisie Production — MySifa</title>
 <link rel="icon" type="image/png" sizes="512x512" href="/static/mys_icon_512.png">
 <link rel="apple-touch-icon" href="/static/mys_icon_180.png">
+<link rel="stylesheet" href="/static/support_widget.css">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -325,6 +326,9 @@ table.fab-table tr.fab-row-last td{
   transition:border-color .15s;
 }
 .fab-picker-search:focus{border-color:var(--accent)}
+.fab-picker-hint{font-size:11px;color:var(--muted);margin:-4px 0 6px;line-height:1.45;padding:0 2px}
+.fab-picker-hint-link{color:var(--accent);cursor:pointer;text-decoration:underline;text-underline-offset:2px;background:none;border:none;font:inherit;font-size:inherit;padding:0}
+.fab-picker-hint-link:hover{opacity:.8}
 
 /* Toast */
 .fab-toast{
@@ -498,6 +502,7 @@ table.fab-traca-table tr:last-child td{border-bottom:none}
 </head>
 <body>
 <div id="root"></div>
+<script src="/static/support_widget.js"></script>
 <script>
 'use strict';
 
@@ -703,6 +708,7 @@ function icon(name,size=16){
     camera:'<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
     'video-off':'<path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/><path d="M7.5 4H14a2 2 0 0 1 2 2v3.5"/><polyline points="22 8 22 16 18 13"/><line x1="2" y1="2" x2="22" y2="22"/>',
     trash:'<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>',
+    headset:'<path d="M4 12a8 8 0 0 1 16 0"/><path d="M6 12v5a2 2 0 0 0 2 2h1v-7H8a2 2 0 0 0-2 2z"/><path d="M18 12v5a2 2 0 0 1-2 2h-1v-7h1a2 2 0 0 1 2 2z"/>',
   };
   const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
   svg.setAttribute('width',String(size));svg.setAttribute('height',String(size));
@@ -888,6 +894,17 @@ function renderSidebar(){
       h('div',{className:'fab-user-chip'},
         h('div',{className:'fab-user-name'},userName),
         h('div',{className:'fab-user-machine'},machineName)
+      ),
+      h('button',{className:'support-btn',style:{marginBottom:'8px'},
+        onClick:()=>{
+          if(window.MySifaSupport && typeof window.MySifaSupport.open==='function'){
+            window.MySifaSupport.open({user:S.user, page:'Saisie Production',
+              notify:(m,t)=>showToast(m,t==='error'?'danger':'success'), api:apiFetch});
+          }
+        }
+      },
+        h('span',{className:'support-ico'},icon('headset',18)),
+        h('span',null,'Contacter le support')
       ),
       h('button',{className:'fab-back-btn',onClick:()=>{window.location.href='/'}},
         '← Retour ',
@@ -1603,19 +1620,24 @@ function handleSearchSubmit(query){
 let _pickerQ = '';
 
 function _buildPickerItems(q){
-  const lq = (q||'').toLowerCase();
+  const lq = (q||'').toLowerCase().trim();
   const filtered = S.dossiers.filter(d=>{
     if(!lq) return true;
+    // Recherche intelligente sur ref dossier, ref produit, client, description, machine
     return (d.reference||'').toLowerCase().includes(lq)||
+           (d.ref_produit||'').toLowerCase().includes(lq)||
            (d.client||'').toLowerCase().includes(lq)||
-           (d.description||'').toLowerCase().includes(lq);
+           (d.description||'').toLowerCase().includes(lq)||
+           (d.machine_nom||'').toLowerCase().includes(lq);
   });
   if(!filtered.length){
     const empty = document.createElement('div');
     empty.className = 'fab-picker-empty';
-    empty.textContent = S.dossiers.length===0
-      ? 'Aucun dossier disponible dans le planning'
-      : 'Aucun dossier ne correspond à la recherche';
+    if(S.dossiers.length===0){
+      empty.textContent = 'Aucun dossier disponible dans le planning';
+    }else{
+      empty.innerHTML = '<div style="margin-bottom:8px;font-weight:500;">Aucun dossier ne correspond à votre recherche</div><div style="font-size:11px;opacity:.8;">💡 Si vous ne trouvez pas votre dossier, essayez avec :<br/>• La référence produit<br/>• Le nom du client<br/>• La référence OF<br/><br/>Sinon, merci de contacter le support.</div>';
+    }
     return [empty];
   }
   return filtered.map(d=>{
@@ -1651,7 +1673,21 @@ function renderDossierPickerModal(){
     ..._buildPickerItems(''));
 
   const searchInp = h('input',{type:'text',className:'fab-picker-search',
-    placeholder:'Rechercher un dossier…'});
+    placeholder:'Réf. OF, réf. produit, client, machine…'});
+
+  const hintLink = h('button',{className:'fab-picker-hint-link',
+    onClick:()=>{
+      set({showDossierPicker:false});
+      if(window.MySifaSupport && typeof window.MySifaSupport.open==='function'){
+        window.MySifaSupport.open({user:S.user, page:'Saisie Production — Recherche dossier',
+          notify:(m,t)=>showToast(m,t==='error'?'danger':'success'), api:apiFetch});
+      }
+    }
+  },'contacter le support');
+  const searchHint = h('div',{className:'fab-picker-hint'},
+    'Cherchez par réf. dossier, réf. produit ou nom du client. Si vous ne trouvez pas votre dossier, ',
+    hintLink, '.'
+  );
 
   searchInp.addEventListener('input',e=>{
     _pickerQ = e.target.value;
@@ -1673,6 +1709,7 @@ function renderDossierPickerModal(){
         'Choisissez le dossier à démarrer parmi ceux disponibles dans le planning.'
       ),
       searchInp,
+      searchHint,
       listEl,
       h('div',{className:'fab-modal-btns'},
         h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',

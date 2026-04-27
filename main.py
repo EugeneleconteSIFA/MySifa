@@ -37,6 +37,8 @@ from app.routers.fabrication import router as fabrication_api_router
 from app.web.fabrication_page import router as fabrication_page_router
 from app.routers.planning_rh import router as planning_rh_api_router
 from app.web.planning_rh_page import router as planning_rh_page_router
+from app.routers.paie import router as paie_api_router
+from app.web.paie_page import router as paie_page_router
 
 
 @asynccontextmanager
@@ -103,6 +105,8 @@ app.include_router(fabrication_api_router)
 app.include_router(fabrication_page_router)
 app.include_router(planning_rh_api_router)
 app.include_router(planning_rh_page_router)
+app.include_router(paie_api_router)
+app.include_router(paie_page_router)
 
 
 @app.get("/", response_class=HTMLResponse)

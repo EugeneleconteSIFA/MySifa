@@ -2336,56 +2336,87 @@ let _recepLastCodeTs = 0;
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 const isAndroid = /Android/.test(navigator.userAgent);
 
+// Helper pour trouver la caméra arrière
+async function getBackCameraDeviceId() {
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const videoDevices = devices.filter(d => d.kind === 'videoinput');
+    console.log('[Scan] Périphériques vidéo trouvés:', videoDevices.map(d => d.label));
+
+    // Chercher une caméra arrière
+    const backCamera = videoDevices.find(d => {
+      const label = d.label.toLowerCase();
+      return label.includes('back') || label.includes('rear') || label.includes('environment') || label.includes('arrière');
+    });
+
+    if (backCamera) {
+      console.log('[Scan] Caméra arrière trouvée:', backCamera.label, 'ID:', backCamera.deviceId);
+      return backCamera.deviceId;
+    }
+
+    // Fallback: première caméra
+    console.log('[Scan] Utilisation première caméra disponible');
+    return videoDevices[0]?.deviceId || null;
+  } catch(e) {
+    console.error('[Scan] Erreur enumerateDevices:', e);
+    return null;
+  }
+}
+
 async function recepStartCamera() {
   const video = document.getElementById('recep-video');
   if (!video) return;
 
-  // Android : utiliser BarcodeDetector natif si disponible
-  if (isAndroid && 'BarcodeDetector' in window) {
-    showToast('Démarrage caméra Android...', 'warn');
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' } }
-      });
-      S.recepStream = stream;
-      S.recepScanning = true;
-      video.srcObject = stream;
-      await video.play();
-      renderContent();
-      // Démarrer le scan avec BarcodeDetector natif
-      recepStartScanningAndroid(video);
-      return;
-    } catch(e) {
-      showToast('Caméra inaccessible', 'error');
-      S.recepScanning = false; renderContent();
-      return;
-    }
-  }
+  // Debug info
+  console.log('[Scan] Protocol:', window.location.protocol);
+  console.log('[Scan] UserAgent:', navigator.userAgent);
+  console.log('[Scan] isAndroid:', isAndroid, 'isIOS:', isIOS);
 
-  // iOS et autres : utiliser ZXing
   showToast('Chargement du scanner...', 'warn');
   const loaded = await loadZXing();
   if (!loaded) { showToast('Impossible de charger le scanner', 'error'); return; }
 
-  // Essayer différentes contraintes caméra (compatibilité iOS/Android)
+  // Optimisation Android: trouver la caméra arrière
   let stream = null;
-  const constraints = [
-    { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 }, focusMode: { ideal: 'continuous' } } },
-    { video: { facingMode: { ideal: 'environment' }, focusMode: { ideal: 'continuous' } } },
-    { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } },
-    { video: { facingMode: { ideal: 'environment' } } },
-    { video: { width: { ideal: 1280 }, height: { ideal: 720 } } },
-    { video: true }
-  ];
+  try {
+    if (isAndroid) {
+      const backDeviceId = await getBackCameraDeviceId();
+      if (backDeviceId) {
+        const constraints = {
+          video: {
+            deviceId: { exact: backDeviceId },
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          }
+        };
+        console.log('[Scan] Tentative avec deviceId exact:', backDeviceId);
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      }
+    }
+  } catch(e) {
+    console.log('[Scan] Échec deviceId exact, fallback vers facingMode:', e.message);
+  }
 
-  for (let i = 0; i < constraints.length; i++) {
-    try {
-      stream = await navigator.mediaDevices.getUserMedia(constraints[i]);
-      console.log('Caméra ok avec contraintes:', i);
-      break;
-    } catch(e) {
-      console.log('Contrainte', i, 'échouée:', e.message);
-      if (i === constraints.length - 1) throw e;
+  // Fallback si pas de stream ou si iOS
+  if (!stream) {
+    const constraints = [
+      { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } },
+      { video: { facingMode: { ideal: 'environment' } } },
+      { video: true }
+    ];
+
+    for (let i = 0; i < constraints.length; i++) {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints[i]);
+        console.log('[Scan] Caméra ok avec contraintes:', i);
+        break;
+      } catch(e) {
+        console.log('[Scan] Contrainte', i, 'échouée:', e.message);
+        if (i === constraints.length - 1) {
+          showToast('Caméra inaccessible', 'error');
+          return;
+        }
+      }
     }
   }
 
@@ -2397,130 +2428,41 @@ async function recepStartCamera() {
   try {
     S.recepStream = stream;
     S.recepScanning = true;
+
+    // Forcer les attributs pour PWA mobile
+    video.setAttribute('playsinline', 'true');
+    video.setAttribute('muted', 'true');
+    video.setAttribute('autoplay', 'true');
+
     video.srcObject = stream;
-    await video.play();
+
+    // Play avec gestion d'erreur
+    video.play().catch(err => {
+      console.error('[Scan] video.play() error:', err);
+    });
+
     renderContent();
-    recepStartScanning(stream);
+
+    // Démarrer le scan ZXing unifié
+    recepStartScanningZXing(video);
   } catch(e) {
     showToast('Erreur caméra : ' + e.message, 'error');
     S.recepScanning = false; S.recepStream = null; renderContent();
   }
 }
 
-// Scan avec BarcodeDetector natif (Android)
-async function recepStartScanningAndroid(video) {
+// Scan ZXing unifié pour tous les appareils (avec optimisations Android)
+async function recepStartScanningZXing(video) {
   if (!S.recepScanning || !video) return;
 
-  // Vérifier si BarcodeDetector est vraiment disponible et fonctionnel
-  let detector = null;
-  try {
-    if ('BarcodeDetector' in window) {
-      detector = new BarcodeDetector({
-        formats: ['code_128', 'ean_13', 'ean_8', 'qr_code', 'code_39']
-      });
-      // Test rapide pour voir si l'API fonctionne
-      showToast('API BarcodeDetector chargée', 'success');
-    }
-  } catch(e) {
-    console.error('BarcodeDetector error:', e);
-    showToast('BarcodeDetector indisponible, utilisation ZXing...', 'warn');
-    // Fallback vers ZXing
-    recepStartScanningZXingFallback();
-    return;
-  }
-
-  // Si pas de detector, fallback ZXing
-  if (!detector) {
-    showToast('Utilisation scanner ZXing (fallback)...', 'warn');
-    recepStartScanningZXingFallback();
-    return;
-  }
+  console.log('[Scan] Démarrage ZXing - readyState:', video.readyState);
+  console.log('[Scan] Dimensions vidéo:', video.videoWidth, 'x', video.videoHeight);
 
   let lastCode = null;
   let lastTime = 0;
-  let scanAttempts = 0;
+  let scanCount = 0;
 
-  // Ajouter bouton capture manuelle dans l'UI
-  const captureBtn = document.getElementById('recep-capture-btn');
-  if (captureBtn) {
-    captureBtn.style.display = 'block';
-    captureBtn.onclick = async () => {
-      try {
-        const codes = await detector.detect(video);
-        if (codes.length > 0) {
-          const code = codes[0].rawValue;
-          recepAddCode(code);
-          showToast('✓ Code: ' + code, 'success');
-          recepStopCamera();
-        } else {
-          showToast('Aucun code détecté - réessayez', 'warn');
-        }
-      } catch(e) {
-        showToast('Erreur capture: ' + e.message, 'error');
-      }
-    };
-  }
-
-  // Scan automatique en boucle
-  async function tick() {
-    if (!S.recepScanning) return;
-    scanAttempts++;
-
-    // Log tous les 30 frames pour debug
-    if (scanAttempts % 30 === 0) {
-      console.log('Scan attempt #' + scanAttempts);
-    }
-
-    try {
-      const codes = await detector.detect(video);
-      if (codes.length > 0) {
-        const code = codes[0].rawValue;
-        const now = Date.now();
-        console.log('Code détecté:', code);
-
-        if (code !== lastCode || (now - lastTime) > 1200) {
-          lastCode = code;
-          lastTime = now;
-          recepAddCode(code);
-          showToast('✓ Code scanné: ' + code, 'success');
-          recepStopCamera();
-          return;
-        }
-      }
-    } catch(e) {
-      // Ignorer les erreurs de détection silencieuses
-    }
-
-    if (S.recepScanning) {
-      setTimeout(() => requestAnimationFrame(tick), 100); // 10 scans/sec max
-    }
-  }
-
-  // Démarrer après un délai pour laisser la caméra s'initialiser
-  setTimeout(() => {
-    showToast('Scan actif - Appuyez sur 📷 pour capturer manuellement', 'success');
-    tick();
-  }, 800);
-}
-
-// Fallback ZXing pour Android si BarcodeDetector échoue
-async function recepStartScanningZXingFallback() {
-  const video = document.getElementById('recep-video');
-  if (!video) return;
-
-  const loaded = await loadZXing();
-  if (!loaded) {
-    showToast('Scanner indisponible', 'error');
-    recepStopCamera();
-    return;
-  }
-
-  showToast('ZXing actif - Scan en cours...', 'success');
-
-  // Code existant pour ZXing
-  let lastCode = null;
-  let lastTime = 0;
-
+  // Utiliser BrowserMultiFormatReader pour meilleure stabilité
   const hints = new Map();
   hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
     ZXing.BarcodeFormat.CODE_128,
@@ -2531,34 +2473,66 @@ async function recepStartScanningZXingFallback() {
     ZXing.BarcodeFormat.CODE_39
   ]);
 
-  S.recepBarcodeReader = new ZXing.MultiFormatReader();
-  S.recepBarcodeReader.setHints(hints);
+  // Créer le reader (BrowserMultiFormatReader pour gestion cycle de vie vidéo)
+  const reader = new ZXing.BrowserMultiFormatReader(hints);
+  S.recepBarcodeReader = reader;
 
+  // Canvas pour traitement image (avec réduction résolution sur Android)
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-  async function tick() {
+  showToast('Scan actif - présentez un code-barres', 'success');
+
+  function tick() {
     if (!S.recepScanning) return;
+
+    // Vérifier readyState
     if (video.readyState < 2) {
-      setTimeout(tick, 200);
+      console.log('[Scan] Video not ready, readyState:', video.readyState);
+      requestAnimationFrame(tick);
       return;
     }
 
     try {
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 480;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const luminance = new ZXing.RGBLuminanceSource(imgData.data, canvas.width, canvas.height);
+      scanCount++;
+      const isVideoReady = video.videoWidth > 0 && video.videoHeight > 0;
+
+      if (!isVideoReady) {
+        console.log('[Scan] Video dimensions not available yet');
+        requestAnimationFrame(tick);
+        return;
+      }
+
+      // Log toutes les 60 frames (~1 sec à 60fps)
+      if (scanCount % 60 === 0) {
+        console.log('[Scan] Frames traitées:', scanCount, 'Dimensions:', video.videoWidth, 'x', video.videoHeight);
+      }
+
+      // Réduction résolution de moitié sur Android pour performance
+      const scaleFactor = isAndroid ? 0.5 : 1.0;
+      const w = Math.floor(video.videoWidth * scaleFactor);
+      const h = Math.floor(video.videoHeight * scaleFactor);
+
+      canvas.width = w;
+      canvas.height = h;
+
+      // drawImage avec réduction
+      ctx.drawImage(video, 0, 0, w, h);
+
+      const imgData = ctx.getImageData(0, 0, w, h);
+      const luminance = new ZXing.RGBLuminanceSource(imgData.data, w, h);
       const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminance));
-      const result = S.recepBarcodeReader.decode(bitmap);
+
+      const result = reader.decode(bitmap);
 
       if (result) {
         const code = result.getText();
         const now = Date.now();
+
         if (code !== lastCode || (now - lastTime) > 1200) {
           lastCode = code;
           lastTime = now;
+          console.log('[Scan] ✓ Code détecté:', code);
           recepAddCode(code);
           showToast('✓ Code: ' + code, 'success');
           recepStopCamera();
@@ -2566,7 +2540,7 @@ async function recepStartScanningZXingFallback() {
         }
       }
     } catch(e) {
-      // Pas de code ou erreur, continuer
+      // Erreur silencieuse (pas de code détecté)
     }
 
     if (S.recepScanning) {
@@ -2574,12 +2548,23 @@ async function recepStartScanningZXingFallback() {
     }
   }
 
-  tick();
+  // Démarrer après un court délai
+  setTimeout(() => {
+    requestAnimationFrame(tick);
+  }, 300);
 }
 
 function recepStopCamera() {
   if (S.recepStream) { S.recepStream.getTracks().forEach(t => t.stop()); S.recepStream = null; }
-  if (S.recepBarcodeReader) { try { S.recepBarcodeReader.reset(); } catch(e) {} S.recepBarcodeReader = null; }
+  if (S.recepBarcodeReader) {
+    try {
+      // BrowserMultiFormatReader a une méthode reset différente
+      if (typeof S.recepBarcodeReader.reset === 'function') {
+        S.recepBarcodeReader.reset();
+      }
+    } catch(e) {}
+    S.recepBarcodeReader = null;
+  }
   // Cacher le bouton capture
   const captureBtn = document.getElementById('recep-capture-btn');
   if (captureBtn) captureBtn.style.display = 'none';
@@ -2726,7 +2711,7 @@ function buildReception() {
     // Démarrer le flux après rendu
     setTimeout(() => {
       const v = document.getElementById('recep-video');
-      if (v && S.recepStream) { v.srcObject = S.recepStream; v.play().catch(() => {}); recepStartScanning(S.recepStream); }
+      if (v && S.recepStream) { v.srcObject = S.recepStream; v.play().catch(() => {}); recepStartScanningZXing(v); }
     }, 80);
   } else {
     const placeholder = el('div', { cls: 'recep-cam-placeholder' },

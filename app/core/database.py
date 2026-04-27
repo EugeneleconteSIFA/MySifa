@@ -881,6 +881,48 @@ def _migrate(conn):
         
         _record_schema_migration(conn, 6, "configure_user_access_overrides")
 
+    # Migration v7 : Tables Gestion des Paies
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=7 LIMIT 1").fetchone():
+        existing_tables_v7 = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+
+        if "paie_employes" not in existing_tables_v7:
+            conn.execute("""CREATE TABLE paie_employes (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id       INTEGER UNIQUE,
+                matricule     TEXT,
+                contrat_type  TEXT DEFAULT 'CDI',
+                date_debut    TEXT,
+                date_fin      TEXT,
+                nb_heures_base  REAL,
+                taux_horaire    REAL,
+                salaire_mensuel REAL,
+                prime_anciennete REAL,
+                mutuelle       INTEGER DEFAULT 0,
+                avantage_voiture REAL,
+                updated_at    TEXT,
+                updated_by    TEXT,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )""")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_paie_employes_user ON paie_employes(user_id)")
+
+        if "paie_variables" not in existing_tables_v7:
+            conn.execute("""CREATE TABLE paie_variables (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id    INTEGER NOT NULL,
+                annee      INTEGER NOT NULL,
+                mois       INTEGER NOT NULL,
+                data       TEXT NOT NULL DEFAULT '{}',
+                updated_at TEXT NOT NULL,
+                updated_by TEXT,
+                UNIQUE(user_id, annee, mois),
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )""")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_paie_variables_period ON paie_variables(annee, mois)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_paie_variables_user   ON paie_variables(user_id)")
+
+        conn.commit()
+        _record_schema_migration(conn, 7, "paie_employes_et_variables")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

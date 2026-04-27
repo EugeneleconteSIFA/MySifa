@@ -2740,12 +2740,20 @@ function renderCompta(){
       ),
       h('div',{className:'logo-sub'},'by SIFA')
     ),
-    h('button',{className:'nav-btn'+(tab==='factor'?' active':''),onClick:()=>{set({comptaTab:'factor'});}},
-      iconEl('upload',15),'  Import Factor'),
-    h('button',{className:'nav-btn'+(tab==='acheteurs'?' active':''),onClick:()=>{set({comptaTab:'acheteurs'});loadComptaAcheteurs();}},
-      iconEl('users',15),'  Acheteurs'),
-    h('button',{className:'nav-btn'+(tab==='comptes'?' active':''),onClick:()=>{set({comptaTab:'comptes'});loadComptaComptes();}},
-      iconEl('file',15),'  Table des comptes'),
+    h('div',{className:'nav-scroll tabs',style:{width:'100%',margin:0}},
+      h('div',{className:'nav-group-label'},'Import'),
+      h('button',{className:'nav-btn'+(tab==='factor'?' active':''),onClick:()=>{set({comptaTab:'factor'});}},
+        iconEl('upload',15),'  Import Factor'),
+      h('button',{className:'nav-btn'+(tab==='acheteurs'?' active':''),onClick:()=>{set({comptaTab:'acheteurs'});loadComptaAcheteurs();}},
+        iconEl('users',15),'  Acheteurs'),
+      h('button',{className:'nav-btn'+(tab==='comptes'?' active':''),onClick:()=>{set({comptaTab:'comptes'});loadComptaComptes();}},
+        iconEl('file',15),'  Table des comptes'),
+      h('div',{className:'nav-group-label',style:{marginTop:'8px'}},'Développement'),
+      h('button',{className:'nav-btn'+(tab==='cession'?' active':''),onClick:()=>{set({comptaTab:'cession'});}},
+        iconEl('clock',15),'  Cession (en cours)'),
+      h('button',{className:'nav-btn'+(tab==='paie'?' active':''),onClick:()=>{set({comptaTab:'paie'});}},
+        iconEl('clock',15),'  Paie (en cours)')
+    ),
     h('div',{className:'sidebar-bottom'},
       h('button',{className:'nav-btn back-mysifa',onClick:()=>{window.location.href='/' }},
         '← Retour ',
@@ -2980,6 +2988,22 @@ function renderCompta(){
       )))
     ) : h('div',{className:'card-empty'},'Aucun compte');
     content=h('div',null,form,rows);
+  }else if(tab==='cession'){
+    content=h('div',null,
+      h('div',{className:'card',style:{padding:'40px',textAlign:'center'}},
+        h('div',{style:{fontSize:'48px',marginBottom:'20px'}},'🚧'),
+        h('h2',{style:{color:'var(--muted)'}},'Cession'),
+        h('p',{style:{color:'var(--muted)',marginTop:'10px'}},'En cours de développement...')
+      )
+    );
+  }else if(tab==='paie'){
+    content=h('div',null,
+      h('div',{className:'card',style:{padding:'40px',textAlign:'center'}},
+        h('div',{style:{fontSize:'48px',marginBottom:'20px'}},'🚧'),
+        h('h2',{style:{color:'var(--muted)'}},'Paie'),
+        h('p',{style:{color:'var(--muted)',marginTop:'10px'}},'En cours de développement...')
+      )
+    );
   }
 
   const body=h('div',{className:'app'},
