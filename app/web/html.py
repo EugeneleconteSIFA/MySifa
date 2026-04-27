@@ -704,6 +704,58 @@ body.light .stock-empl-suggest-add:hover{background:rgba(124,58,237,.2);color:#1
 .expe-score .price .unit{font-size:13px;font-weight:500;color:var(--muted);margin-left:4px}
 .expe-score .medal{font-size:24px;flex-shrink:0}
 .expe-note{font-size:10px;color:rgba(148,163,184,.8);margin-top:12px}
+/* ── Paie (onglet MyCompta) ── */
+.paie-layout{display:flex;gap:14px;height:calc(100vh - 210px);overflow:hidden}
+.paie-emp-panel{width:252px;flex-shrink:0;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.paie-emp-head{padding:10px 12px;border-bottom:1px solid var(--border);flex-shrink:0}
+.paie-emp-head input{width:100%;padding:7px 10px;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;font-family:inherit;outline:none}
+.paie-emp-head input:focus{border-color:var(--accent)}
+.paie-emp-hint{font-size:9px;color:var(--muted);margin-top:4px;line-height:1.4}
+.paie-emp-list{flex:1;overflow-y:auto;padding:5px}
+.paie-emp-item{padding:8px 10px;border-radius:7px;cursor:pointer;border:1px solid transparent;margin-bottom:2px;transition:all .12s}
+.paie-emp-item:hover{background:var(--accent-bg);border-color:rgba(34,211,238,.2)}
+.paie-emp-item.active{background:var(--accent-bg);border-color:var(--accent)}
+.paie-emp-name{font-size:12px;font-weight:700;color:var(--text)}
+.paie-emp-sub{font-size:10px;color:var(--muted);margin-top:1px}
+.paie-form-col{flex:1;display:flex;flex-direction:column;overflow:hidden;gap:10px}
+.paie-period-bar{display:flex;align-items:center;gap:10px;flex-shrink:0;background:var(--card);border:1px solid var(--border);border-radius:11px;padding:9px 14px;flex-wrap:wrap}
+.paie-period-nav{display:flex;align-items:center;gap:7px}
+.paie-pbtn{padding:5px 10px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-size:14px;font-family:inherit;transition:all .12s}
+.paie-pbtn:hover{border-color:var(--accent);color:var(--accent)}
+.paie-plbl{font-size:14px;font-weight:700;color:var(--accent);min-width:130px;text-align:center}
+.paie-xbtn{margin-left:auto;display:flex;align-items:center;gap:7px;padding:7px 13px;border-radius:8px;background:var(--accent);color:#0a0e17;font-weight:700;font-size:11px;border:none;cursor:pointer;font-family:inherit;transition:opacity .15s}
+.paie-xbtn:hover{opacity:.85}.paie-xbtn:disabled{opacity:.4;cursor:not-allowed}
+.paie-hist-btn{display:flex;align-items:center;gap:6px;padding:7px 11px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:11px;cursor:pointer;font-family:inherit;transition:all .12s}
+.paie-hist-btn:hover{border-color:var(--accent);color:var(--accent)}
+.paie-form-scroll{flex:1;overflow-y:auto;padding-right:2px}
+.paie-sec{background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:10px;overflow:hidden}
+.paie-sec-title{padding:9px 14px;font-size:10px;font-weight:800;color:var(--accent);text-transform:uppercase;letter-spacing:.5px;background:rgba(34,211,238,.04);border-bottom:1px solid var(--border)}
+.paie-fgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
+.paie-f{padding:8px 12px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);display:flex;flex-direction:column;gap:3px}
+.paie-f.full{grid-column:1/-1}
+.paie-flbl{font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}
+.paie-f input,.paie-f select,.paie-f textarea{background:var(--bg);border:1.5px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;font-family:inherit;padding:6px 9px;outline:none;width:100%;transition:border-color .12s}
+.paie-f input:focus,.paie-f select:focus,.paie-f textarea:focus{border-color:var(--accent)}
+.paie-f textarea{resize:vertical;min-height:50px}
+.paie-f select option{background:var(--card)}
+.paie-emp-hdr{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;background:var(--card);border:1px solid var(--border);border-radius:11px;padding:10px 14px;flex-shrink:0}
+.paie-emp-hdr-name{font-size:15px;font-weight:900}
+.paie-emp-hdr-meta{display:flex;gap:7px;flex-wrap:wrap;margin-top:4px}
+.paie-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:5px;background:var(--accent-bg);color:var(--accent);border:1px solid rgba(34,211,238,.3)}
+.paie-svbtn{padding:7px 14px;border-radius:7px;background:var(--accent);color:#0a0e17;font-weight:700;font-size:11px;border:none;cursor:pointer;font-family:inherit;transition:all .15s}
+.paie-svbtn:hover{opacity:.85}.paie-svbtn.saved{background:var(--ok)}
+.paie-ph{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--muted);gap:10px;font-size:13px}
+.paie-pw{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:32px 28px;max-width:340px;margin:40px auto;text-align:center}
+.paie-pw-inp{width:100%;padding:10px 13px;background:var(--bg);border:1.5px solid var(--border);border-radius:9px;color:var(--text);font-size:15px;font-family:inherit;outline:none;text-align:center;letter-spacing:3px;margin:10px 0}
+.paie-pw-inp:focus{border-color:var(--accent)}
+.paie-pw-btn{width:100%;padding:11px;border-radius:9px;border:none;background:var(--accent);color:#0a0e17;font-weight:800;font-size:13px;cursor:pointer;font-family:inherit;margin-top:6px;transition:opacity .15s}
+.paie-pw-btn:hover{opacity:.85}
+.paie-unsaved{width:6px;height:6px;border-radius:50%;background:var(--warn);display:inline-block;margin-left:5px;vertical-align:middle}
+.paie-hist-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:500;display:flex;align-items:center;justify-content:center;padding:18px}
+.paie-hist-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;width:420px;max-height:60vh;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,.45)}
+.paie-hist-item{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border-radius:8px;cursor:pointer;border:1px solid transparent;transition:all .12s;margin-bottom:3px}
+.paie-hist-item:hover{background:var(--accent-bg);border-color:rgba(34,211,238,.2)}
+.paie-hist-item.active{background:var(--accent-bg);border-color:var(--accent)}
 </style>
 </head>
 <body>
@@ -811,6 +863,13 @@ let S={
   expePoidsRows:[{qty:'',laize:'',dev:''},{qty:'',laize:'',dev:''},{qty:'',laize:'',dev:''},{qty:'',laize:'',dev:''}],
   expoPoidsPalNb:'',
   expoPoidsPalKg:'',
+  // ── Paie ──
+  paieAuth: sessionStorage.getItem('paie_auth_v1')==='1',
+  paieEmployes:[],paieEmpSearch:'',paieEmpLoaded:false,
+  paieCurrentEmpId:null,
+  paieAnnee:new Date().getFullYear(),paieMois:new Date().getMonth()+1,
+  paieVarsCache:{},paiePendingFixed:{},paiePendingVar:{},
+  paieExporting:false,paieShowHist:false,paieHistData:null,
 };
 
 function set(u){Object.assign(S,u);render();}
@@ -2108,11 +2167,11 @@ function renderPortal(){
   if(isPaie){
     apps.push(h('div',{
       className:'portal-app',
-      onClick:()=>{ window.location.href='/paie'; }
+      onClick:()=>{ window.location.href='/compta'; }
     },
       h('div',{className:'portal-app-icon'},iconEl('credit-card',28)),
       h('div',{className:'portal-app-name'},'Paies'),
-      h('div',{className:'portal-app-desc'},'Saisie & export mensuel — accès restreint')
+      h('div',{className:'portal-app-desc'},'Saisie mensuelle via MyCompta')
     ));
   }
 
@@ -2747,6 +2806,319 @@ function renderStock(){
 }
 
 // ── MyCompta (placeholder v0) ─────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════
+// ── PAIE (onglet MyCompta) ────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════
+const PAIE_MOIS_FR=['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+
+const PAIE_SECTIONS=[
+  {title:'📋 Contrat & Salaire',fields:[
+    {key:'matricule',       label:'Matricule',          type:'text',   fixed:true},
+    {key:'contrat_type',    label:'Type de contrat',    type:'select', fixed:true, opts:['CDI','CDD','Intérim','Stage','Apprentissage']},
+    {key:'date_debut',      label:'Date de début',      type:'date',   fixed:true},
+    {key:'date_fin',        label:'Date de fin',        type:'date',   fixed:true},
+    {key:'nb_heures_base',  label:'Heures de base',     type:'number', fixed:true, step:'0.01'},
+    {key:'taux_horaire',    label:'Taux horaire (€)',   type:'number', fixed:true, step:'0.01'},
+    {key:'salaire_mensuel', label:'Salaire mensuel (€)',type:'number', fixed:true, step:'0.01'},
+    {key:'mutuelle',        label:'Mutuelle',           type:'select', fixed:true, opts:['Non','Oui']},
+    {key:'avantage_voiture',label:'Avantage voiture (€)',type:'number',fixed:true, step:'0.01'},
+    {key:'prime_anciennete',label:'Prime ancienneté (%)',type:'number',fixed:true, step:'0.01'},
+  ]},
+  {title:'⏱ Heures & Compteurs',fields:[
+    {key:'compteur_hs_m1',              label:'Compteur HS M-1',        type:'text'},
+    {key:'nb_heures_payer',             label:'Nb heures à payer',      type:'number',step:'0.01'},
+    {key:'heures_nuit',                 label:'Heures de nuit',         type:'text'},
+    {key:'heures_nuit_ferie',           label:'Nuit férié',             type:'text'},
+    {key:'heures_nuit_dimanche',        label:'Nuit dimanche',          type:'text'},
+    {key:'heures_nuit_dimanche_ferie',  label:'Nuit dim. férié',        type:'text'},
+    {key:'heures_sup_25',               label:'Heures sup 25%',         type:'text'},
+    {key:'heures_sup_50',               label:'Heures sup 50%',         type:'text'},
+    {key:'heures_sup_nuit',             label:'Heures sup nuit',        type:'text'},
+    {key:'heures_ferie',                label:'Heures j. férié (+150%)',type:'text'},
+  ]},
+  {title:'💰 Primes & Commissions',fields:[
+    {key:'augmentation_salaire', label:'Augmentation salaire (€)',  type:'number',step:'0.01'},
+    {key:'commissions_ventes',   label:'Commissions ventes (€)',    type:'number',step:'0.01'},
+    {key:'prime_objectifs',      label:"Prime d'objectifs (€)",     type:'number',step:'0.01'},
+    {key:'prime_inflation',      label:'Prime inflation (€)',       type:'number',step:'0.01'},
+    {key:'prime_exceptionnelle', label:'Prime exceptionnelle (€)',  type:'number',step:'0.01'},
+    {key:'prime_equipe',         label:'Prime équipe (€)',          type:'number',step:'0.01'},
+    {key:'panier',               label:'Panier (6,47€/j)',          type:'number',step:'0.01'},
+    {key:'solde_tout_compte',    label:'Solde tout compte',         type:'select', opts:['','Oui','Non']},
+  ]},
+  {title:'🏖 Absences',fields:[
+    {key:'absence_heures',          label:'Absence (heures)',          type:'text'},
+    {key:'absence_maladie_heures',  label:'Maladie (heures)',          type:'text'},
+    {key:'absence_maladie_jours',   label:'Maladie (jours)',           type:'text'},
+    {key:'absence_deces_mariage',   label:'Décès / Mariage',          type:'text'},
+    {key:'absence_cp_heures',       label:'Congés payés (h)',          type:'text'},
+    {key:'absence_cp_jours',        label:'Congés payés (j)',          type:'text'},
+    {key:'date_conges_payes',       label:'Dates des CP',              type:'text'},
+    {key:'absence_rtt',             label:'RTT',                       type:'text'},
+    {key:'absence_css_heures',      label:'Congés sans solde (h)',     type:'text'},
+    {key:'absence_css_jours',       label:'Congés sans solde (j)',     type:'text'},
+    {key:'absence_non_justifie_h',  label:'Non justifiée (h)',         type:'text'},
+    {key:'absence_non_justifie_j',  label:'Non justifiée (j)',         type:'text'},
+    {key:'absence_justifiee_np_h',  label:'Justifiée non payée (h)',   type:'text'},
+    {key:'absence_justifiee_np_j',  label:'Justifiée non payée (j)',   type:'text'},
+    {key:'absence_at_heures',       label:'AT (heures)',               type:'text'},
+    {key:'absence_at_jours',        label:'AT (jours)',                type:'text'},
+    {key:'mi_temps_therapeutique',  label:'Mi-temps thérapeutique',   type:'text'},
+    {key:'absence_chomage_partiel', label:'Chômage partiel',          type:'text'},
+    {key:'absence_conge_parentale', label:'Congé parental',           type:'text'},
+  ]},
+  {title:'💳 Frais & Divers',fields:[
+    {key:'frais_pro',           label:'Frais pro (€)',            type:'number',step:'0.01'},
+    {key:'frais_transport',     label:'Remb. transport (€)',      type:'number',step:'0.01'},
+    {key:'pret_sifa',           label:'Prêt SIFA (€)',            type:'number',step:'0.01'},
+    {key:'atd',                 label:'ATD (€)',                  type:'number',step:'0.01'},
+    {key:'acompte_exceptionnel',label:'Acompte exceptionnel (€)', type:'number',step:'0.01'},
+  ]},
+  {title:'📝 Information',fields:[
+    {key:'information',label:'Note libre',type:'textarea',full:true},
+  ]},
+];
+
+async function paieLoadEmployes(){
+  if(S.paieEmpLoaded) return;
+  try{
+    const d=await api('/api/paie/employes');
+    S.paieEmployes=d.employes||[];
+    S.paieEmpLoaded=true;
+    render();
+  }catch(e){toast('Erreur chargement employés: '+e.message,'error');}
+}
+
+async function paieLoadVars(){
+  const pk=S.paieAnnee+'_'+S.paieMois;
+  if(S.paieVarsCache[pk]!==undefined) return;
+  S.paieVarsCache[pk]={};
+  try{
+    const d=await api('/api/paie/variables/'+S.paieAnnee+'/'+S.paieMois);
+    S.paieVarsCache[pk]=d.variables||{};
+  }catch(e){}
+}
+
+function paieGetFixed(userId){
+  const e=S.paieEmployes.find(x=>x.user_id===userId)||{};
+  return {matricule:e.matricule,contrat_type:e.contrat_type||'CDI',date_debut:e.date_debut,date_fin:e.date_fin,
+    nb_heures_base:e.nb_heures_base,taux_horaire:e.taux_horaire,salaire_mensuel:e.salaire_mensuel,
+    prime_anciennete:e.prime_anciennete,mutuelle:e.mutuelle||'Non',avantage_voiture:e.avantage_voiture};
+}
+function paieGetVar(userId){
+  const pk=S.paieAnnee+'_'+S.paieMois;
+  const cached=((S.paieVarsCache[pk]||{})[String(userId)]||{}).data||{};
+  return {...cached,...(S.paiePendingVar[userId]||{})};
+}
+
+async function paieSaveEmp(userId,btnEl){
+  if(btnEl){btnEl.disabled=true;btnEl.textContent='Enregistrement…';}
+  try{
+    const fixPending=S.paiePendingFixed[userId]||{};
+    const emp=S.paieEmployes.find(x=>x.user_id===userId)||{};
+    const fixBody={
+      matricule:fixPending.matricule??emp.matricule,
+      contrat_type:fixPending.contrat_type??emp.contrat_type,
+      date_debut:fixPending.date_debut??emp.date_debut,
+      date_fin:fixPending.date_fin??emp.date_fin,
+      nb_heures_base:fixPending.nb_heures_base??emp.nb_heures_base,
+      taux_horaire:fixPending.taux_horaire??emp.taux_horaire,
+      salaire_mensuel:fixPending.salaire_mensuel??emp.salaire_mensuel,
+      prime_anciennete:fixPending.prime_anciennete??emp.prime_anciennete,
+      mutuelle:fixPending.mutuelle??emp.mutuelle,
+      avantage_voiture:fixPending.avantage_voiture??emp.avantage_voiture,
+    };
+    await api('/api/paie/employes/'+userId+'/fixed',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(fixBody)});
+    const varData=paieGetVar(userId);
+    await api('/api/paie/variables/'+S.paieAnnee+'/'+S.paieMois+'/'+userId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:varData})});
+    const pk=S.paieAnnee+'_'+S.paieMois;
+    if(!S.paieVarsCache[pk])S.paieVarsCache[pk]={};
+    S.paieVarsCache[pk][String(userId)]={data:varData};
+    Object.assign(emp,fixBody);
+    delete S.paiePendingFixed[userId];
+    delete S.paiePendingVar[userId];
+    toast('Enregistré','success');
+    if(btnEl){btnEl.disabled=false;btnEl.textContent='✅ Enregistré';btnEl.className='paie-svbtn saved';setTimeout(()=>{if(btnEl){btnEl.textContent='💾 Enregistrer';btnEl.className='paie-svbtn';}},2500);}
+    render();
+  }catch(e){
+    toast('Erreur: '+e.message,'error');
+    if(btnEl){btnEl.disabled=false;btnEl.textContent='💾 Enregistrer';}
+  }
+}
+
+async function paieExport(){
+  S.paieExporting=true;render();
+  try{
+    const r=await fetch('/api/paie/export/'+S.paieAnnee+'/'+S.paieMois,{credentials:'include'});
+    if(!r.ok)throw new Error('Erreur '+r.status);
+    const blob=await r.blob();
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='paie_'+S.paieAnnee+'_'+String(S.paieMois).padStart(2,'0')+'_'+PAIE_MOIS_FR[S.paieMois]+'.xlsx';
+    a.click();
+    toast('Export téléchargé','success');
+  }catch(e){toast('Export échoué: '+e.message,'error');}
+  S.paieExporting=false;render();
+}
+
+async function paieShowHistory(){
+  S.paieShowHist=true;S.paieHistData=null;render();
+  try{
+    const d=await api('/api/paie/historique');
+    S.paieHistData=d.periodes||[];
+    render();
+  }catch(e){S.paieHistData=[];render();}
+}
+
+function paieChangePeriod(delta){
+  let m=S.paieMois+delta,y=S.paieAnnee;
+  if(m<1){m=12;y--;}if(m>12){m=1;y++;}
+  S.paieMois=m;S.paieAnnee=y;
+  S.paiePendingVar={};
+  paieLoadVars().then(()=>render());
+}
+
+function renderPaieForm(userId){
+  const emp=S.paieEmployes.find(x=>x.user_id===userId);
+  if(!emp)return h('div',{className:'paie-ph'},'Employé introuvable');
+  const varD=paieGetVar(userId);
+  const fixD=paieGetFixed(userId);
+  const wrap=h('div',null);
+  // Header
+  const btnSave=h('button',{className:'paie-svbtn'});
+  btnSave.textContent='💾 Enregistrer';
+  btnSave.onclick=()=>paieSaveEmp(userId,btnSave);
+  const meta=h('div',{className:'paie-emp-hdr-meta'});
+  [emp.contrat_type||'CDI', emp.salaire_mensuel?Number(emp.salaire_mensuel).toLocaleString('fr-FR')+' €':null, emp.date_debut?'Depuis '+emp.date_debut:null].filter(Boolean)
+    .forEach(t=>{const b=h('span',{className:'paie-badge'});b.textContent=t;meta.appendChild(b);});
+  const nm=h('div',{className:'paie-emp-hdr-name'});nm.textContent=emp.nom_complet||'';
+  const nmWrap=h('div',null,nm,meta);
+  const hdr=h('div',{className:'paie-emp-hdr'},nmWrap,btnSave);
+  wrap.appendChild(hdr);
+  // Sections
+  PAIE_SECTIONS.forEach(sec=>{
+    const sEl=h('div',{className:'paie-sec'});
+    const tEl=h('div',{className:'paie-sec-title'});tEl.textContent=sec.title;sEl.appendChild(tEl);
+    const grid=h('div',{className:'paie-fgrid'});
+    sec.fields.forEach(f=>{
+      const cell=h('div',{className:'paie-f'+(f.full?' full':'')});
+      const lbl=h('div',{className:'paie-flbl'});lbl.textContent=f.label;cell.appendChild(lbl);
+      const val=f.fixed?(fixD[f.key]??''):(varD[f.key]??'');
+      let inp;
+      if(f.type==='select'){
+        inp=document.createElement('select');
+        (f.opts||[]).forEach(o=>{const op=document.createElement('option');op.value=o;op.textContent=o;if(String(val)===o)op.selected=true;inp.appendChild(op);});
+      }else if(f.type==='textarea'){
+        inp=document.createElement('textarea');inp.value=val||'';
+      }else{
+        inp=document.createElement('input');inp.type=f.type||'text';if(f.step)inp.step=f.step;inp.value=val!=null?val:'';
+      }
+      inp.addEventListener('input',()=>{
+        if(f.fixed){if(!S.paiePendingFixed[userId])S.paiePendingFixed[userId]={};S.paiePendingFixed[userId][f.key]=inp.value;}
+        else{if(!S.paiePendingVar[userId])S.paiePendingVar[userId]={};S.paiePendingVar[userId][f.key]=inp.value;}
+      });
+      cell.appendChild(inp);grid.appendChild(cell);
+    });
+    sEl.appendChild(grid);wrap.appendChild(sEl);
+  });
+  return wrap;
+}
+
+function renderPaieEmployeeList(){
+  const tokens=(S.paieEmpSearch||'').toLowerCase().trim().split(/\s+/).filter(Boolean);
+  const scoreM=(hay,toks)=>{if(!toks.length)return 1;const h2=(hay||'').toLowerCase();let s=0;for(const t of toks)if(h2.includes(t))s+=(h2.startsWith(t)?2:1);return s;};
+  let list=S.paieEmployes.filter(e=>{if(!tokens.length)return true;return scoreM([e.nom_complet,e.contrat_type,e.email].join(' '),tokens)>0;})
+    .sort((a,b)=>{if(!tokens.length)return(a.nom_complet||'').localeCompare(b.nom_complet||'','fr');const sa=scoreM([a.nom_complet,a.contrat_type].join(' '),tokens);const sb=scoreM([b.nom_complet,b.contrat_type].join(' '),tokens);return sb-sa;});
+  const ul=h('div',{className:'paie-emp-list'});
+  if(!list.length){const em=h('div',{style:{padding:'12px',fontSize:'11px',color:'var(--muted)',textAlign:'center'}});em.textContent='Aucun résultat';ul.appendChild(em);return ul;}
+  list.forEach(emp=>{
+    const div=h('div',{className:'paie-emp-item'+(emp.user_id===S.paieCurrentEmpId?' active':'')});
+    const dirty=!!(S.paiePendingVar[emp.user_id]||S.paiePendingFixed[emp.user_id]);
+    const nm=h('div',{className:'paie-emp-name'});nm.textContent=emp.nom_complet||(emp.nom+' '+emp.prenom);
+    if(dirty){const dot=h('span',{className:'paie-unsaved'});nm.appendChild(dot);}
+    const sub=h('div',{className:'paie-emp-sub'});sub.textContent=(emp.contrat_type||'CDI')+' · '+(emp.email||'');
+    div.appendChild(nm);div.appendChild(sub);
+    div.onclick=()=>{S.paieCurrentEmpId=emp.user_id;render();};
+    ul.appendChild(div);
+  });
+  return ul;
+}
+
+function renderPaieTab(){
+  // Password check
+  if(!S.paieAuth){
+    const pw=h('div',{className:'paie-pw'});
+    const tit=h('div',{style:{fontSize:'20px',fontWeight:900,color:'var(--accent)',marginBottom:'4px'}});tit.textContent='🔐 Accès Paies';
+    const sub=h('div',{style:{fontSize:'12px',color:'var(--muted)',marginBottom:'20px'}});sub.textContent='Cette section est protégée. Saisissez le mot de passe pour continuer.';
+    const lbl=h('label',{style:{fontSize:'11px',fontWeight:700,color:'var(--text2)',display:'block',textAlign:'left',marginBottom:'4px'}});lbl.textContent='Mot de passe';
+    const inp=h('input',{className:'paie-pw-inp',type:'password',placeholder:'••••••••'});
+    const err=h('div',{style:{color:'var(--danger)',fontSize:'11px',minHeight:'16px',marginTop:'4px'}});
+    const btn=h('button',{className:'paie-pw-btn'});btn.textContent='Accéder →';
+    const check=()=>{
+      if(inp.value.trim().toLowerCase()==='safir'){
+        sessionStorage.setItem('paie_auth_v1','1');
+        S.paieAuth=true;
+        paieLoadEmployes();
+        paieLoadVars().then(()=>render());
+      }else{err.textContent='Mot de passe incorrect.';inp.value='';setTimeout(()=>err.textContent='',3000);}
+    };
+    btn.onclick=check;inp.addEventListener('keydown',e=>{if(e.key==='Enter')check();});
+    pw.append(tit,sub,lbl,inp,err,btn);
+    requestAnimationFrame(()=>inp.focus());
+    return pw;
+  }
+
+  // Load data if needed
+  if(!S.paieEmpLoaded){paieLoadEmployes();return h('div',{className:'paie-ph'},'Chargement…');}
+
+  // Period bar
+  const periodStr=PAIE_MOIS_FR[S.paieMois]+' '+S.paieAnnee;
+  const prevBtn=h('button',{className:'paie-pbtn',onClick:()=>paieChangePeriod(-1)});prevBtn.textContent='‹';
+  const nextBtn=h('button',{className:'paie-pbtn',onClick:()=>paieChangePeriod(+1)});nextBtn.textContent='›';
+  const lbl=h('div',{className:'paie-plbl'});lbl.textContent=periodStr;
+  const histBtn=h('button',{className:'paie-hist-btn',onClick:paieShowHistory});histBtn.innerHTML=icon('clock',13)+' Historique';
+  const xBtn=h('button',{className:'paie-xbtn',disabled:S.paieExporting,onClick:paieExport});
+  xBtn.innerHTML=icon('download',13)+' Exporter Excel';
+  if(S.paieExporting)xBtn.innerHTML='Génération…';
+  const periodBar=h('div',{className:'paie-period-bar'},h('div',{className:'paie-period-nav'},prevBtn,lbl,nextBtn),histBtn,xBtn);
+
+  // Employee list panel
+  const srch=h('input',{type:'search',placeholder:'Rechercher un employé…',style:{width:'100%',padding:'7px 10px',background:'var(--bg)',border:'1.5px solid var(--border)',borderRadius:'8px',color:'var(--text)',fontSize:'12px',fontFamily:'inherit',outline:'none'}});
+  srch.value=S.paieEmpSearch||'';
+  srch.addEventListener('input',()=>{S.paieEmpSearch=srch.value;const list=srch.closest('.paie-layout').querySelector('.paie-emp-list');if(list){const ul=renderPaieEmployeeList();list.replaceWith(ul);}});
+  const hint=h('div',{className:'paie-emp-hint'});hint.textContent='Cherchez par nom, prénom ou contrat';
+  const empHead=h('div',{className:'paie-emp-head'},srch,hint);
+  const empList=renderPaieEmployeeList();
+  const empPanel=h('div',{className:'paie-emp-panel'},empHead,empList);
+
+  // Right column
+  const formScroll=h('div',{className:'paie-form-scroll'});
+  if(S.paieCurrentEmpId){
+    formScroll.appendChild(renderPaieForm(S.paieCurrentEmpId));
+  }else{
+    const ph=h('div',{className:'paie-ph'});ph.textContent='← Sélectionnez un employé';
+    formScroll.appendChild(ph);
+  }
+  const formCol=h('div',{className:'paie-form-col'},periodBar,formScroll);
+  const layout=h('div',{className:'paie-layout'},empPanel,formCol);
+
+  // History modal
+  if(S.paieShowHist){
+    const histEl=h('div',{className:'paie-hist-modal'});
+    histEl.onclick=(e)=>{if(e.target===histEl){S.paieShowHist=false;render();}};
+    const card=h('div',{className:'paie-hist-card'});
+    const htit=h('div',{style:{fontSize:'14px',fontWeight:800,marginBottom:'12px'}});htit.textContent='📋 Historique des périodes';
+    const hlist=h('div',{style:{overflowY:'auto',flex:1}});
+    if(S.paieHistData===null){const ld=h('div',{style:{padding:'12px',color:'var(--muted)',fontSize:'12px'}});ld.textContent='Chargement…';hlist.appendChild(ld);}
+    else if(!S.paieHistData.length){const em=h('div',{style:{padding:'12px',color:'var(--muted)',fontSize:'12px'}});em.textContent='Aucune période enregistrée.';hlist.appendChild(em);}
+    else{S.paieHistData.forEach(p=>{const active=p.annee===S.paieAnnee&&p.mois===S.paieMois;const it=h('div',{className:'paie-hist-item'+(active?' active':'')});const ilab=h('div');const iname=h('div',{style:{fontSize:'13px',fontWeight:700,color:'var(--accent)'}});iname.textContent=p.mois_label+' '+p.annee;const isub=h('div',{style:{fontSize:'11px',color:'var(--muted)'}});isub.textContent=p.nb_employes+' employé(s) · '+(p.last_update||'').slice(0,10);ilab.append(iname,isub);const iact=h('span',{style:{fontSize:'11px',color:'var(--accent)'}});iact.textContent=active?'✓ Période actuelle':'→ Aller';it.append(ilab,iact);it.onclick=()=>{S.paieAnnee=p.annee;S.paieMois=p.mois;S.paiePendingVar={};S.paieShowHist=false;paieLoadVars().then(()=>render());};hlist.appendChild(it);});}
+    const closeBtn=h('button',{style:{marginTop:'12px',padding:'9px',borderRadius:'8px',border:'1px solid var(--border)',background:'transparent',color:'var(--text2)',cursor:'pointer',fontFamily:'inherit',fontSize:'12px',width:'100%'},onClick:()=>{S.paieShowHist=false;render();}});closeBtn.textContent='Fermer';
+    card.append(htit,hlist,closeBtn);histEl.appendChild(card);
+    return h('div',null,layout,histEl);
+  }
+  return layout;
+}
+
 function renderCompta(){
   const isLight=document.body.classList.contains('light');
   const tab = S.comptaTab || 'factor';
@@ -2765,11 +3137,11 @@ function renderCompta(){
         iconEl('users',15),'  Acheteurs'),
       h('button',{className:'nav-btn'+(tab==='comptes'?' active':''),onClick:()=>{set({comptaTab:'comptes'});loadComptaComptes();}},
         iconEl('file',15),'  Table des comptes'),
-      h('div',{className:'nav-group-label',style:{marginTop:'8px'}},'Développement'),
+      h('div',{className:'nav-group-label',style:{marginTop:'8px'}},'Autres modules'),
       h('button',{className:'nav-btn'+(tab==='cession'?' active':''),onClick:()=>{set({comptaTab:'cession'});}},
         iconEl('clock',15),'  Cession (en cours)'),
-      h('button',{className:'nav-btn'+(tab==='paie'?' active':''),onClick:()=>{set({comptaTab:'paie'});}},
-        iconEl('clock',15),'  Paie (en cours)')
+      h('button',{className:'nav-btn'+(tab==='paie'?' active':''),onClick:()=>{if(!S.paieEmpLoaded&&S.paieAuth){paieLoadEmployes();}paieLoadVars().then(()=>render());set({comptaTab:'paie'});}},
+        iconEl('credit-card',15),'  Paies')
     ),
     h('div',{className:'sidebar-bottom'},
       h('button',{className:'nav-btn back-mysifa',onClick:()=>{window.location.href='/' }},
@@ -3014,13 +3386,7 @@ function renderCompta(){
       )
     );
   }else if(tab==='paie'){
-    content=h('div',null,
-      h('div',{className:'card',style:{padding:'40px',textAlign:'center'}},
-        h('div',{style:{fontSize:'48px',marginBottom:'20px'}},'🚧'),
-        h('h2',{style:{color:'var(--muted)'}},'Paie'),
-        h('p',{style:{color:'var(--muted)',marginTop:'10px'}},'En cours de développement...')
-      )
-    );
+    content=renderPaieTab();
   }
 
   const body=h('div',{className:'app'},
