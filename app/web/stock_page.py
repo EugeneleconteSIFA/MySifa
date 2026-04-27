@@ -2364,9 +2364,6 @@ async function getBackCameraDeviceId() {
 }
 
 async function recepStartCamera() {
-  const video = document.getElementById('recep-video');
-  if (!video) return;
-
   // Debug info
   console.log('[Scan] Protocol:', window.location.protocol);
   console.log('[Scan] UserAgent:', navigator.userAgent);
@@ -2376,52 +2373,30 @@ async function recepStartCamera() {
   const loaded = await loadZXing();
   if (!loaded) { showToast('Impossible de charger le scanner', 'error'); return; }
 
-  // Optimisation Android: trouver la caméra arrière
+  // Stratégie caméra : facingMode exact d'abord (Android + iOS), puis dégradés
+  // NOTE: on n'utilise plus enumerateDevices() avant permission car les labels sont vides
   let stream = null;
-  try {
-    if (isAndroid) {
-      const backDeviceId = await getBackCameraDeviceId();
-      if (backDeviceId) {
-        const constraints = {
-          video: {
-            deviceId: { exact: backDeviceId },
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          }
-        };
-        console.log('[Scan] Tentative avec deviceId exact:', backDeviceId);
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
-      }
-    }
-  } catch(e) {
-    console.log('[Scan] Échec deviceId exact, fallback vers facingMode:', e.message);
-  }
+  const constraints = [
+    { video: { facingMode: { exact: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } },
+    { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } },
+    { video: { facingMode: { ideal: 'environment' } } },
+    { video: true }
+  ];
 
-  // Fallback si pas de stream ou si iOS
-  if (!stream) {
-    const constraints = [
-      { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } },
-      { video: { facingMode: { ideal: 'environment' } } },
-      { video: true }
-    ];
-
-    for (let i = 0; i < constraints.length; i++) {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia(constraints[i]);
-        console.log('[Scan] Caméra ok avec contraintes:', i);
-        break;
-      } catch(e) {
-        console.log('[Scan] Contrainte', i, 'échouée:', e.message);
-        if (i === constraints.length - 1) {
-          showToast('Caméra inaccessible', 'error');
-          return;
-        }
-      }
+  for (let i = 0; i < constraints.length; i++) {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia(constraints[i]);
+      console.log('[Scan] Caméra ok avec contraintes index:', i);
+      break;
+    } catch(e) {
+      console.log('[Scan] Contrainte', i, 'échouée:', e.message);
     }
   }
 
   if (!stream) {
-    showToast('Aucune caméra disponible', 'error');
+    showToast('Caméra inaccessible. Vérifiez les permissions.', 'error');
+    S.recepScanning = false;
+    renderContent();
     return;
   }
 
@@ -2429,29 +2404,35 @@ async function recepStartCamera() {
     S.recepStream = stream;
     S.recepScanning = true;
 
-    // Forcer les attributs pour PWA mobile
-    video.setAttribute('playsinline', 'true');
-    video.setAttribute('muted', 'true');
-    video.setAttribute('autoplay', 'true');
-
-    video.srcObject = stream;
-
-    // Play avec gestion d'erreur
-    video.play().catch(err => {
-      console.error('[Scan] video.play() error:', err);
-    });
-
+    // renderContent() recrée le DOM — on récupère le nouvel élément video APRÈS
     renderContent();
 
-    // Démarrer le scan ZXing unifié
-    recepStartScanningZXing(video);
+    // Attendre que le nouvel élément soit dans le DOM, puis démarrer le scan
+    setTimeout(() => {
+      const video = document.getElementById('recep-video');
+      if (!video || !S.recepStream) return;
+
+      // Attributs indispensables pour PWA mobile (iOS < 15 nécessite webkit-playsinline)
+      video.setAttribute('playsinline', 'true');
+      video.setAttribute('webkit-playsinline', 'true');
+      video.setAttribute('muted', 'true');
+      video.setAttribute('autoplay', 'true');
+
+      video.srcObject = S.recepStream;
+      video.play().catch(err => {
+        console.error('[Scan] video.play() error:', err);
+      });
+
+      recepStartScanningZXing(video);
+    }, 100);
+
   } catch(e) {
     showToast('Erreur caméra : ' + e.message, 'error');
     S.recepScanning = false; S.recepStream = null; renderContent();
   }
 }
 
-// Scan ZXing unifié pour tous les appareils (avec optimisations Android)
+// Scan ZXing unifié pour tous les appareils
 async function recepStartScanningZXing(video) {
   if (!S.recepScanning || !video) return;
 
@@ -2461,8 +2442,10 @@ async function recepStartScanningZXing(video) {
   let lastCode = null;
   let lastTime = 0;
   let scanCount = 0;
+  const SCAN_INTERVAL_MS = 150; // ~6-7 fps : largement suffisant, évite la surchauffe mobile
+  const READY_TIMEOUT_MS = 10000; // abandon si la vidéo ne démarre pas en 10s
+  const startTs = Date.now();
 
-  // Utiliser BrowserMultiFormatReader pour meilleure stabilité
   const hints = new Map();
   hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
     ZXing.BarcodeFormat.CODE_128,
@@ -2473,11 +2456,10 @@ async function recepStartScanningZXing(video) {
     ZXing.BarcodeFormat.CODE_39
   ]);
 
-  // Créer le reader (BrowserMultiFormatReader pour gestion cycle de vie vidéo)
   const reader = new ZXing.BrowserMultiFormatReader(hints);
   S.recepBarcodeReader = reader;
 
-  // Canvas pour traitement image (avec réduction résolution sur Android)
+  // Canvas réutilisé à chaque frame (willReadFrequently = optimisation navigateur)
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
@@ -2486,37 +2468,37 @@ async function recepStartScanningZXing(video) {
   function tick() {
     if (!S.recepScanning) return;
 
-    // Vérifier readyState
+    // Timeout de sécurité si la vidéo ne démarre jamais
     if (video.readyState < 2) {
-      console.log('[Scan] Video not ready, readyState:', video.readyState);
-      requestAnimationFrame(tick);
+      if (Date.now() - startTs > READY_TIMEOUT_MS) {
+        console.error('[Scan] Timeout readyState - abandon');
+        showToast('Délai dépassé, relancez le scan', 'error');
+        recepStopCamera();
+        return;
+      }
+      setTimeout(tick, 200);
       return;
     }
 
+    if (video.videoWidth === 0 || video.videoHeight === 0) {
+      setTimeout(tick, 200);
+      return;
+    }
+
+    scanCount++;
+    if (scanCount % 20 === 0) {
+      console.log('[Scan] Frames traitées:', scanCount, '— dim:', video.videoWidth, 'x', video.videoHeight);
+    }
+
     try {
-      scanCount++;
-      const isVideoReady = video.videoWidth > 0 && video.videoHeight > 0;
-
-      if (!isVideoReady) {
-        console.log('[Scan] Video dimensions not available yet');
-        requestAnimationFrame(tick);
-        return;
-      }
-
-      // Log toutes les 60 frames (~1 sec à 60fps)
-      if (scanCount % 60 === 0) {
-        console.log('[Scan] Frames traitées:', scanCount, 'Dimensions:', video.videoWidth, 'x', video.videoHeight);
-      }
-
-      // Réduction résolution de moitié sur Android pour performance
-      const scaleFactor = isAndroid ? 0.5 : 1.0;
+      // Android : 0.5x (performance). iOS : 0.75x (meilleur que 1.0x, moins lourd).
+      // Desktop : 1.0x
+      const scaleFactor = isAndroid ? 0.5 : (isIOS ? 0.75 : 1.0);
       const w = Math.floor(video.videoWidth * scaleFactor);
       const h = Math.floor(video.videoHeight * scaleFactor);
 
       canvas.width = w;
       canvas.height = h;
-
-      // drawImage avec réduction
       ctx.drawImage(video, 0, 0, w, h);
 
       const imgData = ctx.getImageData(0, 0, w, h);
@@ -2528,7 +2510,6 @@ async function recepStartScanningZXing(video) {
       if (result) {
         const code = result.getText();
         const now = Date.now();
-
         if (code !== lastCode || (now - lastTime) > 1200) {
           lastCode = code;
           lastTime = now;
@@ -2540,18 +2521,16 @@ async function recepStartScanningZXing(video) {
         }
       }
     } catch(e) {
-      // Erreur silencieuse (pas de code détecté)
+      // NotFoundException normale (pas de code dans la frame), on continue
     }
 
     if (S.recepScanning) {
-      requestAnimationFrame(tick);
+      setTimeout(tick, SCAN_INTERVAL_MS); // throttlé à ~6fps, pas requestAnimationFrame
     }
   }
 
-  // Démarrer après un court délai
-  setTimeout(() => {
-    requestAnimationFrame(tick);
-  }, 300);
+  // Court délai initial pour laisser la vidéo s'initialiser
+  setTimeout(tick, 300);
 }
 
 function recepStopCamera() {
@@ -2708,11 +2687,7 @@ function buildReception() {
     btnWrap.appendChild(el('button', { cls: 'btn-recep btn-recep-danger', on: { click: recepStopCamera } }, iconEl('x', 14), ' Arrêter'));
     camCard.appendChild(btnWrap);
 
-    // Démarrer le flux après rendu
-    setTimeout(() => {
-      const v = document.getElementById('recep-video');
-      if (v && S.recepStream) { v.srcObject = S.recepStream; v.play().catch(() => {}); recepStartScanningZXing(v); }
-    }, 80);
+    // Note: le démarrage du flux est géré par recepStartCamera() après renderContent()
   } else {
     const placeholder = el('div', { cls: 'recep-cam-placeholder' },
       iconEl('scan', 40),

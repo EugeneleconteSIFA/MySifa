@@ -3082,12 +3082,11 @@ function renderPaieTab(){
   const prevBtn=h('button',{className:'paie-pbtn',onClick:()=>paieChangePeriod(-1)});prevBtn.textContent='‹';
   const nextBtn=h('button',{className:'paie-pbtn',onClick:()=>paieChangePeriod(+1)});nextBtn.textContent='›';
   const lbl=h('div',{className:'paie-plbl'});lbl.textContent=periodStr;
-  const statusBadge=h('div',{style:{fontSize:'11px',padding:'4px 10px',borderRadius:'12px',background:monthStatusColor,color:'#000',fontWeight:600,whiteSpace:'nowrap'}},monthStatus);
   const histBtn=h('button',{className:'paie-hist-btn',onClick:paieShowHistory});histBtn.innerHTML=icon('clock',13)+' Historique';
   const xBtn=h('button',{className:'paie-xbtn',disabled:S.paieExporting,onClick:paieExport});
   xBtn.innerHTML=icon('download',13)+' Exporter Excel';
   if(S.paieExporting)xBtn.innerHTML='Génération…';
-  const periodBar=h('div',{className:'paie-period-bar'},h('div',{className:'paie-period-nav'},prevBtn,lbl,statusBadge),histBtn,xBtn);
+  const periodBar=h('div',{className:'paie-period-bar'},h('div',{className:'paie-period-nav'},prevBtn,lbl,nextBtn),histBtn,xBtn);
 
   // Employee list panel
   const srch=h('input',{type:'search',placeholder:'Rechercher un employé…',style:{width:'100%',padding:'7px 10px',background:'var(--bg)',border:'1.5px solid var(--border)',borderRadius:'8px',color:'var(--text)',fontSize:'12px',fontFamily:'inherit',outline:'none'}});
