@@ -2072,7 +2072,7 @@ function renderPortal(){
   const isPrint = isSuper || !!(urole && ['fabrication','logistique'].includes(urole));
   const isCom = urole==='commercial';
   const isRH   = aa ? !!aa.planning_rh : (isSuper || !!(urole && ['direction','fabrication','logistique'].includes(urole)));
-  const isPaie = isSuper || !!(urole && ['direction','administration'].includes(urole));
+  const isPaie = isSuper || !!(urole && ['direction','administration','comptabilite'].includes(urole));
   const isLight=document.body.classList.contains('light');
 
   const apps=[];
@@ -3035,29 +3035,6 @@ function renderPaieEmployeeList(){
 }
 
 function renderPaieTab(){
-  // Password check
-  if(!S.paieAuth){
-    const pw=h('div',{className:'paie-pw'});
-    const tit=h('div',{style:{fontSize:'20px',fontWeight:900,color:'var(--accent)',marginBottom:'4px'}});tit.textContent='🔐 Accès Paies';
-    const sub=h('div',{style:{fontSize:'12px',color:'var(--muted)',marginBottom:'20px'}});sub.textContent='Cette section est protégée. Saisissez le mot de passe pour continuer.';
-    const lbl=h('label',{style:{fontSize:'11px',fontWeight:700,color:'var(--text2)',display:'block',textAlign:'left',marginBottom:'4px'}});lbl.textContent='Mot de passe';
-    const inp=h('input',{className:'paie-pw-inp',type:'password',placeholder:'••••••••'});
-    const err=h('div',{style:{color:'var(--danger)',fontSize:'11px',minHeight:'16px',marginTop:'4px'}});
-    const btn=h('button',{className:'paie-pw-btn'});btn.textContent='Accéder →';
-    const check=()=>{
-      if(inp.value.trim().toLowerCase()==='safir'){
-        sessionStorage.setItem('paie_auth_v1','1');
-        S.paieAuth=true;
-        paieLoadEmployes();
-        paieLoadVars().then(()=>render());
-      }else{err.textContent='Mot de passe incorrect.';inp.value='';setTimeout(()=>err.textContent='',3000);}
-    };
-    btn.onclick=check;inp.addEventListener('keydown',e=>{if(e.key==='Enter')check();});
-    pw.append(tit,sub,lbl,inp,err,btn);
-    requestAnimationFrame(()=>inp.focus());
-    return pw;
-  }
-
   // Load data if needed
   if(!S.paieEmpLoaded){paieLoadEmployes();return h('div',{className:'paie-ph'},'Chargement…');}
 
@@ -3130,7 +3107,7 @@ function renderCompta(){
       h('div',{className:'nav-group-label',style:{marginTop:'8px'}},'Autres modules'),
       h('button',{className:'nav-btn'+(tab==='cession'?' active':''),onClick:()=>{set({comptaTab:'cession'});}},
         iconEl('clock',15),'  Cession (en cours)'),
-      h('button',{className:'nav-btn'+(tab==='paie'?' active':''),onClick:()=>{if(!S.paieEmpLoaded&&S.paieAuth){paieLoadEmployes();}paieLoadVars().then(()=>render());set({comptaTab:'paie'});}},
+      h('button',{className:'nav-btn'+(tab==='paie'?' active':''),onClick:()=>{if(!S.paieEmpLoaded){paieLoadEmployes();}paieLoadVars().then(()=>render());set({comptaTab:'paie'});}},
         iconEl('credit-card',15),'  Paies')
     ),
     h('div',{className:'sidebar-bottom'},

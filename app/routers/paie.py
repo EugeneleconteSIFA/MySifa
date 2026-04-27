@@ -1,5 +1,5 @@
 """MySifa — Router Gestion des Paies
-Accès : superadmin + direction + administration (+ mot de passe "safir" côté client)
+Accès : superadmin + direction + administration + comptabilite
 """
 from __future__ import annotations
 
@@ -12,7 +12,9 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from app.core.database import get_db
-from app.services.auth_service import get_current_user, is_admin
+from app.services.auth_service import get_current_user
+
+ROLES_PAIE = {"superadmin", "direction", "administration", "comptabilite"}
 
 router = APIRouter()
 
@@ -89,7 +91,7 @@ FIXED_FIELDS = {
 
 def _require_paie(request: Request) -> dict:
     user = get_current_user(request)
-    if not is_admin(user):
+    if user.get("role") not in ROLES_PAIE:
         raise HTTPException(status_code=403, detail="Accès réservé")
     return user
 
