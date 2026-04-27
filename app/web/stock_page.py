@@ -2394,22 +2394,46 @@ async function recepStartCamera() {
   document.body.appendChild(overlay);
 
   try {
-    // facingMode string simple (pas {exact:...}) — déclenche correctement la demande
-    // de permission sur Android et sélectionne la caméra arrière sur iOS et Android
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    // Résolution minimale 720p : indispensable pour les barres fines des codes 1D
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
     S.recepStream = stream;
     video.srcObject = stream;
+
+    // Android : activer l'autofocus continu sur le track vidéo.
+    // Sans ça, la caméra se fige en mise au point fixe → QR codes passent (2D tolérant),
+    // codes-barres linéaires échouent (barres fines nécessitant une netteté précise).
+    if (isAndroid) {
+      const track = stream.getVideoTracks()[0];
+      const caps = track.getCapabilities?.();
+      // getCapabilities() peut être absent sur certains WebViews Android — on tente quand même
+      const supportsContinuous = !caps || caps?.focusMode?.includes('continuous');
+      if (supportsContinuous) {
+        try {
+          await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+          console.log('[Scan] Autofocus continu activé');
+        } catch(e) {
+          console.log('[Scan] focusMode continuous non supporté:', e.message);
+        }
+      }
+    }
 
     const hints = new Map();
     hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
       ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
       ZXing.BarcodeFormat.QR_CODE, ZXing.BarcodeFormat.DATA_MATRIX, ZXing.BarcodeFormat.CODE_39
     ]);
+    // TRY_HARDER : ZXing essaie davantage de rotations et résolutions par frame
+    // Utile sur Android où la netteté peut varier entre frames
+    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+
     const reader = new ZXing.BrowserMultiFormatReader(hints);
     S.recepBarcodeReader = reader;
 
-    // decodeFromVideoDevice gère le cycle vidéo en interne — plus fiable que le canvas loop
-    reader.decodeFromVideoDevice(null, video, (result) => {
+    // decodeFromStream utilise le stream qu'on a configuré (avec autofocus appliqué)
+    // contrairement à decodeFromVideoDevice qui recrée son propre stream en interne
+    reader.decodeFromStream(stream, video, (result) => {
       if (!result) return;
       const code = result.getText().trim();
       resultEl.textContent = '✅ ' + code;
