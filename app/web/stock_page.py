@@ -1268,17 +1268,20 @@ async function startCamera() {
 
     const useNativeDetector = isAndroid && ('BarcodeDetector' in window);
 
-    // Callback partagé entre les deux moteurs
+    // Arrêt immédiat dès détection — évite tout callback supplémentaire
     let searchDetected = false;
     const onSearchCode = (text) => {
-      if (!S.scanning || searchDetected) return;
+      if (searchDetected) return;
       searchDetected = true;
+      S.scanning = false;
+      if (S.barcodeReader) { try { S.barcodeReader.reset(); } catch(e) {} S.barcodeReader = null; }
+      if (S.cameraStream) { S.cameraStream.getTracks().forEach(t => t.stop()); S.cameraStream = null; }
       const upper = text.trim().toUpperCase();
       resultEl.textContent = '✅ ' + upper; resultEl.style.color = 'var(--success)';
-      setTimeout(() => { stopCamera(overlay); handleScan(upper); }, 600);
+      setTimeout(() => { overlay.remove(); handleScan(upper); }, 600);
     };
 
-    // ZXing nécessaire sur iOS et pour les QR codes sur Android
+    // ZXing nécessaire sur iOS et pour QR codes sur Android
     if (typeof ZXing === 'undefined') {
       resultEl.textContent = 'Chargement scanner…';
       await new Promise((res, rej) => {
@@ -1290,34 +1293,68 @@ async function startCamera() {
     }
 
     if (useNativeDetector) {
-      // Android : BarcodeDetector (codes 1D) + ZXing (QR uniquement) en parallèle
-      const detector = new BarcodeDetector({
-        formats: ['code_128', 'ean_13', 'ean_8', 'data_matrix', 'code_39', 'upc_a', 'upc_e']
-      });
-      const scanLoop = async () => {
-        if (!S.scanning) return;
-        if (video.readyState < 2 || !video.videoWidth) { setTimeout(scanLoop, 100); return; }
-        try {
-          const barcodes = await detector.detect(video);
-          if (barcodes.length > 0) { onSearchCode(barcodes[0].rawValue); return; }
-        } catch(e) {}
-        if (S.scanning) setTimeout(scanLoop, 150);
-      };
-      setTimeout(scanLoop, 500);
-
+      // Android : BarcodeDetector (codes 1D) + ZXing canvas loop (QR) — sans decodeFromVideoDevice
+      const qrCanvas = document.createElement('canvas');
+      const qrCtx = qrCanvas.getContext('2d', { willReadFrequently: true });
       const qrHints = new Map();
       qrHints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.QR_CODE]);
       qrHints.set(ZXing.DecodeHintType.TRY_HARDER, true);
       const qrReader = new ZXing.BrowserMultiFormatReader(qrHints);
       S.barcodeReader = qrReader;
-      qrReader.decodeFromVideoDevice(null, video, result => { if (result) onSearchCode(result.getText()); });
+
+      const detector = new BarcodeDetector({
+        formats: ['code_128', 'ean_13', 'ean_8', 'data_matrix', 'code_39', 'upc_a', 'upc_e']
+      });
+      const barcodeLoop = async () => {
+        if (!S.scanning) return;
+        if (video.readyState < 2 || !video.videoWidth) { setTimeout(barcodeLoop, 100); return; }
+        try {
+          const found = await detector.detect(video);
+          if (found.length > 0) { onSearchCode(found[0].rawValue); return; }
+        } catch(e) {}
+        if (S.scanning) setTimeout(barcodeLoop, 150);
+      };
+      setTimeout(barcodeLoop, 500);
+
+      const qrLoop = () => {
+        if (!S.scanning) return;
+        if (video.readyState < 2 || !video.videoWidth) { setTimeout(qrLoop, 100); return; }
+        try {
+          qrCanvas.width = video.videoWidth; qrCanvas.height = video.videoHeight;
+          qrCtx.drawImage(video, 0, 0);
+          const img = qrCtx.getImageData(0, 0, qrCanvas.width, qrCanvas.height);
+          const lum = new ZXing.RGBLuminanceSource(img.data, qrCanvas.width, qrCanvas.height);
+          const bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
+          const result = qrReader.decode(bmp);
+          if (result) { onSearchCode(result.getText()); return; }
+        } catch(e) {}
+        if (S.scanning) setTimeout(qrLoop, 200);
+      };
+      setTimeout(qrLoop, 600);
     } else {
-      // iOS + fallback : ZXing tous formats
+      // iOS + fallback : ZXing canvas loop tous formats
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
       const hints = new Map();
       hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.CODE_128,ZXing.BarcodeFormat.EAN_13,ZXing.BarcodeFormat.QR_CODE]);
+      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
       const reader = new ZXing.BrowserMultiFormatReader(hints);
       S.barcodeReader = reader;
-      reader.decodeFromVideoDevice(null, video, result => { if (result) onSearchCode(result.getText()); });
+      const loop = () => {
+        if (!S.scanning) return;
+        if (video.readyState < 2 || !video.videoWidth) { setTimeout(loop, 100); return; }
+        try {
+          canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+          ctx.drawImage(video, 0, 0);
+          const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const lum = new ZXing.RGBLuminanceSource(img.data, canvas.width, canvas.height);
+          const bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
+          const result = reader.decode(bmp);
+          if (result) { onSearchCode(result.getText()); return; }
+        } catch(e) {}
+        if (S.scanning) setTimeout(loop, 150);
+      };
+      setTimeout(loop, 400);
     }
   } catch(e) {
     showToast(e.message.includes('HTTPS') ? e.message : 'Accès caméra refusé', 'error');
@@ -2437,17 +2474,23 @@ async function recepStartCamera() {
     // iOS + fallback Android → ZXing (BarcodeDetector absent sur Safari)
     const useNativeDetector = isAndroid && ('BarcodeDetector' in window);
 
-    // Callback partagé — le premier des deux moteurs à détecter remporte
+    // Callback partagé — arrêt IMMÉDIAT des deux moteurs dès détection
+    // (évite que ZXing continue d'appeler le callback pendant le délai d'animation)
     let recepDetected = false;
     const onRecepCode = (code) => {
-      if (!S.recepScanning || recepDetected) return;
+      if (recepDetected) return;
       recepDetected = true;
+      // Stopper tout immédiatement — plus aucun callback possible après ça
+      S.recepScanning = false;
+      if (S.recepBarcodeReader) { try { S.recepBarcodeReader.reset(); } catch(e) {} S.recepBarcodeReader = null; }
+      if (S.recepStream) { S.recepStream.getTracks().forEach(t => t.stop()); S.recepStream = null; }
       resultEl.textContent = '✅ ' + code;
       resultEl.style.color = 'var(--success)';
-      setTimeout(() => { recepStopCamera(overlay); recepAddCode(code); }, 600);
+      // Garder l'overlay 600ms pour l'animation, puis fermer et ajouter
+      setTimeout(() => { overlay.remove(); recepAddCode(code); }, 600);
     };
 
-    // ZXing est nécessaire sur iOS (seul moteur dispo) et sur Android pour les QR codes
+    // ZXing nécessaire sur iOS et pour QR codes sur Android
     if (typeof ZXing === 'undefined') {
       resultEl.textContent = 'Chargement scanner…';
       await new Promise((res, rej) => {
@@ -2459,36 +2502,53 @@ async function recepStartCamera() {
     }
 
     if (useNativeDetector) {
-      // ── Android : hybride BarcodeDetector + ZXing ───────────────────────────────
-      // BarcodeDetector (ML Kit) : codes 1D — autofocus natif, bien supérieur à ZXing pour les barres fines
-      // ZXing : QR Code uniquement — BarcodeDetector ne supporte pas qr_code sur tous les appareils Android
-      // Les deux tournent en parallèle sur le même flux, le premier à détecter l'emporte.
-
-      // Moteur 1 : BarcodeDetector pour codes 1D
-      const detector = new BarcodeDetector({
-        formats: ['code_128', 'ean_13', 'ean_8', 'data_matrix', 'code_39', 'upc_a', 'upc_e']
-      });
-      const scanLoop = async () => {
-        if (!S.recepScanning) return;
-        if (video.readyState < 2 || !video.videoWidth) { setTimeout(scanLoop, 100); return; }
-        try {
-          const barcodes = await detector.detect(video);
-          if (barcodes.length > 0) { onRecepCode(barcodes[0].rawValue); return; }
-        } catch(e) {}
-        if (S.recepScanning) setTimeout(scanLoop, 150);
-      };
-      setTimeout(scanLoop, 500);
-
-      // Moteur 2 : ZXing pour QR codes seulement
+      // ── Android : BarcodeDetector (codes 1D) + ZXing canvas loop (QR) ──────────
+      // ZXing QR via canvas : lit les pixels du <video> sans toucher à srcObject
+      // → n'interfère pas avec BarcodeDetector qui lit le même élément vidéo
+      const qrCanvas = document.createElement('canvas');
+      const qrCtx = qrCanvas.getContext('2d', { willReadFrequently: true });
       const qrHints = new Map();
       qrHints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.QR_CODE]);
       qrHints.set(ZXing.DecodeHintType.TRY_HARDER, true);
       const qrReader = new ZXing.BrowserMultiFormatReader(qrHints);
       S.recepBarcodeReader = qrReader;
-      qrReader.decodeFromStream(stream, video, (result) => { if (result) onRecepCode(result.getText().trim()); });
+
+      // Moteur 1 : BarcodeDetector pour codes 1D (ML Kit natif, autofocus natif)
+      const detector = new BarcodeDetector({
+        formats: ['code_128', 'ean_13', 'ean_8', 'data_matrix', 'code_39', 'upc_a', 'upc_e']
+      });
+      const barcodeLoop = async () => {
+        if (!S.recepScanning) return;
+        if (video.readyState < 2 || !video.videoWidth) { setTimeout(barcodeLoop, 100); return; }
+        try {
+          const found = await detector.detect(video);
+          if (found.length > 0) { onRecepCode(found[0].rawValue); return; }
+        } catch(e) {}
+        if (S.recepScanning) setTimeout(barcodeLoop, 150);
+      };
+      setTimeout(barcodeLoop, 500);
+
+      // Moteur 2 : ZXing canvas loop pour QR codes (non-invasif)
+      const qrLoop = () => {
+        if (!S.recepScanning) return;
+        if (video.readyState < 2 || !video.videoWidth) { setTimeout(qrLoop, 100); return; }
+        try {
+          qrCanvas.width = video.videoWidth; qrCanvas.height = video.videoHeight;
+          qrCtx.drawImage(video, 0, 0);
+          const img = qrCtx.getImageData(0, 0, qrCanvas.width, qrCanvas.height);
+          const lum = new ZXing.RGBLuminanceSource(img.data, qrCanvas.width, qrCanvas.height);
+          const bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
+          const result = qrReader.decode(bmp);
+          if (result) { onRecepCode(result.getText().trim()); return; }
+        } catch(e) {}
+        if (S.recepScanning) setTimeout(qrLoop, 200);
+      };
+      setTimeout(qrLoop, 600);
 
     } else {
-      // ── iOS + fallback : ZXing tous formats ─────────────────────────────────────
+      // ── iOS + fallback : ZXing canvas loop tous formats ──────────────────────────
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
       const hints = new Map();
       hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
         ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
@@ -2497,7 +2557,21 @@ async function recepStartCamera() {
       hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
       const reader = new ZXing.BrowserMultiFormatReader(hints);
       S.recepBarcodeReader = reader;
-      reader.decodeFromStream(stream, video, (result) => { if (result) onRecepCode(result.getText().trim()); });
+      const loop = () => {
+        if (!S.recepScanning) return;
+        if (video.readyState < 2 || !video.videoWidth) { setTimeout(loop, 100); return; }
+        try {
+          canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+          ctx.drawImage(video, 0, 0);
+          const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const lum = new ZXing.RGBLuminanceSource(img.data, canvas.width, canvas.height);
+          const bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
+          const result = reader.decode(bmp);
+          if (result) { onRecepCode(result.getText().trim()); return; }
+        } catch(e) {}
+        if (S.recepScanning) setTimeout(loop, 150);
+      };
+      setTimeout(loop, 400);
     }
   } catch(e) {
     showToast(e.message.includes('HTTPS') ? e.message : 'Accès caméra refusé', 'error');
