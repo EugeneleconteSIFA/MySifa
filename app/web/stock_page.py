@@ -1266,27 +1266,50 @@ async function startCamera() {
     S.cameraStream = stream;
     video.srcObject = stream;
 
-    // ZXing chargé APRÈS getUserMedia — le plus risqué est passé
-    if (typeof ZXing === 'undefined') {
-      resultEl.textContent = 'Chargement scanner…';
-      await new Promise((res, rej) => {
-        const s = document.createElement('script');
-        s.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js';
-        s.onload = res; s.onerror = rej; document.head.appendChild(s);
-      });
-      resultEl.textContent = 'En attente…';
-    }
+    // Android Chrome 83+ → BarcodeDetector (ML Kit natif), iOS → ZXing
+    const useNativeDetector = isAndroid && ('BarcodeDetector' in window);
 
-    const hints = new Map();
-    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.CODE_128,ZXing.BarcodeFormat.EAN_13,ZXing.BarcodeFormat.QR_CODE]);
-    const reader = new ZXing.BrowserMultiFormatReader(hints);
-    S.barcodeReader = reader;
-    reader.decodeFromVideoDevice(null, video, result => {
-      if (!result) return;
-      const text = result.getText().trim().toUpperCase();
-      resultEl.textContent = '✅ ' + text; resultEl.style.color = 'var(--success)';
-      setTimeout(() => { stopCamera(overlay); handleScan(text); }, 600);
-    });
+    if (useNativeDetector) {
+      const detector = new BarcodeDetector({
+        formats: ['code_128', 'ean_13', 'ean_8', 'qr_code', 'data_matrix', 'code_39', 'upc_a', 'upc_e']
+      });
+      const scanLoop = async () => {
+        if (!S.scanning) return;
+        if (video.readyState < 2 || !video.videoWidth) { setTimeout(scanLoop, 100); return; }
+        try {
+          const barcodes = await detector.detect(video);
+          if (barcodes.length > 0) {
+            const text = barcodes[0].rawValue.trim().toUpperCase();
+            resultEl.textContent = '✅ ' + text; resultEl.style.color = 'var(--success)';
+            setTimeout(() => { stopCamera(overlay); handleScan(text); }, 600);
+            return;
+          }
+        } catch(e) {}
+        if (S.scanning) setTimeout(scanLoop, 150);
+      };
+      setTimeout(scanLoop, 500);
+    } else {
+      // ZXing chargé APRÈS getUserMedia — le plus risqué est passé
+      if (typeof ZXing === 'undefined') {
+        resultEl.textContent = 'Chargement scanner…';
+        await new Promise((res, rej) => {
+          const s = document.createElement('script');
+          s.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js';
+          s.onload = res; s.onerror = rej; document.head.appendChild(s);
+        });
+        resultEl.textContent = 'En attente…';
+      }
+      const hints = new Map();
+      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.CODE_128,ZXing.BarcodeFormat.EAN_13,ZXing.BarcodeFormat.QR_CODE]);
+      const reader = new ZXing.BrowserMultiFormatReader(hints);
+      S.barcodeReader = reader;
+      reader.decodeFromVideoDevice(null, video, result => {
+        if (!result) return;
+        const text = result.getText().trim().toUpperCase();
+        resultEl.textContent = '✅ ' + text; resultEl.style.color = 'var(--success)';
+        setTimeout(() => { stopCamera(overlay); handleScan(text); }, 600);
+      });
+    }
   } catch(e) {
     showToast(e.message.includes('HTTPS') ? e.message : 'Accès caméra refusé', 'error');
     stopCamera(overlay);
@@ -2399,47 +2422,62 @@ async function recepStartCamera() {
     S.recepStream = stream;
     video.srcObject = stream;
 
-    // ZXing chargé APRÈS getUserMedia — permission obtenue, on peut prendre le temps de charger
-    if (typeof ZXing === 'undefined') {
-      resultEl.textContent = 'Chargement scanner…';
-      await new Promise((res, rej) => {
-        const s = document.createElement('script');
-        s.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js';
-        s.onload = res; s.onerror = rej; document.head.appendChild(s);
+    // Stratégie de décodage selon la plateforme :
+    // Android Chrome 83+ → BarcodeDetector (Google ML Kit natif) : gère nativement l'autofocus
+    //   et les codes 1D fins. ZXing JS ne peut pas rivaliser avec le moteur natif de l'OS.
+    // iOS + fallback Android → ZXing (BarcodeDetector absent sur Safari)
+    const useNativeDetector = isAndroid && ('BarcodeDetector' in window);
+
+    if (useNativeDetector) {
+      // ── Android : BarcodeDetector (ML Kit) ──────────────────────────────────────
+      // Pas besoin de charger ZXing, pas de gestion d'autofocus manuelle
+      const detector = new BarcodeDetector({
+        formats: ['code_128', 'ean_13', 'ean_8', 'qr_code', 'data_matrix', 'code_39', 'upc_a', 'upc_e']
       });
-      resultEl.textContent = 'En attente…';
-    }
-
-    // Android : autofocus continu — indispensable pour les codes-barres linéaires (barres fines)
-    if (isAndroid) {
-      const track = stream.getVideoTracks()[0];
-      const caps = track.getCapabilities?.();
-      const supportsContinuous = !caps || caps?.focusMode?.includes('continuous');
-      if (supportsContinuous) {
+      const scanLoop = async () => {
+        if (!S.recepScanning) return;
+        if (video.readyState < 2 || !video.videoWidth) { setTimeout(scanLoop, 100); return; }
         try {
-          await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
-        } catch(e) {
-          console.log('[Scan] focusMode continuous non supporté:', e.message);
-        }
+          const barcodes = await detector.detect(video);
+          if (barcodes.length > 0) {
+            const code = barcodes[0].rawValue;
+            resultEl.textContent = '✅ ' + code;
+            resultEl.style.color = 'var(--success)';
+            setTimeout(() => { recepStopCamera(overlay); recepAddCode(code); }, 600);
+            return;
+          }
+        } catch(e) { /* pas de code dans la frame, on continue */ }
+        if (S.recepScanning) setTimeout(scanLoop, 150);
+      };
+      setTimeout(scanLoop, 500); // laisser la caméra stabiliser la mise au point
+
+    } else {
+      // ── iOS + fallback Android : ZXing ──────────────────────────────────────────
+      if (typeof ZXing === 'undefined') {
+        resultEl.textContent = 'Chargement scanner…';
+        await new Promise((res, rej) => {
+          const s = document.createElement('script');
+          s.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js';
+          s.onload = res; s.onerror = rej; document.head.appendChild(s);
+        });
+        resultEl.textContent = 'En attente…';
       }
+      const hints = new Map();
+      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+        ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
+        ZXing.BarcodeFormat.QR_CODE, ZXing.BarcodeFormat.DATA_MATRIX, ZXing.BarcodeFormat.CODE_39
+      ]);
+      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+      const reader = new ZXing.BrowserMultiFormatReader(hints);
+      S.recepBarcodeReader = reader;
+      reader.decodeFromStream(stream, video, (result) => {
+        if (!result) return;
+        const code = result.getText().trim();
+        resultEl.textContent = '✅ ' + code;
+        resultEl.style.color = 'var(--success)';
+        setTimeout(() => { recepStopCamera(overlay); recepAddCode(code); }, 600);
+      });
     }
-
-    const hints = new Map();
-    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-      ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
-      ZXing.BarcodeFormat.QR_CODE, ZXing.BarcodeFormat.DATA_MATRIX, ZXing.BarcodeFormat.CODE_39
-    ]);
-    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-
-    const reader = new ZXing.BrowserMultiFormatReader(hints);
-    S.recepBarcodeReader = reader;
-    reader.decodeFromStream(stream, video, (result) => {
-      if (!result) return;
-      const code = result.getText().trim();
-      resultEl.textContent = '✅ ' + code;
-      resultEl.style.color = 'var(--success)';
-      setTimeout(() => { recepStopCamera(overlay); recepAddCode(code); }, 600);
-    });
   } catch(e) {
     showToast(e.message.includes('HTTPS') ? e.message : 'Accès caméra refusé', 'error');
     recepStopCamera(overlay);
