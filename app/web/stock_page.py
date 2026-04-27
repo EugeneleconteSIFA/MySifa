@@ -2364,267 +2364,70 @@ async function getBackCameraDeviceId() {
 }
 
 async function recepStartCamera() {
-  // Debug info
-  console.log('[Scan] Protocol:', window.location.protocol);
-  console.log('[Scan] UserAgent:', navigator.userAgent);
-  console.log('[Scan] isAndroid:', isAndroid, 'isIOS:', isIOS);
+  if (S.recepScanning) return;
 
-  showToast('Chargement du scanner...', 'warn');
-  const loaded = await loadZXing();
-  if (!loaded) { showToast('Impossible de charger le scanner', 'error'); return; }
-
-  // Stratégie caméra : facingMode exact d'abord (Android + iOS), puis dégradés
-  // NOTE: on n'utilise plus enumerateDevices() avant permission car les labels sont vides
-  let stream = null;
-  const constraints = [
-    { video: { facingMode: { exact: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } },
-    { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } },
-    { video: { facingMode: { ideal: 'environment' } } },
-    { video: true }
-  ];
-
-  for (let i = 0; i < constraints.length; i++) {
-    try {
-      stream = await navigator.mediaDevices.getUserMedia(constraints[i]);
-      console.log('[Scan] Caméra ok avec contraintes index:', i);
-      break;
-    } catch(e) {
-      console.log('[Scan] Contrainte', i, 'échouée:', e.message);
-    }
-  }
-
-  if (!stream) {
-    showToast('Caméra inaccessible. Vérifiez les permissions.', 'error');
-    S.recepScanning = false;
-    renderContent();
-    return;
-  }
-
+  // Charger ZXing si besoin
   try {
-    S.recepStream = stream;
-    S.recepScanning = true;
-
-    // renderContent() recrée le DOM — on récupère le nouvel élément video APRÈS
-    renderContent();
-
-    // Attendre que le nouvel élément soit dans le DOM, puis démarrer le scan
-    setTimeout(() => {
-      const video = document.getElementById('recep-video');
-      if (!video || !S.recepStream) return;
-
-      // Attributs indispensables pour PWA mobile (iOS < 15 nécessite webkit-playsinline)
-      video.setAttribute('playsinline', 'true');
-      video.setAttribute('webkit-playsinline', 'true');
-      video.setAttribute('muted', 'true');
-      video.setAttribute('autoplay', 'true');
-
-      video.srcObject = S.recepStream;
-      video.play().catch(err => {
-        console.error('[Scan] video.play() error:', err);
+    if (typeof ZXing === 'undefined') {
+      showToast('Chargement scanner...', 'warn');
+      await new Promise((res, rej) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js';
+        s.onload = res; s.onerror = rej; document.head.appendChild(s);
       });
-
-      recepStartScanningZXing(video);
-    }, 100);
-
-  } catch(e) {
-    showToast('Erreur caméra : ' + e.message, 'error');
-    S.recepScanning = false; S.recepStream = null; renderContent();
-  }
-}
-
-// Scan ZXing unifié pour tous les appareils
-async function recepStartScanningZXing(video) {
-  if (!S.recepScanning || !video) return;
-
-  console.log('[Scan] Démarrage ZXing - readyState:', video.readyState);
-  console.log('[Scan] Dimensions vidéo:', video.videoWidth, 'x', video.videoHeight);
-
-  let lastCode = null;
-  let lastTime = 0;
-  let scanCount = 0;
-  const SCAN_INTERVAL_MS = 150; // ~6-7 fps : largement suffisant, évite la surchauffe mobile
-  const READY_TIMEOUT_MS = 10000; // abandon si la vidéo ne démarre pas en 10s
-  const startTs = Date.now();
-
-  const hints = new Map();
-  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-    ZXing.BarcodeFormat.CODE_128,
-    ZXing.BarcodeFormat.EAN_13,
-    ZXing.BarcodeFormat.EAN_8,
-    ZXing.BarcodeFormat.QR_CODE,
-    ZXing.BarcodeFormat.DATA_MATRIX,
-    ZXing.BarcodeFormat.CODE_39
-  ]);
-
-  const reader = new ZXing.BrowserMultiFormatReader(hints);
-  S.recepBarcodeReader = reader;
-
-  // Canvas réutilisé à chaque frame (willReadFrequently = optimisation navigateur)
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-
-  showToast('Scan actif - présentez un code-barres', 'success');
-
-  function tick() {
-    if (!S.recepScanning) return;
-
-    // Timeout de sécurité si la vidéo ne démarre jamais
-    if (video.readyState < 2) {
-      if (Date.now() - startTs > READY_TIMEOUT_MS) {
-        console.error('[Scan] Timeout readyState - abandon');
-        showToast('Délai dépassé, relancez le scan', 'error');
-        recepStopCamera();
-        return;
-      }
-      setTimeout(tick, 200);
-      return;
     }
+  } catch(e) { showToast('Impossible de charger le scanner', 'error'); return; }
 
-    if (video.videoWidth === 0 || video.videoHeight === 0) {
-      setTimeout(tick, 200);
-      return;
-    }
+  S.recepScanning = true;
 
-    scanCount++;
-    if (scanCount % 20 === 0) {
-      console.log('[Scan] Frames traitées:', scanCount, '— dim:', video.videoWidth, 'x', video.videoHeight);
-    }
-
-    try {
-      // Android : 0.5x (performance). iOS : 0.75x (meilleur que 1.0x, moins lourd).
-      // Desktop : 1.0x
-      const scaleFactor = isAndroid ? 0.5 : (isIOS ? 0.75 : 1.0);
-      const w = Math.floor(video.videoWidth * scaleFactor);
-      const h = Math.floor(video.videoHeight * scaleFactor);
-
-      canvas.width = w;
-      canvas.height = h;
-      ctx.drawImage(video, 0, 0, w, h);
-
-      const imgData = ctx.getImageData(0, 0, w, h);
-      const luminance = new ZXing.RGBLuminanceSource(imgData.data, w, h);
-      const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminance));
-
-      const result = reader.decode(bitmap);
-
-      if (result) {
-        const code = result.getText();
-        const now = Date.now();
-        if (code !== lastCode || (now - lastTime) > 1200) {
-          lastCode = code;
-          lastTime = now;
-          console.log('[Scan] ✓ Code détecté:', code);
-          recepAddCode(code);
-          showToast('✓ Code: ' + code, 'success');
-          recepStopCamera();
-          return;
-        }
-      }
-    } catch(e) {
-      // NotFoundException normale (pas de code dans la frame), on continue
-    }
-
-    if (S.recepScanning) {
-      setTimeout(tick, SCAN_INTERVAL_MS); // throttlé à ~6fps, pas requestAnimationFrame
-    }
-  }
-
-  // Court délai initial pour laisser la vidéo s'initialiser
-  setTimeout(tick, 300);
-}
-
-function recepStopCamera() {
-  if (S.recepStream) { S.recepStream.getTracks().forEach(t => t.stop()); S.recepStream = null; }
-  if (S.recepBarcodeReader) {
-    try {
-      // BrowserMultiFormatReader a une méthode reset différente
-      if (typeof S.recepBarcodeReader.reset === 'function') {
-        S.recepBarcodeReader.reset();
-      }
-    } catch(e) {}
-    S.recepBarcodeReader = null;
-  }
-  // Cacher le bouton capture
-  const captureBtn = document.getElementById('recep-capture-btn');
-  if (captureBtn) captureBtn.style.display = 'none';
-  S.recepScanning = false;
-  renderContent();
-}
-
-async function recepStartScanning(stream) {
-  if (!S.recepScanning || !stream) return;
-  if (typeof ZXing === 'undefined') { showToast('Scanner non chargé', 'error'); return; }
-
-  const hints = new Map();
-  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-    ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.CODE_39,
-    ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
-    ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.UPC_E,
-    ZXing.BarcodeFormat.QR_CODE, ZXing.BarcodeFormat.DATA_MATRIX,
-    ZXing.BarcodeFormat.AZTEC, ZXing.BarcodeFormat.PDF_417
-  ]);
+  // Overlay monté sur document.body — indépendant du cycle renderContent()
+  // C'est la même architecture que startCamera() qui fonctionne sur iOS et Android
+  const overlay = el('div', { cls: 'camera-modal recep-overlay' });
+  const wrap = el('div', { cls: 'camera-wrap' });
+  const video = el('video', { cls: 'camera-video', autoplay: '', playsinline: '' });
+  const frame = el('div', { cls: 'camera-frame' });
+  wrap.append(video, frame);
+  const hint = el('p', { cls: 'camera-hint' }, 'Pointez vers le code-barres de la bobine');
+  const resultEl = el('div', { cls: 'camera-result' }, 'En attente…');
+  const closeBtn = el('button', { cls: 'btn-close-cam', on: { click: () => recepStopCamera(overlay) } }, '✕ Fermer');
+  overlay.append(wrap, hint, resultEl, closeBtn);
+  document.body.appendChild(overlay);
 
   try {
-    S.recepBarcodeReader = new ZXing.BrowserMultiFormatReader(hints);
-    // Utiliser decodeFromStream avec un callback
-    await S.recepBarcodeReader.decodeFromStream(stream, 'recep-video', (result, err) => {
-      if (!S.recepScanning) return;
-      if (result) {
-        const code = result.getText().trim();
-        const now = Date.now();
-        if (code !== _recepLastCode || now - _recepLastCodeTs > 2000) {
-          _recepLastCode = code;
-          _recepLastCodeTs = now;
-          recepAddCode(code);
-          showToast('Code scanné: ' + code, 'success');
-          // Arrêter immédiatement le reader et la caméra
-          try { S.recepBarcodeReader.reset(); } catch(e) {}
-          recepStopCamera();
-        }
-      }
+    // facingMode string simple (pas {exact:...}) — déclenche correctement la demande
+    // de permission sur Android et sélectionne la caméra arrière sur iOS et Android
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    S.recepStream = stream;
+    video.srcObject = stream;
+
+    const hints = new Map();
+    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+      ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
+      ZXing.BarcodeFormat.QR_CODE, ZXing.BarcodeFormat.DATA_MATRIX, ZXing.BarcodeFormat.CODE_39
+    ]);
+    const reader = new ZXing.BrowserMultiFormatReader(hints);
+    S.recepBarcodeReader = reader;
+
+    // decodeFromVideoDevice gère le cycle vidéo en interne — plus fiable que le canvas loop
+    reader.decodeFromVideoDevice(null, video, (result) => {
+      if (!result) return;
+      const code = result.getText().trim();
+      resultEl.textContent = '✅ ' + code;
+      resultEl.style.color = 'var(--success)';
+      setTimeout(() => { recepStopCamera(overlay); recepAddCode(code); }, 600);
     });
   } catch(e) {
-    console.error('Scan error:', e);
-    // Fallback: utiliser decodeFromVideoDevice
-    recepScanLoopFallback();
+    showToast('Accès caméra refusé', 'error');
+    recepStopCamera(overlay);
   }
 }
 
-// Fallback avec la méthode originale si decodeFromStream échoue
-async function recepScanLoopFallback() {
-  if (!S.recepScanning) return;
-  const video = document.getElementById('recep-video');
-  if (!video || video.readyState < 2) { setTimeout(recepScanLoopFallback, 200); return; }
-  if (typeof ZXing === 'undefined') { setTimeout(recepScanLoopFallback, 500); return; }
-
-  const hints = new Map();
-  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-    ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.QR_CODE
-  ]);
-
-  try {
-    if (!S.recepBarcodeReader) {
-      S.recepBarcodeReader = new ZXing.BrowserMultiFormatReader(hints);
-    }
-    const result = await S.recepBarcodeReader.decodeOnceFromVideoElement(video);
-    if (result && S.recepScanning) {
-      const code = result.getText().trim();
-      const now = Date.now();
-      if (code !== _recepLastCode || now - _recepLastCodeTs > 2000) {
-        _recepLastCode = code;
-        _recepLastCodeTs = now;
-        recepAddCode(code);
-        showToast('Code scanné: ' + code, 'success');
-        // Arrêter immédiatement le reader et la caméra
-        try { S.recepBarcodeReader.reset(); } catch(e) {}
-        recepStopCamera();
-        return;
-      }
-    }
-  } catch(e) {
-    // Pas de code détecté, continuer
-    if (S.recepScanning) requestAnimationFrame(recepScanLoopFallback);
-  }
+function recepStopCamera(overlay) {
+  if (S.recepStream) { S.recepStream.getTracks().forEach(t => t.stop()); S.recepStream = null; }
+  if (S.recepBarcodeReader) { try { S.recepBarcodeReader.reset(); } catch(e) {} S.recepBarcodeReader = null; }
+  S.recepScanning = false;
+  // Retirer l'overlay du body (passé en paramètre ou recherche de secours)
+  if (overlay) { overlay.remove(); } else { document.querySelector('.camera-modal.recep-overlay')?.remove(); }
 }
 
 async function recepValider() {
@@ -2664,42 +2467,14 @@ function buildReception() {
     el('div', { cls: 'recep-card-title' }, iconEl('scan', 14), ' Scanner une bobine')
   );
 
-  if (S.recepScanning) {
-    const videoWrap = el('div', { cls: 'recep-video-wrap' });
-    const video = el('video', { id: 'recep-video', cls: 'recep-video', attrs: { autoplay: 'true', playsinline: 'true', muted: 'true' } });
-    const frame = el('div', { cls: 'recep-scan-frame' });
-    const line  = el('div', { cls: 'recep-scan-line' });
-    frame.appendChild(line);
-    videoWrap.append(video, frame);
-    camCard.appendChild(videoWrap);
-
-    // Boutons de contrôle
-    const btnWrap = el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } });
-    // Bouton capture manuelle (visible sur Android)
-    if (isAndroid) {
-      btnWrap.appendChild(el('button', {
-        id: 'recep-capture-btn',
-        cls: 'btn-recep btn-recep-primary',
-        style: { display: 'none' },
-        on: { click: () => {} }
-      }, '📷 Capturer'));
-    }
-    btnWrap.appendChild(el('button', { cls: 'btn-recep btn-recep-danger', on: { click: recepStopCamera } }, iconEl('x', 14), ' Arrêter'));
-    camCard.appendChild(btnWrap);
-
-    // Note: le démarrage du flux est géré par recepStartCamera() après renderContent()
-  } else {
-    const placeholder = el('div', { cls: 'recep-cam-placeholder' },
-      iconEl('scan', 40),
-      el('div', null, 'Appuyez sur "Démarrer" pour activer la caméra')
-    );
-    camCard.appendChild(placeholder);
-    camCard.appendChild(el('button', { cls: 'btn-recep btn-recep-primary', on: { click: () => {
-      // Monter la vidéo avant de démarrer le stream
-      S.recepScanning = true; renderContent();
-      setTimeout(recepStartCamera, 80);
-    }}}, iconEl('scan', 14), ' Démarrer le scan'));
-  }
+  // L'overlay caméra est géré par recepStartCamera() directement sur document.body
+  // — pas besoin d'un état S.recepScanning dans l'UI de la card
+  const placeholder = el('div', { cls: 'recep-cam-placeholder' },
+    iconEl('scan', 40),
+    el('div', null, 'Appuyez sur "Démarrer" pour activer la caméra')
+  );
+  camCard.appendChild(placeholder);
+  camCard.appendChild(el('button', { cls: 'btn-recep btn-recep-primary', on: { click: recepStartCamera } }, iconEl('scan', 14), ' Démarrer le scan'));
   grid.appendChild(camCard);
 
   // Colonne droite : saisie manuelle + note
