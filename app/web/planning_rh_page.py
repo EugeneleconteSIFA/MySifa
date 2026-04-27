@@ -1827,6 +1827,7 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
           }else if(m.creneaux.length===1 && m.creneaux[0].key==='journee' && isFirstRow){
             // DSI-like machine with only journee - merge both rows
             const journeeCr=m.creneaux[0];
+            const isDSI=m.code==='DSI';
             journeeCr.postes.forEach((poste,pidx)=>{
               const td=document.createElement('td');
               // Bordure plus épaisse à gauche du premier poste de chaque machine (sauf première)
