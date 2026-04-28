@@ -353,6 +353,7 @@ body.light .btn-p{color:#fff}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
 @keyframes tipIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 @keyframes slideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes activePulse{0%,100%{box-shadow:0 0 0 2px #000,0 0 8px rgba(0,0,0,.6)}50%{box-shadow:0 0 0 3px #333,0 0 15px rgba(0,0,0,.8)}}
 .view-tabs{display:flex;gap:0;align-items:center}
 .view-tab{padding:6px 14px;background:var(--card);border:1px solid var(--border2);color:var(--dim);
   cursor:pointer;font-size:12px;font-family:var(--mono);transition:all .15s}
@@ -427,7 +428,7 @@ const DEFAULTS_BY_KEY={
 const DAY_API={1:"lundi",2:"mardi",3:"mercredi",4:"jeudi",5:"vendredi",6:"samedi"};
 const DAY_FIELD={1:"horaires_lundi",2:"horaires_mardi",3:"horaires_mercredi",4:"horaires_jeudi",5:"horaires_vendredi",6:"horaires_samedi"};
 let S={machine:null,machines:[],entries:[],timeline:[],wo:0,loading:true,holidays:{},dayWorked:{},dayHoraires:{},view:localStorage.getItem("mysifa.planning.view")||"2w",
-  contactOpen:false,contactSubject:"",contactMessage:"",contactSending:false,searchQuery:""};
+  contactOpen:false,contactSubject:"",contactMessage:"",contactSending:false,searchQuery:"",activeDossier:null};
 let ME=null;
 let CAN_EDIT=false;
 let SHOW_DOSSIERS=false;
@@ -449,9 +450,14 @@ async function load(){
     // Important: la timeline persiste planned_start/planned_end en DB.
     // Pour que les statuts calculés (en_cours/termine) soient à jour après un reorder,
     // on charge d'abord la timeline, puis la liste des entrées (admin uniquement).
-    const [m, tl] = await Promise.all([api(`/machines/${MID}`), api(`/machines/${MID}/timeline`)]);
+    const [m, tl, activeDoss] = await Promise.all([
+      api(`/machines/${MID}`), 
+      api(`/machines/${MID}/timeline`),
+      loadActiveDossier()
+    ]);
     S.machine = m;
     S.timeline = (tl && tl.slots) ? tl.slots : [];
+    S.activeDossier = activeDoss;
     if(showDossiers){
       const en = await api(`/machines/${MID}/entries`);
       S.entries = en || [];
@@ -493,6 +499,15 @@ async function loadHolidays(){
   const map={};
   (rows||[]).forEach(r=>{map[String(r.date)]=!!(+r.is_off);});
   S.holidays=map;
+}
+
+async function loadActiveDossier(){
+  try{
+    const resp=await fetch('/api/fabrication/session?machine_id='+MID,{credentials:"include"});
+    if(!resp.ok) return null;
+    const data=await resp.json();
+    return data.dossier||null;
+  }catch(e){ return null; }
 }
 
 async function setDayNonTravail(dateStr,isSaturday,nonTravailChecked){
@@ -1106,11 +1121,13 @@ function mkTL(mon,slots){
     const cli=(s.client||"").trim()||(s.numero_of||s.reference||"—");
     const subTxt=fm!=="—"?fm:"";
     const meta=[s.numero_of||s.reference,s.description].filter(Boolean).join(" · ");
-    h+=`<div class="slot" style="left:${l}%;width:${w}%;background:${co}cc;border:1px solid ${co};box-shadow:0 2px 12px ${co}33"
+    const isActive = S.activeDossier && S.activeDossier.id === s.entry_id;
+    const activeStyle = isActive ? "animation:activePulse 1.5s infinite;z-index:10;" : "";
+    h+=`<div class="slot" style="left:${l}%;width:${w}%;background:${co}cc;border:1px solid ${co};box-shadow:0 2px 12px ${co}33;${activeStyle}"
       onmouseenter="showTip(event,this)" onmousemove="moveTip(event)" onmouseleave="hideTip()"
       data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-fmt="${escAttr(fm)}" data-dur="${escAttr(String(s.duree_heures)+"h")}"
       data-deb="${escAttr(fdt(ss))}" data-fin="${escAttr(fdt(se))}" data-st="${escAttr(st)}" data-co="${escAttr(co)}">
-      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}</span>${subTxt?`<span class="line2">${escAttr(subTxt)}</span>`:""}</div>`:""}</div>`;
+      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}</span>${subTxt?`<span class="line2">${escAttr(subTxt)}</span>`:""}${isActive?'<span style="font-size:10px;color:#000;background:#fff;padding:1px 4px;border-radius:3px;margin-left:4px">🔴 ACTIF</span>':""}</div>`:""}</div>`;
   });
 
   const np=gp(now);
@@ -1145,6 +1162,8 @@ function mkRow(e,i,slots){
   const of=escAttr(e.numero_of||e.reference||"—");
   const rfp=escAttr(e.ref_produit||"")||"—";
   const lz=e.laize!=null&&e.laize!==""?escAttr(String(e.laize)):"—";
+  const isActive = S.activeDossier && S.activeDossier.id === e.id;
+  const activeBorder = isActive ? "animation:activePulse 1.5s infinite;box-shadow:0 0 0 2px #000,0 0 10px rgba(0,0,0,.5);" : "";
   const statutCell=(isLocked||!CAN_EDIT)
     ? `<span class="st ${sc}">${sc==="run"?'<span style="width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite;display:inline-block"></span>':""}${sl} 🔒</span>`
     : `<select class="statut-select" data-eid="${e.id}">
@@ -1154,7 +1173,7 @@ function mkRow(e,i,slots){
        </select>`;
   return`<div class="tr" draggable="true" data-eid="${e.id}" data-idx="${i}" ${isAnchor?'data-scroll-anchor="1"':''}
     data-statut="${escAttr(e.statut||'attente')}"
-    style="animation:slideIn .3s ease ${i*.03}s both;${i===0?`border-left:3px solid ${co}`:"border-left:3px solid transparent"};${isLocked?"cursor:not-allowed;opacity:.9":""}">
+    style="animation:slideIn .3s ease ${i*.03}s both,activePulse 1.5s infinite paused;${i===0?`border-left:3px solid ${co}`:"border-left:3px solid transparent"};${isLocked?"cursor:not-allowed;opacity:.9":""}${activeBorder}">
     <span class="dh-handle">⠿</span>
     <span class="cell-mini">${i+1}</span>
     <div><div class="cd" style="background:${co}"></div></div>
@@ -1170,8 +1189,10 @@ function mkRow(e,i,slots){
       ${CAN_EDIT?`
       <button type="button" class="ab mov" onclick="moveEntry(${e.id},-1)" title="Monter" ${i<=0||isLocked?"disabled":""}>▲</button>
       <button type="button" class="ab mov" onclick="moveEntry(${e.id},+1)" title="Descendre" ${i>=S.entries.length-1||isLocked?"disabled":""}>▼</button>
-      <button type="button" class="ab" onclick="openInsert(${e.id})" title="${nextLocked?"⦸ Impossible : dossier En cours / Terminé juste après":"Insérer après"}" ${isLocked||nextLocked?"disabled":""}>${nextLocked?"⦸":"↳+"}</button>
+      <button type="button" class="ab" onclick="openInsert(${e.id})" title="${nextLocked?"⦸ Impossible : dossier En cours / Termine juste apres":"Inserer apres"}" ${isLocked||nextLocked?"disabled":""}>${nextLocked?"⦸":"↳+"}</button>
       <button type="button" class="ab" onclick="splitEntry(${e.id})" title="Spliter en 2">½</button>
+      <button type="button" class="ab" onclick="duplicateEntry(${e.id})" title="Dupliquer">⎘</button>
+      <button type="button" class="ab" onclick="openSwitchMachine(${e.id})" title="Changer de machine" ${isLocked?"disabled":""}>⇄</button>
       <button type="button" class="ab" onclick="openEdit(${e.id})" title="Modifier">${icon('edit',14)}</button>
       ${(e.statut==="en_cours")?`<button type="button" class="ab del" onclick="if(confirm('Supprimer ce dossier en cours ? Le suivant passera automatiquement en cours.'))delEntry(${e.id})" title="Supprimer (en cours)">✕</button>`:`<button type="button" class="ab del" onclick="if(confirm('Supprimer ?'))delEntry(${e.id})" title="Supprimer" ${e.statut==="termine"?"disabled":""}>✕</button>`}`:""}
     </div></div>`;
@@ -1364,6 +1385,128 @@ async function splitEntry(id){
     console.error(e);
     alert("Split impossible");
     await load();
+  }
+}
+
+// ── Duplicate entry ──
+function duplicateEntry(id){
+  if(!CAN_EDIT) return;
+  const e=S.entries.find(x=>x.id===id);
+  if(!e) return;
+  document.getElementById("mroot").innerHTML=modalHTML(
+    "Dupliquer le dossier",
+    dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.format_l||"",e.format_h||"",e.duree_heures,"attente",false),
+    "Ajouter","submitDuplicate()"
+  );
+}
+async function submitDuplicate(){
+  const d=getFormData(false);
+  if(!d.numero_of)return alert("Numero d'OF requis");
+  await api(`/machines/${MID}/entries`,{method:"POST",body:JSON.stringify({reference:d.numero_of,...d})});
+  closeM();load();
+}
+
+// ── Switch machine ──
+let _switchEntryId=null;
+function openSwitchMachine(entryId){
+  if(!CAN_EDIT) return;
+  const e=S.entries.find(x=>x.id===entryId);
+  if(!e) return;
+  if(e.statut==="en_cours"||e.statut==="termine") return alert("Dossier verrouille - impossible de changer de machine");
+  _switchEntryId=entryId;
+  const otherMachines=S.machines.filter(m=>m.id!==MID);
+  if(otherMachines.length===0) return alert("Aucune autre machine disponible");
+  const machineOptions=otherMachines.map(m=>`<option value="${m.id}">${escAttr(m.nom||'')}</option>`).join("");
+  document.getElementById("mroot").innerHTML=`<div class="mo" onclick="if(event.target===this)closeM()"><div class="md"><h3>Changer de machine</h3>
+    <div class="fd"><label>Selectionner la machine cible</label>
+    <select id="f-target-machine" style="width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:14px;font-family:var(--mono)">
+      ${machineOptions}
+    </select></div>
+    <div class="md-acts"><button class="btn-s" onclick="closeM()">Annuler</button>
+    <button class="btn-p" onclick="showTargetDossiers()">Continuer</button></div></div></div>`;
+}
+async function showTargetDossiers(){
+  const targetMachineId=parseInt(document.getElementById("f-target-machine").value);
+  if(!targetMachineId) return;
+  const e=S.entries.find(x=>x.id===_switchEntryId);
+  if(!e) return closeM();
+  document.getElementById("mroot").innerHTML=`<div class="mo" onclick="if(event.target===this)closeM()"><div class="md" style="width:600px;max-width:95vw;"><h3>Inserer apres quel dossier ?</h3>
+    <p style="font-size:12px;color:var(--muted);margin:-12px 0 12px">Cliquez sur un dossier pour inserer <strong>${escAttr(e.client||e.numero_of||'')}</strong> apres celui-ci.</p>
+    <div id="switch-dossier-list" style="max-height:400px;overflow:auto;border:1px solid var(--border2);border-radius:8px;">
+      <div style="padding:20px;text-align:center;color:var(--muted)">Chargement...</div>
+    </div>
+    <div class="md-acts"><button class="btn-s" onclick="closeM()">Annuler</button></div></div></div>`;
+  try{
+    const targetEntries=await api(`/machines/${targetMachineId}/entries`);
+    const listEl=document.getElementById("switch-dossier-list");
+    const pendingEntries=(targetEntries||[]).filter(en=>en.statut!=="termine");
+    if(pendingEntries.length===0){
+      listEl.innerHTML=`<div style="padding:20px;text-align:center;color:var(--muted)">Aucun dossier en attente/en cours sur cette machine.<br><br><button class="btn-p" onclick="confirmSwitch(${targetMachineId},null)">Ajouter en premiere position</button></div>`;
+    }else{
+      listEl.innerHTML=`<div style="padding:8px;border-bottom:1px solid var(--border2);background:var(--accent-bg);cursor:pointer;" onclick="confirmSwitch(${targetMachineId},null)">
+        <strong>Ajouter en premiere position</strong> (avant tous les dossiers)
+      </div>`+pendingEntries.map((en,idx)=>{
+        const fm=en.format_l&&en.format_h?`${en.format_l}x${en.format_h}`:"—";
+        const stat=en.statut==="en_cours"?"🔴 En cours":"⚪ Attente";
+        const nextEn=pendingEntries[idx+1];
+        const nextId=nextEn?nextEn.id:null;
+        return`<div style="padding:10px 12px;border-bottom:1px solid var(--border2);cursor:pointer;background:var(--bg);" onmouseover="this.style.background='var(--accent-bg)'" onmouseout="this.style.background='var(--bg)'" onclick="confirmSwitch(${targetMachineId},${en.id})">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <span style="font-weight:600">${escAttr(en.client||"—")}</span>
+            <span style="color:var(--muted);font-size:12px">| OF: ${escAttr(en.numero_of||en.reference||"—")}</span>
+            <span style="color:var(--muted);font-size:12px">| ${escAttr(fm)}</span>
+            <span style="margin-left:auto;font-size:12px">${stat}</span>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">Cliquez pour inserer apres ce dossier</div>
+        </div>`;
+      }).join("");
+    }
+  }catch(err){
+    document.getElementById("switch-dossier-list").innerHTML=`<div style="padding:20px;text-align:center;color:var(--danger)">Erreur de chargement</div>`;
+  }
+}
+async function confirmSwitch(targetMachineId,afterEntryId){
+  if(!_switchEntryId) return;
+  if(!confirm("Confirmer le deplacement de ce dossier vers l'autre machine ?")) return;
+  try{
+    const e=S.entries.find(x=>x.id===_switchEntryId);
+    if(!e) throw new Error("Dossier introuvable");
+    await api(`/machines/${MID}/entries/${_switchEntryId}`,{method:"DELETE"});
+    if(afterEntryId){
+      await api(`/machines/${targetMachineId}/insert-after/${afterEntryId}`,{method:"POST",body:JSON.stringify({
+        reference:e.numero_of||e.reference||"",
+        numero_of:e.numero_of||e.reference||"",
+        client:e.client||"",
+        ref_produit:e.ref_produit||"",
+        laize:e.laize||null,
+        date_livraison:e.date_livraison||"",
+        commentaire:e.commentaire||"",
+        format_l:e.format_l||null,
+        format_h:e.format_h||null,
+        duree_heures:e.duree_heures||8,
+        statut:"attente"
+      })});
+    }else{
+      await api(`/machines/${targetMachineId}/entries`,{method:"POST",body:JSON.stringify({
+        reference:e.numero_of||e.reference||"",
+        numero_of:e.numero_of||e.reference||"",
+        client:e.client||"",
+        ref_produit:e.ref_produit||"",
+        laize:e.laize||null,
+        date_livraison:e.date_livraison||"",
+        commentaire:e.commentaire||"",
+        format_l:e.format_l||null,
+        format_h:e.format_h||null,
+        duree_heures:e.duree_heures||8,
+        statut:"attente"
+      })});
+    }
+    closeM();
+    _switchEntryId=null;
+    load();
+  }catch(err){
+    alert("Erreur lors du deplacement: "+(err.message||"Erreur"));
+    closeM();
   }
 }
 
