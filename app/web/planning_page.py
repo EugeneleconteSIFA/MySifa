@@ -128,8 +128,7 @@ body.sb-open .sidebar-overlay{display:block}
 .contact-ov{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:950;display:flex;align-items:center;justify-content:center;padding:18px}
 .contact-box{width:100%;max-width:560px;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px 18px 16px;box-shadow:0 24px 64px rgba(0,0,0,.4);position:relative}
 .contact-box h3{font-size:16px;font-weight:800;margin:0 0 12px;padding-right:34px}
-.contact-close{position:absolute;top:14px;right:14px;width:32px;height:32px;border-radius:10px;border:1px solid var(--border);
-  background:var(--bg);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:18px;line-height:1}
+.contact-close{position:absolute;top:14px;right:14px;width:32px;height:32px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:18px;line-height:1}
 .contact-close:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 .contact-box label{display:block;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:10px 0 4px}
 .contact-box input,.contact-box textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none}
@@ -273,11 +272,11 @@ body.light .slot .line1{color:#0f172a}body.light .slot .line2{color:#334155}
   padding:4px 8px;cursor:pointer;text-align:center;font-family:inherit;transition:color .15s,border-color .15s}
 .cpk-reset:hover{color:var(--accent);border-color:var(--accent)}
 
-.th{display:grid;grid-template-columns:22px 22px 14px minmax(110px,1.3fr) minmax(70px,.85fr) minmax(80px,.9fr) minmax(70px,.85fr) minmax(50px,.55fr) minmax(80px,.8fr) 55px minmax(120px,1.1fr) minmax(90px,auto);
+.th{display:grid;grid-template-columns:22px 14px minmax(110px,1.3fr) minmax(70px,.85fr) minmax(80px,.9fr) minmax(70px,.85fr) minmax(50px,.55fr) minmax(80px,.8fr) 55px minmax(120px,1.1fr) minmax(140px,auto);
   gap:6px;padding:10px 10px;background:var(--bg-dark);border-radius:10px 10px 0 0;
   font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600;font-family:var(--mono);align-items:center}
 .th>span{min-width:0}
-.th .act-c{text-align:right}
+.th .act-c{text-align:center}
 #tbody{
   /* Plus haut pour afficher ~10 dossiers visibles */
   max-height:min(820px, calc(100vh - 260px));
@@ -286,7 +285,7 @@ body.light .slot .line1{color:#0f172a}body.light .slot .line2{color:#334155}
   scroll-behavior:auto;
   overscroll-behavior:contain;
 }
-.tr{display:grid;grid-template-columns:22px 22px 14px minmax(110px,1.3fr) minmax(70px,.85fr) minmax(80px,.9fr) minmax(70px,.85fr) minmax(50px,.55fr) minmax(80px,.8fr) 55px minmax(120px,1.1fr) minmax(90px,auto);
+.tr{display:grid;grid-template-columns:22px 14px minmax(110px,1.3fr) minmax(70px,.85fr) minmax(80px,.9fr) minmax(70px,.85fr) minmax(50px,.55fr) minmax(80px,.8fr) 55px minmax(120px,1.1fr) minmax(140px,auto);
   gap:6px;padding:10px 10px;border-bottom:1px solid var(--border);font-size:12px;align-items:center;
   cursor:grab;transition:background .2s;background:var(--bg-dark)}
 .tr:first-child{background:var(--accent-bg)}
@@ -314,8 +313,8 @@ body.light .th{background:var(--bg)}
 .statut-select{width:100%;min-width:110px;max-width:140px;padding:6px 10px;background:var(--bg);border:1px solid var(--border2);
   border-radius:10px;color:var(--text2);font-size:11px;font-family:var(--mono);outline:none}
 .statut-select:focus{border-color:var(--accent);color:var(--text)}
-.acts{display:grid;grid-template-columns:1fr 1fr;gap:4px 6px;justify-items:end;align-items:center}
-.acts .ab{flex:0 0 auto;width:28px;height:24px;display:flex;align-items:center;justify-content:center;padding:0}
+.acts{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.acts .ab{flex:0 0 auto;width:36px;height:32px;display:flex;align-items:center;justify-content:center;padding:0;font-size:13px}
 .ab{padding:4px 8px;background:transparent;border:1px solid var(--border2);color:var(--text2);
   cursor:pointer;font-size:11px;border-radius:6px;font-family:var(--mono)}
 .ab:hover{background:var(--accent-bg);color:var(--accent)}
@@ -345,7 +344,7 @@ body.light .btn-p{color:#fff}
 .fd select option{background:var(--card);color:var(--text)}
 .dur-b{margin-top:6px;height:4px;border-radius:2px;background:var(--border);overflow:hidden}
 .dur-f{height:100%;border-radius:2px;background:linear-gradient(90deg,#059669,#d97706,#dc2626);transition:width .2s}
-.md-acts{display:flex;gap:12px;justify-content:flex-end;margin-top:28px}
+.md-acts{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:28px}
 .btn-s{padding:10px 24px;background:transparent;color:var(--dim);border:1px solid var(--border2);
   border-radius:8px;cursor:pointer;font-size:14px;font-family:var(--mono)}
 .empty{text-align:center;padding:48px;color:var(--muted);font-size:14px;width:100%}
@@ -971,7 +970,7 @@ function render(){
           ${CAN_EDIT?`<button type="button" class="btn-p" onclick="openAdd()"><span style="font-size:18px;line-height:1">+</span> Ajouter</button>`:""}
         </div>
       </div>
-      <div class="th"><span></span><span>#</span><span></span><span>Client</span><span>Format prod.</span><span>Ref OF</span><span>Ref prod.</span><span>Laize</span><span>Livraison</span><span>Durée</span><span>Statut</span><span class="act-c">Actions</span></div>
+      <div class="th"><span></span><span></span><span>Client</span><span>Format prod.</span><span>Ref OF</span><span>Ref prod.</span><span>Laize</span><span>Livraison</span><span>Durée</span><span>Statut</span><span class="act-c">Actions</span></div>
       <div id="tbody">${S.entries.length===0?'<div class="empty">Aucun dossier au planning</div>':""}
         ${filterEntries(S.entries,S.searchQuery).map((e,i)=>mkRow(e,i,sl)).join("")}
       </div>
@@ -1173,7 +1172,6 @@ function mkRow(e,i,slots){
     data-statut="${escAttr(e.statut||'attente')}"
     style="animation:slideIn .3s ease ${i*.03}s both;${i===0?`border-left:3px solid ${co}`:"border-left:3px solid transparent"};${isLocked?"cursor:not-allowed;opacity:.9":""}">
     <span class="dh-handle">⠿</span>
-    <span class="cell-mini">${i+1}</span>
     <div><div class="cd" style="background:${co}"></div></div>
     <span class="lbl-main">${escAttr(cli)}</span>
     <span class="cell-mini">${escAttr(fm)}${fm!=="—"?" mm":""}</span>
@@ -1185,13 +1183,13 @@ function mkRow(e,i,slots){
     ${statutCell}
     <div class="acts">
       ${CAN_EDIT?`
+      <button type="button" class="ab" onclick="openEdit(${e.id})" title="Modifier">${icon('edit',14)}</button>
+      <button type="button" class="ab" onclick="duplicateEntry(${e.id})" title="Dupliquer">⎘</button>
+      <button type="button" class="ab" onclick="openSwitchMachine(${e.id})" title="Changer machine" ${isLocked?"disabled":""}>⇄</button>
       <button type="button" class="ab mov" onclick="moveEntry(${e.id},-1)" title="Monter" ${i<=0||isLocked?"disabled":""}>▲</button>
       <button type="button" class="ab mov" onclick="moveEntry(${e.id},+1)" title="Descendre" ${i>=S.entries.length-1||isLocked?"disabled":""}>▼</button>
-      <button type="button" class="ab" onclick="openInsert(${e.id})" title="${nextLocked?"⦸ Impossible : dossier En cours / Termine juste apres":"Inserer apres"}" ${isLocked||nextLocked?"disabled":""}>${nextLocked?"⦸":"↳+"}</button>
-      <button type="button" class="ab" onclick="splitEntry(${e.id})" title="Spliter en 2">½</button>
-      <button type="button" class="ab" onclick="duplicateEntry(${e.id})" title="Dupliquer">⎘</button>
-      <button type="button" class="ab" onclick="openSwitchMachine(${e.id})" title="Changer de machine" ${isLocked?"disabled":""}>⇄</button>
-      <button type="button" class="ab" onclick="openEdit(${e.id})" title="Modifier">${icon('edit',14)}</button>
+      <button type="button" class="ab" onclick="splitEntry(${e.id})" title="Spliter">½</button>
+      <button type="button" class="ab" onclick="openInsert(${e.id})" title="${nextLocked?"⦸ Impossible":"Inserer apres"}" ${isLocked||nextLocked?"disabled":""}>${nextLocked?"⦸":"↳+"}</button>
       ${(e.statut==="en_cours")?`<button type="button" class="ab del" onclick="if(confirm('Supprimer ce dossier en cours ? Le suivant passera automatiquement en cours.'))delEntry(${e.id})" title="Supprimer (en cours)">✕</button>`:`<button type="button" class="ab del" onclick="if(confirm('Supprimer ?'))delEntry(${e.id})" title="Supprimer" ${e.statut==="termine"?"disabled":""}>✕</button>`}`:""}
     </div></div>`;
 }
