@@ -1027,6 +1027,7 @@ async function checkAuth(){
       await loadFilters();
       await loadProd();
       await loadHist();
+      await loadMachineStatus();
     }else if(S.app==='stock'){
       await loadStockGlobale();
       await loadStockProduits();
@@ -1037,6 +1038,7 @@ async function checkAuth(){
 }
 
 let _msgPollStarted=false;
+let _mstInterval=null;
 function isSuperAdmin(u){return !!(u && u.role==='superadmin');}
 async function loadMessagesUnread(){
   if(!isSuperAdmin(S.user))return;
@@ -1048,6 +1050,15 @@ function startMessagesPolling(){
   _msgPollStarted=true;
   loadMessagesUnread().catch(()=>{});
   setInterval(()=>{loadMessagesUnread().catch(()=>{});},30000);
+}
+function startMachineStatusPolling(){
+  if(_mstInterval)return;
+  if(!isAdmin(S.user))return;
+  loadMachineStatus().catch(()=>{});
+  _mstInterval=setInterval(()=>{loadMachineStatus().catch(()=>{});},15000);
+}
+function stopMachineStatusPolling(){
+  if(_mstInterval){clearInterval(_mstInterval);_mstInterval=null;}
 }
 
 async function refreshPortalData(){
@@ -1155,6 +1166,7 @@ async function doLogin(email,password){
       await loadFilters();
       await loadProd();
       await loadHist();
+      await loadMachineStatus();
     }else if(S.app==='stock'){
       await loadStockGlobale();
       await loadStockProduits();
@@ -3977,8 +3989,54 @@ function buildParams(){
 async function loadHist(){const d=await api('/api/dashboard/historique?'+buildParams());if(d)S.historique=d;}
 async function loadProd(){const d=await api('/api/dashboard/production?'+buildParams());if(d)S.production=d;}
 async function loadMachineStatus(){
-  try{const d=await api('/api/production/machine-status');if(d)S.machineStatus=d;}catch(e){}
+  try{
+    const d=await api('/api/production/machine-status');
+    if(d){
+      S.machineStatus=d;
+      // Mise à jour DOM ciblée sans re-render global
+      updateMachineStatusDOM();
+    }
+  }catch(e){}
 }
+function updateMachineStatusDOM(){
+  const ms=S.machineStatus;
+  const ICONS={production:'▶',calage:'⚙',arret:'⛔',changement:'↻',eteinte:'○',autre:'·'};
+  const grid=document.querySelector('.mst-grid');
+  if(!grid)return;
+  const cards=grid.querySelectorAll('.mst-card');
+  cards.forEach((card,idx)=>{
+    const mkey=idx===0?'C1':'C2';
+    const m=ms&&ms[mkey];
+    const sk=m?(m.statut_key||'eteinte'):'eteinte';
+    const label=m?(m.statut_label||'Éteinte'):'Éteinte';
+    const nom=m?m.nom:(mkey==='C1'?'Cohésio 1':'Cohésio 2');
+    const op=m?(m.operateur||''):'';
+    const dos=m?m.dossier:null;
+    const icon=ICONS[sk]||'·';
+    const isOn=sk!=='eteinte';
+    // Mise à jour classes et contenu
+    card.className='mst-card mst-'+sk;
+    const headNom=card.querySelector('.mst-nom');
+    if(headNom)headNom.textContent=nom;
+    const dotWrap=card.querySelector('.mst-head div');
+    if(dotWrap){
+      dotWrap.innerHTML=isOn?'<span style="font-size:8px;color:#22c55e;animation:pulse 2s infinite;display:inline-block;border-radius:50%;width:8px;height:8px;background:#22c55e"></span><span class="mst-dot"></span>':'<span class="mst-dot"></span>';
+    }
+    const body=card.querySelector('.mst-body');
+    if(body){
+      let html='<div class="mst-statut">'+icon+' '+label+'</div>';
+      if(op)html+='<div class="mst-op">👤 '+escapeHtml(op)+'</div>';
+      if(dos&&dos.no_dossier){
+        html+='<div class="mst-dos"><div class="mst-dos-ref">Dossier #'+escapeHtml(dos.no_dossier)+'</div>';
+        if(dos.client)html+='<div class="mst-dos-cli">'+escapeHtml(dos.client)+'</div>';
+        if(dos.designation)html+='<div class="mst-dos-des">'+escapeHtml(dos.designation)+'</div>';
+        html+='</div>';
+      }
+      body.innerHTML=html;
+    }
+  });
+}
+function escapeHtml(t){return(t||'').replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 async function loadImports(){const d=await api('/api/imports');if(d)set({imports:d});}
 async function loadDos(){const d=await api('/api/dossiers');if(d)set({dossiers:d});}
 async function loadMachines(){try{const d=await api('/api/planning/machines');if(d)set({machines:d});}catch(e){}}
@@ -5104,6 +5162,9 @@ function renderTracabiliteDossierDetail(){
 
 function renderProdPage(){
   const subPage = S.subPage || 'kpis';
+  // Gestion du polling temps réel machines
+  if(subPage==='kpis'){startMachineStatusPolling();}
+  else{stopMachineStatusPolling();}
   const tabs = [
     {key:'kpis',    label:"Vue d'ensemble", icon:'wrench'},
     {key:'saisies', label:'Saisies', icon:'pencil'},
@@ -5115,7 +5176,8 @@ function renderProdPage(){
       className:'nav-tab'+(subPage===t.key?' active':''),
       onClick:async()=>{
         S.subPage=t.key;
-        if(t.key==='kpis'){if(!S.production)await loadProd(); await loadMachineStatus();}
+        if(t.key==='kpis'){if(!S.production)await loadProd(); await loadMachineStatus(); startMachineStatusPolling();}
+        else{stopMachineStatusPolling();}
         if(t.key==='saisies'&&!S.saisies)  await loadSaisies();
         if(t.key==='erreurs'&&!S.historique) await loadHist();
         render();
@@ -5260,8 +5322,14 @@ function renderMachineStatusCards(){
       h('span',null,iconEl('cpu',13),' Statut machines'),
       h('button',{
         type:'button',
+        id:'mst-refresh-btn',
         style:{fontSize:'10px',color:'var(--accent)',background:'none',border:'none',cursor:'pointer',padding:'2px 6px',fontFamily:'inherit'},
-        onClick:async()=>{await loadMachineStatus();render();}
+        onClick:async()=>{
+          const btn=document.getElementById('mst-refresh-btn');
+          if(btn){btn.textContent='↺ Actualisation…';btn.disabled=true;}
+          await loadMachineStatus();
+          if(btn){btn.textContent='↺ Actualiser';btn.disabled=false;}
+        }
       },'↺ Actualiser')
     ),
     h('div',{className:'mst-grid'},
@@ -5277,7 +5345,7 @@ function renderProdKpis(){
   if(d.blocked)return h('div',{className:'card'},h('div',{className:'card-blocked'},h('div',{className:'cb-icon'},iconEl('lock',32)),h('div',{className:'cb-msg'},d.message)));
   const prod = d.produit||{};
   const tt=d.temps_totaux||{};const parts=[];
-  parts.push(renderMachineStatusCards());
+  if(isAdmin(S.user)) parts.push(renderMachineStatusCards());
 
   // ── Sanity score cliquable ─────────────────────────────────────
   if(S.historique&&S.historique.sanity){
@@ -7342,6 +7410,9 @@ function render(){
   document.body.classList.toggle('sb-open', !!S.sidebarOpen);
   document.body.classList.toggle('has-topbar', S.app==='prod' || S.app==='stock' || S.app==='compta' || S.app==='expe');
   window.__MYSIFA_APP__ = S.app;
+
+  // Nettoyage polling machine quand on quitte MyProd
+  if(S.app!=='prod'){stopMachineStatusPolling();}
 
   if(!S.user||S.app==='login'){root.appendChild(renderLogin());}
   else if(S.app==='portal'){root.appendChild(renderPortal());}

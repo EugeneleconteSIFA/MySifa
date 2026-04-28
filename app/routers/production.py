@@ -4,7 +4,7 @@ from fastapi import APIRouter, Request, Query
 from datetime import datetime as _dt_cls
 from database import get_db
 from services.timings import compute_dossier_times
-from services.auth_service import get_current_user, is_admin, can_view_all_prod
+from services.auth_service import get_current_user, is_admin, can_view_all_prod, require_admin
 from config import OPERATION_SEVERITY
 
 router = APIRouter()
@@ -81,9 +81,9 @@ def _derive_status(rows_today: list) -> tuple:
 def machine_status(request: Request):
     """
     Statut en temps réel des machines C1 et C2 basé sur les saisies de prod du jour.
-    Accessible à tout utilisateur authentifié.
+    Accessible uniquement à la Direction, Administration et Super Admin.
     """
-    get_current_user(request)   # auth obligatoire, pas de filtre de rôle
+    require_admin(request)   # direction, administration ou superadmin uniquement
 
     now  = _dt_cls.now()
     iso_today = now.strftime('%Y-%m-%d')           # 'YYYY-MM-DD'
