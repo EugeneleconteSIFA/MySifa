@@ -69,6 +69,18 @@ html,body{
       <div class="option-desc">Double-cliquez sur<br><strong>Installer-MyProd-Widget.bat</strong></div>
     </a>
   </div>
+
+  <div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:16px 20px;margin-top:24px;text-align:left">
+    <h4 style="margin:0 0 10px;color:#f59e0b;font-size:14px">⚠️ macOS - Si Gatekeeper bloque l'installation</h4>
+    <p style="margin:0 0 10px;color:#94a3b8;font-size:13px;line-height:1.5">
+      Si vous voyez <em>"Apple cannot verify..."</em> :
+    </p>
+    <ol style="margin:0;padding-left:20px;color:#94a3b8;font-size:13px;line-height:1.6">
+      <li><strong>Clic droit</strong> sur le fichier → <strong>Ouvrir</strong> (pas double-clic)</li>
+      <li>Cliquez sur <strong>Ouvrir</strong> dans la fenêtre d'alerte</li>
+      <li>Ou en Terminal : <code style="background:#334155;padding:2px 6px;border-radius:4px">xattr -c Installer-MyProd-Widget.command</code></li>
+    </ol>
+  </div>
   
   <div class="reqs">
     <h3>Prérequis</h3>
