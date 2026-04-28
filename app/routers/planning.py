@@ -382,12 +382,12 @@ def _compute_timeline_slots(
                 continue
             used = min(remaining, avail)
             remaining -= used
+            cursor = cursor + timedelta(hours=used)
             if remaining > 1e-9:
                 cursor = datetime(cursor.year, cursor.month, cursor.day) + timedelta(days=1)
                 cursor = cursor.replace(hour=0, minute=0, second=0, microsecond=0)
                 cursor = advance_to_work(cursor)
             else:
-                cursor = cursor + timedelta(hours=used)
                 cursor = advance_to_work(cursor)
         if slot_start is None:
             slot_start = cursor.replace(second=0, microsecond=0)

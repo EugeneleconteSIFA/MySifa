@@ -5354,17 +5354,25 @@ function renderMachineStatusCards(){
   return h('div',null,
     h('div',{className:'section-title',style:{display:'flex',alignItems:'center',justifyContent:'space-between'}},
       h('span',null,iconEl('cpu',13),' Statut machines'),
-      h('button',{
-        type:'button',
-        id:'mst-refresh-btn',
-        style:{fontSize:'10px',color:'var(--accent)',background:'none',border:'none',cursor:'pointer',padding:'2px 6px',fontFamily:'inherit'},
-        onClick:async()=>{
-          const btn=document.getElementById('mst-refresh-btn');
-          if(btn){btn.textContent='↺ Actualisation…';btn.disabled=true;}
-          await loadMachineStatus();
-          if(btn){btn.textContent='↺ Actualiser';btn.disabled=false;}
-        }
-      },'↺ Actualiser')
+      h('div',{style:{display:'flex',gap:'8px'}},
+        h('button',{
+          type:'button',
+          id:'mst-widget-btn',
+          style:{fontSize:'10px',color:'#22c55e',background:'rgba(34,197,94,.1)',border:'1px solid rgba(34,197,94,.3)',borderRadius:'6px',cursor:'pointer',padding:'3px 8px',fontFamily:'inherit'},
+          onClick:()=>window.open('/install/widget','_blank')
+        },'📲 Installer widget'),
+        h('button',{
+          type:'button',
+          id:'mst-refresh-btn',
+          style:{fontSize:'10px',color:'var(--accent)',background:'none',border:'none',cursor:'pointer',padding:'2px 6px',fontFamily:'inherit'},
+          onClick:async()=>{
+            const btn=document.getElementById('mst-refresh-btn');
+            if(btn){btn.textContent='↺ Actualisation…';btn.disabled=true;}
+            await loadMachineStatus();
+            if(btn){btn.textContent='↺ Actualiser';btn.disabled=false;}
+          }
+        },'↺ Actualiser')
+      )
     ),
     h('div',{className:'mst-grid'},
       mkCard('C1'),
@@ -5379,7 +5387,17 @@ function renderProdKpis(){
   if(d.blocked)return h('div',{className:'card'},h('div',{className:'card-blocked'},h('div',{className:'cb-icon'},iconEl('lock',32)),h('div',{className:'cb-msg'},d.message)));
   const prod = d.produit||{};
   const tt=d.temps_totaux||{};const parts=[];
-  if(isAdmin(S.user)) parts.push(renderMachineStatusCards());
+  if(isAdmin(S.user)){
+    parts.push(renderMachineStatusCards());
+    // ── Bouton Installer Widget (réservé admin) ───────────────────
+    parts.push(h('div',{style:{display:'flex',justifyContent:'flex-end',marginBottom:'12px'}},
+      h('button',{
+        type:'button',
+        style:{fontSize:'11px',color:'#22c55e',background:'rgba(34,197,94,.1)',border:'1px solid rgba(34,197,94,.3)',borderRadius:'6px',cursor:'pointer',padding:'4px 10px',fontFamily:'inherit',display:'flex',alignItems:'center',gap:'4px'},
+        onClick:()=>window.open('/install/widget','_blank')
+      },'📲 Installer widget bureau')
+    ));
+  }
 
   // ── Sanity score cliquable ─────────────────────────────────────
   if(S.historique&&S.historique.sanity){
