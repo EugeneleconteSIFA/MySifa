@@ -1080,7 +1080,7 @@ async function createProduit(ref, commentaire, quantite, emplacement, uniteVente
     const r = await api('/api/stock/produits', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
     if (!r || r.id == null) return;
     await api('/api/stock/mouvement', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
-      produit_id: r.id, emplacement: empl, type_mouvement: 'entree', quantite: qte
+      produit_id: r.id, emplacement: empl, type_mouvement: 'entree', quantite: qte, note: commentaire || ''
     }) });
     const msg = r.existing
       ? ('Référence déjà en base — ' + fU(qte, unite) + ' ajoutée(s) en ' + empl)
@@ -1794,41 +1794,78 @@ function buildDashboard() {
           const emplList = el('div', { cls: 'empl-suggestions', id: 'stock-page-add-empl-suggestions', style: { display: 'none' } });
           emplWrap.appendChild(emplInp);
           emplWrap.appendChild(emplList);
-          const comI = el('input',{cls:'field-input',placeholder:'Commentaire (facultatif)',autocomplete:'off',style:{direction:'ltr'}});
-          return el('div',{cls:'add-form-inner'},
-            el('div',{style:{fontSize:'12px',color:'var(--muted)',marginBottom:'10px',lineHeight:'1.45'}},
-              'Même référence qu’un produit existant : une entrée de stock est enregistrée, sans dupliquer la fiche.'),
-            el('div',{cls:'add-form-row',style:{gridTemplateColumns:'1fr'}},
-              el('div',null,el('label',{cls:'field-label'},'Référence *'),refI)
+          const comI = el(‘input’,{cls:’field-input’,placeholder:’Commentaire (facultatif)’,autocomplete:’off’,style:{direction:’ltr’}});
+
+          // ── Origine : Production / Sous-traitance ─────────────────
+          const today = new Date().toISOString().slice(0,10);
+          const dashProdDateInp = el(‘input’,{cls:’field-input’,type:’date’,value:today,style:{direction:’ltr’}});
+          const dashProdDateField = el(‘div’,{cls:’modal-field’,style:{display:’none’,marginTop:’6px’}},
+            el(‘label’,{cls:’field-label’},’Date de production’),
+            dashProdDateInp
+          );
+          const dashProdCb      = el(‘input’,{type:’checkbox’,id:’dash-prod-check’});
+          const dashSousTraitCb = el(‘input’,{type:’checkbox’,id:’dash-strait-check’});
+          dashProdCb.addEventListener(‘change’,()=>{
+            if(dashProdCb.checked){dashSousTraitCb.checked=false;dashProdDateField.style.display=’’;}
+            else{dashProdDateField.style.display=’none’;}
+          });
+          dashSousTraitCb.addEventListener(‘change’,()=>{
+            if(dashSousTraitCb.checked){dashProdCb.checked=false;dashProdDateField.style.display=’none’;}
+          });
+          const origineBlock = el(‘div’,{cls:’modal-field’,style:{marginBottom:’0’}},
+            el(‘label’,{cls:’field-label’},’Origine’),
+            el(‘div’,{cls:’mvt-origin-group’},
+              el(‘label’,{cls:’mvt-origin-label’},dashProdCb,’Production’),
+              el(‘label’,{cls:’mvt-origin-label’},dashSousTraitCb,’Sous-traitance’)
             ),
-            el('div',{cls:'add-form-row'},
-              el('div',null,el('label',{cls:'field-label'},'Quantité *'),qtyI),
-              el('div',null,el('label',{cls:'field-label'},'Unité de vente *'),unitWrap)
+            dashProdDateField
+          );
+
+          return el(‘div’,{cls:’add-form-inner’},
+            el(‘div’,{style:{fontSize:’12px’,color:’var(--muted)’,marginBottom:’10px’,lineHeight:’1.45’}},
+              ‘Même référence qu’un produit existant : une entrée de stock est enregistrée, sans dupliquer la fiche.’),
+            el(‘div’,{cls:’add-form-row’,style:{gridTemplateColumns:’1fr’}},
+              el(‘div’,null,el(‘label’,{cls:’field-label’},’Référence *’),refI)
             ),
-            el('div',{cls:'add-form-row',style:{gridTemplateColumns:'1fr'}},
-              el('div',null,el('label',{cls:'field-label'},'Emplacement *'),emplWrap)
+            el(‘div’,{cls:’add-form-row’},
+              el(‘div’,null,el(‘label’,{cls:’field-label’},’Quantité *’),qtyI),
+              el(‘div’,null,el(‘label’,{cls:’field-label’},’Unité de vente *’),unitWrap)
             ),
-            el('div',null,el('label',{cls:'field-label'},'Commentaire'),comI),
-            el('div',{cls:'add-form-actions'},
-              el('button',{cls:'btn',on:{click:async()=>{
-                const raw = (refI.value||'').trim();
+            el(‘div’,{cls:’add-form-row’,style:{gridTemplateColumns:’1fr’}},
+              el(‘div’,null,el(‘label’,{cls:’field-label’},’Emplacement *’),emplWrap)
+            ),
+            origineBlock,
+            el(‘div’,{cls:’modal-field’,style:{marginTop:’10px’,marginBottom:’0’}},el(‘label’,{cls:’field-label’},’Commentaire’),comI),
+            el(‘div’,{cls:’add-form-actions’},
+              el(‘button’,{cls:’btn’,on:{click:async()=>{
+                const raw = (refI.value||’’).trim();
                 const ref = raw.toUpperCase();
-                if(!ref){showToast('Référence requise','error');return;}
-                const qRaw = (qtyI.value||'').trim();
-                const com = (comI.value||'').trim();
-                const emplVal = String((emplInp.value||'').trim().toUpperCase());
+                if(!ref){showToast(‘Référence requise’,’error’);return;}
+                const qRaw = (qtyI.value||’’).trim();
+                const emplVal = String((emplInp.value||’’).trim().toUpperCase());
                 if (!emplVal || !isStockEmplacementCode(emplVal)) {
-                  showToast('Emplacement obligatoire (une lettre puis des chiffres, ex. Z999)', 'error');
+                  showToast(‘Emplacement obligatoire (une lettre puis des chiffres, ex. Z999)’, ‘error’);
                   return;
                 }
-                const qte = parseFloat(qRaw.replace(',','.'));
+                const qte = parseFloat(qRaw.replace(‘,’,’.’));
                 if (!qRaw || Number.isNaN(qte) || qte <= 0) {
-                  showToast('Quantité obligatoire (nombre supérieur à 0)', 'error');
+                  showToast(‘Quantité obligatoire (nombre supérieur à 0)’, ‘error’);
                   return;
                 }
-                await createProduit(ref, com, qte, emplVal, unitInp.value);
-                refI.value=''; qtyI.value=''; comI.value=''; emplInp.value=''; unitInp.value='';
-              }}},'Ajouter au stock')
+                // Préfixe origine + commentaire libre
+                let prefix = ‘’;
+                if (dashProdCb.checked) {
+                  const dp = dashProdDateInp.value;
+                  prefix = dp ? ‘Production | ‘ + dp : ‘Production’;
+                } else if (dashSousTraitCb.checked) {
+                  prefix = ‘Sous-traitance’;
+                }
+                const userNote = (comI.value||’’).trim();
+                const finalNote = [prefix, userNote].filter(Boolean).join(‘ | ‘);
+                await createProduit(ref, finalNote, qte, emplVal, unitInp.value);
+                refI.value=’’; qtyI.value=’’; comI.value=’’; emplInp.value=’’; unitInp.value=’’;
+                dashProdCb.checked=false; dashSousTraitCb.checked=false; dashProdDateField.style.display=’none’;
+              }}},’Ajouter au stock’)
             )          );
         })()
       )
