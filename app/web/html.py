@@ -245,6 +245,26 @@ table.table-std tr:hover td{background:var(--accent-bg)}
 .bar-track{flex:1;height:22px;background:var(--bg);border-radius:4px;overflow:hidden}
 .bar-fill{height:100%;border-radius:4px;display:flex;align-items:center;padding:0 8px;transition:width .5s}
 .bar-val{font-size:10px;color:var(--bg);font-weight:600;font-family:monospace;white-space:nowrap}
+/* ── Statut machines ── */
+.mst-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-bottom:24px}
+.mst-card{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.mst-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border)}
+.mst-nom{font-size:14px;font-weight:700;color:var(--text)}
+.mst-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.mst-body{padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.mst-statut{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:700;padding:5px 12px;border-radius:20px;width:fit-content}
+.mst-op{font-size:11px;color:var(--muted)}
+.mst-dos{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:12px;display:flex;flex-direction:column;gap:3px}
+.mst-dos-ref{font-weight:700;color:var(--accent);font-family:monospace;font-size:12px}
+.mst-dos-cli{color:var(--text);font-weight:600;font-size:13px}
+.mst-dos-des{color:var(--muted);font-size:11px}
+/* couleurs par statut */
+.mst-production .mst-dot{background:#22c55e}.mst-production .mst-statut{background:rgba(34,197,94,.12);color:#22c55e}
+.mst-calage .mst-dot{background:#f97316}.mst-calage .mst-statut{background:rgba(249,115,22,.12);color:#f97316}
+.mst-arret .mst-dot{background:#ef4444}.mst-arret .mst-statut{background:rgba(239,68,68,.12);color:#ef4444}
+.mst-changement .mst-dot{background:#a78bfa}.mst-changement .mst-statut{background:rgba(167,139,250,.12);color:#a78bfa}
+.mst-eteinte .mst-dot{background:#475569}.mst-eteinte .mst-statut{background:rgba(71,85,105,.12);color:#94a3b8}
+.mst-autre .mst-dot{background:#94a3b8}.mst-autre .mst-statut{background:rgba(148,163,184,.12);color:#94a3b8}
 .time-kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:14px;margin-bottom:24px}
 .time-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px}
 .tc-label{font-size:11px;color:var(--text2);font-weight:800;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
@@ -798,6 +818,7 @@ let S={
   app: HAS_INITIAL_APP ? INITIAL_APP : 'login',
   page:'production',user:null,
   subPage:'kpis',   // 'kpis' | 'saisies' | 'erreurs'
+  machineStatus:null,
   importOpen:false,
   selDossier:null,
   loginSubmitting:false,loginError:null,portalLoading:null,
@@ -3955,6 +3976,9 @@ function buildParams(){
 
 async function loadHist(){const d=await api('/api/dashboard/historique?'+buildParams());if(d)S.historique=d;}
 async function loadProd(){const d=await api('/api/dashboard/production?'+buildParams());if(d)S.production=d;}
+async function loadMachineStatus(){
+  try{const d=await api('/api/production/machine-status');if(d)S.machineStatus=d;}catch(e){}
+}
 async function loadImports(){const d=await api('/api/imports');if(d)set({imports:d});}
 async function loadDos(){const d=await api('/api/dossiers');if(d)set({dossiers:d});}
 async function loadMachines(){try{const d=await api('/api/planning/machines');if(d)set({machines:d});}catch(e){}}
@@ -5091,7 +5115,7 @@ function renderProdPage(){
       className:'nav-tab'+(subPage===t.key?' active':''),
       onClick:async()=>{
         S.subPage=t.key;
-        if(t.key==='kpis'&&!S.production) await loadProd();
+        if(t.key==='kpis'){if(!S.production)await loadProd(); await loadMachineStatus();}
         if(t.key==='saisies'&&!S.saisies)  await loadSaisies();
         if(t.key==='erreurs'&&!S.historique) await loadHist();
         render();
@@ -5192,12 +5216,68 @@ function renderHist(){
 }
 
 // ── Production ──────────────────────────────────────────────────
+function renderMachineStatusCards(){
+  const ms = S.machineStatus;
+  const ICONS = {
+    production:  '▶',
+    calage:      '⚙',
+    arret:       '⛔',
+    changement:  '↻',
+    eteinte:     '○',
+    autre:       '·',
+  };
+  function mkCard(mkey){
+    const m = ms && ms[mkey];
+    const sk = m ? (m.statut_key||'eteinte') : 'eteinte';
+    const label = m ? (m.statut_label||'Éteinte') : 'Éteinte';
+    const nom   = m ? m.nom : (mkey==='C1'?'Cohésio 1':'Cohésio 2');
+    const op    = m ? (m.operateur||'') : '';
+    const dos   = m ? m.dossier : null;
+    const icon  = ICONS[sk]||'·';
+    const isOn  = sk!=='eteinte';
+    return h('div',{className:`mst-card mst-${sk}`},
+      h('div',{className:'mst-head'},
+        h('span',{className:'mst-nom'},nom),
+        h('div',{style:{display:'flex',alignItems:'center',gap:'6px'}},
+          isOn?h('span',{style:{fontSize:'8px',color:'#22c55e',animation:'pulse 2s infinite',display:'inline-block',borderRadius:'50%',width:'8px',height:'8px',background:'#22c55e'}}):null,
+          h('span',{className:'mst-dot'})
+        )
+      ),
+      h('div',{className:'mst-body'},
+        h('div',{className:'mst-statut'},icon,' ',label),
+        op?h('div',{className:'mst-op'},'👤 ',op):null,
+        dos?h('div',{className:'mst-dos'},
+          h('div',{className:'mst-dos-ref'},'Dossier #',dos.no_dossier),
+          dos.client?h('div',{className:'mst-dos-cli'},dos.client):null,
+          dos.designation?h('div',{className:'mst-dos-des'},dos.designation):null
+        ):null,
+        !ms?h('div',{style:{fontSize:'11px',color:'var(--muted)'}},'Chargement…'):null
+      )
+    );
+  }
+  return h('div',null,
+    h('div',{className:'section-title',style:{display:'flex',alignItems:'center',justifyContent:'space-between'}},
+      h('span',null,iconEl('cpu',13),' Statut machines'),
+      h('button',{
+        type:'button',
+        style:{fontSize:'10px',color:'var(--accent)',background:'none',border:'none',cursor:'pointer',padding:'2px 6px',fontFamily:'inherit'},
+        onClick:async()=>{await loadMachineStatus();render();}
+      },'↺ Actualiser')
+    ),
+    h('div',{className:'mst-grid'},
+      mkCard('C1'),
+      mkCard('C2')
+    )
+  );
+}
+
 function renderProdKpis(){
   const d=S.production;
   if(!d)return h('div',{className:'card-empty'},'Chargement des données de production…');
   if(d.blocked)return h('div',{className:'card'},h('div',{className:'card-blocked'},h('div',{className:'cb-icon'},iconEl('lock',32)),h('div',{className:'cb-msg'},d.message)));
   const prod = d.produit||{};
   const tt=d.temps_totaux||{};const parts=[];
+  parts.push(renderMachineStatusCards());
 
   // ── Sanity score cliquable ─────────────────────────────────────
   if(S.historique&&S.historique.sanity){
@@ -7341,7 +7421,7 @@ function render(){
 
 async function nav(){
   if(S.page==='production'){
-    if(S.subPage==='kpis'||!S.subPage){await loadProd();if(!S.historique)await loadHist();}
+    if(S.subPage==='kpis'||!S.subPage){await loadProd();if(!S.historique)await loadHist();loadMachineStatus();}
     else if(S.subPage==='saisies'){await loadSaisies();}
     else if(S.subPage==='erreurs'){await loadHist();}
   }

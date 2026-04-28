@@ -5,8 +5,142 @@ from datetime import datetime as _dt_cls
 from database import get_db
 from services.timings import compute_dossier_times
 from services.auth_service import get_current_user, is_admin, can_view_all_prod
+from config import OPERATION_SEVERITY
 
 router = APIRouter()
+
+# ── Codes spéciaux ───────────────────────────────────────────────────────────
+_CODES_CALAGE     = {'02','10','11','59','60','74','75','01'}
+_CODES_PRODUCTION = {'03','88'}
+_CODE_ARRIVEE     = '86'
+_CODE_DEPART      = '87'
+_CODE_FIN_DOS     = '89'
+
+def _norm_machine(m: str) -> Optional[str]:
+    """Normalise le champ machine vers C1 ou C2 (None si non reconnu)."""
+    if not m:
+        return None
+    n = m.lower().replace('é','e').replace('è','e').replace('ê','e').strip()
+    if 'cohesio 1' in n or 'cohesion 1' in n or 'cohesio !' in n:
+        return 'C1'
+    if 'cohesio 2' in n or 'cohesion 2' in n:
+        return 'C2'
+    return None
+
+def _clean_client(raw: str) -> str:
+    """Supprime le préfixe code opérateur : '601 - ROQUETTE' → 'ROQUETTE'."""
+    if not raw:
+        return ''
+    parts = raw.split(' - ', 1)
+    if len(parts) == 2 and parts[0].strip().isdigit():
+        return parts[1].strip()
+    return raw.strip()
+
+def _derive_status(rows_today: list) -> tuple:
+    """
+    Retourne (statut_key, statut_label, last_row_with_dossier).
+    rows_today trié ASC par date_operation.
+    """
+    if not rows_today:
+        return 'eteinte', 'Éteinte', None
+
+    has_arrivee = any(r['operation_code'] == _CODE_ARRIVEE for r in rows_today)
+    if not has_arrivee:
+        return 'eteinte', 'Éteinte', None
+
+    last = rows_today[-1]
+    code = last['operation_code'] or ''
+    cat  = (last['operation_category'] or '').lower()
+
+    # Cherche le dernier dossier connu (non vide, non '0')
+    last_dos_row = None
+    for r in reversed(rows_today):
+        nd = r.get('no_dossier') or ''
+        if nd and nd != '0':
+            last_dos_row = r
+            break
+
+    if code == _CODE_DEPART:
+        return 'eteinte', 'Éteinte', None
+    if code in (_CODE_ARRIVEE, _CODE_FIN_DOS):
+        return 'changement', 'Changement de dossier', last_dos_row
+    if code in _CODES_CALAGE or cat == 'calage':
+        return 'calage', 'Calage', last_dos_row
+    if code in _CODES_PRODUCTION or cat == 'production':
+        return 'production', 'Production', last_dos_row
+    if cat == 'arret':
+        op_label = OPERATION_SEVERITY.get(code, {}).get('label', 'Arrêt')
+        return 'arret', f'Arrêt — {op_label}', last_dos_row
+
+    # Catch-all : affiche le label de l'opération
+    op_label = OPERATION_SEVERITY.get(code, {}).get('label', f'Op {code}')
+    return 'autre', op_label, last_dos_row
+
+
+@router.get("/api/production/machine-status")
+def machine_status(request: Request):
+    """
+    Statut en temps réel des machines C1 et C2 basé sur les saisies de prod du jour.
+    Accessible à tout utilisateur authentifié.
+    """
+    get_current_user(request)   # auth obligatoire, pas de filtre de rôle
+
+    now  = _dt_cls.now()
+    iso_today = now.strftime('%Y-%m-%d')           # 'YYYY-MM-DD'
+    old_today = now.strftime('%d/%m/%Y')            # 'DD/MM/YYYY'
+
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT operation_code, operation_category, machine,
+                      no_dossier, client, designation, operateur, date_operation
+               FROM production_data
+               WHERE date_operation LIKE ? OR date_operation LIKE ?
+               ORDER BY date_operation ASC""",
+            (iso_today + '%', old_today + '%'),
+        ).fetchall()
+
+    # Bucket par machine (C1/C2), garder les lignes bien ordonnées
+    by_mkey: dict = {'C1': [], 'C2': []}
+    for r in [dict(x) for x in rows]:
+        k = _norm_machine(r.get('machine') or '')
+        if k:
+            by_mkey[k].append(r)
+
+    result = {}
+    machine_names = {'C1': 'Cohésio 1', 'C2': 'Cohésio 2'}
+    for mkey in ('C1', 'C2'):
+        rows_m = by_mkey[mkey]
+        status_key, status_label, dos_row = _derive_status(rows_m)
+
+        dossier = None
+        if dos_row:
+            nd = dos_row.get('no_dossier') or ''
+            if nd and nd != '0':
+                dossier = {
+                    'no_dossier':  nd,
+                    'client':      _clean_client(dos_row.get('client') or ''),
+                    'designation': (dos_row.get('designation') or '').strip(', ').strip(),
+                }
+
+        # Dernier opérateur arrivé (code 86)
+        operateur = ''
+        for r in reversed(rows_m):
+            if r.get('operation_code') == _CODE_ARRIVEE:
+                operateur = r.get('operateur') or ''
+                break
+        # Nettoie "907 - DENIS Alan" → "DENIS Alan"
+        if ' - ' in operateur:
+            operateur = operateur.split(' - ', 1)[1].strip()
+
+        result[mkey] = {
+            'nom':          machine_names[mkey],
+            'statut_key':   status_key,
+            'statut_label': status_label,
+            'operateur':    operateur,
+            'dossier':      dossier,
+        }
+
+    return result
 
 @router.get("/api/dashboard/production")
 def dashboard_production(
