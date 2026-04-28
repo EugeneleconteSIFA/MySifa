@@ -14,6 +14,8 @@ _CODES_CALAGE     = {'02','10','11','59','60','74','75','01'}
 _CODES_PRODUCTION = {'03','88'}
 _CODES_ARRET      = {c for c,v in OPERATION_SEVERITY.items()
                      if (v.get('category') or '').lower() == 'arret'}
+_CODES_NETTOYAGE  = {c for c,v in OPERATION_SEVERITY.items()
+                     if (v.get('category') or '').lower() == 'nettoyage'}
 _CODE_ARRIVEE     = '86'
 _CODE_DEPART      = '87'
 _CODE_FIN_DOS     = '89'
@@ -81,6 +83,8 @@ def _derive_status(rows_today: list) -> tuple:
         return 'changement', 'Changement de dossier', last_dos_row
     if code in _CODES_CALAGE or cat == 'calage':
         return 'calage', 'Calage', last_dos_row
+    if code in _CODES_NETTOYAGE or cat == 'nettoyage':
+        return 'nettoyage', 'Nettoyage', last_dos_row
     if code in _CODES_PRODUCTION or cat == 'production':
         return 'production', 'Production', last_dos_row
     if cat == 'arret':

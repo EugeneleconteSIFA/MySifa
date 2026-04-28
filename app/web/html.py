@@ -265,6 +265,7 @@ table.table-std tr:hover td{background:var(--accent-bg)}
 .mst-calage .mst-dot{background:#f97316}.mst-calage .mst-statut{background:rgba(249,115,22,.12);color:#f97316}
 .mst-arret .mst-dot{background:#ef4444}.mst-arret .mst-statut{background:rgba(239,68,68,.12);color:#ef4444}
 .mst-changement .mst-dot{background:#a78bfa}.mst-changement .mst-statut{background:rgba(167,139,250,.12);color:#a78bfa}
+.mst-nettoyage .mst-dot{background:#c084fc}.mst-nettoyage .mst-statut{background:rgba(192,132,252,.12);color:#c084fc}
 .mst-eteinte .mst-dot{background:#475569}.mst-eteinte .mst-statut{background:rgba(71,85,105,.12);color:#94a3b8}
 .mst-autre .mst-dot{background:#94a3b8}.mst-autre .mst-statut{background:rgba(148,163,184,.12);color:#94a3b8}
 .time-kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:14px;margin-bottom:24px}
@@ -4002,8 +4003,8 @@ async function loadMachineStatus(){
 }
 function updateMachineStatusDOM(){
   const ms=S.machineStatus;
-  const ICONS={production:'▶',calage:'⚙',arret:'⛔',changement:'↻',eteinte:'○',autre:'·'};
-  const DUREE_LABEL={production:'En production depuis',calage:'En calage depuis',arret:'En arrêt depuis',changement:'En changement depuis',eteinte:'Éteinte depuis',autre:'Depuis'};
+  const ICONS={production:'▶',calage:'⚙',arret:'⛔',changement:'↻',nettoyage:'🧹',eteinte:'○',autre:'·'};
+  const DUREE_LABEL={production:'En production depuis',calage:'En calage depuis',arret:'En arrêt depuis',changement:'En changement depuis',nettoyage:'En nettoyage depuis',eteinte:'Éteinte depuis',autre:'Depuis'};
   function fmtDuree(min){
     if(min==null||min<0)return null;
     if(min<1)return 'à l\'instant';
@@ -5298,6 +5299,7 @@ function renderMachineStatusCards(){
     calage:      '⚙',
     arret:       '⛔',
     changement:  '↻',
+    nettoyage:   '🧹',
     eteinte:     '○',
     autre:       '·',
   };
@@ -5313,6 +5315,7 @@ function renderMachineStatusCards(){
     calage:      'En calage depuis',
     arret:       'En arrêt depuis',
     changement:  'En changement depuis',
+    nettoyage:   'En nettoyage depuis',
     eteinte:     'Éteinte depuis',
     autre:       'Depuis',
   };
