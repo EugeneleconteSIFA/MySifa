@@ -254,6 +254,8 @@ table.table-std tr:hover td{background:var(--accent-bg)}
 .mst-body{padding:14px 16px;display:flex;flex-direction:column;gap:8px}
 .mst-statut{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:700;padding:5px 12px;border-radius:20px;width:fit-content}
 .mst-op{font-size:11px;color:var(--muted)}
+.mst-duree{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;display:flex;align-items:center;gap:4px}
+.mst-duree-val{font-weight:700;color:var(--text)}
 .mst-dos{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:12px;display:flex;flex-direction:column;gap:3px}
 .mst-dos-ref{font-weight:700;color:var(--accent);font-family:monospace;font-size:12px}
 .mst-dos-cli{color:var(--text);font-weight:600;font-size:13px}
@@ -4001,6 +4003,14 @@ async function loadMachineStatus(){
 function updateMachineStatusDOM(){
   const ms=S.machineStatus;
   const ICONS={production:'▶',calage:'⚙',arret:'⛔',changement:'↻',eteinte:'○',autre:'·'};
+  const DUREE_LABEL={production:'En production depuis',calage:'En calage depuis',arret:'En arrêt depuis',changement:'En changement depuis',eteinte:'Éteinte depuis',autre:'Depuis'};
+  function fmtDuree(min){
+    if(min==null||min<0)return null;
+    if(min<1)return 'à l\'instant';
+    const h=Math.floor(min/60),m=min%60;
+    if(h===0)return m+' min';
+    return m===0?(h+'h'):(h+'h '+m+'min');
+  }
   const grid=document.querySelector('.mst-grid');
   if(!grid)return;
   const cards=grid.querySelectorAll('.mst-card');
@@ -4014,6 +4024,8 @@ function updateMachineStatusDOM(){
     const dos=m?m.dossier:null;
     const icon=ICONS[sk]||'·';
     const isOn=sk!=='eteinte';
+    const dureeStr=m?fmtDuree(m.duree_min):null;
+    const dureeLabel=DUREE_LABEL[sk]||'Depuis';
     // Mise à jour classes et contenu
     card.className='mst-card mst-'+sk;
     const headNom=card.querySelector('.mst-nom');
@@ -4025,6 +4037,7 @@ function updateMachineStatusDOM(){
     const body=card.querySelector('.mst-body');
     if(body){
       let html='<div class="mst-statut">'+icon+' '+label+'</div>';
+      if(dureeStr)html+='<div class="mst-duree">'+dureeLabel+' <span class="mst-duree-val">'+dureeStr+'</span></div>';
       if(op)html+='<div class="mst-op">👤 '+escapeHtml(op)+'</div>';
       if(dos&&dos.no_dossier){
         html+='<div class="mst-dos"><div class="mst-dos-ref">Dossier #'+escapeHtml(dos.no_dossier)+'</div>';
@@ -5288,6 +5301,21 @@ function renderMachineStatusCards(){
     eteinte:     '○',
     autre:       '·',
   };
+  function fmtDuree(min){
+    if(min==null||min<0) return null;
+    if(min<1) return 'à l\'instant';
+    const h=Math.floor(min/60), m=min%60;
+    if(h===0) return `${m} min`;
+    return m===0?`${h}h`:`${h}h ${m}min`;
+  }
+  const DUREE_LABEL = {
+    production:  'En production depuis',
+    calage:      'En calage depuis',
+    arret:       'En arrêt depuis',
+    changement:  'En changement depuis',
+    eteinte:     'Éteinte depuis',
+    autre:       'Depuis',
+  };
   function mkCard(mkey){
     const m = ms && ms[mkey];
     const sk = m ? (m.statut_key||'eteinte') : 'eteinte';
@@ -5297,6 +5325,8 @@ function renderMachineStatusCards(){
     const dos   = m ? m.dossier : null;
     const icon  = ICONS[sk]||'·';
     const isOn  = sk!=='eteinte';
+    const dureeStr = m ? fmtDuree(m.duree_min) : null;
+    const dureeLabel = DUREE_LABEL[sk]||'Depuis';
     return h('div',{className:`mst-card mst-${sk}`},
       h('div',{className:'mst-head'},
         h('span',{className:'mst-nom'},nom),
@@ -5307,6 +5337,7 @@ function renderMachineStatusCards(){
       ),
       h('div',{className:'mst-body'},
         h('div',{className:'mst-statut'},icon,' ',label),
+        dureeStr?h('div',{className:'mst-duree'},dureeLabel,' ',h('span',{className:'mst-duree-val'},dureeStr)):null,
         op?h('div',{className:'mst-op'},'👤 ',op):null,
         dos?h('div',{className:'mst-dos'},
           h('div',{className:'mst-dos-ref'},'Dossier #',dos.no_dossier),

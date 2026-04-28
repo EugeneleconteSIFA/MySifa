@@ -12,6 +12,8 @@ router = APIRouter()
 # ── Codes spéciaux ───────────────────────────────────────────────────────────
 _CODES_CALAGE     = {'02','10','11','59','60','74','75','01'}
 _CODES_PRODUCTION = {'03','88'}
+_CODES_ARRET      = {c for c,v in OPERATION_SEVERITY.items()
+                     if (v.get('category') or '').lower() == 'arret'}
 _CODE_ARRIVEE     = '86'
 _CODE_DEPART      = '87'
 _CODE_FIN_DOS     = '89'
@@ -35,6 +37,19 @@ def _clean_client(raw: str) -> str:
     if len(parts) == 2 and parts[0].strip().isdigit():
         return parts[1].strip()
     return raw.strip()
+
+def _parse_date_op(s: str) -> Optional[_dt_cls]:
+    """Parse date_operation (YYYY-MM-DDTHH:MM:SS ou DD/MM/YYYY HH:MM:SS)."""
+    if not s:
+        return None
+    s = s.strip()
+    for fmt in ('%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S',
+                '%d/%m/%Y %H:%M:%S', '%d/%m/%Y %H:%M'):
+        try:
+            return _dt_cls.strptime(s[:19], fmt)
+        except ValueError:
+            continue
+    return None
 
 def _derive_status(rows_today: list) -> tuple:
     """
@@ -75,6 +90,42 @@ def _derive_status(rows_today: list) -> tuple:
     # Catch-all : affiche le label de l'opération
     op_label = OPERATION_SEVERITY.get(code, {}).get('label', f'Op {code}')
     return 'autre', op_label, last_dos_row
+
+def _compute_duree_min(status_key: str, rows_today: list, now: _dt_cls) -> Optional[int]:
+    """
+    Calcule la durée (en minutes entières) du statut courant.
+
+    • production : durée depuis la dernière saisie qui n'est ni production
+      ni arrêt (= début de session productive). Les arrêts intermédiaires
+      n'interrompent pas le compteur.
+    • autres statuts : durée depuis la dernière saisie (= last row).
+    • eteinte sans saisies : None.
+    """
+    if not rows_today:
+        return None
+
+    if status_key == 'production':
+        # Chercher, en remontant, la première saisie qui n'est ni prod ni arrêt
+        anchor_row = None
+        for r in reversed(rows_today):
+            c   = r.get('operation_code') or ''
+            cat = (r.get('operation_category') or '').lower()
+            if c not in _CODES_PRODUCTION and c not in _CODES_ARRET and cat != 'arret':
+                anchor_row = r
+                break
+        if anchor_row is None:
+            # Toutes les saisies sont prod/arrêt : prendre la première
+            anchor_row = rows_today[0]
+        ts = _parse_date_op(anchor_row.get('date_operation') or '')
+        if ts is None:
+            return None
+        return max(0, int((now - ts).total_seconds() // 60))
+
+    # Pour tous les autres statuts : durée depuis la dernière saisie
+    last_ts = _parse_date_op(rows_today[-1].get('date_operation') or '')
+    if last_ts is None:
+        return None
+    return max(0, int((now - last_ts).total_seconds() // 60))
 
 
 @router.get("/api/production/machine-status")
@@ -132,12 +183,15 @@ def machine_status(request: Request):
         if ' - ' in operateur:
             operateur = operateur.split(' - ', 1)[1].strip()
 
+        duree_min = _compute_duree_min(status_key, rows_m, now)
+
         result[mkey] = {
             'nom':          machine_names[mkey],
             'statut_key':   status_key,
             'statut_label': status_label,
             'operateur':    operateur,
             'dossier':      dossier,
+            'duree_min':    duree_min,
         }
 
     return result
