@@ -1830,7 +1830,7 @@ function buildDashboard() {
 
           return el(‘div’,{cls:’add-form-inner’},
             el(‘div’,{style:{fontSize:’12px’,color:’var(--muted)’,marginBottom:’10px’,lineHeight:’1.45’}},
-              ‘Même référence qu’un produit existant : une entrée de stock est enregistrée, sans dupliquer la fiche.’),
+              ‘Même référence qu\’un produit existant : une entrée de stock est enregistrée, sans dupliquer la fiche.’),
             el(‘div’,{cls:’add-form-row’,style:{gridTemplateColumns:’1fr’}},
               el(‘div’,null,el(‘label’,{cls:’field-label’},’Référence *’),refI)
             ),
