@@ -389,6 +389,13 @@ body.light .field-input.empl-upper::placeholder{
 .etiq-more-note{font-size:11px;opacity:0.5;padding:8px 0;font-style:italic}
 
 /* ── Inventaire chaîne ── */
+.nav-wip-badge{margin-left:auto;font-size:14px;line-height:1;padding:2px 4px;border-radius:4px;cursor:pointer;opacity:.75;transition:opacity .15s;background:none;border:none;color:inherit;flex-shrink:0}
+.nav-wip-badge:hover{opacity:1;background:rgba(255,200,0,.15)}
+.wip-page{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;text-align:center;gap:12px}
+.wip-page-icon{font-size:52px;line-height:1}
+.wip-page-title{font-size:17px;font-weight:700;color:var(--text)}
+.wip-page-sub{font-size:13px;color:var(--muted);max-width:280px}
+.wip-admin-banner{display:flex;align-items:center;gap:10px;background:rgba(255,180,0,.12);border:1px solid rgba(255,180,0,.35);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--warn);font-weight:600}
 .inv-item{padding:13px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s}
 .inv-item:last-child{border-bottom:none}
 .inv-item:hover{background:var(--accent-bg)}
@@ -412,6 +419,10 @@ body.light .field-input.empl-upper::placeholder{
 .modal-handle{width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 20px;display:block}
 .modal-title{font-size:17px;font-weight:800;margin-bottom:6px}
 .modal-sub{font-size:12px;color:var(--muted);margin-bottom:18px}
+.mvt-origin-group{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
+.mvt-origin-label{display:inline-flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;background:var(--bg);transition:background .15s,border-color .15s;user-select:none}
+.mvt-origin-label:hover{background:var(--accent-bg);border-color:var(--accent)}
+.mvt-origin-label input[type=checkbox]{accent-color:var(--accent);width:15px;height:15px;cursor:pointer;flex-shrink:0;margin:0}
 .mvt-type-btns{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:20px}
 .mvt-type-btn{padding:13px 6px;border-radius:12px;border:1.5px solid var(--border);
   background:transparent;color:var(--text2);cursor:pointer;font-size:12px;font-weight:700;
@@ -1416,6 +1427,30 @@ function openEmplEntreeModal(codeEmpl) {
   const dateInp = el('input', { cls:'field-input', type:'date', value:today });
   const noteInp = el('input', { cls:'field-input', type:'text', placeholder:'Réf BL, lot…', style:{direction:'ltr'} });
 
+  // ── Origine : Production / Sous-traitance ───────────────────────
+  const prodDateInp2 = el('input', { cls:'field-input', type:'date', value:today, style:{direction:'ltr'} });
+  const prodDateField2 = el('div', { cls:'modal-field', style:{display:'none', marginTop:'2px'} },
+    el('label', { cls:'field-label' }, 'Date de production'),
+    prodDateInp2
+  );
+  const prodCb2      = el('input', { type:'checkbox', id:'empl-prod-check' });
+  const sousTraitCb2 = el('input', { type:'checkbox', id:'empl-strait-check' });
+  prodCb2.addEventListener('change', () => {
+    if (prodCb2.checked) { sousTraitCb2.checked = false; prodDateField2.style.display = ''; }
+    else { prodDateField2.style.display = 'none'; }
+  });
+  sousTraitCb2.addEventListener('change', () => {
+    if (sousTraitCb2.checked) { prodCb2.checked = false; prodDateField2.style.display = 'none'; }
+  });
+  const origineWrap2 = el('div', { cls:'modal-field' },
+    el('label', { cls:'field-label' }, 'Origine'),
+    el('div', { cls:'mvt-origin-group' },
+      el('label', { cls:'mvt-origin-label' }, prodCb2, 'Production'),
+      el('label', { cls:'mvt-origin-label' }, sousTraitCb2, 'Sous-traitance')
+    ),
+    prodDateField2
+  );
+
   const confirmBtn = el('button', { cls:'btn-confirm entree', on:{ click: async () => {
     const ref  = refInp.value.trim().toUpperCase();
     const qte  = parseFloat(qteInp.value);
@@ -1435,7 +1470,16 @@ function openEmplEntreeModal(codeEmpl) {
         _pid = match.id;
       } catch(e) { showToast(e.message, 'error'); return; }
     }
-    await submitMouvement({ produit_id: _pid, emplacement: empl, type_mouvement:'entree', quantite: qte, date_entree: dateInp.value||today, note: noteInp.value.trim() });
+    let prefix = '';
+    if (prodCb2.checked) {
+      const dp = prodDateInp2.value ? prodDateInp2.value : '';
+      prefix = dp ? 'Production | ' + dp : 'Production';
+    } else if (sousTraitCb2.checked) {
+      prefix = 'Sous-traitance';
+    }
+    const userNote = noteInp.value.trim();
+    const finalNote = [prefix, userNote].filter(Boolean).join(' | ');
+    await submitMouvement({ produit_id: _pid, emplacement: empl, type_mouvement:'entree', quantite: qte, date_entree: dateInp.value||today, note: finalNote });
     overlay.remove();
   }}}, '↓ Valider entrée');
 
@@ -1447,6 +1491,7 @@ function openEmplEntreeModal(codeEmpl) {
       el('div',{style:{position:'relative'}}, refInp, suggWrap), refError),
     el('div',{cls:'modal-field'}, el('label',{cls:'field-label'},'Quantité *'), qteInp),
     el('div',{cls:'modal-field'}, el('label',{cls:'field-label'},'Date du stock'), dateInp),
+    origineWrap2,
     el('div',{cls:'modal-field'}, el('label',{cls:'field-label'},'Commentaire (optionnel)'), noteInp),
     el('div',{cls:'modal-actions'},
       el('button',{cls:'btn-cancel',on:{click:()=>overlay.remove()}},'Annuler'),
@@ -1508,7 +1553,8 @@ function buildMvtModal() {
     })
   );
 
-  const emplInp = el('input', { cls:'field-input empl-upper', type:'text', placeholder:'Ex: a123, b211…', value: emplacement, style:{direction:'ltr'} });  emplInpRef = emplInp;
+  const emplInp = el('input', { cls:'field-input empl-upper', type:'text', placeholder:'Ex: a123, b211…', value: emplacement, style:{direction:'ltr'} });
+  emplInpRef = emplInp;
   const suggWrap = el('div', { cls:'empl-suggestions' });
   emplInp.addEventListener('input', e => { emplInp.value = e.target.value.toUpperCase(); searchEmplSugg(emplInp.value, suggWrap); });
 
@@ -1520,28 +1566,47 @@ function buildMvtModal() {
 
   const noteInp = el('input', { cls:'field-input', type:'text', placeholder:'Réf BL, raison…', style:{direction:'ltr'} });
 
-  // Checkbox Expédition (uniquement pour les sorties)
-  let expCheckbox = null;
-  let expWrap = null;
-  if (type === 'sortie') {
-    expCheckbox = el('input', { cls:'field-input', type:'checkbox', id:'expedition-check', style:{cursor:'pointer',width:'auto',height:'auto',marginLeft:'4px'} });
-    expWrap = el('div', { cls:'modal-field', style:{display:'flex',alignItems:'center',marginTop:'4px'} },
-      el('label', { cls:'field-label', htmlFor:'expedition-check', style:{marginBottom:'0',cursor:'pointer'} }, 'Expédition'),
-      expCheckbox
+  // ── Origine : Production / Sous-traitance (entrée uniquement) ──
+  let prodCheckbox = null, sousTraitCheckbox = null, prodDateInp = null;
+  let origineWrap = null;
+  if (type === 'entree') {
+    prodDateInp = el('input', { cls:'field-input', type:'date', value:today, style:{direction:'ltr'} });
+    const prodDateField = el('div', { cls:'modal-field', style:{display:'none', marginTop:'2px'} },
+      el('label', { cls:'field-label' }, 'Date de production'),
+      prodDateInp
     );
-    
-    // Toggle note input based on checkbox
-    expCheckbox.addEventListener('change', e => {
-      if (e.target.checked) {
-        noteInp.value = 'Expédition';
-        noteInp.disabled = true;
-        noteInp.style.opacity = '0.5';
-      } else {
-        noteInp.value = '';
-        noteInp.disabled = false;
-        noteInp.style.opacity = '1';
-      }
+
+    prodCheckbox     = el('input', { type:'checkbox', id:'prod-check' });
+    sousTraitCheckbox = el('input', { type:'checkbox', id:'strait-check' });
+
+    prodCheckbox.addEventListener('change', () => {
+      if (prodCheckbox.checked) { sousTraitCheckbox.checked = false; prodDateField.style.display = ''; }
+      else { prodDateField.style.display = 'none'; }
     });
+    sousTraitCheckbox.addEventListener('change', () => {
+      if (sousTraitCheckbox.checked) { prodCheckbox.checked = false; prodDateField.style.display = 'none'; }
+    });
+
+    origineWrap = el('div', { cls:'modal-field' },
+      el('label', { cls:'field-label' }, 'Origine'),
+      el('div', { cls:'mvt-origin-group' },
+        el('label', { cls:'mvt-origin-label' }, prodCheckbox, 'Production'),
+        el('label', { cls:'mvt-origin-label' }, sousTraitCheckbox, 'Sous-traitance')
+      ),
+      prodDateField
+    );
+  }
+
+  // ── Expédition (sortie uniquement) ──────────────────────────────
+  let expCheckbox = null, expWrap = null;
+  if (type === 'sortie') {
+    expCheckbox = el('input', { type:'checkbox', id:'expedition-check' });
+    expWrap = el('div', { cls:'modal-field' },
+      el('label', { cls:'field-label' }, 'Livraison'),
+      el('div', { cls:'mvt-origin-group' },
+        el('label', { cls:'mvt-origin-label' }, expCheckbox, 'Expédition')
+      )
+    );
   }
 
   const confirmBtn = el('button', { cls:'btn-confirm '+type, on:{ click: async () => {
@@ -1549,11 +1614,26 @@ function buildMvtModal() {
     const empl = emplInp.value.trim().toUpperCase();
     if (!empl) { showToast('Emplacement requis','error'); return; }
     if (!qte||qte<=0) { showToast('Quantité requise','error'); return; }
-    const finalNote = (expCheckbox && expCheckbox.checked) ? 'Expédition' : noteInp.value.trim();
+
+    // Préfixe selon case cochée
+    let prefix = '';
+    if (type === 'entree') {
+      if (prodCheckbox && prodCheckbox.checked) {
+        const dp = prodDateInp && prodDateInp.value ? prodDateInp.value : '';
+        prefix = dp ? 'Production | ' + dp : 'Production';
+      } else if (sousTraitCheckbox && sousTraitCheckbox.checked) {
+        prefix = 'Sous-traitance';
+      }
+    } else if (type === 'sortie' && expCheckbox && expCheckbox.checked) {
+      prefix = 'Expédition';
+    }
+    const userNote = noteInp.value.trim();
+    const finalNote = [prefix, userNote].filter(Boolean).join(' | ');
+
     await submitMouvement({ produit_id, emplacement:empl, type_mouvement:S.modalType, quantite:qte, date_entree:dateInp.value||today, note:finalNote });
   }}}, type==='entree'?'Valider entrée':type==='sortie'?'Valider sortie':'Valider inventaire');
 
-  sheet.append(
+  sheet.append(...[
     el('span',{cls:'modal-handle'}),
     el('div',{cls:'modal-title'}, '📦 '+ref),
     el('div',{cls:'modal-sub'}, 'Mouvement de stock'),
@@ -1561,13 +1641,14 @@ function buildMvtModal() {
     el('div',{cls:'modal-field'}, el('label',{cls:'field-label'},'Emplacement'), emplInp, suggWrap),
     el('div',{cls:'modal-field'}, el('label',{cls:'field-label'},'Quantité'), qteInp),
     dateField,
+    origineWrap,
     expWrap,
     el('div',{cls:'modal-field'}, el('label',{cls:'field-label'},'Commentaire (optionnel)'), noteInp),
     el('div',{cls:'modal-actions'},
       el('button',{cls:'btn-cancel', on:{click:()=>{S.modalMvt=null;overlay.remove();}}},'Annuler'),
       confirmBtn
     )
-  );
+  ].filter(Boolean));
   overlay.appendChild(sheet);
   return overlay;
 }
@@ -2249,8 +2330,27 @@ function buildTraca() {
 }
 
 function buildInventaire() {
+  const isSuperAdmin = S.user && S.user.role === 'superadmin';
+
+  // Utilisateurs non-superadmin : page "en cours de développement"
+  if (!isSuperAdmin) {
+    return el('div',{cls:'content'},
+      el('div',{cls:'card'},
+        el('div',{cls:'wip-page'},
+          el('div',{cls:'wip-page-icon'},'🚧'),
+          el('div',{cls:'wip-page-title'},'En cours de développement'),
+          el('div',{cls:'wip-page-sub'},"Cette fonctionnalité sera bientôt disponible.")
+        )
+      )
+    );
+  }
+
+  // Superadmin : bannière avertissement + contenu normal
   const list = S.inventaireList||[];
   return el('div',{cls:'content'},
+    el('div',{cls:'wip-admin-banner'},
+      '⚠️ Attention — cet onglet est en cours de développement pour les autres utilisateurs.'
+    ),
     el('div',{cls:'card',style:{marginBottom:'12px'}},
       el('div',{cls:'card-header'},
         el('div',{cls:'card-title'},'⚠ À inventorier ('+list.length+')'),
@@ -2846,10 +2946,24 @@ function render() {
             { tab:'reception', icon:'inbox', label:'Réception matière' },
             { tab:'traca', icon:'printer', label:'Étiquettes traça' },
           ]
-      ).map(n => el('button', { cls:'nav-btn'+(S.tab===n.tab?' active':''), 'data-tab':n.tab, on:{ click:()=>goToTab(n.tab) } },
-        iconEl(n.icon,16),
-        el('span', null, ' ' + n.label)
-      ))
+      ).map(n => {
+        const isSuperAdmin = S.user && S.user.role === 'superadmin';
+        const wipBadge = n.tab === 'inventaire'
+          ? el('button', { cls:'nav-wip-badge', type:'button', title:'En cours de développement', on:{ click: e => {
+              e.stopPropagation();
+              if (!isSuperAdmin) {
+                showToast('🚧 En cours de développement', 'warn');
+              } else {
+                showToast('⚠️ Cet onglet est en cours de développement pour les autres utilisateurs', 'warn');
+              }
+            }}}, '🚧')
+          : null;
+        return el('button', { cls:'nav-btn'+(S.tab===n.tab?' active':''), 'data-tab':n.tab, on:{ click:()=>goToTab(n.tab) } },
+          iconEl(n.icon,16),
+          el('span', null, ' ' + n.label),
+          wipBadge
+        );
+      })
     ),
     el('div', { cls:'sidebar-bottom' },
       el('button', { cls:'nav-btn nav-btn--mysifa-portal', on:{ click:()=>{ window.location.href='/'; } } },
