@@ -1,0 +1,52 @@
+{
+  "name": "myprod-widget",
+  "version": "1.0.0",
+  "description": "Widget de bureau MySifa - Statut machines Cohésio",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac"
+  },
+  "keywords": ["mysifa", "production", "widget", "industrie"],
+  "author": "SIFA",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.0"
+  },
+  "build": {
+    "appId": "pro.sifa.myprod-widget",
+    "productName": "MyProd Widget",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer.js",
+      "assets/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.utilities",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        }
+      ]
+    },
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "MyProd-Widget-${version}.exe"
+    }
+  }
+}
