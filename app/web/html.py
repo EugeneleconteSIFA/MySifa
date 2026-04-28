@@ -4046,7 +4046,6 @@ function updateMachineStatusDOM(){
         if(dos.designation)html+='<div class="mst-dos-des">'+escapeHtml(dos.designation)+'</div>';
         html+='</div>';
       }
-      if(m&&m.debug)html+='<div style="margin-top:8px;padding:8px;background:rgba(0,0,0,.18);border-radius:6px;font-size:10px;font-family:monospace;color:#94a3b8;line-height:1.6;white-space:pre-wrap">'+escapeHtml(JSON.stringify(m.debug,null,2))+'</div>';
       body.innerHTML=html;
     }
   });
@@ -5347,9 +5346,6 @@ function renderMachineStatusCards(){
           h('div',{className:'mst-dos-ref'},'Dossier #',dos.no_dossier),
           dos.client?h('div',{className:'mst-dos-cli'},dos.client):null,
           dos.designation?h('div',{className:'mst-dos-des'},dos.designation):null
-        ):null,
-        m&&m.debug?h('div',{style:{marginTop:'8px',padding:'8px',background:'rgba(0,0,0,.18)',borderRadius:'6px',fontSize:'10px',fontFamily:'monospace',color:'#94a3b8',lineHeight:'1.6',whiteSpace:'pre-wrap'}},
-          JSON.stringify(m.debug,null,2)
         ):null,
         !ms?h('div',{style:{fontSize:'11px',color:'var(--muted)'}},'Chargement…'):null
       )

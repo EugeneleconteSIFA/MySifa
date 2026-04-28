@@ -97,64 +97,37 @@ def _derive_status(rows_today: list) -> tuple:
     op_label = OPERATION_SEVERITY.get(code, {}).get('label', f'Op {code}')
     return 'autre', op_label, last_dos_row
 
-def _compute_duree_debug(status_key: str, rows_today: list, now: _dt_cls) -> dict:
+def _compute_duree_min(status_key: str, rows_today: list, now: _dt_cls) -> Optional[int]:
     """
-    Retourne un dict de debug avec duree_min + toutes les infos de calcul.
+    Calcule la durée (en minutes) du statut courant.
+    Production : depuis le début de la séquence prod/arrêt en cours
+    (les arrêts sont transparents). Autres statuts : depuis la dernière saisie.
     """
     if not rows_today:
-        return {'duree_min': None, 'debug': {'raison': 'aucune saisie'}}
+        return None
 
     if status_key == 'production':
         earliest_prod = None
-        scan = []
         for r in reversed(rows_today):
             c   = r.get('operation_code') or ''
             cat = (r.get('operation_category') or '').lower()
-            entry = {'code': c, 'cat': cat, 'date': r.get('date_operation',''), 'action': ''}
             if c in _CODES_PRODUCTION:
                 earliest_prod = r
-                entry['action'] = 'ancre candidate (prod)'
             elif c in _CODES_ARRET or cat == 'arret':
-                entry['action'] = 'transparent (arrêt)'
+                pass
             else:
-                entry['action'] = 'STOP'
-                scan.append(entry)
                 break
-            scan.append(entry)
         if earliest_prod is None:
             earliest_prod = rows_today[-1]
         ts = _parse_date_op(earliest_prod.get('date_operation') or '')
-        duree = max(0, int((now - ts).total_seconds() // 60)) if ts else None
-        return {
-            'duree_min': duree,
-            'debug': {
-                'mode': 'production',
-                'ancre_code': earliest_prod.get('operation_code'),
-                'ancre_date': earliest_prod.get('date_operation'),
-                'ancre_ts_parsé': ts.strftime('%H:%M:%S') if ts else None,
-                'now': now.strftime('%H:%M:%S'),
-                'duree_min_calculée': duree,
-                'scan': scan[:10],
-            }
-        }
+        if ts is None:
+            return None
+        return max(0, int((now - ts).total_seconds() // 60))
 
-    # Autres statuts
-    last = rows_today[-1]
-    last_ts = _parse_date_op(last.get('date_operation') or '')
-    duree = max(0, int((now - last_ts).total_seconds() // 60)) if last_ts else None
-    return {
-        'duree_min': duree,
-        'debug': {
-            'mode': status_key,
-            'derniere_saisie_code': last.get('operation_code'),
-            'derniere_saisie_date': last.get('date_operation'),
-            'derniere_saisie_ts_parsé': last_ts.strftime('%H:%M:%S') if last_ts else None,
-            'now': now.strftime('%H:%M:%S'),
-            'duree_min_calculée': duree,
-            'nb_saisies_total': len(rows_today),
-            'ordre_saisies': [{'code': r.get('operation_code'), 'date': r.get('date_operation')} for r in rows_today[-5:]],
-        }
-    }
+    last_ts = _parse_date_op(rows_today[-1].get('date_operation') or '')
+    if last_ts is None:
+        return None
+    return max(0, int((now - last_ts).total_seconds() // 60))
 
 
 @router.get("/api/production/machine-status")
@@ -216,16 +189,13 @@ def machine_status(request: Request):
         if ' - ' in operateur:
             operateur = operateur.split(' - ', 1)[1].strip()
 
-        duree_data = _compute_duree_debug(status_key, rows_m, now)
-
         result[mkey] = {
             'nom':          machine_names[mkey],
             'statut_key':   status_key,
             'statut_label': status_label,
             'operateur':    operateur,
             'dossier':      dossier,
-            'duree_min':    duree_data['duree_min'],
-            'debug':        duree_data['debug'],
+            'duree_min':    _compute_duree_min(status_key, rows_m, now),
         }
 
     return result
