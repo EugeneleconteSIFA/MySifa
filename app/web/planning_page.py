@@ -1162,8 +1162,6 @@ function mkRow(e,i,slots){
   const of=escAttr(e.numero_of||e.reference||"—");
   const rfp=escAttr(e.ref_produit||"")||"—";
   const lz=e.laize!=null&&e.laize!==""?escAttr(String(e.laize)):"—";
-  const isActive = S.activeDossier && S.activeDossier.id === e.id;
-  const activeBorder = isActive ? "animation:activePulse 1.5s infinite;box-shadow:0 0 0 2px #000,0 0 10px rgba(0,0,0,.5);" : "";
   const statutCell=(isLocked||!CAN_EDIT)
     ? `<span class="st ${sc}">${sc==="run"?'<span style="width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite;display:inline-block"></span>':""}${sl} 🔒</span>`
     : `<select class="statut-select" data-eid="${e.id}">
@@ -1173,7 +1171,7 @@ function mkRow(e,i,slots){
        </select>`;
   return`<div class="tr" draggable="true" data-eid="${e.id}" data-idx="${i}" ${isAnchor?'data-scroll-anchor="1"':''}
     data-statut="${escAttr(e.statut||'attente')}"
-    style="animation:slideIn .3s ease ${i*.03}s both,activePulse 1.5s infinite paused;${i===0?`border-left:3px solid ${co}`:"border-left:3px solid transparent"};${isLocked?"cursor:not-allowed;opacity:.9":""}${activeBorder}">
+    style="animation:slideIn .3s ease ${i*.03}s both;${i===0?`border-left:3px solid ${co}`:"border-left:3px solid transparent"};${isLocked?"cursor:not-allowed;opacity:.9":""}">
     <span class="dh-handle">⠿</span>
     <span class="cell-mini">${i+1}</span>
     <div><div class="cd" style="background:${co}"></div></div>
