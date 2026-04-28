@@ -473,6 +473,20 @@ def _migrate(conn):
         "CREATE INDEX IF NOT EXISTS idx_pdw_lookup ON planning_day_worked(machine_id, date)"
     )
 
+    if "planning_day_horaires" not in existing_tables:
+        conn.execute("""CREATE TABLE planning_day_horaires (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            machine_id INTEGER NOT NULL,
+            date TEXT NOT NULL,              -- YYYY-MM-DD
+            heure_debut REAL NOT NULL,       -- fraction décimale (ex: 5.0 = 5h)
+            heure_fin   REAL NOT NULL,       -- fraction décimale (ex: 13.0 = 13h)
+            UNIQUE(machine_id, date),
+            FOREIGN KEY (machine_id) REFERENCES machines(id)
+        )""")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_pdh_lookup ON planning_day_horaires(machine_id, date)"
+    )
+
     # Tables MyStock
     existing_tables = {row[0] for row in conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table'"

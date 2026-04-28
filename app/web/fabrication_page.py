@@ -1129,50 +1129,109 @@ async function tracaDeleteMatiere(id){
   }catch(e){ showToast(e.message,'danger'); }
 }
 
-function tracaStartCamera(){
-  if(!('BarcodeDetector' in window)){
-    showToast('Scanner non disponible — utilisez la saisie manuelle','danger');
-    return;
+async function tracaStartCamera(){
+  if(!navigator.mediaDevices?.getUserMedia){
+    showToast('Caméra non disponible (page non HTTPS ?)','danger'); return;
   }
   set({tracaScanning:true});
-  render(); // render first so video el exists
+  render(); // render d'abord pour que l'élément video existe
   const video = document.getElementById('tracaVideo');
   if(!video){ set({tracaScanning:false}); return; }
-  navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}})
-    .then(stream=>{
-      video.srcObject = stream;
-      S.tracaStream = stream;
-      video.play();
-      tracaScanLoop(video);
-    })
-    .catch(err=>{ set({tracaScanning:false}); showToast('Caméra inaccessible','danger'); });
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    video.srcObject = stream;
+    S.tracaStream = stream;
+    video.play();
+    tracaScanLoop(video, stream);
+  } catch(err) {
+    set({tracaScanning:false});
+    showToast('Caméra inaccessible','danger');
+  }
 }
 
 function tracaStopCamera(){
   if(S.tracaStream){ S.tracaStream.getTracks().forEach(t=>t.stop()); }
+  if(S.tracaBarcodeReader){ try{ S.tracaBarcodeReader.reset(); }catch(e){} S.tracaBarcodeReader=null; }
   set({tracaScanning:false, tracaStream:null});
 }
 
-async function tracaScanLoop(video){
-  const detector = new BarcodeDetector({formats:['code_128','ean_13','ean_8','qr_code','data_matrix','pdf417','code_39','code_93']});
+async function _loadZXingTraca() {
+  if(typeof ZXing !== 'undefined') return true;
+  return new Promise(res => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js';
+    s.onload = () => res(true); s.onerror = () => res(false);
+    document.head.appendChild(s);
+  });
+}
+
+async function tracaScanLoop(video, stream){
+  // Latence 1,5s — évite les scans parasites au démarrage
+  const SCAN_DELAY_MS = 1500;
+  const scanStartTime = Date.now();
+
+  const isAndroidDev = /Android/.test(navigator.userAgent);
+  const useNativeDetector = isAndroidDev && ('BarcodeDetector' in window);
+
   let lastCode = null; let lastTime = 0;
-  async function tick(){
-    if(!S.tracaScanning) return;
-    try{
-      const codes = await detector.detect(video);
-      if(codes.length>0){
-        const code = codes[0].rawValue;
-        const now = Date.now();
-        // Anti-dup : même code, même seconde → ignorer
-        if(code!==lastCode || now-lastTime>3000){
-          lastCode=code; lastTime=now;
-          await tracaSaveCode(code);
-        }
-      }
-    }catch(e){}
-    if(S.tracaScanning) requestAnimationFrame(tick);
+  const onTracaCode = async (code) => {
+    if(Date.now() - scanStartTime < SCAN_DELAY_MS) return; // latence démarrage
+    const now = Date.now();
+    // Anti-dup : même code dans les 3 dernières secondes → ignorer
+    if(code === lastCode && now - lastTime < 3000) return;
+    lastCode = code; lastTime = now;
+    await tracaSaveCode(code);
+  };
+
+  if(useNativeDetector) {
+    // ── Android : BarcodeDetector (codes 1D) + ZXing decodeFromStream (QR) ──
+    await _loadZXingTraca();
+    if(typeof ZXing !== 'undefined') {
+      const qrHints = new Map();
+      qrHints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.QR_CODE]);
+      qrHints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+      const qrReader = new ZXing.BrowserMultiFormatReader(qrHints);
+      S.tracaBarcodeReader = qrReader;
+      qrReader.decodeFromStream(stream, video, (result) => { if(result && S.tracaScanning) onTracaCode(result.getText()); });
+    }
+    const detector = new BarcodeDetector({formats:['code_128','ean_13','ean_8','qr_code','data_matrix','pdf417','code_39','code_93']});
+    async function tick(){
+      if(!S.tracaScanning) return;
+      try{
+        const codes = await detector.detect(video);
+        if(codes.length > 0) await onTracaCode(codes[0].rawValue);
+      }catch(e){}
+      if(S.tracaScanning) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+
+  } else {
+    // ── iOS + fallback : ZXing canvas loop tous formats ──────────────────────
+    const ok = await _loadZXingTraca();
+    if(!ok){ showToast('Scanner non disponible sur cet appareil','danger'); tracaStopCamera(); return; }
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d', {willReadFrequently:true});
+    const hints = new Map();
+    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.QR_CODE, ZXing.BarcodeFormat.DATA_MATRIX, ZXing.BarcodeFormat.CODE_39]);
+    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+    const reader = new ZXing.BrowserMultiFormatReader(hints);
+    S.tracaBarcodeReader = reader;
+    const loop = () => {
+      if(!S.tracaScanning) return;
+      if(video.readyState < 2 || !video.videoWidth){ setTimeout(loop, 100); return; }
+      try{
+        canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0);
+        const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const lum = new ZXing.RGBLuminanceSource(img.data, canvas.width, canvas.height);
+        const bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
+        const result = reader.decode(bmp);
+        if(result) { onTracaCode(result.getText()); }
+      }catch(e){}
+      if(S.tracaScanning) setTimeout(loop, 150);
+    };
+    setTimeout(loop, 500);
   }
-  requestAnimationFrame(tick);
 }
 
 function renderTracaPanel(){

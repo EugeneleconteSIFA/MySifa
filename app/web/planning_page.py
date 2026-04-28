@@ -258,7 +258,20 @@ body.light .slot .line1{color:#0f172a}body.light .slot .line2{color:#334155}
 
 .legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}
 .lg-i{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dim)}
-.lg-d{width:10px;height:10px;border-radius:3px}.lg-i span{font-family:var(--mono)}
+.lg-d{width:10px;height:10px;border-radius:3px;cursor:pointer;transition:transform .15s,box-shadow .15s;flex-shrink:0}
+.lg-d:hover{transform:scale(1.35);box-shadow:0 0 0 2px rgba(255,255,255,.35)}
+.lg-i span{font-family:var(--mono)}
+/* ── Color picker popup ── */
+.cpk{position:fixed;z-index:9999;background:var(--card);border:1px solid var(--border2);border-radius:12px;
+  padding:10px;box-shadow:0 8px 32px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:8px;min-width:180px}
+.cpk-title{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;padding:0 2px}
+.cpk-grid{display:grid;grid-template-columns:repeat(7,22px);gap:5px}
+.cpk-sw{width:22px;height:22px;border-radius:5px;border:2px solid transparent;cursor:pointer;transition:transform .12s,border-color .12s}
+.cpk-sw:hover{transform:scale(1.2);border-color:rgba(255,255,255,.5)}
+.cpk-sw.sel{border-color:#fff;transform:scale(1.15)}
+.cpk-reset{font-size:10px;color:var(--muted);background:transparent;border:1px solid var(--border2);border-radius:6px;
+  padding:4px 8px;cursor:pointer;text-align:center;font-family:inherit;transition:color .15s,border-color .15s}
+.cpk-reset:hover{color:var(--accent);border-color:var(--accent)}
 
 .th{display:grid;grid-template-columns:22px 22px 14px minmax(110px,1.3fr) minmax(70px,.85fr) minmax(80px,.9fr) minmax(70px,.85fr) minmax(50px,.55fr) minmax(80px,.8fr) 55px minmax(120px,1.1fr) minmax(90px,auto);
   gap:6px;padding:10px 10px;background:var(--bg-dark);border-radius:10px 10px 0 0;
@@ -393,6 +406,14 @@ let MID=__MACHINE_ID__;
 const DN=["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"];
 const MIND=2,MAXD=720;
 const CC=["#2563eb","#7c3aed","#059669","#d97706","#dc2626","#0891b2","#4f46e5","#65a30d","#c026d3","#ea580c"];
+// Palette étendue pour le picker de couleurs
+const PALETTE=[
+  "#ef4444","#f97316","#eab308","#22c55e","#10b981","#14b8a6",
+  "#06b6d4","#3b82f6","#6366f1","#8b5cf6","#a855f7","#ec4899",
+  "#f43f5e","#84cc16","#0ea5e9","#2563eb","#7c3aed","#059669",
+  "#d97706","#dc2626","#0891b2","#4f46e5","#c026d3","#ea580c",
+  "#64748b","#475569","#334155","#94a3b8","#cbd5e1","#e2e8f0",
+];
 const MACHINE_ORDER=["Cohésio 1","Cohésio 2","DSI","Repiquage"];
 const DEFAULTS_BY_KEY={
   "C1":{pair:{week:{s:5,e:20},fri:{s:7,e:19}},impair:{week:{s:5,e:20},fri:{s:7,e:19}}}, // Cohésio 1
@@ -405,7 +426,7 @@ const DEFAULTS_BY_KEY={
 };
 const DAY_API={1:"lundi",2:"mardi",3:"mercredi",4:"jeudi",5:"vendredi",6:"samedi"};
 const DAY_FIELD={1:"horaires_lundi",2:"horaires_mardi",3:"horaires_mercredi",4:"horaires_jeudi",5:"horaires_vendredi",6:"horaires_samedi"};
-let S={machine:null,machines:[],entries:[],timeline:[],wo:0,loading:true,holidays:{},dayWorked:{},view:localStorage.getItem("mysifa.planning.view")||"2w",
+let S={machine:null,machines:[],entries:[],timeline:[],wo:0,loading:true,holidays:{},dayWorked:{},dayHoraires:{},view:localStorage.getItem("mysifa.planning.view")||"2w",
   contactOpen:false,contactSubject:"",contactMessage:"",contactSending:false};
 let ME=null;
 let CAN_EDIT=false;
@@ -437,7 +458,7 @@ async function load(){
     }else{
       S.entries = [];
     }
-    await Promise.all([loadHolidays(),loadDayWorked()]);
+    await Promise.all([loadHolidays(),loadDayWorked(),loadDayHoraires()]);
     // Cohésio 2: les horaires alternent paire/impair → ne pas les "figer" en base.
   }catch(e){console.error(e)}
   S.loading=false;render();
@@ -451,6 +472,16 @@ async function loadDayWorked(){
   const map={};
   (rows||[]).forEach(r=>{map[String(r.date)]=!!(+r.is_worked);});
   S.dayWorked=map;
+}
+
+async function loadDayHoraires(){
+  const mon=addD(getMon(new Date()),S.wo*7);
+  const nb=S.view==="1w"?6:S.view==="4w"?27:13;
+  const start=ymd(mon), end=ymd(addD(mon,nb));
+  const rows=await api(`/machines/${MID}/day-horaires?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
+  const map={};
+  (rows||[]).forEach(r=>{ map[String(r.date)]={s:r.heure_debut, e:r.heure_fin}; });
+  S.dayHoraires=map;
 }
 
 async function loadHolidays(){
@@ -511,8 +542,49 @@ async function bootstrapCohesio2HoursFromDefaultsIfNeeded(){
 }
 
 function colorForId(id){
+  const custom=localStorage.getItem("mysifa.slot.color."+id);
+  if(custom) return custom;
   const n=(id*2654435761)>>>0;
   return CC[n%CC.length];
+}
+
+// ── Color picker ─────────────────────────────────────────────────
+let _cpkEl=null,_cpkEntryId=null;
+function openColorPicker(entryId,anchorEl){
+  closeColorPicker();
+  _cpkEntryId=entryId;
+  const cur=colorForId(entryId);
+  const div=document.createElement("div");
+  div.className="cpk";
+  div.innerHTML=`<div class="cpk-title">Couleur du dossier</div>
+<div class="cpk-grid">${PALETTE.map(c=>`<div class="cpk-sw${c===cur?" sel":""}" style="background:${c}" title="${c}" onclick="pickColor(${entryId},'${c}')"></div>`).join("")}</div>
+<button class="cpk-reset" onclick="pickColor(${entryId},null)">Réinitialiser</button>`;
+  document.body.appendChild(div);
+  _cpkEl=div;
+  // Positionner au-dessus/dessous de l'ancre
+  const rect=anchorEl.getBoundingClientRect();
+  const dw=div.offsetWidth||190,dh=div.offsetHeight||160;
+  let left=rect.left,top=rect.bottom+6;
+  if(left+dw>window.innerWidth-8) left=window.innerWidth-dw-8;
+  if(top+dh>window.innerHeight-8) top=rect.top-dh-6;
+  div.style.left=Math.max(8,left)+"px";
+  div.style.top=Math.max(8,top)+"px";
+  // Fermer au clic extérieur
+  setTimeout(()=>document.addEventListener("click",_cpkOutside,{once:true,capture:true}),0);
+}
+function _cpkOutside(e){
+  if(_cpkEl&&!_cpkEl.contains(e.target)) closeColorPicker();
+  else setTimeout(()=>document.addEventListener("click",_cpkOutside,{once:true,capture:true}),0);
+}
+function closeColorPicker(){
+  if(_cpkEl){_cpkEl.remove();_cpkEl=null;}
+  document.removeEventListener("click",_cpkOutside,{capture:true});
+}
+function pickColor(entryId,color){
+  if(color) localStorage.setItem("mysifa.slot.color."+entryId,color);
+  else localStorage.removeItem("mysifa.slot.color."+entryId);
+  closeColorPicker();
+  load(); // redessine la timeline + légende
 }
 
 const pad=n=>String(n).padStart(2,"0");
@@ -632,8 +704,12 @@ function isWeekPair(d){
   const w=wkNum(d);
   return (w%2)===0;
 }
-function getWhForDate(di,dateObj){
-  // Priorité: horaires "hebdo" stockés en base pour cette machine (si non vides)
+function getWhForDate(di,dateObj,ds){
+  // Priorité 1 : override ponctuel par date (planning_day_horaires)
+  if(ds && S.dayHoraires && S.dayHoraires[ds]){
+    return S.dayHoraires[ds];
+  }
+  // Priorité 2 : horaires hebdo stockés en base pour cette machine (si non vides)
   const m=S.machine,key=DAY_FIELD[di];
   const raw=m&&m[key]!=null?String(m[key]):"";
   if(raw && raw.trim()){
@@ -833,7 +909,7 @@ function render(){
       </div>
       <div style="font-size:11px;color:var(--muted);margin:-8px 0 12px">Samedi non travaillé par défaut — décochez pour l'activer.</div>
       ${tlBlocks}
-      <div class="legend">${sl.slice(0,8).map(s=>{const co=colorForId(s.entry_id||0);const lb=escAttr(s.client||s.numero_of||s.reference||"—");return`<div class="lg-i"><div class="lg-d" style="background:${co}"></div><span>${lb}</span></div>`;}).join("")}</div>
+      <div class="legend" id="tl-legend"></div>
     </section>
     ${SHOW_DOSSIERS?`<section class="sec">
       <div class="sec-hdr">
@@ -848,7 +924,35 @@ function render(){
   ${renderContactModal()}</div></main></div><div id="mroot"></div>`;
   setupDD();
   setupStatutSelects();
+  buildLegend(sl, m1, nw);
   if(SHOW_DOSSIERS)autoScrollDossiersIfNeeded();
+}
+
+function buildLegend(sl, m1, nw){
+  const lgEl=document.getElementById("tl-legend");
+  if(!lgEl) return;
+  // Fenêtre de temps affichée
+  const viewStart=m1, viewEnd=addD(m1, nw*7);
+  // Slots visibles dans la fenêtre (en dédupliquant par entry_id)
+  const seen=new Set();
+  const visible=[];
+  (sl||[]).forEach(s=>{
+    const ss=new Date(s.start), se=new Date(s.end);
+    if(ss<viewEnd && se>viewStart && !seen.has(s.entry_id)){
+      seen.add(s.entry_id);
+      visible.push(s);
+    }
+  });
+  if(!visible.length){ lgEl.innerHTML=""; return; }
+  lgEl.innerHTML=visible.map(s=>{
+    const co=colorForId(s.entry_id||0);
+    const lb=escAttr(s.client||s.numero_of||s.reference||"—");
+    return`<div class="lg-i">
+      <div class="lg-d" style="background:${co}" title="Changer la couleur"
+        onclick="openColorPicker(${s.entry_id},this);event.stopPropagation()"></div>
+      <span>${lb}</span>
+    </div>`;
+  }).join("");
 }
 
 function autoScrollDossiersIfNeeded(){
@@ -899,7 +1003,7 @@ function mkTL(mon,slots){
     if(di===0)continue;
     const ds=ymd(d);
     const isSat=di===6;
-    const w=getWhForDate(di,d);
+    const w=getWhForDate(di,d,ds);
     if(!w)continue;
     const off=isSat?!S.dayWorked[ds]:!!S.holidays[ds];
     const dayT=off?0:(w.e-w.s);
@@ -938,7 +1042,7 @@ function mkTL(mon,slots){
     h+=`<div class="dh-cell ${td?"today":""} ${sa?"sat":""}" style="flex:${d.flex};opacity:${off?0.45:1}">
       <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
         <div>${DN[d.di]} ${fd(d.date)}</div>
-        ${d.off?`<small>${d.hourLbl}</small>`:(CAN_EDIT?`<button type="button" class="dh-hours-btn" onclick="openHorairesModal(${d.di})">${escAttr(d.hourLbl)}</button>`:`<small>${escAttr(d.hourLbl)}</small>`)}
+        ${d.off?`<small>${d.hourLbl}</small>`:(CAN_EDIT?`<button type="button" class="dh-hours-btn" onclick="openHorairesModal('${d.ds}',${d.di})">${escAttr(d.hourLbl)}</button>`:`<small>${escAttr(d.hourLbl)}</small>`)}
         <label style="display:flex;align-items:center;gap:6px;font-size:10px;opacity:.85;cursor:pointer;white-space:nowrap">
           <input type="checkbox" ${d.nonTravail?"checked":""} ${CAN_EDIT?"":"disabled"} onchange="setDayNonTravail('${d.ds}',${d.isSat},this.checked)"> non travaillé
         </label>
@@ -1110,12 +1214,19 @@ function hideNowTip(){if(nowTipEl){nowTipEl.remove();nowTipEl=null}}
 // ── Drag & Drop ──
 function setupDD(){
   if(!CAN_EDIT) return;
-  const rows=document.querySelectorAll(".tr[draggable]");let di=null;
+  const rows=document.querySelectorAll(".tr[draggable]");
+  let di=null;
   let overEl=null, overPos=null;
+  // _dropIdx : index d'insertion EXACT dans le tableau original, calculé au moment
+  // où la barre bleue est dessinée. C'est cette valeur (et elle seule) qui est
+  // utilisée dans le drop — on ne recalcule jamais depuis la position de la souris.
+  let _dropIdx=null;
+
   function clearOver(){
     if(overEl){overEl.classList.remove("drop-before","drop-after");}
-    overEl=null;overPos=null;
+    overEl=null; overPos=null; _dropIdx=null;
   }
+
   rows.forEach(r=>{
     const st=(r.dataset.statut||"").toLowerCase();
     const locked=(st==="en_cours"||st==="termine");
@@ -1128,41 +1239,42 @@ function setupDD(){
       e.preventDefault();
       r.classList.add("dov");
       const rect=r.getBoundingClientRect();
-      const before = (e.clientY - rect.top) < rect.height/2;
-      if(overEl!==r || overPos!==(before?"before":"after")){
+      const before=(e.clientY - rect.top) < rect.height/2;
+      const pos=before?"before":"after";
+      if(overEl!==r || overPos!==pos){
         clearOver();
-        overEl=r;overPos=before?"before":"after";
+        overEl=r; overPos=pos;
         r.classList.add(before?"drop-before":"drop-after");
+        // Mémoriser l'index d'insertion exact dès maintenant,
+        // pendant que l'on sait où est la barre bleue.
+        const idx=+r.dataset.idx;
+        _dropIdx = before ? idx : idx+1;
       }
     });
     r.addEventListener("dragleave",()=>{
       r.classList.remove("dov");
       // Ne pas clearOver ici : le navigateur peut déclencher dragleave juste avant drop,
-      // et on perdrait l'information "avant/après" (trait bleu).
+      // et on perdrait la position de la barre bleue (_dropIdx).
     });
     r.addEventListener("drop", async (e)=>{
       e.preventDefault();
       r.classList.remove("dov");
-      const tgt = overEl || r;
-      const ti = +(tgt.dataset.idx||r.dataset.idx||"0");
-      if(di===null){ clearOver(); return; }
-      if(di===ti){ clearOver(); return; }
-      const ids = S.entries.map(e=>e.id);
-      const [m] = ids.splice(di, 1);
-      let insertAt = ti;
-      // Se fier EXACTEMENT au trait bleu (overPos) calculé au dragover.
-      const after = (tgt===overEl && overPos==="after");
-      if(after) insertAt = ti + 1;
-      if(di < insertAt) insertAt -= 1;
-      ids.splice(insertAt, 0, m);
+      // Utiliser _dropIdx tel quel — il reflète exactement la barre bleue.
+      if(di===null || _dropIdx===null){ clearOver(); return; }
+      const ids=S.entries.map(e=>e.id);
+      const [m]=ids.splice(di,1);
+      // Ajuster _dropIdx pour tenir compte du décalage après suppression de di.
+      let insertAt = _dropIdx > di ? _dropIdx-1 : _dropIdx;
+      insertAt=Math.max(0,Math.min(insertAt,ids.length));
+      ids.splice(insertAt,0,m);
       clearOver();
-      const savedScroll = document.querySelector(".main")?.scrollTop ?? 0;
-      _suppressAutoScroll = true;
+      const savedScroll=document.querySelector(".main")?.scrollTop??0;
+      _suppressAutoScroll=true;
       try{
         await api(`/machines/${MID}/reorder`,{method:"POST",body:JSON.stringify({entry_ids:ids})});
       }finally{
         await load();
-        _suppressAutoScroll = false;
+        _suppressAutoScroll=false;
         requestAnimationFrame(()=>requestAnimationFrame(()=>{
           const main=document.querySelector(".main");
           if(main) main.scrollTop=savedScroll;
@@ -1174,8 +1286,8 @@ function setupDD(){
       di=null;
       clearOver();
       rows.forEach(x=>x.classList.remove("dov"));
-    })
-  })
+    });
+  });
 }
 
 function setupStatutSelects(){
@@ -1337,34 +1449,52 @@ function setView(v){
   load();
 }
 
-function openHorairesModal(di){
+function openHorairesModal(ds, di){
   if(!CAN_EDIT) return;
-  if(!S.machine)return;
-  const {s,e}=getWhForDate(di,new Date());
-  const dn={1:"Lundi",2:"Mardi",3:"Mercredi",4:"Jeudi",5:"Vendredi",6:"Samedi"}[di]||"Jour";
+  if(!S.machine) return;
+  // Lire les horaires actuels pour cette date (override ou hebdo)
+  const dateObj = ds ? new Date(ds) : new Date();
+  const {s,e} = getWhForDate(di, dateObj, ds);
+  const dn = {1:"Lundi",2:"Mardi",3:"Mercredi",4:"Jeudi",5:"Vendredi",6:"Samedi"}[di]||"Jour";
+  // Afficher la date lisible
+  const dateLabel = ds ? new Date(ds+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'}) : dn;
+  const hasOverride = !!(ds && S.dayHoraires && S.dayHoraires[ds]);
   document.getElementById("mroot").innerHTML=modalHTML(
-    `Plage horaire — ${dn}`,
-    `<p style="font-size:12px;color:var(--muted);margin:-8px 0 16px">Modèle hebdo pour cette machine (tous les ${dn.toLowerCase()}s).</p>
+    `Plage horaire — ${dateLabel}`,
+    `<p style="font-size:12px;color:var(--muted);margin:-8px 0 16px">
+      Horaire pour ce jour uniquement${hasOverride?' <span style="color:var(--accent);font-weight:700">· Override actif</span>':''}.
+    </p>
     <div class="fd"><label>Début (HH:MM)</label><input type="text" inputmode="numeric" placeholder="07:00" id="f-h-start" value="${fracToTimeInput(s)}"></div>
-    <div class="fd"><label>Fin de journée (HH:MM)</label><input type="text" inputmode="numeric" placeholder="19:00" id="f-h-end" value="${fracToTimeInput(e)}"></div>`,
+    <div class="fd"><label>Fin de journée (HH:MM)</label><input type="text" inputmode="numeric" placeholder="19:00" id="f-h-end" value="${fracToTimeInput(e)}"></div>
+    ${hasOverride?`<div style="margin-top:10px;text-align:right"><button type="button" class="btn-s" style="color:var(--danger);border-color:var(--danger)" onclick="resetHorairesDate('${ds}')">Réinitialiser au modèle hebdo</button></div>`:''}`,
     "Enregistrer",
-    `submitHoraires(${di})`
+    `submitHoraires('${ds}')`
   );
 }
-async function submitHoraires(di){
+async function submitHoraires(ds){
   if(!CAN_EDIT) return;
   const st=(document.getElementById("f-h-start").value||"").trim();
   const en=(document.getElementById("f-h-end").value||"").trim();
-  if(!st||!en)return void alert("Indiquez début et fin.");
-  if(!isHHMM(st)||!isHHMM(en))return void alert("Format attendu : HH:MM (24h). Exemple : 07:00");
+  if(!st||!en) return void alert("Indiquez début et fin.");
+  if(!isHHMM(st)||!isHHMM(en)) return void alert("Format attendu : HH:MM (24h). Exemple : 07:00");
+  // Convertir HH:MM → fraction décimale
+  const toFrac = hhmm => { const [h,m]=hhmm.split(":").map(Number); return h+m/60; };
+  const hd = toFrac(st), hf = toFrac(en);
+  if(hf <= hd) return void alert("L'heure de fin doit être après le début.");
   try{
-    await api(`/machines/${MID}/horaires`,{method:"PUT",body:JSON.stringify({day:DAY_API[di],start:st,end:en})});
-    closeM();load();
+    await api(`/machines/${MID}/day-horaires`,{method:"PUT",body:JSON.stringify({date:ds,heure_debut:hd,heure_fin:hf})});
+    closeM(); load();
   }catch(err){
     let msg="Modification impossible.";
     try{const j=await err.json();if(j&&j.detail)msg=typeof j.detail==="string"?j.detail:JSON.stringify(j.detail);}catch(x){}
     alert(msg);
   }
+}
+async function resetHorairesDate(ds){
+  try{
+    await api(`/machines/${MID}/day-horaires`,{method:"PUT",body:JSON.stringify({date:ds,heure_debut:null})});
+    closeM(); load();
+  }catch(err){ alert("Impossible de réinitialiser."); }
 }
 
 function openDefaultsModal(){

@@ -752,6 +752,9 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
                        WHERE id=? AND machine_id=?""",
                     (float(duree), now, pe, entry_id, machine_id),
                 )
+                # Invalider les créneaux "attente" suivants pour qu'ils soient
+                # recalculés depuis le nouveau planned_end du dossier en cours.
+                _invalidate_attente_plans(conn, machine_id)
                 conn.commit()
                 return {"success": True, "partial": "duree_heures"}
             raise HTTPException(400, "Ce dossier est verrouillé — statut en cours ou terminé")
@@ -1232,6 +1235,66 @@ async def set_holiday(machine_id: int, request: Request):
             (machine_id, date, is_off, label),
         )
         _invalidate_attente_plans(conn, machine_id)
+        conn.commit()
+    return {"success": True}
+
+
+# ═══════════════════════════════════════════════════════════════
+# HORAIRES PAR DATE (override ponctuel)
+# ═══════════════════════════════════════════════════════════════
+
+@router.get("/machines/{machine_id}/day-horaires")
+def list_day_horaires(machine_id: int, request: Request, start: str, end: str):
+    """Retourne les overrides d'horaires sur une plage YYYY-MM-DD."""
+    require_planning_view(request)
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT date, heure_debut, heure_fin FROM planning_day_horaires
+               WHERE machine_id=? AND date>=? AND date<=?
+               ORDER BY date""",
+            (machine_id, start, end),
+        ).fetchall()
+    return [{"date": r["date"], "heure_debut": r["heure_debut"], "heure_fin": r["heure_fin"]} for r in rows]
+
+
+@router.put("/machines/{machine_id}/day-horaires")
+async def set_day_horaires(machine_id: int, request: Request):
+    """Enregistre ou met à jour l'horaire pour une date précise.
+    Body: {date:'YYYY-MM-DD', heure_debut: 5.0, heure_fin: 13.0}
+    Passer heure_debut==null supprime l'override.
+    """
+    require_admin(request)
+    body = await request.json()
+    date = (body.get("date") or "").strip()
+    if not date:
+        raise HTTPException(400, "date requise (YYYY-MM-DD)")
+
+    # Suppression de l'override
+    if body.get("heure_debut") is None:
+        with get_db() as conn:
+            conn.execute(
+                "DELETE FROM planning_day_horaires WHERE machine_id=? AND date=?",
+                (machine_id, date),
+            )
+            conn.commit()
+        return {"success": True, "deleted": True}
+
+    try:
+        hd = float(body["heure_debut"])
+        hf = float(body["heure_fin"])
+    except (TypeError, ValueError, KeyError):
+        raise HTTPException(400, "heure_debut et heure_fin doivent être des nombres")
+    if not (0 <= hd < hf <= 24):
+        raise HTTPException(400, "Plage invalide : 0 ≤ début < fin ≤ 24")
+
+    with get_db() as conn:
+        conn.execute(
+            """INSERT INTO planning_day_horaires (machine_id, date, heure_debut, heure_fin)
+               VALUES (?,?,?,?)
+               ON CONFLICT(machine_id, date)
+               DO UPDATE SET heure_debut=excluded.heure_debut, heure_fin=excluded.heure_fin""",
+            (machine_id, date, hd, hf),
+        )
         conn.commit()
     return {"success": True}
 

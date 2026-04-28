@@ -1289,9 +1289,16 @@ async function startCamera() {
 
     const useNativeDetector = isAndroid && ('BarcodeDetector' in window);
 
+    // Délai de latence avant activation — évite les scans parasites au démarrage
+    const SCAN_DELAY_MS = 1500;
+    const scanStartTime = Date.now();
+    resultEl.textContent = 'Positionnez-vous devant le code…';
+    setTimeout(() => { if (S.scanning) resultEl.textContent = 'En attente…'; }, SCAN_DELAY_MS);
+
     // Arrêt immédiat dès détection — évite tout callback supplémentaire
     let searchDetected = false;
     const onSearchCode = (text) => {
+      if (Date.now() - scanStartTime < SCAN_DELAY_MS) return;
       if (searchDetected) return;
       searchDetected = true;
       S.scanning = false;
@@ -2608,10 +2615,17 @@ async function recepStartCamera() {
     // iOS + fallback Android → ZXing (BarcodeDetector absent sur Safari)
     const useNativeDetector = isAndroid && ('BarcodeDetector' in window);
 
+    // Délai de latence avant activation — évite les scans parasites au démarrage
+    const RECEP_SCAN_DELAY_MS = 1500;
+    const recepScanStartTime = Date.now();
+    resultEl.textContent = 'Positionnez-vous devant le code…';
+    setTimeout(() => { if (S.recepScanning) resultEl.textContent = 'En attente…'; }, RECEP_SCAN_DELAY_MS);
+
     // Callback partagé — arrêt IMMÉDIAT des deux moteurs dès détection
     // (évite que ZXing continue d'appeler le callback pendant le délai d'animation)
     let recepDetected = false;
     const onRecepCode = (code) => {
+      if (Date.now() - recepScanStartTime < RECEP_SCAN_DELAY_MS) return;
       if (recepDetected) return;
       recepDetected = true;
       // Stopper tout immédiatement — plus aucun callback possible après ça

@@ -1752,52 +1752,37 @@ async function loadZXing() {
 
 async function startCameraSearch() {
   if (stockSearchState.scanning) return;
-  try {
-    if (typeof ZXing === 'undefined') {
-      toast('Chargement du scanner...', 'warn');
-      await loadZXing();
-    }
-  } catch (e) {
-    toast('Impossible de charger le scanner', 'error');
-    return;
-  }
+  if (!navigator.mediaDevices?.getUserMedia) { toast('Caméra non disponible (page non HTTPS ?)', 'error'); return; }
 
   stockSearchState.scanning = true;
   renderStockSearchBar();
 
+  // ── Construction de l'overlay (synchrone, geste utilisateur encore actif) ──
   const modal = document.createElement('div');
   modal.className = 'camera-modal';
-
   const videoWrap = document.createElement('div');
   videoWrap.className = 'camera-video-wrap';
-
   const video = document.createElement('video');
   video.className = 'camera-video';
   video.autoplay = true;
   video.playsInline = true;
-
   const overlay = document.createElement('div');
   overlay.className = 'camera-overlay';
   const frame = document.createElement('div');
   frame.className = 'camera-frame';
   overlay.appendChild(frame);
-
   videoWrap.appendChild(video);
   videoWrap.appendChild(overlay);
-
   const hint = document.createElement('p');
   hint.className = 'camera-hint';
   hint.textContent = 'Pointez la caméra vers un code — emplacement (A121) ou référence produit';
-
   const resultEl = document.createElement('div');
   resultEl.className = 'camera-result';
   resultEl.textContent = 'En attente de scan...';
-
   const closeBtn = document.createElement('button');
   closeBtn.className = 'camera-close';
   closeBtn.textContent = '✕ Fermer';
   closeBtn.onclick = () => stopCamera(modal);
-
   modal.appendChild(videoWrap);
   modal.appendChild(hint);
   modal.appendChild(resultEl);
@@ -1805,35 +1790,90 @@ async function startCameraSearch() {
   document.body.appendChild(modal);
 
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
-    });
+    // getUserMedia en PREMIER (avant tout await long) — Android exige que la demande
+    // de permission intervienne dans le même tick que le geste utilisateur
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
     stockSearchState.cameraStream = stream;
     video.srcObject = stream;
 
-    const hints = new Map();
-    const formats = [
-      ZXing.BarcodeFormat.CODE_128,
-      ZXing.BarcodeFormat.EAN_13,
-      ZXing.BarcodeFormat.EAN_8,
-      ZXing.BarcodeFormat.QR_CODE,
-      ZXing.BarcodeFormat.DATA_MATRIX,
-    ];
-    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
-    const reader = new ZXing.BrowserMultiFormatReader(hints);
-    stockSearchState.barcodeReader = reader;
+    // ── Latence 1,5s — évite les scans parasites au démarrage ──────────────────
+    const SCAN_DELAY_MS = 1500;
+    const scanStartTime = Date.now();
+    resultEl.textContent = 'Positionnez-vous devant le code…';
+    setTimeout(() => { if (stockSearchState.scanning) resultEl.textContent = 'En attente…'; }, SCAN_DELAY_MS);
 
-    reader.decodeFromVideoDevice(null, video, (result) => {
-      if (result) {
-        const text = result.getText();
-        resultEl.textContent = '✅ ' + text;
-        resultEl.style.borderColor = 'var(--success)';
-        resultEl.style.color = 'var(--success)';
-        setTimeout(() => { stopCamera(modal); handleBarcodeResult(text); }, 600);
-      }
-    });
+    let detected = false;
+    const onCode = (text) => {
+      if (Date.now() - scanStartTime < SCAN_DELAY_MS) return;
+      if (detected) return;
+      detected = true;
+      stockSearchState.scanning = false;
+      if (stockSearchState.barcodeReader) { try { stockSearchState.barcodeReader.reset(); } catch(e) {} stockSearchState.barcodeReader = null; }
+      if (stockSearchState.cameraStream) { stockSearchState.cameraStream.getTracks().forEach(t => t.stop()); stockSearchState.cameraStream = null; }
+      resultEl.textContent = '✅ ' + text.trim().toUpperCase();
+      resultEl.style.color = 'var(--success)';
+      setTimeout(() => { modal.remove(); renderStockSearchBar(); handleBarcodeResult(text); }, 600);
+    };
+
+    // ── Chargement ZXing (nécessaire sur iOS et pour QR sur Android) ─────────
+    if (typeof ZXing === 'undefined') {
+      resultEl.textContent = 'Chargement scanner…';
+      await new Promise((res, rej) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js';
+        s.onload = res; s.onerror = rej; document.head.appendChild(s);
+      });
+      if (stockSearchState.scanning) resultEl.textContent = 'Positionnez-vous devant le code…';
+    }
+
+    const isAndroidDev = /Android/.test(navigator.userAgent);
+    const useNativeDetector = isAndroidDev && ('BarcodeDetector' in window);
+
+    if (useNativeDetector) {
+      // ── Android : BarcodeDetector (codes 1D) + ZXing decodeFromStream (QR) ──
+      const qrHints = new Map();
+      qrHints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.QR_CODE]);
+      qrHints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+      const qrReader = new ZXing.BrowserMultiFormatReader(qrHints);
+      stockSearchState.barcodeReader = qrReader;
+
+      const detector = new BarcodeDetector({ formats: ['code_128','ean_13','ean_8','data_matrix','code_39','upc_a','upc_e'] });
+      const barcodeLoop = async () => {
+        if (!stockSearchState.scanning) return;
+        if (video.readyState < 2 || !video.videoWidth) { setTimeout(barcodeLoop, 100); return; }
+        try { const found = await detector.detect(video); if (found.length > 0) { onCode(found[0].rawValue); return; } } catch(e) {}
+        if (stockSearchState.scanning) setTimeout(barcodeLoop, 150);
+      };
+      setTimeout(barcodeLoop, 500);
+      qrReader.decodeFromStream(stream, video, (result) => { if (result) onCode(result.getText()); });
+
+    } else {
+      // ── iOS + fallback : ZXing canvas loop tous formats ──────────────────────
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      const hints = new Map();
+      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.QR_CODE, ZXing.BarcodeFormat.DATA_MATRIX, ZXing.BarcodeFormat.CODE_39]);
+      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+      const reader = new ZXing.BrowserMultiFormatReader(hints);
+      stockSearchState.barcodeReader = reader;
+      const loop = () => {
+        if (!stockSearchState.scanning) return;
+        if (video.readyState < 2 || !video.videoWidth) { setTimeout(loop, 100); return; }
+        try {
+          canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+          ctx.drawImage(video, 0, 0);
+          const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const lum = new ZXing.RGBLuminanceSource(img.data, canvas.width, canvas.height);
+          const bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
+          const result = reader.decode(bmp);
+          if (result) { onCode(result.getText()); return; }
+        } catch(e) {}
+        if (stockSearchState.scanning) setTimeout(loop, 150);
+      };
+      setTimeout(loop, 400);
+    }
   } catch (err) {
-    toast('Accès caméra refusé ou non disponible', 'error');
+    toast(err.message?.includes('HTTPS') ? err.message : 'Accès caméra refusé ou non disponible', 'error');
     stopCamera(modal);
   }
 }
