@@ -403,6 +403,23 @@ def delete_produit(produit_id: int, request: Request):
 
 
 # ── Emplacements ──────────────────────────────────────────────────
+@router.get("/api/stock/emplacements-list")
+def list_emplacements(request: Request):
+    """Retourne tous les emplacements connus : plan (référentiel) + stock réel."""
+    require_stock(request)
+    with get_db() as conn:
+        plan = conn.execute(
+            "SELECT code FROM emplacements_plan ORDER BY code"
+        ).fetchall()
+        reels = conn.execute(
+            "SELECT DISTINCT emplacement FROM stock_emplacements ORDER BY emplacement"
+        ).fetchall()
+    codes_plan = {r["code"] for r in plan}
+    codes_reels = {r["emplacement"] for r in reels}
+    tous = sorted(codes_plan | codes_reels)
+    return {"emplacements": tous}
+
+
 @router.get("/api/stock/emplacements/{emplacement}")
 def get_emplacement(emplacement: str, request: Request):
     require_stock(request)

@@ -833,10 +833,20 @@ async function submitMouvement(body) {
   } catch(e) { showToast(e.message, 'error'); }
 }
 
-const STOCK_EMPL_BASE = ['A121','A122','A123','B121','B122','B123','C121','C122','C123'];
+// Emplacements chargés depuis /api/stock/emplacements-list (plan + stock réel)
+let _emplListFromDB = [];
 const LS_STOCK_EMPL_CUSTOM = 'mysifa_stock_empl_custom';
 const STOCK_UNITS_BASE = ['cartons','bobines','étiquettes','palettes','paravents','boîtes'];
 const LS_STOCK_UNITS_CUSTOM = 'mysifa_stock_units_custom_v1';
+
+async function fetchEmplacementsFromDB() {
+  try {
+    const r = await api('/api/stock/emplacements-list');
+    if (r && Array.isArray(r.emplacements)) {
+      _emplListFromDB = r.emplacements;
+    }
+  } catch(e) { _emplListFromDB = []; }
+}
 
 function loadPageEmplCustom() {
   try {
@@ -857,7 +867,7 @@ function addPageCustomEmplacement(code) {
   cur.push(t); savePageEmplCustom(cur); return true;
 }
 function allPageEmplacementChoices() {
-  return [...new Set([...STOCK_EMPL_BASE, ...loadPageEmplCustom()])].sort();
+  return [...new Set([..._emplListFromDB, ...loadPageEmplCustom()])].sort();
 }
 function isStockEmplacementCode(s) {
   const t = String(s || '').trim().toUpperCase();
@@ -1293,9 +1303,7 @@ async function startCamera() {
     }
 
     if (useNativeDetector) {
-      // Android : BarcodeDetector (codes 1D) + ZXing canvas loop (QR) — sans decodeFromVideoDevice
-      const qrCanvas = document.createElement('canvas');
-      const qrCtx = qrCanvas.getContext('2d', { willReadFrequently: true });
+      // Android : BarcodeDetector (codes 1D) + ZXing decodeFromStream (QR)
       const qrHints = new Map();
       qrHints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.QR_CODE]);
       qrHints.set(ZXing.DecodeHintType.TRY_HARDER, true);
@@ -1316,21 +1324,10 @@ async function startCamera() {
       };
       setTimeout(barcodeLoop, 500);
 
-      const qrLoop = () => {
-        if (!S.scanning) return;
-        if (video.readyState < 2 || !video.videoWidth) { setTimeout(qrLoop, 100); return; }
-        try {
-          qrCanvas.width = video.videoWidth; qrCanvas.height = video.videoHeight;
-          qrCtx.drawImage(video, 0, 0);
-          const img = qrCtx.getImageData(0, 0, qrCanvas.width, qrCanvas.height);
-          const lum = new ZXing.RGBLuminanceSource(img.data, qrCanvas.width, qrCanvas.height);
-          const bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
-          const result = qrReader.decode(bmp);
-          if (result) { onSearchCode(result.getText()); return; }
-        } catch(e) {}
-        if (S.scanning) setTimeout(qrLoop, 200);
-      };
-      setTimeout(qrLoop, 600);
+      // ZXing decodeFromStream pour QR (seule méthode fiable sur Android pour les QR)
+      qrReader.decodeFromStream(stream, video, (result) => {
+        if (result) onSearchCode(result.getText());
+      });
     } else {
       // iOS + fallback : ZXing canvas loop tous formats
       const canvas = document.createElement('canvas');
@@ -2502,11 +2499,7 @@ async function recepStartCamera() {
     }
 
     if (useNativeDetector) {
-      // ── Android : BarcodeDetector (codes 1D) + ZXing canvas loop (QR) ──────────
-      // ZXing QR via canvas : lit les pixels du <video> sans toucher à srcObject
-      // → n'interfère pas avec BarcodeDetector qui lit le même élément vidéo
-      const qrCanvas = document.createElement('canvas');
-      const qrCtx = qrCanvas.getContext('2d', { willReadFrequently: true });
+      // ── Android : BarcodeDetector (codes 1D) + ZXing decodeFromStream (QR) ──────
       const qrHints = new Map();
       qrHints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.QR_CODE]);
       qrHints.set(ZXing.DecodeHintType.TRY_HARDER, true);
@@ -2528,22 +2521,13 @@ async function recepStartCamera() {
       };
       setTimeout(barcodeLoop, 500);
 
-      // Moteur 2 : ZXing canvas loop pour QR codes (non-invasif)
-      const qrLoop = () => {
-        if (!S.recepScanning) return;
-        if (video.readyState < 2 || !video.videoWidth) { setTimeout(qrLoop, 100); return; }
-        try {
-          qrCanvas.width = video.videoWidth; qrCanvas.height = video.videoHeight;
-          qrCtx.drawImage(video, 0, 0);
-          const img = qrCtx.getImageData(0, 0, qrCanvas.width, qrCanvas.height);
-          const lum = new ZXing.RGBLuminanceSource(img.data, qrCanvas.width, qrCanvas.height);
-          const bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
-          const result = qrReader.decode(bmp);
-          if (result) { onRecepCode(result.getText().trim()); return; }
-        } catch(e) {}
-        if (S.recepScanning) setTimeout(qrLoop, 200);
-      };
-      setTimeout(qrLoop, 600);
+      // Moteur 2 : ZXing decodeFromStream pour QR codes
+      // decodeFromStream est la seule méthode ZXing qui fonctionne pour les QR sur Android
+      // (drawImage canvas ne capture pas correctement les frames live sur certains Android Chrome)
+      // Le double scan est évité par l'arrêt immédiat dans onRecepCode (reader.reset() + stream stop)
+      qrReader.decodeFromStream(stream, video, (result) => {
+        if (result) onRecepCode(result.getText().trim());
+      });
 
     } else {
       // ── iOS + fallback : ZXing canvas loop tous formats ──────────────────────────
@@ -3044,6 +3028,8 @@ async function init() {
   S.tracaOnly = (user.role === 'fabrication');
   // Charger les fournisseurs FSC
   await loadFournisseursFSC();
+  // Charger la liste complète des emplacements depuis la base de données
+  await fetchEmplacementsFromDB();
   // Onglet initial via URL param ?tab=...
   const urlTab = new URLSearchParams(window.location.search).get('tab');
   if (urlTab && ['dashboard','stock','inventaire','reception','traca'].includes(urlTab)) {
