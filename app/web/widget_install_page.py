@@ -61,12 +61,12 @@ html,body{
     <a href="/download/widget-mac" class="option mac">
       <div class="icon">🍎</div>
       <div class="option-name">macOS</div>
-      <div class="option-desc">Installation automatique<br>Double-cliquez → Terminé</div>
+      <div class="option-desc">Double-cliquez sur<br><strong>Installer-MyProd-Widget.command</strong></div>
     </a>
     <a href="/download/widget-win" class="option win">
       <div class="icon">🪟</div>
       <div class="option-name">Windows</div>
-      <div class="option-desc">Installation automatique<br>Clique droit → Exécuter</div>
+      <div class="option-desc">Double-cliquez sur<br><strong>Installer-MyProd-Widget.bat</strong></div>
     </a>
   </div>
   

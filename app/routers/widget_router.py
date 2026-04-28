@@ -39,6 +39,14 @@ def _read_installer_file(filename: str) -> str:
     with open(fpath, "r", encoding="utf-8", errors="replace") as f:
         return f.read()
 
+def _read_installer_bytes(filename: str) -> bytes:
+    """Lit un fichier binaire depuis le dossier myprod-widget."""
+    fpath = os.path.join(_WIDGET_DIR, filename)
+    if not os.path.isfile(fpath):
+        return b""
+    with open(fpath, "rb") as f:
+        return f.read()
+
 
 def _create_widget_zip(platform: str) -> io.BytesIO:
     """Crée le ZIP du widget avec les installateurs appropriés."""
@@ -48,7 +56,8 @@ def _create_widget_zip(platform: str) -> io.BytesIO:
         # Fichiers du dossier myprod-widget (sources)
         skip = {"node_modules", "dist", ".git", "__pycache__", 
                 "installer-mac.applescript", "installer-windows.ps1", "installer-windows.bat",
-                "Installer-MyProd-Widget.command", "Lancer-Widget.sh"}
+                "Installer-MyProd-Widget.command", "Lancer-Widget.sh",
+                "Install-MyProd-Widget-Mac.command", "Install-MyProd-Widget-Windows.bat"}
         
         if os.path.isdir(_WIDGET_DIR):
             for fname in os.listdir(_WIDGET_DIR):
@@ -65,19 +74,25 @@ def _create_widget_zip(platform: str) -> io.BytesIO:
                 zf.writestr(f"myprod-widget/{fname}", content.encode("utf-8"))
         
         if platform == "mac":
-            # Ajouter l'installateur Mac
-            installer_mac = _read_installer_file("installer-mac.applescript")
+            # Ajouter le nouvel installateur Mac (.command exécutable)
+            installer_mac = _read_installer_bytes("Install-MyProd-Widget-Mac.command")
             if installer_mac:
-                zf.writestr("Installer-MyProd-Widget.applescript", installer_mac.encode("utf-8"))
+                # Écrire avec permissions exécutables (mode 755)
+                info = zipfile.ZipInfo("Installer-MyProd-Widget.command")
+                info.external_attr = (0o755 << 16)  # Permissions Unix exécutables
+                zf.writestr(info, installer_mac)
             
             readme_mac = (
                 "=== MyProd Widget - Installation macOS ===\n\n"
                 "ÉTAPES D'INSTALLATION AUTOMATIQUE\n"
                 "-----------------------------------\n\n"
-                "1. Double-cliquez sur \"Installer-MyProd-Widget.applescript\"\n"
-                "2. Cliquez sur \"Installer\" dans la fenêtre de dialogue\n"
-                "3. Patientez pendant le téléchargement et l'installation de Node.js\n"
-                "4. Le widget se lance automatiquement à la fin\n\n"
+                "1. Décompressez le ZIP\n"
+                "2. Double-cliquez sur \"Installer-MyProd-Widget.command\"\n"
+                "3. Si macOS dit que le fichier est d'un développeur non identifié,\n"
+                "   faites clic droit → Ouvrir, puis cliquez sur Ouvrir\n"
+                "4. Cliquez sur \"Installer\" dans la fenêtre de dialogue\n"
+                "5. Patientez pendant le téléchargement et l'installation de Node.js\n"
+                "6. Le widget se lance automatiquement à la fin\n\n"
                 "PRÉREQUIS\n"
                 "---------\n"
                 "• macOS 10.15 ou plus récent\n"
@@ -91,26 +106,24 @@ def _create_widget_zip(platform: str) -> io.BytesIO:
                 "4. Tapez: npm install && npm start\n\n"
                 "LANCEMENT ULTÉRIEUR\n"
                 "-------------------\n"
-                "Un raccourci est créé sur le bureau et dans le Dock.\n"
+                "Un raccourci est créé sur le bureau.\n"
             )
-            zf.writestr("LISEZ-MOI-macOS.txt", readme_mac.encode("utf-8"))
+            zf.writestr("LISEZ-MOI.txt", readme_mac.encode("utf-8"))
             
         elif platform == "win":
-            # Ajouter l'installateur Windows
-            installer_ps1 = _read_installer_file("installer-windows.ps1")
-            installer_bat = _read_installer_file("installer-windows.bat")
-            if installer_ps1:
-                zf.writestr("Installer-MyProd-Widget.ps1", installer_ps1.encode("utf-8"))
-            if installer_bat:
-                zf.writestr("Installer-MyProd-Widget.bat", installer_bat.encode("utf-8"))
+            # Ajouter le nouvel installateur Windows (.bat)
+            installer_win = _read_installer_bytes("Install-MyProd-Widget-Windows.bat")
+            if installer_win:
+                zf.writestr("Installer-MyProd-Widget.bat", installer_win)
             
             readme_win = (
                 "=== MyProd Widget - Installation Windows ===\n\n"
                 "ÉTAPES D'INSTALLATION AUTOMATIQUE\n"
                 "-----------------------------------\n\n"
-                "1. Faites un clic droit sur \"Installer-MyProd-Widget.bat\"\n"
-                "2. Sélectionnez \"Exécuter avec PowerShell\" ou \"Exécuter en tant qu'administrateur\"\n"
-                "3. Cliquez sur \"Oui\" pour autoriser l'installation\n"
+                "1. Décompressez le ZIP\n"
+                "2. Double-cliquez sur \"Installer-MyProd-Widget.bat\"\n"
+                "3. Si Windows SmartScreen bloque, cliquez sur \"Plus d'infos\"\n"
+                "   puis \"Exécuter quand même\"\n"
                 "4. Patientez pendant le téléchargement et l'installation de Node.js\n"
                 "5. Le widget se lance automatiquement à la fin\n\n"
                 "PRÉREQUIS\n"
@@ -126,9 +139,9 @@ def _create_widget_zip(platform: str) -> io.BytesIO:
                 "3. Dans le dossier myprod-widget, double-cliquez sur start.bat\n\n"
                 "LANCEMENT ULTÉRIEUR\n"
                 "-------------------\n"
-                "Un raccourci est créé sur le bureau et dans le Menu Démarrer.\n"
+                "Un raccourci est créé sur le bureau.\n"
             )
-            zf.writestr("LISEZ-MOI-Windows.txt", readme_win.encode("utf-8"))
+            zf.writestr("LISEZ-MOI.txt", readme_win.encode("utf-8"))
     
     buf.seek(0)
     return buf
