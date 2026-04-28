@@ -2,6 +2,8 @@
 from typing import Optional, List
 from fastapi import APIRouter, Request, Query
 from datetime import datetime as _dt_cls
+from zoneinfo import ZoneInfo as _ZoneInfo
+_TZ_PARIS = _ZoneInfo('Europe/Paris')
 from database import get_db
 from services.timings import compute_dossier_times
 from services.auth_service import get_current_user, is_admin, can_view_all_prod, require_admin
@@ -163,7 +165,7 @@ def machine_status(request: Request):
     """
     require_admin(request)   # direction, administration ou superadmin uniquement
 
-    now  = _dt_cls.now()
+    now  = _dt_cls.now(_TZ_PARIS).replace(tzinfo=None)
     iso_today = now.strftime('%Y-%m-%d')           # 'YYYY-MM-DD'
     old_today = now.strftime('%d/%m/%Y')            # 'DD/MM/YYYY'
 
