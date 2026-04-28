@@ -5389,14 +5389,6 @@ function renderProdKpis(){
   const tt=d.temps_totaux||{};const parts=[];
   if(isAdmin(S.user)){
     parts.push(renderMachineStatusCards());
-    // ── Bouton Installer Widget (réservé admin) ───────────────────
-    parts.push(h('div',{style:{display:'flex',justifyContent:'flex-end',marginBottom:'12px'}},
-      h('button',{
-        type:'button',
-        style:{fontSize:'11px',color:'#22c55e',background:'rgba(34,197,94,.1)',border:'1px solid rgba(34,197,94,.3)',borderRadius:'6px',cursor:'pointer',padding:'4px 10px',fontFamily:'inherit',display:'flex',alignItems:'center',gap:'4px'},
-        onClick:()=>window.open('/install/widget','_blank')
-      },'📲 Installer widget bureau')
-    ));
   }
 
   // ── Sanity score cliquable ─────────────────────────────────────
