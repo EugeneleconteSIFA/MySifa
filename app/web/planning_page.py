@@ -427,7 +427,7 @@ const DEFAULTS_BY_KEY={
 const DAY_API={1:"lundi",2:"mardi",3:"mercredi",4:"jeudi",5:"vendredi",6:"samedi"};
 const DAY_FIELD={1:"horaires_lundi",2:"horaires_mardi",3:"horaires_mercredi",4:"horaires_jeudi",5:"horaires_vendredi",6:"horaires_samedi"};
 let S={machine:null,machines:[],entries:[],timeline:[],wo:0,loading:true,holidays:{},dayWorked:{},dayHoraires:{},view:localStorage.getItem("mysifa.planning.view")||"2w",
-  contactOpen:false,contactSubject:"",contactMessage:"",contactSending:false};
+  contactOpen:false,contactSubject:"",contactMessage:"",contactSending:false,searchQuery:""};
 let ME=null;
 let CAN_EDIT=false;
 let SHOW_DOSSIERS=false;
@@ -590,6 +590,40 @@ function pickColor(entryId,color){
 const pad=n=>String(n).padStart(2,"0");
 function ymdate(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());}
 const ymd=ymdate;
+
+// ── Filtrage intelligent des entrées ─────────────────────────────
+function filterEntries(entries, query){
+  if(!query||!query.trim()) return entries||[];
+  const q=String(query).toLowerCase().trim();
+  const qNorm=q.normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+  return (entries||[]).filter(e=>{
+    const fields=[
+      e.client,e.reference,e.numero_of,e.ref_produit,e.description,
+      e.format_l?String(e.format_l):"",e.format_h?String(e.format_h):"",
+      e.laize?String(e.laize):"",e.date_livraison
+    ];
+    return fields.some(f=>{
+      if(!f) return false;
+      const s=String(f).toLowerCase();
+      const sNorm=s.normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+      return s.includes(q)||sNorm.includes(qNorm);
+    });
+  });
+}
+
+function renderEntries(){
+  const tbody=document.getElementById("tbody");
+  if(!tbody) return;
+  const sl=S.timeline;
+  const filtered=filterEntries(S.entries,S.searchQuery);
+  if(filtered.length===0){
+    tbody.innerHTML=S.searchQuery?'<div class="empty">Aucun résultat pour \"'+escAttr(S.searchQuery)+'\"</div>':'<div class="empty">Aucun dossier au planning</div>';
+  }else{
+    tbody.innerHTML=filtered.map((e,i)=>mkRow(e,i,sl)).join("");
+  }
+  setupDD();
+  setupStatutSelects();
+}
 function escAttr(s){return String(s??"").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;");}
 function escHtml(s){
   return String(s??"")
@@ -914,11 +948,17 @@ function render(){
     ${SHOW_DOSSIERS?`<section class="sec">
       <div class="sec-hdr">
         <div class="sec-title">Dossiers de production</div>
-        ${CAN_EDIT?`<button type="button" class="btn-p" onclick="openAdd()"><span style="font-size:18px;line-height:1">+</span> Ajouter</button>`:""}
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <div style="position:relative">
+            <input type="text" id="planning-search" placeholder="Rechercher (client, ref, OF, format…)" value="${escAttr(S.searchQuery)}" oninput="S.searchQuery=this.value;renderEntries();" style="padding:8px 12px;border:1px solid var(--border2);border-radius:8px;background:var(--bg);color:var(--text);font-size:13px;min-width:260px">
+            <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px">🔍</span>
+          </div>
+          ${CAN_EDIT?`<button type="button" class="btn-p" onclick="openAdd()"><span style="font-size:18px;line-height:1">+</span> Ajouter</button>`:""}
+        </div>
       </div>
       <div class="th"><span></span><span>#</span><span></span><span>Client</span><span>Format prod.</span><span>Ref OF</span><span>Ref prod.</span><span>Laize</span><span>Livraison</span><span>Durée</span><span>Statut</span><span class="act-c">Actions</span></div>
       <div id="tbody">${S.entries.length===0?'<div class="empty">Aucun dossier au planning</div>':""}
-        ${S.entries.map((e,i)=>mkRow(e,i,sl)).join("")}
+        ${filterEntries(S.entries,S.searchQuery).map((e,i)=>mkRow(e,i,sl)).join("")}
       </div>
     </section>`:""}
   ${renderContactModal()}</div></main></div><div id="mroot"></div>`;
