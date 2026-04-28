@@ -157,12 +157,16 @@ def machine_status(request: Request):
             (iso_today + '%', old_today + '%'),
         ).fetchall()
 
-    # Bucket par machine (C1/C2), garder les lignes bien ordonnées
+    # Bucket par machine (C1/C2) — tri par timestamp réel après fetch,
+    # car les formats DD/MM/YYYY et YYYY-MM-DDTHH:MM:SS ne se trient pas
+    # correctement par ORDER BY lexicographique.
     by_mkey: dict = {'C1': [], 'C2': []}
     for r in [dict(x) for x in rows]:
         k = _norm_machine(r.get('machine') or '')
         if k:
             by_mkey[k].append(r)
+    for k in by_mkey:
+        by_mkey[k].sort(key=lambda r: _parse_date_op(r.get('date_operation') or '') or _dt_cls.min)
 
     result = {}
     machine_names = {'C1': 'Cohésio 1', 'C2': 'Cohésio 2'}
