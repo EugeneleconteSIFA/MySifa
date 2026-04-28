@@ -105,18 +105,25 @@ def _compute_duree_min(status_key: str, rows_today: list, now: _dt_cls) -> Optio
         return None
 
     if status_key == 'production':
-        # Chercher, en remontant, la première saisie qui n'est ni prod ni arrêt
-        anchor_row = None
+        # Remonter depuis la fin en cherchant le PLUS ANCIEN code production
+        # de la séquence ininterrompue prod/arrêt.
+        # Les arrêts sont transparents (on les traverse).
+        # On s'arrête au premier événement qui n'est ni prod ni arrêt
+        # (calage, arrivée, fin de dossier…) : ce qui précède ce point
+        # marque le début de la session productive.
+        earliest_prod = None
         for r in reversed(rows_today):
             c   = r.get('operation_code') or ''
             cat = (r.get('operation_category') or '').lower()
-            if c not in _CODES_PRODUCTION and c not in _CODES_ARRET and cat != 'arret':
-                anchor_row = r
-                break
-        if anchor_row is None:
-            # Toutes les saisies sont prod/arrêt : prendre la première
-            anchor_row = rows_today[0]
-        ts = _parse_date_op(anchor_row.get('date_operation') or '')
+            if c in _CODES_PRODUCTION:
+                earliest_prod = r          # mise à jour : on remonte
+            elif c in _CODES_ARRET or cat == 'arret':
+                pass                       # arrêt transparent
+            else:
+                break                      # fin du bloc courant
+        if earliest_prod is None:
+            earliest_prod = rows_today[-1]
+        ts = _parse_date_op(earliest_prod.get('date_operation') or '')
         if ts is None:
             return None
         return max(0, int((now - ts).total_seconds() // 60))
