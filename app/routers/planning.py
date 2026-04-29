@@ -271,6 +271,7 @@ def _slot_payload(e: dict, start_iso: str, end_iso: str) -> dict:
         "numero_of": e.get("numero_of"),
         "ref_produit": e.get("ref_produit"),
         "commentaire": e.get("commentaire"),
+        "a_placer": e.get("a_placer", 0),
         "duree_heures": e["duree_heures"],
         # Un dossier terminé en DB reste terminé même si planned_end est dans le futur
         # (cas : durée modifiée → planned_end recalculé en heures calendaires)
@@ -698,8 +699,8 @@ async def add_entry(machine_id: int, request: Request):
             INSERT INTO planning_entries
                 (machine_id, position, reference, client, description, format_l, format_h,
                  duree_heures, statut, notes, created_at, updated_at,
-                 dos_rvgi, numero_of, ref_produit, laize, date_livraison, commentaire)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 dos_rvgi, numero_of, ref_produit, laize, date_livraison, commentaire, a_placer)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             machine_id, position,
             reference,
@@ -717,6 +718,7 @@ async def add_entry(machine_id: int, request: Request):
             body.get("laize"),
             body.get("date_livraison"),
             body.get("commentaire"),
+            body.get("a_placer", 1),
         ))
         _invalidate_attente_plans(conn, machine_id)
         conn.commit()
@@ -791,7 +793,7 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
             SET reference=?, client=?, description=?, format_l=?, format_h=?,
                 duree_heures=?, statut=?, notes=?, updated_at=?,
                 dos_rvgi=?, numero_of=?, ref_produit=?, laize=?, date_livraison=?, commentaire=?,
-                planned_start=?, planned_end=?
+                planned_start=?, planned_end=?, a_placer=?
             WHERE id=?
         """, (
             body.get("reference", ex["reference"]),
@@ -811,6 +813,7 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
             body.get("commentaire", ex["commentaire"] if "commentaire" in ex.keys() else None),
             ps,
             pe,
+            body.get("a_placer", ex["a_placer"] if "a_placer" in ex.keys() else 0),
             entry_id
         ))
         conn.commit()

@@ -223,7 +223,7 @@ body.light .badge-run{background:rgba(16,185,129,.14);border-color:#059669;color
 .dh-hours-btn{display:block;margin:2px auto 0;padding:2px 8px;border-radius:6px;border:1px solid var(--border2);
   background:transparent;color:var(--muted);font-size:10px;font-family:var(--mono);cursor:pointer;opacity:.85;transition:all .15s}
 .dh-hours-btn:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-bg);opacity:1}
-.tl-bar{position:relative;height:56px;background:var(--bg-dark);border-radius:8px;
+.tl-bar{position:relative;height:84px;background:var(--bg-dark);border-radius:8px;
   border:1px solid var(--border);overflow:visible}
 .d-bg{position:absolute;top:0;bottom:0;z-index:1;pointer-events:none}
 .d-bg.a0{background:rgba(148,163,184,.02)}
@@ -233,14 +233,14 @@ body.light .d-bg.a1{background:rgba(2,6,23,.085)}
 .d-sep{position:absolute;top:0;bottom:0;width:2px;background:rgba(148,163,184,.45);z-index:2;pointer-events:none}
 body.light .d-sep{background:rgba(71,85,105,.35)}
 .d-sep::after{content:'';position:absolute;top:0;bottom:0;left:-6px;width:14px;background:linear-gradient(90deg,rgba(34,211,238,0),rgba(34,211,238,.08),rgba(34,211,238,0));opacity:.35}
-.slot{position:absolute;top:6px;bottom:6px;border-radius:6px;display:flex;align-items:center;
-  justify-content:center;cursor:pointer;transition:all .15s;overflow:hidden;padding:2px 4px}
-.slot:hover{top:4px;bottom:4px;z-index:20}
+.slot{position:absolute;top:8px;bottom:8px;border-radius:6px;display:flex;align-items:center;
+  justify-content:center;cursor:pointer;transition:all .15s;overflow:hidden;padding:3px 6px}
+.slot:hover{top:5px;bottom:5px;z-index:20}
 .slot-inner{display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.15;
   text-align:center;max-width:100%;pointer-events:none}
-.slot .line1{font-size:11px;color:#fff;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-.slot .line2{font-size:9px;font-weight:500;color:rgba(255,255,255,.88);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-body.light .slot .line1{color:#0f172a}body.light .slot .line2{color:#334155}
+.slot .line1{font-size:11px;color:#1e293b;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.slot .line2{font-size:9px;font-weight:600;color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+body.light .slot .line1{color:#1e293b}body.light .slot .line2{color:#334155}
 .now-l{position:absolute;top:0;bottom:0;width:2px;background:var(--red);z-index:15;box-shadow:0 0 8px var(--red)}
 .now-d{position:absolute;top:-4px;left:-4px;width:10px;height:10px;border-radius:50%;background:var(--red)}
 
@@ -272,7 +272,7 @@ body.light .slot .line1{color:#0f172a}body.light .slot .line2{color:#334155}
   padding:4px 8px;cursor:pointer;text-align:center;font-family:inherit;transition:color .15s,border-color .15s}
 .cpk-reset:hover{color:var(--accent);border-color:var(--accent)}
 
-.th{display:grid;grid-template-columns:22px 14px minmax(110px,1.3fr) minmax(70px,.85fr) minmax(80px,.9fr) minmax(70px,.85fr) minmax(50px,.55fr) minmax(80px,.8fr) 55px minmax(120px,1.1fr) minmax(140px,auto);
+.th{display:grid;grid-template-columns:22px 14px minmax(110px,1.3fr) minmax(55px,.65fr) minmax(72px,.82fr) minmax(62px,.72fr) 38px minmax(62px,.6fr) minmax(80px,.9fr) 42px minmax(95px,.88fr) minmax(120px,auto);
   gap:6px;padding:10px 10px;background:var(--bg-dark);border-radius:10px 10px 0 0;
   font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600;font-family:var(--mono);align-items:center}
 .th>span{min-width:0}
@@ -285,7 +285,7 @@ body.light .slot .line1{color:#0f172a}body.light .slot .line2{color:#334155}
   scroll-behavior:auto;
   overscroll-behavior:contain;
 }
-.tr{display:grid;grid-template-columns:22px 14px minmax(110px,1.3fr) minmax(70px,.85fr) minmax(80px,.9fr) minmax(70px,.85fr) minmax(50px,.55fr) minmax(80px,.8fr) 55px minmax(120px,1.1fr) minmax(140px,auto);
+.tr{display:grid;grid-template-columns:22px 14px minmax(110px,1.3fr) minmax(55px,.65fr) minmax(72px,.82fr) minmax(62px,.72fr) 38px minmax(62px,.6fr) minmax(80px,.9fr) 42px minmax(95px,.88fr) minmax(120px,auto);
   gap:6px;padding:10px 10px;border-bottom:1px solid var(--border);font-size:12px;align-items:center;
   cursor:grab;transition:background .2s;background:var(--bg-dark)}
 .tr:first-child{background:var(--accent-bg)}
@@ -351,6 +351,13 @@ body.light .btn-p{color:#fff}
 @keyframes tipIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 @keyframes slideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 @keyframes activePulse{0%,100%{border-color:#22d3ee;box-shadow:0 0 5px rgba(34,211,238,.3)}50%{border-color:rgba(34,211,238,.35);box-shadow:none}}
+/* Timeline search highlighting */
+.slot.tl-match{outline:3px solid rgba(255,255,255,.9);outline-offset:2px;z-index:12}
+.slot.tl-no-match{opacity:0.18;filter:grayscale(50%)}
+/* À placer au planning — zébré */
+.tr.tr-aplacer{background:repeating-linear-gradient(135deg,var(--bg-dark),var(--bg-dark) 10px,rgba(34,211,238,.07) 10px,rgba(34,211,238,.07) 20px)!important}
+body.light .tr.tr-aplacer{background:repeating-linear-gradient(135deg,var(--card),var(--card) 10px,rgba(8,145,178,.08) 10px,rgba(8,145,178,.08) 20px)!important}
+.slot.slot-aplacer{background-image:repeating-linear-gradient(135deg,transparent,transparent 5px,rgba(0,0,0,.12) 5px,rgba(0,0,0,.12) 10px)!important}
 .view-tabs{display:flex;gap:0;align-items:center}
 .view-tab{padding:6px 14px;background:var(--card);border:1px solid var(--border2);color:var(--dim);
   cursor:pointer;font-size:12px;font-family:var(--mono);transition:all .15s}
@@ -369,7 +376,7 @@ body.light .btn-p{color:#fff}
   .header{padding:0 0 14px}
   .sec{padding:16px}
   .wk-nav button{padding:6px 10px}
-  .tl-bar{height:52px}
+  .tl-bar{height:78px}
   .dh-cell{font-size:11px}
   /* Sidebar en tiroir */
   .sidebar{position:fixed;left:0;top:0;bottom:0;height:auto;max-height:100vh;z-index:300;
@@ -403,7 +410,7 @@ window.addEventListener("unhandledrejection", (e)=>showFatal("Promise rejection"
 let MID=__MACHINE_ID__;
 const DN=["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"];
 const MIND=2,MAXD=720;
-const CC=["#2563eb","#7c3aed","#059669","#d97706","#dc2626","#0891b2","#4f46e5","#65a30d","#c026d3","#ea580c"];
+const CC=["#93c5fd","#c4b5fd","#6ee7b7","#fde68a","#fca5a5","#67e8f9","#a5b4fc","#bbf7d0","#f0abfc","#fdba74"];
 // Palette étendue pour le picker de couleurs
 const PALETTE=[
   "#ef4444","#f97316","#eab308","#22c55e","#10b981","#14b8a6",
@@ -425,7 +432,7 @@ const DEFAULTS_BY_KEY={
 const DAY_API={1:"lundi",2:"mardi",3:"mercredi",4:"jeudi",5:"vendredi",6:"samedi"};
 const DAY_FIELD={1:"horaires_lundi",2:"horaires_mardi",3:"horaires_mercredi",4:"horaires_jeudi",5:"horaires_vendredi",6:"horaires_samedi"};
 let S={machine:null,machines:[],entries:[],timeline:[],wo:0,loading:true,holidays:{},dayWorked:{},dayHoraires:{},view:localStorage.getItem("mysifa.planning.view")||"2w",
-  contactOpen:false,contactSubject:"",contactMessage:"",contactSending:false,searchQuery:"",activeDossier:null};
+  contactOpen:false,contactSubject:"",contactMessage:"",contactSending:false,searchQuery:"",tlSearchQuery:"",activeDossier:null};
 let ME=null;
 let CAN_EDIT=false;
 let SHOW_DOSSIERS=false;
@@ -961,7 +968,16 @@ function render(){
         </div>
       </div>
       <div style="font-size:11px;color:var(--muted);margin:-8px 0 12px">Samedi non travaillé par défaut — décochez pour l'activer.</div>
-      ${tlBlocks}
+      <div style="margin-bottom:12px;display:flex;align-items:center;gap:8px">
+        <div style="position:relative;max-width:380px;flex:1">
+          <input type="text" id="tl-search" placeholder="Rechercher dans la timeline…" value="${escAttr(S.tlSearchQuery||"")}"
+            oninput="S.tlSearchQuery=this.value;renderTL()"
+            style="width:100%;padding:8px 36px 8px 12px;border:1px solid var(--border2);border-radius:8px;background:var(--bg);color:var(--text);font-size:12px;font-family:var(--mono);outline:none">
+          <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;pointer-events:none">🔍</span>
+        </div>
+        ${S.tlSearchQuery?`<button type="button" onclick="S.tlSearchQuery='';renderTL()" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--muted);cursor:pointer;font-family:inherit">✕ Effacer</button>`:""}
+      </div>
+      <div id="tl-blocks-container">${tlBlocks}</div>
       <div class="legend" id="tl-legend"></div>
     </section>
     ${SHOW_DOSSIERS?`<section class="sec">
@@ -975,7 +991,7 @@ function render(){
           ${CAN_EDIT?`<button type="button" class="btn-p" onclick="openAdd()"><span style="font-size:18px;line-height:1">+</span> Ajouter</button>`:""}
         </div>
       </div>
-      <div class="th"><span></span><span></span><span>Client</span><span>Format prod.</span><span>Ref OF</span><span>Ref prod.</span><span>Laize</span><span>Livraison</span><span>Durée</span><span>Statut</span><span class="act-c">Actions</span></div>
+      <div class="th"><span></span><span></span><span>Client</span><span>Format</span><span>Ref OF</span><span>Ref prod.</span><span>Laize</span><span>Livraison</span><span>Commentaire</span><span>Durée</span><span>Statut</span><span class="act-c">Actions</span></div>
       <div id="tbody">${S.entries.length===0?'<div class="empty">Aucun dossier au planning</div>':""}
         ${filterEntries(S.entries,S.searchQuery).map((e,i)=>mkRow(e,i,sl)).join("")}
       </div>
@@ -985,6 +1001,31 @@ function render(){
   setupStatutSelects();
   buildLegend(sl, m1, nw);
   if(SHOW_DOSSIERS)autoScrollDossiersIfNeeded();
+}
+
+function renderTL(){
+  const m1=addD(getMon(new Date()),S.wo*7);
+  const nw=S.view==="1w"?1:S.view==="4w"?4:2;
+  const sl=S.timeline;
+  let tlBlocks="";
+  for(let wi=0;wi<nw;wi++){
+    const mn=addD(m1,wi*7),wn=wkNum(mn);
+    const lblCls=wi===0?"cur":"nxt";
+    tlBlocks+=`<div ${wi<nw-1?'style="margin-bottom:16px"':""}>
+      <div class="wk-lbl ${lblCls}">S${wn} — ${fd(mn)} au ${fd(addD(mn,4))}</div>
+      ${mkTL(mn,sl)}
+    </div>`;
+  }
+  const container=document.getElementById("tl-blocks-container");
+  if(container) container.innerHTML=tlBlocks;
+  buildLegend(sl, m1, nw);
+  // Scroll to first matching slot
+  if(S.tlSearchQuery&&S.tlSearchQuery.trim()){
+    requestAnimationFrame(()=>{
+      const first=document.querySelector("#tl-blocks-container .slot.tl-match");
+      if(first) first.scrollIntoView({behavior:"smooth",block:"nearest"});
+    });
+  }
 }
 
 function buildLegend(sl, m1, nw){
@@ -1115,23 +1156,33 @@ function mkTL(mon,slots){
   });
   cols.slice(1).forEach(col=>{h+=`<div class="d-sep" style="left:${(col.cs/tot)*100}%"></div>`;});
 
+  const tlQ=(S.tlSearchQuery||"").toLowerCase().trim();
   ws.forEach((s,idx)=>{
     const ss=new Date(s.start),se=new Date(s.end);
     const cs=ss<mon?mon:ss,ce=se>we?we:se;
     const sp=gp(cs),ep=gp(ce),l=(sp/tot)*100,w=Math.max(.5,((ep-sp)/tot)*100);
     const co=colorForId(s.entry_id||idx+1);
-    const fm=s.format_l&&s.format_h?`${s.format_l} × ${s.format_h} mm`:"—";
+    const fm=s.format_l&&s.format_h?`${s.format_l} × ${s.format_h} mm`:"";
+    const lz=s.laize?`${s.laize} mm`:"";
+    const subTxt=[fm,lz].filter(Boolean).join(" | ");
+    const fmTip=fm||"—";
     const st=s.statut==="en_cours"?"En cours":"En attente";
     const cli=(s.client||"").trim()||(s.numero_of||s.reference||"—");
-    const subTxt=fm!=="—"?fm:"";
     const meta=[s.numero_of||s.reference,s.description].filter(Boolean).join(" · ");
     const noOf=(s.numero_of||s.reference||"").trim().toLowerCase();
     const activeNo=S.activeDossier?(S.activeDossier.no_dossier||"").trim().toLowerCase():"";
     const isActive=!!(activeNo&&noOf&&activeNo===noOf);
-    const activeStyle=isActive?"border:1px solid #22d3ee;animation:activePulse 2.2s ease-in-out infinite;":"";
-    h+=`<div class="slot" style="left:${l}%;width:${w}%;background:${co}cc;border:1px solid ${co};box-shadow:0 2px 12px ${co}33;${activeStyle}"
+    // Search match
+    let matchCls="";
+    if(tlQ){
+      const fields=[cli,s.numero_of||"",s.reference||"",s.description||"",fm,lz,s.laize?String(s.laize):""].map(f=>f.toLowerCase());
+      matchCls=fields.some(f=>f.includes(tlQ))?"tl-match":"tl-no-match";
+    }
+    // a_placer striped
+    const aplacerCls=s.a_placer?"slot-aplacer":"";
+    h+=`<div class="slot ${matchCls} ${aplacerCls}" style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${isActive?"border:2px solid #22d3ee;animation:activePulse 2.2s ease-in-out infinite;":"border:1px solid "+co+"99;"}"
       onmouseenter="showTip(event,this)" onmousemove="moveTip(event)" onmouseleave="hideTip()"
-      data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-fmt="${escAttr(fm)}" data-dur="${escAttr(String(s.duree_heures)+"h")}"
+      data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(String(s.duree_heures)+"h")}"
       data-deb="${escAttr(fdt(ss))}" data-fin="${escAttr(fdt(se))}" data-st="${escAttr(st)}" data-co="${escAttr(co)}">
       ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}</span>${subTxt?`<span class="line2">${escAttr(subTxt)}</span>`:""}</div>`:""}</div>`;
   });
@@ -1175,7 +1226,9 @@ function mkRow(e,i,slots){
          <option value="en_cours" ${e.statut==="en_cours"?"selected":""}>En cours</option>
          <option value="termine" ${e.statut==="termine"?"selected":""}>Terminé</option>
        </select>`;
-  return`<div class="tr" draggable="true" data-eid="${e.id}" data-idx="${i}" ${isAnchor?'data-scroll-anchor="1"':''}
+  const com=escAttr(e.commentaire||"");
+  const aplacerRowCls=e.a_placer?"tr-aplacer":"";
+  return`<div class="tr ${aplacerRowCls}" draggable="true" data-eid="${e.id}" data-idx="${i}" ${isAnchor?'data-scroll-anchor="1"':''}
     data-statut="${escAttr(e.statut||'attente')}"
     style="animation:slideIn .3s ease ${i*.03}s both;${i===0?`border-left:3px solid ${co}`:"border-left:3px solid transparent"};${isLocked?"cursor:not-allowed;opacity:.9":""}">
     <span class="dh-handle">⠿</span>
@@ -1186,6 +1239,7 @@ function mkRow(e,i,slots){
     <span class="cell-mini">${rfp}</span>
     <span class="cell-mini">${lz}</span>
     <span class="cell-mini">${escAttr(fmtDl(e.date_livraison||""))}</span>
+    <span class="cell-mini" style="font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${com}">${com}</span>
     <span class="cell-mini">${e.duree_heures}h</span>
     ${statutCell}
     <div class="acts">
@@ -1537,7 +1591,7 @@ function modalHTML(title,fields,submitLabel,onSubmitFn){
     <button class="btn-p" onclick="${onSubmitFn}">${submitLabel}</button></div></div></div>`
 }
 
-function dossierFields(numero_of,client,ref_produit,laize,date_livraison,commentaire,fl,fh,dur,statut,showStatut){
+function dossierFields(numero_of,client,ref_produit,laize,date_livraison,commentaire,fl,fh,dur,statut,showStatut,aPlacer=1){
   return`
     <div class="fd"><label>Numéro d'OF</label><input id="f-of" value="${numero_of}" placeholder="961/0001"></div>
     <div class="fd"><label>Client</label><input id="f-cli" value="${client}" placeholder="Nom du client"></div>
@@ -1554,6 +1608,12 @@ function dossierFields(numero_of,client,ref_produit,laize,date_livraison,comment
     <div class="fd"><label>Durée (${MIND}–${MAXD}h)</label>
       <input type="number" id="f-dur" min="${MIND}" max="${MAXD}" value="${dur}" oninput="document.getElementById('f-dur-fill').style.width=((Math.max(${MIND},Math.min(${MAXD},+this.value||${MIND}))-${MIND})/(${MAXD}-${MIND})*100)+'%'">
       <div class="dur-b"><div class="dur-f" id="f-dur-fill" style="width:${durBar(dur)}"></div></div>
+    </div>
+    <div class="fd" style="margin-top:4px">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--text2);text-transform:none;letter-spacing:0">
+        <input type="checkbox" id="f-aplacer" ${aPlacer?"checked":""} style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
+        À placer au planning
+      </label>
     </div>
     ${showStatut?`<div class="fd"><label>Statut</label><select id="f-stat">
       <option value="attente" ${statut==="attente"?"selected":""}>En attente</option>
@@ -1573,6 +1633,7 @@ function getFormData(withStatut){
     date_livraison:document.getElementById("f-dl").value||"",
     commentaire:document.getElementById("f-com").value||"",
     duree_heures:Math.max(MIND,Math.min(MAXD,parseInt(document.getElementById("f-dur").value)||8)),
+    a_placer:document.getElementById("f-aplacer")?.checked?1:0,
   };
   if(withStatut)d.statut=document.getElementById("f-stat").value;
   return d;
@@ -1625,7 +1686,7 @@ function openEdit(id){
   // ── Cas normal (attente) ──────────────────────────────────────────────────
   document.getElementById("mroot").innerHTML=modalHTML(
     `Modifier — ${(e.numero_of||e.reference)||''}`,
-    dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.format_l||"",e.format_h||"",e.duree_heures,e.statut,true),
+    dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.format_l||"",e.format_h||"",e.duree_heures,e.statut,true,e.a_placer??1),
     "Enregistrer",`submitEdit(${id})`
   );
 }
