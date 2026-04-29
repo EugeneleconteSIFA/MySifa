@@ -447,7 +447,7 @@ const DAY_API={1:"lundi",2:"mardi",3:"mercredi",4:"jeudi",5:"vendredi",6:"samedi
 const DAY_FIELD={1:"horaires_lundi",2:"horaires_mardi",3:"horaires_mercredi",4:"horaires_jeudi",5:"horaires_vendredi",6:"horaires_samedi"};
 let S={machine:null,machines:[],entries:[],timeline:[],wo:0,loading:true,holidays:{},dayWorked:{},dayHoraires:{},view:localStorage.getItem("mysifa.planning.view")||"2w",
   contactOpen:false,contactSubject:"",contactMessage:"",contactSending:false,searchQuery:"",tlSearchQuery:"",tlSearchIdx:0,activeDossier:null};
-let _tlMatches=[];
+let _allTlMatches=[];
 let ME=null;
 let CAN_EDIT=false;
 let SHOW_DOSSIERS=false;
@@ -1035,47 +1035,81 @@ function render(){
   setupStatutSelects();
   buildLegend(sl, m1, nw);
   if(SHOW_DOSSIERS)autoScrollDossiersIfNeeded();
+  // Réappliquer la recherche timeline si active après un re-render complet
+  requestAnimationFrame(()=>{computeAllTlMatches();updateTlMatchInfo();});
+}
+
+// ── Timeline search — scan ALL slots (across all week offsets) ──────────────
+function computeAllTlMatches(){
+  const q=(S.tlSearchQuery||"").toLowerCase().trim();
+  if(!q){_allTlMatches=[];return;}
+  _allTlMatches=(S.timeline||[]).filter(s=>{
+    const cli=(s.client||"").trim()||(s.numero_of||s.reference||"");
+    const fm=s.format_l&&s.format_h?`${s.format_l} × ${s.format_h} mm`:"";
+    const lz=s.laize?String(s.laize):"";
+    const fields=[cli,s.numero_of||"",s.reference||"",s.description||"",fm,lz].map(f=>f.toLowerCase());
+    return fields.some(f=>f.includes(q));
+  });
+}
+
+function woForSlot(s){
+  // Calcule le S.wo qui rend ce slot visible (aligne la semaine du slot sur la vue)
+  const slotMon=getMon(new Date(s.start));
+  const curMon=getMon(new Date());
+  const diffDays=Math.round((slotMon.getTime()-curMon.getTime())/864e5);
+  return Math.floor(diffDays/7);
 }
 
 function updateTlMatchInfo(){
-  _tlMatches=Array.from(document.querySelectorAll("#tl-blocks-container .slot.tl-match"));
-  const n=_tlMatches.length;
+  const n=_allTlMatches.length;
   const q=!!(S.tlSearchQuery&&S.tlSearchQuery.trim());
   if(S.tlSearchIdx>=n) S.tlSearchIdx=Math.max(0,n-1);
-  // Count label
+  // Compteur
   const cntEl=document.getElementById("tl-match-count");
   if(cntEl){
     cntEl.textContent=q?(n>0?`${S.tlSearchIdx+1} / ${n}`:"0 résultat"):"";
     cntEl.style.display=q?"inline":"none";
   }
-  // Nav buttons
+  // Boutons nav
   const navEl=document.getElementById("tl-match-nav");
   if(navEl) navEl.style.display=(q&&n>0)?"flex":"none";
-  // Highlight current vs others
-  _tlMatches.forEach((el,i)=>{
-    el.style.outline=i===S.tlSearchIdx?"3px solid #22d3ee":"3px solid rgba(255,255,255,.7)";
+  // Highlight : cyan sur le courant, blanc atténué sur les autres visibles
+  const curId=n>0?String(_allTlMatches[S.tlSearchIdx].entry_id):"";
+  document.querySelectorAll("#tl-blocks-container .slot.tl-match").forEach(el=>{
+    const isCur=el.dataset.eid===curId;
+    el.style.outline=isCur?"3px solid #22d3ee":"3px solid rgba(255,255,255,.7)";
     el.style.outlineOffset="2px";
   });
-  // Scroll to current
-  if(n>0&&_tlMatches[S.tlSearchIdx]){
-    requestAnimationFrame(()=>{
-      _tlMatches[S.tlSearchIdx].scrollIntoView({behavior:"smooth",block:"nearest"});
-    });
+  // Scroll vers le slot courant (s'il est dans le DOM)
+  if(curId){
+    const curDom=document.querySelector(`#tl-blocks-container .slot[data-eid="${curId}"]`);
+    if(curDom) requestAnimationFrame(()=>curDom.scrollIntoView({behavior:"smooth",block:"nearest"}));
   }
 }
 
-function tlSearchNext(){
-  if(!_tlMatches.length) return;
-  S.tlSearchIdx=(S.tlSearchIdx+1)%_tlMatches.length;
-  updateTlMatchInfo();
+async function tlNavTo(rawIdx){
+  if(!_allTlMatches.length) return;
+  const n=_allTlMatches.length;
+  S.tlSearchIdx=((rawIdx%n)+n)%n;
+  const s=_allTlMatches[S.tlSearchIdx];
+  // Si le slot est hors de la vue courante → déplacer la vue
+  const targetWo=woForSlot(s);
+  const nw=S.view==="1w"?1:S.view==="4w"?4:2;
+  const m1=addD(getMon(new Date()),S.wo*7);
+  const viewEnd=addD(m1,nw*7);
+  const ss=new Date(s.start),se=new Date(s.end);
+  const visible=ss<viewEnd&&se>m1;
+  if(!visible){
+    S.wo=targetWo;
+    try{ await Promise.all([loadDayWorked(),loadDayHoraires(),loadHolidays()]); }catch(e){}
+  }
+  renderTL();
 }
-function tlSearchPrev(){
-  if(!_tlMatches.length) return;
-  S.tlSearchIdx=(S.tlSearchIdx-1+_tlMatches.length)%_tlMatches.length;
-  updateTlMatchInfo();
-}
+function tlSearchNext(){ tlNavTo(S.tlSearchIdx+1); }
+function tlSearchPrev(){ tlNavTo(S.tlSearchIdx-1); }
 
 function renderTL(){
+  computeAllTlMatches();
   const m1=addD(getMon(new Date()),S.wo*7);
   const nw=S.view==="1w"?1:S.view==="4w"?4:2;
   const sl=S.timeline;
@@ -1246,7 +1280,7 @@ function mkTL(mon,slots){
     }
     // a_placer striped
     const aplacerCls=s.a_placer?"slot-aplacer":"";
-    h+=`<div class="slot ${matchCls} ${aplacerCls}" style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${isActive?"border:2px solid #22d3ee;animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
+    h+=`<div class="slot ${matchCls} ${aplacerCls}" data-eid="${s.entry_id||idx}" style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${isActive?"border:2px solid #22d3ee;animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
       onmouseenter="showTip(event,this)" onmousemove="moveTip(event)" onmouseleave="hideTip()"
       data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(String(s.duree_heures)+"h")}"
       data-deb="${escAttr(fdt(ss))}" data-fin="${escAttr(fdt(se))}" data-st="${escAttr(st)}" data-co="${escAttr(co)}">
