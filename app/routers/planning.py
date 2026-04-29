@@ -11,10 +11,13 @@ Ajouter dans main.py :
 import unicodedata
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
+from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Request, HTTPException
 from database import get_db
 from config import ROLE_FABRICATION
 from services.auth_service import require_admin, get_current_user, user_has_app_access
+
+_TZ_PARIS = ZoneInfo("Europe/Paris")
 
 router = APIRouter(prefix="/api/planning", tags=["planning"])
 
@@ -1415,4 +1418,107 @@ def get_timeline(machine_id: int, request: Request, semaine: Optional[str] = Non
         "slots": slots,
         "configs": configs,
     }
+
+
+# ── Codes opération production ──────────────────────────────────────────────
+_PROD_CODE_ARRIVEE = "86"
+_PROD_CODE_DEPART  = "87"
+
+
+def _norm_machine_key_prod(m: str) -> Optional[str]:
+    """Normalise le champ machine de production_data vers C1/C2."""
+    if not m:
+        return None
+    n = m.lower().replace("é", "e").replace("è", "e").replace("ê", "e").strip()
+    if "cohesio 1" in n or "cohesion 1" in n or "cohesio !" in n:
+        return "C1"
+    if "cohesio 2" in n or "cohesion 2" in n:
+        return "C2"
+    return None
+
+
+def _parse_prod_dt(s: str) -> Optional[datetime]:
+    if not s:
+        return None
+    s = s.strip()
+    for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M"):
+        try:
+            return datetime.strptime(s[:19], fmt)
+        except ValueError:
+            continue
+    return None
+
+
+@router.get("/machines/{machine_id}/active-dossier")
+def get_active_dossier(machine_id: int, request: Request):
+    """Retourne le dossier actuellement en cours de saisie sur cette machine.
+
+    Interroge production_data pour les saisies d'aujourd'hui afin de déterminer
+    le dernier no_dossier actif sur la machine correspondante.
+    Retourne {"dossier": {"no_dossier": ..., "client": ..., "designation": ...}}
+    ou {"dossier": null} si aucun dossier actif.
+    """
+    with get_db() as conn:
+        require_planning_machine(request, conn, machine_id)
+        machine = conn.execute(
+            "SELECT * FROM machines WHERE id=?", (machine_id,)
+        ).fetchone()
+        if not machine:
+            raise HTTPException(404, "Machine non trouvée")
+
+        mk = _machine_key_from_record(dict(machine))
+        # Seulement C1/C2 ont la saisie de production (Cohésio 1 & 2)
+        if mk not in ("C1", "C2"):
+            return {"dossier": None}
+
+        now = datetime.now(_TZ_PARIS).replace(tzinfo=None)
+        iso_today = now.strftime("%Y-%m-%d")
+        old_today = now.strftime("%d/%m/%Y")
+
+        rows = conn.execute(
+            """SELECT operation_code, no_dossier, client, designation, machine, date_operation
+               FROM production_data
+               WHERE date_operation LIKE ? OR date_operation LIKE ?
+               ORDER BY date_operation ASC""",
+            (iso_today + "%", old_today + "%"),
+        ).fetchall()
+
+    # Filtrer par machine et trier chronologiquement
+    machine_rows: List[dict] = []
+    for r in [dict(x) for x in rows]:
+        if _norm_machine_key_prod(r.get("machine") or "") == mk:
+            machine_rows.append(r)
+    machine_rows.sort(
+        key=lambda r: _parse_prod_dt(r.get("date_operation") or "") or datetime.min
+    )
+
+    if not machine_rows:
+        return {"dossier": None}
+
+    # Pas d'arrivée → machine éteinte
+    if not any(r["operation_code"] == _PROD_CODE_ARRIVEE for r in machine_rows):
+        return {"dossier": None}
+
+    # Dernière opération = départ → machine éteinte
+    if machine_rows[-1]["operation_code"] == _PROD_CODE_DEPART:
+        return {"dossier": None}
+
+    # Cherche le dernier no_dossier non vide
+    for r in reversed(machine_rows):
+        nd = (r.get("no_dossier") or "").strip()
+        if nd and nd != "0":
+            # Nettoie le préfixe opérateur "907 - CLIENT" → "CLIENT"
+            client = r.get("client") or ""
+            parts = client.split(" - ", 1)
+            if len(parts) == 2 and parts[0].strip().isdigit():
+                client = parts[1].strip()
+            return {
+                "dossier": {
+                    "no_dossier": nd,
+                    "client": client,
+                    "designation": (r.get("designation") or "").strip(", ").strip(),
+                }
+            }
+
+    return {"dossier": None}
 

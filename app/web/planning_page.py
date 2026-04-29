@@ -314,18 +314,16 @@ body.light .th{background:var(--bg)}
   border-radius:10px;color:var(--text2);font-size:11px;font-family:var(--mono);outline:none}
 .statut-select:focus{border-color:var(--accent);color:var(--text)}
 .acts{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
-.acts .ab{flex:0 0 auto;width:36px;height:32px;display:flex;align-items:center;justify-content:center;padding:0;font-size:13px}
+.acts .ab{width:32px;height:30px;display:flex;align-items:center;justify-content:center;padding:0}
 .ab{padding:4px 8px;background:transparent;border:1px solid var(--border2);color:var(--text2);
-  cursor:pointer;font-size:11px;border-radius:6px;font-family:var(--mono)}
+  cursor:pointer;border-radius:6px;font-family:var(--mono);display:flex;align-items:center;justify-content:center}
+.ab svg{width:14px;height:14px;flex-shrink:0}
 .ab:hover{background:var(--accent-bg);color:var(--accent)}
 .ab.del{color:var(--red)}.ab.del:hover{background:rgba(248,113,113,.12)}
-.ab.mov{width:28px;display:none;align-items:center;justify-content:center;padding:4px 0}
 .ab.mov{display:none}
-@media (max-width:900px){
-  .ab.mov{display:inline-flex}
-}
-.ab:disabled{opacity:.45;cursor:not-allowed}
-.ab:disabled:hover{background:transparent;color:var(--text2);border-color:var(--border2)}
+@media (max-width:900px){.ab.mov{display:flex}}
+.ab:disabled{opacity:.4;cursor:not-allowed;color:var(--muted)}
+.ab:disabled:hover{background:transparent;color:var(--muted);border-color:var(--border2)}
 
 .btn-p{padding:8px 20px;background:var(--accent);color:var(--bg);border:none;border-radius:8px;
   cursor:pointer;font-size:13px;font-weight:600;font-family:var(--mono);display:flex;align-items:center;gap:8px}
@@ -352,7 +350,7 @@ body.light .btn-p{color:#fff}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
 @keyframes tipIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 @keyframes slideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-@keyframes activePulse{0%,100%{box-shadow:0 0 0 2px #000,0 0 8px rgba(0,0,0,.6)}50%{box-shadow:0 0 0 3px #333,0 0 15px rgba(0,0,0,.8)}}
+@keyframes activePulse{0%,100%{box-shadow:0 0 0 0 rgba(37,99,235,.7),0 2px 12px rgba(37,99,235,.3);border-color:#2563eb}50%{box-shadow:0 0 0 5px rgba(37,99,235,.15),0 2px 22px rgba(37,99,235,.55);border-color:#60a5fa}}
 .view-tabs{display:flex;gap:0;align-items:center}
 .view-tab{padding:6px 14px;background:var(--card);border:1px solid var(--border2);color:var(--dim);
   cursor:pointer;font-size:12px;font-family:var(--mono);transition:all .15s}
@@ -501,10 +499,9 @@ async function loadHolidays(){
 }
 
 async function loadActiveDossier(){
+  if(!MID) return null;
   try{
-    const resp=await fetch('/api/fabrication/session?machine_id='+MID,{credentials:"include"});
-    if(!resp.ok) return null;
-    const data=await resp.json();
+    const data=await api(`/machines/${MID}/active-dossier`);
     return data.dossier||null;
   }catch(e){ return null; }
 }
@@ -664,6 +661,14 @@ function icon(name,size=16){
     'settings': '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
     'home': '<path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/><path d="M10 21v-6h4v6"/>',
     'layers': '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
+    'arrow-up': '<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>',
+    'arrow-down': '<line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>',
+    'copy': '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 0 2 2v1"/>',
+    'scissors': '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/>',
+    'repeat': '<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>',
+    'trash-2': '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>',
+    'corner-down-right': '<polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/>',
+    'ban': '<circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>',
   };
   return `<svg ${a} aria-hidden="true" style="display:inline-block;vertical-align:middle;flex-shrink:0">${p[name]||p['calendar']}</svg>`;
 }
@@ -1120,13 +1125,15 @@ function mkTL(mon,slots){
     const cli=(s.client||"").trim()||(s.numero_of||s.reference||"—");
     const subTxt=fm!=="—"?fm:"";
     const meta=[s.numero_of||s.reference,s.description].filter(Boolean).join(" · ");
-    const isActive = S.activeDossier && S.activeDossier.id === s.entry_id;
-    const activeStyle = isActive ? "animation:activePulse 1.5s infinite;z-index:10;" : "";
+    const noOf=(s.numero_of||s.reference||"").trim().toLowerCase();
+    const activeNo=S.activeDossier?(S.activeDossier.no_dossier||"").trim().toLowerCase():"";
+    const isActive=!!(activeNo&&noOf&&activeNo===noOf);
+    const activeStyle=isActive?"border:2px solid #2563eb;animation:activePulse 1.8s ease-in-out infinite;z-index:10;":"";
     h+=`<div class="slot" style="left:${l}%;width:${w}%;background:${co}cc;border:1px solid ${co};box-shadow:0 2px 12px ${co}33;${activeStyle}"
       onmouseenter="showTip(event,this)" onmousemove="moveTip(event)" onmouseleave="hideTip()"
       data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-fmt="${escAttr(fm)}" data-dur="${escAttr(String(s.duree_heures)+"h")}"
       data-deb="${escAttr(fdt(ss))}" data-fin="${escAttr(fdt(se))}" data-st="${escAttr(st)}" data-co="${escAttr(co)}">
-      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}</span>${subTxt?`<span class="line2">${escAttr(subTxt)}</span>`:""}${isActive?'<span style="font-size:10px;color:#000;background:#fff;padding:1px 4px;border-radius:3px;margin-left:4px">🔴 ACTIF</span>':""}</div>`:""}</div>`;
+      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}</span>${subTxt?`<span class="line2">${escAttr(subTxt)}</span>`:""}${isActive?'<span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#fff;background:#1d4ed8;padding:1px 6px;border-radius:10px;margin-left:4px;font-weight:600"><span style="width:5px;height:5px;border-radius:50%;background:#93c5fd;animation:pulse 1.5s infinite;display:inline-block"></span>En saisie</span>':""}</div>`:""}</div>`;
   });
 
   const np=gp(now);
@@ -1182,15 +1189,29 @@ function mkRow(e,i,slots){
     <span class="cell-mini">${e.duree_heures}h</span>
     ${statutCell}
     <div class="acts">
-      ${CAN_EDIT?`
+      ${CAN_EDIT?(()=>{
+        const BAN=icon('ban',14);
+        const blkSwitch=isLocked;
+        const blkUp=i<=0||isLocked;
+        const blkDown=i>=S.entries.length-1||isLocked;
+        const blkSplit=isLocked;
+        const blkInsert=isLocked||nextLocked;
+        const blkDel=e.statut==="termine";
+        return`
       <button type="button" class="ab" onclick="openEdit(${e.id})" title="Modifier">${icon('edit',14)}</button>
-      <button type="button" class="ab" onclick="duplicateEntry(${e.id})" title="Dupliquer">⎘</button>
-      <button type="button" class="ab" onclick="openSwitchMachine(${e.id})" title="Changer machine" ${isLocked?"disabled":""}>⇄</button>
-      <button type="button" class="ab mov" onclick="moveEntry(${e.id},-1)" title="Monter" ${i<=0||isLocked?"disabled":""}>▲</button>
-      <button type="button" class="ab mov" onclick="moveEntry(${e.id},+1)" title="Descendre" ${i>=S.entries.length-1||isLocked?"disabled":""}>▼</button>
-      <button type="button" class="ab" onclick="splitEntry(${e.id})" title="Spliter">½</button>
-      <button type="button" class="ab" onclick="openInsert(${e.id})" title="${nextLocked?"⦸ Impossible":"Inserer apres"}" ${isLocked||nextLocked?"disabled":""}>${nextLocked?"⦸":"↳+"}</button>
-      ${(e.statut==="en_cours")?`<button type="button" class="ab del" onclick="if(confirm('Supprimer ce dossier en cours ? Le suivant passera automatiquement en cours.'))delEntry(${e.id})" title="Supprimer (en cours)">✕</button>`:`<button type="button" class="ab del" onclick="if(confirm('Supprimer ?'))delEntry(${e.id})" title="Supprimer" ${e.statut==="termine"?"disabled":""}>✕</button>`}`:""}
+      <button type="button" class="ab" onclick="duplicateEntry(${e.id})" title="Dupliquer">${icon('copy',14)}</button>
+      <button type="button" class="ab${blkSwitch?" disabled-btn":""}" ${blkSwitch?`disabled title="Non disponible — dossier verrouillé"`:`onclick="openSwitchMachine(${e.id})" title="Changer de machine"`}>${blkSwitch?BAN:icon('repeat',14)}</button>
+      <button type="button" class="ab mov${blkUp?" disabled-btn":""}" ${blkUp?`disabled title="Non disponible"`:`onclick="moveEntry(${e.id},-1)" title="Monter"`}>${blkUp?BAN:icon('arrow-up',14)}</button>
+      <button type="button" class="ab mov${blkDown?" disabled-btn":""}" ${blkDown?`disabled title="Non disponible"`:`onclick="moveEntry(${e.id},+1)" title="Descendre"`}>${blkDown?BAN:icon('arrow-down',14)}</button>
+      <button type="button" class="ab${blkSplit?" disabled-btn":""}" ${blkSplit?`disabled title="Non disponible — dossier verrouillé"`:`onclick="splitEntry(${e.id})" title="Diviser en 2"`}>${blkSplit?BAN:icon('scissors',14)}</button>
+      <button type="button" class="ab${blkInsert?" disabled-btn":""}" ${blkInsert?`disabled title="Non disponible"`:`onclick="openInsert(${e.id})" title="Insérer après"`}>${blkInsert?BAN:icon('corner-down-right',14)}</button>
+      ${e.statut==="termine"
+        ?`<button type="button" class="ab" disabled title="Non disponible — dossier terminé">${BAN}</button>`
+        :e.statut==="en_cours"
+          ?`<button type="button" class="ab del" onclick="if(confirm('Supprimer ce dossier en cours ? Le suivant passera automatiquement en cours.'))delEntry(${e.id})" title="Supprimer (en cours)">${icon('trash-2',14)}</button>`
+          :`<button type="button" class="ab del" onclick="if(confirm('Supprimer ?'))delEntry(${e.id})" title="Supprimer">${icon('trash-2',14)}</button>`
+      }`;
+      })():""}
     </div></div>`;
 }
 
@@ -1575,17 +1596,75 @@ async function submitAdd(){
 function openEdit(id){
   if(!CAN_EDIT) return;
   const e=S.entries.find(x=>x.id===id);if(!e)return;
+
+  // ── Dossier TERMINÉ : lecture seule ──────────────────────────────────────
+  if(e.statut==="termine"){
+    const fm=e.format_l&&e.format_h?`${e.format_l}×${e.format_h} mm`:"—";
+    document.getElementById("mroot").innerHTML=modalHTML(
+      `Dossier terminé — ${escAttr(e.numero_of||e.reference||'')}`,
+      `<div style="background:rgba(248,113,113,.10);border:1px solid var(--red);border-radius:8px;padding:10px 14px;margin-bottom:18px;font-size:12px;color:var(--muted)">
+        Ce dossier est <strong style="color:var(--red)">terminé</strong> — aucune modification n'est possible.
+      </div>
+      <div class="fd"><label>Numéro d'OF</label><input value="${escAttr(e.numero_of||e.reference||'')}" disabled style="opacity:.6"></div>
+      <div class="fd"><label>Client</label><input value="${escAttr(e.client||'')}" disabled style="opacity:.6"></div>
+      <div class="fd"><label>Format</label><input value="${escAttr(fm)}" disabled style="opacity:.6"></div>
+      <div class="fd"><label>Durée</label><input value="${e.duree_heures}h" disabled style="opacity:.6"></div>`,
+      "Fermer","closeM()"
+    );
+    return;
+  }
+
+  // ── Dossier EN COURS : seule la durée est ajustable ──────────────────────
+  if(e.statut==="en_cours"){
+    const curDur=e.duree_heures||8;
+    const pct=((Math.max(MIND,Math.min(30,curDur))-MIND)/(30-MIND)*100).toFixed(1);
+    document.getElementById("mroot").innerHTML=modalHTML(
+      `En cours — ${escAttr(e.numero_of||e.reference||'')}`,
+      `<div style="background:var(--accent-bg);border:1px solid var(--accent);border-radius:8px;padding:10px 14px;margin-bottom:18px;font-size:12px;color:var(--muted)">
+        Dossier <strong style="color:var(--accent)">en cours</strong> — seule la durée estimée peut être ajustée.
+      </div>
+      <div class="fd"><label>Durée (${MIND}–720h)</label>
+        <input type="number" id="f-dur" min="${MIND}" max="720" value="${curDur}"
+          oninput="document.getElementById('f-dur-fill2').style.width=((Math.max(${MIND},Math.min(30,+this.value||${MIND}))-${MIND})/(30-${MIND})*100)+'%'">
+        <div class="dur-b"><div class="dur-f" id="f-dur-fill2" style="width:${pct}%"></div></div>
+      </div>`,
+      "Enregistrer",`submitEditDuree(${id})`
+    );
+    return;
+  }
+
+  // ── Cas normal (attente) ──────────────────────────────────────────────────
   document.getElementById("mroot").innerHTML=modalHTML(
     `Modifier — ${(e.numero_of||e.reference)||''}`,
     dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.format_l||"",e.format_h||"",e.duree_heures,e.statut,true),
     "Enregistrer",`submitEdit(${id})`
   );
 }
+
+async function submitEditDuree(id){
+  const dur=parseInt(document.getElementById("f-dur").value)||0;
+  if(dur<MIND||dur>720)return alert(`Durée entre ${MIND} et 720h`);
+  try{
+    await api(`/machines/${MID}/entries/${id}`,{method:"PUT",body:JSON.stringify({duree_heures:dur})});
+    closeM();load();
+  }catch(err){
+    let msg="Modification impossible.";
+    try{const j=await err.json();if(j&&j.detail)msg=typeof j.detail==="string"?j.detail:JSON.stringify(j.detail);}catch(x){}
+    alert(msg);
+  }
+}
+
 async function submitEdit(id){
   const d=getFormData(true);
   if(!d.numero_of)return alert("Numéro d'OF requis");
-  await api(`/machines/${MID}/entries/${id}`,{method:"PUT",body:JSON.stringify({reference:d.numero_of,...d})});
-  closeM();load();
+  try{
+    await api(`/machines/${MID}/entries/${id}`,{method:"PUT",body:JSON.stringify({reference:d.numero_of,...d})});
+    closeM();load();
+  }catch(err){
+    let msg="Modification impossible.";
+    try{const j=await err.json();if(j&&j.detail)msg=typeof j.detail==="string"?j.detail:JSON.stringify(j.detail);}catch(x){}
+    alert(msg);
+  }
 }
 
 function openInsert(afterId){
@@ -1778,6 +1857,16 @@ async function boot(){
     }
   }catch(e){console.error(e);MID=0;}
   await load();
+  // Actualise le dossier actif toutes les 30 s sans recharger toute la page
+  setInterval(async()=>{
+    if(!MID) return;
+    try{
+      const d=await api(`/machines/${MID}/active-dossier`);
+      const prev=S.activeDossier?S.activeDossier.no_dossier:null;
+      const next=d.dossier?d.dossier.no_dossier:null;
+      if(prev!==next){S.activeDossier=d.dossier||null;render();}
+    }catch(e){}
+  },30000);
 }
 boot();
 </script>
