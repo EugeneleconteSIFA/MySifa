@@ -272,6 +272,7 @@ def _slot_payload(e: dict, start_iso: str, end_iso: str) -> dict:
         "ref_produit": e.get("ref_produit"),
         "commentaire": e.get("commentaire"),
         "a_placer": e.get("a_placer", 0),
+        "destockage": e.get("destockage") or "todo",
         "duree_heures": e["duree_heures"],
         # Un dossier terminé en DB reste terminé même si planned_end est dans le futur
         # (cas : durée modifiée → planned_end recalculé en heures calendaires)
@@ -818,6 +819,28 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
         ))
         conn.commit()
     return {"success": True}
+
+
+@router.put("/machines/{machine_id}/entries/{entry_id}/destockage")
+async def toggle_destockage(machine_id: int, entry_id: int, request: Request):
+    """Bascule le flag destockage (todo ↔ done) d'un dossier."""
+    require_admin(request)
+    now = datetime.now().isoformat()
+    with get_db() as conn:
+        ex = conn.execute(
+            "SELECT destockage FROM planning_entries WHERE id=? AND machine_id=?",
+            (entry_id, machine_id)
+        ).fetchone()
+        if not ex:
+            raise HTTPException(404, "Entrée non trouvée")
+        cur = ex["destockage"] or "todo"
+        new_val = "todo" if cur == "done" else "done"
+        conn.execute(
+            "UPDATE planning_entries SET destockage=?, updated_at=? WHERE id=? AND machine_id=?",
+            (new_val, now, entry_id, machine_id)
+        )
+        conn.commit()
+    return {"success": True, "destockage": new_val}
 
 
 @router.post("/machines/{machine_id}/entries/{entry_id}/split")

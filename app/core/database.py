@@ -410,6 +410,8 @@ def _migrate(conn):
             ("split_parent_id", "ALTER TABLE planning_entries ADD COLUMN split_parent_id INTEGER"),
             # Planning v2: flag "à placer au planning" (0=non, 1=oui — zébré dans liste+timeline)
             ("a_placer", "ALTER TABLE planning_entries ADD COLUMN a_placer INTEGER DEFAULT 0"),
+            # Planning v2: destockage (todo/done — point gris dans le slot timeline)
+            ("destockage", "ALTER TABLE planning_entries ADD COLUMN destockage TEXT DEFAULT 'todo'"),
         ]:
             if col not in pe_cols:
                 conn.execute(sql)

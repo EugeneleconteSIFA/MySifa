@@ -1018,8 +1018,10 @@ function render(){
       <div class="sec-hdr">
         <div class="sec-title">Dossiers de production</div>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-          <div style="position:relative">
-            <input type="text" id="planning-search" placeholder="Rechercher (client, ref, OF, format…)" value="${escAttr(S.searchQuery)}" oninput="S.searchQuery=this.value;renderEntries();" style="padding:8px 12px;border:1px solid var(--border2);border-radius:8px;background:var(--bg);color:var(--text);font-size:13px;min-width:260px">
+          <div style="position:relative;max-width:360px;flex:1;min-width:160px">
+            <input type="text" id="planning-search" placeholder="Rechercher (client, ref, OF, format…)" value="${escAttr(S.searchQuery)}"
+              oninput="S.searchQuery=this.value;renderEntries();"
+              style="width:100%;padding:8px 34px 8px 12px;border:1px solid var(--border2);border-radius:8px;background:var(--bg);color:var(--text);font-size:12px;font-family:var(--mono);outline:none">
             <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px">🔍</span>
           </div>
           ${CAN_EDIT?`<button type="button" class="btn-p" onclick="openAdd()"><span style="font-size:18px;line-height:1">+</span> Ajouter</button>`:""}
@@ -1126,6 +1128,16 @@ function renderTL(){
   if(container) container.innerHTML=tlBlocks;
   buildLegend(sl, m1, nw);
   requestAnimationFrame(()=>updateTlMatchInfo());
+}
+
+async function toggleDestockage(entryId){
+  if(!CAN_EDIT) return;
+  try{
+    const r=await api(`/machines/${MID}/entries/${entryId}/destockage`,{method:"PUT"});
+    // Mise à jour locale du cache timeline (pas de rechargement complet)
+    (S.timeline||[]).forEach(s=>{if((s.entry_id||0)===entryId) s.destockage=r.destockage;});
+    renderTL();
+  }catch(e){ console.error("toggleDestockage",e); }
 }
 
 function buildLegend(sl, m1, nw){
@@ -1280,10 +1292,13 @@ function mkTL(mon,slots){
     }
     // a_placer striped
     const aplacerCls=s.a_placer?"slot-aplacer":"";
+    const destock=s.destockage==="done";
     h+=`<div class="slot ${matchCls} ${aplacerCls}" data-eid="${s.entry_id||idx}" style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${isActive?"border:2px solid #22d3ee;animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
       onmouseenter="showTip(event,this)" onmousemove="moveTip(event)" onmouseleave="hideTip()"
+      ondblclick="hideTip();toggleDestockage(${s.entry_id||idx});event.stopPropagation()"
       data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(String(s.duree_heures)+"h")}"
       data-deb="${escAttr(fdt(ss))}" data-fin="${escAttr(fdt(se))}" data-st="${escAttr(st)}" data-co="${escAttr(co)}">
+      ${destock?`<div style="position:absolute;top:4px;right:4px;width:7px;height:7px;border-radius:50%;background:rgba(148,163,184,.55);pointer-events:none;z-index:5;flex-shrink:0"></div>`:""}
       ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}</span>${subTxt?`<span class="line2">${escAttr(subTxt)}</span>`:""}</div>`:""}</div>`;
   });
 
@@ -1744,7 +1759,7 @@ function openAdd(){
   document.getElementById("mroot").innerHTML=modalHTML(
     "Ajouter un dossier",
     dossierFields("","","","","","","","",8,"attente",false),
-    "Ajouter","submitAdd()"
+    '<span style="font-size:18px;line-height:1">+</span> Ajouter',"submitAdd()"
   );
 }
 async function submitAdd(){
