@@ -1597,31 +1597,20 @@ function openEdit(id){
   if(!CAN_EDIT) return;
   const e=S.entries.find(x=>x.id===id);if(!e)return;
 
-  // ── Dossier TERMINÉ : lecture seule ──────────────────────────────────────
-  if(e.statut==="termine"){
-    const fm=e.format_l&&e.format_h?`${e.format_l}×${e.format_h} mm`:"—";
-    document.getElementById("mroot").innerHTML=modalHTML(
-      `Dossier terminé — ${escAttr(e.numero_of||e.reference||'')}`,
-      `<div style="background:rgba(248,113,113,.10);border:1px solid var(--red);border-radius:8px;padding:10px 14px;margin-bottom:18px;font-size:12px;color:var(--muted)">
-        Ce dossier est <strong style="color:var(--red)">terminé</strong> — aucune modification n'est possible.
-      </div>
-      <div class="fd"><label>Numéro d'OF</label><input value="${escAttr(e.numero_of||e.reference||'')}" disabled style="opacity:.6"></div>
-      <div class="fd"><label>Client</label><input value="${escAttr(e.client||'')}" disabled style="opacity:.6"></div>
-      <div class="fd"><label>Format</label><input value="${escAttr(fm)}" disabled style="opacity:.6"></div>
-      <div class="fd"><label>Durée</label><input value="${e.duree_heures}h" disabled style="opacity:.6"></div>`,
-      "Fermer","closeM()"
-    );
-    return;
-  }
-
-  // ── Dossier EN COURS : seule la durée est ajustable ──────────────────────
-  if(e.statut==="en_cours"){
+  // ── Dossier EN COURS ou TERMINÉ : seule la durée est ajustable ─────────
+  if(e.statut==="en_cours"||e.statut==="termine"){
     const curDur=e.duree_heures||8;
     const pct=((Math.max(MIND,Math.min(30,curDur))-MIND)/(30-MIND)*100).toFixed(1);
+    const isTermine=e.statut==="termine";
+    const bannerColor=isTermine?"rgba(248,113,113,.10)":"var(--accent-bg)";
+    const bannerBorder=isTermine?"var(--red)":"var(--accent)";
+    const bannerTxtColor=isTermine?"var(--red)":"var(--accent)";
+    const bannerLabel=isTermine?"terminé":"en cours";
+    const bannerNote=isTermine?"la durée réelle peut encore être corrigée.":"seule la durée estimée peut être ajustée.";
     document.getElementById("mroot").innerHTML=modalHTML(
-      `En cours — ${escAttr(e.numero_of||e.reference||'')}`,
-      `<div style="background:var(--accent-bg);border:1px solid var(--accent);border-radius:8px;padding:10px 14px;margin-bottom:18px;font-size:12px;color:var(--muted)">
-        Dossier <strong style="color:var(--accent)">en cours</strong> — seule la durée estimée peut être ajustée.
+      `${isTermine?"Terminé":"En cours"} — ${escAttr(e.numero_of||e.reference||'')}`,
+      `<div style="background:${bannerColor};border:1px solid ${bannerBorder};border-radius:8px;padding:10px 14px;margin-bottom:18px;font-size:12px;color:var(--muted)">
+        Dossier <strong style="color:${bannerTxtColor}">${bannerLabel}</strong> — ${bannerNote}
       </div>
       <div class="fd"><label>Durée (${MIND}–720h)</label>
         <input type="number" id="f-dur" min="${MIND}" max="720" value="${curDur}"
