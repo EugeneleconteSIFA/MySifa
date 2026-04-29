@@ -238,8 +238,8 @@ body.light .d-sep{background:rgba(71,85,105,.35)}
 .slot:hover{top:5px;bottom:5px;z-index:20}
 .slot-inner{display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.15;
   text-align:center;max-width:100%;pointer-events:none}
-.slot .line1{font-size:16px;color:#1e293b;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-.slot .line2{font-size:13px;font-weight:600;color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.slot .line1{font-size:13px;color:#1e293b;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.slot .line2{font-size:10px;font-weight:600;color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 body.light .slot .line1{color:#1e293b}body.light .slot .line2{color:#334155}
 .now-l{position:absolute;top:0;bottom:0;width:2px;background:var(--red);z-index:15;box-shadow:0 0 8px var(--red)}
 .now-d{position:absolute;top:-4px;left:-4px;width:10px;height:10px;border-radius:50%;background:var(--red)}
@@ -325,6 +325,17 @@ body.light .th{background:var(--bg)}
 @media (max-width:900px){.ab.mov{display:flex}}
 .ab:disabled{opacity:.4;cursor:not-allowed;color:var(--muted)}
 .ab:disabled:hover{background:transparent;color:var(--muted);border-color:var(--border2)}
+/* Tooltip actions */
+.ab[title]{position:relative;overflow:visible}
+.ab[title]:hover::after{
+  content:attr(title);position:absolute;bottom:calc(100% + 7px);left:50%;transform:translateX(-50%);
+  background:var(--card);border:1px solid var(--border2);border-radius:7px;
+  padding:5px 9px;font-size:10px;color:var(--text2);white-space:nowrap;
+  pointer-events:none;z-index:200;box-shadow:0 4px 16px rgba(0,0,0,.35);
+  font-family:var(--sans);font-weight:500;letter-spacing:0}
+.ab[title]:hover::before{
+  content:'';position:absolute;bottom:calc(100% + 2px);left:50%;transform:translateX(-50%);
+  border:5px solid transparent;border-top-color:var(--border2);pointer-events:none;z-index:200}
 
 .btn-p{padding:8px 20px;background:var(--accent);color:var(--bg);border:none;border-radius:8px;
   cursor:pointer;font-size:13px;font-weight:600;font-family:var(--mono);display:flex;align-items:center;gap:8px}
@@ -435,7 +446,8 @@ const DEFAULTS_BY_KEY={
 const DAY_API={1:"lundi",2:"mardi",3:"mercredi",4:"jeudi",5:"vendredi",6:"samedi"};
 const DAY_FIELD={1:"horaires_lundi",2:"horaires_mardi",3:"horaires_mercredi",4:"horaires_jeudi",5:"horaires_vendredi",6:"horaires_samedi"};
 let S={machine:null,machines:[],entries:[],timeline:[],wo:0,loading:true,holidays:{},dayWorked:{},dayHoraires:{},view:localStorage.getItem("mysifa.planning.view")||"2w",
-  contactOpen:false,contactSubject:"",contactMessage:"",contactSending:false,searchQuery:"",tlSearchQuery:"",activeDossier:null};
+  contactOpen:false,contactSubject:"",contactMessage:"",contactSending:false,searchQuery:"",tlSearchQuery:"",tlSearchIdx:0,activeDossier:null};
+let _tlMatches=[];
 let ME=null;
 let CAN_EDIT=false;
 let SHOW_DOSSIERS=false;
@@ -679,6 +691,9 @@ function icon(name,size=16){
     'trash-2': '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>',
     'corner-down-right': '<polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/>',
     'ban': '<circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>',
+    'search': '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+    'chevron-left': '<polyline points="15 18 9 12 15 6"/>',
+    'chevron-right': '<polyline points="9 18 15 12 9 6"/>',
   };
   return `<svg ${a} aria-hidden="true" style="display:inline-block;vertical-align:middle;flex-shrink:0">${p[name]||p['calendar']}</svg>`;
 }
@@ -971,14 +986,30 @@ function render(){
         </div>
       </div>
       <div style="font-size:11px;color:var(--muted);margin:-8px 0 12px">Samedi non travaillé par défaut — décochez pour l'activer.</div>
-      <div style="margin-bottom:12px;display:flex;align-items:center;gap:8px">
-        <div style="position:relative;max-width:380px;flex:1">
+      <div style="margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div style="position:relative;max-width:360px;flex:1;min-width:160px">
           <input type="text" id="tl-search" placeholder="Rechercher dans la timeline…" value="${escAttr(S.tlSearchQuery||"")}"
-            oninput="S.tlSearchQuery=this.value;renderTL()"
-            style="width:100%;padding:8px 36px 8px 12px;border:1px solid var(--border2);border-radius:8px;background:var(--bg);color:var(--text);font-size:12px;font-family:var(--mono);outline:none">
-          <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;pointer-events:none">🔍</span>
+            oninput="S.tlSearchIdx=0;S.tlSearchQuery=this.value;renderTL()"
+            onkeydown="if(event.key==='Enter'){event.shiftKey?tlSearchPrev():tlSearchNext();event.preventDefault()}"
+            style="width:100%;padding:8px 34px 8px 12px;border:1px solid var(--border2);border-radius:8px;background:var(--bg);color:var(--text);font-size:12px;font-family:var(--mono);outline:none">
+          <button type="button" onclick="tlSearchNext()" title="Résultat suivant (Entrée)"
+            style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:transparent;border:none;color:var(--muted);cursor:pointer;padding:2px;display:flex;align-items:center;line-height:1">
+            ${icon('search',14)}
+          </button>
         </div>
-        ${S.tlSearchQuery?`<button type="button" onclick="S.tlSearchQuery='';renderTL()" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--muted);cursor:pointer;font-family:inherit">✕ Effacer</button>`:""}
+        <span id="tl-match-count" style="font-size:12px;font-weight:700;color:#67e8f9;font-family:var(--mono);display:none;white-space:nowrap"></span>
+        <div id="tl-match-nav" style="display:none;align-items:center;gap:6px">
+          <button type="button" onclick="tlSearchPrev()" title="Précédent (Shift+Entrée)"
+            style="display:flex;align-items:center;gap:4px;font-size:11px;padding:5px 10px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit">
+            ${icon('chevron-left',13)} Préc.
+          </button>
+          <button type="button" onclick="tlSearchNext()" title="Suivant (Entrée)"
+            style="display:flex;align-items:center;gap:4px;font-size:11px;padding:5px 10px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit">
+            Suiv. ${icon('chevron-right',13)}
+          </button>
+          <button type="button" onclick="S.tlSearchQuery='';S.tlSearchIdx=0;document.getElementById('tl-search').value='';renderTL()"
+            style="font-size:11px;padding:5px 10px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--muted);cursor:pointer;font-family:inherit">✕</button>
+        </div>
       </div>
       <div id="tl-blocks-container">${tlBlocks}</div>
       <div class="legend" id="tl-legend"></div>
@@ -1006,6 +1037,44 @@ function render(){
   if(SHOW_DOSSIERS)autoScrollDossiersIfNeeded();
 }
 
+function updateTlMatchInfo(){
+  _tlMatches=Array.from(document.querySelectorAll("#tl-blocks-container .slot.tl-match"));
+  const n=_tlMatches.length;
+  const q=!!(S.tlSearchQuery&&S.tlSearchQuery.trim());
+  if(S.tlSearchIdx>=n) S.tlSearchIdx=Math.max(0,n-1);
+  // Count label
+  const cntEl=document.getElementById("tl-match-count");
+  if(cntEl){
+    cntEl.textContent=q?(n>0?`${S.tlSearchIdx+1} / ${n}`:"0 résultat"):"";
+    cntEl.style.display=q?"inline":"none";
+  }
+  // Nav buttons
+  const navEl=document.getElementById("tl-match-nav");
+  if(navEl) navEl.style.display=(q&&n>0)?"flex":"none";
+  // Highlight current vs others
+  _tlMatches.forEach((el,i)=>{
+    el.style.outline=i===S.tlSearchIdx?"3px solid #22d3ee":"3px solid rgba(255,255,255,.7)";
+    el.style.outlineOffset="2px";
+  });
+  // Scroll to current
+  if(n>0&&_tlMatches[S.tlSearchIdx]){
+    requestAnimationFrame(()=>{
+      _tlMatches[S.tlSearchIdx].scrollIntoView({behavior:"smooth",block:"nearest"});
+    });
+  }
+}
+
+function tlSearchNext(){
+  if(!_tlMatches.length) return;
+  S.tlSearchIdx=(S.tlSearchIdx+1)%_tlMatches.length;
+  updateTlMatchInfo();
+}
+function tlSearchPrev(){
+  if(!_tlMatches.length) return;
+  S.tlSearchIdx=(S.tlSearchIdx-1+_tlMatches.length)%_tlMatches.length;
+  updateTlMatchInfo();
+}
+
 function renderTL(){
   const m1=addD(getMon(new Date()),S.wo*7);
   const nw=S.view==="1w"?1:S.view==="4w"?4:2;
@@ -1022,13 +1091,7 @@ function renderTL(){
   const container=document.getElementById("tl-blocks-container");
   if(container) container.innerHTML=tlBlocks;
   buildLegend(sl, m1, nw);
-  // Scroll to first matching slot
-  if(S.tlSearchQuery&&S.tlSearchQuery.trim()){
-    requestAnimationFrame(()=>{
-      const first=document.querySelector("#tl-blocks-container .slot.tl-match");
-      if(first) first.scrollIntoView({behavior:"smooth",block:"nearest"});
-    });
-  }
+  requestAnimationFrame(()=>updateTlMatchInfo());
 }
 
 function buildLegend(sl, m1, nw){
@@ -1183,7 +1246,7 @@ function mkTL(mon,slots){
     }
     // a_placer striped
     const aplacerCls=s.a_placer?"slot-aplacer":"";
-    h+=`<div class="slot ${matchCls} ${aplacerCls}" style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${isActive?"border:2px solid #22d3ee;animation:activePulse 2.2s ease-in-out infinite;":"border:1px solid "+co+"99;"}"
+    h+=`<div class="slot ${matchCls} ${aplacerCls}" style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${isActive?"border:2px solid #22d3ee;animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
       onmouseenter="showTip(event,this)" onmousemove="moveTip(event)" onmouseleave="hideTip()"
       data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(String(s.duree_heures)+"h")}"
       data-deb="${escAttr(fdt(ss))}" data-fin="${escAttr(fdt(se))}" data-st="${escAttr(st)}" data-co="${escAttr(co)}">
