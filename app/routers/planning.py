@@ -745,19 +745,27 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
             if duree is not None and float(duree) != float(ex["duree_heures"]):
                 ps = exd.get("planned_start")
                 st = _parse_planned_dt(ps)
-                if st:
-                    # Recalcule planned_end à partir de planned_start + nouvelle durée
-                    # (aussi pour terminé : décale les dossiers suivants en attente)
+                if statut_auto == "en_cours" and st:
+                    # en_cours : recalculer planned_end (estimation de fin à jour)
                     pe = _fmt_ts(st + timedelta(hours=float(duree)))
+                    conn.execute(
+                        """UPDATE planning_entries
+                           SET duree_heures=?, updated_at=?, planned_end=?
+                           WHERE id=? AND machine_id=?""",
+                        (float(duree), now, pe, entry_id, machine_id),
+                    )
                 else:
-                    pe = exd.get("planned_end")
-                conn.execute(
-                    """UPDATE planning_entries
-                       SET duree_heures=?, updated_at=?, planned_end=?
-                       WHERE id=? AND machine_id=?""",
-                    (float(duree), now, pe, entry_id, machine_id),
-                )
-                # Toujours invalider les créneaux attente pour que le décalage se propage
+                    # terminé : on null planned_end pour forcer un recalcul via
+                    # compute_slots (jours ouvrés pris en compte), et on force
+                    # statut_force=1 pour que compute_statut retourne "terminé"
+                    # même sans planned_end — évite la régression vers en_cours/attente.
+                    conn.execute(
+                        """UPDATE planning_entries
+                           SET duree_heures=?, updated_at=?,
+                               planned_end=NULL, statut='termine', statut_force=1
+                           WHERE id=? AND machine_id=?""",
+                        (float(duree), now, entry_id, machine_id),
+                    )
                 _invalidate_attente_plans(conn, machine_id)
                 conn.commit()
                 return {"success": True, "partial": "duree_heures"}
