@@ -745,11 +745,11 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
             if duree is not None and float(duree) != float(ex["duree_heures"]):
                 ps = exd.get("planned_start")
                 st = _parse_planned_dt(ps)
-                if statut_auto == "en_cours" and st:
-                    # Pour en_cours : recalculer planned_end à partir du planned_start
+                if st:
+                    # Recalcule planned_end à partir de planned_start + nouvelle durée
+                    # (aussi pour terminé : décale les dossiers suivants en attente)
                     pe = _fmt_ts(st + timedelta(hours=float(duree)))
                 else:
-                    # Pour terminé : conserver planned_end existant (le dossier est fini)
                     pe = exd.get("planned_end")
                 conn.execute(
                     """UPDATE planning_entries
@@ -757,9 +757,8 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
                        WHERE id=? AND machine_id=?""",
                     (float(duree), now, pe, entry_id, machine_id),
                 )
-                if statut_auto == "en_cours":
-                    # Recalculer les créneaux attente suivants uniquement si en_cours
-                    _invalidate_attente_plans(conn, machine_id)
+                # Toujours invalider les créneaux attente pour que le décalage se propage
+                _invalidate_attente_plans(conn, machine_id)
                 conn.commit()
                 return {"success": True, "partial": "duree_heures"}
             raise HTTPException(400, "Ce dossier est verrouillé — seule la durée peut être modifiée")

@@ -8,7 +8,7 @@ const path = require('path');
 const CONFIG = {
   width:  340,
   height: 300,
-  url:    'http://localhost:8000/widget',  // ← Modifier pour la production
+  url:    'https://www.mysifa.com/widget',
   refreshInterval: 30000,   // ms entre chaque actualisation auto
 };
 

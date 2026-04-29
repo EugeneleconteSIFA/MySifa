@@ -350,7 +350,7 @@ body.light .btn-p{color:#fff}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
 @keyframes tipIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 @keyframes slideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-@keyframes activePulse{0%,100%{box-shadow:0 0 0 0 rgba(37,99,235,.7),0 2px 12px rgba(37,99,235,.3);border-color:#2563eb}50%{box-shadow:0 0 0 5px rgba(37,99,235,.15),0 2px 22px rgba(37,99,235,.55);border-color:#60a5fa}}
+@keyframes activePulse{0%,100%{border-color:#22d3ee;box-shadow:0 0 5px rgba(34,211,238,.3)}50%{border-color:rgba(34,211,238,.35);box-shadow:none}}
 .view-tabs{display:flex;gap:0;align-items:center}
 .view-tab{padding:6px 14px;background:var(--card);border:1px solid var(--border2);color:var(--dim);
   cursor:pointer;font-size:12px;font-family:var(--mono);transition:all .15s}
@@ -1128,12 +1128,12 @@ function mkTL(mon,slots){
     const noOf=(s.numero_of||s.reference||"").trim().toLowerCase();
     const activeNo=S.activeDossier?(S.activeDossier.no_dossier||"").trim().toLowerCase():"";
     const isActive=!!(activeNo&&noOf&&activeNo===noOf);
-    const activeStyle=isActive?"border:2px solid #2563eb;animation:activePulse 1.8s ease-in-out infinite;z-index:10;":"";
+    const activeStyle=isActive?"border:1px solid #22d3ee;animation:activePulse 2.2s ease-in-out infinite;":"";
     h+=`<div class="slot" style="left:${l}%;width:${w}%;background:${co}cc;border:1px solid ${co};box-shadow:0 2px 12px ${co}33;${activeStyle}"
       onmouseenter="showTip(event,this)" onmousemove="moveTip(event)" onmouseleave="hideTip()"
       data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-fmt="${escAttr(fm)}" data-dur="${escAttr(String(s.duree_heures)+"h")}"
       data-deb="${escAttr(fdt(ss))}" data-fin="${escAttr(fdt(se))}" data-st="${escAttr(st)}" data-co="${escAttr(co)}">
-      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}</span>${subTxt?`<span class="line2">${escAttr(subTxt)}</span>`:""}${isActive?'<span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#fff;background:#1d4ed8;padding:1px 6px;border-radius:10px;margin-left:4px;font-weight:600"><span style="width:5px;height:5px;border-radius:50%;background:#93c5fd;animation:pulse 1.5s infinite;display:inline-block"></span>En saisie</span>':""}</div>`:""}</div>`;
+      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}</span>${subTxt?`<span class="line2">${escAttr(subTxt)}</span>`:""}${isActive?'<span style="font-size:9px;color:#22d3ee;font-weight:700;letter-spacing:.2px;margin-left:4px;opacity:.9">● saisie</span>':""}</div>`:""}</div>`;
   });
 
   const np=gp(now);
