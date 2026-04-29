@@ -238,8 +238,8 @@ body.light .d-sep{background:rgba(71,85,105,.35)}
 .slot:hover{top:5px;bottom:5px;z-index:20}
 .slot-inner{display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.15;
   text-align:center;max-width:100%;pointer-events:none}
-.slot .line1{font-size:11px;color:#1e293b;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-.slot .line2{font-size:9px;font-weight:600;color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.slot .line1{font-size:16px;color:#1e293b;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.slot .line2{font-size:13px;font-weight:600;color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 body.light .slot .line1{color:#1e293b}body.light .slot .line2{color:#334155}
 .now-l{position:absolute;top:0;bottom:0;width:2px;background:var(--red);z-index:15;box-shadow:0 0 8px var(--red)}
 .now-d{position:absolute;top:-4px;left:-4px;width:10px;height:10px;border-radius:50%;background:var(--red)}
@@ -257,8 +257,9 @@ body.light .slot .line1{color:#1e293b}body.light .slot .line2{color:#334155}
 
 .legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}
 .lg-i{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dim)}
-.lg-d{width:10px;height:10px;border-radius:3px;cursor:pointer;transition:transform .15s,box-shadow .15s;flex-shrink:0}
-.lg-d:hover{transform:scale(1.35);box-shadow:0 0 0 2px rgba(255,255,255,.35)}
+.lg-d{width:14px;height:14px;border-radius:4px;cursor:pointer;transition:transform .15s,box-shadow .15s;flex-shrink:0;border:1.5px solid rgba(148,163,184,.35)}
+.lg-d:hover{transform:scale(1.3);box-shadow:0 0 0 2px rgba(255,255,255,.5)}
+body.light .lg-d{border-color:rgba(71,85,105,.3)}
 .lg-i span{font-family:var(--mono)}
 /* ── Color picker popup ── */
 .cpk{position:fixed;z-index:9999;background:var(--card);border:1px solid var(--border2);border-radius:12px;
@@ -411,13 +412,15 @@ let MID=__MACHINE_ID__;
 const DN=["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"];
 const MIND=2,MAXD=720;
 const CC=["#93c5fd","#c4b5fd","#6ee7b7","#fde68a","#fca5a5","#67e8f9","#a5b4fc","#bbf7d0","#f0abfc","#fdba74"];
-// Palette étendue pour le picker de couleurs
+// Palette étendue pour le picker de couleurs (pastels en premier, saturés ensuite)
 const PALETTE=[
-  "#ef4444","#f97316","#eab308","#22c55e","#10b981","#14b8a6",
-  "#06b6d4","#3b82f6","#6366f1","#8b5cf6","#a855f7","#ec4899",
-  "#f43f5e","#84cc16","#0ea5e9","#2563eb","#7c3aed","#059669",
-  "#d97706","#dc2626","#0891b2","#4f46e5","#c026d3","#ea580c",
-  "#64748b","#475569","#334155","#94a3b8","#cbd5e1","#e2e8f0",
+  // Pastels (cohérents avec la palette par défaut)
+  "#93c5fd","#c4b5fd","#6ee7b7","#fde68a","#fca5a5","#67e8f9",
+  "#a5b4fc","#bbf7d0","#f0abfc","#fdba74","#99f6e4","#fef08a",
+  "#bfdbfe","#ddd6fe","#a7f3d0","#fecaca","#fed7aa","#e9d5ff",
+  // Saturés (pour surcharge manuelle)
+  "#3b82f6","#8b5cf6","#10b981","#f59e0b","#ef4444","#06b6d4",
+  "#6366f1","#22c55e","#d946ef","#f97316","#64748b","#94a3b8",
 ];
 const MACHINE_ORDER=["Cohésio 1","Cohésio 2","DSI","Repiquage"];
 const DEFAULTS_BY_KEY={
