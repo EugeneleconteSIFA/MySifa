@@ -1406,7 +1406,12 @@ function mkTL(mon,slots){
     const co=colorForId(s.entry_id||idx+1);
     const fm=s.format_l&&s.format_h?`${s.format_l} × ${s.format_h} mm`:"";
     const lz=s.laize?`${s.laize} mm`:"";
-    const subTxt=[fm,lz].filter(Boolean).join(" | ");
+    // Construction de la ligne 2 avec format/laize + date livraison + commentaire
+    const fmLz=[fm,lz].filter(Boolean).join(" | ");
+    const dateLiv=s.date_livraison?`à livrer pour ${s.date_livraison}`:"";
+    const com=s.commentaire?String(s.commentaire).trim():"";
+    const extraParts=[dateLiv,com].filter(Boolean);
+    const subTxt=fmLz+(extraParts.length?(fmLz?" · ":"")+extraParts.join(" · "):"");
     const fmTip=fm||"—";
     const st=s.statut==="en_cours"?"En cours":s.statut==="termine"?"Terminé":"En attente";
     const cli=(s.client||"").trim()||(s.numero_of||s.reference||"—");
