@@ -375,7 +375,7 @@ body.light .btn-p{color:#fff}
 body.light .tr.tr-aplacer{background:repeating-linear-gradient(135deg,var(--card),var(--card) 10px,rgba(8,145,178,.08) 10px,rgba(8,145,178,.08) 20px)!important}
 .slot.slot-aplacer{background-image:repeating-linear-gradient(135deg,transparent,transparent 5px,rgba(0,0,0,.12) 5px,rgba(0,0,0,.12) 10px)!important}
 /* Réellement terminé (saisie opérateur confirmée) */
-.slot.slot-reel-termine{opacity:.38!important;filter:grayscale(65%) brightness(.75)!important}
+.slot.slot-reel-termine{opacity:.55!important;filter:grayscale(35%) brightness(.82)!important}
 .tr.tr-reel-termine{opacity:.45;filter:grayscale(40%)}
 /* ── Popup Mise à jour ── */
 .upd-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px}
@@ -1093,8 +1093,10 @@ function render(){
   setupStatutSelects();
   buildLegend(sl, m1, nw);
   if(SHOW_DOSSIERS)autoScrollDossiersIfNeeded();
-  // Réappliquer la recherche timeline si active après un re-render complet
-  requestAnimationFrame(()=>{computeAllTlMatches();updateTlMatchInfo();});
+  // Nouveau container → réinitialise le flag de liaison DnD timeline
+  _tlDDContainerBound=false;
+  // Réappliquer la recherche timeline + DnD après re-render complet
+  requestAnimationFrame(()=>{computeAllTlMatches();updateTlMatchInfo();setupTlDD();});
 }
 
 // ── Timeline search — scan ALL slots (across all week offsets) ──────────────
@@ -1188,15 +1190,16 @@ function renderTL(){
 }
 
 // ── Drag & Drop timeline slots ──
-// Les événements dragover/drop sont sur le conteneur pour éviter que les
-// éléments enfants des slots absorbent les événements et bloquent le drop.
+// Les listeners dragover/drop sont sur le conteneur (stable) et non sur les slots
+// (recréés à chaque render). _tlDDContainerBound évite les doublons de listeners.
 let _tlDragEid=null;
+let _tlDDContainerBound=false;
 function setupTlDD(){
   if(!CAN_EDIT) return;
   const container=document.getElementById("tl-blocks-container");
   if(!container) return;
 
-  // dragstart / dragend : sur chaque slot draggable
+  // dragstart / dragend : toujours sur les slots (nouveaux éléments après chaque render)
   document.querySelectorAll("#tl-blocks-container .slot[draggable='true']").forEach(el=>{
     el.addEventListener("dragstart",ev=>{
       _tlDragEid=+el.dataset.eid;
@@ -1207,29 +1210,32 @@ function setupTlDD(){
     el.addEventListener("dragend",()=>{
       el.style.opacity="";
       _tlDragEid=null;
-      container.querySelectorAll(".slot.tl-drop-over").forEach(e=>e.classList.remove("tl-drop-over"));
+      document.querySelectorAll("#tl-blocks-container .slot.tl-drop-over").forEach(e=>e.classList.remove("tl-drop-over"));
     });
   });
 
-  // dragover / drop : sur le conteneur — ev.target.closest() remonte au slot
+  // dragover / drop : une seule fois par container (render() reset _tlDDContainerBound)
+  if(_tlDDContainerBound) return;
+  _tlDDContainerBound=true;
+
   container.addEventListener("dragover",ev=>{
     if(!_tlDragEid) return;
     ev.preventDefault();
     ev.dataTransfer.dropEffect="move";
     const target=ev.target.closest(".slot[data-eid]");
-    container.querySelectorAll(".slot.tl-drop-over").forEach(e=>e.classList.remove("tl-drop-over"));
+    document.querySelectorAll("#tl-blocks-container .slot.tl-drop-over").forEach(e=>e.classList.remove("tl-drop-over"));
     if(target && +target.dataset.eid!==_tlDragEid){
       target.classList.add("tl-drop-over");
     }
   });
   container.addEventListener("dragleave",ev=>{
     if(!container.contains(ev.relatedTarget)){
-      container.querySelectorAll(".slot.tl-drop-over").forEach(e=>e.classList.remove("tl-drop-over"));
+      document.querySelectorAll("#tl-blocks-container .slot.tl-drop-over").forEach(e=>e.classList.remove("tl-drop-over"));
     }
   });
   container.addEventListener("drop",async ev=>{
     ev.preventDefault();
-    container.querySelectorAll(".slot.tl-drop-over").forEach(e=>e.classList.remove("tl-drop-over"));
+    document.querySelectorAll("#tl-blocks-container .slot.tl-drop-over").forEach(e=>e.classList.remove("tl-drop-over"));
     const target=ev.target.closest(".slot[data-eid]");
     const fromEid=_tlDragEid;
     _tlDragEid=null;
@@ -1919,28 +1925,32 @@ function openEdit(id){
 
   const isLocked=(e.statut==="en_cours"||e.statut==="termine");
   const isTermine=e.statut==="termine";
-  const bannerColor=isTermine?"rgba(248,113,113,.10)":"var(--accent-bg)";
-  const bannerBorder=isTermine?"var(--red)":"var(--accent)";
-  const bannerTxtColor=isTermine?"var(--red)":"var(--accent)";
-  const bannerLabel=isTermine?"Terminé":"En cours";
-  const bannerNote=isLocked?"Vous pouvez modifier toutes les informations de ce dossier.":"";
+  const statLabel=isTermine?"Terminé":e.statut==="en_cours"?"En cours":"";
+  const statColor=isTermine?"var(--danger)":"var(--accent)";
 
-  const fieldsHtml=isLocked
-    ? `<div style="background:${bannerColor};border:1px solid ${bannerBorder};border-radius:8px;padding:10px 14px;margin-bottom:18px;font-size:12px;color:var(--muted)">
-        Dossier <strong style="color:${bannerTxtColor}">${bannerLabel}</strong> — ${bannerNote}
-      </div>`
-      + dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.format_l||"",e.format_h||"",e.duree_heures,e.statut,true,e.a_placer??1)
-    : dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.format_l||"",e.format_h||"",e.duree_heures,e.statut,true,e.a_placer??1);
+  const fieldsHtml=dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.format_l||"",e.format_h||"",e.duree_heures,e.statut,true,e.a_placer??1);
 
   const destockDone=e.destockage==="done";
-  const destockRow=`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0 2px;border-top:1px solid var(--border);margin-top:14px">
-    <span style="font-size:12px;color:var(--text2)">Déstockage</span>
-    <button type="button" onclick="toggleDestockage(${id});closeM();" style="padding:4px 12px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:${destockDone?"var(--ok)":"var(--muted)"};font-size:12px;cursor:pointer">
-      ${destockDone?"✓ Fait":"Marquer fait"}
+  // Bouton déstockage — orange si en attente, bleu si fait
+  const destockBg=destockDone?"rgba(56,189,248,.10)":"rgba(251,146,60,.08)";
+  const destockBorder=destockDone?"#38bdf8":"#fb923c";
+  const destockColor=destockDone?"#38bdf8":"#fb923c";
+  const destockLabel=destockDone?"Matières destockées":"Matières à destocker";
+  const destockIcon=destockDone?`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>`;
+  const destockRow=`<div style="margin-top:16px">
+    <button type="button" onclick="toggleDestockage(${id});closeM();"
+      title="${destockDone?"Cliquer pour marquer en attente":"Cliquer pour marquer destocké"}"
+      style="display:flex;align-items:center;gap:8px;width:100%;padding:10px 14px;border-radius:8px;border:1.5px solid ${destockBorder};background:${destockBg};color:${destockColor};font-size:13px;font-weight:600;cursor:pointer;transition:opacity .15s;font-family:inherit;letter-spacing:.01em"
+      onmouseenter="this.style.opacity='.75'" onmouseleave="this.style.opacity='1'">
+      ${destockIcon}
+      <span>${destockLabel}</span>
+      ${destockDone?"":`<span style="margin-left:auto;font-size:11px;font-weight:400;opacity:.7">→ cliquer pour valider</span>`}
     </button>
   </div>`;
+
+  const titlePrefix=statLabel?`<span style="color:${statColor};font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;margin-right:6px">${statLabel}</span>`:"";
   document.getElementById("mroot").innerHTML=modalHTML(
-    isLocked?`${bannerLabel} — ${(e.numero_of||e.reference)||''}`:`Modifier — ${(e.numero_of||e.reference)||''}`,
+    `${titlePrefix}${(e.numero_of||e.reference)||''}`,
     fieldsHtml+destockRow,
     "Enregistrer",`submitEdit(${id})`
   );

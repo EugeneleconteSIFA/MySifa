@@ -1546,7 +1546,8 @@ def live_refresh_en_cours(machine_id: int, request: Request):
 
         # Trouve l'entrée en_cours pour cette machine
         en_cours = conn.execute(
-            """SELECT id, no_dossier, duree_heures FROM planning_entries
+            """SELECT id, COALESCE(numero_of, reference) AS dossier_ref, duree_heures
+               FROM planning_entries
                WHERE machine_id=? AND statut='en_cours'
                ORDER BY position ASC LIMIT 1""",
             (machine_id,),
@@ -1555,7 +1556,7 @@ def live_refresh_en_cours(machine_id: int, request: Request):
             return {"updated": False}
 
         entry_id = en_cours["id"]
-        no_dossier = (en_cours["no_dossier"] or "").strip()
+        no_dossier = (en_cours["dossier_ref"] or "").strip()
         current_dur = float(en_cours["duree_heures"] or 0)
 
         if not no_dossier:
