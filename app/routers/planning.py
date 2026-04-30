@@ -1532,3 +1532,59 @@ def get_active_dossier(machine_id: int, request: Request):
 
     return {"dossier": None}
 
+
+@router.post("/machines/{machine_id}/live-refresh")
+def live_refresh_en_cours(machine_id: int, request: Request):
+    """Recalcule la durée du dossier en_cours à partir des timestamps de production.
+
+    Si le temps écoulé depuis le dernier Début de production (code 01) dépasse
+    la durée planifiée, met à jour duree_heures en DB et retourne {"updated": true}.
+    Sinon retourne {"updated": false}.
+    """
+    with get_db() as conn:
+        require_planning_machine(request, conn, machine_id)
+
+        # Trouve l'entrée en_cours pour cette machine
+        en_cours = conn.execute(
+            """SELECT id, no_dossier, duree_heures FROM planning_entries
+               WHERE machine_id=? AND statut='en_cours'
+               ORDER BY position ASC LIMIT 1""",
+            (machine_id,),
+        ).fetchone()
+        if not en_cours:
+            return {"updated": False}
+
+        entry_id = en_cours["id"]
+        no_dossier = (en_cours["no_dossier"] or "").strip()
+        current_dur = float(en_cours["duree_heures"] or 0)
+
+        if not no_dossier:
+            return {"updated": False}
+
+        # Dernier Début de production (code 01) pour ce dossier
+        debut_row = conn.execute(
+            """SELECT date_operation FROM production_data
+               WHERE no_dossier=? AND operation_code='01'
+               ORDER BY date_operation DESC LIMIT 1""",
+            (no_dossier,),
+        ).fetchone()
+        if not debut_row or not debut_row["date_operation"]:
+            return {"updated": False}
+
+        dt_start = _parse_prod_dt(debut_row["date_operation"])
+        if not dt_start:
+            return {"updated": False}
+
+        now = datetime.now(_TZ_PARIS).replace(tzinfo=None)
+        elapsed = (now - dt_start).total_seconds() / 3600
+        elapsed = round(elapsed, 2)
+
+        if elapsed <= current_dur or elapsed <= 0:
+            return {"updated": False}
+
+        conn.execute(
+            "UPDATE planning_entries SET duree_heures=?, planned_start=NULL, planned_end=NULL, updated_at=? WHERE id=?",
+            (elapsed, datetime.now().isoformat(), entry_id),
+        )
+        conn.commit()
+        return {"updated": True, "entry_id": entry_id, "duree_heures": elapsed}

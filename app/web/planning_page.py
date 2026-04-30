@@ -1188,47 +1188,64 @@ function renderTL(){
 }
 
 // ── Drag & Drop timeline slots ──
+// Les événements dragover/drop sont sur le conteneur pour éviter que les
+// éléments enfants des slots absorbent les événements et bloquent le drop.
 let _tlDragEid=null;
 function setupTlDD(){
   if(!CAN_EDIT) return;
+  const container=document.getElementById("tl-blocks-container");
+  if(!container) return;
+
+  // dragstart / dragend : sur chaque slot draggable
   document.querySelectorAll("#tl-blocks-container .slot[draggable='true']").forEach(el=>{
-    const eid=+el.dataset.eid;
     el.addEventListener("dragstart",ev=>{
-      _tlDragEid=eid;
+      _tlDragEid=+el.dataset.eid;
       el.style.opacity="0.45";
       ev.dataTransfer.effectAllowed="move";
-      ev.stopPropagation();
+      ev.dataTransfer.setData("text/plain",String(_tlDragEid));
     });
     el.addEventListener("dragend",()=>{
       el.style.opacity="";
       _tlDragEid=null;
-      document.querySelectorAll("#tl-blocks-container .slot.tl-drop-over").forEach(e=>e.classList.remove("tl-drop-over"));
+      container.querySelectorAll(".slot.tl-drop-over").forEach(e=>e.classList.remove("tl-drop-over"));
     });
-    el.addEventListener("dragover",ev=>{
-      if(!_tlDragEid||_tlDragEid===eid) return;
-      ev.preventDefault();
-      ev.dataTransfer.dropEffect="move";
-      document.querySelectorAll("#tl-blocks-container .slot.tl-drop-over").forEach(e=>e.classList.remove("tl-drop-over"));
-      el.classList.add("tl-drop-over");
-    });
-    el.addEventListener("dragleave",()=>{ el.classList.remove("tl-drop-over"); });
-    el.addEventListener("drop",async ev=>{
-      ev.preventDefault();
-      el.classList.remove("tl-drop-over");
-      const fromEid=_tlDragEid;
-      _tlDragEid=null;
-      if(!fromEid||fromEid===eid) return;
-      const ids=S.entries.map(e=>e.id);
-      const fromIdx=ids.indexOf(fromEid);
-      const toIdx=ids.indexOf(eid);
-      if(fromIdx<0||toIdx<0) return;
-      const [moved]=ids.splice(fromIdx,1);
-      ids.splice(toIdx,0,moved);
-      try{
-        await api(`/machines/${MID}/reorder`,{method:"POST",body:JSON.stringify({entry_ids:ids})});
-        await load();
-      }catch(e){ alert("Réordonnancement impossible"); await load(); }
-    });
+  });
+
+  // dragover / drop : sur le conteneur — ev.target.closest() remonte au slot
+  container.addEventListener("dragover",ev=>{
+    if(!_tlDragEid) return;
+    ev.preventDefault();
+    ev.dataTransfer.dropEffect="move";
+    const target=ev.target.closest(".slot[data-eid]");
+    container.querySelectorAll(".slot.tl-drop-over").forEach(e=>e.classList.remove("tl-drop-over"));
+    if(target && +target.dataset.eid!==_tlDragEid){
+      target.classList.add("tl-drop-over");
+    }
+  });
+  container.addEventListener("dragleave",ev=>{
+    if(!container.contains(ev.relatedTarget)){
+      container.querySelectorAll(".slot.tl-drop-over").forEach(e=>e.classList.remove("tl-drop-over"));
+    }
+  });
+  container.addEventListener("drop",async ev=>{
+    ev.preventDefault();
+    container.querySelectorAll(".slot.tl-drop-over").forEach(e=>e.classList.remove("tl-drop-over"));
+    const target=ev.target.closest(".slot[data-eid]");
+    const fromEid=_tlDragEid;
+    _tlDragEid=null;
+    if(!target||!fromEid) return;
+    const eid=+target.dataset.eid;
+    if(eid===fromEid) return;
+    const ids=S.entries.map(e=>e.id);
+    const fromIdx=ids.indexOf(fromEid);
+    const toIdx=ids.indexOf(eid);
+    if(fromIdx<0||toIdx<0) return;
+    const [moved]=ids.splice(fromIdx,1);
+    ids.splice(toIdx,0,moved);
+    try{
+      await api(`/machines/${MID}/reorder`,{method:"POST",body:JSON.stringify({entry_ids:ids})});
+      await load();
+    }catch(e){ alert("Réordonnancement impossible"); await load(); }
   });
 }
 
@@ -1394,12 +1411,12 @@ function mkTL(mon,slots){
     }
     // a_placer striped
     const aplacerCls=s.a_placer?"slot-aplacer":"";
-    const reelTermineCls=s.statut_reel==="reellement_termine"?"slot-reel-termine":"";
+    const reelTermineCls=(s.statut_reel==="reellement_termine"||s.statut==="termine")?"slot-reel-termine":"";
     const destock=s.destockage==="done";
     const canDragSlot=CAN_EDIT&&s.statut!=="en_cours"&&s.statut!=="termine";
     h+=`<div class="slot ${matchCls} ${aplacerCls} ${reelTermineCls}" data-eid="${s.entry_id||idx}" data-statut="${escAttr(s.statut||"attente")}" data-statut-reel="${escAttr(s.statut_reel||"reellement_en_attente")}" ${canDragSlot?'draggable="true"':''} style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${isActive?"border:2px solid #22d3ee;animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
       onmouseenter="showTip(event,this)" onmousemove="moveTip(event)" onmouseleave="hideTip()"
-      ondblclick="hideTip();toggleDestockage(${s.entry_id||idx});event.stopPropagation()"
+      ondblclick="hideTip();openEdit(${s.entry_id||idx});event.stopPropagation()"
       data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(fmtDur(s.duree_heures))}"
       data-deb="${escAttr(fdt(ss))}" data-fin="${escAttr(fdt(se))}" data-st="${escAttr(st)}" data-co="${escAttr(co)}">
       ${destock?`<div style="position:absolute;top:4px;right:4px;width:7px;height:7px;border-radius:50%;background:rgba(71,85,105,.9);pointer-events:none;z-index:5;flex-shrink:0"></div>`:""}
@@ -1540,7 +1557,7 @@ function showTip(ev,el){hideTip();const d=el.dataset;_hoveredSlotEid=d.eid?+d.ei
     <span class="k">Début</span><span class="v">${d.deb||""}</span><span class="k">Fin</span><span class="v">${d.fin||""}</span>
     <span class="k">Statut</span><span class="v" style="color:${d.st==="En cours"?"var(--green)":d.st==="Terminé"?"var(--muted)":"var(--amber)"};font-weight:600">${d.st||""}</span>
     ${(()=>{const r=d.statutReel||"";if(r==="reellement_termine")return`<span class="k">Saisie</span><span class="v" style="color:var(--muted)">✓ Terminé</span>`;if(r==="reellement_en_saisie")return`<span class="k">Saisie</span><span class="v" style="color:var(--success)">⚙ En cours</span>`;return"";})()} </div>
-    ${CAN_EDIT&&d.st!=="Terminé"?`<div style="margin-top:10px;font-size:10px;color:var(--muted);text-align:center;letter-spacing:.5px">↵ Entrée pour modifier</div>`:""}`
+    ${CAN_EDIT&&d.st!=="Terminé"?`<div style="margin-top:10px;font-size:10px;color:var(--muted);text-align:center;letter-spacing:.5px">↵ Entrée · double-clic pour modifier</div>`:""}`
   el.closest(".tl-wrap").appendChild(tipEl);moveTip(ev)}
 function moveTip(ev){if(!tipEl)return;const c=tipEl.parentElement.getBoundingClientRect();
   let x=ev.clientX-c.left+12,y=ev.clientY-c.top-tipEl.offsetHeight-12;
@@ -1915,9 +1932,16 @@ function openEdit(id){
       + dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.format_l||"",e.format_h||"",e.duree_heures,e.statut,true,e.a_placer??1)
     : dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.format_l||"",e.format_h||"",e.duree_heures,e.statut,true,e.a_placer??1);
 
+  const destockDone=e.destockage==="done";
+  const destockRow=`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0 2px;border-top:1px solid var(--border);margin-top:14px">
+    <span style="font-size:12px;color:var(--text2)">Déstockage</span>
+    <button type="button" onclick="toggleDestockage(${id});closeM();" style="padding:4px 12px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:${destockDone?"var(--ok)":"var(--muted)"};font-size:12px;cursor:pointer">
+      ${destockDone?"✓ Fait":"Marquer fait"}
+    </button>
+  </div>`;
   document.getElementById("mroot").innerHTML=modalHTML(
     isLocked?`${bannerLabel} — ${(e.numero_of||e.reference)||''}`:`Modifier — ${(e.numero_of||e.reference)||''}`,
-    fieldsHtml,
+    fieldsHtml+destockRow,
     "Enregistrer",`submitEdit(${id})`
   );
 }
@@ -2061,9 +2085,9 @@ function openWeekSettingsModal(monTs){
         <input type="checkbox" id="wks-w-${ds}" ${worked?"checked":""}> travaillé
       </label>
       <input type="text" inputmode="numeric" id="wks-s-${ds}" value="${startVal}" placeholder="07:00"
-        style="padding:5px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px;font-family:var(--mono);outline:none"${hasOv?' title="Override actif"':''}>
+        style="padding:5px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px;font-family:var(--mono);outline:none;width:100%;min-width:0;box-sizing:border-box"${hasOv?' title="Override actif"':''}>
       <input type="text" inputmode="numeric" id="wks-e-${ds}" value="${endVal}" placeholder="19:00"
-        style="padding:5px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px;font-family:var(--mono);outline:none">
+        style="padding:5px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px;font-family:var(--mono);outline:none;width:100%;min-width:0;box-sizing:border-box">
     </div>`;
   }
   document.getElementById("mroot").innerHTML=modalHTML(
@@ -2226,10 +2250,19 @@ async function boot(){
   await load();
   // Vérifier les annonces de mise à jour après le chargement initial
   checkUpdates();
-  // Actualise le dossier actif toutes les 30 s sans recharger toute la page
+  // Actualise le dossier actif + allonge le slot en_cours toutes les 30 s
   setInterval(async()=>{
     if(!MID) return;
     try{
+      // 1. Vérifier si la durée du dossier en_cours a grandi (live-refresh)
+      const lr=await api(`/machines/${MID}/live-refresh`,{method:"POST"});
+      if(lr&&lr.updated){
+        await load();
+        return; // load() actualise aussi activeDossier
+      }
+    }catch(e){}
+    try{
+      // 2. Sinon, juste mettre à jour le dossier actif affiché
       const d=await api(`/machines/${MID}/active-dossier`);
       const prev=S.activeDossier?S.activeDossier.no_dossier:null;
       const next=d.dossier?d.dossier.no_dossier:null;

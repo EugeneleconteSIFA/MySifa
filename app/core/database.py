@@ -978,26 +978,22 @@ def _migrate(conn):
 
         # ── Seed : annonces du 30 avril 2026 ─────────────────────────────────
         _planning_msg = (
-            "<p>Bonjour&nbsp;! 👋 De belles nouveautés vous attendent dans le <strong>planning de production</strong>. Voici ce qui a changé&nbsp;:</p>"
+            "<p style='margin-bottom:14px'>Plusieurs améliorations ont été déployées ce matin sur le planning.</p>"
             "<ul style='margin:10px 0;padding-left:20px;line-height:1.9'>"
-            "<li>🙈 <strong>Dossiers terminés masqués</strong> — Seuls les 2 derniers dossiers terminés restent visibles. Fini le défilement jusqu'en bas&nbsp;! Un bouton permet de tout afficher si besoin.</li>"
-            "<li>📌 <strong>Scroll préservé</strong> — La liste ne remonte plus en haut après chaque modification ou déplacement. Votre position reste stable.</li>"
-            "<li>🖱️ <strong>Glisser-déposer sur la timeline</strong> — Réorganisez les slots <em>En attente</em> directement sur la barre de temps.</li>"
-            "<li>⏎ <strong>Raccourci Entrée</strong> — Survolez un slot et appuyez sur <kbd style='background:rgba(255,255,255,.15);padding:1px 5px;border-radius:4px'>Entrée</kbd> pour ouvrir sa fiche directement.</li>"
-            "<li>⚙️ <strong>Paramètres par semaine</strong> — Une icône ⚙ sur chaque semaine permet de configurer les jours travaillés et horaires spécifiques à cette semaine.</li>"
-            "<li>🎯 <strong>Durée réelle automatique</strong> — À la clôture d'un dossier en saisie, sa durée dans le planning se met à jour avec le temps réel de production. Ex&nbsp;: <em>5h15</em> au lieu de 8h.</li>"
-            "<li>🔵 <strong>Statut saisie visible</strong> — Un badge indique si un dossier est <em>⚙ en saisie</em> ou <em>✓ terminé</em> en production réelle.</li>"
+            "<li><strong>Lisibilité de la liste</strong> — Les dossiers terminés sont masqués par défaut, à l'exception des deux derniers. Un bouton permet de les afficher en totalité si nécessaire. La position de défilement est conservée après chaque modification ou réordonnancement.</li>"
+            "<li><strong>Timeline</strong> — Les slots <em>En attente</em> sont déplaçables par glisser-déposer directement sur la barre de temps. Survoler un slot et appuyer sur <kbd style='background:rgba(255,255,255,.12);padding:1px 5px;border-radius:4px;font-family:monospace;font-size:11px'>Entrée</kbd> ouvre sa fiche d'édition.</li>"
+            "<li><strong>Paramètres semaine</strong> — Une icône ⚙ est disponible sur chaque en-tête de semaine pour configurer les jours travaillés et les horaires spécifiques, indépendamment des défauts machine.</li>"
+            "<li><strong>Durée réelle</strong> — À la clôture d'un dossier, sa durée plannée est mise à jour automatiquement d'après les horodatages réels de production. Les durées s'affichent au format <em>5h15</em>.</li>"
+            "<li><strong>Statut saisie</strong> — La liste et la timeline indiquent si un dossier est en cours de saisie ou réellement terminé côté opérateur.</li>"
             "</ul>"
-            "<p style='margin-top:12px;font-size:12px;opacity:.65'>Ces améliorations visent à rendre votre quotidien plus fluide. N'hésitez pas à faire remonter vos retours&nbsp;! 💙</p>"
         )
         _fabrication_msg = (
-            "<p>Bonjour&nbsp;! 👋 La <strong>saisie de production</strong> évolue pour mieux gérer vos dossiers. Voici les changements&nbsp;:</p>"
+            "<p style='margin-bottom:14px'>Deux changements importants sont en vigueur dès aujourd'hui.</p>"
             "<ul style='margin:10px 0;padding-left:20px;line-height:1.9'>"
-            "<li>📝 <strong>Nouveau nom</strong> — «&nbsp;Début dossier&nbsp;» et «&nbsp;Fin dossier&nbsp;» s'appellent désormais <strong>Début de production</strong> et <strong>Fin de production</strong>. Plus intuitif&nbsp;!</li>"
-            "<li>✅ <strong>Clôture de dossier</strong> — Lors d'une fin de production, vous devez indiquer si le dossier est <strong>terminé</strong> (🟢 Oui, clôturé) ou s'il <strong>continue</strong> (🔄 Non, on reprend). Cette info est cruciale pour le planning&nbsp;!</li>"
-            "<li>🔄 <strong>Planning mis à jour automatiquement</strong> — À la clôture d'un dossier, sa durée dans le planning se met à jour avec le temps réel de production.</li>"
+            "<li><strong>Renommage</strong> — «&nbsp;Début dossier&nbsp;» et «&nbsp;Fin dossier&nbsp;» s'appellent désormais <strong>Début de production</strong> et <strong>Fin de production</strong>.</li>"
+            "<li><strong>Clôture de dossier</strong> — Lors d'une fin de production, il est obligatoire d'indiquer si le dossier est terminé ou s'il reprend. Cette information alimente directement le planning&nbsp;: ne pas la renseigner correctement faussera la visibilité de l'équipe sur les encours.</li>"
+            "<li><strong>Durée plannée mise à jour automatiquement</strong> — À la clôture d'un dossier, la durée dans le planning est recalculée d'après le temps réel de production.</li>"
             "</ul>"
-            "<p style='margin-top:12px;font-size:12px;opacity:.65'>Ces améliorations permettent à l'équipe planning d'avoir une vision précise et en temps réel de votre avancement. Merci pour votre rigueur&nbsp;! 💙</p>"
         )
 
         _seed_ts = "2026-04-30T00:00:00"
