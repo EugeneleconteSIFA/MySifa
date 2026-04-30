@@ -232,10 +232,13 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
       <div class="card">
         <div class="users-head">
           <h2>Utilisateurs</h2>
-          <div class="users-search">
-            <input type="search" id="users-q" placeholder="Rechercher (nom, email, rôle, opérateur, machine…)" autocomplete="off" spellcheck="false">
-            <select id="users-role-filter"><option value="">Tous les services</option></select>
-            <span class="hint" id="users-q-hint"></span>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <div class="users-search">
+              <input type="search" id="users-q" placeholder="Rechercher (nom, email, rôle, opérateur, machine…)" autocomplete="off" spellcheck="false">
+              <select id="users-role-filter"><option value="">Tous les services</option></select>
+              <span class="hint" id="users-q-hint"></span>
+            </div>
+            <button type="button" class="btn btn-sec" onclick="downloadUsersCSV()" title="Télécharger la liste">Télécharger</button>
           </div>
         </div>
         <div id="users-list"></div>
@@ -312,7 +315,7 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
     </section>
 
     <!-- Modal nouvelle annonce -->
-    <div id="upd-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:800;display:flex;align-items:center;justify-content:center" class="hidden">
+    <div id="upd-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:800;align-items:center;justify-content:center" class="hidden">
       <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;width:min(560px,95vw);max-height:90vh;overflow:auto">
         <h2 style="margin:0 0 18px;font-size:17px">Nouvelle annonce</h2>
         <div class="form-grid" style="grid-template-columns:1fr 1fr;margin-bottom:12px">
@@ -686,6 +689,36 @@ async function copyUserCredentials(id) {
   } catch (e) {
     toast('Erreur copie : ' + e.message, true);
   }
+}
+
+function downloadUsersCSV(){
+  // Exporter tous les utilisateurs (pas seulement les filtrés)
+  if(!usersAll || usersAll.length===0){
+    toast('Aucun utilisateur à exporter', true);
+    return;
+  }
+  const headers=['Nom','Email','Rôle','Actif','Dernière connexion','Opérateur lié','Machine'];
+  const rows=usersAll.map(u=>{
+    const nom=esc(u.nom||'');
+    const email=esc(u.email||'');
+    const role=esc(roleLabels[u.role]||u.role||'');
+    const actif=u.actif?'Oui':'Non';
+    const lastLogin=u.last_login?new Date(u.last_login).toLocaleString('fr-FR'):'Jamais';
+    const op=esc(u.operateur||'');
+    const mac=esc(u.machine_nom||'');
+    return [nom,email,role,actif,lastLogin,op,mac].map(f=>'"'+f.replace(/"/g,'""')+'"').join(';');
+  });
+  const csv=[headers.join(';')].concat(rows).join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download='utilisateurs_mysifa_'+new Date().toISOString().slice(0,10)+'.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast(usersAll.length+' utilisateurs exportés');
 }
 
 function syncCuRoleUI() {
@@ -1063,6 +1096,19 @@ async function loadUpdates() {
   }
 }
 
+function toParisTime(isoStr) {
+  if (!isoStr) return '—';
+  try {
+    // acknowledged_at est stocké en UTC (datetime.now() côté serveur)
+    const d = new Date(isoStr.includes('T') ? isoStr + 'Z' : isoStr);
+    return d.toLocaleString('fr-FR', {
+      timeZone: 'Europe/Paris',
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    });
+  } catch(e) { return isoStr.slice(0, 16).replace('T', ' '); }
+}
+
 function renderUpdatesList() {
   const box = document.getElementById('upd-list');
   if (!_updatesData.length) {
@@ -1093,6 +1139,7 @@ function renderUpdatesList() {
       <div style="font-size:18px;font-weight:800;color:var(--accent)">${ackCount}</div>
       <div style="font-size:10px;color:var(--muted)">lecture(s)</div>
     </div>
+    <button type="button" class="btn btn-sec" style="padding:5px 10px;font-size:11px" onclick="event.stopPropagation();showUpdatePreview(${u.id})">Aperçu</button>
     <button type="button" class="btn btn-sec" style="padding:5px 10px;font-size:11px" onclick="event.stopPropagation();toggleActive(${u.id},${u.active})">${u.active ? 'Archiver' : 'Réactiver'}</button>
     <span style="font-size:16px;color:var(--muted);transition:transform .2s;${isOpen ? 'transform:rotate(180deg)' : ''}">▾</span>
   </div>
@@ -1101,6 +1148,26 @@ function renderUpdatesList() {
   </div>
 </div>`;
   }).join('');
+}
+
+function showUpdatePreview(id) {
+  const u = _updatesData.find(x => x.id === id);
+  if (!u) return;
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:900;display:flex;align-items:center;justify-content:center';
+  ov.innerHTML = `<div style="background:var(--card);border:1px solid var(--border2);border-radius:16px;padding:28px;width:min(560px,95vw);max-height:88vh;overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,.6)">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px">
+      <div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:4px">${esc(SCOPE_LABELS[u.scope]||u.scope)}</div>
+        <h2 style="font-size:16px;margin:0">${esc(u.titre)}</h2>
+      </div>
+      <button onclick="this.closest('[style*=fixed]').remove()" style="border:none;background:none;color:var(--muted);font-size:22px;cursor:pointer;padding:0 0 0 12px;line-height:1;flex-shrink:0">×</button>
+    </div>
+    <div style="font-size:13px;line-height:1.7;color:var(--text2)">${u.message}</div>
+    <button class="btn" style="width:100%;margin-top:20px;padding:12px;font-size:14px" onclick="this.closest('[style*=fixed]').remove()">Fermer</button>
+  </div>`;
+  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+  document.body.appendChild(ov);
 }
 
 async function toggleAck(id) {
@@ -1123,7 +1190,7 @@ async function toggleAck(id) {
     contentEl.innerHTML = '<div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">' + acks.length + ' lecture(s)</div>' +
       '<div style="display:flex;flex-wrap:wrap;gap:6px">' +
       acks.map(a => {
-        const dt = a.acknowledged_at ? a.acknowledged_at.replace('T', ' ').slice(0, 16) : '';
+        const dt = toParisTime(a.acknowledged_at);
         return `<div style="padding:6px 10px;border-radius:8px;background:var(--bg);border:1px solid var(--border);font-size:12px">
           <strong>${esc(a.user_nom || a.email || '—')}</strong>
           ${a.email && a.user_nom ? '<span style="color:var(--muted);margin-left:4px">' + esc(a.email) + '</span>' : ''}
@@ -1138,7 +1205,7 @@ async function toggleAck(id) {
 async function toggleActive(id, current) {
   try {
     await api('/api/updates/' + id, { method: 'PATCH', body: JSON.stringify({ active: !current }), headers: { 'Content-Type': 'application/json' } });
-    toast(current ? 'Annonce archivée' : 'Annonce réactivée ✅');
+    toast(current ? 'Annonce archivée' : 'Annonce réactivée');
     await loadUpdates();
   } catch(e) { toast(e.message, true); }
 }

@@ -674,6 +674,10 @@ async def add_entry(machine_id: int, request: Request):
     if duree < 2 or duree > 720:
         raise HTTPException(400, "Durée entre 2 et 720 heures")
 
+    # Récupérer l'utilisateur courant pour la traçabilité
+    user = get_current_user(request)
+    user_name = user.get("nom") or user.get("email") or "Admin"
+
     now = datetime.now().isoformat()
     with get_db() as conn:
         # Vérifier que la machine existe
@@ -700,8 +704,9 @@ async def add_entry(machine_id: int, request: Request):
             INSERT INTO planning_entries
                 (machine_id, position, reference, client, description, format_l, format_h,
                  duree_heures, statut, notes, created_at, updated_at,
-                 dos_rvgi, numero_of, ref_produit, laize, date_livraison, commentaire, a_placer)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 dos_rvgi, numero_of, ref_produit, laize, date_livraison, commentaire, a_placer,
+                 created_by, updated_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             machine_id, position,
             reference,
@@ -720,6 +725,8 @@ async def add_entry(machine_id: int, request: Request):
             body.get("date_livraison"),
             body.get("commentaire"),
             body.get("a_placer", 1),
+            user_name,
+            user_name,
         ))
         _invalidate_attente_plans(conn, machine_id)
         conn.commit()
@@ -737,6 +744,10 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
     duree = body.get("duree_heures")
     if duree is not None and (duree < 2 or duree > 720):
         raise HTTPException(400, "Durée entre 2 et 720 heures")
+
+    # Récupérer l'utilisateur courant pour la traçabilité
+    user = get_current_user(request)
+    user_name = user.get("nom") or user.get("email") or "Admin"
 
     with get_db() as conn:
         ex = conn.execute(
@@ -769,7 +780,7 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
         conn.execute("""
             UPDATE planning_entries
             SET reference=?, client=?, description=?, format_l=?, format_h=?,
-                duree_heures=?, statut=?, notes=?, updated_at=?,
+                duree_heures=?, statut=?, notes=?, updated_at=?, updated_by=?,
                 dos_rvgi=?, numero_of=?, ref_produit=?, laize=?, date_livraison=?, commentaire=?,
                 planned_start=?, planned_end=?, a_placer=?
             WHERE id=?
@@ -783,6 +794,7 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
             new_statut,
             body.get("notes", ex["notes"]),
             now,
+            user_name,
             (body.get("dos_rvgi") or "").strip() or None,
             body.get("numero_of", ex["numero_of"] if "numero_of" in ex.keys() else None),
             body.get("ref_produit", ex["ref_produit"] if "ref_produit" in ex.keys() else None),

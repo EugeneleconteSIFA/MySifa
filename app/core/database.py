@@ -415,6 +415,9 @@ def _migrate(conn):
             # Planning v3: statut réel issu de la saisie fabrication
             # reellement_en_attente | reellement_en_saisie | reellement_termine
             ("statut_reel", "ALTER TABLE planning_entries ADD COLUMN statut_reel TEXT DEFAULT 'reellement_en_attente'"),
+            # Traçabilité création/modification
+            ("created_by", "ALTER TABLE planning_entries ADD COLUMN created_by TEXT"),
+            ("updated_by", "ALTER TABLE planning_entries ADD COLUMN updated_by TEXT"),
         ]:
             if col not in pe_cols:
                 conn.execute(sql)

@@ -4041,7 +4041,10 @@ function updateMachineStatusDOM(){
       if(dureeStr)html+='<div class="mst-duree">'+dureeLabel+' <span class="mst-duree-val">'+dureeStr+'</span></div>';
       if(op)html+='<div class="mst-op">👤 '+escapeHtml(op)+'</div>';
       if(dos&&dos.no_dossier){
-        html+='<div class="mst-dos"><div class="mst-dos-ref">Dossier #'+escapeHtml(dos.no_dossier)+'</div>';
+        const isChangement=sk==='changement';
+        const dosStyle=isChangement?' style="opacity:.6;filter:grayscale(.4)"':'';
+        const dosPrefix=isChangement?'dossier précédent : #':'Dossier #';
+        html+='<div class="mst-dos"'+dosStyle+'><div class="mst-dos-ref">'+dosPrefix+escapeHtml(dos.no_dossier)+'</div>';
         if(dos.client)html+='<div class="mst-dos-cli">'+escapeHtml(dos.client)+'</div>';
         if(dos.designation)html+='<div class="mst-dos-des">'+escapeHtml(dos.designation)+'</div>';
         html+='</div>';
@@ -5342,8 +5345,8 @@ function renderMachineStatusCards(){
         h('div',{className:'mst-statut'},icon,' ',label),
         dureeStr?h('div',{className:'mst-duree'},dureeLabel,' ',h('span',{className:'mst-duree-val'},dureeStr)):null,
         op?h('div',{className:'mst-op'},'👤 ',op):null,
-        dos?h('div',{className:'mst-dos'},
-          h('div',{className:'mst-dos-ref'},'Dossier #',dos.no_dossier),
+        dos?h('div',{className:'mst-dos',style:sk==='changement'?{opacity:'.6',filter:'grayscale(.4)'}:null},
+          h('div',{className:'mst-dos-ref'},sk==='changement'?'dossier précédent : #':(h('span',null,'Dossier #')),dos.no_dossier),
           dos.client?h('div',{className:'mst-dos-cli'},dos.client):null,
           dos.designation?h('div',{className:'mst-dos-des'},dos.designation):null
         ):null,

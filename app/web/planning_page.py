@@ -296,6 +296,11 @@ body.light .lg-d{border-color:rgba(71,85,105,.3)}
 .tr.dov{background:var(--accent-bg);opacity:.95}.tr.dra{opacity:.5}
 .tr.drop-before{box-shadow:0 -3px 0 0 var(--accent) inset}
 .tr.drop-after{box-shadow:0 3px 0 0 var(--accent) inset}
+/* Nouvel indicateur de drop précis - ligne horizontale */
+.drop-indicator{position:absolute;left:0;right:0;height:3px;background:var(--accent);border-radius:2px;pointer-events:none;z-index:100;box-shadow:0 0 8px var(--accent);animation:dropPulse 1s ease-in-out infinite}
+.drop-indicator::before{content:'';position:absolute;left:-6px;top:-4px;width:12px;height:12px;border-radius:50%;background:var(--accent);border:2px solid var(--card)}
+.drop-indicator::after{content:'';position:absolute;right:-6px;top:-4px;width:12px;height:12px;border-radius:50%;background:var(--accent);border:2px solid var(--card)}
+@keyframes dropPulse{0%,100%{opacity:1}50%{opacity:.6}}
 .dh-handle{color:var(--muted);font-size:14px;cursor:grab;user-select:none}
 body.light .tr{background:var(--card)}
 body.light .tr:first-child{background:var(--accent-bg)}
@@ -1417,7 +1422,7 @@ function mkTL(mon,slots){
     }
     // a_placer striped
     const aplacerCls=s.a_placer?"slot-aplacer":"";
-    const reelTermineCls=(s.statut_reel==="reellement_termine"||s.statut==="termine")?"slot-reel-termine":"";
+    const reelTermineCls=((s.statut_reel==="reellement_termine"&&s.statut!=="en_cours")||s.statut==="termine")?"slot-reel-termine":"";
     const destock=s.destockage==="done";
     const canDragSlot=CAN_EDIT&&s.statut!=="en_cours"&&s.statut!=="termine";
     h+=`<div class="slot ${matchCls} ${aplacerCls} ${reelTermineCls}" data-eid="${s.entry_id||idx}" data-statut="${escAttr(s.statut||"attente")}" data-statut-reel="${escAttr(s.statut_reel||"reellement_en_attente")}" ${canDragSlot?'draggable="true"':''} style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${isActive?"border:2px solid #22d3ee;animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
@@ -1606,84 +1611,194 @@ function moveNowTip(ev){
 function hideNowTip(){if(nowTipEl){nowTipEl.remove();nowTipEl=null}}
 
 // ── Drag & Drop ──
+// Variables globales pour le DnD de la liste des dossiers
+let _ddDragIdx=null;      // Index de l'élément draggué dans S.entries
+let _ddDropIdx=null;      // Index d'insertion calculé
+let _ddIndicator=null;    // Élément DOM de l'indicateur de drop
+let _ddAutoScrollInterval=null; // Timer pour l'auto-scroll
+
 function setupDD(){
   if(!CAN_EDIT) return;
-  const rows=document.querySelectorAll(".tr[draggable]");
-  let di=null;
-  let overEl=null, overPos=null;
-  // _dropIdx : index d'insertion EXACT dans le tableau original, calculé au moment
-  // où la barre bleue est dessinée. C'est cette valeur (et elle seule) qui est
-  // utilisée dans le drop — on ne recalcule jamais depuis la position de la souris.
-  let _dropIdx=null;
 
-  function clearOver(){
-    if(overEl){overEl.classList.remove("drop-before","drop-after");}
-    overEl=null; overPos=null; _dropIdx=null;
+  const tbody=document.getElementById("tbody");
+  if(!tbody) return;
+
+  // Créer l'indicateur de drop s'il n'existe pas
+  if(!_ddIndicator){
+    _ddIndicator=document.createElement("div");
+    _ddIndicator.className="drop-indicator";
+    _ddIndicator.style.display="none";
+    tbody.style.position="relative";
+    tbody.appendChild(_ddIndicator);
   }
 
-  rows.forEach(r=>{
-    const st=(r.dataset.statut||"").toLowerCase();
-    const locked=(st==="en_cours"||st==="termine");
-    if(locked){
-      r.removeAttribute("draggable");
+  // Récupérer toutes les lignes visibles (filtrées)
+  const getVisibleRows=()=>Array.from(tbody.querySelectorAll(".tr[draggable]"));
+
+  // Nettoyage
+  function clearState(){
+    _ddDragIdx=null;
+    _ddDropIdx=null;
+    if(_ddIndicator) _ddIndicator.style.display="none";
+    tbody.querySelectorAll(".tr.dra").forEach(r=>r.classList.remove("dra"));
+    tbody.querySelectorAll(".tr.dov").forEach(r=>r.classList.remove("dov"));
+    stopAutoScroll();
+  }
+
+  // Arrêter l'auto-scroll
+  function stopAutoScroll(){
+    if(_ddAutoScrollInterval){
+      clearInterval(_ddAutoScrollInterval);
+      _ddAutoScrollInterval=null;
+    }
+  }
+
+  // Démarrer l'auto-scroll
+  function startAutoScroll(direction){
+    stopAutoScroll();
+    const scrollSpeed=8; // pixels par frame
+    _ddAutoScrollInterval=setInterval(()=>{
+      const currentScroll=tbody.scrollTop;
+      const maxScroll=tbody.scrollHeight-tbody.clientHeight;
+      if(direction==="up" && currentScroll>0){
+        tbody.scrollTop=Math.max(0,currentScroll-scrollSpeed);
+      }else if(direction==="down" && currentScroll<maxScroll){
+        tbody.scrollTop=Math.min(maxScroll,currentScroll+scrollSpeed);
+      }
+    },16);
+  }
+
+  // Mettre à jour la position de l'indicateur
+  function updateIndicator(yPosition){
+    if(!_ddIndicator) return;
+    _ddIndicator.style.display="block";
+    _ddIndicator.style.top=yPosition+"px";
+  }
+
+  // Calculer l'index d'insertion basé sur la position Y
+  function calculateDropIndex(clientY){
+    const rows=getVisibleRows();
+    if(rows.length===0) return 0;
+
+    const tbodyRect=tbody.getBoundingClientRect();
+    const relativeY=clientY-tbodyRect.top+tbody.scrollTop;
+
+    // Trouver la ligne survolée
+    for(let i=0;i<rows.length;i++){
+      const row=rows[i];
+      const rect=row.getBoundingClientRect();
+      const rowTop=rect.top-tbodyRect.top+tbody.scrollTop;
+      const rowBottom=rowTop+rect.height;
+
+      // Si on est au-dessus de cette ligne, insérer avant
+      if(relativeY<rowTop+rect.height/2){
+        // Convertir l'index visible en index réel
+        const realIdx=parseInt(row.dataset.idx,10);
+        return {insertIdx:realIdx,indicatorY:rowTop-1};
+      }
+    }
+
+    // Si on est en dessous de toutes les lignes, insérer à la fin
+    const lastRow=rows[rows.length-1];
+    const lastRect=lastRow.getBoundingClientRect();
+    const lastBottom=(lastRect.top-tbodyRect.top+tbody.scrollTop)+lastRect.height;
+    const lastRealIdx=parseInt(lastRow.dataset.idx,10);
+    return {insertIdx:lastRealIdx+1,indicatorY:lastBottom-1};
+  }
+
+  // Event delegation sur le tbody
+  tbody.addEventListener("dragstart",(e)=>{
+    const row=e.target.closest(".tr[draggable]");
+    if(!row) return;
+    _ddDragIdx=parseInt(row.dataset.idx,10);
+    row.classList.add("dra");
+    e.dataTransfer.effectAllowed="move";
+  });
+
+  tbody.addEventListener("dragover",(e)=>{
+    e.preventDefault();
+    if(_ddDragIdx===null) return;
+    e.dataTransfer.dropEffect="move";
+
+    // Auto-scroll quand on approche des bords
+    const tbodyRect=tbody.getBoundingClientRect();
+    const relativeY=e.clientY-tbodyRect.top;
+    const scrollZone=40; // pixels depuis le bord pour déclencher l'auto-scroll
+
+    if(relativeY<scrollZone){
+      startAutoScroll("up");
+    }else if(relativeY>tbodyRect.height-scrollZone){
+      startAutoScroll("down");
+    }else{
+      stopAutoScroll();
+    }
+
+    // Calculer et afficher l'indicateur
+    const result=calculateDropIndex(e.clientY);
+    _ddDropIdx=result.insertIdx;
+    updateIndicator(result.indicatorY);
+
+    // Highlight visuel sur la ligne survolée
+    const targetRow=e.target.closest(".tr[draggable]");
+    tbody.querySelectorAll(".tr.dov").forEach(r=>r.classList.remove("dov"));
+    if(targetRow) targetRow.classList.add("dov");
+  });
+
+  tbody.addEventListener("dragleave",(e)=>{
+    if(!tbody.contains(e.relatedTarget)){
+      stopAutoScroll();
+    }
+  });
+
+  tbody.addEventListener("drop",async (e)=>{
+    e.preventDefault();
+    stopAutoScroll();
+
+    if(_ddDragIdx===null || _ddDropIdx===null){
+      clearState();
       return;
     }
-    r.addEventListener("dragstart",e=>{di=+r.dataset.idx;r.classList.add("dra");e.dataTransfer.effectAllowed="move"});
-    r.addEventListener("dragover",e=>{
-      e.preventDefault();
-      r.classList.add("dov");
-      const rect=r.getBoundingClientRect();
-      const before=(e.clientY - rect.top) < rect.height/2;
-      const pos=before?"before":"after";
-      if(overEl!==r || overPos!==pos){
-        clearOver();
-        overEl=r; overPos=pos;
-        r.classList.add(before?"drop-before":"drop-after");
-        // Mémoriser l'index d'insertion exact dès maintenant,
-        // pendant que l'on sait où est la barre bleue.
-        const idx=+r.dataset.idx;
-        _dropIdx = before ? idx : idx+1;
-      }
-    });
-    r.addEventListener("dragleave",()=>{
-      r.classList.remove("dov");
-      // Ne pas clearOver ici : le navigateur peut déclencher dragleave juste avant drop,
-      // et on perdrait la position de la barre bleue (_dropIdx).
-    });
-    r.addEventListener("drop", async (e)=>{
-      e.preventDefault();
-      r.classList.remove("dov");
-      // Utiliser _dropIdx tel quel — il reflète exactement la barre bleue.
-      if(di===null || _dropIdx===null){ clearOver(); return; }
-      const ids=S.entries.map(e=>e.id);
-      const [m]=ids.splice(di,1);
-      // Ajuster _dropIdx pour tenir compte du décalage après suppression de di.
-      let insertAt = _dropIdx > di ? _dropIdx-1 : _dropIdx;
-      insertAt=Math.max(0,Math.min(insertAt,ids.length));
-      ids.splice(insertAt,0,m);
-      clearOver();
-      const savedScroll=document.querySelector(".main")?.scrollTop??0;
-      const savedTbodyScroll=document.getElementById("tbody")?.scrollTop??0;
-      _suppressAutoScroll=true;
-      try{
-        await api(`/machines/${MID}/reorder`,{method:"POST",body:JSON.stringify({entry_ids:ids})});
-      }finally{
-        await load();
-        _suppressAutoScroll=false;
-        requestAnimationFrame(()=>requestAnimationFrame(()=>{
-          const main=document.querySelector(".main");
-          if(main) main.scrollTop=savedScroll;
-          const tbody=document.getElementById("tbody");
-          if(tbody&&savedTbodyScroll>0) tbody.scrollTop=savedTbodyScroll;
-        }));
-      }
-    });
-    r.addEventListener("dragend",()=>{
-      r.classList.remove("dra");
-      di=null;
-      clearOver();
-      rows.forEach(x=>x.classList.remove("dov"));
-    });
+
+    // Ajuster l'index d'insertion si nécessaire
+    let insertAt=_ddDropIdx;
+    if(insertAt>_ddDragIdx) insertAt--;
+    insertAt=Math.max(0,Math.min(insertAt,S.entries.length-1));
+
+    // Ne rien faire si on drop au même endroit
+    if(insertAt===_ddDragIdx){
+      clearState();
+      return;
+    }
+
+    // Sauvegarder les positions de scroll
+    const savedScroll=document.querySelector(".main")?.scrollTop??0;
+    const savedTbodyScroll=tbody.scrollTop??0;
+
+    // Réordonner
+    const ids=S.entries.map(en=>en.id);
+    const [moved]=ids.splice(_ddDragIdx,1);
+    ids.splice(insertAt,0,moved);
+
+    clearState();
+    _suppressAutoScroll=true;
+
+    try{
+      await api(`/machines/${MID}/reorder`,{method:"POST",body:JSON.stringify({entry_ids:ids})});
+    }catch(err){
+      console.error("Reorder failed",err);
+    }finally{
+      await load();
+      _suppressAutoScroll=false;
+      requestAnimationFrame(()=>{
+        const main=document.querySelector(".main");
+        if(main) main.scrollTop=savedScroll;
+        if(tbody&&savedTbodyScroll>0) tbody.scrollTop=savedTbodyScroll;
+      });
+    }
+  });
+
+  tbody.addEventListener("dragend",()=>{
+    clearState();
   });
 }
 
@@ -1849,8 +1964,12 @@ async function confirmSwitch(targetMachineId,afterEntryId){
 // ── Modals ──
 function durBar(v){return((v-MIND)/(MAXD-MIND)*100)+"%"}
 
-function modalHTML(title,fields,submitLabel,onSubmitFn){
-  return`<div class="mo" onclick="if(event.target===this)closeM()"><div class="md"><h3>${title}</h3>
+function modalHTML(title,fields,submitLabel,onSubmitFn,headerAction=""){
+  return`<div class="mo" onclick="if(event.target===this)closeM()"><div class="md">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;gap:12px;flex-wrap:wrap">
+      <h3 style="margin:0;font-size:18px;font-family:var(--mono);color:var(--text);line-height:1.3">${title}</h3>
+      ${headerAction?`<div style="flex-shrink:0">${headerAction}</div>`:""}
+    </div>
     ${fields}
     <div class="md-acts"><button class="btn-s" onclick="closeM()">Annuler</button>
     <button class="btn-p" onclick="${onSubmitFn}">${submitLabel}</button></div></div></div>`
@@ -1930,29 +2049,46 @@ function openEdit(id){
 
   const fieldsHtml=dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.format_l||"",e.format_h||"",e.duree_heures,e.statut,true,e.a_placer??1);
 
+  // Bouton déstockage compact en en-tête
   const destockDone=e.destockage==="done";
-  // Bouton déstockage — orange si en attente, bleu si fait
-  const destockBg=destockDone?"rgba(56,189,248,.10)":"rgba(251,146,60,.08)";
+  const destockBg=destockDone?"rgba(56,189,248,.12)":"rgba(251,146,60,.10)";
   const destockBorder=destockDone?"#38bdf8":"#fb923c";
   const destockColor=destockDone?"#38bdf8":"#fb923c";
-  const destockLabel=destockDone?"Matières destockées":"Matières à destocker";
-  const destockIcon=destockDone?`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>`;
-  const destockRow=`<div style="margin-top:16px">
-    <button type="button" onclick="toggleDestockage(${id});closeM();"
-      title="${destockDone?"Cliquer pour marquer en attente":"Cliquer pour marquer destocké"}"
-      style="display:flex;align-items:center;gap:8px;width:100%;padding:10px 14px;border-radius:8px;border:1.5px solid ${destockBorder};background:${destockBg};color:${destockColor};font-size:13px;font-weight:600;cursor:pointer;transition:opacity .15s;font-family:inherit;letter-spacing:.01em"
-      onmouseenter="this.style.opacity='.75'" onmouseleave="this.style.opacity='1'">
-      ${destockIcon}
-      <span>${destockLabel}</span>
-      ${destockDone?"":`<span style="margin-left:auto;font-size:11px;font-weight:400;opacity:.7">→ cliquer pour valider</span>`}
-    </button>
-  </div>`;
+  const destockIcon=destockDone?`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`:`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>`;
+  const headerAction=`<button type="button" onclick="toggleDestockage(${id});closeM();"
+    title="${destockDone?"Matières destockées - cliquer pour annuler":"Matières à destocker - cliquer pour valider"}"
+    style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;border:1.5px solid ${destockBorder};background:${destockBg};color:${destockColor};font-size:12px;font-weight:600;cursor:pointer;transition:opacity .15s;font-family:inherit;white-space:nowrap"
+    onmouseenter="this.style.opacity='.75'" onmouseleave="this.style.opacity='1'">
+    ${destockIcon}
+    <span>${destockDone?"Destocké":"À destocker"}</span>
+  </button>`;
+
+  // Traçabilité création/modification
+  const fmtDate=(iso)=>{
+    if(!iso) return null;
+    const d=new Date(iso);
+    return d.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'});
+  };
+  const fmtDateTime=(iso)=>{
+    if(!iso) return null;
+    const d=new Date(iso);
+    return d.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'})+' '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+  };
+  const createdAt=fmtDate(e.created_at);
+  const updatedAt=fmtDateTime(e.updated_at);
+  const createdBy=e.created_by||"—";
+  const updatedBy=e.updated_by||e.created_by||"—";
+  const traceParts=[];
+  if(createdAt) traceParts.push(`créé par ${escAttr(createdBy)} le ${createdAt}`);
+  if(updatedAt && e.updated_at!==e.created_at) traceParts.push(`Dernière modification le ${escAttr(updatedAt)} par ${escAttr(updatedBy)}`);
+  const traceHtml=traceParts.length?`<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border2);font-size:11px;color:var(--muted);line-height:1.5">${traceParts.join(' | ')}</div>`:"";
 
   const titlePrefix=statLabel?`<span style="color:${statColor};font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;margin-right:6px">${statLabel}</span>`:"";
   document.getElementById("mroot").innerHTML=modalHTML(
     `${titlePrefix}${(e.numero_of||e.reference)||''}`,
-    fieldsHtml+destockRow,
-    "Enregistrer",`submitEdit(${id})`
+    fieldsHtml+traceHtml,
+    "Enregistrer",`submitEdit(${id})`,
+    headerAction
   );
 }
 
