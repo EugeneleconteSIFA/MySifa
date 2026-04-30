@@ -748,29 +748,6 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
 
         exd = dict(ex)
         statut_auto = compute_statut(exd)
-        # Entrées verrouillées : on autorise uniquement la modification de durée sur "en cours"
-        # (utile pour ajuster l'estimation) mais on bloque le reste.
-        if statut_auto in ("en_cours", "termine"):
-            if duree is not None and float(duree) != float(ex["duree_heures"]):
-                ps = exd.get("planned_start")
-                st = _parse_planned_dt(ps)
-                if st:
-                    # Recalcule planned_end = planned_start + nouvelle durée (heures calendaires).
-                    # Pour terminé : planned_end peut tomber dans le futur si la durée augmente,
-                    # mais _slot_payload force l'affichage "terminé" (statut DB prime).
-                    pe = _fmt_ts(st + timedelta(hours=float(duree)))
-                else:
-                    pe = exd.get("planned_end")
-                conn.execute(
-                    """UPDATE planning_entries
-                       SET duree_heures=?, updated_at=?, planned_end=?
-                       WHERE id=? AND machine_id=?""",
-                    (float(duree), now, pe, entry_id, machine_id),
-                )
-                _invalidate_attente_plans(conn, machine_id)
-                conn.commit()
-                return {"success": True, "partial": "duree_heures"}
-            raise HTTPException(400, "Ce dossier est verrouillé — seule la durée peut être modifiée")
         if (
             exd.get("statut") == "attente"
             and duree is not None

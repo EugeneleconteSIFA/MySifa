@@ -1298,7 +1298,7 @@ function mkTL(mon,slots){
       ondblclick="hideTip();toggleDestockage(${s.entry_id||idx});event.stopPropagation()"
       data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(String(s.duree_heures)+"h")}"
       data-deb="${escAttr(fdt(ss))}" data-fin="${escAttr(fdt(se))}" data-st="${escAttr(st)}" data-co="${escAttr(co)}">
-      ${destock?`<div style="position:absolute;top:4px;right:4px;width:7px;height:7px;border-radius:50%;background:rgba(148,163,184,.55);pointer-events:none;z-index:5;flex-shrink:0"></div>`:""}
+      ${destock?`<div style="position:absolute;top:4px;right:4px;width:7px;height:7px;border-radius:50%;background:rgba(71,85,105,.9);pointer-events:none;z-index:5;flex-shrink:0"></div>`:""}
       ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}</span>${subTxt?`<span class="line2">${escAttr(subTxt)}</span>`:""}</div>`:""}</div>`;
   });
 
@@ -1708,7 +1708,7 @@ function modalHTML(title,fields,submitLabel,onSubmitFn){
 
 function dossierFields(numero_of,client,ref_produit,laize,date_livraison,commentaire,fl,fh,dur,statut,showStatut,aPlacer=1){
   return`
-    <div class="fd"><label>Numéro d'OF</label><input id="f-of" value="${numero_of}" placeholder="961/0001"></div>
+    <div class="fd"><label>Numéro d'OF</label><input id="f-of" value="${numero_of}" placeholder="9936280"></div>
     <div class="fd"><label>Client</label><input id="f-cli" value="${client}" placeholder="Nom du client"></div>
     <div class="fd"><label>Réf produit</label><input id="f-rp" value="${ref_produit}" placeholder="REF-PROD"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
@@ -1773,35 +1773,24 @@ function openEdit(id){
   if(!CAN_EDIT) return;
   const e=S.entries.find(x=>x.id===id);if(!e)return;
 
-  // ── Dossier EN COURS ou TERMINÉ : seule la durée est ajustable ─────────
-  if(e.statut==="en_cours"||e.statut==="termine"){
-    const curDur=e.duree_heures||8;
-    const pct=((Math.max(MIND,Math.min(30,curDur))-MIND)/(30-MIND)*100).toFixed(1);
-    const isTermine=e.statut==="termine";
-    const bannerColor=isTermine?"rgba(248,113,113,.10)":"var(--accent-bg)";
-    const bannerBorder=isTermine?"var(--red)":"var(--accent)";
-    const bannerTxtColor=isTermine?"var(--red)":"var(--accent)";
-    const bannerLabel=isTermine?"terminé":"en cours";
-    const bannerNote=isTermine?"la durée réelle peut encore être corrigée.":"seule la durée estimée peut être ajustée.";
-    document.getElementById("mroot").innerHTML=modalHTML(
-      `${isTermine?"Terminé":"En cours"} — ${escAttr(e.numero_of||e.reference||'')}`,
-      `<div style="background:${bannerColor};border:1px solid ${bannerBorder};border-radius:8px;padding:10px 14px;margin-bottom:18px;font-size:12px;color:var(--muted)">
-        Dossier <strong style="color:${bannerTxtColor}">${bannerLabel}</strong> — ${bannerNote}
-      </div>
-      <div class="fd"><label>Durée (${MIND}–720h)</label>
-        <input type="number" id="f-dur" min="${MIND}" max="720" value="${curDur}"
-          oninput="document.getElementById('f-dur-fill2').style.width=((Math.max(${MIND},Math.min(30,+this.value||${MIND}))-${MIND})/(30-${MIND})*100)+'%'">
-        <div class="dur-b"><div class="dur-f" id="f-dur-fill2" style="width:${pct}%"></div></div>
-      </div>`,
-      "Enregistrer",`submitEditDuree(${id})`
-    );
-    return;
-  }
+  const isLocked=(e.statut==="en_cours"||e.statut==="termine");
+  const isTermine=e.statut==="termine";
+  const bannerColor=isTermine?"rgba(248,113,113,.10)":"var(--accent-bg)";
+  const bannerBorder=isTermine?"var(--red)":"var(--accent)";
+  const bannerTxtColor=isTermine?"var(--red)":"var(--accent)";
+  const bannerLabel=isTermine?"Terminé":"En cours";
+  const bannerNote=isLocked?"Vous pouvez modifier toutes les informations de ce dossier.":"";
 
-  // ── Cas normal (attente) ──────────────────────────────────────────────────
+  const fieldsHtml=isLocked
+    ? `<div style="background:${bannerColor};border:1px solid ${bannerBorder};border-radius:8px;padding:10px 14px;margin-bottom:18px;font-size:12px;color:var(--muted)">
+        Dossier <strong style="color:${bannerTxtColor}">${bannerLabel}</strong> — ${bannerNote}
+      </div>`
+      + dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.format_l||"",e.format_h||"",e.duree_heures,e.statut,true,e.a_placer??1)
+    : dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.format_l||"",e.format_h||"",e.duree_heures,e.statut,true,e.a_placer??1);
+
   document.getElementById("mroot").innerHTML=modalHTML(
-    `Modifier — ${(e.numero_of||e.reference)||''}`,
-    dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.format_l||"",e.format_h||"",e.duree_heures,e.statut,true,e.a_placer??1),
+    isLocked?`${bannerLabel} — ${(e.numero_of||e.reference)||''}`:`Modifier — ${(e.numero_of||e.reference)||''}`,
+    fieldsHtml,
     "Enregistrer",`submitEdit(${id})`
   );
 }
