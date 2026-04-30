@@ -373,3 +373,25 @@ async def patch_update(announcement_id: int, request: Request):
             )
         conn.commit()
     return {"success": True}
+
+@router.delete("/updates/{announcement_id}")
+def delete_update(announcement_id: int, request: Request):
+    """Supprimer une annonce (uniquement si elle n'a pas encore été lue)."""
+    require_superadmin(request)
+    from database import get_db
+    with get_db() as conn:
+        ann = conn.execute(
+            "SELECT * FROM update_announcements WHERE id=?", (announcement_id,)
+        ).fetchone()
+        if not ann:
+            raise HTTPException(status_code=404, detail="Annonce non trouvée")
+        # Vérifier si l'annonce a déjà été lue
+        ack_count = conn.execute(
+            "SELECT COUNT(*) FROM update_acknowledgements WHERE announcement_id=?",
+            (announcement_id,)
+        ).fetchone()[0]
+        if ack_count > 0:
+            raise HTTPException(status_code=400, detail="Impossible de supprimer une annonce déjà lue")
+        conn.execute("DELETE FROM update_announcements WHERE id=?", (announcement_id,))
+        conn.commit()
+    return {"success": True}

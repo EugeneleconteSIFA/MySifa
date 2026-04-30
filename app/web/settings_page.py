@@ -349,6 +349,42 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
         </div>
       </div>
     </div>
+
+    <!-- Modal modifier annonce -->
+    <div id="edit-upd-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:800;align-items:center;justify-content:center" class="hidden">
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;width:min(560px,95vw);max-height:90vh;overflow:auto">
+        <h2 style="margin:0 0 18px;font-size:17px">Modifier l'annonce</h2>
+        <div class="form-grid" style="grid-template-columns:1fr 1fr;margin-bottom:12px">
+          <div>
+            <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Page concernée</label>
+            <select id="edit-nm-scope" style="width:100%">
+              <option value="planning">Planning de production</option>
+              <option value="fabrication">Saisie de production</option>
+              <option value="global">Toutes les pages</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Active</label>
+            <select id="edit-nm-active" style="width:100%">
+              <option value="1">Oui — visible par les utilisateurs</option>
+              <option value="0">Non — masquée</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-bottom:12px">
+          <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Titre</label>
+          <input type="text" id="edit-nm-titre" placeholder="Ex : Mise à jour du 15 mai 2026 — Planning" style="width:100%">
+        </div>
+        <div style="margin-bottom:18px">
+          <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Message (HTML autorisé)</label>
+          <textarea id="edit-nm-message" rows="8" placeholder="&lt;p&gt;Bonjour ! Voici les nouveautés…&lt;/p&gt;" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:monospace;resize:vertical"></textarea>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end">
+          <button type="button" class="btn btn-sec" onclick="closeEditUpdateModal()">Annuler</button>
+          <button type="button" class="btn" onclick="submitEditUpdate()">Enregistrer</button>
+        </div>
+      </div>
+    </div>
   </main>
 </div>
 <script src="/static/support_widget.js"></script>
@@ -1140,6 +1176,7 @@ function renderUpdatesList() {
       <div style="font-size:10px;color:var(--muted)">lecture(s)</div>
     </div>
     <button type="button" class="btn btn-sec" style="padding:5px 10px;font-size:11px" onclick="event.stopPropagation();showUpdatePreview(${u.id})">Aperçu</button>
+    ${ackCount === 0 ? `<button type="button" class="btn btn-sec" style="padding:5px 10px;font-size:11px" onclick="event.stopPropagation();openEditUpdateModal(${u.id})">Modifier</button><button type="button" class="btn btn-sec" style="padding:5px 10px;font-size:11px;color:var(--danger);border-color:var(--danger)" onclick="event.stopPropagation();deleteUpdate(${u.id})">Supprimer</button>` : ''}
     <button type="button" class="btn btn-sec" style="padding:5px 10px;font-size:11px" onclick="event.stopPropagation();toggleActive(${u.id},${u.active})">${u.active ? 'Archiver' : 'Réactiver'}</button>
     <span style="font-size:16px;color:var(--muted);transition:transform .2s;${isOpen ? 'transform:rotate(180deg)' : ''}">▾</span>
   </div>
@@ -1230,6 +1267,53 @@ async function submitNewUpdate() {
     closeNewUpdateModal();
     document.getElementById('nm-titre').value = '';
     document.getElementById('nm-message').value = '';
+    await loadUpdates();
+  } catch(e) { toast(e.message, true); }
+}
+
+let _editingUpdateId = null;
+
+function openEditUpdateModal(id) {
+  const u = _updatesData.find(x => x.id === id);
+  if (!u) return;
+  _editingUpdateId = id;
+  document.getElementById('edit-nm-scope').value = u.scope || 'planning';
+  document.getElementById('edit-nm-titre').value = u.titre || '';
+  document.getElementById('edit-nm-message').value = u.message || '';
+  document.getElementById('edit-nm-active').value = u.active ? '1' : '0';
+  const ov = document.getElementById('edit-upd-modal-overlay');
+  if (ov) { ov.style.display = 'flex'; ov.classList.remove('hidden'); }
+}
+
+function closeEditUpdateModal() {
+  const ov = document.getElementById('edit-upd-modal-overlay');
+  if (ov) { ov.style.display = 'none'; ov.classList.add('hidden'); }
+  _editingUpdateId = null;
+}
+
+async function submitEditUpdate() {
+  if (!_editingUpdateId) return;
+  const scope   = document.getElementById('edit-nm-scope').value;
+  const titre   = (document.getElementById('edit-nm-titre').value || '').trim();
+  const message = (document.getElementById('edit-nm-message').value || '').trim();
+  const active  = Number(document.getElementById('edit-nm-active').value);
+  if (!titre || !message) { toast('Titre et message sont requis', true); return; }
+  try {
+    await api('/api/updates/' + _editingUpdateId, { method: 'PATCH', body: JSON.stringify({ scope, titre, message, active }), headers: { 'Content-Type': 'application/json' } });
+    toast('Annonce modifiée ✅');
+    closeEditUpdateModal();
+    await loadUpdates();
+  } catch(e) { toast(e.message, true); }
+}
+
+async function deleteUpdate(id) {
+  const u = _updatesData.find(x => x.id === id);
+  if (!u) return;
+  if (u.nb_ack > 0) { toast('Impossible de supprimer une annonce déjà lue', true); return; }
+  if (!confirm('Supprimer définitivement cette annonce ?')) return;
+  try {
+    await api('/api/updates/' + id, { method: 'DELETE' });
+    toast('Annonce supprimée ✅');
     await loadUpdates();
   } catch(e) { toast(e.message, true); }
 }

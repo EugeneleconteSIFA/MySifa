@@ -240,7 +240,8 @@ body.light .d-sep{background:rgba(71,85,105,.35)}
   text-align:center;max-width:100%;pointer-events:none}
 .slot .line1{font-size:13px;color:#1e293b;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .slot .line2{font-size:10px;font-weight:600;color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-body.light .slot .line1{color:#1e293b}body.light .slot .line2{color:#334155}
+.slot .line3{font-size:9px;font-weight:500;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;margin-top:1px}
+body.light .slot .line1{color:#1e293b}body.light .slot .line2{color:#334155}body.light .slot .line3{color:#64748b}
 .now-l{position:absolute;top:0;bottom:0;width:2px;background:var(--red);z-index:15;box-shadow:0 0 8px var(--red)}
 .now-d{position:absolute;top:-4px;left:-4px;width:10px;height:10px;border-radius:50%;background:var(--red)}
 
@@ -1406,16 +1407,18 @@ function mkTL(mon,slots){
     const co=colorForId(s.entry_id||idx+1);
     const fm=s.format_l&&s.format_h?`${s.format_l} × ${s.format_h} mm`:"";
     const lz=s.laize?`${s.laize} mm`:"";
-    // Construction de la ligne 2 avec format/laize + date livraison + commentaire
-    const fmLz=[fm,lz].filter(Boolean).join(" | ");
+    // Ligne 2 : format + laize
+    const line2Txt=[fm,lz].filter(Boolean).join(" | ");
+    // Ligne 3 : date livraison + commentaire
     const dateLiv=s.date_livraison?`à livrer pour ${s.date_livraison}`:"";
     const com=s.commentaire?String(s.commentaire).trim():"";
-    const extraParts=[dateLiv,com].filter(Boolean);
-    const subTxt=fmLz+(extraParts.length?(fmLz?" · ":"")+extraParts.join(" · "):"");
+    const line3Parts=[dateLiv,com].filter(Boolean);
+    const line3Txt=line3Parts.join(" | ");
+    const subTxt=line2Txt; // pour compatibilité tooltip
     const fmTip=fm||"—";
     const st=s.statut==="en_cours"?"En cours":s.statut==="termine"?"Terminé":"En attente";
     const cli=(s.client||"").trim()||(s.numero_of||s.reference||"—");
-    const meta=[s.numero_of||s.reference,s.description].filter(Boolean).join(" · ");
+    const meta=[s.numero_of||s.reference,s.description].filter(Boolean).join(" | ");
     const noOf=(s.numero_of||s.reference||"").trim().toLowerCase();
     const activeNo=S.activeDossier?(S.activeDossier.no_dossier||"").trim().toLowerCase():"";
     const isActive=!!(activeNo&&noOf&&activeNo===noOf);
@@ -1436,7 +1439,7 @@ function mkTL(mon,slots){
       data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(fmtDur(s.duree_heures))}"
       data-deb="${escAttr(fdt(ss))}" data-fin="${escAttr(fdt(se))}" data-st="${escAttr(st)}" data-co="${escAttr(co)}">
       ${destock?`<div style="position:absolute;top:4px;right:4px;width:7px;height:7px;border-radius:50%;background:rgba(71,85,105,.9);pointer-events:none;z-index:5;flex-shrink:0"></div>`:""}
-      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}</span>${subTxt?`<span class="line2">${escAttr(subTxt)}</span>`:""}</div>`:""}</div>`;
+      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}</span>${line2Txt?`<span class="line2">${escAttr(line2Txt)}</span>`:""}${line3Txt?`<span class="line3">${escAttr(line3Txt)}</span>`:""}</div>`:""}</div>`;
   });
 
   const np=gp(now);
