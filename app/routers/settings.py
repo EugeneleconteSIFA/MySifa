@@ -1,5 +1,6 @@
 """Paramètres & matrice d'accès — super administrateur uniquement."""
 
+from datetime import datetime
 from fastapi import APIRouter, Request, HTTPException
 
 from config import (
@@ -222,3 +223,153 @@ def fournisseur_receptions(fournisseur_id: int, request: Request):
         d["items"] = raw.split("||") if raw else []
         result.append(d)
     return {"fournisseur": four["nom"], "receptions": result}
+
+
+# ─── Annonces de mise à jour ──────────────────────────────────────────────────
+
+@router.get("/api/updates/pending")
+def pending_updates(request: Request, scope: str = None):
+    """Annonces non acquittées pour l'utilisateur courant (toutes pages)."""
+    from database import get_db
+    from services.auth_service import get_current_user
+    user = get_current_user(request)
+    uid = user.get("id")
+    with get_db() as conn:
+        if scope:
+            rows = conn.execute(
+                """SELECT a.* FROM update_announcements a
+                   WHERE a.active=1 AND a.scope=?
+                     AND NOT EXISTS (
+                         SELECT 1 FROM update_acknowledgements ack
+                         WHERE ack.announcement_id=a.id AND ack.user_id=?
+                     )
+                   ORDER BY a.created_at DESC""",
+                (scope, uid),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT a.* FROM update_announcements a
+                   WHERE a.active=1
+                     AND NOT EXISTS (
+                         SELECT 1 FROM update_acknowledgements ack
+                         WHERE ack.announcement_id=a.id AND ack.user_id=?
+                     )
+                   ORDER BY a.created_at DESC""",
+                (uid,),
+            ).fetchall()
+    return [dict(r) for r in rows]
+
+
+@router.post("/api/updates/{announcement_id}/acknowledge")
+async def acknowledge_update(announcement_id: int, request: Request):
+    """Marque une annonce comme lue par l'utilisateur courant."""
+    from database import get_db
+    from services.auth_service import get_current_user
+    user = get_current_user(request)
+    uid = user.get("id")
+    nom = user.get("nom") or user.get("email") or ""
+    with get_db() as conn:
+        ann = conn.execute(
+            "SELECT id FROM update_announcements WHERE id=?", (announcement_id,)
+        ).fetchone()
+        if not ann:
+            raise HTTPException(status_code=404, detail="Annonce non trouvée")
+        conn.execute(
+            """INSERT OR IGNORE INTO update_acknowledgements
+               (announcement_id, user_id, user_nom, acknowledged_at) VALUES (?,?,?,?)""",
+            (announcement_id, uid, nom, datetime.now().isoformat()),
+        )
+        conn.commit()
+    return {"success": True}
+
+
+@router.get("/api/updates")
+def list_updates(request: Request):
+    """Liste toutes les annonces avec compteur d'acquittements (super admin)."""
+    require_superadmin(request)
+    from database import get_db
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT a.*, COUNT(ack.id) AS nb_ack
+               FROM update_announcements a
+               LEFT JOIN update_acknowledgements ack ON ack.announcement_id=a.id
+               GROUP BY a.id
+               ORDER BY a.created_at DESC"""
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+@router.get("/api/updates/{announcement_id}/acknowledgements")
+def list_acknowledgements(announcement_id: int, request: Request):
+    """Détail des acquittements pour une annonce (super admin)."""
+    require_superadmin(request)
+    from database import get_db
+    with get_db() as conn:
+        ann = conn.execute(
+            "SELECT * FROM update_announcements WHERE id=?", (announcement_id,)
+        ).fetchone()
+        if not ann:
+            raise HTTPException(status_code=404, detail="Annonce non trouvée")
+        acks = conn.execute(
+            """SELECT ack.user_nom, ack.acknowledged_at, u.email
+               FROM update_acknowledgements ack
+               LEFT JOIN users u ON u.id=ack.user_id
+               WHERE ack.announcement_id=?
+               ORDER BY ack.acknowledged_at DESC""",
+            (announcement_id,),
+        ).fetchall()
+    return {"announcement": dict(ann), "acknowledgements": [dict(a) for a in acks]}
+
+
+@router.post("/api/updates")
+async def create_update(request: Request):
+    """Créer une nouvelle annonce (super admin)."""
+    user = require_superadmin(request)
+    from database import get_db
+    body = await request.json()
+    scope   = (body.get("scope")   or "").strip()
+    titre   = (body.get("titre")   or "").strip()
+    message = (body.get("message") or "").strip()
+    active  = int(bool(body.get("active", True)))
+    if not scope or not titre or not message:
+        raise HTTPException(status_code=400, detail="scope, titre et message sont requis")
+    with get_db() as conn:
+        cur = conn.execute(
+            """INSERT INTO update_announcements (scope,titre,message,created_at,created_by,active)
+               VALUES (?,?,?,?,?,?)""",
+            (scope, titre, message, datetime.now().isoformat(),
+             user.get("nom") or user.get("email"), active),
+        )
+        conn.commit()
+    return {"success": True, "id": cur.lastrowid}
+
+
+@router.patch("/api/updates/{announcement_id}")
+async def patch_update(announcement_id: int, request: Request):
+    """Modifier une annonce — ex: activer/désactiver (super admin)."""
+    require_superadmin(request)
+    from database import get_db
+    body = await request.json()
+    with get_db() as conn:
+        ann = conn.execute(
+            "SELECT id FROM update_announcements WHERE id=?", (announcement_id,)
+        ).fetchone()
+        if not ann:
+            raise HTTPException(status_code=404, detail="Annonce non trouvée")
+        if "active" in body:
+            conn.execute(
+                "UPDATE update_announcements SET active=? WHERE id=?",
+                (int(bool(body["active"])), announcement_id),
+            )
+        if "titre" in body:
+            conn.execute(
+                "UPDATE update_announcements SET titre=? WHERE id=?",
+                ((body["titre"] or "").strip(), announcement_id),
+            )
+        if "message" in body:
+            conn.execute(
+                "UPDATE update_announcements SET message=? WHERE id=?",
+                ((body["message"] or "").strip(), announcement_id),
+            )
+        conn.commit()
+    return {"success": True}

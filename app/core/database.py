@@ -412,6 +412,9 @@ def _migrate(conn):
             ("a_placer", "ALTER TABLE planning_entries ADD COLUMN a_placer INTEGER DEFAULT 0"),
             # Planning v2: destockage (todo/done — point gris dans le slot timeline)
             ("destockage", "ALTER TABLE planning_entries ADD COLUMN destockage TEXT DEFAULT 'todo'"),
+            # Planning v3: statut réel issu de la saisie fabrication
+            # reellement_en_attente | reellement_en_saisie | reellement_termine
+            ("statut_reel", "ALTER TABLE planning_entries ADD COLUMN statut_reel TEXT DEFAULT 'reellement_en_attente'"),
         ]:
             if col not in pe_cols:
                 conn.execute(sql)
@@ -420,6 +423,17 @@ def _migrate(conn):
         try:
             conn.execute(
                 "UPDATE planning_entries SET group_id=CAST(id AS TEXT) WHERE group_id IS NULL OR TRIM(group_id)=''"
+            )
+        except Exception:
+            pass
+
+        # Backfill statut_reel : les dossiers planning marqués "termine" sont réellement terminés
+        try:
+            conn.execute(
+                """UPDATE planning_entries
+                   SET statut_reel='reellement_termine'
+                   WHERE statut='termine'
+                     AND (statut_reel IS NULL OR statut_reel='reellement_en_attente')"""
             )
         except Exception:
             pass
@@ -940,6 +954,64 @@ def _migrate(conn):
 
         conn.commit()
         _record_schema_migration(conn, 7, "paie_employes_et_variables")
+
+    # Migration v8 : Tables annonces de mise à jour + acquittements utilisateurs
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=8 LIMIT 1").fetchone():
+        conn.execute("""CREATE TABLE IF NOT EXISTS update_announcements (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            scope       TEXT NOT NULL,        -- 'planning', 'fabrication', 'global'
+            titre       TEXT NOT NULL,
+            message     TEXT NOT NULL,        -- HTML autorisé
+            created_at  TEXT NOT NULL,
+            created_by  TEXT DEFAULT 'système',
+            active      INTEGER DEFAULT 1    -- 0 = archivé (ne plus afficher)
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS update_acknowledgements (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            announcement_id INTEGER NOT NULL,
+            user_id         INTEGER NOT NULL,
+            user_nom        TEXT,
+            acknowledged_at TEXT NOT NULL,
+            UNIQUE(announcement_id, user_id),
+            FOREIGN KEY (announcement_id) REFERENCES update_announcements(id)
+        )""")
+
+        # ── Seed : annonces du 30 avril 2026 ─────────────────────────────────
+        _planning_msg = (
+            "<p>Bonjour&nbsp;! 👋 De belles nouveautés vous attendent dans le <strong>planning de production</strong>. Voici ce qui a changé&nbsp;:</p>"
+            "<ul style='margin:10px 0;padding-left:20px;line-height:1.9'>"
+            "<li>🙈 <strong>Dossiers terminés masqués</strong> — Seuls les 2 derniers dossiers terminés restent visibles. Fini le défilement jusqu'en bas&nbsp;! Un bouton permet de tout afficher si besoin.</li>"
+            "<li>📌 <strong>Scroll préservé</strong> — La liste ne remonte plus en haut après chaque modification ou déplacement. Votre position reste stable.</li>"
+            "<li>🖱️ <strong>Glisser-déposer sur la timeline</strong> — Réorganisez les slots <em>En attente</em> directement sur la barre de temps.</li>"
+            "<li>⏎ <strong>Raccourci Entrée</strong> — Survolez un slot et appuyez sur <kbd style='background:rgba(255,255,255,.15);padding:1px 5px;border-radius:4px'>Entrée</kbd> pour ouvrir sa fiche directement.</li>"
+            "<li>⚙️ <strong>Paramètres par semaine</strong> — Une icône ⚙ sur chaque semaine permet de configurer les jours travaillés et horaires spécifiques à cette semaine.</li>"
+            "<li>🎯 <strong>Durée réelle automatique</strong> — À la clôture d'un dossier en saisie, sa durée dans le planning se met à jour avec le temps réel de production. Ex&nbsp;: <em>5h15</em> au lieu de 8h.</li>"
+            "<li>🔵 <strong>Statut saisie visible</strong> — Un badge indique si un dossier est <em>⚙ en saisie</em> ou <em>✓ terminé</em> en production réelle.</li>"
+            "</ul>"
+            "<p style='margin-top:12px;font-size:12px;opacity:.65'>Ces améliorations visent à rendre votre quotidien plus fluide. N'hésitez pas à faire remonter vos retours&nbsp;! 💙</p>"
+        )
+        _fabrication_msg = (
+            "<p>Bonjour&nbsp;! 👋 La <strong>saisie de production</strong> évolue pour mieux gérer vos dossiers. Voici les changements&nbsp;:</p>"
+            "<ul style='margin:10px 0;padding-left:20px;line-height:1.9'>"
+            "<li>📝 <strong>Nouveau nom</strong> — «&nbsp;Début dossier&nbsp;» et «&nbsp;Fin dossier&nbsp;» s'appellent désormais <strong>Début de production</strong> et <strong>Fin de production</strong>. Plus intuitif&nbsp;!</li>"
+            "<li>✅ <strong>Clôture de dossier</strong> — Lors d'une fin de production, vous devez indiquer si le dossier est <strong>terminé</strong> (🟢 Oui, clôturé) ou s'il <strong>continue</strong> (🔄 Non, on reprend). Cette info est cruciale pour le planning&nbsp;!</li>"
+            "<li>🔄 <strong>Planning mis à jour automatiquement</strong> — À la clôture d'un dossier, sa durée dans le planning se met à jour avec le temps réel de production.</li>"
+            "</ul>"
+            "<p style='margin-top:12px;font-size:12px;opacity:.65'>Ces améliorations permettent à l'équipe planning d'avoir une vision précise et en temps réel de votre avancement. Merci pour votre rigueur&nbsp;! 💙</p>"
+        )
+
+        _seed_ts = "2026-04-30T00:00:00"
+        conn.execute(
+            "INSERT INTO update_announcements (scope,titre,message,created_at,created_by,active) VALUES (?,?,?,?,?,1)",
+            ("planning", "Mise à jour du 30 avril 2026 — Planning de production", _planning_msg, _seed_ts, "système"),
+        )
+        conn.execute(
+            "INSERT INTO update_announcements (scope,titre,message,created_at,created_by,active) VALUES (?,?,?,?,?,1)",
+            ("fabrication", "Mise à jour du 30 avril 2026 — Saisie de production", _fabrication_msg, _seed_ts, "système"),
+        )
+
+        conn.commit()
+        _record_schema_migration(conn, 8, "update_announcements_tables")
 
     _record_schema_migration(
         conn,

@@ -265,6 +265,11 @@ async def create_saisie(request: Request):
     designation = (body.get("designation")  or "").strip() or None
     commentaire = (body.get("commentaire")  or "").strip() or None
 
+    # fin_dossier : booléen transmis par la saisie Fin de production
+    # True  → dossier réellement terminé (statut_reel = reellement_termine)
+    # False → production entamée mais non clôturée (statut_reel = reellement_en_saisie)
+    fin_dossier_flag = bool(body.get("fin_dossier", False))
+
     # Métrages : début → metrage_prevu, fin → metrage_reel
     metrage_debut  = body.get("metrage_debut")
     metrage_fin    = body.get("metrage_fin")
@@ -384,6 +389,71 @@ async def create_saisie(request: Request):
                 (new_metrage, machine_id_resolved),
             )
             conn.commit()
+
+        # ── Mise à jour statut_reel sur le dossier planning ───────────────────
+        if no_dossier and cl["code"] in ("01", "89"):
+            try:
+                pe_row = conn.execute(
+                    """SELECT id, statut_reel FROM planning_entries
+                       WHERE reference = ? AND machine_id = ?
+                       ORDER BY position ASC LIMIT 1""",
+                    (no_dossier, machine_id_resolved),
+                ).fetchone()
+                if pe_row:
+                    pe_id = pe_row["id"]
+                    current_reel = pe_row["statut_reel"] or "reellement_en_attente"
+                    if cl["code"] == "01":
+                        # Début de production → marque le dossier comme entamé
+                        # (sauf s'il est déjà réellement terminé)
+                        if current_reel != "reellement_termine":
+                            conn.execute(
+                                "UPDATE planning_entries SET statut_reel='reellement_en_saisie', updated_at=? WHERE id=?",
+                                (datetime.now().isoformat(), pe_id),
+                            )
+                            conn.commit()
+                    elif cl["code"] == "89":
+                        # Fin de production
+                        if fin_dossier_flag:
+                            # Fin de dossier confirmée → réellement terminé
+                            conn.execute(
+                                "UPDATE planning_entries SET statut_reel='reellement_termine', updated_at=? WHERE id=?",
+                                (datetime.now().isoformat(), pe_id),
+                            )
+                            conn.commit()
+                            # ── Mise à jour durée réelle ──────────────────────
+                            # Calcule le temps écoulé entre le dernier Début de
+                            # production (01) et maintenant, et met à jour
+                            # duree_heures sur l'entrée planning.
+                            try:
+                                debut_row = conn.execute(
+                                    """SELECT date_operation FROM production_data
+                                       WHERE no_dossier = ? AND operation_code = '01'
+                                       ORDER BY date_operation DESC LIMIT 1""",
+                                    (no_dossier,),
+                                ).fetchone()
+                                if debut_row and debut_row["date_operation"]:
+                                    dt_start = datetime.fromisoformat(debut_row["date_operation"])
+                                    dt_end = datetime.fromisoformat(date_op)
+                                    elapsed = (dt_end - dt_start).total_seconds() / 3600
+                                    elapsed = round(elapsed, 2)
+                                    if elapsed > 0:
+                                        conn.execute(
+                                            "UPDATE planning_entries SET duree_heures=?, updated_at=? WHERE id=?",
+                                            (elapsed, datetime.now().isoformat(), pe_id),
+                                        )
+                                        conn.commit()
+                            except Exception:
+                                pass  # Ne pas bloquer si le calcul durée échoue
+                        else:
+                            # Fin de production partielle → entamé (pas terminé)
+                            if current_reel == "reellement_en_attente":
+                                conn.execute(
+                                    "UPDATE planning_entries SET statut_reel='reellement_en_saisie', updated_at=? WHERE id=?",
+                                    (datetime.now().isoformat(), pe_id),
+                                )
+                            conn.commit()
+            except Exception:
+                pass  # Ne pas bloquer la saisie si la mise à jour planning échoue
 
         row = conn.execute(
             "SELECT * FROM production_data WHERE id=?", (new_id,)

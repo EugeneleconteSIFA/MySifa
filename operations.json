@@ -1,5 +1,5 @@
 {
-  "01": { "severity": "info", "label": "Début dossier", "category": "personnel", "required": true },
+  "01": { "severity": "info", "label": "Début de production", "category": "personnel", "required": true },
   "02": { "severity": "info", "label": "Calage", "category": "calage", "required": false },
   "03": { "severity": "info", "label": "Production", "category": "production", "required": false },
   "10": { "severity": "info", "label": "Calage Errepi", "category": "calage", "required": false },
@@ -35,6 +35,6 @@
   "86": { "severity": "info", "label": "Arrivée personnel", "category": "personnel", "required": true },
   "87": { "severity": "info", "label": "Départ personnel", "category": "personnel", "required": true },
   "88": { "severity": "info", "label": "Reprise production", "category": "production", "required": false },
-  "89": { "severity": "info", "label": "Fin dossier", "category": "personnel", "required": true },
+  "89": { "severity": "info", "label": "Fin de production", "category": "personnel", "required": true },
   "90": { "severity": "info", "label": "Annulation saisie", "category": "annulation", "required": false }
 }

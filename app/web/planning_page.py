@@ -286,6 +286,9 @@ body.light .lg-d{border-color:rgba(71,85,105,.3)}
   scroll-behavior:auto;
   overscroll-behavior:contain;
 }
+.show-termine-btn{padding:7px 14px;font-size:11px;color:var(--muted);cursor:pointer;text-align:center;
+  border-bottom:1px solid var(--border);background:var(--bg);user-select:none;letter-spacing:.3px}
+.show-termine-btn:hover{color:var(--accent);background:var(--accent-bg)}
 .tr{display:grid;grid-template-columns:22px 14px minmax(110px,1.3fr) minmax(55px,.65fr) minmax(72px,.82fr) minmax(62px,.72fr) 38px minmax(62px,.6fr) minmax(80px,.9fr) 42px minmax(95px,.88fr) minmax(120px,auto);
   gap:6px;padding:10px 10px;border-bottom:1px solid var(--border);font-size:12px;align-items:center;
   cursor:grab;transition:background .2s;background:var(--bg-dark)}
@@ -366,10 +369,27 @@ body.light .btn-p{color:#fff}
 /* Timeline search highlighting */
 .slot.tl-match{outline:3px solid rgba(255,255,255,.9);outline-offset:2px;z-index:12}
 .slot.tl-no-match{opacity:0.18;filter:grayscale(50%)}
+.slot.tl-drop-over{outline:3px solid #22d3ee;outline-offset:3px;z-index:30;filter:brightness(1.15)}
 /* À placer au planning — zébré */
 .tr.tr-aplacer{background:repeating-linear-gradient(135deg,var(--bg-dark),var(--bg-dark) 10px,rgba(34,211,238,.07) 10px,rgba(34,211,238,.07) 20px)!important}
 body.light .tr.tr-aplacer{background:repeating-linear-gradient(135deg,var(--card),var(--card) 10px,rgba(8,145,178,.08) 10px,rgba(8,145,178,.08) 20px)!important}
 .slot.slot-aplacer{background-image:repeating-linear-gradient(135deg,transparent,transparent 5px,rgba(0,0,0,.12) 5px,rgba(0,0,0,.12) 10px)!important}
+/* Réellement terminé (saisie opérateur confirmée) */
+.slot.slot-reel-termine{opacity:.38!important;filter:grayscale(65%) brightness(.75)!important}
+.tr.tr-reel-termine{opacity:.45;filter:grayscale(40%)}
+/* ── Popup Mise à jour ── */
+.upd-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px}
+.upd-card{background:var(--card);border:1px solid var(--border2);border-radius:18px;padding:28px 28px 22px;width:min(560px,100%);max-height:88vh;overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,.55)}
+.upd-card h2{font-size:18px;margin:0 0 4px}
+.upd-card .upd-sub{font-size:12px;color:var(--dim);margin:0 0 18px}
+.upd-card .upd-body{font-size:13px;line-height:1.7;color:var(--fg2)}
+.upd-card .upd-body ul{padding-left:18px;margin:8px 0}
+.upd-card .upd-body li{margin-bottom:6px}
+.upd-card .upd-body strong{color:var(--fg)}
+.upd-card .upd-body kbd{background:rgba(255,255,255,.12);border-radius:4px;padding:1px 5px;font-family:monospace;font-size:11px}
+.upd-ok-btn{display:block;width:100%;margin-top:20px;padding:13px;border-radius:12px;border:none;background:var(--accent);color:#0a0e17;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;transition:filter .15s}
+.upd-ok-btn:hover{filter:brightness(1.08)}
+body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 .view-tabs{display:flex;gap:0;align-items:center}
 .view-tab{padding:6px 14px;background:var(--card);border:1px solid var(--border2);color:var(--dim);
   cursor:pointer;font-size:12px;font-family:var(--mono);transition:all .15s}
@@ -453,6 +473,8 @@ let CAN_EDIT=false;
 let SHOW_DOSSIERS=false;
 let _autoScrollKey=null;
 let _suppressAutoScroll=false;
+let _showAllTermine=false;   // true = montrer tous les terminés; false = seulement les 2 derniers
+const TERMINE_KEEP=2;        // nombre de terminés toujours visibles en bas de la pile
 
 const api=(p,o={})=>fetch(`/api/planning${p}`,{credentials:"include",headers:{"Content-Type":"application/json",...(o.headers||{})},...o}).then(r=>{if(!r.ok)throw r;return r.json()});
 
@@ -649,11 +671,43 @@ function renderEntries(){
   if(!tbody) return;
   const sl=S.timeline;
   const filtered=filterEntries(S.entries,S.searchQuery);
+
+  // ── Sauvegarde du scroll courant (avant toute modification du DOM) ────────
+  const prevScroll=tbody.scrollTop;
+
   if(filtered.length===0){
     tbody.innerHTML=S.searchQuery?'<div class="empty">Aucun résultat pour \"'+escAttr(S.searchQuery)+'\"</div>':'<div class="empty">Aucun dossier au planning</div>';
-  }else{
-    tbody.innerHTML=filtered.map((e,i)=>mkRow(e,i,sl)).join("");
+    setupDD();setupStatutSelects();
+    return;
   }
+
+  // ── Partition terminés / actifs ───────────────────────────────────────────
+  // On recherche dans la liste COMPLÈTE (S.entries) pour conserver les bons data-idx.
+  const terminated=filtered.filter(e=>e.statut==="termine");
+  const active=filtered.filter(e=>e.statut!=="termine");
+  const hiddenCount=_showAllTermine?0:Math.max(0,terminated.length-TERMINE_KEEP);
+  const visibleTerminated=_showAllTermine?terminated:terminated.slice(-TERMINE_KEEP);
+  const visible=[...visibleTerminated,...active];
+
+  // ── Construction HTML ─────────────────────────────────────────────────────
+  let html="";
+  if(hiddenCount>0){
+    html+=`<div class="show-termine-btn" onclick="_showAllTermine=true;renderEntries()">▲ ${hiddenCount} dossier${hiddenCount>1?"s":""} terminé${hiddenCount>1?"s":""} masqué${hiddenCount>1?"s":""} — cliquer pour afficher</div>`;
+  } else if(_showAllTermine&&terminated.length>TERMINE_KEEP){
+    html+=`<div class="show-termine-btn" onclick="_showAllTermine=false;renderEntries()">▼ Masquer les anciens dossiers terminés</div>`;
+  }
+  html+=visible.map(e=>{
+    // Toujours utiliser l'index ORIGINAL de S.entries pour que data-idx soit cohérent
+    // avec le drag & drop et l'auto-scroll (qui travaillent sur S.entries complet).
+    const origIdx=S.entries.findIndex(x=>x.id===e.id);
+    return mkRow(e,origIdx,sl);
+  }).join("");
+  tbody.innerHTML=html;
+
+  // ── Restauration du scroll : on ne bouge pas si l'utilisateur avait déjà scrollé ──
+  // autoScrollDossiersIfNeeded() s'occupera du scroll initial (changement de dossier actif).
+  if(prevScroll>0) tbody.scrollTop=prevScroll;
+
   setupDD();
   setupStatutSelects();
 }
@@ -704,6 +758,7 @@ function wkNum(d){const x=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDa
   x.setUTCDate(x.getUTCDate()+4-n);const y=new Date(Date.UTC(x.getUTCFullYear(),0,1));return Math.ceil(((x-y)/864e5+1)/7)}
 function addD(d,n){const r=new Date(d);r.setDate(r.getDate()+n);return r}
 function fmtDl(s){if(!s)return"—";const p=String(s).slice(0,10).split("-");return p.length===3?p[2]+"/"+p[1]+"/"+p[0]:s;}
+function fmtDur(h){const hrs=Math.floor(+h||0);const mins=Math.round(((+h||0)-hrs)*60);return mins>0?`${hrs}h${String(mins).padStart(2,"0")}`:`${hrs}h`;}
 
 function parseHorairesPair(raw,di){
   const fb=[5,21];
@@ -924,8 +979,9 @@ function render(){
   for(let wi=0;wi<nw;wi++){
     const mn=addD(m1,wi*7),wn=wkNum(mn);
     const lblCls=wi===0?"cur":"nxt";
+    const wkParamBtn2=CAN_EDIT?`<button type="button" class="gear-btn" style="padding:3px 6px;flex-shrink:0" onclick="openWeekSettingsModal(${mn.getTime()})" title="Paramètres semaine S${wn}">${icon('settings',13)}</button>`:"";
     tlBlocks+=`<div ${wi<nw-1?'style="margin-bottom:16px"':""}>
-      <div class="wk-lbl ${lblCls}">S${wn} — ${fd(mn)} au ${fd(addD(mn,4))}</div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">${wkParamBtn2}<div class="wk-lbl ${lblCls}" style="margin-bottom:0">S${wn} — ${fd(mn)} au ${fd(addD(mn,4))}</div></div>
       ${mkTL(mn,sl)}
     </div>`;
   }
@@ -985,7 +1041,7 @@ function render(){
           </div>
         </div>
       </div>
-      <div style="font-size:11px;color:var(--muted);margin:-8px 0 12px">Samedi non travaillé par défaut — décochez pour l'activer.</div>
+      <div style="font-size:11px;color:var(--muted);margin:-8px 0 12px">Gérez les jours et horaires via l'icône ⚙ de chaque semaine.</div>
       <div style="margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <div style="position:relative;max-width:360px;flex:1;min-width:160px">
           <input type="text" id="tl-search" placeholder="Rechercher dans la timeline…" value="${escAttr(S.tlSearchQuery||"")}"
@@ -1119,15 +1175,61 @@ function renderTL(){
   for(let wi=0;wi<nw;wi++){
     const mn=addD(m1,wi*7),wn=wkNum(mn);
     const lblCls=wi===0?"cur":"nxt";
+    const wkParamBtn=CAN_EDIT?`<button type="button" class="gear-btn" style="padding:3px 6px;flex-shrink:0" onclick="openWeekSettingsModal(${mn.getTime()})" title="Paramètres semaine S${wn}">${icon('settings',13)}</button>`:"";
     tlBlocks+=`<div ${wi<nw-1?'style="margin-bottom:16px"':""}>
-      <div class="wk-lbl ${lblCls}">S${wn} — ${fd(mn)} au ${fd(addD(mn,4))}</div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">${wkParamBtn}<div class="wk-lbl ${lblCls}" style="margin-bottom:0">S${wn} — ${fd(mn)} au ${fd(addD(mn,4))}</div></div>
       ${mkTL(mn,sl)}
     </div>`;
   }
   const container=document.getElementById("tl-blocks-container");
   if(container) container.innerHTML=tlBlocks;
   buildLegend(sl, m1, nw);
-  requestAnimationFrame(()=>updateTlMatchInfo());
+  requestAnimationFrame(()=>{updateTlMatchInfo();setupTlDD();});
+}
+
+// ── Drag & Drop timeline slots ──
+let _tlDragEid=null;
+function setupTlDD(){
+  if(!CAN_EDIT) return;
+  document.querySelectorAll("#tl-blocks-container .slot[draggable='true']").forEach(el=>{
+    const eid=+el.dataset.eid;
+    el.addEventListener("dragstart",ev=>{
+      _tlDragEid=eid;
+      el.style.opacity="0.45";
+      ev.dataTransfer.effectAllowed="move";
+      ev.stopPropagation();
+    });
+    el.addEventListener("dragend",()=>{
+      el.style.opacity="";
+      _tlDragEid=null;
+      document.querySelectorAll("#tl-blocks-container .slot.tl-drop-over").forEach(e=>e.classList.remove("tl-drop-over"));
+    });
+    el.addEventListener("dragover",ev=>{
+      if(!_tlDragEid||_tlDragEid===eid) return;
+      ev.preventDefault();
+      ev.dataTransfer.dropEffect="move";
+      document.querySelectorAll("#tl-blocks-container .slot.tl-drop-over").forEach(e=>e.classList.remove("tl-drop-over"));
+      el.classList.add("tl-drop-over");
+    });
+    el.addEventListener("dragleave",()=>{ el.classList.remove("tl-drop-over"); });
+    el.addEventListener("drop",async ev=>{
+      ev.preventDefault();
+      el.classList.remove("tl-drop-over");
+      const fromEid=_tlDragEid;
+      _tlDragEid=null;
+      if(!fromEid||fromEid===eid) return;
+      const ids=S.entries.map(e=>e.id);
+      const fromIdx=ids.indexOf(fromEid);
+      const toIdx=ids.indexOf(eid);
+      if(fromIdx<0||toIdx<0) return;
+      const [moved]=ids.splice(fromIdx,1);
+      ids.splice(toIdx,0,moved);
+      try{
+        await api(`/machines/${MID}/reorder`,{method:"POST",body:JSON.stringify({entry_ids:ids})});
+        await load();
+      }catch(e){ alert("Réordonnancement impossible"); await load(); }
+    });
+  });
 }
 
 async function toggleDestockage(entryId){
@@ -1176,7 +1278,11 @@ function autoScrollDossiersIfNeeded(){
     const tbody = document.getElementById("tbody");
     if(!main || !tbody) return;
 
-    const key = String(MID||"") + "|" + ent.map(e=>String(e.id||"")+"-"+String(e.statut||"")).join(",");
+    // ── Clé basée uniquement sur le dossier en_cours ──────────────────────
+    // On ne veut PAS re-scroller après un simple reorder ou edit — seulement
+    // quand le dossier actif change (ou au premier chargement de cette machine).
+    const enCoursId = (ent.find(e=>e.statut==="en_cours")||{}).id ?? "none";
+    const key = `${MID}|${enCoursId}`;
     if(_autoScrollKey === key) return;
     _autoScrollKey = key;
 
@@ -1248,16 +1354,12 @@ function mkTL(mon,slots){
   const ws=slots.filter(s=>{const ss=new Date(s.start),se=new Date(s.end);return ss<we&&se>mon});
 
   let h=`<div class="tl-wrap" data-mon="${mon.getTime()}"><div class="dh">`;
-  days.forEach(d=>{
+  days.filter(d=>!d.off).forEach(d=>{
     const td=d.date.toDateString()===ts,sa=d.di===6;
-    const off=d.off;
-    h+=`<div class="dh-cell ${td?"today":""} ${sa?"sat":""}" style="flex:${d.flex};opacity:${off?0.45:1}">
+    h+=`<div class="dh-cell ${td?"today":""} ${sa?"sat":""}" style="flex:${d.tWork}">
       <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
         <div>${DN[d.di]} ${fd(d.date)}</div>
-        ${d.off?`<small>${d.hourLbl}</small>`:(CAN_EDIT?`<button type="button" class="dh-hours-btn" onclick="openHorairesModal('${d.ds}',${d.di})">${escAttr(d.hourLbl)}</button>`:`<small>${escAttr(d.hourLbl)}</small>`)}
-        <label style="display:flex;align-items:center;gap:6px;font-size:10px;opacity:.85;cursor:pointer;white-space:nowrap">
-          <input type="checkbox" ${d.nonTravail?"checked":""} ${CAN_EDIT?"":"disabled"} onchange="setDayNonTravail('${d.ds}',${d.isSat},this.checked)"> non travaillé
-        </label>
+        ${CAN_EDIT?`<button type="button" class="dh-hours-btn" onclick="openHorairesModal('${d.ds}',${d.di})">${escAttr(d.hourLbl)}</button>`:`<small>${escAttr(d.hourLbl)}</small>`}
       </div>
     </div>`;
   });
@@ -1278,7 +1380,7 @@ function mkTL(mon,slots){
     const lz=s.laize?`${s.laize} mm`:"";
     const subTxt=[fm,lz].filter(Boolean).join(" | ");
     const fmTip=fm||"—";
-    const st=s.statut==="en_cours"?"En cours":"En attente";
+    const st=s.statut==="en_cours"?"En cours":s.statut==="termine"?"Terminé":"En attente";
     const cli=(s.client||"").trim()||(s.numero_of||s.reference||"—");
     const meta=[s.numero_of||s.reference,s.description].filter(Boolean).join(" · ");
     const noOf=(s.numero_of||s.reference||"").trim().toLowerCase();
@@ -1292,11 +1394,13 @@ function mkTL(mon,slots){
     }
     // a_placer striped
     const aplacerCls=s.a_placer?"slot-aplacer":"";
+    const reelTermineCls=s.statut_reel==="reellement_termine"?"slot-reel-termine":"";
     const destock=s.destockage==="done";
-    h+=`<div class="slot ${matchCls} ${aplacerCls}" data-eid="${s.entry_id||idx}" style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${isActive?"border:2px solid #22d3ee;animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
+    const canDragSlot=CAN_EDIT&&s.statut!=="en_cours"&&s.statut!=="termine";
+    h+=`<div class="slot ${matchCls} ${aplacerCls} ${reelTermineCls}" data-eid="${s.entry_id||idx}" data-statut="${escAttr(s.statut||"attente")}" data-statut-reel="${escAttr(s.statut_reel||"reellement_en_attente")}" ${canDragSlot?'draggable="true"':''} style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${isActive?"border:2px solid #22d3ee;animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
       onmouseenter="showTip(event,this)" onmousemove="moveTip(event)" onmouseleave="hideTip()"
       ondblclick="hideTip();toggleDestockage(${s.entry_id||idx});event.stopPropagation()"
-      data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(String(s.duree_heures)+"h")}"
+      data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(fmtDur(s.duree_heures))}"
       data-deb="${escAttr(fdt(ss))}" data-fin="${escAttr(fdt(se))}" data-st="${escAttr(st)}" data-co="${escAttr(co)}">
       ${destock?`<div style="position:absolute;top:4px;right:4px;width:7px;height:7px;border-radius:50%;background:rgba(71,85,105,.9);pointer-events:none;z-index:5;flex-shrink:0"></div>`:""}
       ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}</span>${subTxt?`<span class="line2">${escAttr(subTxt)}</span>`:""}</div>`:""}</div>`;
@@ -1343,19 +1447,26 @@ function mkRow(e,i,slots){
        </select>`;
   const com=escAttr(e.commentaire||"");
   const aplacerRowCls=e.a_placer?"tr-aplacer":"";
-  return`<div class="tr ${aplacerRowCls}" draggable="true" data-eid="${e.id}" data-idx="${i}" ${isAnchor?'data-scroll-anchor="1"':''}
+  const reelTermineRowCls=e.statut_reel==="reellement_termine"?"tr-reel-termine":"";
+  const reelBadge=(()=>{
+    const r=e.statut_reel||"reellement_en_attente";
+    if(r==="reellement_termine") return`<span style="font-size:9px;padding:2px 6px;border-radius:4px;background:rgba(148,163,184,.15);color:var(--muted);font-weight:600;letter-spacing:.5px;white-space:nowrap">✓ saisie terminé</span>`;
+    if(r==="reellement_en_saisie") return`<span style="font-size:9px;padding:2px 6px;border-radius:4px;background:rgba(52,211,153,.12);color:var(--success);font-weight:600;letter-spacing:.5px;white-space:nowrap">⚙ en saisie</span>`;
+    return"";
+  })();
+  return`<div class="tr ${aplacerRowCls} ${reelTermineRowCls}" draggable="true" data-eid="${e.id}" data-idx="${i}" ${isAnchor?'data-scroll-anchor="1"':''}
     data-statut="${escAttr(e.statut||'attente')}"
     style="animation:slideIn .3s ease ${i*.03}s both;${i===0?`border-left:3px solid ${co}`:"border-left:3px solid transparent"};${isLocked?"cursor:not-allowed;opacity:.9":""}">
     <span class="dh-handle">⠿</span>
     <div><div class="cd" style="background:${co}"></div></div>
-    <span class="lbl-main">${escAttr(cli)}</span>
+    <span class="lbl-main">${escAttr(cli)}${reelBadge?`<br><span style="display:inline-block;margin-top:2px">${reelBadge}</span>`:""}</span>
     <span class="cell-mini">${escAttr(fm)}${fm!=="—"?" mm":""}</span>
     <span class="cell-mini">${of}</span>
     <span class="cell-mini">${rfp}</span>
     <span class="cell-mini">${lz}</span>
     <span class="cell-mini">${escAttr(fmtDl(e.date_livraison||""))}</span>
     <span class="cell-mini" style="font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${com}">${com}</span>
-    <span class="cell-mini">${e.duree_heures}h</span>
+    <span class="cell-mini">${fmtDur(e.duree_heures)}</span>
     ${statutCell}
     <div class="acts">
       ${CAN_EDIT?(()=>{
@@ -1399,6 +1510,7 @@ async function moveEntry(entryId,delta){
   const [m]=ids.splice(idx,1);
   ids.splice(ni,0,m);
   const savedScroll = document.querySelector(".main")?.scrollTop ?? 0;
+  const savedTbodyScroll = document.getElementById("tbody")?.scrollTop ?? 0;
   _suppressAutoScroll = true;
   try{
     await api(`/machines/${MID}/reorder`,{method:"POST",body:JSON.stringify({entry_ids:ids})});
@@ -1411,25 +1523,37 @@ async function moveEntry(entryId,delta){
     requestAnimationFrame(()=>requestAnimationFrame(()=>{
       const main=document.querySelector(".main");
       if(main) main.scrollTop=savedScroll;
+      const tbody=document.getElementById("tbody");
+      if(tbody&&savedTbodyScroll>0) tbody.scrollTop=savedTbodyScroll;
     }));
   }
 }
 
 // ── Tooltip ──
 let tipEl=null;
-function showTip(ev,el){hideTip();const d=el.dataset;tipEl=document.createElement("div");tipEl.className="tip";
+let _hoveredSlotEid=null;
+function showTip(ev,el){hideTip();const d=el.dataset;_hoveredSlotEid=d.eid?+d.eid:null;tipEl=document.createElement("div");tipEl.className="tip";
   tipEl.style.borderColor=(d.co||"#888")+"55";
   const sub=d.lbl?`<div class="tip-lbl">${d.lbl}</div>`:"";
   tipEl.innerHTML=`<div class="tip-hdr"><div class="tip-bar" style="background:${d.co||"#888"}"></div><div><div class="tip-ref">${d.ref||"—"}</div>${sub}</div></div>
     <div class="tip-grid"><span class="k">Format</span><span class="v">${d.fmt||"—"}</span><span class="k">Durée</span><span class="v">${d.dur||""}</span>
     <span class="k">Début</span><span class="v">${d.deb||""}</span><span class="k">Fin</span><span class="v">${d.fin||""}</span>
-    <span class="k">Statut</span><span class="v" style="color:${d.st==="En cours"?"var(--green)":"var(--amber)"};font-weight:600">${d.st||""}</span></div>`;
+    <span class="k">Statut</span><span class="v" style="color:${d.st==="En cours"?"var(--green)":d.st==="Terminé"?"var(--muted)":"var(--amber)"};font-weight:600">${d.st||""}</span>
+    ${(()=>{const r=d.statutReel||"";if(r==="reellement_termine")return`<span class="k">Saisie</span><span class="v" style="color:var(--muted)">✓ Terminé</span>`;if(r==="reellement_en_saisie")return`<span class="k">Saisie</span><span class="v" style="color:var(--success)">⚙ En cours</span>`;return"";})()} </div>
+    ${CAN_EDIT&&d.st!=="Terminé"?`<div style="margin-top:10px;font-size:10px;color:var(--muted);text-align:center;letter-spacing:.5px">↵ Entrée pour modifier</div>`:""}`
   el.closest(".tl-wrap").appendChild(tipEl);moveTip(ev)}
 function moveTip(ev){if(!tipEl)return;const c=tipEl.parentElement.getBoundingClientRect();
   let x=ev.clientX-c.left+12,y=ev.clientY-c.top-tipEl.offsetHeight-12;
   if(x+tipEl.offsetWidth>c.width)x=c.width-tipEl.offsetWidth-8;if(x<0)x=8;if(y<0)y=ev.clientY-c.top+20;
   tipEl.style.left=x+"px";tipEl.style.top=y+"px"}
-function hideTip(){if(tipEl){tipEl.remove();tipEl=null}}
+function hideTip(){if(tipEl){tipEl.remove();tipEl=null;}_hoveredSlotEid=null;}
+document.addEventListener("keydown",ev=>{
+  if(ev.key==="Enter"&&_hoveredSlotEid!=null&&CAN_EDIT){
+    hideTip();
+    openEdit(_hoveredSlotEid);
+    ev.preventDefault();
+  }
+});
 
 // ── Tooltip "ligne maintenant" ──
 let nowTipEl=null;
@@ -1516,6 +1640,7 @@ function setupDD(){
       ids.splice(insertAt,0,m);
       clearOver();
       const savedScroll=document.querySelector(".main")?.scrollTop??0;
+      const savedTbodyScroll=document.getElementById("tbody")?.scrollTop??0;
       _suppressAutoScroll=true;
       try{
         await api(`/machines/${MID}/reorder`,{method:"POST",body:JSON.stringify({entry_ids:ids})});
@@ -1525,6 +1650,8 @@ function setupDD(){
         requestAnimationFrame(()=>requestAnimationFrame(()=>{
           const main=document.querySelector(".main");
           if(main) main.scrollTop=savedScroll;
+          const tbody=document.getElementById("tbody");
+          if(tbody&&savedTbodyScroll>0) tbody.scrollTop=savedTbodyScroll;
         }));
       }
     });
@@ -1721,7 +1848,7 @@ function dossierFields(numero_of,client,ref_produit,laize,date_livraison,comment
     </div>
     <div class="fd"><label>Commentaire</label><input id="f-com" value="${commentaire}" placeholder="Bobine, contraintes, etc."></div>
     <div class="fd"><label>Durée (${MIND}–${MAXD}h)</label>
-      <input type="number" id="f-dur" min="${MIND}" max="${MAXD}" value="${dur}" oninput="document.getElementById('f-dur-fill').style.width=((Math.max(${MIND},Math.min(${MAXD},+this.value||${MIND}))-${MIND})/(${MAXD}-${MIND})*100)+'%'">
+      <input type="number" id="f-dur" min="${MIND}" max="${MAXD}" step="0.25" value="${dur}" oninput="document.getElementById('f-dur-fill').style.width=((Math.max(${MIND},Math.min(${MAXD},+this.value||${MIND}))-${MIND})/(${MAXD}-${MIND})*100)+'%'">
       <div class="dur-b"><div class="dur-f" id="f-dur-fill" style="width:${durBar(dur)}"></div></div>
     </div>
     <div class="fd" style="margin-top:4px">
@@ -1747,7 +1874,7 @@ function getFormData(withStatut){
     laize:parseFloat(document.getElementById("f-laize").value)||null,
     date_livraison:document.getElementById("f-dl").value||"",
     commentaire:document.getElementById("f-com").value||"",
-    duree_heures:Math.max(MIND,Math.min(MAXD,parseInt(document.getElementById("f-dur").value)||8)),
+    duree_heures:Math.max(MIND,Math.min(MAXD,parseFloat(document.getElementById("f-dur").value)||8)),
     a_placer:document.getElementById("f-aplacer")?.checked?1:0,
   };
   if(withStatut)d.statut=document.getElementById("f-stat").value;
@@ -1909,6 +2036,92 @@ async function resetHorairesDate(ds){
   }catch(err){ alert("Impossible de réinitialiser."); }
 }
 
+// ── Paramètres semaine ──
+function openWeekSettingsModal(monTs){
+  if(!CAN_EDIT) return;
+  const mon=new Date(monTs);
+  const wn=wkNum(mon);
+  const DN_FULL={1:"Lundi",2:"Mardi",3:"Mercredi",4:"Jeudi",5:"Vendredi",6:"Samedi"};
+  let rows="";
+  for(let i=0;i<6;i++){
+    const d=addD(mon,i);
+    const di=d.getDay();
+    if(di===0) continue;
+    const ds=ymd(d);
+    const isSat=di===6;
+    const isOff=isSat?!S.dayWorked[ds]:!!S.holidays[ds];
+    const worked=!isOff;
+    const wh=getWhForDate(di,d,ds);
+    const startVal=fracToTimeInput(wh.s);
+    const endVal=fracToTimeInput(wh.e);
+    const hasOv=!!(S.dayHoraires&&S.dayHoraires[ds]);
+    rows+=`<div style="display:grid;grid-template-columns:72px 90px 1fr 1fr;gap:6px 10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)">
+      <span style="font-size:12px;font-weight:600;color:var(--text)">${DN_FULL[di]||""}</span>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--text2)">
+        <input type="checkbox" id="wks-w-${ds}" ${worked?"checked":""}> travaillé
+      </label>
+      <input type="text" inputmode="numeric" id="wks-s-${ds}" value="${startVal}" placeholder="07:00"
+        style="padding:5px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px;font-family:var(--mono);outline:none"${hasOv?' title="Override actif"':''}>
+      <input type="text" inputmode="numeric" id="wks-e-${ds}" value="${endVal}" placeholder="19:00"
+        style="padding:5px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px;font-family:var(--mono);outline:none">
+    </div>`;
+  }
+  document.getElementById("mroot").innerHTML=modalHTML(
+    `Paramètres — Semaine S${wn}`,
+    `<p style="font-size:12px;color:var(--muted);margin:-8px 0 12px">Jours travaillés et horaires précis pour la semaine S${wn}. Ces réglages supplantent les horaires par défaut.</p>
+    <div style="display:grid;grid-template-columns:72px 90px 1fr 1fr;gap:4px 10px;padding:0 0 6px;border-bottom:1px solid var(--border2)">
+      <span style="font-size:10px;color:var(--muted)">Jour</span>
+      <span style="font-size:10px;color:var(--muted)">État</span>
+      <span style="font-size:10px;color:var(--muted)">Début</span>
+      <span style="font-size:10px;color:var(--muted)">Fin</span>
+    </div>${rows}`,
+    "Enregistrer",`submitWeekSettings(${monTs})`
+  );
+}
+
+async function submitWeekSettings(monTs){
+  if(!CAN_EDIT) return;
+  const mon=new Date(monTs);
+  const toFrac=hhmm=>{const [h,m]=hhmm.split(":").map(Number);return h+m/60;};
+  const errors=[];
+  const ops=[];
+  for(let i=0;i<6;i++){
+    const d=addD(mon,i);
+    const di=d.getDay();
+    if(di===0) continue;
+    const ds=ymd(d);
+    const isSat=di===6;
+    const wEl=document.getElementById(`wks-w-${ds}`);
+    const sEl=document.getElementById(`wks-s-${ds}`);
+    const eEl=document.getElementById(`wks-e-${ds}`);
+    if(!wEl) continue;
+    const worked=wEl.checked;
+    const st=(sEl?.value||"").trim();
+    const en=(eEl?.value||"").trim();
+    if(st&&(!isHHMM(st)||!isHHMM(en))){errors.push(`Format horaire invalide — ${ds}`);continue;}
+    ops.push({ds,isSat,worked,st,en});
+  }
+  if(errors.length){alert(errors.join("\n"));return;}
+  try{
+    for(const op of ops){
+      if(op.isSat){
+        await api(`/machines/${MID}/day-work`,{method:"PUT",body:JSON.stringify({date:op.ds,is_worked:op.worked?1:0})});
+      }else{
+        await api(`/machines/${MID}/holidays`,{method:"PUT",body:JSON.stringify({date:op.ds,is_off:op.worked?0:1})});
+      }
+      if(op.st&&op.en){
+        const hd=toFrac(op.st),hf=toFrac(op.en);
+        if(hf>hd) await api(`/machines/${MID}/day-horaires`,{method:"PUT",body:JSON.stringify({date:op.ds,heure_debut:hd,heure_fin:hf})});
+      }
+    }
+    closeM(); load();
+  }catch(err){
+    let msg="Modification impossible.";
+    try{const j=await err.json();if(j&&j.detail)msg=typeof j.detail==="string"?j.detail:JSON.stringify(j.detail);}catch(x){}
+    alert(msg);
+  }
+}
+
 function openDefaultsModal(){
   const defs=getMachineDefaults();
   function row(lbl,id,val){
@@ -2011,6 +2224,8 @@ async function boot(){
     }
   }catch(e){console.error(e);MID=0;}
   await load();
+  // Vérifier les annonces de mise à jour après le chargement initial
+  checkUpdates();
   // Actualise le dossier actif toutes les 30 s sans recharger toute la page
   setInterval(async()=>{
     if(!MID) return;
@@ -2022,6 +2237,42 @@ async function boot(){
     }catch(e){}
   },30000);
 }
+
+// ── Popup mises à jour ────────────────────────────────────────────────────────
+async function checkUpdates(){
+  try{
+    const updates=await fetch("/api/updates/pending?scope=planning",{credentials:"include"}).then(r=>r.ok?r.json():[]);
+    if(!updates||!updates.length) return;
+    showUpdatePopup(updates);
+  }catch(e){}
+}
+
+function showUpdatePopup(updates){
+  const overlay=document.createElement("div");
+  overlay.className="upd-overlay";
+  const ids=updates.map(u=>u.id);
+  const firstTitle=updates[0].titre||"Nouveautés MySifa";
+  const bodies=updates.map(u=>`<div class="upd-body">${u.message}</div>`).join("<hr style='border:none;border-top:1px solid var(--border2);margin:16px 0'>");
+  overlay.innerHTML=`
+    <div class="upd-card">
+      <div style="font-size:28px;margin-bottom:8px;text-align:center">🎉</div>
+      <h2 style="text-align:center">${firstTitle}</h2>
+      <p class="upd-sub" style="text-align:center">Lisez les nouveautés ci-dessous, puis confirmez.</p>
+      ${bodies}
+      <button class="upd-ok-btn" onclick="acknowledgeUpdates([${ids.join(",")}],this.closest('.upd-overlay'))">
+        ✅ J'ai compris — C'est parti !
+      </button>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+async function acknowledgeUpdates(ids,overlay){
+  try{
+    await Promise.all(ids.map(id=>fetch(`/api/updates/${id}/acknowledge`,{method:"POST",credentials:"include"})));
+  }catch(e){}
+  if(overlay) overlay.remove();
+}
+
 boot();
 </script>
 </body>

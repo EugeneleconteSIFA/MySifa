@@ -159,6 +159,8 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
       <div class="nav-group-label" style="margin-top:8px">Accès</div>
       <button type="button" class="nav-btn" data-tab="matrix">Matrice d'accès</button>
       <button type="button" class="nav-btn" data-tab="defaults">Référentiel rôles</button>
+      <div class="nav-group-label" style="margin-top:8px">Communication</div>
+      <button type="button" class="nav-btn" data-tab="updates">Mises à jour</button>
     </div>
     <div class="sidebar-bottom">
       <button type="button" class="nav-btn back-mysifa" onclick="location.href='/'">
@@ -297,6 +299,53 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
         </div>
       </div>
     </section>
+
+    <section id="panel-updates" class="hidden">
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+          <h2 style="margin:0">Annonces de mise à jour</h2>
+          <button type="button" class="btn" id="upd-new-btn" onclick="openNewUpdateModal()">+ Nouvelle annonce</button>
+        </div>
+        <p class="sub" style="margin-top:-8px;margin-bottom:16px">Gérez les messages affichés aux utilisateurs lors de leur prochaine connexion. Cliquez sur une ligne pour voir qui l'a lu.</p>
+        <div id="upd-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
+      </div>
+    </section>
+
+    <!-- Modal nouvelle annonce -->
+    <div id="upd-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:800;display:flex;align-items:center;justify-content:center" class="hidden">
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;width:min(560px,95vw);max-height:90vh;overflow:auto">
+        <h2 style="margin:0 0 18px;font-size:17px">Nouvelle annonce</h2>
+        <div class="form-grid" style="grid-template-columns:1fr 1fr;margin-bottom:12px">
+          <div>
+            <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Page concernée</label>
+            <select id="nm-scope" style="width:100%">
+              <option value="planning">Planning de production</option>
+              <option value="fabrication">Saisie de production</option>
+              <option value="global">Toutes les pages</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Active</label>
+            <select id="nm-active" style="width:100%">
+              <option value="1">Oui — visible par les utilisateurs</option>
+              <option value="0">Non — masquée</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-bottom:12px">
+          <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Titre</label>
+          <input type="text" id="nm-titre" placeholder="Ex : Mise à jour du 15 mai 2026 — Planning" style="width:100%">
+        </div>
+        <div style="margin-bottom:18px">
+          <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Message (HTML autorisé)</label>
+          <textarea id="nm-message" rows="8" placeholder="&lt;p&gt;Bonjour ! Voici les nouveautés…&lt;/p&gt;" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:monospace;resize:vertical"></textarea>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end">
+          <button type="button" class="btn btn-sec" onclick="closeNewUpdateModal()">Annuler</button>
+          <button type="button" class="btn" onclick="submitNewUpdate()">Créer l'annonce</button>
+        </div>
+      </div>
+    </div>
   </main>
 </div>
 <script src="/static/support_widget.js"></script>
@@ -368,11 +417,12 @@ function setTab(id) {
   document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === id);
   });
-  ['users', 'matrix', 'defaults', 'fournisseurs'].forEach(p => {
+  ['users', 'matrix', 'defaults', 'fournisseurs', 'updates'].forEach(p => {
     const el = document.getElementById('panel-' + p);
     if (el) el.classList.toggle('hidden', p !== id);
   });
   if (id === 'fournisseurs') loadFournisseurs();
+  if (id === 'updates') loadUpdates();
 }
 
 document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
@@ -995,6 +1045,127 @@ document.getElementById('fh-four').addEventListener('change', async function() {
     toast(e.message || 'Erreur chargement', true);
   }
 })();
+
+// ── Mises à jour ──────────────────────────────────────────────────────────────
+const SCOPE_LABELS = { planning: '📋 Planning', fabrication: '⚙️ Saisie de prod.', global: '🌐 Global' };
+
+let _updatesData = [];
+let _openAckId = null;
+
+async function loadUpdates() {
+  const box = document.getElementById('upd-list');
+  if (!box) return;
+  try {
+    _updatesData = await api('/api/updates') || [];
+    renderUpdatesList();
+  } catch(e) {
+    box.innerHTML = '<p style="color:var(--danger);font-size:13px">' + esc(e.message) + '</p>';
+  }
+}
+
+function renderUpdatesList() {
+  const box = document.getElementById('upd-list');
+  if (!_updatesData.length) {
+    box.innerHTML = '<p style="color:var(--muted);font-size:13px">Aucune annonce pour le moment.</p>';
+    return;
+  }
+  box.innerHTML = _updatesData.map(u => {
+    const scopeLbl = SCOPE_LABELS[u.scope] || u.scope;
+    const dt = u.created_at ? u.created_at.slice(0, 10).split('-').reverse().join('/') : '—';
+    const activeTag = u.active
+      ? '<span style="font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(52,211,153,.15);color:#34d399;border:1px solid rgba(52,211,153,.3);font-weight:700">Actif</span>'
+      : '<span style="font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(148,163,184,.12);color:var(--muted);border:1px solid var(--border);font-weight:700">Archivé</span>';
+    const ackCount = u.nb_ack || 0;
+    const isOpen = _openAckId === u.id;
+    return `
+<div style="border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:10px">
+  <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;cursor:pointer;background:var(--card)" onclick="toggleAck(${u.id})">
+    <div style="flex:1;min-width:0">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+        <span style="font-size:12px;color:var(--muted)">${esc(scopeLbl)}</span>
+        <span style="font-size:11px;color:var(--muted)">·</span>
+        <span style="font-size:12px;color:var(--muted)">${dt}</span>
+        ${activeTag}
+      </div>
+      <div style="font-weight:700;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(u.titre)}</div>
+    </div>
+    <div style="text-align:right;flex-shrink:0">
+      <div style="font-size:18px;font-weight:800;color:var(--accent)">${ackCount}</div>
+      <div style="font-size:10px;color:var(--muted)">lecture(s)</div>
+    </div>
+    <button type="button" class="btn btn-sec" style="padding:5px 10px;font-size:11px" onclick="event.stopPropagation();toggleActive(${u.id},${u.active})">${u.active ? 'Archiver' : 'Réactiver'}</button>
+    <span style="font-size:16px;color:var(--muted);transition:transform .2s;${isOpen ? 'transform:rotate(180deg)' : ''}">▾</span>
+  </div>
+  <div id="ack-panel-${u.id}" style="display:${isOpen ? 'block' : 'none'};border-top:1px solid var(--border);padding:14px 16px;background:rgba(0,0,0,.08)">
+    <div id="ack-content-${u.id}"><em style="color:var(--muted);font-size:13px">Chargement…</em></div>
+  </div>
+</div>`;
+  }).join('');
+}
+
+async function toggleAck(id) {
+  if (_openAckId === id) {
+    _openAckId = null;
+    renderUpdatesList();
+    return;
+  }
+  _openAckId = id;
+  renderUpdatesList();
+  const contentEl = document.getElementById('ack-content-' + id);
+  if (!contentEl) return;
+  try {
+    const data = await api('/api/updates/' + id + '/acknowledgements');
+    const acks = data.acknowledgements || [];
+    if (!acks.length) {
+      contentEl.innerHTML = '<p style="color:var(--muted);font-size:13px;margin:0">Personne n\'a encore lu cette annonce.</p>';
+      return;
+    }
+    contentEl.innerHTML = '<div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">' + acks.length + ' lecture(s)</div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:6px">' +
+      acks.map(a => {
+        const dt = a.acknowledged_at ? a.acknowledged_at.replace('T', ' ').slice(0, 16) : '';
+        return `<div style="padding:6px 10px;border-radius:8px;background:var(--bg);border:1px solid var(--border);font-size:12px">
+          <strong>${esc(a.user_nom || a.email || '—')}</strong>
+          ${a.email && a.user_nom ? '<span style="color:var(--muted);margin-left:4px">' + esc(a.email) + '</span>' : ''}
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">${esc(dt)}</div>
+        </div>`;
+      }).join('') + '</div>';
+  } catch(e) {
+    contentEl.innerHTML = '<p style="color:var(--danger);font-size:13px">' + esc(e.message) + '</p>';
+  }
+}
+
+async function toggleActive(id, current) {
+  try {
+    await api('/api/updates/' + id, { method: 'PATCH', body: JSON.stringify({ active: !current }), headers: { 'Content-Type': 'application/json' } });
+    toast(current ? 'Annonce archivée' : 'Annonce réactivée ✅');
+    await loadUpdates();
+  } catch(e) { toast(e.message, true); }
+}
+
+function openNewUpdateModal() {
+  const ov = document.getElementById('upd-modal-overlay');
+  if (ov) { ov.style.display = 'flex'; ov.classList.remove('hidden'); }
+}
+function closeNewUpdateModal() {
+  const ov = document.getElementById('upd-modal-overlay');
+  if (ov) { ov.style.display = 'none'; ov.classList.add('hidden'); }
+}
+async function submitNewUpdate() {
+  const scope   = document.getElementById('nm-scope').value;
+  const titre   = (document.getElementById('nm-titre').value || '').trim();
+  const message = (document.getElementById('nm-message').value || '').trim();
+  const active  = Number(document.getElementById('nm-active').value);
+  if (!titre || !message) { toast('Titre et message sont requis', true); return; }
+  try {
+    await api('/api/updates', { method: 'POST', body: JSON.stringify({ scope, titre, message, active }), headers: { 'Content-Type': 'application/json' } });
+    toast('Annonce créée ✅');
+    closeNewUpdateModal();
+    document.getElementById('nm-titre').value = '';
+    document.getElementById('nm-message').value = '';
+    await loadUpdates();
+  } catch(e) { toast(e.message, true); }
+}
 </script>
 </body>
 </html>

@@ -498,6 +498,18 @@ table.fab-traca-table tr:last-child td{border-bottom:none}
   .fab-footer-tools{flex-direction:row;gap:6px;align-items:center}
   .fab-comment-hint{display:none}
 }
+/* ── Popup Mise à jour ── */
+.upd-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px}
+.upd-card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:28px 28px 22px;width:min(540px,100%);max-height:88vh;overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,.55)}
+.upd-card h2{font-size:18px;margin:0 0 4px;color:var(--text)}
+.upd-card .upd-sub{font-size:12px;color:var(--text2);margin:0 0 18px}
+.upd-card .upd-body{font-size:13px;line-height:1.8;color:var(--text2)}
+.upd-card .upd-body ul{padding-left:18px;margin:8px 0}
+.upd-card .upd-body li{margin-bottom:6px}
+.upd-card .upd-body strong{color:var(--text)}
+.upd-card .upd-body kbd{background:rgba(255,255,255,.12);border-radius:4px;padding:1px 5px;font-family:monospace;font-size:11px}
+.upd-ok-btn{display:block;width:100%;margin-top:20px;padding:13px;border-radius:12px;border:none;background:var(--accent);color:#0a0e17;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;transition:filter .15s}
+.upd-ok-btn:hover{filter:brightness(1.08)}
 </style>
 </head>
 <body>
@@ -508,7 +520,7 @@ table.fab-traca-table tr:last-child td{border-bottom:none}
 
 /* ── Operations config ───────────────────────────────────────── */
 const OPS = {
-  "01":{"label":"Début dossier","category":"personnel","severity":"info","required":true},
+  "01":{"label":"Début de production","category":"personnel","severity":"info","required":true},
   "02":{"label":"Calage","category":"calage","severity":"info"},
   "03":{"label":"Production","category":"production","severity":"info"},
   "10":{"label":"Calage Errepi","category":"calage","severity":"info"},
@@ -545,7 +557,7 @@ const OPS = {
   "86":{"label":"Arrivée personnel","category":"personnel","severity":"info","required":true},
   "87":{"label":"Départ personnel","category":"personnel","severity":"info","required":true},
   "88":{"label":"Reprise production","category":"production","severity":"info"},
-  "89":{"label":"Fin dossier","category":"personnel","severity":"info","required":true},
+  "89":{"label":"Fin de production","category":"personnel","severity":"info","required":true},
   "90":{"label":"Annulation saisie","category":"annulation","severity":"info"},
 };
 
@@ -580,6 +592,7 @@ let S = {
   metrageDebut: '',
   metrageFinVal: '',
   nbEtiquettes: '',
+  finDossierOui: null,  // null | true | false — sélecteur fin de dossier dans renderFinModal
   commentText: '',
   searchQuery: '',
 
@@ -1506,8 +1519,8 @@ function renderFooter(){
   else if(e==='arrive'){
     btns.push(h('button',{
       className:'fab-btn fab-btn-success',
-      onClick:()=>handleOpTrigger('01','Début dossier','personnel')
-    }, svgIcon('plus-circle',16),' Début de dossier'));
+      onClick:()=>handleOpTrigger('01','Début de production','personnel')
+    }, svgIcon('plus-circle',16),' Début de production'));
     btns.push(h('button',{
       className:'fab-btn fab-btn-muted fab-btn-sm',
       onClick:()=>triggerOp('87','Départ personnel')
@@ -1518,8 +1531,8 @@ function renderFooter(){
   else if(e==='en_cours_production'){
     btns.push(h('button',{
       className:'fab-btn fab-btn-warn',
-      onClick:()=>handleOpTrigger('89','Fin dossier','personnel')
-    }, svgIcon('flag',16),' Fin de dossier'));
+      onClick:()=>handleOpTrigger('89','Fin de production','personnel')
+    }, svgIcon('flag',16),' Fin de production'));
   }
 
   // ── État : arrêt en cours ──
@@ -1530,15 +1543,15 @@ function renderFooter(){
     }, svgIcon('play',16),' Reprise production'));
     btns.push(h('button',{
       className:'fab-btn fab-btn-warn fab-btn-sm',
-      onClick:()=>handleOpTrigger('89','Fin dossier','personnel')
-    }, svgIcon('flag',14),' Fin de dossier'));
+      onClick:()=>handleOpTrigger('89','Fin de production','personnel')
+    }, svgIcon('flag',14),' Fin de production'));
   }
 
   // ── État : dossier terminé ──
   else if(e==='fin_dossier'){
     btns.push(h('button',{
       className:'fab-btn fab-btn-success',
-      onClick:()=>handleOpTrigger('01','Début dossier','personnel')
+      onClick:()=>handleOpTrigger('01','Début de production','personnel')
     }, svgIcon('plus-circle',16),' Nouveau dossier'));
     btns.push(h('button',{
       className:'fab-btn fab-btn-muted fab-btn-sm',
@@ -1807,7 +1820,7 @@ function renderDebutModal(){
     set({showDebutModal:false, loading:true});
     try{
       const body = {
-        operation:'01 - Début dossier',
+        operation:'01 - Début de production',
         no_dossier: dos.reference,
         machine: dos.machine_nom||'',
         client: dos.client||'',
@@ -1820,7 +1833,7 @@ function renderDebutModal(){
         body:JSON.stringify(body),
       });
       if(r&&r.success){
-        showToast('Début de dossier enregistré');
+        showToast('Début de production enregistré');
         await loadSession();
       }
     }catch(e){
@@ -1832,7 +1845,7 @@ function renderDebutModal(){
 
   return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)set({showDebutModal:false});}},
     h('div',{className:'fab-modal'},
-      h('div',{className:'fab-modal-title'},'📦 Début de dossier'),
+      h('div',{className:'fab-modal-title'},'📦 Début de production'),
       d ? h('div',{className:'fab-modal-sub'},
         'Dossier : ',h('strong',null,d.reference),
         d.client ? (' — '+d.client) : ''
@@ -1868,7 +1881,52 @@ function renderFinModal(){
   etiqInp.value = S.nbEtiquettes||'';
   etiqInp.addEventListener('input',e=>{ S.nbEtiquettes=e.target.value; });
 
+  // ── Sélecteur "Fin de dossier ?" ─────────────────────────────────────────
+  const finDossierVal = S.finDossierOui; // null | true | false
+  const mkFdBtn = (val, label, emoji, colorVar) => {
+    const isActive = finDossierVal === val;
+    const btn = h('button',{
+      type:'button',
+      style:{
+        flex:'1',padding:'14px 8px',borderRadius:'10px',border:'2px solid',
+        borderColor: isActive ? `var(${colorVar})` : 'var(--border2)',
+        background: isActive ? `rgba(${val?'52,211,153':'248,113,113'},.15)` : 'var(--bg)',
+        color: isActive ? `var(${colorVar})` : 'var(--text2)',
+        fontWeight: isActive ? '800' : '500',
+        fontSize:'15px',cursor:'pointer',transition:'all .15s',fontFamily:'inherit',
+        display:'flex',flexDirection:'column',alignItems:'center',gap:'4px',
+      },
+      onClick:()=>{ set({finDossierOui:val}); }
+    },
+      h('span',{style:{fontSize:'24px',lineHeight:'1'}},emoji),
+      h('span',null,label)
+    );
+    return btn;
+  };
+
+  const fdSelector = h('div',{style:{marginBottom:'0'}},
+    h('div',{style:{
+      fontWeight:'800',fontSize:'14px',color:'var(--text)',marginBottom:'10px',
+      padding:'10px 14px',borderRadius:'10px',
+      background:'rgba(251,191,36,.12)',border:'1px solid rgba(251,191,36,.4)',
+      display:'flex',alignItems:'center',gap:'8px',
+    }},
+      h('span',{style:{fontSize:'20px'}},'❓'),
+      'Ce dossier est-il terminé ?'
+    ),
+    h('div',{style:{display:'flex',gap:'10px'}},
+      mkFdBtn(true,  'Oui, terminé',  '✅', '--success'),
+      mkFdBtn(false, 'Non, continue', '🔄', '--warn')
+    )
+  );
+
   const submit = async()=>{
+    // Validation : fin_dossier obligatoire
+    if(S.finDossierOui === null || S.finDossierOui === undefined){
+      showToast('Indiquez si le dossier est terminé (Oui / Non)','danger');
+      return;
+    }
+
     const mFin = S.metrageFinVal ? parseFloat(String(S.metrageFinVal).replace(',','.')) : null;
 
     // Validation locale 1 : métrage fin < dernier_metrage machine
@@ -1884,7 +1942,7 @@ function renderFinModal(){
       const debutRow = [...S.saisies].reverse().find(s=>s.operation_code==='01'&&(s.metrage_total_debut??s.metrage_prevu)!=null);
       const debutCtr = debutRow ? parseFloat(debutRow.metrage_total_debut ?? debutRow.metrage_prevu) : null;
       if(debutCtr !== null && mFin < debutCtr){
-        showToast('Métrage fin ('+Math.round(mFin).toLocaleString('fr-FR')+' m) inférieur au début de dossier ('+Math.round(debutCtr).toLocaleString('fr-FR')+' m)','danger');
+        showToast('Métrage fin ('+Math.round(mFin).toLocaleString('fr-FR')+' m) inférieur au début de production ('+Math.round(debutCtr).toLocaleString('fr-FR')+' m)','danger');
         return;
       }
     }
@@ -1892,11 +1950,12 @@ function renderFinModal(){
     set({showFinModal:false, loading:true});
     try{
       const body = {
-        operation:'89 - Fin dossier',
+        operation:'89 - Fin de production',
         no_dossier: S.dossier ? S.dossier.reference : null,
         machine: S.machine ? S.machine.nom : null,
         client: S.dossier ? (S.dossier.client||'') : '',
         designation: S.dossier ? (S.dossier.description||'') : '',
+        fin_dossier: S.finDossierOui === true,
       };
       if(mFin !== null) body.metrage_fin = mFin;
       if(S.nbEtiquettes) body.qte_etiquettes = parseFloat(String(S.nbEtiquettes).replace(',','.'));
@@ -1906,21 +1965,21 @@ function renderFinModal(){
         body:JSON.stringify(body),
       });
       if(r&&r.success){
-        showToast('Fin de dossier enregistrée');
+        showToast(S.finDossierOui ? 'Dossier clôturé ✅' : 'Fin de production enregistrée 🔄');
         await loadSession();
       }
     }catch(e){
       showToast('Erreur : '+e.message,'danger');
     }finally{
-      set({loading:false, metrageFinVal:'', nbEtiquettes:''});
+      set({loading:false, metrageFinVal:'', nbEtiquettes:'', finDossierOui:null});
     }
   };
 
-  return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)set({showFinModal:false});}},
+  return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)set({showFinModal:false,finDossierOui:null});}},
     h('div',{className:'fab-modal'},
-      h('div',{className:'fab-modal-title'},'🏁 Fin de dossier'),
+      h('div',{className:'fab-modal-title'},'🏁 Fin de production'),
       S.dossier ? h('div',{className:'fab-modal-sub'},
-        'Clôture du dossier ',h('strong',null,S.dossier.reference),
+        'Dossier ',h('strong',null,S.dossier.reference),
         S.dossier.client ? (' — '+S.dossier.client) : ''
       ) : null,
       h('div',{className:'fab-field'},
@@ -1935,12 +1994,16 @@ function renderFinModal(){
         h('label',null,'Quantité d\'étiquettes produites'),
         etiqInp
       ),
+      h('div',{className:'fab-field'},fdSelector),
       h('div',{className:'fab-modal-btns'},
         h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',
-          onClick:()=>set({showFinModal:false})},'Annuler'),
-        h('button',{className:'fab-btn fab-btn-danger',
+          onClick:()=>set({showFinModal:false,finDossierOui:null})},'Annuler'),
+        h('button',{
+          className:'fab-btn '+(S.finDossierOui===true?'fab-btn-danger':'fab-btn-warn'),
+          style:{opacity: S.finDossierOui===null?'.55':'1'},
           onClick:submit},
-          svgIcon('flag',15),' Clôturer le dossier')
+          svgIcon('flag',15),' '+(S.finDossierOui===true?'Clôturer le dossier':'Enregistrer la fin de production')
+        )
       )
     )
   );
@@ -2058,6 +2121,44 @@ async function init(){
 
   // Load session
   await loadSession();
+
+  // Vérifier les annonces de mise à jour
+  checkUpdates();
+}
+
+// ── Popup mises à jour ────────────────────────────────────────────────────────
+async function checkUpdates(){
+  try{
+    const updates=await fetch("/api/updates/pending?scope=fabrication",{credentials:"include"}).then(r=>r.ok?r.json():[]);
+    if(!updates||!updates.length) return;
+    showUpdatePopup(updates);
+  }catch(e){}
+}
+
+function showUpdatePopup(updates){
+  const overlay=document.createElement("div");
+  overlay.className="upd-overlay";
+  const ids=updates.map(u=>u.id);
+  const firstTitle=updates[0].titre||"Nouveautés MySifa";
+  const bodies=updates.map(u=>`<div class="upd-body">${u.message}</div>`).join("<hr style='border:none;border-top:1px solid var(--border);margin:16px 0'>");
+  overlay.innerHTML=`
+    <div class="upd-card">
+      <div style="font-size:28px;margin-bottom:8px;text-align:center">🎉</div>
+      <h2 style="text-align:center">${firstTitle}</h2>
+      <p class="upd-sub" style="text-align:center">Lisez les nouveautés ci-dessous, puis confirmez.</p>
+      ${bodies}
+      <button class="upd-ok-btn" onclick="acknowledgeUpdates([${ids.join(",")}],this.closest('.upd-overlay'))">
+        ✅ J'ai compris — C'est parti !
+      </button>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+async function acknowledgeUpdates(ids,overlay){
+  try{
+    await Promise.all(ids.map(id=>fetch(`/api/updates/${id}/acknowledge`,{method:"POST",credentials:"include"})));
+  }catch(e){}
+  if(overlay) overlay.remove();
 }
 
 init();
