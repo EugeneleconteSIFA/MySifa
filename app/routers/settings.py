@@ -374,7 +374,7 @@ async def patch_update(announcement_id: int, request: Request):
         conn.commit()
     return {"success": True}
 
-@router.delete("/updates/{announcement_id}")
+@router.delete("/api/updates/{announcement_id}")
 def delete_update(announcement_id: int, request: Request):
     """Supprimer une annonce (uniquement si elle n'a pas encore été lue)."""
     require_superadmin(request)
