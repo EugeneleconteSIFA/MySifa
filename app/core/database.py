@@ -1148,6 +1148,20 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 14, "users_portal_apps_order")
 
+    # v15 — base matière : supplément Rotoflex par ligne (calcul prix depuis paramètres)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=15 LIMIT 1").fetchone():
+        mb_cols = {r["name"] for r in conn.execute("PRAGMA table_info(matiere_base)").fetchall()}
+        if "rotoflex_supplement_eur_m2" not in mb_cols:
+            conn.execute(
+                "ALTER TABLE matiere_base ADD COLUMN rotoflex_supplement_eur_m2 REAL"
+            )
+        conn.execute(
+            """INSERT OR IGNORE INTO matiere_config (cle, valeur, updated_at)
+               VALUES ('supplement_rotoflex_eur_m2', '0.06', datetime('now'))"""
+        )
+        conn.commit()
+        _record_schema_migration(conn, 15, "matiere_base_rotoflex_supplement")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

@@ -914,7 +914,8 @@ let S={
   matiereTab:'base',
   matiereParams:[],
   matiereBase:[],
-  matiereConfig:{marge_erreur:5,taux_change_usd:0.85},
+  matiereConfig:{marge_erreur:5,taux_change_usd:0.85,supplement_rotoflex_eur_m2:0.06},
+  matiereImportReplaceAll:true,
   matiereSearch:'',
   matiereLoading:false,
 };
@@ -7225,8 +7226,9 @@ function scheduleMatiereConfigSave(){
     try{
       const mc=S.matiereConfig||{};
       await api('/api/matiere/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-        marge_erreur:parseFloat(mc.marge_erreur),
-        taux_change_usd:parseFloat(mc.taux_change_usd)
+        marge_erreur:(()=>{const x=parseFloat(mc.marge_erreur);return Number.isNaN(x)?5:x;})(),
+        taux_change_usd:(()=>{const x=parseFloat(mc.taux_change_usd);return Number.isNaN(x)?0.85:x;})(),
+        supplement_rotoflex_eur_m2:(()=>{const x=parseFloat(mc.supplement_rotoflex_eur_m2);return Number.isNaN(x)?0.06:x;})()
       })});
       const [cfg,base]=await Promise.all([api('/api/matiere/config'),api('/api/matiere/base')]);
       set({matiereConfig:cfg||mc,matiereBase:Array.isArray(base)?base:[]});
@@ -7246,7 +7248,7 @@ async function loadMatierePrixPage(){
     ]);
     set({
       matiereLoading:false,
-      matiereConfig:cfg||{marge_erreur:5,taux_change_usd:0.85},
+      matiereConfig:cfg||{marge_erreur:5,taux_change_usd:0.85,supplement_rotoflex_eur_m2:0.06},
       matiereParams:Array.isArray(params)?params:[],
       matiereBase:Array.isArray(base)?base:[],
     });
@@ -7291,8 +7293,7 @@ function openMatiereBaseModal(row){
   matiereAddLabeledInput(grid,'Silicone','silicone',row&&row.silicone||'','text');
   matiereAddLabeledInput(grid,'Glassine','glassine',row&&row.glassine||'','text');
   matiereAddLabeledInput(grid,'Marqueur','marqueur',row&&row.marqueur||'','text');
-  matiereAddLabeledInput(grid,'Prix Cohésio €/m²','prix_cohesio',row&&row.prix_cohesio!=null?row.prix_cohesio:'','number');
-  matiereAddLabeledInput(grid,'Prix Rotoflex €/m²','prix_rotoflex',row&&row.prix_rotoflex!=null?row.prix_rotoflex:'','number');
+  matiereAddLabeledInput(grid,'Supplément Rotoflex €/m² (optionnel, sinon défaut config)','rotoflex_supplement_eur_m2',row&&row.rotoflex_supplement_eur_m2!=null?row.rotoflex_supplement_eur_m2:'','number');
   const actions=document.createElement('div');
   actions.className='form-actions';
   const btnCancel=document.createElement('button');
@@ -7430,7 +7431,7 @@ function renderMatierePrix(){
       h('p',{style:{color:'var(--text2)'}},'Accès réservé : droit application « MyDevis » (matrice Paramètres).')
     );
   }
-  const mc=S.matiereConfig||{marge_erreur:5,taux_change_usd:0.85};
+  const mc=S.matiereConfig||{marge_erreur:5,taux_change_usd:0.85,supplement_rotoflex_eur_m2:0.06};
   const marge=parseFloat(mc.marge_erreur);
   const q=normMatiereTxt(S.matiereSearch||'');
 
@@ -7474,15 +7475,34 @@ function renderMatierePrix(){
           scheduleMatiereConfigSave();
         }
       })
+    ),
+    h('label',{style:{display:'flex',alignItems:'center',gap:'8px',fontSize:'13px',color:'var(--text2)'}},
+      'Supplément Rotoflex',
+      h('input',{
+        type:'number',min:0,max:2,step:0.001,
+        value:String(mc.supplement_rotoflex_eur_m2!=null?mc.supplement_rotoflex_eur_m2:'0.06'),
+        style:{width:'88px',padding:'6px 8px',borderRadius:'6px',border:'1px solid var(--border)',background:'var(--bg)',color:'var(--text)'},
+        onInput:(e)=>{
+          const v=parseFloat(e.target.value);
+          set({matiereConfig:{...mc,supplement_rotoflex_eur_m2:Number.isNaN(v)?mc.supplement_rotoflex_eur_m2:v}});
+          scheduleMatiereConfigSave();
+        }
+      }),
+      '€/m²'
     )
   );
 
   const fileInp=h('input',{type:'file',accept:'.xlsx,.xlsm',style:{display:'none'}});
+  const importReplace=h('label',{style:{display:'flex',alignItems:'center',gap:'8px',fontSize:'12px',color:'var(--text2)',marginRight:'12px'}},
+    h('input',{type:'checkbox',checked:!!S.matiereImportReplaceAll,onChange:(e)=>set({matiereImportReplaceAll:e.target.checked})}),
+    'Remplacer toutes les lignes (recommandé pour le classeur SIFA)'
+  );
   fileInp.addEventListener('change',async()=>{
     const f=fileInp.files&&fileInp.files[0];
     if(!f)return;
     const fd=new FormData();
     fd.append('file',f);
+    if(S.matiereImportReplaceAll)fd.append('replace_all','true');
     try{
       const r=await fetch(window.location.origin+'/api/matiere/import-excel',{method:'POST',credentials:'include',body:fd});
       if(!r.ok){
@@ -7497,7 +7517,8 @@ function renderMatierePrix(){
     fileInp.value='';
   });
 
-  const topActions=h('div',{style:{display:'flex',justifyContent:'flex-end',gap:'8px',marginBottom:'12px'}},
+  const topActions=h('div',{style:{display:'flex',justifyContent:'flex-end',alignItems:'center',gap:'8px',marginBottom:'12px',flexWrap:'wrap'}},
+    importReplace,
     h('button',{className:'btn-sm btn-ghost',onClick:()=>fileInp.click()},'Importer Excel'),
     S.matiereTab==='base'
       ?h('button',{className:'btn-sm',onClick:()=>openMatiereBaseModal(null)},'+')
@@ -7620,7 +7641,7 @@ function renderMatierePrix(){
 
   return h('div',null,
     h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:'12px',marginBottom:'8px'}},
-      h('div',null,h('p',{style:{margin:'0 0 6px',color:'var(--text2)',fontSize:'13px'}},'Prix base : marge appliquée pour affichage (valeur serveur).')),
+      h('div',null,h('p',{style:{margin:'0 0 6px',color:'var(--text2)',fontSize:'13px'}},'Base matière : Cohésio = somme des €/m² des paramètres (frontal + silicone + adhésif + glassine). Rotoflex = Cohésio + supplément (par ligne ou défaut ci-dessus). Marge appliquée sur les montants affichés.')),
       topActions
     ),
     fileInp,

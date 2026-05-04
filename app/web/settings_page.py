@@ -325,20 +325,30 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
         <h2 style="margin:0 0 18px;font-size:17px">Nouvelle annonce</h2>
         <div class="form-grid" style="grid-template-columns:1fr 1fr;margin-bottom:12px">
           <div>
-            <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Page concernée</label>
-            <select id="nm-scope" style="width:100%">
-              <option value="planning">Planning de production</option>
-              <option value="fabrication">Saisie de production</option>
-              <option value="global">Toutes les pages</option>
+            <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Application</label>
+            <select id="nm-app" style="width:100%" onchange="onAppChange()">
+              <option value="planning">Planning Production</option>
+              <option value="fabrication">Saisie Production</option>
+              <option value="stock">Stock & Inventaire</option>
+              <option value="myexpe">MyExpé (Transport)</option>
+              <option value="planning_rh">Planning RH</option>
+              <option value="paie">Paie</option>
+              <option value="global">Toutes les applications</option>
             </select>
           </div>
           <div>
-            <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Active</label>
-            <select id="nm-active" style="width:100%">
-              <option value="1">Oui — visible par les utilisateurs</option>
-              <option value="0">Non — masquée</option>
+            <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Page</label>
+            <select id="nm-page" style="width:100%">
+              <option value="">Toutes les pages</option>
             </select>
           </div>
+        </div>
+        <div style="margin-bottom:12px">
+          <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Active</label>
+          <select id="nm-active" style="width:100%">
+            <option value="1">Oui — visible par les utilisateurs</option>
+            <option value="0">Non — masquée</option>
+          </select>
         </div>
         <div style="margin-bottom:12px">
           <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Titre</label>
@@ -361,20 +371,30 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
         <h2 style="margin:0 0 18px;font-size:17px">Modifier l'annonce</h2>
         <div class="form-grid" style="grid-template-columns:1fr 1fr;margin-bottom:12px">
           <div>
-            <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Page concernée</label>
-            <select id="edit-nm-scope" style="width:100%">
-              <option value="planning">Planning de production</option>
-              <option value="fabrication">Saisie de production</option>
-              <option value="global">Toutes les pages</option>
+            <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Application</label>
+            <select id="edit-nm-app" style="width:100%" onchange="onEditAppChange()">
+              <option value="planning">Planning Production</option>
+              <option value="fabrication">Saisie Production</option>
+              <option value="stock">Stock & Inventaire</option>
+              <option value="myexpe">MyExpé (Transport)</option>
+              <option value="planning_rh">Planning RH</option>
+              <option value="paie">Paie</option>
+              <option value="global">Toutes les applications</option>
             </select>
           </div>
           <div>
-            <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Active</label>
-            <select id="edit-nm-active" style="width:100%">
-              <option value="1">Oui — visible par les utilisateurs</option>
-              <option value="0">Non — masquée</option>
+            <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Page</label>
+            <select id="edit-nm-page" style="width:100%">
+              <option value="">Toutes les pages</option>
             </select>
           </div>
+        </div>
+        <div style="margin-bottom:12px">
+          <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Active</label>
+          <select id="edit-nm-active" style="width:100%">
+            <option value="1">Oui — visible par les utilisateurs</option>
+            <option value="0">Non — masquée</option>
+          </select>
         </div>
         <div style="margin-bottom:12px">
           <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Titre</label>
@@ -1337,6 +1357,99 @@ async function toggleAck(id) {
   }
 }
 
+const APP_PAGES = {
+  planning: [
+    {value: '', label: 'Toutes les pages'},
+    {value: 'planning', label: 'Planning'}
+  ],
+  fabrication: [
+    {value: '', label: 'Toutes les pages'},
+    {value: 'prod', label: 'Saisie Production'},
+    {value: 'recap', label: 'Récapitulatif'},
+    {value: 'tracabilite', label: 'Traçabilité'},
+    {value: 'profil', label: 'Profil Opérateur'}
+  ],
+  stock: [
+    {value: '', label: 'Toutes les pages'},
+    {value: 'inventaire', label: 'Inventaire'},
+    {value: 'alertes', label: 'Alertes de stock'},
+    {value: 'reappro', label: 'Réapprovisionnement'},
+    {value: 'mouvements', label: 'Mouvements'},
+    {value: 'historique', label: 'Historique'},
+    {value: 'parametres', label: 'Paramètres'}
+  ],
+  myexpe: [
+    {value: '', label: 'Toutes les pages'},
+    {value: 'suivi_departs', label: 'Suivi départs'},
+    {value: 'historique_departs', label: 'Historique départs'},
+    {value: 'comparateur', label: 'Comparateur tarifs'},
+    {value: 'transporteurs', label: 'Transporteurs'},
+    {value: 'poids', label: 'Poids envoi'}
+  ],
+  planning_rh: [
+    {value: '', label: 'Toutes les pages'},
+    {value: 'planning', label: 'Planning personnel'},
+    {value: 'conges', label: 'Gestion des congés'},
+    {value: 'soldes', label: 'Soldes congés'}
+  ],
+  paie: [
+    {value: '', label: 'Toutes les pages'},
+    {value: 'bulletins', label: 'Bulletins de paie'},
+    {value: 'employes', label: 'Employés'},
+    {value: 'parametres', label: 'Paramètres'}
+  ],
+  global: [
+    {value: '', label: 'Toutes les pages'}
+  ]
+};
+
+function populatePageSelect(appSelectId, pageSelectId, selectedPage) {
+  const app = document.getElementById(appSelectId).value;
+  const pageSelect = document.getElementById(pageSelectId);
+  const pages = APP_PAGES[app] || [{value: '', label: 'Toutes les pages'}];
+  pageSelect.innerHTML = pages.map(p => 
+    `<option value="${p.value}"${p.value === (selectedPage || '') ? ' selected' : ''}>${p.label}</option>`
+  ).join('');
+}
+
+function onAppChange() {
+  populatePageSelect('nm-app', 'nm-page', '');
+}
+
+function onEditAppChange() {
+  populatePageSelect('edit-nm-app', 'edit-nm-page', '');
+}
+
+function getScopeFromAppPage(appId, pageId) {
+  const app = document.getElementById(appId).value;
+  const page = document.getElementById(pageId).value;
+  if (app === 'global') return 'global';
+  if (!page) return app;
+  return app + '_' + page;
+}
+
+function setAppPageFromScope(scope) {
+  if (!scope || scope === 'global') {
+    return { app: 'global', page: '' };
+  }
+  const parts = scope.split('_');
+  const knownApps = Object.keys(APP_PAGES);
+  // Check if first part is an app
+  if (knownApps.includes(parts[0])) {
+    const app = parts[0];
+    const page = parts.slice(1).join('_');
+    // Check if page exists for this app
+    const pages = APP_PAGES[app] || [];
+    const pageExists = pages.some(p => p.value === page);
+    return { app: app, page: pageExists ? page : '' };
+  }
+  // Legacy scope (just app name)
+  if (knownApps.includes(scope)) {
+    return { app: scope, page: '' };
+  }
+  return { app: 'global', page: '' };
+}
+
 async function toggleActive(id, current) {
   try {
     await api('/api/updates/' + id, { method: 'PATCH', body: JSON.stringify({ active: !current }), headers: { 'Content-Type': 'application/json' } });
@@ -1347,14 +1460,19 @@ async function toggleActive(id, current) {
 
 function openNewUpdateModal() {
   const ov = document.getElementById('upd-modal-overlay');
-  if (ov) { ov.style.display = 'flex'; ov.classList.remove('hidden'); }
+  if (ov) { 
+    ov.style.display = 'flex'; 
+    ov.classList.remove('hidden'); 
+  }
+  // Initialize page select based on current app
+  onAppChange();
 }
 function closeNewUpdateModal() {
   const ov = document.getElementById('upd-modal-overlay');
   if (ov) { ov.style.display = 'none'; ov.classList.add('hidden'); }
 }
 async function submitNewUpdate() {
-  const scope   = document.getElementById('nm-scope').value;
+  const scope   = getScopeFromAppPage('nm-app', 'nm-page');
   const titre   = (document.getElementById('nm-titre').value || '').trim();
   const message = (document.getElementById('nm-message').value || '').trim();
   const active  = Number(document.getElementById('nm-active').value);
@@ -1375,7 +1493,9 @@ function openEditUpdateModal(id) {
   const u = _updatesData.find(x => x.id === id);
   if (!u) return;
   _editingUpdateId = id;
-  document.getElementById('edit-nm-scope').value = u.scope || 'planning';
+  const { app, page } = setAppPageFromScope(u.scope);
+  document.getElementById('edit-nm-app').value = app;
+  populatePageSelect('edit-nm-app', 'edit-nm-page', page);
   document.getElementById('edit-nm-titre').value = u.titre || '';
   document.getElementById('edit-nm-message').value = u.message || '';
   document.getElementById('edit-nm-active').value = u.active ? '1' : '0';
@@ -1391,7 +1511,7 @@ function closeEditUpdateModal() {
 
 async function submitEditUpdate() {
   if (!_editingUpdateId) return;
-  const scope   = document.getElementById('edit-nm-scope').value;
+  const scope   = getScopeFromAppPage('edit-nm-app', 'edit-nm-page');
   const titre   = (document.getElementById('edit-nm-titre').value || '').trim();
   const message = (document.getElementById('edit-nm-message').value || '').trim();
   const active  = Number(document.getElementById('edit-nm-active').value);

@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 import pandas as pd
-from fastapi import APIRouter, Body, File, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Body, File, Form, HTTPException, Query, Request, UploadFile
 
 from database import get_db
 from services.auth_service import get_current_user, user_has_app_access
@@ -46,11 +46,108 @@ def _marge_factor(conn) -> float:
     return 1.0 + max(0.0, m) / 100.0
 
 
-def _row_base_with_marge(conn, row: dict) -> dict:
+def _norm_matiere_label(s: Any) -> str:
+    t = str(s or "").strip().lower()
+    t = unicodedata.normalize("NFD", t)
+    t = "".join(c for c in t if unicodedata.category(c) != "Mn")
+    t = re.sub(r"\s+", " ", t)
+    return t
+
+
+def _float_safe(v: Any) -> Optional[float]:
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _split_param_pools(params: list[dict]) -> dict[str, list[dict[str, Any]]]:
+    """Découpe les lignes matiere_params en pools pour appariement frontal / silicone / adhésif / glassine."""
+    glass: list[dict[str, Any]] = []
+    sil: list[dict[str, Any]] = []
+    adh: list[dict[str, Any]] = []
+    front: list[dict[str, Any]] = []
+    for p in params:
+        eur = _float_safe(p.get("prix_eur_m2"))
+        if eur is None:
+            continue
+        des = (p.get("designation") or "").strip()
+        if not des:
+            continue
+        cat_raw = (p.get("categorie") or "").strip()
+        cat_n = _norm_matiere_label(cat_raw).replace(" ", "")
+        item = {"cat": cat_raw, "des": des, "desn": _norm_matiere_label(des), "eur": eur}
+        if cat_n == "gls" or cat_raw.upper() == "GLS":
+            glass.append(item)
+        elif cat_n in ("s", "linerless"):
+            sil.append(item)
+        elif cat_n in ("e", "p"):
+            adh.append(item)
+        else:
+            front.append(item)
+    return {"glassine": glass, "silicone": sil, "adhesif": adh, "frontal": front}
+
+
+def _eur_best_match(label: Any, pool: list[dict[str, Any]]) -> float:
+    """Reprend la logique du classeur Excel (appariement le plus spécifique ; ambiguïté → 0)."""
+    nc = _norm_matiere_label(label)
+    if not nc:
+        return 0.0
+    for p in pool:
+        if p["desn"] == nc:
+            return float(p["eur"])
+    inside = [p for p in pool if p["desn"] and p["desn"] in nc]
+    if len(inside) == 1:
+        return float(inside[0]["eur"])
+    if len(inside) > 1:
+        inside.sort(key=lambda x: -len(x["desn"]))
+        return float(inside[0]["eur"])
+    flex = [p for p in pool if nc in p["desn"]]
+    if len(flex) == 1:
+        return float(flex[0]["eur"])
+    if len(flex) > 1:
+        return 0.0
+    return 0.0
+
+
+def prix_cohesio_from_params(base: dict, params: list[dict]) -> float:
+    pools = _split_param_pools(params)
+    return (
+        _eur_best_match(base.get("frontal"), pools["frontal"])
+        + _eur_best_match(base.get("silicone"), pools["silicone"])
+        + _eur_best_match(base.get("adhesif"), pools["adhesif"])
+        + _eur_best_match(base.get("glassine"), pools["glassine"])
+    )
+
+
+def _default_rotoflex_supplement(conn) -> float:
+    cfg = _cfg_dict(conn)
+    try:
+        return float(cfg.get("supplement_rotoflex_eur_m2", 0.06))
+    except (TypeError, ValueError):
+        return 0.06
+
+
+def _row_base_with_marge(conn, row: dict, params: Optional[list[dict]] = None) -> dict:
     d = dict(row)
     fac = _marge_factor(conn)
     pc = d.get("prix_cohesio")
     pr = d.get("prix_rotoflex")
+    if params is not None and len(params) > 0:
+        try:
+            calc = prix_cohesio_from_params(d, params)
+            pc = calc
+            sup = _float_safe(d.get("rotoflex_supplement_eur_m2"))
+            if sup is None:
+                sup = _default_rotoflex_supplement(conn)
+            pr = calc + sup
+            d["prix_cohesio_calc"] = calc
+            d["prix_rotoflex_calc"] = pr
+        except Exception:
+            d["prix_cohesio_calc"] = None
+            d["prix_rotoflex_calc"] = None
     try:
         d["prix_cohesio_majore"] = float(pc) * fac if pc is not None else None
     except (TypeError, ValueError):
@@ -75,7 +172,11 @@ def get_config(request: Request):
             taux = float(cfg.get("taux_change_usd", 0.85))
         except (TypeError, ValueError):
             taux = 0.85
-    return {"marge_erreur": marge, "taux_change_usd": taux}
+        try:
+            sup_rot = float(cfg.get("supplement_rotoflex_eur_m2", 0.06))
+        except (TypeError, ValueError):
+            sup_rot = 0.06
+    return {"marge_erreur": marge, "taux_change_usd": taux, "supplement_rotoflex_eur_m2": sup_rot}
 
 
 @router.post("/config")
@@ -84,6 +185,7 @@ def post_config(request: Request, body: dict = Body(...)):
     try:
         marge = body.get("marge_erreur")
         taux = body.get("taux_change_usd")
+        sup_rot = body.get("supplement_rotoflex_eur_m2")
         now = datetime.now().isoformat()
         with get_db() as conn:
             if marge is not None:
@@ -106,6 +208,17 @@ def post_config(request: Request, body: dict = Body(...)):
                     """INSERT INTO matiere_config (cle, valeur, updated_at) VALUES (?,?,?)
                        ON CONFLICT(cle) DO UPDATE SET valeur=excluded.valeur, updated_at=excluded.updated_at""",
                     ("taux_change_usd", str(tv), now),
+                )
+            if sup_rot is not None:
+                try:
+                    sv = float(sup_rot)
+                except (TypeError, ValueError):
+                    sv = 0.06
+                sv = max(0.0, min(2.0, sv))
+                conn.execute(
+                    """INSERT INTO matiere_config (cle, valeur, updated_at) VALUES (?,?,?)
+                       ON CONFLICT(cle) DO UPDATE SET valeur=excluded.valeur, updated_at=excluded.updated_at""",
+                    ("supplement_rotoflex_eur_m2", str(sv), now),
                 )
             conn.commit()
     except Exception:
@@ -278,7 +391,8 @@ def list_base(
             f"SELECT * FROM matiere_base WHERE {where} ORDER BY frontal, designation, id",
             args,
         ).fetchall()
-        return [_row_base_with_marge(conn, dict(r)) for r in rows]
+        prows = [dict(x) for x in conn.execute("SELECT * FROM matiere_params").fetchall()]
+        return [_row_base_with_marge(conn, dict(r), prows) for r in rows]
 
 
 @router.post("/base")
@@ -292,8 +406,8 @@ def create_base(request: Request, body: dict = Body(...)):
         cur = conn.execute(
             """INSERT INTO matiere_base (
                 ref_interne, designation, frontal, type_adhesion, adhesif, silicone, glassine,
-                marqueur, prix_cohesio, prix_rotoflex, updated_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                marqueur, prix_cohesio, prix_rotoflex, rotoflex_supplement_eur_m2, updated_at
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 body.get("ref_interne"),
                 des,
@@ -305,13 +419,15 @@ def create_base(request: Request, body: dict = Body(...)):
                 body.get("marqueur"),
                 body.get("prix_cohesio"),
                 body.get("prix_rotoflex"),
+                body.get("rotoflex_supplement_eur_m2"),
                 now,
             ),
         )
         conn.commit()
         rid = cur.lastrowid
         row = conn.execute("SELECT * FROM matiere_base WHERE id=?", (rid,)).fetchone()
-        return _row_base_with_marge(conn, dict(row))
+        prows = [dict(x) for x in conn.execute("SELECT * FROM matiere_params").fetchall()]
+        return _row_base_with_marge(conn, dict(row), prows)
 
 
 @router.put("/base/{base_id}")
@@ -329,6 +445,7 @@ def update_base(request: Request, base_id: int, body: dict = Body(...)):
         "marqueur",
         "prix_cohesio",
         "prix_rotoflex",
+        "rotoflex_supplement_eur_m2",
     ]
     sets = []
     args: list[Any] = []
@@ -347,7 +464,8 @@ def update_base(request: Request, base_id: int, body: dict = Body(...)):
         row = conn.execute("SELECT * FROM matiere_base WHERE id=?", (base_id,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Ligne introuvable")
-        return _row_base_with_marge(conn, dict(row))
+        prows = [dict(x) for x in conn.execute("SELECT * FROM matiere_params").fetchall()]
+        return _row_base_with_marge(conn, dict(row), prows)
 
 
 @router.delete("/base/{base_id}")
@@ -357,6 +475,203 @@ def delete_base(request: Request, base_id: int):
         conn.execute("DELETE FROM matiere_base WHERE id=?", (base_id,))
         conn.commit()
     return {"ok": True}
+
+
+def _sheet_key_parametres_sifa(sheets: dict) -> Optional[str]:
+    for k in sheets:
+        nk = _norm_header(k)
+        if nk in ("parametres", "parametre"):
+            return k
+    return None
+
+
+def _is_sifa_matiere_workbook(sheets: dict) -> bool:
+    key = _sheet_key_parametres_sifa(sheets)
+    if not key:
+        return False
+    df = sheets[key]
+    try:
+        v = df.iloc[0, 2]
+        s = str(v or "").lower()
+        return "taux" in s and "change" in s
+    except Exception:
+        return False
+
+
+def _sifa_param_code_cell(v: Any) -> str:
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return "-"
+    if isinstance(v, (int, float)):
+        try:
+            fv = float(v)
+            if abs(fv - int(fv)) < 1e-9:
+                return str(int(fv))
+        except (TypeError, ValueError):
+            pass
+    s = str(v).strip()
+    return s if s else "-"
+
+
+def _sifa_apply_workbook_config(conn, df_raw: pd.DataFrame, now: str) -> None:
+    try:
+        tv = _float_cell(df_raw.iloc[0, 6])
+        if tv is not None and tv > 0:
+            conn.execute(
+                """INSERT INTO matiere_config (cle, valeur, updated_at) VALUES (?,?,?)
+                   ON CONFLICT(cle) DO UPDATE SET valeur=excluded.valeur, updated_at=excluded.updated_at""",
+                ("taux_change_usd", str(tv), now),
+            )
+    except Exception:
+        pass
+
+
+def _import_sifa_parametres(conn, df: pd.DataFrame, now: str) -> tuple[int, list[str]]:
+    errors: list[str] = []
+    n = 0
+    for i in range(2, len(df)):
+        row = df.iloc[i]
+        des = row[2]
+        if pd.isna(des) or str(des).strip() == "":
+            continue
+        ds = str(des).strip()
+        if len(ds) > 2 and ds[0].isdigit() and "-" in ds[:4]:
+            continue
+        pev: Optional[float] = None
+        try:
+            if pd.notna(row[7]):
+                pev = float(row[7])
+        except (TypeError, ValueError):
+            pev = None
+        if pev is None and pd.isna(row[13]) and pd.isna(row[14]):
+            continue
+        p_usd = _float_cell(row[13]) if pd.notna(row[13]) else _float_cell(row[14])
+        cat = _str_cell(row[0]) or ""
+        code = _sifa_param_code_cell(row[1])
+        four = _str_cell(row[6]) if pd.notna(row[6]) else _str_cell(row[24])
+        pm2 = _float_cell(row[23])
+        txv = _float_cell(row[22])
+        if txv is None:
+            txv = 1.0
+        incv = _float_cell(row[10])
+        if incv is None:
+            incv = 1.0
+        trv = _float_cell(row[20])
+        if trv is None:
+            trv = _float_cell(row[19]) or 0.0
+        if trv is None:
+            trv = 0.0
+        app = _str_cell(row[25])
+        gr = _int_cell(row[26])
+        note_parts: list[str] = []
+        if pd.notna(row[3]) and str(row[3]).strip():
+            note_parts.append(str(row[3]).strip())
+        notes_val = " | ".join(note_parts) if note_parts else None
+        try:
+            conn.execute(
+                """INSERT INTO matiere_params (
+                    categorie, code, designation, fournisseur, poids_m2, prix_eur_m2, prix_usd_kg,
+                    taux_change, incidence_dollar, transport_total, appellation, grammage, notes, updated_at
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    cat,
+                    code,
+                    ds,
+                    four,
+                    pm2,
+                    pev,
+                    p_usd,
+                    txv,
+                    incv,
+                    trv,
+                    app,
+                    gr,
+                    notes_val,
+                    now,
+                ),
+            )
+            n += 1
+        except Exception as e:
+            errors.append(f"Parametres SIFA ligne {i}: {e}")
+    return n, errors
+
+
+def _sifa_base_col(df: pd.DataFrame, *candidates: str) -> Optional[str]:
+    for c in candidates:
+        if c in df.columns:
+            return c
+    for col in df.columns:
+        nc = _norm_header(col)
+        for c in candidates:
+            if nc == _norm_header(c):
+                return col
+    return None
+
+
+def _import_sifa_base(conn, df: pd.DataFrame, now: str) -> tuple[int, list[str]]:
+    errors: list[str] = []
+    n = 0
+    des_c = _sifa_base_col(df, "Désignation", "Designation", "designation")
+    if not des_c:
+        errors.append("Base SIFA : colonne désignation introuvable")
+        return 0, errors
+    ref_c = list(df.columns)[0]
+    mar_c = list(df.columns)[7] if len(df.columns) > 7 else None
+    type_c = _sifa_base_col(df, "Type")
+    adh_c = _sifa_base_col(df, "Adhésif", "Adhesif")
+    sil_c = _sifa_base_col(df, "Silicone")
+    gla_c = _sifa_base_col(df, "Glassine")
+    front_c = _sifa_base_col(df, "Frontal")
+    coh_c = _sifa_base_col(df, "COHESIO", "Cohésio", "cohésio")
+    rot_c = _sifa_base_col(df, "ROTOFLEX", "Rotoflex")
+    for idx, row in df.iterrows():
+        frontal = row.get(front_c) if front_c else None
+        if frontal is None or (isinstance(frontal, float) and pd.isna(frontal)):
+            continue
+        if not str(frontal).strip():
+            continue
+        co = row.get(coh_c) if coh_c else None
+        if co is None or (isinstance(co, float) and pd.isna(co)):
+            continue
+        try:
+            coh = float(co)
+            ro = row.get(rot_c) if rot_c else None
+            if ro is None or (isinstance(ro, float) and pd.isna(ro)):
+                rot = coh + _default_rotoflex_supplement(conn)
+            else:
+                rot = float(ro)
+        except (TypeError, ValueError):
+            errors.append(f"Base SIFA ligne {idx}: prix invalide")
+            continue
+        sup = rot - coh
+        des = row.get(des_c)
+        if des is None or (isinstance(des, float) and pd.isna(des)) or not str(des).strip():
+            continue
+        mar = _str_cell(row.get(mar_c)) if mar_c else None
+        try:
+            conn.execute(
+                """INSERT INTO matiere_base (
+                    ref_interne, designation, frontal, type_adhesion, adhesif, silicone, glassine,
+                    marqueur, prix_cohesio, prix_rotoflex, rotoflex_supplement_eur_m2, updated_at
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    _int_cell(row.get(ref_c)),
+                    str(des).strip(),
+                    str(frontal).strip(),
+                    _str_cell(row.get(type_c)) if type_c else None,
+                    _str_cell(row.get(adh_c)) if adh_c else None,
+                    _str_cell(row.get(sil_c)) if sil_c else None,
+                    _str_cell(row.get(gla_c)) if gla_c else None,
+                    mar,
+                    None,
+                    None,
+                    sup,
+                    now,
+                ),
+            )
+            n += 1
+        except Exception as e:
+            errors.append(f"Base SIFA ligne {idx}: {e}")
+    return n, errors
 
 
 def _find_sheet(sheets: dict, *candidates: str) -> Optional[str]:
@@ -413,7 +728,11 @@ def _str_cell(v: Any) -> Optional[str]:
 
 
 @router.post("/import-excel")
-async def import_excel(request: Request, file: UploadFile = File(...)):
+async def import_excel(
+    request: Request,
+    file: UploadFile = File(...),
+    replace_all: bool = Form(False),
+):
     _require_devis(request)
     if not file.filename or not str(file.filename).lower().endswith((".xlsx", ".xlsm")):
         raise HTTPException(status_code=400, detail="Fichier .xlsx ou .xlsm attendu")
@@ -425,6 +744,27 @@ async def import_excel(request: Request, file: UploadFile = File(...)):
         sheets = pd.read_excel(io.BytesIO(raw), sheet_name=None, engine="openpyxl")
     except Exception as e:
         return {"imported_params": 0, "imported_base": 0, "errors": [f"Lecture Excel: {e}"]}
+
+    if _is_sifa_matiere_workbook(sheets):
+        now = datetime.now().isoformat()
+        sk_p = _sheet_key_parametres_sifa(sheets)
+        if not sk_p:
+            return {"imported_params": 0, "imported_base": 0, "errors": ["Feuille Parametres introuvable"]}
+        sh_b = _find_sheet(sheets, "Base_matières", "Base_matieres", "Base matières")
+        with get_db() as conn:
+            if replace_all:
+                conn.execute("DELETE FROM matiere_base")
+                conn.execute("DELETE FROM matiere_params")
+            _sifa_apply_workbook_config(conn, sheets[sk_p], now)
+            imported_params, e1 = _import_sifa_parametres(conn, sheets[sk_p], now)
+            errors.extend(e1)
+            if sh_b:
+                imported_base, e2 = _import_sifa_base(conn, sheets[sh_b], now)
+                errors.extend(e2)
+            else:
+                errors.append("Feuille Base_matières introuvable")
+            conn.commit()
+        return {"imported_params": imported_params, "imported_base": imported_base, "errors": errors}
 
     sh_p = _find_sheet(sheets, "Parametres", "Paramètres", "parametres")
     sh_b = _find_sheet(sheets, "Base_matières", "Base_matieres", "Base matières")
