@@ -12,6 +12,7 @@ _PARIS = ZoneInfo("Europe/Paris")
 from database import get_db
 from config import classify_operation
 from app.services.auth_service import get_current_user, is_fabrication, is_admin
+from app.routers.planning import _planned_end_iso_for_machine
 
 router = APIRouter()
 
@@ -415,7 +416,13 @@ async def create_saisie(request: Request):
                             (now_iso, machine_id_resolved, pe_id),
                         )
                         dt_start   = datetime.fromisoformat(date_op)
-                        dt_end_new = (dt_start + timedelta(hours=duree_h)).strftime("%Y-%m-%dT%H:%M:%S")
+                        dt_end_new = _planned_end_iso_for_machine(
+                            conn, machine_id_resolved, date_op, duree_h
+                        )
+                        if not dt_end_new:
+                            dt_end_new = (dt_start + timedelta(hours=duree_h)).strftime(
+                                "%Y-%m-%dT%H:%M:%S"
+                            )
                         conn.execute(
                             """UPDATE planning_entries
                                SET statut_reel   = 'reellement_en_saisie',
@@ -480,7 +487,13 @@ async def create_saisie(request: Request):
                                     (now_iso, machine_id_resolved, pe_id),
                                 )
                                 dt_start   = datetime.fromisoformat(date_op)
-                                dt_end_new = (dt_start + timedelta(hours=duree_h)).strftime("%Y-%m-%dT%H:%M:%S")
+                                dt_end_new = _planned_end_iso_for_machine(
+                                    conn, machine_id_resolved, date_op, duree_h
+                                )
+                                if not dt_end_new:
+                                    dt_end_new = (dt_start + timedelta(hours=duree_h)).strftime(
+                                        "%Y-%m-%dT%H:%M:%S"
+                                    )
                                 conn.execute(
                                     """UPDATE planning_entries
                                        SET statut_reel   = 'reellement_en_saisie',

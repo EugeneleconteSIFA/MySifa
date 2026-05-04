@@ -527,13 +527,16 @@ function showToast(message,type){
     if(!CAN_EDIT||!MID) return;
     const handle=e.target&&e.target.closest&&e.target.closest("[data-resize='1']");
     if(!handle) return;
-    if(!e.shiftKey) return;
     const slot=handle.closest(".slot");
     if(!slot) return;
     const tlBar=slot.closest(".tl-bar");
     if(!tlBar) return;
     const eidStr=String(handle.dataset.eid||"");
-    const entry=(S.timeline||[]).find(s=>String(s.entry_id||"")===eidStr);
+    let entry=(S.timeline||[]).find(s=>String(s.entry_id||"")===eidStr);
+    if(!entry&&S.entries&&S.entries.length){
+      const ent=S.entries.find(x=>String(x.id)===eidStr);
+      if(ent) entry={entry_id:ent.id,duree_heures:ent.duree_heures};
+    }
     if(!entry) return;
     e.preventDefault();
     e.stopPropagation();
@@ -632,9 +635,6 @@ function fmtPlanningIso(d){
     if(isNaN(o0.getTime())||isNaN(o1.getTime())) return;
     const mon=new Date(+tlWrap.dataset.mon);
     if(isNaN(mon.getTime())) return;
-    const weekEnd=addD(mon,7);
-    const weekSpanMs=weekEnd.getTime()-mon.getTime();
-    if(weekSpanMs<=0) return;
     e.preventDefault();
     try{hideTip();}catch(_){}
     const tlRect=tlBar.getBoundingClientRect();
@@ -648,8 +648,7 @@ function fmtPlanningIso(d){
       origLeftPct,
       wPct,
       origStartMs:o0.getTime(),
-      origEndMs:o1.getTime(),
-      weekSpanMs
+      origEndMs:o1.getTime()
     };
   });
   document.addEventListener("mousemove",function(e){
@@ -672,11 +671,35 @@ function fmtPlanningIso(d){
       return;
     }
     const newLeft=ctx._effLeft!=null?ctx._effLeft:ctx.origLeftPct;
-    const effMs=((newLeft-ctx.origLeftPct)/100)*ctx.weekSpanMs;
-    const ns=new Date(ctx.origStartMs+effMs),ne=new Date(ctx.origEndMs+effMs);
+    const tlWrap2=ctx.slot.closest(".tl-wrap");
+    const mon=new Date(+(tlWrap2&&tlWrap2.dataset?tlWrap2.dataset.mon:NaN));
+    let ns,ne,skip=false;
+    if(isNaN(mon.getTime())) skip=true;
+    else{
+      const wm=computeTlWeekModel(mon);
+      if(wm.err){
+        const weekEnd=addD(mon,7);
+        const weekSpanMs=weekEnd.getTime()-mon.getTime();
+        if(weekSpanMs<=0) skip=true;
+        else{
+          const effMs=((newLeft-ctx.origLeftPct)/100)*weekSpanMs;
+          if(Math.abs(effMs)<3e4) skip=true;
+          else{ns=new Date(ctx.origStartMs+effMs);ne=new Date(ctx.origEndMs+effMs);}
+        }
+      }else{
+        const{tot,cols}=wm;
+        const sp0=(ctx.origLeftPct/100)*tot;
+        const ep0=((ctx.origLeftPct+ctx.wPct)/100)*tot;
+        const dWork=ep0-sp0;
+        const sp1=(newLeft/100)*tot;
+        const ep1=Math.min(tot,sp1+dWork);
+        if(Math.abs(sp1-sp0)<0.03) skip=true;
+        else{ns=invCumulativeWorkH(sp1,cols,tot);ne=invCumulativeWorkH(ep1,cols,tot);}
+      }
+    }
     const ps=fmtPlanningIso(ns),pe=fmtPlanningIso(ne);
     ctx.slot.style.left=ctx.origLeftPct+"%";
-    if(!ps||!pe||Math.abs(effMs)<3e4) return;
+    if(skip||!ps||!pe) return;
     try{
       const res=await fetch(`/api/planning/machines/${MID}/entries/${ctx.eid}`,{
         method:"PUT",
@@ -1424,7 +1447,7 @@ function setupTlDD(){
   // dragstart / dragend : toujours sur les slots (nouveaux éléments après chaque render)
   document.querySelectorAll("#tl-blocks-container .slot[draggable='true']").forEach(el=>{
     el.addEventListener("dragstart",ev=>{
-      if(ev.shiftKey&&ev.target&&ev.target.closest&&ev.target.closest(".slot-resize-handle")){ev.preventDefault();return;}
+      if(ev.target&&ev.target.closest&&ev.target.closest(".slot-resize-handle")){ev.preventDefault();return;}
       _tlDragEid=+el.dataset.eid;
       el.style.opacity="0.45";
       ev.dataTransfer.effectAllowed="move";
@@ -1586,7 +1609,8 @@ try{
   if(ov) ov.addEventListener("click",()=>setSidebarOpen(false));
 }catch(e){}
 
-function mkTL(mon,slots){
+/** Modèle semaine timeline (heures ouvrées cumulées + gp) — partagé par mkTL et le déplacement des terminés. */
+function computeTlWeekModel(mon){
   const we=addD(mon,7),HF=.42,days=[];
   for(let i=0;i<7;i++){
     const d=addD(mon,i),di=d.getDay();
@@ -1601,12 +1625,11 @@ function mkTL(mon,slots){
     const nonTravail=isSat?!S.dayWorked[ds]:!!S.holidays[ds];
     days.push({date:d,di,ds,s:w.s,e:w.e,tWork:dayT,flex:off?HF:dayT,off,hourLbl,nonTravail,isSat});
   }
-  if(!days.length)return'<div style="color:var(--dim);padding:8px;font-size:13px">Aucun jour ouvré</div>';
+  if(!days.length) return{err:"nodays"};
   const tot=days.reduce((s,d)=>s+d.tWork,0);
-  if(tot<=0)return'<div style="color:var(--muted);padding:8px;font-size:13px">Aucun créneau calculable (semaine entièrement non travaillée ou fermée).</div>';
+  if(tot<=0) return{err:"notot"};
   let c=0;
   const cols=days.filter(d=>d.tWork>0).map(d=>{const cs=c;c+=d.tWork;return{...d,cs,ce:c}});
-  const now=new Date(),ts=now.toDateString();
   const wkStart=new Date(mon);wkStart.setHours(0,0,0,0);
   function gp(dt){
     let acc=0,t=dt.getTime();
@@ -1623,6 +1646,32 @@ function mkTL(mon,slots){
     }
     return Math.min(acc,tot);
   }
+  return{err:null,we,days,tot,cols,wkStart,gp};
+}
+
+/** h = heures ouvrées cumulées depuis le lundi 0h de la semaine [0,tot[ → Date locale */
+function invCumulativeWorkH(h,cols,tot){
+  const H=Math.max(0,Math.min(Number(h)||0,tot-1e-9));
+  for(let i=0;i<cols.length;i++){
+    const col=cols[i];
+    if(H<col.cs-1e-9) continue;
+    if(H>col.ce+1e-9) continue;
+    const into=Math.max(0,Math.min(H-col.cs,col.tWork-1e-9));
+    const sod=new Date(col.date);sod.setHours(0,0,0,0);
+    const hourDec=col.s+into;
+    return new Date(sod.getTime()+hourDec*36e5);
+  }
+  const last=cols[cols.length-1];
+  const sod=new Date(last.date);sod.setHours(0,0,0,0);
+  return new Date(sod.getTime()+last.e*36e5);
+}
+
+function mkTL(mon,slots){
+  const wm=computeTlWeekModel(mon);
+  if(wm.err==="nodays")return'<div style="color:var(--dim);padding:8px;font-size:13px">Aucun jour ouvré</div>';
+  if(wm.err==="notot")return'<div style="color:var(--muted);padding:8px;font-size:13px">Aucun créneau calculable (semaine entièrement non travaillée ou fermée).</div>';
+  const{we,days,tot,cols,wkStart,gp}=wm;
+  const now=new Date(),ts=now.toDateString();
   const ws=slots.filter(s=>{const ss=new Date(s.start),se=new Date(s.end);return ss<we&&se>mon});
 
   let h=`<div class="tl-wrap" data-mon="${mon.getTime()}"><div class="dh">`;
@@ -1677,9 +1726,10 @@ function mkTL(mon,slots){
     const destock=s.destockage==="done";
     const reelForDrag=(s.statut_reel||"reellement_en_attente")==="reellement_en_attente";
     const canDragSlot=CAN_EDIT&&s.statut!=="en_cours"&&s.statut!=="termine"&&reelForDrag;
+    const canResizeSlot=CAN_EDIT&&s.statut!=="termine"&&(s.statut==="en_cours"||(s.statut==="attente"&&reelForDrag));
     const termineSlideCls=(CAN_EDIT&&s.statut==="termine")?"slot-termine-movable":"";
-    const resizeHint="Glisser : réordonner. Maj (Shift) maintenue + glisser : ajuster la durée.";
-    const resizeHandle=canDragSlot?`<div class="slot-resize-handle" data-eid="${s.entry_id||idx}" data-resize="1" title="${escAttr(resizeHint)}"></div>`:"";
+    const resizeHint="Bord droit : ajuster la durée. Reste du créneau : réordonner (si disponible).";
+    const resizeHandle=canResizeSlot?`<div class="slot-resize-handle" data-eid="${s.entry_id||idx}" data-resize="1" title="${escAttr(resizeHint)}"></div>`:"";
     const termineTitle=termineSlideCls?"Dossier terminé — glisser pour décaler le créneau sur la ligne de temps":"";
     h+=`<div class="slot ${matchCls} ${aplacerCls} ${reelTermineCls} ${termineSlideCls}" data-eid="${s.entry_id||idx}" data-statut="${escAttr(s.statut||"attente")}" data-statut-reel="${escAttr(s.statut_reel||"reellement_en_attente")}" ${canDragSlot?'draggable="true"':''} style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${isActive?"border:2px solid #22d3ee;animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
       onmouseenter="showTip(event,this)" onmousemove="moveTip(event)" onmouseleave="hideTip()"

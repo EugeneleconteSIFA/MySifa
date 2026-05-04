@@ -313,50 +313,35 @@ _PARITY_DEFAULTS: Dict[str, Any] = {
 }
 
 
-def _slot_payload(e: dict, start_iso: str, end_iso: str) -> dict:
-    return {
-        "entry_id": e["id"],
-        "reference": e["reference"],
-        "client": e["client"],
-        "description": e["description"],
-        "format_l": e["format_l"],
-        "format_h": e["format_h"],
-        "laize": e.get("laize"),
-        "date_livraison": e.get("date_livraison"),
-        "numero_of": e.get("numero_of"),
-        "ref_produit": e.get("ref_produit"),
-        "commentaire": e.get("commentaire"),
-        "a_placer": e.get("a_placer", 0),
-        "destockage": e.get("destockage") or "todo",
-        "statut_reel": e.get("statut_reel") or "reellement_en_attente",
-        "duree_heures": e["duree_heures"],
-        # Un dossier terminé en DB reste terminé même si planned_end est dans le futur
-        # (cas : durée modifiée → planned_end recalculé en heures calendaires)
-        "statut": (
-            "termine"
-            if (e.get("statut") == "termine")
-            else compute_statut({**e, "planned_start": start_iso, "planned_end": end_iso})
-        ),
-        "notes": e["notes"],
-        "start": start_iso,
-        "end": end_iso,
-    }
+def _load_planning_calendar_maps(conn, machine_id: int) -> tuple[dict, dict, Dict[str, int]]:
+    """Config semaines (samedi), fériés, jours travaillés — aligné sur GET /timeline."""
+    configs: dict = {}
+    today = datetime.now()
+    for w in range(8):
+        d = today + timedelta(weeks=w)
+        sw = f"{d.year}-W{d.isocalendar()[1]:02d}"
+        cfg = conn.execute(
+            "SELECT samedi_travaille FROM planning_config WHERE machine_id=? AND semaine=?",
+            (machine_id, sw),
+        ).fetchone()
+        configs[sw] = cfg["samedi_travaille"] if cfg else 0
+    hol_rows = conn.execute(
+        "SELECT date, is_off FROM planning_holidays WHERE machine_id=?",
+        (machine_id,),
+    ).fetchall()
+    off_days = {str(r["date"]): int(r["is_off"] or 0) for r in hol_rows}
+    dw_rows = conn.execute(
+        "SELECT date, is_worked FROM planning_day_worked WHERE machine_id=?",
+        (machine_id,),
+    ).fetchall()
+    day_worked_map = {str(r["date"]): int(r["is_worked"] or 0) for r in dw_rows}
+    return configs, off_days, day_worked_map
 
 
-def _compute_timeline_slots(
-    conn,
-    machine_id: int,
-    m: dict,
-    configs: dict,
-    off_days: dict,
-    day_worked_map: Dict[str, int],
-    entries: List[dict],
-) -> List[dict]:
-    """Calcule les créneaux : terminé / en cours figés ; en attente (et en_cours sans plan) dynamiques + persistés.
-
-    day_worked_map : pour chaque date YYYY-MM-DD, is_worked 0/1. Samedi : sans ligne ou 0 = non travaillé ;
-    lun–ven : sans ligne = ouvré selon horaires machine ; ligne 0 = forcé non travaillé.
-    """
+def _make_work_duration_consumer(
+    m: dict, configs: dict, off_days: dict, day_worked_map: Dict[str, int]
+) -> tuple[Any, Any]:
+    """(advance_to_work, consume_duration_from) — duree_heures = heures ouvrées machine (même logique que la timeline)."""
     base_hours = {}
     for day_idx, field in [(0, "horaires_lundi"), (1, "horaires_mardi"),
                            (2, "horaires_mercredi"), (3, "horaires_jeudi"),
@@ -365,9 +350,8 @@ def _compute_timeline_slots(
 
     sat_hours_t = _parse_horaires_val(m.get("horaires_samedi"), "6,18")
 
-    # Machines à horaires alternés selon la parité de la semaine ISO.
     mk = _machine_key_from_record(m)
-    _parity_defs = _PARITY_DEFAULTS.get(mk)  # None si machine non reconnue
+    _parity_defs = _PARITY_DEFAULTS.get(mk)
 
     def _is_pair_week(dt: datetime) -> bool:
         return dt.isocalendar()[1] % 2 == 0
@@ -378,16 +362,12 @@ def _compute_timeline_slots(
     def get_hours_for_date(dt):
         dkey = dt.strftime("%Y-%m-%d")
         wd = dt.weekday()
-        # Fériés = lun–ven seulement. Le samedi est piloté uniquement par planning_day_worked
-        # (sinon une ligne férié + samedi travaillé bloque à tort la timeline).
         if wd <= 4 and int(off_days.get(dkey, 0) or 0):
             return None
         dw = day_worked_map.get(dkey)
         if wd in base_hours:
             if dw is not None and int(dw) == 0:
                 return None
-            # Cohésio 2 (et futures machines à horaires alternés) : les valeurs DB sont des
-            # génériques — toujours appliquer la logique paire/impaire.
             if _parity_defs is not None:
                 par = "pair" if _is_pair_week(dt) else "impair"
                 slot = "fri" if wd == 4 else "week"
@@ -395,9 +375,6 @@ def _compute_timeline_slots(
                 return (h[0], h[1])
             return base_hours[wd]
         if wd == 5:
-            # Samedi:
-            # - planning_day_worked force 0/1 sur une date donnée
-            # - sinon, utiliser le réglage hebdo planning_config.samedi_travaille (base fonctionnelle)
             if dw is None:
                 if int(configs.get(week_key(dt), 0) or 0) == 0:
                     return None
@@ -423,7 +400,7 @@ def _compute_timeline_slots(
             dt = nd.replace(hour=0, minute=0, second=0, microsecond=0)
         return dt
 
-    def consume_duration(cursor, duree_heures: float):
+    def consume_duration_from(cursor: datetime, duree_heures: float):
         remaining = float(duree_heures)
         slot_start: Optional[datetime] = None
         while remaining > 1e-9:
@@ -461,6 +438,76 @@ def _compute_timeline_slots(
         slot_end = cursor.replace(second=0, microsecond=0)
         return slot_start, slot_end, cursor
 
+    return advance_to_work, consume_duration_from
+
+
+def _planned_end_iso_for_machine(
+    conn, machine_id: int, planned_start_iso: str, duree_h: float
+) -> Optional[str]:
+    """planned_end ISO : début + duree_h heures **ouvrées** selon calendrier machine."""
+    m = conn.execute("SELECT * FROM machines WHERE id=?", (machine_id,)).fetchone()
+    if not m:
+        return None
+    dt0 = _parse_planned_dt(planned_start_iso)
+    if not dt0:
+        return None
+    try:
+        cfgs, off, dw = _load_planning_calendar_maps(conn, machine_id)
+        _, consume_from = _make_work_duration_consumer(dict(m), cfgs, off, dw)
+        _, slot_end, _ = consume_from(dt0.replace(microsecond=0), float(duree_h))
+        return _fmt_ts(slot_end)
+    except Exception:
+        return None
+
+
+def _slot_payload(e: dict, start_iso: str, end_iso: str) -> dict:
+    return {
+        "entry_id": e["id"],
+        "reference": e["reference"],
+        "client": e["client"],
+        "description": e["description"],
+        "format_l": e["format_l"],
+        "format_h": e["format_h"],
+        "laize": e.get("laize"),
+        "date_livraison": e.get("date_livraison"),
+        "numero_of": e.get("numero_of"),
+        "ref_produit": e.get("ref_produit"),
+        "commentaire": e.get("commentaire"),
+        "a_placer": e.get("a_placer", 0),
+        "destockage": e.get("destockage") or "todo",
+        "statut_reel": e.get("statut_reel") or "reellement_en_attente",
+        "duree_heures": e["duree_heures"],
+        # Un dossier terminé en DB reste terminé même si planned_end est dans le futur
+        # (cas : durée modifiée → planned_end recalculé en heures ouvrées machine)
+        "statut": (
+            "termine"
+            if (e.get("statut") == "termine")
+            else compute_statut({**e, "planned_start": start_iso, "planned_end": end_iso})
+        ),
+        "notes": e["notes"],
+        "start": start_iso,
+        "end": end_iso,
+    }
+
+
+def _compute_timeline_slots(
+    conn,
+    machine_id: int,
+    m: dict,
+    configs: dict,
+    off_days: dict,
+    day_worked_map: Dict[str, int],
+    entries: List[dict],
+) -> List[dict]:
+    """Calcule les créneaux : terminé / en cours figés ; en attente (et en_cours sans plan) dynamiques + persistés.
+
+    day_worked_map : pour chaque date YYYY-MM-DD, is_worked 0/1. Samedi : sans ligne ou 0 = non travaillé ;
+    lun–ven : sans ligne = ouvré selon horaires machine ; ligne 0 = forcé non travaillé.
+    """
+    advance_to_work, consume_duration_from = _make_work_duration_consumer(
+        m, configs, off_days, day_worked_map
+    )
+
     slots: List[dict] = []
     cursor = advance_to_work(datetime.now().replace(minute=0, second=0, microsecond=0))
     now_u = _fmt_ts(datetime.now())
@@ -485,8 +532,10 @@ def _compute_timeline_slots(
             p01 = _last_prod_01_start(conn, ref) if ref else None
             if p01 is not None:
                 duree_h = float(e.get("duree_heures") or 0)
-                ps = _fmt_ts(p01)
-                pe = _fmt_ts(p01 + timedelta(hours=duree_h))
+                p0 = p01.replace(microsecond=0)
+                ps = _fmt_ts(p0)
+                _, pe_dt, _ = consume_duration_from(p0, duree_h)
+                pe = _fmt_ts(pe_dt)
                 if str(e.get("planned_start") or "") != ps or str(e.get("planned_end") or "") != pe:
                     conn.execute(
                         """UPDATE planning_entries SET planned_start=?, planned_end=?, updated_at=?
@@ -503,7 +552,7 @@ def _compute_timeline_slots(
             continue
 
         # ── Attente et en_cours sans dates : calcul dynamique depuis cursor
-        slot_start, slot_end, cursor = consume_duration(cursor, e["duree_heures"])
+        slot_start, slot_end, cursor = consume_duration_from(cursor, e["duree_heures"])
         ps, pe = _fmt_ts(slot_start), _fmt_ts(slot_end)
         conn.execute(
             """UPDATE planning_entries SET planned_start=?, planned_end=?, updated_at=?
@@ -949,9 +998,9 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
         ):
             dt_start = _parse_planned_dt(exd["planned_start"])
             if dt_start:
-                new_end = dt_start + timedelta(hours=float(duree))
                 ps = exd.get("planned_start")
-                pe = new_end.strftime("%Y-%m-%dT%H:%M:%S")
+                pe_w = _planned_end_iso_for_machine(conn, machine_id, str(ps), float(duree))
+                pe = pe_w or (dt_start + timedelta(hours=float(duree))).strftime("%Y-%m-%dT%H:%M:%S")
 
         old_ps = exd.get("planned_start")
         statut_reel_actuel = exd.get("statut_reel") or "reellement_en_attente"
@@ -1331,7 +1380,11 @@ async def import_orphan_dossier(machine_id: int, request: Request):
             statut_reel = "reellement_termine"
             planned_end = last_end
         elif first_start:
-            planned_end = (datetime.fromisoformat(first_start) + timedelta(hours=duree)).strftime("%Y-%m-%dT%H:%M:%S")
+            planned_end = _planned_end_iso_for_machine(conn, machine_id, first_start, float(duree))
+            if not planned_end:
+                planned_end = (
+                    datetime.fromisoformat(first_start) + timedelta(hours=duree)
+                ).strftime("%Y-%m-%dT%H:%M:%S")
 
         # Position : insérer parmi les terminés existants (avant le premier non-terminé)
         rows_pos = conn.execute(
