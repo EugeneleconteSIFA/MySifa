@@ -243,6 +243,8 @@ body.light .d-sep{background:rgba(71,85,105,.35)}
 body.light .slot-resize-handle::after{color:rgba(30,41,59,.75)}
 .slot-resize-preview{position:absolute;top:4px;right:22px;background:var(--card);border:1px solid var(--border2);
   border-radius:4px;padding:2px 7px;font-size:11px;color:var(--text);white-space:nowrap;pointer-events:none;z-index:100}
+.slot.slot-termine-movable{cursor:grab}
+.slot.slot-termine-movable:active{cursor:grabbing}
 .p-toast{position:fixed;bottom:22px;right:22px;z-index:20000;max-width:min(420px,92vw);padding:11px 16px;border-radius:10px;
   font-size:13px;font-weight:600;box-shadow:0 10px 36px rgba(0,0,0,.45);border:1px solid var(--border2);animation:p-toast-in .2s ease}
 .p-toast.success{background:rgba(34,197,94,.14);color:var(--ok, #22c55e)}
@@ -595,6 +597,97 @@ function showToast(message,type){
         showToast(msg,"danger");
       }else{
         showToast("Durée mise à jour : "+rounded.toFixed(1)+" h","success");
+      }
+    }catch(_){
+      showToast("Erreur réseau.","danger");
+    }
+    await load();
+  });
+})();
+
+function fmtPlanningIso(d){
+  if(!d||!(d instanceof Date)||isNaN(d.getTime())) return"";
+  const y=d.getFullYear(),mo=String(d.getMonth()+1).padStart(2,"0"),da=String(d.getDate()).padStart(2,"0");
+  const hh=String(d.getHours()).padStart(2,"0"),mi=String(d.getMinutes()).padStart(2,"0"),ss=String(d.getSeconds()).padStart(2,"0");
+  return y+"-"+mo+"-"+da+"T"+hh+":"+mi+":"+ss;
+}
+
+(function initTermineTlSlide(){
+  if(window.__mysifaTermineSlide) return;
+  window.__mysifaTermineSlide=true;
+  let st=null;
+  document.addEventListener("mousedown",function(e){
+    if(!CAN_EDIT||!MID) return;
+    if(e.target&&e.target.closest&&e.target.closest("[data-resize='1']")) return;
+    const slot=e.target&&e.target.closest&&e.target.closest("#tl-blocks-container .slot.slot-termine-movable");
+    if(!slot) return;
+    const tlBar=slot.closest(".tl-bar"),tlWrap=slot.closest(".tl-wrap");
+    if(!tlBar||!tlWrap) return;
+    const p0=slot.dataset.plannedStart,p1=slot.dataset.plannedEnd;
+    if(!p0||!p1) return;
+    const o0=new Date(p0),o1=new Date(p1);
+    if(isNaN(o0.getTime())||isNaN(o1.getTime())) return;
+    const mon=new Date(+tlWrap.dataset.mon);
+    if(isNaN(mon.getTime())) return;
+    const weekEnd=addD(mon,7);
+    const weekSpanMs=weekEnd.getTime()-mon.getTime();
+    if(weekSpanMs<=0) return;
+    e.preventDefault();
+    try{hideTip();}catch(_){}
+    const tlRect=tlBar.getBoundingClientRect();
+    const origLeftPct=parseFloat(slot.style.left)||0;
+    const wPct=parseFloat(slot.style.width)||0.5;
+    st={
+      slot,
+      eid:String(slot.dataset.eid||""),
+      startX:e.clientX,
+      tlRect,
+      origLeftPct,
+      wPct,
+      origStartMs:o0.getTime(),
+      origEndMs:o1.getTime(),
+      weekSpanMs
+    };
+  });
+  document.addEventListener("mousemove",function(e){
+    if(!st) return;
+    const dx=e.clientX-st.startX;
+    if(Math.abs(dx)<3) return;
+    st.moved=true;
+    const tw=st.tlRect.width||1;
+    const rawLeft=st.origLeftPct+dx/tw*100;
+    const newLeft=Math.max(0,Math.min(100-st.wPct,rawLeft));
+    st.slot.style.left=newLeft+"%";
+    st._effLeft=newLeft;
+  });
+  document.addEventListener("mouseup",async function(){
+    if(!st) return;
+    const ctx=st;
+    st=null;
+    if(!ctx.moved){
+      ctx.slot.style.left=ctx.origLeftPct+"%";
+      return;
+    }
+    const newLeft=ctx._effLeft!=null?ctx._effLeft:ctx.origLeftPct;
+    const effMs=((newLeft-ctx.origLeftPct)/100)*ctx.weekSpanMs;
+    const ns=new Date(ctx.origStartMs+effMs),ne=new Date(ctx.origEndMs+effMs);
+    const ps=fmtPlanningIso(ns),pe=fmtPlanningIso(ne);
+    ctx.slot.style.left=ctx.origLeftPct+"%";
+    if(!ps||!pe||Math.abs(effMs)<3e4) return;
+    try{
+      const res=await fetch(`/api/planning/machines/${MID}/entries/${ctx.eid}`,{
+        method:"PUT",
+        credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({planned_start:ps,planned_end:pe})
+      });
+      if(!res.ok){
+        const j=await res.json().catch(()=>({}));
+        const d=j.detail;
+        const msg=typeof d==="string"?d:(Array.isArray(d)?d.map(x=>x.msg||JSON.stringify(x)).join(" "):"Impossible de déplacer le créneau.");
+        showToast(msg,"danger");
+      }else{
+        showToast("Créneau déplacé.","success");
       }
     }catch(_){
       showToast("Erreur réseau.","danger");
@@ -1581,13 +1674,16 @@ function mkTL(mon,slots){
     const destock=s.destockage==="done";
     const reelForDrag=(s.statut_reel||"reellement_en_attente")==="reellement_en_attente";
     const canDragSlot=CAN_EDIT&&s.statut!=="en_cours"&&s.statut!=="termine"&&reelForDrag;
+    const termineSlideCls=(CAN_EDIT&&s.statut==="termine")?"slot-termine-movable":"";
     const resizeHandle=canDragSlot?`<div class="slot-resize-handle" data-eid="${s.entry_id||idx}" data-resize="1" onmousedown="event.stopPropagation()"></div>`:"";
-    h+=`<div class="slot ${matchCls} ${aplacerCls} ${reelTermineCls}" data-eid="${s.entry_id||idx}" data-statut="${escAttr(s.statut||"attente")}" data-statut-reel="${escAttr(s.statut_reel||"reellement_en_attente")}" ${canDragSlot?'draggable="true"':''} style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${isActive?"border:2px solid #22d3ee;animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
+    const termineTitle=termineSlideCls?"Dossier terminé — glisser pour décaler le créneau sur la ligne de temps":"";
+    h+=`<div class="slot ${matchCls} ${aplacerCls} ${reelTermineCls} ${termineSlideCls}" data-eid="${s.entry_id||idx}" data-statut="${escAttr(s.statut||"attente")}" data-statut-reel="${escAttr(s.statut_reel||"reellement_en_attente")}" ${canDragSlot?'draggable="true"':''} style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${isActive?"border:2px solid #22d3ee;animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
       onmouseenter="showTip(event,this)" onmousemove="moveTip(event)" onmouseleave="hideTip()"
       ondragstart="var t=event.target;if(t&&t.closest&&t.closest('.slot-resize-handle'))event.preventDefault()"
       ondblclick="hideTip();openEdit(${s.entry_id||idx});event.stopPropagation()"
       data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-rfp="${escAttr(s.ref_produit||"")}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(fmtDur(s.duree_heures))}"
-      data-deb="${escAttr(fdt(ss))}" data-fin="${escAttr(fdt(se))}" data-st="${escAttr(st)}" data-co="${escAttr(co)}">
+      data-planned-start="${escAttr(String(s.start||""))}" data-planned-end="${escAttr(String(s.end||""))}"
+      data-deb="${escAttr(fdt(ss))}" data-fin="${escAttr(fdt(se))}" data-st="${escAttr(st)}" data-co="${escAttr(co)}"${termineTitle?` title="${escAttr(termineTitle)}"`:""}>
       ${destock?`<div style="position:absolute;top:4px;right:4px;width:7px;height:7px;border-radius:50%;background:rgba(71,85,105,.9);pointer-events:none;z-index:5;flex-shrink:0"></div>`:""}
       ${resizeHandle}
       ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}</span>${line2Txt?`<span class="line2">${escAttr(line2Txt)}</span>`:""}${line3Txt?`<span class="line3">${escAttr(line3Txt)}</span>`:""}</div>`:""}</div>`;

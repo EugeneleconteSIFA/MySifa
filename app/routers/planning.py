@@ -853,16 +853,40 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
             and duree is not None
             and float(duree) != float(ex["duree_heures"])
         )
+        termine_reposition = (
+            not clear_plan
+            and not invalidate_dur
+            and exd.get("statut") == "termine"
+            and body.get("planned_start") is not None
+            and body.get("planned_end") is not None
+        )
+
         if clear_plan or invalidate_dur:
             ps = None
             pe = None
+        elif termine_reposition:
+            ps_dt = _parse_planned_dt(body.get("planned_start"))
+            pe_dt = _parse_planned_dt(body.get("planned_end"))
+            if not ps_dt or not pe_dt:
+                raise HTTPException(
+                    status_code=400,
+                    detail="planned_start / planned_end invalides.",
+                )
+            if pe_dt <= ps_dt:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Intervalle planifié invalide (fin avant ou égale au début).",
+                )
+            ps = _fmt_ts(ps_dt)
+            pe = _fmt_ts(pe_dt)
         else:
             ps = exd.get("planned_start")
             pe = exd.get("planned_end")
 
         # Recalcul simple de fin de créneau si seule la durée change (ancrage inchangé)
         if (
-            duree is not None
+            not termine_reposition
+            and duree is not None
             and float(duree) != float(ex["duree_heures"])
             and exd.get("planned_start")
             and not clear_plan
@@ -876,7 +900,7 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
 
         old_ps = exd.get("planned_start")
         statut_reel_actuel = exd.get("statut_reel") or "reellement_en_attente"
-        if statut_reel_actuel != "reellement_en_attente":
+        if statut_reel_actuel != "reellement_en_attente" and not termine_reposition:
             if old_ps and ps and str(ps) != str(old_ps):
                 raise HTTPException(
                     status_code=409,
