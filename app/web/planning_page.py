@@ -236,7 +236,7 @@ body.light .d-sep{background:rgba(71,85,105,.35)}
 .d-sep::after{content:'';position:absolute;top:0;bottom:0;left:-6px;width:14px;background:linear-gradient(90deg,rgba(34,211,238,0),rgba(34,211,238,.08),rgba(34,211,238,0));opacity:.35}
 .slot{position:absolute;top:8px;bottom:8px;border-radius:6px;display:flex;align-items:center;
   justify-content:center;cursor:pointer;transition:all .15s;overflow:visible;padding:3px 6px}
-.slot-resize-handle{position:absolute;right:0;top:0;bottom:0;width:10px;cursor:ew-resize;display:flex;
+.slot-resize-handle{position:absolute;right:0;top:0;bottom:0;width:10px;cursor:grab;display:flex;
   align-items:center;justify-content:center;opacity:0;transition:opacity .15s;z-index:10}
 .slot:hover .slot-resize-handle,.slot-resize-handle:hover{opacity:1}
 .slot-resize-handle::after{content:'⇔';font-size:11px;color:rgba(255,255,255,.7);pointer-events:none}
@@ -527,6 +527,7 @@ function showToast(message,type){
     if(!CAN_EDIT||!MID) return;
     const handle=e.target&&e.target.closest&&e.target.closest("[data-resize='1']");
     if(!handle) return;
+    if(!e.shiftKey) return;
     const slot=handle.closest(".slot");
     if(!slot) return;
     const tlBar=slot.closest(".tl-bar");
@@ -546,6 +547,7 @@ function showToast(message,type){
     preview.className="slot-resize-preview";
     preview.textContent=startDuree.toFixed(1)+" h";
     slot.appendChild(preview);
+    slot.style.cursor="ew-resize";
     resizing={
       slot,
       eid:eidStr,
@@ -557,7 +559,7 @@ function showToast(message,type){
       preview,
       maxRightPct:Math.max(0.55,100-startLeftpct-0.08)
     };
-  });
+  },true);
   document.addEventListener("mousemove",function(e){
     if(!resizing) return;
     const dx=e.clientX-resizing.startX;
@@ -572,6 +574,7 @@ function showToast(message,type){
     if(!resizing) return;
     const{slot,eid,preview,startDuree,startWpct}=resizing;
     preview.remove();
+    slot.style.cursor="";
     const live=resizing._liveNewDuree;
     resizing=null;
     if(live==null){
@@ -1421,7 +1424,7 @@ function setupTlDD(){
   // dragstart / dragend : toujours sur les slots (nouveaux éléments après chaque render)
   document.querySelectorAll("#tl-blocks-container .slot[draggable='true']").forEach(el=>{
     el.addEventListener("dragstart",ev=>{
-      if(ev.target&&ev.target.closest&&ev.target.closest(".slot-resize-handle")){ev.preventDefault();return;}
+      if(ev.shiftKey&&ev.target&&ev.target.closest&&ev.target.closest(".slot-resize-handle")){ev.preventDefault();return;}
       _tlDragEid=+el.dataset.eid;
       el.style.opacity="0.45";
       ev.dataTransfer.effectAllowed="move";
@@ -1675,11 +1678,11 @@ function mkTL(mon,slots){
     const reelForDrag=(s.statut_reel||"reellement_en_attente")==="reellement_en_attente";
     const canDragSlot=CAN_EDIT&&s.statut!=="en_cours"&&s.statut!=="termine"&&reelForDrag;
     const termineSlideCls=(CAN_EDIT&&s.statut==="termine")?"slot-termine-movable":"";
-    const resizeHandle=canDragSlot?`<div class="slot-resize-handle" data-eid="${s.entry_id||idx}" data-resize="1" onmousedown="event.stopPropagation()"></div>`:"";
+    const resizeHint="Glisser : réordonner. Maj (Shift) maintenue + glisser : ajuster la durée.";
+    const resizeHandle=canDragSlot?`<div class="slot-resize-handle" data-eid="${s.entry_id||idx}" data-resize="1" title="${escAttr(resizeHint)}"></div>`:"";
     const termineTitle=termineSlideCls?"Dossier terminé — glisser pour décaler le créneau sur la ligne de temps":"";
     h+=`<div class="slot ${matchCls} ${aplacerCls} ${reelTermineCls} ${termineSlideCls}" data-eid="${s.entry_id||idx}" data-statut="${escAttr(s.statut||"attente")}" data-statut-reel="${escAttr(s.statut_reel||"reellement_en_attente")}" ${canDragSlot?'draggable="true"':''} style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${isActive?"border:2px solid #22d3ee;animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
       onmouseenter="showTip(event,this)" onmousemove="moveTip(event)" onmouseleave="hideTip()"
-      ondragstart="var t=event.target;if(t&&t.closest&&t.closest('.slot-resize-handle'))event.preventDefault()"
       ondblclick="hideTip();openEdit(${s.entry_id||idx});event.stopPropagation()"
       data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-rfp="${escAttr(s.ref_produit||"")}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(fmtDur(s.duree_heures))}"
       data-planned-start="${escAttr(String(s.start||""))}" data-planned-end="${escAttr(String(s.end||""))}"

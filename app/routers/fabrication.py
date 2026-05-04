@@ -396,9 +396,10 @@ async def create_saisie(request: Request):
                 pe_row = conn.execute(
                     """SELECT id, statut_reel, statut, duree_heures, planned_start, planned_end
                        FROM planning_entries
-                       WHERE reference = ? AND machine_id = ? AND statut != 'termine'
+                       WHERE machine_id = ? AND statut != 'termine'
+                         AND (trim(reference) = trim(?) OR trim(COALESCE(numero_of,'')) = trim(?))
                        ORDER BY position ASC LIMIT 1""",
-                    (no_dossier, machine_id_resolved),
+                    (machine_id_resolved, no_dossier, no_dossier),
                 ).fetchone()
                 if pe_row:
                     pe_id        = pe_row["id"]
@@ -407,6 +408,12 @@ async def create_saisie(request: Request):
                     now_iso      = datetime.now().isoformat()
 
                     if cl["code"] == "01" and current_reel != "reellement_termine":
+                        conn.execute(
+                            """UPDATE planning_entries SET statut='attente', statut_force=0,
+                                   planned_start=NULL, planned_end=NULL, updated_at=?
+                               WHERE machine_id=? AND statut='en_cours' AND id != ?""",
+                            (now_iso, machine_id_resolved, pe_id),
+                        )
                         dt_start   = datetime.fromisoformat(date_op)
                         dt_end_new = (dt_start + timedelta(hours=duree_h)).strftime("%Y-%m-%dT%H:%M:%S")
                         conn.execute(
@@ -466,6 +473,12 @@ async def create_saisie(request: Request):
 
                         else:
                             if current_reel == "reellement_en_attente":
+                                conn.execute(
+                                    """UPDATE planning_entries SET statut='attente', statut_force=0,
+                                           planned_start=NULL, planned_end=NULL, updated_at=?
+                                       WHERE machine_id=? AND statut='en_cours' AND id != ?""",
+                                    (now_iso, machine_id_resolved, pe_id),
+                                )
                                 dt_start   = datetime.fromisoformat(date_op)
                                 dt_end_new = (dt_start + timedelta(hours=duree_h)).strftime("%Y-%m-%dT%H:%M:%S")
                                 conn.execute(

@@ -227,6 +227,41 @@ def _auto_complete_en_cours(conn, machine_id: int) -> None:
             )
 
 
+def _last_prod_01_start(conn, no_dossier: str) -> Optional[datetime]:
+    """Dernier horodatage saisi pour le code 01 (début de production) pour ce no_dossier."""
+    ref = (no_dossier or "").strip()
+    if not ref:
+        return None
+    row = conn.execute(
+        """SELECT date_operation FROM production_data
+           WHERE trim(no_dossier) = ? AND operation_code = '01'
+           ORDER BY date_operation DESC LIMIT 1""",
+        (ref,),
+    ).fetchone()
+    if not row or not row["date_operation"]:
+        return None
+    return _parse_planned_dt(str(row["date_operation"]).strip())
+
+
+def _enforce_single_en_cours(conn, machine_id: int) -> None:
+    """Au plus une entrée avec statut DB 'en_cours' par machine (la plus haute dans la pile)."""
+    rows = conn.execute(
+        """SELECT id FROM planning_entries
+           WHERE machine_id=? AND statut='en_cours' ORDER BY position ASC""",
+        (machine_id,),
+    ).fetchall()
+    if len(rows) <= 1:
+        return
+    now_s = datetime.now().isoformat()
+    for r in rows[1:]:
+        conn.execute(
+            """UPDATE planning_entries SET statut='attente', statut_force=0,
+                   planned_start=NULL, planned_end=NULL, updated_at=?
+               WHERE id=? AND machine_id=?""",
+            (now_s, int(r["id"]), machine_id),
+        )
+
+
 def _is_frozen_entry(e: dict) -> bool:
     st = e.get("statut") or ""
     if st not in ("termine", "en_cours"):
@@ -439,9 +474,23 @@ def _compute_timeline_slots(
         if st == "termine":
             continue
 
-        # ── En cours figé (dates forcées par saisie réelle) ───────────────
+        # ── En cours figé : priorité à la date/heure du code 01 en saisie prod ─
         if st == "en_cours" and _is_frozen_entry(e):
-            ps, pe = e["planned_start"], e["planned_end"]
+            ref = (e.get("numero_of") or e.get("reference") or "").strip()
+            p01 = _last_prod_01_start(conn, ref) if ref else None
+            if p01 is not None:
+                duree_h = float(e.get("duree_heures") or 0)
+                ps = _fmt_ts(p01)
+                pe = _fmt_ts(p01 + timedelta(hours=duree_h))
+                if str(e.get("planned_start") or "") != ps or str(e.get("planned_end") or "") != pe:
+                    conn.execute(
+                        """UPDATE planning_entries SET planned_start=?, planned_end=?, updated_at=?
+                           WHERE id=? AND machine_id=?""",
+                        (ps, pe, now_u, e["id"], machine_id),
+                    )
+                    e["planned_start"], e["planned_end"] = ps, pe
+            else:
+                ps, pe = e["planned_start"], e["planned_end"]
             pend = _parse_planned_dt(pe)
             if pend:
                 cursor = advance_to_work(pend)
@@ -633,6 +682,7 @@ def list_entries(machine_id: int, request: Request):
                 detail="Liste des dossiers réservée à l'administration",
             )
         _auto_complete_en_cours(conn, machine_id)
+        _enforce_single_en_cours(conn, machine_id)
         conn.commit()
         rows = conn.execute("""
             SELECT * FROM planning_entries
@@ -1754,6 +1804,7 @@ def get_timeline(machine_id: int, request: Request, semaine: Optional[str] = Non
         day_worked_map = {str(r["date"]): int(r["is_worked"] or 0) for r in dw_rows}
 
         _auto_complete_en_cours(conn, machine_id)
+        _enforce_single_en_cours(conn, machine_id)
 
         rows = conn.execute(
             """
@@ -1936,9 +1987,13 @@ def live_refresh_en_cours(machine_id: int, request: Request):
         if elapsed <= current_dur or elapsed <= 0:
             return {"updated": False}
 
+        planned_start = _fmt_ts(dt_start)
+        planned_end = _fmt_ts(dt_start + timedelta(hours=elapsed))
         conn.execute(
-            "UPDATE planning_entries SET duree_heures=?, planned_start=NULL, planned_end=NULL, updated_at=? WHERE id=?",
-            (elapsed, datetime.now().isoformat(), entry_id),
+            """UPDATE planning_entries
+               SET duree_heures=?, planned_start=?, planned_end=?, updated_at=?
+               WHERE id=?""",
+            (elapsed, planned_start, planned_end, datetime.now().isoformat(), entry_id),
         )
         conn.commit()
         return {"updated": True, "entry_id": entry_id, "duree_heures": elapsed}
