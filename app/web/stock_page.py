@@ -507,6 +507,8 @@ body.light .field-input.empl-upper::placeholder{
 
 /* ── Réception matière ─────────────────────────────────────── */
 .recep-page{padding:20px;max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+.recep-head-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap;width:100%}
+.recep-head-row .recep-title{flex:1;min-width:0;margin:0}
 .recep-title{font-size:18px;font-weight:800}
 .recep-title span{color:var(--accent)}
 .recep-layout{display:grid;grid-template-columns:1fr 1fr;gap:16px}
@@ -2750,8 +2752,30 @@ async function recepValider() {
 function buildReception() {
   const wrap = el('div', { cls: 'recep-page' });
 
-  // Titre
-  wrap.appendChild(el('div', { cls: 'recep-title' }, 'Réception ', el('span', null, 'matière')));
+  const tracaGuideBtn = el('button', {
+    type: 'button',
+    style: {
+      display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '6px',
+      border: '1.5px solid #fb923c', background: 'rgba(251,146,60,.10)', color: '#fb923c',
+      fontSize: '12px', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+      flexShrink: '0', alignSelf: 'flex-start',
+    },
+    on: {
+      mouseenter: (e) => { e.currentTarget.style.opacity = '0.75'; },
+      mouseleave: (e) => { e.currentTarget.style.opacity = '1'; },
+      click: () => {
+        const f = FOURNISSEURS_FSC.find((x) => x.nom === S.recepFournisseur);
+        if (typeof showTracaGuide === 'function') {
+          showTracaGuide(f ? f.id : null, S.recepFournisseur || '', FOURNISSEURS_FSC);
+        }
+      },
+    },
+  }, iconEl('scan', 12), ' Quel code scanner ?');
+
+  wrap.appendChild(el('div', { cls: 'recep-head-row' },
+    el('div', { cls: 'recep-title' }, 'Réception ', el('span', null, 'matière')),
+    tracaGuideBtn
+  ));
 
   // ── Grille scanner + saisie manuelle ──
   const grid = el('div', { cls: 'recep-layout' });
@@ -2816,28 +2840,6 @@ function buildReception() {
   const fourLabel = el('div', { cls: 'recep-fourn-label' }, iconEl('truck', 13), ' Fournisseur', el('span', { style: { color: 'var(--danger)', marginLeft: '4px' } }, '*'));
   fourWrap.appendChild(fourLabel);
   const fourSearchWrap = el('div', { cls: 'recep-fourn-search-wrap' });
-  const tracaGuideBtn = el('button', {
-    type: 'button',
-    style: {
-      display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '6px',
-      border: '1.5px solid #fb923c', background: 'rgba(251,146,60,.10)', color: '#fb923c',
-      fontSize: '12px', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
-      flexShrink: '0',
-    },
-    on: {
-      mouseenter: (e) => { e.currentTarget.style.opacity = '0.75'; },
-      mouseleave: (e) => { e.currentTarget.style.opacity = '1'; },
-      click: () => {
-        const f = FOURNISSEURS_FSC.find((x) => x.nom === S.recepFournisseur);
-        if (typeof showTracaGuide === 'function') {
-          showTracaGuide(f ? f.id : null, S.recepFournisseur || '', FOURNISSEURS_FSC);
-        }
-      },
-    },
-  }, iconEl('scan', 12), ' Quel code scanner ?');
-  const fourRow = el('div', {
-    style: { display: 'flex', alignItems: 'flex-start', gap: '8px', flexWrap: 'wrap', width: '100%' },
-  }, fourSearchWrap, tracaGuideBtn);
   const fourInp = el('input', {
     cls: 'recep-fourn-inp' + (S.recepFournisseur ? ' recep-fourn-selected' : ''),
     attrs: {
@@ -2904,7 +2906,7 @@ function buildReception() {
       setTimeout(() => { dropdown.classList.remove('open'); S.recepFournisseurOpen = false; }, 200);
     });
   }
-  fourWrap.appendChild(fourRow);
+  fourWrap.appendChild(fourSearchWrap);
   // Afficher le certificat FSC si fournisseur sélectionné
   if (S.recepFournisseur) {
     const fsc = FOURNISSEURS_FSC.find(f => f.nom === S.recepFournisseur);

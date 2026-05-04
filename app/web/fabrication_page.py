@@ -623,7 +623,7 @@ let S = {
 let FOURNISSEURS_FSC = [];
 async function loadFournisseursFSC(){
   try{
-    const data = await apiFetch('/api/stock/fournisseurs');
+    const data = await apiFetch('/api/fabrication/fournisseurs-fsc');
     FOURNISSEURS_FSC = Array.isArray(data) ? data : [];
   }catch(e){ FOURNISSEURS_FSC = []; }
 }
@@ -966,10 +966,13 @@ function handleOpTrigger(code, label, cat){
 
 /* ── Main table ──────────────────────────────────────────────── */
 /* ── Tab navigation ──────────────────────────────────────────── */
-function switchFabTab(tab){
+async function switchFabTab(tab){
   if(tab!=='traca' && S.tracaScanning) tracaStopCamera();
   set({fabTab:tab});
-  if(tab==='traca' && S.tracaMatieres.length===0) loadMatieres();
+  if(tab==='traca'){
+    await loadFournisseursFSC();
+    if(S.tracaMatieres.length===0) await loadMatieres();
+  }
 }
 
 /* ── Print panel ─────────────────────────────────────────────── */
@@ -1310,7 +1313,8 @@ function renderTracaPanel(){
     },
     onMouseEnter:(e)=>{ e.currentTarget.style.opacity='0.75'; },
     onMouseLeave:(e)=>{ e.currentTarget.style.opacity='1'; },
-    onClick:()=>{
+    onClick:async ()=>{
+      await loadFournisseursFSC();
       if(typeof showTracaGuide==='function') showTracaGuide(null, '', FOURNISSEURS_FSC);
     },
   }, svgIcon('scan',12),' Quel code scanner ?');
@@ -1622,11 +1626,11 @@ function renderFooter(){
 
   // Tab nav (always visible at bottom of footer)
   const tabNav = h('div',{className:'fab-tab-nav'},
-    h('button',{className:'fab-tab-btn'+(S.fabTab==='saisie'?' active':''),onClick:()=>switchFabTab('saisie')},
+    h('button',{className:'fab-tab-btn'+(S.fabTab==='saisie'?' active':''),onClick:()=>{ void switchFabTab('saisie'); }},
       svgIcon('edit',16),'Saisie'),
-    h('button',{className:'fab-tab-btn'+(S.fabTab==='print'?' active':''),onClick:()=>switchFabTab('print')},
+    h('button',{className:'fab-tab-btn'+(S.fabTab==='print'?' active':''),onClick:()=>{ void switchFabTab('print'); }},
       svgIcon('printer',16),'Imprimer'),
-    h('button',{className:'fab-tab-btn'+(S.fabTab==='traca'?' active':''),onClick:()=>switchFabTab('traca')},
+    h('button',{className:'fab-tab-btn'+(S.fabTab==='traca'?' active':''),onClick:()=>{ void switchFabTab('traca'); }},
       svgIcon('scan',16),'Traça')
   );
 
@@ -1964,7 +1968,7 @@ function renderFinModal(){
 
     // Validation locale 2 : métrage fin < métrage début du dossier
     if(mFin !== null && S.saisies.length){
-      const debutRow = [...S.saisies].reverse().find(s=>s.operation_code==='01'&&(s.metrage_total_debut??s.metrage_prevu)!=null);
+      const debutRow = S.saisies.find(s=>s.operation_code==='01'&&(s.metrage_total_debut??s.metrage_prevu)!=null);
       const debutCtr = debutRow ? parseFloat(debutRow.metrage_total_debut ?? debutRow.metrage_prevu) : null;
       if(debutCtr !== null && mFin < debutCtr){
         showToast('Métrage fin ('+Math.round(mFin).toLocaleString('fr-FR')+' m) inférieur au début de production ('+Math.round(debutCtr).toLocaleString('fr-FR')+' m)','danger');

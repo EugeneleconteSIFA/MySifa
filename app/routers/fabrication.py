@@ -4,6 +4,7 @@ Accessible : fabrication, admin, superadmin
 """
 import json
 from datetime import datetime, date, timedelta
+from typing import Optional
 from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Request, HTTPException
 
@@ -100,6 +101,34 @@ def _resolve_machine(user: dict, body: dict, conn) -> dict:
     return dict(m)
 
 
+def _machine_sql_match_params(machine_name: str, machine_code: str) -> tuple[str, str, str]:
+    """Paramètres (nom, code, code) pour filtrer production_data.machine comme le planning."""
+    mn = (machine_name or "").strip()
+    mc = (machine_code or "").strip()
+    return (mn, mc, mc)
+
+
+def _first_01_date_iso_for_dossier_on_machine(
+    conn, no_dossier: str, machine_name: str, machine_code: str
+) -> Optional[str]:
+    """Première saisie « Début de production » (01) pour ce dossier sur cette machine (MIN date_operation)."""
+    if not (no_dossier or "").strip():
+        return None
+    mn, mc, mc2 = _machine_sql_match_params(machine_name, machine_code)
+    row = conn.execute(
+        """SELECT MIN(pd.date_operation) AS dt
+           FROM production_data pd
+           WHERE trim(pd.no_dossier) = trim(?)
+             AND pd.operation_code = '01'
+             AND (trim(pd.machine) = trim(?) OR (trim(?) != '' AND trim(pd.machine) = trim(?)))""",
+        (no_dossier, mn, mc, mc2),
+    ).fetchone()
+    if not row or not row["dt"]:
+        return None
+    s = str(row["dt"]).strip()
+    return s or None
+
+
 # ─── Endpoints ────────────────────────────────────────────────────────────────
 
 @router.get("/api/fabrication/machines")
@@ -112,6 +141,19 @@ def list_machines(request: Request):
             "SELECT id, nom, code, dernier_metrage FROM machines WHERE actif=1 ORDER BY nom"
         ).fetchall()
     return {"machines": [dict(r) for r in rows]}
+
+
+@router.get("/api/fabrication/fournisseurs-fsc")
+def list_fournisseurs_fsc_fabrication(request: Request):
+    """Fournisseurs FSC + infos guide traça (page fabrication, sans passer par /api/stock)."""
+    user = get_current_user(request)
+    _check_fab_access(user)
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT id, nom, licence, certificat, traca_photo_url, traca_explication, traca_exemple_code
+               FROM fournisseurs_fsc ORDER BY nom COLLATE NOCASE ASC"""
+        ).fetchall()
+    return [dict(r) for r in rows]
 
 
 @router.get("/api/fabrication/dossiers")
@@ -320,13 +362,15 @@ async def create_saisie(request: Request):
 
             # Fin dossier : métrage fin >= métrage début du même dossier
             if no_dossier:
+                mn, mc, mc2 = _machine_sql_match_params(machine_name, machine_obj.get("code") or "")
                 debut_row = conn.execute(
                     """SELECT COALESCE(metrage_total_debut, metrage_prevu) AS ctr_debut
                        FROM production_data
-                       WHERE no_dossier = ? AND operation_code = '01'
+                       WHERE trim(no_dossier) = trim(?) AND operation_code = '01'
+                         AND (trim(machine) = trim(?) OR (trim(?) != '' AND trim(machine) = trim(?)))
                          AND COALESCE(metrage_total_debut, metrage_prevu) IS NOT NULL
-                       ORDER BY date_operation DESC LIMIT 1""",
-                    (no_dossier,),
+                       ORDER BY date_operation ASC, id ASC LIMIT 1""",
+                    (no_dossier, mn, mc, mc2),
                 ).fetchone()
                 if debut_row and debut_row["ctr_debut"] is not None:
                     m_debut_ref = float(debut_row["ctr_debut"])
@@ -415,9 +459,16 @@ async def create_saisie(request: Request):
                                WHERE machine_id=? AND statut='en_cours' AND id != ?""",
                             (now_iso, machine_id_resolved, pe_id),
                         )
-                        dt_start   = datetime.fromisoformat(date_op)
+                        mcode = str(machine_obj.get("code") or "")
+                        start_iso = (
+                            _first_01_date_iso_for_dossier_on_machine(
+                                conn, no_dossier, machine_name, mcode
+                            )
+                            or date_op
+                        )
+                        dt_start = datetime.fromisoformat(start_iso)
                         dt_end_new = _planned_end_iso_for_machine(
-                            conn, machine_id_resolved, date_op, duree_h
+                            conn, machine_id_resolved, start_iso, duree_h
                         )
                         if not dt_end_new:
                             dt_end_new = (dt_start + timedelta(hours=duree_h)).strftime(
@@ -432,7 +483,7 @@ async def create_saisie(request: Request):
                                    planned_end   = ?,
                                    updated_at    = ?
                                WHERE id = ?""",
-                            (date_op, dt_end_new, now_iso, pe_id),
+                            (start_iso, dt_end_new, now_iso, pe_id),
                         )
                         conn.commit()
 
@@ -440,15 +491,15 @@ async def create_saisie(request: Request):
                         if fin_dossier_flag:
                             elapsed = 0.0
                             try:
-                                debut_row = conn.execute(
-                                    """SELECT date_operation FROM production_data
-                                       WHERE no_dossier = ? AND operation_code = '01'
-                                       ORDER BY date_operation DESC LIMIT 1""",
-                                    (no_dossier,),
-                                ).fetchone()
-                                if debut_row and debut_row["date_operation"]:
-                                    dt_s    = datetime.fromisoformat(debut_row["date_operation"])
-                                    dt_e    = datetime.fromisoformat(date_op)
+                                debut_iso = _first_01_date_iso_for_dossier_on_machine(
+                                    conn,
+                                    no_dossier,
+                                    machine_name,
+                                    str(machine_obj.get("code") or ""),
+                                )
+                                if debut_iso:
+                                    dt_s = datetime.fromisoformat(debut_iso)
+                                    dt_e = datetime.fromisoformat(date_op)
                                     elapsed = round((dt_e - dt_s).total_seconds() / 3600, 2)
                             except Exception:
                                 pass
@@ -486,9 +537,16 @@ async def create_saisie(request: Request):
                                        WHERE machine_id=? AND statut='en_cours' AND id != ?""",
                                     (now_iso, machine_id_resolved, pe_id),
                                 )
-                                dt_start   = datetime.fromisoformat(date_op)
+                                mcode = str(machine_obj.get("code") or "")
+                                start_iso = (
+                                    _first_01_date_iso_for_dossier_on_machine(
+                                        conn, no_dossier, machine_name, mcode
+                                    )
+                                    or date_op
+                                )
+                                dt_start = datetime.fromisoformat(start_iso)
                                 dt_end_new = _planned_end_iso_for_machine(
-                                    conn, machine_id_resolved, date_op, duree_h
+                                    conn, machine_id_resolved, start_iso, duree_h
                                 )
                                 if not dt_end_new:
                                     dt_end_new = (dt_start + timedelta(hours=duree_h)).strftime(
@@ -503,7 +561,7 @@ async def create_saisie(request: Request):
                                            planned_end   = ?,
                                            updated_at    = ?
                                        WHERE id = ?""",
-                                    (date_op, dt_end_new, now_iso, pe_id),
+                                    (start_iso, dt_end_new, now_iso, pe_id),
                                 )
                                 conn.commit()
 

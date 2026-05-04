@@ -8,7 +8,6 @@ from typing import Optional
 
 from fastapi import APIRouter, Request, HTTPException
 
-from config import ROLE_FABRICATION
 from database import get_db
 from services.auth_service import get_current_user, user_has_app_access
 
@@ -58,18 +57,6 @@ def require_stock(request: Request) -> dict:
     if not user_has_app_access(user, "stock"):
         raise HTTPException(403, "Accès réservé à la Direction, Administration et Logistique")
     return user
-
-
-def _require_stock_or_fabrication(user: dict) -> None:
-    """Lecture fournisseurs FSC : MyStock ou page fabrication (guide traça)."""
-    if user_has_app_access(user, "stock"):
-        return
-    if user.get("role") == ROLE_FABRICATION:
-        return
-    raise HTTPException(
-        status_code=403,
-        detail="Accès réservé à la Direction, Administration, Logistique ou fabrication",
-    )
 
 
 def require_stock_write(request: Request) -> dict:
@@ -427,6 +414,23 @@ def delete_produit(produit_id: int, request: Request):
 
 
 # ── Emplacements ──────────────────────────────────────────────────
+@router.get("/api/stock/emplacements-list")
+def list_emplacements(request: Request):
+    """Retourne tous les emplacements connus : plan (référentiel) + stock réel."""
+    require_stock(request)
+    with get_db() as conn:
+        plan = conn.execute(
+            "SELECT code FROM emplacements_plan ORDER BY code"
+        ).fetchall()
+        reels = conn.execute(
+            "SELECT DISTINCT emplacement FROM stock_emplacements ORDER BY emplacement"
+        ).fetchall()
+    codes_plan = {r["code"] for r in plan}
+    codes_reels = {r["emplacement"] for r in reels}
+    tous = sorted(codes_plan | codes_reels)
+    return {"emplacements": tous}
+
+
 @router.get("/api/stock/emplacements/{emplacement}")
 def get_emplacement(emplacement: str, request: Request):
     require_stock(request)
@@ -711,9 +715,8 @@ def dashboard(request: Request):
 
 @router.get("/api/stock/fournisseurs")
 def list_fournisseurs_stock(request: Request):
-    """Liste des fournisseurs FSC pour la réception matière et le guide traça (fabrication)."""
-    user = get_current_user(request)
-    _require_stock_or_fabrication(user)
+    """Liste des fournisseurs FSC pour la réception matière et le guide traça (lecture publique interne)."""
+    get_current_user(request)
     with get_db() as conn:
         rows = conn.execute(
             """SELECT id, nom, licence, certificat, traca_photo_url, traca_explication, traca_exemple_code
