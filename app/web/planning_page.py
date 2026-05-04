@@ -55,6 +55,7 @@ PLANNING_HTML = r"""<!DOCTYPE html>
 <link rel="apple-touch-icon" href="/static/mys_icon_180.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <title>__PLANNING_TITLE__</title>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <link rel="stylesheet" href="/static/support_widget.css">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
@@ -754,6 +755,7 @@ function icon(name,size=16){
     'search': '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
     'chevron-left': '<polyline points="15 18 9 12 15 6"/>',
     'chevron-right': '<polyline points="9 18 15 12 9 6"/>',
+    'download': '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
   };
   return `<svg ${a} aria-hidden="true" style="display:inline-block;vertical-align:middle;flex-shrink:0">${p[name]||p['calendar']}</svg>`;
 }
@@ -1087,6 +1089,7 @@ function render(){
             <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px">🔍</span>
           </div>
           ${CAN_EDIT?`<button type="button" class="btn-p" onclick="openAdd()"><span style="font-size:18px;line-height:1">+</span> Ajouter</button>`:""}
+          <button type="button" class="btn-s" onclick="exportDossiers()" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;font-size:12px">${icon('download',14)} Exporter</button>
         </div>
       </div>
       <div class="th"><span></span><span></span><span>Client</span><span>Format</span><span>Ref OF</span><span>Ref prod.</span><span>Laize</span><span>Livraison</span><span>Commentaire</span><span>Durée</span><span>Statut</span><span class="act-c">Actions</span></div>
@@ -2173,6 +2176,38 @@ async function submitInsert(afterId){
 }
 
 function closeM(){document.getElementById("mroot").innerHTML=""}
+
+function exportDossiers(){
+  if(!S.entries||!S.entries.length) return alert("Aucun dossier à exporter");
+  const statLabel=s=>s==="en_cours"?"En cours":s==="termine"?"Terminé":"En attente";
+  const reelLabel=r=>{
+    if(r==="reellement_termine") return "Saisie terminée";
+    if(r==="reellement_en_saisie") return "En saisie";
+    return "";
+  };
+  const rows=S.entries.map(e=>({
+    "Client":       e.client||"",
+    "Format":       e.format_l&&e.format_h?`${e.format_l}×${e.format_h} mm`:"",
+    "Réf OF":       e.numero_of||e.reference||"",
+    "Réf produit":  e.ref_produit||"",
+    "Laize":        e.laize!=null?e.laize:"",
+    "Livraison":    e.date_livraison||"",
+    "Commentaire":  e.commentaire||"",
+    "Durée (h)":    e.duree_heures||0,
+    "Statut":       statLabel(e.statut),
+    "Saisie réelle":reelLabel(e.statut_reel),
+    "Déstockage":   e.destockage==="done"?"Oui":"Non",
+  }));
+  const ws=XLSX.utils.json_to_sheet(rows);
+  const colW=[18,16,14,14,8,12,24,10,12,14,10];
+  ws["!cols"]=colW.map(w=>({wch:w}));
+  const wb=XLSX.utils.book_new();
+  const mName=(S.machine&&S.machine.nom)||"planning";
+  XLSX.utils.book_append_sheet(wb,ws,mName.slice(0,31));
+  const d=new Date();
+  const ts=`${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`;
+  XLSX.writeFile(wb,`planning_${mName.replace(/[^a-zA-Z0-9]/g,"_")}_${ts}.xlsx`);
+}
 
 function changeMachine(v){
   const id=parseInt(v,10);
