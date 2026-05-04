@@ -267,11 +267,12 @@ async def update_me(request: Request):
         ex = conn.execute("SELECT * FROM users WHERE id=?", (user["id"],)).fetchone()
         if not ex:
             raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+        exd = dict(ex)
 
-        nom       = (body.get("nom")       or ex["nom"]).strip()
-        email     = (body.get("email")     or ex["email"]).strip().lower()
-        telephone = (body.get("telephone") or ex.get("telephone") or "").strip()
-        pwd_hash  = ex["password_hash"]
+        nom = str(body.get("nom") or exd.get("nom") or "").strip()
+        email = str(body.get("email") or exd.get("email") or "").strip().lower()
+        telephone = str(body.get("telephone") or exd.get("telephone") or "").strip()
+        pwd_hash = exd["password_hash"]
 
         if "password" in body and body["password"]:
             if len(body["password"]) < 8:
@@ -282,14 +283,14 @@ async def update_me(request: Request):
             pwd_hash = hash_password(body["password"])
 
         # Vérifier unicité email si changé
-        if email != ex["email"]:
+        if email != str(exd.get("email") or "").strip().lower():
             existing = conn.execute(
                 "SELECT id FROM users WHERE email=? AND id!=?", (email, user["id"])
             ).fetchone()
             if existing:
                 raise HTTPException(status_code=409, detail="Email déjà utilisé")
 
-        portal_val = dict(ex).get("portal_apps_order")
+        portal_val = exd.get("portal_apps_order")
         if "portal_apps_order" in body:
             portal_val = _normalize_portal_order_for_db(body.get("portal_apps_order"))
 
@@ -400,28 +401,29 @@ async def update_user(user_id: int, request: Request):
         ex = conn.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
         if not ex:
             raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+        exd = dict(ex)
 
-        nom      = body.get("nom")           or ex["nom"]
-        role_req = body.get("role")          or ex["role"]
-        op       = body.get("operateur_lie", ex["operateur_lie"])
-        actif    = body.get("actif",         ex["actif"])
-        tel      = body.get("telephone")     or (ex["telephone"] if "telephone" in ex.keys() else "") or ""
-        email    = (body.get("email") or ex["email"]).strip().lower()
-        ident_in = (body.get("identifiant") if "identifiant" in body else ex.get("identifiant")) or ""
+        nom      = body.get("nom")           or exd["nom"]
+        role_req = body.get("role")          or exd["role"]
+        op       = body.get("operateur_lie", exd["operateur_lie"])
+        actif    = body.get("actif",         exd["actif"])
+        tel      = body.get("telephone")     or (exd.get("telephone") or "")
+        email    = (body.get("email") or exd["email"]).strip().lower()
+        ident_in = (body.get("identifiant") if "identifiant" in body else exd.get("identifiant")) or ""
         ident_in = str(ident_in).strip().lower()
-        pwd_hash = ex["password_hash"]
+        pwd_hash = exd["password_hash"]
         # machine_id : None si la clé est présente et vide, sinon valeur existante
         if "machine_id" in body:
             raw_mid = body["machine_id"]
             machine_id = int(raw_mid) if raw_mid not in (None, "", 0, "0") else None
         else:
-            machine_id = ex["machine_id"] if "machine_id" in ex.keys() else None
+            machine_id = exd.get("machine_id")
 
         role_eff = _validate_user_role_write(
             target_email=email,
             target_role=role_req,
-            existing_email=ex["email"],
-            existing_role=ex["role"],
+            existing_email=exd["email"],
+            existing_role=exd["role"],
         )
 
         if "password" in body and body["password"]:
@@ -433,7 +435,7 @@ async def update_user(user_id: int, request: Request):
         if "access_overrides" in body:
             ao_sql = _normalize_access_overrides_payload(body.get("access_overrides"))
         else:
-            ao_sql = ex.get("access_overrides")
+            ao_sql = exd.get("access_overrides")
 
         # identifiant: générer si vide (ou si absent en base) à partir du nom, puis assurer unicité.
         if not ident_in:
