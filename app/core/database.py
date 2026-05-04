@@ -1012,6 +1012,27 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 8, "update_announcements_tables")
 
+    # Migration v9 : Correctifs planning — statut_reel corrompu + dates erronées
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=9 LIMIT 1").fetchone():
+        # Bug 1 : SNV 9931304 marqué "en saisie" par erreur opérateur
+        conn.execute(
+            """UPDATE planning_entries
+               SET statut_reel = 'reellement_en_attente', updated_at = datetime('now')
+               WHERE reference = '9931304'
+                 AND statut_reel = 'reellement_en_saisie'"""
+        )
+        # Bug 2 : Nestlé Marconnelle (Marché 722) — planned_start erroné 30/04 au lieu de 04/05
+        conn.execute(
+            """UPDATE planning_entries
+               SET planned_start = '2026-05-04T07:00:00',
+                   planned_end   = datetime('2026-05-04T07:00:00', '+' || CAST(duree_heures AS INTEGER) || ' hours'),
+                   updated_at    = datetime('now')
+               WHERE reference LIKE '%Marché 722%'
+                 AND statut = 'en_cours'"""
+        )
+        conn.commit()
+        _record_schema_migration(conn, 9, "fix_corrupted_statut_reel_and_dates")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,
