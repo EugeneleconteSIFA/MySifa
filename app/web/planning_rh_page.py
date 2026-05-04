@@ -2096,6 +2096,18 @@ function buildPrintCongesList(weeks){
   return section;
 }
 
+function getPrenom(userNom){
+  return userNom.trim().split(' ')[0];
+}
+function formatPrintName(a){
+  const prenom=getPrenom(a.user_nom);
+  const joursVal=a.jours!==undefined?a.jours:31;
+  const hasPartial=(joursVal&31)<31;
+  if(hasPartial){
+    return prenom+' ('+joursToList(joursVal).join(', ')+')';
+  }
+  return prenom;
+}
 function buildPivotTable(machines,weeks,hasMatinAprem){
   const table=document.createElement('table');
   table.className='rh-pivot-table';
@@ -2225,15 +2237,15 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
                   if(ass.length===1){
                     const chip=document.createElement('span');
                     chip.style.cssText='display:inline-block;font-size:11px;padding:2px 4px;background:transparent;margin:1px;font-weight:bold;color:#000';
-                    chip.textContent=ass[0].user_nom;
+                    chip.textContent=formatPrintName(ass[0]);
                     td.appendChild(chip);
                   }else{
                     const list=document.createElement('div');
                     list.style.cssText='display:flex;flex-direction:column;gap:1px';
                     ass.forEach(a=>{
                       const line=document.createElement('div');
-                      line.style.cssText='font-size:10px;line-height:1.2;color:#000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
-                      line.textContent=a.user_nom;
+                      line.style.cssText='font-size:10px;line-height:1.2;color:#000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:bold';
+                      line.textContent=formatPrintName(a);
                       list.appendChild(line);
                     });
                     td.appendChild(list);
@@ -2259,15 +2271,15 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
                 if(ass.length===1){
                   const chip=document.createElement('span');
                   chip.style.cssText='display:inline-block;font-size:11px;padding:2px 4px;background:transparent;margin:1px;font-weight:bold;color:#000';
-                  chip.textContent=ass[0].user_nom;
+                  chip.textContent=formatPrintName(ass[0]);
                   td.appendChild(chip);
                 }else{
                   const list=document.createElement('div');
                   list.style.cssText='display:flex;flex-direction:column;gap:1px';
                   ass.forEach(a=>{
                     const line=document.createElement('div');
-                    line.style.cssText='font-size:10px;line-height:1.2;color:#000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
-                    line.textContent=a.user_nom;
+                    line.style.cssText='font-size:10px;line-height:1.2;color:#000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:bold';
+                    line.textContent=formatPrintName(a);
                     list.appendChild(line);
                   });
                   td.appendChild(list);
@@ -2316,15 +2328,15 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
               if(ass.length===1){
                 const chip=document.createElement('span');
                 chip.style.cssText='display:inline-block;font-size:11px;padding:2px 4px;background:transparent;margin:1px;font-weight:bold;color:#000';
-                chip.textContent=ass[0].user_nom;
+                chip.textContent=formatPrintName(ass[0]);
                 td.appendChild(chip);
               }else{
                 const list=document.createElement('div');
                 list.style.cssText='display:flex;flex-direction:column;gap:1px';
                 ass.forEach(a=>{
                   const line=document.createElement('div');
-                  line.style.cssText='font-size:10px;line-height:1.2;color:#000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
-                  line.textContent=a.user_nom;
+                  line.style.cssText='font-size:10px;line-height:1.2;color:#000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:bold';
+                  line.textContent=formatPrintName(a);
                   list.appendChild(line);
                 });
                 td.appendChild(list);

@@ -1,7 +1,7 @@
 """SIFA — Auth v0.8 — profil utilisateur + fiche admin"""
 import json
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 import re
 import unicodedata
 from fastapi import APIRouter, Request, Response, HTTPException
@@ -28,6 +28,68 @@ from config import (
 )
 
 router = APIRouter()
+
+# Identifiants des tuiles portail (ordre personnalisable, sauvegardé par utilisateur).
+_PORTAL_TILE_IDS = frozenset(
+    {
+        "fabrication",
+        "prod",
+        "stock",
+        "print",
+        "compta",
+        "expe",
+        "planning_rh",
+        "devis",
+        "com_expe",
+        "com_devis",
+    }
+)
+
+
+def _portal_order_list_from_db(val) -> List[str]:
+    if not val:
+        return []
+    try:
+        arr = json.loads(val) if isinstance(val, str) else val
+    except (json.JSONDecodeError, TypeError):
+        return []
+    if not isinstance(arr, list):
+        return []
+    out: List[str] = []
+    seen: set = set()
+    for x in arr:
+        if isinstance(x, str):
+            tid = x.strip()
+            if tid in _PORTAL_TILE_IDS and tid not in seen:
+                out.append(tid)
+                seen.add(tid)
+    return out
+
+
+def _normalize_portal_order_for_db(raw) -> Optional[str]:
+    """Valide et compacte la liste d'ids ; None si vide ou invalide."""
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except json.JSONDecodeError:
+            return None
+    if not isinstance(raw, list):
+        return None
+    out: List[str] = []
+    seen: set = set()
+    for x in raw:
+        if not isinstance(x, str):
+            continue
+        tid = x.strip()
+        if tid in _PORTAL_TILE_IDS and tid not in seen:
+            out.append(tid)
+            seen.add(tid)
+    if not out:
+        return None
+    return json.dumps(out, separators=(",", ":"))
+
 
 def _norm_email(s: str) -> str:
     return (s or "").strip().lower()
@@ -182,7 +244,7 @@ def me(request: Request):
         return PlainResponse(content=b"null", media_type="application/json")
     with get_db() as conn:
         row = conn.execute(
-            "SELECT id,email,identifiant,nom,role,operateur_lie,machine_id,telephone,access_overrides FROM users WHERE id=?",
+            "SELECT id,email,identifiant,nom,role,operateur_lie,machine_id,telephone,access_overrides,portal_apps_order FROM users WHERE id=?",
             (user["id"],)
         ).fetchone()
     if not row:
@@ -191,6 +253,7 @@ def me(request: Request):
     ov_raw = d.get("access_overrides")
     d["access_overrides"] = parse_access_overrides_raw(ov_raw)
     d["app_access"] = merged_app_access(d.get("role"), ov_raw)
+    d["portal_apps_order"] = _portal_order_list_from_db(d.get("portal_apps_order"))
     return d
 
 
@@ -226,9 +289,13 @@ async def update_me(request: Request):
             if existing:
                 raise HTTPException(status_code=409, detail="Email déjà utilisé")
 
+        portal_val = dict(ex).get("portal_apps_order")
+        if "portal_apps_order" in body:
+            portal_val = _normalize_portal_order_for_db(body.get("portal_apps_order"))
+
         conn.execute(
-            "UPDATE users SET nom=?,email=?,telephone=?,password_hash=? WHERE id=?",
-            (nom, email, telephone, pwd_hash, user["id"])
+            "UPDATE users SET nom=?,email=?,telephone=?,password_hash=?,portal_apps_order=? WHERE id=?",
+            (nom, email, telephone, pwd_hash, portal_val, user["id"]),
         )
         conn.commit()
 

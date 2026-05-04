@@ -1140,6 +1140,14 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 13, "expe_departs_suivi")
 
+    # v14 — ordre des tuiles portail (préférence utilisateur)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=14 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
+        if "portal_apps_order" not in cols:
+            conn.execute("ALTER TABLE users ADD COLUMN portal_apps_order TEXT")
+        conn.commit()
+        _record_schema_migration(conn, 14, "users_portal_apps_order")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

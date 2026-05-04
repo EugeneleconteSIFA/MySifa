@@ -510,6 +510,11 @@ body.light .btn-sec.is-active{
   background:rgba(248,113,113,.95);color:#fff;font-size:10px;font-weight:800;font-family:monospace;
   display:inline-flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(0,0,0,.25)}
 .portal-apps{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;align-items:stretch}
+.portal-apps--reorderable .portal-app:not(.portal-app--busy){cursor:grab;touch-action:none}
+.portal-apps--reorderable .portal-app--dragging{cursor:grabbing;opacity:.92;z-index:5;
+  box-shadow:0 12px 36px rgba(0,0,0,.35);transform:scale(1.02)}
+.portal-apps--reorderable .portal-app--disabled{cursor:grab}
+.portal-apps-hint{font-size:11px;color:var(--muted);text-align:center;margin:8px 0 0;width:100%;line-height:1.35}
 .portal-app{display:flex;flex-direction:column;align-items:center;gap:8px;
   background:var(--card);border:1px solid var(--border);border-radius:16px;
   padding:16px 14px;cursor:pointer;transition:all .2s;text-decoration:none;
@@ -797,6 +802,7 @@ let _matiereMargeTimer=null;
 let _expeHistSearchT=null;
 let _expeLastRenderedInnerTab=null;
 let _expeJourInflight=null;
+let _portalDragSuppressClick=false;
 async function api(p,o){
   try{
     const r=await fetch(API+p,{credentials:'include',...o});
@@ -2163,6 +2169,82 @@ function initStockSearchBar() {
   if (bar) renderStockSearchBar();
 }
 
+function portalOrderTileSpecs(specs, order){
+  const byId=new Map(specs.map(s=>[s.id,s]));
+  const out=[];
+  const seen=new Set();
+  if(Array.isArray(order)){
+    order.forEach(id=>{
+      const sp=byId.get(id);
+      if(sp&&!seen.has(id)){out.push(sp);seen.add(id);}
+    });
+  }
+  specs.forEach(sp=>{
+    if(!seen.has(sp.id)){out.push(sp);seen.add(sp.id);}
+  });
+  return out;
+}
+function portalGetDragInsertBefore(container,x,y){
+  const drag=container.querySelector('.portal-app--dragging');
+  const elems=[...container.querySelectorAll('.portal-app')].filter(ch=>ch!==drag);
+  if(!elems.length)return null;
+  const rowTol=28;
+  const inRow=elems.filter(ch=>{
+    const b=ch.getBoundingClientRect();
+    return y>=b.top-rowTol&&y<=b.bottom+rowTol;
+  });
+  const pool=inRow.length?inRow:elems;
+  let closest=null,best=-Infinity;
+  pool.forEach(ch=>{
+    const box=ch.getBoundingClientRect();
+    const mid=box.left+box.width/2;
+    const dist=x-mid;
+    if(dist<0&&dist>best){best=dist;closest=ch;}
+  });
+  return closest;
+}
+async function savePortalAppsOrder(ids){
+  try{
+    const prev=(S.user&&S.user.portal_apps_order)?S.user.portal_apps_order:[];
+    await api('/api/auth/me',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({portal_apps_order:ids})});
+    S.user={...S.user,portal_apps_order:ids};
+    const same=prev.length===ids.length&&prev.every((v,i)=>v===ids[i]);
+    if(!same)toast('Ordre du portail enregistré');
+  }catch(e){toast(e.message||'Enregistrement impossible','danger');}
+}
+function attachPortalReorder(appsWrap){
+  if(appsWrap._portalDndBound)return;
+  appsWrap._portalDndBound=true;
+  appsWrap.addEventListener('dragstart',e=>{
+    const t=e.target.closest('.portal-app');
+    if(!t||!appsWrap.contains(t))return;
+    t.classList.add('portal-app--dragging');
+    try{e.dataTransfer.setData('text/plain',t.getAttribute('data-portal-id')||'');}catch(err){}
+    e.dataTransfer.effectAllowed='move';
+  });
+  appsWrap.addEventListener('dragend',e=>{
+    const t=e.target.closest('.portal-app');
+    if(t)t.classList.remove('portal-app--dragging');
+    const ids=[...appsWrap.querySelectorAll('.portal-app')].map(n=>n.getAttribute('data-portal-id')).filter(Boolean);
+    const prev=(S.user&&S.user.portal_apps_order)?S.user.portal_apps_order:[];
+    const same=prev.length===ids.length&&prev.every((v,i)=>v===ids[i]);
+    if(!same){
+      _portalDragSuppressClick=true;
+      setTimeout(()=>{_portalDragSuppressClick=false;},450);
+      savePortalAppsOrder(ids);
+    }
+  });
+  appsWrap.addEventListener('dragover',e=>{
+    e.preventDefault();
+    const dragEl=appsWrap.querySelector('.portal-app--dragging');
+    if(!dragEl)return;
+    const after=portalGetDragInsertBefore(appsWrap,e.clientX,e.clientY);
+    if(after==null||after===dragEl)appsWrap.appendChild(dragEl);
+    else appsWrap.insertBefore(dragEl,after);
+  });
+  appsWrap.addEventListener('drop',e=>{e.preventDefault();});
+}
+
 function renderPortal(){
   const aa = S.user && S.user.app_access ? S.user.app_access : null;
   const urole = S.user && S.user.role ? S.user.role : '';
@@ -2179,120 +2261,158 @@ function renderPortal(){
   const isDevis = aa ? !!aa.devis : (isSuper || urole==='direction');
   const isLight=document.body.classList.contains('light');
 
-  const apps=[];
+  const order=(S.user&&Array.isArray(S.user.portal_apps_order))?S.user.portal_apps_order:[];
+  const tileSpecs=[];
 
   if(isFab){
-    apps.push(h('div',{
+    const id='fabrication';
+    tileSpecs.push({id,el:h('div',{
       className:'portal-app',
-      onClick:()=>{ window.location.href='/fabrication'; }
+      'data-portal-id':id,
+      draggable:'true',
+      onClick:()=>{if(_portalDragSuppressClick)return;window.location.href='/fabrication';}
     },
       h('div',{className:'portal-app-icon'},iconEl('edit',28)),
       h('div',{className:'portal-app-name'},'Saisie Prod'),
       h('div',{className:'portal-app-desc'},'Saisie opérateur — machine')
-    ));
+    )});
   }
 
   if(isProd){
-    apps.push(h('div',{
+    const id='prod';
+    tileSpecs.push({id,el:h('div',{
       className:'portal-app'+(S.portalLoading==='prod'?' portal-app--busy':''),
-      onClick:async()=>{
-        window.location.href='/prod';
-      }
+      'data-portal-id':id,
+      draggable:S.portalLoading==='prod'?'false':'true',
+      onClick:async()=>{if(_portalDragSuppressClick)return;window.location.href='/prod';}
     },
       h('div',{className:'portal-app-icon'},iconEl('wrench',28)),
       h('div',{className:'portal-app-name'},'MyProd'),
       h('div',{className:'portal-app-desc'},'Suivi de production & Planning')
-    ));
+    )});
   }
 
   if(isStock){
-    apps.push(h('div',{
+    const id='stock';
+    tileSpecs.push({id,el:h('div',{
       className:'portal-app'+(S.portalLoading==='stock'?' portal-app--busy':''),
-      onClick:async()=>{
-        window.location.href='/stock';
-      }
+      'data-portal-id':id,
+      draggable:S.portalLoading==='stock'?'false':'true',
+      onClick:async()=>{if(_portalDragSuppressClick)return;window.location.href='/stock';}
     },
       h('div',{className:'portal-app-icon'},iconEl('package',28)),
       h('div',{className:'portal-app-name'},'MyStock'),
       h('div',{className:'portal-app-desc'},'Gestion des stocks produits')
-    ));
+    )});
   }
 
   if(isPrint){
-    apps.push(h('div',{
+    const id='print';
+    tileSpecs.push({id,el:h('div',{
       className:'portal-app',
-      onClick:()=>{ window.location.href='/stock?tab=traca'; }
+      'data-portal-id':id,
+      draggable:'true',
+      onClick:()=>{if(_portalDragSuppressClick)return;window.location.href='/stock?tab=traca';}
     },
       h('div',{className:'portal-app-icon'},iconEl('printer',28)),
       h('div',{className:'portal-app-name'},'MyPrint'),
       h('div',{className:'portal-app-desc'},'Étiquettes de traçabilité')
-    ));
+    )});
   }
 
   // Messagerie: icône dans le coin (sous Paramètres) pour le super admin
 
   if(isCompta){
-    apps.push(h('div',{
+    const id='compta';
+    tileSpecs.push({id,el:h('div',{
       className:'portal-app'+(S.portalLoading==='compta'?' portal-app--busy':''),
-      onClick:async()=>{
-        window.location.href='/compta';
-      }
+      'data-portal-id':id,
+      draggable:S.portalLoading==='compta'?'false':'true',
+      onClick:async()=>{if(_portalDragSuppressClick)return;window.location.href='/compta';}
     },
       h('div',{className:'portal-app-icon'},iconEl('calculator',28)),
       h('div',{className:'portal-app-name'},'MyCompta'),
       h('div',{className:'portal-app-desc'},'Comptabilité — accès réservé')
-    ));
+    )});
   }
 
   if(isExpe){
-    apps.push(h('div',{
+    const id='expe';
+    tileSpecs.push({id,el:h('div',{
       className:'portal-app'+(S.portalLoading==='expe'?' portal-app--busy':''),
-      onClick:async()=>{
-        window.location.href='/expe';
-      }
+      'data-portal-id':id,
+      draggable:S.portalLoading==='expe'?'false':'true',
+      onClick:async()=>{if(_portalDragSuppressClick)return;window.location.href='/expe';}
     },
       h('div',{className:'portal-app-icon'},iconEl('truck',28)),
       h('div',{className:'portal-app-name'},'MyExpé'),
       h('div',{className:'portal-app-desc'},'Expédition & Suivi')
-    ));
+    )});
   }
 
   if(isRH){
-    apps.push(h('div',{
+    const id='planning_rh';
+    tileSpecs.push({id,el:h('div',{
       className:'portal-app',
-      onClick:()=>{ window.location.href='/planning-rh'; }
+      'data-portal-id':id,
+      draggable:'true',
+      onClick:()=>{if(_portalDragSuppressClick)return;window.location.href='/planning-rh';}
     },
       h('div',{className:'portal-app-icon'},iconEl('users',28)),
       h('div',{className:'portal-app-name'},'Planning RH'),
       h('div',{className:'portal-app-desc'},'Planning personnel & Congés')
-    ));
+    )});
   }
 
   if(isDevis){
-    apps.push(h('div',{
+    const id='devis';
+    tileSpecs.push({id,el:h('div',{
       className:'portal-app',
-      onClick:()=>{ window.location.href='/devis'; }
+      'data-portal-id':id,
+      draggable:'true',
+      onClick:()=>{if(_portalDragSuppressClick)return;window.location.href='/devis';}
     },
       h('div',{className:'portal-app-icon'},iconEl('file-text',28)),
       h('div',{className:'portal-app-name'},'MyDevis'),
       h('div',{className:'portal-app-desc'},'Paramètres matière & Base prix')
-    ));
+    )});
   }
 
   if(isCom){
-    apps.push(h('div',{className:'portal-app portal-app--disabled'},
+    const id1='com_expe';
+    tileSpecs.push({id:id1,el:h('div',{
+      className:'portal-app portal-app--disabled',
+      'data-portal-id':id1,
+      draggable:'true',
+      onClick:()=>{if(_portalDragSuppressClick)return;}
+    },
       h('div',{className:'portal-app-icon',style:{opacity:.4}},iconEl('truck',28)),
       h('div',{className:'portal-app-name',style:{opacity:.5}},'MyExpé'),
       h('div',{className:'portal-app-desc'},'Expédition & Suivi'),
       h('span',{className:'badge-dev'},'En développement')
-    ));
-    apps.push(h('div',{className:'portal-app portal-app--disabled'},
+    )});
+    const id2='com_devis';
+    tileSpecs.push({id:id2,el:h('div',{
+      className:'portal-app portal-app--disabled',
+      'data-portal-id':id2,
+      draggable:'true',
+      onClick:()=>{if(_portalDragSuppressClick)return;}
+    },
       h('div',{className:'portal-app-icon',style:{opacity:.4}},iconEl('file-text',28)),
       h('div',{className:'portal-app-name',style:{opacity:.5}},'MyDevis'),
       h('div',{className:'portal-app-desc'},'Devis & Chiffrage'),
       h('span',{className:'badge-dev'},'En développement')
-    ));
+    )});
   }
+
+  const orderedTiles=portalOrderTileSpecs(tileSpecs,order);
+  const apps=orderedTiles.map(s=>s.el);
+  const appsWrap=h('div',{className:'portal-apps portal-apps--reorderable'},...apps);
+  const appsBlock=h('div',{style:{width:'100%',maxWidth:'900px',margin:'0 auto'}},
+    appsWrap,
+    apps.length?h('div',{className:'portal-apps-hint'},'Maintenir une tuile et la glisser pour réorganiser les accès (ordre enregistré pour votre compte).'):null
+  );
+  setTimeout(()=>{if(apps.length)attachPortalReorder(appsWrap);},0);
 
   function openGoogle(q){
     const query = String(q||'').trim();
@@ -2351,7 +2471,7 @@ function renderPortal(){
       h('div',{className:'tagline'},'Portail interne — Production, stocks et outils métier')
     ),
     gBox,
-    h('div',{className:'portal-apps'},...apps),
+    appsBlock,
     h('div',{className:'portal-user'},
       h('span',{style:{display:'inline-flex',alignItems:'center',gap:'8px'}},iconEl('user',14),document.createTextNode(' '+((S.user&&S.user.nom)?S.user.nom:''))),
       h('button',{className:'portal-logout',onClick:()=>{document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');render();}},
@@ -4132,10 +4252,6 @@ function renderExpe(){
     h('button',{className:'nav-btn'+(tab==='poids'?' active':''),onClick:()=>set({expeTab:'poids'})},
       iconEl('calculator',15),'  Poids envoi'),
     h('div',{className:'sidebar-bottom'},
-      (S.user&&['direction','fabrication','logistique','superadmin'].includes(S.user.role))?
-        h('button',{className:'nav-btn',onClick:()=>{window.location.href='/planning-rh'}},
-          iconEl('users',15),'  Planning RH')
-        :null,
       h('button',{className:'nav-btn back-mysifa',onClick:()=>{window.location.href='/'}},
         '← Retour ',h('span',{className:'wm'},'My',h('span',null,'Sifa'))
       ),
