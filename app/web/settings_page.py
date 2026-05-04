@@ -1380,8 +1380,8 @@ const APP_PAGES = {
   ],
   myexpe: [
     {value: '', label: 'Toutes les pages'},
-    {value: 'suivi_departs', label: 'Suivi départs'},
-    {value: 'historique_departs', label: 'Historique départs'},
+    {value: 'suivi_departs', label: 'Suivi départs — départs du jour'},
+    {value: 'historique_departs', label: 'Suivi départs — historique'},
     {value: 'comparateur', label: 'Comparateur tarifs'},
     {value: 'transporteurs', label: 'Transporteurs'},
     {value: 'poids', label: 'Poids envoi'}

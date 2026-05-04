@@ -838,6 +838,7 @@ let S={
   loginSubmitting:false,loginError:null,portalLoading:null,
   sidebarOpen:false,
   expeTab:'suivi_departs',
+  expeDepartSubTab:'jour',
   expeDept:'59',
   expeKg:'',
   expeNbPal:'',
@@ -4227,14 +4228,38 @@ function renderExpeHistoriqueDeparts(){
   );
 }
 
+function renderExpeSuiviDepartsWithSubtabs(){
+  const sub=S.expeDepartSubTab||'jour';
+  const tabs=[
+    {key:'jour',label:'Départs du jour',icon:'clipboard'},
+    {key:'historique',label:'Historique',icon:'folder'},
+  ];
+  const subNav=h('div',{className:'nav-tabs',style:{marginBottom:'16px'}},
+    ...tabs.map(t=>h('button',{
+      type:'button',
+      className:'nav-tab'+(sub===t.key?' active':''),
+      onClick:()=>set({expeDepartSubTab:t.key})
+    },iconEl(t.icon,14),' ',t.label))
+  );
+  const body=sub==='historique'?renderExpeHistoriqueDeparts():renderExpeSuiviDeparts();
+  return h('div',null,subNav,body);
+}
+
 function renderExpe(){
   const isLight=document.body.classList.contains('light');
+  if(S.expeTab==='historique_departs'){
+    S.expeTab='suivi_departs';
+    S.expeDepartSubTab='historique';
+  }
   const tab=S.expeTab||'suivi_departs';
-  if(tab!==_expeLastRenderedInnerTab){
-    _expeLastRenderedInnerTab=tab;
-    if(tab==='suivi_departs')void loadExpeDepartJour();
-    else if(tab==='historique_departs')void loadExpeDepartHistorique();
-    else if(tab==='comparateur')void ensureExpeRawData();
+  const sub=S.expeDepartSubTab||'jour';
+  const loadKey=tab==='suivi_departs'?tab+'_'+sub:tab;
+  if(loadKey!==_expeLastRenderedInnerTab){
+    _expeLastRenderedInnerTab=loadKey;
+    if(tab==='suivi_departs'){
+      if(sub==='jour')void loadExpeDepartJour();
+      else void loadExpeDepartHistorique();
+    }else if(tab==='comparateur')void ensureExpeRawData();
   }
 
   const sidebar=h('nav',{className:'sidebar'},
@@ -4244,8 +4269,6 @@ function renderExpe(){
     ),
     h('button',{className:'nav-btn'+(tab==='suivi_departs'?' active':''),onClick:()=>set({expeTab:'suivi_departs'})},
       iconEl('clipboard',15),'  Suivi départs'),
-    h('button',{className:'nav-btn'+(tab==='historique_departs'?' active':''),onClick:()=>set({expeTab:'historique_departs'})},
-      iconEl('folder',15),'  Historique départs'),
     h('button',{className:'nav-btn'+(tab==='comparateur'?' active':''),onClick:()=>set({expeTab:'comparateur'})},
       iconEl('package',15),'  Comparateur'),
     h('button',{className:'nav-btn'+(tab==='transporteurs'?' active':''),onClick:()=>set({expeTab:'transporteurs'})},
@@ -4278,14 +4301,13 @@ function renderExpe(){
     h('div',null,
       h('div',{className:'mobile-topbar-title'},'MyExpé'),
       h('div',{className:'mobile-topbar-sub'},
-        tab==='suivi_departs'?'Suivi des départs':tab==='historique_departs'?'Historique départs':
+        tab==='suivi_departs'?(sub==='historique'?'Historique départs':'Départs du jour'):
         tab==='transporteurs'?'Transporteurs':tab==='poids'?'Poids envoi':'Comparateur tarifs')
     ),
     h('button',{type:'button',className:'mobile-home-btn',onClick:()=>{window.location.href='/'},'aria-label':'Accueil'},iconEl('home',20))
   );
 
-  const content=tab==='suivi_departs'?renderExpeSuiviDeparts():
-    tab==='historique_departs'?renderExpeHistoriqueDeparts():
+  const content=tab==='suivi_departs'?renderExpeSuiviDepartsWithSubtabs():
     tab==='transporteurs'?renderExpeTransporteurs():tab==='poids'?renderExpePoids():renderExpeComparateur();
 
   return h('div',null,
@@ -4297,8 +4319,8 @@ function renderExpe(){
           topbar,
           h('h1',null,'MyExpé'),
           h('div',{className:'subtitle'},
-            tab==='suivi_departs'?'Enregistrement des enlèvements et validation vers l\'historique'
-            :tab==='historique_departs'?'Recherche multi-critères sur les départs validés'
+            tab==='suivi_departs'?(sub==='historique'?'Recherche multi-critères sur les départs validés'
+              :'Enregistrement des enlèvements et validation vers l\'historique')
             :tab==='comparateur'?'Coupé · Coquelle · Ceva · Dimotrans — meilleur prix au poids et à la palette'
             :tab==='poids'?'Estimation du poids d\'un envoi d\'étiquettes'
             :'Vos transporteurs et moyens de contact'),
