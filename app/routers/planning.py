@@ -88,16 +88,18 @@ def require_planning_machine(request: Request, conn, machine_id: int) -> dict:
 def compute_statut(entry: dict) -> str:
     """
     Calcule le statut automatique basé sur l'heure actuelle.
-    Si planned_start/planned_end existent et sont valides, le statut est dérivé de ces dates.
-    Sinon, si statut_force=1, retourne le statut stocké tel quel.
+    Si statut_force=1 (posé par la saisie opérateur ou manuellement),
+    le statut stocké en DB fait autorité — pas de recalcul par dates.
+    Sinon, si planned_start/planned_end existent, le statut est dérivé de ces dates.
     """
+    if int(entry.get("statut_force") or 0) == 1:
+        return entry.get("statut") or "attente"
+
     start = entry.get("planned_start")
     end = entry.get("planned_end")
     st = _parse_planned_dt(start)
     en = _parse_planned_dt(end)
     if not st or not en:
-        if int(entry.get("statut_force") or 0) == 1:
-            return entry.get("statut") or "attente"
         return "attente"
 
     now = datetime.now()
@@ -195,12 +197,16 @@ def _parse_planned_dt(val: Any) -> Optional[datetime]:
 
 
 def _auto_complete_en_cours(conn, machine_id: int) -> None:
-    """Passe en 'termine' les dossiers en_cours dont planned_end est dépassé."""
+    """Passe en 'termine' les dossiers en_cours dont planned_end est dépassé.
+    Les dossiers avec statut_force=1 (posé par la saisie opérateur) sont ignorés :
+    seul le code 89 (fin de production) peut les terminer."""
     now = datetime.now()
     now_s = _fmt_ts(now)
     rows = conn.execute(
         """SELECT id, planned_end FROM planning_entries
-           WHERE machine_id=? AND statut='en_cours' AND planned_end IS NOT NULL""",
+           WHERE machine_id=? AND statut='en_cours'
+             AND planned_end IS NOT NULL
+             AND COALESCE(statut_force, 0) = 0""",
         (machine_id,),
     ).fetchall()
     for r in rows:
@@ -412,6 +418,7 @@ def _compute_timeline_slots(
     for e in entries:
         st = e.get("statut") or "attente"
 
+        # ── Terminé figé : conserve ses dates, avance le curseur ──────────
         if st == "termine" and _is_frozen_entry(e):
             ps, pe = e["planned_start"], e["planned_end"]
             pend = _parse_planned_dt(pe)
@@ -422,14 +429,7 @@ def _compute_timeline_slots(
         if st == "termine":
             continue
 
-        if st == "attente" and e.get("planned_start") and e.get("planned_end"):
-            ps, pe = e["planned_start"], e["planned_end"]
-            pend = _parse_planned_dt(pe)
-            if pend:
-                cursor = advance_to_work(pend)
-            slots.append(_slot_payload(e, ps, pe))
-            continue
-
+        # ── En cours figé (dates forcées par saisie réelle) ───────────────
         if st == "en_cours" and _is_frozen_entry(e):
             ps, pe = e["planned_start"], e["planned_end"]
             pend = _parse_planned_dt(pe)
@@ -438,20 +438,14 @@ def _compute_timeline_slots(
             slots.append(_slot_payload(e, ps, pe))
             continue
 
+        # ── Attente et en_cours sans dates : calcul dynamique depuis cursor
         slot_start, slot_end, cursor = consume_duration(cursor, e["duree_heures"])
         ps, pe = _fmt_ts(slot_start), _fmt_ts(slot_end)
-        if st == "attente":
-            conn.execute(
-                """UPDATE planning_entries SET planned_start=?, planned_end=?, updated_at=?
-                   WHERE id=? AND machine_id=? AND statut='attente'""",
-                (ps, pe, now_u, e["id"], machine_id),
-            )
-        elif st == "en_cours":
-            conn.execute(
-                """UPDATE planning_entries SET planned_start=?, planned_end=?, updated_at=?
-                   WHERE id=? AND machine_id=? AND statut='en_cours'""",
-                (ps, pe, now_u, e["id"], machine_id),
-            )
+        conn.execute(
+            """UPDATE planning_entries SET planned_start=?, planned_end=?, updated_at=?
+               WHERE id=? AND machine_id=?""",
+            (ps, pe, now_u, e["id"], machine_id),
+        )
         ee = {**e, "planned_start": ps, "planned_end": pe}
         slots.append(_slot_payload(ee, ps, pe))
 
