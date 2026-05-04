@@ -520,6 +520,17 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
   .rh-conge-badge{font-size:7px!important;padding:1px 3px!important}
   .rh-dd-eye-btn{display:none!important}
   .rh-add-btn,.rh-chip-del,.rh-row-btns,.rh-act-btn{display:none!important}
+  /* Cellules avec détail jour : masquer chips, afficher mini-tableau */
+  .rh-cell--has-detail .rh-chip{display:none!important}
+  .rh-cell--has-detail .rh-dd-eye-btn{display:none!important}
+  .rh-cell-print-detail{display:block!important}
+  .rh-print-day-tbl{border-collapse:collapse;font-size:6px;width:100%}
+  .rh-print-day-tbl th{border:1px solid #999;padding:1px 2px;text-align:center;font-weight:700;background:#e8e8e8!important;font-size:5.5px}
+  .rh-print-day-tbl td{border:1px solid #ccc;padding:1px 2px;text-align:center;font-size:6px}
+  .rh-print-day-tbl td.rh-pdt-name{text-align:left;font-weight:700;font-size:6px;white-space:nowrap;max-width:60px;overflow:hidden;text-overflow:ellipsis}
+  .rh-print-day-tbl .rh-pdt-on{color:#000;font-weight:900}
+  .rh-print-day-tbl .rh-pdt-off{color:#bbb}
+  .rh-print-day-tbl .rh-pdt-conge{color:#888;font-style:italic;font-size:5px}
   .rh-section.print-target{display:block!important}
   .rh-section-hdr .rh-icon-btn{display:none!important}
   .print-header{display:block!important;margin-bottom:8px;font-size:12px;font-weight:800}
@@ -532,6 +543,7 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
   @page{margin:0.5cm;size:A4 landscape}
 }
 .print-header{display:none}
+.rh-cell-print-detail{display:none} /* visible uniquement en impression */
 
 /* ── Responsive ──────────────────────────────────────── */
 @media(max-width:700px){
@@ -1305,14 +1317,61 @@ function buildPlanningGrid(){
 
           // Icône œil — visible si 2+ opérateurs OU si l'un a des jours partiels
           const hasPartialAny=assignments.some(a=>(a.jours!==undefined&&(a.jours&31)<31));
-          if(S.isEditor&&(assignments.length>=2||hasPartialAny)){
+          const needsDetail=assignments.length>=2||hasPartialAny;
+          if(S.isEditor&&needsDetail){
             const eyeBtn=document.createElement('button');
             eyeBtn.className='rh-dd-eye-btn';
             eyeBtn.title='Répartition par jour';
-            // Icône œil SVG inline
             eyeBtn.innerHTML=`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
             eyeBtn.onclick=()=>openDayDetailModal({semaine:ws,machineCode:mdef.code,poste,creneau:cr.key,machineId:getMachineId(mdef.code)});
             cell.appendChild(eyeBtn);
+          }
+
+          // Bloc impression jour-par-jour (caché à l'écran, visible en print)
+          if(assignments.length>0&&needsDetail){
+            cell.classList.add('rh-cell--has-detail');
+            const printDetail=document.createElement('div');
+            printDetail.className='rh-cell-print-detail';
+            const tbl=document.createElement('table'); tbl.className='rh-print-day-tbl';
+            // En-tête : initiales des jours
+            const hdrRow=document.createElement('tr');
+            const th0=document.createElement('th'); th0.textContent=''; hdrRow.appendChild(th0);
+            ['L','M','M','J','V'].forEach(l=>{
+              const th=document.createElement('th'); th.textContent=l; hdrRow.appendChild(th);
+            });
+            tbl.appendChild(hdrRow);
+            // Une ligne par opérateur
+            assignments.forEach(a=>{
+              const joursVal=a.jours!==undefined?a.jours:31;
+              const congeMask=congeJoursBitmask(a.user_id,ws);
+              const tr=document.createElement('tr');
+              // Nom (prénom initial + nom tronqué)
+              const tdName=document.createElement('td'); tdName.className='rh-pdt-name';
+              // Afficher prénom + initiale nom si possible, sinon juste le nom brut
+              const parts=a.user_nom.trim().split(' ');
+              tdName.textContent=parts.length>=2
+                ? parts[0]+' '+parts.slice(1).map(p=>p[0]+'.').join(' ')
+                : a.user_nom;
+              tdName.title=a.user_nom;
+              tr.appendChild(tdName);
+              // Cases jours
+              for(let i=0;i<5;i++){
+                const td=document.createElement('td');
+                const isConge=!!((congeMask>>i)&1);
+                const isOn=!!((joursVal>>i)&1);
+                if(isConge){
+                  td.className='rh-pdt-conge'; td.textContent='cp';
+                } else if(isOn){
+                  td.className='rh-pdt-on'; td.textContent='●';
+                } else {
+                  td.className='rh-pdt-off'; td.textContent='—';
+                }
+                tr.appendChild(td);
+              }
+              tbl.appendChild(tr);
+            });
+            printDetail.appendChild(tbl);
+            cell.appendChild(printDetail);
           }
 
           if(S.isEditor){
