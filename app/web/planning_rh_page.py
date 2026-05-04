@@ -1967,11 +1967,13 @@ function closeSidebar(){document.getElementById('rh-sb').classList.remove('open'
 function printPlanning(){
   const c=document.getElementById('rh-content');
   if(!c)return;
-  const originalContent=c.innerHTML;
-  c.innerHTML='';
-  c.appendChild(buildPrintPivotLayout());
+  const originalChildren=Array.from(c.childNodes);
+  originalChildren.forEach(n=>n.style&&(n.style.display='none'));
+  const printLayout=buildPrintPivotLayout();
+  c.appendChild(printLayout);
   window.print();
-  c.innerHTML=originalContent;
+  printLayout.remove();
+  originalChildren.forEach(n=>n.style&&(n.style.display=''));
 }
 
 function fmtWeekLabelPrint(ws){
