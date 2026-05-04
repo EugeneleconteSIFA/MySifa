@@ -235,7 +235,20 @@ body.light .d-bg.a1{background:rgba(2,6,23,.085)}
 body.light .d-sep{background:rgba(71,85,105,.35)}
 .d-sep::after{content:'';position:absolute;top:0;bottom:0;left:-6px;width:14px;background:linear-gradient(90deg,rgba(34,211,238,0),rgba(34,211,238,.08),rgba(34,211,238,0));opacity:.35}
 .slot{position:absolute;top:8px;bottom:8px;border-radius:6px;display:flex;align-items:center;
-  justify-content:center;cursor:pointer;transition:all .15s;overflow:hidden;padding:3px 6px}
+  justify-content:center;cursor:pointer;transition:all .15s;overflow:visible;padding:3px 6px}
+.slot-resize-handle{position:absolute;right:0;top:0;bottom:0;width:10px;cursor:ew-resize;display:flex;
+  align-items:center;justify-content:center;opacity:0;transition:opacity .15s;z-index:10}
+.slot:hover .slot-resize-handle,.slot-resize-handle:hover{opacity:1}
+.slot-resize-handle::after{content:'⇔';font-size:11px;color:rgba(255,255,255,.7);pointer-events:none}
+body.light .slot-resize-handle::after{color:rgba(30,41,59,.75)}
+.slot-resize-preview{position:absolute;top:4px;right:22px;background:var(--card);border:1px solid var(--border2);
+  border-radius:4px;padding:2px 7px;font-size:11px;color:var(--text);white-space:nowrap;pointer-events:none;z-index:100}
+.p-toast{position:fixed;bottom:22px;right:22px;z-index:20000;max-width:min(420px,92vw);padding:11px 16px;border-radius:10px;
+  font-size:13px;font-weight:600;box-shadow:0 10px 36px rgba(0,0,0,.45);border:1px solid var(--border2);animation:p-toast-in .2s ease}
+.p-toast.success{background:rgba(34,197,94,.14);color:var(--ok, #22c55e)}
+.p-toast.danger{background:rgba(248,113,113,.14);color:var(--danger)}
+.p-toast.info{background:rgba(56,189,248,.12);color:var(--accent)}
+@keyframes p-toast-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .slot:hover{top:5px;bottom:5px;z-index:20}
 .slot-inner{display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.15;
   text-align:center;max-width:100%;pointer-events:none}
@@ -473,10 +486,12 @@ const DEFAULTS_BY_KEY={
 const DAY_API={1:"lundi",2:"mardi",3:"mercredi",4:"jeudi",5:"vendredi",6:"samedi"};
 const DAY_FIELD={1:"horaires_lundi",2:"horaires_mardi",3:"horaires_mercredi",4:"horaires_jeudi",5:"horaires_vendredi",6:"horaires_samedi"};
 let S={machine:null,machines:[],entries:[],timeline:[],wo:0,loading:true,holidays:{},dayWorked:{},dayHoraires:{},view:localStorage.getItem("mysifa.planning.view")||"2w",
-  contactOpen:false,contactSubject:"",contactMessage:"",contactSending:false,searchQuery:"",tlSearchQuery:"",tlSearchIdx:0,activeDossier:null};
+  contactOpen:false,contactSubject:"",contactMessage:"",contactSending:false,searchQuery:"",tlSearchQuery:"",tlSearchIdx:0,activeDossier:null,
+  tlTotalDays:5,machineHoursPerDay:16};
 let _allTlMatches=[];
 let ME=null;
 let CAN_EDIT=false;
+let IS_DIR_OR_SUPER=false;
 let SHOW_DOSSIERS=false;
 let _autoScrollKey=null;
 let _suppressAutoScroll=false;
@@ -484,6 +499,109 @@ let _showAllTermine=false;   // true = montrer tous les terminés; false = seule
 const TERMINE_KEEP=2;        // nombre de terminés toujours visibles en bas de la pile
 
 const api=(p,o={})=>fetch(`/api/planning${p}`,{credentials:"include",headers:{"Content-Type":"application/json",...(o.headers||{})},...o}).then(r=>{if(!r.ok)throw r;return r.json()});
+
+let _pToastTimer=null;
+function showToast(message,type){
+  const t=type==="danger"?"danger":type==="info"?"info":"success";
+  let el=document.getElementById("p-toast");
+  if(!el){
+    el=document.createElement("div");
+    el.id="p-toast";
+    el.className="p-toast";
+    document.body.appendChild(el);
+  }
+  el.className="p-toast "+t;
+  el.textContent=message;
+  el.style.display="block";
+  if(_pToastTimer) clearTimeout(_pToastTimer);
+  _pToastTimer=setTimeout(()=>{el.style.display="none";_pToastTimer=null;},3400);
+}
+
+(function initSlotResize(){
+  if(window.__mysifaPlanResize) return;
+  window.__mysifaPlanResize=true;
+  let resizing=null;
+  document.addEventListener("mousedown",function(e){
+    if(!CAN_EDIT||!MID) return;
+    const handle=e.target&&e.target.closest&&e.target.closest("[data-resize='1']");
+    if(!handle) return;
+    const slot=handle.closest(".slot");
+    if(!slot) return;
+    const tlBar=slot.closest(".tl-bar");
+    if(!tlBar) return;
+    const eidStr=String(handle.dataset.eid||"");
+    const entry=(S.timeline||[]).find(s=>String(s.entry_id||"")===eidStr);
+    if(!entry) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const tlRect=tlBar.getBoundingClientRect();
+    const pxPerPct=tlRect.width/100||1;
+    const startWpct=parseFloat(slot.style.width)||1;
+    const startLeftpct=parseFloat(slot.style.left)||0;
+    const startDuree=Math.max(0.25,parseFloat(entry.duree_heures)||0.5);
+    slot.style.position="relative";
+    const preview=document.createElement("div");
+    preview.className="slot-resize-preview";
+    preview.textContent=startDuree.toFixed(1)+" h";
+    slot.appendChild(preview);
+    resizing={
+      slot,
+      eid:eidStr,
+      startX:e.clientX,
+      startWpct,
+      startLeftpct,
+      pxPerPct,
+      startDuree,
+      preview,
+      maxRightPct:Math.max(0.55,100-startLeftpct-0.08)
+    };
+  });
+  document.addEventListener("mousemove",function(e){
+    if(!resizing) return;
+    const dx=e.clientX-resizing.startX;
+    const deltaPct=dx/resizing.pxPerPct;
+    const newWpct=Math.min(resizing.maxRightPct,Math.max(0.5,resizing.startWpct+deltaPct));
+    const newDuree=Math.max(0.25,resizing.startDuree*(newWpct/resizing.startWpct));
+    resizing.slot.style.width=newWpct+"%";
+    resizing.preview.textContent=newDuree.toFixed(1)+" h";
+    resizing._liveNewDuree=newDuree;
+  });
+  document.addEventListener("mouseup",async function(){
+    if(!resizing) return;
+    const{slot,eid,preview,startDuree,startWpct}=resizing;
+    preview.remove();
+    const live=resizing._liveNewDuree;
+    resizing=null;
+    if(live==null){
+      slot.style.width=startWpct+"%";
+      return;
+    }
+    const rounded=Math.round(live*4)/4;
+    if(Math.abs(rounded-startDuree)<1e-6){
+      slot.style.width=startWpct+"%";
+      return;
+    }
+    try{
+      const res=await fetch(`/api/planning/machines/${MID}/entries/${eid}`,{
+        method:"PUT",
+        credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({duree_heures:rounded})
+      });
+      if(!res.ok){
+        const j=await res.json().catch(()=>({}));
+        const d=j.detail;
+        const msg=typeof d==="string"?d:(Array.isArray(d)?d.map(x=>x.msg||JSON.stringify(x)).join(" "):"Erreur mise à jour durée.");
+        showToast(msg,"danger");
+      }else{
+        showToast("Durée mise à jour : "+rounded.toFixed(1)+" h","success");
+      }
+    }catch(_){
+      showToast("Erreur réseau.","danger");
+    }
+    await load();
+  });
+})();
 
 async function load(){
   if(!MID){
@@ -967,6 +1085,7 @@ function render(){
   }
   const m=S.machine||{nom:"?"};
   CAN_EDIT = isAdmin(ME);
+  IS_DIR_OR_SUPER = !!(ME && (ME.role==="superadmin" || ME.role==="direction"));
   SHOW_DOSSIERS = CAN_EDIT;
   let runLbl="";
   if(SHOW_DOSSIERS){
@@ -1209,6 +1328,7 @@ function setupTlDD(){
   // dragstart / dragend : toujours sur les slots (nouveaux éléments après chaque render)
   document.querySelectorAll("#tl-blocks-container .slot[draggable='true']").forEach(el=>{
     el.addEventListener("dragstart",ev=>{
+      if(ev.target&&ev.target.closest&&ev.target.closest(".slot-resize-handle")){ev.preventDefault();return;}
       _tlDragEid=+el.dataset.eid;
       el.style.opacity="0.45";
       ev.dataTransfer.effectAllowed="move";
@@ -1285,12 +1405,17 @@ function updateDestockBtn(entryId, val){
   btn.innerHTML=ico+'<span>'+(done?"Destocké":"À destocker")+'</span>';
 }
 
-async function resetSaisie(entryId){
-  if(!CAN_EDIT) return;
+async function resetSaisieFromModal(entryId){
+  if(!IS_DIR_OR_SUPER) return;
+  if(!confirm("Remettre ce dossier en attente et effacer le statut de saisie réelle ?")) return;
   try{
-    await api(`/machines/${MID}/entries/${entryId}/reset-saisie`,{method:"PUT"});
+    await api(`/machines/${MID}/entries/${entryId}/reset-saisie`,{method:"POST"});
     closeM();load();
-  }catch(e){ console.error("resetSaisie",e); alert("Erreur lors de la réinitialisation."); }
+  }catch(e){
+    let msg="Erreur lors du reset.";
+    try{const j=await e.json();if(j&&j.detail)msg=typeof j.detail==="string"?j.detail:JSON.stringify(j.detail);}catch(x){}
+    alert(msg);
+  }
 }
 
 function buildLegend(sl, m1, nw){
@@ -1454,13 +1579,17 @@ function mkTL(mon,slots){
     const aplacerCls=s.a_placer?"slot-aplacer":"";
     const reelTermineCls=((s.statut_reel==="reellement_termine"&&s.statut!=="en_cours")||s.statut==="termine")?"slot-reel-termine":"";
     const destock=s.destockage==="done";
-    const canDragSlot=CAN_EDIT&&s.statut!=="en_cours"&&s.statut!=="termine";
+    const reelForDrag=(s.statut_reel||"reellement_en_attente")==="reellement_en_attente";
+    const canDragSlot=CAN_EDIT&&s.statut!=="en_cours"&&s.statut!=="termine"&&reelForDrag;
+    const resizeHandle=canDragSlot?`<div class="slot-resize-handle" data-eid="${s.entry_id||idx}" data-resize="1" onmousedown="event.stopPropagation()"></div>`:"";
     h+=`<div class="slot ${matchCls} ${aplacerCls} ${reelTermineCls}" data-eid="${s.entry_id||idx}" data-statut="${escAttr(s.statut||"attente")}" data-statut-reel="${escAttr(s.statut_reel||"reellement_en_attente")}" ${canDragSlot?'draggable="true"':''} style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${isActive?"border:2px solid #22d3ee;animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
       onmouseenter="showTip(event,this)" onmousemove="moveTip(event)" onmouseleave="hideTip()"
+      ondragstart="var t=event.target;if(t&&t.closest&&t.closest('.slot-resize-handle'))event.preventDefault()"
       ondblclick="hideTip();openEdit(${s.entry_id||idx});event.stopPropagation()"
-      data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(fmtDur(s.duree_heures))}"
+      data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-rfp="${escAttr(s.ref_produit||"")}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(fmtDur(s.duree_heures))}"
       data-deb="${escAttr(fdt(ss))}" data-fin="${escAttr(fdt(se))}" data-st="${escAttr(st)}" data-co="${escAttr(co)}">
       ${destock?`<div style="position:absolute;top:4px;right:4px;width:7px;height:7px;border-radius:50%;background:rgba(71,85,105,.9);pointer-events:none;z-index:5;flex-shrink:0"></div>`:""}
+      ${resizeHandle}
       ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}</span>${line2Txt?`<span class="line2">${escAttr(line2Txt)}</span>`:""}${line3Txt?`<span class="line3">${escAttr(line3Txt)}</span>`:""}</div>`:""}</div>`;
   });
 
@@ -1496,9 +1625,12 @@ function mkRow(e,i,slots){
   const of=escAttr(e.numero_of||e.reference||"—");
   const rfp=escAttr(e.ref_produit||"")||"—";
   const lz=e.laize!=null&&e.laize!==""?escAttr(String(e.laize)):"—";
-  const statutCell=(isLocked||!CAN_EDIT)
+  const reelAvance=(e.statut_reel==="reellement_en_saisie"||e.statut_reel==="reellement_termine");
+  const statutLockedForReel=reelAvance && !IS_DIR_OR_SUPER;
+  const showStatutSelect=CAN_EDIT&&!statutLockedForReel&&((!isLocked)||IS_DIR_OR_SUPER);
+  const statutCell=!showStatutSelect
     ? `<span class="st ${sc}">${sc==="run"?'<span style="width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite;display:inline-block"></span>':""}${sl} 🔒</span>`
-    : `<select class="statut-select" data-eid="${e.id}">
+    : `<select class="statut-select" data-eid="${e.id}" data-current="${escAttr(e.statut||"attente")}">
          <option value="attente" ${e.statut==="attente"?"selected":""}>Attente</option>
          <option value="en_cours" ${e.statut==="en_cours"?"selected":""}>En cours</option>
          <option value="termine" ${e.statut==="termine"?"selected":""}>Terminé</option>
@@ -1594,7 +1726,7 @@ function showTip(ev,el){hideTip();const d=el.dataset;_hoveredSlotEid=d.eid?+d.ei
   tipEl.style.borderColor=(d.co||"#888")+"55";
   const sub=d.lbl?`<div class="tip-lbl">${d.lbl}</div>`:"";
   tipEl.innerHTML=`<div class="tip-hdr"><div class="tip-bar" style="background:${d.co||"#888"}"></div><div><div class="tip-ref">${d.ref||"—"}</div>${sub}</div></div>
-    <div class="tip-grid"><span class="k">Format</span><span class="v">${d.fmt||"—"}</span><span class="k">Durée</span><span class="v">${d.dur||""}</span>
+    <div class="tip-grid">${d.rfp?`<span class="k">Réf produit</span><span class="v">${d.rfp}</span>`:""}<span class="k">Format</span><span class="v">${d.fmt||"—"}</span><span class="k">Durée</span><span class="v">${d.dur||""}</span>
     <span class="k">Début</span><span class="v">${d.deb||""}</span><span class="k">Fin</span><span class="v">${d.fin||""}</span>
     <span class="k">Statut</span><span class="v" style="color:${d.st==="En cours"?"var(--green)":d.st==="Terminé"?"var(--muted)":"var(--amber)"};font-weight:600">${d.st||""}</span>
     ${(()=>{const r=d.statutReel||"";if(r==="reellement_termine")return`<span class="k">Saisie</span><span class="v" style="color:var(--muted)">✓ Terminé</span>`;if(r==="reellement_en_saisie")return`<span class="k">Saisie</span><span class="v" style="color:var(--success)">⚙ En cours</span>`;return"";})()} </div>
@@ -1835,18 +1967,50 @@ function setupDD(){
 function setupStatutSelects(){
   if(!CAN_EDIT) return;
   document.querySelectorAll(".statut-select").forEach(sel=>{
-    sel.addEventListener("change", async()=>{
-      const eid=sel.dataset.eid;
-      try{
-        await api(`/machines/${MID}/entries/${eid}/statut`,{
-          method:"PUT",
-          body: JSON.stringify({statut: sel.value, force: true})
-        });
-        await load();
-      }catch(e){
-        alert("Erreur statut");
-        await load();
-      }
+    sel.addEventListener("change", async function(){
+      const eid=this.dataset.eid;
+      const newStat=this.value;
+      const oldStat=this.dataset.current||"attente";
+      const el=this;
+      const doUpdate=async(override=false)=>{
+        try{
+          const data=await api(`/machines/${MID}/entries/${eid}/statut`,{
+            method:"PUT",
+            body:JSON.stringify({statut:newStat,force:true,override})
+          });
+          if(data.warning&&data.code==="NO_SAISIE"){
+            const confirmed=confirm(data.message+"\n\nCliquer OK pour terminer quand même, Annuler pour stopper.");
+            if(confirmed) await doUpdate(true);
+            else{
+              el.value=oldStat;
+              showToast("Action annulée.","info");
+            }
+            return;
+          }
+          if(data.saisie_found===false&&newStat==="termine"){
+            showToast("Dossier terminé — aucune saisie de production associée.","info");
+          }else if(data.saisie_found===true&&newStat==="termine"){
+            showToast("Dossier terminé — saisie trouvée.","success");
+          }else{
+            showToast("Statut mis à jour.","success");
+          }
+          el.dataset.current=newStat;
+          await load();
+        }catch(err){
+          let msg="Erreur statut.";
+          try{
+            if(err&&typeof err.json==="function"){
+              const j=await err.json();
+              const d=j.detail;
+              msg=typeof d==="string"?d:(Array.isArray(d)?d.map(x=>x.msg||JSON.stringify(x)).join(" "):msg);
+            }
+          }catch(x){}
+          showToast(typeof msg==="string"?msg:JSON.stringify(msg),"danger");
+          el.value=oldStat;
+          await load();
+        }
+      };
+      await doUpdate();
     });
   });
 }
@@ -2091,11 +2255,8 @@ function openEdit(id){
   const destockColor=destockDone?"#38bdf8":"#fb923c";
   const destockIcon=destockDone?`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`:`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>`;
   const reelNonDefault=e.statut_reel&&e.statut_reel!=="reellement_en_attente";
-  const resetSaisieBtn=reelNonDefault?`<button type="button" onclick="if(confirm('Réinitialiser la saisie de ce dossier ? Le statut repassera en attente.'))resetSaisie(${id})"
-    title="Réinitialiser — remet le dossier en attente et efface le statut de saisie"
-    style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;border:1.5px solid var(--border2);background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;font-family:inherit;white-space:nowrap"
-    onmouseenter="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseleave="this.style.borderColor='var(--border2)';this.style.color='var(--muted)'">${icon('repeat',12)} Réinit. saisie</button>`:"";
-  const headerAction=`<div style="display:flex;gap:8px;flex-wrap:wrap">${resetSaisieBtn}<button type="button" id="destock-btn-${id}" onclick="toggleDestockage(${id})"
+  const resetBlock=(IS_DIR_OR_SUPER&&reelNonDefault)?`<button type="button" class="btn-reset-saisie" data-eid="${id}" onclick="resetSaisieFromModal(${id})" style="margin-top:8px;width:100%;padding:7px;border-radius:6px;border:1px solid rgba(248,113,113,.4);background:rgba(248,113,113,.08);color:var(--danger);font-size:11px;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">${icon('repeat',12)} Réinitialiser la saisie réelle</button>`:"";
+  const headerAction=`<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" id="destock-btn-${id}" onclick="toggleDestockage(${id})"
     title="${destockDone?"Matières destockées — cliquer pour annuler":"Matières à destocker — cliquer pour valider"}"
     style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;border:1.5px solid ${destockBorder};background:${destockBg};color:${destockColor};font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;font-family:inherit;white-space:nowrap"
     onmouseenter="this.style.opacity='.75'" onmouseleave="this.style.opacity='1'">
@@ -2131,7 +2292,7 @@ function openEdit(id){
 
   document.getElementById("mroot").innerHTML=modalHTML(
     `${titlePrefix}${(e.numero_of||e.reference)||''}`,
-    fieldsHtml+traceHtml,
+    fieldsHtml+traceHtml+resetBlock,
     "Enregistrer",`submitEdit(${id})`,
     headerAction,
     delBtn

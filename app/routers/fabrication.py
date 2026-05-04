@@ -390,14 +390,13 @@ async def create_saisie(request: Request):
             )
             conn.commit()
 
-        # ── Sync planning depuis saisie réelle ────────────────────────────────
-        # La prod réelle pilote le statut théorique et les dates planifiées.
+        # ── Sync planning depuis saisie réelle (source de vérité prioritaire) ─
         if no_dossier and cl["code"] in ("01", "89"):
             try:
                 pe_row = conn.execute(
                     """SELECT id, statut_reel, statut, duree_heures, planned_start, planned_end
                        FROM planning_entries
-                       WHERE reference = ? AND machine_id = ?
+                       WHERE reference = ? AND machine_id = ? AND statut != 'termine'
                        ORDER BY position ASC LIMIT 1""",
                     (no_dossier, machine_id_resolved),
                 ).fetchone()
@@ -407,22 +406,21 @@ async def create_saisie(request: Request):
                     duree_h      = float(pe_row["duree_heures"] or 0)
                     now_iso      = datetime.now().isoformat()
 
-                    if cl["code"] == "01":
-                        if current_reel != "reellement_termine":
-                            dt_start   = datetime.fromisoformat(date_op)
-                            dt_end_new = (dt_start + timedelta(hours=duree_h)).strftime("%Y-%m-%dT%H:%M:%S")
-                            conn.execute(
-                                """UPDATE planning_entries
-                                   SET statut_reel   = 'reellement_en_saisie',
-                                       statut        = 'en_cours',
-                                       statut_force  = 1,
-                                       planned_start = ?,
-                                       planned_end   = ?,
-                                       updated_at    = ?
-                                   WHERE id = ?""",
-                                (date_op, dt_end_new, now_iso, pe_id),
-                            )
-                            conn.commit()
+                    if cl["code"] == "01" and current_reel != "reellement_termine":
+                        dt_start   = datetime.fromisoformat(date_op)
+                        dt_end_new = (dt_start + timedelta(hours=duree_h)).strftime("%Y-%m-%dT%H:%M:%S")
+                        conn.execute(
+                            """UPDATE planning_entries
+                               SET statut_reel   = 'reellement_en_saisie',
+                                   statut        = 'en_cours',
+                                   statut_force  = 1,
+                                   planned_start = ?,
+                                   planned_end   = ?,
+                                   updated_at    = ?
+                               WHERE id = ?""",
+                            (date_op, dt_end_new, now_iso, pe_id),
+                        )
+                        conn.commit()
 
                     elif cl["code"] == "89":
                         if fin_dossier_flag:

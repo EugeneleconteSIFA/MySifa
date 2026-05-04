@@ -13,8 +13,9 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Request, HTTPException
+from fastapi.responses import JSONResponse
 from database import get_db
-from config import ROLE_FABRICATION
+from config import ROLE_FABRICATION, ROLE_DIRECTION, ROLE_SUPERADMIN
 from services.auth_service import require_admin, get_current_user, user_has_app_access
 
 _TZ_PARIS = ZoneInfo("Europe/Paris")
@@ -82,6 +83,14 @@ def require_planning_machine(request: Request, conn, machine_id: int) -> dict:
         allowed = fabrication_planning_machine_ids(conn, user)
         if machine_id not in allowed:
             raise HTTPException(status_code=403, detail="Accès non autorisé à cette machine")
+    return user
+
+
+def require_planning_edit(request: Request, conn, machine_id: int) -> dict:
+    """Planning + machine : actions sensibles (reset saisie réelle) réservées direction / superadmin."""
+    user = require_planning_machine(request, conn, machine_id)
+    if user.get("role") not in (ROLE_SUPERADMIN, ROLE_DIRECTION):
+        raise HTTPException(status_code=403, detail="Action réservée aux administrateurs.")
     return user
 
 
@@ -640,20 +649,89 @@ def list_entries(machine_id: int, request: Request):
 
 @router.put("/machines/{machine_id}/entries/{entry_id}/statut")
 async def force_statut(machine_id: int, entry_id: int, request: Request):
-    """Forcer un statut manuellement depuis la liste."""
+    """Forcer un statut depuis la liste. Direction / superadmin : transitions flexibles."""
     require_admin(request)
+    user = get_current_user(request)
     body = await request.json()
     statut = body.get("statut", "attente")
-    force = bool(body.get("force", True))
+    override = bool(body.get("override", False))
+
     if statut not in ("attente", "en_cours", "termine"):
-        raise HTTPException(400, "Statut invalide")
+        raise HTTPException(status_code=400, detail="Statut invalide.")
+
+    is_flex = user.get("role") in (ROLE_SUPERADMIN, ROLE_DIRECTION)
+
     with get_db() as conn:
+        require_planning_machine(request, conn, machine_id)
+        row = conn.execute(
+            """SELECT id, reference, statut, statut_reel, planned_start, planned_end
+               FROM planning_entries WHERE id = ? AND machine_id = ?""",
+            (entry_id, machine_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Entrée introuvable.")
+
+        current_reel = row["statut_reel"] or "reellement_en_attente"
+
+        if not is_flex and current_reel != "reellement_en_attente":
+            raise HTTPException(
+                status_code=409,
+                detail="Statut verrouillé par la saisie de production.",
+            )
+
+        if current_reel == "reellement_termine" and statut != "termine":
+            raise HTTPException(
+                status_code=409,
+                detail="Ce dossier est clôturé en production. Utiliser « Réinitialiser la saisie » pour le rouvrir.",
+            )
+
+        saisie_found = False
+        if statut == "termine" and row["statut"] != "termine":
+            reference = (row["reference"] or "").strip()
+            if reference:
+                saisie_row = conn.execute(
+                    """SELECT id FROM production_data
+                       WHERE no_dossier = ?
+                       ORDER BY date_operation DESC LIMIT 1""",
+                    (reference,),
+                ).fetchone()
+                saisie_found = saisie_row is not None
+
+            if not saisie_found and not override:
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "warning": True,
+                        "code": "NO_SAISIE",
+                        "message": "Aucune saisie de production trouvée pour ce dossier. Continuer quand même ?",
+                    },
+                )
+
+        new_reel = current_reel
+        if statut == "attente":
+            new_reel = "reellement_en_attente"
+        elif statut == "en_cours":
+            if current_reel == "reellement_en_attente":
+                new_reel = "reellement_en_saisie"
+        elif statut == "termine":
+            if current_reel in ("reellement_en_attente", "reellement_en_saisie"):
+                new_reel = "reellement_termine" if (saisie_found or override) else current_reel
+
+        now_iso = datetime.now().isoformat()
         conn.execute(
-            "UPDATE planning_entries SET statut=?, statut_force=?, updated_at=? WHERE id=? AND machine_id=?",
-            (statut, 1 if force else 0, datetime.now().isoformat(), entry_id, machine_id),
+            """UPDATE planning_entries
+               SET statut       = ?,
+                   statut_force = 1,
+                   statut_reel  = ?,
+                   updated_at   = ?
+               WHERE id = ? AND machine_id = ?""",
+            (statut, new_reel, now_iso, entry_id, machine_id),
         )
+        if statut == "attente":
+            _invalidate_attente_plans(conn, machine_id)
         conn.commit()
-    return {"success": True}
+
+    return {"ok": True, "saisie_found": saisie_found}
 
 
 @router.post("/machines/{machine_id}/entries")
@@ -736,9 +814,15 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
     body = await request.json()
     now = datetime.now().isoformat()
 
-    duree = body.get("duree_heures")
-    if duree is not None and (duree < 2 or duree > 720):
-        raise HTTPException(400, "Durée entre 2 et 720 heures")
+    duree_raw = body.get("duree_heures")
+    duree: Optional[float] = None
+    if duree_raw is not None:
+        try:
+            duree = float(duree_raw)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Durée invalide")
+        if duree < 0.5 or duree > 720:
+            raise HTTPException(status_code=400, detail="Durée entre 0,5 et 720 heures")
 
     # Récupérer l'utilisateur courant pour la traçabilité
     user = get_current_user(request)
@@ -769,8 +853,35 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
             and duree is not None
             and float(duree) != float(ex["duree_heures"])
         )
-        ps = None if (clear_plan or invalidate_dur) else exd.get("planned_start")
-        pe = None if (clear_plan or invalidate_dur) else exd.get("planned_end")
+        if clear_plan or invalidate_dur:
+            ps = None
+            pe = None
+        else:
+            ps = exd.get("planned_start")
+            pe = exd.get("planned_end")
+
+        # Recalcul simple de fin de créneau si seule la durée change (ancrage inchangé)
+        if (
+            duree is not None
+            and float(duree) != float(ex["duree_heures"])
+            and exd.get("planned_start")
+            and not clear_plan
+            and not invalidate_dur
+        ):
+            dt_start = _parse_planned_dt(exd["planned_start"])
+            if dt_start:
+                new_end = dt_start + timedelta(hours=float(duree))
+                ps = exd.get("planned_start")
+                pe = new_end.strftime("%Y-%m-%dT%H:%M:%S")
+
+        old_ps = exd.get("planned_start")
+        statut_reel_actuel = exd.get("statut_reel") or "reellement_en_attente"
+        if statut_reel_actuel != "reellement_en_attente":
+            if old_ps and ps and str(ps) != str(old_ps):
+                raise HTTPException(
+                    status_code=409,
+                    detail="Impossible de déplacer ce dossier : une saisie de production est en cours ou terminée.",
+                )
 
         conn.execute("""
             UPDATE planning_entries
@@ -785,7 +896,9 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
             body.get("description", ex["description"]),
             body.get("format_l", ex["format_l"]),
             body.get("format_h", ex["format_h"]),
-            body.get("duree_heures", ex["duree_heures"]),
+            float(body.get("duree_heures", ex["duree_heures"]))
+            if body.get("duree_heures") is not None
+            else ex["duree_heures"],
             new_statut,
             body.get("notes", ex["notes"]),
             now,
@@ -827,19 +940,27 @@ async def toggle_destockage(machine_id: int, entry_id: int, request: Request):
     return {"success": True, "destockage": new_val}
 
 
-@router.put("/machines/{machine_id}/entries/{entry_id}/reset-saisie")
-async def reset_saisie(machine_id: int, entry_id: int, request: Request):
-    """Réinitialise statut_reel, statut_force et les dates planifiées d'un dossier.
-    Permet de corriger une erreur de saisie opérateur sans accès DB."""
-    require_admin(request)
-    now = datetime.now().isoformat()
+@router.post("/machines/{machine_id}/entries/{entry_id}/reset-saisie")
+async def reset_statut_reel(machine_id: int, entry_id: int, request: Request):
+    """
+    Remet statut_reel à reellement_en_attente.
+    Réservé aux rôles superadmin et direction.
+    Bloqué si dossier définitivement clôturé (statut + saisie réelle terminés).
+    """
     with get_db() as conn:
-        ex = conn.execute(
-            "SELECT id, statut FROM planning_entries WHERE id=? AND machine_id=?",
+        require_planning_edit(request, conn, machine_id)
+        row = conn.execute(
+            "SELECT id, statut, statut_reel FROM planning_entries WHERE id=? AND machine_id=?",
             (entry_id, machine_id),
         ).fetchone()
-        if not ex:
-            raise HTTPException(404, "Entrée non trouvée")
+        if not row:
+            raise HTTPException(status_code=404, detail="Entrée introuvable.")
+        if (row["statut_reel"] or "") == "reellement_termine":
+            raise HTTPException(
+                status_code=409,
+                detail="Dossier définitivement clôturé — reset impossible.",
+            )
+        now = datetime.now().isoformat()
         conn.execute(
             """UPDATE planning_entries
                SET statut_reel   = 'reellement_en_attente',
@@ -853,7 +974,7 @@ async def reset_saisie(machine_id: int, entry_id: int, request: Request):
         )
         _invalidate_attente_plans(conn, machine_id)
         conn.commit()
-    return {"success": True}
+    return {"ok": True}
 
 
 @router.post("/machines/{machine_id}/entries/{entry_id}/split")
