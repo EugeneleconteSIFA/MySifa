@@ -279,6 +279,7 @@ def _slot_payload(e: dict, start_iso: str, end_iso: str) -> dict:
         "commentaire": e.get("commentaire"),
         "a_placer": e.get("a_placer", 0),
         "destockage": e.get("destockage") or "todo",
+        "statut_reel": e.get("statut_reel") or "reellement_en_attente",
         "duree_heures": e["duree_heures"],
         # Un dossier terminé en DB reste terminé même si planned_end est dans le futur
         # (cas : durée modifiée → planned_end recalculé en heures calendaires)
@@ -826,6 +827,35 @@ async def toggle_destockage(machine_id: int, entry_id: int, request: Request):
     return {"success": True, "destockage": new_val}
 
 
+@router.put("/machines/{machine_id}/entries/{entry_id}/reset-saisie")
+async def reset_saisie(machine_id: int, entry_id: int, request: Request):
+    """Réinitialise statut_reel, statut_force et les dates planifiées d'un dossier.
+    Permet de corriger une erreur de saisie opérateur sans accès DB."""
+    require_admin(request)
+    now = datetime.now().isoformat()
+    with get_db() as conn:
+        ex = conn.execute(
+            "SELECT id, statut FROM planning_entries WHERE id=? AND machine_id=?",
+            (entry_id, machine_id),
+        ).fetchone()
+        if not ex:
+            raise HTTPException(404, "Entrée non trouvée")
+        conn.execute(
+            """UPDATE planning_entries
+               SET statut_reel   = 'reellement_en_attente',
+                   statut        = 'attente',
+                   statut_force  = 0,
+                   planned_start = NULL,
+                   planned_end   = NULL,
+                   updated_at    = ?
+               WHERE id = ? AND machine_id = ?""",
+            (now, entry_id, machine_id),
+        )
+        _invalidate_attente_plans(conn, machine_id)
+        conn.commit()
+    return {"success": True}
+
+
 @router.post("/machines/{machine_id}/entries/{entry_id}/split")
 def split_entry(machine_id: int, entry_id: int, request: Request):
     """Duplique un dossier en 2 dossiers consécutifs (mêmes infos), durée /2.
@@ -977,6 +1007,178 @@ def delete_entry(machine_id: int, entry_id: int, request: Request):
 
         conn.commit()
     return {"success": True}
+
+
+# ═══════════════════════════════════════════════════════════════
+# DOSSIERS ORPHELINS (saisis en prod mais absents du planning)
+# ═══════════════════════════════════════════════════════════════
+
+@router.get("/machines/{machine_id}/orphan-dossiers")
+def list_orphan_dossiers(machine_id: int, request: Request):
+    """Liste les dossiers saisis en production (code 01) sur cette machine
+    qui ne sont pas encore reliés à une entrée du planning."""
+    require_admin(request)
+    with get_db() as conn:
+        mac = conn.execute("SELECT id, nom, code FROM machines WHERE id=?", (machine_id,)).fetchone()
+        if not mac:
+            raise HTTPException(404, "Machine non trouvée")
+        mnom = mac["nom"] or ""
+        mcode = mac["code"] or ""
+
+        rows = conn.execute(
+            """SELECT pd.no_dossier,
+                      pd.client,
+                      pd.designation,
+                      MIN(CASE WHEN pd.operation_code='01' THEN pd.date_operation END) AS first_start,
+                      MAX(CASE WHEN pd.operation_code='89' THEN pd.date_operation END) AS last_end,
+                      pd.operateur
+               FROM production_data pd
+               WHERE pd.no_dossier IS NOT NULL
+                 AND pd.no_dossier != ''
+                 AND (pd.machine = ? OR pd.machine = ?)
+                 AND pd.no_dossier NOT IN (
+                     SELECT pe.reference FROM planning_entries pe WHERE pe.machine_id = ?
+                 )
+               GROUP BY pd.no_dossier
+               HAVING MIN(CASE WHEN pd.operation_code='01' THEN pd.date_operation END) IS NOT NULL
+               ORDER BY first_start DESC""",
+            (mnom, mcode, machine_id),
+        ).fetchall()
+
+    result = []
+    for r in rows:
+        d = dict(r)
+        elapsed = None
+        if d["first_start"] and d["last_end"]:
+            try:
+                dt_s = datetime.fromisoformat(d["first_start"])
+                dt_e = datetime.fromisoformat(d["last_end"])
+                elapsed = round((dt_e - dt_s).total_seconds() / 3600, 2)
+            except Exception:
+                pass
+        d["duree_reelle"] = elapsed
+        d["has_end"] = d["last_end"] is not None
+        result.append(d)
+
+    return {"dossiers": result}
+
+
+@router.post("/machines/{machine_id}/import-orphan")
+async def import_orphan_dossier(machine_id: int, request: Request):
+    """Importe un dossier orphelin (saisi en prod) dans le planning avec ses dates réelles."""
+    require_admin(request)
+    body = await request.json()
+    no_dossier = (body.get("no_dossier") or "").strip()
+    if not no_dossier:
+        raise HTTPException(400, "Référence dossier requise")
+
+    user = get_current_user(request)
+    user_name = user.get("nom") or user.get("email") or "Admin"
+    now = datetime.now().isoformat()
+
+    with get_db() as conn:
+        mac = conn.execute("SELECT id, nom, code FROM machines WHERE id=?", (machine_id,)).fetchone()
+        if not mac:
+            raise HTTPException(404, "Machine non trouvée")
+
+        existing = conn.execute(
+            "SELECT id FROM planning_entries WHERE reference=? AND machine_id=?",
+            (no_dossier, machine_id),
+        ).fetchone()
+        if existing:
+            raise HTTPException(400, "Ce dossier est déjà au planning")
+
+        mnom = mac["nom"] or ""
+        mcode = mac["code"] or ""
+
+        prod_rows = conn.execute(
+            """SELECT operation_code, date_operation, client, designation,
+                      metrage_total_debut, metrage_total_fin
+               FROM production_data
+               WHERE no_dossier = ? AND (machine = ? OR machine = ?)
+               ORDER BY date_operation ASC""",
+            (no_dossier, mnom, mcode),
+        ).fetchall()
+        if not prod_rows:
+            raise HTTPException(404, "Aucune saisie trouvée pour ce dossier sur cette machine")
+
+        client = ""
+        first_start = None
+        last_end = None
+        for pr in prod_rows:
+            p = dict(pr)
+            if not client and p.get("client"):
+                client = p["client"]
+            if p["operation_code"] == "01" and p["date_operation"]:
+                if first_start is None:
+                    first_start = p["date_operation"]
+            if p["operation_code"] == "89" and p["date_operation"]:
+                last_end = p["date_operation"]
+
+        duree = 8.0
+        statut = "en_cours"
+        statut_reel = "reellement_en_saisie"
+        planned_end = None
+
+        if first_start and last_end:
+            try:
+                dt_s = datetime.fromisoformat(first_start)
+                dt_e = datetime.fromisoformat(last_end)
+                duree = max(1.0, round((dt_e - dt_s).total_seconds() / 3600, 2))
+            except Exception:
+                pass
+            statut = "termine"
+            statut_reel = "reellement_termine"
+            planned_end = last_end
+        elif first_start:
+            planned_end = (datetime.fromisoformat(first_start) + timedelta(hours=duree)).strftime("%Y-%m-%dT%H:%M:%S")
+
+        # Position : insérer parmi les terminés existants (avant le premier non-terminé)
+        rows_pos = conn.execute(
+            """SELECT id, position, statut, statut_force, planned_start, planned_end
+               FROM planning_entries WHERE machine_id=? ORDER BY position ASC""",
+            (machine_id,),
+        ).fetchall()
+
+        insert_pos = 0
+        for rp in rows_pos:
+            rpd = dict(rp)
+            st = compute_statut(rpd)
+            if st == "termine":
+                insert_pos = rpd["position"] + 1
+            else:
+                break
+
+        if not rows_pos:
+            insert_pos = 1
+        elif insert_pos == 0:
+            insert_pos = 1
+
+        conn.execute(
+            "UPDATE planning_entries SET position = position + 1 WHERE machine_id=? AND position >= ?",
+            (machine_id, insert_pos),
+        )
+
+        conn.execute("""
+            INSERT INTO planning_entries
+                (machine_id, position, reference, client, description,
+                 duree_heures, statut, statut_reel, statut_force,
+                 planned_start, planned_end,
+                 created_at, updated_at, created_by, updated_by,
+                 numero_of, a_placer)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, 0)
+        """, (
+            machine_id, insert_pos,
+            no_dossier, client, "",
+            duree, statut, statut_reel,
+            first_start, planned_end,
+            now, now, user_name, user_name,
+            no_dossier,
+        ))
+        _invalidate_attente_plans(conn, machine_id)
+        conn.commit()
+
+    return {"success": True, "statut": statut, "duree": duree}
 
 
 # ═══════════════════════════════════════════════════════════════

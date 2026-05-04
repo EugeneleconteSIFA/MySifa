@@ -1047,6 +1047,7 @@ function render(){
             <button type="button" class="today" onclick="S.wo=0;load()">${navLbl}</button>
             <button type="button" onclick="S.wo++;load()">▶</button>
           </div>
+          ${CAN_EDIT?`<button type="button" class="btn-s" onclick="openImportOrphan()" style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;font-size:11px" title="Ajouter un dossier terminé depuis les saisies de production"><span style="font-size:15px;line-height:1">+</span> Importer dossier</button>`:""}
         </div>
       </div>
       <div style="font-size:11px;color:var(--muted);margin:-8px 0 12px">Gérez les jours et horaires via l'icône ⚙ de chaque semaine.</div>
@@ -1282,6 +1283,14 @@ function updateDestockBtn(entryId, val){
   btn.title=done?"Matières destockées — cliquer pour annuler":"Matières à destocker — cliquer pour valider";
   const ico=done?'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>':'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>';
   btn.innerHTML=ico+'<span>'+(done?"Destocké":"À destocker")+'</span>';
+}
+
+async function resetSaisie(entryId){
+  if(!CAN_EDIT) return;
+  try{
+    await api(`/machines/${MID}/entries/${entryId}/reset-saisie`,{method:"PUT"});
+    closeM();load();
+  }catch(e){ console.error("resetSaisie",e); alert("Erreur lors de la réinitialisation."); }
 }
 
 function buildLegend(sl, m1, nw){
@@ -2081,13 +2090,18 @@ function openEdit(id){
   const destockBorder=destockDone?"#38bdf8":"#fb923c";
   const destockColor=destockDone?"#38bdf8":"#fb923c";
   const destockIcon=destockDone?`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`:`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>`;
-  const headerAction=`<button type="button" id="destock-btn-${id}" onclick="toggleDestockage(${id})"
+  const reelNonDefault=e.statut_reel&&e.statut_reel!=="reellement_en_attente";
+  const resetSaisieBtn=reelNonDefault?`<button type="button" onclick="if(confirm('Réinitialiser la saisie de ce dossier ? Le statut repassera en attente.'))resetSaisie(${id})"
+    title="Réinitialiser — remet le dossier en attente et efface le statut de saisie"
+    style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;border:1.5px solid var(--border2);background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;font-family:inherit;white-space:nowrap"
+    onmouseenter="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseleave="this.style.borderColor='var(--border2)';this.style.color='var(--muted)'">${icon('repeat',12)} Réinit. saisie</button>`:"";
+  const headerAction=`<div style="display:flex;gap:8px;flex-wrap:wrap">${resetSaisieBtn}<button type="button" id="destock-btn-${id}" onclick="toggleDestockage(${id})"
     title="${destockDone?"Matières destockées — cliquer pour annuler":"Matières à destocker — cliquer pour valider"}"
     style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;border:1.5px solid ${destockBorder};background:${destockBg};color:${destockColor};font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;font-family:inherit;white-space:nowrap"
     onmouseenter="this.style.opacity='.75'" onmouseleave="this.style.opacity='1'">
     ${destockIcon}
     <span>${destockDone?"Destocké":"À destocker"}</span>
-  </button>`;
+  </button></div>`;
 
   // Traçabilité création/modification
   const fmtDate=(iso)=>{
@@ -2207,6 +2221,66 @@ function exportDossiers(){
   const d=new Date();
   const ts=`${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`;
   XLSX.writeFile(wb,`planning_${mName.replace(/[^a-zA-Z0-9]/g,"_")}_${ts}.xlsx`);
+}
+
+async function openImportOrphan(){
+  if(!CAN_EDIT) return;
+  document.getElementById("mroot").innerHTML=`<div class="mo" onclick="if(event.target===this)closeM()"><div class="md" style="max-width:620px">
+    <h3 style="margin:0 0 6px;font-size:16px;font-family:var(--mono)">Importer un dossier depuis les saisies</h3>
+    <p style="margin:0 0 16px;font-size:12px;color:var(--muted)">Dossiers saisis en production sur cette machine, non encore au planning.</p>
+    <div id="orphan-list" style="max-height:50vh;overflow-y:auto"><div style="padding:24px;text-align:center;color:var(--muted)">Chargement…</div></div>
+    <div class="md-acts" style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn-s" onclick="closeM()">Fermer</button></div>
+  </div></div>`;
+  try{
+    const r=await api(`/machines/${MID}/orphan-dossiers`);
+    const list=r.dossiers||[];
+    const el=document.getElementById("orphan-list");
+    if(!el) return;
+    if(list.length===0){
+      el.innerHTML='<div style="padding:24px;text-align:center;color:var(--muted)">Aucun dossier orphelin trouvé sur cette machine.</div>';
+      return;
+    }
+    el.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="border-bottom:2px solid var(--border2);text-align:left">
+        <th style="padding:8px 6px;color:var(--muted);font-weight:600">Réf / OF</th>
+        <th style="padding:8px 6px;color:var(--muted);font-weight:600">Client</th>
+        <th style="padding:8px 6px;color:var(--muted);font-weight:600">Début</th>
+        <th style="padding:8px 6px;color:var(--muted);font-weight:600">Fin</th>
+        <th style="padding:8px 6px;color:var(--muted);font-weight:600">Durée</th>
+        <th style="padding:8px 6px"></th>
+      </tr></thead><tbody>${list.map(d=>{
+        const fdt=s=>{if(!s)return"—";try{const x=new Date(s);return x.toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit"})+" "+x.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})}catch(e){return s}};
+        const dur=d.duree_reelle?d.duree_reelle.toFixed(1)+"h":"—";
+        const st=d.has_end?'<span style="color:var(--muted)">Terminé</span>':'<span style="color:var(--accent)">En cours</span>';
+        return`<tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:8px 6px;font-weight:600;font-family:var(--mono)">${escAttr(d.no_dossier)}</td>
+          <td style="padding:8px 6px">${escAttr(d.client||"—")}</td>
+          <td style="padding:8px 6px;font-size:11px">${fdt(d.first_start)}</td>
+          <td style="padding:8px 6px;font-size:11px">${fdt(d.last_end)}</td>
+          <td style="padding:8px 6px;font-family:var(--mono)">${dur}</td>
+          <td style="padding:8px 6px;text-align:right">
+            <button type="button" class="btn-p" style="padding:5px 12px;font-size:11px" onclick="submitImportOrphan('${escAttr(d.no_dossier)}',this)">Ajouter</button>
+          </td>
+        </tr>`;
+      }).join("")}</tbody></table>`;
+  }catch(e){
+    const el=document.getElementById("orphan-list");
+    if(el) el.innerHTML='<div style="padding:24px;text-align:center;color:var(--danger)">Erreur de chargement.</div>';
+  }
+}
+
+async function submitImportOrphan(ref,btn){
+  if(!CAN_EDIT) return;
+  btn.disabled=true;btn.textContent="…";
+  try{
+    await api(`/machines/${MID}/import-orphan`,{method:"POST",body:JSON.stringify({no_dossier:ref})});
+    closeM();load();
+  }catch(e){
+    btn.disabled=false;btn.textContent="Ajouter";
+    let msg="Erreur lors de l'import.";
+    try{const j=await e.json();if(j&&j.detail)msg=typeof j.detail==="string"?j.detail:JSON.stringify(j.detail);}catch(x){}
+    alert(msg);
+  }
 }
 
 function changeMachine(v){
