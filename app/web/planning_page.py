@@ -491,7 +491,7 @@ async function load(){
     render();
     return;
   }
-  S.loading=true;render();
+  S.loading=true;_showAllTermine=false;render();
   try{
     const showDossiers = !!(ME && isAdmin(ME));
     // Important: la timeline persiste planned_start/planned_end en DB.
@@ -1090,15 +1090,12 @@ function render(){
         </div>
       </div>
       <div class="th"><span></span><span></span><span>Client</span><span>Format</span><span>Ref OF</span><span>Ref prod.</span><span>Laize</span><span>Livraison</span><span>Commentaire</span><span>Durée</span><span>Statut</span><span class="act-c">Actions</span></div>
-      <div id="tbody">${S.entries.length===0?'<div class="empty">Aucun dossier au planning</div>':""}
-        ${filterEntries(S.entries,S.searchQuery).map((e,i)=>mkRow(e,i,sl)).join("")}
-      </div>
+      <div id="tbody"></div>
     </section>`:""}
   ${renderContactModal()}</div></main></div><div id="mroot"></div>`;
-  setupDD();
-  setupStatutSelects();
+  if(SHOW_DOSSIERS) renderEntries();
   buildLegend(sl, m1, nw);
-  if(SHOW_DOSSIERS)autoScrollDossiersIfNeeded();
+  if(SHOW_DOSSIERS) autoScrollDossiersIfNeeded();
   // Nouveau container → réinitialise le flag de liaison DnD timeline
   _tlDDContainerBound=false;
   // Réappliquer la recherche timeline + DnD après re-render complet
@@ -1265,10 +1262,23 @@ async function toggleDestockage(entryId){
   if(!CAN_EDIT) return;
   try{
     const r=await api(`/machines/${MID}/entries/${entryId}/destockage`,{method:"PUT"});
-    // Mise à jour locale du cache timeline (pas de rechargement complet)
     (S.timeline||[]).forEach(s=>{if((s.entry_id||0)===entryId) s.destockage=r.destockage;});
+    const ent=(S.entries||[]).find(x=>x.id===entryId);
+    if(ent) ent.destockage=r.destockage;
     renderTL();
+    updateDestockBtn(entryId, r.destockage);
   }catch(e){ console.error("toggleDestockage",e); }
+}
+function updateDestockBtn(entryId, val){
+  const btn=document.getElementById("destock-btn-"+entryId);
+  if(!btn) return;
+  const done=val==="done";
+  btn.style.borderColor=done?"#38bdf8":"#fb923c";
+  btn.style.background=done?"rgba(56,189,248,.12)":"rgba(251,146,60,.10)";
+  btn.style.color=done?"#38bdf8":"#fb923c";
+  btn.title=done?"Matières destockées — cliquer pour annuler":"Matières à destocker — cliquer pour valider";
+  const ico=done?'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>':'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>';
+  btn.innerHTML=ico+'<span>'+(done?"Destocké":"À destocker")+'</span>';
 }
 
 function buildLegend(sl, m1, nw){
@@ -1972,15 +1982,20 @@ async function confirmSwitch(targetMachineId,afterEntryId){
 // ── Modals ──
 function durBar(v){return((v-MIND)/(MAXD-MIND)*100)+"%"}
 
-function modalHTML(title,fields,submitLabel,onSubmitFn,headerAction=""){
+function modalHTML(title,fields,submitLabel,onSubmitFn,headerAction="",footerLeft=""){
   return`<div class="mo" onclick="if(event.target===this)closeM()"><div class="md">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;gap:12px;flex-wrap:wrap">
       <h3 style="margin:0;font-size:18px;font-family:var(--mono);color:var(--text);line-height:1.3">${title}</h3>
       ${headerAction?`<div style="flex-shrink:0">${headerAction}</div>`:""}
     </div>
     ${fields}
-    <div class="md-acts"><button class="btn-s" onclick="closeM()">Annuler</button>
-    <button class="btn-p" onclick="${onSubmitFn}">${submitLabel}</button></div></div></div>`
+    <div class="md-acts" style="display:flex;align-items:center;justify-content:${footerLeft?"space-between":"flex-end"};gap:10px;flex-wrap:wrap">
+      ${footerLeft?`<div>${footerLeft}</div>`:""}
+      <div style="display:flex;align-items:center;gap:10px">
+        <button class="btn-s" onclick="closeM()">Annuler</button>
+        <button class="btn-p" onclick="${onSubmitFn}">${submitLabel}</button>
+      </div>
+    </div></div></div>`
 }
 
 function dossierFields(numero_of,client,ref_produit,laize,date_livraison,commentaire,fl,fh,dur,statut,showStatut,aPlacer=1){
@@ -2063,9 +2078,9 @@ function openEdit(id){
   const destockBorder=destockDone?"#38bdf8":"#fb923c";
   const destockColor=destockDone?"#38bdf8":"#fb923c";
   const destockIcon=destockDone?`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`:`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>`;
-  const headerAction=`<button type="button" onclick="toggleDestockage(${id});closeM();"
-    title="${destockDone?"Matières destockées - cliquer pour annuler":"Matières à destocker - cliquer pour valider"}"
-    style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;border:1.5px solid ${destockBorder};background:${destockBg};color:${destockColor};font-size:12px;font-weight:600;cursor:pointer;transition:opacity .15s;font-family:inherit;white-space:nowrap"
+  const headerAction=`<button type="button" id="destock-btn-${id}" onclick="toggleDestockage(${id})"
+    title="${destockDone?"Matières destockées — cliquer pour annuler":"Matières à destocker — cliquer pour valider"}"
+    style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;border:1.5px solid ${destockBorder};background:${destockBg};color:${destockColor};font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;font-family:inherit;white-space:nowrap"
     onmouseenter="this.style.opacity='.75'" onmouseleave="this.style.opacity='1'">
     ${destockIcon}
     <span>${destockDone?"Destocké":"À destocker"}</span>
@@ -2092,11 +2107,17 @@ function openEdit(id){
   const traceHtml=traceParts.length?`<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border2);font-size:11px;color:var(--muted);line-height:1.5">${traceParts.join(' | ')}</div>`:"";
 
   const titlePrefix=statLabel?`<span style="color:${statColor};font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;margin-right:6px">${statLabel}</span>`:"";
+
+  const delBtn=isTermine
+    ?`<button type="button" disabled style="display:flex;align-items:center;gap:5px;padding:6px 12px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--muted);font-size:12px;cursor:not-allowed;opacity:.4;font-family:inherit" title="Suppression impossible — dossier terminé">${icon('trash-2',14)} Supprimer</button>`
+    :`<button type="button" onclick="if(confirm('Supprimer ce dossier ?')){closeM();delEntry(${id})}" style="display:flex;align-items:center;gap:5px;padding:6px 12px;border-radius:6px;border:1px solid var(--danger);background:rgba(248,113,113,.08);color:var(--danger);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;font-family:inherit" onmouseenter="this.style.background='rgba(248,113,113,.18)'" onmouseleave="this.style.background='rgba(248,113,113,.08)'" title="Supprimer ce dossier">${icon('trash-2',14)} Supprimer</button>`;
+
   document.getElementById("mroot").innerHTML=modalHTML(
     `${titlePrefix}${(e.numero_of||e.reference)||''}`,
     fieldsHtml+traceHtml,
     "Enregistrer",`submitEdit(${id})`,
-    headerAction
+    headerAction,
+    delBtn
   );
 }
 
