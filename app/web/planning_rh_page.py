@@ -218,9 +218,15 @@ input,select,textarea{font-family:inherit;color:var(--text)}
   display:inline-flex;align-items:center;gap:5px;padding:4px 8px;
   border-radius:20px;font-size:12px;font-weight:600;background:var(--accent-bg);
   color:var(--accent);border:1px solid rgba(34,211,238,.25);
-  transition:all .15s;white-space:nowrap;
+  transition:all .15s;
 }
 .rh-chip.warn{background:rgba(251,191,36,.12);color:var(--warn);border-color:rgba(251,191,36,.3)}
+.rh-chip-inner{display:flex;flex-direction:column;gap:1px;line-height:1.2;min-width:0}
+.rh-chip-name{white-space:nowrap}
+.rh-conge-inline-badge{
+  font-size:9px;font-weight:600;color:var(--warn);white-space:nowrap;
+  letter-spacing:0.01em;
+}
 .rh-chip-del{
   display:inline-flex;align-items:center;justify-content:center;
   width:14px;height:14px;border-radius:50%;border:none;background:transparent;
@@ -474,6 +480,8 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
   .rh-week-hdr{padding:4px 8px;font-size:10px}
   .rh-creneau-hdr td{padding:2px 4px!important;font-size:8px}
   .rh-chip{font-size:7px!important;padding:1px 3px!important;border:1px solid #000!important}
+  .rh-chip-name{font-size:7px!important}
+  .rh-conge-inline-badge{font-size:6px!important;color:#8a5e00!important}
   .rh-conge-badge{font-size:7px!important;padding:1px 3px!important}
   .rh-add-btn,.rh-chip-del,.rh-row-btns,.rh-act-btn{display:none!important}
   .rh-section.print-target{display:block!important}
@@ -735,44 +743,67 @@ async function loadSoldes(){
 
 async function addAssignment(target, force=false){
   const p=target.person;
-  // Appel brut pour pouvoir inspecter le 409 structuré (can_force)
-  let resp;
-  try{
-    resp=await fetch(API+'/planning',{
-      credentials:'include',method:'POST',
+  const payload={
+    user_id:p.id, semaine:target.semaine,
+    machine_id:target.machineId, poste:target.poste, creneau:target.creneau,
+    force:!!force
+  };
+
+  async function doPost(pld){
+    return fetch(API+'/planning',{
+      credentials:'include', method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        user_id:p.id,semaine:target.semaine,
-        machine_id:target.machineId,poste:target.poste,creneau:target.creneau,
-        force
-      })
+      body:JSON.stringify(pld)
     });
-  }catch(e){toast('Erreur réseau : '+e.message,'error');S.modal=null;render();return;}
+  }
+
+  let resp;
+  try{ resp=await doPost(payload); }
+  catch(e){ toast('Erreur réseau : '+e.message,'error'); S.modal=null; render(); return; }
 
   if(resp.status===409){
-    const err=await resp.json().catch(()=>({}));
+    let err={};
+    try{ err=await resp.json(); }catch(_){}
+
     if(err.can_force){
-      // Congé partiel — demander confirmation
-      const jours=err.conge_days&&err.conge_days.length?err.conge_days.join(', '):'';
-      const msg=`${p.nom} est absent(e) ce(s) jour(s) : ${jours} (${err.conge_type||'congé'}).\n\nAffecter quand même pour le reste de la semaine ?`;
-      if(confirm(msg)){
-        await addAssignment(target,true); // relance avec force=true
+      // Congé partiel — confirmation explicite
+      const jours=Array.isArray(err.conge_days)&&err.conge_days.length
+        ? err.conge_days.join(', ') : '?';
+      const ok=confirm(
+        `${p.nom} est absent(e) le(s) ${jours} (${err.conge_type||'congé'}).\n\n`+
+        `Affecter quand même pour les autres jours ?`
+      );
+      if(ok){
+        let resp2;
+        try{ resp2=await doPost({...payload, force:true}); }
+        catch(e){ toast('Erreur réseau : '+e.message,'error'); S.modal=null; render(); return; }
+        if(resp2.ok){
+          const d=await resp2.json().catch(()=>null);
+          if(d){ S.planning.push(d); toast(p.nom+' affecté (congé partiel)','success'); }
+          S.modal=null; render(); return;
+        }
+        const e2=await resp2.json().catch(()=>({}));
+        toast(typeof e2.detail==='string'?e2.detail:'Erreur affectation','error');
+        S.modal=null; render(); return;
       }
-      return; // ne pas fermer la modale si refus
+      // Annulé → garder la modale ouverte, rafraîchir la liste
+      renderPersonList(); return;
     }
-    // Blocage dur (semaine entière ou autre conflit)
-    toast(err.detail||'Conflit planning','error');
+
+    // Blocage dur (semaine entière ou déjà affecté)
+    const msg=typeof err.detail==='string'?err.detail:'Conflit planning';
+    toast(msg,'error');
     S.modal=null; render(); return;
   }
 
   if(!resp.ok){
     const e=await resp.json().catch(()=>({}));
-    toast(e.detail||'Erreur '+resp.status,'error');
+    toast(typeof e.detail==='string'?e.detail:'Erreur '+resp.status,'error');
     S.modal=null; render(); return;
   }
 
-  const d=await resp.json();
-  if(d){S.planning.push(d);toast(p.nom+' affecté','success');}
+  const d=await resp.json().catch(()=>null);
+  if(d){ S.planning.push(d); toast(p.nom+' affecté','success'); }
   S.modal=null; render();
 }
 
@@ -1162,9 +1193,29 @@ function buildPlanningGrid(){
 
           const assignments=getAssignments(mdef.code,cr.key,poste,ws);
           assignments.forEach(a=>{
+            // Vérifier si l'opérateur a un congé partiel cette semaine
+            const userCongesW=userCongesThisWeek(a.user_id,ws);
+            const joursAbs=userCongesW.length?getCongesJoursThisWeek(userCongesW,ws):[];
+            const hasPartialConge=joursAbs.length>0&&joursAbs.length<5;
+
             const chip=document.createElement('span');
-            chip.className='rh-chip';
-            chip.textContent=a.user_nom;
+            chip.className='rh-chip'+(hasPartialConge?' warn':'');
+
+            // Contenu interne : nom + badge congé éventuel
+            const inner=document.createElement('span');
+            inner.className='rh-chip-inner';
+            const nameSpan=document.createElement('span');
+            nameSpan.className='rh-chip-name';
+            nameSpan.textContent=a.user_nom;
+            inner.appendChild(nameSpan);
+            if(hasPartialConge){
+              const badge=document.createElement('span');
+              badge.className='rh-conge-inline-badge';
+              badge.textContent='Abs. : '+joursAbs.join(', ');
+              inner.appendChild(badge);
+            }
+            chip.appendChild(inner);
+
             if(S.isEditor){
               const delBtn=document.createElement('button');
               delBtn.className='rh-chip-del';
