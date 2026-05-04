@@ -99,10 +99,15 @@ def compute_statut(entry: dict) -> str:
     Calcule le statut automatique basé sur l'heure actuelle.
     Si statut_force=1 (posé par la saisie opérateur ou manuellement),
     le statut stocké en DB fait autorité — pas de recalcul par dates.
+    Un dossier déjà « terminé » en colonne statut reste terminé même si le créneau
+    planning a été invalidé (planned_* nuls) : sinon il disparaît des filtres UI / export.
     Sinon, si planned_start/planned_end existent, le statut est dérivé de ces dates.
     """
     if int(entry.get("statut_force") or 0) == 1:
         return entry.get("statut") or "attente"
+
+    if (entry.get("statut") or "") == "termine":
+        return "termine"
 
     start = entry.get("planned_start")
     end = entry.get("planned_end")
