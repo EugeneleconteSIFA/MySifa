@@ -232,20 +232,51 @@ def _auto_complete_en_cours(conn, machine_id: int) -> None:
             )
 
 
-def _last_prod_01_start(conn, no_dossier: str) -> Optional[datetime]:
-    """Dernier horodatage saisi pour le code 01 (début de production) pour ce no_dossier."""
-    ref = (no_dossier or "").strip()
+def _norm_prod_dossier(val: Any) -> str:
+    return (str(val or "").strip().lower())
+
+
+def _prod_run_start_for_machine(conn, machine_id: int, m: dict, no_dossier: str) -> Optional[datetime]:
+    """Date de début du « run » actuel du dossier sur cette machine.
+
+    Chronologie des saisies prod filtrées sur la machine : on prend le suffixe final où
+    chaque ligne est le même no_dossier ; la date de début affichée est celle de la
+    **première** saisie de ce suffixe (après le dernier autre dossier sur la machine).
+    """
+    ref = _norm_prod_dossier(no_dossier)
     if not ref:
         return None
-    row = conn.execute(
-        """SELECT date_operation FROM production_data
-           WHERE trim(no_dossier) = ? AND operation_code = '01'
-           ORDER BY date_operation DESC LIMIT 1""",
-        (ref,),
-    ).fetchone()
-    if not row or not row["date_operation"]:
+    mnom = (m.get("nom") or "").strip()
+    mcode = (m.get("code") or "").strip()
+    if not mnom and not mcode:
         return None
-    return _parse_planned_dt(str(row["date_operation"]).strip())
+    rows = conn.execute(
+        """SELECT no_dossier, date_operation
+           FROM production_data
+           WHERE (trim(machine) = trim(?) OR (trim(?) != '' AND trim(machine) = trim(?)))
+           ORDER BY date_operation ASC, id ASC""",
+        (mnom, mcode, mcode),
+    ).fetchall()
+    if not rows:
+        return None
+
+    def row_ref(r: Any) -> str:
+        return _norm_prod_dossier(r["no_dossier"])
+
+    n = len(rows)
+    last = n - 1
+    while last >= 0 and row_ref(rows[last]) != ref:
+        last -= 1
+    if last < 0:
+        return None
+    first = last
+    while first > 0 and row_ref(rows[first - 1]) == ref:
+        first -= 1
+    raw = rows[first]["date_operation"]
+    if not raw:
+        return None
+    s = str(raw).strip()
+    return _parse_prod_dt(s) or _parse_planned_dt(s)
 
 
 def _enforce_single_en_cours(conn, machine_id: int) -> None:
@@ -526,13 +557,13 @@ def _compute_timeline_slots(
         if st == "termine":
             continue
 
-        # ── En cours figé : priorité à la date/heure du code 01 en saisie prod ─
+        # ── En cours figé : début prod = 1re saisie du run actuel du dossier sur la machine ─
         if st == "en_cours" and _is_frozen_entry(e):
             ref = (e.get("numero_of") or e.get("reference") or "").strip()
-            p01 = _last_prod_01_start(conn, ref) if ref else None
-            if p01 is not None:
+            run_start = _prod_run_start_for_machine(conn, machine_id, m, ref) if ref else None
+            if run_start is not None:
                 duree_h = float(e.get("duree_heures") or 0)
-                p0 = p01.replace(microsecond=0)
+                p0 = run_start.replace(microsecond=0)
                 ps = _fmt_ts(p0)
                 _, pe_dt, _ = consume_duration_from(p0, duree_h)
                 pe = _fmt_ts(pe_dt)
@@ -1999,9 +2030,10 @@ def get_active_dossier(machine_id: int, request: Request):
 def live_refresh_en_cours(machine_id: int, request: Request):
     """Recalcule la durée du dossier en_cours à partir des timestamps de production.
 
-    Si le temps écoulé depuis le dernier Début de production (code 01) dépasse
-    la durée planifiée, met à jour duree_heures en DB et retourne {"updated": true}.
-    Sinon retourne {"updated": false}.
+    L’horodatage de référence est le début du run actuel du dossier sur la machine
+    (première saisie du bloc final contigu pour ce no_dossier, cf. _prod_run_start_for_machine).
+    Si le temps écoulé depuis ce point dépasse la durée planifiée, met à jour duree_heures
+    en DB et retourne {"updated": true}. Sinon retourne {"updated": false}.
     """
     with get_db() as conn:
         require_planning_machine(request, conn, machine_id)
@@ -2024,17 +2056,11 @@ def live_refresh_en_cours(machine_id: int, request: Request):
         if not no_dossier:
             return {"updated": False}
 
-        # Dernier Début de production (code 01) pour ce dossier
-        debut_row = conn.execute(
-            """SELECT date_operation FROM production_data
-               WHERE no_dossier=? AND operation_code='01'
-               ORDER BY date_operation DESC LIMIT 1""",
-            (no_dossier,),
-        ).fetchone()
-        if not debut_row or not debut_row["date_operation"]:
+        mac = conn.execute("SELECT * FROM machines WHERE id=?", (machine_id,)).fetchone()
+        if not mac:
             return {"updated": False}
 
-        dt_start = _parse_prod_dt(debut_row["date_operation"])
+        dt_start = _prod_run_start_for_machine(conn, machine_id, dict(mac), no_dossier)
         if not dt_start:
             return {"updated": False}
 
