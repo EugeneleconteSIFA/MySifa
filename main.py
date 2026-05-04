@@ -1,6 +1,7 @@
 """
 MyProd by SIFA — v0.5.0
 """
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -8,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from config import APP_TITLE, APP_VERSION, HOST, PORT
+from config import APP_TITLE, APP_VERSION, HOST, PORT, BASE_DIR
 from frontend.html import render_frontend_html
 
 from routers.auth       import router as auth_router
@@ -59,6 +60,10 @@ app = FastAPI(title=APP_TITLE, version=APP_VERSION, lifespan=lifespan)
 
 # Static assets (chat widget, etc.)
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+_uploads_root = os.path.join(BASE_DIR, "uploads")
+os.makedirs(os.path.join(_uploads_root, "traca"), exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=_uploads_root), name="uploads")
 
 app.add_middleware(
     CORSMiddleware,

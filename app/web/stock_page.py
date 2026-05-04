@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from services.auth_service import get_current_user, user_has_app_access
 from app.web.access_denied import access_denied_response
+from app.web.traca_guide_js import TRACA_GUIDE_SCRIPT_BLOCK
 
 router = APIRouter()
 
@@ -597,6 +598,7 @@ body.light .field-input.empl-upper::placeholder{
 <div id="root"></div>
 <script src="/static/support_widget.js"></script>
 <script>
+/*__TRACA_GUIDE__*/
 const API = window.location.origin;
 
 // ── State ───────────────────────────────────────────────────────
@@ -680,8 +682,8 @@ let FOURNISSEURS_FSC = [
 async function loadFournisseursFSC() {
   try {
     const data = await api('/api/stock/fournisseurs');
-    if (Array.isArray(data) && data.length) FOURNISSEURS_FSC = data;
-  } catch(e) { /* fallback: keep existing array */ }
+    FOURNISSEURS_FSC = Array.isArray(data) ? data : [];
+  } catch(e) { /* garder la liste précédente si erreur */ }
 }
 
 function fournisseurSuggestions(query) {
@@ -2814,6 +2816,28 @@ function buildReception() {
   const fourLabel = el('div', { cls: 'recep-fourn-label' }, iconEl('truck', 13), ' Fournisseur', el('span', { style: { color: 'var(--danger)', marginLeft: '4px' } }, '*'));
   fourWrap.appendChild(fourLabel);
   const fourSearchWrap = el('div', { cls: 'recep-fourn-search-wrap' });
+  const tracaGuideBtn = el('button', {
+    type: 'button',
+    style: {
+      display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '6px',
+      border: '1.5px solid #fb923c', background: 'rgba(251,146,60,.10)', color: '#fb923c',
+      fontSize: '12px', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+      flexShrink: '0',
+    },
+    on: {
+      mouseenter: (e) => { e.currentTarget.style.opacity = '0.75'; },
+      mouseleave: (e) => { e.currentTarget.style.opacity = '1'; },
+      click: () => {
+        const f = FOURNISSEURS_FSC.find((x) => x.nom === S.recepFournisseur);
+        if (typeof showTracaGuide === 'function') {
+          showTracaGuide(f ? f.id : null, S.recepFournisseur || '', FOURNISSEURS_FSC);
+        }
+      },
+    },
+  }, iconEl('scan', 12), ' Quel code scanner ?');
+  const fourRow = el('div', {
+    style: { display: 'flex', alignItems: 'flex-start', gap: '8px', flexWrap: 'wrap', width: '100%' },
+  }, fourSearchWrap, tracaGuideBtn);
   const fourInp = el('input', {
     cls: 'recep-fourn-inp' + (S.recepFournisseur ? ' recep-fourn-selected' : ''),
     attrs: {
@@ -2880,7 +2904,7 @@ function buildReception() {
       setTimeout(() => { dropdown.classList.remove('open'); S.recepFournisseurOpen = false; }, 200);
     });
   }
-  fourWrap.appendChild(fourSearchWrap);
+  fourWrap.appendChild(fourRow);
   // Afficher le certificat FSC si fournisseur sélectionné
   if (S.recepFournisseur) {
     const fsc = FOURNISSEURS_FSC.find(f => f.nom === S.recepFournisseur);
@@ -3213,3 +3237,5 @@ init();
 </script>
 </body>
 </html>"""
+
+STOCK_HTML = STOCK_HTML.replace("/*__TRACA_GUIDE__*/", TRACA_GUIDE_SCRIPT_BLOCK)

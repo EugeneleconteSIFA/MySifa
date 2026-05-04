@@ -1,10 +1,15 @@
 """Paramètres & matrice d'accès — super administrateur uniquement."""
 
+import uuid
 from datetime import datetime
-from fastapi import APIRouter, Request, HTTPException
+from pathlib import Path
+from typing import Optional
+
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 
 from config import (
     ASSIGNABLE_ROLES,
+    BASE_DIR,
     ROLE_SUPERADMIN,
     ROLE_FABRICATION,
     ROLE_ADMINISTRATION,
@@ -13,12 +18,37 @@ from config import (
     ROLE_COMPTABILITE,
     ROLE_EXPEDITION,
     ROLE_COMMERCIAL,
+    ROLES_ADMIN,
     SUPERADMIN_EMAIL,
     default_app_access_for_role,
 )
-from services.auth_service import require_superadmin, merged_app_access, parse_access_overrides_raw
+from services.auth_service import get_current_user, require_superadmin, merged_app_access, parse_access_overrides_raw
 
 router = APIRouter(tags=["settings"])
+
+
+def _require_traca_photo_editor(request: Request) -> dict:
+    """Super admin, direction ou administration : photo / guide traça fournisseur."""
+    user = get_current_user(request)
+    if user.get("role") not in ROLES_ADMIN:
+        raise HTTPException(status_code=403, detail="Accès réservé aux administrateurs.")
+    return user
+
+
+def _traca_file_from_url(url: str) -> Optional[Path]:
+    if not url or not isinstance(url, str):
+        return None
+    rel = url.strip().lstrip("/")
+    if rel.startswith("..") or rel.startswith("/"):
+        return None
+    if not rel.startswith("uploads/traca/"):
+        return None
+    p = (Path(BASE_DIR) / rel).resolve()
+    try:
+        p.relative_to((Path(BASE_DIR) / "uploads" / "traca").resolve())
+    except ValueError:
+        return None
+    return p
 
 
 @router.get("/api/settings/access-matrix")
@@ -130,7 +160,8 @@ def list_fournisseurs(request: Request):
     from database import get_db
     with get_db() as conn:
         rows = conn.execute(
-            "SELECT id, nom, licence, certificat FROM fournisseurs_fsc ORDER BY nom COLLATE NOCASE ASC"
+            """SELECT id, nom, licence, certificat, traca_photo_url, traca_explication, traca_exemple_code
+               FROM fournisseurs_fsc ORDER BY nom COLLATE NOCASE ASC"""
         ).fetchall()
     return [dict(r) for r in rows]
 
@@ -173,15 +204,95 @@ async def update_fournisseur(fournisseur_id: int, request: Request):
         if isinstance(certificat, str): certificat = certificat.strip() or None
         if not nom:
             raise HTTPException(status_code=400, detail="Nom du fournisseur requis")
+        traca_explication = (body.get("traca_explication") or "").strip() or None
+        traca_exemple_code = (body.get("traca_exemple_code") or "").strip() or None
         try:
             conn.execute(
-                "UPDATE fournisseurs_fsc SET nom=?, licence=?, certificat=? WHERE id=?",
-                (nom, licence, certificat, fournisseur_id),
+                """UPDATE fournisseurs_fsc SET nom=?, licence=?, certificat=?,
+                       traca_explication=?, traca_exemple_code=?
+                   WHERE id=?""",
+                (nom, licence, certificat, traca_explication, traca_exemple_code, fournisseur_id),
             )
             conn.commit()
             return {"success": True}
         except Exception:
             raise HTTPException(status_code=409, detail="Ce nom de fournisseur existe déjà")
+
+
+@router.post("/api/fournisseurs/{fournisseur_id}/traca-photo")
+async def upload_traca_photo(fournisseur_id: int, request: Request, photo: UploadFile = File(...)):
+    """Upload d'une photo d'étiquette fournisseur pour le guide code-barre."""
+    _require_traca_photo_editor(request)
+    allowed = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+    if (photo.content_type or "") not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail="Format image non accepté (jpg, png, webp, gif).",
+        )
+    ext_map = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif"}
+    ext = ext_map.get(photo.content_type or "", "jpg")
+    dest_dir = Path(BASE_DIR) / "uploads" / "traca"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"traca_{fournisseur_id}_{uuid.uuid4().hex[:8]}.{ext}"
+    dest = dest_dir / filename
+    content = await photo.read()
+    if len(content) > 6 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Fichier trop volumineux (max 6 Mo).")
+    with open(dest, "wb") as f:
+        f.write(content)
+    url = f"/uploads/traca/{filename}"
+    from database import get_db
+
+    with get_db() as conn:
+        ex = conn.execute("SELECT id, traca_photo_url FROM fournisseurs_fsc WHERE id=?", (fournisseur_id,)).fetchone()
+        if not ex:
+            try:
+                dest.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise HTTPException(status_code=404, detail="Fournisseur introuvable")
+        old_url = ex["traca_photo_url"]
+        if old_url:
+            old_p = _traca_file_from_url(str(old_url))
+            if old_p and old_p.is_file():
+                try:
+                    old_p.unlink()
+                except OSError:
+                    pass
+        conn.execute(
+            "UPDATE fournisseurs_fsc SET traca_photo_url=? WHERE id=?",
+            (url, fournisseur_id),
+        )
+        conn.commit()
+    return {"url": url}
+
+
+@router.delete("/api/fournisseurs/{fournisseur_id}/traca-photo")
+def delete_traca_photo(fournisseur_id: int, request: Request):
+    _require_traca_photo_editor(request)
+    from database import get_db
+
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id, traca_photo_url FROM fournisseurs_fsc WHERE id=?",
+            (fournisseur_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Fournisseur introuvable")
+        old_url = row["traca_photo_url"]
+        if old_url:
+            old_p = _traca_file_from_url(str(old_url))
+            if old_p and old_p.is_file():
+                try:
+                    old_p.unlink()
+                except OSError:
+                    pass
+        conn.execute(
+            "UPDATE fournisseurs_fsc SET traca_photo_url=NULL WHERE id=?",
+            (fournisseur_id,),
+        )
+        conn.commit()
+    return {"ok": True}
 
 
 @router.delete("/api/fournisseurs/{fournisseur_id}")

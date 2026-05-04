@@ -8,6 +8,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Request, HTTPException
 
+from config import ROLE_FABRICATION
 from database import get_db
 from services.auth_service import get_current_user, user_has_app_access
 
@@ -57,6 +58,18 @@ def require_stock(request: Request) -> dict:
     if not user_has_app_access(user, "stock"):
         raise HTTPException(403, "Accès réservé à la Direction, Administration et Logistique")
     return user
+
+
+def _require_stock_or_fabrication(user: dict) -> None:
+    """Lecture fournisseurs FSC : MyStock ou page fabrication (guide traça)."""
+    if user_has_app_access(user, "stock"):
+        return
+    if user.get("role") == ROLE_FABRICATION:
+        return
+    raise HTTPException(
+        status_code=403,
+        detail="Accès réservé à la Direction, Administration, Logistique ou fabrication",
+    )
 
 
 def require_stock_write(request: Request) -> dict:
@@ -698,11 +711,13 @@ def dashboard(request: Request):
 
 @router.get("/api/stock/fournisseurs")
 def list_fournisseurs_stock(request: Request):
-    """Liste des fournisseurs FSC pour la réception matière (accès stock)."""
-    user = require_stock(request)
+    """Liste des fournisseurs FSC pour la réception matière et le guide traça (fabrication)."""
+    user = get_current_user(request)
+    _require_stock_or_fabrication(user)
     with get_db() as conn:
         rows = conn.execute(
-            "SELECT id, nom, licence, certificat FROM fournisseurs_fsc ORDER BY nom COLLATE NOCASE ASC"
+            """SELECT id, nom, licence, certificat, traca_photo_url, traca_explication, traca_exemple_code
+               FROM fournisseurs_fsc ORDER BY nom COLLATE NOCASE ASC"""
         ).fetchall()
     return [dict(r) for r in rows]
 

@@ -1033,6 +1033,18 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 9, "fix_corrupted_statut_reel_and_dates")
 
+    # Migration v10 : traçabilité code-barre fournisseur (photo + texte)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=10 LIMIT 1").fetchone():
+        fsc_cols = {r["name"] for r in conn.execute("PRAGMA table_info(fournisseurs_fsc)").fetchall()}
+        if "traca_photo_url" not in fsc_cols:
+            conn.execute("ALTER TABLE fournisseurs_fsc ADD COLUMN traca_photo_url TEXT")
+        if "traca_explication" not in fsc_cols:
+            conn.execute("ALTER TABLE fournisseurs_fsc ADD COLUMN traca_explication TEXT")
+        if "traca_exemple_code" not in fsc_cols:
+            conn.execute("ALTER TABLE fournisseurs_fsc ADD COLUMN traca_exemple_code TEXT")
+        conn.commit()
+        _record_schema_migration(conn, 10, "add_traca_barcode_to_fournisseurs")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

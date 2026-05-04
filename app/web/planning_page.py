@@ -1695,11 +1695,16 @@ function mkTL(mon,slots){
   cols.slice(1).forEach(col=>{h+=`<div class="d-sep" style="left:${(col.cs/tot)*100}%"></div>`;});
 
   const tlQ=(S.tlSearchQuery||"").toLowerCase().trim();
+  /** Dossier sur >=2 semaines calendaires : ne pas afficher un segment dont la duree ouvree visible sur cette semaine est < 0,5 h. */
+  const TL_MIN_VISIBLE_H_WHEN_SPLIT = 0.5;
   ws.forEach((s,idx)=>{
     const ss=new Date(s.start),se=new Date(s.end);
     const cs=ss<mon?mon:ss,ce=se>we?we:se;
     let sp=gp(cs),ep=gp(ce);
     if(ep<sp){ const t=sp;sp=ep;ep=t; }
+    const visibleWorkH = ep - sp;
+    const spansMultipleWeeks = getMon(ss).getTime() !== getMon(se).getTime();
+    if(spansMultipleWeeks && visibleWorkH < TL_MIN_VISIBLE_H_WHEN_SPLIT) return;
     const l=(sp/tot)*100,w=Math.max(.5,((ep-sp)/tot)*100);
     const co=colorForId(s.entry_id||idx+1);
     const fm=s.format_l&&s.format_h?`${s.format_l} × ${s.format_h} mm`:"";

@@ -6,6 +6,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from config import APP_VERSION
 from services.auth_service import get_current_user, is_superadmin
 from app.web.access_denied import access_denied_response
+from app.web.traca_guide_js import TRACA_GUIDE_SCRIPT_BLOCK
 
 router = APIRouter()
 
@@ -26,7 +27,11 @@ def settings_page(request: Request):
                 "Merci de contacter un administrateur en cas de besoin."
             ),
         )
-    return HTMLResponse(content=SETTINGS_HTML.replace("__V_LABEL__", f"v{APP_VERSION}"))
+    return HTMLResponse(
+        content=SETTINGS_HTML.replace("__V_LABEL__", f"v{APP_VERSION}").replace(
+            "/*__TRACA_GUIDE__*/", TRACA_GUIDE_SCRIPT_BLOCK
+        )
+    )
 
 
 SETTINGS_HTML = r"""<!DOCTYPE html>
@@ -389,6 +394,7 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 </div>
 <script src="/static/support_widget.js"></script>
 <script>
+/*__TRACA_GUIDE__*/
 const API = window.location.origin;
 async function api(path, opt) {
   const r = await fetch(API + path, { credentials: 'include', ...opt });
@@ -979,11 +985,14 @@ function renderFournisseursTable() {
     wrap.innerHTML = '<p class="sub" style="padding:12px">Aucun fournisseur enregistré.</p>';
     return;
   }
-  wrap.innerHTML = '<table><thead><tr><th>Nom</th><th>Licence FSC</th><th>Certificat FSC</th><th></th></tr></thead><tbody>' +
+  wrap.innerHTML = '<table><thead><tr><th>Nom</th><th>Licence FSC</th><th>Certificat FSC</th><th>Code-barre traça</th><th></th></tr></thead><tbody>' +
     fournisseursAll.map(f => '<tr>' +
       '<td><strong>' + esc(f.nom) + '</strong></td>' +
       '<td><code>' + esc(f.licence || '—') + '</code></td>' +
       '<td><code>' + esc(f.certificat || '—') + '</code></td>' +
+      '<td>' + (f.traca_photo_url || f.traca_explication || f.traca_exemple_code
+        ? '<span style="color:var(--ok);font-size:12px">✓ Renseigné</span>'
+        : '<span style="color:var(--muted);font-size:12px">— Non renseigné</span>') + '</td>' +
       '<td style="display:flex;gap:6px;justify-content:flex-end">' +
         '<button type="button" class="btn btn-sec" data-fedit="' + f.id + '">Modifier</button>' +
         '<button type="button" class="btn btn-sec" data-fdel="' + f.id + '" style="color:var(--danger)">Supprimer</button>' +
@@ -1023,15 +1032,96 @@ async function openEditFournisseur(id) {
     '<label class="sub">Nom</label><input id="ef-nom" value="' + esc(f.nom) + '" style="margin-bottom:10px">' +
     '<label class="sub">Licence FSC</label><input id="ef-licence" value="' + esc(f.licence || '') + '" style="margin-bottom:10px" placeholder="ex: FSC-C004451">' +
     '<label class="sub">Certificat FSC</label><input id="ef-certificat" value="' + esc(f.certificat || '') + '" style="margin-bottom:10px" placeholder="ex: CU-COC-807907">' +
+    '<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">' +
+    '<p style="margin:0 0 10px;font-size:13px;font-weight:600;color:var(--text)">Code-barre de traçabilité</p>' +
+    '<p style="margin:0 0 10px;font-size:12px;color:var(--text2)">Aide pour les opérateurs : quel code scanner sur les bobines de ce fournisseur.</p>' +
+    '<label class="sub">Photo de l\'étiquette</label>' +
+    '<div id="ef-photo-preview" style="margin-bottom:10px"></div>' +
+    '<input type="file" id="ef-photo-input" accept="image/*" style="display:none">' +
+    '<div style="display:flex;gap:8px;margin-bottom:12px">' +
+    '<button type="button" class="btn btn-sec" id="ef-photo-pick" style="font-size:12px">Choisir une photo</button>' +
+    '<button type="button" class="btn btn-sec" id="ef-photo-del" style="font-size:12px;color:var(--danger);display:none">Supprimer la photo</button></div>' +
+    '<label class="sub">Explication (emplacement, description du code)</label>' +
+    '<textarea id="ef-traca-exp" placeholder="Ex: Scanner le code en bas à gauche de l\'étiquette bobine — code EAN-13 commençant par 376" ' +
+    'style="width:100%;min-height:72px;resize:vertical;margin-bottom:10px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;box-sizing:border-box"></textarea>' +
+    '<label class="sub">Exemple de code (scanner une vraie étiquette pour le remplir)</label>' +
+    '<div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">' +
+    '<input type="text" id="ef-traca-code" placeholder="Ex: 3760123456789" style="flex:1;font-family:monospace">' +
+    '<button type="button" class="btn btn-sec" id="ef-scan-example" style="font-size:12px;white-space:nowrap">Scanner</button></div>' +
+    '<p class="sub" style="margin-top:4px;font-size:11px">Utilisez « Scanner » pour remplir automatiquement en scannant une vraie bobine.</p></div>' +
     '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">' +
     '<button type="button" class="btn btn-sec" id="ef-cancel">Annuler</button>' +
     '<button type="button" class="btn" id="ef-save">Enregistrer</button></div>';
+
+  const expEl = dlg.querySelector('#ef-traca-exp');
+  const codeEl = dlg.querySelector('#ef-traca-code');
+  const photoPreview = dlg.querySelector('#ef-photo-preview');
+  const photoInput = dlg.querySelector('#ef-photo-input');
+  const photoDelBtn = dlg.querySelector('#ef-photo-del');
+  expEl.value = f.traca_explication || '';
+  codeEl.value = f.traca_exemple_code || '';
+
+  function refreshPhotoPreview(url) {
+    if (url) {
+      photoPreview.innerHTML = '<img src="' + esc(url) + '" alt="" style="max-width:100%;max-height:200px;border-radius:8px;border:1px solid var(--border);display:block;margin-bottom:4px">';
+      photoDelBtn.style.display = '';
+    } else {
+      photoPreview.innerHTML = '<p class="sub" style="margin:0 0 8px;font-size:12px">Aucune photo</p>';
+      photoDelBtn.style.display = 'none';
+    }
+  }
+  refreshPhotoPreview(f.traca_photo_url || null);
+
+  dlg.querySelector('#ef-photo-pick').onclick = () => photoInput.click();
+  photoInput.onchange = async () => {
+    const file = photoInput.files[0];
+    photoInput.value = '';
+    if (!file) return;
+    const fd = new FormData();
+    fd.append('photo', file);
+    try {
+      const res = await fetch(API + '/api/fournisseurs/' + id + '/traca-photo', { method: 'POST', credentials: 'include', body: fd });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const d = j.detail;
+        const msg = typeof d === 'string' ? d : (Array.isArray(d) && d[0] && d[0].msg ? d[0].msg : 'Erreur upload');
+        throw new Error(msg);
+      }
+      refreshPhotoPreview(j.url);
+      const fi = fournisseursAll.find(x => x.id === id);
+      if (fi) fi.traca_photo_url = j.url;
+      toast('Photo enregistrée');
+    } catch (e) { toast(e.message, true); }
+  };
+
+  photoDelBtn.onclick = async () => {
+    if (!confirm('Supprimer la photo ?')) return;
+    try {
+      const res = await fetch(API + '/api/fournisseurs/' + id + '/traca-photo', { method: 'DELETE', credentials: 'include' });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof j.detail === 'string' ? j.detail : 'Erreur');
+      refreshPhotoPreview(null);
+      const fi = fournisseursAll.find(x => x.id === id);
+      if (fi) fi.traca_photo_url = null;
+      toast('Photo supprimée');
+    } catch (e) { toast(e.message, true); }
+  };
+
+  dlg.querySelector('#ef-scan-example').onclick = async () => {
+    try {
+      if (typeof startTracaExampleScan !== 'function') return;
+      await startTracaExampleScan(function(code) { if (code) codeEl.value = code; });
+    } catch (e) {}
+  };
+
   dlg.querySelector('#ef-cancel').onclick = () => backdrop.remove();
   dlg.querySelector('#ef-save').onclick = async () => {
     const body = {
       nom: dlg.querySelector('#ef-nom').value.trim(),
       licence: dlg.querySelector('#ef-licence').value.trim(),
       certificat: dlg.querySelector('#ef-certificat').value.trim(),
+      traca_explication: expEl.value.trim(),
+      traca_exemple_code: codeEl.value.trim(),
     };
     if (!body.nom) return toast('Nom requis', true);
     try {
@@ -1040,6 +1130,14 @@ async function openEditFournisseur(id) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
+      const fi = fournisseursAll.find(x => x.id === id);
+      if (fi) {
+        fi.traca_explication = body.traca_explication || null;
+        fi.traca_exemple_code = body.traca_exemple_code || null;
+        fi.nom = body.nom;
+        fi.licence = body.licence || null;
+        fi.certificat = body.certificat || null;
+      }
       toast('Fournisseur mis à jour');
       backdrop.remove();
       await loadFournisseurs();

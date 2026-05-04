@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.services.auth_service import get_current_user, is_fabrication, is_admin
 from app.web.access_denied import access_denied_response
+from app.web.traca_guide_js import TRACA_GUIDE_SCRIPT_BLOCK
 
 router = APIRouter()
 
@@ -517,6 +518,7 @@ table.fab-traca-table tr:last-child td{border-bottom:none}
 <script src="/static/support_widget.js"></script>
 <script>
 'use strict';
+/*__TRACA_GUIDE__*/
 
 /* ── Operations config ───────────────────────────────────────── */
 const OPS = {
@@ -617,6 +619,14 @@ let S = {
   // Pending op from picker
   _pendingPickerOp: null,
 };
+
+let FOURNISSEURS_FSC = [];
+async function loadFournisseursFSC(){
+  try{
+    const data = await apiFetch('/api/stock/fournisseurs');
+    FOURNISSEURS_FSC = Array.isArray(data) ? data : [];
+  }catch(e){ FOURNISSEURS_FSC = []; }
+}
 
 /* ── Helpers ─────────────────────────────────────────────────── */
 function set(u){ Object.assign(S, u); render(); }
@@ -1265,7 +1275,7 @@ function renderTracaPanel(){
         );
       })
     : [h('tr',null,h('td',{colSpan:'4',className:'fab-traca-empty'},
-        S.tracaLoading ? '⏳ Chargement…' : 'Aucune bobine scannée aujourd\'hui'
+        S.tracaLoading ? 'Chargement…' : 'Aucune bobine scannée aujourd\'hui'
       ))];
 
   // Manual input
@@ -1291,6 +1301,20 @@ function renderTracaPanel(){
     onClick:()=>tracaSaveCode(S.tracaManual)
   }, svgIcon('plus-circle',14),' Ajouter');
 
+  const tracaGuideBtn = h('button',{
+    type:'button',
+    style:{
+      display:'flex',alignItems:'center',gap:'6px',padding:'6px 12px',borderRadius:'6px',
+      border:'1.5px solid #fb923c',background:'rgba(251,146,60,.10)',color:'#fb923c',
+      fontSize:'12px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap',
+    },
+    onMouseEnter:(e)=>{ e.currentTarget.style.opacity='0.75'; },
+    onMouseLeave:(e)=>{ e.currentTarget.style.opacity='1'; },
+    onClick:()=>{
+      if(typeof showTracaGuide==='function') showTracaGuide(null, '', FOURNISSEURS_FSC);
+    },
+  }, svgIcon('scan',12),' Quel code scanner ?');
+
   return h('div',{className:'fab-main'},
     h('div',{className:'fab-main-head'},
       h('span',{className:'fab-main-title'}, svgIcon('scan',16),' Traçabilité matières'),
@@ -1303,7 +1327,8 @@ function renderTracaPanel(){
       h('div',{className:'fab-traca-scan-row'},
         manualInp,
         addBtn,
-        camBtn
+        camBtn,
+        tracaGuideBtn
       ),
       // Camera preview
       S.tracaScanning ? h('div',{className:'fab-traca-video-wrap'},
@@ -2113,6 +2138,8 @@ async function init(){
   if(!user){ window.location.href='/'; return; }
   set({user});
 
+  await loadFournisseursFSC();
+
   // Charger la liste des machines (nécessaire pour le sélecteur admin)
   const isAdm = user.role==='superadmin'||user.role==='administration'||user.role==='direction';
   if(isAdm && !user.machine_id){
@@ -2165,3 +2192,5 @@ init();
 </script>
 </body>
 </html>"""
+
+FABRICATION_HTML = FABRICATION_HTML.replace("/*__TRACA_GUIDE__*/", TRACA_GUIDE_SCRIPT_BLOCK)
