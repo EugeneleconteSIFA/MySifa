@@ -91,7 +91,7 @@ def get_planning(
             SELECT p.id, p.user_id, u.nom AS user_nom, u.role AS user_role,
                    p.semaine, p.machine_id,
                    m.code AS machine_code, m.nom AS machine_nom,
-                   p.poste, p.creneau, p.created_by, p.created_at
+                   p.poste, p.creneau, p.jours, p.created_by, p.created_at
             FROM rh_planning_postes p
             JOIN users u ON u.id = p.user_id
             LEFT JOIN machines m ON m.id = p.machine_id
@@ -124,21 +124,22 @@ async def create_planning(request: Request):
     editor = _require_edit(request)
     body = await request.json()
 
-    user_id  = body.get("user_id")
-    semaine  = body.get("semaine")
+    user_id    = body.get("user_id")
+    semaine    = body.get("semaine")
     machine_id = body.get("machine_id")   # peut être None (resp_atelier / logistique)
-    poste    = body.get("poste")
-    creneau  = body.get("creneau", "journee")
-    force    = bool(body.get("force", False))  # passer outre un congé partiel
+    poste      = body.get("poste")
+    creneau    = body.get("creneau", "journee")
+    force      = bool(body.get("force", False))   # passer outre un congé partiel
+    jours_req  = body.get("jours")                # bitmask optionnel (None → auto)
 
     if not user_id or not semaine or not poste:
         raise HTTPException(400, "Champs obligatoires manquants : user_id, semaine, poste")
 
-    # Validation format semaine
     monday, sunday = _week_bounds(semaine)
+    friday = monday + timedelta(days=4)
+    JOURS_NOMS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"]
 
     with get_db() as conn:
-        # Vérification utilisateur planifiable
         user_row = conn.execute(
             "SELECT id, nom, role FROM users WHERE id = ? AND actif = 1", (user_id,)
         ).fetchone()
@@ -164,21 +165,22 @@ async def create_planning(request: Request):
                AND date_debut <= ? AND date_fin >= ?""",
             (user_id, sunday.isoformat(), monday.isoformat()),
         ).fetchone()
+
+        conge_day_bits = 0   # bitmask des jours de congé (Lun=bit0 … Ven=bit4)
+        conge_days: list[str] = []
+
         if conge:
-            # Calculer les jours ouvrés de la semaine concernés par le congé
-            JOURS_NOMS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"]
-            friday = monday + timedelta(days=4)
             d_deb = date.fromisoformat(conge["date_debut"])
             d_fin = date.fromisoformat(conge["date_fin"])
             cur_day = max(d_deb, monday)
             end_day = min(d_fin, friday)
-            conge_days: list[str] = []
             while cur_day <= end_day:
-                if cur_day.weekday() < 5:          # lundi–vendredi uniquement
+                if cur_day.weekday() < 5:
                     conge_days.append(JOURS_NOMS[cur_day.weekday()])
+                    conge_day_bits |= (1 << cur_day.weekday())
                 cur_day += timedelta(days=1)
 
-            is_full_week = len(conge_days) >= 5    # semaine entière → blocage dur
+            is_full_week = len(conge_days) >= 5
 
             if is_full_week:
                 raise HTTPException(
@@ -188,7 +190,6 @@ async def create_planning(request: Request):
                     f"Impossible de l'affecter.",
                 )
             elif not force:
-                # Congé partiel : informer et demander confirmation (force=True)
                 from fastapi.responses import JSONResponse
                 days_str = ", ".join(conge_days) if conge_days else conge["date_debut"]
                 return JSONResponse(
@@ -203,14 +204,22 @@ async def create_planning(request: Request):
                         "conge_type": conge["type_conge"],
                     },
                 )
-            # force=True → on continue malgré le congé partiel
+            # force=True → on affecte malgré le congé partiel
+
+        # Calculer le bitmask jours final :
+        #   - Si le client fournit une valeur explicite → l'utiliser (masquée sur 5 bits)
+        #   - Sinon → 31 (toute la semaine) en excluant les jours de congé
+        if jours_req is not None:
+            jours = int(jours_req) & 31
+        else:
+            jours = 31 & ~conge_day_bits   # retire les jours de congé par défaut
 
         now = datetime.now().isoformat()
         cur = conn.execute(
             """INSERT INTO rh_planning_postes
-                   (user_id, semaine, machine_id, poste, creneau, created_by, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (user_id, semaine, machine_id, poste, creneau, editor.get("email"), now),
+                   (user_id, semaine, machine_id, poste, creneau, jours, created_by, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (user_id, semaine, machine_id, poste, creneau, jours, editor.get("email"), now),
         )
         conn.commit()
         new_id = cur.lastrowid
@@ -219,7 +228,7 @@ async def create_planning(request: Request):
             """SELECT p.id, p.user_id, u.nom AS user_nom, u.role AS user_role,
                       p.semaine, p.machine_id,
                       m.code AS machine_code, m.nom AS machine_nom,
-                      p.poste, p.creneau, p.created_by, p.created_at
+                      p.poste, p.creneau, p.jours, p.created_by, p.created_at
                FROM rh_planning_postes p
                JOIN users u ON u.id = p.user_id
                LEFT JOIN machines m ON m.id = p.machine_id
@@ -241,6 +250,40 @@ def delete_planning(plan_id: int, request: Request):
         conn.execute("DELETE FROM rh_planning_postes WHERE id = ?", (plan_id,))
         conn.commit()
     return {"ok": True}
+
+
+@router.put("/planning/{plan_id}")
+async def update_planning_jours(plan_id: int, request: Request):
+    """Met à jour le bitmask jours d'une affectation existante."""
+    _require_edit(request)
+    body = await request.json()
+
+    jours = body.get("jours")
+    if jours is None:
+        raise HTTPException(400, "Champ 'jours' requis (bitmask 0–31)")
+    jours = int(jours) & 31
+
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id FROM rh_planning_postes WHERE id = ?", (plan_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Affectation introuvable")
+        conn.execute("UPDATE rh_planning_postes SET jours = ? WHERE id = ?", (jours, plan_id))
+        conn.commit()
+
+        updated = conn.execute(
+            """SELECT p.id, p.user_id, u.nom AS user_nom, u.role AS user_role,
+                      p.semaine, p.machine_id,
+                      m.code AS machine_code, m.nom AS machine_nom,
+                      p.poste, p.creneau, p.jours, p.created_by, p.created_at
+               FROM rh_planning_postes p
+               JOIN users u ON u.id = p.user_id
+               LEFT JOIN machines m ON m.id = p.machine_id
+               WHERE p.id = ?""",
+            (plan_id,),
+        ).fetchone()
+    return dict(updated)
 
 
 # ── Congés ───────────────────────────────────────────────────────

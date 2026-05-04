@@ -404,6 +404,41 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 .rh-btn.secondary:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 .rh-btn:disabled{opacity:.5;cursor:not-allowed}
 
+/* Modale détail jours */
+.rh-dd-modal-box{
+  background:var(--card);border-radius:16px;padding:28px 32px;
+  width:min(760px,95vw);max-height:88vh;overflow-y:auto;
+  position:relative;box-shadow:0 16px 48px rgba(0,0,0,.45);
+}
+.rh-dd-modal-box h3{font-size:15px;font-weight:800;margin-bottom:4px;padding-right:36px}
+.rh-dd-subtitle{font-size:12px;color:var(--muted);margin-bottom:20px}
+.rh-dd-table{width:100%;border-collapse:collapse;font-size:13px}
+.rh-dd-table th{
+  padding:8px 10px;text-align:center;font-size:11px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.5px;color:var(--muted);
+  border-bottom:1px solid var(--border);
+}
+.rh-dd-table th.rh-dd-name-col{text-align:left}
+.rh-dd-table td{padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.04);text-align:center;vertical-align:middle}
+.rh-dd-table td.rh-dd-name-col{text-align:left;font-weight:600;font-size:13px;white-space:nowrap;padding-right:16px}
+.rh-dd-day-btn{
+  width:42px;height:36px;border-radius:8px;border:1px solid var(--border);
+  background:transparent;cursor:pointer;font-size:11px;font-weight:700;
+  color:var(--muted);transition:all .15s;
+}
+.rh-dd-day-btn.on{background:rgba(34,211,238,.12);border-color:var(--accent);color:var(--accent)}
+.rh-dd-day-btn.conge{background:rgba(234,179,8,.08);border-color:rgba(234,179,8,.3);color:var(--warn);cursor:default;font-size:9px}
+.rh-dd-day-btn:not(.conge):hover{border-color:var(--accent);color:var(--accent);background:rgba(34,211,238,.06)}
+.rh-dd-day-hdr{font-size:11px}
+.rh-dd-day-date{font-size:10px;color:var(--muted);font-weight:400;margin-top:2px}
+.rh-dd-eye-btn{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:22px;height:22px;border-radius:6px;border:1px solid var(--border);
+  background:transparent;color:var(--muted);cursor:pointer;font-size:13px;
+  transition:all .15s;vertical-align:middle;
+}
+.rh-dd-eye-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+
 /* Person search list in modal */
 .rh-person-list{display:flex;flex-direction:column;gap:4px;max-height:280px;overflow-y:auto;margin-top:8px}
 .rh-person-item{
@@ -481,8 +516,9 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
   .rh-creneau-hdr td{padding:2px 4px!important;font-size:8px}
   .rh-chip{font-size:7px!important;padding:1px 3px!important;border:1px solid #000!important}
   .rh-chip-name{font-size:7px!important}
-  .rh-conge-inline-badge{font-size:6px!important;color:#8a5e00!important}
+  .rh-conge-inline-badge{font-size:6px!important;color:#7a5200!important}
   .rh-conge-badge{font-size:7px!important;padding:1px 3px!important}
+  .rh-dd-eye-btn{display:none!important}
   .rh-add-btn,.rh-chip-del,.rh-row-btns,.rh-act-btn{display:none!important}
   .rh-section.print-target{display:block!important}
   .rh-section-hdr .rh-icon-btn{display:none!important}
@@ -596,6 +632,45 @@ const POSTE_LABELS = {
 const TYPE_CONGE_LABELS = { CP:'Congés payés', maladie:'Maladie', autre:'Autre' };
 const STATUT_CONGE_LABELS = { pose:'Posé', valide:'Validé', refuse:'Refusé' };
 
+// ── Helpers bitmask jours (Lun=bit0 … Ven=bit4, 31=toute la semaine) ──
+const JOURS_LABELS  = ['Lun','Mar','Mer','Jeu','Ven'];
+const JOURS_LONGS   = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi'];
+const JOURS_FULL    = 31;
+
+function joursToFlags(jours){ // bitmask → [bool×5]
+  return JOURS_LABELS.map((_,i)=>!!((jours>>i)&1));
+}
+function joursFromFlags(flags){ // [bool×5] → bitmask
+  return flags.reduce((acc,v,i)=>v?acc|(1<<i):acc, 0);
+}
+function joursToList(jours){ // bitmask → ['Lun','Mer',…]
+  return JOURS_LABELS.filter((_,i)=>(jours>>i)&1);
+}
+function joursToDisplay(jours){ // bitmask → '' (pleine semaine) ou 'Lun, Mer, Ven'
+  if((jours&31)===31) return '';
+  return joursToList(jours).join(', ');
+}
+// Bitmask des jours de congé d'un opérateur sur une semaine donnée
+function congeJoursBitmask(userId, ws){
+  const conges=userCongesThisWeek(userId,ws);
+  if(!conges.length) return 0;
+  const mon=weekMonday(ws);
+  const fri=new Date(mon); fri.setDate(mon.getDate()+4);
+  let mask=0;
+  conges.forEach(c=>{
+    const deb=new Date(c.date_debut+'T00:00:00');
+    const fin=new Date(c.date_fin+'T00:00:00');
+    let cur=new Date(Math.max(deb.getTime(),mon.getTime()));
+    const end=new Date(Math.min(fin.getTime(),fri.getTime()));
+    while(cur<=end){
+      const dow=cur.getDay();
+      if(dow>=1&&dow<=5) mask|=(1<<(dow-1));
+      cur.setDate(cur.getDate()+1);
+    }
+  });
+  return mask;
+}
+
 // ── État global ────────────────────────────────────────
 const S = {
   user: null, isEditor: false, tab: 'planning',
@@ -610,7 +685,9 @@ const S = {
   congeForm: { user_id:'', date_debut:'', date_fin:'', nb_jours:'', type_conge:'CP', note:'' },
   soldeForm: { user_id:'', quota_cp:25, quota_rtt:0, note:'' },
   personSearch: '',
-  modalTarget: null,    // { semaine, machineCode, poste, creneau, machineId }
+  modalTarget: null,     // { semaine, machineCode, poste, creneau, machineId }
+  dayDetailTarget: null, // { semaine, machineCode, poste, creneau, machineId }
+  dayDetailEdit: {},     // { [planId]: joursFlags [bool×5] }
 };
 
 // ── Helpers semaines ───────────────────────────────────
@@ -1193,25 +1270,24 @@ function buildPlanningGrid(){
 
           const assignments=getAssignments(mdef.code,cr.key,poste,ws);
           assignments.forEach(a=>{
-            // Vérifier si l'opérateur a un congé partiel cette semaine
-            const userCongesW=userCongesThisWeek(a.user_id,ws);
-            const joursAbs=userCongesW.length?getCongesJoursThisWeek(userCongesW,ws):[];
-            const hasPartialConge=joursAbs.length>0&&joursAbs.length<5;
+            // Jours travaillés (depuis le bitmask de l'affectation)
+            const joursVal=a.jours!==undefined?a.jours:31;
+            const hasPartialJours=(joursVal&31)<31;
 
             const chip=document.createElement('span');
-            chip.className='rh-chip'+(hasPartialConge?' warn':'');
+            chip.className='rh-chip'+(hasPartialJours?' warn':'');
 
-            // Contenu interne : nom + badge congé éventuel
+            // Contenu interne : nom + jours travaillés si partiel
             const inner=document.createElement('span');
             inner.className='rh-chip-inner';
             const nameSpan=document.createElement('span');
             nameSpan.className='rh-chip-name';
             nameSpan.textContent=a.user_nom;
             inner.appendChild(nameSpan);
-            if(hasPartialConge){
+            if(hasPartialJours){
               const badge=document.createElement('span');
               badge.className='rh-conge-inline-badge';
-              badge.textContent='Abs. : '+joursAbs.join(', ');
+              badge.textContent=joursToList(joursVal).join(', ');
               inner.appendChild(badge);
             }
             chip.appendChild(inner);
@@ -1226,6 +1302,18 @@ function buildPlanningGrid(){
             }
             cell.appendChild(chip);
           });
+
+          // Icône œil — visible si 2+ opérateurs OU si l'un a des jours partiels
+          const hasPartialAny=assignments.some(a=>(a.jours!==undefined&&(a.jours&31)<31));
+          if(S.isEditor&&(assignments.length>=2||hasPartialAny)){
+            const eyeBtn=document.createElement('button');
+            eyeBtn.className='rh-dd-eye-btn';
+            eyeBtn.title='Répartition par jour';
+            // Icône œil SVG inline
+            eyeBtn.innerHTML=`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+            eyeBtn.onclick=()=>openDayDetailModal({semaine:ws,machineCode:mdef.code,poste,creneau:cr.key,machineId:getMachineId(mdef.code)});
+            cell.appendChild(eyeBtn);
+          }
 
           if(S.isEditor){
             const addBtn=document.createElement('button');
@@ -1331,6 +1419,145 @@ function renderPersonList(){
     if(!blocked) item.onclick=()=>{addAssignment({...t,person:p});};
     el.appendChild(item);
   });
+}
+
+// ── Modale détail jours ────────────────────────────────
+function openDayDetailModal(target){
+  S.dayDetailTarget=target;
+  // Initialiser l'état d'édition depuis les jours actuels de chaque affectation
+  const assignments=getAssignments(target.machineCode,target.creneau,target.poste,target.semaine);
+  S.dayDetailEdit={};
+  assignments.forEach(a=>{
+    S.dayDetailEdit[a.id]=joursToFlags(a.jours!==undefined?a.jours:31);
+  });
+  S.modal='day_detail'; render();
+}
+
+function buildDayDetailModal(){
+  if(S.modal!=='day_detail'||!S.dayDetailTarget) return null;
+  const t=S.dayDetailTarget;
+  const assignments=getAssignments(t.machineCode,t.creneau,t.poste,t.semaine);
+
+  const ov=document.createElement('div'); ov.className='rh-modal-ov';
+  ov.addEventListener('mousedown',e=>{if(e.target===ov){S.modal=null;render();}});
+
+  const box=document.createElement('div'); box.className='rh-dd-modal-box';
+
+  // En-tête
+  const machDef=GRID_DEF.find(m=>m.code===t.machineCode)||{label:t.machineCode};
+  const crDef=(machDef.creneaux||[]).find(c=>c.key===t.creneau)||{label:t.creneau};
+  const posteLbl=POSTE_LABELS[t.poste]||t.poste;
+  const mon=weekMonday(t.semaine);
+  const wkN=t.semaine.split('W')[1];
+
+  const hdr=document.createElement('div');
+  hdr.innerHTML=`
+    <button class="rh-modal-close" onclick="S.modal=null;render();">${icon('x',16)}</button>
+    <h3>Répartition par jour</h3>
+    <div class="rh-dd-subtitle">${machDef.label} · ${crDef.label} · ${posteLbl} — Semaine ${wkN}</div>
+  `;
+  box.appendChild(hdr);
+
+  // Construire les dates Lun-Ven de la semaine
+  const dayDates=Array.from({length:5},(_,i)=>{
+    const d=new Date(mon); d.setDate(mon.getDate()+i); return d;
+  });
+  const fmtDate=d=>`${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}`;
+
+  // Tableau
+  const table=document.createElement('table'); table.className='rh-dd-table';
+
+  // En-tête colonnes
+  const thead=document.createElement('thead');
+  const thRow=document.createElement('tr');
+  const th0=document.createElement('th'); th0.className='rh-dd-name-col'; th0.textContent='Opérateur';
+  thRow.appendChild(th0);
+  dayDates.forEach((d,i)=>{
+    const th=document.createElement('th');
+    th.innerHTML=`<div class="rh-dd-day-hdr">${JOURS_LABELS[i]}</div><div class="rh-dd-day-date">${fmtDate(d)}</div>`;
+    thRow.appendChild(th);
+  });
+  thead.appendChild(thRow); table.appendChild(thead);
+
+  // Corps : une ligne par opérateur
+  const tbody=document.createElement('tbody');
+  assignments.forEach(a=>{
+    const flags=S.dayDetailEdit[a.id]||(()=>{
+      const f=joursToFlags(a.jours!==undefined?a.jours:31);
+      S.dayDetailEdit[a.id]=f; return f;
+    })();
+    const congeMask=congeJoursBitmask(a.user_id,t.semaine);
+
+    const tr=document.createElement('tr');
+    const tdName=document.createElement('td'); tdName.className='rh-dd-name-col';
+    tdName.textContent=a.user_nom; tr.appendChild(tdName);
+
+    flags.forEach((isOn,i)=>{
+      const isConge=!!((congeMask>>i)&1);
+      const td=document.createElement('td');
+      const btn=document.createElement('button');
+      btn.className='rh-dd-day-btn'+(isConge?' conge':(isOn?' on':''));
+      btn.title=isConge?'Congé':'Cliquer pour basculer';
+
+      if(isConge){
+        // Afficher le type de congé depuis rh_conges
+        const cg=userCongesThisWeek(a.user_id,t.semaine)[0];
+        btn.textContent=cg?cg.type_conge.toUpperCase():'CP';
+      } else {
+        btn.textContent=isOn?'✓':'—';
+        btn.onclick=()=>{
+          S.dayDetailEdit[a.id][i]=!S.dayDetailEdit[a.id][i];
+          // Mise à jour visuelle directe sans re-render complet
+          btn.className='rh-dd-day-btn'+(S.dayDetailEdit[a.id][i]?' on':'');
+          btn.textContent=S.dayDetailEdit[a.id][i]?'✓':'—';
+        };
+      }
+      td.appendChild(btn); tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  box.appendChild(table);
+
+  // Boutons d'action
+  const acts=document.createElement('div'); acts.className='rh-modal-acts';
+  const btnCancel=document.createElement('button');
+  btnCancel.className='rh-btn secondary'; btnCancel.textContent='Annuler';
+  btnCancel.onclick=()=>{S.modal=null;render();};
+  const btnSave=document.createElement('button');
+  btnSave.className='rh-btn primary'; btnSave.textContent='Enregistrer';
+  btnSave.onclick=()=>saveDayDetail(assignments);
+  acts.appendChild(btnCancel); acts.appendChild(btnSave);
+  box.appendChild(acts);
+
+  ov.appendChild(box); return ov;
+}
+
+async function saveDayDetail(assignments){
+  let hasError=false;
+  for(const a of assignments){
+    const flags=S.dayDetailEdit[a.id];
+    if(!flags) continue;
+    const jours=joursFromFlags(flags);
+    if(jours===(a.jours!==undefined?a.jours:31)) continue; // pas de changement
+    try{
+      const resp=await fetch(API+'/planning/'+a.id,{
+        credentials:'include',method:'PUT',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({jours})
+      });
+      if(resp.ok){
+        const updated=await resp.json().catch(()=>null);
+        if(updated){
+          const idx=S.planning.findIndex(p=>p.id===a.id);
+          if(idx>=0) S.planning[idx]={...S.planning[idx],jours:updated.jours};
+        }
+      } else { hasError=true; }
+    } catch(e){ hasError=true; }
+  }
+  if(hasError) toast('Une ou plusieurs modifications ont échoué','error');
+  else toast('Répartition mise à jour','success');
+  S.modal=null; render();
 }
 
 // ── Congés tab ─────────────────────────────────────────
@@ -1642,6 +1869,9 @@ function renderModals(){
     mr.innerHTML=''; if(m)mr.appendChild(m);
   }else if(S.modal==='solde'){
     const m=buildSoldeModal();
+    mr.innerHTML=''; if(m)mr.appendChild(m);
+  }else if(S.modal==='day_detail'){
+    const m=buildDayDetailModal();
     mr.innerHTML=''; if(m)mr.appendChild(m);
   }else{
     mr.innerHTML='';

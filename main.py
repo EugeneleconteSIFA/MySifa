@@ -21,6 +21,7 @@ from routers.stats      import router as router_stats
 from routers.dossiers   import router as router_dossiers
 from routers.saisies    import router as router_saisies
 from routers.rentabilite import router as router_rentabilite
+from app.routers.matiere_prix import router as router_matiere_prix
 from routers.planning import router as planning_router
 from routers.stock import router as router_stock
 from routers.chat import router as chat_router
@@ -94,6 +95,7 @@ app.include_router(router_stats)
 app.include_router(router_dossiers)
 app.include_router(router_saisies)
 app.include_router(router_rentabilite)
+app.include_router(router_matiere_prix, prefix="/api/matiere")
 app.include_router(planning_router)
 app.include_router(router_stock)
 app.include_router(chat_router)

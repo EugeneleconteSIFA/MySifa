@@ -1045,6 +1045,68 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 10, "add_traca_barcode_to_fournisseurs")
 
+    # Migration v11 : MyDevis — paramètres matière & base prix
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=11 LIMIT 1").fetchone():
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS matiere_params (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                categorie TEXT NOT NULL,
+                code TEXT NOT NULL,
+                designation TEXT NOT NULL,
+                fournisseur TEXT,
+                poids_m2 REAL,
+                prix_eur_m2 REAL,
+                prix_usd_kg REAL,
+                taux_change REAL DEFAULT 1.0,
+                incidence_dollar REAL DEFAULT 1.0,
+                transport_total REAL DEFAULT 0,
+                appellation TEXT,
+                grammage INTEGER,
+                notes TEXT,
+                updated_at TEXT
+            );
+            CREATE TABLE IF NOT EXISTS matiere_base (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ref_interne INTEGER,
+                designation TEXT NOT NULL,
+                frontal TEXT,
+                type_adhesion TEXT,
+                adhesif TEXT,
+                silicone TEXT,
+                glassine TEXT,
+                marqueur TEXT,
+                prix_cohesio REAL,
+                prix_rotoflex REAL,
+                updated_at TEXT
+            );
+            CREATE TABLE IF NOT EXISTS matiere_config (
+                cle TEXT PRIMARY KEY,
+                valeur TEXT NOT NULL,
+                updated_at TEXT
+            );
+            """
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO matiere_config (cle, valeur, updated_at) VALUES ('marge_erreur', '5', datetime('now'))"
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO matiere_config (cle, valeur, updated_at) VALUES ('taux_change_usd', '0.85', datetime('now'))"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 11, "matiere_params_base_config")
+
+    # v12 — jours travaillés par affectation RH (bitmask Lun=bit0…Ven=bit4, 31=semaine entière)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=12 LIMIT 1").fetchone():
+        try:
+            conn.execute(
+                "ALTER TABLE rh_planning_postes ADD COLUMN jours INTEGER NOT NULL DEFAULT 31"
+            )
+        except Exception:
+            pass  # colonne déjà présente
+        conn.commit()
+        _record_schema_migration(conn, 12, "rh_planning_postes_jours")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,
