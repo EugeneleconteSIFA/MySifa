@@ -407,12 +407,15 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 }
 .rh-person-item:hover:not(.blocked){border-color:var(--accent);background:var(--accent-bg)}
 .rh-person-item.blocked{opacity:.5;cursor:not-allowed}
+.rh-person-item.warn{border-color:var(--warn);background:rgba(234,179,8,.06)}
+.rh-person-item.warn:hover{border-color:var(--warn);background:rgba(234,179,8,.13)}
 .rh-person-name{font-size:13px;font-weight:600;color:var(--text)}
 .rh-person-info{font-size:11px;color:var(--muted);margin-top:2px}
 .rh-person-status{font-size:11px;font-weight:600}
 .rh-person-status.ok{color:var(--success)}
 .rh-person-status.blocked{color:var(--danger)}
-.rh-person-status.conge{color:var(--warn)}
+.rh-person-status.conge{color:var(--danger)}
+.rh-person-status.warn{color:var(--warn)}
 .rh-search-inp{
   width:100%;padding:9px 12px;background:var(--bg);border:1px solid var(--border);
   border-radius:8px;color:var(--text);font-size:13px;outline:none;
@@ -666,6 +669,25 @@ function userCongesThisWeek(userId,ws){
   const monS=mon.toISOString().split('T')[0]; const sunS=sun.toISOString().split('T')[0];
   return S.conges.filter(c=>c.user_id===userId&&c.statut!=='refuse'&&c.date_debut<=sunS&&c.date_fin>=monS);
 }
+// Retourne les noms abrégés des jours ouvrés couverts par les congés de la semaine ws
+function getCongesJoursThisWeek(conges,ws){
+  const JOURS=['Lun','Mar','Mer','Jeu','Ven'];
+  const mon=weekMonday(ws);
+  const fri=new Date(mon); fri.setDate(mon.getDate()+4);
+  const days=new Set();
+  conges.forEach(c=>{
+    const deb=new Date(c.date_debut+'T00:00:00');
+    const fin=new Date(c.date_fin+'T00:00:00');
+    let cur=new Date(Math.max(deb.getTime(),mon.getTime()));
+    const end=new Date(Math.min(fin.getTime(),fri.getTime()));
+    while(cur<=end){
+      const dow=cur.getDay(); // 1=Lun … 5=Ven
+      if(dow>=1&&dow<=5) days.add(JOURS[dow-1]);
+      cur.setDate(cur.getDate()+1);
+    }
+  });
+  return JOURS.filter(j=>days.has(j));
+}
 function userAssignedThisWeek(userId,ws){
   return S.planning.find(p=>p.user_id===userId&&p.semaine===ws)||null;
 }
@@ -711,18 +733,46 @@ async function loadSoldes(){
   render();
 }
 
-async function addAssignment(target){
+async function addAssignment(target, force=false){
   const p=target.person;
+  // Appel brut pour pouvoir inspecter le 409 structuré (can_force)
+  let resp;
   try{
-    const d=await api('/planning',{
-      method:'POST',headers:{'Content-Type':'application/json'},
+    resp=await fetch(API+'/planning',{
+      credentials:'include',method:'POST',
+      headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
         user_id:p.id,semaine:target.semaine,
-        machine_id:target.machineId,poste:target.poste,creneau:target.creneau
+        machine_id:target.machineId,poste:target.poste,creneau:target.creneau,
+        force
       })
     });
-    if(d){S.planning.push(d);toast(p.nom+' affecté','success');}
-  }catch(e){toast(e.message,'error');}
+  }catch(e){toast('Erreur réseau : '+e.message,'error');S.modal=null;render();return;}
+
+  if(resp.status===409){
+    const err=await resp.json().catch(()=>({}));
+    if(err.can_force){
+      // Congé partiel — demander confirmation
+      const jours=err.conge_days&&err.conge_days.length?err.conge_days.join(', '):'';
+      const msg=`${p.nom} est absent(e) ce(s) jour(s) : ${jours} (${err.conge_type||'congé'}).\n\nAffecter quand même pour le reste de la semaine ?`;
+      if(confirm(msg)){
+        await addAssignment(target,true); // relance avec force=true
+      }
+      return; // ne pas fermer la modale si refus
+    }
+    // Blocage dur (semaine entière ou autre conflit)
+    toast(err.detail||'Conflit planning','error');
+    S.modal=null; render(); return;
+  }
+
+  if(!resp.ok){
+    const e=await resp.json().catch(()=>({}));
+    toast(e.detail||'Erreur '+resp.status,'error');
+    S.modal=null; render(); return;
+  }
+
+  const d=await resp.json();
+  if(d){S.planning.push(d);toast(p.nom+' affecté','success');}
   S.modal=null; render();
 }
 
@@ -1195,15 +1245,33 @@ function renderPersonList(){
   persons.forEach(p=>{
     const assigned=userAssignedThisWeek(p.id,t.semaine);
     const conges=userCongesThisWeek(p.id,t.semaine);
-    const blocked=!!(assigned||conges.length);
+
+    // Déterminer si le congé couvre toute la semaine ou seulement certains jours
+    let congeJours=[];
+    let congeFullWeek=false;
+    let congePartiel=false;
+    if(conges.length){
+      congeJours=getCongesJoursThisWeek(conges,t.semaine);
+      if(congeJours.length>=5) congeFullWeek=true;
+      else congePartiel=true;
+    }
+
+    const blocked=!!(assigned||congeFullWeek);
+    const warn=!blocked&&congePartiel;
 
     const item=document.createElement('div');
-    item.className='rh-person-item'+(blocked?' blocked':'');
-    item.title=blocked?(assigned?'Déjà affecté : '+assigned.poste+(assigned.machine_nom?' ('+assigned.machine_nom+')':''):'En congé cette semaine'):'';
+    item.className='rh-person-item'+(blocked?' blocked':'')+(warn?' warn':'');
+
+    let titleTip='';
+    if(assigned) titleTip='Déjà affecté : '+assigned.poste+(assigned.machine_nom?' ('+assigned.machine_nom+')':'');
+    else if(congeFullWeek) titleTip='En congé toute la semaine';
+    else if(congePartiel) titleTip='En congé : '+congeJours.join(', ')+' — cliquer pour affecter quand même';
+    item.title=titleTip;
 
     let statusHtml='<span class="rh-person-status ok">✓ Disponible</span>';
     if(assigned) statusHtml=`<span class="rh-person-status blocked">Affecté (${POSTE_LABELS[assigned.poste]||assigned.poste})</span>`;
-    else if(conges.length) statusHtml=`<span class="rh-person-status conge">🏖 En congé</span>`;
+    else if(congeFullWeek) statusHtml=`<span class="rh-person-status conge">Congé — semaine entière</span>`;
+    else if(congePartiel) statusHtml=`<span class="rh-person-status warn">Congé : ${congeJours.join(', ')}</span>`;
 
     item.innerHTML=`
       <div><div class="rh-person-name">${p.nom}</div><div class="rh-person-info">${p.role}</div></div>

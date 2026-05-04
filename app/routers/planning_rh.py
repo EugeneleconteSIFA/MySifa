@@ -129,6 +129,7 @@ async def create_planning(request: Request):
     machine_id = body.get("machine_id")   # peut être None (resp_atelier / logistique)
     poste    = body.get("poste")
     creneau  = body.get("creneau", "journee")
+    force    = bool(body.get("force", False))  # passer outre un congé partiel
 
     if not user_id or not semaine or not poste:
         raise HTTPException(400, "Champs obligatoires manquants : user_id, semaine, poste")
@@ -158,18 +159,51 @@ async def create_planning(request: Request):
 
         # Congé qui chevauche la semaine ?
         conge = conn.execute(
-            """SELECT id, date_debut, date_fin, type_conge FROM rh_conges
+            """SELECT id, date_debut, date_fin, nb_jours, type_conge FROM rh_conges
                WHERE user_id = ? AND statut != 'refuse'
                AND date_debut <= ? AND date_fin >= ?""",
             (user_id, sunday.isoformat(), monday.isoformat()),
         ).fetchone()
         if conge:
-            raise HTTPException(
-                409,
-                f"{user_row['nom']} est en congé cette semaine "
-                f"({conge['date_debut']} → {conge['date_fin']}, {conge['type_conge']}). "
-                f"Impossible de l'affecter à un poste.",
-            )
+            # Calculer les jours ouvrés de la semaine concernés par le congé
+            JOURS_NOMS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"]
+            friday = monday + timedelta(days=4)
+            d_deb = date.fromisoformat(conge["date_debut"])
+            d_fin = date.fromisoformat(conge["date_fin"])
+            cur_day = max(d_deb, monday)
+            end_day = min(d_fin, friday)
+            conge_days: list[str] = []
+            while cur_day <= end_day:
+                if cur_day.weekday() < 5:          # lundi–vendredi uniquement
+                    conge_days.append(JOURS_NOMS[cur_day.weekday()])
+                cur_day += timedelta(days=1)
+
+            is_full_week = len(conge_days) >= 5    # semaine entière → blocage dur
+
+            if is_full_week:
+                raise HTTPException(
+                    409,
+                    f"{user_row['nom']} est en congé toute la semaine "
+                    f"({conge['date_debut']} → {conge['date_fin']}, {conge['type_conge']}). "
+                    f"Impossible de l'affecter.",
+                )
+            elif not force:
+                # Congé partiel : informer et demander confirmation (force=True)
+                from fastapi.responses import JSONResponse
+                days_str = ", ".join(conge_days) if conge_days else conge["date_debut"]
+                return JSONResponse(
+                    status_code=409,
+                    content={
+                        "detail": (
+                            f"{user_row['nom']} est en congé le(s) {days_str} cette semaine "
+                            f"({conge['type_conge']}). Affecter quand même ?"
+                        ),
+                        "can_force": True,
+                        "conge_days": conge_days,
+                        "conge_type": conge["type_conge"],
+                    },
+                )
+            # force=True → on continue malgré le congé partiel
 
         now = datetime.now().isoformat()
         cur = conn.execute(
