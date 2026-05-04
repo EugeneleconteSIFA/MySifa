@@ -1107,6 +1107,39 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 12, "rh_planning_postes_jours")
 
+    # v13 — MyExpé : suivi des départs (exportations)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=13 LIMIT 1").fetchone():
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS expe_departs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date_enlevement TEXT NOT NULL,
+                affreteurs TEXT,
+                transporteur TEXT,
+                client TEXT,
+                code_postal_destination TEXT,
+                ref_sifa TEXT,
+                arc TEXT,
+                no_cde_transport TEXT,
+                no_bl TEXT,
+                nb_palette REAL,
+                poids_total_kg REAL,
+                date_livraison TEXT,
+                statut TEXT NOT NULL DEFAULT 'en_attente',
+                created_at TEXT NOT NULL,
+                created_by_email TEXT,
+                validated_at TEXT,
+                validated_by_email TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_expe_departs_statut_date
+                ON expe_departs(statut, date_enlevement);
+            CREATE INDEX IF NOT EXISTS idx_expe_departs_validated
+                ON expe_departs(validated_at);
+            """
+        )
+        conn.commit()
+        _record_schema_migration(conn, 13, "expe_departs_suivi")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

@@ -1,6 +1,6 @@
 """
 SIFA — MyDevis : paramètres matière & base prix.
-Accès : direction + superadmin uniquement.
+Accès : application « devis » (rôle par défaut : direction + superadmin ; matrice Paramètres).
 """
 import io
 import re
@@ -12,18 +12,15 @@ import pandas as pd
 from fastapi import APIRouter, Body, File, HTTPException, Query, Request, UploadFile
 
 from database import get_db
-from services.auth_service import get_current_user
+from services.auth_service import get_current_user, user_has_app_access
 
 router = APIRouter()
 
 
-def _require_dir_super(request: Request) -> dict:
+def _require_devis(request: Request) -> dict:
     user = get_current_user(request)
-    if user["role"] not in ("superadmin", "direction"):
-        raise HTTPException(
-            status_code=403,
-            detail="Accès réservé à la Direction et au super admin",
-        )
+    if not user_has_app_access(user, "devis"):
+        raise HTTPException(status_code=403, detail="Accès MyDevis requis")
     return user
 
 
@@ -67,7 +64,7 @@ def _row_base_with_marge(conn, row: dict) -> dict:
 
 @router.get("/config")
 def get_config(request: Request):
-    _require_dir_super(request)
+    _require_devis(request)
     with get_db() as conn:
         cfg = _cfg_dict(conn)
         try:
@@ -83,7 +80,7 @@ def get_config(request: Request):
 
 @router.post("/config")
 def post_config(request: Request, body: dict = Body(...)):
-    _require_dir_super(request)
+    _require_devis(request)
     try:
         marge = body.get("marge_erreur")
         taux = body.get("taux_change_usd")
@@ -144,7 +141,7 @@ def list_params(
     q: Optional[str] = None,
     categorie: Optional[str] = None,
 ):
-    _require_dir_super(request)
+    _require_devis(request)
     where, args = _params_filters(q, categorie)
     with get_db() as conn:
         rows = conn.execute(
@@ -156,7 +153,7 @@ def list_params(
 
 @router.post("/params")
 def create_param(request: Request, body: dict = Body(...)):
-    _require_dir_super(request)
+    _require_devis(request)
     cat = (body.get("categorie") or "").strip()
     code = (body.get("code") or "").strip()
     des = (body.get("designation") or "").strip()
@@ -194,7 +191,7 @@ def create_param(request: Request, body: dict = Body(...)):
 
 @router.put("/params/{param_id}")
 def update_param(request: Request, param_id: int, body: dict = Body(...)):
-    _require_dir_super(request)
+    _require_devis(request)
     now = datetime.now().isoformat()
     fields = [
         "categorie",
@@ -233,7 +230,7 @@ def update_param(request: Request, param_id: int, body: dict = Body(...)):
 
 @router.delete("/params/{param_id}")
 def delete_param(request: Request, param_id: int):
-    _require_dir_super(request)
+    _require_devis(request)
     with get_db() as conn:
         conn.execute("DELETE FROM matiere_params WHERE id=?", (param_id,))
         conn.commit()
@@ -274,7 +271,7 @@ def list_base(
     frontal: Optional[str] = None,
     type_: Optional[str] = Query(None, alias="type"),
 ):
-    _require_dir_super(request)
+    _require_devis(request)
     where, args = _base_filters(q, frontal, type_)
     with get_db() as conn:
         rows = conn.execute(
@@ -286,7 +283,7 @@ def list_base(
 
 @router.post("/base")
 def create_base(request: Request, body: dict = Body(...)):
-    _require_dir_super(request)
+    _require_devis(request)
     des = (body.get("designation") or "").strip()
     if not des:
         raise HTTPException(status_code=400, detail="designation obligatoire")
@@ -319,7 +316,7 @@ def create_base(request: Request, body: dict = Body(...)):
 
 @router.put("/base/{base_id}")
 def update_base(request: Request, base_id: int, body: dict = Body(...)):
-    _require_dir_super(request)
+    _require_devis(request)
     now = datetime.now().isoformat()
     fields = [
         "ref_interne",
@@ -355,7 +352,7 @@ def update_base(request: Request, base_id: int, body: dict = Body(...)):
 
 @router.delete("/base/{base_id}")
 def delete_base(request: Request, base_id: int):
-    _require_dir_super(request)
+    _require_devis(request)
     with get_db() as conn:
         conn.execute("DELETE FROM matiere_base WHERE id=?", (base_id,))
         conn.commit()
@@ -417,7 +414,7 @@ def _str_cell(v: Any) -> Optional[str]:
 
 @router.post("/import-excel")
 async def import_excel(request: Request, file: UploadFile = File(...)):
-    _require_dir_super(request)
+    _require_devis(request)
     if not file.filename or not str(file.filename).lower().endswith((".xlsx", ".xlsm")):
         raise HTTPException(status_code=400, detail="Fichier .xlsx ou .xlsm attendu")
     raw = await file.read()

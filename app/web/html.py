@@ -794,6 +794,9 @@ function isAuthMePath(p){
 }
 let authEpoch=0;
 let _matiereMargeTimer=null;
+let _expeHistSearchT=null;
+let _expeLastRenderedInnerTab=null;
+let _expeJourInflight=null;
 async function api(p,o){
   try{
     const r=await fetch(API+p,{credentials:'include',...o});
@@ -828,7 +831,7 @@ let S={
   selDossier:null,
   loginSubmitting:false,loginError:null,portalLoading:null,
   sidebarOpen:false,
-  expeTab:'comparateur',
+  expeTab:'suivi_departs',
   expeDept:'59',
   expeKg:'',
   expeNbPal:'',
@@ -839,6 +842,12 @@ let S={
   expeRaw:null,
   expeRawLoading:false,
   expeRawError:null,
+  expeDepartJourDate:'',
+  expeDepartList:[],
+  expeDepartLoading:false,
+  expeDepartHist:[],
+  expeDepartHistQ:'',
+  expeDepartHistLoading:false,
   comptaTab:'factor',
   comptaAcheteurs:[],
   comptaComptes:[],
@@ -1035,7 +1044,8 @@ async function checkAuth(){
       const sp=new URLSearchParams(window.location.search||'');
       const p=(sp.get('page')||'').trim();
       if(S.app==='prod' && p==='users'){window.location.href='/settings';return;}
-      const allowed=new Set(['production','suivi','profil','historique','saisies','import','rentabilite','dossiers','traceabilite','matiere_prix']);
+      if(S.app==='prod' && p==='matiere_prix'){window.location.href='/devis';return;}
+      const allowed=new Set(['production','suivi','profil','historique','saisies','import','rentabilite','dossiers','traceabilite']);
       if(S.app==='prod' && allowed.has(p)) S.page=p;
     }catch(e){}
     if(S.app==='prod'){
@@ -1043,7 +1053,8 @@ async function checkAuth(){
       await loadProd();
       await loadHist();
       await loadMachineStatus();
-      if(S.page==='matiere_prix'){await loadMatierePrixPage();}
+    }else if(S.app==='devis'){
+      await loadMatierePrixPage();
     }else if(S.app==='stock'){
       await loadStockGlobale();
       await loadStockProduits();
@@ -1159,7 +1170,8 @@ async function doLogin(email,password){
       const sp=new URLSearchParams(window.location.search||'');
       const p=(sp.get('page')||'').trim();
       if(S.app==='prod' && p==='users'){window.location.href='/settings';return;}
-      const allowed=new Set(['production','suivi','profil','historique','saisies','import','rentabilite','dossiers','traceabilite','matiere_prix']);
+      if(S.app==='prod' && p==='matiere_prix'){window.location.href='/devis';return;}
+      const allowed=new Set(['production','suivi','profil','historique','saisies','import','rentabilite','dossiers','traceabilite']);
       if(S.app==='prod' && allowed.has(p)) S.page=p;
     }catch(e){}
     S.loginError=null;
@@ -1183,7 +1195,8 @@ async function doLogin(email,password){
       await loadProd();
       await loadHist();
       await loadMachineStatus();
-      if(S.page==='matiere_prix'){await loadMatierePrixPage();}
+    }else if(S.app==='devis'){
+      await loadMatierePrixPage();
     }else if(S.app==='stock'){
       await loadStockGlobale();
       await loadStockProduits();
@@ -2163,6 +2176,7 @@ function renderPortal(){
   const isCom = urole==='commercial';
   const isRH   = aa ? !!aa.planning_rh : (isSuper || !!(urole && ['direction','fabrication','logistique'].includes(urole)));
   const isPaie = isSuper || !!(urole && ['direction','administration','comptabilite'].includes(urole));
+  const isDevis = aa ? !!aa.devis : (isSuper || urole==='direction');
   const isLight=document.body.classList.contains('light');
 
   const apps=[];
@@ -2254,10 +2268,10 @@ function renderPortal(){
     ));
   }
 
-  if(urole==='direction'||urole==='superadmin'){
+  if(isDevis){
     apps.push(h('div',{
       className:'portal-app',
-      onClick:()=>{ window.location.href='/prod?page=matiere_prix'; }
+      onClick:()=>{ window.location.href='/devis'; }
     },
       h('div',{className:'portal-app-icon'},iconEl('file-text',28)),
       h('div',{className:'portal-app-name'},'MyDevis'),
@@ -3914,15 +3928,203 @@ function renderExpePoids(){
   );
 }
 
+function expeParisDayISO(){
+  try{return new Date().toLocaleDateString('sv-SE',{timeZone:'Europe/Paris'});}
+  catch(e){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+}
+async function loadExpeDepartJour(){
+  if(S.app!=='expe')return;
+  if(_expeJourInflight)return await _expeJourInflight;
+  const d=(S.expeDepartJourDate&&String(S.expeDepartJourDate).trim())||expeParisDayISO();
+  _expeJourInflight=(async()=>{
+    set({expeDepartLoading:true});
+    try{
+      const rows=await api('/api/expe/departs/jour?date='+encodeURIComponent(d));
+      set({expeDepartList:Array.isArray(rows)?rows:[],expeDepartLoading:false,expeDepartJourDate:d});
+    }catch(e){
+      set({expeDepartLoading:false});
+      toast(e.message||'Chargement impossible','error');
+    }
+  })();
+  try{return await _expeJourInflight;}finally{_expeJourInflight=null;}
+}
+async function loadExpeDepartHistorique(){
+  if(S.app!=='expe')return;
+  set({expeDepartHistLoading:true});
+  try{
+    const qq=(S.expeDepartHistQ||'').trim();
+    const rows=await api('/api/expe/departs/historique?q='+encodeURIComponent(qq)+'&limit=800');
+    set({expeDepartHist:Array.isArray(rows)?rows:[],expeDepartHistLoading:false});
+  }catch(e){
+    set({expeDepartHistLoading:false});
+    toast(e.message||'Chargement impossible','error');
+  }
+}
+function scheduleExpeHistSearch(){
+  if(_expeHistSearchT)clearTimeout(_expeHistSearchT);
+  _expeHistSearchT=setTimeout(()=>{loadExpeDepartHistorique();},380);
+}
+async function expeValiderDepart(id){
+  try{
+    await api('/api/expe/departs/'+id+'/valider',{method:'POST'});
+    toast('Départ validé — entrée dans l\'historique');
+    await loadExpeDepartJour();
+  }catch(e){toast(e.message||'Validation impossible','error');}
+}
+
+function renderExpeSuiviDeparts(){
+  const dayVal=(S.expeDepartJourDate&&String(S.expeDepartJourDate).trim())||expeParisDayISO();
+  const dateJour=h('input',{type:'date',value:dayVal,
+    onChange:e=>{
+      set({expeDepartJourDate:e.target.value});
+      setTimeout(()=>loadExpeDepartJour(),0);
+    }
+  });
+  const inps={};
+  function mk(label,key,type,ph,val){
+    const i=h('input',{type:type||'text',placeholder:ph||'',value:val!=null?String(val):''});
+    inps[key]=i;
+    return h('div',{className:'expe-field'},h('label',null,label),i);
+  }
+  const formCard=h('div',{className:'card',style:{marginBottom:'16px'}},
+    h('div',{className:'card-header'},h('h3',null,'Ajouter un départ')),
+    h('div',{style:{padding:'16px 18px'}},
+      h('div',{style:{display:'flex',gap:'14px',flexWrap:'wrap',alignItems:'flex-end',marginBottom:'14px'}},
+        h('div',{className:'expe-field'},h('label',null,'Jour affiché (départs en attente)'),dateJour),
+        h('button',{className:'btn-sm',onClick:()=>{set({expeDepartJourDate:expeParisDayISO()});loadExpeDepartJour();}},'Aujourd\'hui (Paris)'),
+        h('button',{className:'btn-ghost btn-sm',onClick:()=>loadExpeDepartJour()},'Rafraîchir')
+      ),
+      h('div',{className:'expe-help',style:{marginBottom:'10px'}},'Les lignes « en attente » dont la date d\'enlèvement correspond au jour choisi apparaissent ci-dessous. La validation les archive dans l\'historique.'),
+      h('div',{className:'expe-fields'},
+        mk('Date d\'enlèvement (nouveau)','date_enlevement','date','YYYY-MM-DD',dayVal),
+        mk('Affréteurs','affreteurs'),
+        mk('Transporteur','transporteur'),
+        mk('Client','client'),
+        mk('Code postal / destination','code_postal_destination'),
+        mk('Réf. SIFA','ref_sifa'),
+        mk('ARC','arc'),
+        mk('N° commande transport','no_cde_transport'),
+        mk('N° BL','no_bl'),
+        mk('Nombre de palettes','nb_palette','number','ex: 2'),
+        mk('Poids total (kg)','poids_total_kg','number','ex: 1325'),
+        mk('Date livraison (prévue)','date_livraison','date')
+      ),
+      h('div',{style:{marginTop:'14px'}},
+        h('button',{className:'btn',onClick:async()=>{
+          const dateEnl=(inps.date_enlevement&&inps.date_enlevement.value)||dayVal;
+          const body={
+            date_enlevement:dateEnl,
+            affreteurs:inps.affreteurs.value||null,
+            transporteur:inps.transporteur.value||null,
+            client:inps.client.value||null,
+            code_postal_destination:inps.code_postal_destination.value||null,
+            ref_sifa:inps.ref_sifa.value||null,
+            arc:inps.arc.value||null,
+            no_cde_transport:inps.no_cde_transport.value||null,
+            no_bl:inps.no_bl.value||null,
+            nb_palette:inps.nb_palette.value||null,
+            poids_total_kg:inps.poids_total_kg.value||null,
+            date_livraison:inps.date_livraison.value||null
+          };
+          if(!body.date_enlevement){toast('Date d\'enlèvement obligatoire','error');return;}
+          try{
+            await api('/api/expe/departs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+            toast('Départ enregistré');
+            Object.keys(inps).forEach(k=>{const el=inps[k];if(el)el.value='';});
+            if(inps.date_enlevement)inps.date_enlevement.value=dayVal;
+            await loadExpeDepartJour();
+          }catch(e){toast(e.message||'Erreur','error');}
+        }},'Enregistrer le départ')
+      )
+    )
+  );
+  const rows=S.expeDepartList||[];
+  const head=h('tr',null,
+    ...['Date enl.','Affr.','Transp.','Client','Destination','Réf SIFA','ARC','Cde transp.','N° BL','Pal.','Poids kg','Liv. prév.',''].map(t=>h('th',null,t))
+  );
+  const body=rows.length?rows.map(r=>h('tr',null,
+    h('td',null,(r.date_enlevement||'').slice(0,10)),
+    h('td',null,r.affreteurs||'—'),
+    h('td',null,r.transporteur||'—'),
+    h('td',null,r.client||'—'),
+    h('td',{style:{maxWidth:'140px',fontSize:'12px'}},r.code_postal_destination||'—'),
+    h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.ref_sifa||'—'),
+    h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.arc||'—'),
+    h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.no_cde_transport||'—'),
+    h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.no_bl||'—'),
+    h('td',null,r.nb_palette!=null?String(r.nb_palette):'—'),
+    h('td',null,r.poids_total_kg!=null?String(r.poids_total_kg):'—'),
+    h('td',null,(r.date_livraison||'').slice(0,10)||'—'),
+    h('td',null,h('button',{className:'btn-sm',onClick:()=>expeValiderDepart(r.id)},'Valider'))
+  )):[h('tr',null,h('td',{colSpan:13,style:{color:'var(--muted)'}},S.expeDepartLoading?'Chargement…':'Aucun départ en attente pour ce jour'))];
+  const listCard=h('div',{className:'card'},
+    h('div',{className:'card-header'},h('h3',null,'Départs du jour (en attente de validation)')),
+    h('div',{style:{overflowX:'auto'}},h('table',{className:'table-std'},h('thead',null,head),h('tbody',null,...body)))
+  );
+  return h('div',null,formCard,listCard);
+}
+
+function renderExpeHistoriqueDeparts(){
+  const qInp=h('input',{
+    type:'search',
+    placeholder:'Réf. SIFA, client, ARC, BL, commande transport, transporteur…',
+    value:S.expeDepartHistQ||'',
+    style:{width:'100%',maxWidth:'560px',padding:'10px 12px',borderRadius:'8px',border:'1px solid var(--border)',background:'var(--bg)',color:'var(--text)',marginBottom:'12px'},
+    onInput:e=>{
+      set({expeDepartHistQ:e.target.value});
+      scheduleExpeHistSearch();
+    }
+  });
+  const rows=S.expeDepartHist||[];
+  const head=h('tr',null,
+    ...['Validé le','Par','Date enl.','Client','Réf SIFA','ARC','Cde transp.','N° BL','Transp.','Pal.','Poids','Liv. prév.'].map(t=>h('th',null,t))
+  );
+  const body=rows.length?rows.map(r=>h('tr',null,
+    h('td',{style:{fontSize:'12px',whiteSpace:'nowrap'}},(r.validated_at||'').replace('T',' ').slice(0,16)||'—'),
+    h('td',{style:{fontSize:'12px'}},r.validated_by_email||'—'),
+    h('td',null,(r.date_enlevement||'').slice(0,10)),
+    h('td',null,r.client||'—'),
+    h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.ref_sifa||'—'),
+    h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.arc||'—'),
+    h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.no_cde_transport||'—'),
+    h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.no_bl||'—'),
+    h('td',null,r.transporteur||'—'),
+    h('td',null,r.nb_palette!=null?String(r.nb_palette):'—'),
+    h('td',null,r.poids_total_kg!=null?String(r.poids_total_kg):'—'),
+    h('td',null,(r.date_livraison||'').slice(0,10)||'—')
+  )):[h('tr',null,h('td',{colSpan:12,style:{color:'var(--muted)'}},S.expeDepartHistLoading?'Chargement…':'Aucune entrée (ou affiner la recherche)'))];
+  return h('div',null,
+    h('div',{className:'card',style:{marginBottom:'12px',padding:'14px 18px'}},
+      h('h3',{style:{fontSize:'14px',fontWeight:'700',marginBottom:'8px'}},'Recherche'),
+      h('div',{className:'expe-help',style:{marginBottom:'8px'}},'Mots séparés par des espaces : tous doivent être trouvés (ref., client, ARC, BL, etc.). Insensible à la casse et aux accents. Portée : les 800 derniers départs validés.'),
+      qInp
+    ),
+    h('div',{className:'card'},
+      h('div',{className:'card-header'},h('h3',null,'Historique des départs validés')),
+      h('div',{style:{overflowX:'auto'}},h('table',{className:'table-std'},h('thead',null,head),h('tbody',null,...body)))
+    )
+  );
+}
+
 function renderExpe(){
   const isLight=document.body.classList.contains('light');
-  const tab=S.expeTab||'comparateur';
+  const tab=S.expeTab||'suivi_departs';
+  if(tab!==_expeLastRenderedInnerTab){
+    _expeLastRenderedInnerTab=tab;
+    if(tab==='suivi_departs')void loadExpeDepartJour();
+    else if(tab==='historique_departs')void loadExpeDepartHistorique();
+    else if(tab==='comparateur')void ensureExpeRawData();
+  }
 
   const sidebar=h('nav',{className:'sidebar'},
     h('div',{className:'logo'},
       h('div',{className:'logo-brand'},'My',h('span',null,'Expé')),
       h('div',{className:'logo-sub'},'by SIFA')
     ),
+    h('button',{className:'nav-btn'+(tab==='suivi_departs'?' active':''),onClick:()=>set({expeTab:'suivi_departs'})},
+      iconEl('clipboard',15),'  Suivi départs'),
+    h('button',{className:'nav-btn'+(tab==='historique_departs'?' active':''),onClick:()=>set({expeTab:'historique_departs'})},
+      iconEl('folder',15),'  Historique départs'),
     h('button',{className:'nav-btn'+(tab==='comparateur'?' active':''),onClick:()=>set({expeTab:'comparateur'})},
       iconEl('package',15),'  Comparateur'),
     h('button',{className:'nav-btn'+(tab==='transporteurs'?' active':''),onClick:()=>set({expeTab:'transporteurs'})},
@@ -3958,12 +4160,16 @@ function renderExpe(){
     h('button',{type:'button',className:'mobile-menu-btn',onClick:toggleSidebar,'aria-label':'Menu'},iconEl('menu',20)),
     h('div',null,
       h('div',{className:'mobile-topbar-title'},'MyExpé'),
-      h('div',{className:'mobile-topbar-sub'},tab==='transporteurs'?'Transporteurs':tab==='poids'?'Poids envoi':'Comparateur tarifs')
+      h('div',{className:'mobile-topbar-sub'},
+        tab==='suivi_departs'?'Suivi des départs':tab==='historique_departs'?'Historique départs':
+        tab==='transporteurs'?'Transporteurs':tab==='poids'?'Poids envoi':'Comparateur tarifs')
     ),
     h('button',{type:'button',className:'mobile-home-btn',onClick:()=>{window.location.href='/'},'aria-label':'Accueil'},iconEl('home',20))
   );
 
-  const content=tab==='transporteurs'?renderExpeTransporteurs():tab==='poids'?renderExpePoids():renderExpeComparateur();
+  const content=tab==='suivi_departs'?renderExpeSuiviDeparts():
+    tab==='historique_departs'?renderExpeHistoriqueDeparts():
+    tab==='transporteurs'?renderExpeTransporteurs():tab==='poids'?renderExpePoids():renderExpeComparateur();
 
   return h('div',null,
     S.sidebarOpen?h('div',{className:'sidebar-overlay',onClick:closeSidebar}):null,
@@ -3973,8 +4179,10 @@ function renderExpe(){
         h('div',{className:'container'},
           topbar,
           h('h1',null,'MyExpé'),
-          h('div',{className:'subtitle'},tab==='comparateur'
-            ?'Coupé · Coquelle · Ceva · Dimotrans — meilleur prix au poids et à la palette'
+          h('div',{className:'subtitle'},
+            tab==='suivi_departs'?'Enregistrement des enlèvements et validation vers l\'historique'
+            :tab==='historique_departs'?'Recherche multi-critères sur les départs validés'
+            :tab==='comparateur'?'Coupé · Coquelle · Ceva · Dimotrans — meilleur prix au poids et à la palette'
             :tab==='poids'?'Estimation du poids d\'un envoi d\'étiquettes'
             :'Vos transporteurs et moyens de contact'),
           content
@@ -3982,6 +4190,61 @@ function renderExpe(){
       )
     ),
     S.expeShowContacts?renderExpeContactModal():null
+  );
+}
+
+function renderMyDevis(){
+  const isLight=document.body.classList.contains('light');
+  const sidebar=h('nav',{className:'sidebar'},
+    h('div',{className:'logo'},
+      h('div',{className:'logo-brand'},'My',h('span',null,'Devis')),
+      h('div',{className:'logo-sub'},'by SIFA')
+    ),
+    h('div',{style:{padding:'10px 14px',fontSize:'12px',color:'var(--text2)',lineHeight:1.45}},'Base matière et paramètres — aligné sur le suivi Excel métier.'),
+    h('div',{className:'sidebar-bottom'},
+      h('button',{className:'nav-btn back-mysifa',onClick:()=>{window.location.href='/'}},
+        '← Retour ',
+        h('span',{className:'wm'},'My',h('span',null,'Sifa'))
+      ),
+      h('div',{className:'user-chip'},
+        h('div',{className:'uc-name'},(S.user&&S.user.nom)?S.user.nom:''),
+        h('div',{className:'uc-role'},(S.user&&S.user.role)?(ROLE_LABELS[S.user.role]||S.user.role):'')
+      ),
+      (()=>{
+        const b=h('button',{className:'support-btn',title:'Contacter le support',onClick:()=>set({contactOpen:true})});
+        const ico=h('span',{className:'support-ico'});
+        try{ico.innerHTML=(window.MySifaSupport&&typeof window.MySifaSupport.iconSvg==='function')?window.MySifaSupport.iconSvg():'';}catch(e){ico.innerHTML='';}
+        b.appendChild(ico);b.appendChild(h('span',null,'Contacter le support'));return b;
+      })(),
+      h('button',{className:'theme-btn',onClick:()=>{document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');render();}},
+        h('span',{className:'theme-ico'},iconEl(isLight?'sun':'moon',16)),
+        h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')
+      ),
+      h('button',{className:'logout-btn',onClick:doLogout},iconEl('log-out',14),' Déconnexion')
+    )
+  );
+  const topbar=h('div',{className:'mobile-topbar'},
+    h('button',{type:'button',className:'mobile-menu-btn',onClick:toggleSidebar,'aria-label':'Menu'},iconEl('menu',20)),
+    h('div',null,
+      h('div',{className:'mobile-topbar-title'},'MyDevis'),
+      h('div',{className:'mobile-topbar-sub'},'Paramètres matière et base prix')
+    ),
+    h('button',{type:'button',className:'mobile-home-btn',onClick:()=>{window.location.href='/'},'aria-label':'Accueil'},iconEl('home',20))
+  );
+  const inner=renderMatierePrix();
+  return h('div',null,
+    S.sidebarOpen?h('div',{className:'sidebar-overlay',onClick:closeSidebar}):null,
+    h('div',{className:'app'},
+      sidebar,
+      h('main',{className:'main'},
+        h('div',{className:'container'},
+          topbar,
+          h('h1',null,'MyDevis'),
+          h('div',{className:'subtitle'},'Chiffrage matière — base et paramètres'),
+          inner
+        )
+      )
+    )
   );
 }
 
@@ -4286,13 +4549,11 @@ function renderLogin(){
 function renderSidebar(){
   const admin=isAdmin(S.user);
   const isSuper=isSuperAdmin(S.user);
-  const canMatiere=S.user&&(S.user.role==='direction'||S.user.role==='superadmin');
   const items=[
     ...(canPlanningNav(S.user)?[{key:'_planning',label:'Planning',icon:'calendar'}]:[]),
     {key:'production',label:'Production',icon:'wrench'},
     {key:'traceabilite',label:'Traçabilité',icon:'layers'},
     ...(admin?[{key:'rentabilite',label:'Rentabilité',icon:'trending-up'}]:[]),
-    ...(canMatiere?[{key:'matiere_prix',label:'Base matière',icon:'layers'}]:[]),
   ];
   const isLight=document.body.classList.contains('light');
   return h('nav',{className:'sidebar'},
@@ -6827,7 +7088,7 @@ function renderLiaisonDossiers(devisId, dossiersLies, allDossiers){
 
 
 function canMatierePrixUser(u){
-  return u && (u.role==='direction'||u.role==='superadmin');
+  return !!(u && u.app_access && u.app_access.devis);
 }
 function normMatiereTxt(s){
   return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
@@ -7050,7 +7311,7 @@ function renderMatierePrix(){
   if(!canMatierePrixUser(S.user)){
     return h('div',{className:'card',style:{padding:'24px'}},
       h('h3',null,'Accès refusé'),
-      h('p',{style:{color:'var(--text2)'}},'Cette section est réservée à la Direction et au super admin.')
+      h('p',{style:{color:'var(--text2)'}},'Accès réservé : droit application « MyDevis » (matrice Paramètres).')
     );
   }
   const mc=S.matiereConfig||{marge_erreur:5,taux_change_usd:0.85};
@@ -7910,8 +8171,9 @@ function renderSuivi(){
 function render(){
   const root=document.getElementById('root');root.innerHTML='';
   document.body.classList.toggle('sb-open', !!S.sidebarOpen);
-  document.body.classList.toggle('has-topbar', S.app==='prod' || S.app==='stock' || S.app==='compta' || S.app==='expe');
+  document.body.classList.toggle('has-topbar', S.app==='prod' || S.app==='stock' || S.app==='compta' || S.app==='expe' || S.app==='devis');
   window.__MYSIFA_APP__ = S.app;
+  if(S.app!=='expe'){_expeLastRenderedInnerTab=null;}
 
   // Nettoyage polling machine quand on quitte MyProd
   if(S.app!=='prod'){stopMachineStatusPolling();}
@@ -7921,6 +8183,7 @@ function render(){
   else if(S.app==='stock'){root.appendChild(renderStock());}
   else if(S.app==='compta'){root.appendChild(renderCompta());}
   else if(S.app==='expe'){root.appendChild(renderExpe());}
+  else if(S.app==='devis'){root.appendChild(renderMyDevis());}
   else if(S.app==='messages'){root.appendChild(renderMessagesApp());}
   else if(S.app==='prod'){
     const titles={
@@ -7930,7 +8193,7 @@ function render(){
       traceabilite:'Traçabilité',
       // rétrocompat URL directe
       historique:'Historique & Erreurs',saisies:'Saisies',import:'Import XLSX',
-      dossiers:'Dossiers',rentabilite:'Rentabilité',matiere_prix:'MyDevis',
+      dossiers:'Dossiers',rentabilite:'Rentabilité',
     };
     const subs={
       production: S.subPage==='saisies'?'Consulter, corriger et importer des saisies':
@@ -7940,7 +8203,6 @@ function render(){
       profil:'Informations personnelles et mot de passe',
       traceabilite:'Matières utilisées par dossier',
       historique:'',saisies:'',import:'',dossiers:'',rentabilite:'',
-      matiere_prix:'Paramètres matière et base prix',
     };
     const topbar=h('div',{className:'mobile-topbar'},
       h('button',{type:'button',className:'mobile-menu-btn',onClick:toggleSidebar,'aria-label':'Menu'},iconEl('menu',20)),
@@ -7968,7 +8230,6 @@ function render(){
         S.page==='import'?renderImport():null,
         S.page==='dossiers'?renderDos():null,
         S.page==='rentabilite'?renderRentabilite():null,
-        S.page==='matiere_prix'?renderMatierePrix():null,
         ))
       )
     ));
@@ -8005,7 +8266,6 @@ async function nav(){
   else if(S.page==='saisies')await loadSaisies();
   else if(S.page==='import')await loadImports();
   else if(S.page==='rentabilite'){await loadDevis();await loadRentPlanning();}
-  else if(S.page==='matiere_prix'){await loadMatierePrixPage();}
   else if(S.page==='dossiers')await loadDos();
   else if(S.page==='traceabilite'){S.traceabilite=null;S.traceabiliteDossier=undefined;await loadTracabilite();}
   render();

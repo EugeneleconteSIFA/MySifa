@@ -88,6 +88,11 @@ def access_matrix(request: Request):
             "hint": "Expédition",
         },
         {
+            "id": "devis",
+            "label": "MyDevis",
+            "hint": "Chiffrage matière — base et paramètres",
+        },
+        {
             "id": "settings",
             "label": "Paramètres",
             "hint": "Comptes, rôles & matrice — super admin uniquement",

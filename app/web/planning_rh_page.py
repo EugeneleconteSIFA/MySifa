@@ -2222,12 +2222,22 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
               if(machineCreneaux.postes.includes(poste)){
                 const ass=getAssignments(m.code,cr.key,poste,ws);
                 if(ass.length){
-                  ass.forEach(a=>{
+                  if(ass.length===1){
                     const chip=document.createElement('span');
                     chip.style.cssText='display:inline-block;font-size:11px;padding:2px 4px;background:transparent;margin:1px;font-weight:bold;color:#000';
-                    chip.textContent=a.user_nom.split(' ')[0];
+                    chip.textContent=ass[0].user_nom;
                     td.appendChild(chip);
-                  });
+                  }else{
+                    const list=document.createElement('div');
+                    list.style.cssText='display:flex;flex-direction:column;gap:1px';
+                    ass.forEach(a=>{
+                      const line=document.createElement('div');
+                      line.style.cssText='font-size:10px;line-height:1.2;color:#000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+                      line.textContent=a.user_nom;
+                      list.appendChild(line);
+                    });
+                    td.appendChild(list);
+                  }
                 }
               }
               row.appendChild(td);
@@ -2246,12 +2256,22 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
               td.rowSpan=2;
               const ass=getAssignments(m.code,'journee',poste,ws);
               if(ass.length){
-                ass.forEach(a=>{
+                if(ass.length===1){
                   const chip=document.createElement('span');
                   chip.style.cssText='display:inline-block;font-size:11px;padding:2px 4px;background:transparent;margin:1px;font-weight:bold;color:#000';
-                  chip.textContent=a.user_nom.split(' ')[0];
+                  chip.textContent=ass[0].user_nom;
                   td.appendChild(chip);
-                });
+                }else{
+                  const list=document.createElement('div');
+                  list.style.cssText='display:flex;flex-direction:column;gap:1px';
+                  ass.forEach(a=>{
+                    const line=document.createElement('div');
+                    line.style.cssText='font-size:10px;line-height:1.2;color:#000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+                    line.textContent=a.user_nom;
+                    list.appendChild(line);
+                  });
+                  td.appendChild(list);
+                }
               }
               row.appendChild(td);
             });
@@ -2293,12 +2313,22 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
             td.style.cssText='border-top:1px solid #000;border-bottom:1px solid #000;border-left:'+borderLeft+' solid #000;border-right:1px solid #000;font-size:9px;padding:3px 5px;min-width:'+(isNarrow?'50px':'60px')+';background:'+cellBg;
             const ass=getAssignments(m.code,'journee',poste,ws);
             if(ass.length){
-              ass.forEach(a=>{
+              if(ass.length===1){
                 const chip=document.createElement('span');
                 chip.style.cssText='display:inline-block;font-size:11px;padding:2px 4px;background:transparent;margin:1px;font-weight:bold;color:#000';
-                chip.textContent=a.user_nom.split(' ')[0];
+                chip.textContent=ass[0].user_nom;
                 td.appendChild(chip);
-              });
+              }else{
+                const list=document.createElement('div');
+                list.style.cssText='display:flex;flex-direction:column;gap:1px';
+                ass.forEach(a=>{
+                  const line=document.createElement('div');
+                  line.style.cssText='font-size:10px;line-height:1.2;color:#000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+                  line.textContent=a.user_nom;
+                  list.appendChild(line);
+                });
+                td.appendChild(list);
+              }
             }
             row.appendChild(td);
           });
