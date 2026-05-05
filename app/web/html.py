@@ -726,6 +726,15 @@ body.light .stock-empl-suggest-add:hover{background:rgba(124,58,237,.2);color:#1
 .expe-help{font-size:10px;color:var(--muted);margin-top:4px}
 .expe-departs-table tbody tr:nth-child(even) td{background:rgba(148,163,184,.06)}
 .expe-departs-table tbody tr:hover td{background:rgba(34,211,238,.06)}
+.expe-hist-table th{padding:6px 10px;font-size:9px}
+.expe-hist-table td{padding:6px 10px;max-width:140px}
+.expe-hist-table td:nth-child(1){max-width:110px} /* Validé le */
+.expe-hist-table td:nth-child(2){max-width:120px} /* Par */
+.expe-hist-table td:nth-child(4){max-width:160px} /* Client */
+.expe-hist-table td:nth-child(5){max-width:160px} /* Réf SIFA */
+.expe-hist-table td:nth-child(7){max-width:140px} /* Cde transp. */
+.expe-hist-table td:nth-child(8){max-width:140px} /* N° BL */
+.expe-hist-table td:nth-child(9){max-width:140px} /* Transp. */
 .expe-top3{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-bottom:18px}
 .expe-score{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;position:relative}
 .expe-score .stripe{height:4px}
@@ -4324,7 +4333,19 @@ function renderExpeDepartModal(){
 
 function renderExpeSuiviDeparts(){
   const btnBarStyle={display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'};
-  const btnPairStyle={minWidth:'160px',padding:'10px 16px',fontSize:'13px',borderRadius:'10px',fontWeight:800,whiteSpace:'nowrap'};
+  const btnPairStyle={
+    minWidth:'160px',
+    padding:'10px 16px',
+    fontSize:'13px',
+    borderRadius:'10px',
+    fontWeight:800,
+    whiteSpace:'nowrap',
+    display:'inline-flex',
+    alignItems:'center',
+    justifyContent:'center',
+    gap:'8px',
+    lineHeight:1
+  };
   const topBar=h('div',{className:'card',style:{marginBottom:'12px'}},
     h('div',{className:'card-header',style:{display:'flex',justifyContent:'flex-start',alignItems:'center',gap:'12px',flexWrap:'wrap'}},
       h('h3',null,'Départs du jour'),
@@ -4424,7 +4445,7 @@ function renderExpeHistoriqueDeparts(){
     ),
     h('div',{className:'card'},
       h('div',{className:'card-header'},h('h3',null,'Historique des départs validés')),
-      h('div',{style:{overflowX:'auto'}},h('table',{className:'table-std'},h('thead',null,head),h('tbody',null,...body)))
+      h('div',{style:{overflowX:'auto'}},h('table',{className:'table-std expe-hist-table'},h('thead',null,head),h('tbody',null,...body)))
     )
   );
 }
