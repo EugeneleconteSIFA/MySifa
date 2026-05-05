@@ -526,6 +526,7 @@ function showToast(message,type){
   if(window.__mysifaPlanResize) return;
   window.__mysifaPlanResize=true;
   let resizing=null;
+  const MIN_DUREE_H=0.5; // aligné avec la validation backend (planning.update_entry)
   document.addEventListener("mousedown",function(e){
     if(!CAN_EDIT||!MID) return;
     const handle=e.target&&e.target.closest&&e.target.closest("[data-resize='1']");
@@ -547,7 +548,7 @@ function showToast(message,type){
     const pxPerPct=tlRect.width/100||1;
     const startWpct=parseFloat(slot.style.width)||1;
     const startLeftpct=parseFloat(slot.style.left)||0;
-    const startDuree=Math.max(0.25,parseFloat(entry.duree_heures)||0.5);
+    const startDuree=Math.max(MIN_DUREE_H,parseFloat(entry.duree_heures)||MIN_DUREE_H);
     slot.style.position="relative";
     const preview=document.createElement("div");
     preview.className="slot-resize-preview";
@@ -571,7 +572,7 @@ function showToast(message,type){
     const dx=e.clientX-resizing.startX;
     const deltaPct=dx/resizing.pxPerPct;
     const newWpct=Math.min(resizing.maxRightPct,Math.max(0.5,resizing.startWpct+deltaPct));
-    const newDuree=Math.max(0.25,resizing.startDuree*(newWpct/resizing.startWpct));
+    const newDuree=Math.max(MIN_DUREE_H,resizing.startDuree*(newWpct/resizing.startWpct));
     resizing.slot.style.width=newWpct+"%";
     resizing.preview.textContent=newDuree.toFixed(1)+" h";
     resizing._liveNewDuree=newDuree;
@@ -587,11 +588,12 @@ function showToast(message,type){
       slot.style.width=startWpct+"%";
       return;
     }
-    const rounded=Math.round(live*4)/4;
+    const rounded=Math.max(MIN_DUREE_H,Math.round(live*4)/4);
     if(Math.abs(rounded-startDuree)<1e-6){
       slot.style.width=startWpct+"%";
       return;
     }
+    let ok=false;
     try{
       const res=await fetch(`/api/planning/machines/${MID}/entries/${eid}`,{
         method:"PUT",
@@ -606,9 +608,14 @@ function showToast(message,type){
         showToast(msg,"danger");
       }else{
         showToast("Durée mise à jour : "+rounded.toFixed(1)+" h","success");
+        ok=true;
       }
     }catch(_){
       showToast("Erreur réseau.","danger");
+    }
+    if(!ok){
+      slot.style.width=startWpct+"%";
+      return;
     }
     await load();
   });
