@@ -1,0 +1,11 @@
+[0;1;32m●[0m mysifa.service - MyProd by SIFA
+     Loaded: loaded (]8;;file://srv1555446/etc/systemd/system/mysifa.service/etc/systemd/system/mysifa.service]8;;; [0;1;32menabled[0m; preset: [0;1;32menabled[0m)
+     Active: [0;1;32mactive (running)[0m since Fri 2026-04-03 20:41:24 UTC; 11ms ago
+   Main PID: 10193 (uvicorn)
+      Tasks: 1 (limit: 9483)
+     Memory: 2.0M (peak: 2.0M)
+        CPU: 7ms
+     CGroup: /system.slice/mysifa.service
+             └─[0;38;5;245m10193 /home/sifa/production-saas/venv/bin/python3 /home/sifa/production-saas/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000[0m
+
+Apr 03 20:41:24 srv1555446 systemd[1]: Started mysifa.service - MyProd by SIFA.
