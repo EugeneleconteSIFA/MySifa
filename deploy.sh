@@ -6,7 +6,7 @@ VPS_PATH="/home/sifa/production-saas"
 LOCAL_DB="data/production.db"
 # IMPORTANT: le service systemd lance depuis $VPS_PATH et la config par défaut lit `data/production.db`.
 # Donc on copie la DB au même endroit, sauf si ton .env VPS surcharge DB_PATH.
-REMOTE_DB="$VPS_PATH/data/production.db"
+REMOTE_DB="$VPS_PATH/app/data/production.db"
 LOCAL_UPLOADS="data/uploads"
 REMOTE_UPLOADS="$VPS_PATH/data/uploads"
 
