@@ -46,6 +46,7 @@ PLANNING_RH_HTML = r"""<!DOCTYPE html>
 <title>Planning RH — MySifa</title>
 <link rel="icon" type="image/png" sizes="512x512" href="/static/mys_icon_512.png">
 <link rel="apple-touch-icon" href="/static/mys_icon_180.png">
+<link rel="stylesheet" href="/static/support_widget.css">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -1088,6 +1089,10 @@ function renderSidebar(){
   const isLight=document.body.classList.contains('light');
   bot.innerHTML=`
     ${S.user?`<div class="rh-user-chip"><div class="ucn">${S.user.nom||''}</div><div class="ucr">${S.user.role||''}</div></div>`:''}
+    <button type="button" class="support-btn" onclick="openSupportRH()">
+      <span class="support-ico">${(window.MySifaSupport&&window.MySifaSupport.iconSvg)?window.MySifaSupport.iconSvg():""}</span>
+      <span>Contacter le support</span>
+    </button>
     <button class="rh-theme-btn" onclick="toggleTheme()">
       ${icon(isLight?'moon':'sun',13)} ${isLight?'Mode sombre':'Mode clair'}
     </button>
@@ -1096,6 +1101,22 @@ function renderSidebar(){
       <span class="mysifa-back-brand">My<span class="mysifa-back-accent">Sifa</span></span>
     </button>
   `;
+}
+
+function openSupportRH(){
+  try{
+    if(window.MySifaSupport && typeof window.MySifaSupport.open==='function'){
+      window.MySifaSupport.open({
+        user:S.user,
+        page:'Planning RH',
+        notify:(m,t)=>showToast(m,(t==='error')?'danger':(t==='warn')?'info':'success'),
+        api:(p,o)=>fetch(p,{credentials:'include',...(o||{})}).then(async r=>{
+          if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.detail||('Erreur '+r.status));}
+          return await r.json();
+        })
+      });
+    }
+  }catch(e){}
 }
 
 // ── Header ────────────────────────────────────────────
@@ -2381,5 +2402,6 @@ function printConges(){
   if(S.tab==='conges')await loadSoldes();
 })();
 </script>
+<script src="/static/support_widget.js"></script>
 </body>
 </html>"""

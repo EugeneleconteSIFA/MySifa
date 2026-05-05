@@ -336,7 +336,7 @@ def import_parametres(ws, conn):
                     appellation=?, notes=?, updated_at=?
                 WHERE id=?
             """, (
-                code, fournisseur, grammage, poids_m2,
+                code or '', fournisseur, grammage, poids_m2,
                 prix_eur, prix_usd, taux_change,
                 incidence_dollar, transport_m2 or 0,
                 appellation, notes_str, NOW,

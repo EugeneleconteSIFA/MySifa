@@ -856,6 +856,8 @@ let S={
   expeDepartHistQ:'',
   expeDepartHistLoading:false,
   expeDepartSubmitting:false,
+  expeDepartModalOpen:false,
+  expeDepartEditId:null,
   expeDepartForm:{
     date_enlevement:'',
     affreteurs:'',
@@ -2273,7 +2275,7 @@ function renderPortal(){
   const isFab = aa ? !!aa.fabrication : (isSuper || urole==='fabrication' || !!(urole && ['direction','administration'].includes(urole)));
   const isPrint = isSuper || !!(urole && ['fabrication','logistique'].includes(urole));
   const isCom = urole==='commercial';
-  const isRH   = aa ? !!aa.planning_rh : (isSuper || !!(urole && ['direction','fabrication','logistique'].includes(urole)));
+  const isRH   = aa ? !!aa.planning_rh : (isSuper || !!(urole && ['direction','administration','fabrication','logistique'].includes(urole)));
   const isPaie = isSuper || !!(urole && ['direction','administration','comptabilite'].includes(urole));
   const isDevis = aa ? !!aa.devis : (isSuper || urole==='direction');
   const isLight=document.body.classList.contains('light');
@@ -4144,6 +4146,117 @@ async function expeValiderDepart(id){
   }catch(e){toast(e.message||'Validation impossible','error');}
 }
 
+function expeOpenDepartModal(prefill, mode){
+  const dayVal=(S.expeDepartJourDate&&String(S.expeDepartJourDate).trim())||expeParisDayISO();
+  const src = prefill || {};
+  set({
+    expeDepartModalOpen:true,
+    expeDepartEditId: (mode==='edit' && src && src.id) ? src.id : null,
+    expeDepartForm:{
+      date_enlevement: dayVal,
+      affreteurs: src.affreteurs||'',
+      transporteur: src.transporteur||'',
+      client: src.client||'',
+      code_postal_destination: src.code_postal_destination||'',
+      ref_sifa: src.ref_sifa||'',
+      arc: src.arc||'',
+      no_cde_transport: src.no_cde_transport||'',
+      no_bl: src.no_bl||'',
+      nb_palette: (src.nb_palette!=null && src.nb_palette!=='') ? String(src.nb_palette) : '',
+      poids_total_kg: (src.poids_total_kg!=null && src.poids_total_kg!=='') ? String(src.poids_total_kg) : '',
+      date_livraison: (src.date_livraison||'') ? String(src.date_livraison).slice(0,10) : '',
+    }
+  });
+}
+function expeCloseDepartModal(){
+  set({expeDepartModalOpen:false, expeDepartEditId:null});
+}
+
+function renderExpeDepartModal(){
+  if(!S.expeDepartModalOpen) return null;
+  const dayVal=(S.expeDepartJourDate&&String(S.expeDepartJourDate).trim())||expeParisDayISO();
+  const f=S.expeDepartForm||{};
+  const isEdit = !!S.expeDepartEditId;
+
+  function mk(label,key,type,ph){
+    const i=h('input',{type:type||'text',placeholder:ph||'',value:(f[key]!=null?String(f[key]):''),name:key});
+    i.addEventListener('input',e=>{S.expeDepartForm[key]=e.target.value;});
+    return h('div',{className:'expe-field'},h('label',null,label),i);
+  }
+
+  const overlay=h('div',{className:'add-row-modal',style:{zIndex:12000}});
+  overlay.addEventListener('click',e=>{if(e.target===overlay)expeCloseDepartModal();});
+
+  const box=h('div',{className:'add-row-form',style:{maxWidth:'760px'}});
+  const closeBtn=h('button',{type:'button',className:'add-row-close',onClick:expeCloseDepartModal},'×');
+  const header=h('div',{className:'add-row-header'},
+    h('h3',null,isEdit?'Modifier un départ':'Ajouter un départ'),
+    h('div',{className:'badge',style:{marginLeft:'auto'}},'Jour : ',dayVal)
+  );
+
+  const form=h('form',{onSubmit:async(e)=>{
+    e.preventDefault();
+    if(S.expeDepartSubmitting) return;
+    const body={
+      date_enlevement: dayVal,
+      affreteurs:(S.expeDepartForm.affreteurs||'').trim()||null,
+      transporteur:(S.expeDepartForm.transporteur||'').trim()||null,
+      client:(S.expeDepartForm.client||'').trim()||null,
+      code_postal_destination:(S.expeDepartForm.code_postal_destination||'').trim()||null,
+      ref_sifa:(S.expeDepartForm.ref_sifa||'').trim()||null,
+      arc:(S.expeDepartForm.arc||'').trim()||null,
+      no_cde_transport:(S.expeDepartForm.no_cde_transport||'').trim()||null,
+      no_bl:(S.expeDepartForm.no_bl||'').trim()||null,
+      nb_palette:(S.expeDepartForm.nb_palette||'').trim()||null,
+      poids_total_kg:(S.expeDepartForm.poids_total_kg||'').trim()||null,
+      date_livraison:(S.expeDepartForm.date_livraison||'').trim()||null
+    };
+    set({expeDepartSubmitting:true});
+    try{
+      if(isEdit){
+        await api('/api/expe/departs/'+S.expeDepartEditId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        toast('Départ modifié');
+      }else{
+        await api('/api/expe/departs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        toast('Départ enregistré');
+      }
+      set({expeDepartSubmitting:false});
+      expeCloseDepartModal();
+      await loadExpeDepartJour();
+    }catch(err){
+      set({expeDepartSubmitting:false});
+      toast(err.message||'Erreur','error');
+    }
+  }});
+
+  const fields=h('div',{className:'expe-fields'},
+    mk('Affréteurs','affreteurs'),
+    mk('Transporteur','transporteur'),
+    mk('Client','client'),
+    mk('Code postal / destination','code_postal_destination'),
+    mk('Réf. SIFA','ref_sifa'),
+    mk('ARC','arc'),
+    mk('N° commande transporteur','no_cde_transport'),
+    mk('N° BL','no_bl'),
+    mk('Nombre de palettes','nb_palette','number','ex: 2'),
+    mk('Poids total (kg)','poids_total_kg','number','ex: 1325'),
+    mk('Date livraison (prévue)','date_livraison','date')
+  );
+
+  const actions=h('div',{className:'form-actions'},
+    h('button',{type:'button',className:'btn-ghost',onClick:expeCloseDepartModal},'Annuler'),
+    h('button',{type:'submit',className:'btn',disabled:!!S.expeDepartSubmitting},S.expeDepartSubmitting?'Enregistrement…':'Enregistrer le départ')
+  );
+
+  form.appendChild(fields);
+  form.appendChild(actions);
+  box.appendChild(closeBtn);
+  box.appendChild(header);
+  box.appendChild(form);
+  overlay.appendChild(box);
+  return overlay;
+}
+
 function renderExpeSuiviDeparts(){
   const dayVal=(S.expeDepartJourDate&&String(S.expeDepartJourDate).trim())||expeParisDayISO();
   const dateJour=h('input',{type:'date',value:dayVal,
@@ -4152,89 +4265,15 @@ function renderExpeSuiviDeparts(){
       setTimeout(()=>loadExpeDepartJour(),0);
     }
   });
-  const f=S.expeDepartForm||{};
-  function mk(label,key,type,ph,defaultVal){
-    const v=(f[key]!=null && String(f[key])!=='')?String(f[key]):(defaultVal!=null?String(defaultVal):'');
-    const i=h('input',{type:type||'text',placeholder:ph||'',value:v,name:key});
-    // Important: ne pas appeler set() sur chaque frappe (évite rerender + perte focus).
-    i.addEventListener('input',e=>{S.expeDepartForm[key]=e.target.value;});
-    return h('div',{className:'expe-field'},h('label',null,label),i);
-  }
-  const formCard=h('div',{className:'card',style:{marginBottom:'16px'}},
-    h('div',{className:'card-header'},h('h3',null,'Ajouter un départ')),
-    h('div',{style:{padding:'16px 18px'}},
-      h('div',{style:{display:'flex',gap:'14px',flexWrap:'wrap',alignItems:'flex-end',marginBottom:'14px'}},
-        h('div',{className:'expe-field'},h('label',null,'Jour affiché (départs en attente)'),dateJour),
-        h('button',{className:'btn-sm',onClick:()=>{set({expeDepartJourDate:expeParisDayISO()});loadExpeDepartJour();}},'Aujourd\'hui (Paris)'),
-        h('button',{className:'btn-ghost btn-sm',onClick:()=>loadExpeDepartJour()},'Rafraîchir')
-      ),
-      h('div',{className:'expe-help',style:{marginBottom:'10px'}},'Les lignes « en attente » dont la date d\'enlèvement correspond au jour choisi apparaissent ci-dessous. La validation les archive dans l\'historique.'),
-      (()=>{
-        const form=h('form',{onSubmit:async(e)=>{
-          e.preventDefault();
-          if(S.expeDepartSubmitting) return;
-          const dateEnl=(S.expeDepartForm.date_enlevement||'').trim()||dayVal;
-          const body={
-            date_enlevement:dateEnl,
-            affreteurs:(S.expeDepartForm.affreteurs||'').trim()||null,
-            transporteur:(S.expeDepartForm.transporteur||'').trim()||null,
-            client:(S.expeDepartForm.client||'').trim()||null,
-            code_postal_destination:(S.expeDepartForm.code_postal_destination||'').trim()||null,
-            ref_sifa:(S.expeDepartForm.ref_sifa||'').trim()||null,
-            arc:(S.expeDepartForm.arc||'').trim()||null,
-            no_cde_transport:(S.expeDepartForm.no_cde_transport||'').trim()||null,
-            no_bl:(S.expeDepartForm.no_bl||'').trim()||null,
-            nb_palette:(S.expeDepartForm.nb_palette||'').trim()||null,
-            poids_total_kg:(S.expeDepartForm.poids_total_kg||'').trim()||null,
-            date_livraison:(S.expeDepartForm.date_livraison||'').trim()||null
-          };
-          if(!body.date_enlevement){toast('Date d\'enlèvement obligatoire','error');return;}
-          set({expeDepartSubmitting:true});
-          try{
-            await api('/api/expe/departs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-            toast('Départ enregistré');
-            set({
-              expeDepartSubmitting:false,
-              expeDepartForm:{
-                date_enlevement:dayVal,
-                affreteurs:'',
-                transporteur:'',
-                client:'',
-                code_postal_destination:'',
-                ref_sifa:'',
-                arc:'',
-                no_cde_transport:'',
-                no_bl:'',
-                nb_palette:'',
-                poids_total_kg:'',
-                date_livraison:'',
-              }
-            });
-            await loadExpeDepartJour();
-          }catch(err){
-            set({expeDepartSubmitting:false});
-            toast(err.message||'Erreur','error');
-          }
-        }});
-        form.appendChild(h('div',{className:'expe-fields'},
-          mk('Date d\'enlèvement (nouveau)','date_enlevement','date','YYYY-MM-DD',dayVal),
-          mk('Affréteurs','affreteurs'),
-          mk('Transporteur','transporteur'),
-          mk('Client','client'),
-          mk('Code postal / destination','code_postal_destination'),
-          mk('Réf. SIFA','ref_sifa'),
-          mk('ARC','arc'),
-          mk('N° commande transport','no_cde_transport'),
-          mk('N° BL','no_bl'),
-          mk('Nombre de palettes','nb_palette','number','ex: 2'),
-          mk('Poids total (kg)','poids_total_kg','number','ex: 1325'),
-          mk('Date livraison (prévue)','date_livraison','date')
-        ));
-        form.appendChild(h('div',{style:{marginTop:'14px'}},
-          h('button',{className:'btn',type:'submit',disabled:!!S.expeDepartSubmitting},S.expeDepartSubmitting?'Enregistrement…':'Enregistrer le départ')
-        ));
-        return form;
-      })()
+  const topBar=h('div',{className:'card',style:{marginBottom:'12px'}},
+    h('div',{className:'card-header',style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'12px',flexWrap:'wrap'}},
+      h('h3',null,'Départs du jour'),
+      h('div',{style:{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}},
+        h('div',{className:'expe-field',style:{minWidth:'200px'}},h('label',null,'Jour affiché (en attente)'),dateJour),
+        h('button',{className:'btn-sm',type:'button',onClick:()=>{set({expeDepartJourDate:expeParisDayISO()});loadExpeDepartJour();}},'Aujourd\'hui'),
+        h('button',{className:'btn-ghost btn-sm',type:'button',onClick:()=>loadExpeDepartJour()},'Rafraîchir'),
+        h('button',{className:'btn-sm',type:'button',onClick:()=>expeOpenDepartModal(null,'new')},iconEl('plus',14),' Ajouter')
+      )
     )
   );
   const rows=S.expeDepartList||[];
@@ -4254,13 +4293,25 @@ function renderExpeSuiviDeparts(){
     h('td',null,r.nb_palette!=null?String(r.nb_palette):'—'),
     h('td',null,r.poids_total_kg!=null?String(r.poids_total_kg):'—'),
     h('td',null,(r.date_livraison||'').slice(0,10)||'—'),
-    h('td',null,h('button',{className:'btn-sm',onClick:()=>expeValiderDepart(r.id)},'Valider'))
+    h('td',null,
+      h('button',{className:'btn-ghost',title:'Copier',onClick:()=>expeOpenDepartModal(r,'new')},iconEl('copy',14)),
+      h('button',{className:'btn-ghost',title:'Modifier',onClick:()=>expeOpenDepartModal(r,'edit')},iconEl('edit',14)),
+      h('button',{className:'btn-ghost',title:'Supprimer',onClick:async()=>{
+        if(!confirm('Supprimer ce départ ?')) return;
+        try{
+          await api('/api/expe/departs/'+r.id,{method:'DELETE'});
+          toast('Départ supprimé');
+          await loadExpeDepartJour();
+        }catch(e){toast(e.message||'Suppression impossible','error');}
+      }},iconEl('trash',14)),
+      h('button',{className:'btn-sm',style:{marginLeft:'8px'},onClick:()=>expeValiderDepart(r.id)},'Valider')
+    )
   )):[h('tr',null,h('td',{colSpan:13,style:{color:'var(--muted)'}},S.expeDepartLoading?'Chargement…':'Aucun départ en attente pour ce jour'))];
   const listCard=h('div',{className:'card'},
     h('div',{className:'card-header'},h('h3',null,'Départs du jour (en attente de validation)')),
     h('div',{style:{overflowX:'auto'}},h('table',{className:'table-std'},h('thead',null,head),h('tbody',null,...body)))
   );
-  return h('div',null,formCard,listCard);
+  return h('div',null,topBar,listCard,renderExpeDepartModal());
 }
 
 function renderExpeHistoriqueDeparts(){
@@ -4276,7 +4327,7 @@ function renderExpeHistoriqueDeparts(){
   });
   const rows=S.expeDepartHist||[];
   const head=h('tr',null,
-    ...['Validé le','Par','Date enl.','Client','Réf SIFA','ARC','Cde transp.','N° BL','Transp.','Pal.','Poids','Liv. prév.'].map(t=>h('th',null,t))
+    ...['Validé le','Par','Date enl.','Client','Réf SIFA','ARC','Cde transp.','N° BL','Transp.','Pal.','Poids','Liv. prév.',''].map(t=>h('th',null,t))
   );
   const body=rows.length?rows.map(r=>h('tr',null,
     h('td',{style:{fontSize:'12px',whiteSpace:'nowrap'}},(r.validated_at||'').replace('T',' ').slice(0,16)||'—'),
@@ -4290,8 +4341,11 @@ function renderExpeHistoriqueDeparts(){
     h('td',null,r.transporteur||'—'),
     h('td',null,r.nb_palette!=null?String(r.nb_palette):'—'),
     h('td',null,r.poids_total_kg!=null?String(r.poids_total_kg):'—'),
-    h('td',null,(r.date_livraison||'').slice(0,10)||'—')
-  )):[h('tr',null,h('td',{colSpan:12,style:{color:'var(--muted)'}},S.expeDepartHistLoading?'Chargement…':'Aucune entrée (ou affiner la recherche)'))];
+    h('td',null,(r.date_livraison||'').slice(0,10)||'—'),
+    h('td',null,
+      h('button',{className:'btn-ghost',title:'Copier',onClick:()=>expeOpenDepartModal(r,'new')},iconEl('copy',14))
+    )
+  )):[h('tr',null,h('td',{colSpan:13,style:{color:'var(--muted)'}},S.expeDepartHistLoading?'Chargement…':'Aucune entrée (ou affiner la recherche)'))];
   return h('div',null,
     h('div',{className:'card',style:{marginBottom:'12px',padding:'14px 18px'}},
       h('h3',{style:{fontSize:'14px',fontWeight:'700',marginBottom:'8px'}},'Recherche'),

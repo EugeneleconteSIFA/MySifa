@@ -163,6 +163,90 @@ def valider_depart(request: Request, depart_id: int):
     return dict(out)
 
 
+@router.put("/departs/{depart_id}")
+async def update_depart(request: Request, depart_id: int, body: dict = Body(...)):
+    """Modifie un départ en attente (avant validation)."""
+    _require_expe(request)
+
+    def _f(key: str) -> Any:
+        v = body.get(key)
+        if v is None or v == "":
+            return None
+        return v
+
+    def _float_opt(key: str) -> Any:
+        v = body.get(key)
+        if v is None or v == "":
+            return None
+        try:
+            return float(str(v).replace(",", ".").replace("\u202f", "").replace(" ", ""))
+        except ValueError:
+            return None
+
+    sets = []
+    args: list[Any] = []
+
+    # Optionnel : permettre de modifier la date d'enlèvement si fournie
+    if "date_enlevement" in body:
+        date_enl = _date_prefix(str(body.get("date_enlevement") or "").strip())
+        if not date_enl or not re.match(r"^\d{4}-\d{2}-\d{2}$", date_enl):
+            raise HTTPException(status_code=400, detail="Date d'enlèvement invalide (YYYY-MM-DD)")
+        sets.append("date_enlevement=?")
+        args.append(date_enl)
+
+    fields_text = [
+        "affreteurs",
+        "transporteur",
+        "client",
+        "code_postal_destination",
+        "ref_sifa",
+        "arc",
+        "no_cde_transport",
+        "no_bl",
+        "date_livraison",
+    ]
+    for k in fields_text:
+        if k in body:
+            sets.append(f"{k}=?")
+            args.append(_f(k))
+
+    fields_num = ["nb_palette", "poids_total_kg"]
+    for k in fields_num:
+        if k in body:
+            sets.append(f"{k}=?")
+            args.append(_float_opt(k))
+
+    if not sets:
+        raise HTTPException(status_code=400, detail="Aucun champ à mettre à jour")
+
+    with get_db() as conn:
+        ex = conn.execute("SELECT id, statut FROM expe_departs WHERE id=?", (depart_id,)).fetchone()
+        if not ex:
+            raise HTTPException(status_code=404, detail="Départ introuvable")
+        if ex["statut"] != "en_attente":
+            raise HTTPException(status_code=409, detail="Modification impossible : départ déjà validé ou annulé")
+
+        conn.execute(f"UPDATE expe_departs SET {', '.join(sets)} WHERE id=?", (*args, depart_id))
+        conn.commit()
+        row = conn.execute("SELECT * FROM expe_departs WHERE id=?", (depart_id,)).fetchone()
+    return dict(row)
+
+
+@router.delete("/departs/{depart_id}")
+def delete_depart(request: Request, depart_id: int):
+    """Supprime un départ en attente."""
+    _require_expe(request)
+    with get_db() as conn:
+        ex = conn.execute("SELECT id, statut FROM expe_departs WHERE id=?", (depart_id,)).fetchone()
+        if not ex:
+            raise HTTPException(status_code=404, detail="Départ introuvable")
+        if ex["statut"] != "en_attente":
+            raise HTTPException(status_code=409, detail="Suppression impossible : départ déjà validé ou annulé")
+        conn.execute("DELETE FROM expe_departs WHERE id=?", (depart_id,))
+        conn.commit()
+    return {"ok": True}
+
+
 @router.get("/departs/historique")
 def historique_departs(
     request: Request,
