@@ -33,6 +33,22 @@ def _norm_header(v: Any) -> str:
     return t.strip("_")
 
 
+def _norm_sheet_name(v: Any) -> str:
+    t = str(v or "").strip().lower()
+    t = unicodedata.normalize("NFD", t)
+    t = "".join(c for c in t if unicodedata.category(c) != "Mn")
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
+
+
+def _pick_worksheet(wb: openpyxl.Workbook, desired_name: str):
+    want = _norm_sheet_name(desired_name)
+    for sname in wb.sheetnames:
+        if _norm_sheet_name(sname) == want:
+            return wb[sname]
+    return wb.active
+
+
 def _as_date_yyyy_mm_dd(v: Any) -> Optional[str]:
     if v is None or v == "":
         return None
@@ -106,7 +122,7 @@ def main() -> int:
         return 2
 
     wb = openpyxl.load_workbook(excel_path, data_only=True)
-    ws = wb.active
+    ws = _pick_worksheet(wb, "terminé")
 
     rows = list(ws.iter_rows(values_only=True))
     if not rows:
