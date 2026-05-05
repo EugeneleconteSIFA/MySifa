@@ -4265,7 +4265,8 @@ function renderExpeDepartModal(){
       }
       set({expeDepartSubmitting:false});
       expeCloseDepartModal();
-      await loadExpeDepartJour();
+      if((S.expeDepartSubTab||'jour')==='historique') await loadExpeDepartHistorique();
+      else await loadExpeDepartJour();
     }catch(err){
       set({expeDepartSubmitting:false});
       toast(err.message||'Erreur','error');
@@ -4392,7 +4393,16 @@ function renderExpeHistoriqueDeparts(){
     h('td',null,r.poids_total_kg!=null?String(r.poids_total_kg):'—'),
     h('td',null,(r.date_livraison||'').slice(0,10)||'—'),
     h('td',null,
-      h('button',{className:'btn-ghost',title:'Copier',onClick:()=>expeOpenDepartModal(r,'new')},iconEl('copy',14))
+      h('button',{className:'btn-ghost',title:'Copier',onClick:()=>expeOpenDepartModal(r,'new')},iconEl('copy',14)),
+      h('button',{className:'btn-ghost',title:'Modifier',onClick:()=>expeOpenDepartModal(r,'edit')},iconEl('edit',14)),
+      h('button',{className:'btn-danger',title:'Supprimer',onClick:async()=>{
+        if(!confirm('Supprimer ce départ ?')) return;
+        try{
+          await api('/api/expe/departs/'+r.id,{method:'DELETE'});
+          toast('Départ supprimé');
+          await loadExpeDepartHistorique();
+        }catch(e){toast(e.message||'Suppression impossible','error');}
+      }},iconEl('trash',14))
     )
   )):[h('tr',null,h('td',{colSpan:13,style:{color:'var(--muted)'}},S.expeDepartHistLoading?'Chargement…':'Aucune entrée (ou affiner la recherche)'))];
   return h('div',null,

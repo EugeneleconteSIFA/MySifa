@@ -165,7 +165,7 @@ def valider_depart(request: Request, depart_id: int):
 
 @router.put("/departs/{depart_id}")
 async def update_depart(request: Request, depart_id: int, body: dict = Body(...)):
-    """Modifie un départ en attente (avant validation)."""
+    """Modifie un départ (en attente ou validé)."""
     _require_expe(request)
 
     def _f(key: str) -> Any:
@@ -223,8 +223,8 @@ async def update_depart(request: Request, depart_id: int, body: dict = Body(...)
         ex = conn.execute("SELECT id, statut FROM expe_departs WHERE id=?", (depart_id,)).fetchone()
         if not ex:
             raise HTTPException(status_code=404, detail="Départ introuvable")
-        if ex["statut"] != "en_attente":
-            raise HTTPException(status_code=409, detail="Modification impossible : départ déjà validé ou annulé")
+        if ex["statut"] not in ("en_attente", "valide"):
+            raise HTTPException(status_code=409, detail="Modification impossible : départ annulé")
 
         conn.execute(f"UPDATE expe_departs SET {', '.join(sets)} WHERE id=?", (*args, depart_id))
         conn.commit()
@@ -234,14 +234,14 @@ async def update_depart(request: Request, depart_id: int, body: dict = Body(...)
 
 @router.delete("/departs/{depart_id}")
 def delete_depart(request: Request, depart_id: int):
-    """Supprime un départ en attente."""
+    """Supprime un départ (en attente ou validé)."""
     _require_expe(request)
     with get_db() as conn:
         ex = conn.execute("SELECT id, statut FROM expe_departs WHERE id=?", (depart_id,)).fetchone()
         if not ex:
             raise HTTPException(status_code=404, detail="Départ introuvable")
-        if ex["statut"] != "en_attente":
-            raise HTTPException(status_code=409, detail="Suppression impossible : départ déjà validé ou annulé")
+        if ex["statut"] not in ("en_attente", "valide"):
+            raise HTTPException(status_code=409, detail="Suppression impossible : départ annulé")
         conn.execute("DELETE FROM expe_departs WHERE id=?", (depart_id,))
         conn.commit()
     return {"ok": True}

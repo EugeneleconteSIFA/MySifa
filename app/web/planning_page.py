@@ -466,7 +466,7 @@ window.addEventListener("unhandledrejection", (e)=>showFatal("Promise rejection"
 <script>
 let MID=__MACHINE_ID__;
 const DN=["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"];
-const MIND=2,MAXD=720;
+const MIND=0.75,MAXD=720;
 const CC=["#93c5fd","#c4b5fd","#6ee7b7","#fde68a","#fca5a5","#67e8f9","#a5b4fc","#bbf7d0","#f0abfc","#fdba74"];
 // Palette étendue pour le picker de couleurs (pastels en premier, saturés ensuite)
 const PALETTE=[
@@ -2466,7 +2466,7 @@ function openEdit(id){
 }
 
 async function submitEditDuree(id){
-  const dur=parseInt(document.getElementById("f-dur").value)||0;
+  const dur=parseFloat(document.getElementById("f-dur").value)||0;
   if(dur<MIND||dur>720)return alert(`Durée entre ${MIND} et 720h`);
   try{
     await api(`/machines/${MID}/entries/${id}`,{method:"PUT",body:JSON.stringify({duree_heures:dur})});
