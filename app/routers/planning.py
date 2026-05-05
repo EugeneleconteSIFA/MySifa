@@ -2040,7 +2040,7 @@ def live_refresh_en_cours(machine_id: int, request: Request):
 
         # Trouve l'entrée en_cours pour cette machine
         en_cours = conn.execute(
-            """SELECT id, COALESCE(numero_of, reference) AS dossier_ref, duree_heures
+            """SELECT id, COALESCE(numero_of, reference) AS dossier_ref, duree_heures, updated_at, updated_by
                FROM planning_entries
                WHERE machine_id=? AND statut='en_cours'
                ORDER BY position ASC LIMIT 1""",
@@ -2052,9 +2052,21 @@ def live_refresh_en_cours(machine_id: int, request: Request):
         entry_id = en_cours["id"]
         no_dossier = (en_cours["dossier_ref"] or "").strip()
         current_dur = float(en_cours["duree_heures"] or 0)
+        updated_at_raw = (en_cours["updated_at"] or "").strip()
+        updated_by_raw = (en_cours["updated_by"] or "").strip()
 
         if not no_dossier:
             return {"updated": False}
+
+        # Ne pas écraser une modification manuelle récente.
+        # Sinon, un utilisateur qui ajuste la durée voit son changement annulé au refresh automatique.
+        try:
+            if updated_at_raw and updated_by_raw:
+                dt_updated = datetime.fromisoformat(updated_at_raw.split("+")[0].replace("Z", ""))
+                if (datetime.now() - dt_updated) < timedelta(minutes=10):
+                    return {"updated": False}
+        except ValueError:
+            pass
 
         mac = conn.execute("SELECT * FROM machines WHERE id=?", (machine_id,)).fetchone()
         if not mac:
@@ -2075,9 +2087,9 @@ def live_refresh_en_cours(machine_id: int, request: Request):
         planned_end = _fmt_ts(dt_start + timedelta(hours=elapsed))
         conn.execute(
             """UPDATE planning_entries
-               SET duree_heures=?, planned_start=?, planned_end=?, updated_at=?
+               SET duree_heures=?, planned_start=?, planned_end=?, updated_at=?, updated_by=?
                WHERE id=?""",
-            (elapsed, planned_start, planned_end, datetime.now().isoformat(), entry_id),
+            (elapsed, planned_start, planned_end, datetime.now().isoformat(), "Auto", entry_id),
         )
         conn.commit()
         return {"updated": True, "entry_id": entry_id, "duree_heures": elapsed}
