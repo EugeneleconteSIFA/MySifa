@@ -4350,7 +4350,6 @@ function renderExpeSuiviDeparts(){
     h('div',{className:'card-header',style:{display:'flex',justifyContent:'flex-start',alignItems:'center',gap:'12px',flexWrap:'wrap'}},
       h('h3',null,'Départs du jour'),
       h('div',{style:btnBarStyle},
-        h('button',{className:'btn-ghost',type:'button',style:btnPairStyle,onClick:()=>loadExpeDepartJour()},'Rafraîchir'),
         h('button',{className:'btn',type:'button',style:btnPairStyle,onClick:()=>expeOpenDepartModal(null,'new')},iconEl('plus',14),' Ajouter')
       ),
     )
