@@ -4351,12 +4351,19 @@ function renderExpeSuiviDeparts(){
     h('td',null,r.nb_palette!=null?String(r.nb_palette):'—'),
     h('td',null,r.poids_total_kg!=null?String(r.poids_total_kg):'—'),
     h('td',null,(r.date_livraison||'').slice(0,10)||'—'),
-    h('td',null,
-      h('button',{
-        className:'btn',
-        style:{padding:'8px 14px',fontSize:'12px',borderRadius:'10px',background:'#2563eb',color:'#fff',border:'1px solid rgba(37,99,235,.55)'},
-        onClick:()=>expeValiderDepart(r.id)
-      },'Valider')
+    // Empêcher la troncature (… en rouge) sur la colonne actions.
+    h('td',{style:{maxWidth:'none',overflow:'visible',textOverflow:'clip',whiteSpace:'nowrap'}},
+      h('button',{className:'btn-ghost',title:'Copier',onClick:()=>expeOpenDepartModal(r,'new')},iconEl('copy',14)),
+      h('button',{className:'btn-ghost',title:'Modifier',onClick:()=>expeOpenDepartModal(r,'edit')},iconEl('edit',14)),
+      h('button',{className:'btn-danger',title:'Supprimer',onClick:async()=>{
+        if(!confirm('Supprimer ce départ ?')) return;
+        try{
+          await api('/api/expe/departs/'+r.id,{method:'DELETE'});
+          toast('Départ supprimé');
+          await loadExpeDepartJour();
+        }catch(e){toast(e.message||'Suppression impossible','error');}
+      }},iconEl('trash',14)),
+      h('button',{className:'btn',style:{marginLeft:'8px',padding:'8px 12px',fontSize:'12px',borderRadius:'10px'},onClick:()=>expeValiderDepart(r.id)},'Valider')
     )
   )):[h('tr',null,h('td',{colSpan:13,style:{color:'var(--muted)'}},S.expeDepartLoading?'Chargement…':'Aucun départ en attente pour ce jour'))];
   const listCard=h('div',{className:'card'},
