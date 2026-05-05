@@ -35,6 +35,21 @@ def _norm_key(val: Any) -> str:
     return str(val or "").strip().lower()
 
 
+def _norm_search(val: Any) -> str:
+    """Minuscule + suppression accents + trim (pour recherche multi-machines)."""
+    s = str(val or "").strip().lower()
+    s = unicodedata.normalize("NFD", s)
+    s = "".join(ch for ch in s if unicodedata.category(ch) != "Mn")
+    return " ".join(s.split())
+
+
+def _match_tokens(blob: str, tokens: list[str]) -> bool:
+    if not tokens:
+        return False
+    b = _norm_search(blob)
+    return all(t in b for t in tokens)
+
+
 def fabrication_planning_machine_ids(conn, user: dict) -> set[int]:
     """Machines autorisées pour le rôle fabrication : saisies production + machine du profil."""
     ids: set[int] = set()
@@ -619,6 +634,88 @@ def list_machines(request: Request):
                 "SELECT * FROM machines WHERE actif=1 ORDER BY nom"
             ).fetchall()
     return [dict(r) for r in rows]
+
+
+@router.get("/search")
+def search_across_machines(
+    request: Request,
+    q: str = "",
+    limit_per_machine: int = 3,
+):
+    """Recherche planning sur toutes les machines actives.
+
+    Retour: [{machine_id, nom, count, sample_entry_ids:[...]}, ...]
+    - Insensible à la casse et aux accents, et multi-mots (tous les tokens doivent matcher).
+    - Filtré pour le rôle fabrication (machines autorisées).
+    """
+    user = require_planning_view(request)
+    qt = _norm_search(q)
+    tokens = [t for t in qt.split(" ") if t]
+    if not tokens:
+        return []
+
+    with get_db() as conn:
+        if user.get("role") == ROLE_FABRICATION:
+            allowed = fabrication_planning_machine_ids(conn, user)
+            if not allowed:
+                return []
+            ph = ",".join("?" * len(allowed))
+            mrows = conn.execute(
+                f"SELECT id, nom FROM machines WHERE actif=1 AND id IN ({ph}) ORDER BY nom",
+                tuple(allowed),
+            ).fetchall()
+            erows = conn.execute(
+                f"""
+                SELECT id, machine_id, client, reference, numero_of, ref_produit, description
+                FROM planning_entries
+                WHERE machine_id IN ({ph})
+                ORDER BY machine_id, id DESC
+                """,
+                tuple(allowed),
+            ).fetchall()
+        else:
+            mrows = conn.execute(
+                "SELECT id, nom FROM machines WHERE actif=1 ORDER BY nom"
+            ).fetchall()
+            erows = conn.execute(
+                """
+                SELECT id, machine_id, client, reference, numero_of, ref_produit, description
+                FROM planning_entries
+                ORDER BY machine_id, id DESC
+                """
+            ).fetchall()
+
+    mnames = {int(r["id"]): (r["nom"] or "") for r in mrows}
+    out: dict[int, dict] = {}
+    for r in erows:
+        mid = int(r["machine_id"])
+        blob = " ".join(
+            str(x or "")
+            for x in (
+                r["client"],
+                r["reference"],
+                r["numero_of"],
+                r["ref_produit"],
+                r["description"],
+            )
+        )
+        if not _match_tokens(blob, tokens):
+            continue
+        if mid not in out:
+            out[mid] = {
+                "machine_id": mid,
+                "nom": mnames.get(mid, ""),
+                "count": 0,
+                "sample_entry_ids": [],
+            }
+        out[mid]["count"] += 1
+        if len(out[mid]["sample_entry_ids"]) < int(limit_per_machine):
+            out[mid]["sample_entry_ids"].append(int(r["id"]))
+
+    # Ne renvoyer que les machines où il y a un résultat, tri par nom.
+    items = list(out.values())
+    items.sort(key=lambda d: (d.get("nom") or ""))
+    return items
 
 
 @router.get("/summary")

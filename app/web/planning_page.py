@@ -1301,7 +1301,7 @@ function render(){
       <div style="font-size:11px;color:var(--muted);margin:-8px 0 12px">Gérez les jours et horaires via l'icône ⚙ de chaque semaine.</div>
       <div style="margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <div style="position:relative;max-width:360px;flex:1;min-width:160px">
-          <input type="text" id="tl-search" placeholder="Rechercher dans la timeline…" value="${escAttr(S.tlSearchQuery||"")}"
+          <input type="text" id="tl-search" placeholder="Rechercher dans la timeline (client, OF, réf produit…)" value="${escAttr(S.tlSearchQuery||"")}"
             oninput="S.tlSearchIdx=0;S.tlSearchQuery=this.value;renderTL()"
             onkeydown="if(event.key==='Enter'){event.shiftKey?tlSearchPrev():tlSearchNext();event.preventDefault()}"
             style="width:100%;padding:8px 34px 8px 12px;border:1px solid var(--border2);border-radius:8px;background:var(--bg);color:var(--text);font-size:12px;font-family:var(--mono);outline:none">
@@ -1311,6 +1311,7 @@ function render(){
           </button>
         </div>
         <span id="tl-match-count" style="font-size:12px;font-weight:700;color:#67e8f9;font-family:var(--mono);display:none;white-space:nowrap"></span>
+        <div id="tl-other-machines" style="display:none;align-items:center;gap:6px;flex-wrap:wrap"></div>
         <div id="tl-match-nav" style="display:none;align-items:center;gap:6px">
           <button type="button" onclick="tlSearchPrev()" title="Précédent (Shift+Entrée)"
             style="display:flex;align-items:center;gap:4px;font-size:11px;padding:5px 10px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit">
@@ -1332,11 +1333,12 @@ function render(){
         <div class="sec-title">Dossiers de production</div>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           <div style="position:relative;max-width:360px;flex:1;min-width:160px">
-            <input type="text" id="planning-search" placeholder="Rechercher (client, ref, OF, format…)" value="${escAttr(S.searchQuery)}"
+            <input type="text" id="planning-search" placeholder="Rechercher (client, ref, OF, réf produit, format…)" value="${escAttr(S.searchQuery)}"
               oninput="S.searchQuery=this.value;renderEntries();"
               style="width:100%;padding:8px 34px 8px 12px;border:1px solid var(--border2);border-radius:8px;background:var(--bg);color:var(--text);font-size:12px;font-family:var(--mono);outline:none">
             <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px">🔍</span>
           </div>
+          <div id="list-other-machines" style="display:none;align-items:center;gap:6px;flex-wrap:wrap"></div>
           ${CAN_EDIT?`<button type="button" class="btn-p" onclick="openAdd()"><span style="font-size:18px;line-height:1">+</span> Ajouter</button>`:""}
           <button type="button" class="btn-s" onclick="exportDossiers()" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;font-size:12px">${icon('download',14)} Exporter</button>
         </div>
@@ -1362,9 +1364,95 @@ function computeAllTlMatches(){
     const cli=(s.client||"").trim()||(s.numero_of||s.reference||"");
     const fm=s.format_l&&s.format_h?`${s.format_l} × ${s.format_h} mm`:"";
     const lz=s.laize?String(s.laize):"";
-    const fields=[cli,s.numero_of||"",s.reference||"",s.description||"",fm,lz].map(f=>f.toLowerCase());
+    const fields=[cli,s.numero_of||"",s.reference||"",s.ref_produit||"",s.description||"",fm,lz].map(f=>f.toLowerCase());
     return fields.some(f=>f.includes(q));
   });
+  scheduleCrossMachineSearch();
+}
+
+// ── Cross-machine search (chips) ─────────────────────────────────────────────
+let _xmsT=null;
+let _xmsInflight=null;
+let _xmsLastKey="";
+async function crossMachineSearchNow(){
+  if(!MID) return;
+  const q1=(S.searchQuery||"").trim();
+  const q2=(S.tlSearchQuery||"").trim();
+  const key=(q1||"")+"\n"+(q2||"")+"\n"+String(MID||"");
+  if(key===_xmsLastKey) return;
+  _xmsLastKey=key;
+
+  // Rien à chercher → cacher les chips.
+  const tlEl=document.getElementById("tl-other-machines");
+  const lsEl=document.getElementById("list-other-machines");
+  if(!q1 && !q2){
+    if(tlEl) tlEl.style.display="none";
+    if(lsEl) lsEl.style.display="none";
+    return;
+  }
+
+  const q = (q2 || q1).trim();
+  if(!q){
+    if(tlEl) tlEl.style.display="none";
+    if(lsEl) lsEl.style.display="none";
+    return;
+  }
+
+  if(_xmsInflight) return await _xmsInflight;
+  _xmsInflight=(async()=>{
+    try{
+      const rows=await api(`/search?q=`+encodeURIComponent(q)+`&limit_per_machine=3`);
+      const list=Array.isArray(rows)?rows:[];
+      const other=list.filter(r=>String(r.machine_id)!==String(MID) && (r.count||0)>0);
+
+      function mkChip(r){
+        const label=(r.count||0)+' dossier'+((r.count||0)>1?'s':'')+' en '+(r.nom||('Machine '+r.machine_id));
+        const b=document.createElement("button");
+        b.type="button";
+        b.className="btn-s";
+        b.textContent=label;
+        b.style.padding="6px 10px";
+        b.style.fontSize="11px";
+        b.style.borderRadius="999px";
+        b.style.whiteSpace="nowrap";
+        b.title="Ouvrir cette machine avec la même recherche";
+        b.onclick=()=>{
+          const sp=new URLSearchParams();
+          sp.set("machine", String(r.machine_id));
+          if(q1) sp.set("q", q1);
+          if(q2) sp.set("tlq", q2);
+          sp.set("auto","1");
+          location.href="/planning?"+sp.toString();
+        };
+        return b;
+      }
+
+      // Timeline chips
+      if(tlEl){
+        tlEl.innerHTML="";
+        if(other.length){
+          other.forEach(r=>tlEl.appendChild(mkChip(r)));
+          tlEl.style.display="flex";
+        }else tlEl.style.display="none";
+      }
+      // List chips
+      if(lsEl){
+        lsEl.innerHTML="";
+        if(other.length){
+          other.forEach(r=>lsEl.appendChild(mkChip(r)));
+          lsEl.style.display="flex";
+        }else lsEl.style.display="none";
+      }
+    }catch(e){
+      if(tlEl) tlEl.style.display="none";
+      if(lsEl) lsEl.style.display="none";
+    }
+  })();
+  try{return await _xmsInflight;}finally{_xmsInflight=null;}
+}
+function scheduleCrossMachineSearch(){
+  if(_xmsT) clearTimeout(_xmsT);
+  _xmsT=setTimeout(()=>{_xmsT=null;crossMachineSearchNow();},280);
 }
 
 function woForSlot(s){
@@ -1727,14 +1815,14 @@ function mkTL(mon,slots){
     const fmTip=fm||"—";
     const st=s.statut==="en_cours"?"En cours":s.statut==="termine"?"Terminé":"En attente";
     const cli=(s.client||"").trim()||(s.numero_of||s.reference||"—");
-    const meta=[s.numero_of||s.reference,s.description].filter(Boolean).join(" | ");
+    const meta=[s.numero_of||s.reference,s.ref_produit,s.description].filter(Boolean).join(" | ");
     const noOf=(s.numero_of||s.reference||"").trim().toLowerCase();
     const activeNo=S.activeDossier?(S.activeDossier.no_dossier||"").trim().toLowerCase():"";
     const isActive=!!(activeNo&&noOf&&activeNo===noOf);
     // Search match
     let matchCls="";
     if(tlQ){
-      const fields=[cli,s.numero_of||"",s.reference||"",s.description||"",fm,lz,s.laize?String(s.laize):""].map(f=>f.toLowerCase());
+      const fields=[cli,s.numero_of||"",s.reference||"",s.ref_produit||"",s.description||"",fm,lz,s.laize?String(s.laize):""].map(f=>f.toLowerCase());
       matchCls=fields.some(f=>f.includes(tlQ))?"tl-match":"tl-no-match";
     }
     // a_placer striped
@@ -2896,6 +2984,11 @@ async function boot(){
 
     const sp=new URLSearchParams(location.search||"");
     const raw=sp.get("machine");
+    // Pré-remplissage recherche depuis URL (navigation cross-machine).
+    const qParam=sp.get("q");
+    const tlqParam=sp.get("tlq");
+    if(typeof qParam==="string" && qParam.trim()) S.searchQuery=qParam;
+    if(typeof tlqParam==="string" && tlqParam.trim()) S.tlSearchQuery=tlqParam;
     const num=raw?parseInt(raw,10):NaN;
     const ids=new Set(ordered.map(m=>m.id));
     const saved=parseInt(localStorage.getItem("mysifa.planning.lastMachine")||"",10);
@@ -2915,6 +3008,15 @@ async function boot(){
     }
   }catch(e){console.error(e);MID=0;}
   await load();
+  // Si on arrive via un chip cross-machine, naviguer directement vers le 1er match.
+  try{
+    const sp=new URLSearchParams(location.search||"");
+    if(sp.get("auto")==="1" && (S.tlSearchQuery||"").trim()){
+      setTimeout(()=>{try{computeAllTlMatches();if(_allTlMatches&&_allTlMatches.length) tlNavTo(0);}catch(e){}},220);
+    }
+    // Toujours recalculer les chips après le 1er load.
+    scheduleCrossMachineSearch();
+  }catch(e){}
   // Vérifier les annonces de mise à jour après le chargement initial
   checkUpdates();
   // Actualise le dossier actif + allonge le slot en_cours toutes les 30 s
