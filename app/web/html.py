@@ -4165,6 +4165,11 @@ async function loadExpeDepartJour(){
 }
 async function loadExpeDepartHistorique(){
   if(S.app!=='expe')return;
+  // Préserver le focus/caret de la searchbar pendant les re-renders (chargement + résultats)
+  const qEl = document.getElementById('expe-hist-search');
+  const hadFocus = !!(qEl && document.activeElement === qEl);
+  const caret = (hadFocus && typeof qEl.selectionStart === 'number') ? [qEl.selectionStart, qEl.selectionEnd] : null;
+
   set({expeDepartHistLoading:true});
   try{
     const qq=(S.expeDepartHistQ||'').trim();
@@ -4173,6 +4178,20 @@ async function loadExpeDepartHistorique(){
   }catch(e){
     set({expeDepartHistLoading:false});
     toast(e.message||'Chargement impossible','error');
+  }
+  if(hadFocus){
+    requestAnimationFrame(()=>{
+      const ne = document.getElementById('expe-hist-search');
+      if(!ne) return;
+      try{
+        ne.focus();
+        if(caret){
+          const a=Math.min(caret[0]!=null?caret[0]:0, ne.value.length);
+          const b=Math.min(caret[1]!=null?caret[1]:a, ne.value.length);
+          ne.setSelectionRange(a,b);
+        }
+      }catch(e){}
+    });
   }
 }
 function scheduleExpeHistSearch(){
@@ -4357,12 +4376,14 @@ function renderExpeSuiviDeparts(){
 
 function renderExpeHistoriqueDeparts(){
   const qInp=h('input',{
+    id:'expe-hist-search',
     type:'search',
     placeholder:'Réf. SIFA, client, ARC, BL, commande transport, transporteur…',
     value:S.expeDepartHistQ||'',
     style:{width:'100%',maxWidth:'560px',padding:'10px 12px',borderRadius:'8px',border:'1px solid var(--border)',background:'var(--bg)',color:'var(--text)',marginBottom:'12px'},
     onInput:e=>{
-      set({expeDepartHistQ:e.target.value});
+      // Ne pas déclencher un render à chaque caractère (sinon perte de focus).
+      S.expeDepartHistQ = e.target.value;
       scheduleExpeHistSearch();
     }
   });

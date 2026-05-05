@@ -2828,7 +2828,7 @@ async function resetDefaults(){
   closeM();
   await load();
 }
-function submitDefaults(){
+async function submitDefaults(){
   function v(id){
     const raw=(document.getElementById(id).value||"").trim();
     if(!isHHMM(raw)) return null;
@@ -2847,7 +2847,35 @@ function submitDefaults(){
     return alert("Plages invalides (fin > début, entre 0 et 24).");
   }
   saveMachineDefaults(nd);
-  closeM();render();
+  // Appliquer aussi aux horaires hebdo DB (sinon la timeline reste sur les horaires_* non vides).
+  // Cohésio 2 : la DB est volontairement générique, les défauts paire/impair restent en fallback.
+  try{
+    const mk=machineKey();
+    if(MID && mk!=="C2"){
+      const p=nd.pair||nd.impair||null;
+      const week=p&&p.week?p.week:null;
+      const fri=p&&p.fri?p.fri:null;
+      const hs=(week&&isFinite(week.s))?week.s:null, he=(week&&isFinite(week.e))?week.e:null;
+      const fs=(fri&&isFinite(fri.s))?fri.s:hs, fe=(fri&&isFinite(fri.e))?fri.e:he;
+      function hmPair(a,b){
+        if(a==null||b==null) return null;
+        return timeInputFromFloat(a)+","+timeInputFromFloat(b);
+      }
+      const payload={
+        horaires_lundi:hmPair(hs,he),
+        horaires_mardi:hmPair(hs,he),
+        horaires_mercredi:hmPair(hs,he),
+        horaires_jeudi:hmPair(hs,he),
+        horaires_vendredi:hmPair(fs,fe),
+      };
+      Object.keys(payload).forEach(k=>{ if(!payload[k]) delete payload[k]; });
+      if(Object.keys(payload).length){
+        await api(`/machines/${MID}/horaires-bulk`,{method:"PUT",body:JSON.stringify(payload)});
+      }
+    }
+  }catch(e){}
+  closeM();
+  await load();
 }
 
 async function boot(){
