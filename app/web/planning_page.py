@@ -2920,6 +2920,16 @@ async function boot(){
   // Actualise le dossier actif + allonge le slot en_cours toutes les 30 s
   setInterval(async()=>{
     if(!MID) return;
+    // Ne pas interrompre une saisie (ajout/édition) en cours dans une modale.
+    // Le refresh provoque un re-render et peut faire perdre la saisie.
+    try{
+      const mr=document.getElementById("mroot");
+      const modalOpen=!!(mr && mr.firstElementChild);
+      const ae=document.activeElement;
+      const inModal=!!(ae && mr && mr.contains(ae));
+      const typing=!!(ae && (ae.tagName==="INPUT"||ae.tagName==="TEXTAREA"||ae.tagName==="SELECT") && ae.isConnected);
+      if(modalOpen && (inModal || typing)) return;
+    }catch(e){}
     try{
       // 1. Vérifier si la durée du dossier en_cours a grandi (live-refresh)
       const lr=await api(`/machines/${MID}/live-refresh`,{method:"POST"});

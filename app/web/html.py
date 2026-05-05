@@ -4323,17 +4323,15 @@ function renderExpeDepartModal(){
 }
 
 function renderExpeSuiviDeparts(){
+  const btnBarStyle={display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'};
+  const btnPairStyle={minWidth:'160px',padding:'10px 16px',fontSize:'13px',borderRadius:'10px',fontWeight:800,whiteSpace:'nowrap'};
   const topBar=h('div',{className:'card',style:{marginBottom:'12px'}},
-    h('div',{className:'card-header',style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'12px',flexWrap:'wrap'}},
+    h('div',{className:'card-header',style:{display:'flex',justifyContent:'flex-start',alignItems:'center',gap:'12px',flexWrap:'wrap'}},
       h('h3',null,'Départs du jour'),
-      h('div',{style:{display:'flex',gap:'10px',alignItems:'flex-end',flexWrap:'wrap',justifyContent:'flex-end',maxWidth:'820px'}},
-        h('div',{style:{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}},
-          h('button',{className:'btn-ghost',type:'button',style:{padding:'10px 14px',fontSize:'13px',borderRadius:'10px',fontWeight:700,whiteSpace:'nowrap'},
-            onClick:()=>loadExpeDepartJour()},'Rafraîchir'),
-          h('button',{className:'btn',type:'button',style:{padding:'10px 16px',fontSize:'13px',borderRadius:'10px',whiteSpace:'nowrap'},
-            onClick:()=>expeOpenDepartModal(null,'new')},iconEl('plus',14),' Ajouter')
-        )
-      )
+      h('div',{style:btnBarStyle},
+        h('button',{className:'btn-ghost',type:'button',style:btnPairStyle,onClick:()=>loadExpeDepartJour()},'Rafraîchir'),
+        h('button',{className:'btn',type:'button',style:btnPairStyle,onClick:()=>expeOpenDepartModal(null,'new')},iconEl('plus',14),' Ajouter')
+      ),
     )
   );
   const rows=S.expeDepartList||[];
