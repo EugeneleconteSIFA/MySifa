@@ -879,8 +879,8 @@ async def add_entry(machine_id: int, request: Request):
         raise HTTPException(400, "Référence requise")
 
     duree = body.get("duree_heures", 8)
-    if duree < 2 or duree > 720:
-        raise HTTPException(400, "Durée entre 2 et 720 heures")
+    if duree < 0.75 or duree > 720:
+        raise HTTPException(400, "Durée entre 0,75 et 720 heures")
 
     # Récupérer l'utilisateur courant pour la traçabilité
     user = get_current_user(request)
@@ -956,8 +956,8 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
             duree = float(duree_raw)
         except (TypeError, ValueError):
             raise HTTPException(status_code=400, detail="Durée invalide")
-        if duree < 0.5 or duree > 720:
-            raise HTTPException(status_code=400, detail="Durée entre 0,5 et 720 heures")
+        if duree < 0.75 or duree > 720:
+            raise HTTPException(status_code=400, detail="Durée entre 0,75 et 720 heures")
 
     # Récupérer l'utilisateur courant pour la traçabilité
     user = get_current_user(request)

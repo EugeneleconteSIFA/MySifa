@@ -972,7 +972,13 @@ let S={
 // Charger la persistance MyExpé (si présent) avant le 1er render.
 expeLoadLocalState();
 
-function set(u){Object.assign(S,u);render();}
+function set(u){
+  Object.assign(S,u);
+  if('expeDepartJourDate' in u || 'expeDepartForm' in u || 'expeDepartModalOpen' in u || 'expeDepartEditId' in u){
+    expeScheduleSaveLocal();
+  }
+  render();
+}
 function toast(m,t='success'){set({toast:{message:m,type:t}});setTimeout(()=>set({toast:null}),3500);}
 function showToast(message,type){
   const t=type==='danger'?'error':(type==='success'?'success':'success');
@@ -4183,11 +4189,12 @@ async function expeValiderDepart(id){
 function expeOpenDepartModal(prefill, mode){
   const dayVal=(S.expeDepartJourDate&&String(S.expeDepartJourDate).trim())||expeParisDayISO();
   const src = prefill || {};
+  const srcDate = (src.date_enlevement||'') ? String(src.date_enlevement).slice(0,10) : '';
   set({
     expeDepartModalOpen:true,
     expeDepartEditId: (mode==='edit' && src && src.id) ? src.id : null,
     expeDepartForm:{
-      date_enlevement: dayVal,
+      date_enlevement: srcDate || dayVal,
       affreteurs: src.affreteurs||'',
       transporteur: src.transporteur||'',
       client: src.client||'',
@@ -4231,8 +4238,9 @@ function renderExpeDepartModal(){
   const form=h('form',{onSubmit:async(e)=>{
     e.preventDefault();
     if(S.expeDepartSubmitting) return;
+    const dateEnl = (S.expeDepartForm.date_enlevement||'').trim() || dayVal;
     const body={
-      date_enlevement: dayVal,
+      date_enlevement: dateEnl,
       affreteurs:(S.expeDepartForm.affreteurs||'').trim()||null,
       transporteur:(S.expeDepartForm.transporteur||'').trim()||null,
       client:(S.expeDepartForm.client||'').trim()||null,
@@ -4245,6 +4253,7 @@ function renderExpeDepartModal(){
       poids_total_kg:(S.expeDepartForm.poids_total_kg||'').trim()||null,
       date_livraison:(S.expeDepartForm.date_livraison||'').trim()||null
     };
+    if(!body.date_enlevement){toast("Date d'enlèvement obligatoire",'error');return;}
     set({expeDepartSubmitting:true});
     try{
       if(isEdit){
@@ -4264,6 +4273,7 @@ function renderExpeDepartModal(){
   }});
 
   const fields=h('div',{className:'expe-fields'},
+    mk("Date d'enlèvement",'date_enlevement','date'),
     mk('Affréteurs','affreteurs'),
     mk('Transporteur','transporteur'),
     mk('Client','client'),
@@ -4302,14 +4312,16 @@ function renderExpeSuiviDeparts(){
   const topBar=h('div',{className:'card',style:{marginBottom:'12px'}},
     h('div',{className:'card-header',style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'12px',flexWrap:'wrap'}},
       h('h3',null,'Départs du jour'),
-      h('div',{style:{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}},
-        h('div',{className:'expe-field',style:{minWidth:'200px'}},h('label',null,'Jour affiché (en attente)'),dateJour),
-        h('button',{className:'btn-sec',type:'button',style:{padding:'10px 14px',fontSize:'13px',borderRadius:'10px',fontWeight:700},
-          onClick:()=>{set({expeDepartJourDate:expeParisDayISO()});loadExpeDepartJour();}},'Aujourd\'hui'),
-        h('button',{className:'btn-ghost',type:'button',style:{padding:'10px 14px',fontSize:'13px',borderRadius:'10px',fontWeight:700},
-          onClick:()=>loadExpeDepartJour()},'Rafraîchir'),
-        h('button',{className:'btn',type:'button',style:{padding:'10px 16px',fontSize:'13px',borderRadius:'10px'},
-          onClick:()=>expeOpenDepartModal(null,'new')},iconEl('plus',14),' Ajouter')
+      h('div',{style:{display:'flex',gap:'10px',alignItems:'flex-end',flexWrap:'wrap',justifyContent:'flex-end',maxWidth:'820px'}},
+        h('div',{className:'expe-field',style:{minWidth:'220px',maxWidth:'260px'}},h('label',null,'Jour affiché (en attente)'),dateJour),
+        h('div',{style:{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}},
+          h('button',{className:'btn-sec',type:'button',style:{padding:'10px 14px',fontSize:'13px',borderRadius:'10px',fontWeight:700,whiteSpace:'nowrap'},
+            onClick:()=>{set({expeDepartJourDate:expeParisDayISO()});loadExpeDepartJour();}},'Aujourd\'hui'),
+          h('button',{className:'btn-ghost',type:'button',style:{padding:'10px 14px',fontSize:'13px',borderRadius:'10px',fontWeight:700,whiteSpace:'nowrap'},
+            onClick:()=>loadExpeDepartJour()},'Rafraîchir'),
+          h('button',{className:'btn',type:'button',style:{padding:'10px 16px',fontSize:'13px',borderRadius:'10px',whiteSpace:'nowrap'},
+            onClick:()=>expeOpenDepartModal(null,'new')},iconEl('plus',14),' Ajouter')
+        )
       )
     )
   );
@@ -4341,7 +4353,7 @@ function renderExpeSuiviDeparts(){
           await loadExpeDepartJour();
         }catch(e){toast(e.message||'Suppression impossible','error');}
       }},iconEl('trash',14)),
-      h('button',{className:'btn-sm',style:{marginLeft:'8px'},onClick:()=>expeValiderDepart(r.id)},'Valider')
+      h('button',{className:'btn',style:{marginLeft:'8px',padding:'8px 12px',fontSize:'12px',borderRadius:'10px'},onClick:()=>expeValiderDepart(r.id)},'Valider')
     )
   )):[h('tr',null,h('td',{colSpan:13,style:{color:'var(--muted)'}},S.expeDepartLoading?'Chargement…':'Aucun départ en attente pour ce jour'))];
   const listCard=h('div',{className:'card'},

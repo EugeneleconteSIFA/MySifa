@@ -526,7 +526,7 @@ function showToast(message,type){
   if(window.__mysifaPlanResize) return;
   window.__mysifaPlanResize=true;
   let resizing=null;
-  const MIN_DUREE_H=0.5; // aligné avec la validation backend (planning.update_entry)
+  const MIN_DUREE_H=0.75; // aligné avec la validation backend (planning.update_entry)
   document.addEventListener("mousedown",function(e){
     if(!CAN_EDIT||!MID) return;
     const handle=e.target&&e.target.closest&&e.target.closest("[data-resize='1']");
@@ -1727,7 +1727,8 @@ function mkTL(mon,slots){
     const fmTip=fm||"—";
     const st=s.statut==="en_cours"?"En cours":s.statut==="termine"?"Terminé":"En attente";
     const cli=(s.client||"").trim()||(s.numero_of||s.reference||"—");
-    const meta=[s.numero_of||s.reference,s.description].filter(Boolean).join(" | ");
+    const meta=[s.numero_of||s.reference,s.description].filter(Boolean).join(" |
+     ");
     const noOf=(s.numero_of||s.reference||"").trim().toLowerCase();
     const activeNo=S.activeDossier?(S.activeDossier.no_dossier||"").trim().toLowerCase():"";
     const isActive=!!(activeNo&&noOf&&activeNo===noOf);

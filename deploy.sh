@@ -34,6 +34,9 @@ if [[ "$1" == "--db" ]]; then
   echo "\n🗄️  Transfert de la base de données..."
   scp $LOCAL_DB $VPS_USER@$VPS_IP:$REMOTE_DB
   echo "✅ DB transférée."
+  # Redémarrage après transfert pour que le service lise la nouvelle DB
+  echo "\n🔄 Redémarrage du service (post-DB)..."
+  ssh $VPS_USER@$VPS_IP "systemctl restart mysifa && systemctl status mysifa --no-pager -l"
 fi
 
 # 4. Transfert uploads (seulement si --uploads passé en argument)
