@@ -71,16 +71,11 @@ def list_departs_jour(
     date: Optional[str] = Query(None, description="YYYY-MM-DD (défaut : jour Paris)"),
 ):
     _require_expe(request)
-    day = _date_prefix(date) if date else _today_paris_iso()
-    if not re.match(r"^\d{4}-\d{2}-\d{2}$", day):
-        raise HTTPException(status_code=400, detail="Paramètre date invalide (attendu YYYY-MM-DD)")
     with get_db() as conn:
         rows = conn.execute(
             """SELECT * FROM expe_departs
                WHERE statut = 'en_attente'
-                 AND substr(date_enlevement, 1, 10) = ?
                ORDER BY date_enlevement ASC, id ASC""",
-            (day,),
         ).fetchall()
     return [dict(r) for r in rows]
 

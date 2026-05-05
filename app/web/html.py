@@ -724,6 +724,8 @@ body.light .stock-empl-suggest-add:hover{background:rgba(124,58,237,.2);color:#1
 .expe-field input,.expe-field select{width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;font-family:inherit;outline:none}
 .expe-field input:focus,.expe-field select:focus{border-color:var(--accent)}
 .expe-help{font-size:10px;color:var(--muted);margin-top:4px}
+.expe-departs-table tbody tr:nth-child(even) td{background:rgba(148,163,184,.06)}
+.expe-departs-table tbody tr:hover td{background:rgba(34,211,238,.06)}
 .expe-top3{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-bottom:18px}
 .expe-score{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;position:relative}
 .expe-score .stripe{height:4px}
@@ -4149,12 +4151,11 @@ function expeParisDayISO(){
 async function loadExpeDepartJour(){
   if(S.app!=='expe')return;
   if(_expeJourInflight)return await _expeJourInflight;
-  const d=(S.expeDepartJourDate&&String(S.expeDepartJourDate).trim())||expeParisDayISO();
   _expeJourInflight=(async()=>{
     set({expeDepartLoading:true});
     try{
-      const rows=await api('/api/expe/departs/jour?date='+encodeURIComponent(d));
-      set({expeDepartList:Array.isArray(rows)?rows:[],expeDepartLoading:false,expeDepartJourDate:d});
+      const rows=await api('/api/expe/departs/jour');
+      set({expeDepartList:Array.isArray(rows)?rows:[],expeDepartLoading:false});
     }catch(e){
       set({expeDepartLoading:false});
       toast(e.message||'Chargement impossible','error');
@@ -4303,21 +4304,11 @@ function renderExpeDepartModal(){
 }
 
 function renderExpeSuiviDeparts(){
-  const dayVal=(S.expeDepartJourDate&&String(S.expeDepartJourDate).trim())||expeParisDayISO();
-  const dateJour=h('input',{type:'date',value:dayVal,
-    onChange:e=>{
-      set({expeDepartJourDate:e.target.value});
-      setTimeout(()=>loadExpeDepartJour(),0);
-    }
-  });
   const topBar=h('div',{className:'card',style:{marginBottom:'12px'}},
     h('div',{className:'card-header',style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'12px',flexWrap:'wrap'}},
       h('h3',null,'Départs du jour'),
       h('div',{style:{display:'flex',gap:'10px',alignItems:'flex-end',flexWrap:'wrap',justifyContent:'flex-end',maxWidth:'820px'}},
-        h('div',{className:'expe-field',style:{minWidth:'220px',maxWidth:'260px'}},h('label',null,'Jour affiché (en attente)'),dateJour),
         h('div',{style:{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}},
-          h('button',{className:'btn-sec',type:'button',style:{padding:'10px 14px',fontSize:'13px',borderRadius:'10px',fontWeight:700,whiteSpace:'nowrap'},
-            onClick:()=>{set({expeDepartJourDate:expeParisDayISO()});loadExpeDepartJour();}},'Aujourd\'hui'),
           h('button',{className:'btn-ghost',type:'button',style:{padding:'10px 14px',fontSize:'13px',borderRadius:'10px',fontWeight:700,whiteSpace:'nowrap'},
             onClick:()=>loadExpeDepartJour()},'Rafraîchir'),
           h('button',{className:'btn',type:'button',style:{padding:'10px 16px',fontSize:'13px',borderRadius:'10px',whiteSpace:'nowrap'},
@@ -4359,7 +4350,7 @@ function renderExpeSuiviDeparts(){
   )):[h('tr',null,h('td',{colSpan:13,style:{color:'var(--muted)'}},S.expeDepartLoading?'Chargement…':'Aucun départ en attente pour ce jour'))];
   const listCard=h('div',{className:'card'},
     h('div',{className:'card-header'},h('h3',null,'Départs du jour (en attente de validation)')),
-    h('div',{style:{overflowX:'auto'}},h('table',{className:'table-std'},h('thead',null,head),h('tbody',null,...body)))
+    h('div',{style:{overflowX:'auto'}},h('table',{className:'table-std expe-departs-table'},h('thead',null,head),h('tbody',null,...body)))
   );
   return h('div',null,topBar,listCard,renderExpeDepartModal());
 }
