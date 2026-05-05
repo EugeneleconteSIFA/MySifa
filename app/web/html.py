@@ -803,6 +803,37 @@ let _expeHistSearchT=null;
 let _expeLastRenderedInnerTab=null;
 let _expeJourInflight=null;
 let _portalDragSuppressClick=false;
+
+// ── MyExpé : persistance locale (départs) ─────────────────────────
+const LS_EXPE_DEPARTS_STATE = 'mysifa.expe.departs.state.v1';
+function expeLoadLocalState(){
+  try{
+    const raw=localStorage.getItem(LS_EXPE_DEPARTS_STATE);
+    if(!raw) return;
+    const d=JSON.parse(raw);
+    if(d && typeof d==='object'){
+      if(typeof d.expeDepartJourDate==='string') S.expeDepartJourDate=d.expeDepartJourDate;
+      if(d.expeDepartForm && typeof d.expeDepartForm==='object') S.expeDepartForm={...S.expeDepartForm,...d.expeDepartForm};
+      if(typeof d.expeDepartModalOpen==='boolean') S.expeDepartModalOpen=d.expeDepartModalOpen;
+      if(d.expeDepartEditId!=null) S.expeDepartEditId=d.expeDepartEditId;
+    }
+  }catch(e){}
+}
+function expeSaveLocalState(){
+  try{
+    const payload={
+      expeDepartJourDate: S.expeDepartJourDate||'',
+      expeDepartForm: S.expeDepartForm||{},
+      expeDepartModalOpen: !!S.expeDepartModalOpen,
+      expeDepartEditId: S.expeDepartEditId||null
+    };
+    localStorage.setItem(LS_EXPE_DEPARTS_STATE, JSON.stringify(payload));
+  }catch(e){}
+}
+function expeScheduleSaveLocal(){
+  if(window._expeSaveT) clearTimeout(window._expeSaveT);
+  window._expeSaveT=setTimeout(()=>{window._expeSaveT=null;expeSaveLocalState();},250);
+}
 async function api(p,o){
   try{
     const r=await fetch(API+p,{credentials:'include',...o});
@@ -937,6 +968,9 @@ let S={
   matiereSearch:'',
   matiereLoading:false,
 };
+
+// Charger la persistance MyExpé (si présent) avant le 1er render.
+expeLoadLocalState();
 
 function set(u){Object.assign(S,u);render();}
 function toast(m,t='success'){set({toast:{message:m,type:t}});setTimeout(()=>set({toast:null}),3500);}
@@ -4270,9 +4304,12 @@ function renderExpeSuiviDeparts(){
       h('h3',null,'Départs du jour'),
       h('div',{style:{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}},
         h('div',{className:'expe-field',style:{minWidth:'200px'}},h('label',null,'Jour affiché (en attente)'),dateJour),
-        h('button',{className:'btn-sm',type:'button',onClick:()=>{set({expeDepartJourDate:expeParisDayISO()});loadExpeDepartJour();}},'Aujourd\'hui'),
-        h('button',{className:'btn-ghost btn-sm',type:'button',onClick:()=>loadExpeDepartJour()},'Rafraîchir'),
-        h('button',{className:'btn-sm',type:'button',onClick:()=>expeOpenDepartModal(null,'new')},iconEl('plus',14),' Ajouter')
+        h('button',{className:'btn-sec',type:'button',style:{padding:'10px 14px',fontSize:'13px',borderRadius:'10px',fontWeight:700},
+          onClick:()=>{set({expeDepartJourDate:expeParisDayISO()});loadExpeDepartJour();}},'Aujourd\'hui'),
+        h('button',{className:'btn-ghost',type:'button',style:{padding:'10px 14px',fontSize:'13px',borderRadius:'10px',fontWeight:700},
+          onClick:()=>loadExpeDepartJour()},'Rafraîchir'),
+        h('button',{className:'btn',type:'button',style:{padding:'10px 16px',fontSize:'13px',borderRadius:'10px'},
+          onClick:()=>expeOpenDepartModal(null,'new')},iconEl('plus',14),' Ajouter')
       )
     )
   );
@@ -4296,7 +4333,7 @@ function renderExpeSuiviDeparts(){
     h('td',null,
       h('button',{className:'btn-ghost',title:'Copier',onClick:()=>expeOpenDepartModal(r,'new')},iconEl('copy',14)),
       h('button',{className:'btn-ghost',title:'Modifier',onClick:()=>expeOpenDepartModal(r,'edit')},iconEl('edit',14)),
-      h('button',{className:'btn-ghost',title:'Supprimer',onClick:async()=>{
+      h('button',{className:'btn-danger',title:'Supprimer',onClick:async()=>{
         if(!confirm('Supprimer ce départ ?')) return;
         try{
           await api('/api/expe/departs/'+r.id,{method:'DELETE'});
@@ -4446,7 +4483,7 @@ function renderExpe(){
     h('div',{className:'app'},
       sidebar,
       h('main',{className:'main'},
-        h('div',{className:'container'},
+        h('div',{className:'container',style:(tab==='suivi_departs'?{maxWidth:'1600px'}:null)},
           topbar,
           h('h1',null,'MyExpé'),
           h('div',{className:'subtitle'},
