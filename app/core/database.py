@@ -1162,6 +1162,45 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 15, "matiere_base_rotoflex_supplement")
 
+    # v16 — MyDevis : matiere_params.code nullable + base matière groupée par famille
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=16 LIMIT 1").fetchone():
+        try:
+            # Recréer la table sans la contrainte NOT NULL sur code
+            conn.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS matiere_params_new (
+                    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                    categorie        TEXT NOT NULL DEFAULT '',
+                    code             TEXT,
+                    designation      TEXT NOT NULL,
+                    fournisseur      TEXT,
+                    poids_m2         REAL,
+                    prix_eur_m2      REAL,
+                    prix_usd_kg      REAL,
+                    taux_change      REAL DEFAULT 1.0,
+                    incidence_dollar REAL DEFAULT 1.0,
+                    transport_total  REAL DEFAULT 0,
+                    appellation      TEXT,
+                    grammage         INTEGER,
+                    notes            TEXT,
+                    updated_at       TEXT
+                );
+                INSERT INTO matiere_params_new SELECT * FROM matiere_params;
+                DROP TABLE matiere_params;
+                ALTER TABLE matiere_params_new RENAME TO matiere_params;
+                """
+            )
+        except Exception:
+            pass
+        try:
+            mb_cols = {r["name"] for r in conn.execute("PRAGMA table_info(matiere_base)").fetchall()}
+            if "groupe" not in mb_cols:
+                conn.execute("ALTER TABLE matiere_base ADD COLUMN groupe TEXT")
+        except Exception:
+            pass
+        conn.commit()
+        _record_schema_migration(conn, 16, "matiere_params_code_nullable_and_matiere_base_groupe")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

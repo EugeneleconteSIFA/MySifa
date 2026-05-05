@@ -855,6 +855,21 @@ let S={
   expeDepartHist:[],
   expeDepartHistQ:'',
   expeDepartHistLoading:false,
+  expeDepartSubmitting:false,
+  expeDepartForm:{
+    date_enlevement:'',
+    affreteurs:'',
+    transporteur:'',
+    client:'',
+    code_postal_destination:'',
+    ref_sifa:'',
+    arc:'',
+    no_cde_transport:'',
+    no_bl:'',
+    nb_palette:'',
+    poids_total_kg:'',
+    date_livraison:'',
+  },
   comptaTab:'factor',
   comptaAcheteurs:[],
   comptaComptes:[],
@@ -3924,20 +3939,38 @@ function renderExpeTransporteurs(){
   );
 }
 function renderExpePoids(){
-  const gram=parseFloat(S.expePoidsGram)||155;
-  const coeff=parseFloat(S.expePoidsCoeff)||1.05;
   const rows=S.expePoidsRows||[];
-  const rowWeights=rows.map(r=>{
-    const q=parseFloat(r.qty)||0,l=parseFloat(r.laize)||0,d=parseFloat(r.dev)||0;
-    if(!q||!l||!d)return null;
-    return q*l*d*coeff*gram/1e6;
-  });
-  const palNb=parseFloat(S.expoPoidsPalNb)||0;
-  const palKg=parseFloat(S.expoPoidsPalKg)||0;
-  const palTotal=palNb*palKg;
-  const etiqTotal=rowWeights.reduce((a,w)=>a+(w||0),0);
-  const grandTotal=etiqTotal+palTotal;
   const fKg=v=>v.toFixed(3)+'\u00a0kg';
+  const wNum=x=>{const v=parseFloat(x);return Number.isFinite(v)?v:0;};
+
+  // Recalcul sans rerender (garde le focus dans les inputs)
+  const weightEls=[];
+  let etiqTotalEl=null, palTotalEl=null, grandTotalEl=null, grandPalPartEl=null;
+  function recalc(){
+    const gram=wNum(S.expePoidsGram)||155;
+    const coeff=wNum(S.expePoidsCoeff)||1.05;
+    let etiqTotal=0;
+    for(let i=0;i<rows.length;i++){
+      const r=rows[i]||{};
+      const q=wNum(r.qty), l=wNum(r.laize), d=wNum(r.dev);
+      const w = (q&&l&&d) ? (q*l*d*coeff*gram/1e6) : null;
+      if(w!=null) etiqTotal += w;
+      if(weightEls[i]) weightEls[i].textContent = w!=null ? fKg(w) : '—';
+      if(weightEls[i]){
+        weightEls[i].style.opacity = w!=null ? '1' : '0.25';
+        weightEls[i].style.fontWeight = w!=null ? '600' : 'normal';
+      }
+    }
+    const palNb=wNum(S.expoPoidsPalNb)||0;
+    const palKg=wNum(S.expoPoidsPalKg)||0;
+    const palTotal=palNb*palKg;
+    const grandTotal=etiqTotal+palTotal;
+    if(etiqTotalEl) etiqTotalEl.textContent = etiqTotal>0 ? fKg(etiqTotal) : '—';
+    if(palTotalEl) palTotalEl.textContent = palTotal>0 ? fKg(palTotal) : '—';
+    if(grandTotalEl) grandTotalEl.textContent = grandTotal>0 ? grandTotal.toFixed(3)+'\u00a0kg' : '—';
+    if(grandPalPartEl) grandPalPartEl.textContent = (grandTotal>0&&palTotal>0) ? ('dont palette\u00a0: '+fKg(palTotal)) : '';
+  }
+
   const inp=(val,cb,extra={})=>{
     const el=h('input',Object.assign({type:'number',min:'0',step:'any',placeholder:'0',value:val,
       style:{width:'100%',padding:'0.3rem 0.5rem',borderRadius:'6px',border:'1px solid var(--border)',
@@ -3955,7 +3988,7 @@ function renderExpePoids(){
               value:S.expePoidsGram||'',
               style:{width:'90px',padding:'0.3rem 0.5rem',borderRadius:'6px',border:'1px solid var(--border)',
                      background:'var(--card)',color:'var(--fg)',fontSize:'0.85rem'}});
-            el.addEventListener('input',e=>set({expePoidsGram:e.target.value}));
+            el.addEventListener('input',e=>{S.expePoidsGram=e.target.value;recalc();});
             return el;
           })(),
           h('span',{style:{fontSize:'0.85rem',opacity:0.75}},'g/m²')
@@ -3966,7 +3999,7 @@ function renderExpePoids(){
         (()=>{const el=h('input',{type:'number',step:'0.01',min:'0.1',value:S.expePoidsCoeff,
           style:{width:'90px',padding:'0.3rem 0.5rem',borderRadius:'6px',border:'1px solid var(--border)',
                  background:'var(--card)',color:'var(--fg)',fontSize:'0.85rem'}});
-          el.addEventListener('input',e=>set({expePoidsCoeff:e.target.value}));return el;})()
+          el.addEventListener('input',e=>{S.expePoidsCoeff=e.target.value;recalc();});return el;})()
       )
     )
   );
@@ -3981,15 +4014,20 @@ function renderExpePoids(){
     h('th',{style:{...thStyle,textAlign:'right'}},'Poids (kg)')
   ));
   const tbody=h('tbody',null,...rows.map((r,i)=>{
-    const w=rowWeights[i];
-    const updateRow=(key,val)=>{const nr=rows.map((row,j)=>j===i?{...row,[key]:val}:row);set({expePoidsRows:nr});};
+    const updateRow=(key,val)=>{
+      if(!S.expePoidsRows) S.expePoidsRows=[];
+      if(!S.expePoidsRows[i]) S.expePoidsRows[i]={qty:'',laize:'',dev:''};
+      S.expePoidsRows[i][key]=val;
+      recalc();
+    };
+    const wEl=h('span',null,'—');
+    weightEls[i]=wEl;
     return h('tr',null,
       h('td',{style:{...tdStyle,textAlign:'center',fontSize:'0.75rem',opacity:0.4}},String(i+1)),
       h('td',{style:tdStyle},inp(r.qty,v=>updateRow('qty',v))),
       h('td',{style:tdStyle},inp(r.laize,v=>updateRow('laize',v))),
       h('td',{style:tdStyle},inp(r.dev,v=>updateRow('dev',v))),
-      h('td',{style:{...tdStyle,textAlign:'right',fontWeight:w?'600':'normal',opacity:w?1:0.25,fontSize:'0.85rem',whiteSpace:'nowrap'}},
-        w?fKg(w):'—')
+      h('td',{style:{...tdStyle,textAlign:'right',fontWeight:'normal',opacity:0.25,fontSize:'0.85rem',whiteSpace:'nowrap'}},wEl)
     );
   }));
 
@@ -4008,8 +4046,12 @@ function renderExpePoids(){
     h('div',{style:{overflowX:'auto',padding:'0.25rem 0.75rem 0.75rem'}},
       h('table',{style:{width:'100%',borderCollapse:'collapse',fontSize:'0.88rem'}},thead,tbody)
     ),
-    etiqTotal>0?h('div',{style:{padding:'0.1rem 1rem 0.75rem',textAlign:'right',fontSize:'0.88rem',opacity:0.75}},
-      'Sous-total étiquettes\u00a0: ',h('strong',null,fKg(etiqTotal))):null
+    (()=>{
+      etiqTotalEl=h('strong',null,'—');
+      return h('div',{style:{padding:'0.1rem 1rem 0.75rem',textAlign:'right',fontSize:'0.88rem',opacity:0.75}},
+        'Sous-total étiquettes\u00a0: ',etiqTotalEl
+      );
+    })()
   );
 
   const palCard=h('div',{className:'card',style:{marginBottom:'1rem'}},
@@ -4020,34 +4062,42 @@ function renderExpePoids(){
         (()=>{const el=h('input',{type:'number',min:'0',step:'1',placeholder:'0',value:S.expoPoidsPalNb,
           style:{width:'100%',padding:'0.3rem 0.5rem',borderRadius:'6px',border:'1px solid var(--border)',
                  background:'var(--card)',color:'var(--fg)',fontSize:'0.85rem'}});
-          el.addEventListener('input',e=>set({expoPoidsPalNb:e.target.value}));return el;})()
+          el.addEventListener('input',e=>{S.expoPoidsPalNb=e.target.value;recalc();});return el;})()
       ),
       h('div',{style:{flex:'0 0 120px'}},
         h('label',{style:{display:'block',fontSize:'0.75rem',opacity:0.65,marginBottom:'0.4rem'}},'Poids / palette (kg)'),
         (()=>{const el=h('input',{type:'number',min:'0',step:'any',placeholder:'0',value:S.expoPoidsPalKg,
           style:{width:'100%',padding:'0.3rem 0.5rem',borderRadius:'6px',border:'1px solid var(--border)',
                  background:'var(--card)',color:'var(--fg)',fontSize:'0.85rem'}});
-          el.addEventListener('input',e=>set({expoPoidsPalKg:e.target.value}));return el;})()
+          el.addEventListener('input',e=>{S.expoPoidsPalKg=e.target.value;recalc();});return el;})()
       ),
-      palTotal>0?h('div',{style:{paddingBottom:'0.2rem',fontSize:'0.88rem',opacity:0.75}},
-        'Sous-total\u00a0: ',h('strong',null,fKg(palTotal))):null
+      (()=>{
+        palTotalEl=h('strong',null,'—');
+        return h('div',{style:{paddingBottom:'0.2rem',fontSize:'0.88rem',opacity:0.75}},
+          'Sous-total\u00a0: ',palTotalEl
+        );
+      })()
     )
   );
 
   const totalCard=h('div',{className:'card',style:{textAlign:'center',padding:'1.5rem 1rem',
     background:'var(--accent)',color:'#fff',borderRadius:'12px',marginBottom:'0.5rem'}},
     h('div',{style:{fontSize:'0.78rem',letterSpacing:'0.08em',opacity:0.85,marginBottom:'0.4rem'}},'POIDS TOTAL ESTIMÉ'),
-    h('div',{style:{fontSize:'2.4rem',fontWeight:'700',letterSpacing:'-1px',lineHeight:1.1}},
-      grandTotal>0?grandTotal.toFixed(3)+'\u00a0kg':'—'),
-    grandTotal>0&&palTotal>0?h('div',{style:{fontSize:'0.8rem',opacity:0.8,marginTop:'0.35rem'}},
-      'dont palette\u00a0: '+fKg(palTotal)):null
+    (()=>{
+      grandTotalEl=h('div',{style:{fontSize:'2.4rem',fontWeight:'700',letterSpacing:'-1px',lineHeight:1.1}},'—');
+      grandPalPartEl=h('div',{style:{fontSize:'0.8rem',opacity:0.8,marginTop:'0.35rem'}},'');
+      return h('div',null,grandTotalEl,grandPalPartEl);
+    })()
   );
 
-  return h('div',{style:{maxWidth:'680px'}},
+  const root=h('div',{style:{maxWidth:'680px'}},
     h('p',{style:{opacity:0.55,fontSize:'0.82rem',marginBottom:'1.25rem',fontStyle:'italic'}},
       'Formule\u00a0: Qté\u2009(mille)\u2009×\u2009Laize\u2009×\u2009Développé\u2009×\u2009Coeff\u2009×\u2009Grammage\u2009/\u20091\u202f000\u202f000'),
     paramCard,rowsCard,palCard,totalCard
   );
+  // Initial calc after DOM is built
+  queueMicrotask(recalc);
+  return root;
 }
 
 function expeParisDayISO(){
@@ -4102,10 +4152,12 @@ function renderExpeSuiviDeparts(){
       setTimeout(()=>loadExpeDepartJour(),0);
     }
   });
-  const inps={};
-  function mk(label,key,type,ph,val){
-    const i=h('input',{type:type||'text',placeholder:ph||'',value:val!=null?String(val):''});
-    inps[key]=i;
+  const f=S.expeDepartForm||{};
+  function mk(label,key,type,ph,defaultVal){
+    const v=(f[key]!=null && String(f[key])!=='')?String(f[key]):(defaultVal!=null?String(defaultVal):'');
+    const i=h('input',{type:type||'text',placeholder:ph||'',value:v,name:key});
+    // Important: ne pas appeler set() sur chaque frappe (évite rerender + perte focus).
+    i.addEventListener('input',e=>{S.expeDepartForm[key]=e.target.value;});
     return h('div',{className:'expe-field'},h('label',null,label),i);
   }
   const formCard=h('div',{className:'card',style:{marginBottom:'16px'}},
@@ -4117,47 +4169,72 @@ function renderExpeSuiviDeparts(){
         h('button',{className:'btn-ghost btn-sm',onClick:()=>loadExpeDepartJour()},'Rafraîchir')
       ),
       h('div',{className:'expe-help',style:{marginBottom:'10px'}},'Les lignes « en attente » dont la date d\'enlèvement correspond au jour choisi apparaissent ci-dessous. La validation les archive dans l\'historique.'),
-      h('div',{className:'expe-fields'},
-        mk('Date d\'enlèvement (nouveau)','date_enlevement','date','YYYY-MM-DD',dayVal),
-        mk('Affréteurs','affreteurs'),
-        mk('Transporteur','transporteur'),
-        mk('Client','client'),
-        mk('Code postal / destination','code_postal_destination'),
-        mk('Réf. SIFA','ref_sifa'),
-        mk('ARC','arc'),
-        mk('N° commande transport','no_cde_transport'),
-        mk('N° BL','no_bl'),
-        mk('Nombre de palettes','nb_palette','number','ex: 2'),
-        mk('Poids total (kg)','poids_total_kg','number','ex: 1325'),
-        mk('Date livraison (prévue)','date_livraison','date')
-      ),
-      h('div',{style:{marginTop:'14px'}},
-        h('button',{className:'btn',onClick:async()=>{
-          const dateEnl=(inps.date_enlevement&&inps.date_enlevement.value)||dayVal;
+      (()=>{
+        const form=h('form',{onSubmit:async(e)=>{
+          e.preventDefault();
+          if(S.expeDepartSubmitting) return;
+          const dateEnl=(S.expeDepartForm.date_enlevement||'').trim()||dayVal;
           const body={
             date_enlevement:dateEnl,
-            affreteurs:inps.affreteurs.value||null,
-            transporteur:inps.transporteur.value||null,
-            client:inps.client.value||null,
-            code_postal_destination:inps.code_postal_destination.value||null,
-            ref_sifa:inps.ref_sifa.value||null,
-            arc:inps.arc.value||null,
-            no_cde_transport:inps.no_cde_transport.value||null,
-            no_bl:inps.no_bl.value||null,
-            nb_palette:inps.nb_palette.value||null,
-            poids_total_kg:inps.poids_total_kg.value||null,
-            date_livraison:inps.date_livraison.value||null
+            affreteurs:(S.expeDepartForm.affreteurs||'').trim()||null,
+            transporteur:(S.expeDepartForm.transporteur||'').trim()||null,
+            client:(S.expeDepartForm.client||'').trim()||null,
+            code_postal_destination:(S.expeDepartForm.code_postal_destination||'').trim()||null,
+            ref_sifa:(S.expeDepartForm.ref_sifa||'').trim()||null,
+            arc:(S.expeDepartForm.arc||'').trim()||null,
+            no_cde_transport:(S.expeDepartForm.no_cde_transport||'').trim()||null,
+            no_bl:(S.expeDepartForm.no_bl||'').trim()||null,
+            nb_palette:(S.expeDepartForm.nb_palette||'').trim()||null,
+            poids_total_kg:(S.expeDepartForm.poids_total_kg||'').trim()||null,
+            date_livraison:(S.expeDepartForm.date_livraison||'').trim()||null
           };
           if(!body.date_enlevement){toast('Date d\'enlèvement obligatoire','error');return;}
+          set({expeDepartSubmitting:true});
           try{
             await api('/api/expe/departs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
             toast('Départ enregistré');
-            Object.keys(inps).forEach(k=>{const el=inps[k];if(el)el.value='';});
-            if(inps.date_enlevement)inps.date_enlevement.value=dayVal;
+            set({
+              expeDepartSubmitting:false,
+              expeDepartForm:{
+                date_enlevement:dayVal,
+                affreteurs:'',
+                transporteur:'',
+                client:'',
+                code_postal_destination:'',
+                ref_sifa:'',
+                arc:'',
+                no_cde_transport:'',
+                no_bl:'',
+                nb_palette:'',
+                poids_total_kg:'',
+                date_livraison:'',
+              }
+            });
             await loadExpeDepartJour();
-          }catch(e){toast(e.message||'Erreur','error');}
-        }},'Enregistrer le départ')
-      )
+          }catch(err){
+            set({expeDepartSubmitting:false});
+            toast(err.message||'Erreur','error');
+          }
+        }});
+        form.appendChild(h('div',{className:'expe-fields'},
+          mk('Date d\'enlèvement (nouveau)','date_enlevement','date','YYYY-MM-DD',dayVal),
+          mk('Affréteurs','affreteurs'),
+          mk('Transporteur','transporteur'),
+          mk('Client','client'),
+          mk('Code postal / destination','code_postal_destination'),
+          mk('Réf. SIFA','ref_sifa'),
+          mk('ARC','arc'),
+          mk('N° commande transport','no_cde_transport'),
+          mk('N° BL','no_bl'),
+          mk('Nombre de palettes','nb_palette','number','ex: 2'),
+          mk('Poids total (kg)','poids_total_kg','number','ex: 1325'),
+          mk('Date livraison (prévue)','date_livraison','date')
+        ));
+        form.appendChild(h('div',{style:{marginTop:'14px'}},
+          h('button',{className:'btn',type:'submit',disabled:!!S.expeDepartSubmitting},S.expeDepartSubmitting?'Enregistrement…':'Enregistrer le départ')
+        ));
+        return form;
+      })()
     )
   );
   const rows=S.expeDepartList||[];
@@ -7307,6 +7384,7 @@ function openMatiereBaseModal(row){
   title.textContent=isEdit?'Modifier base matière':'Nouvelle base matière';
   const grid=document.createElement('div');
   grid.className='form-row';
+  matiereAddLabeledInput(grid,'Famille (VELIN, COUCHE, THERMIQUE ECO…)','groupe',row&&row.groupe||'','text');
   matiereAddLabeledInput(grid,'Réf. interne','ref_interne',row&&row.ref_interne!=null?row.ref_interne:'','number');
   matiereAddLabeledInput(grid,'Désignation','designation',row&&row.designation||'','text');
   matiereAddLabeledInput(grid,'Frontal','frontal',row&&row.frontal||'','text');
@@ -7315,6 +7393,8 @@ function openMatiereBaseModal(row){
   matiereAddLabeledInput(grid,'Silicone','silicone',row&&row.silicone||'','text');
   matiereAddLabeledInput(grid,'Glassine','glassine',row&&row.glassine||'','text');
   matiereAddLabeledInput(grid,'Marqueur','marqueur',row&&row.marqueur||'','text');
+  matiereAddLabeledInput(grid,'Prix Cohésio €/m²','prix_cohesio',row&&row.prix_cohesio!=null?row.prix_cohesio:'','number');
+  matiereAddLabeledInput(grid,'Prix Rotoflex €/m²','prix_rotoflex',row&&row.prix_rotoflex!=null?row.prix_rotoflex:'','number');
   matiereAddLabeledInput(grid,'Supplément Rotoflex €/m² (optionnel, sinon défaut config)','rotoflex_supplement_eur_m2',row&&row.rotoflex_supplement_eur_m2!=null?row.rotoflex_supplement_eur_m2:'','number');
   const actions=document.createElement('div');
   actions.className='form-actions';
@@ -7379,9 +7459,9 @@ function openMatiereParamModal(row){
     ['Poids m² (kg)','poids_m2','number',row&&row.poids_m2],
     ['Prix €/m²','prix_eur_m2','number',row&&row.prix_eur_m2],
     ['Prix USD/kg','prix_usd_kg','number',row&&row.prix_usd_kg],
-    ['Taux change','taux_change','number',row&&row.taux_change],
-    ['Incidence dollar','incidence_dollar','number',row&&row.incidence_dollar],
-    ['Transport','transport_total','number',row&&row.transport_total],
+    ['Taux de change USD→EUR  (ex: 0.85)','taux_change','number',row&&row.taux_change],
+    ['Incidence taxe/transport import  (ex: 1.075)','incidence_dollar','number',row&&row.incidence_dollar],
+    ['Transport au m²  (€/m², ex: 0.06)','transport_total','number',row&&row.transport_total],
     ['Appellation','appellation','text',row&&row.appellation],
     ['Grammage','grammage','number',row&&row.grammage],
     ['Notes','notes','text',row&&row.notes],
@@ -7410,7 +7490,7 @@ function openMatiereParamModal(row){
         body[k]=inp.value.trim();
       }
     });
-    if(!body.categorie||!body.code||!body.designation){showToast('Catégorie, code et désignation obligatoires','danger');return;}
+    if(!body.categorie||!body.designation){showToast('Catégorie et désignation obligatoires','danger');return;}
     if(!isEdit){
       if(body.taux_change==null||Number.isNaN(body.taux_change))body.taux_change=1;
       if(body.incidence_dollar==null||Number.isNaN(body.incidence_dollar))body.incidence_dollar=1;
@@ -7457,7 +7537,7 @@ function renderMatierePrix(){
   const marge=parseFloat(mc.marge_erreur);
   const q=normMatiereTxt(S.matiereSearch||'');
 
-  const tabBar=h('div',{style:{display:'flex',gap:'8px',marginBottom:'16px',flexWrap:'wrap'}},
+  const tabBar=h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap'}},
     h('button',{className:'btn-sm'+(S.matiereTab==='base'?'':' btn-ghost'),onClick:()=>set({matiereTab:'base'})},'Base matière'),
     h('button',{className:'btn-sm'+(S.matiereTab==='params'?'':' btn-ghost'),onClick:()=>set({matiereTab:'params'})},'Paramètres')
   );
@@ -7466,11 +7546,11 @@ function renderMatierePrix(){
     type:'text',
     placeholder:'Rechercher par désignation, frontal, adhésif, type…',
     value:S.matiereSearch||'',
-    style:{width:'100%',padding:'10px 12px',borderRadius:'8px',border:'1px solid var(--border)',background:'var(--bg)',color:'var(--text)',marginBottom:'12px'},
+    style:{width:'100%',padding:'10px 12px',borderRadius:'8px',border:'1px solid var(--border)',background:'var(--bg)',color:'var(--text)'},
     onInput:(e)=>set({matiereSearch:e.target.value})
   });
 
-  const margeRow=h('div',{style:{display:'flex',flexWrap:'wrap',gap:'16px',alignItems:'center',marginBottom:'16px'}},
+  const margeRow=h('div',{style:{display:'flex',flexWrap:'wrap',gap:'16px',alignItems:'center'}},
     h('label',{style:{display:'flex',alignItems:'center',gap:'8px',fontSize:'13px',color:'var(--text2)'}},
       'Marge d\'erreur',
       h('input',{
@@ -7561,18 +7641,36 @@ function renderMatierePrix(){
   let baseBody=[];
   if(S.matiereTab==='base'){
     const rows=(S.matiereBase||[]).filter(rowMatchesBase);
-    rows.sort((a,b)=>String(a.frontal||'').localeCompare(String(b.frontal||''),'fr')||String(a.designation||'').localeCompare(String(b.designation||''),'fr'));
-    let lastG=null;
+    rows.sort((a,b)=>{
+      const ga=String(a.groupe||'ZZZ'), gb=String(b.groupe||'ZZZ');
+      if(ga!==gb)return ga.localeCompare(gb,'fr');
+      const fa=String(a.frontal||''), fb=String(b.frontal||'');
+      if(fa!==fb)return fa.localeCompare(fb,'fr');
+      return String(a.designation||'').localeCompare(String(b.designation||''),'fr');
+    });
+    let lastGroupe=null, lastFrontal=null;
     rows.forEach(r=>{
-      const g=r.frontal||'— (sans frontal)';
-      if(g!==lastG){
-        lastG=g;
-        baseBody.push(h('tr',{className:'matiere-group'},h('td',{colSpan:11},g)));
+      const grp=(r.groupe||'').toUpperCase()||'AUTRES';
+      const front=r.frontal||'— (sans frontal)';
+      if(grp!==lastGroupe){
+        lastGroupe=grp; lastFrontal=null;
+        baseBody.push(
+          h('tr',{className:'matiere-group matiere-group-famille'},
+            h('td',{colSpan:10,style:{background:'var(--accent)',color:'#fff',padding:'4px 12px',fontSize:'11px',fontWeight:'700',letterSpacing:'1px',textTransform:'uppercase'}},grp)
+          )
+        );
+      }
+      if(front!==lastFrontal){
+        lastFrontal=front;
+        baseBody.push(
+          h('tr',{className:'matiere-group'},
+            h('td',{colSpan:10,style:{paddingLeft:'20px',fontStyle:'italic'}},front)
+          )
+        );
       }
       baseBody.push(h('tr',null,
-        h('td',{style:{fontFamily:'monospace'}},r.ref_interne!=null?String(r.ref_interne):'—'),
+        h('td',{style:{fontFamily:'monospace',paddingLeft:'28px'}},r.ref_interne!=null?String(r.ref_interne):'—'),
         h('td',null,r.designation||''),
-        h('td',null,r.frontal||''),
         h('td',null,r.type_adhesion||''),
         h('td',null,r.adhesif||''),
         h('td',null,r.silicone||''),
@@ -7593,7 +7691,7 @@ function renderMatierePrix(){
         )
       ));
     });
-    if(!baseBody.length)baseBody.push(h('tr',null,h('td',{colSpan:11,style:{color:'var(--muted)'}},S.matiereLoading?'Chargement…':'Aucune ligne')));
+    if(!baseBody.length)baseBody.push(h('tr',null,h('td',{colSpan:10,style:{color:'var(--muted)'}},S.matiereLoading?'Chargement…':'Aucune ligne')));
   }
 
   let paramBody=[];
@@ -7650,26 +7748,39 @@ function renderMatierePrix(){
 
   const tableBase=h('table',{className:'table-std'},
     h('thead',null,h('tr',null,
-      ...['Réf.','Désignation','Frontal','Type','Adhésif','Silicone','Glassine','Cohésio €/m²','Rotoflex €/m²','Marqueur',''].map(x=>h('th',null,x))
+      ...['Réf.','Désignation','Type','Adhésif','Silicone','Glassine','Cohésio €/m²','Rotoflex €/m²','Marqueur',''].map(x=>h('th',null,x))
     )),
     h('tbody',null,...baseBody)
   );
   const tableParams=h('table',{className:'table-std'},
     h('thead',null,h('tr',null,
-      ...['Catégorie','Code','Désignation','Fournisseur','Poids m²','Prix €/m²','USD/kg','Tx change','Incidence','Transport','Appellation','Notes',''].map(x=>h('th',null,x))
+      ...['Catégorie','Réf.','Désignation','Fournisseur','Poids m²','Prix €/m²','Prix USD/kg','Taux USD→EUR','Incidence taxe','Transport €/m²','Code app.','Notes',''].map(x=>h('th',null,x))
     )),
     h('tbody',null,...paramBody)
   );
 
-  return h('div',null,
+  const stickyHeader=h('div',{style:{
+    position:'sticky',top:0,zIndex:10,
+    background:'var(--bg)',
+    paddingBottom:'8px',
+    borderBottom:'1px solid var(--border)',
+    marginBottom:'12px'
+  }},
     h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:'12px',marginBottom:'8px'}},
-      h('div',null,h('p',{style:{margin:'0 0 6px',color:'var(--text2)',fontSize:'13px'}},'Base matière : Cohésio = somme des €/m² des paramètres (frontal + silicone + adhésif + glassine). Rotoflex = Cohésio + supplément (par ligne ou défaut ci-dessus). Marge appliquée sur les montants affichés.')),
+      h('div',null,
+        h('p',{style:{margin:'0 0 6px',color:'var(--text2)',fontSize:'13px'}},
+          'Prix matière = frontal + silicone + adhésif + glassine. La marge d\'erreur est ajoutée pour les commerciaux (prix en vert = prix à donner, prix barré = prix de revient).'
+        )
+      ),
       topActions
     ),
     fileInp,
     tabBar,
-    search,
-    margeRow,
+    h('div',{style:{marginTop:'12px',display:'grid',gap:'12px'}},search,margeRow)
+  );
+
+  return h('div',null,
+    stickyHeader,
     h('div',{style:{overflowX:'auto'}},S.matiereTab==='base'?tableBase:tableParams)
   );
 }

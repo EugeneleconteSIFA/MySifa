@@ -268,10 +268,10 @@ def list_params(
 def create_param(request: Request, body: dict = Body(...)):
     _require_devis(request)
     cat = (body.get("categorie") or "").strip()
-    code = (body.get("code") or "").strip()
     des = (body.get("designation") or "").strip()
-    if not cat or not code or not des:
-        raise HTTPException(status_code=400, detail="categorie, code et designation sont obligatoires")
+    if not cat or not des:
+        raise HTTPException(status_code=400, detail="categorie et designation sont obligatoires")
+    code = (body.get("code") or "").strip() or None
     now = datetime.now().isoformat()
     with get_db() as conn:
         cur = conn.execute(
@@ -388,7 +388,7 @@ def list_base(
     where, args = _base_filters(q, frontal, type_)
     with get_db() as conn:
         rows = conn.execute(
-            f"SELECT * FROM matiere_base WHERE {where} ORDER BY frontal, designation, id",
+            f"SELECT * FROM matiere_base WHERE {where} ORDER BY groupe, frontal, designation, id",
             args,
         ).fetchall()
         prows = [dict(x) for x in conn.execute("SELECT * FROM matiere_params").fetchall()]
@@ -405,10 +405,11 @@ def create_base(request: Request, body: dict = Body(...)):
     with get_db() as conn:
         cur = conn.execute(
             """INSERT INTO matiere_base (
-                ref_interne, designation, frontal, type_adhesion, adhesif, silicone, glassine,
+                groupe, ref_interne, designation, frontal, type_adhesion, adhesif, silicone, glassine,
                 marqueur, prix_cohesio, prix_rotoflex, rotoflex_supplement_eur_m2, updated_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
+                (body.get("groupe") or "").strip() or None,
                 body.get("ref_interne"),
                 des,
                 body.get("frontal"),
@@ -435,6 +436,7 @@ def update_base(request: Request, base_id: int, body: dict = Body(...)):
     _require_devis(request)
     now = datetime.now().isoformat()
     fields = [
+        "groupe",
         "ref_interne",
         "designation",
         "frontal",

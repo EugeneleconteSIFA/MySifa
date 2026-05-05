@@ -352,7 +352,7 @@ def import_parametres(ws, conn):
                     appellation, notes, updated_at
                 ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """, (
-                current_category, code, designation, fournisseur, grammage,
+                current_category, code or '', designation, fournisseur, grammage,
                 poids_m2, prix_eur, prix_usd, taux_change,
                 incidence_dollar, transport_m2 or 0,
                 appellation, notes_str, NOW
