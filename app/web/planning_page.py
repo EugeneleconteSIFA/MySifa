@@ -1727,8 +1727,7 @@ function mkTL(mon,slots){
     const fmTip=fm||"—";
     const st=s.statut==="en_cours"?"En cours":s.statut==="termine"?"Terminé":"En attente";
     const cli=(s.client||"").trim()||(s.numero_of||s.reference||"—");
-    const meta=[s.numero_of||s.reference,s.description].filter(Boolean).join(" |
-     ");
+    const meta=[s.numero_of||s.reference,s.description].filter(Boolean).join(" | ");
     const noOf=(s.numero_of||s.reference||"").trim().toLowerCase();
     const activeNo=S.activeDossier?(S.activeDossier.no_dossier||"").trim().toLowerCase():"";
     const isActive=!!(activeNo&&noOf&&activeNo===noOf);
