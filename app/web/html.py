@@ -154,7 +154,7 @@ h1{font-size:22px;font-weight:700;margin-bottom:4px}
 .sanity-pill{font-size:11px;padding:3px 10px;border-radius:20px;font-weight:600;background:rgba(248,113,113,.12);color:var(--danger)}
 .card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:16px}
 .card-header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
-.card-header h3{font-size:14px;font-weight:600}
+.card-header h3{font-size:14px;font-weight:600;margin:0;line-height:1.2}
 .card-empty{padding:24px;text-align:center;color:var(--muted);font-size:13px}
 .card-blocked{padding:32px 24px;text-align:center}
 .cw-row-bad td{background:rgba(248,113,113,.08)!important}
