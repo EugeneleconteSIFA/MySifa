@@ -276,7 +276,12 @@ def _prod_run_start_for_machine(conn, machine_id: int, m: dict, no_dossier: str)
         return None
 
     def row_ref(r: Any) -> str:
-        return _norm_prod_dossier(r["no_dossier"])
+        # Neutraliser les "trous" : certaines lignes peuvent ne pas porter de no_dossier (vide / "0").
+        # Elles ne doivent pas casser un run contigu si aucun autre dossier n'apparaît entre deux saisies.
+        v = _norm_prod_dossier(r["no_dossier"])
+        if not v or v == "0":
+            return ""
+        return v
 
     n = len(rows)
     last = n - 1
@@ -284,9 +289,24 @@ def _prod_run_start_for_machine(conn, machine_id: int, m: dict, no_dossier: str)
         last -= 1
     if last < 0:
         return None
-    first = last
-    while first > 0 and row_ref(rows[first - 1]) == ref:
-        first -= 1
+
+    # Remonter tant qu'on ne rencontre pas un autre dossier non vide.
+    # Les lignes sans no_dossier (vide/"0") sont ignorées et ne cassent pas la juxtaposition.
+    i = last
+    while i > 0:
+        pr = row_ref(rows[i - 1])
+        if pr == ref or pr == "":
+            i -= 1
+            continue
+        break
+
+    # Trouver la première ligne du run qui porte réellement ce dossier.
+    first = i
+    while first <= last and row_ref(rows[first]) != ref:
+        first += 1
+    if first > last:
+        return None
+
     raw = rows[first]["date_operation"]
     if not raw:
         return None

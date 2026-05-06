@@ -44,6 +44,8 @@ from app.web.planning_rh_page import router as planning_rh_page_router
 from app.routers.paie import router as paie_api_router
 from app.web.paie_page import router as paie_page_router
 from app.routers.widget_router import router as widget_router
+from app.routers.db_viewer import router as db_viewer_api_router
+from app.web.db_viewer_page import router as db_viewer_page_router
 
 
 @asynccontextmanager
@@ -120,6 +122,8 @@ app.include_router(planning_rh_page_router)
 app.include_router(paie_api_router)
 app.include_router(paie_page_router)
 app.include_router(widget_router)
+app.include_router(db_viewer_api_router)
+app.include_router(db_viewer_page_router)
 
 
 @app.get("/", response_class=HTMLResponse)

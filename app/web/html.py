@@ -2289,57 +2289,57 @@ function portalGetDragInsertBefore(container,x,y){
     ch!==drag && !ch.classList.contains('portal-app--placeholder')
   );
   if(!elems.length)return null;
-  const rowTol=28;
-  const inRow=elems.filter(ch=>{
-    const b=ch.getBoundingClientRect();
-    return y>=b.top-rowTol&&y<=b.bottom+rowTol;
+  // Regrouper par ligne (flex-wrap) selon la coordonnée top, puis choisir la ligne
+  // la plus proche du curseur en Y. Cela évite les cas "bords extérieurs" où un
+  // test de tolérance peut rater la bonne ligne.
+  const rowTol=10;
+  const rows=[];
+  elems.forEach(el=>{
+    const b=el.getBoundingClientRect();
+    if(!b||!b.width||!b.height)return;
+    const top=b.top;
+    const r=rows.find(g=>Math.abs(g.top-top)<=rowTol);
+    if(r)r.items.push({el,b});
+    else rows.push({top,items:[{el,b}]});
   });
-  // Si on est clairement sur une ligne, autoriser le drop "à droite" de la dernière tuile de la ligne
-  if(inRow.length){
-    const row=inRow.slice().sort((a,b)=>a.getBoundingClientRect().left-b.getBoundingClientRect().left);
-    for(const ch of row){
-      const box=ch.getBoundingClientRect();
-      const mid=box.left+box.width/2;
-      if(x<mid)return ch;
-    }
-    // Curseur à droite de toutes les tuiles de la ligne.
-    // Calcule le nombre max de tuiles par ligne (capacité réelle de la grille flex)
-    // en regroupant les éléments par position top (±8px de tolérance subpixel).
-    const rowGroups=[];
-    elems.forEach(el=>{
-      const t=el.getBoundingClientRect().top;
-      const grp=rowGroups.find(g=>Math.abs(g.top-t)<8);
-      if(grp)grp.items.push(el);
-      else rowGroups.push({top:t,items:[el]});
-    });
-    const maxPerRow=Math.max(...rowGroups.map(g=>g.items.length));
-    // Éléments réellement dans cette ligne (top similaire au premier inRow)
-    const refTop=inRow[0].getBoundingClientRect().top;
-    const actualRow=elems
-      .filter(el=>Math.abs(el.getBoundingClientRect().top-refTop)<8)
-      .sort((a,b)=>a.getBoundingClientRect().left-b.getBoundingClientRect().left);
-    // Ligne pleine : insérer avant la dernière tuile de la ligne, pas avant la
-    // première de la suivante — ainsi le placeholder reste visible en fin de
-    // cette ligne (la dernière tuile se décale en ligne suivante).
-    if(actualRow.length>=maxPerRow&&actualRow.length>1){
-      return actualRow[actualRow.length-1];
-    }
-    // Ligne non pleine : comportement normal (insère après la dernière tuile,
-    // le placeholder tient encore dans la ligne).
-    const idxs=new Set(inRow.map(n=>elems.indexOf(n)).filter(i=>i>=0));
+  if(!rows.length)return null;
+  rows.forEach(r=>{
+    r.items.sort((a,b)=>a.b.left-b.b.left);
+    r.centerY=r.items.reduce((acc,it)=>acc+(it.b.top+it.b.height/2),0)/r.items.length;
+  });
+  rows.sort((a,b)=>a.centerY-b.centerY);
+  let bestRow=rows[0], bestDy=Math.abs(y-rows[0].centerY);
+  for(const r of rows){
+    const dy=Math.abs(y-r.centerY);
+    if(dy<bestDy){bestDy=dy;bestRow=r;}
+  }
+  const rowItems=bestRow.items;
+  const first=rowItems[0], last=rowItems[rowItems.length-1];
+  const firstMid=first.b.left+first.b.width/2;
+  const lastMid=last.b.left+last.b.width/2;
+  // Extrémité gauche
+  if(x<firstMid)return first.el;
+  // Extrémité droite: insérer "après la dernière tuile de la ligne"
+  if(x>lastMid){
     let maxIdx=-1;
-    idxs.forEach(i=>{ if(i>maxIdx)maxIdx=i; });
+    for(const it of rowItems){
+      const idx=elems.indexOf(it.el);
+      if(idx>maxIdx)maxIdx=idx;
+    }
     return (maxIdx>=0 && maxIdx+1<elems.length) ? elems[maxIdx+1] : null;
   }
-  // Fallback global: comportement d'origine (plus permissif si on n'est pas "dans" une ligne)
-  let closest=null,best=-Infinity;
-  elems.forEach(ch=>{
-    const box=ch.getBoundingClientRect();
-    const mid=box.left+box.width/2;
-    const dist=x-mid;
-    if(dist<0&&dist>best){best=dist;closest=ch;}
-  });
-  return closest;
+  // Milieu de ligne: première tuile dont le milieu est à droite du curseur
+  for(const it of rowItems){
+    const mid=it.b.left+it.b.width/2;
+    if(x<mid)return it.el;
+  }
+  // Fallback: après la ligne
+  let maxIdx=-1;
+  for(const it of rowItems){
+    const idx=elems.indexOf(it.el);
+    if(idx>maxIdx)maxIdx=idx;
+  }
+  return (maxIdx>=0 && maxIdx+1<elems.length) ? elems[maxIdx+1] : null;
 }
 async function savePortalAppsOrder(ids){
   try{
