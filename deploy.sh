@@ -12,9 +12,20 @@ REMOTE_UPLOADS="$VPS_PATH/data/uploads"
 
 echo "🚀 Déploiement MySifa..."
 
+# 0. Sécurité : ne jamais commiter les artefacts Electron / node_modules
+if git status --porcelain | rg -q '^(A |M |\\?\\?)\\s+myprod-widget/(node_modules|dist)/'; then
+  echo ""
+  echo "⛔ Refus du déploiement : des artefacts myprod-widget sont présents (node_modules/dist)."
+  echo "   Nettoyez-les (ou ignorez-les) avant de déployer."
+  echo ""
+  git status --porcelain | rg 'myprod-widget/(node_modules|dist)/' || true
+  exit 1
+fi
+
 # 1. Push du code vers GitHub
 echo "\n📦 Push du code..."
-git add -A
+# Ne pas faire git add -A (risque d'embarquer des artefacts locaux)
+git add .
 git commit -m "deploy $(date '+%Y-%m-%d %H:%M')" || true
 git push origin main
 
