@@ -407,6 +407,35 @@ def _load_planning_calendar_maps(conn, machine_id: int) -> tuple[dict, dict, Dic
     return configs, off_days, day_worked_map
 
 
+def _load_planning_calendar_maps_range(
+    conn, machine_id: int, weeks_back: int = 52, weeks_forward: int = 8
+) -> tuple[dict, dict, Dict[str, int]]:
+    """Variante de _load_planning_calendar_maps avec plage étendue (utile pour opérations de recalage)."""
+    configs: dict = {}
+    today = datetime.now()
+    for w in range(-int(weeks_back), int(weeks_forward) + 1):
+        d = today + timedelta(weeks=w)
+        sw = f"{d.year}-W{d.isocalendar()[1]:02d}"
+        if sw in configs:
+            continue
+        cfg = conn.execute(
+            "SELECT samedi_travaille FROM planning_config WHERE machine_id=? AND semaine=?",
+            (machine_id, sw),
+        ).fetchone()
+        configs[sw] = cfg["samedi_travaille"] if cfg else 0
+    hol_rows = conn.execute(
+        "SELECT date, is_off FROM planning_holidays WHERE machine_id=?",
+        (machine_id,),
+    ).fetchall()
+    off_days = {str(r["date"]): int(r["is_off"] or 0) for r in hol_rows}
+    dw_rows = conn.execute(
+        "SELECT date, is_worked FROM planning_day_worked WHERE machine_id=?",
+        (machine_id,),
+    ).fetchall()
+    day_worked_map = {str(r["date"]): int(r["is_worked"] or 0) for r in dw_rows}
+    return configs, off_days, day_worked_map
+
+
 def _make_work_duration_consumer(
     m: dict, configs: dict, off_days: dict, day_worked_map: Dict[str, int]
 ) -> tuple[Any, Any]:
@@ -583,22 +612,6 @@ def _compute_timeline_slots(
 
     for e in entries:
         st = e.get("statut") or "attente"
-
-        # ── "À placer" : visible dans la liste mais pas dans la timeline ──
-        # On ne doit pas leur attribuer de planned_start/planned_end (sinon superposition
-        # avec les dossiers réellement planifiés).
-        if st == "attente" and int(e.get("a_placer") or 0) == 1:
-            try:
-                if e.get("planned_start") or e.get("planned_end"):
-                    conn.execute(
-                        """UPDATE planning_entries
-                           SET planned_start=NULL, planned_end=NULL, updated_at=?
-                           WHERE id=? AND machine_id=?""",
-                        (now_u, e["id"], machine_id),
-                    )
-            except Exception:
-                pass
-            continue
 
         # ── Terminé figé : conserve ses dates, avance le curseur ──────────
         if st == "termine" and _is_frozen_entry(e):
@@ -2070,6 +2083,24 @@ def get_timeline(machine_id: int, request: Request, semaine: Optional[str] = Non
         ).fetchall()
         entries_list = [dict(r) for r in rows]
 
+        # Les dossiers "à placer" doivent apparaître à la suite de la timeline,
+        # pas intercalés (sinon superpositions visuelles avec les dossiers planifiés).
+        # On garde l'ordre relatif (position) dans chaque groupe.
+        main_entries: List[dict] = []
+        aplacer_entries: List[dict] = []
+        for e in entries_list:
+            try:
+                st = (e.get("statut") or "attente").strip()
+                ap = int(e.get("a_placer") or 0)
+            except Exception:
+                st = (e.get("statut") or "attente").strip()
+                ap = 0
+            if st == "attente" and ap == 1:
+                aplacer_entries.append(e)
+            else:
+                main_entries.append(e)
+        entries_list = main_entries + aplacer_entries
+
         slots = _compute_timeline_slots(
             conn,
             machine_id,
@@ -2086,6 +2117,164 @@ def get_timeline(machine_id: int, request: Request, semaine: Optional[str] = Non
         "slots": slots,
         "configs": configs,
     }
+
+
+@router.post("/machines/{machine_id}/pack-termines")
+async def pack_termines(machine_id: int, request: Request):
+    """Recale les dossiers terminés les uns derrière les autres pour terminer à "maintenant" (arrondi à l'heure).
+
+    - Ne modifie que les entrées statut='termine'
+    - Affecte planned_start/planned_end en conséquence (persisté)
+    """
+    require_admin(request)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    end_iso = (body.get("end_iso") or "").strip()
+
+    with get_db() as conn:
+        require_planning_machine(request, conn, machine_id)
+        mrow = conn.execute("SELECT * FROM machines WHERE id=?", (machine_id,)).fetchone()
+        if not mrow:
+            raise HTTPException(404, "Machine non trouvée")
+        m = dict(mrow)
+
+        # Cible : maintenant, arrondi à l'heure (heure Paris)
+        if end_iso:
+            dt_end = _parse_planned_dt(end_iso)
+            if not dt_end:
+                raise HTTPException(status_code=400, detail="end_iso invalide.")
+            dt_end = dt_end.replace(minute=0, second=0, microsecond=0)
+        else:
+            dt_end = datetime.now(_TZ_PARIS).replace(tzinfo=None, minute=0, second=0, microsecond=0)
+
+        # Charger calendrier étendu (peut remonter loin pour les terminés)
+        configs, off_days, day_worked_map = _load_planning_calendar_maps_range(conn, machine_id)
+
+        # Re-implémentation locale de get_hours_for_date (miroir de _make_work_duration_consumer)
+        base_hours = {}
+        for day_idx, field in [
+            (0, "horaires_lundi"),
+            (1, "horaires_mardi"),
+            (2, "horaires_mercredi"),
+            (3, "horaires_jeudi"),
+            (4, "horaires_vendredi"),
+        ]:
+            base_hours[day_idx] = _parse_horaires_val(m.get(field), "5,21")
+        sat_hours_t = _parse_horaires_val(m.get("horaires_samedi"), "6,18")
+        mk = _machine_key_from_record(m)
+        _parity_defs = _PARITY_DEFAULTS.get(mk)
+
+        def _is_pair_week(dt: datetime) -> bool:
+            return dt.isocalendar()[1] % 2 == 0
+
+        def week_key(dt: datetime) -> str:
+            return f"{dt.year}-W{dt.isocalendar()[1]:02d}"
+
+        def get_hours_for_date(dt: datetime):
+            dkey = dt.strftime("%Y-%m-%d")
+            wd = dt.weekday()
+            if wd <= 4 and int(off_days.get(dkey, 0) or 0):
+                return None
+            dw = day_worked_map.get(dkey)
+            if wd in base_hours:
+                if dw is not None and int(dw) == 0:
+                    return None
+                if _parity_defs is not None:
+                    par = "pair" if _is_pair_week(dt) else "impair"
+                    slot = "fri" if wd == 4 else "week"
+                    h = _parity_defs[par][slot]
+                    return (h[0], h[1])
+                return base_hours[wd]
+            if wd == 5:
+                if dw is None:
+                    if int(configs.get(week_key(dt), 0) or 0) == 0:
+                        return None
+                    return sat_hours_t
+                if int(dw) == 0:
+                    return None
+                return sat_hours_t
+            return None
+
+        def prev_work_instant(dt: datetime) -> datetime:
+            """Dernier instant <= dt qui est dans une fenêtre ouvrée (ou fin de fenêtre si dt après)."""
+            cur = dt.replace(microsecond=0)
+            for _ in range(366 * 3):
+                win = get_hours_for_date(cur)
+                if win:
+                    s, e = win
+                    sod = datetime(cur.year, cur.month, cur.day, 0, 0, 0, 0)
+                    start_dt = sod + timedelta(hours=s)
+                    end_dt = sod + timedelta(hours=e)
+                    if cur > end_dt:
+                        return end_dt.replace(second=0, microsecond=0)
+                    if cur >= start_dt:
+                        return cur.replace(second=0, microsecond=0)
+                # reculer au jour précédent
+                prev_day = datetime(cur.year, cur.month, cur.day, 0, 0, 0, 0) - timedelta(seconds=1)
+                cur = prev_day.replace(microsecond=0)
+            return cur.replace(second=0, microsecond=0)
+
+        def rewind_work_hours(end_dt: datetime, hours: float) -> datetime:
+            """Remonte 'hours' heures ouvrées avant end_dt (end_dt peut être hors fenêtre ouvrée)."""
+            remaining = float(hours or 0.0)
+            cur = prev_work_instant(end_dt)
+            for _ in range(20000):
+                if remaining <= 1e-9:
+                    break
+                win = get_hours_for_date(cur)
+                if not win:
+                    cur = prev_work_instant(cur - timedelta(days=1))
+                    continue
+                s, _e = win
+                sod = datetime(cur.year, cur.month, cur.day, 0, 0, 0, 0)
+                start_dt = sod + timedelta(hours=s)
+                if cur <= start_dt:
+                    cur = prev_work_instant(start_dt - timedelta(seconds=1))
+                    continue
+                avail = (cur - start_dt).total_seconds() / 3600.0
+                used = min(remaining, max(0.0, avail))
+                remaining -= used
+                cur = (cur - timedelta(hours=used)).replace(second=0, microsecond=0)
+                if remaining > 1e-9 and cur <= start_dt:
+                    cur = prev_work_instant(start_dt - timedelta(seconds=1))
+            return cur.replace(second=0, microsecond=0)
+
+        terms = conn.execute(
+            """SELECT id, position, duree_heures
+               FROM planning_entries
+               WHERE machine_id=? AND statut='termine'
+               ORDER BY position ASC""",
+            (machine_id,),
+        ).fetchall()
+        terms_list = [dict(r) for r in terms]
+
+        now_u = datetime.now().isoformat()
+        updated = 0
+        end_cur = dt_end
+        for e in reversed(terms_list):
+            try:
+                dur = float(e.get("duree_heures") or 0.0)
+            except Exception:
+                dur = 0.0
+            if dur <= 1e-6:
+                continue
+            start_cur = rewind_work_hours(end_cur, dur)
+            conn.execute(
+                """UPDATE planning_entries
+                   SET planned_start=?, planned_end=?, updated_at=?
+                   WHERE id=? AND machine_id=?""",
+                (_fmt_ts(start_cur), _fmt_ts(end_cur), now_u, int(e["id"]), machine_id),
+            )
+            updated += 1
+            end_cur = start_cur
+
+        conn.commit()
+
+    return {"success": True, "updated": updated, "end": _fmt_ts(dt_end)}
 
 
 # ── Codes opération production ──────────────────────────────────────────────

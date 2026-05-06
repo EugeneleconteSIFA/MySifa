@@ -522,6 +522,31 @@ function showToast(message,type){
   _pToastTimer=setTimeout(()=>{el.style.display="none";_pToastTimer=null;},3400);
 }
 
+async function packTerminesToNow(){
+  if(!CAN_EDIT||!MID) return;
+  if(!confirm("Recaler les dossiers terminés les uns derrière les autres (fin = maintenant) ?")) return;
+  try{
+    const res=await fetch(`/api/planning/machines/${MID}/pack-termines`,{
+      method:"POST",
+      credentials:"include",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({})
+    });
+    if(!res.ok){
+      const j=await res.json().catch(()=>({}));
+      const d=j.detail;
+      const msg=typeof d==="string"?d:(Array.isArray(d)?d.map(x=>x.msg||JSON.stringify(x)).join(" "):"Erreur recalage terminés.");
+      showToast(msg,"danger");
+      return;
+    }
+    const j=await res.json().catch(()=>({}));
+    showToast(`Terminés recalés (${j.updated||0}).`,"success");
+  }catch(_){
+    showToast("Erreur réseau.","danger");
+  }
+  await load();
+}
+
 (function initSlotResize(){
   if(window.__mysifaPlanResize) return;
   window.__mysifaPlanResize=true;
@@ -1277,6 +1302,7 @@ function render(){
     </div>
     <div class="h-right">
       ${CAN_EDIT&&machineKey()==="C2"?`<button type="button" class="reset-days-btn" onclick="resetDefaultDaysCohesio2()" title="Réinitialiser jours (Cohésio 2)">↺ Base jours</button>`:""}
+      ${SHOW_DOSSIERS?`<button type="button" class="reset-days-btn" onclick="packTerminesToNow()" title="Recaler les terminés jusqu'à maintenant">⇤ Terminés</button>`:""}
       ${CAN_EDIT?`<button type="button" class="gear-btn" onclick="openDefaultsModal()" title="Réglages horaires par défaut" aria-label="Réglages">${icon('settings',16)}</button>`:""}
       ${runLbl?`<div class="badge badge-run"><div class="dot"></div>${escAttr(runLbl)}</div>`:""}
       ${SHOW_DOSSIERS?`<div class="badge badge-info">${totH}h · ${nb} dossiers</div>`:""}
