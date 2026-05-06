@@ -44,6 +44,12 @@ html,body{
 .mac .option-cta{background:var(--mac);color:#000}
 .win .option-cta{background:var(--win);color:#fff}
 .option-cta:hover{opacity:.88}
+.option-cta.alt{
+  background:transparent !important;
+  border:1px solid var(--border);
+  color:var(--text);
+}
+.option-cta.alt:hover{border-color:rgba(255,255,255,.22)}
 
 .mode-banner{
   background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.2);
@@ -79,18 +85,18 @@ html,body{
   __MODE_BANNER__
 
   <div class="options">
-    <a href="/download/widget-mac" class="option mac">
+    <div class="option mac">
       <div class="os-icon">macOS</div>
       <div class="option-name">macOS</div>
       <div class="option-desc">__MAC_DESC__</div>
-      <div class="option-cta">Télécharger</div>
-    </a>
-    <a href="/download/widget-win" class="option win">
+      __MAC_CTA__
+    </div>
+    <div class="option win">
       <div class="os-icon">Windows</div>
       <div class="option-name">Windows</div>
       <div class="option-desc">__WIN_DESC__</div>
-      <div class="option-cta">Télécharger</div>
-    </a>
+      __WIN_CTA__
+    </div>
   </div>
 
   <div class="note">

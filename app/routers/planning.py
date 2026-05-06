@@ -587,7 +587,29 @@ def _compute_timeline_slots(
         # ── Terminé figé : conserve ses dates, avance le curseur ──────────
         if st == "termine" and _is_frozen_entry(e):
             ps, pe = e["planned_start"], e["planned_end"]
+            pstart = _parse_planned_dt(ps)
             pend = _parse_planned_dt(pe)
+
+            # Si le créneau "figé" démarre avant le curseur actuel, on le recale
+            # pour éviter les superpositions (ex: un dossier précédent a été étiré).
+            if pstart and cursor and cursor > pstart:
+                try:
+                    slot_start, slot_end, cursor = consume_duration_from(
+                        cursor, float(e.get("duree_heures") or 0)
+                    )
+                    ps, pe = _fmt_ts(slot_start), _fmt_ts(slot_end)
+                    conn.execute(
+                        """UPDATE planning_entries SET planned_start=?, planned_end=?, updated_at=?
+                           WHERE id=? AND machine_id=?""",
+                        (ps, pe, now_u, e["id"], machine_id),
+                    )
+                    ee = {**e, "planned_start": ps, "planned_end": pe}
+                    slots.append(_slot_payload(ee, ps, pe))
+                    continue
+                except Exception:
+                    # fallback: garder le figé même si overlap (ne pas casser l'API)
+                    pass
+
             if pend:
                 cursor = advance_to_work(pend)
             slots.append(_slot_payload(e, ps, pe))
