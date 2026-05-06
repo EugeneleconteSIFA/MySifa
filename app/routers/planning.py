@@ -584,32 +584,26 @@ def _compute_timeline_slots(
     for e in entries:
         st = e.get("statut") or "attente"
 
+        # ── "À placer" : visible dans la liste mais pas dans la timeline ──
+        # On ne doit pas leur attribuer de planned_start/planned_end (sinon superposition
+        # avec les dossiers réellement planifiés).
+        if st == "attente" and int(e.get("a_placer") or 0) == 1:
+            try:
+                if e.get("planned_start") or e.get("planned_end"):
+                    conn.execute(
+                        """UPDATE planning_entries
+                           SET planned_start=NULL, planned_end=NULL, updated_at=?
+                           WHERE id=? AND machine_id=?""",
+                        (now_u, e["id"], machine_id),
+                    )
+            except Exception:
+                pass
+            continue
+
         # ── Terminé figé : conserve ses dates, avance le curseur ──────────
         if st == "termine" and _is_frozen_entry(e):
             ps, pe = e["planned_start"], e["planned_end"]
-            pstart = _parse_planned_dt(ps)
             pend = _parse_planned_dt(pe)
-
-            # Si le créneau "figé" démarre avant le curseur actuel, on le recale
-            # pour éviter les superpositions (ex: un dossier précédent a été étiré).
-            if pstart and cursor and cursor > pstart:
-                try:
-                    slot_start, slot_end, cursor = consume_duration_from(
-                        cursor, float(e.get("duree_heures") or 0)
-                    )
-                    ps, pe = _fmt_ts(slot_start), _fmt_ts(slot_end)
-                    conn.execute(
-                        """UPDATE planning_entries SET planned_start=?, planned_end=?, updated_at=?
-                           WHERE id=? AND machine_id=?""",
-                        (ps, pe, now_u, e["id"], machine_id),
-                    )
-                    ee = {**e, "planned_start": ps, "planned_end": pe}
-                    slots.append(_slot_payload(ee, ps, pe))
-                    continue
-                except Exception:
-                    # fallback: garder le figé même si overlap (ne pas casser l'API)
-                    pass
-
             if pend:
                 cursor = advance_to_work(pend)
             slots.append(_slot_payload(e, ps, pe))
@@ -1176,6 +1170,7 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
                 pe = pe_w or (dt_start + timedelta(hours=float(duree))).strftime("%Y-%m-%dT%H:%M:%S")
 
         old_ps = exd.get("planned_start")
+        old_pe = exd.get("planned_end")
         statut_reel_actuel = exd.get("statut_reel") or "reellement_en_attente"
         if statut_reel_actuel != "reellement_en_attente" and not termine_reposition:
             if old_ps and ps and str(ps) != str(old_ps):
@@ -1215,6 +1210,34 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
             body.get("a_placer", ex["a_placer"] if "a_placer" in ex.keys() else 0),
             entry_id
         ))
+
+        # Si un créneau planifié voit sa durée changer (donc planned_end bouge),
+        # il faut pousser les dossiers suivants (non verrouillés) en invalidant
+        # leurs dates; elles seront recalculées au prochain GET timeline.
+        try:
+            pe_changed = (
+                duree is not None
+                and old_ps
+                and ps
+                and str(ps) == str(old_ps)  # ancrage inchangé (resize)
+                and (str(old_pe or "") != str(pe or ""))
+            )
+            if pe_changed:
+                pos = conn.execute(
+                    "SELECT position FROM planning_entries WHERE id=? AND machine_id=?",
+                    (entry_id, machine_id),
+                ).fetchone()
+                if pos and pos["position"] is not None:
+                    conn.execute(
+                        """UPDATE planning_entries
+                           SET planned_start=NULL, planned_end=NULL, updated_at=?
+                           WHERE machine_id=?
+                             AND position > ?
+                             AND statut='attente'""",
+                        (now, machine_id, int(pos["position"])),
+                    )
+        except Exception:
+            pass
         conn.commit()
     return {"success": True}
 
