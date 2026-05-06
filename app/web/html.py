@@ -1104,6 +1104,7 @@ function icon(name,size=16){
     'grid': '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>',
     'tag': '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>',
     'map-pin': '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>',
+    'database': '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/>',
   };
   return `<svg ${a} aria-hidden="true" style="display:inline-block;vertical-align:middle;flex-shrink:0">${p[name]||p['alert-circle']}</svg>`;
 }
@@ -2609,15 +2610,15 @@ function renderPortal(){
   );
 
   return h('div',{className:'portal-page'},
-    isSuper?h('div',{className:'portal-corner-stack'},
-      h('button',{
+    (isSuper||urole==='direction')?h('div',{className:'portal-corner-stack'},
+      isSuper?h('button',{
         type:'button',
         className:'portal-settings-corner',
         'aria-label':'Paramètres',
         title:'Paramètres',
         onClick:()=>{window.location.href='/settings';}
-      },iconEl('sliders',24)),
-      h('button',{
+      },iconEl('sliders',24)):null,
+      isSuper?h('button',{
         type:'button',
         className:'portal-settings-corner',
         'aria-label':'Messagerie',
@@ -2630,7 +2631,14 @@ function renderPortal(){
       },
         (S.msgUnread>0)?h('span',{className:'portal-corner-badge'},S.msgUnread>9?'9+':String(S.msgUnread)):null,
         iconEl('mail',24)
-      )
+      ):null,
+      h('button',{
+        type:'button',
+        className:'portal-settings-corner',
+        'aria-label':'Base de données',
+        title:'Base de données',
+        onClick:()=>{window.location.href='/db';}
+      },iconEl('database',24))
     ):null,
     h('div',{className:'portal-logo'},
       h('div',{className:'brand'},'My',h('span',null,'Sifa')),

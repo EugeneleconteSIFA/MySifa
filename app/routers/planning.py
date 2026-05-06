@@ -265,15 +265,18 @@ def _prod_run_start_for_machine(conn, machine_id: int, m: dict, no_dossier: str)
     mcode = (m.get("code") or "").strip()
     if not mnom and not mcode:
         return None
+    # Important: date_operation peut être stocké sous plusieurs formats (ISO et fr-FR).
+    # Un ORDER BY SQL sur le texte donne parfois un ordre chronologique faux.
     rows = conn.execute(
-        """SELECT no_dossier, date_operation
+        """SELECT id, no_dossier, date_operation
            FROM production_data
-           WHERE (trim(machine) = trim(?) OR (trim(?) != '' AND trim(machine) = trim(?)))
-           ORDER BY date_operation ASC, id ASC""",
+           WHERE (trim(machine) = trim(?) OR (trim(?) != '' AND trim(machine) = trim(?)))""",
         (mnom, mcode, mcode),
     ).fetchall()
     if not rows:
         return None
+    rows = [dict(r) for r in rows]
+    rows.sort(key=lambda r: (_parse_prod_dt(str(r.get("date_operation") or "")) or datetime.min, int(r.get("id") or 0)))
 
     def row_ref(r: Any) -> str:
         # Neutraliser les "trous" : certaines lignes peuvent ne pas porter de no_dossier (vide / "0").
@@ -307,7 +310,7 @@ def _prod_run_start_for_machine(conn, machine_id: int, m: dict, no_dossier: str)
     if first > last:
         return None
 
-    raw = rows[first]["date_operation"]
+    raw = rows[first].get("date_operation")
     if not raw:
         return None
     s = str(raw).strip()
