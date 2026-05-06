@@ -72,35 +72,30 @@ html,body{
 <body>
 <div class="container">
   <div class="header">
-    <h1>🏭 MyProd Widget</h1>
+    <h1>MyProd Widget</h1>
     <p>Surveillance des machines Cohésio 1 &amp; 2 — icône dans la barre système</p>
   </div>
 
-  <div class="mode-banner">
-    <strong>⚠️ Mode legacy actif</strong> — les installateurs natifs (.dmg / .exe) n'ont pas encore été compilés.<br>
-    Le téléchargement fournit un <strong>ZIP</strong> contenant les sources + script d'installation (Node.js requis).<br>
-    Pour passer en mode natif : <code>cd myprod-widget && npm install && npm run build:mac</code> (voir <strong>BUILD.md</strong>).
-  </div>
+  __MODE_BANNER__
 
   <div class="options">
     <a href="/download/widget-mac" class="option mac">
-      <div class="os-icon">🍎</div>
+      <div class="os-icon">macOS</div>
       <div class="option-name">macOS</div>
-      <div class="option-desc">ZIP + script d'installation<br><em>Node.js requis</em></div>
+      <div class="option-desc">__MAC_DESC__</div>
       <div class="option-cta">Télécharger</div>
     </a>
     <a href="/download/widget-win" class="option win">
-      <div class="os-icon">🪟</div>
+      <div class="os-icon">Windows</div>
       <div class="option-name">Windows</div>
-      <div class="option-desc">ZIP + script d'installation<br><em>Node.js requis</em></div>
+      <div class="option-desc">__WIN_DESC__</div>
       <div class="option-cta">Télécharger</div>
     </a>
   </div>
 
   <div class="note">
-    <strong>⚠️ macOS — Si Gatekeeper bloque le script</strong><br>
-    Faites un <strong>clic droit → Ouvrir</strong> sur <code>Installer-MyProd-Widget.command</code>,
-    puis confirmez dans la fenêtre d'alerte.
+    <strong>macOS — ouverture de l'application</strong><br>
+    Si macOS bloque l’ouverture : clic droit → Ouvrir, puis confirmer.
   </div>
 </div>
 </body>

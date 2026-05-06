@@ -54,7 +54,42 @@ def widget_page(request: Request):
 def install_widget_page(request: Request):
     """Page de téléchargement Mac/Windows pour le widget."""
     require_admin(request)
-    return HTMLResponse(content=WIDGET_INSTALL_HTML, status_code=200)
+    dmg = _native_mac()
+    exe = _native_win()
+
+    if dmg or exe:
+        mode = (
+            "<div class=\"mode-banner\">"
+            "<strong>Mode natif</strong> — installateurs autonomes disponibles."
+            "</div>"
+        )
+    else:
+        mode = (
+            "<div class=\"mode-banner\">"
+            "<strong>Mode legacy</strong> — installateurs natifs indisponibles."
+            "<br>Le téléchargement fournit un <strong>ZIP</strong> contenant les sources + un script d'installation."
+            "<br><em>Node.js requis</em>."
+            "<br>Compilation : <code>cd myprod-widget && npm install && npm run build:mac</code> (voir <strong>BUILD.md</strong>)."
+            "</div>"
+        )
+
+    mac_desc = (
+        "Installateur DMG (glisser vers Applications)"
+        if dmg
+        else "ZIP + script d'installation<br><em>Node.js requis</em>"
+    )
+    win_desc = (
+        "Installateur EXE (assistant)"
+        if exe
+        else "ZIP + script d'installation<br><em>Node.js requis</em>"
+    )
+
+    html = (
+        WIDGET_INSTALL_HTML.replace("__MODE_BANNER__", mode)
+        .replace("__MAC_DESC__", mac_desc)
+        .replace("__WIN_DESC__", win_desc)
+    )
+    return HTMLResponse(content=html, status_code=200)
 
 
 @router.get("/download/widget-mac")
