@@ -547,6 +547,33 @@ async function packTerminesToNow(){
   await load();
 }
 
+async function packTerminesBeforeEnCoursAll(){
+  if(!CAN_EDIT) return;
+  if(!confirm("Replacer les dossiers terminés avant le dossier en cours sur chaque machine ?")) return;
+  try{
+    const res=await fetch(`/api/planning/pack-termines-before-en-cours`,{
+      method:"POST",
+      credentials:"include",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({})
+    });
+    if(!res.ok){
+      const j=await res.json().catch(()=>({}));
+      const d=j.detail;
+      const msg=typeof d==="string"?d:(Array.isArray(d)?d.map(x=>x.msg||JSON.stringify(x)).join(" "):"Erreur recalage terminés (toutes machines).");
+      showToast(msg,"danger");
+      return;
+    }
+    const j=await res.json().catch(()=>({}));
+    const arr=Array.isArray(j.machines)?j.machines:[];
+    const tot=arr.reduce((s,x)=>s+(Number(x.updated)||0),0);
+    showToast(`Terminés replacés (total: ${tot}).`,"success");
+  }catch(_){
+    showToast("Erreur réseau.","danger");
+  }
+  await load();
+}
+
 (function initSlotResize(){
   if(window.__mysifaPlanResize) return;
   window.__mysifaPlanResize=true;
@@ -1303,6 +1330,7 @@ function render(){
     <div class="h-right">
       ${CAN_EDIT&&machineKey()==="C2"?`<button type="button" class="reset-days-btn" onclick="resetDefaultDaysCohesio2()" title="Réinitialiser jours (Cohésio 2)">↺ Base jours</button>`:""}
       ${SHOW_DOSSIERS?`<button type="button" class="reset-days-btn" onclick="packTerminesToNow()" title="Recaler les terminés jusqu'à maintenant">⇤ Terminés</button>`:""}
+      ${SHOW_DOSSIERS?`<button type="button" class="reset-days-btn" onclick="packTerminesBeforeEnCoursAll()" title="Replacer les terminés avant le en cours (toutes machines)">⇤ Terminés → en cours</button>`:""}
       ${CAN_EDIT?`<button type="button" class="gear-btn" onclick="openDefaultsModal()" title="Réglages horaires par défaut" aria-label="Réglages">${icon('settings',16)}</button>`:""}
       ${runLbl?`<div class="badge badge-run"><div class="dot"></div>${escAttr(runLbl)}</div>`:""}
       ${SHOW_DOSSIERS?`<div class="badge badge-info">${totH}h · ${nb} dossiers</div>`:""}

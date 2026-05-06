@@ -2277,6 +2277,219 @@ async def pack_termines(machine_id: int, request: Request):
     return {"success": True, "updated": updated, "end": _fmt_ts(dt_end)}
 
 
+def _pack_termines_before_anchor(
+    conn,
+    machine_id: int,
+    anchor_end_dt: datetime,
+    only_before_position: Optional[int],
+) -> int:
+    """Recale les terminés (position < only_before_position) pour finir à anchor_end_dt.
+
+    Ne modifie que les entrées statut='termine'.
+    Retourne le nombre d'entrées mises à jour.
+    """
+    mrow = conn.execute("SELECT * FROM machines WHERE id=?", (machine_id,)).fetchone()
+    if not mrow:
+        return 0
+    m = dict(mrow)
+
+    configs, off_days, day_worked_map = _load_planning_calendar_maps_range(conn, machine_id)
+
+    base_hours = {}
+    for day_idx, field in [
+        (0, "horaires_lundi"),
+        (1, "horaires_mardi"),
+        (2, "horaires_mercredi"),
+        (3, "horaires_jeudi"),
+        (4, "horaires_vendredi"),
+    ]:
+        base_hours[day_idx] = _parse_horaires_val(m.get(field), "5,21")
+    sat_hours_t = _parse_horaires_val(m.get("horaires_samedi"), "6,18")
+    mk = _machine_key_from_record(m)
+    _parity_defs = _PARITY_DEFAULTS.get(mk)
+
+    def _is_pair_week(dt: datetime) -> bool:
+        return dt.isocalendar()[1] % 2 == 0
+
+    def week_key(dt: datetime) -> str:
+        return f"{dt.year}-W{dt.isocalendar()[1]:02d}"
+
+    def get_hours_for_date(dt: datetime):
+        dkey = dt.strftime("%Y-%m-%d")
+        wd = dt.weekday()
+        if wd <= 4 and int(off_days.get(dkey, 0) or 0):
+            return None
+        dw = day_worked_map.get(dkey)
+        if wd in base_hours:
+            if dw is not None and int(dw) == 0:
+                return None
+            if _parity_defs is not None:
+                par = "pair" if _is_pair_week(dt) else "impair"
+                slot = "fri" if wd == 4 else "week"
+                h = _parity_defs[par][slot]
+                return (h[0], h[1])
+            return base_hours[wd]
+        if wd == 5:
+            if dw is None:
+                if int(configs.get(week_key(dt), 0) or 0) == 0:
+                    return None
+                return sat_hours_t
+            if int(dw) == 0:
+                return None
+            return sat_hours_t
+        return None
+
+    def prev_work_instant(dt: datetime) -> datetime:
+        cur = dt.replace(microsecond=0)
+        for _ in range(366 * 3):
+            win = get_hours_for_date(cur)
+            if win:
+                s, e = win
+                sod = datetime(cur.year, cur.month, cur.day, 0, 0, 0, 0)
+                start_dt = sod + timedelta(hours=s)
+                end_dt = sod + timedelta(hours=e)
+                if cur > end_dt:
+                    return end_dt.replace(second=0, microsecond=0)
+                if cur >= start_dt:
+                    return cur.replace(second=0, microsecond=0)
+            prev_day = datetime(cur.year, cur.month, cur.day, 0, 0, 0, 0) - timedelta(seconds=1)
+            cur = prev_day.replace(microsecond=0)
+        return cur.replace(second=0, microsecond=0)
+
+    def rewind_work_hours(end_dt: datetime, hours: float) -> datetime:
+        remaining = float(hours or 0.0)
+        cur = prev_work_instant(end_dt)
+        for _ in range(20000):
+            if remaining <= 1e-9:
+                break
+            win = get_hours_for_date(cur)
+            if not win:
+                cur = prev_work_instant(cur - timedelta(days=1))
+                continue
+            s, _e = win
+            sod = datetime(cur.year, cur.month, cur.day, 0, 0, 0, 0)
+            start_dt = sod + timedelta(hours=s)
+            if cur <= start_dt:
+                cur = prev_work_instant(start_dt - timedelta(seconds=1))
+                continue
+            avail = (cur - start_dt).total_seconds() / 3600.0
+            used = min(remaining, max(0.0, avail))
+            remaining -= used
+            cur = (cur - timedelta(hours=used)).replace(second=0, microsecond=0)
+            if remaining > 1e-9 and cur <= start_dt:
+                cur = prev_work_instant(start_dt - timedelta(seconds=1))
+        return cur.replace(second=0, microsecond=0)
+
+    if only_before_position is None:
+        rows = conn.execute(
+            """SELECT id, position, duree_heures
+               FROM planning_entries
+               WHERE machine_id=? AND statut='termine'
+               ORDER BY position ASC""",
+            (machine_id,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """SELECT id, position, duree_heures
+               FROM planning_entries
+               WHERE machine_id=? AND statut='termine' AND position < ?
+               ORDER BY position ASC""",
+            (machine_id, int(only_before_position)),
+        ).fetchall()
+
+    terms_list = [dict(r) for r in rows]
+    now_u = datetime.now().isoformat()
+
+    updated = 0
+    end_cur = anchor_end_dt
+    for e in reversed(terms_list):
+        try:
+            dur = float(e.get("duree_heures") or 0.0)
+        except Exception:
+            dur = 0.0
+        if dur <= 1e-6:
+            continue
+        start_cur = rewind_work_hours(end_cur, dur)
+        conn.execute(
+            """UPDATE planning_entries
+               SET planned_start=?, planned_end=?, updated_at=?
+               WHERE id=? AND machine_id=?""",
+            (_fmt_ts(start_cur), _fmt_ts(end_cur), now_u, int(e["id"]), machine_id),
+        )
+        updated += 1
+        end_cur = start_cur
+
+    return updated
+
+
+@router.post("/machines/{machine_id}/pack-termines-before-en-cours")
+async def pack_termines_before_en_cours(machine_id: int, request: Request):
+    """Recale les terminés *avant* le dossier en cours pour finir au début du en_cours.
+
+    Les terminés restent ensuite figés sauf déplacement manuel.
+    """
+    require_admin(request)
+    with get_db() as conn:
+        require_planning_machine(request, conn, machine_id)
+
+        # Anchor = planned_start du en_cours si possible, sinon "maintenant" arrondi à l'heure.
+        row = conn.execute(
+            """SELECT position, planned_start
+               FROM planning_entries
+               WHERE machine_id=? AND statut='en_cours'
+               ORDER BY position ASC LIMIT 1""",
+            (machine_id,),
+        ).fetchone()
+        if row and row["planned_start"]:
+            dt_anchor = _parse_planned_dt(row["planned_start"])
+        else:
+            dt_anchor = datetime.now(_TZ_PARIS).replace(tzinfo=None)
+        if not dt_anchor:
+            dt_anchor = datetime.now(_TZ_PARIS).replace(tzinfo=None)
+        dt_anchor = dt_anchor.replace(minute=0, second=0, microsecond=0)
+
+        before_pos = int(row["position"]) if row and row["position"] is not None else None
+        updated = _pack_termines_before_anchor(conn, machine_id, dt_anchor, before_pos)
+        conn.commit()
+
+    return {"success": True, "updated": updated, "anchor": _fmt_ts(dt_anchor)}
+
+
+@router.post("/pack-termines-before-en-cours")
+async def pack_termines_before_en_cours_all(request: Request):
+    """Recale, sur toutes les machines actives, les terminés avant le en_cours."""
+    require_admin(request)
+    with get_db() as conn:
+        mids = [
+            int(r["id"])
+            for r in conn.execute("SELECT id FROM machines WHERE actif=1").fetchall()
+        ]
+        out = []
+        for mid in mids:
+            try:
+                row = conn.execute(
+                    """SELECT position, planned_start
+                       FROM planning_entries
+                       WHERE machine_id=? AND statut='en_cours'
+                       ORDER BY position ASC LIMIT 1""",
+                    (mid,),
+                ).fetchone()
+                if row and row["planned_start"]:
+                    dt_anchor = _parse_planned_dt(row["planned_start"])
+                else:
+                    dt_anchor = datetime.now(_TZ_PARIS).replace(tzinfo=None)
+                if not dt_anchor:
+                    dt_anchor = datetime.now(_TZ_PARIS).replace(tzinfo=None)
+                dt_anchor = dt_anchor.replace(minute=0, second=0, microsecond=0)
+                before_pos = int(row["position"]) if row and row["position"] is not None else None
+                upd = _pack_termines_before_anchor(conn, mid, dt_anchor, before_pos)
+                out.append({"machine_id": mid, "updated": upd})
+            except Exception:
+                out.append({"machine_id": mid, "updated": 0, "error": True})
+        conn.commit()
+    return {"success": True, "machines": out}
+
+
 # ── Codes opération production ──────────────────────────────────────────────
 _PROD_CODE_ARRIVEE = "86"
 _PROD_CODE_DEPART  = "87"
