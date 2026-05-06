@@ -755,9 +755,9 @@ function rowsIco(s=14) {{
 </html>"""
     return HTMLResponse(
         content=html,
-        headers={{
+        headers={
             "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
             "Pragma": "no-cache",
             "Expires": "0",
-        }},
+        },
     )

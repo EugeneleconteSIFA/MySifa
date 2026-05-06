@@ -189,9 +189,18 @@ def db_table_rows(
         data_sql = f'SELECT * FROM "{name}" {where_clause} {order_clause} LIMIT ? OFFSET ?'
         rows = conn.execute(data_sql, params + [limit, offset]).fetchall()
 
+        def _safe(v):
+            """Convertit les bytes (BLOB) en représentation lisible pour JSON."""
+            if isinstance(v, bytes):
+                try:
+                    return v.decode("utf-8", errors="replace")
+                except Exception:
+                    return f"<BLOB {len(v)} bytes>"
+            return v
+
         return {
             "columns": col_names,
-            "rows": [list(r) for r in rows],
+            "rows": [[_safe(cell) for cell in r] for r in rows],
             "total": total,
             "page": page,
             "limit": limit,
