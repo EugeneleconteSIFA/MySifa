@@ -513,6 +513,35 @@ body.light .btn-sec.is-active{
 .portal-apps--reorderable .portal-app:not(.portal-app--busy){cursor:grab;touch-action:none}
 .portal-apps--reorderable .portal-app--dragging{cursor:grabbing;opacity:.92;z-index:5;
   box-shadow:0 12px 36px rgba(0,0,0,.35);transform:scale(1.02)}
+.portal-apps--reorderable .portal-app--placeholder{
+  cursor:default;
+  background:transparent;
+  border:2px dashed rgba(34,211,238,.55);
+  box-shadow:none!important;
+  transform:none!important;
+}
+body.light .portal-apps--reorderable .portal-app--placeholder{border-color:rgba(8,145,178,.55)}
+.portal-apps--reorderable .portal-app--placeholder:hover{
+  border-color:rgba(34,211,238,.75);
+  background:rgba(34,211,238,.06);
+  box-shadow:none!important;
+  transform:none!important;
+}
+body.light .portal-apps--reorderable .portal-app--placeholder:hover{background:rgba(8,145,178,.06)}
+.portal-apps--reorderable .portal-app--placeholder .portal-ph-plus{
+  font-size:28px;
+  font-weight:900;
+  color:var(--muted);
+  line-height:1;
+  margin-bottom:4px;
+}
+.portal-apps--reorderable .portal-app--placeholder .portal-ph-label{
+  font-size:11px;
+  font-weight:800;
+  color:var(--muted);
+  text-transform:uppercase;
+  letter-spacing:.6px;
+}
 .portal-apps--reorderable .portal-app--disabled{cursor:grab}
 .portal-apps-hint{font-size:11px;color:var(--muted);text-align:center;margin:8px 0 0;width:100%;line-height:1.35}
 .portal-app{display:flex;flex-direction:column;align-items:center;gap:8px;
@@ -2256,16 +2285,32 @@ function portalOrderTileSpecs(specs, order){
 }
 function portalGetDragInsertBefore(container,x,y){
   const drag=container.querySelector('.portal-app--dragging');
-  const elems=[...container.querySelectorAll('.portal-app')].filter(ch=>ch!==drag);
+  const elems=[...container.querySelectorAll('.portal-app')].filter(ch=>
+    ch!==drag && !ch.classList.contains('portal-app--placeholder')
+  );
   if(!elems.length)return null;
   const rowTol=28;
   const inRow=elems.filter(ch=>{
     const b=ch.getBoundingClientRect();
     return y>=b.top-rowTol&&y<=b.bottom+rowTol;
   });
-  const pool=inRow.length?inRow:elems;
+  // Si on est clairement sur une ligne, autoriser le drop "à droite" de la dernière tuile de la ligne
+  if(inRow.length){
+    const row=inRow.slice().sort((a,b)=>a.getBoundingClientRect().left-b.getBoundingClientRect().left);
+    for(const ch of row){
+      const box=ch.getBoundingClientRect();
+      const mid=box.left+box.width/2;
+      if(x<mid)return ch;
+    }
+    // À droite de la ligne: insérer avant le 1er élément de la ligne suivante (ou null si dernière ligne)
+    const idxs=new Set(inRow.map(n=>elems.indexOf(n)).filter(i=>i>=0));
+    let maxIdx=-1;
+    idxs.forEach(i=>{ if(i>maxIdx)maxIdx=i; });
+    return (maxIdx>=0 && maxIdx+1<elems.length) ? elems[maxIdx+1] : null;
+  }
+  // Fallback global: comportement d'origine (plus permissif si on n'est pas "dans" une ligne)
   let closest=null,best=-Infinity;
-  pool.forEach(ch=>{
+  elems.forEach(ch=>{
     const box=ch.getBoundingClientRect();
     const mid=box.left+box.width/2;
     const dist=x-mid;
@@ -2285,17 +2330,44 @@ async function savePortalAppsOrder(ids){
 function attachPortalReorder(appsWrap){
   if(appsWrap._portalDndBound)return;
   appsWrap._portalDndBound=true;
+  function ensurePlaceholder(){
+    let ph=appsWrap.querySelector('.portal-app--placeholder');
+    if(ph)return ph;
+    ph=document.createElement('div');
+    ph.className='portal-app portal-app--placeholder';
+    ph.setAttribute('aria-hidden','true');
+    ph.innerHTML='<div class="portal-ph-plus">+</div><div class="portal-ph-label">Déplacer ici</div>';
+    return ph;
+  }
+  function cleanupPlaceholder(){
+    const ph=appsWrap.querySelector('.portal-app--placeholder');
+    if(ph&&ph.parentNode)ph.parentNode.removeChild(ph);
+  }
   appsWrap.addEventListener('dragstart',e=>{
     const t=e.target.closest('.portal-app');
     if(!t||!appsWrap.contains(t))return;
     t.classList.add('portal-app--dragging');
     try{e.dataTransfer.setData('text/plain',t.getAttribute('data-portal-id')||'');}catch(err){}
     e.dataTransfer.effectAllowed='move';
+    // Placeholder à l'emplacement d'origine, puis on masque la tuile (le drag image natif reste visible)
+    const ph=ensurePlaceholder();
+    try{appsWrap.insertBefore(ph,t);}catch(err){}
+    setTimeout(()=>{ try{t.style.display='none';}catch(err){} },0);
   });
   appsWrap.addEventListener('dragend',e=>{
     const t=e.target.closest('.portal-app');
-    if(t)t.classList.remove('portal-app--dragging');
-    const ids=[...appsWrap.querySelectorAll('.portal-app')].map(n=>n.getAttribute('data-portal-id')).filter(Boolean);
+    const ph=appsWrap.querySelector('.portal-app--placeholder');
+    if(t){
+      t.classList.remove('portal-app--dragging');
+      try{t.style.display='';}catch(err){}
+      if(ph&&ph.parentNode){
+        try{appsWrap.insertBefore(t,ph);}catch(err){}
+      }
+    }
+    cleanupPlaceholder();
+    const ids=[...appsWrap.querySelectorAll('.portal-app')]
+      .filter(n=>!n.classList.contains('portal-app--placeholder'))
+      .map(n=>n.getAttribute('data-portal-id')).filter(Boolean);
     const prev=(S.user&&S.user.portal_apps_order)?S.user.portal_apps_order:[];
     const same=prev.length===ids.length&&prev.every((v,i)=>v===ids[i]);
     if(!same){
@@ -2308,9 +2380,10 @@ function attachPortalReorder(appsWrap){
     e.preventDefault();
     const dragEl=appsWrap.querySelector('.portal-app--dragging');
     if(!dragEl)return;
+    const ph=ensurePlaceholder();
     const after=portalGetDragInsertBefore(appsWrap,e.clientX,e.clientY);
-    if(after==null||after===dragEl)appsWrap.appendChild(dragEl);
-    else appsWrap.insertBefore(dragEl,after);
+    if(after==null||after===ph)appsWrap.appendChild(ph);
+    else appsWrap.insertBefore(ph,after);
   });
   appsWrap.addEventListener('drop',e=>{e.preventDefault();});
 }
