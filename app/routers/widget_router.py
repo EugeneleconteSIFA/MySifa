@@ -8,11 +8,9 @@ Stratégie de distribution (deux modes, automatique) :
   Pour passer en mode natif : voir myprod-widget/BUILD.md.
 """
 
-import io
 import os
 import glob as _glob
-import zipfile
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Query
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from services.auth_service import get_current_user, require_admin
 from app.web.widget_page import WIDGET_HTML
@@ -34,8 +32,16 @@ def _find_latest(pattern: str) -> str | None:
     return max(matches, key=os.path.getmtime)
 
 
-def _native_mac() -> str | None:
-    return _find_latest("*arm64*.dmg") or _find_latest("*.dmg")
+def _native_mac_arm64() -> str | None:
+    return _find_latest("*arm64*.dmg")
+
+
+def _native_mac_x64() -> str | None:
+    return _find_latest("*x64*.dmg") or _find_latest("*x86_64*.dmg")
+
+
+def _native_mac_any() -> str | None:
+    return _native_mac_arm64() or _native_mac_x64() or _find_latest("*.dmg")
 
 
 def _native_win() -> str | None:
@@ -54,10 +60,12 @@ def widget_page(request: Request):
 def install_widget_page(request: Request):
     """Page de téléchargement Mac/Windows pour le widget."""
     require_admin(request)
-    dmg = _native_mac()
+    dmg_any = _native_mac_any()
+    dmg_arm = _native_mac_arm64()
+    dmg_x64 = _native_mac_x64()
     exe = _native_win()
 
-    if dmg or exe:
+    if dmg_any or exe:
         mode = (
             "<div class=\"mode-banner\">"
             "<strong>Mode natif</strong> — installateurs autonomes disponibles."
@@ -73,35 +81,63 @@ def install_widget_page(request: Request):
             "</div>"
         )
 
-    mac_desc = (
-        "Installateur DMG (glisser vers Applications)"
-        if dmg
-        else "ZIP + script d'installation<br><em>Node.js requis</em>"
-    )
+    if dmg_any:
+        if dmg_arm and dmg_x64:
+            mac_desc = "Installateur DMG — choisir la version de votre Mac"
+            mac_cta = (
+                "<a class=\"option-cta\" href=\"/download/widget-mac?arch=arm64\">Télécharger (Apple Silicon)</a>"
+                "<a class=\"option-cta alt\" href=\"/download/widget-mac?arch=x64\">Télécharger (Intel)</a>"
+            )
+        elif dmg_arm:
+            mac_desc = "Installateur DMG (Apple Silicon) — glisser vers Applications"
+            mac_cta = "<a class=\"option-cta\" href=\"/download/widget-mac?arch=arm64\">Télécharger</a>"
+        elif dmg_x64:
+            mac_desc = "Installateur DMG (Intel) — glisser vers Applications"
+            mac_cta = "<a class=\"option-cta\" href=\"/download/widget-mac?arch=x64\">Télécharger</a>"
+        else:
+            mac_desc = "Installateur DMG — glisser vers Applications"
+            mac_cta = "<a class=\"option-cta\" href=\"/download/widget-mac\">Télécharger</a>"
+    else:
+        mac_desc = "Installateur indisponible — compilation DMG requise"
+        mac_cta = "<span class=\"option-cta alt\" style=\"cursor:default;opacity:.7\">Indisponible</span>"
+
     win_desc = (
         "Installateur EXE (assistant)"
         if exe
         else "ZIP + script d'installation<br><em>Node.js requis</em>"
     )
+    if exe:
+        win_cta = "<a class=\"option-cta\" href=\"/download/widget-win\">Télécharger</a>"
+    else:
+        win_cta = "<a class=\"option-cta\" href=\"/download/widget-win\">Télécharger (legacy)</a>"
 
     html = (
         WIDGET_INSTALL_HTML.replace("__MODE_BANNER__", mode)
         .replace("__MAC_DESC__", mac_desc)
         .replace("__WIN_DESC__", win_desc)
+        .replace("__MAC_CTA__", mac_cta)
+        .replace("__WIN_CTA__", win_cta)
     )
     return HTMLResponse(content=html, status_code=200)
 
 
 @router.get("/download/widget-mac")
-def download_widget_mac(request: Request):
+def download_widget_mac(request: Request, arch: str | None = Query(None)):
     """
     Télécharge l'installateur macOS.
     • Mode natif  : DMG electron-builder (si présent dans dist/)
-    • Mode legacy : ZIP sources + script .command (fallback automatique)
     """
     require_admin(request)
 
-    dmg = _native_mac()
+    dmg: str | None = None
+    if arch:
+        a = arch.strip().lower()
+        if a in ("arm64", "apple", "silicon"):
+            dmg = _native_mac_arm64()
+        elif a in ("x64", "intel", "x86_64"):
+            dmg = _native_mac_x64()
+    if not dmg:
+        dmg = _native_mac_any()
     if dmg:
         filename = os.path.basename(dmg)
         return FileResponse(
@@ -111,12 +147,21 @@ def download_widget_mac(request: Request):
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
-    # Fallback : ZIP legacy
-    buf = _create_widget_zip("mac")
-    return StreamingResponse(
-        buf,
-        media_type="application/zip",
-        headers={"Content-Disposition": 'attachment; filename="myprod-widget-macos.zip"'},
+    # Pas de fallback ZIP sur macOS : Gatekeeper bloque les scripts .command chez les utilisateurs.
+    return HTMLResponse(
+        content=(
+            "<!doctype html><meta charset='utf-8'>"
+            "<title>MyProd Widget — installateur indisponible</title>"
+            "<div style='font-family:system-ui,-apple-system,Segoe UI,sans-serif;padding:24px;max-width:760px'>"
+            "<h2 style='margin:0 0 10px'>Installateur macOS indisponible</h2>"
+            "<p>Le serveur ne trouve aucun fichier <strong>.dmg</strong> dans <code>myprod-widget/dist/</code>.</p>"
+            "<p>Action admin (sur un Mac) :</p>"
+            "<pre style='background:#111827;color:#e2e8f0;padding:12px;border-radius:10px;overflow:auto'>"
+            "cd myprod-widget\\nnpm install\\nnpm run build:mac\\n</pre>"
+            "<p>Puis copier le DMG généré dans <code>myprod-widget/dist/</code> sur le serveur.</p>"
+            "</div>"
+        ),
+        status_code=503,
     )
 
 
@@ -157,6 +202,10 @@ def download_widget_legacy(request: Request):
 
 # ── Génération ZIP legacy ───────────────────────────────────────────────────────
 
+import io
+import zipfile
+
+
 def _read_installer_bytes(filename: str) -> bytes:
     fpath = os.path.join(_WIDGET_DIR, filename)
     if not os.path.isfile(fpath):
@@ -192,42 +241,13 @@ def _create_widget_zip(platform: str) -> io.BytesIO:
                 except Exception:
                     pass
 
-        if platform == "mac":
-            installer = _build_mac_installer()
-            info = zipfile.ZipInfo("Installer-MyProd-Widget.command")
-            info.external_attr = (0o755 << 16)
-            zf.writestr(info, installer.encode("utf-8"))
-            zf.writestr("LISEZ-MOI.txt", _readme_mac().encode("utf-8"))
-        else:
-            installer = _build_win_installer()
-            zf.writestr("Installer-MyProd-Widget.bat", installer.encode("utf-8"))
-            zf.writestr("LISEZ-MOI.txt", _readme_win().encode("utf-8"))
+        # Windows only for now (macOS: no ZIP fallback)
+        installer = _build_win_installer()
+        zf.writestr("Installer-MyProd-Widget.bat", installer.encode("utf-8"))
+        zf.writestr("LISEZ-MOI.txt", _readme_win().encode("utf-8"))
 
     buf.seek(0)
     return buf
-
-
-def _build_mac_installer() -> str:
-    return f"""#!/bin/bash
-# MyProd Widget — Installateur macOS (legacy)
-set -e
-WIDGET_DIR="$HOME/.myprod-widget"
-mkdir -p "$WIDGET_DIR"
-SRC="$(cd "$(dirname "$0")/myprod-widget" 2>/dev/null && pwd || echo "")"
-if [ -n "$SRC" ]; then
-  cp -r "$SRC/." "$WIDGET_DIR/"
-fi
-cd "$WIDGET_DIR"
-if ! command -v node &>/dev/null; then
-  echo "Node.js introuvable — téléchargement..."
-  curl -fsSL https://nodejs.org/dist/v20.11.0/node-v20.11.0-darwin-arm64.tar.gz | tar -xz -C "$HOME/.local" --strip-components=1 2>/dev/null || \\
-  curl -fsSL https://nodejs.org/dist/v20.11.0/node-v20.11.0-darwin-x64.tar.gz   | tar -xz -C "$HOME/.local" --strip-components=1
-  export PATH="$HOME/.local/bin:$PATH"
-fi
-npm install --prefer-offline
-node_modules/.bin/electron . &
-echo "Widget lancé !"
-"""
 
 
 def _build_win_installer() -> str:
@@ -246,23 +266,6 @@ npm install --prefer-offline
 start "" node_modules\\.bin\\electron .
 echo Widget lance !
 """
-
-
-def _readme_mac() -> str:
-    return (
-        "=== MyProd Widget - Installation macOS (version legacy) ===\n\n"
-        "NOTE : Cette version nécessite Node.js. Pour une installation en un clic\n"
-        "       (sans Node.js), demandez à l'administrateur de compiler les installateurs natifs.\n\n"
-        "INSTALLATION\n"
-        "------------\n"
-        "1. Décompressez ce ZIP\n"
-        "2. Clic droit sur Installer-MyProd-Widget.command → Ouvrir\n"
-        "3. Confirmez l'ouverture si macOS demande\n"
-        "4. Le widget se lance automatiquement\n\n"
-        "PRÉREQUIS\n"
-        "---------\n"
-        "• macOS 10.15+  •  Connexion internet (~50 Mo)  •  Node.js (téléchargé auto si absent)\n"
-    )
 
 
 def _readme_win() -> str:
