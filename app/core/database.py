@@ -1201,6 +1201,38 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 16, "matiere_params_code_nullable_and_matiere_base_groupe")
 
+    # v17 — base matière : liens directs vers matiere_params (IDs composants)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=17 LIMIT 1").fetchone():
+        try:
+            mb_cols = {r["name"] for r in conn.execute("PRAGMA table_info(matiere_base)").fetchall()}
+            for col, sql in [
+                (
+                    "param_id_frontal",
+                    "ALTER TABLE matiere_base ADD COLUMN param_id_frontal INTEGER REFERENCES matiere_params(id)",
+                ),
+                (
+                    "param_id_adhesif",
+                    "ALTER TABLE matiere_base ADD COLUMN param_id_adhesif INTEGER REFERENCES matiere_params(id)",
+                ),
+                (
+                    "param_id_silicone",
+                    "ALTER TABLE matiere_base ADD COLUMN param_id_silicone INTEGER REFERENCES matiere_params(id)",
+                ),
+                (
+                    "param_id_glassine",
+                    "ALTER TABLE matiere_base ADD COLUMN param_id_glassine INTEGER REFERENCES matiere_params(id)",
+                ),
+            ]:
+                if col not in mb_cols:
+                    try:
+                        conn.execute(sql)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        conn.commit()
+        _record_schema_migration(conn, 17, "matiere_base_param_ids")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

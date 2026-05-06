@@ -2302,7 +2302,30 @@ function portalGetDragInsertBefore(container,x,y){
       const mid=box.left+box.width/2;
       if(x<mid)return ch;
     }
-    // À droite de la ligne: insérer avant le 1er élément de la ligne suivante (ou null si dernière ligne)
+    // Curseur à droite de toutes les tuiles de la ligne.
+    // Calcule le nombre max de tuiles par ligne (capacité réelle de la grille flex)
+    // en regroupant les éléments par position top (±8px de tolérance subpixel).
+    const rowGroups=[];
+    elems.forEach(el=>{
+      const t=el.getBoundingClientRect().top;
+      const grp=rowGroups.find(g=>Math.abs(g.top-t)<8);
+      if(grp)grp.items.push(el);
+      else rowGroups.push({top:t,items:[el]});
+    });
+    const maxPerRow=Math.max(...rowGroups.map(g=>g.items.length));
+    // Éléments réellement dans cette ligne (top similaire au premier inRow)
+    const refTop=inRow[0].getBoundingClientRect().top;
+    const actualRow=elems
+      .filter(el=>Math.abs(el.getBoundingClientRect().top-refTop)<8)
+      .sort((a,b)=>a.getBoundingClientRect().left-b.getBoundingClientRect().left);
+    // Ligne pleine : insérer avant la dernière tuile de la ligne, pas avant la
+    // première de la suivante — ainsi le placeholder reste visible en fin de
+    // cette ligne (la dernière tuile se décale en ligne suivante).
+    if(actualRow.length>=maxPerRow&&actualRow.length>1){
+      return actualRow[actualRow.length-1];
+    }
+    // Ligne non pleine : comportement normal (insère après la dernière tuile,
+    // le placeholder tient encore dans la ligne).
     const idxs=new Set(inRow.map(n=>elems.indexOf(n)).filter(i=>i>=0));
     let maxIdx=-1;
     idxs.forEach(i=>{ if(i>maxIdx)maxIdx=i; });
@@ -7591,6 +7614,110 @@ function matiereAddLabeledInput(parent,labelText,name,val,type){
   return inp;
 }
 
+function matiereAddHidden(parent,name,val){
+  const inp=document.createElement('input');
+  inp.type='hidden';
+  inp.name=name;
+  if(val!=null&&val!=='')inp.value=String(val);
+  parent.appendChild(inp);
+  return inp;
+}
+
+function matiereNormCatRaw(s){
+  return normMatiereTxt(s||'').replace(/\s+/g,'').trim();
+}
+
+function matiereBuildParamPools(params){
+  const glassine=[], silicone=[], adhesif=[], frontal=[];
+  (Array.isArray(params)?params:[]).forEach(p=>{
+    const id=p&&p.id!=null?parseInt(p.id,10):null;
+    if(!id||Number.isNaN(id))return;
+    const des=String(p.designation||'').trim();
+    if(!des)return;
+    const eur=parseFloat(p.prix_eur_m2);
+    if(Number.isNaN(eur))return;
+    const catRaw=String(p.categorie||'').trim();
+    const catN=matiereNormCatRaw(catRaw);
+    const item={id,designation:des,desn:normMatiereTxt(des),eur,cat:catRaw,catn:catN};
+    if(catN==='gls'||String(catRaw||'').toUpperCase()==='GLS')glassine.push(item);
+    else if(catN==='s'||catN==='linerless')silicone.push(item);
+    else if(catN==='e'||catN==='p')adhesif.push(item);
+    else frontal.push(item);
+  });
+  function byDes(a,b){return String(a.designation||'').localeCompare(String(b.designation||''),'fr');}
+  frontal.sort(byDes); adhesif.sort(byDes); silicone.sort(byDes); glassine.sort(byDes);
+  return {frontal,adhesif,silicone,glassine};
+}
+
+function matiereBestMatchId(label,pool){
+  const nc=normMatiereTxt(label);
+  if(!nc)return null;
+  for(const p of pool){ if(p.desn===nc) return p.id; }
+  const inside=pool.filter(p=>p.desn&&p.desn.length&&nc.includes(p.desn));
+  if(inside.length===1)return inside[0].id;
+  if(inside.length>1){
+    inside.sort((a,b)=> (b.desn.length-a.desn.length));
+    return inside[0].id;
+  }
+  const flex=pool.filter(p=>p.desn&&p.desn.includes(nc));
+  if(flex.length===1)return flex[0].id;
+  if(flex.length>1)return null;
+  return null;
+}
+
+function matiereComponentSelector(grid,labelText,pool,currentId,currentText,onPick){
+  const wrap=document.createElement('div');
+  const lab=document.createElement('label');
+  lab.textContent=labelText;
+  const filter=document.createElement('input');
+  filter.type='text';
+  filter.placeholder='Filtrer…';
+  filter.autocomplete='off';
+  const sel=document.createElement('select');
+  function optLabel(p){
+    return `${p.designation} (${matiereFmt4(p.eur)} €/m²)`;
+  }
+  function rebuild(q){
+    const qq=normMatiereTxt(q||'').trim();
+    const keep=sel.value;
+    sel.innerHTML='';
+    const o0=document.createElement('option');
+    o0.value='';
+    o0.textContent='— aucun';
+    sel.appendChild(o0);
+    const list=qq?pool.filter(p=>p.desn.includes(qq)):pool;
+    list.forEach(p=>{
+      const o=document.createElement('option');
+      o.value=String(p.id);
+      o.textContent=optLabel(p);
+      sel.appendChild(o);
+    });
+    if(keep!=null&&keep!=='')sel.value=keep;
+  }
+  rebuild('');
+  // Préselection
+  if(currentId!=null && currentId!=='' && !Number.isNaN(parseInt(currentId,10))){
+    sel.value=String(parseInt(currentId,10));
+  }else{
+    const mid=matiereBestMatchId(currentText,pool);
+    if(mid)sel.value=String(mid);
+  }
+  function emit(){
+    const id=sel.value?parseInt(sel.value,10):null;
+    const p=id?pool.find(x=>x.id===id):null;
+    onPick(id,p?p.designation:'',p?p.eur:null);
+  }
+  filter.addEventListener('input',()=>rebuild(filter.value));
+  sel.addEventListener('change',emit);
+  wrap.appendChild(lab);
+  wrap.appendChild(filter);
+  wrap.appendChild(sel);
+  grid.appendChild(wrap);
+  // Init callback
+  emit();
+  return {wrap,filter,select:sel};
+}
+
 function openMatiereBaseModal(row){
   closeMatiereModals();
   const isEdit=!!(row&&row.id);
@@ -7604,18 +7731,132 @@ function openMatiereBaseModal(row){
   title.textContent=isEdit?'Modifier base matière':'Nouvelle base matière';
   const grid=document.createElement('div');
   grid.className='form-row';
-  matiereAddLabeledInput(grid,'Famille (VELIN, COUCHE, THERMIQUE ECO…)','groupe',row&&row.groupe||'','text');
-  matiereAddLabeledInput(grid,'Réf. interne','ref_interne',row&&row.ref_interne!=null?row.ref_interne:'','number');
-  matiereAddLabeledInput(grid,'Désignation','designation',row&&row.designation||'','text');
-  matiereAddLabeledInput(grid,'Frontal','frontal',row&&row.frontal||'','text');
-  matiereAddLabeledInput(grid,'Type adhésion','type_adhesion',row&&row.type_adhesion||'','text');
-  matiereAddLabeledInput(grid,'Adhésif','adhesif',row&&row.adhesif||'','text');
-  matiereAddLabeledInput(grid,'Silicone','silicone',row&&row.silicone||'','text');
-  matiereAddLabeledInput(grid,'Glassine','glassine',row&&row.glassine||'','text');
-  matiereAddLabeledInput(grid,'Marqueur','marqueur',row&&row.marqueur||'','text');
-  matiereAddLabeledInput(grid,'Prix Cohésio €/m²','prix_cohesio',row&&row.prix_cohesio!=null?row.prix_cohesio:'','number');
-  matiereAddLabeledInput(grid,'Prix Rotoflex €/m²','prix_rotoflex',row&&row.prix_rotoflex!=null?row.prix_rotoflex:'','number');
-  matiereAddLabeledInput(grid,'Supplément Rotoflex €/m² (optionnel, sinon défaut config)','rotoflex_supplement_eur_m2',row&&row.rotoflex_supplement_eur_m2!=null?row.rotoflex_supplement_eur_m2:'','number');
+  const inpGroupe=matiereAddLabeledInput(grid,'Famille (VELIN, COUCHE, THERMIQUE ECO…)','groupe',row&&row.groupe||'','text');
+  const inpRef=matiereAddLabeledInput(grid,'Réf. interne','ref_interne',row&&row.ref_interne!=null?row.ref_interne:'','number');
+  const inpDes=matiereAddLabeledInput(grid,'Désignation','designation',row&&row.designation||'','text');
+
+  // Champs stockés (rétrocompat) + nouveaux IDs composants
+  const hidFrontal=matiereAddHidden(grid,'frontal',row&&row.frontal||'');
+  const hidAdhesif=matiereAddHidden(grid,'adhesif',row&&row.adhesif||'');
+  const hidSilicone=matiereAddHidden(grid,'silicone',row&&row.silicone||'');
+  const hidGlassine=matiereAddHidden(grid,'glassine',row&&row.glassine||'');
+  const hidPidFrontal=matiereAddHidden(grid,'param_id_frontal',row&&row.param_id_frontal!=null?row.param_id_frontal:'');
+  const hidPidAdhesif=matiereAddHidden(grid,'param_id_adhesif',row&&row.param_id_adhesif!=null?row.param_id_adhesif:'');
+  const hidPidSilicone=matiereAddHidden(grid,'param_id_silicone',row&&row.param_id_silicone!=null?row.param_id_silicone:'');
+  const hidPidGlassine=matiereAddHidden(grid,'param_id_glassine',row&&row.param_id_glassine!=null?row.param_id_glassine:'');
+
+  const inpType=matiereAddLabeledInput(grid,'Type adhésion','type_adhesion',row&&row.type_adhesion||'','text');
+
+  const pools=matiereBuildParamPools(S.matiereParams||[]);
+  const selState={frontal:{},adhesif:{},silicone:{},glassine:{}};
+
+  const preview=document.createElement('div');
+  preview.style.cssText='grid-column:1/-1;border:1px solid var(--border);border-radius:10px;padding:12px 14px;background:rgba(15,23,42,.25)';
+
+  function readSupplement(){
+    const v=(inpSup.value||'').trim();
+    const x=v===''?null:parseFloat(v.replace(',','.'));
+    if(x==null||Number.isNaN(x))return null;
+    return x;
+  }
+  function updatePreview(){
+    const mc=S.matiereConfig||{marge_erreur:5,supplement_rotoflex_eur_m2:0.06};
+    const m=parseFloat(mc.marge_erreur);
+    const fac=1+(Number.isNaN(m)?5:m)/100;
+    const sup=(()=>{
+      const s=readSupplement();
+      if(s!=null)return s;
+      const d=parseFloat(mc.supplement_rotoflex_eur_m2);
+      return Number.isNaN(d)?0.06:d;
+    })();
+    const parts=[
+      ['Frontal',selState.frontal],
+      ['Adhésif',selState.adhesif],
+      ['Silicone',selState.silicone],
+      ['Glassine',selState.glassine],
+    ];
+    const total=parts.reduce((acc,[_l,st])=>acc+(st.eur!=null?st.eur:0),0);
+    const rot=total+sup;
+    const cohM=total*fac;
+    const rotM=rot*fac;
+    preview.innerHTML='';
+    const h1=document.createElement('div');
+    h1.style.cssText='font-weight:800;margin-bottom:8px';
+    h1.textContent='Composition sélectionnée';
+    preview.appendChild(h1);
+    const list=document.createElement('div');
+    list.style.cssText='display:grid;grid-template-columns:110px 1fr 120px;gap:6px 10px;font-size:12px;align-items:baseline';
+    parts.forEach(([lab,st])=>{
+      const a=document.createElement('div'); a.style.color='var(--muted)'; a.textContent=lab;
+      const b=document.createElement('div'); b.style.fontFamily='monospace'; b.textContent=st.des||'—';
+      const c=document.createElement('div'); c.style.textAlign='right'; c.style.fontFamily='monospace'; c.textContent=(st.eur!=null)?(matiereFmt4(st.eur)+' €/m²'):'—';
+      list.appendChild(a); list.appendChild(b); list.appendChild(c);
+    });
+    preview.appendChild(list);
+    const hr=document.createElement('div');
+    hr.style.cssText='height:1px;background:var(--border);margin:10px 0';
+    preview.appendChild(hr);
+    const lines=document.createElement('div');
+    lines.style.cssText='display:grid;grid-template-columns:1fr 120px;gap:6px 10px;font-size:12px;align-items:baseline';
+    function addLine(lbl,val,accent){
+      const a=document.createElement('div'); a.textContent=lbl; a.style.color=accent?'var(--text)':'var(--text2)';
+      const b=document.createElement('div'); b.style.textAlign='right'; b.style.fontFamily='monospace';
+      b.textContent=val;
+      if(accent){ b.style.color='var(--ok)'; b.style.fontWeight='700'; }
+      lines.appendChild(a); lines.appendChild(b);
+    }
+    addLine('Prix de revient Cohésio',matiereFmt4(total)+' €/m²',false);
+    addLine('+ Supplément Rotoflex ('+matiereFmt4(sup)+')',matiereFmt4(sup)+' €/m²',false);
+    addLine('Prix de revient Rotoflex',matiereFmt4(rot)+' €/m²',false);
+    const hr2=document.createElement('div');
+    hr2.style.cssText='height:1px;background:var(--border);margin:10px 0';
+    preview.appendChild(lines);
+    preview.appendChild(hr2);
+    addLine('Prix Cohésio (+'+(Number.isNaN(m)?'5':String(m))+'% marge)',matiereFmt4(cohM)+' €/m²',true);
+    addLine('Prix Rotoflex (+'+(Number.isNaN(m)?'5':String(m))+'% marge)',matiereFmt4(rotM)+' €/m²',true);
+  }
+
+  function onPick(field,hidPid,hidTxt){
+    return (id,des,eur)=>{
+      hidPid.value=(id!=null && !Number.isNaN(id))?String(id):'';
+      hidTxt.value=des||'';
+      selState[field]={id:id!=null?id:null,des:des||'',eur:(eur!=null&&!Number.isNaN(eur))?eur:null};
+      updatePreview();
+    };
+  }
+
+  matiereComponentSelector(
+    grid,'Frontal (sélection composant)',pools.frontal,
+    row&&row.param_id_frontal,row&&row.frontal,
+    onPick('frontal',hidPidFrontal,hidFrontal)
+  );
+  matiereComponentSelector(
+    grid,'Adhésif (sélection composant)',pools.adhesif,
+    row&&row.param_id_adhesif,row&&row.adhesif,
+    onPick('adhesif',hidPidAdhesif,hidAdhesif)
+  );
+  matiereComponentSelector(
+    grid,'Silicone (sélection composant)',pools.silicone,
+    row&&row.param_id_silicone,row&&row.silicone,
+    onPick('silicone',hidPidSilicone,hidSilicone)
+  );
+  matiereComponentSelector(
+    grid,'Glassine (sélection composant)',pools.glassine,
+    row&&row.param_id_glassine,row&&row.glassine,
+    onPick('glassine',hidPidGlassine,hidGlassine)
+  );
+
+  const inpMarqueur=matiereAddLabeledInput(grid,'Marqueur','marqueur',row&&row.marqueur||'','text');
+  const inpSup=matiereAddLabeledInput(
+    grid,
+    'Supplément Rotoflex €/m² (optionnel, sinon défaut config)',
+    'rotoflex_supplement_eur_m2',
+    row&&row.rotoflex_supplement_eur_m2!=null?row.rotoflex_supplement_eur_m2:'',
+    'number'
+  );
+  inpSup.addEventListener('input',updatePreview);
+  updatePreview();
+  grid.appendChild(preview);
   const actions=document.createElement('div');
   actions.className='form-actions';
   const btnCancel=document.createElement('button');
@@ -7626,17 +7867,32 @@ function openMatiereBaseModal(row){
   btnOk.className='btn';
   btnOk.textContent='Enregistrer';
   btnOk.onclick=async()=>{
-    const body={};
-    grid.querySelectorAll('input').forEach(inp=>{
-      const k=inp.name;
-      if(!k)return;
-      if(inp.type==='number'){
-        const v=inp.value.trim();
-        body[k]=v===''?null:parseFloat(v.replace(',','.'));
-      }else{
-        body[k]=inp.value.trim();
-      }
-    });
+    const body={
+      groupe: (inpGroupe.value||'').trim() || null,
+      ref_interne: (()=>{
+        const v=(inpRef.value||'').trim();
+        if(v==='')return null;
+        const x=parseFloat(v.replace(',','.'));
+        return Number.isNaN(x)?null:x;
+      })(),
+      designation: (inpDes.value||'').trim(),
+      type_adhesion: (inpType.value||'').trim() || null,
+      frontal: (hidFrontal.value||'').trim() || null,
+      adhesif: (hidAdhesif.value||'').trim() || null,
+      silicone: (hidSilicone.value||'').trim() || null,
+      glassine: (hidGlassine.value||'').trim() || null,
+      param_id_frontal: hidPidFrontal.value?parseInt(hidPidFrontal.value,10):null,
+      param_id_adhesif: hidPidAdhesif.value?parseInt(hidPidAdhesif.value,10):null,
+      param_id_silicone: hidPidSilicone.value?parseInt(hidPidSilicone.value,10):null,
+      param_id_glassine: hidPidGlassine.value?parseInt(hidPidGlassine.value,10):null,
+      marqueur: (inpMarqueur.value||'').trim() || null,
+      rotoflex_supplement_eur_m2: (()=>{
+        const v=(inpSup.value||'').trim();
+        if(v==='')return null;
+        const x=parseFloat(v.replace(',','.'));
+        return Number.isNaN(x)?null:x;
+      })(),
+    };
     if(!body.designation){showToast('Désignation obligatoire','danger');return;}
     try{
       if(isEdit){
@@ -7888,9 +8144,17 @@ function renderMatierePrix(){
           )
         );
       }
+      const hasCalcIds = !!(
+        r && (r.param_id_frontal!=null || r.param_id_adhesif!=null || r.param_id_silicone!=null || r.param_id_glassine!=null)
+      );
       baseBody.push(h('tr',null,
         h('td',{style:{fontFamily:'monospace',paddingLeft:'28px'}},r.ref_interne!=null?String(r.ref_interne):'—'),
-        h('td',null,r.designation||''),
+        h('td',null,
+          h('span',{style:{display:'inline-flex',alignItems:'center',gap:'6px'}},
+            r.designation||'',
+            hasCalcIds?h('span',{title:'Prix calculé depuis composants',style:{opacity:.7,display:'inline-flex',alignItems:'center'}},iconEl('settings',12)):null
+          )
+        ),
         h('td',null,r.type_adhesion||''),
         h('td',null,r.adhesif||''),
         h('td',null,r.silicone||''),

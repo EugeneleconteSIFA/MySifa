@@ -124,6 +124,32 @@ def prix_cohesio_from_params(base: dict, params: list[dict]) -> float:
     )
 
 
+def prix_cohesio_from_ids(base: dict, params_by_id: dict[int, dict]) -> float:
+    total = 0.0
+    for field in (
+        "param_id_frontal",
+        "param_id_adhesif",
+        "param_id_silicone",
+        "param_id_glassine",
+    ):
+        pid = base.get(field)
+        if pid is None:
+            continue
+        try:
+            pid_i = int(pid)
+        except (TypeError, ValueError):
+            continue
+        if pid_i <= 0:
+            continue
+        p = params_by_id.get(pid_i)
+        if not p:
+            continue
+        eur = _float_safe(p.get("prix_eur_m2"))
+        if eur:
+            total += float(eur)
+    return total
+
+
 def _default_rotoflex_supplement(conn) -> float:
     cfg = _cfg_dict(conn)
     try:
@@ -139,7 +165,24 @@ def _row_base_with_marge(conn, row: dict, params: Optional[list[dict]] = None) -
     pr = d.get("prix_rotoflex")
     if params is not None and len(params) > 0:
         try:
-            calc = prix_cohesio_from_params(d, params)
+            pid_keys = (
+                "param_id_frontal",
+                "param_id_adhesif",
+                "param_id_silicone",
+                "param_id_glassine",
+            )
+            has_any_pid = any(d.get(k) not in (None, "", 0, "0") for k in pid_keys)
+            if has_any_pid:
+                params_by_id: dict[int, dict] = {}
+                for p in params:
+                    try:
+                        pid = int(p.get("id"))
+                    except (TypeError, ValueError):
+                        continue
+                    params_by_id[pid] = p
+                calc = prix_cohesio_from_ids(d, params_by_id)
+            else:
+                calc = prix_cohesio_from_params(d, params)
             pc = calc
             sup = _float_safe(d.get("rotoflex_supplement_eur_m2"))
             if sup is None:
@@ -408,8 +451,10 @@ def create_base(request: Request, body: dict = Body(...)):
         cur = conn.execute(
             """INSERT INTO matiere_base (
                 groupe, ref_interne, designation, frontal, type_adhesion, adhesif, silicone, glassine,
-                marqueur, prix_cohesio, prix_rotoflex, rotoflex_supplement_eur_m2, updated_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                marqueur, prix_cohesio, prix_rotoflex, rotoflex_supplement_eur_m2,
+                param_id_frontal, param_id_adhesif, param_id_silicone, param_id_glassine,
+                updated_at
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 (body.get("groupe") or "").strip() or None,
                 body.get("ref_interne"),
@@ -423,6 +468,10 @@ def create_base(request: Request, body: dict = Body(...)):
                 body.get("prix_cohesio"),
                 body.get("prix_rotoflex"),
                 body.get("rotoflex_supplement_eur_m2"),
+                body.get("param_id_frontal"),
+                body.get("param_id_adhesif"),
+                body.get("param_id_silicone"),
+                body.get("param_id_glassine"),
                 now,
             ),
         )
@@ -450,6 +499,10 @@ def update_base(request: Request, base_id: int, body: dict = Body(...)):
         "prix_cohesio",
         "prix_rotoflex",
         "rotoflex_supplement_eur_m2",
+        "param_id_frontal",
+        "param_id_adhesif",
+        "param_id_silicone",
+        "param_id_glassine",
     ]
     sets = []
     args: list[Any] = []
