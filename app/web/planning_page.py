@@ -549,7 +549,7 @@ function showToast(message,type){
     const startWpct=parseFloat(slot.style.width)||1;
     const startLeftpct=parseFloat(slot.style.left)||0;
     const startDuree=Math.max(MIN_DUREE_H,parseFloat(entry.duree_heures)||MIN_DUREE_H);
-    slot.style.position="relative";
+    const _prevCursor=slot.style.cursor||"";
     const preview=document.createElement("div");
     preview.className="slot-resize-preview";
     preview.textContent=startDuree.toFixed(1)+" h";
@@ -564,7 +564,8 @@ function showToast(message,type){
       pxPerPct,
       startDuree,
       preview,
-      maxRightPct:Math.max(0.55,100-startLeftpct-0.08)
+      maxRightPct:Math.max(0.55,100-startLeftpct-0.08),
+      _prevCursor
     };
   },true);
   document.addEventListener("mousemove",function(e){
@@ -579,9 +580,9 @@ function showToast(message,type){
   });
   document.addEventListener("mouseup",async function(){
     if(!resizing) return;
-    const{slot,eid,preview,startDuree,startWpct}=resizing;
+    const{slot,eid,preview,startDuree,startWpct,_prevCursor}=resizing;
     preview.remove();
-    slot.style.cursor="";
+    slot.style.cursor=_prevCursor||"";
     const live=resizing._liveNewDuree;
     resizing=null;
     if(live==null){
