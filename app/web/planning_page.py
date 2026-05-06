@@ -1109,6 +1109,10 @@ function machineKey(){
   if(norm.includes("dsi")) return "DSI";
   return raw;
 }
+function hasSaisieReelle(){
+  const mk=machineKey();
+  return mk==="C1" || mk==="C2";
+}
 function getMachineDefaults(){
   const mk=machineKey();
   const key=`mysifa.planning.defaults.${mk}`;
@@ -1350,7 +1354,7 @@ function render(){
             <button type="button" class="today" onclick="S.wo=0;load()">${navLbl}</button>
             <button type="button" onclick="S.wo++;load()">▶</button>
           </div>
-          ${CAN_EDIT?`<button type="button" class="btn-s" onclick="openImportOrphan()" style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;font-size:11px" title="Ajouter un dossier terminé depuis les saisies de production"><span style="font-size:15px;line-height:1">+</span> Importer dossier</button>`:""}
+          ${CAN_EDIT&&hasSaisieReelle()?`<button type="button" class="btn-s" onclick="openImportOrphan()" style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;font-size:11px" title="Ajouter un dossier terminé depuis les saisies de production"><span style="font-size:15px;line-height:1">+</span> Importer dossier</button>`:""}
         </div>
       </div>
       <div style="font-size:11px;color:var(--muted);margin:-8px 0 12px">Gérez les jours et horaires via l'icône ⚙ de chaque semaine.</div>
@@ -1882,16 +1886,17 @@ function mkTL(mon,slots){
     }
     // a_placer striped
     const aplacerCls=s.a_placer?"slot-aplacer":"";
-    const reelTermineCls=((s.statut_reel==="reellement_termine"&&s.statut!=="en_cours")||s.statut==="termine")?"slot-reel-termine":"";
+    const reelTermineCls=(hasSaisieReelle() && (s.statut_reel==="reellement_termine") && s.statut!=="en_cours")||s.statut==="termine"?"slot-reel-termine":"";
     const destock=s.destockage==="done";
-    const reelForDrag=(s.statut_reel||"reellement_en_attente")==="reellement_en_attente";
+    const reelForDrag=hasSaisieReelle() ? ((s.statut_reel||"reellement_en_attente")==="reellement_en_attente") : true;
     const canDragSlot=CAN_EDIT&&s.statut!=="en_cours"&&s.statut!=="termine"&&reelForDrag;
     const canResizeSlot=CAN_EDIT&&s.statut!=="termine"&&(s.statut==="en_cours"||(s.statut==="attente"&&reelForDrag));
     const termineSlideCls=(CAN_EDIT&&s.statut==="termine")?"slot-termine-movable":"";
     const resizeHint="Bord droit : ajuster la durée. Reste du créneau : réordonner (si disponible).";
     const resizeHandle=canResizeSlot?`<div class="slot-resize-handle" data-eid="${s.entry_id||idx}" data-resize="1" title="${escAttr(resizeHint)}"></div>`:"";
     const termineTitle=termineSlideCls?"Dossier terminé — glisser pour décaler le créneau sur la ligne de temps":"";
-    h+=`<div class="slot ${matchCls} ${aplacerCls} ${reelTermineCls} ${termineSlideCls}" data-eid="${s.entry_id||idx}" data-statut="${escAttr(s.statut||"attente")}" data-statut-reel="${escAttr(s.statut_reel||"reellement_en_attente")}" ${canDragSlot?'draggable="true"':''} style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${isActive?"border:2px solid #22d3ee;animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
+    const sr = hasSaisieReelle() ? (s.statut_reel||"reellement_en_attente") : "reellement_en_attente";
+    h+=`<div class="slot ${matchCls} ${aplacerCls} ${reelTermineCls} ${termineSlideCls}" data-eid="${s.entry_id||idx}" data-statut="${escAttr(s.statut||"attente")}" data-statut-reel="${escAttr(sr)}" ${canDragSlot?'draggable="true"':''} style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${isActive?"border:2px solid #22d3ee;animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
       onmouseenter="showTip(event,this)" onmousemove="moveTip(event)" onmouseleave="hideTip()"
       ondblclick="hideTip();openEdit(${s.entry_id||idx});event.stopPropagation()"
       data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-rfp="${escAttr(s.ref_produit||"")}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(fmtDur(s.duree_heures))}"
@@ -1934,7 +1939,7 @@ function mkRow(e,i,slots){
   const of=escAttr(e.numero_of||e.reference||"—");
   const rfp=escAttr(e.ref_produit||"")||"—";
   const lz=e.laize!=null&&e.laize!==""?escAttr(String(e.laize)):"—";
-  const reelAvance=(e.statut_reel==="reellement_en_saisie"||e.statut_reel==="reellement_termine");
+  const reelAvance=hasSaisieReelle() && (e.statut_reel==="reellement_en_saisie"||e.statut_reel==="reellement_termine");
   const statutLockedForReel=reelAvance && !IS_DIR_OR_SUPER;
   const showStatutSelect=CAN_EDIT&&!statutLockedForReel&&((!isLocked)||IS_DIR_OR_SUPER);
   const statutCell=!showStatutSelect
@@ -1946,8 +1951,9 @@ function mkRow(e,i,slots){
        </select>`;
   const com=escAttr(e.commentaire||"");
   const aplacerRowCls=e.a_placer?"tr-aplacer":"";
-  const reelTermineRowCls=e.statut_reel==="reellement_termine"?"tr-reel-termine":"";
+  const reelTermineRowCls=(hasSaisieReelle() && e.statut_reel==="reellement_termine")?"tr-reel-termine":"";
   const reelBadge=(()=>{
+    if(!hasSaisieReelle()) return "";
     const r=e.statut_reel||"reellement_en_attente";
     if(r==="reellement_termine") return`<span style="font-size:9px;padding:2px 6px;border-radius:4px;background:rgba(148,163,184,.15);color:var(--muted);font-weight:600;letter-spacing:.5px;white-space:nowrap">✓ saisie terminé</span>`;
     if(r==="reellement_en_saisie") return`<span style="font-size:9px;padding:2px 6px;border-radius:4px;background:rgba(52,211,153,.12);color:var(--success);font-weight:600;letter-spacing:.5px;white-space:nowrap">⚙ en saisie</span>`;
@@ -2296,9 +2302,9 @@ function setupStatutSelects(){
             }
             return;
           }
-          if(data.saisie_found===false&&newStat==="termine"){
+          if(hasSaisieReelle() && data.saisie_found===false && newStat==="termine"){
             showToast("Dossier terminé — aucune saisie de production associée.","info");
-          }else if(data.saisie_found===true&&newStat==="termine"){
+          }else if(hasSaisieReelle() && data.saisie_found===true && newStat==="termine"){
             showToast("Dossier terminé — saisie trouvée.","success");
           }else{
             showToast("Statut mis à jour.","success");
@@ -2563,8 +2569,8 @@ function openEdit(id){
   const destockBorder=destockDone?"#38bdf8":"#fb923c";
   const destockColor=destockDone?"#38bdf8":"#fb923c";
   const destockIcon=destockDone?`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`:`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>`;
-  const reelNonDefault=e.statut_reel&&e.statut_reel!=="reellement_en_attente";
-  const resetBlock=(IS_DIR_OR_SUPER&&reelNonDefault)?`<button type="button" class="btn-reset-saisie" data-eid="${id}" onclick="resetSaisieFromModal(${id})" style="margin-top:8px;width:100%;padding:7px;border-radius:6px;border:1px solid rgba(248,113,113,.4);background:rgba(248,113,113,.08);color:var(--danger);font-size:11px;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">${icon('repeat',12)} Réinitialiser la saisie réelle</button>`:"";
+  const reelNonDefault=hasSaisieReelle() && e.statut_reel && e.statut_reel!=="reellement_en_attente";
+  const resetBlock=(hasSaisieReelle() && IS_DIR_OR_SUPER && reelNonDefault)?`<button type="button" class="btn-reset-saisie" data-eid="${id}" onclick="resetSaisieFromModal(${id})" style="margin-top:8px;width:100%;padding:7px;border-radius:6px;border:1px solid rgba(248,113,113,.4);background:rgba(248,113,113,.08);color:var(--danger);font-size:11px;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">${icon('repeat',12)} Réinitialiser la saisie réelle</button>`:"";
   const headerAction=`<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" id="destock-btn-${id}" onclick="toggleDestockage(${id})"
     title="${destockDone?"Matières destockées — cliquer pour annuler":"Matières à destocker — cliquer pour valider"}"
     style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;border:1.5px solid ${destockBorder};background:${destockBg};color:${destockColor};font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;font-family:inherit;white-space:nowrap"
@@ -2669,7 +2675,8 @@ function exportDossiers(){
     if(r==="reellement_en_saisie") return "En saisie";
     return "";
   };
-  const rows=S.entries.map(e=>({
+  const rows=S.entries.map(e=>{
+    const base={
     "Client":       e.client||"",
     "Format":       e.format_l&&e.format_h?`${e.format_l}×${e.format_h} mm`:"",
     "Réf OF":       e.numero_of||e.reference||"",
@@ -2679,9 +2686,11 @@ function exportDossiers(){
     "Commentaire":  e.commentaire||"",
     "Durée (h)":    e.duree_heures||0,
     "Statut":       statLabel(e.statut),
-    "Saisie réelle":reelLabel(e.statut_reel),
     "Déstockage":   e.destockage==="done"?"Oui":"Non",
-  }));
+    };
+    if(hasSaisieReelle()) base["Saisie réelle"]=reelLabel(e.statut_reel);
+    return base;
+  });
   const ws=XLSX.utils.json_to_sheet(rows);
   const colW=[18,16,14,14,8,12,24,10,12,14,10];
   ws["!cols"]=colW.map(w=>({wch:w}));
