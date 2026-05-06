@@ -3,6 +3,7 @@ SIFA — MyDevis : paramètres matière & base prix.
 Accès : application « devis » (rôle par défaut : direction + superadmin ; matrice Paramètres).
 """
 import io
+import os
 import re
 import unicodedata
 from datetime import datetime
@@ -13,6 +14,7 @@ from fastapi import APIRouter, Body, File, Form, HTTPException, Query, Request, 
 
 from database import get_db
 from services.auth_service import get_current_user, user_has_app_access
+from config import DATA_DIR
 
 router = APIRouter()
 
@@ -914,3 +916,230 @@ async def import_excel(
         conn.commit()
 
     return {"imported_params": imported_params, "imported_base": imported_base, "errors": errors}
+
+
+def _pick_latest_matiere_xlsx_under_data() -> Optional[str]:
+    """
+    Sélectionne le fichier Excel matière le plus plausible sous data/.
+    Objectif: permettre l'import "serveur" (même DB que MyDevis) sans ambiguïté de chemin.
+    """
+    try:
+        entries = []
+        for fn in os.listdir(DATA_DIR):
+            lf = fn.lower()
+            if not lf.endswith((".xlsx", ".xlsm")):
+                continue
+            if any(k in lf for k in ("prix", "matiere", "matière")):
+                entries.append(fn)
+        if not entries:
+            return None
+        entries.sort()
+        return os.path.join(DATA_DIR, entries[-1])
+    except Exception:
+        return None
+
+
+@router.post("/import-from-data")
+def import_from_data(
+    request: Request,
+    filename: Optional[str] = Body(None),
+    replace_all: bool = Body(False),
+):
+    """
+    Import matières (Parametres + Base_matières) depuis un fichier présent sur le serveur sous data/.
+
+    - Si filename est absent: prend le dernier .xlsx/.xlsm correspondant (contient 'prix' ou 'matiere')
+    - Écrit dans la DB active de l'app (config.DB_PATH)
+    """
+    _require_devis(request)
+    try:
+        if filename:
+            path = os.path.join(DATA_DIR, str(filename))
+        else:
+            path = _pick_latest_matiere_xlsx_under_data()
+        if not path:
+            raise HTTPException(status_code=404, detail="Aucun fichier Excel matière trouvé dans data/")
+        if not os.path.isfile(path):
+            raise HTTPException(status_code=404, detail="Fichier introuvable dans data/")
+        with open(path, "rb") as f:
+            raw = f.read()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lecture fichier: {e}") from e
+
+    # Réutilise exactement la logique d'import Excel (SIFA + fallback)
+    errors: list[str] = []
+    imported_params = 0
+    imported_base = 0
+    try:
+        sheets = pd.read_excel(io.BytesIO(raw), sheet_name=None, engine="openpyxl")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Lecture Excel: {e}") from e
+
+    now = datetime.now().isoformat()
+    if _is_sifa_matiere_workbook(sheets):
+        sk_p = _sheet_key_parametres_sifa(sheets)
+        if not sk_p:
+            raise HTTPException(status_code=400, detail="Feuille Parametres introuvable")
+        sh_b = _find_sheet(sheets, "Base_matières", "Base_matieres", "Base matières")
+        with get_db() as conn:
+            if replace_all:
+                conn.execute("DELETE FROM matiere_base")
+                conn.execute("DELETE FROM matiere_params")
+            _sifa_apply_workbook_config(conn, sheets[sk_p], now)
+            imported_params, e1 = _import_sifa_parametres(conn, sheets[sk_p], now)
+            errors.extend(e1)
+            if sh_b:
+                imported_base, e2 = _import_sifa_base(conn, sheets[sh_b], now)
+                errors.extend(e2)
+            else:
+                errors.append("Feuille Base_matières introuvable")
+            conn.commit()
+        return {
+            "source": os.path.basename(path),
+            "imported_params": imported_params,
+            "imported_base": imported_base,
+            "errors": errors,
+        }
+
+    # Fallback: appeler l'import générique existant en "copiant" son flux logique
+    sh_p = _find_sheet(sheets, "Parametres", "Paramètres", "parametres")
+    sh_b = _find_sheet(sheets, "Base_matières", "Base_matieres", "Base matières")
+    with get_db() as conn:
+        if replace_all:
+            conn.execute("DELETE FROM matiere_base")
+            conn.execute("DELETE FROM matiere_params")
+        # ── Parametres (générique) ──
+        if sh_p:
+            df = sheets[sh_p].dropna(how="all")
+            if len(df.columns):
+                norm_cols = {_norm_header(c): c for c in df.columns}
+                c_cat = _pick_col(norm_cols, "categorie", "catégorie", "category")
+                c_code = _pick_col(norm_cols, "code")
+                c_des = _pick_col(norm_cols, "designation", "désignation", "libelle", "libellé")
+                c_four = _pick_col(norm_cols, "fournisseur", "supplier")
+                c_pm2 = _pick_col(norm_cols, "poids_m2", "poids m2", "poids_m", "kg_m2", "kg/m2")
+                c_peur = _pick_col(norm_cols, "prix_eur_m2", "prix eur", "eur_m2", "€/m2", "eur m2")
+                c_usd = _pick_col(norm_cols, "prix_usd_kg", "usd kg", "usd_kg", "$/kg")
+                c_tx = _pick_col(norm_cols, "taux_change", "taux change", "taux", "change")
+                c_inc = _pick_col(norm_cols, "incidence_dollar", "incidence", "incidence dollar")
+                c_tr = _pick_col(norm_cols, "transport_total", "transport", "frais transport")
+                c_app = _pick_col(norm_cols, "appellation")
+                c_gr = _pick_col(norm_cols, "grammage", "g/m2", "gsm")
+                c_notes = _pick_col(norm_cols, "notes", "remarques", "commentaire")
+                used = {
+                    c_cat,
+                    c_code,
+                    c_des,
+                    c_four,
+                    c_pm2,
+                    c_peur,
+                    c_usd,
+                    c_tx,
+                    c_inc,
+                    c_tr,
+                    c_app,
+                    c_gr,
+                    c_notes,
+                }
+                for idx, row in df.iterrows():
+                    cat = _str_cell(c_cat and row.get(c_cat))
+                    code = _str_cell(c_code and row.get(c_code))
+                    des = _str_cell(c_des and row.get(c_des))
+                    if not cat or not code or not des:
+                        continue
+                    note_parts = []
+                    if c_notes:
+                        n0 = _str_cell(row.get(c_notes))
+                        if n0:
+                            note_parts.append(n0)
+                    for ec in df.columns:
+                        if ec in used or ec is None:
+                            continue
+                        v = row.get(ec)
+                        if v is not None and not (isinstance(v, float) and pd.isna(v)) and str(v).strip():
+                            note_parts.append(f"{ec}={v}")
+                    notes_val = " | ".join(note_parts) if note_parts else None
+                    txv = _float_cell(row.get(c_tx)) if c_tx else None
+                    if txv is None:
+                        txv = 1.0
+                    incv = _float_cell(row.get(c_inc)) if c_inc else None
+                    if incv is None:
+                        incv = 1.0
+                    try:
+                        conn.execute(
+                            """INSERT INTO matiere_params (
+                                categorie, code, designation, fournisseur, poids_m2, prix_eur_m2, prix_usd_kg,
+                                taux_change, incidence_dollar, transport_total, appellation, grammage, notes, updated_at
+                            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                            (
+                                cat,
+                                code,
+                                des,
+                                _str_cell(c_four and row.get(c_four)) if c_four else None,
+                                _float_cell(row.get(c_pm2)) if c_pm2 else None,
+                                _float_cell(row.get(c_peur)) if c_peur else None,
+                                _float_cell(row.get(c_usd)) if c_usd else None,
+                                txv,
+                                incv,
+                                _float_cell(row.get(c_tr)) if c_tr else 0,
+                                _str_cell(c_app and row.get(c_app)) if c_app else None,
+                                _int_cell(row.get(c_gr)) if c_gr else None,
+                                notes_val,
+                                now,
+                            ),
+                        )
+                        imported_params += 1
+                    except Exception as e:
+                        errors.append(f"Parametres ligne {idx}: {e}")
+        # ── Base_matières (générique) ──
+        if sh_b:
+            df = sheets[sh_b].dropna(how="all")
+            if len(df.columns):
+                norm_cols = {_norm_header(c): c for c in df.columns}
+                c_ref = _pick_col(norm_cols, "ref_interne", "ref", "reference", "réf", "ref.")
+                c_des = _pick_col(norm_cols, "designation", "désignation", "libelle")
+                c_front = _pick_col(norm_cols, "frontal", "papier frontal", "support")
+                c_type = _pick_col(norm_cols, "type_adhesion", "type adhesion", "type", "adhesion")
+                c_adh = _pick_col(norm_cols, "adhesif", "adhésif")
+                c_sil = _pick_col(norm_cols, "silicone")
+                c_gla = _pick_col(norm_cols, "glassine")
+                c_mar = _pick_col(norm_cols, "marqueur")
+                c_pc = _pick_col(norm_cols, "prix_cohesio", "cohesio", "cohésio", "prix cohesio")
+                c_pr = _pick_col(norm_cols, "prix_rotoflex", "rotoflex", "prix rotoflex")
+                for idx, row in df.iterrows():
+                    des = _str_cell(c_des and row.get(c_des)) or _str_cell(row.get(df.columns[0]))
+                    if not des:
+                        continue
+                    try:
+                        conn.execute(
+                            """INSERT INTO matiere_base (
+                                ref_interne, designation, frontal, type_adhesion, adhesif, silicone, glassine,
+                                marqueur, prix_cohesio, prix_rotoflex, updated_at
+                            ) VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                            (
+                                _int_cell(row.get(c_ref)) if c_ref else None,
+                                des,
+                                _str_cell(c_front and row.get(c_front)) if c_front else None,
+                                _str_cell(c_type and row.get(c_type)) if c_type else None,
+                                _str_cell(c_adh and row.get(c_adh)) if c_adh else None,
+                                _str_cell(c_sil and row.get(c_sil)) if c_sil else None,
+                                _str_cell(c_gla and row.get(c_gla)) if c_gla else None,
+                                _str_cell(c_mar and row.get(c_mar)) if c_mar else None,
+                                _float_cell(row.get(c_pc)) if c_pc else None,
+                                _float_cell(row.get(c_pr)) if c_pr else None,
+                                now,
+                            ),
+                        )
+                        imported_base += 1
+                    except Exception as e:
+                        errors.append(f"Base_matières ligne {idx}: {e}")
+        conn.commit()
+
+    return {
+        "source": os.path.basename(path),
+        "imported_params": imported_params,
+        "imported_base": imported_base,
+        "errors": errors,
+    }

@@ -20,7 +20,15 @@ from datetime import datetime
 
 # ── Chemin DB ─────────────────────────────────────────────────────
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB_PATH  = os.getenv("DB_PATH", os.path.join(BASE_DIR, "data", "production.db"))
+# Toujours s'aligner sur la config applicative (évite "bonne DB / mauvais chemin").
+try:
+    from config import DB_PATH as _APP_DB_PATH  # type: ignore
+except Exception:
+    _APP_DB_PATH = None
+DB_PATH = os.getenv(
+    "DB_PATH",
+    _APP_DB_PATH or os.path.join(BASE_DIR, "data", "production.db"),
+)
 
 # ── Chemin Excel ──────────────────────────────────────────────────
 if len(sys.argv) > 1:
