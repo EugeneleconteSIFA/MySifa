@@ -51,13 +51,27 @@ function createWindow() {
 function createTray() {
   let icon;
   try {
-    icon = nativeImage.createFromPath(path.join(__dirname, 'assets', 'icon.png'));
-    if (!icon.isEmpty()) icon = icon.resize({ width: 16, height: 16 });
+    // Icône template macOS (vectorielle) pour éviter le pixelisé
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+        <path fill="#000" d="M4 18V6h3.1l2.9 7.2L12.9 6H16v12h-2V9.9l-2.6 6.5h-1.8L7 9.9V18H4Z"/>
+        <path fill="#000" d="M12 2.5a9.5 9.5 0 1 0 0 19a9.5 9.5 0 0 0 0-19Zm0 1.8a7.7 7.7 0 1 1 0 15.4a7.7 7.7 0 0 1 0-15.4Z" opacity=".0"/>
+      </svg>
+    `.trim();
+    icon = nativeImage.createFromDataURL(
+      'data:image/svg+xml;utf8,' + encodeURIComponent(svg)
+    );
+    if (!icon.isEmpty()) icon = icon.resize({ width: 18, height: 18, quality: 'best' });
   } catch (_) {
     icon = nativeImage.createEmpty();
   }
 
   tray = new Tray(icon);
+  if (process.platform === 'darwin') {
+    try { icon.setTemplateImage(true); } catch (_) {}
+    try { tray.setTitle(''); } catch (_) {}
+    try { tray.setIgnoreDoubleClickEvents?.(true); } catch (_) {}
+  }
   tray.setToolTip('MyProd Widget — Statut machines');
 
   const menu = Menu.buildFromTemplate([
@@ -102,6 +116,15 @@ function refresh() {
 
 // ── IPC ─────────────────────────────────────────────────────────────────────
 ipcMain.on('widget-close',  () => mainWindow?.hide());
+ipcMain.on('widget-resize', (_, data) => {
+  if (!mainWindow || !data) return;
+  const w = Math.max(300, Math.min(500, Number(data.width || CONFIG.width)));
+  const h = Math.max(160, Math.min(600, Number(data.height || CONFIG.height)));
+  const [cw] = mainWindow.getSize();
+  // On garde une largeur fixe (widget), on ajuste surtout la hauteur.
+  const nextW = cw || w;
+  mainWindow.setSize(nextW, h, false);
+});
 ipcMain.on('status-alert',  (_, data) => {
   if (data.status === 'arret') {
     tray?.displayBalloon({

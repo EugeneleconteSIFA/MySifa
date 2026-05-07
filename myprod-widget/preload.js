@@ -13,6 +13,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // Écouter les demandes de rafraîchissement depuis le main
   onRefresh: (callback) => ipcRenderer.on('widget-refresh', callback),
+
+  // Ajuster la taille de la fenêtre (auto-fit au contenu)
+  resizeTo: (width, height) => ipcRenderer.send('widget-resize', { width, height }),
   
   // Supprimer les listeners
   removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel),

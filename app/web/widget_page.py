@@ -255,6 +255,8 @@ function renderLogin(message){
     e.preventDefault();
     window.open('/', '_blank');
   });
+
+  requestFit();
 }
 
 async function load(){
@@ -273,10 +275,12 @@ async function load(){
     const n=new Date();
     footer.textContent='Actualisé à '+n.toLocaleTimeString('fr-FR');
     loadingFirst=false;
+    requestFit();
   }catch(e){
     if(loadingFirst){
       main.innerHTML=`<div class="offline"><div>⚠️ Connexion impossible</div></div>`;
       footer.textContent='';
+      requestFit();
     }
   }
 }
@@ -308,6 +312,19 @@ document.getElementById('btn-close').onclick=()=>{
   if(window.electronAPI)window.electronAPI.close();
   else window.close();
 };
+
+function requestFit(){
+  if(!window.electronAPI || !window.electronAPI.resizeTo) return;
+  requestAnimationFrame(()=>{
+    const tb=document.querySelector('.tb');
+    const main=document.getElementById('main');
+    const ft=document.getElementById('footer');
+    const h = (tb?.offsetHeight||0) + (main?.scrollHeight||0) + (ft?.offsetHeight||0);
+    // marges + shadow
+    const target = Math.max(160, Math.min(520, h + 8));
+    window.electronAPI.resizeTo(340, target);
+  });
+}
 </script>
 </body>
 </html>"""
