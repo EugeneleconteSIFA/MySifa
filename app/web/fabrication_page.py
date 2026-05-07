@@ -1526,9 +1526,10 @@ function renderMain(){
           onClick:()=>set({showCommentModal:true, commentSaisieId:s.id, commentText:s.commentaire||''})
         }, svgIcon(s.commentaire?'edit':'message-square',13));
 
+        const opNom = (s.operateur_nom || s.operateur || '—');
         return h('tr',{className:'fab-table-row'+(isLast?' fab-row-last':'')},
           h('td',null, h('span',{className:'fab-time'}, fmtTime(s.date_operation))),
-          ...(isAdminView ? [h('td',null, h('span',{style:{fontWeight:'700',color:'var(--text2)'}}, (s.operateur||'—')))] : []),
+          ...(isAdminView ? [h('td',null, h('span',{style:{fontWeight:'800',color:'var(--text)'}}, opNom))] : []),
           h('td',null,
             h('span',{className:'fab-op-chip',style:{background:chipColor+'22',color:chipColor}},
               h('span',{className:'fab-op-chip-code'},code)
@@ -1561,11 +1562,16 @@ function renderMain(){
         ? ('Dossier : '+S.dossier.reference)
         : "Saisie de production"
       ),
-      canAdminView ? h('div',{style:{marginLeft:'auto',display:'flex',gap:'8px',alignItems:'center'}},
-        h('button',{type:'button',className:'fab-btn fab-btn-ghost fab-btn-sm',onClick:()=>setSaisieViewMode('operator'),
-          style:{borderColor:(!isAdminView)?'var(--accent)':'var(--border)',color:(!isAdminView)?'var(--accent)':'var(--text2)'}},'Opérateur'),
-        h('button',{type:'button',className:'fab-btn fab-btn-ghost fab-btn-sm',onClick:()=>setSaisieViewMode('admin'),
-          style:{borderColor:(isAdminView)?'var(--accent)':'var(--border)',color:(isAdminView)?'var(--accent)':'var(--text2)'}},'Admin')
+      canAdminView ? h('div',{style:{marginLeft:'auto',display:'flex',alignItems:'center',gap:'10px'}},
+        h('div',{style:{display:'inline-flex',border:'1px solid var(--border)',borderRadius:'12px',overflow:'hidden',background:'var(--card)'}},
+          h('button',{type:'button',onClick:()=>setSaisieViewMode('operator'),
+            style:{border:'none',padding:'8px 12px',cursor:'pointer',fontFamily:'inherit',fontWeight:'800',fontSize:'12px',
+              background:(!isAdminView)?'var(--accent-bg)':'transparent',color:(!isAdminView)?'var(--accent)':'var(--text2)'}},'Opérateur'),
+          h('button',{type:'button',onClick:()=>setSaisieViewMode('admin'),
+            style:{border:'none',padding:'8px 12px',cursor:'pointer',fontFamily:'inherit',fontWeight:'800',fontSize:'12px',
+              background:(isAdminView)?'var(--accent-bg)':'transparent',color:(isAdminView)?'var(--accent)':'var(--text2)'}},'Admin')
+        ),
+        isAdminView ? h('span',{style:{fontSize:'11px',fontWeight:'800',color:'var(--muted)',letterSpacing:'.4px',textTransform:'uppercase'}},'Lecture seule') : null
       ) : null,
       alert ? null : null,
       h('span',{className:'fab-etat-badge '+etatClass(S.etat)}, etatLabel(S.etat)),
@@ -1587,6 +1593,17 @@ function renderMain(){
 
 /* ── Footer ──────────────────────────────────────────────────── */
 function renderFooter(){
+  // Vue admin : lecture seule → ne pas afficher le footer d'actions (évite toute confusion).
+  const isAdminUser = S.user && (S.user.role==='superadmin'||S.user.role==='administration'||S.user.role==='direction');
+  const isAdminView = !!isAdminUser && S.saisieViewMode==='admin';
+  if(isAdminView){
+    return h('div',{className:'fab-footer',style:{justifyContent:'center'}},
+      h('div',{style:{fontSize:'12px',color:'var(--muted)',fontWeight:'800',letterSpacing:'.4px',textTransform:'uppercase'}},
+        'Vue admin — lecture seule'
+      )
+    );
+  }
+
   // Left: dossier info
   let infoSection;
   if(S.dossier){
@@ -1624,7 +1641,7 @@ function renderFooter(){
   const e = S.etat;
 
   // Résoudre la machine effective (liée au compte ou sélectionnée par l'admin)
-  const isAdminUser = S.user && (S.user.role==='superadmin'||S.user.role==='administration'||S.user.role==='direction');
+  // (déjà calculé plus haut)
   // Admin/direction/superadmin : machine liée au compte OU machine sélectionnée via le sélecteur
   const hasMachine = !!(S.user && S.user.machine_id) || !!(isAdminUser && S.adminMachineId);
 

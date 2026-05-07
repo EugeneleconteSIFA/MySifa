@@ -130,16 +130,26 @@ ipcMain.on('status-alert',  (_, data) => {
 
 // ── Cycle de vie ─────────────────────────────────────────────────────────────
 app.whenReady().then(() => {
-  createWindow();
-  createTray();
+  console.log('[main] app ready');
+  try {
+    createWindow();
+    console.log('[main] window created');
+  } catch(e) { console.error('[main] createWindow failed:', e); }
 
-  const { globalShortcut } = require('electron');
-  globalShortcut.register('CommandOrControl+Shift+M', () => toggleWindow());
-  globalShortcut.register('CommandOrControl+Shift+R', () => refresh());
+  try {
+    createTray();
+    console.log('[main] tray created');
+  } catch(e) { console.error('[main] createTray failed:', e); }
 
-  // Auto-refresh
+  try {
+    const { globalShortcut } = require('electron');
+    globalShortcut.register('CommandOrControl+Shift+M', () => toggleWindow());
+    globalShortcut.register('CommandOrControl+Shift+R', () => refresh());
+  } catch(e) { console.error('[main] shortcuts failed:', e); }
+
   if (CONFIG.refreshInterval > 0) setInterval(refresh, CONFIG.refreshInterval);
-});
+  console.log('[main] init complete');
+}).catch(e => console.error('[main] whenReady failed:', e));
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('activate',          () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });

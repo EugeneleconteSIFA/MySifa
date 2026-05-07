@@ -14,6 +14,7 @@ from services.auth_service import (
     get_current_user,
     get_optional_user,
     hash_password,
+    verify_password,
     merged_app_access,
     parse_access_overrides_raw,
     require_superadmin,
@@ -244,7 +245,7 @@ def me(request: Request):
         return PlainResponse(content=b"null", media_type="application/json")
     with get_db() as conn:
         row = conn.execute(
-            "SELECT id,email,identifiant,nom,role,operateur_lie,machine_id,telephone,access_overrides,portal_apps_order FROM users WHERE id=?",
+            "SELECT id,email,identifiant,nom,role,operateur_lie,machine_id,telephone,adresse,date_naissance,access_overrides,portal_apps_order FROM users WHERE id=?",
             (user["id"],)
         ).fetchone()
     if not row:
@@ -272,9 +273,16 @@ async def update_me(request: Request):
         nom = str(body.get("nom") or exd.get("nom") or "").strip()
         email = str(body.get("email") or exd.get("email") or "").strip().lower()
         telephone = str(body.get("telephone") or exd.get("telephone") or "").strip()
+        adresse = str(body.get("adresse") if ("adresse" in body) else (exd.get("adresse") or "")).strip()
+        date_naissance = str(body.get("date_naissance") if ("date_naissance" in body) else (exd.get("date_naissance") or "")).strip()
         pwd_hash = exd["password_hash"]
 
         if "password" in body and body["password"]:
+            current_pwd = str(body.get("current_password") or "").strip()
+            if not current_pwd:
+                raise HTTPException(status_code=400, detail="Mot de passe actuel requis")
+            if not verify_password(current_pwd, exd.get("password_hash") or ""):
+                raise HTTPException(status_code=403, detail="Mot de passe actuel invalide")
             if len(body["password"]) < 8:
                 raise HTTPException(status_code=400, detail="Mot de passe minimum 8 caractères")
             # Vérifier confirmation
@@ -295,8 +303,8 @@ async def update_me(request: Request):
             portal_val = _normalize_portal_order_for_db(body.get("portal_apps_order"))
 
         conn.execute(
-            "UPDATE users SET nom=?,email=?,telephone=?,password_hash=?,portal_apps_order=? WHERE id=?",
-            (nom, email, telephone, pwd_hash, portal_val, user["id"]),
+            "UPDATE users SET nom=?,email=?,telephone=?,adresse=?,date_naissance=?,password_hash=?,portal_apps_order=? WHERE id=?",
+            (nom, email, telephone, adresse or None, date_naissance or None, pwd_hash, portal_val, user["id"]),
         )
         conn.commit()
 

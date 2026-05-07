@@ -7315,14 +7315,21 @@ function renderProfil(userData){
     mkField('Nom complet','nom'),
     mkField('Email','email','email'),
     mkField('Téléphone','telephone','tel'),
+    mkField('Adresse','adresse','text'),
+    mkField('Date de naissance','date_naissance','date'),
   ];
 
   // Champ mot de passe
+  const curPwdI=h('input',{type:'password',placeholder:'Mot de passe actuel'});
   const pwdI=h('input',{type:'password',placeholder:'Nouveau mot de passe (laisser vide = inchangé)'});
   const pwdCI=h('input',{type:'password',placeholder:'Confirmer le mot de passe'});
-  inputs.password=pwdI;inputs.password_confirm=pwdCI;
+  inputs.current_password=curPwdI;inputs.password=pwdI;inputs.password_confirm=pwdCI;
 
   const pwdSection=h('div',null,
+    h('div',{style:{marginBottom:'14px'}},
+      h('label',{style:{display:'block',fontSize:'11px',fontWeight:'600',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'5px'}},'Mot de passe actuel'),
+      curPwdI
+    ),
     h('div',{style:{marginBottom:'14px'}},
       h('label',{style:{display:'block',fontSize:'11px',fontWeight:'600',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'5px'}},'Nouveau mot de passe'),
       pwdI
@@ -7339,6 +7346,10 @@ function renderProfil(userData){
       if(el.type==='checkbox') body[k]=el.checked?1:0;
       else if(el.value!==undefined) body[k]=el.value;
     });
+    // Si aucun changement de mot de passe, ne pas envoyer les champs liés
+    if(!body.password){
+      delete body.current_password;
+    }
     if(!body.password) delete body.password;
     if(!body.password_confirm) delete body.password_confirm;
     await saveProfil(body);

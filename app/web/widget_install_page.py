@@ -46,7 +46,7 @@ body.light{
   --accent:#0891b2;
   --accent-bg: rgba(8,145,178,0.12);
 }
-.container{max-width:1040px;width:100%}
+.container{max-width:none;width:100%}
 .header{position:relative;text-align:center;margin-bottom:28px}
 .header h1{font-size:22px;font-weight:700;margin-bottom:8px}
 .header p{color:var(--text2);font-size:14px}
@@ -60,8 +60,12 @@ body.light{
   font-size:12px;
   font-weight:800;
   cursor:pointer;transition:filter .15s;
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
 }
 .theme-btn:hover{filter:brightness(1.05)}
+.theme-btn svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;opacity:.9}
 .options{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
 .option{
   background:var(--card);border:1px solid var(--border);
@@ -125,7 +129,7 @@ body.light{
   color:var(--text);
 }
 @media(max-width:840px){
-  .container{max-width:720px}
+  .container{max-width:none}
 }
 @media(max-width:560px){
   .header{padding-top:46px}
@@ -137,7 +141,7 @@ body.light{
 <body>
 <div class="container">
   <div class="header">
-    <button class="theme-btn" id="theme-btn" type="button" title="Thème sombre / clair">Thème</button>
+    <button class="theme-btn" id="theme-btn" type="button" title="Mode sombre / mode clair"></button>
     <h1>MyProd Widget</h1>
     <p>Surveillance des machines Cohésio 1 &amp; 2 — icône dans la barre système</p>
   </div>
@@ -175,10 +179,20 @@ body.light{
 
 <script>
 (function(){
+  const ICON_MOON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
+  const ICON_SUN  = `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
+  const btn = document.getElementById('theme-btn');
+
+  function syncBtn(){
+    if(!btn) return;
+    const isLight = document.body.classList.contains('light');
+    btn.innerHTML = (isLight ? ICON_SUN : ICON_MOON) + (isLight ? 'Mode clair' : 'Mode sombre');
+  }
   function applyTheme(mode){
     const light = mode === 'light';
     document.body.classList.toggle('light', light);
     try{ localStorage.setItem('mysifa_install_theme', light ? 'light' : 'dark'); }catch(e){}
+    syncBtn();
   }
   function toggleTheme(){
     applyTheme(document.body.classList.contains('light') ? 'dark' : 'light');
@@ -187,7 +201,7 @@ body.light{
     const saved = localStorage.getItem('mysifa_install_theme');
     if(saved === 'light' || saved === 'dark') applyTheme(saved);
   }catch(e){}
-  const btn = document.getElementById('theme-btn');
+  syncBtn();
   if(btn) btn.addEventListener('click', toggleTheme);
 })();
 </script>

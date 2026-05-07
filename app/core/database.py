@@ -1247,6 +1247,16 @@ def _migrate(conn):
             conn.execute("ALTER TABLE fab_matieres_utilisees ADD COLUMN certificat_fsc_manual TEXT")
         _record_schema_migration(conn, 18, "fab_traca_link_receptions")
 
+    # v19 — Profil utilisateur : adresse + date de naissance
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=19 LIMIT 1").fetchone():
+        ucols = {r["name"] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
+        if "adresse" not in ucols:
+            conn.execute("ALTER TABLE users ADD COLUMN adresse TEXT")
+        if "date_naissance" not in ucols:
+            # ISO YYYY-MM-DD
+            conn.execute("ALTER TABLE users ADD COLUMN date_naissance TEXT")
+        _record_schema_migration(conn, 19, "users_adresse_date_naissance")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

@@ -273,7 +273,7 @@ def get_session(request: Request, machine_id: int = None):
 
 @router.get("/api/fabrication/saisies-jour")
 def list_saisies_jour_all(request: Request):
-    """Vue admin (lecture seule) : toutes les saisies du jour, triées par opérateur puis heure."""
+    """Vue admin (lecture seule) : toutes les saisies du jour, triées par machine puis heure."""
     user = get_current_user(request)
     _check_fab_access(user)
     if not is_admin(user):
@@ -284,10 +284,18 @@ def list_saisies_jour_all(request: Request):
     with get_db() as conn:
         rows = conn.execute(
             """
-            SELECT *
-            FROM production_data
+            SELECT
+              pd.*,
+              COALESCE(u.nom, pd.operateur) AS operateur_nom
+            FROM production_data pd
+            LEFT JOIN users u
+              ON (
+                trim(lower(u.operateur_lie)) = trim(lower(pd.operateur))
+                OR trim(lower(u.nom)) = trim(lower(pd.operateur))
+              )
             WHERE (date_operation LIKE ? OR date_operation LIKE ?)
-            ORDER BY operateur COLLATE NOCASE ASC, date_operation ASC, id ASC
+            ORDER BY trim(COALESCE(pd.machine,'')) COLLATE NOCASE ASC,
+                     pd.date_operation ASC, pd.id ASC
             """,
             (today + "%", today_fr + "%"),
         ).fetchall()

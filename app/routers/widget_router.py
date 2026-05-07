@@ -68,7 +68,7 @@ def install_widget_page(request: Request):
     if dmg_any or exe:
         mode = (
             "<div class=\"mode-banner\">"
-            "<strong>Mode natif</strong> — installateurs autonomes disponibles."
+            "<strong>Installateurs disponibles</strong> — téléchargement direct (macOS / Windows)."
             "</div>"
         )
     else:
