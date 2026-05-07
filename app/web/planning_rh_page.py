@@ -687,6 +687,7 @@ function congeJoursBitmask(userId, ws){
 // ── État global ────────────────────────────────────────
 const S = {
   user: null, isEditor: false, tab: 'planning',
+  isReadOnlyAdmin: false,
   viewRange: 4, baseOffset: 0, detailMode: false,
   machines: [], personnel: [], planning: [], conges: [], soldes: [],
   annee: new Date().getFullYear(),
@@ -735,7 +736,7 @@ function fmtWeekLong(ws){
 }
 function getWeeksToShow(){
   // For operators in read-only view, use opViewRange and opOffset
-  const isOperator = !S.isEditor && S.user;
+  const isOperator = !S.isEditor && !S.isReadOnlyAdmin && S.user;
   const range = isOperator ? S.opViewRange : S.viewRange;
   const offset = isOperator ? S.opOffset : S.baseOffset;
   const base=addWeeks(weekStr(new Date()),offset);
@@ -1039,6 +1040,7 @@ async function loadMe(){
     const hasPlanningRHOverride = d.access_overrides && d.access_overrides.planning_rh === true;
     const email = String(d.email||'').trim().toLowerCase();
     S.isEditor=(['direction','superadmin'].includes(d.role) || hasPlanningRHOverride || email==='mlesaffre@sifa.pro');
+    S.isReadOnlyAdmin = (d.role === 'administration') && !S.isEditor;
   }}
   catch(e){}
 }
@@ -1124,7 +1126,7 @@ function openSupportRH(){
 function renderHeader(){
   const hdr=document.getElementById('rh-hdr');
   if(!hdr)return;
-  const isEditor=S.isEditor;
+  const isEditor=S.isEditor || S.isReadOnlyAdmin;
 
   if(!isEditor){
     // Vue opérateur — header simplifié
@@ -1176,7 +1178,7 @@ function renderContent(){
   const c=document.getElementById('rh-content');
   if(!c)return;
   if(S.loading){c.innerHTML=`<div class="rh-loading"><div class="rh-spinner"></div> Chargement…</div>`;renderModals();return;}
-  if(!S.isEditor){c.innerHTML='';c.appendChild(buildOperatorView());renderModals();return;}
+  if(!S.isEditor && !S.isReadOnlyAdmin){c.innerHTML='';c.appendChild(buildOperatorView());renderModals();return;}
   if(S.tab==='planning'){c.innerHTML='';c.appendChild(buildPlanningGrid());}
   else if(S.tab==='conges'){c.innerHTML='';c.appendChild(buildCongesTab());}
   renderModals();
@@ -2397,7 +2399,7 @@ function printConges(){
 (async()=>{
   if(localStorage.getItem('theme')==='light') document.body.classList.add('light');
   await loadMe();
-  if(S.isEditor)S.viewRange=4; else S.viewRange=1;
+  if(S.isEditor || S.isReadOnlyAdmin)S.viewRange=4; else S.viewRange=1;
   await loadMachines();
   await loadData();
   if(S.tab==='conges')await loadSoldes();
