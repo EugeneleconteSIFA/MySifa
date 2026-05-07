@@ -432,6 +432,11 @@ table.fab-traca-table th{font-size:10px;color:var(--muted);font-weight:700;
 table.fab-traca-table td{padding:7px 10px;border-bottom:1px solid var(--border)}
 table.fab-traca-table tr:last-child td{border-bottom:none}
 .fab-traca-code{font-family:monospace;font-weight:700;color:var(--accent)}
+.fab-traca-supplier{font-weight:700;color:var(--text)}
+.fab-traca-cert{font-family:monospace;font-weight:700;color:var(--text2);font-size:11px}
+.fab-traca-link{font-size:11px;font-weight:800;letter-spacing:.3px;text-transform:uppercase}
+.fab-traca-link.ok{color:var(--success)}
+.fab-traca-link.bad{color:var(--danger)}
 .fab-traca-del{background:none;border:none;cursor:pointer;color:var(--muted);padding:2px 6px;
   border-radius:4px;transition:color .12s}
 .fab-traca-del:hover{color:var(--danger)}
@@ -1143,8 +1148,79 @@ async function tracaSaveCode(code){
       render();
       showToast('✓ Bobine enregistrée','success');
     }
-  }catch(e){ showToast(e.message,'danger'); }
+  }catch(e){
+    const msg = String((e && e.message) || '');
+    if(msg.toLowerCase().includes('fournisseur requis')){
+      await loadFournisseursFSC();
+      const fid = await tracaAskFournisseur();
+      if(fid){
+        try{
+          const body2 = {code_barre:clean, fournisseur_fsc_id: fid};
+          const mid2 = (S.user&&S.user.machine_id) || S.adminMachineId;
+          if(mid2) body2.machine_id = mid2;
+          if(S.dossier) body2.no_dossier = S.dossier.reference;
+          const d2 = await apiFetch('/api/fabrication/matieres',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body2)});
+          if(d2.success){
+            S.tracaMatieres = [...S.tracaMatieres, d2.matiere];
+            S.tracaLastCode = clean;
+            S.tracaManual = '';
+            render();
+            showToast('Bobine enregistrée.','success');
+            return;
+          }
+        }catch(e2){
+          showToast((e2 && e2.message) || 'Erreur de liaison fournisseur.','danger');
+        }
+      }
+      return;
+    }
+    showToast(e.message,'danger');
+  }
   finally{ set({tracaAutoSaving:false}); }
+}
+
+function tracaAskFournisseur(){
+  return new Promise((resolve) => {
+    const list = Array.isArray(FOURNISSEURS_FSC) ? FOURNISSEURS_FSC : [];
+    document.getElementById('traca-fournisseur-modal')?.remove();
+    const backdrop=document.createElement('div');
+    backdrop.id='traca-fournisseur-modal';
+    backdrop.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9200;display:flex;align-items:center;justify-content:center;padding:16px';
+    const box=document.createElement('div');
+    box.style.cssText='background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;max-width:420px;width:100%';
+    const opts = list
+      .map(x=>`<option value="${Number(x.id)}">${escHtml(x.nom||'')}</option>`)
+      .join('');
+    box.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px">
+        <div style="font-size:14px;font-weight:800">Merci de renseigner le fournisseur</div>
+        <button type="button" id="tf-close" style="background:none;border:none;cursor:pointer;color:var(--text2);font-size:20px;line-height:1;padding:2px 6px">&times;</button>
+      </div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:10px">
+        Ce code-barres n'est lié à aucune réception matière.
+      </div>
+      <label style="font-size:10px;color:var(--muted);font-weight:800;letter-spacing:.4px;text-transform:uppercase;display:block;margin-bottom:6px">Fournisseur</label>
+      <select id="tf-sel" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;font-size:13px">
+        <option value="">— Choisir —</option>
+        ${opts}
+      </select>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+        <button type="button" id="tf-cancel" class="fab-btn fab-btn-ghost fab-btn-sm">Annuler</button>
+        <button type="button" id="tf-ok" class="fab-btn fab-btn-primary fab-btn-sm" disabled>Valider</button>
+      </div>
+    `;
+    backdrop.appendChild(box);
+    function close(v){ try{ backdrop.remove(); }catch(_){} resolve(v); }
+    backdrop.onclick=(e)=>{ if(e.target===backdrop) close(null); };
+    box.querySelector('#tf-close').onclick=()=>close(null);
+    box.querySelector('#tf-cancel').onclick=()=>close(null);
+    box.querySelector('#tf-cancel').onclick=()=>close(null);
+    const sel = box.querySelector('#tf-sel');
+    const ok = box.querySelector('#tf-ok');
+    sel.onchange=()=>{ ok.disabled = !sel.value; };
+    ok.onclick=()=>{ const v = sel.value ? Number(sel.value) : null; close(v||null); };
+    document.body.appendChild(backdrop);
+  });
 }
 
 async function tracaDeleteMatiere(id){
@@ -1269,15 +1345,23 @@ function renderTracaPanel(){
     ? matieres.slice().reverse().map(m=>{
         const dt = m.scanned_at ? new Date(m.scanned_at) : null;
         const timeStr = dt&&!isNaN(dt) ? dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : '—';
+        const fournisseur = (m.fournisseur || '').trim();
+        const cert = (m.certificat_fsc || '').trim();
+        const mode = (m.liaison_mode || '').trim();
+        const isLinked = mode === 'reception';
+        const linkLbl = isLinked ? 'Lié à une réception' : 'Liaison manuelle';
         return h('tr',null,
           h('td',null,h('span',{className:'fab-traca-code'},m.code_barre)),
+          h('td',null,fournisseur ? h('span',{className:'fab-traca-supplier'},fournisseur) : h('span',{style:{color:'var(--muted)',fontStyle:'italic'}},'—')),
+          h('td',null,cert ? h('span',{className:'fab-traca-cert'},cert) : h('span',{style:{color:'var(--muted)',fontStyle:'italic'}},'—')),
+          h('td',null,h('span',{className:'fab-traca-link '+(isLinked?'ok':'bad')},linkLbl)),
           h('td',null,m.no_dossier||h('span',{style:{color:'var(--muted)',fontStyle:'italic'}},'—')),
           h('td',null,timeStr),
           h('td',null,h('button',{className:'fab-traca-del',title:'Supprimer',
             onClick:()=>tracaDeleteMatiere(m.id)},svgIcon('trash',12)))
         );
       })
-    : [h('tr',null,h('td',{colSpan:'4',className:'fab-traca-empty'},
+    : [h('tr',null,h('td',{colSpan:'7',className:'fab-traca-empty'},
         S.tracaLoading ? 'Chargement…' : 'Aucune bobine scannée aujourd\'hui'
       ))];
 
@@ -1350,7 +1434,13 @@ function renderTracaPanel(){
       h('div',{className:'fab-traca-table-wrap'},
         h('table',{className:'fab-traca-table'},
           h('thead',null,h('tr',null,
-            h('th',null,'Code barre'),h('th',null,'Dossier'),h('th',null,'Heure'),h('th',null,'')
+            h('th',null,'Code barre'),
+            h('th',null,'Fournisseur'),
+            h('th',null,'Certificat FSC'),
+            h('th',null,'Liaison'),
+            h('th',null,'Dossier'),
+            h('th',null,'Heure'),
+            h('th',null,'')
           )),
           h('tbody',null,...tableRows)
         )

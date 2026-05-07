@@ -1891,7 +1891,9 @@ function mkTL(mon,slots){
     if(ep<sp){ const t=sp;sp=ep;ep=t; }
     const visibleWorkH = ep - sp;
     const spansMultipleWeeks = getMon(ss).getTime() !== getMon(se).getTime();
-    if(spansMultipleWeeks && visibleWorkH < TL_MIN_VISIBLE_H_WHEN_SPLIT) return;
+    // IMPORTANT: un dossier "terminé" peut légitimement chevaucher 2 semaines.
+    // On n'applique pas le seuil de masquage sur les terminés (affichage uniquement).
+    if(spansMultipleWeeks && (s.statut!=="termine") && visibleWorkH < TL_MIN_VISIBLE_H_WHEN_SPLIT) return;
     const l=(sp/tot)*100,w=Math.max(.5,((ep-sp)/tot)*100);
     const co=colorForId(s.entry_id||idx+1);
     const fm=s.format_l&&s.format_h?`${s.format_l} × ${s.format_h} mm`:"";

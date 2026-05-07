@@ -590,26 +590,90 @@ def list_matieres(request: Request, machine_id: int = None, no_dossier: str = No
         operateur = user.get("nom") or ""
 
     with get_db() as conn:
+        select_sql = """
+            SELECT
+              fmu.*,
+              sr.id AS reception_id_found,
+              COALESCE(sr.fournisseur, fmu.fournisseur_manual) AS fournisseur,
+              COALESCE(sr.certificat_fsc, fmu.certificat_fsc_manual) AS certificat_fsc,
+              CASE
+                WHEN sr.id IS NOT NULL THEN 'reception'
+                WHEN fmu.fournisseur_manual IS NOT NULL THEN 'manual'
+                ELSE NULL
+              END AS liaison_mode_resolved
+            FROM fab_matieres_utilisees fmu
+            LEFT JOIN stock_receptions sr
+              ON sr.id = (
+                SELECT i.reception_id
+                FROM stock_reception_items i
+                WHERE trim(i.code_barre) = trim(fmu.code_barre)
+                ORDER BY i.scanned_at DESC, i.id DESC
+                LIMIT 1
+              )
+        """
         if no_dossier:
             rows = conn.execute(
-                """SELECT * FROM fab_matieres_utilisees
-                   WHERE no_dossier = ?
-                   ORDER BY scanned_at ASC""",
+                select_sql + """
+                   WHERE fmu.no_dossier = ?
+                   ORDER BY fmu.scanned_at ASC""",
                 (no_dossier,),
             ).fetchall()
         elif mid:
             today = _today_prefix()
             today_fr = date.today().strftime("%d/%m/%Y")
             rows = conn.execute(
-                """SELECT * FROM fab_matieres_utilisees
-                   WHERE machine_id = ? AND (scanned_at LIKE ? OR scanned_at LIKE ?)
-                   ORDER BY scanned_at ASC""",
+                select_sql + """
+                   WHERE fmu.machine_id = ? AND (fmu.scanned_at LIKE ? OR fmu.scanned_at LIKE ?)
+                   ORDER BY fmu.scanned_at ASC""",
                 (mid, today + "%", today_fr + "%"),
             ).fetchall()
         else:
             rows = []
 
-    return {"matieres": [dict(r) for r in rows]}
+    matieres = []
+    for r in rows:
+        d = dict(r)
+        # Normalise: si une réception est trouvée, elle prime sur une éventuelle liaison manuelle
+        if d.get("reception_id_found"):
+            d["reception_id"] = d.get("reception_id_found")
+            d["liaison_mode"] = "reception"
+        else:
+            d["liaison_mode"] = d.get("liaison_mode_resolved") or d.get("liaison_mode")
+        d.pop("reception_id_found", None)
+        d.pop("liaison_mode_resolved", None)
+        matieres.append(d)
+    return {"matieres": matieres}
+
+
+@router.get("/api/fabrication/receptions/lookup")
+def lookup_reception_for_barcode(request: Request, code_barre: str):
+    """Lookup d'une réception matière depuis un code barre (pour Traça Fabrication)."""
+    user = get_current_user(request)
+    _check_fab_access(user)
+    code = (code_barre or "").strip()
+    if not code:
+        raise HTTPException(status_code=400, detail="Code barre manquant")
+    with get_db() as conn:
+        row = conn.execute(
+            """
+            SELECT r.id AS reception_id, r.fournisseur, r.certificat_fsc
+            FROM stock_reception_items i
+            JOIN stock_receptions r ON r.id = i.reception_id
+            WHERE trim(i.code_barre) = trim(?)
+            ORDER BY i.scanned_at DESC, i.id DESC
+            LIMIT 1
+            """,
+            (code,),
+        ).fetchone()
+    if not row:
+        return {"found": False}
+    d = dict(row)
+    return {
+        "found": True,
+        "reception_id": d.get("reception_id"),
+        "fournisseur": d.get("fournisseur"),
+        "certificat_fsc": d.get("certificat_fsc"),
+    }
 
 
 @router.post("/api/fabrication/matieres")
@@ -622,6 +686,12 @@ async def add_matiere(request: Request):
     code_barre = (body.get("code_barre") or "").strip()
     if not code_barre:
         raise HTTPException(status_code=400, detail="Code barre manquant")
+
+    fournisseur_fsc_id = body.get("fournisseur_fsc_id")
+    try:
+        fournisseur_fsc_id = int(fournisseur_fsc_id) if fournisseur_fsc_id is not None else None
+    except (ValueError, TypeError):
+        fournisseur_fsc_id = None
 
     # Opérateur : operateur_lie si défini, sinon nom de l'utilisateur
     operateur = user.get("operateur_lie") or ""
@@ -646,11 +716,83 @@ async def add_matiere(request: Request):
         )
         conn.commit()
         new_id = cursor.lastrowid
+
+        # Tenter de lier à une réception existante (prioritaire)
+        rec = conn.execute(
+            """
+            SELECT r.id AS reception_id, r.fournisseur, r.certificat_fsc
+            FROM stock_reception_items i
+            JOIN stock_receptions r ON r.id = i.reception_id
+            WHERE trim(i.code_barre) = trim(?)
+            ORDER BY i.scanned_at DESC, i.id DESC
+            LIMIT 1
+            """,
+            (code_barre,),
+        ).fetchone()
+        if rec and rec["reception_id"]:
+            conn.execute(
+                """UPDATE fab_matieres_utilisees
+                   SET reception_id=?, liaison_mode='reception',
+                       fournisseur_manual=NULL, certificat_fsc_manual=NULL
+                   WHERE id=?""",
+                (int(rec["reception_id"]), new_id),
+            )
+            conn.commit()
+        else:
+            # Pas trouvé → exige une saisie fournisseur (liaison manuelle)
+            if not fournisseur_fsc_id:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Fournisseur requis — liaison manuelle.",
+                )
+            f = conn.execute(
+                "SELECT nom, certificat FROM fournisseurs_fsc WHERE id=?",
+                (int(fournisseur_fsc_id),),
+            ).fetchone()
+            if not f:
+                raise HTTPException(status_code=400, detail="Fournisseur introuvable")
+            conn.execute(
+                """UPDATE fab_matieres_utilisees
+                   SET reception_id=NULL, liaison_mode='manual',
+                       fournisseur_manual=?, certificat_fsc_manual=?
+                   WHERE id=?""",
+                (str(f["nom"]), str(f["certificat"] or ""), new_id),
+            )
+            conn.commit()
+
         row = conn.execute(
-            "SELECT * FROM fab_matieres_utilisees WHERE id=?", (new_id,)
+            """SELECT
+                 fmu.*,
+                 sr.id AS reception_id_found,
+                 COALESCE(sr.fournisseur, fmu.fournisseur_manual) AS fournisseur,
+                 COALESCE(sr.certificat_fsc, fmu.certificat_fsc_manual) AS certificat_fsc,
+                 CASE
+                   WHEN sr.id IS NOT NULL THEN 'reception'
+                   WHEN fmu.fournisseur_manual IS NOT NULL THEN 'manual'
+                   ELSE NULL
+                 END AS liaison_mode_resolved
+               FROM fab_matieres_utilisees fmu
+               LEFT JOIN stock_receptions sr
+                 ON sr.id = (
+                   SELECT i.reception_id
+                   FROM stock_reception_items i
+                   WHERE trim(i.code_barre) = trim(fmu.code_barre)
+                   ORDER BY i.scanned_at DESC, i.id DESC
+                   LIMIT 1
+                 )
+               WHERE fmu.id=?""",
+            (new_id,),
         ).fetchone()
 
-    return {"success": True, "id": new_id, "matiere": dict(row)}
+    d = dict(row) if row else {}
+    if d.get("reception_id_found"):
+        d["reception_id"] = d.get("reception_id_found")
+        d["liaison_mode"] = "reception"
+    else:
+        d["liaison_mode"] = d.get("liaison_mode_resolved") or d.get("liaison_mode")
+    d.pop("reception_id_found", None)
+    d.pop("liaison_mode_resolved", None)
+    return {"success": True, "id": new_id, "matiere": d}
 
 
 @router.delete("/api/fabrication/matieres/{matiere_id}")

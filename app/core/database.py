@@ -1233,6 +1233,20 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 17, "matiere_base_param_ids")
 
+    # v18 — Traça fabrication : liaison scans matières ↔ réceptions (fournisseur + certificat)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=18 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(fab_matieres_utilisees)").fetchall()}
+        if "reception_id" not in cols:
+            conn.execute("ALTER TABLE fab_matieres_utilisees ADD COLUMN reception_id INTEGER")
+        if "liaison_mode" not in cols:
+            # 'reception' | 'manual'
+            conn.execute("ALTER TABLE fab_matieres_utilisees ADD COLUMN liaison_mode TEXT")
+        if "fournisseur_manual" not in cols:
+            conn.execute("ALTER TABLE fab_matieres_utilisees ADD COLUMN fournisseur_manual TEXT")
+        if "certificat_fsc_manual" not in cols:
+            conn.execute("ALTER TABLE fab_matieres_utilisees ADD COLUMN certificat_fsc_manual TEXT")
+        _record_schema_migration(conn, 18, "fab_traca_link_receptions")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,
