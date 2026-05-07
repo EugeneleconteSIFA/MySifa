@@ -88,6 +88,34 @@ html,body{
 }
 .offline a{color:var(--accent);text-decoration:none;font-size:11px;padding:5px 12px;border:1px solid var(--accent);border-radius:6px}
 .offline a:hover{background:rgba(56,189,248,.1)}
+
+/* login */
+.login{
+  display:flex;flex-direction:column;gap:10px;
+  width:100%;max-width:260px;
+}
+.login-title{font-weight:800;color:var(--text);font-size:12px;letter-spacing:.3px}
+.login-row{display:flex;flex-direction:column;gap:6px}
+.login-row label{font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.3px;text-transform:uppercase}
+.login-row input{
+  background:var(--bg);border:1px solid var(--border);border-radius:10px;
+  padding:10px 12px;color:var(--text);font-size:12px;outline:none;
+}
+.login-row input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(56,189,248,.12)}
+.login-actions{display:flex;gap:8px;align-items:center}
+.btn{
+  border-radius:10px;padding:9px 12px;font-weight:800;cursor:pointer;border:1px solid transparent;
+  font-size:12px;transition:filter .15s;user-select:none;
+}
+.btn:hover{filter:brightness(1.05)}
+.btn-accent{background:var(--accent);color:var(--bg)}
+.btn-ghost{background:transparent;color:var(--text);border-color:var(--border)}
+.login-err{
+  display:none;
+  background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);
+  border-radius:10px;padding:8px 10px;font-size:11px;color:rgba(248,113,113,1);
+}
+.login-err.show{display:block}
 /* spinner */
 @keyframes spin{to{transform:rotate(360deg)}}
 .spin{display:inline-block;animation:spin 1s linear infinite}
@@ -146,17 +174,93 @@ function mkCard(mkey,m){
 }
 
 let loadingFirst=true;
+let loginSubmitting=false;
+
+function renderLogin(message){
+  const main=document.getElementById('main');
+  main.innerHTML=`<div class="offline">
+    <div class="login">
+      <div class="login-title">Connexion MySifa</div>
+      <div class="login-err" id="login-err"></div>
+      <div class="login-row">
+        <label for="login-email">Adresse e-mail</label>
+        <input id="login-email" type="email" autocomplete="username" placeholder="votre@email.fr">
+      </div>
+      <div class="login-row">
+        <label for="login-password">Mot de passe</label>
+        <input id="login-password" type="password" autocomplete="current-password" placeholder="••••••••">
+      </div>
+      <div class="login-actions">
+        <button class="btn btn-accent" id="login-submit">${loginSubmitting?'Connexion…':'Se connecter'}</button>
+        <button class="btn btn-ghost" id="login-open" title="Ouvrir MySifa dans le navigateur">Ouvrir MySifa</button>
+      </div>
+    </div>
+  </div>`;
+
+  const errEl=document.getElementById('login-err');
+  if(message){
+    errEl.textContent=message;
+    errEl.classList.add('show');
+  }
+
+  const emailEl=document.getElementById('login-email');
+  const passEl=document.getElementById('login-password');
+  requestAnimationFrame(()=>emailEl?.focus());
+
+  function setErr(msg){
+    if(!msg){errEl.textContent='';errEl.classList.remove('show');return;}
+    errEl.textContent=msg;errEl.classList.add('show');
+  }
+
+  async function submit(){
+    if(loginSubmitting)return;
+    const email=(emailEl?.value||'').trim();
+    const password=(passEl?.value||'');
+    if(!email||!password){setErr('Identifiants requis.');return;}
+    setErr(null);
+    loginSubmitting=true;
+    const sb=document.getElementById('login-submit');
+    if(sb)sb.textContent='Connexion…';
+    try{
+      const r=await fetch('/api/auth/login',{
+        method:'POST',
+        credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({email,password})
+      });
+      const d=await r.json().catch(()=>null);
+      if(!r.ok){
+        setErr((d&&d.detail)||'Connexion impossible.');
+        return;
+      }
+      await load();
+    }catch(e){
+      setErr('Connexion impossible.');
+    }finally{
+      loginSubmitting=false;
+      const b=document.getElementById('login-submit');
+      if(b)b.textContent='Se connecter';
+    }
+  }
+
+  document.getElementById('login-submit')?.addEventListener('click', (e)=>{e.preventDefault();submit();});
+  passEl?.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){e.preventDefault();submit();} });
+  emailEl?.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){e.preventDefault();passEl?.focus();} });
+  document.getElementById('login-open')?.addEventListener('click', (e)=>{
+    e.preventDefault();
+    window.open('/', '_blank');
+  });
+}
+
 async function load(){
   const main=document.getElementById('main');
   const footer=document.getElementById('footer');
   try{
     const r=await fetch('/api/production/machine-status',{credentials:'include'});
     if(r.status===401||r.status===403){
-      main.innerHTML=`<div class="offline">
-        <div>🔒 Non connecté</div>
-        <a href="/" target="_blank">Se connecter à MySifa →</a>
-      </div>`;
-      footer.textContent='';return;
+      footer.textContent='';
+      renderLogin(null);
+      return;
     }
     if(!r.ok)throw new Error('HTTP '+r.status);
     const d=await r.json();
