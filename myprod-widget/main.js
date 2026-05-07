@@ -7,7 +7,7 @@ const path = require('path');
 
 const CONFIG = {
   width:  340,
-  height: 180,
+  height: 160,
   url:    'https://www.mysifa.com/widget',
   refreshInterval: 30000,   // ms entre chaque actualisation auto
 };
@@ -51,10 +51,11 @@ function createWindow() {
 function createTray() {
   let icon;
   try {
-    // Les assets sont dépaqués hors de l'asar (asarUnpack) pour être lisibles par nativeImage
-    const assetDir = __dirname.replace('app.asar', 'app.asar.unpacked');
-    icon = nativeImage.createFromPath(path.join(assetDir, 'assets', 'tray-factory-template.svg'));
-    if (!icon.isEmpty()) icon = icon.resize({ width: 18, height: 18, quality: 'best' });
+    // Icône PNG 18x18 usine, encodée en base64 — indépendante du filesystem/asar
+    // Template macOS : blanc pur, s'adapte automatiquement dark/light
+    const ICON_B64 = 'iVBORw0KGgoAAAANSUhEUgAAABIAAAASCAIAAADZrBkAAAAAMklEQVR4nGNgoBz8xwDEasPDxWcPaZYT4x6c2uBGYjKorY0YQBu/YXXeENZGTkgOSwAAgtQP/9So8NQAAAAASUVORK5CYII=';
+    icon = nativeImage.createFromDataURL('data:image/png;base64,' + ICON_B64);
+    icon.setTemplateImage(true);
   } catch (_) {
     icon = nativeImage.createEmpty();
   }
@@ -151,10 +152,19 @@ app.whenReady().then(() => {
   console.log('[main] init complete');
 }).catch(e => console.error('[main] whenReady failed:', e));
 
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+app.on('window-all-closed', () => {
+  console.log('[main] window-all-closed fired, platform:', process.platform);
+  if (process.platform !== 'darwin') app.quit();
+});
 app.on('activate',          () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
-app.on('before-quit',       () => { isQuitting = true; });
+app.on('before-quit',       () => { isQuitting = true; console.log('[main] before-quit'); });
 
 app.on('web-contents-created', (_, contents) => {
   contents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: 'deny' }; });
+  contents.on('destroyed',   () => console.log('[main] webContents destroyed'));
+  contents.on('did-fail-load', (_, code, desc) => console.log('[main] did-fail-load', code, desc));
 });
+
+process.on('exit',               (code) => console.log('[main] process exit code:', code));
+process.on('uncaughtException',  (err)  => console.error('[main] uncaughtException:', err));
+process.on('unhandledRejection', (r)    => console.error('[main] unhandledRejection:', r));

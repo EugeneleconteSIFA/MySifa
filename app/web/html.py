@@ -137,6 +137,15 @@ body.light .theme-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 18px rg
 }
 .logout-btn{border:none}.logout-btn:hover{color:var(--danger);background:rgba(248,113,113,.1);box-shadow:0 0 0 1px rgba(248,113,113,.35),0 0 18px rgba(248,113,113,.12)}
 .version{font-size:10px;color:var(--muted);font-family:monospace;padding:4px 12px}
+.upd-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px}
+.upd-card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:28px 28px 22px;width:min(540px,100%);max-height:88vh;overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,.55)}
+.upd-card h2{font-size:16px;font-weight:700;margin:0 0 16px;color:var(--text)}
+.upd-card .upd-body{font-size:13px;line-height:1.8;color:var(--text2)}
+.upd-card .upd-body ul{padding-left:18px;margin:8px 0}
+.upd-card .upd-body li{margin-bottom:6px}
+.upd-card .upd-body strong{color:var(--text)}
+.upd-ok-btn{display:block;width:100%;margin-top:20px;padding:13px;border-radius:12px;border:none;background:var(--accent);color:#0a0e17;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;transition:filter .15s}
+.upd-ok-btn:hover{filter:brightness(1.08)}
 .main{flex:1;padding:28px;overflow-y:auto}.container{max-width:1200px;margin:0 auto}
 h1{font-size:22px;font-weight:700;margin-bottom:4px}
 .subtitle{font-size:13px;color:var(--muted);margin-bottom:24px}
@@ -1137,6 +1146,7 @@ async function checkAuth(){
     S.app=HAS_INITIAL_APP ? INITIAL_APP : 'portal';
     // Garder le badge Messagerie à jour, même sur le portail
     try{ startMessagesPolling(); }catch(e){}
+    try{ checkGlobalUpdates(); }catch(e){}
     // Support : redirection post-login (ex: /?next=/planning)
     try{
       const sp=new URLSearchParams(window.location.search||'');
@@ -1197,6 +1207,26 @@ function startMachineStatusPolling(){
 }
 function stopMachineStatusPolling(){
   if(_mstInterval){clearInterval(_mstInterval);_mstInterval=null;}
+}
+
+// ── Popup annonces globales ───────────────────────────────────────────────────
+async function checkGlobalUpdates(){
+  try{
+    const updates=await fetch('/api/updates/pending?scope=global',{credentials:'include'}).then(r=>r.ok?r.json():[]);
+    if(!updates||!updates.length)return;
+    const overlay=document.createElement('div');
+    overlay.className='upd-overlay';
+    const ids=updates.map(u=>u.id);
+    const bodies=updates.map(u=>`<div class="upd-body">${u.message}</div>`).join('<hr style="border:none;border-top:1px solid var(--border);margin:16px 0">');
+    overlay.innerHTML=`<div class="upd-card">
+      ${bodies}
+      <button class="upd-ok-btn" onclick="
+        Promise.all([${ids.join(',')}].map(id=>fetch('/api/updates/'+id+'/acknowledge',{method:'POST',credentials:'include'}))).catch(()=>{});
+        this.closest('.upd-overlay').remove();
+      ">Compris</button>
+    </div>`;
+    document.body.appendChild(overlay);
+  }catch(e){}
 }
 
 async function refreshPortalData(){
@@ -1301,6 +1331,7 @@ async function doLogin(email,password){
     // Déverrouiller tout de suite — avant loadFilters/loadHist (sinon bouton « Connexion… » bloqué le temps des APIs)
     S.loginSubmitting=false;
     render();
+    checkGlobalUpdates().catch(()=>{});
     if(S.app==='prod'){
       await loadFilters();
       await loadProd();

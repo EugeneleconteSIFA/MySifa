@@ -323,9 +323,16 @@ Le message (`message` field) doit être en **HTML** et respecter les codes visue
 
   <div style="margin-bottom:10px;font-weight:600;color:var(--text);font-size:12px;
        text-transform:uppercase;letter-spacing:.5px">Corrections</div>
-  <ul style="margin:0;padding-left:18px">
+  <ul style="margin:0 0 14px 0;padding-left:18px">
     <li style="margin-bottom:5px">Correction décrite sobrement.</li>
   </ul>
+
+  <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);
+       font-size:11px;color:var(--muted);line-height:1.6">
+    Dans l'optique d'améliorer constamment l'outil, vos retours sont les bienvenus.<br>
+    Merci de votre confiance.<br>
+    <span style="color:var(--text2);font-weight:600">Eugène</span>
+  </div>
 </div>
 ```
 

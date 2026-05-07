@@ -354,7 +354,7 @@ def pending_updates(request: Request, scope: str = None):
         if scope:
             rows = conn.execute(
                 """SELECT a.* FROM update_announcements a
-                   WHERE a.active=1 AND a.scope=?
+                   WHERE a.active=1 AND (a.scope=? OR a.scope='global')
                      AND NOT EXISTS (
                          SELECT 1 FROM update_acknowledgements ack
                          WHERE ack.announcement_id=a.id AND ack.user_id=?
