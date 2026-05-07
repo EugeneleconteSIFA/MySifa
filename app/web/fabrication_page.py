@@ -578,6 +578,8 @@ const CAT_LABELS = {
 let S = {
   user: null,
   saisies: [],
+  saisiesAdmin: [],
+  saisieViewMode: (localStorage.getItem('mysifa.fab.viewmode')||'operator'), // operator | admin
   etat: 'loading',   // loading | sans_session | arrive | en_cours_production | en_arret | fin_dossier
   dossier: null,     // planning_entry actif
   dossiers: [],      // liste pour picker
@@ -781,6 +783,22 @@ async function loadSession(){
     operateur: d.operateur||'',
     machine: d.machine||null,
   });
+}
+
+async function loadAdminSaisiesJour(){
+  const d = await apiFetch('/api/fabrication/saisies-jour').catch(e=>{
+    showToast('Erreur vue admin: '+e.message,'danger');
+    return null;
+  });
+  if(!d){ set({saisiesAdmin:[]}); return; }
+  set({saisiesAdmin: d.saisies||[]});
+}
+
+function setSaisieViewMode(mode){
+  const m = (mode==='admin') ? 'admin' : 'operator';
+  localStorage.setItem('mysifa.fab.viewmode', m);
+  set({saisieViewMode:m});
+  if(m==='admin') loadAdminSaisiesJour();
 }
 
 async function loadDossiers(){
@@ -1466,6 +1484,8 @@ function renderMain(){
     );
   }
   const isAdminUserMain = S.user && (S.user.role==='superadmin'||S.user.role==='administration'||S.user.role==='direction');
+  const canAdminView = !!isAdminUserMain;
+  const isAdminView = canAdminView && S.saisieViewMode==='admin';
   if(S.operateur && !S.machine && !isAdminUserMain){
     alert = h('div',{className:'fab-alert fab-alert-warn'},
       svgIcon('alert',14),
@@ -1473,15 +1493,16 @@ function renderMain(){
     );
   }
 
-  const rows = [...S.saisies]; // chronologique : première saisie en haut, dernière en bas
+  const rows = isAdminView ? [...(S.saisiesAdmin||[])] : [...S.saisies]; // admin: global / opérateur: perso
 
   const tableHead = h('tr',null,
     h('th',null,'Heure'),
+    ...(isAdminView ? [h('th',null,'Opérateur')] : []),
     h('th',null,'Code'),
     h('th',null,'Opération'),
     h('th',null,'Métrages'),
     h('th',null,'Commentaire'),
-    h('th',null,'')
+    ...(isAdminView ? [] : [h('th',null,'')])
   );
 
   const tableBody = rows.length
@@ -1499,7 +1520,7 @@ function renderMain(){
         if(mFin!=null) metrageText += (metrageText?' | ':'')+' Fin '+fN(mFin)+' m';
         if(s.quantite_traitee&&Number(s.quantite_traitee)>0) metrageText += (metrageText?' | ':'')+fN(s.quantite_traitee)+' étiq.';
 
-        const commentBtn = h('button',{
+        const commentBtn = isAdminView ? null : h('button',{
           className:'fab-comment-btn',
           title:'Ajouter/modifier un commentaire',
           onClick:()=>set({showCommentModal:true, commentSaisieId:s.id, commentText:s.commentaire||''})
@@ -1507,6 +1528,7 @@ function renderMain(){
 
         return h('tr',{className:'fab-table-row'+(isLast?' fab-row-last':'')},
           h('td',null, h('span',{className:'fab-time'}, fmtTime(s.date_operation))),
+          ...(isAdminView ? [h('td',null, h('span',{style:{fontWeight:'700',color:'var(--text2)'}}, (s.operateur||'—')))] : []),
           h('td',null,
             h('span',{className:'fab-op-chip',style:{background:chipColor+'22',color:chipColor}},
               h('span',{className:'fab-op-chip-code'},code)
@@ -1519,11 +1541,11 @@ function renderMain(){
             ? h('span',{className:'fab-comment-cell',title:s.commentaire}, s.commentaire)
             : h('span',{style:{color:'var(--muted)',fontSize:'11px'}},'—')
           ),
-          h('td',null, commentBtn)
+          ...(isAdminView ? [] : [h('td',null, commentBtn)])
         );
       })
     : [h('tr',null,
-        h('td',{colspan:'6'},
+        h('td',{colspan: isAdminView ? '6' : '6'},
           h('div',{className:'fab-empty'},
             h('div',{className:'fab-empty-icon'},'📋'),
             S.etat==='sans_session'
@@ -1539,9 +1561,19 @@ function renderMain(){
         ? ('Dossier : '+S.dossier.reference)
         : "Saisie de production"
       ),
+      canAdminView ? h('div',{style:{marginLeft:'auto',display:'flex',gap:'8px',alignItems:'center'}},
+        h('button',{type:'button',className:'fab-btn fab-btn-ghost fab-btn-sm',onClick:()=>setSaisieViewMode('operator'),
+          style:{borderColor:(!isAdminView)?'var(--accent)':'var(--border)',color:(!isAdminView)?'var(--accent)':'var(--text2)'}},'Opérateur'),
+        h('button',{type:'button',className:'fab-btn fab-btn-ghost fab-btn-sm',onClick:()=>setSaisieViewMode('admin'),
+          style:{borderColor:(isAdminView)?'var(--accent)':'var(--border)',color:(isAdminView)?'var(--accent)':'var(--text2)'}},'Admin')
+      ) : null,
       alert ? null : null,
       h('span',{className:'fab-etat-badge '+etatClass(S.etat)}, etatLabel(S.etat)),
-      h('span',{className:'fab-main-sub'}, S.saisies.length+' saisie'+(S.saisies.length!==1?'s':'')+' aujourd\'hui')
+      h('span',{className:'fab-main-sub'},
+        (isAdminView
+          ? (rows.length+' saisie'+(rows.length!==1?'s':'')+' aujourd\'hui (tous opérateurs)')
+          : (S.saisies.length+' saisie'+(S.saisies.length!==1?'s':'')+' aujourd\'hui'))
+      )
     ),
     alert,
     h('div',{className:'fab-table-wrap'},
@@ -2242,6 +2274,10 @@ async function init(){
 
   // Load session
   await loadSession();
+  // Vue admin (lecture) : charger la liste globale du jour si sélectionnée
+  if(isAdm && S.saisieViewMode==='admin'){
+    await loadAdminSaisiesJour();
+  }
 
   // Vérifier les annonces de mise à jour
   checkUpdates();

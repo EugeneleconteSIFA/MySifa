@@ -271,6 +271,29 @@ def get_session(request: Request, machine_id: int = None):
         }
 
 
+@router.get("/api/fabrication/saisies-jour")
+def list_saisies_jour_all(request: Request):
+    """Vue admin (lecture seule) : toutes les saisies du jour, triées par opérateur puis heure."""
+    user = get_current_user(request)
+    _check_fab_access(user)
+    if not is_admin(user):
+        raise HTTPException(status_code=403, detail="Accès réservé à l'administration")
+
+    today = _today_prefix()
+    today_fr = date.today().strftime("%d/%m/%Y")
+    with get_db() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM production_data
+            WHERE (date_operation LIKE ? OR date_operation LIKE ?)
+            ORDER BY operateur COLLATE NOCASE ASC, date_operation ASC, id ASC
+            """,
+            (today + "%", today_fr + "%"),
+        ).fetchall()
+    return {"saisies": [dict(r) for r in rows]}
+
+
 @router.post("/api/fabrication/saisie")
 async def create_saisie(request: Request):
     """Crée une saisie de production. Autorisé pour le rôle Fabrication."""

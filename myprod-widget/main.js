@@ -51,8 +51,9 @@ function createWindow() {
 function createTray() {
   let icon;
   try {
-    // Icône template macOS (SVG vectoriel) pour un rendu net
-    icon = nativeImage.createFromPath(path.join(__dirname, 'assets', 'tray-factory-template.svg'));
+    // Les assets sont dépaqués hors de l'asar (asarUnpack) pour être lisibles par nativeImage
+    const assetDir = __dirname.replace('app.asar', 'app.asar.unpacked');
+    icon = nativeImage.createFromPath(path.join(assetDir, 'assets', 'tray-factory-template.svg'));
     if (!icon.isEmpty()) icon = icon.resize({ width: 18, height: 18, quality: 'best' });
   } catch (_) {
     icon = nativeImage.createEmpty();
