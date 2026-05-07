@@ -3046,9 +3046,12 @@ function render() {
       el('button', { cls:'nav-btn nav-btn--mysifa-portal', on:{ click:()=>{ window.location.href='/'; } } },
         el('span', { cls:'mysifa-back-preamble' }, '← Retour '),
         el('span', { cls:'mysifa-back-brand' }, 'My', el('span', { cls:'mysifa-back-accent' }, 'Sifa'))
-      ),      S.user ? el('div', { cls:'user-chip' },
+      ),      S.user ? el('div', { cls:'user-chip', attrs:{ title:'Mon profil' }, on:{ click:()=>{ window.location.href='/profil'; } } },
         el('div', { cls:'uc-name' }, S.user.nom||''),
-        el('div', { cls:'uc-role' }, S.user.role||'')
+        el('div', { cls:'uc-role' }, S.user.role||''),
+        el('div', { attrs:{ style:'font-size:10px;color:var(--accent);margin-top:3px;display:flex;align-items:center;gap:4px' } },
+          iconEl('edit',12), ' Mon profil'
+        )
       ) : null,
       (() => {
         if(!S.user) return null;

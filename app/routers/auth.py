@@ -317,7 +317,7 @@ def list_users(request: Request):
     require_superadmin(request)
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT u.id,u.email,u.identifiant,u.nom,u.role,u.operateur_lie,u.actif,u.telephone,u.machine_id,
+            """SELECT u.id,u.email,u.identifiant,u.nom,u.role,u.operateur_lie,u.actif,u.telephone,u.adresse,u.date_naissance,u.machine_id,
                       u.created_at,u.last_login,u.access_overrides,
                       m.nom AS machine_nom
                FROM users u
@@ -340,7 +340,7 @@ def get_user(user_id: int, request: Request):
     require_superadmin(request)
     with get_db() as conn:
         row = conn.execute(
-            """SELECT u.id,u.email,u.identifiant,u.nom,u.role,u.operateur_lie,u.actif,u.telephone,u.machine_id,
+            """SELECT u.id,u.email,u.identifiant,u.nom,u.role,u.operateur_lie,u.actif,u.telephone,u.adresse,u.date_naissance,u.machine_id,
                       u.created_at,u.last_login,u.access_overrides,
                       m.nom AS machine_nom
                FROM users u
@@ -416,6 +416,8 @@ async def update_user(user_id: int, request: Request):
         op       = body.get("operateur_lie", exd["operateur_lie"])
         actif    = body.get("actif",         exd["actif"])
         tel      = body.get("telephone")     or (exd.get("telephone") or "")
+        adresse  = str(body.get("adresse") if ("adresse" in body) else (exd.get("adresse") or "")).strip()
+        date_naissance = str(body.get("date_naissance") if ("date_naissance" in body) else (exd.get("date_naissance") or "")).strip()
         email    = (body.get("email") or exd["email"]).strip().lower()
         ident_in = (body.get("identifiant") if "identifiant" in body else exd.get("identifiant")) or ""
         ident_in = str(ident_in).strip().lower()
@@ -452,8 +454,10 @@ async def update_user(user_id: int, request: Request):
 
         conn.execute(
             """UPDATE users SET nom=?,email=?,identifiant=?,role=?,operateur_lie=?,actif=?,telephone=?,
-               password_hash=?,access_overrides=?,machine_id=? WHERE id=?""",
-            (nom, email, ident_sql or None, role_eff, op, actif, tel, pwd_hash, ao_sql, machine_id, user_id),
+               adresse=?,date_naissance=?,password_hash=?,access_overrides=?,machine_id=? WHERE id=?""",
+            (nom, email, ident_sql or None, role_eff, op, actif, tel,
+             (adresse or None), (date_naissance or None),
+             pwd_hash, ao_sql, machine_id, user_id),
         )
         conn.commit()
 

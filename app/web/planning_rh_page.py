@@ -1091,7 +1091,7 @@ function renderSidebar(){
 
   const isLight=document.body.classList.contains('light');
   bot.innerHTML=`
-    ${S.user?`<div class="rh-user-chip"><div class="ucn">${S.user.nom||''}</div><div class="ucr">${S.user.role||''}</div></div>`:''}
+    ${S.user?`<div class="rh-user-chip" title="Mon profil" onclick="window.location.href='/profil'"><div class="ucn">${S.user.nom||''}</div><div class="ucr">${S.user.role||''}</div><div style="font-size:10px;color:var(--accent);margin-top:3px;display:flex;align-items:center;gap:4px">${icon('edit',12)} Mon profil</div></div>`:''}
     <button type="button" class="support-btn" onclick="openSupportRH()">
       <span class="support-ico">${(window.MySifaSupport&&window.MySifaSupport.iconSvg)?window.MySifaSupport.iconSvg():""}</span>
       <span>Contacter le support</span>

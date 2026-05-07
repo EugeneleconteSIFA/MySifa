@@ -539,7 +539,7 @@ document.getElementById('logout-btn').onclick = async () => {
 if (localStorage.getItem('theme') === 'light') document.body.classList.add('light');
 syncThemeBtn();
 
-document.getElementById('sb-user-chip').onclick = () => { location.href = '/prod?page=profil'; };
+document.getElementById('sb-user-chip').onclick = () => { location.href = '/profil'; };
 
 function initSupportSidebar() {
   const ico = document.getElementById('sb-support-ico');
@@ -859,6 +859,9 @@ async function openEdit(id) {
     '<label class="sub">Nom</label><input id="ed-nom" value="' + esc(u.nom) + '" style="margin-bottom:10px">' +
     '<label class="sub">Identifiant</label><input id="ed-ident" value="' + esc(u.identifiant || '') + '" style="margin-bottom:10px" placeholder="auto si vide">' +
     '<label class="sub">Email</label><input id="ed-email" type="email" value="' + esc(u.email) + '" style="margin-bottom:10px"' + (isDesignatedSup ? ' disabled' : '') + '>' +
+    '<label class="sub">Téléphone</label><input id="ed-tel" value="' + esc(u.telephone || '') + '" style="margin-bottom:10px" placeholder="">' +
+    '<label class="sub">Adresse</label><input id="ed-adr" value="' + esc(u.adresse || '') + '" style="margin-bottom:10px" placeholder="">' +
+    '<label class="sub">Date de naissance</label><input id="ed-birth" type="date" value="' + esc(u.date_naissance || '') + '" style="margin-bottom:10px">' +
     '<label class="sub">Rôle</label><select id="ed-role" style="margin-bottom:10px"' + (isDesignatedSup ? ' disabled' : '') + '>' + roleOpts + '</select>' +
     '<div id="ed-op-wrap"><label class="sub">Opérateur lié</label><select id="ed-op" style="margin-bottom:10px">' +
     '<option value="">—</option>' + operators.map(o => '<option value="' + esc(o) + '"' + (u.operateur_lie === o ? ' selected' : '') + '>' + esc(o) + '</option>').join('') + '</select></div>' +
@@ -886,6 +889,9 @@ async function openEdit(id) {
       nom: dlg.querySelector('#ed-nom').value.trim(),
       identifiant: dlg.querySelector('#ed-ident').value.trim(),
       email: dlg.querySelector('#ed-email').value.trim(),
+      telephone: dlg.querySelector('#ed-tel').value.trim(),
+      adresse: dlg.querySelector('#ed-adr').value.trim(),
+      date_naissance: dlg.querySelector('#ed-birth').value.trim(),
       role: dlg.querySelector('#ed-role').value,
       operateur_lie: dlg.querySelector('#ed-op').value || null,
       machine_id: dlg.querySelector('#ed-mac').value ? Number(dlg.querySelector('#ed-mac').value) : null,

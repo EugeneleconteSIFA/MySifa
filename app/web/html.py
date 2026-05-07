@@ -1154,6 +1154,11 @@ async function checkAuth(){
       const allowed=new Set(['production','suivi','profil','historique','saisies','import','rentabilite','dossiers','traceabilite']);
       if(S.app==='prod' && allowed.has(p)) S.page=p;
     }catch(e){}
+    try{
+      if(S.app==='prod' && window.location && window.location.pathname==='/profil'){
+        S.page='profil';
+      }
+    }catch(e){}
     if(S.app==='prod'){
       await loadFilters();
       await loadProd();
@@ -2610,8 +2615,15 @@ function renderPortal(){
   );
 
   return h('div',{className:'portal-page'},
-    (isSuper||urole==='direction')?h('div',{className:'portal-corner-stack'},
-      isSuper?h('button',{
+    h('div',{className:'portal-corner-stack'},
+      h('button',{
+        type:'button',
+        className:'portal-settings-corner',
+        'aria-label':'Mon profil',
+        title:'Mon profil',
+        onClick:()=>{window.location.href='/profil';}
+      },iconEl('user',24)),
+      (isSuper||urole==='direction')?h('button',{
         type:'button',
         className:'portal-settings-corner',
         'aria-label':'Paramètres',
@@ -2632,14 +2644,14 @@ function renderPortal(){
         (S.msgUnread>0)?h('span',{className:'portal-corner-badge'},S.msgUnread>9?'9+':String(S.msgUnread)):null,
         iconEl('mail',24)
       ):null,
-      h('button',{
+      (isSuper||urole==='direction')?h('button',{
         type:'button',
         className:'portal-settings-corner',
         'aria-label':'Base de données',
         title:'Base de données',
         onClick:()=>{window.location.href='/db';}
-      },iconEl('database',24))
-    ):null,
+      },iconEl('database',24)):null
+    ),
     h('div',{className:'portal-logo'},
       h('div',{className:'brand'},'My',h('span',null,'Sifa')),
       h('div',{className:'tagline'},'Portail interne — Production, stocks et outils métier')

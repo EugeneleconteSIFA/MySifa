@@ -937,9 +937,12 @@ function renderSidebar(){
     ),
     h('div',{className:'fab-sidebar-list'},...groups),
     h('div',{className:'fab-sidebar-bottom'},
-      h('div',{className:'fab-user-chip'},
+      h('div',{className:'fab-user-chip',title:'Mon profil',onClick:()=>{window.location.href='/profil';}},
         h('div',{className:'fab-user-name'},userName),
-        h('div',{className:'fab-user-machine'},machineName)
+        h('div',{className:'fab-user-machine'},machineName),
+        h('div',{style:{fontSize:'10px',color:'var(--accent)',marginTop:'3px',display:'flex',alignItems:'center',gap:'4px'}},
+          svgIcon('edit',10),' Mon profil'
+        )
       ),
       h('button',{className:'support-btn',style:{marginBottom:'8px'},
         onClick:()=>{
