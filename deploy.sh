@@ -13,13 +13,27 @@ REMOTE_UPLOADS="$VPS_PATH/data/uploads"
 echo "🚀 Déploiement MySifa..."
 
 # 0. Sécurité : ne jamais commiter les artefacts Electron / node_modules
-if git status --porcelain | rg -q '^(A |M |\\?\\?)\\s+myprod-widget/(node_modules|dist)/'; then
+# NOTE: on tolère la présence locale de dist/*.dmg et dist/*.exe (upload via scp),
+#       mais on refuse toute tentative de les commiter/pusher.
+if git status --porcelain | rg -q '^(A |M |\\?\\?)\\s+myprod-widget/node_modules/'; then
   echo ""
   echo "⛔ Refus du déploiement : des artefacts myprod-widget sont présents (node_modules/dist)."
   echo "   Nettoyez-les (ou ignorez-les) avant de déployer."
   echo ""
   git status --porcelain | rg 'myprod-widget/(node_modules|dist)/' || true
   exit 1
+fi
+
+if git status --porcelain | rg -q '^(A |M |\\?\\?)\\s+myprod-widget/dist/'; then
+  # Autoriser uniquement les DMG/EXE en dist, mais ils ne doivent pas être commités.
+  if git status --porcelain | rg -q '^(A |M |\\?\\?)\\s+myprod-widget/dist/(?!.*\\.(dmg|exe)$)'; then
+    echo ""
+    echo "⛔ Refus du déploiement : fichiers inattendus dans myprod-widget/dist/."
+    echo "   Gardez uniquement des .dmg / .exe dans dist/ (upload séparé), ou supprimez dist/."
+    echo ""
+    git status --porcelain | rg 'myprod-widget/dist/' || true
+    exit 1
+  fi
 fi
 
 # 1. Push du code vers GitHub
@@ -39,6 +53,29 @@ ssh $VPS_USER@$VPS_IP "
   systemctl restart mysifa &&
   systemctl status mysifa --no-pager -l
 "
+
+# 2b. Upload optionnel des installateurs natifs widget (DMG/EXE) sans Git
+if [[ "$1" == "--widget" || "$2" == "--widget" || "$3" == "--widget" ]]; then
+  echo "\n🧩 Upload des installateurs widget (DMG/EXE)..."
+  # macOS DMG
+  if ls myprod-widget/dist/*.dmg >/dev/null 2>&1; then
+    LATEST_DMG=$(ls -t myprod-widget/dist/*.dmg | head -n 1)
+    echo "→ DMG: $LATEST_DMG"
+    ssh $VPS_USER@$VPS_IP "mkdir -p $VPS_PATH/myprod-widget/dist"
+    scp "$LATEST_DMG" $VPS_USER@$VPS_IP:$VPS_PATH/myprod-widget/dist/
+    echo "✅ DMG uploadé."
+  else
+    echo "→ Aucun DMG trouvé dans myprod-widget/dist/"
+  fi
+  # Windows EXE (si besoin plus tard)
+  if ls myprod-widget/dist/*.exe >/dev/null 2>&1; then
+    LATEST_EXE=$(ls -t myprod-widget/dist/*.exe | head -n 1)
+    echo "→ EXE: $LATEST_EXE"
+    ssh $VPS_USER@$VPS_IP "mkdir -p $VPS_PATH/myprod-widget/dist"
+    scp "$LATEST_EXE" $VPS_USER@$VPS_IP:$VPS_PATH/myprod-widget/dist/
+    echo "✅ EXE uploadé."
+  fi
+fi
 
 # 3. Transfert DB (seulement si --db passé en argument)
 if [[ "$1" == "--db" ]]; then
