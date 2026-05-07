@@ -17,6 +17,10 @@ html,body{
   font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
   width:340px;height:100vh;overflow:hidden;user-select:none;
 }
+body.light{
+  --bg:#f1f5f9;--card:#ffffff;--border:#e2e8f0;
+  --text:#0f172a;--muted:#64748b;--accent:#0891b2;
+}
 /* ── Barre titre (déplaçable dans Electron) ── */
 .tb{
   -webkit-app-region:drag;
@@ -126,6 +130,7 @@ html,body{
   <span class="tb-title">🏭 MyProd Widget</span>
   <div class="tb-actions">
     <button class="bi" id="btn-refresh" title="Actualiser">↺</button>
+    <button class="bi" id="btn-theme" title="Thème">◐</button>
     <button class="bi close" id="btn-close" title="Fermer">✕</button>
   </div>
 </div>
@@ -279,11 +284,26 @@ async function load(){
 load();
 setInterval(load,30000);
 
+function applyTheme(mode){
+  const light = mode === 'light';
+  document.body.classList.toggle('light', light);
+  try{ localStorage.setItem('mysifa_widget_theme', light ? 'light' : 'dark'); }catch(_){}
+}
+function toggleTheme(){
+  const isLight = document.body.classList.contains('light');
+  applyTheme(isLight ? 'dark' : 'light');
+}
+try{
+  const saved = localStorage.getItem('mysifa_widget_theme');
+  if(saved === 'light' || saved === 'dark') applyTheme(saved);
+}catch(_){}
+
 document.getElementById('btn-refresh').onclick=()=>{
   const btn=document.getElementById('btn-refresh');
   btn.textContent='↺'; btn.classList.add('spin');
   load().finally(()=>{btn.classList.remove('spin');});
 };
+document.getElementById('btn-theme').onclick=()=>{ toggleTheme(); };
 document.getElementById('btn-close').onclick=()=>{
   if(window.electronAPI)window.electronAPI.close();
   else window.close();
