@@ -38,6 +38,7 @@ def _require_edit(request: Request) -> dict:
     user = get_current_user(request)
     # Check role OR planning_rh override
     has_override = False
+    email = (user.get("email") or "").strip().lower()
     overrides_raw = user.get("access_overrides")
     if overrides_raw:
         try:
@@ -46,6 +47,9 @@ def _require_edit(request: Request) -> dict:
             has_override = overrides.get("planning_rh") is True
         except:
             pass
+    # Manuel Lessafre : accès édition explicite (même si rôle opérateur)
+    if email == "mlesaffre@sifa.pro":
+        return user
     if user.get("role") not in ROLES_PLANNING_RH_EDIT and not has_override:
         raise HTTPException(403, "Modification réservée aux configurateurs (direction / superadmin)")
     return user

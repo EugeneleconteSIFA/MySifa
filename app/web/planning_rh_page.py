@@ -1037,7 +1037,8 @@ async function loadMe(){
   if(d&&d.role){
     S.user=d;
     const hasPlanningRHOverride = d.access_overrides && d.access_overrides.planning_rh === true;
-    S.isEditor=(['direction','superadmin'].includes(d.role) || hasPlanningRHOverride);
+    const email = String(d.email||'').trim().toLowerCase();
+    S.isEditor=(['direction','superadmin'].includes(d.role) || hasPlanningRHOverride || email==='mlesaffre@sifa.pro');
   }}
   catch(e){}
 }
