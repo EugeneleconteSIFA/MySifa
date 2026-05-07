@@ -154,7 +154,7 @@ async function load(){
     if(r.status===401||r.status===403){
       main.innerHTML=`<div class="offline">
         <div>🔒 Non connecté</div>
-        <a href="/auth/login" target="_blank">Ouvrir MySifa →</a>
+        <a href="/" target="_blank">Se connecter à MySifa →</a>
       </div>`;
       footer.textContent='';return;
     }
