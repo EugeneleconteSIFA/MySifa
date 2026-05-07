@@ -15,7 +15,7 @@ WIDGET_HTML = r"""<!DOCTYPE html>
 html,body{
   background:var(--bg);color:var(--text);
   font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
-  width:340px;height:100vh;overflow:hidden;user-select:none;
+  width:340px;overflow:hidden;user-select:none;
 }
 body.light{
   --bg:#f1f5f9;--card:#ffffff;--border:#e2e8f0;
@@ -88,7 +88,7 @@ body.light{
 /* état hors-ligne / erreur */
 .offline{
   display:flex;flex-direction:column;align-items:center;justify-content:center;
-  height:calc(100vh - 36px);gap:10px;font-size:12px;color:var(--muted);
+  padding:14px 12px;gap:10px;font-size:12px;color:var(--muted);
 }
 .offline a{color:var(--accent);text-decoration:none;font-size:11px;padding:5px 12px;border:1px solid var(--accent);border-radius:6px}
 .offline a:hover{background:rgba(56,189,248,.1)}
@@ -319,9 +319,9 @@ function requestFit(){
     const tb=document.querySelector('.tb');
     const main=document.getElementById('main');
     const ft=document.getElementById('footer');
+    // scrollHeight est fiable si on ne force pas 100vh côté CSS
     const h = (tb?.offsetHeight||0) + (main?.scrollHeight||0) + (ft?.offsetHeight||0);
-    // marges + shadow
-    const target = Math.max(160, Math.min(520, h + 8));
+    const target = Math.max(160, Math.min(520, Math.ceil(h + 10)));
     window.electronAPI.resizeTo(340, target);
   });
 }
