@@ -7,7 +7,7 @@ const path = require('path');
 
 const CONFIG = {
   width:  340,
-  height: 260,
+  height: 180,
   url:    'https://www.mysifa.com/widget',
   refreshInterval: 30000,   // ms entre chaque actualisation auto
 };

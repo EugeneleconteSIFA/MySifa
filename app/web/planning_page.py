@@ -1068,6 +1068,39 @@ function addD(d,n){const r=new Date(d);r.setDate(r.getDate()+n);return r}
 function fmtDl(s){if(!s)return"—";const p=String(s).slice(0,10).split("-");return p.length===3?p[2]+"/"+p[1]+"/"+p[0]:s;}
 function fmtDur(h){const hrs=Math.floor(+h||0);const mins=Math.round(((+h||0)-hrs)*60);return mins>0?`${hrs}h${String(mins).padStart(2,"0")}`:`${hrs}h`;}
 
+// Durée "ouvrée" entre 2 timestamps (créneaux de production), pour l'affichage uniquement.
+// IMPORTANT: ne pas impacter la timeline (taille slots, positions, etc.).
+function workHoursBetween(startDt,endDt){
+  try{
+    if(!(startDt instanceof Date) || !(endDt instanceof Date)) return null;
+    if(!(startDt<endDt)) return 0;
+    let cur = new Date(startDt);
+    cur.setSeconds(0,0);
+    const end = new Date(endDt);
+    end.setSeconds(0,0);
+    let total = 0;
+    while(cur < end){
+      const day = new Date(cur); day.setHours(0,0,0,0);
+      const ds = ymdate(day);
+      const di = day.getDay(); // 0..6 (lun=1 ... sam=6)
+      if(di === 0){ cur = addD(day,1); continue; } // dimanche
+      const isSat = (di === 6);
+      const isOff = isSat ? !S.dayWorked[ds] : !!S.holidays[ds];
+      if(isOff){ cur = addD(day,1); continue; }
+      const wh = getWhForDate(di, day, ds);
+      const ws = new Date(day.getTime() + (wh.s||0)*36e5);
+      const we = new Date(day.getTime() + (wh.e||0)*36e5);
+      const segS = (cur > ws) ? cur : ws;
+      const segE = (end < we) ? end : we;
+      if(segE > segS) total += (segE - segS) / 36e5;
+      cur = addD(day,1);
+    }
+    return total;
+  }catch(e){
+    return null;
+  }
+}
+
 function parseHorairesPair(raw,di){
   const fb=[5,21];
   const d=String(raw??"").trim();
@@ -1896,10 +1929,11 @@ function mkTL(mon,slots){
     const resizeHandle=canResizeSlot?`<div class="slot-resize-handle" data-eid="${s.entry_id||idx}" data-resize="1" title="${escAttr(resizeHint)}"></div>`:"";
     const termineTitle=termineSlideCls?"Dossier terminé — glisser pour décaler le créneau sur la ligne de temps":"";
     const sr = hasSaisieReelle() ? (s.statut_reel||"reellement_en_attente") : "reellement_en_attente";
+    const durAff = (s.statut==="termine") ? (workHoursBetween(ss,se) ?? s.duree_heures) : s.duree_heures;
     h+=`<div class="slot ${matchCls} ${aplacerCls} ${reelTermineCls} ${termineSlideCls}" data-eid="${s.entry_id||idx}" data-statut="${escAttr(s.statut||"attente")}" data-statut-reel="${escAttr(sr)}" ${canDragSlot?'draggable="true"':''} style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${isActive?"border:2px solid #22d3ee;animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
       onmouseenter="showTip(event,this)" onmousemove="moveTip(event)" onmouseleave="hideTip()"
       ondblclick="hideTip();openEdit(${s.entry_id||idx});event.stopPropagation()"
-      data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-rfp="${escAttr(s.ref_produit||"")}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(fmtDur(s.duree_heures))}"
+      data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-rfp="${escAttr(s.ref_produit||"")}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(fmtDur(durAff))}"
       data-planned-start="${escAttr(String(s.start||""))}" data-planned-end="${escAttr(String(s.end||""))}"
       data-deb="${escAttr(fdt(ss))}" data-fin="${escAttr(fdt(se))}" data-st="${escAttr(st)}" data-co="${escAttr(co)}"${termineTitle?` title="${escAttr(termineTitle)}"`:""}>
       ${destock?`<div style="position:absolute;top:4px;right:4px;width:10px;height:10px;border-radius:50%;background:rgba(71,85,105,.9);pointer-events:none;z-index:5;flex-shrink:0"></div>`:""}
@@ -1971,7 +2005,7 @@ function mkRow(e,i,slots){
     <span class="cell-mini">${lz}</span>
     <span class="cell-mini">${escAttr(fmtDl(e.date_livraison||""))}</span>
     <span class="cell-mini" style="font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${com}">${com}</span>
-    <span class="cell-mini">${fmtDur(e.duree_heures)}</span>
+    <span class="cell-mini">${fmtDur((e.statut==="termine" && e.planned_start && e.planned_end)?(workHoursBetween(new Date(e.planned_start), new Date(e.planned_end)) ?? e.duree_heures):e.duree_heures)}</span>
     ${statutCell}
     <div class="acts">
       ${CAN_EDIT?(()=>{

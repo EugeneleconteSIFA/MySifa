@@ -315,15 +315,17 @@ document.getElementById('btn-close').onclick=()=>{
 
 function requestFit(){
   if(!window.electronAPI || !window.electronAPI.resizeTo) return;
-  requestAnimationFrame(()=>{
-    const tb=document.querySelector('.tb');
-    const main=document.getElementById('main');
-    const ft=document.getElementById('footer');
-    // scrollHeight est fiable si on ne force pas 100vh côté CSS
-    const h = (tb?.offsetHeight||0) + (main?.scrollHeight||0) + (ft?.offsetHeight||0);
-    const target = Math.max(160, Math.min(520, Math.ceil(h + 10)));
+  // Double rAF : garantit que le layout est complètement calculé avant la mesure
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    const h = document.documentElement.scrollHeight;
+    const target = Math.max(160, Math.min(520, h));
     window.electronAPI.resizeTo(340, target);
-  });
+  }));
+}
+
+// ResizeObserver : ajuste la fenêtre automatiquement si le contenu change de taille
+if(window.electronAPI?.resizeTo && typeof ResizeObserver !== 'undefined'){
+  new ResizeObserver(()=>requestFit()).observe(document.body);
 }
 </script>
 </body>
