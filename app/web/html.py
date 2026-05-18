@@ -5107,6 +5107,7 @@ function renderSidebar(){
     {key:'production',label:'Production',icon:'wrench'},
     {key:'traceabilite',label:'Traçabilité',icon:'layers'},
     ...(admin?[{key:'rentabilite',label:'Rentabilité',icon:'trending-up'}]:[]),
+    {key:'profil',label:'Profil',icon:'user'},
   ];
   const isLight=document.body.classList.contains('light');
   return h('nav',{className:'sidebar'},

@@ -282,6 +282,12 @@ body.light .slot .line1{color:#1e293b}body.light .slot .line2{color:#334155}body
 .cmt-btn:hover,.cmt-btn.has-cmt{color:var(--accent);border-color:var(--accent);background:var(--accent-bg)}
 .cmt-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-left:4px;vertical-align:middle}
 .wk-lbl.has-cmt,.dh-cell.has-cmt .dh-date-lbl{color:var(--accent)}
+.wk-hdr-row{display:flex;align-items:flex-start;gap:8px;margin-bottom:8px}
+.wk-hdr-actions{display:flex;align-items:center;gap:6px;flex-shrink:0;padding-top:1px}
+.wk-hdr-center{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-width:0}
+.cal-cmt-text{color:var(--blue);font-weight:700;font-size:11px;line-height:1.35;text-align:center;word-break:break-word;max-width:100%}
+.wk-cmt-text{margin-top:3px;padding:0 8px}
+.day-cmt-text{padding:3px 6px 5px;width:100%}
 
 .legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}
 .lg-i{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dim)}
@@ -1163,11 +1169,15 @@ function weekCommentBtn(sk,monTs){
 function weekHeaderRow(mn,lblCls){
   const wn=wkNum(mn);
   const sk=semaineKey(mn);
-  const hasCmt=!!((S.weekComments||{})[sk]||"").trim();
+  const weekCmt=((S.weekComments||{})[sk]||"").trim();
+  const hasCmt=!!weekCmt;
   const wkParamBtn=CAN_EDIT?`<button type="button" class="gear-btn" style="padding:3px 6px;flex-shrink:0" onclick="openWeekSettingsModal(${mn.getTime()})" title="Paramètres semaine S${wn}">${icon("settings",13)}</button>`:"";
-  return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
-    ${wkParamBtn}${weekCommentBtn(sk,mn.getTime())}
-    <div class="wk-lbl ${lblCls}${hasCmt?" has-cmt":""}" style="margin-bottom:0;cursor:pointer" onclick="openWeekCommentModal('${escAttr(sk)}',${mn.getTime()})" title="Commentaire semaine S${wn}">S${wn} — ${fd(mn)} au ${fd(addD(mn,4))}</div>
+  return `<div class="wk-hdr-row">
+    <div class="wk-hdr-actions">${wkParamBtn}${weekCommentBtn(sk,mn.getTime())}</div>
+    <div class="wk-hdr-center">
+      <div class="wk-lbl ${lblCls}${hasCmt?" has-cmt":""}" style="margin-bottom:0;cursor:pointer" onclick="openWeekCommentModal('${escAttr(sk)}',${mn.getTime()})" title="Commentaire semaine S${wn}">S${wn} — ${fd(mn)} au ${fd(addD(mn,4))}</div>
+      ${weekCmt?`<div class="cal-cmt-text wk-cmt-text">${escHtml(weekCmt)}</div>`:""}
+    </div>
   </div>`;
 }
 function fmtDur(h){const hrs=Math.floor(+h||0);const mins=Math.round(((+h||0)-hrs)*60);return mins>0?`${hrs}h${String(mins).padStart(2,"0")}`:`${hrs}h`}
@@ -1987,11 +1997,12 @@ function mkTL(mon,slots){
     const hasDayCmt=!!dayCmt;
     h+=`<div class="dh-cell ${td?"today":""} ${sa?"sat":""}${hasDayCmt?" has-cmt":""}" style="flex:${d.tWork}">
       <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
-        <div class="dh-date-lbl" style="cursor:pointer" onclick="openDayCommentModal('${d.ds}',${d.di})" title="${hasDayCmt?escAttr(dayCmt):'Commentaire jour'}">${DN[d.di]} ${fd(d.date)}${hasDayCmt?'<span class="cmt-dot"></span>':""}</div>
-        <div style="display:flex;align-items:center;gap:4px">
+        <div class="dh-date-lbl" style="cursor:pointer" onclick="openDayCommentModal('${d.ds}',${d.di})" title="Commentaire jour">${DN[d.di]} ${fd(d.date)}</div>
+        <div style="display:flex;align-items:center;gap:4px;justify-content:center">
           ${CAN_EDIT?`<button type="button" class="dh-hours-btn" onclick="event.stopPropagation();openHorairesModal('${d.ds}',${d.di})">${escAttr(d.hourLbl)}</button>`:`<small>${escAttr(d.hourLbl)}</small>`}
           <button type="button" class="cmt-btn${hasDayCmt?" has-cmt":""}" onclick="event.stopPropagation();openDayCommentModal('${d.ds}',${d.di})" title="${hasDayCmt?"Modifier le commentaire":"Commentaire jour"}">${icon("message-square",11)}</button>
         </div>
+        ${dayCmt?`<div class="cal-cmt-text day-cmt-text">${escHtml(dayCmt)}</div>`:""}
       </div>
     </div>`;;
   });

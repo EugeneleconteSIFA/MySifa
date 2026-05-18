@@ -839,6 +839,7 @@ function icon(name, size=16){
     'upload': '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
     'download': '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
     'edit': '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
+    'plus-circle': '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>',
   };
   return `<svg ${a} aria-hidden="true" style="display:inline-block;vertical-align:middle;flex-shrink:0">${p[name]||p['grid']}</svg>`;
 }
@@ -1189,6 +1190,7 @@ function goToTab(tab) {
   updateNavActive();
   renderContent();
   if (tab === 'dashboard') loadDashboard();
+  else if (tab === 'referentiel') loadDashboard();
   else if (tab === 'inventaire') loadInventaireList();
   else if (tab === 'reception') loadRecepHistory();
 }
@@ -1854,6 +1856,37 @@ function buildMvtHistory(mouvements, unite='', opts=null) {
 }
 
 
+function buildReferentielPage() {
+  const s = (S.dashboard && S.dashboard.stats) ? S.dashboard.stats : {};
+  return el('div', { cls: 'content' },
+    el('div', { style: { marginBottom: '16px' } },
+      el('h2', { style: { fontSize: '18px', fontWeight: '800', marginBottom: '6px' } }, 'Références et unités de vente'),
+      el('p', { style: { fontSize: '12px', color: 'var(--muted)', lineHeight: '1.5', maxWidth: '560px' } },
+        'Gérez le référentiel des références produit et de leur unité de vente (import CSV ou Excel, export, impression).'
+      ),
+      (s.nb_refs != null) ? el('div', { cls: 'stats-grid', style: { maxWidth: '220px', marginTop: '12px' } },
+        el('div', { cls: 'stat-card' },
+          el('div', { cls: 'stat-label' }, 'Références en base'),
+          el('div', { cls: 'stat-value accent' }, String(s.nb_refs || 0))
+        )
+      ) : null
+    ),
+    buildReferentielCard(),
+    (!S.stockReadOnly) ? el('div', { cls: 'card', style: { marginTop: '12px' } },
+      el('div', { cls: 'card-header' },
+        el('div', { cls: 'card-title' }, 'Unités de vente personnalisées')
+      ),
+      el('div', { style: { fontSize: '12px', color: 'var(--muted)', lineHeight: '1.5', padding: '0 2px 8px' } },
+        'Créez une unité composite (ex. 500 cartons) utilisable lors de l\'ajout au stock.'
+      ),
+      el('button', {
+        cls: 'btn-ghost-sm', type: 'button',
+        on: { click: () => { S.unitModalOpen = true; S.unitNewLabel = ''; S.unitNewBase = 'cartons'; S.unitNewQty = ''; render(); } },
+      }, iconEl('plus-circle', 14), ' Créer une unité de vente')
+    ) : null
+  );
+}
+
 function buildReferentielCard() {
   const actions = el('div', { cls: 'ref-header-actions' });
   if (!S.stockReadOnly) {
@@ -2031,7 +2064,6 @@ function buildDashboard() {
       el('div',{cls:'stat-card'},el('div',{cls:'stat-label'},'Références'),el('div',{cls:'stat-value accent'},s.nb_refs||0)),
       el('div',{cls:'stat-card'},el('div',{cls:'stat-label'},'Emplacements occupés'),el('div',{cls:'stat-value accent'},s.nb_empl_occupes||0))
     ),
-    buildReferentielCard(),
     ...(!S.stockReadOnly ? [el('div',{cls:'card',style:{overflow:'visible'}},
       el('div',{cls:'card-header'},el('div',{cls:'card-title'},'➕ Ajouter au stock')),
       el('div',{cls:'add-form'},
@@ -2676,6 +2708,7 @@ function renderContent() {
   if (S.selProduit) content = buildProduitDetail();
   else if (S.selEmpl) content = buildEmplacementDetail();
   else if (S.tab === 'dashboard') content = buildDashboard();
+  else if (S.tab === 'referentiel') content = buildReferentielPage();
   else if (S.tab === 'inventaire') content = buildInventaire();
   else if (S.tab === 'traca') content = buildTraca();
   else if (S.tab === 'reception') content = buildReception();
@@ -3267,6 +3300,7 @@ function render() {
         ? [{ tab:'traca', icon:'printer', label:'Étiquettes traça' }]
         : [
             { tab:'dashboard',  icon:'grid', label:'Dashboard' },
+            { tab:'referentiel', icon:'tag', label:'Réf. & unités de vente' },
             ...(!S.stockReadOnly ? [{ tab:'inventaire', icon:'clipboard', label:'Inventaire' }] : []),
             { tab:'reception', icon:'inbox', label:'Réception matière' },
             { tab:'traca', icon:'printer', label:'Étiquettes traça' },
@@ -3477,7 +3511,7 @@ async function init() {
   await fetchEmplacementsFromDB();
   // Onglet initial via URL param ?tab=...
   const urlTab = new URLSearchParams(window.location.search).get('tab');
-  if (urlTab && ['dashboard','stock','inventaire','reception','traca'].includes(urlTab)) {
+  if (urlTab && ['dashboard','referentiel','stock','inventaire','reception','traca'].includes(urlTab)) {
     S.tab = urlTab;
   }
   // Forcer traça si accès restreint
@@ -3486,6 +3520,7 @@ async function init() {
   if (S.tab === 'traca') { /* rien à charger */ }
   else if (S.tab === 'reception') { await loadRecepHistory(); }
   else if (S.tab === 'inventaire') { await loadInventaireList(); }
+  else if (S.tab === 'referentiel') { await loadDashboard(); }
   else { await loadDashboard(); }
 }
 
