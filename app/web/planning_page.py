@@ -285,8 +285,8 @@ body.light .slot .line1{color:#1e293b}body.light .slot .line2{color:#334155}body
 .wk-hdr-row{display:flex;align-items:flex-start;gap:8px;margin-bottom:8px}
 .wk-hdr-actions{display:flex;align-items:center;gap:6px;flex-shrink:0;height:28px}
 .wk-hdr-text{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;text-align:left;justify-content:center;min-height:28px}
-.wk-hdr-text--solo{align-items:center;text-align:center}
-.wk-hdr-text--solo .wk-lbl{width:100%;text-align:center;margin-bottom:0}
+.wk-hdr-text--solo{align-items:flex-start;text-align:left;justify-content:center}
+.wk-hdr-text--solo .wk-lbl{width:100%;text-align:left;margin-bottom:0}
 .wk-hdr-row.has-wk-cmt .wk-hdr-text{align-items:flex-start;text-align:left;min-height:0;justify-content:flex-start}
 .wk-hdr-row.has-wk-cmt .wk-lbl{margin:0;line-height:1.35;width:100%;text-align:left}
 .cal-cmt-text{color:var(--blue);font-weight:700;font-size:11px;line-height:1.35;word-break:break-word;max-width:100%}
