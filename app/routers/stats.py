@@ -21,7 +21,7 @@ def dashboard_stats(request: Request):
 
 @router.get("/api/config/operations")
 def get_ops_config():
-    """Même source que le moteur d’import (config.OPERATION_SEVERITY — operations.json validé au démarrage)."""
+    """Référentiel codes opération (SQLite, repli operations.json)."""
     return OPERATION_SEVERITY
 
 @router.get("/api/health")

@@ -511,3 +511,132 @@ def delete_update(announcement_id: int, request: Request):
         conn.execute("DELETE FROM update_announcements WHERE id=?", (announcement_id,))
         conn.commit()
     return {"success": True}
+
+
+# ── Référentiel codes opération (table operation_codes) ─────────────────────
+
+
+@router.get("/api/settings/operation-codes")
+def list_operation_codes(request: Request):
+    require_superadmin(request)
+    from database import get_db
+    from app.services.operations_config import categories_for_ui, list_operation_codes as _list
+
+    with get_db() as conn:
+        items = _list(conn)
+    return {"items": items, "categories": categories_for_ui()}
+
+
+@router.post("/api/settings/operation-codes")
+async def create_operation_code(request: Request):
+    require_superadmin(request)
+    from database import get_db
+    from app.services.operations_config import TABLE, validate_operation_payload
+    from config import refresh_operations_cache
+
+    body = await request.json()
+    try:
+        payload = validate_operation_payload(body, for_create=True)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    now = datetime.now().isoformat()
+    with get_db() as conn:
+        ex = conn.execute(f"SELECT 1 FROM {TABLE} WHERE code=?", (payload["code"],)).fetchone()
+        if ex:
+            raise HTTPException(status_code=409, detail=f"Le code {payload['code']} existe déjà.")
+        conn.execute(
+            f"""INSERT INTO {TABLE} (code, severity, label, category, required, updated_at)
+                VALUES (?,?,?,?,?,?)""",
+            (
+                payload["code"],
+                payload["severity"],
+                payload["label"],
+                payload["category"],
+                1 if payload["required"] else 0,
+                now,
+            ),
+        )
+        conn.commit()
+    refresh_operations_cache()
+    return {"success": True, "code": payload["code"]}
+
+
+@router.put("/api/settings/operation-codes/{code}")
+async def update_operation_code(code: str, request: Request):
+    require_superadmin(request)
+    from database import get_db
+    from app.services.operations_config import TABLE, normalize_code, validate_operation_payload
+    from config import refresh_operations_cache
+
+    try:
+        code_key = normalize_code(code)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    body = await request.json()
+    body = dict(body) if isinstance(body, dict) else {}
+    body["code"] = code_key
+    try:
+        payload = validate_operation_payload(body, for_create=False)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    now = datetime.now().isoformat()
+    with get_db() as conn:
+        ex = conn.execute(f"SELECT 1 FROM {TABLE} WHERE code=?", (code_key,)).fetchone()
+        if not ex:
+            raise HTTPException(status_code=404, detail="Code introuvable.")
+        conn.execute(
+            f"""UPDATE {TABLE}
+                SET severity=?, label=?, category=?, required=?, updated_at=?
+                WHERE code=?""",
+            (
+                payload["severity"],
+                payload["label"],
+                payload["category"],
+                1 if payload["required"] else 0,
+                now,
+                code_key,
+            ),
+        )
+        conn.commit()
+    refresh_operations_cache()
+    return {"success": True}
+
+
+@router.delete("/api/settings/operation-codes/{code}")
+def delete_operation_code(code: str, request: Request):
+    require_superadmin(request)
+    from database import get_db
+    from app.services.operations_config import TABLE, normalize_code
+    from config import refresh_operations_cache
+
+    try:
+        code_key = normalize_code(code)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    with get_db() as conn:
+        ex = conn.execute(f"SELECT 1 FROM {TABLE} WHERE code=?", (code_key,)).fetchone()
+        if not ex:
+            raise HTTPException(status_code=404, detail="Code introuvable.")
+        conn.execute(f"DELETE FROM {TABLE} WHERE code=?", (code_key,))
+        conn.commit()
+    refresh_operations_cache()
+    return {"success": True}
+
+
+@router.post("/api/settings/operation-codes/import-json")
+def import_operation_codes_json(request: Request):
+    """Réimporte depuis operations.json (upsert tous les codes du fichier)."""
+    require_superadmin(request)
+    from database import get_db
+    from app.services.operations_config import upsert_operation_codes_from_json
+    from config import refresh_operations_cache
+
+    with get_db() as conn:
+        n = upsert_operation_codes_from_json(conn)
+        conn.commit()
+    refresh_operations_cache()
+    return {"success": True, "upserted": n}

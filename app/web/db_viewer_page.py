@@ -116,15 +116,20 @@ body.light .tbl-rows-badge{{background:rgba(8,145,178,.1)}}
 }}
 .theme-btn:hover{{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}}
 .back-mysifa{{
-  display:flex;align-items:center;gap:0;padding:9px 10px;border-radius:8px;
+  display:flex;align-items:center;gap:4px;padding:9px 10px;border-radius:8px;
   border:none!important;background:transparent!important;
   color:var(--text2)!important;font-size:13px;font-weight:500;
   cursor:pointer;width:100%;font-family:'Segoe UI',system-ui,sans-serif;
   transition:color .12s,background .12s;
 }}
 .back-mysifa:hover{{color:var(--text)!important;background:var(--accent-bg)!important}}
+.back-mysifa .back-preamble{{font-weight:500;color:var(--text2)}}
 .back-mysifa .wm{{font-weight:800;color:var(--text);letter-spacing:-.3px}}
 .back-mysifa .wm span{{color:var(--accent)}}
+.user-chip{{cursor:pointer;transition:background .12s,border-color .12s}}
+.user-chip:hover{{background:rgba(34,211,238,.16);border:1px solid rgba(34,211,238,.25)}}
+body.light .user-chip:hover{{background:rgba(8,145,178,.12)}}
+.user-chip .uc-profil{{font-size:10px;color:var(--accent);margin-top:3px;display:flex;align-items:center;gap:4px;font-weight:600}}
 .version{{font-size:10px;color:var(--muted);text-align:center;font-family:monospace;padding-top:2px}}
 
 /* ── Main ── */
@@ -331,16 +336,21 @@ body.light .tbl-rows-badge{{background:rgba(8,145,178,.1)}}
     </div>
 
     <div class="sidebar-bottom">
-      <div class="user-chip">
+      <div class="user-chip" onclick="window.location.href='/profil'" title="Modifier mon profil" role="button" tabindex="0">
         <div class="uc-name">{user_name}</div>
         <div class="uc-role">{user_role}</div>
+        <div class="uc-profil">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Modifier mon profil
+        </div>
       </div>
       <button class="theme-btn" onclick="toggleTheme()">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
         <span id="theme-label">Thème clair</span>
       </button>
       <button type="button" class="back-mysifa" onclick="window.location.href='/'" title="Retour MySifa">
-        ← Retour <span class="wm">My<span>Sifa</span></span>
+        <span class="back-preamble">← Retour</span>
+        <span class="wm">My<span>Sifa</span></span>
       </button>
       <div class="version">v{version}</div>
     </div>

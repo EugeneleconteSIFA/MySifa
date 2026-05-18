@@ -109,6 +109,19 @@ input,select{width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid 
 body.light .btn-sec:hover{box-shadow:0 0 0 1px rgba(8,145,178,.35),0 0 18px rgba(8,145,178,.15);border-color:rgba(8,145,178,.4);color:var(--accent)}
 .row-user{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)}
 .row-user:last-child{border-bottom:none}
+.op-cat{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:18px 0 8px}
+.op-row{display:grid;grid-template-columns:52px 1fr 110px 100px 52px auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px}
+.op-row:last-child{border-bottom:none}
+.op-code{font-family:monospace;font-weight:800;color:var(--accent)}
+.op-lbl{font-weight:600}
+.op-pill{font-size:10px;padding:2px 8px;border-radius:999px;border:1px solid var(--border);text-transform:uppercase}
+.op-pill.calage{color:#34d399;border-color:rgba(52,211,153,.35)}
+.op-pill.arret{color:#fbbf24;border-color:rgba(251,191,36,.35)}
+.op-pill.production{color:#60a5fa;border-color:rgba(96,165,250,.35)}
+.op-act{display:flex;gap:6px;justify-content:flex-end}
+.op-act button{padding:4px 8px;font-size:11px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit}
+.op-act button:hover{border-color:var(--accent);color:var(--accent)}
+
 .pill{font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;border:1px solid var(--border);display:inline-flex;align-items:center;gap:6px;line-height:1.4}
 .pill--direction{border-color:rgba(244,114,182,.35);color:#f472b6;background:rgba(244,114,182,.12)}
 .pill--administration{border-color:rgba(167,139,250,.38);color:#a78bfa;background:rgba(167,139,250,.12)}
@@ -161,6 +174,7 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
       <div class="nav-group-label">Base</div>
       <button type="button" class="nav-btn active" data-tab="users">Utilisateurs</button>
       <button type="button" class="nav-btn" data-tab="fournisseurs">Fournisseurs</button>
+      <button type="button" class="nav-btn" data-tab="bases">Bases</button>
       <div class="nav-group-label" style="margin-top:8px">Accès</div>
       <button type="button" class="nav-btn" data-tab="matrix">Matrice d'accès</button>
       <button type="button" class="nav-btn" data-tab="defaults">Référentiel rôles</button>
@@ -305,6 +319,36 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
           </div>
           <div id="fh-results"></div>
         </div>
+      </div>
+    </section>
+
+
+    <section id="panel-bases" class="hidden">
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+          <h2 style="margin:0">Codes opération (calage, arrêt, production…)</h2>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button type="button" class="btn btn-sec" onclick="importOpsJson()">Sync. operations.json</button>
+            <button type="button" class="btn" onclick="openOpForm()">+ Ajouter un code</button>
+          </div>
+        </div>
+        <p class="sub" style="margin-top:-4px;margin-bottom:14px">Référentiel utilisé par la saisie production et les imports. Modifiable ici ou via Database Viewer → table <code>operation_codes</code>.</p>
+        <div id="op-form-wrap" class="hidden" style="margin-bottom:16px;padding:14px;border:1px solid var(--border);border-radius:12px;background:rgba(0,0,0,.12)">
+          <h3 style="margin:0 0 10px;font-size:14px" id="op-form-title">Nouveau code</h3>
+          <div class="form-grid" style="grid-template-columns:repeat(auto-fill,minmax(140px,1fr))">
+            <input type="text" id="op-code" placeholder="Code (ex. 82)" inputmode="numeric" maxlength="3">
+            <input type="text" id="op-label" placeholder="Libellé">
+            <select id="op-severity"><option value="info">info</option><option value="attention">attention</option><option value="critique">critique</option></select>
+            <select id="op-category"></select>
+            <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2)"><input type="checkbox" id="op-required"> Obligatoire</label>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:12px">
+            <button type="button" class="btn" onclick="saveOpForm()">Enregistrer</button>
+            <button type="button" class="btn btn-sec" onclick="closeOpForm()">Annuler</button>
+          </div>
+        </div>
+        <input type="search" id="op-filter" placeholder="Filtrer (code, libellé, catégorie…)" style="margin-bottom:12px" oninput="renderOpList()">
+        <div id="op-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
       </div>
     </section>
 
@@ -482,11 +526,12 @@ function setTab(id) {
   document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === id);
   });
-  ['users', 'matrix', 'defaults', 'fournisseurs', 'updates'].forEach(p => {
+  ['users', 'matrix', 'defaults', 'fournisseurs', 'bases', 'updates'].forEach(p => {
     const el = document.getElementById('panel-' + p);
     if (el) el.classList.toggle('hidden', p !== id);
   });
   if (id === 'fournisseurs') loadFournisseurs();
+  if (id === 'bases') loadOperationCodes();
   if (id === 'updates') loadUpdates();
 }
 
@@ -1528,6 +1573,156 @@ async function submitEditUpdate() {
     closeEditUpdateModal();
     await loadUpdates();
   } catch(e) { toast(e.message, true); }
+}
+
+
+let _opItems = [];
+let _opCategories = [];
+let _opEditCode = null;
+
+async function loadOperationCodes() {
+  const el = document.getElementById('op-list');
+  if (!el) return;
+  try {
+    const d = await api('/api/settings/operation-codes');
+    _opItems = (d && d.items) ? d.items : [];
+    _opCategories = (d && d.categories) ? d.categories : [];
+    const sel = document.getElementById('op-category');
+    if (sel) {
+      sel.innerHTML = _opCategories.map(c => `<option value="${c}">${c}</option>`).join('');
+    }
+    renderOpList();
+  } catch (e) {
+    el.innerHTML = `<p style="color:var(--danger)">${esc(e.message)}</p>`;
+  }
+}
+
+function renderOpList() {
+  const el = document.getElementById('op-list');
+  if (!el) return;
+  const q = (document.getElementById('op-filter')?.value || '').trim().toLowerCase();
+  let items = [..._opItems];
+  if (q) {
+    items = items.filter(o =>
+      String(o.code).includes(q) ||
+      (o.label || '').toLowerCase().includes(q) ||
+      (o.category || '').toLowerCase().includes(q)
+    );
+  }
+  const byCat = {};
+  items.forEach(o => {
+    const c = o.category || 'autre';
+    if (!byCat[c]) byCat[c] = [];
+    byCat[c].push(o);
+  });
+  const cats = Object.keys(byCat).sort((a, b) => a.localeCompare(b, 'fr'));
+  if (!cats.length) {
+    el.innerHTML = '<p style="color:var(--muted);font-size:13px">Aucun code.</p>';
+    return;
+  }
+  el.innerHTML = cats.map(cat => {
+    const rows = byCat[cat].map(o => {
+      const c = esc(o.code);
+      return '<div class="op-row">'
+        + '<span class="op-code">' + c + '</span>'
+        + '<span class="op-lbl">' + esc(o.label) + '</span>'
+        + '<span class="op-pill ' + esc(o.severity) + '">' + esc(o.severity) + '</span>'
+        + '<span class="op-pill ' + esc(cat) + '">' + esc(cat) + '</span>'
+        + '<span style="font-size:11px;color:var(--muted)">' + (o.required ? 'oui' : '—') + '</span>'
+        + '<span class="op-act">'
+        + '<button type="button" data-op-edit="' + c + '">Modifier</button>'
+        + '<button type="button" data-op-del="' + c + '">Suppr.</button>'
+        + '</span></div>';
+    }).join('');
+    return '<div class="op-cat">' + esc(cat) + '</div>' + rows;
+  }).join('');
+  el.querySelectorAll('[data-op-edit]').forEach(btn => {
+    btn.addEventListener('click', () => openOpForm(btn.getAttribute('data-op-edit')));
+  });
+  el.querySelectorAll('[data-op-del]').forEach(btn => {
+    btn.addEventListener('click', () => deleteOpCode(btn.getAttribute('data-op-del')));
+  });
+}
+
+function openOpForm(code) {
+  _opEditCode = code || null;
+  const wrap = document.getElementById('op-form-wrap');
+  const title = document.getElementById('op-form-title');
+  const codeInp = document.getElementById('op-code');
+  if (!wrap) return;
+  wrap.classList.remove('hidden');
+  if (code) {
+    const o = _opItems.find(x => String(x.code) === String(code));
+    if (!o) return;
+    title.textContent = 'Modifier le code ' + code;
+    codeInp.value = o.code;
+    codeInp.disabled = true;
+    document.getElementById('op-label').value = o.label || '';
+    document.getElementById('op-severity').value = o.severity || 'info';
+    document.getElementById('op-category').value = o.category || 'autre';
+    document.getElementById('op-required').checked = !!o.required;
+  } else {
+    title.textContent = 'Nouveau code';
+    codeInp.value = '';
+    codeInp.disabled = false;
+    document.getElementById('op-label').value = '';
+    document.getElementById('op-severity').value = 'info';
+    document.getElementById('op-category').value = _opCategories[0] || 'autre';
+    document.getElementById('op-required').checked = false;
+  }
+}
+
+function closeOpForm() {
+  _opEditCode = null;
+  const wrap = document.getElementById('op-form-wrap');
+  if (wrap) wrap.classList.add('hidden');
+}
+
+async function saveOpForm() {
+  const body = {
+    code: document.getElementById('op-code').value.trim(),
+    label: document.getElementById('op-label').value.trim(),
+    severity: document.getElementById('op-severity').value,
+    category: document.getElementById('op-category').value,
+    required: document.getElementById('op-required').checked,
+  };
+  try {
+    if (_opEditCode) {
+      await api('/api/settings/operation-codes/' + encodeURIComponent(_opEditCode), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      toast('Code mis à jour');
+    } else {
+      await api('/api/settings/operation-codes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      toast('Code ajouté');
+    }
+    closeOpForm();
+    await loadOperationCodes();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function deleteOpCode(code) {
+  if (!confirm('Supprimer le code ' + code + ' ?')) return;
+  try {
+    await api('/api/settings/operation-codes/' + encodeURIComponent(code), { method: 'DELETE' });
+    toast('Code supprimé');
+    await loadOperationCodes();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function importOpsJson() {
+  if (!confirm('Importer / mettre à jour tous les codes depuis operations.json sur le serveur ?')) return;
+  try {
+    const r = await api('/api/settings/operation-codes/import-json', { method: 'POST' });
+    toast('Sync. OK (' + (r.upserted || 0) + ' codes)');
+    await loadOperationCodes();
+  } catch (e) { toast(e.message, true); }
 }
 
 async function deleteUpdate(id) {

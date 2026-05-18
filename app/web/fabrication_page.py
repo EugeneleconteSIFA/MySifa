@@ -166,12 +166,11 @@ table.fab-table td{
   color:var(--text2);
 }
 table.fab-table tr:last-child td{border-bottom:none}
-table.fab-table tr.fab-row-arret td{background:rgba(251,191,36,.12)}
-body.light table.fab-table tr.fab-row-arret td{background:rgba(217,119,6,.10)}
-table.fab-table tr.fab-row-last.fab-row-arret td{background:rgba(251,191,36,.14)}
-body.light table.fab-table tr.fab-row-last.fab-row-arret td{background:rgba(217,119,6,.12)}
-table.fab-table tr.fab-row-last:not(.fab-row-arret) td{
+table.fab-table tr.fab-row-last td{
   background:rgba(34,211,238,.04);
+}
+body.light table.fab-table tr.fab-row-last td{
+  background:rgba(8,145,178,.06);
 }
 .fab-time{font-family:monospace;font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;letter-spacing:.2px}
 .fab-op-chip{
@@ -353,6 +352,18 @@ table.fab-table tr.fab-row-last:not(.fab-row-arret) td{
 .fab-picker-hint{font-size:11px;color:var(--muted);margin:-4px 0 6px;line-height:1.45;padding:0 2px}
 .fab-picker-hint-link{color:var(--accent);cursor:pointer;text-decoration:underline;text-underline-offset:2px;background:none;border:none;font:inherit;font-size:inherit;padding:0}
 .fab-picker-hint-link:hover{opacity:.8}
+.fab-btn-fictif{
+  background:rgba(167,139,250,.18);color:#a78bfa;border:1.5px solid rgba(167,139,250,.45);
+  font-weight:800;width:100%;margin-top:10px;
+}
+.fab-btn-fictif:hover{background:rgba(167,139,250,.28);border-color:#a78bfa}
+.fab-dossier-fictif,.fab-fictif-label{color:#a78bfa;font-weight:800}
+.fab-dossier-ref.fab-dossier-fictif{font-size:15px}
+table.fab-table tr.fab-row-fictif td{color:#a78bfa;font-weight:700}
+table.fab-table tr.fab-row-fictif .fab-op-chip{opacity:.92}
+body.light .fab-btn-fictif{background:rgba(124,58,237,.12);color:#7c3aed;border-color:rgba(124,58,237,.35)}
+body.light table.fab-table tr.fab-row-fictif td{color:#7c3aed}
+body.light .fab-dossier-fictif,body.light .fab-fictif-label{color:#7c3aed}
 
 /* Toast */
 .fab-toast{
@@ -616,6 +627,8 @@ let S = {
   // Modals
   showDossierPicker: false,
   pickerQuery: '',
+  showFictifModal: false,
+  fictifOf: '',
   showDebutModal: false,
   showFinModal: false,
   showCommentModal: false,
@@ -670,7 +683,7 @@ function fabPauseAutoRefresh(ms){
 }
 
 function fabIsModalOpen(){
-  if(S.showDossierPicker || S.showDebutModal || S.showFinModal || S.showCommentModal || S.showArret50Modal) return true;
+  if(S.showDossierPicker || S.showFictifModal || S.showDebutModal || S.showFinModal || S.showCommentModal || S.showArret50Modal) return true;
   try{
     const mr = document.getElementById('mroot');
     if(mr && mr.firstElementChild) return true;
@@ -704,11 +717,11 @@ function _fabCaptureUiState(){
 
 function _fabRestoreUiState(ui){
   if(!ui) return;
-  requestAnimationFrame(()=>{
+  const apply = ()=>{
     const wrap = document.querySelector('.fab-table-wrap');
-    if(wrap && ui.scrollTop > 0) wrap.scrollTop = ui.scrollTop;
+    if(wrap) wrap.scrollTop = ui.scrollTop ?? 0;
     const main = document.querySelector('.fab-main');
-    if(main && ui.mainScroll > 0) main.scrollTop = ui.mainScroll;
+    if(main) main.scrollTop = ui.mainScroll ?? 0;
     if(ui.focusId){
       const el = document.getElementById(ui.focusId);
       if(el){
@@ -718,7 +731,15 @@ function _fabRestoreUiState(ui){
         }
       }
     }
-  });
+  };
+  requestAnimationFrame(()=>requestAnimationFrame(apply));
+}
+
+function fabRenderPreserveUi(patch){
+  const ui = _fabCaptureUiState();
+  if(patch) Object.assign(S, patch);
+  render();
+  _fabRestoreUiState(ui);
 }
 
 function set(u){ Object.assign(S, u); render(); }
@@ -750,6 +771,30 @@ function fmtDate(iso){
   return d.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'});
 }
 function fN(v){ if(v==null||v===''||isNaN(Number(v))) return '—'; return Number(v).toLocaleString('fr-FR'); }
+
+const FAB_FICTIF_PREFIX = 'FICTIF:';
+
+function isFictifDossierRef(ref){
+  if(!ref) return false;
+  return String(ref).trim().toUpperCase().startsWith(FAB_FICTIF_PREFIX);
+}
+
+function fictifOfDisplay(ref){
+  if(!ref) return '';
+  const s = String(ref).trim();
+  if(isFictifDossierRef(s)) return s.slice(FAB_FICTIF_PREFIX.length);
+  return s;
+}
+
+function fabDossierRefLabel(d){
+  if(!d) return '';
+  if(d.fictif || isFictifDossierRef(d.reference)) return 'OF fictif '+fictifOfDisplay(d.reference||d.numero_of||'');
+  return d.reference||'';
+}
+
+function isFictifSaisieRow(s){
+  return isFictifDossierRef(s.no_dossier);
+}
 
 function isArretSaisie(s){
   if(!s) return false;
@@ -892,6 +937,10 @@ async function loadSession(opts){
     Object.assign(S, patch);
     return;
   }
+  if(opts?.preserveUi){
+    fabRenderPreserveUi(patch);
+    return;
+  }
   set(patch);
 }
 
@@ -969,14 +1018,20 @@ async function triggerOp(opCode, opLabel, extra={}){
   }catch(e){
     showToast('Erreur : '+e.message,'danger');
   }finally{
-    set({loading:false});
-    await loadSession(); // toujours rafraîchir l'état après saisie (succès ou erreur)
+    fabPauseAutoRefresh(10000);
+    const ui = _fabCaptureUiState();
+    Object.assign(S, {loading:false});
+    await loadSession({noRender:true, silent:true});
+    render();
+    _fabRestoreUiState(ui);
   }
 }
 
 async function saveComment(){
   const id = S.commentSaisieId;
   if(!id) return;
+  fabPauseAutoRefresh(10000);
+  const ui = _fabCaptureUiState();
   set({loading:true});
   try{
     await apiFetch('/api/fabrication/saisie/'+id+'/commentaire',{
@@ -984,12 +1039,12 @@ async function saveComment(){
       body: JSON.stringify({commentaire: S.commentText}),
     });
     showToast('Commentaire enregistré');
-    fabPauseAutoRefresh(10000);
-    set({showCommentModal:false, commentText:'', commentSaisieId:null});
-    await loadSession();
+    await loadSession({noRender:true, silent:true});
+    Object.assign(S, {showCommentModal:false, commentText:'', commentSaisieId:null, loading:false});
+    render();
+    _fabRestoreUiState(ui);
   }catch(e){
     showToast('Erreur : '+e.message,'danger');
-  }finally{
     set({loading:false});
   }
 }
@@ -1265,8 +1320,9 @@ function renderPrintPanel(){
     h('div',{className:'fab-panel'},
       S.dossier ? h('div',{style:{fontSize:'12px',color:'var(--muted)',marginBottom:'4px'}},
         '📂 Dossier actif : ',
-        h('strong',{style:{color:'var(--accent)'}},S.dossier.reference),
-        ' — ',S.dossier.client||''
+        h('strong',{style:{color:(S.dossier.fictif||isFictifDossierRef(S.dossier.reference))?'#a78bfa':'var(--accent)'}},
+          fabDossierRefLabel(S.dossier)),
+        (S.dossier.client && !(S.dossier.fictif||isFictifDossierRef(S.dossier.reference))) ? (' — '+S.dossier.client) : ''
       ) : h('div',{style:{fontSize:'12px',color:'var(--muted)',marginBottom:'4px'}},
         'Pas de dossier actif — les champs seront vides par défaut'
       ),
@@ -1568,8 +1624,9 @@ function renderTracaPanel(){
   return h('div',{className:'fab-main'},
     h('div',{className:'fab-main-head'},
       h('span',{className:'fab-main-title'}, svgIcon('scan',16),' Traçabilité matières'),
-      S.dossier ? h('span',{style:{fontSize:'12px',color:'var(--accent)',fontWeight:'700'}},
-        S.dossier.reference) : null,
+      S.dossier ? h('span',{style:{fontSize:'12px',fontWeight:'700',
+          color:(S.dossier.fictif||isFictifDossierRef(S.dossier.reference))?'#a78bfa':'var(--accent)'}},
+        fabDossierRefLabel(S.dossier)) : null,
       h('span',{className:'fab-main-sub'},machineName)
     ),
     h('div',{className:'fab-traca-layout'},
@@ -1590,7 +1647,7 @@ function renderTracaPanel(){
         h('div',{className:'fab-spinner',style:{width:'12px',height:'12px',borderWidth:'1.5px'}}),'Enregistrement…'
       ) : h('div',{className:'fab-traca-status'},
         matieres.length+' bobine'+(matieres.length!==1?'s':''),' enregistrée'+(matieres.length!==1?'s':''),' aujourd\'hui',
-        S.dossier ? ' — Dossier '+S.dossier.reference : ''
+        S.dossier ? (' — Dossier '+fabDossierRefLabel(S.dossier)) : ''
       ),
       // Table
       h('div',{className:'fab-traca-table-wrap'},
@@ -1671,10 +1728,8 @@ function renderMain(){
         }, svgIcon(s.commentaire?'edit':'message-square',13));
 
         const opNom = (s.operateur_nom || s.operateur || '—');
-        const isArret = isArretSaisie(s);
-        return h('tr',{className:'fab-table-row'
-          +(isArret?' fab-row-arret':'')
-          +(isLast?' fab-row-last':'')},
+        const fictifRow = isFictifSaisieRow(s);
+        return h('tr',{className:'fab-table-row'+(isLast?' fab-row-last':'')+(fictifRow?' fab-row-fictif':'')},
           h('td',null, h('span',{className:'fab-time'}, fmtTime(s.date_operation))),
           ...(isAdminView ? [h('td',null, h('span',{style:{fontWeight:'800',color:'var(--text)'}}, opNom))] : []),
           h('td',null,
@@ -1706,7 +1761,9 @@ function renderMain(){
   return h('div',{className:'fab-main'},
     h('div',{className:'fab-main-head'},
       h('span',{className:'fab-main-title'}, S.dossier
-        ? ('Dossier : '+S.dossier.reference)
+        ? h('span',null,'Dossier : ',
+            h('span',{className:(S.dossier.fictif||isFictifDossierRef(S.dossier.reference))?'fab-fictif-label':''},
+              fabDossierRefLabel(S.dossier)))
         : "Saisie de production"
       ),
       canAdminView ? h('div',{style:{marginLeft:'auto',display:'flex',alignItems:'center',gap:'10px'}},
@@ -1759,12 +1816,16 @@ function renderFooter(){
     if(d.laize) metas.push({label:'Laize',val:d.laize+' mm'});
     if(d.format_l&&d.format_h) metas.push({label:'Format',val:d.format_l+' × '+d.format_h+' mm'});
     if(d.date_livraison) metas.push({label:'Livraison',val:fmtDate(d.date_livraison)});
-    if(d.numero_of) metas.push({label:'N° OF',val:d.numero_of});
+    const fictifDos = d.fictif || isFictifDossierRef(d.reference);
+    if(d.numero_of && !fictifDos) metas.push({label:'N° OF',val:d.numero_of});
+    if(fictifDos) metas.push({label:'N° OF fictif',val:fictifOfDisplay(d.reference||d.numero_of||'')});
     if(d.machine_nom) metas.push({label:'Machine',val:d.machine_nom});
 
     infoSection = h('div',{className:'fab-footer-info'},
-      h('div',{className:'fab-dossier-ref'},d.reference||'—'),
-      h('div',{className:'fab-dossier-client'},d.client||'Client non renseigné'),
+      h('div',{className:'fab-dossier-ref'+(fictifDos?' fab-dossier-fictif':'')},
+        fictifDos ? ('OF fictif '+fictifOfDisplay(d.reference||d.numero_of||'')) : (d.reference||'—')),
+      h('div',{className:'fab-dossier-client'},
+        fictifDos ? 'Dossier hors planning' : (d.client||'Client non renseigné')),
       h('div',{className:'fab-dossier-meta'},
         ...metas.map(m=>h('span',{className:'fab-meta-item'},
           h('span',{className:'fab-meta-label'},m.label),
@@ -1938,7 +1999,7 @@ function renderFooter(){
   // When on non-saisie tabs, show a minimal status line instead of full footer
   if(S.fabTab!=='saisie'){
     const machineName = (S.machine&&S.machine.nom)||(S.user&&S.user.machine_nom)||'—';
-    const dossierLabel = S.dossier ? S.dossier.reference : 'Aucun dossier';
+    const dossierLabel = S.dossier ? fabDossierRefLabel(S.dossier) : 'Aucun dossier';
     return h('div',{className:'fab-footer',style:{gridTemplateColumns:'1fr',padding:'4px 16px 0'}},
       h('div',{style:{display:'flex',alignItems:'center',justifyContent:'center',gap:'16px',
         fontSize:'11px',color:'var(--muted)',padding:'4px 0'}},
@@ -2144,9 +2205,75 @@ function renderDossierPickerModal(){
       ),
       h('div',{id:'fab-picker-search-host'}, searchInp, searchHint),
       listEl,
+      h('button',{
+        type:'button',
+        className:'fab-btn fab-btn-fictif fab-btn-sm',
+        onClick:()=>set({showDossierPicker:false, showFictifModal:true, fictifOf:''}),
+      },'Je ne trouve pas mon dossier'),
       h('div',{className:'fab-modal-btns'},
         h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',
           onClick:()=>set({showDossierPicker:false})},'Annuler')
+      )
+    )
+  );
+}
+
+function openFictifDebut(){
+  const raw = (S.fictifOf||'').trim();
+  if(!raw){
+    showToast('Saisissez un numéro d\'ordre de fabrication','danger');
+    return;
+  }
+  const machine = S.machine || (S.adminMachineId && S.machines.find(m=>m.id===S.adminMachineId));
+  const ref = FAB_FICTIF_PREFIX + raw;
+  set({
+    showFictifModal:false,
+    fictifOf:'',
+    _selectedDossier:{
+      reference: ref,
+      fictif: true,
+      numero_of: raw,
+      client: '',
+      description: 'Dossier hors planning',
+      machine_nom: machine ? machine.nom : '',
+    },
+    showDebutModal:true,
+    metrageDebut:'',
+  });
+}
+
+function renderFictifModal(){
+  const inp = h('input',{
+    type:'text',
+    id:'fab-fictif-of',
+    className:'fab-picker-search',
+    placeholder:'Ex: 2026-12345',
+    autocomplete:'off',
+  });
+  inp.value = S.fictifOf || '';
+  inp.addEventListener('input', e=>{ S.fictifOf = e.target.value; });
+  inp.addEventListener('keydown', e=>{
+    if(e.key==='Enter'){ e.preventDefault(); openFictifDebut(); }
+  });
+
+  requestAnimationFrame(()=>document.getElementById('fab-fictif-of')?.focus());
+
+  return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)set({showFictifModal:false, fictifOf:''});}},
+    h('div',{className:'fab-modal'},
+      h('div',{className:'fab-modal-title'},'Ordre de fabrication hors planning'),
+      h('div',{className:'fab-modal-sub'},
+        'Saisissez le numéro d\'OF pour démarrer un dossier non présent dans le planning. ',
+        h('span',{className:'fab-fictif-label'},'Les saisies seront affichées en violet.')
+      ),
+      h('div',{className:'fab-field'},
+        h('label',null,'N° ordre de fabrication (fictif)'),
+        inp
+      ),
+      h('div',{className:'fab-modal-btns'},
+        h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',
+          onClick:()=>set({showFictifModal:false, fictifOf:'', showDossierPicker:true})},'Retour'),
+        h('button',{className:'fab-btn fab-btn-fictif fab-btn-sm',
+          onClick:openFictifDebut},'Continuer')
       )
     )
   );
@@ -2188,6 +2315,11 @@ function renderDebutModal(){
         client: dos.client||'',
         designation: dos.description||'',
       };
+      if(dos.fictif || isFictifDossierRef(dos.reference)){
+        body.dossier_fictif = true;
+        body.numero_of_fictif = fictifOfDisplay(dos.reference||dos.numero_of||'');
+        body.designation = 'Dossier hors planning';
+      }
       if(mDebut !== null) body.metrage_debut = mDebut;
       if(S.adminMachineId) body.machine_id = S.adminMachineId;
       const r = await apiFetch('/api/fabrication/saisie',{
@@ -2196,12 +2328,13 @@ function renderDebutModal(){
       });
       if(r&&r.success){
         showToast('Début de production enregistré');
-        await loadSession();
+        fabPauseAutoRefresh(10000);
+        await loadSession({noRender:true, silent:true});
       }
     }catch(e){
       showToast('Erreur : '+e.message,'danger');
     }finally{
-      set({loading:false, _selectedDossier:null, metrageDebut:''});
+      fabRenderPreserveUi({loading:false, _selectedDossier:null, metrageDebut:''});
     }
   };
 
@@ -2209,8 +2342,10 @@ function renderDebutModal(){
     h('div',{className:'fab-modal'},
       h('div',{className:'fab-modal-title'},'📦 Début de production'),
       d ? h('div',{className:'fab-modal-sub'},
-        'Dossier : ',h('strong',null,d.reference),
-        d.client ? (' — '+d.client) : ''
+        'Dossier : ',
+        h('strong',{className:(d.fictif||isFictifDossierRef(d.reference))?'fab-fictif-label':''},
+          fabDossierRefLabel(d)),
+        (d.client && !(d.fictif||isFictifDossierRef(d.reference))) ? (' — '+d.client) : ''
       ) : null,
       h('div',{className:'fab-field'},
         h('label',null,(()=>{
@@ -2329,12 +2464,13 @@ function renderFinModal(){
       });
       if(r&&r.success){
         showToast(S.finDossierOui ? 'Dossier clôturé ✅' : 'Fin de production enregistrée 🔄');
-        await loadSession();
+        fabPauseAutoRefresh(10000);
+        await loadSession({noRender:true, silent:true});
       }
     }catch(e){
       showToast('Erreur : '+e.message,'danger');
     }finally{
-      set({loading:false, metrageFinVal:'', nbEtiquettes:'', finDossierOui:null});
+      fabRenderPreserveUi({loading:false, metrageFinVal:'', nbEtiquettes:'', finDossierOui:null});
     }
   };
 
@@ -2342,8 +2478,10 @@ function renderFinModal(){
     h('div',{className:'fab-modal'},
       h('div',{className:'fab-modal-title'},'🏁 Fin de production'),
       S.dossier ? h('div',{className:'fab-modal-sub'},
-        'Dossier ',h('strong',null,S.dossier.reference),
-        S.dossier.client ? (' — '+S.dossier.client) : ''
+        'Dossier ',
+        h('strong',{className:(S.dossier.fictif||isFictifDossierRef(S.dossier.reference))?'fab-fictif-label':''},
+          fabDossierRefLabel(S.dossier)),
+        (S.dossier.client && !(S.dossier.fictif||isFictifDossierRef(S.dossier.reference))) ? (' — '+S.dossier.client) : ''
       ) : null,
       h('div',{className:'fab-field'},
         h('label',null,(()=>{
@@ -2504,6 +2642,7 @@ function render(){
   root.appendChild(overlay);
 
   if(S.showDossierPicker) root.appendChild(renderDossierPickerModal());
+  if(S.showFictifModal)   root.appendChild(renderFictifModal());
   if(S.showDebutModal)    root.appendChild(renderDebutModal());
   if(S.showFinModal)      root.appendChild(renderFinModal());
   if(S.showCommentModal)  root.appendChild(renderCommentModal());

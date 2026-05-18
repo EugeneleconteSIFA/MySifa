@@ -1308,6 +1308,33 @@ def _migrate(conn):
             conn.execute("ALTER TABLE machines ADD COLUMN horaires_parity TEXT")
         _record_schema_migration(conn, 22, "machines_horaires_parity")
 
+    # v23 — Référentiel codes opération (ex operations.json)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=23 LIMIT 1").fetchone():
+        if not conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='operation_codes'"
+        ).fetchone():
+            conn.execute(
+                """CREATE TABLE operation_codes (
+                    code TEXT PRIMARY KEY,
+                    severity TEXT NOT NULL,
+                    label TEXT NOT NULL,
+                    category TEXT NOT NULL,
+                    required INTEGER NOT NULL DEFAULT 0,
+                    updated_at TEXT NOT NULL
+                )"""
+            )
+        try:
+            from app.services.operations_config import (
+                seed_operation_codes_if_empty,
+                upsert_operation_codes_from_json,
+            )
+
+            seed_operation_codes_if_empty(conn)
+            upsert_operation_codes_from_json(conn, ["12", "58", "69", "80", "81"])
+        except Exception:
+            pass
+        _record_schema_migration(conn, 23, "operation_codes")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,
@@ -1424,3 +1451,10 @@ def map_columns(df):
 
 init_db()
 create_default_admin()
+
+try:
+    from config import refresh_operations_cache
+
+    refresh_operations_cache()
+except Exception:
+    pass

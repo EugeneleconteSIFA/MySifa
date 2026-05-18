@@ -177,19 +177,32 @@ def validate_operations_config(data: object) -> None:
 
 
 def load_operations():
-    path = os.path.join(BASE_DIR, "operations.json")
+    """Charge le référentiel (SQLite prioritaire, repli operations.json)."""
     try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except FileNotFoundError as e:
-        raise RuntimeError(f"Fichier manquant : {path}") from e
-    except json.JSONDecodeError as e:
-        raise RuntimeError(f"JSON invalide : {path} — {e}") from e
-    try:
-        validate_operations_config(data)
-    except ValueError as e:
-        raise RuntimeError(f"operations.json : {e}") from e
-    return data
+        from app.services.operations_config import load_operations_dict
+
+        return load_operations_dict()
+    except Exception:
+        path = os.path.join(BASE_DIR, "operations.json")
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except FileNotFoundError as e:
+            raise RuntimeError(f"Fichier manquant : {path}") from e
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"JSON invalide : {path} — {e}") from e
+        try:
+            validate_operations_config(data)
+        except ValueError as e:
+            raise RuntimeError(f"operations.json : {e}") from e
+        return data
+
+
+def refresh_operations_cache():
+    """Recharge OPERATION_SEVERITY après modification en base."""
+    global OPERATION_SEVERITY
+    OPERATION_SEVERITY = load_operations()
+    return OPERATION_SEVERITY
 
 
 OPERATION_SEVERITY = load_operations()

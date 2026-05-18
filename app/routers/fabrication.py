@@ -17,6 +17,9 @@ from app.routers.planning import _planned_end_iso_for_machine
 
 router = APIRouter()
 
+# Dossiers saisis hors planning (OF saisi manuellement par l'opérateur)
+_FICTIF_PREFIX = "FICTIF:"
+
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -101,6 +104,55 @@ def _get_active_dossier(saisies: list):
         elif code == "89":
             active = None
     return active
+
+
+def _is_fictif_dossier(no_dossier: Optional[str]) -> bool:
+    ref = (no_dossier or "").strip()
+    return ref.upper().startswith(_FICTIF_PREFIX)
+
+
+def _fictif_of_display(no_dossier: str) -> str:
+    """Numéro OF affiché (sans préfixe interne)."""
+    ref = (no_dossier or "").strip()
+    if _is_fictif_dossier(ref):
+        return ref[len(_FICTIF_PREFIX) :].strip()
+    return ref
+
+
+def _normalize_fictif_no_dossier(raw: str) -> str:
+    """Valide et normalise un n° OF fictif → FICTIF:<of>."""
+    s = (raw or "").strip()
+    if not s:
+        raise HTTPException(
+            status_code=400,
+            detail="Numéro d'ordre de fabrication requis pour un dossier hors planning",
+        )
+    if s.upper().startswith(_FICTIF_PREFIX):
+        s = s[len(_FICTIF_PREFIX) :].strip()
+    if not s:
+        raise HTTPException(
+            status_code=400,
+            detail="Numéro d'ordre de fabrication invalide",
+        )
+    if len(s) > 80:
+        raise HTTPException(
+            status_code=400,
+            detail="Numéro d'ordre de fabrication trop long (80 caractères max)",
+        )
+    return _FICTIF_PREFIX + s
+
+
+def _build_fictif_dossier_dict(no_dossier: str, machine: Optional[dict] = None) -> dict:
+    of = _fictif_of_display(no_dossier)
+    return {
+        "reference": no_dossier.strip(),
+        "fictif": True,
+        "numero_of": of,
+        "client": "",
+        "description": "Dossier hors planning",
+        "machine_nom": (machine or {}).get("nom"),
+        "machine_code": (machine or {}).get("code"),
+    }
 
 
 def _resolve_machine(user: dict, body: dict, conn) -> dict:
@@ -283,6 +335,8 @@ def get_session(request: Request, machine_id: int = None):
             ).fetchone()
             if row:
                 dossier = dict(row)
+            elif _is_fictif_dossier(active_ref):
+                dossier = _build_fictif_dossier_dict(active_ref, None)
 
         # Info machine
         machine = None
@@ -290,6 +344,10 @@ def get_session(request: Request, machine_id: int = None):
             m = conn.execute("SELECT * FROM machines WHERE id=?", (mid,)).fetchone()
             if m:
                 machine = dict(m)
+
+        if dossier and dossier.get("fictif") and machine:
+            dossier["machine_nom"] = machine.get("nom")
+            dossier["machine_code"] = machine.get("code")
 
         return {
             "saisies": saisies,
@@ -368,6 +426,17 @@ async def create_saisie(request: Request):
     client      = (body.get("client")       or "").strip() or None
     designation = (body.get("designation")  or "").strip() or None
     commentaire = (body.get("commentaire")  or "").strip() or None
+
+    dossier_fictif = bool(body.get("dossier_fictif"))
+    numero_of_fictif = (
+        (body.get("numero_of_fictif") or body.get("numero_of") or "").strip()
+    )
+    if dossier_fictif:
+        no_dossier = _normalize_fictif_no_dossier(numero_of_fictif or no_dossier or "")
+        designation = designation or "Dossier hors planning"
+    elif no_dossier and _is_fictif_dossier(no_dossier):
+        no_dossier = _normalize_fictif_no_dossier(no_dossier)
+        designation = designation or "Dossier hors planning"
 
     # fin_dossier : booléen transmis par la saisie Fin de production
     # True  → dossier réellement terminé (statut_reel = reellement_termine)
