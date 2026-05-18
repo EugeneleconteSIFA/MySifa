@@ -284,9 +284,10 @@ body.light .slot .line1{color:#1e293b}body.light .slot .line2{color:#334155}body
 .wk-lbl.has-cmt,.dh-cell.has-cmt .dh-date-lbl{color:var(--accent)}
 .wk-hdr-row{display:flex;align-items:flex-start;gap:8px;margin-bottom:8px}
 .wk-hdr-actions{display:flex;align-items:center;gap:6px;flex-shrink:0;padding-top:1px}
-.wk-hdr-center{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-width:0}
+.wk-hdr-center{flex:1;display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;text-align:left;min-width:0}
 .cal-cmt-text{color:var(--blue);font-weight:700;font-size:11px;line-height:1.35;text-align:center;word-break:break-word;max-width:100%}
-.wk-cmt-text{margin-top:3px;padding:0 8px}
+.wk-hdr-center .cal-cmt-text,.wk-cmt-text{text-align:left}
+.wk-cmt-text{margin-top:3px;padding:0}
 .day-cmt-text{padding:3px 6px 5px;width:100%}
 
 .legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}

@@ -560,54 +560,42 @@ table.fab-traca-table tr:last-child td{border-bottom:none}
 'use strict';
 /*__TRACA_GUIDE__*/
 
-/* ── Operations config ───────────────────────────────────────── */
-const OPS = {
-  "01":{"label":"Début de production","category":"personnel","severity":"info","required":true},
-  "02":{"label":"Calage","category":"calage","severity":"info"},
-  "03":{"label":"Production","category":"production","severity":"info"},
-  "10":{"label":"Calage Errepi","category":"calage","severity":"info"},
-  "11":{"label":"Calage Bunsch","category":"calage","severity":"info"},
-  "50":{"label":"Arrêt machine","category":"arret","severity":"attention"},
-  "51":{"label":"Casse Echenillage","category":"arret","severity":"attention"},
-  "52":{"label":"Problème raccord","category":"arret","severity":"attention"},
-  "53":{"label":"Casse bande","category":"arret","severity":"attention"},
-  "54":{"label":"Problème Impressions","category":"arret","severity":"attention"},
-  "55":{"label":"Surdosage colle","category":"arret","severity":"attention"},
-  "56":{"label":"Appro mandrins","category":"appro","severity":"info"},
-  "58":{"label":"Changement bobines","category":"appro","severity":"info"},
-  "59":{"label":"Changement Contre-Partie","category":"calage","severity":"info"},
-  "60":{"label":"Changement Plaque","category":"calage","severity":"info"},
-  "61":{"label":"Nettoyage","category":"nettoyage","severity":"info"},
-  "62":{"label":"Remplissage colle Errépi","category":"arret","severity":"info"},
-  "63":{"label":"Pause","category":"pause","severity":"info"},
-  "64":{"label":"Intervention technique","category":"technique","severity":"info"},
-  "65":{"label":"Débordement adhésif","category":"arret","severity":"attention"},
-  "66":{"label":"Attente matière","category":"appro","severity":"critique"},
-  "67":{"label":"Vidange four colle","category":"nettoyage","severity":"info"},
-  "68":{"label":"Casse Claquant métal","category":"arret","severity":"attention"},
-  "69":{"label":"Arrêt urgence Errepi","category":"arret","severity":"info"},
-  "70":{"label":"Problème UV1","category":"arret","severity":"info"},
-  "71":{"label":"Problème UV2","category":"arret","severity":"info"},
-  "72":{"label":"Problème UV3","category":"arret","severity":"info"},
-  "73":{"label":"Problème Turret","category":"arret","severity":"attention"},
-  "74":{"label":"Changement Magnétique","category":"calage","severity":"info"},
-  "75":{"label":"Changement Cliché","category":"calage","severity":"info"},
-  "76":{"label":"Rétraction couteaux","category":"arret","severity":"info"},
-  "77":{"label":"Nettoyage Bunch","category":"nettoyage","severity":"info"},
-  "78":{"label":"Problème / casse-rive","category":"arret","severity":"attention"},
-  "79":{"label":"Problème tapis Errepi","category":"arret","severity":"attention"},
-  "86":{"label":"Arrivée personnel","category":"personnel","severity":"info","required":true},
-  "87":{"label":"Départ personnel","category":"personnel","severity":"info","required":true},
-  "88":{"label":"Reprise production","category":"production","severity":"info"},
-  "89":{"label":"Fin de production","category":"personnel","severity":"info","required":true},
-  "90":{"label":"Annulation saisie","category":"annulation","severity":"info"},
-};
-
-const CAT_ORDER = ["personnel","production","calage","arret","appro","nettoyage","technique","pause","annulation"];
+/* ── Operations config (SQLite — Paramètres > Opérations) ───── */
+let OPS = {};
 const CAT_LABELS = {
   personnel:"Personnel",production:"Production",calage:"Calage",arret:"Arrêts machine",
-  appro:"Approvisionnement",nettoyage:"Nettoyage",technique:"Technique",pause:"Pauses",annulation:"Annulation"
+  appro:"Approvisionnement",nettoyage:"Nettoyage",technique:"Technique",pause:"Pauses",
+  annulation:"Annulation",autre:"Autre"
 };
+const DEFAULT_CAT_ORDER = ["personnel","production","calage","arret","appro","nettoyage","technique","pause","annulation","autre"];
+let CAT_ORDER = [...DEFAULT_CAT_ORDER];
+
+function rebuildCatOrder(ops, serverCategories){
+  const seen = new Set();
+  const order = [];
+  const add = (c)=>{
+    if(!c || seen.has(c)) return;
+    if(!Object.values(ops).some(o=>(o.category||'autre')===c)) return;
+    order.push(c);
+    seen.add(c);
+  };
+  (serverCategories && serverCategories.length ? serverCategories : DEFAULT_CAT_ORDER).forEach(add);
+  Object.values(ops).forEach(o=>add(o.category||'autre'));
+  CAT_ORDER = order.length ? order : [...DEFAULT_CAT_ORDER];
+}
+
+async function loadOperationsConfig(){
+  try{
+    const d = await apiFetch('/api/fabrication/operations');
+    if(d && d.operations){
+      OPS = d.operations;
+      rebuildCatOrder(OPS, d.categories);
+    }
+  }catch(e){
+    console.error('loadOperationsConfig', e);
+    showToast('Référentiel opérations indisponible','danger');
+  }
+}
 
 /* ── State ───────────────────────────────────────────────────── */
 let S = {
@@ -2205,12 +2193,12 @@ function renderDossierPickerModal(){
       ),
       h('div',{id:'fab-picker-search-host'}, searchInp, searchHint),
       listEl,
-      h('button',{
-        type:'button',
-        className:'fab-btn fab-btn-fictif fab-btn-sm',
-        onClick:()=>set({showDossierPicker:false, showFictifModal:true, fictifOf:''}),
-      },'Je ne trouve pas mon dossier'),
       h('div',{className:'fab-modal-btns'},
+        h('button',{
+          type:'button',
+          className:'fab-btn fab-btn-fictif fab-btn-sm',
+          onClick:()=>set({showDossierPicker:false, showFictifModal:true, fictifOf:''}),
+        },'Je ne trouve pas mon dossier'),
         h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',
           onClick:()=>set({showDossierPicker:false})},'Annuler')
       )
@@ -2680,6 +2668,8 @@ async function init(){
   set({user});
 
   await loadFournisseursFSC();
+  await loadOperationsConfig();
+  render();
 
   // Charger la liste des machines (nécessaire pour le sélecteur admin)
   const isAdm = user.role==='superadmin'||user.role==='administration'||user.role==='direction';

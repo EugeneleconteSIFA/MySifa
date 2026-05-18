@@ -490,9 +490,27 @@ async function loadStats() {{
 }}
 
 /* ── Tables list ── */
+const TABLE_LABELS = {{
+  operation_codes: 'Opérations (référentiel codes)',
+}};
+
+function tableDisplayName(name) {{
+  return TABLE_LABELS[name] || name;
+}}
+
+function sortTablesList(tables) {{
+  const list = [...(tables || [])];
+  list.sort((a, b) => {{
+    if (a.name === 'operation_codes') return -1;
+    if (b.name === 'operation_codes') return 1;
+    return a.name.localeCompare(b.name, 'fr');
+  }});
+  return list;
+}}
+
 async function loadTables() {{
   try {{
-    S.tables = await api('/api/db/tables');
+    S.tables = sortTablesList(await api('/api/db/tables'));
     S.filteredTables = [...S.tables];
     renderTables();
   }} catch(e) {{
@@ -513,7 +531,7 @@ function renderTables() {{
     return `<div class="tbl-item${{active}}" onclick="selectTable('${{escAttr(t.name)}}')" title="${{escAttr(t.name)}}">
       <div class="tbl-item-ico">${{tableIco(14)}}</div>
       <div class="tbl-item-info">
-        <div class="tbl-item-name">${{escHtml(t.name)}}</div>
+        <div class="tbl-item-name">${{escHtml(tableDisplayName(t.name))}}</div>
         <div class="tbl-item-meta">${{t.col_count}} col · ${{t.row_count.toLocaleString('fr')}} lignes</div>
       </div>
       <div class="tbl-rows-badge">${{rows}}</div>

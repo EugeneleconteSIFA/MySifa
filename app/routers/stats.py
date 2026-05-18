@@ -22,7 +22,9 @@ def dashboard_stats(request: Request):
 @router.get("/api/config/operations")
 def get_ops_config():
     """Référentiel codes opération (SQLite, repli operations.json)."""
-    return OPERATION_SEVERITY
+    from app.services.operations_config import load_operations_dict
+
+    return load_operations_dict()
 
 @router.get("/api/health")
 def health():

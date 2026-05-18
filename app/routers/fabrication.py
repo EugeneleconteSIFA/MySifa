@@ -213,6 +213,18 @@ def _first_01_date_iso_for_dossier_on_machine(
 
 # ─── Endpoints ────────────────────────────────────────────────────────────────
 
+@router.get("/api/fabrication/operations")
+def get_fabrication_operations(request: Request):
+    """Référentiel codes opération (SQLite) — même source que Paramètres > Opérations."""
+    user = get_current_user(request)
+    _check_fab_access(user)
+    from app.services.operations_config import categories_for_ui, load_operations_dict
+
+    with get_db() as conn:
+        ops = load_operations_dict(conn)
+    return {"operations": ops, "categories": categories_for_ui()}
+
+
 @router.get("/api/fabrication/machines")
 def list_machines(request: Request):
     """Liste toutes les machines actives (pour le sélecteur admin)."""

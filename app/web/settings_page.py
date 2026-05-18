@@ -174,7 +174,7 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
       <div class="nav-group-label">Base</div>
       <button type="button" class="nav-btn active" data-tab="users">Utilisateurs</button>
       <button type="button" class="nav-btn" data-tab="fournisseurs">Fournisseurs</button>
-      <button type="button" class="nav-btn" data-tab="bases">Bases</button>
+      <button type="button" class="nav-btn" data-tab="operations">Opérations</button>
       <div class="nav-group-label" style="margin-top:8px">Accès</div>
       <button type="button" class="nav-btn" data-tab="matrix">Matrice d'accès</button>
       <button type="button" class="nav-btn" data-tab="defaults">Référentiel rôles</button>
@@ -323,7 +323,7 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
     </section>
 
 
-    <section id="panel-bases" class="hidden">
+    <section id="panel-operations" class="hidden">
       <div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
           <h2 style="margin:0">Codes opération (calage, arrêt, production…)</h2>
@@ -526,12 +526,12 @@ function setTab(id) {
   document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === id);
   });
-  ['users', 'matrix', 'defaults', 'fournisseurs', 'bases', 'updates'].forEach(p => {
+  ['users', 'matrix', 'defaults', 'fournisseurs', 'operations', 'updates'].forEach(p => {
     const el = document.getElementById('panel-' + p);
     if (el) el.classList.toggle('hidden', p !== id);
   });
   if (id === 'fournisseurs') loadFournisseurs();
-  if (id === 'bases') loadOperationCodes();
+  if (id === 'operations') loadOperationCodes();
   if (id === 'updates') loadUpdates();
 }
 
