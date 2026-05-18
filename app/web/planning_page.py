@@ -274,6 +274,14 @@ body.light .slot .line1{color:#1e293b}body.light .slot .line2{color:#334155}body
 .tip-grid{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:11px;
   border-top:1px solid var(--border2);padding-top:10px}
 .tip-grid .k{color:var(--muted)}.tip-grid .v{color:var(--text2);font-family:var(--mono)}
+.tip-livraison{margin-top:10px;padding:6px 10px;font-size:12px;border-radius:8px;background:var(--card);
+  border:1px solid var(--border);color:var(--text);font-weight:600;line-height:1.35}
+
+.cmt-btn{display:inline-flex;align-items:center;justify-content:center;padding:3px 6px;border-radius:6px;
+  border:1px solid var(--border2);background:transparent;color:var(--muted);cursor:pointer;flex-shrink:0;transition:all .15s}
+.cmt-btn:hover,.cmt-btn.has-cmt{color:var(--accent);border-color:var(--accent);background:var(--accent-bg)}
+.cmt-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-left:4px;vertical-align:middle}
+.wk-lbl.has-cmt,.dh-cell.has-cmt .dh-date-lbl{color:var(--accent)}
 
 .legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}
 .lg-i{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dim)}
@@ -374,6 +382,25 @@ body.light .btn-p{color:#fff}
   justify-content:center;z-index:1000;backdrop-filter:blur(4px)}
 .md{background:var(--card);border:1px solid var(--border2);border-radius:16px;padding:32px;
   width:480px;max-width:90vw;box-shadow:0 24px 80px rgba(0,0,0,.5)}
+.md.md--stats{width:min(720px,95vw);max-height:90vh;overflow-y:auto}
+.ds-section{margin:20px 0 0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.ds-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-top:10px}
+.ds-stat{background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:12px 14px}
+.ds-stat-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px}
+.ds-stat-val{font-size:20px;font-weight:800;font-family:var(--mono);color:var(--text)}
+.ds-time-kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:10px}
+.ds-time-card{background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:14px 16px}
+.ds-tc-lbl{font-size:11px;color:var(--muted);margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.ds-tc-val{font-size:18px;font-weight:700;font-family:var(--mono);color:var(--text)}
+.ds-tbl{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px}
+.ds-tbl th,.ds-tbl td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--border2)}
+.ds-tbl th{font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:600}
+.ds-tbl td{font-family:var(--mono);color:var(--text2)}
+.ds-tbl-wrap{overflow-x:auto;margin-top:8px;border:1px solid var(--border2);border-radius:10px}
+.ds-empty{padding:24px;text-align:center;color:var(--muted);font-size:13px}
+.ds-cat-calage{color:var(--warn)}
+.ds-cat-production{color:var(--success)}
+.ds-cat-arret{color:var(--danger)}
 .md h3{color:var(--text);font-size:18px;font-family:var(--mono);margin-bottom:24px}
 .fd{margin-bottom:16px}
 .fd label{display:block;margin-bottom:6px;color:var(--dim);font-size:12px;text-transform:uppercase;letter-spacing:1px}
@@ -490,7 +517,7 @@ const DEFAULTS_BY_KEY={
 };
 const DAY_API={1:"lundi",2:"mardi",3:"mercredi",4:"jeudi",5:"vendredi",6:"samedi"};
 const DAY_FIELD={1:"horaires_lundi",2:"horaires_mardi",3:"horaires_mercredi",4:"horaires_jeudi",5:"horaires_vendredi",6:"horaires_samedi"};
-let S={machine:null,machines:[],entries:[],timeline:[],wo:0,loading:true,holidays:{},dayWorked:{},dayHoraires:{},view:localStorage.getItem("mysifa.planning.view")||"2w",
+let S={machine:null,machines:[],entries:[],timeline:[],wo:0,loading:true,holidays:{},dayWorked:{},dayHoraires:{},weekComments:{},dayComments:{},view:localStorage.getItem("mysifa.planning.view")||"2w",
   contactOpen:false,contactSubject:"",contactMessage:"",contactSending:false,searchQuery:"",tlSearchQuery:"",tlSearchIdx:0,activeDossier:null,
   tlTotalDays:5,machineHoursPerDay:16};
 let _allTlMatches=[];
@@ -632,7 +659,7 @@ async function packTerminesBeforeEnCoursAll(){
   });
   document.addEventListener("mouseup",async function(){
     if(!resizing) return;
-    const{slot,eid,preview,startDuree,startWpct,_prevCursor}=resizing;
+    const{slot,eid,preview,startDuree,startWpct,startLeftpct,_prevCursor}=resizing;
     preview.remove();
     slot.style.cursor=_prevCursor||"";
     const live=resizing._liveNewDuree;
@@ -646,13 +673,30 @@ async function packTerminesBeforeEnCoursAll(){
       slot.style.width=startWpct+"%";
       return;
     }
+    const tlWrap=slot.closest(".tl-wrap");
+    const mon=tlWrap?new Date(+tlWrap.dataset.mon):null;
+    let payload={duree_heures:rounded,planned_end_manual:true};
+    if(mon&&!isNaN(mon.getTime())){
+      const wm=computeTlWeekModel(mon);
+      if(!wm.err){
+        const{tot,cols}=wm;
+        const sp0=(startLeftpct/100)*tot;
+        const ep0=((startLeftpct+startWpct)/100)*tot;
+        const dWork=ep0-sp0;
+        const newWpct=parseFloat(slot.style.width)||startWpct;
+        const ep1=Math.min(tot,sp0+dWork*(newWpct/startWpct));
+        const ne=invCumulativeWorkH(ep1,cols,tot);
+        const pe=fmtPlanningIso(ne);
+        if(pe) payload.planned_end=pe;
+      }
+    }
     let ok=false;
     try{
       const res=await fetch(`/api/planning/machines/${MID}/entries/${eid}`,{
         method:"PUT",
         credentials:"include",
         headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({duree_heures:rounded})
+        body:JSON.stringify(payload)
       });
       if(!res.ok){
         const j=await res.json().catch(()=>({}));
@@ -812,7 +856,7 @@ async function load(){
     }else{
       S.entries = [];
     }
-    await Promise.all([loadHolidays(),loadDayWorked(),loadDayHoraires()]);
+    await Promise.all([loadHolidays(),loadDayWorked(),loadDayHoraires(),loadCalendarComments()]);
     // Cohésio 2: les horaires alternent paire/impair → ne pas les "figer" en base.
   }catch(e){console.error(e)}
   S.loading=false;render();
@@ -847,6 +891,21 @@ async function loadHolidays(){
   const map={};
   (rows||[]).forEach(r=>{map[String(r.date)]=!!(+r.is_off);});
   S.holidays=map;
+}
+
+async function loadCalendarComments(){
+  if(!MID) return;
+  const mon=addD(getMon(new Date()),S.wo*7);
+  const nb=S.view==="1w"?6:S.view==="4w"?27:13;
+  const start=ymd(mon), end=ymd(addD(mon,nb));
+  try{
+    const data=await api(`/machines/${MID}/calendar-comments?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
+    S.weekComments=(data&&data.week_comments)||{};
+    S.dayComments=(data&&data.day_comments)||{};
+  }catch(e){
+    S.weekComments={};
+    S.dayComments={};
+  }
 }
 
 async function loadActiveDossier(){
@@ -1056,6 +1115,11 @@ function icon(name,size=16){
     'chevron-left': '<polyline points="15 18 9 12 15 6"/>',
     'chevron-right': '<polyline points="9 18 15 12 9 6"/>',
     'download': '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+    'message-square': '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    'play': '<polygon points="5 3 19 12 5 21 5 3"/>',
+    'alert-triangle': '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+    'clock': '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+    'box': '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
   };
   return `<svg ${a} aria-hidden="true" style="display:inline-block;vertical-align:middle;flex-shrink:0">${p[name]||p['calendar']}</svg>`;
 }
@@ -1066,7 +1130,39 @@ function wkNum(d){const x=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDa
   x.setUTCDate(x.getUTCDate()+4-n);const y=new Date(Date.UTC(x.getUTCFullYear(),0,1));return Math.ceil(((x-y)/864e5+1)/7)}
 function addD(d,n){const r=new Date(d);r.setDate(r.getDate()+n);return r}
 function fmtDl(s){if(!s)return"—";const p=String(s).slice(0,10).split("-");return p.length===3?p[2]+"/"+p[1]+"/"+p[0]:s;}
-function fmtDur(h){const hrs=Math.floor(+h||0);const mins=Math.round(((+h||0)-hrs)*60);return mins>0?`${hrs}h${String(mins).padStart(2,"0")}`:`${hrs}h`;}
+function fmtLivraisonLong(s){
+  if(!s)return"";
+  const iso=String(s).slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(iso))return String(s);
+  try{
+    const d=new Date(iso+"T12:00:00");
+    return d.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+  }catch(e){return iso;}
+}
+function semaineKey(d){
+  const x=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
+  const n=x.getUTCDay()||7;
+  x.setUTCDate(x.getUTCDate()+4-n);
+  const y=x.getUTCFullYear();
+  const w=Math.ceil(((x-Date.UTC(y,0,1))/864e5+1)/7);
+  return `${y}-W${String(w).padStart(2,"0")}`;
+}
+function weekCommentBtn(sk,monTs){
+  const has=!!((S.weekComments||{})[sk]||"").trim();
+  const title=has?"Commentaire semaine":"Ajouter un commentaire semaine";
+  return `<button type="button" class="cmt-btn${has?" has-cmt":""}" onclick="event.stopPropagation();openWeekCommentModal('${escAttr(sk)}',${monTs})" title="${escAttr(title)}">${icon("message-square",12)}</button>`;
+}
+function weekHeaderRow(mn,lblCls){
+  const wn=wkNum(mn);
+  const sk=semaineKey(mn);
+  const hasCmt=!!((S.weekComments||{})[sk]||"").trim();
+  const wkParamBtn=CAN_EDIT?`<button type="button" class="gear-btn" style="padding:3px 6px;flex-shrink:0" onclick="openWeekSettingsModal(${mn.getTime()})" title="Paramètres semaine S${wn}">${icon("settings",13)}</button>`:"";
+  return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+    ${wkParamBtn}${weekCommentBtn(sk,mn.getTime())}
+    <div class="wk-lbl ${lblCls}${hasCmt?" has-cmt":""}" style="margin-bottom:0;cursor:pointer" onclick="openWeekCommentModal('${escAttr(sk)}',${mn.getTime()})" title="Commentaire semaine S${wn}">S${wn} — ${fd(mn)} au ${fd(addD(mn,4))}</div>
+  </div>`;
+}
+function fmtDur(h){const hrs=Math.floor(+h||0);const mins=Math.round(((+h||0)-hrs)*60);return mins>0?`${hrs}h${String(mins).padStart(2,"0")}`:`${hrs}h`}
 
 // Durée "ouvrée" entre 2 timestamps (créneaux de production), pour l'affichage uniquement.
 // IMPORTANT: ne pas impacter la timeline (taille slots, positions, etc.).
@@ -1146,29 +1242,40 @@ function hasSaisieReelle(){
   const mk=machineKey();
   return mk==="C1" || mk==="C2";
 }
+function normalizeParityDefs(raw){
+  if(!raw||typeof raw!=="object") return null;
+  const out={pair:{},impair:{}};
+  for(const par of ["pair","impair"]){
+    const block=raw[par];
+    if(!block) return null;
+    for(const slot of ["week","fri"]){
+      const w=block[slot];
+      let s,e;
+      if(Array.isArray(w)&&w.length>=2){s=+w[0];e=+w[1];}
+      else if(w&&typeof w==="object"){s=+w.s;e=+w.e;}
+      else return null;
+      if(!isFinite(s)||!isFinite(e)||e<=s) return null;
+      out[par][slot]={s,e};
+    }
+  }
+  return out;
+}
 function getMachineDefaults(){
   const mk=machineKey();
+  const m=S.machine;
+  if(m&&m.horaires_parity){
+    try{
+      const j=typeof m.horaires_parity==="string"?JSON.parse(m.horaires_parity):m.horaires_parity;
+      const norm=normalizeParityDefs(j);
+      if(norm) return norm;
+    }catch(e){}
+  }
   const key=`mysifa.planning.defaults.${mk}`;
   try{
     const raw=localStorage.getItem(key);
     if(raw){
-      const j=JSON.parse(raw);
-      if(j&&j.pair&&j.impair){
-        // Migration Cohésio 2: corrige d'anciens défauts erronés (vendredi figé à 05:00–13:00)
-        if(mk==="C2"){
-          const isOld =
-            j?.pair?.week?.s===5 && j?.pair?.week?.e===13 &&
-            j?.pair?.fri?.s===5  && j?.pair?.fri?.e===13 &&
-            j?.impair?.week?.s===13 && j?.impair?.week?.e===20 &&
-            j?.impair?.fri?.s===5   && j?.impair?.fri?.e===13;
-          if(isOld){
-            const fixed = DEFAULTS_BY_KEY["C2"];
-            localStorage.setItem(key, JSON.stringify(fixed));
-            return fixed;
-          }
-        }
-        return j;
-      }
+      const norm=normalizeParityDefs(JSON.parse(raw));
+      if(norm) return norm;
     }
   }catch(e){}
   return DEFAULTS_BY_KEY[mk]||DEFAULTS_BY_KEY["C1"];
@@ -1187,19 +1294,22 @@ function getWhForDate(di,dateObj,ds){
   if(ds && S.dayHoraires && S.dayHoraires[ds]){
     return S.dayHoraires[ds];
   }
-  // Priorité 2 : horaires hebdo stockés en base pour cette machine (si non vides)
+  const mk=machineKey();
+  // Priorité 2 : Cohésio 2 — horaires paire/impaire depuis la base (horaires_parity)
+  if(mk==="C2"){
+    const defs=getMachineDefaults();
+    const par=isWeekPair(dateObj)?"pair":"impair";
+    const isFri=(di===5);
+    const w=isFri?(defs[par].fri):(defs[par].week);
+    return {s:w.s,e:w.e};
+  }
+  // Priorité 3 : horaires hebdo par jour (machines.horaires_*)
   const m=S.machine,key=DAY_FIELD[di];
   const raw=m&&m[key]!=null?String(m[key]):"";
-  if(raw && raw.trim()){
-    // Cohesio 2 : les horaires alternent selon semaine paire/impaire.
-    // Les valeurs DB sont volontairement génériques — toujours utiliser les défauts paire/impaire.
-    if(machineKey()!=="C2"){
-      return parseHorairesPair(raw||null,di);
-    }
-    // C2 : fall-through vers la logique paire/impaire ci-dessous
+  if(raw&&raw.trim()){
+    return parseHorairesPair(raw,di);
   }
-
-  // Défauts par machine (semaine paire/impair + vendredi)
+  // Repli : défauts paire/impair (localStorage ou constantes)
   const defs=getMachineDefaults();
   const par=isWeekPair(dateObj)?"pair":"impair";
   const isFri=(di===5);
@@ -1323,11 +1433,10 @@ function render(){
   const navLbl=S.wo===0?"actuelle":(S.view==="4w"?`${fd(m1)}–${fd(addD(m1,27))}`:`S${w1}`);
   let tlBlocks="";
   for(let wi=0;wi<nw;wi++){
-    const mn=addD(m1,wi*7),wn=wkNum(mn);
+    const mn=addD(m1,wi*7);
     const lblCls=wi===0?"cur":"nxt";
-    const wkParamBtn2=CAN_EDIT?`<button type="button" class="gear-btn" style="padding:3px 6px;flex-shrink:0" onclick="openWeekSettingsModal(${mn.getTime()})" title="Paramètres semaine S${wn}">${icon('settings',13)}</button>`:"";
     tlBlocks+=`<div ${wi<nw-1?'style="margin-bottom:16px"':""}>
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">${wkParamBtn2}<div class="wk-lbl ${lblCls}" style="margin-bottom:0">S${wn} — ${fd(mn)} au ${fd(addD(mn,4))}</div></div>
+      ${weekHeaderRow(mn,lblCls)}
       ${mkTL(mn,sl)}
     </div>`;
   }
@@ -1610,11 +1719,10 @@ function renderTL(){
   const sl=S.timeline;
   let tlBlocks="";
   for(let wi=0;wi<nw;wi++){
-    const mn=addD(m1,wi*7),wn=wkNum(mn);
+    const mn=addD(m1,wi*7);
     const lblCls=wi===0?"cur":"nxt";
-    const wkParamBtn=CAN_EDIT?`<button type="button" class="gear-btn" style="padding:3px 6px;flex-shrink:0" onclick="openWeekSettingsModal(${mn.getTime()})" title="Paramètres semaine S${wn}">${icon('settings',13)}</button>`:"";
     tlBlocks+=`<div ${wi<nw-1?'style="margin-bottom:16px"':""}>
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">${wkParamBtn}<div class="wk-lbl ${lblCls}" style="margin-bottom:0">S${wn} — ${fd(mn)} au ${fd(addD(mn,4))}</div></div>
+      ${weekHeaderRow(mn,lblCls)}
       ${mkTL(mn,sl)}
     </div>`;
   }
@@ -1867,12 +1975,17 @@ function mkTL(mon,slots){
   let h=`<div class="tl-wrap" data-mon="${mon.getTime()}"><div class="dh">`;
   days.filter(d=>!d.off).forEach(d=>{
     const td=d.date.toDateString()===ts,sa=d.di===6;
-    h+=`<div class="dh-cell ${td?"today":""} ${sa?"sat":""}" style="flex:${d.tWork}">
+    const dayCmt=((S.dayComments||{})[d.ds]||"").trim();
+    const hasDayCmt=!!dayCmt;
+    h+=`<div class="dh-cell ${td?"today":""} ${sa?"sat":""}${hasDayCmt?" has-cmt":""}" style="flex:${d.tWork}">
       <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
-        <div>${DN[d.di]} ${fd(d.date)}</div>
-        ${CAN_EDIT?`<button type="button" class="dh-hours-btn" onclick="openHorairesModal('${d.ds}',${d.di})">${escAttr(d.hourLbl)}</button>`:`<small>${escAttr(d.hourLbl)}</small>`}
+        <div class="dh-date-lbl" style="cursor:pointer" onclick="openDayCommentModal('${d.ds}',${d.di})" title="${hasDayCmt?escAttr(dayCmt):'Commentaire jour'}">${DN[d.di]} ${fd(d.date)}${hasDayCmt?'<span class="cmt-dot"></span>':""}</div>
+        <div style="display:flex;align-items:center;gap:4px">
+          ${CAN_EDIT?`<button type="button" class="dh-hours-btn" onclick="event.stopPropagation();openHorairesModal('${d.ds}',${d.di})">${escAttr(d.hourLbl)}</button>`:`<small>${escAttr(d.hourLbl)}</small>`}
+          <button type="button" class="cmt-btn${hasDayCmt?" has-cmt":""}" onclick="event.stopPropagation();openDayCommentModal('${d.ds}',${d.di})" title="${hasDayCmt?"Modifier le commentaire":"Commentaire jour"}">${icon("message-square",11)}</button>
+        </div>
       </div>
-    </div>`;
+    </div>`;;
   });
   h+=`</div><div class="tl-bar">`;
   cols.forEach((col,i)=>{
@@ -1935,7 +2048,7 @@ function mkTL(mon,slots){
     h+=`<div class="slot ${matchCls} ${aplacerCls} ${reelTermineCls} ${termineSlideCls}" data-eid="${s.entry_id||idx}" data-statut="${escAttr(s.statut||"attente")}" data-statut-reel="${escAttr(sr)}" ${canDragSlot?'draggable="true"':''} style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${isActive?"border:2px solid #22d3ee;animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
       onmouseenter="showTip(event,this)" onmousemove="moveTip(event)" onmouseleave="hideTip()"
       ondblclick="hideTip();openEdit(${s.entry_id||idx});event.stopPropagation()"
-      data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-rfp="${escAttr(s.ref_produit||"")}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(fmtDur(durAff))}"
+      data-livraison="${escAttr(fmtLivraisonLong(s.date_livraison||""))}" data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-rfp="${escAttr(s.ref_produit||"")}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(fmtDur(durAff))}"
       data-planned-start="${escAttr(String(s.start||""))}" data-planned-end="${escAttr(String(s.end||""))}"
       data-deb="${escAttr(fdt(ss))}" data-fin="${escAttr(fdt(se))}" data-st="${escAttr(st)}" data-co="${escAttr(co)}"${termineTitle?` title="${escAttr(termineTitle)}"`:""}>
       ${destock?`<div style="position:absolute;top:4px;right:4px;width:10px;height:10px;border-radius:50%;background:rgba(71,85,105,.9);pointer-events:none;z-index:5;flex-shrink:0"></div>`:""}
@@ -2076,7 +2189,9 @@ let _hoveredSlotEid=null;
 function showTip(ev,el){hideTip();const d=el.dataset;_hoveredSlotEid=d.eid?+d.eid:null;tipEl=document.createElement("div");tipEl.className="tip";
   tipEl.style.borderColor=(d.co||"#888")+"55";
   const sub=d.lbl?`<div class="tip-lbl">${d.lbl}</div>`:"";
+  const liv=(d.livraison||"").trim();
   tipEl.innerHTML=`<div class="tip-hdr"><div class="tip-bar" style="background:${d.co||"#888"}"></div><div><div class="tip-ref">${d.ref||"—"}</div>${sub}</div></div>
+    ${liv?`<div class="tip-livraison">Livraison : ${escHtml(liv)}</div>`:""}
     <div class="tip-grid">${d.rfp?`<span class="k">Réf produit</span><span class="v">${d.rfp}</span>`:""}<span class="k">Format</span><span class="v">${d.fmt||"—"}</span><span class="k">Durée</span><span class="v">${d.dur||""}</span>
     <span class="k">Début</span><span class="v">${d.deb||""}</span><span class="k">Fin</span><span class="v">${d.fin||""}</span>
     <span class="k">Statut</span><span class="v" style="color:${d.st==="En cours"?"var(--green)":d.st==="Terminé"?"var(--muted)":"var(--amber)"};font-weight:600">${d.st||""}</span>
@@ -2607,7 +2722,10 @@ function openEdit(id){
   const destockIcon=destockDone?`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`:`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>`;
   const reelNonDefault=hasSaisieReelle() && e.statut_reel && e.statut_reel!=="reellement_en_attente";
   const resetBlock=(hasSaisieReelle() && IS_DIR_OR_SUPER && reelNonDefault)?`<button type="button" class="btn-reset-saisie" data-eid="${id}" onclick="resetSaisieFromModal(${id})" style="margin-top:8px;width:100%;padding:7px;border-radius:6px;border:1px solid rgba(248,113,113,.4);background:rgba(248,113,113,.08);color:var(--danger);font-size:11px;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">${icon('repeat',12)} Réinitialiser la saisie réelle</button>`:"";
-  const headerAction=`<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" id="destock-btn-${id}" onclick="toggleDestockage(${id})"
+  const statsBtn=isTermine?`<button type="button" onclick="openDossierStatsModal(${id})" title="Statistiques de production"
+    style="display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:6px;border:1.5px solid var(--border2);background:var(--accent-bg);color:var(--accent);cursor:pointer;transition:opacity .15s;font-family:inherit;flex-shrink:0"
+    onmouseenter="this.style.opacity='.75'" onmouseleave="this.style.opacity='1'">${icon('bar-chart-2',16)}</button>`:"";
+  const headerAction=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${statsBtn}<button type="button" id="destock-btn-${id}" onclick="toggleDestockage(${id})"
     title="${destockDone?"Matières destockées — cliquer pour annuler":"Matières à destocker — cliquer pour valider"}"
     style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;border:1.5px solid ${destockBorder};background:${destockBg};color:${destockColor};font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;font-family:inherit;white-space:nowrap"
     onmouseenter="this.style.opacity='.75'" onmouseleave="this.style.opacity='1'">
@@ -2699,6 +2817,109 @@ async function submitInsert(afterId){
   if(!d.numero_of)return alert("Numéro d'OF requis");
   await api(`/machines/${MID}/insert-after/${afterId}`,{method:"POST",body:JSON.stringify({reference:d.numero_of,...d})});
   closeM();load();
+}
+
+function fMin(m){
+  if(m==null||m===""||isNaN(m)) return "—";
+  const n=Number(m);
+  const hh=Math.floor(n/60),mm=Math.round(n%60);
+  return hh>0?hh+"h "+String(mm).padStart(2,"0")+"min":mm+"min";
+}
+function fN(n){
+  if(n==null||n===""||isNaN(n)) return "0";
+  const x=Number(n);
+  return x>=1e6?x.toLocaleString("fr-FR"):String(Math.round(x*10)/10);
+}
+function dsCatCls(cat){
+  const c=String(cat||"").toLowerCase();
+  if(c==="calage") return "ds-cat-calage";
+  if(c==="production") return "ds-cat-production";
+  if(c==="arret") return "ds-cat-arret";
+  return "";
+}
+function renderDossierStatsBody(d){
+  if(!d) return '<div class="ds-empty">Chargement…</div>';
+  const tt=d.temps_totaux||{};
+  const q=d.quantites||{};
+  const prodInclArrets=Number(tt.production_min||0)+Number(tt.arret_min||0);
+  if(!d.nb_saisies){
+    return '<div class="ds-empty">Aucune saisie de production trouvée pour ce dossier sur cette machine.</div>';
+  }
+  let html=`<div class="ds-stats">
+    <div class="ds-stat"><div class="ds-stat-lbl">Durée totale</div><div class="ds-stat-val">${fMin(tt.duree_totale_min)}</div></div>
+    <div class="ds-stat"><div class="ds-stat-lbl">Saisies</div><div class="ds-stat-val">${fN(d.nb_saisies)}</div></div>
+    <div class="ds-stat"><div class="ds-stat-lbl">Étiquettes</div><div class="ds-stat-val">${fN(q.etiquettes)}</div></div>
+    <div class="ds-stat"><div class="ds-stat-lbl">Métrage</div><div class="ds-stat-val">${fN(q.metrage_m)} m</div></div>
+    <div class="ds-stat"><div class="ds-stat-lbl">Vitesse</div><div class="ds-stat-val">${Number(d.vitesse_m_min||0).toFixed(2)} m/min</div></div>
+  </div>`;
+  html+=`<div class="ds-section">${icon("clock",13)} Temps</div>
+  <div class="ds-time-kpi">
+    <div class="ds-time-card"><div class="ds-tc-lbl">${icon("wrench",12)} Calage</div><div class="ds-tc-val">${fMin(tt.calage_min)}</div></div>
+    <div class="ds-time-card"><div class="ds-tc-lbl">${icon("play",12)} Production</div><div class="ds-tc-val">${fMin(prodInclArrets)}</div></div>
+    <div class="ds-time-card"><div class="ds-tc-lbl">${icon("alert-triangle",12)} Arrêts</div><div class="ds-tc-val">${fMin(tt.arret_min)}</div></div>
+  </div>`;
+  const cats=d.by_category||[];
+  if(cats.length){
+    html+=`<div class="ds-section">${icon("layers",13)} Répartition par catégorie</div>
+    <div class="ds-tbl-wrap"><table class="ds-tbl"><thead><tr><th>Catégorie</th><th>Durée</th></tr></thead><tbody>`;
+    cats.forEach(c=>{
+      if(!c.minutes) return;
+      html+=`<tr><td class="${dsCatCls(c.category)}">${escHtml(c.label||c.category)}</td><td>${fMin(c.minutes)}</td></tr>`;
+    });
+    html+=`</tbody></table></div>`;
+  }
+  const ops=d.by_operation||[];
+  if(ops.length){
+    html+=`<div class="ds-section">${icon("bar-chart-2",13)} Répartition par code opération</div>
+    <div class="ds-tbl-wrap"><table class="ds-tbl"><thead><tr><th>Code</th><th>Opération</th><th>Cat.</th><th>Saisies</th><th>Durée</th></tr></thead><tbody>`;
+    ops.forEach(r=>{
+      html+=`<tr>
+        <td style="font-weight:700;color:var(--text)">${escHtml(r.code)}</td>
+        <td>${escHtml(r.label||"")}</td>
+        <td class="${dsCatCls(r.category)}">${escHtml(r.category||"")}</td>
+        <td>${fN(r.count)}</td>
+        <td>${fMin(r.minutes)}</td>
+      </tr>`;
+    });
+    html+=`</tbody></table></div>`;
+  }
+  const ops2=d.operateurs||[];
+  if(ops2.length){
+    html+=`<div class="ds-section">${icon("users",13)} Opérateurs</div>
+    <div class="ds-tbl-wrap"><table class="ds-tbl"><thead><tr><th>Opérateur</th><th>Saisies</th><th>Calage</th><th>Prod</th><th>Arrêts</th><th>Total</th></tr></thead><tbody>`;
+    ops2.forEach(r=>{
+      html+=`<tr>
+        <td style="font-weight:600;color:var(--text)">${escHtml(r.operateur||"?")}</td>
+        <td>${fN(r.nb_saisies)}</td>
+        <td>${fMin(r.calage_min)}</td>
+        <td>${fMin(r.prod_min)}</td>
+        <td>${fMin(r.arret_min)}</td>
+        <td>${fMin(r.minutes)}</td>
+      </tr>`;
+    });
+    html+=`</tbody></table></div>`;
+  }
+  return html;
+}
+async function openDossierStatsModal(entryId){
+  const e=S.entries.find(x=>x.id===entryId);
+  const ref=(e&&(e.numero_of||e.reference))||"Dossier";
+  document.getElementById("mroot").innerHTML=`<div class="mo" onclick="if(event.target===this)closeM()"><div class="md md--stats">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;gap:12px">
+      <h3 style="margin:0;font-size:18px;font-family:var(--mono);color:var(--text);display:flex;align-items:center;gap:8px">${icon("bar-chart-2",18)} ${escHtml(ref)}</h3>
+      <button type="button" class="btn-s" onclick="closeM()">Fermer</button>
+    </div>
+    <div id="ds-body"><div class="ds-empty">Chargement des statistiques…</div></div>
+  </div></div>`;
+  try{
+    const d=await api(`/machines/${MID}/entries/${entryId}/production-stats`);
+    const el=document.getElementById("ds-body");
+    if(el) el.innerHTML=renderDossierStatsBody(d);
+  }catch(err){
+    const el=document.getElementById("ds-body");
+    const msg=err&&err.message?err.message:"Erreur lors du chargement";
+    if(el) el.innerHTML=`<div class="ds-empty">${escHtml(msg)}</div>`;
+  }
 }
 
 function closeM(){document.getElementById("mroot").innerHTML=""}
@@ -2859,6 +3080,63 @@ async function resetHorairesDate(ds){
   }catch(err){ alert("Impossible de réinitialiser."); }
 }
 
+
+// ── Commentaires timeline (semaine / jour) ──
+function openWeekCommentModal(sk,monTs){
+  const mon=monTs?new Date(monTs):getMon(new Date());
+  const wn=wkNum(mon);
+  const existing=((S.weekComments||{})[sk]||"").trim();
+  const readOnly=!CAN_EDIT;
+  document.getElementById("mroot").innerHTML=modalHTML(
+    `Commentaire — Semaine S${wn}`,
+    `<p style="font-size:12px;color:var(--muted);margin:-8px 0 12px">Note visible sur la timeline pour toute la semaine S${wn}.</p>
+    <div class="fd"><label>Commentaire</label><textarea id="f-wk-cmt" rows="4" placeholder="Ex : maintenance prévue, priorité client…" style="width:100%;padding:10px 12px;border:1px solid var(--border2);border-radius:10px;background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;resize:vertical;outline:none"${readOnly?" readonly":""}>${escHtml(existing)}</textarea></div>`,
+    readOnly?"Fermer":"Enregistrer",
+    readOnly?"closeM()":`submitWeekComment('${escAttr(sk)}')`
+  );
+}
+async function submitWeekComment(sk){
+  if(!CAN_EDIT) return;
+  const comment=(document.getElementById("f-wk-cmt")?.value||"").trim();
+  try{
+    await api(`/machines/${MID}/week-comment`,{method:"PUT",body:JSON.stringify({semaine:sk,comment})});
+    if(comment) S.weekComments={...(S.weekComments||{}),[sk]:comment};
+    else{const m={...(S.weekComments||{})};delete m[sk];S.weekComments=m;}
+    closeM();renderTL();
+  }catch(err){
+    let msg="Enregistrement impossible.";
+    try{const j=await err.json();if(j&&j.detail)msg=typeof j.detail==="string"?j.detail:JSON.stringify(j.detail);}catch(x){}
+    alert(msg);
+  }
+}
+function openDayCommentModal(ds,di){
+  const dn={1:"Lundi",2:"Mardi",3:"Mercredi",4:"Jeudi",5:"Vendredi",6:"Samedi"}[di]||"Jour";
+  const dateLabel=ds?new Date(ds+"T12:00:00").toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}):dn;
+  const existing=((S.dayComments||{})[ds]||"").trim();
+  const readOnly=!CAN_EDIT;
+  document.getElementById("mroot").innerHTML=modalHTML(
+    `Commentaire — ${dateLabel}`,
+    `<p style="font-size:12px;color:var(--muted);margin:-8px 0 12px">Note du jour affichée sur la timeline.</p>
+    <div class="fd"><label>Commentaire</label><textarea id="f-day-cmt" rows="4" placeholder="Ex : réunion matin, manque matière…" style="width:100%;padding:10px 12px;border:1px solid var(--border2);border-radius:10px;background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;resize:vertical;outline:none"${readOnly?" readonly":""}>${escHtml(existing)}</textarea></div>`,
+    readOnly?"Fermer":"Enregistrer",
+    readOnly?"closeM()":`submitDayComment('${escAttr(ds)}')`
+  );
+}
+async function submitDayComment(ds){
+  if(!CAN_EDIT) return;
+  const comment=(document.getElementById("f-day-cmt")?.value||"").trim();
+  try{
+    await api(`/machines/${MID}/day-comment`,{method:"PUT",body:JSON.stringify({date:ds,comment})});
+    if(comment) S.dayComments={...(S.dayComments||{}),[ds]:comment};
+    else{const m={...(S.dayComments||{})};delete m[ds];S.dayComments=m;}
+    closeM();renderTL();
+  }catch(err){
+    let msg="Enregistrement impossible.";
+    try{const j=await err.json();if(j&&j.detail)msg=typeof j.detail==="string"?j.detail:JSON.stringify(j.detail);}catch(x){}
+    alert(msg);
+  }
+}
+
 // ── Paramètres semaine ──
 function openWeekSettingsModal(monTs){
   if(!CAN_EDIT) return;
@@ -2952,7 +3230,7 @@ function openDefaultsModal(){
   }
   const f=`
     <p style="font-size:12px;color:var(--muted);margin:-8px 0 16px">
-      Valeurs par défaut utilisées quand les horaires hebdo (base) sont vides. Elles impactent les fuseaux affichés sur le planning.
+      Horaires de production enregistrés en base pour cette machine. Ils déterminent la largeur des jours sur la timeline (semaines paires / impaires pour Cohésio 2).
     </p>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
       <div style="border:1px solid var(--border2);border-radius:14px;padding:14px">
@@ -2986,33 +3264,36 @@ async function resetDefaults(){
   const mk=machineKey();
   const d=DEFAULTS_BY_KEY[mk]||DEFAULTS_BY_KEY["C1"];
   saveMachineDefaults(d);
-  // Appliquer aussi aux horaires hebdo DB (sinon la timeline reste sur les horaires_* non vides).
-  // Cohésio 2 : la DB est volontairement générique, les défauts paire/impair restent en fallback.
   try{
-    if(MID && mk!=="C2"){
-      const p=d.pair||d.impair||null;
-      const week=p&&p.week?p.week:null;
-      const fri=p&&p.fri?p.fri:null;
-      const hs=(week&&isFinite(week.s))?week.s:null, he=(week&&isFinite(week.e))?week.e:null;
-      const fs=(fri&&isFinite(fri.s))?fri.s:hs, fe=(fri&&isFinite(fri.e))?fri.e:he;
-      function hmPair(a,b){
-        if(a==null||b==null) return null;
-        return timeInputFromFloat(a)+","+timeInputFromFloat(b);
-      }
-      const payload={
-        horaires_lundi:hmPair(hs,he),
-        horaires_mardi:hmPair(hs,he),
-        horaires_mercredi:hmPair(hs,he),
-        horaires_jeudi:hmPair(hs,he),
-        horaires_vendredi:hmPair(fs,fe),
-      };
-      // Envoyer uniquement les champs non nuls
-      Object.keys(payload).forEach(k=>{ if(!payload[k]) delete payload[k]; });
-      if(Object.keys(payload).length){
-        await api(`/machines/${MID}/horaires-bulk`,{method:"PUT",body:JSON.stringify(payload)});
+    if(MID){
+      await api(`/machines/${MID}/horaires-parity`,{method:"PUT",body:JSON.stringify(d)});
+      if(mk!=="C2"){
+        const p=d.pair||d.impair||null;
+        const week=p&&p.week?p.week:null;
+        const fri=p&&p.fri?p.fri:null;
+        const hs=(week&&isFinite(week.s))?week.s:null, he=(week&&isFinite(week.e))?week.e:null;
+        const fs=(fri&&isFinite(fri.s))?fri.s:hs, fe=(fri&&isFinite(fri.e))?fri.e:he;
+        function hmPair(a,b){
+          if(a==null||b==null) return null;
+          return timeInputFromFloat(a)+","+timeInputFromFloat(b);
+        }
+        const payload={
+          horaires_lundi:hmPair(hs,he),
+          horaires_mardi:hmPair(hs,he),
+          horaires_mercredi:hmPair(hs,he),
+          horaires_jeudi:hmPair(hs,he),
+          horaires_vendredi:hmPair(fs,fe),
+        };
+        Object.keys(payload).forEach(k=>{ if(!payload[k]) delete payload[k]; });
+        if(Object.keys(payload).length){
+          await api(`/machines/${MID}/horaires-bulk`,{method:"PUT",body:JSON.stringify(payload)});
+        }
       }
     }
-  }catch(e){}
+  }catch(e){
+    console.error(e);
+    alert("Enregistrement des horaires impossible.");
+  }
   closeM();
   await load();
 }
@@ -3035,33 +3316,37 @@ async function submitDefaults(){
     return alert("Plages invalides (fin > début, entre 0 et 24).");
   }
   saveMachineDefaults(nd);
-  // Appliquer aussi aux horaires hebdo DB (sinon la timeline reste sur les horaires_* non vides).
-  // Cohésio 2 : la DB est volontairement générique, les défauts paire/impair restent en fallback.
   try{
     const mk=machineKey();
-    if(MID && mk!=="C2"){
-      const p=nd.pair||nd.impair||null;
-      const week=p&&p.week?p.week:null;
-      const fri=p&&p.fri?p.fri:null;
-      const hs=(week&&isFinite(week.s))?week.s:null, he=(week&&isFinite(week.e))?week.e:null;
-      const fs=(fri&&isFinite(fri.s))?fri.s:hs, fe=(fri&&isFinite(fri.e))?fri.e:he;
-      function hmPair(a,b){
-        if(a==null||b==null) return null;
-        return timeInputFromFloat(a)+","+timeInputFromFloat(b);
-      }
-      const payload={
-        horaires_lundi:hmPair(hs,he),
-        horaires_mardi:hmPair(hs,he),
-        horaires_mercredi:hmPair(hs,he),
-        horaires_jeudi:hmPair(hs,he),
-        horaires_vendredi:hmPair(fs,fe),
-      };
-      Object.keys(payload).forEach(k=>{ if(!payload[k]) delete payload[k]; });
-      if(Object.keys(payload).length){
-        await api(`/machines/${MID}/horaires-bulk`,{method:"PUT",body:JSON.stringify(payload)});
+    if(MID){
+      await api(`/machines/${MID}/horaires-parity`,{method:"PUT",body:JSON.stringify(nd)});
+      if(mk!=="C2"){
+        const p=nd.pair||nd.impair||null;
+        const week=p&&p.week?p.week:null;
+        const fri=p&&p.fri?p.fri:null;
+        const hs=(week&&isFinite(week.s))?week.s:null, he=(week&&isFinite(week.e))?week.e:null;
+        const fs=(fri&&isFinite(fri.s))?fri.s:hs, fe=(fri&&isFinite(fri.e))?fri.e:he;
+        function hmPair(a,b){
+          if(a==null||b==null) return null;
+          return timeInputFromFloat(a)+","+timeInputFromFloat(b);
+        }
+        const payload={
+          horaires_lundi:hmPair(hs,he),
+          horaires_mardi:hmPair(hs,he),
+          horaires_mercredi:hmPair(hs,he),
+          horaires_jeudi:hmPair(hs,he),
+          horaires_vendredi:hmPair(fs,fe),
+        };
+        Object.keys(payload).forEach(k=>{ if(!payload[k]) delete payload[k]; });
+        if(Object.keys(payload).length){
+          await api(`/machines/${MID}/horaires-bulk`,{method:"PUT",body:JSON.stringify(payload)});
+        }
       }
     }
-  }catch(e){}
+  }catch(e){
+    console.error(e);
+    alert("Enregistrement des horaires impossible.");
+  }
   closeM();
   await load();
 }

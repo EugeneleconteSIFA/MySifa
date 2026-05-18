@@ -32,7 +32,14 @@ uploads/
 
 # MyProd Widget (Electron) — artefacts locaux
 myprod-widget/node_modules/
-myprod-widget/dist/
+# dist/ : ignorer les dossiers temporaires et fichiers de build,
+# mais tracker les installateurs (.exe / .dmg / .blockmap) pour déploiement VPS via git
+myprod-widget/dist/win-unpacked/
+myprod-widget/dist/mac/
+myprod-widget/dist/mac-arm64/
+myprod-widget/dist/builder-debug.yml
+myprod-widget/dist/builder-effective-config.yaml
+myprod-widget/dist/MyProd-Widget-
 
 # Logs locaux
 nohup.out

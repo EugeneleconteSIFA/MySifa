@@ -10,7 +10,7 @@ from fastapi import APIRouter, Request, HTTPException
 
 _PARIS = ZoneInfo("Europe/Paris")
 
-from database import get_db
+from database import get_db, parse_datetime
 from config import classify_operation
 from app.services.auth_service import get_current_user, is_fabrication, is_admin
 from app.routers.planning import _planned_end_iso_for_machine
@@ -28,6 +28,36 @@ def _check_fab_access(user: dict):
 
 def _today_prefix() -> str:
     return date.today().isoformat()
+
+
+def _resolve_date_operation(client_raw: Optional[str]) -> str:
+    """Horodatage canonique avec secondes (client au clic ou serveur).
+
+    Accepte l'heure envoyée par le navigateur si plausible (±24 h, pas >2 min futur).
+    """
+    now = datetime.now(_PARIS).replace(tzinfo=None)
+    if client_raw:
+        raw = str(client_raw).strip()
+        if raw:
+            dt = parse_datetime(raw)
+            if dt is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Horodatage invalide (format attendu : YYYY-MM-DDTHH:MM:SS)",
+                )
+            delta = (dt - now).total_seconds()
+            if delta > 120:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Horodatage dans le futur — vérifiez l'heure de l'appareil",
+                )
+            if delta < -86400:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Horodatage trop ancien",
+                )
+            return dt.strftime("%Y-%m-%dT%H:%M:%S")
+    return now.strftime("%Y-%m-%dT%H:%M:%S")
 
 
 def _compute_etat(saisies: list) -> str:
@@ -332,7 +362,7 @@ async def create_saisie(request: Request):
             detail="Compte utilisateur sans nom — contacter un administrateur",
         )
 
-    date_op = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
+    date_op = _resolve_date_operation(body.get("date_operation"))
 
     no_dossier  = (body.get("no_dossier")   or "").strip() or None
     client      = (body.get("client")       or "").strip() or None
@@ -470,7 +500,8 @@ async def create_saisie(request: Request):
         if no_dossier and cl["code"] in ("01", "89"):
             try:
                 pe_row = conn.execute(
-                    """SELECT id, statut_reel, statut, duree_heures, planned_start, planned_end
+                    """SELECT id, statut_reel, statut, duree_heures, planned_start, planned_end,
+                              planned_end_manual
                        FROM planning_entries
                        WHERE machine_id = ? AND statut != 'termine'
                          AND (trim(reference) = trim(?) OR trim(COALESCE(numero_of,'')) = trim(?))
@@ -481,6 +512,7 @@ async def create_saisie(request: Request):
                     pe_id        = pe_row["id"]
                     current_reel = pe_row["statut_reel"] or "reellement_en_attente"
                     duree_h      = float(pe_row["duree_heures"] or 0)
+                    manual_end   = int(pe_row["planned_end_manual"] or 0) == 1
                     now_iso      = datetime.now().isoformat()
 
                     if cl["code"] == "01" and current_reel != "reellement_termine":
@@ -498,24 +530,36 @@ async def create_saisie(request: Request):
                             or date_op
                         )
                         dt_start = datetime.fromisoformat(start_iso)
-                        dt_end_new = _planned_end_iso_for_machine(
-                            conn, machine_id_resolved, start_iso, duree_h
-                        )
-                        if not dt_end_new:
-                            dt_end_new = (dt_start + timedelta(hours=duree_h)).strftime(
-                                "%Y-%m-%dT%H:%M:%S"
+                        if manual_end:
+                            conn.execute(
+                                """UPDATE planning_entries
+                                   SET statut_reel   = 'reellement_en_saisie',
+                                       statut        = 'en_cours',
+                                       statut_force  = 1,
+                                       planned_start = ?,
+                                       updated_at    = ?
+                                   WHERE id = ?""",
+                                (start_iso, now_iso, pe_id),
                             )
-                        conn.execute(
-                            """UPDATE planning_entries
-                               SET statut_reel   = 'reellement_en_saisie',
-                                   statut        = 'en_cours',
-                                   statut_force  = 1,
-                                   planned_start = ?,
-                                   planned_end   = ?,
-                                   updated_at    = ?
-                               WHERE id = ?""",
-                            (start_iso, dt_end_new, now_iso, pe_id),
-                        )
+                        else:
+                            dt_end_new = _planned_end_iso_for_machine(
+                                conn, machine_id_resolved, start_iso, duree_h
+                            )
+                            if not dt_end_new:
+                                dt_end_new = (dt_start + timedelta(hours=duree_h)).strftime(
+                                    "%Y-%m-%dT%H:%M:%S"
+                                )
+                            conn.execute(
+                                """UPDATE planning_entries
+                                   SET statut_reel   = 'reellement_en_saisie',
+                                       statut        = 'en_cours',
+                                       statut_force  = 1,
+                                       planned_start = ?,
+                                       planned_end   = ?,
+                                       updated_at    = ?
+                                   WHERE id = ?""",
+                                (start_iso, dt_end_new, now_iso, pe_id),
+                            )
                         conn.commit()
 
                     elif cl["code"] == "89":
@@ -576,24 +620,36 @@ async def create_saisie(request: Request):
                                     or date_op
                                 )
                                 dt_start = datetime.fromisoformat(start_iso)
-                                dt_end_new = _planned_end_iso_for_machine(
-                                    conn, machine_id_resolved, start_iso, duree_h
-                                )
-                                if not dt_end_new:
-                                    dt_end_new = (dt_start + timedelta(hours=duree_h)).strftime(
-                                        "%Y-%m-%dT%H:%M:%S"
+                                if manual_end:
+                                    conn.execute(
+                                        """UPDATE planning_entries
+                                           SET statut_reel   = 'reellement_en_saisie',
+                                               statut        = 'en_cours',
+                                               statut_force  = 1,
+                                               planned_start = ?,
+                                               updated_at    = ?
+                                           WHERE id = ?""",
+                                        (start_iso, now_iso, pe_id),
                                     )
-                                conn.execute(
-                                    """UPDATE planning_entries
-                                       SET statut_reel   = 'reellement_en_saisie',
-                                           statut        = 'en_cours',
-                                           statut_force  = 1,
-                                           planned_start = ?,
-                                           planned_end   = ?,
-                                           updated_at    = ?
-                                       WHERE id = ?""",
-                                    (start_iso, dt_end_new, now_iso, pe_id),
-                                )
+                                else:
+                                    dt_end_new = _planned_end_iso_for_machine(
+                                        conn, machine_id_resolved, start_iso, duree_h
+                                    )
+                                    if not dt_end_new:
+                                        dt_end_new = (
+                                            dt_start + timedelta(hours=duree_h)
+                                        ).strftime("%Y-%m-%dT%H:%M:%S")
+                                    conn.execute(
+                                        """UPDATE planning_entries
+                                           SET statut_reel   = 'reellement_en_saisie',
+                                               statut        = 'en_cours',
+                                               statut_force  = 1,
+                                               planned_start = ?,
+                                               planned_end   = ?,
+                                               updated_at    = ?
+                                           WHERE id = ?""",
+                                        (start_iso, dt_end_new, now_iso, pe_id),
+                                    )
                                 conn.commit()
 
             except Exception:
@@ -880,7 +936,7 @@ def get_traceability(request: Request, no_dossier: str = None, machine_id: int =
                           metrage_prevu, metrage_reel, quantite_traitee
                    FROM production_data
                    WHERE no_dossier = ?
-                   ORDER BY date_operation ASC""",
+                   ORDER BY date_operation ASC, id ASC""",
                 (no_dossier,),
             ).fetchall()
 
@@ -939,17 +995,11 @@ async def update_commentaire(saisie_id: int, request: Request):
         if not is_admin(user) and ex["operateur"] != user_operateur:
             raise HTTPException(status_code=403, detail="Non autorisé")
 
+        # Commentaire seul : ne pas renseigner modifie_* (badge « Corrigé » réservé
+        # aux modifications de données de production dans MyProd > Saisies).
         conn.execute(
-            """UPDATE production_data
-               SET commentaire=?, modifie_par=?, modifie_le=?, modifie_note=?
-               WHERE id=?""",
-            (
-                commentaire,
-                user["email"],
-                datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S"),
-                "Commentaire opérateur fabrication",
-                saisie_id,
-            ),
+            """UPDATE production_data SET commentaire=? WHERE id=?""",
+            (commentaire, saisie_id),
         )
         conn.commit()
 

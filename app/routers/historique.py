@@ -171,6 +171,78 @@ def compute_sanity_score_v2(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     return {"score": score, "mention": mention, "color": color, "penalites": penalites, "events": events}
 
 
+def _sanity_mention_color(score: int) -> tuple[str, str]:
+    if score >= 90:
+        return "Excellent", "success"
+    if score >= 70:
+        return "Bon", "warn"
+    if score >= 50:
+        return "À améliorer", "warn"
+    return "Critique", "danger"
+
+
+def _activity_minutes_by_operateur(
+    dur_rows: List[dict], duree_by_id: Dict[int, float]
+) -> Dict[str, float]:
+    """Temps d'activité = somme des durées entre saisies consécutives (minutes)."""
+    agg: Dict[str, float] = {}
+    for r in dur_rows:
+        rid = r.get("id")
+        if rid is None:
+            continue
+        mins = float(duree_by_id.get(int(rid), 0.0) or 0.0)
+        if mins <= 0:
+            continue
+        op = str(r.get("operateur") or "?")
+        agg[op] = round(agg.get(op, 0.0) + mins, 1)
+    return agg
+
+
+def compute_weighted_sanity(
+    sanity_by_operateur: Dict[str, Dict[str, Any]],
+    activity_min_by_operateur: Dict[str, float],
+    selected_ops: List[str],
+) -> Dict[str, Any]:
+    """Moyenne pondérée : Σ(note_i × temps_i) / Σ(temps_i) (temps en minutes)."""
+    num = 0.0
+    den = 0.0
+    weights_used: Dict[str, float] = {}
+    for op in selected_ops:
+        san = sanity_by_operateur.get(op)
+        if not san:
+            continue
+        w = float(activity_min_by_operateur.get(op, 0.0) or 0.0)
+        if w <= 0:
+            continue
+        weights_used[op] = w
+        num += float(san.get("score", 0) or 0) * w
+        den += w
+
+    if den <= 0:
+        scores = [
+            float(sanity_by_operateur[op].get("score", 0) or 0)
+            for op in selected_ops
+            if op in sanity_by_operateur
+        ]
+        if not scores:
+            return {**compute_sanity_score_v2([]), "weighted": True}
+        score = int(round(sum(scores) / len(scores)))
+    else:
+        score = int(round(num / den))
+
+    score = max(0, min(100, score))
+    mention, color = _sanity_mention_color(score)
+    return {
+        "score": score,
+        "mention": mention,
+        "color": color,
+        "penalites": [],
+        "events": {},
+        "weighted": True,
+        "activity_min_by_operateur": weights_used,
+    }
+
+
 @router.get("/api/dashboard/historique")
 def dashboard_historique(
     request: Request,
@@ -236,7 +308,10 @@ def dashboard_historique(
 
         out: Dict[int, float] = {}
         for _k, items in by_key.items():
-            items_sorted = sorted(items, key=lambda x: x[0])
+            items_sorted = sorted(
+                items,
+                key=lambda x: (x[0] if x[0] else datetime.min, int(x[1].get("id") or 0)),
+            )
             for i, (dt, r) in enumerate(items_sorted[:-1]):
                 nxt = items_sorted[i + 1][0]
                 delta = (nxt - dt).total_seconds() / 60.0
@@ -320,13 +395,19 @@ def dashboard_historique(
 
     sanity_by_operateur = None
     if can_view_all_prod(user):
-        # Si multi-sélection opérateurs => un sanity score par opérateur
+        # Si multi-sélection opérateurs => score par opérateur + moyenne pondérée globale
         sel_ops = operateurs
         if sel_ops and len(sel_ops) > 1:
             sanity_by_operateur = {}
             for op in sel_ops:
                 sub = [r for r in san_list if str(r.get("operateur") or "") == str(op)]
                 sanity_by_operateur[op] = compute_sanity_score_v2(sub)
+            activity_min = _activity_minutes_by_operateur(
+                [dict(r) for r in dur_rows], duree_by_id
+            )
+            sanity = compute_weighted_sanity(
+                sanity_by_operateur, activity_min, sel_ops
+            )
 
     return {
         "blocked": False,

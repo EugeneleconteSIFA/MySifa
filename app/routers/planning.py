@@ -8,6 +8,7 @@ Ajouter dans main.py :
     app.include_router(planning_router)
 """
 
+import json
 import unicodedata
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
@@ -17,6 +18,7 @@ from fastapi.responses import JSONResponse
 from database import get_db
 from config import ROLE_FABRICATION, ROLE_DIRECTION, ROLE_SUPERADMIN
 from services.auth_service import require_admin, get_current_user, user_has_app_access
+from services.dossier_stats import build_dossier_production_stats
 
 _TZ_PARIS = ZoneInfo("Europe/Paris")
 
@@ -343,6 +345,14 @@ def _is_frozen_entry(e: dict) -> bool:
     return bool(e.get("planned_start") and e.get("planned_end"))
 
 
+def _body_flag_true(val) -> bool:
+    if val is True or val == 1:
+        return True
+    if isinstance(val, str) and val.strip().lower() in ("1", "true", "yes", "on"):
+        return True
+    return False
+
+
 def _invalidate_attente_plans(conn, machine_id: int) -> None:
     """Recalcule les créneaux « en attente » au prochain GET (réordre, ajout, durée, etc.)."""
     conn.execute(
@@ -380,6 +390,76 @@ _PARITY_DEFAULTS: Dict[str, Any] = {
     "DSI": {"pair": {"week": (8, 14), "fri": (8, 14)}, "impair": {"week": (8, 14), "fri": (8, 14)}},
     "REP": {"pair": {"week": (6, 20), "fri": (7, 19)}, "impair": {"week": (6, 20), "fri": (7, 19)}},
 }
+
+
+def _parity_slot_to_tuple(slot: Any) -> Optional[tuple[float, float]]:
+    if slot is None:
+        return None
+    if isinstance(slot, (list, tuple)) and len(slot) >= 2:
+        return (float(slot[0]), float(slot[1]))
+    if isinstance(slot, dict):
+        s, e = slot.get("s"), slot.get("e")
+        if s is None or e is None:
+            return None
+        return (float(s), float(e))
+    return None
+
+
+def _parity_defs_from_raw(raw: Any) -> Optional[Dict[str, Any]]:
+    if raw is None:
+        return None
+    try:
+        data = json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return None
+    if not isinstance(data, dict):
+        return None
+    out: Dict[str, Any] = {}
+    for par in ("pair", "impair"):
+        block = data.get(par)
+        if not isinstance(block, dict):
+            return None
+        week = _parity_slot_to_tuple(block.get("week"))
+        fri = _parity_slot_to_tuple(block.get("fri"))
+        if week is None or fri is None:
+            return None
+        out[par] = {"week": week, "fri": fri}
+    return out
+
+
+def _parity_defs_for_machine(m: dict) -> Optional[Dict[str, Any]]:
+    """Horaires paire/impaire : DB (horaires_parity) puis repli codé en dur pour Cohésio 2."""
+    db_defs = _parity_defs_from_raw(m.get("horaires_parity"))
+    if db_defs:
+        return db_defs
+    mk = _machine_key_from_record(m)
+    if mk == "C2":
+        return _parity_defs_from_raw(_PARITY_DEFAULTS.get("C2"))
+    return None
+
+
+def _normalize_parity_body(body: dict) -> Dict[str, Any]:
+    """Valide et normalise le JSON horaires paire/impaire depuis l'API."""
+    out: Dict[str, Any] = {}
+    for par in ("pair", "impair"):
+        block = body.get(par)
+        if not isinstance(block, dict):
+            raise HTTPException(400, f"Bloc '{par}' manquant ou invalide")
+        norm_block: Dict[str, Any] = {}
+        for slot in ("week", "fri"):
+            raw = block.get(slot)
+            if not isinstance(raw, dict):
+                raise HTTPException(400, f"{par}.{slot} invalide")
+            try:
+                s = float(raw.get("s"))
+                e = float(raw.get("e"))
+            except (TypeError, ValueError):
+                raise HTTPException(400, f"{par}.{slot} : s et e numériques requis")
+            if not (0 <= s < e <= 24):
+                raise HTTPException(400, f"{par}.{slot} : plage invalide (0 ≤ début < fin ≤ 24)")
+            norm_block[slot] = {"s": s, "e": e}
+        out[par] = norm_block
+    return out
 
 
 def _load_planning_calendar_maps(conn, machine_id: int) -> tuple[dict, dict, Dict[str, int]]:
@@ -448,8 +528,7 @@ def _make_work_duration_consumer(
 
     sat_hours_t = _parse_horaires_val(m.get("horaires_samedi"), "6,18")
 
-    mk = _machine_key_from_record(m)
-    _parity_defs = _PARITY_DEFAULTS.get(mk)
+    _parity_defs = _parity_defs_for_machine(m)
 
     def _is_pair_week(dt: datetime) -> bool:
         return dt.isocalendar()[1] % 2 == 0
@@ -470,7 +549,9 @@ def _make_work_duration_consumer(
                 par = "pair" if _is_pair_week(dt) else "impair"
                 slot = "fri" if wd == 4 else "week"
                 h = _parity_defs[par][slot]
-                return (h[0], h[1])
+                if isinstance(h, dict):
+                    return (float(h["s"]), float(h["e"]))
+                return (float(h[0]), float(h[1]))
             return base_hours[wd]
         if wd == 5:
             if dw is None:
@@ -624,11 +705,12 @@ def _compute_timeline_slots(
         if st == "termine":
             continue
 
-        # ── En cours figé : début prod = 1re saisie du run actuel du dossier sur la machine ─
+        # ── En cours figé : début prod = 1re saisie du run actuel ; fin auto sauf override manuel ─
         if st == "en_cours" and _is_frozen_entry(e):
+            manual_end = int(e.get("planned_end_manual") or 0) == 1
             ref = (e.get("numero_of") or e.get("reference") or "").strip()
             run_start = _prod_run_start_for_machine(conn, machine_id, m, ref) if ref else None
-            if run_start is not None:
+            if run_start is not None and not manual_end:
                 duree_h = float(e.get("duree_heures") or 0)
                 p0 = run_start.replace(microsecond=0)
                 ps = _fmt_ts(p0)
@@ -641,6 +723,17 @@ def _compute_timeline_slots(
                         (ps, pe, now_u, e["id"], machine_id),
                     )
                     e["planned_start"], e["planned_end"] = ps, pe
+            elif run_start is not None and manual_end:
+                p0 = run_start.replace(microsecond=0)
+                ps = _fmt_ts(p0)
+                pe = e.get("planned_end")
+                if str(e.get("planned_start") or "") != ps:
+                    conn.execute(
+                        """UPDATE planning_entries SET planned_start=?, updated_at=?
+                           WHERE id=? AND machine_id=?""",
+                        (ps, now_u, e["id"], machine_id),
+                    )
+                    e["planned_start"] = ps
             else:
                 ps, pe = e["planned_start"], e["planned_end"]
             pend = _parse_planned_dt(pe)
@@ -902,6 +995,33 @@ async def set_machine_horaires_bulk(machine_id: int, request: Request):
     return {"success": True, "updated": updates}
 
 
+@router.put("/machines/{machine_id}/horaires-parity")
+async def set_machine_horaires_parity(machine_id: int, request: Request):
+    """Enregistre les horaires paire/impaire (semaine + vendredi) pour la timeline.
+
+    Body: {
+      "pair": {"week": {"s": 5, "e": 20}, "fri": {"s": 6, "e": 20}},
+      "impair": {"week": {"s": 13, "e": 20}, "fri": {"s": 14, "e": 20}}
+    }
+    """
+    require_admin(request)
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Body invalide")
+    normalized = _normalize_parity_body(body)
+    with get_db() as conn:
+        ex = conn.execute("SELECT id FROM machines WHERE id=?", (machine_id,)).fetchone()
+        if not ex:
+            raise HTTPException(404, "Machine non trouvée")
+        conn.execute(
+            "UPDATE machines SET horaires_parity=? WHERE id=?",
+            (json.dumps(normalized), machine_id),
+        )
+        _invalidate_attente_plans(conn, machine_id)
+        conn.commit()
+    return {"success": True, "horaires_parity": normalized}
+
+
 # ═══════════════════════════════════════════════════════════════
 # PLANNING ENTRIES — CRUD
 # ═══════════════════════════════════════════════════════════════
@@ -1122,6 +1242,8 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
 
         exd = dict(ex)
         statut_auto = compute_statut(exd)
+        set_manual_end = _body_flag_true(body.get("planned_end_manual"))
+        clear_manual_end = body.get("planned_end_manual") is not None and not set_manual_end
         if (
             exd.get("statut") == "attente"
             and duree is not None
@@ -1144,10 +1266,32 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
             and body.get("planned_start") is not None
             and body.get("planned_end") is not None
         )
+        manual_end_explicit = (
+            not clear_plan
+            and not invalidate_dur
+            and not termine_reposition
+            and set_manual_end
+            and body.get("planned_end") is not None
+        )
 
         if clear_plan or invalidate_dur:
             ps = None
             pe = None
+        elif manual_end_explicit:
+            ps_dt = _parse_planned_dt(exd.get("planned_start"))
+            pe_dt = _parse_planned_dt(body.get("planned_end"))
+            if not ps_dt or not pe_dt:
+                raise HTTPException(
+                    status_code=400,
+                    detail="planned_start / planned_end invalides.",
+                )
+            if pe_dt <= ps_dt:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Intervalle planifié invalide (fin avant ou égale au début).",
+                )
+            ps = _fmt_ts(ps_dt)
+            pe = _fmt_ts(pe_dt)
         elif termine_reposition:
             ps_dt = _parse_planned_dt(body.get("planned_start"))
             pe_dt = _parse_planned_dt(body.get("planned_end"))
@@ -1167,9 +1311,10 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
             ps = exd.get("planned_start")
             pe = exd.get("planned_end")
 
-        # Recalcul simple de fin de créneau si seule la durée change (ancrage inchangé)
+        # Recalcul fin de créneau si durée change (ancrage inchangé) — conserve l'override manuel
         if (
             not termine_reposition
+            and not manual_end_explicit
             and duree is not None
             and float(duree) != float(ex["duree_heures"])
             and exd.get("planned_start")
@@ -1181,23 +1326,32 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
                 ps = exd.get("planned_start")
                 pe_w = _planned_end_iso_for_machine(conn, machine_id, str(ps), float(duree))
                 pe = pe_w or (dt_start + timedelta(hours=float(duree))).strftime("%Y-%m-%dT%H:%M:%S")
+                if set_manual_end:
+                    pass  # planned_end_manual mis à 1 plus bas
 
         old_ps = exd.get("planned_start")
         old_pe = exd.get("planned_end")
         statut_reel_actuel = exd.get("statut_reel") or "reellement_en_attente"
-        if statut_reel_actuel != "reellement_en_attente" and not termine_reposition:
+        if statut_reel_actuel != "reellement_en_attente" and not termine_reposition and not manual_end_explicit:
             if old_ps and ps and str(ps) != str(old_ps):
                 raise HTTPException(
                     status_code=409,
                     detail="Impossible de déplacer ce dossier : une saisie de production est en cours ou terminée.",
                 )
 
+        if clear_plan or clear_manual_end:
+            planned_end_manual_val = 0
+        elif set_manual_end:
+            planned_end_manual_val = 1
+        else:
+            planned_end_manual_val = int(exd.get("planned_end_manual") or 0)
+
         conn.execute("""
             UPDATE planning_entries
             SET reference=?, client=?, description=?, format_l=?, format_h=?,
                 duree_heures=?, statut=?, notes=?, updated_at=?, updated_by=?,
                 dos_rvgi=?, numero_of=?, ref_produit=?, laize=?, date_livraison=?, commentaire=?,
-                planned_start=?, planned_end=?, a_placer=?
+                planned_start=?, planned_end=?, planned_end_manual=?, a_placer=?
             WHERE id=?
         """, (
             body.get("reference", ex["reference"]),
@@ -1220,6 +1374,7 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
             body.get("commentaire", ex["commentaire"] if "commentaire" in ex.keys() else None),
             ps,
             pe,
+            planned_end_manual_val,
             body.get("a_placer", ex["a_placer"] if "a_placer" in ex.keys() else 0),
             entry_id
         ))
@@ -1277,6 +1432,47 @@ async def toggle_destockage(machine_id: int, entry_id: int, request: Request):
     return {"success": True, "destockage": new_val}
 
 
+@router.get("/machines/{machine_id}/entries/{entry_id}/production-stats")
+def entry_production_stats(machine_id: int, entry_id: int, request: Request):
+    """Statistiques de production du dossier (alignées MyProd > Production)."""
+    with get_db() as conn:
+        require_planning_machine(request, conn, machine_id)
+        row = conn.execute(
+            """SELECT id, reference, numero_of
+               FROM planning_entries WHERE id=? AND machine_id=?""",
+            (entry_id, machine_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Entrée introuvable.")
+        m = conn.execute(
+            "SELECT nom, code FROM machines WHERE id=? AND actif=1",
+            (machine_id,),
+        ).fetchone()
+        if not m:
+            raise HTTPException(status_code=404, detail="Machine introuvable.")
+        no_dossier = (row["numero_of"] or row["reference"] or "").strip()
+        if not no_dossier:
+            return build_dossier_production_stats([], "")
+        mnom = (m["nom"] or "").strip()
+        mcode = (m["code"] or "").strip()
+        prod_rows = conn.execute(
+            """SELECT id, operateur, date_operation, operation, operation_code,
+                      operation_category, machine, no_dossier, client, designation,
+                      quantite_a_traiter, quantite_traitee,
+                      COALESCE(metrage_total_debut, metrage_prevu) AS metrage_prevu,
+                      COALESCE(metrage_total_fin, metrage_reel) AS metrage_reel
+               FROM production_data
+               WHERE trim(no_dossier) = trim(?)
+                 AND (
+                   trim(machine) = trim(?)
+                   OR (trim(?) != '' AND trim(machine) = trim(?))
+                 )
+               ORDER BY operateur, date_operation""",
+            (no_dossier, mnom, mcode, mcode),
+        ).fetchall()
+    return build_dossier_production_stats([dict(r) for r in prod_rows], no_dossier)
+
+
 @router.post("/machines/{machine_id}/entries/{entry_id}/reset-saisie")
 async def reset_statut_reel(machine_id: int, entry_id: int, request: Request):
     """
@@ -1305,6 +1501,7 @@ async def reset_statut_reel(machine_id: int, entry_id: int, request: Request):
                    statut_force  = 0,
                    planned_start = NULL,
                    planned_end   = NULL,
+                   planned_end_manual = 0,
                    updated_at    = ?
                WHERE id = ? AND machine_id = ?""",
             (now, entry_id, machine_id),
@@ -1983,6 +2180,108 @@ async def set_day_horaires(machine_id: int, request: Request):
 
 
 # ═══════════════════════════════════════════════════════════════
+# COMMENTAIRES TIMELINE (semaine / jour)
+# ═══════════════════════════════════════════════════════════════
+
+
+def _iso_week_keys_between(start: str, end: str) -> List[str]:
+    """Clés ISO semaine (YYYY-Www) couvrant la plage [start, end] inclusive."""
+    try:
+        d0 = datetime.strptime(start, "%Y-%m-%d").date()
+        d1 = datetime.strptime(end, "%Y-%m-%d").date()
+    except ValueError:
+        return []
+    if d1 < d0:
+        d0, d1 = d1, d0
+    keys: set = set()
+    cur = d0
+    while cur <= d1:
+        ic = cur.isocalendar()
+        keys.add(f"{ic[0]}-W{ic[1]:02d}")
+        cur += timedelta(days=1)
+    return sorted(keys)
+
+
+@router.get("/machines/{machine_id}/calendar-comments")
+def list_calendar_comments(machine_id: int, request: Request, start: str, end: str):
+    """Commentaires semaine (planning_config.notes) et jour sur une plage YYYY-MM-DD."""
+    require_planning_view(request)
+    week_keys = _iso_week_keys_between(start, end)
+    with get_db() as conn:
+        require_planning_machine(request, conn, machine_id)
+        week_comments: dict = {}
+        if week_keys:
+            ph = ",".join("?" * len(week_keys))
+            rows = conn.execute(
+                f"""SELECT semaine, notes FROM planning_config
+                    WHERE machine_id=? AND semaine IN ({ph})
+                      AND TRIM(COALESCE(notes, '')) != ''""",
+                (machine_id, *week_keys),
+            ).fetchall()
+            week_comments = {str(r["semaine"]): str(r["notes"] or "") for r in rows}
+        day_rows = conn.execute(
+            """SELECT date, comment FROM planning_day_comments
+               WHERE machine_id=? AND date>=? AND date<=?
+                 AND TRIM(COALESCE(comment, '')) != ''
+               ORDER BY date""",
+            (machine_id, start, end),
+        ).fetchall()
+    day_comments = {str(r["date"]): str(r["comment"] or "") for r in day_rows}
+    return {"week_comments": week_comments, "day_comments": day_comments}
+
+
+@router.put("/machines/{machine_id}/week-comment")
+async def set_week_comment(machine_id: int, request: Request):
+    """Body: {semaine: '2026-W20', comment: '...'} — ne modifie pas samedi_travaille."""
+    require_admin(request)
+    body = await request.json()
+    semaine = (body.get("semaine") or "").strip()
+    if not semaine:
+        raise HTTPException(400, "semaine requise")
+    comment = (body.get("comment") or "").strip()
+    with get_db() as conn:
+        conn.execute(
+            """INSERT INTO planning_config (machine_id, semaine, samedi_travaille, notes)
+               VALUES (?, ?, 0, ?)
+               ON CONFLICT(machine_id, semaine) DO UPDATE SET notes=excluded.notes""",
+            (machine_id, semaine, comment),
+        )
+        conn.commit()
+    return {"success": True, "semaine": semaine, "comment": comment}
+
+
+@router.put("/machines/{machine_id}/day-comment")
+async def set_day_comment(machine_id: int, request: Request):
+    """Body: {date: 'YYYY-MM-DD', comment: '...'}"""
+    require_admin(request)
+    body = await request.json()
+    date = (body.get("date") or "").strip()
+    if not date:
+        raise HTTPException(400, "date requise")
+    try:
+        datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(400, "date invalide (YYYY-MM-DD)")
+    comment = (body.get("comment") or "").strip()
+    with get_db() as conn:
+        if comment:
+            conn.execute(
+                """INSERT INTO planning_day_comments (machine_id, date, comment, updated_at)
+                   VALUES (?, ?, ?, datetime('now'))
+                   ON CONFLICT(machine_id, date)
+                   DO UPDATE SET comment=excluded.comment, updated_at=datetime('now')""",
+                (machine_id, date, comment),
+            )
+        else:
+            conn.execute(
+                "DELETE FROM planning_day_comments WHERE machine_id=? AND date=?",
+                (machine_id, date),
+            )
+        conn.commit()
+    return {"success": True, "date": date, "comment": comment}
+
+
+# ═══════════════════════════════════════════════════════════════
 # CONFIG SEMAINE (samedi travaillé)
 # ═══════════════════════════════════════════════════════════════
 
@@ -2165,8 +2464,7 @@ async def pack_termines(machine_id: int, request: Request):
         ]:
             base_hours[day_idx] = _parse_horaires_val(m.get(field), "5,21")
         sat_hours_t = _parse_horaires_val(m.get("horaires_samedi"), "6,18")
-        mk = _machine_key_from_record(m)
-        _parity_defs = _PARITY_DEFAULTS.get(mk)
+        _parity_defs = _parity_defs_for_machine(m)
 
         def _is_pair_week(dt: datetime) -> bool:
             return dt.isocalendar()[1] % 2 == 0
@@ -2187,7 +2485,9 @@ async def pack_termines(machine_id: int, request: Request):
                     par = "pair" if _is_pair_week(dt) else "impair"
                     slot = "fri" if wd == 4 else "week"
                     h = _parity_defs[par][slot]
-                    return (h[0], h[1])
+                    if isinstance(h, dict):
+                        return (float(h["s"]), float(h["e"]))
+                    return (float(h[0]), float(h[1]))
                 return base_hours[wd]
             if wd == 5:
                 if dw is None:
@@ -2305,8 +2605,7 @@ def _pack_termines_before_anchor(
     ]:
         base_hours[day_idx] = _parse_horaires_val(m.get(field), "5,21")
     sat_hours_t = _parse_horaires_val(m.get("horaires_samedi"), "6,18")
-    mk = _machine_key_from_record(m)
-    _parity_defs = _PARITY_DEFAULTS.get(mk)
+    _parity_defs = _parity_defs_for_machine(m)
 
     def _is_pair_week(dt: datetime) -> bool:
         return dt.isocalendar()[1] % 2 == 0
@@ -2327,7 +2626,9 @@ def _pack_termines_before_anchor(
                 par = "pair" if _is_pair_week(dt) else "impair"
                 slot = "fri" if wd == 4 else "week"
                 h = _parity_defs[par][slot]
-                return (h[0], h[1])
+                if isinstance(h, dict):
+                    return (float(h["s"]), float(h["e"]))
+                return (float(h[0]), float(h[1]))
             return base_hours[wd]
         if wd == 5:
             if dw is None:

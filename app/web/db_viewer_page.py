@@ -115,8 +115,16 @@ body.light .tbl-rows-badge{{background:rgba(8,145,178,.1)}}
   cursor:pointer;font-size:12px;width:100%;font-family:inherit;transition:all .12s;
 }}
 .theme-btn:hover{{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}}
-.logout-btn{{border:none}}
-.logout-btn:hover{{color:var(--danger);background:rgba(248,113,113,.1)}}
+.back-mysifa{{
+  display:flex;align-items:center;gap:0;padding:9px 10px;border-radius:8px;
+  border:none!important;background:transparent!important;
+  color:var(--text2)!important;font-size:13px;font-weight:500;
+  cursor:pointer;width:100%;font-family:'Segoe UI',system-ui,sans-serif;
+  transition:color .12s,background .12s;
+}}
+.back-mysifa:hover{{color:var(--text)!important;background:var(--accent-bg)!important}}
+.back-mysifa .wm{{font-weight:800;color:var(--text);letter-spacing:-.3px}}
+.back-mysifa .wm span{{color:var(--accent)}}
 .version{{font-size:10px;color:var(--muted);text-align:center;font-family:monospace;padding-top:2px}}
 
 /* ── Main ── */
@@ -331,9 +339,8 @@ body.light .tbl-rows-badge{{background:rgba(8,145,178,.1)}}
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
         <span id="theme-label">Thème clair</span>
       </button>
-      <button class="logout-btn" onclick="window.location.href='/'">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
-        Retour au portail
+      <button type="button" class="back-mysifa" onclick="window.location.href='/'" title="Retour MySifa">
+        ← Retour <span class="wm">My<span>Sifa</span></span>
       </button>
       <div class="version">v{version}</div>
     </div>

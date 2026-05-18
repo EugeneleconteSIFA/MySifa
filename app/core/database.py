@@ -415,6 +415,8 @@ def _migrate(conn):
             # Planning v3: statut réel issu de la saisie fabrication
             # reellement_en_attente | reellement_en_saisie | reellement_termine
             ("statut_reel", "ALTER TABLE planning_entries ADD COLUMN statut_reel TEXT DEFAULT 'reellement_en_attente'"),
+            # Fin de créneau figée manuellement (resize timeline) — ne pas recalculer depuis la saisie prod
+            ("planned_end_manual", "ALTER TABLE planning_entries ADD COLUMN planned_end_manual INTEGER DEFAULT 0"),
             # Traçabilité création/modification
             ("created_by", "ALTER TABLE planning_entries ADD COLUMN created_by TEXT"),
             ("updated_by", "ALTER TABLE planning_entries ADD COLUMN updated_by TEXT"),
@@ -506,6 +508,20 @@ def _migrate(conn):
         )""")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_pdh_lookup ON planning_day_horaires(machine_id, date)"
+    )
+
+    if "planning_day_comments" not in existing_tables:
+        conn.execute("""CREATE TABLE planning_day_comments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            machine_id INTEGER NOT NULL,
+            date TEXT NOT NULL,
+            comment TEXT NOT NULL DEFAULT '',
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(machine_id, date),
+            FOREIGN KEY (machine_id) REFERENCES machines(id)
+        )""")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_pdc_lookup ON planning_day_comments(machine_id, date)"
     )
 
     # Tables MyStock
@@ -1256,6 +1272,41 @@ def _migrate(conn):
             # ISO YYYY-MM-DD
             conn.execute("ALTER TABLE users ADD COLUMN date_naissance TEXT")
         _record_schema_migration(conn, 19, "users_adresse_date_naissance")
+
+    # v20 — Planning : commentaires par jour (timeline)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=20 LIMIT 1").fetchone():
+        if not conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='planning_day_comments'"
+        ).fetchone():
+            conn.execute("""CREATE TABLE planning_day_comments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                machine_id INTEGER NOT NULL,
+                date TEXT NOT NULL,
+                comment TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(machine_id, date),
+                FOREIGN KEY (machine_id) REFERENCES machines(id)
+            )""")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_pdc_lookup ON planning_day_comments(machine_id, date)"
+        )
+        _record_schema_migration(conn, 20, "planning_day_comments")
+
+    # v21 — Planning : date de fin manuelle (override saisie production)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=21 LIMIT 1").fetchone():
+        pe_cols = {r["name"] for r in conn.execute("PRAGMA table_info(planning_entries)").fetchall()}
+        if "planned_end_manual" not in pe_cols:
+            conn.execute(
+                "ALTER TABLE planning_entries ADD COLUMN planned_end_manual INTEGER DEFAULT 0"
+            )
+        _record_schema_migration(conn, 21, "planning_planned_end_manual")
+
+    # v22 — Machines : horaires paire/impaire (JSON) pour la timeline Cohésio 2 et similaires
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=22 LIMIT 1").fetchone():
+        mcols = {r["name"] for r in conn.execute("PRAGMA table_info(machines)").fetchall()}
+        if "horaires_parity" not in mcols:
+            conn.execute("ALTER TABLE machines ADD COLUMN horaires_parity TEXT")
+        _record_schema_migration(conn, 22, "machines_horaires_parity")
 
     _record_schema_migration(
         conn,

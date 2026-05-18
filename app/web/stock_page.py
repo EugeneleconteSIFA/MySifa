@@ -99,9 +99,18 @@ input,select{font-family:inherit}
 .sidebar-nav::-webkit-scrollbar{width:4px}
 .sidebar-nav::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
 .sidebar-bottom{padding:12px 8px;border-top:1px solid var(--border);display:flex;flex-direction:column;
-  gap:6px;flex-shrink:0;margin-top:auto;background:var(--card)}.user-chip{padding:10px 12px;border-radius:8px;background:var(--accent-bg)}
+  gap:6px;flex-shrink:0;margin-top:auto;background:var(--card)}
+.user-chip{padding:10px 12px;border-radius:8px;background:var(--accent-bg);cursor:pointer}
+.user-chip:hover{background:rgba(34,211,238,.18)}
 .uc-name{font-size:12px;font-weight:600;color:var(--text)}
 .uc-role{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px}
+.back-mysifa{
+  border:none!important;background:transparent!important;font-weight:400!important;
+  color:var(--text2)!important;padding:8px 10px!important;
+}
+.back-mysifa:hover{color:var(--text)!important;background:transparent!important}
+.back-mysifa .wm{font-weight:800;color:var(--text)}
+.back-mysifa .wm span{color:var(--accent)}
 .theme-btn,.logout-btn{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;
   border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;
   font-size:12px;width:100%;font-family:inherit;transition:all .15s}
@@ -457,6 +466,27 @@ body.light .field-input.empl-upper::placeholder{
 .contact-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:650;display:flex;align-items:center;justify-content:center;padding:18px}
 .contact-modal{width:100%;max-width:560px;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px 18px 16px;box-shadow:0 24px 64px rgba(0,0,0,.4);position:relative}
 .contact-modal h3{font-size:16px;font-weight:800;margin:0 0 12px;padding-right:34px}
+.ref-import-drop{border:1.5px dashed var(--border);border-radius:12px;padding:24px 16px;text-align:center;
+  background:var(--bg);cursor:pointer;transition:border-color .15s,background .15s}
+.ref-import-drop:hover,.ref-import-drop.dragover{border-color:var(--accent);background:var(--accent-bg)}
+.ref-import-drop-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px}
+.ref-import-drop-sub{font-size:11px;color:var(--muted)}
+.ref-import-table-wrap{max-height:320px;overflow:auto;margin:14px 0;border:1px solid var(--border);border-radius:10px}
+.ref-import-table{width:100%;border-collapse:collapse;font-size:12px}
+.ref-import-table th{position:sticky;top:0;background:var(--card);padding:8px 10px;text-align:left;
+  font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);border-bottom:1px solid var(--border)}
+.ref-import-table td{padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+.ref-import-table tr:last-child td{border-bottom:none}
+.ref-import-badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700}
+.ref-import-badge.create{background:rgba(52,211,153,.15);color:var(--success)}
+.ref-import-badge.update{background:rgba(34,211,238,.15);color:var(--accent)}
+.ref-import-badge.unchanged{background:rgba(148,163,184,.12);color:var(--muted)}
+.ref-import-badge.error{background:rgba(248,113,113,.15);color:var(--danger)}
+.ref-header-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.btn-ghost-sm{background:transparent;border:1px solid var(--border);border-radius:8px;padding:7px 12px;
+  font-size:12px;font-weight:700;color:var(--text2);cursor:pointer;font-family:inherit;display:inline-flex;
+  align-items:center;gap:6px;transition:all .15s}
+.btn-ghost-sm:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 .contact-close{position:absolute;top:14px;right:14px;width:32px;height:32px;border-radius:10px;border:1px solid var(--border);
   background:var(--bg);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:18px;line-height:1}
 .contact-close:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
@@ -651,6 +681,17 @@ let S = {
   recepFournisseur: '',     // fournisseur sélectionné
   recepFournisseurSearch: '', // texte de recherche fournisseur
   recepFournisseurOpen: false, // dropdown ouvert
+  // Import référentiel références / unités
+  importRefsOpen: false,
+  importRefsPreview: null,
+  importRefsLoading: false,
+  importRefsApplying: false,
+};
+
+const ROLE_LABELS = {
+  direction:'Direction', administration:'Administration', fabrication:'Fabrication',
+  logistique:'Logistique', comptabilite:'Comptabilité', expedition:'Expédition',
+  commercial:'Commercial', superadmin:'Super admin',
 };
 
 // ── Fournisseurs FSC (chargés depuis la base via API) ──
@@ -714,6 +755,39 @@ async function api(p, o) {
   }
 }
 
+async function apiUpload(path, formData) {
+  const r = await fetch(API + path, { method: 'POST', credentials: 'include', body: formData });
+  if (r.status === 401) { window.location.href = '/'; return null; }
+  if (!r.ok) {
+    const e = await r.json().catch(() => ({}));
+    const detail = e.detail;
+    throw new Error(typeof detail === 'string' ? detail : (detail?.msg || 'Erreur ' + r.status));
+  }
+  return await r.json();
+}
+
+async function downloadRefsExport() {
+  try {
+    const r = await fetch(API + '/api/stock/produits/export?format=csv', { credentials: 'include' });
+    if (r.status === 401) { window.location.href = '/'; return; }
+    if (!r.ok) throw new Error('Export impossible');
+    const blob = await r.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'references_unites_vente.csv';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 800);
+    showToast('Export CSV téléchargé');
+  } catch(e) {
+    showToast(e.message || 'Export impossible', 'error');
+  }
+}
+
+function printRefsExport() {
+  window.open(API + '/api/stock/produits/export?format=print', '_blank', 'noopener');
+}
+
 function showToast(m, t='success') {
   S.toast = { message: m, type: t };
   renderToast();
@@ -762,6 +836,9 @@ function icon(name, size=16){
     'scan': '<rect x="3" y="3" width="5" height="5"/><rect x="16" y="3" width="5" height="5"/><rect x="3" y="16" width="5" height="5"/><line x1="21" y1="16" x2="21" y2="21"/><line x1="16" y1="21" x2="21" y2="21"/><line x1="11" y1="3" x2="11" y2="7"/><line x1="11" y1="11" x2="11" y2="17"/><line x1="3" y1="11" x2="7" y2="11"/><line x1="11" y1="11" x2="17" y2="11"/>',
     'inbox': '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
     'check-circle': '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
+    'upload': '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
+    'download': '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+    'edit': '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
   };
   return `<svg ${a} aria-hidden="true" style="display:inline-block;vertical-align:middle;flex-shrink:0">${p[name]||p['grid']}</svg>`;
 }
@@ -1776,6 +1853,175 @@ function buildMvtHistory(mouvements, unite='', opts=null) {
   );
 }
 
+
+function buildReferentielCard() {
+  const actions = el('div', { cls: 'ref-header-actions' });
+  if (!S.stockReadOnly) {
+    actions.appendChild(el('button', {
+      cls: 'btn-ghost-sm', type: 'button',
+      on: { click: () => { S.importRefsOpen = true; S.importRefsPreview = null; render(); } },
+    }, iconEl('upload', 14), ' Importer'));
+  }
+  actions.appendChild(el('button', {
+    cls: 'btn-ghost-sm', type: 'button', on: { click: downloadRefsExport },
+  }, iconEl('download', 14), ' Exporter CSV'));
+  actions.appendChild(el('button', {
+    cls: 'btn-ghost-sm', type: 'button', on: { click: printRefsExport },
+  }, iconEl('printer', 14), ' Imprimer'));
+
+  return el('div', { cls: 'card' },
+    el('div', { cls: 'card-header' },
+      el('div', { cls: 'card-title' }, 'Références et unités de vente'),
+      actions
+    ),
+    el('div', { style: { fontSize: '12px', color: 'var(--muted)', lineHeight: '1.5', padding: '0 2px 4px' } },
+      'Importez ou exportez le référentiel des références produit et de leur unité de vente (CSV ou Excel).'
+    )
+  );
+}
+
+async function previewRefsImport(file) {
+  if (!file) return;
+  S.importRefsLoading = true;
+  render();
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    const d = await apiUpload('/api/stock/produits/import/preview', fd);
+    S.importRefsPreview = d;
+    const st = d.stats || {};
+    showToast((st.create || 0) + (st.update || 0) + ' ligne(s) à traiter');
+  } catch(e) {
+    S.importRefsPreview = null;
+    showToast(e.message || 'Import impossible', 'error');
+  } finally {
+    S.importRefsLoading = false;
+    render();
+  }
+}
+
+async function confirmRefsImport() {
+  const prev = S.importRefsPreview;
+  if (!prev || !prev.rows) return;
+  const rows = prev.rows.filter(r => r.action === 'create' || r.action === 'update');
+  if (!rows.length) {
+    showToast('Aucune ligne à importer', 'warn');
+    return;
+  }
+  S.importRefsApplying = true;
+  render();
+  try {
+    const d = await api('/api/stock/produits/import/confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rows }),
+    });
+    const a = d.applied || {};
+    showToast(
+      (a.create || 0) + ' créée(s), ' + (a.update || 0) + ' mise(s) à jour'
+      + ((a.skipped || 0) ? ', ' + a.skipped + ' ignorée(s)' : '')
+    );
+    S.importRefsOpen = false;
+    S.importRefsPreview = null;
+    await loadDashboard();
+  } catch(e) {
+    showToast(e.message || 'Import impossible', 'error');
+  } finally {
+    S.importRefsApplying = false;
+    render();
+  }
+}
+
+function renderImportRefsModal() {
+  const ov = el('div', { cls: 'contact-modal-overlay', on: {
+    click: (e) => {
+      if (e.target === ov && !S.importRefsApplying) {
+        S.importRefsOpen = false;
+        S.importRefsPreview = null;
+        render();
+      }
+    },
+  }});
+  const box = el('div', { cls: 'contact-modal', style: { maxWidth: '720px' } });
+  const close = () => {
+    if (S.importRefsApplying) return;
+    S.importRefsOpen = false;
+    S.importRefsPreview = null;
+    render();
+  };
+  box.appendChild(el('button', { cls: 'contact-close', type: 'button', on: { click: close } }, '×'));
+  box.appendChild(el('h3', null, 'Importer références et unités de vente'));
+
+  if (!S.importRefsPreview) {
+    const fileInp = el('input', { type: 'file', accept: '.csv,.xlsx,.xls,.xlsm', style: { display: 'none' } });
+    const drop = el('div', { cls: 'ref-import-drop' },
+      el('div', { cls: 'ref-import-drop-title' }, 'Glisser un fichier ici ou cliquer pour parcourir'),
+      el('div', { cls: 'ref-import-drop-sub' }, 'CSV, Excel (.xlsx, .xls) — colonnes : référence, unité de vente, désignation (facultatif)')
+    );
+    drop.addEventListener('click', () => fileInp.click());
+    drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('dragover'); });
+    drop.addEventListener('dragleave', () => drop.classList.remove('dragover'));
+    drop.addEventListener('drop', e => {
+      e.preventDefault();
+      drop.classList.remove('dragover');
+      const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) previewRefsImport(f);
+    });
+    fileInp.addEventListener('change', e => {
+      const f = e.target.files && e.target.files[0];
+      if (f) previewRefsImport(f);
+    });
+    box.appendChild(drop);
+    box.appendChild(fileInp);
+    if (S.importRefsLoading) {
+      box.appendChild(el('div', { style: { marginTop: '12px', fontSize: '12px', color: 'var(--accent)' } }, 'Analyse du fichier…'));
+    }
+    const cancelOnly = el('div', { cls: 'contact-actions' });
+    cancelOnly.appendChild(el('button', { cls: 'btn-cancel', type: 'button', on: { click: close } }, 'Fermer'));
+    box.appendChild(cancelOnly);
+  } else {
+    const st = S.importRefsPreview.stats || {};
+    box.appendChild(el('div', { style: { fontSize: '12px', color: 'var(--muted)', marginBottom: '10px' } },
+      'Fichier : ' + (S.importRefsPreview.filename || '') + ' — '
+      + (st.create || 0) + ' création(s), ' + (st.update || 0) + ' mise(s) à jour, '
+      + (st.unchanged || 0) + ' inchangée(s), ' + (st.error || 0) + ' erreur(s)'
+    ));
+    const wrap = el('div', { cls: 'ref-import-table-wrap' });
+    const table = el('table', { cls: 'ref-import-table' });
+    const thead = el('thead', null, el('tr', null,
+      el('th', null, 'Ligne'), el('th', null, 'Référence'), el('th', null, 'Unité'),
+      el('th', null, 'Désignation'), el('th', null, 'Action')
+    ));
+    const tbody = el('tbody', null);
+    (S.importRefsPreview.rows || []).forEach(r => {
+      const badge = el('span', { cls: 'ref-import-badge ' + (r.action || 'error') }, r.action || 'error');
+      tbody.appendChild(el('tr', null,
+        el('td', null, String(r.line || '')),
+        el('td', { style: { fontFamily: 'monospace', fontWeight: '700' } }, r.reference || '—'),
+        el('td', null, r.unite || '—'),
+        el('td', null, r.designation || '—'),
+        el('td', null, badge, el('div', { style: { display: 'block', fontSize: '10px', color: 'var(--muted)', marginTop: '2px' } }, r.message || ''))
+      ));
+    });
+    table.appendChild(thead);
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+    box.appendChild(wrap);
+    const actions = el('div', { cls: 'contact-actions' });
+    actions.appendChild(el('button', { cls: 'btn-cancel', type: 'button', on: { click: close } }, 'Annuler'));
+    const nApply = (S.importRefsPreview.rows || []).filter(r => r.action === 'create' || r.action === 'update').length;
+    const okBtn = el('button', { cls: 'btn', type: 'button' },
+      S.importRefsApplying ? 'Import…' : ('Valider l\'import (' + nApply + ')'));
+    okBtn.disabled = !!S.importRefsApplying || nApply === 0;
+    okBtn.addEventListener('click', () => confirmRefsImport());
+    actions.appendChild(okBtn);
+    box.appendChild(actions);
+  }
+
+  ov.appendChild(box);
+  document.body.appendChild(ov);
+}
+
 function buildDashboard() {
   const d = S.dashboard;
   if (!d) return el('div',{cls:'content'},el('div',{cls:'card-empty'},'Chargement…'));
@@ -1785,6 +2031,7 @@ function buildDashboard() {
       el('div',{cls:'stat-card'},el('div',{cls:'stat-label'},'Références'),el('div',{cls:'stat-value accent'},s.nb_refs||0)),
       el('div',{cls:'stat-card'},el('div',{cls:'stat-label'},'Emplacements occupés'),el('div',{cls:'stat-value accent'},s.nb_empl_occupes||0))
     ),
+    buildReferentielCard(),
     ...(!S.stockReadOnly ? [el('div',{cls:'card',style:{overflow:'visible'}},
       el('div',{cls:'card-header'},el('div',{cls:'card-title'},'➕ Ajouter au stock')),
       el('div',{cls:'add-form'},
@@ -2999,6 +3246,7 @@ function render() {
   try{
     document.querySelectorAll('.contact-modal-overlay').forEach(n=>n.remove());
     document.querySelectorAll('.unit-modal-overlay').forEach(n=>n.remove());
+    document.querySelectorAll('.ref-import-modal-overlay').forEach(n=>n.remove());
   }catch(e){}
 
   const root = document.getElementById('root');
@@ -3043,14 +3291,15 @@ function render() {
       })
     ),
     el('div', { cls:'sidebar-bottom' },
-      el('button', { cls:'nav-btn nav-btn--mysifa-portal', on:{ click:()=>{ window.location.href='/'; } } },
-        el('span', { cls:'mysifa-back-preamble' }, '← Retour '),
-        el('span', { cls:'mysifa-back-brand' }, 'My', el('span', { cls:'mysifa-back-accent' }, 'Sifa'))
-      ),      S.user ? el('div', { cls:'user-chip', attrs:{ title:'Mon profil' }, on:{ click:()=>{ window.location.href='/profil'; } } },
+      el('button', { cls:'nav-btn back-mysifa', on:{ click:()=>{ window.location.href='/'; } } },
+        '← Retour ',
+        el('span', { cls:'wm' }, 'My', el('span', null, 'Sifa'))
+      ),
+      S.user ? el('div', { cls:'user-chip', style:{ cursor:'pointer' }, attrs:{ title:'Modifier mon profil' }, on:{ click:()=>{ window.location.href='/profil'; } } },
         el('div', { cls:'uc-name' }, S.user.nom||''),
-        el('div', { cls:'uc-role' }, S.user.role||''),
-        el('div', { attrs:{ style:'font-size:10px;color:var(--accent);margin-top:3px;display:flex;align-items:center;gap:4px' } },
-          iconEl('edit',12), ' Mon profil'
+        el('div', { cls:'uc-role' }, ROLE_LABELS[S.user.role] || S.user.role || ''),
+        el('div', { style:{ fontSize:'10px', color:'var(--accent)', marginTop:'3px', display:'flex', alignItems:'center', gap:'4px' } },
+          iconEl('edit',10), ' Mon profil'
         )
       ) : null,
       (() => {
@@ -3204,6 +3453,8 @@ function render() {
     ov.appendChild(box);
     document.body.appendChild(ov);
   }
+
+  if (S.importRefsOpen) renderImportRefsModal();
 
   renderContent();
 

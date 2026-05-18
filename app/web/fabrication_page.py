@@ -166,7 +166,11 @@ table.fab-table td{
   color:var(--text2);
 }
 table.fab-table tr:last-child td{border-bottom:none}
-table.fab-table tr.fab-row-last td{
+table.fab-table tr.fab-row-arret td{background:rgba(251,191,36,.12)}
+body.light table.fab-table tr.fab-row-arret td{background:rgba(217,119,6,.10)}
+table.fab-table tr.fab-row-last.fab-row-arret td{background:rgba(251,191,36,.14)}
+body.light table.fab-table tr.fab-row-last.fab-row-arret td{background:rgba(217,119,6,.12)}
+table.fab-table tr.fab-row-last:not(.fab-row-arret) td{
   background:rgba(34,211,238,.04);
 }
 .fab-time{font-family:monospace;font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;letter-spacing:.2px}
@@ -302,6 +306,24 @@ table.fab-table tr.fab-row-last td{
 .fab-field textarea{resize:vertical;min-height:70px}
 .fab-modal-btns{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
 
+/* Modals #mroot (design system) */
+#mroot{position:fixed;inset:0;z-index:1100;pointer-events:none}
+#mroot:empty{display:none}
+#mroot>*{pointer-events:auto}
+#mroot .fab-modal{border-radius:12px}
+.btn{
+  border-radius:10px;padding:10px 18px;font-size:13px;font-weight:700;
+  cursor:pointer;font-family:inherit;border:none;transition:opacity .15s,filter .15s;
+}
+.btn-accent{background:var(--accent);color:var(--bg)}
+.btn-accent:hover:not(:disabled){filter:brightness(1.06)}
+.btn-accent:disabled{opacity:.45;cursor:not-allowed}
+.btn-ghost{
+  background:transparent;color:var(--text2);
+  border:1px solid var(--border);
+}
+.btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
+
 /* Dossier picker */
 .fab-picker-list{
   max-height:300px;overflow-y:auto;margin:10px 0;
@@ -313,6 +335,7 @@ table.fab-table tr.fab-row-last td{
   display:flex;flex-direction:column;gap:3px;
 }
 .fab-picker-item:hover{border-color:var(--accent);background:var(--accent-bg)}
+.fab-picker-item--hi{border-color:var(--accent);background:var(--accent-bg);outline:2px solid rgba(34,211,238,.35);outline-offset:1px}
 .fab-picker-line1{font-size:13px;font-weight:800;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fab-picker-line1 .fab-picker-ref{color:var(--accent)}
 .fab-picker-line1 .fab-picker-sep{color:var(--muted);font-weight:400;margin:0 4px}
@@ -520,6 +543,7 @@ table.fab-traca-table tr:last-child td{border-bottom:none}
 </head>
 <body>
 <div id="root"></div>
+<div id="mroot"></div>
 <script src="/static/support_widget.js"></script>
 <script>
 'use strict';
@@ -596,6 +620,8 @@ let S = {
   showFinModal: false,
   showCommentModal: false,
   commentSaisieId: null,
+  showArret50Modal: false,
+  arret50Comment: '',
 
   // Form values
   metrageDebut: '',
@@ -636,8 +662,75 @@ async function loadFournisseursFSC(){
 }
 
 /* ── Helpers ─────────────────────────────────────────────────── */
+let _fabPollInterval = null;
+let _fabRefreshPausedUntil = 0;
+
+function fabPauseAutoRefresh(ms){
+  _fabRefreshPausedUntil = Math.max(_fabRefreshPausedUntil, Date.now() + (ms||10000));
+}
+
+function fabIsModalOpen(){
+  if(S.showDossierPicker || S.showDebutModal || S.showFinModal || S.showCommentModal || S.showArret50Modal) return true;
+  try{
+    const mr = document.getElementById('mroot');
+    if(mr && mr.firstElementChild) return true;
+  }catch(e){}
+  return false;
+}
+
+function fabIsUserBusy(){
+  if(Date.now() < _fabRefreshPausedUntil) return true;
+  if(S.loading || fabIsModalOpen()) return true;
+  const ae = document.activeElement;
+  if(!ae || !ae.isConnected) return false;
+  if(ae.tagName==='INPUT' || ae.tagName==='TEXTAREA' || ae.tagName==='SELECT'){
+    const root = document.getElementById('root');
+    if(root && root.contains(ae)) return true;
+  }
+  return false;
+}
+
+function _fabCaptureUiState(){
+  const wrap = document.querySelector('.fab-table-wrap');
+  const ae = document.activeElement;
+  return {
+    scrollTop: wrap ? wrap.scrollTop : 0,
+    mainScroll: document.querySelector('.fab-main')?.scrollTop ?? 0,
+    focusId: ae?.id || null,
+    selStart: ae?.selectionStart ?? null,
+    selEnd: ae?.selectionEnd ?? null,
+  };
+}
+
+function _fabRestoreUiState(ui){
+  if(!ui) return;
+  requestAnimationFrame(()=>{
+    const wrap = document.querySelector('.fab-table-wrap');
+    if(wrap && ui.scrollTop > 0) wrap.scrollTop = ui.scrollTop;
+    const main = document.querySelector('.fab-main');
+    if(main && ui.mainScroll > 0) main.scrollTop = ui.mainScroll;
+    if(ui.focusId){
+      const el = document.getElementById(ui.focusId);
+      if(el){
+        el.focus();
+        if(ui.selStart != null && typeof el.setSelectionRange==='function'){
+          try{ el.setSelectionRange(ui.selStart, ui.selEnd ?? ui.selStart); }catch(e){}
+        }
+      }
+    }
+  });
+}
+
 function set(u){ Object.assign(S, u); render(); }
 function api_path(p){ return p; }
+
+/** Horodatage local avec secondes (tri / durées en base). */
+function nowIsoLocal(){
+  const d=new Date();
+  const pad=n=>String(n).padStart(2,'0');
+  return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())
+    +'T'+pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
+}
 
 function fmtTime(iso){
   if(!iso) return '--/--/---- --:--';
@@ -657,6 +750,14 @@ function fmtDate(iso){
   return d.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'});
 }
 function fN(v){ if(v==null||v===''||isNaN(Number(v))) return '—'; return Number(v).toLocaleString('fr-FR'); }
+
+function isArretSaisie(s){
+  if(!s) return false;
+  if(String(s.operation_category||'').toLowerCase()==='arret') return true;
+  const code = String(s.operation_code||'').trim();
+  const op = code ? OPS[code] : null;
+  return !!(op && op.category==='arret');
+}
 
 function catColor(cat){
   const m = {production:'var(--success)',personnel:'var(--c1)',calage:'var(--c2)',
@@ -767,31 +868,66 @@ async function apiFetch(path, opts={}){
   return r.json();
 }
 
-async function loadSession(){
+async function loadSession(opts){
   let url = '/api/fabrication/session';
   if(S.adminMachineId) url += '?machine_id='+S.adminMachineId;
   const d = await apiFetch(url).catch(e=>{
-    showToast('Erreur session: '+e.message,'danger');
+    if(!opts?.silent) showToast('Erreur session: '+e.message,'danger');
     return null;
   });
-  if(!d){ set({etat:'sans_session'}); return; }
-  set({
+  if(!d){
+    if(opts?.silent) S.etat = 'sans_session';
+    else set({etat:'sans_session'});
+    return;
+  }
+  const patch = {
     saisies: d.saisies||[],
     etat: d.etat||'sans_session',
     dossier: d.dossier||null,
     lastSaisie: d.last_saisie||null,
     operateur: d.operateur||'',
     machine: d.machine||null,
-  });
+  };
+  if(opts?.noRender){
+    Object.assign(S, patch);
+    return;
+  }
+  set(patch);
 }
 
-async function loadAdminSaisiesJour(){
+async function loadAdminSaisiesJour(opts){
   const d = await apiFetch('/api/fabrication/saisies-jour').catch(e=>{
-    showToast('Erreur vue admin: '+e.message,'danger');
+    if(!opts?.silent) showToast('Erreur vue admin: '+e.message,'danger');
     return null;
   });
-  if(!d){ set({saisiesAdmin:[]}); return; }
+  if(!d){
+    if(opts?.noRender) S.saisiesAdmin = [];
+    else set({saisiesAdmin:[]});
+    return;
+  }
+  if(opts?.noRender){
+    S.saisiesAdmin = d.saisies||[];
+    return;
+  }
   set({saisiesAdmin: d.saisies||[]});
+}
+
+async function fabAutoRefresh(){
+  if(fabIsUserBusy()) return;
+  const ui = _fabCaptureUiState();
+  await loadSession({noRender:true, silent:true});
+  if(S.saisieViewMode==='admin') await loadAdminSaisiesJour({noRender:true, silent:true});
+  render();
+  _fabRestoreUiState(ui);
+}
+
+function startFabSessionPolling(){
+  if(_fabPollInterval) return;
+  _fabPollInterval = setInterval(()=>{ fabAutoRefresh(); }, 20000);
+}
+
+function stopFabSessionPolling(){
+  if(_fabPollInterval){ clearInterval(_fabPollInterval); _fabPollInterval = null; }
 }
 
 function setSaisieViewMode(mode){
@@ -815,7 +951,7 @@ async function triggerOp(opCode, opLabel, extra={}){
   const opStr = opCode+' - '+opLabel;
   set({loading:true});
   try{
-    const body = {operation: opStr, ...extra};
+    const body = {operation: opStr, date_operation: nowIsoLocal(), ...extra};
     if(S.dossier) body.no_dossier = S.dossier.reference;
     if(S.machine) body.machine = S.machine.nom;
     if(S.dossier) body.client = S.dossier.client||'';
@@ -848,6 +984,7 @@ async function saveComment(){
       body: JSON.stringify({commentaire: S.commentText}),
     });
     showToast('Commentaire enregistré');
+    fabPauseAutoRefresh(10000);
     set({showCommentModal:false, commentText:'', commentSaisieId:null});
     await loadSession();
   }catch(e){
@@ -975,6 +1112,10 @@ function handleOpTrigger(code, label, cat){
   if(code==='89'){
     // Fin dossier → modal metrage + étiquettes
     set({showFinModal:true, metrageFinVal:'', nbEtiquettes:''});
+    return;
+  }
+  if(code==='50'){
+    set({showArret50Modal:true, arret50Comment:''});
     return;
   }
   if(code==='86'||code==='87'||code==='88'||code==='03'){
@@ -1530,7 +1671,10 @@ function renderMain(){
         }, svgIcon(s.commentaire?'edit':'message-square',13));
 
         const opNom = (s.operateur_nom || s.operateur || '—');
-        return h('tr',{className:'fab-table-row'+(isLast?' fab-row-last':'')},
+        const isArret = isArretSaisie(s);
+        return h('tr',{className:'fab-table-row'
+          +(isArret?' fab-row-arret':'')
+          +(isLast?' fab-row-last':'')},
           h('td',null, h('span',{className:'fab-time'}, fmtTime(s.date_operation))),
           ...(isAdminView ? [h('td',null, h('span',{style:{fontWeight:'800',color:'var(--text)'}}, opNom))] : []),
           h('td',null,
@@ -1737,7 +1881,7 @@ function renderFooter(){
 
   // Right: search + comment
   const searchInput = h('input',{
-    type:'text',className:'fab-search-input',
+    type:'text',id:'fab-op-search',className:'fab-search-input',
     placeholder:'Code ou libellé op. (Entrée)',
     value: S.searchQuery||'',
   });
@@ -1859,31 +2003,46 @@ function handleSearchSubmit(query){
 
 /* ── Modals ──────────────────────────────────────────────────── */
 
-// Variable locale pour la query du picker — mise à jour sans re-render complet
+// Picker dossier — hors re-render global (focus préservé)
 let _pickerQ = '';
+let _pickerHi = -1;
+let _pickerFiltered = [];
+
+function _filterDossiers(q){
+  const lq = (q||'').toLowerCase().trim();
+  if(!lq) return [...S.dossiers];
+  return S.dossiers.filter(d=>
+    (d.reference||'').toLowerCase().includes(lq)||
+    (d.ref_produit||'').toLowerCase().includes(lq)||
+    (d.client||'').toLowerCase().includes(lq)||
+    (d.description||'').toLowerCase().includes(lq)||
+    (d.machine_nom||'').toLowerCase().includes(lq)
+  );
+}
+
+function _refreshPickerList(){
+  const list = document.getElementById('fab-picker-list-inner');
+  if(!list) return;
+  list.innerHTML = '';
+  _buildPickerItems(_pickerQ).forEach(item=>list.appendChild(item));
+}
 
 function _buildPickerItems(q){
-  const lq = (q||'').toLowerCase().trim();
-  const filtered = S.dossiers.filter(d=>{
-    if(!lq) return true;
-    // Recherche intelligente sur ref dossier, ref produit, client, description, machine
-    return (d.reference||'').toLowerCase().includes(lq)||
-           (d.ref_produit||'').toLowerCase().includes(lq)||
-           (d.client||'').toLowerCase().includes(lq)||
-           (d.description||'').toLowerCase().includes(lq)||
-           (d.machine_nom||'').toLowerCase().includes(lq);
-  });
+  const term = (q||'').trim();
+  const filtered = _filterDossiers(term);
+  _pickerFiltered = filtered;
+  if(_pickerHi >= filtered.length) _pickerHi = filtered.length - 1;
   if(!filtered.length){
     const empty = document.createElement('div');
     empty.className = 'fab-picker-empty';
     if(S.dossiers.length===0){
       empty.textContent = 'Aucun dossier disponible dans le planning';
     }else{
-      empty.innerHTML = '<div style="margin-bottom:8px;font-weight:500;">Aucun dossier ne correspond à votre recherche</div><div style="font-size:11px;opacity:.8;">💡 Si vous ne trouvez pas votre dossier, essayez avec :<br/>• La référence produit<br/>• Le nom du client<br/>• La référence OF<br/><br/>Sinon, merci de contacter le support.</div>';
+      empty.textContent = 'Aucun résultat pour « '+term+' »';
     }
     return [empty];
   }
-  return filtered.map(d=>{
+  return filtered.map((d,idx)=>{
     const refProd = d.ref_produit||d.description||'';
     const fmtParts = [];
     if(d.format_l) fmtParts.push(d.format_l+' mm');
@@ -1894,7 +2053,8 @@ function _buildPickerItems(q){
     if(d.machine_nom) metaParts.push(d.machine_nom);
     if(d.date_livraison) metaParts.push('Livr. '+fmtDate(d.date_livraison));
     if(d.duree_heures) metaParts.push(d.duree_heures+' h');
-    return h('div',{className:'fab-picker-item',onClick:()=>selectDossier(d)},
+    const hi = idx === _pickerHi;
+    return h('div',null,{className:'fab-picker-item'+(hi?' fab-picker-item--hi':''),onClick:()=>selectDossier(d)},
       h('div',{className:'fab-picker-line1'},
         h('span',{className:'fab-picker-ref'},d.reference),
         h('span',{className:'fab-picker-sep'},'|'),
@@ -1909,14 +2069,16 @@ function _buildPickerItems(q){
 }
 
 function renderDossierPickerModal(){
-  // Réinitialise la query locale à l'ouverture du picker
   _pickerQ = '';
+  _pickerHi = -1;
 
-  const listEl = h('div',{className:'fab-picker-list',id:'fab-picker-list-inner'},
-    ..._buildPickerItems(''));
-
-  const searchInp = h('input',{type:'text',className:'fab-picker-search',
-    placeholder:'Réf. OF, réf. produit, client, machine…'});
+  const searchInp = h('input',{
+    type:'text',
+    id:'fab-picker-search',
+    className:'fab-picker-search',
+    placeholder:'Rechercher un dossier (réf, client, OF...)',
+    autocomplete:'off',
+  });
 
   const hintLink = h('button',{className:'fab-picker-hint-link',
     onClick:()=>{
@@ -1928,22 +2090,51 @@ function renderDossierPickerModal(){
     }
   },'contacter le support');
   const searchHint = h('div',{className:'fab-picker-hint'},
-    'Cherchez par réf. dossier, réf. produit ou nom du client. Si vous ne trouvez pas votre dossier, ',
+    'Filtre en direct. Si vous ne trouvez pas votre dossier, ',
     hintLink, '.'
   );
 
   searchInp.addEventListener('input',e=>{
     _pickerQ = e.target.value;
-    // Met à jour uniquement la liste — sans toucher au reste de la page
-    const list = document.getElementById('fab-picker-list-inner');
-    if(list){
-      list.innerHTML = '';
-      _buildPickerItems(_pickerQ).forEach(item=>list.appendChild(item));
+    _pickerHi = -1;
+    _refreshPickerList();
+  });
+
+  searchInp.addEventListener('keydown',e=>{
+    const n = _pickerFiltered.length;
+    if(e.key==='Escape'){
+      e.preventDefault();
+      _pickerQ = '';
+      searchInp.value = '';
+      _pickerHi = -1;
+      _refreshPickerList();
+      return;
+    }
+    if(!n) return;
+    if(e.key==='ArrowDown'){
+      e.preventDefault();
+      _pickerHi = _pickerHi < 0 ? 0 : Math.min(_pickerHi + 1, n - 1);
+      _refreshPickerList();
+      document.querySelector('.fab-picker-item--hi')?.scrollIntoView({block:'nearest'});
+    }else if(e.key==='ArrowUp'){
+      e.preventDefault();
+      _pickerHi = _pickerHi < 0 ? n - 1 : Math.max(_pickerHi - 1, 0);
+      _refreshPickerList();
+      document.querySelector('.fab-picker-item--hi')?.scrollIntoView({block:'nearest'});
+    }else if(e.key==='Enter'){
+      if(_pickerHi >= 0 && _pickerFiltered[_pickerHi]){
+        e.preventDefault();
+        selectDossier(_pickerFiltered[_pickerHi]);
+      }
     }
   });
 
-  // Autofocus à l'ouverture (après insertion dans le DOM)
-  requestAnimationFrame(()=>{ searchInp.focus(); });
+  const listEl = h('div',{className:'fab-picker-list',id:'fab-picker-list-inner'});
+
+  requestAnimationFrame(()=>{
+    _refreshPickerList();
+    document.getElementById('fab-picker-search')?.focus();
+  });
 
   return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)set({showDossierPicker:false});}},
     h('div',{className:'fab-modal'},
@@ -1951,8 +2142,7 @@ function renderDossierPickerModal(){
       h('div',{className:'fab-modal-sub'},
         'Choisissez le dossier à démarrer parmi ceux disponibles dans le planning.'
       ),
-      searchInp,
-      searchHint,
+      h('div',{id:'fab-picker-search-host'}, searchInp, searchHint),
       listEl,
       h('div',{className:'fab-modal-btns'},
         h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',
@@ -1992,6 +2182,7 @@ function renderDebutModal(){
     try{
       const body = {
         operation:'01 - Début de production',
+        date_operation: nowIsoLocal(),
         no_dossier: dos.reference,
         machine: dos.machine_nom||'',
         client: dos.client||'',
@@ -2122,6 +2313,7 @@ function renderFinModal(){
     try{
       const body = {
         operation:'89 - Fin de production',
+        date_operation: nowIsoLocal(),
         no_dossier: S.dossier ? S.dossier.reference : null,
         machine: S.machine ? S.machine.nom : null,
         client: S.dossier ? (S.dossier.client||'') : '',
@@ -2180,6 +2372,65 @@ function renderFinModal(){
   );
 }
 
+function renderArret50Modal(){
+  const mr = document.getElementById('mroot');
+  if(!mr) return;
+  mr.innerHTML = '';
+  if(!S.showArret50Modal) return;
+
+  let submitBtn;
+  const ta = h('textarea',{
+    placeholder:'Ex. panne moteur, bourrage…',
+    rows:'4',
+  });
+  ta.value = S.arret50Comment || '';
+
+  const syncSubmit = ()=>{
+    const ok = !!(ta.value||'').trim();
+    if(submitBtn) submitBtn.disabled = !ok;
+  };
+
+  ta.addEventListener('input',e=>{
+    S.arret50Comment = e.target.value;
+    syncSubmit();
+  });
+
+  const closeArret50 = ()=>set({showArret50Modal:false, arret50Comment:''});
+
+  async function confirmArret50(){
+    const text = (ta.value||'').trim();
+    if(!text) return;
+    set({showArret50Modal:false, arret50Comment:''});
+    await triggerOp('50','Arrêt machine',{commentaire:text});
+  }
+
+  submitBtn = h('button',{
+    className:'btn btn-accent',
+    disabled:!((S.arret50Comment||'').trim()),
+    onClick:confirmArret50,
+  },'Valider');
+
+  mr.appendChild(
+    h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)closeArret50();}},
+      h('div',{className:'fab-modal'},
+        h('div',{className:'fab-modal-title'},svgIcon('alert',18),' 50 — Arrêt machine'),
+        h('div',{className:'fab-modal-sub'},
+          'Un commentaire est obligatoire pour enregistrer cet arrêt.'
+        ),
+        h('div',{className:'fab-field'},
+          h('label',null,"Précisez la raison de l'arrêt"),
+          ta
+        ),
+        h('div',{className:'fab-modal-btns'},
+          h('button',{className:'btn btn-ghost',onClick:closeArret50},'Annuler'),
+          submitBtn
+        )
+      )
+    )
+  );
+  setTimeout(()=>ta.focus(),50);
+}
+
 function renderCommentModal(){
   const ta = h('textarea',{placeholder:'Votre commentaire…',rows:'3'});
   ta.value = S.commentText||'';
@@ -2228,6 +2479,7 @@ function renderLoading(){
 
 /* ── Main render ─────────────────────────────────────────────── */
 function render(){
+  const ui = _fabCaptureUiState();
   const root = document.getElementById('root');
   root.innerHTML = '';
 
@@ -2256,6 +2508,8 @@ function render(){
   if(S.showFinModal)      root.appendChild(renderFinModal());
   if(S.showCommentModal)  root.appendChild(renderCommentModal());
 
+  renderArret50Modal();
+
   if(S.loading) root.appendChild(renderLoading());
 
   if(S.toast){
@@ -2264,6 +2518,8 @@ function render(){
       S.toast
     ));
   }
+
+  _fabRestoreUiState(ui);
 }
 
 /* ── Auth + init ─────────────────────────────────────────────── */
@@ -2301,6 +2557,8 @@ async function init(){
 
   // Vérifier les annonces de mise à jour
   checkUpdates();
+
+  startFabSessionPolling();
 }
 
 // ── Popup mises à jour ────────────────────────────────────────────────────────

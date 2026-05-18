@@ -2,13 +2,18 @@
 FIFO lots, inventaire, recherche instantanée, mobile-first.
 Accès : direction, administration, logistique.
 """
+import csv
+import io
+import re
 import sqlite3
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Request, HTTPException
+import pandas as pd
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi.responses import StreamingResponse
 
-from database import get_db
+from database import get_db, parse_file
 from services.auth_service import get_current_user, user_has_app_access
 
 router = APIRouter()
@@ -774,3 +779,240 @@ async def create_reception(request: Request):
         conn.commit()
 
     return {"success": True, "id": reception_id, "nb_bobines": len(codes)}
+
+
+# ── Référentiel produits (référence + unité de vente) ─────────────
+
+_REF_HEADER_KEYS = frozenset({
+    "reference", "référence", "ref", "ref produit", "référence produit",
+    "reference produit", "code", "code produit",
+})
+_UNITE_HEADER_KEYS = frozenset({
+    "unite", "unité", "unite de vente", "unité de vente", "uv", "unité vente",
+    "unite vente", "unit",
+})
+_DES_HEADER_KEYS = frozenset({
+    "designation", "désignation", "description", "libelle", "libellé",
+})
+
+
+def _norm_header(s: str) -> str:
+    return re.sub(r"\s+", " ", str(s or "").strip().lower())
+
+
+def _map_produits_import_columns(df: pd.DataFrame) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    ref_col = unite_col = des_col = None
+    for col in df.columns:
+        key = _norm_header(col)
+        if key in _REF_HEADER_KEYS:
+            ref_col = col
+        elif key in _UNITE_HEADER_KEYS:
+            unite_col = col
+        elif key in _DES_HEADER_KEYS:
+            des_col = col
+    if ref_col is None and len(df.columns) >= 1:
+        ref_col = df.columns[0]
+    if unite_col is None and len(df.columns) >= 2:
+        for col in df.columns:
+            if col != ref_col:
+                unite_col = col
+                break
+    return ref_col, unite_col, des_col
+
+
+def _parse_produits_import_df(df: pd.DataFrame) -> list[dict]:
+    ref_col, unite_col, des_col = _map_produits_import_columns(df)
+    if not ref_col or not unite_col:
+        raise HTTPException(
+            400,
+            "Colonnes introuvables : le fichier doit contenir au minimum « référence » et « unité de vente ».",
+        )
+    rows: list[dict] = []
+    seen_refs: set[str] = set()
+    for idx, row in df.iterrows():
+        line = int(idx) + 2
+        ref_raw = row.get(ref_col)
+        unite_raw = row.get(unite_col)
+        des_raw = row.get(des_col) if des_col else None
+        ref = "" if pd.isna(ref_raw) else str(ref_raw).strip().upper()
+        unite = "" if pd.isna(unite_raw) else str(unite_raw).strip()
+        designation = ""
+        if des_raw is not None and not pd.isna(des_raw):
+            designation = str(des_raw).strip()
+        if not ref and not unite:
+            continue
+        if not ref:
+            rows.append({
+                "line": line, "reference": "", "unite": unite, "designation": designation,
+                "action": "error", "message": "Référence manquante",
+            })
+            continue
+        if not unite:
+            rows.append({
+                "line": line, "reference": ref, "unite": "", "designation": designation,
+                "action": "error", "message": "Unité de vente manquante",
+            })
+            continue
+        if ref in seen_refs:
+            rows.append({
+                "line": line, "reference": ref, "unite": unite, "designation": designation,
+                "action": "error", "message": "Référence en double dans le fichier",
+            })
+            continue
+        seen_refs.add(ref)
+        rows.append({
+            "line": line, "reference": ref, "unite": unite, "designation": designation,
+            "action": "pending", "message": "",
+        })
+    return rows
+
+
+def _enrich_produits_import_preview(conn, rows: list[dict]) -> dict:
+    stats = {"create": 0, "update": 0, "unchanged": 0, "error": 0}
+    for r in rows:
+        if r["action"] == "error":
+            stats["error"] += 1
+            continue
+        existing = conn.execute(
+            "SELECT id, unite, designation FROM produits WHERE reference=?",
+            (r["reference"],),
+        ).fetchone()
+        if not existing:
+            r["action"] = "create"
+            r["message"] = "Nouvelle référence"
+            stats["create"] += 1
+        else:
+            old_u = (existing["unite"] or "").strip()
+            old_d = (existing["designation"] or "").strip()
+            new_d = (r["designation"] or "").strip() or old_d or r["reference"]
+            if old_u == r["unite"] and (not r["designation"] or old_d == new_d):
+                r["action"] = "unchanged"
+                r["message"] = "Déjà à jour"
+                stats["unchanged"] += 1
+            else:
+                r["action"] = "update"
+                r["message"] = "Mise à jour unité / désignation"
+                stats["update"] += 1
+    return stats
+
+
+def _apply_produits_import_row(conn, r: dict, now: str) -> str:
+    ref = r["reference"]
+    unite = r["unite"]
+    des = (r.get("designation") or "").strip() or ref
+    existing = conn.execute("SELECT id FROM produits WHERE reference=?", (ref,)).fetchone()
+    if existing:
+        conn.execute(
+            "UPDATE produits SET unite=?, designation=?, updated_at=? WHERE id=?",
+            (unite, des, now, existing["id"]),
+        )
+        return "update"
+    conn.execute(
+        "INSERT INTO produits (reference, designation, description, unite, created_at, updated_at) "
+        "VALUES (?,?,?,?,?,?)",
+        (ref, des, "", unite, now, now),
+    )
+    return "create"
+
+
+@router.post("/api/stock/produits/import/preview")
+async def preview_produits_import(request: Request, file: UploadFile = File(...)):
+    require_stock_write(request)
+    contents = await file.read()
+    filename = file.filename or "import.csv"
+    try:
+        df = parse_file(contents, filename)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    df.columns = [str(c).strip() for c in df.columns]
+    parsed = _parse_produits_import_df(df)
+    if not parsed:
+        raise HTTPException(400, "Aucune ligne valide dans le fichier.")
+    with get_db() as conn:
+        stats = _enrich_produits_import_preview(conn, parsed)
+    return {"filename": filename, "rows": parsed, "stats": stats}
+
+
+@router.post("/api/stock/produits/import/confirm")
+async def confirm_produits_import(request: Request):
+    require_stock_write(request)
+    body = await request.json()
+    rows = body.get("rows") or []
+    if not isinstance(rows, list) or not rows:
+        raise HTTPException(400, "Aucune ligne à importer.")
+    now = datetime.now().isoformat()
+    applied = {"create": 0, "update": 0, "skipped": 0, "error": 0}
+    with get_db() as conn:
+        for item in rows:
+            ref = (item.get("reference") or "").strip().upper()
+            unite = (item.get("unite") or "").strip()
+            action = (item.get("action") or "").strip()
+            if action in ("error", "unchanged", "skip"):
+                applied["skipped"] += 1
+                continue
+            if not ref or not unite:
+                applied["error"] += 1
+                continue
+            row = {
+                "reference": ref,
+                "unite": unite,
+                "designation": (item.get("designation") or "").strip(),
+            }
+            try:
+                result = _apply_produits_import_row(conn, row, now)
+                applied[result] += 1
+            except sqlite3.IntegrityError:
+                applied["error"] += 1
+        conn.commit()
+    return {"success": True, "applied": applied}
+
+
+@router.get("/api/stock/produits/export")
+def export_produits_referentiel(request: Request, format: str = "csv"):
+    require_stock(request)
+    fmt = (format or "csv").strip().lower()
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT reference, unite, designation FROM produits ORDER BY reference"
+        ).fetchall()
+    if fmt == "csv":
+        buf = io.StringIO()
+        writer = csv.writer(buf, delimiter=";")
+        writer.writerow(["reference", "unite", "designation"])
+        for r in rows:
+            writer.writerow([r["reference"] or "", r["unite"] or "", r["designation"] or ""])
+        data = buf.getvalue().encode("utf-8-sig")
+        return StreamingResponse(
+            io.BytesIO(data),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": 'attachment; filename="references_unites_vente.csv"'},
+        )
+    if fmt == "print":
+        html_rows = "".join(
+            f"<tr><td>{r['reference'] or ''}</td><td>{r['unite'] or ''}</td>"
+            f"<td>{r['designation'] or ''}</td></tr>"
+            for r in rows
+        )
+        html = f"""<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
+<title>Références et unités de vente</title>
+<style>
+body{{font-family:system-ui,sans-serif;margin:24px;color:#111}}
+h1{{font-size:18px;margin:0 0 4px}}
+p{{color:#555;font-size:12px;margin:0 0 16px}}
+table{{width:100%;border-collapse:collapse;font-size:12px}}
+th,td{{border:1px solid #ccc;padding:8px 10px;text-align:left}}
+th{{background:#f1f5f9;font-weight:700}}
+tr:nth-child(even){{background:#f8fafc}}
+@media print{{body{{margin:12px}}}}
+</style></head><body>
+<h1>Références et unités de vente</h1>
+<p>Export MyStock — {datetime.now().strftime("%d/%m/%Y %H:%M")} — {len(rows)} référence(s)</p>
+<table><thead><tr><th>Référence</th><th>Unité de vente</th><th>Désignation</th></tr></thead>
+<tbody>{html_rows}</tbody></table>
+<script>window.onload=function(){{window.print();}}</script>
+</body></html>"""
+        return StreamingResponse(
+            io.BytesIO(html.encode("utf-8")),
+            media_type="text/html; charset=utf-8",
+        )
+    raise HTTPException(400, "Format non supporté (csv ou print).")

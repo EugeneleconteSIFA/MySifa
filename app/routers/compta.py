@@ -1,3 +1,5 @@
+import csv
+import io
 import re
 import unicodedata
 from datetime import datetime
@@ -316,17 +318,26 @@ def _find_header_row(ws, required_headers: List[str], max_scan_rows: int = 30) -
 def _hdr_norm(s: str) -> str:
     # Normalize headers to tolerate casing/accents/quotes differences (’, ', etc.)
     s = _norm(str(s or ""))
-    s = s.replace("’", "'")
+    s = s.replace("’", "'").replace("'", "'").replace("`", "'")
     return s
 
 
-def _find_header_row_norm(
-    ws, required_headers: List[str], max_scan_rows: int = 30
+_FACTOR_REQUIRED = [
+    "Code vendeur",
+    "Date comptable de l'écriture",
+    "Libellé condensé",
+    "Montant du débit",
+    "Montant du crédit",
+    "Données de l'acheteur concerné par l'opération",
+    "Complément sur l'acheteur concerné par l'opération",
+]
+
+
+def _find_header_row_from_list(
+    rows: List[List[Any]], required_headers: List[str], max_scan_rows: int = 40
 ) -> Tuple[int, Dict[str, int]]:
     req = [_hdr_norm(x) for x in required_headers]
-    for r_i, row in enumerate(
-        ws.iter_rows(min_row=1, max_row=max_scan_rows, values_only=True), start=1
-    ):
+    for r_i, row in enumerate(rows[:max_scan_rows]):
         if not row:
             continue
         headers = [("" if v is None else str(v).strip()) for v in row]
@@ -335,57 +346,89 @@ def _find_header_row_norm(
         idx = {_hdr_norm(h): i for i, h in enumerate(headers) if str(h or "").strip()}
         if all(h in idx for h in req):
             return r_i, idx
-    raise HTTPException(status_code=400, detail="En-têtes introuvables dans la feuille Excel")
+    raise HTTPException(status_code=400, detail="En-têtes Factor introuvables (vérifiez les colonnes du fichier ou du collage)")
 
 
-def _load_wb_from_upload(contents: bytes):
-    from io import BytesIO
-    from openpyxl import load_workbook
+def _decode_bytes(contents: bytes) -> str:
+    for enc in ("utf-8-sig", "utf-8", "latin-1", "cp1252"):
+        try:
+            return contents.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return contents.decode("utf-8", errors="replace")
 
+
+def _parse_delimited_text(text: str) -> List[List[str]]:
+    t = (text or "").strip()
+    if not t:
+        raise HTTPException(status_code=400, detail="Contenu vide")
+    sample = t[:8192]
+    delimiter = ";"
     try:
-        return load_workbook(BytesIO(contents), read_only=True, data_only=True)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Excel invalide: {e}")
+        dialect = csv.Sniffer().sniff(sample, delimiters=";,\t|")
+        delimiter = dialect.delimiter
+    except csv.Error:
+        first = t.split("\n", 1)[0]
+        if "\t" in first:
+            delimiter = "\t"
+        elif ";" in first:
+            delimiter = ";"
+        elif "," in first:
+            delimiter = ","
+    reader = csv.reader(io.StringIO(t), delimiter=delimiter)
+    rows: List[List[str]] = []
+    for row in reader:
+        if not row or all(not str(c or "").strip() for c in row):
+            continue
+        rows.append([str(c or "").strip() for c in row])
+    if not rows:
+        raise HTTPException(status_code=400, detail="Aucune ligne lisible dans le contenu")
+    return rows
 
 
-@router.post("/api/compta/transform")
-async def transform_factor(
-    request: Request,
-    file: UploadFile = File(...),
-    caf_compte: str = "512330000000",
-):
-    _require_compta(request)
-    contents = await file.read()
+def _load_table_from_bytes(contents: bytes, filename: str = "") -> List[List[Any]]:
+    fn = (filename or "").lower()
+    if fn.endswith(".csv") or fn.endswith(".txt"):
+        return _parse_delimited_text(_decode_bytes(contents))
+    if not fn.endswith((".xlsx", ".xlsm", ".xls")):
+        head = contents[:2048]
+        if b";" in head or b"\t" in head or (b"," in head and b"\n" in head):
+            try:
+                return _parse_delimited_text(_decode_bytes(contents))
+            except HTTPException:
+                pass
+    return _load_table_from_excel(contents)
 
+
+def _load_table_from_excel(contents: bytes) -> List[List[Any]]:
     wb = _load_wb_from_upload(contents)
-
     sheet_name = _sheet_by_name(wb, ["IMPORT DU FACTOR", "Import du factor", "IMPORT", "FACTOR"])
-    # Cas fréquent: fichier mono-feuille (export direct). On prend la seule feuille.
     if not sheet_name and len(getattr(wb, "sheetnames", []) or []) == 1:
         sheet_name = wb.sheetnames[0]
     if not sheet_name:
-        raise HTTPException(status_code=400, detail="Onglet 'IMPORT DU FACTOR' introuvable (ou fichier multi-feuilles non reconnu)")
-
+        raise HTTPException(
+            status_code=400,
+            detail="Onglet 'IMPORT DU FACTOR' introuvable (ou fichier multi-feuilles non reconnu)",
+        )
     ws = wb[sheet_name]
+    return [list(row) for row in ws.iter_rows(values_only=True)]
 
-    # Tolérant aux variations d'entêtes (accents/quotes/majuscules) + aux lignes de titre avant l'entête
-    required = [
-        "Code vendeur",
-        "Date comptable de l’écriture",
-        "Libellé condensé",
-        "Montant du débit",
-        "Montant du crédit",
-        "Données de l’acheteur concerné par l’opération",
-        "Complément sur l’acheteur concerné par l’opération",
-    ]
-    header_row, idx = _find_header_row_norm(ws, required, max_scan_rows=40)
+
+def _load_table_from_text(text: str) -> List[List[Any]]:
+    return _parse_delimited_text(text)
+
+
+def _transform_factor_table(
+    table_rows: List[List[Any]], caf_compte: str = "512330000000"
+) -> Dict[str, Any]:
+    header_row, idx = _find_header_row_from_list(table_rows, _FACTOR_REQUIRED, max_scan_rows=40)
     i_code = idx[_hdr_norm("Code vendeur")]
-    i_date = idx[_hdr_norm("Date comptable de l’écriture")]
+    i_date = idx[_hdr_norm("Date comptable de l'écriture")]
     i_lib = idx[_hdr_norm("Libellé condensé")]
     i_deb = idx[_hdr_norm("Montant du débit")]
     i_cred = idx[_hdr_norm("Montant du crédit")]
-    i_buy = idx[_hdr_norm("Données de l’acheteur concerné par l’opération")]
-    i_comp = idx[_hdr_norm("Complément sur l’acheteur concerné par l’opération")]
+    i_buy = idx[_hdr_norm("Données de l'acheteur concerné par l'opération")]
+    i_comp = idx[_hdr_norm("Complément sur l'acheteur concerné par l'opération")]
 
     with get_db() as conn:
         comptes, acheteurs = _load_mappings(conn)
@@ -394,8 +437,10 @@ async def transform_factor(
     missing_accounts: Dict[str, int] = {}
     missing_buyers: Dict[str, int] = {}
 
-    for row in ws.iter_rows(min_row=header_row + 1, values_only=True):
+    for row in table_rows[header_row + 1 :]:
         if not row or all(v in (None, "") for v in row):
+            continue
+        if len(row) <= max(i_code, i_date, i_lib, i_deb, i_cred, i_buy, i_comp):
             continue
 
         code_vendeur = str(row[i_code] or "").strip()
@@ -406,11 +451,9 @@ async def transform_factor(
         buyer_raw = str(row[i_buy] or "").strip()
         comp_raw = str(row[i_comp] or "").strip()
 
-        # skip empty monetary lines
         if debit == 0.0 and credit == 0.0:
             continue
 
-        # Determine main account + label
         main_compte = None
         main_libelle = lib_raw
         problem = None
@@ -422,10 +465,11 @@ async def transform_factor(
                 bname = _buyer_name(buyer_raw)
                 siret = acheteurs.get((code_vendeur or None, bname)) or acheteurs.get((None, bname))
             if not siret:
-                missing_buyers[_buyer_name(buyer_raw) or buyer_raw] = missing_buyers.get(_buyer_name(buyer_raw) or buyer_raw, 0) + 1
+                key_b = _buyer_name(buyer_raw) or buyer_raw
+                missing_buyers[key_b] = missing_buyers.get(key_b, 0) + 1
                 main_compte = ""
                 problem = "acheteur_inconnu"
-                problem_detail = _buyer_name(buyer_raw) or buyer_raw
+                problem_detail = key_b
             else:
                 main_compte = siret
         else:
@@ -437,7 +481,6 @@ async def transform_factor(
                 problem = "compte_manquant"
                 problem_detail = key or lib_raw
 
-        # Emit 2 lines: main + mirror CAF
         out_rows.append(
             {
                 "date": date_ecr,
@@ -463,7 +506,6 @@ async def transform_factor(
             }
         )
 
-    # CW paste format: tab-separated, 6 columns
     def f(x: float) -> str:
         if x is None:
             return "0"
@@ -488,10 +530,57 @@ async def transform_factor(
         "rows": out_rows,
         "cw_text": "\n".join(cw_lines),
         "missing": {
-            "comptes": [{"libelle_key": k, "count": v} for k, v in sorted(missing_accounts.items(), key=lambda kv: -kv[1])],
-            "acheteurs": [{"buyer": k, "count": v} for k, v in sorted(missing_buyers.items(), key=lambda kv: -kv[1])],
+            "comptes": [
+                {"libelle_key": k, "count": v}
+                for k, v in sorted(missing_accounts.items(), key=lambda kv: -kv[1])
+            ],
+            "acheteurs": [
+                {"buyer": k, "count": v}
+                for k, v in sorted(missing_buyers.items(), key=lambda kv: -kv[1])
+            ],
         },
     }
+
+
+def _load_wb_from_upload(contents: bytes):
+    from io import BytesIO
+    from openpyxl import load_workbook
+
+    try:
+        return load_workbook(BytesIO(contents), read_only=True, data_only=True)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Excel invalide: {e}")
+
+
+@router.post("/api/compta/transform")
+async def transform_factor(
+    request: Request,
+    file: UploadFile = File(...),
+    caf_compte: str = "512330000000",
+):
+    _require_compta(request)
+    contents = await file.read()
+    filename = file.filename or "import.xlsx"
+    try:
+        table = _load_table_from_bytes(contents, filename)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Fichier illisible: {e}")
+    return _transform_factor_table(table, caf_compte)
+
+
+@router.post("/api/compta/transform-paste")
+async def transform_factor_paste(request: Request, caf_compte: str = "512330000000"):
+    _require_compta(request)
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="JSON invalide")
+    text = str(body.get("text") or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Collez au moins une ligne (en-têtes Factor inclus)")
+    table = _load_table_from_text(text)
+    return _transform_factor_table(table, caf_compte)
 
 
 @router.post("/api/compta/import-acheteurs")

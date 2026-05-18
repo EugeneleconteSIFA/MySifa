@@ -953,6 +953,8 @@ let S={
     date_livraison:'',
   },
   comptaTab:'factor',
+  comptaFactorMode:'file',
+  comptaPasteText:'',
   comptaAcheteurs:[],
   comptaComptes:[],
   comptaResult:null,
@@ -3646,11 +3648,18 @@ function renderCompta(){
 
   let content;
   if(tab==='factor'){
-    const inp=h('input',{type:'file',accept:'.xlsx,.xlsm,.xls',style:{display:'none'}});
+    const factorMode=S.comptaFactorMode||'file';
+    const modeBar=h('div',{style:{display:'flex',gap:'8px',marginBottom:'12px',flexWrap:'wrap'}},
+      h('button',{className:factorMode==='file'?'btn-sm':'btn-ghost btn-sm',type:'button',onClick:()=>set({comptaFactorMode:'file'})},
+        iconEl('upload',13),' Fichier'),
+      h('button',{className:factorMode==='paste'?'btn-sm':'btn-ghost btn-sm',type:'button',onClick:()=>set({comptaFactorMode:'paste'})},
+        iconEl('clipboard',13),' Coller')
+    );
+    const inp=h('input',{type:'file',accept:'.xlsx,.xlsm,.xls,.csv,.txt',style:{display:'none'}});
     const zone=h('div',{className:'drop-zone',style:{marginBottom:'16px'}},
       h('div',{className:'dz-icon'},iconEl('cloud-upload',36)),
-      h('div',{className:'dz-title'},'Dépose le fichier Excel Factor'),
-      h('div',{className:'dz-sub'},'Clique ou glisse-dépose un fichier .xlsx')
+      h('div',{className:'dz-title'},'Dépose le fichier Factor'),
+      h('div',{className:'dz-sub'},'Excel (.xlsx, .xls) ou CSV (.csv)')
     );
     zone.addEventListener('click',()=>inp.click());
     zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('drag');});
@@ -3660,6 +3669,30 @@ function renderCompta(){
       const f=e.dataTransfer.files[0];if(f)comptaTransform(f);
     });
     inp.addEventListener('change',e=>{const f=e.target.files[0];if(f)comptaTransform(f);});
+    const pasteTa=h('textarea',{
+      className:'form-sel',
+      style:{width:'100%',minHeight:'180px',fontFamily:'ui-monospace,monospace',fontSize:'12px',resize:'vertical',boxSizing:'border-box'},
+      placeholder:'Collez ici les lignes Factor (ligne d\'en-tête incluse). Séparateur ; , ou tabulation.',
+      value:S.comptaPasteText||''
+    });
+    pasteTa.addEventListener('input',e=>{S.comptaPasteText=e.target.value;});
+    const pasteFromClip=h('button',{className:'btn-ghost btn-sm',type:'button',onClick:async()=>{
+      try{
+        const t=await navigator.clipboard.readText();
+        S.comptaPasteText=t||'';
+        set({comptaPasteText:S.comptaPasteText});
+      }catch(e){toast('Impossible de lire le presse-papiers','error');}
+    }},iconEl('clipboard',13),' Lire le presse-papiers');
+    const pasteGo=h('button',{className:'btn-sm',type:'button',onClick:()=>comptaTransformPaste(pasteTa.value)},
+      iconEl('upload',13),' Transformer');
+    const pasteBlock=h('div',{className:'card',style:{marginBottom:'16px',padding:'14px 18px'}},
+      h('div',{style:{fontSize:'13px',fontWeight:'600',color:'var(--text)',marginBottom:'8px'}},'Coller les lignes Factor'),
+      h('div',{style:{fontSize:'12px',color:'var(--muted)',marginBottom:'10px',lineHeight:'1.5'}},
+        'Copiez les lignes depuis Factor ou Excel, puis collez-les ci-dessous (en-têtes requis).'),
+      pasteTa,
+      h('div',{style:{display:'flex',gap:'8px',marginTop:'10px',flexWrap:'wrap'}},pasteFromClip,pasteGo)
+    );
+    const importBlock=factorMode==='paste'?pasteBlock:zone;
 
     const r=S.comptaResult;
     const miss=r && r.missing ? r.missing : null;
@@ -3739,9 +3772,9 @@ function renderCompta(){
         top,
         bot
       );
-    })() : h('div',{className:'card-empty'},'Aucun résultat. Charge un fichier Excel.');
+    })() : h('div',{className:'card-empty'},'Aucun résultat. Importez un fichier ou collez des lignes.');
 
-    content=h('div',null, zone, inp,
+    content=h('div',null, modeBar, importBlock, inp,
       missBox,
       h('div',{className:'card'},
         h('div',{className:'card-header'},h('h3',null,'Résultat (à coller dans CW)'), copyBtn),
@@ -4877,6 +4910,16 @@ async function loadDevis(){const d=await api('/api/rentabilite/devis');if(d)set(
 async function loadComptaAcheteurs(){try{const d=await api('/api/compta/acheteurs');if(d)set({comptaAcheteurs:d});}catch(e){}}
 async function loadComptaComptes(){try{const d=await api('/api/compta/comptes');if(d)set({comptaComptes:d});}catch(e){}}
 
+async function comptaTransformPaste(text){
+  try{
+    const t=String(text||'').trim();
+    if(!t){toast('Collez au moins une ligne','error');return;}
+    const r=await api('/api/compta/transform-paste',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})});
+    if(!r)return;
+    set({comptaResult:r,comptaPasteText:t});
+    toast('Transformation OK');
+  }catch(e){toast(e.message,'error');}
+}
 async function comptaTransform(file){
   try{
     const fd=new FormData();
@@ -5668,7 +5711,7 @@ function renderSanity(sanity, title){
     h('div',{className:'sanity-circle'},svg,h('div',{className:'sanity-num',style:{color:col}},String(score))),
     h('div',null,
       h('div',{className:'si-mention',style:{color:col}},(title?title+' — ':'')+(sanity.mention||'')),
-      h('div',{className:'si-label'},'Qualité de saisie — Sanity Score')
+      h('div',{className:'si-label'},sanity.weighted?'Qualité de saisie — moyenne pondérée (temps d\'activité)':'Qualité de saisie — Sanity Score')
     )
   );
 }

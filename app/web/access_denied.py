@@ -40,8 +40,12 @@ p{{font-size:15px;line-height:1.6;margin:0 0 18px;color:#cbd5e1;}}
 .meta{{font-size:13px;color:#94a3b8;margin-bottom:20px;}}
 .meta span.app{{font-weight:700;color:#22d3ee;}}
 .actions{{display:flex;flex-wrap:wrap;gap:10px;}}
-a.btn{{display:inline-block;padding:10px 18px;background:#0891b2;color:#fff;text-decoration:none;border-radius:10px;font-weight:600;font-size:14px;}}
-a.btn:hover{{filter:brightness(1.08);}}
+a.btn-portal{{display:inline-flex;align-items:center;gap:0;padding:10px 16px;background:transparent;
+  color:#94a3b8;text-decoration:none;border-radius:10px;font-weight:500;font-size:14px;
+  font-family:'Segoe UI',system-ui,sans-serif;border:1px solid #475569;transition:color .15s,border-color .15s,background .15s;}}
+a.btn-portal:hover{{border-color:#22d3ee;color:#e2e8f0;background:rgba(34,211,238,.08);}}
+a.btn-portal .wm{{font-weight:800;color:#f1f5f9;letter-spacing:-.3px}}
+a.btn-portal .wm span{{color:#22d3ee}}
 a.btn2{{display:inline-block;padding:10px 18px;background:transparent;color:#94a3b8;text-decoration:none;border-radius:10px;font-weight:600;font-size:14px;border:1px solid #475569;}}
 a.btn2:hover{{border-color:#22d3ee;color:#22d3ee;}}
 </style>
@@ -52,7 +56,7 @@ a.btn2:hover{{border-color:#22d3ee;color:#22d3ee;}}
   <p>{safe_msg}</p>
   <p class="meta">Application : <span class="app">{safe_label}</span></p>
   <div class="actions">
-    <a class="btn" href="/">Retour au portail MySifa</a>
+    <a class="btn-portal" href="/">← Retour <span class="wm">My<span>Sifa</span></span></a>
     <a class="btn2" href="javascript:history.back()">Page précédente</a>
   </div>
 </div>

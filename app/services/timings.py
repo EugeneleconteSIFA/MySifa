@@ -41,7 +41,10 @@ def compute_dossier_times(rows):
     })
 
     for (operateur, jour), items in by_op_day.items():
-        items_sorted = sorted(items, key=lambda x: x[0] if x[0] else datetime.min)
+        items_sorted = sorted(
+            items,
+            key=lambda x: (x[0] if x[0] else datetime.min, int(x[1].get("id") or 0)),
+        )
         # Pré-calculer le prochain dt non-None pour éviter la recherche O(n)
         # à chaque i (sinon on tombe sur O(n^2) dans un groupe).
         next_dt_after = [None] * len(items_sorted)
