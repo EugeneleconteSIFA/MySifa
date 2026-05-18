@@ -207,6 +207,11 @@ tr.data-row{position:relative}
 .add-row-btn{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:22px;height:22px;background:var(--accent);color:#000;border:2px solid var(--bg);border-radius:50%;cursor:pointer;font-size:14px;font-weight:900;opacity:0;transition:opacity .15s;z-index:30;box-shadow:0 2px 8px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;pointer-events:none}
 tr.data-row:hover .add-row-btn{opacity:1;pointer-events:auto}
 tr.data-row:hover td{background:rgba(34,211,238,0.025)}
+tr.data-row.saisie-row-fictif td{color:#a78bfa !important;font-weight:800 !important}
+tr.data-row.saisie-row-fictif td span{color:#a78bfa !important;font-weight:800 !important}
+tr.data-row.saisie-row-fictif:hover td{background:rgba(167,139,250,.08) !important}
+body.light tr.data-row.saisie-row-fictif td,
+body.light tr.data-row.saisie-row-fictif td span{color:#7c3aed !important}
 
 /* Formulaire ajout ligne — modal style */
 .add-row-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;display:flex;align-items:center;justify-content:center}
@@ -7001,6 +7006,16 @@ async function bulkDelete(){
     toast(e.message,'error');
   }
 }
+
+const SAISIE_FICTIF_PREFIX = 'FICTIF:';
+function isFictifDossierRef(ref){
+  if(!ref) return false;
+  return String(ref).trim().toUpperCase().startsWith(SAISIE_FICTIF_PREFIX);
+}
+function isFictifSaisieRow(row){
+  if(!row) return false;
+  return isFictifDossierRef(row.no_dossier) || isFictifDossierRef(row.reference);
+}
  
 function renderSaisies(){
   const d=S.saisies;
@@ -7128,13 +7143,16 @@ function renderSaisies(){
   const tbody=h('tbody',null);
  
   rows.forEach(row=>{
-    const tr=h('tr',{className:'data-row',style:{cursor:readOnly?'default':'pointer'}});
+    const fictifRow = isFictifSaisieRow(row);
+    const tr=h('tr',{className:'data-row'+(fictifRow?' saisie-row-fictif':''),style:{cursor:readOnly?'default':'pointer'}});
     // PAR — contrastes plus forts + catégorie production en vert
     const opCode = row.operation_code || '';
     const cat    = row.operation_category || '';
 
     let rowBg = '';
-    if (row.operation_severity === 'critique') {
+    if (fictifRow) {
+      rowBg = 'rgba(167,139,250,.10)';          // dossier fictif (FICTIF:)
+    } else if (row.operation_severity === 'critique') {
       rowBg = 'rgba(248,113,113,.18)';          // rouge soutenu
     } else if (row.operation_severity === 'attention') {
       rowBg = 'rgba(251,191,36,.18)';           // jaune soutenu

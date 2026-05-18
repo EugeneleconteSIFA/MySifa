@@ -482,7 +482,33 @@ body.light .field-input.empl-upper::placeholder{
 .ref-import-badge.update{background:rgba(34,211,238,.15);color:var(--accent)}
 .ref-import-badge.unchanged{background:rgba(148,163,184,.12);color:var(--muted)}
 .ref-import-badge.error{background:rgba(248,113,113,.15);color:var(--danger)}
-.ref-header-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.ref-header-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+/* ── Référentiel (onglet Réf. & unités de vente) ── */
+.content.ref-page{max-width:960px;padding:24px 22px 40px}
+.ref-page-hero{margin-bottom:28px}
+.ref-page-title{font-size:22px;font-weight:800;letter-spacing:-.3px;margin:0 0 10px;color:var(--text)}
+.ref-page-desc{font-size:13px;color:var(--muted);line-height:1.65;margin:0;max-width:640px}
+.ref-stat-pill{display:inline-flex;align-items:center;gap:12px;margin-top:18px;padding:14px 18px;
+  background:var(--card);border:1px solid var(--border);border-radius:14px}
+.ref-stat-pill .stat-label{margin:0;font-size:10px}
+.ref-stat-pill .stat-value{font-size:22px;line-height:1}
+.ref-card{background:var(--card);border:1px solid var(--border);border-radius:16px;margin-bottom:20px;overflow:hidden}
+.ref-card-header{padding:18px 22px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}
+.ref-card-header .card-title{font-size:15px;font-weight:800}
+.ref-card-body{padding:20px 22px 22px}
+.ref-card-desc{font-size:13px;color:var(--muted);line-height:1.6;margin:0 0 18px;max-width:560px}
+.ref-card-body .ref-card-desc:last-child{margin-bottom:0}
+.contact-modal.ref-import-modal{padding:22px 24px 20px}
+.contact-modal.ref-import-modal h3{margin-bottom:16px;font-size:17px}
+.ref-card-actions{display:flex;gap:10px;flex-wrap:wrap;padding-top:4px}
+.ref-units-card .ref-card-body{padding-top:6px}
+.ref-units-card .ref-card-desc{margin-bottom:16px}
+.ref-page .btn-ghost-sm{padding:9px 14px;border-radius:10px}
+.ref-import-drop{padding:36px 24px;border-radius:14px;margin-top:4px}
+.ref-import-drop-title{font-size:14px;margin-bottom:8px}
+.ref-import-drop-sub{font-size:12px;line-height:1.5}
+.ref-import-table-wrap{margin:18px 0;border-radius:12px}
+.ref-import-table th,.ref-import-table td{padding:10px 14px}
 .btn-ghost-sm{background:transparent;border:1px solid var(--border);border-radius:8px;padding:7px 12px;
   font-size:12px;font-weight:700;color:var(--text2);cursor:pointer;font-family:inherit;display:inline-flex;
   align-items:center;gap:6px;transition:all .15s}
@@ -1858,31 +1884,33 @@ function buildMvtHistory(mouvements, unite='', opts=null) {
 
 function buildReferentielPage() {
   const s = (S.dashboard && S.dashboard.stats) ? S.dashboard.stats : {};
-  return el('div', { cls: 'content' },
-    el('div', { style: { marginBottom: '16px' } },
-      el('h2', { style: { fontSize: '18px', fontWeight: '800', marginBottom: '6px' } }, 'Références et unités de vente'),
-      el('p', { style: { fontSize: '12px', color: 'var(--muted)', lineHeight: '1.5', maxWidth: '560px' } },
+  return el('div', { cls: 'content ref-page' },
+    el('div', { cls: 'ref-page-hero' },
+      el('h2', { cls: 'ref-page-title' }, 'Références et unités de vente'),
+      el('p', { cls: 'ref-page-desc' },
         'Gérez le référentiel des références produit et de leur unité de vente (import CSV ou Excel, export, impression).'
       ),
-      (s.nb_refs != null) ? el('div', { cls: 'stats-grid', style: { maxWidth: '220px', marginTop: '12px' } },
-        el('div', { cls: 'stat-card' },
+      (s.nb_refs != null) ? el('div', { cls: 'ref-stat-pill' },
+        el('div', null,
           el('div', { cls: 'stat-label' }, 'Références en base'),
           el('div', { cls: 'stat-value accent' }, String(s.nb_refs || 0))
         )
       ) : null
     ),
     buildReferentielCard(),
-    (!S.stockReadOnly) ? el('div', { cls: 'card', style: { marginTop: '12px' } },
-      el('div', { cls: 'card-header' },
+    (!S.stockReadOnly) ? el('div', { cls: 'ref-card ref-units-card' },
+      el('div', { cls: 'ref-card-header' },
         el('div', { cls: 'card-title' }, 'Unités de vente personnalisées')
       ),
-      el('div', { style: { fontSize: '12px', color: 'var(--muted)', lineHeight: '1.5', padding: '0 2px 8px' } },
-        'Créez une unité composite (ex. 500 cartons) utilisable lors de l\'ajout au stock.'
-      ),
-      el('button', {
-        cls: 'btn-ghost-sm', type: 'button',
-        on: { click: () => { S.unitModalOpen = true; S.unitNewLabel = ''; S.unitNewBase = 'cartons'; S.unitNewQty = ''; render(); } },
-      }, iconEl('plus-circle', 14), ' Créer une unité de vente')
+      el('div', { cls: 'ref-card-body' },
+        el('p', { cls: 'ref-card-desc' },
+          'Créez une unité composite (ex. 500 cartons) utilisable lors de l\'ajout au stock.'
+        ),
+        el('button', {
+          cls: 'btn-ghost-sm', type: 'button',
+          on: { click: () => { S.unitModalOpen = true; S.unitNewLabel = ''; S.unitNewBase = 'cartons'; S.unitNewQty = ''; render(); } },
+        }, iconEl('plus-circle', 14), ' Créer une unité de vente')
+      )
     ) : null
   );
 }
@@ -1902,13 +1930,15 @@ function buildReferentielCard() {
     cls: 'btn-ghost-sm', type: 'button', on: { click: printRefsExport },
   }, iconEl('printer', 14), ' Imprimer'));
 
-  return el('div', { cls: 'card' },
-    el('div', { cls: 'card-header' },
+  return el('div', { cls: 'ref-card' },
+    el('div', { cls: 'ref-card-header' },
       el('div', { cls: 'card-title' }, 'Références et unités de vente'),
       actions
     ),
-    el('div', { style: { fontSize: '12px', color: 'var(--muted)', lineHeight: '1.5', padding: '0 2px 4px' } },
-      'Importez ou exportez le référentiel des références produit et de leur unité de vente (CSV ou Excel).'
+    el('div', { cls: 'ref-card-body' },
+      el('p', { cls: 'ref-card-desc' },
+        'Importez ou exportez le référentiel des références produit et de leur unité de vente (CSV ou Excel).'
+      )
     )
   );
 }
@@ -1975,7 +2005,7 @@ function renderImportRefsModal() {
       }
     },
   }});
-  const box = el('div', { cls: 'contact-modal', style: { maxWidth: '720px' } });
+  const box = el('div', { cls: 'contact-modal ref-import-modal', style: { maxWidth: '720px' } });
   const close = () => {
     if (S.importRefsApplying) return;
     S.importRefsOpen = false;
