@@ -274,8 +274,8 @@ body.light .slot .line1{color:#1e293b}body.light .slot .line2{color:#334155}body
 .tip-grid{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:11px;
   border-top:1px solid var(--border2);padding-top:10px}
 .tip-grid .k{color:var(--muted)}.tip-grid .v{color:var(--text2);font-family:var(--mono)}
-.tip-livraison{margin-top:10px;padding:6px 10px;font-size:12px;border-radius:8px;background:var(--card);
-  border:1px solid var(--border);color:var(--text);font-weight:600;line-height:1.35}
+.tip-livraison{margin-top:8px;padding:4px 0 2px;font-size:12px;color:var(--text);font-weight:600;line-height:1.35}
+.tip-livraison+.tip-grid{border-top:none;padding-top:6px}
 
 .cmt-btn{display:inline-flex;align-items:center;justify-content:center;padding:3px 6px;border-radius:6px;
   border:1px solid var(--border2);background:transparent;color:var(--muted);cursor:pointer;flex-shrink:0;transition:all .15s}
@@ -382,6 +382,14 @@ body.light .btn-p{color:#fff}
   justify-content:center;z-index:1000;backdrop-filter:blur(4px)}
 .md{background:var(--card);border:1px solid var(--border2);border-radius:16px;padding:32px;
   width:480px;max-width:90vw;box-shadow:0 24px 80px rgba(0,0,0,.5)}
+.md--compact{padding:22px 24px;width:min(460px,95vw)}
+.md--compact .md-hdr{margin-bottom:14px!important}
+.md--compact .fd{margin-bottom:10px}
+.md--compact .fd label{margin-bottom:4px;font-size:11px}
+.md--compact .fd input,.md--compact .fd select{padding:7px 10px;font-size:13px}
+.md--compact .fd-row{gap:8px!important}
+.md--compact .dur-b{margin-top:4px}
+.md--compact .md-acts{margin-top:18px}
 .md.md--stats{width:min(720px,95vw);max-height:90vh;overflow-y:auto}
 .ds-section{margin:20px 0 0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);display:flex;align-items:center;gap:6px}
 .ds-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-top:10px}
@@ -2624,9 +2632,9 @@ async function confirmSwitch(targetMachineId,afterEntryId){
 // ── Modals ──
 function durBar(v){return((v-MIND)/(MAXD-MIND)*100)+"%"}
 
-function modalHTML(title,fields,submitLabel,onSubmitFn,headerAction="",footerLeft=""){
-  return`<div class="mo" onclick="if(event.target===this)closeM()"><div class="md">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;gap:12px;flex-wrap:wrap">
+function modalHTML(title,fields,submitLabel,onSubmitFn,headerAction="",footerLeft="",compact=false){
+  return`<div class="mo" onclick="if(event.target===this)closeM()"><div class="md${compact?' md--compact':''}">
+    <div class="md-hdr" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;gap:12px;flex-wrap:wrap">
       <h3 style="margin:0;font-size:18px;font-family:var(--mono);color:var(--text);line-height:1.3">${title}</h3>
       ${headerAction?`<div style="flex-shrink:0">${headerAction}</div>`:""}
     </div>
@@ -2645,11 +2653,11 @@ function dossierFields(numero_of,client,ref_produit,laize,date_livraison,comment
     <div class="fd"><label>Numéro d'OF</label><input id="f-of" value="${numero_of}" placeholder="9936280"></div>
     <div class="fd"><label>Client</label><input id="f-cli" value="${client}" placeholder="Nom du client"></div>
     <div class="fd"><label>Réf produit</label><input id="f-rp" value="${ref_produit}" placeholder="REF-PROD"></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <div class="fd-row" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
       <div class="fd"><label>Largeur (mm)</label><input type="number" id="f-fl" value="${fl}" placeholder="100"></div>
       <div class="fd"><label>Hauteur (mm)</label><input type="number" id="f-fh" value="${fh}" placeholder="70"></div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <div class="fd-row" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
       <div class="fd"><label>Laize (mm)</label><input type="number" id="f-laize" value="${laize}" placeholder="510"></div>
       <div class="fd"><label>Date livraison</label><input type="date" id="f-dl" value="${/^\d{4}-\d{2}-\d{2}$/.test(date_livraison)?date_livraison:''}"></div>
     </div>
@@ -2764,7 +2772,8 @@ function openEdit(id){
     fieldsHtml+traceHtml+resetBlock,
     "Enregistrer",`submitEdit(${id})`,
     headerAction,
-    delBtn
+    delBtn,
+    true
   );
 }
 
@@ -3232,7 +3241,7 @@ function openDefaultsModal(){
     <p style="font-size:12px;color:var(--muted);margin:-8px 0 16px">
       Horaires de production enregistrés en base pour cette machine. Ils déterminent la largeur des jours sur la timeline (semaines paires / impaires pour Cohésio 2).
     </p>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <div class="fd-row" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
       <div style="border:1px solid var(--border2);border-radius:14px;padding:14px">
         <div style="font-family:var(--mono);font-size:12px;color:var(--text);margin-bottom:10px">Semaine paire</div>
         ${row("Semaine paire — début","dp-w-s",defs.pair.week.s)}
