@@ -11,7 +11,7 @@ Ajouter dans main.py :
 import json
 import unicodedata
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse
@@ -462,8 +462,28 @@ def _normalize_parity_body(body: dict) -> Dict[str, Any]:
     return out
 
 
-def _load_planning_calendar_maps(conn, machine_id: int) -> tuple[dict, dict, Dict[str, int]]:
-    """Config semaines (samedi), fériés, jours travaillés — aligné sur GET /timeline."""
+def _load_day_horaires_map(conn, machine_id: int) -> Dict[str, Tuple[float, float]]:
+    """Overrides journaliers (planning_day_horaires) — priorité sur horaires machine / paire-impair."""
+    rows = conn.execute(
+        "SELECT date, heure_debut, heure_fin FROM planning_day_horaires WHERE machine_id=?",
+        (machine_id,),
+    ).fetchall()
+    out: Dict[str, Tuple[float, float]] = {}
+    for r in rows:
+        try:
+            s = float(r["heure_debut"])
+            e = float(r["heure_fin"])
+        except (TypeError, ValueError):
+            continue
+        if e > s:
+            out[str(r["date"])] = (s, e)
+    return out
+
+
+def _load_planning_calendar_maps(
+    conn, machine_id: int
+) -> tuple[dict, dict, Dict[str, int], Dict[str, Tuple[float, float]]]:
+    """Config semaines (samedi), fériés, jours travaillés, horaires journaliers — aligné GET /timeline."""
     configs: dict = {}
     today = datetime.now()
     for w in range(8):
@@ -484,12 +504,13 @@ def _load_planning_calendar_maps(conn, machine_id: int) -> tuple[dict, dict, Dic
         (machine_id,),
     ).fetchall()
     day_worked_map = {str(r["date"]): int(r["is_worked"] or 0) for r in dw_rows}
-    return configs, off_days, day_worked_map
+    day_horaires_map = _load_day_horaires_map(conn, machine_id)
+    return configs, off_days, day_worked_map, day_horaires_map
 
 
 def _load_planning_calendar_maps_range(
     conn, machine_id: int, weeks_back: int = 52, weeks_forward: int = 8
-) -> tuple[dict, dict, Dict[str, int]]:
+) -> tuple[dict, dict, Dict[str, int], Dict[str, Tuple[float, float]]]:
     """Variante de _load_planning_calendar_maps avec plage étendue (utile pour opérations de recalage)."""
     configs: dict = {}
     today = datetime.now()
@@ -513,13 +534,19 @@ def _load_planning_calendar_maps_range(
         (machine_id,),
     ).fetchall()
     day_worked_map = {str(r["date"]): int(r["is_worked"] or 0) for r in dw_rows}
-    return configs, off_days, day_worked_map
+    day_horaires_map = _load_day_horaires_map(conn, machine_id)
+    return configs, off_days, day_worked_map, day_horaires_map
 
 
-def _make_work_duration_consumer(
-    m: dict, configs: dict, off_days: dict, day_worked_map: Dict[str, int]
-) -> tuple[Any, Any]:
-    """(advance_to_work, consume_duration_from) — duree_heures = heures ouvrées machine (même logique que la timeline)."""
+def _hours_for_date_factory(
+    m: dict,
+    configs: dict,
+    off_days: dict,
+    day_worked_map: Dict[str, int],
+    day_horaires_map: Optional[Dict[str, Tuple[float, float]]] = None,
+):
+    """get_hours_for_date(dt) — même priorité que getWhForDate côté planning (override journalier d'abord)."""
+    dh_map = day_horaires_map or {}
     base_hours = {}
     for day_idx, field in [(0, "horaires_lundi"), (1, "horaires_mardi"),
                            (2, "horaires_mercredi"), (3, "horaires_jeudi"),
@@ -536,8 +563,11 @@ def _make_work_duration_consumer(
     def week_key(dt: datetime) -> str:
         return f"{dt.year}-W{dt.isocalendar()[1]:02d}"
 
-    def get_hours_for_date(dt):
+    def get_hours_for_date(dt: datetime):
         dkey = dt.strftime("%Y-%m-%d")
+        dh = dh_map.get(dkey)
+        if dh is not None:
+            return dh
         wd = dt.weekday()
         if wd <= 4 and int(off_days.get(dkey, 0) or 0):
             return None
@@ -562,6 +592,21 @@ def _make_work_duration_consumer(
                 return None
             return sat_hours_t
         return None
+
+    return get_hours_for_date
+
+
+def _make_work_duration_consumer(
+    m: dict,
+    configs: dict,
+    off_days: dict,
+    day_worked_map: Dict[str, int],
+    day_horaires_map: Optional[Dict[str, Tuple[float, float]]] = None,
+) -> tuple[Any, Any]:
+    """(advance_to_work, consume_duration_from) — duree_heures = heures ouvrées machine (même logique que la timeline)."""
+    get_hours_for_date = _hours_for_date_factory(
+        m, configs, off_days, day_worked_map, day_horaires_map
+    )
 
     def advance_to_work(dt):
         for _ in range(366):
@@ -631,8 +676,8 @@ def _planned_end_iso_for_machine(
     if not dt0:
         return None
     try:
-        cfgs, off, dw = _load_planning_calendar_maps(conn, machine_id)
-        _, consume_from = _make_work_duration_consumer(dict(m), cfgs, off, dw)
+        cfgs, off, dw, dh = _load_planning_calendar_maps(conn, machine_id)
+        _, consume_from = _make_work_duration_consumer(dict(m), cfgs, off, dw, dh)
         _, slot_end, _ = consume_from(dt0.replace(microsecond=0), float(duree_h))
         return _fmt_ts(slot_end)
     except Exception:
@@ -676,6 +721,7 @@ def _compute_timeline_slots(
     configs: dict,
     off_days: dict,
     day_worked_map: Dict[str, int],
+    day_horaires_map: Dict[str, Tuple[float, float]],
     entries: List[dict],
 ) -> List[dict]:
     """Calcule les créneaux : terminé / en cours figés ; en attente (et en_cours sans plan) dynamiques + persistés.
@@ -684,7 +730,7 @@ def _compute_timeline_slots(
     lun–ven : sans ligne = ouvré selon horaires machine ; ligne 0 = forcé non travaillé.
     """
     advance_to_work, consume_duration_from = _make_work_duration_consumer(
-        m, configs, off_days, day_worked_map
+        m, configs, off_days, day_worked_map, day_horaires_map
     )
 
     slots: List[dict] = []
@@ -2346,28 +2392,9 @@ def get_timeline(machine_id: int, request: Request, semaine: Optional[str] = Non
         if not machine:
             raise HTTPException(404, "Machine non trouvée")
 
-        configs: dict = {}
-        today = datetime.now()
-        for w in range(8):
-            d = today + timedelta(weeks=w)
-            sw = f"{d.year}-W{d.isocalendar()[1]:02d}"
-            cfg = conn.execute(
-                "SELECT samedi_travaille FROM planning_config WHERE machine_id=? AND semaine=?",
-                (machine_id, sw)
-            ).fetchone()
-            configs[sw] = cfg["samedi_travaille"] if cfg else 0
-
-        hol_rows = conn.execute(
-            "SELECT date, is_off FROM planning_holidays WHERE machine_id=?",
-            (machine_id,),
-        ).fetchall()
-        off_days = {str(r["date"]): int(r["is_off"] or 0) for r in hol_rows}
-
-        dw_rows = conn.execute(
-            "SELECT date, is_worked FROM planning_day_worked WHERE machine_id=?",
-            (machine_id,),
-        ).fetchall()
-        day_worked_map = {str(r["date"]): int(r["is_worked"] or 0) for r in dw_rows}
+        configs, off_days, day_worked_map, day_horaires_map = _load_planning_calendar_maps(
+            conn, machine_id
+        )
 
         _auto_complete_en_cours(conn, machine_id)
         _enforce_single_en_cours(conn, machine_id)
@@ -2407,6 +2434,7 @@ def get_timeline(machine_id: int, request: Request, semaine: Optional[str] = Non
             configs,
             off_days,
             day_worked_map,
+            day_horaires_map,
             entries_list,
         )
         conn.commit()
@@ -2451,53 +2479,12 @@ async def pack_termines(machine_id: int, request: Request):
             dt_end = datetime.now(_TZ_PARIS).replace(tzinfo=None, minute=0, second=0, microsecond=0)
 
         # Charger calendrier étendu (peut remonter loin pour les terminés)
-        configs, off_days, day_worked_map = _load_planning_calendar_maps_range(conn, machine_id)
-
-        # Re-implémentation locale de get_hours_for_date (miroir de _make_work_duration_consumer)
-        base_hours = {}
-        for day_idx, field in [
-            (0, "horaires_lundi"),
-            (1, "horaires_mardi"),
-            (2, "horaires_mercredi"),
-            (3, "horaires_jeudi"),
-            (4, "horaires_vendredi"),
-        ]:
-            base_hours[day_idx] = _parse_horaires_val(m.get(field), "5,21")
-        sat_hours_t = _parse_horaires_val(m.get("horaires_samedi"), "6,18")
-        _parity_defs = _parity_defs_for_machine(m)
-
-        def _is_pair_week(dt: datetime) -> bool:
-            return dt.isocalendar()[1] % 2 == 0
-
-        def week_key(dt: datetime) -> str:
-            return f"{dt.year}-W{dt.isocalendar()[1]:02d}"
-
-        def get_hours_for_date(dt: datetime):
-            dkey = dt.strftime("%Y-%m-%d")
-            wd = dt.weekday()
-            if wd <= 4 and int(off_days.get(dkey, 0) or 0):
-                return None
-            dw = day_worked_map.get(dkey)
-            if wd in base_hours:
-                if dw is not None and int(dw) == 0:
-                    return None
-                if _parity_defs is not None:
-                    par = "pair" if _is_pair_week(dt) else "impair"
-                    slot = "fri" if wd == 4 else "week"
-                    h = _parity_defs[par][slot]
-                    if isinstance(h, dict):
-                        return (float(h["s"]), float(h["e"]))
-                    return (float(h[0]), float(h[1]))
-                return base_hours[wd]
-            if wd == 5:
-                if dw is None:
-                    if int(configs.get(week_key(dt), 0) or 0) == 0:
-                        return None
-                    return sat_hours_t
-                if int(dw) == 0:
-                    return None
-                return sat_hours_t
-            return None
+        configs, off_days, day_worked_map, day_horaires_map = _load_planning_calendar_maps_range(
+            conn, machine_id
+        )
+        get_hours_for_date = _hours_for_date_factory(
+            m, configs, off_days, day_worked_map, day_horaires_map
+        )
 
         def prev_work_instant(dt: datetime) -> datetime:
             """Dernier instant <= dt qui est dans une fenêtre ouvrée (ou fin de fenêtre si dt après)."""
@@ -2593,52 +2580,12 @@ def _pack_termines_before_anchor(
         return 0
     m = dict(mrow)
 
-    configs, off_days, day_worked_map = _load_planning_calendar_maps_range(conn, machine_id)
-
-    base_hours = {}
-    for day_idx, field in [
-        (0, "horaires_lundi"),
-        (1, "horaires_mardi"),
-        (2, "horaires_mercredi"),
-        (3, "horaires_jeudi"),
-        (4, "horaires_vendredi"),
-    ]:
-        base_hours[day_idx] = _parse_horaires_val(m.get(field), "5,21")
-    sat_hours_t = _parse_horaires_val(m.get("horaires_samedi"), "6,18")
-    _parity_defs = _parity_defs_for_machine(m)
-
-    def _is_pair_week(dt: datetime) -> bool:
-        return dt.isocalendar()[1] % 2 == 0
-
-    def week_key(dt: datetime) -> str:
-        return f"{dt.year}-W{dt.isocalendar()[1]:02d}"
-
-    def get_hours_for_date(dt: datetime):
-        dkey = dt.strftime("%Y-%m-%d")
-        wd = dt.weekday()
-        if wd <= 4 and int(off_days.get(dkey, 0) or 0):
-            return None
-        dw = day_worked_map.get(dkey)
-        if wd in base_hours:
-            if dw is not None and int(dw) == 0:
-                return None
-            if _parity_defs is not None:
-                par = "pair" if _is_pair_week(dt) else "impair"
-                slot = "fri" if wd == 4 else "week"
-                h = _parity_defs[par][slot]
-                if isinstance(h, dict):
-                    return (float(h["s"]), float(h["e"]))
-                return (float(h[0]), float(h[1]))
-            return base_hours[wd]
-        if wd == 5:
-            if dw is None:
-                if int(configs.get(week_key(dt), 0) or 0) == 0:
-                    return None
-                return sat_hours_t
-            if int(dw) == 0:
-                return None
-            return sat_hours_t
-        return None
+    configs, off_days, day_worked_map, day_horaires_map = _load_planning_calendar_maps_range(
+        conn, machine_id
+    )
+    get_hours_for_date = _hours_for_date_factory(
+        m, configs, off_days, day_worked_map, day_horaires_map
+    )
 
     def prev_work_instant(dt: datetime) -> datetime:
         cur = dt.replace(microsecond=0)

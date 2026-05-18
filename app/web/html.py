@@ -1198,13 +1198,9 @@ async function checkAuth(){
       const p=(sp.get('page')||'').trim();
       if(S.app==='prod' && p==='users'){window.location.href='/settings';return;}
       if(S.app==='prod' && p==='matiere_prix'){window.location.href='/devis';return;}
-      const allowed=new Set(['production','suivi','profil','historique','saisies','import','rentabilite','dossiers','traceabilite']);
+      if(S.app==='prod' && p==='profil'){window.location.href='/profil';return;}
+      const allowed=new Set(['production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite']);
       if(S.app==='prod' && allowed.has(p)) S.page=p;
-    }catch(e){}
-    try{
-      if(S.app==='prod' && window.location && window.location.pathname==='/profil'){
-        S.page='profil';
-      }
     }catch(e){}
     if(S.app==='prod'){
       await loadFilters();
@@ -1349,7 +1345,8 @@ async function doLogin(email,password){
       const p=(sp.get('page')||'').trim();
       if(S.app==='prod' && p==='users'){window.location.href='/settings';return;}
       if(S.app==='prod' && p==='matiere_prix'){window.location.href='/devis';return;}
-      const allowed=new Set(['production','suivi','profil','historique','saisies','import','rentabilite','dossiers','traceabilite']);
+      if(S.app==='prod' && p==='profil'){window.location.href='/profil';return;}
+      const allowed=new Set(['production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite']);
       if(S.app==='prod' && allowed.has(p)) S.page=p;
     }catch(e){}
     S.loginError=null;
@@ -5142,7 +5139,6 @@ function renderSidebar(){
     {key:'production',label:'Production',icon:'wrench'},
     {key:'traceabilite',label:'Traçabilité',icon:'layers'},
     ...(admin?[{key:'rentabilite',label:'Rentabilité',icon:'trending-up'}]:[]),
-    {key:'profil',label:'Profil',icon:'user'},
   ];
   const isLight=document.body.classList.contains('light');
   return h('nav',{className:'sidebar'},
@@ -5165,8 +5161,8 @@ function renderSidebar(){
       h('div',{
         className:'user-chip',
         style:{cursor:'pointer'},
-        title:'Modifier mon profil',
-        onClick:()=>{set({page:'profil'});}
+        title:'Mon profil',
+        onClick:()=>{window.location.href='/profil';}
       },
         h('div',{className:'uc-name'},(S.user&&S.user.nom)?S.user.nom:''),
         h('div',{className:'uc-role'},(S.user&&S.user.role)?(ROLE_LABELS[S.user.role]||S.user.role):''),
@@ -7559,91 +7555,6 @@ function renderDos(){
   return h('div',null,form,list);
 }
 
-// ── Page profil (utilisateur courant) ──────────────────────────
-async function saveProfil(body){
-  try{
-    const r=await api('/api/auth/me',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    if(!r)return;
-    toast('Profil mis à jour');
-    // Recharger les infos user
-    const u=await api('/api/auth/me');
-    if(u)S.user={...S.user,...u};
-    render();
-  }catch(e){toast(e.message,'error');}
-}
-
-function renderProfil(userData){
-  const inputs={};
-
-  const mkField=(label,key,type='text',val='')=>{
-    const i=h('input',{type,placeholder:label,value:(userData && (key in userData) ? (userData[key]||'') : '') || val});
-    inputs[key]=i;
-    return h('div',{style:{marginBottom:'14px'}},
-      h('label',{style:{display:'block',fontSize:'11px',fontWeight:'600',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'5px'}},label),
-      i
-    );
-  };
-
-  const fields=[
-    mkField('Nom complet','nom'),
-    mkField('Email','email','email'),
-    mkField('Téléphone','telephone','tel'),
-    mkField('Adresse','adresse','text'),
-    mkField('Date de naissance','date_naissance','date'),
-  ];
-
-  // Champ mot de passe
-  const curPwdI=h('input',{type:'password',placeholder:'Mot de passe actuel'});
-  const pwdI=h('input',{type:'password',placeholder:'Nouveau mot de passe (laisser vide = inchangé)'});
-  const pwdCI=h('input',{type:'password',placeholder:'Confirmer le mot de passe'});
-  inputs.current_password=curPwdI;inputs.password=pwdI;inputs.password_confirm=pwdCI;
-
-  const pwdSection=h('div',null,
-    h('div',{style:{marginBottom:'14px'}},
-      h('label',{style:{display:'block',fontSize:'11px',fontWeight:'600',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'5px'}},'Mot de passe actuel'),
-      curPwdI
-    ),
-    h('div',{style:{marginBottom:'14px'}},
-      h('label',{style:{display:'block',fontSize:'11px',fontWeight:'600',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'5px'}},'Nouveau mot de passe'),
-      pwdI
-    ),
-    h('div',{style:{marginBottom:'14px'}},
-      h('label',{style:{display:'block',fontSize:'11px',fontWeight:'600',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'5px'}},'Confirmer le mot de passe'),
-      pwdCI
-    )
-  );
-
-  const saveBtn=h('button',{className:'btn',onClick:async()=>{
-    const body={};
-    Object.entries(inputs).forEach(([k,el])=>{
-      if(el.type==='checkbox') body[k]=el.checked?1:0;
-      else if(el.value!==undefined) body[k]=el.value;
-    });
-    // Si aucun changement de mot de passe, ne pas envoyer les champs liés
-    if(!body.password){
-      delete body.current_password;
-    }
-    if(!body.password) delete body.password;
-    if(!body.password_confirm) delete body.password_confirm;
-    await saveProfil(body);
-  }},'💾 Enregistrer');
-
-  const infos=userData?[
-    userData.created_at?h('p',{style:{fontSize:'11px',color:'var(--muted)',marginTop:'8px'}},'Créé le '+fD(userData.created_at)):null,
-    userData.last_login?h('p',{style:{fontSize:'11px',color:'var(--muted)'}},'Dernière connexion : '+fD(userData.last_login)):null,
-  ]:[];
-
-  return h('div',{className:'card',style:{padding:'28px',maxWidth:'520px'}},
-    h('h2',{style:{fontSize:'18px',fontWeight:'700',marginBottom:'6px',display:'inline-flex',alignItems:'center',gap:'8px'}},iconEl('user',18),'Mon profil'),
-    h('p',{style:{fontSize:'13px',color:'var(--muted)',marginBottom:'24px'}},'Modifiez vos informations personnelles'),
-    ...fields,
-    h('hr',{style:{border:'none',borderTop:'1px solid var(--border)',margin:'20px 0'}}),
-    pwdSection,
-    saveBtn,
-    ...infos
-  );
-}
-
 // ── Rentabilité ──────────────────────────────────────────────────
 async function loadComparaison(devisId){
   const d=await api('/api/rentabilite/devis/'+devisId+'/comparaison');
@@ -9239,7 +9150,6 @@ function render(){
     const titles={
       production: S.subPage==='saisies'?'Saisies':S.subPage==='erreurs'?'Historique & Erreurs':'Production',
       suivi:'Rentabilité & Dossiers',
-      profil:'Mon profil',
       traceabilite:'Traçabilité',
       // rétrocompat URL directe
       historique:'Historique & Erreurs',saisies:'Saisies',import:'Import XLSX',
@@ -9250,7 +9160,6 @@ function render(){
                   S.subPage==='erreurs'?'Sanity Score, incidents et erreurs de saisie':
                   'KPIs, temps, quantités et qualité de saisie',
       suivi:'Dossiers de production et comparaison devis / réel',
-      profil:'Informations personnelles et mot de passe',
       traceabilite:'Matières utilisées par dossier',
       historique:'',saisies:'',import:'',dossiers:'',rentabilite:'',
     };
@@ -9272,7 +9181,6 @@ function render(){
         (S.page==='production'||S.page==='historique'||S.page==='saisies')?renderFilters():null,
         S.page==='production'?renderProdPage():null,
         S.page==='suivi'?renderSuivi():null,
-        S.page==='profil'?renderProfil(S.user):null,
         S.page==='traceabilite'?renderTracabilite():null,
         // Rétrocompat accès direct par URL :
         S.page==='historique'?renderHist():null,

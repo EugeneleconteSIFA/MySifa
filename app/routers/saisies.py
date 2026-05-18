@@ -12,6 +12,76 @@ from services.auth_service import get_current_user, is_admin, is_fabrication, ca
 
 router = APIRouter()
 
+_FICTIF_PREFIX = "FICTIF:"
+
+
+def _is_fictif_dossier(no_dossier: Optional[str]) -> bool:
+    return (no_dossier or "").strip().upper().startswith(_FICTIF_PREFIX)
+
+
+def _normalize_fictif_no_dossier(raw: str) -> str:
+    s = (raw or "").strip()
+    if not s:
+        raise HTTPException(status_code=400, detail="Dossier fictif requis")
+    if s.upper().startswith(_FICTIF_PREFIX):
+        s = s[len(_FICTIF_PREFIX) :].strip()
+    if not s:
+        raise HTTPException(status_code=400, detail="Dossier fictif invalide")
+    return _FICTIF_PREFIX + s
+
+
+def _fictif_of_display(no_dossier: str) -> str:
+    ref = (no_dossier or "").strip()
+    if _is_fictif_dossier(ref):
+        return ref[len(_FICTIF_PREFIX) :].strip()
+    return ref
+
+
+def _resolve_target_dossier_meta(conn, to_ref: str) -> dict:
+    """Métadonnées du dossier cible (planning prioritaire, sinon ref brute)."""
+    ref = (to_ref or "").strip()
+    if not ref:
+        raise HTTPException(status_code=400, detail="Dossier cible requis")
+    if _is_fictif_dossier(ref):
+        raise HTTPException(status_code=400, detail="Le dossier cible ne peut pas être fictif")
+
+    row = conn.execute(
+        """SELECT reference, numero_of, client, description, statut
+           FROM planning_entries
+           WHERE TRIM(COALESCE(numero_of,'')) = TRIM(?)
+              OR TRIM(COALESCE(reference,'')) = TRIM(?)
+           ORDER BY CASE statut WHEN 'en_cours' THEN 0 WHEN 'attente' THEN 1 ELSE 2 END, id DESC
+           LIMIT 1""",
+        (ref, ref),
+    ).fetchone()
+    if row:
+        nd = (row["numero_of"] or row["reference"] or ref).strip()
+        return {
+            "no_dossier": nd,
+            "client": (row["client"] or "").strip(),
+            "designation": (row["description"] or "").strip(),
+            "planning_reference": (row["reference"] or "").strip(),
+            "planning_statut": row["statut"],
+        }
+
+    prod = conn.execute(
+        """SELECT no_dossier, client, designation FROM production_data
+           WHERE TRIM(no_dossier) = TRIM(?)
+           LIMIT 1""",
+        (ref,),
+    ).fetchone()
+    if prod:
+        return {
+            "no_dossier": (prod["no_dossier"] or ref).strip(),
+            "client": (prod["client"] or "").strip(),
+            "designation": (prod["designation"] or "").strip(),
+            "planning_reference": None,
+            "planning_statut": None,
+        }
+
+    return {"no_dossier": ref, "client": "", "designation": "", "planning_reference": None, "planning_statut": None}
+
+
 def normalize_date_operation(val):
     dt = parse_datetime(val)
     return dt.strftime('%Y-%m-%dT%H:%M:%S') if dt else val
@@ -63,6 +133,235 @@ def list_saisies(
             params + [limit, offset]
         ).fetchall()
     return {"total": total, "rows": [dict(r) for r in rows]}
+
+
+@router.get("/api/saisies/reassign/fictif-sources")
+def list_fictif_dossier_sources(request: Request):
+    """Dossiers fictifs (FICTIF:…) présents dans les saisies."""
+    user = get_current_user(request)
+    if is_fabrication(user):
+        raise HTTPException(status_code=403, detail="Action réservée aux administrateurs")
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT no_dossier, COUNT(*) AS nb_saisies
+               FROM production_data
+               WHERE no_dossier IS NOT NULL AND TRIM(no_dossier) != ''
+                 AND UPPER(no_dossier) LIKE 'FICTIF:%'
+               GROUP BY no_dossier
+               ORDER BY no_dossier"""
+        ).fetchall()
+    out = []
+    for r in rows:
+        nd = str(r["no_dossier"] or "").strip()
+        if not nd:
+            continue
+        out.append(
+            {
+                "no_dossier": nd,
+                "of_display": _fictif_of_display(nd),
+                "nb_saisies": int(r["nb_saisies"] or 0),
+            }
+        )
+    return out
+
+
+@router.get("/api/saisies/reassign/target-dossiers")
+def suggest_target_dossiers(request: Request, q: str = "", limit: int = 20):
+    """Suggestions de dossiers réels (planning + production), hors FICTIF:."""
+    user = get_current_user(request)
+    if is_fabrication(user):
+        raise HTTPException(status_code=403, detail="Action réservée aux administrateurs")
+    qn = (q or "").strip()
+    try:
+        lim = max(1, min(int(limit), 50))
+    except Exception:
+        lim = 20
+    like = f"%{qn}%"
+    seen: set[str] = set()
+    out: list[dict] = []
+
+    with get_db() as conn:
+        if qn:
+            plan_rows = conn.execute(
+                """SELECT reference, numero_of, client, description, statut
+                   FROM planning_entries
+                   WHERE TRIM(COALESCE(reference,'')) != ''
+                     AND (
+                       LOWER(reference) LIKE LOWER(?)
+                       OR LOWER(COALESCE(numero_of,'')) LIKE LOWER(?)
+                       OR LOWER(COALESCE(client,'')) LIKE LOWER(?)
+                     )
+                   ORDER BY CASE statut WHEN 'en_cours' THEN 0 WHEN 'attente' THEN 1 ELSE 2 END,
+                            reference
+                   LIMIT ?""",
+                (like, like, like, lim * 2),
+            ).fetchall()
+        else:
+            plan_rows = conn.execute(
+                """SELECT reference, numero_of, client, description, statut
+                   FROM planning_entries
+                   WHERE TRIM(COALESCE(reference,'')) != ''
+                   ORDER BY updated_at DESC
+                   LIMIT ?""",
+                (lim,),
+            ).fetchall()
+
+        for r in plan_rows:
+            nd = (r["numero_of"] or r["reference"] or "").strip()
+            if not nd or _is_fictif_dossier(nd) or nd in seen:
+                continue
+            seen.add(nd)
+            out.append(
+                {
+                    "no_dossier": nd,
+                    "reference": (r["reference"] or "").strip(),
+                    "numero_of": (r["numero_of"] or "").strip(),
+                    "client": (r["client"] or "").strip(),
+                    "description": (r["description"] or "").strip(),
+                    "statut": r["statut"],
+                    "source": "planning",
+                }
+            )
+            if len(out) >= lim:
+                break
+
+        if len(out) < lim and qn:
+            prod_rows = conn.execute(
+                """SELECT DISTINCT no_dossier, client, designation
+                   FROM production_data
+                   WHERE no_dossier IS NOT NULL AND TRIM(no_dossier) != ''
+                     AND UPPER(no_dossier) NOT LIKE 'FICTIF:%'
+                     AND LOWER(no_dossier) LIKE LOWER(?)
+                   ORDER BY no_dossier
+                   LIMIT ?""",
+                (like, lim),
+            ).fetchall()
+            for r in prod_rows:
+                nd = str(r["no_dossier"] or "").strip()
+                if not nd or nd in seen:
+                    continue
+                seen.add(nd)
+                out.append(
+                    {
+                        "no_dossier": nd,
+                        "reference": nd,
+                        "numero_of": "",
+                        "client": (r["client"] or "").strip(),
+                        "description": (r["description"] or "").strip(),
+                        "statut": None,
+                        "source": "production",
+                    }
+                )
+                if len(out) >= lim:
+                    break
+
+    return out[:lim]
+
+
+@router.post("/api/saisies/reassign/fictif")
+async def reassign_fictif_dossier(request: Request):
+    """Rattache toutes les saisies d'un dossier FICTIF:… à un dossier réel existant."""
+    user = get_current_user(request)
+    if is_fabrication(user):
+        raise HTTPException(status_code=403, detail="Action réservée aux administrateurs")
+    if not is_admin(user):
+        raise HTTPException(status_code=403, detail="Action réservée aux administrateurs")
+
+    body = await request.json()
+    from_raw = (body.get("from_no_dossier") or body.get("from") or "").strip()
+    to_raw = (body.get("to_no_dossier") or body.get("to") or "").strip()
+    if not from_raw or not to_raw:
+        raise HTTPException(status_code=400, detail="from_no_dossier et to_no_dossier requis")
+
+    from_ref = _normalize_fictif_no_dossier(from_raw)
+    if from_ref.lower() == to_raw.strip().lower():
+        raise HTTPException(status_code=400, detail="Le dossier cible doit être différent du fictif")
+
+    now = datetime.now().isoformat()
+    note = f"Rattachement {from_ref} → {to_raw.strip()}"
+
+    with get_db() as conn:
+        target = _resolve_target_dossier_meta(conn, to_raw)
+        to_ref = target["no_dossier"]
+        client = target.get("client") or ""
+        designation = target.get("designation") or ""
+
+        rows = conn.execute(
+            "SELECT id, data FROM production_data WHERE TRIM(no_dossier) = TRIM(?)",
+            (from_ref,),
+        ).fetchall()
+        if not rows:
+            raise HTTPException(status_code=404, detail=f"Aucune saisie pour {from_ref}")
+
+        updated_saisies = 0
+        for r in rows:
+            data = {}
+            if r["data"]:
+                try:
+                    data = json.loads(r["data"])
+                except Exception:
+                    data = {}
+            if not isinstance(data, dict):
+                data = {}
+            data["no_dossier"] = to_ref
+            if client:
+                data["client"] = client
+            if designation:
+                data["designation"] = designation
+            conn.execute(
+                """UPDATE production_data SET
+                   no_dossier=?, client=?, designation=?, data=?,
+                   modifie_par=?, modifie_le=?, modifie_note=?
+                   WHERE id=?""",
+                (
+                    to_ref,
+                    client or None,
+                    designation or None,
+                    json.dumps(data, default=str),
+                    user["email"],
+                    now,
+                    note,
+                    r["id"],
+                ),
+            )
+            updated_saisies += 1
+
+        mat_res = conn.execute(
+            "UPDATE fab_matieres_utilisees SET no_dossier=? WHERE TRIM(no_dossier)=TRIM(?)",
+            (to_ref, from_ref),
+        )
+        updated_matieres = mat_res.rowcount
+
+        link_rows = conn.execute(
+            "SELECT id, planning_entry_id FROM rent_prod_links WHERE TRIM(no_dossier)=TRIM(?)",
+            (from_ref,),
+        ).fetchall()
+        updated_links = 0
+        for lk in link_rows:
+            dup = conn.execute(
+                "SELECT 1 FROM rent_prod_links WHERE planning_entry_id=? AND TRIM(no_dossier)=TRIM(?)",
+                (lk["planning_entry_id"], to_ref),
+            ).fetchone()
+            if dup:
+                conn.execute("DELETE FROM rent_prod_links WHERE id=?", (lk["id"],))
+            else:
+                conn.execute(
+                    "UPDATE rent_prod_links SET no_dossier=? WHERE id=?",
+                    (to_ref, lk["id"]),
+                )
+                updated_links += 1
+
+        conn.commit()
+
+    return {
+        "success": True,
+        "from_no_dossier": from_ref,
+        "to_no_dossier": to_ref,
+        "updated_saisies": updated_saisies,
+        "updated_matieres": updated_matieres,
+        "updated_links": updated_links,
+        "target": target,
+    }
 
 
 @router.put("/api/saisies/{row_id}")

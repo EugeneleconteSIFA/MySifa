@@ -85,8 +85,8 @@ def main() -> None:
                 continue
 
             duree_h = float(r["duree_heures"] or 0)
-            cfgs, off, dw = _load_planning_calendar_maps(conn, mid)
-            _, consume_from = _make_work_duration_consumer(m, cfgs, off, dw)
+            cfgs, off, dw, dh = _load_planning_calendar_maps(conn, mid)
+            _, consume_from = _make_work_duration_consumer(m, cfgs, off, dw, dh)
             p0 = run_start.replace(microsecond=0)
             try:
                 _, pe_dt, _ = consume_from(p0, duree_h)

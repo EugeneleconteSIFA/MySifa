@@ -274,6 +274,58 @@ def list_produits(request: Request, q: Optional[str] = None, limit: int = 50):
     return [dict(r) for r in rows]
 
 
+@router.get("/api/stock/produits/export")
+def export_produits_referentiel(request: Request, format: str = "csv"):
+    """Export CSV ou page d'impression du référentiel — avant /{produit_id} (sinon 'export' est parsé en id)."""
+    require_stock(request)
+    fmt = (format or "csv").strip().lower()
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT reference, unite, designation FROM produits ORDER BY reference"
+        ).fetchall()
+    if fmt == "csv":
+        buf = io.StringIO()
+        writer = csv.writer(buf, delimiter=";")
+        writer.writerow(["reference", "unite", "designation"])
+        for r in rows:
+            writer.writerow([r["reference"] or "", r["unite"] or "", r["designation"] or ""])
+        data = buf.getvalue().encode("utf-8-sig")
+        return StreamingResponse(
+            io.BytesIO(data),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": 'attachment; filename="references_unites_vente.csv"'},
+        )
+    if fmt == "print":
+        html_rows = "".join(
+            f"<tr><td>{r['reference'] or ''}</td><td>{r['unite'] or ''}</td>"
+            f"<td>{r['designation'] or ''}</td></tr>"
+            for r in rows
+        )
+        html = f"""<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
+<title>Références et unités de vente</title>
+<style>
+body{{font-family:system-ui,sans-serif;margin:24px;color:#111}}
+h1{{font-size:18px;margin:0 0 4px}}
+p{{color:#555;font-size:12px;margin:0 0 16px}}
+table{{width:100%;border-collapse:collapse;font-size:12px}}
+th,td{{border:1px solid #ccc;padding:8px 10px;text-align:left}}
+th{{background:#f1f5f9;font-weight:700}}
+tr:nth-child(even){{background:#f8fafc}}
+@media print{{body{{margin:12px}}}}
+</style></head><body>
+<h1>Références et unités de vente</h1>
+<p>Export MyStock — {datetime.now().strftime("%d/%m/%Y %H:%M")} — {len(rows)} référence(s)</p>
+<table><thead><tr><th>Référence</th><th>Unité de vente</th><th>Désignation</th></tr></thead>
+<tbody>{html_rows}</tbody></table>
+<script>window.onload=function(){{window.print();}}</script>
+</body></html>"""
+        return StreamingResponse(
+            io.BytesIO(html.encode("utf-8")),
+            media_type="text/html; charset=utf-8",
+        )
+    raise HTTPException(400, "Format non supporté (csv ou print).")
+
+
 @router.get("/api/stock/produits/{produit_id}")
 def get_produit(produit_id: int, request: Request):
     require_stock(request)
@@ -965,54 +1017,3 @@ async def confirm_produits_import(request: Request):
                 applied["error"] += 1
         conn.commit()
     return {"success": True, "applied": applied}
-
-
-@router.get("/api/stock/produits/export")
-def export_produits_referentiel(request: Request, format: str = "csv"):
-    require_stock(request)
-    fmt = (format or "csv").strip().lower()
-    with get_db() as conn:
-        rows = conn.execute(
-            "SELECT reference, unite, designation FROM produits ORDER BY reference"
-        ).fetchall()
-    if fmt == "csv":
-        buf = io.StringIO()
-        writer = csv.writer(buf, delimiter=";")
-        writer.writerow(["reference", "unite", "designation"])
-        for r in rows:
-            writer.writerow([r["reference"] or "", r["unite"] or "", r["designation"] or ""])
-        data = buf.getvalue().encode("utf-8-sig")
-        return StreamingResponse(
-            io.BytesIO(data),
-            media_type="text/csv; charset=utf-8",
-            headers={"Content-Disposition": 'attachment; filename="references_unites_vente.csv"'},
-        )
-    if fmt == "print":
-        html_rows = "".join(
-            f"<tr><td>{r['reference'] or ''}</td><td>{r['unite'] or ''}</td>"
-            f"<td>{r['designation'] or ''}</td></tr>"
-            for r in rows
-        )
-        html = f"""<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
-<title>Références et unités de vente</title>
-<style>
-body{{font-family:system-ui,sans-serif;margin:24px;color:#111}}
-h1{{font-size:18px;margin:0 0 4px}}
-p{{color:#555;font-size:12px;margin:0 0 16px}}
-table{{width:100%;border-collapse:collapse;font-size:12px}}
-th,td{{border:1px solid #ccc;padding:8px 10px;text-align:left}}
-th{{background:#f1f5f9;font-weight:700}}
-tr:nth-child(even){{background:#f8fafc}}
-@media print{{body{{margin:12px}}}}
-</style></head><body>
-<h1>Références et unités de vente</h1>
-<p>Export MyStock — {datetime.now().strftime("%d/%m/%Y %H:%M")} — {len(rows)} référence(s)</p>
-<table><thead><tr><th>Référence</th><th>Unité de vente</th><th>Désignation</th></tr></thead>
-<tbody>{html_rows}</tbody></table>
-<script>window.onload=function(){{window.print();}}</script>
-</body></html>"""
-        return StreamingResponse(
-            io.BytesIO(html.encode("utf-8")),
-            media_type="text/html; charset=utf-8",
-        )
-    raise HTTPException(400, "Format non supporté (csv ou print).")
