@@ -24,12 +24,14 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 :root{
   --bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;
   --muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,0.12);
+  --filter-input-bg:#1c2838;
   --success:#34d399;--warn:#fbbf24;--danger:#f87171;
   --c1:#22d3ee;--c2:#a78bfa;--c3:#34d399;--c4:#fbbf24;--c5:#f87171
 }
 body.light{
   --bg:#f1f5f9;--card:#ffffff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;
   --muted:#94a3b8;--accent:#0891b2;--accent-bg:rgba(8,145,178,0.10);
+  --filter-input-bg:#ffffff;
   --success:#059669;--warn:#d97706;--danger:#dc2626;
   --c1:#0891b2;--c2:#7c3aed;--c3:#059669;--c4:#d97706;--c5:#dc2626
 }
@@ -176,13 +178,31 @@ h1{font-size:22px;font-weight:700;margin-bottom:4px}
 .cw-table .tbl-scroll.top::-webkit-scrollbar{height:10px}
 .cw-table .tbl-scroll.bot{max-height:520px}
 .cb-icon{font-size:32px;margin-bottom:12px}.cb-msg{font-size:14px;color:var(--muted)}
-.filters{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:20px}
+.filters-panel{margin-bottom:20px}
+.filters{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
 .filter-group{display:flex;flex-direction:column;gap:6px}
-.filter-group--dossier{flex:1;min-width:220px;max-width:380px}
+.filter-group--dossier{flex:1;min-width:200px;max-width:300px}
 .filter-group label{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.filter-input{
+  background:var(--filter-input-bg);border:1.5px solid var(--border);border-radius:10px;
+  padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;
+  min-height:40px;box-sizing:border-box;transition:border-color .15s,box-shadow .15s;
+}
+.filter-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+body.light .filter-input:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
+.filters .filter-input[type=date]{min-width:148px;padding:9px 12px;font-size:12px}
+.filters .multisel-trigger{
+  min-width:168px;cursor:pointer;display:flex;align-items:center;
+  justify-content:space-between;gap:8px;text-align:left;
+}
+.filters .multisel-trigger-caret{opacity:.55;font-size:10px}
 .prod-dossier-filter{position:relative;width:100%}
-.filters .prod-dossier-filter .search-bar{margin-bottom:0;padding:10px 14px;font-size:13px;border-radius:10px}
+.filters .prod-dossier-filter .search-bar{
+  width:100%;margin-bottom:0;min-height:40px;padding:10px 14px;font-size:13px;
+  border-radius:10px;background:var(--filter-input-bg);border:1.5px solid var(--border);
+}
 .prod-dossier-filter .search-bar:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+body.light .prod-dossier-filter .search-bar:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .prod-dossier-suggest{position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:80;
   background:var(--card);border:1px solid var(--border);border-radius:10px;max-height:240px;overflow-y:auto;
   box-shadow:0 10px 28px rgba(0,0,0,.35);display:none}
@@ -192,24 +212,25 @@ h1{font-size:22px;font-weight:700;margin-bottom:4px}
 .prod-dossier-suggest-item:last-child{border-bottom:none}
 .prod-dossier-suggest-item:hover,.prod-dossier-suggest-item--hi{background:var(--accent-bg);color:var(--accent)}
 .prod-dossier-suggest-empty{padding:12px 14px;font-size:12px;color:var(--muted);line-height:1.45}
-.prod-dossier-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;min-height:0}
-.prod-dossier-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:20px;
-  font-size:11px;font-weight:700;font-family:monospace;background:var(--accent-bg);
-  border:1px solid rgba(34,211,238,.25);color:var(--text)}
-.prod-dossier-chip button{border:none;background:transparent;color:var(--muted);cursor:pointer;
-  font-size:15px;padding:0;line-height:1;font-family:inherit}
-.prod-dossier-chip button:hover{color:var(--danger)}
-.filters select,.filters input[type=date]{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;font-family:inherit;min-width:140px}
-.filters select:focus,.filters input:focus{border-color:var(--accent);outline:none}
-.filters button{
-  background:var(--accent);color:var(--bg);
-  border:none;border-radius:8px;
-  padding:9px 16px;font-size:12px;font-weight:600;
+.filters-chips-row{margin-top:10px;padding-top:2px}
+.prod-dossier-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.prod-dossier-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px 3px 10px;border-radius:16px;
+  font-size:11px;font-weight:600;font-family:monospace;background:var(--accent-bg);
+  border:1px solid rgba(34,211,238,.22);color:var(--text)}
+.prod-dossier-chip-remove{
+  border:none;background:transparent;color:var(--muted);cursor:pointer;
+  font-size:11px;line-height:1;padding:0;width:16px;height:16px;
+  display:inline-flex;align-items:center;justify-content:center;border-radius:4px;font-family:inherit;
+}
+.prod-dossier-chip-remove:hover{color:var(--danger);background:rgba(248,113,113,.12)}
+.filters-apply-btn{
+  background:var(--accent);color:var(--bg);border:none;border-radius:10px;
+  padding:10px 18px;font-size:13px;font-weight:600;min-height:40px;
   cursor:pointer;font-family:inherit;align-self:flex-end;
   transition:filter .15s,box-shadow .15s,transform .05s;
 }
-.filters button:hover{filter:brightness(1.05);box-shadow:0 0 0 4px rgba(34,211,238,.18)}
-.filters button:active{transform:translateY(1px)}
+.filters-apply-btn:hover{filter:brightness(1.05);box-shadow:0 0 0 4px rgba(34,211,238,.18)}
+.filters-apply-btn:active{transform:translateY(1px)}
 .drop-zone{border:2px dashed var(--border);border-radius:16px;padding:48px 24px;text-align:center;cursor:pointer;background:var(--card);transition:all .2s;margin-bottom:20px}
 .drop-zone:hover,.drop-zone.drag{border-color:var(--accent);background:var(--accent-bg)}
 .dz-icon{font-size:36px;opacity:.4;margin-bottom:12px}
@@ -227,6 +248,15 @@ tr.data-row{position:relative}
 .add-row-btn{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:22px;height:22px;background:var(--accent);color:#000;border:2px solid var(--bg);border-radius:50%;cursor:pointer;font-size:14px;font-weight:900;opacity:0;transition:opacity .15s;z-index:30;box-shadow:0 2px 8px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;pointer-events:none}
 tr.data-row:hover .add-row-btn{opacity:1;pointer-events:auto}
 tr.data-row:hover td{background:rgba(34,211,238,0.025)}
+.btn-fictif-sm{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:10px;border:1px solid rgba(167,139,250,.45);
+  background:rgba(167,139,250,.12);color:#a78bfa;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
+.btn-fictif-sm:hover{background:rgba(167,139,250,.22);border-color:#a78bfa}
+body.light .btn-fictif-sm{color:#7c3aed;border-color:rgba(124,58,237,.35);background:rgba(124,58,237,.08)}
+body.light .btn-fictif-sm:hover{background:rgba(124,58,237,.14)}
+.fictif-reassign-suggest{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.fictif-reassign-suggest button{font-size:12px;padding:6px 10px;border-radius:8px;border:1px solid var(--border2);
+  background:var(--bg);color:var(--text2);cursor:pointer;font-family:inherit}
+.fictif-reassign-suggest button:hover{border-color:var(--accent);color:var(--accent)}
 tr.data-row.saisie-row-fictif td{color:#a78bfa !important;font-weight:800 !important}
 tr.data-row.saisie-row-fictif td span{color:#a78bfa !important;font-weight:800 !important}
 tr.data-row.saisie-row-fictif:hover td{background:rgba(167,139,250,.08) !important}
@@ -5574,18 +5604,8 @@ function makeDateSelect(value, onChange){
 function makeDateInput(value, onChange){
   const inp = h('input',{
     type:'date',
+    className:'filter-input',
     value: value || '',
-    style:{
-      background:'var(--bg)',
-      border:'1px solid var(--border)',
-      borderRadius:'8px',
-      padding:'8px 10px',
-      color:'var(--text)',
-      fontSize:'12px',
-      fontFamily:'inherit',
-      outline:'none',
-      minWidth:'148px',
-    }
   });
   inp.addEventListener('change',()=>onChange(inp.value||''));
   // Ouvrir le calendrier au clic (Chrome/Safari supportent showPicker).
@@ -5623,8 +5643,23 @@ function renderFilters(){
   const dt=makeDateInput(S.fv.date_to,   v=>{S.fv.date_to=v;});
   parts.push(h('div',{className:'filter-group'},h('label',null,'Du'),df));
   parts.push(h('div',{className:'filter-group'},h('label',null,'Au'),dt));
-  parts.push(h('button',{onClick:applyF},'Filtrer'));
-  return h('div',{className:'filters'},...parts);
+  parts.push(h('button',{className:'filters-apply-btn',onClick:applyF},'Filtrer'));
+
+  const row = h('div',{className:'filters'},...parts);
+  const chipsRow = admin ? renderDossierFilterChipsRow() : null;
+  return h('div',{className:'filters-panel'},row,chipsRow||null);
+}
+
+function renderDossierFilterChipsRow(){
+  const sel = S.fv.dossiers || [];
+  if(!sel.length) return null;
+  const chips = h('div',{className:'prod-dossier-chips',id:'prod-filter-dossier-chips'});
+  sel.forEach(ref=>{
+    const rm = h('button',{type:'button',className:'prod-dossier-chip-remove',title:'Retirer','aria-label':'Retirer '+ref,
+      onClick:()=>removeDossierFilter(ref)},'×');
+    chips.appendChild(h('span',{className:'prod-dossier-chip'},ref,rm));
+  });
+  return h('div',{className:'filters-chips-row',id:'prod-filter-dossier-chips-row'},chips);
 }
  
 // ── Composant multi-select avec cases à cocher ──────────────────
@@ -5638,18 +5673,13 @@ function makeMultiSelect(label, options, selected, onChange){
   const isSelected = v => getSelected().includes(v);
   const count = getSelected().length;
  
-  // Bouton déclencheur
+  const triggerLabel = h('span',null, count>0 ? label+' ('+count+')' : label);
   const trigger = h('button',{
-    className:'multisel-trigger',
-    style:{
-      background:'var(--bg)',border:'1px solid var(--border)',borderRadius:'8px',
-      padding:'8px 12px',color:'var(--text)',fontSize:'12px',fontFamily:'inherit',
-      cursor:'pointer',display:'flex',alignItems:'center',gap:'6px',minWidth:'160px',
-      justifyContent:'space-between'
-    }
+    type:'button',
+    className:'filter-input multisel-trigger',
   },
-    h('span',null, count>0 ? label+' ('+count+')' : label),
-    h('span',{style:{opacity:'.5'}},'▾')
+    triggerLabel,
+    h('span',{className:'multisel-trigger-caret'},'▾')
   );
  
   // Dropdown
@@ -5674,7 +5704,7 @@ function makeMultiSelect(label, options, selected, onChange){
     onChange(newSel);
     // Mettre à jour les checkboxes enfants
     dropdown.querySelectorAll('input[type=checkbox]').forEach((cb,i)=>{if(i>0)cb.checked=e.target.checked;});
-    trigger.querySelector('span').textContent = newSel.length>0?label+' ('+newSel.length+')':label;
+    triggerLabel.textContent = newSel.length>0?label+' ('+newSel.length+')':label;
   });
   dropdown.appendChild(allChk);
  
@@ -5690,7 +5720,7 @@ function makeMultiSelect(label, options, selected, onChange){
       let newSel = curSel.filter(v=>v!==opt.value);
       if(chk.checked) newSel.push(opt.value);
       onChange(newSel);
-      trigger.querySelector('span').textContent = newSel.length>0?label+' ('+newSel.length+')':label;
+      triggerLabel.textContent = newSel.length>0?label+' ('+newSel.length+')':label;
       allChk.querySelector('input').checked = newSel.length===options.length;
     });
     dropdown.appendChild(lbl);
@@ -5785,7 +5815,7 @@ function makeDossierFilterSearch(allDossiers){
     type: 'text',
     id: 'prod-filter-dossier-search',
     className: 'search-bar',
-    placeholder: 'Rechercher un n° de dossier…',
+    placeholder: 'Rechercher (n° dossier…)',
     autocomplete: 'off',
     value: S.fv.dossierSearchQ || '',
   });
@@ -5830,15 +5860,6 @@ function makeDossierFilterSearch(allDossiers){
   rel.appendChild(inp);
   rel.appendChild(dd);
   wrap.appendChild(rel);
-
-  const chips = h('div', { className: 'prod-dossier-chips', id: 'prod-filter-dossier-chips' });
-  (S.fv.dossiers || []).forEach(ref=>{
-    chips.appendChild(h('span', { className: 'prod-dossier-chip' },
-      ref,
-      h('button', { type: 'button', title: 'Retirer', onClick: ()=>removeDossierFilter(ref) }, '×')
-    ));
-  });
-  wrap.appendChild(chips);
 
   if(!window._mysifaDossierFilterDocClick){
     window._mysifaDossierFilterDocClick = true;
@@ -7180,6 +7201,81 @@ function isFictifSaisieRow(row){
   if(!row) return false;
   return isFictifDossierRef(row.no_dossier) || isFictifDossierRef(row.reference);
 }
+
+function fictifOfDisplay(ref){
+  const s=String(ref||'').trim();
+  if(isFictifDossierRef(s)) return s.slice(SAISIE_FICTIF_PREFIX.length);
+  return s;
+}
+
+async function openFictifReassignModal(){
+  if(isFab(S.user)) return;
+  try{
+    const m=document.querySelector('.add-row-modal');
+    if(m) m.remove();
+  }catch(e){}
+  const sources=await api('/api/saisies/reassign/fictif-sources')||[];
+  const fromSel=h('select',{className:'form-sel',style:{width:'100%'}},
+    h('option',{value:''},'— Choisir un dossier fictif —'),
+    ...sources.map(s=>{
+      const opt=h('option',{value:s.no_dossier},
+        'OF fictif '+fictifOfDisplay(s.no_dossier)+' ('+s.nb_saisies+' saisie'+(s.nb_saisies>1?'s':'')+')');
+      return opt;
+    })
+  );
+  const toInp=h('input',{type:'text',className:'form-sel',style:{width:'100%'},
+    placeholder:'N° dossier planning (référence ou OF)…'});
+  const sugWrap=h('div',{className:'fictif-reassign-suggest'});
+  let sugTok=0;
+  const refreshSug=async()=>{
+    const q=String(toInp.value||'').trim();
+    const tok=++sugTok;
+    if(q.length<1){ sugWrap.innerHTML=''; return; }
+    const sugs=await api('/api/saisies/reassign/target-dossiers?q='+encodeURIComponent(q)+'&limit=12')||[];
+    if(tok!==sugTok) return;
+    sugWrap.innerHTML='';
+    (sugs||[]).slice(0,10).forEach(d=>{
+      const lbl=[d.no_dossier,d.client].filter(Boolean).join(' — ');
+      const btn=h('button',{type:'button',onClick:()=>{ toInp.value=d.no_dossier; sugWrap.innerHTML=''; }},
+        lbl+(d.statut?(' ['+d.statut+']'):''));
+      sugWrap.appendChild(btn);
+    });
+  };
+  toInp.addEventListener('input',()=>{ refreshSug(); });
+  const msg=h('p',{style:{fontSize:'12px',color:'var(--muted)',margin:'0 0 12px',lineHeight:1.5}},
+    'Toutes les saisies du dossier fictif seront rattachées au dossier réel choisi (production, matières traça, liens rentabilité).');
+  const form=h('div',{className:'add-row-form',style:{minWidth:'min(480px,92vw)'}},
+    h('button',{type:'button',className:'add-row-close',title:'Fermer',onClick:(e)=>{e.stopPropagation();closeModal();}},'×'),
+    h('h3',{style:{marginBottom:'12px',color:'#a78bfa'}},iconEl('file-text',16),' Rattacher un dossier fictif'),
+    msg,
+    h('div',{className:'fd'},h('label',null,'Dossier fictif'),fromSel),
+    h('div',{className:'fd',style:{marginTop:'14px'}},h('label',null,'Dossier réel existant'),toInp,sugWrap),
+    h('div',{style:{display:'flex',gap:'8px',justifyContent:'flex-end',marginTop:'18px'}},
+      h('button',{type:'button',className:'btn-ghost',onClick:()=>closeModal()},'Annuler'),
+      h('button',{type:'button',className:'btn-fictif-sm',onClick:async()=>{
+        const from=String(fromSel.value||'').trim();
+        const to=String(toInp.value||'').trim();
+        if(!from){ toast('Choisissez un dossier fictif','error'); return; }
+        if(!to){ toast('Indiquez le dossier cible','error'); return; }
+        if(!confirm('Rattacher « '+fictifOfDisplay(from)+' » → « '+to+' » ?\n\nToutes les saisies concernées seront modifiées.')) return;
+        try{
+          const r=await api('/api/saisies/reassign/fictif',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({from_no_dossier:from,to_no_dossier:to})
+          });
+          closeModal();
+          toast((r.updated_saisies||0)+' saisie(s) rattachée(s) → '+r.to_no_dossier,'success');
+          await loadFilters();
+          await loadSaisies();
+        }catch(err){ toast(err.message||'Rattachement impossible','error'); }
+      }},'Rattacher')
+    )
+  );
+  const modal=h('div',{className:'add-row-modal',onClick:e=>{if(e.target===modal)closeModal();}},form);
+  document.getElementById('root').appendChild(modal);
+  if(sources.length===1) fromSel.value=sources[0].no_dossier;
+}
  
 function renderSaisies(){
   const d=S.saisies;
@@ -7440,6 +7536,7 @@ function renderSaisies(){
       headerRight.appendChild(h('button',{className:'btn-danger',onClick:bulkDelete},iconEl('trash',13),' Supprimer ('+selCount+')'));
     }
     headerRight.appendChild(h('button',{className:'btn-sm',onClick:()=>openAddModal(rows[rows.length-1]||null)},iconEl('plus',13),' Ajouter'));
+    headerRight.appendChild(h('button',{className:'btn-fictif-sm',onClick:()=>openFictifReassignModal()},iconEl('file-text',13),' Dossier fictif'));
     headerRight.appendChild(h('button',{className:'btn-ghost',onClick:()=>exportBlob('/api/saisies/export?'+buildParams(),'saisies.xlsx')},iconEl('download',13),' Export'));
   }
  

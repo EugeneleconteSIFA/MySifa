@@ -283,16 +283,15 @@ body.light .slot .line1{color:#1e293b}body.light .slot .line2{color:#334155}body
 .cmt-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-left:4px;vertical-align:middle}
 .wk-lbl.has-cmt,.dh-cell.has-cmt .dh-date-lbl{color:var(--accent)}
 .wk-hdr-row{display:flex;align-items:flex-start;gap:8px;margin-bottom:8px}
-.wk-hdr-row.has-wk-cmt{flex-direction:column;align-items:stretch;gap:4px}
-.wk-hdr-top{display:flex;align-items:center;gap:8px;min-width:0}
-.wk-hdr-actions{display:flex;align-items:center;gap:6px;flex-shrink:0;padding-top:1px}
-.wk-hdr-row.has-wk-cmt .wk-hdr-actions{padding-top:0}
-.wk-hdr-center{flex:1;display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;text-align:left;min-width:0}
-.wk-hdr-row.has-wk-cmt .wk-lbl{margin:0;flex:1;min-width:0;line-height:1.35}
-.wk-hdr-row.has-wk-cmt .wk-cmt-text{margin:0;padding:0}
-.cal-cmt-text{color:var(--blue);font-weight:700;font-size:11px;line-height:1.35;text-align:center;word-break:break-word;max-width:100%}
-.wk-hdr-center .cal-cmt-text,.wk-cmt-text{text-align:left}
-.wk-cmt-text{margin-top:3px;padding:0}
+.wk-hdr-actions{display:flex;align-items:center;gap:6px;flex-shrink:0;height:28px}
+.wk-hdr-text{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;text-align:left;justify-content:center;min-height:28px}
+.wk-hdr-text--solo{align-items:center;text-align:center}
+.wk-hdr-text--solo .wk-lbl{width:100%;text-align:center;margin-bottom:0}
+.wk-hdr-row.has-wk-cmt .wk-hdr-text{align-items:flex-start;text-align:left;min-height:0;justify-content:flex-start}
+.wk-hdr-row.has-wk-cmt .wk-lbl{margin:0;line-height:1.35;width:100%;text-align:left}
+.cal-cmt-text{color:var(--blue);font-weight:700;font-size:11px;line-height:1.35;word-break:break-word;max-width:100%}
+.wk-hdr-text .wk-cmt-text{text-align:left;margin:2px 0 0;padding:0;width:100%}
+.dh-cell .cal-cmt-text,.day-cmt-text{text-align:center}
 .day-cmt-text{padding:3px 6px 5px;width:100%}
 
 .legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}
@@ -1180,15 +1179,11 @@ function weekHeaderRow(mn,lblCls){
   const wkParamBtn=CAN_EDIT?`<button type="button" class="gear-btn" style="padding:3px 6px;flex-shrink:0" onclick="openWeekSettingsModal(${mn.getTime()})" title="Paramètres semaine S${wn}">${icon("settings",13)}</button>`:"";
   const lbl=`<div class="wk-lbl ${lblCls}${hasCmt?" has-cmt":""}" style="margin-bottom:0;cursor:pointer" onclick="openWeekCommentModal('${escAttr(sk)}',${mn.getTime()})" title="Commentaire semaine S${wn}">S${wn} — ${fd(mn)} au ${fd(addD(mn,4))}</div>`;
   const actions=`<div class="wk-hdr-actions">${wkParamBtn}${weekCommentBtn(sk,mn.getTime())}</div>`;
-  if(hasCmt){
-    return `<div class="wk-hdr-row has-wk-cmt">
-      <div class="wk-hdr-top">${actions}${lbl}</div>
-      <div class="cal-cmt-text wk-cmt-text">${escHtml(weekCmt)}</div>
-    </div>`;
-  }
-  return `<div class="wk-hdr-row">
+  const textCls=hasCmt?"wk-hdr-text":"wk-hdr-text wk-hdr-text--solo";
+  const cmtHtml=hasCmt?`<div class="cal-cmt-text wk-cmt-text">${escHtml(weekCmt)}</div>`:"";
+  return `<div class="wk-hdr-row${hasCmt?" has-wk-cmt":""}">
     ${actions}
-    <div class="wk-hdr-center">${lbl}</div>
+    <div class="${textCls}">${lbl}${cmtHtml}</div>
   </div>`;
 }
 function fmtDur(h){const hrs=Math.floor(+h||0);const mins=Math.round(((+h||0)-hrs)*60);return mins>0?`${hrs}h${String(mins).padStart(2,"0")}`:`${hrs}h`}
