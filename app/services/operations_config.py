@@ -26,6 +26,19 @@ _ALLOWED_CATEGORIES = frozenset(
         "autre",
     }
 )
+# Ordre d'affichage (saisie production, paramètres)
+CATEGORIES_UI_ORDER = [
+    "production",
+    "calage",
+    "appro",
+    "arret",
+    "nettoyage",
+    "technique",
+    "pause",
+    "personnel",
+    "annulation",
+    "autre",
+]
 
 
 def operations_json_path() -> str:
@@ -195,4 +208,4 @@ def list_operation_codes(conn) -> list:
 
 
 def categories_for_ui() -> list:
-    return sorted(_ALLOWED_CATEGORIES)
+    return [c for c in CATEGORIES_UI_ORDER if c in _ALLOWED_CATEGORIES]

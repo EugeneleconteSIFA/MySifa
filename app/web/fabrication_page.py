@@ -359,10 +359,20 @@ body.light table.fab-table tr.fab-row-last td{
 .fab-btn-fictif:hover{background:rgba(167,139,250,.28);border-color:#a78bfa}
 .fab-dossier-fictif,.fab-fictif-label{color:#a78bfa;font-weight:800}
 .fab-dossier-ref.fab-dossier-fictif{font-size:15px}
-table.fab-table tr.fab-row-fictif td{color:#a78bfa;font-weight:700}
-table.fab-table tr.fab-row-fictif .fab-op-chip{opacity:.92}
+table.fab-table tr.fab-row-fictif td{color:#a78bfa !important;font-weight:800 !important}
+table.fab-table tr.fab-row-fictif .fab-time,
+table.fab-table tr.fab-row-fictif .fab-metrage,
+table.fab-table tr.fab-row-fictif .fab-comment-cell,
+table.fab-table tr.fab-row-fictif td > span:not(.fab-op-chip-code){color:#a78bfa !important;font-weight:800 !important}
+table.fab-table tr.fab-row-fictif .fab-op-chip{opacity:.95}
+table.fab-table tr.fab-row-fictif.fab-row-last td{background:rgba(167,139,250,.1)}
 body.light .fab-btn-fictif{background:rgba(124,58,237,.12);color:#7c3aed;border-color:rgba(124,58,237,.35)}
-body.light table.fab-table tr.fab-row-fictif td{color:#7c3aed}
+body.light table.fab-table tr.fab-row-fictif td,
+body.light table.fab-table tr.fab-row-fictif .fab-time,
+body.light table.fab-table tr.fab-row-fictif .fab-metrage,
+body.light table.fab-table tr.fab-row-fictif .fab-comment-cell,
+body.light table.fab-table tr.fab-row-fictif td > span:not(.fab-op-chip-code){color:#7c3aed !important}
+body.light table.fab-table tr.fab-row-fictif.fab-row-last td{background:rgba(124,58,237,.08)}
 body.light .fab-dossier-fictif,body.light .fab-fictif-label{color:#7c3aed}
 
 /* Toast */
@@ -563,11 +573,11 @@ table.fab-traca-table tr:last-child td{border-bottom:none}
 /* ── Operations config (SQLite — Paramètres > Opérations) ───── */
 let OPS = {};
 const CAT_LABELS = {
-  personnel:"Personnel",production:"Production",calage:"Calage",arret:"Arrêts machine",
-  appro:"Approvisionnement",nettoyage:"Nettoyage",technique:"Technique",pause:"Pauses",
-  annulation:"Annulation",autre:"Autre"
+  production:"Production",calage:"Calage",appro:"Approvisionnement",arret:"Arrêts machine",
+  nettoyage:"Nettoyage",technique:"Interventions technique",pause:"Pauses",
+  personnel:"Personnel",annulation:"Annulation",autre:"Autre"
 };
-const DEFAULT_CAT_ORDER = ["personnel","production","calage","arret","appro","nettoyage","technique","pause","annulation","autre"];
+const DEFAULT_CAT_ORDER = ["production","calage","appro","arret","nettoyage","technique","pause","personnel","annulation","autre"];
 let CAT_ORDER = [...DEFAULT_CAT_ORDER];
 
 function rebuildCatOrder(ops, serverCategories){
@@ -781,7 +791,14 @@ function fabDossierRefLabel(d){
 }
 
 function isFictifSaisieRow(s){
-  return isFictifDossierRef(s.no_dossier);
+  if(isFictifDossierRef(s.no_dossier)) return true;
+  if(isFictifDossierRef(s.reference)) return true;
+  const d = S.dossier;
+  if(d && (d.fictif || isFictifDossierRef(d.reference))){
+    const ref = String(d.reference||'').trim();
+    if(ref && String(s.no_dossier||'').trim()===ref) return true;
+  }
+  return false;
 }
 
 function isArretSaisie(s){
@@ -1717,15 +1734,18 @@ function renderMain(){
 
         const opNom = (s.operateur_nom || s.operateur || '—');
         const fictifRow = isFictifSaisieRow(s);
+        const opLblStyle = fictifRow
+          ? null
+          : {color:isLast?'var(--text)':'var(--text2)',fontWeight:isLast?'700':'500'};
         return h('tr',{className:'fab-table-row'+(isLast?' fab-row-last':'')+(fictifRow?' fab-row-fictif':'')},
           h('td',null, h('span',{className:'fab-time'}, fmtTime(s.date_operation))),
-          ...(isAdminView ? [h('td',null, h('span',{style:{fontWeight:'800',color:'var(--text)'}}, opNom))] : []),
+          ...(isAdminView ? [h('td',null, h('span',{style:fictifRow?undefined:{fontWeight:'800',color:'var(--text)'}}, opNom))] : []),
           h('td',null,
             h('span',{className:'fab-op-chip',style:{background:chipColor+'22',color:chipColor}},
               h('span',{className:'fab-op-chip-code'},code)
             )
           ),
-          h('td',null, h('span',{style:{color:isLast?'var(--text)':'var(--text2)',fontWeight:isLast?'700':'500'}},
+          h('td',null, h('span',{...(opLblStyle?{style:opLblStyle}:{})},
             op.label||s.operation||code)),
           h('td',null, metrageText ? h('span',{className:'fab-metrage'},metrageText) : null),
           h('td',null, s.commentaire
