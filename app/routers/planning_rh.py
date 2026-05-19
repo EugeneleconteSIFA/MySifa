@@ -11,7 +11,7 @@ from fastapi import APIRouter, Request, HTTPException
 
 from database import get_db
 from app.services.auth_service import get_current_user
-from config import ROLES_PLANNING_RH_VIEW, ROLES_PLANNING_RH_EDIT
+from config import ROLES_PLANNING_RH_VIEW, ROLES_PLANNING_RH_EDIT, PLANNING_RH_EXCLUDED_NOMS
 
 router = APIRouter(prefix="/api/rh", tags=["planning_rh"])
 
@@ -66,16 +66,57 @@ def _week_bounds(semaine: str):
         raise HTTPException(400, f"Format de semaine invalide : '{semaine}' (attendu YYYY-WNN)")
 
 
+def _norm_person_nom(val) -> str:
+    return str(val or "").strip().lower()
+
+
+def _planning_rh_nom_excluded(nom) -> bool:
+    return _norm_person_nom(nom) in PLANNING_RH_EXCLUDED_NOMS
+
+
+def _planning_rh_staff_sql_filter() -> tuple[str, list]:
+    """Clause SQL + paramètres pour exclure les profils non planifiables."""
+    if not PLANNING_RH_EXCLUDED_NOMS:
+        return "", []
+    clause = " AND " + " AND ".join("lower(trim(nom)) != ?" for _ in PLANNING_RH_EXCLUDED_NOMS)
+    return clause, list(PLANNING_RH_EXCLUDED_NOMS)
+
+
+def _filter_planning_rh_user_rows(rows, nom_key: str = "nom"):
+    out = []
+    for r in rows:
+        d = dict(r)
+        nom = d.get(nom_key) or d.get("user_nom") or ""
+        if _planning_rh_nom_excluded(nom):
+            continue
+        out.append(d)
+    return out
+
+
+def _assert_planning_rh_user_allowed(conn, user_id: int) -> None:
+    row = conn.execute(
+        "SELECT nom FROM users WHERE id = ? AND actif = 1",
+        (user_id,),
+    ).fetchone()
+    if not row:
+        raise HTTPException(404, "Utilisateur introuvable")
+    if _planning_rh_nom_excluded(row["nom"]):
+        raise HTTPException(400, "Ce profil n'est pas planifiable dans le planning RH")
+
+
 # ── Personnel planifiable ────────────────────────────────────────
 @router.get("/personnel")
 def get_personnel(request: Request):
     _require_view(request)
+    staff_filter, staff_params = _planning_rh_staff_sql_filter()
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT id, nom, email, role, machine_id, actif
+            f"""SELECT id, nom, email, role, machine_id, actif
                FROM users
-               WHERE (role IN ('fabrication','logistique') OR email = 'mlesaffre@sifa.pro') AND actif = 1
-               ORDER BY nom COLLATE NOCASE"""
+               WHERE (role IN ('fabrication','logistique') OR email = 'mlesaffre@sifa.pro')
+                 AND actif = 1{staff_filter}
+               ORDER BY nom COLLATE NOCASE""",
+            staff_params,
         ).fetchall()
     return {"personnel": [dict(r) for r in rows]}
 
@@ -120,7 +161,7 @@ def get_planning(
         q += " ORDER BY p.semaine, u.nom COLLATE NOCASE"
 
         rows = conn.execute(q, params).fetchall()
-    return {"planning": [dict(r) for r in rows]}
+    return {"planning": _filter_planning_rh_user_rows(rows, "user_nom")}
 
 
 @router.post("/planning")
@@ -149,6 +190,8 @@ async def create_planning(request: Request):
         ).fetchone()
         if not user_row:
             raise HTTPException(404, "Utilisateur introuvable")
+        if _planning_rh_nom_excluded(user_row["nom"]):
+            raise HTTPException(400, "Ce profil n'est pas planifiable dans le planning RH")
 
         # Déjà affecté cette semaine ?
         existing = conn.execute(
@@ -319,7 +362,7 @@ def get_conges(
             q += " WHERE " + " AND ".join(conds)
         q += " ORDER BY c.date_debut DESC"
         rows = conn.execute(q, params).fetchall()
-    return {"conges": [dict(r) for r in rows]}
+    return {"conges": _filter_planning_rh_user_rows(rows, "user_nom")}
 
 
 @router.post("/conges")
@@ -355,6 +398,8 @@ async def create_conge(request: Request):
         ).fetchone()
         if not user_row:
             raise HTTPException(404, "Utilisateur introuvable")
+        if _planning_rh_nom_excluded(user_row["nom"]):
+            raise HTTPException(400, "Ce profil n'est pas planifiable dans le planning RH")
 
         # Conflits avec des affectations planning existantes
         existing_assignments = conn.execute(
@@ -460,11 +505,14 @@ def get_soldes(request: Request, annee: Optional[int] = None):
     _require_view(request)
     year = annee or datetime.now().year
 
+    staff_filter, staff_params = _planning_rh_staff_sql_filter()
     with get_db() as conn:
         staff = conn.execute(
-            """SELECT id, nom FROM users
-               WHERE (role IN ('fabrication','logistique') OR email = 'mlesaffre@sifa.pro') AND actif = 1
-               ORDER BY nom COLLATE NOCASE"""
+            f"""SELECT id, nom FROM users
+               WHERE (role IN ('fabrication','logistique') OR email = 'mlesaffre@sifa.pro')
+                 AND actif = 1{staff_filter}
+               ORDER BY nom COLLATE NOCASE""",
+            staff_params,
         ).fetchall()
 
         soldes_raw = conn.execute(
@@ -530,6 +578,7 @@ async def update_solde(request: Request):
 
     now = datetime.now().isoformat()
     with get_db() as conn:
+        _assert_planning_rh_user_allowed(conn, int(user_id))
         conn.execute(
             """INSERT INTO rh_conges_soldes
                    (user_id, annee, quota_cp, quota_rtt, note, updated_by, updated_at)

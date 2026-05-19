@@ -126,6 +126,9 @@ ROLES_PLANNING_RH_VIEW  = {
 ROLES_PLANNING_RH_EDIT  = {ROLE_DIRECTION, ROLE_SUPERADMIN}
 ROLES_PLANNING_RH_STAFF = {ROLE_FABRICATION, ROLE_LOGISTIQUE}
 
+# Profils utilisateurs exclus du planning RH (comparaison sur nom normalisé : trim + minuscules).
+PLANNING_RH_EXCLUDED_NOMS = frozenset({"logistique sifa"})
+
 
 def default_app_access_for_role(role: str) -> dict:
     """Accès applications issus du seul rôle (avant surcharges utilisateur)."""

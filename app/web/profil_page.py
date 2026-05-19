@@ -111,8 +111,10 @@ body.light .theme-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 18px rg
 /* ── Main ── */
 .main{flex:1;padding:28px;overflow:auto}
 .container{max-width:680px;margin:0 auto}
+.page-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:22px}
+.page-head-text{flex:1;min-width:0}
 h1{font-size:22px;font-weight:700;margin:0 0 4px}
-.subtitle{font-size:13px;color:var(--muted);margin-bottom:22px}
+.subtitle{font-size:13px;color:var(--muted);margin:0}
 
 /* ── Mobile topbar ── */
 .mobile-topbar{display:none;align-items:center;gap:10px;margin-bottom:14px}
@@ -146,7 +148,36 @@ body.sb-open .sidebar-overlay{display:block}
 
 /* ── Formulaire profil ── */
 .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px 20px;margin-bottom:16px}
-.card h2{font-size:15px;font-weight:700;margin:0 0 14px}
+.card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+.card h2{font-size:15px;font-weight:700;margin:0}
+.prof-ring{position:relative;flex-shrink:0;width:40px;height:40px}
+.prof-ring svg{display:block;width:40px;height:40px}
+.prof-ring-track{stroke:var(--border)}
+.prof-ring-bar{stroke:var(--accent);stroke-linecap:round;transition:stroke-dashoffset .25s ease}
+.prof-ring[data-tier="low"] .prof-ring-bar{stroke:var(--danger)}
+.prof-ring[data-tier="mid"] .prof-ring-bar{stroke:var(--warn)}
+.prof-ring[data-tier="high"] .prof-ring-bar{stroke:var(--ok)}
+.prof-ring-label{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:800;color:var(--text);letter-spacing:-.02em;
+}
+.prof-modal-overlay{
+  position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.55);
+  display:flex;align-items:center;justify-content:center;padding:20px;
+}
+.prof-modal-card{
+  background:var(--card);border:1px solid var(--border);border-radius:16px;
+  padding:26px 24px 20px;width:min(400px,100%);box-shadow:0 24px 64px rgba(0,0,0,.45);
+  text-align:center;
+}
+.prof-modal-title{font-size:16px;font-weight:700;color:var(--text);margin-bottom:8px}
+.prof-modal-text{font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:18px}
+.prof-modal-ok{
+  width:100%;padding:12px;border-radius:10px;border:none;background:var(--accent);
+  color:#0a0e17;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;
+  transition:filter .15s;
+}
+.prof-modal-ok:hover{filter:brightness(1.06)}
 .role-pill{display:inline-block;font-size:10px;font-weight:700;text-transform:uppercase;
   letter-spacing:.5px;color:var(--accent);background:var(--accent-bg);
   padding:4px 10px;border-radius:999px;margin-bottom:14px}
@@ -272,8 +303,13 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
         </button>
       </div>
 
-      <h1>Mon profil</h1>
-      <p class="subtitle" id="page-sub">Vos informations personnelles.</p>
+      <div class="page-head" id="page-head">
+        <div class="page-head-text">
+          <h1>Mon profil</h1>
+          <p class="subtitle" id="page-sub">Vos informations personnelles.</p>
+        </div>
+        <div id="page-head-ring" aria-hidden="true"></div>
+      </div>
 
       <!-- Onglet Mes informations -->
       <div class="pane-tab active" id="pane-info">
@@ -365,6 +401,74 @@ function showTab(tab){
   closeSidebar();
 }
 
+// ── Complétion profil ─────────────────────────────────────────────
+const PROFILE_FIELDS=['nom','email','telephone','adresse','date_naissance'];
+function profileFieldFilled(val){return String(val==null?'':val).trim().length>0;}
+function profileCompletionPercent(u){
+  if(!u||typeof u!=='object')return 0;
+  let n=0;
+  PROFILE_FIELDS.forEach(k=>{if(profileFieldFilled(u[k]))n+=1;});
+  return Math.round((n/PROFILE_FIELDS.length)*100);
+}
+function profileRingTier(pct){
+  if(pct>=80)return 'high';
+  if(pct>=40)return 'mid';
+  return 'low';
+}
+function profileRingHtml(pct){
+  const p=Math.max(0,Math.min(100,Number(pct)||0));
+  const r=14;const c=2*Math.PI*r;const off=c*(1-p/100);
+  const tier=profileRingTier(p);
+  return '<span class="prof-ring" data-tier="'+tier+'" title="Profil complété à '+p+' %">'+
+    '<svg viewBox="0 0 34 34" aria-hidden="true">'+
+    '<circle class="prof-ring-track" cx="17" cy="17" r="'+r+'" fill="none" stroke-width="3"/>'+
+    '<circle class="prof-ring-bar" cx="17" cy="17" r="'+r+'" fill="none" stroke-width="3"'+
+    ' stroke-dasharray="'+c.toFixed(2)+'" stroke-dashoffset="'+off.toFixed(2)+'"'+
+    ' transform="rotate(-90 17 17)"/>'+
+    '</svg>'+
+    '<span class="prof-ring-label">'+p+'%</span>'+
+    '</span>';
+}
+function profileCompleteStorageKey(){
+  return 'mysifa.profil.complete100.'+(ME&&ME.id?ME.id:'');
+}
+function showProfileCompleteModal(){
+  const old=document.getElementById('prof-complete-modal');
+  if(old)old.remove();
+  const overlay=document.createElement('div');
+  overlay.id='prof-complete-modal';
+  overlay.className='prof-modal-overlay';
+  overlay.innerHTML=
+    '<div class="prof-modal-card" role="dialog" aria-labelledby="prof-modal-title">'+
+    '<div class="prof-modal-title" id="prof-modal-title">Profil complété</div>'+
+    '<p class="prof-modal-text">Merci d\'avoir complété votre profil.</p>'+
+    '<button type="button" class="prof-modal-ok">OK</button>'+
+    '</div>';
+  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
+  overlay.querySelector('.prof-modal-ok').onclick=()=>overlay.remove();
+  document.body.appendChild(overlay);
+}
+function maybeShowProfileCompleteModal(prevPct,newPct){
+  const key=profileCompleteStorageKey();
+  if(newPct<100){
+    try{localStorage.removeItem(key);}catch(e){}
+    return;
+  }
+  if(prevPct>=100)return;
+  try{
+    if(localStorage.getItem(key))return;
+    localStorage.setItem(key,'1');
+  }catch(e){}
+  showProfileCompleteModal();
+}
+function updateProfileRings(u){
+  const pct=profileCompletionPercent(u);
+  const ring=profileRingHtml(pct);
+  const head=document.getElementById('page-head-ring');
+  if(head)head.innerHTML=ring;
+  return ring;
+}
+
 // ── Onglet Mes informations ───────────────────────────────────────
 function fieldHtml(label,id,type,val){
   return `<div class="field"><label for="${id}">${label}</label><input id="${id}" type="${type||'text'}" value="${esc(val)}"></div>`;
@@ -373,10 +477,14 @@ function fieldHtml(label,id,type,val){
 function renderInfo(){
   const u=ME||{};
   const role=ROLE_LABELS[u.role]||u.role||'';
+  const ring=updateProfileRings(u);
   document.getElementById('pane-info').innerHTML=`
     <div class="card">
       <div class="role-pill">${esc(role)}</div>
-      <h2>Informations personnelles</h2>
+      <div class="card-head">
+        <h2>Informations personnelles</h2>
+        ${ring}
+      </div>
       <form id="profil-form" onsubmit="return false;">
         ${fieldHtml('Nom complet','f-nom','text',u.nom)}
         ${fieldHtml('Email','f-email','email',u.email)}
@@ -400,6 +508,7 @@ function renderInfo(){
 async function saveInfo(){
   const btn=document.getElementById('btn-save');
   if(btn)btn.disabled=true;
+  const prevPct=profileCompletionPercent(ME);
   const body={
     nom:(document.getElementById('f-nom')?.value||'').trim(),
     email:(document.getElementById('f-email')?.value||'').trim(),
@@ -414,9 +523,12 @@ async function saveInfo(){
   try{
     await api('/api/auth/me',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     ME=await api('/api/auth/me');
-    toast('Profil mis à jour',true);
+    const newPct=profileCompletionPercent(ME);
+    const completedNow=prevPct<100&&newPct===100;
+    if(!completedNow)toast('Profil mis à jour',true);
     renderInfo();
     updateUserChip();
+    maybeShowProfileCompleteModal(prevPct,newPct);
   }catch(e){
     toast(e.message||'Enregistrement impossible',false);
   }finally{
