@@ -25,15 +25,20 @@ body.light{
 .tb{
   -webkit-app-region:drag;
   display:flex;align-items:center;justify-content:space-between;
-  padding:0 12px;height:36px;
+  padding:0 10px;height:28px;
   background:var(--card);border-bottom:1px solid var(--border);
   flex-shrink:0;
 }
-.tb-title{font-size:12px;font-weight:700;color:var(--accent);letter-spacing:.4px;display:flex;align-items:center;gap:6px}
-.tb-actions{-webkit-app-region:no-drag;display:flex;gap:4px}
+.tb-title{font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.3px;display:flex;align-items:center;gap:5px}
+.tb-sync{
+  font-size:8px;font-weight:500;color:var(--muted);letter-spacing:0;
+  line-height:1;white-space:nowrap;
+  -webkit-app-region:no-drag;
+}
+.tb-actions{-webkit-app-region:no-drag;display:flex;align-items:center;gap:3px}
 .bi{
   background:none;border:none;color:var(--muted);cursor:pointer;
-  padding:4px 7px;border-radius:5px;font-size:13px;line-height:1;
+  padding:2px 5px;border-radius:5px;font-size:12px;line-height:1;
   transition:background .15s,color .15s;
 }
 .bi:hover{color:var(--text);background:rgba(255,255,255,.07)}
@@ -83,8 +88,6 @@ body.light{
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .s-production .dot{animation:pulse 2s infinite}
 .s-arret .dot{animation:pulse 1s infinite}
-/* footer */
-.footer{padding:3px 12px;font-size:9px;color:var(--muted);text-align:right;border-top:1px solid var(--border)}
 /* état hors-ligne / erreur */
 .offline{
   display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -128,7 +131,8 @@ body.light{
 <body>
 <div class="tb">
   <span class="tb-title">🏭 MyProd Widget</span>
-  <div class="tb-actions">
+  <span class="tb-sync" id="footer"></span>
+  <motion class="tb-actions">
     <button class="bi" id="btn-refresh" title="Actualiser">↺</button>
     <button class="bi" id="btn-theme" title="Thème">◐</button>
     <button class="bi close" id="btn-close" title="Fermer">✕</button>

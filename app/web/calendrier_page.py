@@ -253,12 +253,11 @@ function showToast(msg,type){
 
 function applyTheme(){
   if(window.MySifaTheme){
-    MySifaTheme.apply();
-    syncThemeBtn();
-    return;
+    MySifaTheme.initFromStorage();
+  }else{
+    const mode=localStorage.getItem('theme')||'dark';
+    document.body.classList.toggle('light',mode==='light');
   }
-  const mode=localStorage.getItem('mysifa_theme')||'dark';
-  document.body.classList.toggle('light',mode==='light');
   syncThemeBtn();
 }
 
@@ -350,12 +349,15 @@ function isMultiDay(ev){return ev.all_day&&spanDays(ev)>1;}
 async function api(path){
   const r=await fetch(path,{credentials:'include'});
   if(r.status===401){location.href='/?next=/calendrier';throw new Error('auth');}
+  if(r.status===403){showToast('Accès réservé au super administrateur.','danger');throw new Error('auth');}
   if(!r.ok){
     let d='Erreur';
     try{const j=await r.json();d=j.detail?(typeof j.detail==='string'?j.detail:JSON.stringify(j.detail)):d;}catch(e){}
     throw new Error(d);
   }
-  return r.json();
+  const ct=r.headers.get('content-type')||'';
+  if(ct.includes('application/json'))return r.json();
+  return null;
 }
 
 async function fetchEvents(){
@@ -607,7 +609,7 @@ document.getElementById('btn-theme').onclick=()=>{
   if(window.MySifaTheme)MySifaTheme.toggleMode();
   else{
     const next=document.body.classList.contains('light')?'dark':'light';
-    localStorage.setItem('mysifa_theme',next);
+    localStorage.setItem('theme',next);
     document.body.classList.toggle('light',next==='light');
   }
   syncThemeBtn();
@@ -618,18 +620,26 @@ document.getElementById('btn-logout').onclick=async()=>{
 };
 
 (async function init(){
-  applyTheme();
-  loadVisible();
-  renderToggles();
-  document.querySelectorAll('.cal-view-tabs .cal-btn[data-view="month"]')[0]?.classList.add('primary');
   try{
+    applyTheme();
+    loadVisible();
+    renderToggles();
+    document.querySelectorAll('.cal-view-tabs .cal-btn[data-view="month"]')[0]?.classList.add('primary');
     ME=await api('/api/auth/me');
-    if(ME&&window.MySifaTheme)MySifaTheme.mergeFromUser(ME);
-    document.getElementById('uc-name').textContent=ME.nom||'—';
-    document.getElementById('uc-role').textContent=ROLE_LABELS[ME.role]||ME.role||'—';
+    if(!ME){
+      location.href='/?next=/calendrier';
+      return;
+    }
+    if(window.MySifaTheme)MySifaTheme.mergeFromUser(ME);
+    const ucName=document.getElementById('uc-name');
+    const ucRole=document.getElementById('uc-role');
+    if(ucName)ucName.textContent=ME.nom||'—';
+    if(ucRole)ucRole.textContent=ROLE_LABELS[ME.role]||ME.role||'—';
     syncThemeBtn();
-  }catch(e){}
-  fetchEvents();
+    await fetchEvents();
+  }catch(e){
+    if(e.message!=='auth')showToast(e.message||'Initialisation impossible','danger');
+  }
 })();
 </script>
 </body>
