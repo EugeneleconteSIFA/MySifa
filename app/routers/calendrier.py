@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import calendar
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -13,6 +13,7 @@ from app.routers.planning import (
     _compute_timeline_slots,
     _enforce_single_en_cours,
     _fmt_ts,
+    _hours_for_date_factory,
     _load_planning_calendar_maps_range,
     _parse_planned_dt as _parse_planned_dt_planning,
 )
@@ -225,6 +226,62 @@ def _production_events_for_machine(
     return out
 
 
+def _compute_day_windows(
+    conn,
+    prod_machine_ids: list[int],
+    d0: date,
+    d1: date,
+) -> dict[str, dict[str, float]]:
+    """Plage horaire d'affichage par jour (union des machines production), alignée planning."""
+    if not prod_machine_ids:
+        return {}
+
+    unique_ids = list(dict.fromkeys(prod_machine_ids))
+    today = date.today()
+    weeks_back = max(12, (today - d0).days // 7 + 2)
+    weeks_forward = max(12, (d1 - today).days // 7 + 2)
+
+    getters: list[Any] = []
+    for mid in unique_ids:
+        row = conn.execute("SELECT * FROM machines WHERE id=?", (mid,)).fetchone()
+        if not row:
+            continue
+        m = dict(row)
+        configs, off_days, day_worked_map, day_horaires_map = _load_planning_calendar_maps_range(
+            conn, mid, weeks_back=weeks_back, weeks_forward=weeks_forward
+        )
+        getters.append(
+            _hours_for_date_factory(m, configs, off_days, day_worked_map, day_horaires_map)
+        )
+
+    if not getters:
+        return {}
+
+    default_start, default_end = 5.0, 21.0
+    windows: dict[str, dict[str, float]] = {}
+    cur = d0
+    while cur <= d1:
+        dkey = cur.isoformat()
+        dt = datetime(cur.year, cur.month, cur.day)
+        starts: list[float] = []
+        ends: list[float] = []
+        for get_h in getters:
+            win = get_h(dt)
+            if win:
+                starts.append(float(win[0]))
+                ends.append(float(win[1]))
+        if starts:
+            windows[dkey] = {"h_start": min(starts), "h_end": max(ends)}
+        else:
+            windows[dkey] = {
+                "h_start": default_start,
+                "h_end": default_end,
+                "off": 1.0,
+            }
+        cur += timedelta(days=1)
+    return windows
+
+
 @router.get("/api/calendrier/events")
 def list_events(
     request: Request,
@@ -246,12 +303,15 @@ def list_events(
     if unknown:
         raise HTTPException(400, detail=f"Calendriers inconnus : {', '.join(sorted(unknown))}")
     if not cals:
-        return []
+        return {"events": [], "day_windows": {}}
 
     out: list[dict] = []
+    prod_machine_ids: list[int] = []
+    day_windows: dict[str, dict[str, float]] = {}
 
     with get_db() as conn:
         prod_machines = _resolve_production_machines(conn, cals)
+        prod_machine_ids = list(prod_machines.values())
         for cal_key, machine_id in prod_machines.items():
             out.extend(
                 _production_events_for_machine(conn, machine_id, cal_key, d0, d1)
@@ -449,5 +509,9 @@ def list_events(
                     )
                 )
 
+        if prod_machine_ids:
+            day_windows = _compute_day_windows(conn, prod_machine_ids, d0, d1)
+
     out.sort(key=lambda e: (e["debut"], e["calendrier"], e["id"]))
-    return out
+
+    return {"events": out, "day_windows": day_windows}

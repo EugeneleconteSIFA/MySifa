@@ -117,22 +117,31 @@
     if (sp.mode != null) prefs.mode = sp.mode;
     savePrefs(prefs);
     applyPrefs(prefs);
+    if (global.MySifaCalendar && typeof global.MySifaCalendar.mergeFromUser === 'function') {
+      global.MySifaCalendar.mergeFromUser(user);
+    }
     return prefs;
   }
 
-  function syncToServer(prefs) {
+  function themePrefsPayload(prefs) {
     prefs = prefs || loadPrefs();
+    var tp = {
+      palette: prefs.palette,
+      style: prefs.style,
+      mode: prefs.mode,
+    };
+    if (global.MySifaCalendar && typeof global.MySifaCalendar.buildThemePrefsPayload === 'function') {
+      return global.MySifaCalendar.buildThemePrefsPayload(tp);
+    }
+    return tp;
+  }
+
+  function syncToServer(prefs) {
     return fetch('/api/auth/me', {
       method: 'PUT',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        theme_prefs: {
-          palette: prefs.palette,
-          style: prefs.style,
-          mode: prefs.mode,
-        },
-      }),
+      body: JSON.stringify({ theme_prefs: themePrefsPayload(prefs) }),
     }).catch(function () {});
   }
 
@@ -150,6 +159,7 @@
     setPrefs: setPrefs,
     mergeFromUser: mergeFromUser,
     syncToServer: syncToServer,
+    themePrefsPayload: themePrefsPayload,
     parseThemePrefs: parseThemePrefs,
   };
 

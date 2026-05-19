@@ -58,6 +58,12 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
 .cal-toggle input{appearance:none;width:16px;height:16px;border:2px solid var(--border);border-radius:4px;background:var(--bg);cursor:pointer;position:relative;flex-shrink:0}
 .cal-toggle input:checked{background:var(--cal-c);border-color:var(--cal-c)}
 .cal-toggle input:checked::after{content:'';position:absolute;left:4px;top:1px;width:4px;height:8px;border:solid #0a0e17;border-width:0 2px 2px 0;transform:rotate(45deg)}
+.cal-gear-btn{
+  flex-shrink:0;display:flex;align-items:center;justify-content:center;width:26px;height:26px;
+  border:none;border-radius:6px;background:transparent;color:var(--muted);cursor:pointer;padding:0;
+  transition:color .15s,background .15s;
+}
+.cal-gear-btn:hover{color:var(--accent);background:var(--accent-bg)}
 .back-mysifa{border:none!important;background:transparent!important;font-weight:400!important;color:var(--text2)!important;padding:8px 10px!important}
 .back-mysifa:hover{color:var(--text)!important;background:transparent!important}
 .back-mysifa .wm{font-weight:800;color:var(--text)}.back-mysifa .wm span{color:var(--accent)}
@@ -93,7 +99,7 @@ body.sb-open .sidebar-overlay{display:block}
 .cal-week{border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:8px;background:var(--card)}
 .cal-week-bars{position:relative;min-height:0;display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--border)}
 .cal-week-bars:empty{display:none}
-.cal-mbar{margin:2px 2px 0;padding:2px 6px;font-size:10px;font-weight:700;border-radius:4px;color:#0a0e17;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;grid-row:1}
+.cal-mbar{margin:2px 3px 0;padding:2px 8px;font-size:10px;font-weight:700;border-radius:4px;border-width:2px;border-style:solid;color:#0a0e17;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;grid-row:1;box-shadow:0 1px 2px rgba(0,0,0,.15)}
 .cal-days{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--border)}
 .cal-day{min-height:100px;background:var(--bg);padding:6px;display:flex;flex-direction:column;gap:4px}
 .cal-day.other{opacity:.45}
@@ -101,7 +107,7 @@ body.sb-open .sidebar-overlay{display:block}
 .cal-day-num{font-size:12px;font-weight:700;color:var(--text2);flex-shrink:0}
 .cal-day.other .cal-day-num{color:var(--muted)}
 .cal-day-events{flex:1;display:flex;flex-direction:column;gap:3px;min-height:0}
-.cal-pill{font-size:10px;font-weight:600;padding:2px 6px;border-radius:4px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#0a0e17;line-height:1.35}
+.cal-pill{font-size:10px;font-weight:600;padding:2px 8px;border-radius:4px;border-width:2px;border-style:solid;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#0a0e17;line-height:1.35;box-shadow:0 1px 2px rgba(0,0,0,.15)}
 .cal-more{font-size:10px;color:var(--muted);font-weight:700;padding:0 4px;cursor:pointer}
 /* Week / Day time grid */
 .cal-time-wrap{display:flex;min-width:640px;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--card)}
@@ -113,18 +119,19 @@ body.sb-open .sidebar-overlay{display:block}
 body.light .cal-allday-row{background:#f8fafc}
 .cal-allday-label{width:48px;flex-shrink:0;font-size:9px;font-weight:700;color:var(--muted);display:flex;align-items:center;justify-content:flex-end;padding:4px;border-right:1px solid var(--border)}
 .cal-allday-cols{flex:1;display:grid;position:relative;min-height:28px}
-.cal-allday-pill{font-size:10px;font-weight:600;padding:2px 6px;border-radius:4px;margin:2px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#0a0e17}
+.cal-allday-pill{font-size:10px;font-weight:600;padding:2px 8px;border-radius:4px;border-width:2px;border-style:solid;margin:2px 3px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#0a0e17;box-shadow:0 1px 2px rgba(0,0,0,.15)}
 .cal-cols-row{flex:1;display:grid;position:relative}
 .cal-col{border-left:1px solid var(--border);position:relative}
 .cal-col:first-child{border-left:none}
 .cal-col-head{text-align:center;font-size:11px;font-weight:700;padding:8px 4px;border-bottom:1px solid var(--border);background:var(--bg)}
 .cal-col-head.today{color:var(--accent)}
-.cal-col-slots{position:relative;height:1152px;width:100%;overflow:visible}
+.cal-col-slots{position:relative;width:100%;overflow:visible}
 .cal-col{min-width:0;overflow:visible}
 .cal-slot-line{position:absolute;left:0;right:0;height:1px;background:var(--border)}
 .cal-ev{
-  position:absolute;border-radius:6px;padding:4px 6px;font-size:10px;font-weight:700;color:#0a0e17;
-  overflow:hidden;cursor:pointer;line-height:1.3;box-sizing:border-box;
+  position:absolute;border-radius:6px;padding:4px 8px;font-size:10px;font-weight:700;color:#0a0e17;
+  border-width:2px;border-style:solid;overflow:hidden;cursor:pointer;line-height:1.3;box-sizing:border-box;
+  box-shadow:0 1px 3px rgba(0,0,0,.2);
 }
 .cal-day-single .cal-cols-row{grid-template-columns:1fr}
 /* Popover */
@@ -149,6 +156,7 @@ body.light .cal-allday-row{background:#f8fafc}
 </head>
 <body class="has-topbar">
 <script src="/static/mysifa_theme.js"></script>
+<script src="/static/mysifa_calendar.js"></script>
 <div class="sidebar-overlay" id="sb-ov"></div>
 <div class="layout">
   <aside class="sidebar">
@@ -222,24 +230,18 @@ body.light .cal-allday-row{background:#f8fafc}
   </main>
 </div>
 <script>
-const CAL_DEFS=[
-  {id:'production_1',label:'Cohésio 1',color:'#22d3ee'},
-  {id:'production_2',label:'Cohésio 2',color:'#3A7BD5'},
-  {id:'production_3',label:'DSI',color:'#a78bfa'},
-  {id:'production_4',label:'Repiquage',color:'#34d399'},
-  {id:'conges',label:'Congés',color:'#fbbf24'},
-  {id:'anniversaires',label:'Anniversaires',color:'#34d399'},
-  {id:'feries',label:'Jours fériés',color:'#f87171'},
-  {id:'paie',label:'Paie',color:'#a78bfa'},
-  {id:'expeditions',label:'Expéditions',color:'#f97316'}
-];
+const CAL_DEFS=window.MySifaCalendar?MySifaCalendar.CAL_DEFS:[];
+const ICO_CAL_GEAR='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
 const PROD_CAL_IDS=['production_1','production_2','production_3','production_4'];
 const LS_VISIBLE='mysifa_cal_visible';
 const MOIS=['','janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
 const JOURS=['lun','mar','mer','jeu','ven','sam','dim'];
 const ROLE_LABELS={direction:'Direction',administration:'Administration',fabrication:'Fabrication',logistique:'Logistique',comptabilite:'Comptabilité',expedition:'Expédition',commercial:'Commercial',superadmin:'Super admin'};
 
-let S={view:'month',anchor:new Date(),events:[],loading:false,visible:{},pop:null};
+const PX_PER_HOUR=48;
+const CAL_SLOT_PAD_X=3;
+const DEFAULT_DAY_WIN={hStart:5,hEnd:21};
+let S={view:'month',anchor:new Date(),events:[],dayWindows:{},loading:false,visible:{},pop:null};
 let ME=null;
 
 function pad2(n){return String(n).padStart(2,'0');}
@@ -311,12 +313,16 @@ function saveVisible(){
 function renderToggles(){
   const box=document.getElementById('cal-toggles');
   if(!box)return;
-  box.innerHTML=CAL_DEFS.map(c=>`
-    <label class="cal-toggle" style="--cal-c:${c.color}">
+  box.innerHTML=CAL_DEFS.map(c=>{
+    const gearUrl=window.MySifaCalendar?MySifaCalendar.profilUrl(c.id):'/profil?tab=prefs';
+    return `<label class="cal-toggle" style="--cal-c:${calColor(c.id)}">
       <span class="cal-dot"></span>
       <span class="flex1">${esc(c.label)}</span>
+      <button type="button" class="cal-gear-btn" title="Couleur du calendrier" aria-label="Réglage couleur ${esc(c.label)}"
+        onclick="event.preventDefault();event.stopPropagation();location.href='${gearUrl}'">${ICO_CAL_GEAR}</button>
       <input type="checkbox" data-cal="${c.id}" ${S.visible[c.id]?'checked':''}>
-    </label>`).join('');
+    </label>`;
+  }).join('');
   box.querySelectorAll('input[data-cal]').forEach(inp=>{
     inp.onchange=()=>{
       S.visible[inp.dataset.cal]=inp.checked;
@@ -329,7 +335,25 @@ function renderToggles(){
 function activeCalList(){
   return CAL_DEFS.filter(c=>S.visible[c.id]).map(c=>c.id);
 }
-function calColor(id){const c=CAL_DEFS.find(x=>x.id===id);return c?c.color:'var(--accent)';}
+function calColor(id){
+  if(window.MySifaCalendar)return MySifaCalendar.colorFor(id);
+  const c=CAL_DEFS.find(x=>x.id===id);
+  return c?c.color:'var(--accent)';
+}
+function darkenHex(hex,f){
+  const m=String(hex||'').trim().match(/^#([0-9a-f]{6})$/i);
+  if(!m)return '#0f172a';
+  const k=1-Math.min(0.5,Math.max(0,f==null?0.32:f));
+  const r=Math.min(255,Math.max(0,Math.round(parseInt(m[1].slice(0,2),16)*k)));
+  const g=Math.min(255,Math.max(0,Math.round(parseInt(m[1].slice(2,4),16)*k)));
+  const b=Math.min(255,Math.max(0,Math.round(parseInt(m[1].slice(4,6),16)*k)));
+  return '#'+[r,g,b].map(x=>pad2(x.toString(16))).join('');
+}
+function calSlotStyle(calId){
+  const fill=calColor(calId);
+  if(String(fill).indexOf('var(')===0)return 'background:'+fill+';border-color:var(--border)';
+  return 'background:'+fill+';border-color:'+darkenHex(fill);
+}
 
 function getPeriod(){
   const a=new Date(S.anchor);
@@ -360,25 +384,58 @@ function evOverlapsDay(ev,day){
   const dk=ymd(day);
   return ymd(startOfDay(s))<=dk&&ymd(startOfDay(e))>=dk;
 }
-/** Intervalle [début, fin] d'un événement sur un jour donné (ms). */
+function getDayWindow(day){
+  const w=S.dayWindows[ymd(day)];
+  if(!w)return DEFAULT_DAY_WIN;
+  return{
+    hStart:Number(w.h_start)||DEFAULT_DAY_WIN.hStart,
+    hEnd:Number(w.h_end)||DEFAULT_DAY_WIN.hEnd,
+    off:!!(w.off)
+  };
+}
+/** Plage commune pour aligner les colonnes (semaine). */
+function weekTimeRange(days){
+  let hStart=24,hEnd=0;
+  days.forEach(day=>{
+    const w=getDayWindow(day);
+    hStart=Math.min(hStart,w.hStart);
+    hEnd=Math.max(hEnd,w.hEnd);
+  });
+  if(hStart>=24)return DEFAULT_DAY_WIN;
+  return{hStart,hEnd:Math.max(hEnd,hStart+1)};
+}
+function workBoundsMs(day,range){
+  const d0=startOfDay(day);
+  const r=range||getDayWindow(day);
+  return{
+    start:d0.getTime()+r.hStart*3600000,
+    end:d0.getTime()+r.hEnd*3600000
+  };
+}
+/** Intervalle [début, fin] d'un événement sur un jour (ms), borné aux horaires machines. */
 function evClipOnDay(ev,day){
   const s=evStart(ev),e=evEnd(ev)||s;
   if(!s||!evOverlapsDay(ev,day))return null;
   const d0=startOfDay(day);
   const dEnd=new Date(d0);dEnd.setHours(23,59,59,999);
-  const clipS=s<d0?d0:s;
-  const clipE=e>dEnd?dEnd:e;
+  let clipS=s<d0?d0:s;
+  let clipE=e>dEnd?dEnd:e;
+  if(clipE<=clipS)return null;
+  const wb=workBoundsMs(day);
+  clipS=new Date(Math.max(clipS.getTime(),wb.start));
+  clipE=new Date(Math.min(clipE.getTime(),wb.end));
   if(clipE<=clipS)return null;
   return{start:clipS.getTime(),end:clipE.getTime()};
 }
-/** Tranche horaire d'un événement sur un jour (vues semaine / jour). */
-function timedSliceOnDay(ev,day){
+/** Tranche horaire d'un événement (vues semaine / jour), relative à la plage affichée. */
+function timedSliceOnDay(ev,day,range){
   const clip=evClipOnDay(ev,day);
   if(!clip)return null;
-  const d0=startOfDay(day);
-  const topMin=(clip.start-d0.getTime())/60000;
-  const endMin=(clip.end-d0.getTime())/60000;
-  return{top:topMin/60*48,h:Math.max(18,(endMin-topMin)/60*48)};
+  const r=range||getDayWindow(day);
+  const ws=workBoundsMs(day,r).start;
+  const topMin=(clip.start-ws)/60000;
+  const endMin=(clip.end-ws)/60000;
+  return{top:topMin/60*PX_PER_HOUR,h:Math.max(18,(endMin-topMin)/60*PX_PER_HOUR)};
 }
 function evDayKey(d){return ymd(d);}
 function daysBetweenInclusive(s,e){
@@ -415,6 +472,7 @@ async function fetchEvents(){
   const loading=document.getElementById('cal-loading');
   if(!cals.length){
     S.events=[];
+    S.dayWindows={};
     if(loading)loading.style.display='none';
     if(body)body.innerHTML='<p class="cal-loading">Aucun calendrier sélectionné.</p>';
     return;
@@ -427,7 +485,14 @@ async function fetchEvents(){
       date_fin:ymd(p.end),
       calendriers:cals.join(',')
     });
-    S.events=(await api('/api/calendrier/events?'+q))||[];
+    const res=await api('/api/calendrier/events?'+q);
+    if(Array.isArray(res)){
+      S.events=res;
+      S.dayWindows={};
+    }else{
+      S.events=(res&&res.events)||[];
+      S.dayWindows=(res&&res.day_windows)||{};
+    }
     if(loading)loading.style.display='none';
     renderCalendar();
   }catch(e){
@@ -535,7 +600,7 @@ function renderMonth(p){
       html+='<div class="cal-day-num">'+day.getDate()+'</div>';
       html+='<div class="cal-day-events">';
       show.forEach(ev=>{
-        html+='<div class="cal-pill" data-ev-id="'+esc(ev.id)+'" style="background:'+calColor(ev.calendrier)+'">'+esc(ev.titre)+'</div>';
+        html+='<div class="cal-pill" data-ev-id="'+esc(ev.id)+'" style="'+calSlotStyle(ev.calendrier)+'">'+esc(ev.titre)+'</div>';
       });
       if(more)html+='<div class="cal-more">+'+more+'</div>';
       html+='</div></div>';
@@ -598,15 +663,17 @@ function timedEvStyle(ev,top,h,col,total){
   const t=Math.max(1,Number(total)||1);
   const pctW=(100/t).toFixed(4);
   const pctL=((c*100)/t).toFixed(4);
-  return 'top:'+top+'px;height:'+h+'px;left:'+pctL+'%;width:'+pctW+'%;'+
-    'z-index:'+(1+c)+';background:'+calColor(ev.calendrier);
+  const px=CAL_SLOT_PAD_X;
+  const inset=px*2;
+  return 'top:'+top+'px;height:'+h+'px;left:calc('+pctL+'% + '+px+'px);width:calc('+pctW+'% - '+inset+'px);'+
+    'z-index:'+(1+c)+';'+calSlotStyle(ev.calendrier);
 }
 
-function renderDayTimedHtml(dayTimed,day){
+function renderDayTimedHtml(dayTimed,day,range){
   const layout=buildOverlapLayout(dayTimed,day);
   let html='';
   for(const ev of dayTimed){
-    const slice=timedSliceOnDay(ev,day);
+    const slice=timedSliceOnDay(ev,day,range);
     if(!slice)continue;
     const lay=layout.get(layoutKey(ev))||{col:0,total:1};
     html+='<div class="cal-ev" data-ev-id="'+esc(ev.id)+'" data-col="'+lay.col+'" data-tot="'+lay.total+'" '+
@@ -636,7 +703,7 @@ function renderWeekBars(days){
     }
     if(!colStart)return;
     const span=colEnd-colStart+1;
-    html+='<div class="cal-mbar" data-ev-id="'+esc(ev.id)+'" style="grid-column:'+colStart+' / span '+span+';grid-row:'+(ri+1)+';background:'+calColor(ev.calendrier)+'">'+esc(ev.titre)+'</div>';
+    html+='<div class="cal-mbar" data-ev-id="'+esc(ev.id)+'" style="grid-column:'+colStart+' / span '+span+';grid-row:'+(ri+1)+';'+calSlotStyle(ev.calendrier)+'">'+esc(ev.titre)+'</div>';
   });
   html+='</div>';
   return html;
@@ -653,9 +720,14 @@ function renderTimeGrid(p,colCount){
     if(ev.all_day)allDay.push(ev);
     else timed.push(ev);
   });
+  const range=colCount===1?getDayWindow(days[0]):weekTimeRange(days);
+  const h0=Math.floor(range.hStart);
+  const h1=Math.ceil(range.hEnd);
+  const span=Math.max(1,h1-h0);
+  const gridH=span*PX_PER_HOUR;
   let html='<div class="cal-time-wrap'+(colCount===1?' cal-day-single':'')+'">';
   html+='<div class="cal-time-gutter"><div style="height:32px;border-bottom:1px solid var(--border)"></div>';
-  for(let h=0;h<24;h++)html+='<div class="tg-hour">'+pad2(h)+':00</div>';
+  for(let h=h0;h<h1;h++)html+='<div class="tg-hour">'+pad2(h)+':00</div>';
   html+='</div><div class="cal-time-grid">';
   html+='<div class="cal-allday-row"><div class="cal-allday-label">Journée</div>';
   html+='<div class="cal-allday-cols" style="grid-template-columns:repeat('+colCount+',1fr)">';
@@ -665,7 +737,7 @@ function renderTimeGrid(p,colCount){
       const s=ymd(startOfDay(evStart(ev))),e=ymd(startOfDay(evEnd(ev)));
       return s<=dk&&e>=dk;
     }).forEach(ev=>{
-      html+='<div class="cal-allday-pill" data-ev-id="'+esc(ev.id)+'" style="background:'+calColor(ev.calendrier)+'">'+esc(ev.titre)+'</div>';
+      html+='<div class="cal-allday-pill" data-ev-id="'+esc(ev.id)+'" style="'+calSlotStyle(ev.calendrier)+'">'+esc(ev.titre)+'</div>';
     });
   });
   html+='</div></div>';
@@ -673,9 +745,9 @@ function renderTimeGrid(p,colCount){
   days.forEach(day=>{
     html+='<div class="cal-col"><div class="cal-col-head'+(isToday(day)?' today':'')+'">'+
       day.toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'})+'</div>';
-    html+='<div class="cal-col-slots">';
-    for(let h=0;h<24;h++)html+='<div class="cal-slot-line" style="top:'+(h*48)+'px"></div>';
-    html+=renderDayTimedHtml(timed.filter(ev=>evOverlapsDay(ev,day)),day);
+    html+='<div class="cal-col-slots" style="height:'+gridH+'px">';
+    for(let h=h0;h<h1;h++)html+='<div class="cal-slot-line" style="top:'+((h-h0)*PX_PER_HOUR)+'px"></div>';
+    html+=renderDayTimedHtml(timed.filter(ev=>evOverlapsDay(ev,day)),day,range);
     html+='</div></div>';
   });
   html+='</div></div></div>';
@@ -739,6 +811,8 @@ document.getElementById('btn-logout').onclick=async()=>{
       return;
     }
     if(window.MySifaTheme)MySifaTheme.mergeFromUser(ME);
+    else if(window.MySifaCalendar)MySifaCalendar.mergeFromUser(ME);
+    renderToggles();
     const ucName=document.getElementById('uc-name');
     const ucRole=document.getElementById('uc-role');
     if(ucName)ucName.textContent=ME.nom||'—';

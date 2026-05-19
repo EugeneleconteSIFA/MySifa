@@ -236,10 +236,28 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
   font-family:inherit;margin-top:4px;transition:filter .15s}
 .btn-prefs-save:hover{filter:brightness(1.06)}
 .pref-hint{font-size:11px;color:var(--muted);text-align:center;margin-top:10px;line-height:1.5}
+.cal-color-list{display:flex;flex-direction:column;gap:8px;margin-bottom:4px}
+.cal-color-row{
+  display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;
+  border:1px solid var(--border);background:var(--bg);transition:box-shadow .25s;
+}
+.cal-color-row.highlight{box-shadow:0 0 0 2px var(--accent);background:var(--accent-bg)}
+.cal-color-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;border:1px solid rgba(0,0,0,.15)}
+.cal-color-label{flex:1;font-size:13px;font-weight:600;color:var(--text)}
+.cal-color-row input[type=color]{
+  width:40px;height:30px;padding:2px;border:1px solid var(--border);border-radius:8px;
+  background:var(--card);cursor:pointer;flex-shrink:0;
+}
+.cal-color-reset{
+  font-size:11px;font-weight:600;color:var(--muted);border:none;background:transparent;
+  cursor:pointer;font-family:inherit;padding:4px 6px;border-radius:6px;flex-shrink:0;
+}
+.cal-color-reset:hover{color:var(--accent);background:var(--accent-bg)}
 </style>
 </head>
 <body class="has-topbar">
 <script src="/static/mysifa_theme.js"></script>
+<script src="/static/mysifa_calendar.js"></script>
 
 <div class="sidebar-overlay" id="sb-ov" onclick="closeSidebar()"></div>
 
@@ -595,10 +613,72 @@ function modeCard(id,icoSvg,label,sub){
   </div>`;
 }
 
+function calColorRow(c){
+  const col=(window.MySifaCalendar?MySifaCalendar.loadColorsMap():{})[c.id]||c.color;
+  return `<div class="cal-color-row" id="cal-row-${esc(c.id)}">
+    <span class="cal-color-dot" style="background:${esc(col)}"></span>
+    <span class="cal-color-label">${esc(c.label)}</span>
+    <input type="color" value="${esc(col)}" aria-label="Couleur ${esc(c.label)}"
+      oninput="onCalColorInput('${esc(c.id)}',this.value)">
+    <button type="button" class="cal-color-reset" onclick="resetCalColor('${esc(c.id)}')">Défaut</button>
+  </div>`;
+}
+
+function onCalColorInput(calId,hex){
+  if(!window.MySifaCalendar||!MySifaCalendar.validHex(hex))return;
+  MySifaCalendar.setColor(calId,hex);
+  const row=document.getElementById('cal-row-'+calId);
+  const dot=row&&row.querySelector('.cal-color-dot');
+  if(dot)dot.style.background=hex;
+}
+
+function resetCalColor(calId){
+  if(!window.MySifaCalendar)return;
+  MySifaCalendar.resetColor(calId);
+  const row=document.getElementById('cal-row-'+calId);
+  if(!row)return;
+  const hex=MySifaCalendar.colorFor(calId);
+  const dot=row.querySelector('.cal-color-dot');
+  const inp=row.querySelector('input[type=color]');
+  if(dot)dot.style.background=hex;
+  if(inp)inp.value=hex;
+}
+
+function openCalColorFromHash(){
+  const h=location.hash||'';
+  if(!h.startsWith('#cal-'))return;
+  const id=decodeURIComponent(h.slice(5));
+  showTab('prefs');
+  requestAnimationFrame(()=>{
+    const row=document.getElementById('cal-row-'+id);
+    if(row){
+      row.scrollIntoView({behavior:'smooth',block:'center'});
+      row.classList.add('highlight');
+      setTimeout(()=>row.classList.remove('highlight'),2500);
+    }
+  });
+}
+
+function themePrefsBody(){
+  const prefs=getPrefs();
+  const tp={palette:prefs.palette,style:prefs.style,mode:prefs.mode};
+  if(window.MySifaTheme&&MySifaTheme.themePrefsPayload)return MySifaTheme.themePrefsPayload(prefs);
+  if(window.MySifaCalendar)return MySifaCalendar.buildThemePrefsPayload(tp);
+  return tp;
+}
+
 function renderPrefs(){
+  const calDefs=window.MySifaCalendar?MySifaCalendar.CAL_DEFS:[];
+  const calSection=calDefs.length?`
+      <h2>Calendrier</h2>
+      <p class="pref-hint" style="text-align:left;margin:0 0 12px">Couleurs des calendriers affichés dans MyCalendrier.</p>
+      <div class="pref-section">
+        <div class="cal-color-list">${calDefs.map(calColorRow).join('')}</div>
+      </div>
+      <h2 style="margin-top:20px">Palette de couleurs</h2>`:'<h2>Palette de couleurs</h2>';
   document.getElementById('pane-prefs').innerHTML=`
     <div class="card">
-      <h2>Palette de couleurs</h2>
+      ${calSection}
       <div class="pref-section">
         <div class="theme-grid">${PALETTE_DEF.map(palCard).join('')}</div>
       </div>
@@ -623,12 +703,11 @@ function selectStyle(id){setPrefs({style:id});renderPrefs();syncThemeBtn();}
 function selectMode(id){setPrefs({mode:id});renderPrefs();syncThemeBtn();}
 
 async function savePrefs(){
-  const prefs=getPrefs();
   try{
     await api('/api/auth/me',{
       method:'PUT',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({theme_prefs:{palette:prefs.palette,style:prefs.style,mode:prefs.mode}})
+      body:JSON.stringify({theme_prefs:themePrefsBody()})
     });
     toast('Préférences enregistrées',true);
   }catch(e){
@@ -663,9 +742,12 @@ document.getElementById('btn-logout').onclick=async()=>{
   try{
     ME=await api('/api/auth/me');
     if(ME&&window.MySifaTheme)MySifaTheme.mergeFromUser(ME);
+    else if(ME&&window.MySifaCalendar)MySifaCalendar.mergeFromUser(ME);
     syncThemeBtn();
     updateUserChip();
     renderInfo();
+    if(new URLSearchParams(location.search).get('tab')==='prefs')showTab('prefs');
+    if(location.hash.startsWith('#cal-'))openCalColorFromHash();
   }catch(e){
     if(e.message!=='auth'){
       document.getElementById('pane-info').innerHTML='<div class="card"><p style="color:var(--muted);font-size:13px">Impossible de charger le profil.</p></div>';
