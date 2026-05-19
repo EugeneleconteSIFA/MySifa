@@ -348,6 +348,8 @@ function getPeriod(){
 function evVisible(ev){return !!S.visible[ev.calendrier];}
 function evStart(ev){return parseEvDt(ev.debut);}
 function evEnd(ev){return parseEvDt(ev.fin)||evStart(ev);}
+function layoutKey(ev){return String(ev.id);}
+function clipsOverlap(a,b){return a.start<b.end&&b.start<a.end;}
 function evOverlapsDay(ev,day){
   const s=evStart(ev),e=evEnd(ev)||s;
   if(!s)return false;
@@ -540,7 +542,7 @@ function renderMonth(p){
   return html;
 }
 
-/** Chevauchements — clusters + colonnes glouton sur la tranche du jour (pas la plage multi-jours). */
+/** Chevauchements — groupes connexes + colonnes glouton (tranche du jour). */
 function layoutTimedEvents(events,day){
   const layout=new Map();
   const items=[];
@@ -548,52 +550,56 @@ function layoutTimedEvents(events,day){
     const clip=evClipOnDay(ev,day);
     if(clip)items.push({ev,clip});
   }
-  if(!items.length)return layout;
-  items.sort((a,b)=>{
-    if(a.clip.start!==b.clip.start)return a.clip.start-b.clip.start;
-    return a.clip.end-b.clip.end;
-  });
-  const clusters=[];
-  let cluster=[];
-  let clusterEnd=-Infinity;
-  for(const it of items){
-    const s=it.clip.start,e=it.clip.end;
-    if(!cluster.length||s<clusterEnd){
-      cluster.push(it);
-      clusterEnd=Math.max(clusterEnd,e);
-    }else{
-      clusters.push(cluster);
-      cluster=[it];
-      clusterEnd=e;
+  const n=items.length;
+  if(!n)return layout;
+
+  const parent=Array.from({length:n},(_,i)=>i);
+  function find(i){return parent[i]===i?i:(parent[i]=find(parent[i]));}
+  function unite(i,j){const ri=find(i),rj=find(j);if(ri!==rj)parent[ri]=rj;}
+
+  for(let i=0;i<n;i++){
+    for(let j=i+1;j<n;j++){
+      if(clipsOverlap(items[i].clip,items[j].clip))unite(i,j);
     }
   }
-  if(cluster.length)clusters.push(cluster);
-  for(const cl of clusters){
+
+  const groups=new Map();
+  for(let i=0;i<n;i++){
+    const r=find(i);
+    if(!groups.has(r))groups.set(r,[]);
+    groups.get(r).push(items[i]);
+  }
+
+  for(const group of groups.values()){
+    group.sort((a,b)=>a.clip.start-b.clip.start||a.clip.end-b.clip.end);
     const colEnds=[];
-    const sortedCl=[...cl].sort((a,b)=>a.clip.start-b.clip.start);
-    for(const it of sortedCl){
-      const s=it.clip.start,e=it.clip.end;
+    const placed=[];
+    for(const it of group){
       let col=0;
-      while(col<colEnds.length&&colEnds[col]>s)col++;
-      if(col===colEnds.length)colEnds.push(e);
-      else colEnds[col]=e;
-      layout.set(it.ev.id,{col,total:0});
+      while(col<colEnds.length&&colEnds[col]>it.clip.start)col++;
+      if(col===colEnds.length)colEnds.push(it.clip.end);
+      else colEnds[col]=it.clip.end;
+      placed.push({it,col});
     }
     const total=colEnds.length;
-    for(const it of cl){
-      const o=layout.get(it.ev.id);
-      if(o)o.total=total;
+    for(const {it,col} of placed){
+      layout.set(layoutKey(it.ev),{col,total});
     }
   }
   return layout;
 }
 
 function timedEvStyle(ev,top,h,layout){
-  const col=layout?layout.col:0;
-  const total=layout?layout.total:1;
+  const col=layout?.col??0;
+  const total=Math.max(1,layout?.total??1);
   const bg='background:'+calColor(ev.calendrier);
-  if(total<=1)return 'top:'+top+'px;height:'+h+'px;width:100%;left:0;'+bg;
-  return 'top:'+top+'px;height:'+h+'px;width:calc((100% - 4px) / '+total+');left:calc('+col+' * (100% - 4px) / '+total+');'+bg;
+  const gap=2;
+  if(total<=1){
+    return 'top:'+top+'px;height:'+h+'px;left:0;width:calc(100% - 2px);z-index:1;'+bg;
+  }
+  const w='calc((100% - '+((total-1)*gap)+'px) / '+total+')';
+  const l='calc('+col+' * ((100% - '+((total-1)*gap)+'px) / '+total+' + '+gap+'px))';
+  return 'top:'+top+'px;height:'+h+'px;width:'+w+';left:'+l+';z-index:'+(1+col)+';'+bg;
 }
 
 function renderWeekBars(days){
@@ -661,7 +667,7 @@ function renderTimeGrid(p,colCount){
     dayTimed.forEach(ev=>{
       const slice=timedSliceOnDay(ev,day);
       if(!slice)return;
-      const lay=dayLayout.get(ev.id)||{col:0,total:1};
+      const lay=dayLayout.get(layoutKey(ev))||{col:0,total:1};
       html+='<div class="cal-ev" data-ev-id="'+esc(ev.id)+'" style="'+timedEvStyle(ev,slice.top,slice.h,lay)+'">'+esc(ev.titre)+'</div>';
     });
     html+='</div></div>';
