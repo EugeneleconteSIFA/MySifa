@@ -251,34 +251,67 @@ def list_fournisseurs_fsc_fabrication(request: Request):
 
 
 @router.get("/api/fabrication/dossiers")
-def list_dossiers(request: Request):
-    """Dossiers du planning pour la machine liée à l'opérateur (statut attente + en_cours)."""
+def list_dossiers(request: Request, machine_id: int = None):
+    """Dossiers planning pour le picker début de production.
+
+    Sans recherche (q vide) : uniquement statut attente ou en_cours, ordre position.
+    Avec recherche (q) : même périmètre statut, filtre texte côté SQL.
+    """
     user = get_current_user(request)
     _check_fab_access(user)
 
-    machine_id = user.get("machine_id")
+    mid = user.get("machine_id") or machine_id
+    q = (request.query_params.get("q") or "").strip()
+
+    statut_sql = "pe.statut IN ('attente','en_cours')"
+    order_sql = "pe.position ASC, pe.id ASC"
+    params: list = []
 
     with get_db() as conn:
-        if machine_id:
+        if mid:
+            where = f"pe.machine_id = ? AND {statut_sql}"
+            params.append(mid)
+            if q:
+                like = f"%{q}%"
+                where += (
+                    " AND (LOWER(pe.reference) LIKE LOWER(?) OR LOWER(COALESCE(pe.client,'')) LIKE LOWER(?)"
+                    " OR LOWER(COALESCE(pe.numero_of,'')) LIKE LOWER(?)"
+                    " OR LOWER(COALESCE(pe.ref_produit,'')) LIKE LOWER(?)"
+                    " OR LOWER(COALESCE(pe.description,'')) LIKE LOWER(?)"
+                    " OR LOWER(COALESCE(pe.dos_rvgi,'')) LIKE LOWER(?))"
+                )
+                params.extend([like, like, like, like, like, like])
             rows = conn.execute(
-                """SELECT pe.*, m.nom AS machine_nom, m.code AS machine_code
-                   FROM planning_entries pe
-                   JOIN machines m ON m.id = pe.machine_id
-                   WHERE pe.machine_id = ? AND pe.statut IN ('attente','en_cours')
-                   ORDER BY pe.position ASC""",
-                (machine_id,),
+                f"""SELECT pe.*, m.nom AS machine_nom, m.code AS machine_code
+                    FROM planning_entries pe
+                    JOIN machines m ON m.id = pe.machine_id
+                    WHERE {where}
+                    ORDER BY {order_sql}""",
+                params,
             ).fetchall()
             machine = conn.execute(
-                "SELECT * FROM machines WHERE id=?", (machine_id,)
+                "SELECT * FROM machines WHERE id=?", (mid,)
             ).fetchone()
         else:
-            # Admin sans machine liée : tous les dossiers de toutes les machines
+            # Admin sans machine : toutes machines, même filtre statut
+            where = statut_sql
+            if q:
+                like = f"%{q}%"
+                where += (
+                    " AND (LOWER(pe.reference) LIKE LOWER(?) OR LOWER(COALESCE(pe.client,'')) LIKE LOWER(?)"
+                    " OR LOWER(COALESCE(pe.numero_of,'')) LIKE LOWER(?)"
+                    " OR LOWER(COALESCE(pe.ref_produit,'')) LIKE LOWER(?)"
+                    " OR LOWER(COALESCE(pe.description,'')) LIKE LOWER(?)"
+                    " OR LOWER(COALESCE(pe.dos_rvgi,'')) LIKE LOWER(?))"
+                )
+                params.extend([like, like, like, like, like, like])
             rows = conn.execute(
-                """SELECT pe.*, m.nom AS machine_nom, m.code AS machine_code
-                   FROM planning_entries pe
-                   JOIN machines m ON m.id = pe.machine_id
-                   WHERE pe.statut IN ('attente','en_cours')
-                   ORDER BY m.nom, pe.position ASC"""
+                f"""SELECT pe.*, m.nom AS machine_nom, m.code AS machine_code
+                    FROM planning_entries pe
+                    JOIN machines m ON m.id = pe.machine_id
+                    WHERE {where}
+                    ORDER BY m.nom ASC, {order_sql}""",
+                params,
             ).fetchall()
             machine = None
 

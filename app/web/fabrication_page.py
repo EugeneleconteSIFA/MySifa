@@ -304,7 +304,15 @@ body.light table.fab-table tr.fab-row-last td{
   border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)
 }
 .fab-field textarea{resize:vertical;min-height:70px}
-.fab-modal-btns{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
+.fab-modal-btns{
+  display:flex;gap:8px;justify-content:flex-end;align-items:center;
+  flex-wrap:wrap;margin-top:18px;
+}
+.fab-modal-btns .fab-btn{
+  box-sizing:border-box;min-height:34px;padding:7px 14px;font-size:12px;
+  line-height:1.25;border-radius:8px;
+}
+.fab-modal-btns .fab-btn-fictif{width:auto;flex:0 1 auto;margin-top:0}
 
 /* Modals #mroot (design system) */
 #mroot{position:fixed;inset:0;z-index:1100;pointer-events:none}
@@ -354,8 +362,8 @@ body.light table.fab-table tr.fab-row-last td{
 .fab-picker-hint-link{color:var(--accent);cursor:pointer;text-decoration:underline;text-underline-offset:2px;background:none;border:none;font:inherit;font-size:inherit;padding:0}
 .fab-picker-hint-link:hover{opacity:.8}
 .fab-btn-fictif{
-  background:rgba(167,139,250,.18);color:#a78bfa;border:1.5px solid rgba(167,139,250,.45);
-  font-weight:800;width:100%;margin-top:10px;
+  background:rgba(167,139,250,.18);color:#a78bfa;border:1px solid rgba(167,139,250,.45);
+  font-weight:700;
 }
 .fab-btn-fictif:hover{background:rgba(167,139,250,.28);border-color:#a78bfa}
 .fab-dossier-fictif,.fab-fictif-label{color:#a78bfa;font-weight:800}
@@ -993,10 +1001,18 @@ function setSaisieViewMode(mode){
   if(m==='admin') loadAdminSaisiesJour();
 }
 
+function _pickerDossiersUrl(){
+  const params = new URLSearchParams();
+  const mid = (S.user && S.user.machine_id) || S.adminMachineId;
+  if(mid) params.set('machine_id', String(mid));
+  const qs = params.toString();
+  return '/api/fabrication/dossiers'+(qs?'?'+qs:'');
+}
+
 async function loadDossiers(){
-  const d = await apiFetch('/api/fabrication/dossiers').catch(()=>null);
+  const d = await apiFetch(_pickerDossiersUrl()).catch(()=>null);
   if(!d) return;
-  S.dossiers = d.dossiers||[];
+  S.dossiers = _pickerNormalizeList(d.dossiers||[]);
   if(S.showDossierPicker){
     _refreshPickerList();
     return;
@@ -1174,7 +1190,7 @@ function handleOpTrigger(code, label, cat){
   if(code==='01'){
     // Début dossier → picker dossier
     _pickerHi = -1;
-    set({showDossierPicker:true, _pendingPickerOp:{code,label}, pickerQuery:''});
+    set({showDossierPicker:true, _pendingPickerOp:{code,label}, pickerQuery:'', dossiers:[]});
     loadDossiers();
     return;
   }
@@ -2084,6 +2100,29 @@ function handleSearchSubmit(query){
 let _pickerHi = -1;
 let _pickerFiltered = [];
 
+const _PICKER_ELIGIBLE_STATUTS = new Set(['attente','en_cours']);
+
+function _pickerStatutOk(d){
+  const st = String(d && d.statut || '').toLowerCase().trim();
+  return _PICKER_ELIGIBLE_STATUTS.has(st);
+}
+
+/** Liste de base : attente + en_cours uniquement, ordre planning (position). */
+function _pickerNormalizeList(list){
+  return (list||[])
+    .filter(_pickerStatutOk)
+    .sort((a,b)=>{
+      const pa = Number(a.position);
+      const pb = Number(b.position);
+      if(pa !== pb) return (isNaN(pa)?0:pa) - (isNaN(pb)?0:pb);
+      return (Number(a.id)||0) - (Number(b.id)||0);
+    });
+}
+
+function _pickerBaseDossiers(){
+  return _pickerNormalizeList(S.dossiers);
+}
+
 function _normSearchStr(s){
   return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
 }
@@ -2105,13 +2144,14 @@ function _pickerEntryMatches(d, q, qNorm){
   });
 }
 
-/** Filtre attente/en_cours (API) ; conserve l'ordre planning (position). */
+/** Sans recherche : liste complète éligible. Avec recherche : filtre dans le même périmètre. */
 function _filterDossiers(q){
+  const base = _pickerBaseDossiers();
   const raw = (q||'').trim();
-  if(!raw) return [...S.dossiers];
+  if(!raw) return base;
   const lq = raw.toLowerCase();
   const lqNorm = _normSearchStr(raw);
-  return S.dossiers.filter(d=>_pickerEntryMatches(d, lq, lqNorm));
+  return base.filter(d=>_pickerEntryMatches(d, lq, lqNorm));
 }
 
 function _refreshPickerList(){
@@ -2129,8 +2169,11 @@ function _buildPickerItems(q){
   if(!filtered.length){
     const empty = document.createElement('div');
     empty.className = 'fab-picker-empty';
-    if(S.dossiers.length===0){
-      empty.textContent = 'Aucun dossier disponible dans le planning';
+    const baseLen = _pickerBaseDossiers().length;
+    if(!term){
+      empty.textContent = baseLen===0
+        ? 'Aucun dossier en attente ou en cours sur cette machine'
+        : 'Aucun dossier disponible';
     }else{
       empty.textContent = 'Aucun résultat pour « '+term+' »';
     }
