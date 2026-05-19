@@ -11,6 +11,15 @@ REMOTE_DB="$VPS_PATH/app/data/production.db"
 LOCAL_UPLOADS="data/uploads"
 REMOTE_UPLOADS="$VPS_PATH/data/uploads"
 
+_has_flag() {
+  local flag="$1"
+  shift
+  for a in "$@"; do
+    [[ "$a" == "$flag" ]] && return 0
+  done
+  return 1
+}
+
 echo "🚀 Déploiement MySifa..."
 
 # 0. Sécurité : ne jamais commiter les artefacts Electron / node_modules
@@ -66,7 +75,7 @@ if ! ssh -o BatchMode=no -o ConnectTimeout=15 "$VPS_USER@$VPS_IP" "
 fi
 
 # 2b. Upload optionnel des installateurs natifs widget (DMG/EXE) sans Git
-if [[ "$1" == "--widget" || "$2" == "--widget" || "$3" == "--widget" ]]; then
+if _has_flag "--widget" "$@"; then
   echo "\n🧩 Upload des installateurs widget (DMG/EXE)..."
   # macOS DMG
   if ls myprod-widget/dist/*.dmg >/dev/null 2>&1; then
@@ -89,7 +98,7 @@ if [[ "$1" == "--widget" || "$2" == "--widget" || "$3" == "--widget" ]]; then
 fi
 
 # 3. Transfert DB (seulement si --db passé en argument)
-if [[ "$1" == "--db" ]]; then
+if _has_flag "--db" "$@"; then
   echo "\n🗄️  Transfert de la base de données..."
   scp $LOCAL_DB $VPS_USER@$VPS_IP:$REMOTE_DB
   echo "✅ DB transférée."
@@ -99,7 +108,7 @@ if [[ "$1" == "--db" ]]; then
 fi
 
 # 4. Transfert uploads (seulement si --uploads passé en argument)
-if [[ "$1" == "--uploads" || "$2" == "--uploads" ]]; then
+if _has_flag "--uploads" "$@"; then
   echo "\n📎 Transfert des uploads (CSV/XLSX importés)..."
   rsync -az --delete "$LOCAL_UPLOADS/" "$VPS_USER@$VPS_IP:$REMOTE_UPLOADS/"
   echo "✅ Uploads transférés."
