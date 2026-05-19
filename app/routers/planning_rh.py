@@ -1,7 +1,7 @@
 """MySifa — Planning RH (Personnel) — API v1.0
 
 Routes /api/rh/*
-Lecture  : fabrication, logistique, direction, superadmin
+Lecture  : fabrication, logistique, comptabilite (lecture seule), administration (lecture seule), direction, superadmin
 Écriture : direction, superadmin (configurateurs)
 """
 from datetime import datetime, date, timedelta

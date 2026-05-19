@@ -574,6 +574,25 @@ body.light .btn-sec.is-active{
 .portal-corner-badge{position:absolute;top:8px;left:8px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;
   background:rgba(248,113,113,.95);color:#fff;font-size:10px;font-weight:800;font-family:monospace;
   display:inline-flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+.portal-prof-ring.prof-ring{
+  position:absolute;top:-5px;left:-5px;z-index:2;pointer-events:none;
+  width:30px;height:30px;background:var(--card);border:1px solid var(--border);border-radius:50%;
+  box-shadow:0 4px 16px rgba(0,0,0,.35);
+}
+.portal-prof-ring.prof-ring svg{width:30px;height:30px}
+.portal-prof-ring .prof-ring-label{opacity:1;font-size:8px}
+.prof-ring{position:relative;flex-shrink:0;width:34px;height:34px}
+.prof-ring svg{display:block;width:34px;height:34px}
+.prof-ring-track{stroke:var(--border)}
+.prof-ring-bar{stroke:var(--accent);stroke-linecap:round;transition:stroke-dashoffset .25s ease}
+.prof-ring[data-tier="low"] .prof-ring-bar{stroke:var(--danger)}
+.prof-ring[data-tier="mid"] .prof-ring-bar{stroke:var(--warn)}
+.prof-ring[data-tier="high"] .prof-ring-bar{stroke:var(--ok)}
+.prof-ring-label{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-size:9px;font-weight:800;color:var(--text);letter-spacing:-.02em;
+  opacity:0;pointer-events:none;
+}
 .portal-apps{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;align-items:stretch}
 .portal-apps--reorderable .portal-app:not(.portal-app--busy){cursor:grab;touch-action:none}
 .portal-apps--reorderable .portal-app--dragging{cursor:grabbing;opacity:.92;z-index:5;
@@ -1198,6 +1217,7 @@ const fDSecs=d=>{
 const opName=s=>{if(!s)return'';const p=s.split(' - ');return p.length>1?p.slice(1).join(' - '):s;};
 const fMin=m=>{if(!m&&m!==0)return'-';const hh=Math.floor(m/60),mm=Math.round(m%60);return hh>0?hh+'h '+String(mm).padStart(2,'0')+'min':mm+'min';};
 const isAdmin=u=>u&&(u.role==='direction'||u.role==='administration'||u.role==='superadmin');
+const isComptaPlanning=u=>u&&u.role==='comptabilite';
 const canPlanningNav=u=>!!(u&&u.app_access&&u.app_access.planning);
 const isFab=u=>u&&u.role==='fabrication';
 
@@ -1236,6 +1256,7 @@ async function checkAuth(){
       if(S.app==='prod' && allowed.has(p)) S.page=p;
     }catch(e){}
     if(S.app==='prod'){
+      if(isComptaPlanning(S.user)){window.location.href='/planning';return;}
       await loadFilters();
       await loadProd();
       await loadHist();
@@ -1400,6 +1421,7 @@ async function doLogin(email,password){
     render();
     checkGlobalUpdates().catch(()=>{});
     if(S.app==='prod'){
+      if(isComptaPlanning(S.user)){window.location.href='/planning';return;}
       await loadFilters();
       await loadProd();
       await loadHist();
@@ -2372,6 +2394,41 @@ function initStockSearchBar() {
   if (bar) renderStockSearchBar();
 }
 
+const PROFILE_FIELDS=['nom','email','telephone','adresse','date_naissance'];
+function profileFieldFilled(val){return String(val==null?'':val).trim().length>0;}
+function profileCompletionPercent(u){
+  if(!u||typeof u!=='object')return 0;
+  let n=0;
+  PROFILE_FIELDS.forEach(k=>{if(profileFieldFilled(u[k]))n+=1;});
+  return Math.round((n/PROFILE_FIELDS.length)*100);
+}
+function profileRingTier(pct){
+  if(pct>=80)return 'high';
+  if(pct>=40)return 'mid';
+  return 'low';
+}
+function profileRingHtml(pct){
+  const p=Math.max(0,Math.min(100,Number(pct)||0));
+  const r=14;const c=2*Math.PI*r;const off=c*(1-p/100);
+  const tier=profileRingTier(p);
+  return '<span class="prof-ring" data-tier="'+tier+'" title="Profil complété à '+p+' %">'+
+    '<svg viewBox="0 0 34 34" aria-hidden="true">'+
+    '<circle class="prof-ring-track" cx="17" cy="17" r="'+r+'" fill="none" stroke-width="3"/>'+
+    '<circle class="prof-ring-bar" cx="17" cy="17" r="'+r+'" fill="none" stroke-width="3"'+
+    ' stroke-dasharray="'+c.toFixed(2)+'" stroke-dashoffset="'+off.toFixed(2)+'"'+
+    ' transform="rotate(-90 17 17)"/>'+
+    '</svg>'+
+    '<span class="prof-ring-label">'+p+'%</span>'+
+    '</span>';
+}
+function portalProfileRingEl(pct){
+  const wrap=document.createElement('span');
+  wrap.innerHTML=profileRingHtml(pct);
+  const ring=wrap.firstElementChild;
+  if(ring)ring.classList.add('portal-prof-ring');
+  return ring;
+}
+
 function portalOrderTileSpecs(specs, order){
   const byId=new Map(specs.map(s=>[s.id,s]));
   const out=[];
@@ -2526,7 +2583,8 @@ function renderPortal(){
   const isFab = aa ? !!aa.fabrication : (isSuper || urole==='fabrication' || !!(urole && ['direction','administration'].includes(urole)));
   const isPrint = isSuper || !!(urole && ['fabrication','logistique'].includes(urole));
   const isCom = urole==='commercial';
-  const isRH   = aa ? !!aa.planning_rh : (isSuper || !!(urole && ['direction','administration','fabrication','logistique'].includes(urole)));
+  const isRH   = aa ? !!aa.planning_rh : (isSuper || !!(urole && ['direction','administration','fabrication','logistique','comptabilite'].includes(urole)));
+  const isComptaPlan = urole === 'comptabilite';
   const isPaie = isSuper || !!(urole && ['direction','administration','comptabilite'].includes(urole));
   const isDevis = aa ? !!aa.devis : (isSuper || urole==='direction');
   const isLight=document.body.classList.contains('light');
@@ -2554,11 +2612,11 @@ function renderPortal(){
       className:'portal-app'+(S.portalLoading==='prod'?' portal-app--busy':''),
       'data-portal-id':id,
       draggable:S.portalLoading==='prod'?'false':'true',
-      onClick:async()=>{if(_portalDragSuppressClick)return;window.location.href='/prod';}
+      onClick:async()=>{if(_portalDragSuppressClick)return;window.location.href=isComptaPlan?'/planning':'/prod';}
     },
       h('div',{className:'portal-app-icon'},iconEl('wrench',28)),
       h('div',{className:'portal-app-name'},'MyProd'),
-      h('div',{className:'portal-app-desc'},'Suivi de production & Planning')
+      h('div',{className:'portal-app-desc'},isComptaPlan?'Planning production — lecture seule':'Suivi de production & Planning')
     )});
   }
 
@@ -2712,15 +2770,19 @@ function renderPortal(){
     h('div',{className:'portal-search-hint'},'Astuce : tape puis Entrée pour ouvrir Google.')
   );
 
+  const profPct=profileCompletionPercent(S.user);
+  const profRingBadge=(profPct<100)?portalProfileRingEl(profPct):null;
+  const profTitle=profPct<100?('Mon profil — '+profPct+' % complété'):'Mon profil';
+
   return h('div',{className:'portal-page'},
     h('div',{className:'portal-corner-stack'},
       h('button',{
         type:'button',
         className:'portal-settings-corner',
-        'aria-label':'Mon profil',
-        title:'Mon profil',
+        'aria-label':profTitle,
+        title:profTitle,
         onClick:()=>{window.location.href='/profil';}
-      },iconEl('user',24)),
+      },profRingBadge,iconEl('user',24)),
       (isSuper||urole==='direction')?h('button',{
         type:'button',
         className:'portal-settings-corner',
@@ -5167,7 +5229,10 @@ function renderLogin(){
 function renderSidebar(){
   const admin=isAdmin(S.user);
   const isSuper=isSuperAdmin(S.user);
-  const items=[
+  const comptaPlan=isComptaPlanning(S.user);
+  const items=comptaPlan
+    ? (canPlanningNav(S.user)?[{key:'_planning',label:'Planning',icon:'calendar'}]:[])
+    : [
     ...(canPlanningNav(S.user)?[{key:'_planning',label:'Planning',icon:'calendar'}]:[]),
     {key:'production',label:'Production',icon:'wrench'},
     {key:'traceabilite',label:'Traçabilité',icon:'layers'},

@@ -1452,6 +1452,7 @@ function render(){
   const m=S.machine||{nom:"?"};
   CAN_EDIT = isAdmin(ME);
   IS_DIR_OR_SUPER = !!(ME && (ME.role==="superadmin" || ME.role==="direction"));
+  const IS_COMPTA_RO = !!(ME && ME.role==="comptabilite");
   SHOW_DOSSIERS = CAN_EDIT;
   let runLbl="";
   if(SHOW_DOSSIERS){
@@ -1515,6 +1516,7 @@ function render(){
       ${SHOW_DOSSIERS?`<button type="button" class="reset-days-btn" onclick="packTerminesToNow()" title="Recaler les terminés jusqu'à maintenant">⇤ Terminés</button>`:""}
       ${SHOW_DOSSIERS?`<button type="button" class="reset-days-btn" onclick="packTerminesBeforeEnCoursAll()" title="Replacer les terminés avant le en cours (toutes machines)">⇤ Terminés → en cours</button>`:""}
       ${CAN_EDIT?`<button type="button" class="gear-btn" onclick="openDefaultsModal()" title="Réglages horaires par défaut" aria-label="Réglages">${icon('settings',16)}</button>`:""}
+      ${IS_COMPTA_RO?`<div class="badge" style="background:var(--accent-bg);color:var(--accent);border:1px solid var(--border)">Lecture seule</div>`:""}
       ${runLbl?`<div class="badge badge-run"><div class="dot"></div>${escAttr(runLbl)}</div>`:""}
       ${SHOW_DOSSIERS?`<div class="badge badge-info">${totH}h · ${nb} dossiers</div>`:""}
     </div>
