@@ -402,6 +402,7 @@ def _migrate(conn):
             ("laize", "ALTER TABLE planning_entries ADD COLUMN laize REAL"),
             ("date_livraison", "ALTER TABLE planning_entries ADD COLUMN date_livraison TEXT"),
             ("commentaire", "ALTER TABLE planning_entries ADD COLUMN commentaire TEXT"),
+            ("exigences_production", "ALTER TABLE planning_entries ADD COLUMN exigences_production TEXT"),
             ("planned_start", "ALTER TABLE planning_entries ADD COLUMN planned_start TEXT"),
             ("planned_end", "ALTER TABLE planning_entries ADD COLUMN planned_end TEXT"),
             ("statut_force", "ALTER TABLE planning_entries ADD COLUMN statut_force INTEGER DEFAULT 0"),
@@ -1341,6 +1342,13 @@ def _migrate(conn):
         if "theme_prefs" not in ucols:
             conn.execute("ALTER TABLE users ADD COLUMN theme_prefs TEXT")
         _record_schema_migration(conn, 24, "users_theme_prefs")
+
+    # v25 — Planning : exigences de production par dossier
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=25 LIMIT 1").fetchone():
+        pe_cols = {r["name"] for r in conn.execute("PRAGMA table_info(planning_entries)").fetchall()}
+        if "exigences_production" not in pe_cols:
+            conn.execute("ALTER TABLE planning_entries ADD COLUMN exigences_production TEXT")
+        _record_schema_migration(conn, 25, "planning_exigences_production")
 
     _record_schema_migration(
         conn,

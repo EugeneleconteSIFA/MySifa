@@ -59,9 +59,9 @@ body.palette-cocon{
   --c1:#ff5c98;--c2:#e8b0c8;--c3:#34d399;--c4:#f0b240;--c5:#ff6060
 }
 body.palette-cocon.light{
-  --bg:#fff5f8;--card:#ffffff;--border:#f5d0df;--text:#3a0f22;--text2:#7a2e50;
-  --muted:#b87090;--accent:#d42070;--accent-bg:rgba(212,32,112,0.10);
-  --filter-input-bg:#ffffff;
+  --bg:#fef8f2;--card:#fffdfb;--border:#f0d5de;--text:#3a0f22;--text2:#7a2e50;
+  --muted:#b87090;--accent:#d42070;--accent-bg:rgba(212,32,112,0.09);
+  --filter-input-bg:#fffdfb;
   --success:#2e7d32;--warn:#d06000;--danger:#c0392b;
   --c1:#d42070;--c2:#7a2e50;--c3:#2e7d32;--c4:#d06000;--c5:#c0392b
 }

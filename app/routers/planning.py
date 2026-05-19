@@ -697,6 +697,7 @@ def _slot_payload(e: dict, start_iso: str, end_iso: str) -> dict:
         "numero_of": e.get("numero_of"),
         "ref_produit": e.get("ref_produit"),
         "commentaire": e.get("commentaire"),
+        "exigences_production": e.get("exigences_production"),
         "a_placer": e.get("a_placer", 0),
         "destockage": e.get("destockage") or "todo",
         "statut_reel": e.get("statut_reel") or "reellement_en_attente",
@@ -1227,9 +1228,9 @@ async def add_entry(machine_id: int, request: Request):
             INSERT INTO planning_entries
                 (machine_id, position, reference, client, description, format_l, format_h,
                  duree_heures, statut, notes, created_at, updated_at,
-                 dos_rvgi, numero_of, ref_produit, laize, date_livraison, commentaire, a_placer,
-                 created_by, updated_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 dos_rvgi, numero_of, ref_produit, laize, date_livraison, commentaire,
+                 exigences_production, a_placer, created_by, updated_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             machine_id, position,
             reference,
@@ -1247,6 +1248,7 @@ async def add_entry(machine_id: int, request: Request):
             body.get("laize"),
             body.get("date_livraison"),
             body.get("commentaire"),
+            body.get("exigences_production"),
             body.get("a_placer", 1),
             user_name,
             user_name,
@@ -1397,7 +1399,7 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
             SET reference=?, client=?, description=?, format_l=?, format_h=?,
                 duree_heures=?, statut=?, notes=?, updated_at=?, updated_by=?,
                 dos_rvgi=?, numero_of=?, ref_produit=?, laize=?, date_livraison=?, commentaire=?,
-                planned_start=?, planned_end=?, planned_end_manual=?, a_placer=?
+                exigences_production=?, planned_start=?, planned_end=?, planned_end_manual=?, a_placer=?
             WHERE id=?
         """, (
             body.get("reference", ex["reference"]),
@@ -1418,6 +1420,10 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
             body.get("laize", ex["laize"] if "laize" in ex.keys() else None),
             body.get("date_livraison", ex["date_livraison"] if "date_livraison" in ex.keys() else None),
             body.get("commentaire", ex["commentaire"] if "commentaire" in ex.keys() else None),
+            body.get(
+                "exigences_production",
+                ex["exigences_production"] if "exigences_production" in ex.keys() else None,
+            ),
             ps,
             pe,
             planned_end_manual_val,
@@ -1621,15 +1627,15 @@ def split_entry(machine_id: int, entry_id: int, request: Request):
         cols = [
             "reference", "client", "description", "format_l", "format_h",
             "dos_rvgi", "numero_of", "ref_produit", "laize", "date_livraison", "commentaire",
-            "notes",
+            "exigences_production", "notes",
         ]
         payload = {c: exd.get(c) for c in cols}
         conn.execute(
             """INSERT INTO planning_entries
                (machine_id, position, reference, client, description, format_l, format_h,
                 dos_rvgi, duree_heures, statut, notes, created_at, updated_at,
-                numero_of, ref_produit, laize, date_livraison, commentaire)
-               VALUES (?,?,?,?,?,?,?,?,?,'attente',?,?,?,?,?,?,?,?)""",
+                numero_of, ref_produit, laize, date_livraison, commentaire, exigences_production)
+               VALUES (?,?,?,?,?,?,?,?,?,'attente',?,?,?,?,?,?,?,?,?)""",
             (
                 machine_id,
                 new_position,
@@ -1648,6 +1654,7 @@ def split_entry(machine_id: int, entry_id: int, request: Request):
                 payload.get("laize"),
                 payload.get("date_livraison"),
                 payload.get("commentaire"),
+                payload.get("exigences_production"),
             ),
         )
         # Assigner group_id identique + split_parent_id sur la nouvelle entrée
@@ -1977,8 +1984,9 @@ async def insert_after(machine_id: int, after_entry_id: int, request: Request):
             INSERT INTO planning_entries
                 (machine_id, position, reference, client, description, format_l, format_h,
                  duree_heures, statut, notes, created_at, updated_at,
-                 dos_rvgi, numero_of, ref_produit, laize, date_livraison, commentaire)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'attente', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 dos_rvgi, numero_of, ref_produit, laize, date_livraison, commentaire,
+                 exigences_production)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'attente', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             machine_id, new_position,
             reference,
@@ -1995,6 +2003,7 @@ async def insert_after(machine_id: int, after_entry_id: int, request: Request):
             body.get("laize"),
             body.get("date_livraison"),
             body.get("commentaire"),
+            body.get("exigences_production"),
         ))
         _invalidate_attente_plans(conn, machine_id)
         conn.commit()

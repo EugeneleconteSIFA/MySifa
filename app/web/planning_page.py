@@ -262,7 +262,16 @@ body.light .slot-resize-handle::after{color:rgba(30,41,59,.85)}
 .slot .line1{font-size:13px;color:#1e293b;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .slot .line2{font-size:10px;font-weight:600;color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .slot .line3{font-size:9px;font-weight:500;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;margin-top:1px}
+.slot.slot-has-exig{outline:2px solid var(--warn);outline-offset:-1px}
+.slot .line-exig{display:block;width:calc(100% - 4px);max-width:100%;margin-top:4px;padding:3px 5px;border-radius:5px;
+  background:#fef08a;color:#713f12;font-size:10px;font-weight:800;line-height:1.25;text-align:center;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border:1.5px solid #eab308;
+  box-shadow:0 1px 4px rgba(0,0,0,.35);letter-spacing:.2px}
+body.light .slot .line-exig{background:#fef9c3;color:#713f12;border-color:#ca8a04}
 body.light .slot .line1{color:#1e293b}body.light .slot .line2{color:#334155}body.light .slot .line3{color:#64748b}
+.tip-exig{margin-top:10px;padding:8px 10px;border-radius:8px;background:rgba(251,191,36,.18);border:1.5px solid var(--warn);
+  font-size:12px;font-weight:700;color:var(--warn);line-height:1.4}
+.tip-exig .k{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:4px;font-weight:600}
 .now-l{position:absolute;top:0;bottom:0;width:2px;background:var(--red);z-index:15;box-shadow:0 0 8px var(--red)}
 .now-d{position:absolute;top:-4px;left:-4px;width:10px;height:10px;border-radius:50%;background:var(--red)}
 
@@ -2045,6 +2054,7 @@ function mkTL(mon,slots){
     const com=s.commentaire?String(s.commentaire).trim():"";
     const line3Parts=[dateLiv,com].filter(Boolean);
     const line3Txt=line3Parts.join(" | ");
+    const exig=s.exigences_production?String(s.exigences_production).trim():"";
     const subTxt=line2Txt; // pour compatibilité tooltip
     const fmTip=fm||"—";
     const st=s.statut==="en_cours"?"En cours":s.statut==="termine"?"Terminé":"En attente";
@@ -2056,7 +2066,7 @@ function mkTL(mon,slots){
     // Search match
     let matchCls="";
     if(tlQ){
-      const fields=[cli,s.numero_of||"",s.reference||"",s.ref_produit||"",s.description||"",fm,lz,s.laize?String(s.laize):""].map(f=>f.toLowerCase());
+      const fields=[cli,s.numero_of||"",s.reference||"",s.ref_produit||"",s.description||"",fm,lz,s.laize?String(s.laize):"",exig,com].map(f=>f.toLowerCase());
       matchCls=fields.some(f=>f.includes(tlQ))?"tl-match":"tl-no-match";
     }
     // a_placer striped
@@ -2072,15 +2082,16 @@ function mkTL(mon,slots){
     const termineTitle=termineSlideCls?"Dossier terminé — glisser pour décaler le créneau sur la ligne de temps":"";
     const sr = hasSaisieReelle() ? (s.statut_reel||"reellement_en_attente") : "reellement_en_attente";
     const durAff = (s.statut==="termine") ? (workHoursBetween(ss,se) ?? s.duree_heures) : s.duree_heures;
-    h+=`<div class="slot ${matchCls} ${aplacerCls} ${reelTermineCls} ${termineSlideCls}" data-eid="${s.entry_id||idx}" data-statut="${escAttr(s.statut||"attente")}" data-statut-reel="${escAttr(sr)}" ${canDragSlot?'draggable="true"':''} style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${isActive?"border:2px solid #22d3ee;animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
+    const exigCls=exig?" slot-has-exig":"";
+    h+=`<div class="slot${exigCls} ${matchCls} ${aplacerCls} ${reelTermineCls} ${termineSlideCls}" data-eid="${s.entry_id||idx}" data-statut="${escAttr(s.statut||"attente")}" data-statut-reel="${escAttr(sr)}" ${canDragSlot?'draggable="true"':''} style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${isActive?"border:2px solid #22d3ee;animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
       onmouseenter="showTip(event,this)" onmousemove="moveTip(event)" onmouseleave="hideTip()"
       ondblclick="hideTip();openEdit(${s.entry_id||idx});event.stopPropagation()"
-      data-livraison="${escAttr(fmtLivraisonLong(s.date_livraison||""))}" data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-rfp="${escAttr(s.ref_produit||"")}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(fmtDur(durAff))}"
+      data-livraison="${escAttr(fmtLivraisonLong(s.date_livraison||""))}" data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-rfp="${escAttr(s.ref_produit||"")}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(fmtDur(durAff))}" data-exigences="${escAttr(exig)}"
       data-planned-start="${escAttr(String(s.start||""))}" data-planned-end="${escAttr(String(s.end||""))}"
       data-deb="${escAttr(fdt(ss))}" data-fin="${escAttr(fdt(se))}" data-st="${escAttr(st)}" data-co="${escAttr(co)}"${termineTitle?` title="${escAttr(termineTitle)}"`:""}>
       ${destock?`<div style="position:absolute;top:4px;right:4px;width:10px;height:10px;border-radius:50%;background:rgba(71,85,105,.9);pointer-events:none;z-index:5;flex-shrink:0"></div>`:""}
       ${resizeHandle}
-      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}</span>${line2Txt?`<span class="line2">${escAttr(line2Txt)}</span>`:""}${line3Txt?`<span class="line3">${escAttr(line3Txt)}</span>`:""}</div>`:""}</div>`;
+      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}</span>${line2Txt?`<span class="line2">${escAttr(line2Txt)}</span>`:""}${line3Txt?`<span class="line3">${escAttr(line3Txt)}</span>`:""}${exig?`<span class="line-exig" title="${escAttr(exig)}">EXIG. ${escAttr(exig)}</span>`:""}</div>`:""}</div>`;
   });
 
   const np=gp(now);
@@ -2217,8 +2228,10 @@ function showTip(ev,el){hideTip();const d=el.dataset;_hoveredSlotEid=d.eid?+d.ei
   tipEl.style.borderColor=(d.co||"#888")+"55";
   const sub=d.lbl?`<div class="tip-lbl">${d.lbl}</div>`:"";
   const liv=(d.livraison||"").trim();
+  const exigTip=(d.exigences||"").trim();
   tipEl.innerHTML=`<div class="tip-hdr"><div class="tip-bar" style="background:${d.co||"#888"}"></div><div><div class="tip-ref">${d.ref||"—"}</div>${sub}</div></div>
     ${liv?`<div class="tip-livraison">Livraison : ${escHtml(liv)}</div>`:""}
+    ${exigTip?`<div class="tip-exig"><span class="k">Exigences de production</span>${escHtml(exigTip)}</div>`:""}
     <div class="tip-grid">${d.rfp?`<span class="k">Réf produit</span><span class="v">${d.rfp}</span>`:""}<span class="k">Format</span><span class="v">${d.fmt||"—"}</span><span class="k">Durée</span><span class="v">${d.dur||""}</span>
     <span class="k">Début</span><span class="v">${d.deb||""}</span><span class="k">Fin</span><span class="v">${d.fin||""}</span>
     <span class="k">Statut</span><span class="v" style="color:${d.st==="En cours"?"var(--green)":d.st==="Terminé"?"var(--muted)":"var(--amber)"};font-weight:600">${d.st||""}</span>
@@ -2533,7 +2546,7 @@ function duplicateEntry(id){
   if(!e) return;
   document.getElementById("mroot").innerHTML=modalHTML(
     "Dupliquer le dossier",
-    dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.format_l||"",e.format_h||"",e.duree_heures,"attente",false),
+    dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.exigences_production||"",e.format_l||"",e.format_h||"",e.duree_heures,"attente",false),
     "Ajouter","submitDuplicate()"
   );
 }
@@ -2619,6 +2632,7 @@ async function confirmSwitch(targetMachineId,afterEntryId){
         laize:e.laize||null,
         date_livraison:e.date_livraison||"",
         commentaire:e.commentaire||"",
+        exigences_production:e.exigences_production||"",
         format_l:e.format_l||null,
         format_h:e.format_h||null,
         duree_heures:e.duree_heures||8,
@@ -2633,6 +2647,7 @@ async function confirmSwitch(targetMachineId,afterEntryId){
         laize:e.laize||null,
         date_livraison:e.date_livraison||"",
         commentaire:e.commentaire||"",
+        exigences_production:e.exigences_production||"",
         format_l:e.format_l||null,
         format_h:e.format_h||null,
         duree_heures:e.duree_heures||8,
@@ -2667,7 +2682,7 @@ function modalHTML(title,fields,submitLabel,onSubmitFn,headerAction="",footerLef
     </div></div></div>`
 }
 
-function dossierFields(numero_of,client,ref_produit,laize,date_livraison,commentaire,fl,fh,dur,statut,showStatut,aPlacer=1){
+function dossierFields(numero_of,client,ref_produit,laize,date_livraison,commentaire,exigences_production,fl,fh,dur,statut,showStatut,aPlacer=1){
   return`
     <div class="fd"><label>Numéro d'OF</label><input id="f-of" value="${numero_of}" placeholder="9936280"></div>
     <div class="fd"><label>Client</label><input id="f-cli" value="${client}" placeholder="Nom du client"></div>
@@ -2681,6 +2696,7 @@ function dossierFields(numero_of,client,ref_produit,laize,date_livraison,comment
       <div class="fd"><label>Date livraison</label><input type="date" id="f-dl" value="${/^\d{4}-\d{2}-\d{2}$/.test(date_livraison)?date_livraison:''}"></div>
     </div>
     <div class="fd"><label>Commentaire</label><input id="f-com" value="${commentaire}" placeholder="Bobine, contraintes, etc."></div>
+    <div class="fd"><label>Exigences de production</label><textarea id="f-exig" rows="2" placeholder="Consignes impératives pour l'atelier (visibles en priorité sur la timeline)" style="width:100%;padding:10px 12px;border:1px solid var(--border2);border-radius:10px;background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;resize:vertical;outline:none">${escHtml(exigences_production||"")}</textarea></div>
     <div class="fd"><label>Durée (${MIND}–${MAXD}h)</label>
       <input type="number" id="f-dur" min="${MIND}" max="${MAXD}" step="0.25" value="${dur}" oninput="document.getElementById('f-dur-fill').style.width=((Math.max(${MIND},Math.min(${MAXD},+this.value||${MIND}))-${MIND})/(${MAXD}-${MIND})*100)+'%'">
       <div class="dur-b"><div class="dur-f" id="f-dur-fill" style="width:${durBar(dur)}"></div></div>
@@ -2708,6 +2724,7 @@ function getFormData(withStatut){
     laize:parseFloat(document.getElementById("f-laize").value)||null,
     date_livraison:document.getElementById("f-dl").value||"",
     commentaire:document.getElementById("f-com").value||"",
+    exigences_production:(document.getElementById("f-exig")?.value||"").trim(),
     duree_heures:Math.max(MIND,Math.min(MAXD,parseFloat(document.getElementById("f-dur").value)||8)),
     a_placer:document.getElementById("f-aplacer")?.checked?1:0,
   };
@@ -2719,7 +2736,7 @@ function openAdd(){
   if(!CAN_EDIT) return;
   document.getElementById("mroot").innerHTML=modalHTML(
     "Ajouter un dossier",
-    dossierFields("","","","","","","","",8,"attente",false),
+    dossierFields("","","","","","","","","",8,"attente",false),
     '<span style="font-size:18px;line-height:1">+</span> Ajouter',"submitAdd()"
   );
 }
@@ -2739,7 +2756,7 @@ function openEdit(id){
   const statLabel=isTermine?"Terminé":e.statut==="en_cours"?"En cours":"";
   const statColor=isTermine?"var(--danger)":"var(--accent)";
 
-  const fieldsHtml=dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.format_l||"",e.format_h||"",e.duree_heures,e.statut,true,e.a_placer??1);
+  const fieldsHtml=dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.exigences_production||"",e.format_l||"",e.format_h||"",e.duree_heures,e.statut,true,e.a_placer??1);
 
   // Bouton déstockage compact en en-tête
   const destockDone=e.destockage==="done";
@@ -2836,7 +2853,7 @@ function openInsert(afterId){
   }catch(e){}
   document.getElementById("mroot").innerHTML=modalHTML(
     "Insérer un dossier après",
-    dossierFields("","","","","","","","",8,"attente",false),
+    dossierFields("","","","","","","","","",8,"attente",false),
     "Insérer",`submitInsert(${afterId})`
   );
 }
@@ -2969,6 +2986,7 @@ function exportDossiers(){
     "Laize":        e.laize!=null?e.laize:"",
     "Livraison":    e.date_livraison||"",
     "Commentaire":  e.commentaire||"",
+    "Exigences prod.": e.exigences_production||"",
     "Durée (h)":    e.duree_heures||0,
     "Statut":       statLabel(e.statut),
     "Déstockage":   e.destockage==="done"?"Oui":"Non",

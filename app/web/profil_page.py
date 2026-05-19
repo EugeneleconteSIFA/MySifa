@@ -68,9 +68,9 @@ body.palette-cocon{
   --ok:#34d399;--danger:#ff6060;--warn:#f0b240;
 }
 body.palette-cocon.light{
-  --bg:#fff5f8;--card:#ffffff;--border:#f5d0df;
+  --bg:#fef8f2;--card:#fffdfb;--border:#f0d5de;
   --text:#3a0f22;--text2:#7a2e50;--muted:#b87090;
-  --accent:#d42070;--accent-bg:rgba(212,32,112,0.10);
+  --accent:#d42070;--accent-bg:rgba(212,32,112,0.09);
   --ok:#2e7d32;--danger:#c0392b;--warn:#d06000;
 }
 /* Style Compact */
@@ -477,13 +477,13 @@ async function saveInfo(){
 
 // ── Onglet Mes préférences ────────────────────────────────────────
 const PALETTE_DEF=[
-  {id:'mysifa', name:'MySifa',   sub:'Cyan · défaut',
+  {id:'mysifa', name:'Cyan',   sub:'défaut',
     prev:`<div style="background:#0a0e17;width:100%;height:100%;border-radius:6px;display:flex;align-items:center;justify-content:center;gap:5px">
       <div style="width:9px;height:9px;border-radius:50%;background:#22d3ee"></div>
       <div style="width:9px;height:9px;border-radius:50%;background:#22d3ee;opacity:.5"></div>
       <div style="width:9px;height:9px;border-radius:50%;background:#22d3ee;opacity:.25"></div>
     </div>`},
-  {id:'forge',  name:'Marine',   sub:'Ambre · navy',
+  {id:'forge',  name:'Ambre',   sub:'Doré · navy',
     prev:`<div style="background:#0c1422;width:100%;height:100%;border-radius:6px;display:flex;align-items:center;justify-content:center;gap:5px">
       <div style="width:9px;height:9px;border-radius:50%;background:#F0A500"></div>
       <div style="width:9px;height:9px;border-radius:50%;background:#4A8FE8;opacity:.8"></div>
