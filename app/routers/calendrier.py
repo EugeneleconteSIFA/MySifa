@@ -13,8 +13,29 @@ from services.auth_service import require_superadmin
 
 router = APIRouter(tags=["calendrier"])
 
+PRODUCTION_CALENDARS: dict[str, int] = {
+    "production_1": 1,
+    "production_2": 2,
+    "production_3": 3,
+    "production_4": 4,
+}
+
 VALID_CALENDARS = frozenset(
-    {"production", "conges", "anniversaires", "feries", "paie"}
+    set(PRODUCTION_CALENDARS.keys())
+    | {"conges", "anniversaires", "feries", "paie"}
+)
+
+DEFAULT_CALENDARS = ",".join(
+    [
+        "production_1",
+        "production_2",
+        "production_3",
+        "production_4",
+        "conges",
+        "anniversaires",
+        "feries",
+        "paie",
+    ]
 )
 
 def _parse_ymd(s: str) -> date:
@@ -79,7 +100,7 @@ def list_events(
     date_debut: str = Query(..., description="YYYY-MM-DD"),
     date_fin: str = Query(..., description="YYYY-MM-DD"),
     calendriers: str = Query(
-        "production,conges,anniversaires,feries,paie",
+        DEFAULT_CALENDARS,
         description="Liste séparée par des virgules",
     ),
 ):
@@ -99,19 +120,31 @@ def list_events(
     out: list[dict] = []
 
     with get_db() as conn:
-        if "production" in cals:
+        prod_by_mid = {
+            mid: cal_key
+            for cal_key, mid in PRODUCTION_CALENDARS.items()
+            if cal_key in cals
+        }
+        if prod_by_mid:
+            mids = sorted(prod_by_mid.keys())
+            placeholders = ",".join("?" * len(mids))
             rows = conn.execute(
-                """
+                f"""
                 SELECT id, reference, client, machine_id, statut,
                        planned_start, planned_end
                 FROM planning_entries
                 WHERE planned_start IS NOT NULL
+                  AND machine_id IN ({placeholders})
                   AND date(planned_start) <= ?
                   AND date(COALESCE(planned_end, planned_start)) >= ?
                 """,
-                (d1.isoformat(), d0.isoformat()),
+                (*mids, d1.isoformat(), d0.isoformat()),
             ).fetchall()
             for r in rows:
+                mid = r["machine_id"]
+                cal_key = prod_by_mid.get(mid)
+                if not cal_key:
+                    continue
                 ps = _parse_planned_dt(r["planned_start"])
                 pe = _parse_planned_dt(r["planned_end"]) or ps
                 if not ps:
@@ -124,14 +157,14 @@ def list_events(
                 out.append(
                     _event(
                         eid=f"prod-{r['id']}",
-                        cal="production",
+                        cal=cal_key,
                         titre=titre,
                         debut=_fmt_dt(ps),
                         fin=_fmt_dt(pe),
                         all_day=False,
                         meta={
                             "statut": r["statut"],
-                            "machine_id": r["machine_id"],
+                            "machine_id": mid,
                             "reference": ref,
                         },
                     )
