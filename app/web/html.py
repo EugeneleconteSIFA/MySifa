@@ -373,11 +373,13 @@ tr.matiere-group td{padding:7px 16px;background:var(--card);font-weight:600;font
 @media(max-width:480px){.calc-panel{right:12px;width:calc(100vw - 24px);bottom:80px}}
 /* ── Agent IA — Widget chat ─────────────────────────────── */
 #ai-chat-root{display:none}
+#ai-chat-root.ai-on-portal #ai-chat-btn{right:max(24px,env(safe-area-inset-right,0px))}
+#ai-chat-root.ai-on-portal #ai-chat-panel{right:max(24px,env(safe-area-inset-right,0px))}
 #ai-chat-btn{
   position:fixed;
   bottom:max(24px,env(safe-area-inset-bottom,0px));
   right:max(84px,calc(env(safe-area-inset-right,0px) + 84px));
-  z-index:8001;
+  z-index:8003;
   width:48px;height:48px;border-radius:50%;
   background:var(--accent);border:none;cursor:pointer;
   display:flex;align-items:center;justify-content:center;
@@ -393,11 +395,16 @@ tr.matiere-group td{padding:7px 16px;background:var(--card);font-weight:600;font
   box-shadow:0 12px 48px rgba(0,0,0,0.5);
   display:flex;flex-direction:column;
   transform-origin:bottom right;
-  transform:scale(0.9) translateY(10px);opacity:0;pointer-events:none;
-  transition:transform .2s cubic-bezier(.34,1.56,.64,1),opacity .15s;
+  transform:scale(0.9) translateY(10px);opacity:0;
+  visibility:hidden;pointer-events:none;
+  transition:transform .2s cubic-bezier(.34,1.56,.64,1),opacity .15s,visibility 0s linear .15s;
   overflow:hidden;
 }
-#ai-chat-panel.open{transform:scale(1) translateY(0);opacity:1;pointer-events:all}
+#ai-chat-panel.open{
+  transform:scale(1) translateY(0);opacity:1;visibility:visible;pointer-events:auto;
+  z-index:8004;
+  transition:transform .2s cubic-bezier(.34,1.56,.64,1),opacity .15s,visibility 0s;
+}
 #ai-chat-header{
   padding:12px 16px;background:var(--card);
   border-bottom:1px solid var(--border);
@@ -770,20 +777,52 @@ body.light .portal-app--busy::after{background:rgba(255,255,255,.88);color:var(-
 body.light .portal-logout:hover{text-shadow:0 0 12px rgba(8,145,178,.35)}
 body.light .portal-logout:hover:last-of-type{text-shadow:0 0 12px rgba(220,38,38,.35)}
 
-@media (max-width:420px){
-  /* Portail mobile : 2 colonnes au lieu d'une pile */
+@media (max-width:480px){
+  /* Portail mobile : coin en flow, tuiles compactes 2 colonnes */
+  .portal-page{padding:24px 16px 32px;gap:20px}
+  .portal-logo{order:1}
+  .portal-corner-stack{
+    order:2;
+    position:static;
+    top:auto;
+    right:auto;
+    z-index:auto;
+    flex-direction:row;
+    flex-wrap:wrap;
+    justify-content:center;
+    gap:10px;
+    width:100%;
+    margin:0;
+  }
+  .portal-corner-stack .portal-settings-corner{
+    width:44px;
+    height:44px;
+    border-radius:14px;
+  }
+  .portal-search{
+    order:3;
+    width:100%;
+    max-width:100%;
+    margin-top:12px;
+  }
+  .portal-page>div:not([class]){order:4;width:100%;max-width:100%}
+  .portal-user{order:5}
   .portal-apps{
     display:grid;
     grid-template-columns:repeat(2, minmax(0, 1fr));
     gap:12px;
     width:100%;
-    max-width:420px;
+    max-width:100%;
   }
   .portal-app{
     width:auto;
     flex:none;
+    height:auto;
+    padding:14px 10px;
+    align-items:center;
   }
-  .portal-app-desc{max-width:100%}
+  .portal-app-desc{display:none}
+  .portal-app-icon svg{width:32px;height:32px}
 }
 
 /* ── MyStock ────────────────────────────────────────────────────── */
@@ -9776,7 +9815,8 @@ checkAuth();
     const root = document.getElementById('ai-chat-root');
     if(!root) return;
 
-    const show = AI_ROLES.indexOf(user.role) >= 0 && app && app !== 'portal' && app !== 'login';
+    const show = AI_ROLES.indexOf(user.role) >= 0 && app && app !== 'login';
+    root.classList.toggle('ai-on-portal', app === 'portal');
     root.style.display = show ? 'block' : 'none';
     if(!show){
       open = false;
@@ -9796,8 +9836,8 @@ checkAuth();
 
     if(!bound){
       bound = true;
-      btn.addEventListener('click', toggle);
-      closeBtn.addEventListener('click', toggle);
+      btn.addEventListener('click', function(e){ e.stopPropagation(); toggle(); });
+      closeBtn.addEventListener('click', function(e){ e.stopPropagation(); toggle(); });
       document.addEventListener('click', onDocClick);
       input.addEventListener('keydown', onKey);
       input.addEventListener('input', onInput);
@@ -9821,10 +9861,10 @@ checkAuth();
       if(open) setTimeout(function(){ input.focus(); }, 200);
     }
     function onDocClick(e){
-      if(open && !panel.contains(e.target) && e.target !== btn){
-        open = false;
-        panel.classList.remove('open');
-      }
+      if(!open) return;
+      if(panel.contains(e.target) || btn.contains(e.target)) return;
+      open = false;
+      panel.classList.remove('open');
     }
     function onKey(e){
       if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); handleSend(); }
