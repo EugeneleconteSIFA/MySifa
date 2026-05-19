@@ -172,6 +172,13 @@ body.light{
   </div>
 
   <div class="note">
+    <strong>Windows — avertissement au téléchargement</strong><br>
+    Le message « isn't commonly downloaded » ou « fichier peu courant » est normal pour un installateur interne non signé.
+    Dans le navigateur : <code>Conserver</code> ou <code>Conserver quand même</code> sur le fichier téléchargé.
+    À l’exécution de <code>MyProd-Widget-*-Setup.exe</code> : si SmartScreen bloque, cliquer <code>Plus d’infos</code> puis <code>Exécuter quand même</code>.
+    L’application provient de MySifa (SIFA) — aucun risque si vous avez téléchargé depuis <code>/install/widget</code>.
+  </div>
+  <div class="note" style="margin-top:12px">
     <strong>macOS — si l’ouverture est bloquée</strong><br>
     Si macOS bloque l’application : aller dans <code>Réglages Système</code> → <code>Confidentialité et sécurité</code> → cliquer <code>Ouvrir quand même</code>, puis confirmer.
   </div>

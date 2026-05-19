@@ -9,6 +9,8 @@ Ajouter dans main.py :
 """
 
 import json
+import logging
+import sqlite3
 import unicodedata
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
@@ -21,6 +23,15 @@ from services.auth_service import require_admin, get_current_user, user_has_app_
 from services.dossier_stats import build_dossier_production_stats
 
 _TZ_PARIS = ZoneInfo("Europe/Paris")
+_log = logging.getLogger(__name__)
+
+# Colonnes ajoutées après déploiements partiels — ALTER si absentes (évite 500 si migration pas encore passée).
+_PLANNING_ENTRY_COL_DDLS = [
+    ("exigences_production", "ALTER TABLE planning_entries ADD COLUMN exigences_production TEXT"),
+    ("a_placer", "ALTER TABLE planning_entries ADD COLUMN a_placer INTEGER DEFAULT 0"),
+    ("created_by", "ALTER TABLE planning_entries ADD COLUMN created_by TEXT"),
+    ("updated_by", "ALTER TABLE planning_entries ADD COLUMN updated_by TEXT"),
+]
 
 router = APIRouter(prefix="/api/planning", tags=["planning"])
 
@@ -359,6 +370,53 @@ def _invalidate_attente_plans(conn, machine_id: int) -> None:
         """UPDATE planning_entries SET planned_start=NULL, planned_end=NULL
            WHERE machine_id=? AND statut='attente'""",
         (machine_id,),
+    )
+
+
+def _planning_entry_columns(conn) -> set:
+    return {row[1] for row in conn.execute("PRAGMA table_info(planning_entries)").fetchall()}
+
+
+def _ensure_planning_entry_columns(conn) -> set:
+    cols = _planning_entry_columns(conn)
+    for name, ddl in _PLANNING_ENTRY_COL_DDLS:
+        if name not in cols:
+            try:
+                conn.execute(ddl)
+                cols.add(name)
+            except sqlite3.OperationalError:
+                cols = _planning_entry_columns(conn)
+    return cols
+
+
+def _parse_duree_heures(raw: Any, default: float = 8.0) -> float:
+    if raw is None:
+        return float(default)
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Durée invalide")
+
+
+def _parse_a_placer(raw: Any, default: int = 1) -> int:
+    if raw is None:
+        return 1 if default else 0
+    if isinstance(raw, bool):
+        return 1 if raw else 0
+    if isinstance(raw, (int, float)):
+        return 1 if int(raw) else 0
+    if isinstance(raw, str) and raw.strip().lower() in ("1", "true", "yes", "on"):
+        return 1
+    return 0
+
+
+def _backfill_group_id(conn, entry_id: int, pe_cols: set) -> None:
+    if "group_id" not in pe_cols:
+        return
+    conn.execute(
+        """UPDATE planning_entries SET group_id=CAST(id AS TEXT)
+           WHERE id=? AND (group_id IS NULL OR TRIM(COALESCE(group_id,''))='')""",
+        (entry_id,),
     )
 
 
@@ -1190,71 +1248,81 @@ async def add_entry(machine_id: int, request: Request):
     """Ajouter un dossier manuellement au planning."""
     require_admin(request)
     body = await request.json()
-    reference = body.get("reference", "").strip()
+    reference = (body.get("reference") or body.get("numero_of") or "").strip()
     if not reference:
         raise HTTPException(400, "Référence requise")
 
-    duree = body.get("duree_heures", 8)
+    duree = _parse_duree_heures(body.get("duree_heures", 8))
     if duree < 0.75 or duree > 720:
         raise HTTPException(400, "Durée entre 0,75 et 720 heures")
 
-    # Récupérer l'utilisateur courant pour la traçabilité
     user = get_current_user(request)
     user_name = user.get("nom") or user.get("email") or "Admin"
-
     now = datetime.now().isoformat()
-    with get_db() as conn:
-        # Vérifier que la machine existe
-        mac = conn.execute("SELECT id FROM machines WHERE id=?", (machine_id,)).fetchone()
-        if not mac:
-            raise HTTPException(404, "Machine non trouvée")
+    date_liv = body.get("date_livraison")
+    if date_liv is not None and not str(date_liv).strip():
+        date_liv = None
 
-        # Position : soit spécifiée, soit en fin de file
-        position = body.get("position")
-        if position is None:
-            max_pos = conn.execute(
-                "SELECT COALESCE(MAX(position),0) FROM planning_entries WHERE machine_id=?",
-                (machine_id,)
-            ).fetchone()[0]
-            position = max_pos + 1
-        else:
-            # Décaler les entrées existantes pour faire de la place
+    row_data = {
+        "reference": reference,
+        "client": body.get("client", "") or "",
+        "description": body.get("description", "") or "",
+        "format_l": body.get("format_l"),
+        "format_h": body.get("format_h"),
+        "duree_heures": duree,
+        "statut": body.get("statut", "attente") or "attente",
+        "notes": body.get("notes", "") or "",
+        "created_at": now,
+        "updated_at": now,
+        "dos_rvgi": (body.get("dos_rvgi") or "").strip() or None,
+        "numero_of": body.get("numero_of") or reference,
+        "ref_produit": body.get("ref_produit"),
+        "laize": body.get("laize"),
+        "date_livraison": date_liv,
+        "commentaire": body.get("commentaire", "") or "",
+        "exigences_production": (body.get("exigences_production") or "").strip() or None,
+        "a_placer": _parse_a_placer(body.get("a_placer"), default=1),
+        "created_by": user_name,
+        "updated_by": user_name,
+    }
+
+    position: int
+    try:
+        with get_db() as conn:
+            pe_cols = _ensure_planning_entry_columns(conn)
+            mac = conn.execute("SELECT id FROM machines WHERE id=?", (machine_id,)).fetchone()
+            if not mac:
+                raise HTTPException(404, "Machine non trouvée")
+
+            position = body.get("position")
+            if position is None:
+                max_pos = conn.execute(
+                    "SELECT COALESCE(MAX(position),0) FROM planning_entries WHERE machine_id=?",
+                    (machine_id,),
+                ).fetchone()[0]
+                position = int(max_pos) + 1
+            else:
+                position = int(position)
+                conn.execute(
+                    "UPDATE planning_entries SET position = position + 1 WHERE machine_id=? AND position >= ?",
+                    (machine_id, position),
+                )
+
+            insert_cols = ["machine_id", "position"] + [c for c in row_data if c in pe_cols]
+            values = [machine_id, position] + [row_data[c] for c in insert_cols[2:]]
             conn.execute(
-                "UPDATE planning_entries SET position = position + 1 WHERE machine_id=? AND position >= ?",
-                (machine_id, position)
+                f"INSERT INTO planning_entries ({', '.join(insert_cols)}) VALUES ({', '.join('?' * len(insert_cols))})",
+                values,
             )
-
-        conn.execute("""
-            INSERT INTO planning_entries
-                (machine_id, position, reference, client, description, format_l, format_h,
-                 duree_heures, statut, notes, created_at, updated_at,
-                 dos_rvgi, numero_of, ref_produit, laize, date_livraison, commentaire,
-                 exigences_production, a_placer, created_by, updated_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            machine_id, position,
-            reference,
-            body.get("client", ""),
-            body.get("description", ""),
-            body.get("format_l"),
-            body.get("format_h"),
-            duree,
-            body.get("statut", "attente"),
-            body.get("notes", ""),
-            now, now,
-            (body.get("dos_rvgi") or "").strip() or None,
-            body.get("numero_of"),
-            body.get("ref_produit"),
-            body.get("laize"),
-            body.get("date_livraison"),
-            body.get("commentaire"),
-            body.get("exigences_production"),
-            body.get("a_placer", 1),
-            user_name,
-            user_name,
-        ))
-        _invalidate_attente_plans(conn, machine_id)
-        conn.commit()
+            new_id = int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
+            _backfill_group_id(conn, new_id, pe_cols)
+            _invalidate_attente_plans(conn, machine_id)
+            conn.commit()
+    except HTTPException:
+        raise
+    except sqlite3.OperationalError as exc:
+        _log.exception("add_entry DB error machine_id=%s", machine_id)
+        raise HTTPException(status_code=500, detail=f"Erreur base de données : {exc}") from exc
 
     return {"success": True, "position": position}
 
@@ -1970,41 +2038,48 @@ async def insert_after(machine_id: int, after_entry_id: int, request: Request):
     if not reference:
         raise HTTPException(400, "Référence requise")
 
-    duree = body.get("duree_heures", 8)
+    duree = _parse_duree_heures(body.get("duree_heures", 8))
     if duree < 2 or duree > 720:
         raise HTTPException(400, "Durée entre 2 et 720 heures")
 
     now = datetime.now().isoformat()
+    date_liv = body.get("date_livraison")
+    if date_liv is not None and not str(date_liv).strip():
+        date_liv = None
+    row_data = {
+        "reference": reference,
+        "client": body.get("client", "") or "",
+        "description": body.get("description", "") or "",
+        "format_l": body.get("format_l"),
+        "format_h": body.get("format_h"),
+        "duree_heures": duree,
+        "statut": "attente",
+        "notes": body.get("notes", "") or "",
+        "created_at": now,
+        "updated_at": now,
+        "dos_rvgi": (body.get("dos_rvgi") or "").strip() or None,
+        "numero_of": body.get("numero_of") or reference,
+        "ref_produit": body.get("ref_produit"),
+        "laize": body.get("laize"),
+        "date_livraison": date_liv,
+        "commentaire": body.get("commentaire", "") or "",
+        "exigences_production": (body.get("exigences_production") or "").strip() or None,
+        "a_placer": _parse_a_placer(body.get("a_placer"), default=1),
+    }
     with get_db() as conn:
+        pe_cols = _ensure_planning_entry_columns(conn)
         conn.execute(
             "UPDATE planning_entries SET position = position + 1 WHERE machine_id=? AND position >= ?",
             (machine_id, new_position)
         )
-        conn.execute("""
-            INSERT INTO planning_entries
-                (machine_id, position, reference, client, description, format_l, format_h,
-                 duree_heures, statut, notes, created_at, updated_at,
-                 dos_rvgi, numero_of, ref_produit, laize, date_livraison, commentaire,
-                 exigences_production)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'attente', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            machine_id, new_position,
-            reference,
-            body.get("client", ""),
-            body.get("description", ""),
-            body.get("format_l"),
-            body.get("format_h"),
-            duree,
-            body.get("notes", ""),
-            now, now,
-            (body.get("dos_rvgi") or "").strip() or None,
-            body.get("numero_of"),
-            body.get("ref_produit"),
-            body.get("laize"),
-            body.get("date_livraison"),
-            body.get("commentaire"),
-            body.get("exigences_production"),
-        ))
+        insert_cols = ["machine_id", "position"] + [c for c in row_data if c in pe_cols]
+        values = [machine_id, new_position] + [row_data[c] for c in insert_cols[2:]]
+        conn.execute(
+            f"INSERT INTO planning_entries ({', '.join(insert_cols)}) VALUES ({', '.join('?' * len(insert_cols))})",
+            values,
+        )
+        new_id = int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
+        _backfill_group_id(conn, new_id, pe_cols)
         _invalidate_attente_plans(conn, machine_id)
         conn.commit()
 

@@ -81,3 +81,30 @@ Les fichiers suivants sont des reliques de l'ancienne méthode (ZIP + Node.js t�
 - `installer-windows.ps1`
 
 Ils peuvent être supprimés dès que les binaires natifs sont en production.
+
+---
+
+## Windows — avertissement SmartScreen / « isn't commonly downloaded »
+
+Ce message n'est **pas une erreur** : Edge et Windows affichent cet avertissement pour tout `.exe` interne **non signé** ou peu téléchargé (réputation SmartScreen).
+
+**Côté utilisateur (installation normale)**
+1. Au téléchargement (Edge/Chrome) : **Conserver** / **Conserver quand même**
+2. À l'exécution du Setup : **Plus d'infos** → **Exécuter quand même**
+
+**Pour supprimer l'avertissement à terme (option admin)**
+- Obtenir un certificat **Authenticode** (OV ou EV) au nom de SIFA
+- Signer l'installateur à la compilation, par ex. dans `package.json` :
+
+```json
+"win": {
+  "certificateFile": "chemin/vers/cert.pfx",
+  "certificatePassword": "…",
+  "signingHashAlgorithms": ["sha256"],
+  "publisherName": "SIFA"
+}
+```
+
+- Soumettre le binaire à [Microsoft Partner Center](https://developer.microsoft.com/en-us/windows/hardware/) pour accélérer la réputation SmartScreen (gratuit, délai de quelques jours)
+
+Sans signature, l'installateur reste **fonctionnel** — seul le parcours utilisateur demande une confirmation supplémentaire.

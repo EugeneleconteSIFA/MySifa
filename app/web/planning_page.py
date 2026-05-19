@@ -2791,9 +2791,14 @@ function openAdd(){
 }
 async function submitAdd(){
   const d=getFormData(false);
-  if(!d.numero_of)return alert("Numéro d'OF requis");
-  await api(`/machines/${MID}/entries`,{method:"POST",body:JSON.stringify({reference:d.numero_of,...d})});
-  closeM();load();
+  if(!d.numero_of){ showToast("Numéro d'OF requis.","danger"); return; }
+  try{
+    await api(`/machines/${MID}/entries`,{method:"POST",body:JSON.stringify({reference:d.numero_of,...d})});
+    closeM();load();
+    showToast("Dossier ajouté.","success");
+  }catch(e){
+    showToast(apiErrorMessage(e,"Ajout impossible."),"danger");
+  }
 }
 
 function openEdit(id){
@@ -2908,9 +2913,14 @@ function openInsert(afterId){
 }
 async function submitInsert(afterId){
   const d=getFormData(false);
-  if(!d.numero_of)return alert("Numéro d'OF requis");
-  await api(`/machines/${MID}/insert-after/${afterId}`,{method:"POST",body:JSON.stringify({reference:d.numero_of,...d})});
-  closeM();load();
+  if(!d.numero_of){ showToast("Numéro d'OF requis.","danger"); return; }
+  try{
+    await api(`/machines/${MID}/insert-after/${afterId}`,{method:"POST",body:JSON.stringify({reference:d.numero_of,...d})});
+    closeM();load();
+    showToast("Dossier inséré.","success");
+  }catch(e){
+    showToast(apiErrorMessage(e,"Insertion impossible."),"danger");
+  }
 }
 
 function fMin(m){
