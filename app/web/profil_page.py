@@ -276,7 +276,11 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
     </button>
     <button type="button" class="nav-btn" id="nav-prefs" onclick="showTab('prefs')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></svg>
-      Mes préférences
+      Thème et apparence
+    </button>
+    <button type="button" class="nav-btn" id="nav-calendrier" onclick="showTab('calendrier')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      Calendrier
     </button>
 
     <div class="sidebar-bottom">
@@ -329,6 +333,7 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 
       <!-- Onglet Mes préférences -->
       <div class="pane-tab" id="pane-prefs"></div>
+      <div class="pane-tab" id="pane-calendrier"></div>
 
     </div>
   </main>
@@ -399,16 +404,27 @@ function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').
 // ── Onglets ───────────────────────────────────────────────────────
 function showTab(tab){
   CURRENT_TAB=tab;
-  ['info','prefs'].forEach(id=>{
-    document.getElementById('pane-'+id).classList.toggle('active',id===tab);
-    document.getElementById('nav-'+id).classList.toggle('active',id===tab);
+  ['info','prefs','calendrier'].forEach(id=>{
+    const pane=document.getElementById('pane-'+id);
+    const nav=document.getElementById('nav-'+id);
+    if(pane)pane.classList.toggle('active',id===tab);
+    if(nav)nav.classList.toggle('active',id===tab);
   });
-  const subLabels={info:'Informations personnelles',prefs:'Apparence et thème'};
+  const subLabels={
+    info:'Informations personnelles',
+    prefs:'Thème et apparence',
+    calendrier:'Couleurs MyCalendrier'
+  };
   const sub=document.getElementById('mobile-sub');
   if(sub)sub.textContent=subLabels[tab]||'';
   const pageSub=document.getElementById('page-sub');
-  if(pageSub)pageSub.textContent=tab==='info'?'Vos informations personnelles et mot de passe.':'Personnalisez l\'apparence de MySifa.';
+  if(pageSub){
+    if(tab==='info')pageSub.textContent='Vos informations personnelles et mot de passe.';
+    else if(tab==='calendrier')pageSub.textContent='Couleurs des calendriers affichés dans MyCalendrier.';
+    else pageSub.textContent='Personnalisez l\'apparence de MySifa.';
+  }
   if(tab==='prefs')renderPrefs();
+  if(tab==='calendrier')renderCalendrier();
   closeSidebar();
 }
 
@@ -648,7 +664,7 @@ function openCalColorFromHash(){
   const h=location.hash||'';
   if(!h.startsWith('#cal-'))return;
   const id=decodeURIComponent(h.slice(5));
-  showTab('prefs');
+  showTab('calendrier');
   requestAnimationFrame(()=>{
     const row=document.getElementById('cal-row-'+id);
     if(row){
@@ -667,18 +683,23 @@ function themePrefsBody(){
   return tp;
 }
 
-function renderPrefs(){
+function renderCalendrier(){
   const calDefs=window.MySifaCalendar?MySifaCalendar.CAL_DEFS:[];
-  const calSection=calDefs.length?`
-      <h2>Calendrier</h2>
-      <p class="pref-hint" style="text-align:left;margin:0 0 12px">Couleurs des calendriers affichés dans MyCalendrier.</p>
+  document.getElementById('pane-calendrier').innerHTML=`
+    <div class="card">
+      <h2>Couleurs des calendriers</h2>
+      <p class="pref-hint" style="text-align:left;margin:0 0 14px">Personnalisez la couleur de chaque calendrier dans MyCalendrier.</p>
       <div class="pref-section">
         <div class="cal-color-list">${calDefs.map(calColorRow).join('')}</div>
       </div>
-      <h2 style="margin-top:20px">Palette de couleurs</h2>`:'<h2>Palette de couleurs</h2>';
+      <button class="btn-prefs-save" onclick="saveCalColors()">Enregistrer</button>
+    </div>`;
+}
+
+function renderPrefs(){
   document.getElementById('pane-prefs').innerHTML=`
     <div class="card">
-      ${calSection}
+      <h2>Palette de couleurs</h2>
       <div class="pref-section">
         <div class="theme-grid">${PALETTE_DEF.map(palCard).join('')}</div>
       </div>
@@ -702,7 +723,7 @@ function selectPalette(id){setPrefs({palette:id});renderPrefs();syncThemeBtn();}
 function selectStyle(id){setPrefs({style:id});renderPrefs();syncThemeBtn();}
 function selectMode(id){setPrefs({mode:id});renderPrefs();syncThemeBtn();}
 
-async function savePrefs(){
+async function saveThemePrefs(){
   try{
     await api('/api/auth/me',{
       method:'PUT',
@@ -714,6 +735,19 @@ async function savePrefs(){
     toast('Préférences appliquées localement',true);
   }
 }
+async function saveCalColors(){
+  try{
+    await api('/api/auth/me',{
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({theme_prefs:themePrefsBody()})
+    });
+    toast('Couleurs enregistrées',true);
+  }catch(e){
+    toast('Couleurs appliquées localement',true);
+  }
+}
+async function savePrefs(){return saveThemePrefs();}
 
 // ── Sidebar bottom : user chip + theme toggle + logout ────────────
 function updateUserChip(){
@@ -728,6 +762,7 @@ document.getElementById('btn-theme').onclick=()=>{
   if(window.MySifaTheme)MySifaTheme.toggleMode();
   syncThemeBtn();
   if(CURRENT_TAB==='prefs')renderPrefs();
+  if(CURRENT_TAB==='calendrier')renderCalendrier();
 };
 
 document.getElementById('btn-logout').onclick=async()=>{
@@ -746,7 +781,9 @@ document.getElementById('btn-logout').onclick=async()=>{
     syncThemeBtn();
     updateUserChip();
     renderInfo();
-    if(new URLSearchParams(location.search).get('tab')==='prefs')showTab('prefs');
+    const tabParam=new URLSearchParams(location.search).get('tab');
+    if(tabParam==='prefs')showTab('prefs');
+    else if(tabParam==='calendrier')showTab('calendrier');
     if(location.hash.startsWith('#cal-'))openCalColorFromHash();
   }catch(e){
     if(e.message!=='auth'){

@@ -99,7 +99,7 @@ body.sb-open .sidebar-overlay{display:block}
 .cal-week{border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:8px;background:var(--card)}
 .cal-week-bars{position:relative;min-height:0;display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--border)}
 .cal-week-bars:empty{display:none}
-.cal-mbar{margin:2px 3px 0;padding:2px 8px;font-size:10px;font-weight:700;border-radius:4px;border-width:2px;border-style:solid;color:#0a0e17;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;grid-row:1;box-shadow:0 1px 2px rgba(0,0,0,.15)}
+.cal-mbar{margin:2px 3px 0;padding:2px 8px;font-size:10px;font-weight:700;border-radius:4px;border-width:1px;border-style:solid;color:#0a0e17;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;grid-row:1;box-shadow:0 1px 2px rgba(0,0,0,.15)}
 .cal-days{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--border)}
 .cal-day{min-height:100px;background:var(--bg);padding:6px;display:flex;flex-direction:column;gap:4px}
 .cal-day.other{opacity:.45}
@@ -107,7 +107,7 @@ body.sb-open .sidebar-overlay{display:block}
 .cal-day-num{font-size:12px;font-weight:700;color:var(--text2);flex-shrink:0}
 .cal-day.other .cal-day-num{color:var(--muted)}
 .cal-day-events{flex:1;display:flex;flex-direction:column;gap:3px;min-height:0}
-.cal-pill{font-size:10px;font-weight:600;padding:2px 8px;border-radius:4px;border-width:2px;border-style:solid;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#0a0e17;line-height:1.35;box-shadow:0 1px 2px rgba(0,0,0,.15)}
+.cal-pill{font-size:10px;font-weight:600;padding:2px 8px;border-radius:4px;border-width:1px;border-style:solid;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#0a0e17;line-height:1.35;box-shadow:0 1px 2px rgba(0,0,0,.15)}
 .cal-more{font-size:10px;color:var(--muted);font-weight:700;padding:0 4px;cursor:pointer}
 /* Week / Day time grid */
 .cal-time-wrap{display:flex;min-width:640px;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--card)}
@@ -119,7 +119,7 @@ body.sb-open .sidebar-overlay{display:block}
 body.light .cal-allday-row{background:#f8fafc}
 .cal-allday-label{width:48px;flex-shrink:0;font-size:9px;font-weight:700;color:var(--muted);display:flex;align-items:center;justify-content:flex-end;padding:4px;border-right:1px solid var(--border)}
 .cal-allday-cols{flex:1;display:grid;position:relative;min-height:28px}
-.cal-allday-pill{font-size:10px;font-weight:600;padding:2px 8px;border-radius:4px;border-width:2px;border-style:solid;margin:2px 3px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#0a0e17;box-shadow:0 1px 2px rgba(0,0,0,.15)}
+.cal-allday-pill{font-size:10px;font-weight:600;padding:2px 8px;border-radius:4px;border-width:1px;border-style:solid;margin:2px 3px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#0a0e17;box-shadow:0 1px 2px rgba(0,0,0,.15)}
 .cal-cols-row{flex:1;display:grid;position:relative}
 .cal-col{border-left:1px solid var(--border);position:relative}
 .cal-col:first-child{border-left:none}
@@ -130,7 +130,7 @@ body.light .cal-allday-row{background:#f8fafc}
 .cal-slot-line{position:absolute;left:0;right:0;height:1px;background:var(--border)}
 .cal-ev{
   position:absolute;border-radius:6px;padding:4px 8px;font-size:10px;font-weight:700;color:#0a0e17;
-  border-width:2px;border-style:solid;overflow:hidden;cursor:pointer;line-height:1.3;box-sizing:border-box;
+  border-width:1px;border-style:solid;overflow:hidden;cursor:pointer;line-height:1.3;box-sizing:border-box;
   box-shadow:0 1px 3px rgba(0,0,0,.2);
 }
 .cal-day-single .cal-cols-row{grid-template-columns:1fr}
@@ -141,6 +141,38 @@ body.light .cal-allday-row{background:#f8fafc}
 .cal-pop a{font-size:12px;font-weight:700;color:var(--accent);text-decoration:none}
 .cal-pop a:hover{text-decoration:underline}
 .cal-pop-close{position:absolute;top:8px;right:10px;border:none;background:transparent;color:var(--muted);cursor:pointer;font-size:18px;line-height:1;padding:4px}
+.cal-color-modal-backdrop{position:fixed;inset:0;z-index:8500;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px}
+.cal-color-modal{
+  position:relative;width:100%;max-width:420px;max-height:min(88vh,640px);overflow:auto;
+  background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 18px 16px;
+  box-shadow:0 16px 48px rgba(0,0,0,.45);
+}
+.cal-color-modal h2{font-size:15px;font-weight:800;margin:0 0 6px;color:var(--text)}
+.cal-color-modal-desc{font-size:12px;color:var(--text2);line-height:1.55;margin:0 0 14px}
+.cal-color-list{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
+.cal-color-row{
+  display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;
+  border:1px solid var(--border);background:var(--bg);transition:box-shadow .25s;
+}
+.cal-color-row.highlight{box-shadow:0 0 0 2px var(--accent);background:var(--accent-bg)}
+.cal-color-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;border:1px solid rgba(0,0,0,.15)}
+.cal-color-label{flex:1;font-size:13px;font-weight:600;color:var(--text)}
+.cal-color-row input[type=color]{
+  width:40px;height:30px;padding:2px;border:1px solid var(--border);border-radius:8px;
+  background:var(--card);cursor:pointer;flex-shrink:0;
+}
+.cal-color-reset{
+  font-size:11px;font-weight:600;color:var(--muted);border:none;background:transparent;
+  cursor:pointer;font-family:inherit;padding:4px 6px;border-radius:6px;flex-shrink:0;
+}
+.cal-color-reset:hover{color:var(--accent);background:var(--accent-bg)}
+.cal-color-modal-foot{display:flex;gap:10px;justify-content:flex-end;padding-top:4px}
+.cal-color-modal-foot .cal-btn{min-width:96px}
+.cal-color-modal-close{
+  position:absolute;top:10px;right:12px;border:none;background:transparent;color:var(--muted);
+  cursor:pointer;font-size:20px;line-height:1;padding:4px;
+}
+.cal-color-modal-close:hover{color:var(--text)}
 .toast{position:fixed;bottom:22px;right:22px;z-index:9999;padding:11px 16px;border-radius:10px;font-size:13px;font-weight:600;box-shadow:0 10px 36px rgba(0,0,0,.4);border:1px solid var(--border)}
 .toast.success{background:rgba(52,211,153,.15);color:var(--ok)}
 .toast.danger{background:rgba(248,113,113,.15);color:var(--danger)}
@@ -229,6 +261,7 @@ body.light .cal-allday-row{background:#f8fafc}
     </div>
   </main>
 </div>
+<div id="cal-color-modal-root"></div>
 <script>
 const CAL_DEFS=window.MySifaCalendar?MySifaCalendar.CAL_DEFS:[];
 const ICO_CAL_GEAR='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
@@ -241,7 +274,7 @@ const ROLE_LABELS={direction:'Direction',administration:'Administration',fabrica
 const PX_PER_HOUR=48;
 const CAL_SLOT_PAD_X=3;
 const DEFAULT_DAY_WIN={hStart:5,hEnd:21};
-let S={view:'month',anchor:new Date(),events:[],dayWindows:{},loading:false,visible:{},pop:null};
+let S={view:'month',anchor:new Date(),events:[],dayWindows:{},loading:false,visible:{},pop:null,colorModal:null};
 let ME=null;
 
 function pad2(n){return String(n).padStart(2,'0');}
@@ -310,19 +343,106 @@ function saveVisible(){
   try{localStorage.setItem(LS_VISIBLE,JSON.stringify(S.visible));}catch(e){}
 }
 
+function calColorModalRow(c,focusId){
+  const col=(window.MySifaCalendar?MySifaCalendar.loadColorsMap():{})[c.id]||c.color;
+  const hi=focusId===c.id?' highlight':'';
+  return `<div class="cal-color-row${hi}" id="cal-mrow-${esc(c.id)}">
+    <span class="cal-color-dot" style="background:${esc(col)}"></span>
+    <span class="cal-color-label">${esc(c.label)}</span>
+    <input type="color" value="${esc(col)}" aria-label="Couleur ${esc(c.label)}"
+      oninput="onCalColorModalInput('${esc(c.id)}',this.value)">
+    <button type="button" class="cal-color-reset" onclick="resetCalColorModal('${esc(c.id)}')">Défaut</button>
+  </div>`;
+}
+function closeCalColorModal(){
+  if(S.colorModal){S.colorModal.remove();S.colorModal=null;}
+  document.removeEventListener('keydown',onCalColorModalKey);
+}
+function onCalColorModalKey(e){if(e.key==='Escape')closeCalColorModal();}
+function syncCalToggleColors(){
+  document.querySelectorAll('.cal-toggle').forEach(lbl=>{
+    const inp=lbl.querySelector('input[data-cal]');
+    if(inp)lbl.style.setProperty('--cal-c',calColor(inp.dataset.cal));
+  });
+}
+function onCalColorModalInput(calId,hex){
+  if(!window.MySifaCalendar||!MySifaCalendar.validHex(hex))return;
+  MySifaCalendar.setColor(calId,hex);
+  const row=document.getElementById('cal-mrow-'+calId);
+  const dot=row&&row.querySelector('.cal-color-dot');
+  if(dot)dot.style.background=hex;
+  syncCalToggleColors();
+}
+function resetCalColorModal(calId){
+  if(!window.MySifaCalendar)return;
+  MySifaCalendar.resetColor(calId);
+  const row=document.getElementById('cal-mrow-'+calId);
+  if(!row)return;
+  const hex=MySifaCalendar.colorFor(calId);
+  const dot=row.querySelector('.cal-color-dot');
+  const inp=row.querySelector('input[type=color]');
+  if(dot)dot.style.background=hex;
+  if(inp)inp.value=hex;
+  syncCalToggleColors();
+}
+async function saveCalColorsModal(){
+  const prefs=window.MySifaTheme?MySifaTheme.loadPrefs():{palette:'mysifa',style:'defaut',mode:'dark'};
+  const tp=window.MySifaTheme&&MySifaTheme.themePrefsPayload
+    ?MySifaTheme.themePrefsPayload(prefs)
+    :(window.MySifaCalendar?MySifaCalendar.buildThemePrefsPayload(prefs):prefs);
+  try{
+    await api('/api/auth/me',{
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({theme_prefs:tp})
+    });
+    showToast('Couleurs enregistrées','success');
+  }catch(e){
+    showToast('Couleurs appliquées localement','success');
+  }
+  renderToggles();
+  renderCalendar();
+  closeCalColorModal();
+}
+function openCalColorModal(focusId){
+  closeCalColorModal();
+  const root=document.getElementById('cal-color-modal-root');
+  if(!root||!window.MySifaCalendar)return;
+  const calDefs=MySifaCalendar.CAL_DEFS;
+  const wrap=document.createElement('div');
+  wrap.className='cal-color-modal-backdrop';
+  wrap.innerHTML=`<div class="cal-color-modal" role="dialog" aria-labelledby="cal-color-modal-title">
+    <button type="button" class="cal-color-modal-close" aria-label="Fermer" onclick="closeCalColorModal()">×</button>
+    <h2 id="cal-color-modal-title">Couleurs des calendriers</h2>
+    <p class="cal-color-modal-desc">Choisissez une couleur par calendrier. Les changements sont visibles immédiatement.</p>
+    <div class="cal-color-list">${calDefs.map(c=>calColorModalRow(c,focusId)).join('')}</div>
+    <div class="cal-color-modal-foot">
+      <button type="button" class="cal-btn" onclick="closeCalColorModal()">Fermer</button>
+      <button type="button" class="cal-btn primary" onclick="saveCalColorsModal()">Enregistrer</button>
+    </div>
+  </div>`;
+  wrap.onclick=e=>{if(e.target===wrap)closeCalColorModal();};
+  wrap.querySelector('.cal-color-modal').onclick=e=>e.stopPropagation();
+  root.appendChild(wrap);
+  S.colorModal=wrap;
+  document.addEventListener('keydown',onCalColorModalKey);
+  if(focusId){
+    requestAnimationFrame(()=>{
+      const row=document.getElementById('cal-mrow-'+focusId);
+      if(row){row.scrollIntoView({block:'nearest'});row.classList.add('highlight');}
+    });
+  }
+}
 function renderToggles(){
   const box=document.getElementById('cal-toggles');
   if(!box)return;
-  box.innerHTML=CAL_DEFS.map(c=>{
-    const gearUrl=window.MySifaCalendar?MySifaCalendar.profilUrl(c.id):'/profil?tab=prefs';
-    return `<label class="cal-toggle" style="--cal-c:${calColor(c.id)}">
+  box.innerHTML=CAL_DEFS.map(c=>`<label class="cal-toggle" style="--cal-c:${calColor(c.id)}">
       <span class="cal-dot"></span>
       <span class="flex1">${esc(c.label)}</span>
       <button type="button" class="cal-gear-btn" title="Couleur du calendrier" aria-label="Réglage couleur ${esc(c.label)}"
-        onclick="event.preventDefault();event.stopPropagation();location.href='${gearUrl}'">${ICO_CAL_GEAR}</button>
+        onclick="event.preventDefault();event.stopPropagation();openCalColorModal('${esc(c.id)}')">${ICO_CAL_GEAR}</button>
       <input type="checkbox" data-cal="${c.id}" ${S.visible[c.id]?'checked':''}>
-    </label>`;
-  }).join('');
+    </label>`).join('');
   box.querySelectorAll('input[data-cal]').forEach(inp=>{
     inp.onchange=()=>{
       S.visible[inp.dataset.cal]=inp.checked;
@@ -451,8 +571,8 @@ function spanDays(ev){
 }
 function isMultiDay(ev){return ev.all_day&&spanDays(ev)>1;}
 
-async function api(path){
-  const r=await fetch(path,{credentials:'include'});
+async function api(path,opts){
+  const r=await fetch(path,{credentials:'include',...opts});
   if(r.status===401){location.href='/?next=/calendrier';throw new Error('auth');}
   if(r.status===403){showToast('Accès réservé au super administrateur.','danger');throw new Error('auth');}
   if(!r.ok){

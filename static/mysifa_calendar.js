@@ -115,7 +115,7 @@
   }
 
   function profilUrl(calId) {
-    return '/profil?tab=prefs#cal-' + encodeURIComponent(calId);
+    return '/profil?tab=calendrier#cal-' + encodeURIComponent(calId);
   }
 
   function buildThemePrefsPayload(themePrefs) {
