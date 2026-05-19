@@ -45,8 +45,8 @@ SETTINGS_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/support_widget.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css">
 <style>
-:root{--bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;--muted:#94a3b8;--accent:#22d3ee;--ok:#34d399;--danger:#f87171;}
-body.light{--bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--muted:#64748b;--accent:#0891b2;--ok:#059669;--danger:#dc2626;}
+:root{--bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;--muted:#94a3b8;--accent:#22d3ee;--ok:#34d399;--warn:#fbbf24;--danger:#f87171;}
+body.light{--bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--muted:#64748b;--accent:#0891b2;--ok:#059669;--warn:#d97706;--danger:#dc2626;}
 *{box-sizing:border-box}
 body{margin:0;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
 .layout{display:flex;min-height:100vh}
@@ -110,6 +110,19 @@ input,select{width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid 
 body.light .btn-sec:hover{box-shadow:0 0 0 1px rgba(8,145,178,.35),0 0 18px rgba(8,145,178,.15);border-color:rgba(8,145,178,.4);color:var(--accent)}
 .row-user{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)}
 .row-user:last-child{border-bottom:none}
+.prof-ring{position:relative;flex-shrink:0;width:34px;height:34px;cursor:default}
+.prof-ring svg{display:block;width:34px;height:34px}
+.prof-ring-track{stroke:var(--border)}
+.prof-ring-bar{stroke:var(--accent);stroke-linecap:round;transition:stroke-dashoffset .25s ease}
+.prof-ring[data-tier="low"] .prof-ring-bar{stroke:var(--danger)}
+.prof-ring[data-tier="mid"] .prof-ring-bar{stroke:var(--warn)}
+.prof-ring[data-tier="high"] .prof-ring-bar{stroke:var(--ok)}
+.prof-ring-label{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-size:9px;font-weight:800;color:var(--text);letter-spacing:-.02em;
+  opacity:0;transition:opacity .15s;pointer-events:none;
+}
+.prof-ring:hover .prof-ring-label{opacity:1}
 .op-cat{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:18px 0 8px}
 .op-row{display:grid;grid-template-columns:52px 1fr 110px 100px 52px auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px}
 .op-row:last-child{border-bottom:none}
@@ -653,6 +666,42 @@ function fillRoleSelect() {
   ).join('');
 }
 
+const PROFILE_FIELDS = ['nom', 'email', 'telephone', 'adresse', 'date_naissance'];
+
+function profileFieldFilled(val) {
+  return String(val == null ? '' : val).trim().length > 0;
+}
+
+function profileCompletionPercent(u) {
+  if (!u || typeof u !== 'object') return 0;
+  let n = 0;
+  PROFILE_FIELDS.forEach((k) => { if (profileFieldFilled(u[k])) n += 1; });
+  return Math.round((n / PROFILE_FIELDS.length) * 100);
+}
+
+function profileRingTier(pct) {
+  if (pct >= 80) return 'high';
+  if (pct >= 40) return 'mid';
+  return 'low';
+}
+
+function profileRingHtml(pct) {
+  const p = Math.max(0, Math.min(100, Number(pct) || 0));
+  const r = 14;
+  const c = 2 * Math.PI * r;
+  const off = c * (1 - p / 100);
+  const tier = profileRingTier(p);
+  return '<span class="prof-ring" data-tier="' + tier + '" title="Profil complété à ' + p + ' %">' +
+    '<svg viewBox="0 0 34 34" aria-hidden="true">' +
+    '<circle class="prof-ring-track" cx="17" cy="17" r="' + r + '" fill="none" stroke-width="3"/>' +
+    '<circle class="prof-ring-bar" cx="17" cy="17" r="' + r + '" fill="none" stroke-width="3"' +
+    ' stroke-dasharray="' + c.toFixed(2) + '" stroke-dashoffset="' + off.toFixed(2) + '"' +
+    ' transform="rotate(-90 17 17)"/>' +
+    '</svg>' +
+    '<span class="prof-ring-label">' + p + '%</span>' +
+    '</span>';
+}
+
 async function loadUsers() {
   const list = await api('/api/users');
   usersAll = Array.isArray(list) ? list.slice() : [];
@@ -710,8 +759,10 @@ function renderUsersList(){
       u.machine_nom ? ('Machine: ' + esc(u.machine_nom)) : '',
       u.telephone ? ('Tel: ' + esc(u.telephone)) : '',
     ].filter(Boolean).join(' · ');
+    const profPct = profileCompletionPercent(u);
     return '<div class="row-user">' +
-      '<div style="display:flex;align-items:flex-start;gap:8px">' +
+      '<div style="display:flex;align-items:center;gap:10px">' +
+        profileRingHtml(profPct) +
         '<div><strong>' + esc(u.nom) + '</strong> <span class="' + pillCls + '">' + esc(roleLabels[u.role] || u.role) + '</span>' +
         (act ? '' : ' <span class="pill pill--inactive">Inactif</span>') +
         '<div style="font-size:11px;color:var(--muted);margin-top:4px">' + esc(u.email) + (meta ? (' · ' + meta) : '') + '</div></div>' +

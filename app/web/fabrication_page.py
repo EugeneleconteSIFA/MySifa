@@ -995,7 +995,13 @@ function setSaisieViewMode(mode){
 
 async function loadDossiers(){
   const d = await apiFetch('/api/fabrication/dossiers').catch(()=>null);
-  if(d) set({dossiers: d.dossiers||[]});
+  if(!d) return;
+  S.dossiers = d.dossiers||[];
+  if(S.showDossierPicker){
+    _refreshPickerList();
+    return;
+  }
+  set({dossiers: S.dossiers});
 }
 
 async function loadMachines(){
@@ -1167,6 +1173,7 @@ function handleOpTrigger(code, label, cat){
   // Opérations nécessitant une action spéciale
   if(code==='01'){
     // Début dossier → picker dossier
+    _pickerHi = -1;
     set({showDossierPicker:true, _pendingPickerOp:{code,label}, pickerQuery:''});
     loadDossiers();
     return;
@@ -2073,28 +2080,45 @@ function handleSearchSubmit(query){
 
 /* ── Modals ──────────────────────────────────────────────────── */
 
-// Picker dossier — hors re-render global (focus préservé)
-let _pickerQ = '';
+// Picker dossier — liste rafraîchie sans re-render global (focus préservé)
 let _pickerHi = -1;
 let _pickerFiltered = [];
 
+function _normSearchStr(s){
+  return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
+
+function _pickerEntryMatches(d, q, qNorm){
+  const fields = [
+    d.reference, d.numero_of, d.client, d.ref_produit, d.description,
+    d.dos_rvgi, d.machine_nom,
+    d.format_l != null ? String(d.format_l) : '',
+    d.format_h != null ? String(d.format_h) : '',
+    d.laize != null ? String(d.laize) : '',
+    d.date_livraison,
+  ];
+  return fields.some(f=>{
+    if(f == null || f === '') return false;
+    const s = String(f).toLowerCase();
+    const sNorm = _normSearchStr(s);
+    return s.includes(q) || sNorm.includes(qNorm);
+  });
+}
+
+/** Filtre attente/en_cours (API) ; conserve l'ordre planning (position). */
 function _filterDossiers(q){
-  const lq = (q||'').toLowerCase().trim();
-  if(!lq) return [...S.dossiers];
-  return S.dossiers.filter(d=>
-    (d.reference||'').toLowerCase().includes(lq)||
-    (d.ref_produit||'').toLowerCase().includes(lq)||
-    (d.client||'').toLowerCase().includes(lq)||
-    (d.description||'').toLowerCase().includes(lq)||
-    (d.machine_nom||'').toLowerCase().includes(lq)
-  );
+  const raw = (q||'').trim();
+  if(!raw) return [...S.dossiers];
+  const lq = raw.toLowerCase();
+  const lqNorm = _normSearchStr(raw);
+  return S.dossiers.filter(d=>_pickerEntryMatches(d, lq, lqNorm));
 }
 
 function _refreshPickerList(){
   const list = document.getElementById('fab-picker-list-inner');
   if(!list) return;
   list.innerHTML = '';
-  _buildPickerItems(_pickerQ).forEach(item=>list.appendChild(item));
+  _buildPickerItems(S.pickerQuery).forEach(item=>list.appendChild(item));
 }
 
 function _buildPickerItems(q){
@@ -2124,7 +2148,7 @@ function _buildPickerItems(q){
     if(d.date_livraison) metaParts.push('Livr. '+fmtDate(d.date_livraison));
     if(d.duree_heures) metaParts.push(d.duree_heures+' h');
     const hi = idx === _pickerHi;
-    return h('div',null,{className:'fab-picker-item'+(hi?' fab-picker-item--hi':''),onClick:()=>selectDossier(d)},
+    return h('div',{className:'fab-picker-item'+(hi?' fab-picker-item--hi':''),onClick:()=>selectDossier(d)},
       h('div',{className:'fab-picker-line1'},
         h('span',{className:'fab-picker-ref'},d.reference),
         h('span',{className:'fab-picker-sep'},'|'),
@@ -2139,15 +2163,13 @@ function _buildPickerItems(q){
 }
 
 function renderDossierPickerModal(){
-  _pickerQ = '';
-  _pickerHi = -1;
-
   const searchInp = h('input',{
     type:'text',
     id:'fab-picker-search',
     className:'fab-picker-search',
-    placeholder:'Rechercher un dossier (réf, client, OF...)',
+    placeholder:'Rechercher (réf dossier, client, OF, réf produit, format…)',
     autocomplete:'off',
+    value: S.pickerQuery||'',
   });
 
   const hintLink = h('button',{className:'fab-picker-hint-link',
@@ -2165,7 +2187,7 @@ function renderDossierPickerModal(){
   );
 
   searchInp.addEventListener('input',e=>{
-    _pickerQ = e.target.value;
+    S.pickerQuery = e.target.value;
     _pickerHi = -1;
     _refreshPickerList();
   });
@@ -2174,7 +2196,7 @@ function renderDossierPickerModal(){
     const n = _pickerFiltered.length;
     if(e.key==='Escape'){
       e.preventDefault();
-      _pickerQ = '';
+      S.pickerQuery = '';
       searchInp.value = '';
       _pickerHi = -1;
       _refreshPickerList();
