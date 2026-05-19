@@ -119,9 +119,14 @@ body.light .cal-allday-row{background:#f8fafc}
 .cal-col:first-child{border-left:none}
 .cal-col-head{text-align:center;font-size:11px;font-weight:700;padding:8px 4px;border-bottom:1px solid var(--border);background:var(--bg)}
 .cal-col-head.today{color:var(--accent)}
-.cal-col-slots{position:relative;height:1152px}
+.cal-col-slots{position:relative;height:1152px;width:100%;overflow:visible}
+.cal-col{min-width:0;overflow:visible}
 .cal-slot-line{position:absolute;left:0;right:0;height:1px;background:var(--border)}
-.cal-ev{position:absolute;left:0;border-radius:6px;padding:4px 6px;font-size:10px;font-weight:700;color:#0a0e17;overflow:hidden;cursor:pointer;line-height:1.3;z-index:2;box-sizing:border-box}
+.cal-ev{
+  position:absolute;border-radius:6px;padding:4px 6px;font-size:10px;font-weight:700;color:#0a0e17;
+  overflow:hidden;cursor:pointer;line-height:1.3;box-sizing:border-box;
+  transform-origin:left top;
+}
 .cal-day-single .cal-cols-row{grid-template-columns:1fr}
 /* Popover */
 .cal-pop{position:fixed;z-index:8000;min-width:240px;max-width:320px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;box-shadow:0 16px 48px rgba(0,0,0,.45)}
@@ -542,14 +547,14 @@ function renderMonth(p){
   return html;
 }
 
-/** Chevauchements — groupes connexes + colonnes glouton (tranche du jour). */
-function layoutTimedEvents(events,day){
-  const layout=new Map();
+/** Colonnes côte à côte pour les événements qui se chevauchent (tranche du jour). */
+function buildOverlapLayout(events,day){
   const items=[];
   for(const ev of events){
     const clip=evClipOnDay(ev,day);
     if(clip)items.push({ev,clip});
   }
+  const layout=new Map();
   const n=items.length;
   if(!n)return layout;
 
@@ -578,7 +583,7 @@ function layoutTimedEvents(events,day){
       let col=0;
       while(col<colEnds.length&&colEnds[col]>it.clip.start)col++;
       if(col===colEnds.length)colEnds.push(it.clip.end);
-      else colEnds[col]=it.clip.end;
+      else colEnds[col]=Math.max(colEnds[col],it.clip.end);
       placed.push({it,col});
     }
     const total=colEnds.length;
@@ -589,17 +594,26 @@ function layoutTimedEvents(events,day){
   return layout;
 }
 
-function timedEvStyle(ev,top,h,layout){
-  const col=layout?.col??0;
-  const total=Math.max(1,layout?.total??1);
-  const bg='background:'+calColor(ev.calendrier);
-  const gap=2;
-  if(total<=1){
-    return 'top:'+top+'px;height:'+h+'px;left:0;width:calc(100% - 2px);z-index:1;'+bg;
+function timedEvStyle(ev,top,h,col,total){
+  const c=col||0;
+  const t=Math.max(1,total||1);
+  const pctW=(100/t).toFixed(4);
+  const tx=c>0?'transform:translateX('+(c*100)+'%);':'';
+  return 'top:'+top+'px;height:'+h+'px;left:0;width:'+pctW+'%;'+tx+
+    'z-index:'+(1+c)+';background:'+calColor(ev.calendrier);
+}
+
+function renderDayTimedHtml(dayTimed,day){
+  const layout=buildOverlapLayout(dayTimed,day);
+  let html='';
+  for(const ev of dayTimed){
+    const slice=timedSliceOnDay(ev,day);
+    if(!slice)continue;
+    const lay=layout.get(layoutKey(ev))||{col:0,total:1};
+    html+='<div class="cal-ev" data-ev-id="'+esc(ev.id)+'" data-col="'+lay.col+'" data-tot="'+lay.total+'" '+
+      'style="'+timedEvStyle(ev,slice.top,slice.h,lay.col,lay.total)+'">'+esc(ev.titre)+'</div>';
   }
-  const w='calc((100% - '+((total-1)*gap)+'px) / '+total+')';
-  const l='calc('+col+' * ((100% - '+((total-1)*gap)+'px) / '+total+' + '+gap+'px))';
-  return 'top:'+top+'px;height:'+h+'px;width:'+w+';left:'+l+';z-index:'+(1+col)+';'+bg;
+  return html;
 }
 
 function renderWeekBars(days){
@@ -662,14 +676,7 @@ function renderTimeGrid(p,colCount){
       day.toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'})+'</div>';
     html+='<div class="cal-col-slots">';
     for(let h=0;h<24;h++)html+='<div class="cal-slot-line" style="top:'+(h*48)+'px"></div>';
-    const dayTimed=timed.filter(ev=>evOverlapsDay(ev,day));
-    const dayLayout=layoutTimedEvents(dayTimed,day);
-    dayTimed.forEach(ev=>{
-      const slice=timedSliceOnDay(ev,day);
-      if(!slice)return;
-      const lay=dayLayout.get(layoutKey(ev))||{col:0,total:1};
-      html+='<div class="cal-ev" data-ev-id="'+esc(ev.id)+'" style="'+timedEvStyle(ev,slice.top,slice.h,lay)+'">'+esc(ev.titre)+'</div>';
-    });
+    html+=renderDayTimedHtml(timed.filter(ev=>evOverlapsDay(ev,day)),day);
     html+='</div></div>';
   });
   html+='</div></div></div>';
