@@ -92,30 +92,43 @@ ROLE_SCOPE: dict[str, list[str]] = {
 def get_user_scope(role: str) -> list[str]:
     return ROLE_SCOPE.get(role, [])
 
+def _load_sifa_context() -> str:
+    """Charge le fichier SIFA_CONTEXT.md depuis la racine du projet."""
+    import pathlib
+    ctx_path = pathlib.Path(__file__).resolve().parents[2] / "SIFA_CONTEXT.md"
+    try:
+        return ctx_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return ""
+
+
 def build_system_prompt(user: dict, module_actif: str | None = None) -> str:
     now = datetime.now(PARIS)
     role = user.get("role", "")
     nom = user.get("nom", "Utilisateur")
     scope = get_user_scope(role)
     date_str = now.strftime("%A %d %B %Y, %H:%M")
-
     scope_desc = ", ".join(scope) if scope else "aucun module"
+    sifa_context = _load_sifa_context()
 
     return f"""Tu es l'assistant intégré de MySifa, l'outil de gestion de production de SIFA.
 Tu réponds uniquement en français. Sois direct, factuel, concis.
 
-Utilisateur : {nom} — rôle : {role}
+{sifa_context}
+
+---
+Utilisateur connecté : {nom} — rôle : {role}
 Date et heure : {date_str} (heure de Paris)
 Module actif : {module_actif or "portail"}
-Périmètre autorisé : {scope_desc}
+Périmètre de données autorisé : {scope_desc}
 
 Règles strictes :
 - Tu ne peux accéder qu'aux données du périmètre de l'utilisateur.
-- Tu ne modifies rien sans confirmation explicite de l'utilisateur (sauf les actions de lecture).
-- Si une information manque pour répondre, pose une question courte.
-- Les réponses sont courtes (3-6 lignes max sauf si un tableau ou une liste est demandé).
-- Ne jamais inventer de données. Si tu ne sais pas, dis-le.
-- Ton ton est professionnel et direct — pas de formules commerciales.
+- Tu ne modifies rien sans confirmation explicite (sauf actions de lecture).
+- Si une information manque, pose une question courte.
+- Réponses courtes (3-6 lignes max sauf tableau/liste demandé explicitement).
+- Ne jamais inventer de données. Si tu ne sais pas, dis-le clairement.
+- Ton professionnel et direct — pas de formules commerciales.
 """
 ```
 

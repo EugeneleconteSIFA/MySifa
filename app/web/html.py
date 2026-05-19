@@ -371,6 +371,110 @@ tr.matiere-group td{padding:7px 16px;background:var(--card);font-weight:600;font
 .calc-key.eq:hover{filter:brightness(1.08)}
 .calc-key.fn{color:var(--text2);font-size:14px}
 @media(max-width:480px){.calc-panel{right:12px;width:calc(100vw - 24px);bottom:80px}}
+/* ── Agent IA — Widget chat ─────────────────────────────── */
+#ai-chat-root{display:none}
+#ai-chat-btn{
+  position:fixed;
+  bottom:max(24px,env(safe-area-inset-bottom,0px));
+  right:max(84px,calc(env(safe-area-inset-right,0px) + 84px));
+  z-index:8001;
+  width:48px;height:48px;border-radius:50%;
+  background:var(--accent);border:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 4px 16px rgba(34,211,238,0.35);
+  transition:transform .18s,box-shadow .18s;
+}
+#ai-chat-btn:hover{transform:scale(1.08);box-shadow:0 6px 24px rgba(34,211,238,0.5)}
+#ai-chat-btn svg{display:block;color:var(--bg)}
+#ai-chat-panel{
+  position:fixed;bottom:84px;right:84px;z-index:8002;
+  width:360px;height:500px;
+  background:var(--card);border:1px solid var(--border);border-radius:14px;
+  box-shadow:0 12px 48px rgba(0,0,0,0.5);
+  display:flex;flex-direction:column;
+  transform-origin:bottom right;
+  transform:scale(0.9) translateY(10px);opacity:0;pointer-events:none;
+  transition:transform .2s cubic-bezier(.34,1.56,.64,1),opacity .15s;
+  overflow:hidden;
+}
+#ai-chat-panel.open{transform:scale(1) translateY(0);opacity:1;pointer-events:all}
+#ai-chat-header{
+  padding:12px 16px;background:var(--card);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:10px;flex-shrink:0;
+}
+#ai-chat-header .ai-dot{
+  width:8px;height:8px;border-radius:50%;background:var(--accent);
+  box-shadow:0 0 6px var(--accent);animation:ai-pulse 2s infinite;
+}
+@keyframes ai-pulse{0%,100%{opacity:1}50%{opacity:.3}}
+#ai-chat-header .ai-title{flex:1;font-size:13px;font-weight:700;color:var(--text)}
+#ai-chat-header .ai-sub{font-size:10px;color:var(--muted);display:block;font-weight:400}
+#ai-chat-close{
+  background:none;border:none;cursor:pointer;color:var(--muted);
+  padding:4px;border-radius:6px;display:flex;align-items:center;transition:color .15s;
+}
+#ai-chat-close:hover{color:var(--text)}
+#ai-messages{
+  flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;
+  gap:8px;scrollbar-width:thin;scrollbar-color:var(--border) transparent;
+}
+.ai-msg{display:flex;flex-direction:column;max-width:86%}
+.ai-msg.bot{align-self:flex-start}
+.ai-msg.user{align-self:flex-end}
+.ai-label{font-size:10px;color:var(--muted);margin-bottom:3px}
+.ai-msg.user .ai-label{text-align:right}
+.ai-bubble{
+  padding:8px 12px;border-radius:10px;font-size:13px;
+  line-height:1.5;word-break:break-word;
+}
+.ai-msg.bot .ai-bubble{background:var(--bg);border:1px solid var(--border);color:var(--text);border-bottom-left-radius:3px}
+.ai-msg.user .ai-bubble{background:var(--accent);color:var(--bg);font-weight:600;border-bottom-right-radius:3px}
+.ai-status{display:inline-block;font-size:10px;padding:2px 7px;border-radius:20px;margin-top:4px;font-weight:600}
+.ai-status.ok{background:rgba(52,211,153,.15);color:var(--ok);border:1px solid var(--ok)}
+.ai-status.err{background:rgba(248,113,113,.15);color:var(--danger);border:1px solid var(--danger)}
+.ai-status.info{background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent)}
+#ai-typing{
+  display:none;align-self:flex-start;
+  padding:8px 12px;background:var(--bg);border:1px solid var(--border);
+  border-radius:10px;border-bottom-left-radius:3px;
+  gap:4px;align-items:center;
+}
+#ai-typing.visible{display:flex}
+.ai-dot-t{width:5px;height:5px;border-radius:50%;background:var(--muted);animation:ai-bounce 1.2s infinite}
+.ai-dot-t:nth-child(2){animation-delay:.2s}.ai-dot-t:nth-child(3){animation-delay:.4s}
+@keyframes ai-bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-4px)}}
+#ai-input-area{
+  padding:10px 12px;border-top:1px solid var(--border);
+  display:flex;gap:8px;align-items:flex-end;flex-shrink:0;background:var(--card);
+}
+#ai-input{
+  flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;
+  color:var(--text);font-size:13px;font-family:inherit;padding:8px 12px;
+  resize:none;max-height:80px;min-height:36px;outline:none;line-height:1.4;
+  transition:border-color .15s;
+}
+#ai-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.1)}
+#ai-send{
+  width:36px;height:36px;border-radius:8px;background:var(--accent);
+  border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;transition:filter .15s;
+}
+#ai-send:hover{filter:brightness(1.1)}
+#ai-send:disabled{opacity:.4;cursor:not-allowed}
+#ai-send svg{color:var(--bg)}
+.ai-confirm-actions{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.ai-confirm-btn{
+  padding:6px 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;
+  border:1px solid var(--border);background:var(--bg);color:var(--text2);
+  font-family:inherit;transition:filter .15s,border-color .15s;
+}
+.ai-confirm-btn:hover{filter:brightness(1.05)}
+.ai-confirm-btn.primary{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+@media (max-width:640px){
+  #ai-chat-btn{right:max(24px,env(safe-area-inset-right,0px));bottom:84px}
+  #ai-chat-panel{width:calc(100vw - 24px);right:12px;bottom:140px}
+}
 @media (max-width:480px){
   .toast{left:16px;right:16px;bottom:max(16px,env(safe-area-inset-bottom,0px));max-width:none}
 }
@@ -5712,7 +5816,9 @@ function renderFilters(){
   const admin=isAdmin(S.user);
   const ops=S.filters.operators||[];
   const dos=S.filters.dossiers||[];
-  const machs=(S.filters.machines||[]).map(m=>({value:m,label:m}));
+  const MACHINE_FILTER_ORDER=['Cohésio 1','Cohésio 2','DSI','Repiquage'];
+  const machList=(S.filters.machines&&S.filters.machines.length)?S.filters.machines:MACHINE_FILTER_ORDER;
+  const machs=machList.map(m=>({value:m,label:m}));
   const parts=[];
  
   if(admin){
@@ -9489,6 +9595,8 @@ function render(){
   document.body.classList.toggle('sb-open', !!S.sidebarOpen);
   document.body.classList.toggle('has-topbar', S.app==='prod' || S.app==='stock' || S.app==='compta' || S.app==='expe' || S.app==='devis');
   window.__MYSIFA_APP__ = S.app;
+  window.__MYSIFA_USER__ = S.user ? { nom: (S.user.nom || ''), role: (S.user.role || '') } : {};
+  if(typeof initAiChatWidget === 'function') initAiChatWidget();
   if(S.app!=='expe'){_expeLastRenderedInnerTab=null;}
 
   // Nettoyage polling machine quand on quitte MyProd
@@ -9630,7 +9738,205 @@ try{
 }catch(e){}
 checkAuth();
 </script>
-<!-- Chatbot temporairement désactivé -->
+<!-- Agent IA -->
+<div id="ai-chat-root">
+  <button id="ai-chat-btn" type="button" aria-label="Assistant IA" title="Assistant MySifa">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+    </svg>
+  </button>
+  <div id="ai-chat-panel" role="dialog" aria-label="Assistant MySifa">
+      <div id="ai-chat-header">
+      <span class="ai-dot"></span>
+      <div class="ai-title">Assistant MySifa<span class="ai-sub">Posez vos questions sur la production, le stock…</span></div>
+      <button id="ai-chat-close" type="button" aria-label="Fermer">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="1" y1="1" x2="13" y2="13"/><line x1="13" y1="1" x2="1" y2="13"/></svg>
+      </button>
+    </div>
+    <div id="ai-messages"></div>
+    <div id="ai-typing"><span class="ai-dot-t"></span><span class="ai-dot-t"></span><span class="ai-dot-t"></span></div>
+      <div id="ai-input-area">
+      <textarea id="ai-input" placeholder="Votre question…" rows="1" aria-label="Message"></textarea>
+      <button id="ai-send" type="button" aria-label="Envoyer">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4 20-7z"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  'use strict';
+  let bound = false, greeted = false, open = false, loading = false;
+  const history = [];
+  const AI_ROLES = ['superadmin', 'direction', 'administration'];
+
+  window.initAiChatWidget = function(){
+    const user = window.__MYSIFA_USER__ || {};
+    const app = window.__MYSIFA_APP__;
+    const root = document.getElementById('ai-chat-root');
+    if(!root) return;
+
+    const show = AI_ROLES.indexOf(user.role) >= 0 && app && app !== 'portal' && app !== 'login';
+    root.style.display = show ? 'block' : 'none';
+    if(!show){
+      open = false;
+      const panel = document.getElementById('ai-chat-panel');
+      if(panel) panel.classList.remove('open');
+      return;
+    }
+
+    const btn = document.getElementById('ai-chat-btn');
+    const panel = document.getElementById('ai-chat-panel');
+    const closeBtn = document.getElementById('ai-chat-close');
+    const msgs = document.getElementById('ai-messages');
+    const input = document.getElementById('ai-input');
+    const send = document.getElementById('ai-send');
+    const typing = document.getElementById('ai-typing');
+    if(!btn || !panel || !closeBtn || !msgs || !input || !send || !typing) return;
+
+    if(!bound){
+      bound = true;
+      btn.addEventListener('click', toggle);
+      closeBtn.addEventListener('click', toggle);
+      document.addEventListener('click', onDocClick);
+      input.addEventListener('keydown', onKey);
+      input.addEventListener('input', onInput);
+      send.addEventListener('click', handleSend);
+    }
+
+    if(!greeted){
+      greeted = true;
+      const greetings = {
+        fabrication: 'Production du jour, état des machines — posez vos questions.',
+        logistique: 'Stock, emplacements, expéditions à venir — posez vos questions.',
+        direction: 'KPIs, synthèse production, planning, stock — posez vos questions.',
+        administration: 'Congés, paie, expéditions — posez vos questions.',
+      };
+      addBot(greetings[user.role] || 'Posez vos questions sur MySifa.', null);
+    }
+
+    function toggle(){
+      open = !open;
+      panel.classList.toggle('open', open);
+      if(open) setTimeout(function(){ input.focus(); }, 200);
+    }
+    function onDocClick(e){
+      if(open && !panel.contains(e.target) && e.target !== btn){
+        open = false;
+        panel.classList.remove('open');
+      }
+    }
+    function onKey(e){
+      if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); handleSend(); }
+    }
+    function onInput(){
+      input.style.height = 'auto';
+      input.style.height = Math.min(input.scrollHeight, 80) + 'px';
+    }
+    function fmt(t){
+      return String(t || '').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+    }
+    function scrollEnd(){
+      setTimeout(function(){ msgs.scrollTop = msgs.scrollHeight; }, 30);
+    }
+    function parseConfirmAction(text){
+      const raw = String(text || '');
+      const m = raw.match(/\[CONFIRM_ACTION:(\{[\s\S]*\})\]/);
+      if(!m) return { clean: raw, payload: null };
+      try{
+        return { clean: raw.replace(m[0], '').trim(), payload: JSON.parse(m[1]) };
+      }catch(e){
+        return { clean: raw, payload: null };
+      }
+    }
+    function sendConfirm(){
+      input.value = 'oui, confirme';
+      handleSend();
+    }
+    function addBot(text, status){
+      const parsed = parseConfirmAction(text);
+      const w = document.createElement('div');
+      w.className = 'ai-msg bot';
+      w.innerHTML = '<div class="ai-label">MySifa</div><div class="ai-bubble">' + fmt(parsed.clean) + '</div>';
+      if(parsed.payload){
+        if(typeof S !== 'undefined') S.pendingAction = parsed.payload;
+        const actions = document.createElement('div');
+        actions.className = 'ai-confirm-actions';
+        const btnOk = document.createElement('button');
+        btnOk.type = 'button';
+        btnOk.className = 'ai-confirm-btn primary';
+        btnOk.textContent = 'Confirmer';
+        btnOk.addEventListener('click', function(){
+          if(typeof S !== 'undefined') S.pendingAction = parsed.payload;
+          sendConfirm();
+        });
+        const btnNo = document.createElement('button');
+        btnNo.type = 'button';
+        btnNo.className = 'ai-confirm-btn';
+        btnNo.textContent = 'Annuler';
+        btnNo.addEventListener('click', function(){
+          if(typeof S !== 'undefined') S.pendingAction = null;
+          addBot('Action annulée.', 'info');
+        });
+        actions.appendChild(btnOk);
+        actions.appendChild(btnNo);
+        w.appendChild(actions);
+      }
+      if(status){
+        const s = document.createElement('span');
+        s.className = 'ai-status ' + status;
+        s.textContent = status === 'ok' ? 'Action effectuée' : status === 'err' ? 'Erreur' : 'Info';
+        w.appendChild(s);
+      }
+      msgs.appendChild(w);
+      scrollEnd();
+    }
+    function addUser(text){
+      const w = document.createElement('div');
+      w.className = 'ai-msg user';
+      w.innerHTML = '<div class="ai-label">Vous</div><div class="ai-bubble">' + String(text).replace(/</g, '&lt;') + '</div>';
+      msgs.appendChild(w);
+      scrollEnd();
+    }
+    function setLoading(v){
+      loading = v;
+      send.disabled = v;
+      input.disabled = v;
+      typing.classList.toggle('visible', v);
+      if(v) scrollEnd();
+    }
+    async function handleSend(){
+      const text = input.value.trim();
+      if(!text || loading) return;
+      addUser(text);
+      history.push({ role: 'user', content: text });
+      input.value = '';
+      input.style.height = 'auto';
+      setLoading(true);
+      try{
+        const res = await fetch('/api/ai/chat', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messages: history, module: app || null }),
+        });
+        const data = await res.json().catch(function(){ return {}; });
+        if(!res.ok){
+          const detail = data.detail;
+          const msg = typeof detail === 'string' ? detail : (Array.isArray(detail) ? detail.map(function(d){ return d.msg || d; }).join(', ') : ('HTTP ' + res.status));
+          throw new Error(msg);
+        }
+        addBot(data.reply || 'OK.', data.status || null);
+        history.push({ role: 'assistant', content: data.reply || '' });
+      } catch(err){
+        addBot('Erreur de connexion. Réessayez dans un instant.', 'err');
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+})();
+</script>
 </body>
 </html>"""
 

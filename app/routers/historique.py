@@ -7,6 +7,7 @@ from fastapi import APIRouter, Request, Query
 from database import get_db, parse_datetime
 from services.analyse import analyse_saisie_errors
 from services.auth_service import get_current_user, is_admin, can_view_all_prod
+from services.prod_machine_filter import append_machine_filter
 from config import CODE_ARRIVEE, CODE_DEPART, CODE_DEBUT_DOS, CODE_FIN_DOS, CODE_CALAGE, CODE_PRODUCTION, CODE_REPRISE
 
 router = APIRouter()
@@ -274,12 +275,8 @@ def dashboard_historique(
     else:
         # Pour fabrication: filtrer par operateur_lie ou nom utilisateur
         where.append("operateur = ?"); params.append(user_operateur)
-    if machines:
-        where.append(f"machine IN ({','.join('?'*len(machines))})")
-        params.extend(machines)
     if date_from: where.append("date_operation >= ?"); params.append(date_from)
     if date_to:   where.append("date_operation <= ?"); params.append(date_to+'T23:59:59')
-    wc = " AND ".join(where)
 
     # ── Filtre Sanity (sans filtre dossier) ───────────────────────
     ws, ps = ["1=1"], []
@@ -290,12 +287,8 @@ def dashboard_historique(
     else:
         # Pour fabrication: filtrer par operateur_lie ou nom utilisateur
         ws.append("operateur = ?"); ps.append(user_operateur)
-    if machines:
-        ws.append(f"machine IN ({','.join('?'*len(machines))})")
-        ps.extend(machines)
     if date_from: ws.append("date_operation >= ?"); ps.append(date_from)
     if date_to:   ws.append("date_operation <= ?"); ps.append(date_to+'T23:59:59')
-    wc_san = " AND ".join(ws)
 
     def compute_duree_minutes_by_id(rows: List[dict]) -> Dict[int, float]:
         """Durée (minutes) = écart jusqu'à la saisie suivante, par opérateur+jour.
@@ -330,6 +323,11 @@ def dashboard_historique(
         return out
 
     with get_db() as conn:
+        if machines:
+            append_machine_filter(where, params, conn, machines)
+            append_machine_filter(ws, ps, conn, machines)
+        wc = " AND ".join(where)
+        wc_san = " AND ".join(ws)
         total     = conn.execute(f"SELECT COUNT(*) as c FROM production_data WHERE {wc}", params).fetchone()["c"]
         sev       = conn.execute(f"SELECT operation_severity, COUNT(*) as c FROM production_data WHERE {wc} GROUP BY operation_severity", params).fetchall()
         cat       = conn.execute(f"SELECT operation_category, operation_severity, COUNT(*) as c FROM production_data WHERE {wc} GROUP BY operation_category, operation_severity ORDER BY c DESC", params).fetchall()

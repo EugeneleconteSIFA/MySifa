@@ -55,7 +55,13 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
 .nav-btn svg{flex-shrink:0}
 .nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
 .sidebar hr{border:none;border-top:1px solid var(--border);margin:12px 0}
-.cal-section-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);padding:4px 12px 8px}
+.cal-cals-section{margin-bottom:4px}
+.cal-cals-head{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;padding:4px 12px 8px;border:none;background:transparent;cursor:pointer;font-family:inherit;transition:color .15s}
+.cal-cals-head:hover .cal-cals-head-label,.cal-cals-head:hover .cal-cals-chevron{color:var(--accent)}
+.cal-cals-head-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted)}
+.cal-cals-chevron{flex-shrink:0;color:var(--muted);transition:transform .15s,color .15s}
+.cal-cals-section.collapsed .cal-cals-chevron{transform:rotate(-90deg)}
+.cal-cals-section.collapsed #cal-toggles{display:none}
 .cal-toggle{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--text2);user-select:none}
 .cal-toggle:hover{background:var(--accent-bg)}
 .cal-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;background:var(--cal-c)}
@@ -377,8 +383,13 @@ body.light .cal-allday-row{background:#f8fafc}
       Vue agenda
     </button>
     <hr>
-    <div class="cal-section-label">Calendriers</div>
-    <div id="cal-toggles"></div>
+    <div class="cal-cals-section" id="cal-cals-section">
+      <button type="button" class="cal-cals-head" id="cal-cals-head" aria-expanded="true" aria-controls="cal-toggles">
+        <span class="cal-cals-head-label">Calendriers</span>
+        <svg class="cal-cals-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div id="cal-toggles"></div>
+    </div>
     <div id="cal-mini-root"></div>
     <div class="sidebar-bottom">
       <button type="button" class="nav-btn back-mysifa" onclick="location.href='/'">
@@ -463,6 +474,7 @@ function accessibleCalDefs(){
 const ICO_CAL_GEAR='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
 const PROD_CAL_IDS=['production_1','production_2','production_3','production_4'];
 const LS_VISIBLE='mysifa_cal_visible';
+const LS_CAL_LIST='mysifa_cal_list_open';
 const MOIS=['','janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
 const JOURS=['lun','mar','mer','jeu','ven','sam','dim'];
 const ROLE_LABELS={direction:'Direction',administration:'Administration',fabrication:'Fabrication',logistique:'Logistique',comptabilite:'Comptabilité',expedition:'Expédition',commercial:'Commercial',superadmin:'Super admin'};
@@ -676,6 +688,25 @@ function loadVisible(){
 }
 function saveVisible(){
   try{localStorage.setItem(LS_VISIBLE,JSON.stringify(S.visible));}catch(e){}
+}
+
+function loadCalListOpen(){
+  try{return localStorage.getItem(LS_CAL_LIST)!=='0';}catch(e){return true;}
+}
+function saveCalListOpen(open){
+  try{localStorage.setItem(LS_CAL_LIST,open?'1':'0');}catch(e){}
+}
+function applyCalListOpen(open){
+  const sec=document.getElementById('cal-cals-section');
+  const head=document.getElementById('cal-cals-head');
+  if(sec)sec.classList.toggle('collapsed',!open);
+  if(head)head.setAttribute('aria-expanded',open?'true':'false');
+}
+function toggleCalList(){
+  const sec=document.getElementById('cal-cals-section');
+  const willOpen=!!(sec&&sec.classList.contains('collapsed'));
+  applyCalListOpen(willOpen);
+  saveCalListOpen(willOpen);
 }
 
 function calColorModalRow(c,focusId){
@@ -1566,6 +1597,9 @@ document.addEventListener('DOMContentLoaded',bootCalendrier);
     bootCalendrier();
     applyTheme();
     loadVisible();
+    applyCalListOpen(loadCalListOpen());
+    const calHead=document.getElementById('cal-cals-head');
+    if(calHead)calHead.addEventListener('click',toggleCalList);
     renderToggles();
     applyViewChrome(S.view);
     ME=await api('/api/auth/me');

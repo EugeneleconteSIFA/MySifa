@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 from database import get_db, parse_french_number, parse_datetime
 from config import classify_operation
 from services.auth_service import get_current_user, is_admin, is_fabrication, can_view_all_prod
+from services.prod_machine_filter import append_machine_filter
 
 router = APIRouter()
 
@@ -118,14 +119,13 @@ def list_saisies(
             where.append("operateur = ?"); params.append(user_operateur)
         else:
             where.append("1=0")
-    if machines:
-        where.append(f"machine IN ({','.join('?'*len(machines))})")
-        params.extend(machines)
     if date_from: where.append("date_operation >= ?"); params.append(date_from)
     if date_to:   where.append("date_operation <= ?"); params.append(date_to+'T23:59:59')
-    wc = " AND ".join(where)
 
     with get_db() as conn:
+        if machines:
+            append_machine_filter(where, params, conn, machines)
+        wc = " AND ".join(where)
         total = conn.execute(f"SELECT COUNT(*) as c FROM production_data WHERE {wc}", params).fetchone()["c"]
         rows  = conn.execute(
             f"""SELECT id,import_id,operateur,date_operation,operation,operation_code,
@@ -607,14 +607,13 @@ def export_saisies(
             where.append("operateur = ?"); params.append(user_operateur)
         else:
             where.append("1=0")
-    if machines:
-        where.append(f"machine IN ({','.join('?'*len(machines))})")
-        params.extend(machines)
     if date_from: where.append("date_operation >= ?"); params.append(date_from)
     if date_to:   where.append("date_operation <= ?"); params.append(date_to+'T23:59:59')
-    wc = " AND ".join(where)
 
     with get_db() as conn:
+        if machines:
+            append_machine_filter(where, params, conn, machines)
+        wc = " AND ".join(where)
         rows = conn.execute(
             f"""SELECT id,operateur,date_operation,operation,operation_code,
                        operation_severity,operation_category,machine,no_dossier,client,designation,

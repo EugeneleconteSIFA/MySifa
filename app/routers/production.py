@@ -7,6 +7,7 @@ _TZ_PARIS = _ZoneInfo('Europe/Paris')
 from database import get_db
 from services.timings import compute_dossier_times
 from services.auth_service import get_current_user, is_admin, can_view_all_prod, require_admin
+from services.prod_machine_filter import append_machine_filter
 from config import OPERATION_SEVERITY
 
 router = APIRouter()
@@ -238,14 +239,13 @@ def dashboard_production(
     else:
         # Pour fabrication: filtrer par operateur_lie ou nom utilisateur
         where.append("operateur = ?"); params.append(user_operateur)
-    if machines:
-        where.append(f"machine IN ({','.join('?'*len(machines))})")
-        params.extend(machines)
     if date_from: where.append("date_operation >= ?"); params.append(date_from)
     if date_to:   where.append("date_operation <= ?"); params.append(date_to+'T23:59:59')
-    wc = " AND ".join(where)
 
     with get_db() as conn:
+        if machines:
+            append_machine_filter(where, params, conn, machines)
+        wc = " AND ".join(where)
         completed = conn.execute(
             f"""SELECT no_dossier,operateur,machine,client,designation,
                        quantite_traitee,metrage_reel,metrage_prevu,date_operation

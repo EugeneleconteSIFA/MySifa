@@ -24,7 +24,6 @@ from routers.rentabilite import router as router_rentabilite
 from app.routers.matiere_prix import router as router_matiere_prix
 from routers.planning import router as planning_router
 from routers.stock import router as router_stock
-from routers.chat import router as chat_router
 from routers.support import router as support_router
 from app.routers.messages import router as messages_router
 from app.routers.compta import router as compta_router
@@ -49,6 +48,7 @@ from app.web.db_viewer_page import router as db_viewer_page_router
 from app.web.profil_page import router as profil_page_router
 from app.routers.calendrier import router as calendrier_api_router
 from app.web.calendrier_page import router as calendrier_page_router
+from app.routers.ai import router as ai_router
 
 
 @asynccontextmanager
@@ -105,7 +105,6 @@ app.include_router(router_rentabilite)
 app.include_router(router_matiere_prix, prefix="/api/matiere")
 app.include_router(planning_router)
 app.include_router(router_stock)
-app.include_router(chat_router)
 app.include_router(support_router)
 app.include_router(messages_router)
 app.include_router(compta_router)
@@ -130,6 +129,7 @@ app.include_router(db_viewer_page_router)
 app.include_router(profil_page_router)
 app.include_router(calendrier_api_router)
 app.include_router(calendrier_page_router)
+app.include_router(ai_router)
 
 
 @app.get("/", response_class=HTMLResponse)

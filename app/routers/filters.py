@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Request
 from database import get_db
 from services.auth_service import get_current_user, is_admin, is_fabrication
+from services.prod_machine_filter import list_filter_machines
 
 router = APIRouter()
 
@@ -55,14 +56,10 @@ def get_filters(request: Request):
             WHERE no_dossier IS NOT NULL AND no_dossier!='' AND no_dossier!='0'
             ORDER BY no_dossier
         """).fetchall()
-        machines = conn.execute("""
-            SELECT DISTINCT machine FROM production_data
-            WHERE machine IS NOT NULL AND machine!=''
-            ORDER BY machine
-        """).fetchall()
+        machine_list = list_filter_machines(conn)
 
     return {
         "operators": [r["operateur"] for r in ops],
         "dossiers":  [r["no_dossier"] for r in dos],
-        "machines":  [r["machine"]    for r in machines],
+        "machines":  machine_list,
     }
