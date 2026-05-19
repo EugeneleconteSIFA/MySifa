@@ -16,6 +16,7 @@ ROLE_SCOPE: dict[str, list[str]] = {
 READ_TOOL_NAMES: list[str] = [
     "production_detail",
     "planning_detail",
+    "planning_client_schedule",
     "stock_search",
     "expe_detail",
 ]
@@ -93,6 +94,7 @@ Module actif : {module_actif or "portail"}
 Règles strictes :
 - Respecte strictement le périmètre ci-dessus ; ne demande jamais d'accéder à d'autres données.
 - Tu ne modifies rien sans confirmation explicite (sauf actions de lecture).
+- Pour « quand » un dossier client passera en production, utilise l'outil planning_client_schedule (dates estimées en heures ouvrées machine).
 - Si une information manque, pose une question courte.
 - Réponses courtes (3-6 lignes max sauf tableau/liste demandé explicitement).
 - Ne jamais inventer de données. Si tu ne sais pas, dis-le clairement.

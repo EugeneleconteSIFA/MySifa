@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 
+from app.services.audit_service import log_action
 from database import get_db
 from services.auth_service import get_current_user, user_has_app_access
 
@@ -131,6 +132,14 @@ def create_depart(request: Request, body: dict = Body(...)):
         conn.commit()
         rid = cur.lastrowid
         row = conn.execute("SELECT * FROM expe_departs WHERE id=?", (rid,)).fetchone()
+    client_nom = (body.get("client") or "").strip() or "—"
+    log_action(
+        user=user,
+        action="CREATE",
+        module="expe",
+        objet=f"Départ {client_nom} · {date_enl}",
+        ip=request.client.host if request.client else None,
+    )
     return dict(row)
 
 
@@ -155,13 +164,21 @@ def valider_depart(request: Request, depart_id: int):
         )
         conn.commit()
         out = conn.execute("SELECT * FROM expe_departs WHERE id=?", (depart_id,)).fetchone()
+    client_nom = (out["client"] or "").strip() if out else "—"
+    log_action(
+        user=user,
+        action="VALIDATE",
+        module="expe",
+        objet=f"Départ #{depart_id} validé · {client_nom}",
+        ip=request.client.host if request.client else None,
+    )
     return dict(out)
 
 
 @router.put("/departs/{depart_id}")
 async def update_depart(request: Request, depart_id: int, body: dict = Body(...)):
     """Modifie un départ (en attente ou validé)."""
-    _require_expe(request)
+    user = _require_expe(request)
 
     def _f(key: str) -> Any:
         v = body.get(key)
@@ -224,21 +241,40 @@ async def update_depart(request: Request, depart_id: int, body: dict = Body(...)
         conn.execute(f"UPDATE expe_departs SET {', '.join(sets)} WHERE id=?", (*args, depart_id))
         conn.commit()
         row = conn.execute("SELECT * FROM expe_departs WHERE id=?", (depart_id,)).fetchone()
+    client_nom = (row["client"] or "").strip() if row else "—"
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="expe",
+        objet=f"Départ #{depart_id} · {client_nom}",
+        ip=request.client.host if request.client else None,
+    )
     return dict(row)
 
 
 @router.delete("/departs/{depart_id}")
 def delete_depart(request: Request, depart_id: int):
     """Supprime un départ (en attente ou validé)."""
-    _require_expe(request)
+    user = _require_expe(request)
+    client_nom = ""
     with get_db() as conn:
-        ex = conn.execute("SELECT id, statut FROM expe_departs WHERE id=?", (depart_id,)).fetchone()
+        ex = conn.execute(
+            "SELECT id, statut, client FROM expe_departs WHERE id=?", (depart_id,)
+        ).fetchone()
         if not ex:
             raise HTTPException(status_code=404, detail="Départ introuvable")
         if ex["statut"] not in ("en_attente", "valide"):
             raise HTTPException(status_code=409, detail="Suppression impossible : départ annulé")
+        client_nom = (ex["client"] or "").strip() or "—"
         conn.execute("DELETE FROM expe_departs WHERE id=?", (depart_id,))
         conn.commit()
+    log_action(
+        user=user,
+        action="DELETE",
+        module="expe",
+        objet=f"Départ #{depart_id} supprimé · {client_nom}",
+        ip=request.client.host if request.client else None,
+    )
     return {"ok": True}
 
 

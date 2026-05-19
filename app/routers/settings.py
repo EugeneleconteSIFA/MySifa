@@ -22,6 +22,7 @@ from config import (
     SUPERADMIN_EMAIL,
     default_app_access_for_role,
 )
+from app.services.audit_service import log_action
 from services.auth_service import get_current_user, require_superadmin, merged_app_access, parse_access_overrides_raw
 
 router = APIRouter(tags=["settings"])
@@ -157,6 +158,46 @@ def access_matrix(request: Request):
     }
 
 
+@router.get("/api/settings/audit")
+def get_audit_logs(
+    request: Request,
+    limit: int = 100,
+    offset: int = 0,
+    module: str = "",
+    action: str = "",
+    search: str = "",
+):
+    require_superadmin(request)
+    from database import get_db
+
+    with get_db() as conn:
+        conditions = ["1=1"]
+        params: list = []
+        if module:
+            conditions.append("module = ?")
+            params.append(module)
+        if action:
+            conditions.append("action = ?")
+            params.append(action.upper())
+        if search:
+            conditions.append("(objet LIKE ? OR user_nom LIKE ? OR detail LIKE ?)")
+            params.extend([f"%{search}%", f"%{search}%", f"%{search}%"])
+        where = " AND ".join(conditions)
+        total = conn.execute(
+            f"SELECT COUNT(*) FROM audit_logs WHERE {where}", params
+        ).fetchone()[0]
+        rows = conn.execute(
+            f"""SELECT id, user_nom, user_role, action, module, objet, detail, ip, created_at
+                FROM audit_logs WHERE {where}
+                ORDER BY created_at DESC LIMIT ? OFFSET ?""",
+            params + [limit, offset],
+        ).fetchall()
+    return {
+        "total": total,
+        "logs": [dict(r) for r in rows],
+    }
+
+
 # ─── Fournisseurs FSC ──────────────────────────────────────────────
 
 @router.get("/api/fournisseurs")
@@ -173,7 +214,7 @@ def list_fournisseurs(request: Request):
 
 @router.post("/api/fournisseurs")
 async def create_fournisseur(request: Request):
-    require_superadmin(request)
+    user = require_superadmin(request)
     from database import get_db
     body = await request.json()
     nom = (body.get("nom") or "").strip()
@@ -188,6 +229,13 @@ async def create_fournisseur(request: Request):
                 (nom, licence, certificat),
             )
             conn.commit()
+            log_action(
+                user=user,
+                action="CREATE",
+                module="settings",
+                objet=f"Fournisseur FSC {nom}",
+                ip=request.client.host if request.client else None,
+            )
             return {"success": True, "id": cur.lastrowid}
         except Exception:
             raise HTTPException(status_code=409, detail="Ce fournisseur existe déjà")
@@ -195,7 +243,7 @@ async def create_fournisseur(request: Request):
 
 @router.put("/api/fournisseurs/{fournisseur_id}")
 async def update_fournisseur(fournisseur_id: int, request: Request):
-    require_superadmin(request)
+    user = require_superadmin(request)
     from database import get_db
     body = await request.json()
     with get_db() as conn:
@@ -219,6 +267,13 @@ async def update_fournisseur(fournisseur_id: int, request: Request):
                 (nom, licence, certificat, traca_explication, traca_exemple_code, fournisseur_id),
             )
             conn.commit()
+            log_action(
+                user=user,
+                action="UPDATE",
+                module="settings",
+                objet=f"Fournisseur FSC {nom}",
+                ip=request.client.host if request.client else None,
+            )
             return {"success": True}
         except Exception:
             raise HTTPException(status_code=409, detail="Ce nom de fournisseur existe déjà")
@@ -227,7 +282,7 @@ async def update_fournisseur(fournisseur_id: int, request: Request):
 @router.post("/api/fournisseurs/{fournisseur_id}/traca-photo")
 async def upload_traca_photo(fournisseur_id: int, request: Request, photo: UploadFile = File(...)):
     """Upload d'une photo d'étiquette fournisseur pour le guide code-barre."""
-    _require_traca_photo_editor(request)
+    user = _require_traca_photo_editor(request)
     allowed = {"image/jpeg", "image/png", "image/webp", "image/gif"}
     if (photo.content_type or "") not in allowed:
         raise HTTPException(
@@ -248,14 +303,19 @@ async def upload_traca_photo(fournisseur_id: int, request: Request, photo: Uploa
     url = f"/uploads/traca/{filename}"
     from database import get_db
 
+    four_nom = ""
     with get_db() as conn:
-        ex = conn.execute("SELECT id, traca_photo_url FROM fournisseurs_fsc WHERE id=?", (fournisseur_id,)).fetchone()
+        ex = conn.execute(
+            "SELECT id, nom, traca_photo_url FROM fournisseurs_fsc WHERE id=?",
+            (fournisseur_id,),
+        ).fetchone()
         if not ex:
             try:
                 dest.unlink(missing_ok=True)
             except OSError:
                 pass
             raise HTTPException(status_code=404, detail="Fournisseur introuvable")
+        four_nom = ex["nom"] or ""
         old_url = ex["traca_photo_url"]
         if old_url:
             old_p = _traca_file_from_url(str(old_url))
@@ -269,21 +329,31 @@ async def upload_traca_photo(fournisseur_id: int, request: Request, photo: Uploa
             (url, fournisseur_id),
         )
         conn.commit()
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="settings",
+        objet=f"Fournisseur FSC {four_nom}",
+        detail={"traca_photo": True},
+        ip=request.client.host if request.client else None,
+    )
     return {"url": url}
 
 
 @router.delete("/api/fournisseurs/{fournisseur_id}/traca-photo")
 def delete_traca_photo(fournisseur_id: int, request: Request):
-    _require_traca_photo_editor(request)
+    user = _require_traca_photo_editor(request)
     from database import get_db
 
+    four_nom = ""
     with get_db() as conn:
         row = conn.execute(
-            "SELECT id, traca_photo_url FROM fournisseurs_fsc WHERE id=?",
+            "SELECT id, nom, traca_photo_url FROM fournisseurs_fsc WHERE id=?",
             (fournisseur_id,),
         ).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Fournisseur introuvable")
+        four_nom = row["nom"] or ""
         old_url = row["traca_photo_url"]
         if old_url:
             old_p = _traca_file_from_url(str(old_url))
@@ -297,20 +367,37 @@ def delete_traca_photo(fournisseur_id: int, request: Request):
             (fournisseur_id,),
         )
         conn.commit()
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="settings",
+        objet=f"Fournisseur FSC {four_nom}",
+        detail={"traca_photo": False},
+        ip=request.client.host if request.client else None,
+    )
     return {"ok": True}
 
 
 @router.delete("/api/fournisseurs/{fournisseur_id}")
 async def delete_fournisseur(fournisseur_id: int, request: Request):
-    require_superadmin(request)
+    user = require_superadmin(request)
     from database import get_db
+    four_nom = ""
     with get_db() as conn:
         ex = conn.execute("SELECT * FROM fournisseurs_fsc WHERE id=?", (fournisseur_id,)).fetchone()
         if not ex:
             raise HTTPException(status_code=404, detail="Fournisseur non trouvé")
+        four_nom = ex["nom"] or ""
         conn.execute("DELETE FROM fournisseurs_fsc WHERE id=?", (fournisseur_id,))
         conn.commit()
-        return {"success": True}
+    log_action(
+        user=user,
+        action="DELETE",
+        module="settings",
+        objet=f"Fournisseur FSC {four_nom}",
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True}
 
 
 @router.get("/api/fournisseurs/{fournisseur_id}/receptions")
@@ -457,6 +544,14 @@ async def create_update(request: Request):
              user.get("nom") or user.get("email"), active),
         )
         conn.commit()
+    log_action(
+        user=user,
+        action="CREATE",
+        module="settings",
+        objet=f"Annonce · {titre}",
+        detail={"scope": scope},
+        ip=request.client.host if request.client else None,
+    )
     return {"success": True, "id": cur.lastrowid}
 
 
@@ -493,14 +588,16 @@ async def patch_update(announcement_id: int, request: Request):
 @router.delete("/api/updates/{announcement_id}")
 def delete_update(announcement_id: int, request: Request):
     """Supprimer une annonce (uniquement si elle n'a pas encore été lue)."""
-    require_superadmin(request)
+    user = require_superadmin(request)
     from database import get_db
+    titre_ann = ""
     with get_db() as conn:
         ann = conn.execute(
             "SELECT * FROM update_announcements WHERE id=?", (announcement_id,)
         ).fetchone()
         if not ann:
             raise HTTPException(status_code=404, detail="Annonce non trouvée")
+        titre_ann = ann["titre"] or ""
         # Vérifier si l'annonce a déjà été lue
         ack_count = conn.execute(
             "SELECT COUNT(*) FROM update_acknowledgements WHERE announcement_id=?",
@@ -510,6 +607,13 @@ def delete_update(announcement_id: int, request: Request):
             raise HTTPException(status_code=400, detail="Impossible de supprimer une annonce déjà lue")
         conn.execute("DELETE FROM update_announcements WHERE id=?", (announcement_id,))
         conn.commit()
+    log_action(
+        user=user,
+        action="DELETE",
+        module="settings",
+        objet=f"Annonce · {titre_ann}",
+        ip=request.client.host if request.client else None,
+    )
     return {"success": True}
 
 

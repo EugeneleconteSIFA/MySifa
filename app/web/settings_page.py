@@ -195,6 +195,19 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
       <button type="button" class="nav-btn" data-tab="defaults">Référentiel rôles</button>
       <div class="nav-group-label" style="margin-top:8px">Communication</div>
       <button type="button" class="nav-btn" data-tab="updates">Mises à jour</button>
+      <div class="nav-group-label" style="margin-top:8px">Audit</div>
+      <button type="button" class="nav-btn" data-tab="audit">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
+             style="display:inline-block;vertical-align:middle;margin-right:6px;flex-shrink:0">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="16" y1="13" x2="8" y2="13"/>
+          <line x1="16" y1="17" x2="8" y2="17"/>
+          <polyline points="10 9 9 9 8 9"/>
+        </svg>
+        Traçabilité
+      </button>
     </div>
     <div class="sidebar-bottom">
       <button type="button" class="nav-btn back-mysifa" onclick="location.href='/'">
@@ -378,6 +391,54 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
       </div>
     </section>
 
+    <section id="panel-audit" class="hidden">
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;
+                gap:12px;margin-bottom:16px;flex-wrap:wrap">
+          <div style="font-size:15px;font-weight:700;color:var(--text)">Journal des actions</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <input type="text" id="audit-search"
+                   placeholder="Rechercher (utilisateur, objet…)"
+                   style="background:var(--bg);border:1px solid var(--border);border-radius:8px;
+                          padding:7px 12px;color:var(--text);font-size:12px;width:200px;
+                          font-family:inherit;outline:none"
+                   oninput="debouncedAuditSearch()">
+            <select id="audit-filter-module" onchange="loadAuditLogs()"
+                    style="background:var(--bg);border:1px solid var(--border);border-radius:8px;
+                           padding:7px 10px;color:var(--text);font-size:12px;font-family:inherit">
+              <option value="">Tous les modules</option>
+              <option value="planning">Planning</option>
+              <option value="fabrication">Fabrication</option>
+              <option value="stock">Stock</option>
+              <option value="expe">Expéditions</option>
+              <option value="rh">RH</option>
+              <option value="settings">Paramètres</option>
+              <option value="auth">Auth</option>
+            </select>
+            <select id="audit-filter-action" onchange="loadAuditLogs()"
+                    style="background:var(--bg);border:1px solid var(--border);border-radius:8px;
+                           padding:7px 10px;color:var(--text);font-size:12px;font-family:inherit">
+              <option value="">Toutes les actions</option>
+              <option value="CREATE">Création</option>
+              <option value="UPDATE">Modification</option>
+              <option value="DELETE">Suppression</option>
+              <option value="CLOSE">Clôture</option>
+              <option value="VALIDATE">Validation</option>
+              <option value="REORDER">Réorganisation</option>
+            </select>
+          </div>
+        </div>
+        <div id="audit-table-wrap" style="overflow-x:auto">
+          <div id="audit-loading" style="color:var(--muted);font-size:13px;padding:20px 0">
+            Chargement…
+          </div>
+        </div>
+        <div id="audit-pagination"
+             style="display:flex;align-items:center;justify-content:space-between;
+                    margin-top:12px;font-size:12px;color:var(--muted)"></div>
+      </div>
+    </section>
+
     <!-- Modal nouvelle annonce -->
     <div id="upd-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:800;align-items:center;justify-content:center" class="hidden">
       <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;width:min(560px,95vw);max-height:90vh;overflow:auto">
@@ -541,13 +602,14 @@ function setTab(id) {
   document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === id);
   });
-  ['users', 'matrix', 'defaults', 'fournisseurs', 'operations', 'updates'].forEach(p => {
+  ['users', 'matrix', 'defaults', 'fournisseurs', 'operations', 'updates', 'audit'].forEach(p => {
     const el = document.getElementById('panel-' + p);
     if (el) el.classList.toggle('hidden', p !== id);
   });
   if (id === 'fournisseurs') loadFournisseurs();
   if (id === 'operations') loadOperationCodes();
   if (id === 'updates') loadUpdates();
+  if (id === 'audit') loadAuditLogs();
 }
 
 document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
@@ -637,6 +699,10 @@ function esc(s) {
   const d = document.createElement('div');
   d.textContent = s == null ? '' : String(s);
   return d.innerHTML;
+}
+
+function escAttr(s) {
+  return String(s || '').replace(/"/g, '&quot;');
 }
 
 async function loadFilters() {
@@ -1787,6 +1853,123 @@ async function deleteUpdate(id) {
     toast('Annonce supprimée ✅');
     await loadUpdates();
   } catch(e) { toast(e.message, true); }
+}
+
+// ── Audit log ─────────────────────────────────────────────
+let _auditOffset = 0;
+const _auditLimit = 50;
+let _auditSearchTimer = null;
+
+function debouncedAuditSearch() {
+  clearTimeout(_auditSearchTimer);
+  _auditSearchTimer = setTimeout(() => { _auditOffset = 0; loadAuditLogs(); }, 300);
+}
+
+const ACTION_COLORS = {
+  CREATE:   'var(--ok)',
+  UPDATE:   'var(--accent)',
+  DELETE:   'var(--danger)',
+  CLOSE:    'var(--muted)',
+  VALIDATE: 'var(--warn)',
+  REORDER:  'var(--text2)',
+};
+const ACTION_LABELS = {
+  CREATE:'Création', UPDATE:'Modification', DELETE:'Suppression',
+  CLOSE:'Clôture', VALIDATE:'Validation', REORDER:'Réorganisation',
+};
+const MODULE_LABELS = {
+  planning:'Planning', fabrication:'Fabrication', stock:'Stock',
+  expe:'Expéditions', rh:'RH', settings:'Paramètres', auth:'Auth',
+};
+
+async function loadAuditLogs() {
+  const wrap = document.getElementById('audit-table-wrap');
+  const pag  = document.getElementById('audit-pagination');
+  const search = (document.getElementById('audit-search')?.value || '').trim();
+  const module = document.getElementById('audit-filter-module')?.value || '';
+  const action = document.getElementById('audit-filter-action')?.value || '';
+
+  wrap.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px 0">Chargement…</div>';
+
+  const params = new URLSearchParams({
+    limit: _auditLimit,
+    offset: _auditOffset,
+    ...(module && { module }),
+    ...(action && { action }),
+    ...(search && { search }),
+  });
+
+  const res = await fetch('/api/settings/audit?' + params, { credentials: 'include' });
+  if (!res.ok) { wrap.innerHTML = '<div style="color:var(--danger);font-size:13px">Erreur de chargement.</div>'; return; }
+  const { total, logs } = await res.json();
+
+  if (!logs.length) {
+    wrap.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px 0">Aucune action enregistrée.</div>';
+    pag.innerHTML = '';
+    return;
+  }
+
+  const rows = logs.map(l => {
+    const color = ACTION_COLORS[l.action] || 'var(--text2)';
+    const actionLabel = ACTION_LABELS[l.action] || l.action;
+    const moduleLabel = MODULE_LABELS[l.module] || l.module;
+    const dt = l.created_at ? l.created_at.replace('T', ' ').slice(0, 16) : '—';
+    const detailHtml = l.detail
+      ? `<span style="color:var(--muted);font-size:11px;display:block;margin-top:2px;
+                      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px"
+               title="${escAttr(l.detail)}">${esc(l.detail)}</span>` : '';
+    return `<tr>
+      <td style="white-space:nowrap;font-family:monospace;font-size:11px;color:var(--muted)">${dt}</td>
+      <td style="font-size:13px;font-weight:600;color:var(--text)">${esc(l.user_nom||'—')}</td>
+      <td><span style="font-size:10px;font-weight:700;color:var(--bg);background:${color};
+                       padding:2px 7px;border-radius:20px;text-transform:uppercase">${actionLabel}</span></td>
+      <td><span style="font-size:11px;color:var(--text2);background:var(--accent-bg);
+                       padding:2px 6px;border-radius:6px">${moduleLabel}</span></td>
+      <td style="font-size:13px;color:var(--text);max-width:280px">
+        ${esc(l.objet||'—')}${detailHtml}
+      </td>
+    </tr>`;
+  }).join('');
+
+  wrap.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead>
+        <tr style="border-bottom:2px solid var(--border)">
+          <th style="text-align:left;padding:8px 12px 8px 0;font-size:11px;font-weight:700;
+                     color:var(--muted);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">Date</th>
+          <th style="text-align:left;padding:8px 12px;font-size:11px;font-weight:700;
+                     color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Utilisateur</th>
+          <th style="text-align:left;padding:8px 12px;font-size:11px;font-weight:700;
+                     color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Action</th>
+          <th style="text-align:left;padding:8px 12px;font-size:11px;font-weight:700;
+                     color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Module</th>
+          <th style="text-align:left;padding:8px 12px;font-size:11px;font-weight:700;
+                     color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Objet</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.replace(/<tr>/g, '<tr style="border-bottom:1px solid var(--border)">')}
+      </tbody>
+    </table>`;
+
+  const from = _auditOffset + 1;
+  const to   = Math.min(_auditOffset + logs.length, total);
+  pag.innerHTML = `
+    <span>${from}–${to} sur ${total} actions</span>
+    <div style="display:flex;gap:6px">
+      <button type="button" onclick="_auditOffset=Math.max(0,_auditOffset-_auditLimit);loadAuditLogs()"
+              ${_auditOffset === 0 ? 'disabled' : ''}
+              style="background:var(--card);border:1px solid var(--border);border-radius:6px;
+                     padding:4px 10px;color:var(--text2);cursor:pointer;font-family:inherit;font-size:12px">
+        ← Précédent
+      </button>
+      <button type="button" onclick="_auditOffset=Math.min(total-_auditLimit,_auditOffset+_auditLimit);loadAuditLogs()"
+              ${to >= total ? 'disabled' : ''}
+              style="background:var(--card);border:1px solid var(--border);border-radius:6px;
+                     padding:4px 10px;color:var(--text2);cursor:pointer;font-family:inherit;font-size:12px">
+        Suivant →
+      </button>
+    </div>`;
 }
 </script>
 </body>

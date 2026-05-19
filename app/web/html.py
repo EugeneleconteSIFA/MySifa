@@ -6915,7 +6915,7 @@ function renderProdKpis(){
           h('td',{style:{fontFamily:'monospace',color:'var(--text2)'}},fMin(r.temps_calage_min)),
           h('td',{style:{fontFamily:'monospace',color:'var(--text2)'}},fMin(r.temps_prod_min)),
           h('td',{style:{fontFamily:'monospace',color:'var(--text2)'}},fMin(r.temps_arret_min)),
-          h('td',{style:{fontFamily:'monospace',fontWeight:'800',color:'var(--warn)'}},(Number(r.temps_prod_min||0)>0? (Number(r.metrage_m||0)/Number(r.temps_prod_min||1)).toFixed(2):'0.00')+' m/min')
+          h('td',{style:{fontFamily:'monospace',fontWeight:'800',color:'var(--warn)'}},(()=>{const den=Number(r.temps_prod_min||0)+Number(r.temps_arret_min||0);return (den>0?(Number(r.metrage_m||0)/den).toFixed(2):'0.00')+' m/min';})())
         )))
       ))
     ));

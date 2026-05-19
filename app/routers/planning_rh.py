@@ -9,6 +9,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Request, HTTPException
 
+from app.services.audit_service import log_action
 from database import get_db
 from app.services.auth_service import get_current_user
 from config import ROLES_PLANNING_RH_VIEW, ROLES_PLANNING_RH_EDIT, PLANNING_RH_EXCLUDED_NOMS
@@ -377,7 +378,7 @@ async def create_planning(request: Request):
 
 @router.delete("/planning/{plan_id}")
 def delete_planning(plan_id: int, request: Request):
-    _require_edit(request)
+    editor = _require_edit(request)
     with get_db() as conn:
         row = conn.execute(
             "SELECT id FROM rh_planning_postes WHERE id = ?", (plan_id,)
@@ -386,13 +387,20 @@ def delete_planning(plan_id: int, request: Request):
             raise HTTPException(404, "Affectation introuvable")
         conn.execute("DELETE FROM rh_planning_postes WHERE id = ?", (plan_id,))
         conn.commit()
+    log_action(
+        user=editor,
+        action="DELETE",
+        module="rh",
+        objet=f"Poste RH #{plan_id} supprimé",
+        ip=request.client.host if request.client else None,
+    )
     return {"ok": True}
 
 
 @router.put("/planning/{plan_id}")
 async def update_planning_jours(plan_id: int, request: Request):
     """Met à jour le bitmask jours d'une affectation existante."""
-    _require_edit(request)
+    editor = _require_edit(request)
     body = await request.json()
 
     jours = body.get("jours")
@@ -440,6 +448,14 @@ async def update_planning_jours(plan_id: int, request: Request):
                WHERE p.id = ?""",
             (plan_id,),
         ).fetchone()
+    log_action(
+        user=editor,
+        action="UPDATE",
+        module="rh",
+        objet=f"Poste RH #{plan_id} modifié",
+        detail={"jours": jours},
+        ip=request.client.host if request.client else None,
+    )
     return dict(updated)
 
 
@@ -559,12 +575,20 @@ async def create_conge(request: Request):
                WHERE c.id = ?""",
             (new_id,),
         ).fetchone()
+    user_nom = user_row["nom"] if user_row else ""
+    log_action(
+        user=editor,
+        action="CREATE",
+        module="rh",
+        objet=f"Congé {type_conge} · {user_nom} · {date_debut} → {date_fin}",
+        ip=request.client.host if request.client else None,
+    )
     return dict(row)
 
 
 @router.put("/conges/{conge_id}")
 async def update_conge(conge_id: int, request: Request):
-    _require_edit(request)
+    editor = _require_edit(request)
     body = await request.json()
 
     with get_db() as conn:
@@ -592,12 +616,20 @@ async def update_conge(conge_id: int, request: Request):
                WHERE c.id = ?""",
             (conge_id,),
         ).fetchone()
-        return dict(row)
+    log_action(
+        user=editor,
+        action="UPDATE",
+        module="rh",
+        objet=f"Congé #{conge_id} modifié",
+        detail=fields or None,
+        ip=request.client.host if request.client else None,
+    )
+    return dict(row)
 
 
 @router.delete("/conges/{conge_id}")
 def delete_conge(conge_id: int, request: Request):
-    _require_edit(request)
+    editor = _require_edit(request)
     with get_db() as conn:
         row = conn.execute(
             "SELECT id FROM rh_conges WHERE id = ?", (conge_id,)
@@ -606,6 +638,13 @@ def delete_conge(conge_id: int, request: Request):
             raise HTTPException(404, "Congé introuvable")
         conn.execute("DELETE FROM rh_conges WHERE id = ?", (conge_id,))
         conn.commit()
+    log_action(
+        user=editor,
+        action="DELETE",
+        module="rh",
+        objet=f"Congé #{conge_id} supprimé",
+        ip=request.client.host if request.client else None,
+    )
     return {"ok": True}
 
 

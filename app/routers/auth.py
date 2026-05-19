@@ -8,6 +8,7 @@ from fastapi import APIRouter, Request, Response, HTTPException
 from fastapi.responses import JSONResponse, Response as PlainResponse
 
 from database import get_db
+from services.audit_service import log_action
 from services.auth_service import (
     login_user,
     delete_session,
@@ -223,16 +224,34 @@ async def login(request: Request):
         key=COOKIE_NAME, value=token, httponly=True,
         samesite="lax", secure=False, max_age=SESSION_HOURS * 3600,
     )
+    client_ip = request.client.host if request.client else None
+    log_action(
+        user=u_pub,
+        action="LOGIN",
+        module="auth",
+        objet=f"Connexion · {u_pub.get('email', '')}",
+        ip=client_ip,
+    )
     return response
 
 
 # ─── Logout ───────────────────────────────────────────────────────
 @router.post("/api/auth/logout")
 def logout(request: Request, response: Response):
+    user = get_optional_user(request)
     token = request.cookies.get(COOKIE_NAME)
     if token:
         delete_session(token)
     response.delete_cookie(COOKIE_NAME)
+    if user:
+        client_ip = request.client.host if request.client else None
+        log_action(
+            user=user,
+            action="LOGOUT",
+            module="auth",
+            objet=f"Déconnexion · {user.get('email', '')}",
+            ip=client_ip,
+        )
     return {"success": True}
 
 
@@ -370,7 +389,7 @@ def get_user(user_id: int, request: Request):
 
 @router.post("/api/users")
 async def create_user(request: Request):
-    require_superadmin(request)
+    actor = require_superadmin(request)
     body = await request.json()
 
     email = (body.get("email") or "").strip().lower()
@@ -408,12 +427,20 @@ async def create_user(request: Request):
         except Exception:
             raise HTTPException(status_code=409, detail="Email déjà utilisé")
 
+    log_action(
+        user=actor,
+        action="CREATE",
+        module="settings",
+        objet=f"Utilisateur {nom} [{role}]",
+        detail={"email": email},
+        ip=request.client.host if request.client else None,
+    )
     return {"success": True}
 
 
 @router.put("/api/users/{user_id}")
 async def update_user(user_id: int, request: Request):
-    require_superadmin(request)
+    actor = require_superadmin(request)
     body = await request.json()
 
     with get_db() as conn:
@@ -472,6 +499,14 @@ async def update_user(user_id: int, request: Request):
         )
         conn.commit()
 
+    log_action(
+        user=actor,
+        action="UPDATE",
+        module="settings",
+        objet=f"Utilisateur {nom} [{role_eff}]",
+        detail={"user_id": user_id},
+        ip=request.client.host if request.client else None,
+    )
     return {"success": True}
 
 
@@ -504,10 +539,23 @@ def deactivate_user(user_id: int, request: Request):
     actor = require_superadmin(request)
     if actor["id"] == user_id:
         raise HTTPException(status_code=400, detail="Impossible de désactiver votre propre compte")
+    nom_audit = ""
+    role_audit = ""
     with get_db() as conn:
-        ex = conn.execute("SELECT email, role FROM users WHERE id=?", (user_id,)).fetchone()
+        ex = conn.execute("SELECT email, nom, role FROM users WHERE id=?", (user_id,)).fetchone()
         if ex and _is_designated_superadmin_row(ex["email"], ex["role"]):
             raise HTTPException(status_code=400, detail="Impossible de désactiver le compte super administrateur")
+        if ex:
+            nom_audit = ex["nom"] or ""
+            role_audit = ex["role"] or ""
         conn.execute("UPDATE users SET actif=0 WHERE id=?", (user_id,))
         conn.commit()
+    log_action(
+        user=actor,
+        action="DELETE",
+        module="settings",
+        objet=f"Utilisateur {nom_audit} [{role_audit}]",
+        detail={"user_id": user_id},
+        ip=request.client.host if request.client else None,
+    )
     return {"success": True}

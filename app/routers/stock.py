@@ -13,6 +13,7 @@ import pandas as pd
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 
+from app.services.audit_service import log_action
 from database import get_db, parse_file
 from services.auth_service import get_current_user, user_has_app_access
 
@@ -435,6 +436,14 @@ async def create_produit(request: Request):
                 (ref, des, description, unite, now, now),
             )
             conn.commit()
+            log_action(
+                user=user,
+                action="CREATE",
+                module="stock",
+                objet=f"Produit {ref} — {des}",
+                detail={"reference": ref},
+                ip=request.client.host if request.client else None,
+            )
             return {"success": True, "id": cursor.lastrowid, "existing": False}
         except sqlite3.IntegrityError:
             conn.rollback()
@@ -446,27 +455,55 @@ async def create_produit(request: Request):
 
 @router.put("/api/stock/produits/{produit_id}")
 async def update_produit(produit_id: int, request: Request):
-    require_stock_write(request)
+    user = require_stock_write(request)
     body = await request.json()
     now = datetime.now().isoformat()
+    ref_audit = ""
     with get_db() as conn:
+        prow = conn.execute(
+            "SELECT reference FROM produits WHERE id=?", (produit_id,)
+        ).fetchone()
+        if not prow:
+            raise HTTPException(404, "Produit non trouvé")
+        ref_audit = prow["reference"] or ""
         conn.execute(
             "UPDATE produits SET designation=?,description=?,unite=?,updated_at=? WHERE id=?",
             (body.get("designation"), body.get("description"), body.get("unite"), now, produit_id),
         )
         conn.commit()
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="stock",
+        objet=f"Produit {ref_audit}",
+        ip=request.client.host if request.client else None,
+    )
     return {"success": True}
 
 
 @router.delete("/api/stock/produits/{produit_id}")
 def delete_produit(produit_id: int, request: Request):
-    require_stock_write(request)
+    user = require_stock_write(request)
+    ref_audit = ""
     with get_db() as conn:
+        prow = conn.execute(
+            "SELECT reference FROM produits WHERE id=?", (produit_id,)
+        ).fetchone()
+        if not prow:
+            raise HTTPException(404, "Produit non trouvé")
+        ref_audit = prow["reference"] or ""
         conn.execute("DELETE FROM lots_stock WHERE produit_id=?", (produit_id,))
         conn.execute("DELETE FROM stock_emplacements WHERE produit_id=?", (produit_id,))
         conn.execute("DELETE FROM mouvements_stock WHERE produit_id=?", (produit_id,))
         conn.execute("DELETE FROM produits WHERE id=?", (produit_id,))
         conn.commit()
+    log_action(
+        user=user,
+        action="DELETE",
+        module="stock",
+        objet=f"Produit {ref_audit} supprimé",
+        ip=request.client.host if request.client else None,
+    )
     return {"success": True}
 
 
@@ -573,6 +610,8 @@ async def mouvement_stock(request: Request):
     # Toujours tracer un "Nom Prénom" fiable (champ #ed-nom → users.nom).
     # Certains contextes peuvent renvoyer un user.nom vide : on complète via la DB.
     created_by_name = (user.get("nom") or "").strip() or None
+    ref_audit = ""
+    audit_action = "UPDATE"
 
     with get_db() as conn:
         if not created_by_name:
@@ -589,9 +628,18 @@ async def mouvement_stock(request: Request):
                 created_by_name = None
 
         # Vérifier produit
-        p = conn.execute("SELECT id FROM produits WHERE id=?", (produit_id,)).fetchone()
+        p = conn.execute(
+            "SELECT id, reference FROM produits WHERE id=?", (produit_id,)
+        ).fetchone()
         if not p:
             raise HTTPException(404, "Produit non trouvé")
+        ref_audit = p["reference"] or ""
+        if type_mvt == "entree":
+            audit_action = "CREATE"
+        elif type_mvt == "sortie":
+            audit_action = "DELETE"
+        else:
+            audit_action = "UPDATE"
 
         ex = conn.execute(
             "SELECT quantite FROM stock_emplacements WHERE produit_id=? AND emplacement=?",
@@ -677,6 +725,14 @@ async def mouvement_stock(request: Request):
 
         conn.commit()
 
+    log_action(
+        user=user,
+        action=audit_action,
+        module="stock",
+        objet=f"{type_mvt} · {ref_audit} · {emplacement} · {quantite}",
+        detail={"type_mouvement": type_mvt, "quantite": quantite},
+        ip=request.client.host if request.client else None,
+    )
     return {"success": True, **result}
 
 

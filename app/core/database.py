@@ -1432,6 +1432,30 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 28, "cal_events_perso")
 
+    # v29 — Journal d'audit (actions sensibles)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=29 LIMIT 1").fetchone():
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS audit_logs (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id     INTEGER,
+                user_nom    TEXT,
+                user_role   TEXT,
+                action      TEXT NOT NULL,
+                module      TEXT NOT NULL,
+                objet       TEXT,
+                detail      TEXT,
+                ip          TEXT,
+                created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_logs(user_id);
+            CREATE INDEX IF NOT EXISTS idx_audit_module ON audit_logs(module);
+            """
+        )
+        conn.commit()
+        _record_schema_migration(conn, 29, "audit_logs")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

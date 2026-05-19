@@ -25,6 +25,7 @@ from app.services.ai_data import (
     fetch_context_for_role,
     tool_expe_detail,
     tool_planning_close_dossier_prepare,
+    tool_planning_client_schedule,
     tool_planning_detail,
     tool_production_detail,
     tool_stock_adjust_prepare,
@@ -68,7 +69,8 @@ TOOLS: list[dict[str, Any]] = [
     {
         "name": "planning_detail",
         "description": (
-            "Liste des dossiers au planning machine, filtrable par machine et statut."
+            "Liste des dossiers au planning machine, filtrable par machine, client et statut. "
+            "Pour les dates de passage (« quand »), préférer planning_client_schedule."
         ),
         "input_schema": {
             "type": "object",
@@ -76,6 +78,10 @@ TOOLS: list[dict[str, Any]] = [
                 "machine_nom": {
                     "type": "string",
                     "description": "Nom de la machine. Optionnel.",
+                },
+                "client": {
+                    "type": "string",
+                    "description": "Filtrer par nom de client (fragment). Optionnel.",
                 },
                 "statut": {
                     "type": "string",
@@ -86,6 +92,28 @@ TOOLS: list[dict[str, Any]] = [
                     "description": "Nombre max de dossiers (défaut 10, max 30).",
                 },
             },
+        },
+    },
+    {
+        "name": "planning_client_schedule",
+        "description": (
+            "Dates estimées de passage en production pour les dossiers d'un client "
+            "(file d'attente, début/fin en heures ouvrées machine). À utiliser pour "
+            "répondre aux questions « quand », « à quelle date », « position N »."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "client": {
+                    "type": "string",
+                    "description": "Nom ou fragment du client (ex. SNV).",
+                },
+                "machine_nom": {
+                    "type": "string",
+                    "description": "Limiter à une machine. Optionnel.",
+                },
+            },
+            "required": ["client"],
         },
     },
     {
@@ -359,6 +387,11 @@ async def _dispatch_tool(
             if "planning" not in scope:
                 return ("Accès planning non autorisé pour ce rôle.", "err")
             return (tool_planning_detail(conn, inp), "ok")
+
+        if name == "planning_client_schedule":
+            if "planning" not in scope:
+                return ("Accès planning non autorisé pour ce rôle.", "err")
+            return (tool_planning_client_schedule(conn, inp), "ok")
 
         if name == "stock_search":
             if "stock" not in scope:

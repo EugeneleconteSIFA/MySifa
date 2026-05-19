@@ -19,6 +19,7 @@ from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse
 from database import get_db
 from config import ROLE_FABRICATION, ROLE_DIRECTION, ROLE_SUPERADMIN
+from app.services.audit_service import log_action
 from services.auth_service import require_admin, get_current_user, user_has_app_access
 from services.dossier_stats import build_dossier_production_stats
 
@@ -782,6 +783,8 @@ def _compute_timeline_slots(
     day_worked_map: Dict[str, int],
     day_horaires_map: Dict[str, Tuple[float, float]],
     entries: List[dict],
+    *,
+    persist: bool = True,
 ) -> List[dict]:
     """Calcule les créneaux : terminé / en cours figés ; en attente (et en_cours sans plan) dynamiques + persistés.
 
@@ -821,24 +824,27 @@ def _compute_timeline_slots(
                 ps = _fmt_ts(p0)
                 _, pe_dt, _ = consume_duration_from(p0, duree_h)
                 pe = _fmt_ts(pe_dt)
-                if str(e.get("planned_start") or "") != ps or str(e.get("planned_end") or "") != pe:
+                if persist and (
+                    str(e.get("planned_start") or "") != ps
+                    or str(e.get("planned_end") or "") != pe
+                ):
                     conn.execute(
                         """UPDATE planning_entries SET planned_start=?, planned_end=?, updated_at=?
                            WHERE id=? AND machine_id=?""",
                         (ps, pe, now_u, e["id"], machine_id),
                     )
-                    e["planned_start"], e["planned_end"] = ps, pe
+                e["planned_start"], e["planned_end"] = ps, pe
             elif run_start is not None and manual_end:
                 p0 = run_start.replace(microsecond=0)
                 ps = _fmt_ts(p0)
                 pe = e.get("planned_end")
-                if str(e.get("planned_start") or "") != ps:
+                if persist and str(e.get("planned_start") or "") != ps:
                     conn.execute(
                         """UPDATE planning_entries SET planned_start=?, updated_at=?
                            WHERE id=? AND machine_id=?""",
                         (ps, now_u, e["id"], machine_id),
                     )
-                    e["planned_start"] = ps
+                e["planned_start"] = ps
             else:
                 ps, pe = e["planned_start"], e["planned_end"]
             pend = _parse_planned_dt(pe)
@@ -850,11 +856,12 @@ def _compute_timeline_slots(
         # ── Attente et en_cours sans dates : calcul dynamique depuis cursor
         slot_start, slot_end, cursor = consume_duration_from(cursor, e["duree_heures"])
         ps, pe = _fmt_ts(slot_start), _fmt_ts(slot_end)
-        conn.execute(
-            """UPDATE planning_entries SET planned_start=?, planned_end=?, updated_at=?
-               WHERE id=? AND machine_id=?""",
-            (ps, pe, now_u, e["id"], machine_id),
-        )
+        if persist:
+            conn.execute(
+                """UPDATE planning_entries SET planned_start=?, planned_end=?, updated_at=?
+                   WHERE id=? AND machine_id=?""",
+                (ps, pe, now_u, e["id"], machine_id),
+            )
         ee = {**e, "planned_start": ps, "planned_end": pe}
         slots.append(_slot_payload(ee, ps, pe))
 
@@ -1029,7 +1036,7 @@ def get_machine(machine_id: int, request: Request):
 @router.put("/machines/{machine_id}/horaires")
 async def set_machine_horaires(machine_id: int, request: Request):
     """Modifier les heures d'ouverture d'un jour : body { day: lundi|…|samedi, start, end } en HH:MM."""
-    require_admin(request)
+    user = require_admin(request)
     body = await request.json()
     day = (body.get("day") or "").lower().strip()
     if day not in _HORAIRES_COL:
@@ -1046,13 +1053,23 @@ async def set_machine_horaires(machine_id: int, request: Request):
     if he <= hs:
         raise HTTPException(400, "La fin doit être après le début")
     col = _HORAIRES_COL[day]
+    machine_nom = ""
     with get_db() as conn:
-        ex = conn.execute("SELECT id FROM machines WHERE id=?", (machine_id,)).fetchone()
+        ex = conn.execute("SELECT id, nom FROM machines WHERE id=?", (machine_id,)).fetchone()
         if not ex:
             raise HTTPException(404, "Machine non trouvée")
+        machine_nom = ex["nom"] or ""
         conn.execute(f"UPDATE machines SET {col} = ? WHERE id = ?", (val, machine_id))
         _invalidate_attente_plans(conn, machine_id)
         conn.commit()
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="planning",
+        objet=f"Horaires machine {machine_nom}",
+        detail={"day": day, "start": start, "end": end},
+        ip=request.client.host if request.client else None,
+    )
     return {"success": True, "field": col, "value": val}
 
 
@@ -1169,6 +1186,7 @@ async def force_statut(machine_id: int, entry_id: int, request: Request):
         raise HTTPException(status_code=400, detail="Statut invalide.")
 
     is_flex = user.get("role") in (ROLE_SUPERADMIN, ROLE_DIRECTION)
+    ref_audit = ""
 
     with get_db() as conn:
         require_planning_machine(request, conn, machine_id)
@@ -1179,6 +1197,7 @@ async def force_statut(machine_id: int, entry_id: int, request: Request):
         ).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Entrée introuvable.")
+        ref_audit = (row["reference"] or "").strip()
 
         current_reel = row["statut_reel"] or "reellement_en_attente"
 
@@ -1240,6 +1259,14 @@ async def force_statut(machine_id: int, entry_id: int, request: Request):
             _invalidate_attente_plans(conn, machine_id)
         conn.commit()
 
+    log_action(
+        user=user,
+        action="CLOSE" if statut == "termine" else "UPDATE",
+        module="planning",
+        objet=f"Statut dossier {ref_audit} → {statut}",
+        detail={"statut": statut, "override": override},
+        ip=request.client.host if request.client else None,
+    )
     return {"ok": True, "saisie_found": saisie_found}
 
 
@@ -1287,12 +1314,14 @@ async def add_entry(machine_id: int, request: Request):
     }
 
     position: int
+    machine_nom = ""
     try:
         with get_db() as conn:
             pe_cols = _ensure_planning_entry_columns(conn)
-            mac = conn.execute("SELECT id FROM machines WHERE id=?", (machine_id,)).fetchone()
+            mac = conn.execute("SELECT id, nom FROM machines WHERE id=?", (machine_id,)).fetchone()
             if not mac:
                 raise HTTPException(404, "Machine non trouvée")
+            machine_nom = mac["nom"] or ""
 
             position = body.get("position")
             if position is None:
@@ -1324,6 +1353,14 @@ async def add_entry(machine_id: int, request: Request):
         _log.exception("add_entry DB error machine_id=%s", machine_id)
         raise HTTPException(status_code=500, detail=f"Erreur base de données : {exc}") from exc
 
+    log_action(
+        user=user,
+        action="CREATE",
+        module="planning",
+        objet=f"Dossier {reference} · {machine_nom}",
+        detail={"reference": reference, "duree_heures": duree},
+        ip=request.client.host if request.client else None,
+    )
     return {"success": True, "position": position}
 
 
@@ -1347,6 +1384,8 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
     # Récupérer l'utilisateur courant pour la traçabilité
     user = get_current_user(request)
     user_name = user.get("nom") or user.get("email") or "Admin"
+    ref_audit = ""
+    audit_detail: dict = {}
 
     with get_db() as conn:
         ex = conn.execute(
@@ -1357,6 +1396,15 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
             raise HTTPException(404, "Entrée non trouvée")
 
         exd = dict(ex)
+        ref_audit = (exd.get("reference") or "").strip()
+        if body.get("reference") is not None and str(body.get("reference")) != str(exd.get("reference") or ""):
+            audit_detail["reference"] = body.get("reference")
+        if body.get("duree_heures") is not None and float(body.get("duree_heures")) != float(exd.get("duree_heures") or 0):
+            audit_detail["duree_heures"] = body.get("duree_heures")
+        if body.get("statut") is not None and body.get("statut") != exd.get("statut"):
+            audit_detail["statut"] = body.get("statut")
+        if body.get("client") is not None and body.get("client") != exd.get("client"):
+            audit_detail["client"] = body.get("client")
         statut_auto = compute_statut(exd)
         set_manual_end = _body_flag_true(body.get("planned_end_manual"))
         clear_manual_end = body.get("planned_end_manual") is not None and not set_manual_end
@@ -1527,6 +1575,14 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
         except Exception:
             pass
         conn.commit()
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="planning",
+        objet=f"Dossier {ref_audit}",
+        detail=audit_detail or None,
+        ip=request.client.host if request.client else None,
+    )
     return {"success": True}
 
 
@@ -1639,8 +1695,9 @@ def split_entry(machine_id: int, entry_id: int, request: Request):
     - 1er dossier = arrondi supérieur
     - 2e dossier  = arrondi inférieur
     """
-    require_admin(request)
+    user = require_admin(request)
     now = datetime.now().isoformat()
+    ref_audit = ""
     with get_db() as conn:
         ex = conn.execute(
             "SELECT * FROM planning_entries WHERE id=? AND machine_id=?",
@@ -1649,6 +1706,7 @@ def split_entry(machine_id: int, entry_id: int, request: Request):
         if not ex:
             raise HTTPException(404, "Entrée non trouvée")
         exd = dict(ex)
+        ref_audit = (exd.get("reference") or "").strip()
         statut_auto = compute_statut(exd)
         if statut_auto in ("en_cours", "termine"):
             raise HTTPException(400, "Ce dossier est verrouillé — statut en cours ou terminé")
@@ -1737,6 +1795,14 @@ def split_entry(machine_id: int, entry_id: int, request: Request):
 
         _invalidate_attente_plans(conn, machine_id)
         conn.commit()
+    log_action(
+        user=user,
+        action="CREATE",
+        module="planning",
+        objet=f"Scission dossier {ref_audit}",
+        detail={"duree_1": d1, "duree_2": d2},
+        ip=request.client.host if request.client else None,
+    )
     return {"success": True, "split": [d1, d2]}
 
 
@@ -1745,15 +1811,20 @@ def delete_entry(machine_id: int, entry_id: int, request: Request):
     """Supprimer une entrée et recompacter les positions.
     Si l'entrée supprimée était en_cours, le premier dossier attente suivant est promu en_cours.
     """
-    require_admin(request)
+    user = require_admin(request)
+    ref_audit = ""
+    machine_nom = ""
     with get_db() as conn:
+        mac = conn.execute("SELECT nom FROM machines WHERE id=?", (machine_id,)).fetchone()
+        machine_nom = (mac["nom"] or "") if mac else ""
         ex = conn.execute(
-            """SELECT id, position, statut, statut_force, planned_start, planned_end
+            """SELECT id, position, statut, statut_force, planned_start, planned_end, reference
                FROM planning_entries WHERE id=? AND machine_id=?""",
             (entry_id, machine_id)
         ).fetchone()
         if not ex:
             raise HTTPException(404, "Entrée non trouvée")
+        ref_audit = (ex["reference"] or "").strip()
 
         was_en_cours = (compute_statut(dict(ex)) == "en_cours")
 
@@ -1782,6 +1853,13 @@ def delete_entry(machine_id: int, entry_id: int, request: Request):
                 )
 
         conn.commit()
+    log_action(
+        user=user,
+        action="DELETE",
+        module="planning",
+        objet=f"Dossier {ref_audit} · {machine_nom}",
+        ip=request.client.host if request.client else None,
+    )
     return {"success": True}
 
 
@@ -1968,14 +2046,17 @@ async def import_orphan_dossier(machine_id: int, request: Request):
 @router.post("/machines/{machine_id}/reorder")
 async def reorder_entries(machine_id: int, request: Request):
     """Réordonner les entrées. Body: {"entry_ids": [5, 3, 8, 1, ...]}"""
-    require_admin(request)
+    user = require_admin(request)
     body = await request.json()
     entry_ids = body.get("entry_ids", [])
     if not entry_ids:
         raise HTTPException(400, "entry_ids requis (liste ordonnée)")
 
     now = datetime.now().isoformat()
+    machine_nom = ""
     with get_db() as conn:
+        mac = conn.execute("SELECT nom FROM machines WHERE id=?", (machine_id,)).fetchone()
+        machine_nom = (mac["nom"] or "") if mac else ""
         # Autoriser le reorder même si des entrées sont verrouillées,
         # à condition que les entrées verrouillées (en_cours/termine) restent
         # exactement à la même position (index) dans la liste.
@@ -2010,6 +2091,14 @@ async def reorder_entries(machine_id: int, request: Request):
             )
         _invalidate_attente_plans(conn, machine_id)
         conn.commit()
+    log_action(
+        user=user,
+        action="REORDER",
+        module="planning",
+        objet=f"Réorganisation planning {machine_nom}",
+        detail={"entry_ids": entry_ids},
+        ip=request.client.host if request.client else None,
+    )
     return {"success": True, "count": len(entry_ids)}
 
 

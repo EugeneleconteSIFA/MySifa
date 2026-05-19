@@ -373,6 +373,7 @@ def tool_production_detail(conn, inp: dict) -> str:
 def tool_planning_detail(conn, inp: dict) -> str:
     limit = max(1, min(int(inp.get("limit") or 10), 30))
     machine_nom = (inp.get("machine_nom") or "").strip()
+    client = (inp.get("client") or "").strip()
     statut = (inp.get("statut") or "").strip()
 
     where = ["1=1"]
@@ -380,6 +381,9 @@ def tool_planning_detail(conn, inp: dict) -> str:
     if machine_nom:
         where.append("(TRIM(m.nom) = TRIM(?) OR TRIM(m.nom) LIKE '%' || TRIM(?) || '%')")
         params.extend([machine_nom, machine_nom])
+    if client:
+        where.append("pe.client LIKE ? COLLATE NOCASE")
+        params.append(f"%{client}%")
     if statut:
         where.append("pe.statut = ?")
         params.append(statut)
@@ -388,7 +392,7 @@ def tool_planning_detail(conn, inp: dict) -> str:
         f"""
         SELECT m.nom AS machine, pe.position, pe.statut,
                COALESCE(NULLIF(TRIM(pe.numero_of), ''), pe.reference) AS dossier,
-               pe.client, pe.duree_heures
+               pe.client, pe.duree_heures, pe.planned_start, pe.planned_end
         FROM planning_entries pe
         JOIN machines m ON m.id = pe.machine_id
         WHERE {' AND '.join(where)}
@@ -407,10 +411,203 @@ def tool_planning_detail(conn, inp: dict) -> str:
         return f"Planning : aucun dossier{suffix}."
     lines = [f"Planning ({len(rows)} dossier(s)) :"]
     for r in rows:
+        dates = ""
+        if r["planned_start"] or r["planned_end"]:
+            dates = (
+                f" · {_fmt_planning_dt(r['planned_start'])}"
+                f" → {_fmt_planning_dt(r['planned_end'])}"
+            )
         lines.append(
             f"  - {r['machine']} #{r['position']} · {r['dossier']} · {r['client']} "
-            f"[{r['statut']}, {r['duree_heures']}h]"
+            f"[{r['statut']}, {r['duree_heures']}h]{dates}"
         )
+    return "\n".join(lines)
+
+
+def _fmt_planning_dt(iso: str | None) -> str:
+    if not iso:
+        return "—"
+    s = str(iso).strip()
+    if len(s) >= 16:
+        return s[:16].replace("T", " ")
+    return s[:10]
+
+
+def _split_planning_entries(entries_list: list[dict]) -> list[dict]:
+    """Même ordre que la timeline UI : dossiers planifiés puis « à placer »."""
+    main_entries: list[dict] = []
+    aplacer_entries: list[dict] = []
+    for e in entries_list:
+        st = (e.get("statut") or "attente").strip()
+        ap = int(e.get("a_placer") or 0)
+        if st == "attente" and ap == 1:
+            aplacer_entries.append(e)
+        else:
+            main_entries.append(e)
+    return main_entries + aplacer_entries
+
+
+def tool_planning_client_schedule(conn, inp: dict) -> str:
+    """Créneaux estimés (début/fin) pour les dossiers d'un client — lecture seule."""
+    from app.routers.planning import (
+        _compute_timeline_slots,
+        _load_planning_calendar_maps,
+    )
+
+    client_q = (inp.get("client") or "").strip()
+    if not client_q:
+        return "Indiquez un nom de client (ex. SNV)."
+    machine_nom = (inp.get("machine_nom") or "").strip()
+    cq = client_q.lower()
+
+    params: list[Any] = [f"%{client_q}%"]
+    machine_sql = ""
+    if machine_nom:
+        machine_sql = (
+            " AND (TRIM(m.nom) = TRIM(?) OR TRIM(m.nom) LIKE '%' || TRIM(?) || '%')"
+        )
+        params.extend([machine_nom, machine_nom])
+
+    machines = conn.execute(
+        f"""
+        SELECT DISTINCT m.id, m.nom
+        FROM planning_entries pe
+        JOIN machines m ON m.id = pe.machine_id
+        WHERE pe.client LIKE ? COLLATE NOCASE
+          AND pe.statut IN ('attente', 'en_cours')
+          {machine_sql}
+        ORDER BY m.nom
+        """,
+        params,
+    ).fetchall()
+
+    if not machines:
+        termines = conn.execute(
+            f"""
+            SELECT m.nom, pe.position,
+                   COALESCE(NULLIF(TRIM(pe.numero_of), ''), pe.reference) AS dossier,
+                   pe.statut, pe.planned_end
+            FROM planning_entries pe
+            JOIN machines m ON m.id = pe.machine_id
+            WHERE pe.client LIKE ? COLLATE NOCASE
+              AND pe.statut = 'termine'
+              {machine_sql}
+            ORDER BY pe.planned_end DESC
+            LIMIT 5
+            """,
+            params,
+        ).fetchall()
+        if termines:
+            lines = [
+                f"Aucun dossier en attente/en cours pour « {client_q} ».",
+                "Derniers dossiers terminés :",
+            ]
+            for r in termines:
+                lines.append(
+                    f"  - {r['nom']} #{r['position']} · {r['dossier']} "
+                    f"(fin {_fmt_planning_dt(r['planned_end'])})"
+                )
+            return "\n".join(lines)
+        return f"Aucun dossier planning trouvé pour le client « {client_q} »."
+
+    lines = [
+        f"Planning client « {client_q} » — dates estimées (heures ouvrées machine, Paris) :"
+    ]
+
+    for mrow in machines:
+        mid = int(mrow["id"])
+        mnom = mrow["nom"]
+        machine = conn.execute("SELECT * FROM machines WHERE id=?", (mid,)).fetchone()
+        if not machine:
+            continue
+
+        configs, off_days, day_worked_map, day_horaires_map = _load_planning_calendar_maps(
+            conn, mid
+        )
+        rows = conn.execute(
+            "SELECT * FROM planning_entries WHERE machine_id=? ORDER BY position ASC",
+            (mid,),
+        ).fetchall()
+        entries_list = _split_planning_entries([dict(r) for r in rows])
+        by_id = {int(e["id"]): e for e in entries_list}
+
+        slots = _compute_timeline_slots(
+            conn,
+            mid,
+            dict(machine),
+            configs,
+            off_days,
+            day_worked_map,
+            day_horaires_map,
+            entries_list,
+            persist=False,
+        )
+
+        client_slots: list[tuple[dict, dict]] = []
+        for slot in slots:
+            eid = int(slot.get("entry_id") or 0)
+            ent = by_id.get(eid, {})
+            if cq not in str(ent.get("client") or "").lower():
+                continue
+            client_slots.append((slot, ent))
+
+        if not client_slots:
+            continue
+
+        lines.append(f"\n{mnom} :")
+
+        first_pos = min(int(ent.get("position") or 0) for _, ent in client_slots)
+        ahead_h = 0.0
+        ahead_n = 0
+        for ent in entries_list:
+            pos = int(ent.get("position") or 0)
+            if pos >= first_pos:
+                break
+            st = (ent.get("statut") or "").strip()
+            if st in ("attente", "en_cours"):
+                ahead_h += float(ent.get("duree_heures") or 0)
+                ahead_n += 1
+
+        if ahead_n:
+            lines.append(
+                f"  File d'attente : {ahead_n} dossier(s) avant le premier dossier "
+                f"{client_q} (~{ahead_h:.1f}h ouvrées machine au total)."
+            )
+
+        for slot, ent in client_slots:
+            dossier = (
+                (ent.get("numero_of") or "").strip()
+                or (ent.get("reference") or "").strip()
+                or "?"
+            )
+            st = slot.get("statut") or ent.get("statut") or "?"
+            pos = int(ent.get("position") or 0)
+            start = _fmt_planning_dt(slot.get("start"))
+            end = _fmt_planning_dt(slot.get("end"))
+            duree = float(ent.get("duree_heures") or 0)
+            liv = ent.get("date_livraison")
+            liv_s = f" · livraison {str(liv)[:10]}" if liv else ""
+            if st == "en_cours":
+                lines.append(
+                    f"  - #{pos} · {dossier} · {st} · en cours depuis {start} "
+                    f"(fin estimée {end}, {duree}h){liv_s}"
+                )
+            elif st == "attente" and start != "—":
+                lines.append(
+                    f"  - #{pos} · {dossier} · {st} · passage estimé du {start} au {end} "
+                    f"({duree}h){liv_s}"
+                )
+            else:
+                lines.append(
+                    f"  - #{pos} · {dossier} · {st} · {duree}h{liv_s}"
+                )
+
+    if len(lines) == 1:
+        return f"Aucun créneau calculable pour « {client_q} »."
+    lines.append(
+        "\nNote : estimation basée sur la file actuelle et le calendrier machine "
+        "(jours ouvrés, horaires). Sous réserve des aléas de production."
+    )
     return "\n".join(lines)
 
 

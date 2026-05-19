@@ -10,6 +10,8 @@ from fastapi import APIRouter, Request, HTTPException
 
 _PARIS = ZoneInfo("Europe/Paris")
 
+from app.services.audit_service import log_action
+from app.services.audit_service import log_action
 from database import get_db, parse_datetime
 from config import classify_operation
 from app.services.auth_service import get_current_user, is_fabrication, is_admin
@@ -773,6 +775,14 @@ async def create_saisie(request: Request):
             "SELECT * FROM production_data WHERE id=?", (new_id,)
         ).fetchone()
 
+    log_action(
+        user=user,
+        action="CREATE",
+        module="fabrication",
+        objet=f"Saisie {cl['code']} · {no_dossier or '—'} · {machine_name}",
+        detail={"duree_heures": None, "metrage_reel": m_fin, "metrage_prevu": m_debut},
+        ip=request.client.host if request.client else None,
+    )
     return {"success": True, "id": new_id, "saisie": dict(row)}
 
 
@@ -1019,6 +1029,14 @@ async def delete_matiere(matiere_id: int, request: Request):
         conn.execute("DELETE FROM fab_matieres_utilisees WHERE id=?", (matiere_id,))
         conn.commit()
 
+    log_action(
+        user=user,
+        action="DELETE",
+        module="fabrication",
+        objet=f"Matière #{matiere_id} supprimée",
+        detail={"no_dossier": ex["no_dossier"], "code_barre": ex["code_barre"]},
+        ip=request.client.host if request.client else None,
+    )
     return {"success": True}
 
 
@@ -1117,4 +1135,12 @@ async def update_commentaire(saisie_id: int, request: Request):
         )
         conn.commit()
 
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="fabrication",
+        objet=f"Commentaire saisie #{saisie_id}",
+        detail={"no_dossier": ex["no_dossier"], "operation_code": ex["operation_code"]},
+        ip=request.client.host if request.client else None,
+    )
     return {"success": True}
