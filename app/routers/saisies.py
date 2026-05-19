@@ -92,6 +92,7 @@ def list_saisies(
     request: Request,
     operateur: Optional[List[str]] = Query(default=None),
     no_dossier: Optional[List[str]] = Query(default=None),
+    machine: Optional[List[str]] = Query(default=None),
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     limit: int = 500, offset: int = 0,
@@ -101,6 +102,7 @@ def list_saisies(
     user_operateur = user.get("operateur_lie") or user.get("nom") or ""
     operateurs = [o for o in (operateur or []) if o]
     dossiers   = [d for d in (no_dossier or []) if d]
+    machines   = [m for m in (machine or []) if m]
 
     where, params = ["1=1"], []
     if can_view_all_prod(user):
@@ -116,6 +118,9 @@ def list_saisies(
             where.append("operateur = ?"); params.append(user_operateur)
         else:
             where.append("1=0")
+    if machines:
+        where.append(f"machine IN ({','.join('?'*len(machines))})")
+        params.extend(machines)
     if date_from: where.append("date_operation >= ?"); params.append(date_from)
     if date_to:   where.append("date_operation <= ?"); params.append(date_to+'T23:59:59')
     wc = " AND ".join(where)
@@ -576,6 +581,7 @@ def export_saisies(
     request: Request,
     operateur: Optional[List[str]] = Query(default=None),
     no_dossier: Optional[List[str]] = Query(default=None),
+    machine: Optional[List[str]] = Query(default=None),
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
 ):
@@ -585,6 +591,7 @@ def export_saisies(
     user_operateur = user.get("operateur_lie") or user.get("nom") or ""
     operateurs = [o for o in (operateur or []) if o]
     dossiers   = [d for d in (no_dossier or []) if d]
+    machines   = [m for m in (machine or []) if m]
 
     where, params = ["1=1"], []
     if can_view_all_prod(user):
@@ -600,6 +607,9 @@ def export_saisies(
             where.append("operateur = ?"); params.append(user_operateur)
         else:
             where.append("1=0")
+    if machines:
+        where.append(f"machine IN ({','.join('?'*len(machines))})")
+        params.extend(machines)
     if date_from: where.append("date_operation >= ?"); params.append(date_from)
     if date_to:   where.append("date_operation <= ?"); params.append(date_to+'T23:59:59')
     wc = " AND ".join(where)

@@ -17,6 +17,7 @@
     { id: 'feries', label: 'Jours fériés', color: '#f87171' },
     { id: 'paie', label: 'Paie', color: '#a78bfa' },
     { id: 'expeditions', label: 'Expéditions', color: '#f97316' },
+    { id: 'perso', label: 'Personnel', color: '#f97316' },
   ];
 
   function defaultColorsMap() {

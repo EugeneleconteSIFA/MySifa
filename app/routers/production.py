@@ -205,6 +205,7 @@ def dashboard_production(
     request: Request,
     operateur: Optional[List[str]] = Query(default=None),
     no_dossier: Optional[List[str]] = Query(default=None),
+    machine: Optional[List[str]] = Query(default=None),
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
 ):
@@ -224,6 +225,7 @@ def dashboard_production(
 
     operateurs = [o for o in (operateur or []) if o]
     dossiers   = [d for d in (no_dossier or []) if d]
+    machines   = [m for m in (machine or []) if m]
 
     where, params = ["1=1"], []
     if can_view_all_prod(user):
@@ -236,6 +238,9 @@ def dashboard_production(
     else:
         # Pour fabrication: filtrer par operateur_lie ou nom utilisateur
         where.append("operateur = ?"); params.append(user_operateur)
+    if machines:
+        where.append(f"machine IN ({','.join('?'*len(machines))})")
+        params.extend(machines)
     if date_from: where.append("date_operation >= ?"); params.append(date_from)
     if date_to:   where.append("date_operation <= ?"); params.append(date_to+'T23:59:59')
     wc = " AND ".join(where)

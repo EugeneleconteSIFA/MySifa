@@ -1,12 +1,15 @@
-"""MySifa — MyCalendrier — agrégation d'événements (superadmin)."""
+"""MySifa — MyCalendrier — agrégation d'événements."""
 
 from __future__ import annotations
 
 import calendar
+import json
 from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import Response
+from pydantic import BaseModel, Field
 
 from app.routers.planning import (
     _auto_complete_en_cours,
@@ -17,10 +20,17 @@ from app.routers.planning import (
     _load_planning_calendar_maps_range,
     _parse_planned_dt as _parse_planned_dt_planning,
 )
+from config import ROLE_ADMINISTRATION, ROLE_DIRECTION, ROLE_SUPERADMIN
 from database import get_db
-from services.auth_service import require_superadmin
+from services.auth_service import require_calendrier
 
 router = APIRouter(tags=["calendrier"])
+
+CALENDRIER_ADMIN_CALENDARS = frozenset(
+    {"conges", "anniversaires", "feries", "paie", "expeditions"}
+)
+CALENDRIER_BASIC_CALENDARS = frozenset({"conges", "feries"})
+CALENDRIER_PERSO_CAL = "perso"
 
 # Codes machines (table machines) — les id numériques ne sont pas fixes en base.
 PRODUCTION_MACHINE_CODES: dict[str, str] = {
@@ -32,7 +42,7 @@ PRODUCTION_MACHINE_CODES: dict[str, str] = {
 
 VALID_CALENDARS = frozenset(
     set(PRODUCTION_MACHINE_CODES.keys())
-    | {"conges", "anniversaires", "feries", "paie", "expeditions"}
+    | {"conges", "anniversaires", "feries", "paie", "expeditions", "perso"}
 )
 
 DEFAULT_CALENDARS = ",".join(
@@ -46,8 +56,56 @@ DEFAULT_CALENDARS = ",".join(
         "feries",
         "paie",
         "expeditions",
+        "perso",
     ]
 )
+
+
+def _allowed_calendars_for_role(role: str) -> frozenset[str]:
+    if role in {ROLE_SUPERADMIN, ROLE_DIRECTION}:
+        base: frozenset[str] = VALID_CALENDARS
+    elif role == ROLE_ADMINISTRATION:
+        base = CALENDRIER_ADMIN_CALENDARS
+    else:
+        base = CALENDRIER_BASIC_CALENDARS
+    return base | frozenset({CALENDRIER_PERSO_CAL})
+
+
+def _filter_calendars_for_role(role: str, requested: set[str]) -> set[str]:
+    allowed = _allowed_calendars_for_role(role)
+    return {c for c in requested if c in allowed}
+
+
+class PersoEventCreate(BaseModel):
+    titre: str = Field(..., min_length=1, max_length=500)
+    date_debut: str
+    date_fin: str
+    all_day: bool = False
+    note: Optional[str] = Field(None, max_length=4000)
+
+
+def _parse_event_dt(s: str, field: str) -> datetime:
+    raw = str(s or "").strip().replace(" ", "T")
+    if len(raw) == 10:
+        raw = f"{raw}T00:00"
+    try:
+        return datetime.fromisoformat(raw[:16])
+    except ValueError:
+        raise HTTPException(
+            400,
+            detail=f"{field} : format YYYY-MM-DDTHH:MM attendu.",
+        )
+
+
+def _user_id_from_session(user: dict) -> int:
+    uid = user.get("id")
+    if uid is None:
+        raise HTTPException(401, detail="Session invalide.")
+    try:
+        return int(uid)
+    except (TypeError, ValueError):
+        raise HTTPException(401, detail="Session invalide.")
+
 
 def _parse_ymd(s: str) -> date:
     try:
@@ -282,29 +340,32 @@ def _compute_day_windows(
     return windows
 
 
-@router.get("/api/calendrier/events")
-def list_events(
+def _calendar_request_context(
     request: Request,
-    date_debut: str = Query(..., description="YYYY-MM-DD"),
-    date_fin: str = Query(..., description="YYYY-MM-DD"),
-    calendriers: str = Query(
-        DEFAULT_CALENDARS,
-        description="Liste séparée par des virgules",
-    ),
-):
-    require_superadmin(request)
+    date_debut: str,
+    date_fin: str,
+    calendriers: str,
+) -> tuple[dict, date, date, set[str]]:
+    user = require_calendrier(request)
     d0 = _parse_ymd(date_debut)
     d1 = _parse_ymd(date_fin)
     if d1 < d0:
         raise HTTPException(400, detail="date_fin doit être >= date_debut.")
-
-    cals = {c.strip() for c in calendriers.split(",") if c.strip()}
+    role = str(user.get("role") or "")
+    requested = {c.strip() for c in calendriers.split(",") if c.strip()}
+    cals = _filter_calendars_for_role(role, requested)
     unknown = cals - VALID_CALENDARS
     if unknown:
         raise HTTPException(400, detail=f"Calendriers inconnus : {', '.join(sorted(unknown))}")
-    if not cals:
-        return {"events": [], "day_windows": {}}
+    return user, d0, d1, cals
 
+
+def _fetch_calendar_events(
+    user: dict,
+    d0: date,
+    d1: date,
+    cals: set[str],
+) -> tuple[list[dict], dict[str, dict[str, float]]]:
     out: list[dict] = []
     prod_machine_ids: list[int] = []
     day_windows: dict[str, dict[str, float]] = {}
@@ -512,6 +573,220 @@ def list_events(
         if prod_machine_ids:
             day_windows = _compute_day_windows(conn, prod_machine_ids, d0, d1)
 
-    out.sort(key=lambda e: (e["debut"], e["calendrier"], e["id"]))
+        if CALENDRIER_PERSO_CAL in cals:
+            uid = _user_id_from_session(user)
+            rows = conn.execute(
+                """
+                SELECT id, titre, date_debut, date_fin, all_day, note
+                FROM cal_events_perso
+                WHERE user_id = ?
+                  AND date(substr(date_debut, 1, 10)) <= ?
+                  AND date(substr(date_fin, 1, 10)) >= ?
+                ORDER BY date_debut ASC, id ASC
+                """,
+                (uid, d1.isoformat(), d0.isoformat()),
+            ).fetchall()
+            for r in rows:
+                debut = str(r["date_debut"] or "").strip()
+                fin = str(r["date_fin"] or "").strip() or debut
+                all_day = bool(int(r["all_day"] or 0))
+                note = (r["note"] or "").strip() or None
+                out.append(
+                    _event(
+                        eid=f"perso-{r['id']}",
+                        cal=CALENDRIER_PERSO_CAL,
+                        titre=(r["titre"] or "").strip() or "Sans titre",
+                        debut=debut,
+                        fin=fin,
+                        all_day=all_day,
+                        meta={"note": note} if note else {},
+                    )
+                )
 
-    return {"events": out, "day_windows": day_windows}
+    out.sort(key=lambda e: (e["debut"], e["calendrier"], e["id"]))
+    return out, day_windows
+
+
+def _ics_escape(value: str) -> str:
+    return (
+        value.replace("\\", "\\\\")
+        .replace("\n", "\\n")
+        .replace(",", "\\,")
+        .replace(";", "\\;")
+    )
+
+
+def _fold_ics_line(line: str, limit: int = 75) -> str:
+    if len(line) <= limit:
+        return line
+    parts = [line[:limit]]
+    rest = line[limit:]
+    while rest:
+        parts.append(" " + rest[: limit - 1])
+        rest = rest[limit - 1 :]
+    return "\r\n".join(parts)
+
+
+def _parse_ev_dt_for_ics(raw: str) -> Optional[datetime]:
+    s = str(raw or "").strip().replace(" ", "T").split("+")[0]
+    if not s:
+        return None
+    if len(s) == 10:
+        s = f"{s}T00:00:00"
+    elif "T" in s and len(s) == 16:
+        s = f"{s}:00"
+    try:
+        return datetime.fromisoformat(s[:19])
+    except ValueError:
+        return None
+
+
+def _ics_description(ev: dict) -> str:
+    meta = ev.get("meta") or {}
+    payload = {"calendrier": ev.get("calendrier"), **meta}
+    try:
+        return json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    except (TypeError, ValueError):
+        return str(payload)
+
+
+def _event_to_vevent_lines(ev: dict) -> list[str]:
+    eid = str(ev.get("id") or "event")
+    titre = _ics_escape(str(ev.get("titre") or "Sans titre"))
+    uid = _ics_escape(f"{eid}@mysifa")
+    desc = _ics_escape(_ics_description(ev))
+    lines = ["BEGIN:VEVENT", f"UID:{uid}", f"SUMMARY:{titre}"]
+    if desc:
+        lines.append(f"DESCRIPTION:{desc}")
+    debut = _parse_ev_dt_for_ics(ev.get("debut") or "")
+    fin = _parse_ev_dt_for_ics(ev.get("fin") or "") or debut
+    if not debut:
+        lines.append("END:VEVENT")
+        return lines
+    if ev.get("all_day"):
+        start_d = debut.date()
+        end_d = (fin or debut).date()
+        if end_d < start_d:
+            end_d = start_d
+        end_exclusive = end_d + timedelta(days=1)
+        lines.append(f"DTSTART;VALUE=DATE:{start_d.strftime('%Y%m%d')}")
+        lines.append(f"DTEND;VALUE=DATE:{end_exclusive.strftime('%Y%m%d')}")
+    else:
+        if not fin or fin < debut:
+            fin = debut
+        lines.append(f"DTSTART:{debut.strftime('%Y%m%dT%H%M%S')}")
+        lines.append(f"DTEND:{fin.strftime('%Y%m%dT%H%M%S')}")
+    lines.append("END:VEVENT")
+    return lines
+
+
+def build_ics_calendar(events: list[dict]) -> str:
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//MySifa//MyCalendrier//FR",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+    ]
+    for ev in events:
+        for line in _event_to_vevent_lines(ev):
+            lines.append(_fold_ics_line(line))
+    lines.append("END:VCALENDAR")
+    return "\r\n".join(lines) + "\r\n"
+
+
+@router.get("/api/calendrier/events")
+def list_events(
+    request: Request,
+    date_debut: str = Query(..., description="YYYY-MM-DD"),
+    date_fin: str = Query(..., description="YYYY-MM-DD"),
+    calendriers: str = Query(
+        DEFAULT_CALENDARS,
+        description="Liste séparée par des virgules",
+    ),
+):
+    user, d0, d1, cals = _calendar_request_context(
+        request, date_debut, date_fin, calendriers
+    )
+    if not cals:
+        return {"events": [], "day_windows": {}}
+    events, day_windows = _fetch_calendar_events(user, d0, d1, cals)
+    return {"events": events, "day_windows": day_windows}
+
+
+@router.get("/api/calendrier/export.ics")
+def export_ics(
+    request: Request,
+    date_debut: str = Query(..., description="YYYY-MM-DD"),
+    date_fin: str = Query(..., description="YYYY-MM-DD"),
+    calendriers: str = Query(
+        DEFAULT_CALENDARS,
+        description="Liste séparée par des virgules",
+    ),
+):
+    user, d0, d1, cals = _calendar_request_context(
+        request, date_debut, date_fin, calendriers
+    )
+    events: list[dict] = []
+    if cals:
+        events, _ = _fetch_calendar_events(user, d0, d1, cals)
+    body = build_ics_calendar(events)
+    return Response(
+        content=body.encode("utf-8"),
+        media_type="text/calendar; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="mysifa-calendrier.ics"',
+        },
+    )
+
+
+@router.post("/api/calendrier/events/perso")
+def create_perso_event(request: Request, body: PersoEventCreate):
+    user = require_calendrier(request)
+    uid = _user_id_from_session(user)
+    titre = body.titre.strip()
+    if not titre:
+        raise HTTPException(400, detail="titre est requis.")
+    dt_debut = _parse_event_dt(body.date_debut, "date_debut")
+    dt_fin = _parse_event_dt(body.date_fin, "date_fin")
+    if dt_fin < dt_debut:
+        raise HTTPException(400, detail="date_fin doit être >= date_debut.")
+    note = (body.note or "").strip() or None
+    all_day = 1 if body.all_day else 0
+    debut_s = _fmt_dt(dt_debut)
+    fin_s = _fmt_dt(dt_fin)
+    with get_db() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO cal_events_perso (user_id, titre, date_debut, date_fin, all_day, note)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (uid, titre, debut_s, fin_s, all_day, note),
+        )
+        conn.commit()
+        new_id = int(cur.lastrowid)
+    return {
+        "id": f"perso-{new_id}",
+        "calendrier": CALENDRIER_PERSO_CAL,
+        "titre": titre,
+        "debut": debut_s,
+        "fin": fin_s,
+        "all_day": bool(all_day),
+        "meta": {"note": note} if note else {},
+    }
+
+
+@router.delete("/api/calendrier/events/perso/{event_id}")
+def delete_perso_event(request: Request, event_id: int):
+    user = require_calendrier(request)
+    uid = _user_id_from_session(user)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id FROM cal_events_perso WHERE id = ? AND user_id = ?",
+            (event_id, uid),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, detail="Événement introuvable.")
+        conn.execute("DELETE FROM cal_events_perso WHERE id = ?", (event_id,))
+        conn.commit()
+    return {"ok": True}

@@ -1410,6 +1410,28 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 27, "rh_planning_multi_affectations_semaine")
 
+    # v28 — Événements calendrier personnel (MyCalendrier)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=28 LIMIT 1").fetchone():
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS cal_events_perso (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                titre TEXT NOT NULL,
+                date_debut TEXT NOT NULL,
+                date_fin TEXT NOT NULL,
+                all_day INTEGER DEFAULT 0,
+                note TEXT,
+                created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_cal_events_perso_user ON cal_events_perso(user_id);
+            CREATE INDEX IF NOT EXISTS idx_cal_events_perso_debut ON cal_events_perso(date_debut);
+            """
+        )
+        conn.commit()
+        _record_schema_migration(conn, 28, "cal_events_perso")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

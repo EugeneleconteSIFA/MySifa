@@ -16,8 +16,13 @@ from config import (
     ROLES_ADMIN,
     ACCESS_OVERRIDABLE_APPS,
     ROLE_SUPERADMIN,
+    ROLE_DIRECTION,
+    ROLE_ADMINISTRATION,
     default_app_access_for_role,
 )
+
+# MyCalendrier — accès page (pas de rôle rh en base)
+CALENDRIER_PAGE_ROLES = frozenset({ROLE_SUPERADMIN, ROLE_DIRECTION, ROLE_ADMINISTRATION})
 
 
 # ─── Passwords ────────────────────────────────────────────────────
@@ -129,6 +134,18 @@ def require_superadmin(request: Request) -> dict:
     user = get_current_user(request)
     if not is_superadmin(user):
         raise HTTPException(status_code=403, detail="Accès réservé au super administrateur")
+    return user
+
+
+def can_access_calendrier(user: dict) -> bool:
+    """MyCalendrier : superadmin, direction, administration."""
+    return bool(user and user.get("role") in CALENDRIER_PAGE_ROLES)
+
+
+def require_calendrier(request: Request) -> dict:
+    user = get_current_user(request)
+    if not can_access_calendrier(user):
+        raise HTTPException(status_code=403, detail="Accès non autorisé à MyCalendrier")
     return user
 
 

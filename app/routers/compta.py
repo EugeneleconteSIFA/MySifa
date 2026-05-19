@@ -318,7 +318,12 @@ def _find_header_row(ws, required_headers: List[str], max_scan_rows: int = 30) -
 def _hdr_norm(s: str) -> str:
     # Normalize headers to tolerate casing/accents/quotes differences (’, ', etc.)
     s = _norm(str(s or ""))
-    s = s.replace("’", "'").replace("'", "'").replace("`", "'")
+    s = (
+        s.replace("’", "'")
+        .replace("‘", "'")
+        .replace("", "'")  # latin-1 misread of cp1252 apostrophe
+        .replace("`", "'")
+    )
     return s
 
 
@@ -350,7 +355,8 @@ def _find_header_row_from_list(
 
 
 def _decode_bytes(contents: bytes) -> str:
-    for enc in ("utf-8-sig", "utf-8", "latin-1", "cp1252"):
+    # cp1252 before latin-1: latin-1 never fails but mangles Factor exports (apostrophe → U+0092)
+    for enc in ("utf-8-sig", "utf-8", "cp1252", "latin-1"):
         try:
             return contents.decode(enc)
         except UnicodeDecodeError:

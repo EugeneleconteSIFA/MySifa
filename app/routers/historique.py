@@ -248,6 +248,7 @@ def dashboard_historique(
     request: Request,
     operateur: Optional[List[str]] = Query(default=None),
     no_dossier: Optional[List[str]] = Query(default=None),
+    machine: Optional[List[str]] = Query(default=None),
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
 ):
@@ -259,6 +260,7 @@ def dashboard_historique(
 
     operateurs = [o for o in (operateur or []) if o]
     dossiers   = [d for d in (no_dossier or []) if d]
+    machines   = [m for m in (machine or []) if m]
 
     # ── Filtre principal (avec dossiers) ──────────────────────────
     where, params = ["1=1"], []
@@ -272,6 +274,9 @@ def dashboard_historique(
     else:
         # Pour fabrication: filtrer par operateur_lie ou nom utilisateur
         where.append("operateur = ?"); params.append(user_operateur)
+    if machines:
+        where.append(f"machine IN ({','.join('?'*len(machines))})")
+        params.extend(machines)
     if date_from: where.append("date_operation >= ?"); params.append(date_from)
     if date_to:   where.append("date_operation <= ?"); params.append(date_to+'T23:59:59')
     wc = " AND ".join(where)
@@ -285,6 +290,9 @@ def dashboard_historique(
     else:
         # Pour fabrication: filtrer par operateur_lie ou nom utilisateur
         ws.append("operateur = ?"); ps.append(user_operateur)
+    if machines:
+        ws.append(f"machine IN ({','.join('?'*len(machines))})")
+        ps.extend(machines)
     if date_from: ws.append("date_operation >= ?"); ps.append(date_from)
     if date_to:   ws.append("date_operation <= ?"); ps.append(date_to+'T23:59:59')
     wc_san = " AND ".join(ws)

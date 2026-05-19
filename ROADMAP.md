@@ -76,51 +76,64 @@ Pas de chat général — des échanges liés à des objets métier.
 
 ## 8. Agent IA — plan d'implémentation
 
-### Phase 1 — Socle *(2-3 jours)*
+> **Note :** Un premier prototype existe (`app/routers/chat.py` + `app/static/chatbot_widget.js`).
+> Il est à supprimer entièrement — design hors charte, outils trop limités, pas de SDK Anthropic, widget non intégré au portail.
+> Fichiers à effacer avant de commencer : `app/routers/chat.py`, `routers/chat.py`, `app/static/chatbot_widget.js`, `static/chatbot_widget.js`. Retirer les références dans `main.py` (import + include_router).
 
-- [ ] Ajouter `ANTHROPIC_API_KEY` dans `.env` et `config.py`
-- [ ] Ajouter `anthropic` dans `requirements.txt`
+### Phase 0 — Nettoyage *(30 min)*
+
+- [ ] Supprimer les 4 fichiers listés ci-dessus
+- [ ] Retirer `from routers.chat import router as chat_router` et `app.include_router(chat_router)` dans `main.py`
+
+### Phase 1 — Socle backend *(1-2 jours)*
+
+- [ ] Ajouter `ANTHROPIC_API_KEY` dans `.env` — ne jamais hardcoder
+- [ ] Ajouter `anthropic>=0.30` dans `requirements.txt` (SDK officiel, pas urllib)
 - [ ] Créer `app/routers/ai.py` — route `POST /api/ai/chat`
-- [ ] Créer `app/services/ai_context.py` — construit le contexte envoyé à Claude (rôle utilisateur, module actif, données pertinentes)
-- [ ] Test basique sans données DB
+- [ ] Créer `app/services/ai_context.py` — construit le contexte envoyé à Claude : rôle, nom, module actif, timestamp Paris
+- [ ] Boucle tool_use propre (max 6 itérations), gestion des erreurs Anthropic
 
-### Phase 2 — Accès aux données *(3-4 jours)*
+### Phase 2 — Data fetcher *(2-3 jours)*
 
-Requêtes en lecture seule uniquement. Aucun `UPDATE` ni `INSERT` déclenché par l'agent.
+Fonctions Python en lecture seule uniquement. Claude reçoit des données structurées — jamais un accès direct à la DB ni du SQL libre.
 
-- [ ] Production du jour / semaine / par machine
-- [ ] Dossiers en cours, en retard, clôturés
-- [ ] État des stocks, alertes seuil bas
-- [ ] Planning machine et RH sur une période
-- [ ] `DataFetcher` dans `ai_context.py` : reçoit une intention, exécute la bonne requête
-
-> Règle : Claude reçoit des données structurées, jamais un accès direct à la DB ni des requêtes SQL libres.
+- [ ] `fetch_production_summary(conn, role, user_id, days)` — production récente par machine
+- [ ] `fetch_planning_status(conn, machine_id)` — dossiers en cours / en attente / en retard
+- [ ] `fetch_stock_alerts(conn)` — articles sous seuil, mouvements récents
+- [ ] `fetch_expe_upcoming(conn, days)` — départs à venir
+- [ ] `fetch_rh_absences(conn, days)` — congés et absences de la période
 
 ### Phase 3 — Interface chat *(2-3 jours)*
 
-- [ ] Widget flottant en bas à droite du portail (toutes pages)
-- [ ] Panel latéral ou modal sans quitter la page en cours
-- [ ] Historique de session en mémoire (pas de persistance DB en phase 1)
-- [ ] Design system MySifa : `--card`, `--border`, `--accent`
-- [ ] `Ctrl+Enter` pour envoyer
+Intégré dans `app/web/html.py` — présent sur toutes les pages du portail.
 
-### Phase 4 — Droits par rôle *(1-2 jours)*
+- [ ] Bouton flottant bas-droite (icône waveform, couleur `--accent`, pas amber)
+- [ ] Panel slide-in (pas une modale) — reste ouvert pendant la navigation
+- [ ] Design system MySifa strict : `--card`, `--border`, `--accent`, `--text`, `--text2`
+- [ ] Historique de session en mémoire JS (pas de persistance DB en phase 1)
+- [ ] `Enter` pour envoyer, `Shift+Enter` pour saut de ligne
+- [ ] Masqué sur `/` (login) et portail d'accueil
 
-Le contexte envoyé à Claude est filtré côté serveur selon le rôle — non contournable.
+### Phase 4 — Droits par rôle *(1 jour)*
 
-| Rôle | Périmètre agent |
-|---|---|
-| `fabrication` | Ses dossiers, sa machine, sa production |
-| `logistique` | Stock, mouvements, emplacements |
-| `direction` | Tout — KPIs, synthèses, comparatifs |
-| `superadmin` | Tout + infos techniques |
+Filtrage côté serveur — non contournable côté client.
+
+> **Accès actuel : superadmin uniquement.** L'ouverture aux autres rôles se fait en ajoutant des entrées dans `ROLE_SCOPE` (ai_context.py) et `get_tools_for_role()` — un seul endroit à modifier.
+
+| Rôle | Périmètre agent | Statut |
+|---|---|---|
+| `superadmin` | Tout + infos techniques | Actif |
+| `direction` | Tout — KPIs, synthèses, comparatifs | À activer |
+| `fabrication` | Ses saisies, sa machine, production du jour | À activer |
+| `logistique` | Stock, mouvements, emplacements, expéditions | À activer |
+| `administration` | Congés, RH, paie, expéditions | À activer |
 
 ### Phase 5 — Capacités avancées *(ongoing)*
 
-- [ ] Détection d'anomalies proactive — cadence en chute, dossier bloqué, stock critique — sans qu'on interroge
-- [ ] Actions avec confirmation — l'agent propose, l'utilisateur confirme, le backend exécute
-- [ ] Brief quotidien automatique par rôle (direction, logistique, fabrication)
-- [ ] Historique des conversations persisté en DB par utilisateur
+- [ ] Détection d'anomalies proactive — cadence en chute, dossier bloqué, stock critique
+- [ ] Actions avec confirmation — l'agent propose, l'utilisateur clique "Confirmer", le backend exécute
+- [ ] Brief quotidien automatique par rôle
+- [ ] Historique des conversations persisté en DB
 
 ---
 
