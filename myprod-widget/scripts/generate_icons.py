@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Génère les PNG icônes MyProd Widget (usine + couleurs MySifa)."""
+"""Génère les PNG icônes MyProd Widget (waveform activité + couleurs MySifa)."""
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 from PIL import Image, ImageDraw
@@ -11,101 +10,42 @@ ROOT = Path(__file__).resolve().parents[1]
 ASSETS = ROOT / "assets"
 STATIC_DIRS = [ROOT.parent / "static", ROOT.parent / "app" / "static"]
 
-ACCENT = (34, 211, 238)       # #22d3ee
-BG = (10, 14, 23)             # #0a0e17
-BLACK = (0, 0, 0)
-
-# Paths from assets/tray-factory-template.svg (viewBox 0 0 64 64)
-FACTORY_PATHS = [
-    "M10 54V28l12-10v-6h6v6l4 3V12h6v14l16 13v15H10Z",
-    "M16 48h32V41H16v7Z",
-    "M16 35h32v-6.3L32 20.6 16 28.7V35Z",
-    "M22 46h4v6h-4v-6Z",
-    "M30 46h4v6h-4v-6Z",
-    "M38 46h4v6h-4v-6Z",
-]
+ACCENT = (34, 211, 238)   # #22d3ee
+BG     = (10, 14, 23)     # #0a0e17
+BLACK  = (0, 0, 0)
 
 
-def _tokenize_path(d: str) -> list[str]:
-    return re.findall(
-        r"[MmLlHhVvZz]|[-+]?(?:\d*\.\d+|\d+)(?:[eE][-+]?\d+)?",
-        d.replace(",", " "),
-    )
-
-
-def _path_to_points(d: str) -> list[tuple[float, float]]:
-    tokens = _tokenize_path(d)
-    pts: list[tuple[float, float]] = []
-    i = 0
-    x = y = 0.0
-    start = (0.0, 0.0)
-
-    def read() -> float:
-        nonlocal i
-        v = float(tokens[i])
-        i += 1
-        return v
-
-    while i < len(tokens):
-        cmd = tokens[i]
-        i += 1
-        rel = cmd.islower()
-        c = cmd.upper()
-
-        if c == "M":
-            x, y = read(), read()
-            start = (x, y)
-            pts.append((x, y))
-            while i < len(tokens) and tokens[i] not in "MmLlHhVvZz":
-                x, y = read(), read()
-                pts.append((x, y))
-        elif c == "L":
-            while i < len(tokens) and tokens[i] not in "MmLlHhVvZz":
-                nx, ny = read(), read()
-                if rel:
-                    nx += x
-                    ny += y
-                x, y = nx, ny
-                pts.append((x, y))
-        elif c == "H":
-            while i < len(tokens) and tokens[i] not in "MmLlHhVvZz":
-                nx = read()
-                if rel:
-                    nx += x
-                x = nx
-                pts.append((x, y))
-        elif c == "V":
-            while i < len(tokens) and tokens[i] not in "MmLlHhVvZz":
-                ny = read()
-                if rel:
-                    ny += y
-                y = ny
-                pts.append((x, y))
-        elif c == "Z":
-            pts.append(start)
-            x, y = start
-    return pts
-
-
-def _draw_factory(
+def _draw_waveform(
     draw: ImageDraw.ImageDraw,
     size: int,
     color: tuple[int, int, int],
     *,
-    pad: float = 0.12,
+    pad: float = 0.10,
 ) -> None:
-    margin = size * pad
-    scale = (size - 2 * margin) / 64.0
-    ox = margin
-    oy = margin
+    """
+    Waveform (activité / signal vital) — polyline en dents de scie.
+    Correspond exactement au SVG <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+    normalisé sur un viewBox 24x24, mis à l'échelle dans size×size.
+    """
+    m = size * pad
+    w = size - 2 * m
 
-    def tx(p: tuple[float, float]) -> tuple[float, float]:
-        return (ox + p[0] * scale, oy + p[1] * scale)
+    # Points normalisés sur viewBox 24×24
+    raw = [
+        (0,  12),
+        (6,  12),
+        (9,   3),
+        (15, 21),
+        (18, 12),
+        (24, 12),
+    ]
 
-    for d in FACTORY_PATHS:
-        poly = [tx(p) for p in _path_to_points(d)]
-        if len(poly) >= 3:
-            draw.polygon(poly, fill=color)
+    def tx(px: float, py: float) -> tuple[float, float]:
+        return (m + px / 24 * w, m + py / 24 * w)
+
+    pts = [tx(px, py) for px, py in raw]
+    lw = max(1, round(size * 0.09))   # épaisseur relative à la taille
+    draw.line(pts, fill=color + (255,), width=lw, joint="curve")
 
 
 def _rounded_app_icon(size: int) -> Image.Image:
@@ -113,21 +53,23 @@ def _rounded_app_icon(size: int) -> Image.Image:
     draw = ImageDraw.Draw(img)
     r = int(size * 0.18)
     draw.rounded_rectangle((0, 0, size - 1, size - 1), radius=r, fill=BG + (255,))
-    _draw_factory(draw, size, ACCENT, pad=0.16)
+    _draw_waveform(draw, size, ACCENT, pad=0.18)
     return img
 
 
 def _tray_template(size: int) -> Image.Image:
+    """macOS : template image noire sur fond transparent."""
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-    _draw_factory(draw, size, BLACK, pad=0.1)
+    _draw_waveform(draw, size, BLACK, pad=0.08)
     return img
 
 
 def _tray_colored(size: int) -> Image.Image:
+    """Windows : waveform accent sur fond transparent."""
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-    _draw_factory(draw, size, ACCENT, pad=0.1)
+    _draw_waveform(draw, size, ACCENT, pad=0.08)
     return img
 
 
@@ -152,11 +94,11 @@ def main() -> None:
     for d in STATIC_DIRS:
         d.mkdir(parents=True, exist_ok=True)
 
-    _write_png(ASSETS / "icon.png", _rounded_app_icon(512))
-    _write_png(ASSETS / "trayTemplate.png", _tray_template(18))
+    _write_png(ASSETS / "icon.png",            _rounded_app_icon(512))
+    _write_png(ASSETS / "trayTemplate.png",    _tray_template(18))
     _write_png(ASSETS / "trayTemplate@2x.png", _tray_template(36))
-    _write_png(ASSETS / "trayWin16.png", _tray_colored(16))
-    _write_png(ASSETS / "trayWin32.png", _tray_colored(32))
+    _write_png(ASSETS / "trayWin16.png",        _tray_colored(16))
+    _write_png(ASSETS / "trayWin32.png",        _tray_colored(32))
 
     for name, size in (("favicon-16.png", 16), ("favicon-32.png", 32)):
         img = _rounded_app_icon(size)

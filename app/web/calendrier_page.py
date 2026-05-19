@@ -226,7 +226,8 @@ const CAL_DEFS=[
   {id:'conges',label:'Congés',color:'#fbbf24'},
   {id:'anniversaires',label:'Anniversaires',color:'#34d399'},
   {id:'feries',label:'Jours fériés',color:'#f87171'},
-  {id:'paie',label:'Paie',color:'#a78bfa'}
+  {id:'paie',label:'Paie',color:'#a78bfa'},
+  {id:'expeditions',label:'Expéditions',color:'#f97316'}
 ];
 const PROD_CAL_IDS=['production_1','production_2','production_3','production_4'];
 const LS_VISIBLE='mysifa_cal_visible';
@@ -239,7 +240,14 @@ let ME=null;
 
 function pad2(n){return String(n).padStart(2,'0');}
 function ymd(d){return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());}
-function parseEvDt(s){if(!s)return null;const t=String(s).trim().replace(' ','T');const d=new Date(t);return isNaN(d.getTime())?null:d;}
+function parseEvDt(s){
+  if(!s)return null;
+  const t=String(s).trim().replace(' ','T').replace(/Z$/i,'').split('+')[0];
+  const m=t.match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?)?/);
+  if(m)return new Date(+m[1],+m[2]-1,+m[3],+(m[4]||0),+(m[5]||0),+(m[6]||0));
+  const d=new Date(t);
+  return isNaN(d.getTime())?null:d;
+}
 function startOfDay(d){const x=new Date(d);x.setHours(0,0,0,0);return x;}
 function addDays(d,n){const x=new Date(d);x.setDate(x.getDate()+n);return x;}
 function startOfWeekMon(d){const x=startOfDay(d);const w=(x.getDay()+6)%7;x.setDate(x.getDate()-w);return x;}
@@ -411,6 +419,7 @@ function openPop(ev,anchorEl){
   let link='';
   if(ev.calendrier.startsWith('production_'))link='<a href="/planning">Ouvrir le planning production</a>';
   else if(ev.calendrier==='conges')link='<a href="/planning-rh">Ouvrir le planning RH</a>';
+  else if(ev.calendrier==='expeditions')link='<a href="/expe">Ouvrir MyExpé</a>';
   const pop=document.createElement('div');
   pop.className='cal-pop';
   pop.innerHTML='<button type="button" class="cal-pop-close" aria-label="Fermer">×</button>'+

@@ -154,7 +154,7 @@ body.light{
     <button class="theme-btn" id="theme-btn" type="button" title="Mode sombre / mode clair"></button>
     <h1 class="install-title">
       <span class="install-ico" aria-hidden="true">
-        <svg viewBox="0 0 64 64" fill="currentColor"><path d="M10 54V28l12-10v-6h6v6l4 3V12h6v14l16 13v15H10Z"/><path d="M16 48h32V41H16v7Z"/><path d="M16 35h32v-6.3L32 20.6 16 28.7V35Z"/><path d="M22 46h4v6h-4v-6Z"/><path d="M30 46h4v6h-4v-6Z"/><path d="M38 46h4v6h-4v-6Z"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
       </span>
       My<span class="accent">Prod</span> Widget
     </h1>

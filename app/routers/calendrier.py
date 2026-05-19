@@ -8,21 +8,30 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
+from app.routers.planning import (
+    _auto_complete_en_cours,
+    _compute_timeline_slots,
+    _enforce_single_en_cours,
+    _fmt_ts,
+    _load_planning_calendar_maps_range,
+    _parse_planned_dt as _parse_planned_dt_planning,
+)
 from database import get_db
 from services.auth_service import require_superadmin
 
 router = APIRouter(tags=["calendrier"])
 
-PRODUCTION_CALENDARS: dict[str, int] = {
-    "production_1": 1,
-    "production_2": 2,
-    "production_3": 3,
-    "production_4": 4,
+# Codes machines (table machines) — les id numériques ne sont pas fixes en base.
+PRODUCTION_MACHINE_CODES: dict[str, str] = {
+    "production_1": "C1",
+    "production_2": "C2",
+    "production_3": "DSI",
+    "production_4": "REP",
 }
 
 VALID_CALENDARS = frozenset(
-    set(PRODUCTION_CALENDARS.keys())
-    | {"conges", "anniversaires", "feries", "paie"}
+    set(PRODUCTION_MACHINE_CODES.keys())
+    | {"conges", "anniversaires", "feries", "paie", "expeditions"}
 )
 
 DEFAULT_CALENDARS = ",".join(
@@ -35,6 +44,7 @@ DEFAULT_CALENDARS = ",".join(
         "anniversaires",
         "feries",
         "paie",
+        "expeditions",
     ]
 )
 
@@ -94,6 +104,126 @@ def _ranges_overlap(d0: date, d1: date, start: date, end: date) -> bool:
     return start <= d1 and end >= d0
 
 
+def _resolve_production_machines(
+    conn, cals: set[str]
+) -> dict[str, int]:
+    """cal_key → machine_id réel (via code C1, C2, DSI, REP)."""
+    wanted = {
+        cal_key: code
+        for cal_key, code in PRODUCTION_MACHINE_CODES.items()
+        if cal_key in cals
+    }
+    if not wanted:
+        return {}
+    codes = list(wanted.values())
+    placeholders = ",".join("?" * len(codes))
+    rows = conn.execute(
+        f"SELECT id, code FROM machines WHERE code IN ({placeholders})",
+        codes,
+    ).fetchall()
+    code_to_id = {str(r["code"]): int(r["id"]) for r in rows}
+    out: dict[str, int] = {}
+    for cal_key, code in wanted.items():
+        mid = code_to_id.get(code)
+        if mid is not None:
+            out[cal_key] = mid
+    return out
+
+
+def _slot_in_range(start_iso: str, end_iso: str, d0: date, d1: date) -> bool:
+    ps = _parse_planned_dt_planning(start_iso)
+    pe = _parse_planned_dt_planning(end_iso) or ps
+    if not ps:
+        return False
+    return ps.date() <= d1 and pe.date() >= d0
+
+
+def _production_events_for_machine(
+    conn,
+    machine_id: int,
+    cal_key: str,
+    d0: date,
+    d1: date,
+) -> list[dict]:
+    """Créneaux alignés sur GET /machines/{id}/timeline (horaires ouvrés, recalcul attente)."""
+    machine = conn.execute("SELECT * FROM machines WHERE id=?", (machine_id,)).fetchone()
+    if not machine:
+        return []
+    m = dict(machine)
+
+    today = date.today()
+    weeks_back = max(12, (today - d0).days // 7 + 2)
+    weeks_forward = max(12, (d1 - today).days // 7 + 2)
+    configs, off_days, day_worked_map, day_horaires_map = _load_planning_calendar_maps_range(
+        conn, machine_id, weeks_back=weeks_back, weeks_forward=weeks_forward
+    )
+
+    _auto_complete_en_cours(conn, machine_id)
+    _enforce_single_en_cours(conn, machine_id)
+
+    rows = conn.execute(
+        """
+        SELECT * FROM planning_entries
+        WHERE machine_id = ?
+        ORDER BY position ASC
+        """,
+        (machine_id,),
+    ).fetchall()
+    entries_list = [dict(r) for r in rows]
+    main_entries: list[dict] = []
+    aplacer_entries: list[dict] = []
+    for e in entries_list:
+        st = (e.get("statut") or "attente").strip()
+        ap = int(e.get("a_placer") or 0)
+        if st == "attente" and ap == 1:
+            aplacer_entries.append(e)
+        else:
+            main_entries.append(e)
+    entries_list = main_entries + aplacer_entries
+
+    slots = _compute_timeline_slots(
+        conn,
+        machine_id,
+        m,
+        configs,
+        off_days,
+        day_worked_map,
+        day_horaires_map,
+        entries_list,
+    )
+
+    out: list[dict] = []
+    for slot in slots:
+        ps_iso = slot.get("start") or ""
+        pe_iso = slot.get("end") or ""
+        if not _slot_in_range(ps_iso, pe_iso, d0, d1):
+            continue
+        ref = (slot.get("reference") or slot.get("numero_of") or "").strip()
+        cli = (slot.get("client") or "").strip()
+        titre = f"{ref} · {cli}" if cli else ref or f"Dossier #{slot.get('id')}"
+        out.append(
+            _event(
+                eid=f"prod-{slot.get('id')}",
+                cal=cal_key,
+                titre=titre,
+                debut=_fmt_ts(_parse_planned_dt_planning(ps_iso) or datetime.now()),
+                fin=_fmt_ts(
+                    _parse_planned_dt_planning(pe_iso)
+                    or _parse_planned_dt_planning(ps_iso)
+                    or datetime.now()
+                ),
+                all_day=False,
+                meta={
+                    "statut": slot.get("statut"),
+                    "machine_id": machine_id,
+                    "machine_code": m.get("code"),
+                    "reference": ref,
+                },
+            )
+        )
+    return out
+
+
 @router.get("/api/calendrier/events")
 def list_events(
     request: Request,
@@ -120,55 +250,12 @@ def list_events(
     out: list[dict] = []
 
     with get_db() as conn:
-        prod_by_mid = {
-            mid: cal_key
-            for cal_key, mid in PRODUCTION_CALENDARS.items()
-            if cal_key in cals
-        }
-        if prod_by_mid:
-            mids = sorted(prod_by_mid.keys())
-            placeholders = ",".join("?" * len(mids))
-            rows = conn.execute(
-                f"""
-                SELECT id, reference, client, machine_id, statut,
-                       planned_start, planned_end
-                FROM planning_entries
-                WHERE planned_start IS NOT NULL
-                  AND machine_id IN ({placeholders})
-                  AND date(planned_start) <= ?
-                  AND date(COALESCE(planned_end, planned_start)) >= ?
-                """,
-                (*mids, d1.isoformat(), d0.isoformat()),
-            ).fetchall()
-            for r in rows:
-                mid = r["machine_id"]
-                cal_key = prod_by_mid.get(mid)
-                if not cal_key:
-                    continue
-                ps = _parse_planned_dt(r["planned_start"])
-                pe = _parse_planned_dt(r["planned_end"]) or ps
-                if not ps:
-                    continue
-                if not pe:
-                    pe = ps
-                ref = (r["reference"] or "").strip()
-                cli = (r["client"] or "").strip()
-                titre = f"{ref} · {cli}" if cli else ref or f"Dossier #{r['id']}"
-                out.append(
-                    _event(
-                        eid=f"prod-{r['id']}",
-                        cal=cal_key,
-                        titre=titre,
-                        debut=_fmt_dt(ps),
-                        fin=_fmt_dt(pe),
-                        all_day=False,
-                        meta={
-                            "statut": r["statut"],
-                            "machine_id": mid,
-                            "reference": ref,
-                        },
-                    )
-                )
+        prod_machines = _resolve_production_machines(conn, cals)
+        for cal_key, machine_id in prod_machines.items():
+            out.extend(
+                _production_events_for_machine(conn, machine_id, cal_key, d0, d1)
+            )
+        conn.commit()
 
         if "conges" in cals:
             rows = conn.execute(
@@ -265,6 +352,64 @@ def list_events(
                         fin=f"{hd.isoformat()}T23:59",
                         all_day=True,
                         meta={},
+                    )
+                )
+
+        if "expeditions" in cals:
+            rows = conn.execute(
+                """
+                SELECT id, date_enlevement, date_livraison, client, transporteur,
+                       ref_sifa, code_postal_destination, statut, nb_palette, poids_total_kg
+                FROM expe_departs
+                WHERE statut IN ('en_attente', 'valide')
+                  AND date(date_enlevement) <= ?
+                  AND date(COALESCE(NULLIF(trim(date_livraison), ''), date_enlevement)) >= ?
+                ORDER BY date_enlevement ASC, id ASC
+                """,
+                (d1.isoformat(), d0.isoformat()),
+            ).fetchall()
+            for r in rows:
+                try:
+                    d_enl = datetime.strptime(
+                        str(r["date_enlevement"] or "")[:10], "%Y-%m-%d"
+                    ).date()
+                except ValueError:
+                    continue
+                d_liv = d_enl
+                raw_liv = str(r["date_livraison"] or "").strip()[:10]
+                if raw_liv:
+                    try:
+                        d_liv = datetime.strptime(raw_liv, "%Y-%m-%d").date()
+                    except ValueError:
+                        d_liv = d_enl
+                if d_liv < d_enl:
+                    d_liv = d_enl
+                if not _ranges_overlap(d0, d1, d_enl, d_liv):
+                    continue
+                client = (r["client"] or "").strip()
+                transp = (r["transporteur"] or "").strip()
+                ref = (r["ref_sifa"] or "").strip()
+                cp = (r["code_postal_destination"] or "").strip()
+                parts = [p for p in (client, transp) if p]
+                if not parts and ref:
+                    parts = [ref]
+                titre = " · ".join(parts) if parts else f"Départ #{r['id']}"
+                if cp and cp not in titre:
+                    titre = f"{titre} ({cp})"
+                out.append(
+                    _event(
+                        eid=f"expe-{r['id']}",
+                        cal="expeditions",
+                        titre=titre,
+                        debut=f"{d_enl.isoformat()}T00:00",
+                        fin=f"{d_liv.isoformat()}T23:59",
+                        all_day=True,
+                        meta={
+                            "statut": r["statut"],
+                            "ref_sifa": ref,
+                            "date_enlevement": d_enl.isoformat(),
+                            "date_livraison": d_liv.isoformat(),
+                        },
                     )
                 )
 
