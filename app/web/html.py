@@ -576,8 +576,8 @@ body.light .btn-sec.is-active{
   display:inline-flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(0,0,0,.25)}
 .portal-prof-ring.prof-ring{
   position:absolute;top:-5px;left:-5px;z-index:2;pointer-events:none;
-  width:30px;height:30px;background:var(--card);border:1px solid var(--border);border-radius:50%;
-  box-shadow:0 4px 16px rgba(0,0,0,.35);
+  width:30px;height:30px;background:transparent;border:none;border-radius:50%;
+  box-shadow:none;
 }
 .portal-prof-ring.prof-ring svg{width:30px;height:30px}
 .portal-prof-ring .prof-ring-label{opacity:1;font-size:8px}

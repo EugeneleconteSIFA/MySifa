@@ -111,10 +111,8 @@ body.light .theme-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 18px rg
 /* ── Main ── */
 .main{flex:1;padding:28px;overflow:auto}
 .container{max-width:680px;margin:0 auto}
-.page-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:22px}
-.page-head-text{flex:1;min-width:0}
 h1{font-size:22px;font-weight:700;margin:0 0 4px}
-.subtitle{font-size:13px;color:var(--muted);margin:0}
+.subtitle{font-size:13px;color:var(--muted);margin-bottom:22px}
 
 /* ── Mobile topbar ── */
 .mobile-topbar{display:none;align-items:center;gap:10px;margin-bottom:14px}
@@ -303,13 +301,8 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
         </button>
       </div>
 
-      <div class="page-head" id="page-head">
-        <div class="page-head-text">
-          <h1>Mon profil</h1>
-          <p class="subtitle" id="page-sub">Vos informations personnelles.</p>
-        </div>
-        <div id="page-head-ring" aria-hidden="true"></div>
-      </div>
+      <h1>Mon profil</h1>
+      <p class="subtitle" id="page-sub">Vos informations personnelles.</p>
 
       <!-- Onglet Mes informations -->
       <div class="pane-tab active" id="pane-info">
@@ -461,14 +454,6 @@ function maybeShowProfileCompleteModal(prevPct,newPct){
   }catch(e){}
   showProfileCompleteModal();
 }
-function updateProfileRings(u){
-  const pct=profileCompletionPercent(u);
-  const ring=profileRingHtml(pct);
-  const head=document.getElementById('page-head-ring');
-  if(head)head.innerHTML=ring;
-  return ring;
-}
-
 // ── Onglet Mes informations ───────────────────────────────────────
 function fieldHtml(label,id,type,val){
   return `<div class="field"><label for="${id}">${label}</label><input id="${id}" type="${type||'text'}" value="${esc(val)}"></div>`;
@@ -477,7 +462,7 @@ function fieldHtml(label,id,type,val){
 function renderInfo(){
   const u=ME||{};
   const role=ROLE_LABELS[u.role]||u.role||'';
-  const ring=updateProfileRings(u);
+  const ring=profileRingHtml(profileCompletionPercent(u));
   document.getElementById('pane-info').innerHTML=`
     <div class="card">
       <div class="role-pill">${esc(role)}</div>
