@@ -200,10 +200,11 @@ def _production_events_for_machine(
             continue
         ref = (slot.get("reference") or slot.get("numero_of") or "").strip()
         cli = (slot.get("client") or "").strip()
-        titre = f"{ref} · {cli}" if cli else ref or f"Dossier #{slot.get('id')}"
+        entry_id = slot.get("entry_id")
+        titre = f"{ref} · {cli}" if cli else ref or f"Dossier #{entry_id}"
         out.append(
             _event(
-                eid=f"prod-{slot.get('id')}",
+                eid=f"prod-{cal_key}-{entry_id}",
                 cal=cal_key,
                 titre=titre,
                 debut=_fmt_ts(_parse_planned_dt_planning(ps_iso) or datetime.now()),

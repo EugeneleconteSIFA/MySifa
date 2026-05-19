@@ -125,7 +125,6 @@ body.light .cal-allday-row{background:#f8fafc}
 .cal-ev{
   position:absolute;border-radius:6px;padding:4px 6px;font-size:10px;font-weight:700;color:#0a0e17;
   overflow:hidden;cursor:pointer;line-height:1.3;box-sizing:border-box;
-  transform-origin:left top;
 }
 .cal-day-single .cal-cols-row{grid-template-columns:1fr}
 /* Popover */
@@ -353,7 +352,7 @@ function getPeriod(){
 function evVisible(ev){return !!S.visible[ev.calendrier];}
 function evStart(ev){return parseEvDt(ev.debut);}
 function evEnd(ev){return parseEvDt(ev.fin)||evStart(ev);}
-function layoutKey(ev){return String(ev.id);}
+function layoutKey(ev){return String(ev.calendrier)+'|'+String(ev.id);}
 function clipsOverlap(a,b){return a.start<b.end&&b.start<a.end;}
 function evOverlapsDay(ev,day){
   const s=evStart(ev),e=evEnd(ev)||s;
@@ -595,11 +594,11 @@ function buildOverlapLayout(events,day){
 }
 
 function timedEvStyle(ev,top,h,col,total){
-  const c=col||0;
-  const t=Math.max(1,total||1);
+  const c=Number(col)||0;
+  const t=Math.max(1,Number(total)||1);
   const pctW=(100/t).toFixed(4);
-  const tx=c>0?'transform:translateX('+(c*100)+'%);':'';
-  return 'top:'+top+'px;height:'+h+'px;left:0;width:'+pctW+'%;'+tx+
+  const pctL=((c*100)/t).toFixed(4);
+  return 'top:'+top+'px;height:'+h+'px;left:'+pctL+'%;width:'+pctW+'%;'+
     'z-index:'+(1+c)+';background:'+calColor(ev.calendrier);
 }
 
