@@ -1087,7 +1087,7 @@ function renderSidebar(){
     <button class="rh-nav-btn${S.tab==='planning'?' active':''}" onclick="setTab('planning')">
       ${icon('calendar',14)} Planning
     </button>
-    ${S.isEditor?`<button class="rh-nav-btn${S.tab==='conges'?' active':''}" onclick="setTab('conges')">
+    ${(S.isEditor||S.isReadOnlyAdmin)?`<button class="rh-nav-btn${S.tab==='conges'?' active':''}" onclick="setTab('conges')">
       ${icon('umbrella',14)} Congés
     </button>`:''}
   `;

@@ -1368,6 +1368,7 @@ function fracToTimeInput(f){
 function isHHMM(s){return /^\d{2}:\d{2}$/.test(String(s||"").trim());}
 
 function isAdmin(u){return u&&(u.role==="direction"||u.role==="administration"||u.role==="superadmin");}
+function isComptaUser(u){return !!(u&&u.role==="comptabilite");}
 function canPlanningNav(u){return !!(u&&u.app_access&&u.app_access.planning);}
 function roleLabel(role){const R={direction:"Direction",administration:"Administration",fabrication:"Fabrication",superadmin:"Super admin"};return R[role]||role||"";}
 function renderSidebar(){
@@ -1380,11 +1381,14 @@ function renderSidebar(){
       </div></nav>`;
   }
   const admin=isAdmin(ME);
+  const comptaOnly=isComptaUser(ME);
   const items=[
     ...(canPlanningNav(ME)?[{key:"_planning",label:"Planning",icon:"calendar",href:"/planning"}]:[]),
-    {key:"production",label:"Production",icon:"wrench",href:"/prod?page=production"},
-    {key:"traceabilite",label:"Traçabilité",icon:"layers",href:"/prod?page=traceabilite"},
-    ...(admin?[{key:"rentabilite",label:"Rentabilité",icon:"trending-up",href:"/prod?page=rentabilite"}]:[]),
+    ...(comptaOnly?[]:[
+      {key:"production",label:"Production",icon:"wrench",href:"/prod?page=production"},
+      {key:"traceabilite",label:"Traçabilité",icon:"layers",href:"/prod?page=traceabilite"},
+      ...(admin?[{key:"rentabilite",label:"Rentabilité",icon:"trending-up",href:"/prod?page=rentabilite"}]:[]),
+    ]),
   ];
   const isLight=document.body.classList.contains("light");
   return`<nav class="sidebar"><div class="logo"><div class="logo-brand">My<span>Prod</span></div><div class="logo-sub">by SIFA</div></div>${

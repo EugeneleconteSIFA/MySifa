@@ -1246,6 +1246,7 @@ async function checkAuth(){
         return;
       }
     }catch(e){}
+    if(S.app==='prod' && isComptaPlanning(S.user)){window.location.href='/planning';return;}
     try{
       const sp=new URLSearchParams(window.location.search||'');
       const p=(sp.get('page')||'').trim();
@@ -1393,6 +1394,7 @@ async function doLogin(email,password){
         return;
       }
     }catch(e){}
+    if(S.app==='prod' && isComptaPlanning(S.user)){window.location.href='/planning';return;}
     // Support /prod?page=xxx après login
     try{
       const sp=new URLSearchParams(window.location.search||'');
@@ -9312,6 +9314,7 @@ function render(){
   else if(S.app==='devis'){root.appendChild(renderMyDevis());}
   else if(S.app==='messages'){root.appendChild(renderMessagesApp());}
   else if(S.app==='prod'){
+    if(isComptaPlanning(S.user)){window.location.href='/planning';return;}
     const titles={
       production: S.subPage==='saisies'?'Saisies':S.subPage==='erreurs'?'Historique & Erreurs':'Production',
       suivi:'Rentabilité & Dossiers',
