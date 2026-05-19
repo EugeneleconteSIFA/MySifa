@@ -7,7 +7,7 @@ const path = require('path');
 
 const CONFIG = {
   width:  340,
-  height: 160,
+  height: 130,
   url:    'https://www.mysifa.com/widget',
   refreshInterval: 30000,   // ms entre chaque actualisation auto
 };
@@ -113,7 +113,7 @@ ipcMain.on('widget-close',  () => mainWindow?.hide());
 ipcMain.on('widget-resize', (_, data) => {
   if (!mainWindow || !data) return;
   const w = Math.max(300, Math.min(500, Number(data.width || CONFIG.width)));
-  const h = Math.max(160, Math.min(600, Number(data.height || CONFIG.height)));
+  const h = Math.max(130, Math.min(600, Number(data.height || CONFIG.height)));
   const [cw] = mainWindow.getSize();
   // On garde une largeur fixe (widget), on ajuste surtout la hauteur.
   const nextW = cw || w;

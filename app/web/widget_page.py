@@ -132,14 +132,13 @@ body.light{
 <div class="tb">
   <span class="tb-title">🏭 MyProd Widget</span>
   <span class="tb-sync" id="footer"></span>
-  <motion class="tb-actions">
+  <div class="tb-actions">
     <button class="bi" id="btn-refresh" title="Actualiser">↺</button>
     <button class="bi" id="btn-theme" title="Thème">◐</button>
     <button class="bi close" id="btn-close" title="Fermer">✕</button>
   </div>
 </div>
 <div id="main"><div class="offline"><span class="spin">↺</span></div></div>
-<div class="footer" id="footer"></div>
 
 <script>
 const ICONS={production:'▶',calage:'⚙',arret:'⛔',changement:'↻',nettoyage:'🧹',eteinte:'○',autre:'·'};
@@ -277,7 +276,9 @@ async function load(){
     const d=await r.json();
     main.innerHTML=`<div class="grid">${mkCard('C1',d.C1)}${mkCard('C2',d.C2)}</div>`;
     const n=new Date();
-    footer.textContent='Actualisé à '+n.toLocaleTimeString('fr-FR');
+    const tsFull=n.toLocaleTimeString('fr-FR');
+    footer.textContent=n.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+    footer.title='Actualisé à '+tsFull;
     loadingFirst=false;
     requestFit();
   }catch(e){
@@ -322,7 +323,7 @@ function requestFit(){
   // Double rAF : garantit que le layout est complètement calculé avant la mesure
   requestAnimationFrame(()=>requestAnimationFrame(()=>{
     const h = document.documentElement.scrollHeight;
-    const target = Math.max(160, Math.min(520, h));
+    const target = Math.max(130, Math.min(520, h));
     window.electronAPI.resizeTo(340, target);
   }));
 }
