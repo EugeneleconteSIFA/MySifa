@@ -1335,6 +1335,13 @@ def _migrate(conn):
             pass
         _record_schema_migration(conn, 23, "operation_codes")
 
+    # v24 — Préférences thème utilisateur (palette, style, mode)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=24 LIMIT 1").fetchone():
+        ucols = {r["name"] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
+        if "theme_prefs" not in ucols:
+            conn.execute("ALTER TABLE users ADD COLUMN theme_prefs TEXT")
+        _record_schema_migration(conn, 24, "users_theme_prefs")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

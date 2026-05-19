@@ -245,7 +245,7 @@ def me(request: Request):
         return PlainResponse(content=b"null", media_type="application/json")
     with get_db() as conn:
         row = conn.execute(
-            "SELECT id,email,identifiant,nom,role,operateur_lie,machine_id,telephone,adresse,date_naissance,access_overrides,portal_apps_order FROM users WHERE id=?",
+            "SELECT id,email,identifiant,nom,role,operateur_lie,machine_id,telephone,adresse,date_naissance,access_overrides,portal_apps_order,theme_prefs FROM users WHERE id=?",
             (user["id"],)
         ).fetchone()
     if not row:
@@ -302,9 +302,20 @@ async def update_me(request: Request):
         if "portal_apps_order" in body:
             portal_val = _normalize_portal_order_for_db(body.get("portal_apps_order"))
 
+        theme_prefs_val = exd.get("theme_prefs")
+        if "theme_prefs" in body:
+            import json as _json
+            tp = body.get("theme_prefs")
+            if tp is None:
+                theme_prefs_val = None
+            elif isinstance(tp, dict):
+                theme_prefs_val = _json.dumps(tp, ensure_ascii=False)
+            else:
+                theme_prefs_val = str(tp)
+
         conn.execute(
-            "UPDATE users SET nom=?,email=?,telephone=?,adresse=?,date_naissance=?,password_hash=?,portal_apps_order=? WHERE id=?",
-            (nom, email, telephone, adresse or None, date_naissance or None, pwd_hash, portal_val, user["id"]),
+            "UPDATE users SET nom=?,email=?,telephone=?,adresse=?,date_naissance=?,password_hash=?,portal_apps_order=?,theme_prefs=? WHERE id=?",
+            (nom, email, telephone, adresse or None, date_naissance or None, pwd_hash, portal_val, theme_prefs_val, user["id"]),
         )
         conn.commit()
 

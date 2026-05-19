@@ -171,6 +171,8 @@ body.sb-open .sidebar-overlay{display:block}
   transition:all .15s;font-size:16px;line-height:1
 }
 .gear-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.cmt-del-btn{color:var(--danger)!important;border-color:rgba(248,113,113,.35)!important}
+.cmt-del-btn:hover{border-color:var(--danger)!important;color:var(--danger)!important;background:rgba(248,113,113,.12)!important}
 .reset-days-btn{
   height:36px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;
   padding:0 12px;gap:8px;
@@ -3108,18 +3110,41 @@ async function resetHorairesDate(ds){
 
 
 // ── Commentaires timeline (semaine / jour) ──
+function commentModalDeleteBtn(onDeleteFn,hasExisting){
+  if(!hasExisting||!onDeleteFn) return "";
+  return `<button type="button" class="gear-btn cmt-del-btn" onclick="${onDeleteFn}" title="Supprimer le commentaire" aria-label="Supprimer le commentaire">${icon("trash-2",15)}</button>`;
+}
 function openWeekCommentModal(sk,monTs){
   const mon=monTs?new Date(monTs):getMon(new Date());
   const wn=wkNum(mon);
   const existing=((S.weekComments||{})[sk]||"").trim();
   const readOnly=!CAN_EDIT;
+  const footerLeft=readOnly?"":commentModalDeleteBtn(`deleteWeekComment('${escAttr(sk)}')`,!!existing);
   document.getElementById("mroot").innerHTML=modalHTML(
     `Commentaire — Semaine S${wn}`,
     `<p style="font-size:12px;color:var(--muted);margin:-8px 0 12px">Note visible sur la timeline pour toute la semaine S${wn}.</p>
     <div class="fd"><label>Commentaire</label><textarea id="f-wk-cmt" rows="4" placeholder="Ex : maintenance prévue, priorité client…" style="width:100%;padding:10px 12px;border:1px solid var(--border2);border-radius:10px;background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;resize:vertical;outline:none"${readOnly?" readonly":""}>${escHtml(existing)}</textarea></div>`,
     readOnly?"Fermer":"Enregistrer",
-    readOnly?"closeM()":`submitWeekComment('${escAttr(sk)}')`
+    readOnly?"closeM()":`submitWeekComment('${escAttr(sk)}')`,
+    "",
+    footerLeft
   );
+}
+async function deleteWeekComment(sk){
+  if(!CAN_EDIT) return;
+  if(!confirm("Supprimer le commentaire de cette semaine ?")) return;
+  try{
+    await api(`/machines/${MID}/week-comment`,{method:"PUT",body:JSON.stringify({semaine:sk,comment:""})});
+    const m={...(S.weekComments||{})};
+    delete m[sk];
+    S.weekComments=m;
+    closeM();
+    renderTL();
+  }catch(err){
+    let msg="Suppression impossible.";
+    try{const j=await err.json();if(j&&j.detail)msg=typeof j.detail==="string"?j.detail:JSON.stringify(j.detail);}catch(x){}
+    alert(msg);
+  }
 }
 async function submitWeekComment(sk){
   if(!CAN_EDIT) return;
@@ -3140,13 +3165,32 @@ function openDayCommentModal(ds,di){
   const dateLabel=ds?new Date(ds+"T12:00:00").toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}):dn;
   const existing=((S.dayComments||{})[ds]||"").trim();
   const readOnly=!CAN_EDIT;
+  const footerLeft=readOnly?"":commentModalDeleteBtn(`deleteDayComment('${escAttr(ds)}')`,!!existing);
   document.getElementById("mroot").innerHTML=modalHTML(
     `Commentaire — ${dateLabel}`,
     `<p style="font-size:12px;color:var(--muted);margin:-8px 0 12px">Note du jour affichée sur la timeline.</p>
     <div class="fd"><label>Commentaire</label><textarea id="f-day-cmt" rows="4" placeholder="Ex : réunion matin, manque matière…" style="width:100%;padding:10px 12px;border:1px solid var(--border2);border-radius:10px;background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;resize:vertical;outline:none"${readOnly?" readonly":""}>${escHtml(existing)}</textarea></div>`,
     readOnly?"Fermer":"Enregistrer",
-    readOnly?"closeM()":`submitDayComment('${escAttr(ds)}')`
+    readOnly?"closeM()":`submitDayComment('${escAttr(ds)}')`,
+    "",
+    footerLeft
   );
+}
+async function deleteDayComment(ds){
+  if(!CAN_EDIT) return;
+  if(!confirm("Supprimer le commentaire de ce jour ?")) return;
+  try{
+    await api(`/machines/${MID}/day-comment`,{method:"PUT",body:JSON.stringify({date:ds,comment:""})});
+    const m={...(S.dayComments||{})};
+    delete m[ds];
+    S.dayComments=m;
+    closeM();
+    renderTL();
+  }catch(err){
+    let msg="Suppression impossible.";
+    try{const j=await err.json();if(j&&j.detail)msg=typeof j.detail==="string"?j.detail:JSON.stringify(j.detail);}catch(x){}
+    alert(msg);
+  }
 }
 async function submitDayComment(ds){
   if(!CAN_EDIT) return;

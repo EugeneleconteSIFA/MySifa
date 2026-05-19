@@ -35,6 +35,63 @@ body.light{
   --success:#059669;--warn:#d97706;--danger:#dc2626;
   --c1:#0891b2;--c2:#7c3aed;--c3:#059669;--c4:#d97706;--c5:#dc2626
 }
+/* ── Palette Forge (Nuit/Acier/Bleu vif/Ambre) ── */
+body.palette-forge{
+  --bg:#1A2332;--card:#243044;--border:#2D4163;--text:#f0f4fc;--text2:#b8c9e8;
+  --muted:#64748B;--accent:#3A7BD5;--accent-bg:rgba(58,123,213,0.15);
+  --filter-input-bg:#1e2d42;
+  --success:#34d399;--warn:#F0A500;--danger:#f87171;
+  --c1:#3A7BD5;--c2:#a78bfa;--c3:#34d399;--c4:#F0A500;--c5:#f87171
+}
+body.palette-forge.light{
+  --bg:#F4F6FA;--card:#ffffff;--border:#dce3ef;--text:#1A2332;--text2:#2D4163;
+  --muted:#64748B;--accent:#3A7BD5;--accent-bg:rgba(58,123,213,0.10);
+  --filter-input-bg:#ffffff;
+  --success:#059669;--warn:#d97706;--danger:#dc2626;
+  --c1:#3A7BD5;--c2:#7c3aed;--c3:#059669;--c4:#d97706;--c5:#dc2626
+}
+/* ── Palette Cocon (Pivoine / tons rosés) ── */
+body.palette-cocon{
+  --bg:#1f0e14;--card:#2e1620;--border:#4a2535;--text:#f5e8ed;--text2:#dbb8c8;
+  --muted:#9e6a80;--accent:#e8729a;--accent-bg:rgba(232,114,154,0.12);
+  --filter-input-bg:#261218;
+  --success:#34d399;--warn:#fbbf24;--danger:#f87171;
+  --c1:#e8729a;--c2:#dbb8c8;--c3:#34d399;--c4:#fbbf24;--c5:#f87171
+}
+body.palette-cocon.light{
+  --bg:#fdf8f5;--card:#fff9f7;--border:#f0ddd8;--text:#3d1a24;--text2:#7a4155;
+  --muted:#b08090;--accent:#c4577a;--accent-bg:rgba(196,87,122,0.10);
+  --filter-input-bg:#fff9f7;
+  --success:#2e7d32;--warn:#e6a817;--danger:#c0392b;
+  --c1:#c4577a;--c2:#7a4155;--c3:#2e7d32;--c4:#e6a817;--c5:#c0392b
+}
+/* ── Style : Compact (arrondis réduits, police monospace) ── */
+body.style-mini{font-family:'Courier New','SF Mono',monospace}
+body.style-mini .card,body.style-mini .login-card,body.style-mini .upd-card,
+body.style-mini .stat,body.style-mini .prod-dossier-suggest{border-radius:4px!important}
+body.style-mini .field input,body.style-mini .filter-input,body.style-mini select,
+body.style-mini .search-bar,body.style-mini textarea{border-radius:4px!important}
+body.style-mini .nav-btn,body.style-mini .btn,body.style-mini .btn-sm,
+body.style-mini .btn-save,body.style-mini .btn-accent,body.style-mini .btn-danger,
+body.style-mini .btn-ghost,body.style-mini .back-link,
+body.style-mini .login-btn,body.style-mini .filters-apply-btn{border-radius:4px!important}
+body.style-mini .user-chip{border-radius:4px!important}
+body.style-mini .theme-btn,body.style-mini .logout-btn{border-radius:4px!important}
+body.style-mini .toast{border-radius:4px!important}
+body.style-mini .sidebar{border-radius:0!important}
+/* ── Style : Aéré (arrondis généreux, plus doux) ── */
+body.style-round .card,body.style-round .login-card,body.style-round .upd-card{border-radius:20px!important}
+body.style-round .stat{border-radius:18px!important}
+body.style-round .field input,body.style-round .filter-input,body.style-round select,
+body.style-round .search-bar{border-radius:14px!important}
+body.style-round .nav-btn,body.style-round .back-link{border-radius:12px!important}
+body.style-round .btn,body.style-round .btn-sm,body.style-round .btn-save,
+body.style-round .btn-accent,body.style-round .btn-danger,body.style-round .btn-ghost,
+body.style-round .login-btn,body.style-round .filters-apply-btn{border-radius:14px!important}
+body.style-round .user-chip{border-radius:12px!important}
+body.style-round .theme-btn,body.style-round .logout-btn{border-radius:12px!important}
+body.style-round .toast{border-radius:14px!important}
+body.style-round .sidebar{border-radius:0 20px 20px 0!important}
 body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
 button:focus-visible,.nav-btn:focus-visible,.login-btn:focus-visible,.portal-logout:focus-visible,.theme-btn:focus-visible,.logout-btn:focus-visible,a:focus-visible{
   outline:2px solid var(--accent);outline-offset:2px}
@@ -9342,7 +9399,14 @@ async function nav(){
   render();
 }
 
-if(localStorage.getItem('theme')==='light')document.body.classList.add('light');
+(function(){
+  var t=localStorage.getItem('theme');
+  var p=localStorage.getItem('mysifa_palette');
+  var s=localStorage.getItem('mysifa_style');
+  if(t==='light')document.body.classList.add('light');
+  if(p&&p!=='mysifa')document.body.classList.add('palette-'+p);
+  if(s&&s!=='defaut')document.body.classList.add('style-'+s);
+})();
 // Désactive temporairement toute trace PWA (service worker) pour éviter des effets de cache.
 // Certains navigateurs gardent un SW enregistré même après suppression du manifest.
 try{
