@@ -66,6 +66,33 @@ def _week_bounds(semaine: str):
         raise HTTPException(400, f"Format de semaine invalide : '{semaine}' (attendu YYYY-WNN)")
 
 
+JOURS_NOMS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"]
+JOURS_ABREVS = ["Lun", "Mar", "Mer", "Jeu", "Ven"]
+
+
+def _bits_to_day_labels(bits: int, short: bool = True) -> list[str]:
+    labels = JOURS_ABREVS if short else JOURS_NOMS
+    return [labels[i] for i in range(5) if (bits >> i) & 1]
+
+
+def _same_planning_slot(
+    poste: str,
+    creneau: str,
+    machine_id,
+    other_poste: str,
+    other_creneau: str,
+    other_machine_id,
+) -> bool:
+    return (
+        poste == other_poste
+        and creneau == other_creneau
+        and (
+            machine_id == other_machine_id
+            or (machine_id is None and other_machine_id is None)
+        )
+    )
+
+
 def _norm_person_nom(val) -> str:
     return str(val or "").strip().lower()
 
@@ -182,7 +209,6 @@ async def create_planning(request: Request):
 
     monday, sunday = _week_bounds(semaine)
     friday = monday + timedelta(days=4)
-    JOURS_NOMS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"]
 
     with get_db() as conn:
         user_row = conn.execute(
@@ -193,17 +219,29 @@ async def create_planning(request: Request):
         if _planning_rh_nom_excluded(user_row["nom"]):
             raise HTTPException(400, "Ce profil n'est pas planifiable dans le planning RH")
 
-        # Déjà affecté cette semaine ?
-        existing = conn.execute(
-            "SELECT id, poste, machine_id FROM rh_planning_postes WHERE user_id = ? AND semaine = ?",
+        # Affectations existantes cette semaine (plusieurs postes / jours partiels possibles)
+        existing_rows = conn.execute(
+            """SELECT id, poste, machine_id, creneau, jours
+               FROM rh_planning_postes WHERE user_id = ? AND semaine = ?""",
             (user_id, semaine),
-        ).fetchone()
-        if existing:
-            raise HTTPException(
-                409,
-                f"{user_row['nom']} est déjà affecté cette semaine "
-                f"(poste : {existing['poste']}). Retirez d'abord cette affectation.",
-            )
+        ).fetchall()
+
+        busy_bits = 0
+        for ex in existing_rows:
+            ex_jours = int(ex["jours"] or 31) & 31
+            busy_bits |= ex_jours
+            if _same_planning_slot(
+                poste, creneau, machine_id,
+                ex["poste"], ex["creneau"], ex["machine_id"],
+            ):
+                raise HTTPException(
+                    409,
+                    f"{user_row['nom']} est déjà affecté sur ce poste / créneau cette semaine. "
+                    f"Utilisez l'icône œil pour ajuster les jours.",
+                )
+
+        assign_days = _bits_to_day_labels(busy_bits)
+        is_full_assigned = (busy_bits & 31) == 31
 
         # Congé qui chevauche la semaine ?
         conge = conn.execute(
@@ -247,19 +285,71 @@ async def create_planning(request: Request):
                             f"({conge['type_conge']}). Affecter quand même ?"
                         ),
                         "can_force": True,
+                        "conflict_type": "conge",
                         "conge_days": conge_days,
                         "conge_type": conge["type_conge"],
                     },
                 )
             # force=True → on affecte malgré le congé partiel
 
+        unavailable_bits = (busy_bits | conge_day_bits) & 31
+
+        if is_full_assigned:
+            raise HTTPException(
+                409,
+                f"{user_row['nom']} est déjà affecté toute la semaine. "
+                f"Retirez ou ajustez une affectation existante.",
+            )
+
         # Calculer le bitmask jours final :
         #   - Si le client fournit une valeur explicite → l'utiliser (masquée sur 5 bits)
-        #   - Sinon → 31 (toute la semaine) en excluant les jours de congé
+        #   - Sinon → jours libres (hors congé et hors affectations existantes)
         if jours_req is not None:
             jours = int(jours_req) & 31
         else:
-            jours = 31 & ~conge_day_bits   # retire les jours de congé par défaut
+            jours = 31 & ~unavailable_bits
+
+        overlap = jours & unavailable_bits
+        if overlap:
+            if not force:
+                from fastapi.responses import JSONResponse
+
+                if busy_bits and not (busy_bits & 31 == 31):
+                    days_str = ", ".join(assign_days) if assign_days else "?"
+                    return JSONResponse(
+                        status_code=409,
+                        content={
+                            "detail": (
+                                f"{user_row['nom']} est déjà affecté le(s) {days_str} cette semaine. "
+                                f"Affecter pour les autres jours ?"
+                            ),
+                            "can_force": True,
+                            "conflict_type": "assignment",
+                            "busy_days": assign_days,
+                        },
+                    )
+                days_str = ", ".join(_bits_to_day_labels(conge_day_bits, short=False))
+                return JSONResponse(
+                    status_code=409,
+                    content={
+                        "detail": (
+                            f"{user_row['nom']} est en congé le(s) {days_str} cette semaine "
+                            f"({conge['type_conge']}). Affecter quand même ?"
+                        ),
+                        "can_force": True,
+                        "conflict_type": "conge",
+                        "conge_days": _bits_to_day_labels(conge_day_bits, short=False),
+                        "conge_type": conge["type_conge"],
+                    },
+                )
+            jours = jours & ~unavailable_bits
+
+        if jours == 0:
+            raise HTTPException(
+                409,
+                f"{user_row['nom']} n'a aucun jour disponible cette semaine "
+                f"(affectations ou congés).",
+            )
 
         now = datetime.now().isoformat()
         cur = conn.execute(
@@ -309,13 +399,33 @@ async def update_planning_jours(plan_id: int, request: Request):
     if jours is None:
         raise HTTPException(400, "Champ 'jours' requis (bitmask 0–31)")
     jours = int(jours) & 31
+    if jours == 0:
+        raise HTTPException(400, "Au moins un jour ouvré doit être sélectionné")
 
     with get_db() as conn:
         row = conn.execute(
-            "SELECT id FROM rh_planning_postes WHERE id = ?", (plan_id,)
+            "SELECT id, user_id, semaine FROM rh_planning_postes WHERE id = ?", (plan_id,)
         ).fetchone()
         if not row:
             raise HTTPException(404, "Affectation introuvable")
+
+        other_busy = 0
+        others = conn.execute(
+            """SELECT jours FROM rh_planning_postes
+               WHERE user_id = ? AND semaine = ? AND id != ?""",
+            (row["user_id"], row["semaine"], plan_id),
+        ).fetchall()
+        for o in others:
+            other_busy |= int(o["jours"] or 31) & 31
+
+        if jours & other_busy:
+            days_str = ", ".join(_bits_to_day_labels(other_busy))
+            raise HTTPException(
+                409,
+                f"Chevauchement avec une autre affectation ({days_str}). "
+                f"Ajustez les jours sur les deux postes.",
+            )
+
         conn.execute("UPDATE rh_planning_postes SET jours = ? WHERE id = ?", (jours, plan_id))
         conn.commit()
 

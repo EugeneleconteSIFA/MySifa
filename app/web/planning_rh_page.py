@@ -789,8 +789,18 @@ function getCongesJoursThisWeek(conges,ws){
   });
   return JOURS.filter(j=>days.has(j));
 }
-function userAssignedThisWeek(userId,ws){
-  return S.planning.find(p=>p.user_id===userId&&p.semaine===ws)||null;
+function userAssignmentsThisWeek(userId,ws){
+  return S.planning.filter(p=>p.user_id===userId&&p.semaine===ws);
+}
+function userBusyDaysMask(userId,ws){
+  return userAssignmentsThisWeek(userId,ws).reduce((m,a)=>m|(a.jours!==undefined?a.jours:31),0);
+}
+function userAssignedInCell(userId,target){
+  const key=`${target.machineCode}|${target.creneau}|${target.poste}|${target.semaine}`;
+  return S.planning.some(p=>p.user_id===userId&&planningKey(p)===key);
+}
+function userFreeDaysMask(userId,ws){
+  return 31 & ~userBusyDaysMask(userId,ws) & ~congeJoursBitmask(userId,ws);
 }
 
 // ── API ────────────────────────────────────────────────
@@ -841,6 +851,7 @@ async function addAssignment(target, force=false){
     machine_id:target.machineId, poste:target.poste, creneau:target.creneau,
     force:!!force
   };
+  if(target.jours!==undefined) payload.jours=target.jours;
 
   async function doPost(pld){
     return fetch(API+'/planning',{
@@ -859,20 +870,23 @@ async function addAssignment(target, force=false){
     try{ err=await resp.json(); }catch(_){}
 
     if(err.can_force){
-      // Congé partiel — confirmation explicite
-      const jours=Array.isArray(err.conge_days)&&err.conge_days.length
-        ? err.conge_days.join(', ') : '?';
-      const ok=confirm(
-        `${p.nom} est absent(e) le(s) ${jours} (${err.conge_type||'congé'}).\n\n`+
-        `Affecter quand même pour les autres jours ?`
-      );
+      const isAssign=err.conflict_type==='assignment';
+      const days=isAssign
+        ? (Array.isArray(err.busy_days)&&err.busy_days.length?err.busy_days.join(', '):'?')
+        : (Array.isArray(err.conge_days)&&err.conge_days.length?err.conge_days.join(', '):'?');
+      const msg=isAssign
+        ? `${p.nom} est déjà affecté(e) le(s) ${days} cette semaine.\n\nAffecter pour les autres jours ?`
+        : `${p.nom} est absent(e) le(s) ${days} (${err.conge_type||'congé'}).\n\nAffecter quand même pour les autres jours ?`;
+      const ok=confirm(msg);
       if(ok){
+        const extra={...payload, force:true};
+        if(isAssign) extra.jours=userFreeDaysMask(p.id,target.semaine);
         let resp2;
-        try{ resp2=await doPost({...payload, force:true}); }
+        try{ resp2=await doPost(extra); }
         catch(e){ toast('Erreur réseau : '+e.message,'error'); S.modal=null; render(); return; }
         if(resp2.ok){
           const d=await resp2.json().catch(()=>null);
-          if(d){ S.planning.push(d); toast(p.nom+' affecté (congé partiel)','success'); }
+          if(d){ S.planning.push(d); toast(p.nom+(isAssign?' affecté (jours libres)':' affecté (congé partiel)'),'success'); }
           S.modal=null; render(); return;
         }
         const e2=await resp2.json().catch(()=>({}));
@@ -928,7 +942,8 @@ async function duplicateAssignmentsToNextWeek(semaine, machineCode, poste, crene
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
           user_id:a.user_id,semaine:nextWeek,
-          machine_id:machineId,poste:poste,creneau:targetCreneau
+          machine_id:machineId,poste:poste,creneau:targetCreneau,
+          jours:a.jours!==undefined?a.jours:31
         })
       });
       if(d){S.planning.push(d);count++;}
@@ -957,7 +972,8 @@ async function duplicateAllAssignmentsToNextWeek(semaine, machineCode, machineId
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
           user_id:a.user_id,semaine:nextWeek,
-          machine_id:machineId,poste:a.poste,creneau:targetCreneau
+          machine_id:machineId,poste:a.poste,creneau:targetCreneau,
+          jours:a.jours!==undefined?a.jours:31
         })
       });
       if(d){S.planning.push(d);count++;}
@@ -1342,20 +1358,27 @@ function buildPlanningGrid(){
             cell.appendChild(chip);
           });
 
-          // Icône œil — visible si 2+ opérateurs OU si l'un a des jours partiels
-          const hasPartialAny=assignments.some(a=>(a.jours!==undefined&&(a.jours&31)<31));
-          const needsDetail=assignments.length>=2||hasPartialAny;
-          if(S.isEditor&&needsDetail){
+          // Icône œil — sur chaque espace d'affectation (éditeur)
+          if(S.isEditor){
             const eyeBtn=document.createElement('button');
             eyeBtn.className='rh-dd-eye-btn';
-            eyeBtn.title='Répartition par jour';
+            eyeBtn.title=assignments.length
+              ?'Répartition par jour'
+              :'Répartition par jour — ajoutez une personne avec +';
             eyeBtn.innerHTML=`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
-            eyeBtn.onclick=()=>openDayDetailModal({semaine:ws,machineCode:mdef.code,poste,creneau:cr.key,machineId:getMachineId(mdef.code)});
+            const cellTarget={semaine:ws,machineCode:mdef.code,poste,creneau:cr.key,machineId:getMachineId(mdef.code)};
+            eyeBtn.onclick=()=>{
+              if(assignments.length) openDayDetailModal(cellTarget);
+              else openAddPersonModal(cellTarget);
+            };
             cell.appendChild(eyeBtn);
           }
 
+          const hasPartialAny=assignments.some(a=>(a.jours!==undefined&&(a.jours&31)<31));
+          const needsPrintDetail=assignments.length>0&&(assignments.length>=2||hasPartialAny);
+
           // Bloc impression jour-par-jour (caché à l'écran, visible en print)
-          if(assignments.length>0&&needsDetail){
+          if(needsPrintDetail){
             cell.classList.add('rh-cell--has-detail');
             const printDetail=document.createElement('div');
             printDetail.className='rh-cell-print-detail';
@@ -1468,7 +1491,11 @@ function renderPersonList(){
 
   el.innerHTML='';
   persons.forEach(p=>{
-    const assigned=userAssignedThisWeek(p.id,t.semaine);
+    const assignedHere=userAssignedInCell(p.id,t);
+    const busyMask=userBusyDaysMask(p.id,t.semaine);
+    const assignJours=joursToList(busyMask);
+    const assignFullWeek=(busyMask&31)===31;
+    const assignPartiel=busyMask>0&&!assignFullWeek;
     const conges=userCongesThisWeek(p.id,t.semaine);
 
     // Déterminer si le congé couvre toute la semaine ou seulement certains jours
@@ -1481,20 +1508,25 @@ function renderPersonList(){
       else congePartiel=true;
     }
 
-    const blocked=!!(assigned||congeFullWeek);
-    const warn=!blocked&&congePartiel;
+    const blocked=assignedHere||congeFullWeek||assignFullWeek;
+    const warn=!blocked&&(congePartiel||assignPartiel);
+    const freeMask=userFreeDaysMask(p.id,t.semaine);
 
     const item=document.createElement('div');
     item.className='rh-person-item'+(blocked?' blocked':'')+(warn?' warn':'');
 
     let titleTip='';
-    if(assigned) titleTip='Déjà affecté : '+assigned.poste+(assigned.machine_nom?' ('+assigned.machine_nom+')':'');
+    if(assignedHere) titleTip='Déjà affecté sur ce poste / créneau';
+    else if(assignFullWeek) titleTip='Affecté toute la semaine sur un autre poste';
+    else if(assignPartiel) titleTip='Affecté : '+assignJours.join(', ')+' — cliquer pour les autres jours';
     else if(congeFullWeek) titleTip='En congé toute la semaine';
     else if(congePartiel) titleTip='En congé : '+congeJours.join(', ')+' — cliquer pour affecter quand même';
     item.title=titleTip;
 
     let statusHtml='<span class="rh-person-status ok">✓ Disponible</span>';
-    if(assigned) statusHtml=`<span class="rh-person-status blocked">Affecté (${POSTE_LABELS[assigned.poste]||assigned.poste})</span>`;
+    if(assignedHere) statusHtml='<span class="rh-person-status blocked">Déjà sur ce poste</span>';
+    else if(assignFullWeek) statusHtml='<span class="rh-person-status blocked">Affecté — semaine entière</span>';
+    else if(assignPartiel) statusHtml=`<span class="rh-person-status warn">Affecté : ${assignJours.join(', ')}</span>`;
     else if(congeFullWeek) statusHtml=`<span class="rh-person-status conge">Congé — semaine entière</span>`;
     else if(congePartiel) statusHtml=`<span class="rh-person-status warn">Congé : ${congeJours.join(', ')}</span>`;
 
@@ -1502,7 +1534,11 @@ function renderPersonList(){
       <div><div class="rh-person-name">${p.nom}</div><div class="rh-person-info">${p.role}</div></div>
       ${statusHtml}
     `;
-    if(!blocked) item.onclick=()=>{addAssignment({...t,person:p});};
+    if(!blocked){
+      const clickTarget={...t,person:p};
+      if(warn&&freeMask) clickTarget.jours=freeMask;
+      item.onclick=()=>{addAssignment(clickTarget);};
+    }
     el.appendChild(item);
   });
 }
@@ -1886,7 +1922,7 @@ function buildOperatorView(){
 
   let hasAnyPlan=false;
   weeks.forEach(ws=>{
-    const myPlan=S.planning.find(p=>S.user&&p.user_id===S.user.id&&p.semaine===ws);
+    const myPlans=S.planning.filter(p=>S.user&&p.user_id===S.user.id&&p.semaine===ws);
     const weekHeader=document.createElement('div');
     weekHeader.className='rh-op-week-header';
     weekHeader.style.cssText='font-size:12px;font-weight:700;color:var(--muted);margin:8px 0 4px;padding-top:4px;border-top:1px solid var(--border);';
@@ -1894,23 +1930,31 @@ function buildOperatorView(){
     if(isCurrentWeek(ws)) weekHeader.innerHTML+=' <span style="color:var(--accent)">(cette semaine)</span>';
     planCard.appendChild(weekHeader);
     
-    if(myPlan){
+    if(myPlans.length){
       hasAnyPlan=true;
-      const rows=[
-        {k:'Machine',v:myPlan.machine_nom||'—'},
-        {k:'Poste',v:POSTE_LABELS[myPlan.poste]||myPlan.poste},
-        {k:'Créneau',v:myPlan.creneau==='matin'?'Matin':myPlan.creneau==='aprem'?'Après-midi':'Journée'},
-      ];
-      // Trouver les horaires
-      const gdef=GRID_DEF.find(g=>g.code===myPlan.machine_code||(myPlan.poste==='logistique'&&g.code==='LOG')||(myPlan.poste==='resp_atelier'&&g.code==='RESP'));
-      if(gdef){
-        const cr=gdef.creneaux.find(c=>c.key===myPlan.creneau);
-        if(cr&&cr.hours) rows.push({k:'Horaires',v:cr.hours});
-      }
-      rows.forEach(r=>{
-        const row=document.createElement('div'); row.className='rh-op-row';
-        row.innerHTML=`<span class="rh-op-key">${r.k}</span><span class="rh-op-val accent">${r.v}</span>`;
-        planCard.appendChild(row);
+      myPlans.forEach((myPlan,pi)=>{
+        if(pi>0){
+          const sep=document.createElement('div');
+          sep.style.cssText='border-top:1px dashed var(--border);margin:8px 0;';
+          planCard.appendChild(sep);
+        }
+        const joursLbl=joursToDisplay(myPlan.jours!==undefined?myPlan.jours:31);
+        const rows=[
+          {k:'Machine',v:myPlan.machine_nom||'—'},
+          {k:'Poste',v:POSTE_LABELS[myPlan.poste]||myPlan.poste},
+          {k:'Créneau',v:myPlan.creneau==='matin'?'Matin':myPlan.creneau==='aprem'?'Après-midi':'Journée'},
+        ];
+        if(joursLbl) rows.push({k:'Jours',v:joursLbl});
+        const gdef=GRID_DEF.find(g=>g.code===myPlan.machine_code||(myPlan.poste==='logistique'&&g.code==='LOG')||(myPlan.poste==='resp_atelier'&&g.code==='RESP'));
+        if(gdef){
+          const cr=gdef.creneaux.find(c=>c.key===myPlan.creneau);
+          if(cr&&cr.hours) rows.push({k:'Horaires',v:cr.hours});
+        }
+        rows.forEach(r=>{
+          const row=document.createElement('div'); row.className='rh-op-row';
+          row.innerHTML=`<span class="rh-op-key">${r.k}</span><span class="rh-op-val accent">${r.v}</span>`;
+          planCard.appendChild(row);
+        });
       });
     }else{
       const noPlanDiv=document.createElement('div');

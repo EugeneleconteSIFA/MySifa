@@ -1379,6 +1379,37 @@ def _migrate(conn):
                 )
         _record_schema_migration(conn, 26, "feries_nationaux_2026")
 
+    # v27 — Plusieurs affectations RH par personne et par semaine (jours partiels multi-postes)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=27 LIMIT 1").fetchone():
+        conn.executescript(
+            """
+            CREATE TABLE rh_planning_postes_v27 (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id     INTEGER NOT NULL,
+                semaine     TEXT NOT NULL,
+                machine_id  INTEGER,
+                poste       TEXT NOT NULL,
+                creneau     TEXT NOT NULL DEFAULT 'journee',
+                jours       INTEGER NOT NULL DEFAULT 31,
+                created_by  TEXT,
+                created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (user_id)    REFERENCES users(id),
+                FOREIGN KEY (machine_id) REFERENCES machines(id)
+            );
+            INSERT INTO rh_planning_postes_v27
+                (id, user_id, semaine, machine_id, poste, creneau, jours, created_by, created_at)
+            SELECT id, user_id, semaine, machine_id, poste, creneau,
+                   COALESCE(jours, 31), created_by, created_at
+            FROM rh_planning_postes;
+            DROP TABLE rh_planning_postes;
+            ALTER TABLE rh_planning_postes_v27 RENAME TO rh_planning_postes;
+            CREATE INDEX IF NOT EXISTS idx_rh_planning_semaine ON rh_planning_postes(semaine);
+            CREATE INDEX IF NOT EXISTS idx_rh_planning_user   ON rh_planning_postes(user_id);
+            """
+        )
+        conn.commit()
+        _record_schema_migration(conn, 27, "rh_planning_multi_affectations_semaine")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,
