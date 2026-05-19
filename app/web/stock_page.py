@@ -54,6 +54,7 @@ STOCK_HTML = r"""<!DOCTYPE html>
 <link rel="apple-touch-icon" href="/static/mys_icon_180.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <link rel="stylesheet" href="/static/support_widget.css">
+<link rel="stylesheet" href="/static/mysifa_theme.css">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -653,6 +654,7 @@ body.light .field-input.empl-upper::placeholder{
 </style>
 </head>
 <body>
+<script src="/static/mysifa_theme.js"></script>
 <div id="root"></div>
 <script src="/static/support_widget.js"></script>
 <script>
@@ -3373,7 +3375,7 @@ function render() {
         b.append(ico, el('span',null,'Contacter le support'));
         return b;
       })(),
-      el('button', { cls:'theme-btn', on:{ click:()=>{ document.body.classList.toggle('light'); localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark'); render(); } } },
+      el('button', { cls:'theme-btn', on:{ click:()=>{ if(window.MySifaTheme)MySifaTheme.toggleMode(); render(); } } },
         el('span', { cls:'theme-ico' }, iconEl(isLight ? 'sun' : 'moon', 16)),
         el('span', { cls:'theme-label' }, isLight ? 'Mode clair' : 'Mode sombre')
       ),      el('button', { cls:'logout-btn', on:{ click: async ()=>{ await api('/api/auth/logout',{method:'POST'}); window.location.href='/'; } } }, iconEl('log-out',14), ' Déconnexion'),
@@ -3527,9 +3529,9 @@ function render() {
 }
 
 async function init() {
-  if (localStorage.getItem('theme')==='light') document.body.classList.add('light');
   document.body.classList.add('has-topbar');
   const user = await api('/api/auth/me').catch(()=>null);
+  if (user && window.MySifaTheme) MySifaTheme.mergeFromUser(user);
   if (!user) { window.location.href='/'; return; }
   S.user = user;
   S.stockReadOnly = (user.role === 'commercial');

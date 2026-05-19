@@ -47,6 +47,7 @@ PLANNING_RH_HTML = r"""<!DOCTYPE html>
 <link rel="icon" type="image/png" sizes="512x512" href="/static/mys_icon_512.png">
 <link rel="apple-touch-icon" href="/static/mys_icon_180.png">
 <link rel="stylesheet" href="/static/support_widget.css">
+<link rel="stylesheet" href="/static/mysifa_theme.css">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -591,6 +592,7 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 </style>
 </head>
 <body>
+<script src="/static/mysifa_theme.js"></script>
 <div id="root">
   <nav class="rh-sb" id="rh-sb">
     <div class="rh-sb-head">
@@ -1037,6 +1039,7 @@ async function loadMe(){
   try{const d=await fetch('/api/auth/me',{credentials:'include'}).then(r=>r.json());
   if(d&&d.role){
     S.user=d;
+    if(window.MySifaTheme)MySifaTheme.mergeFromUser(d);
     const hasPlanningRHOverride = d.access_overrides && d.access_overrides.planning_rh === true;
     const email = String(d.email||'').trim().toLowerCase();
     S.isEditor=(['direction','superadmin'].includes(d.role) || hasPlanningRHOverride || email==='mlesaffre@sifa.pro');
@@ -1985,7 +1988,7 @@ function navWeeks(n){
 }
 function toggleDetail(){S.detailMode=!S.detailMode;render();}
 function changeAnnee(y){S.annee=parseInt(y);loadSoldes();render();}
-function toggleTheme(){document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');renderSidebar();}
+function toggleTheme(){if(window.MySifaTheme)MySifaTheme.toggleMode();renderSidebar();}
 function openSidebar(){document.getElementById('rh-sb').classList.add('open');}
 function closeSidebar(){document.getElementById('rh-sb').classList.remove('open');}
 function printPlanning(){
@@ -2397,7 +2400,6 @@ function printConges(){
 
 // ── Init ───────────────────────────────────────────────
 (async()=>{
-  if(localStorage.getItem('theme')==='light') document.body.classList.add('light');
   await loadMe();
   if(S.isEditor || S.isReadOnlyAdmin)S.viewRange=4; else S.viewRange=1;
   await loadMachines();

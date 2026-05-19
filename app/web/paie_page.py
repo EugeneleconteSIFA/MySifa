@@ -41,6 +41,7 @@ PAIE_HTML = r"""<!DOCTYPE html>
 <title>Gestion des Paies — MySifa</title>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <link rel="stylesheet" href="/static/support_widget.css">
+<link rel="stylesheet" href="/static/mysifa_theme.css">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -292,6 +293,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 </style>
 </head>
 <body>
+<script src="/static/mysifa_theme.js"></script>
 
 <!-- ── Password overlay ── -->
 <div id="pw-overlay">

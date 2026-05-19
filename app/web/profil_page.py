@@ -33,6 +33,7 @@ PROFIL_HTML = r"""<!DOCTYPE html>
 <title>Mon profil — MySifa</title>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <link rel="stylesheet" href="/static/support_widget.css">
+<link rel="stylesheet" href="/static/mysifa_theme.css">
 <style>
 /* ── Variables MySifa (dark défaut) ── */
 :root{
@@ -47,39 +48,6 @@ body.light{
   --accent:#0891b2;--accent-bg:rgba(8,145,178,0.10);
   --ok:#059669;--danger:#dc2626;--warn:#d97706;
 }
-/* Palette Marine */
-body.palette-forge{
-  --bg:#0c1422;--card:#152030;--border:#1e3152;
-  --text:#eef2ff;--text2:#a8bfe8;--muted:#6b7fa8;
-  --accent:#F0A500;--accent-bg:rgba(240,165,0,0.13);
-  --ok:#34d399;--danger:#f87171;--warn:#4A8FE8;
-}
-body.palette-forge.light{
-  --bg:#EFF3FA;--card:#ffffff;--border:#c8d6ef;
-  --text:#0c1422;--text2:#1e3152;--muted:#6b7fa8;
-  --accent:#c97d00;--accent-bg:rgba(201,125,0,0.10);
-  --ok:#059669;--danger:#dc2626;--warn:#2d6fbb;
-}
-/* Palette Pivoine */
-body.palette-cocon{
-  --bg:#1a0a14;--card:#2a1020;--border:#4d1f38;
-  --text:#fce8f0;--text2:#e8b0c8;--muted:#a06080;
-  --accent:#ff5c98;--accent-bg:rgba(255,92,152,0.14);
-  --ok:#34d399;--danger:#ff6060;--warn:#f0b240;
-}
-body.palette-cocon.light{
-  --bg:#fef8f2;--card:#fffdfb;--border:#f0d5de;
-  --text:#3a0f22;--text2:#7a2e50;--muted:#b87090;
-  --accent:#d42070;--accent-bg:rgba(212,32,112,0.09);
-  --ok:#2e7d32;--danger:#c0392b;--warn:#d06000;
-}
-/* Style Compact */
-body.style-mini{font-family:'Courier New','SF Mono',monospace}
-body.style-mini .card,.style-mini input,.style-mini button{border-radius:4px!important}
-/* Style Aéré */
-body.style-round .card{border-radius:20px!important}
-body.style-round input,body.style-round button{border-radius:14px!important}
-
 /* ── Reset & base ── */
 *{box-sizing:border-box}
 body{margin:0;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
@@ -242,6 +210,7 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 </style>
 </head>
 <body class="has-topbar">
+<script src="/static/mysifa_theme.js"></script>
 
 <div class="sidebar-overlay" id="sb-ov" onclick="closeSidebar()"></div>
 
@@ -327,43 +296,23 @@ const ROLE_LABELS={
 };
 
 let ME=null;
-let PREFS={palette:'mysifa',style:'defaut',mode:'dark'};
 let CURRENT_TAB='info';
+
+function getPrefs(){ return window.MySifaTheme ? MySifaTheme.loadPrefs() : {palette:'mysifa',style:'defaut',mode:'dark'}; }
+function setPrefs(partial){ return window.MySifaTheme ? MySifaTheme.setPrefs(partial) : null; }
 
 // ── SVG helpers ───────────────────────────────────────────────────
 const ICO_MOON=`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
 const ICO_SUN=`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
 const ICO_CHECK=`<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0a0e17" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
 
-// ── Préférences ───────────────────────────────────────────────────
-function loadPrefsFromStorage(){
-  const p=localStorage.getItem('mysifa_palette');
-  const s=localStorage.getItem('mysifa_style');
-  const t=localStorage.getItem('theme');
-  if(p)PREFS.palette=p;
-  if(s)PREFS.style=s;
-  PREFS.mode=(t==='light')?'light':'dark';
-}
-
-function applyPrefsToDOM(){
-  const b=document.body;
-  b.classList.toggle('light',PREFS.mode==='light');
-  b.classList.remove('palette-forge','palette-cocon');
-  if(PREFS.palette!=='mysifa')b.classList.add('palette-'+PREFS.palette);
-  b.classList.remove('style-mini','style-round');
-  if(PREFS.style!=='defaut')b.classList.add('style-'+PREFS.style);
-  // Mettre à jour le bouton thème
-  const isLight=PREFS.mode==='light';
+// ── Préférences (MySifaTheme partagé) ─────────────────────────────
+function syncThemeBtn(){
+  const isLight=getPrefs().mode==='light';
   const ico=document.getElementById('theme-ico');
   const lbl=document.getElementById('theme-label');
   if(ico)ico.innerHTML=isLight?ICO_SUN:ICO_MOON;
   if(lbl)lbl.textContent=isLight?'Mode sombre':'Mode clair';
-}
-
-function savePrefsToStorage(){
-  localStorage.setItem('mysifa_palette',PREFS.palette);
-  localStorage.setItem('mysifa_style',PREFS.style);
-  localStorage.setItem('theme',PREFS.mode);
 }
 
 // ── Sidebar mobile ────────────────────────────────────────────────
@@ -519,7 +468,7 @@ const STYLE_DEF=[
 ];
 
 function palCard(p){
-  const sel=PREFS.palette===p.id?'selected':'';
+  const sel=getPrefs().palette===p.id?'selected':'';
   return `<div class="theme-card ${sel}" onclick="selectPalette('${p.id}')">
     <div class="tc-check">${ICO_CHECK}</div>
     <div class="tc-preview">${p.prev}</div>
@@ -529,7 +478,7 @@ function palCard(p){
 }
 
 function styleCard(s){
-  const sel=PREFS.style===s.id?'selected':'';
+  const sel=getPrefs().style===s.id?'selected':'';
   return `<div class="theme-card ${sel}" onclick="selectStyle('${s.id}')">
     <div class="tc-check">${ICO_CHECK}</div>
     <div class="tc-preview" style="background:var(--card);padding:6px;border-radius:6px">${s.prev}</div>
@@ -539,7 +488,7 @@ function styleCard(s){
 }
 
 function modeCard(id,icoSvg,label,sub){
-  const sel=PREFS.mode===id?'selected':'';
+  const sel=getPrefs().mode===id?'selected':'';
   return `<div class="mode-card ${sel}" onclick="selectMode('${id}')">
     <span class="mode-ico">${icoSvg}</span>
     <div>
@@ -572,18 +521,17 @@ function renderPrefs(){
     </div>`;
 }
 
-function selectPalette(id){PREFS.palette=id;renderPrefs();applyPrefsToDOM();}
-function selectStyle(id){PREFS.style=id;renderPrefs();applyPrefsToDOM();}
-function selectMode(id){PREFS.mode=id;renderPrefs();applyPrefsToDOM();}
+function selectPalette(id){setPrefs({palette:id});renderPrefs();syncThemeBtn();}
+function selectStyle(id){setPrefs({style:id});renderPrefs();syncThemeBtn();}
+function selectMode(id){setPrefs({mode:id});renderPrefs();syncThemeBtn();}
 
 async function savePrefs(){
-  savePrefsToStorage();
-  applyPrefsToDOM();
+  const prefs=getPrefs();
   try{
     await api('/api/auth/me',{
       method:'PUT',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({theme_prefs:{palette:PREFS.palette,style:PREFS.style,mode:PREFS.mode}})
+      body:JSON.stringify({theme_prefs:{palette:prefs.palette,style:prefs.style,mode:prefs.mode}})
     });
     toast('Préférences enregistrées',true);
   }catch(e){
@@ -601,10 +549,8 @@ function updateUserChip(){
 }
 
 document.getElementById('btn-theme').onclick=()=>{
-  PREFS.mode=PREFS.mode==='light'?'dark':'light';
-  savePrefsToStorage();
-  applyPrefsToDOM();
-  // Sync si pane-prefs visible
+  if(window.MySifaTheme)MySifaTheme.toggleMode();
+  syncThemeBtn();
   if(CURRENT_TAB==='prefs')renderPrefs();
 };
 
@@ -615,24 +561,12 @@ document.getElementById('btn-logout').onclick=async()=>{
 
 // ── Init ──────────────────────────────────────────────────────────
 (async function init(){
-  loadPrefsFromStorage();
-  applyPrefsToDOM();
+  syncThemeBtn();
 
   try{
     ME=await api('/api/auth/me');
-    // Sync préfs depuis serveur
-    if(ME&&ME.theme_prefs){
-      try{
-        const sp=typeof ME.theme_prefs==='string'?JSON.parse(ME.theme_prefs):ME.theme_prefs;
-        if(sp&&typeof sp==='object'){
-          if(sp.palette)PREFS.palette=sp.palette;
-          if(sp.style)PREFS.style=sp.style;
-          if(sp.mode)PREFS.mode=sp.mode;
-          savePrefsToStorage();
-          applyPrefsToDOM();
-        }
-      }catch(e){}
-    }
+    if(ME&&window.MySifaTheme)MySifaTheme.mergeFromUser(ME);
+    syncThemeBtn();
     updateUserChip();
     renderInfo();
   }catch(e){

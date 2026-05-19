@@ -19,6 +19,7 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <meta name="mobile-web-app-capable" content="yes">
 <title>__PAGE_TITLE__</title>
 <link rel="stylesheet" href="/static/support_widget.css">
+<link rel="stylesheet" href="/static/mysifa_theme.css">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -35,63 +36,6 @@ body.light{
   --success:#059669;--warn:#d97706;--danger:#dc2626;
   --c1:#0891b2;--c2:#7c3aed;--c3:#059669;--c4:#d97706;--c5:#dc2626
 }
-/* ── Palette Marine (navy profond / ambre) ── */
-body.palette-forge{
-  --bg:#0c1422;--card:#152030;--border:#1e3152;--text:#eef2ff;--text2:#a8bfe8;
-  --muted:#6b7fa8;--accent:#F0A500;--accent-bg:rgba(240,165,0,0.13);
-  --filter-input-bg:#121d30;
-  --success:#34d399;--warn:#4A8FE8;--danger:#f87171;
-  --c1:#F0A500;--c2:#4A8FE8;--c3:#34d399;--c4:#fbbf24;--c5:#f87171
-}
-body.palette-forge.light{
-  --bg:#EFF3FA;--card:#ffffff;--border:#c8d6ef;--text:#0c1422;--text2:#1e3152;
-  --muted:#6b7fa8;--accent:#c97d00;--accent-bg:rgba(201,125,0,0.10);
-  --filter-input-bg:#ffffff;
-  --success:#059669;--warn:#2d6fbb;--danger:#dc2626;
-  --c1:#c97d00;--c2:#2d6fbb;--c3:#059669;--c4:#c97d00;--c5:#dc2626
-}
-/* ── Palette Pivoine (rose vif / magenta) ── */
-body.palette-cocon{
-  --bg:#1a0a14;--card:#2a1020;--border:#4d1f38;--text:#fce8f0;--text2:#e8b0c8;
-  --muted:#a06080;--accent:#ff5c98;--accent-bg:rgba(255,92,152,0.14);
-  --filter-input-bg:#220e1a;
-  --success:#34d399;--warn:#f0b240;--danger:#ff6060;
-  --c1:#ff5c98;--c2:#e8b0c8;--c3:#34d399;--c4:#f0b240;--c5:#ff6060
-}
-body.palette-cocon.light{
-  --bg:#fef8f2;--card:#fffdfb;--border:#f0d5de;--text:#3a0f22;--text2:#7a2e50;
-  --muted:#b87090;--accent:#d42070;--accent-bg:rgba(212,32,112,0.09);
-  --filter-input-bg:#fffdfb;
-  --success:#2e7d32;--warn:#d06000;--danger:#c0392b;
-  --c1:#d42070;--c2:#7a2e50;--c3:#2e7d32;--c4:#d06000;--c5:#c0392b
-}
-/* ── Style : Compact (arrondis réduits, police monospace) ── */
-body.style-mini{font-family:'Courier New','SF Mono',monospace}
-body.style-mini .card,body.style-mini .login-card,body.style-mini .upd-card,
-body.style-mini .stat,body.style-mini .prod-dossier-suggest{border-radius:4px!important}
-body.style-mini .field input,body.style-mini .filter-input,body.style-mini select,
-body.style-mini .search-bar,body.style-mini textarea{border-radius:4px!important}
-body.style-mini .nav-btn,body.style-mini .btn,body.style-mini .btn-sm,
-body.style-mini .btn-save,body.style-mini .btn-accent,body.style-mini .btn-danger,
-body.style-mini .btn-ghost,body.style-mini .back-link,
-body.style-mini .login-btn,body.style-mini .filters-apply-btn{border-radius:4px!important}
-body.style-mini .user-chip{border-radius:4px!important}
-body.style-mini .theme-btn,body.style-mini .logout-btn{border-radius:4px!important}
-body.style-mini .toast{border-radius:4px!important}
-body.style-mini .sidebar{border-radius:0!important}
-/* ── Style : Aéré (arrondis généreux, plus doux) ── */
-body.style-round .card,body.style-round .login-card,body.style-round .upd-card{border-radius:20px!important}
-body.style-round .stat{border-radius:18px!important}
-body.style-round .field input,body.style-round .filter-input,body.style-round select,
-body.style-round .search-bar{border-radius:14px!important}
-body.style-round .nav-btn,body.style-round .back-link{border-radius:12px!important}
-body.style-round .btn,body.style-round .btn-sm,body.style-round .btn-save,
-body.style-round .btn-accent,body.style-round .btn-danger,body.style-round .btn-ghost,
-body.style-round .login-btn,body.style-round .filters-apply-btn{border-radius:14px!important}
-body.style-round .user-chip{border-radius:12px!important}
-body.style-round .theme-btn,body.style-round .logout-btn{border-radius:12px!important}
-body.style-round .toast{border-radius:14px!important}
-body.style-round .sidebar{border-radius:0 20px 20px 0!important}
 body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
 button:focus-visible,.nav-btn:focus-visible,.login-btn:focus-visible,.portal-logout:focus-visible,.theme-btn:focus-visible,.logout-btn:focus-visible,a:focus-visible{
   outline:2px solid var(--accent);outline-offset:2px}
@@ -949,6 +893,7 @@ body.light .stock-empl-suggest-add:hover{background:rgba(124,58,237,.2);color:#1
 </style>
 </head>
 <body>
+<script src="/static/mysifa_theme.js"></script>
 <div id="root"></div>
 <script src="/static/support_widget.js"></script>
 <script>
@@ -1267,6 +1212,7 @@ async function checkAuth(){
   if(epoch!==authEpoch)return;
   if(user){
     S.user=user;
+    try{ MySifaTheme.mergeFromUser(user); }catch(e){}
     S.app=HAS_INITIAL_APP ? INITIAL_APP : 'portal';
     // Garder le badge Messagerie à jour, même sur le portail
     try{ startMessagesPolling(); }catch(e){}
@@ -2812,7 +2758,7 @@ function renderPortal(){
     appsBlock,
     h('div',{className:'portal-user'},
       h('span',{style:{display:'inline-flex',alignItems:'center',gap:'8px'}},iconEl('user',14),document.createTextNode(' '+((S.user&&S.user.nom)?S.user.nom:''))),
-      h('button',{className:'portal-logout',onClick:()=>{document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');render();}},
+      h('button',{className:'portal-logout',onClick:()=>{MySifaTheme.toggleMode();render();}},
         h('span',{className:'theme-ico'},iconEl(isLight?'sun':'moon',16)),
         h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')
       ),
@@ -2871,7 +2817,7 @@ function renderStock(){
         b.appendChild(h('span',null,'Contacter le support'));
         return b;
       })(),
-      h('button',{className:'theme-btn',onClick:()=>{document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');render();}},
+      h('button',{className:'theme-btn',onClick:()=>{MySifaTheme.toggleMode();render();}},
         h('span',{className:'theme-ico'},iconEl(isLight?'sun':'moon',16)),
         h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')
       ),
@@ -3746,7 +3692,7 @@ function renderCompta(){
       })(),
       h('button',{
         className:'theme-btn',
-        onClick:()=>{document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');render();},
+        onClick:()=>{MySifaTheme.toggleMode();render();},
         title:'Changer le thème'
       },
         h('span',{className:'theme-ico'},iconEl(isLight?'sun':'moon',16)),
@@ -4812,7 +4758,7 @@ function renderExpe(){
         try{ico.innerHTML=(window.MySifaSupport&&typeof window.MySifaSupport.iconSvg==='function')?window.MySifaSupport.iconSvg():'';}catch(e){ico.innerHTML='';}
         b.appendChild(ico);b.appendChild(h('span',null,'Contacter le support'));return b;
       })(),
-      h('button',{className:'theme-btn',onClick:()=>{document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');render();}},
+      h('button',{className:'theme-btn',onClick:()=>{MySifaTheme.toggleMode();render();}},
         h('span',{className:'theme-ico'},iconEl(isLight?'sun':'moon',16)),
         h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')
       ),
@@ -4878,7 +4824,7 @@ function renderMyDevis(){
         try{ico.innerHTML=(window.MySifaSupport&&typeof window.MySifaSupport.iconSvg==='function')?window.MySifaSupport.iconSvg():'';}catch(e){ico.innerHTML='';}
         b.appendChild(ico);b.appendChild(h('span',null,'Contacter le support'));return b;
       })(),
-      h('button',{className:'theme-btn',onClick:()=>{document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');render();}},
+      h('button',{className:'theme-btn',onClick:()=>{MySifaTheme.toggleMode();render();}},
         h('span',{className:'theme-ico'},iconEl(isLight?'sun':'moon',16)),
         h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')
       ),
@@ -5269,7 +5215,7 @@ function renderSidebar(){
         b.appendChild(h('span',null,'Contacter le support'));
         return b;
       })(),
-      h('button',{className:'theme-btn',onClick:()=>{document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');render();}},
+      h('button',{className:'theme-btn',onClick:()=>{MySifaTheme.toggleMode();render();}},
         h('span',{className:'theme-ico'},iconEl(isLight?'sun':'moon',16)),
         h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')
       ),
@@ -5382,7 +5328,7 @@ function renderMessagesApp(){
         h('div',{className:'uc-name'},(S.user&&S.user.nom)?S.user.nom:''),
         h('div',{className:'uc-role'},'Super admin')
       ),
-      h('button',{className:'theme-btn',onClick:()=>{document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');render();}},
+      h('button',{className:'theme-btn',onClick:()=>{MySifaTheme.toggleMode();render();}},
         h('span',{className:'theme-ico'},iconEl(isLight?'sun':'moon',16)),
         h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')
       ),
@@ -9399,14 +9345,6 @@ async function nav(){
   render();
 }
 
-(function(){
-  var t=localStorage.getItem('theme');
-  var p=localStorage.getItem('mysifa_palette');
-  var s=localStorage.getItem('mysifa_style');
-  if(t==='light')document.body.classList.add('light');
-  if(p&&p!=='mysifa')document.body.classList.add('palette-'+p);
-  if(s&&s!=='defaut')document.body.classList.add('style-'+s);
-})();
 // Désactive temporairement toute trace PWA (service worker) pour éviter des effets de cache.
 // Certains navigateurs gardent un SW enregistré même après suppression du manifest.
 try{

@@ -43,6 +43,7 @@ SETTINGS_HTML = r"""<!DOCTYPE html>
 <title>Paramètres — MySifa</title>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <link rel="stylesheet" href="/static/support_widget.css">
+<link rel="stylesheet" href="/static/mysifa_theme.css">
 <style>
 :root{--bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;--muted:#94a3b8;--accent:#22d3ee;--ok:#34d399;--danger:#f87171;}
 body.light{--bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--muted:#64748b;--accent:#0891b2;--ok:#059669;--danger:#dc2626;}
@@ -166,6 +167,7 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 </style>
 </head>
 <body>
+<script src="/static/mysifa_theme.js"></script>
 <div class="sidebar-overlay" id="sb-ov"></div>
 <div class="layout">
   <aside class="sidebar">
@@ -573,15 +575,13 @@ function syncThemeBtn() {
 }
 
 document.getElementById('theme-btn').onclick = () => {
-  document.body.classList.toggle('light');
-  localStorage.setItem('theme', document.body.classList.contains('light') ? 'light' : 'dark');
+  if (window.MySifaTheme) MySifaTheme.toggleMode();
   syncThemeBtn();
 };
 document.getElementById('logout-btn').onclick = async () => {
   try { await api('/api/auth/logout', { method: 'POST' }); } catch (e) {}
   location.href = '/';
 };
-if (localStorage.getItem('theme') === 'light') document.body.classList.add('light');
 syncThemeBtn();
 
 document.getElementById('sb-user-chip').onclick = () => { location.href = '/profil'; };
@@ -610,6 +610,7 @@ function initSupportSidebar() {
 async function refreshSidebarUser() {
   const me = await api('/api/auth/me');
   if (!me || typeof me !== 'object') return;
+  if (window.MySifaTheme) MySifaTheme.mergeFromUser(me);
   window.__meUser = me;
   const nm = document.getElementById('sb-uc-name');
   const rr = document.getElementById('sb-uc-role');

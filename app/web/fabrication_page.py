@@ -46,6 +46,7 @@ FABRICATION_HTML = r"""<!DOCTYPE html>
 <link rel="icon" type="image/png" sizes="512x512" href="/static/mys_icon_512.png">
 <link rel="apple-touch-icon" href="/static/mys_icon_180.png">
 <link rel="stylesheet" href="/static/support_widget.css">
+<link rel="stylesheet" href="/static/mysifa_theme.css">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -563,6 +564,7 @@ table.fab-traca-table tr:last-child td{border-bottom:none}
 </style>
 </head>
 <body>
+<script src="/static/mysifa_theme.js"></script>
 <div id="root"></div>
 <div id="mroot"></div>
 <script src="/static/support_widget.js"></script>
@@ -1998,8 +2000,7 @@ function renderFooter(){
   const themeBtn = h('button',{
     className:'fab-theme-btn',
     onClick:()=>{
-      document.body.classList.toggle('light');
-      localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');
+      if(window.MySifaTheme)MySifaTheme.toggleMode();
       render();
     }
   }, svgIcon(isLight?'sun':'moon',14), isLight?'Clair':'Sombre');
@@ -2671,9 +2672,6 @@ function render(){
 
 /* ── Auth + init ─────────────────────────────────────────────── */
 async function init(){
-  // Theme
-  if(localStorage.getItem('theme')==='light') document.body.classList.add('light');
-
   render(); // show loading
 
   // Auth check
@@ -2685,6 +2683,7 @@ async function init(){
     return;
   }
   if(!user){ window.location.href='/'; return; }
+  if(window.MySifaTheme)MySifaTheme.mergeFromUser(user);
   set({user});
 
   await loadFournisseursFSC();

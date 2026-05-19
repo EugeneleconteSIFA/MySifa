@@ -57,6 +57,7 @@ PLANNING_HTML = r"""<!DOCTYPE html>
 <title>__PLANNING_TITLE__</title>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <link rel="stylesheet" href="/static/support_widget.css">
+<link rel="stylesheet" href="/static/mysifa_theme.css">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -501,6 +502,7 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 </style>
 </head>
 <body>
+<script src="/static/mysifa_theme.js"></script>
 <div class="sidebar-overlay" id="sb-ov"></div>
 <div id="app"></div>
 <script src="/static/support_widget.js"></script>
@@ -1389,7 +1391,7 @@ function renderSidebar(){
     items.map(i=>`<button type="button" class="nav-btn${i.key==="_planning"?" active":""}" onclick="location.href='${i.href}'"><span style="display:inline-flex;align-items:center;gap:10px">${icon(i.icon,16)}${i.label}</span></button>`).join("")
   }<div class="sidebar-bottom"><button type="button" class="nav-btn nav-btn--mysifa-portal" onclick="location.href='/'"><span class="mysifa-back-preamble">← Retour </span><span class="mysifa-back-brand">My<span class="mysifa-back-accent">Sifa</span></span></button><div class="user-chip" onclick="location.href='/profil'" title="Mon profil"><div class="uc-name">${escAttr(ME.nom||"")}</div><div class="uc-role">${roleLabel(ME.role)}</div><div style="font-size:10px;color:var(--accent);margin-top:3px;display:flex;align-items:center;gap:4px">${icon('edit',12)} Mon profil</div></div><button type="button" class="support-btn" onclick="openSupport()"><span class="support-ico">${(window.MySifaSupport&&window.MySifaSupport.iconSvg)?window.MySifaSupport.iconSvg():""}</span><span>Contacter le support</span></button><button type="button" class="theme-btn" onclick="toggleTheme()"><span class="theme-ico">${isLight?icon('sun',16):icon('moon',16)}</span><span class="theme-label">${isLight?"Mode clair":"Mode sombre"}</span></button><button type="button" class="logout-btn" onclick="doLogout()">${icon('log-out',14)} Déconnexion</button><div class="version">__V_LABEL__</div></div></nav>`;
 }
-function toggleTheme(){document.body.classList.toggle("light");localStorage.setItem("theme",document.body.classList.contains("light")?"light":"dark");render();}
+function toggleTheme(){if(window.MySifaTheme)MySifaTheme.toggleMode();render();}
 async function doLogout(){try{await fetch("/api/auth/logout",{method:"POST",credentials:"include"});}catch(e){}location.href="/";}
 
 function openSupport(){
@@ -3440,13 +3442,13 @@ async function submitDefaults(){
 }
 
 async function boot(){
-  if(localStorage.getItem("theme")==="light")document.body.classList.add("light");
   document.body.classList.add("has-topbar");
   try{ render(); }catch(e){}
   let r;
   try{r=await fetch("/api/auth/me",{credentials:"include"});}catch(e){location.href="/";return;}
   if(!r.ok){location.href="/";return;}
   ME=await r.json();
+  if(window.MySifaTheme)MySifaTheme.mergeFromUser(ME);
   try{
     const list=await api(`/machines`);
     const byName=new Map((list||[]).map(m=>[String(m.nom||""),m]));

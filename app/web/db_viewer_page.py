@@ -37,6 +37,7 @@ def db_viewer_page(request: Request):
 <meta name="theme-color" content="#0a0e17">
 <title>Database — MySifa</title>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
+<link rel="stylesheet" href="/static/mysifa_theme.css">
 <style>
 *,*::before,*::after{{margin:0;padding:0;box-sizing:border-box}}
 :root{{
@@ -306,6 +307,7 @@ body.light .user-chip:hover{{background:rgba(8,145,178,.12)}}
 </style>
 </head>
 <body>
+<script src="/static/mysifa_theme.js"></script>
 
 <!-- Mobile topbar -->
 <div class="mobile-topbar">
@@ -428,17 +430,18 @@ const S = {{
 }})();
 
 /* ── Theme ── */
+function syncThemeLabel() {{
+  const isLight = window.MySifaTheme ? MySifaTheme.isLight() : document.body.classList.contains('light');
+  const el = document.getElementById('theme-label');
+  if (el) el.textContent = isLight ? 'Thème sombre' : 'Thème clair';
+}}
 function applyStoredTheme() {{
-  const t = localStorage.getItem('theme');
-  if (t === 'light') document.body.classList.add('light');
-  document.getElementById('theme-label').textContent =
-    document.body.classList.contains('light') ? 'Thème sombre' : 'Thème clair';
+  if (window.MySifaTheme) MySifaTheme.initFromStorage();
+  syncThemeLabel();
 }}
 function toggleTheme() {{
-  document.body.classList.toggle('light');
-  const isLight = document.body.classList.contains('light');
-  localStorage.setItem('theme', isLight ? 'light' : 'dark');
-  document.getElementById('theme-label').textContent = isLight ? 'Thème sombre' : 'Thème clair';
+  if (window.MySifaTheme) MySifaTheme.toggleMode();
+  syncThemeLabel();
 }}
 
 /* ── API ── */

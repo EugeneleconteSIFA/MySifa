@@ -1,0 +1,168 @@
+/* MySifa — palettes et styles d'interface (partagés) */
+
+/* ── Palette Marine (navy profond / ambre) ── */
+body.palette-forge {
+  --bg: #0c1422;
+  --card: #152030;
+  --border: #1e3152;
+  --text: #eef2ff;
+  --text2: #a8bfe8;
+  --muted: #6b7fa8;
+  --accent: #F0A500;
+  --accent-bg: rgba(240, 165, 0, 0.13);
+  --filter-input-bg: #121d30;
+  --success: #34d399;
+  --warn: #4A8FE8;
+  --danger: #f87171;
+  --c1: #F0A500;
+  --c2: #4A8FE8;
+  --c3: #34d399;
+  --c4: #fbbf24;
+  --c5: #f87171;
+}
+body.palette-forge.light {
+  --bg: #EFF3FA;
+  --card: #ffffff;
+  --border: #c8d6ef;
+  --text: #0c1422;
+  --text2: #1e3152;
+  --muted: #6b7fa8;
+  --accent: #c97d00;
+  --accent-bg: rgba(201, 125, 0, 0.10);
+  --filter-input-bg: #ffffff;
+  --success: #059669;
+  --warn: #2d6fbb;
+  --danger: #dc2626;
+  --c1: #c97d00;
+  --c2: #2d6fbb;
+  --c3: #059669;
+  --c4: #c97d00;
+  --c5: #dc2626;
+}
+
+/* ── Palette Pivoine (rose vif / magenta) ── */
+body.palette-cocon {
+  --bg: #1a0a14;
+  --card: #2a1020;
+  --border: #4d1f38;
+  --text: #fce8f0;
+  --text2: #e8b0c8;
+  --muted: #a06080;
+  --accent: #ff5c98;
+  --accent-bg: rgba(255, 92, 152, 0.14);
+  --filter-input-bg: #220e1a;
+  --success: #34d399;
+  --warn: #f0b240;
+  --danger: #ff6060;
+  --c1: #ff5c98;
+  --c2: #e8b0c8;
+  --c3: #34d399;
+  --c4: #f0b240;
+  --c5: #ff6060;
+}
+body.palette-cocon.light {
+  --bg: #fef8f2;
+  --card: #fffdfb;
+  --border: #f0d5de;
+  --text: #3a0f22;
+  --text2: #7a2e50;
+  --muted: #b87090;
+  --accent: #d42070;
+  --accent-bg: rgba(212, 32, 112, 0.09);
+  --filter-input-bg: #fffdfb;
+  --success: #2e7d32;
+  --warn: #d06000;
+  --danger: #c0392b;
+  --c1: #d42070;
+  --c2: #7a2e50;
+  --c3: #2e7d32;
+  --c4: #d06000;
+  --c5: #c0392b;
+}
+
+/* ── Style : Compact ── */
+body.style-mini {
+  font-family: 'Courier New', 'SF Mono', monospace;
+}
+body.style-mini .card,
+body.style-mini .login-card,
+body.style-mini .upd-card,
+body.style-mini .stat,
+body.style-mini .prod-dossier-suggest {
+  border-radius: 4px !important;
+}
+body.style-mini .field input,
+body.style-mini .filter-input,
+body.style-mini select,
+body.style-mini .search-bar,
+body.style-mini textarea {
+  border-radius: 4px !important;
+}
+body.style-mini .nav-btn,
+body.style-mini .btn,
+body.style-mini .btn-sm,
+body.style-mini .btn-save,
+body.style-mini .btn-accent,
+body.style-mini .btn-danger,
+body.style-mini .btn-ghost,
+body.style-mini .back-link,
+body.style-mini .login-btn,
+body.style-mini .filters-apply-btn {
+  border-radius: 4px !important;
+}
+body.style-mini .user-chip,
+body.style-mini .theme-btn,
+body.style-mini .logout-btn,
+body.style-mini .toast {
+  border-radius: 4px !important;
+}
+body.style-mini .sidebar {
+  border-radius: 0 !important;
+}
+body.style-mini input,
+body.style-mini button {
+  border-radius: 4px !important;
+}
+
+/* ── Style : Aéré ── */
+body.style-round .card,
+body.style-round .login-card,
+body.style-round .upd-card {
+  border-radius: 20px !important;
+}
+body.style-round .stat {
+  border-radius: 18px !important;
+}
+body.style-round .field input,
+body.style-round .filter-input,
+body.style-round select,
+body.style-round .search-bar {
+  border-radius: 14px !important;
+}
+body.style-round .nav-btn,
+body.style-round .back-link {
+  border-radius: 12px !important;
+}
+body.style-round .btn,
+body.style-round .btn-sm,
+body.style-round .btn-save,
+body.style-round .btn-accent,
+body.style-round .btn-danger,
+body.style-round .btn-ghost,
+body.style-round .login-btn,
+body.style-round .filters-apply-btn {
+  border-radius: 14px !important;
+}
+body.style-round .user-chip,
+body.style-round .theme-btn,
+body.style-round .logout-btn,
+body.style-round .toast {
+  border-radius: 12px !important;
+}
+body.style-round .sidebar {
+  border-radius: 0 20px 20px 0 !important;
+}
+body.style-round input,
+body.style-round button {
+  border-radius: 14px !important;
+}
