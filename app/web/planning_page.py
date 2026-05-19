@@ -519,7 +519,14 @@ function showFatal(message, lineno, colno, extra){
   }catch(e){}
 }
 window.addEventListener("error", (e)=>showFatal(e.message, e.lineno, e.colno, (e.error && e.error.stack) ? e.error.stack : ""));
-window.addEventListener("unhandledrejection", (e)=>showFatal("Promise rejection", 0, 0, e.reason||""));
+window.addEventListener("unhandledrejection", (e)=>{
+  const r=e.reason;
+  let extra="";
+  if(r instanceof Error) extra=r.message+(r.stack?("\\n"+r.stack):"");
+  else if(r&&typeof r.json==="function") extra="Réponse HTTP "+(r.status||"?")+" — détail dans la console (F12)";
+  else extra=String(r||"");
+  showFatal("Promise rejection", 0, 0, extra);
+});
 </script>
 <script>
 let MID=__MACHINE_ID__;
@@ -561,7 +568,29 @@ let _suppressAutoScroll=false;
 let _showAllTermine=false;   // true = montrer tous les terminés; false = seulement les 2 derniers
 const TERMINE_KEEP=2;        // nombre de terminés toujours visibles en bas de la pile
 
-const api=(p,o={})=>fetch(`/api/planning${p}`,{credentials:"include",headers:{"Content-Type":"application/json",...(o.headers||{})},...o}).then(r=>{if(!r.ok)throw r;return r.json()});
+async function parseApiError(res){
+  let msg="Erreur "+res.status;
+  try{
+    const j=await res.json();
+    const d=j&&j.detail;
+    if(typeof d==="string") msg=d;
+    else if(Array.isArray(d)) msg=d.map(x=>(x&&x.msg)?x.msg:JSON.stringify(x)).join(" ");
+    else if(d) msg=JSON.stringify(d);
+  }catch(_){}
+  const err=new Error(msg);
+  err.status=res.status;
+  return err;
+}
+function apiErrorMessage(e,fallback){
+  if(e&&e.message) return e.message;
+  return fallback||"Erreur";
+}
+const api=(p,o={})=>fetch(`/api/planning${p}`,{credentials:"include",headers:{"Content-Type":"application/json",...(o.headers||{})},...o}).then(async r=>{
+  if(!r.ok) throw await parseApiError(r);
+  const ct=r.headers.get("content-type")||"";
+  if(ct.includes("application/json")) return r.json();
+  return null;
+});
 
 let _pToastTimer=null;
 function showToast(message,type){
@@ -1837,7 +1866,11 @@ function setupTlDD(){
     try{
       await api(`/machines/${MID}/reorder`,{method:"POST",body:JSON.stringify({entry_ids:ids})});
       await load();
-    }catch(e){ alert("Réordonnancement impossible"); await load(); }
+      showToast("Ordre enregistré.","success");
+    }catch(e){
+      showToast(apiErrorMessage(e,"Réordonnancement impossible."),"danger");
+      await load();
+    }
   });
 }
 
@@ -2213,8 +2246,9 @@ async function moveEntry(entryId,delta){
   try{
     await api(`/machines/${MID}/reorder`,{method:"POST",body:JSON.stringify({entry_ids:ids})});
     await load();
+    showToast("Ordre enregistré.","success");
   }catch(e){
-    alert("Réordonnancement impossible");
+    showToast(apiErrorMessage(e,"Réordonnancement impossible."),"danger");
     await load();
   }finally{
     _suppressAutoScroll = false;
@@ -2296,6 +2330,8 @@ function setupDD(){
 
   const tbody=document.getElementById("tbody");
   if(!tbody) return;
+  if(tbody.dataset.ddBound==="1") return;
+  tbody.dataset.ddBound="1";
 
   // Créer l'indicateur de drop s'il n'existe pas
   if(!_ddIndicator){
@@ -2456,19 +2492,26 @@ function setupDD(){
     clearState();
     _suppressAutoScroll=true;
 
+    let reorderOk=false;
     try{
       await api(`/machines/${MID}/reorder`,{method:"POST",body:JSON.stringify({entry_ids:ids})});
+      reorderOk=true;
     }catch(err){
       console.error("Reorder failed",err);
-    }finally{
-      await load();
-      _suppressAutoScroll=false;
-      requestAnimationFrame(()=>{
-        const main=document.querySelector(".main");
-        if(main) main.scrollTop=savedScroll;
-        if(tbody&&savedTbodyScroll>0) tbody.scrollTop=savedTbodyScroll;
-      });
+      showToast(apiErrorMessage(err,"Réordonnancement impossible."),"danger");
     }
+    try{
+      await load();
+    }catch(e){
+      console.error("load after reorder",e);
+    }
+    _suppressAutoScroll=false;
+    if(reorderOk) showToast("Ordre enregistré.","success");
+    requestAnimationFrame(()=>{
+      const main=document.querySelector(".main");
+      if(main) main.scrollTop=savedScroll;
+      if(tbody&&savedTbodyScroll>0) tbody.scrollTop=savedTbodyScroll;
+    });
   });
 
   tbody.addEventListener("dragend",()=>{
