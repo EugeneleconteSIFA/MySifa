@@ -1,6 +1,6 @@
 {
   "name": "myprod-widget",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Widget de bureau MySifa - Statut machines Cohésio",
   "main": "main.js",
   "scripts": {
@@ -8,7 +8,9 @@
     "build": "electron-builder",
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac",
-    "icons": "python3 scripts/generate_icons.py"
+    "icons": "python3 scripts/generate_icons.py",
+    "sync:dist": "python3 scripts/sync_dist_assets.py",
+    "predist": "npm run icons && npm run sync:dist"
   },
   "keywords": ["mysifa", "production", "widget", "industrie"],
   "author": "SIFA",

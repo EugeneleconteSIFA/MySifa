@@ -60,13 +60,14 @@ Changez `"version"` dans `package.json`, recompilez, et recopiez dans `dist/`.
 
 ---
 
-## Icônes (usine + couleurs MySifa)
+## Icônes (waveform + couleurs MySifa)
 
-Générer ou régénérer les PNG à partir du SVG usine :
+Générer ou régénérer les PNG (waveform activité, même motif que `/install/widget`) :
 
 ```bash
 cd myprod-widget
-python3 scripts/generate_icons.py
+npm run icons          # generate_icons.py + favicons static/
+npm run sync:dist      # copie vers dist/*/app.asar.unpacked/assets/ (si dist/ existe)
 ```
 
 Produit dans `assets/` :
@@ -76,7 +77,13 @@ Produit dans `assets/` :
 
 Copie aussi les favicons vers `static/widget-favicon*.png` pour la page `/install/widget`.
 
-Après modification des icônes, recompiler (`npm run build:win` / `build:mac`) et redéployer `dist/`.
+**Important** : le patch manuel de `dist/win-unpacked/` ne met pas à jour `MyProd-Widget-*-Setup.exe` ni les `.dmg` déjà compilés. Après changement d’icône :
+
+1. `npm run icons`
+2. `npm run build:win` (sur Windows) et/ou `npm run build:mac` (sur Mac)
+3. Copier les nouveaux binaires dans `myprod-widget/dist/` sur le serveur VPS
+
+Sans rebuild, les utilisateurs qui téléchargent via `/download/widget-win` gardent l’ancien installateur.
 
 ---
 

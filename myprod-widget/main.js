@@ -17,10 +17,17 @@ let tray       = null;
 let isQuitting = false;
 
 function assetsPath(...parts) {
-  const root = app.isPackaged
-    ? path.join(process.resourcesPath, 'app.asar.unpacked')
-    : __dirname;
-  return path.join(root, 'assets', ...parts);
+  const rel = path.join('assets', ...parts);
+  if (!app.isPackaged) {
+    return path.join(__dirname, rel);
+  }
+  const fs = require('fs');
+  const unpacked = path.join(process.resourcesPath, 'app.asar.unpacked', rel);
+  if (fs.existsSync(unpacked)) {
+    return unpacked;
+  }
+  // Fallback : assets dans app.asar (builds sans asarUnpack complet)
+  return path.join(__dirname, rel);
 }
 
 function resolveAppIcon() {

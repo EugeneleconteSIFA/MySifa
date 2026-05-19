@@ -348,6 +348,25 @@ function getPeriod(){
 function evVisible(ev){return !!S.visible[ev.calendrier];}
 function evStart(ev){return parseEvDt(ev.debut);}
 function evEnd(ev){return parseEvDt(ev.fin)||evStart(ev);}
+function evOverlapsDay(ev,day){
+  const s=evStart(ev),e=evEnd(ev)||s;
+  if(!s)return false;
+  const dk=ymd(day);
+  return ymd(startOfDay(s))<=dk&&ymd(startOfDay(e))>=dk;
+}
+/** Tranche horaire d'un événement sur un jour (vues semaine / jour). */
+function timedSliceOnDay(ev,day){
+  const s=evStart(ev),e=evEnd(ev)||s;
+  if(!s||!evOverlapsDay(ev,day))return null;
+  const d0=startOfDay(day);
+  const dEnd=new Date(d0);dEnd.setHours(23,59,59,999);
+  const clipS=s<d0?d0:s;
+  const clipE=e>dEnd?dEnd:e;
+  if(clipE<=clipS)return null;
+  const topMin=(clipS-d0)/60000;
+  const endMin=(clipE-d0)/60000;
+  return{top:topMin/60*48,h:Math.max(18,(endMin-topMin)/60*48)};
+}
 function evDayKey(d){return ymd(d);}
 function daysBetweenInclusive(s,e){
   const out=[];let c=startOfDay(s);const end=startOfDay(e);
@@ -629,19 +648,13 @@ function renderTimeGrid(p,colCount){
       day.toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'})+'</div>';
     html+='<div class="cal-col-slots">';
     for(let h=0;h<24;h++)html+='<div class="cal-slot-line" style="top:'+(h*48)+'px"></div>';
-    const dayTimed=timed.filter(ev=>{
-      const s=evStart(ev);
-      return s&&sameDay(startOfDay(s),day);
-    });
+    const dayTimed=timed.filter(ev=>evOverlapsDay(ev,day));
     const dayLayout=layoutTimedEvents(dayTimed);
     dayTimed.forEach(ev=>{
-      const s=evStart(ev),e=evEnd(ev)||s;
-      const top=(s.getHours()+s.getMinutes()/60)*48;
-      const endH=e.getHours()+e.getMinutes()/60;
-      const startH=s.getHours()+s.getMinutes()/60;
-      const h=Math.max(18,(endH-startH)*48);
+      const slice=timedSliceOnDay(ev,day);
+      if(!slice)return;
       const lay=dayLayout.get(ev.id)||{col:0,total:1};
-      html+='<div class="cal-ev" data-ev-id="'+esc(ev.id)+'" style="'+timedEvStyle(ev,top,h,lay)+'">'+esc(ev.titre)+'</div>';
+      html+='<div class="cal-ev" data-ev-id="'+esc(ev.id)+'" style="'+timedEvStyle(ev,slice.top,slice.h,lay)+'">'+esc(ev.titre)+'</div>';
     });
     html+='</div></div>';
   });
