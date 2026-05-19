@@ -35,35 +35,35 @@ body.light{
   --success:#059669;--warn:#d97706;--danger:#dc2626;
   --c1:#0891b2;--c2:#7c3aed;--c3:#059669;--c4:#d97706;--c5:#dc2626
 }
-/* ── Palette Forge (Nuit/Acier/Bleu vif/Ambre) ── */
+/* ── Palette Marine (navy profond / ambre) ── */
 body.palette-forge{
-  --bg:#1A2332;--card:#243044;--border:#2D4163;--text:#f0f4fc;--text2:#b8c9e8;
-  --muted:#64748B;--accent:#3A7BD5;--accent-bg:rgba(58,123,213,0.15);
-  --filter-input-bg:#1e2d42;
-  --success:#34d399;--warn:#F0A500;--danger:#f87171;
-  --c1:#3A7BD5;--c2:#a78bfa;--c3:#34d399;--c4:#F0A500;--c5:#f87171
+  --bg:#0c1422;--card:#152030;--border:#1e3152;--text:#eef2ff;--text2:#a8bfe8;
+  --muted:#6b7fa8;--accent:#F0A500;--accent-bg:rgba(240,165,0,0.13);
+  --filter-input-bg:#121d30;
+  --success:#34d399;--warn:#4A8FE8;--danger:#f87171;
+  --c1:#F0A500;--c2:#4A8FE8;--c3:#34d399;--c4:#fbbf24;--c5:#f87171
 }
 body.palette-forge.light{
-  --bg:#F4F6FA;--card:#ffffff;--border:#dce3ef;--text:#1A2332;--text2:#2D4163;
-  --muted:#64748B;--accent:#3A7BD5;--accent-bg:rgba(58,123,213,0.10);
+  --bg:#EFF3FA;--card:#ffffff;--border:#c8d6ef;--text:#0c1422;--text2:#1e3152;
+  --muted:#6b7fa8;--accent:#c97d00;--accent-bg:rgba(201,125,0,0.10);
   --filter-input-bg:#ffffff;
-  --success:#059669;--warn:#d97706;--danger:#dc2626;
-  --c1:#3A7BD5;--c2:#7c3aed;--c3:#059669;--c4:#d97706;--c5:#dc2626
+  --success:#059669;--warn:#2d6fbb;--danger:#dc2626;
+  --c1:#c97d00;--c2:#2d6fbb;--c3:#059669;--c4:#c97d00;--c5:#dc2626
 }
-/* ── Palette Cocon (Pivoine / tons rosés) ── */
+/* ── Palette Pivoine (rose vif / magenta) ── */
 body.palette-cocon{
-  --bg:#1f0e14;--card:#2e1620;--border:#4a2535;--text:#f5e8ed;--text2:#dbb8c8;
-  --muted:#9e6a80;--accent:#e8729a;--accent-bg:rgba(232,114,154,0.12);
-  --filter-input-bg:#261218;
-  --success:#34d399;--warn:#fbbf24;--danger:#f87171;
-  --c1:#e8729a;--c2:#dbb8c8;--c3:#34d399;--c4:#fbbf24;--c5:#f87171
+  --bg:#1a0a14;--card:#2a1020;--border:#4d1f38;--text:#fce8f0;--text2:#e8b0c8;
+  --muted:#a06080;--accent:#ff5c98;--accent-bg:rgba(255,92,152,0.14);
+  --filter-input-bg:#220e1a;
+  --success:#34d399;--warn:#f0b240;--danger:#ff6060;
+  --c1:#ff5c98;--c2:#e8b0c8;--c3:#34d399;--c4:#f0b240;--c5:#ff6060
 }
 body.palette-cocon.light{
-  --bg:#fdf8f5;--card:#fff9f7;--border:#f0ddd8;--text:#3d1a24;--text2:#7a4155;
-  --muted:#b08090;--accent:#c4577a;--accent-bg:rgba(196,87,122,0.10);
-  --filter-input-bg:#fff9f7;
-  --success:#2e7d32;--warn:#e6a817;--danger:#c0392b;
-  --c1:#c4577a;--c2:#7a4155;--c3:#2e7d32;--c4:#e6a817;--c5:#c0392b
+  --bg:#fff5f8;--card:#ffffff;--border:#f5d0df;--text:#3a0f22;--text2:#7a2e50;
+  --muted:#b87090;--accent:#d42070;--accent-bg:rgba(212,32,112,0.10);
+  --filter-input-bg:#ffffff;
+  --success:#2e7d32;--warn:#d06000;--danger:#c0392b;
+  --c1:#d42070;--c2:#7a2e50;--c3:#2e7d32;--c4:#d06000;--c5:#c0392b
 }
 /* ── Style : Compact (arrondis réduits, police monospace) ── */
 body.style-mini{font-family:'Courier New','SF Mono',monospace}

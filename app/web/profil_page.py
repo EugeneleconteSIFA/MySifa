@@ -34,175 +34,308 @@ PROFIL_HTML = r"""<!DOCTYPE html>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <link rel="stylesheet" href="/static/support_widget.css">
 <style>
-/* ── Variables : MySifa (défaut dark) ── */
+/* ── Variables MySifa (dark défaut) ── */
 :root{
   --bg:#0a0e17;--card:#111827;--border:#1e293b;
   --text:#f1f5f9;--text2:#cbd5e1;--muted:#94a3b8;
   --accent:#22d3ee;--accent-bg:rgba(34,211,238,0.12);
   --ok:#34d399;--danger:#f87171;--warn:#fbbf24;
 }
-/* MySifa clair */
 body.light{
   --bg:#f1f5f9;--card:#fff;--border:#e2e8f0;
   --text:#0f172a;--text2:#475569;--muted:#64748b;
   --accent:#0891b2;--accent-bg:rgba(8,145,178,0.10);
   --ok:#059669;--danger:#dc2626;--warn:#d97706;
 }
-/* Palette Forge */
+/* Palette Marine */
 body.palette-forge{
-  --bg:#1A2332;--card:#243044;--border:#2D4163;
-  --text:#f0f4fc;--text2:#b8c9e8;--muted:#64748B;
-  --accent:#3A7BD5;--accent-bg:rgba(58,123,213,0.15);
-  --ok:#34d399;--danger:#f87171;--warn:#F0A500;
+  --bg:#0c1422;--card:#152030;--border:#1e3152;
+  --text:#eef2ff;--text2:#a8bfe8;--muted:#6b7fa8;
+  --accent:#F0A500;--accent-bg:rgba(240,165,0,0.13);
+  --ok:#34d399;--danger:#f87171;--warn:#4A8FE8;
 }
 body.palette-forge.light{
-  --bg:#F4F6FA;--card:#ffffff;--border:#dce3ef;
-  --text:#1A2332;--text2:#2D4163;--muted:#64748B;
-  --accent:#3A7BD5;--accent-bg:rgba(58,123,213,0.10);
-  --ok:#059669;--danger:#dc2626;--warn:#d97706;
+  --bg:#EFF3FA;--card:#ffffff;--border:#c8d6ef;
+  --text:#0c1422;--text2:#1e3152;--muted:#6b7fa8;
+  --accent:#c97d00;--accent-bg:rgba(201,125,0,0.10);
+  --ok:#059669;--danger:#dc2626;--warn:#2d6fbb;
 }
-/* Palette Cocon */
+/* Palette Pivoine */
 body.palette-cocon{
-  --bg:#1f0e14;--card:#2e1620;--border:#4a2535;
-  --text:#f5e8ed;--text2:#dbb8c8;--muted:#9e6a80;
-  --accent:#e8729a;--accent-bg:rgba(232,114,154,0.12);
-  --ok:#34d399;--danger:#f87171;--warn:#fbbf24;
+  --bg:#1a0a14;--card:#2a1020;--border:#4d1f38;
+  --text:#fce8f0;--text2:#e8b0c8;--muted:#a06080;
+  --accent:#ff5c98;--accent-bg:rgba(255,92,152,0.14);
+  --ok:#34d399;--danger:#ff6060;--warn:#f0b240;
 }
 body.palette-cocon.light{
-  --bg:#fdf8f5;--card:#fff9f7;--border:#f0ddd8;
-  --text:#3d1a24;--text2:#7a4155;--muted:#b08090;
-  --accent:#c4577a;--accent-bg:rgba(196,87,122,0.10);
-  --ok:#2e7d32;--danger:#c0392b;--warn:#e6a817;
+  --bg:#fff5f8;--card:#ffffff;--border:#f5d0df;
+  --text:#3a0f22;--text2:#7a2e50;--muted:#b87090;
+  --accent:#d42070;--accent-bg:rgba(212,32,112,0.10);
+  --ok:#2e7d32;--danger:#c0392b;--warn:#d06000;
 }
 /* Style Compact */
 body.style-mini{font-family:'Courier New','SF Mono',monospace}
-body.style-mini .card,.style-mini input,.style-mini button,.style-mini .tab-btn{border-radius:4px!important}
+body.style-mini .card,.style-mini input,.style-mini button{border-radius:4px!important}
 /* Style Aéré */
 body.style-round .card{border-radius:20px!important}
-body.style-round input,body.style-round button,body.style-round .tab-btn{border-radius:14px!important}
+body.style-round input,body.style-round button{border-radius:14px!important}
 
+/* ── Reset & base ── */
 *{box-sizing:border-box}
-body{margin:0;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;transition:background .2s,color .2s}
-.shell{max-width:580px;margin:0 auto;padding:24px 20px 48px}
+body{margin:0;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
+  background:var(--bg);color:var(--text);min-height:100vh;}
 
-/* ── Topbar ── */
-.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:28px;flex-wrap:wrap}
-.brand{font-size:20px;font-weight:800;letter-spacing:-.5px}
-.brand span{color:var(--accent)}
-.brand-sub{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-top:2px}
-.top-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.btn-icon{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;font-family:inherit;transition:border-color .15s,color .15s,background .15s}
-.btn-icon:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
-.back-link{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:13px;font-weight:500;text-decoration:none;cursor:pointer;font-family:inherit;transition:border-color .15s,color .15s}
-.back-link:hover{border-color:var(--accent);color:var(--accent)}
+/* ── Layout ── */
+.layout{display:flex;min-height:100vh}
 
-/* ── Onglets ── */
-.tabs{display:flex;gap:4px;margin-bottom:20px;border-bottom:1px solid var(--border);padding-bottom:0}
-.tab-btn{background:transparent;border:none;border-bottom:2px solid transparent;padding:10px 16px;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;font-family:inherit;transition:color .15s,border-color .15s;margin-bottom:-1px;border-radius:0}
-.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
-.tab-btn:hover:not(.active){color:var(--text)}
+/* ── Sidebar ── */
+.sidebar{
+  width:220px;background:var(--card);border-right:1px solid var(--border);
+  padding:20px 12px;display:flex;flex-direction:column;flex-shrink:0;
+  height:100vh;position:sticky;top:0;overflow-y:auto;scrollbar-width:none;
+}
+.sidebar::-webkit-scrollbar{width:0}
+.logo{padding:0 8px;margin-bottom:28px}
+.logo-brand{font-size:15px;font-weight:800}.logo-brand span{color:var(--accent)}
+.logo-sub{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px}
+.nav-btn{
+  display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+  padding:10px 12px;border-radius:8px;border:none;background:transparent;
+  color:var(--text2);font-size:13px;font-weight:500;cursor:pointer;
+  font-family:inherit;transition:background .15s,color .15s,box-shadow .2s;margin-bottom:2px;
+}
+.nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
+.nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(34,211,238,.25),0 0 18px rgba(34,211,238,.15)}
+body.palette-forge .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(240,165,0,.28),0 0 16px rgba(240,165,0,.14)}
+body.palette-cocon .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(255,92,152,.28),0 0 16px rgba(255,92,152,.14)}
+body.light .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(8,145,178,.32),0 0 16px rgba(8,145,178,.12)}
+.back-mysifa{
+  border:none!important;background:transparent!important;
+  font-weight:400!important;color:var(--text2)!important;padding:8px 10px!important;
+}
+.back-mysifa:hover{color:var(--text)!important;background:transparent!important}
+.back-mysifa .wm{font-weight:800;color:var(--text)}.back-mysifa .wm span{color:var(--accent)}
+.sidebar-bottom{margin-top:auto;display:flex;flex-direction:column;gap:6px;padding-bottom:8px}
+.user-chip{padding:10px 12px;border-radius:8px;background:var(--accent-bg);cursor:pointer}
+.user-chip .uc-name{font-size:12px;font-weight:600;color:var(--text)}
+.user-chip .uc-role{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px}
+.theme-btn,.logout-btn{
+  display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;
+  border:1px solid var(--border);background:transparent;color:var(--text2);
+  cursor:pointer;font-size:12px;width:100%;font-family:inherit;
+  transition:background .15s,color .15s,border-color .15s,box-shadow .2s;
+}
+.theme-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent);
+  box-shadow:0 0 0 1px rgba(34,211,238,.22),0 0 20px rgba(34,211,238,.14)}
+body.palette-forge .theme-btn:hover{box-shadow:0 0 0 1px rgba(240,165,0,.28),0 0 18px rgba(240,165,0,.14)}
+body.palette-cocon .theme-btn:hover{box-shadow:0 0 0 1px rgba(255,92,152,.28),0 0 18px rgba(255,92,152,.14)}
+body.light .theme-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 18px rgba(8,145,178,.12)}
+.theme-btn .theme-ico{display:inline-flex;align-items:center;line-height:1}
+.theme-btn .theme-label{white-space:nowrap}
+@media (display-mode:standalone),(max-width:900px){
+  .theme-btn .theme-label{display:none}.theme-btn{justify-content:center}
+}
+.logout-btn{border:none}
+.logout-btn:hover{color:var(--danger);background:rgba(248,113,113,.1);
+  box-shadow:0 0 0 1px rgba(248,113,113,.35),0 0 18px rgba(248,113,113,.12)}
+.version{font-size:10px;color:var(--muted);font-family:monospace;padding:4px 12px}
 
-/* ── Card ── */
-.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px 22px;margin-bottom:16px}
-.card h1{font-size:19px;font-weight:800;margin:0 0 5px}
-.card .sub{font-size:13px;color:var(--muted);margin-bottom:20px}
-.role-pill{display:inline-block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--accent);background:var(--accent-bg);padding:4px 10px;border-radius:999px;margin-bottom:14px}
-.field{margin-bottom:13px}
-.field label{display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
-.field input{width:100%;padding:10px 13px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;font-family:inherit;outline:none;transition:border-color .15s}
+/* ── Main ── */
+.main{flex:1;padding:28px;overflow:auto}
+.container{max-width:680px;margin:0 auto}
+h1{font-size:22px;font-weight:700;margin:0 0 4px}
+.subtitle{font-size:13px;color:var(--muted);margin-bottom:22px}
+
+/* ── Mobile topbar ── */
+.mobile-topbar{display:none;align-items:center;gap:10px;margin-bottom:14px}
+.mobile-menu-btn,.mobile-home-btn{
+  display:none;align-items:center;justify-content:center;
+  width:40px;height:40px;border-radius:10px;
+  border:1px solid var(--border);background:var(--card);
+  color:var(--text2);cursor:pointer;font-family:inherit;flex-shrink:0;
+}
+.mobile-menu-btn:hover,.mobile-home-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.mobile-home-btn{margin-left:auto}
+.mobile-topbar-title{font-size:14px;font-weight:800}
+.mobile-topbar-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200}
+body.sb-open .sidebar-overlay{display:block}
+@media (max-width:900px){
+  .mobile-topbar{display:flex;position:fixed;top:0;left:0;right:0;z-index:120;
+    background:var(--bg);padding:10px 18px;border-bottom:1px solid var(--border)}
+  .mobile-menu-btn{display:inline-flex}
+  .mobile-home-btn{display:inline-flex}
+  body.has-topbar .main{padding-top:74px}
+  .main{padding:18px}
+  .sidebar{position:fixed;left:0;top:0;bottom:0;height:auto;max-height:100vh;z-index:300;
+    transform:translateX(-105%);transition:transform .18s ease;box-shadow:0 16px 48px rgba(0,0,0,.55)}
+  body.sb-open .sidebar{transform:translateX(0)}
+}
+
+/* ── Tabs (nav dans sidebar) ── */
+.pane-tab{display:none}
+.pane-tab.active{display:block}
+
+/* ── Formulaire profil ── */
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px 20px;margin-bottom:16px}
+.card h2{font-size:15px;font-weight:700;margin:0 0 14px}
+.role-pill{display:inline-block;font-size:10px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.5px;color:var(--accent);background:var(--accent-bg);
+  padding:4px 10px;border-radius:999px;margin-bottom:14px}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:11px;font-weight:600;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
+.field input{width:100%;padding:10px 13px;border-radius:10px;border:1.5px solid var(--border);
+  background:var(--bg);color:var(--text);font-size:14px;font-family:inherit;outline:none;
+  transition:border-color .15s}
 .field input:focus{border-color:var(--accent)}
-hr{border:none;border-top:1px solid var(--border);margin:18px 0}
-.btn-save{background:var(--accent);color:#0a0e17;border:none;border-radius:10px;padding:11px 20px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit;margin-top:4px;transition:filter .15s}
+hr{border:none;border-top:1px solid var(--border);margin:16px 0}
+.btn-save{background:var(--accent);color:#0a0e17;border:none;border-radius:10px;
+  padding:11px 20px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit;
+  margin-top:4px;transition:filter .15s}
 .btn-save:hover{filter:brightness(1.06)}
 .btn-save:disabled{opacity:.6;cursor:not-allowed}
 .meta{font-size:11px;color:var(--muted);margin-top:14px;line-height:1.6}
 
-/* ── Toasts ── */
-.toast{position:fixed;bottom:22px;right:22px;z-index:9999;padding:11px 16px;border-radius:10px;font-size:13px;font-weight:600;box-shadow:0 10px 36px rgba(0,0,0,.4);border:1px solid var(--border);animation:toast-in .2s ease}
+/* ── Toast ── */
+.toast{position:fixed;bottom:22px;right:22px;z-index:9999;padding:11px 16px;
+  border-radius:10px;font-size:13px;font-weight:600;
+  box-shadow:0 10px 36px rgba(0,0,0,.4);border:1px solid var(--border);
+  animation:toast-in .2s ease}
 .toast.ok{background:rgba(52,211,153,.15);color:var(--ok)}
 .toast.err{background:rgba(248,113,113,.15);color:var(--danger)}
 @keyframes toast-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 .loading{color:var(--muted);font-size:14px;padding:40px 0;text-align:center}
 
-/* ── Sélecteurs de thème ── */
-.pref-section{margin-bottom:24px}
-.pref-section-title{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px}
+/* ── Préférences : sélecteurs visuels ── */
+.pref-section{margin-bottom:22px}
+.pref-section-title{font-size:11px;font-weight:700;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px}
 .theme-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-.theme-card{border:2px solid var(--border);border-radius:12px;padding:14px 12px;cursor:pointer;transition:border-color .15s,background .15s;background:var(--bg);text-align:center;position:relative}
+@media (max-width:480px){.theme-grid{grid-template-columns:1fr 1fr}}
+.theme-card{border:2px solid var(--border);border-radius:12px;padding:14px 10px;
+  cursor:pointer;transition:border-color .15s,background .15s;
+  background:var(--bg);text-align:center;position:relative}
 .theme-card:hover{border-color:var(--accent);background:var(--accent-bg)}
 .theme-card.selected{border-color:var(--accent);background:var(--accent-bg)}
-.theme-card .tc-check{position:absolute;top:8px;right:8px;width:16px;height:16px;border-radius:50%;background:var(--accent);display:none;align-items:center;justify-content:center}
+.tc-check{position:absolute;top:7px;right:7px;width:16px;height:16px;border-radius:50%;
+  background:var(--accent);display:none;align-items:center;justify-content:center}
 .theme-card.selected .tc-check{display:flex}
-.theme-card .tc-preview{height:48px;border-radius:8px;margin-bottom:8px;display:flex;align-items:center;justify-content:center;gap:4px;font-size:9px;font-weight:700;letter-spacing:.3px;overflow:hidden}
-.theme-card .tc-name{font-size:12px;font-weight:700;color:var(--text)}
-.theme-card .tc-sub{font-size:10px;color:var(--muted);margin-top:2px}
-
-/* Previews palettes */
-.prev-mysifa{background:#0a0e17;color:#22d3ee}
-.prev-mysifa .dot{width:8px;height:8px;border-radius:50%;background:#22d3ee}
-.prev-forge{background:#1A2332;color:#3A7BD5}
-.prev-forge .dot{width:8px;height:8px;border-radius:50%;background:#3A7BD5}
-.prev-cocon{background:#1f0e14;color:#e8729a}
-.prev-cocon .dot{width:8px;height:8px;border-radius:50%;background:#e8729a}
-.prev-mysifa-l{background:linear-gradient(135deg,#f1f5f9,#e2e8f0);color:#0891b2}
-.prev-forge-l{background:linear-gradient(135deg,#F4F6FA,#dce3ef);color:#3A7BD5}
-.prev-cocon-l{background:linear-gradient(135deg,#fdf8f5,#f0ddd8);color:#c4577a}
-
-/* Previews styles */
-.prev-defaut{background:var(--card);border-radius:8px;display:flex;gap:4px;padding:4px}
-.prev-defaut .b{height:24px;flex:1;border-radius:6px;background:var(--border)}
-.prev-mini{background:var(--card);border-radius:2px;display:flex;gap:3px;padding:4px}
-.prev-mini .b{height:24px;flex:1;border-radius:2px;background:var(--border)}
-.prev-round{background:var(--card);border-radius:14px;display:flex;gap:4px;padding:5px}
-.prev-round .b{height:24px;flex:1;border-radius:12px;background:var(--border)}
-
-/* Toggle mode */
+.tc-preview{height:44px;border-radius:8px;margin-bottom:8px;
+  display:flex;align-items:center;justify-content:center;gap:4px;overflow:hidden}
+.tc-name{font-size:12px;font-weight:700;color:var(--text)}
+.tc-sub{font-size:10px;color:var(--muted);margin-top:2px}
 .mode-toggle{display:flex;gap:10px}
-.mode-card{flex:1;border:2px solid var(--border);border-radius:12px;padding:14px 12px;cursor:pointer;transition:border-color .15s,background .15s;background:var(--bg);text-align:center;display:flex;align-items:center;gap:10px;justify-content:center}
+.mode-card{flex:1;border:2px solid var(--border);border-radius:12px;padding:14px 12px;
+  cursor:pointer;transition:border-color .15s,background .15s;
+  background:var(--bg);display:flex;align-items:center;gap:10px;justify-content:center}
 .mode-card:hover{border-color:var(--accent);background:var(--accent-bg)}
 .mode-card.selected{border-color:var(--accent);background:var(--accent-bg)}
-.mode-ico{font-size:22px}
+.mode-ico{display:inline-flex;align-items:center}
 .mode-label{font-size:13px;font-weight:700;color:var(--text)}
 .mode-sub{font-size:10px;color:var(--muted)}
-
-.btn-prefs-save{width:100%;background:var(--accent);color:#0a0e17;border:none;border-radius:10px;padding:12px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit;margin-top:8px;transition:filter .15s}
+.btn-prefs-save{width:100%;background:var(--accent);color:#0a0e17;border:none;
+  border-radius:10px;padding:12px;font-weight:700;font-size:14px;cursor:pointer;
+  font-family:inherit;margin-top:4px;transition:filter .15s}
 .btn-prefs-save:hover{filter:brightness(1.06)}
 .pref-hint{font-size:11px;color:var(--muted);text-align:center;margin-top:10px;line-height:1.5}
 </style>
 </head>
-<body>
-<div class="shell">
-  <div class="top">
-    <div>
-      <div class="brand">My<span>Sifa</span></div>
-      <div class="brand-sub">Mon profil</div>
+<body class="has-topbar">
+
+<div class="sidebar-overlay" id="sb-ov" onclick="closeSidebar()"></div>
+
+<div class="layout">
+
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-brand">My<span>Sifa</span></div>
+      <div class="logo-sub">Mon profil</div>
     </div>
-    <div class="top-actions">
-      <a class="back-link" href="/" title="Retour au portail">← Portail</a>
-      <button type="button" class="btn-icon" id="btn-logout" title="Déconnexion" aria-label="Déconnexion">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+
+    <button type="button" class="nav-btn active" id="nav-info" onclick="showTab('info')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      Mes informations
+    </button>
+    <button type="button" class="nav-btn" id="nav-prefs" onclick="showTab('prefs')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></svg>
+      Mes préférences
+    </button>
+
+    <div class="sidebar-bottom">
+      <button type="button" class="nav-btn back-mysifa" onclick="location.href='/'">
+        ← Retour <span class="wm">My<span>Sifa</span></span>
       </button>
+      <div class="user-chip" onclick="location.href='/profil'" title="Mon profil">
+        <div class="uc-name" id="uc-name">—</div>
+        <div class="uc-role" id="uc-role">—</div>
+      </div>
+      <button type="button" class="theme-btn" id="btn-theme">
+        <span class="theme-ico" id="theme-ico">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </span>
+        <span class="theme-label" id="theme-label">Mode clair</span>
+      </button>
+      <button type="button" class="logout-btn" id="btn-logout">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        Déconnexion
+      </button>
+      <div class="version">Mon profil · __V_LABEL__</div>
     </div>
-  </div>
+  </aside>
 
-  <!-- Onglets -->
-  <div class="tabs">
-    <button class="tab-btn active" id="tab-info" onclick="showTab('info')">Mes informations</button>
-    <button class="tab-btn" id="tab-prefs" onclick="showTab('prefs')">Mes préférences</button>
-  </div>
+  <!-- ── Main ── -->
+  <main class="main">
+    <div class="container">
 
-  <!-- Contenu onglets -->
-  <div id="pane-info"><div class="loading">Chargement…</div></div>
-  <div id="pane-prefs" style="display:none"></div>
+      <!-- Topbar mobile -->
+      <div class="mobile-topbar">
+        <button type="button" class="mobile-menu-btn" onclick="toggleSidebar()" aria-label="Menu">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <div>
+          <div class="mobile-topbar-title">Mon profil</div>
+          <div class="mobile-topbar-sub" id="mobile-sub">Mes informations</div>
+        </div>
+        <button type="button" class="mobile-home-btn" onclick="location.href='/'" aria-label="Accueil">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/><path d="M10 21v-6h4v6"/></svg>
+        </button>
+      </div>
+
+      <h1>Mon profil</h1>
+      <p class="subtitle" id="page-sub">Vos informations personnelles.</p>
+
+      <!-- Onglet Mes informations -->
+      <div class="pane-tab active" id="pane-info">
+        <div class="loading">Chargement…</div>
+      </div>
+
+      <!-- Onglet Mes préférences -->
+      <div class="pane-tab" id="pane-prefs"></div>
+
+    </div>
+  </main>
 </div>
+
 <script src="/static/support_widget.js"></script>
 <script>
-const ROLE_LABELS={direction:'Direction',administration:'Administration',fabrication:'Fabrication',logistique:'Logistique',comptabilite:'Comptabilité',expedition:'Expédition',commercial:'Commercial',superadmin:'Super admin'};
+const ROLE_LABELS={
+  direction:'Direction',administration:'Administration',fabrication:'Fabrication',
+  logistique:'Logistique',comptabilite:'Comptabilité',expedition:'Expédition',
+  commercial:'Commercial',superadmin:'Super admin'
+};
+
 let ME=null;
-
-// ─── État préférences (depuis localStorage) ───────────────────────
 let PREFS={palette:'mysifa',style:'defaut',mode:'dark'};
+let CURRENT_TAB='info';
 
+// ── SVG helpers ───────────────────────────────────────────────────
+const ICO_MOON=`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
+const ICO_SUN=`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
+const ICO_CHECK=`<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0a0e17" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+
+// ── Préférences ───────────────────────────────────────────────────
 function loadPrefsFromStorage(){
   const p=localStorage.getItem('mysifa_palette');
   const s=localStorage.getItem('mysifa_style');
@@ -214,14 +347,17 @@ function loadPrefsFromStorage(){
 
 function applyPrefsToDOM(){
   const b=document.body;
-  // Mode
   b.classList.toggle('light',PREFS.mode==='light');
-  // Palette
   b.classList.remove('palette-forge','palette-cocon');
   if(PREFS.palette!=='mysifa')b.classList.add('palette-'+PREFS.palette);
-  // Style
   b.classList.remove('style-mini','style-round');
   if(PREFS.style!=='defaut')b.classList.add('style-'+PREFS.style);
+  // Mettre à jour le bouton thème
+  const isLight=PREFS.mode==='light';
+  const ico=document.getElementById('theme-ico');
+  const lbl=document.getElementById('theme-label');
+  if(ico)ico.innerHTML=isLight?ICO_SUN:ICO_MOON;
+  if(lbl)lbl.textContent=isLight?'Mode sombre':'Mode clair';
 }
 
 function savePrefsToStorage(){
@@ -230,7 +366,11 @@ function savePrefsToStorage(){
   localStorage.setItem('theme',PREFS.mode);
 }
 
-// ─── UI helpers ───────────────────────────────────────────────────
+// ── Sidebar mobile ────────────────────────────────────────────────
+function toggleSidebar(){document.body.classList.toggle('sb-open');}
+function closeSidebar(){document.body.classList.remove('sb-open');}
+
+// ── Toast ─────────────────────────────────────────────────────────
 function toast(msg,ok){
   const t=document.createElement('div');
   t.className='toast '+(ok?'ok':'err');
@@ -239,6 +379,7 @@ function toast(msg,ok){
   setTimeout(()=>t.remove(),3200);
 }
 
+// ── API ───────────────────────────────────────────────────────────
 async function api(path,opts){
   const r=await fetch(path,{credentials:'include',...opts});
   if(r.status===401){location.href='/?next=/profil';throw new Error('auth');}
@@ -257,20 +398,26 @@ function fD(iso){
   if(!iso)return '';
   try{return new Date(iso).toLocaleString('fr-FR',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});}catch(e){return iso;}
 }
-
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');}
 
-// ─── Onglets ──────────────────────────────────────────────────────
+// ── Onglets ───────────────────────────────────────────────────────
 function showTab(tab){
-  document.getElementById('pane-info').style.display=tab==='info'?'':'none';
-  document.getElementById('pane-prefs').style.display=tab==='prefs'?'':'none';
-  document.getElementById('tab-info').classList.toggle('active',tab==='info');
-  document.getElementById('tab-prefs').classList.toggle('active',tab==='prefs');
+  CURRENT_TAB=tab;
+  ['info','prefs'].forEach(id=>{
+    document.getElementById('pane-'+id).classList.toggle('active',id===tab);
+    document.getElementById('nav-'+id).classList.toggle('active',id===tab);
+  });
+  const subLabels={info:'Informations personnelles',prefs:'Apparence et thème'};
+  const sub=document.getElementById('mobile-sub');
+  if(sub)sub.textContent=subLabels[tab]||'';
+  const pageSub=document.getElementById('page-sub');
+  if(pageSub)pageSub.textContent=tab==='info'?'Vos informations personnelles et mot de passe.':'Personnalisez l\'apparence de MySifa.';
   if(tab==='prefs')renderPrefs();
+  closeSidebar();
 }
 
-// ─── Onglet Mes informations ──────────────────────────────────────
-function field(label,id,type,val){
+// ── Onglet Mes informations ───────────────────────────────────────
+function fieldHtml(label,id,type,val){
   return `<div class="field"><label for="${id}">${label}</label><input id="${id}" type="${type||'text'}" value="${esc(val)}"></div>`;
 }
 
@@ -280,18 +427,17 @@ function renderInfo(){
   document.getElementById('pane-info').innerHTML=`
     <div class="card">
       <div class="role-pill">${esc(role)}</div>
-      <h1>Mes informations</h1>
-      <p class="sub">Modifiez vos informations personnelles et votre mot de passe.</p>
+      <h2>Informations personnelles</h2>
       <form id="profil-form" onsubmit="return false;">
-        ${field('Nom complet','f-nom','text',u.nom)}
-        ${field('Email','f-email','email',u.email)}
-        ${field('Téléphone','f-tel','tel',u.telephone)}
-        ${field('Adresse','f-addr','text',u.adresse)}
-        ${field('Date de naissance','f-birth','date',u.date_naissance)}
+        ${fieldHtml('Nom complet','f-nom','text',u.nom)}
+        ${fieldHtml('Email','f-email','email',u.email)}
+        ${fieldHtml('Téléphone','f-tel','tel',u.telephone)}
+        ${fieldHtml('Adresse','f-addr','text',u.adresse)}
+        ${fieldHtml('Date de naissance','f-birth','date',u.date_naissance)}
         <hr>
-        ${field('Mot de passe actuel','f-cur-pwd','password','')}
-        ${field('Nouveau mot de passe','f-pwd','password','')}
-        ${field('Confirmer le mot de passe','f-pwd2','password','')}
+        ${fieldHtml('Mot de passe actuel','f-cur-pwd','password','')}
+        ${fieldHtml('Nouveau mot de passe','f-pwd','password','')}
+        ${fieldHtml('Confirmer','f-pwd2','password','')}
         <button type="button" class="btn-save" id="btn-save">Enregistrer</button>
         <div class="meta">
           ${u.created_at?`<div>Créé le ${esc(fD(u.created_at))}</div>`:''}
@@ -321,6 +467,7 @@ async function saveInfo(){
     ME=await api('/api/auth/me');
     toast('Profil mis à jour',true);
     renderInfo();
+    updateUserChip();
   }catch(e){
     toast(e.message||'Enregistrement impossible',false);
   }finally{
@@ -328,41 +475,73 @@ async function saveInfo(){
   }
 }
 
-// ─── Onglet Mes préférences ───────────────────────────────────────
-function checkMark(){
-  return `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0a0e17" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
-}
+// ── Onglet Mes préférences ────────────────────────────────────────
+const PALETTE_DEF=[
+  {id:'mysifa', name:'MySifa',   sub:'Cyan · défaut',
+    prev:`<div style="background:#0a0e17;width:100%;height:100%;border-radius:6px;display:flex;align-items:center;justify-content:center;gap:5px">
+      <div style="width:9px;height:9px;border-radius:50%;background:#22d3ee"></div>
+      <div style="width:9px;height:9px;border-radius:50%;background:#22d3ee;opacity:.5"></div>
+      <div style="width:9px;height:9px;border-radius:50%;background:#22d3ee;opacity:.25"></div>
+    </div>`},
+  {id:'forge',  name:'Marine',   sub:'Ambre · navy',
+    prev:`<div style="background:#0c1422;width:100%;height:100%;border-radius:6px;display:flex;align-items:center;justify-content:center;gap:5px">
+      <div style="width:9px;height:9px;border-radius:50%;background:#F0A500"></div>
+      <div style="width:9px;height:9px;border-radius:50%;background:#4A8FE8;opacity:.8"></div>
+      <div style="width:9px;height:9px;border-radius:50%;background:#F0A500;opacity:.4"></div>
+    </div>`},
+  {id:'cocon',  name:'Pivoine',  sub:'Rose vif · magenta',
+    prev:`<div style="background:#1a0a14;width:100%;height:100%;border-radius:6px;display:flex;align-items:center;justify-content:center;gap:5px">
+      <div style="width:9px;height:9px;border-radius:50%;background:#ff5c98"></div>
+      <div style="width:9px;height:9px;border-radius:50%;background:#ff5c98;opacity:.55"></div>
+      <div style="width:9px;height:9px;border-radius:50%;background:#f0b240;opacity:.7"></div>
+    </div>`},
+];
 
-function palCard(id,name,sub,prevClass,dotColor){
-  const sel=PREFS.palette===id?'selected':'';
-  return `<div class="theme-card ${sel}" onclick="selectPalette('${id}')">
-    <div class="tc-check">${checkMark()}</div>
-    <div class="tc-preview ${prevClass}">
-      <div style="width:8px;height:8px;border-radius:50%;background:${dotColor}"></div>
-      <div style="width:8px;height:8px;border-radius:50%;background:${dotColor};opacity:.5"></div>
-      <div style="width:8px;height:8px;border-radius:50%;background:${dotColor};opacity:.25"></div>
-    </div>
-    <div class="tc-name">${name}</div>
-    <div class="tc-sub">${sub}</div>
+const STYLE_DEF=[
+  {id:'defaut', name:'Défaut',   sub:'Équilibré · tech',
+    prev:`<div style="display:flex;gap:3px;width:100%">
+      <div style="height:18px;flex:1;border-radius:6px;background:var(--border)"></div>
+      <div style="height:18px;flex:1;border-radius:6px;background:var(--border)"></div>
+      <div style="height:18px;flex:1;border-radius:6px;background:var(--border)"></div>
+    </div>`},
+  {id:'mini',   name:'Compact',  sub:'Serré · monospace',
+    prev:`<div style="display:flex;gap:2px;width:100%;font-family:monospace">
+      <div style="height:18px;flex:1;border-radius:2px;background:var(--border);display:flex;align-items:center;justify-content:center;font-size:7px;color:var(--muted)">_</div>
+      <div style="height:18px;flex:1;border-radius:2px;background:var(--border)"></div>
+      <div style="height:18px;flex:1;border-radius:2px;background:var(--border)"></div>
+    </div>`},
+  {id:'round',  name:'Aéré',     sub:'Doux · arrondi',
+    prev:`<div style="display:flex;gap:3px;width:100%">
+      <div style="height:18px;flex:1;border-radius:12px;background:var(--border)"></div>
+      <div style="height:18px;flex:1;border-radius:12px;background:var(--border)"></div>
+      <div style="height:18px;flex:1;border-radius:12px;background:var(--border)"></div>
+    </div>`},
+];
+
+function palCard(p){
+  const sel=PREFS.palette===p.id?'selected':'';
+  return `<div class="theme-card ${sel}" onclick="selectPalette('${p.id}')">
+    <div class="tc-check">${ICO_CHECK}</div>
+    <div class="tc-preview">${p.prev}</div>
+    <div class="tc-name">${p.name}</div>
+    <div class="tc-sub">${p.sub}</div>
   </div>`;
 }
 
-function styleCard(id,name,sub,innerHtml){
-  const sel=PREFS.style===id?'selected':'';
-  return `<div class="theme-card ${sel}" onclick="selectStyle('${id}')">
-    <div class="tc-check">${checkMark()}</div>
-    <div class="tc-preview" style="background:var(--card);padding:6px;gap:3px;border-radius:8px">
-      ${innerHtml}
-    </div>
-    <div class="tc-name">${name}</div>
-    <div class="tc-sub">${sub}</div>
+function styleCard(s){
+  const sel=PREFS.style===s.id?'selected':'';
+  return `<div class="theme-card ${sel}" onclick="selectStyle('${s.id}')">
+    <div class="tc-check">${ICO_CHECK}</div>
+    <div class="tc-preview" style="background:var(--card);padding:6px;border-radius:6px">${s.prev}</div>
+    <div class="tc-name">${s.name}</div>
+    <div class="tc-sub">${s.sub}</div>
   </div>`;
 }
 
-function modeCard(id,ico,label,sub){
+function modeCard(id,icoSvg,label,sub){
   const sel=PREFS.mode===id?'selected':'';
   return `<div class="mode-card ${sel}" onclick="selectMode('${id}')">
-    <span class="mode-ico">${ico}</span>
+    <span class="mode-ico">${icoSvg}</span>
     <div>
       <div class="mode-label">${label}</div>
       <div class="mode-sub">${sub}</div>
@@ -371,70 +550,35 @@ function modeCard(id,ico,label,sub){
 }
 
 function renderPrefs(){
-  const styleBlocks={
-    defaut:`<div style="height:18px;flex:1;border-radius:6px;background:var(--border)"></div><div style="height:18px;flex:1;border-radius:6px;background:var(--border)"></div><div style="height:18px;flex:1;border-radius:6px;background:var(--border)"></div>`,
-    mini:`<div style="height:18px;flex:1;border-radius:2px;background:var(--border);font-size:8px;font-family:monospace;display:flex;align-items:center;justify-content:center;color:var(--muted)">_</div><div style="height:18px;flex:1;border-radius:2px;background:var(--border)"></div><div style="height:18px;flex:1;border-radius:2px;background:var(--border)"></div>`,
-    round:`<div style="height:18px;flex:1;border-radius:12px;background:var(--border)"></div><div style="height:18px;flex:1;border-radius:12px;background:var(--border)"></div><div style="height:18px;flex:1;border-radius:12px;background:var(--border)"></div>`
-  };
-
   document.getElementById('pane-prefs').innerHTML=`
     <div class="card">
-      <h1>Mes préférences</h1>
-      <p class="sub">Personnalisez l'apparence de MySifa selon vos goûts.</p>
-
+      <h2>Palette de couleurs</h2>
       <div class="pref-section">
-        <div class="pref-section-title">Palette de couleurs</div>
-        <div class="theme-grid" id="palette-grid">
-          ${palCard('mysifa','MySifa','Cyan · défaut','prev-mysifa','#22d3ee')}
-          ${palCard('forge','Forge','Bleu marine · ambre','prev-forge','#3A7BD5')}
-          ${palCard('cocon','Cocon','Pivoine · rosé','prev-cocon','#e8729a')}
+        <div class="theme-grid">${PALETTE_DEF.map(palCard).join('')}</div>
+      </div>
+      <h2 style="margin-top:20px">Style de l'interface</h2>
+      <div class="pref-section">
+        <div class="theme-grid">${STYLE_DEF.map(styleCard).join('')}</div>
+      </div>
+      <h2 style="margin-top:20px">Mode d'affichage</h2>
+      <div class="pref-section">
+        <div class="mode-toggle">
+          ${modeCard('dark', ICO_MOON, 'Sombre', 'Fond foncé')}
+          ${modeCard('light', ICO_SUN,  'Clair',  'Fond blanc')}
         </div>
       </div>
-
-      <div class="pref-section">
-        <div class="pref-section-title">Style de l'interface</div>
-        <div class="theme-grid" id="style-grid">
-          ${styleCard('defaut','Défaut','Équilibré · tech',`<div style="display:flex;gap:3px;width:100%">${styleBlocks.defaut}</div>`)}
-          ${styleCard('mini','Compact','Serré · monospace',`<div style="display:flex;gap:2px;width:100%">${styleBlocks.mini}</div>`)}
-          ${styleCard('round','Aéré','Doux · arrondi',`<div style="display:flex;gap:3px;width:100%">${styleBlocks.round}</div>`)}
-        </div>
-      </div>
-
-      <div class="pref-section">
-        <div class="pref-section-title">Mode d'affichage</div>
-        <div class="mode-toggle" id="mode-toggle">
-          ${modeCard('dark','🌙','Sombre','Fond foncé')}
-          ${modeCard('light','☀','Clair','Fond blanc')}
-        </div>
-      </div>
-
-      <button class="btn-prefs-save" onclick="savePrefs()">Appliquer les préférences</button>
-      <p class="pref-hint">Les préférences s'appliquent immédiatement sur toutes les pages.</p>
+      <button class="btn-prefs-save" onclick="savePrefs()">Appliquer</button>
+      <p class="pref-hint">Les préférences s'appliquent sur toutes les pages MySifa.</p>
     </div>`;
 }
 
-function selectPalette(id){
-  PREFS.palette=id;
-  renderPrefs();
-  applyPrefsToDOM();
-}
-
-function selectStyle(id){
-  PREFS.style=id;
-  renderPrefs();
-  applyPrefsToDOM();
-}
-
-function selectMode(id){
-  PREFS.mode=id;
-  renderPrefs();
-  applyPrefsToDOM();
-}
+function selectPalette(id){PREFS.palette=id;renderPrefs();applyPrefsToDOM();}
+function selectStyle(id){PREFS.style=id;renderPrefs();applyPrefsToDOM();}
+function selectMode(id){PREFS.mode=id;renderPrefs();applyPrefsToDOM();}
 
 async function savePrefs(){
   savePrefsToStorage();
   applyPrefsToDOM();
-  // Sync serveur
   try{
     await api('/api/auth/me',{
       method:'PUT',
@@ -443,25 +587,40 @@ async function savePrefs(){
     });
     toast('Préférences enregistrées',true);
   }catch(e){
-    // Ne pas bloquer si serveur échoue — localStorage est déjà à jour
     toast('Préférences appliquées localement',true);
   }
 }
 
-// ─── Déconnexion ──────────────────────────────────────────────────
+// ── Sidebar bottom : user chip + theme toggle + logout ────────────
+function updateUserChip(){
+  if(!ME)return;
+  const n=document.getElementById('uc-name');
+  const r=document.getElementById('uc-role');
+  if(n)n.textContent=ME.nom||'—';
+  if(r)r.textContent=ROLE_LABELS[ME.role]||ME.role||'—';
+}
+
+document.getElementById('btn-theme').onclick=()=>{
+  PREFS.mode=PREFS.mode==='light'?'dark':'light';
+  savePrefsToStorage();
+  applyPrefsToDOM();
+  // Sync si pane-prefs visible
+  if(CURRENT_TAB==='prefs')renderPrefs();
+};
+
 document.getElementById('btn-logout').onclick=async()=>{
   try{await fetch('/api/auth/logout',{method:'POST',credentials:'include'});}catch(e){}
   location.href='/';
 };
 
-// ─── Init ─────────────────────────────────────────────────────────
+// ── Init ──────────────────────────────────────────────────────────
 (async function init(){
   loadPrefsFromStorage();
   applyPrefsToDOM();
 
   try{
     ME=await api('/api/auth/me');
-    // Sync depuis serveur si des préfs y sont sauvegardées
+    // Sync préfs depuis serveur
     if(ME&&ME.theme_prefs){
       try{
         const sp=typeof ME.theme_prefs==='string'?JSON.parse(ME.theme_prefs):ME.theme_prefs;
@@ -474,10 +633,11 @@ document.getElementById('btn-logout').onclick=async()=>{
         }
       }catch(e){}
     }
+    updateUserChip();
     renderInfo();
   }catch(e){
     if(e.message!=='auth'){
-      document.getElementById('pane-info').innerHTML='<div class="card"><p class="sub">Impossible de charger le profil.</p></div>';
+      document.getElementById('pane-info').innerHTML='<div class="card"><p style="color:var(--muted);font-size:13px">Impossible de charger le profil.</p></div>';
     }
   }
 })();
