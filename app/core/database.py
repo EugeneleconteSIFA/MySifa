@@ -1350,6 +1350,35 @@ def _migrate(conn):
             conn.execute("ALTER TABLE planning_entries ADD COLUMN exigences_production TEXT")
         _record_schema_migration(conn, 25, "planning_exigences_production")
 
+    # v26 — Jours fériés nationaux 2026 (planning + calendrier)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=26 LIMIT 1").fetchone():
+        feries_2026 = [
+            ("2026-01-01", "Jour de l'an"),
+            ("2026-04-06", "Lundi de Pâques"),
+            ("2026-05-01", "Fête du Travail"),
+            ("2026-05-08", "Victoire des Alliés 1945"),
+            ("2026-05-14", "Jeudi de l'Ascension"),
+            ("2026-05-25", "Lundi de Pentecôte"),
+            ("2026-07-14", "Fête Nationale"),
+            ("2026-08-15", "Assomption"),
+            ("2026-11-01", "La Toussaint"),
+            ("2026-11-11", "Armistice 1918"),
+            ("2026-12-25", "Noël"),
+        ]
+        conn.execute("DELETE FROM planning_holidays")
+        machine_ids = [
+            int(r[0])
+            for r in conn.execute("SELECT id FROM machines ORDER BY id").fetchall()
+        ]
+        for machine_id in machine_ids:
+            for date_str, label in feries_2026:
+                conn.execute(
+                    """INSERT INTO planning_holidays (machine_id, date, is_off, label)
+                       VALUES (?, ?, 1, ?)""",
+                    (machine_id, date_str, label),
+                )
+        _record_schema_migration(conn, 26, "feries_nationaux_2026")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

@@ -7,7 +7,8 @@
     "start": "electron .",
     "build": "electron-builder",
     "build:win": "electron-builder --win",
-    "build:mac": "electron-builder --mac"
+    "build:mac": "electron-builder --mac",
+    "icons": "python3 scripts/generate_icons.py"
   },
   "keywords": ["mysifa", "production", "widget", "industrie"],
   "author": "SIFA",
@@ -25,10 +26,10 @@
     "files": [
       "main.js",
       "preload.js",
-      "assets/**/*"
+      "assets/**"
     ],
     "asarUnpack": [
-      "assets/**/*"
+      "assets/**"
     ],
     "mac": {
       "category": "public.app-category.utilities",

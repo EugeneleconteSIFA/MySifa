@@ -60,12 +60,23 @@ Changez `"version"` dans `package.json`, recompilez, et recopiez dans `dist/`.
 
 ---
 
-## Icône
+## Icônes (usine + couleurs MySifa)
 
-Placez une image PNG 512×512 dans `assets/icon.png`.
-Electron-builder la convertit automatiquement en `.icns` (macOS) et `.ico` (Windows).
+Générer ou régénérer les PNG à partir du SVG usine :
 
-Si `assets/icon.png` est absent, electron-builder utilise une icône Electron par défaut.
+```bash
+cd myprod-widget
+python3 scripts/generate_icons.py
+```
+
+Produit dans `assets/` :
+- `icon.png` (512×512) — icône application, installateur NSIS/DMG
+- `trayTemplate.png` / `trayTemplate@2x.png` — barre menu macOS (template noir)
+- `trayWin16.png` / `trayWin32.png` — zone de notification Windows (cyan MySifa)
+
+Copie aussi les favicons vers `static/widget-favicon*.png` pour la page `/install/widget`.
+
+Après modification des icônes, recompiler (`npm run build:win` / `build:mac`) et redéployer `dist/`.
 
 ---
 

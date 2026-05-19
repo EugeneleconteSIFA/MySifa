@@ -6,11 +6,15 @@ WIDGET_HTML = r"""<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>MyProd Widget</title>
+<link rel="icon" href="/static/widget-favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/widget-favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/static/widget-favicon-16.png">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
   --bg:#0a0e17;--card:#111827;--border:#1e293b;
-  --text:#e2e8f0;--muted:#64748b;--accent:#38bdf8;
+  --text:#f1f5f9;--text2:#cbd5e1;--muted:#94a3b8;--accent:#22d3ee;
+  --accent-bg:rgba(34,211,238,0.12);
 }
 html,body{
   background:var(--bg);color:var(--text);
@@ -19,7 +23,8 @@ html,body{
 }
 body.light{
   --bg:#f1f5f9;--card:#ffffff;--border:#e2e8f0;
-  --text:#0f172a;--muted:#64748b;--accent:#0891b2;
+  --text:#0f172a;--text2:#334155;--muted:#64748b;--accent:#0891b2;
+  --accent-bg:rgba(8,145,178,0.12);
 }
 /* ── Barre titre (déplaçable dans Electron) ── */
 .tb{
@@ -29,7 +34,11 @@ body.light{
   background:var(--card);border-bottom:1px solid var(--border);
   flex-shrink:0;
 }
-.tb-title{font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.3px;display:flex;align-items:center;gap:5px}
+.tb-brand{display:flex;align-items:center;gap:5px;-webkit-app-region:drag;min-width:0}
+.tb-ico{display:inline-flex;align-items:center;color:var(--accent);flex-shrink:0}
+.tb-ico svg{display:block}
+.tb-name{font-size:11px;font-weight:800;color:var(--text);letter-spacing:-.2px;white-space:nowrap}
+.tb-name .tb-accent{color:var(--accent)}
 .tb-sync{
   font-size:8px;font-weight:500;color:var(--muted);letter-spacing:0;
   line-height:1;white-space:nowrap;
@@ -40,9 +49,12 @@ body.light{
   background:none;border:none;color:var(--muted);cursor:pointer;
   padding:2px 5px;border-radius:5px;font-size:12px;line-height:1;
   transition:background .15s,color .15s;
+  display:inline-flex;align-items:center;justify-content:center;
 }
+.bi svg{display:block}
 .bi:hover{color:var(--text);background:rgba(255,255,255,.07)}
-.bi.close:hover{color:#ef4444}
+body.light .bi:hover{background:rgba(15,23,42,.06)}
+.bi.close:hover{color:var(--danger,#f87171)}
 /* ── Grille cartes ── */
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px}
 .card{
@@ -94,7 +106,7 @@ body.light{
   padding:14px 12px;gap:10px;font-size:12px;color:var(--muted);
 }
 .offline a{color:var(--accent);text-decoration:none;font-size:11px;padding:5px 12px;border:1px solid var(--accent);border-radius:6px}
-.offline a:hover{background:rgba(56,189,248,.1)}
+.offline a:hover{background:var(--accent-bg)}
 
 /* login */
 .login{
@@ -108,7 +120,7 @@ body.light{
   background:var(--bg);border:1px solid var(--border);border-radius:10px;
   padding:10px 12px;color:var(--text);font-size:12px;outline:none;
 }
-.login-row input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(56,189,248,.12)}
+.login-row input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
 .login-actions{display:flex;gap:8px;align-items:center}
 .btn{
   border-radius:10px;padding:9px 12px;font-weight:800;cursor:pointer;border:1px solid transparent;
@@ -130,17 +142,24 @@ body.light{
 </head>
 <body>
 <div class="tb">
-  <span class="tb-title">🏭 MyProd Widget</span>
+  <span class="tb-brand">
+    <span class="tb-ico" id="tb-ico" aria-hidden="true"></span>
+    <span class="tb-name">My<span class="tb-accent">Prod</span> Widget</span>
+  </span>
   <span class="tb-sync" id="footer"></span>
   <div class="tb-actions">
     <button class="bi" id="btn-refresh" title="Actualiser">↺</button>
-    <button class="bi" id="btn-theme" title="Thème">◐</button>
+    <button class="bi" id="btn-theme" type="button" title="Thème"></button>
     <button class="bi close" id="btn-close" title="Fermer">✕</button>
   </div>
 </div>
 <div id="main"><div class="offline"><span class="spin">↺</span></div></div>
 
 <script>
+const SVG_ATTR='width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
+const ICON_FACTORY=`<svg width="14" height="14" viewBox="0 0 64 64" fill="currentColor" aria-hidden="true"><path d="M10 54V28l12-10v-6h6v6l4 3V12h6v14l16 13v15H10Z"/><path d="M16 48h32V41H16v7Z"/><path d="M16 35h32v-6.3L32 20.6 16 28.7V35Z"/><path d="M22 46h4v6h-4v-6Z"/><path d="M30 46h4v6h-4v-6Z"/><path d="M38 46h4v6h-4v-6Z"/></svg>`;
+const ICON_SUN=`<svg ${SVG_ATTR}><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
+const ICON_MOON=`<svg ${SVG_ATTR}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
 const ICONS={production:'▶',calage:'⚙',arret:'⛔',changement:'↻',nettoyage:'🧹',eteinte:'○',autre:'·'};
 const DL={production:'En production depuis',calage:'En calage depuis',arret:'En arrêt depuis',
           changement:'En changement depuis',nettoyage:'En nettoyage depuis',eteinte:'Éteinte depuis',autre:'Depuis'};
@@ -293,10 +312,18 @@ async function load(){
 load();
 setInterval(load,30000);
 
+function syncThemeBtn(){
+  const btn=document.getElementById('btn-theme');
+  if(!btn) return;
+  const light=document.body.classList.contains('light');
+  btn.innerHTML=light?ICON_SUN:ICON_MOON;
+  btn.title=light?'Mode clair':'Mode sombre';
+}
 function applyTheme(mode){
   const light = mode === 'light';
   document.body.classList.toggle('light', light);
   try{ localStorage.setItem('mysifa_widget_theme', light ? 'light' : 'dark'); }catch(_){}
+  syncThemeBtn();
 }
 function toggleTheme(){
   const isLight = document.body.classList.contains('light');
@@ -305,14 +332,16 @@ function toggleTheme(){
 try{
   const saved = localStorage.getItem('mysifa_widget_theme');
   if(saved === 'light' || saved === 'dark') applyTheme(saved);
-}catch(_){}
+  else syncThemeBtn();
+}catch(_){ syncThemeBtn(); }
+document.getElementById('tb-ico').innerHTML=ICON_FACTORY;
 
 document.getElementById('btn-refresh').onclick=()=>{
   const btn=document.getElementById('btn-refresh');
   btn.textContent='↺'; btn.classList.add('spin');
   load().finally(()=>{btn.classList.remove('spin');});
 };
-document.getElementById('btn-theme').onclick=()=>{ toggleTheme(); };
+document.getElementById('btn-theme').onclick=()=>toggleTheme();
 document.getElementById('btn-close').onclick=()=>{
   if(window.electronAPI)window.electronAPI.close();
   else window.close();

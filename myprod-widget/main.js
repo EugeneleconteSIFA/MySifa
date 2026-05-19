@@ -16,11 +16,41 @@ let mainWindow = null;
 let tray       = null;
 let isQuitting = false;
 
+function assetsPath(...parts) {
+  const root = app.isPackaged
+    ? path.join(process.resourcesPath, 'app.asar.unpacked')
+    : __dirname;
+  return path.join(root, 'assets', ...parts);
+}
+
+function resolveAppIcon() {
+  const p = assetsPath('icon.png');
+  const img = nativeImage.createFromPath(p);
+  return img.isEmpty() ? undefined : img;
+}
+
+function resolveTrayIcon() {
+  const isMac = process.platform === 'darwin';
+  const file = isMac
+    ? assetsPath('trayTemplate@2x.png')
+    : assetsPath('trayWin32.png');
+  let icon = nativeImage.createFromPath(file);
+  if (icon.isEmpty()) {
+    icon = nativeImage.createFromPath(assetsPath('trayTemplate.png'));
+  }
+  if (icon.isEmpty()) return nativeImage.createEmpty();
+  if (isMac) {
+    try { icon.setTemplateImage(true); } catch (_) {}
+  }
+  return icon;
+}
+
 // ── Fenêtre principale ──────────────────────────────────────────────────────
 function createWindow() {
   mainWindow = new BrowserWindow({
     width:       CONFIG.width,
     height:      CONFIG.height,
+    icon:        resolveAppIcon(),
     frame:       false,
     alwaysOnTop: true,
     skipTaskbar: true,
@@ -49,20 +79,9 @@ function createWindow() {
 
 // ── Tray ────────────────────────────────────────────────────────────────────
 function createTray() {
-  let icon;
-  try {
-    // Icône PNG 18x18 usine, encodée en base64 — indépendante du filesystem/asar
-    // Template macOS : blanc pur, s'adapte automatiquement dark/light
-    const ICON_B64 = 'iVBORw0KGgoAAAANSUhEUgAAABIAAAASCAIAAADZrBkAAAAAMklEQVR4nGNgoBz8xwDEasPDxWcPaZYT4x6c2uBGYjKorY0YQBu/YXXeENZGTkgOSwAAgtQP/9So8NQAAAAASUVORK5CYII=';
-    icon = nativeImage.createFromDataURL('data:image/png;base64,' + ICON_B64);
-    icon.setTemplateImage(true);
-  } catch (_) {
-    icon = nativeImage.createEmpty();
-  }
-
+  const icon = resolveTrayIcon();
   tray = new Tray(icon);
   if (process.platform === 'darwin') {
-    try { icon.setTemplateImage(true); } catch (_) {}
     try { tray.setTitle(''); } catch (_) {}
     try { tray.setIgnoreDoubleClickEvents?.(true); } catch (_) {}
   }
@@ -123,7 +142,7 @@ ipcMain.on('status-alert',  (_, data) => {
   if (data.status === 'arret') {
     tray?.displayBalloon({
       iconType: 'warning',
-      title:    `⚠️ ${data.machine} — ARRÊT`,
+      title:    `${data.machine} — ARRÊT`,
       content:  `La machine est passée en statut ARRÊT`,
     });
   }
@@ -141,6 +160,13 @@ app.whenReady().then(() => {
     createTray();
     console.log('[main] tray created');
   } catch(e) { console.error('[main] createTray failed:', e); }
+
+  if (process.platform === 'darwin') {
+    const dockIcon = resolveAppIcon();
+    if (dockIcon && !dockIcon.isEmpty()) {
+      try { app.dock?.setIcon(dockIcon); } catch (_) {}
+    }
+  }
 
   try {
     const { globalShortcut } = require('electron');

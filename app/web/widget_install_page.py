@@ -6,6 +6,9 @@ WIDGET_INSTALL_HTML = r"""<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Installer MyProd Widget</title>
+<link rel="icon" href="/static/widget-favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/widget-favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/static/widget-favicon-16.png">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -48,7 +51,13 @@ body.light{
 }
 .container{max-width:none;width:100%}
 .header{position:relative;text-align:center;margin-bottom:28px}
-.header h1{font-size:22px;font-weight:700;margin-bottom:8px}
+.install-title{
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  font-size:22px;font-weight:800;margin-bottom:8px;color:var(--text);
+}
+.install-title .accent{color:var(--accent)}
+.install-ico{display:inline-flex;color:var(--accent);flex-shrink:0}
+.install-ico svg{display:block;width:28px;height:28px}
 .header p{color:var(--text2);font-size:14px}
 .theme-btn{
   position:absolute;right:0;top:0;
@@ -65,7 +74,8 @@ body.light{
   gap:8px;
 }
 .theme-btn:hover{filter:brightness(1.05)}
-.theme-btn svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;opacity:.9}
+.theme-btn .theme-ico{display:inline-flex;align-items:center}
+.theme-btn svg{width:14px;height:14px;display:block;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;opacity:.9}
 .options{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
 .option{
   background:var(--card);border:1px solid var(--border);
@@ -142,7 +152,12 @@ body.light{
 <div class="container">
   <div class="header">
     <button class="theme-btn" id="theme-btn" type="button" title="Mode sombre / mode clair"></button>
-    <h1>MyProd Widget</h1>
+    <h1 class="install-title">
+      <span class="install-ico" aria-hidden="true">
+        <svg viewBox="0 0 64 64" fill="currentColor"><path d="M10 54V28l12-10v-6h6v6l4 3V12h6v14l16 13v15H10Z"/><path d="M16 48h32V41H16v7Z"/><path d="M16 35h32v-6.3L32 20.6 16 28.7V35Z"/><path d="M22 46h4v6h-4v-6Z"/><path d="M30 46h4v6h-4v-6Z"/><path d="M38 46h4v6h-4v-6Z"/></svg>
+      </span>
+      My<span class="accent">Prod</span> Widget
+    </h1>
     <p>Surveillance des machines Cohésio 1 &amp; 2 — icône dans la barre système</p>
   </div>
 
@@ -186,14 +201,15 @@ body.light{
 
 <script>
 (function(){
-  const ICON_MOON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
-  const ICON_SUN  = `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
+  const SVG_ATTR='width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
+  const ICON_MOON = `<svg ${SVG_ATTR} aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
+  const ICON_SUN  = `<svg ${SVG_ATTR} aria-hidden="true"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
   const btn = document.getElementById('theme-btn');
 
   function syncBtn(){
     if(!btn) return;
     const isLight = document.body.classList.contains('light');
-    btn.innerHTML = (isLight ? ICON_SUN : ICON_MOON) + (isLight ? 'Mode clair' : 'Mode sombre');
+    btn.innerHTML = '<span class="theme-ico">' + (isLight ? ICON_SUN : ICON_MOON) + '</span><span class="theme-label">' + (isLight ? 'Mode clair' : 'Mode sombre') + '</span>';
   }
   function applyTheme(mode){
     const light = mode === 'light';
