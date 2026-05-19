@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 VPS_USER="root"
 VPS_IP="168.231.85.64"   # ← à remplacer
@@ -44,15 +45,25 @@ git commit -m "deploy $(date '+%Y-%m-%d %H:%M')" || true
 git push origin main
 
 # 2. Sur le VPS : pull + redémarrage
-echo "\n🖥️  Mise à jour VPS..."
-ssh $VPS_USER@$VPS_IP "
-  cd $VPS_PATH &&
-  git fetch --all &&
-  git reset --hard origin/main &&
-  chown -R sifa:sifa $VPS_PATH &&
-  systemctl restart mysifa &&
+echo ""
+echo "🖥️  Mise à jour VPS..."
+if ! ssh -o BatchMode=no -o ConnectTimeout=15 "$VPS_USER@$VPS_IP" "
+  set -e
+  cd $VPS_PATH
+  git fetch --all
+  git reset --hard origin/main
+  chown -R sifa:sifa $VPS_PATH
+  systemctl restart mysifa
   systemctl status mysifa --no-pager -l
-"
+"; then
+  echo ""
+  echo "⛔ Échec SSH / mise à jour VPS — le code GitHub est à jour, le serveur ne l'est pas."
+  echo "   Relancer manuellement (une fois connecté) :"
+  echo "   ssh $VPS_USER@$VPS_IP"
+  echo "   cd $VPS_PATH && git fetch --all && git reset --hard origin/main && chown -R sifa:sifa . && systemctl restart mysifa"
+  echo "   Installateurs widget volumineux : ./deploy.sh --widget  (scp sans repasser par git)"
+  exit 1
+fi
 
 # 2b. Upload optionnel des installateurs natifs widget (DMG/EXE) sans Git
 if [[ "$1" == "--widget" || "$2" == "--widget" || "$3" == "--widget" ]]; then
@@ -94,4 +105,5 @@ if [[ "$1" == "--uploads" || "$2" == "--uploads" ]]; then
   echo "✅ Uploads transférés."
 fi
 
-echo "\n✅ Déploiement terminé."
+echo ""
+echo "✅ Déploiement terminé."

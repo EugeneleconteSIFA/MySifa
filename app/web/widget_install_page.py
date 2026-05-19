@@ -6,9 +6,9 @@ WIDGET_INSTALL_HTML = r"""<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Installer MyProd Widget</title>
-<link rel="icon" href="/static/widget-favicon.ico" sizes="any">
-<link rel="icon" type="image/png" sizes="32x32" href="/static/widget-favicon-32.png">
-<link rel="icon" type="image/png" sizes="16x16" href="/static/widget-favicon-16.png">
+<link rel="icon" href="/static/widget-favicon.ico?v=1.0.1" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/widget-favicon-32.png?v=1.0.1">
+<link rel="icon" type="image/png" sizes="16x16" href="/static/widget-favicon-16.png?v=1.0.1">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{

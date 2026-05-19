@@ -354,8 +354,8 @@ function evOverlapsDay(ev,day){
   const dk=ymd(day);
   return ymd(startOfDay(s))<=dk&&ymd(startOfDay(e))>=dk;
 }
-/** Tranche horaire d'un événement sur un jour (vues semaine / jour). */
-function timedSliceOnDay(ev,day){
+/** Intervalle [début, fin] d'un événement sur un jour donné (ms). */
+function evClipOnDay(ev,day){
   const s=evStart(ev),e=evEnd(ev)||s;
   if(!s||!evOverlapsDay(ev,day))return null;
   const d0=startOfDay(day);
@@ -363,8 +363,15 @@ function timedSliceOnDay(ev,day){
   const clipS=s<d0?d0:s;
   const clipE=e>dEnd?dEnd:e;
   if(clipE<=clipS)return null;
-  const topMin=(clipS-d0)/60000;
-  const endMin=(clipE-d0)/60000;
+  return{start:clipS.getTime(),end:clipE.getTime()};
+}
+/** Tranche horaire d'un événement sur un jour (vues semaine / jour). */
+function timedSliceOnDay(ev,day){
+  const clip=evClipOnDay(ev,day);
+  if(!clip)return null;
+  const d0=startOfDay(day);
+  const topMin=(clip.start-d0.getTime())/60000;
+  const endMin=(clip.end-d0.getTime())/60000;
   return{top:topMin/60*48,h:Math.max(18,(endMin-topMin)/60*48)};
 }
 function evDayKey(d){return ymd(d);}
@@ -533,47 +540,48 @@ function renderMonth(p){
   return html;
 }
 
-/** Chevauchements — clusters + colonnes glouton (vues semaine / jour uniquement). */
-function layoutTimedEvents(events){
+/** Chevauchements — clusters + colonnes glouton sur la tranche du jour (pas la plage multi-jours). */
+function layoutTimedEvents(events,day){
   const layout=new Map();
-  if(!events.length)return layout;
-  const sorted=[...events].sort((a,b)=>{
-    const as=evStart(a)?.getTime()??0, bs=evStart(b)?.getTime()??0;
-    if(as!==bs)return as-bs;
-    return ((evEnd(a)||evStart(a))?.getTime()??0)-((evEnd(b)||evStart(b))?.getTime()??0);
+  const items=[];
+  for(const ev of events){
+    const clip=evClipOnDay(ev,day);
+    if(clip)items.push({ev,clip});
+  }
+  if(!items.length)return layout;
+  items.sort((a,b)=>{
+    if(a.clip.start!==b.clip.start)return a.clip.start-b.clip.start;
+    return a.clip.end-b.clip.end;
   });
   const clusters=[];
   let cluster=[];
   let clusterEnd=-Infinity;
-  for(const ev of sorted){
-    const s=evStart(ev)?.getTime();
-    const e=(evEnd(ev)||evStart(ev))?.getTime();
-    if(s==null||e==null)continue;
+  for(const it of items){
+    const s=it.clip.start,e=it.clip.end;
     if(!cluster.length||s<clusterEnd){
-      cluster.push(ev);
+      cluster.push(it);
       clusterEnd=Math.max(clusterEnd,e);
     }else{
       clusters.push(cluster);
-      cluster=[ev];
+      cluster=[it];
       clusterEnd=e;
     }
   }
   if(cluster.length)clusters.push(cluster);
   for(const cl of clusters){
     const colEnds=[];
-    const sortedCl=[...cl].sort((a,b)=>(evStart(a)-evStart(b)));
-    for(const ev of sortedCl){
-      const s=evStart(ev).getTime();
-      const e=(evEnd(ev)||evStart(ev)).getTime();
+    const sortedCl=[...cl].sort((a,b)=>a.clip.start-b.clip.start);
+    for(const it of sortedCl){
+      const s=it.clip.start,e=it.clip.end;
       let col=0;
       while(col<colEnds.length&&colEnds[col]>s)col++;
       if(col===colEnds.length)colEnds.push(e);
       else colEnds[col]=e;
-      layout.set(ev.id,{col,total:0});
+      layout.set(it.ev.id,{col,total:0});
     }
     const total=colEnds.length;
-    for(const ev of cl){
-      const o=layout.get(ev.id);
+    for(const it of cl){
+      const o=layout.get(it.ev.id);
       if(o)o.total=total;
     }
   }
@@ -649,7 +657,7 @@ function renderTimeGrid(p,colCount){
     html+='<div class="cal-col-slots">';
     for(let h=0;h<24;h++)html+='<div class="cal-slot-line" style="top:'+(h*48)+'px"></div>';
     const dayTimed=timed.filter(ev=>evOverlapsDay(ev,day));
-    const dayLayout=layoutTimedEvents(dayTimed);
+    const dayLayout=layoutTimedEvents(dayTimed,day);
     dayTimed.forEach(ev=>{
       const slice=timedSliceOnDay(ev,day);
       if(!slice)return;

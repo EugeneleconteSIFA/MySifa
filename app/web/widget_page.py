@@ -6,9 +6,9 @@ WIDGET_HTML = r"""<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>MyProd Widget</title>
-<link rel="icon" href="/static/widget-favicon.ico" sizes="any">
-<link rel="icon" type="image/png" sizes="32x32" href="/static/widget-favicon-32.png">
-<link rel="icon" type="image/png" sizes="16x16" href="/static/widget-favicon-16.png">
+<link rel="icon" href="/static/widget-favicon.ico?v=1.0.1" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/widget-favicon-32.png?v=1.0.1">
+<link rel="icon" type="image/png" sizes="16x16" href="/static/widget-favicon-16.png?v=1.0.1">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -157,7 +157,7 @@ body.light .bi:hover{background:rgba(15,23,42,.06)}
 
 <script>
 const SVG_ATTR='width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
-const ICON_FACTORY=`<svg width="14" height="14" viewBox="0 0 64 64" fill="currentColor" aria-hidden="true"><path d="M10 54V28l12-10v-6h6v6l4 3V12h6v14l16 13v15H10Z"/><path d="M16 48h32V41H16v7Z"/><path d="M16 35h32v-6.3L32 20.6 16 28.7V35Z"/><path d="M22 46h4v6h-4v-6Z"/><path d="M30 46h4v6h-4v-6Z"/><path d="M38 46h4v6h-4v-6Z"/></svg>`;
+const ICON_WAVEFORM=`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>`;
 const ICON_SUN=`<svg ${SVG_ATTR}><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
 const ICON_MOON=`<svg ${SVG_ATTR}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
 const ICONS={production:'▶',calage:'⚙',arret:'⛔',changement:'↻',nettoyage:'🧹',eteinte:'○',autre:'·'};
@@ -334,7 +334,7 @@ try{
   if(saved === 'light' || saved === 'dark') applyTheme(saved);
   else syncThemeBtn();
 }catch(_){ syncThemeBtn(); }
-document.getElementById('tb-ico').innerHTML=ICON_FACTORY;
+document.getElementById('tb-ico').innerHTML=ICON_WAVEFORM;
 
 document.getElementById('btn-refresh').onclick=()=>{
   const btn=document.getElementById('btn-refresh');
