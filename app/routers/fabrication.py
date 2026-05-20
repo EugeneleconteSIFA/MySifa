@@ -11,7 +11,6 @@ from fastapi import APIRouter, Request, HTTPException
 _PARIS = ZoneInfo("Europe/Paris")
 
 from app.services.audit_service import log_action
-from app.services.audit_service import log_action
 from database import get_db, parse_datetime
 from config import classify_operation
 from app.services.auth_service import get_current_user, is_fabrication, is_admin
@@ -24,6 +23,21 @@ _FICTIF_PREFIX = "FICTIF:"
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
+
+def _can_edit_matiere_scan(user: dict, row: dict, operateur_courant: str) -> bool:
+    """Correction traçabilité : admin, auteur du scan, ou même machine que l'utilisateur."""
+    if is_admin(user):
+        return True
+    if (row.get("operateur") or "").strip() == (operateur_courant or "").strip():
+        return True
+    uid, mid = user.get("machine_id"), row.get("machine_id")
+    if uid is not None and mid is not None:
+        try:
+            return int(uid) == int(mid)
+        except (TypeError, ValueError):
+            return False
+    return False
+
 
 def _check_fab_access(user: dict):
     """Fabrication OU admin autorisé pour cette API."""
@@ -1035,15 +1049,20 @@ async def patch_matiere(matiere_id: int, request: Request):
         ).fetchone()
         if not ex:
             raise HTTPException(status_code=404, detail="Scan non trouvé")
-        if not is_admin(user) and ex["operateur"] != operateur:
+        if not _can_edit_matiere_scan(user, dict(ex), operateur):
             raise HTTPException(status_code=403, detail="Non autorisé")
 
-        conn.execute(
-            "UPDATE fab_matieres_utilisees SET code_barre=? WHERE id=?",
-            (code_barre, matiere_id),
-        )
-        _link_matiere_to_reception(conn, matiere_id, code_barre, fournisseur_fsc_id)
-        conn.commit()
+        try:
+            conn.execute("BEGIN")
+            conn.execute(
+                "UPDATE fab_matieres_utilisees SET code_barre=? WHERE id=?",
+                (code_barre, matiere_id),
+            )
+            _link_matiere_to_reception(conn, matiere_id, code_barre, fournisseur_fsc_id)
+            conn.commit()
+        except HTTPException:
+            conn.rollback()
+            raise
 
         row = conn.execute(
             "SELECT * FROM fab_matieres_utilisees WHERE id=?", (matiere_id,)
@@ -1077,7 +1096,7 @@ async def delete_matiere(matiere_id: int, request: Request):
         ).fetchone()
         if not ex:
             raise HTTPException(status_code=404, detail="Scan non trouvé")
-        if not is_admin(user) and ex["operateur"] != operateur:
+        if not _can_edit_matiere_scan(user, dict(ex), operateur):
             raise HTTPException(status_code=403, detail="Non autorisé")
 
         conn.execute("DELETE FROM fab_matieres_utilisees WHERE id=?", (matiere_id,))
