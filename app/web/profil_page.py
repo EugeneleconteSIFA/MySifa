@@ -72,7 +72,8 @@ body{margin:0;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
   color:var(--text2);font-size:13px;font-weight:500;cursor:pointer;
   font-family:inherit;transition:background .15s,color .15s,box-shadow .2s;margin-bottom:2px;
 }
-.nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
+.nav-btn:hover{background:var(--accent-bg);color:var(--accent)}
+.nav-btn.active{background:var(--accent-bg-active,var(--accent-bg));color:var(--accent);font-weight:600}
 .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(34,211,238,.25),0 0 18px rgba(34,211,238,.15)}
 body.palette-ambre .nav-btn:hover:not(.active),body.palette-forge .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(240,165,0,.28),0 0 16px rgba(240,165,0,.14)}
 body.palette-pivoine .nav-btn:hover:not(.active),body.palette-cocon .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(240,56,136,.28),0 0 16px rgba(240,56,136,.14)}
@@ -220,7 +221,7 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
   cursor:pointer;transition:border-color .15s,background .15s;
   background:var(--bg);text-align:center;position:relative}
 .theme-card:hover{border-color:var(--accent);background:var(--accent-bg)}
-.theme-card.selected{border-color:var(--accent);background:var(--accent-bg)}
+.theme-card.selected{border-color:var(--accent);background:var(--accent-bg-active,var(--accent-bg))}
 .tc-check{position:absolute;top:7px;right:7px;width:16px;height:16px;border-radius:50%;
   background:var(--accent);display:none;align-items:center;justify-content:center}
 .theme-card.selected .tc-check{display:flex}
@@ -233,7 +234,7 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
   cursor:pointer;transition:border-color .15s,background .15s;
   background:var(--bg);display:flex;align-items:center;gap:10px;justify-content:center}
 .mode-card:hover{border-color:var(--accent);background:var(--accent-bg)}
-.mode-card.selected{border-color:var(--accent);background:var(--accent-bg)}
+.mode-card.selected{border-color:var(--accent);background:var(--accent-bg-active,var(--accent-bg))}
 .mode-ico{display:inline-flex;align-items:center}
 .mode-label{font-size:13px;font-weight:700;color:var(--text)}
 .mode-sub{font-size:10px;color:var(--muted)}

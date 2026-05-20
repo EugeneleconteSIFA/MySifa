@@ -52,7 +52,8 @@ body.palette-cocon {
   --text2: #b888a4;
   --muted: #7a4870;
   --accent: #f03888;
-  --accent-bg: rgba(240, 56, 136, 0.14);
+  --accent-bg: rgba(240, 56, 136, 0.18);
+  --accent-bg-active: rgba(240, 56, 136, 0.32);
   --filter-input-bg: #120810;
   --success: #34d399;
   --warn: #f0b240;
@@ -72,7 +73,8 @@ body.palette-cocon.light {
   --text2: #5c1840;
   --muted: #a86088;
   --accent: #c01460;
-  --accent-bg: rgba(192, 20, 96, 0.09);
+  --accent-bg: rgba(192, 20, 96, 0.12);
+  --accent-bg-active: rgba(192, 20, 96, 0.22);
   --filter-input-bg: #ffffff;
   --success: #2e7d32;
   --warn: #d06000;
@@ -93,7 +95,8 @@ body.palette-foret {
   --text2: #8fa898;
   --muted: #506058;
   --accent: #3dd67e;
-  --accent-bg: rgba(61, 214, 126, 0.13);
+  --accent-bg: rgba(61, 214, 126, 0.18);
+  --accent-bg-active: rgba(61, 214, 126, 0.32);
   --filter-input-bg: #08110a;
   --success: #34d399;
   --warn: #fbbf24;
@@ -112,7 +115,8 @@ body.palette-foret.light {
   --text2: #2a5034;
   --muted: #5a7860;
   --accent: #187a3a;
-  --accent-bg: rgba(24, 122, 58, 0.10);
+  --accent-bg: rgba(24, 122, 58, 0.12);
+  --accent-bg-active: rgba(24, 122, 58, 0.22);
   --filter-input-bg: #ffffff;
   --success: #059669;
   --warn: #b45309;
@@ -133,7 +137,8 @@ body.palette-cendre {
   --text2: #848ea8;
   --muted: #505870;
   --accent: #6496c8;
-  --accent-bg: rgba(100, 150, 200, 0.13);
+  --accent-bg: rgba(100, 150, 200, 0.18);
+  --accent-bg-active: rgba(100, 150, 200, 0.32);
   --filter-input-bg: #0b0e16;
   --success: #34d399;
   --warn: #fbbf24;
@@ -152,7 +157,8 @@ body.palette-cendre.light {
   --text2: #303a58;
   --muted: #8890a8;
   --accent: #2a5c9a;
-  --accent-bg: rgba(42, 92, 154, 0.09);
+  --accent-bg: rgba(42, 92, 154, 0.12);
+  --accent-bg-active: rgba(42, 92, 154, 0.22);
   --filter-input-bg: #ffffff;
   --success: #059669;
   --warn: #b45309;
@@ -173,7 +179,8 @@ body.palette-braise {
   --text2: #b8907a;
   --muted: #806050;
   --accent: #f07030;
-  --accent-bg: rgba(240, 112, 48, 0.14);
+  --accent-bg: rgba(240, 112, 48, 0.18);
+  --accent-bg-active: rgba(240, 112, 48, 0.32);
   --filter-input-bg: #120700;
   --success: #34d399;
   --warn: #fbbf24;
@@ -192,7 +199,8 @@ body.palette-braise.light {
   --text2: #5c2800;
   --muted: #a06040;
   --accent: #b83c00;
-  --accent-bg: rgba(184, 60, 0, 0.09);
+  --accent-bg: rgba(184, 60, 0, 0.12);
+  --accent-bg-active: rgba(184, 60, 0, 0.22);
   --filter-input-bg: #ffffff;
   --success: #2e7d32;
   --warn: #d06000;
@@ -202,6 +210,67 @@ body.palette-braise.light {
   --c3: #2e7d32;
   --c4: #d06000;
   --c5: #c0392b;
+}
+
+/* ── États sélectionnés — contraste renforcé (fonds quasi-noirs) ── */
+body.palette-pivoine .nav-btn.active,
+body.palette-cocon .nav-btn.active,
+body.palette-foret .nav-btn.active,
+body.palette-cendre .nav-btn.active,
+body.palette-braise .nav-btn.active {
+  background: var(--accent-bg-active);
+  color: var(--accent);
+  font-weight: 600;
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+body.palette-pivoine .theme-card.selected,
+body.palette-cocon .theme-card.selected,
+body.palette-pivoine .mode-card.selected,
+body.palette-cocon .mode-card.selected,
+body.palette-foret .theme-card.selected,
+body.palette-foret .mode-card.selected,
+body.palette-cendre .theme-card.selected,
+body.palette-cendre .mode-card.selected,
+body.palette-braise .theme-card.selected,
+body.palette-braise .mode-card.selected,
+body.palette-pivoine .devis-card.selected,
+body.palette-cocon .devis-card.selected,
+body.palette-foret .devis-card.selected,
+body.palette-cendre .devis-card.selected,
+body.palette-braise .devis-card.selected,
+body.palette-pivoine .stock-cell.active,
+body.palette-cocon .stock-cell.active,
+body.palette-foret .stock-cell.active,
+body.palette-cendre .stock-cell.active,
+body.palette-braise .stock-cell.active,
+body.palette-pivoine .produit-row.active,
+body.palette-cocon .produit-row.active,
+body.palette-foret .produit-row.active,
+body.palette-cendre .produit-row.active,
+body.palette-braise .produit-row.active,
+body.palette-pivoine .paie-emp-item.active,
+body.palette-cocon .paie-emp-item.active,
+body.palette-foret .paie-emp-item.active,
+body.palette-cendre .paie-emp-item.active,
+body.palette-braise .paie-emp-item.active,
+body.palette-pivoine .paie-hist-item.active,
+body.palette-cocon .paie-hist-item.active,
+body.palette-foret .paie-hist-item.active,
+body.palette-cendre .paie-hist-item.active,
+body.palette-braise .paie-hist-item.active {
+  background: var(--accent-bg-active);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+body.palette-pivoine .produit-row.active,
+body.palette-cocon .produit-row.active,
+body.palette-foret .produit-row.active,
+body.palette-cendre .produit-row.active,
+body.palette-braise .produit-row.active {
+  border-left: 3px solid var(--accent);
 }
 
 /* ── Style : Compact ── */
