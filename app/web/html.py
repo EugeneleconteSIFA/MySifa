@@ -108,6 +108,11 @@ button:focus:not(:focus-visible){outline:none}
 .nav-btn{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:13px;font-weight:500;width:100%;text-align:left;font-family:inherit;transition:background .15s,color .15s,box-shadow .2s;margin-bottom:2px}
 .nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
 .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(34,211,238,.25),0 0 18px rgba(34,211,238,.15)}
+body.palette-ambre .nav-btn:hover:not(.active),body.palette-forge .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(240,165,0,.28),0 0 16px rgba(240,165,0,.14)}
+body.palette-pivoine .nav-btn:hover:not(.active),body.palette-cocon .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(255,92,152,.28),0 0 16px rgba(255,92,152,.14)}
+body.palette-foret .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(76,175,114,.28),0 0 16px rgba(76,175,114,.14)}
+body.palette-cendre .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(148,163,184,.28),0 0 16px rgba(148,163,184,.14)}
+body.palette-braise .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(255,108,32,.28),0 0 16px rgba(255,108,32,.14)}
 body.light .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(8,145,178,.32),0 0 16px rgba(8,145,178,.12)}
 .nav-badge{margin-left:auto;min-width:22px;height:18px;padding:0 6px;border-radius:999px;
   background:rgba(248,113,113,.14);border:1px solid rgba(248,113,113,.35);color:var(--danger);
@@ -131,6 +136,11 @@ body.light .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(8,145,178,.32),
 .user-chip .uc-role{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px}
 .theme-btn,.logout-btn{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-size:12px;width:100%;font-family:inherit;transition:background .15s,color .15s,border-color .15s,box-shadow .2s}
 .theme-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent);box-shadow:0 0 0 1px rgba(34,211,238,.22),0 0 20px rgba(34,211,238,.14)}
+body.palette-ambre .theme-btn:hover,body.palette-forge .theme-btn:hover{box-shadow:0 0 0 1px rgba(240,165,0,.28),0 0 18px rgba(240,165,0,.14)}
+body.palette-pivoine .theme-btn:hover,body.palette-cocon .theme-btn:hover{box-shadow:0 0 0 1px rgba(255,92,152,.28),0 0 18px rgba(255,92,152,.14)}
+body.palette-foret .theme-btn:hover{box-shadow:0 0 0 1px rgba(76,175,114,.24),0 0 18px rgba(76,175,114,.12)}
+body.palette-cendre .theme-btn:hover{box-shadow:0 0 0 1px rgba(148,163,184,.24),0 0 18px rgba(148,163,184,.12)}
+body.palette-braise .theme-btn:hover{box-shadow:0 0 0 1px rgba(255,108,32,.24),0 0 18px rgba(255,108,32,.12)}
 body.light .theme-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 18px rgba(8,145,178,.12)}
 .theme-btn .theme-ico{font-size:14px;line-height:1}
 .theme-btn .theme-label{white-space:nowrap}

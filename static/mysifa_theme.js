@@ -9,11 +9,15 @@
   var LS_STYLE = 'mysifa_style';
   var LS_MODE = 'theme';
 
-  var PALETTES = ['mysifa', 'forge', 'cocon'];
+  var PALETTES = ['mysifa', 'ambre', 'pivoine', 'foret', 'cendre', 'braise'];
   var STYLES = ['defaut', 'mini', 'round'];
-  var THEME_CLASSES = ['light', 'palette-forge', 'palette-cocon', 'style-mini', 'style-round'];
+  // Conserver les anciennes classes (forge/cocon) pour compatibilité.
+  var THEME_CLASSES = ['light', 'palette-ambre', 'palette-pivoine', 'palette-forge', 'palette-cocon', 'palette-foret', 'palette-cendre', 'palette-braise', 'style-mini', 'style-round'];
 
   function normalizePalette(p) {
+    // Alias pour rétrocompatibilité (anciennes prefs)
+    if (p === 'forge') p = 'ambre';
+    if (p === 'cocon') p = 'pivoine';
     return PALETTES.indexOf(p) >= 0 ? p : 'mysifa';
   }
 
