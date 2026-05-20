@@ -1063,6 +1063,9 @@ async def patch_matiere(matiere_id: int, request: Request):
         except HTTPException:
             conn.rollback()
             raise
+        except Exception:
+            conn.rollback()
+            raise
 
         row = conn.execute(
             "SELECT * FROM fab_matieres_utilisees WHERE id=?", (matiere_id,)

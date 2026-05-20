@@ -549,6 +549,21 @@ body.light .btn-sec:hover{
 body.light .btn-sec.is-active{
   box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 16px rgba(8,145,178,.10);
 }
+/* Modales (contacts expé, édition bobines traçabilité) — styles absents du shell unifié */
+.contact-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9200;display:flex;align-items:center;justify-content:center;padding:18px;box-sizing:border-box}
+body.light .contact-modal-overlay{background:rgba(15,23,42,.42)}
+.contact-modal{width:100%;max-width:560px;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px 18px 16px;box-shadow:0 24px 64px rgba(0,0,0,.45);position:relative;max-height:min(90vh,calc(100dvh - 36px));overflow:auto}
+.contact-modal h3{font-size:16px;font-weight:800;margin:0;padding-right:34px;color:var(--text);line-height:1.25}
+.contact-modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px}
+.contact-modal-head h3{padding-right:8px;flex:1}
+.contact-close-btn{background:var(--bg);border:1px solid var(--border);cursor:pointer;color:var(--muted);font-size:18px;line-height:1;width:34px;height:34px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;font-family:inherit;padding:0;transition:border-color .15s,color .15s,background .15s}
+.contact-close-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.contact-modal-body{display:block;font-size:13px;color:var(--text)}
+.contact-modal-actions{display:flex;gap:10px;justify-content:flex-end;align-items:center;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)}
+.contact-modal .btn,.contact-modal .btn-sm,.contact-modal .btn-ghost{margin-top:0}
+.contact-modal input,.contact-modal select{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box}
+.contact-modal input:focus,.contact-modal select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+body.light .contact-modal input:focus,body.light .contact-modal select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .btn-danger{background:rgba(248,113,113,.15);color:var(--danger);border:1px solid rgba(248,113,113,.3);border-radius:6px;padding:5px 12px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit}
 .msg-sel-btn{
   width:22px;height:22px;border-radius:8px;
@@ -1332,7 +1347,6 @@ function icon(name,size=16){
     'calculator': '<rect x="6" y="2.5" width="12" height="19" rx="2"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="9" y1="11" x2="10" y2="11"/><line x1="12" y1="11" x2="13" y2="11"/><line x1="15" y1="11" x2="16" y2="11"/><line x1="9" y1="14" x2="10" y2="14"/><line x1="12" y1="14" x2="13" y2="14"/><line x1="15" y1="14" x2="16" y2="14"/><line x1="9" y1="17" x2="10" y2="17"/><line x1="12" y1="17" x2="13" y2="17"/><line x1="15" y1="17" x2="16" y2="17"/>',
     'truck': '<path d="M3 7h11v10H3z"/><path d="M14 10h4l3 3v4h-7z"/><circle cx="7.5" cy="17" r="2"/><circle cx="17.5" cy="17" r="2"/>',
     'sliders': '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>',
-    'settings': '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
     'layers': '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
     'arrow-left': '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
     'printer': '<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>',
@@ -4395,7 +4409,7 @@ function renderExpeComparateur(){
       h('div',{style:{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}},
         S.expeRawLoading?h('span',{className:'readonly-notice'},'Chargement des grilles\u2026'):null,
         S.expeRawError?h('span',{className:'badge-danger'},S.expeRawError):null,
-        h('button',{className:'btn-ghost',onClick:()=>set({expeShowContacts:true})},iconEl('settings',13),' Contacts')
+        h('button',{className:'btn-ghost',onClick:()=>set({expeShowContacts:true})},iconEl('sliders',13),' Contacts')
       )
     ),
     h('div',{style:{padding:'14px 18px'}},
@@ -4444,7 +4458,7 @@ function renderExpeTransporteurs(){
   return h('div',{className:'card'},
     h('div',{className:'card-header'},
       h('h3',null,'Mes transporteurs ('+carriers.length+')'),
-      h('button',{className:'btn-ghost',onClick:()=>set({expeShowContacts:true})},iconEl('settings',13),' Modifier les contacts')
+      h('button',{className:'btn-ghost',onClick:()=>set({expeShowContacts:true})},iconEl('sliders',13),' Modifier les contacts')
     ),
     h('div',{style:{padding:0}},...carriers.map(c=>{
       const col=expeCC(c.name);const ct=contacts[c.name];
@@ -6367,6 +6381,20 @@ function closeTracMatieresEditModal(){
   document.getElementById('trac-mat-edit-modal')?.remove();
 }
 
+function tracResolveMachineId(dos, matieres){
+  const dmid = dos && dos.machine_id;
+  if(dmid!=null && dmid!==''){
+    const n = Number(dmid);
+    return Number.isFinite(n) && n>0 ? n : null;
+  }
+  const m0 = (matieres||[]).find(x=>x.machine_id!=null && x.machine_id!=='');
+  if(m0){
+    const n = Number(m0.machine_id);
+    return Number.isFinite(n) && n>0 ? n : null;
+  }
+  return null;
+}
+
 async function openTracMatieresEditModal(dos, matieres){
   closeTracMatieresEditModal();
   const ref = (dos.reference||'').trim();
@@ -6386,6 +6414,7 @@ async function openTracMatieresEditModal(dos, matieres){
   const overlay = document.createElement('div');
   overlay.id = 'trac-mat-edit-modal';
   overlay.className = 'contact-modal-overlay';
+  overlay.style.zIndex = '9200';
 
   const box = document.createElement('div');
   box.className = 'contact-modal';
@@ -6460,7 +6489,7 @@ async function openTracMatieresEditModal(dos, matieres){
       line.append(inp, del);
       listWrap.appendChild(line);
     });
-    newRows.forEach((row, idx)=>{
+    newRows.forEach((row)=>{
       const line = document.createElement('div');
       line.style.cssText = 'display:flex;gap:8px;align-items:center';
       const inp = mkCodeInput(row.code, 'Nouveau code barre');
@@ -6471,7 +6500,11 @@ async function openTracMatieresEditModal(dos, matieres){
       del.title = 'Retirer';
       del.style.padding = '8px 10px';
       del.appendChild(iconEl('trash',14));
-      del.onclick = ()=>{ newRows.splice(idx, 1); renderRows(); };
+      del.onclick = ()=>{
+        const i = newRows.indexOf(row);
+        if(i>=0) newRows.splice(i,1);
+        renderRows();
+      };
       line.append(inp, del);
       listWrap.appendChild(line);
     });
@@ -6505,8 +6538,7 @@ async function openTracMatieresEditModal(dos, matieres){
   saveBtn.className = 'btn-sm';
   saveBtn.textContent = 'Enregistrer';
   saveBtn.onclick = async ()=>{
-    const machineId = dos.machine_id;
-    if(!machineId){ showToast('Machine du dossier introuvable.','danger'); return; }
+    const machineId = tracResolveMachineId(dos, matieres);
 
     const toDelete = rows.filter(r=>r.deleted && r.id).map(r=>r.id);
     const toPatch = rows.filter(r=>!r.deleted && r.id && (r.code||'').trim() && (r.code||'').trim() !== origById[r.id]);
@@ -6520,43 +6552,63 @@ async function openTracMatieresEditModal(dos, matieres){
       closeTracMatieresEditModal();
       return;
     }
+    if(toAdd.length && !machineId){
+      showToast('Machine du dossier introuvable — impossible d\'ajouter une bobine. Utilisez la saisie sur la machine ou renseignez la machine au planning.','danger');
+      return;
+    }
 
     const fid = fournSel.value ? Number(fournSel.value) : null;
     saveBtn.disabled = true;
     saveBtn.textContent = 'Enregistrement…';
     fournWrap.style.display = 'none';
 
-    try{
-      for(const id of toDelete){
-        await api('/api/fabrication/matieres/'+id, {method:'DELETE'});
+    const postMatiere = async (code)=>{
+      const body = {code_barre: code, no_dossier: ref, machine_id: machineId};
+      if(fid) body.fournisseur_fsc_id = fid;
+      try{
+        await api('/api/fabrication/matieres', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(body),
+        });
+      }catch(e){
+        const msg = String((e && e.message) || '');
+        if(msg.toLowerCase().includes('fournisseur requis')){
+          fournWrap.style.display = 'block';
+          showToast('Sélectionnez un fournisseur pour les codes non liés à une réception.','danger');
+        }
+        throw e;
       }
-      for(const row of toPatch){
-        const body = {code_barre: (row.code||'').trim()};
-        if(fid) body.fournisseur_fsc_id = fid;
+    };
+
+    const patchMatiere = async (row)=>{
+      const body = {code_barre: (row.code||'').trim()};
+      if(fid) body.fournisseur_fsc_id = fid;
+      try{
         await api('/api/fabrication/matieres/'+row.id, {
           method:'PATCH',
           headers:{'Content-Type':'application/json'},
           body: JSON.stringify(body),
         });
+      }catch(e){
+        const msg = String((e && e.message) || '');
+        if(msg.toLowerCase().includes('fournisseur requis')){
+          fournWrap.style.display = 'block';
+          showToast('Sélectionnez un fournisseur pour les codes non liés à une réception.','danger');
+        }
+        throw e;
+      }
+    };
+
+    try{
+      for(const id of toDelete){
+        await api('/api/fabrication/matieres/'+id, {method:'DELETE'});
+      }
+      for(const row of toPatch){
+        await patchMatiere(row);
       }
       for(const code of toAdd){
-        const body = {code_barre: code, no_dossier: ref, machine_id: machineId};
-        if(fid) body.fournisseur_fsc_id = fid;
-        try{
-          await api('/api/fabrication/matieres', {
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body: JSON.stringify(body),
-          });
-        }catch(e){
-          const msg = String((e && e.message) || '');
-          if(msg.toLowerCase().includes('fournisseur requis')){
-            fournWrap.style.display = 'block';
-            showToast('Sélectionnez un fournisseur pour les codes non liés à une réception.','danger');
-            throw e;
-          }
-          throw e;
-        }
+        await postMatiere(code);
       }
       closeTracMatieresEditModal();
       showToast('Bobines enregistrées.','success');
@@ -6661,9 +6713,10 @@ function renderTracabiliteDossierDetail(){
             type:'button',
             className:'btn btn-sm btn-ghost',
             title:'Modifier les bobines',
+            'aria-label':'Modifier les bobines',
             style:{display:'inline-flex',alignItems:'center',gap:'6px',flexShrink:0},
             onClick:()=>openTracMatieresEditModal(dos, matieres)
-          }, iconEl('settings',14))
+          }, iconEl('sliders',14), ' Modifier'))
         ),
         h('div',{style:{overflowX:'auto'}}, matiereTable)
       )
@@ -9084,7 +9137,7 @@ function renderMatierePrix(){
         h('td',null,
           h('span',{style:{display:'inline-flex',alignItems:'center',gap:'6px'}},
             r.designation||'',
-            hasCalcIds?h('span',{title:'Prix calculé depuis composants',style:{opacity:.7,display:'inline-flex',alignItems:'center'}},iconEl('settings',12)):null
+            hasCalcIds?h('span',{title:'Prix calculé depuis composants',style:{opacity:.7,display:'inline-flex',alignItems:'center'}},iconEl('sliders',12)):null
           )
         ),
         h('td',null,r.type_adhesion||''),
