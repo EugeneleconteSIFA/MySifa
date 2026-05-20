@@ -49,6 +49,35 @@ def _today_prefix() -> str:
     return date.today().isoformat()
 
 
+def _enrich_saisies_client(conn, saisies: list) -> None:
+    """Complète client depuis planning_entries si absent sur la saisie."""
+    missing_refs = {
+        (s.get("no_dossier") or "").strip()
+        for s in saisies
+        if (s.get("no_dossier") or "").strip() and not (s.get("client") or "").strip()
+    }
+    if not missing_refs:
+        return
+    placeholders = ",".join("?" * len(missing_refs))
+    rows = conn.execute(
+        f"""SELECT trim(reference) AS reference, client
+            FROM planning_entries
+            WHERE trim(reference) IN ({placeholders})""",
+        list(missing_refs),
+    ).fetchall()
+    client_map = {
+        (r["reference"] or "").strip(): (r["client"] or "").strip()
+        for r in rows
+        if (r["client"] or "").strip()
+    }
+    for s in saisies:
+        if (s.get("client") or "").strip():
+            continue
+        ref = (s.get("no_dossier") or "").strip()
+        if ref in client_map:
+            s["client"] = client_map[ref]
+
+
 def _resolve_date_operation(client_raw: Optional[str]) -> str:
     """Horodatage canonique avec secondes (client au clic ou serveur).
 
@@ -381,6 +410,7 @@ def get_session(request: Request, machine_id: int = None):
             rows = []
 
         saisies = [dict(r) for r in rows]
+        _enrich_saisies_client(conn, saisies)
         etat = _compute_etat(saisies)
         active_ref = _get_active_dossier(saisies)
 
@@ -448,7 +478,9 @@ def list_saisies_jour_all(request: Request):
             """,
             (today + "%", today_fr + "%"),
         ).fetchall()
-    return {"saisies": [dict(r) for r in rows]}
+        saisies = [dict(r) for r in rows]
+        _enrich_saisies_client(conn, saisies)
+    return {"saisies": saisies}
 
 
 @router.post("/api/fabrication/saisie")

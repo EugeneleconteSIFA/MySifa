@@ -1925,7 +1925,12 @@ function renderMain(){
         }, svgIcon(s.commentaire?'edit':'message-square',13));
 
         const opNom = (s.operateur_nom || s.operateur || '—');
-        const clientNom = (s.client || '').trim();
+        let clientNom = (s.client || '').trim();
+        if(!clientNom){
+          const ref = String(s.no_dossier||'').trim();
+          if(ref && S.dossier && String(S.dossier.reference||'').trim()===ref)
+            clientNom = (S.dossier.client||'').trim();
+        }
         const fictifRow = isFictifSaisieRow(s);
         const opLblStyle = fictifRow
           ? null
@@ -2980,7 +2985,7 @@ function renderTopbar(){
       document.body.classList.toggle('sb-open',S.sidebarOpen);
       render();
     }},icon('menu',20)),
-    h('span',{className:'fab-topbar-title'},'Saisie Production'),
+    h('span',{className:'fab-topbar-title'},'Saisie Prod'),
     h('button',{className:'fab-topbar-btn',onClick:()=>{window.location.href='/'}},icon('home',18))
   );
 }

@@ -214,13 +214,14 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 .pref-section{margin-bottom:22px}
 .pref-section-title{font-size:11px;font-weight:700;color:var(--muted);
   text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px}
-.theme-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.theme-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;
+  background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:10px}
 @media (max-width:480px){.theme-grid{grid-template-columns:1fr 1fr}}
 .theme-card{border:2px solid var(--border);border-radius:12px;padding:14px 10px;
   cursor:pointer;transition:border-color .15s,background .15s;
-  background:var(--bg);text-align:center;position:relative}
-.theme-card:hover{border-color:var(--accent);background:var(--accent-bg)}
-.theme-card.selected{border-color:var(--accent);background:var(--accent-bg)}
+  background:transparent;text-align:center;position:relative}
+.theme-card:hover:not(.selected){border-color:var(--accent);background:var(--accent-bg)}
+.theme-card.selected{border-color:var(--accent);background:var(--card)}
 .tc-check{position:absolute;top:7px;right:7px;width:16px;height:16px;border-radius:50%;
   background:var(--accent);display:none;align-items:center;justify-content:center}
 .theme-card.selected .tc-check{display:flex}
@@ -228,12 +229,13 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
   display:flex;align-items:center;justify-content:center;gap:4px;overflow:hidden}
 .tc-name{font-size:12px;font-weight:700;color:var(--text)}
 .tc-sub{font-size:10px;color:var(--muted);margin-top:2px}
-.mode-toggle{display:flex;gap:10px}
+.mode-toggle{display:flex;gap:10px;
+  background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:10px}
 .mode-card{flex:1;border:2px solid var(--border);border-radius:12px;padding:14px 12px;
   cursor:pointer;transition:border-color .15s,background .15s;
-  background:var(--bg);display:flex;align-items:center;gap:10px;justify-content:center}
-.mode-card:hover{border-color:var(--accent);background:var(--accent-bg)}
-.mode-card.selected{border-color:var(--accent);background:var(--accent-bg)}
+  background:transparent;display:flex;align-items:center;gap:10px;justify-content:center}
+.mode-card:hover:not(.selected){border-color:var(--accent);background:var(--accent-bg)}
+.mode-card.selected{border-color:var(--accent);background:var(--card)}
 .mode-ico{display:inline-flex;align-items:center}
 .mode-label{font-size:13px;font-weight:700;color:var(--text)}
 .mode-sub{font-size:10px;color:var(--muted)}
