@@ -1456,6 +1456,46 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 29, "audit_logs")
 
+    # v31 — FSC : flag certification requise sur les dossiers planning
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=31 LIMIT 1").fetchone():
+        pe_cols = {r["name"] for r in conn.execute("PRAGMA table_info(planning_entries)").fetchall()}
+        if "fsc_requis" not in pe_cols:
+            conn.execute(
+                "ALTER TABLE planning_entries ADD COLUMN fsc_requis INTEGER DEFAULT 0"
+            )
+        if "fsc_type_requis" not in pe_cols:
+            conn.execute(
+                "ALTER TABLE planning_entries ADD COLUMN fsc_type_requis TEXT DEFAULT ''"
+            )
+        conn.commit()
+        _record_schema_migration(conn, 31, "planning_entries_fsc_requis")
+
+    # v32 — FSC : type de claim sur les réceptions de bobines
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=32 LIMIT 1").fetchone():
+        sr_cols = {r["name"] for r in conn.execute("PRAGMA table_info(stock_receptions)").fetchall()}
+        if "fsc_type_claim" not in sr_cols:
+            conn.execute(
+                "ALTER TABLE stock_receptions ADD COLUMN fsc_type_claim TEXT DEFAULT 'non_fsc'"
+            )
+        conn.commit()
+        _record_schema_migration(conn, 32, "stock_receptions_fsc_type_claim")
+
+    # v33 — FSC : champs alerte sur fab_matieres_utilisees
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=33 LIMIT 1").fetchone():
+        fmu_cols = {
+            r["name"] for r in conn.execute("PRAGMA table_info(fab_matieres_utilisees)").fetchall()
+        }
+        if "fsc_warning" not in fmu_cols:
+            conn.execute(
+                "ALTER TABLE fab_matieres_utilisees ADD COLUMN fsc_warning INTEGER DEFAULT 0"
+            )
+        if "fsc_warning_note" not in fmu_cols:
+            conn.execute(
+                "ALTER TABLE fab_matieres_utilisees ADD COLUMN fsc_warning_note TEXT"
+            )
+        conn.commit()
+        _record_schema_migration(conn, 33, "fab_matieres_fsc_warning")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

@@ -30,6 +30,7 @@ from app.services.ai_data import (
     tool_production_detail,
     tool_stock_adjust_prepare,
     tool_stock_search,
+    tool_traceability_dossier_bobines,
 )
 
 router = APIRouter(prefix="/api/ai", tags=["agent-ia"])
@@ -117,8 +118,36 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "traceability_dossier_bobines",
+        "description": (
+            "Liste les bobines matière utilisées sur un dossier de fabrication : "
+            "codes barres scannés en saisie production (MyProd > Traçabilité). "
+            "À utiliser pour « bobines utilisées », « matières scannées », « codes barres du dossier ». "
+            "Ne pas confondre avec le stock articles (stock_search)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "no_dossier": {
+                    "type": "string",
+                    "description": (
+                        "Numéro ou référence du dossier / OF "
+                        "(ex. 9931595, Reliquat 9931595, référence planning)."
+                    ),
+                },
+                "query": {
+                    "type": "string",
+                    "description": "Alias de no_dossier si la référence est formulée autrement.",
+                },
+            },
+        },
+    },
+    {
         "name": "stock_search",
-        "description": "Recherche un article en stock par référence ou désignation.",
+        "description": (
+            "Recherche un article en stock (produits finis / matières en entrepôt) "
+            "par référence ou désignation. Pas pour les bobines scannées sur un dossier fabrication."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -392,6 +421,11 @@ async def _dispatch_tool(
             if "planning" not in scope:
                 return ("Accès planning non autorisé pour ce rôle.", "err")
             return (tool_planning_client_schedule(conn, inp), "ok")
+
+        if name == "traceability_dossier_bobines":
+            if "production" not in scope:
+                return ("Accès traçabilité fabrication non autorisé pour ce rôle.", "err")
+            return (tool_traceability_dossier_bobines(conn, inp), "ok")
 
         if name == "stock_search":
             if "stock" not in scope:

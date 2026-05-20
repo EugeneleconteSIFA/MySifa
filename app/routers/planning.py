@@ -32,7 +32,11 @@ _PLANNING_ENTRY_COL_DDLS = [
     ("a_placer", "ALTER TABLE planning_entries ADD COLUMN a_placer INTEGER DEFAULT 0"),
     ("created_by", "ALTER TABLE planning_entries ADD COLUMN created_by TEXT"),
     ("updated_by", "ALTER TABLE planning_entries ADD COLUMN updated_by TEXT"),
+    ("fsc_requis", "ALTER TABLE planning_entries ADD COLUMN fsc_requis INTEGER DEFAULT 0"),
+    ("fsc_type_requis", "ALTER TABLE planning_entries ADD COLUMN fsc_type_requis TEXT DEFAULT ''"),
 ]
+
+_FSC_TYPES = frozenset({"fsc_100", "fsc_mix", "fsc_recycled"})
 
 router = APIRouter(prefix="/api/planning", tags=["planning"])
 
@@ -411,6 +415,22 @@ def _parse_a_placer(raw: Any, default: int = 1) -> int:
     return 0
 
 
+def _parse_fsc_requis(raw: Any, default: int = 0) -> int:
+    return _parse_a_placer(raw, default=default)
+
+
+def _parse_fsc_type_requis(raw: Any, fsc_requis: int) -> str:
+    if not fsc_requis:
+        return ""
+    t = (raw or "").strip()
+    if t not in _FSC_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="Type FSC invalide — valeurs : fsc_100, fsc_mix, fsc_recycled.",
+        )
+    return t
+
+
 def _backfill_group_id(conn, entry_id: int, pe_cols: set) -> None:
     if "group_id" not in pe_cols:
         return
@@ -757,6 +777,8 @@ def _slot_payload(e: dict, start_iso: str, end_iso: str) -> dict:
         "ref_produit": e.get("ref_produit"),
         "commentaire": e.get("commentaire"),
         "exigences_production": e.get("exigences_production"),
+        "fsc_requis": int(e.get("fsc_requis") or 0),
+        "fsc_type_requis": (e.get("fsc_type_requis") or "").strip(),
         "a_placer": e.get("a_placer", 0),
         "destockage": e.get("destockage") or "todo",
         "statut_reel": e.get("statut_reel") or "reellement_en_attente",
@@ -1290,6 +1312,7 @@ async def add_entry(machine_id: int, request: Request):
     if date_liv is not None and not str(date_liv).strip():
         date_liv = None
 
+    fsc_requis_val = _parse_fsc_requis(body.get("fsc_requis"), default=0)
     row_data = {
         "reference": reference,
         "client": body.get("client", "") or "",
@@ -1309,6 +1332,10 @@ async def add_entry(machine_id: int, request: Request):
         "commentaire": body.get("commentaire", "") or "",
         "exigences_production": (body.get("exigences_production") or "").strip() or None,
         "a_placer": _parse_a_placer(body.get("a_placer"), default=1),
+        "fsc_requis": fsc_requis_val,
+        "fsc_type_requis": _parse_fsc_type_requis(
+            body.get("fsc_type_requis"), fsc_requis_val
+        ),
         "created_by": user_name,
         "updated_by": user_name,
     }
@@ -1405,6 +1432,22 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
             audit_detail["statut"] = body.get("statut")
         if body.get("client") is not None and body.get("client") != exd.get("client"):
             audit_detail["client"] = body.get("client")
+        fsc_requis_new = (
+            _parse_fsc_requis(body["fsc_requis"])
+            if "fsc_requis" in body
+            else int(exd.get("fsc_requis") or 0)
+        )
+        fsc_type_new = _parse_fsc_type_requis(
+            body.get("fsc_type_requis", exd.get("fsc_type_requis")),
+            fsc_requis_new,
+        )
+        if "fsc_requis" in body and fsc_requis_new != int(exd.get("fsc_requis") or 0):
+            audit_detail["fsc_requis"] = fsc_requis_new
+        if (
+            "fsc_requis" in body
+            or "fsc_type_requis" in body
+        ) and fsc_type_new != (exd.get("fsc_type_requis") or "").strip():
+            audit_detail["fsc_type_requis"] = fsc_type_new
         statut_auto = compute_statut(exd)
         set_manual_end = _body_flag_true(body.get("planned_end_manual"))
         clear_manual_end = body.get("planned_end_manual") is not None and not set_manual_end
@@ -1515,7 +1558,8 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
             SET reference=?, client=?, description=?, format_l=?, format_h=?,
                 duree_heures=?, statut=?, notes=?, updated_at=?, updated_by=?,
                 dos_rvgi=?, numero_of=?, ref_produit=?, laize=?, date_livraison=?, commentaire=?,
-                exigences_production=?, planned_start=?, planned_end=?, planned_end_manual=?, a_placer=?
+                exigences_production=?, planned_start=?, planned_end=?, planned_end_manual=?, a_placer=?,
+                fsc_requis=?, fsc_type_requis=?
             WHERE id=?
         """, (
             body.get("reference", ex["reference"]),
@@ -1544,6 +1588,8 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
             pe,
             planned_end_manual_val,
             body.get("a_placer", ex["a_placer"] if "a_placer" in ex.keys() else 0),
+            fsc_requis_new,
+            fsc_type_new,
             entry_id
         ))
 
@@ -2135,6 +2181,7 @@ async def insert_after(machine_id: int, after_entry_id: int, request: Request):
     date_liv = body.get("date_livraison")
     if date_liv is not None and not str(date_liv).strip():
         date_liv = None
+    fsc_requis_val = _parse_fsc_requis(body.get("fsc_requis"), default=0)
     row_data = {
         "reference": reference,
         "client": body.get("client", "") or "",
@@ -2154,6 +2201,10 @@ async def insert_after(machine_id: int, after_entry_id: int, request: Request):
         "commentaire": body.get("commentaire", "") or "",
         "exigences_production": (body.get("exigences_production") or "").strip() or None,
         "a_placer": _parse_a_placer(body.get("a_placer"), default=1),
+        "fsc_requis": fsc_requis_val,
+        "fsc_type_requis": _parse_fsc_type_requis(
+            body.get("fsc_type_requis"), fsc_requis_val
+        ),
     }
     with get_db() as conn:
         pe_cols = _ensure_planning_entry_columns(conn)

@@ -709,6 +709,7 @@ let S = {
   recepFournisseur: '',     // fournisseur sélectionné
   recepFournisseurSearch: '', // texte de recherche fournisseur
   recepFournisseurOpen: false, // dropdown ouvert
+  recepFscTypeClaim: 'non_fsc', // type certification lot (obligatoire)
   // Import référentiel références / unités
   importRefsOpen: false,
   importRefsPreview: null,
@@ -2828,6 +2829,44 @@ function renderContent() {
 
 // ── Réception matière ───────────────────────────────────────────
 
+const FSC_CLAIM_LABELS = {
+  non_fsc: 'Non FSC',
+  fsc_100: 'FSC 100%',
+  fsc_mix_credit: 'FSC Mix Credit',
+  fsc_mix: 'FSC Mix',
+  fsc_recycled: 'FSC Recycled',
+};
+
+function fscClaimBadge(claim) {
+  const c = (claim || 'non_fsc').trim();
+  const label = FSC_CLAIM_LABELS[c] || c;
+  let bg = 'rgba(148,163,184,.12)';
+  let color = 'var(--muted)';
+  if (c === 'fsc_100') {
+    bg = 'rgba(52,211,153,.12)';
+    color = 'var(--success)';
+  } else if (c === 'fsc_recycled' || c.startsWith('fsc_mix')) {
+    bg = 'var(--accent-bg)';
+    color = 'var(--accent)';
+  }
+  return el('span', {
+    title: 'Type de certification FSC',
+    style: {
+      background: bg,
+      color,
+      padding: '2px 8px',
+      borderRadius: '6px',
+      fontSize: '11px',
+      fontWeight: '600',
+      flexShrink: '0',
+    },
+  }, label);
+}
+
+function recepFscTypeRequiresCert(claim) {
+  return (claim || 'non_fsc') !== 'non_fsc';
+}
+
 async function loadRecepHistory() {
   S.recepHistLoading = true; renderContent();
   try {
@@ -3044,17 +3083,30 @@ async function recepValider() {
     showToast('Veuillez sélectionner un fournisseur avant de valider la réception', 'error');
     return;
   }
+  const claim = S.recepFscTypeClaim || 'non_fsc';
   const fsc = FOURNISSEURS_FSC.find(f => f.nom === S.recepFournisseur);
+  const cert = fsc ? String(fsc.certificat || '').trim() : '';
+  if (recepFscTypeRequiresCert(claim) && !cert) {
+    showToast('Certificat FSC requis pour une réception certifiée FSC.', 'error');
+    return;
+  }
   try {
     const codes = S.recepItems.map(i => i.code);
     const d = await api('/api/stock/receptions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ codes, note: S.recepNote, fournisseur: S.recepFournisseur, certificat_fsc: fsc ? fsc.certificat : '' }),
+      body: JSON.stringify({
+        codes,
+        note: S.recepNote,
+        fournisseur: S.recepFournisseur,
+        certificat_fsc: recepFscTypeRequiresCert(claim) ? cert : '',
+        fsc_type_claim: claim,
+      }),
     });
     if (d && d.success) {
       showToast(d.nb_bobines + ' bobine' + (d.nb_bobines > 1 ? 's' : '') + ' enregistrée' + (d.nb_bobines > 1 ? 's' : ''));
       S.recepItems = []; S.recepNote = ''; S.recepFournisseur = ''; S.recepFournisseurSearch = ''; S.recepFournisseurOpen = false;
+      S.recepFscTypeClaim = 'non_fsc';
       recepStopCamera();
       await loadRecepHistory();
     }
@@ -3149,6 +3201,36 @@ function buildReception() {
 
   // ── Barre de recherche fournisseur ──
   const fourWrap = el('div', { cls: 'recep-fourn-wrap' });
+  const fscTypeLbl = el('label', {
+    style: {
+      display: 'block',
+      fontSize: '11px',
+      fontWeight: '700',
+      textTransform: 'uppercase',
+      letterSpacing: '.6px',
+      color: 'var(--muted)',
+      marginBottom: '4px',
+    },
+  }, 'Type de certification FSC');
+  const fscTypeSel = el('select', {
+    cls: 'form-sel',
+    attrs: { id: 'fsc-type-claim', required: 'required' },
+    style: { width: '100%', marginBottom: '12px' },
+    on: {
+      change: (e) => {
+        S.recepFscTypeClaim = e.target.value;
+        renderContent();
+      },
+    },
+  },
+    el('option', { attrs: { value: 'non_fsc', selected: (S.recepFscTypeClaim || 'non_fsc') === 'non_fsc' } }, 'Non FSC'),
+    el('option', { attrs: { value: 'fsc_100', selected: S.recepFscTypeClaim === 'fsc_100' } }, 'FSC 100%'),
+    el('option', { attrs: { value: 'fsc_mix_credit', selected: S.recepFscTypeClaim === 'fsc_mix_credit' } }, 'FSC Mix Credit'),
+    el('option', { attrs: { value: 'fsc_mix', selected: S.recepFscTypeClaim === 'fsc_mix' } }, 'FSC Mix'),
+    el('option', { attrs: { value: 'fsc_recycled', selected: S.recepFscTypeClaim === 'fsc_recycled' } }, 'FSC Recycled')
+  );
+  fourWrap.append(fscTypeLbl, fscTypeSel);
+
   const fourLabel = el('div', { cls: 'recep-fourn-label' }, iconEl('truck', 13), ' Fournisseur', el('span', { style: { color: 'var(--danger)', marginLeft: '4px' } }, '*'));
   fourWrap.appendChild(fourLabel);
   const fourSearchWrap = el('div', { cls: 'recep-fourn-search-wrap' });
@@ -3219,12 +3301,22 @@ function buildReception() {
     });
   }
   fourWrap.appendChild(fourSearchWrap);
-  // Afficher le certificat FSC si fournisseur sélectionné
-  if (S.recepFournisseur) {
+  // Afficher le certificat FSC si fournisseur sélectionné et claim FSC
+  if (S.recepFournisseur && recepFscTypeRequiresCert(S.recepFscTypeClaim)) {
     const fsc = FOURNISSEURS_FSC.find(f => f.nom === S.recepFournisseur);
-    if (fsc) {
-      fourWrap.appendChild(el('div', { cls: 'recep-fourn-fsc' }, 'Certificat FSC : ', el('strong', null, fsc.certificat), ' — Licence : ', el('strong', null, fsc.licence)));
+    const certTxt = fsc && fsc.certificat ? fsc.certificat : '—';
+    const certBlock = el('div', { cls: 'recep-fourn-fsc' },
+      'Certificat FSC : ',
+      el('strong', null, certTxt)
+    );
+    if (fsc && fsc.licence) {
+      certBlock.appendChild(document.createTextNode(' — Licence : '));
+      certBlock.appendChild(el('strong', null, fsc.licence));
     }
+    if (!fsc || !String(fsc.certificat || '').trim()) {
+      certBlock.appendChild(el('span', { style: { color: 'var(--danger)', marginLeft: '8px', fontSize: '12px' } }, 'Certificat manquant pour ce fournisseur'));
+    }
+    fourWrap.appendChild(certBlock);
   }
   tableCard.appendChild(fourWrap);
 
@@ -3289,14 +3381,69 @@ function buildReception() {
       }}},
         el('span', { cls: 'recep-hist-date' }, dateStr),
         el('span', { cls: 'recep-hist-count' }, lot.nb_bobines + ' bobine' + (lot.nb_bobines !== 1 ? 's' : '')),
+        fscClaimBadge(lot.fsc_type_claim),
         el('span', { cls: 'recep-hist-note' }, lot.note || ''),
         el('span', { cls: 'recep-hist-four' }, lot.fournisseur || ''),
         el('span', { cls: 'recep-hist-user' }, lot.created_by_name || '')
       );
       hist.appendChild(row);
-      if (isOpen && lot.items && lot.items.length) {
-        const detail = el('div', { cls: 'recep-hist-detail' });
-        lot.items.forEach(code => detail.appendChild(el('span', { cls: 'recep-hist-chip' }, code)));
+      if (isOpen) {
+        const detail = el('div', { cls: 'recep-hist-detail', style: { padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '10px' } });
+        if (lot.items && lot.items.length) {
+          const chips = el('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '6px' } });
+          lot.items.forEach(code => chips.appendChild(el('span', { cls: 'recep-hist-chip' }, code)));
+          detail.appendChild(chips);
+        }
+        if (!S.stockReadOnly) {
+          const editClaim = el('select', { cls: 'form-sel', style: { maxWidth: '280px' } },
+            ...Object.entries(FSC_CLAIM_LABELS).map(([v, lbl]) =>
+              el('option', { attrs: { value: v, selected: (lot.fsc_type_claim || 'non_fsc') === v } }, lbl)
+            )
+          );
+          const editFour = el('input', { cls: 'recep-note-inp', attrs: { type: 'text', placeholder: 'Fournisseur' }, style: { maxWidth: '280px' } });
+          editFour.value = lot.fournisseur || '';
+          const editCert = el('input', { cls: 'recep-note-inp', attrs: { type: 'text', placeholder: 'Certificat FSC' }, style: { maxWidth: '280px' } });
+          editCert.value = lot.certificat_fsc || '';
+          const editNote = el('input', { cls: 'recep-note-inp', attrs: { type: 'text', placeholder: 'Note' }, style: { maxWidth: '400px' } });
+          editNote.value = lot.note || '';
+          const saveBtn = el('button', {
+            cls: 'btn-recep btn-recep-ghost',
+            style: { alignSelf: 'flex-start' },
+            on: {
+              click: async (e) => {
+                e.stopPropagation();
+                const claim = editClaim.value;
+                const cert = editCert.value.trim();
+                if (recepFscTypeRequiresCert(claim) && !cert) {
+                  showToast('Certificat FSC requis pour une réception certifiée FSC.', 'error');
+                  return;
+                }
+                try {
+                  await api('/api/stock/receptions/' + lot.id, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      fournisseur: editFour.value.trim() || null,
+                      certificat_fsc: recepFscTypeRequiresCert(claim) ? cert : '',
+                      fsc_type_claim: claim,
+                      note: editNote.value.trim() || null,
+                    }),
+                  });
+                  showToast('Réception mise à jour.', 'success');
+                  await loadRecepHistory();
+                } catch (err) {
+                  showToast('Erreur : ' + (err.message || 'mise à jour impossible'), 'error');
+                }
+              },
+            },
+          }, 'Enregistrer les modifications');
+          detail.appendChild(el('div', { style: { fontSize: '11px', color: 'var(--muted)', fontWeight: '700', textTransform: 'uppercase' } }, 'Corriger la réception'));
+          detail.appendChild(editClaim);
+          detail.appendChild(editFour);
+          detail.appendChild(editCert);
+          detail.appendChild(editNote);
+          detail.appendChild(saveBtn);
+        }
         hist.appendChild(detail);
       }
     });

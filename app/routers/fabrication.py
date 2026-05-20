@@ -802,6 +802,80 @@ async def create_saisie(request: Request):
 
 # ─── Traçabilité matières ─────────────────────────────────────────────────────
 
+FSC_CLAIM_HIERARCHY = {
+    "fsc_100": {"fsc_100"},
+    "fsc_mix": {"fsc_100", "fsc_mix_credit", "fsc_mix"},
+    "fsc_recycled": {"fsc_100", "fsc_recycled"},
+}
+
+_FSC_TYPE_LABELS = {
+    "fsc_100": "FSC 100%",
+    "fsc_mix": "FSC Mix",
+    "fsc_recycled": "FSC Recycled",
+}
+
+
+def _fsc_type_label(fsc_type: str) -> str:
+    t = (fsc_type or "").strip()
+    return _FSC_TYPE_LABELS.get(t, t.replace("_", " ").upper() if t else "FSC")
+
+
+def _check_fsc_compatibility(dossier_fsc_type: str, bobine_fsc_type: str | None) -> bool:
+    """True si la bobine est compatible avec le type FSC requis sur le dossier."""
+    if not bobine_fsc_type or bobine_fsc_type == "non_fsc":
+        return False
+    allowed = FSC_CLAIM_HIERARCHY.get((dossier_fsc_type or "").strip(), set())
+    return bobine_fsc_type in allowed
+
+
+def _bobine_fsc_type_for_matiere(conn, matiere_id: int) -> str:
+    row = conn.execute(
+        """SELECT COALESCE(sr.fsc_type_claim, 'non_fsc') AS bobine_fsc_type
+           FROM fab_matieres_utilisees fmu
+           LEFT JOIN stock_receptions sr ON sr.id = fmu.reception_id
+           WHERE fmu.id=?""",
+        (matiere_id,),
+    ).fetchone()
+    return (row["bobine_fsc_type"] if row else None) or "non_fsc"
+
+
+def _fetch_matiere_row(conn, matiere_id: int) -> dict | None:
+    row = conn.execute(
+        """SELECT
+             fmu.*,
+             sr.id AS reception_id_found,
+             COALESCE(sr.fournisseur, fmu.fournisseur_manual) AS fournisseur,
+             COALESCE(sr.certificat_fsc, fmu.certificat_fsc_manual) AS certificat_fsc,
+             CASE
+               WHEN sr.id IS NOT NULL THEN 'reception'
+               WHEN fmu.fournisseur_manual IS NOT NULL THEN 'manual'
+               ELSE NULL
+             END AS liaison_mode_resolved
+           FROM fab_matieres_utilisees fmu
+           LEFT JOIN stock_receptions sr
+             ON sr.id = (
+               SELECT i.reception_id
+               FROM stock_reception_items i
+               WHERE trim(i.code_barre) = trim(fmu.code_barre)
+               ORDER BY i.scanned_at DESC, i.id DESC
+               LIMIT 1
+             )
+           WHERE fmu.id=?""",
+        (matiere_id,),
+    ).fetchone()
+    if not row:
+        return None
+    d = dict(row)
+    if d.get("reception_id_found"):
+        d["reception_id"] = d.get("reception_id_found")
+        d["liaison_mode"] = "reception"
+    else:
+        d["liaison_mode"] = d.get("liaison_mode_resolved") or d.get("liaison_mode")
+    d.pop("reception_id_found", None)
+    d.pop("liaison_mode_resolved", None)
+    return d
+
+
 @router.get("/api/fabrication/matieres")
 def list_matieres(request: Request, machine_id: int = None, no_dossier: str = None):
     """Retourne les matières scannées : pour une machine (session du jour) ou un dossier."""
@@ -870,6 +944,95 @@ def list_matieres(request: Request, machine_id: int = None, no_dossier: str = No
     return {"matieres": matieres}
 
 
+@router.get("/api/fabrication/tracabilite/{no_dossier}")
+def get_tracabilite_dossier(no_dossier: str, request: Request):
+    """Rapport de traçabilité FSC complet pour un dossier."""
+    user = get_current_user(request)
+    _check_fab_access(user)
+
+    ref = (no_dossier or "").strip()
+    if not ref:
+        raise HTTPException(status_code=400, detail="Référence dossier manquante")
+
+    with get_db() as conn:
+        entry = conn.execute(
+            """SELECT pe.reference, pe.client, pe.description, pe.statut, pe.machine_id,
+                      pe.fsc_requis, pe.fsc_type_requis, pe.date_livraison, pe.numero_of,
+                      m.nom AS machine_nom
+               FROM planning_entries pe
+               LEFT JOIN machines m ON m.id = pe.machine_id
+               WHERE pe.reference=? LIMIT 1""",
+            (ref,),
+        ).fetchone()
+
+        rows = conn.execute(
+            """SELECT
+                 fmu.id, fmu.code_barre, fmu.scanned_at, fmu.operateur,
+                 fmu.machine_nom, fmu.liaison_mode,
+                 fmu.fsc_warning, fmu.fsc_warning_note,
+                 COALESCE(sr.fournisseur, fmu.fournisseur_manual) AS fournisseur,
+                 COALESCE(sr.certificat_fsc, fmu.certificat_fsc_manual) AS certificat_fsc,
+                 COALESCE(sr.fsc_type_claim, NULL) AS fsc_type_claim,
+                 sr.id AS reception_id,
+                 sr.created_at AS reception_date,
+                 ff.licence AS fournisseur_licence,
+                 ff.certificat AS fournisseur_certificat
+               FROM fab_matieres_utilisees fmu
+               LEFT JOIN stock_receptions sr ON sr.id = (
+                   SELECT i.reception_id FROM stock_reception_items i
+                   WHERE trim(i.code_barre) = trim(fmu.code_barre)
+                   ORDER BY i.scanned_at DESC, i.id DESC
+                   LIMIT 1
+               )
+               LEFT JOIN fournisseurs_fsc ff
+                 ON ff.nom = COALESCE(sr.fournisseur, fmu.fournisseur_manual)
+               WHERE fmu.no_dossier = ?
+               ORDER BY fmu.scanned_at ASC""",
+            (ref,),
+        ).fetchall()
+
+    fsc_requis = int(entry["fsc_requis"]) if entry and entry["fsc_requis"] else 0
+    fsc_type_requis = (entry["fsc_type_requis"] if entry else None) or ""
+
+    bobines = []
+    nb_conformes = 0
+    for r in rows:
+        d = dict(r)
+        if fsc_requis:
+            bobine_claim = d.get("fsc_type_claim")
+            conforme = _check_fsc_compatibility(fsc_type_requis, bobine_claim)
+            d["fsc_conforme"] = conforme
+            if conforme:
+                nb_conformes += 1
+        else:
+            d["fsc_conforme"] = None
+        bobines.append(d)
+
+    nb_total = len(bobines)
+    if fsc_requis and nb_total > 0:
+        statut_global = "conforme" if nb_conformes == nb_total else "non_conforme"
+    elif fsc_requis and nb_total == 0:
+        statut_global = "en_attente"
+    else:
+        statut_global = "non_applicable"
+
+    dossier_out = dict(entry) if entry else {"reference": ref}
+    if not entry and _is_fictif_dossier(ref):
+        dossier_out = _build_fictif_dossier_dict(ref, None)
+
+    return {
+        "dossier": dossier_out,
+        "bobines": bobines,
+        "synthese": {
+            "nb_bobines_total": nb_total,
+            "nb_bobines_fsc_conformes": nb_conformes if fsc_requis else None,
+            "nb_bobines_non_conformes": (nb_total - nb_conformes) if fsc_requis else None,
+            "statut_global": statut_global,
+            "genere_a": datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S"),
+        },
+    }
+
+
 @router.get("/api/fabrication/receptions/lookup")
 def lookup_reception_for_barcode(request: Request, code_barre: str):
     """Lookup d'une réception matière depuis un code barre (pour Traça Fabrication)."""
@@ -881,7 +1044,7 @@ def lookup_reception_for_barcode(request: Request, code_barre: str):
     with get_db() as conn:
         row = conn.execute(
             """
-            SELECT r.id AS reception_id, r.fournisseur, r.certificat_fsc
+            SELECT r.id AS reception_id, r.fournisseur, r.certificat_fsc, r.fsc_type_claim
             FROM stock_reception_items i
             JOIN stock_receptions r ON r.id = i.reception_id
             WHERE trim(i.code_barre) = trim(?)
@@ -898,6 +1061,7 @@ def lookup_reception_for_barcode(request: Request, code_barre: str):
         "reception_id": d.get("reception_id"),
         "fournisseur": d.get("fournisseur"),
         "certificat_fsc": d.get("certificat_fsc"),
+        "fsc_type_claim": d.get("fsc_type_claim") or "non_fsc",
     }
 
 
@@ -908,6 +1072,42 @@ async def add_matiere(request: Request):
     _check_fab_access(user)
 
     body = await request.json()
+
+    # Confirmation d'une alerte FSC sur un scan déjà créé
+    if body.get("fsc_warning_confirmed"):
+        try:
+            matiere_id_confirm = int(body.get("matiere_id"))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Identifiant matière invalide")
+        note = (body.get("fsc_warning_note") or "").strip()
+        if not note:
+            raise HTTPException(
+                status_code=400,
+                detail="Raison de l'utilisation obligatoire.",
+            )
+        with get_db() as conn:
+            ex = conn.execute(
+                "SELECT id FROM fab_matieres_utilisees WHERE id=?",
+                (matiere_id_confirm,),
+            ).fetchone()
+            if not ex:
+                raise HTTPException(status_code=404, detail="Scan introuvable")
+            conn.execute(
+                """UPDATE fab_matieres_utilisees
+                   SET fsc_warning=1, fsc_warning_note=?
+                   WHERE id=?""",
+                (note, matiere_id_confirm),
+            )
+            conn.commit()
+            d = _fetch_matiere_row(conn, matiere_id_confirm)
+        return {
+            "success": True,
+            "id": matiere_id_confirm,
+            "matiere": d,
+            "warning": False,
+            "warning_message": None,
+        }
+
     code_barre = (body.get("code_barre") or "").strip()
     if not code_barre:
         raise HTTPException(status_code=400, detail="Code barre manquant")
@@ -943,41 +1143,37 @@ async def add_matiere(request: Request):
         new_id = cursor.lastrowid
 
         _link_matiere_to_reception(conn, new_id, code_barre, fournisseur_fsc_id)
+
+        fsc_warning = False
+        fsc_warning_message = None
+        if no_dossier:
+            entry = conn.execute(
+                """SELECT fsc_requis, fsc_type_requis FROM planning_entries
+                   WHERE reference=? LIMIT 1""",
+                (no_dossier,),
+            ).fetchone()
+            if entry and entry["fsc_requis"]:
+                dossier_type = (entry["fsc_type_requis"] or "").strip()
+                if dossier_type:
+                    bobine_fsc = _bobine_fsc_type_for_matiere(conn, new_id)
+                    if not _check_fsc_compatibility(dossier_type, bobine_fsc):
+                        label = _fsc_type_label(dossier_type)
+                        fsc_warning = True
+                        fsc_warning_message = (
+                            f"Cette bobine ({code_barre}) n'est pas certifiée {label}. "
+                            f"Le dossier {no_dossier} requiert une certification {label}."
+                        )
+
         conn.commit()
+        d = _fetch_matiere_row(conn, new_id) or {}
 
-        row = conn.execute(
-            """SELECT
-                 fmu.*,
-                 sr.id AS reception_id_found,
-                 COALESCE(sr.fournisseur, fmu.fournisseur_manual) AS fournisseur,
-                 COALESCE(sr.certificat_fsc, fmu.certificat_fsc_manual) AS certificat_fsc,
-                 CASE
-                   WHEN sr.id IS NOT NULL THEN 'reception'
-                   WHEN fmu.fournisseur_manual IS NOT NULL THEN 'manual'
-                   ELSE NULL
-                 END AS liaison_mode_resolved
-               FROM fab_matieres_utilisees fmu
-               LEFT JOIN stock_receptions sr
-                 ON sr.id = (
-                   SELECT i.reception_id
-                   FROM stock_reception_items i
-                   WHERE trim(i.code_barre) = trim(fmu.code_barre)
-                   ORDER BY i.scanned_at DESC, i.id DESC
-                   LIMIT 1
-                 )
-               WHERE fmu.id=?""",
-            (new_id,),
-        ).fetchone()
-
-    d = dict(row) if row else {}
-    if d.get("reception_id_found"):
-        d["reception_id"] = d.get("reception_id_found")
-        d["liaison_mode"] = "reception"
-    else:
-        d["liaison_mode"] = d.get("liaison_mode_resolved") or d.get("liaison_mode")
-    d.pop("reception_id_found", None)
-    d.pop("liaison_mode_resolved", None)
-    return {"success": True, "id": new_id, "matiere": d}
+    return {
+        "success": True,
+        "id": new_id,
+        "matiere": d,
+        "warning": fsc_warning,
+        "warning_message": fsc_warning_message,
+    }
 
 
 def _link_matiere_to_reception(conn, matiere_id: int, code_barre: str, fournisseur_fsc_id: int | None) -> None:

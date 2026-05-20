@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import date, datetime, timedelta
 from typing import Any
 
@@ -608,6 +609,167 @@ def tool_planning_client_schedule(conn, inp: dict) -> str:
         "\nNote : estimation basée sur la file actuelle et le calendrier machine "
         "(jours ouvrés, horaires). Sous réserve des aléas de production."
     )
+    return "\n".join(lines)
+
+
+def _resolve_dossier_refs_for_traceability(conn, query: str) -> tuple[list[str], list[dict]]:
+    """Références planning/OF et no_dossier matières correspondant à la recherche."""
+    q = (query or "").strip()
+    if not q:
+        return [], []
+
+    refs: set[str] = set()
+    planning_hits: list[dict] = []
+    seen_pe: set[str] = set()
+
+    def _add_pe_row(r) -> None:
+        ref = (r["reference"] or "").strip()
+        of = (r["numero_of"] or "").strip()
+        key = ref or of
+        if not key or key in seen_pe:
+            return
+        seen_pe.add(key)
+        if ref:
+            refs.add(ref)
+        if of:
+            refs.add(of)
+        planning_hits.append(
+            {
+                "reference": ref or of,
+                "numero_of": of or None,
+                "client": (r["client"] or "").strip() or None,
+                "statut": (r["statut"] or "").strip() or None,
+                "machine": (r["machine_nom"] or "").strip() or None,
+            }
+        )
+
+    like = f"%{q}%"
+    pe_rows = conn.execute(
+        """
+        SELECT pe.reference, pe.numero_of, pe.client, pe.statut, m.nom AS machine_nom
+        FROM planning_entries pe
+        LEFT JOIN machines m ON m.id = pe.machine_id
+        WHERE TRIM(COALESCE(pe.reference, '')) = TRIM(?)
+           OR TRIM(COALESCE(pe.numero_of, '')) = TRIM(?)
+           OR pe.reference LIKE ? COLLATE NOCASE
+           OR pe.numero_of LIKE ? COLLATE NOCASE
+           OR TRIM(COALESCE(pe.reference, '')) LIKE '%' || TRIM(?) || '%' COLLATE NOCASE
+           OR TRIM(COALESCE(pe.numero_of, '')) LIKE '%' || TRIM(?) || '%' COLLATE NOCASE
+        ORDER BY pe.position ASC
+        LIMIT 12
+        """,
+        (q, q, like, like, q, q),
+    ).fetchall()
+    for r in pe_rows:
+        _add_pe_row(r)
+
+    for chunk in re.findall(r"\d{4,}", q):
+        if chunk == q:
+            continue
+        chunk_like = f"%{chunk}%"
+        extra = conn.execute(
+            """
+            SELECT pe.reference, pe.numero_of, pe.client, pe.statut, m.nom AS machine_nom
+            FROM planning_entries pe
+            LEFT JOIN machines m ON m.id = pe.machine_id
+            WHERE pe.reference LIKE ? COLLATE NOCASE
+               OR pe.numero_of LIKE ? COLLATE NOCASE
+            ORDER BY pe.position ASC
+            LIMIT 8
+            """,
+            (chunk_like, chunk_like),
+        ).fetchall()
+        for r in extra:
+            _add_pe_row(r)
+
+    m_rows = conn.execute(
+        """
+        SELECT DISTINCT TRIM(no_dossier) AS nd
+        FROM fab_matieres_utilisees
+        WHERE no_dossier IS NOT NULL AND TRIM(no_dossier) != ''
+          AND (
+            TRIM(no_dossier) = TRIM(?)
+            OR no_dossier LIKE ? COLLATE NOCASE
+            OR TRIM(no_dossier) LIKE '%' || TRIM(?) || '%' COLLATE NOCASE
+          )
+        """,
+        (q, like, q),
+    ).fetchall()
+    for r in m_rows:
+        nd = (r["nd"] or "").strip()
+        if nd:
+            refs.add(nd)
+
+    return sorted(refs), planning_hits
+
+
+def tool_traceability_dossier_bobines(conn, inp: dict) -> str:
+    """Bobines matière scannées pour un dossier (MyProd > Traçabilité)."""
+    query = (
+        inp.get("no_dossier")
+        or inp.get("query")
+        or inp.get("reference")
+        or inp.get("dossier")
+        or ""
+    ).strip()
+    if not query:
+        return "Indiquez le numéro ou la référence du dossier (ex. 9931595, Reliquat 9931595)."
+
+    refs, planning_hits = _resolve_dossier_refs_for_traceability(conn, query)
+    if not refs:
+        return (
+            f"Traçabilité — aucun dossier fabrication trouvé pour « {query} ». "
+            "Vérifiez la référence planning ou le numéro d'OF."
+        )
+
+    placeholders = ",".join("?" * len(refs))
+    matieres = conn.execute(
+        f"""
+        SELECT code_barre, machine_nom, operateur, scanned_at, no_dossier
+        FROM fab_matieres_utilisees
+        WHERE TRIM(no_dossier) IN ({placeholders})
+        ORDER BY scanned_at ASC
+        """,
+        refs,
+    ).fetchall()
+
+    lines = [f"Traçabilité bobines — recherche « {query} » :"]
+
+    if planning_hits:
+        pe = planning_hits[0]
+        dossier_lbl = pe["reference"] or "—"
+        extra = []
+        if pe.get("client"):
+            extra.append(pe["client"])
+        if pe.get("machine"):
+            extra.append(pe["machine"])
+        if pe.get("statut"):
+            extra.append(pe["statut"])
+        suffix = f" ({', '.join(extra)})" if extra else ""
+        lines.append(f"Dossier planning : {dossier_lbl}{suffix}")
+        if len(planning_hits) > 1:
+            others = ", ".join(
+                (p["reference"] or "?") for p in planning_hits[1:4]
+            )
+            lines.append(f"Autres correspondances planning : {others}")
+
+    if not matieres:
+        lines.append(
+            "Aucune bobine matière scannée enregistrée pour ce dossier "
+            "(MyProd > Traçabilité)."
+        )
+        return "\n".join(lines)
+
+    lines.append(f"{len(matieres)} bobine(s) scannée(s) :")
+    for m in matieres:
+        code = (m["code_barre"] or "").strip() or "—"
+        mach = (m["machine_nom"] or "").strip() or "—"
+        op = (m["operateur"] or "").strip() or "—"
+        dt = str(m["scanned_at"] or "")[:16].replace("T", " ")
+        nd = (m["no_dossier"] or "").strip()
+        nd_s = f" · dossier {nd}" if nd and len(refs) > 1 else ""
+        lines.append(f"  - {code} · {mach} · {op} · {dt or '—'}{nd_s}")
+
     return "\n".join(lines)
 
 

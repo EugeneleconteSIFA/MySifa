@@ -7,7 +7,7 @@ import io
 import re
 import sqlite3
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Any, Optional
 
 import pandas as pd
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
@@ -826,6 +826,25 @@ def dashboard(request: Request):
 
 # ─── Réception matière ─────────────────────────────────────────────────────────
 
+_FSC_TYPE_CLAIM_VALUES = frozenset({
+    "fsc_100",
+    "fsc_mix_credit",
+    "fsc_mix",
+    "fsc_recycled",
+    "non_fsc",
+})
+
+
+def _parse_fsc_type_claim(raw: Any, default: str = "non_fsc") -> str:
+    t = (raw or default).strip() if raw is not None else default
+    if t not in _FSC_TYPE_CLAIM_VALUES:
+        raise HTTPException(
+            status_code=400,
+            detail="Type FSC invalide — valeurs : fsc_100, fsc_mix_credit, fsc_mix, fsc_recycled, non_fsc.",
+        )
+    return t
+
+
 @router.get("/api/stock/fournisseurs")
 def list_fournisseurs_stock(request: Request):
     """Liste des fournisseurs FSC pour la réception matière et le guide traça (lecture publique interne)."""
@@ -871,13 +890,30 @@ async def create_reception(request: Request):
     note = (body.get("note") or "").strip() or None
     fournisseur = (body.get("fournisseur") or "").strip() or None
     certificat_fsc = (body.get("certificat_fsc") or "").strip() or None
+    fsc_type_claim = _parse_fsc_type_claim(body.get("fsc_type_claim"), "non_fsc")
+    if fsc_type_claim != "non_fsc" and not certificat_fsc:
+        raise HTTPException(
+            status_code=400,
+            detail="Certificat FSC requis pour une réception certifiée FSC.",
+        )
     now = datetime.now().isoformat()
 
     with get_db() as conn:
         cur = conn.execute(
-            """INSERT INTO stock_receptions (created_at, created_by, created_by_name, note, nb_bobines, fournisseur, certificat_fsc)
-               VALUES (?,?,?,?,?,?,?)""",
-            (now, user.get("email"), user.get("nom"), note, len(codes), fournisseur, certificat_fsc),
+            """INSERT INTO stock_receptions
+               (created_at, created_by, created_by_name, note, nb_bobines,
+                fournisseur, certificat_fsc, fsc_type_claim)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            (
+                now,
+                user.get("email"),
+                user.get("nom"),
+                note,
+                len(codes),
+                fournisseur,
+                certificat_fsc,
+                fsc_type_claim,
+            ),
         )
         reception_id = cur.lastrowid
         conn.executemany(
@@ -887,6 +923,77 @@ async def create_reception(request: Request):
         conn.commit()
 
     return {"success": True, "id": reception_id, "nb_bobines": len(codes)}
+
+
+@router.patch("/api/stock/receptions/{reception_id}")
+async def patch_reception(reception_id: int, request: Request):
+    """Corrige a posteriori fournisseur, certificat FSC, type de claim ou note."""
+    user = require_stock_write(request)
+    body = await request.json()
+
+    with get_db() as conn:
+        ex = conn.execute(
+            "SELECT * FROM stock_receptions WHERE id=?", (reception_id,)
+        ).fetchone()
+        if not ex:
+            raise HTTPException(status_code=404, detail="Réception introuvable")
+
+        exd = dict(ex)
+        fournisseur = (
+            (body.get("fournisseur") or "").strip() or None
+            if "fournisseur" in body
+            else exd.get("fournisseur")
+        )
+        note = (
+            (body.get("note") or "").strip() or None
+            if "note" in body
+            else exd.get("note")
+        )
+        certificat_fsc = (
+            (body.get("certificat_fsc") or "").strip() or None
+            if "certificat_fsc" in body
+            else exd.get("certificat_fsc")
+        )
+        fsc_type_claim = (
+            _parse_fsc_type_claim(body.get("fsc_type_claim"))
+            if "fsc_type_claim" in body
+            else _parse_fsc_type_claim(exd.get("fsc_type_claim"), "non_fsc")
+        )
+        if fsc_type_claim != "non_fsc" and not certificat_fsc:
+            raise HTTPException(
+                status_code=400,
+                detail="Certificat FSC requis pour une réception certifiée FSC.",
+            )
+
+        audit_detail: dict = {}
+        if fournisseur != exd.get("fournisseur"):
+            audit_detail["fournisseur"] = fournisseur
+        if note != exd.get("note"):
+            audit_detail["note"] = note
+        if certificat_fsc != exd.get("certificat_fsc"):
+            audit_detail["certificat_fsc"] = certificat_fsc
+        if fsc_type_claim != (exd.get("fsc_type_claim") or "non_fsc"):
+            audit_detail["fsc_type_claim"] = fsc_type_claim
+
+        conn.execute(
+            """UPDATE stock_receptions
+               SET fournisseur=?, certificat_fsc=?, fsc_type_claim=?, note=?
+               WHERE id=?""",
+            (fournisseur, certificat_fsc, fsc_type_claim, note, reception_id),
+        )
+        conn.commit()
+
+    if audit_detail:
+        log_action(
+            user=user,
+            action="UPDATE",
+            module="stock",
+            objet=f"Réception bobines #{reception_id}",
+            detail=audit_detail,
+            ip=request.client.host if request.client else None,
+        )
+
+    return {"success": True, "id": reception_id}
 
 
 # ── Référentiel produits (référence + unité de vente) ─────────────

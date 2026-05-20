@@ -493,6 +493,11 @@ table.fab-traca-table tr:last-child td{border-bottom:none}
 .fab-traca-del{background:none;border:none;cursor:pointer;color:var(--muted);padding:2px 6px;
   border-radius:4px;transition:color .12s}
 .fab-traca-del:hover{color:var(--danger)}
+.fab-traca-fsc-warn{
+  display:inline-flex;align-items:center;justify-content:center;
+  margin-left:6px;color:var(--warn);font-weight:800;font-size:13px;
+  cursor:help;vertical-align:middle;
+}
 .fab-traca-empty{text-align:center;padding:24px;color:var(--muted);font-size:12px}
 .fab-traca-status{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;flex-shrink:0}
 .fab-traca-saving{color:var(--accent)}
@@ -569,6 +574,34 @@ table.fab-traca-table tr:last-child td{border-bottom:none}
 .upd-card .upd-body kbd{background:rgba(255,255,255,.12);border-radius:4px;padding:1px 5px;font-family:monospace;font-size:11px}
 .upd-ok-btn{display:block;width:100%;margin-top:20px;padding:13px;border-radius:12px;border:none;background:var(--accent);color:#0a0e17;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;transition:filter .15s}
 .upd-ok-btn:hover{filter:brightness(1.08)}
+
+/* Rapport FSC — export PDF */
+.fab-fsc-traca-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1200;
+  display:flex;align-items:center;justify-content:center;padding:20px;
+}
+.fab-fsc-traca-box{
+  background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:20px 22px;max-width:780px;width:100%;max-height:90vh;overflow-y:auto;
+  box-shadow:0 24px 64px rgba(0,0,0,.5);
+}
+.fab-fsc-traca-table{width:100%;border-collapse:collapse;font-size:13px}
+.fab-fsc-traca-table th{
+  text-align:left;padding:8px;background:var(--bg);border-bottom:2px solid var(--border);
+  font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);
+}
+.fab-fsc-traca-table td{padding:8px;border-bottom:1px solid var(--border);vertical-align:top}
+.fab-fsc-traca-statut{
+  padding:10px 16px;border-radius:8px;margin-bottom:16px;font-weight:700;font-size:13px;
+}
+@media print{
+  #root{display:none!important}
+  .fab-sidebar,.fab-topbar,.fab-sidebar-overlay,.fab-footer{display:none!important}
+  #mroot{position:static!important;inset:auto!important;pointer-events:auto!important;display:block!important}
+  #mroot .fab-fsc-traca-overlay{position:static;background:none;padding:0}
+  #mroot .fab-fsc-traca-box{box-shadow:none;max-height:none;border:none;max-width:none}
+  #mroot .fab-fsc-traca-no-print{display:none!important}
+}
 </style>
 </head>
 <body>
@@ -688,6 +721,27 @@ let _fabRefreshPausedUntil = 0;
 
 function fabPauseAutoRefresh(ms){
   _fabRefreshPausedUntil = Math.max(_fabRefreshPausedUntil, Date.now() + (ms||10000));
+}
+
+function escHtml(s){
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+const FSC_CLAIM_LABELS = {
+  fsc_100: 'FSC 100%',
+  fsc_mix_credit: 'FSC Mix Credit',
+  fsc_mix: 'FSC Mix',
+  fsc_recycled: 'FSC Recycled',
+  non_fsc: 'Non FSC',
+};
+
+function fscClaimLabel(claim){
+  const c = (claim || 'non_fsc').trim();
+  return FSC_CLAIM_LABELS[c] || c;
+}
+
+function fscTypeRequisLabel(t){
+  return fscClaimLabel(t) || '—';
 }
 
 function fabIsModalOpen(){
@@ -1379,23 +1433,117 @@ async function loadMatieres(){
   finally{ set({tracaLoading:false}); }
 }
 
+function tracaBuildMatiereBody(codeBarre, extra){
+  const body = {code_barre: codeBarre, ...(extra||{})};
+  const mid = (S.user&&S.user.machine_id) || S.adminMachineId;
+  if(mid) body.machine_id = mid;
+  if(S.dossier) body.no_dossier = S.dossier.reference;
+  return body;
+}
+
+function tracaApplyMatiereSaved(d, clean){
+  S.tracaMatieres = [...S.tracaMatieres, d.matiere];
+  S.tracaLastCode = clean;
+  S.tracaManual = '';
+  render();
+  showToast('Bobine enregistrée.','success');
+}
+
+function closeFscWarningModal(){
+  const mr = document.getElementById('mroot');
+  if(mr) mr.innerHTML = '';
+}
+
+function showFscWarningModal(message, onConfirm, onCancel){
+  fabPauseAutoRefresh(60000);
+  const mr = document.getElementById('mroot');
+  if(!mr) return;
+  mr.innerHTML = '';
+  const noteTa = h('textarea',{
+    attrs:{id:'fsc-warn-note',rows:'2',placeholder:'Ex : matière FSC en attente de livraison, autorisation responsable…'}
+  });
+  const overlay = h('div',{className:'fab-modal-overlay',onClick:(e)=>{
+    if(e.target===e.currentTarget){ closeFscWarningModal(); if(onCancel) onCancel(); }
+  }},
+    h('div',{className:'fab-modal',style:{borderTop:'4px solid var(--danger)',maxWidth:'480px'},
+      onClick:(e)=>e.stopPropagation()},
+      h('div',{className:'fab-modal-title',style:{color:'var(--danger)'}},'Alerte certification FSC'),
+      h('p',{className:'fab-modal-sub'},message),
+      h('div',{className:'fab-field'},
+        h('label',null,'Raison de l\'utilisation (obligatoire)'),
+        noteTa
+      ),
+      h('div',{className:'fab-modal-btns'},
+        h('button',{className:'fab-btn fab-btn-ghost',onClick:()=>{
+          closeFscWarningModal(); if(onCancel) onCancel();
+        }},'Annuler'),
+        h('button',{className:'fab-btn fab-btn-danger',onClick:()=>{
+          const note = document.getElementById('fsc-warn-note')?.value?.trim();
+          if(!note){ showToast('La raison est obligatoire.','danger'); return; }
+          closeFscWarningModal();
+          if(onConfirm) onConfirm(note);
+        }},'Confirmer quand même')
+      )
+    )
+  );
+  mr.appendChild(overlay);
+  requestAnimationFrame(()=>document.getElementById('fsc-warn-note')?.focus());
+}
+
+async function tracaConfirmFscWarning(matiereId, note){
+  const d = await apiFetch('/api/fabrication/matieres',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      matiere_id: matiereId,
+      fsc_warning_confirmed: true,
+      fsc_warning_note: note,
+    }),
+  });
+  return d;
+}
+
+async function tracaHandleMatiereResponse(d, clean){
+  if(!d || !d.success) return false;
+  if(d.warning){
+    showFscWarningModal(d.warning_message||'Incompatibilité certification FSC.',
+      async (note)=>{
+        set({tracaAutoSaving:true});
+        try{
+          const d2 = await tracaConfirmFscWarning(d.id, note);
+          if(d2 && d2.success && d2.matiere){
+            tracaApplyMatiereSaved(d2, clean);
+          }
+        }catch(e){ showToast(e.message||'Erreur confirmation FSC.','danger'); }
+        finally{ set({tracaAutoSaving:false}); }
+      },
+      async ()=>{
+        try{
+          await tracaDeleteMatiere(d.id);
+          showToast('Scan annulé.','info');
+        }catch(e){ showToast(e.message||'Erreur annulation.','danger'); }
+      }
+    );
+    return true;
+  }
+  if(d.matiere){
+    tracaApplyMatiereSaved(d, clean);
+    return true;
+  }
+  return false;
+}
+
 async function tracaSaveCode(code){
   if(!code||!code.trim()) return;
   const clean = code.trim();
   set({tracaAutoSaving:true});
   try{
-    const body = {code_barre:clean};
-    const mid = (S.user&&S.user.machine_id) || S.adminMachineId;
-    if(mid) body.machine_id = mid;
-    if(S.dossier) body.no_dossier = S.dossier.reference;
-    const d = await apiFetch('/api/fabrication/matieres',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    if(d.success){
-      S.tracaMatieres = [...S.tracaMatieres, d.matiere];
-      S.tracaLastCode = clean;
-      S.tracaManual = '';
-      render();
-      showToast('✓ Bobine enregistrée','success');
-    }
+    const d = await apiFetch('/api/fabrication/matieres',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(tracaBuildMatiereBody(clean)),
+    });
+    if(await tracaHandleMatiereResponse(d, clean)) return;
   }catch(e){
     const msg = String((e && e.message) || '');
     if(msg.toLowerCase().includes('fournisseur requis')){
@@ -1403,19 +1551,12 @@ async function tracaSaveCode(code){
       const fid = await tracaAskFournisseur();
       if(fid){
         try{
-          const body2 = {code_barre:clean, fournisseur_fsc_id: fid};
-          const mid2 = (S.user&&S.user.machine_id) || S.adminMachineId;
-          if(mid2) body2.machine_id = mid2;
-          if(S.dossier) body2.no_dossier = S.dossier.reference;
-          const d2 = await apiFetch('/api/fabrication/matieres',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body2)});
-          if(d2.success){
-            S.tracaMatieres = [...S.tracaMatieres, d2.matiere];
-            S.tracaLastCode = clean;
-            S.tracaManual = '';
-            render();
-            showToast('Bobine enregistrée.','success');
-            return;
-          }
+          const d2 = await apiFetch('/api/fabrication/matieres',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify(tracaBuildMatiereBody(clean, {fournisseur_fsc_id: fid})),
+          });
+          await tracaHandleMatiereResponse(d2, clean);
         }catch(e2){
           showToast((e2 && e2.message) || 'Erreur de liaison fournisseur.','danger');
         }
@@ -1598,8 +1739,12 @@ function renderTracaPanel(){
         const mode = (m.liaison_mode || '').trim();
         const isLinked = mode === 'reception';
         const linkLbl = isLinked ? 'Lié à une réception' : 'Liaison manuelle';
+        const fscWarn = m.fsc_warning === 1 || m.fsc_warning === true;
         return h('tr',null,
-          h('td',null,h('span',{className:'fab-traca-code'},m.code_barre)),
+          h('td',null,
+            h('span',{className:'fab-traca-code'},m.code_barre),
+            fscWarn ? h('span',{className:'fab-traca-fsc-warn',title:m.fsc_warning_note||'Alerte certification FSC'},'\u26A0') : null
+          ),
           h('td',null,fournisseur ? h('span',{className:'fab-traca-supplier'},fournisseur) : h('span',{style:{color:'var(--muted)',fontStyle:'italic'}},'—')),
           h('td',null,cert ? h('span',{className:'fab-traca-cert'},cert) : h('span',{style:{color:'var(--muted)',fontStyle:'italic'}},'—')),
           h('td',null,h('span',{className:'fab-traca-link '+(isLinked?'ok':'bad')},linkLbl)),
@@ -1657,6 +1802,12 @@ function renderTracaPanel(){
       S.dossier ? h('span',{style:{fontSize:'12px',fontWeight:'700',
           color:(S.dossier.fictif||isFictifDossierRef(S.dossier.reference))?'#a78bfa':'var(--accent)'}},
         fabDossierRefLabel(S.dossier)) : null,
+      S.dossier && (S.dossier.fsc_requis === 1 || S.dossier.fsc_requis === true)
+        ? h('button',{
+            className:'fab-btn fab-btn-ghost fab-btn-sm',
+            style:{fontSize:'11px',marginLeft:'auto'},
+            onClick:()=>openTracabiliteModal(S.dossier.reference || S.dossier.numero_of || ''),
+          },'Rapport FSC') : null,
       h('span',{className:'fab-main-sub'},machineName)
     ),
     h('div',{className:'fab-traca-layout'},
@@ -1828,6 +1979,126 @@ function renderMain(){
   );
 }
 
+/* ── Rapport traçabilité FSC ─────────────────────────────────── */
+function closeTracabiliteModal(){
+  const mr = document.getElementById('mroot');
+  if(mr) mr.innerHTML = '';
+}
+
+function renderTracabiliteModal(data, noDossier){
+  const mr = document.getElementById('mroot');
+  if(!mr) return;
+  mr.innerHTML = '';
+
+  const syn = data.synthese || {};
+  const sg = syn.statut_global || 'non_applicable';
+  const statutColor = sg === 'conforme' ? 'var(--success)'
+    : sg === 'non_conforme' ? 'var(--danger)' : 'var(--muted)';
+  const statutBg = sg === 'conforme' ? 'rgba(52,211,153,.12)'
+    : sg === 'non_conforme' ? 'rgba(248,113,113,.12)' : 'rgba(148,163,184,.12)';
+  let statutText = 'Certification FSC non requise sur ce dossier';
+  if(sg === 'conforme') statutText = 'Conforme FSC';
+  else if(sg === 'non_conforme') {
+    statutText = 'Non conforme — ' + (syn.nb_bobines_non_conformes ?? 0) + ' bobine(s) en écart';
+  } else if(sg === 'en_attente') statutText = 'En attente — aucune bobine scannée';
+
+  const dos = data.dossier || {};
+  const typeReq = dos.fsc_type_requis ? fscTypeRequisLabel(dos.fsc_type_requis) : '—';
+
+  const thead = h('tr',null,
+    h('th',null,'Code barre'),
+    h('th',null,'Fournisseur'),
+    h('th',null,'Certificat FSC'),
+    h('th',null,'Type claim'),
+    h('th',null,'Statut'),
+    h('th',null,'Scanné le')
+  );
+  const tbody = h('tbody');
+  (data.bobines || []).forEach(b=>{
+    const claim = b.fsc_type_claim || 'non_fsc';
+    const claimBg = claim === 'fsc_100' ? 'rgba(52,211,153,.12)' : 'var(--accent-bg)';
+    const claimColor = claim === 'fsc_100' ? 'var(--success)' : 'var(--accent)';
+    let statutCell;
+    if(b.fsc_conforme === true){
+      statutCell = h('span',{style:{color:'var(--success)'}},'\u2713 Conforme');
+    } else if(b.fsc_conforme === false){
+      const ecart = '\u2717 Écart' + (b.fsc_warning ? ' (confirmé)' : '');
+      statutCell = h('span',{style:{color:'var(--danger)'}}, ecart);
+    } else {
+      statutCell = h('span',{style:{color:'var(--muted)'}},'—');
+    }
+    const scanLbl = (b.scanned_at || '') + (b.operateur ? ' · ' + b.operateur : '');
+    tbody.appendChild(h('tr',null,
+      h('td',{style:{fontFamily:'monospace',fontWeight:'700'}}, b.code_barre || '—'),
+      h('td',null, b.fournisseur || '—'),
+      h('td',null, b.certificat_fsc || '—'),
+      h('td',null, h('span',{
+        style:{
+          fontSize:'11px',fontWeight:'600',padding:'2px 6px',borderRadius:'4px',
+          background:claimBg,color:claimColor,
+        },
+      }, fscClaimLabel(claim)),
+      h('td',null, statutCell),
+      h('td',{style:{color:'var(--muted)',fontSize:'12px'}}, scanLbl || '—')
+    ));
+  });
+  if(!data.bobines || !data.bobines.length){
+    tbody.appendChild(h('tr',null,
+      h('td',{colSpan:'6',style:{textAlign:'center',color:'var(--muted)',padding:'16px'}},
+        'Aucune bobine scannée pour ce dossier')
+    ));
+  }
+
+  const overlay = h('div',{className:'fab-fsc-traca-overlay fab-modal-overlay',onClick:(e)=>{
+    if(e.target===e.currentTarget) closeTracabiliteModal();
+  }},
+    h('div',{className:'fab-fsc-traca-box fab-modal',onClick:(e)=>e.stopPropagation()},
+      h('div',{className:'fab-fsc-traca-no-print',style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:'12px',marginBottom:'16px',flexWrap:'wrap'}},
+        h('div',null,
+          h('div',{style:{fontSize:'16px',fontWeight:'700'}},'Rapport de traçabilité FSC'),
+          h('div',{style:{color:'var(--muted)',fontSize:'13px',marginTop:'4px'}},'Dossier ', noDossier),
+          dos.client ? h('div',{style:{fontSize:'12px',color:'var(--text2)',marginTop:'4px'}}, dos.client) : null,
+          dos.fsc_requis ? h('div',{style:{fontSize:'12px',color:'var(--text2)',marginTop:'2px'}},
+            'Certification requise : ', typeReq) : null
+        ),
+        h('div',{style:{display:'flex',gap:'8px',flexShrink:'0'}},
+          h('button',{className:'fab-btn fab-btn-ghost fab-btn-sm',onClick:()=>window.print()},
+            'Exporter PDF'),
+          h('button',{className:'fab-btn fab-btn-ghost fab-btn-sm',onClick:closeTracabiliteModal},
+            'Fermer')
+        )
+      ),
+      h('div',{className:'fab-fsc-traca-statut',style:{
+        background:statutBg,
+        border:'1px solid '+statutColor,
+        color:statutColor,
+      }}, statutText),
+      h('table',{className:'fab-fsc-traca-table'},
+        h('thead',null, thead),
+        tbody
+      ),
+      h('div',{style:{marginTop:'16px',paddingTop:'12px',borderTop:'1px solid var(--border)',
+        fontSize:'11px',color:'var(--muted)'}},
+        'Généré le ', syn.genere_a || '—', ' · MySifa · SIFA')
+    )
+  );
+
+  mr.appendChild(overlay);
+}
+
+async function openTracabiliteModal(noDossier){
+  const ref = (noDossier || '').trim();
+  if(!ref){ showToast('Référence dossier manquante.','danger'); return; }
+  fabPauseAutoRefresh(120000);
+  try{
+    const data = await apiFetch('/api/fabrication/tracabilite/'+encodeURIComponent(ref));
+    if(!data) return;
+    renderTracabiliteModal(data, ref);
+  }catch(e){
+    showToast(e.message || 'Rapport indisponible.','danger');
+  }
+}
+
 /* ── Footer ──────────────────────────────────────────────────── */
 function renderFooter(){
   // Vue admin : lecture seule → ne pas afficher le footer d'actions (évite toute confusion).
@@ -1867,7 +2138,12 @@ function renderFooter(){
       ),
       d.commentaire ? h('div',{style:{fontSize:'11px',color:'var(--muted)',marginTop:'4px',
         overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'280px'}},
-        '💬 '+d.commentaire) : null
+        '💬 '+d.commentaire) : null,
+      (d.fsc_requis === 1 || d.fsc_requis === true) ? h('button',{
+        className:'fab-btn fab-btn-ghost fab-btn-sm',
+        style:{marginTop:'8px',alignSelf:'flex-start',fontSize:'12px'},
+        onClick:()=>openTracabiliteModal(d.reference || d.numero_of || ''),
+      },'Rapport traçabilité FSC') : null
     );
   } else {
     infoSection = h('div',{className:'fab-footer-info'},

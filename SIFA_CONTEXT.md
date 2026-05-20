@@ -88,6 +88,13 @@ consommables et produits finis par référence et par emplacement.
 | Statut en attente | Dossier planifié, pas encore commencé |
 | Statut en cours | Dossier en production actuellement |
 | Statut terminé | Dossier clôturé |
+| Bobine (matière) | Rouleau de support adhésif scanné en début de production ; code barre enregistré |
+| Traçabilité matières | Liste des bobines scannées par dossier (MyProd > Traçabilité) |
+
+### Traçabilité bobines (MyProd)
+Lors de la production, l'opérateur scanne les codes barres des bobines matière utilisées.
+Ces scans sont liés au numéro de dossier (référence planning / OF) et consultables dans
+MyProd > Traçabilité. Ce ne sont pas des références de stock produits finis.
 
 ---
 
@@ -100,3 +107,5 @@ consommables et produits finis par référence et par emplacement.
 - La logistique cherche des infos sur les emplacements, les mouvements de stock, les départs.
 - Toujours répondre en français, de façon concise et factuelle.
 - Ne jamais inventer de données : si l'information n'est pas dans la base, le dire clairement.
+- Questions du type « bobines utilisées pour le dossier X » : données de traçabilité fabrication
+  (codes barres scannés), pas le stock MyStock.
