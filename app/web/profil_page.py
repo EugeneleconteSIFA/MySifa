@@ -75,10 +75,10 @@ body{margin:0;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
 .nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
 .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(34,211,238,.25),0 0 18px rgba(34,211,238,.15)}
 body.palette-ambre .nav-btn:hover:not(.active),body.palette-forge .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(240,165,0,.28),0 0 16px rgba(240,165,0,.14)}
-body.palette-pivoine .nav-btn:hover:not(.active),body.palette-cocon .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(255,92,152,.28),0 0 16px rgba(255,92,152,.14)}
-body.palette-foret .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(76,175,114,.28),0 0 16px rgba(76,175,114,.14)}
-body.palette-cendre .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(148,163,184,.28),0 0 16px rgba(148,163,184,.14)}
-body.palette-braise .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(255,108,32,.28),0 0 16px rgba(255,108,32,.14)}
+body.palette-pivoine .nav-btn:hover:not(.active),body.palette-cocon .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(240,56,136,.28),0 0 16px rgba(240,56,136,.14)}
+body.palette-foret .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(61,214,126,.28),0 0 16px rgba(61,214,126,.14)}
+body.palette-cendre .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(100,150,200,.28),0 0 16px rgba(100,150,200,.14)}
+body.palette-braise .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(240,112,48,.28),0 0 16px rgba(240,112,48,.14)}
 body.light .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(8,145,178,.32),0 0 16px rgba(8,145,178,.12)}
 .back-mysifa{
   border:none!important;background:transparent!important;
@@ -99,10 +99,10 @@ body.light .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(8,145,178,.32),
 .theme-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent);
   box-shadow:0 0 0 1px rgba(34,211,238,.22),0 0 20px rgba(34,211,238,.14)}
 body.palette-ambre .theme-btn:hover,body.palette-forge .theme-btn:hover{box-shadow:0 0 0 1px rgba(240,165,0,.28),0 0 18px rgba(240,165,0,.14)}
-body.palette-pivoine .theme-btn:hover,body.palette-cocon .theme-btn:hover{box-shadow:0 0 0 1px rgba(255,92,152,.28),0 0 18px rgba(255,92,152,.14)}
-body.palette-foret .theme-btn:hover{box-shadow:0 0 0 1px rgba(76,175,114,.24),0 0 18px rgba(76,175,114,.12)}
-body.palette-cendre .theme-btn:hover{box-shadow:0 0 0 1px rgba(148,163,184,.24),0 0 18px rgba(148,163,184,.12)}
-body.palette-braise .theme-btn:hover{box-shadow:0 0 0 1px rgba(255,108,32,.24),0 0 18px rgba(255,108,32,.12)}
+body.palette-pivoine .theme-btn:hover,body.palette-cocon .theme-btn:hover{box-shadow:0 0 0 1px rgba(240,56,136,.24),0 0 18px rgba(240,56,136,.12)}
+body.palette-foret .theme-btn:hover{box-shadow:0 0 0 1px rgba(61,214,126,.24),0 0 18px rgba(61,214,126,.12)}
+body.palette-cendre .theme-btn:hover{box-shadow:0 0 0 1px rgba(100,150,200,.24),0 0 18px rgba(100,150,200,.12)}
+body.palette-braise .theme-btn:hover{box-shadow:0 0 0 1px rgba(240,112,48,.24),0 0 18px rgba(240,112,48,.12)}
 body.light .theme-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 18px rgba(8,145,178,.12)}
 .theme-btn .theme-ico{display:inline-flex;align-items:center;line-height:1}
 .theme-btn .theme-label{white-space:nowrap}
@@ -575,29 +575,29 @@ const PALETTE_DEF=[
       <div style="width:9px;height:9px;border-radius:50%;background:#4A8FE8;opacity:.8"></div>
       <div style="width:9px;height:9px;border-radius:50%;background:#F0A500;opacity:.4"></div>
     </div>`},
-  {id:'pivoine',  name:'Pivoine',  sub:'Rose vif · magenta',
-    prev:`<div style="background:#1a0a14;width:100%;height:100%;border-radius:6px;display:flex;align-items:center;justify-content:center;gap:5px">
-      <div style="width:9px;height:9px;border-radius:50%;background:#ff5c98"></div>
-      <div style="width:9px;height:9px;border-radius:50%;background:#ff5c98;opacity:.55"></div>
-      <div style="width:9px;height:9px;border-radius:50%;background:#f0b240;opacity:.7"></div>
+  {id:'pivoine', name:'Pivoine', sub:'Rose vif · quasi-noir',
+    prev:`<div style="background:#0e040c;width:100%;height:100%;border-radius:6px;display:flex;align-items:center;justify-content:center;gap:5px">
+      <div style="width:9px;height:9px;border-radius:50%;background:#f03888"></div>
+      <div style="width:9px;height:9px;border-radius:50%;background:#f03888;opacity:.5"></div>
+      <div style="width:9px;height:9px;border-radius:50%;background:#b888a4;opacity:.55"></div>
     </div>`},
-  {id:'foret',  name:'Forêt',   sub:'Vert profond · mousse',
-    prev:`<div style="background:#081a0f;width:100%;height:100%;border-radius:6px;display:flex;align-items:center;justify-content:center;gap:5px">
-      <div style="width:9px;height:9px;border-radius:50%;background:#4caf72"></div>
-      <div style="width:9px;height:9px;border-radius:50%;background:#4caf72;opacity:.55"></div>
-      <div style="width:9px;height:9px;border-radius:50%;background:#a5c8a8;opacity:.6"></div>
+  {id:'foret',  name:'Forêt',   sub:'Vert vif · quasi-noir',
+    prev:`<div style="background:#060d08;width:100%;height:100%;border-radius:6px;display:flex;align-items:center;justify-content:center;gap:5px">
+      <div style="width:9px;height:9px;border-radius:50%;background:#3dd67e"></div>
+      <div style="width:9px;height:9px;border-radius:50%;background:#3dd67e;opacity:.5"></div>
+      <div style="width:9px;height:9px;border-radius:50%;background:#8fa898;opacity:.6"></div>
     </div>`},
-  {id:'cendre', name:'Cendre',  sub:'Gris ardoise · froid',
-    prev:`<div style="background:#0f1115;width:100%;height:100%;border-radius:6px;display:flex;align-items:center;justify-content:center;gap:5px">
-      <div style="width:9px;height:9px;border-radius:50%;background:#94a3b8"></div>
-      <div style="width:9px;height:9px;border-radius:50%;background:#94a3b8;opacity:.6"></div>
-      <div style="width:9px;height:9px;border-radius:50%;background:#636878;opacity:.7"></div>
+  {id:'cendre', name:'Cendre',  sub:'Bleu acier · nuit froide',
+    prev:`<div style="background:#080a0f;width:100%;height:100%;border-radius:6px;display:flex;align-items:center;justify-content:center;gap:5px">
+      <div style="width:9px;height:9px;border-radius:50%;background:#6496c8"></div>
+      <div style="width:9px;height:9px;border-radius:50%;background:#6496c8;opacity:.55"></div>
+      <div style="width:9px;height:9px;border-radius:50%;background:#848ea8;opacity:.65"></div>
     </div>`},
-  {id:'braise', name:'Braise',  sub:'Orange brûlé · brun',
-    prev:`<div style="background:#1a0a00;width:100%;height:100%;border-radius:6px;display:flex;align-items:center;justify-content:center;gap:5px">
-      <div style="width:9px;height:9px;border-radius:50%;background:#ff6c20"></div>
-      <div style="width:9px;height:9px;border-radius:50%;background:#ff6c20;opacity:.55"></div>
-      <div style="width:9px;height:9px;border-radius:50%;background:#ffb87a;opacity:.65"></div>
+  {id:'braise', name:'Braise',  sub:'Orange brûlé · quasi-noir',
+    prev:`<div style="background:#0e0500;width:100%;height:100%;border-radius:6px;display:flex;align-items:center;justify-content:center;gap:5px">
+      <div style="width:9px;height:9px;border-radius:50%;background:#f07030"></div>
+      <div style="width:9px;height:9px;border-radius:50%;background:#f07030;opacity:.5"></div>
+      <div style="width:9px;height:9px;border-radius:50%;background:#b8907a;opacity:.65"></div>
     </div>`},
 ];
 

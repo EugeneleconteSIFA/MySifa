@@ -42,163 +42,163 @@ body.palette-forge.light {
   --c5: #dc2626;
 }
 
-/* ── Palette Pivoine (rose vif / magenta) ── */
+/* ── Palette Pivoine (fond quasi-noir / magenta vif) ── */
 body.palette-pivoine,
 body.palette-cocon {
-  --bg: #1a0a14;
-  --card: #2a1020;
-  --border: #4d1f38;
-  --text: #fce8f0;
-  --text2: #e8b0c8;
-  --muted: #a06080;
-  --accent: #ff5c98;
-  --accent-bg: rgba(255, 92, 152, 0.14);
-  --filter-input-bg: #220e1a;
+  --bg: #0e040c;
+  --card: #1c0d18;
+  --border: #3d1834;
+  --text: #faeef6;
+  --text2: #b888a4;
+  --muted: #7a4870;
+  --accent: #f03888;
+  --accent-bg: rgba(240, 56, 136, 0.14);
+  --filter-input-bg: #120810;
   --success: #34d399;
   --warn: #f0b240;
   --danger: #ff6060;
-  --c1: #ff5c98;
-  --c2: #e8b0c8;
+  --c1: #f03888;
+  --c2: #b888a4;
   --c3: #34d399;
   --c4: #f0b240;
   --c5: #ff6060;
 }
 body.palette-pivoine.light,
 body.palette-cocon.light {
-  --bg: #fef8f2;
-  --card: #fffdfb;
-  --border: #f0d5de;
-  --text: #3a0f22;
-  --text2: #7a2e50;
-  --muted: #b87090;
-  --accent: #d42070;
-  --accent-bg: rgba(212, 32, 112, 0.09);
-  --filter-input-bg: #fffdfb;
+  --bg: #faedf4;
+  --card: #ffffff;
+  --border: #eec8dc;
+  --text: #1a0412;
+  --text2: #5c1840;
+  --muted: #a86088;
+  --accent: #c01460;
+  --accent-bg: rgba(192, 20, 96, 0.09);
+  --filter-input-bg: #ffffff;
   --success: #2e7d32;
   --warn: #d06000;
   --danger: #c0392b;
-  --c1: #d42070;
-  --c2: #7a2e50;
+  --c1: #c01460;
+  --c2: #5c1840;
   --c3: #2e7d32;
   --c4: #d06000;
   --c5: #c0392b;
 }
 
-/* ── Palette Forêt (vert profond / mousse) ── */
+/* ── Palette Forêt (quasi-noir / vert vif) ── */
 body.palette-foret {
-  --bg: #081a0f;
-  --card: #0f2416;
-  --border: #1a3d24;
-  --text: #e8f5e9;
-  --text2: #a5c8a8;
-  --muted: #5a8a65;
-  --accent: #4caf72;
-  --accent-bg: rgba(76, 175, 114, 0.13);
-  --filter-input-bg: #0b1f12;
+  --bg: #060d08;
+  --card: #0e1c12;
+  --border: #1c3820;
+  --text: #eef5ef;
+  --text2: #8fa898;
+  --muted: #506058;
+  --accent: #3dd67e;
+  --accent-bg: rgba(61, 214, 126, 0.13);
+  --filter-input-bg: #08110a;
   --success: #34d399;
   --warn: #fbbf24;
   --danger: #f87171;
-  --c1: #4caf72;
-  --c2: #a5c8a8;
+  --c1: #3dd67e;
+  --c2: #8fa898;
   --c3: #34d399;
   --c4: #fbbf24;
   --c5: #f87171;
 }
 body.palette-foret.light {
-  --bg: #f0f7f1;
+  --bg: #ecf5ed;
   --card: #ffffff;
-  --border: #c3dfc8;
-  --text: #0f2414;
-  --text2: #2d5e35;
-  --muted: #5a8a65;
-  --accent: #2d7a42;
-  --accent-bg: rgba(45, 122, 66, 0.10);
+  --border: #bfdfc6;
+  --text: #06160a;
+  --text2: #2a5034;
+  --muted: #5a7860;
+  --accent: #187a3a;
+  --accent-bg: rgba(24, 122, 58, 0.10);
   --filter-input-bg: #ffffff;
   --success: #059669;
   --warn: #b45309;
   --danger: #dc2626;
-  --c1: #2d7a42;
-  --c2: #2d5e35;
+  --c1: #187a3a;
+  --c2: #2a5034;
   --c3: #059669;
   --c4: #b45309;
   --c5: #dc2626;
 }
 
-/* ── Palette Cendre (gris · ardoise froide) ── */
+/* ── Palette Cendre (quasi-noir froid / bleu acier) ── */
 body.palette-cendre {
-  --bg: #0f1115;
-  --card: #1a1d24;
-  --border: #2c3040;
-  --text: #e8eaf0;
-  --text2: #9ba0b2;
-  --muted: #636878;
-  --accent: #94a3b8;
-  --accent-bg: rgba(148, 163, 184, 0.12);
-  --filter-input-bg: #131619;
+  --bg: #080a0f;
+  --card: #11151e;
+  --border: #202840;
+  --text: #edf0f8;
+  --text2: #848ea8;
+  --muted: #505870;
+  --accent: #6496c8;
+  --accent-bg: rgba(100, 150, 200, 0.13);
+  --filter-input-bg: #0b0e16;
   --success: #34d399;
   --warn: #fbbf24;
   --danger: #f87171;
-  --c1: #94a3b8;
-  --c2: #9ba0b2;
+  --c1: #6496c8;
+  --c2: #848ea8;
   --c3: #34d399;
   --c4: #fbbf24;
   --c5: #f87171;
 }
 body.palette-cendre.light {
-  --bg: #f4f5f7;
+  --bg: #edf0f7;
   --card: #ffffff;
-  --border: #d1d5db;
-  --text: #111827;
-  --text2: #374151;
-  --muted: #9ca3af;
-  --accent: #475569;
-  --accent-bg: rgba(71, 85, 105, 0.10);
+  --border: #cdd4e4;
+  --text: #080c1a;
+  --text2: #303a58;
+  --muted: #8890a8;
+  --accent: #2a5c9a;
+  --accent-bg: rgba(42, 92, 154, 0.09);
   --filter-input-bg: #ffffff;
   --success: #059669;
   --warn: #b45309;
   --danger: #dc2626;
-  --c1: #475569;
-  --c2: #374151;
+  --c1: #2a5c9a;
+  --c2: #303a58;
   --c3: #059669;
   --c4: #b45309;
   --c5: #dc2626;
 }
 
-/* ── Palette Braise (brun-noir / orange brûlé) ── */
+/* ── Palette Braise (quasi-noir chaud / orange brûlé) ── */
 body.palette-braise {
-  --bg: #1a0a00;
-  --card: #281400;
-  --border: #4d2400;
-  --text: #fff0e8;
-  --text2: #ffb87a;
-  --muted: #a06040;
-  --accent: #ff6c20;
-  --accent-bg: rgba(255, 108, 32, 0.14);
-  --filter-input-bg: #1f0d00;
+  --bg: #0e0500;
+  --card: #1c0d00;
+  --border: #3d1e00;
+  --text: #fdf0e6;
+  --text2: #b8907a;
+  --muted: #806050;
+  --accent: #f07030;
+  --accent-bg: rgba(240, 112, 48, 0.14);
+  --filter-input-bg: #120700;
   --success: #34d399;
   --warn: #fbbf24;
   --danger: #ff6060;
-  --c1: #ff6c20;
-  --c2: #ffb87a;
+  --c1: #f07030;
+  --c2: #b8907a;
   --c3: #34d399;
   --c4: #fbbf24;
   --c5: #ff6060;
 }
 body.palette-braise.light {
-  --bg: #fff7f0;
-  --card: #fffefb;
-  --border: #f0d0b0;
-  --text: #2a0f00;
-  --text2: #7a3010;
-  --muted: #b07040;
-  --accent: #c04010;
-  --accent-bg: rgba(192, 64, 16, 0.09);
-  --filter-input-bg: #fffefb;
+  --bg: #fdf0e6;
+  --card: #ffffff;
+  --border: #efd8c0;
+  --text: #180800;
+  --text2: #5c2800;
+  --muted: #a06040;
+  --accent: #b83c00;
+  --accent-bg: rgba(184, 60, 0, 0.09);
+  --filter-input-bg: #ffffff;
   --success: #2e7d32;
   --warn: #d06000;
   --danger: #c0392b;
-  --c1: #c04010;
-  --c2: #7a3010;
+  --c1: #b83c00;
+  --c2: #5c2800;
   --c3: #2e7d32;
   --c4: #d06000;
   --c5: #c0392b;
