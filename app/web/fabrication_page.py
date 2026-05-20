@@ -174,6 +174,7 @@ body.light table.fab-table tr.fab-row-last td{
   background:rgba(8,145,178,.06);
 }
 .fab-time{font-family:monospace;font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;letter-spacing:.2px}
+.fab-client-cell{display:inline-block;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
 .fab-op-chip{
   display:inline-flex;align-items:center;gap:5px;
   font-size:11px;font-weight:700;padding:2px 8px;border-radius:12px;
@@ -1894,6 +1895,7 @@ function renderMain(){
   const tableHead = h('tr',null,
     h('th',null,'Heure'),
     ...(isAdminView ? [h('th',null,'Opérateur')] : []),
+    h('th',null,'Client'),
     h('th',null,'Code'),
     h('th',null,'Opération'),
     h('th',null,'Métrages'),
@@ -1923,6 +1925,7 @@ function renderMain(){
         }, svgIcon(s.commentaire?'edit':'message-square',13));
 
         const opNom = (s.operateur_nom || s.operateur || '—');
+        const clientNom = (s.client || '').trim();
         const fictifRow = isFictifSaisieRow(s);
         const opLblStyle = fictifRow
           ? null
@@ -1930,6 +1933,9 @@ function renderMain(){
         return h('tr',{className:'fab-table-row'+(isLast?' fab-row-last':'')+(fictifRow?' fab-row-fictif':'')},
           h('td',null, h('span',{className:'fab-time'}, fmtTime(s.date_operation))),
           ...(isAdminView ? [h('td',null, h('span',{style:fictifRow?undefined:{fontWeight:'800',color:'var(--text)'}}, opNom))] : []),
+          h('td',null, clientNom
+            ? h('span',{className:'fab-client-cell',title:clientNom}, clientNom)
+            : h('span',{style:{color:'var(--muted)',fontSize:'11px'}},'—')),
           h('td',null,
             h('span',{className:'fab-op-chip',style:{background:chipColor+'22',color:chipColor}},
               h('span',{className:'fab-op-chip-code'},code)
@@ -1946,7 +1952,7 @@ function renderMain(){
         );
       })
     : [h('tr',null,
-        h('td',{colspan: isAdminView ? '6' : '6'},
+        h('td',{colspan: isAdminView ? '7' : '7'},
           h('div',{className:'fab-empty'},
             h('div',{className:'fab-empty-icon'},'📋'),
             S.etat==='sans_session'
