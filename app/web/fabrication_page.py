@@ -2037,7 +2037,7 @@ function renderTracabiliteModal(data, noDossier){
           fontSize:'11px',fontWeight:'600',padding:'2px 6px',borderRadius:'4px',
           background:claimBg,color:claimColor,
         },
-      }, fscClaimLabel(claim)),
+      }, fscClaimLabel(claim))),
       h('td',null, statutCell),
       h('td',{style:{color:'var(--muted)',fontSize:'12px'}}, scanLbl || '—')
     ));
