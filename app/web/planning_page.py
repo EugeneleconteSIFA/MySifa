@@ -447,11 +447,15 @@ body.light .btn-p{color:#fff}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
 @keyframes tipIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 @keyframes slideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-@keyframes activePulse{0%,100%{border-color:#22d3ee;box-shadow:0 0 5px rgba(34,211,238,.3)}50%{border-color:rgba(34,211,238,.35);box-shadow:none}}
+/* Dossier réellement en cours : contour accent (thème) */
+@keyframes activePulse{
+  0%,100%{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+  50%{border-color:var(--border2);box-shadow:none}
+}
 /* Timeline search highlighting */
 .slot.tl-match{outline:3px solid rgba(255,255,255,.9);outline-offset:2px;z-index:12}
 .slot.tl-no-match{opacity:0.18;filter:grayscale(50%)}
-.slot.tl-drop-over{outline:3px solid #22d3ee;outline-offset:3px;z-index:30;filter:brightness(1.15)}
+.slot.tl-drop-over{outline:3px solid var(--accent);outline-offset:3px;z-index:30;filter:brightness(1.15)}
 /* À placer au planning — zébré */
 .tr.tr-aplacer{background:repeating-linear-gradient(135deg,var(--bg-dark),var(--bg-dark) 10px,rgba(34,211,238,.07) 10px,rgba(34,211,238,.07) 20px)!important}
 body.light .tr.tr-aplacer{background:repeating-linear-gradient(135deg,var(--card),var(--card) 10px,rgba(8,145,178,.08) 10px,rgba(8,145,178,.08) 20px)!important}
@@ -1752,7 +1756,7 @@ function updateTlMatchInfo(){
   const curId=n>0?String(_allTlMatches[S.tlSearchIdx].entry_id):"";
   document.querySelectorAll("#tl-blocks-container .slot.tl-match").forEach(el=>{
     const isCur=el.dataset.eid===curId;
-    el.style.outline=isCur?"3px solid #22d3ee":"3px solid rgba(255,255,255,.7)";
+    el.style.outline=isCur?"3px solid var(--accent)":"3px solid rgba(255,255,255,.7)";
     el.style.outlineOffset="2px";
   });
   // Scroll vers le slot courant (s'il est dans le DOM)
@@ -2122,7 +2126,7 @@ function mkTL(mon,slots){
     const termineTitle=termineSlideCls?"Dossier terminé — glisser pour décaler le créneau sur la ligne de temps":"";
     const sr = hasSaisieReelle() ? (s.statut_reel||"reellement_en_attente") : "reellement_en_attente";
     const durAff = (s.statut==="termine") ? (workHoursBetween(ss,se) ?? s.duree_heures) : s.duree_heures;
-    h+=`<div class="slot ${matchCls} ${aplacerCls} ${reelTermineCls} ${termineSlideCls}" data-eid="${s.entry_id||idx}" data-statut="${escAttr(s.statut||"attente")}" data-statut-reel="${escAttr(sr)}" ${canDragSlot?'draggable="true"':''} style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${isActive?"border:2px solid #22d3ee;animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
+    h+=`<div class="slot ${matchCls} ${aplacerCls} ${reelTermineCls} ${termineSlideCls}" data-eid="${s.entry_id||idx}" data-statut="${escAttr(s.statut||"attente")}" data-statut-reel="${escAttr(sr)}" ${canDragSlot?'draggable="true"':''} style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${isActive?"border:2px solid var(--accent);animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
       onmouseenter="showTip(event,this)" onmousemove="moveTip(event)" onmouseleave="hideTip()"
       ondblclick="hideTip();openEdit(${s.entry_id||idx});event.stopPropagation()"
       data-livraison="${escAttr(fmtLivraisonLong(s.date_livraison||""))}" data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-rfp="${escAttr(s.ref_produit||"")}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(fmtDur(durAff))}" data-exigences="${escAttr(exig)}"

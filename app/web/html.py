@@ -6538,6 +6538,17 @@ function renderTracabilite(){
     });
   }
 
+  // ── Pagination (sur la liste filtrée/triée) ─────────────────────
+  const PAGE_SIZE = 50;
+  if(S.tracPage == null) S.tracPage = 0;
+  const totalFiltered = dossiers.length;
+  const maxPage = Math.max(0, Math.ceil(totalFiltered / PAGE_SIZE) - 1);
+  if(S.tracPage > maxPage) S.tracPage = maxPage;
+  if(S.tracPage < 0) S.tracPage = 0;
+  const pageStart = S.tracPage * PAGE_SIZE;
+  const pageEnd = Math.min(pageStart + PAGE_SIZE, totalFiltered);
+  const dossiersPage = dossiers.slice(pageStart, pageEnd);
+
   // ── Helper : badge statut ───────────────────────────────────────
   function statutBadge(st){
     if(st==='en_cours')  return h('span',{className:'badge',style:{color:'var(--success)',background:'rgba(52,211,153,.12)',display:'inline-flex',alignItems:'center',gap:'5px'}},
@@ -6554,6 +6565,7 @@ function renderTracabilite(){
     return h('th',{
       style:{cursor:'pointer',userSelect:'none',whiteSpace:'nowrap',color:active?'var(--accent)':''},
       onClick:()=>{
+        S.tracPage = 0;
         if(Srt.col===colKey) S.tracSort={col:colKey,dir:Srt.dir==='asc'?'desc':'asc'};
         else S.tracSort={col:colKey,dir:'asc'};
         render();
@@ -6565,10 +6577,12 @@ function renderTracabilite(){
   // Helper : input texte avec conservation du focus et position du curseur
   const filterInput = (inputId, label, val, onChange)=>{
     const inp = h('input',{
-      type:'text', id:inputId, value:val, placeholder:'Rechercher…'
+      type:'text', id:inputId, value:val, placeholder:'Rechercher…', className:'filter-input',
+      autocomplete:'off', spellcheck:'false'
     });
     inp.addEventListener('input', e=>{
       const selStart = e.target.selectionStart;
+      S.tracPage = 0;
       onChange(e.target.value);
       render();
       // Restaurer le focus et la position du curseur après le re-render
@@ -6581,9 +6595,9 @@ function renderTracabilite(){
     );
   };
   const filterSelect = (inputId, label, options, val, onChange)=>{
-    const sel = h('select',{id:inputId},
+    const sel = h('select',{id:inputId, className:'filter-input'},
       ...options.map(o=>h('option',{value:o.val,selected:val===o.val},o.label)));
-    sel.addEventListener('change', e=>{ onChange(e.target.value); render(); });
+    sel.addEventListener('change', e=>{ S.tracPage = 0; onChange(e.target.value); render(); });
     return h('div',{className:'filter-group'},
       h('label',null,label),
       sel
@@ -6591,22 +6605,25 @@ function renderTracabilite(){
   };
   const hasActiveFilter = !!(F.ref||F.client||F.machine||F.statut);
 
-  const filterBar = h('div',{className:'filters',style:{marginBottom:'18px'}},
-    filterInput('trac-f-ref',    'Référence',  F.ref,    v=>{S.tracFilters.ref=v;}),
-    filterInput('trac-f-client', 'Client',     F.client, v=>{S.tracFilters.client=v;}),
-    filterSelect('trac-f-machine','Machine',
-      [{val:'',label:'Toutes machines'},...machinesUniq.map(m=>({val:m,label:m}))],
-      F.machine, v=>{S.tracFilters.machine=v;}
-    ),
-    filterSelect('trac-f-statut','Statut', statuts, F.statut, v=>{S.tracFilters.statut=v;}),
-    hasActiveFilter ? h('button',{
-      style:{alignSelf:'flex-end'},
-      onClick:()=>{ S.tracFilters={ref:'',client:'',machine:'',statut:''}; render(); }
-    },'✕ Effacer') : null
+  const filterBar = h('div',{className:'filters-panel',style:{padding:'14px 20px',borderBottom:'1px solid var(--border)'}},
+    h('div',{className:'filters'},
+      filterInput('trac-f-ref',    'Référence',  F.ref,    v=>{S.tracFilters.ref=v;}),
+      filterInput('trac-f-client', 'Client',     F.client, v=>{S.tracFilters.client=v;}),
+      filterSelect('trac-f-machine','Machine',
+        [{val:'',label:'Toutes machines'},...machinesUniq.map(m=>({val:m,label:m}))],
+        F.machine, v=>{S.tracFilters.machine=v;}
+      ),
+      filterSelect('trac-f-statut','Statut', statuts, F.statut, v=>{S.tracFilters.statut=v;}),
+      hasActiveFilter ? h('button',{
+        className:'btn btn-sm btn-ghost',
+        style:{alignSelf:'flex-end',marginTop:'0'},
+        onClick:()=>{ S.tracFilters={ref:'',client:'',machine:'',statut:''}; render(); }
+      }, iconEl('x',14),' Effacer') : null
+    )
   );
 
   // ── Lignes tableau ──────────────────────────────────────────────
-  const rows = dossiers.map(dos=>{
+  const rows = dossiersPage.map(dos=>{
     const hasMatieres = (dos.nb_matieres||0)>0;
     return h('tr',{style:{cursor:'pointer'},
       onClick:async()=>{
@@ -6659,7 +6676,35 @@ function renderTracabilite(){
   return h('div',{className:'card'},
     h('div',{className:'card-header'},
       h('h3',null,'Traçabilité par dossier'),
-      h('span',{className:'badge'},dossiers.length+(dossiers.length!==allDossiers.length?'/'+allDossiers.length:'')+' dossier'+(allDossiers.length!==1?'s':''))
+      h('div',{style:{display:'flex',alignItems:'center',gap:'10px',flexWrap:'wrap'}},
+        h('span',{className:'badge'},
+          (totalFiltered
+            + (totalFiltered!==allDossiers.length?'/'+allDossiers.length:'')
+            + ' dossier' + (allDossiers.length!==1?'s':'')
+          )
+        ),
+        totalFiltered > PAGE_SIZE
+          ? h('div',{style:{display:'flex',alignItems:'center',gap:'8px'}},
+              h('span',{style:{fontSize:'11px',color:'var(--muted)',fontFamily:'monospace'}},
+                (pageStart+1)+'–'+pageEnd+' / '+totalFiltered
+              ),
+              h('button',{
+                className:'btn btn-sm btn-ghost',
+                disabled:S.tracPage<=0,
+                style:{marginTop:'0',padding:'6px 10px'},
+                onClick:()=>{ if(S.tracPage>0){ S.tracPage--; render(); } },
+                title:'Précédent'
+              }, '<'),
+              h('button',{
+                className:'btn btn-sm btn-ghost',
+                disabled:S.tracPage>=maxPage,
+                style:{marginTop:'0',padding:'6px 10px'},
+                onClick:()=>{ if(S.tracPage<maxPage){ S.tracPage++; render(); } },
+                title:'Suivant'
+              }, '>')
+            )
+          : null
+      )
     ),
     filterBar,
     h('div',{style:{overflowX:'auto',padding:'0 0 8px'}}, table)
