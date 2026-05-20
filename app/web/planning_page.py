@@ -2952,8 +2952,9 @@ function openEdit(id){
     style="display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:6px;border:1.5px solid var(--border2);background:var(--accent-bg);color:var(--accent);cursor:pointer;transition:opacity .15s;font-family:inherit;flex-shrink:0"
     onmouseenter="this.style.opacity='.75'" onmouseleave="this.style.opacity='1'">${icon('bar-chart-2',16)}</button>`:"";
   const refFsc=(e.reference||e.numero_of||"").trim();
+  const refFscEnc=encodeURIComponent(refFsc);
   const fscBtn=(e.fsc_requis===1||e.fsc_requis===true)
-    ?`<button type="button" onclick="closeM();openFscRapport(${JSON.stringify(refFsc)})"
+    ?`<button type="button" onclick="closeM();openFscRapport(decodeURIComponent('${escAttr(refFscEnc)}'))"
       style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;
              border:1.5px solid var(--accent);background:var(--accent-bg);color:var(--accent);
              font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap"
