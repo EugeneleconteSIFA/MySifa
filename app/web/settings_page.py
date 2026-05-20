@@ -158,6 +158,8 @@ body.light .users-search input:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .users-search select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.14)}
 body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .tabs{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
+.tabs .btn{display:inline-flex;align-items:center;gap:8px;vertical-align:middle}
+.tabs .btn svg{flex-shrink:0}
 .nav-group-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);padding:8px 12px 2px;opacity:.7}
 .hidden{display:none}
 .legend{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
@@ -187,27 +189,46 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
     <div class="logo">My<span>Sifa</span><div class="logo-sub">by SIFA</div></div>
     <div class="nav-scroll tabs" style="width:100%;margin:0">
       <div class="nav-group-label">Base</div>
-      <button type="button" class="nav-btn active" data-tab="users">Utilisateurs</button>
-      <button type="button" class="nav-btn" data-tab="fournisseurs">Fournisseurs</button>
-      <button type="button" class="nav-btn" data-tab="operations">Opérations</button>
-      <button type="button" class="nav-btn" data-tab="machines">Machines</button>
+      <button type="button" class="nav-btn active" data-tab="users">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Utilisateurs
+      </button>
+      <button type="button" class="nav-btn" data-tab="fournisseurs">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+        Fournisseurs
+      </button>
+      <button type="button" class="nav-btn" data-tab="operations">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Opérations
+      </button>
+      <button type="button" class="nav-btn" data-tab="machines">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        Machines
+      </button>
       <div class="nav-group-label" style="margin-top:8px">Accès</div>
-      <button type="button" class="nav-btn" data-tab="matrix">Matrice d'accès</button>
-      <button type="button" class="nav-btn" data-tab="defaults">Référentiel rôles</button>
+      <button type="button" class="nav-btn" data-tab="matrix">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        Matrice d'accès
+      </button>
+      <button type="button" class="nav-btn" data-tab="defaults">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        Référentiel rôles
+      </button>
       <div class="nav-group-label" style="margin-top:8px">Communication</div>
-      <button type="button" class="nav-btn" data-tab="updates">Mises à jour</button>
+      <button type="button" class="nav-btn" data-tab="updates">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        Mises à jour
+      </button>
       <div class="nav-group-label" style="margin-top:8px">Audit</div>
       <button type="button" class="nav-btn" data-tab="audit">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
-             style="display:inline-block;vertical-align:middle;margin-right:6px;flex-shrink:0">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
           <polyline points="14 2 14 8 20 8"/>
           <line x1="16" y1="13" x2="8" y2="13"/>
           <line x1="16" y1="17" x2="8" y2="17"/>
           <polyline points="10 9 9 9 8 9"/>
         </svg>
-        Traçabilité
+        Log
       </button>
     </div>
     <div class="sidebar-bottom">
@@ -260,9 +281,18 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 
     <section id="panel-users">
     <div class="tabs" style="margin-bottom:14px">
-      <button type="button" class="btn btn-sec sub-tab-btn active" data-subtab="users-list">Liste</button>
-      <button type="button" class="btn btn-sec sub-tab-btn" data-subtab="users-matrix">Matrice</button>
-      <button type="button" class="btn btn-sec sub-tab-btn" data-subtab="users-defaults">Référentiel</button>
+      <button type="button" class="btn btn-sec sub-tab-btn active" data-subtab="users-list">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+        Liste
+      </button>
+      <button type="button" class="btn btn-sec sub-tab-btn" data-subtab="users-matrix">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        Matrice
+      </button>
+      <button type="button" class="btn btn-sec sub-tab-btn" data-subtab="users-defaults">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        Référentiel
+      </button>
     </div>
       <div class="card">
         <h2>Ajouter un utilisateur</h2>
@@ -295,9 +325,18 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 
     <section id="panel-matrix" class="hidden">
     <div class="tabs" style="margin-bottom:14px">
-      <button type="button" class="btn btn-sec sub-tab-btn" data-subtab="users-list">Liste</button>
-      <button type="button" class="btn btn-sec sub-tab-btn active" data-subtab="users-matrix">Matrice</button>
-      <button type="button" class="btn btn-sec sub-tab-btn" data-subtab="users-defaults">Référentiel</button>
+      <button type="button" class="btn btn-sec sub-tab-btn" data-subtab="users-list">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+        Liste
+      </button>
+      <button type="button" class="btn btn-sec sub-tab-btn active" data-subtab="users-matrix">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        Matrice
+      </button>
+      <button type="button" class="btn btn-sec sub-tab-btn" data-subtab="users-defaults">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        Référentiel
+      </button>
     </div>
       <div class="card">
         <h2>Qui a accès à quoi</h2>
@@ -308,9 +347,18 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 
     <section id="panel-defaults" class="hidden">
     <div class="tabs" style="margin-bottom:14px">
-      <button type="button" class="btn btn-sec sub-tab-btn" data-subtab="users-list">Liste</button>
-      <button type="button" class="btn btn-sec sub-tab-btn" data-subtab="users-matrix">Matrice</button>
-      <button type="button" class="btn btn-sec sub-tab-btn active" data-subtab="users-defaults">Référentiel</button>
+      <button type="button" class="btn btn-sec sub-tab-btn" data-subtab="users-list">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+        Liste
+      </button>
+      <button type="button" class="btn btn-sec sub-tab-btn" data-subtab="users-matrix">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        Matrice
+      </button>
+      <button type="button" class="btn btn-sec sub-tab-btn active" data-subtab="users-defaults">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        Référentiel
+      </button>
     </div>
       <div class="card">
         <h2>Accès par défaut selon le rôle</h2>
@@ -321,8 +369,14 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 
     <section id="panel-fournisseurs" class="hidden">
     <div class="tabs" style="margin-bottom:14px">
-      <button type="button" class="btn btn-sec four-sub-btn active" data-foursub="four-certifs">Certifications</button>
-      <button type="button" class="btn btn-sec four-sub-btn" data-foursub="four-hist">Historique</button>
+      <button type="button" class="btn btn-sec four-sub-btn active" data-foursub="four-certifs">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        Certifications
+      </button>
+      <button type="button" class="btn btn-sec four-sub-btn" data-foursub="four-hist">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Historique
+      </button>
     </div>
       <div id="four-certifs">
         <div class="card">
@@ -354,8 +408,14 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 
     <section id="panel-machines" class="hidden">
       <div class="tabs" style="margin-bottom:14px">
-        <button type="button" class="btn btn-sec mac-sub-btn active" data-macsub="mac-horaires">Horaires</button>
-        <button type="button" class="btn btn-sec mac-sub-btn" data-macsub="mac-metrage">Métrage total</button>
+        <button type="button" class="btn btn-sec mac-sub-btn active" data-macsub="mac-horaires">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Horaires
+        </button>
+        <button type="button" class="btn btn-sec mac-sub-btn" data-macsub="mac-metrage">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          Métrage total
+        </button>
       </div>
       <div class="card">
         <div style="display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
