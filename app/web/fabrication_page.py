@@ -1796,20 +1796,33 @@ function renderTracaPanel(){
     },
   }, svgIcon('scan',12),' Quel code scanner ?');
 
+  const fscTracaBanner = S.dossier && (S.dossier.fsc_requis === 1 || S.dossier.fsc_requis === true)
+    ? h('div',{
+        style:{
+          display:'flex',alignItems:'center',justifyContent:'space-between',
+          gap:'10px',padding:'8px 12px',
+          background:'var(--accent-bg)',borderBottom:'1px solid var(--border)',
+        },
+      },
+        h('span',{style:{fontSize:'12px',fontWeight:'600',color:'var(--accent)'}},
+          'Dossier certifié FSC — '+fscTypeRequisLabel(S.dossier.fsc_type_requis)),
+        h('button',{
+          className:'fab-btn fab-btn-ghost fab-btn-sm',
+          style:{fontSize:'11px',flexShrink:'0'},
+          onClick:()=>openTracabiliteModal(S.dossier.reference || S.dossier.numero_of || ''),
+        },'Rapport FSC')
+      )
+    : null;
+
   return h('div',{className:'fab-main'},
     h('div',{className:'fab-main-head'},
       h('span',{className:'fab-main-title'}, svgIcon('scan',16),' Traçabilité matières'),
       S.dossier ? h('span',{style:{fontSize:'12px',fontWeight:'700',
           color:(S.dossier.fictif||isFictifDossierRef(S.dossier.reference))?'#a78bfa':'var(--accent)'}},
         fabDossierRefLabel(S.dossier)) : null,
-      S.dossier && (S.dossier.fsc_requis === 1 || S.dossier.fsc_requis === true)
-        ? h('button',{
-            className:'fab-btn fab-btn-ghost fab-btn-sm',
-            style:{fontSize:'11px',marginLeft:'auto'},
-            onClick:()=>openTracabiliteModal(S.dossier.reference || S.dossier.numero_of || ''),
-          },'Rapport FSC') : null,
       h('span',{className:'fab-main-sub'},machineName)
     ),
+    fscTracaBanner,
     h('div',{className:'fab-traca-layout'},
       // Scan row
       h('div',{className:'fab-traca-scan-row'},
@@ -2308,14 +2321,22 @@ function renderFooter(){
   if(S.fabTab!=='saisie'){
     const machineName = (S.machine&&S.machine.nom)||(S.user&&S.user.machine_nom)||'—';
     const dossierLabel = S.dossier ? fabDossierRefLabel(S.dossier) : 'Aucun dossier';
+    const fscFooterBtn = S.dossier && (S.dossier.fsc_requis === 1 || S.dossier.fsc_requis === true)
+      ? h('button',{
+          className:'fab-btn fab-btn-ghost',
+          style:{fontSize:'10px',padding:'2px 8px'},
+          onClick:()=>openTracabiliteModal(S.dossier.reference || S.dossier.numero_of || ''),
+        },'FSC')
+      : null;
     return h('div',{className:'fab-footer',style:{gridTemplateColumns:'1fr',padding:'4px 16px 0'}},
       h('div',{style:{display:'flex',alignItems:'center',justifyContent:'center',gap:'16px',
-        fontSize:'11px',color:'var(--muted)',padding:'4px 0'}},
+        fontSize:'11px',color:'var(--muted)',padding:'4px 0',flexWrap:'wrap'}},
         h('span',null, svgIcon('tool',11),' '+machineName),
         h('span',{style:{color:'var(--border)'}},'/'),
         h('span',null,dossierLabel),
         h('span',{style:{color:'var(--border)'}},'/'),
         h('span',{className:'fab-etat-badge '+etatClass(S.etat),style:{fontSize:'9px',padding:'2px 8px'}}, etatLabel(S.etat)),
+        fscFooterBtn,
         h('span',{style:{color:'var(--border)'}},'/'),
         themeBtn
       ),
