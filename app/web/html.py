@@ -499,6 +499,9 @@ table.table-std th{font-size:10px;color:var(--muted);font-weight:700;text-transf
 table.table-std td{padding:10px 16px;border-bottom:1px solid var(--border)}
 table.table-std tr:last-child td{border-bottom:none}
 table.table-std tr:hover td{background:var(--accent-bg)}
+.show-trac-attente-btn{padding:7px 14px;font-size:11px;color:var(--muted);cursor:pointer;text-align:center;
+  border-bottom:1px solid var(--border);background:var(--bg);user-select:none;letter-spacing:.3px}
+.show-trac-attente-btn:hover{color:var(--accent);background:var(--accent-bg)}
 tr.matiere-group td{padding:7px 16px;background:var(--card);font-weight:600;font-size:12px;color:var(--text2);border-bottom:1px solid var(--border);box-shadow:inset 0 1px 0 var(--border)}
 .badge-danger{font-size:11px;color:var(--danger);background:rgba(248,113,113,.12);padding:3px 10px;border-radius:20px;font-family:monospace;font-weight:700}
 .badge-manuel{font-size:10px;color:var(--c3);background:rgba(52,211,153,.12);padding:2px 7px;border-radius:12px;font-weight:600}
@@ -1410,6 +1413,7 @@ let S={
   historique:null,production:null,traceabilite:null,
   tracFilters:{ref:'',client:'',machine:'',statut:''},
   tracSort:{col:null,dir:'asc'},
+  tracShowAttente:false,
   imports:[],selImp:null,impData:null,
   saisies:null,
   dossiers:[],
@@ -6396,7 +6400,7 @@ function renderSanityEventsBlock(sanity){
 // ── Production (page wrapper avec sous-onglets) ───────────────────
 // ── Traçabilité ─────────────────────────────────────────────────
 async function loadTracabilite(machineId){
-  S.traceabilite = null; render();
+  S.traceabilite = null; S.tracShowAttente = false; render();
   try{
     let url = '/api/fabrication/traceability';
     const params = [];
@@ -6545,7 +6549,18 @@ function renderTracabilite(){
     return true;
   });
 
-  // ── Tri ─────────────────────────────────────────────────────────
+  // ── Tri / visibilité en attente ─────────────────────────────────
+  const _tracPos = d=>{
+    const p = Number(d && d.position);
+    if(!isNaN(p)) return p;
+    return Number(d && d.id) || 0;
+  };
+  const attenteDossiers = dossiers.filter(dos=>dos.statut==='attente');
+  const mainDossiers = dossiers.filter(dos=>dos.statut!=='attente');
+  const forceShowAttente = F.statut==='attente';
+  const showAttente = forceShowAttente || !!S.tracShowAttente;
+  const hiddenAttenteCount = (!showAttente && !F.statut) ? attenteDossiers.length : 0;
+
   const COL_KEY = {ref:'reference',client:'client',designation:'designation',machine:'machine_nom',statut:'statut',matieres:'nb_matieres'};
   if(Srt.col){
     const key = COL_KEY[Srt.col]||Srt.col;
@@ -6555,6 +6570,14 @@ function renderTracabilite(){
       else{av=String(av).toLowerCase();bv=String(bv).toLowerCase();}
       return Srt.dir==='asc'?(av>bv?1:av<bv?-1:0):(av<bv?1:av>bv?-1:0);
     });
+    if(!showAttente && !F.statut){
+      dossiers = dossiers.filter(dos=>dos.statut!=='attente');
+    }
+  } else {
+    const sortDescPos = (a,b)=>_tracPos(b)-_tracPos(a);
+    const sortedAttente = [...attenteDossiers].sort(sortDescPos);
+    const sortedMain = [...mainDossiers].sort(sortDescPos);
+    dossiers = showAttente ? [...sortedAttente, ...sortedMain] : sortedMain;
   }
 
   // ── Pagination (sur la liste filtrée/triée) ─────────────────────
@@ -6636,7 +6659,7 @@ function renderTracabilite(){
       hasActiveFilter ? h('button',{
         className:'btn btn-sm btn-ghost',
         style:{alignSelf:'flex-end',marginTop:'0'},
-        onClick:()=>{ S.tracFilters={ref:'',client:'',machine:'',statut:''}; render(); }
+        onClick:()=>{ S.tracFilters={ref:'',client:'',machine:'',statut:''}; S.tracShowAttente=false; S.tracPage=0; render(); }
       }, iconEl('x',14),' Effacer') : null
     )
   );
@@ -6678,6 +6701,18 @@ function renderTracabilite(){
     );
   });
 
+  const attenteToggleBar = hiddenAttenteCount > 0
+    ? h('div',{
+        className:'show-trac-attente-btn',
+        onClick:()=>{ S.tracPage=0; S.tracShowAttente=true; render(); }
+      }, '▲ '+hiddenAttenteCount+' dossier'+(hiddenAttenteCount>1?'s':'')+' en attente masqué'+(hiddenAttenteCount>1?'s':'')+' — cliquer pour afficher')
+    : (showAttente && !forceShowAttente && attenteDossiers.length > 0
+      ? h('div',{
+          className:'show-trac-attente-btn',
+          onClick:()=>{ S.tracPage=0; S.tracShowAttente=false; render(); }
+        }, '▼ Masquer les dossiers en attente')
+      : null);
+
   const table = rows.length
     ? h('table',{className:'table-std'},
         h('thead',null,h('tr',null,
@@ -6692,15 +6727,20 @@ function renderTracabilite(){
       )
     : h('div',{className:'card-empty'},allDossiers.length?'Aucun résultat pour ces filtres':'Aucun dossier dans le planning');
 
+  const matchingCount = attenteDossiers.length + mainDossiers.length;
+  let badgeSuffix = '';
+  if(hiddenAttenteCount > 0 && matchingCount !== totalFiltered){
+    badgeSuffix = '/'+matchingCount;
+  } else if(matchingCount !== allDossiers.length){
+    badgeSuffix = '/'+allDossiers.length;
+  }
+
   return h('div',{className:'card'},
     h('div',{className:'card-header'},
       h('h3',null,'Traçabilité par dossier'),
       h('div',{style:{display:'flex',alignItems:'center',gap:'10px',flexWrap:'wrap'}},
         h('span',{className:'badge'},
-          (totalFiltered
-            + (totalFiltered!==allDossiers.length?'/'+allDossiers.length:'')
-            + ' dossier' + (allDossiers.length!==1?'s':'')
-          )
+          totalFiltered + badgeSuffix + ' dossier' + (totalFiltered!==1?'s':'')
         ),
         totalFiltered > PAGE_SIZE
           ? h('div',{style:{display:'flex',alignItems:'center',gap:'8px'}},
@@ -6726,6 +6766,7 @@ function renderTracabilite(){
       )
     ),
     filterBar,
+    attenteToggleBar,
     h('div',{style:{overflowX:'auto',padding:'0 0 8px'}}, table)
   );
 }
@@ -10443,7 +10484,7 @@ async function nav(){
   else if(S.page==='import')await loadImports();
   else if(S.page==='rentabilite'){await loadDevis();await loadRentPlanning();}
   else if(S.page==='dossiers')await loadDos();
-  else if(S.page==='traceabilite'){S.traceabilite=null;S.traceabiliteDossier=undefined;await loadTracabilite();}
+  else if(S.page==='traceabilite'){S.traceabilite=null;S.traceabiliteDossier=undefined;S.tracShowAttente=false;await loadTracabilite();}
   render();
 }
 
