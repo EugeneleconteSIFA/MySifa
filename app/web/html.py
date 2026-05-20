@@ -6716,7 +6716,7 @@ function renderTracabiliteDossierDetail(){
             'aria-label':'Modifier les bobines',
             style:{display:'inline-flex',alignItems:'center',gap:'6px',flexShrink:0},
             onClick:()=>openTracMatieresEditModal(dos, matieres)
-          }, iconEl('sliders',14), ' Modifier'))
+          }, iconEl('sliders',14), ' Modifier')
         ),
         h('div',{style:{overflowX:'auto'}}, matiereTable)
       )
