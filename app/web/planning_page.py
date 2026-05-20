@@ -2756,7 +2756,7 @@ function fscTypeRequisLabel(t){
 
 function dossierFields(numero_of,client,ref_produit,laize,date_livraison,commentaire,exigences_production,fl,fh,dur,statut,showStatut,aPlacer=1,fscRequis=0,fscType=""){
   const fscOn=fscRequis===1||fscRequis===true;
-  const fscTyp=(fscType&&["fsc_100","fsc_mix","fsc_recycled"].includes(fscType))?fscType:"fsc_100";
+  const fscTyp=(fscType&&["fsc_100","fsc_mix","fsc_recycled"].includes(fscType))?fscType:"fsc_mix";
   return`
     <div class="fd"><label>Numéro d'OF</label><input id="f-of" value="${numero_of}" placeholder="9936280"></div>
     <div class="fd"><label>Client</label><input id="f-cli" value="${client}" placeholder="Nom du client"></div>
@@ -2820,7 +2820,7 @@ function getFormData(withStatut){
   const fscChk=document.getElementById("fsc-requis-chk");
   const fscOn=!!(fscChk&&fscChk.checked);
   d.fsc_requis=fscOn?1:0;
-  d.fsc_type_requis=fscOn?(document.getElementById("fsc-type-requis")?.value||"fsc_100"):"";
+  d.fsc_type_requis=fscOn?(document.getElementById("fsc-type-requis")?.value||"fsc_mix"):"";
   if(withStatut)d.statut=document.getElementById("f-stat").value;
   return d;
 }
@@ -2865,6 +2865,17 @@ async function openFscRapport(noDossier){
     const isConforme=sg==="conforme";
     const isNonConforme=sg==="non_conforme";
     const statutColor=isConforme?"var(--success)":isNonConforme?"var(--danger)":"var(--muted)";
+    const genHuman=(()=>{
+      const raw=String(syn.genere_a||"").trim();
+      if(!raw) return "";
+      try{
+        const d=new Date(raw);
+        if(isNaN(d)) return raw.replace("T"," ").slice(0,16);
+        const dd=pad(d.getDate()),mo=pad(d.getMonth()+1),yr=d.getFullYear();
+        const hh=pad(d.getHours()),mm=pad(d.getMinutes());
+        return dd+"/"+mo+"/"+yr+" "+hh+":"+mm;
+      }catch(e){return raw.replace("T"," ").slice(0,16);}
+    })();
     const statutText=isConforme
       ? ("Conforme FSC — "+(syn.nb_bobines_fsc_conformes??0)+"/"+(syn.nb_bobines_total??0)+" bobine(s)")
       : isNonConforme
@@ -2920,7 +2931,7 @@ async function openFscRapport(noDossier){
             <tbody>${lignes||'<tr><td colspan="5" style="padding:20px;text-align:center;color:var(--muted);font-size:12px">Aucune bobine scannée sur ce dossier.</td></tr>'}</tbody>
           </table>
           <div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border2);font-size:11px;color:var(--muted)">
-            Généré le ${escAttr(syn.genere_a||"")} \u00b7 MySifa \u00b7 SIFA
+            Généré le ${escAttr(genHuman||syn.genere_a||"")} \u00b7 MySifa \u00b7 SIFA
           </div>
         </div>
       </div>`;

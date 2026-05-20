@@ -280,8 +280,8 @@ body.light tr.data-row.saisie-row-fictif td span{color:#7c3aed !important}
   display:inline-flex;align-items:center;justify-content:center;cursor:pointer;line-height:1;font-size:14px;padding:0}
 .add-row-nav-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 .add-row-nav-btn:active{transform:translateY(1px)}
-.prod-synth-key{cursor:pointer;font-weight:700;color:var(--accent);text-decoration:underline;text-decoration-color:transparent;transition:text-decoration-color .15s,color .15s}
-.prod-synth-key:hover{text-decoration-color:var(--accent);filter:brightness(1.08)}
+.prod-synth-key{cursor:pointer;font-weight:700;color:var(--text);text-decoration:underline;text-decoration-color:transparent;transition:text-decoration-color .15s,color .15s}
+.prod-synth-key:hover{color:var(--text);text-decoration-color:var(--text2)}
 .prod-synth-modal .add-row-form{max-width:min(820px,94vw);max-height:90vh;overflow:auto}
 .prod-synth-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin:16px 0}
 .prod-synth-kpi{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px}

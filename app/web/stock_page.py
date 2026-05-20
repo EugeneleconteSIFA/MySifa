@@ -617,7 +617,11 @@ body.light .field-input.empl-upper::placeholder{
 .recep-fourn-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:4px;display:flex;align-items:center;gap:6px}
 .recep-fourn-search-wrap{position:relative}
 .recep-fourn-inp{width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;color:var(--text);outline:none;transition:border-color .15s;box-sizing:border-box}
-.recep-fourn-inp:focus{border-color:var(--accent)}
+.recep-fourn-inp:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+body.light .recep-fourn-inp:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
+.recep-fourn-sel{width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;color:var(--text);outline:none;transition:border-color .15s,box-shadow .15s;box-sizing:border-box;font-family:inherit;cursor:pointer;margin-top:0;margin-bottom:12px;-webkit-appearance:none;appearance:none}
+.recep-fourn-sel:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+body.light .recep-fourn-sel:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .recep-fourn-inp::placeholder{color:var(--muted)}
 .recep-fourn-inp.recep-fourn-selected{border-color:var(--accent);background:var(--accent-bg);font-weight:600}
 .recep-fourn-clear{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:var(--border);border:none;border-radius:50%;width:22px;height:22px;cursor:pointer;font-size:12px;color:var(--text2);display:flex;align-items:center;justify-content:center}
@@ -709,7 +713,7 @@ let S = {
   recepFournisseur: '',     // fournisseur sélectionné
   recepFournisseurSearch: '', // texte de recherche fournisseur
   recepFournisseurOpen: false, // dropdown ouvert
-  recepFscTypeClaim: 'non_fsc', // type certification lot (obligatoire)
+  recepFscTypeClaim: 'fsc_mix', // type certification lot (défaut FSC Mix)
   // Import référentiel références / unités
   importRefsOpen: false,
   importRefsPreview: null,
@@ -3083,7 +3087,7 @@ async function recepValider() {
     showToast('Veuillez sélectionner un fournisseur avant de valider la réception', 'error');
     return;
   }
-  const claim = S.recepFscTypeClaim || 'non_fsc';
+  const claim = S.recepFscTypeClaim || 'fsc_mix';
   const fsc = FOURNISSEURS_FSC.find(f => f.nom === S.recepFournisseur);
   const cert = fsc ? String(fsc.certificat || '').trim() : '';
   if (recepFscTypeRequiresCert(claim) && !cert) {
@@ -3106,7 +3110,7 @@ async function recepValider() {
     if (d && d.success) {
       showToast(d.nb_bobines + ' bobine' + (d.nb_bobines > 1 ? 's' : '') + ' enregistrée' + (d.nb_bobines > 1 ? 's' : ''));
       S.recepItems = []; S.recepNote = ''; S.recepFournisseur = ''; S.recepFournisseurSearch = ''; S.recepFournisseurOpen = false;
-      S.recepFscTypeClaim = 'non_fsc';
+      S.recepFscTypeClaim = 'fsc_mix';
       recepStopCamera();
       await loadRecepHistory();
     }
@@ -3199,37 +3203,8 @@ function buildReception() {
   );
   tableCard.appendChild(tableHead);
 
-  // ── Barre de recherche fournisseur ──
+  // ── Fournisseur puis type FSC (même style champs MySifa) ──
   const fourWrap = el('div', { cls: 'recep-fourn-wrap' });
-  const fscTypeLbl = el('label', {
-    style: {
-      display: 'block',
-      fontSize: '11px',
-      fontWeight: '700',
-      textTransform: 'uppercase',
-      letterSpacing: '.6px',
-      color: 'var(--muted)',
-      marginBottom: '4px',
-    },
-  }, 'Type de certification FSC');
-  const fscTypeSel = el('select', {
-    cls: 'form-sel',
-    attrs: { id: 'fsc-type-claim', required: 'required' },
-    style: { width: '100%', marginBottom: '12px' },
-    on: {
-      change: (e) => {
-        S.recepFscTypeClaim = e.target.value;
-        renderContent();
-      },
-    },
-  },
-    el('option', { attrs: { value: 'non_fsc', selected: (S.recepFscTypeClaim || 'non_fsc') === 'non_fsc' } }, 'Non FSC'),
-    el('option', { attrs: { value: 'fsc_100', selected: S.recepFscTypeClaim === 'fsc_100' } }, 'FSC 100%'),
-    el('option', { attrs: { value: 'fsc_mix_credit', selected: S.recepFscTypeClaim === 'fsc_mix_credit' } }, 'FSC Mix Credit'),
-    el('option', { attrs: { value: 'fsc_mix', selected: S.recepFscTypeClaim === 'fsc_mix' } }, 'FSC Mix'),
-    el('option', { attrs: { value: 'fsc_recycled', selected: S.recepFscTypeClaim === 'fsc_recycled' } }, 'FSC Recycled')
-  );
-  fourWrap.append(fscTypeLbl, fscTypeSel);
 
   const fourLabel = el('div', { cls: 'recep-fourn-label' }, iconEl('truck', 13), ' Fournisseur', el('span', { style: { color: 'var(--danger)', marginLeft: '4px' } }, '*'));
   fourWrap.appendChild(fourLabel);
@@ -3318,6 +3293,27 @@ function buildReception() {
     }
     fourWrap.appendChild(certBlock);
   }
+
+  const fscClaim = S.recepFscTypeClaim || 'fsc_mix';
+  const fscTypeLbl = el('div', { cls: 'recep-fourn-label', style: { marginTop: '4px' } }, iconEl('clipboard', 13), ' Type de certification FSC');
+  const fscTypeSel = el('select', {
+    cls: 'recep-fourn-sel',
+    attrs: { id: 'fsc-type-claim' },
+    on: {
+      change: (e) => {
+        S.recepFscTypeClaim = e.target.value;
+        renderContent();
+      },
+    },
+  },
+    el('option', { attrs: { value: 'non_fsc', selected: fscClaim === 'non_fsc' } }, 'Non FSC'),
+    el('option', { attrs: { value: 'fsc_100', selected: fscClaim === 'fsc_100' } }, 'FSC 100%'),
+    el('option', { attrs: { value: 'fsc_mix_credit', selected: fscClaim === 'fsc_mix_credit' } }, 'FSC Mix Credit'),
+    el('option', { attrs: { value: 'fsc_mix', selected: fscClaim === 'fsc_mix' } }, 'FSC Mix'),
+    el('option', { attrs: { value: 'fsc_recycled', selected: fscClaim === 'fsc_recycled' } }, 'FSC Recycled')
+  );
+  fourWrap.append(fscTypeLbl, fscTypeSel);
+
   tableCard.appendChild(fourWrap);
 
   if (S.recepItems.length === 0) {

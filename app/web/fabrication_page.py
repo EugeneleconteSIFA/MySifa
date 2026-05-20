@@ -2093,7 +2093,7 @@ function renderTracabiliteModal(data, noDossier){
       ),
       h('div',{style:{marginTop:'16px',paddingTop:'12px',borderTop:'1px solid var(--border)',
         fontSize:'11px',color:'var(--muted)'}},
-        'Généré le ', syn.genere_a || '—', ' · MySifa · SIFA')
+        'Généré le ', (syn.genere_a ? fmtTime(syn.genere_a) : '—'), ' · MySifa · SIFA')
     )
   );
 
