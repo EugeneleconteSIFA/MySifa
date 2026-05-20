@@ -24,9 +24,13 @@ _FICTIF_PREFIX = "FICTIF:"
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
-def _can_edit_matiere_scan(user: dict, row: dict, operateur_courant: str) -> bool:
+def _can_edit_matiere_scan(
+    user: dict, row: dict, operateur_courant: str, *, from_tracabilite: bool = False
+) -> bool:
     """Correction traçabilité : admin, auteur du scan, ou même machine que l'utilisateur."""
     if is_admin(user):
+        return True
+    if from_tracabilite and is_fabrication(user):
         return True
     if (row.get("operateur") or "").strip() == (operateur_courant or "").strip():
         return True
@@ -37,6 +41,23 @@ def _can_edit_matiere_scan(user: dict, row: dict, operateur_courant: str) -> boo
         except (TypeError, ValueError):
             return False
     return False
+
+
+def _resolve_fournisseur_fsc_id(conn, fournisseur_fsc_id, fournisseur_manual: str | None) -> int | None:
+    """Retrouve un fournisseur FSC à partir de son id ou du nom déjà lié manuellement."""
+    if fournisseur_fsc_id is not None:
+        try:
+            return int(fournisseur_fsc_id)
+        except (TypeError, ValueError):
+            return None
+    nom = (fournisseur_manual or "").strip()
+    if not nom:
+        return None
+    row = conn.execute(
+        "SELECT id FROM fournisseurs_fsc WHERE trim(nom)=trim(?) LIMIT 1",
+        (nom,),
+    ).fetchone()
+    return int(row["id"]) if row else None
 
 
 def _check_fab_access(user: dict):
@@ -1165,38 +1186,46 @@ async def add_matiere(request: Request):
         machine_id_resolved = machine_obj["id"]
         machine_name = machine_obj["nom"]
 
-        cursor = conn.execute(
-            """INSERT INTO fab_matieres_utilisees
-               (machine_id, machine_nom, operateur, no_dossier, code_barre, scanned_at)
-               VALUES (?,?,?,?,?,?)""",
-            (machine_id_resolved, machine_name, operateur, no_dossier, code_barre, scanned_at),
-        )
-        conn.commit()
-        new_id = cursor.lastrowid
+        try:
+            conn.execute("BEGIN")
+            cursor = conn.execute(
+                """INSERT INTO fab_matieres_utilisees
+                   (machine_id, machine_nom, operateur, no_dossier, code_barre, scanned_at)
+                   VALUES (?,?,?,?,?,?)""",
+                (machine_id_resolved, machine_name, operateur, no_dossier, code_barre, scanned_at),
+            )
+            new_id = cursor.lastrowid
+            fid = _resolve_fournisseur_fsc_id(conn, fournisseur_fsc_id, None)
+            _link_matiere_to_reception(conn, new_id, code_barre, fid)
 
-        _link_matiere_to_reception(conn, new_id, code_barre, fournisseur_fsc_id)
+            fsc_warning = False
+            fsc_warning_message = None
+            if no_dossier:
+                entry = conn.execute(
+                    """SELECT fsc_requis, fsc_type_requis FROM planning_entries
+                       WHERE reference=? LIMIT 1""",
+                    (no_dossier,),
+                ).fetchone()
+                if entry and entry["fsc_requis"]:
+                    dossier_type = (entry["fsc_type_requis"] or "").strip()
+                    if dossier_type:
+                        bobine_fsc = _bobine_fsc_type_for_matiere(conn, new_id)
+                        if not _check_fsc_compatibility(dossier_type, bobine_fsc):
+                            label = _fsc_type_label(dossier_type)
+                            fsc_warning = True
+                            fsc_warning_message = (
+                                f"Cette bobine ({code_barre}) n'est pas certifiée {label}. "
+                                f"Le dossier {no_dossier} requiert une certification {label}."
+                            )
 
-        fsc_warning = False
-        fsc_warning_message = None
-        if no_dossier:
-            entry = conn.execute(
-                """SELECT fsc_requis, fsc_type_requis FROM planning_entries
-                   WHERE reference=? LIMIT 1""",
-                (no_dossier,),
-            ).fetchone()
-            if entry and entry["fsc_requis"]:
-                dossier_type = (entry["fsc_type_requis"] or "").strip()
-                if dossier_type:
-                    bobine_fsc = _bobine_fsc_type_for_matiere(conn, new_id)
-                    if not _check_fsc_compatibility(dossier_type, bobine_fsc):
-                        label = _fsc_type_label(dossier_type)
-                        fsc_warning = True
-                        fsc_warning_message = (
-                            f"Cette bobine ({code_barre}) n'est pas certifiée {label}. "
-                            f"Le dossier {no_dossier} requiert une certification {label}."
-                        )
+            conn.commit()
+        except HTTPException:
+            conn.rollback()
+            raise
+        except Exception:
+            conn.rollback()
+            raise
 
-        conn.commit()
         d = _fetch_matiere_row(conn, new_id) or {}
 
     return {
@@ -1261,11 +1290,8 @@ async def patch_matiere(matiere_id: int, request: Request):
     if not code_barre:
         raise HTTPException(status_code=400, detail="Code barre manquant")
 
+    from_tracabilite = bool(body.get("tracabilite"))
     fournisseur_fsc_id = body.get("fournisseur_fsc_id")
-    try:
-        fournisseur_fsc_id = int(fournisseur_fsc_id) if fournisseur_fsc_id is not None else None
-    except (ValueError, TypeError):
-        fournisseur_fsc_id = None
 
     operateur = user.get("operateur_lie") or ""
     if not operateur:
@@ -1277,16 +1303,28 @@ async def patch_matiere(matiere_id: int, request: Request):
         ).fetchone()
         if not ex:
             raise HTTPException(status_code=404, detail="Scan non trouvé")
-        if not _can_edit_matiere_scan(user, dict(ex), operateur):
+        if not _can_edit_matiere_scan(
+            user, dict(ex), operateur, from_tracabilite=from_tracabilite
+        ):
             raise HTTPException(status_code=403, detail="Non autorisé")
+
+        exd = dict(ex)
+        prev_code = (exd.get("code_barre") or "").strip()
+        fid = _resolve_fournisseur_fsc_id(
+            conn, fournisseur_fsc_id, exd.get("fournisseur_manual")
+        )
+
+        if prev_code == code_barre and fid is None:
+            return {"success": True, "matiere": exd}
 
         try:
             conn.execute("BEGIN")
-            conn.execute(
-                "UPDATE fab_matieres_utilisees SET code_barre=? WHERE id=?",
-                (code_barre, matiere_id),
-            )
-            _link_matiere_to_reception(conn, matiere_id, code_barre, fournisseur_fsc_id)
+            if prev_code != code_barre:
+                conn.execute(
+                    "UPDATE fab_matieres_utilisees SET code_barre=? WHERE id=?",
+                    (code_barre, matiere_id),
+                )
+            _link_matiere_to_reception(conn, matiere_id, code_barre, fid)
             conn.commit()
         except HTTPException:
             conn.rollback()
@@ -1311,7 +1349,7 @@ async def patch_matiere(matiere_id: int, request: Request):
 
 
 @router.delete("/api/fabrication/matieres/{matiere_id}")
-async def delete_matiere(matiere_id: int, request: Request):
+async def delete_matiere(matiere_id: int, request: Request, tracabilite: bool = False):
     """Supprime un scan de matière."""
     user = get_current_user(request)
     _check_fab_access(user)
@@ -1327,7 +1365,9 @@ async def delete_matiere(matiere_id: int, request: Request):
         ).fetchone()
         if not ex:
             raise HTTPException(status_code=404, detail="Scan non trouvé")
-        if not _can_edit_matiere_scan(user, dict(ex), operateur):
+        if not _can_edit_matiere_scan(
+            user, dict(ex), operateur, from_tracabilite=tracabilite
+        ):
             raise HTTPException(status_code=403, detail="Non autorisé")
 
         conn.execute("DELETE FROM fab_matieres_utilisees WHERE id=?", (matiere_id,))

@@ -1324,6 +1324,22 @@ function expeScheduleSaveLocal(){
   if(window._expeSaveT) clearTimeout(window._expeSaveT);
   window._expeSaveT=setTimeout(()=>{window._expeSaveT=null;expeSaveLocalState();},250);
 }
+function apiDetailMsg(detail){
+  if(!detail) return '';
+  if(typeof detail==='string') return detail;
+  if(Array.isArray(detail)){
+    return detail.map(x=>{
+      if(typeof x==='string') return x;
+      if(x && typeof x==='object'){
+        const loc=Array.isArray(x.loc)?x.loc.filter(p=>p!=='body').join('.'):'';
+        return (loc?loc+': ':'')+(x.msg||x.message||JSON.stringify(x));
+      }
+      return String(x);
+    }).join(' · ');
+  }
+  if(typeof detail==='object') return detail.msg||detail.message||JSON.stringify(detail);
+  return String(detail);
+}
 async function api(p,o){
   try{
     const r=await fetch(API+p,{credentials:'include',...o});
@@ -1333,7 +1349,7 @@ async function api(p,o){
       if(!isAuthMePath(p)){S.user=null;S.app='login';render();}
       return null;
     }
-    if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.detail||'Erreur '+r.status);}
+    if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(apiDetailMsg(e.detail)||('Erreur '+r.status));}
     const ct=r.headers.get('content-type')||'';
     if(ct.includes('spreadsheet')||ct.includes('octet-stream'))return r.blob();
     return await r.json();
@@ -6421,8 +6437,21 @@ async function loadTracabiliteDossier(ref){
       api('/api/fabrication/tracabilite/'+encodeURIComponent(ref)),
     ]);
     const fscMap = {};
-    (fsc && fsc.bobines ? fsc.bobines : []).forEach(b => { fscMap[b.code_barre] = b; });
-    (d && d.matieres ? d.matieres : []).forEach(m => { Object.assign(m, fscMap[m.code_barre] || {}); });
+    (fsc && fsc.bobines ? fsc.bobines : []).forEach(b => {
+      const key = String(b.code_barre||'').trim();
+      if(key) fscMap[key] = b;
+    });
+    (d && d.matieres ? d.matieres : []).forEach(m => {
+      const key = String(m.code_barre||'').trim();
+      const b = fscMap[key];
+      if(!b) return;
+      if(b.fsc_conforme !== undefined) m.fsc_conforme = b.fsc_conforme;
+      if(b.fsc_type_claim != null) m.fsc_type_claim = b.fsc_type_claim;
+      if(b.fournisseur != null) m.fournisseur = b.fournisseur;
+      if(b.certificat_fsc != null) m.certificat_fsc = b.certificat_fsc;
+      if(b.fournisseur_licence != null) m.fournisseur_licence = b.fournisseur_licence;
+      if(b.fournisseur_certificat != null) m.fournisseur_certificat = b.fournisseur_certificat;
+    });
     d.fsc_synthese = (fsc && fsc.synthese) ? fsc.synthese : null;
     S.traceabiliteDossier = d;
   }catch(e){ S.traceabiliteDossier = {error:e.message}; }
@@ -6800,9 +6829,11 @@ async function openTracMatieresEditModal(dos, matieres){
     fournisseurs = Array.isArray(fd) ? fd : (fd.fournisseurs||[]);
   }catch(e){ /* liste optionnelle */ }
 
-  const origById = {};
-  (matieres||[]).forEach(m=>{ if(m.id) origById[m.id] = (m.code_barre||'').trim(); });
-  const rows = (matieres||[]).map(m=>({id:m.id, code:(m.code_barre||'').trim(), deleted:false}));
+  const rows = (matieres||[]).map(m=>{
+    const mid = Number(m.id);
+    const code = String(m.code_barre||'').trim();
+    return {id: (Number.isFinite(mid) && mid > 0) ? mid : null, code, origCode: code, deleted:false};
+  });
   const newRows = [];
 
   const overlay = document.createElement('div');
@@ -6935,7 +6966,12 @@ async function openTracMatieresEditModal(dos, matieres){
     const machineId = tracResolveMachineId(dos, matieres);
 
     const toDelete = rows.filter(r=>r.deleted && r.id).map(r=>r.id);
-    const toPatch = rows.filter(r=>!r.deleted && r.id && (r.code||'').trim() && (r.code||'').trim() !== origById[r.id]);
+    const toPatch = rows.filter(r=>{
+      if(r.deleted || !r.id) return false;
+      const code = String(r.code||'').trim();
+      if(!code) return false;
+      return code !== String(r.origCode||'').trim();
+    });
     const toAdd = [
       ...rows.filter(r=>!r.deleted && !r.id && (r.code||'').trim()).map(r=>(r.code||'').trim()),
       ...newRows.map(r=>(r.code||'').trim()).filter(Boolean),
@@ -6957,7 +6993,7 @@ async function openTracMatieresEditModal(dos, matieres){
     fournWrap.style.display = 'none';
 
     const postMatiere = async (code)=>{
-      const body = {code_barre: code, no_dossier: ref, machine_id: machineId};
+      const body = {code_barre: code, no_dossier: ref, machine_id: machineId, tracabilite: true};
       if(fid) body.fournisseur_fsc_id = fid;
       try{
         await api('/api/fabrication/matieres', {
@@ -6976,7 +7012,7 @@ async function openTracMatieresEditModal(dos, matieres){
     };
 
     const patchMatiere = async (row)=>{
-      const body = {code_barre: (row.code||'').trim()};
+      const body = {code_barre: String(row.code||'').trim(), tracabilite: true};
       if(fid) body.fournisseur_fsc_id = fid;
       try{
         await api('/api/fabrication/matieres/'+row.id, {
@@ -6996,7 +7032,7 @@ async function openTracMatieresEditModal(dos, matieres){
 
     try{
       for(const id of toDelete){
-        await api('/api/fabrication/matieres/'+id, {method:'DELETE'});
+        await api('/api/fabrication/matieres/'+id+'?tracabilite=1', {method:'DELETE'});
       }
       for(const row of toPatch){
         await patchMatiere(row);
