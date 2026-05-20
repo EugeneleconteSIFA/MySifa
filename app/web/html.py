@@ -1332,6 +1332,7 @@ function icon(name,size=16){
     'calculator': '<rect x="6" y="2.5" width="12" height="19" rx="2"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="9" y1="11" x2="10" y2="11"/><line x1="12" y1="11" x2="13" y2="11"/><line x1="15" y1="11" x2="16" y2="11"/><line x1="9" y1="14" x2="10" y2="14"/><line x1="12" y1="14" x2="13" y2="14"/><line x1="15" y1="14" x2="16" y2="14"/><line x1="9" y1="17" x2="10" y2="17"/><line x1="12" y1="17" x2="13" y2="17"/><line x1="15" y1="17" x2="16" y2="17"/>',
     'truck': '<path d="M3 7h11v10H3z"/><path d="M14 10h4l3 3v4h-7z"/><circle cx="7.5" cy="17" r="2"/><circle cx="17.5" cy="17" r="2"/>',
     'sliders': '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>',
+    'settings': '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
     'layers': '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
     'arrow-left': '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
     'printer': '<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>',
@@ -6362,6 +6363,225 @@ function renderTracabilite(){
   );
 }
 
+function closeTracMatieresEditModal(){
+  document.getElementById('trac-mat-edit-modal')?.remove();
+}
+
+async function openTracMatieresEditModal(dos, matieres){
+  closeTracMatieresEditModal();
+  const ref = (dos.reference||'').trim();
+  if(!ref){ showToast('Référence dossier manquante.','danger'); return; }
+
+  let fournisseurs = [];
+  try{
+    const fd = await api('/api/fabrication/fournisseurs-fsc');
+    fournisseurs = Array.isArray(fd) ? fd : (fd.fournisseurs||[]);
+  }catch(e){ /* liste optionnelle */ }
+
+  const origById = {};
+  (matieres||[]).forEach(m=>{ if(m.id) origById[m.id] = (m.code_barre||'').trim(); });
+  const rows = (matieres||[]).map(m=>({id:m.id, code:(m.code_barre||'').trim(), deleted:false}));
+  const newRows = [];
+
+  const overlay = document.createElement('div');
+  overlay.id = 'trac-mat-edit-modal';
+  overlay.className = 'contact-modal-overlay';
+
+  const box = document.createElement('div');
+  box.className = 'contact-modal';
+  box.style.maxWidth = '520px';
+  box.onclick = (e)=> e.stopPropagation();
+
+  const head = document.createElement('div');
+  head.className = 'contact-modal-head';
+  const title = document.createElement('h3');
+  title.textContent = 'Bobines — '+ref;
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'contact-close-btn';
+  closeBtn.textContent = '\u2715';
+  closeBtn.onclick = closeTracMatieresEditModal;
+  head.append(title, closeBtn);
+
+  const body = document.createElement('div');
+  body.className = 'contact-modal-body';
+  body.style.display = 'grid';
+  body.style.gap = '10px';
+
+  const hint = document.createElement('p');
+  hint.style.cssText = 'margin:0;font-size:12px;color:var(--muted);line-height:1.5';
+  hint.textContent = 'Modifiez les codes barres ou ajoutez une bobine. Les lignes supprimées seront retirées du dossier.';
+  body.appendChild(hint);
+
+  const listWrap = document.createElement('div');
+  listWrap.style.display = 'grid';
+  listWrap.style.gap = '8px';
+
+  const fournWrap = document.createElement('div');
+  fournWrap.style.display = 'none';
+  const fournLbl = document.createElement('label');
+  fournLbl.style.cssText = 'font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.4px;text-transform:uppercase;display:block;margin-bottom:6px';
+  fournLbl.textContent = 'Fournisseur (liaison manuelle)';
+  const fournSel = document.createElement('select');
+  fournSel.className = 'form-sel';
+  fournSel.style.width = '100%';
+  fournSel.innerHTML = '<option value="">— Choisir —</option>' +
+    fournisseurs.map(f=>'<option value="'+Number(f.id)+'">'+escapeHtml(f.nom||'')+'</option>').join('');
+  fournWrap.append(fournLbl, fournSel);
+
+  function mkCodeInput(val, placeholder){
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.value = val||'';
+    inp.placeholder = placeholder||'Code barre';
+    inp.style.cssText = 'flex:1;min-width:0;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:monospace;font-size:13px';
+    return inp;
+  }
+
+  function renderRows(){
+    listWrap.innerHTML = '';
+    rows.forEach((row, idx)=>{
+      if(row.deleted) return;
+      const line = document.createElement('div');
+      line.style.cssText = 'display:flex;gap:8px;align-items:center';
+      const inp = mkCodeInput(row.code, 'Code barre bobine');
+      inp.addEventListener('input', ()=>{ row.code = inp.value; });
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'btn btn-sm btn-ghost';
+      del.title = 'Supprimer';
+      del.style.padding = '8px 10px';
+      del.innerHTML = '';
+      del.appendChild(iconEl('trash',14));
+      del.onclick = ()=>{
+        if(!confirm('Supprimer cette bobine du dossier ?')) return;
+        row.deleted = true;
+        renderRows();
+      };
+      line.append(inp, del);
+      listWrap.appendChild(line);
+    });
+    newRows.forEach((row, idx)=>{
+      const line = document.createElement('div');
+      line.style.cssText = 'display:flex;gap:8px;align-items:center';
+      const inp = mkCodeInput(row.code, 'Nouveau code barre');
+      inp.addEventListener('input', ()=>{ row.code = inp.value; });
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'btn btn-sm btn-ghost';
+      del.title = 'Retirer';
+      del.style.padding = '8px 10px';
+      del.appendChild(iconEl('trash',14));
+      del.onclick = ()=>{ newRows.splice(idx, 1); renderRows(); };
+      line.append(inp, del);
+      listWrap.appendChild(line);
+    });
+    if(!rows.some(r=>!r.deleted) && !newRows.length){
+      const empty = document.createElement('div');
+      empty.style.cssText = 'font-size:12px;color:var(--muted);font-style:italic;padding:4px 0';
+      empty.textContent = 'Aucune bobine — ajoutez-en une ci-dessous.';
+      listWrap.appendChild(empty);
+    }
+  }
+  renderRows();
+  body.appendChild(listWrap);
+
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'btn btn-sm btn-ghost';
+  addBtn.style.justifySelf = 'start';
+  addBtn.appendChild(iconEl('plus',14));
+  addBtn.appendChild(document.createTextNode(' Ajouter une bobine'));
+  addBtn.onclick = ()=>{ newRows.push({code:''}); renderRows(); };
+  body.appendChild(addBtn);
+  body.appendChild(fournWrap);
+
+  const actions = document.createElement('div');
+  actions.className = 'contact-modal-actions';
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'btn-ghost';
+  cancelBtn.textContent = 'Annuler';
+  cancelBtn.onclick = closeTracMatieresEditModal;
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'btn-sm';
+  saveBtn.textContent = 'Enregistrer';
+  saveBtn.onclick = async ()=>{
+    const machineId = dos.machine_id;
+    if(!machineId){ showToast('Machine du dossier introuvable.','danger'); return; }
+
+    const toDelete = rows.filter(r=>r.deleted && r.id).map(r=>r.id);
+    const toPatch = rows.filter(r=>!r.deleted && r.id && (r.code||'').trim() && (r.code||'').trim() !== origById[r.id]);
+    const toAdd = [
+      ...rows.filter(r=>!r.deleted && !r.id && (r.code||'').trim()).map(r=>(r.code||'').trim()),
+      ...newRows.map(r=>(r.code||'').trim()).filter(Boolean),
+    ];
+
+    if(!toDelete.length && !toPatch.length && !toAdd.length){
+      showToast('Aucune modification.','info');
+      closeTracMatieresEditModal();
+      return;
+    }
+
+    const fid = fournSel.value ? Number(fournSel.value) : null;
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Enregistrement…';
+    fournWrap.style.display = 'none';
+
+    try{
+      for(const id of toDelete){
+        await api('/api/fabrication/matieres/'+id, {method:'DELETE'});
+      }
+      for(const row of toPatch){
+        const body = {code_barre: (row.code||'').trim()};
+        if(fid) body.fournisseur_fsc_id = fid;
+        await api('/api/fabrication/matieres/'+row.id, {
+          method:'PATCH',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(body),
+        });
+      }
+      for(const code of toAdd){
+        const body = {code_barre: code, no_dossier: ref, machine_id: machineId};
+        if(fid) body.fournisseur_fsc_id = fid;
+        try{
+          await api('/api/fabrication/matieres', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify(body),
+          });
+        }catch(e){
+          const msg = String((e && e.message) || '');
+          if(msg.toLowerCase().includes('fournisseur requis')){
+            fournWrap.style.display = 'block';
+            showToast('Sélectionnez un fournisseur pour les codes non liés à une réception.','danger');
+            throw e;
+          }
+          throw e;
+        }
+      }
+      closeTracMatieresEditModal();
+      showToast('Bobines enregistrées.','success');
+      await loadTracabiliteDossier(ref);
+    }catch(e){
+      if(!String((e&&e.message)||'').toLowerCase().includes('fournisseur requis')){
+        showToast((e&&e.message)||'Enregistrement impossible.','danger');
+      }
+    }finally{
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Enregistrer';
+    }
+  };
+  actions.append(cancelBtn, saveBtn);
+
+  box.append(head, body, actions);
+  overlay.appendChild(box);
+  overlay.addEventListener('click', (e)=>{ if(e.target===overlay) closeTracMatieresEditModal(); });
+  document.body.appendChild(overlay);
+  requestAnimationFrame(()=>{
+    const first = listWrap.querySelector('input');
+    if(first) first.focus();
+  });
+}
+
 function renderTracabiliteDossierDetail(){
   const d = S.traceabiliteDossier;
 
@@ -6432,9 +6652,18 @@ function renderTracabiliteDossierDetail(){
       ),
       infoGrid,
       h('div',{style:{padding:'0 20px 16px'}},
-        h('div',{style:{fontWeight:'800',fontSize:'12px',color:'var(--text2)',
-          textTransform:'uppercase',letterSpacing:'.4px',marginBottom:'10px'}},
-          iconEl('box',12),' Bobines matières utilisées ('+matieres.length+')'
+        h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'10px',marginBottom:'10px'}},
+          h('div',{style:{fontWeight:'800',fontSize:'12px',color:'var(--text2)',
+            textTransform:'uppercase',letterSpacing:'.4px',display:'flex',alignItems:'center',gap:'6px'}},
+            iconEl('box',12),' Bobines matières utilisées ('+matieres.length+')'
+          ),
+          h('button',{
+            type:'button',
+            className:'btn btn-sm btn-ghost',
+            title:'Modifier les bobines',
+            style:{display:'inline-flex',alignItems:'center',gap:'6px',flexShrink:0},
+            onClick:()=>openTracMatieresEditModal(dos, matieres)
+          }, iconEl('settings',14))
         ),
         h('div',{style:{overflowX:'auto'}}, matiereTable)
       )

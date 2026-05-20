@@ -928,48 +928,8 @@ async def add_matiere(request: Request):
         conn.commit()
         new_id = cursor.lastrowid
 
-        # Tenter de lier à une réception existante (prioritaire)
-        rec = conn.execute(
-            """
-            SELECT r.id AS reception_id, r.fournisseur, r.certificat_fsc
-            FROM stock_reception_items i
-            JOIN stock_receptions r ON r.id = i.reception_id
-            WHERE trim(i.code_barre) = trim(?)
-            ORDER BY i.scanned_at DESC, i.id DESC
-            LIMIT 1
-            """,
-            (code_barre,),
-        ).fetchone()
-        if rec and rec["reception_id"]:
-            conn.execute(
-                """UPDATE fab_matieres_utilisees
-                   SET reception_id=?, liaison_mode='reception',
-                       fournisseur_manual=NULL, certificat_fsc_manual=NULL
-                   WHERE id=?""",
-                (int(rec["reception_id"]), new_id),
-            )
-            conn.commit()
-        else:
-            # Pas trouvé → exige une saisie fournisseur (liaison manuelle)
-            if not fournisseur_fsc_id:
-                raise HTTPException(
-                    status_code=409,
-                    detail="Fournisseur requis — liaison manuelle.",
-                )
-            f = conn.execute(
-                "SELECT nom, certificat FROM fournisseurs_fsc WHERE id=?",
-                (int(fournisseur_fsc_id),),
-            ).fetchone()
-            if not f:
-                raise HTTPException(status_code=400, detail="Fournisseur introuvable")
-            conn.execute(
-                """UPDATE fab_matieres_utilisees
-                   SET reception_id=NULL, liaison_mode='manual',
-                       fournisseur_manual=?, certificat_fsc_manual=?
-                   WHERE id=?""",
-                (str(f["nom"]), str(f["certificat"] or ""), new_id),
-            )
-            conn.commit()
+        _link_matiere_to_reception(conn, new_id, code_barre, fournisseur_fsc_id)
+        conn.commit()
 
         row = conn.execute(
             """SELECT
@@ -1004,6 +964,100 @@ async def add_matiere(request: Request):
     d.pop("reception_id_found", None)
     d.pop("liaison_mode_resolved", None)
     return {"success": True, "id": new_id, "matiere": d}
+
+
+def _link_matiere_to_reception(conn, matiere_id: int, code_barre: str, fournisseur_fsc_id: int | None) -> None:
+    """Lie un scan matière à une réception stock ou à un fournisseur FSC (manuel)."""
+    rec = conn.execute(
+        """
+        SELECT r.id AS reception_id, r.fournisseur, r.certificat_fsc
+        FROM stock_reception_items i
+        JOIN stock_receptions r ON r.id = i.reception_id
+        WHERE trim(i.code_barre) = trim(?)
+        ORDER BY i.scanned_at DESC, i.id DESC
+        LIMIT 1
+        """,
+        (code_barre,),
+    ).fetchone()
+    if rec and rec["reception_id"]:
+        conn.execute(
+            """UPDATE fab_matieres_utilisees
+               SET reception_id=?, liaison_mode='reception',
+                   fournisseur_manual=NULL, certificat_fsc_manual=NULL
+               WHERE id=?""",
+            (int(rec["reception_id"]), matiere_id),
+        )
+        return
+    if not fournisseur_fsc_id:
+        raise HTTPException(
+            status_code=409,
+            detail="Fournisseur requis — liaison manuelle.",
+        )
+    f = conn.execute(
+        "SELECT nom, certificat FROM fournisseurs_fsc WHERE id=?",
+        (int(fournisseur_fsc_id),),
+    ).fetchone()
+    if not f:
+        raise HTTPException(status_code=400, detail="Fournisseur introuvable")
+    conn.execute(
+        """UPDATE fab_matieres_utilisees
+           SET reception_id=NULL, liaison_mode='manual',
+               fournisseur_manual=?, certificat_fsc_manual=?
+           WHERE id=?""",
+        (str(f["nom"]), str(f["certificat"] or ""), matiere_id),
+    )
+
+
+@router.patch("/api/fabrication/matieres/{matiere_id}")
+async def patch_matiere(matiere_id: int, request: Request):
+    """Modifie le code barre d'un scan matière."""
+    user = get_current_user(request)
+    _check_fab_access(user)
+
+    body = await request.json()
+    code_barre = (body.get("code_barre") or "").strip()
+    if not code_barre:
+        raise HTTPException(status_code=400, detail="Code barre manquant")
+
+    fournisseur_fsc_id = body.get("fournisseur_fsc_id")
+    try:
+        fournisseur_fsc_id = int(fournisseur_fsc_id) if fournisseur_fsc_id is not None else None
+    except (ValueError, TypeError):
+        fournisseur_fsc_id = None
+
+    operateur = user.get("operateur_lie") or ""
+    if not operateur:
+        operateur = user.get("nom") or ""
+
+    with get_db() as conn:
+        ex = conn.execute(
+            "SELECT * FROM fab_matieres_utilisees WHERE id=?", (matiere_id,)
+        ).fetchone()
+        if not ex:
+            raise HTTPException(status_code=404, detail="Scan non trouvé")
+        if not is_admin(user) and ex["operateur"] != operateur:
+            raise HTTPException(status_code=403, detail="Non autorisé")
+
+        conn.execute(
+            "UPDATE fab_matieres_utilisees SET code_barre=? WHERE id=?",
+            (code_barre, matiere_id),
+        )
+        _link_matiere_to_reception(conn, matiere_id, code_barre, fournisseur_fsc_id)
+        conn.commit()
+
+        row = conn.execute(
+            "SELECT * FROM fab_matieres_utilisees WHERE id=?", (matiere_id,)
+        ).fetchone()
+
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="fabrication",
+        objet=f"Matière #{matiere_id} modifiée",
+        detail={"no_dossier": ex["no_dossier"], "code_barre": code_barre},
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True, "matiere": dict(row) if row else {}}
 
 
 @router.delete("/api/fabrication/matieres/{matiere_id}")
