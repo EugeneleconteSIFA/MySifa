@@ -73,13 +73,9 @@ body{margin:0;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
   font-family:inherit;transition:background .15s,color .15s,box-shadow .2s;margin-bottom:2px;
 }
 .nav-btn:hover{background:var(--accent-bg);color:var(--accent)}
-.nav-btn.active{background:var(--accent-bg-active,var(--accent-bg));color:var(--accent);font-weight:600}
+.nav-btn.active{background:var(--sel-bg,var(--accent-bg));color:var(--sel-text,var(--accent));font-weight:500}
 .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(34,211,238,.25),0 0 18px rgba(34,211,238,.15)}
 body.palette-ambre .nav-btn:hover:not(.active),body.palette-forge .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(240,165,0,.28),0 0 16px rgba(240,165,0,.14)}
-body.palette-pivoine .nav-btn:hover:not(.active),body.palette-cocon .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(240,56,136,.28),0 0 16px rgba(240,56,136,.14)}
-body.palette-foret .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(61,214,126,.28),0 0 16px rgba(61,214,126,.14)}
-body.palette-cendre .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(100,150,200,.28),0 0 16px rgba(100,150,200,.14)}
-body.palette-braise .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(240,112,48,.28),0 0 16px rgba(240,112,48,.14)}
 body.light .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(8,145,178,.32),0 0 16px rgba(8,145,178,.12)}
 .back-mysifa{
   border:none!important;background:transparent!important;
@@ -221,7 +217,7 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
   cursor:pointer;transition:border-color .15s,background .15s;
   background:var(--bg);text-align:center;position:relative}
 .theme-card:hover{border-color:var(--accent);background:var(--accent-bg)}
-.theme-card.selected{border-color:var(--accent);background:var(--accent-bg-active,var(--accent-bg))}
+.theme-card.selected{border-color:var(--sel-border,var(--accent));background:var(--card)}
 .tc-check{position:absolute;top:7px;right:7px;width:16px;height:16px;border-radius:50%;
   background:var(--accent);display:none;align-items:center;justify-content:center}
 .theme-card.selected .tc-check{display:flex}
@@ -234,7 +230,7 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
   cursor:pointer;transition:border-color .15s,background .15s;
   background:var(--bg);display:flex;align-items:center;gap:10px;justify-content:center}
 .mode-card:hover{border-color:var(--accent);background:var(--accent-bg)}
-.mode-card.selected{border-color:var(--accent);background:var(--accent-bg-active,var(--accent-bg))}
+.mode-card.selected{border-color:var(--sel-border,var(--accent));background:var(--card)}
 .mode-ico{display:inline-flex;align-items:center}
 .mode-label{font-size:13px;font-weight:700;color:var(--text)}
 .mode-sub{font-size:10px;color:var(--muted)}
@@ -579,25 +575,25 @@ const PALETTE_DEF=[
   {id:'pivoine', name:'Pivoine', sub:'Rose vif · quasi-noir',
     prev:`<div style="background:#0e040c;width:100%;height:100%;border-radius:6px;display:flex;align-items:center;justify-content:center;gap:5px">
       <div style="width:9px;height:9px;border-radius:50%;background:#f03888"></div>
-      <div style="width:9px;height:9px;border-radius:50%;background:#f03888;opacity:.5"></div>
+      <div style="width:9px;height:9px;border-radius:50%;background:#7a9cc8;opacity:.85"></div>
       <div style="width:9px;height:9px;border-radius:50%;background:#b888a4;opacity:.55"></div>
     </div>`},
   {id:'foret',  name:'Forêt',   sub:'Vert vif · quasi-noir',
     prev:`<div style="background:#060d08;width:100%;height:100%;border-radius:6px;display:flex;align-items:center;justify-content:center;gap:5px">
       <div style="width:9px;height:9px;border-radius:50%;background:#3dd67e"></div>
-      <div style="width:9px;height:9px;border-radius:50%;background:#3dd67e;opacity:.5"></div>
+      <div style="width:9px;height:9px;border-radius:50%;background:#c8a86a;opacity:.85"></div>
       <div style="width:9px;height:9px;border-radius:50%;background:#8fa898;opacity:.6"></div>
     </div>`},
   {id:'cendre', name:'Cendre',  sub:'Bleu acier · nuit froide',
     prev:`<div style="background:#080a0f;width:100%;height:100%;border-radius:6px;display:flex;align-items:center;justify-content:center;gap:5px">
       <div style="width:9px;height:9px;border-radius:50%;background:#6496c8"></div>
-      <div style="width:9px;height:9px;border-radius:50%;background:#6496c8;opacity:.55"></div>
+      <div style="width:9px;height:9px;border-radius:50%;background:#c8a070;opacity:.85"></div>
       <div style="width:9px;height:9px;border-radius:50%;background:#848ea8;opacity:.65"></div>
     </div>`},
   {id:'braise', name:'Braise',  sub:'Orange brûlé · quasi-noir',
     prev:`<div style="background:#0e0500;width:100%;height:100%;border-radius:6px;display:flex;align-items:center;justify-content:center;gap:5px">
       <div style="width:9px;height:9px;border-radius:50%;background:#f07030"></div>
-      <div style="width:9px;height:9px;border-radius:50%;background:#f07030;opacity:.5"></div>
+      <div style="width:9px;height:9px;border-radius:50%;background:#6a90b0;opacity:.85"></div>
       <div style="width:9px;height:9px;border-radius:50%;background:#b8907a;opacity:.65"></div>
     </div>`},
 ];

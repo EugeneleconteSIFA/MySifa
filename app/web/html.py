@@ -107,13 +107,9 @@ button:focus:not(:focus-visible){outline:none}
 .theme-btn--logo .theme-ico{display:inline-flex;align-items:center}
 .nav-btn{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:13px;font-weight:500;width:100%;text-align:left;font-family:inherit;transition:background .15s,color .15s,box-shadow .2s;margin-bottom:2px}
 .nav-btn:hover{background:var(--accent-bg);color:var(--accent)}
-.nav-btn.active{background:var(--accent-bg-active,var(--accent-bg));color:var(--accent);font-weight:600}
+.nav-btn.active{background:var(--sel-bg,var(--accent-bg));color:var(--sel-text,var(--accent));font-weight:500}
 .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(34,211,238,.25),0 0 18px rgba(34,211,238,.15)}
 body.palette-ambre .nav-btn:hover:not(.active),body.palette-forge .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(240,165,0,.28),0 0 16px rgba(240,165,0,.14)}
-body.palette-pivoine .nav-btn:hover:not(.active),body.palette-cocon .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(240,56,136,.28),0 0 16px rgba(240,56,136,.14)}
-body.palette-foret .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(61,214,126,.28),0 0 16px rgba(61,214,126,.14)}
-body.palette-cendre .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(100,150,200,.28),0 0 16px rgba(100,150,200,.14)}
-body.palette-braise .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(240,112,48,.28),0 0 16px rgba(240,112,48,.14)}
 body.light .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(8,145,178,.32),0 0 16px rgba(8,145,178,.12)}
 .nav-badge{margin-left:auto;min-width:22px;height:18px;padding:0 6px;border-radius:999px;
   background:rgba(248,113,113,.14);border:1px solid rgba(248,113,113,.35);color:var(--danger);
