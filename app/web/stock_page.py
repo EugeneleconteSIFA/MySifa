@@ -3300,6 +3300,15 @@ function buildReception() {
     cls: 'recep-fourn-sel',
     attrs: { id: 'fsc-type-claim' },
     on: {
+      mousedown: () => {
+        // Fermer le dropdown fournisseur avant l'ouverture du select (sinon il capte le clic).
+        try { dropdown.classList.remove('open'); } catch(e) {}
+        S.recepFournisseurOpen = false;
+      },
+      focus: () => {
+        try { dropdown.classList.remove('open'); } catch(e) {}
+        S.recepFournisseurOpen = false;
+      },
       change: (e) => {
         S.recepFscTypeClaim = e.target.value;
         renderContent();
