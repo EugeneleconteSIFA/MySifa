@@ -744,3 +744,53 @@ def import_operation_codes_json(request: Request):
         conn.commit()
     refresh_operations_cache()
     return {"success": True, "upserted": n}
+
+
+# ── Machines (horaires planning + métrage total compteur) ───────────────────
+
+
+@router.put("/api/settings/machines/{machine_id}/dernier-metrage")
+async def set_machine_dernier_metrage(machine_id: int, request: Request):
+    """Correction manuelle du compteur machine (dernier_metrage) — super admin."""
+    user = require_superadmin(request)
+    body = await request.json()
+    if not isinstance(body, dict) or "dernier_metrage" not in body:
+        raise HTTPException(status_code=400, detail="dernier_metrage requis")
+
+    raw = body.get("dernier_metrage")
+    if raw is None or raw == "":
+        new_val = None
+    else:
+        try:
+            new_val = float(raw)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Métrage invalide")
+        if new_val < 0:
+            raise HTTPException(status_code=400, detail="Le métrage doit être positif ou nul")
+
+    from database import get_db
+
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id, nom, dernier_metrage FROM machines WHERE id=? AND actif=1",
+            (machine_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Machine introuvable")
+        old_val = row["dernier_metrage"]
+        conn.execute(
+            "UPDATE machines SET dernier_metrage=? WHERE id=?",
+            (new_val, machine_id),
+        )
+        conn.commit()
+        machine_nom = row["nom"] or ""
+
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="settings",
+        objet=f"Métrage total machine {machine_nom}",
+        detail={"machine_id": machine_id, "ancien": old_val, "nouveau": new_val},
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True, "dernier_metrage": new_val}

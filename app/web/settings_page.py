@@ -190,6 +190,7 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
       <button type="button" class="nav-btn active" data-tab="users">Utilisateurs</button>
       <button type="button" class="nav-btn" data-tab="fournisseurs">Fournisseurs</button>
       <button type="button" class="nav-btn" data-tab="operations">Opérations</button>
+      <button type="button" class="nav-btn" data-tab="machines">Machines</button>
       <div class="nav-group-label" style="margin-top:8px">Accès</div>
       <button type="button" class="nav-btn" data-tab="matrix">Matrice d'accès</button>
       <button type="button" class="nav-btn" data-tab="defaults">Référentiel rôles</button>
@@ -350,6 +351,41 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
       </div>
     </section>
 
+
+    <section id="panel-machines" class="hidden">
+      <div class="tabs" style="margin-bottom:14px">
+        <button type="button" class="btn btn-sec mac-sub-btn active" data-macsub="mac-horaires">Horaires</button>
+        <button type="button" class="btn btn-sec mac-sub-btn" data-macsub="mac-metrage">Métrage total</button>
+      </div>
+      <div class="card">
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+          <div style="flex:1;min-width:200px">
+            <label class="sub" style="display:block;margin-bottom:6px">Machine</label>
+            <select id="mac-select" style="width:100%;max-width:320px"></select>
+          </div>
+          <span class="hint" id="mac-hint"></span>
+        </div>
+        <div id="mac-horaires-wrap">
+          <p class="sub" style="margin-top:-4px;margin-bottom:14px">Horaires par défaut du planning de production (lun–sam). Cohésio 2 : semaines paires / impaires.</p>
+          <div id="mac-horaires-weekly"></div>
+          <div id="mac-horaires-parity" class="hidden" style="margin-top:16px"></div>
+          <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
+            <button type="button" class="btn" id="mac-hor-save">Enregistrer les horaires</button>
+            <button type="button" class="btn btn-sec" id="mac-hor-reset">Réinitialiser (défauts machine)</button>
+          </div>
+        </div>
+        <div id="mac-metrage-wrap" class="hidden">
+          <p class="sub" style="margin-top:-4px;margin-bottom:14px">Compteur machine utilisé à la saisie production (début / fin de dossier). Mis à jour automatiquement à chaque saisie ; correction manuelle en cas d'erreur.</p>
+          <div style="max-width:360px">
+            <label class="sub" style="display:block;margin-bottom:6px">Métrage total actuel (m)</label>
+            <input type="text" id="mac-metrage-inp" inputmode="decimal" placeholder="Ex. 1254300" autocomplete="off"
+              style="width:100%;font-family:ui-monospace,monospace;font-size:15px">
+            <p class="hint" id="mac-metrage-hint" style="margin-top:8px"></p>
+          </div>
+          <button type="button" class="btn" id="mac-metr-save" style="margin-top:14px">Enregistrer le métrage</button>
+        </div>
+      </div>
+    </section>
 
     <section id="panel-operations" class="hidden">
       <div class="card">
@@ -602,12 +638,13 @@ function setTab(id) {
   document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === id);
   });
-  ['users', 'matrix', 'defaults', 'fournisseurs', 'operations', 'updates', 'audit'].forEach(p => {
+  ['users', 'matrix', 'defaults', 'fournisseurs', 'operations', 'machines', 'updates', 'audit'].forEach(p => {
     const el = document.getElementById('panel-' + p);
     if (el) el.classList.toggle('hidden', p !== id);
   });
   if (id === 'fournisseurs') loadFournisseurs();
   if (id === 'operations') loadOperationCodes();
+  if (id === 'machines') initMachinesPanel();
   if (id === 'updates') loadUpdates();
   if (id === 'audit') loadAuditLogs();
 }
@@ -723,6 +760,359 @@ async function loadMachines() {
   const ms = document.getElementById('cu-mac');
   ms.innerHTML = '<option value="">— Machine (fabrication) —</option>' +
     machines.map(x => '<option value="' + esc(x.id) + '">' + esc(x.nom) + '</option>').join('');
+  fillMacSelect();
+}
+
+// ── Machines (horaires planning + métrage total) ─────────────────────────────
+const MAC_DAY_ROWS = [
+  { key: 'horaires_lundi', label: 'Lundi' },
+  { key: 'horaires_mardi', label: 'Mardi' },
+  { key: 'horaires_mercredi', label: 'Mercredi' },
+  { key: 'horaires_jeudi', label: 'Jeudi' },
+  { key: 'horaires_vendredi', label: 'Vendredi' },
+  { key: 'horaires_samedi', label: 'Samedi' },
+];
+const MAC_DEFAULTS_BY_KEY = {
+  C1: { pair: { week: { s: 5, e: 20 }, fri: { s: 7, e: 19 } }, impair: { week: { s: 5, e: 20 }, fri: { s: 7, e: 19 } } },
+  C2: { pair: { week: { s: 5, e: 13 }, fri: { s: 6, e: 13 } }, impair: { week: { s: 13, e: 20 }, fri: { s: 14, e: 20 } } },
+  DSI: { pair: { week: { s: 8, e: 14 }, fri: { s: 8, e: 14 } }, impair: { week: { s: 8, e: 14 }, fri: { s: 8, e: 14 } } },
+  REP: { pair: { week: { s: 6, e: 20 }, fri: { s: 7, e: 19 } }, impair: { week: { s: 6, e: 20 }, fri: { s: 7, e: 19 } } },
+};
+let macSubTab = 'mac-horaires';
+let macMachine = null;
+let _macPanelReady = false;
+
+function macMachineKey(m) {
+  const raw = String((m && (m.code || m.nom)) || '').trim();
+  const norm = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (norm.includes('cohesio 1') || norm === 'c1') return 'C1';
+  if (norm.includes('cohesio 2') || norm === 'c2') return 'C2';
+  if (norm.includes('repiquage') || norm === 'rep') return 'REP';
+  if (norm.includes('dsi')) return 'DSI';
+  return raw;
+}
+
+function macPad(n) { return String(n).padStart(2, '0'); }
+
+function macFloatToHm(f) {
+  if (!isFinite(f)) return '';
+  const h = Math.floor(f + 1e-6);
+  const m = Math.round((f - h) * 60);
+  const hh = h + (m >= 60 ? 1 : 0);
+  const mm = ((m % 60) + 60) % 60;
+  return macPad(hh) + ':' + macPad(mm);
+}
+
+function macHmToFloat(raw) {
+  const s = String(raw || '').trim();
+  if (!/^\d{1,2}:\d{2}$/.test(s)) return null;
+  const p = s.split(':');
+  const hh = parseInt(p[0], 10);
+  const mm = parseInt(p[1], 10);
+  if (!isFinite(hh) || !isFinite(mm)) return null;
+  return hh + mm / 60;
+}
+
+function macParseHorairesCol(val) {
+  if (!val || !String(val).trim()) return { start: '', end: '' };
+  const parts = String(val).trim().split(',');
+  function toHm(x) {
+    const t = String(x || '').trim();
+    if (/^\d{1,2}:\d{2}$/.test(t)) return t;
+    const f = parseFloat(t.replace(',', '.'));
+    return isFinite(f) ? macFloatToHm(f) : '';
+  }
+  return { start: toHm(parts[0]), end: toHm(parts[1] || '') };
+}
+
+function macNormalizeParity(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const out = { pair: {}, impair: {} };
+  for (const par of ['pair', 'impair']) {
+    const block = raw[par];
+    if (!block) return null;
+    for (const slot of ['week', 'fri']) {
+      const w = block[slot];
+      let s, e;
+      if (Array.isArray(w) && w.length >= 2) { s = +w[0]; e = +w[1]; }
+      else if (w && typeof w === 'object') { s = +w.s; e = +w.e; }
+      else return null;
+      if (!isFinite(s) || !isFinite(e) || e <= s) return null;
+      out[par][slot] = { s, e };
+    }
+  }
+  return out;
+}
+
+function macGetParityDefaults(m) {
+  if (m && m.horaires_parity) {
+    try {
+      const j = typeof m.horaires_parity === 'string' ? JSON.parse(m.horaires_parity) : m.horaires_parity;
+      const norm = macNormalizeParity(j);
+      if (norm) return norm;
+    } catch (e) { /* ignore */ }
+  }
+  const mk = macMachineKey(m);
+  return MAC_DEFAULTS_BY_KEY[mk] || MAC_DEFAULTS_BY_KEY.C1;
+}
+
+function fillMacSelect() {
+  const sel = document.getElementById('mac-select');
+  if (!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = machines.map(x =>
+    '<option value="' + esc(x.id) + '">' + esc(x.nom) + '</option>'
+  ).join('');
+  if (prev && machines.some(x => String(x.id) === String(prev))) sel.value = prev;
+  else if (machines.length) sel.value = String(machines[0].id);
+}
+
+function setMacSubTab(id) {
+  macSubTab = id;
+  document.querySelectorAll('.mac-sub-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.macsub === id);
+  });
+  const hor = document.getElementById('mac-horaires-wrap');
+  const met = document.getElementById('mac-metrage-wrap');
+  if (hor) hor.classList.toggle('hidden', id !== 'mac-horaires');
+  if (met) met.classList.toggle('hidden', id !== 'mac-metrage');
+}
+
+function renderMacHorairesForm() {
+  const m = macMachine;
+  const weekly = document.getElementById('mac-horaires-weekly');
+  const parityBox = document.getElementById('mac-horaires-parity');
+  if (!weekly || !m) return;
+  const mk = macMachineKey(m);
+  const isC2 = mk === 'C2';
+  if (parityBox) parityBox.classList.toggle('hidden', !isC2);
+
+  let rows = '';
+  MAC_DAY_ROWS.forEach(d => {
+    const p = macParseHorairesCol(m[d.key]);
+    rows += '<tr><td style="font-weight:600">' + esc(d.label) + '</td>' +
+      '<td><input type="text" class="mac-h-start" data-field="' + esc(d.key) + '" value="' + esc(p.start) + '" placeholder="05:00" inputmode="numeric" style="width:100%"></td>' +
+      '<td><input type="text" class="mac-h-end" data-field="' + esc(d.key) + '" value="' + esc(p.end) + '" placeholder="21:00" inputmode="numeric" style="width:100%"></td></tr>';
+  });
+  weekly.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Jour</th><th>Début (HH:MM)</th><th>Fin (HH:MM)</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+
+  if (isC2 && parityBox) {
+    const defs = macGetParityDefaults(m);
+    function pr(lbl, id, val) {
+      return '<div class="fd" style="margin-bottom:8px"><label class="sub" style="display:block;margin-bottom:4px">' + lbl + '</label>' +
+        '<input type="text" id="' + id + '" value="' + esc(macFloatToHm(val)) + '" placeholder="07:00" inputmode="numeric" style="width:100%"></div>';
+    }
+    parityBox.innerHTML =
+      '<div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px">Semaines paires / impaires (Cohésio 2)</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
+      '<div style="border:1px solid var(--border);border-radius:12px;padding:14px">' +
+      '<div style="font-weight:600;margin-bottom:8px;font-size:13px">Semaine paire</div>' +
+      pr('Lun–jeu début', 'mac-dp-w-s', defs.pair.week.s) +
+      pr('Lun–jeu fin', 'mac-dp-w-e', defs.pair.week.e) +
+      pr('Vendredi début', 'mac-dp-f-s', defs.pair.fri.s) +
+      pr('Vendredi fin', 'mac-dp-f-e', defs.pair.fri.e) +
+      '</div><div style="border:1px solid var(--border);border-radius:12px;padding:14px">' +
+      '<div style="font-weight:600;margin-bottom:8px;font-size:13px">Semaine impaire</div>' +
+      pr('Lun–jeu début', 'mac-di-w-s', defs.impair.week.s) +
+      pr('Lun–jeu fin', 'mac-di-w-e', defs.impair.week.e) +
+      pr('Vendredi début', 'mac-di-f-s', defs.impair.fri.s) +
+      pr('Vendredi fin', 'mac-di-f-e', defs.impair.fri.e) +
+      '</div></div>';
+  } else if (parityBox) {
+    parityBox.innerHTML = '';
+  }
+}
+
+function renderMacMetrageForm() {
+  const inp = document.getElementById('mac-metrage-inp');
+  const hint = document.getElementById('mac-metrage-hint');
+  if (!inp || !macMachine) return;
+  const v = macMachine.dernier_metrage;
+  inp.value = (v != null && isFinite(Number(v))) ? String(Math.round(Number(v))) : '';
+  if (hint) {
+    hint.textContent = v != null
+      ? 'Valeur en base : ' + Math.round(Number(v)).toLocaleString('fr-FR') + ' m'
+      : 'Aucune valeur enregistrée — la première saisie définira le compteur.';
+  }
+}
+
+async function loadMacMachineDetail() {
+  const sel = document.getElementById('mac-select');
+  const hint = document.getElementById('mac-hint');
+  if (!sel || !sel.value) {
+    macMachine = null;
+    return;
+  }
+  const id = Number(sel.value);
+  try {
+    macMachine = await api('/api/planning/machines/' + id);
+    if (hint) hint.textContent = (macMachine && macMachine.code) ? ('Code ' + macMachine.code) : '';
+    renderMacHorairesForm();
+    renderMacMetrageForm();
+  } catch (e) {
+    macMachine = null;
+    if (hint) hint.textContent = '';
+    toast(e.message || 'Erreur chargement machine', true);
+  }
+}
+
+function macCollectHorairesPayload() {
+  const payload = {};
+  document.querySelectorAll('.mac-h-start').forEach(inp => {
+    const field = inp.dataset.field;
+    const endInp = document.querySelector('.mac-h-end[data-field="' + field + '"]');
+    const st = (inp.value || '').trim();
+    const en = endInp ? (endInp.value || '').trim() : '';
+    if (st && en) payload[field] = st + ',' + en;
+  });
+  return payload;
+}
+
+function macCollectParityPayload() {
+  function v(id) {
+    const f = macHmToFloat(document.getElementById(id) && document.getElementById(id).value);
+    return f == null ? null : f;
+  }
+  return {
+    pair: { week: { s: v('mac-dp-w-s'), e: v('mac-dp-w-e') }, fri: { s: v('mac-dp-f-s'), e: v('mac-dp-f-e') } },
+    impair: { week: { s: v('mac-di-w-s'), e: v('mac-di-w-e') }, fri: { s: v('mac-di-f-s'), e: v('mac-di-f-e') } },
+  };
+}
+
+async function saveMacHoraires() {
+  if (!macMachine) return;
+  const id = macMachine.id;
+  const mk = macMachineKey(macMachine);
+  const bulk = macCollectHorairesPayload();
+  try {
+    if (mk === 'C2') {
+      const nd = macCollectParityPayload();
+      function okR(r) { return r.s != null && r.e != null && r.e > r.s && r.s >= 0 && r.e <= 24; }
+      if (![nd.pair.week, nd.pair.fri, nd.impair.week, nd.impair.fri].every(okR)) {
+        toast('Plages paire/impair invalides (format HH:MM, fin > début)', true);
+        return;
+      }
+      await api('/api/planning/machines/' + id + '/horaires-parity', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(nd),
+      });
+    }
+    if (Object.keys(bulk).length) {
+      await api('/api/planning/machines/' + id + '/horaires-bulk', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bulk),
+      });
+    }
+    if (mk !== 'C2' && !Object.keys(bulk).length) {
+      toast('Renseignez au moins un créneau horaire.', true);
+      return;
+    }
+    toast('Horaires enregistrés.');
+    await loadMacMachineDetail();
+    await loadMachines();
+  } catch (e) {
+    toast(e.message || 'Erreur enregistrement horaires', true);
+  }
+}
+
+async function resetMacHoraires() {
+  if (!macMachine || !confirm('Réinitialiser les horaires de cette machine aux valeurs par défaut ?')) return;
+  const mk = macMachineKey(macMachine);
+  const d = MAC_DEFAULTS_BY_KEY[mk] || MAC_DEFAULTS_BY_KEY.C1;
+  const id = macMachine.id;
+  try {
+    if (mk === 'C2') {
+      await api('/api/planning/machines/' + id + '/horaires-parity', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(d),
+      });
+    } else {
+      const p = d.pair || d.impair;
+      const week = p && p.week ? p.week : null;
+      const fri = p && p.fri ? p.fri : null;
+      const hs = week && isFinite(week.s) ? week.s : null;
+      const he = week && isFinite(week.e) ? week.e : null;
+      const fs = fri && isFinite(fri.s) ? fri.s : hs;
+      const fe = fri && isFinite(fri.e) ? fri.e : he;
+      function pair(a, b) {
+        if (a == null || b == null) return null;
+        return macFloatToHm(a) + ',' + macFloatToHm(b);
+      }
+      const payload = {
+        horaires_lundi: pair(hs, he),
+        horaires_mardi: pair(hs, he),
+        horaires_mercredi: pair(hs, he),
+        horaires_jeudi: pair(hs, he),
+        horaires_vendredi: pair(fs, fe),
+      };
+      Object.keys(payload).forEach(k => { if (!payload[k]) delete payload[k]; });
+      if (Object.keys(payload).length) {
+        await api('/api/planning/machines/' + id + '/horaires-bulk', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+      }
+    }
+    toast('Horaires réinitialisés.');
+    await loadMacMachineDetail();
+    await loadMachines();
+  } catch (e) {
+    toast(e.message || 'Erreur réinitialisation', true);
+  }
+}
+
+async function saveMacMetrage() {
+  if (!macMachine) return;
+  const raw = (document.getElementById('mac-metrage-inp').value || '').trim().replace(/\s/g, '').replace(',', '.');
+  let val = null;
+  if (raw !== '') {
+    val = parseFloat(raw);
+    if (!isFinite(val) || val < 0) {
+      toast('Métrage invalide — valeur positive ou nulle attendue.', true);
+      return;
+    }
+  }
+  const lbl = macMachine.nom || ('Machine ' + macMachine.id);
+  const msg = val == null
+    ? 'Effacer le compteur de « ' + lbl + ' » ?'
+    : 'Enregistrer le compteur à ' + Math.round(val).toLocaleString('fr-FR') + ' m pour « ' + lbl + ' » ?';
+  if (!confirm(msg)) return;
+  try {
+    await api('/api/settings/machines/' + macMachine.id + '/dernier-metrage', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dernier_metrage: val }),
+    });
+    toast('Métrage enregistré.');
+    await loadMacMachineDetail();
+    await loadMachines();
+  } catch (e) {
+    toast(e.message || 'Erreur enregistrement métrage', true);
+  }
+}
+
+function initMachinesPanel() {
+  fillMacSelect();
+  if (!_macPanelReady) {
+    _macPanelReady = true;
+    document.querySelectorAll('.mac-sub-btn').forEach(b => {
+      b.addEventListener('click', () => setMacSubTab(b.dataset.macsub));
+    });
+    const sel = document.getElementById('mac-select');
+    if (sel) sel.addEventListener('change', () => loadMacMachineDetail());
+    const hs = document.getElementById('mac-hor-save');
+    const hr = document.getElementById('mac-hor-reset');
+    const ms = document.getElementById('mac-metr-save');
+    if (hs) hs.addEventListener('click', saveMacHoraires);
+    if (hr) hr.addEventListener('click', resetMacHoraires);
+    if (ms) ms.addEventListener('click', saveMacMetrage);
+  }
+  setMacSubTab(macSubTab);
+  loadMacMachineDetail();
 }
 
 function fillRoleSelect() {
