@@ -2746,6 +2746,14 @@ function fscBadgeHtml(e){
   return `<span title="${escAttr(title)}" style="background:var(--accent-bg);color:var(--accent);font-size:10px;font-weight:700;padding:1px 5px;border-radius:4px;margin-left:4px;vertical-align:middle">FSC</span>`;
 }
 
+function fscTypeRequisLabel(t){
+  const typ=(t||"").trim();
+  if(typ==="fsc_100") return "FSC 100%";
+  if(typ==="fsc_mix") return "FSC Mix";
+  if(typ==="fsc_recycled") return "FSC Recycled";
+  return typ;
+}
+
 function dossierFields(numero_of,client,ref_produit,laize,date_livraison,commentaire,exigences_production,fl,fh,dur,statut,showStatut,aPlacer=1,fscRequis=0,fscType=""){
   const fscOn=fscRequis===1||fscRequis===true;
   const fscTyp=(fscType&&["fsc_100","fsc_mix","fsc_recycled"].includes(fscType))?fscType:"fsc_100";
@@ -2837,6 +2845,90 @@ async function submitAdd(){
   }
 }
 
+async function openFscRapport(noDossier){
+  const ref=(noDossier||"").trim();
+  if(!ref){ showToast("Référence dossier manquante.","danger"); return; }
+  try{
+    const res=await fetch("/api/fabrication/tracabilite/"+encodeURIComponent(ref),{
+      credentials:"include",
+      headers:{"Content-Type":"application/json"},
+    });
+    if(!res.ok) throw await parseApiError(res);
+    const ct=res.headers.get("content-type")||"";
+    const data=ct.includes("application/json")?await res.json():null;
+    if(!data) return;
+    const syn=data.synthese||{};
+    const bobines=data.bobines||[];
+    const dos=data.dossier||{};
+    const typeReq=fscTypeRequisLabel(dos.fsc_type_requis||"");
+    const sg=syn.statut_global||"";
+    const isConforme=sg==="conforme";
+    const isNonConforme=sg==="non_conforme";
+    const statutColor=isConforme?"var(--success)":isNonConforme?"var(--danger)":"var(--muted)";
+    const statutText=isConforme
+      ? ("Conforme FSC — "+(syn.nb_bobines_fsc_conformes??0)+"/"+(syn.nb_bobines_total??0)+" bobine(s)")
+      : isNonConforme
+        ? ("Non conforme — "+(syn.nb_bobines_non_conformes??0)+" bobine(s) en écart")
+        : ((syn.nb_bobines_total??0)===0?"Aucune bobine scannée":"Non applicable");
+
+    const lignes=bobines.map(b=>{
+      const confBadge=b.fsc_conforme===true
+        ? `<span style="color:var(--success);font-weight:700">\u2713</span>`
+        : b.fsc_conforme===false
+          ? `<span style="color:var(--danger);font-weight:700">\u2717${b.fsc_warning?" (confirmé)":""}</span>`
+          : `<span style="color:var(--muted)">\u2014</span>`;
+      const scan=(b.scanned_at||"").slice(0,16).replace("T"," ");
+      return `<tr style="border-bottom:1px solid var(--border2)">
+        <td style="padding:7px 8px;font-family:var(--mono);font-size:12px">${escAttr(b.code_barre||"")}</td>
+        <td style="padding:7px 8px;font-size:12px">${escAttr(b.fournisseur||"\u2014")}</td>
+        <td style="padding:7px 8px;font-size:12px">${escAttr(b.fsc_type_claim||"Non FSC")}</td>
+        <td style="padding:7px 8px;font-size:12px">${confBadge}</td>
+        <td style="padding:7px 8px;font-size:11px;color:var(--muted)">${escAttr(scan)}</td>
+      </tr>`;
+    }).join("");
+
+    document.getElementById("mroot").innerHTML=`
+      <div class="mo" onclick="if(event.target===this)closeM()" style="z-index:2000">
+        <div class="md" onclick="event.stopPropagation()" style="width:min(760px,95vw);max-width:760px;max-height:88vh;overflow-y:auto;padding:24px 28px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+            <div>
+              <div style="font-size:15px;font-weight:700;color:var(--text)">Rapport traçabilité FSC</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px">
+                ${escAttr(ref)}${dos.client?" — "+escAttr(dos.client):""}
+                ${typeReq?" \u00b7 Requis : "+escAttr(typeReq):""}
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap">
+              <button type="button" class="btn-s" style="font-size:12px" onclick="window.print()">Exporter PDF</button>
+              <button type="button" class="btn-s" style="font-size:12px" onclick="closeM()">Fermer</button>
+            </div>
+          </div>
+          <div style="padding:10px 14px;border-radius:8px;margin-bottom:14px;font-weight:700;font-size:13px;
+            background:${statutColor}20;border:1px solid ${statutColor};color:${statutColor}">
+            ${statutText}
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead>
+              <tr style="border-bottom:2px solid var(--border2)">
+                <th style="text-align:left;padding:7px 8px;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:700">Code barre</th>
+                <th style="text-align:left;padding:7px 8px;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:700">Fournisseur</th>
+                <th style="text-align:left;padding:7px 8px;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:700">Claim</th>
+                <th style="text-align:left;padding:7px 8px;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:700">Statut</th>
+                <th style="text-align:left;padding:7px 8px;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:700">Scanné le</th>
+              </tr>
+            </thead>
+            <tbody>${lignes||'<tr><td colspan="5" style="padding:20px;text-align:center;color:var(--muted);font-size:12px">Aucune bobine scannée sur ce dossier.</td></tr>'}</tbody>
+          </table>
+          <div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border2);font-size:11px;color:var(--muted)">
+            Généré le ${escAttr(syn.genere_a||"")} \u00b7 MySifa \u00b7 SIFA
+          </div>
+        </div>
+      </div>`;
+  }catch(err){
+    showToast(apiErrorMessage(err,"Rapport FSC indisponible."),"danger");
+  }
+}
+
 function openEdit(id){
   if(!CAN_EDIT) return;
   const e=S.entries.find(x=>x.id===id);if(!e)return;
@@ -2859,7 +2951,17 @@ function openEdit(id){
   const statsBtn=isTermine?`<button type="button" onclick="openDossierStatsModal(${id})" title="Statistiques de production"
     style="display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:6px;border:1.5px solid var(--border2);background:var(--accent-bg);color:var(--accent);cursor:pointer;transition:opacity .15s;font-family:inherit;flex-shrink:0"
     onmouseenter="this.style.opacity='.75'" onmouseleave="this.style.opacity='1'">${icon('bar-chart-2',16)}</button>`:"";
-  const headerAction=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${statsBtn}<button type="button" id="destock-btn-${id}" onclick="toggleDestockage(${id})"
+  const refFsc=(e.reference||e.numero_of||"").trim();
+  const fscBtn=(e.fsc_requis===1||e.fsc_requis===true)
+    ?`<button type="button" onclick="closeM();openFscRapport(${JSON.stringify(refFsc)})"
+      style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;
+             border:1.5px solid var(--accent);background:var(--accent-bg);color:var(--accent);
+             font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap"
+      onmouseenter="this.style.opacity='.75'" onmouseleave="this.style.opacity='1'">
+      Rapport FSC
+    </button>`
+    :"";
+  const headerAction=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${fscBtn}${statsBtn}<button type="button" id="destock-btn-${id}" onclick="toggleDestockage(${id})"
     title="${destockDone?"Matières destockées — cliquer pour annuler":"Matières à destocker — cliquer pour valider"}"
     style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;border:1.5px solid ${destockBorder};background:${destockBg};color:${destockColor};font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;font-family:inherit;white-space:nowrap"
     onmouseenter="this.style.opacity='.75'" onmouseleave="this.style.opacity='1'">

@@ -1364,6 +1364,7 @@ def get_traceability(request: Request, no_dossier: str = None, machine_id: int =
             rows = conn.execute(
                 f"""SELECT pe.reference, pe.client, pe.description AS designation, pe.statut,
                            pe.date_livraison, m.nom AS machine_nom,
+                           pe.fsc_requis, pe.fsc_type_requis,
                            (SELECT COUNT(*) FROM fab_matieres_utilisees fmu
                             WHERE fmu.no_dossier = pe.reference) AS nb_matieres,
                            (SELECT COUNT(*) FROM production_data pd

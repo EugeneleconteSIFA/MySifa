@@ -2363,7 +2363,9 @@ async function loadAuditLogs() {
     const color = ACTION_COLORS[l.action] || 'var(--text2)';
     const actionLabel = ACTION_LABELS[l.action] || l.action;
     const moduleLabel = MODULE_LABELS[l.module] || l.module;
-    const dt = l.created_at ? l.created_at.replace('T', ' ').slice(0, 16) : '—';
+    const dt = l.created_at_display != null && l.created_at_display !== ''
+      ? l.created_at_display
+      : (l.created_at ? l.created_at.replace('T', ' ').slice(0, 16) : '—');
     const detailHtml = l.detail
       ? `<span style="color:var(--muted);font-size:11px;display:block;margin-top:2px;
                       white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px"

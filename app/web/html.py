@@ -6209,10 +6209,101 @@ async function loadTracabilite(machineId){
 async function loadTracabiliteDossier(ref){
   S.traceabiliteDossier = null; render();
   try{
-    const d = await api('/api/fabrication/traceability?no_dossier='+encodeURIComponent(ref));
+    // Charger les deux en parallèle : vue production + vue FSC
+    const [d, fsc] = await Promise.all([
+      api('/api/fabrication/traceability?no_dossier='+encodeURIComponent(ref)),
+      api('/api/fabrication/tracabilite/'+encodeURIComponent(ref)),
+    ]);
+    const fscMap = {};
+    (fsc && fsc.bobines ? fsc.bobines : []).forEach(b => { fscMap[b.code_barre] = b; });
+    (d && d.matieres ? d.matieres : []).forEach(m => { Object.assign(m, fscMap[m.code_barre] || {}); });
+    d.fsc_synthese = (fsc && fsc.synthese) ? fsc.synthese : null;
     S.traceabiliteDossier = d;
   }catch(e){ S.traceabiliteDossier = {error:e.message}; }
   render();
+}
+
+function openFscRapportModal(data, ref){
+  try{
+    const syn = (data && data.synthese) ? data.synthese : {};
+    const bobines = (data && data.bobines) ? data.bobines : [];
+    const dos = (data && data.dossier) ? data.dossier : {};
+
+    const sg = syn.statut_global || 'non_applicable';
+    const statutColor = sg === 'conforme' ? 'var(--success)'
+      : sg === 'non_conforme' ? 'var(--danger)' : 'var(--muted)';
+    const statutBg = sg === 'conforme' ? 'rgba(52,211,153,.12)'
+      : sg === 'non_conforme' ? 'rgba(248,113,113,.12)' : 'rgba(148,163,184,.12)';
+    let statutText = 'Non applicable';
+    if(sg === 'conforme'){
+      statutText = 'Conforme FSC — ' + (syn.nb_bobines_fsc_conformes ?? 0) + '/' + (syn.nb_bobines_total ?? 0) + ' bobine(s)';
+    }else if(sg === 'non_conforme'){
+      statutText = 'Non conforme — ' + (syn.nb_bobines_non_conformes ?? 0) + ' bobine(s) en écart';
+    }else if(sg === 'en_attente'){
+      statutText = 'En attente — aucune bobine scannée';
+    }else if((syn.nb_bobines_total ?? 0) === 0){
+      statutText = 'Aucune bobine scannée';
+    }
+
+    const typeReq = dos.fsc_type_requis ? String(dos.fsc_type_requis) : '';
+
+    const overlay = h('div',{className:'contact-modal-overlay',onClick:(e)=>{ if(e.target===e.currentTarget) overlay.remove(); }},
+      h('div',{className:'contact-modal',onClick:(e)=>e.stopPropagation(),style:{maxWidth:'760px'}},
+        h('div',{className:'contact-modal-head'},
+          h('h3',null,'Rapport traçabilité FSC'),
+          h('div',{style:{display:'flex',gap:'8px',flexShrink:0,flexWrap:'wrap'}},
+            h('button',{className:'btn btn-sm btn-ghost',style:{fontSize:'12px'},onClick:()=>window.print()},'Exporter PDF'),
+            h('button',{className:'btn btn-sm btn-ghost',style:{fontSize:'12px'},onClick:()=>overlay.remove()},'Fermer')
+          )
+        ),
+        h('div',{style:{fontSize:'12px',color:'var(--muted)',marginTop:'-6px',marginBottom:'12px'}},
+          (ref||'') + (dos.client ? (' — ' + dos.client) : '') + (typeReq ? (' · Requis : ' + typeReq) : '')
+        ),
+        h('div',{style:{padding:'10px 14px',borderRadius:'8px',marginBottom:'14px',fontWeight:'800',fontSize:'13px',
+          background:statutBg,border:'1px solid '+statutColor,color:statutColor}}, statutText),
+        h('div',{className:'table-wrap',style:{border:'1px solid var(--border)',borderRadius:'12px'}},
+          h('table',{className:'table-std',style:{fontSize:'13px'}},
+            h('thead',null,h('tr',null,
+              h('th',null,'Code barre'),
+              h('th',null,'Fournisseur'),
+              h('th',null,'Claim FSC'),
+              h('th',null,'Statut FSC'),
+              h('th',null,'Scanné le')
+            )),
+            h('tbody',null,
+              ...(bobines.length ? bobines.map(b=>{
+                const claim = b.fsc_type_claim || 'Non FSC';
+                const conf = b.fsc_conforme;
+                const confCell = conf === true
+                  ? h('span',{style:{color:'var(--success)',fontWeight:'800'}},'\u2713')
+                  : conf === false
+                    ? h('span',{style:{color:'var(--danger)',fontWeight:'800'}},'\u2717'+(b.fsc_warning?' (confirmé)':''))
+                    : h('span',{style:{color:'var(--muted)'}},'\u2014');
+                const scan = (b.scanned_at||'').slice(0,16).replace('T',' ');
+                return h('tr',null,
+                  h('td',null,h('span',{style:{fontFamily:'ui-monospace,monospace',fontWeight:'800'}},b.code_barre||'')),
+                  h('td',null,b.fournisseur||'—'),
+                  h('td',null,claim),
+                  h('td',null,confCell),
+                  h('td',{style:{fontSize:'11px',color:'var(--muted)'}},scan||'—'),
+                );
+              }) : [
+                h('tr',null,h('td',{colSpan:'5',style:{padding:'20px',textAlign:'center',color:'var(--muted)',fontSize:'12px'}},
+                  'Aucune bobine scannée sur ce dossier.'
+                ))
+              ])
+            )
+          )
+        ),
+        h('div',{style:{marginTop:'14px',paddingTop:'10px',borderTop:'1px solid var(--border)',fontSize:'11px',color:'var(--muted)'}},
+          'Généré le ', syn.genere_a || '', ' · MySifa · SIFA'
+        )
+      )
+    );
+    document.body.appendChild(overlay);
+  }catch(e){
+    showToast('Rapport FSC indisponible.','danger');
+  }
 }
 
 function renderTracabilite(){
@@ -6344,7 +6435,21 @@ function renderTracabilite(){
       h('td',null, dos.client||'—'),
       h('td',null, dos.designation||'—'),
       h('td',null, dos.machine_nom||'—'),
-      h('td',null, statutBadge(dos.statut||'attente')),
+      h('td', null,
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' } },
+          statutBadge(dos.statut || 'attente'),
+          (dos.fsc_requis === 1 || dos.fsc_requis === true)
+            ? h('span', {
+                title: 'Certification FSC requise — ' + (dos.fsc_type_requis || ''),
+                style: {
+                  background: 'var(--accent-bg)', color: 'var(--accent)',
+                  fontSize: '10px', fontWeight: '700',
+                  padding: '1px 6px', borderRadius: '4px',
+                }
+              }, 'FSC')
+            : null
+        )
+      ),
       h('td',null,
         hasMatieres
           ? h('span',{className:'badge badge-ok'}, (dos.nb_matieres||0)+' bobine'+(dos.nb_matieres>1?'s':''))
@@ -6649,6 +6754,7 @@ function renderTracabiliteDossierDetail(){
   const dos = d.dossier||{};
   const matieres = d.matieres||[];
   const prod = d.production||[];
+  const fscSyn = d.fsc_synthese || null;
 
   // Production summary
   const debutRow = prod.find(r=>r.operation_code==='01');
@@ -6678,10 +6784,20 @@ function renderTracabiliteDossierDetail(){
   const matiereRows = matieres.map(m=>{
     const dt = m.scanned_at ? new Date(m.scanned_at) : null;
     const dateStr = dt&&!isNaN(dt) ? dt.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
+    const claim = m.fsc_type_claim || 'Non FSC';
+    const conf = m.fsc_conforme;
+    const confCell = conf === true
+      ? h('span',{style:{color:'var(--success)',fontWeight:'800'}},'\u2713')
+      : conf === false
+        ? h('span',{style:{color:'var(--danger)',fontWeight:'800'}},'\u2717'+(m.fsc_warning?' (confirmé)':''))
+        : h('span',{style:{color:'var(--muted)'}},'\u2014');
     return h('tr',null,
       h('td',null,h('span',{style:{fontFamily:'monospace',fontWeight:'700',color:'var(--accent)'}},m.code_barre)),
       h('td',null,m.machine_nom||'—'),
       h('td',null,m.operateur||'—'),
+      h('td',null,m.fournisseur||'—'),
+      h('td',null,claim),
+      h('td',null,confCell),
       h('td',null,dateStr)
     );
   });
@@ -6689,18 +6805,65 @@ function renderTracabiliteDossierDetail(){
   const matiereTable = matieres.length
     ? h('table',{className:'table-std'},
         h('thead',null,h('tr',null,
-          h('th',null,'Code barre'),h('th',null,'Machine'),h('th',null,'Opérateur'),h('th',null,'Heure scan')
+          h('th',null,'Code barre'),
+          h('th',null,'Machine'),
+          h('th',null,'Opérateur'),
+          h('th',null,'Fournisseur'),
+          h('th',null,'Claim FSC'),
+          h('th',null,'Statut FSC'),
+          h('th',null,'Heure scan')
         )),
         h('tbody',null,...matiereRows)
       )
     : h('div',{className:'card-empty',style:{padding:'16px'}},'Aucune bobine matière scannée pour ce dossier');
+
+  const fscBanner = fscSyn ? (()=>{
+    const sg = fscSyn.statut_global || 'non_applicable';
+    const statutColor = sg === 'conforme' ? 'var(--success)'
+      : sg === 'non_conforme' ? 'var(--danger)' : 'var(--muted)';
+    const statutBg = sg === 'conforme' ? 'rgba(52,211,153,.12)'
+      : sg === 'non_conforme' ? 'rgba(248,113,113,.12)' : 'rgba(148,163,184,.12)';
+    let txt = 'Non applicable';
+    if(sg === 'conforme'){
+      txt = 'Conforme FSC — ' + (fscSyn.nb_bobines_fsc_conformes ?? 0) + '/' + (fscSyn.nb_bobines_total ?? 0) + ' bobine(s)';
+    }else if(sg === 'non_conforme'){
+      txt = 'Non conforme — ' + (fscSyn.nb_bobines_non_conformes ?? 0) + ' bobine(s) en écart';
+    }else if(sg === 'en_attente'){
+      txt = 'En attente — aucune bobine scannée';
+    }else if((fscSyn.nb_bobines_total ?? 0) === 0){
+      txt = 'Aucune bobine scannée';
+    }
+    return h('div',{style:{margin:'10px 0 0',padding:'10px 14px',borderRadius:'10px',
+      background:statutBg,border:'1px solid '+statutColor,color:statutColor,fontWeight:'800',fontSize:'13px'}}, txt);
+  })() : null;
 
   return h('div',null,
     backBtn,
     h('div',{className:'card'},
       h('div',{className:'card-header'},
         h('h3',null,dos.reference||'Dossier'),
-        h('span',{className:'badge badge-ok'},finRow?'Terminé':'En cours')
+        h('div',{style:{display:'flex',alignItems:'center',gap:'8px'}},
+          h('span',{className:'badge badge-ok'},finRow?'Terminé':'En cours'),
+          (dos.fsc_requis === 1 || dos.fsc_requis === true)
+            ? h('button', {
+                className: 'btn btn-sm',
+                style: {
+                  background: 'var(--accent-bg)', color: 'var(--accent)',
+                  border: '1px solid var(--accent)', borderRadius: '6px',
+                  fontSize: '12px', fontWeight: '700', padding: '4px 10px',
+                  cursor: 'pointer',
+                },
+                onClick: async () => {
+                  try {
+                    const ref = dos.reference || '';
+                    const data = await api('/api/fabrication/tracabilite/' + encodeURIComponent(ref));
+                    if (!data) return;
+                    openFscRapportModal(data, ref);
+                  } catch(e) { showToast('Rapport FSC indisponible.', 'danger'); }
+                }
+              }, iconEl('file-text', 13), ' Rapport FSC')
+            : null
+        )
       ),
       infoGrid,
       h('div',{style:{padding:'0 20px 16px'}},
@@ -6718,6 +6881,7 @@ function renderTracabiliteDossierDetail(){
             onClick:()=>openTracMatieresEditModal(dos, matieres)
           }, iconEl('sliders',14), ' Modifier')
         ),
+        fscBanner,
         h('div',{style:{overflowX:'auto'}}, matiereTable)
       )
     )

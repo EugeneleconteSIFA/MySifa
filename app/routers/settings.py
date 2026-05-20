@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 
@@ -26,6 +27,24 @@ from app.services.audit_service import log_action
 from services.auth_service import get_current_user, require_superadmin, merged_app_access, parse_access_overrides_raw
 
 router = APIRouter(tags=["settings"])
+
+
+def _audit_created_at_display_paris(created_at: Optional[str]) -> str:
+    """Affichage journal audit en heure Europe/Paris.
+
+    Les `created_at` naïfs issus de SQLite (`strftime(...,'now','localtime')` sur un
+    serveur en UTC) correspondent à une horloge UTC — on les convertit en Paris.
+    """
+    if not created_at:
+        return "—"
+    s = str(created_at).strip().replace(" ", "T")[:19]
+    if len(s) < 16:
+        return str(created_at).replace("T", " ")[:16]
+    try:
+        dt_utc = datetime.fromisoformat(s).replace(tzinfo=ZoneInfo("UTC"))
+        return dt_utc.astimezone(ZoneInfo("Europe/Paris")).strftime("%d/%m/%Y %H:%M")
+    except ValueError:
+        return s.replace("T", " ")
 
 
 def _require_traca_photo_editor(request: Request) -> dict:
@@ -192,9 +211,14 @@ def get_audit_logs(
                 ORDER BY created_at DESC LIMIT ? OFFSET ?""",
             params + [limit, offset],
         ).fetchall()
+    logs = []
+    for r in rows:
+        d = dict(r)
+        d["created_at_display"] = _audit_created_at_display_paris(d.get("created_at"))
+        logs.append(d)
     return {
         "total": total,
-        "logs": [dict(r) for r in rows],
+        "logs": logs,
     }
 
 
