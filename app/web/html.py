@@ -260,8 +260,13 @@ body.light .prod-dossier-filter .search-bar:focus{box-shadow:0 0 0 3px rgba(8,14
   body.mysifa-app-prod.mysifa-prod-filters-page .filters .multisel-trigger{
     display:inline-flex;align-items:center;justify-content:space-between;
   }
+  body.mysifa-app-prod.mysifa-prod-filters-page .main .container > h1,
+  body.mysifa-app-prod.mysifa-prod-filters-page .main .container > .subtitle{
+    display:none!important;
+  }
   body.mysifa-app-prod.mysifa-prod-filters-page .filters-panel{
-    margin-top:10px;
+    margin-top:0;
+    margin-bottom:14px;
   }
 }
 
@@ -291,10 +296,10 @@ body.light .prod-dossier-filter .search-bar:focus{box-shadow:0 0 0 3px rgba(8,14
   }
   body.mysifa-app-prod.mysifa-prod-filters-page .filters-panel{
     position:sticky;
-    top:8px;
+    top:0;
     z-index:85;
     flex-shrink:0;
-    margin:8px -10px 8px;
+    margin:0 -10px 8px;
     padding:6px 10px;
     background:var(--bg);
     border-bottom:1px solid var(--border);

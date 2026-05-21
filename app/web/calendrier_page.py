@@ -232,6 +232,10 @@ body.light .cal-allday-row{background:#f8fafc}
   cursor:pointer;font-size:20px;line-height:1;padding:4px;
 }
 .cal-color-modal-close:hover{color:var(--text)}
+.cal-settings-section{margin-top:16px;padding-top:14px;border-top:1px solid var(--border)}
+.cal-settings-section-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:10px}
+.cal-settings-export-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.cal-settings-hint{font-size:11px;color:var(--muted);margin:8px 0 0;line-height:1.5}
 .cal-create-modal-backdrop{position:fixed;inset:0;z-index:8600;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:16px}
 .cal-create-modal{
   position:relative;width:100%;max-width:440px;max-height:min(90vh,560px);overflow:auto;
@@ -432,8 +436,8 @@ body.light .cal-allday-row{background:#f8fafc}
         <option value="day">Jour</option>
         <option value="agenda" selected>Agenda</option>
       </select>
-      <button type="button" class="mobile-home-btn" onclick="location.href='/'" aria-label="Accueil">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/></svg>
+      <button type="button" class="mobile-home-btn" onclick="window.location.href='/'" aria-label="Accueil">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/><path d="M10 21v-6h4v6"/></svg>
       </button>
     </div>
     <div class="cal-toolbar">
@@ -735,16 +739,8 @@ function toggleCalList(){
   saveCalListOpen(willOpen);
 }
 
-function calColorModalRow(c,focusId){
-  const col=(window.MySifaCalendar?MySifaCalendar.loadColorsMap():{})[c.id]||c.color;
-  const hi=focusId===c.id?' highlight':'';
-  return `<div class="cal-color-row${hi}" id="cal-mrow-${esc(c.id)}">
-    <span class="cal-color-dot" style="background:${esc(col)}"></span>
-    <span class="cal-color-label">${esc(c.label)}</span>
-    <input type="color" value="${esc(col)}" aria-label="Couleur ${esc(c.label)}"
-      oninput="onCalColorModalInput('${esc(c.id)}',this.value)">
-    <button type="button" class="cal-color-reset" onclick="resetCalColorModal('${esc(c.id)}')">Défaut</button>
-  </div>`;
+function calDefById(calId){
+  return accessibleCalDefs().find(c=>c.id===calId)||null;
 }
 function closeCalColorModal(){
   if(S.colorModal){S.colorModal.remove();S.colorModal=null;}
@@ -796,18 +792,34 @@ async function saveCalColorsModal(){
   renderCalendar();
   closeCalColorModal();
 }
-function openCalColorModal(focusId){
+function openCalSettingsModal(calId){
   closeCalColorModal();
   const root=document.getElementById('cal-color-modal-root');
   if(!root||!window.MySifaCalendar)return;
-  const calDefs=accessibleCalDefs();
+  const c=calDefById(calId);
+  if(!c)return;
+  const col=(MySifaCalendar.loadColorsMap()[c.id]||c.color);
+  const period=getPeriod();
   const wrap=document.createElement('div');
   wrap.className='cal-color-modal-backdrop';
-  wrap.innerHTML=`<div class="cal-color-modal" role="dialog" aria-labelledby="cal-color-modal-title">
+  wrap.innerHTML=`<div class="cal-color-modal" role="dialog" aria-labelledby="cal-settings-title">
     <button type="button" class="cal-color-modal-close" aria-label="Fermer" onclick="closeCalColorModal()">×</button>
-    <h2 id="cal-color-modal-title">Couleurs des calendriers</h2>
-    <p class="cal-color-modal-desc">Choisissez une couleur par calendrier. Les changements sont visibles immédiatement.</p>
-    <div class="cal-color-list">${calDefs.map(c=>calColorModalRow(c,focusId)).join('')}</div>
+    <h2 id="cal-settings-title">${esc(c.label)}</h2>
+    <p class="cal-color-modal-desc">Couleur d'affichage et export des événements de ce calendrier.</p>
+    <div class="cal-color-row" id="cal-mrow-${esc(c.id)}">
+      <span class="cal-color-dot" style="background:${esc(col)}"></span>
+      <span class="cal-color-label">Couleur</span>
+      <input type="color" value="${esc(col)}" aria-label="Couleur ${esc(c.label)}"
+        oninput="onCalColorModalInput('${esc(c.id)}',this.value)">
+      <button type="button" class="cal-color-reset" onclick="resetCalColorModal('${esc(c.id)}')">Défaut</button>
+    </div>
+    <div class="cal-settings-section">
+      <div class="cal-settings-section-label">Export</div>
+      <div class="cal-settings-export-row">
+        <button type="button" class="cal-btn" onclick="exportCalIcs('${esc(c.id)}')">Exporter .ics</button>
+      </div>
+      <p class="cal-settings-hint">Période affichée : ${esc(period.title)}</p>
+    </div>
     <div class="cal-color-modal-foot">
       <button type="button" class="cal-btn" onclick="closeCalColorModal()">Fermer</button>
       <button type="button" class="cal-btn primary" onclick="saveCalColorsModal()">Enregistrer</button>
@@ -818,12 +830,6 @@ function openCalColorModal(focusId){
   root.appendChild(wrap);
   S.colorModal=wrap;
   document.addEventListener('keydown',onCalColorModalKey);
-  if(focusId){
-    requestAnimationFrame(()=>{
-      const row=document.getElementById('cal-mrow-'+focusId);
-      if(row){row.scrollIntoView({block:'nearest'});row.classList.add('highlight');}
-    });
-  }
 }
 function renderToggles(){
   const box=document.getElementById('cal-toggles');
@@ -831,8 +837,8 @@ function renderToggles(){
   box.innerHTML=accessibleCalDefs().map(c=>`<label class="cal-toggle" style="--cal-c:${calColor(c.id)}">
       <span class="cal-dot"></span>
       <span class="flex1">${esc(c.label)}</span>
-      <button type="button" class="cal-gear-btn" title="Couleur du calendrier" aria-label="Réglage couleur ${esc(c.label)}"
-        onclick="event.preventDefault();event.stopPropagation();openCalColorModal('${esc(c.id)}')">${ICO_CAL_GEAR}</button>
+      <button type="button" class="cal-gear-btn" title="Réglages du calendrier" aria-label="Réglages ${esc(c.label)}"
+        onclick="event.preventDefault();event.stopPropagation();openCalSettingsModal('${esc(c.id)}')">${ICO_CAL_GEAR}</button>
       <input type="checkbox" data-cal="${c.id}" ${S.visible[c.id]?'checked':''}>
     </label>`).join('');
   box.querySelectorAll('input[data-cal]').forEach(inp=>{
@@ -848,16 +854,24 @@ function activeCalList(){
   const allowed=new Set(calIdsForRole(USER_ROLE));
   return CAL_DEFS.filter(c=>allowed.has(c.id)&&S.visible[c.id]).map(c=>c.id);
 }
+function exportIcsUrl(dateStart,dateEnd,calIds){
+  const q=new URLSearchParams({
+    date_debut:ymd(dateStart),
+    date_fin:ymd(dateEnd),
+    calendriers:calIds.join(',')
+  });
+  return '/api/calendrier/export.ics?'+q;
+}
+function exportCalIcs(calId){
+  if(!calDefById(calId)){showToast('Calendrier introuvable.','danger');return;}
+  const p=getPeriod();
+  window.location.href=exportIcsUrl(p.start,p.end,[calId]);
+}
 function exportIcs(){
   const p=getPeriod();
   const cals=activeCalList();
   if(!cals.length){showToast('Aucun calendrier sélectionné.','danger');return;}
-  const q=new URLSearchParams({
-    date_debut:ymd(p.start),
-    date_fin:ymd(p.end),
-    calendriers:cals.join(',')
-  });
-  window.location.href='/api/calendrier/export.ics?'+q;
+  window.location.href=exportIcsUrl(p.start,p.end,cals);
 }
 function calColor(id){
   if(window.MySifaCalendar)return MySifaCalendar.colorFor(id);
