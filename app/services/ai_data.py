@@ -773,10 +773,77 @@ def tool_traceability_dossier_bobines(conn, inp: dict) -> str:
     return "\n".join(lines)
 
 
+_EMPL_CODE_RE = re.compile(r"^[A-N]\d{3}$", re.I)
+
+
+def _normalize_emplacement(code: str) -> str:
+    return re.sub(r"\s+", "", (code or "").strip()).upper()
+
+
+def tool_stock_emplacement(conn, inp: dict) -> str:
+    """Contenu d'un emplacement entrepôt (lots actifs), aligné sur GET /api/stock/emplacements/{code}."""
+    raw = (inp.get("emplacement") or inp.get("query") or "").strip()
+    if not raw:
+        return "Indiquez un code emplacement (ex. B121)."
+    empl = _normalize_emplacement(raw)
+    if not _EMPL_CODE_RE.match(empl):
+        return (
+            f"Code emplacement invalide : « {raw} » "
+            "(format : une lettre puis 3 chiffres, ex. B121)."
+        )
+
+    rows = conn.execute(
+        """
+        SELECT p.reference, p.designation, p.unite,
+               SUM(l.quantite_restante) AS quantite,
+               MIN(CASE WHEN l.quantite_restante > 0 THEN l.date_entree END) AS date_fifo
+        FROM lots_stock l
+        JOIN produits p ON p.id = l.produit_id
+        WHERE UPPER(REPLACE(l.emplacement, ' ', '')) = ?
+          AND l.quantite_restante > 0
+        GROUP BY l.produit_id
+        ORDER BY p.reference
+        """,
+        (empl,),
+    ).fetchall()
+
+    if not rows:
+        rows = conn.execute(
+            """
+            SELECT p.reference, p.designation, p.unite, s.quantite
+            FROM stock_emplacements s
+            JOIN produits p ON p.id = s.produit_id
+            WHERE UPPER(REPLACE(s.emplacement, ' ', '')) = ?
+              AND s.quantite > 0
+            ORDER BY p.reference
+            """,
+            (empl,),
+        ).fetchall()
+
+    if not rows:
+        return f"Emplacement {empl} : aucun article en stock (lots actifs)."
+
+    lines = [f"Emplacement {empl} — {len(rows)} référence(s) :"]
+    total = 0.0
+    for r in rows:
+        qte = float(r["quantite"] or 0)
+        total += qte
+        fifo = str(r["date_fifo"] or "")[:10] if "date_fifo" in r.keys() else ""
+        fifo_s = f" · FIFO {fifo}" if fifo else ""
+        lines.append(
+            f"  - {r['reference']} — {r['designation']} : {qte:g} {r['unite']}{fifo_s}"
+        )
+    lines.append(f"Total unités : {total:g}")
+    return "\n".join(lines)
+
+
 def tool_stock_search(conn, inp: dict) -> str:
     query = (inp.get("query") or "").strip()
     if not query:
         return "Indiquez une référence ou une désignation à chercher."
+    compact = _normalize_emplacement(query)
+    if _EMPL_CODE_RE.match(compact):
+        return tool_stock_emplacement(conn, {"emplacement": compact})
     like = f"%{query}%"
     rows = conn.execute(
         """

@@ -19,6 +19,7 @@ READ_TOOL_NAMES: list[str] = [
     "planning_client_schedule",
     "traceability_dossier_bobines",
     "stock_search",
+    "stock_emplacement",
     "expe_detail",
 ]
 
@@ -97,6 +98,7 @@ Règles strictes :
 - Tu ne modifies rien sans confirmation explicite (sauf actions de lecture).
 - Pour « quand » un dossier client passera en production, utilise l'outil planning_client_schedule (dates estimées en heures ouvrées machine).
 - Bobines / matières utilisées sur un dossier de fabrication = codes barres scannés en saisie (MyProd > Traçabilité, table fab_matieres_utilisees). Utilise traceability_dossier_bobines avec le numéro ou la référence du dossier (ex. 9931595, Reliquat 9931595). Ne pas utiliser stock_search pour cela.
+- Stock par emplacement (ex. B121, a211) : utilise stock_emplacement avec le code emplacement. Ne pas déduire le contenu d'un emplacement sans appeler cet outil.
 - Un numéro d'OF, de dossier ou « Reliquat XXXXX » est un dossier planning/fabrication, pas une référence article en stock.
 - Si l'utilisateur précise « dossier de fabrication », appelle traceability_dossier_bobines sans redemander s'il s'agit du stock.
 - Si une information manque, pose une question courte.

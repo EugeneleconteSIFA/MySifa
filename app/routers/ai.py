@@ -29,6 +29,7 @@ from app.services.ai_data import (
     tool_planning_detail,
     tool_production_detail,
     tool_stock_adjust_prepare,
+    tool_stock_emplacement,
     tool_stock_search,
     tool_traceability_dossier_bobines,
 )
@@ -146,7 +147,8 @@ TOOLS: list[dict[str, Any]] = [
         "name": "stock_search",
         "description": (
             "Recherche un article en stock (produits finis / matières en entrepôt) "
-            "par référence ou désignation. Pas pour les bobines scannées sur un dossier fabrication."
+            "par référence ou désignation. Pas pour les bobines scannées sur un dossier fabrication. "
+            "Pour un code emplacement (ex. B121), utiliser stock_emplacement."
         ),
         "input_schema": {
             "type": "object",
@@ -157,6 +159,24 @@ TOOLS: list[dict[str, Any]] = [
                 },
             },
             "required": ["query"],
+        },
+    },
+    {
+        "name": "stock_emplacement",
+        "description": (
+            "Liste les articles présents à un emplacement entrepôt "
+            "(ex. B121, A211) : références, quantités et unités. "
+            "À utiliser pour « stock dans B121 », « contenu de l'emplacement », « qu'y a-t-il en B121 »."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "emplacement": {
+                    "type": "string",
+                    "description": "Code emplacement (lettre + 3 chiffres, ex. B121).",
+                },
+            },
+            "required": ["emplacement"],
         },
     },
     {
@@ -431,6 +451,11 @@ async def _dispatch_tool(
             if "stock" not in scope:
                 return ("Accès stock non autorisé pour ce rôle.", "err")
             return (tool_stock_search(conn, inp), "ok")
+
+        if name == "stock_emplacement":
+            if "stock" not in scope:
+                return ("Accès stock non autorisé pour ce rôle.", "err")
+            return (tool_stock_emplacement(conn, inp), "ok")
 
         if name == "expe_detail":
             if "expe" not in scope:

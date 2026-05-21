@@ -319,15 +319,15 @@ body.light .user-chip:hover{{background:rgba(8,145,178,.12)}}
 <script src="/static/mysifa_landscape.js"></script>
 <script>window.MySifaLandscape&&MySifaLandscape.enable();</script>
 <script>
-(function(){
-  function bootChatDock(){
+(function(){{
+  function bootChatDock(){{
     if(window._CW&&typeof window._CW.syncUser==='function')window._CW.syncUser();
     if(window.MySifaDock&&typeof window.MySifaDock.layout==='function')window.MySifaDock.layout();
-  }
+  }}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bootChatDock);
   else bootChatDock();
   window.addEventListener('load',bootChatDock);
-})();
+}})();
 </script>
 
 <!-- Mobile topbar -->
