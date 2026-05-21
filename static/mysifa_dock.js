@@ -310,7 +310,13 @@
       chatBar.style.right = '';
       chatBar.style.bottom = '';
       chatBar.style.left = '';
+      chatBar.style.top = '';
+      chatBar.style.width = '';
+      chatBar.style.maxWidth = '';
       chatBar.style.boxShadow = '';
+    }
+    if (hasChatBubble) {
+      chatBubble.style.left = '';
     }
 
     let offsetRight = 0;

@@ -30,7 +30,8 @@
 }
 .mysifa-dock-fab-active,
 .calc-fab-active,
-.cw-bubble-active {
+.cw-bubble-active,
+.cw-bar-active {
   z-index: 8025 !important;
   box-shadow: 0 6px 24px rgba(34, 211, 238, 0.55);
 }
