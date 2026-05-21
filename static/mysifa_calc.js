@@ -105,6 +105,8 @@
 
   function setOpen(v) {
     _open = !!v;
+    var fab = document.getElementById('_calc_fab');
+    if (fab) fab.classList.toggle('calc-fab-active', _open);
     render();
   }
 

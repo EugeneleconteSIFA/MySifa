@@ -504,6 +504,7 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 <link rel="stylesheet" href="/static/mysifa_landscape.css">
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/mysifa_calc.js"></script>
+<script src="/static/mysifa_ai_chat.js"></script>
 <script src="/static/chat_widget.js"></script>
 <script src="/static/mysifa_landscape.js"></script>
 <script>window.MySifaLandscape&&MySifaLandscape.enable();</script>
@@ -3671,8 +3672,11 @@ async function boot(){
     window.__MYSIFA_UID__=ME.id;
     window.__MYSIFA_NOM__=ME.nom||"";
     window.__MYSIFA_ROLE__=ME.role||"";
-    if(window._CW&&typeof window._CW.syncUser==="function")window._CW.syncUser();
-    if(window.MySifaDock&&typeof window.MySifaDock.layout==="function")window.MySifaDock.layout();
+    window.__MYSIFA_USER__={nom:ME.nom||"",role:ME.role||""};
+    if(window._CW&&typeof window._CW.ensureReady==="function")await window._CW.ensureReady();
+    else if(window._CW&&typeof window._CW.syncUser==="function")window._CW.syncUser();
+    if(window.MySifaDock&&typeof window.MySifaDock.bootPageWidgets==="function")window.MySifaDock.bootPageWidgets();
+    else if(window.MySifaDock&&typeof window.MySifaDock.layout==="function")window.MySifaDock.layout();
   }
   if(window.MySifaTheme)MySifaTheme.mergeFromUser(ME);
   try{

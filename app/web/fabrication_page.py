@@ -543,6 +543,7 @@ body.has-topbar .fab-main{padding-top:74px}
   .fab-main{
     grid-column:1;grid-row:1;
   }
+  /* FAB / panneaux : décalage géré par mysifa_dock.js (minFabBaseBottom) */
   .fab-footer{
     grid-column:1;grid-row:2;
     grid-template-columns:1fr;
@@ -719,6 +720,8 @@ body.has-topbar .fab-main{padding-top:74px}
 <script>window.__MYSIFA_APP__='fabrication';</script>
 <link rel="stylesheet" href="/static/mysifa_landscape.css">
 <script src="/static/mysifa_dock.js"></script>
+<script src="/static/mysifa_calc.js"></script>
+<script src="/static/mysifa_ai_chat.js"></script>
 <script src="/static/chat_widget.js"></script>
 <script src="/static/mysifa_landscape.js"></script>
 <script>window.MySifaLandscape&&MySifaLandscape.enable();</script>
@@ -3124,6 +3127,7 @@ function render(){
   document.body.classList.toggle('fab-mode-operator', S.saisieViewMode === 'operator');
   document.body.classList.toggle('fab-mode-admin', S.saisieViewMode === 'admin');
   document.body.classList.toggle('has-topbar', window.innerWidth <= 900);
+  document.body.classList.add('mysifa-app-fabrication');
   const root = document.getElementById('root');
   root.innerHTML = '';
 
@@ -3164,7 +3168,17 @@ function render(){
     ));
   }
 
+  bootFabWidgets();
   _fabRestoreUiState(ui);
+}
+
+function bootFabWidgets(){
+  if(S.user){
+    window.__MYSIFA_USER__={nom:S.user.nom||'',role:S.user.role||''};
+  }
+  if(window.MySifaDock&&typeof window.MySifaDock.layout==='function'){
+    window.MySifaDock.layout();
+  }
 }
 
 /* ── Auth + init ─────────────────────────────────────────────── */
@@ -3185,8 +3199,16 @@ async function init(){
   window.__MYSIFA_UID__=user.id;
   window.__MYSIFA_NOM__=user.nom||'';
   window.__MYSIFA_ROLE__=user.role||'';
-  if(window._CW&&typeof window._CW.syncUser==='function')window._CW.syncUser();
-  if(window.MySifaDock&&typeof window.MySifaDock.layout==='function')window.MySifaDock.layout();
+  window.__MYSIFA_USER__={nom:user.nom||'',role:user.role||''};
+  if(window._CW&&typeof window._CW.ensureReady==='function')await window._CW.ensureReady();
+  else if(window._CW&&typeof window._CW.syncUser==='function')window._CW.syncUser();
+  if(window.MySifaDock&&typeof window.MySifaDock.bootPageWidgets==='function'){
+    window.MySifaDock.bootPageWidgets();
+  }else{
+    if(window._calc_mount)window._calc_mount();
+    if(typeof initAiChatWidget==='function')initAiChatWidget();
+    bootFabWidgets();
+  }
 
   await loadFournisseursFSC();
   await loadOperationsConfig();

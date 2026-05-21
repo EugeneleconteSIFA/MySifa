@@ -293,8 +293,9 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
   #cw-close-list,#cw-close{
     min-width:40px;min-height:40px;display:flex;align-items:center;justify-content:center;
     border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text2);
-    font-size:22px;cursor:pointer;z-index:5;
+    font-size:22px;cursor:pointer;z-index:5;pointer-events:auto;
   }
+  body.cw-panel-open #cw-list-topbar{pointer-events:auto}
   #cw-close-list:hover,#cw-close:hover{color:var(--accent);border-color:var(--accent)}
   #cw-panel{
     position:fixed!important;top:auto!important;
@@ -535,8 +536,8 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
 
   function buildDom() {
     const bubbles = document.querySelectorAll('#cw-bubble');
-    const panel = document.getElementById('cw-panel');
-    if (bubbles.length === 1 && panel) return;
+    const existingPanel = document.getElementById('cw-panel');
+    if (bubbles.length === 1 && existingPanel) return;
     removeChatDom();
 
     syncFromWindow();
@@ -548,9 +549,12 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       '<span class="cw-bubble-ico" aria-hidden="true">' +
       ICO_MSG +
       '</span><span id="cw-bubble-badge" aria-label=""></span>';
-    bub.addEventListener('click', () => {
+    bub.addEventListener('click', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
       unlockAudio();
-      togglePanel();
+      if (CW.open) closePanel();
+      else void openPanel();
     });
     document.body.appendChild(bub);
 
@@ -599,11 +603,17 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       '</button></div></div>';
     document.body.appendChild(panel);
 
-    document.getElementById('cw-close').addEventListener('click', () => togglePanel(false));
-    document.getElementById('cw-close-list')?.addEventListener('click', () => togglePanel(false));
+    document.getElementById('cw-close').addEventListener('click', (e) => {
+      e.stopPropagation();
+      closePanel();
+    });
+    document.getElementById('cw-close-list')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closePanel();
+    });
     document.getElementById('cw-back-list')?.addEventListener('click', mobileBackToList);
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && CW.open) togglePanel(false);
+      if (e.key === 'Escape' && CW.open) closePanel();
     });
     document.getElementById('cw-attach').addEventListener('click', () => {
       document.getElementById('cw-file-input')?.click();
@@ -1698,42 +1708,70 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     }
   }
 
-  async function togglePanel(force) {
+  let _panelToggleGen = 0;
+
+  function closePanel() {
+    _panelToggleGen += 1;
+    CW.open = false;
     const panel = document.getElementById('cw-panel');
-    if (!panel) return;
-    const next = typeof force === 'boolean' ? force : !CW.open;
-    CW.open = next;
-    if (CW.open) {
-      panel.classList.remove('cw-hidden');
-      try {
-        await _getAudioCtx();
-      } catch (e) {}
-      if (!CW.channels.length) await loadChannels();
-      else if (CW.activeId) await selectChannel(CW.activeId);
-      else if (!isCwMobile()) await loadChannels();
-      else syncMobileChatUi();
-      syncChatState(false);
-      if (CW.isPortal && !isCwMobile()) {
-        requestAnimationFrame(() => {
-          positionPortalPanel();
-          requestAnimationFrame(positionPortalPanel);
-        });
-      }
-    } else {
-      panel.classList.add('cw-hidden');
-      document.body.classList.remove('cw-panel-open', 'cw-chat-active');
-      if (CW.pollTimer) {
-        clearInterval(CW.pollTimer);
-        CW.pollTimer = null;
-      }
-      stopTypingPolls();
-      const picker = document.getElementById('cw-dm-picker');
-      if (picker) picker.classList.add('cw-hidden');
-      closeOverlay();
+    const bub = document.getElementById('cw-bubble');
+    if (panel) panel.classList.add('cw-hidden');
+    if (bub) bub.classList.remove('cw-bubble-active');
+    document.body.classList.remove('cw-panel-open', 'cw-chat-active');
+    if (CW.pollTimer) {
+      clearInterval(CW.pollTimer);
+      CW.pollTimer = null;
     }
+    stopTypingPolls();
+    const picker = document.getElementById('cw-dm-picker');
+    if (picker) picker.classList.add('cw-hidden');
+    closeOverlay();
     hideReactionTip();
     syncMobileChatUi();
     dockLayout();
+  }
+
+  async function openPanel() {
+    const panel = document.getElementById('cw-panel');
+    if (!panel) return;
+    const gen = (_panelToggleGen += 1);
+    CW.open = true;
+    const bub = document.getElementById('cw-bubble');
+    if (bub) bub.classList.add('cw-bubble-active');
+    panel.classList.remove('cw-hidden');
+    syncMobileChatUi();
+    dockLayout();
+    try {
+      await _getAudioCtx();
+    } catch (e) {}
+    if (!CW.open || gen !== _panelToggleGen) return;
+    if (!CW.channels.length) await loadChannels();
+    else if (CW.activeId) await selectChannel(CW.activeId);
+    else if (!isCwMobile()) await loadChannels();
+    else syncMobileChatUi();
+    if (!CW.open || gen !== _panelToggleGen) return;
+    syncChatState(false);
+    if (CW.isPortal && !isCwMobile()) {
+      requestAnimationFrame(() => {
+        if (!CW.open || gen !== _panelToggleGen) return;
+        positionPortalPanel();
+        requestAnimationFrame(() => {
+          if (!CW.open || gen !== _panelToggleGen) return;
+          positionPortalPanel();
+        });
+      });
+    }
+    dockLayout();
+  }
+
+  async function togglePanel(force) {
+    const next = typeof force === 'boolean' ? force : !CW.open;
+    if (!next) {
+      closePanel();
+      return;
+    }
+    if (CW.open) return;
+    await openPanel();
   }
 
   function _getAudioCtx() {

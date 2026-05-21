@@ -115,6 +115,7 @@
     function toggle() {
       open = !open;
       panel.classList.toggle('open', open);
+      btn.classList.toggle('mysifa-dock-fab-active', open);
       if (open) setTimeout(function () { input.focus(); }, 200);
       if (window.MySifaDock && typeof window.MySifaDock.layout === 'function') {
         window.MySifaDock.layout();

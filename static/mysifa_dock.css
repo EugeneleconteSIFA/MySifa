@@ -28,6 +28,12 @@
 .calc-fab:active {
   transform: scale(1.02);
 }
+.mysifa-dock-fab-active,
+.calc-fab-active,
+.cw-bubble-active {
+  z-index: 8025 !important;
+  box-shadow: 0 6px 24px rgba(34, 211, 238, 0.55);
+}
 .mysifa-dock-fab svg,
 .calc-fab svg {
   display: block;

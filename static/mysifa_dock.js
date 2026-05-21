@@ -11,6 +11,10 @@
   const MOBILE_LANDSCAPE_BP = '(max-width: 900px) and (orientation: landscape)';
   const SHADOW_FAB = '0 4px 16px rgba(34,211,238,0.35)';
   const SHADOW_PANEL = '0 12px 48px rgba(0,0,0,0.5)';
+  const Z_FAB = 8002;
+  const Z_PANEL = 8015;
+  /** FAB au-dessus du panneau ouvert pour permettre le 2e clic (fermer). */
+  const Z_FAB_ACTIVE = 8025;
 
   function isMobile() {
     return window.matchMedia(MOBILE_BP).matches;
@@ -39,10 +43,46 @@
       : 'max(24px, env(safe-area-inset-bottom, 0px))';
   }
 
+  /** Décalage minimum des FAB (footer fixe saisie prod, etc.) */
+  function minFabBaseBottom() {
+    if (document.body.classList.contains('mysifa-app-fabrication')) return 88;
+    return 0;
+  }
+
   function isVisible(el) {
     if (!el) return false;
     if (el.id === 'ai-chat-root') return el.style.display !== 'none';
     return getComputedStyle(el).display !== 'none';
+  }
+
+  function calcPanelOpen() {
+    var p = document.getElementById('_calc_panel');
+    return !!(p && getComputedStyle(p).display !== 'none');
+  }
+
+  function chatPanelOpen() {
+    var p = document.getElementById('cw-panel');
+    return !!(p && !p.classList.contains('cw-hidden'));
+  }
+
+  function aiPanelOpen() {
+    var p = document.getElementById('ai-chat-panel');
+    return !!(p && p.classList.contains('open'));
+  }
+
+  function raiseFabIfOpen(fab, open) {
+    if (!fab) return;
+    fab.style.zIndex = open ? String(Z_FAB_ACTIVE) : String(Z_FAB);
+    fab.classList.toggle('mysifa-dock-fab-active', !!open);
+  }
+
+  function applyActiveFabZIndex() {
+    raiseFabIfOpen(document.getElementById('_calc_fab'), calcPanelOpen());
+    raiseFabIfOpen(
+      document.getElementById('cw-bubble') || document.getElementById('cw-bar'),
+      chatPanelOpen()
+    );
+    raiseFabIfOpen(document.getElementById('ai-chat-btn'), aiPanelOpen());
   }
 
   function isDockFab(el) {
@@ -91,7 +131,7 @@
 
     function placeFabRow(el) {
       if (!el) return;
-      applyFab(el, safeRight(stackRight), safeBottom(0));
+      applyFab(el, safeRight(stackRight), safeBottom(minFabBaseBottom()));
       el.style.zIndex = '8002';
       el.style.boxShadow = SHADOW_FAB;
       stackRight += FAB_SIZE + GAP;
@@ -107,15 +147,16 @@
       if (calcPanel && getComputedStyle(calcPanel).display !== 'none') {
         calcPanel.style.right = safeRight(0);
         calcPanel.style.bottom = safeBottom(fabRowH);
-        calcPanel.style.zIndex = '8014';
+        calcPanel.style.zIndex = String(Z_PANEL);
         calcPanel.style.boxShadow = SHADOW_PANEL;
       }
     }
     if (chatFab) placeFabRow(chatFab);
     if (hasAi) placeFabRow(aiBtn);
 
-    const panelBottom = fabRowH;
-    const panelMaxH = 'calc(100dvh - ' + (fabRowH + 12) + 'px)';
+    const footerClear = minFabBaseBottom();
+    const panelBottom = Math.max(fabRowH, footerClear + FAB_SIZE + GAP);
+    const panelMaxH = 'calc(100dvh - ' + (panelBottom + 12) + 'px)';
 
     function layoutLandscapePanel(el, z) {
       if (!el) return;
@@ -160,11 +201,12 @@
         aiPanel.style.boxShadow = '';
       }
     }
+    applyActiveFabZIndex();
   }
 
   function layoutMobile(calcFab, calcPanel, aiBtn, aiPanel, chatBubble, chatBar, chatPanel) {
     const aiRoot = document.getElementById('ai-chat-root');
-    let stackBottom = 0;
+    let stackBottom = minFabBaseBottom();
 
     function placeFab(el) {
       if (!el) return;
@@ -193,7 +235,7 @@
 
     const fabStackH = stackBottom;
     const panelBottom = fabStackH + 12;
-    const panelMaxH = 'calc(100dvh - ' + (fabStackH + 20) + 'px)';
+    const panelMaxH = 'calc(100dvh - ' + (panelBottom + FAB_SIZE + 8) + 'px)';
     const panelMinH = 'min(560px, ' + panelMaxH + ')';
 
     function layoutFloaterPanel(el, z) {
@@ -232,6 +274,7 @@
         aiPanel.style.boxShadow = '';
       }
     }
+    applyActiveFabZIndex();
   }
 
   function layout() {
@@ -259,6 +302,7 @@
       } else {
         layoutMobile(calcFab, calcPanel, aiBtn, aiPanel, chatBubble, chatBar, chatPanel);
       }
+      applyActiveFabZIndex();
       return;
     }
 
@@ -321,6 +365,16 @@
         chatPanel.style.boxShadow = SHADOW_PANEL;
       }
     }
+    applyActiveFabZIndex();
+  }
+
+  var CALC_APPS = { stock: 1, prod: 1, compta: 1, expe: 1, fabrication: 1, planning: 1 };
+
+  function bootPageWidgets() {
+    var app = window.__MYSIFA_APP__ || '';
+    if (CALC_APPS[app] && typeof window._calc_mount === 'function') window._calc_mount();
+    if (typeof window.initAiChatWidget === 'function') window.initAiChatWidget();
+    layout();
   }
 
   window.addEventListener('resize', layout);
@@ -339,6 +393,7 @@
 
   window.MySifaDock = {
     layout: layout,
+    bootPageWidgets: bootPageWidgets,
     isMobileLandscape: isMobileLandscape,
     SHADOW_FAB: SHADOW_FAB,
     SHADOW_PANEL: SHADOW_PANEL,

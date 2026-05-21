@@ -234,13 +234,31 @@ body.light .prod-dossier-filter .search-bar:focus{box-shadow:0 0 0 3px rgba(8,14
 .filters-apply-btn:hover{filter:brightness(1.05);box-shadow:0 0 0 4px rgba(34,211,238,.18)}
 .filters-apply-btn:active{transform:translateY(1px)}
 
-/* MyProd — mobile : pas de libellés au-dessus des filtres (placeholders / boutons multisel) */
+/* MyProd — mobile : pas de libellés, hauteur des champs = bouton Filtrer */
 @media (max-width:900px){
   body.mysifa-app-prod.mysifa-prod-filters-page .filters-panel .filter-group > label{
     display:none;
   }
   body.mysifa-app-prod.mysifa-prod-filters-page .filters-panel .filter-group{
     gap:0;
+  }
+  body.mysifa-app-prod.mysifa-prod-filters-page .filters{
+    align-items:center;
+  }
+  body.mysifa-app-prod.mysifa-prod-filters-page .filters-apply-btn{
+    height:40px;min-height:40px;max-height:40px;
+    padding:0 18px;box-sizing:border-box;
+    display:inline-flex;align-items:center;justify-content:center;
+    align-self:center;
+  }
+  body.mysifa-app-prod.mysifa-prod-filters-page .filters .filter-input[type=date],
+  body.mysifa-app-prod.mysifa-prod-filters-page .filters .multisel-trigger,
+  body.mysifa-app-prod.mysifa-prod-filters-page .filters .prod-dossier-filter .search-bar{
+    height:40px;min-height:40px;max-height:40px;
+    padding:0 12px;font-size:12px;box-sizing:border-box;line-height:1.2;
+  }
+  body.mysifa-app-prod.mysifa-prod-filters-page .filters .multisel-trigger{
+    display:inline-flex;align-items:center;justify-content:space-between;
   }
 }
 
@@ -284,7 +302,7 @@ body.light .prod-dossier-filter .search-bar:focus{box-shadow:0 0 0 3px rgba(8,14
   }
   body.mysifa-app-prod.mysifa-prod-filters-page .filters{
     flex-wrap:nowrap;
-    align-items:flex-end;
+    align-items:center;
     gap:6px;
     overflow-x:auto;
     overflow-y:hidden;
@@ -310,31 +328,29 @@ body.light .prod-dossier-filter .search-bar:focus{box-shadow:0 0 0 3px rgba(8,14
     flex:0 0 100px;
   }
   body.mysifa-app-prod.mysifa-prod-filters-page .filters .prod-dossier-filter .search-bar{
-    min-height:32px;
-    padding:6px 8px;
-    font-size:11px;
+    height:32px;min-height:32px;max-height:32px;
+    padding:0 8px;font-size:11px;
   }
   body.mysifa-app-prod.mysifa-prod-filters-page .filters .filter-input[type=date]{
     min-width:102px;
     width:102px;
-    padding:6px 8px;
-    font-size:11px;
+    height:32px;min-height:32px;max-height:32px;
+    padding:0 8px;font-size:11px;
   }
   body.mysifa-app-prod.mysifa-prod-filters-page .filters .multisel-trigger{
     min-width:72px;
     max-width:96px;
-    padding:6px 8px;
-    font-size:11px;
+    height:32px;min-height:32px;max-height:32px;
+    padding:0 8px;font-size:11px;
     white-space:nowrap;
     overflow:hidden;
     text-overflow:ellipsis;
   }
   body.mysifa-app-prod.mysifa-prod-filters-page .filters-apply-btn{
-    padding:7px 11px;
-    font-size:11px;
-    min-height:32px;
+    height:32px;min-height:32px;max-height:32px;
+    padding:0 11px;font-size:11px;
     flex-shrink:0;
-    align-self:flex-end;
+    align-self:center;
   }
   body.mysifa-app-prod.mysifa-prod-filters-page .prod-main-scroll{
     flex:1;
