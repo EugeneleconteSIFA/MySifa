@@ -47,6 +47,7 @@ PLANNING_RH_HTML = r"""<!DOCTYPE html>
 <link rel="icon" type="image/png" sizes="512x512" href="/static/mys_icon_512.png">
 <link rel="apple-touch-icon" href="/static/mys_icon_180.png">
 <link rel="stylesheet" href="/static/support_widget.css">
+<link rel="stylesheet" href="/static/mysifa_chat_nav.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
@@ -1088,6 +1089,7 @@ function icon(name,sz=14){
     menu:'<line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/>',
     x:'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
     check:'<polyline points="20 6 9 17 4 12"/>',
+    mail:'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
   };
   return`<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icons[name]||''}</svg>`;
 }
@@ -1110,6 +1112,7 @@ function renderSidebar(){
 
   const isLight=document.body.classList.contains('light');
   bot.innerHTML=`
+    <button type="button" class="rh-nav-btn" onclick="window.location.href='/messages'">${icon('mail',14)} Messages <span class="chat-nav-badge hidden" data-mysifa-chat-badge></span></button>
     ${S.user?`<div class="rh-user-chip" title="Mon profil" onclick="window.location.href='/profil'"><div class="ucn">${S.user.nom||''}</div><div class="ucr">${S.user.role||''}</div><div style="font-size:10px;color:var(--accent);margin-top:3px;display:flex;align-items:center;gap:4px">${icon('edit',12)} Mon profil</div></div>`:''}
     <button type="button" class="support-btn" onclick="openSupportRH()">
       <span class="support-ico">${(window.MySifaSupport&&window.MySifaSupport.iconSvg)?window.MySifaSupport.iconSvg():""}</span>
@@ -2452,5 +2455,6 @@ function printConges(){
 })();
 </script>
 <script src="/static/support_widget.js"></script>
+<script src="/static/mysifa_chat_badge.js"></script>
 </body>
 </html>"""

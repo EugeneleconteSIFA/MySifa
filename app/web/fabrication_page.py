@@ -46,7 +46,9 @@ FABRICATION_HTML = r"""<!DOCTYPE html>
 <link rel="icon" type="image/png" sizes="512x512" href="/static/mys_icon_512.png">
 <link rel="apple-touch-icon" href="/static/mys_icon_180.png">
 <link rel="stylesheet" href="/static/support_widget.css">
+<link rel="stylesheet" href="/static/mysifa_chat_nav.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css">
+<link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -607,9 +609,11 @@ table.fab-traca-table tr:last-child td{border-bottom:none}
 </head>
 <body>
 <script src="/static/mysifa_theme.js"></script>
+<script src="/static/mysifa_user_chip.js"></script>
 <div id="root"></div>
 <div id="mroot"></div>
 <script src="/static/support_widget.js"></script>
+<script src="/static/mysifa_chat_badge.js"></script>
 <script>
 'use strict';
 /*__TRACA_GUIDE__*/
@@ -1213,12 +1217,21 @@ function renderSidebar(){
     ),
     h('div',{className:'fab-sidebar-list'},...groups),
     h('div',{className:'fab-sidebar-bottom'},
-      h('div',{className:'fab-user-chip',title:'Mon profil',onClick:()=>{window.location.href='/profil';}},
-        h('div',{className:'fab-user-name'},userName),
-        h('div',{className:'fab-user-machine'},machineName),
-        h('div',{style:{fontSize:'10px',color:'var(--accent)',marginTop:'3px',display:'flex',alignItems:'center',gap:'4px'}},
-          svgIcon('edit',10),' Mon profil'
-        )
+      h('button',{className:'support-btn',style:{marginBottom:'8px'},onClick:()=>{window.location.href='/messages';}},
+        h('span',{className:'support-ico'},svgIcon('message-square',18)),
+        h('span',null,'Messages'),
+        h('span',{className:'chat-nav-badge hidden',attrs:{'data-mysifa-chat-badge':''}})
+      ),
+      (window.MySifaUserChip
+        ? MySifaUserChip.element(
+            Object.assign({}, S.user||{}, { nom:userName, ucSubtext:machineName }),
+            h, svgIcon, { chipClass:'fab-user-chip', title:'Mon profil' }
+          )
+        : h('div',{className:'fab-user-chip',title:'Mon profil',onClick:()=>{window.location.href='/profil';}},
+            h('div',{className:'fab-user-name'},userName),
+            h('div',{className:'fab-user-machine'},machineName),
+            h('div',{className:'uc-profil'},svgIcon('edit',10),' Mon profil')
+          )
       ),
       h('button',{className:'support-btn',style:{marginBottom:'8px'},
         onClick:()=>{

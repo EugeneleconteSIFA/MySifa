@@ -38,6 +38,7 @@ def db_viewer_page(request: Request):
 <title>Database — MySifa</title>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <link rel="stylesheet" href="/static/mysifa_theme.css">
+<link rel="stylesheet" href="/static/mysifa_chat_nav.css">
 <style>
 *,*::before,*::after{{margin:0;padding:0;box-sizing:border-box}}
 :root{{
@@ -308,6 +309,7 @@ body.light .user-chip:hover{{background:rgba(8,145,178,.12)}}
 </head>
 <body>
 <script src="/static/mysifa_theme.js"></script>
+<script src="/static/mysifa_chat_badge.js"></script>
 
 <!-- Mobile topbar -->
 <div class="mobile-topbar">
@@ -337,6 +339,11 @@ body.light .user-chip:hover{{background:rgba(8,145,178,.12)}}
       </div>
     </div>
 
+    <button type="button" class="nav-btn" style="margin:0 12px 8px;width:calc(100% - 24px)" onclick="window.location.href='/messages'">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      Messages
+      <span class="chat-nav-badge hidden" data-mysifa-chat-badge></span>
+    </button>
     <div class="sidebar-bottom">
       <div class="user-chip" onclick="window.location.href='/profil'" title="Modifier mon profil" role="button" tabindex="0">
         <div class="uc-name">{user_name}</div>

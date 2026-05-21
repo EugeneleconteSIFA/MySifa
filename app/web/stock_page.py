@@ -54,7 +54,9 @@ STOCK_HTML = r"""<!DOCTYPE html>
 <link rel="apple-touch-icon" href="/static/mys_icon_180.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <link rel="stylesheet" href="/static/support_widget.css">
+<link rel="stylesheet" href="/static/mysifa_chat_nav.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css">
+<link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -659,8 +661,10 @@ body.light .recep-fourn-sel:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 </head>
 <body>
 <script src="/static/mysifa_theme.js"></script>
+<script src="/static/mysifa_user_chip.js"></script>
 <div id="root"></div>
 <script src="/static/support_widget.js"></script>
+<script src="/static/mysifa_chat_badge.js"></script>
 <script>
 /*__TRACA_GUIDE__*/
 const API = window.location.origin;
@@ -873,6 +877,7 @@ function icon(name, size=16){
     'download': '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
     'edit': '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
     'plus-circle': '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>',
+    'mail': '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
   };
   return `<svg ${a} aria-hidden="true" style="display:inline-block;vertical-align:middle;flex-shrink:0">${p[name]||p['grid']}</svg>`;
 }
@@ -3509,16 +3514,23 @@ function render() {
       })
     ),
     el('div', { cls:'sidebar-bottom' },
+      el('button', { cls:'nav-btn', on:{ click:()=>{ window.location.href='/messages'; } } },
+        el('span', { attrs:{ style:'display:inline-flex;align-items:center;gap:10px' } },
+          iconEl('mail',15), ' Messages ',
+          el('span', { cls:'chat-nav-badge hidden', attrs:{ 'data-mysifa-chat-badge':'' } })
+        )
+      ),
       el('button', { cls:'nav-btn back-mysifa', on:{ click:()=>{ window.location.href='/'; } } },
         '← Retour ',
         el('span', { cls:'wm' }, 'My', el('span', null, 'Sifa'))
       ),
-      S.user ? el('div', { cls:'user-chip', style:{ cursor:'pointer' }, attrs:{ title:'Modifier mon profil' }, on:{ click:()=>{ window.location.href='/profil'; } } },
-        el('div', { cls:'uc-name' }, S.user.nom||''),
-        el('div', { cls:'uc-role' }, ROLE_LABELS[S.user.role] || S.user.role || ''),
-        el('div', { style:{ fontSize:'10px', color:'var(--accent)', marginTop:'3px', display:'flex', alignItems:'center', gap:'4px' } },
-          iconEl('edit',10), ' Mon profil'
-        )
+      S.user ? (window.MySifaUserChip
+        ? MySifaUserChip.element(S.user, el, iconEl, { title:'Modifier mon profil' })
+        : el('div', { cls:'user-chip', style:{ cursor:'pointer' }, attrs:{ title:'Modifier mon profil' }, on:{ click:()=>{ window.location.href='/profil'; } } },
+            el('div', { cls:'uc-name' }, S.user.nom||''),
+            el('div', { cls:'uc-role' }, ROLE_LABELS[S.user.role] || S.user.role || ''),
+            el('div', { cls:'uc-profil' }, iconEl('edit',10), ' Mon profil')
+          )
       ) : null,
       (() => {
         if(!S.user) return null;

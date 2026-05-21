@@ -1504,6 +1504,46 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 34, "users_avatar_url")
 
+    # v35 — Chat interne (DMs + canaux d'équipe)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=35 LIMIT 1").fetchone():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS chat_channels (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                type         TEXT    NOT NULL DEFAULT 'channel',
+                name         TEXT    DEFAULT NULL,
+                description  TEXT    DEFAULT NULL,
+                created_by   INTEGER REFERENCES users(id),
+                created_at   TEXT    NOT NULL,
+                archived_at  TEXT    DEFAULT NULL
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS chat_members (
+                channel_id   INTEGER NOT NULL REFERENCES chat_channels(id),
+                user_id      INTEGER NOT NULL REFERENCES users(id),
+                joined_at    TEXT    NOT NULL,
+                last_read_at TEXT    DEFAULT NULL,
+                PRIMARY KEY (channel_id, user_id)
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS chat_messages (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                channel_id   INTEGER NOT NULL REFERENCES chat_channels(id),
+                user_id      INTEGER NOT NULL REFERENCES users(id),
+                user_nom     TEXT    NOT NULL,
+                body         TEXT    NOT NULL,
+                created_at   TEXT    NOT NULL,
+                deleted_at   TEXT    DEFAULT NULL
+            )
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_chat_msg_chan
+            ON chat_messages(channel_id, created_at)
+        """)
+        conn.commit()
+        _record_schema_migration(conn, 35, "chat_channels_messages")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

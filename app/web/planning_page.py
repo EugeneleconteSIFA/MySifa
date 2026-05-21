@@ -57,7 +57,9 @@ PLANNING_HTML = r"""<!DOCTYPE html>
 <title>__PLANNING_TITLE__</title>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <link rel="stylesheet" href="/static/support_widget.css">
+<link rel="stylesheet" href="/static/mysifa_chat_nav.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css">
+<link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -506,9 +508,11 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 </head>
 <body>
 <script src="/static/mysifa_theme.js"></script>
+<script src="/static/mysifa_user_chip.js"></script>
 <div class="sidebar-overlay" id="sb-ov"></div>
 <div id="app"></div>
 <script src="/static/support_widget.js"></script>
+<script src="/static/mysifa_chat_badge.js"></script>
 <script>
 // Handler d'erreurs installé *avant* le script principal (capte aussi les erreurs de parsing).
 function showFatal(message, lineno, colno, extra){
@@ -1402,7 +1406,15 @@ function isHHMM(s){return /^\d{2}:\d{2}$/.test(String(s||"").trim());}
 function isAdmin(u){return u&&(u.role==="direction"||u.role==="administration"||u.role==="superadmin");}
 function isComptaUser(u){return !!(u&&u.role==="comptabilite");}
 function canPlanningNav(u){return !!(u&&u.app_access&&u.app_access.planning);}
-function roleLabel(role){const R={direction:"Direction",administration:"Administration",fabrication:"Fabrication",superadmin:"Super admin"};return R[role]||role||"";}
+function roleLabel(role){const R={direction:"Direction",administration:"Administration",fabrication:"Fabrication",logistique:"Logistique",comptabilite:"Comptabilité",expedition:"Expédition",commercial:"Commercial",superadmin:"Super admin"};return R[role]||role||"";}
+function planningUserChipHtml(){
+  if(!ME)return "";
+  const editIco=icon("edit",12);
+  const inner=window.MySifaUserChip
+    ? MySifaUserChip.innerHtml(ME,{roleLabels:{direction:"Direction",administration:"Administration",fabrication:"Fabrication",logistique:"Logistique",comptabilite:"Comptabilité",expedition:"Expédition",commercial:"Commercial",superadmin:"Super admin"},editIconHtml:editIco})
+    : '<div class="uc-name">'+escAttr(ME.nom||"")+'</div><div class="uc-role">'+roleLabel(ME.role)+'</div><div class="uc-profil">'+editIco+' Mon profil</div>';
+  return '<div class="user-chip" onclick="location.href=\'/profil\'" title="Mon profil">'+inner+'</div>';
+}
 function renderSidebar(){
   if(!ME){
     return `<nav class="sidebar"><div class="logo"><div class="logo-brand">My<span>Prod</span></div><div class="logo-sub">by SIFA</div></div>
@@ -1425,7 +1437,7 @@ function renderSidebar(){
   const isLight=document.body.classList.contains("light");
   return`<nav class="sidebar"><div class="logo"><div class="logo-brand">My<span>Prod</span></div><div class="logo-sub">by SIFA</div></div>${
     items.map(i=>`<button type="button" class="nav-btn${i.key==="_planning"?" active":""}" onclick="location.href='${i.href}'"><span style="display:inline-flex;align-items:center;gap:10px">${icon(i.icon,16)}${i.label}</span></button>`).join("")
-  }<div class="sidebar-bottom"><button type="button" class="nav-btn nav-btn--mysifa-portal" onclick="location.href='/'"><span class="mysifa-back-preamble">← Retour </span><span class="mysifa-back-brand">My<span class="mysifa-back-accent">Sifa</span></span></button><div class="user-chip" onclick="location.href='/profil'" title="Mon profil"><div class="uc-name">${escAttr(ME.nom||"")}</div><div class="uc-role">${roleLabel(ME.role)}</div><div style="font-size:10px;color:var(--accent);margin-top:3px;display:flex;align-items:center;gap:4px">${icon('edit',12)} Mon profil</div></div><button type="button" class="support-btn" onclick="openSupport()"><span class="support-ico">${(window.MySifaSupport&&window.MySifaSupport.iconSvg)?window.MySifaSupport.iconSvg():""}</span><span>Contacter le support</span></button><button type="button" class="theme-btn" onclick="toggleTheme()"><span class="theme-ico">${isLight?icon('sun',16):icon('moon',16)}</span><span class="theme-label">${isLight?"Mode clair":"Mode sombre"}</span></button><button type="button" class="logout-btn" onclick="doLogout()">${icon('log-out',14)} Déconnexion</button><div class="version">__V_LABEL__</div></div></nav>`;
+  }<button type="button" class="nav-btn" onclick="location.href='/messages'"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Messages<span class="chat-nav-badge hidden" data-mysifa-chat-badge></span></button><div class="sidebar-bottom"><button type="button" class="nav-btn nav-btn--mysifa-portal" onclick="location.href='/'"><span class="mysifa-back-preamble">← Retour </span><span class="mysifa-back-brand">My<span class="mysifa-back-accent">Sifa</span></span></button>${planningUserChipHtml()}<button type="button" class="support-btn" onclick="openSupport()"><span class="support-ico">${(window.MySifaSupport&&window.MySifaSupport.iconSvg)?window.MySifaSupport.iconSvg():""}</span><span>Contacter le support</span></button><button type="button" class="theme-btn" onclick="toggleTheme()"><span class="theme-ico">${isLight?icon('sun',16):icon('moon',16)}</span><span class="theme-label">${isLight?"Mode clair":"Mode sombre"}</span></button><button type="button" class="logout-btn" onclick="doLogout()">${icon('log-out',14)} Déconnexion</button><div class="version">__V_LABEL__</div></div></nav>`;
 }
 function toggleTheme(){if(window.MySifaTheme)MySifaTheme.toggleMode();render();}
 async function doLogout(){try{await fetch("/api/auth/logout",{method:"POST",credentials:"include"});}catch(e){}location.href="/";}

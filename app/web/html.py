@@ -19,7 +19,9 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <meta name="mobile-web-app-capable" content="yes">
 <title>__PAGE_TITLE__</title>
 <link rel="stylesheet" href="/static/support_widget.css">
+<link rel="stylesheet" href="/static/mysifa_chat_nav.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css">
+<link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -1278,8 +1280,10 @@ body.light .stock-empl-suggest-add:hover{background:rgba(124,58,237,.2);color:#1
 </head>
 <body>
 <script src="/static/mysifa_theme.js"></script>
+<script src="/static/mysifa_user_chip.js"></script>
 <div id="root"></div>
 <script src="/static/support_widget.js"></script>
+<script src="/static/mysifa_chat_badge.js"></script>
 <script>
 const API=window.location.origin;
 const INITIAL_APP="__INITIAL_APP_VALUE__";
@@ -1583,6 +1587,26 @@ function iconEl(name,size=16){
   s.style.cssText='display:inline-flex;align-items:center;flex-shrink:0';
   s.innerHTML=icon(name,size);
   return s;
+}
+function sidebarUserChip(user,opts){
+  if(!user)return null;
+  opts=opts||{};
+  if(window.MySifaUserChip){
+    return MySifaUserChip.element(user,h,iconEl,Object.assign({
+      title:'Mon profil',
+      onClick:()=>{window.location.href='/profil'}
+    },opts));
+  }
+  return h('div',{
+    className:opts.chipClass||'user-chip',
+    style:{cursor:'pointer'},
+    title:'Mon profil',
+    onClick:()=>{window.location.href='/profil'}
+  },
+    h('div',{className:'uc-name'},user.nom||''),
+    h('div',{className:'uc-role'},ROLE_LABELS[user.role]||user.role||''),
+    h('div',{className:'uc-profil'},iconEl('edit',10),' Mon profil')
+  );
 }
 
 const fN=n=>n?Number(n).toLocaleString('fr-FR'):'0';
@@ -3041,6 +3065,20 @@ function renderPortal(){
 
   // Messagerie: icône dans le coin (sous Paramètres) pour le super admin
 
+  {
+    const id='messages';
+    tileSpecs.push({id,el:h('div',{
+      className:'portal-app',
+      'data-portal-id':id,
+      draggable:'true',
+      onClick:()=>{if(_portalDragSuppressClick)return;window.location.href='/messages';}
+    },
+      h('div',{className:'portal-app-icon'},iconEl('mail',28)),
+      h('div',{className:'portal-app-name'},'Messages'),
+      h('div',{className:'portal-app-desc'},'Chat interne — équipe et collègues')
+    )});
+  }
+
   if(isCompta){
     const id='compta';
     tileSpecs.push({id,el:h('div',{
@@ -3275,10 +3313,7 @@ function renderStock(){
         '← Retour ',
         h('span',{className:'wm'},'My',h('span',null,'Sifa'))
       ),
-      h('div',{className:'user-chip'},
-        h('div',{className:'uc-name'},(S.user&&S.user.nom)?S.user.nom:''),
-        h('div',{className:'uc-role'},(S.user&&S.user.role)?(ROLE_LABELS[S.user.role]||S.user.role):'')
-      ),
+      sidebarUserChip(S.user),
       (() => {
         const b=h('button',{
           className:'support-btn',
@@ -4148,10 +4183,7 @@ function renderCompta(){
         '← Retour ',
         h('span',{className:'wm'},'My',h('span',null,'Sifa'))
       ),
-      h('div',{className:'user-chip'},
-        h('div',{className:'uc-name'},(S.user&&S.user.nom)?S.user.nom:''),
-        h('div',{className:'uc-role'},(S.user&&S.user.role)?(ROLE_LABELS[S.user.role]||S.user.role):'')
-      ),
+      sidebarUserChip(S.user),
       (() => {
         const b=h('button',{
           className:'support-btn',
@@ -5224,10 +5256,7 @@ function renderExpe(){
       h('button',{className:'nav-btn back-mysifa',onClick:()=>{window.location.href='/'}},
         '← Retour ',h('span',{className:'wm'},'My',h('span',null,'Sifa'))
       ),
-      h('div',{className:'user-chip'},
-        h('div',{className:'uc-name'},(S.user&&S.user.nom)?S.user.nom:''),
-        h('div',{className:'uc-role'},(S.user&&S.user.role)?(ROLE_LABELS[S.user.role]||S.user.role):'')
-      ),
+      sidebarUserChip(S.user),
       (()=>{
         const b=h('button',{className:'support-btn',title:'Contacter le support',onClick:()=>set({contactOpen:true})});
         const ico=h('span',{className:'support-ico'});
@@ -5290,10 +5319,7 @@ function renderMyDevis(){
         '← Retour ',
         h('span',{className:'wm'},'My',h('span',null,'Sifa'))
       ),
-      h('div',{className:'user-chip'},
-        h('div',{className:'uc-name'},(S.user&&S.user.nom)?S.user.nom:''),
-        h('div',{className:'uc-role'},(S.user&&S.user.role)?(ROLE_LABELS[S.user.role]||S.user.role):'')
-      ),
+      sidebarUserChip(S.user),
       (()=>{
         const b=h('button',{className:'support-btn',title:'Contacter le support',onClick:()=>set({contactOpen:true})});
         const ico=h('span',{className:'support-ico'});
@@ -5666,21 +5692,22 @@ function renderSidebar(){
       btn.appendChild(document.createTextNode('  '+i.label));
       return btn;
     }),
+    (()=>{
+      const chatBtn=h('button',{className:'nav-btn',onClick:()=>{window.location.href='/messages';}});
+      chatBtn.appendChild(iconEl('mail',15));
+      const chatLbl=document.createElement('span');
+      chatLbl.style.flex='1';
+      chatLbl.textContent=' Messages';
+      chatBtn.appendChild(chatLbl);
+      chatBtn.appendChild(h('span',{className:'chat-nav-badge hidden','data-mysifa-chat-badge':''}));
+      return chatBtn;
+    })(),
     h('div',{className:'sidebar-bottom'},
       h('button',{className:'nav-btn back-mysifa',onClick:()=>{window.location.href='/' }},
         '← Retour ',
         h('span',{className:'wm'},'My',h('span',null,'Sifa'))
       ),
-      h('div',{
-        className:'user-chip',
-        style:{cursor:'pointer'},
-        title:'Mon profil',
-        onClick:()=>{window.location.href='/profil';}
-      },
-        h('div',{className:'uc-name'},(S.user&&S.user.nom)?S.user.nom:''),
-        h('div',{className:'uc-role'},(S.user&&S.user.role)?(ROLE_LABELS[S.user.role]||S.user.role):''),
-        h('div',{style:{fontSize:'10px',color:'var(--accent)',marginTop:'3px',display:'flex',alignItems:'center',gap:'4px'}},iconEl('edit',10),' Mon profil')
-      ),
+      sidebarUserChip(S.user),
       (() => {
         const b=h('button',{
           className:'support-btn',
@@ -5804,10 +5831,7 @@ function renderMessagesApp(){
       '← Retour ',h('span',{className:'wm'},'My',h('span',null,'Sifa'))
     ),
     h('div',{className:'sidebar-bottom'},
-      h('div',{className:'user-chip'},
-        h('div',{className:'uc-name'},(S.user&&S.user.nom)?S.user.nom:''),
-        h('div',{className:'uc-role'},'Super admin')
-      ),
+      sidebarUserChip(S.user),
       h('button',{className:'theme-btn',onClick:()=>{MySifaTheme.toggleMode();render();}},
         h('span',{className:'theme-ico'},iconEl(isLight?'sun':'moon',16)),
         h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')

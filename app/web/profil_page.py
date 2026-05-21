@@ -33,7 +33,9 @@ PROFIL_HTML = r"""<!DOCTYPE html>
 <title>Mon profil — MySifa</title>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <link rel="stylesheet" href="/static/support_widget.css">
+<link rel="stylesheet" href="/static/mysifa_chat_nav.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css">
+<link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <style>
 /* ── Variables MySifa (dark défaut) ── */
 :root{
@@ -321,6 +323,11 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
       Calendrier
     </button>
 
+    <button type="button" class="nav-btn" onclick="location.href='/messages'">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      Messages
+      <span class="chat-nav-badge hidden" data-mysifa-chat-badge></span>
+    </button>
     <div class="sidebar-bottom">
       <button type="button" class="nav-btn back-mysifa" onclick="location.href='/'">
         ← Retour <span class="wm">My<span>Sifa</span></span>
@@ -378,6 +385,7 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 </div>
 
 <script src="/static/support_widget.js"></script>
+<script src="/static/mysifa_chat_badge.js"></script>
 <script>
 const ROLE_LABELS={
   direction:'Direction',administration:'Administration',fabrication:'Fabrication',

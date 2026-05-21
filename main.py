@@ -46,9 +46,11 @@ from app.routers.widget_router import router as widget_router
 from app.routers.db_viewer import router as db_viewer_api_router
 from app.web.db_viewer_page import router as db_viewer_page_router
 from app.web.profil_page import router as profil_page_router
+from app.web.messages_page import router as messages_page_router
 from app.routers.calendrier import router as calendrier_api_router
 from app.web.calendrier_page import router as calendrier_page_router
 from app.routers.ai import router as ai_router
+from app.routers.chat import router as chat_router
 
 
 @asynccontextmanager
@@ -61,6 +63,12 @@ async def lifespan(app: FastAPI):
         print(f"[MySifa] emplacements_plan : {n} code(s) depuis CSV")
     except Exception as e:
         print(f"[MySifa] emplacements_plan : import CSV ignoré ({e})")
+    try:
+        from app.routers.chat import seed_default_channels_on_startup
+
+        seed_default_channels_on_startup()
+    except Exception as e:
+        print(f"[MySifa] chat seed ignoré ({e})")
     yield
 
 
@@ -128,9 +136,11 @@ app.include_router(widget_router)
 app.include_router(db_viewer_api_router)
 app.include_router(db_viewer_page_router)
 app.include_router(profil_page_router)
+app.include_router(messages_page_router)
 app.include_router(calendrier_api_router)
 app.include_router(calendrier_page_router)
 app.include_router(ai_router)
+app.include_router(chat_router)
 
 
 @app.get("/", response_class=HTMLResponse)

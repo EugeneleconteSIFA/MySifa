@@ -1,0 +1,83 @@
+/* MySifa — encadré profil sidebar (partagé) */
+.user-chip,
+.fab-user-chip,
+.rh-user-chip {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--accent-bg);
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+}
+.user-chip:hover,
+.fab-user-chip:hover,
+.rh-user-chip:hover {
+  background: rgba(34, 211, 238, .18);
+}
+body.light .user-chip:hover,
+body.light .fab-user-chip:hover,
+body.light .rh-user-chip:hover {
+  background: rgba(8, 145, 178, .12);
+}
+.user-chip .uc-top,
+.fab-user-chip .uc-top,
+.rh-user-chip .uc-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.user-chip .uc-avatar,
+.fab-user-chip .uc-avatar,
+.rh-user-chip .uc-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+  background: var(--bg);
+  display: block;
+}
+.user-chip .uc-info,
+.fab-user-chip .uc-info,
+.rh-user-chip .uc-info {
+  flex: 1;
+  min-width: 0;
+}
+.user-chip .uc-name,
+.fab-user-chip .fab-user-name,
+.fab-user-chip .uc-name,
+.rh-user-chip .ucn,
+.rh-user-chip .uc-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.user-chip .uc-role,
+.fab-user-chip .fab-user-machine,
+.fab-user-chip .uc-role,
+.rh-user-chip .ucr,
+.rh-user-chip .uc-role {
+  font-size: 10px;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.user-chip .uc-profil,
+.fab-user-chip .uc-profil,
+.rh-user-chip .uc-profil {
+  font-size: 10px;
+  color: var(--accent);
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
