@@ -84,15 +84,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 .sidebar::-webkit-scrollbar{width:0}.sidebar{scrollbar-width:none}
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200}
 body.sb-open .sidebar-overlay{display:block}
-.mobile-topbar{display:none;align-items:center;gap:10px;margin-bottom:14px}
-.mobile-menu-btn{display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;
-  border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;font-family:inherit}
-.mobile-menu-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
-.mobile-home-btn{display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;
-  border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;font-family:inherit;margin-left:auto}
-.mobile-home-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
-.mobile-topbar-title{font-size:14px;font-weight:800}
-.mobile-topbar-sub{font-size:11px;color:var(--muted);margin-top:2px}
+/* topbar mobile : mysifa_mobile_topbar.css */
 .logo{padding:0 8px;margin-bottom:32px}
 .logo-brand{font-size:15px;font-weight:800}.logo-brand span{color:var(--accent)}
 .logo-sub{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase}
@@ -487,9 +479,6 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 .view-tab:hover:not(.active){background:var(--border);color:var(--text2)}
 
 @media (max-width:900px){
-  .mobile-topbar{display:flex;position:fixed;top:0;left:0;right:0;z-index:120;background:var(--bg);padding:10px 18px;border-bottom:1px solid var(--border)}
-  .mobile-menu-btn{display:inline-flex}
-  .mobile-home-btn{display:inline-flex}
   body.has-topbar .main{padding-top:74px}
   .main{padding:14px}
   .header{padding:0 0 14px}
@@ -3683,6 +3672,7 @@ async function boot(){
     window.__MYSIFA_NOM__=ME.nom||"";
     window.__MYSIFA_ROLE__=ME.role||"";
     if(window._CW&&typeof window._CW.syncUser==="function")window._CW.syncUser();
+    if(window.MySifaDock&&typeof window.MySifaDock.layout==="function")window.MySifaDock.layout();
   }
   if(window.MySifaTheme)MySifaTheme.mergeFromUser(ME);
   try{

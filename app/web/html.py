@@ -72,15 +72,6 @@ button:focus:not(:focus-visible){outline:none}
 .sidebar{width:220px;background:var(--card);border-right:1px solid var(--border);padding:20px 12px;display:flex;flex-direction:column;flex-shrink:0;height:100vh;position:sticky;top:0;overflow-y:auto}
 .sidebar::-webkit-scrollbar{width:0}
 .sidebar{scrollbar-width:none}
-.mobile-topbar{display:none;align-items:center;gap:10px;margin-bottom:14px}
-.mobile-menu-btn{display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;
-  border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;font-family:inherit}
-.mobile-menu-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
-.mobile-home-btn{display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;
-  border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;font-family:inherit;margin-left:auto}
-.mobile-home-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
-.mobile-topbar-title{font-size:14px;font-weight:800}
-.mobile-topbar-sub{font-size:11px;color:var(--muted);margin-top:2px}
 .sidebar-overlay{display:none}
 .back-mysifa{
   border:none!important;
@@ -96,12 +87,8 @@ button:focus:not(:focus-visible){outline:none}
   .sidebar{position:fixed;left:0;top:0;bottom:0;z-index:9000;transform:translateX(-105%);transition:transform .18s ease;box-shadow:0 16px 48px rgba(0,0,0,.55)}
   body.sb-open .sidebar{transform:translateX(0)}
   .main{padding:18px}
-  .mobile-topbar{display:flex;position:fixed;top:0;left:0;right:0;z-index:120;background:var(--bg);padding:10px 18px;border-bottom:1px solid var(--border)}
-  .mobile-menu-btn{display:inline-flex}
-  .mobile-home-btn{display:inline-flex}
   .sidebar-overlay{display:block;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:8999}
   body:not(.sb-open) .sidebar-overlay{display:none}
-  body.has-topbar .main{padding-top:74px}
 }
 .logo{padding:0 8px;margin-bottom:32px}
 .logo-brand{font-size:15px;font-weight:800}.logo-brand span{color:var(--accent)}
@@ -247,6 +234,16 @@ body.light .prod-dossier-filter .search-bar:focus{box-shadow:0 0 0 3px rgba(8,14
 .filters-apply-btn:hover{filter:brightness(1.05);box-shadow:0 0 0 4px rgba(34,211,238,.18)}
 .filters-apply-btn:active{transform:translateY(1px)}
 
+/* MyProd — mobile : pas de libellés au-dessus des filtres (placeholders / boutons multisel) */
+@media (max-width:900px){
+  body.mysifa-app-prod.mysifa-prod-filters-page .filters-panel .filter-group > label{
+    display:none;
+  }
+  body.mysifa-app-prod.mysifa-prod-filters-page .filters-panel .filter-group{
+    gap:0;
+  }
+}
+
 /* MyProd — mobile paysage : filtres sur une ligne, barre fixe, sans titre dupliqué */
 @media (max-width:900px) and (orientation:landscape){
   body.mysifa-app-prod.mysifa-prod-filters-page .main .container > h1,
@@ -301,11 +298,11 @@ body.light .prod-dossier-filter .search-bar:focus{box-shadow:0 0 0 3px rgba(8,14
     gap:2px;
     min-width:0;
   }
-  body.mysifa-app-prod.mysifa-prod-filters-page .filter-group label{
-    font-size:9px;
-    letter-spacing:.35px;
-    line-height:1;
-    white-space:nowrap;
+  body.mysifa-app-prod.mysifa-prod-filters-page .filter-group > label{
+    display:none;
+  }
+  body.mysifa-app-prod.mysifa-prod-filters-page .filter-group{
+    gap:0;
   }
   body.mysifa-app-prod.mysifa-prod-filters-page .filter-group--dossier{
     min-width:88px;
@@ -6231,11 +6228,12 @@ function makeDateSelect(value, onChange){
   return h('div',{style:{display:'flex',gap:'4px',alignItems:'center'}},jSel,mSel,aSel);
 }
 
-function makeDateInput(value, onChange){
+function makeDateInput(value, onChange, ariaLabel){
   const inp = h('input',{
     type:'date',
     className:'filter-input',
     value: value || '',
+    ...(ariaLabel ? {'aria-label': ariaLabel, title: ariaLabel} : {}),
   });
   inp.addEventListener('change',()=>onChange(inp.value||''));
   // Ouvrir le calendrier au clic (Chrome/Safari supportent showPicker).
@@ -6281,8 +6279,8 @@ function renderFilters(){
     ));
   }
  
-  const df=makeDateInput(S.fv.date_from, v=>{S.fv.date_from=v;});
-  const dt=makeDateInput(S.fv.date_to,   v=>{S.fv.date_to=v;});
+  const df=makeDateInput(S.fv.date_from, v=>{S.fv.date_from=v;}, 'Du');
+  const dt=makeDateInput(S.fv.date_to,   v=>{S.fv.date_to=v;}, 'Au');
   parts.push(h('div',{className:'filter-group'},h('label',null,'Du'),df));
   parts.push(h('div',{className:'filter-group'},h('label',null,'Au'),dt));
   parts.push(h('button',{className:'filters-apply-btn',onClick:applyF},'Filtrer'));

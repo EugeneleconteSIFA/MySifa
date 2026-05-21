@@ -7,12 +7,22 @@
 
   const GAP = 12;
   const FAB_SIZE = 48;
-  const MOBILE_BP = '(max-width: 768px)';
+  const MOBILE_BP = '(max-width: 900px)';
+  const MOBILE_LANDSCAPE_BP = '(max-width: 900px) and (orientation: landscape)';
   const SHADOW_FAB = '0 4px 16px rgba(34,211,238,0.35)';
   const SHADOW_PANEL = '0 12px 48px rgba(0,0,0,0.5)';
 
   function isMobile() {
     return window.matchMedia(MOBILE_BP).matches;
+  }
+
+  function isMobileLandscape() {
+    return window.matchMedia(MOBILE_LANDSCAPE_BP).matches;
+  }
+
+  function syncDockBodyClass() {
+    document.body.classList.toggle('mysifa-dock-mobile', isMobile());
+    document.body.classList.toggle('mysifa-dock-landscape', isMobileLandscape());
   }
 
   function safeRight(extraPx) {
@@ -32,8 +42,12 @@
   function isVisible(el) {
     if (!el) return false;
     if (el.id === 'ai-chat-root') return el.style.display !== 'none';
-    if (el.id === 'cw-bar' && document.body.classList.contains('cw-panel-open')) return false;
-    return el.offsetParent !== null || getComputedStyle(el).display !== 'none';
+    return getComputedStyle(el).display !== 'none';
+  }
+
+  function isDockFab(el) {
+    if (!el) return false;
+    return isVisible(el);
   }
 
   function applyFab(el, right, bottom) {
@@ -49,72 +63,149 @@
     el.style.boxShadow = SHADOW_FAB;
   }
 
+  function layoutMobileLandscape(calcFab, calcPanel, aiBtn, aiPanel, chatBubble, chatBar, chatPanel) {
+    const aiRoot = document.getElementById('ai-chat-root');
+    const fabRowH = FAB_SIZE + 14;
+    let stackRight = 0;
+
+    function placeFabRow(el) {
+      if (!el) return;
+      applyFab(el, safeRight(stackRight), safeBottom(0));
+      el.style.zIndex = '8002';
+      el.style.boxShadow = SHADOW_FAB;
+      stackRight += FAB_SIZE + GAP;
+    }
+
+    const hasCalc = isDockFab(calcFab);
+    const hasAi = isVisible(aiRoot) && isDockFab(aiBtn);
+    const chatFab =
+      isDockFab(chatBubble) ? chatBubble : isDockFab(chatBar) ? chatBar : null;
+
+    if (hasCalc) {
+      placeFabRow(calcFab);
+      if (calcPanel && getComputedStyle(calcPanel).display !== 'none') {
+        calcPanel.style.right = safeRight(0);
+        calcPanel.style.bottom = safeBottom(fabRowH);
+        calcPanel.style.zIndex = '8014';
+        calcPanel.style.boxShadow = SHADOW_PANEL;
+      }
+    }
+    if (chatFab) placeFabRow(chatFab);
+    if (hasAi) placeFabRow(aiBtn);
+
+    const panelBottom = fabRowH;
+    const panelMaxH = 'calc(100dvh - ' + (fabRowH + 12) + 'px)';
+
+    function layoutLandscapePanel(el, z) {
+      if (!el) return;
+      el.style.top = 'max(8px, env(safe-area-inset-top, 0px))';
+      el.style.left = 'max(12px, env(safe-area-inset-left, 0px))';
+      el.style.right = 'max(12px, env(safe-area-inset-right, 0px))';
+      el.style.width = 'auto';
+      el.style.maxWidth = 'none';
+      el.style.marginLeft = '0';
+      el.style.marginRight = '0';
+      el.style.bottom = safeBottom(panelBottom);
+      el.style.height = panelMaxH;
+      el.style.maxHeight = panelMaxH;
+      el.style.minHeight = '0';
+      el.style.borderRadius = '12px';
+      el.style.boxShadow = SHADOW_PANEL;
+      el.style.zIndex = String(z);
+    }
+
+    if (chatPanel && !chatPanel.classList.contains('cw-hidden')) {
+      layoutLandscapePanel(chatPanel, 8015);
+    }
+
+    if (hasAi && aiPanel) {
+      if (aiPanel.classList.contains('open')) {
+        layoutLandscapePanel(aiPanel, 8016);
+      } else {
+        aiPanel.style.top = '';
+        aiPanel.style.left = '';
+        aiPanel.style.right = safeRight(0);
+        aiPanel.style.bottom = safeBottom(0);
+        aiPanel.style.width = '';
+        aiPanel.style.maxWidth = '';
+        aiPanel.style.height = '';
+        aiPanel.style.maxHeight = '';
+        aiPanel.style.minHeight = '';
+        aiPanel.style.zIndex = '8002';
+        aiPanel.style.boxShadow = '';
+      }
+    }
+  }
+
   function layoutMobile(calcFab, calcPanel, aiBtn, aiPanel, chatBubble, chatBar, chatPanel) {
+    const aiRoot = document.getElementById('ai-chat-root');
     let stackBottom = 0;
 
     function placeFab(el) {
       if (!el) return;
       applyFab(el, safeRight(0), safeBottom(stackBottom));
+      el.style.zIndex = '8002';
       el.style.boxShadow = SHADOW_FAB;
       stackBottom += FAB_SIZE + GAP;
     }
 
-    const hasCalc = isVisible(calcFab);
-    const hasAi = isVisible(document.getElementById('ai-chat-root')) && isVisible(aiBtn);
-    const hasChatBubble = isVisible(chatBubble);
-    const hasChatBar = isVisible(chatBar);
-    const chatFab = hasChatBubble ? chatBubble : hasChatBar ? chatBar : null;
+    const hasCalc = isDockFab(calcFab);
+    const hasAi = isVisible(aiRoot) && isDockFab(aiBtn);
+    const chatFab =
+      isDockFab(chatBubble) ? chatBubble : isDockFab(chatBar) ? chatBar : null;
 
     if (hasCalc) {
       placeFab(calcFab);
-      if (calcPanel) {
+      if (calcPanel && getComputedStyle(calcPanel).display !== 'none') {
         calcPanel.style.right = safeRight(0);
         calcPanel.style.bottom = safeBottom(FAB_SIZE + 14);
+        calcPanel.style.zIndex = '8014';
         calcPanel.style.boxShadow = SHADOW_PANEL;
       }
     }
+    if (chatFab) placeFab(chatFab);
+    if (hasAi) placeFab(aiBtn);
 
-    placeFab(chatFab);
+    const fabStackH = stackBottom;
+    const panelBottom = fabStackH + 12;
+    const panelMaxH = 'calc(100dvh - ' + (fabStackH + 20) + 'px)';
+    const panelMinH = 'min(560px, ' + panelMaxH + ')';
 
-    if (hasAi) {
-      placeFab(aiBtn);
-      if (aiPanel) {
-        if (aiPanel.classList.contains('open')) {
-          aiPanel.style.left = '';
-          aiPanel.style.right = '';
-          aiPanel.style.bottom = '';
-          aiPanel.style.width = '';
-          aiPanel.style.maxWidth = '';
-          aiPanel.style.boxShadow = SHADOW_PANEL;
-        } else {
-          aiPanel.style.left = '';
-          aiPanel.style.right = safeRight(0);
-          aiPanel.style.bottom = safeBottom(stackBottom);
-          aiPanel.style.width = '';
-          aiPanel.style.maxWidth = '';
-          aiPanel.style.boxShadow = SHADOW_PANEL;
-        }
-      }
+    function layoutFloaterPanel(el, z) {
+      if (!el) return;
+      el.style.top = 'auto';
+      el.style.left = 'max(12px, env(safe-area-inset-left, 0px))';
+      el.style.right = 'max(12px, env(safe-area-inset-right, 0px))';
+      el.style.width = 'auto';
+      el.style.maxWidth = 'min(420px, calc(100vw - 24px))';
+      el.style.marginLeft = 'auto';
+      el.style.marginRight = 'auto';
+      el.style.bottom = safeBottom(panelBottom);
+      el.style.height = panelMinH;
+      el.style.maxHeight = panelMaxH;
+      el.style.borderRadius = '14px';
+      el.style.boxShadow = SHADOW_PANEL;
+      el.style.zIndex = String(z);
     }
 
     if (chatPanel && !chatPanel.classList.contains('cw-hidden')) {
-      let fabStack = 0;
-      if (hasCalc) fabStack += FAB_SIZE + GAP;
-      if (chatFab) fabStack += FAB_SIZE + GAP;
-      if (hasAi) fabStack += FAB_SIZE + GAP;
-      const insetTop = fabStack + 72;
-      chatPanel.style.top = 'auto';
-      chatPanel.style.left = 'max(12px, env(safe-area-inset-left, 0px))';
-      chatPanel.style.right = 'max(12px, env(safe-area-inset-right, 0px))';
-      chatPanel.style.width = 'auto';
-      chatPanel.style.maxWidth = 'min(420px, calc(100vw - 24px))';
-      chatPanel.style.marginLeft = 'auto';
-      chatPanel.style.marginRight = 'auto';
-      chatPanel.style.height = 'min(520px, calc(100dvh - ' + insetTop + 'px))';
-      chatPanel.style.maxHeight = 'calc(100dvh - ' + insetTop + 'px)';
-      chatPanel.style.bottom = safeBottom(fabStack + 14);
-      chatPanel.style.borderRadius = '14px';
-      chatPanel.style.boxShadow = SHADOW_PANEL;
+      layoutFloaterPanel(chatPanel, 8015);
+    }
+
+    if (hasAi && aiPanel) {
+      if (aiPanel.classList.contains('open')) {
+        layoutFloaterPanel(aiPanel, 8016);
+      } else {
+        aiPanel.style.left = '';
+        aiPanel.style.right = safeRight(0);
+        aiPanel.style.bottom = safeBottom(fabStackH);
+        aiPanel.style.width = '';
+        aiPanel.style.maxWidth = '';
+        aiPanel.style.height = '';
+        aiPanel.style.maxHeight = '';
+        aiPanel.style.zIndex = '8002';
+        aiPanel.style.boxShadow = '';
+      }
     }
   }
 
@@ -128,6 +219,9 @@
     const chatBar = document.getElementById('cw-bar');
     const chatPanel = document.getElementById('cw-panel');
     const mobile = isMobile();
+    const landscape = isMobileLandscape();
+
+    syncDockBodyClass();
 
     const hasCalc = isVisible(calcFab);
     const hasAi = isVisible(aiRoot) && isVisible(aiBtn);
@@ -135,7 +229,11 @@
     const hasChatBar = isVisible(chatBar);
 
     if (mobile) {
-      layoutMobile(calcFab, calcPanel, aiBtn, aiPanel, chatBubble, chatBar, chatPanel);
+      if (landscape) {
+        layoutMobileLandscape(calcFab, calcPanel, aiBtn, aiPanel, chatBubble, chatBar, chatPanel);
+      } else {
+        layoutMobile(calcFab, calcPanel, aiBtn, aiPanel, chatBubble, chatBar, chatPanel);
+      }
       return;
     }
 
@@ -200,5 +298,24 @@
     }
   }
 
-  window.MySifaDock = { layout: layout, SHADOW_FAB: SHADOW_FAB, SHADOW_PANEL: SHADOW_PANEL };
+  window.addEventListener('resize', layout);
+  window.addEventListener('orientationchange', function () {
+    setTimeout(layout, 80);
+  });
+  if (typeof window.matchMedia === 'function') {
+    ['(max-width: 900px)', MOBILE_LANDSCAPE_BP, '(orientation: landscape)', '(orientation: portrait)'].forEach(
+      function (q) {
+        var mq = window.matchMedia(q);
+        if (mq.addEventListener) mq.addEventListener('change', layout);
+        else if (mq.addListener) mq.addListener(layout);
+      }
+    );
+  }
+
+  window.MySifaDock = {
+    layout: layout,
+    isMobileLandscape: isMobileLandscape,
+    SHADOW_FAB: SHADOW_FAB,
+    SHADOW_PANEL: SHADOW_PANEL,
+  };
 })();

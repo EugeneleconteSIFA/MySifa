@@ -1,4 +1,5 @@
 /* MySifa — palettes et styles d'interface (partagés) */
+@import url("/static/mysifa_mobile_topbar.css");
 
 /* ── Palette Marine (navy profond / ambre) ── */
 body.palette-ambre,

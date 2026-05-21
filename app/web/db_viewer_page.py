@@ -294,16 +294,7 @@ body.light .user-chip:hover{{background:rgba(8,145,178,.12)}}
 .view-tab.active{{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}}
 .view-tab:hover:not(.active){{border-color:rgba(34,211,238,.3);color:var(--text)}}
 
-/* Mobile topbar */
-.mobile-topbar{{
-  display:none;padding:12px 16px;background:var(--card);
-  border-bottom:1px solid var(--border);align-items:center;gap:12px;
-}}
-.mobile-menu-btn{{
-  background:none;border:1px solid var(--border);color:var(--text2);
-  padding:7px;border-radius:8px;cursor:pointer;display:flex;
-}}
-@media(max-width:768px){{
+@media(max-width:900px){{
   #app{{grid-template-columns:1fr}}
   .sidebar{{
     position:fixed;top:0;left:0;height:100%;width:var(--sidebar-w);
@@ -319,7 +310,7 @@ body.light .user-chip:hover{{background:rgba(8,145,178,.12)}}
 }}
 </style>
 </head>
-<body>
+<body class="has-topbar">
 <script src="/static/mysifa_theme.js"></script>
 <script>window.__MYSIFA_APP__='db';</script>
 <link rel="stylesheet" href="/static/mysifa_landscape.css">
@@ -327,13 +318,30 @@ body.light .user-chip:hover{{background:rgba(8,145,178,.12)}}
 <script src="/static/chat_widget.js"></script>
 <script src="/static/mysifa_landscape.js"></script>
 <script>window.MySifaLandscape&&MySifaLandscape.enable();</script>
+<script>
+(function(){
+  function bootChatDock(){
+    if(window._CW&&typeof window._CW.syncUser==='function')window._CW.syncUser();
+    if(window.MySifaDock&&typeof window.MySifaDock.layout==='function')window.MySifaDock.layout();
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bootChatDock);
+  else bootChatDock();
+  window.addEventListener('load',bootChatDock);
+})();
+</script>
 
 <!-- Mobile topbar -->
 <div class="mobile-topbar">
-  <button class="mobile-menu-btn" onclick="document.body.classList.toggle('sb-open')">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  <button type="button" class="mobile-menu-btn" onclick="document.body.classList.toggle('sb-open')" aria-label="Menu">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
   </button>
-  <div style="font-size:14px;font-weight:700">My<span style="color:var(--accent)">Sifa</span> <span style="color:var(--muted);font-weight:400">· Base de données</span></div>
+  <div>
+    <div class="mobile-topbar-title">Base de données</div>
+    <div class="mobile-topbar-sub">MySifa · lecture seule</div>
+  </div>
+  <button type="button" class="mobile-home-btn" onclick="window.location.href='/'" aria-label="Accueil">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/></svg>
+  </button>
 </div>
 <div class="sidebar-overlay" onclick="document.body.classList.remove('sb-open')"></div>
 

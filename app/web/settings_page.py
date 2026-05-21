@@ -77,17 +77,7 @@ body.light .theme-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 18px rg
 .logout-btn{border:none}.logout-btn:hover{color:var(--danger);background:rgba(248,113,113,.1);box-shadow:0 0 0 1px rgba(248,113,113,.35),0 0 18px rgba(248,113,113,.12)}
 .version{font-size:10px;color:var(--muted);font-family:monospace;padding:4px 12px}
 .main{flex:1;padding:24px 28px;overflow:auto}
-.mobile-topbar{display:none;align-items:center;gap:10px;margin-bottom:14px}
-.mobile-menu-btn{display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;
-  border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;font-family:inherit;flex-shrink:0}
-.mobile-menu-btn:hover{border-color:var(--accent);color:var(--accent);background:rgba(34,211,238,.12)}
-body.light .mobile-menu-btn:hover{background:rgba(8,145,178,.12)}
-.mobile-home-btn{display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;
-  border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;font-family:inherit;margin-left:auto;flex-shrink:0}
-.mobile-home-btn:hover{border-color:var(--accent);color:var(--accent);background:rgba(34,211,238,.12)}
-body.light .mobile-home-btn:hover{background:rgba(8,145,178,.12)}
-.mobile-topbar-title{font-size:14px;font-weight:800}
-.mobile-topbar-sub{font-size:11px;color:var(--muted);margin-top:2px}
+/* topbar mobile : mysifa_mobile_topbar.css */
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200}
 body.sb-open .sidebar-overlay{display:block}
 h1{font-size:22px;margin:0 0 6px}
@@ -198,10 +188,7 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .legend .item strong{display:block;margin-bottom:6px;font-size:13px}
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--border);padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;box-shadow:0 8px 32px rgba(0,0,0,.35);z-index:900}.toast.err{border-left:3px solid var(--danger)}
 @media(max-width:900px){
-  .mobile-topbar{display:flex;position:fixed;top:0;left:0;right:0;z-index:120;background:var(--bg);padding:10px 18px;border-bottom:1px solid var(--border)}
-  .mobile-menu-btn{display:inline-flex}
-  .mobile-home-btn{display:inline-flex}
-  body.has-topbar .main{padding-top:68px}
+  body.has-topbar .main{padding-top:74px}
   .main{padding:12px 14px}
   .desktop-head{display:none}
   h1{font-size:18px}

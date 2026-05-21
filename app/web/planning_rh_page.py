@@ -75,14 +75,7 @@ input,select,textarea{font-family:inherit;color:var(--text)}
 .app{display:flex;height:100vh;overflow:hidden;width:100%}
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:899}
 body.sb-open .sidebar-overlay{display:block}
-.mobile-topbar{display:none;align-items:center;gap:10px;flex-shrink:0}
-.mobile-menu-btn,.mobile-home-btn{
-  display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;
-  border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;font-family:inherit;
-}
-.mobile-menu-btn:hover,.mobile-home-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
-.mobile-topbar-title{font-size:14px;font-weight:800}
-.mobile-topbar-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.mobile-topbar{flex-shrink:0}
 .logo{padding:0 8px;margin-bottom:32px}
 .logo-brand{font-size:15px;font-weight:800}.logo-brand span{color:var(--accent)}
 .logo-sub{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase}
@@ -563,30 +556,46 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 .print-header{display:none}
 .rh-cell-print-detail{display:none} /* visible uniquement en impression */
 
+/* ── Topbar mobile : titre + barre d'outils ───────────── */
+.rh-mobile-toolbar{display:none}
+.rh-mobile-range-lbl{
+  font-size:10px;font-weight:600;color:var(--muted);
+  max-width:min(140px,32vw);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.rh-icon-btn--icon-only{min-width:36px;padding:6px 10px}
+.rh-icon-btn--icon-only .rh-icon-btn-label{display:none}
+
 /* ── Responsive (même seuil que les autres apps MySifa) ─ */
 @media(max-width:900px){
   .mobile-topbar{
-    display:flex;position:fixed;top:0;left:0;right:0;z-index:120;
-    background:var(--bg);padding:10px 18px;border-bottom:1px solid var(--border);
+    display:flex;flex-direction:column;align-items:stretch;gap:0;
+    position:fixed;top:0;left:0;right:0;z-index:120;
+    background:var(--bg);padding:8px 12px 10px;border-bottom:1px solid var(--border);
   }
-  .mobile-menu-btn,.mobile-home-btn{display:inline-flex}
-  .mobile-home-btn{margin-left:auto}
-  body.has-topbar .main.rh-main{padding-top:74px}
+  .rh-mobile-topbar-row{
+    display:flex;align-items:center;gap:10px;min-width:0;
+  }
+  .rh-mobile-topbar-row>div:not(.mobile-menu-btn):not(.mobile-home-btn){
+    flex:1;min-width:0;
+  }
+  .rh-mobile-toolbar{
+    display:flex;align-items:center;justify-content:center;
+    flex-wrap:wrap;gap:6px;padding-top:8px;margin-top:8px;
+    border-top:1px solid var(--border);
+  }
+  .rh-mobile-toolbar .rh-wk-nav button{padding:6px 8px;font-size:12px}
+  .rh-mobile-toolbar .rh-range-tab{padding:5px 10px;font-size:11px}
+  .rh-mobile-toolbar .rh-icon-btn{font-size:11px;padding:5px 8px}
+  .rh-mobile-toolbar .rh-annee-sel{font-size:11px;padding:4px 8px}
+  body.has-topbar .main.rh-main{padding-top:118px}
+  .rh-hdr{display:none!important}
+  .rh-op-wrap>.rh-op-wk-nav{display:none!important}
   .sidebar{
     position:fixed;left:0;top:0;bottom:0;z-index:900;
     transform:translateX(-105%);transition:transform .18s ease;
     box-shadow:0 16px 48px rgba(0,0,0,.55);
   }
   body.sb-open .sidebar{transform:translateX(0)}
-  .rh-range-tabs{display:none}
-  .rh-hdr-title{display:none}
-  body.rh-view-operator .rh-hdr{display:none}
-  .rh-hdr{padding:10px 14px;gap:8px;border-top:none}
-  .rh-hdr-right{width:100%;justify-content:center}
-  .rh-hdr-nav-row{width:100%;justify-content:center}
-  .rh-wk-nav button{padding:6px 8px;font-size:12px}
-  .rh-hdr-range{width:100%;text-align:center;font-size:11px}
-  .rh-icon-btn{font-size:11px;padding:5px 8px}
   .rh-content{padding:12px 14px}
 }
 @media (display-mode:standalone),(max-width:900px){
@@ -1123,18 +1132,70 @@ function render(){
   renderHeader();
   renderContent();
 }
+function rhMobileRangeLabel(){
+  if(S.user&&!S.isEditor&&!S.isReadOnlyAdmin){
+    const base=addWeeks(weekStr(new Date()),S.opOffset);
+    const weeks=Array.from({length:S.opViewRange},(_,i)=>addWeeks(base,i));
+    return weeks.length===1?fmtWeekLong(weeks[0]):`${fmtWeekLabel(weeks[0])} → ${fmtWeekLabel(weeks[weeks.length-1])}`;
+  }
+  const weeks=getWeeksToShow();
+  return weeks.length===1?fmtWeekLong(weeks[0]):`${fmtWeekLabel(weeks[0])} → ${fmtWeekLabel(weeks[weeks.length-1])}`;
+}
+
+function rhMobileToolbarHtml(){
+  if(window.innerWidth>900)return '';
+  const isOp=S.user&&!S.isEditor&&!S.isReadOnlyAdmin;
+  const isEditor=S.isEditor||S.isReadOnlyAdmin;
+  const rangeLbl=rhMobileRangeLabel();
+  const parts=[];
+
+  if(isOp){
+    parts.push(`<div class="rh-wk-nav">
+      <button type="button" onclick="S.opOffset-=S.opViewRange;loadData();" title="Précédent" aria-label="Précédent">${icon('chevron_left',14)}</button>
+      ${S.opOffset!==0?`<button type="button" class="rh-wk-today" onclick="S.opOffset=0;loadData();">Aujourd'hui</button>`:''}
+      <button type="button" onclick="S.opOffset+=S.opViewRange;loadData();" title="Suivant" aria-label="Suivant">${icon('chevron_right',14)}</button>
+    </div>`);
+    parts.push(`<span class="rh-mobile-range-lbl">${rangeLbl}</span>`);
+    parts.push(`<div class="rh-range-tabs">${rhDesktopRangeOpts().map(n=>`<button type="button" class="rh-range-tab${S.opViewRange===n?' active':''}" onclick="S.opViewRange=${n};loadData();">${n} sem.</button>`).join('')}</div>`);
+    return `<div class="rh-mobile-toolbar">${parts.join('')}</div>`;
+  }
+
+  if(!isEditor)return '';
+
+  if(S.tab==='planning'){
+    parts.push(`<div class="rh-wk-nav">
+      <button type="button" onclick="navWeeks(-S.viewRange)" title="Période précédente" aria-label="Précédent">${icon('chevron_left',14)}</button>
+      <button type="button" class="rh-wk-today" onclick="navWeeks(0)">Aujourd'hui</button>
+      <button type="button" onclick="navWeeks(S.viewRange)" title="Période suivante" aria-label="Suivant">${icon('chevron_right',14)}</button>
+    </div>`);
+    parts.push(`<span class="rh-mobile-range-lbl">${rangeLbl}</span>`);
+    parts.push(`<div class="rh-range-tabs">${rhDesktopRangeOpts().map(n=>`<button type="button" class="rh-range-tab${S.viewRange===n?' active':''}" onclick="setRange(${n})">${n} sem.</button>`).join('')}</div>`);
+    parts.push(`<button type="button" class="rh-icon-btn rh-icon-btn--icon-only" onclick="printPlanning()" title="Imprimer le planning" aria-label="Imprimer">${icon('printer',14)}<span class="rh-icon-btn-label"> Imprimer</span></button>`);
+  } else if(S.tab==='conges'){
+    parts.push(`<select class="rh-annee-sel" onchange="changeAnnee(this.value)" aria-label="Année">
+      ${[S.annee-1,S.annee,S.annee+1].map(y=>`<option value="${y}"${y===S.annee?' selected':''}>${y}</option>`).join('')}
+    </select>`);
+    parts.push(`<button type="button" class="rh-icon-btn rh-icon-btn--icon-only" onclick="printConges()" title="Imprimer" aria-label="Imprimer">${icon('printer',14)}<span class="rh-icon-btn-label"> Imprimer</span></button>`);
+  }
+  return parts.length?`<div class="rh-mobile-toolbar">${parts.join('')}</div>`:'';
+}
+
 function renderMobileTopbar(){
   const bar=document.getElementById('rh-mobile-topbar');
   if(!bar)return;
   const isOp=S.user&&!S.isEditor&&!S.isReadOnlyAdmin;
   const sub=isOp?'Ma semaine':(S.tab==='conges'?'Congés':'Planning');
+  const toolbar=window.innerWidth<=900?rhMobileToolbarHtml():'';
   bar.innerHTML=`
-    <button type="button" class="mobile-menu-btn" onclick="toggleSidebar()" aria-label="Menu">${icon('menu',20)}</button>
-    <div>
-      <div class="mobile-topbar-title">Planning RH</div>
-      <div class="mobile-topbar-sub">${sub}</div>
+    <div class="rh-mobile-topbar-row">
+      <button type="button" class="mobile-menu-btn" onclick="toggleSidebar()" aria-label="Menu">${icon('menu',20)}</button>
+      <div>
+        <div class="mobile-topbar-title">Planning RH</div>
+        <div class="mobile-topbar-sub">${sub}</div>
+      </div>
+      <button type="button" class="mobile-home-btn" onclick="window.location.href='/'" aria-label="Accueil">${icon('home',20)}</button>
     </div>
-    <button type="button" class="mobile-home-btn" onclick="window.location.href='/'" aria-label="Accueil">${icon('home',20)}</button>
+    ${toolbar}
   `;
 }
 
@@ -1227,8 +1288,13 @@ function renderHeader(){
   if(!hdr)return;
   const isEditor=S.isEditor || S.isReadOnlyAdmin;
 
+  if(window.innerWidth<=900){
+    hdr.innerHTML='';
+    return;
+  }
+
   if(!isEditor){
-    hdr.innerHTML=window.innerWidth<=900?'':'<div class="rh-hdr-title">Planning RH · <span>Ma semaine</span></div>';
+    hdr.innerHTML='<div class="rh-hdr-title">Planning RH · <span>Ma semaine</span></div>';
     return;
   }
 
@@ -1240,30 +1306,25 @@ function renderHeader(){
     <div class="rh-hdr-right">
       <div class="rh-hdr-nav-row">
         <div class="rh-wk-nav">
-          <button onclick="navWeeks(-S.viewRange)" title="Période précédente">${icon('chevron_left',14)}</button>
-          <button class="rh-wk-today" onclick="navWeeks(0)">Aujourd'hui</button>
-          <button onclick="navWeeks(S.viewRange)" title="Période suivante">${icon('chevron_right',14)}</button>
+          <button type="button" onclick="navWeeks(-S.viewRange)" title="Période précédente">${icon('chevron_left',14)}</button>
+          <button type="button" class="rh-wk-today" onclick="navWeeks(0)">Aujourd'hui</button>
+          <button type="button" onclick="navWeeks(S.viewRange)" title="Période suivante">${icon('chevron_right',14)}</button>
         </div>
         ${S.tab==='planning'?`
-          <button class="rh-icon-btn" onclick="printPlanning()" title="Imprimer le planning">
+          <button type="button" class="rh-icon-btn" onclick="printPlanning()" title="Imprimer le planning">
             ${icon('printer',13)} Imprimer
           </button>
         `:''}
       </div>
       <span class="rh-hdr-range">${rangeLabel}</span>
       <div class="rh-range-tabs">
-        ${rhDesktopRangeOpts().map(n=>`<button class="rh-range-tab${S.viewRange===n?' active':''}" onclick="setRange(${n})">${n} sem.</button>`).join('')}
+        ${rhDesktopRangeOpts().map(n=>`<button type="button" class="rh-range-tab${S.viewRange===n?' active':''}" onclick="setRange(${n})">${n} sem.</button>`).join('')}
       </div>
-      ${S.tab==='planning'?`
-        <button class="rh-icon-btn${S.detailMode?' active':''}" onclick="toggleDetail()" title="Vue détaillée jour/semaine">
-          ${icon('calendar',13)} Détail
-        </button>
-      `:''}
       ${S.tab==='conges'?`
         <select class="rh-annee-sel" onchange="changeAnnee(this.value)">
           ${[S.annee-1,S.annee,S.annee+1].map(y=>`<option value="${y}"${y===S.annee?' selected':''}>${y}</option>`).join('')}
         </select>
-        <button class="rh-icon-btn" onclick="printConges()">
+        <button type="button" class="rh-icon-btn" onclick="printConges()">
           ${icon('printer',13)} Imprimer
         </button>
       `:''}

@@ -16,6 +16,9 @@
 
   function syncPortraitClass() {
     document.body.classList.toggle('mysifa-portrait', isMobile() && isPortrait());
+    if (window.MySifaDock && typeof window.MySifaDock.layout === 'function') {
+      window.MySifaDock.layout();
+    }
   }
 
   function tryLockLandscape() {

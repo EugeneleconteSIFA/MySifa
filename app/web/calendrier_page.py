@@ -88,11 +88,17 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
 .logout-btn{border:none}.logout-btn:hover{color:var(--danger);background:rgba(248,113,113,.1)}
 .version{font-size:10px;color:var(--muted);font-family:monospace;padding:4px 12px}
 .main{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden}
-.mobile-topbar{display:none;align-items:center;gap:10px;padding:10px 18px;border-bottom:1px solid var(--border);background:var(--bg);flex-shrink:0}
-.mobile-menu-btn,.mobile-home-btn{display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;font-family:inherit;flex-shrink:0}
-.mobile-home-btn{margin-left:auto}
-.mobile-topbar-title{font-size:14px;font-weight:800}
-.mobile-topbar-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.mobile-topbar{flex-shrink:0}
+.cal-mobile-view-sel{margin-left:auto}
+.cal-mobile-view-sel{
+  display:none;flex:1;min-width:0;max-width:148px;margin-left:auto;
+  background:var(--bg);border:1px solid var(--border);border-radius:10px;
+  padding:8px 32px 8px 12px;color:var(--text);font-size:12px;font-weight:600;
+  font-family:inherit;cursor:pointer;appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 10px center;
+}
+.cal-mobile-view-sel:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px rgba(34,211,238,.12)}
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200}
 body.sb-open .sidebar-overlay{display:block}
 .cal-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:16px 20px;border-bottom:1px solid var(--border);background:var(--card);flex-shrink:0}
@@ -327,8 +333,9 @@ body.light .cal-allday-row{background:#f8fafc}
   .cal-week-num,.cal-mini-wrap,.cal-toggle,.cal-gear-btn{display:none!important}
 }
 @media(max-width:900px){
-  .mobile-topbar{display:flex}
-  .mobile-menu-btn,.mobile-home-btn{display:inline-flex}
+  .cal-mobile-view-sel{display:block}
+  .mobile-topbar-sub{display:none}
+  .cal-view-tabs,.cal-shortcuts-wrap{display:none!important}
   .sidebar{position:fixed;left:0;top:0;bottom:0;z-index:300;transform:translateX(-105%);transition:transform .18s ease;box-shadow:0 16px 48px rgba(0,0,0,.55)}
   body.sb-open .sidebar{transform:translateX(0)}
   body.has-topbar .main{padding-top:0}
@@ -342,9 +349,6 @@ body.light .cal-allday-row{background:#f8fafc}
   #btn-next{order:3;padding:8px 10px;min-width:36px;font-size:16px}
   .cal-title{order:2;flex:1;min-width:0;font-size:12px;text-align:center;line-height:1.3}
   #btn-today{order:4;padding:8px 10px;font-size:11px;white-space:nowrap}
-  .cal-view-tabs,.cal-shortcuts-wrap{display:none!important}
-  .nav-btn[data-view="month"],.nav-btn[data-view="week"],
-  .cal-view-tabs .cal-btn[data-view="month"],.cal-view-tabs .cal-btn[data-view="week"]{display:none!important}
   .cal-body{padding:0}
   .cal-agenda{width:100%;box-sizing:border-box;padding:12px}
   .cal-agenda-ev-row .cal-pill{
@@ -414,16 +418,22 @@ body.light .cal-allday-row{background:#f8fafc}
     </div>
   </aside>
   <main class="main">
-    <div class="mobile-topbar">
+    <div class="mobile-topbar mobile-topbar--home-end">
       <button type="button" class="mobile-menu-btn" id="sb-burger" aria-label="Menu">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
       </button>
       <div>
         <div class="mobile-topbar-title">Calendrier</div>
-        <div class="mobile-topbar-sub" id="mobile-sub">Vue mensuelle</div>
+        <div class="mobile-topbar-sub" id="mobile-sub">Vue agenda</div>
       </div>
+      <select id="mobile-view-sel" class="cal-mobile-view-sel" aria-label="Vue du calendrier">
+        <option value="month">Mois</option>
+        <option value="week">Semaine</option>
+        <option value="day">Jour</option>
+        <option value="agenda" selected>Agenda</option>
+      </select>
       <button type="button" class="mobile-home-btn" onclick="location.href='/'" aria-label="Accueil">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/></svg>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/></svg>
       </button>
     </div>
     <div class="cal-toolbar">
@@ -488,7 +498,7 @@ const DEFAULT_DAY_WIN={hStart:5,hEnd:21};
 const LS_VIEW='mysifa_cal_view';
 const VALID_VIEWS=['month','week','day','agenda'];
 const MINI_DOW=['L','M','M','J','V','S','D'];
-const MOBILE_BREAKPOINT=768;
+const MOBILE_BREAKPOINT=900;
 let S={view:'month',anchor:new Date(),events:[],dayWindows:{},feriesMap:{},loading:false,visible:{},pop:null,colorModal:null,createModal:null,miniCalY:null,miniCalM:null,_touchStartX:null,_touchStartY:null};
 let ME=null;
 
@@ -523,9 +533,19 @@ function applyViewChrome(v){
   document.querySelectorAll('.cal-view-tabs .cal-btn[data-view]').forEach(b=>{
     b.classList.toggle('primary',b.dataset.view===v);
   });
+  const msel=document.getElementById('mobile-view-sel');
+  if(msel&&msel.value!==v)msel.value=v;
   const subs={month:'Vue mensuelle',week:'Vue hebdomadaire',day:'Vue journalière',agenda:'Vue agenda'};
   const sub=document.getElementById('mobile-sub');
-  if(sub)sub.textContent=subs[v]||'';
+  if(sub&&!isMobileViewport())sub.textContent=subs[v]||'';
+}
+function formatAgendaPeriodTitle(start,end){
+  const d0=start.getDate(),d1=end.getDate();
+  const m0=MOIS[start.getMonth()+1],m1=MOIS[end.getMonth()+1];
+  const y0=start.getFullYear(),y1=end.getFullYear();
+  if(y0===y1&&start.getMonth()===end.getMonth())return d0+' — '+d1+' '+m1+' '+y1;
+  if(y0===y1)return d0+' '+m0+' — '+d1+' '+m1+' '+y1;
+  return d0+' '+m0+' '+y0+' — '+d1+' '+m1+' '+y1;
 }
 function isTypingTarget(el){
   if(!el)return false;
@@ -876,7 +896,7 @@ function getPeriod(){
   if(S.view==='agenda'){
     const start=startOfDay(new Date(S.anchor));
     const end=addDays(start,29);
-    return{start,end,title:'30 prochains jours'};
+    return{start,end,title:formatAgendaPeriodTitle(start,end)};
   }
   const d=startOfDay(a);
   return{start:d,end:d,title:d.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})};
@@ -1559,6 +1579,8 @@ document.getElementById('btn-print').onclick=()=>window.print();
 document.querySelectorAll('.nav-btn[data-view],.cal-view-tabs .cal-btn[data-view]').forEach(b=>{
   b.onclick=()=>setView(b.dataset.view);
 });
+const mobileViewSel=document.getElementById('mobile-view-sel');
+if(mobileViewSel)mobileViewSel.onchange=()=>setView(mobileViewSel.value);
 document.getElementById('sb-burger').onclick=()=>document.body.classList.toggle('sb-open');
 document.getElementById('sb-ov').onclick=()=>document.body.classList.remove('sb-open');
 document.getElementById('btn-theme').onclick=()=>{

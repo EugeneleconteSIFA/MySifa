@@ -301,10 +301,11 @@
   color: var(--bg);
   border-color: var(--accent);
 }
-@media (max-width: 768px) {
+@media (max-width: 900px) {
   #ai-chat-root.ai-on-portal #ai-chat-btn,
   #ai-chat-btn {
     right: max(24px, env(safe-area-inset-right, 0px));
+    z-index: 8002;
   }
   #ai-chat-panel {
     left: max(12px, env(safe-area-inset-left, 0px));
@@ -313,12 +314,28 @@
     max-width: min(420px, calc(100vw - 24px));
     margin-left: auto;
     margin-right: auto;
-    bottom: max(12px, env(safe-area-inset-bottom, 0px));
-    height: min(500px, calc(100dvh - 96px));
-    max-height: calc(100dvh - 96px);
     transform-origin: bottom center;
   }
   #ai-chat-panel.open {
     transform: scale(1) translateY(0);
+    z-index: 8016;
+  }
+}
+
+@media (max-width: 900px) and (orientation: landscape) {
+  #ai-chat-panel.open {
+    top: max(8px, env(safe-area-inset-top, 0px));
+    left: max(12px, env(safe-area-inset-left, 0px));
+    right: max(12px, env(safe-area-inset-right, 0px));
+    width: auto;
+    max-width: none;
+    margin: 0;
+    height: calc(100dvh - 72px);
+    max-height: calc(100dvh - 72px);
+    bottom: max(62px, calc(env(safe-area-inset-bottom, 0px) + 62px));
+    transform-origin: bottom center;
+  }
+  #ai-messages {
+    min-height: 0;
   }
 }

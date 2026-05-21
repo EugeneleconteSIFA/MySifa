@@ -158,3 +158,19 @@
     width: min(260px, calc(100vw - 24px));
   }
 }
+
+/* Apps paysage : pas de barre messagerie bas-gauche, bulle à droite */
+body.mysifa-landscape-required #cw-bar {
+  display: none !important;
+}
+body.mysifa-landscape-required #cw-bubble {
+  left: auto !important;
+}
+
+/* Mobile paysage — FABs en ligne, panneaux pleine hauteur utile */
+@media (max-width: 900px) and (orientation: landscape) {
+  body.mysifa-dock-landscape .calc-panel {
+    width: min(280px, calc(100vw - 48px));
+    max-height: calc(100dvh - 72px);
+  }
+}

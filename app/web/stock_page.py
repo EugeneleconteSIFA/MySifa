@@ -134,19 +134,12 @@ input,select{font-family:inherit}
 /* Main area */
 .main-area{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
 
-/* Mobile topbar (alignée sur MyProd) */
-.mobile-topbar{display:none;align-items:center;gap:10px;margin-bottom:14px}
-.mobile-menu-btn{display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;
-  border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;font-family:inherit;flex-shrink:0}
-.mobile-menu-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
-.mobile-home-btn{display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;
-  border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;font-family:inherit;margin-left:auto;flex-shrink:0}
-.mobile-home-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
-.mobile-print-btn{display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;
-  border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;font-family:inherit;flex-shrink:0}
+/* topbar mobile : mysifa_mobile_topbar.css */
+.mobile-print-btn{
+  display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;
+  border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;font-family:inherit;flex-shrink:0;
+}
 .mobile-print-btn:hover,.mobile-print-btn.active{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
-.mobile-topbar-title{font-size:14px;font-weight:800}
-.mobile-topbar-sub{font-size:11px;color:var(--muted);margin-top:2px}
 
 /* Sidebar overlay mobile */
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200}
@@ -155,9 +148,6 @@ body.sb-open .sidebar-overlay{display:block}
   .sidebar{position:fixed;left:0;top:0;bottom:0;height:auto;max-height:100vh;z-index:300;    transform:translateX(-105%);transition:transform .18s ease;
     box-shadow:0 16px 48px rgba(0,0,0,.55)}
   body.sb-open .sidebar{transform:translateX(0)}
-  .mobile-topbar{display:flex;position:fixed;top:0;left:0;right:0;z-index:120;background:var(--bg);padding:10px 18px;border-bottom:1px solid var(--border)}
-  .mobile-menu-btn{display:inline-flex}
-  .mobile-home-btn{display:inline-flex}
   .mobile-print-btn{display:inline-flex}
   /* La topbar est fixed → on décale uniquement la barre de recherche. */
   body.has-topbar .search-bar-wrap{margin-top:74px}

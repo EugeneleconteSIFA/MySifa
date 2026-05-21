@@ -57,7 +57,8 @@
 
   const CW_STYLES = `
 @keyframes cwPulse{0%,100%{opacity:1}50%{opacity:.3}}
-#cw-bar{position:fixed;bottom:24px;left:24px;z-index:8002;width:340px;max-width:calc(100vw - 48px);
+#cw-bar{display:none!important}
+#cw-bar-legacy{position:fixed;bottom:24px;left:24px;z-index:8002;width:340px;max-width:calc(100vw - 48px);
   background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px 16px;
   display:flex;align-items:center;gap:12px;cursor:pointer;transition:border-color .15s,box-shadow .18s,transform .18s;
   font-family:inherit;box-shadow:0 4px 16px rgba(0,0,0,.2)}
@@ -84,6 +85,9 @@ body.light #cw-bar.cw-portal-accent #cw-bar-icon{background:rgba(255,255,255,.22
 #cw-bar.cw-portal-accent #cw-bar-badge{background:#fff;color:#0a0e17;border:2px solid rgba(10,14,23,.15)}
 body.light #cw-bar.cw-portal-accent #cw-bar-badge{border-color:rgba(15,23,42,.12)}
 #cw-bubble{position:fixed;z-index:8002;
+  right:max(24px,env(safe-area-inset-right,0px));
+  bottom:max(24px,env(safe-area-inset-bottom,0px));
+  left:auto!important;
   width:48px;height:48px;border-radius:50%;background:var(--accent);border:none;
   display:flex;align-items:center;justify-content:center;cursor:pointer;
   transition:transform .18s,box-shadow .18s;color:var(--bg);overflow:visible;
@@ -98,8 +102,7 @@ body.light #cw-bubble-badge{border-color:#fff}
   font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;
   box-shadow:0 12px 48px rgba(0,0,0,0.5)}
 #cw-panel.cw-hidden{display:none!important}
-#cw-panel.cw-mode-bar{left:max(24px,env(safe-area-inset-left,0px));bottom:110px}
-#cw-panel.cw-mode-bubble{bottom:auto;right:auto}
+#cw-panel.cw-mode-bubble{bottom:auto;right:auto;left:auto}
 #cw-panel-left{width:168px;flex-shrink:0;border-right:1px solid var(--border);
   display:flex;flex-direction:column;overflow:hidden;min-height:0}
 .cw-list-section{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
@@ -278,7 +281,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
 .cw-overlay-err{font-size:12px;color:var(--danger);margin-top:8px}
 #cw-back-list.cw-hidden{display:none}
 .cw-list-topbar{display:none}
-@media (max-width:768px){
+@media (max-width:900px){
   .cw-list-topbar{
     display:flex;align-items:center;justify-content:space-between;gap:10px;
     padding:12px 14px 10px;border-bottom:1px solid var(--border);
@@ -292,27 +295,15 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     font-size:22px;cursor:pointer;z-index:5;
   }
   #cw-close-list:hover,#cw-close:hover{color:var(--accent);border-color:var(--accent)}
-  body.cw-panel-open #cw-bar,body.cw-panel-open #cw-bubble{display:none!important}
-  #cw-bar{
-    width:48px;height:48px;padding:0;border-radius:50%;max-width:none;
-    left:auto!important;display:flex!important;
-    justify-content:center;align-items:center;cursor:pointer;
-    z-index:8002;
-  }
-  #cw-bar #cw-bar-text{display:none}
-  #cw-bar #cw-bar-icon-wrap{margin:0}
-  #cw-bar #cw-bar-icon{width:40px;height:40px}
   #cw-panel{
     position:fixed!important;top:auto!important;
     left:max(12px,env(safe-area-inset-left,0px))!important;
     right:max(12px,env(safe-area-inset-right,0px))!important;
     width:auto!important;max-width:min(420px,calc(100vw - 24px))!important;
     margin-left:auto!important;margin-right:auto!important;
-    height:min(520px,calc(100dvh - 120px))!important;
-    max-height:calc(100dvh - 120px)!important;
     border-radius:14px!important;border:1px solid var(--border)!important;
     box-shadow:0 12px 48px rgba(0,0,0,.5)!important;
-    z-index:8010!important;
+    z-index:8015!important;
   }
   #cw-panel-left{
     width:100%;max-width:100%;flex:1;min-width:0;border-right:none;
@@ -338,6 +329,53 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
   .cw-msg-attach-img img{max-width:min(240px,100%)}
   .cw-react-picker{margin-top:-8px}
   #cw-back-list{display:flex!important}
+}
+@media (max-width:900px) and (orientation:landscape){
+  body.cw-mobile #cw-panel{
+    display:flex!important;
+    flex-direction:row!important;
+    align-items:stretch!important;
+    max-width:none!important;
+    width:auto!important;
+    min-height:0!important;
+  }
+  body.cw-mobile #cw-panel-left{
+    display:flex!important;
+    pointer-events:auto!important;
+    flex:0 0 min(168px,34vw)!important;
+    width:min(168px,34vw)!important;
+    max-width:34vw!important;
+    min-width:120px!important;
+    border-right:1px solid var(--border)!important;
+  }
+  body.cw-mobile.cw-chat-active #cw-panel-left{
+    display:flex!important;
+  }
+  body.cw-mobile #cw-panel-right{
+    display:flex!important;
+    flex:1!important;
+    min-width:0!important;
+    width:auto!important;
+    visibility:visible!important;
+    pointer-events:auto!important;
+  }
+  body.cw-mobile:not(.cw-chat-active) #cw-panel-right{
+    visibility:hidden!important;
+    pointer-events:none!important;
+    width:0!important;
+    flex:0!important;
+    overflow:hidden!important;
+  }
+  body.cw-mobile.cw-chat-active #cw-panel-right{
+    visibility:visible!important;
+    pointer-events:auto!important;
+    flex:1!important;
+    width:auto!important;
+  }
+  body.cw-mobile.cw-chat-active .cw-list-topbar{display:none}
+  #cw-panel-header{padding:8px 12px}
+  #cw-messages{padding:8px 10px}
+  .cw-msg-wrap{max-width:72%}
 }
 `;
 
@@ -497,51 +535,23 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     if (document.getElementById('cw-panel')) document.getElementById('cw-panel').remove();
 
     syncFromWindow();
-    if (CW.isPortal) {
-      const bar = document.createElement('div');
-      bar.id = 'cw-bar';
-      bar.className = 'cw-portal-accent';
-      bar.setAttribute('role', 'button');
-      bar.setAttribute('tabindex', '0');
-      bar.setAttribute('aria-label', 'Messagerie');
-      bar.innerHTML =
-        '<div id="cw-bar-icon-wrap"><div id="cw-bar-icon">' +
-        ICO_MSG +
-        '</div><span id="cw-bar-badge"></span></div>' +
-        '<div id="cw-bar-text"><div id="cw-bar-title">Messagerie</div>' +
-        '<div id="cw-bar-preview">Aucun message</div></div>';
-      const openChat = () => {
-        unlockAudio();
-        togglePanel();
-      };
-      bar.addEventListener('click', openChat);
-      bar.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          openChat();
-        }
-      });
-      document.body.appendChild(bar);
-    } else {
-      const bub = document.createElement('button');
-      bub.type = 'button';
-      bub.id = 'cw-bubble';
-      bub.setAttribute('aria-label', 'Messagerie');
-      bub.innerHTML =
-        '<span class="cw-bubble-ico" aria-hidden="true">' +
-        ICO_MSG +
-        '</span><span id="cw-bubble-badge" aria-label=""></span>';
-      bub.addEventListener('click', () => {
-        unlockAudio();
-        togglePanel();
-      });
-      document.body.appendChild(bub);
-    }
+    const bub = document.createElement('button');
+    bub.type = 'button';
+    bub.id = 'cw-bubble';
+    bub.setAttribute('aria-label', 'Messagerie');
+    bub.innerHTML =
+      '<span class="cw-bubble-ico" aria-hidden="true">' +
+      ICO_MSG +
+      '</span><span id="cw-bubble-badge" aria-label=""></span>';
+    bub.addEventListener('click', () => {
+      unlockAudio();
+      togglePanel();
+    });
+    document.body.appendChild(bub);
 
     const panel = document.createElement('div');
     panel.id = 'cw-panel';
-    panel.className =
-      'cw-hidden ' + (CW.isPortal ? 'cw-mode-bar' : 'cw-mode-bubble');
+    panel.className = 'cw-hidden cw-mode-bubble';
     panel.innerHTML =
       '<div id="cw-panel-left">' +
       '<div class="cw-list-topbar">' +
@@ -745,15 +755,22 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     el.style.height = Math.min(Math.max(CW_INPUT_MIN_H, el.scrollHeight), 96) + 'px';
   }
 
-  const CW_MOBILE_BP = '(max-width: 768px)';
+  const CW_MOBILE_BP = '(max-width: 900px)';
+  const CW_MOBILE_LANDSCAPE_BP = '(max-width: 900px) and (orientation: landscape)';
 
   function isCwMobile() {
     return window.matchMedia(CW_MOBILE_BP).matches;
   }
 
+  function isCwMobileLandscape() {
+    return window.matchMedia(CW_MOBILE_LANDSCAPE_BP).matches;
+  }
+
   function syncMobileChatUi() {
     const mobile = isCwMobile();
+    const landscape = isCwMobileLandscape();
     document.body.classList.toggle('cw-mobile', mobile);
+    document.body.classList.toggle('cw-mobile-landscape', mobile && landscape);
     document.body.classList.toggle('cw-panel-open', mobile && CW.open);
     document.body.classList.toggle('cw-chat-active', mobile && CW.open && !!CW.activeId);
     const backBtn = document.getElementById('cw-back-list');
@@ -794,13 +811,14 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
   /** Panneau portail : au-dessus de la barre Messagerie avec un léger décalage. */
   function positionPortalPanel() {
     if (!CW.isPortal || isCwMobile()) return;
-    const bar = document.getElementById('cw-bar');
+    const trigger = document.getElementById('cw-bubble') || document.getElementById('cw-bar');
     const panel = document.getElementById('cw-panel');
-    if (!bar || !panel || panel.classList.contains('cw-hidden')) return;
+    if (!trigger || !panel || panel.classList.contains('cw-hidden')) return;
     const gap = 14;
-    const barTop = bar.getBoundingClientRect().top;
-    panel.style.bottom = window.innerHeight - barTop + gap + 'px';
-    panel.style.left = getComputedStyle(bar).left;
+    const top = trigger.getBoundingClientRect().top;
+    panel.style.bottom = window.innerHeight - top + gap + 'px';
+    panel.style.left = 'auto';
+    panel.style.right = getComputedStyle(trigger).right;
   }
 
   function attachmentHtml(msg) {
@@ -1739,9 +1757,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
   };
 
   function hasCorrectChatTrigger() {
-    return CW.isPortal
-      ? !!document.getElementById('cw-bar')
-      : !!document.getElementById('cw-bubble');
+    return !!document.getElementById('cw-bubble');
   }
 
   CW.init = async function () {
@@ -1762,6 +1778,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     buildDom();
     syncAdminButtons();
     syncMobileChatUi();
+    dockLayout();
     document.addEventListener('click', unlockAudio, { once: false, capture: true });
     startBgPoll();
     return true;
