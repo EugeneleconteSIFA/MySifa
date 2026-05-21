@@ -169,12 +169,15 @@ body.light .cw-channel-item:hover{background:rgba(0,0,0,.04)}
 .cw-msg-wrap{position:relative;display:flex;flex-direction:column;max-width:82%;word-break:break-word}
 .cw-msg-wrap.cw-mine{align-self:flex-end;align-items:flex-end}
 .cw-msg-wrap.cw-theirs{align-self:flex-start;align-items:flex-start}
-.cw-react-picker{display:none;position:absolute;top:-36px;background:var(--card);
-  border:1px solid var(--border);border-radius:10px;padding:4px 6px;
-  gap:2px;z-index:10;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.3)}
-.cw-msg-wrap:hover .cw-react-picker{display:flex}
-.cw-msg-wrap.cw-mine .cw-react-picker{right:0}
-.cw-msg-wrap.cw-theirs .cw-react-picker{left:0}
+.cw-msg-bubble-wrap{position:relative;display:inline-block;max-width:100%}
+.cw-react-picker{display:none;position:absolute;top:100%;left:0;right:auto;
+  margin-top:-10px;background:var(--card);border:1px solid var(--border);border-radius:10px;
+  padding:4px 6px;gap:2px;z-index:12;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.3);
+  pointer-events:auto}
+.cw-msg-wrap:hover .cw-react-picker,.cw-msg-bubble-wrap:hover .cw-react-picker,
+.cw-react-picker:hover{display:flex}
+.cw-msg-wrap.cw-mine .cw-react-picker{left:auto;right:0}
+.cw-msg-wrap.cw-theirs .cw-react-picker{left:0;right:auto}
 .cw-react-btn{background:none;border:none;cursor:pointer;font-size:16px;
   padding:2px 4px;border-radius:6px;line-height:1.2;transition:background .1s}
 .cw-react-btn:hover{background:var(--accent-bg)}
@@ -262,6 +265,57 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
 .cw-btn-primary{background:var(--accent);border:none;color:#0a0e17}
 .cw-btn-primary:disabled{opacity:.5;cursor:not-allowed}
 .cw-overlay-err{font-size:12px;color:var(--danger);margin-top:8px}
+#cw-back-list.cw-hidden{display:none}
+@media (max-width:768px){
+  body.cw-panel-open{overflow:hidden}
+  body.cw-panel-open #cw-bar,body.cw-panel-open #cw-bubble{display:none!important}
+  #cw-bar{
+    width:48px;height:48px;padding:0;border-radius:50%;max-width:none;
+    left:auto!important;right:max(16px,env(safe-area-inset-right,0px))!important;
+    bottom:max(16px,env(safe-area-inset-bottom,0px))!important;
+    justify-content:center;align-items:center;cursor:pointer;
+  }
+  #cw-bar #cw-bar-text{display:none}
+  #cw-bar #cw-bar-icon-wrap{margin:0}
+  #cw-bar #cw-bar-icon{width:40px;height:40px}
+  #cw-panel{
+    position:fixed!important;inset:0!important;left:0!important;right:0!important;
+    top:0!important;bottom:0!important;width:100%!important;max-width:100%!important;
+    height:100dvh!important;max-height:100dvh!important;
+    border-radius:0!important;border:none!important;box-shadow:none!important;
+    z-index:8010!important;
+  }
+  #cw-panel.cw-mode-bar,#cw-panel.cw-mode-bubble{bottom:auto!important}
+  #cw-panel-left{
+    width:100%;max-width:100%;flex:1;min-width:0;border-right:none;
+    position:absolute;left:0;top:0;bottom:0;z-index:2;
+    transform:translateX(0);transition:transform .2s ease;
+  }
+  body.cw-chat-active #cw-panel-left{transform:translateX(-105%);pointer-events:none}
+  #cw-panel-right{flex:1;width:100%;min-width:0;min-height:0;display:flex}
+  body:not(.cw-chat-active) #cw-panel-right{
+    visibility:hidden;pointer-events:none;width:0;flex:0;overflow:hidden;
+  }
+  body.cw-chat-active #cw-panel-right{
+    visibility:visible;pointer-events:auto;width:100%;flex:1;
+  }
+  #cw-panel-header{
+    padding-top:max(10px,env(safe-area-inset-top,0px));
+    padding-left:max(10px,env(safe-area-inset-left,0px));
+    padding-right:max(10px,env(safe-area-inset-right,0px));
+  }
+  #cw-input-row{
+    padding-bottom:max(10px,env(safe-area-inset-bottom,0px));
+    padding-left:max(8px,env(safe-area-inset-left,0px));
+    padding-right:max(8px,env(safe-area-inset-right,0px));
+  }
+  #cw-messages{padding-left:max(10px,env(safe-area-inset-left,0px));
+    padding-right:max(10px,env(safe-area-inset-right,0px))}
+  .cw-msg-wrap{max-width:88%}
+  .cw-msg-attach-img img{max-width:min(240px,100%)}
+  .cw-react-picker{margin-top:-8px}
+  #cw-back-list{display:flex!important}
+}
 `;
 
   function escAttr(s) {
@@ -469,7 +523,9 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       '<div id="cw-dm-picker" class="cw-hidden">' +
       '<input type="search" id="cw-dm-search" placeholder="Rechercher un collègue…" autocomplete="off">' +
       '<div id="cw-dm-list"></div></div>' +
-      '<div id="cw-panel-header"><span id="cw-header-avatar" class="cw-header-avatar cw-hidden"></span>' +
+      '<div id="cw-panel-header">' +
+      '<button type="button" class="cw-header-btn cw-hidden" id="cw-back-list" aria-label="Retour aux conversations">←</button>' +
+      '<span id="cw-header-avatar" class="cw-header-avatar cw-hidden"></span>' +
       '<span id="cw-panel-title">Messagerie</span>' +
       '<button type="button" class="cw-header-btn cw-hidden" id="cw-channel-info" title="Membres du canal" aria-label="Membres du canal">' +
       ICO_SETTINGS +
@@ -490,6 +546,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     document.body.appendChild(panel);
 
     document.getElementById('cw-close').addEventListener('click', () => togglePanel(false));
+    document.getElementById('cw-back-list')?.addEventListener('click', mobileBackToList);
     document.getElementById('cw-attach').addEventListener('click', () => {
       document.getElementById('cw-file-input')?.click();
     });
@@ -643,6 +700,54 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     el.style.height = Math.min(Math.max(CW_INPUT_MIN_H, el.scrollHeight), 96) + 'px';
   }
 
+  const CW_MOBILE_BP = '(max-width: 768px)';
+
+  function isCwMobile() {
+    return window.matchMedia(CW_MOBILE_BP).matches;
+  }
+
+  function syncMobileChatUi() {
+    const mobile = isCwMobile();
+    document.body.classList.toggle('cw-mobile', mobile);
+    document.body.classList.toggle('cw-panel-open', mobile && CW.open);
+    document.body.classList.toggle('cw-chat-active', mobile && CW.open && !!CW.activeId);
+    const backBtn = document.getElementById('cw-back-list');
+    if (backBtn) {
+      backBtn.classList.toggle('cw-hidden', !mobile || !CW.activeId);
+    }
+    const panel = document.getElementById('cw-panel');
+    if (panel && mobile && CW.open) {
+      panel.style.left = '';
+      panel.style.right = '';
+      panel.style.bottom = '';
+      panel.style.top = '';
+      panel.style.width = '';
+      panel.style.height = '';
+      panel.style.boxShadow = '';
+    } else if (panel && !mobile) {
+      panel.style.width = '';
+      panel.style.height = '';
+      panel.style.maxHeight = '';
+    }
+    if (mobile && CW.open) return;
+    if (!mobile && CW.isPortal && CW.open) positionPortalPanel();
+  }
+
+  function mobileBackToList() {
+    CW.activeId = null;
+    CW.lastMsgId = 0;
+    stopTypingPolls();
+    if (CW.pollTimer) {
+      clearInterval(CW.pollTimer);
+      CW.pollTimer = null;
+    }
+    const box = document.getElementById('cw-messages');
+    if (box) box.innerHTML = '<div id="cw-empty-hint">Sélectionnez un canal</div>';
+    updateChannelHeader();
+    renderChannelLists();
+    syncMobileChatUi();
+  }
+
   function dockLayout() {
     if (window.MySifaDock && typeof window.MySifaDock.layout === 'function') {
       window.MySifaDock.layout();
@@ -651,7 +756,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
 
   /** Panneau portail : au-dessus de la barre Messagerie avec un léger décalage. */
   function positionPortalPanel() {
-    if (!CW.isPortal) return;
+    if (!CW.isPortal || isCwMobile()) return;
     const bar = document.getElementById('cw-bar');
     const panel = document.getElementById('cw-panel');
     if (!bar || !panel || panel.classList.contains('cw-hidden')) return;
@@ -818,7 +923,8 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     wrap.className = 'cw-msg-wrap ' + (mine ? 'cw-mine' : 'cw-theirs');
     wrap.dataset.id = String(msg.id);
     if (msg.created_at) wrap.dataset.at = String(msg.created_at);
-    wrap.innerHTML = picker + bubble + rxHtml;
+    wrap.innerHTML =
+      '<div class="cw-msg-bubble-wrap">' + bubble + picker + '</div>' + rxHtml;
     bindReactionHandlers(wrap, msg.id);
     return wrap;
   }
@@ -916,7 +1022,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
   async function loadChannels() {
     await syncChatState(false);
 
-    if (!CW.activeId && CW.channels.length) {
+    if (!CW.activeId && CW.channels.length && !isCwMobile()) {
       let pick = CW.channels[0];
       let maxU = -1;
       CW.channels.forEach((c) => {
@@ -929,6 +1035,8 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       await selectChannel(pick.id);
     } else if (CW.activeId) {
       await selectChannel(CW.activeId);
+    } else {
+      syncMobileChatUi();
     }
   }
 
@@ -971,6 +1079,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     } catch (e) {
       box.innerHTML = '<div id="cw-empty-hint">Chargement impossible.</div>';
     }
+    syncMobileChatUi();
   }
 
   async function pollMessages() {
@@ -1472,9 +1581,10 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       } catch (e) {}
       if (!CW.channels.length) await loadChannels();
       else if (CW.activeId) await selectChannel(CW.activeId);
-      else await loadChannels();
+      else if (!isCwMobile()) await loadChannels();
+      else syncMobileChatUi();
       syncChatState(false);
-      if (CW.isPortal) {
+      if (CW.isPortal && !isCwMobile()) {
         requestAnimationFrame(() => {
           positionPortalPanel();
           requestAnimationFrame(positionPortalPanel);
@@ -1482,6 +1592,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       }
     } else {
       panel.classList.add('cw-hidden');
+      document.body.classList.remove('cw-panel-open', 'cw-chat-active');
       if (bar) bar.classList.remove('cw-bar-active');
       if (CW.pollTimer) {
         clearInterval(CW.pollTimer);
@@ -1492,6 +1603,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       if (picker) picker.classList.add('cw-hidden');
       closeOverlay();
     }
+    syncMobileChatUi();
     dockLayout();
   }
 
@@ -1516,6 +1628,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     }
     syncAdminButtons();
     refreshBadge();
+    syncMobileChatUi();
     dockLayout();
   };
 
@@ -1535,6 +1648,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     injectStyles();
     buildDom();
     syncAdminButtons();
+    syncMobileChatUi();
     document.addEventListener('click', unlockAudio, { once: false, capture: true });
     startBgPoll();
     return true;
@@ -1559,6 +1673,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     });
     CW._inited = false;
     CW.open = false;
+    document.body.classList.remove('cw-mobile', 'cw-panel-open', 'cw-chat-active');
     dockLayout();
   };
 
@@ -1574,8 +1689,20 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
   }
 
   window.addEventListener('resize', () => {
-    if (CW.open && CW.isPortal) positionPortalPanel();
+    syncMobileChatUi();
+    dockLayout();
+    if (CW.open && CW.isPortal && !isCwMobile()) positionPortalPanel();
   });
+
+  if (typeof window.matchMedia === 'function') {
+    const mq = window.matchMedia(CW_MOBILE_BP);
+    const onMq = () => {
+      syncMobileChatUi();
+      dockLayout();
+    };
+    if (mq.addEventListener) mq.addEventListener('change', onMq);
+    else if (mq.addListener) mq.addListener(onMq);
+  }
 
   boot();
   window._CW = CW;
