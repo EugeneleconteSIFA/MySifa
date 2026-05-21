@@ -46,9 +46,10 @@
   bottom:calc(max(24px, env(safe-area-inset-bottom, 0px)) + 58px);
   right:max(84px, calc(env(safe-area-inset-right, 0px) + 24px));
   width:46px;height:46px;border-radius:50%;background:var(--card);border:1px solid var(--border);
-  display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative;
-  transition:border-color .15s;color:var(--accent)}
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  transition:border-color .15s;color:var(--accent);box-shadow:0 4px 16px rgba(0,0,0,.25)}
 #cw-bubble:hover{border-color:var(--accent)}
+#cw-bubble-badge{position:absolute;top:-4px;right:-4px}
 #cw-panel{position:fixed;z-index:8003;width:360px;height:480px;max-height:calc(100vh - 80px);
   background:var(--card);border:1px solid var(--border);border-radius:14px;display:flex;overflow:hidden;
   font-family:'Segoe UI',system-ui,sans-serif}
@@ -193,7 +194,13 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
   }
 
   function buildDom() {
-    if (document.getElementById('cw-panel')) return;
+    const hasTrigger = CW.isPortal
+      ? document.getElementById('cw-bar')
+      : document.getElementById('cw-bubble');
+    if (hasTrigger && document.getElementById('cw-panel')) return;
+    if (document.getElementById('cw-bar')) document.getElementById('cw-bar').remove();
+    if (document.getElementById('cw-bubble')) document.getElementById('cw-bubble').remove();
+    if (document.getElementById('cw-panel')) document.getElementById('cw-panel').remove();
 
     if (CW.isPortal) {
       const bar = document.createElement('div');
@@ -573,9 +580,12 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     syncFromWindow();
     if (!CW.uid) {
       const ok = await fetchMe();
-      if (!ok) return;
+      if (!ok) return false;
     }
-    if (CW._inited) return;
+    const hasTrigger = CW.isPortal
+      ? document.getElementById('cw-bar')
+      : document.getElementById('cw-bubble');
+    if (CW._inited && hasTrigger && document.getElementById('cw-panel')) return true;
     CW._inited = true;
 
     injectStyles();
@@ -583,6 +593,14 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     refreshBadge();
     if (CW.badgeTimer) clearInterval(CW.badgeTimer);
     CW.badgeTimer = setInterval(refreshBadge, 30000);
+    return true;
+  };
+
+  CW.ensureReady = async function () {
+    syncFromWindow();
+    if (!CW.uid) await fetchMe();
+    if (!CW.uid) return false;
+    return CW.init();
   };
 
   CW.destroy = function () {
@@ -597,11 +615,14 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
   };
 
   function boot() {
+    const run = () => CW.ensureReady();
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => CW.init());
+      document.addEventListener('DOMContentLoaded', run);
     } else {
-      CW.init();
+      run();
     }
+    window.addEventListener('load', run);
+    setTimeout(run, 1200);
   }
 
   boot();

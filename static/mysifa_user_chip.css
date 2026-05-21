@@ -28,9 +28,16 @@ body.light .rh-user-chip:hover {
 }
 .user-chip .uc-avatar,
 .fab-user-chip .uc-avatar,
-.rh-user-chip .uc-avatar {
+.rh-user-chip .uc-avatar,
+.user-chip img[class*="uc-avatar"],
+.fab-user-chip img[class*="uc-avatar"],
+.rh-user-chip img[class*="uc-avatar"] {
   width: 36px;
   height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  max-width: 36px;
+  max-height: 36px;
   border-radius: 50%;
   object-fit: cover;
   border: 1px solid var(--border);

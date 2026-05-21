@@ -104,8 +104,12 @@ input,select{font-family:inherit}
   gap:6px;flex-shrink:0;margin-top:auto;background:var(--card)}
 .user-chip{padding:10px 12px;border-radius:8px;background:var(--accent-bg);cursor:pointer}
 .user-chip:hover{background:rgba(34,211,238,.18)}
-.uc-name{font-size:12px;font-weight:600;color:var(--text)}
-.uc-role{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px}
+.user-chip .uc-top{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.user-chip .uc-avatar{width:36px;height:36px;min-width:36px;border-radius:50%;object-fit:cover;border:1px solid var(--border);flex-shrink:0;display:block}
+.user-chip .uc-info{flex:1;min-width:0}
+.user-chip .uc-name,.uc-name{font-size:12px;font-weight:600;color:var(--text)}
+.user-chip .uc-role,.uc-role{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px}
+.user-chip .uc-profil{font-size:10px;color:var(--accent);margin-top:3px;display:flex;align-items:center;gap:4px}
 .back-mysifa{
   border:none!important;background:transparent!important;font-weight:400!important;
   color:var(--text2)!important;padding:8px 10px!important;
@@ -892,8 +896,9 @@ function iconEl(name, size=16){
 function el(tag, attrs, ...children) {
   const e = document.createElement(tag);
   if (attrs) {
-    const { cls, on, style: s, html, ...rest } = attrs;
-    if (cls) e.className = cls;
+    const { cls, className, on, style: s, html, ...rest } = attrs;
+    const cn = cls || className;
+    if (cn) e.className = cn;
     if (on) Object.entries(on).forEach(([ev,fn]) => e.addEventListener(ev, fn));
     if (s && typeof s === 'object') Object.assign(e.style, s);
     if (html) { e.innerHTML = html; }
@@ -3692,6 +3697,10 @@ async function init() {
   if (user && window.MySifaTheme) MySifaTheme.mergeFromUser(user);
   if (!user) { window.location.href='/'; return; }
   S.user = user;
+  window.__MYSIFA_UID__=user.id;
+  window.__MYSIFA_NOM__=user.nom||'';
+  window.__MYSIFA_ROLE__=user.role||'';
+  if(window._CW&&typeof window._CW.syncUser==='function')window._CW.syncUser();
   S.stockReadOnly = (user.role === 'commercial');
   // Fabrication : accès restreint à l'onglet traça uniquement
   S.tracaOnly = (user.role === 'fabrication');

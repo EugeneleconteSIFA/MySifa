@@ -40,6 +40,13 @@
     return labels[u.role] || u.role || '';
   }
 
+  function domAttrs(extra) {
+    var a = extra || {};
+    if (a.className && !a.cls) a.cls = a.className;
+    if (a.cls && !a.className) a.className = a.cls;
+    return a;
+  }
+
   function profilLinkHtml(editIconHtml) {
     var ico = editIconHtml || '';
     return '<div class="uc-profil">' + ico + ' Mon profil</div>';
@@ -103,25 +110,25 @@
       parts.push(
         h(
           'div',
-          { className: 'uc-top' },
-          h('img', { className: 'uc-avatar', src: url, alt: '' }),
+          domAttrs({ className: 'uc-top' }),
+          h('img', domAttrs({ className: 'uc-avatar', src: url, alt: '', width: 36, height: 36 })),
           h(
             'div',
-            { className: 'uc-info' },
-            h('div', { className: 'uc-name' }, nom),
-            h('div', { className: 'uc-role' }, role)
+            domAttrs({ className: 'uc-info' }),
+            h('div', domAttrs({ className: 'uc-name' }), nom),
+            h('div', domAttrs({ className: 'uc-role' }), role)
           )
         )
       );
     } else {
-      parts.push(h('div', { className: 'uc-name' }, nom));
-      parts.push(h('div', { className: 'uc-role' }, role));
+      parts.push(h('div', domAttrs({ className: 'uc-name' }), nom));
+      parts.push(h('div', domAttrs({ className: 'uc-role' }), role));
     }
     if (showProfil) {
       parts.push(
         h(
           'div',
-          { className: 'uc-profil' },
+          domAttrs({ className: 'uc-profil' }),
           iconElFn ? iconElFn('edit', 10) : null,
           ' Mon profil'
         )
@@ -134,7 +141,7 @@
     opts = opts || {};
     var h = hFn;
     var cls = opts.chipClass || 'user-chip';
-    var chipOpts = {
+    var chipOpts = domAttrs({
       className: cls,
       style: Object.assign({ cursor: 'pointer' }, opts.style || {}),
       title: opts.title || 'Mon profil',
@@ -143,7 +150,7 @@
         function () {
           global.location.href = '/profil';
         },
-    };
+    });
     return h('div', chipOpts, children(u, hFn, iconElFn, opts));
   }
 

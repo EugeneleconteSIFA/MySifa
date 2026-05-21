@@ -3067,6 +3067,10 @@ async function init(){
   if(!user){ window.location.href='/'; return; }
   if(window.MySifaTheme)MySifaTheme.mergeFromUser(user);
   set({user});
+  window.__MYSIFA_UID__=user.id;
+  window.__MYSIFA_NOM__=user.nom||'';
+  window.__MYSIFA_ROLE__=user.role||'';
+  if(window._CW&&typeof window._CW.syncUser==='function')window._CW.syncUser();
 
   await loadFournisseursFSC();
   await loadOperationsConfig();

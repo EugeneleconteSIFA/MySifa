@@ -3671,6 +3671,12 @@ async function boot(){
   try{r=await fetch("/api/auth/me",{credentials:"include"});}catch(e){location.href="/";return;}
   if(!r.ok){location.href="/";return;}
   ME=await r.json();
+  if(ME&&ME.id){
+    window.__MYSIFA_UID__=ME.id;
+    window.__MYSIFA_NOM__=ME.nom||"";
+    window.__MYSIFA_ROLE__=ME.role||"";
+    if(window._CW&&typeof window._CW.syncUser==="function")window._CW.syncUser();
+  }
   if(window.MySifaTheme)MySifaTheme.mergeFromUser(ME);
   try{
     const list=await api(`/machines`);
