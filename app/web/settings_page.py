@@ -494,7 +494,7 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
           <div style="font-size:15px;font-weight:700;color:var(--text)">Journal des actions</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <input type="text" id="audit-search"
-                   placeholder="Rechercher (utilisateur, objet…)"
+                   placeholder="Rechercher (utilisateur, objet, requête Google…)"
                    style="background:var(--bg);border:1px solid var(--border);border-radius:8px;
                           padding:7px 12px;color:var(--text);font-size:12px;width:200px;
                           font-family:inherit;outline:none"
@@ -510,6 +510,7 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
               <option value="rh">RH</option>
               <option value="settings">Paramètres</option>
               <option value="auth">Auth</option>
+              <option value="portal">Portail</option>
             </select>
             <select id="audit-filter-action" onchange="loadAuditLogs()"
                     style="background:var(--bg);border:1px solid var(--border);border-radius:8px;
@@ -521,6 +522,7 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
               <option value="CLOSE">Clôture</option>
               <option value="VALIDATE">Validation</option>
               <option value="REORDER">Réorganisation</option>
+              <option value="SEARCH">Recherche</option>
             </select>
           </div>
         </div>
@@ -2322,14 +2324,19 @@ const ACTION_COLORS = {
   CLOSE:    'var(--muted)',
   VALIDATE: 'var(--warn)',
   REORDER:  'var(--text2)',
+  SEARCH:   'var(--accent)',
+  LOGIN:    'var(--text2)',
+  LOGOUT:   'var(--muted)',
 };
 const ACTION_LABELS = {
   CREATE:'Création', UPDATE:'Modification', DELETE:'Suppression',
   CLOSE:'Clôture', VALIDATE:'Validation', REORDER:'Réorganisation',
+  SEARCH:'Recherche', LOGIN:'Connexion', LOGOUT:'Déconnexion',
 };
 const MODULE_LABELS = {
   planning:'Planning', fabrication:'Fabrication', stock:'Stock',
   expe:'Expéditions', rh:'RH', settings:'Paramètres', auth:'Auth',
+  portal:'Portail',
 };
 
 async function loadAuditLogs() {

@@ -24,8 +24,8 @@ def log_action(
 
     Args:
         user    : dict retourné par get_current_user()
-        action  : CREATE | UPDATE | DELETE | CLOSE | REORDER | VALIDATE | LOGIN | LOGOUT
-        module  : planning | fabrication | stock | expe | rh | settings | auth
+        action  : CREATE | UPDATE | DELETE | CLOSE | REORDER | VALIDATE | LOGIN | LOGOUT | SEARCH
+        module  : planning | fabrication | stock | expe | rh | settings | auth | portal
         objet   : description courte (ex: "Dossier REF-4521 · Cohésio 1")
         detail  : dict ou str avec contexte supplémentaire (avant/après, champs modifiés)
         ip      : adresse IP (Request.client.host)

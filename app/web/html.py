@@ -1765,7 +1765,13 @@ async function doLogin(email,password){
       return;
     }
     authEpoch++;
-    S.user=r.user;
+    // Profil complet : la réponse login ne contient pas tous les champs (adresse, date_naissance).
+    try{
+      const me=await api('/api/auth/me');
+      S.user=me||r.user;
+    }catch(e){
+      S.user=r.user;
+    }
     S.app=HAS_INITIAL_APP ? INITIAL_APP : 'portal';
     // Support : redirection post-login (ex: /?next=/planning)
     try{
@@ -3127,9 +3133,19 @@ function renderPortal(){
   );
   setTimeout(()=>{if(apps.length)attachPortalReorder(appsWrap);},0);
 
+  function logPortalGoogleSearch(query){
+    if(!S.user||!query) return;
+    fetch('/api/portal/google-search',{
+      method:'POST',
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({q:query}),
+    }).catch(()=>{});
+  }
   function openGoogle(q){
     const query = String(q||'').trim();
     if(!query) return;
+    logPortalGoogleSearch(query);
     const url = 'https://www.google.com/search?q=' + encodeURIComponent(query);
     // Ouvre un nouvel onglet (Chrome)
     window.open(url, '_blank', 'noopener');

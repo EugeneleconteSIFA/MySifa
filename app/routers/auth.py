@@ -217,6 +217,8 @@ async def login(request: Request):
             "role": u_pub["role"],
             "operateur_lie": u_pub.get("operateur_lie"),
             "telephone": u_pub.get("telephone", ""),
+            "adresse": u_pub.get("adresse", ""),
+            "date_naissance": u_pub.get("date_naissance", ""),
             "app_access": u_pub.get("app_access", {}),
         },
     })
@@ -252,6 +254,29 @@ def logout(request: Request, response: Response):
             objet=f"Déconnexion · {user.get('email', '')}",
             ip=client_ip,
         )
+    return {"success": True}
+
+
+# ─── Portail — recherche Google ─────────────────────────────────────
+@router.post("/api/portal/google-search")
+async def portal_google_search(request: Request):
+    """Journalise une recherche Google depuis le portail d'accueil (audit_logs)."""
+    user = get_current_user(request)
+    body = await request.json()
+    q = str(body.get("q") or "").strip()
+    if not q:
+        raise HTTPException(status_code=400, detail="Requête vide")
+    if len(q) > 200:
+        q = q[:200]
+    client_ip = request.client.host if request.client else None
+    log_action(
+        user=user,
+        action="SEARCH",
+        module="portal",
+        objet=f"Recherche Google · {q}",
+        detail={"q": q},
+        ip=client_ip,
+    )
     return {"success": True}
 
 

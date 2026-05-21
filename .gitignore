@@ -1,45 +1,27 @@
 # Python
+venv/
 __pycache__/
 *.py[cod]
+.Python
 *.egg-info/
-.venv/
-venv/
+.eggs/
 
-# Secrets & local
+# OS
+.DS_Store
+Thumbs.db
+
+# Base locale (ne jamais versionner la DB active)
+data/production.db
+data/production.db.*
+data/*.bak
+data/*.backup
+mysifa.db
+production.db
+
+# Widget Electron (build local — upload via deploy.sh --widget)
+myprod-widget/node_modules/
+myprod-widget/dist/
+
+# Env / secrets
 .env
 .env.*
-
-# Base SQLite (une seule vérité : défaut data/production.db via DB_PATH)
-*.db
-*.db-journal
-*.db-wal
-*.db-shm
-*.bak
-
-# Sauvegardes outil
-data/backups/
-
-# Fichiers déposés par l’app (garder la structure du dossier si besoin)
-data/uploads/*
-!data/uploads/.gitkeep
-uploads/
-
-# OS / IDE
-.DS_Store
-.idea/
-.vscode/
-*.swp
-
-# MyProd Widget (Electron) — artefacts locaux
-myprod-widget/node_modules/
-# dist/ : ignorer les dossiers temporaires et fichiers de build,
-# mais tracker les installateurs (.exe / .dmg / .blockmap) pour déploiement VPS via git
-myprod-widget/dist/win-unpacked/
-myprod-widget/dist/mac/
-myprod-widget/dist/mac-arm64/
-myprod-widget/dist/builder-debug.yml
-myprod-widget/dist/builder-effective-config.yaml
-myprod-widget/dist/MyProd-Widget-
-
-# Logs locaux
-nohup.out
