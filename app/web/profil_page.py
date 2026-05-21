@@ -200,6 +200,36 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 .btn-save:disabled{opacity:.6;cursor:not-allowed}
 .meta{font-size:11px;color:var(--muted);margin-top:14px;line-height:1.6}
 
+/* ── Photo de profil ── */
+.prof-avatar-wrap{display:flex;align-items:center;gap:16px;margin-bottom:18px;padding-bottom:18px;border-bottom:1px solid var(--border)}
+.prof-avatar-box{position:relative;flex-shrink:0;width:80px;height:80px}
+.prof-avatar,.prof-avatar-ph{
+  width:80px;height:80px;border-radius:50%;border:2px solid var(--border);
+  object-fit:cover;display:block;background:var(--bg);
+}
+.prof-avatar-ph{
+  display:flex;align-items:center;justify-content:center;
+  font-size:22px;font-weight:800;color:var(--accent);background:var(--accent-bg);
+}
+.prof-avatar-actions{display:flex;flex-direction:column;gap:8px;flex:1;min-width:0}
+.prof-avatar-hint{font-size:11px;color:var(--muted);line-height:1.5;margin:0}
+.btn-avatar{
+  align-self:flex-start;padding:8px 14px;border-radius:10px;border:1px solid var(--border);
+  background:transparent;color:var(--text2);font-size:12px;font-weight:600;
+  cursor:pointer;font-family:inherit;transition:border-color .15s,color .15s,background .15s;
+}
+.btn-avatar:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.btn-avatar-danger:hover{border-color:var(--danger);color:var(--danger);background:rgba(248,113,113,.1)}
+.user-chip .uc-avatar{
+  width:28px;height:28px;border-radius:50%;object-fit:cover;border:1px solid var(--border);
+  margin-bottom:6px;display:block;background:var(--bg);
+}
+.user-chip .uc-avatar-ph{
+  width:28px;height:28px;border-radius:50%;border:1px solid var(--border);
+  margin-bottom:6px;display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:800;color:var(--accent);background:var(--accent-bg);
+}
+
 /* ── Toast ── */
 .toast{position:fixed;bottom:22px;right:22px;z-index:9999;padding:11px 16px;
   border-radius:10px;font-size:13px;font-weight:600;
@@ -409,6 +439,34 @@ function fD(iso){
 }
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');}
 
+function avatarInitials(nom){
+  const p=String(nom||'').trim().split(/\s+/).filter(Boolean);
+  if(!p.length)return '?';
+  if(p.length===1)return p[0].slice(0,2).toUpperCase();
+  return (p[0][0]+p[p.length-1][0]).toUpperCase();
+}
+function avatarPreviewHtml(u,size){
+  const sz=size||80;
+  const url=(u&&u.avatar_url)?String(u.avatar_url).trim():'';
+  if(url){
+    return '<img class="prof-avatar" src="'+esc(url)+'" alt="" width="'+sz+'" height="'+sz+'">';
+  }
+  return '<div class="prof-avatar-ph" aria-hidden="true">'+esc(avatarInitials(u&&u.nom))+'</div>';
+}
+function avatarChipHtml(u){
+  const url=(u&&u.avatar_url)?String(u.avatar_url).trim():'';
+  if(url){
+    return '<img class="uc-avatar" src="'+esc(url)+'" alt="">';
+  }
+  return '<div class="uc-avatar-ph" aria-hidden="true">'+esc(avatarInitials(u&&u.nom))+'</div>';
+}
+function refreshAvatarPreview(){
+  const box=document.getElementById('prof-avatar-box');
+  if(box)box.innerHTML=avatarPreviewHtml(ME,80);
+  const del=document.getElementById('btn-avatar-del');
+  if(del)del.style.display=(ME&&ME.avatar_url)?'':'none';
+}
+
 // ── Onglets ───────────────────────────────────────────────────────
 function showTab(tab){
   CURRENT_TAB=tab;
@@ -505,12 +563,22 @@ function renderInfo(){
   const u=ME||{};
   const role=ROLE_LABELS[u.role]||u.role||'';
   const ring=profileRingHtml(profileCompletionPercent(u));
+  const hasAvatar=!!(u.avatar_url&&String(u.avatar_url).trim());
   document.getElementById('pane-info').innerHTML=`
     <div class="card">
       <div class="role-pill">${esc(role)}</div>
       <div class="card-head">
         <h2>Informations personnelles</h2>
         ${ring}
+      </div>
+      <div class="prof-avatar-wrap">
+        <div class="prof-avatar-box" id="prof-avatar-box">${avatarPreviewHtml(u,80)}</div>
+        <div class="prof-avatar-actions">
+          <p class="prof-avatar-hint">Photo de profil — jpg, png, webp ou gif, 4 Mo max.</p>
+          <input type="file" id="prof-avatar-input" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none">
+          <button type="button" class="btn-avatar" id="btn-avatar-pick">Choisir une photo</button>
+          <button type="button" class="btn-avatar btn-avatar-danger" id="btn-avatar-del" style="display:${hasAvatar?'':'none'}">Supprimer la photo</button>
+        </div>
       </div>
       <form id="profil-form" onsubmit="return false;">
         ${fieldHtml('Nom complet','f-nom','text',u.nom)}
@@ -530,6 +598,49 @@ function renderInfo(){
       </form>
     </div>`;
   document.getElementById('btn-save').onclick=saveInfo;
+  document.getElementById('btn-avatar-pick').onclick=()=>document.getElementById('prof-avatar-input')?.click();
+  document.getElementById('prof-avatar-input').onchange=uploadAvatar;
+  document.getElementById('btn-avatar-del').onclick=deleteAvatar;
+}
+
+async function uploadAvatar(){
+  const inp=document.getElementById('prof-avatar-input');
+  const file=inp&&inp.files&&inp.files[0];
+  if(inp)inp.value='';
+  if(!file)return;
+  const fd=new FormData();
+  fd.append('photo',file);
+  try{
+    const r=await fetch('/api/auth/me/avatar',{method:'POST',credentials:'include',body:fd});
+    if(r.status===401){location.href='/?next=/profil';return;}
+    if(!r.ok){
+      let msg='Enregistrement impossible';
+      try{const j=await r.json();msg=(j&&j.detail)?(typeof j.detail==='string'?j.detail:JSON.stringify(j.detail)):msg;}catch(e){}
+      throw new Error(msg);
+    }
+    const j=await r.json();
+    if(ME)ME.avatar_url=j.url||'';
+    refreshAvatarPreview();
+    updateUserChip();
+    toast('Photo enregistrée',true);
+  }catch(e){
+    toast(e.message||'Enregistrement impossible',false);
+  }
+}
+
+async function deleteAvatar(){
+  if(!confirm('Supprimer la photo de profil ?'))return;
+  try{
+    const r=await fetch('/api/auth/me/avatar',{method:'DELETE',credentials:'include'});
+    if(r.status===401){location.href='/?next=/profil';return;}
+    if(!r.ok)throw new Error('Suppression impossible');
+    if(ME)ME.avatar_url='';
+    refreshAvatarPreview();
+    updateUserChip();
+    toast('Photo supprimée',true);
+  }catch(e){
+    toast(e.message||'Suppression impossible',false);
+  }
 }
 
 async function saveInfo(){
@@ -778,6 +889,12 @@ async function savePrefs(){return saveThemePrefs();}
 // ── Sidebar bottom : user chip + theme toggle + logout ────────────
 function updateUserChip(){
   if(!ME)return;
+  const chip=document.querySelector('.user-chip');
+  if(chip){
+    const av=chip.querySelector('.uc-avatar,.uc-avatar-ph');
+    if(av)av.remove();
+    chip.insertAdjacentHTML('afterbegin',avatarChipHtml(ME));
+  }
   const n=document.getElementById('uc-name');
   const r=document.getElementById('uc-role');
   if(n)n.textContent=ME.nom||'—';

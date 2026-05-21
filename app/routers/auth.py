@@ -1,12 +1,16 @@
 """SIFA — Auth v0.8 — profil utilisateur + fiche admin"""
 import json
-from datetime import datetime
-from typing import List, Optional
 import re
 import unicodedata
-from fastapi import APIRouter, Request, Response, HTTPException
+import uuid
+from datetime import datetime
+from pathlib import Path
+from typing import List, Optional
+
+from fastapi import APIRouter, File, HTTPException, Request, Response, UploadFile
 from fastapi.responses import JSONResponse, Response as PlainResponse
 
+from config import BASE_DIR
 from database import get_db
 from services.audit_service import log_action
 from services.auth_service import (
@@ -219,6 +223,7 @@ async def login(request: Request):
             "telephone": u_pub.get("telephone", ""),
             "adresse": u_pub.get("adresse", ""),
             "date_naissance": u_pub.get("date_naissance", ""),
+            "avatar_url": u_pub.get("avatar_url") or "",
             "app_access": u_pub.get("app_access", {}),
         },
     })
@@ -280,6 +285,33 @@ async def portal_google_search(request: Request):
     return {"success": True}
 
 
+def _avatar_file_from_url(url: str) -> Optional[Path]:
+    if not url or not isinstance(url, str):
+        return None
+    rel = url.strip().lstrip("/")
+    if rel.startswith("..") or rel.startswith("/"):
+        return None
+    if not rel.startswith("uploads/avatars/"):
+        return None
+    p = (Path(BASE_DIR) / rel).resolve()
+    try:
+        p.relative_to((Path(BASE_DIR) / "uploads" / "avatars").resolve())
+    except ValueError:
+        return None
+    return p
+
+
+def _delete_avatar_file(url: Optional[str]) -> None:
+    if not url:
+        return
+    old_p = _avatar_file_from_url(str(url))
+    if old_p and old_p.is_file():
+        try:
+            old_p.unlink()
+        except OSError:
+            pass
+
+
 # ─── Profil courant ───────────────────────────────────────────────
 @router.get("/api/auth/me")
 def me(request: Request):
@@ -289,7 +321,7 @@ def me(request: Request):
         return PlainResponse(content=b"null", media_type="application/json")
     with get_db() as conn:
         row = conn.execute(
-            "SELECT id,email,identifiant,nom,role,operateur_lie,machine_id,telephone,adresse,date_naissance,access_overrides,portal_apps_order,theme_prefs FROM users WHERE id=?",
+            "SELECT id,email,identifiant,nom,role,operateur_lie,machine_id,telephone,adresse,date_naissance,avatar_url,access_overrides,portal_apps_order,theme_prefs FROM users WHERE id=?",
             (user["id"],)
         ).fetchone()
     if not row:
@@ -364,6 +396,74 @@ async def update_me(request: Request):
         conn.commit()
 
     return {"success": True}
+
+
+@router.post("/api/auth/me/avatar")
+async def upload_my_avatar(request: Request, photo: UploadFile = File(...)):
+    """Upload de la photo de profil de l'utilisateur connecté."""
+    user = get_current_user(request)
+    allowed = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+    if (photo.content_type or "") not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail="Format image non accepté (jpg, png, webp, gif).",
+        )
+    ext_map = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif"}
+    ext = ext_map.get(photo.content_type or "", "jpg")
+    dest_dir = Path(BASE_DIR) / "uploads" / "avatars"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"user_{user['id']}_{uuid.uuid4().hex[:8]}.{ext}"
+    dest = dest_dir / filename
+    content = await photo.read()
+    if len(content) > 4 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Fichier trop volumineux (max 4 Mo).")
+    with open(dest, "wb") as f:
+        f.write(content)
+    url = f"/uploads/avatars/{filename}"
+    with get_db() as conn:
+        ex = conn.execute("SELECT avatar_url FROM users WHERE id=?", (user["id"],)).fetchone()
+        if not ex:
+            try:
+                dest.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+        _delete_avatar_file(ex["avatar_url"])
+        conn.execute("UPDATE users SET avatar_url=? WHERE id=?", (url, user["id"]))
+        conn.commit()
+    client_ip = request.client.host if request.client else None
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="auth",
+        objet="Photo de profil",
+        detail={"avatar": True},
+        ip=client_ip,
+    )
+    return {"url": url}
+
+
+@router.delete("/api/auth/me/avatar")
+def delete_my_avatar(request: Request):
+    """Supprime la photo de profil de l'utilisateur connecté."""
+    user = get_current_user(request)
+    with get_db() as conn:
+        ex = conn.execute("SELECT avatar_url FROM users WHERE id=?", (user["id"],)).fetchone()
+        if not ex:
+            raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+        _delete_avatar_file(ex["avatar_url"])
+        conn.execute("UPDATE users SET avatar_url=NULL WHERE id=?", (user["id"],))
+        conn.commit()
+    client_ip = request.client.host if request.client else None
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="auth",
+        objet="Photo de profil",
+        detail={"avatar": False},
+        ip=client_ip,
+    )
+    return {"ok": True}
 
 
 # ─── Gestion utilisateurs (super admin uniquement) ──────────────

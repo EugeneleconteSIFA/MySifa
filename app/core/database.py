@@ -1496,6 +1496,14 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 33, "fab_matieres_fsc_warning")
 
+    # v34 — Photo de profil utilisateur
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=34 LIMIT 1").fetchone():
+        ucols = {r["name"] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
+        if "avatar_url" not in ucols:
+            conn.execute("ALTER TABLE users ADD COLUMN avatar_url TEXT")
+        conn.commit()
+        _record_schema_migration(conn, 34, "users_avatar_url")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,
