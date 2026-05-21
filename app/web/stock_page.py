@@ -591,6 +591,8 @@ body.light .field-input.empl-upper::placeholder{
 .recep-note-inp::placeholder{color:var(--muted)}
 /* Historique */
 .recep-hist{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.recep-hist-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.recep-hist-row{min-width:min(100%,560px)}
 .recep-hist-head{padding:12px 16px;border-bottom:1px solid var(--border);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);display:flex;align-items:center;gap:7px}
 .recep-hist-row{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid rgba(255,255,255,.04);transition:background .1s;cursor:pointer}
 .recep-hist-row:last-child{border-bottom:none}
@@ -3302,6 +3304,7 @@ function buildReception() {
   } else if (!S.recepHistory.length) {
     hist.appendChild(el('div', { cls: 'recep-hist-empty' }, 'Aucune réception enregistrée'));
   } else {
+    const histScroll = el('div', { cls: 'recep-hist-scroll' });
     S.recepHistory.forEach(lot => {
       const dateStr = lot.created_at ? lot.created_at.slice(0,16).replace('T', ' ') : '—';
       const isOpen = S.recepExpandedId === lot.id;
@@ -3316,7 +3319,7 @@ function buildReception() {
         el('span', { cls: 'recep-hist-four' }, lot.fournisseur || ''),
         el('span', { cls: 'recep-hist-user' }, lot.created_by_name || '')
       );
-      hist.appendChild(row);
+      histScroll.appendChild(row);
       if (isOpen) {
         const detail = el('div', { cls: 'recep-hist-detail', style: { padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '10px' } });
         if (lot.items && lot.items.length) {
@@ -3374,9 +3377,10 @@ function buildReception() {
           detail.appendChild(editNote);
           detail.appendChild(saveBtn);
         }
-        hist.appendChild(detail);
+        histScroll.appendChild(detail);
       }
     });
+    hist.appendChild(histScroll);
   }
   wrap.appendChild(hist);
   return wrap;

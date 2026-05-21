@@ -23,6 +23,7 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_ai_chat.css">
 <link rel="stylesheet" href="/static/mysifa_dock.css">
+<link rel="stylesheet" href="/static/mysifa_landscape.css">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -838,8 +839,8 @@ body.light .portal-apps--reorderable .portal-app--placeholder:hover{background:r
 .portal-apps-hint{font-size:11px;color:var(--muted);text-align:center;margin:8px 0 0;width:100%;line-height:1.35}
 .portal-app{display:flex;flex-direction:column;align-items:center;gap:8px;
   background:var(--card);border:1px solid var(--border);border-radius:16px;
-  padding:16px 14px;cursor:pointer;transition:all .2s;text-decoration:none;
-  width:168px;height:152px;flex:0 0 168px;box-sizing:border-box;
+  padding:14px 12px;cursor:pointer;transition:all .2s;text-decoration:none;
+  width:148px;height:132px;flex:0 0 148px;box-sizing:border-box;
   justify-content:center}
 .portal-app--disabled{cursor:default;opacity:.6;position:relative}
 .portal-app--disabled:hover{border-color:var(--border);background:var(--card)}
@@ -852,7 +853,7 @@ body.light .portal-apps--reorderable .portal-app--placeholder:hover{background:r
   background:rgba(10,14,23,.72);border-radius:16px;font-size:12px;font-weight:700;color:var(--accent);letter-spacing:.02em}
 body.light .portal-app--busy::after{background:rgba(255,255,255,.88);color:var(--accent)}
 .portal-app-icon{display:flex;align-items:center;justify-content:center;line-height:1;flex-shrink:0}
-.portal-app-name{font-size:15px;font-weight:800;color:var(--text);flex-shrink:0;text-align:center;line-height:1.2}
+.portal-app-name{font-size:14px;font-weight:800;color:var(--text);flex-shrink:0;text-align:center;line-height:1.2}
 .portal-app-desc{font-size:11px;color:var(--muted);text-align:center;max-width:152px;line-height:1.3;
   display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
   flex:0 0 auto;margin:0}
@@ -907,11 +908,12 @@ body.light .portal-logout:hover:last-of-type{text-shadow:0 0 12px rgba(220,38,38
     width:auto;
     flex:none;
     height:auto;
-    padding:14px 10px;
+    padding:12px 8px;
     align-items:center;
   }
   .portal-app-desc{display:none}
-  .portal-app-icon svg{width:32px;height:32px}
+  .portal-app-name{font-size:13px}
+  .portal-app-icon svg{width:28px;height:28px}
 }
 
 /* ── MyStock ────────────────────────────────────────────────────── */
@@ -1161,6 +1163,7 @@ body.light .stock-empl-suggest-add:hover{background:rgba(124,58,237,.2);color:#1
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/chat_widget.js"></script>
 <script src="/static/mysifa_ai_chat.js"></script>
+<script src="/static/mysifa_landscape.js"></script>
 <script>
 const API=window.location.origin;
 const INITIAL_APP="__INITIAL_APP_VALUE__";
@@ -7289,12 +7292,6 @@ function renderMachineStatusCards(){
       h('div',{style:{display:'flex',gap:'8px'}},
         h('button',{
           type:'button',
-          id:'mst-widget-btn',
-          style:{fontSize:'10px',color:'#22c55e',background:'rgba(34,197,94,.1)',border:'1px solid rgba(34,197,94,.3)',borderRadius:'6px',cursor:'pointer',padding:'3px 8px',fontFamily:'inherit'},
-          onClick:()=>window.open('/install/widget','_blank')
-        },'📲 Installer widget'),
-        h('button',{
-          type:'button',
           id:'mst-refresh-btn',
           style:{fontSize:'10px',color:'var(--accent)',background:'none',border:'none',cursor:'pointer',padding:'2px 6px',fontFamily:'inherit'},
           onClick:async()=>{
@@ -10307,6 +10304,14 @@ function render(){
     window._calc_unmount();
   }
   if(window.MySifaDock && typeof window.MySifaDock.layout==='function') window.MySifaDock.layout();
+
+  if(S.app==='prod'||S.app==='expe'){
+    document.body.classList.add('mysifa-landscape-required');
+    if(window.MySifaLandscape&&typeof window.MySifaLandscape.enable==='function') window.MySifaLandscape.enable();
+  }else{
+    document.body.classList.remove('mysifa-landscape-required');
+    document.body.classList.remove('mysifa-portrait');
+  }
 
   // PWA: feature temporairement retirée. (setupInstallButton supprimé)
 

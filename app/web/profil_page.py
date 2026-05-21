@@ -193,6 +193,7 @@ body.sb-open .sidebar-overlay{display:block}
   background:var(--bg);color:var(--text);font-size:14px;font-family:inherit;outline:none;
   transition:border-color .15s}
 .field input:focus{border-color:var(--accent)}
+.field input[type=date]{max-width:min(220px,100%);width:100%;box-sizing:border-box}
 hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 .btn-save{background:var(--accent);color:#0a0e17;border:none;border-radius:10px;
   padding:11px 20px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit;

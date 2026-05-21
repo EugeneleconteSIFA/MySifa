@@ -512,8 +512,12 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 <div id="app"></div>
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='planning';</script>
+<link rel="stylesheet" href="/static/mysifa_landscape.css">
 <script src="/static/mysifa_dock.js"></script>
+<script src="/static/mysifa_calc.js"></script>
 <script src="/static/chat_widget.js"></script>
+<script src="/static/mysifa_landscape.js"></script>
+<script>window.MySifaLandscape&&MySifaLandscape.enable();</script>
 <script>
 // Handler d'erreurs installé *avant* le script principal (capte aussi les erreurs de parsing).
 function showFatal(message, lineno, colno, extra){
@@ -564,7 +568,9 @@ const DEFAULTS_BY_KEY={
 };
 const DAY_API={1:"lundi",2:"mardi",3:"mercredi",4:"jeudi",5:"vendredi",6:"samedi"};
 const DAY_FIELD={1:"horaires_lundi",2:"horaires_mardi",3:"horaires_mercredi",4:"horaires_jeudi",5:"horaires_vendredi",6:"horaires_samedi"};
-let S={machine:null,machines:[],entries:[],timeline:[],wo:0,loading:true,holidays:{},dayWorked:{},dayHoraires:{},weekComments:{},dayComments:{},view:localStorage.getItem("mysifa.planning.view")||"2w",
+let _planView=localStorage.getItem("mysifa.planning.view")||"2w";
+if(_planView==="4w")_planView="2w";
+let S={machine:null,machines:[],entries:[],timeline:[],wo:0,loading:true,holidays:{},dayWorked:{},dayHoraires:{},weekComments:{},dayComments:{},view:_planView,
   contactOpen:false,contactSubject:"",contactMessage:"",contactSending:false,searchQuery:"",tlSearchQuery:"",tlSearchIdx:0,activeDossier:null,
   tlTotalDays:5,machineHoursPerDay:16};
 let _allTlMatches=[];
@@ -933,7 +939,7 @@ async function load(){
 
 async function loadDayWorked(){
   const mon=addD(getMon(new Date()),S.wo*7);
-  const nb=S.view==="1w"?6:S.view==="4w"?27:13;
+  const nb=S.view==="1w"?6:13;
   const start=ymd(mon), end=ymd(addD(mon,nb));
   const rows=await api(`/machines/${MID}/day-work?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
   const map={};
@@ -943,7 +949,7 @@ async function loadDayWorked(){
 
 async function loadDayHoraires(){
   const mon=addD(getMon(new Date()),S.wo*7);
-  const nb=S.view==="1w"?6:S.view==="4w"?27:13;
+  const nb=S.view==="1w"?6:13;
   const start=ymd(mon), end=ymd(addD(mon,nb));
   const rows=await api(`/machines/${MID}/day-horaires?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
   const map={};
@@ -954,7 +960,7 @@ async function loadDayHoraires(){
 async function loadHolidays(){
   const mon=addD(getMon(new Date()),S.wo*7);
   const start=ymd(mon);
-  const nb=S.view==="1w"?6:S.view==="4w"?27:13;
+  const nb=S.view==="1w"?6:13;
   const end=ymd(addD(mon,nb));
   const rows=await api(`/machines/${MID}/holidays?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
   const map={};
@@ -965,7 +971,7 @@ async function loadHolidays(){
 async function loadCalendarComments(){
   if(!MID) return;
   const mon=addD(getMon(new Date()),S.wo*7);
-  const nb=S.view==="1w"?6:S.view==="4w"?27:13;
+  const nb=S.view==="1w"?6:13;
   const start=ymd(mon), end=ymd(addD(mon,nb));
   try{
     const data=await api(`/machines/${MID}/calendar-comments?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
@@ -1516,8 +1522,8 @@ function render(){
   const sl=S.timeline;
   const m1=addD(getMon(new Date()),S.wo*7),m2=addD(m1,7);
   const w1=wkNum(m1),w2=wkNum(m2);
-  const nw=S.view==="1w"?1:S.view==="4w"?4:2;
-  const navLbl=S.wo===0?"actuelle":(S.view==="4w"?`${fd(m1)}–${fd(addD(m1,27))}`:`S${w1}`);
+  const nw=S.view==="1w"?1:2;
+  const navLbl=S.wo===0?"actuelle":`S${w1}`;
   let tlBlocks="";
   for(let wi=0;wi<nw;wi++){
     const mn=addD(m1,wi*7);
@@ -1577,7 +1583,6 @@ function render(){
           <div class="view-tabs">
             <button type="button" class="view-tab ${S.view==="1w"?"active":""}" onclick="setView('1w')">Semaine</button>
             <button type="button" class="view-tab ${S.view==="2w"?"active":""}" onclick="setView('2w')">2 semaines</button>
-            <button type="button" class="view-tab ${S.view==="4w"?"active":""}" onclick="setView('4w')">Mois</button>
           </div>
           <div class="wk-nav">
             <button type="button" onclick="S.wo--;load()">◀</button>
@@ -1786,7 +1791,7 @@ async function tlNavTo(rawIdx){
   const s=_allTlMatches[S.tlSearchIdx];
   // Si le slot est hors de la vue courante → déplacer la vue
   const targetWo=woForSlot(s);
-  const nw=S.view==="1w"?1:S.view==="4w"?4:2;
+  const nw=S.view==="1w"?1:2;
   const m1=addD(getMon(new Date()),S.wo*7);
   const viewEnd=addD(m1,nw*7);
   const ss=new Date(s.start),se=new Date(s.end);
@@ -1803,7 +1808,7 @@ function tlSearchPrev(){ tlNavTo(S.tlSearchIdx-1); }
 function renderTL(){
   computeAllTlMatches();
   const m1=addD(getMon(new Date()),S.wo*7);
-  const nw=S.view==="1w"?1:S.view==="4w"?4:2;
+  const nw=S.view==="1w"?1:2;
   const sl=S.timeline;
   let tlBlocks="";
   for(let wi=0;wi<nw;wi++){
@@ -3299,6 +3304,7 @@ function changeMachine(v){
 }
 
 function setView(v){
+  if(v==="4w")v="2w";
   S.view=v;
   localStorage.setItem("mysifa.planning.view",v);
   load();

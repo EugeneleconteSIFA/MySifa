@@ -78,11 +78,13 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
 #chat-wrap{flex:1;display:flex;min-width:0;min-height:100vh}
 #chat-left{
   width:280px;flex-shrink:0;background:var(--card);border-right:1px solid var(--border);
-  display:flex;flex-direction:column;min-height:100vh;
+  display:flex;flex-direction:column;min-height:100vh;overflow:hidden;
 }
-#chat-left-head{
+.chat-list-section{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
+.chat-list-section-dms{border-top:1px solid var(--border)}
+#chat-left-head,#chat-dm-head{
   display:flex;align-items:center;justify-content:space-between;gap:8px;
-  padding:14px 12px;border-bottom:1px solid var(--border);flex-shrink:0;
+  padding:14px 12px 8px;flex-shrink:0;
 }
 .chat-section-title{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;padding:0 4px}
 #btn-new-channel{
@@ -91,7 +93,7 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
   font-weight:700;line-height:1;font-family:inherit;
 }
 #btn-new-channel:hover{border-color:var(--accent);color:var(--accent)}
-#chat-channels-list,#chat-dms-list{overflow-y:auto;padding:4px 6px;flex:1;min-height:0}
+#chat-channels-list,#chat-dms-list{overflow-y:auto;padding:4px 6px;flex:1;min-height:0;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
 #chat-left-foot{padding:10px 12px;border-top:1px solid var(--border);flex-shrink:0}
 #chat-left-foot button{
   width:100%;display:flex;align-items:center;justify-content:center;gap:8px;
@@ -295,13 +297,19 @@ body.sb-open .sidebar-overlay{display:block}
   </aside>
   <div id="chat-wrap">
     <div id="chat-left">
-      <div id="chat-left-head">
-        <div class="chat-section-title">Canaux</div>
-        <button type="button" id="btn-new-channel" title="Nouveau canal" style="display:none" onclick="openNewChannel()">+</button>
+      <div class="chat-list-section chat-list-section-channels">
+        <div id="chat-left-head">
+          <div class="chat-section-title">Canaux</div>
+          <button type="button" id="btn-new-channel" title="Nouveau canal" style="display:none" onclick="openNewChannel()">+</button>
+        </div>
+        <div id="chat-channels-list"></div>
       </div>
-      <div id="chat-channels-list"></div>
-      <div class="chat-section-title" style="margin:12px 10px 4px">Messages directs</div>
-      <div id="chat-dms-list"></div>
+      <div class="chat-list-section chat-list-section-dms">
+        <div id="chat-dm-head">
+          <div class="chat-section-title">Messages directs</div>
+        </div>
+        <div id="chat-dms-list"></div>
+      </div>
       <div id="chat-left-foot">
         <button type="button" onclick="openNewDm()">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>

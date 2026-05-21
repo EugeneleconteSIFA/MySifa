@@ -138,6 +138,7 @@ body.light{--cal-ferie-bg:color-mix(in srgb, var(--danger) 9%, transparent)}
 /* Agenda */
 .cal-agenda{background:var(--bg);padding:16px;min-height:120px}
 .cal-agenda-empty{text-align:center;color:var(--muted);font-size:14px;padding:48px 16px;margin:0}
+.cal-agenda-day-empty{font-size:12px;color:var(--muted);font-style:italic;margin:0;padding:4px 0}
 .cal-agenda-day{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px}
 .cal-agenda-day-head{
   display:flex;align-items:center;flex-wrap:wrap;gap:8px;
@@ -337,10 +338,10 @@ body.light .cal-allday-row{background:#f8fafc}
   .cal-toolbar{flex-wrap:nowrap;align-items:center;gap:8px;padding:12px 14px}
   .cal-nav{display:contents}
   .cal-nav #btn-export-ics,.cal-nav #btn-print{display:none!important}
-  #btn-prev{order:1}
-  .cal-title{order:2;flex:1;min-width:0;font-size:14px;text-align:center}
-  #btn-next{order:3}
-  #btn-today{order:4}
+  #btn-prev{order:1;padding:8px 10px;min-width:36px;font-size:16px}
+  #btn-next{order:3;padding:8px 10px;min-width:36px;font-size:16px}
+  .cal-title{order:2;flex:1;min-width:0;font-size:12px;text-align:center;line-height:1.3}
+  #btn-today{order:4;padding:8px 10px;font-size:11px;white-space:nowrap}
   .cal-view-tabs,.cal-shortcuts-wrap{display:none!important}
   .nav-btn[data-view="month"],.nav-btn[data-view="week"],
   .cal-view-tabs .cal-btn[data-view="month"],.cal-view-tabs .cal-btn[data-view="week"]{display:none!important}
@@ -427,9 +428,9 @@ body.light .cal-allday-row{background:#f8fafc}
     </div>
     <div class="cal-toolbar">
       <div class="cal-nav">
-        <button type="button" class="cal-btn" id="btn-prev">← Précédent</button>
+        <button type="button" class="cal-btn" id="btn-prev" title="Période précédente" aria-label="Période précédente">‹</button>
         <button type="button" class="cal-btn primary" id="btn-today">Aujourd'hui</button>
-        <button type="button" class="cal-btn" id="btn-next">Suivant →</button>
+        <button type="button" class="cal-btn" id="btn-next" title="Période suivante" aria-label="Période suivante">›</button>
         <button type="button" class="cal-btn" id="btn-export-ics">Exporter .ics</button>
         <button type="button" class="cal-btn" id="btn-print">Imprimer</button>
       </div>
@@ -1310,15 +1311,15 @@ function renderAgenda(p){
   let any=false;
   while(cur<=end){
     const evs=agendaEventsOnDay(cur);
+    any=true;
+    const today=isToday(cur);
+    html+='<div class="cal-agenda-day">';
+    html+='<div class="cal-agenda-day-head">';
+    html+='<span class="cal-agenda-day-title">'+esc(formatAgendaDayHeader(cur))+'</span>';
+    html+='<span class="cal-agenda-day-iso">S '+getISOWeek(cur)+'</span>';
+    if(today)html+='<span class="cal-agenda-today">Aujourd\'hui</span>';
+    html+='</div><div class="cal-agenda-evs">';
     if(evs.length){
-      any=true;
-      const today=isToday(cur);
-      html+='<div class="cal-agenda-day">';
-      html+='<div class="cal-agenda-day-head">';
-      html+='<span class="cal-agenda-day-title">'+esc(formatAgendaDayHeader(cur))+'</span>';
-      html+='<span class="cal-agenda-day-iso">S '+getISOWeek(cur)+'</span>';
-      if(today)html+='<span class="cal-agenda-today">Aujourd\'hui</span>';
-      html+='</div><div class="cal-agenda-evs">';
       evs.forEach(ev=>{
         const time=evTimeLabelOnDay(ev,cur);
         html+='<div class="cal-agenda-ev-row">';
@@ -1326,11 +1327,13 @@ function renderAgenda(p){
         html+='<div class="cal-pill" data-ev-id="'+esc(ev.id)+'" style="'+calSlotStyle(ev.calendrier)+'">'+esc(ev.titre)+'</div>';
         html+='</div>';
       });
-      html+='</div></div>';
+    }else{
+      html+='<p class="cal-agenda-day-empty">Rien de prévu ce jour-là</p>';
     }
+    html+='</div></div>';
     cur=addDays(cur,1);
   }
-  if(!any)html+='<p class="cal-agenda-empty">Aucun événement à venir.</p>';
+  if(!any)html+='<p class="cal-agenda-empty">Aucune date dans la période.</p>';
   html+='</div>';
   return html;
 }

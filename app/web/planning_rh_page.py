@@ -126,6 +126,8 @@ input,select,textarea{font-family:inherit;color:var(--text)}
 .rh-hdr-title{font-size:18px;font-weight:800;flex:1;min-width:120px}
 .rh-hdr-title span{color:var(--accent)}
 .rh-hdr-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.rh-hdr-nav-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.rh-hdr-range{font-size:12px;color:var(--muted);font-weight:600;white-space:nowrap}
 
 /* Nav semaines */
 .rh-wk-nav{display:flex;align-items:center;gap:0}
@@ -556,6 +558,13 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
   .rh-sb.open~.rh-sb-overlay{display:block}
   .rh-mobile-menu{display:inline-flex!important}
   .rh-range-tabs{display:none}
+  .rh-hdr{padding:10px 14px;gap:8px}
+  .rh-hdr-title{font-size:15px;min-width:0}
+  .rh-hdr-right{width:100%;justify-content:center}
+  .rh-hdr-nav-row{width:100%;justify-content:center}
+  .rh-wk-nav button{padding:6px 8px;font-size:12px}
+  .rh-hdr-range{width:100%;text-align:center;font-size:11px}
+  .rh-icon-btn{font-size:11px;padding:5px 8px}
 }
 .rh-mobile-menu{display:none;align-items:center;justify-content:center;width:36px;height:36px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;font-size:18px}
 .rh-mobile-menu:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
@@ -692,12 +701,12 @@ function congeJoursBitmask(userId, ws){
 const S = {
   user: null, isEditor: false, tab: 'planning',
   isReadOnlyAdmin: false,
-  viewRange: 4, baseOffset: 0, detailMode: false,
+  viewRange: 2, baseOffset: 0, detailMode: false,
   machines: [], personnel: [], planning: [], conges: [], soldes: [],
   annee: new Date().getFullYear(),
   modal: null, toast: null, loading: false,
   opOffset: 0,          // opérateur : décalage semaine
-  opViewRange: 1,       // opérateur : plage de vue (1, 2 ou 4 semaines)
+  opViewRange: 2,       // opérateur : plage de vue (1 ou 2 semaines)
   editConge: null,      // congé en cours d'édition
   editSolde: null,      // solde en cours d'édition
   congeForm: { user_id:'', date_debut:'', date_fin:'', nb_jours:'', type_conge:'CP', note:'' },
@@ -1175,21 +1184,25 @@ function renderHeader(){
     <button class="rh-mobile-menu" onclick="openSidebar()">${icon('menu',18)}</button>
     <div class="rh-hdr-title">Planning <span>RH</span></div>
     <div class="rh-hdr-right">
-      <div class="rh-wk-nav">
-        <button onclick="navWeeks(-S.viewRange)" title="Période précédente">${icon('chevron_left',14)}</button>
-        <button class="rh-wk-today" onclick="navWeeks(0)">Aujourd'hui</button>
-        <button onclick="navWeeks(S.viewRange)" title="Période suivante">${icon('chevron_right',14)}</button>
+      <div class="rh-hdr-nav-row">
+        <div class="rh-wk-nav">
+          <button onclick="navWeeks(-S.viewRange)" title="Période précédente">${icon('chevron_left',14)}</button>
+          <button class="rh-wk-today" onclick="navWeeks(0)">Aujourd'hui</button>
+          <button onclick="navWeeks(S.viewRange)" title="Période suivante">${icon('chevron_right',14)}</button>
+        </div>
+        ${S.tab==='planning'?`
+          <button class="rh-icon-btn" onclick="printPlanning()" title="Imprimer le planning">
+            ${icon('printer',13)} Imprimer
+          </button>
+        `:''}
       </div>
-      <span style="font-size:12px;color:var(--muted);font-weight:600">${rangeLabel}</span>
+      <span class="rh-hdr-range">${rangeLabel}</span>
       <div class="rh-range-tabs">
-        ${[1,2,4].map(n=>`<button class="rh-range-tab${S.viewRange===n?' active':''}" onclick="setRange(${n})">${n} sem.</button>`).join('')}
+        ${[1,2].map(n=>`<button class="rh-range-tab${S.viewRange===n?' active':''}" onclick="setRange(${n})">${n} sem.</button>`).join('')}
       </div>
       ${S.tab==='planning'?`
         <button class="rh-icon-btn${S.detailMode?' active':''}" onclick="toggleDetail()" title="Vue détaillée jour/semaine">
           ${icon('calendar',13)} Détail
-        </button>
-        <button class="rh-icon-btn" onclick="printPlanning()" title="Imprimer le planning">
-          ${icon('printer',13)} Imprimer
         </button>
       `:''}
       ${S.tab==='conges'?`
@@ -1917,7 +1930,7 @@ function buildOperatorView(){
   const rangeSelector=document.createElement('div');
   rangeSelector.className='rh-op-range-tabs';
   rangeSelector.style.cssText='display:flex;gap:4px;margin-left:12px;';
-  [1,2,4].forEach(n=>{
+  [1,2].forEach(n=>{
     const btn=document.createElement('button');
     btn.className='rh-op-range-btn'+(S.opViewRange===n?' active':'');
     btn.textContent=n+' sem.';
@@ -2457,7 +2470,7 @@ function printConges(){
 // ── Init ───────────────────────────────────────────────
 (async()=>{
   await loadMe();
-  if(S.isEditor || S.isReadOnlyAdmin)S.viewRange=4; else S.viewRange=1;
+  if(S.isEditor || S.isReadOnlyAdmin)S.viewRange=2; else S.viewRange=1;
   await loadMachines();
   await loadData();
   if(S.tab==='conges')await loadSoldes();

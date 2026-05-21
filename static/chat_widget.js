@@ -101,9 +101,12 @@ body.light #cw-bubble-badge{border-color:#fff}
 #cw-panel.cw-mode-bar{left:max(24px,env(safe-area-inset-left,0px));bottom:110px}
 #cw-panel.cw-mode-bubble{bottom:auto;right:auto}
 #cw-panel-left{width:168px;flex-shrink:0;border-right:1px solid var(--border);
-  display:flex;flex-direction:column;overflow-y:auto;min-height:0}
-.cw-section-row{display:flex;align-items:center;justify-content:space-between;padding:12px 12px 6px;gap:6px}
-.cw-section-row.cw-section-discussion{border-top:1px solid var(--border);margin-top:6px;padding-top:14px}
+  display:flex;flex-direction:column;overflow:hidden;min-height:0}
+.cw-list-section{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
+.cw-list-section-dms{border-top:1px solid var(--border)}
+.cw-section-row{display:flex;align-items:center;justify-content:space-between;padding:12px 12px 6px;gap:6px;flex-shrink:0}
+.cw-section-row.cw-section-discussion{padding-top:12px}
+#cw-channels,#cw-dms{flex:1;min-height:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
 .cw-section-label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;
   letter-spacing:.5px;flex:1;min-width:0}
 .cw-section-add{width:26px;height:26px;border-radius:8px;border:1px solid var(--border);background:transparent;
@@ -274,7 +277,21 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
 .cw-btn-primary:disabled{opacity:.5;cursor:not-allowed}
 .cw-overlay-err{font-size:12px;color:var(--danger);margin-top:8px}
 #cw-back-list.cw-hidden{display:none}
+.cw-list-topbar{display:none}
 @media (max-width:768px){
+  .cw-list-topbar{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    padding:max(10px,env(safe-area-inset-top,0px)) 14px 10px;
+    border-bottom:1px solid var(--border);flex-shrink:0;background:var(--card);
+  }
+  body.cw-chat-active .cw-list-topbar{display:none}
+  #cw-list-title{font-size:14px;font-weight:700;color:var(--text)}
+  #cw-close-list,#cw-close{
+    min-width:40px;min-height:40px;display:flex;align-items:center;justify-content:center;
+    border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text2);
+    font-size:22px;cursor:pointer;z-index:5;
+  }
+  #cw-close-list:hover,#cw-close:hover{color:var(--accent);border-color:var(--accent)}
   body.cw-panel-open{overflow:hidden}
   body.cw-panel-open #cw-bar,body.cw-panel-open #cw-bubble{display:none!important}
   #cw-bar{
@@ -474,58 +491,44 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
   }
 
   function buildDom() {
-    const hasTrigger = CW.isPortal
-      ? document.getElementById('cw-bar')
-      : document.getElementById('cw-bubble');
+    const hasTrigger = document.getElementById('cw-bubble');
     if (hasTrigger && document.getElementById('cw-panel')) return;
     if (document.getElementById('cw-bar')) document.getElementById('cw-bar').remove();
     if (document.getElementById('cw-bubble')) document.getElementById('cw-bubble').remove();
     if (document.getElementById('cw-panel')) document.getElementById('cw-panel').remove();
 
-    if (CW.isPortal) {
-      const bar = document.createElement('div');
-      bar.id = 'cw-bar';
-      bar.className = 'cw-portal-accent';
-      bar.innerHTML =
-        '<div id="cw-bar-icon-wrap"><div id="cw-bar-icon">' +
-        ICO_MSG +
-        '</div><span id="cw-bar-badge"></span></div>' +
-        '<div id="cw-bar-text"><div id="cw-bar-title">Messagerie</div>' +
-        '<div id="cw-bar-preview">Aucun message</div></div>';
-      bar.addEventListener('click', () => {
-        unlockAudio();
-        togglePanel();
-      });
-      document.body.appendChild(bar);
-    } else {
-      const bub = document.createElement('button');
-      bub.type = 'button';
-      bub.id = 'cw-bubble';
-      bub.setAttribute('aria-label', 'Messagerie');
-      bub.innerHTML =
-        '<span class="cw-bubble-ico" aria-hidden="true">' +
-        ICO_MSG +
-        '</span><span id="cw-bubble-badge" aria-label=""></span>';
-      bub.addEventListener('click', () => {
-        unlockAudio();
-        togglePanel();
-      });
-      document.body.appendChild(bub);
-    }
+    const bub = document.createElement('button');
+    bub.type = 'button';
+    bub.id = 'cw-bubble';
+    bub.setAttribute('aria-label', 'Messagerie');
+    bub.innerHTML =
+      '<span class="cw-bubble-ico" aria-hidden="true">' +
+      ICO_MSG +
+      '</span><span id="cw-bubble-badge" aria-label=""></span>';
+    bub.addEventListener('click', () => {
+      unlockAudio();
+      togglePanel();
+    });
+    document.body.appendChild(bub);
 
     const panel = document.createElement('div');
     panel.id = 'cw-panel';
-    panel.className = 'cw-hidden ' + (CW.isPortal ? 'cw-mode-bar' : 'cw-mode-bubble');
+    panel.className = 'cw-hidden cw-mode-bubble';
     panel.innerHTML =
       '<div id="cw-panel-left">' +
+      '<div class="cw-list-topbar">' +
+      '<span id="cw-list-title">Messagerie</span>' +
+      '<button type="button" id="cw-close-list" aria-label="Fermer la messagerie">×</button></div>' +
+      '<div class="cw-list-section cw-list-section-channels">' +
       '<div class="cw-section-row"><span class="cw-section-label">Canaux</span>' +
       '<button type="button" class="cw-section-add cw-hidden" id="cw-add-channel" title="Nouveau canal" aria-label="Nouveau canal">' +
       ICO_PLUS +
-      '</button></div><div id="cw-channels"></div>' +
+      '</button></div><div id="cw-channels"></div></div>' +
+      '<div class="cw-list-section cw-list-section-dms">' +
       '<div class="cw-section-row cw-section-discussion"><span class="cw-section-label">Discussion</span>' +
       '<button type="button" class="cw-section-add" id="cw-add-dm" title="Nouvelle discussion" aria-label="Nouvelle discussion">' +
       ICO_PLUS +
-      '</button></div><div id="cw-dms"></div></div>' +
+      '</button></div><div id="cw-dms"></div></div></div>' +
       '<div id="cw-panel-right">' +
       '<div id="cw-overlay" class="cw-hidden"></div>' +
       '<div id="cw-dm-picker" class="cw-hidden">' +
@@ -554,7 +557,11 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     document.body.appendChild(panel);
 
     document.getElementById('cw-close').addEventListener('click', () => togglePanel(false));
+    document.getElementById('cw-close-list')?.addEventListener('click', () => togglePanel(false));
     document.getElementById('cw-back-list')?.addEventListener('click', mobileBackToList);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && CW.open) togglePanel(false);
+    });
     document.getElementById('cw-attach').addEventListener('click', () => {
       document.getElementById('cw-file-input')?.click();
     });
@@ -1653,10 +1660,8 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     if (!panel) return;
     const next = typeof force === 'boolean' ? force : !CW.open;
     CW.open = next;
-    const bar = document.getElementById('cw-bar');
     if (CW.open) {
       panel.classList.remove('cw-hidden');
-      if (bar) bar.classList.add('cw-bar-active');
       try {
         await _getAudioCtx();
       } catch (e) {}
@@ -1674,7 +1679,6 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     } else {
       panel.classList.add('cw-hidden');
       document.body.classList.remove('cw-panel-open', 'cw-chat-active');
-      if (bar) bar.classList.remove('cw-bar-active');
       if (CW.pollTimer) {
         clearInterval(CW.pollTimer);
         CW.pollTimer = null;
@@ -1721,9 +1725,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       const ok = await fetchMe();
       if (!ok) return false;
     }
-    const hasTrigger = CW.isPortal
-      ? document.getElementById('cw-bar')
-      : document.getElementById('cw-bubble');
+    const hasTrigger = document.getElementById('cw-bubble');
     if (CW._inited && hasTrigger && document.getElementById('cw-panel')) return true;
     CW._inited = true;
 

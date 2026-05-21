@@ -322,8 +322,11 @@ body.light .user-chip:hover{{background:rgba(8,145,178,.12)}}
 <body>
 <script src="/static/mysifa_theme.js"></script>
 <script>window.__MYSIFA_APP__='db';</script>
+<link rel="stylesheet" href="/static/mysifa_landscape.css">
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/chat_widget.js"></script>
+<script src="/static/mysifa_landscape.js"></script>
+<script>window.MySifaLandscape&&MySifaLandscape.enable();</script>
 
 <!-- Mobile topbar -->
 <div class="mobile-topbar">
