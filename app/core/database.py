@@ -1557,6 +1557,25 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 36, "chat_messages_attachments")
 
+    # v37 — Réactions emoji sur les messages chat
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=37 LIMIT 1").fetchone():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS chat_reactions (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                message_id  INTEGER NOT NULL REFERENCES chat_messages(id) ON DELETE CASCADE,
+                user_id     INTEGER NOT NULL,
+                user_nom    TEXT    NOT NULL DEFAULT '',
+                emoji       TEXT    NOT NULL,
+                created_at  TEXT    NOT NULL,
+                UNIQUE(message_id, user_id, emoji)
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_reactions_msg ON chat_reactions(message_id)"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 37, "chat_reactions")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

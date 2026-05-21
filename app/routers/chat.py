@@ -26,6 +26,7 @@ _PARIS = ZoneInfo("Europe/Paris")
 _MAX_BODY = 4000
 _PAGE_SIZE = 50
 _MAX_ATTACHMENT = 10 * 1024 * 1024
+_ALLOWED_EMOJIS = {"👍", "✅", "👀", "⚠️", "🔧", "❌"}
 _MSG_SELECT = """m.id, m.user_id, m.user_nom, m.body, m.created_at,
                    m.attachment_url, m.attachment_name, m.attachment_mime, m.attachment_size,
                    u.avatar_url"""
@@ -88,7 +89,7 @@ def _require(request: Request) -> dict:
     return get_current_user(request)
 
 
-def _message_dict(row, uid: int) -> dict:
+def _message_dict(row, uid: int, reactions: Optional[list] = None) -> dict:
     return {
         "id": row["id"],
         "user_id": row["user_id"],
@@ -101,7 +102,31 @@ def _message_dict(row, uid: int) -> dict:
         "attachment_mime": row["attachment_mime"] or "",
         "attachment_size": row["attachment_size"] or 0,
         "is_mine": row["user_id"] == uid,
+        "reactions": reactions if reactions is not None else [],
     }
+
+
+def _fetch_reactions_map(conn, msg_ids: List[int], uid: int) -> dict[int, list]:
+    reactions_map: dict[int, list] = {mid: [] for mid in msg_ids}
+    if not msg_ids:
+        return reactions_map
+    placeholders = ",".join("?" * len(msg_ids))
+    rx_rows = conn.execute(
+        f"""SELECT r.message_id, r.emoji, COUNT(*) as count,
+                   MAX(CASE WHEN r.user_id=? THEN 1 ELSE 0 END) as reacted_by_me
+            FROM chat_reactions r
+            WHERE r.message_id IN ({placeholders})
+            GROUP BY r.message_id, r.emoji
+            ORDER BY r.message_id, MIN(r.created_at) ASC""",
+        [uid] + msg_ids,
+    ).fetchall()
+    for rx in rx_rows:
+        reactions_map[rx["message_id"]].append({
+            "emoji": rx["emoji"],
+            "count": rx["count"],
+            "reacted_by_me": bool(rx["reacted_by_me"]),
+        })
+    return reactions_map
 
 
 def _safe_attachment_name(name: str) -> str:
@@ -194,7 +219,7 @@ def list_channels(request: Request):
     uid = user["id"]
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT c.id, c.type, c.name, c.description, c.created_at,
+            """SELECT c.id, c.type, c.name, c.description, c.created_at, c.created_by,
                       cm.last_read_at,
                       (SELECT COUNT(*) FROM chat_messages m
                        WHERE m.channel_id = c.id AND m.deleted_at IS NULL
@@ -364,6 +389,58 @@ def channel_members(channel_id: int, request: Request):
     return [dict(r) for r in rows]
 
 
+@router.delete("/channels/{channel_id}/members/{target_user_id}")
+def remove_member(channel_id: int, target_user_id: int, request: Request):
+    """Retire un membre d'un canal (admin, direction ou créateur du canal)."""
+    user = _require(request)
+    is_admin = user.get("role") in {"superadmin", "direction"}
+
+    with get_db() as conn:
+        ch = conn.execute(
+            "SELECT id, type, created_by FROM chat_channels WHERE id=? AND archived_at IS NULL LIMIT 1",
+            (channel_id,),
+        ).fetchone()
+        if not ch:
+            raise HTTPException(status_code=404, detail="Canal introuvable")
+        if ch["type"] == "direct":
+            raise HTTPException(status_code=403, detail="Impossible de retirer un membre d'un DM")
+
+        is_creator = ch["created_by"] == user["id"]
+        if not is_admin and not is_creator:
+            raise HTTPException(
+                status_code=403,
+                detail="Action réservée aux administrateurs ou au créateur du canal",
+            )
+
+        if target_user_id == user["id"]:
+            raise HTTPException(
+                status_code=400,
+                detail="Utilisez 'Quitter le canal' pour vous retirer vous-même",
+            )
+
+        member = conn.execute(
+            "SELECT 1 FROM chat_members WHERE channel_id=? AND user_id=? LIMIT 1",
+            (channel_id, target_user_id),
+        ).fetchone()
+        if not member:
+            raise HTTPException(status_code=404, detail="Utilisateur non membre de ce canal")
+
+        count = conn.execute(
+            "SELECT COUNT(*) as c FROM chat_members WHERE channel_id=?",
+            (channel_id,),
+        ).fetchone()["c"]
+        if count <= 1:
+            raise HTTPException(status_code=400, detail="Impossible de retirer le dernier membre")
+
+        conn.execute(
+            "DELETE FROM chat_members WHERE channel_id=? AND user_id=?",
+            (channel_id, target_user_id),
+        )
+        conn.commit()
+
+    return {"removed": True}
+
+
 @router.post("/channels/{channel_id}/typing")
 def set_typing(channel_id: int, request: Request):
     """Signale que l'utilisateur est en train d'écrire (expire après _TYPING_TTL s)."""
@@ -442,18 +519,24 @@ def get_messages(
                 (channel_id, _PAGE_SIZE),
             ).fetchall()
 
+        uid = user["id"]
+        if after is not None:
+            ordered = list(rows)
+        else:
+            ordered = list(reversed(rows))
+        msg_ids = [r["id"] for r in ordered]
+        reactions_map = _fetch_reactions_map(conn, msg_ids, uid)
+
         conn.execute(
             "UPDATE chat_members SET last_read_at=? WHERE channel_id=? AND user_id=?",
             (_now_iso(), channel_id, user["id"]),
         )
         conn.commit()
 
-    uid = user["id"]
-    if after is not None:
-        ordered = list(rows)
-    else:
-        ordered = list(reversed(rows))
-    messages = [_message_dict(r, uid) for r in ordered]
+    messages = [
+        _message_dict(r, uid, reactions_map.get(r["id"], []))
+        for r in ordered
+    ]
     has_more = len(rows) == _PAGE_SIZE if before else False
     return {"messages": messages, "has_more": has_more}
 
@@ -550,6 +633,43 @@ def delete_message(channel_id: int, msg_id: int, request: Request):
         )
         conn.commit()
     return {"deleted": True}
+
+
+@router.post("/channels/{channel_id}/messages/{msg_id}/reactions")
+async def toggle_reaction(channel_id: int, msg_id: int, request: Request):
+    """Toggle une réaction emoji sur un message."""
+    user = _require(request)
+    data = await request.json()
+    emoji = (data.get("emoji") or "").strip()
+    if emoji not in _ALLOWED_EMOJIS:
+        raise HTTPException(status_code=400, detail="Emoji non autorisé")
+
+    now = _now_iso()
+    with get_db() as conn:
+        _assert_member(conn, channel_id, user["id"])
+        msg = conn.execute(
+            "SELECT id FROM chat_messages WHERE id=? AND channel_id=? AND deleted_at IS NULL LIMIT 1",
+            (msg_id, channel_id),
+        ).fetchone()
+        if not msg:
+            raise HTTPException(status_code=404, detail="Message introuvable")
+
+        existing = conn.execute(
+            "SELECT id FROM chat_reactions WHERE message_id=? AND user_id=? AND emoji=? LIMIT 1",
+            (msg_id, user["id"], emoji),
+        ).fetchone()
+
+        if existing:
+            conn.execute("DELETE FROM chat_reactions WHERE id=?", (existing["id"],))
+            conn.commit()
+            return {"added": False, "emoji": emoji}
+
+        conn.execute(
+            "INSERT INTO chat_reactions (message_id, user_id, user_nom, emoji, created_at) VALUES (?,?,?,?,?)",
+            (msg_id, user["id"], user.get("nom") or user.get("email", ""), emoji, now),
+        )
+        conn.commit()
+    return {"added": True, "emoji": emoji}
 
 
 # ─── Utilitaires ─────────────────────────────────────────────────────────────

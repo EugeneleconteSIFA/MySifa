@@ -2391,6 +2391,472 @@ B — Read receipts :
 
 ---
 
+## Prompt 9 — Réactions emoji + gestion des membres d'un canal
+
+```
+Contexte projet : MySifa. FastAPI + SQLite. Widget chat dans static/chat_widget.js.
+Router chat dans app/routers/chat.py.
+La dernière migration en DB est la version 36 (dans app/core/database.py, fonction _migrate()).
+Design system : --bg, --card, --border, --text, --text2, --muted, --accent, --accent-bg, --danger.
+
+Tâche : Deux fonctionnalités indépendantes à ajouter dans le même prompt.
+
+=== PARTIE A — Réactions emoji sur les messages ===
+
+--- A1 : Migration DB (app/core/database.py) ---
+
+Dans _migrate(), ajouter après le bloc version=36 :
+
+```python
+if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=37 LIMIT 1").fetchone():
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS chat_reactions (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            message_id  INTEGER NOT NULL REFERENCES chat_messages(id) ON DELETE CASCADE,
+            user_id     INTEGER NOT NULL,
+            user_nom    TEXT    NOT NULL DEFAULT '',
+            emoji       TEXT    NOT NULL,
+            created_at  TEXT    NOT NULL,
+            UNIQUE(message_id, user_id, emoji)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_reactions_msg ON chat_reactions(message_id)")
+    _record_schema_migration(conn, 37, "chat_reactions")
+    conn.commit()
+```
+
+--- A2 : Backend (app/routers/chat.py) ---
+
+1. Modifier GET /channels/{channel_id}/messages pour inclure les réactions :
+
+Dans les trois branches de la requête (after / before / défaut), remplacer chaque SELECT par une
+sous-requête enrichie. Après avoir récupéré les messages, ajouter pour chaque message :
+
+```python
+# Après avoir construit la liste `messages`, pour chaque message, ajouter le champ reactions :
+msg_ids = [r["id"] for r in ordered]
+reactions_map: dict[int, list] = {mid: [] for mid in msg_ids}
+
+if msg_ids:
+    placeholders = ",".join("?" * len(msg_ids))
+    rx_rows = conn.execute(
+        f"""SELECT r.message_id, r.emoji, COUNT(*) as count,
+                   MAX(CASE WHEN r.user_id=? THEN 1 ELSE 0 END) as reacted_by_me
+            FROM chat_reactions r
+            WHERE r.message_id IN ({placeholders})
+            GROUP BY r.message_id, r.emoji
+            ORDER BY r.message_id, r.created_at ASC""",
+        [uid] + msg_ids,
+    ).fetchall()
+    for rx in rx_rows:
+        reactions_map[rx["message_id"]].append({
+            "emoji": rx["emoji"],
+            "count": rx["count"],
+            "reacted_by_me": bool(rx["reacted_by_me"]),
+        })
+
+# Puis dans la construction de la liste messages :
+messages = [
+    {
+        "id": r["id"],
+        "user_id": r["user_id"],
+        "user_nom": r["user_nom"],
+        "body": r["body"],
+        "created_at": r["created_at"],
+        "avatar_url": r["avatar_url"] or "",
+        "is_mine": r["user_id"] == uid,
+        "reactions": reactions_map.get(r["id"], []),
+    }
+    for r in ordered
+]
+```
+
+2. Ajouter l'endpoint toggle réaction :
+
+```python
+@router.post("/channels/{channel_id}/messages/{msg_id}/reactions")
+async def toggle_reaction(channel_id: int, msg_id: int, request: Request):
+    """
+    Toggle une réaction emoji sur un message.
+    Si l'utilisateur a déjà réagi avec cet emoji → supprime la réaction.
+    Sinon → ajoute la réaction.
+    Retourne { added: bool, emoji: str }.
+    """
+    user = _require(request)
+    data = await request.json()
+    emoji = (data.get("emoji") or "").strip()
+    ALLOWED_EMOJIS = {"👍", "✅", "👀", "⚠️", "🔧", "❌"}
+    if emoji not in ALLOWED_EMOJIS:
+        raise HTTPException(status_code=400, detail="Emoji non autorisé")
+
+    now = _now_iso()
+    with get_db() as conn:
+        _assert_member(conn, channel_id, user["id"])
+        # Vérifier que le message appartient au canal
+        msg = conn.execute(
+            "SELECT id FROM chat_messages WHERE id=? AND channel_id=? AND deleted_at IS NULL LIMIT 1",
+            (msg_id, channel_id),
+        ).fetchone()
+        if not msg:
+            raise HTTPException(status_code=404, detail="Message introuvable")
+
+        existing = conn.execute(
+            "SELECT id FROM chat_reactions WHERE message_id=? AND user_id=? AND emoji=? LIMIT 1",
+            (msg_id, user["id"], emoji),
+        ).fetchone()
+
+        if existing:
+            conn.execute("DELETE FROM chat_reactions WHERE id=?", (existing["id"],))
+            conn.commit()
+            return {"added": False, "emoji": emoji}
+        else:
+            conn.execute(
+                "INSERT INTO chat_reactions (message_id, user_id, user_nom, emoji, created_at) VALUES (?,?,?,?,?)",
+                (msg_id, user["id"], user.get("nom") or user.get("email", ""), emoji, now),
+            )
+            conn.commit()
+            return {"added": True, "emoji": emoji}
+```
+
+--- A3 : Frontend (static/chat_widget.js) ---
+
+Jeu d'emojis autorisés (même ordre qu'en backend) :
+  const CW_EMOJIS = ['👍', '✅', '👀', '⚠️', '🔧', '❌'];
+
+1. Ajouter dans CW_STYLES les règles CSS suivantes :
+
+```css
+.cw-msg-wrap{position:relative;display:flex;flex-direction:column;max-width:82%}
+.cw-msg-wrap.cw-mine{align-self:flex-end;align-items:flex-end}
+.cw-msg-wrap.cw-theirs{align-self:flex-start;align-items:flex-start}
+.cw-react-picker{display:none;position:absolute;top:-36px;background:var(--card);
+  border:1px solid var(--border);border-radius:10px;padding:4px 6px;
+  gap:2px;z-index:10;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.3)}
+.cw-msg-wrap:hover .cw-react-picker{display:flex}
+.cw-msg-wrap.cw-mine .cw-react-picker{right:0}
+.cw-msg-wrap.cw-theirs .cw-react-picker{left:0}
+.cw-react-btn{background:none;border:none;cursor:pointer;font-size:16px;
+  padding:2px 4px;border-radius:6px;line-height:1.2;transition:background .1s}
+.cw-react-btn:hover{background:var(--accent-bg)}
+.cw-reactions{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.cw-reaction-pill{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;
+  border-radius:99px;font-size:12px;cursor:pointer;border:1px solid var(--border);
+  background:transparent;color:var(--text2);font-family:inherit;transition:border-color .1s,background .1s}
+.cw-reaction-pill:hover{border-color:var(--accent);background:var(--accent-bg)}
+.cw-reaction-pill.cw-reacted{border-color:var(--accent);background:var(--accent-bg);color:var(--accent);font-weight:600}
+.cw-reaction-count{font-size:12px;font-weight:600}
+```
+
+2. Modifier renderMsg() pour envelopper le message dans un .cw-msg-wrap et ajouter le picker et les réactions :
+
+Remplacer l'implémentation actuelle de renderMsg() par :
+
+```javascript
+function renderMsg(msg) {
+  const mine = Number(msg.user_id) === Number(CW.uid) || msg.is_mine;
+  cacheUserAvatar(msg.user_id, msg.user_nom, msg.avatar_url);
+
+  let metaEl = '';
+  if (!mine) {
+    const av = cwAvatarHtml(msg.user_nom, msg.avatar_url, 20);
+    metaEl =
+      '<div class="cw-msg-meta">' + av +
+      '<span class="cw-msg-meta-text">' + escCW(msg.user_nom) +
+      ' · ' + escCW(fmtTime(msg.created_at)) + '</span></div>';
+  }
+
+  // Picker emoji (6 boutons)
+  const pickerBtns = CW_EMOJIS.map(e =>
+    '<button type="button" class="cw-react-btn" data-emoji="' + e +
+    '" title="' + e + '" aria-label="Réagir ' + e + '">' + e + '</button>'
+  ).join('');
+  const picker = '<div class="cw-react-picker" aria-label="Réactions">' + pickerBtns + '</div>';
+
+  // Bulle du message
+  const bubble = '<div class="' + (mine ? 'cw-msg-mine' : 'cw-msg-theirs') + '">' +
+    metaEl + escCW(msg.body) + '</div>';
+
+  // Réactions existantes
+  const reactions = (msg.reactions || []);
+  let rxHtml = '';
+  if (reactions.length) {
+    rxHtml = '<div class="cw-reactions">' +
+      reactions.map(rx =>
+        '<button type="button" class="cw-reaction-pill' +
+        (rx.reacted_by_me ? ' cw-reacted' : '') +
+        '" data-emoji="' + escCW(rx.emoji) + '" aria-label="' +
+        escCW(rx.emoji + ' ' + rx.count) + '">' +
+        rx.emoji + '<span class="cw-reaction-count">' + rx.count + '</span></button>'
+      ).join('') + '</div>';
+  }
+
+  const wrap = document.createElement('div');
+  wrap.className = 'cw-msg-wrap ' + (mine ? 'cw-mine' : 'cw-theirs');
+  wrap.dataset.id = String(msg.id);
+  if (msg.created_at) wrap.dataset.at = String(msg.created_at);
+  wrap.innerHTML = picker + bubble + rxHtml;
+
+  // Écouteurs réactions
+  wrap.querySelectorAll('.cw-react-btn, .cw-reaction-pill').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const emoji = btn.dataset.emoji;
+      if (!emoji || !CW.activeId) return;
+      try {
+        await api(
+          '/api/chat/channels/' + CW.activeId + '/messages/' + msg.id + '/reactions',
+          { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ emoji }) }
+        );
+        // Rafraîchir les messages pour mettre à jour les compteurs
+        await pollMessages();
+      } catch (ex) {}
+    });
+  });
+
+  return wrap;
+}
+```
+
+3. Dans renderMsg() (ou dans la fonction de mise à jour DOM de pollMessages),
+   lorsqu'on rafraîchit les messages existants via polling, les compteurs de réactions
+   doivent être mis à jour sans reconstruire tout le fil.
+
+   Dans pollMessages(), après avoir ajouté les nouveaux messages, ajouter une
+   passe de mise à jour des réactions sur les messages déjà présents :
+
+```javascript
+// Mettre à jour les réactions des messages déjà présents
+if (incoming.length > 0) {
+  // Re-fetch les messages complets pour rafraîchir les réactions
+  // Note : le ?after=ID ne retourne que les nouveaux messages, pas les réactions mises à jour
+  // Pour les réactions, faire un refresh léger de la vue entière si des réactions ont changé.
+  // Alternative simple : re-fetch les 50 derniers messages et mettre à jour uniquement les .cw-reactions
+  // en comparant sans reconstruire le DOM.
+  // Implémentation recommandée : ajouter un endpoint léger GET /reactions?message_ids=1,2,3
+  // ou simplement laisser pollMessages mettre à jour les réactions au prochain selectChannel().
+  // Pour ce Prompt : les réactions se mettent à jour à l'ouverture du canal ou au clic.
+  // Un rafraîchissement complet peut être déclenché par l'utilisateur via re-sélection du canal.
+}
+```
+
+=== PARTIE B — Gestion des membres dans la vue canal ===
+
+--- B1 : Backend (app/routers/chat.py) ---
+
+1. Modifier GET /channels pour inclure created_by dans la réponse :
+
+Dans list_channels(), dans la requête SQL principale, ajouter `c.created_by` à la liste SELECT.
+Dans la construction du dict résultat, inclure `"created_by": d["created_by"]`.
+
+2. Ajouter l'endpoint suppression de membre :
+
+```python
+@router.delete("/channels/{channel_id}/members/{target_user_id}")
+def remove_member(channel_id: int, target_user_id: int, request: Request):
+    """
+    Retire un membre d'un canal.
+    Autorisé : superadmin, direction, ou créateur du canal.
+    Interdit sur les DMs.
+    Ne peut pas retirer le dernier membre ni se retirer soi-même via cet endpoint.
+    """
+    user = _require(request)
+    is_admin = user.get("role") in {"superadmin", "direction"}
+
+    with get_db() as conn:
+        ch = conn.execute(
+            "SELECT id, type, created_by FROM chat_channels WHERE id=? AND archived_at IS NULL LIMIT 1",
+            (channel_id,),
+        ).fetchone()
+        if not ch:
+            raise HTTPException(status_code=404, detail="Canal introuvable")
+        if ch["type"] == "direct":
+            raise HTTPException(status_code=403, detail="Impossible de retirer un membre d'un DM")
+
+        is_creator = ch["created_by"] == user["id"]
+        if not is_admin and not is_creator:
+            raise HTTPException(status_code=403, detail="Action réservée aux administrateurs ou au créateur du canal")
+
+        if target_user_id == user["id"]:
+            raise HTTPException(status_code=400, detail="Utilisez 'Quitter le canal' pour vous retirer vous-même")
+
+        member = conn.execute(
+            "SELECT 1 FROM chat_members WHERE channel_id=? AND user_id=? LIMIT 1",
+            (channel_id, target_user_id),
+        ).fetchone()
+        if not member:
+            raise HTTPException(status_code=404, detail="Utilisateur non membre de ce canal")
+
+        # Vérifier qu'il restera au moins un membre
+        count = conn.execute(
+            "SELECT COUNT(*) as c FROM chat_members WHERE channel_id=?",
+            (channel_id,),
+        ).fetchone()["c"]
+        if count <= 1:
+            raise HTTPException(status_code=400, detail="Impossible de retirer le dernier membre")
+
+        conn.execute(
+            "DELETE FROM chat_members WHERE channel_id=? AND user_id=?",
+            (channel_id, target_user_id),
+        )
+        conn.commit()
+
+    return {"removed": True}
+```
+
+--- B2 : Frontend (static/chat_widget.js) ---
+
+1. Ajouter dans CW_STATES les règles CSS suivantes :
+
+```css
+.cw-member-row{position:relative}
+.cw-member-actions-btn{background:none;border:1px solid var(--border);border-radius:8px;
+  color:var(--muted);cursor:pointer;width:28px;height:28px;display:flex;align-items:center;
+  justify-content:center;flex-shrink:0;font-size:16px;padding:0;font-family:inherit;
+  margin-left:auto;transition:border-color .1s,color .1s}
+.cw-member-actions-btn:hover{border-color:var(--accent);color:var(--accent)}
+.cw-member-dropdown{position:absolute;right:14px;top:40px;z-index:20;
+  background:var(--card);border:1px solid var(--border);border-radius:10px;
+  min-width:170px;box-shadow:0 8px 24px rgba(0,0,0,.35);overflow:hidden}
+.cw-member-dropdown.cw-hidden{display:none}
+.cw-dropdown-item{display:block;width:100%;text-align:left;padding:10px 14px;
+  background:none;border:none;border-bottom:1px solid var(--border);
+  color:var(--text2);font-size:13px;cursor:pointer;font-family:inherit}
+.cw-dropdown-item:last-child{border-bottom:none}
+.cw-dropdown-item:hover{background:var(--accent-bg);color:var(--accent)}
+.cw-dropdown-item.cw-danger:hover{background:rgba(248,113,113,.1);color:var(--danger)}
+```
+
+2. Modifier openChannelMembers() pour ajouter le bouton trois points sur chaque membre.
+
+Remplacer la construction innerHTML des membres par :
+
+```javascript
+const ch = CW.channels.find((c) => c.id === CW.activeId);
+const canManage =
+  ADMIN_ROLES.has(CW.role) ||
+  (ch && ch.created_by && ch.created_by === CW.uid);
+
+body.innerHTML = '';  // vider la liste
+
+members.forEach((m) => {
+  const rl = ROLE_LABELS[m.role] || m.role || '';
+  cacheUserAvatar(m.id, m.nom, m.avatar_url);
+  const isSelf = m.id === CW.uid;
+
+  const row = document.createElement('div');
+  row.className = 'cw-member-row';
+
+  row.innerHTML =
+    cwAvatarHtml(m.nom, m.avatar_url, 32) +
+    '<div class="cw-member-body">' +
+    '<div>' + escCW(m.nom || 'Utilisateur') + '</div>' +
+    '<div class="cw-member-role">' + escCW(rl) + '</div>' +
+    '</div>' +
+    // Bouton trois points — visible pour tous sauf soi-même
+    (!isSelf
+      ? '<button type="button" class="cw-member-actions-btn" title="Actions" aria-label="Actions pour ' + escCW(m.nom) + '">⋮</button>' +
+        '<div class="cw-member-dropdown cw-hidden">' +
+        '<button type="button" class="cw-dropdown-item" data-action="dm">Envoyer un message</button>' +
+        (canManage
+          ? '<button type="button" class="cw-dropdown-item cw-danger" data-action="remove">Retirer du canal</button>'
+          : '') +
+        '</div>'
+      : '');
+
+  // Bouton ⋮ : toggle dropdown
+  const actBtn = row.querySelector('.cw-member-actions-btn');
+  const dropdown = row.querySelector('.cw-member-dropdown');
+  if (actBtn && dropdown) {
+    actBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      // Fermer les autres dropdowns ouverts dans la liste
+      body.querySelectorAll('.cw-member-dropdown').forEach(d => {
+        if (d !== dropdown) d.classList.add('cw-hidden');
+      });
+      dropdown.classList.toggle('cw-hidden');
+    });
+
+    // Fermer si clic ailleurs dans l'overlay
+    document.addEventListener('click', function closeDD(e) {
+      if (!dropdown.contains(e.target) && e.target !== actBtn) {
+        dropdown.classList.add('cw-hidden');
+        document.removeEventListener('click', closeDD);
+      }
+    });
+
+    // Actions du dropdown
+    dropdown.querySelectorAll('.cw-dropdown-item').forEach(item => {
+      item.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        dropdown.classList.add('cw-hidden');
+        const action = item.dataset.action;
+
+        if (action === 'dm') {
+          // Fermer l'overlay, ouvrir un DM avec cet utilisateur
+          closeOverlay();
+          try {
+            const r = await api('/api/chat/channels', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ type: 'direct', user_id: m.id }),
+            });
+            await loadChannels();
+            await selectChannel(r.id);
+          } catch (ex) {}
+        }
+
+        if (action === 'remove') {
+          // Demander confirmation avant de retirer
+          const confirmed = window.confirm(
+            'Retirer ' + (m.nom || 'cet utilisateur') + ' du canal ?'
+          );
+          if (!confirmed) return;
+          try {
+            await api(
+              '/api/chat/channels/' + CW.activeId + '/members/' + m.id,
+              { method: 'DELETE' }
+            );
+            // Rafraîchir la vue membres
+            openChannelMembers();
+            // Rafraîchir la liste des canaux
+            await syncChatState(false);
+          } catch (ex) {
+            alert(ex.message || 'Erreur lors de la suppression.');
+          }
+        }
+      });
+    });
+  }
+
+  body.appendChild(row);
+});
+```
+
+Note sur la confirmation : utiliser window.confirm() est acceptable en interne. Si l'équipe
+préfère éviter les popups natifs, remplacer par une modal inline dans l'overlay avec deux boutons
+"Confirmer" / "Annuler" dans le même style que les .cw-btn-primary / .cw-btn-ghost.
+
+--- Vérification finale ---
+
+A — Réactions :
+1. Ouvrir un canal, passer la souris sur un message → le picker 6 emojis apparaît.
+2. Cliquer 👍 → réaction ajoutée, compteur "👍 1" visible sous le message.
+3. Depuis un autre compte, cliquer le même emoji → compteur passe à "👍 2".
+4. Recliquer son propre emoji → supprimé, compteur réduit.
+5. Tester en thème light : les pills sont lisibles.
+
+B — Gestion membres :
+1. Ouvrir un canal → clic icône réglages → liste des membres.
+2. Passer sur un membre → bouton ⋮ visible.
+3. Clic ⋮ → dropdown avec "Envoyer un message" + "Retirer du canal" (si admin/créateur).
+4. "Envoyer un message" → overlay se ferme, DM s'ouvre directement avec ce membre.
+5. "Retirer du canal" → confirmation → membre retiré → liste rafraîchie.
+6. Avec un compte sans droits admin/créateur → "Retirer du canal" absent du dropdown.
+```
+
+---
+
 ## Ordre d'exécution complet
 
 | # | Prompt | Périmètre | Durée est. |
@@ -2403,10 +2869,11 @@ B — Read receipts :
 | 6 | DB + API chat (DMs + canaux) | `/api/chat/*` | 20 min |
 | 7 | Widget chat flottant | `static/chat_widget.js` + injection `html.py` | 40 min |
 | 8 | "Est en train d'écrire" + "Message lu" | `chat.py` + `chat_widget.js` | 30 min |
+| 9 | Réactions emoji + gestion membres canal | `chat.py` + `chat_widget.js` + migration v37 | 35 min |
 
-Les Prompts 1–5 (commentaires contextuels) sont indépendants des Prompts 6–8 (chat).
+Les Prompts 1–5 (commentaires contextuels) sont indépendants des Prompts 6–9 (chat).
 Commencer par 6 si le chat est la priorité ; commencer par 1 si les commentaires sur dossiers le sont.
-Les Prompts 6 et 7 sont livrés et opérationnels. Exécuter le Prompt 8 directement.
+Les Prompts 6 et 7 sont livrés et opérationnels. Exécuter les Prompts 8 et 9 dans l'ordre.
 
 ## Points d'attention (tous prompts)
 
