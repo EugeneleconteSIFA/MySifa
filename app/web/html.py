@@ -1283,6 +1283,7 @@ body.light .stock-empl-suggest-add:hover{background:rgba(124,58,237,.2);color:#1
 <div id="root"></div>
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__="__INITIAL_APP_VALUE__";</script>
+<script src="/static/mysifa_dock.js"></script>
 <script src="/static/chat_widget.js"></script>
 <script>
 const API=window.location.origin;
@@ -10513,6 +10514,7 @@ function render(){
     if(fab)fab.remove();
     if(panel)panel.remove();
   }
+  if(window.MySifaDock && typeof window.MySifaDock.layout==='function') window.MySifaDock.layout();
 
   // PWA: feature temporairement retirée. (setupInstallButton supprimé)
 
@@ -10623,6 +10625,7 @@ checkAuth();
       open = false;
       const panel = document.getElementById('ai-chat-panel');
       if(panel) panel.classList.remove('open');
+      if(window.MySifaDock && typeof window.MySifaDock.layout==='function') window.MySifaDock.layout();
       return;
     }
 
@@ -10660,6 +10663,7 @@ checkAuth();
       open = !open;
       panel.classList.toggle('open', open);
       if(open) setTimeout(function(){ input.focus(); }, 200);
+      if(window.MySifaDock && typeof window.MySifaDock.layout==='function') window.MySifaDock.layout();
     }
     function onDocClick(e){
       if(!open) return;
@@ -10775,6 +10779,8 @@ checkAuth();
         setLoading(false);
       }
     }
+
+    if(window.MySifaDock && typeof window.MySifaDock.layout==='function') window.MySifaDock.layout();
   };
 })();
 </script>

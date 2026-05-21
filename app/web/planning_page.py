@@ -512,6 +512,7 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 <div id="app"></div>
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='planning';</script>
+<script src="/static/mysifa_dock.js"></script>
 <script src="/static/chat_widget.js"></script>
 <script>
 // Handler d'erreurs installé *avant* le script principal (capte aussi les erreurs de parsing).

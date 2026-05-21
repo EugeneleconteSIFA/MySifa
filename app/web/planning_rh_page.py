@@ -2465,6 +2465,7 @@ function printConges(){
 </script>
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='planning_rh';</script>
+<script src="/static/mysifa_dock.js"></script>
 <script src="/static/chat_widget.js"></script>
 </body>
 </html>"""

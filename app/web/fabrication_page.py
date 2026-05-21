@@ -613,6 +613,7 @@ table.fab-traca-table tr:last-child td{border-bottom:none}
 <div id="mroot"></div>
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='fabrication';</script>
+<script src="/static/mysifa_dock.js"></script>
 <script src="/static/chat_widget.js"></script>
 <script>
 'use strict';

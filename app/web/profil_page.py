@@ -371,6 +371,7 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='profil';</script>
+<script src="/static/mysifa_dock.js"></script>
 <script src="/static/chat_widget.js"></script>
 <script>
 const ROLE_LABELS={

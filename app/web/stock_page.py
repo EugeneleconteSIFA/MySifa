@@ -668,6 +668,7 @@ body.light .recep-fourn-sel:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 <div id="root"></div>
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='stock';</script>
+<script src="/static/mysifa_dock.js"></script>
 <script src="/static/chat_widget.js"></script>
 <script>
 /*__TRACA_GUIDE__*/
@@ -3689,6 +3690,7 @@ function render() {
 
   // Calculette flottante (montée une seule fois, persiste entre les rendus)
   window._calcMountStock && window._calcMountStock();
+  if(window.MySifaDock&&typeof window.MySifaDock.layout==='function')window.MySifaDock.layout();
 }
 
 async function init() {

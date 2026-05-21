@@ -362,6 +362,7 @@ body.light .cal-allday-row{background:#f8fafc}
 <script src="/static/mysifa_user_chip.js"></script>
 <script src="/static/mysifa_calendar.js"></script>
 <script>window.__MYSIFA_APP__='calendrier';</script>
+<script src="/static/mysifa_dock.js"></script>
 <script src="/static/chat_widget.js"></script>
 <div class="sidebar-overlay" id="sb-ov"></div>
 <div class="layout">
