@@ -184,6 +184,24 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
 #chat-send:hover{filter:brightness(1.1)}
 #chat-send:disabled{opacity:.4;cursor:not-allowed}
 #chat-send svg{color:var(--bg)}
+#chat-attach{
+  width:36px;height:36px;border-radius:8px;background:transparent;
+  border:1px solid var(--border);cursor:pointer;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;color:var(--muted);transition:border-color .15s,color .15s,background .15s;
+}
+#chat-attach:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-bg)}
+#chat-file-input{display:none}
+#chat-pending-row{padding:6px 14px 0;display:none}
+#chat-pending-row.show{display:block}
+.chat-pending-chip{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg);
+  border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--text2)}
+.chat-pending-chip button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1}
+.chat-pending-chip button:hover{color:var(--danger)}
+.chat-msg-attach{display:block;margin-top:6px}
+.chat-msg-attach-img img{max-width:280px;max-height:200px;border-radius:8px;display:block}
+.chat-msg-attach-file{display:inline-flex;padding:6px 10px;background:var(--accent-bg);
+  border:1px solid rgba(34,211,238,.25);border-radius:8px;font-size:12px;color:var(--accent);text-decoration:none}
+.chat-msg.mine .chat-msg-attach-file{background:rgba(0,0,0,.12);border-color:rgba(255,255,255,.25);color:var(--bg)}
 .chat-modal-overlay{
   position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.55);
   display:flex;align-items:center;justify-content:center;padding:20px;
@@ -306,7 +324,12 @@ body.sb-open .sidebar-overlay{display:block}
       </div>
       <div id="chat-empty">Sélectionnez un canal ou démarrez une conversation.</div>
       <div id="chat-messages" style="display:none"></div>
+      <div id="chat-pending-row"></div>
       <div id="chat-input-area" style="display:none">
+        <input type="file" id="chat-file-input" accept=".jpg,.jpeg,.png,.webp,.gif,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip">
+        <button type="button" id="chat-attach" aria-label="Pièce jointe" title="Pièce jointe" onclick="document.getElementById('chat-file-input').click()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+        </button>
         <textarea id="chat-input" placeholder="Message…" rows="1" aria-label="Message"></textarea>
         <button type="button" id="chat-send" aria-label="Envoyer" onclick="sendMessage()">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
@@ -340,6 +363,7 @@ let pollTimer = null;
 let listPollTimer = null;
 let allUsers = [];
 let newChannelMembers = [];
+let pendingChatFile = null;
 
 // ── Sonnerie notification ─────────────────────────────────
 let _audioCtx = null;
@@ -465,6 +489,8 @@ function renderChannelLists(){
 
 async function selectChannel(id){
   activeId=id;
+  pendingChatFile=null;
+  renderPendingChatFile();
   renderChannelLists();
   document.body.classList.add('chat-active');
   document.body.classList.remove('chat-list-open');
@@ -534,14 +560,44 @@ function renderMessages(fullRebuild){
   }
 }
 
+function chatAttachmentHtml(m){
+  if(!m.attachment_url)return '';
+  const url=esc(m.attachment_url);
+  const name=esc(m.attachment_name||'Pièce jointe');
+  const mime=(m.attachment_mime||'').toLowerCase();
+  if(mime.indexOf('image/')===0){
+    return '<a class="chat-msg-attach chat-msg-attach-img" href="'+url+'" target="_blank" rel="noopener noreferrer">'+
+      '<img src="'+url+'" alt="'+name+'"></a>';
+  }
+  return '<a class="chat-msg-attach chat-msg-attach-file" href="'+url+'" target="_blank" rel="noopener noreferrer" download>'+name+'</a>';
+}
+
+function renderPendingChatFile(){
+  const row=document.getElementById('chat-pending-row');
+  if(!row)return;
+  if(!pendingChatFile){row.classList.remove('show');row.innerHTML='';return;}
+  row.classList.add('show');
+  row.innerHTML='<div class="chat-pending-chip"><span>'+esc(pendingChatFile.name)+'</span>'+
+    '<button type="button" aria-label="Retirer" onclick="clearPendingChatFile()">×</button></div>';
+}
+
+function clearPendingChatFile(){
+  pendingChatFile=null;
+  renderPendingChatFile();
+}
+
 function buildMsgEl(m){
   const wrap=document.createElement('div');
   wrap.className='chat-msg '+(m.is_mine?'mine':'theirs');
   wrap.dataset.id=String(m.id);
   const canDel=m.is_mine||ADMIN_ROLES.has(window.__MYSIFA_ROLE__);
+  const body=(m.body||'').trim();
+  let bubble=body?esc(body):'';
+  if(m.attachment_url)bubble+=(bubble?'<br>':'')+chatAttachmentHtml(m);
+  if(!bubble)bubble='<span style="color:var(--muted);font-size:12px">Pièce jointe</span>';
   wrap.innerHTML=
     '<div class="chat-msg-label">'+esc(m.user_nom)+' · '+esc(fmtTime(m.created_at))+'</div>'+
-    '<div class="chat-msg-bubble">'+esc(m.body)+'</div>'+
+    '<div class="chat-msg-bubble">'+bubble+'</div>'+
     (canDel?'<button type="button" class="chat-msg-del" title="Supprimer" onclick="deleteMsg('+m.id+')">×</button>':'');
   return wrap;
 }
@@ -607,17 +663,27 @@ async function loadMoreMessages(){
 async function sendMessage(){
   const inp=document.getElementById('chat-input');
   const body=(inp.value||'').trim();
-  if(!body||!activeId)return;
+  const file=pendingChatFile;
+  if((!body&&!file)||!activeId)return;
   const btn=document.getElementById('chat-send');
   btn.disabled=true;
   try{
-    await api('/api/chat/channels/'+activeId+'/messages',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({body})
-    });
+    if(file){
+      const fd=new FormData();
+      if(body)fd.append('body',body);
+      fd.append('file',file);
+      await api('/api/chat/channels/'+activeId+'/messages',{method:'POST',body:fd});
+    }else{
+      await api('/api/chat/channels/'+activeId+'/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({body})
+      });
+    }
     inp.value='';
     inp.style.height='auto';
+    pendingChatFile=null;
+    renderPendingChatFile();
     await loadMessages(false);
   }catch(e){
     showToast(e.message||'Envoi impossible','danger');
@@ -766,6 +832,11 @@ document.getElementById('chat-input').addEventListener('keydown',e=>{
 document.getElementById('chat-input').addEventListener('input',function(){
   this.style.height='auto';
   this.style.height=Math.min(this.scrollHeight,80)+'px';
+});
+document.getElementById('chat-file-input').addEventListener('change',function(){
+  pendingChatFile=(this.files&&this.files[0])||null;
+  renderPendingChatFile();
+  this.value='';
 });
 
 const ICO_MOON='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';

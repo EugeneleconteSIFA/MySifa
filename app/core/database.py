@@ -1544,6 +1544,19 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 35, "chat_channels_messages")
 
+    # v36 — Pièces jointes messagerie
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=36 LIMIT 1").fetchone():
+        for col, typedef in (
+            ("attachment_url", "TEXT"),
+            ("attachment_name", "TEXT"),
+            ("attachment_mime", "TEXT"),
+            ("attachment_size", "INTEGER"),
+        ):
+            if col not in {r[1] for r in conn.execute("PRAGMA table_info(chat_messages)").fetchall()}:
+                conn.execute(f"ALTER TABLE chat_messages ADD COLUMN {col} {typedef}")
+        conn.commit()
+        _record_schema_migration(conn, 36, "chat_messages_attachments")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

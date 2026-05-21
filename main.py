@@ -80,6 +80,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 _uploads_root = os.path.join(BASE_DIR, "uploads")
 os.makedirs(os.path.join(_uploads_root, "traca"), exist_ok=True)
 os.makedirs(os.path.join(_uploads_root, "avatars"), exist_ok=True)
+os.makedirs(os.path.join(_uploads_root, "chat"), exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=_uploads_root), name="uploads")
 
 app.add_middleware(

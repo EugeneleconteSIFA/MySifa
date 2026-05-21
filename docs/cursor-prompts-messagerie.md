@@ -2089,6 +2089,308 @@ def chat_unread(request: Request):
 
 ---
 
+## Prompt 8 — "Est en train d'écrire" + "Message lu"
+
+```
+Contexte projet : MySifa. Le router /api/chat/* est opérationnel dans app/routers/chat.py.
+Le widget chat est dans static/chat_widget.js.
+Design system : variables CSS --bg, --card, --border, --text, --text2, --muted, --accent, --accent-bg.
+Pas de WebSocket — tout est en polling. Backend FastAPI + SQLite.
+
+Tâche : Ajouter deux fonctionnalités dans le widget chat existant :
+  A) Indicateur "est en train d'écrire" (typing indicator)
+  B) Accusés de lecture "message lu" (read receipts)
+
+Les deux fonctionnalités doivent s'intégrer dans le code existant sans le réécrire.
+
+=== PARTIE A — "Est en train d'écrire" ===
+
+--- Backend (app/routers/chat.py) ---
+
+Ajouter un état de frappe en mémoire vive (pas en DB — éphémère par nature) :
+
+```python
+import time
+from threading import Lock
+
+_typing_lock = Lock()
+_typing_state: dict[int, dict[int, dict]] = {}
+# Structure : { channel_id: { user_id: { "nom": str, "expires": float } } }
+_TYPING_TTL = 6.0  # secondes
+
+
+def _typing_cleanup(channel_id: int) -> None:
+    """Supprime les entrées expirées pour un canal."""
+    now = time.time()
+    with _typing_lock:
+        if channel_id not in _typing_state:
+            return
+        expired = [uid for uid, v in _typing_state[channel_id].items() if v["expires"] < now]
+        for uid in expired:
+            del _typing_state[channel_id][uid]
+```
+
+Ajouter deux endpoints dans chat.py :
+
+```python
+@router.post("/channels/{channel_id}/typing")
+def set_typing(channel_id: int, request: Request):
+    """
+    Signale que l'utilisateur est en train d'écrire.
+    À appeler depuis le frontend toutes les 3s pendant la frappe.
+    L'entrée expire automatiquement après _TYPING_TTL secondes.
+    """
+    user = _require(request)
+    with get_db() as conn:
+        _assert_member(conn, channel_id, user["id"])
+    now = time.time()
+    with _typing_lock:
+        if channel_id not in _typing_state:
+            _typing_state[channel_id] = {}
+        _typing_state[channel_id][user["id"]] = {
+            "nom": user.get("nom") or user.get("email", ""),
+            "expires": now + _TYPING_TTL,
+        }
+    return {"ok": True}
+
+
+@router.get("/channels/{channel_id}/typing")
+def get_typing(channel_id: int, request: Request):
+    """
+    Retourne la liste des utilisateurs en train d'écrire (hors soi-même).
+    """
+    user = _require(request)
+    _typing_cleanup(channel_id)
+    now = time.time()
+    with _typing_lock:
+        entries = dict(_typing_state.get(channel_id, {}))
+    typists = [
+        v["nom"]
+        for uid, v in entries.items()
+        if uid != user["id"] and v["expires"] > now
+    ]
+    return {"typists": typists}
+```
+
+--- Frontend (static/chat_widget.js) ---
+
+1. Ajouter un élément #cw-typing-bar sous #cw-messages, au-dessus de #cw-input-row :
+
+Dans buildDom(), dans la chaîne innerHTML du panel, remplacer :
+  '<div id="cw-input-row">...'
+Par :
+  '<div id="cw-typing-bar" style="height:20px;padding:0 14px;font-size:11px;' +
+  'color:var(--muted);display:flex;align-items:center;gap:6px;min-height:20px"></div>' +
+  '<div id="cw-input-row">...'
+
+2. Ajouter dans CW_STYLES :
+  '#cw-typing-bar{transition:opacity .2s}'
+  '.cw-typing-dot{width:5px;height:5px;border-radius:50%;background:var(--muted);display:inline-block;animation:cwTypDot 1.2s ease-in-out infinite}'
+  '.cw-typing-dot:nth-child(2){animation-delay:.2s}'
+  '.cw-typing-dot:nth-child(3){animation-delay:.4s}'
+  '@keyframes cwTypDot{0%,80%,100%{transform:scale(.6);opacity:.4}40%{transform:scale(1);opacity:1}}'
+
+3. Ajouter dans l'état CW :
+  typingTimer: null,     // setInterval pour envoyer POST /typing pendant la frappe
+  typingPollTimer: null, // setInterval pour GET /typing toutes les 2.5s
+  _lastTypingSent: 0,    // timestamp de la dernière requête POST /typing
+
+4. Dans l'écouteur `input` du textarea #cw-input (dans buildDom) :
+  Appeler signalTyping() à chaque frappe.
+
+5. Ajouter la fonction signalTyping() :
+```javascript
+function signalTyping() {
+  if (!CW.activeId) return;
+  const now = Date.now();
+  if (now - CW._lastTypingSent < 2800) return; // throttle : max 1 requête / 3s
+  CW._lastTypingSent = now;
+  api('/api/chat/channels/' + CW.activeId + '/typing', { method: 'POST' }).catch(() => {});
+}
+```
+
+6. Ajouter la fonction pollTyping() :
+```javascript
+async function pollTyping() {
+  if (!CW.activeId || !CW.open) return;
+  try {
+    const data = await api('/api/chat/channels/' + CW.activeId + '/typing');
+    const bar = document.getElementById('cw-typing-bar');
+    if (!bar) return;
+    const typists = data.typists || [];
+    if (!typists.length) {
+      bar.innerHTML = '';
+      return;
+    }
+    let label = '';
+    if (typists.length === 1) label = escCW(typists[0]) + ' est en train d\'écrire';
+    else if (typists.length === 2) label = escCW(typists[0]) + ' et ' + escCW(typists[1]) + ' écrivent';
+    else label = typists.length + ' personnes écrivent';
+    bar.innerHTML =
+      '<span class="cw-typing-dot"></span>' +
+      '<span class="cw-typing-dot"></span>' +
+      '<span class="cw-typing-dot"></span>' +
+      '<span style="margin-left:4px">' + label + '</span>';
+  } catch (e) {}
+}
+```
+
+7. Dans selectChannel() : démarrer le polling typing :
+  Après `CW.pollTimer = setInterval(pollMessages, 5000);` ajouter :
+  `if (CW.typingPollTimer) clearInterval(CW.typingPollTimer);`
+  `CW.typingPollTimer = setInterval(pollTyping, 2500);`
+  `pollTyping();`
+
+8. Dans togglePanel() (branche fermeture, où on clearInterval pollTimer) :
+  Ajouter `if (CW.typingPollTimer) { clearInterval(CW.typingPollTimer); CW.typingPollTimer = null; }`
+
+9. Dans CW.destroy() : ajouter clearInterval des deux nouveaux timers.
+
+=== PARTIE B — "Message lu" (read receipts) ===
+
+Périmètre MVP : uniquement les DMs (2 personnes). Dans les canaux, un simple compteur "N vus".
+
+--- Backend (app/routers/chat.py) ---
+
+Modifier GET /channels/{channel_id}/members pour inclure last_read_at :
+
+Localiser la requête SQL dans channel_members() et ajouter cm.last_read_at :
+
+```python
+@router.get("/channels/{channel_id}/members")
+def channel_members(channel_id: int, request: Request):
+    user = _require(request)
+    with get_db() as conn:
+        _assert_member(conn, channel_id, user["id"])
+        rows = conn.execute(
+            """SELECT u.id, u.nom, u.role, u.avatar_url, cm.joined_at, cm.last_read_at
+               FROM chat_members cm JOIN users u ON u.id = cm.user_id
+               WHERE cm.channel_id = ?
+               ORDER BY u.nom""",
+            (channel_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+```
+
+Pas d'autre changement backend nécessaire — last_read_at est déjà mis à jour à chaque
+GET /channels/{id}/messages et POST /channels/{id}/messages.
+
+--- Frontend (static/chat_widget.js) ---
+
+1. Ajouter dans l'état CW :
+  memberReadStatus: {},  // { user_id: last_read_at ISO string } pour le canal actif
+
+2. Ajouter la fonction fetchReadStatus() :
+```javascript
+async function fetchReadStatus(channelId) {
+  try {
+    const members = await api('/api/chat/channels/' + channelId + '/members');
+    const status = {};
+    (members || []).forEach(m => { status[m.id] = m.last_read_at || null; });
+    CW.memberReadStatus = status;
+    updateReadReceipts();
+  } catch (e) {}
+}
+```
+
+3. Ajouter la fonction updateReadReceipts() :
+```javascript
+function updateReadReceipts() {
+  // Nettoyer les anciens indicateurs
+  document.querySelectorAll('.cw-read-receipt').forEach(el => el.remove());
+
+  const ch = CW.channels.find(c => c.id === CW.activeId);
+  if (!ch) return;
+  const box = document.getElementById('cw-messages');
+  if (!box) return;
+
+  // Récupérer mes messages (triés du plus récent au plus ancien)
+  const myMsgs = [...box.querySelectorAll('.cw-msg-mine[data-id]')].reverse();
+  if (!myMsgs.length) return;
+
+  if (ch.type === 'direct') {
+    // DM : chercher l'autre membre
+    const otherId = ch.other_user_id;
+    const otherReadAt = CW.memberReadStatus[otherId];
+    if (!otherReadAt) return;
+
+    // Trouver le dernier de mes messages lu par l'autre
+    for (const msgEl of myMsgs) {
+      const msgId = parseInt(msgEl.dataset.id, 10);
+      // Récupérer le created_at du message depuis le DOM ou via data-at
+      const msgAt = msgEl.dataset.at;
+      if (!msgAt) continue;
+      if (otherReadAt >= msgAt) {
+        // Ajouter "Vu" sous ce message uniquement
+        const receipt = document.createElement('div');
+        receipt.className = 'cw-read-receipt';
+        receipt.style.cssText =
+          'text-align:right;font-size:10px;color:var(--accent);padding:0 2px 4px;' +
+          'display:flex;align-items:center;justify-content:flex-end;gap:4px';
+        receipt.innerHTML =
+          '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"' +
+          ' stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+          '<polyline points="20 6 9 17 4 12"/></svg>Vu';
+        msgEl.after(receipt);
+        break; // un seul "Vu" — sur le dernier message lu
+      }
+    }
+  } else {
+    // Canal : "N vus" sous le dernier message (simplifié)
+    const lastMyMsg = myMsgs[0];
+    if (!lastMyMsg) return;
+    const lastAt = lastMyMsg.dataset.at;
+    if (!lastAt) return;
+    const readCount = Object.entries(CW.memberReadStatus)
+      .filter(([uid, at]) => Number(uid) !== CW.uid && at && at >= lastAt)
+      .length;
+    if (readCount > 0) {
+      const receipt = document.createElement('div');
+      receipt.className = 'cw-read-receipt';
+      receipt.style.cssText =
+        'text-align:right;font-size:10px;color:var(--muted);padding:0 2px 4px';
+      receipt.textContent = readCount + ' vu' + (readCount > 1 ? 's' : '');
+      lastMyMsg.after(receipt);
+    }
+  }
+}
+```
+
+4. Dans renderMsg() : ajouter `data-at` sur l'élément pour que updateReadReceipts() puisse
+   comparer les timestamps :
+
+Dans renderMsg(), après `div.dataset.id = String(msg.id);`, ajouter :
+  `if (msg.created_at) div.dataset.at = String(msg.created_at);`
+
+5. Dans selectChannel() : appeler fetchReadStatus après le chargement des messages.
+   Juste après `scrollMessagesBottom();`, ajouter :
+   `fetchReadStatus(id);`
+
+6. Dans pollMessages() : après `await syncChatState(false);`, ajouter :
+   `fetchReadStatus(CW.activeId);`
+   Cela rafraîchit les accusés de lecture à chaque cycle de polling.
+
+7. Dans sendMessage() : appeler fetchReadStatus après envoi.
+   Juste après `scrollMessagesBottom();`, ajouter :
+   `fetchReadStatus(CW.activeId);`
+
+--- Vérification finale ---
+
+A — Typing indicator :
+1. Ouvrir le chat dans deux onglets avec deux utilisateurs différents.
+2. Dans l'onglet A, commencer à taper → dans les 2.5s, l'onglet B affiche "X est en train d'écrire" avec les trois points animés.
+3. Arrêter de taper → dans les 6s, l'indicateur disparaît automatiquement.
+4. Envoyer le message → l'indicateur disparaît immédiatement.
+
+B — Read receipts :
+1. Utilisateur A envoie un message dans un DM.
+2. Utilisateur B ouvre le canal (GET /messages met à jour last_read_at).
+3. Dans les 5s (prochain poll de A), "Vu" apparaît sous le dernier message de A.
+4. Dans un canal, "N vus" apparaît sous le dernier message après lecture par d'autres membres.
+```
+
+---
+
 ## Ordre d'exécution complet
 
 | # | Prompt | Périmètre | Durée est. |
@@ -2100,15 +2402,17 @@ def chat_unread(request: Request):
 | 5 | Badges sidebar + /inbox | `html.py` + page inbox | 20 min |
 | 6 | DB + API chat (DMs + canaux) | `/api/chat/*` | 20 min |
 | 7 | Widget chat flottant | `static/chat_widget.js` + injection `html.py` | 40 min |
+| 8 | "Est en train d'écrire" + "Message lu" | `chat.py` + `chat_widget.js` | 30 min |
 
-Les Prompts 1–5 (commentaires contextuels) sont indépendants des Prompts 6–7 (chat).
+Les Prompts 1–5 (commentaires contextuels) sont indépendants des Prompts 6–8 (chat).
 Commencer par 6 si le chat est la priorité ; commencer par 1 si les commentaires sur dossiers le sont.
+Les Prompts 6 et 7 sont livrés et opérationnels. Exécuter le Prompt 8 directement.
 
 ## Points d'attention (tous prompts)
 
 - Tester systématiquement en **thème light** (`body.light`).
 - Le `no_dossier` dans fabrication est une **string** — `object_id` en DB est TEXT.
-- Pour le chat (Prompt 7), le polling à **5s** est intentionnel pour un chat temps-quasi-réel
+- Pour le chat (Prompts 7–8), le polling à **5s** est intentionnel pour un chat temps-quasi-réel
   sans WebSocket. Sur un VPS avec 10–20 utilisateurs simultanés, c'est négligeable.
 - Les canaux par défaut (#général, #fabrication, #logistique) sont créés via
   `POST /api/chat/channels/seed-defaults` une seule fois après déploiement.
@@ -2117,3 +2421,7 @@ Commencer par 6 si le chat est la priorité ; commencer par 1 si les commentaire
 - Le widget flottant est injecté via le layout commun (`html.py`) — il n'a pas besoin d'être
   dupliqué dans chaque page. S'assurer que `window.__MYSIFA_APP__` est bien défini sur chaque page
   (portail = `'portal'`, autres = identifiant de la page) avant le chargement de `chat_widget.js`.
+- **Typing indicator** : l'état est en mémoire vive (`_typing_state` dict Python), pas en DB.
+  Il se réinitialise au redémarrage du serveur — comportement acceptable.
+- **Read receipts** : le `data-at` sur chaque message est indispensable pour la comparaison
+  des timestamps. Vérifier que `msg.created_at` est bien inclus dans la réponse API.

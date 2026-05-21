@@ -5,13 +5,18 @@ Accès  : tout utilisateur authentifié.
 """
 from __future__ import annotations
 
+import re
+import time
+import uuid
 from datetime import datetime
+from pathlib import Path
+from threading import Lock
 from typing import List, Optional
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 
-from config import ROLE_SUPERADMIN
+from config import BASE_DIR, ROLE_SUPERADMIN
 from database import get_db
 from services.auth_service import get_current_user
 
@@ -20,6 +25,45 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 _PARIS = ZoneInfo("Europe/Paris")
 _MAX_BODY = 4000
 _PAGE_SIZE = 50
+_MAX_ATTACHMENT = 10 * 1024 * 1024
+_MSG_SELECT = """m.id, m.user_id, m.user_nom, m.body, m.created_at,
+                   m.attachment_url, m.attachment_name, m.attachment_mime, m.attachment_size,
+                   u.avatar_url"""
+_ALLOWED_ATTACHMENT_EXT = {
+    ".jpg", ".jpeg", ".png", ".webp", ".gif", ".pdf",
+    ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+    ".txt", ".csv", ".zip",
+}
+_ALLOWED_ATTACHMENT_MIMES = {
+    "image/jpeg", "image/png", "image/webp", "image/gif",
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "application/msword",
+    "application/vnd.ms-excel",
+    "application/vnd.ms-powerpoint",
+    "text/plain", "text/csv",
+    "application/zip", "application/x-zip-compressed",
+}
+
+_typing_lock = Lock()
+_typing_state: dict[int, dict[int, dict]] = {}
+_TYPING_TTL = 6.0
+
+
+def _typing_cleanup(channel_id: int) -> None:
+    """Supprime les entrées expirées pour un canal."""
+    now = time.time()
+    with _typing_lock:
+        if channel_id not in _typing_state:
+            return
+        expired = [
+            uid for uid, v in _typing_state[channel_id].items() if v["expires"] < now
+        ]
+        for uid in expired:
+            del _typing_state[channel_id][uid]
+
 
 _DEFAULT_CHANNELS = [
     ("général", "Canal général — toute l'équipe", None),
@@ -42,6 +86,55 @@ def _now_iso() -> str:
 
 def _require(request: Request) -> dict:
     return get_current_user(request)
+
+
+def _message_dict(row, uid: int) -> dict:
+    return {
+        "id": row["id"],
+        "user_id": row["user_id"],
+        "user_nom": row["user_nom"],
+        "body": row["body"] or "",
+        "created_at": row["created_at"],
+        "avatar_url": row["avatar_url"] or "",
+        "attachment_url": row["attachment_url"] or "",
+        "attachment_name": row["attachment_name"] or "",
+        "attachment_mime": row["attachment_mime"] or "",
+        "attachment_size": row["attachment_size"] or 0,
+        "is_mine": row["user_id"] == uid,
+    }
+
+
+def _safe_attachment_name(name: str) -> str:
+    base = Path(name or "fichier").name
+    base = re.sub(r"[^\w.\- ]", "_", base, flags=re.UNICODE).strip("._ ") or "fichier"
+    return base[:120]
+
+
+async def _save_chat_attachment(channel_id: int, upload: UploadFile) -> tuple[str, str, str, int]:
+    raw_name = upload.filename or "fichier"
+    safe = _safe_attachment_name(raw_name)
+    ext = Path(safe).suffix.lower()
+    if ext not in _ALLOWED_ATTACHMENT_EXT:
+        raise HTTPException(
+            status_code=400,
+            detail="Type de fichier non accepté (images, PDF, Office, texte, zip).",
+        )
+    mime = (upload.content_type or "").split(";")[0].strip().lower()
+    if mime and mime not in _ALLOWED_ATTACHMENT_MIMES:
+        raise HTTPException(status_code=400, detail="Type de fichier non accepté.")
+    content = await upload.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Fichier vide.")
+    if len(content) > _MAX_ATTACHMENT:
+        raise HTTPException(status_code=400, detail="Fichier trop volumineux (max 10 Mo).")
+    dest_dir = Path(BASE_DIR) / "uploads" / "chat" / str(channel_id)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    stored = f"{uuid.uuid4().hex[:12]}{ext}"
+    dest = dest_dir / stored
+    with open(dest, "wb") as f:
+        f.write(content)
+    url = f"/uploads/chat/{channel_id}/{stored}"
+    return url, safe, mime or "application/octet-stream", len(content)
 
 
 def _seed_default_channels(conn, created_by: Optional[int]) -> List[str]:
@@ -131,7 +224,7 @@ def list_channels(request: Request):
             d = dict(r)
             if d["type"] == "direct":
                 other = conn.execute(
-                    """SELECT u.nom, u.id FROM chat_members cm2
+                    """SELECT u.nom, u.id, u.avatar_url FROM chat_members cm2
                        JOIN users u ON u.id = cm2.user_id
                        WHERE cm2.channel_id = ? AND cm2.user_id != ?
                        LIMIT 1""",
@@ -139,6 +232,7 @@ def list_channels(request: Request):
                 ).fetchone()
                 d["display_name"] = other["nom"] if other else "Utilisateur inconnu"
                 d["other_user_id"] = other["id"] if other else None
+                d["other_user_avatar_url"] = (other["avatar_url"] or "") if other else ""
             else:
                 d["display_name"] = d["name"] or "Canal sans nom"
                 d["other_user_id"] = None
@@ -261,13 +355,48 @@ def channel_members(channel_id: int, request: Request):
     with get_db() as conn:
         _assert_member(conn, channel_id, user["id"])
         rows = conn.execute(
-            """SELECT u.id, u.nom, u.role, cm.joined_at
+            """SELECT u.id, u.nom, u.role, u.avatar_url, cm.joined_at, cm.last_read_at
                FROM chat_members cm JOIN users u ON u.id = cm.user_id
                WHERE cm.channel_id = ?
                ORDER BY u.nom""",
             (channel_id,),
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+@router.post("/channels/{channel_id}/typing")
+def set_typing(channel_id: int, request: Request):
+    """Signale que l'utilisateur est en train d'écrire (expire après _TYPING_TTL s)."""
+    user = _require(request)
+    with get_db() as conn:
+        _assert_member(conn, channel_id, user["id"])
+    now = time.time()
+    with _typing_lock:
+        if channel_id not in _typing_state:
+            _typing_state[channel_id] = {}
+        _typing_state[channel_id][user["id"]] = {
+            "nom": user.get("nom") or user.get("email", ""),
+            "expires": now + _TYPING_TTL,
+        }
+    return {"ok": True}
+
+
+@router.get("/channels/{channel_id}/typing")
+def get_typing(channel_id: int, request: Request):
+    """Utilisateurs en train d'écrire dans le canal (hors soi-même)."""
+    user = _require(request)
+    with get_db() as conn:
+        _assert_member(conn, channel_id, user["id"])
+    _typing_cleanup(channel_id)
+    now = time.time()
+    with _typing_lock:
+        entries = dict(_typing_state.get(channel_id, {}))
+    typists = [
+        v["nom"]
+        for uid, v in entries.items()
+        if uid != user["id"] and v["expires"] > now
+    ]
+    return {"typists": typists}
 
 
 # ─── Messages ────────────────────────────────────────────────────────────────
@@ -287,26 +416,29 @@ def get_messages(
         if after is not None:
             after_id = int(after)
             rows = conn.execute(
-                """SELECT id, user_id, user_nom, body, created_at
-                   FROM chat_messages
-                   WHERE channel_id=? AND deleted_at IS NULL AND id > ?
-                   ORDER BY created_at ASC""",
+                f"""SELECT {_MSG_SELECT}
+                   FROM chat_messages m
+                   LEFT JOIN users u ON u.id = m.user_id
+                   WHERE m.channel_id=? AND m.deleted_at IS NULL AND m.id > ?
+                   ORDER BY m.created_at ASC""",
                 (channel_id, after_id),
             ).fetchall()
         elif before:
             rows = conn.execute(
-                """SELECT id, user_id, user_nom, body, created_at
-                   FROM chat_messages
-                   WHERE channel_id=? AND deleted_at IS NULL AND created_at < ?
-                   ORDER BY created_at DESC LIMIT ?""",
+                f"""SELECT {_MSG_SELECT}
+                   FROM chat_messages m
+                   LEFT JOIN users u ON u.id = m.user_id
+                   WHERE m.channel_id=? AND m.deleted_at IS NULL AND m.created_at < ?
+                   ORDER BY m.created_at DESC LIMIT ?""",
                 (channel_id, before, _PAGE_SIZE),
             ).fetchall()
         else:
             rows = conn.execute(
-                """SELECT id, user_id, user_nom, body, created_at
-                   FROM chat_messages
-                   WHERE channel_id=? AND deleted_at IS NULL
-                   ORDER BY created_at DESC LIMIT ?""",
+                f"""SELECT {_MSG_SELECT}
+                   FROM chat_messages m
+                   LEFT JOIN users u ON u.id = m.user_id
+                   WHERE m.channel_id=? AND m.deleted_at IS NULL
+                   ORDER BY m.created_at DESC LIMIT ?""",
                 (channel_id, _PAGE_SIZE),
             ).fetchall()
 
@@ -321,46 +453,79 @@ def get_messages(
         ordered = list(rows)
     else:
         ordered = list(reversed(rows))
-    messages = [
-        {
-            "id": r["id"],
-            "user_id": r["user_id"],
-            "user_nom": r["user_nom"],
-            "body": r["body"],
-            "created_at": r["created_at"],
-            "is_mine": r["user_id"] == uid,
-        }
-        for r in ordered
-    ]
+    messages = [_message_dict(r, uid) for r in ordered]
     has_more = len(rows) == _PAGE_SIZE if before else False
     return {"messages": messages, "has_more": has_more}
 
 
 @router.post("/channels/{channel_id}/messages")
-async def send_message(channel_id: int, request: Request):
-    """Envoyer un message dans un canal."""
+async def send_message(
+    channel_id: int,
+    request: Request,
+    file: Optional[UploadFile] = File(None),
+):
+    """Envoyer un message (JSON ou multipart avec pièce jointe)."""
     user = _require(request)
-    data = await request.json()
-    body = (data.get("body") or "").strip()
-    if not body:
+    body = ""
+    upload = file
+    content_type = (request.headers.get("content-type") or "").lower()
+    if "multipart/form-data" in content_type:
+        form = await request.form()
+        raw_body = form.get("body")
+        body = (raw_body if isinstance(raw_body, str) else "").strip()
+        if upload is None:
+            f = form.get("file")
+            if isinstance(f, UploadFile):
+                upload = f
+    else:
+        data = await request.json()
+        body = (data.get("body") or "").strip()
+
+    if not body and not upload:
         raise HTTPException(status_code=400, detail="Message vide")
-    if len(body) > _MAX_BODY:
+    if body and len(body) > _MAX_BODY:
         raise HTTPException(status_code=400, detail=f"Message trop long (max {_MAX_BODY} caractères)")
+
+    att_url, att_name, att_mime, att_size = "", "", "", 0
+    if upload is not None and (upload.filename or ""):
+        with get_db() as conn:
+            _assert_member(conn, channel_id, user["id"])
+        att_url, att_name, att_mime, att_size = await _save_chat_attachment(channel_id, upload)
 
     now = _now_iso()
     with get_db() as conn:
         _assert_member(conn, channel_id, user["id"])
         cur = conn.execute(
-            """INSERT INTO chat_messages (channel_id, user_id, user_nom, body, created_at)
-               VALUES (?,?,?,?,?)""",
-            (channel_id, user["id"], user.get("nom") or user.get("email", ""), body, now),
+            """INSERT INTO chat_messages
+               (channel_id, user_id, user_nom, body, created_at,
+                attachment_url, attachment_name, attachment_mime, attachment_size)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
+            (
+                channel_id,
+                user["id"],
+                user.get("nom") or user.get("email", ""),
+                body,
+                now,
+                att_url or None,
+                att_name or None,
+                att_mime or None,
+                att_size or None,
+            ),
         )
         conn.execute(
             "UPDATE chat_members SET last_read_at=? WHERE channel_id=? AND user_id=?",
             (now, channel_id, user["id"]),
         )
         conn.commit()
-    return {"id": cur.lastrowid, "created_at": now}
+    return {
+        "id": cur.lastrowid,
+        "created_at": now,
+        "body": body,
+        "attachment_url": att_url,
+        "attachment_name": att_name,
+        "attachment_mime": att_mime,
+        "attachment_size": att_size,
+    }
 
 
 @router.delete("/channels/{channel_id}/messages/{msg_id}")
@@ -396,7 +561,7 @@ def list_users(request: Request, q: str = ""):
     uid = user["id"]
     with get_db() as conn:
         rows = conn.execute(
-            "SELECT id, nom, role FROM users WHERE actif=1 ORDER BY nom",
+            "SELECT id, nom, role, avatar_url FROM users WHERE actif=1 ORDER BY nom",
         ).fetchall()
     users = [dict(r) for r in rows if r["id"] != uid]
     if q:
