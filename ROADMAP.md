@@ -1,6 +1,6 @@
 # MySifa — Roadmap
 
-*Dernière mise à jour : mai 2026 — Agent IA livré et opérationnel*
+*Dernière mise à jour : mai 2026*
 
 ---
 
@@ -15,7 +15,158 @@ Ce qui ne peut pas attendre.
 
 ---
 
-## 2. Dashboard direction
+## 2. Présence permanente au bureau
+
+Objectif : MySifa est l'onglet qu'on ne ferme jamais. Point de départ naturel de chaque journée. Les leviers ci-dessous sont ordonnés par impact / effort.
+
+---
+
+### 2.1 Favicon badge dynamique
+**Effort : 1–2 jours · Impact : élevé**
+
+Le principe : l'onglet MySifa affiche un compteur rouge en temps réel (pattern Gmail) quand des actions sont en attente. Les utilisateurs gardent l'onglet visible pour surveiller le chiffre.
+
+**Ce qui déclenche le badge :**
+- Messages non lus dans la messagerie interne (`S.msgUnread` existe déjà)
+- Dossiers en attente de validation (direction, administration)
+- Alertes stock critique (MyStock, seuil configurable)
+
+**Implémentation — `app/static/favicon-badge.js`**
+
+Créer une fonction `updateFaviconBadge(count)` :
+1. Créer un canvas 32×32px
+2. Dessiner le favicon de base (lettre "M" en `#f1f5f9` sur fond `#0a0e17`, border-radius 6px)
+3. Si `count > 0` : cercle `#f87171` de 12px en haut à droite, chiffre blanc centré (`font: bold 9px system-ui`), texte "9+" si count > 9
+4. `document.querySelector('link[rel="icon"]').href = canvas.toDataURL()`
+
+**Endpoint API — `GET /api/alerts/count`** dans `app/routers/` :
+- Auth cookie `sifa_token` (pattern standard)
+- Retourne `{ total: N, detail: { messages: N, validations: N, stock: N } }`
+- Requêtes légères, aucune jointure lourde — lecture directe sur `production.db`
+- Si l'utilisateur est sur la page source (ex. sur `/messages`), le compteur messages n'est pas inclus dans le total
+
+**Déclenchement dans le JS frontend (`app/web/html.py`) :**
+- Au chargement initial de l'app
+- `setInterval` toutes les 60 secondes
+- Immédiatement après toute action susceptible de modifier le compte (envoi message, validation dossier, etc.)
+
+**Contraintes :**
+- Badge à 0 → favicon standard, aucun cercle rouge
+- Fonctionne sur Chrome, Edge, Firefox desktop
+- Fonctionne aussi dans la fenêtre PWA (point 2.2)
+
+---
+
+### 2.2 PWA desktop (Progressive Web App)
+**Effort : 2–3 jours · Impact : élevé**
+
+Le principe : MySifa s'installe comme une vraie application Windows/Mac depuis Chrome ou Edge — icône dans la barre des tâches, fenêtre standalone sans chrome navigateur, survit à la fermeture du navigateur.
+
+**a) `app/static/manifest.json`** — servi à `/manifest.json` via FastAPI (route statique) :
+```json
+{
+  "name": "MySifa",
+  "short_name": "MySifa",
+  "description": "Portail interne — Production, stocks et outils métier",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0e17",
+  "theme_color": "#0a0e17",
+  "orientation": "any",
+  "icons": [
+    { "src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/static/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
+```
+
+**b) Icônes PNG** à créer dans `app/static/icons/` :
+- `icon-192.png` : 192×192px — fond `#0a0e17`, texte "My**Sifa**" (Sifa en `#22d3ee`), police Segoe UI bold
+- `icon-512.png` : 512×512px, même style, proportions identiques
+- `icon-maskable-512.png` : 512×512px, safe area 40% du bord (contenu dans les 60% centraux)
+
+**c) `app/static/sw.js`** — Service Worker minimal :
+- Stratégie **Cache First** pour `/static/**` (CSS, JS, icons) → chargement instantané
+- Stratégie **Network First** pour les appels API (`/api/**`) → données toujours fraîches
+- Pas d'offline complet requis — juste la coque de l'app pour éviter l'écran blanc
+- Version du cache à incrémenter à chaque déploiement (`const CACHE = 'mysifa-v1'`)
+
+**d) `<head>` HTML** — ajouter dans `app/web/html.py` (dans la chaîne `_BASE_HTML`) :
+```html
+<link rel="manifest" href="/manifest.json">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="MySifa">
+<link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+```
+
+**e) Enregistrement du service worker** — dans le JS frontend, au démarrage de l'app :
+```javascript
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+```
+
+**Comportement attendu :**
+- Chrome/Edge affiche une icône d'installation dans la barre d'adresse dès la première visite
+- Une fois installé : MySifa apparaît dans les apps Windows/Mac, s'ouvre en fenêtre standalone
+- Sur mobile : icône sur l'écran d'accueil, plein écran sans barre navigateur
+- Le favicon badge (point 2.1) fonctionne dans la fenêtre PWA
+
+---
+
+### 2.3 Dashboard "début de journée" par rôle
+**Effort : 1 semaine**
+
+- [ ] Route `/dashboard` accessible selon le rôle
+- [ ] Direction : KPIs production semaine, alertes retard, départs prévus
+- [ ] Administration : absences du jour, planning RH, dossiers à valider
+- [ ] Comptabilité : dossiers à facturer, pièces manquantes
+- [ ] Rafraîchissement automatique toutes les 2 minutes, aucune navigation requise
+
+---
+
+### 2.4 Notifications navigateur (Web Push)
+**Effort : 3–4 jours** *(nécessite le service worker du point 2.2)*
+
+- [ ] Notification push quand un dossier passe en retard
+- [ ] Notification quand une validation est requise (direction / administration)
+- [ ] Notification quand un seuil de stock critique est franchi
+- [ ] Opt-in explicite par utilisateur, géré depuis les Paramètres
+- [ ] Backend : endpoint VAPID + `app/services/push_notifications.py`
+
+---
+
+### 2.5 Raccourcis clavier globaux
+**Effort : 1 jour**
+
+- [ ] `G` + `P` → Planning · `G` + `S` → Stock · `G` + `M` → MyProd · `G` + `C` → Compta
+- [ ] `?` → afficher la liste des raccourcis (modal)
+- [ ] Listener `keydown` global, désactivé quand le focus est dans un champ texte
+- [ ] Pattern identique à Gmail / Linear
+
+---
+
+### 2.6 Sessions longues sur postes fixes
+**Effort : 1 jour**
+
+- [ ] Checkbox "Rester connecté" sur l'écran de login
+- [ ] Si coché : cookie longue durée 14 jours ; sinon : 6h actuelles
+- [ ] Pour les postes partagés, maintenir le comportement 6h par défaut
+
+---
+
+### 2.7 Saisie rapide depuis le portail
+**Effort : 2 jours**
+
+- [ ] Bouton "Saisie rapide" sur le portail → modal pré-rempli avec le dernier dossier en cours de l'opérateur
+- [ ] Objectif : 2 clics pour enregistrer une action sans naviguer dans MyProd
+
+---
+
+## 3. Dashboard direction
 
 Il n'existe pas de vue synthétique pour la direction. Les données sont dans la DB, personne ne les voit agrégées.
 
@@ -25,7 +176,7 @@ Il n'existe pas de vue synthétique pour la direction. Les données sont dans la
 
 ---
 
-## 3. Exports
+## 4. Exports
 
 Les données restent aujourd'hui prisonnières de l'outil.
 
@@ -35,7 +186,7 @@ Les données restent aujourd'hui prisonnières de l'outil.
 
 ---
 
-## 4. Notifications & alertes
+## 5. Notifications & alertes
 
 L'outil est 100 % pull (on va voir). Il faut du push.
 
@@ -46,7 +197,7 @@ L'outil est 100 % pull (on va voir). Il faut du push.
 
 ---
 
-## 5. MyStock — manques à combler
+## 6. MyStock — manques à combler
 
 Module le moins abouti par rapport à l'usage réel.
 
@@ -56,14 +207,14 @@ Module le moins abouti par rapport à l'usage réel.
 
 ---
 
-## 6. Traçabilité
+## 7. Traçabilité
 
 - [ ] Table `audit_log` : user / action / objet / timestamp sur toutes les actions sensibles (modification dossier, clôture, changement planning, modifications stock)
 - [ ] Consultable par `superadmin` depuis les Paramètres
 
 ---
 
-## 7. Messagerie contextuelle
+## 8. Messagerie contextuelle
 
 Pas de chat général — des échanges liés à des objets métier.
 
@@ -74,7 +225,7 @@ Pas de chat général — des échanges liés à des objets métier.
 
 ---
 
-## 8. Agent IA ✓
+## 9. Agent IA ✓
 
 > Livré et opérationnel — mai 2026. Accessible superadmin uniquement pour l'instant.
 > Stack : SDK Anthropic officiel, widget intégré au design system MySifa, contexte SIFA injecté automatiquement.
@@ -97,7 +248,7 @@ Pas de chat général — des échanges liés à des objets métier.
 
 ---
 
-## 9. Widget desktop — finaliser
+## 10. Widget desktop — finaliser
 
 - [ ] Rebuild Windows signé (`npm run build:win`) avec les nouvelles icônes
 - [ ] Distribution via installeur NSIS à jour
@@ -105,7 +256,7 @@ Pas de chat général — des échanges liés à des objets métier.
 
 ---
 
-## 10. Dette technique
+## 11. Dette technique
 
 - [ ] Tests automatisés sur les routes critiques (auth, saisie production, planning)
 - [ ] Script de déploiement propre depuis git (pas de copier-coller manuel)
@@ -113,7 +264,7 @@ Pas de chat général — des échanges liés à des objets métier.
 
 ---
 
-## 11. MyCalendrier — améliorations
+## 12. MyCalendrier — améliorations
 
 ### Accès & rôles
 
@@ -159,7 +310,7 @@ Pas de chat général — des échanges liés à des objets métier.
 
 ---
 
-## 12. Planning machine — améliorations
+## 13. Planning machine — améliorations
 
 ### Visibilité & navigation
 
