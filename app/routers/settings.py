@@ -222,6 +222,165 @@ def get_audit_logs(
     }
 
 
+# ─── Registre FSC ─────────────────────────────────────────────────
+
+_FSC_CLAIM_LABELS = {
+    "fsc_100": "FSC 100%",
+    "fsc_mix_credit": "FSC Mix Credit",
+    "fsc_mix": "FSC Mix",
+    "fsc_recycled": "FSC Recycled",
+    "non_fsc": "Non FSC",
+}
+
+
+@router.get("/api/fsc/stats")
+def get_fsc_stats(request: Request):
+    require_superadmin(request)
+    from database import get_db
+
+    with get_db() as conn:
+        recep_fsc = conn.execute(
+            """SELECT COUNT(*) FROM stock_receptions
+               WHERE fsc_type_claim != 'non_fsc' AND fsc_type_claim IS NOT NULL
+               AND strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')"""
+        ).fetchone()[0]
+        dossiers_fsc = conn.execute(
+            """SELECT COUNT(*) FROM planning_entries
+               WHERE fsc_requis = 1 AND statut != 'termine'"""
+        ).fetchone()[0]
+        alertes = conn.execute(
+            "SELECT COUNT(*) FROM fab_matieres_utilisees WHERE fsc_warning = 1"
+        ).fetchone()[0]
+        total_termines = conn.execute(
+            "SELECT COUNT(*) FROM planning_entries WHERE fsc_requis = 1 AND statut = 'termine'"
+        ).fetchone()[0]
+    return {
+        "recep_fsc_ce_mois": recep_fsc,
+        "dossiers_fsc_actifs": dossiers_fsc,
+        "alertes_ecart_total": alertes,
+        "dossiers_termines_fsc": total_termines,
+    }
+
+
+@router.get("/api/fsc/registre")
+def get_fsc_registre(
+    request: Request,
+    du: str = "",
+    au: str = "",
+    format: str = "json",
+):
+    require_superadmin(request)
+    import csv
+    import datetime as dt
+    import io
+
+    from database import get_db
+    from fastapi.responses import StreamingResponse
+
+    now = dt.datetime.now()
+    date_au = au or now.strftime("%Y-%m-%d")
+    date_du = du or (now - dt.timedelta(days=365)).strftime("%Y-%m-%d")
+
+    with get_db() as conn:
+        receptions = conn.execute(
+            """SELECT r.id, r.created_at, r.created_by_name, r.fournisseur,
+                      r.certificat_fsc, r.fsc_type_claim, r.nb_bobines,
+                      ff.licence AS fournisseur_licence
+               FROM stock_receptions r
+               LEFT JOIN fournisseurs_fsc ff ON ff.nom = r.fournisseur
+               WHERE r.fsc_type_claim != 'non_fsc' AND r.fsc_type_claim IS NOT NULL
+               AND date(r.created_at) BETWEEN ? AND ?
+               ORDER BY r.created_at DESC""",
+            (date_du, date_au),
+        ).fetchall()
+
+        dossiers = conn.execute(
+            """SELECT pe.reference, pe.client, pe.fsc_type_requis, pe.statut,
+                      pe.date_livraison, pe.machine_id,
+                      COUNT(fmu.id) AS nb_bobines_scannees,
+                      SUM(CASE WHEN fmu.fsc_warning = 1 THEN 1 ELSE 0 END) AS nb_alertes
+               FROM planning_entries pe
+               LEFT JOIN fab_matieres_utilisees fmu ON fmu.no_dossier = pe.reference
+               WHERE pe.fsc_requis = 1
+               AND (pe.date_livraison BETWEEN ? AND ? OR pe.date_livraison IS NULL OR pe.date_livraison = '')
+               GROUP BY pe.id
+               ORDER BY pe.date_livraison DESC NULLS LAST""",
+            (date_du, date_au),
+        ).fetchall()
+
+    recep_list = [dict(r) for r in receptions]
+    dossier_list = [dict(d) for d in dossiers]
+
+    if format == "csv":
+        output = io.StringIO()
+        output.write(f"# Registre FSC SIFA — {date_du} au {date_au}\n")
+        output.write(f"# Généré le {now.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+        output.write("## RECEPTIONS FSC\n")
+        w = csv.writer(output)
+        w.writerow(
+            [
+                "Date",
+                "Fournisseur",
+                "Licence FSC",
+                "Certificat",
+                "Type claim",
+                "Nb bobines",
+                "Réceptionné par",
+            ]
+        )
+        for r in recep_list:
+            claim = r.get("fsc_type_claim", "")
+            w.writerow(
+                [
+                    (r.get("created_at") or "")[:10],
+                    r.get("fournisseur") or "",
+                    r.get("fournisseur_licence") or "",
+                    r.get("certificat_fsc") or "",
+                    _FSC_CLAIM_LABELS.get(claim, claim),
+                    r.get("nb_bobines") or "",
+                    r.get("created_by_name") or "",
+                ]
+            )
+        output.write("\n## DOSSIERS FSC\n")
+        w.writerow(
+            [
+                "Référence",
+                "Client",
+                "Type FSC requis",
+                "Statut",
+                "Date livraison",
+                "Nb bobines scannées",
+                "Alertes écart",
+            ]
+        )
+        for d in dossier_list:
+            claim = d.get("fsc_type_requis", "")
+            w.writerow(
+                [
+                    d.get("reference") or "",
+                    d.get("client") or "",
+                    _FSC_CLAIM_LABELS.get(claim, claim),
+                    d.get("statut") or "",
+                    d.get("date_livraison") or "",
+                    d.get("nb_bobines_scannees") or 0,
+                    d.get("nb_alertes") or 0,
+                ]
+            )
+        filename = f"registre_fsc_{date_du}_{date_au}.csv"
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    return {
+        "periode": {"du": date_du, "au": date_au},
+        "genere_a": now.strftime("%Y-%m-%dT%H:%M:%S"),
+        "receptions": recep_list,
+        "dossiers": dossier_list,
+    }
+
+
 # ─── Fournisseurs FSC ──────────────────────────────────────────────
 
 @router.get("/api/fournisseurs")

@@ -372,6 +372,7 @@ body.light .cal-allday-row{background:#f8fafc}
 <script src="/static/mysifa_calendar.js"></script>
 <script>window.__MYSIFA_APP__='calendrier';</script>
 <script src="/static/mysifa_dock.js"></script>
+<script src="/static/mysifa_ai_chat.js"></script>
 <script src="/static/chat_widget.js"></script>
 <div class="sidebar-overlay" id="sb-ov"></div>
 <div class="layout">
@@ -1659,6 +1660,18 @@ window.addEventListener('resize',()=>{
     if(!ME){
       location.href='/?next=/calendrier';
       return;
+    }
+    window.__MYSIFA_UID__=ME.id;
+    window.__MYSIFA_NOM__=ME.nom||'';
+    window.__MYSIFA_ROLE__=ME.role||'';
+    window.__MYSIFA_USER__={nom:ME.nom||'',role:ME.role||''};
+    if(window._CW&&typeof window._CW.ensureReady==='function')await window._CW.ensureReady();
+    else if(window._CW&&typeof window._CW.syncUser==='function')window._CW.syncUser();
+    if(window.MySifaDock&&typeof window.MySifaDock.bootPageWidgets==='function'){
+      window.MySifaDock.bootPageWidgets();
+    }else if(typeof initAiChatWidget==='function'){
+      initAiChatWidget();
+      if(window.MySifaDock&&typeof window.MySifaDock.layout==='function')window.MySifaDock.layout();
     }
     if(window.MySifaTheme)MySifaTheme.mergeFromUser(ME);
     else if(window.MySifaCalendar)MySifaCalendar.mergeFromUser(ME);

@@ -842,6 +842,9 @@ function fabPauseAutoRefresh(ms){
 function escHtml(s){
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+function escAttr(s){
+  return escHtml(s).replace(/'/g,'&#39;');
+}
 
 const FSC_CLAIM_LABELS = {
   fsc_100: 'FSC 100%',
@@ -1658,34 +1661,196 @@ async function tracaSaveCode(code){
   const clean = code.trim();
   set({tracaAutoSaving:true});
   try{
-    const d = await apiFetch('/api/fabrication/matieres',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(tracaBuildMatiereBody(clean)),
-    });
-    if(await tracaHandleMatiereResponse(d, clean)) return;
-  }catch(e){
-    const msg = String((e && e.message) || '');
-    if(msg.toLowerCase().includes('fournisseur requis')){
+    const lookup = await apiFetch(
+      '/api/fabrication/receptions/lookup?code_barre=' + encodeURIComponent(clean)
+    );
+    if(lookup && lookup.found){
+      await tracaShowFicheConfirmation(clean, {
+        fournisseur: lookup.fournisseur || '—',
+        licence: lookup.fournisseur_licence || '—',
+        fsc_type_claim: lookup.fsc_type_claim || 'non_fsc',
+      });
+    }else{
       await loadFournisseursFSC();
-      const fid = await tracaAskFournisseur();
-      if(fid){
-        try{
-          const d2 = await apiFetch('/api/fabrication/matieres',{
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body:JSON.stringify(tracaBuildMatiereBody(clean, {fournisseur_fsc_id: fid})),
-          });
-          await tracaHandleMatiereResponse(d2, clean);
-        }catch(e2){
-          showToast((e2 && e2.message) || 'Erreur de liaison fournisseur.','danger');
-        }
-      }
-      return;
+      await tracaShowFicheManuelle(clean);
     }
-    showToast(e.message,'danger');
+  }catch(e){
+    showToast(e.message || 'Erreur scan.','danger');
   }
   finally{ set({tracaAutoSaving:false}); }
+}
+
+function tracaShowFicheConfirmation(codeBarre, infos){
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9100;display:flex;align-items:center;justify-content:center;padding:16px';
+
+    const fscBadge = infos.fsc_type_claim && infos.fsc_type_claim !== 'non_fsc'
+      ? `<span style="background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700;
+                      padding:2px 8px;border-radius:6px">${escHtml(fscClaimLabel(infos.fsc_type_claim))}</span>`
+      : `<span style="background:rgba(148,163,184,.15);color:var(--muted);font-size:11px;font-weight:700;
+                      padding:2px 8px;border-radius:6px">Non FSC</span>`;
+
+    overlay.innerHTML = `
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;
+                  padding:20px;max-width:400px;width:100%">
+        <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px">
+          Bobine réceptionnée
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:16px;font-family:monospace">
+          ${escHtml(codeBarre)}
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;
+                        letter-spacing:.5px;color:var(--muted);margin-bottom:6px">Fournisseur</div>
+            <div style="font-size:13px;font-weight:600;color:var(--text)">${escHtml(infos.fournisseur)}</div>
+          </div>
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;
+                        letter-spacing:.5px;color:var(--muted);margin-bottom:6px">Licence FSC</div>
+            <div style="font-size:13px;font-weight:600;color:var(--text);font-family:monospace">
+              ${escHtml(infos.licence)}
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-bottom:16px">${fscBadge}</div>
+
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button type="button" class="btn btn-ghost" id="fiche-cancel" style="font-size:13px">Annuler</button>
+          <button type="button" class="btn btn-accent" id="fiche-confirm" style="font-size:13px">Enregistrer le scan</button>
+        </div>
+      </div>`;
+
+    document.body.appendChild(overlay);
+
+    overlay.querySelector('#fiche-cancel').onclick = () => {
+      overlay.remove();
+      resolve(null);
+    };
+
+    overlay.querySelector('#fiche-confirm').onclick = async () => {
+      overlay.remove();
+      set({tracaAutoSaving:true});
+      try{
+        const d = await apiFetch('/api/fabrication/matieres',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify(tracaBuildMatiereBody(codeBarre)),
+        });
+        await tracaHandleMatiereResponse(d, codeBarre);
+      }catch(e){
+        showToast(e.message || 'Erreur enregistrement.','danger');
+      }finally{
+        set({tracaAutoSaving:false});
+      }
+      resolve(true);
+    };
+  });
+}
+
+function tracaShowFicheManuelle(codeBarre){
+  return new Promise((resolve) => {
+    const list = Array.isArray(FOURNISSEURS_FSC) ? FOURNISSEURS_FSC : [];
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9100;display:flex;align-items:center;justify-content:center;padding:16px';
+
+    const opts = list.map(f =>
+      `<option value="${escAttr(String(f.id))}">${escHtml(f.nom)}</option>`
+    ).join('');
+
+    overlay.innerHTML = `
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;
+                  padding:20px;max-width:400px;width:100%">
+        <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px">
+          Bobine non réceptionnée
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:16px;font-family:monospace">
+          ${escHtml(codeBarre)}
+        </div>
+
+        <label style="font-size:11px;font-weight:700;text-transform:uppercase;
+                      letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:6px">
+          Sélectionner le fournisseur
+        </label>
+        <select id="fiche-fournisseur-select"
+                style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;
+                       background:var(--bg);color:var(--text);font-size:13px;margin-bottom:12px;font-family:inherit">
+          <option value="">— Choisir un fournisseur —</option>
+          ${opts}
+        </select>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;
+                        letter-spacing:.5px;color:var(--muted);margin-bottom:6px">Fournisseur</div>
+            <div id="fiche-fournisseur-nom"
+                 style="font-size:13px;font-weight:600;color:var(--muted)">—</div>
+          </div>
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;
+                        letter-spacing:.5px;color:var(--muted);margin-bottom:6px">Licence FSC</div>
+            <div id="fiche-fournisseur-licence"
+                 style="font-size:13px;font-weight:600;color:var(--muted);font-family:monospace">—</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button type="button" class="btn btn-ghost" id="fiche-manual-cancel" style="font-size:13px">Annuler</button>
+          <button type="button" class="btn btn-accent" id="fiche-manual-confirm"
+                  style="font-size:13px;opacity:.5" disabled>Enregistrer le scan</button>
+        </div>
+      </div>`;
+
+    document.body.appendChild(overlay);
+
+    const sel = overlay.querySelector('#fiche-fournisseur-select');
+    const nomEl = overlay.querySelector('#fiche-fournisseur-nom');
+    const licEl = overlay.querySelector('#fiche-fournisseur-licence');
+    const btn = overlay.querySelector('#fiche-manual-confirm');
+
+    function updateLicence(){
+      const fid = sel?.value;
+      const f = list.find(x => String(x.id) === fid);
+      if(f){
+        if(nomEl){ nomEl.textContent = f.nom; nomEl.style.color = 'var(--text)'; }
+        if(licEl){ licEl.textContent = f.licence || '—'; licEl.style.color = 'var(--text)'; }
+        if(btn){ btn.disabled = false; btn.style.opacity = '1'; }
+      }else{
+        if(nomEl){ nomEl.textContent = '—'; nomEl.style.color = 'var(--muted)'; }
+        if(licEl){ licEl.textContent = '—'; licEl.style.color = 'var(--muted)'; }
+        if(btn){ btn.disabled = true; btn.style.opacity = '.5'; }
+      }
+    }
+    if(sel) sel.addEventListener('change', updateLicence);
+
+    overlay.querySelector('#fiche-manual-cancel').onclick = () => {
+      overlay.remove();
+      resolve(null);
+    };
+
+    overlay.querySelector('#fiche-manual-confirm').onclick = async () => {
+      const fid = sel?.value;
+      if(!fid) return;
+      overlay.remove();
+      set({tracaAutoSaving:true});
+      try{
+        const d = await apiFetch('/api/fabrication/matieres',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify(tracaBuildMatiereBody(codeBarre, {fournisseur_fsc_id: parseInt(fid, 10)})),
+        });
+        await tracaHandleMatiereResponse(d, codeBarre);
+      }catch(e){
+        showToast(e.message || 'Erreur enregistrement.','danger');
+      }finally{
+        set({tracaAutoSaving:false});
+      }
+      resolve(true);
+    };
+  });
 }
 
 function tracaAskFournisseur(){
@@ -1854,11 +2019,18 @@ function renderTracaPanel(){
     ? matieres.slice().reverse().map(m=>{
         const dt = m.scanned_at ? new Date(m.scanned_at) : null;
         const timeStr = dt&&!isNaN(dt) ? dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : '—';
-        const fournisseur = (m.fournisseur || '').trim();
-        const cert = (m.certificat_fsc || '').trim();
+        const fournisseur = (m.fournisseur || m.fournisseur_manual || '').trim();
+        const licence = (m.fournisseur_licence || '').trim();
         const mode = (m.liaison_mode || '').trim();
         const isLinked = mode === 'reception';
-        const linkLbl = isLinked ? 'Lié à une réception' : 'Liaison manuelle';
+        const isManual = mode === 'manual';
+        const linkBadge = isLinked
+          ? h('span',{style:{fontSize:'10px',fontWeight:'700',padding:'2px 8px',borderRadius:'6px',
+              background:'rgba(52,211,153,.12)',color:'var(--success)'}},'Réceptionné')
+          : isManual
+            ? h('span',{style:{fontSize:'10px',fontWeight:'700',padding:'2px 8px',borderRadius:'6px',
+                background:'rgba(148,163,184,.15)',color:'var(--muted)'}},'Manuel')
+            : h('span',{style:{color:'var(--muted)',fontStyle:'italic'}},'—');
         const fscWarn = m.fsc_warning === 1 || m.fsc_warning === true;
         return h('tr',null,
           h('td',null,
@@ -1866,8 +2038,8 @@ function renderTracaPanel(){
             fscWarn ? h('span',{className:'fab-traca-fsc-warn',title:m.fsc_warning_note||'Alerte certification FSC'},'\u26A0') : null
           ),
           h('td',null,fournisseur ? h('span',{className:'fab-traca-supplier'},fournisseur) : h('span',{style:{color:'var(--muted)',fontStyle:'italic'}},'—')),
-          h('td',null,cert ? h('span',{className:'fab-traca-cert'},cert) : h('span',{style:{color:'var(--muted)',fontStyle:'italic'}},'—')),
-          h('td',null,h('span',{className:'fab-traca-link '+(isLinked?'ok':'bad')},linkLbl)),
+          h('td',null,licence ? h('span',{className:'fab-traca-licence',style:{fontFamily:'monospace',fontSize:'12px'}},licence) : h('span',{style:{color:'var(--muted)',fontStyle:'italic'}},'—')),
+          h('td',null,linkBadge),
           h('td',null,m.no_dossier||h('span',{style:{color:'var(--muted)',fontStyle:'italic'}},'—')),
           h('td',null,timeStr),
           h('td',null,h('button',{className:'fab-traca-del',title:'Supprimer',
@@ -1970,7 +2142,7 @@ function renderTracaPanel(){
           h('thead',null,h('tr',null,
             h('th',null,'Code barre'),
             h('th',null,'Fournisseur'),
-            h('th',null,'Certificat FSC'),
+            h('th',null,'Licence FSC'),
             h('th',null,'Liaison'),
             h('th',null,'Dossier'),
             h('th',null,'Heure'),

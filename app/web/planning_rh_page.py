@@ -632,6 +632,11 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 <body>
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
+<script src="/static/support_widget.js"></script>
+<script>window.__MYSIFA_APP__='planning_rh';</script>
+<script src="/static/mysifa_dock.js"></script>
+<script src="/static/mysifa_ai_chat.js"></script>
+<script src="/static/chat_widget.js"></script>
 <div id="root" class="app">
   <div class="sidebar-overlay" id="rh-sb-overlay" onclick="closeSidebar()"></div>
   <nav class="sidebar" id="rh-sb">
@@ -1095,6 +1100,18 @@ async function loadMe(){
   if(d&&d.role){
     S.user=d;
     if(window.MySifaTheme)MySifaTheme.mergeFromUser(d);
+    window.__MYSIFA_UID__=d.id;
+    window.__MYSIFA_NOM__=d.nom||'';
+    window.__MYSIFA_ROLE__=d.role||'';
+    window.__MYSIFA_USER__={nom:d.nom||'',role:d.role||''};
+    if(window._CW&&typeof window._CW.ensureReady==='function')await window._CW.ensureReady();
+    else if(window._CW&&typeof window._CW.syncUser==='function')window._CW.syncUser();
+    if(window.MySifaDock&&typeof window.MySifaDock.bootPageWidgets==='function'){
+      window.MySifaDock.bootPageWidgets();
+    }else if(typeof initAiChatWidget==='function'){
+      initAiChatWidget();
+      if(window.MySifaDock&&typeof window.MySifaDock.layout==='function')window.MySifaDock.layout();
+    }
     const hasPlanningRHOverride = d.access_overrides && d.access_overrides.planning_rh === true;
     const email = String(d.email||'').trim().toLowerCase();
     S.isEditor=(['direction','superadmin'].includes(d.role) || hasPlanningRHOverride || email==='mlesaffre@sifa.pro');
@@ -2598,9 +2615,5 @@ function printConges(){
   if(S.tab==='conges')await loadSoldes();
 })();
 </script>
-<script src="/static/support_widget.js"></script>
-<script>window.__MYSIFA_APP__='planning_rh';</script>
-<script src="/static/mysifa_dock.js"></script>
-<script src="/static/chat_widget.js"></script>
 </body>
 </html>"""

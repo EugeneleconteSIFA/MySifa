@@ -148,6 +148,23 @@ body.light .op-table tr.op-cat-row td{background:rgba(8,145,178,.06)}
 .op-pill.nettoyage{color:#c084fc;border-color:rgba(192,132,252,.4);background:rgba(192,132,252,.1)}
 .op-pill.autre{color:var(--muted);border-color:var(--border);background:rgba(148,163,184,.08)}
 .op-req{font-size:11px;font-weight:600;color:var(--muted)}
+.fsc-kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+@media(max-width:1000px){.fsc-kpi-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:520px){.fsc-kpi-grid{grid-template-columns:1fr}}
+.fsc-kpi-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px}
+.fsc-kpi-label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.fsc-kpi-val{font-size:28px;font-weight:800;color:var(--text);line-height:1}
+.fsc-kpi-badge{display:inline-block;margin-top:8px;font-size:10px;font-weight:700;padding:3px 10px;border-radius:999px}
+.fsc-kpi-badge.accent{color:var(--accent);background:rgba(34,211,238,.12)}
+.fsc-kpi-badge.ok{color:var(--ok);background:rgba(52,211,153,.12)}
+.fsc-kpi-badge.danger{color:var(--danger);background:rgba(248,113,113,.12)}
+.fsc-kpi-badge.muted{color:var(--muted);background:rgba(148,163,184,.12)}
+.fsc-claim-badge{display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:3px 10px;border-radius:6px;line-height:1.3}
+.fsc-section-title{font-size:13px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px;margin:0 0 10px}
+.fsc-date-inp{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:12px;font-family:inherit}
+.fsc-date-inp:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+tr.fsc-row-alert td{background:rgba(248,113,113,.08)}
+body.light tr.fsc-row-alert td{background:rgba(220,38,38,.06)}
 .op-req.yes{color:var(--ok)}
 .op-table th:last-child,.op-table td:last-child{text-align:right}
 .op-act{display:inline-flex;gap:6px;justify-content:flex-end;flex-wrap:nowrap}
@@ -268,6 +285,13 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
           <polyline points="10 9 9 9 8 9"/>
         </svg>
         Log
+      </button>
+      <button type="button" class="nav-btn" data-tab="fsc">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"/>
+          <path d="M2 21c0-3 2.5-5 5-5"/>
+        </svg>
+        Registre FSC
       </button>
     </div>
     <div class="sidebar-bottom">
@@ -572,6 +596,33 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
       </div>
     </section>
 
+    <section id="panel-fsc" class="hidden">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px">
+        <div style="font-size:15px;font-weight:700;color:var(--text)">Registre FSC</div>
+        <div style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input type="date" id="fsc-du" class="fsc-date-inp" onchange="loadFscRegistre()">
+          <span style="color:var(--muted);font-size:12px">au</span>
+          <input type="date" id="fsc-au" class="fsc-date-inp" onchange="loadFscRegistre()">
+          <button type="button" class="btn btn-sec" style="font-size:12px;padding:8px 14px" onclick="exportFscCsv()">
+            Exporter CSV
+          </button>
+        </div>
+      </div>
+      <div id="fsc-kpi-grid" class="fsc-kpi-grid"></div>
+      <div class="card" style="margin-bottom:16px">
+        <h2 class="fsc-section-title">Réceptions FSC certifiées</h2>
+        <div id="fsc-recep-wrap" class="table-wrap">
+          <p style="color:var(--muted);font-size:13px;padding:12px 0">Chargement…</p>
+        </div>
+      </div>
+      <div class="card">
+        <h2 class="fsc-section-title">Dossiers de production FSC</h2>
+        <div id="fsc-dossiers-wrap" class="table-wrap">
+          <p style="color:var(--muted);font-size:13px;padding:12px 0">Chargement…</p>
+        </div>
+      </div>
+    </section>
+
     <!-- Modal nouvelle annonce -->
     <div id="upd-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:800;align-items:center;justify-content:center" class="hidden">
       <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;width:min(560px,95vw);max-height:90vh;overflow:auto">
@@ -738,7 +789,7 @@ function setTab(id) {
   document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === id);
   });
-  ['users', 'matrix', 'defaults', 'fournisseurs', 'operations', 'machines', 'updates', 'audit'].forEach(p => {
+  ['users', 'matrix', 'defaults', 'fournisseurs', 'operations', 'machines', 'updates', 'audit', 'fsc'].forEach(p => {
     const el = document.getElementById('panel-' + p);
     if (el) el.classList.toggle('hidden', p !== id);
   });
@@ -747,6 +798,7 @@ function setTab(id) {
   if (id === 'machines') initMachinesPanel();
   if (id === 'updates') loadUpdates();
   if (id === 'audit') loadAuditLogs();
+  if (id === 'fsc') initFscPanel();
 }
 
 document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
@@ -2475,6 +2527,179 @@ async function loadAuditLogs() {
         Suivant →
       </button>
     </div>`;
+}
+
+// ── Registre FSC ─────────────────────────────────────────────
+const FSC_CLAIM_LABELS = {
+  non_fsc: 'Non FSC',
+  fsc_100: 'FSC 100%',
+  fsc_mix_credit: 'FSC Mix Credit',
+  fsc_mix: 'FSC Mix',
+  fsc_recycled: 'FSC Recycled',
+};
+const FSC_STATUT_LABELS = {
+  attente: 'En attente',
+  en_cours: 'En cours',
+  termine: 'Terminé',
+};
+let _fscDatesInit = false;
+
+function initFscDates() {
+  const duEl = document.getElementById('fsc-du');
+  const auEl = document.getElementById('fsc-au');
+  if (!duEl || !auEl) return;
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  if (!duEl.value) duEl.value = `${y}-01-01`;
+  if (!auEl.value) auEl.value = `${y}-${m}-${d}`;
+}
+
+function initFscPanel() {
+  initFscDates();
+  if (!_fscDatesInit) {
+    _fscDatesInit = true;
+  }
+  loadFscStats();
+  loadFscRegistre();
+}
+
+function fscClaimBadgeHtml(claim) {
+  const c = (claim || 'non_fsc').trim();
+  const label = FSC_CLAIM_LABELS[c] || esc(c);
+  let bg = 'rgba(148,163,184,.12)';
+  let color = 'var(--muted)';
+  if (c === 'fsc_100') {
+    bg = 'rgba(52,211,153,.12)';
+    color = 'var(--ok)';
+  } else if (c === 'fsc_recycled' || c.startsWith('fsc_mix')) {
+    bg = 'rgba(34,211,238,.12)';
+    color = 'var(--accent)';
+  }
+  return `<span class="fsc-claim-badge" style="background:${bg};color:${color}">${esc(label)}</span>`;
+}
+
+async function loadFscStats() {
+  const grid = document.getElementById('fsc-kpi-grid');
+  if (!grid) return;
+  try {
+    const d = await api('/api/fsc/stats');
+    if (!d) return;
+    const alertBadge = (d.alertes_ecart_total || 0) > 0 ? 'danger' : 'muted';
+    grid.innerHTML = `
+      <div class="fsc-kpi-card">
+        <div class="fsc-kpi-label">Réceptions FSC ce mois</div>
+        <div class="fsc-kpi-val">${esc(String(d.recep_fsc_ce_mois ?? 0))}</div>
+        <span class="fsc-kpi-badge accent">Mois en cours</span>
+      </div>
+      <div class="fsc-kpi-card">
+        <div class="fsc-kpi-label">Dossiers FSC actifs</div>
+        <div class="fsc-kpi-val">${esc(String(d.dossiers_fsc_actifs ?? 0))}</div>
+        <span class="fsc-kpi-badge accent">Non terminés</span>
+      </div>
+      <div class="fsc-kpi-card">
+        <div class="fsc-kpi-label">Dossiers FSC terminés</div>
+        <div class="fsc-kpi-val">${esc(String(d.dossiers_termines_fsc ?? 0))}</div>
+        <span class="fsc-kpi-badge ok">Historique</span>
+      </div>
+      <div class="fsc-kpi-card">
+        <div class="fsc-kpi-label">Alertes écart total</div>
+        <div class="fsc-kpi-val">${esc(String(d.alertes_ecart_total ?? 0))}</div>
+        <span class="fsc-kpi-badge ${alertBadge}">Confirmées</span>
+      </div>`;
+  } catch (e) {
+    grid.innerHTML = `<p style="color:var(--danger);font-size:13px">${esc(e.message || 'Erreur chargement KPIs')}</p>`;
+  }
+}
+
+function renderFscReceptions(rows) {
+  const wrap = document.getElementById('fsc-recep-wrap');
+  if (!wrap) return;
+  if (!rows.length) {
+    wrap.innerHTML = '<p style="color:var(--muted);font-size:13px;padding:12px 0">Aucune réception FSC sur la période.</p>';
+    return;
+  }
+  const trs = rows.map(r => {
+    const dt = (r.created_at || '').replace('T', ' ').slice(0, 10);
+    return `<tr>
+      <td style="font-family:monospace;font-size:11px;color:var(--muted)">${esc(dt)}</td>
+      <td>${esc(r.fournisseur || '—')}</td>
+      <td style="font-family:monospace;font-size:11px">${esc(r.fournisseur_licence || '—')}</td>
+      <td>${esc(r.certificat_fsc || '—')}</td>
+      <td>${fscClaimBadgeHtml(r.fsc_type_claim)}</td>
+      <td style="text-align:center">${esc(String(r.nb_bobines ?? 0))}</td>
+      <td>${esc(r.created_by_name || '—')}</td>
+    </tr>`;
+  }).join('');
+  wrap.innerHTML = `<table>
+    <thead><tr>
+      <th>Date</th><th>Fournisseur</th><th>Licence FSC</th><th>Certificat</th>
+      <th>Type claim</th><th>Nb bobines</th><th>Réceptionné par</th>
+    </tr></thead>
+    <tbody>${trs}</tbody>
+  </table>`;
+}
+
+function renderFscDossiers(rows) {
+  const wrap = document.getElementById('fsc-dossiers-wrap');
+  if (!wrap) return;
+  if (!rows.length) {
+    wrap.innerHTML = '<p style="color:var(--muted);font-size:13px;padding:12px 0">Aucun dossier FSC sur la période.</p>';
+    return;
+  }
+  const trs = rows.map(d => {
+    const alertes = Number(d.nb_alertes) || 0;
+    const rowCls = alertes > 0 ? ' class="fsc-row-alert"' : '';
+    const statut = FSC_STATUT_LABELS[d.statut] || d.statut || '—';
+    return `<tr${rowCls}>
+      <td style="font-weight:700;color:var(--accent)">${esc(d.reference || '—')}</td>
+      <td>${esc(d.client || '—')}</td>
+      <td>${fscClaimBadgeHtml(d.fsc_type_requis)}</td>
+      <td>${esc(statut)}</td>
+      <td style="font-family:monospace;font-size:11px">${esc(d.date_livraison || '—')}</td>
+      <td style="text-align:center">${esc(String(d.nb_bobines_scannees ?? 0))}</td>
+      <td style="text-align:center;font-weight:700;color:${alertes > 0 ? 'var(--danger)' : 'var(--muted)'}">${esc(String(alertes))}</td>
+    </tr>`;
+  }).join('');
+  wrap.innerHTML = `<table>
+    <thead><tr>
+      <th>Référence</th><th>Client</th><th>Type FSC requis</th><th>Statut</th>
+      <th>Date livraison</th><th>Bobines scannées</th><th>Alertes</th>
+    </tr></thead>
+    <tbody>${trs}</tbody>
+  </table>`;
+}
+
+async function loadFscRegistre() {
+  const du = document.getElementById('fsc-du')?.value || '';
+  const au = document.getElementById('fsc-au')?.value || '';
+  const recepWrap = document.getElementById('fsc-recep-wrap');
+  const dossWrap = document.getElementById('fsc-dossiers-wrap');
+  if (recepWrap) recepWrap.innerHTML = '<p style="color:var(--muted);font-size:13px;padding:12px 0">Chargement…</p>';
+  if (dossWrap) dossWrap.innerHTML = '<p style="color:var(--muted);font-size:13px;padding:12px 0">Chargement…</p>';
+  try {
+    const params = new URLSearchParams();
+    if (du) params.set('du', du);
+    if (au) params.set('au', au);
+    const d = await api('/api/fsc/registre?' + params.toString());
+    if (!d) return;
+    renderFscReceptions(d.receptions || []);
+    renderFscDossiers(d.dossiers || []);
+  } catch (e) {
+    const msg = `<p style="color:var(--danger);font-size:13px;padding:12px 0">${esc(e.message || 'Erreur chargement')}</p>`;
+    if (recepWrap) recepWrap.innerHTML = msg;
+    if (dossWrap) dossWrap.innerHTML = msg;
+  }
+}
+
+function exportFscCsv() {
+  const du = document.getElementById('fsc-du')?.value || '';
+  const au = document.getElementById('fsc-au')?.value || '';
+  const params = new URLSearchParams({ format: 'csv' });
+  if (du) params.set('du', du);
+  if (au) params.set('au', au);
+  window.location.href = '/api/fsc/registre?' + params.toString();
 }
 </script>
 </body>

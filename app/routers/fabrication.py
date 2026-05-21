@@ -899,6 +899,7 @@ def _fetch_matiere_row(conn, matiere_id: int) -> dict | None:
              sr.id AS reception_id_found,
              COALESCE(sr.fournisseur, fmu.fournisseur_manual) AS fournisseur,
              COALESCE(sr.certificat_fsc, fmu.certificat_fsc_manual) AS certificat_fsc,
+             ff.licence AS fournisseur_licence,
              CASE
                WHEN sr.id IS NOT NULL THEN 'reception'
                WHEN fmu.fournisseur_manual IS NOT NULL THEN 'manual'
@@ -913,6 +914,8 @@ def _fetch_matiere_row(conn, matiere_id: int) -> dict | None:
                ORDER BY i.scanned_at DESC, i.id DESC
                LIMIT 1
              )
+           LEFT JOIN fournisseurs_fsc ff
+             ON ff.nom = COALESCE(sr.fournisseur, fmu.fournisseur_manual)
            WHERE fmu.id=?""",
         (matiere_id,),
     ).fetchone()
@@ -948,6 +951,7 @@ def list_matieres(request: Request, machine_id: int = None, no_dossier: str = No
               sr.id AS reception_id_found,
               COALESCE(sr.fournisseur, fmu.fournisseur_manual) AS fournisseur,
               COALESCE(sr.certificat_fsc, fmu.certificat_fsc_manual) AS certificat_fsc,
+              ff.licence AS fournisseur_licence,
               CASE
                 WHEN sr.id IS NOT NULL THEN 'reception'
                 WHEN fmu.fournisseur_manual IS NOT NULL THEN 'manual'
@@ -962,6 +966,8 @@ def list_matieres(request: Request, machine_id: int = None, no_dossier: str = No
                 ORDER BY i.scanned_at DESC, i.id DESC
                 LIMIT 1
               )
+            LEFT JOIN fournisseurs_fsc ff
+              ON ff.nom = COALESCE(sr.fournisseur, fmu.fournisseur_manual)
         """
         if no_dossier:
             rows = conn.execute(
@@ -1097,9 +1103,11 @@ def lookup_reception_for_barcode(request: Request, code_barre: str):
     with get_db() as conn:
         row = conn.execute(
             """
-            SELECT r.id AS reception_id, r.fournisseur, r.certificat_fsc, r.fsc_type_claim
+            SELECT r.id AS reception_id, r.fournisseur, r.certificat_fsc, r.fsc_type_claim,
+                   ff.licence AS fournisseur_licence
             FROM stock_reception_items i
             JOIN stock_receptions r ON r.id = i.reception_id
+            LEFT JOIN fournisseurs_fsc ff ON ff.nom = r.fournisseur
             WHERE trim(i.code_barre) = trim(?)
             ORDER BY i.scanned_at DESC, i.id DESC
             LIMIT 1
@@ -1115,6 +1123,7 @@ def lookup_reception_for_barcode(request: Request, code_barre: str):
         "fournisseur": d.get("fournisseur"),
         "certificat_fsc": d.get("certificat_fsc"),
         "fsc_type_claim": d.get("fsc_type_claim") or "non_fsc",
+        "fournisseur_licence": d.get("fournisseur_licence") or "",
     }
 
 

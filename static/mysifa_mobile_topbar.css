@@ -87,3 +87,204 @@
 .rh-mobile-topbar-row .mobile-home-btn{
   margin-left:auto;
 }
+
+/* ── Sidebar — mobile paysage : footer compact, liste d'onglets visible ── */
+@media (max-width: 900px) and (orientation: landscape) {
+  .sidebar,
+  .fab-sidebar,
+  .paie-sidebar {
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    padding-top: 8px !important;
+    padding-bottom: 4px !important;
+    overflow: hidden !important;
+  }
+
+  /* Pages sans zone nav dédiée : sidebar scrollable, footer collé en bas */
+  .sidebar:not(:has(.sidebar-nav)):not(:has(#rh-sb-nav)) {
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .sidebar .logo,
+  .fab-sidebar .fab-sidebar-head,
+  .paie-sidebar .paie-sidebar-head {
+    flex-shrink: 0;
+    margin-bottom: 6px !important;
+  }
+
+  .sidebar .logo-sub,
+  .fab-sidebar .fab-sidebar-sub,
+  .paie-sidebar .paie-brand-sub,
+  .paie-sidebar .paie-search-hint {
+    display: none;
+  }
+
+  .paie-sidebar .paie-sidebar-head {
+    padding: 10px 12px 8px !important;
+  }
+
+  .paie-sidebar .paie-search {
+    margin-top: 6px !important;
+    padding: 6px 10px !important;
+    min-height: 32px;
+  }
+
+  /* Zones nav scrollables */
+  .sidebar-nav,
+  #rh-sb-nav,
+  .fab-sidebar-list,
+  .emp-list {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .sidebar > .nav-btn,
+  .sidebar > .rh-nav-btn {
+    flex-shrink: 0;
+  }
+
+  .sidebar-bottom,
+  .fab-sidebar-bottom,
+  .paie-sidebar-bottom {
+    flex: 0 0 auto !important;
+    flex-shrink: 0 !important;
+    gap: 3px !important;
+    padding: 6px 4px 4px !important;
+    border-top: 1px solid var(--border);
+    background: var(--card);
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    align-items: stretch;
+    z-index: 2;
+  }
+
+  .sidebar:not(:has(.sidebar-nav)):not(:has(#rh-sb-nav)) .sidebar-bottom {
+    margin-top: 0 !important;
+    position: sticky;
+    bottom: 0;
+    box-shadow: 0 -6px 14px rgba(0, 0, 0, 0.22);
+  }
+
+  .sidebar-bottom > .nav-btn,
+  .sidebar-bottom > .nav-btn--mysifa-portal,
+  .sidebar-bottom > .back-mysifa,
+  .sidebar-bottom > .user-chip,
+  .sidebar-bottom > .rh-user-chip,
+  .fab-sidebar-bottom > .fab-user-chip {
+    width: 100% !important;
+    flex: 1 1 100% !important;
+    min-width: 0;
+  }
+
+  .sidebar-bottom > .theme-btn,
+  .sidebar-bottom > .logout-btn {
+    width: auto !important;
+    flex: 1 1 calc(50% - 2px) !important;
+    min-width: 0;
+  }
+
+  .sidebar-bottom > .support-btn {
+    width: auto !important;
+    flex: 1 1 calc(33.333% - 3px) !important;
+    min-width: 0;
+    max-width: none;
+    justify-content: center !important;
+  }
+
+  .fab-sidebar-bottom > .support-btn,
+  .fab-sidebar-bottom > .fab-back-btn,
+  .paie-sidebar-bottom > .support-btn,
+  .paie-sidebar-bottom > .paie-back-btn {
+    width: auto !important;
+    flex: 1 1 calc(50% - 2px) !important;
+    min-width: 0;
+    justify-content: center !important;
+  }
+
+  .sidebar-bottom .support-btn > span:not(.support-ico),
+  .fab-sidebar-bottom .support-btn > span:not(.support-ico),
+  .paie-sidebar-bottom .support-btn > span:not(.support-ico) {
+    display: none !important;
+  }
+
+  .sidebar-bottom .version,
+  .fab-sidebar-bottom .version {
+    display: none !important;
+  }
+
+  .sidebar-bottom .nav-btn,
+  .sidebar-bottom .nav-btn--mysifa-portal,
+  .sidebar-bottom .back-mysifa,
+  .sidebar-bottom .support-btn,
+  .sidebar-bottom .theme-btn,
+  .sidebar-bottom .logout-btn,
+  .fab-sidebar-bottom .fab-back-btn,
+  .fab-sidebar-bottom .theme-btn,
+  .fab-sidebar-bottom .logout-btn,
+  .paie-sidebar-bottom .paie-back-btn,
+  .paie-sidebar-bottom .support-btn {
+    padding: 5px 8px !important;
+    min-height: 30px !important;
+    font-size: 11px !important;
+    border-radius: 7px !important;
+    margin-bottom: 0 !important;
+  }
+
+  .sidebar-bottom .user-chip,
+  .sidebar-bottom .rh-user-chip,
+  .fab-sidebar-bottom .fab-user-chip {
+    padding: 5px 8px !important;
+  }
+
+  .sidebar-bottom .user-chip .uc-profil,
+  .sidebar-bottom .rh-user-chip .uc-profil,
+  .fab-sidebar-bottom .fab-user-chip .uc-profil,
+  .sidebar-bottom .user-chip .uc-top,
+  .sidebar-bottom .rh-user-chip .uc-top,
+  .fab-sidebar-bottom .fab-user-chip .uc-top {
+    margin-bottom: 0 !important;
+  }
+
+  .sidebar-bottom .user-chip .uc-profil,
+  .sidebar-bottom .rh-user-chip .uc-profil,
+  .fab-sidebar-bottom .fab-user-chip .uc-profil {
+    display: none !important;
+  }
+
+  .sidebar-bottom .user-chip .uc-avatar,
+  .sidebar-bottom .rh-user-chip .uc-avatar,
+  .fab-sidebar-bottom .fab-user-chip .uc-avatar {
+    width: 28px !important;
+    height: 28px !important;
+    min-width: 28px !important;
+    max-width: 28px !important;
+  }
+
+  .sidebar-bottom .user-chip .uc-name,
+  .sidebar-bottom .rh-user-chip .uc-name,
+  .sidebar-bottom .rh-user-chip .ucn,
+  .fab-sidebar-bottom .fab-user-chip .uc-name,
+  .fab-sidebar-bottom .fab-user-name {
+    font-size: 11px !important;
+  }
+
+  .sidebar-bottom .user-chip .uc-role,
+  .sidebar-bottom .rh-user-chip .uc-role,
+  .sidebar-bottom .rh-user-chip .ucr,
+  .fab-sidebar-bottom .fab-user-chip .uc-role,
+  .fab-sidebar-bottom .fab-user-machine {
+    font-size: 9px !important;
+  }
+
+  .sidebar-bottom .mysifa-back-preamble {
+    font-size: 11px !important;
+  }
+
+  .sidebar-bottom .mysifa-back-brand {
+    font-size: 12px !important;
+  }
+}
