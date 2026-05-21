@@ -637,7 +637,11 @@ def delete_message(channel_id: int, msg_id: int, request: Request):
 
 @router.post("/channels/{channel_id}/messages/{msg_id}/reactions")
 async def toggle_reaction(channel_id: int, msg_id: int, request: Request):
-    """Toggle une réaction emoji sur un message."""
+    """
+    Réaction emoji — une seule par utilisateur et par message.
+    Même emoji : retire la réaction.
+    Autre emoji : remplace la réaction précédente.
+    """
     user = _require(request)
     data = await request.json()
     emoji = (data.get("emoji") or "").strip()
@@ -654,22 +658,27 @@ async def toggle_reaction(channel_id: int, msg_id: int, request: Request):
         if not msg:
             raise HTTPException(status_code=404, detail="Message introuvable")
 
-        existing = conn.execute(
-            "SELECT id FROM chat_reactions WHERE message_id=? AND user_id=? AND emoji=? LIMIT 1",
-            (msg_id, user["id"], emoji),
-        ).fetchone()
+        mine = conn.execute(
+            "SELECT id, emoji FROM chat_reactions WHERE message_id=? AND user_id=?",
+            (msg_id, user["id"]),
+        ).fetchall()
 
-        if existing:
-            conn.execute("DELETE FROM chat_reactions WHERE id=?", (existing["id"],))
-            conn.commit()
-            return {"added": False, "emoji": emoji}
+        for row in mine:
+            if row["emoji"] == emoji:
+                conn.execute("DELETE FROM chat_reactions WHERE id=?", (row["id"],))
+                conn.commit()
+                return {"added": False, "emoji": emoji, "replaced": None}
 
+        for row in mine:
+            conn.execute("DELETE FROM chat_reactions WHERE id=?", (row["id"],))
+
+        replaced = mine[0]["emoji"] if mine else None
         conn.execute(
             "INSERT INTO chat_reactions (message_id, user_id, user_nom, emoji, created_at) VALUES (?,?,?,?,?)",
             (msg_id, user["id"], user.get("nom") or user.get("email", ""), emoji, now),
         )
         conn.commit()
-    return {"added": True, "emoji": emoji}
+    return {"added": True, "emoji": emoji, "replaced": replaced}
 
 
 # ─── Utilitaires ─────────────────────────────────────────────────────────────

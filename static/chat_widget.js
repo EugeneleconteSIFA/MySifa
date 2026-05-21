@@ -816,20 +816,29 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     return (
       '<div class="cw-reactions">' +
       reactions
-        .map(
-          (rx) =>
+        .map((rx) => {
+          const mine = !!rx.reacted_by_me;
+          const label = mine
+            ? 'Retirer votre réaction ' + rx.emoji
+            : 'Réagir ' + rx.emoji + ' (' + rx.count + ')';
+          return (
             '<button type="button" class="cw-reaction-pill' +
-            (rx.reacted_by_me ? ' cw-reacted' : '') +
+            (mine ? ' cw-reacted' : '') +
             '" data-emoji="' +
             rx.emoji +
+            '" data-mine="' +
+            (mine ? '1' : '0') +
+            '" title="' +
+            escCW(label) +
             '" aria-label="' +
-            escCW(rx.emoji + ' ' + rx.count) +
+            escCW(label) +
             '">' +
             rx.emoji +
             '<span class="cw-reaction-count">' +
             rx.count +
             '</span></button>'
-        )
+          );
+        })
         .join('') +
       '</div>'
     );
