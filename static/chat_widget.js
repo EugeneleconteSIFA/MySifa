@@ -81,7 +81,7 @@ body.light #cw-bar.cw-portal-accent #cw-bar-icon{background:rgba(255,255,255,.22
   font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;
   box-shadow:0 12px 48px rgba(0,0,0,0.5)}
 #cw-panel.cw-hidden{display:none!important}
-#cw-panel.cw-mode-bar{bottom:80px;left:24px}
+#cw-panel.cw-mode-bar{left:max(24px,env(safe-area-inset-left,0px));bottom:110px}
 #cw-panel.cw-mode-bubble{bottom:auto;right:auto}
 #cw-panel-left{width:168px;flex-shrink:0;border-right:1px solid var(--border);
   display:flex;flex-direction:column;overflow-y:auto;min-height:0}
@@ -119,12 +119,14 @@ body.light .cw-channel-item:hover{background:rgba(0,0,0,.04)}
   border-radius:0 10px 10px 10px;padding:8px 12px;font-size:13px;color:var(--text);max-width:82%;word-break:break-word}
 body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
 .cw-msg-meta{font-size:11px;color:var(--muted);margin-bottom:3px}
-#cw-input-row{padding:10px 12px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:flex-end}
-#cw-input{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;
-  font-size:13px;color:var(--text);resize:none;font-family:inherit;max-height:96px;overflow-y:auto;outline:none}
+#cw-input-row{padding:10px 12px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center}
+#cw-input{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;
+  font-size:13px;line-height:1.3;color:var(--text);resize:none;font-family:inherit;
+  height:38px;min-height:38px;max-height:96px;box-sizing:border-box;overflow-y:auto;outline:none}
 #cw-input:focus{border-color:var(--accent)}
-#cw-send{background:var(--accent-bg);border:1px solid rgba(34,211,238,.3);border-radius:10px;padding:9px 12px;
-  cursor:pointer;display:flex;align-items:center;color:var(--accent);flex-shrink:0}
+#cw-send{width:38px;height:38px;box-sizing:border-box;background:var(--accent-bg);
+  border:1px solid rgba(34,211,238,.3);border-radius:10px;padding:0;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--accent);flex-shrink:0}
 #cw-send:hover{filter:brightness(1.05)}
 #cw-send:disabled{opacity:.5;cursor:not-allowed}
 #cw-dm-picker{position:absolute;inset:0;background:var(--card);z-index:2;display:flex;flex-direction:column}
@@ -326,16 +328,37 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       }
     });
     inp.addEventListener('input', function () {
-      this.style.height = 'auto';
-      this.style.height = Math.min(this.scrollHeight, 80) + 'px';
+      resizeCwInput(this);
     });
     dockLayout();
+  }
+
+  const CW_INPUT_MIN_H = 38;
+
+  function resizeCwInput(el) {
+    if (!el) return;
+    el.style.height = CW_INPUT_MIN_H + 'px';
+    if (!el.value) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(Math.max(CW_INPUT_MIN_H, el.scrollHeight), 96) + 'px';
   }
 
   function dockLayout() {
     if (window.MySifaDock && typeof window.MySifaDock.layout === 'function') {
       window.MySifaDock.layout();
     }
+  }
+
+  /** Panneau portail : au-dessus de la barre Messagerie avec un léger décalage. */
+  function positionPortalPanel() {
+    if (!CW.isPortal) return;
+    const bar = document.getElementById('cw-bar');
+    const panel = document.getElementById('cw-panel');
+    if (!bar || !panel || panel.classList.contains('cw-hidden')) return;
+    const gap = 14;
+    const barTop = bar.getBoundingClientRect().top;
+    panel.style.bottom = window.innerHeight - barTop + gap + 'px';
+    panel.style.left = getComputedStyle(bar).left;
   }
 
   function renderMsg(msg) {
@@ -512,7 +535,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       });
       if (inp) {
         inp.value = '';
-        inp.style.height = 'auto';
+        resizeCwInput(inp);
       }
       const box = document.getElementById('cw-messages');
       if (box && sent && sent.id) {
@@ -817,6 +840,12 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       else if (CW.activeId) await selectChannel(CW.activeId);
       else await loadChannels();
       refreshBadge();
+      if (CW.isPortal) {
+        requestAnimationFrame(() => {
+          positionPortalPanel();
+          requestAnimationFrame(positionPortalPanel);
+        });
+      }
     } else {
       panel.classList.add('cw-hidden');
       if (bar) bar.classList.remove('cw-bar-active');
@@ -906,6 +935,10 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     window.addEventListener('load', run);
     setTimeout(run, 1200);
   }
+
+  window.addEventListener('resize', () => {
+    if (CW.open && CW.isPortal) positionPortalPanel();
+  });
 
   boot();
   window._CW = CW;
