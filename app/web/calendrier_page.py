@@ -501,17 +501,20 @@ function hasSavedView(){
   return false;
 }
 function loadSavedView(){
+  if(isMobileViewport())return 'agenda';
   if(hasSavedView()){
     try{
       const v=localStorage.getItem(LS_VIEW);
       if(VALID_VIEWS.includes(v))return v;
     }catch(e){}
   }
-  if(isMobileViewport())return 'agenda';
   return 'month';
 }
 function applyMobileDefaultView(){
-  if(!hasSavedView()&&isMobileViewport())S.view='agenda';
+  if(isMobileViewport()){
+    S.view='agenda';
+    S.anchor=new Date();
+  }
 }
 function applyViewChrome(v){
   document.querySelectorAll('.nav-btn[data-view]').forEach(b=>{
@@ -1596,6 +1599,15 @@ function bootCalendrier(){
 }
 
 document.addEventListener('DOMContentLoaded',bootCalendrier);
+let _calResizeTimer=null;
+window.addEventListener('resize',()=>{
+  clearTimeout(_calResizeTimer);
+  _calResizeTimer=setTimeout(()=>{
+    if(!isMobileViewport())return;
+    if(S.view==='agenda')return;
+    setView('agenda');
+  },180);
+});
 
 (async function init(){
   try{

@@ -20,7 +20,12 @@ from app.routers.planning import (
     _load_planning_calendar_maps_range,
     _parse_planned_dt as _parse_planned_dt_planning,
 )
-from config import ROLE_ADMINISTRATION, ROLE_DIRECTION, ROLE_SUPERADMIN
+from config import (
+    ROLE_ADMINISTRATION,
+    ROLE_DIRECTION,
+    ROLE_SUPERADMIN,
+    national_holidays_between,
+)
 from database import get_db
 from services.auth_service import require_calendrier
 
@@ -448,23 +453,11 @@ def _fetch_calendar_events(
                         )
 
         if "feries" in cals:
-            rows = conn.execute(
-                """
-                SELECT date, label
-                FROM planning_holidays
-                WHERE date >= ? AND date <= ?
-                GROUP BY date, label
-                ORDER BY date, label
-                """,
-                (d0.isoformat(), d1.isoformat()),
-            ).fetchall()
-            for r in rows:
-                ds = str(r["date"] or "")[:10]
+            for ds, label in national_holidays_between(d0.isoformat(), d1.isoformat()):
                 try:
                     hd = datetime.strptime(ds, "%Y-%m-%d").date()
                 except ValueError:
                     continue
-                label = (r["label"] or "").strip() or "Jour férié"
                 out.append(
                     _event(
                         eid=f"ferie-{ds}-{label}",

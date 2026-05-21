@@ -278,6 +278,10 @@ body.light table.fab-table tr.fab-row-last td{
 .fab-search-btn:hover{filter:brightness(1.1)}
 .fab-comment-row{display:flex;gap:6px;align-items:center}
 .fab-comment-hint{font-size:10px;color:var(--muted);flex:1}
+.fab-footer-row2{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  padding:4px 0 0;width:100%;
+}
 
 /* ── Modals ─────────────────────────────────────────────────── */
 .fab-modal-overlay{
@@ -556,13 +560,91 @@ table.fab-traca-table tr:last-child td{border-bottom:none}
     grid-column:1;grid-row:3;
     grid-template-columns:1fr;
     min-height:unset;
-    padding:10px 12px;
-    gap:10px;
+    padding:8px 10px max(8px, env(safe-area-inset-bottom, 0px));
+    gap:8px;
+    border-top-width:1px;
   }
   .fab-footer-actions{min-width:0;width:100%}
   .fab-footer-info{display:none}
-  .fab-footer-tools{flex-direction:row;gap:6px;align-items:center}
+  .fab-footer-tools{flex-direction:row;gap:6px;align-items:center;flex:1;min-width:0}
   .fab-comment-hint{display:none}
+  /* Vue opérateur mobile : footer compact */
+  body.fab-mode-operator .fab-footer-operator{
+    padding:4px 8px max(4px, env(safe-area-inset-bottom, 0px));
+    gap:4px;
+    display:flex;
+    flex-direction:column;
+  }
+  body.fab-mode-operator .fab-footer-operator .fab-footer-actions{
+    gap:4px;
+    order:1;
+  }
+  body.fab-mode-operator .fab-footer-operator .fab-footer-btns{
+    gap:5px;
+    flex-wrap:nowrap;
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
+    justify-content:flex-start;
+    padding-bottom:2px;
+  }
+  body.fab-mode-operator .fab-footer-operator .fab-btn{
+    padding:7px 11px;
+    font-size:11px;
+    border-radius:8px;
+    gap:5px;
+    flex-shrink:0;
+  }
+  body.fab-mode-operator .fab-footer-operator .fab-btn svg{
+    width:14px;height:14px;
+  }
+  body.fab-mode-operator .fab-footer-operator .fab-footer-tools{
+    order:2;
+    width:100%;
+    gap:4px;
+    grid-column:1;
+  }
+  body.fab-mode-operator .fab-footer-operator .fab-footer-row2{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:4px;
+    width:100%;
+    padding:2px 0 0;
+  }
+  body.fab-mode-operator .fab-footer-operator .fab-search-input{
+    padding:6px 9px;
+    font-size:11px;
+    min-width:0;
+  }
+  body.fab-mode-operator .fab-footer-operator .fab-tab-nav{
+    border-radius:8px;
+    flex-shrink:0;
+  }
+  body.fab-mode-operator .fab-footer-operator .fab-tab-btn{
+    width:52px;
+    padding:3px 2px 2px;
+    font-size:8px;
+    gap:1px;
+    letter-spacing:.3px;
+  }
+  body.fab-mode-operator .fab-footer-operator .fab-tab-btn svg{
+    width:13px;height:13px;
+  }
+  body.fab-mode-operator .fab-footer-operator .fab-theme-btn{
+    padding:5px 7px;
+    font-size:10px;
+    flex-shrink:0;
+  }
+  body.fab-mode-operator .fab-footer-operator .fab-theme-btn .fab-theme-label{
+    display:none;
+  }
+  body.fab-mode-operator .fab-footer-operator.fab-footer--alt{
+    padding:3px 8px max(3px, env(safe-area-inset-bottom, 0px));
+    gap:2px;
+  }
+  body.fab-mode-operator .fab-footer-operator.fab-footer--alt .fab-footer-row2{
+    padding:2px 0 4px;
+  }
 }
 /* ── Popup Mise à jour ── */
 .upd-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px}
@@ -2327,9 +2409,7 @@ function renderFooter(){
       svgIcon('scan',16),'Traça')
   );
 
-  // Wrapper centré commun pour la tab nav
-  const tabNavWrap = h('div',{style:{display:'flex',justifyContent:'center',
-    alignItems:'center',padding:'6px 0 8px'}}, tabNav);
+  const isOperatorView = S.saisieViewMode === 'operator';
 
   // Theme toggle button
   const isLight = document.body.classList.contains('light');
@@ -2339,7 +2419,10 @@ function renderFooter(){
       if(window.MySifaTheme)MySifaTheme.toggleMode();
       render();
     }
-  }, svgIcon(isLight?'sun':'moon',14), isLight?'Clair':'Sombre');
+  }, svgIcon(isLight?'sun':'moon',14),
+    h('span',{className:'fab-theme-label'}, isLight?'Clair':'Sombre'));
+
+  const tabNavWrap = h('div',{className:'fab-footer-row2'}, tabNav, themeBtn);
 
   // When on non-saisie tabs, show a minimal status line instead of full footer
   if(S.fabTab!=='saisie'){
@@ -2352,28 +2435,29 @@ function renderFooter(){
           onClick:()=>openTracabiliteModal(S.dossier.reference || S.dossier.numero_of || ''),
         },'FSC')
       : null;
-    return h('div',{className:'fab-footer',style:{gridTemplateColumns:'1fr',padding:'4px 16px 0'}},
-      h('div',{style:{display:'flex',alignItems:'center',justifyContent:'center',gap:'16px',
-        fontSize:'11px',color:'var(--muted)',padding:'4px 0',flexWrap:'wrap'}},
+    const footerCls = 'fab-footer fab-footer-operator fab-footer--alt';
+    return h('div',{className:footerCls,style:{gridTemplateColumns:'1fr'}},
+      h('div',{style:{display:'flex',alignItems:'center',justifyContent:'center',gap:'10px',
+        fontSize:'10px',color:'var(--muted)',padding:'2px 0',flexWrap:'wrap'}},
         h('span',null, svgIcon('tool',11),' '+machineName),
         h('span',{style:{color:'var(--border)'}},'/'),
         h('span',null,dossierLabel),
         h('span',{style:{color:'var(--border)'}},'/'),
-        h('span',{className:'fab-etat-badge '+etatClass(S.etat),style:{fontSize:'9px',padding:'2px 8px'}}, etatLabel(S.etat)),
+        h('span',{className:'fab-etat-badge '+etatClass(S.etat),style:{fontSize:'9px',padding:'2px 6px'}}, etatLabel(S.etat)),
         fscFooterBtn,
-        h('span',{style:{color:'var(--border)'}},'/'),
         themeBtn
       ),
-      tabNavWrap
+      h('div',{className:'fab-footer-row2',style:{justifyContent:'center'}}, tabNav)
     );
   }
 
-  return h('div',{className:'fab-footer'},
+  const footerCls = 'fab-footer' + (isOperatorView ? ' fab-footer-operator' : '');
+  return h('div',{className:footerCls},
     infoSection,
-    h('div',{className:'fab-footer-actions',style:{display:'flex',flexDirection:'column',alignItems:'center',gap:'8px'}},
+    h('div',{className:'fab-footer-actions'},
       machineSelectorRow,
       h('div',{className:'fab-footer-btns'},...btns),
-      h('div',{style:{display:'flex',alignItems:'center',gap:'8px'}}, tabNavWrap, themeBtn)
+      tabNavWrap
     ),
     toolsSection
   );
@@ -3013,6 +3097,8 @@ function renderLoading(){
 /* ── Main render ─────────────────────────────────────────────── */
 function render(){
   const ui = _fabCaptureUiState();
+  document.body.classList.toggle('fab-mode-operator', S.saisieViewMode === 'operator');
+  document.body.classList.toggle('fab-mode-admin', S.saisieViewMode === 'admin');
   const root = document.getElementById('root');
   root.innerHTML = '';
 

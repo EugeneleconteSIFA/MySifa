@@ -174,6 +174,53 @@ CODE_REPRISE    = "88"
 _ALLOWED_SEVERITY = frozenset({"info", "attention", "critique"})
 
 
+# ─── Jours fériés nationaux (France métropolitaine) ───────────────
+# Source MyCalendrier (calendrier « Jours fériés ») — distinct des jours off planning machine.
+FERIES_NATIONAUX_FR: dict[int, list[tuple[str, str]]] = {
+    2025: [
+        ("2025-01-01", "Jour de l'an"),
+        ("2025-04-21", "Lundi de Pâques"),
+        ("2025-05-01", "Fête du Travail"),
+        ("2025-05-08", "Victoire des Alliés 1945"),
+        ("2025-05-29", "Jeudi de l'Ascension"),
+        ("2025-06-09", "Lundi de Pentecôte"),
+        ("2025-07-14", "Fête Nationale"),
+        ("2025-08-15", "Assomption"),
+        ("2025-11-01", "La Toussaint"),
+        ("2025-11-11", "Armistice 1918"),
+        ("2025-12-25", "Noël"),
+    ],
+    2026: [
+        ("2026-01-01", "Jour de l'an"),
+        ("2026-04-06", "Lundi de Pâques"),
+        ("2026-05-01", "Fête du Travail"),
+        ("2026-05-08", "Victoire des Alliés 1945"),
+        ("2026-05-14", "Jeudi de l'Ascension"),
+        ("2026-05-25", "Lundi de Pentecôte"),
+        ("2026-07-14", "Fête Nationale"),
+        ("2026-08-15", "Assomption"),
+        ("2026-11-01", "La Toussaint"),
+        ("2026-11-11", "Armistice 1918"),
+        ("2026-12-25", "Noël"),
+    ],
+}
+
+
+def national_holidays_between(date_debut: str, date_fin: str) -> list[tuple[str, str]]:
+    """Jours fériés nationaux entre deux dates YYYY-MM-DD (inclus)."""
+    from datetime import date as _date
+
+    d0 = _date.fromisoformat(str(date_debut)[:10])
+    d1 = _date.fromisoformat(str(date_fin)[:10])
+    out: list[tuple[str, str]] = []
+    for year in range(d0.year, d1.year + 1):
+        for ds, label in FERIES_NATIONAUX_FR.get(year, []):
+            d = _date.fromisoformat(ds)
+            if d0 <= d <= d1:
+                out.append((ds, label))
+    return out
+
+
 def validate_operations_config(data: object) -> None:
     """Lève ValueError si la structure de operations.json est invalide."""
     if not isinstance(data, dict) or len(data) == 0:

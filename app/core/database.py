@@ -1576,6 +1576,13 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 37, "chat_reactions")
 
+    # v38 — Retirer des fériés planning les jours off erronés (18–22 mai 2026) ; calendrier = liste nationale
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=38 LIMIT 1").fetchone():
+        conn.execute(
+            "DELETE FROM planning_holidays WHERE date >= '2026-05-18' AND date <= '2026-05-22'"
+        )
+        _record_schema_migration(conn, 38, "cleanup_feries_planning_mai_2026")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

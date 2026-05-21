@@ -124,18 +124,48 @@ body.light .btn-sec:hover{box-shadow:0 0 0 1px rgba(8,145,178,.35),0 0 18px rgba
   opacity:0;transition:opacity .15s;pointer-events:none;
 }
 .prof-ring:hover .prof-ring-label{opacity:1}
-.op-cat{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:18px 0 8px}
-.op-row{display:grid;grid-template-columns:52px 1fr 110px 100px 52px auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px}
-.op-row:last-child{border-bottom:none}
-.op-code{font-family:monospace;font-weight:800;color:var(--accent)}
-.op-lbl{font-weight:600}
-.op-pill{font-size:10px;padding:2px 8px;border-radius:999px;border:1px solid var(--border);text-transform:uppercase}
-.op-pill.calage{color:#34d399;border-color:rgba(52,211,153,.35)}
-.op-pill.arret{color:#fbbf24;border-color:rgba(251,191,36,.35)}
-.op-pill.production{color:#60a5fa;border-color:rgba(96,165,250,.35)}
-.op-act{display:flex;gap:6px;justify-content:flex-end}
-.op-act button{padding:4px 8px;font-size:11px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit}
-.op-act button:hover{border-color:var(--accent);color:var(--accent)}
+.op-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
+.op-filter{flex:1;min-width:200px;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s}
+.op-filter:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+body.light .op-filter:focus{box-shadow:0 0 0 3px rgba(8,145,178,.1)}
+.op-form-panel{margin-bottom:16px;padding:16px 18px;border:1px solid var(--border);border-radius:12px;background:var(--bg)}
+.op-form-panel h3{margin:0 0 12px;font-size:13px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
+.op-table-wrap{margin-top:4px}
+.op-table{font-size:12px}
+.op-table th{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);padding:10px 12px;white-space:nowrap}
+.op-table td{padding:10px 12px;vertical-align:middle}
+.op-table tbody tr:hover td{background:rgba(34,211,238,.04)}
+body.light .op-table tbody tr:hover td{background:rgba(8,145,178,.05)}
+.op-table tr.op-cat-row td{
+  padding:14px 12px 6px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;
+  color:var(--accent);background:rgba(34,211,238,.06);border-bottom:1px solid var(--border)
+}
+body.light .op-table tr.op-cat-row td{background:rgba(8,145,178,.06)}
+.op-table tr.op-cat-row:first-child td{padding-top:8px}
+.op-code-cell{font-family:ui-monospace,monospace;font-weight:800;font-size:13px;color:var(--accent);width:56px}
+.op-lbl-cell{font-weight:600;color:var(--text);max-width:280px;white-space:normal}
+.op-pill{
+  display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:3px 10px;border-radius:999px;
+  border:1px solid var(--border);text-transform:uppercase;letter-spacing:.3px;line-height:1.3
+}
+.op-pill.info{color:var(--text2);border-color:rgba(148,163,184,.4);background:rgba(148,163,184,.1)}
+.op-pill.attention{color:var(--warn);border-color:rgba(251,191,36,.4);background:rgba(251,191,36,.12)}
+.op-pill.critique{color:var(--danger);border-color:rgba(248,113,113,.45);background:rgba(248,113,113,.12)}
+.op-pill.calage{color:var(--ok);border-color:rgba(52,211,153,.4);background:rgba(52,211,153,.1)}
+.op-pill.arret{color:var(--warn);border-color:rgba(251,191,36,.4);background:rgba(251,191,36,.1)}
+.op-pill.production{color:#60a5fa;border-color:rgba(96,165,250,.4);background:rgba(96,165,250,.1)}
+.op-pill.changement{color:#a78bfa;border-color:rgba(167,139,250,.4);background:rgba(167,139,250,.1)}
+.op-pill.nettoyage{color:#c084fc;border-color:rgba(192,132,252,.4);background:rgba(192,132,252,.1)}
+.op-pill.autre{color:var(--muted);border-color:var(--border);background:rgba(148,163,184,.08)}
+.op-req{font-size:11px;font-weight:600;color:var(--muted)}
+.op-req.yes{color:var(--ok)}
+.op-table th:last-child,.op-table td:last-child{text-align:right}
+.op-act{display:inline-flex;gap:6px;justify-content:flex-end;flex-wrap:nowrap}
+.btn-sm{padding:6px 12px;font-size:11px;font-weight:700;border-radius:8px}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text2);transition:border-color .15s,color .15s,box-shadow .15s,filter .15s}
+.btn-ghost:hover{border-color:var(--accent);color:var(--accent);filter:none;box-shadow:0 0 0 1px rgba(34,211,238,.28),0 0 14px rgba(34,211,238,.14)}
+body.light .btn-ghost:hover{box-shadow:0 0 0 1px rgba(8,145,178,.3),0 0 12px rgba(8,145,178,.1)}
+.btn-ghost.danger:hover{border-color:var(--danger);color:var(--danger);box-shadow:0 0 0 1px rgba(248,113,113,.35),0 0 14px rgba(248,113,113,.12)}
 
 .pill{font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;border:1px solid var(--border);display:inline-flex;align-items:center;gap:6px;line-height:1.4}
 .pill--direction{border-color:rgba(244,114,182,.35);color:#f472b6;background:rgba(244,114,182,.12)}
@@ -183,7 +213,8 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
   .layout{min-height:100vh}
   .nav-btn{padding:12px 14px;font-size:14px}
   .nav-scroll{gap:4px}
-  .main section>.tabs{display:none}
+  /* Masquer les sous-onglets Utilisateurs dupliqués (navigation = sidebar) */
+  .main section>.tabs:has(.sub-tab-btn){display:none}
   .tabs{overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;gap:6px;margin-bottom:12px}
   .tabs .btn{flex-shrink:0;font-size:12px;padding:8px 12px}
   .form-grid{grid-template-columns:1fr}
@@ -194,7 +225,8 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
   .table-wrap{-webkit-overflow-scrolling:touch;max-width:100%}
   table{font-size:11px}
   th,td{padding:6px 8px}
-  .op-row{grid-template-columns:52px 1fr auto;gap:6px}
+  .op-act{flex-wrap:wrap}
+  .op-lbl-cell{max-width:160px}
   .legend{grid-template-columns:1fr}
   .four-sub-btn,.mac-sub-btn,.sub-tab-btn{flex-shrink:0}
 }
@@ -471,8 +503,8 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
           </div>
         </div>
         <p class="sub" style="margin-top:-4px;margin-bottom:14px">Référentiel utilisé par la saisie production et les imports. Modifiable ici ou via Database Viewer → table <code>operation_codes</code>.</p>
-        <div id="op-form-wrap" class="hidden" style="margin-bottom:16px;padding:14px;border:1px solid var(--border);border-radius:12px;background:rgba(0,0,0,.12)">
-          <h3 style="margin:0 0 10px;font-size:14px" id="op-form-title">Nouveau code</h3>
+        <div id="op-form-wrap" class="hidden op-form-panel">
+          <h3 id="op-form-title">Nouveau code</h3>
           <div class="form-grid" style="grid-template-columns:repeat(auto-fill,minmax(140px,1fr))">
             <input type="text" id="op-code" placeholder="Code (ex. 82)" inputmode="numeric" maxlength="3">
             <input type="text" id="op-label" placeholder="Libellé">
@@ -480,12 +512,14 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
             <select id="op-category"></select>
             <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2)"><input type="checkbox" id="op-required"> Obligatoire</label>
           </div>
-          <div style="display:flex;gap:8px;margin-top:12px">
+          <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
             <button type="button" class="btn" onclick="saveOpForm()">Enregistrer</button>
             <button type="button" class="btn btn-sec" onclick="closeOpForm()">Annuler</button>
           </div>
         </div>
-        <input type="search" id="op-filter" placeholder="Filtrer (code, libellé, catégorie…)" style="margin-bottom:12px" oninput="renderOpList()">
+        <div class="op-toolbar">
+          <input type="search" id="op-filter" class="op-filter" placeholder="Filtrer (code, libellé, catégorie…)" oninput="renderOpList()">
+        </div>
         <div id="op-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
       </div>
     </section>
@@ -2194,7 +2228,8 @@ function renderOpList() {
     items = items.filter(o =>
       String(o.code).includes(q) ||
       (o.label || '').toLowerCase().includes(q) ||
-      (o.category || '').toLowerCase().includes(q)
+      (o.category || '').toLowerCase().includes(q) ||
+      (o.severity || '').toLowerCase().includes(q)
     );
   }
   const byCat = {};
@@ -2205,25 +2240,31 @@ function renderOpList() {
   });
   const cats = Object.keys(byCat).sort((a, b) => a.localeCompare(b, 'fr'));
   if (!cats.length) {
-    el.innerHTML = '<p style="color:var(--muted);font-size:13px">Aucun code.</p>';
+    el.innerHTML = '<p style="color:var(--muted);font-size:13px">Aucun code' + (q ? ' pour ce filtre' : '') + '.</p>';
     return;
   }
-  el.innerHTML = cats.map(cat => {
-    const rows = byCat[cat].map(o => {
+  let body = '';
+  cats.forEach(cat => {
+    body += '<tr class="op-cat-row"><td colspan="6">' + esc(cat) + '</td></tr>';
+    byCat[cat].forEach(o => {
       const c = esc(o.code);
-      return '<div class="op-row">'
-        + '<span class="op-code">' + c + '</span>'
-        + '<span class="op-lbl">' + esc(o.label) + '</span>'
-        + '<span class="op-pill ' + esc(o.severity) + '">' + esc(o.severity) + '</span>'
-        + '<span class="op-pill ' + esc(cat) + '">' + esc(cat) + '</span>'
-        + '<span style="font-size:11px;color:var(--muted)">' + (o.required ? 'oui' : '—') + '</span>'
-        + '<span class="op-act">'
-        + '<button type="button" data-op-edit="' + c + '">Modifier</button>'
-        + '<button type="button" data-op-del="' + c + '">Suppr.</button>'
-        + '</span></div>';
-    }).join('');
-    return '<div class="op-cat">' + esc(cat) + '</div>' + rows;
-  }).join('');
+      const sev = esc(o.severity || 'info');
+      const reqCls = o.required ? 'op-req yes' : 'op-req';
+      body += '<tr>'
+        + '<td class="op-code-cell">' + c + '</td>'
+        + '<td class="op-lbl-cell">' + esc(o.label) + '</td>'
+        + '<td><span class="op-pill ' + sev + '">' + sev + '</span></td>'
+        + '<td><span class="op-pill ' + esc(cat) + '">' + esc(cat) + '</span></td>'
+        + '<td><span class="' + reqCls + '">' + (o.required ? 'Oui' : '—') + '</span></td>'
+        + '<td><div class="op-act">'
+        + '<button type="button" class="btn-sm btn-ghost" data-op-edit="' + c + '">Modifier</button>'
+        + '<button type="button" class="btn-sm btn-ghost danger" data-op-del="' + c + '">Supprimer</button>'
+        + '</div></td></tr>';
+    });
+  });
+  el.innerHTML = '<div class="table-wrap op-table-wrap"><table class="op-table"><thead><tr>'
+    + '<th>Code</th><th>Libellé</th><th>Sévérité</th><th>Catégorie</th><th>Obligatoire</th><th>Actions</th>'
+    + '</tr></thead><tbody>' + body + '</tbody></table></div>';
   el.querySelectorAll('[data-op-edit]').forEach(btn => {
     btn.addEventListener('click', () => openOpForm(btn.getAttribute('data-op-edit')));
   });

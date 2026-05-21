@@ -307,8 +307,18 @@
     right: max(24px, env(safe-area-inset-right, 0px));
   }
   #ai-chat-panel {
-    width: calc(100vw - 24px);
+    left: max(12px, env(safe-area-inset-left, 0px));
     right: max(12px, env(safe-area-inset-right, 0px));
-    max-height: calc(100dvh - 120px);
+    width: auto;
+    max-width: min(420px, calc(100vw - 24px));
+    margin-left: auto;
+    margin-right: auto;
+    bottom: max(12px, env(safe-area-inset-bottom, 0px));
+    height: min(500px, calc(100dvh - 96px));
+    max-height: calc(100dvh - 96px);
+    transform-origin: bottom center;
+  }
+  #ai-chat-panel.open {
+    transform: scale(1) translateY(0);
   }
 }

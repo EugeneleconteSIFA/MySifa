@@ -71,20 +71,42 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 button:focus:not(:focus-visible){outline:none}
 input,select,textarea{font-family:inherit;color:var(--text)}
 
-/* ── Layout ──────────────────────────────────────────── */
-#root{display:flex;height:100vh;overflow:hidden}
+/* ── Layout (aligné MyProd / Planning / MyExpé) ───────── */
+.app{display:flex;height:100vh;overflow:hidden;width:100%}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:899}
+body.sb-open .sidebar-overlay{display:block}
+.mobile-topbar{display:none;align-items:center;gap:10px;flex-shrink:0}
+.mobile-menu-btn,.mobile-home-btn{
+  display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;
+  border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;font-family:inherit;
+}
+.mobile-menu-btn:hover,.mobile-home-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.mobile-topbar-title{font-size:14px;font-weight:800}
+.mobile-topbar-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.logo{padding:0 8px;margin-bottom:32px}
+.logo-brand{font-size:15px;font-weight:800}.logo-brand span{color:var(--accent)}
+.logo-sub{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase}
+.sidebar-bottom{margin-top:auto;display:flex;flex-direction:column;gap:6px;padding-bottom:8px}
+.support-btn{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);
+  background:transparent;color:var(--text2);cursor:pointer;font-size:12px;width:100%;font-family:inherit;transition:all .15s}
+.support-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+.support-ico{display:inline-flex;align-items:center;justify-content:center}
+.theme-btn,.logout-btn{
+  display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);
+  background:transparent;color:var(--text2);cursor:pointer;font-size:12px;width:100%;font-family:inherit;transition:all .15s;
+}
+.theme-btn:hover,.logout-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+.theme-btn .theme-ico{display:inline-flex;align-items:center;justify-content:center}
+.theme-btn .theme-label{white-space:nowrap}
 
 /* ── Sidebar ──────────────────────────────────────────── */
-.rh-sb{
+.sidebar{
   width:var(--sidebar-w);flex-shrink:0;
   background:var(--card);border-right:1px solid var(--border);
   display:flex;flex-direction:column;overflow:hidden;height:100vh;
+  padding:20px 12px;
 }
-.rh-sb-head{padding:16px 14px 12px;border-bottom:1px solid var(--border);flex-shrink:0}
-.rh-sb-brand{font-size:15px;font-weight:800;line-height:1.2}
-.rh-sb-brand span{color:var(--accent)}
-.rh-sb-sub{font-size:10px;color:var(--muted);letter-spacing:1.2px;text-transform:uppercase;margin-top:2px}
-.rh-sb-nav{flex:1;overflow-y:auto;padding:8px 6px}
+#rh-sb-nav{flex:1;overflow-y:auto;padding:4px 0;min-height:0}
 .rh-nav-btn{
   display:flex;align-items:center;gap:9px;width:100%;padding:9px 10px;
   border-radius:8px;border:none;background:transparent;
@@ -92,16 +114,9 @@ input,select,textarea{font-family:inherit;color:var(--text)}
   font-family:inherit;transition:all .15s;margin-bottom:2px;text-align:left;
 }
 .rh-nav-btn:hover,.rh-nav-btn.active{background:var(--accent-bg);color:var(--accent)}
-.rh-sb-bot{margin-top:auto;padding:10px 6px 12px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:6px}
-.rh-user-chip{padding:8px 10px;border-radius:8px;background:var(--accent-bg)}
+.rh-user-chip{padding:10px 12px;border-radius:8px;background:var(--accent-bg);cursor:pointer}
 .rh-user-chip .ucn{font-size:12px;font-weight:600;color:var(--text)}
 .rh-user-chip .ucr{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px}
-.rh-theme-btn,.rh-back-btn{
-  display:flex;align-items:center;gap:5px;padding:6px 10px;border-radius:10px;
-  border:none;background:transparent;color:var(--text2);cursor:pointer;
-  font-size:13px;font-weight:600;font-family:inherit;transition:background .1s
-}
-.rh-theme-btn:hover,.rh-back-btn:hover{background:var(--accent-bg);color:var(--accent)}
 .nav-btn{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;
   border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:13px;
   font-weight:500;width:100%;text-align:left;font-family:inherit;transition:all .15s;margin-bottom:2px}
@@ -114,10 +129,8 @@ input,select,textarea{font-family:inherit;color:var(--text)}
 .mysifa-back-preamble{font-size:13px;font-weight:500;color:var(--text2);letter-spacing:0}
 .mysifa-back-brand{font-size:14px;font-weight:800;letter-spacing:-.5px;color:var(--text);white-space:nowrap}
 .mysifa-back-accent{color:var(--accent)}
-.rh-back-btn:hover{color:var(--danger);background:rgba(248,113,113,.08);border-color:var(--danger)}
-
 /* ── Main ──────────────────────────────────────────── */
-.rh-main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+.main.rh-main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;min-height:0}
 .rh-hdr{
   padding:14px 20px 12px;border-bottom:1px solid var(--border);
   display:flex;align-items:center;gap:12px;flex-wrap:wrap;flex-shrink:0;
@@ -501,8 +514,8 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 @media print{
   body{background:#fff!important;color:#000!important;overflow:auto!important;font-size:9px}
   html,body{height:auto!important;overflow:visible!important}
-  #root{display:block!important;height:auto!important;overflow:visible!important}
-  .rh-sb,.rh-hdr,.rh-conges-wrap .rh-section:not(.print-target){display:none!important}
+  .app{display:block!important;height:auto!important;overflow:visible!important}
+  .sidebar,.mobile-topbar,.sidebar-overlay,.rh-hdr,.rh-conges-wrap .rh-section:not(.print-target){display:none!important}
   .rh-main{overflow:visible!important;padding:0!important;margin:0!important}
   .rh-content{overflow:visible!important;padding:0!important;margin:0!important}
   .rh-grid-wrap{border:none!important;overflow:visible!important;padding:0!important;margin:0!important}
@@ -550,24 +563,36 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 .print-header{display:none}
 .rh-cell-print-detail{display:none} /* visible uniquement en impression */
 
-/* ── Responsive ──────────────────────────────────────── */
-@media(max-width:700px){
-  .rh-sb{position:fixed;left:0;top:0;bottom:0;z-index:900;transform:translateX(-105%);transition:transform .18s ease;box-shadow:0 16px 48px rgba(0,0,0,.55)}
-  .rh-sb.open{transform:translateX(0)}
-  .rh-sb-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:899;display:none}
-  .rh-sb.open~.rh-sb-overlay{display:block}
-  .rh-mobile-menu{display:inline-flex!important}
+/* ── Responsive (même seuil que les autres apps MySifa) ─ */
+@media(max-width:900px){
+  .mobile-topbar{
+    display:flex;position:fixed;top:0;left:0;right:0;z-index:120;
+    background:var(--bg);padding:10px 18px;border-bottom:1px solid var(--border);
+  }
+  .mobile-menu-btn,.mobile-home-btn{display:inline-flex}
+  .mobile-home-btn{margin-left:auto}
+  body.has-topbar .main.rh-main{padding-top:74px}
+  .sidebar{
+    position:fixed;left:0;top:0;bottom:0;z-index:900;
+    transform:translateX(-105%);transition:transform .18s ease;
+    box-shadow:0 16px 48px rgba(0,0,0,.55);
+  }
+  body.sb-open .sidebar{transform:translateX(0)}
   .rh-range-tabs{display:none}
-  .rh-hdr{padding:10px 14px;gap:8px}
-  .rh-hdr-title{font-size:15px;min-width:0}
+  .rh-hdr-title{display:none}
+  body.rh-view-operator .rh-hdr{display:none}
+  .rh-hdr{padding:10px 14px;gap:8px;border-top:none}
   .rh-hdr-right{width:100%;justify-content:center}
   .rh-hdr-nav-row{width:100%;justify-content:center}
   .rh-wk-nav button{padding:6px 8px;font-size:12px}
   .rh-hdr-range{width:100%;text-align:center;font-size:11px}
   .rh-icon-btn{font-size:11px;padding:5px 8px}
+  .rh-content{padding:12px 14px}
 }
-.rh-mobile-menu{display:none;align-items:center;justify-content:center;width:36px;height:36px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;font-size:18px}
-.rh-mobile-menu:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+@media (display-mode:standalone),(max-width:900px){
+  .theme-btn .theme-label{display:none}
+  .theme-btn{justify-content:center}
+}
 
 /* ── Loading ──────────────────────────────────────────── */
 .rh-loading{display:flex;align-items:center;justify-content:center;padding:60px;color:var(--muted);font-size:13px;gap:10px}
@@ -604,21 +629,21 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 <body>
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
-<div id="root">
-  <nav class="rh-sb" id="rh-sb">
-    <div class="rh-sb-head">
-      <div class="rh-sb-brand">My<span>Sifa</span></div>
-      <div class="rh-sb-sub">Planning RH</div>
+<div id="root" class="app">
+  <div class="sidebar-overlay" id="rh-sb-overlay" onclick="closeSidebar()"></div>
+  <nav class="sidebar" id="rh-sb">
+    <div class="logo">
+      <div class="logo-brand">Planning <span>RH</span></div>
+      <div class="logo-sub">by SIFA</div>
     </div>
-    <div class="rh-sb-nav" id="rh-sb-nav"><!-- injecté JS --></div>
-    <div class="rh-sb-bot" id="rh-sb-bot"><!-- injecté JS --></div>
+    <div id="rh-sb-nav"><!-- injecté JS --></div>
+    <div class="sidebar-bottom" id="rh-sb-bot"><!-- injecté JS --></div>
   </nav>
-  <div class="rh-sb-overlay" id="rh-sb-overlay" onclick="closeSidebar()"></div>
-
-  <div class="rh-main">
+  <main class="main rh-main">
+    <div class="mobile-topbar" id="rh-mobile-topbar"><!-- injecté JS --></div>
     <div class="rh-hdr" id="rh-hdr"><!-- injecté JS --></div>
     <div class="rh-content" id="rh-content"><!-- injecté JS --></div>
-  </div>
+  </main>
 </div>
 <div id="rh-toast"></div>
 <div id="rh-modal-root"></div>
@@ -706,7 +731,7 @@ const S = {
   annee: new Date().getFullYear(),
   modal: null, toast: null, loading: false,
   opOffset: 0,          // opérateur : décalage semaine
-  opViewRange: 2,       // opérateur : plage de vue (1 ou 2 semaines)
+  opViewRange: 2,       // opérateur : plage de vue (1, 2 ou 4 semaines — 4 desktop)
   editConge: null,      // congé en cours d'édition
   editSolde: null,      // solde en cours d'édition
   congeForm: { user_id:'', date_debut:'', date_fin:'', nb_jours:'', type_conge:'CP', note:'' },
@@ -1076,10 +1101,41 @@ async function loadMe(){
 }
 
 // ── Rendu principal ────────────────────────────────────
+function rhDesktopRangeOpts(){
+  return window.innerWidth>900?[1,2,4]:[1,2];
+}
+function rhClampViewRange(){
+  const opts=rhDesktopRangeOpts();
+  if(!opts.includes(S.viewRange)) S.viewRange=opts[opts.length-1];
+  if(!opts.includes(S.opViewRange)) S.opViewRange=opts[opts.length-1];
+}
+function rhSyncMobileLayout(){
+  const mob=window.innerWidth<=900;
+  document.body.classList.toggle('has-topbar',mob);
+  const isOp=S.user&&!S.isEditor&&!S.isReadOnlyAdmin;
+  document.body.classList.toggle('rh-view-operator',mob&&!!isOp);
+  rhClampViewRange();
+}
 function render(){
+  rhSyncMobileLayout();
   renderSidebar();
+  renderMobileTopbar();
   renderHeader();
   renderContent();
+}
+function renderMobileTopbar(){
+  const bar=document.getElementById('rh-mobile-topbar');
+  if(!bar)return;
+  const isOp=S.user&&!S.isEditor&&!S.isReadOnlyAdmin;
+  const sub=isOp?'Ma semaine':(S.tab==='conges'?'Congés':'Planning');
+  bar.innerHTML=`
+    <button type="button" class="mobile-menu-btn" onclick="toggleSidebar()" aria-label="Menu">${icon('menu',20)}</button>
+    <div>
+      <div class="mobile-topbar-title">Planning RH</div>
+      <div class="mobile-topbar-sub">${sub}</div>
+    </div>
+    <button type="button" class="mobile-home-btn" onclick="window.location.href='/'" aria-label="Accueil">${icon('home',20)}</button>
+  `;
 }
 
 function icon(name,sz=14){
@@ -1097,6 +1153,7 @@ function icon(name,sz=14){
     chevron_left:'<polyline points="15 18 9 12 15 6"/>',
     chevron_right:'<polyline points="9 18 15 12 9 6"/>',
     menu:'<line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/>',
+    'log-out':'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
     x:'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
     check:'<polyline points="20 6 9 17 4 12"/>',
     mail:'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
@@ -1131,18 +1188,20 @@ function renderSidebar(){
 
   const isLight=document.body.classList.contains('light');
   bot.innerHTML=`
+    <button type="button" class="nav-btn nav-btn--mysifa-portal" onclick="window.location.href='/'">
+      <span class="mysifa-back-preamble">← Retour </span>
+      <span class="mysifa-back-brand">My<span class="mysifa-back-accent">Sifa</span></span>
+    </button>
     ${rhUserChipHtml()}
     <button type="button" class="support-btn" onclick="openSupportRH()">
       <span class="support-ico">${(window.MySifaSupport&&window.MySifaSupport.iconSvg)?window.MySifaSupport.iconSvg():""}</span>
       <span>Contacter le support</span>
     </button>
-    <button class="rh-theme-btn" onclick="toggleTheme()">
-      ${icon(isLight?'moon':'sun',13)} ${isLight?'Mode sombre':'Mode clair'}
+    <button type="button" class="theme-btn" onclick="toggleTheme()">
+      <span class="theme-ico">${icon(isLight?'sun':'moon',16)}</span>
+      <span class="theme-label">${isLight?'Mode clair':'Mode sombre'}</span>
     </button>
-    <button class="nav-btn nav-btn--mysifa-portal" onclick="window.location.href='/'">
-      <span class="mysifa-back-preamble">← Retour </span>
-      <span class="mysifa-back-brand">My<span class="mysifa-back-accent">Sifa</span></span>
-    </button>
+    <button type="button" class="logout-btn" onclick="doLogout()">${icon('log-out',14)} Déconnexion</button>
   `;
 }
 
@@ -1169,11 +1228,7 @@ function renderHeader(){
   const isEditor=S.isEditor || S.isReadOnlyAdmin;
 
   if(!isEditor){
-    // Vue opérateur — header simplifié
-    hdr.innerHTML=`
-      <button class="rh-mobile-menu" onclick="openSidebar()">${icon('menu',18)}</button>
-      <div class="rh-hdr-title">Planning RH · <span>Ma semaine</span></div>
-    `;
+    hdr.innerHTML=window.innerWidth<=900?'':'<div class="rh-hdr-title">Planning RH · <span>Ma semaine</span></div>';
     return;
   }
 
@@ -1181,7 +1236,6 @@ function renderHeader(){
   const rangeLabel=weeks.length===1?fmtWeekLong(weeks[0]):`${fmtWeekLabel(weeks[0])} → ${fmtWeekLabel(weeks[weeks.length-1])}`;
 
   hdr.innerHTML=`
-    <button class="rh-mobile-menu" onclick="openSidebar()">${icon('menu',18)}</button>
     <div class="rh-hdr-title">Planning <span>RH</span></div>
     <div class="rh-hdr-right">
       <div class="rh-hdr-nav-row">
@@ -1198,7 +1252,7 @@ function renderHeader(){
       </div>
       <span class="rh-hdr-range">${rangeLabel}</span>
       <div class="rh-range-tabs">
-        ${[1,2].map(n=>`<button class="rh-range-tab${S.viewRange===n?' active':''}" onclick="setRange(${n})">${n} sem.</button>`).join('')}
+        ${rhDesktopRangeOpts().map(n=>`<button class="rh-range-tab${S.viewRange===n?' active':''}" onclick="setRange(${n})">${n} sem.</button>`).join('')}
       </div>
       ${S.tab==='planning'?`
         <button class="rh-icon-btn${S.detailMode?' active':''}" onclick="toggleDetail()" title="Vue détaillée jour/semaine">
@@ -1926,11 +1980,11 @@ function buildOperatorView(){
     nav.appendChild(todayBtn);
   }
   
-  // Sélecteur de plage (1/2/4 semaines)
+  // Sélecteur de plage (1/2/4 semaines — 4 sem. desktop uniquement)
   const rangeSelector=document.createElement('div');
   rangeSelector.className='rh-op-range-tabs';
   rangeSelector.style.cssText='display:flex;gap:4px;margin-left:12px;';
-  [1,2].forEach(n=>{
+  rhDesktopRangeOpts().forEach(n=>{
     const btn=document.createElement('button');
     btn.className='rh-op-range-btn'+(S.opViewRange===n?' active':'');
     btn.textContent=n+' sem.';
@@ -2046,6 +2100,7 @@ function toast(msg,type='success'){
 // ── Actions ────────────────────────────────────────────
 function setTab(t){
   S.tab=t;
+  closeSidebar();
   if(t==='conges'&&!S.soldes.length)loadSoldes();
   render();
 }
@@ -2057,9 +2112,21 @@ function navWeeks(n){
 }
 function toggleDetail(){S.detailMode=!S.detailMode;render();}
 function changeAnnee(y){S.annee=parseInt(y);loadSoldes();render();}
-function toggleTheme(){if(window.MySifaTheme)MySifaTheme.toggleMode();renderSidebar();}
-function openSidebar(){document.getElementById('rh-sb').classList.add('open');}
-function closeSidebar(){document.getElementById('rh-sb').classList.remove('open');}
+function toggleTheme(){if(window.MySifaTheme)MySifaTheme.toggleMode();render();}
+async function doLogout(){
+  try{await fetch('/api/auth/logout',{method:'POST',credentials:'include'});}catch(e){}
+  window.location.href='/';
+}
+function toggleSidebar(){document.body.classList.toggle('sb-open');}
+function openSidebar(){document.body.classList.add('sb-open');}
+function closeSidebar(){document.body.classList.remove('sb-open');}
+window.addEventListener('resize',()=>{
+  const prevVR=S.viewRange, prevOp=S.opViewRange;
+  rhSyncMobileLayout();
+  if(S.viewRange!==prevVR||S.opViewRange!==prevOp) loadData();
+  renderMobileTopbar();
+  renderHeader();
+});
 function printPlanning(){
   const c=document.getElementById('rh-content');
   if(!c)return;

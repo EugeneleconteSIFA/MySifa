@@ -281,8 +281,8 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
 @media (max-width:768px){
   .cw-list-topbar{
     display:flex;align-items:center;justify-content:space-between;gap:10px;
-    padding:max(10px,env(safe-area-inset-top,0px)) 14px 10px;
-    border-bottom:1px solid var(--border);flex-shrink:0;background:var(--card);
+    padding:12px 14px 10px;border-bottom:1px solid var(--border);
+    flex-shrink:0;background:var(--card);border-radius:14px 14px 0 0;
   }
   body.cw-chat-active .cw-list-topbar{display:none}
   #cw-list-title{font-size:14px;font-weight:700;color:var(--text)}
@@ -292,7 +292,6 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     font-size:22px;cursor:pointer;z-index:5;
   }
   #cw-close-list:hover,#cw-close:hover{color:var(--accent);border-color:var(--accent)}
-  body.cw-panel-open{overflow:hidden}
   body.cw-panel-open #cw-bar,body.cw-panel-open #cw-bubble{display:none!important}
   #cw-bar{
     width:48px;height:48px;padding:0;border-radius:50%;max-width:none;
@@ -304,31 +303,30 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
   #cw-bar #cw-bar-icon-wrap{margin:0}
   #cw-bar #cw-bar-icon{width:40px;height:40px}
   #cw-panel{
-    position:fixed!important;inset:0!important;left:0!important;right:0!important;
-    top:0!important;bottom:0!important;width:100%!important;max-width:100%!important;
-    height:100dvh!important;max-height:100dvh!important;
-    border-radius:0!important;border:none!important;box-shadow:none!important;
+    position:fixed!important;top:auto!important;
+    left:max(12px,env(safe-area-inset-left,0px))!important;
+    right:max(12px,env(safe-area-inset-right,0px))!important;
+    width:auto!important;max-width:min(420px,calc(100vw - 24px))!important;
+    margin-left:auto!important;margin-right:auto!important;
+    height:min(520px,calc(100dvh - 120px))!important;
+    max-height:calc(100dvh - 120px)!important;
+    border-radius:14px!important;border:1px solid var(--border)!important;
+    box-shadow:0 12px 48px rgba(0,0,0,.5)!important;
     z-index:8010!important;
   }
-  #cw-panel.cw-mode-bar,#cw-panel.cw-mode-bubble{bottom:auto!important}
   #cw-panel-left{
     width:100%;max-width:100%;flex:1;min-width:0;border-right:none;
-    position:absolute;left:0;top:0;bottom:0;z-index:2;
-    transform:translateX(0);transition:transform .2s ease;
+    position:relative;display:flex;flex-direction:column;min-height:0;
   }
-  body.cw-chat-active #cw-panel-left{transform:translateX(-105%);pointer-events:none}
-  #cw-panel-right{flex:1;width:100%;min-width:0;min-height:0;display:flex}
+  body.cw-chat-active #cw-panel-left{display:none!important;pointer-events:none}
+  #cw-panel-right{flex:1;width:100%;min-width:0;min-height:0;display:flex;flex-direction:column}
   body:not(.cw-chat-active) #cw-panel-right{
     visibility:hidden;pointer-events:none;width:0;flex:0;overflow:hidden;
   }
   body.cw-chat-active #cw-panel-right{
-    visibility:visible;pointer-events:auto;width:100%;flex:1;
+    visibility:visible;pointer-events:auto;width:100%;flex:1;min-height:0;
   }
-  #cw-panel-header{
-    padding-top:max(10px,env(safe-area-inset-top,0px));
-    padding-left:max(10px,env(safe-area-inset-left,0px));
-    padding-right:max(10px,env(safe-area-inset-right,0px));
-  }
+  #cw-panel-header{padding:12px 14px}
   #cw-input-row{
     padding-bottom:max(10px,env(safe-area-inset-bottom,0px));
     padding-left:max(8px,env(safe-area-inset-left,0px));
@@ -491,29 +489,59 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
   }
 
   function buildDom() {
-    const hasTrigger = document.getElementById('cw-bubble');
+    const hasTrigger =
+      document.getElementById('cw-bubble') || document.getElementById('cw-bar');
     if (hasTrigger && document.getElementById('cw-panel')) return;
     if (document.getElementById('cw-bar')) document.getElementById('cw-bar').remove();
     if (document.getElementById('cw-bubble')) document.getElementById('cw-bubble').remove();
     if (document.getElementById('cw-panel')) document.getElementById('cw-panel').remove();
 
-    const bub = document.createElement('button');
-    bub.type = 'button';
-    bub.id = 'cw-bubble';
-    bub.setAttribute('aria-label', 'Messagerie');
-    bub.innerHTML =
-      '<span class="cw-bubble-ico" aria-hidden="true">' +
-      ICO_MSG +
-      '</span><span id="cw-bubble-badge" aria-label=""></span>';
-    bub.addEventListener('click', () => {
-      unlockAudio();
-      togglePanel();
-    });
-    document.body.appendChild(bub);
+    syncFromWindow();
+    if (CW.isPortal) {
+      const bar = document.createElement('div');
+      bar.id = 'cw-bar';
+      bar.className = 'cw-portal-accent';
+      bar.setAttribute('role', 'button');
+      bar.setAttribute('tabindex', '0');
+      bar.setAttribute('aria-label', 'Messagerie');
+      bar.innerHTML =
+        '<div id="cw-bar-icon-wrap"><div id="cw-bar-icon">' +
+        ICO_MSG +
+        '</div><span id="cw-bar-badge"></span></div>' +
+        '<div id="cw-bar-text"><div id="cw-bar-title">Messagerie</div>' +
+        '<div id="cw-bar-preview">Aucun message</div></div>';
+      const openChat = () => {
+        unlockAudio();
+        togglePanel();
+      };
+      bar.addEventListener('click', openChat);
+      bar.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          openChat();
+        }
+      });
+      document.body.appendChild(bar);
+    } else {
+      const bub = document.createElement('button');
+      bub.type = 'button';
+      bub.id = 'cw-bubble';
+      bub.setAttribute('aria-label', 'Messagerie');
+      bub.innerHTML =
+        '<span class="cw-bubble-ico" aria-hidden="true">' +
+        ICO_MSG +
+        '</span><span id="cw-bubble-badge" aria-label=""></span>';
+      bub.addEventListener('click', () => {
+        unlockAudio();
+        togglePanel();
+      });
+      document.body.appendChild(bub);
+    }
 
     const panel = document.createElement('div');
     panel.id = 'cw-panel';
-    panel.className = 'cw-hidden cw-mode-bubble';
+    panel.className =
+      'cw-hidden ' + (CW.isPortal ? 'cw-mode-bar' : 'cw-mode-bubble');
     panel.innerHTML =
       '<div id="cw-panel-left">' +
       '<div class="cw-list-topbar">' +
@@ -733,18 +761,10 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       backBtn.classList.toggle('cw-hidden', !mobile || !CW.activeId);
     }
     const panel = document.getElementById('cw-panel');
-    if (panel && mobile && CW.open) {
-      panel.style.left = '';
-      panel.style.right = '';
-      panel.style.bottom = '';
-      panel.style.top = '';
-      panel.style.width = '';
-      panel.style.height = '';
-      panel.style.boxShadow = '';
-    } else if (panel && !mobile) {
-      panel.style.width = '';
-      panel.style.height = '';
-      panel.style.maxHeight = '';
+    if (panel && !mobile) {
+      ['width', 'height', 'maxHeight', 'left', 'right', 'bottom', 'top', 'maxWidth', 'marginLeft', 'marginRight', 'borderRadius'].forEach(
+        (k) => { panel.style[k] = ''; }
+      );
     }
     if (mobile && CW.open) return;
     if (!mobile && CW.isPortal && CW.open) positionPortalPanel();
@@ -1718,6 +1738,12 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     dockLayout();
   };
 
+  function hasCorrectChatTrigger() {
+    return CW.isPortal
+      ? !!document.getElementById('cw-bar')
+      : !!document.getElementById('cw-bubble');
+  }
+
   CW.init = async function () {
     if (!window.__MYSIFA_APP__) window.__MYSIFA_APP__ = 'unknown';
     syncFromWindow();
@@ -1725,8 +1751,11 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       const ok = await fetchMe();
       if (!ok) return false;
     }
-    const hasTrigger = document.getElementById('cw-bubble');
-    if (CW._inited && hasTrigger && document.getElementById('cw-panel')) return true;
+    const panel = document.getElementById('cw-panel');
+    if (CW._inited && panel && hasCorrectChatTrigger()) return true;
+    if (panel || document.getElementById('cw-bar') || document.getElementById('cw-bubble')) {
+      CW.destroy();
+    }
     CW._inited = true;
 
     injectStyles();

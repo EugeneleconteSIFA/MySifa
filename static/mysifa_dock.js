@@ -79,20 +79,42 @@
     if (hasAi) {
       placeFab(aiBtn);
       if (aiPanel) {
-        aiPanel.style.right = safeRight(0);
-        aiPanel.style.bottom = safeBottom(stackBottom);
-        aiPanel.style.boxShadow = SHADOW_PANEL;
+        if (aiPanel.classList.contains('open')) {
+          aiPanel.style.left = '';
+          aiPanel.style.right = '';
+          aiPanel.style.bottom = '';
+          aiPanel.style.width = '';
+          aiPanel.style.maxWidth = '';
+          aiPanel.style.boxShadow = SHADOW_PANEL;
+        } else {
+          aiPanel.style.left = '';
+          aiPanel.style.right = safeRight(0);
+          aiPanel.style.bottom = safeBottom(stackBottom);
+          aiPanel.style.width = '';
+          aiPanel.style.maxWidth = '';
+          aiPanel.style.boxShadow = SHADOW_PANEL;
+        }
       }
     }
 
     if (chatPanel && !chatPanel.classList.contains('cw-hidden')) {
-      chatPanel.style.left = '';
-      chatPanel.style.right = '';
-      chatPanel.style.bottom = '';
-      chatPanel.style.top = '';
-      chatPanel.style.width = '';
-      chatPanel.style.height = '';
-      chatPanel.style.boxShadow = '';
+      let fabStack = 0;
+      if (hasCalc) fabStack += FAB_SIZE + GAP;
+      if (chatFab) fabStack += FAB_SIZE + GAP;
+      if (hasAi) fabStack += FAB_SIZE + GAP;
+      const insetTop = fabStack + 72;
+      chatPanel.style.top = 'auto';
+      chatPanel.style.left = 'max(12px, env(safe-area-inset-left, 0px))';
+      chatPanel.style.right = 'max(12px, env(safe-area-inset-right, 0px))';
+      chatPanel.style.width = 'auto';
+      chatPanel.style.maxWidth = 'min(420px, calc(100vw - 24px))';
+      chatPanel.style.marginLeft = 'auto';
+      chatPanel.style.marginRight = 'auto';
+      chatPanel.style.height = 'min(520px, calc(100dvh - ' + insetTop + 'px))';
+      chatPanel.style.maxHeight = 'calc(100dvh - ' + insetTop + 'px)';
+      chatPanel.style.bottom = safeBottom(fabStack + 14);
+      chatPanel.style.borderRadius = '14px';
+      chatPanel.style.boxShadow = SHADOW_PANEL;
     }
   }
 
