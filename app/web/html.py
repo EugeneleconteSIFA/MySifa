@@ -260,6 +260,9 @@ body.light .prod-dossier-filter .search-bar:focus{box-shadow:0 0 0 3px rgba(8,14
   body.mysifa-app-prod.mysifa-prod-filters-page .filters .multisel-trigger{
     display:inline-flex;align-items:center;justify-content:space-between;
   }
+  body.mysifa-app-prod.mysifa-prod-filters-page .filters-panel{
+    margin-top:10px;
+  }
 }
 
 /* MyProd — mobile paysage : filtres sur une ligne, barre fixe, sans titre dupliqué */
@@ -269,7 +272,7 @@ body.light .prod-dossier-filter .search-bar:focus{box-shadow:0 0 0 3px rgba(8,14
     display:none!important;
   }
   body.mysifa-app-prod.mysifa-prod-filters-page.has-topbar .main{
-    padding-top:48px;
+    padding-top:74px;
     overflow:hidden;
     display:flex;
     flex-direction:column;
@@ -288,10 +291,10 @@ body.light .prod-dossier-filter .search-bar:focus{box-shadow:0 0 0 3px rgba(8,14
   }
   body.mysifa-app-prod.mysifa-prod-filters-page .filters-panel{
     position:sticky;
-    top:0;
+    top:8px;
     z-index:85;
     flex-shrink:0;
-    margin:0 -10px 8px;
+    margin:8px -10px 8px;
     padding:6px 10px;
     background:var(--bg);
     border-bottom:1px solid var(--border);

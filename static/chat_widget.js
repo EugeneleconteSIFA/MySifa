@@ -62,10 +62,11 @@
   background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px 16px;
   display:none;align-items:center;gap:12px;cursor:pointer;transition:border-color .15s,box-shadow .18s,transform .18s;
   font-family:inherit;box-shadow:0 4px 16px rgba(0,0,0,.2)}
-body:not(.cw-mobile) #cw-bar{display:flex!important}
-body.cw-mobile #cw-bar{display:none!important}
-body:not(.cw-mobile) #cw-bubble{display:none!important}
-body.cw-mobile #cw-bubble{display:flex!important}
+/* Barre : desktop portail uniquement — bulle : mobile + apps desktop */
+body:not(.cw-use-bubble) #cw-bar{display:flex!important}
+body.cw-use-bubble #cw-bar{display:none!important}
+body:not(.cw-use-bubble) #cw-bubble{display:none!important}
+body.cw-use-bubble #cw-bubble{display:flex!important}
 #cw-bar:hover{border-color:var(--accent);box-shadow:0 6px 20px rgba(0,0,0,.28)}
 #cw-bar.cw-portal-accent{background:var(--accent);border:none;
   box-shadow:0 4px 16px rgba(34,211,238,0.35)}
@@ -552,9 +553,9 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     const panel = document.getElementById('cw-panel');
     if (bar) bar.classList.toggle('cw-portal-accent', CW.isPortal);
     if (panel) {
-      const mobile = isCwMobile();
-      panel.classList.toggle('cw-mode-bubble', mobile);
-      panel.classList.toggle('cw-mode-bar', !mobile);
+      const bubbleMode = useChatBubbleTrigger();
+      panel.classList.toggle('cw-mode-bubble', bubbleMode);
+      panel.classList.toggle('cw-mode-bar', !bubbleMode);
     }
   }
 
@@ -836,6 +837,11 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     return window.matchMedia(CW_MOBILE_LANDSCAPE_BP).matches;
   }
 
+  /** Bulle (mobile + desktop hors portail) vs barre bas-gauche (portail desktop). */
+  function useChatBubbleTrigger() {
+    return isCwMobile() || !CW.isPortal;
+  }
+
   const CW_PANEL_DOCK_STYLE_KEYS = [
     'display',
     'flexDirection',
@@ -864,22 +870,27 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
   function syncMobileChatUi() {
     const mobile = isCwMobile();
     const landscape = isCwMobileLandscape();
+    const bubbleTrigger = useChatBubbleTrigger();
     document.body.classList.toggle('cw-mobile', mobile);
+    document.body.classList.toggle('cw-use-bubble', bubbleTrigger);
     document.body.classList.toggle('cw-mobile-landscape', mobile && landscape);
-    document.body.classList.toggle('cw-panel-open', mobile && CW.open);
+    document.body.classList.toggle('cw-panel-open', bubbleTrigger && CW.open);
     document.body.classList.toggle('cw-chat-active', mobile && CW.open && !!CW.activeId);
     const backBtn = document.getElementById('cw-back-list');
     if (backBtn) {
       backBtn.classList.toggle('cw-hidden', !mobile || !CW.activeId);
     }
     const panel = document.getElementById('cw-panel');
-    if (panel && !mobile) {
+    if (panel && !bubbleTrigger) {
       clearPanelDockStyles(panel);
-    } else if (panel && mobile && !CW.open) {
+    } else if (panel && bubbleTrigger && !CW.open) {
       clearPanelDockStyles(panel);
     }
     syncChatTriggerMode();
-    if (mobile && CW.open) return;
+    if (bubbleTrigger && CW.open) {
+      dockLayout();
+      return;
+    }
     if (!mobile && CW.open) positionDesktopPanel();
   }
 
@@ -904,9 +915,9 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     }
   }
 
-  /** Desktop : panneau au-dessus de la barre messagerie (bas-gauche). */
+  /** Desktop portail : panneau au-dessus de la barre messagerie (bas-gauche). */
   function positionDesktopPanel() {
-    if (isCwMobile()) return;
+    if (isCwMobile() || useChatBubbleTrigger()) return;
     const bar = document.getElementById('cw-bar');
     const panel = document.getElementById('cw-panel');
     if (!bar || !panel || panel.classList.contains('cw-hidden')) return;
@@ -1835,10 +1846,12 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     if (!isCwMobile()) {
       requestAnimationFrame(() => {
         if (!CW.open || gen !== _panelToggleGen) return;
-        positionDesktopPanel();
+        if (useChatBubbleTrigger()) dockLayout();
+        else positionDesktopPanel();
         requestAnimationFrame(() => {
           if (!CW.open || gen !== _panelToggleGen) return;
-          positionDesktopPanel();
+          if (useChatBubbleTrigger()) dockLayout();
+          else positionDesktopPanel();
         });
       });
     }
@@ -1958,7 +1971,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
   window.addEventListener('resize', () => {
     syncMobileChatUi();
     dockLayout();
-    if (CW.open && !isCwMobile()) positionDesktopPanel();
+    if (CW.open && !isCwMobile() && !useChatBubbleTrigger()) positionDesktopPanel();
   });
 
   if (typeof window.matchMedia === 'function') {
