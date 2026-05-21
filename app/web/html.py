@@ -1139,7 +1139,7 @@ body.light .portal-logout:hover:last-of-type{text-shadow:0 0 12px rgba(220,38,38
     max-width:100%;
     margin-top:8px;
   }
-  .portal-page>div:not([class]){order:4;width:100%;max-width:100%}
+  .portal-apps-block{order:4;width:100%;max-width:100%}
   .portal-user{order:5;font-size:11px}
   .portal-apps-hint{font-size:10px;margin-top:6px}
   .portal-apps{
@@ -1187,6 +1187,125 @@ body.light .portal-logout:hover:last-of-type{text-shadow:0 0 12px rgba(220,38,38
     gap:10px;
   }
   .portal-app{max-height:88px}
+}
+
+/* Portail — mobile paysage : grille compacte, tout visible sans débordement */
+@media (max-width:900px) and (orientation:landscape){
+  .portal-page{
+    display:grid;
+    grid-template-columns:1fr auto;
+    grid-template-rows:auto auto minmax(0,1fr) auto;
+    gap:6px 10px;
+    padding:max(6px,env(safe-area-inset-top,0px)) 12px max(6px,env(safe-area-inset-bottom,0px)) 12px;
+    min-height:100dvh;
+    max-height:100dvh;
+    overflow:hidden;
+    align-items:stretch;
+    justify-content:stretch;
+  }
+  .portal-logo{
+    order:unset;
+    grid-column:1;
+    grid-row:1;
+    text-align:left;
+    align-self:center;
+    margin:0;
+  }
+  .portal-logo .brand{font-size:22px;letter-spacing:-1px;line-height:1.1}
+  .portal-logo .tagline{display:none}
+  .portal-corner-stack{
+    order:unset;
+    grid-column:2;
+    grid-row:1;
+    position:static;
+    flex-direction:row;
+    flex-wrap:nowrap;
+    justify-content:flex-end;
+    align-items:center;
+    gap:6px;
+    width:auto;
+    margin:0;
+    align-self:center;
+  }
+  .portal-corner-stack .portal-settings-corner{
+    width:36px;
+    height:36px;
+    border-radius:10px;
+    flex-shrink:0;
+  }
+  .portal-corner-stack .portal-settings-corner svg{width:18px;height:18px}
+  .portal-prof-ring.prof-ring{width:28px;height:28px;top:-3px;left:-3px}
+  .portal-prof-ring.prof-ring svg{width:28px;height:28px}
+  .portal-corner-badge{top:4px;left:4px;min-width:16px;height:16px;font-size:9px}
+  .portal-search{
+    order:unset;
+    grid-column:1 / -1;
+    grid-row:2;
+    margin:0;
+    max-width:none;
+    width:100%;
+  }
+  .portal-search form{gap:0}
+  .portal-search input{
+    padding:7px 10px 7px 34px;
+    font-size:12px;
+    border-radius:10px;
+    border-width:1px;
+    min-height:34px;
+  }
+  .portal-search-glogo{left:10px;width:16px;height:16px}
+  .portal-search-glogo svg{width:16px;height:16px}
+  .portal-search-hint{display:none}
+  .portal-apps-block{
+    order:unset;
+    grid-column:1 / -1;
+    grid-row:3;
+    min-height:0;
+    overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
+    width:100%;
+    max-width:none;
+    margin:0;
+  }
+  .portal-apps-hint{display:none}
+  .portal-apps{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(72px,1fr));
+    gap:6px;
+    max-width:none;
+    width:100%;
+    margin:0;
+    justify-items:stretch;
+  }
+  .portal-app{
+    width:auto;
+    flex:none;
+    max-height:64px;
+    min-height:0;
+    aspect-ratio:1;
+    padding:5px 3px;
+    gap:3px;
+    border-radius:10px;
+  }
+  .portal-app-name{font-size:9px;line-height:1.1}
+  .portal-app-icon svg{width:18px;height:18px}
+  .portal-apps--reorderable .portal-app--placeholder .portal-ph-plus{font-size:16px;margin-bottom:2px}
+  .portal-apps--reorderable .portal-app--placeholder .portal-ph-label{font-size:8px}
+  .portal-user{
+    order:unset;
+    grid-column:1 / -1;
+    grid-row:4;
+    font-size:10px;
+    gap:8px;
+    flex-wrap:nowrap;
+    justify-content:center;
+    align-items:center;
+    padding-top:0;
+    flex-shrink:0;
+  }
+  .portal-user>span{max-width:28vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .portal-logout{font-size:10px;padding:2px 6px;gap:4px}
+  .portal-logout .theme-label{display:none}
 }
 
 /* ── MyStock ────────────────────────────────────────────────────── */
@@ -3319,7 +3438,7 @@ function renderPortal(){
   const orderedTiles=portalOrderTileSpecs(tileSpecs,order);
   const apps=orderedTiles.map(s=>s.el);
   const appsWrap=h('div',{className:'portal-apps portal-apps--reorderable'},...apps);
-  const appsBlock=h('div',{style:{width:'100%',maxWidth:'900px',margin:'0 auto'}},
+  const appsBlock=h('div',{className:'portal-apps-block',style:{width:'100%',maxWidth:'900px',margin:'0 auto'}},
     appsWrap,
     apps.length?h('div',{className:'portal-apps-hint'},'Maintenir une tuile et la glisser pour réorganiser les accès (ordre enregistré pour votre compte).'):null
   );

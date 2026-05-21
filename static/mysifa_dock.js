@@ -103,7 +103,8 @@
     el.style.boxShadow = SHADOW_FAB;
   }
 
-  function layoutStockLandscapeChatPanel(el, panelBottom, panelMaxH) {
+  /** Panneau messagerie paysage — même cadre vertical que l’assistant IA (8px haut, 62px bas). */
+  function layoutChatLandscapePanel(el) {
     if (!el) return;
     el.style.top = 'max(8px, env(safe-area-inset-top, 0px))';
     el.style.left = 'max(12px, env(safe-area-inset-left, 0px))';
@@ -113,8 +114,8 @@
     el.style.maxWidth = 'none';
     el.style.marginLeft = '0';
     el.style.marginRight = '0';
-    el.style.height = panelMaxH;
-    el.style.maxHeight = panelMaxH;
+    el.style.height = 'calc(100dvh - 72px)';
+    el.style.maxHeight = 'calc(100dvh - 72px)';
     el.style.minHeight = '0';
     el.style.display = 'flex';
     el.style.flexDirection = 'row';
@@ -177,11 +178,7 @@
     }
 
     if (chatPanel && !chatPanel.classList.contains('cw-hidden')) {
-      if (window.__MYSIFA_APP__ === 'stock') {
-        layoutStockLandscapeChatPanel(chatPanel, panelBottom, panelMaxH);
-      } else {
-        layoutLandscapePanel(chatPanel, 8015);
-      }
+      layoutChatLandscapePanel(chatPanel);
     }
 
     if (hasAi && aiPanel) {

@@ -180,4 +180,12 @@ body.mysifa-landscape-required #cw-bubble {
     width: min(280px, calc(100vw - 48px));
     max-height: calc(100dvh - 72px);
   }
+
+  /* Messagerie : même cadre que #ai-chat-panel (évite le débordement en haut) */
+  body.cw-mobile.cw-panel-open #cw-panel:not(.cw-hidden) {
+    top: max(8px, env(safe-area-inset-top, 0px)) !important;
+    bottom: max(62px, calc(env(safe-area-inset-bottom, 0px) + 62px)) !important;
+    height: calc(100dvh - 72px) !important;
+    max-height: calc(100dvh - 72px) !important;
+  }
 }

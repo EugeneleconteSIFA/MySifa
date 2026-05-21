@@ -163,6 +163,16 @@ body.light .op-table tr.op-cat-row td{background:rgba(8,145,178,.06)}
 .fsc-section-title{font-size:13px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px;margin:0 0 10px}
 .fsc-date-inp{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:12px;font-family:inherit}
 .fsc-date-inp:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.fsc-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+.fsc-toolbar-dates{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.fsc-toolbar-dates .fsc-range-sep{color:var(--muted);font-size:12px}
+.fsc-toolbar .btn-sec{font-size:12px;padding:7px 14px}
+body.settings-tab-fsc .desktop-head{display:none}
+body.settings-tab-fsc .main{padding-top:20px}
+body.settings-tab-fsc .fsc-kpi-grid{margin-bottom:14px}
+@media(min-width:901px){
+  body.settings-tab-fsc .main{padding-top:24px}
+}
 tr.fsc-row-alert td{background:rgba(248,113,113,.08)}
 body.light tr.fsc-row-alert td{background:rgba(220,38,38,.06)}
 .op-req.yes{color:var(--ok)}
@@ -597,16 +607,13 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
     </section>
 
     <section id="panel-fsc" class="hidden">
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px">
-        <div style="font-size:15px;font-weight:700;color:var(--text)">Registre FSC</div>
-        <div style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <input type="date" id="fsc-du" class="fsc-date-inp" onchange="loadFscRegistre()">
-          <span style="color:var(--muted);font-size:12px">au</span>
-          <input type="date" id="fsc-au" class="fsc-date-inp" onchange="loadFscRegistre()">
-          <button type="button" class="btn btn-sec" style="font-size:12px;padding:8px 14px" onclick="exportFscCsv()">
-            Exporter CSV
-          </button>
+      <div class="fsc-toolbar">
+        <div class="fsc-toolbar-dates">
+          <input type="date" id="fsc-du" class="fsc-date-inp" onchange="loadFscRegistre()" aria-label="Date de début">
+          <span class="fsc-range-sep">au</span>
+          <input type="date" id="fsc-au" class="fsc-date-inp" onchange="loadFscRegistre()" aria-label="Date de fin">
         </div>
+        <button type="button" class="btn btn-sec" onclick="exportFscCsv()">Exporter CSV</button>
       </div>
       <div id="fsc-kpi-grid" class="fsc-kpi-grid"></div>
       <div class="card" style="margin-bottom:16px">
@@ -785,6 +792,22 @@ function scoreMatch(hay, tokens){
   return score;
 }
 
+function syncSettingsPageHead(tabId) {
+  document.body.classList.toggle('settings-tab-fsc', tabId === 'fsc');
+  const titleEl = document.querySelector('.mobile-topbar-title');
+  const subEl = document.querySelector('.mobile-topbar-sub');
+  if (titleEl) titleEl.textContent = tabId === 'fsc' ? 'Registre FSC' : 'Paramètres';
+  if (subEl) {
+    if (tabId === 'fsc') {
+      subEl.textContent = '';
+      subEl.style.display = 'none';
+    } else {
+      subEl.textContent = 'Gestion des comptes et des accès';
+      subEl.style.display = '';
+    }
+  }
+}
+
 function setTab(id) {
   document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === id);
@@ -793,6 +816,7 @@ function setTab(id) {
     const el = document.getElementById('panel-' + p);
     if (el) el.classList.toggle('hidden', p !== id);
   });
+  syncSettingsPageHead(id);
   if (id === 'fournisseurs') loadFournisseurs();
   if (id === 'operations') loadOperationCodes();
   if (id === 'machines') initMachinesPanel();

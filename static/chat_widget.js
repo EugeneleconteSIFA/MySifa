@@ -343,8 +343,15 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     display:flex!important;
     flex-direction:row!important;
     align-items:stretch!important;
-    max-width:none!important;
+    top:max(8px,env(safe-area-inset-top,0px))!important;
+    left:max(12px,env(safe-area-inset-left,0px))!important;
+    right:max(12px,env(safe-area-inset-right,0px))!important;
+    bottom:max(62px,calc(env(safe-area-inset-bottom,0px) + 62px))!important;
     width:auto!important;
+    max-width:none!important;
+    margin:0!important;
+    height:calc(100dvh - 72px)!important;
+    max-height:calc(100dvh - 72px)!important;
     min-height:0!important;
   }
   body.cw-mobile.cw-panel-open #cw-panel-left{
