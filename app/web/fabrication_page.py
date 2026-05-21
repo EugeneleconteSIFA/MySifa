@@ -46,7 +46,6 @@ FABRICATION_HTML = r"""<!DOCTYPE html>
 <link rel="icon" type="image/png" sizes="512x512" href="/static/mys_icon_512.png">
 <link rel="apple-touch-icon" href="/static/mys_icon_180.png">
 <link rel="stylesheet" href="/static/support_widget.css">
-<link rel="stylesheet" href="/static/mysifa_chat_nav.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <style>
@@ -613,7 +612,8 @@ table.fab-traca-table tr:last-child td{border-bottom:none}
 <div id="root"></div>
 <div id="mroot"></div>
 <script src="/static/support_widget.js"></script>
-<script src="/static/mysifa_chat_badge.js"></script>
+<script>window.__MYSIFA_APP__='fabrication';</script>
+<script src="/static/chat_widget.js"></script>
 <script>
 'use strict';
 /*__TRACA_GUIDE__*/
@@ -1217,11 +1217,6 @@ function renderSidebar(){
     ),
     h('div',{className:'fab-sidebar-list'},...groups),
     h('div',{className:'fab-sidebar-bottom'},
-      h('button',{className:'support-btn',style:{marginBottom:'8px'},onClick:()=>{window.location.href='/messages';}},
-        h('span',{className:'support-ico'},svgIcon('message-square',18)),
-        h('span',null,'Messages'),
-        h('span',{className:'chat-nav-badge hidden',attrs:{'data-mysifa-chat-badge':''}})
-      ),
       (window.MySifaUserChip
         ? MySifaUserChip.element(
             Object.assign({}, S.user||{}, { nom:userName, ucSubtext:machineName }),

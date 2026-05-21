@@ -33,7 +33,6 @@ PROFIL_HTML = r"""<!DOCTYPE html>
 <title>Mon profil — MySifa</title>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <link rel="stylesheet" href="/static/support_widget.css">
-<link rel="stylesheet" href="/static/mysifa_chat_nav.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <style>
@@ -222,16 +221,6 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 }
 .btn-avatar:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 .btn-avatar-danger:hover{border-color:var(--danger);color:var(--danger);background:rgba(248,113,113,.1)}
-.user-chip .uc-avatar{
-  width:28px;height:28px;border-radius:50%;object-fit:cover;border:1px solid var(--border);
-  margin-bottom:6px;display:block;background:var(--bg);
-}
-.user-chip .uc-avatar-ph{
-  width:28px;height:28px;border-radius:50%;border:1px solid var(--border);
-  margin-bottom:6px;display:flex;align-items:center;justify-content:center;
-  font-size:11px;font-weight:800;color:var(--accent);background:var(--accent-bg);
-}
-
 /* ── Toast ── */
 .toast{position:fixed;bottom:22px;right:22px;z-index:9999;padding:11px 16px;
   border-radius:10px;font-size:13px;font-weight:600;
@@ -297,6 +286,7 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 </head>
 <body class="has-topbar">
 <script src="/static/mysifa_theme.js"></script>
+<script src="/static/mysifa_user_chip.js"></script>
 <script src="/static/mysifa_calendar.js"></script>
 
 <div class="sidebar-overlay" id="sb-ov" onclick="closeSidebar()"></div>
@@ -323,11 +313,6 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
       Calendrier
     </button>
 
-    <button type="button" class="nav-btn" onclick="location.href='/messages'">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-      Messages
-      <span class="chat-nav-badge hidden" data-mysifa-chat-badge></span>
-    </button>
     <div class="sidebar-bottom">
       <button type="button" class="nav-btn back-mysifa" onclick="location.href='/'">
         ← Retour <span class="wm">My<span>Sifa</span></span>
@@ -385,7 +370,8 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 </div>
 
 <script src="/static/support_widget.js"></script>
-<script src="/static/mysifa_chat_badge.js"></script>
+<script>window.__MYSIFA_APP__='profil';</script>
+<script src="/static/chat_widget.js"></script>
 <script>
 const ROLE_LABELS={
   direction:'Direction',administration:'Administration',fabrication:'Fabrication',
@@ -898,10 +884,9 @@ async function savePrefs(){return saveThemePrefs();}
 function updateUserChip(){
   if(!ME)return;
   const chip=document.querySelector('.user-chip');
-  if(chip){
-    const av=chip.querySelector('.uc-avatar,.uc-avatar-ph');
-    if(av)av.remove();
-    chip.insertAdjacentHTML('afterbegin',avatarChipHtml(ME));
+  if(chip&&window.MySifaUserChip){
+    MySifaUserChip.fill(chip,ME,{roleLabels:ROLE_LABELS,showProfil:false});
+    return;
   }
   const n=document.getElementById('uc-name');
   const r=document.getElementById('uc-role');

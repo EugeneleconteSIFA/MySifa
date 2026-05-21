@@ -40,7 +40,7 @@ CALENDRIER_HTML = r"""<!DOCTYPE html>
 <title>Calendrier — MySifa</title>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <link rel="stylesheet" href="/static/mysifa_theme.css">
-<link rel="stylesheet" href="/static/mysifa_chat_nav.css">
+<link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <style>
 :root{--bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;--muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,0.12);--ok:#34d399;--warn:#fbbf24;--danger:#f87171;}
 body.light{--bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--muted:#64748b;--accent:#0891b2;--accent-bg:rgba(8,145,178,0.10);--ok:#059669;--warn:#d97706;--danger:#dc2626;}
@@ -359,8 +359,10 @@ body.light .cal-allday-row{background:#f8fafc}
 </head>
 <body class="has-topbar">
 <script src="/static/mysifa_theme.js"></script>
+<script src="/static/mysifa_user_chip.js"></script>
 <script src="/static/mysifa_calendar.js"></script>
-<script src="/static/mysifa_chat_badge.js"></script>
+<script>window.__MYSIFA_APP__='calendrier';</script>
+<script src="/static/chat_widget.js"></script>
 <div class="sidebar-overlay" id="sb-ov"></div>
 <div class="layout">
   <aside class="sidebar">
@@ -393,19 +395,11 @@ body.light .cal-allday-row{background:#f8fafc}
       <div id="cal-toggles"></div>
     </div>
     <div id="cal-mini-root"></div>
-    <button type="button" class="nav-btn" onclick="location.href='/messages'">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-      Messages
-      <span class="chat-nav-badge hidden" data-mysifa-chat-badge></span>
-    </button>
     <div class="sidebar-bottom">
       <button type="button" class="nav-btn back-mysifa" onclick="location.href='/'">
         ← Retour <span class="wm">My<span>Sifa</span></span>
       </button>
-      <div class="user-chip" onclick="location.href='/profil'" title="Mon profil">
-        <div class="uc-name" id="uc-name">—</div>
-        <div class="uc-role" id="uc-role">—</div>
-      </div>
+      <div class="user-chip" id="sb-user-chip" onclick="location.href='/profil'" title="Mon profil"></div>
       <button type="button" class="theme-btn" id="btn-theme">
         <span class="theme-ico" id="theme-ico"></span>
         <span class="theme-label" id="theme-label">Mode clair</span>
@@ -1617,10 +1611,11 @@ document.addEventListener('DOMContentLoaded',bootCalendrier);
     if(window.MySifaTheme)MySifaTheme.mergeFromUser(ME);
     else if(window.MySifaCalendar)MySifaCalendar.mergeFromUser(ME);
     renderToggles();
-    const ucName=document.getElementById('uc-name');
-    const ucRole=document.getElementById('uc-role');
-    if(ucName)ucName.textContent=ME.nom||'—';
-    if(ucRole)ucRole.textContent=ROLE_LABELS[ME.role]||ME.role||'—';
+    const chip=document.getElementById('sb-user-chip');
+    if(chip&&window.MySifaUserChip){
+      const editIco='<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+      MySifaUserChip.fill(chip,ME,{roleLabels:ROLE_LABELS,editIconHtml:editIco});
+    }
     syncThemeBtn();
     bindCalendarBodyClicks();
     await fetchEvents();

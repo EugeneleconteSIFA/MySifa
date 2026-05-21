@@ -47,8 +47,8 @@ PLANNING_RH_HTML = r"""<!DOCTYPE html>
 <link rel="icon" type="image/png" sizes="512x512" href="/static/mys_icon_512.png">
 <link rel="apple-touch-icon" href="/static/mys_icon_180.png">
 <link rel="stylesheet" href="/static/support_widget.css">
-<link rel="stylesheet" href="/static/mysifa_chat_nav.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css">
+<link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -594,6 +594,7 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 </head>
 <body>
 <script src="/static/mysifa_theme.js"></script>
+<script src="/static/mysifa_user_chip.js"></script>
 <div id="root">
   <nav class="rh-sb" id="rh-sb">
     <div class="rh-sb-head">
@@ -1094,6 +1095,15 @@ function icon(name,sz=14){
   return`<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icons[name]||''}</svg>`;
 }
 
+function rhUserChipHtml(){
+  if(!S.user)return '';
+  const editIco=icon('edit',12);
+  const inner=window.MySifaUserChip
+    ? MySifaUserChip.innerHtml(S.user,{editIconHtml:editIco})
+    : '<div class="uc-name">'+(S.user.nom||'')+'</div><div class="uc-role">'+(S.user.role||'')+'</div><div class="uc-profil">'+editIco+' Mon profil</div>';
+  return '<div class="rh-user-chip" title="Mon profil" onclick="window.location.href=\'/profil\'">'+inner+'</div>';
+}
+
 // ── Sidebar ────────────────────────────────────────────
 function renderSidebar(){
   const nav=document.getElementById('rh-sb-nav');
@@ -1112,8 +1122,7 @@ function renderSidebar(){
 
   const isLight=document.body.classList.contains('light');
   bot.innerHTML=`
-    <button type="button" class="rh-nav-btn" onclick="window.location.href='/messages'">${icon('mail',14)} Messages <span class="chat-nav-badge hidden" data-mysifa-chat-badge></span></button>
-    ${S.user?`<div class="rh-user-chip" title="Mon profil" onclick="window.location.href='/profil'"><div class="ucn">${S.user.nom||''}</div><div class="ucr">${S.user.role||''}</div><div style="font-size:10px;color:var(--accent);margin-top:3px;display:flex;align-items:center;gap:4px">${icon('edit',12)} Mon profil</div></div>`:''}
+    ${rhUserChipHtml()}
     <button type="button" class="support-btn" onclick="openSupportRH()">
       <span class="support-ico">${(window.MySifaSupport&&window.MySifaSupport.iconSvg)?window.MySifaSupport.iconSvg():""}</span>
       <span>Contacter le support</span>
@@ -2455,6 +2464,7 @@ function printConges(){
 })();
 </script>
 <script src="/static/support_widget.js"></script>
-<script src="/static/mysifa_chat_badge.js"></script>
+<script>window.__MYSIFA_APP__='planning_rh';</script>
+<script src="/static/chat_widget.js"></script>
 </body>
 </html>"""

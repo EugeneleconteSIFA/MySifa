@@ -19,7 +19,6 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <meta name="mobile-web-app-capable" content="yes">
 <title>__PAGE_TITLE__</title>
 <link rel="stylesheet" href="/static/support_widget.css">
-<link rel="stylesheet" href="/static/mysifa_chat_nav.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <style>
@@ -1283,7 +1282,8 @@ body.light .stock-empl-suggest-add:hover{background:rgba(124,58,237,.2);color:#1
 <script src="/static/mysifa_user_chip.js"></script>
 <div id="root"></div>
 <script src="/static/support_widget.js"></script>
-<script src="/static/mysifa_chat_badge.js"></script>
+<script>window.__MYSIFA_APP__="__INITIAL_APP_VALUE__";</script>
+<script src="/static/chat_widget.js"></script>
 <script>
 const API=window.location.origin;
 const INITIAL_APP="__INITIAL_APP_VALUE__";
@@ -3064,20 +3064,6 @@ function renderPortal(){
   }
 
   // Messagerie: icône dans le coin (sous Paramètres) pour le super admin
-
-  {
-    const id='messages';
-    tileSpecs.push({id,el:h('div',{
-      className:'portal-app',
-      'data-portal-id':id,
-      draggable:'true',
-      onClick:()=>{if(_portalDragSuppressClick)return;window.location.href='/messages';}
-    },
-      h('div',{className:'portal-app-icon'},iconEl('mail',28)),
-      h('div',{className:'portal-app-name'},'Messages'),
-      h('div',{className:'portal-app-desc'},'Chat interne — équipe et collègues')
-    )});
-  }
 
   if(isCompta){
     const id='compta';
@@ -5692,16 +5678,6 @@ function renderSidebar(){
       btn.appendChild(document.createTextNode('  '+i.label));
       return btn;
     }),
-    (()=>{
-      const chatBtn=h('button',{className:'nav-btn',onClick:()=>{window.location.href='/messages';}});
-      chatBtn.appendChild(iconEl('mail',15));
-      const chatLbl=document.createElement('span');
-      chatLbl.style.flex='1';
-      chatLbl.textContent=' Messages';
-      chatBtn.appendChild(chatLbl);
-      chatBtn.appendChild(h('span',{className:'chat-nav-badge hidden','data-mysifa-chat-badge':''}));
-      return chatBtn;
-    })(),
     h('div',{className:'sidebar-bottom'},
       h('button',{className:'nav-btn back-mysifa',onClick:()=>{window.location.href='/' }},
         '← Retour ',
@@ -10451,6 +10427,15 @@ function render(){
   document.body.classList.toggle('has-topbar', S.app==='prod' || S.app==='stock' || S.app==='compta' || S.app==='expe' || S.app==='devis');
   window.__MYSIFA_APP__ = S.app;
   window.__MYSIFA_USER__ = S.user ? { nom: (S.user.nom || ''), role: (S.user.role || '') } : {};
+  if(S.user){
+    window.__MYSIFA_UID__ = S.user.id;
+    window.__MYSIFA_NOM__ = S.user.nom || '';
+    window.__MYSIFA_ROLE__ = S.user.role || '';
+    if(window._CW && typeof window._CW.syncUser === 'function') window._CW.syncUser();
+  } else if(window._CW && typeof window._CW.destroy === 'function'){
+    window._CW.destroy();
+    window.__MYSIFA_UID__ = 0;
+  }
   if(typeof initAiChatWidget === 'function') initAiChatWidget();
   if(S.app!=='expe'){_expeLastRenderedInnerTab=null;}
 

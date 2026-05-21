@@ -277,13 +277,23 @@ def get_messages(
     channel_id: int,
     request: Request,
     before: Optional[str] = None,
+    after: Optional[int] = None,
 ):
-    """Messages d'un canal (les N plus récents, ou avant 'before' pour la pagination)."""
+    """Messages d'un canal (récents, pagination `before`, ou nouveautés `after`)."""
     user = _require(request)
     with get_db() as conn:
         _assert_member(conn, channel_id, user["id"])
 
-        if before:
+        if after is not None:
+            after_id = int(after)
+            rows = conn.execute(
+                """SELECT id, user_id, user_nom, body, created_at
+                   FROM chat_messages
+                   WHERE channel_id=? AND deleted_at IS NULL AND id > ?
+                   ORDER BY created_at ASC""",
+                (channel_id, after_id),
+            ).fetchall()
+        elif before:
             rows = conn.execute(
                 """SELECT id, user_id, user_nom, body, created_at
                    FROM chat_messages
@@ -307,6 +317,10 @@ def get_messages(
         conn.commit()
 
     uid = user["id"]
+    if after is not None:
+        ordered = list(rows)
+    else:
+        ordered = list(reversed(rows))
     messages = [
         {
             "id": r["id"],
@@ -316,9 +330,10 @@ def get_messages(
             "created_at": r["created_at"],
             "is_mine": r["user_id"] == uid,
         }
-        for r in reversed(rows)
+        for r in ordered
     ]
-    return {"messages": messages, "has_more": len(rows) == _PAGE_SIZE}
+    has_more = len(rows) == _PAGE_SIZE if before else False
+    return {"messages": messages, "has_more": has_more}
 
 
 @router.post("/channels/{channel_id}/messages")
@@ -392,7 +407,7 @@ def list_users(request: Request, q: str = ""):
 
 @router.get("/unread")
 def unread_total(request: Request):
-    """Nombre total de messages non lus (badge sidebar)."""
+    """Total non-lus + dernier message (preview barre portail)."""
     user = _require(request)
     uid = user["id"]
     with get_db() as conn:
@@ -404,7 +419,21 @@ def unread_total(request: Request):
                  AND (cm.last_read_at IS NULL OR m.created_at > cm.last_read_at)""",
             (uid, uid),
         ).fetchone()
-    return {"unread": row["c"]}
+        last = conn.execute(
+            """SELECT m.body, m.user_nom, m.created_at, ch.name AS channel_name, ch.type AS channel_type
+               FROM chat_messages m
+               JOIN chat_members cm ON cm.channel_id = m.channel_id AND cm.user_id = ?
+               JOIN chat_channels ch ON ch.id = m.channel_id
+               WHERE m.deleted_at IS NULL AND m.user_id != ?
+                 AND (cm.last_read_at IS NULL OR m.created_at > cm.last_read_at)
+               ORDER BY m.created_at DESC LIMIT 1""",
+            (uid, uid),
+        ).fetchone()
+    last_msg = None
+    if last:
+        last_msg = dict(last)
+        last_msg["from_nom"] = last["user_nom"]
+    return {"unread": row["c"], "last_message": last_msg}
 
 
 @router.post("/channels/seed-defaults")

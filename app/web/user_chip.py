@@ -26,6 +26,7 @@ def user_chip_sidebar_html(
     avatar_url: str = "",
     profil_link: bool = True,
     chip_class: str = "user-chip",
+    chip_attrs: str = "",
 ) -> str:
     """HTML interne du chip sidebar (photo + nom/service + lien profil)."""
     nom_e = _esc(nom)
@@ -53,9 +54,10 @@ def user_chip_sidebar_html(
     else:
         body = (
             f'<div class="uc-name">{nom_e}</div>'
-            f'<div class="uc-role">{role_e}</div>{profil}"
+            f'<div class="uc-role">{role_e}</div>{profil}'
         )
-    return f'<div class="{chip_class}">{body}</div>'
+    attrs = f' {chip_attrs}' if chip_attrs else ""
+    return f'<div class="{chip_class}"{attrs}>{body}</div>'
 
 
 def role_label_for_user(user: dict) -> str:

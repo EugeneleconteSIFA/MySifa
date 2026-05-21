@@ -7,6 +7,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.services.auth_service import get_current_user
 from config import ROLE_SUPERADMIN, ROLE_DIRECTION, APP_VERSION
+from app.web.user_chip import role_label_for_user, user_chip_sidebar_html
 
 router = APIRouter()
 
@@ -25,8 +26,19 @@ def db_viewer_page(request: Request):
         from app.web.access_denied import access_denied_response
         return access_denied_response("Database Viewer")
 
-    user_name = user.get("display_name") or user.get("email", "—")
-    user_role = user.get("role", "")
+    user_name = user.get("nom") or user.get("display_name") or user.get("email", "—")
+    user_role_label = role_label_for_user(user)
+    user_avatar = user.get("avatar_url") or ""
+    user_chip_html = user_chip_sidebar_html(
+        nom=user_name,
+        role_label=user_role_label,
+        avatar_url=user_avatar,
+        profil_link=True,
+        chip_attrs=(
+            'onclick="window.location.href=\'/profil\'" '
+            'title="Modifier mon profil" role="button" tabindex="0"'
+        ),
+    )
     version   = APP_VERSION
 
     html = f"""<!DOCTYPE html>
@@ -38,7 +50,7 @@ def db_viewer_page(request: Request):
 <title>Database — MySifa</title>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <link rel="stylesheet" href="/static/mysifa_theme.css">
-<link rel="stylesheet" href="/static/mysifa_chat_nav.css">
+<link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <style>
 *,*::before,*::after{{margin:0;padding:0;box-sizing:border-box}}
 :root{{
@@ -309,7 +321,8 @@ body.light .user-chip:hover{{background:rgba(8,145,178,.12)}}
 </head>
 <body>
 <script src="/static/mysifa_theme.js"></script>
-<script src="/static/mysifa_chat_badge.js"></script>
+<script>window.__MYSIFA_APP__='db';</script>
+<script src="/static/chat_widget.js"></script>
 
 <!-- Mobile topbar -->
 <div class="mobile-topbar">
@@ -339,20 +352,8 @@ body.light .user-chip:hover{{background:rgba(8,145,178,.12)}}
       </div>
     </div>
 
-    <button type="button" class="nav-btn" style="margin:0 12px 8px;width:calc(100% - 24px)" onclick="window.location.href='/messages'">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-      Messages
-      <span class="chat-nav-badge hidden" data-mysifa-chat-badge></span>
-    </button>
     <div class="sidebar-bottom">
-      <div class="user-chip" onclick="window.location.href='/profil'" title="Modifier mon profil" role="button" tabindex="0">
-        <div class="uc-name">{user_name}</div>
-        <div class="uc-role">{user_role}</div>
-        <div class="uc-profil">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          Modifier mon profil
-        </div>
-      </div>
+      {user_chip_html}
       <button class="theme-btn" onclick="toggleTheme()">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
         <span id="theme-label">Thème clair</span>

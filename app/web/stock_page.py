@@ -54,7 +54,6 @@ STOCK_HTML = r"""<!DOCTYPE html>
 <link rel="apple-touch-icon" href="/static/mys_icon_180.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <link rel="stylesheet" href="/static/support_widget.css">
-<link rel="stylesheet" href="/static/mysifa_chat_nav.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <style>
@@ -664,7 +663,8 @@ body.light .recep-fourn-sel:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 <script src="/static/mysifa_user_chip.js"></script>
 <div id="root"></div>
 <script src="/static/support_widget.js"></script>
-<script src="/static/mysifa_chat_badge.js"></script>
+<script>window.__MYSIFA_APP__='stock';</script>
+<script src="/static/chat_widget.js"></script>
 <script>
 /*__TRACA_GUIDE__*/
 const API = window.location.origin;
@@ -3514,12 +3514,6 @@ function render() {
       })
     ),
     el('div', { cls:'sidebar-bottom' },
-      el('button', { cls:'nav-btn', on:{ click:()=>{ window.location.href='/messages'; } } },
-        el('span', { attrs:{ style:'display:inline-flex;align-items:center;gap:10px' } },
-          iconEl('mail',15), ' Messages ',
-          el('span', { cls:'chat-nav-badge hidden', attrs:{ 'data-mysifa-chat-badge':'' } })
-        )
-      ),
       el('button', { cls:'nav-btn back-mysifa', on:{ click:()=>{ window.location.href='/'; } } },
         '← Retour ',
         el('span', { cls:'wm' }, 'My', el('span', null, 'Sifa'))

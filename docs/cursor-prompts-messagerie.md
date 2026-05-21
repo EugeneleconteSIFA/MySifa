@@ -1716,146 +1716,375 @@ Ou ajouter dans le lifespan de main.py (après le sync emplacements_plan) :
 
 ---
 
-## Prompt 7 — Interface chat (/messages)
+## Prompt 7 — Widget chat flottant (toutes pages)
 
 ```
 Contexte projet : MySifa. Le router /api/chat/* est opérationnel (créé au Prompt 6).
-Design system : variables CSS --bg, --card, --border, --text, --text2, --muted, --accent, --danger.
-Taille sidebar applicative : --sidebar-w = 260px. Même structure que les autres pages MySifa.
-Polling : pas de WebSocket — requêtes GET toutes les 5s sur le canal actif.
+Design system : variables CSS --bg:#0a0e17, --card:#111827, --border:#1e293b, --text:#f1f5f9,
+--text2:#cbd5e1, --muted:#94a3b8, --accent:#22d3ee, --accent-bg:rgba(34,211,238,0.12), --danger:#f87171.
+Boutons flottants existants (bottom-droite) :
+  .calc-fab : bottom:24px / right:24px / z-index:8000
+  #ai-chat-btn : bottom:max(24px,env(safe-area-inset-bottom,0px)) / right:max(84px,...) / z-index:8001
 
-Tâche : Créer la page /messages (chat interne complet).
+Tâche : Créer un widget chat flottant présent sur TOUTES les pages MySifa.
+Il ne remplace pas l'agent IA — il coexiste avec lui.
+Pas de page /messages dédiée. Le chat est entièrement dans le widget.
 
-Créer le fichier app/web/messages_page.py :
+--- PARTIE 1 : Fichier static/chat_widget.js ---
 
-La page /messages doit avoir :
-- Colonne gauche (280px) : liste des canaux et DMs avec badge non-lus
-- Colonne centrale : fil de messages du canal actif + input
-- En-tête : nom du canal / nom du correspondant DM
-- Boutons : "Nouveau DM" (picker utilisateur), "Nouveau canal" (admin uniquement)
+Le widget détecte window.__MYSIFA_APP__ pour choisir son mode de rendu :
+  - "portal"           → mode BARRE (bas gauche, visible en permanence)
+  - toute autre valeur → mode BULLE (bas droite, empilée au-dessus du bouton IA)
 
-Structure HTML générale :
+L'utilisateur courant est lu depuis window.__MYSIFA_UID__ (entier), window.__MYSIFA_NOM__
+(string), window.__MYSIFA_ROLE__ (string).
 
-```html
-<div id="chat-app">
-  <!-- Sidebar MySifa (identique aux autres pages, lien /messages actif) -->
-  <div id="chat-wrap">
-    <div id="chat-left">
-      <div id="chat-left-head">
-        <div class="chat-section-title">Canaux</div>
-        <button id="btn-new-channel" title="Nouveau canal" onclick="openNewChannel()">+</button>
-      </div>
-      <div id="chat-channels-list"><!-- rendu par JS --></div>
-      <div class="chat-section-title" style="margin-top:12px">Messages directs</div>
-      <div id="chat-dms-list"><!-- rendu par JS --></div>
-      <div id="chat-left-foot">
-        <button onclick="openNewDm()">
-          <!-- icône + --> Nouveau message
-        </button>
-      </div>
+=== Constantes de positionnement ===
+
+// BARRE (portail uniquement)
+#cw-bar : position:fixed; bottom:24px; left:24px; z-index:8002; width:340px; max-width:calc(100vw - 48px)
+
+// BULLE (toutes les autres pages)
+#cw-bubble : position:fixed; z-index:8002
+  bottom : calc(max(24px, env(safe-area-inset-bottom, 0px)) + 58px)
+  right  : max(84px, calc(env(safe-area-inset-right, 0px) + 24px))
+  (même alignement horizontal que #ai-chat-btn)
+
+// PANEL (ouvert depuis barre ou bulle)
+#cw-panel : position:fixed; z-index:8003; width:360px; height:480px; max-height:calc(100vh - 80px)
+  En mode BARRE  : bottom:80px; left:24px
+  En mode BULLE : bottom:calc(max(24px,env(safe-area-inset-bottom,0px)) + 120px); right:max(84px,calc(env(safe-area-inset-right,0px)+24px))
+
+=== Structure HTML injectée par JS ===
+
+Le widget injecte dans document.body deux éléments selon le mode :
+
+MODE BARRE (portail) :
+<div id="cw-bar">
+  <div id="cw-bar-icon"><!-- SVG bulle message --></div>
+  <div id="cw-bar-text">
+    <div id="cw-bar-title">
+      Messagerie
+      <span id="cw-bar-badge"><!-- total non-lus, caché si 0 --></span>
     </div>
-    <div id="chat-main">
-      <div id="chat-header"><!-- nom canal / DM + membres --></div>
-      <div id="chat-messages"><!-- fil messages --></div>
-      <div id="chat-input-area">
-        <textarea id="chat-input" placeholder="Message…" rows="1"></textarea>
-        <button id="chat-send"><!-- icône envoi --></button>
-      </div>
+    <div id="cw-bar-preview"><!-- dernier message : "Florian : Les palettes…" --></div>
+  </div>
+  <div id="cw-bar-dot"><!-- point pulsant, visible si non-lus > 0 --></div>
+</div>
+
+MODE BULLE (apps) :
+<div id="cw-bubble">
+  <!-- SVG bulle message -->
+  <span id="cw-bubble-badge"><!-- total non-lus, caché si 0 --></span>
+</div>
+
+PANEL (commun, toujours présent dans le DOM, visibility toggled) :
+<div id="cw-panel" class="cw-hidden">
+  <div id="cw-panel-left">
+    <div class="cw-section-label">Canaux</div>
+    <div id="cw-channels"></div>
+    <div class="cw-section-label" style="margin-top:8px">Messages directs</div>
+    <div id="cw-dms"></div>
+    <button id="cw-new-dm">+ DM</button>
+  </div>
+  <div id="cw-panel-right">
+    <div id="cw-panel-header">
+      <span id="cw-panel-title"></span>
+      <button id="cw-close">×</button>
+    </div>
+    <div id="cw-messages"></div>
+    <div id="cw-input-row">
+      <textarea id="cw-input" rows="1" placeholder="Message…"></textarea>
+      <button id="cw-send"><!-- icône envoi SVG --></button>
     </div>
   </div>
 </div>
-```
 
-CSS à respecter :
-- Layout : grid 3 colonnes (sidebar MySifa | liste canaux | messages)
-- Liste canaux : fond --card, bordure droite --border, overflow-y auto
-- Item canal actif : background var(--accent-bg), color var(--accent), font-weight 700
-- Badge non-lu : fond var(--danger), texte blanc, border-radius 20px, font-size 9px
-- Messages : même style que le composant initMsgThread (bubbles mine/theirs)
-- Input : même style que #ai-input dans l'agent IA
-- Pas d'emoji dans les labels fonctionnels
+=== CSS (injecté via <style id="cw-styles">) ===
 
-Comportement JS :
+Fond du widget : --card (#111827), bordure : --border (#1e293b), border-radius : 14px.
+Pas de box-shadow, pas de gradient — cohérent avec le design system MySifa.
 
-1. Au chargement : appeler GET /api/chat/channels, séparer canaux (type=channel)
-   et DMs (type=direct), rendre les deux listes avec badge non-lus.
+#cw-bar :
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  padding: 12px 16px; display: flex; align-items: center; gap: 12px; cursor: pointer;
+  transition: border-color .15s;
 
-2. Clic sur un canal/DM : charger GET /api/chat/channels/{id}/messages,
-   rendre les messages, démarrer le polling toutes les 5s (clearInterval si on change de canal).
+#cw-bar:hover { border-color: var(--accent); }
 
-3. Polling (5s) : GET /api/chat/channels/{id}/messages — si le dernier message_id
-   reçu est différent du dernier connu, ajouter les nouveaux messages sans reconstruire tout le DOM.
-   Aussi, toutes les 10s, rafraîchir la liste gauche pour mettre à jour les badges.
+#cw-bar-icon :
+  width: 38px; height: 38px; border-radius: 50%; background: var(--accent-bg);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 
-4. Envoi : POST /api/chat/channels/{id}/messages avec { body: texte }.
-   Après succès, appeler load() pour rafraîchir immédiatement.
+#cw-bar-badge, #cw-bubble-badge :
+  background: var(--accent); color: #0a0e17; font-size: 11px; font-weight: 700;
+  padding: 1px 6px; border-radius: 99px; line-height: 1.4;
+  display: none; /* affiché via JS quand unread > 0 */
 
-5. "Nouveau DM" : afficher un picker (modal ou inline) avec GET /api/chat/users.
-   Searchbar pour filtrer par nom. Clic sur un utilisateur → POST /api/chat/channels
-   avec { type: 'direct', user_id: id } → si existing:true, ouvrir le canal existant,
-   sinon ouvrir le canal créé.
+#cw-bar-dot :
+  width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+  flex-shrink: 0; display: none;
+  /* animation : @keyframes cwPulse { 0%,100%{opacity:1} 50%{opacity:.3} } */
 
-6. "Nouveau canal" (superadmin/direction/administration uniquement) :
-   Modal avec champs : nom (requis), description (optionnel), membres (multi-select sur /api/chat/users).
-   POST /api/chat/channels avec { type: 'channel', name, description, member_ids }.
+#cw-bubble :
+  width: 46px; height: 46px; border-radius: 50%;
+  background: var(--card); border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; position: relative; transition: border-color .15s;
 
-7. "Charger plus" : bouton en haut du fil, appelle GET ...?before={oldest_created_at}.
-   Insérer les messages au début du fil sans perdre la position de scroll.
+#cw-bubble:hover { border-color: var(--accent); }
 
-8. Suppression message : bouton × visible au hover sur ses propres messages (ou admin).
-   DELETE /api/chat/channels/{id}/messages/{msg_id} + retirer du DOM.
+#cw-panel :
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  display: flex; overflow: hidden;
 
-Python (router) :
+#cw-panel.cw-hidden { display: none; }
+
+#cw-panel-left :
+  width: 130px; flex-shrink: 0; border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow-y: auto;
+
+.cw-section-label :
+  font-size: 11px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .5px; padding: 10px 12px 4px;
+
+.cw-channel-item :
+  padding: 7px 12px; font-size: 12px; color: var(--text2);
+  display: flex; align-items: center; gap: 6px; cursor: pointer;
+  border-radius: 0; transition: background .1s;
+
+.cw-channel-item:hover { background: rgba(255,255,255,.04); }
+.cw-channel-item.cw-active { background: var(--accent-bg); color: var(--accent); font-weight: 600; }
+
+.cw-unread-badge :
+  margin-left: auto; background: var(--accent); color: #0a0e17;
+  font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 99px;
+
+#cw-panel-right : flex: 1; display: flex; flex-direction: column; min-width: 0;
+
+#cw-panel-header :
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; font-size: 13px; font-weight: 600; color: var(--text);
+
+#cw-close :
+  margin-left: auto; background: none; border: none; color: var(--muted);
+  font-size: 18px; cursor: pointer; line-height: 1; padding: 0 4px;
+
+#cw-messages : flex: 1; overflow-y: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px;
+
+.cw-msg-mine :
+  align-self: flex-end; background: var(--accent-bg); border: 1px solid rgba(34,211,238,.2);
+  border-radius: 10px 0 10px 10px; padding: 6px 10px; font-size: 12px; color: var(--text);
+  max-width: 80%;
+
+.cw-msg-theirs :
+  align-self: flex-start; background: rgba(255,255,255,.05); border: 1px solid var(--border);
+  border-radius: 0 10px 10px 10px; padding: 6px 10px; font-size: 12px; color: var(--text);
+  max-width: 80%;
+
+.cw-msg-meta : font-size: 10px; color: var(--muted); margin-bottom: 2px;
+
+#cw-input-row :
+  padding: 8px 10px; border-top: 1px solid var(--border);
+  display: flex; gap: 6px; align-items: flex-end;
+
+#cw-input :
+  flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  padding: 7px 10px; font-size: 12px; color: var(--text); resize: none;
+  font-family: inherit; max-height: 80px; overflow-y: auto;
+
+#cw-input:focus { border-color: var(--accent); outline: none; }
+
+#cw-send :
+  background: var(--accent-bg); border: 1px solid rgba(34,211,238,.3); border-radius: 8px;
+  padding: 7px 10px; cursor: pointer; display: flex; align-items: center; color: var(--accent);
+
+=== Comportement JS (état central dans objet CW) ===
+
+const CW = {
+  uid: window.__MYSIFA_UID__,       // entier
+  nom: window.__MYSIFA_NOM__,
+  role: window.__MYSIFA_ROLE__,
+  isPortal: window.__MYSIFA_APP__ === 'portal',
+  open: false,          // panel ouvert ou non
+  activeId: null,       // id du canal actif
+  channels: [],         // cache liste canaux
+  lastMsgId: 0,         // dernier message_id vu
+  pollTimer: null,
+  badgeTimer: null,
+};
+
+Fonctions principales à implémenter :
+
+1. init() — appelée au DOMContentLoaded :
+   - Injecte <style id="cw-styles"> avec le CSS ci-dessus dans <head>
+   - Crée et injecte les éléments DOM (#cw-bar ou #cw-bubble + #cw-panel) dans document.body
+   - Attache les écouteurs click
+   - Lance refreshBadge() immédiatement + toutes les 30s (CW.badgeTimer)
+
+2. togglePanel() — ouvre ou ferme le panel :
+   - Si CW.open === false : retire cw-hidden de #cw-panel, load channels si CW.channels vide
+   - Si CW.open === true  : ajoute cw-hidden, clearInterval(CW.pollTimer)
+   - Met à jour CW.open
+
+3. loadChannels() — GET /api/chat/channels :
+   - Remplit #cw-channels (type=channel) et #cw-dms (type=direct) avec les items rendus
+   - Sur chaque item : affiche badge non-lu si unread_count > 0
+   - Sélectionne automatiquement le canal avec le plus grand unread_count, sinon le premier canal
+
+4. selectChannel(id) — charge un canal :
+   - Met à jour CW.activeId, marque l'item actif (.cw-active)
+   - Met à jour #cw-panel-title
+   - GET /api/chat/channels/{id}/messages → rend les messages, scroll en bas
+   - clearInterval(CW.pollTimer), relance toutes les 5s → pollMessages()
+
+5. pollMessages() — GET /api/chat/channels/{CW.activeId}/messages?after={CW.lastMsgId} :
+   - Si des messages nouveaux existent (id > CW.lastMsgId) :
+     - Les ajouter au bas de #cw-messages sans reconstruire le DOM
+     - Mettre à jour CW.lastMsgId
+     - jouerSon() si l'auteur n'est pas CW.uid (son de notification — voir Prompt 6 pour l'implémentation Web Audio)
+     - Scroller en bas UNIQUEMENT si l'utilisateur était déjà en bas (tolérance 40px)
+
+6. sendMessage() — POST /api/chat/channels/{CW.activeId}/messages avec { body } :
+   - Vide le textarea, appelle pollMessages() immédiatement après succès
+
+7. refreshBadge() — GET /api/chat/unread :
+   - Calcule le total non-lus
+   - Met à jour #cw-bar-badge / #cw-bubble-badge (afficher/cacher selon total)
+   - Si mode BARRE : met aussi à jour #cw-bar-preview (dernier message global)
+     et #cw-bar-dot (visible si total > 0)
+
+8. openNewDm() — picker utilisateur :
+   - GET /api/chat/users → afficher une liste modale inline dans #cw-panel-right
+   - Searchbar autofocusée pour filtrer par nom
+   - Clic → POST /api/chat/channels { type:'direct', user_id }
+     → si existing:true, selectChannel(existing_id) ; sinon selectChannel(new_id)
+
+Gestion thème light : le widget utilise uniquement des variables CSS.
+Sur body.light, les variables sont automatiquement surchargées par le design system existant.
+Aucune règle CSS conditionnelle sur .light dans chat_widget.js.
+
+=== Rendu d'un message (fonction renderMsg) ===
+
+function renderMsg(msg) {
+  const mine = msg.from_user_id === CW.uid;
+  const initials = (msg.from_nom || '?').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+  // Pas d'avatars image — initiales uniquement
+  const metaEl = mine ? '' : `<div class="cw-msg-meta">${escCW(msg.from_nom)} · ${fmtTime(msg.created_at)}</div>`;
+  const div = document.createElement('div');
+  div.className = mine ? 'cw-msg-mine' : 'cw-msg-theirs';
+  div.innerHTML = metaEl + escCW(msg.body);
+  return div;
+}
+
+function escCW(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function fmtTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso + (iso.includes('Z') ? '' : '+02:00'));
+  return d.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+}
+
+=== Son de notification (même implémentation que définie au Prompt 6) ===
+
+Reprendre la fonction jouerSon() déjà définie dans chat_widget.js au Prompt 6.
+Si elle n'a pas encore été implémentée, ajouter ici :
+
+function jouerSon() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.type = 'sine'; o.frequency.setValueAtTime(880, ctx.currentTime);
+    g.gain.setValueAtTime(0.18, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    o.start(ctx.currentTime); o.stop(ctx.currentTime + 0.3);
+  } catch(e) {}
+}
+
+=== Export ===
+
+Le fichier se termine par :
+  document.addEventListener('DOMContentLoaded', () => CW.init());
+  window._CW = CW; // accès debug
+
+--- PARTIE 2 : Injection dans app/web/html.py ---
+
+Localiser la fonction qui génère le layout commun (la fonction qui construit la sidebar
+partagée, appelée depuis les pages portail, planning, fabrication, stock, etc.).
+
+À la fin du <body>, juste avant la balise </body>, ajouter :
 
 ```python
-"""MySifa — Page Chat interne (/messages)."""
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
-from config import APP_VERSION
-from services.auth_service import get_current_user
-
-router = APIRouter()
-
-@router.get("/messages", response_class=HTMLResponse)
-def messages_page(request: Request):
-    try:
-        user = get_current_user(request)
-    except HTTPException as e:
-        if e.status_code == 401:
-            return RedirectResponse(url="/?next=/messages", status_code=302)
-        raise
-    import json
-    html = (
-        MESSAGES_HTML
-        .replace("__V_LABEL__", f"v{APP_VERSION}")
-        .replace("__USER_ID__", str(user.get("id", 0)))
-        .replace('"__USER_NOM__"', json.dumps(user.get("nom") or ""))
-        .replace('"__USER_ROLE__"', json.dumps(user.get("role") or ""))
-    )
-    return HTMLResponse(content=html)
-
-MESSAGES_HTML = r"""
-<!-- HTML complet de la page, généré selon les specs ci-dessus -->
-<!-- Reprendre exactement la structure sidebar de html.py -->
-<!-- window.__MYSIFA_UID__ = __USER_ID__; -->
-<!-- window.__MYSIFA_NOM__ = "__USER_NOM__"; -->
-<!-- window.__MYSIFA_ROLE__ = "__USER_ROLE__"; -->
+f"""
+<script>
+  window.__MYSIFA_UID__  = {user_id};
+  window.__MYSIFA_NOM__  = {json.dumps(user_nom)};
+  window.__MYSIFA_ROLE__ = {json.dumps(user_role)};
+</script>
+<script src="/static/chat_widget.js"></script>
 """
 ```
 
-Enregistrer dans main.py :
-  Import  : from app.web.messages_page import router as messages_page_router
-  Ajout   : app.include_router(messages_page_router)
+Note : window.__MYSIFA_APP__ est déjà injecté par chaque page individuellement.
+Si une page ne l'injecte pas encore, ajouter window.__MYSIFA_APP__ = 'unknown' comme fallback.
+Le portail (html.py) doit injecter window.__MYSIFA_APP__ = 'portal'.
 
-Ajouter le lien /messages dans la sidebar de toutes les pages existantes
-(dans app/web/html.py, app/web/planning_page.py, app/web/fabrication_page.py, etc.)
-avec un badge qui affiche le total non-lu via GET /api/chat/unread au chargement de page.
+Vérifier que static/chat_widget.js est servi par FastAPI :
+Dans main.py, la ligne app.mount("/static", StaticFiles(directory="static"), name="static")
+doit déjà exister. Ne pas la dupliquer.
 
-Icône suggérée pour la sidebar :
-<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-  stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-</svg>
+--- PARTIE 3 : Endpoint badge global dans app/routers/chat.py ---
+
+Ajouter l'endpoint suivant (s'il n'existe pas déjà depuis le Prompt 6) :
+
+```python
+@router.get("/api/chat/unread")
+def chat_unread(request: Request):
+    """
+    Retourne le total de messages non-lus + le dernier message reçu (pour la preview de la barre).
+    """
+    user = get_current_user(request)
+    uid  = user["id"]
+    with get_db() as conn:
+        total = conn.execute("""
+            SELECT COUNT(*) FROM chat_messages m
+            JOIN chat_members mb ON mb.channel_id = m.channel_id AND mb.user_id = ?
+            WHERE m.from_user_id != ?
+              AND (mb.last_read_at IS NULL OR m.created_at > mb.last_read_at)
+              AND m.deleted_at IS NULL
+        """, (uid, uid)).fetchone()[0]
+
+        last = conn.execute("""
+            SELECT m.body, m.from_nom, m.created_at, ch.name AS channel_name, ch.type AS channel_type
+            FROM chat_messages m
+            JOIN chat_members mb ON mb.channel_id = m.channel_id AND mb.user_id = ?
+            JOIN chat_channels ch ON ch.id = m.channel_id
+            WHERE m.from_user_id != ?
+              AND (mb.last_read_at IS NULL OR m.created_at > mb.last_read_at)
+              AND m.deleted_at IS NULL
+            ORDER BY m.created_at DESC LIMIT 1
+        """, (uid, uid)).fetchone()
+
+    return {
+        "unread": total,
+        "last_message": dict(last) if last else None,
+    }
+```
+
+--- Vérification finale ---
+
+1. Ouvrir le portail : la barre doit être visible en bas à gauche.
+2. Ouvrir une app (ex: /planning) : la bulle doit être visible juste au-dessus du bouton IA.
+3. Cliquer barre ou bulle : le panel s'ouvre avec la liste des canaux.
+4. Sélectionner un canal, envoyer un message : le message apparaît immédiatement.
+5. Ouvrir une autre session dans un autre navigateur, envoyer un message :
+   il doit apparaître dans les 5s avec le son de notification.
+6. Le badge non-lus se met à jour dans les 30s.
+7. Tester en thème light (body.light) : tout doit rester lisible.
 ```
 
 ---
@@ -1870,7 +2099,7 @@ Icône suggérée pour la sidebar :
 | 4 | Intégration fabrication | Onglet "Commentaires" | 15 min |
 | 5 | Badges sidebar + /inbox | `html.py` + page inbox | 20 min |
 | 6 | DB + API chat (DMs + canaux) | `/api/chat/*` | 20 min |
-| 7 | Interface /messages | Page chat complète | 45 min |
+| 7 | Widget chat flottant | `static/chat_widget.js` + injection `html.py` | 40 min |
 
 Les Prompts 1–5 (commentaires contextuels) sont indépendants des Prompts 6–7 (chat).
 Commencer par 6 si le chat est la priorité ; commencer par 1 si les commentaires sur dossiers le sont.
@@ -1885,3 +2114,6 @@ Commencer par 6 si le chat est la priorité ; commencer par 1 si les commentaire
   `POST /api/chat/channels/seed-defaults` une seule fois après déploiement.
 - `window.__MYSIFA_UID__` doit être un **entier** JS, pas une string.
   Utiliser `.replace("__USER_ID__", str(user["id"]))` sans guillemets dans le template HTML.
+- Le widget flottant est injecté via le layout commun (`html.py`) — il n'a pas besoin d'être
+  dupliqué dans chaque page. S'assurer que `window.__MYSIFA_APP__` est bien défini sur chaque page
+  (portail = `'portal'`, autres = identifiant de la page) avant le chargement de `chat_widget.js`.

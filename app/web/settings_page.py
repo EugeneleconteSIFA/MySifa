@@ -43,8 +43,8 @@ SETTINGS_HTML = r"""<!DOCTYPE html>
 <title>Paramètres — MySifa</title>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <link rel="stylesheet" href="/static/support_widget.css">
-<link rel="stylesheet" href="/static/mysifa_chat_nav.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css">
+<link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <style>
 :root{--bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;--muted:#94a3b8;--accent:#22d3ee;--ok:#34d399;--warn:#fbbf24;--danger:#f87171;}
 body.light{--bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--muted:#64748b;--accent:#0891b2;--ok:#059669;--warn:#d97706;--danger:#dc2626;}
@@ -184,6 +184,7 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 </head>
 <body>
 <script src="/static/mysifa_theme.js"></script>
+<script src="/static/mysifa_user_chip.js"></script>
 <div class="sidebar-overlay" id="sb-ov"></div>
 <div class="layout">
   <aside class="sidebar">
@@ -232,22 +233,11 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
         Log
       </button>
     </div>
-    <button type="button" class="nav-btn" onclick="location.href='/messages'">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-      Messages
-      <span class="chat-nav-badge hidden" data-mysifa-chat-badge></span>
-    </button>
     <div class="sidebar-bottom">
       <button type="button" class="nav-btn back-mysifa" onclick="location.href='/'">
         ← Retour <span class="wm">My<span>Sifa</span></span>
       </button>
-      <div class="user-chip" id="sb-user-chip" title="Modifier mon profil">
-        <div class="uc-name" id="sb-uc-name">—</div>
-        <div class="uc-role" id="sb-uc-role">—</div>
-        <div style="font-size:10px;color:var(--accent);margin-top:3px;display:flex;align-items:center;gap:4px">
-          <span id="sb-edit-ico"></span> Mon profil
-        </div>
-      </div>
+      <div class="user-chip" id="sb-user-chip" title="Modifier mon profil" onclick="location.href='/profil'"></div>
       <button type="button" class="support-btn" id="sb-support" title="Contacter le support (email)">
         <span class="support-ico" id="sb-support-ico"></span>
         <span>Contacter le support</span>
@@ -637,7 +627,8 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
   </main>
 </div>
 <script src="/static/support_widget.js"></script>
-<script src="/static/mysifa_chat_badge.js"></script>
+<script>window.__MYSIFA_APP__='settings';</script>
+<script src="/static/chat_widget.js"></script>
 <script>
 /*__TRACA_GUIDE__*/
 const API = window.location.origin;
@@ -793,12 +784,13 @@ async function refreshSidebarUser() {
   if (!me || typeof me !== 'object') return;
   if (window.MySifaTheme) MySifaTheme.mergeFromUser(me);
   window.__meUser = me;
-  const nm = document.getElementById('sb-uc-name');
-  const rr = document.getElementById('sb-uc-role');
-  const ed = document.getElementById('sb-edit-ico');
-  if (nm) nm.textContent = me.nom || '';
-  if (rr) rr.textContent = roleLabels[me.role] || me.role || '';
-  if (ed) ed.innerHTML = iconSvg('edit', 10);
+  const chip = document.getElementById('sb-user-chip');
+  if (chip && window.MySifaUserChip) {
+    MySifaUserChip.fill(chip, me, {
+      roleLabels: roleLabels,
+      editIconHtml: iconSvg('edit', 10),
+    });
+  }
 }
 
 function esc(s) {

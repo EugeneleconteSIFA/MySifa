@@ -41,7 +41,6 @@ PAIE_HTML = r"""<!DOCTYPE html>
 <title>Gestion des Paies — MySifa</title>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <link rel="stylesheet" href="/static/support_widget.css">
-<link rel="stylesheet" href="/static/mysifa_chat_nav.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
@@ -322,9 +321,6 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
     </div>
     <div class="emp-list" id="emp-list"></div>
     <div class="paie-sidebar-bottom">
-      <button class="paie-back-btn" style="margin-bottom:8px" onclick="window.location.href='/messages'">
-        Messages <span class="chat-nav-badge hidden" data-mysifa-chat-badge></span>
-      </button>
       <button class="support-btn" onclick="openSupport()">
         <span class="support-ico" id="support-ico-slot"></span>
         <span>Contacter le support</span>
@@ -374,7 +370,8 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 </div>
 
 <script src="/static/support_widget.js"></script>
-<script src="/static/mysifa_chat_badge.js"></script>
+<script>window.__MYSIFA_APP__='paie';</script>
+<script src="/static/chat_widget.js"></script>
 <script>
 'use strict';
 

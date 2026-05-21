@@ -13,19 +13,8 @@ router = APIRouter()
 
 @router.get("/messages", response_class=HTMLResponse)
 def messages_page(request: Request):
-    try:
-        user = get_current_user(request)
-    except HTTPException as e:
-        if e.status_code == 401:
-            return RedirectResponse(url="/?next=/messages", status_code=302)
-        raise
-    html = (
-        MESSAGES_HTML.replace("__V_LABEL__", f"v{APP_VERSION}")
-        .replace("__USER_ID__", str(user.get("id", 0)))
-        .replace("__USER_NOM_JSON__", json.dumps(user.get("nom") or ""))
-        .replace("__USER_ROLE_JSON__", json.dumps(user.get("role") or ""))
-    )
-    return HTMLResponse(content=html)
+    """Redirection — le chat est dans le widget flottant."""
+    return RedirectResponse(url="/", status_code=302)
 
 
 MESSAGES_HTML = r"""<!DOCTYPE html>
@@ -37,6 +26,7 @@ MESSAGES_HTML = r"""<!DOCTYPE html>
 <title>Messages — MySifa</title>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <link rel="stylesheet" href="/static/mysifa_theme.css">
+<link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_chat_nav.css">
 <link rel="stylesheet" href="/static/support_widget.css">
 <style>
@@ -132,8 +122,17 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
   padding:14px 18px;border-bottom:1px solid var(--border);background:var(--card);
   flex-shrink:0;
 }
+#chat-header-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+#chat-header-titles{flex:1;min-width:0}
 #chat-header-title{font-size:15px;font-weight:700;color:var(--text)}
 #chat-header-sub{font-size:11px;color:var(--muted);margin-top:3px}
+.hbtn{
+  flex-shrink:0;width:36px;height:36px;border-radius:8px;border:1px solid var(--border);
+  background:var(--bg);color:var(--text2);cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;
+  transition:border-color .15s,color .15s,background .15s;
+}
+.hbtn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 #chat-messages{
   flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;
   gap:8px;scrollbar-width:thin;scrollbar-color:var(--border) transparent;
@@ -247,6 +246,7 @@ body.sb-open .sidebar-overlay{display:block}
 </head>
 <body>
 <script src="/static/mysifa_theme.js"></script>
+<script src="/static/mysifa_user_chip.js"></script>
 <div class="sidebar-overlay" id="sb-ov" onclick="document.body.classList.remove('sb-open')"></div>
 <div id="chat-app">
   <aside class="sidebar">
@@ -263,10 +263,7 @@ body.sb-open .sidebar-overlay{display:block}
       <button type="button" class="nav-btn back-mysifa" onclick="location.href='/'">
         ← Retour <span class="wm">My<span>Sifa</span></span>
       </button>
-      <div class="user-chip" onclick="location.href='/profil'" title="Mon profil">
-        <div class="uc-name" id="uc-name">—</div>
-        <div class="uc-role" id="uc-role">—</div>
-      </div>
+      <div class="user-chip" id="sb-user-chip" onclick="location.href='/profil'" title="Mon profil"></div>
       <button type="button" class="theme-btn" id="btn-theme">
         <span class="theme-ico" id="theme-ico"></span>
         <span id="theme-label">Mode clair</span>
@@ -296,8 +293,16 @@ body.sb-open .sidebar-overlay{display:block}
     </div>
     <div id="chat-main">
       <div id="chat-header" style="display:none">
-        <div id="chat-header-title">—</div>
-        <div id="chat-header-sub"></div>
+        <div id="chat-header-top">
+          <div id="chat-header-titles">
+            <div id="chat-header-title">—</div>
+            <div id="chat-header-sub"></div>
+          </div>
+          <button type="button" id="sound-toggle-btn" onclick="toggleSound()" class="hbtn"
+            title="Couper le son" aria-label="Activer ou couper la sonnerie">
+            <span id="sound-toggle-icon" aria-hidden="true"></span>
+          </button>
+        </div>
       </div>
       <div id="chat-empty">Sélectionnez un canal ou démarrez une conversation.</div>
       <div id="chat-messages" style="display:none"></div>
@@ -317,6 +322,7 @@ body.sb-open .sidebar-overlay{display:block}
 window.__MYSIFA_UID__ = __USER_ID__;
 window.__MYSIFA_NOM__ = __USER_NOM_JSON__;
 window.__MYSIFA_ROLE__ = __USER_ROLE_JSON__;
+window.__MYSIFA_AVATAR__ = __USER_AVATAR_JSON__;
 
 const ADMIN_ROLES = new Set(['superadmin','direction','administration']);
 const ROLE_LABELS = {
@@ -334,6 +340,57 @@ let pollTimer = null;
 let listPollTimer = null;
 let allUsers = [];
 let newChannelMembers = [];
+
+// ── Sonnerie notification ─────────────────────────────────
+let _audioCtx = null;
+let _soundEnabled = localStorage.getItem('chat_sound') !== '0';
+
+const ICO_VOLUME='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>';
+const ICO_VOLUME_OFF='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>';
+
+function _getAudioCtx(){
+  if(!_audioCtx){
+    _audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+  }
+  if(_audioCtx.state==='suspended')_audioCtx.resume();
+  return _audioCtx;
+}
+
+function playNotifSound(){
+  if(!_soundEnabled)return;
+  try{
+    const ctx=_getAudioCtx();
+    const osc=ctx.createOscillator();
+    const gain=ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type='sine';
+    osc.frequency.setValueAtTime(523,ctx.currentTime);
+    osc.frequency.setValueAtTime(659,ctx.currentTime+0.12);
+    gain.gain.setValueAtTime(0,ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.25,ctx.currentTime+0.01);
+    gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.45);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime+0.45);
+  }catch(e){}
+}
+
+function syncSoundToggleUI(){
+  const btn=document.getElementById('sound-toggle-btn');
+  const ico=document.getElementById('sound-toggle-icon');
+  if(!btn||!ico)return;
+  btn.title=_soundEnabled?'Couper le son':'Activer le son';
+  ico.innerHTML=_soundEnabled?ICO_VOLUME:ICO_VOLUME_OFF;
+}
+
+function toggleSound(){
+  _soundEnabled=!_soundEnabled;
+  localStorage.setItem('chat_sound',_soundEnabled?'1':'0');
+  syncSoundToggleUI();
+  if(_soundEnabled){
+    try{_getAudioCtx();}catch(e){}
+  }
+}
 
 function esc(s){
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
@@ -515,10 +572,11 @@ async function pollMessages(){
     const data=await api('/api/chat/channels/'+activeId+'/messages');
     const incoming=data.messages||[];
     if(!incoming.length)return;
-    const maxId=Math.max(...incoming.map(m=>m.id));
-    if(maxId<=lastMsgId)return;
     const fresh=incoming.filter(m=>m.id>lastMsgId);
+    if(fresh.some(m=>!m.is_mine))playNotifSound();
     if(fresh.length)appendNewMessages(fresh);
+    const maxId=Math.max(...incoming.map(m=>m.id));
+    if(maxId>lastMsgId)lastMsgId=maxId;
   }catch(e){}
 }
 
@@ -727,11 +785,19 @@ document.getElementById('btn-logout').onclick=async()=>{
 };
 
 (async function init(){
+  syncSoundToggleUI();
   if(ADMIN_ROLES.has(window.__MYSIFA_ROLE__)){
     document.getElementById('btn-new-channel').style.display='';
   }
-  document.getElementById('uc-name').textContent=window.__MYSIFA_NOM__||'—';
-  document.getElementById('uc-role').textContent=ROLE_LABELS[window.__MYSIFA_ROLE__]||window.__MYSIFA_ROLE__||'—';
+  const chip=document.getElementById('sb-user-chip');
+  if(chip&&window.MySifaUserChip){
+    const editIco='<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+    MySifaUserChip.fill(chip,{
+      nom:window.__MYSIFA_NOM__||'',
+      role:window.__MYSIFA_ROLE__||'',
+      avatar_url:window.__MYSIFA_AVATAR__||''
+    },{roleLabels:ROLE_LABELS,editIconHtml:editIco});
+  }
   if(window.MySifaTheme)MySifaTheme.applyTheme();
   syncThemeBtn();
   await loadChannels();
