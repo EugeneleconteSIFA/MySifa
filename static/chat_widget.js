@@ -27,6 +27,7 @@
     _audioUnlocked: false,
     avatarByUserId: {},
     _inited: false,
+    _initPromise: null,
     pendingFile: null,
   };
 
@@ -526,13 +527,17 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     document.head.appendChild(st);
   }
 
+  function removeChatDom() {
+    document.querySelectorAll('#cw-bubble,#cw-bar').forEach((el) => el.remove());
+    const panel = document.getElementById('cw-panel');
+    if (panel) panel.remove();
+  }
+
   function buildDom() {
-    const hasTrigger =
-      document.getElementById('cw-bubble') || document.getElementById('cw-bar');
-    if (hasTrigger && document.getElementById('cw-panel')) return;
-    if (document.getElementById('cw-bar')) document.getElementById('cw-bar').remove();
-    if (document.getElementById('cw-bubble')) document.getElementById('cw-bubble').remove();
-    if (document.getElementById('cw-panel')) document.getElementById('cw-panel').remove();
+    const bubbles = document.querySelectorAll('#cw-bubble');
+    const panel = document.getElementById('cw-panel');
+    if (bubbles.length === 1 && panel) return;
+    removeChatDom();
 
     syncFromWindow();
     const bub = document.createElement('button');
@@ -1761,27 +1766,39 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
   }
 
   CW.init = async function () {
-    if (!window.__MYSIFA_APP__) window.__MYSIFA_APP__ = 'unknown';
-    syncFromWindow();
-    if (!CW.uid) {
-      const ok = await fetchMe();
-      if (!ok) return false;
+    if (CW._inited && hasCorrectChatTrigger() && document.getElementById('cw-panel')) {
+      return true;
     }
-    const panel = document.getElementById('cw-panel');
-    if (CW._inited && panel && hasCorrectChatTrigger()) return true;
-    if (panel || document.getElementById('cw-bar') || document.getElementById('cw-bubble')) {
-      CW.destroy();
-    }
-    CW._inited = true;
+    if (CW._initPromise) return CW._initPromise;
+    CW._initPromise = (async () => {
+      try {
+        if (!window.__MYSIFA_APP__) window.__MYSIFA_APP__ = 'unknown';
+        syncFromWindow();
+        if (!CW.uid) {
+          const ok = await fetchMe();
+          if (!ok) return false;
+        }
+        if (document.getElementById('cw-panel') || document.querySelectorAll('#cw-bubble').length) {
+          removeChatDom();
+        }
+        CW._inited = true;
 
-    injectStyles();
-    buildDom();
-    syncAdminButtons();
-    syncMobileChatUi();
-    dockLayout();
-    document.addEventListener('click', unlockAudio, { once: false, capture: true });
-    startBgPoll();
-    return true;
+        injectStyles();
+        buildDom();
+        syncAdminButtons();
+        syncMobileChatUi();
+        dockLayout();
+        document.addEventListener('click', unlockAudio, { once: false, capture: true });
+        startBgPoll();
+        return true;
+      } catch (e) {
+        CW._inited = false;
+        return false;
+      } finally {
+        CW._initPromise = null;
+      }
+    })();
+    return CW._initPromise;
   };
 
   CW.ensureReady = async function () {
@@ -1802,20 +1819,21 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       if (el) el.remove();
     });
     CW._inited = false;
+    CW._initPromise = null;
     CW.open = false;
     document.body.classList.remove('cw-mobile', 'cw-panel-open', 'cw-chat-active');
     dockLayout();
   };
 
   function boot() {
-    const run = () => CW.ensureReady();
+    const run = () => {
+      void CW.ensureReady();
+    };
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', run);
+      document.addEventListener('DOMContentLoaded', run, { once: true });
     } else {
       run();
     }
-    window.addEventListener('load', run);
-    setTimeout(run, 1200);
   }
 
   window.addEventListener('resize', () => {

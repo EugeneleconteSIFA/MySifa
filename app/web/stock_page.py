@@ -153,6 +153,65 @@ body.sb-open .sidebar-overlay{display:block}
   body.has-topbar .search-bar-wrap{margin-top:74px}
 }
 
+/* Messagerie — mobile paysage uniquement (vue split liste + conversation) */
+@media (max-width:900px) and (orientation:landscape){
+  body.mysifa-app-stock #cw-panel:not(.cw-hidden){
+    display:flex!important;
+    flex-direction:row!important;
+    align-items:stretch!important;
+    top:max(8px,env(safe-area-inset-top,0px))!important;
+    left:max(12px,env(safe-area-inset-left,0px))!important;
+    right:max(12px,env(safe-area-inset-right,0px))!important;
+    bottom:max(62px,calc(env(safe-area-inset-bottom,0px) + 62px))!important;
+    width:auto!important;
+    max-width:none!important;
+    margin:0!important;
+    height:calc(100dvh - 72px)!important;
+    max-height:calc(100dvh - 72px)!important;
+    min-height:0!important;
+    z-index:8015!important;
+  }
+  body.mysifa-app-stock.cw-mobile #cw-panel-left{
+    display:flex!important;
+    pointer-events:auto!important;
+    flex:0 0 min(200px,36vw)!important;
+    width:min(200px,36vw)!important;
+    min-width:140px!important;
+    max-width:40vw!important;
+    border-right:1px solid var(--border)!important;
+  }
+  body.mysifa-app-stock.cw-mobile #cw-panel-right{
+    display:flex!important;
+    flex-direction:column!important;
+    flex:1!important;
+    min-width:0!important;
+    min-height:0!important;
+    overflow:hidden!important;
+  }
+  body.mysifa-app-stock.cw-mobile:not(.cw-chat-active) #cw-panel-right{
+    visibility:hidden!important;
+    flex:0!important;
+    width:0!important;
+    overflow:hidden!important;
+    pointer-events:none!important;
+  }
+  body.mysifa-app-stock.cw-mobile.cw-chat-active #cw-panel-right{
+    visibility:visible!important;
+    flex:1!important;
+    width:auto!important;
+    pointer-events:auto!important;
+  }
+  body.mysifa-app-stock.cw-mobile #cw-messages{
+    flex:1!important;
+    min-height:0!important;
+    overflow-y:auto!important;
+  }
+  body.mysifa-app-stock.cw-mobile #cw-input-row{
+    flex-shrink:0!important;
+  }
+  body.mysifa-app-stock.cw-mobile.cw-chat-active .cw-list-topbar{display:none!important}
+}
+
 /* Scroll area */
 .scroll-area{flex:1;overflow-y:auto}
 
@@ -3602,7 +3661,7 @@ function render() {
 }
 
 async function init() {
-  document.body.classList.add('has-topbar');
+  document.body.classList.add('has-topbar','mysifa-app-stock');
   const user = await api('/api/auth/me').catch(()=>null);
   if (user && window.MySifaTheme) MySifaTheme.mergeFromUser(user);
   if (!user) { window.location.href='/'; return; }
@@ -3612,7 +3671,8 @@ async function init() {
   window.__MYSIFA_NOM__=user.nom||'';
   window.__MYSIFA_ROLE__=user.role||'';
   window.__MYSIFA_USER__={nom:user.nom||'',role:user.role||''};
-  if(window._CW&&typeof window._CW.syncUser==='function')window._CW.syncUser();
+  if(window._CW&&typeof window._CW.ensureReady==='function')await window._CW.ensureReady();
+  else if(window._CW&&typeof window._CW.syncUser==='function')window._CW.syncUser();
   if(typeof initAiChatWidget==='function')initAiChatWidget();
   S.stockReadOnly = (user.role === 'commercial');
   // Fabrication : accès restreint à l'onglet traça uniquement

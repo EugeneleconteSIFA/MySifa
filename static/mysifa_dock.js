@@ -63,6 +63,27 @@
     el.style.boxShadow = SHADOW_FAB;
   }
 
+  function layoutStockLandscapeChatPanel(el, panelBottom, panelMaxH) {
+    if (!el) return;
+    el.style.top = 'max(8px, env(safe-area-inset-top, 0px))';
+    el.style.left = 'max(12px, env(safe-area-inset-left, 0px))';
+    el.style.right = 'max(12px, env(safe-area-inset-right, 0px))';
+    el.style.bottom = 'max(62px, calc(env(safe-area-inset-bottom, 0px) + 62px))';
+    el.style.width = 'auto';
+    el.style.maxWidth = 'none';
+    el.style.marginLeft = '0';
+    el.style.marginRight = '0';
+    el.style.height = panelMaxH;
+    el.style.maxHeight = panelMaxH;
+    el.style.minHeight = '0';
+    el.style.display = 'flex';
+    el.style.flexDirection = 'row';
+    el.style.alignItems = 'stretch';
+    el.style.borderRadius = '12px';
+    el.style.boxShadow = SHADOW_PANEL;
+    el.style.zIndex = '8015';
+  }
+
   function layoutMobileLandscape(calcFab, calcPanel, aiBtn, aiPanel, chatBubble, chatBar, chatPanel) {
     const aiRoot = document.getElementById('ai-chat-root');
     const fabRowH = FAB_SIZE + 14;
@@ -115,7 +136,11 @@
     }
 
     if (chatPanel && !chatPanel.classList.contains('cw-hidden')) {
-      layoutLandscapePanel(chatPanel, 8015);
+      if (window.__MYSIFA_APP__ === 'stock') {
+        layoutStockLandscapeChatPanel(chatPanel, panelBottom, panelMaxH);
+      } else {
+        layoutLandscapePanel(chatPanel, 8015);
+      }
     }
 
     if (hasAi && aiPanel) {

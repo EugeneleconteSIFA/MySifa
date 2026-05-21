@@ -305,7 +305,6 @@ body.light .user-chip:hover{{background:rgba(8,145,178,.12)}}
     display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99;
   }}
   body.sb-open .sidebar-overlay{{display:block}}
-  .mobile-topbar{{display:flex}}
   .main{{grid-column:1}}
 }}
 </style>

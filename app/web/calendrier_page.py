@@ -338,7 +338,7 @@ body.light .cal-allday-row{background:#f8fafc}
   .cal-view-tabs,.cal-shortcuts-wrap{display:none!important}
   .sidebar{position:fixed;left:0;top:0;bottom:0;z-index:300;transform:translateX(-105%);transition:transform .18s ease;box-shadow:0 16px 48px rgba(0,0,0,.55)}
   body.sb-open .sidebar{transform:translateX(0)}
-  body.has-topbar .main{padding-top:0}
+  body.has-topbar .main{padding-top:74px}
   .cal-title{font-size:14px;min-width:120px}
 }
 @media(max-width:767px){

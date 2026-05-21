@@ -518,6 +518,7 @@ table.fab-traca-table tr:last-child td{border-bottom:none}
 
 /* Mobile topbar (boutons : mysifa_mobile_topbar.css via mysifa_theme.css) */
 .fab-topbar.mobile-topbar{z-index:200}
+body.has-topbar .fab-main{padding-top:74px}
 .fab-sidebar-overlay{
   display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:190;
 }
@@ -527,9 +528,8 @@ table.fab-traca-table tr:last-child td{border-bottom:none}
   :root{--footer-h:auto}
   #root{
     grid-template-columns:1fr;
-    grid-template-rows:48px 1fr auto;
+    grid-template-rows:1fr auto;
   }
-  .fab-topbar.mobile-topbar{display:flex}
   .fab-sidebar{
     grid-column:1;grid-row:1/-1;
     position:fixed;left:0;top:0;bottom:0;height:auto;
@@ -541,11 +541,10 @@ table.fab-traca-table tr:last-child td{border-bottom:none}
   body.sb-open .fab-sidebar{transform:translateX(0)}
   body.sb-open .fab-sidebar-overlay{display:block}
   .fab-main{
-    grid-column:1;grid-row:2;
-    padding-top:0;
+    grid-column:1;grid-row:1;
   }
   .fab-footer{
-    grid-column:1;grid-row:3;
+    grid-column:1;grid-row:2;
     grid-template-columns:1fr;
     min-height:unset;
     padding:8px 10px max(8px, env(safe-area-inset-bottom, 0px));
@@ -1042,7 +1041,7 @@ function txt(t){ return document.createTextNode(String(t||'')); }
 
 function icon(name,size=16){
   const ICONS = {
-    home:'<polyline points="3 9 12 2 21 9"/><polyline points="9 22 9 12 15 12 15 22"/><path d="M3 9v13h18V9"/>',
+    home:'<path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/><path d="M10 21v-6h4v6"/>',
     menu:'<line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>',
     x:'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
     check:'<polyline points="20 6 9 17 4 12"/>',
@@ -3124,6 +3123,7 @@ function render(){
   const ui = _fabCaptureUiState();
   document.body.classList.toggle('fab-mode-operator', S.saisieViewMode === 'operator');
   document.body.classList.toggle('fab-mode-admin', S.saisieViewMode === 'admin');
+  document.body.classList.toggle('has-topbar', window.innerWidth <= 900);
   const root = document.getElementById('root');
   root.innerHTML = '';
 

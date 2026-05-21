@@ -40,7 +40,7 @@
   color:var(--muted);
   margin-top:2px;
 }
-.mobile-topbar > div:not(.mobile-menu-btn):not(.mobile-home-btn):not(.mobile-print-btn):not(.cal-mobile-view-sel):not(.rh-mobile-toolbar){
+.mobile-topbar > div:not(.mobile-menu-btn):not(.mobile-home-btn):not(.mobile-print-btn):not(.cal-mobile-view-sel):not(.rh-mobile-toolbar):not(.rh-mobile-topbar-row){
   flex:1;
   min-width:0;
 }
@@ -70,4 +70,20 @@
 /* Variante : accueil à droite sans margin-left:auto (ex. select + home) */
 .mobile-topbar--home-end .mobile-home-btn{
   margin-left:0;
+}
+
+/* Planning RH : ligne titre + accueil (toolbar en 2e ligne) */
+.rh-mobile-topbar-row{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  width:100%;
+  min-width:0;
+}
+.rh-mobile-topbar-row>div:not(.mobile-menu-btn):not(.mobile-home-btn){
+  flex:1;
+  min-width:0;
+}
+.rh-mobile-topbar-row .mobile-home-btn{
+  margin-left:auto;
 }
