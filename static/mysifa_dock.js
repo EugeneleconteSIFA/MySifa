@@ -40,15 +40,60 @@
     if (!el) return;
     el.style.right = right;
     el.style.bottom = bottom;
-    if (isMobile()) {
-      el.style.left = 'auto';
-    }
+    el.style.left = 'auto';
   }
 
   function layoutChatFab(el, chatCol, stackH) {
     if (!el) return;
     applyFab(el, safeRight(chatCol), safeBottom(stackH));
     el.style.boxShadow = SHADOW_FAB;
+  }
+
+  function layoutMobile(calcFab, calcPanel, aiBtn, aiPanel, chatBubble, chatBar, chatPanel) {
+    let stackBottom = 0;
+
+    function placeFab(el) {
+      if (!el) return;
+      applyFab(el, safeRight(0), safeBottom(stackBottom));
+      el.style.boxShadow = SHADOW_FAB;
+      stackBottom += FAB_SIZE + GAP;
+    }
+
+    const hasCalc = isVisible(calcFab);
+    const hasAi = isVisible(document.getElementById('ai-chat-root')) && isVisible(aiBtn);
+    const hasChatBubble = isVisible(chatBubble);
+    const hasChatBar = isVisible(chatBar);
+    const chatFab = hasChatBubble ? chatBubble : hasChatBar ? chatBar : null;
+
+    if (hasCalc) {
+      placeFab(calcFab);
+      if (calcPanel) {
+        calcPanel.style.right = safeRight(0);
+        calcPanel.style.bottom = safeBottom(FAB_SIZE + 14);
+        calcPanel.style.boxShadow = SHADOW_PANEL;
+      }
+    }
+
+    placeFab(chatFab);
+
+    if (hasAi) {
+      placeFab(aiBtn);
+      if (aiPanel) {
+        aiPanel.style.right = safeRight(0);
+        aiPanel.style.bottom = safeBottom(stackBottom);
+        aiPanel.style.boxShadow = SHADOW_PANEL;
+      }
+    }
+
+    if (chatPanel && !chatPanel.classList.contains('cw-hidden')) {
+      chatPanel.style.left = '';
+      chatPanel.style.right = '';
+      chatPanel.style.bottom = '';
+      chatPanel.style.top = '';
+      chatPanel.style.width = '';
+      chatPanel.style.height = '';
+      chatPanel.style.boxShadow = '';
+    }
   }
 
   function layout() {
@@ -66,6 +111,18 @@
     const hasAi = isVisible(aiRoot) && isVisible(aiBtn);
     const hasChatBubble = isVisible(chatBubble);
     const hasChatBar = isVisible(chatBar);
+
+    if (mobile) {
+      layoutMobile(calcFab, calcPanel, aiBtn, aiPanel, chatBubble, chatBar, chatPanel);
+      return;
+    }
+
+    if (hasChatBar) {
+      chatBar.style.right = '';
+      chatBar.style.bottom = '';
+      chatBar.style.left = '';
+      chatBar.style.boxShadow = '';
+    }
 
     let offsetRight = 0;
     let bottomRowH = 0;
@@ -111,20 +168,8 @@
       layoutChatFab(chatBubble, chatCol, stackH);
     }
 
-    if (hasChatBar && (mobile || !chatPanel || chatPanel.classList.contains('cw-hidden'))) {
-      layoutChatFab(chatBar, chatCol, stackH);
-    }
-
     if (chatPanel && !chatPanel.classList.contains('cw-hidden')) {
-      if (mobile) {
-        chatPanel.style.left = '';
-        chatPanel.style.right = '';
-        chatPanel.style.bottom = '';
-        chatPanel.style.top = '';
-        chatPanel.style.width = '';
-        chatPanel.style.height = '';
-        chatPanel.style.boxShadow = '';
-      } else if (chatPanel.classList.contains('cw-mode-bubble') && (hasChatBubble || hasChatBar)) {
+      if (chatPanel.classList.contains('cw-mode-bubble') && (hasChatBubble || hasChatBar)) {
         const stackPanel = stackH + FAB_SIZE + GAP;
         chatPanel.style.right = safeRight(chatCol);
         chatPanel.style.bottom = safeBottom(stackPanel);

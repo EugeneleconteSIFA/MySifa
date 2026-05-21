@@ -301,14 +301,14 @@
   color: var(--bg);
   border-color: var(--accent);
 }
-@media (max-width: 640px) {
+@media (max-width: 768px) {
+  #ai-chat-root.ai-on-portal #ai-chat-btn,
   #ai-chat-btn {
     right: max(24px, env(safe-area-inset-right, 0px));
-    bottom: 84px;
   }
   #ai-chat-panel {
     width: calc(100vw - 24px);
-    right: 12px;
-    bottom: 140px;
+    right: max(12px, env(safe-area-inset-right, 0px));
+    max-height: calc(100dvh - 120px);
   }
 }

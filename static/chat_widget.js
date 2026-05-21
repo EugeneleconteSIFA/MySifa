@@ -182,9 +182,17 @@ body.light .cw-channel-item:hover{background:rgba(0,0,0,.04)}
   padding:2px 4px;border-radius:6px;line-height:1.2;transition:background .1s}
 .cw-react-btn:hover{background:var(--accent-bg)}
 .cw-reactions{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
-.cw-reaction-pill{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;
+.cw-reaction-pill{position:relative;display:inline-flex;align-items:center;gap:4px;padding:2px 8px;
   border-radius:99px;font-size:12px;cursor:pointer;border:1px solid var(--border);
   background:transparent;color:var(--text2);font-family:inherit;transition:border-color .1s,background .1s}
+#cw-reaction-tip-float{
+  display:none;position:fixed;z-index:8025;pointer-events:none;
+  background:var(--card);border:1px solid var(--border);border-radius:8px;
+  padding:8px 10px;font-size:12px;line-height:1.45;color:var(--text2);
+  box-shadow:0 8px 24px rgba(0,0,0,.35);max-width:240px;max-height:180px;overflow-y:auto;
+}
+#cw-reaction-tip-float .cw-tip-name{display:block;color:var(--text)}
+#cw-reaction-tip-float .cw-tip-name+.cw-tip-name{margin-top:4px}
 .cw-reaction-pill:hover{border-color:var(--accent);background:var(--accent-bg)}
 .cw-reaction-pill.cw-reacted{border-color:var(--accent);background:var(--accent-bg);color:var(--accent);font-weight:600}
 .cw-reaction-count{font-size:12px;font-weight:600}
@@ -271,9 +279,9 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
   body.cw-panel-open #cw-bar,body.cw-panel-open #cw-bubble{display:none!important}
   #cw-bar{
     width:48px;height:48px;padding:0;border-radius:50%;max-width:none;
-    left:auto!important;right:max(16px,env(safe-area-inset-right,0px))!important;
-    bottom:max(16px,env(safe-area-inset-bottom,0px))!important;
+    left:auto!important;display:flex!important;
     justify-content:center;align-items:center;cursor:pointer;
+    z-index:8002;
   }
   #cw-bar #cw-bar-text{display:none}
   #cw-bar #cw-bar-icon-wrap{margin:0}
@@ -575,6 +583,8 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       resizeCwInput(this);
       signalTyping();
     });
+    const msgBox = document.getElementById('cw-messages');
+    if (msgBox) msgBox.addEventListener('scroll', hideReactionTip, { passive: true });
     dockLayout();
   }
 
@@ -811,6 +821,61 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     });
   }
 
+  function getReactionTipEl() {
+    let tip = document.getElementById('cw-reaction-tip-float');
+    if (!tip) {
+      tip = document.createElement('div');
+      tip.id = 'cw-reaction-tip-float';
+      tip.setAttribute('role', 'tooltip');
+      document.body.appendChild(tip);
+    }
+    return tip;
+  }
+
+  function hideReactionTip() {
+    const tip = document.getElementById('cw-reaction-tip-float');
+    if (tip) tip.style.display = 'none';
+  }
+
+  function positionReactionTip(anchor, tip) {
+    const r = anchor.getBoundingClientRect();
+    const gap = 6;
+    let top = r.top - tip.offsetHeight - gap;
+    let left = r.left + r.width / 2 - tip.offsetWidth / 2;
+    const pad = 8;
+    if (top < pad) top = r.bottom + gap;
+    if (left < pad) left = pad;
+    if (left + tip.offsetWidth > window.innerWidth - pad) {
+      left = window.innerWidth - tip.offsetWidth - pad;
+    }
+    tip.style.top = top + 'px';
+    tip.style.left = left + 'px';
+  }
+
+  function showReactionTip(btn, users) {
+    if (!users || !users.length) return;
+    const tip = getReactionTipEl();
+    tip.innerHTML = users
+      .map((u) => '<span class="cw-tip-name">' + escCW(u) + '</span>')
+      .join('');
+    tip.style.display = 'block';
+    positionReactionTip(btn, tip);
+  }
+
+  function attachReactionTip(btn) {
+    let users = [];
+    try {
+      users = JSON.parse(btn.getAttribute('data-users') || '[]');
+    } catch (e) {
+      users = [];
+    }
+    if (!users.length) return;
+    btn.addEventListener('mouseenter', () => showReactionTip(btn, users));
+    btn.addEventListener('mouseleave', hideReactionTip);
+    btn.addEventListener('focus', () => showReactionTip(btn, users));
+    btn.addEventListener('blur', hideReactionTip);
+  }
+
   function buildReactionsHtml(reactions) {
     if (!reactions || !reactions.length) return '';
     return (
@@ -818,9 +883,12 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       reactions
         .map((rx) => {
           const mine = !!rx.reacted_by_me;
+          const users = rx.users || [];
           const label = mine
             ? 'Retirer votre réaction ' + rx.emoji
-            : 'Réagir ' + rx.emoji + ' (' + rx.count + ')';
+            : users.length
+              ? users.join(', ')
+              : 'Réagir ' + rx.emoji;
           return (
             '<button type="button" class="cw-reaction-pill' +
             (mine ? ' cw-reacted' : '') +
@@ -828,10 +896,12 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
             rx.emoji +
             '" data-mine="' +
             (mine ? '1' : '0') +
+            '" data-users="' +
+            escAttr(JSON.stringify(users)) +
             '" title="' +
             escCW(label) +
             '" aria-label="' +
-            escCW(label) +
+            escCW(rx.emoji + ' — ' + (users.length ? users.join(', ') : '')) +
             '">' +
             rx.emoji +
             '<span class="cw-reaction-count">' +
@@ -845,6 +915,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
   }
 
   function bindReactionHandlers(wrap, msgId) {
+    wrap.querySelectorAll('.cw-reaction-pill').forEach((btn) => attachReactionTip(btn));
     wrap.querySelectorAll('.cw-react-btn, .cw-reaction-pill').forEach((btn) => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
@@ -882,6 +953,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
         } else if (existing) existing.remove();
         bindReactionHandlers(wrap, m.id);
       });
+      hideReactionTip();
     } catch (e) {}
   }
 
@@ -1612,6 +1684,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       if (picker) picker.classList.add('cw-hidden');
       closeOverlay();
     }
+    hideReactionTip();
     syncMobileChatUi();
     dockLayout();
   }

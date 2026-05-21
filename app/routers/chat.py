@@ -120,11 +120,25 @@ def _fetch_reactions_map(conn, msg_ids: List[int], uid: int) -> dict[int, list]:
             ORDER BY r.message_id, MIN(r.created_at) ASC""",
         [uid] + msg_ids,
     ).fetchall()
+    user_rows = conn.execute(
+        f"""SELECT message_id, emoji, user_nom
+            FROM chat_reactions
+            WHERE message_id IN ({placeholders})
+            ORDER BY message_id, emoji, created_at ASC""",
+        msg_ids,
+    ).fetchall()
+    users_by_key: dict[tuple[int, str], list] = {}
+    for ur in user_rows:
+        key = (ur["message_id"], ur["emoji"])
+        name = (ur["user_nom"] or "").strip() or "Utilisateur"
+        users_by_key.setdefault(key, []).append(name)
     for rx in rx_rows:
+        key = (rx["message_id"], rx["emoji"])
         reactions_map[rx["message_id"]].append({
             "emoji": rx["emoji"],
             "count": rx["count"],
             "reacted_by_me": bool(rx["reacted_by_me"]),
+            "users": users_by_key.get(key, []),
         })
     return reactions_map
 
