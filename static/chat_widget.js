@@ -757,6 +757,14 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     } catch (e) {}
   }
 
+  function appendReadReceipt(msgWrap, className, content, asHtml) {
+    const receipt = document.createElement('div');
+    receipt.className = 'cw-read-receipt ' + className;
+    if (asHtml) receipt.innerHTML = content;
+    else receipt.textContent = content;
+    msgWrap.appendChild(receipt);
+  }
+
   function updateReadReceipts() {
     document.querySelectorAll('.cw-read-receipt').forEach((el) => el.remove());
 
@@ -765,7 +773,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     const box = document.getElementById('cw-messages');
     if (!box) return;
 
-    const myMsgs = [...box.querySelectorAll('.cw-msg-mine[data-id]')].reverse();
+    const myMsgs = [...box.querySelectorAll('.cw-msg-wrap.cw-mine[data-id]')].reverse();
     if (!myMsgs.length) return;
 
     if (ch.type === 'direct') {
@@ -773,17 +781,18 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       const otherReadAt = CW.memberReadStatus[otherId];
       if (!otherReadAt) return;
 
-      for (const msgEl of myMsgs) {
-        const msgAt = msgEl.dataset.at;
+      for (const msgWrap of myMsgs) {
+        const msgAt = msgWrap.dataset.at;
         if (!msgAt) continue;
         if (otherReadAt >= msgAt) {
-          const receipt = document.createElement('div');
-          receipt.className = 'cw-read-receipt cw-read-vu';
-          receipt.innerHTML =
+          appendReadReceipt(
+            msgWrap,
+            'cw-read-vu',
             '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"' +
-            ' stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-            '<polyline points="20 6 9 17 4 12"/></svg>Vu';
-          msgEl.after(receipt);
+              ' stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+              '<polyline points="20 6 9 17 4 12"/></svg>Vu',
+            true
+          );
           break;
         }
       }
@@ -796,10 +805,12 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
         ([uid, at]) => Number(uid) !== Number(CW.uid) && at && at >= lastAt
       ).length;
       if (readCount > 0) {
-        const receipt = document.createElement('div');
-        receipt.className = 'cw-read-receipt cw-read-count';
-        receipt.textContent = readCount + ' vu' + (readCount > 1 ? 's' : '');
-        lastMyMsg.after(receipt);
+        appendReadReceipt(
+          lastMyMsg,
+          'cw-read-count',
+          readCount + ' vu' + (readCount > 1 ? 's' : ''),
+          false
+        );
       }
     }
   }
