@@ -1,0 +1,160 @@
+/* MySifa — Widgets flottants dock (calculette, aligné IA / messagerie) */
+
+/* Bouton flottant commun (48px, accent, glow cyan) */
+.mysifa-dock-fab,
+.calc-fab {
+  position: fixed;
+  z-index: 8003;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--bg);
+  box-shadow: 0 4px 16px rgba(34, 211, 238, 0.35);
+  transition: transform 0.18s, box-shadow 0.18s;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}
+.mysifa-dock-fab:hover,
+.calc-fab:hover {
+  transform: scale(1.08);
+  box-shadow: 0 6px 24px rgba(34, 211, 238, 0.5);
+}
+.mysifa-dock-fab:active,
+.calc-fab:active {
+  transform: scale(1.02);
+}
+.mysifa-dock-fab svg,
+.calc-fab svg {
+  display: block;
+  color: var(--bg);
+  flex-shrink: 0;
+}
+
+/* Panneau flottant commun */
+.mysifa-dock-panel,
+.calc-panel {
+  position: fixed;
+  z-index: 8002;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+}
+.mysifa-dock-panel-head {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  background: var(--card);
+}
+.mysifa-dock-panel-title {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.mysifa-dock-panel-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+  padding: 0 4px;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s;
+}
+.mysifa-dock-panel-close:hover {
+  color: var(--text);
+}
+
+/* ── Calculette (contenu) ── */
+.calc-panel {
+  width: 260px;
+}
+.calc-panel-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.calc-display {
+  background: var(--bg);
+  padding: 10px 14px 6px;
+  text-align: right;
+  border-bottom: 1px solid var(--border);
+}
+.calc-expr {
+  font-size: 11px;
+  color: var(--muted);
+  min-height: 16px;
+  font-family: ui-monospace, 'Cascadia Code', monospace;
+  word-break: break-all;
+}
+.calc-val {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text);
+  font-family: ui-monospace, 'Cascadia Code', monospace;
+  line-height: 1.2;
+  word-break: break-all;
+}
+.calc-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--border);
+}
+.calc-key {
+  background: var(--card);
+  border: none;
+  padding: 0;
+  height: 48px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s, color 0.12s;
+}
+.calc-key:hover {
+  background: var(--accent-bg);
+}
+.calc-key:active {
+  background: var(--border);
+}
+.calc-key.op {
+  color: var(--accent);
+}
+.calc-key.eq {
+  background: var(--accent);
+  color: var(--bg);
+}
+.calc-key.eq:hover {
+  filter: brightness(1.06);
+}
+.calc-key.fn {
+  color: var(--text2);
+  font-size: 14px;
+}
+
+@media (max-width: 640px) {
+  .calc-panel {
+    width: min(260px, calc(100vw - 24px));
+  }
+}

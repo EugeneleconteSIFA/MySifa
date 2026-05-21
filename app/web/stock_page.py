@@ -56,6 +56,8 @@ STOCK_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/support_widget.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
+<link rel="stylesheet" href="/static/mysifa_ai_chat.css">
+<link rel="stylesheet" href="/static/mysifa_dock.css">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -214,25 +216,6 @@ body.sb-open .sidebar-overlay{display:block}
 .pill{font-size:10px;font-weight:800;border-radius:999px;padding:3px 9px;border:1px solid var(--border);color:var(--text2);background:transparent;text-transform:uppercase;letter-spacing:.04em}
 .pill.ok{border-color:rgba(52,211,153,.45);color:var(--success);background:rgba(52,211,153,.10)}
 .pill.off{border-color:rgba(248,113,113,.45);color:var(--danger);background:rgba(248,113,113,.10)}
-
-/* ── Calculette flottante ── */
-.calc-fab{position:fixed;bottom:max(24px,env(safe-area-inset-bottom,0px));right:max(24px,env(safe-area-inset-right,0px));width:52px;height:52px;border-radius:50%;background:var(--accent);color:var(--bg);border:none;cursor:pointer;z-index:8000;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 18px rgba(0,0,0,.35);transition:transform .15s,filter .15s}
-.calc-fab:hover{filter:brightness(1.1);transform:scale(1.07)}
-.calc-fab:active{transform:scale(.96)}
-.calc-panel{position:fixed;bottom:86px;right:max(20px,env(safe-area-inset-right,0px));width:260px;background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.45);z-index:7999;overflow:hidden;animation:calcUp .2s ease-out}
-@keyframes calcUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
-.calc-display{background:var(--bg);padding:10px 14px 6px;text-align:right}
-.calc-expr{font-size:11px;color:var(--muted);min-height:16px;font-family:monospace;word-break:break-all}
-.calc-val{font-size:26px;font-weight:700;color:var(--text);font-family:monospace;line-height:1.2;word-break:break-all}
-.calc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border)}
-.calc-key{background:var(--card);border:none;padding:0;height:52px;font-size:17px;font-weight:600;color:var(--text);cursor:pointer;font-family:inherit;transition:background .1s}
-.calc-key:hover{background:var(--accent-bg)}
-.calc-key:active{background:var(--border)}
-.calc-key.op{color:var(--accent)}
-.calc-key.eq{background:var(--accent);color:var(--bg)}
-.calc-key.eq:hover{filter:brightness(1.08)}
-.calc-key.fn{color:var(--text2);font-size:14px}
-@media(max-width:480px){.calc-panel{right:12px;width:calc(100vw - 24px);bottom:80px}}
 
 /* ── Formulaire ajout produit ── */
 .add-form{padding:16px;display:flex;flex-direction:column;gap:10px}
@@ -669,7 +652,9 @@ body.light .recep-fourn-sel:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='stock';</script>
 <script src="/static/mysifa_dock.js"></script>
+<script src="/static/mysifa_calc.js"></script>
 <script src="/static/chat_widget.js"></script>
+<script src="/static/mysifa_ai_chat.js"></script>
 <script>
 /*__TRACA_GUIDE__*/
 const API = window.location.origin;
@@ -2771,77 +2756,6 @@ function renderContent() {
   }
 }
 
-// ── Calculette flottante ────────────────────────────────────────
-(function(){
-  let _open=false, _expr='', _val='0', _justEq=false;
-  const CALC_SVG='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><circle cx="8.5" cy="11" r=".8" fill="currentColor" stroke="none"/><circle cx="12" cy="11" r=".8" fill="currentColor" stroke="none"/><circle cx="15.5" cy="11" r=".8" fill="currentColor" stroke="none"/><circle cx="8.5" cy="15" r=".8" fill="currentColor" stroke="none"/><circle cx="12" cy="15" r=".8" fill="currentColor" stroke="none"/><circle cx="15.5" cy="15" r=".8" fill="currentColor" stroke="none"/><line x1="8" y1="19" x2="16" y2="19"/></svg>';
-  const KEYS=[['C','⌫','%','÷'],['7','8','9','×'],['4','5','6','−'],['1','2','3','+'],[  '0','.','=']];
-  function _press(k){
-    if(k==='C'){_expr='';_val='0';_justEq=false;return;}
-    if(k==='⌫'){_val=_val.length>1?_val.slice(0,-1):'0';return;}
-    if(k==='%'){try{_val=String(parseFloat(_val)/100);}catch(e){}return;}
-    if(k==='='){
-      try{
-        const e=(_justEq?_val:_expr+_val).replace(/÷/g,'/').replace(/×/g,'*').replace(/−/g,'-');
-        const r=Function('"use strict";return ('+e+')')();
-        _expr=e+'=';_val=String(Math.round(r*1e10)/1e10);_justEq=true;
-      }catch(e){_val='Err';_expr='';_justEq=false;}
-      return;
-    }
-    if(['+','-','×','÷','−'].includes(k)){
-      if(_justEq){_expr=_val+k;_val='0';_justEq=false;return;}
-      _expr+=_val+k;_val='0';return;
-    }
-    if(_justEq){_expr='';_justEq=false;}
-    if(k==='.'){if(_val.includes('.'))return;_val+='.';return;}
-    _val=(_val==='0'||_val==='-0')?(_val.startsWith('-')?'-'+k:k):_val+k;
-  }
-  function _upd(){
-    const cv=document.querySelector('#_calc_panel ._cv');
-    const ce=document.querySelector('#_calc_panel ._ce');
-    const p=document.getElementById('_calc_panel');
-    if(cv)cv.textContent=_val;
-    if(ce)ce.textContent=_expr;
-    if(p)p.style.display=_open?'':'none';
-  }
-  function _mount(){
-    if(document.getElementById('_calc_fab'))return;
-    const fab=document.createElement('button');
-    fab.id='_calc_fab';fab.className='calc-fab';fab.title='Calculette';
-    fab.innerHTML=CALC_SVG;
-    fab.onclick=()=>{_open=!_open;_upd();};
-    document.body.appendChild(fab);
-    const panel=document.createElement('div');
-    panel.id='_calc_panel';panel.className='calc-panel';panel.style.display='none';
-    const disp=document.createElement('div');disp.className='calc-display';
-    const ce=document.createElement('div');ce.className='calc-expr _ce';
-    const cv=document.createElement('div');cv.className='calc-val _cv';cv.textContent='0';
-    disp.append(ce,cv);panel.appendChild(disp);
-    const grid=document.createElement('div');grid.className='calc-grid';
-    KEYS.forEach(row=>row.forEach(k=>{
-      const b=document.createElement('button');
-      b.className='calc-key'+(k==='='?' eq':['+','-','×','÷','−'].includes(k)?' op':['C','⌫','%'].includes(k)?' fn':'');
-      b.textContent=k;
-      if(k==='0')b.style.gridColumn='span 2';
-      b.onclick=()=>{_press(k);_upd();};
-      grid.appendChild(b);
-    }));
-    panel.appendChild(grid);document.body.appendChild(panel);
-    document.addEventListener('keydown',e=>{
-      if(!_open)return;
-      if(e.key>='0'&&e.key<='9'){_press(e.key);_upd();}
-      else if(e.key==='.'){_press('.');_upd();}
-      else if(e.key==='+'||e.key==='-'){_press(e.key==='+'?'+':'−');_upd();}
-      else if(e.key==='*'){_press('×');_upd();}
-      else if(e.key==='/'){e.preventDefault();_press('÷');_upd();}
-      else if(e.key==='Enter'||e.key==='='){_press('=');_upd();}
-      else if(e.key==='Escape'){_open=false;_upd();}
-      else if(e.key==='Backspace'){_press('⌫');_upd();}
-    });
-  }
-  window._calcMountStock=_mount;
-})();
-
 // ── Réception matière ───────────────────────────────────────────
 
 const FSC_CLAIM_LABELS = {
@@ -3689,7 +3603,7 @@ function render() {
   renderContent();
 
   // Calculette flottante (montée une seule fois, persiste entre les rendus)
-  window._calcMountStock && window._calcMountStock();
+  window._calc_mount && window._calc_mount();
   if(window.MySifaDock&&typeof window.MySifaDock.layout==='function')window.MySifaDock.layout();
 }
 
@@ -3699,10 +3613,13 @@ async function init() {
   if (user && window.MySifaTheme) MySifaTheme.mergeFromUser(user);
   if (!user) { window.location.href='/'; return; }
   S.user = user;
+  window.S = S;
   window.__MYSIFA_UID__=user.id;
   window.__MYSIFA_NOM__=user.nom||'';
   window.__MYSIFA_ROLE__=user.role||'';
+  window.__MYSIFA_USER__={nom:user.nom||'',role:user.role||''};
   if(window._CW&&typeof window._CW.syncUser==='function')window._CW.syncUser();
+  if(typeof initAiChatWidget==='function')initAiChatWidget();
   S.stockReadOnly = (user.role === 'commercial');
   // Fabrication : accès restreint à l'onglet traça uniquement
   S.tracaOnly = (user.role === 'fabrication');

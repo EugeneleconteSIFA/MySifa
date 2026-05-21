@@ -16,9 +16,12 @@
     channels: [],
     lastMsgId: 0,
     pollTimer: null,
-    badgeTimer: null,
+    bgPollTimer: null,
+    prevUnreadTotal: 0,
+    _chatSynced: false,
     soundEnabled: localStorage.getItem('chat_sound') !== '0',
     _audioCtx: null,
+    _audioUnlocked: false,
     _inited: false,
   };
 
@@ -64,10 +67,13 @@ body.light #cw-bar.cw-portal-accent #cw-bar-icon{background:rgba(255,255,255,.22
 #cw-bar-text{flex:1;min-width:0}
 #cw-bar-title{font-size:13px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px}
 #cw-bar-preview{font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#cw-bar-badge,#cw-bubble-badge{background:var(--accent);color:#0a0e17;font-size:11px;font-weight:700;
-  padding:1px 6px;border-radius:99px;line-height:1.4;display:none}
-#cw-bar-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex-shrink:0;display:none;
-  animation:cwPulse 1.4s ease-in-out infinite}
+#cw-bar-icon-wrap{position:relative;flex-shrink:0}
+#cw-bar-badge,#cw-bubble-badge{display:none;min-width:18px;height:18px;padding:0 5px;border-radius:99px;
+  background:var(--danger);color:#fff;font-size:10px;font-weight:800;line-height:1;
+  align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.3);pointer-events:none}
+#cw-bar-badge{position:absolute;top:-6px;right:-6px}
+#cw-bar.cw-portal-accent #cw-bar-badge{background:#fff;color:#0a0e17;border:2px solid rgba(10,14,23,.15)}
+body.light #cw-bar.cw-portal-accent #cw-bar-badge{border-color:rgba(15,23,42,.12)}
 #cw-bubble{position:fixed;z-index:8002;
   width:48px;height:48px;border-radius:50%;background:var(--accent);border:none;
   display:flex;align-items:center;justify-content:center;cursor:pointer;
@@ -86,6 +92,7 @@ body.light #cw-bar.cw-portal-accent #cw-bar-icon{background:rgba(255,255,255,.22
 #cw-panel-left{width:168px;flex-shrink:0;border-right:1px solid var(--border);
   display:flex;flex-direction:column;overflow-y:auto;min-height:0}
 .cw-section-row{display:flex;align-items:center;justify-content:space-between;padding:12px 12px 6px;gap:6px}
+.cw-section-row.cw-section-discussion{border-top:1px solid var(--border);margin-top:6px;padding-top:14px}
 .cw-section-label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;
   letter-spacing:.5px;flex:1;min-width:0}
 .cw-section-add{width:26px;height:26px;border-radius:8px;border:1px solid var(--border);background:transparent;
@@ -98,8 +105,11 @@ body.light #cw-bar.cw-portal-accent #cw-bar-icon{background:rgba(255,255,255,.22
 .cw-channel-item:hover{background:rgba(255,255,255,.04)}
 body.light .cw-channel-item:hover{background:rgba(0,0,0,.04)}
 .cw-channel-item.cw-active{background:var(--accent-bg);color:var(--accent);font-weight:600}
-.cw-unread-badge{margin-left:auto;background:var(--accent);color:#0a0e17;font-size:10px;font-weight:700;
-  padding:2px 6px;border-radius:99px;flex-shrink:0}
+.cw-channel-item.cw-unread .cw-chan-label{font-weight:700;color:var(--text)}
+.cw-channel-item.cw-active.cw-unread .cw-chan-label{color:var(--accent)}
+.cw-unread-badge{margin-left:auto;background:var(--danger);color:#fff;font-size:10px;font-weight:800;
+  min-width:18px;height:18px;padding:0 5px;border-radius:99px;flex-shrink:0;
+  display:inline-flex;align-items:center;justify-content:center}
 .cw-chan-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
 #cw-panel-right{flex:1;display:flex;flex-direction:column;min-width:0;position:relative}
 #cw-panel-header{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;
@@ -187,25 +197,45 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     }
   }
 
-  function jouerSon() {
+  function unlockAudio() {
+    if (CW._audioUnlocked) return;
+    try {
+      if (!CW._audioCtx) CW._audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (CW._audioCtx.state === 'suspended') CW._audioCtx.resume();
+      CW._audioUnlocked = true;
+    } catch (e) {}
+  }
+
+  async function jouerSon() {
     if (!CW.soundEnabled) return;
     try {
       if (!CW._audioCtx) CW._audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       const ctx = CW._audioCtx;
-      if (ctx.state === 'suspended') ctx.resume();
+      if (ctx.state === 'suspended') await ctx.resume();
+      const t = ctx.currentTime;
       const o = ctx.createOscillator();
       const g = ctx.createGain();
       o.connect(g);
       g.connect(ctx.destination);
       o.type = 'sine';
-      o.frequency.setValueAtTime(523, ctx.currentTime);
-      o.frequency.setValueAtTime(659, ctx.currentTime + 0.12);
-      g.gain.setValueAtTime(0, ctx.currentTime);
-      g.gain.linearRampToValueAtTime(0.25, ctx.currentTime + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
-      o.start(ctx.currentTime);
-      o.stop(ctx.currentTime + 0.45);
+      o.frequency.setValueAtTime(523, t);
+      o.frequency.setValueAtTime(659, t + 0.12);
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.3, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+      o.start(t);
+      o.stop(t + 0.45);
     } catch (e) {}
+  }
+
+  function shouldPlayNotifSound(total) {
+    if (!CW._chatSynced) return false;
+    const prev = CW.prevUnreadTotal || 0;
+    if (total <= prev) return false;
+    if (!CW.open) return true;
+    return CW.channels.some(
+      (c) => c.id !== CW.activeId && (Number(c.unread_count) || 0) > 0
+    );
   }
 
   async function api(path, opts) {
@@ -268,11 +298,15 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       bar.id = 'cw-bar';
       bar.className = 'cw-portal-accent';
       bar.innerHTML =
-        '<div id="cw-bar-icon">' +
+        '<div id="cw-bar-icon-wrap"><div id="cw-bar-icon">' +
         ICO_MSG +
-        '</div><div id="cw-bar-text"><div id="cw-bar-title">Messagerie <span id="cw-bar-badge"></span></div>' +
-        '<div id="cw-bar-preview">Aucun message</div></div><div id="cw-bar-dot"></div>';
-      bar.addEventListener('click', () => togglePanel());
+        '</div><span id="cw-bar-badge"></span></div>' +
+        '<div id="cw-bar-text"><div id="cw-bar-title">Messagerie</div>' +
+        '<div id="cw-bar-preview">Aucun message</div></div>';
+      bar.addEventListener('click', () => {
+        unlockAudio();
+        togglePanel();
+      });
       document.body.appendChild(bar);
     } else {
       const bub = document.createElement('button');
@@ -280,7 +314,10 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       bub.id = 'cw-bubble';
       bub.setAttribute('aria-label', 'Messagerie');
       bub.innerHTML = ICO_MSG + '<span id="cw-bubble-badge"></span>';
-      bub.addEventListener('click', () => togglePanel());
+      bub.addEventListener('click', () => {
+        unlockAudio();
+        togglePanel();
+      });
       document.body.appendChild(bub);
     }
 
@@ -293,7 +330,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       '<button type="button" class="cw-section-add cw-hidden" id="cw-add-channel" title="Nouveau canal" aria-label="Nouveau canal">' +
       ICO_PLUS +
       '</button></div><div id="cw-channels"></div>' +
-      '<div class="cw-section-row"><span class="cw-section-label">Discussion</span>' +
+      '<div class="cw-section-row cw-section-discussion"><span class="cw-section-label">Discussion</span>' +
       '<button type="button" class="cw-section-add" id="cw-add-dm" title="Nouvelle discussion" aria-label="Nouvelle discussion">' +
       ICO_PLUS +
       '</button></div><div id="cw-dms"></div></div>' +
@@ -385,9 +422,12 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
   function renderChannelItem(ch) {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'cw-channel-item' + (ch.id === CW.activeId ? ' cw-active' : '');
-    btn.dataset.id = String(ch.id);
     const unread = Number(ch.unread_count) || 0;
+    let cls = 'cw-channel-item';
+    if (ch.id === CW.activeId) cls += ' cw-active';
+    if (unread > 0) cls += ' cw-unread';
+    btn.className = cls;
+    btn.dataset.id = String(ch.id);
     btn.innerHTML =
       '<span class="cw-chan-label">' +
       escCW(ch.display_name || ch.name || 'Canal') +
@@ -439,8 +479,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
   }
 
   async function loadChannels() {
-    CW.channels = (await api('/api/chat/channels')) || [];
-    renderChannelLists();
+    await syncChatState(false);
 
     if (!CW.activeId && CW.channels.length) {
       let pick = CW.channels[0];
@@ -487,6 +526,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
 
       if (CW.pollTimer) clearInterval(CW.pollTimer);
       CW.pollTimer = setInterval(pollMessages, 5000);
+      await syncChatState(false);
     } catch (e) {
       box.innerHTML = '<div id="cw-empty-hint">Chargement impossible.</div>';
     }
@@ -509,6 +549,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       incoming.forEach((m) => {
         if (m.id <= CW.lastMsgId) return;
         if (Number(m.user_id) !== Number(CW.uid) && !played) {
+          unlockAudio();
           jouerSon();
           played = true;
         }
@@ -516,7 +557,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
         if (m.id > CW.lastMsgId) CW.lastMsgId = m.id;
       });
       if (wasBottom) scrollMessagesBottom();
-      refreshBadge();
+      await syncChatState(false);
     } catch (e) {}
   }
 
@@ -555,7 +596,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
         await pollMessages();
       }
       scrollMessagesBottom();
-      await loadChannels();
+      await syncChatState(false);
     } catch (e) {
       console.warn('[chat]', e.message);
     } finally {
@@ -563,46 +604,78 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     }
   }
 
-  async function refreshBadge() {
+  function applyGlobalBadges(total, data) {
+    const barBadge = document.getElementById('cw-bar-badge');
+    const bubBadge = document.getElementById('cw-bubble-badge');
+    const preview = document.getElementById('cw-bar-preview');
+    const label = total > 99 ? '99+' : String(total);
+
+    if (barBadge) {
+      if (total > 0) {
+        barBadge.textContent = label;
+        barBadge.style.display = 'inline-flex';
+      } else barBadge.style.display = 'none';
+    }
+    if (bubBadge) {
+      if (total > 0) {
+        bubBadge.textContent = label;
+        bubBadge.style.display = 'inline-flex';
+      } else bubBadge.style.display = 'none';
+    }
+
+    if (preview && CW.isPortal) {
+      const lm = data && data.last_message;
+      if (lm && lm.body) {
+        const who = lm.from_nom || lm.user_nom || 'Collègue';
+        const prev = who + ' : ' + String(lm.body).slice(0, 48);
+        preview.textContent = prev + (String(lm.body).length > 48 ? '…' : '');
+      } else if (total > 0) {
+        preview.textContent =
+          total + ' message' + (total > 1 ? 's' : '') + ' non lu' + (total > 1 ? 's' : '');
+      } else {
+        preview.textContent = 'Aucun message non lu';
+      }
+    }
+
+    if (window.MySifaChatBadge && typeof window.MySifaChatBadge.refresh === 'function') {
+      window.MySifaChatBadge.refresh();
+    }
+  }
+
+  async function syncChatState(playSoundOnNew) {
+    if (!CW.uid) return;
     try {
-      const data = await api('/api/chat/unread');
-      const total = Number(data.unread) || 0;
-      const barBadge = document.getElementById('cw-bar-badge');
-      const bubBadge = document.getElementById('cw-bubble-badge');
-      const dot = document.getElementById('cw-bar-dot');
-      const preview = document.getElementById('cw-bar-preview');
+      const [unreadData, channels] = await Promise.all([
+        api('/api/chat/unread'),
+        api('/api/chat/channels'),
+      ]);
+      const total = Number(unreadData.unread) || 0;
+      CW.channels = channels || [];
+      renderChannelLists();
+      applyGlobalBadges(total, unreadData);
 
-      if (barBadge) {
-        if (total > 0) {
-          barBadge.textContent = total > 99 ? '99+' : String(total);
-          barBadge.style.display = '';
-        } else barBadge.style.display = 'none';
+      if (playSoundOnNew && shouldPlayNotifSound(total)) {
+        unlockAudio();
+        await jouerSon();
       }
-      if (bubBadge) {
-        if (total > 0) {
-          bubBadge.textContent = total > 99 ? '99+' : String(total);
-          bubBadge.style.display = 'inline-flex';
-        } else bubBadge.style.display = 'none';
-      }
-      if (dot) dot.style.display = total > 0 ? '' : 'none';
-
-      if (preview && CW.isPortal) {
-        const lm = data.last_message;
-        if (lm && lm.body) {
-          const who = lm.from_nom || lm.user_nom || 'Collègue';
-          const prev = who + ' : ' + String(lm.body).slice(0, 48);
-          preview.textContent = prev + (String(lm.body).length > 48 ? '…' : '');
-        } else if (total > 0) {
-          preview.textContent = total + ' message' + (total > 1 ? 's' : '') + ' non lu' + (total > 1 ? 's' : '');
-        } else {
-          preview.textContent = 'Aucun message non lu';
-        }
-      }
-
-      if (window.MySifaChatBadge && typeof window.MySifaChatBadge.refresh === 'function') {
-        window.MySifaChatBadge.refresh();
-      }
+      CW.prevUnreadTotal = total;
+      CW._chatSynced = true;
     } catch (e) {}
+  }
+
+  function startBgPoll() {
+    if (CW.bgPollTimer) clearInterval(CW.bgPollTimer);
+    CW.bgPollTimer = setInterval(() => syncChatState(true), 5000);
+    syncChatState(false);
+  }
+
+  function stopBgPoll() {
+    if (CW.bgPollTimer) clearInterval(CW.bgPollTimer);
+    CW.bgPollTimer = null;
+  }
+
+  async function refreshBadge() {
+    await syncChatState(false);
   }
 
   async function openChannelMembers() {
@@ -839,7 +912,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       if (!CW.channels.length) await loadChannels();
       else if (CW.activeId) await selectChannel(CW.activeId);
       else await loadChannels();
-      refreshBadge();
+      syncChatState(false);
       if (CW.isPortal) {
         requestAnimationFrame(() => {
           positionPortalPanel();
@@ -900,9 +973,8 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     injectStyles();
     buildDom();
     syncAdminButtons();
-    refreshBadge();
-    if (CW.badgeTimer) clearInterval(CW.badgeTimer);
-    CW.badgeTimer = setInterval(refreshBadge, 30000);
+    document.addEventListener('click', unlockAudio, { once: false, capture: true });
+    startBgPoll();
     return true;
   };
 
@@ -915,7 +987,9 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
 
   CW.destroy = function () {
     if (CW.pollTimer) clearInterval(CW.pollTimer);
-    if (CW.badgeTimer) clearInterval(CW.badgeTimer);
+    stopBgPoll();
+    CW._chatSynced = false;
+    CW.prevUnreadTotal = 0;
     ['cw-bar', 'cw-bubble', 'cw-panel', 'cw-styles'].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.remove();

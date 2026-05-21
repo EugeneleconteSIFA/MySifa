@@ -21,6 +21,8 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/support_widget.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
+<link rel="stylesheet" href="/static/mysifa_ai_chat.css">
+<link rel="stylesheet" href="/static/mysifa_dock.css">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -551,134 +553,6 @@ tr.matiere-group td{padding:7px 16px;background:var(--card);font-weight:600;font
 .ec-meta{display:flex;gap:12px;margin-top:6px;font-size:11px;color:var(--text2)}
 .section-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin:20px 0 10px}
 .toast{position:fixed;bottom:max(24px,env(safe-area-inset-bottom,0px));right:max(24px,env(safe-area-inset-right,0px));left:auto;z-index:9999;max-width:min(420px,calc(100vw - 32px));background:var(--card);border-radius:10px;padding:12px 20px;display:flex;align-items:center;gap:10px;box-shadow:0 8px 32px rgba(0,0,0,.4);animation:fadeUp .3s ease-out}
-/* ── Calculette flottante ── */
-.calc-fab{position:fixed;bottom:max(24px,env(safe-area-inset-bottom,0px));right:max(24px,env(safe-area-inset-right,0px));width:52px;height:52px;border-radius:50%;background:var(--accent);color:var(--bg);border:none;font-size:22px;cursor:pointer;z-index:8000;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 18px rgba(0,0,0,.35);transition:transform .15s,filter .15s}
-.calc-fab:hover{filter:brightness(1.1);transform:scale(1.07)}
-.calc-fab:active{transform:scale(.96)}
-.calc-panel{position:fixed;bottom:86px;right:max(20px,env(safe-area-inset-right,0px));width:260px;background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.45);z-index:7999;overflow:hidden;animation:fadeUp .2s ease-out}
-.calc-display{background:var(--bg);padding:10px 14px 6px;text-align:right}
-.calc-expr{font-size:11px;color:var(--muted);min-height:16px;font-family:monospace;word-break:break-all}
-.calc-val{font-size:26px;font-weight:700;color:var(--text);font-family:monospace;line-height:1.2;word-break:break-all}
-.calc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border)}
-.calc-key{background:var(--card);border:none;padding:0;height:52px;font-size:17px;font-weight:600;color:var(--text);cursor:pointer;font-family:inherit;transition:background .1s}
-.calc-key:hover{background:var(--accent-bg)}
-.calc-key:active{background:var(--border)}
-.calc-key.op{color:var(--accent)}
-.calc-key.eq{background:var(--accent);color:var(--bg)}
-.calc-key.eq:hover{filter:brightness(1.08)}
-.calc-key.fn{color:var(--text2);font-size:14px}
-@media(max-width:480px){.calc-panel{right:12px;width:calc(100vw - 24px);bottom:80px}}
-/* ── Agent IA — Widget chat ─────────────────────────────── */
-#ai-chat-root{display:none}
-#ai-chat-root.ai-on-portal #ai-chat-btn{right:max(24px,env(safe-area-inset-right,0px))}
-#ai-chat-root.ai-on-portal #ai-chat-panel{right:max(24px,env(safe-area-inset-right,0px))}
-#ai-chat-btn{
-  position:fixed;
-  bottom:max(24px,env(safe-area-inset-bottom,0px));
-  right:max(84px,calc(env(safe-area-inset-right,0px) + 84px));
-  z-index:8003;
-  width:48px;height:48px;border-radius:50%;
-  background:var(--accent);border:none;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;
-  box-shadow:0 4px 16px rgba(34,211,238,0.35);
-  transition:transform .18s,box-shadow .18s;
-}
-#ai-chat-btn:hover{transform:scale(1.08);box-shadow:0 6px 24px rgba(34,211,238,0.5)}
-#ai-chat-btn svg{display:block;color:var(--bg)}
-#ai-chat-panel{
-  position:fixed;bottom:84px;right:84px;z-index:8002;
-  width:360px;height:500px;
-  background:var(--card);border:1px solid var(--border);border-radius:14px;
-  box-shadow:0 12px 48px rgba(0,0,0,0.5);
-  display:flex;flex-direction:column;
-  transform-origin:bottom right;
-  transform:scale(0.9) translateY(10px);opacity:0;
-  visibility:hidden;pointer-events:none;
-  transition:transform .2s cubic-bezier(.34,1.56,.64,1),opacity .15s,visibility 0s linear .15s;
-  overflow:hidden;
-}
-#ai-chat-panel.open{
-  transform:scale(1) translateY(0);opacity:1;visibility:visible;pointer-events:auto;
-  z-index:8004;
-  transition:transform .2s cubic-bezier(.34,1.56,.64,1),opacity .15s,visibility 0s;
-}
-#ai-chat-header{
-  padding:12px 16px;background:var(--card);
-  border-bottom:1px solid var(--border);
-  display:flex;align-items:center;gap:10px;flex-shrink:0;
-}
-#ai-chat-header .ai-dot{
-  width:8px;height:8px;border-radius:50%;background:var(--accent);
-  box-shadow:0 0 6px var(--accent);animation:ai-pulse 2s infinite;
-}
-@keyframes ai-pulse{0%,100%{opacity:1}50%{opacity:.3}}
-#ai-chat-header .ai-title{flex:1;font-size:13px;font-weight:700;color:var(--text)}
-#ai-chat-header .ai-sub{font-size:10px;color:var(--muted);display:block;font-weight:400}
-#ai-chat-close{
-  background:none;border:none;cursor:pointer;color:var(--muted);
-  padding:4px;border-radius:6px;display:flex;align-items:center;transition:color .15s;
-}
-#ai-chat-close:hover{color:var(--text)}
-#ai-messages{
-  flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;
-  gap:8px;scrollbar-width:thin;scrollbar-color:var(--border) transparent;
-}
-.ai-msg{display:flex;flex-direction:column;max-width:86%}
-.ai-msg.bot{align-self:flex-start}
-.ai-msg.user{align-self:flex-end}
-.ai-label{font-size:10px;color:var(--muted);margin-bottom:3px}
-.ai-msg.user .ai-label{text-align:right}
-.ai-bubble{
-  padding:8px 12px;border-radius:10px;font-size:13px;
-  line-height:1.5;word-break:break-word;
-}
-.ai-msg.bot .ai-bubble{background:var(--bg);border:1px solid var(--border);color:var(--text);border-bottom-left-radius:3px}
-.ai-msg.user .ai-bubble{background:var(--accent);color:var(--bg);font-weight:600;border-bottom-right-radius:3px}
-.ai-status{display:inline-block;font-size:10px;padding:2px 7px;border-radius:20px;margin-top:4px;font-weight:600}
-.ai-status.ok{background:rgba(52,211,153,.15);color:var(--ok);border:1px solid var(--ok)}
-.ai-status.err{background:rgba(248,113,113,.15);color:var(--danger);border:1px solid var(--danger)}
-.ai-status.info{background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent)}
-#ai-typing{
-  display:none;align-self:flex-start;
-  padding:8px 12px;background:var(--bg);border:1px solid var(--border);
-  border-radius:10px;border-bottom-left-radius:3px;
-  gap:4px;align-items:center;
-}
-#ai-typing.visible{display:flex}
-.ai-dot-t{width:5px;height:5px;border-radius:50%;background:var(--muted);animation:ai-bounce 1.2s infinite}
-.ai-dot-t:nth-child(2){animation-delay:.2s}.ai-dot-t:nth-child(3){animation-delay:.4s}
-@keyframes ai-bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-4px)}}
-#ai-input-area{
-  padding:10px 12px;border-top:1px solid var(--border);
-  display:flex;gap:8px;align-items:flex-end;flex-shrink:0;background:var(--card);
-}
-#ai-input{
-  flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;
-  color:var(--text);font-size:13px;font-family:inherit;padding:8px 12px;
-  resize:none;max-height:80px;min-height:36px;outline:none;line-height:1.4;
-  transition:border-color .15s;
-}
-#ai-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.1)}
-#ai-send{
-  width:36px;height:36px;border-radius:8px;background:var(--accent);
-  border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;
-  flex-shrink:0;transition:filter .15s;
-}
-#ai-send:hover{filter:brightness(1.1)}
-#ai-send:disabled{opacity:.4;cursor:not-allowed}
-#ai-send svg{color:var(--bg)}
-.ai-confirm-actions{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
-.ai-confirm-btn{
-  padding:6px 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;
-  border:1px solid var(--border);background:var(--bg);color:var(--text2);
-  font-family:inherit;transition:filter .15s,border-color .15s;
-}
-.ai-confirm-btn:hover{filter:brightness(1.05)}
-.ai-confirm-btn.primary{background:var(--accent);color:var(--bg);border-color:var(--accent)}
-@media (max-width:640px){
-  #ai-chat-btn{right:max(24px,env(safe-area-inset-right,0px));bottom:84px}
-  #ai-chat-panel{width:calc(100vw - 24px);right:12px;bottom:140px}
-}
 @media (max-width:480px){
   .toast{left:16px;right:16px;bottom:max(16px,env(safe-area-inset-bottom,0px));max-width:none}
 }
@@ -1284,7 +1158,9 @@ body.light .stock-empl-suggest-add:hover{background:rgba(124,58,237,.2);color:#1
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__="__INITIAL_APP_VALUE__";</script>
 <script src="/static/mysifa_dock.js"></script>
+<script src="/static/mysifa_calc.js"></script>
 <script src="/static/chat_widget.js"></script>
+<script src="/static/mysifa_ai_chat.js"></script>
 <script>
 const API=window.location.origin;
 const INITIAL_APP="__INITIAL_APP_VALUE__";
@@ -10336,87 +10212,6 @@ function renderSuivi(){
   return h('div',null,...parts);
 }
 
-// ── Calculette flottante (MyStock + MyExpé) ──────────────────────
-(function(){
-  let _open = false, _expr = '', _val = '0', _justEq = false;
-  const KEYS = [
-    ['C','⌫','%','÷'],
-    ['7','8','9','×'],
-    ['4','5','6','−'],
-    ['1','2','3','+'],
-    ['0','.','='],
-  ];
-  function _calc_press(k){
-    if(k==='C'){_expr='';_val='0';_justEq=false;return;}
-    if(k==='⌫'){_val=_val.length>1?_val.slice(0,-1):'0';return;}
-    if(k==='±'){_val=_val.startsWith('-')?_val.slice(1):'-'+_val;return;}
-    if(k==='%'){try{_val=String(parseFloat(_val)/100);}catch(e){}return;}
-    if(k==='='){
-      try{
-        let expr=(_justEq?_val:_expr+_val)
-          .replace(/÷/g,'/').replace(/×/g,'*').replace(/−/g,'-');
-        // eslint-disable-next-line no-new-func
-        let r=Function('"use strict";return ('+expr+')')();
-        _expr=expr+'=';_val=String(Math.round(r*1e10)/1e10);_justEq=true;
-      }catch(e){_val='Err';_expr='';_justEq=false;}
-      return;
-    }
-    if(['+','-','×','÷','−'].includes(k)){
-      if(_justEq){_expr=_val+k;_val='0';_justEq=false;return;}
-      _expr+=_val+k;_val='0';return;
-    }
-    if(_justEq){_expr='';_justEq=false;}
-    if(k==='.'){if(_val.includes('.'))return;_val+='.';return;}
-    _val=(_val==='0'||_val==='-0')?(_val.startsWith('-')?'-'+k:k):_val+k;
-  }
-  function _calc_render(){
-    const fab=document.getElementById('_calc_fab');
-    if(!fab)return;
-    const panel=document.getElementById('_calc_panel');
-    if(!panel)return;
-    panel.style.display=_open?'':'none';
-    panel.querySelector('._cv').textContent=_val;
-    panel.querySelector('._ce').textContent=_expr;
-  }
-  function _calc_mount(){
-    if(document.getElementById('_calc_fab'))return;
-    const fab=document.createElement('button');
-    fab.id='_calc_fab';fab.className='calc-fab';fab.title='Calculette';
-    fab.innerHTML='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><circle cx="8.5" cy="11" r=".8" fill="currentColor" stroke="none"/><circle cx="12" cy="11" r=".8" fill="currentColor" stroke="none"/><circle cx="15.5" cy="11" r=".8" fill="currentColor" stroke="none"/><circle cx="8.5" cy="15" r=".8" fill="currentColor" stroke="none"/><circle cx="12" cy="15" r=".8" fill="currentColor" stroke="none"/><circle cx="15.5" cy="15" r=".8" fill="currentColor" stroke="none"/><line x1="8" y1="19" x2="16" y2="19"/></svg>';
-    fab.onclick=()=>{_open=!_open;_calc_render();};
-    document.body.appendChild(fab);
-    const panel=document.createElement('div');
-    panel.id='_calc_panel';panel.className='calc-panel';panel.style.display='none';
-    const disp=document.createElement('div');disp.className='calc-display';
-    const ce=document.createElement('div');ce.className='calc-expr _ce';
-    const cv=document.createElement('div');cv.className='calc-val _cv';cv.textContent='0';
-    disp.append(ce,cv);panel.appendChild(disp);
-    const grid=document.createElement('div');grid.className='calc-grid';
-    KEYS.forEach(row=>row.forEach(k=>{
-      const btn=document.createElement('button');
-      btn.className='calc-key'+(k==='='?' eq':['+','-','×','÷','−'].includes(k)?' op':['C','⌫','±','%'].includes(k)?' fn':'');
-      btn.textContent=k;
-      if(k==='0'){btn.style.gridColumn='span 2';}
-      btn.onclick=()=>{_calc_press(k);_calc_render();};
-      grid.appendChild(btn);
-    }));
-    panel.appendChild(grid);document.body.appendChild(panel);
-    // keyboard support
-    document.addEventListener('keydown',e=>{
-      if(!_open)return;
-      if(e.key>='0'&&e.key<='9'){_calc_press(e.key);_calc_render();}
-      else if(e.key==='.'){_calc_press('.');_calc_render();}
-      else if(e.key==='+'||e.key==='-'){_calc_press(e.key==='+'?'+':'−');_calc_render();}
-      else if(e.key==='*'){_calc_press('×');_calc_render();}
-      else if(e.key==='/'){e.preventDefault();_calc_press('÷');_calc_render();}
-      else if(e.key==='Enter'||e.key==='='){_calc_press('=');_calc_render();}
-      else if(e.key==='Escape'){_open=false;_calc_render();}
-      else if(e.key==='Backspace'){_calc_press('⌫');_calc_render();}
-    });
-  }
-  window._calc_mount=_calc_mount;
-})();
-
 // ── Render ──────────────────────────────────────────────────────
 function render(){
   const _dfAe = document.activeElement;
@@ -10508,11 +10303,8 @@ function render(){
   // Calculette flottante (MyStock + MyProd + MyCompta + MyExpé)
   if(S.app==='stock'||S.app==='prod'||S.app==='compta'||S.app==='expe'){
     window._calc_mount && window._calc_mount();
-  } else {
-    const fab=document.getElementById('_calc_fab');
-    const panel=document.getElementById('_calc_panel');
-    if(fab)fab.remove();
-    if(panel)panel.remove();
+  } else if(window._calc_unmount){
+    window._calc_unmount();
   }
   if(window.MySifaDock && typeof window.MySifaDock.layout==='function') window.MySifaDock.layout();
 
@@ -10605,185 +10397,6 @@ checkAuth();
     </div>
   </div>
 </div>
-<script>
-(function(){
-  'use strict';
-  let bound = false, greeted = false, open = false, loading = false;
-  const history = [];
-  const AI_ROLES = ['superadmin', 'direction', 'administration'];
-
-  window.initAiChatWidget = function(){
-    const user = window.__MYSIFA_USER__ || {};
-    const app = window.__MYSIFA_APP__;
-    const root = document.getElementById('ai-chat-root');
-    if(!root) return;
-
-    const show = AI_ROLES.indexOf(user.role) >= 0 && app && app !== 'login';
-    root.classList.toggle('ai-on-portal', app === 'portal');
-    root.style.display = show ? 'block' : 'none';
-    if(!show){
-      open = false;
-      const panel = document.getElementById('ai-chat-panel');
-      if(panel) panel.classList.remove('open');
-      if(window.MySifaDock && typeof window.MySifaDock.layout==='function') window.MySifaDock.layout();
-      return;
-    }
-
-    const btn = document.getElementById('ai-chat-btn');
-    const panel = document.getElementById('ai-chat-panel');
-    const closeBtn = document.getElementById('ai-chat-close');
-    const msgs = document.getElementById('ai-messages');
-    const input = document.getElementById('ai-input');
-    const send = document.getElementById('ai-send');
-    const typing = document.getElementById('ai-typing');
-    if(!btn || !panel || !closeBtn || !msgs || !input || !send || !typing) return;
-
-    if(!bound){
-      bound = true;
-      btn.addEventListener('click', function(e){ e.stopPropagation(); toggle(); });
-      closeBtn.addEventListener('click', function(e){ e.stopPropagation(); toggle(); });
-      document.addEventListener('click', onDocClick);
-      input.addEventListener('keydown', onKey);
-      input.addEventListener('input', onInput);
-      send.addEventListener('click', handleSend);
-    }
-
-    if(!greeted){
-      greeted = true;
-      const greetings = {
-        fabrication: 'Production du jour, état des machines — posez vos questions.',
-        logistique: 'Stock, emplacements, expéditions à venir — posez vos questions.',
-        direction: 'KPIs, synthèse production, planning, stock — posez vos questions.',
-        administration: 'Congés, paie, expéditions — posez vos questions.',
-      };
-      addBot(greetings[user.role] || 'Posez vos questions sur MySifa.', null);
-    }
-
-    function toggle(){
-      open = !open;
-      panel.classList.toggle('open', open);
-      if(open) setTimeout(function(){ input.focus(); }, 200);
-      if(window.MySifaDock && typeof window.MySifaDock.layout==='function') window.MySifaDock.layout();
-    }
-    function onDocClick(e){
-      if(!open) return;
-      if(panel.contains(e.target) || btn.contains(e.target)) return;
-      open = false;
-      panel.classList.remove('open');
-    }
-    function onKey(e){
-      if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); handleSend(); }
-    }
-    function onInput(){
-      input.style.height = 'auto';
-      input.style.height = Math.min(input.scrollHeight, 80) + 'px';
-    }
-    function fmt(t){
-      return String(t || '').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
-    }
-    function scrollEnd(){
-      setTimeout(function(){ msgs.scrollTop = msgs.scrollHeight; }, 30);
-    }
-    function parseConfirmAction(text){
-      const raw = String(text || '');
-      const m = raw.match(/\[CONFIRM_ACTION:(\{[\s\S]*\})\]/);
-      if(!m) return { clean: raw, payload: null };
-      try{
-        return { clean: raw.replace(m[0], '').trim(), payload: JSON.parse(m[1]) };
-      }catch(e){
-        return { clean: raw, payload: null };
-      }
-    }
-    function sendConfirm(){
-      input.value = 'oui, confirme';
-      handleSend();
-    }
-    function addBot(text, status){
-      const parsed = parseConfirmAction(text);
-      const w = document.createElement('div');
-      w.className = 'ai-msg bot';
-      w.innerHTML = '<div class="ai-label">MySifa</div><div class="ai-bubble">' + fmt(parsed.clean) + '</div>';
-      if(parsed.payload){
-        if(typeof S !== 'undefined') S.pendingAction = parsed.payload;
-        const actions = document.createElement('div');
-        actions.className = 'ai-confirm-actions';
-        const btnOk = document.createElement('button');
-        btnOk.type = 'button';
-        btnOk.className = 'ai-confirm-btn primary';
-        btnOk.textContent = 'Confirmer';
-        btnOk.addEventListener('click', function(){
-          if(typeof S !== 'undefined') S.pendingAction = parsed.payload;
-          sendConfirm();
-        });
-        const btnNo = document.createElement('button');
-        btnNo.type = 'button';
-        btnNo.className = 'ai-confirm-btn';
-        btnNo.textContent = 'Annuler';
-        btnNo.addEventListener('click', function(){
-          if(typeof S !== 'undefined') S.pendingAction = null;
-          addBot('Action annulée.', 'info');
-        });
-        actions.appendChild(btnOk);
-        actions.appendChild(btnNo);
-        w.appendChild(actions);
-      }
-      if(status){
-        const s = document.createElement('span');
-        s.className = 'ai-status ' + status;
-        s.textContent = status === 'ok' ? 'Action effectuée' : status === 'err' ? 'Erreur' : 'Info';
-        w.appendChild(s);
-      }
-      msgs.appendChild(w);
-      scrollEnd();
-    }
-    function addUser(text){
-      const w = document.createElement('div');
-      w.className = 'ai-msg user';
-      w.innerHTML = '<div class="ai-label">Vous</div><div class="ai-bubble">' + String(text).replace(/</g, '&lt;') + '</div>';
-      msgs.appendChild(w);
-      scrollEnd();
-    }
-    function setLoading(v){
-      loading = v;
-      send.disabled = v;
-      input.disabled = v;
-      typing.classList.toggle('visible', v);
-      if(v) scrollEnd();
-    }
-    async function handleSend(){
-      const text = input.value.trim();
-      if(!text || loading) return;
-      addUser(text);
-      history.push({ role: 'user', content: text });
-      input.value = '';
-      input.style.height = 'auto';
-      setLoading(true);
-      try{
-        const res = await fetch('/api/ai/chat', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: history, module: app || null }),
-        });
-        const data = await res.json().catch(function(){ return {}; });
-        if(!res.ok){
-          const detail = data.detail;
-          const msg = typeof detail === 'string' ? detail : (Array.isArray(detail) ? detail.map(function(d){ return d.msg || d; }).join(', ') : ('HTTP ' + res.status));
-          throw new Error(msg);
-        }
-        addBot(data.reply || 'OK.', data.status || null);
-        history.push({ role: 'assistant', content: data.reply || '' });
-      } catch(err){
-        addBot('Erreur de connexion. Réessayez dans un instant.', 'err');
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    if(window.MySifaDock && typeof window.MySifaDock.layout==='function') window.MySifaDock.layout();
-  };
-})();
-</script>
 </body>
 </html>"""
 

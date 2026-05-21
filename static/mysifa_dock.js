@@ -6,6 +6,7 @@
   'use strict';
 
   const GAP = 12;
+  const FAB_SIZE = 48;
   const SHADOW_FAB = '0 4px 16px rgba(34,211,238,0.35)';
   const SHADOW_PANEL = '0 12px 48px rgba(0,0,0,0.5)';
 
@@ -53,21 +54,22 @@
 
     if (hasCalc) {
       applyFab(calcFab, safeRight(0), safeBottom(0));
-      offsetRight = 52 + GAP;
-      bottomRowH = 52;
+      if (calcFab) calcFab.style.boxShadow = SHADOW_FAB;
+      offsetRight = FAB_SIZE + GAP;
+      bottomRowH = FAB_SIZE;
       if (calcPanel) {
         calcPanel.style.right = safeRight(0);
-        calcPanel.style.bottom = safeBottom(62);
+        calcPanel.style.bottom = safeBottom(FAB_SIZE + 14);
         calcPanel.style.boxShadow = SHADOW_PANEL;
       }
     }
 
     if (hasAi) {
       applyFab(aiBtn, safeRight(offsetRight), safeBottom(0));
-      if (!hasCalc) bottomRowH = 48;
-      else bottomRowH = Math.max(bottomRowH, 48);
+      if (!hasCalc) bottomRowH = FAB_SIZE;
+      else bottomRowH = Math.max(bottomRowH, FAB_SIZE);
       const aiCol = offsetRight;
-      offsetRight += 48 + GAP;
+      offsetRight += FAB_SIZE + GAP;
       if (aiPanel) {
         const onPortal = aiRoot && aiRoot.classList.contains('ai-on-portal');
         aiPanel.style.right = safeRight(onPortal && !hasCalc ? 0 : aiCol);
@@ -78,14 +80,15 @@
 
     if (hasChatBubble) {
       let chatCol = 0;
-      if (hasCalc && hasAi) chatCol = 52 + GAP;
-      else if (hasCalc) chatCol = 52 + GAP;
+      if (hasCalc && hasAi) chatCol = FAB_SIZE + GAP;
+      else if (hasCalc) chatCol = FAB_SIZE + GAP;
       else if (hasAi) chatCol = 0;
       const stackH = bottomRowH > 0 ? bottomRowH + GAP : 0;
       applyFab(chatBubble, safeRight(chatCol), safeBottom(stackH));
+      if (chatBubble) chatBubble.style.boxShadow = SHADOW_FAB;
       if (chatPanel && !chatPanel.classList.contains('cw-hidden')) {
         chatPanel.style.right = safeRight(chatCol);
-        chatPanel.style.bottom = safeBottom(stackH + 46 + GAP);
+        chatPanel.style.bottom = safeBottom(stackH + FAB_SIZE + GAP);
         chatPanel.style.boxShadow = SHADOW_PANEL;
       }
     }
@@ -95,10 +98,10 @@
         chatPanel.style.boxShadow = '';
       } else if (hasChatBubble) {
         const stackH =
-          (bottomRowH > 0 ? bottomRowH + GAP : 0) + 46 + GAP;
+          (bottomRowH > 0 ? bottomRowH + GAP : 0) + FAB_SIZE + GAP;
         let chatCol = 0;
-        if (hasCalc && hasAi) chatCol = 52 + GAP;
-        else if (hasCalc) chatCol = 52 + GAP;
+        if (hasCalc && hasAi) chatCol = FAB_SIZE + GAP;
+        else if (hasCalc) chatCol = FAB_SIZE + GAP;
         chatPanel.style.right = safeRight(chatCol);
         chatPanel.style.bottom = safeBottom(stackH);
         chatPanel.style.boxShadow = SHADOW_PANEL;
