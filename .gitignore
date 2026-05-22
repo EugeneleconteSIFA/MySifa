@@ -25,3 +25,4 @@ myprod-widget/dist/
 # Env / secrets
 .env
 .env.*
+!.env.example

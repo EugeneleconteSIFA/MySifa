@@ -378,38 +378,58 @@ body.light .field-input.empl-upper::placeholder{
 
 /* ── Stats dashboard ── */
 .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px}
-.dash-quick-actions{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:24px}
-.dash-quick-btn{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 16px;
-  font-size:13px;font-weight:600;color:var(--text);cursor:pointer;font-family:inherit;
-  transition:border-color .15s,background .15s}
-.dash-quick-btn:hover{border-color:var(--accent);background:var(--accent-bg)}
-@media(max-width:640px){.dash-quick-actions{flex-direction:column}.dash-quick-btn{width:100%}}
-.dash-section{border-top:1px solid var(--border);padding-top:24px;margin-top:24px}
-.dash-section-title{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;
-  color:var(--text);margin-bottom:14px}
-.dash-alert-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-@media(max-width:640px){.dash-alert-grid{grid-template-columns:1fr}}
-.dash-alert-block{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
-.dash-alert-block h4{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:0 0 10px}
-.dash-alert-ok{font-size:13px;color:var(--success);line-height:1.5}
-.dash-alert-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);
-  cursor:pointer;font-size:13px;color:var(--text)}
+.dash-page{display:flex;flex-direction:column;gap:0;padding-bottom:8px}
+.dash-title{font-size:22px;font-weight:800;letter-spacing:-.3px;color:var(--text);margin:0 0 20px}
+.dash-kpi-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:20px}
+.dash-kpi-grid .stat-card{display:flex;flex-direction:column;justify-content:center;min-height:88px}
+@media(max-width:900px){.dash-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:480px){.dash-kpi-grid{grid-template-columns:1fr}}
+.dash-quick-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:20px}
+.dash-quick-card-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:0 0 12px}
+.dash-quick-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.dash-quick-btn{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;
+  font-size:12px;font-weight:600;color:var(--text);cursor:pointer;font-family:inherit;text-align:left;
+  transition:border-color .15s,background .15s;line-height:1.35}
+.dash-quick-btn:hover{border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
+@media(max-width:768px){.dash-quick-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:480px){.dash-quick-grid{grid-template-columns:1fr}}
+.dash-section{border-top:1px solid var(--border);padding-top:22px;margin-top:22px}
+.dash-section-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;
+  color:var(--muted);margin:0 0 14px}
+.dash-alert-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:stretch}
+@media(max-width:700px){.dash-alert-grid{grid-template-columns:1fr}}
+.dash-alert-block{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;
+  display:flex;flex-direction:column;min-height:100px}
+.dash-alert-block h4{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:0 0 12px;flex-shrink:0}
+.dash-alert-rows{flex:1;min-height:0}
+.dash-alert-ok{font-size:13px;color:var(--success);line-height:1.55;padding:8px 0}
+.dash-alert-row{display:flex;align-items:center;gap:10px;padding:10px 8px;margin:0 -8px;border-bottom:1px solid var(--border);
+  cursor:pointer;font-size:13px;color:var(--text);border-radius:8px;transition:background .12s}
 .dash-alert-row:last-child{border-bottom:none}
-.dash-alert-row:hover{background:var(--accent-bg);border-radius:8px}
+.dash-alert-row:hover{background:var(--accent-bg)}
 .dash-alert-main{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dash-alert-qty{margin-left:auto;white-space:nowrap;color:var(--text2);font-size:12px;flex-shrink:0}
+.dash-alert-qty{margin-left:auto;white-space:nowrap;color:var(--text2);font-size:11px;flex-shrink:0;text-align:right}
 .dash-mp-cat{font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;text-transform:uppercase;flex-shrink:0}
 .dash-mp-cat-mandrin{background:rgba(124,58,237,.15);color:#7c3aed}
 .dash-mp-cat-palette{background:rgba(8,145,178,.15);color:#0891b2}
 .dash-mp-cat-adhesif{background:rgba(217,119,6,.15);color:#d97706}
 .dash-mp-cat-carton{background:rgba(5,150,105,.15);color:#059669}
+.dash-act-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
 .dash-act-list{display:flex;flex-direction:column}
-.dash-act-row{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--border);
-  font-size:13px;flex-wrap:wrap;color:var(--text)}
+.dash-act-row{display:grid;grid-template-columns:auto auto 1fr auto;align-items:center;gap:10px 12px;
+  padding:12px 16px;border-bottom:1px solid var(--border);font-size:13px;color:var(--text)}
 .dash-act-row:last-child{border-bottom:none}
-.dash-act-main{flex:1;min-width:0}
-.dash-act-meta{color:var(--muted);font-size:12px;white-space:nowrap}
-.dash-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;letter-spacing:.3px;flex-shrink:0}
+.dash-act-row:hover{background:var(--accent-bg)}
+.dash-act-main{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+.dash-act-meta{color:var(--muted);font-size:12px;white-space:nowrap;text-align:right}
+.dash-act-empty{padding:28px 16px;text-align:center;color:var(--muted);font-size:13px}
+@media(max-width:640px){
+  .dash-act-row{grid-template-columns:auto 1fr;grid-template-rows:auto auto;gap:6px 8px;padding:12px 14px}
+  .dash-act-row .dash-badge:nth-child(2){grid-column:1}
+  .dash-act-main{grid-column:1/-1;white-space:normal}
+  .dash-act-meta{grid-column:1/-1;text-align:left;white-space:normal}
+}
+.dash-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;letter-spacing:.3px;flex-shrink:0;white-space:nowrap}
 .dash-badge-stock-mp{background:rgba(124,58,237,.12);color:#7c3aed}
 .dash-badge-stock-pf{background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent)}
 .dash-badge-mvt-entree{background:color-mix(in srgb,var(--success) 15%,transparent);color:var(--success)}
@@ -480,51 +500,82 @@ body.light .field-input.empl-upper::placeholder{
 }
 /* ── Historique mouvements ── */
 .hist-page{padding:0 0 24px}
-.hist-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}
-.hist-head h2{margin:0}
-.hist-filters-toggle{display:none;width:100%;margin-bottom:10px}
-.hist-filters-bar{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:16px}
-.hist-filters-bar.sticky{position:sticky;top:0;z-index:20}
-.hist-filters-grid{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
-.hist-filter-field{display:flex;flex-direction:column;gap:6px;min-width:140px;flex:1}
+.hist-title{font-size:22px;font-weight:800;letter-spacing:-.3px;color:var(--text);margin:0 0 4px}
+.hist-subtitle{font-size:12px;color:var(--muted);margin:0}
+.hist-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+.hist-head-actions{display:flex;gap:8px;flex-shrink:0}
+.hist-filters-toggle{display:none;width:100%;justify-content:center;margin-bottom:10px}
+.hist-filters-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:18px}
+.hist-filters-card.sticky{position:sticky;top:0;z-index:20;box-shadow:0 4px 20px rgba(0,0,0,.12)}
+body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
+.hist-filters-card-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:0 0 12px}
+.hist-filters-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;align-items:end}
+.hist-filter-field{display:flex;flex-direction:column;gap:6px;min-width:0}
 .hist-filter-field label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
 .hist-filter-field input,.hist-filter-field select{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;
   padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit}
 .hist-filter-field input:focus,.hist-filter-field select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
 .hist-filter-field select:disabled{opacity:.55;cursor:not-allowed}
-.hist-filters-actions{display:flex;gap:8px;flex-wrap:wrap}
-.hist-loading{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:48px 16px;color:var(--muted);font-size:13px}
+.hist-filters-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)}
+.hist-loading{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:56px 16px;
+  color:var(--muted);font-size:13px;background:var(--card);border:1px solid var(--border);border-radius:12px}
 .hist-spinner{width:28px;height:28px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:hist-spin .7s linear infinite}
 @keyframes hist-spin{to{transform:rotate(360deg)}}
-.hist-empty{text-align:center;color:var(--muted);font-size:13px;padding:40px 16px}
-.hist-table-wrap{display:block;overflow-x:auto}
-.hist-table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:13px}
-.hist-table thead th{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);
-  border-bottom:2px solid var(--border);padding:10px 8px;text-align:left;font-weight:600}
-.hist-table tbody td{padding:10px 8px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:top;overflow:hidden;text-overflow:ellipsis}
+.hist-empty{text-align:center;color:var(--muted);font-size:13px;padding:48px 20px;background:var(--card);
+  border:1px solid var(--border);border-radius:12px;line-height:1.5}
+.hist-results-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.hist-results-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;
+  border-bottom:1px solid var(--border);background:var(--bg)}
+.hist-results-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.hist-count{font-size:12px;font-weight:600;color:var(--text2)}
+.hist-table-wrap{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.hist-table{width:100%;min-width:880px;border-collapse:collapse;font-size:13px}
+.hist-table thead th{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);
+  background:var(--bg);border-bottom:1px solid var(--border);padding:11px 14px;text-align:left;font-weight:600;white-space:nowrap}
+.hist-table tbody td{padding:12px 14px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle}
+.hist-table tbody tr:last-child td{border-bottom:none}
 .hist-table tbody tr:hover{background:var(--accent-bg)}
-.hist-ref{font-family:ui-monospace,monospace;font-size:12px;font-weight:600}
-.hist-muted{color:var(--muted);font-size:12px}
-.hist-badge{font-size:10px;font-weight:700;border-radius:4px;padding:2px 6px;display:inline-block;white-space:nowrap}
+.hist-cell-badges{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.hist-ref{font-family:ui-monospace,monospace;font-size:12px;font-weight:700;color:var(--text)}
+.hist-des{color:var(--text2);font-size:13px}
+.hist-muted{color:var(--muted);font-size:12px;white-space:nowrap}
+.hist-qte{font-weight:700;font-family:ui-monospace,monospace;font-size:13px}
+.hist-qte-entree{color:var(--success)}
+.hist-qte-sortie{color:var(--danger)}
+.hist-op{font-size:12px;color:var(--text2)}
+.hist-note-cell{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hist-badge{font-size:10px;font-weight:700;border-radius:6px;padding:2px 8px;display:inline-block;white-space:nowrap;line-height:1.4}
 .hist-badge-stock-mp{background:rgba(124,58,237,.12);color:#7c3aed}
-.hist-badge-stock-pf{background:rgba(34,211,238,.12);color:var(--accent)}
-.hist-badge-mvt-entree,.hist-badge-mvt-inventaire{background:rgba(52,211,153,.15);color:var(--success);font-size:11px;font-weight:600;padding:2px 8px}
-.hist-badge-mvt-sortie{background:rgba(248,113,113,.15);color:var(--danger);font-size:11px;font-weight:600;padding:2px 8px}
-.hist-badge-mvt-ajustement{background:rgba(251,191,36,.15);color:var(--warn);font-size:11px;font-weight:600;padding:2px 8px}
-.hist-badge-mvt-transfert{background:rgba(34,211,238,.15);color:var(--accent);font-size:11px;font-weight:600;padding:2px 8px}
-.hist-cards{display:none;flex-direction:column;gap:12px}
-.hist-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
-.hist-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.hist-badge-stock-pf{background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent)}
+.hist-badge-mvt-entree,.hist-badge-mvt-inventaire{background:color-mix(in srgb,var(--success) 15%,transparent);color:var(--success)}
+.hist-badge-mvt-sortie{background:color-mix(in srgb,var(--danger) 15%,transparent);color:var(--danger)}
+.hist-badge-mvt-ajustement{background:color-mix(in srgb,var(--warn) 15%,transparent);color:var(--warn)}
+.hist-badge-mvt-transfert{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
+.hist-cards{display:none;flex-direction:column;gap:0}
+.hist-card{padding:14px 16px;border-bottom:1px solid var(--border)}
+.hist-card:last-child{border-bottom:none}
+.hist-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
 .hist-card-badges{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
-.hist-card-date{font-size:12px;color:var(--muted);white-space:nowrap}
-.hist-card-refline{font-family:ui-monospace,monospace;font-size:13px;font-weight:700;color:var(--text);margin-bottom:8px}
-.hist-card-meta{font-size:13px;color:var(--text2);padding-top:8px;border-top:1px solid var(--border)}
-.hist-card-note{font-size:12px;color:var(--muted);margin-top:6px}
+.hist-card-date{font-size:11px;color:var(--muted);white-space:nowrap}
+.hist-card-ref{font-family:ui-monospace,monospace;font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px}
+.hist-card-des{font-size:12px;color:var(--text2);line-height:1.4;margin-bottom:10px}
+.hist-card-stats{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:12px}
+.hist-card-stats dt{color:var(--muted);font-weight:600}
+.hist-card-stats dd{margin:0;color:var(--text2)}
+.hist-card-note{font-size:12px;color:var(--muted);margin-top:10px;padding-top:10px;border-top:1px solid var(--border);line-height:1.45}
+@media(max-width:1000px){
+  .hist-filters-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
 @media(max-width:768px){
   .hist-filters-toggle{display:flex}
-  .hist-filters-bar.collapsed .hist-filters-grid,.hist-filters-bar.collapsed .hist-filters-actions{display:none}
+  .hist-filters-card.collapsed .hist-filters-grid,.hist-filters-card.collapsed .hist-filters-actions{display:none}
+  .hist-filters-grid{grid-template-columns:1fr 1fr;gap:10px}
   .hist-table-wrap{display:none}
   .hist-cards{display:flex}
+  .hist-results-head{flex-wrap:wrap}
+}
+@media(max-width:480px){
+  .hist-filters-grid{grid-template-columns:1fr}
 }
 .stat-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px}
 .stat-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:6px}
@@ -3075,8 +3126,9 @@ function buildHistoriqueFiltersBar() {
 
   const collapseMobile = typeof window !== 'undefined' && window.innerWidth <= 768 && !S.historiqueFiltresOpen;
   const bar = el('div', {
-    cls: 'hist-filters-bar sticky' + (collapseMobile ? ' collapsed' : ''),
+    cls: 'hist-filters-card sticky' + (collapseMobile ? ' collapsed' : ''),
   });
+  bar.appendChild(el('div', { cls: 'hist-filters-card-title' }, 'Critères de recherche'));
   const grid = el('div', { cls: 'hist-filters-grid' },
     buildHistoriqueFilterField('Type de stock', typeStockSel),
     buildHistoriqueFilterField('Catégorie', catSel),
@@ -3085,67 +3137,79 @@ function buildHistoriqueFiltersBar() {
     buildHistoriqueFilterField('Au', dateFin),
   );
   const actions = el('div', { cls: 'hist-filters-actions' },
-    el('button', { cls: 'btn', type: 'button', on: { click: loadHistorique } }, 'Appliquer'),
-    el('button', { cls: 'btn-ghost', type: 'button', on: { click: resetHistoriqueFiltres } }, 'Réinitialiser'),
+    el('button', { cls: 'btn btn-accent', type: 'button', on: { click: loadHistorique } }, 'Appliquer'),
+    el('button', { cls: 'btn btn-ghost', type: 'button', on: { click: resetHistoriqueFiltres } }, 'Réinitialiser'),
   );
   bar.append(grid, actions);
   return bar;
 }
 
-function buildHistoriqueTableRow(m) {
+function histQteLabel(m) {
   const isMp = m.type_stock === 'mp';
   const unit = isMp ? ' pal.' : '';
-  const sign = m.type_mouvement === 'entree' ? '+' : (m.type_mouvement === 'sortie' ? '−' : '');
+  const t = (m.type_mouvement || '').toLowerCase();
+  const sign = t === 'entree' ? '+' : (t === 'sortie' ? '−' : '');
   const qte = (sign || '') + fN(m.quantite) + unit;
+  const cls = 'hist-qte' + (t === 'entree' ? ' hist-qte-entree' : t === 'sortie' ? ' hist-qte-sortie' : '');
+  return { qte, cls };
+}
+
+function buildHistoriqueTableRow(m) {
+  const { qte, cls: qteCls } = histQteLabel(m);
   const avant = m.quantite_avant != null ? fN(m.quantite_avant) : '—';
   const apres = m.quantite_apres != null ? fN(m.quantite_apres) : '—';
   const blNote = [m.ref_bl, m.note].filter(Boolean).join(' · ');
   const op = (m.created_by_name || '').trim() || '—';
   return el('tr', null,
-    el('td', null, fDateTime(m.created_at)),
-    el('td', null, histStockBadge(m.type_stock)),
-    el('td', null, histMvtBadge(m.type_mouvement)),
+    el('td', { cls: 'hist-muted' }, fDateTime(m.created_at)),
+    el('td', null, el('div', { cls: 'hist-cell-badges' }, histStockBadge(m.type_stock), histMvtBadge(m.type_mouvement))),
     el('td', { cls: 'hist-ref' }, m.reference || '—'),
-    el('td', { title: m.designation || '' }, truncStr(m.designation, 30)),
-    el('td', null, qte),
+    el('td', { cls: 'hist-des', title: m.designation || '' }, truncStr(m.designation, 36) || '—'),
+    el('td', null, el('span', { cls: qteCls }, qte)),
     el('td', { cls: 'hist-muted' }, avant + ' → ' + apres),
-    el('td', { cls: 'hist-muted', title: blNote }, truncStr(blNote, 40) || '—'),
-    el('td', null, op),
+    el('td', { cls: 'hist-note-cell hist-muted', title: blNote }, truncStr(blNote, 40) || '—'),
+    el('td', { cls: 'hist-op' }, op),
   );
 }
 
 function buildHistoriqueCard(m) {
-  const isMp = m.type_stock === 'mp';
-  const unit = isMp ? ' pal.' : '';
-  const sign = m.type_mouvement === 'entree' ? '+' : (m.type_mouvement === 'sortie' ? '−' : '');
-  const qte = (sign || '') + fN(m.quantite) + unit;
+  const { qte, cls: qteCls } = histQteLabel(m);
   const avant = m.quantite_avant != null ? fN(m.quantite_avant) : '—';
   const apres = m.quantite_apres != null ? fN(m.quantite_apres) : '—';
   const op = (m.created_by_name || '').trim();
   const blNote = [m.ref_bl, m.note].filter(Boolean).join(' · ');
+  const stats = el('dl', { cls: 'hist-card-stats' },
+    el('dt', null, 'Quantité'),
+    el('dd', null, el('span', { cls: qteCls }, qte)),
+    el('dt', null, 'Stock'),
+    el('dd', null, avant + ' → ' + apres),
+  );
+  if (op) stats.append(el('dt', null, 'Opérateur'), el('dd', null, op));
   return el('div', { cls: 'hist-card' },
     el('div', { cls: 'hist-card-top' },
       el('div', { cls: 'hist-card-badges' }, histStockBadge(m.type_stock), histMvtBadge(m.type_mouvement)),
       el('span', { cls: 'hist-card-date' }, fDateTime(m.created_at)),
     ),
-    el('div', { cls: 'hist-card-refline' },
-      (m.reference || '') + ' · ' + truncStr(m.designation, 40),
-    ),
-    el('div', { cls: 'hist-card-meta' },
-      qte + '   ' + avant + ' → ' + apres + (op ? '   ' + op : ''),
-    ),
+    el('div', { cls: 'hist-card-ref' }, m.reference || '—'),
+    m.designation ? el('div', { cls: 'hist-card-des' }, m.designation) : null,
+    stats,
     blNote ? el('div', { cls: 'hist-card-note' }, blNote) : null,
   );
 }
 
 function buildHistorique() {
   const head = el('div', { cls: 'hist-head' },
-    el('h2', { cls: 'ref-page-title', style: { margin: 0 } }, 'Historique des mouvements'),
-    el('button', { cls: 'btn btn-ghost', type: 'button', on: { click: exportHistoriqueCSV } }, 'Export CSV'),
+    el('div', null,
+      el('h2', { cls: 'hist-title' }, 'Historique des mouvements'),
+      el('p', { cls: 'hist-subtitle' }, 'Entrées, sorties et ajustements — matières premières et produits finis'),
+    ),
+    el('div', { cls: 'hist-head-actions' },
+      el('button', { cls: 'btn btn-ghost', type: 'button', on: { click: exportHistoriqueCSV } }, 'Export CSV'),
+    ),
   );
 
   const toggleBtn = el('button', {
-    cls: 'btn-ghost hist-filters-toggle',
+    cls: 'btn btn-ghost hist-filters-toggle',
     type: 'button',
     on: { click: () => {
       S.historiqueFiltresOpen = !S.historiqueFiltresOpen;
@@ -3169,26 +3233,30 @@ function buildHistorique() {
     return el('div', { cls: 'content' }, body);
   }
 
+  const countLbl = rows.length + ' mouvement' + (rows.length > 1 ? 's' : '');
   const table = el('table', { cls: 'hist-table' });
   const thead = el('thead', null, el('tr', null,
-    el('th', { style: { width: '120px' } }, 'Date'),
-    el('th', { style: { width: '60px' } }, 'Type'),
-    el('th', { style: { width: '100px' } }, 'Mouvement'),
-    el('th', { style: { width: '120px' } }, 'Référence'),
+    el('th', null, 'Date'),
+    el('th', null, 'Stock / Mouvement'),
+    el('th', null, 'Référence'),
     el('th', null, 'Désignation'),
-    el('th', { style: { width: '80px' } }, 'Quantité'),
-    el('th', { style: { width: '100px' } }, 'Avant → Après'),
-    el('th', { style: { width: '140px' } }, 'Ref BL / Note'),
-    el('th', { style: { width: '110px' } }, 'Opérateur'),
+    el('th', null, 'Quantité'),
+    el('th', null, 'Avant → Après'),
+    el('th', null, 'Ref BL / Note'),
+    el('th', null, 'Opérateur'),
   ));
   const tbody = el('tbody', null, ...rows.map(buildHistoriqueTableRow));
   table.append(thead, tbody);
 
   const cards = el('div', { cls: 'hist-cards' }, ...rows.map(buildHistoriqueCard));
-  body.append(
+  body.appendChild(el('div', { cls: 'hist-results-card' },
+    el('div', { cls: 'hist-results-head' },
+      el('span', { cls: 'hist-results-title' }, 'Résultats'),
+      el('span', { cls: 'hist-count' }, countLbl),
+    ),
     el('div', { cls: 'hist-table-wrap' }, table),
     cards,
-  );
+  ));
 
   return el('div', { cls: 'content' }, body);
 }
@@ -3218,25 +3286,39 @@ function dashStockTypeBadge(typeStock) {
   return el('span', { cls: 'dash-badge dash-badge-stock-' + ts }, lbl);
 }
 
-function buildDashboardShortcuts() {
-  const row = el('div', { cls: 'dash-quick-actions' });
-  const mk = (label, onClick) => el('button', { cls: 'dash-quick-btn', type: 'button', on: { click: onClick } }, label);
-  row.append(
-    mk('+ Réception matière', openReceptionQuick),
-    mk('+ Entrée MP', () => openModalMouvement('entree')),
-    mk('+ Sortie MP', () => openModalMouvement('sortie')),
-    mk('+ Ajustement MP', () => openModalMouvement('ajustement')),
+function buildDashboardKpis(s) {
+  const kpis = [
+    { label: 'Références', value: s.nb_refs || 0, mod: 'accent' },
+    { label: 'Emplacements occupés', value: s.nb_empl_occupes || 0, mod: 'accent' },
+    { label: 'Unités en stock', value: s.total_unites || 0, mod: 'accent' },
+    { label: 'À inventorier', value: s.nb_a_inventorier || 0, mod: (s.nb_a_inventorier > 0 ? 'warn' : 'accent') },
+  ];
+  return el('div', { cls: 'dash-kpi-grid' },
+    ...kpis.map(k => el('div', { cls: 'stat-card' },
+      el('div', { cls: 'stat-label' }, k.label),
+      el('div', { cls: 'stat-value ' + k.mod }, fN(k.value)),
+    )),
   );
-  return row;
+}
+
+function buildDashboardShortcuts() {
+  const mk = (label, onClick) => el('button', { cls: 'dash-quick-btn', type: 'button', on: { click: onClick } }, label);
+  return el('div', { cls: 'dash-quick-card' },
+    el('div', { cls: 'dash-quick-card-title' }, 'Actions rapides'),
+    el('div', { cls: 'dash-quick-grid' },
+      mk('Réception matière', openReceptionQuick),
+      mk('Entrée MP', () => openModalMouvement('entree')),
+      mk('Sortie MP', () => openModalMouvement('sortie')),
+      mk('Ajustement MP', () => openModalMouvement('ajustement')),
+    ),
+  );
 }
 
 function buildDashboardAlertes(d) {
   const alertesMp = d.alertes_mp || [];
   const alertesPf = d.alertesPf || [];
-  const mpBlock = el('div', { cls: 'dash-alert-block' },
-    el('h4', null, 'Matières premières'),
-    alertesMp.length
-      ? el('div', null, ...alertesMp.map(a => el('div', {
+  const mpRows = alertesMp.length
+      ? el('div', { cls: 'dash-alert-rows' }, ...alertesMp.map(a => el('div', {
           cls: 'dash-alert-row',
           on: { click: () => goToTab('matieres') },
         },
@@ -3248,12 +3330,13 @@ function buildDashboardAlertes(d) {
             fN(a.quantite) + ' pal. / min. ' + fN(a.seuil_alerte) + ' pal.'
           ),
         )))
-      : el('div', { cls: 'dash-alert-ok' }, 'Toutes les matières sont au-dessus des seuils.'),
+      : el('div', { cls: 'dash-alert-ok' }, 'Toutes les matières sont au-dessus des seuils.');
+  const mpBlock = el('div', { cls: 'dash-alert-block' },
+    el('h4', null, 'Matières premières'),
+    mpRows,
   );
-  const pfBlock = el('div', { cls: 'dash-alert-block' },
-    el('h4', null, 'Produits finis'),
-    alertesPf.length
-      ? el('div', null, ...alertesPf.slice(0, 12).map(a => el('div', {
+  const pfRows = alertesPf.length
+      ? el('div', { cls: 'dash-alert-rows' }, ...alertesPf.slice(0, 12).map(a => el('div', {
           cls: 'dash-alert-row',
           on: { click: () => goToTab('inventaire') },
         },
@@ -3264,7 +3347,10 @@ function buildDashboardAlertes(d) {
             (a.emplacement || '') + ' · ' + (a.jours_depuis === 999999 ? 'jamais' : (a.jours_depuis + 'j'))
           ),
         )))
-      : el('div', { cls: 'dash-alert-ok' }, 'Tous les produits finis sont à jour.'),
+      : el('div', { cls: 'dash-alert-ok' }, 'Tous les produits finis sont à jour.');
+  const pfBlock = el('div', { cls: 'dash-alert-block' },
+    el('h4', null, 'Produits finis'),
+    pfRows,
   );
   return el('div', { cls: 'dash-section' },
     el('div', { cls: 'dash-section-title' }, 'Stocks à réapprovisionner'),
@@ -3276,7 +3362,7 @@ function buildDashboardActivite(d) {
   const rows = d.activiteRecente || [];
   const list = el('div', { cls: 'dash-act-list' });
   if (!rows.length) {
-    list.appendChild(el('div', { cls: 'card-empty' }, 'Aucun mouvement enregistré.'));
+    list.appendChild(el('div', { cls: 'dash-act-empty' }, 'Aucun mouvement enregistré.'));
   } else {
     rows.forEach(m => {
       const actor = (m.created_by_name || '').trim();
@@ -3293,25 +3379,23 @@ function buildDashboardActivite(d) {
   }
   return el('div', { cls: 'dash-section' },
     el('div', { cls: 'dash-section-title' }, 'Activité récente'),
-    list,
+    el('div', { cls: 'dash-act-card' }, list),
   );
 }
 
 function buildDashboard() {
   const d = S.dashboard;
-  if (!d) return el('div',{cls:'content'},el('div',{cls:'card-empty'},'Chargement…'));
+  if (!d) return el('div',{cls:'content dash-page'},el('div',{cls:'card-empty'},'Chargement…'));
   const s = d.stats||{};
   const parts = [
-    el('h2',{cls:'ref-page-title',style:{marginBottom:'16px'}},'Tableau de bord'),
-    el('div',{cls:'stats-grid'},
-      el('div',{cls:'stat-card'},el('div',{cls:'stat-label'},'Références'),el('div',{cls:'stat-value accent'},s.nb_refs||0)),
-      el('div',{cls:'stat-card'},el('div',{cls:'stat-label'},'Emplacements occupés'),el('div',{cls:'stat-value accent'},s.nb_empl_occupes||0))
-    ),
+    el('h2',{cls:'dash-title'},'Tableau de bord'),
+    buildDashboardKpis(s),
   ];
   if (!S.stockReadOnly) parts.push(buildDashboardShortcuts());
   parts.push(buildDashboardAlertes(d));
-  if (!S.stockReadOnly) parts.push(el('div',{cls:'card',style:{overflow:'visible'}},
-      el('div',{cls:'card-header'},el('div',{cls:'card-title'},'➕ Ajouter au stock')),
+  if (!S.stockReadOnly) parts.push(el('div',{cls:'dash-section',style:{paddingTop:'22px',marginTop:'22px',borderTop:'1px solid var(--border)'}},
+    el('div',{cls:'dash-section-title'},'Ajouter au stock'),
+    el('div',{cls:'card',style:{overflow:'visible',marginBottom:0}},
       el('div',{cls:'add-form'},
         (function(){
           const refI = el('input',{cls:'field-input',placeholder:'Référence (neuve ou déjà en base)',autocomplete:'off',style:{direction:'ltr'}});
@@ -3402,12 +3486,14 @@ function buildDashboard() {
                 refI.value=''; qtyI.value=''; comI.value=''; emplInp.value=''; unitInp.value='';
                 dashProdCb.checked=false; dashSousTraitCb.checked=false; dashProdDateField.style.display='none';
               }}},'Ajouter au stock')
-            )          );
+            )
+          );
         })()
       )
-    ));
+    )
+  ));
   parts.push(buildDashboardActivite(d));
-  return el('div',{cls:'content'},...parts);
+  return el('div',{cls:'content dash-page'},...parts);
 }
 
 function clearSel() {
@@ -4636,6 +4722,7 @@ function buildSidebarNavStructure() {
     { kind: 'btn', tab: 'dashboard', icon: 'grid', label: 'Tableau de bord' },
     { kind: 'sep', label: 'Matières premières' },
     { kind: 'btn', tab: 'matieres', icon: 'layers', label: 'Matières premières' },
+    { kind: 'btn', tab: 'reception', icon: 'inbox', label: 'Réception matière' },
     { kind: 'sep', label: 'Produits' },
     { kind: 'btn', tab: 'referentiel', icon: 'tag', label: 'Référentiel' },
   ];
@@ -4643,7 +4730,6 @@ function buildSidebarNavStructure() {
     items.push({ kind: 'btn', tab: 'inventaire', icon: 'clipboard', label: 'Inventaire' });
   }
   items.push(
-    { kind: 'btn', tab: 'reception', icon: 'inbox', label: 'Réception matière' },
     { kind: 'sep', label: 'Outils' },
     { kind: 'btn', tab: 'historique', icon: 'clock', label: 'Historique mouvements' },
     { kind: 'btn', tab: 'traca', icon: 'printer', label: 'Étiquettes traça' },

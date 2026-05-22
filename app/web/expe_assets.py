@@ -5,20 +5,12 @@ from app.web.expe_france_delais_data import DELAIS_FRANCE_JSON
 from app.web.expe_france_map_svg import EXPE_FRANCE_SVG_MARKUP
 
 EXPE_TRANSPORTEURS_CSS = r"""
-/* ── MyExpé — tableau de bord & transporteurs ── */
+/* ── MyExpé — transporteurs ── */
 .expe-trp-panel .btn,.expe-trp-modal .btn,.expe-trp-panel .btn-accent,.expe-trp-modal .btn-accent{margin-top:0;border-radius:10px;padding:10px 18px;font-weight:700}
 .btn-accent{background:var(--accent);color:var(--bg);border:none;border-radius:10px;padding:10px 18px;font-size:13px;font-weight:700;
   cursor:pointer;font-family:inherit;transition:filter .15s}
 .btn-accent:hover:not(:disabled){filter:brightness(1.05)}
 .btn-accent:disabled{opacity:.5;cursor:not-allowed}
-.expe-widgets{display:flex;flex-wrap:wrap;gap:14px;justify-content:flex-start;margin-bottom:20px}
-.expe-widget{display:flex;flex-direction:column;align-items:center;gap:8px;min-width:148px;max-width:180px;flex:1 1 148px;
-  padding:18px 14px;background:var(--card);border:1px solid var(--border);border-radius:12px;cursor:pointer;
-  transition:border-color .15s,background .15s,transform .15s;font-family:inherit;color:inherit;text-align:center}
-.expe-widget:hover{border-color:var(--accent);background:var(--accent-bg);transform:translateY(-2px)}
-.expe-widget-icon{display:flex;align-items:center;justify-content:center;color:var(--accent);line-height:1}
-.expe-widget-name{font-size:14px;font-weight:800;color:var(--text)}
-.expe-widget-desc{font-size:11px;color:var(--muted);line-height:1.35;max-width:160px}
 
 .expe-trp-overlay{position:fixed;inset:0;background:color-mix(in srgb,var(--bg) 55%,transparent);z-index:11500;
   opacity:0;pointer-events:none;transition:opacity .2s}
@@ -57,6 +49,12 @@ EXPE_TRANSPORTEURS_CSS = r"""
 .expe-trp-badge-inactif{font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;background:color-mix(in srgb,var(--muted) 18%,transparent);
   color:var(--muted);border:1px solid var(--border)}
 .expe-trp-empty{padding:24px;text-align:center;color:var(--muted);font-size:13px}
+.expe-trp-page-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.expe-trp-page-head .expe-trp-search{flex:1;min-width:200px;max-width:400px}
+.expe-trp-services{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.expe-trp-svc{font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;background:var(--bg);border:1px solid var(--border);color:var(--text2)}
+.expe-trp-portail{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--accent);text-decoration:none}
+.expe-trp-portail:hover{text-decoration:underline}
 
 .expe-trp-modal-overlay{position:fixed;inset:0;background:color-mix(in srgb,var(--bg) 60%,transparent);z-index:12000;
   display:flex;align-items:center;justify-content:center;padding:16px}
@@ -94,6 +92,7 @@ const T={
   list:[],
   filter:'',
   panelOpen:false,
+  pageLoaded:false,
   loading:false,
   modalOpen:false,
   editId:null,
@@ -101,6 +100,13 @@ const T={
   saving:false,
   tarifFile:null,
   uploadDrag:false
+};
+
+const EXPE_TRP_META={
+  'Coupé':{poids:true,palette:true,palMax:5},
+  'Ceva':{poids:true,palette:true,palMax:4},
+  'Coquelle':{palette:true,palMax:33},
+  'Dimotrans':{palette:true,palMax:28}
 };
 
 function escHtml(t){
@@ -131,6 +137,37 @@ function expeTrpZonesBadges(tr){
   if(tr.zone_affretement)z.push('Affrètement >6 pal.');
   if(tr.zone_messagerie)z.push('Messagerie <6 pal.');
   return z;
+}
+
+function expeTrpServiceBadges(nom){
+  const m=EXPE_TRP_META[nom];
+  if(!m)return [];
+  const out=[];
+  if(m.poids)out.push('Poids');
+  if(m.palette)out.push('Palette');
+  if(m.palMax)out.push('Max '+m.palMax+' pal.');
+  return out;
+}
+
+function expeTrpIsPortailUrl(v){
+  const s=String(v||'').trim().toLowerCase();
+  return s.startsWith('http://')||s.startsWith('https://');
+}
+
+function expeTrpOpenContact(tr){
+  const email=(tr&&tr.contact_email||'').trim();
+  if(expeTrpIsPortailUrl(email)){
+    window.open(email,'_blank','noopener');
+    return;
+  }
+  if(email){
+    const nom=(tr&&tr.nom)||'';
+    const s=encodeURIComponent('Demande de tarif SIFA - '+nom);
+    const b=encodeURIComponent('Bonjour,\n\nNous souhaitons obtenir un tarif pour un départ.\n\nCordialement,\nSIFA Roubaix');
+    window.location.href='mailto:'+email+'?subject='+s+'&body='+b;
+    return;
+  }
+  if(typeof expeOpenContact==='function'&&tr&&tr.nom)expeOpenContact(tr.nom);
 }
 
 function expeTrpFiltered(){
@@ -169,7 +206,7 @@ async function loadTransporteurs(){
 
 function renderTransporteurs(){
   const ae=document.activeElement;
-  const focusId=ae&&ae.id?ae.id:null;
+  const focusId=ae&&ae.id&&(ae.id==='expe-trp-search'||ae.id==='expe-trp-page-search')?ae.id:null;
   const caretStart=ae&&typeof ae.selectionStart==='number'?ae.selectionStart:null;
   const caretEnd=ae&&typeof ae.selectionEnd==='number'?ae.selectionEnd:null;
   render();
@@ -352,30 +389,6 @@ async function toggleActif(id,actif){
   }
 }
 
-function renderExpeDashboard(){
-  const widgets=[
-    {key:'suivi',label:'Suivi départs',desc:'Enlèvements du jour et historique',icon:'clipboard',
-      onClick:()=>set({expeTab:'suivi_departs'})},
-    {key:'comparateur',label:'Comparateur',desc:'Meilleur tarif poids et palette',icon:'package',
-      onClick:()=>set({expeTab:'comparateur'})},
-    {key:'transporteurs',label:'Transporteurs',desc:'Référentiel et tarifs',icon:'truck',
-      onClick:()=>openExpeTranspPanel()},
-    {key:'poids',label:'Poids envoi',desc:'Estimation poids étiquettes',icon:'calculator',
-      onClick:()=>set({expeTab:'poids'})},
-    {key:'carte',label:'Carte de France',desc:'Délais livraison par département',icon:'layers',
-      onClick:()=>openExpeCarteModal()}
-  ];
-  return h('div',null,
-    h('div',{className:'expe-widgets'},
-      ...widgets.map(w=>h('button',{type:'button',className:'expe-widget',onClick:w.onClick},
-        h('span',{className:'expe-widget-icon'},iconEl(w.icon,26)),
-        h('span',{className:'expe-widget-name'},w.label),
-        h('span',{className:'expe-widget-desc'},w.desc)
-      ))
-    )
-  );
-}
-
 function renderExpeTranspList(){
   const rows=expeTrpFiltered();
   if(T.loading&&!rows.length){
@@ -392,15 +405,23 @@ function renderExpeTranspList(){
       const inactive=!Number(tr.actif);
       const zones=expeTrpZonesBadges(tr);
       const taxe=tr.taxe_carburant_pct!=null?Number(tr.taxe_carburant_pct):0;
+      const services=expeTrpServiceBadges(tr.nom||'');
       const contactParts=[];
+      const emailRaw=(tr.contact_email||'').trim();
       if(tr.contact_nom){
         contactParts.push(h('span',{className:'expe-trp-contact-item'},iconEl('user',13),' ',escHtml(tr.contact_nom)));
       }
       if(tr.contact_tel){
         contactParts.push(h('span',{className:'expe-trp-contact-item'},expeTrpIconPhone(13),' ',escHtml(tr.contact_tel)));
       }
-      if(tr.contact_email){
-        contactParts.push(h('span',{className:'expe-trp-contact-item'},iconEl('mail',13),' ',escHtml(tr.contact_email)));
+      if(emailRaw){
+        if(expeTrpIsPortailUrl(emailRaw)){
+          contactParts.push(h('a',{className:'expe-trp-portail',href:emailRaw,target:'_blank',rel:'noopener',onClick:e=>e.stopPropagation()},
+            iconEl('arrow-right',13),' Portail'));
+        }else{
+          contactParts.push(h('a',{className:'expe-trp-contact-item',href:'mailto:'+encodeURIComponent(emailRaw),style:{color:'var(--accent)',textDecoration:'none'}},
+            iconEl('mail',13),' ',escHtml(emailRaw)));
+        }
       }
       let tarifEl;
       if(tr.tarif_url){
@@ -423,10 +444,15 @@ function renderExpeTranspList(){
           ):null
         ),
         zones.length?h('div',{className:'expe-trp-zones'},...zones.map(z=>h('span',{className:'expe-trp-zone'},z))):null,
+        services.length?h('div',{className:'expe-trp-services'},...services.map(s=>h('span',{className:'expe-trp-svc'},s))):null,
         h('div',{className:'expe-trp-meta'},
           h('span',null,'Taxe carburant : ',h('strong',null,escHtml(String(taxe))),' %')
         ),
         contactParts.length?h('div',{className:'expe-trp-contact'},...contactParts):null,
+        (emailRaw||tr.contact_tel)?h('button',{type:'button',className:'btn btn-ghost',style:{marginTop:'8px',alignSelf:'flex-start'},
+          onClick:()=>expeTrpOpenContact(tr)},
+          iconEl(expeTrpIsPortailUrl(emailRaw)?'arrow-right':'mail',13),
+          ' ',expeTrpIsPortailUrl(emailRaw)?'Ouvrir le portail':'Contacter'):null,
         tarifEl
       );
     })
@@ -564,27 +590,45 @@ function renderExpeTransporteurModal(){
 }
 
 function renderExpeTransporteurs(){
-  return h('div',{className:'card',style:{marginBottom:'14px'}},
-    h('div',{className:'card-header'},
-      h('h3',{className:'expe-mobile-hide-head'},'Référentiel transporteurs'),
-      h('button',{type:'button',className:'btn btn-accent',onClick:openExpeTranspPanel},iconEl('truck',14),
-        expeCanWrite()?' Ouvrir la gestion':' Consulter')
-    ),
-    h('div',{style:{padding:'14px 18px',fontSize:'13px',color:'var(--text2)',lineHeight:1.55}},
-      'Gérez les transporteurs, zones desservies, contacts et fichiers tarifs.'
-    )
+  if(!T.pageLoaded&&!T.loading){
+    T.pageLoaded=true;
+    void loadTransporteurs();
+  }
+  const search=h('input',{
+    id:'expe-trp-page-search',
+    type:'search',
+    className:'expe-trp-search',
+    placeholder:'Rechercher un transporteur…',
+    value:T.filter||'',
+    onInput:e=>{T.filter=e.target.value;renderTransporteurs();}
+  });
+  search.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){T.filter='';renderTransporteurs();}
+  });
+  const headKids=[
+    search,
+    h('button',{type:'button',className:'btn btn-ghost',onClick:openExpeTranspPanel},iconEl('layers',14),' Panneau latéral'),
+    expeCanWrite()?h('button',{type:'button',className:'btn btn-accent',onClick:()=>openTransporteurModal(null)},iconEl('plus',14),' Ajouter'):null
+  ];
+  return h('div',{className:'expe-trp-page'},
+    h('div',{className:'expe-trp-page-head'},...headKids),
+    renderExpeTranspList()
   );
 }
 """
 
 EXPE_CARTE_FRANCE_CSS = r"""
-/* ── MyExpé — carte France délais ── */
-.expe-carte-overlay{position:fixed;inset:0;background:color-mix(in srgb,var(--bg) 62%,transparent);z-index:12500;
-  display:flex;align-items:stretch;justify-content:center;padding:12px;box-sizing:border-box}
-.expe-carte-modal{width:min(96vw,1200px);max-height:calc(100vh - 24px);margin:auto;display:flex;flex-direction:column;
-  background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:0 24px 64px color-mix(in srgb,var(--bg) 70%,transparent)}
-.expe-carte-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 18px;border-bottom:1px solid var(--border);flex-shrink:0}
-.expe-carte-head h2{font-size:15px;font-weight:800;color:var(--text);margin:0;flex:1;min-width:140px}
+/* ── MyExpé — carte France délais (widget dock) ── */
+.expe-carte-fab{display:flex;align-items:center;justify-content:center;background:var(--card);border:1px solid var(--border);color:var(--accent)}
+.expe-carte-fab-icon{width:22px;height:22px;flex-shrink:0;background-color:currentColor;
+  mask:url(/static/expe_france_fab_icon.png) center/contain no-repeat;
+  -webkit-mask:url(/static/expe_france_fab_icon.png) center/contain no-repeat}
+.expe-carte-fab:hover{border-color:var(--accent);filter:brightness(1.05)}
+.expe-carte-fab.expe-carte-fab-active,.expe-carte-fab.mysifa-dock-fab-active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.expe-carte-panel{width:min(920px,calc(100vw - 48px));max-height:min(720px,calc(100dvh - 100px))}
+.expe-carte-panel-body{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:12px;padding:12px 14px 14px}
+.expe-carte-toolbar-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;flex-shrink:0}
+.expe-carte-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;flex-shrink:0}
 .expe-carte-search{flex:1;min-width:200px;max-width:360px;padding:12px 16px;background:var(--bg);border:1px solid var(--border);
   border-radius:10px;color:var(--text);font-size:14px;font-family:inherit;outline:none}
 .expe-carte-search:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 12%,transparent)}
@@ -611,8 +655,10 @@ EXPE_CARTE_FRANCE_CSS = r"""
 .expe-carte-tooltip{position:fixed;z-index:13000;pointer-events:none;padding:8px 12px;background:var(--card);border:1px solid var(--border);
   border-radius:10px;font-size:12px;color:var(--text);box-shadow:0 8px 24px color-mix(in srgb,var(--bg) 50%,transparent);max-width:280px;line-height:1.45}
 .expe-carte-msg{font-size:12px;color:var(--warn);min-height:18px;margin-top:6px}
-.expe-carte-close{padding:8px 10px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer}
-.expe-carte-close:hover{border-color:var(--accent);color:var(--accent)}
+@media(max-width:900px){
+  .expe-carte-panel{width:auto;max-height:none}
+  .expe-carte-svg-wrap{min-height:280px;max-height:420px}
+}
 """
 
 EXPE_CARTE_FRANCE_JS = (
@@ -639,7 +685,7 @@ const EXPE_ZONE_LABELS = {
 };
 
 const C = {
-  modalOpen: false,
+  panelOpen: false,
   search: '',
   editMode: false,
   editDept: null,
@@ -683,7 +729,7 @@ function expeResetDelais(){
   expeMergeDelais();
   applyDelaisToMap();
   showToast('Délais réinitialisés.','success');
-  render();
+  refreshExpeCartePanel();
 }
 
 function getDeptData(num){
@@ -756,23 +802,23 @@ function highlightDept(numDept){
   }
 }
 
-function openExpeCarteModal(){
-  expeMergeDelais();
-  C.modalOpen=true;
-  C.search='';
-  C.msg='';
-  C.editDept=null;
-  C.highlighted=null;
-  render();
-  queueMicrotask(()=>initCarteExpe());
+function setExpeCarteOpen(open){
+  C.panelOpen=!!open;
+  const panel=document.getElementById('expe-carte-panel');
+  const fab=document.getElementById('expe-carte-fab');
+  if(panel)panel.style.display=open?'flex':'none';
+  if(fab)fab.classList.toggle('expe-carte-fab-active',open);
+  if(open){
+    expeMergeDelais();
+    refreshExpeCartePanel();
+    queueMicrotask(()=>initCarteExpe());
+  }else{
+    C.editMode=false;
+    hideTooltipDept();
+  }
+  if(window.MySifaDock&&typeof window.MySifaDock.layout==='function')window.MySifaDock.layout();
 }
-
-function closeExpeCarteModal(){
-  C.modalOpen=false;
-  C.editMode=false;
-  hideTooltipDept();
-  render();
-}
+window.setExpeCarteOpen=setExpeCarteOpen;
 
 function bindMapEvents(host){
   const onEnter=(el,e)=>{
@@ -794,7 +840,7 @@ function bindMapEvents(host){
       if(C.editMode&&expeCanEditDelais()){
         C.editDept=id;
         highlightDept(id);
-        render();
+        refreshExpeCartePanel();
         queueMicrotask(()=>initCarteExpe());
         return;
       }
@@ -805,7 +851,7 @@ function bindMapEvents(host){
 
 function initCarteExpe(){
   const host=document.getElementById('expe-carte-svg-host');
-  if(!host||!C.modalOpen)return;
+  if(!host||!C.panelOpen)return;
   if(!host.querySelector('svg.expe-carte-svg')){
     host.innerHTML=EXPE_FRANCE_SVG_MARKUP;
     bindMapEvents(host);
@@ -818,18 +864,18 @@ function initCarteExpe(){
 async function searchDept(query){
   const q=(query||'').trim();
   C.msg='';
-  if(!q){C.highlighted=null;hideTooltipDept();applyDelaisToMap();render();return;}
+  if(!q){C.highlighted=null;hideTooltipDept();applyDelaisToMap();refreshExpeCartePanel();return;}
   const norm=expeNorm(q);
   const qu=q.toUpperCase();
-  if(DELAIS_FRANCE[qu]){C.msg='';highlightDept(qu);render();return;}
-  if(DELAIS_FRANCE[q]){C.msg='';highlightDept(q);render();return;}
+  if(DELAIS_FRANCE[qu]){C.msg='';highlightDept(qu);refreshExpeCartePanel();return;}
+  if(DELAIS_FRANCE[q]){C.msg='';highlightDept(q);refreshExpeCartePanel();return;}
   const key=Object.keys(DELAIS_FRANCE).find(k=>k.toUpperCase()===qu);
-  if(key){C.msg='';highlightDept(key);render();return;}
+  if(key){C.msg='';highlightDept(key);refreshExpeCartePanel();return;}
   for(const [k,v] of Object.entries(DELAIS_FRANCE)){
     if(expeNorm(v.label).includes(norm)||expeNorm(k)===norm){
       C.msg='';
       highlightDept(k);
-      render();
+      refreshExpeCartePanel();
       return;
     }
   }
@@ -845,7 +891,7 @@ async function searchDept(query){
   }catch(e){}
   C.msg='Département introuvable — vérifier le numéro ou le nom';
   showToast(C.msg,'danger');
-  render();
+  refreshExpeCartePanel();
 }
 
 function saveEditDelais(){
@@ -881,11 +927,14 @@ function renderExpeCarteLegend(){
   );
 }
 
-function renderExpeCarteModal(){
-  if(!C.modalOpen)return null;
-  const overlay=h('div',{className:'expe-carte-overlay'});
-  overlay.addEventListener('click',e=>{if(e.target===overlay)closeExpeCarteModal();});
-  const modal=h('div',{className:'expe-carte-modal'});
+function refreshExpeCartePanel(){
+  const body=document.getElementById('expe-carte-panel-body');
+  if(!body||!C.panelOpen)return;
+  const ae=document.activeElement;
+  const focusId=ae&&ae.id;
+  const caretStart=ae&&ae.selectionStart;
+  const caretEnd=ae&&ae.selectionEnd;
+  const hadSvg=!!document.getElementById('expe-carte-svg-host')?.querySelector('svg.expe-carte-svg');
   const canEdit=expeCanEditDelais();
   const search=h('input',{
     id:'expe-carte-search',
@@ -894,19 +943,13 @@ function renderExpeCarteModal(){
     placeholder:'Département (59) ou ville (Lille, Nord…)',
     value:C.search||'',
     onInput:e=>{C.search=e.target.value;},
-    onKeydown:e=>{if(e.key==='Enter'){e.preventDefault();void searchDept(C.search);}}
+    onKeydown:e=>{if(e.key==='Enter'){e.preventDefault();void searchDept(C.search);}if(e.key==='Escape'){e.preventDefault();C.search='';C.msg='';C.highlighted=null;hideTooltipDept();applyDelaisToMap();refreshExpeCartePanel();}}
   });
   const toolbar=h('div',{className:'expe-carte-toolbar'},
     h('button',{type:'button',className:'btn btn-ghost',onClick:()=>void searchDept(C.search)},iconEl('search',14),' Rechercher'),
     canEdit?h('button',{type:'button',className:'btn btn-ghost'+(C.editMode?' is-active':''),style:C.editMode?{borderColor:'var(--accent)',color:'var(--accent)'}:null,
-      onClick:()=>{C.editMode=!C.editMode;C.editDept=null;render();queueMicrotask(()=>initCarteExpe());}},iconEl('edit',14),' Modifier les délais'):null,
+      onClick:()=>{C.editMode=!C.editMode;C.editDept=null;refreshExpeCartePanel();queueMicrotask(()=>initCarteExpe());}},iconEl('edit',14),' Modifier les délais'):null,
     canEdit?h('button',{type:'button',className:'btn btn-ghost',onClick:expeResetDelais},'Réinitialiser'):null
-  );
-  const head=h('div',{className:'expe-carte-head'},
-    h('h2',null,'Carte de France — délais'),
-    search,
-    toolbar,
-    h('button',{type:'button',className:'expe-carte-close',title:'Fermer',onClick:closeExpeCarteModal},iconEl('x',18))
   );
   const mapHost=h('div',{id:'expe-carte-svg-host',className:'expe-carte-svg-wrap'});
   const msgEl=h('div',{className:'expe-carte-msg'},C.msg||'');
@@ -922,15 +965,23 @@ function renderExpeCarteModal(){
     editBar.appendChild(h('div',null,h('label',null,'Zone'),zoneSel));
     editBar.appendChild(h('button',{type:'button',className:'btn btn-accent',style:{alignSelf:'flex-end'},onClick:saveEditDelais},'Enregistrer'));
   }
-  const body=h('div',{className:'expe-carte-body'},
-    h('div',{className:'expe-carte-map-col'},mapHost,msgEl,editBar),
-    renderExpeCarteLegend()
+  const inner=h('div',null,
+    h('div',{className:'expe-carte-toolbar-row'},search,toolbar),
+    h('div',{className:'expe-carte-body'},
+      h('div',{className:'expe-carte-map-col'},mapHost,msgEl,editBar),
+      renderExpeCarteLegend()
+    )
   );
-  modal.appendChild(head);
-  modal.appendChild(body);
-  overlay.appendChild(modal);
-  queueMicrotask(()=>initCarteExpe());
-  return overlay;
+  body.replaceChildren(inner);
+  if(focusId){
+    const el=document.getElementById(focusId);
+    if(el){
+      el.focus();
+      if(caretStart!=null){try{el.setSelectionRange(caretStart,caretEnd);}catch(e){}}
+    }
+  }
+  if(!hadSvg)queueMicrotask(()=>initCarteExpe());
+  else{expeMergeDelais();applyDelaisToMap();if(C.highlighted)highlightDept(C.highlighted);}
 }
 """
 )

@@ -403,8 +403,11 @@ def _load_mappings(conn) -> Tuple[Dict[str, str], Dict[Tuple[Optional[str], str]
     for r in conn.execute(
         "SELECT code_vendeur, identifiant, raison_sociale FROM compta_acheteurs"
     ).fetchall():
-        key = (r["code_vendeur"], _norm(r["raison_sociale"] or ""))
-        acheteurs[key] = str(r["identifiant"] or "").strip()
+        cv = _norm_code_vendeur(r["code_vendeur"]) or None
+        rs_key = _norm(r["raison_sociale"] or "")
+        if not rs_key:
+            continue
+        acheteurs[(cv, rs_key)] = str(r["identifiant"] or "").strip()
     return comptes, acheteurs
 
 
@@ -586,18 +589,20 @@ def _transform_factor_table(table_rows: List[List[Any]]) -> Dict[str, Any]:
         problem_detail = None
         if buyer_raw:
             main_libelle = buyer_raw
-            siret = _extract_siret(comp_raw)
-            if not siret:
-                bname = _buyer_name(buyer_raw)
-                siret = acheteurs.get((code_vendeur or None, bname)) or acheteurs.get((None, bname))
-            if not siret:
-                key_b = _buyer_name(buyer_raw) or buyer_raw
+            bname = _buyer_name(buyer_raw)
+            # Table Acheteurs = source de vérité (prioritaire sur le SIRET du complément Factor)
+            main_compte = (
+                acheteurs.get((code_vendeur or None, bname))
+                or acheteurs.get((None, bname))
+                or _extract_siret(comp_raw)
+                or ""
+            )
+            if not main_compte:
+                key_b = bname or buyer_raw
                 missing_buyers[key_b] = missing_buyers.get(key_b, 0) + 1
                 main_compte = ""
                 problem = "acheteur_inconnu"
                 problem_detail = key_b
-            else:
-                main_compte = siret
         else:
             key = _libelle_key(lib_raw)
             main_compte = comptes.get(key)

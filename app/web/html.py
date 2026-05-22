@@ -1753,6 +1753,7 @@ __EXPE_CARTE_FRANCE_CSS__
 <script>window.__MYSIFA_APP__="__INITIAL_APP_VALUE__";</script>
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/mysifa_calc.js"></script>
+<script src="/static/mysifa_expe_carte.js"></script>
 <script src="/static/chat_widget.js"></script>
 <script src="/static/mysifa_ai_chat.js"></script>
 <script src="/static/mysifa_landscape.js"></script>
@@ -1850,7 +1851,7 @@ let S={
   selDossier:null,
   loginSubmitting:false,loginError:null,portalLoading:null,
   sidebarOpen:false,
-  expeTab:'dashboard',
+  expeTab:'suivi_departs',
   expeDepartSubTab:'jour',
   expeDept:'59',
   expeKg:'',
@@ -5084,6 +5085,10 @@ function expeLoadContacts(){
 }
 function expeEnsureContacts(){if(!S.expeContacts)S.expeContacts=expeLoadContacts();return S.expeContacts;}
 function expeOpenContact(carrier){
+  if(typeof T!=='undefined'&&Array.isArray(T.list)){
+    const tr=T.list.find(x=>String(x.nom||'')===String(carrier||''));
+    if(tr&&typeof expeTrpOpenContact==='function'){expeTrpOpenContact(tr);return;}
+  }
   const c=expeEnsureContacts()[carrier];if(!c)return;
   if(c.type==='url')window.open(c.value,'_blank','noopener');
   else{
@@ -5801,7 +5806,8 @@ function renderExpe(){
     S.expeTab='suivi_departs';
     S.expeDepartSubTab='historique';
   }
-  const tab=S.expeTab||'dashboard';
+  if(S.expeTab==='dashboard')S.expeTab='suivi_departs';
+  const tab=S.expeTab||'suivi_departs';
   const sub=S.expeDepartSubTab||'jour';
   const loadKey=tab==='suivi_departs'?tab+'_'+sub:tab;
   if(loadKey!==_expeLastRenderedInnerTab){
@@ -5809,8 +5815,8 @@ function renderExpe(){
     if(tab==='suivi_departs'){
       if(sub==='jour')void loadExpeDepartJour();
       else void loadExpeDepartHistorique();
-    }else if(tab==='comparateur')void ensureExpeRawData();
-    else if(tab==='transporteurs'&&!T.panelOpen){T.panelOpen=true;void loadTransporteurs();}
+    }else if(tab==='comparateur'){void ensureExpeRawData();if(!T.list.length&&!T.loading)void loadTransporteurs();}
+    else if(tab==='transporteurs'&&!T.pageLoaded){T.pageLoaded=true;void loadTransporteurs();}
   }
 
   const sidebar=h('nav',{className:'sidebar'},
@@ -5818,8 +5824,6 @@ function renderExpe(){
       h('div',{className:'logo-brand'},'My',h('span',null,'Expé')),
       h('div',{className:'logo-sub'},'by SIFA')
     ),
-    h('button',{className:'nav-btn'+(tab==='dashboard'?' active':''),onClick:()=>set({expeTab:'dashboard'})},
-      iconEl('grid',15),'  Tableau de bord'),
     h('button',{className:'nav-btn'+(tab==='suivi_departs'?' active':''),onClick:()=>set({expeTab:'suivi_departs'})},
       iconEl('clipboard',15),'  Suivi départs'),
     h('button',{className:'nav-btn'+(tab==='comparateur'?' active':''),onClick:()=>set({expeTab:'comparateur'})},
@@ -5851,15 +5855,13 @@ function renderExpe(){
     h('div',null,
       h('div',{className:'mobile-topbar-title'},'MyExpé'),
       h('div',{className:'mobile-topbar-sub'},
-        tab==='dashboard'?'Tableau de bord':
         tab==='suivi_departs'?(sub==='historique'?'Historique départs':'Départs du jour'):
         tab==='transporteurs'?'Transporteurs':tab==='poids'?'Poids envoi':'Comparateur tarifs')
     ),
     h('button',{type:'button',className:'mobile-home-btn',onClick:()=>{window.location.href='/'},'aria-label':'Accueil'},iconEl('home',20))
   );
 
-  const content=tab==='dashboard'?renderExpeDashboard():
-    tab==='suivi_departs'?renderExpeSuiviDepartsWithSubtabs():
+  const content=tab==='suivi_departs'?renderExpeSuiviDepartsWithSubtabs():
     tab==='transporteurs'?renderExpeTransporteurs():tab==='poids'?renderExpePoids():renderExpeComparateur();
 
   return h('div',null,
@@ -5872,8 +5874,7 @@ function renderExpe(){
           h('h1',null,'MyExpé'),
           !expeCanWrite()?h('div',{className:'readonly-notice',style:{marginBottom:'12px'}},iconEl('eye',13),' Lecture seule — consultation des départs, transporteurs et délais'):null,
           h('div',{className:'subtitle'},
-            tab==='dashboard'?'Accès rapide aux outils MyExpé'
-            :tab==='suivi_departs'?(sub==='historique'?'Recherche multi-critères sur les départs validés'
+            tab==='suivi_departs'?(sub==='historique'?'Recherche multi-critères sur les départs validés'
               :'Enregistrement des enlèvements et validation vers l\'historique')
             :tab==='comparateur'?'Coupé · Coquelle · Ceva · Dimotrans — meilleur prix au poids et à la palette'
             :tab==='poids'?'Estimation du poids d\'un envoi d\'étiquettes'
@@ -5884,7 +5885,6 @@ function renderExpe(){
     ),
     renderExpeTranspPanel(),
     renderExpeTransporteurModal(),
-    renderExpeCarteModal(),
     S.expeShowContacts?renderExpeContactModal():null
   );
 }
@@ -11075,6 +11075,12 @@ function render(){
     window._calc_mount && window._calc_mount();
   } else if(window._calc_unmount){
     window._calc_unmount();
+  }
+  // Carte France — widget dock MyExpé uniquement
+  if(S.app==='expe'){
+    window._expe_carte_mount && window._expe_carte_mount();
+  } else if(window._expe_carte_unmount){
+    window._expe_carte_unmount();
   }
   if(window.MySifaDock && typeof window.MySifaDock.layout==='function') window.MySifaDock.layout();
 

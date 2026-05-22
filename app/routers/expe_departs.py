@@ -17,6 +17,7 @@ from fastapi import APIRouter, Body, File, HTTPException, Query, Request, Upload
 from fastapi.responses import FileResponse
 
 from app.services.audit_service import log_action
+from app.services.expe_transporteurs_seed import seed_expe_transporteurs_if_empty
 from database import get_db
 from services.auth_service import get_current_user, user_can_write_expe, user_has_app_access
 
@@ -403,6 +404,8 @@ def historique_departs(
 def list_transporteurs(request: Request):
     _require_expe(request)
     with get_db() as conn:
+        seed_expe_transporteurs_if_empty(conn)
+        conn.commit()
         rows = conn.execute(
             """SELECT * FROM expe_transporteurs
                ORDER BY actif DESC, nom ASC"""

@@ -70,6 +70,12 @@
     return !!(p && p.classList.contains('open'));
   }
 
+  function expeCartePanelOpen() {
+    if (typeof window.expeCartePanelOpen === 'function') return window.expeCartePanelOpen();
+    var p = document.getElementById('expe-carte-panel');
+    return !!(p && getComputedStyle(p).display !== 'none');
+  }
+
   function raiseFabIfOpen(fab, open) {
     if (!fab) return;
     fab.style.zIndex = open ? String(Z_FAB_ACTIVE) : String(Z_FAB);
@@ -78,11 +84,22 @@
 
   function applyActiveFabZIndex() {
     raiseFabIfOpen(document.getElementById('_calc_fab'), calcPanelOpen());
+    raiseFabIfOpen(document.getElementById('expe-carte-fab'), expeCartePanelOpen());
     raiseFabIfOpen(
       document.getElementById('cw-bubble') || document.getElementById('cw-bar'),
       chatPanelOpen()
     );
     raiseFabIfOpen(document.getElementById('ai-chat-btn'), aiPanelOpen());
+  }
+
+  function layoutExpeCartePanel(el, rightCol, bottom, zIndex) {
+    if (!el || getComputedStyle(el).display === 'none') return;
+    el.style.right = safeRight(rightCol);
+    el.style.bottom = safeBottom(bottom);
+    el.style.left = 'auto';
+    el.style.top = 'auto';
+    el.style.boxShadow = SHADOW_PANEL;
+    el.style.zIndex = String(zIndex || Z_PANEL);
   }
 
   function isDockFab(el) {
@@ -125,7 +142,7 @@
     el.style.zIndex = '8015';
   }
 
-  function layoutMobileLandscape(calcFab, calcPanel, aiBtn, aiPanel, chatBubble, chatBar, chatPanel) {
+  function layoutMobileLandscape(calcFab, calcPanel, carteFab, cartePanel, aiBtn, aiPanel, chatBubble, chatBar, chatPanel) {
     const aiRoot = document.getElementById('ai-chat-root');
     const fabRowH = FAB_SIZE + 14;
     let stackRight = 0;
@@ -139,6 +156,7 @@
     }
 
     const hasCalc = isDockFab(calcFab);
+    const hasCarte = isDockFab(carteFab);
     const hasAi = isVisible(aiRoot) && isDockFab(aiBtn);
     const chatFab =
       isDockFab(chatBubble) ? chatBubble : isDockFab(chatBar) ? chatBar : null;
@@ -150,6 +168,14 @@
         calcPanel.style.bottom = safeBottom(fabRowH);
         calcPanel.style.zIndex = String(Z_PANEL);
         calcPanel.style.boxShadow = SHADOW_PANEL;
+      }
+    }
+    if (hasCarte) {
+      const carteCol = stackRight;
+      placeFabRow(carteFab);
+      layoutExpeCartePanel(cartePanel, carteCol, fabRowH, 8017);
+      if (cartePanel && getComputedStyle(cartePanel).display !== 'none') {
+        layoutLandscapePanel(cartePanel, 8017);
       }
     }
     if (chatFab) placeFabRow(chatFab);
@@ -201,7 +227,7 @@
     applyActiveFabZIndex();
   }
 
-  function layoutMobile(calcFab, calcPanel, aiBtn, aiPanel, chatBubble, chatBar, chatPanel) {
+  function layoutMobile(calcFab, calcPanel, carteFab, cartePanel, aiBtn, aiPanel, chatBubble, chatBar, chatPanel) {
     const aiRoot = document.getElementById('ai-chat-root');
     let stackBottom = minFabBaseBottom();
 
@@ -214,6 +240,7 @@
     }
 
     const hasCalc = isDockFab(calcFab);
+    const hasCarte = isDockFab(carteFab);
     const hasAi = isVisible(aiRoot) && isDockFab(aiBtn);
     const chatFab =
       isDockFab(chatBubble) ? chatBubble : isDockFab(chatBar) ? chatBar : null;
@@ -225,6 +252,17 @@
         calcPanel.style.bottom = safeBottom(FAB_SIZE + 14);
         calcPanel.style.zIndex = '8014';
         calcPanel.style.boxShadow = SHADOW_PANEL;
+      }
+    }
+    if (hasCarte) {
+      placeFab(carteFab);
+      layoutExpeCartePanel(cartePanel, 0, FAB_SIZE + 14, 8017);
+      if (cartePanel && getComputedStyle(cartePanel).display !== 'none') {
+        cartePanel.style.left = 'max(12px, env(safe-area-inset-left, 0px))';
+        cartePanel.style.right = 'max(12px, env(safe-area-inset-right, 0px))';
+        cartePanel.style.width = 'auto';
+        cartePanel.style.maxWidth = 'none';
+        cartePanel.style.maxHeight = 'calc(100dvh - ' + (stackBottom + FAB_SIZE + 20) + 'px)';
       }
     }
     if (chatFab) placeFab(chatFab);
@@ -256,6 +294,11 @@
       layoutFloaterPanel(chatPanel, 8015);
     }
 
+    if (hasCarte && cartePanel && getComputedStyle(cartePanel).display !== 'none') {
+      layoutFloaterPanel(cartePanel, 8017);
+      cartePanel.style.maxWidth = 'none';
+    }
+
     if (hasAi && aiPanel) {
       if (aiPanel.classList.contains('open')) {
         layoutFloaterPanel(aiPanel, 8016);
@@ -277,6 +320,8 @@
   function layout() {
     const calcFab = document.getElementById('_calc_fab');
     const calcPanel = document.getElementById('_calc_panel');
+    const carteFab = document.getElementById('expe-carte-fab');
+    const cartePanel = document.getElementById('expe-carte-panel');
     const aiRoot = document.getElementById('ai-chat-root');
     const aiBtn = document.getElementById('ai-chat-btn');
     const aiPanel = document.getElementById('ai-chat-panel');
@@ -289,15 +334,16 @@
     syncDockBodyClass();
 
     const hasCalc = isVisible(calcFab);
+    const hasCarte = isVisible(carteFab);
     const hasAi = isVisible(aiRoot) && isVisible(aiBtn);
     const hasChatBubble = isVisible(chatBubble);
     const hasChatBar = isVisible(chatBar);
 
     if (mobile) {
       if (landscape) {
-        layoutMobileLandscape(calcFab, calcPanel, aiBtn, aiPanel, chatBubble, chatBar, chatPanel);
+        layoutMobileLandscape(calcFab, calcPanel, carteFab, cartePanel, aiBtn, aiPanel, chatBubble, chatBar, chatPanel);
       } else {
-        layoutMobile(calcFab, calcPanel, aiBtn, aiPanel, chatBubble, chatBar, chatPanel);
+        layoutMobile(calcFab, calcPanel, carteFab, cartePanel, aiBtn, aiPanel, chatBubble, chatBar, chatPanel);
       }
       applyActiveFabZIndex();
       return;
@@ -331,6 +377,15 @@
       }
     }
 
+    if (hasCarte) {
+      applyFab(carteFab, safeRight(offsetRight), safeBottom(0));
+      if (carteFab) carteFab.style.boxShadow = SHADOW_FAB;
+      const carteCol = offsetRight;
+      offsetRight += FAB_SIZE + GAP;
+      bottomRowH = Math.max(bottomRowH, FAB_SIZE);
+      layoutExpeCartePanel(cartePanel, carteCol, FAB_SIZE + 14, Z_PANEL);
+    }
+
     if (hasAi) {
       applyFab(aiBtn, safeRight(offsetRight), safeBottom(0));
       if (!hasCalc) bottomRowH = FAB_SIZE;
@@ -347,9 +402,10 @@
 
     function chatColumnOffset() {
       let chatCol = 0;
-      if (hasCalc && hasAi) chatCol = FAB_SIZE + GAP;
-      else if (hasCalc) chatCol = FAB_SIZE + GAP;
-      else if (hasAi) chatCol = 0;
+      if (hasCalc) chatCol += FAB_SIZE + GAP;
+      if (hasCarte) chatCol += FAB_SIZE + GAP;
+      if (hasAi && !hasCalc && !hasCarte) chatCol = 0;
+      else if (hasAi && chatCol > 0) chatCol = Math.max(FAB_SIZE + GAP, chatCol - (FAB_SIZE + GAP));
       return chatCol;
     }
 
@@ -376,6 +432,8 @@
   function bootPageWidgets() {
     var app = window.__MYSIFA_APP__ || '';
     if (CALC_APPS[app] && typeof window._calc_mount === 'function') window._calc_mount();
+    if (app === 'expe' && typeof window._expe_carte_mount === 'function') window._expe_carte_mount();
+    else if (typeof window._expe_carte_unmount === 'function') window._expe_carte_unmount();
     if (typeof window.initAiChatWidget === 'function') window.initAiChatWidget();
     layout();
   }

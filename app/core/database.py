@@ -1704,6 +1704,14 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 43, "compta_banques")
 
+    # v44 — MyExpé : transporteurs historiques (Coupé, Ceva, Coquelle, Dimotrans)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=44 LIMIT 1").fetchone():
+        from app.services.expe_transporteurs_seed import seed_expe_transporteurs_if_empty
+
+        seed_expe_transporteurs_if_empty(conn)
+        conn.commit()
+        _record_schema_migration(conn, 44, "expe_transporteurs_seed")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

@@ -47,12 +47,13 @@ MS_CLIENT_ID = os.getenv("MS_CLIENT_ID", "")
 MS_CLIENT_SECRET = os.getenv("MS_CLIENT_SECRET", "")
 MS_SENDER_UPN = os.getenv("MS_SENDER_UPN", "")  # ex: eleconte@sifa.pro (mailbox autorisée à envoyer)
 
-SMTP_HOST = os.getenv("SMTP_HOST", "")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER = os.getenv("SMTP_USER", "")
-SMTP_PASS = os.getenv("SMTP_PASS", "")
-SMTP_FROM = os.getenv("SMTP_FROM", "")  # ex: "MySifa <no-reply@mysifa.com>"
-SMTP_TLS = os.getenv("SMTP_TLS", "1") not in {"0", "false", "False", "no", "NO"}
+SMTP_HOST      = os.getenv("SMTP_HOST", "")
+SMTP_PORT      = int(os.getenv("SMTP_PORT", 587))
+SMTP_USER      = os.getenv("SMTP_USER", "")
+SMTP_PASS      = os.getenv("SMTP_PASS", "")
+SMTP_FROM      = os.getenv("SMTP_FROM", "noreply@mysifa.fr")
+SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "MySifa")
+SMTP_TLS       = os.getenv("SMTP_TLS", "1") not in {"0", "false", "False", "no", "NO"}
 SUPPORT_EMAIL_DEBUG = os.getenv("SUPPORT_EMAIL_DEBUG", "0") in {"1", "true", "True", "yes", "YES"}
 
 # ─── Sécurité ─────────────────────────────────────────────────────
@@ -284,3 +285,7 @@ def classify_operation(op_str):
         info = OPERATION_SEVERITY.get(code, {"severity": "info", "label": op_clean, "category": "autre"})
         return {"code": code, **info}
     return {"code": "", "label": op_clean, "severity": "info", "category": "autre"}
+
+
+# URL de base (pour construire les liens dans les emails)
+BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
