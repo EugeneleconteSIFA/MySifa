@@ -18,6 +18,7 @@ from config import (
     ROLE_SUPERADMIN,
     ROLE_DIRECTION,
     ROLE_ADMINISTRATION,
+    ROLES_EXPE_WRITE,
     default_app_access_for_role,
 )
 
@@ -97,6 +98,11 @@ def user_has_app_access(user: dict, app: str) -> bool:
         return user.get("role") == ROLE_SUPERADMIN
     acc = merged_app_access(user.get("role"), user.get("access_overrides"))
     return bool(acc.get(app))
+
+
+def user_can_write_expe(user: dict) -> bool:
+    """MyExpé — écriture (départs, transporteurs). Logistique : lecture seule."""
+    return user.get("role") in ROLES_EXPE_WRITE
 
 
 # ─── Résolution utilisateur ───────────────────────────────────────

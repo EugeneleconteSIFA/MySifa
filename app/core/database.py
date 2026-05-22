@@ -716,6 +716,19 @@ def _migrate(conn):
         )""")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_compta_comptes_key ON compta_comptes(libelle_key)")
 
+    if "compta_banques" not in existing_tables:
+        conn.execute("""CREATE TABLE compta_banques (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code_vendeur TEXT NOT NULL UNIQUE,
+            numero_compte TEXT NOT NULL,
+            libelle TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )""")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_compta_banques_code ON compta_banques(code_vendeur)"
+        )
+
     _migrate_emplacements_plan(conn)
 
     try:
@@ -1582,6 +1595,114 @@ def _migrate(conn):
             "DELETE FROM planning_holidays WHERE date >= '2026-05-18' AND date <= '2026-05-22'"
         )
         _record_schema_migration(conn, 38, "cleanup_feries_planning_mai_2026")
+
+    # v39 — MyExpé : référentiel transporteurs
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=39 LIMIT 1").fetchone():
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS expe_transporteurs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nom TEXT NOT NULL,
+                taxe_carburant_pct REAL DEFAULT 0,
+                contact_nom TEXT,
+                contact_email TEXT,
+                contact_tel TEXT,
+                zone_france INTEGER DEFAULT 1,          -- 1 = oui
+                zone_france_hors_paris INTEGER DEFAULT 0,
+                zone_affretement INTEGER DEFAULT 0,     -- >6 palettes
+                zone_messagerie INTEGER DEFAULT 0,      -- <6 palettes (ramasse)
+                tarif_filename TEXT,                    -- nom du fichier uploadé
+                tarif_url TEXT,                         -- chemin relatif de stockage
+                actif INTEGER DEFAULT 1,
+                created_at TEXT NOT NULL,
+                updated_at TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_expe_transporteurs_actif
+                ON expe_transporteurs(actif);
+            """
+        )
+        conn.commit()
+        _record_schema_migration(conn, 39, "expe_transporteurs")
+
+    # v40 — Matières premières : référentiel
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=40 LIMIT 1").fetchone():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS matieres_premieres (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                categorie TEXT NOT NULL CHECK(categorie IN ('mandrin','palette','adhesif','carton')),
+                reference TEXT NOT NULL,
+                designation TEXT NOT NULL,
+                seuil_alerte REAL DEFAULT 0,
+                actif INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+                updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+                UNIQUE(categorie, reference)
+            )
+        """)
+        conn.commit()
+        _record_schema_migration(conn, 40, "matieres_premieres")
+
+    # v41 — Matières premières : stock courant
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=41 LIMIT 1").fetchone():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS mp_stock (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                matiere_id INTEGER NOT NULL UNIQUE REFERENCES matieres_premieres(id),
+                quantite REAL DEFAULT 0,
+                updated_at TEXT,
+                updated_by_name TEXT
+            )
+        """)
+        conn.commit()
+        _record_schema_migration(conn, 41, "mp_stock")
+
+    # v42 — Matières premières : historique mouvements
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=42 LIMIT 1").fetchone():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS mp_mouvements (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                matiere_id INTEGER NOT NULL REFERENCES matieres_premieres(id),
+                type_mouvement TEXT NOT NULL CHECK(type_mouvement IN ('entree','sortie','ajustement','transfert')),
+                quantite REAL NOT NULL,
+                quantite_avant REAL,
+                quantite_apres REAL,
+                ref_bl TEXT,
+                note TEXT,
+                emplacement_source TEXT,
+                emplacement_dest TEXT,
+                created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+                created_by INTEGER,
+                created_by_name TEXT
+            )
+        """)
+        conn.commit()
+        _record_schema_migration(conn, 42, "mp_mouvements")
+
+    # v43 — MyCompta : codes de banque (code vendeur Factor → compte CAF)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=43 LIMIT 1").fetchone():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS compta_banques (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                code_vendeur TEXT NOT NULL UNIQUE,
+                numero_compte TEXT NOT NULL,
+                libelle TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_compta_banques_code ON compta_banques(code_vendeur)"
+        )
+        now = datetime.now().isoformat()
+        for code, num in (("100", "512330000000"), ("98", "519320000000")):
+            conn.execute(
+                """INSERT OR IGNORE INTO compta_banques
+                   (code_vendeur, numero_compte, libelle, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (code, num, f"Factor {code}", now, now),
+            )
+        conn.commit()
+        _record_schema_migration(conn, 43, "compta_banques")
 
     _record_schema_migration(
         conn,

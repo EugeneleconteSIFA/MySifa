@@ -39,6 +39,19 @@ def _libelle_key(libelle_condense: str) -> str:
     return s
 
 
+def _norm_code_vendeur(raw: Any) -> str:
+    s = str(raw or "").strip()
+    if not s:
+        return ""
+    try:
+        f = float(s.replace(",", "."))
+        if abs(f - round(f)) < 1e-9:
+            return str(int(round(f)))
+    except ValueError:
+        pass
+    return s
+
+
 def _buyer_name(raw: str) -> str:
     s = str(raw or "").strip()
     if "/" in s:
@@ -120,7 +133,7 @@ async def upsert_acheteurs(request: Request):
             if not isinstance(it, dict):
                 continue
             code_vendeur = (it.get("code_vendeur") or "").strip() or None
-            identifiant = re.sub(r"\D", "", str(it.get("identifiant") or "").strip())
+            identifiant = str(it.get("identifiant") or "").strip()
             rs = str(it.get("raison_sociale") or "").strip()
             if not identifiant or not rs:
                 continue
@@ -153,7 +166,7 @@ async def update_acheteur(acheteur_id: int, request: Request):
     if not isinstance(body, dict):
         raise HTTPException(status_code=400, detail="JSON invalide")
     code_vendeur = (body.get("code_vendeur") or "").strip() or None
-    identifiant = re.sub(r"\D", "", str(body.get("identifiant") or "").strip())
+    identifiant = str(body.get("identifiant") or "").strip()
     rs = str(body.get("raison_sociale") or "").strip()
     if not identifiant or not rs:
         raise HTTPException(status_code=400, detail="identifiant et raison_sociale requis")
@@ -177,6 +190,102 @@ async def update_acheteur(acheteur_id: int, request: Request):
             raise HTTPException(
                 status_code=409,
                 detail="Conflit: un acheteur existe déjà avec ce code vendeur + identifiant",
+            )
+    return {"success": True}
+
+
+@router.get("/api/compta/banques")
+def list_banques(request: Request, q: str = ""):
+    _require_compta(request)
+    qq = _norm(q)
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM compta_banques ORDER BY code_vendeur ASC"
+        ).fetchall()
+    out = [dict(r) for r in rows]
+    if qq:
+        out = [
+            r
+            for r in out
+            if qq in _norm(r.get("code_vendeur") or "")
+            or qq in _norm(r.get("numero_compte") or "")
+            or qq in _norm(r.get("libelle") or "")
+        ]
+    return out
+
+
+@router.post("/api/compta/banques")
+async def upsert_banques(request: Request):
+    _require_compta(request)
+    body = await request.json()
+    items = body.get("items") if isinstance(body, dict) else None
+    if not isinstance(items, list) or len(items) == 0:
+        raise HTTPException(status_code=400, detail="items requis")
+    now = datetime.now().isoformat()
+    with get_db() as conn:
+        for it in items:
+            if not isinstance(it, dict):
+                continue
+            code = _norm_code_vendeur(it.get("code_vendeur"))
+            num = str(it.get("numero_compte") or "").strip()
+            lib = str(it.get("libelle") or "").strip() or None
+            if not code or not num:
+                continue
+            conn.execute(
+                """INSERT INTO compta_banques (code_vendeur,numero_compte,libelle,created_at,updated_at)
+                   VALUES (?,?,?,?,?)
+                   ON CONFLICT(code_vendeur) DO UPDATE SET
+                     numero_compte=excluded.numero_compte,
+                     libelle=excluded.libelle,
+                     updated_at=excluded.updated_at
+                """,
+                (code, num, lib, now, now),
+            )
+        conn.commit()
+    return {"success": True}
+
+
+@router.delete("/api/compta/banques/{banque_id}")
+def delete_banque(banque_id: int, request: Request):
+    _require_compta(request)
+    with get_db() as conn:
+        conn.execute("DELETE FROM compta_banques WHERE id=?", (banque_id,))
+        conn.commit()
+    return {"success": True}
+
+
+@router.put("/api/compta/banques/{banque_id}")
+async def update_banque(banque_id: int, request: Request):
+    _require_compta(request)
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="JSON invalide")
+    code = _norm_code_vendeur(body.get("code_vendeur"))
+    num = str(body.get("numero_compte") or "").strip()
+    lib = str(body.get("libelle") or "").strip() or None
+    if not code or not num:
+        raise HTTPException(
+            status_code=400, detail="code_vendeur et numero_compte requis"
+        )
+    now = datetime.now().isoformat()
+    with get_db() as conn:
+        ex = conn.execute(
+            "SELECT id FROM compta_banques WHERE id=?", (banque_id,)
+        ).fetchone()
+        if not ex:
+            raise HTTPException(status_code=404, detail="Code de banque introuvable")
+        try:
+            conn.execute(
+                """UPDATE compta_banques
+                   SET code_vendeur=?, numero_compte=?, libelle=?, updated_at=?
+                   WHERE id=?""",
+                (code, num, lib, now, banque_id),
+            )
+            conn.commit()
+        except sqlite3.IntegrityError:
+            raise HTTPException(
+                status_code=409,
+                detail="Conflit: ce code vendeur existe déjà",
             )
     return {"success": True}
 
@@ -274,6 +383,17 @@ async def update_compte(compte_id: int, request: Request):
     return {"success": True}
 
 
+def _load_banques(conn) -> Dict[str, str]:
+    out: Dict[str, str] = {}
+    for r in conn.execute(
+        "SELECT code_vendeur, numero_compte FROM compta_banques"
+    ).fetchall():
+        cv = _norm_code_vendeur(r["code_vendeur"])
+        if cv:
+            out[cv] = str(r["numero_compte"] or "").strip()
+    return out
+
+
 def _load_mappings(conn) -> Tuple[Dict[str, str], Dict[Tuple[Optional[str], str], str]]:
     comptes = {
         (r["libelle_key"] or ""): (r["numero_compte"] or "")
@@ -284,7 +404,7 @@ def _load_mappings(conn) -> Tuple[Dict[str, str], Dict[Tuple[Optional[str], str]
         "SELECT code_vendeur, identifiant, raison_sociale FROM compta_acheteurs"
     ).fetchall():
         key = (r["code_vendeur"], _norm(r["raison_sociale"] or ""))
-        acheteurs[key] = re.sub(r"\D", "", str(r["identifiant"] or ""))
+        acheteurs[key] = str(r["identifiant"] or "").strip()
     return comptes, acheteurs
 
 
@@ -424,9 +544,7 @@ def _load_table_from_text(text: str) -> List[List[Any]]:
     return _parse_delimited_text(text)
 
 
-def _transform_factor_table(
-    table_rows: List[List[Any]], caf_compte: str = "512330000000"
-) -> Dict[str, Any]:
+def _transform_factor_table(table_rows: List[List[Any]]) -> Dict[str, Any]:
     header_row, idx = _find_header_row_from_list(table_rows, _FACTOR_REQUIRED, max_scan_rows=40)
     i_code = idx[_hdr_norm("Code vendeur")]
     i_date = idx[_hdr_norm("Date comptable de l'écriture")]
@@ -438,10 +556,12 @@ def _transform_factor_table(
 
     with get_db() as conn:
         comptes, acheteurs = _load_mappings(conn)
+        banques = _load_banques(conn)
 
     out_rows: List[Dict[str, Any]] = []
     missing_accounts: Dict[str, int] = {}
     missing_buyers: Dict[str, int] = {}
+    missing_banques: Dict[str, int] = {}
 
     for row in table_rows[header_row + 1 :]:
         if not row or all(v in (None, "") for v in row):
@@ -449,7 +569,7 @@ def _transform_factor_table(
         if len(row) <= max(i_code, i_date, i_lib, i_deb, i_cred, i_buy, i_comp):
             continue
 
-        code_vendeur = str(row[i_code] or "").strip()
+        code_vendeur = _norm_code_vendeur(row[i_code])
         date_ecr = _fmt_date(row[i_date])
         lib_raw = str(row[i_lib] or "").strip()
         debit = _parse_amount(row[i_deb])
@@ -487,6 +607,15 @@ def _transform_factor_table(
                 problem = "compte_manquant"
                 problem_detail = key or lib_raw
 
+        caf_compte = banques.get(code_vendeur, "")
+        caf_problem = problem
+        caf_detail = problem_detail
+        if not caf_compte:
+            key_b = code_vendeur or "?"
+            missing_banques[key_b] = missing_banques.get(key_b, 0) + 1
+            caf_problem = "banque_manquante"
+            caf_detail = key_b
+
         out_rows.append(
             {
                 "date": date_ecr,
@@ -507,8 +636,8 @@ def _transform_factor_table(
                 "libelle": main_libelle,
                 "debit": credit,
                 "credit": debit,
-                "problem": problem,
-                "problem_detail": problem_detail,
+                "problem": caf_problem,
+                "problem_detail": caf_detail,
             }
         )
 
@@ -544,6 +673,10 @@ def _transform_factor_table(
                 {"buyer": k, "count": v}
                 for k, v in sorted(missing_buyers.items(), key=lambda kv: -kv[1])
             ],
+            "banques": [
+                {"code_vendeur": k, "count": v}
+                for k, v in sorted(missing_banques.items(), key=lambda kv: -kv[1])
+            ],
         },
     }
 
@@ -562,7 +695,6 @@ def _load_wb_from_upload(contents: bytes):
 async def transform_factor(
     request: Request,
     file: UploadFile = File(...),
-    caf_compte: str = "512330000000",
 ):
     _require_compta(request)
     contents = await file.read()
@@ -573,11 +705,11 @@ async def transform_factor(
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Fichier illisible: {e}")
-    return _transform_factor_table(table, caf_compte)
+    return _transform_factor_table(table)
 
 
 @router.post("/api/compta/transform-paste")
-async def transform_factor_paste(request: Request, caf_compte: str = "512330000000"):
+async def transform_factor_paste(request: Request):
     _require_compta(request)
     body = await request.json()
     if not isinstance(body, dict):
@@ -586,7 +718,7 @@ async def transform_factor_paste(request: Request, caf_compte: str = "5123300000
     if not text:
         raise HTTPException(status_code=400, detail="Collez au moins une ligne (en-têtes Factor inclus)")
     table = _load_table_from_text(text)
-    return _transform_factor_table(table, caf_compte)
+    return _transform_factor_table(table)
 
 
 @router.post("/api/compta/import-acheteurs")
@@ -612,7 +744,7 @@ async def import_acheteurs_from_excel(request: Request, file: UploadFile = File(
             if not row or all(v in (None, "") for v in row):
                 continue
             code_v = str(row[i_code] or "").strip() or None
-            ident = re.sub(r"\D", "", str(row[i_ident] or "").strip())
+            ident = str(row[i_ident] or "").strip()
             rs = str(row[i_rs] or "").strip()
             if not ident or not rs:
                 skipped += 1

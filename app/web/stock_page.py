@@ -91,6 +91,8 @@ input,select{font-family:inherit}
   border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:13px;
   font-weight:500;width:100%;text-align:left;font-family:inherit;transition:all .15s;margin-bottom:2px}
 .nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
+.nav-section-label{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);
+  font-weight:600;padding:14px 16px 4px 16px;user-select:none;pointer-events:none}
 .nav-btn--mysifa-portal{align-items:baseline;flex-wrap:wrap;gap:4px 8px;line-height:1.35}
 .nav-btn--mysifa-portal:hover{background:var(--accent-bg)}
 .nav-btn--mysifa-portal:hover .mysifa-back-preamble{color:var(--text2)}
@@ -376,6 +378,154 @@ body.light .field-input.empl-upper::placeholder{
 
 /* ── Stats dashboard ── */
 .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px}
+.dash-quick-actions{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:24px}
+.dash-quick-btn{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 16px;
+  font-size:13px;font-weight:600;color:var(--text);cursor:pointer;font-family:inherit;
+  transition:border-color .15s,background .15s}
+.dash-quick-btn:hover{border-color:var(--accent);background:var(--accent-bg)}
+@media(max-width:640px){.dash-quick-actions{flex-direction:column}.dash-quick-btn{width:100%}}
+.dash-section{border-top:1px solid var(--border);padding-top:24px;margin-top:24px}
+.dash-section-title{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;
+  color:var(--text);margin-bottom:14px}
+.dash-alert-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:640px){.dash-alert-grid{grid-template-columns:1fr}}
+.dash-alert-block{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+.dash-alert-block h4{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:0 0 10px}
+.dash-alert-ok{font-size:13px;color:var(--success);line-height:1.5}
+.dash-alert-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);
+  cursor:pointer;font-size:13px;color:var(--text)}
+.dash-alert-row:last-child{border-bottom:none}
+.dash-alert-row:hover{background:var(--accent-bg);border-radius:8px}
+.dash-alert-main{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dash-alert-qty{margin-left:auto;white-space:nowrap;color:var(--text2);font-size:12px;flex-shrink:0}
+.dash-mp-cat{font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;text-transform:uppercase;flex-shrink:0}
+.dash-mp-cat-mandrin{background:rgba(124,58,237,.15);color:#7c3aed}
+.dash-mp-cat-palette{background:rgba(8,145,178,.15);color:#0891b2}
+.dash-mp-cat-adhesif{background:rgba(217,119,6,.15);color:#d97706}
+.dash-mp-cat-carton{background:rgba(5,150,105,.15);color:#059669}
+.dash-act-list{display:flex;flex-direction:column}
+.dash-act-row{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--border);
+  font-size:13px;flex-wrap:wrap;color:var(--text)}
+.dash-act-row:last-child{border-bottom:none}
+.dash-act-main{flex:1;min-width:0}
+.dash-act-meta{color:var(--muted);font-size:12px;white-space:nowrap}
+.dash-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;letter-spacing:.3px;flex-shrink:0}
+.dash-badge-stock-mp{background:rgba(124,58,237,.12);color:#7c3aed}
+.dash-badge-stock-pf{background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent)}
+.dash-badge-mvt-entree{background:color-mix(in srgb,var(--success) 15%,transparent);color:var(--success)}
+.dash-badge-mvt-sortie{background:color-mix(in srgb,var(--danger) 15%,transparent);color:var(--danger)}
+.dash-badge-mvt-ajustement{background:color-mix(in srgb,var(--warn) 15%,transparent);color:var(--warn)}
+.dash-badge-mvt-transfert{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
+.dash-badge-mvt-inventaire{background:color-mix(in srgb,var(--success) 15%,transparent);color:var(--success)}
+/* ── Matières premières ── */
+.mp-page{padding:0 0 24px}
+.mp-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.mp-head h2{margin:0}
+.mp-pills{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.mp-pill{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:6px 14px;
+  font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;font-family:inherit;transition:all .15s}
+.mp-pill:hover{border-color:var(--accent);color:var(--accent)}
+.mp-pill.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.mp-search-wrap{margin-bottom:16px}
+.mp-search{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 16px;
+  color:var(--text);font-size:14px;font-family:inherit}
+.mp-search:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.mp-list{display:flex;flex-direction:column;gap:12px}
+.mp-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+.mp-card-top{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap}
+.mp-card-ref{font-family:ui-monospace,monospace;font-size:14px;font-weight:700;color:var(--text);flex:1;min-width:120px}
+.mp-card-stock{font-size:20px;font-weight:700;color:var(--text);white-space:nowrap}
+.mp-card-des{font-size:13px;color:var(--text2);margin-top:6px;width:100%}
+.mp-card-warn{font-size:12px;color:var(--warn);margin-top:4px}
+.mp-card-actions{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.mp-card-actions-desktop{display:flex;gap:8px;flex-wrap:wrap}
+.mp-card-actions-mobile{display:none;position:relative}
+.mp-act-btn{border:none;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+.mp-act-entree{background:color-mix(in srgb,var(--success) 15%,transparent);color:var(--success)}
+.mp-act-sortie{background:color-mix(in srgb,var(--danger) 15%,transparent);color:var(--danger)}
+.mp-act-ajust{background:color-mix(in srgb,var(--warn) 15%,transparent);color:var(--warn)}
+.mp-act-transf{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
+.mp-menu-btn{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:16px;cursor:pointer;color:var(--text2)}
+.mp-menu-drop{position:absolute;right:0;top:100%;margin-top:4px;background:var(--card);border:1px solid var(--border);
+  border-radius:10px;padding:6px;min-width:140px;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+.mp-menu-drop button{display:block;width:100%;text-align:left;margin-bottom:4px}
+.mp-empty{text-align:center;color:var(--muted);font-size:13px;padding:32px 16px}
+#mroot{position:fixed;inset:0;z-index:550;pointer-events:none}
+#mroot:not(:empty){pointer-events:auto}
+.mp-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:18px}
+.mp-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;width:100%;max-width:420px;max-height:90vh;overflow-y:auto}
+.mp-modal h3{margin:0 0 16px;font-size:16px;font-weight:700;color:var(--text)}
+.mp-field{margin-bottom:12px}
+.mp-field label{display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px}
+.mp-field input,.mp-field select,.mp-field textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-size:14px;font-family:inherit}
+.mp-field textarea{min-height:72px;resize:vertical}
+.mp-readonly{padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:10px;font-size:13px;color:var(--text2)}
+.mp-hint{font-size:12px;color:var(--muted);margin-top:4px}
+.mp-hint.err{color:var(--danger)}
+.mp-modal-actions{display:flex;gap:10px;margin-top:16px}
+.mp-drawer-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;justify-content:flex-end}
+.mp-drawer{background:var(--card);border-left:1px solid var(--border);width:100%;max-width:480px;height:100%;display:flex;flex-direction:column}
+.mp-drawer-head{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--border);flex-shrink:0}
+.mp-drawer-body{flex:1;overflow-y:auto;padding:16px 18px}
+.mp-drawer-foot{padding:16px 18px;border-top:1px solid var(--border);flex-shrink:0}
+.mp-admin-row{padding:12px 0;border-bottom:1px solid var(--border)}
+.mp-admin-row:last-child{border-bottom:none}
+.mp-admin-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.mp-admin-edit{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:10px}
+.mp-admin-err{font-size:12px;color:var(--danger);margin-top:8px}
+@media(max-width:640px){
+  .mp-card-actions-desktop{display:none}
+  .mp-card-actions-mobile{display:block}
+  .mp-drawer{max-width:100%}
+}
+/* ── Historique mouvements ── */
+.hist-page{padding:0 0 24px}
+.hist-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.hist-head h2{margin:0}
+.hist-filters-toggle{display:none;width:100%;margin-bottom:10px}
+.hist-filters-bar{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:16px}
+.hist-filters-bar.sticky{position:sticky;top:0;z-index:20}
+.hist-filters-grid{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
+.hist-filter-field{display:flex;flex-direction:column;gap:6px;min-width:140px;flex:1}
+.hist-filter-field label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.hist-filter-field input,.hist-filter-field select{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;
+  padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit}
+.hist-filter-field input:focus,.hist-filter-field select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.hist-filter-field select:disabled{opacity:.55;cursor:not-allowed}
+.hist-filters-actions{display:flex;gap:8px;flex-wrap:wrap}
+.hist-loading{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:48px 16px;color:var(--muted);font-size:13px}
+.hist-spinner{width:28px;height:28px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:hist-spin .7s linear infinite}
+@keyframes hist-spin{to{transform:rotate(360deg)}}
+.hist-empty{text-align:center;color:var(--muted);font-size:13px;padding:40px 16px}
+.hist-table-wrap{display:block;overflow-x:auto}
+.hist-table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:13px}
+.hist-table thead th{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);
+  border-bottom:2px solid var(--border);padding:10px 8px;text-align:left;font-weight:600}
+.hist-table tbody td{padding:10px 8px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:top;overflow:hidden;text-overflow:ellipsis}
+.hist-table tbody tr:hover{background:var(--accent-bg)}
+.hist-ref{font-family:ui-monospace,monospace;font-size:12px;font-weight:600}
+.hist-muted{color:var(--muted);font-size:12px}
+.hist-badge{font-size:10px;font-weight:700;border-radius:4px;padding:2px 6px;display:inline-block;white-space:nowrap}
+.hist-badge-stock-mp{background:rgba(124,58,237,.12);color:#7c3aed}
+.hist-badge-stock-pf{background:rgba(34,211,238,.12);color:var(--accent)}
+.hist-badge-mvt-entree,.hist-badge-mvt-inventaire{background:rgba(52,211,153,.15);color:var(--success);font-size:11px;font-weight:600;padding:2px 8px}
+.hist-badge-mvt-sortie{background:rgba(248,113,113,.15);color:var(--danger);font-size:11px;font-weight:600;padding:2px 8px}
+.hist-badge-mvt-ajustement{background:rgba(251,191,36,.15);color:var(--warn);font-size:11px;font-weight:600;padding:2px 8px}
+.hist-badge-mvt-transfert{background:rgba(34,211,238,.15);color:var(--accent);font-size:11px;font-weight:600;padding:2px 8px}
+.hist-cards{display:none;flex-direction:column;gap:12px}
+.hist-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+.hist-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.hist-card-badges{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.hist-card-date{font-size:12px;color:var(--muted);white-space:nowrap}
+.hist-card-refline{font-family:ui-monospace,monospace;font-size:13px;font-weight:700;color:var(--text);margin-bottom:8px}
+.hist-card-meta{font-size:13px;color:var(--text2);padding-top:8px;border-top:1px solid var(--border)}
+.hist-card-note{font-size:12px;color:var(--muted);margin-top:6px}
+@media(max-width:768px){
+  .hist-filters-toggle{display:flex}
+  .hist-filters-bar.collapsed .hist-filters-grid,.hist-filters-bar.collapsed .hist-filters-actions{display:none}
+  .hist-table-wrap{display:none}
+  .hist-cards{display:flex}
+}
 .stat-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px}
 .stat-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:6px}
 .stat-value{font-size:26px;font-weight:800;font-family:monospace}
@@ -700,6 +850,7 @@ body.light .recep-fourn-sel:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
 <div id="root"></div>
+<div id="mroot"></div>
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='stock';</script>
 <script src="/static/mysifa_dock.js"></script>
@@ -764,6 +915,28 @@ let S = {
   importRefsPreview: null,
   importRefsLoading: false,
   importRefsApplying: false,
+  // Matières premières
+  matieres: null,
+  matieresCat: 'tout',
+  matieresQ: '',
+  matieresCardMenuId: null,
+  mpModal: null,
+  matieresAdminOpen: false,
+  matieresAdminList: null,
+  matieresAdminEditId: null,
+  matieresAdminAddError: '',
+  matieresAdminSaving: false,
+  // Historique mouvements
+  historique: [],
+  historiqueFiltres: {
+    type_stock: 'tout',
+    categorie: '',
+    type_mouvement: '',
+    date_debut: '',
+    date_fin: '',
+  },
+  historiqueLoading: false,
+  historiqueFiltresOpen: false,
 };
 
 const ROLE_LABELS = {
@@ -893,6 +1066,8 @@ function icon(name, size=16){
   const a = `width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"`;
   const p = {
     'grid': '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
+    'layers': '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
+    'clock': '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
     'clipboard': '<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>',
     'users': '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
     'sun': '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>',
@@ -985,7 +1160,21 @@ async function loadEmplacement(empl) {
 }
 
 async function loadDashboard() {
-  try { const d = await api('/api/stock/dashboard'); if (d) { S.dashboard = d; renderContent(); } } catch(e) {}
+  try {
+    const [dash, activite, inventaire] = await Promise.all([
+      api('/api/stock/dashboard'),
+      api('/api/stock/historique-mouvements?limit=10').catch(() => []),
+      api('/api/stock/inventaire/produits-a-inventorier').catch(() => []),
+    ]);
+    if (dash) {
+      S.dashboard = {
+        ...dash,
+        activiteRecente: Array.isArray(activite) ? activite : [],
+        alertesPf: Array.isArray(inventaire) ? inventaire : [],
+      };
+      renderContent();
+    }
+  } catch (e) {}
 }
 
 async function loadInventaireList() {
@@ -1267,12 +1456,15 @@ function goToTab(tab) {
   S.tab = tab; S.selProduit = null; S.selEmpl = null; S.searchResults = null; S.showAddForm = false;
   if (tab !== 'traca') S.tracaPoste = null;
   clearSearch(); closeSidebar();
+  if (tab === 'historique') S.historiqueLoading = true;
   updateNavActive();
   renderContent();
   if (tab === 'dashboard') loadDashboard();
   else if (tab === 'referentiel') loadDashboard();
   else if (tab === 'inventaire') loadInventaireList();
   else if (tab === 'reception') loadRecepHistory();
+  else if (tab === 'matieres') loadMatieres();
+  else if (tab === 'historique') loadHistorique();
 }
 
 function updateNavActive() {
@@ -2139,16 +2331,986 @@ function renderImportRefsModal() {
   document.body.appendChild(ov);
 }
 
+const MP_CAT_LABELS = { mandrin: 'Mandrin', palette: 'Palette', adhesif: 'Adhésif', carton: 'Carton' };
+const MVT_TYPE_LABELS = {
+  entree: 'Entrée', sortie: 'Sortie', ajustement: 'Ajustement',
+  transfert: 'Transfert', inventaire: 'Inventaire',
+};
+
+function timeAgo(iso) {
+  if (!iso) return '';
+  const t = new Date(String(iso).replace(' ', 'T'));
+  if (Number.isNaN(t.getTime())) return '';
+  const now = new Date();
+  const diffMs = now - t;
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 60) return 'il y a ' + Math.max(1, diffMin) + 'm';
+  const diffH = Math.floor(diffMs / 3600000);
+  if (diffH < 24) return 'il y a ' + diffH + 'h';
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startYesterday = new Date(startToday.getTime() - 86400000);
+  if (t >= startYesterday && t < startToday) return 'hier';
+  const dd = String(t.getDate()).padStart(2, '0');
+  const mm = String(t.getMonth() + 1).padStart(2, '0');
+  return dd + '/' + mm;
+}
+
+const MP_MVT_TITLES = {
+  entree: 'Entrée en stock',
+  sortie: 'Sortie de stock',
+  ajustement: 'Ajustement d\'inventaire',
+  transfert: 'Transfert',
+};
+const MP_PILL_CATS = [
+  { id: 'tout', label: 'Tout' },
+  { id: 'mandrin', label: 'Mandrins' },
+  { id: 'palette', label: 'Palettes' },
+  { id: 'adhesif', label: 'Adhésifs' },
+  { id: 'carton', label: 'Cartons' },
+];
+
+function isMatieresAdmin() {
+  return S.user && ['superadmin', 'direction', 'administration'].includes(S.user.role);
+}
+
+function closeMroot() {
+  const m = document.getElementById('mroot');
+  if (m) m.innerHTML = '';
+  S.mpModal = null;
+}
+
+function filterMatieresList() {
+  const list = S.matieres || [];
+  const cat = S.matieresCat || 'tout';
+  const q = (S.matieresQ || '').trim().toLowerCase();
+  return list.filter(m => {
+    if (cat !== 'tout' && m.categorie !== cat) return false;
+    if (!q) return true;
+    const ref = (m.reference || '').toLowerCase();
+    const des = (m.designation || '').toLowerCase();
+    return ref.includes(q) || des.includes(q);
+  });
+}
+
+async function loadMatieres() {
+  try {
+    const d = await api('/api/stock/matieres');
+    S.matieres = Array.isArray(d) ? d : [];
+  } catch (e) {
+    S.matieres = [];
+    showToast(e.message, 'error');
+  }
+  renderMatieresView();
+}
+
+function renderMatieresView() {
+  if (S.tab !== 'matieres') return;
+  const ae = document.activeElement;
+  const focusId = ae?.id;
+  const caretStart = ae?.selectionStart;
+  const caretEnd = ae?.selectionEnd;
+  const area = document.getElementById('scroll-area');
+  if (!area) return;
+  area.innerHTML = '';
+  const content = buildMatieres();
+  if (content) area.appendChild(content);
+  if (focusId) {
+    const el = document.getElementById(focusId);
+    if (el) {
+      el.focus();
+      if (caretStart != null) {
+        try { el.setSelectionRange(caretStart, caretEnd); } catch (e) {}
+      }
+    }
+  }
+}
+
+function matieresCardActions(m) {
+  if (S.stockReadOnly) return null;
+  const mk = (lbl, cls, type) => el('button', {
+    cls: 'mp-act-btn ' + cls,
+    type: 'button',
+    on: { click: (e) => { e.stopPropagation(); S.matieresCardMenuId = null; openModalMouvement(type, m); } },
+  }, lbl);
+  const desktop = el('div', { cls: 'mp-card-actions-desktop' },
+    mk('Entrée', 'mp-act-entree', 'entree'),
+    mk('Sortie', 'mp-act-sortie', 'sortie'),
+    mk('Ajust.', 'mp-act-ajust', 'ajustement'),
+    mk('Transfert', 'mp-act-transf', 'transfert'),
+  );
+  const mobileWrap = el('div', { cls: 'mp-card-actions-mobile' });
+  const menuBtn = el('button', {
+    cls: 'mp-menu-btn',
+    type: 'button',
+    on: { click: (e) => {
+      e.stopPropagation();
+      S.matieresCardMenuId = S.matieresCardMenuId === m.id ? null : m.id;
+      renderMatieresView();
+    } },
+  }, '···');
+  mobileWrap.appendChild(menuBtn);
+  if (S.matieresCardMenuId === m.id) {
+    const drop = el('div', { cls: 'mp-menu-drop' },
+      mk('Entrée', 'mp-act-entree', 'entree'),
+      mk('Sortie', 'mp-act-sortie', 'sortie'),
+      mk('Ajust.', 'mp-act-ajust', 'ajustement'),
+      mk('Transfert', 'mp-act-transf', 'transfert'),
+    );
+    mobileWrap.appendChild(drop);
+  }
+  return el('div', { cls: 'mp-card-actions' }, desktop, mobileWrap);
+}
+
+function buildMatieres() {
+  if (S.matieres === null) {
+    return el('div', { cls: 'content mp-page' }, el('div', { cls: 'card-empty' }, 'Chargement…'));
+  }
+  const filtered = filterMatieresList();
+  const q = (S.matieresQ || '').trim();
+  const head = el('div', { cls: 'mp-head' },
+    el('h2', { cls: 'ref-page-title', style: { margin: 0 } }, 'Matières premières'),
+    isMatieresAdmin()
+      ? el('button', {
+          cls: 'btn btn-ghost',
+          type: 'button',
+          on: { click: () => openMatieresAdminDrawer() },
+        }, 'Gérer les références')
+      : null,
+  );
+  const pills = el('div', { cls: 'mp-pills' },
+    ...MP_PILL_CATS.map(p => el('button', {
+      cls: 'mp-pill' + (S.matieresCat === p.id ? ' active' : ''),
+      type: 'button',
+      on: { click: () => { S.matieresCat = p.id; renderMatieresView(); } },
+    }, p.label)),
+  );
+  const searchInp = el('input', {
+    cls: 'mp-search',
+    id: 'matieres-search',
+    attrs: {
+      type: 'text',
+      placeholder: 'Rechercher (référence, désignation…)',
+      autocomplete: 'off',
+    },
+  });
+  searchInp.value = S.matieresQ || '';
+  searchInp.addEventListener('input', (e) => {
+    S.matieresQ = e.target.value;
+    renderMatieresView();
+  });
+  searchInp.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      S.matieresQ = '';
+      renderMatieresView();
+    }
+  });
+  const list = el('div', { cls: 'mp-list' });
+  if (!filtered.length) {
+    list.appendChild(el('div', { cls: 'mp-empty' },
+      q
+        ? 'Aucune matière correspondant à « ' + q + ' ».'
+        : 'Aucune matière dans cette catégorie.',
+    ));
+  } else {
+    filtered.forEach(m => {
+      const seuil = parseFloat(m.seuil_alerte) || 0;
+      list.appendChild(el('div', { cls: 'mp-card' },
+        el('div', { cls: 'mp-card-top' },
+          dashMpCatBadge(m.categorie),
+          el('span', { cls: 'mp-card-ref' }, m.reference || ''),
+          el('span', { cls: 'mp-card-stock' }, fN(m.quantite) + ' pal.'),
+        ),
+        el('div', { cls: 'mp-card-des' }, m.designation || ''),
+        m.en_alerte
+          ? el('div', { cls: 'mp-card-warn' }, 'Sous le seuil (min. ' + fN(seuil) + ' pal.)')
+          : null,
+        matieresCardActions(m),
+      ));
+    });
+  }
+  return el('div', { cls: 'content mp-page' }, head, pills,
+    el('div', { cls: 'mp-search-wrap' }, searchInp), list);
+}
+
+function openModalMouvement(type, matiere) {
+  (async () => {
+    if (!S.matieres) {
+      try {
+        const d = await api('/api/stock/matieres');
+        S.matieres = Array.isArray(d) ? d : [];
+      } catch (e) {
+        S.matieres = [];
+      }
+    }
+    renderMpMouvementModal(type, matiere);
+  })();
+}
+
+function renderMpMouvementModal(type, matiere) {
+  const typeMvt = (type || 'entree').toLowerCase();
+  const list = (S.matieres || []).filter(m => m.actif !== 0);
+  let mat = matiere || null;
+  if (!mat && list.length === 1) mat = list[0];
+  S.mpModal = { type: typeMvt, matiere: mat, matiereId: mat ? mat.id : null };
+  closeMroot();
+  const mroot = document.getElementById('mroot');
+  if (!mroot) return;
+  const stockActuel = mat ? (parseFloat(mat.quantite) || 0) : 0;
+
+  const overlay = el('div', {
+    cls: 'mp-modal-overlay',
+    on: { click: (e) => { if (e.target === overlay) closeMroot(); } },
+  });
+  const box = el('div', { cls: 'mp-modal' });
+  box.appendChild(el('h3', null, MP_MVT_TITLES[typeMvt] || typeMvt));
+
+  if (mat) {
+    box.appendChild(el('div', { cls: 'mp-field' },
+      el('label', null, 'Matière'),
+      el('div', { cls: 'mp-readonly' }, (mat.reference || '') + ' — ' + (mat.designation || '')),
+    ));
+  } else {
+    const sel = el('select', { id: 'mp-modal-matiere-select' });
+    sel.appendChild(el('option', { value: '' }, '— Choisir une matière —'));
+    list.forEach(item => {
+      sel.appendChild(el('option', {
+        value: String(item.id),
+        selected: S.mpModal.matiereId === item.id ? true : null,
+      }, item.reference + ' — ' + item.designation));
+    });
+    sel.addEventListener('change', () => {
+      const id = parseInt(sel.value, 10);
+      const found = list.find(x => x.id === id);
+      renderMpMouvementModal(typeMvt, found || null);
+    });
+    box.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Matière'), sel));
+  }
+
+  box.appendChild(el('div', { cls: 'mp-field' },
+    el('label', null, 'Type de mouvement'),
+    el('div', { cls: 'mp-readonly' }, MP_MVT_TITLES[typeMvt] || typeMvt),
+  ));
+
+  const hintEl = el('div', { cls: 'mp-hint' }, '');
+  const errEl = el('div', { cls: 'mp-hint err', style: { display: 'none' } }, '');
+
+  if (typeMvt === 'entree') {
+    const blInp = el('input', { attrs: { type: 'text', placeholder: 'BL-2024-001' } });
+    const qInp = el('input', { attrs: { type: 'number', min: '0.5', step: '0.5' } });
+    box.appendChild(el('div', { cls: 'mp-field' },
+      el('label', null, 'Référence BL / Fournisseur'),
+      blInp,
+    ));
+    box.appendChild(el('div', { cls: 'mp-field' },
+      el('label', null, 'Quantité (palettes)'),
+      qInp,
+    ));
+    S.mpModal.getBody = () => ({
+      matiere_id: S.mpModal.matiereId,
+      type_mouvement: 'entree',
+      quantite: parseFloat(qInp.value),
+      ref_bl: (blInp.value || '').trim() || null,
+      note: null,
+      emplacement_source: null,
+      emplacement_dest: null,
+    });
+    S.mpModal.validate = () => {
+      const q = parseFloat(qInp.value);
+      if (!S.mpModal.matiereId) return 'Matière obligatoire.';
+      if (!q || q <= 0) return 'Quantité invalide.';
+      return null;
+    };
+  } else if (typeMvt === 'sortie') {
+    hintEl.textContent = 'Stock actuel : ' + fN(stockActuel) + ' pal.';
+    const qInp = el('input', { attrs: { type: 'number', min: '0.5', step: '0.5' } });
+    const checkQ = () => {
+      const q = parseFloat(qInp.value);
+      if (q > stockActuel) {
+        errEl.style.display = '';
+        errEl.textContent = 'Stock insuffisant.';
+      } else {
+        errEl.style.display = 'none';
+      }
+    };
+    qInp.addEventListener('input', checkQ);
+    box.appendChild(el('div', { cls: 'mp-field' },
+      el('label', null, 'Quantité (palettes)'),
+      qInp,
+      hintEl,
+      errEl,
+    ));
+    S.mpModal.getBody = () => ({
+      matiere_id: S.mpModal.matiereId,
+      type_mouvement: 'sortie',
+      quantite: parseFloat(qInp.value),
+      ref_bl: null,
+      note: null,
+      emplacement_source: null,
+      emplacement_dest: null,
+    });
+    S.mpModal.validate = () => {
+      const q = parseFloat(qInp.value);
+      if (!S.mpModal.matiereId) return 'Matière obligatoire.';
+      if (!q || q <= 0) return 'Quantité invalide.';
+      if (q > stockActuel) return 'Stock insuffisant.';
+      return null;
+    };
+  } else if (typeMvt === 'ajustement') {
+    hintEl.textContent = 'Stock actuel : ' + fN(stockActuel) + ' pal.';
+    const qInp = el('input', { attrs: { type: 'number', min: '0', step: '0.5' } });
+    box.appendChild(el('div', { cls: 'mp-field' },
+      hintEl,
+      el('label', null, 'Nouveau stock (palettes)'),
+      qInp,
+    ));
+    S.mpModal.getBody = () => ({
+      matiere_id: S.mpModal.matiereId,
+      type_mouvement: 'ajustement',
+      quantite: parseFloat(qInp.value),
+      ref_bl: null,
+      note: null,
+      emplacement_source: null,
+      emplacement_dest: null,
+    });
+    S.mpModal.validate = () => {
+      const q = parseFloat(qInp.value);
+      if (!S.mpModal.matiereId) return 'Matière obligatoire.';
+      if (Number.isNaN(q) || q < 0) return 'Quantité invalide.';
+      return null;
+    };
+  } else if (typeMvt === 'transfert') {
+    const qInp = el('input', { attrs: { type: 'number', min: '0.5', step: '0.5' } });
+    const srcInp = el('input', { attrs: { type: 'text' } });
+    const dstInp = el('input', { attrs: { type: 'text' } });
+    box.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Quantité (palettes)'), qInp));
+    box.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Emplacement source'), srcInp));
+    box.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Emplacement destination'), dstInp));
+    S.mpModal.getBody = () => ({
+      matiere_id: S.mpModal.matiereId,
+      type_mouvement: 'transfert',
+      quantite: parseFloat(qInp.value),
+      ref_bl: null,
+      note: null,
+      emplacement_source: (srcInp.value || '').trim() || null,
+      emplacement_dest: (dstInp.value || '').trim() || null,
+    });
+    S.mpModal.validate = () => {
+      const q = parseFloat(qInp.value);
+      if (!S.mpModal.matiereId) return 'Matière obligatoire.';
+      if (!q || q <= 0) return 'Quantité invalide.';
+      return null;
+    };
+  }
+
+  const noteTa = el('textarea', { attrs: { placeholder: 'Commentaire (optionnel)' } });
+  box.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Note'), noteTa));
+  const prevGetBody = S.mpModal.getBody;
+  S.mpModal.getBody = () => {
+    const b = prevGetBody();
+    b.note = (noteTa.value || '').trim() || null;
+    return b;
+  };
+
+  const actions = el('div', { cls: 'mp-modal-actions' },
+    el('button', { cls: 'btn-cancel', type: 'button', on: { click: closeMroot } }, 'Annuler'),
+    el('button', { cls: 'btn', type: 'button', on: { click: submitMpMouvement } }, 'Valider'),
+  );
+  box.appendChild(actions);
+  overlay.appendChild(box);
+  mroot.appendChild(overlay);
+}
+
+async function submitMpMouvement() {
+  if (!S.mpModal) return;
+  const err = S.mpModal.validate ? S.mpModal.validate() : null;
+  if (err) { showToast(err, 'error'); return; }
+  const body = S.mpModal.getBody();
+  try {
+    const res = await api('/api/stock/matieres/mouvement', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (res && res.ok) {
+      closeMroot();
+      showToast('Mouvement enregistré.', 'success');
+      await loadMatieres();
+      if (S.tab === 'dashboard') await loadDashboard();
+    }
+  } catch (e) {
+    showToast(e.message || 'Erreur lors de l\'enregistrement.', 'error');
+  }
+}
+
+async function loadMatieresAdminList() {
+  try {
+    const d = await api('/api/stock/matieres?all=1');
+    S.matieresAdminList = Array.isArray(d) ? d : [];
+  } catch (e) {
+    S.matieresAdminList = [];
+    showToast(e.message, 'error');
+  }
+}
+
+async function openMatieresAdminDrawer() {
+  if (!isMatieresAdmin()) return;
+  S.matieresAdminOpen = true;
+  S.matieresAdminEditId = null;
+  S.matieresAdminAddError = '';
+  await loadMatieresAdminList();
+  renderMatieresAdminDrawer();
+}
+
+function closeMatieresAdminDrawer() {
+  S.matieresAdminOpen = false;
+  S.matieresAdminEditId = null;
+  closeMroot();
+}
+
+function renderMatieresAdminDrawer() {
+  closeMroot();
+  if (!S.matieresAdminOpen) return;
+  const mroot = document.getElementById('mroot');
+  if (!mroot) return;
+  const overlay = el('div', {
+    cls: 'mp-drawer-overlay',
+    on: { click: (e) => { if (e.target === overlay) closeMatieresAdminDrawer(); } },
+  });
+  const drawer = el('div', { cls: 'mp-drawer', on: { click: (e) => e.stopPropagation() } });
+  drawer.appendChild(el('div', { cls: 'mp-drawer-head' },
+    el('h3', { style: { margin: 0, fontSize: '16px' } }, 'Références matières premières'),
+    el('button', { cls: 'btn-cancel', type: 'button', on: { click: closeMatieresAdminDrawer } }, '×'),
+  ));
+  const body = el('div', { cls: 'mp-drawer-body' });
+  const list = S.matieresAdminList || [];
+  const byCat = {};
+  list.forEach(item => {
+    const c = item.categorie || 'autre';
+    if (!byCat[c]) byCat[c] = [];
+    byCat[c].push(item);
+  });
+  ['mandrin', 'palette', 'adhesif', 'carton'].forEach(cat => {
+    if (!byCat[cat] || !byCat[cat].length) return;
+    body.appendChild(el('div', { style: { fontSize: '11px', fontWeight: '600', color: 'var(--muted)', margin: '12px 0 8px', textTransform: 'uppercase' } },
+      MP_CAT_LABELS[cat] || cat));
+    byCat[cat].forEach(item => {
+      body.appendChild(buildMatieresAdminRow(item));
+    });
+  });
+  drawer.appendChild(body);
+  drawer.appendChild(buildMatieresAdminAddForm());
+  overlay.appendChild(drawer);
+  mroot.appendChild(overlay);
+}
+
+function buildMatieresAdminRow(item) {
+  const row = el('div', { cls: 'mp-admin-row' });
+  const actif = item.actif !== 0;
+  row.appendChild(el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
+    dashMpCatBadge(item.categorie),
+    el('strong', null, item.reference || ''),
+    el('span', { style: { color: 'var(--text2)', fontSize: '13px' } }, item.designation || ''),
+    el('span', { style: { fontSize: '12px', color: 'var(--muted)' } }, 'Seuil ' + fN(item.seuil_alerte) + ' pal.'),
+    el('span', { style: { fontSize: '11px', fontWeight: '600', color: actif ? 'var(--success)' : 'var(--muted)' } },
+      actif ? 'Actif' : 'Inactif'),
+  ));
+  const actions = el('div', { cls: 'mp-admin-actions' },
+    el('button', {
+      cls: 'btn-ghost',
+      type: 'button',
+      on: { click: () => {
+        S.matieresAdminEditId = S.matieresAdminEditId === item.id ? null : item.id;
+        renderMatieresAdminDrawer();
+      } },
+    }, S.matieresAdminEditId === item.id ? 'Fermer' : 'Modifier'),
+    el('button', {
+      cls: 'btn-ghost',
+      type: 'button',
+      on: { click: () => toggleMatieresActif(item) },
+    }, actif ? 'Désactiver' : 'Réactiver'),
+  );
+  row.appendChild(actions);
+  if (S.matieresAdminEditId === item.id) {
+    row.appendChild(buildMatieresAdminEditForm(item));
+  }
+  return row;
+}
+
+function buildMatieresAdminEditForm(item) {
+  const desInp = el('input', { attrs: { type: 'text' } });
+  desInp.value = item.designation || '';
+  const seuilInp = el('input', { attrs: { type: 'number', min: '0', step: '0.5' } });
+  seuilInp.value = String(item.seuil_alerte ?? 0);
+  const wrap = el('div', { cls: 'mp-admin-edit' },
+    el('div', { cls: 'mp-field' }, el('label', null, 'Désignation'), desInp),
+    el('div', { cls: 'mp-field' }, el('label', null, 'Seuil d\'alerte (pal.)'), seuilInp),
+    el('button', {
+      cls: 'btn',
+      type: 'button',
+      on: { click: async () => {
+        try {
+          await api('/api/stock/matieres/' + item.id, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              designation: desInp.value.trim(),
+              seuil_alerte: parseFloat(seuilInp.value) || 0,
+            }),
+          });
+          showToast('Référence mise à jour.', 'success');
+          S.matieresAdminEditId = null;
+          await loadMatieresAdminList();
+          await loadMatieres();
+          renderMatieresAdminDrawer();
+        } catch (e) {
+          showToast(e.message, 'error');
+        }
+      } },
+    }, 'Enregistrer'),
+  );
+  return wrap;
+}
+
+async function toggleMatieresActif(item) {
+  const actif = item.actif !== 0;
+  if (actif && !confirm('Désactiver la référence « ' + item.reference + ' » ?')) return;
+  try {
+    if (actif) {
+      await api('/api/stock/matieres/' + item.id, { method: 'DELETE' });
+      showToast('Référence désactivée.', 'success');
+    } else {
+      await api('/api/stock/matieres/' + item.id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actif: 1 }),
+      });
+      showToast('Référence réactivée.', 'success');
+    }
+    await loadMatieresAdminList();
+    await loadMatieres();
+    renderMatieresAdminDrawer();
+  } catch (e) {
+    showToast(e.message, 'error');
+  }
+}
+
+function buildMatieresAdminAddForm() {
+  const foot = el('div', { cls: 'mp-drawer-foot' });
+  foot.appendChild(el('div', { style: { fontSize: '12px', fontWeight: '600', marginBottom: '12px', color: 'var(--text)' } }, 'Ajouter une référence'));
+  const catSel = el('select');
+  [['mandrin', 'Mandrin'], ['palette', 'Palette'], ['adhesif', 'Adhésif'], ['carton', 'Carton']].forEach(([v, l]) => {
+    catSel.appendChild(el('option', { value: v }, l));
+  });
+  const refInp = el('input', { attrs: { type: 'text', placeholder: '76MM-3P' } });
+  const desInp = el('input', { attrs: { type: 'text' } });
+  const seuilInp = el('input', { attrs: { type: 'number', min: '0', step: '0.5', value: '0' } });
+  const errEl = el('div', { cls: 'mp-admin-err' }, S.matieresAdminAddError || '');
+  foot.append(
+    el('div', { cls: 'mp-field' }, el('label', null, 'Catégorie'), catSel),
+    el('div', { cls: 'mp-field' }, el('label', null, 'Référence'), refInp),
+    el('div', { cls: 'mp-field' }, el('label', null, 'Désignation'), desInp),
+    el('div', { cls: 'mp-field' }, el('label', null, 'Seuil d\'alerte (pal., 0 = pas d\'alerte)'), seuilInp),
+    errEl,
+    el('button', {
+      cls: 'btn',
+      type: 'button',
+      style: { width: '100%', marginTop: '8px' },
+      on: { click: async () => {
+        S.matieresAdminAddError = '';
+        errEl.textContent = '';
+        const ref = refInp.value.trim();
+        const des = desInp.value.trim();
+        if (!ref || !des) {
+          S.matieresAdminAddError = 'Référence et désignation obligatoires.';
+          errEl.textContent = S.matieresAdminAddError;
+          return;
+        }
+        try {
+          await api('/api/stock/matieres', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              categorie: catSel.value,
+              reference: ref,
+              designation: des,
+              seuil_alerte: parseFloat(seuilInp.value) || 0,
+            }),
+          });
+          showToast('Référence ajoutée.', 'success');
+          refInp.value = '';
+          desInp.value = '';
+          seuilInp.value = '0';
+          await loadMatieresAdminList();
+          await loadMatieres();
+          renderMatieresAdminDrawer();
+        } catch (e) {
+          S.matieresAdminAddError = e.message || 'Erreur.';
+          errEl.textContent = S.matieresAdminAddError;
+        }
+      } },
+    }, 'Ajouter'),
+  );
+  return foot;
+}
+
+window._stockOpenModalMouvement = openModalMouvement;
+
+function fDateTime(iso) {
+  if (!iso) return '—';
+  const s = String(iso);
+  const parts = s.slice(0, 10).split('-');
+  const hm = s.length >= 16 ? s.slice(11, 16) : '';
+  if (parts.length === 3) {
+    return parts[2] + '/' + parts[1] + '/' + parts[0] + (hm ? ' ' + hm : '');
+  }
+  return fD(iso);
+}
+
+function truncStr(s, max) {
+  const t = (s || '').trim();
+  if (t.length <= max) return t;
+  return t.slice(0, max) + '…';
+}
+
+function histStockBadge(typeStock) {
+  const ts = typeStock === 'mp' ? 'mp' : 'pf';
+  const lbl = ts === 'mp' ? 'MP' : 'PF';
+  return el('span', { cls: 'hist-badge hist-badge-stock-' + ts }, lbl);
+}
+
+function histMvtBadge(typeMvt) {
+  const t = (typeMvt || '').toLowerCase();
+  const cls = 'hist-badge hist-badge-mvt-' + (t || 'entree');
+  return el('span', { cls }, MVT_TYPE_LABELS[t] || t);
+}
+
+function resetHistoriqueFiltres() {
+  S.historiqueFiltres = {
+    type_stock: 'tout',
+    categorie: '',
+    type_mouvement: '',
+    date_debut: '',
+    date_fin: '',
+  };
+  loadHistorique();
+}
+
+function exportHistoriqueCSV() {
+  const f = S.historiqueFiltres;
+  const params = new URLSearchParams({ limit: '500', format: 'csv' });
+  if (f.type_stock !== 'tout') params.set('type_stock', f.type_stock);
+  if (f.categorie) params.set('categorie', f.categorie);
+  if (f.type_mouvement) params.set('type_mouvement', f.type_mouvement);
+  if (f.date_debut) params.set('date_debut', f.date_debut);
+  if (f.date_fin) params.set('date_fin', f.date_fin);
+  window.location.href = API + '/api/stock/historique-mouvements?' + params.toString();
+}
+
+async function loadHistorique() {
+  S.historiqueLoading = true;
+  renderHistoriqueView();
+  try {
+    const f = S.historiqueFiltres;
+    const params = new URLSearchParams({ limit: '200' });
+    if (f.type_stock !== 'tout') params.set('type_stock', f.type_stock);
+    if (f.categorie) params.set('categorie', f.categorie);
+    if (f.type_mouvement) params.set('type_mouvement', f.type_mouvement);
+    if (f.date_debut) params.set('date_debut', f.date_debut);
+    if (f.date_fin) params.set('date_fin', f.date_fin);
+    const d = await api('/api/stock/historique-mouvements?' + params.toString());
+    S.historique = Array.isArray(d) ? d : [];
+  } catch (e) {
+    S.historique = [];
+    showToast(e.message, 'error');
+  }
+  S.historiqueLoading = false;
+  renderHistoriqueView();
+}
+
+function renderHistoriqueView() {
+  if (S.tab !== 'historique') return;
+  const area = document.getElementById('scroll-area');
+  if (!area) return;
+  area.innerHTML = '';
+  const content = buildHistorique();
+  if (content) area.appendChild(content);
+}
+
+function buildHistoriqueFilterField(label, inputEl) {
+  return el('div', { cls: 'hist-filter-field' }, el('label', null, label), inputEl);
+}
+
+function buildHistoriqueFiltersBar() {
+  const f = S.historiqueFiltres;
+  const typeStockSel = el('select', { id: 'hist-f-type-stock' });
+  [['tout', 'Tout'], ['mp', 'Matières premières'], ['produits', 'Produits finis']].forEach(([v, l]) => {
+    typeStockSel.appendChild(el('option', { value: v, selected: f.type_stock === v ? true : null }, l));
+  });
+  typeStockSel.addEventListener('change', () => {
+    f.type_stock = typeStockSel.value;
+    if (f.type_stock === 'produits') f.categorie = '';
+    renderHistoriqueView();
+  });
+
+  const catSel = el('select', { id: 'hist-f-categorie', disabled: f.type_stock === 'produits' ? true : null });
+  [['', 'Tout'], ['mandrin', 'Mandrins'], ['palette', 'Palettes'], ['adhesif', 'Adhésifs'], ['carton', 'Cartons']].forEach(([v, l]) => {
+    catSel.appendChild(el('option', { value: v, selected: f.categorie === v ? true : null }, l));
+  });
+  catSel.addEventListener('change', () => { f.categorie = catSel.value; });
+
+  const mvtSel = el('select', { id: 'hist-f-mvt' });
+  [['', 'Tout'], ['entree', 'Entrée'], ['sortie', 'Sortie'], ['ajustement', 'Ajustement'],
+    ['inventaire', 'Inventaire'], ['transfert', 'Transfert']].forEach(([v, l]) => {
+    mvtSel.appendChild(el('option', { value: v, selected: f.type_mouvement === v ? true : null }, l));
+  });
+  mvtSel.addEventListener('change', () => { f.type_mouvement = mvtSel.value; });
+
+  const dateDebut = el('input', { type: 'date', id: 'hist-f-date-debut' });
+  dateDebut.value = f.date_debut || '';
+  dateDebut.addEventListener('change', () => { f.date_debut = dateDebut.value; });
+
+  const dateFin = el('input', { type: 'date', id: 'hist-f-date-fin' });
+  dateFin.value = f.date_fin || '';
+  dateFin.addEventListener('change', () => { f.date_fin = dateFin.value; });
+
+  const collapseMobile = typeof window !== 'undefined' && window.innerWidth <= 768 && !S.historiqueFiltresOpen;
+  const bar = el('div', {
+    cls: 'hist-filters-bar sticky' + (collapseMobile ? ' collapsed' : ''),
+  });
+  const grid = el('div', { cls: 'hist-filters-grid' },
+    buildHistoriqueFilterField('Type de stock', typeStockSel),
+    buildHistoriqueFilterField('Catégorie', catSel),
+    buildHistoriqueFilterField('Mouvement', mvtSel),
+    buildHistoriqueFilterField('Du', dateDebut),
+    buildHistoriqueFilterField('Au', dateFin),
+  );
+  const actions = el('div', { cls: 'hist-filters-actions' },
+    el('button', { cls: 'btn', type: 'button', on: { click: loadHistorique } }, 'Appliquer'),
+    el('button', { cls: 'btn-ghost', type: 'button', on: { click: resetHistoriqueFiltres } }, 'Réinitialiser'),
+  );
+  bar.append(grid, actions);
+  return bar;
+}
+
+function buildHistoriqueTableRow(m) {
+  const isMp = m.type_stock === 'mp';
+  const unit = isMp ? ' pal.' : '';
+  const sign = m.type_mouvement === 'entree' ? '+' : (m.type_mouvement === 'sortie' ? '−' : '');
+  const qte = (sign || '') + fN(m.quantite) + unit;
+  const avant = m.quantite_avant != null ? fN(m.quantite_avant) : '—';
+  const apres = m.quantite_apres != null ? fN(m.quantite_apres) : '—';
+  const blNote = [m.ref_bl, m.note].filter(Boolean).join(' · ');
+  const op = (m.created_by_name || '').trim() || '—';
+  return el('tr', null,
+    el('td', null, fDateTime(m.created_at)),
+    el('td', null, histStockBadge(m.type_stock)),
+    el('td', null, histMvtBadge(m.type_mouvement)),
+    el('td', { cls: 'hist-ref' }, m.reference || '—'),
+    el('td', { title: m.designation || '' }, truncStr(m.designation, 30)),
+    el('td', null, qte),
+    el('td', { cls: 'hist-muted' }, avant + ' → ' + apres),
+    el('td', { cls: 'hist-muted', title: blNote }, truncStr(blNote, 40) || '—'),
+    el('td', null, op),
+  );
+}
+
+function buildHistoriqueCard(m) {
+  const isMp = m.type_stock === 'mp';
+  const unit = isMp ? ' pal.' : '';
+  const sign = m.type_mouvement === 'entree' ? '+' : (m.type_mouvement === 'sortie' ? '−' : '');
+  const qte = (sign || '') + fN(m.quantite) + unit;
+  const avant = m.quantite_avant != null ? fN(m.quantite_avant) : '—';
+  const apres = m.quantite_apres != null ? fN(m.quantite_apres) : '—';
+  const op = (m.created_by_name || '').trim();
+  const blNote = [m.ref_bl, m.note].filter(Boolean).join(' · ');
+  return el('div', { cls: 'hist-card' },
+    el('div', { cls: 'hist-card-top' },
+      el('div', { cls: 'hist-card-badges' }, histStockBadge(m.type_stock), histMvtBadge(m.type_mouvement)),
+      el('span', { cls: 'hist-card-date' }, fDateTime(m.created_at)),
+    ),
+    el('div', { cls: 'hist-card-refline' },
+      (m.reference || '') + ' · ' + truncStr(m.designation, 40),
+    ),
+    el('div', { cls: 'hist-card-meta' },
+      qte + '   ' + avant + ' → ' + apres + (op ? '   ' + op : ''),
+    ),
+    blNote ? el('div', { cls: 'hist-card-note' }, blNote) : null,
+  );
+}
+
+function buildHistorique() {
+  const head = el('div', { cls: 'hist-head' },
+    el('h2', { cls: 'ref-page-title', style: { margin: 0 } }, 'Historique des mouvements'),
+    el('button', { cls: 'btn btn-ghost', type: 'button', on: { click: exportHistoriqueCSV } }, 'Export CSV'),
+  );
+
+  const toggleBtn = el('button', {
+    cls: 'btn-ghost hist-filters-toggle',
+    type: 'button',
+    on: { click: () => {
+      S.historiqueFiltresOpen = !S.historiqueFiltresOpen;
+      renderHistoriqueView();
+    } },
+  }, 'Filtres ' + (S.historiqueFiltresOpen ? '▴' : '▾'));
+
+  const body = el('div', { cls: 'hist-page' }, head, toggleBtn, buildHistoriqueFiltersBar());
+
+  if (S.historiqueLoading) {
+    body.appendChild(el('div', { cls: 'hist-loading' },
+      el('div', { cls: 'hist-spinner' }),
+      'Chargement…',
+    ));
+    return el('div', { cls: 'content' }, body);
+  }
+
+  const rows = S.historique || [];
+  if (!rows.length) {
+    body.appendChild(el('div', { cls: 'hist-empty' }, 'Aucun mouvement trouvé pour ces critères.'));
+    return el('div', { cls: 'content' }, body);
+  }
+
+  const table = el('table', { cls: 'hist-table' });
+  const thead = el('thead', null, el('tr', null,
+    el('th', { style: { width: '120px' } }, 'Date'),
+    el('th', { style: { width: '60px' } }, 'Type'),
+    el('th', { style: { width: '100px' } }, 'Mouvement'),
+    el('th', { style: { width: '120px' } }, 'Référence'),
+    el('th', null, 'Désignation'),
+    el('th', { style: { width: '80px' } }, 'Quantité'),
+    el('th', { style: { width: '100px' } }, 'Avant → Après'),
+    el('th', { style: { width: '140px' } }, 'Ref BL / Note'),
+    el('th', { style: { width: '110px' } }, 'Opérateur'),
+  ));
+  const tbody = el('tbody', null, ...rows.map(buildHistoriqueTableRow));
+  table.append(thead, tbody);
+
+  const cards = el('div', { cls: 'hist-cards' }, ...rows.map(buildHistoriqueCard));
+  body.append(
+    el('div', { cls: 'hist-table-wrap' }, table),
+    cards,
+  );
+
+  return el('div', { cls: 'content' }, body);
+}
+
+function openReceptionQuick() {
+  goToTab('reception');
+  requestAnimationFrame(() => {
+    setTimeout(() => { try { recepStartCamera(); } catch (e) {} }, 100);
+  });
+}
+
+function dashMpCatBadge(categorie) {
+  const c = (categorie || '').toLowerCase();
+  const lbl = MP_CAT_LABELS[c] || categorie || '—';
+  return el('span', { cls: 'dash-mp-cat dash-mp-cat-' + c }, lbl);
+}
+
+function dashMvtBadge(type) {
+  const t = (type || '').toLowerCase();
+  const cls = 'dash-badge dash-badge-mvt-' + (t || 'entree');
+  return el('span', { cls }, MVT_TYPE_LABELS[t] || t);
+}
+
+function dashStockTypeBadge(typeStock) {
+  const ts = typeStock === 'mp' ? 'mp' : 'pf';
+  const lbl = ts === 'mp' ? 'MP' : 'PF';
+  return el('span', { cls: 'dash-badge dash-badge-stock-' + ts }, lbl);
+}
+
+function buildDashboardShortcuts() {
+  const row = el('div', { cls: 'dash-quick-actions' });
+  const mk = (label, onClick) => el('button', { cls: 'dash-quick-btn', type: 'button', on: { click: onClick } }, label);
+  row.append(
+    mk('+ Réception matière', openReceptionQuick),
+    mk('+ Entrée MP', () => openModalMouvement('entree')),
+    mk('+ Sortie MP', () => openModalMouvement('sortie')),
+    mk('+ Ajustement MP', () => openModalMouvement('ajustement')),
+  );
+  return row;
+}
+
+function buildDashboardAlertes(d) {
+  const alertesMp = d.alertes_mp || [];
+  const alertesPf = d.alertesPf || [];
+  const mpBlock = el('div', { cls: 'dash-alert-block' },
+    el('h4', null, 'Matières premières'),
+    alertesMp.length
+      ? el('div', null, ...alertesMp.map(a => el('div', {
+          cls: 'dash-alert-row',
+          on: { click: () => goToTab('matieres') },
+        },
+          dashMpCatBadge(a.categorie),
+          el('span', { cls: 'dash-alert-main' },
+            (a.reference || '') + ' — ' + (a.designation || '')
+          ),
+          el('span', { cls: 'dash-alert-qty' },
+            fN(a.quantite) + ' pal. / min. ' + fN(a.seuil_alerte) + ' pal.'
+          ),
+        )))
+      : el('div', { cls: 'dash-alert-ok' }, 'Toutes les matières sont au-dessus des seuils.'),
+  );
+  const pfBlock = el('div', { cls: 'dash-alert-block' },
+    el('h4', null, 'Produits finis'),
+    alertesPf.length
+      ? el('div', null, ...alertesPf.slice(0, 12).map(a => el('div', {
+          cls: 'dash-alert-row',
+          on: { click: () => goToTab('inventaire') },
+        },
+          el('span', { cls: 'dash-alert-main' },
+            (a.reference || '') + ' — ' + (a.designation || '')
+          ),
+          el('span', { cls: 'dash-alert-qty' },
+            (a.emplacement || '') + ' · ' + (a.jours_depuis === 999999 ? 'jamais' : (a.jours_depuis + 'j'))
+          ),
+        )))
+      : el('div', { cls: 'dash-alert-ok' }, 'Tous les produits finis sont à jour.'),
+  );
+  return el('div', { cls: 'dash-section' },
+    el('div', { cls: 'dash-section-title' }, 'Stocks à réapprovisionner'),
+    el('div', { cls: 'dash-alert-grid' }, mpBlock, pfBlock),
+  );
+}
+
+function buildDashboardActivite(d) {
+  const rows = d.activiteRecente || [];
+  const list = el('div', { cls: 'dash-act-list' });
+  if (!rows.length) {
+    list.appendChild(el('div', { cls: 'card-empty' }, 'Aucun mouvement enregistré.'));
+  } else {
+    rows.forEach(m => {
+      const actor = (m.created_by_name || '').trim();
+      const refDes = (m.reference || '') + ' · ' + (m.designation || '');
+      const qte = fN(m.quantite);
+      const meta = [qte, actor, timeAgo(m.created_at)].filter(Boolean).join(' · ');
+      list.appendChild(el('div', { cls: 'dash-act-row' },
+        dashStockTypeBadge(m.type_stock),
+        dashMvtBadge(m.type_mouvement),
+        el('span', { cls: 'dash-act-main' }, refDes),
+        el('span', { cls: 'dash-act-meta' }, meta),
+      ));
+    });
+  }
+  return el('div', { cls: 'dash-section' },
+    el('div', { cls: 'dash-section-title' }, 'Activité récente'),
+    list,
+  );
+}
+
 function buildDashboard() {
   const d = S.dashboard;
   if (!d) return el('div',{cls:'content'},el('div',{cls:'card-empty'},'Chargement…'));
   const s = d.stats||{};
-  return el('div',{cls:'content'},
+  const parts = [
+    el('h2',{cls:'ref-page-title',style:{marginBottom:'16px'}},'Tableau de bord'),
     el('div',{cls:'stats-grid'},
       el('div',{cls:'stat-card'},el('div',{cls:'stat-label'},'Références'),el('div',{cls:'stat-value accent'},s.nb_refs||0)),
       el('div',{cls:'stat-card'},el('div',{cls:'stat-label'},'Emplacements occupés'),el('div',{cls:'stat-value accent'},s.nb_empl_occupes||0))
     ),
-    ...(!S.stockReadOnly ? [el('div',{cls:'card',style:{overflow:'visible'}},
+  ];
+  if (!S.stockReadOnly) parts.push(buildDashboardShortcuts());
+  parts.push(buildDashboardAlertes(d));
+  if (!S.stockReadOnly) parts.push(el('div',{cls:'card',style:{overflow:'visible'}},
       el('div',{cls:'card-header'},el('div',{cls:'card-title'},'➕ Ajouter au stock')),
       el('div',{cls:'add-form'},
         (function(){
@@ -2243,9 +3405,9 @@ function buildDashboard() {
             )          );
         })()
       )
-    )] : []),
-    buildMvtHistory(d.derniers_mouvements||[])
-  );
+    ));
+  parts.push(buildDashboardActivite(d));
+  return el('div',{cls:'content'},...parts);
 }
 
 function clearSel() {
@@ -2792,10 +3954,16 @@ function renderContent() {
   if (S.selProduit) content = buildProduitDetail();
   else if (S.selEmpl) content = buildEmplacementDetail();
   else if (S.tab === 'dashboard') content = buildDashboard();
+  else if (S.tab === 'matieres') {
+    content = S.matieres === null
+      ? el('div', { cls: 'content mp-page' }, el('div', { cls: 'card-empty' }, 'Chargement…'))
+      : buildMatieres();
+  }
   else if (S.tab === 'referentiel') content = buildReferentielPage();
   else if (S.tab === 'inventaire') content = buildInventaire();
   else if (S.tab === 'traca') content = buildTraca();
   else if (S.tab === 'reception') content = buildReception();
+  else if (S.tab === 'historique') content = buildHistorique();
   else content = buildDashboard();
 
   if (content) area.appendChild(content);
@@ -3435,6 +4603,82 @@ function buildReception() {
   return wrap;
 }
 
+const STOCK_TAB_DOC_TITLES = {
+  dashboard: 'Tableau de bord — MyStock — MySifa',
+  matieres: 'Matières premières — MyStock — MySifa',
+  referentiel: 'Référentiel — MyStock — MySifa',
+  inventaire: 'Inventaire — MyStock — MySifa',
+  reception: 'Réception matière — MyStock — MySifa',
+  historique: 'Historique — MyStock — MySifa',
+  traca: 'Étiquettes traça — MyStock — MySifa',
+};
+
+const STOCK_TAB_MOBILE_TITLES = {
+  dashboard: 'Tableau de bord',
+  matieres: 'Matières premières',
+  referentiel: 'Référentiel',
+  inventaire: 'Inventaire',
+  reception: 'Réception matière',
+  historique: 'Historique',
+  traca: 'Étiquettes traça',
+};
+
+function stockMobileTabTitle() {
+  if (S.selProduit || S.selEmpl) return 'Stock';
+  return STOCK_TAB_MOBILE_TITLES[S.tab] || 'MyStock';
+}
+
+function buildSidebarNavStructure() {
+  if (S.tracaOnly) {
+    return [{ kind: 'btn', tab: 'traca', icon: 'printer', label: 'Étiquettes traça' }];
+  }
+  const items = [
+    { kind: 'btn', tab: 'dashboard', icon: 'grid', label: 'Tableau de bord' },
+    { kind: 'sep', label: 'Matières premières' },
+    { kind: 'btn', tab: 'matieres', icon: 'layers', label: 'Matières premières' },
+    { kind: 'sep', label: 'Produits' },
+    { kind: 'btn', tab: 'referentiel', icon: 'tag', label: 'Référentiel' },
+  ];
+  if (!S.stockReadOnly) {
+    items.push({ kind: 'btn', tab: 'inventaire', icon: 'clipboard', label: 'Inventaire' });
+  }
+  items.push(
+    { kind: 'btn', tab: 'reception', icon: 'inbox', label: 'Réception matière' },
+    { kind: 'sep', label: 'Outils' },
+    { kind: 'btn', tab: 'historique', icon: 'clock', label: 'Historique mouvements' },
+    { kind: 'btn', tab: 'traca', icon: 'printer', label: 'Étiquettes traça' },
+  );
+  return items;
+}
+
+function renderSidebarNavBtn(n) {
+  const isSuperAdmin = S.user && S.user.role === 'superadmin';
+  const wipBadge = n.tab === 'inventaire'
+    ? el('button', { cls: 'nav-wip-badge', type: 'button', title: 'En cours de développement', on: { click: e => {
+        e.stopPropagation();
+        if (!isSuperAdmin) {
+          showToast('🚧 En cours de développement', 'warn');
+        } else {
+          showToast('⚠️ Cet onglet est en cours de développement pour les autres utilisateurs', 'warn');
+        }
+      } } }, '🚧')
+    : null;
+  return el('button', { cls: 'nav-btn' + (S.tab === n.tab ? ' active' : ''), 'data-tab': n.tab, on: { click: () => goToTab(n.tab) } },
+    iconEl(n.icon, 16),
+    el('span', null, ' ' + n.label),
+    wipBadge
+  );
+}
+
+function buildStockTabPlaceholder(title) {
+  return el('div', { cls: 'content' },
+    el('div', { cls: 'card' },
+      el('div', { cls: 'card-title' }, title),
+      el('div', { cls: 'card-empty' }, 'Contenu à venir.')
+    )
+  );
+}
+
 function render() {
   // La modale "contact support" est montée sur <body> : il faut la synchroniser
   // avec l'état à chaque rendu pour éviter un overlay "figé" (ex: reste sur "Envoi…").
@@ -3458,32 +4702,9 @@ function render() {
       el('div', { cls:'logo-sub' }, 'by SIFA')
     ),
     el('div', { cls:'sidebar-nav' },
-      ...(S.tracaOnly
-        ? [{ tab:'traca', icon:'printer', label:'Étiquettes traça' }]
-        : [
-            { tab:'dashboard',  icon:'grid', label:'Dashboard' },
-            { tab:'referentiel', icon:'tag', label:'Réf. & unités de vente' },
-            ...(!S.stockReadOnly ? [{ tab:'inventaire', icon:'clipboard', label:'Inventaire' }] : []),
-            { tab:'reception', icon:'inbox', label:'Réception matière' },
-            { tab:'traca', icon:'printer', label:'Étiquettes traça' },
-          ]
-      ).map(n => {
-        const isSuperAdmin = S.user && S.user.role === 'superadmin';
-        const wipBadge = n.tab === 'inventaire'
-          ? el('button', { cls:'nav-wip-badge', type:'button', title:'En cours de développement', on:{ click: e => {
-              e.stopPropagation();
-              if (!isSuperAdmin) {
-                showToast('🚧 En cours de développement', 'warn');
-              } else {
-                showToast('⚠️ Cet onglet est en cours de développement pour les autres utilisateurs', 'warn');
-              }
-            }}}, '🚧')
-          : null;
-        return el('button', { cls:'nav-btn'+(S.tab===n.tab?' active':''), 'data-tab':n.tab, on:{ click:()=>goToTab(n.tab) } },
-          iconEl(n.icon,16),
-          el('span', null, ' ' + n.label),
-          wipBadge
-        );
+      ...buildSidebarNavStructure().map(item => {
+        if (item.kind === 'sep') return el('div', { cls: 'nav-section-label' }, item.label);
+        return renderSidebarNavBtn(item);
       })
     ),
     el('div', { cls:'sidebar-bottom' },
@@ -3520,7 +4741,7 @@ function render() {
         el('span', { attrs:{ style:'display: inline-flex; align-items: center; flex-shrink: 0;' } }, iconEl('menu',20))
       ),
       el('div', null,
-        el('div', { cls:'mobile-topbar-title' }, 'Stock'),
+        el('div', { cls:'mobile-topbar-title' }, stockMobileTabTitle()),
         el('div', { cls:'mobile-topbar-sub' }, 'Inventaire, mouvements et emplacements')
       ),
       el('button', { cls:'mobile-print-btn'+(S.tab==='traca'?' active':''), on:{ click:()=>goToTab('traca') }, attrs:{ 'aria-label':'Étiquettes traça', type:'button', title:'Étiquettes traçabilité' } },
@@ -3536,6 +4757,8 @@ function render() {
 
   layout.append(sidebar, main);
   root.appendChild(layout);
+
+  document.title = STOCK_TAB_DOC_TITLES[S.tab] || 'MyStock — MySifa';
 
   if(S.contactOpen){
     const ov = el('div', { cls:'contact-modal-overlay', on:{ click:(e)=>{ if(e.target===ov){ S.contactOpen=false; render(); } } } });
@@ -3683,7 +4906,7 @@ async function init() {
   await fetchEmplacementsFromDB();
   // Onglet initial via URL param ?tab=...
   const urlTab = new URLSearchParams(window.location.search).get('tab');
-  if (urlTab && ['dashboard','referentiel','stock','inventaire','reception','traca'].includes(urlTab)) {
+  if (urlTab && ['dashboard','matieres','referentiel','stock','inventaire','reception','historique','traca'].includes(urlTab)) {
     S.tab = urlTab;
   }
   // Forcer traça si accès restreint
@@ -3692,6 +4915,8 @@ async function init() {
   if (S.tab === 'traca') { /* rien à charger */ }
   else if (S.tab === 'reception') { await loadRecepHistory(); }
   else if (S.tab === 'inventaire') { await loadInventaireList(); }
+  else if (S.tab === 'matieres') { await loadMatieres(); }
+  else if (S.tab === 'historique') { await loadHistorique(); }
   else if (S.tab === 'referentiel') { await loadDashboard(); }
   else { await loadDashboard(); }
 }

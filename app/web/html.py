@@ -1,4 +1,10 @@
 from config import APP_VERSION, APP_META_DESCRIPTION, APP_PAGE_TITLE, THEME_COLOR_META
+from app.web.expe_page import (
+    EXPE_CARTE_FRANCE_CSS,
+    EXPE_CARTE_FRANCE_JS,
+    EXPE_TRANSPORTEURS_CSS,
+    EXPE_TRANSPORTEURS_JS,
+)
 
 _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <html lang="fr">
@@ -893,6 +899,17 @@ body.light .contact-modal input:focus,body.light .contact-modal select:focus{box
 .msg-sel-btn.on{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 .import-row{padding:12px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px}
 .import-row:hover{background:rgba(255,255,255,.02)}
+/* MyCompta — barre d'ajout (acheteurs / comptes) */
+.compta-add-bar{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px}
+.compta-add-bar h3{font-size:15px;font-weight:700;color:var(--text);margin:0 0 14px}
+.compta-add-bar-meta{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.compta-add-bar-meta .hint{font-size:12px;color:var(--muted)}
+.compta-add-bar-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.compta-add-bar-fields label{display:block;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.compta-add-bar-fields input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 16px;color:var(--text);font-size:14px;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s}
+.compta-add-bar-fields input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+body.light .compta-add-bar-fields input:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
+.compta-add-bar-actions{display:flex;gap:10px;margin-top:14px;align-items:center}
 .dossier-row{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
 .user-row{display:flex;align-items:flex-start;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);gap:12px}
 .ui-name{font-size:14px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -1672,6 +1689,8 @@ body.light .stock-empl-suggest-add:hover{background:rgba(124,58,237,.2);color:#1
     padding-bottom:10px;
   }
 }
+__EXPE_TRANSPORTEURS_CSS__
+__EXPE_CARTE_FRANCE_CSS__
 /* ── Paie (onglet MyCompta) ── */
 .paie-layout{display:flex;gap:14px;height:calc(100vh - 210px);overflow:hidden}
 .paie-emp-panel{width:252px;flex-shrink:0;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden}
@@ -1831,7 +1850,7 @@ let S={
   selDossier:null,
   loginSubmitting:false,loginError:null,portalLoading:null,
   sidebarOpen:false,
-  expeTab:'suivi_departs',
+  expeTab:'dashboard',
   expeDepartSubTab:'jour',
   expeDept:'59',
   expeKg:'',
@@ -1874,6 +1893,8 @@ let S={
   comptaResult:null,
   comptaEditAcheteurId:null,
   comptaEditCompteId:null,
+  comptaBanques:[],
+  comptaEditBanqueId:null,
   stockView:'grille',
   stockProduits:[],stockSelProduit:null,stockSelEmpl:null,
   stockGlobale:null,stockInvPriorites:[],stockSearch:'',stockGrilleFilter:'',stockMvtType:'entree',
@@ -3447,7 +3468,7 @@ function renderPortal(){
   const isStock = aa ? !!aa.stock : (isSuper || !!(urole && ['direction','administration','logistique','commercial'].includes(urole)));
   const isProd  = aa ? !!aa.prod : (isSuper || !!(urole && ['direction','administration','fabrication','commercial'].includes(urole)));
   const isCompta = aa ? !!aa.compta : (isSuper || !!(urole && ['direction','administration','comptabilite'].includes(urole)));
-  const isExpe = aa ? !!aa.expe : (isSuper || !!(urole && ['direction','administration','expedition'].includes(urole)));
+  const isExpe = aa ? !!aa.expe : (isSuper || !!(urole && ['direction','administration','expedition','logistique'].includes(urole)));
   const isFab = aa ? !!aa.fabrication : (isSuper || urole==='fabrication' || !!(urole && ['direction','administration'].includes(urole)));
   const isPrint = isSuper || !!(urole && ['fabrication','logistique'].includes(urole));
   const isCom = urole==='commercial';
@@ -3542,7 +3563,8 @@ function renderPortal(){
     },
       h('div',{className:'portal-app-icon'},iconEl('truck',28)),
       h('div',{className:'portal-app-name'},'MyExpé'),
-      h('div',{className:'portal-app-desc'},'Expédition & Suivi')
+      h('div',{className:'portal-app-desc'},
+        (urole==='logistique'&&!isSuper)?'Expédition & suivi — lecture seule':'Expédition & Suivi')
     )});
   }
 
@@ -4593,6 +4615,105 @@ function renderPaieTab(){
   return layout;
 }
 
+function closeComptaAcheteurModal(){set({comptaEditAcheteurId:null});}
+function closeComptaCompteModal(){set({comptaEditCompteId:null});}
+function closeComptaBanqueModal(){set({comptaEditBanqueId:null});}
+
+function renderComptaBanqueModal(){
+  const editId=S.comptaEditBanqueId;
+  if(!editId)return null;
+  const cur=(S.comptaBanques||[]).find(x=>String(x.id)===String(editId));
+  if(!cur)return null;
+  const codeI=h('input',{type:'text',placeholder:'Code vendeur (ex: 98, 100)',value:cur.code_vendeur||''});
+  const numI=h('input',{type:'text',placeholder:'Numéro de compte',value:cur.numero_compte||''});
+  const libI=h('input',{type:'text',placeholder:'Libellé (optionnel)',value:cur.libelle||''});
+  const overlay=h('div',{className:'add-row-modal',style:{zIndex:12000}});
+  overlay.addEventListener('click',e=>{if(e.target===overlay)closeComptaBanqueModal();});
+  const form=h('div',{className:'add-row-form',style:{maxWidth:'560px'},onClick:e=>e.stopPropagation()},
+    h('button',{type:'button',className:'add-row-close',onClick:closeComptaBanqueModal},'×'),
+    h('h3',null,'Modifier un code de banque'),
+    h('div',{className:'form-row'},
+      h('div',null,h('label',null,'Code vendeur'),codeI),
+      h('div',null,h('label',null,'Numéro de compte'),numI)
+    ),
+    h('div',{className:'form-row'},
+      h('div',{style:{gridColumn:'span 2'}},h('label',null,'Libellé'),libI)
+    ),
+    h('div',{className:'form-actions'},
+      h('button',{type:'button',className:'btn-ghost',onClick:closeComptaBanqueModal},'Annuler'),
+      h('button',{type:'button',className:'btn-sm',onClick:()=>{
+        const payload={code_vendeur:codeI.value,numero_compte:numI.value,libelle:libI.value||null};
+        if(!payload.code_vendeur||!payload.numero_compte){toast('Code vendeur et numéro de compte obligatoires','error');return;}
+        comptaUpdateBanque(editId,payload);
+      }},'Enregistrer')
+    )
+  );
+  overlay.appendChild(form);
+  return overlay;
+}
+
+function renderComptaAcheteurModal(){
+  const editId=S.comptaEditAcheteurId;
+  if(!editId)return null;
+  const cur=(S.comptaAcheteurs||[]).find(x=>String(x.id)===String(editId));
+  if(!cur)return null;
+  const codeI=h('input',{type:'text',placeholder:'Code vendeur (optionnel)',value:cur.code_vendeur||''});
+  const numCompteI=h('input',{type:'text',placeholder:'Numéro de compte',value:cur.identifiant||''});
+  const rsI=h('input',{type:'text',placeholder:'Raison sociale',value:cur.raison_sociale||''});
+  const overlay=h('div',{className:'add-row-modal',style:{zIndex:12000}});
+  overlay.addEventListener('click',e=>{if(e.target===overlay)closeComptaAcheteurModal();});
+  const form=h('div',{className:'add-row-form',style:{maxWidth:'560px'},onClick:e=>e.stopPropagation()},
+    h('button',{type:'button',className:'add-row-close',onClick:closeComptaAcheteurModal},'×'),
+    h('h3',null,'Modifier un acheteur'),
+    h('div',{className:'form-row'},
+      h('div',null,h('label',null,'Code vendeur'),codeI),
+      h('div',null,h('label',null,'Numéro de compte'),numCompteI)
+    ),
+    h('div',{className:'form-row'},
+      h('div',{style:{gridColumn:'span 2'}},h('label',null,'Raison sociale'),rsI)
+    ),
+    h('div',{className:'form-actions'},
+      h('button',{type:'button',className:'btn-ghost',onClick:closeComptaAcheteurModal},'Annuler'),
+      h('button',{type:'button',className:'btn-sm',onClick:()=>{
+        const payload={code_vendeur:codeI.value||null,identifiant:numCompteI.value,raison_sociale:rsI.value};
+        if(!payload.identifiant||!payload.raison_sociale){toast('Numéro de compte et raison sociale obligatoires','error');return;}
+        comptaUpdateAcheteur(editId,payload);
+      }},'Enregistrer')
+    )
+  );
+  overlay.appendChild(form);
+  return overlay;
+}
+
+function renderComptaCompteModal(){
+  const editId=S.comptaEditCompteId;
+  if(!editId)return null;
+  const cur=(S.comptaComptes||[]).find(x=>String(x.id)===String(editId));
+  if(!cur)return null;
+  const libI=h('input',{type:'text',placeholder:'Libellé condensé',value:cur.libelle_condense||''});
+  const numI=h('input',{type:'text',placeholder:'Numéro de compte',value:cur.numero_compte||''});
+  const overlay=h('div',{className:'add-row-modal',style:{zIndex:12000}});
+  overlay.addEventListener('click',e=>{if(e.target===overlay)closeComptaCompteModal();});
+  const form=h('div',{className:'add-row-form',style:{maxWidth:'560px'},onClick:e=>e.stopPropagation()},
+    h('button',{type:'button',className:'add-row-close',onClick:closeComptaCompteModal},'×'),
+    h('h3',null,'Modifier un compte'),
+    h('div',{className:'form-row'},
+      h('div',null,h('label',null,'Libellé condensé'),libI),
+      h('div',null,h('label',null,'Numéro de compte'),numI)
+    ),
+    h('div',{className:'form-actions'},
+      h('button',{type:'button',className:'btn-ghost',onClick:closeComptaCompteModal},'Annuler'),
+      h('button',{type:'button',className:'btn-sm',onClick:()=>{
+        const payload={libelle_condense:libI.value,numero_compte:numI.value};
+        if(!payload.libelle_condense||!payload.numero_compte){toast('Libellé et numéro de compte obligatoires','error');return;}
+        comptaUpdateCompte(editId,payload);
+      }},'Enregistrer')
+    )
+  );
+  overlay.appendChild(form);
+  return overlay;
+}
+
 function renderCompta(){
   const isLight=document.body.classList.contains('light');
   const tab = S.comptaTab || 'factor';
@@ -4611,6 +4732,8 @@ function renderCompta(){
         iconEl('users',15),'  Acheteurs'),
       h('button',{className:'nav-btn'+(tab==='comptes'?' active':''),onClick:()=>{set({comptaTab:'comptes'});loadComptaComptes();}},
         iconEl('file',15),'  Table des comptes'),
+      h('button',{className:'nav-btn'+(tab==='banques'?' active':''),onClick:()=>{set({comptaTab:'banques'});loadComptaBanques();}},
+        iconEl('credit-card',15),'  Code de banque'),
       h('div',{className:'nav-group-label',style:{marginTop:'8px'}},'Autres modules'),
       h('button',{className:'nav-btn'+(tab==='cession'?' active':''),onClick:()=>{set({comptaTab:'cession'});}},
         iconEl('clock',15),'  Cession (en cours)'),
@@ -4723,7 +4846,14 @@ function renderCompta(){
               h('div',{style:{fontWeight:'700',color:'var(--text)',marginBottom:'6px'}},'Acheteurs non reconnus'),
               ...miss.acheteurs.slice(0,12).map(x=>h('div',null,'- ',x.buyer,' (',x.count,')'))
             )
-          : h('div',null,'✅ Aucun acheteur manquant.')
+          : h('div',null,'✅ Aucun acheteur manquant.'),
+        h('div',{style:{height:'10px'}}),
+        (miss.banques && miss.banques.length)
+          ? h('div',null,
+              h('div',{style:{fontWeight:'700',color:'var(--text)',marginBottom:'6px'}},'Codes vendeur sans compte CAF (Code de banque)'),
+              ...miss.banques.slice(0,12).map(x=>h('div',null,'- ',x.code_vendeur,' (',x.count,')'))
+            )
+          : h('div',null,'✅ Tous les codes vendeur ont un compte CAF.')
       )
     ) : null;
 
@@ -4760,7 +4890,9 @@ function renderCompta(){
           const pb = rr && rr.problem ? String(rr.problem) : '';
           const cls = pb ? ('cw-row-bad') : '';
           const title = pb
-            ? ((pb==='compte_manquant'?'Compte manquant (Table des comptes)':'Acheteur non reconnu') + (rr.problem_detail?(' — '+rr.problem_detail):''))
+            ? ((pb==='compte_manquant'?'Compte manquant (Table des comptes)'
+              : pb==='banque_manquante'?'Compte CAF manquant (Code de banque)'
+              : 'Acheteur non reconnu') + (rr.problem_detail?(' — '+rr.problem_detail):''))
             : '';
           return h('tr',{className:cls, title},
             h('td',null, rr.date||''),
@@ -4798,34 +4930,28 @@ function renderCompta(){
     const imp=h('input',{type:'file',accept:'.xlsx,.xlsm,.xls',style:{display:'none'}});
     const impBtn=h('button',{className:'btn-ghost',onClick:()=>imp.click()},iconEl('upload',13),' Importer Excel');
     imp.addEventListener('change',e=>{const f=e.target.files[0];if(f)comptaImportAcheteurs(f);});
-    const code=h('input',{placeholder:'Code vendeur (optionnel)',className:'form-sel'});
-    const siret=h('input',{placeholder:'SIRET (14 chiffres)',className:'form-sel'});
-    const rs=h('input',{placeholder:'Raison sociale (ex: COME BACK GRAPHIC ASSOCIES)',className:'form-sel'});
-    const editId=S.comptaEditAcheteurId;
-    if(editId){
-      const cur=(list||[]).find(x=>String(x.id)===String(editId));
-      if(cur){
-        code.value=cur.code_vendeur||'';
-        siret.value=cur.identifiant||'';
-        rs.value=cur.raison_sociale||'';
-      }
-    }
-    const form=h('div',{className:'card',style:{padding:'16px',marginBottom:'16px'}},
-      h('h3',{style:{fontSize:'14px',fontWeight:'700',marginBottom:'10px'}},editId?'Modifier un acheteur':'Ajouter / mettre à jour un acheteur'),
-      h('div',{style:{display:'flex',gap:'10px',flexWrap:'wrap',alignItems:'center',marginBottom:'10px'}},
-        h('span',{style:{fontSize:'12px',color:'var(--muted)'}},'Feuille: ACHETEURS'),
+    const code=h('input',{type:'text',placeholder:'Code vendeur (optionnel)'});
+    const numCompte=h('input',{type:'text',placeholder:'Numéro de compte'});
+    const rs=h('input',{type:'text',placeholder:'Raison sociale (ex: COME BACK GRAPHIC ASSOCIES)'});
+    const form=h('div',{className:'compta-add-bar'},
+      h('h3',null,'Ajouter un acheteur'),
+      h('div',{className:'compta-add-bar-meta'},
+        h('span',{className:'hint'},'Feuille: ACHETEURS'),
         impBtn,
-        imp,
-        editId ? h('button',{className:'btn-ghost',onClick:()=>set({comptaEditAcheteurId:null})},'Annuler') : null
+        imp
       ),
-      h('div',{className:'form-grid'},code,siret,rs),
-      h('div',{style:{marginTop:'10px',display:'flex',gap:'10px'}},
+      h('div',{className:'compta-add-bar-fields'},
+        h('div',null,h('label',null,'Code vendeur'),code),
+        h('div',null,h('label',null,'Numéro de compte'),numCompte),
+        h('div',null,h('label',null,'Raison sociale'),rs)
+      ),
+      h('div',{className:'compta-add-bar-actions'},
         h('button',{className:'btn-sm',onClick:()=>{
-          const payload={code_vendeur:code.value||null,identifiant:siret.value,raison_sociale:rs.value};
-          if(editId){ comptaUpdateAcheteur(editId,payload); }
-          else { comptaUpsertAcheteurs([payload]); }
-          code.value='';siret.value='';rs.value='';
-        }},editId?'Enregistrer':'Ajouter')
+          const payload={code_vendeur:code.value||null,identifiant:numCompte.value,raison_sociale:rs.value};
+          if(!payload.identifiant||!payload.raison_sociale){toast('Numéro de compte et raison sociale obligatoires','error');return;}
+          comptaUpsertAcheteurs([payload]);
+          code.value='';numCompte.value='';rs.value='';
+        }},'Ajouter')
       )
     );
     const rows=list.length? h('div',{className:'card'},
@@ -4842,32 +4968,26 @@ function renderCompta(){
     const imp=h('input',{type:'file',accept:'.xlsx,.xlsm,.xls',style:{display:'none'}});
     const impBtn=h('button',{className:'btn-ghost',onClick:()=>imp.click()},iconEl('upload',13),' Importer Excel');
     imp.addEventListener('change',e=>{const f=e.target.files[0];if(f)comptaImportComptes(f);});
-    const lib=h('input',{placeholder:'Libellé condensé (ex: Achat de Factures)',className:'form-sel'});
-    const num=h('input',{placeholder:'Numéro de compte (ex: 519320000000)',className:'form-sel'});
-    const editId=S.comptaEditCompteId;
-    if(editId){
-      const cur=(list||[]).find(x=>String(x.id)===String(editId));
-      if(cur){
-        lib.value=cur.libelle_condense||'';
-        num.value=cur.numero_compte||'';
-      }
-    }
-    const form=h('div',{className:'card',style:{padding:'16px',marginBottom:'16px'}},
-      h('h3',{style:{fontSize:'14px',fontWeight:'700',marginBottom:'10px'}},editId?'Modifier un compte':'Ajouter / mettre à jour un libellé'),
-      h('div',{style:{display:'flex',gap:'10px',flexWrap:'wrap',alignItems:'center',marginBottom:'10px'}},
-        h('span',{style:{fontSize:'12px',color:'var(--muted)'}},'Feuille: TABLE DES COMPTES'),
+    const lib=h('input',{type:'text',placeholder:'Libellé condensé (ex: Achat de Factures)'});
+    const num=h('input',{type:'text',placeholder:'Numéro de compte (ex: 519320000000)'});
+    const form=h('div',{className:'compta-add-bar'},
+      h('h3',null,'Ajouter un libellé'),
+      h('div',{className:'compta-add-bar-meta'},
+        h('span',{className:'hint'},'Feuille: TABLE DES COMPTES'),
         impBtn,
-        imp,
-        editId ? h('button',{className:'btn-ghost',onClick:()=>set({comptaEditCompteId:null})},'Annuler') : null
+        imp
       ),
-      h('div',{className:'form-grid'},lib,num),
-      h('div',{style:{marginTop:'10px',display:'flex',gap:'10px'}},
+      h('div',{className:'compta-add-bar-fields'},
+        h('div',null,h('label',null,'Libellé condensé'),lib),
+        h('div',null,h('label',null,'Numéro de compte'),num)
+      ),
+      h('div',{className:'compta-add-bar-actions'},
         h('button',{className:'btn-sm',onClick:()=>{
           const payload={libelle_condense:lib.value,numero_compte:num.value};
-          if(editId){ comptaUpdateCompte(editId,payload); }
-          else { comptaUpsertComptes([payload]); }
+          if(!payload.libelle_condense||!payload.numero_compte){toast('Libellé et numéro de compte obligatoires','error');return;}
+          comptaUpsertComptes([payload]);
           lib.value='';num.value='';
-        }},editId?'Enregistrer':'Ajouter')
+        }},'Ajouter')
       )
     );
     const rows=list.length? h('div',{className:'card'},
@@ -4878,6 +4998,42 @@ function renderCompta(){
         h('button',{className:'btn-danger',onClick:()=>comptaDeleteCompte(a.id)},iconEl('trash',13),' Supprimer')
       )))
     ) : h('div',{className:'card-empty'},'Aucun compte');
+    content=h('div',null,form,rows);
+  }else if(tab==='banques'){
+    const list=S.comptaBanques||[];
+    const code=h('input',{type:'text',placeholder:'Code vendeur (ex: 98, 100)'});
+    const num=h('input',{type:'text',placeholder:'Numéro de compte (ex: 519320000000)'});
+    const lib=h('input',{type:'text',placeholder:'Libellé (optionnel)'});
+    const form=h('div',{className:'compta-add-bar'},
+      h('h3',null,'Ajouter un code de banque'),
+      h('div',{className:'compta-add-bar-meta'},
+        h('span',{className:'hint'},'Compte CAF de contrepartie selon le code vendeur Factor')
+      ),
+      h('div',{className:'compta-add-bar-fields'},
+        h('div',null,h('label',null,'Code vendeur'),code),
+        h('div',null,h('label',null,'Numéro de compte'),num),
+        h('div',null,h('label',null,'Libellé'),lib)
+      ),
+      h('div',{className:'compta-add-bar-actions'},
+        h('button',{className:'btn-sm',onClick:()=>{
+          const payload={code_vendeur:code.value,numero_compte:num.value,libelle:lib.value||null};
+          if(!payload.code_vendeur||!payload.numero_compte){toast('Code vendeur et numéro de compte obligatoires','error');return;}
+          comptaUpsertBanques([payload]);
+          code.value='';num.value='';lib.value='';
+        }},'Ajouter')
+      )
+    );
+    const rows=list.length? h('div',{className:'card'},
+      h('div',{className:'card-header'},h('h3',null,'Codes de banque ('+list.length+')')),
+      h('div',{style:{padding:'10px 16px'}},...list.map(b=>h('div',{className:'import-row'},
+        h('div',{style:{flex:1}},
+          h('div',{style:{fontSize:'13px',fontWeight:'600'}},'Vendeur ',b.code_vendeur,(b.libelle?(' — '+b.libelle):'')),
+          h('div',{style:{fontSize:'11px',color:'var(--muted)',fontFamily:'monospace'}},b.numero_compte)
+        ),
+        h('button',{className:'btn-ghost',onClick:()=>set({comptaEditBanqueId:b.id})},iconEl('edit',13),' Modifier'),
+        h('button',{className:'btn-danger',onClick:()=>comptaDeleteBanque(b.id)},iconEl('trash',13),' Supprimer')
+      )))
+    ) : h('div',{className:'card-empty'},'Aucun code de banque — ajoutez au moins 98 et 100');
     content=h('div',null,form,rows);
   }else if(tab==='cession'){
     content=h('div',null,
@@ -4905,7 +5061,10 @@ function renderCompta(){
 
   return h('div',null,
     S.sidebarOpen?h('div',{className:'sidebar-overlay',onClick:closeSidebar}):null,
-    body
+    body,
+    renderComptaAcheteurModal(),
+    renderComptaCompteModal(),
+    renderComptaBanqueModal()
   );
 }
 
@@ -5118,7 +5277,7 @@ function renderExpeComparateur(){
       h('div',{style:{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}},
         S.expeRawLoading?h('span',{className:'readonly-notice'},'Chargement des grilles\u2026'):null,
         S.expeRawError?h('span',{className:'badge-danger'},S.expeRawError):null,
-        h('button',{className:'btn-ghost',onClick:()=>set({expeShowContacts:true})},iconEl('sliders',13),' Contacts')
+        expeCanWrite()?h('button',{className:'btn-ghost',onClick:()=>set({expeShowContacts:true})},iconEl('sliders',13),' Contacts'):null
       )
     ),
     h('div',{style:{padding:'14px 18px'}},
@@ -5156,33 +5315,8 @@ function renderExpeComparateur(){
 
   return h('div',null,form,poidsCards,palCards);
 }
-function renderExpeTransporteurs(){
-  const contacts=expeEnsureContacts();
-  const carriers=[
-    {name:'Coupé',desc:'Express messagerie France, 24h',services:'Poids (max 1000 kg) \u00b7 Palette (max 5)'},
-    {name:'Ceva',desc:'Messagerie France (Gefco)',services:'Poids (max 2000 kg) \u00b7 Palette (max 4)'},
-    {name:'Coquelle',desc:'Réseau France, palette uniquement',services:'Palette (max 33)'},
-    {name:'Dimotrans',desc:'France palette, 80\u00d7120',services:'Palette (max 28)'},
-  ];
-  return h('div',{className:'card'},
-    h('div',{className:'card-header'},
-      h('h3',{className:'expe-mobile-hide-head'},'Mes transporteurs ('+carriers.length+')'),
-      h('button',{className:'btn-ghost',onClick:()=>set({expeShowContacts:true})},iconEl('sliders',13),' Modifier les contacts')
-    ),
-    h('div',{style:{padding:0}},...carriers.map(c=>{
-      const col=expeCC(c.name);const ct=contacts[c.name];
-      return h('div',{className:'import-row',style:{gap:14}},
-        h('div',{style:{flex:1,minWidth:0}},
-          h('div',{style:{fontWeight:700,color:'var(--text)',fontSize:14}},c.name),
-          h('div',{style:{fontSize:11,color:'var(--muted)',marginTop:2}},c.desc),
-          h('div',{style:{fontSize:10,color:'var(--text2)',marginTop:4,fontFamily:'monospace'}},c.services)
-        ),
-        ct?h('button',{className:'btn-ghost',style:{borderColor:col+'55',color:col,flexShrink:0},
-          onClick:()=>expeOpenContact(c.name)},ct.type==='url'?'Portail':'Email'):null
-      );
-    }))
-  );
-}
+__EXPE_TRANSPORTEURS_JS__
+__EXPE_CARTE_FRANCE_JS__
 function renderExpePoids(){
   const rows=S.expePoidsRows||[];
   const fKg=v=>v.toFixed(3)+'\u00a0kg';
@@ -5541,9 +5675,9 @@ function renderExpeSuiviDeparts(){
   const topBar=h('div',{className:'card',style:{marginBottom:'12px'}},
     h('div',{className:'card-header',style:{display:'flex',justifyContent:'flex-start',alignItems:'center',gap:'12px',flexWrap:'wrap'}},
       h('h3',{className:'expe-mobile-hide-head'},'Départs du jour'),
-      h('div',{style:btnBarStyle},
+      expeCanWrite()?h('div',{style:btnBarStyle},
         h('button',{className:'btn',type:'button',style:btnPairStyle,onClick:()=>expeOpenDepartModal(null,'new')},iconEl('plus',14),' Ajouter')
-      ),
+      ):null
     )
   );
   const rows=S.expeDepartList||[];
@@ -5564,7 +5698,7 @@ function renderExpeSuiviDeparts(){
     h('td',null,r.poids_total_kg!=null?String(r.poids_total_kg):'—'),
     h('td',null,(r.date_livraison||'').slice(0,10)||'—'),
     // Empêcher la troncature (… en rouge) sur la colonne actions.
-    h('td',{style:{maxWidth:'none',overflow:'visible',textOverflow:'clip',whiteSpace:'nowrap'}},
+    expeCanWrite()?h('td',{style:{maxWidth:'none',overflow:'visible',textOverflow:'clip',whiteSpace:'nowrap'}},
       h('span',{style:{display:'inline-flex',alignItems:'center',gap:'2px'}},
         h('button',{className:'btn-ghost',title:'Copier',onClick:()=>expeOpenDepartModal(r,'new')},iconEl('copy',14)),
         h('button',{className:'btn-ghost',title:'Modifier',onClick:()=>expeOpenDepartModal(r,'edit')},iconEl('edit',14)),
@@ -5578,7 +5712,7 @@ function renderExpeSuiviDeparts(){
         }},iconEl('trash',14))
       ),
       h('button',{className:'btn',title:"Valider et envoyer dans l'historique",style:{marginLeft:'8px',padding:'8px 12px',fontSize:'12px',borderRadius:'10px'},onClick:()=>expeValiderDepart(r.id)},'Valider')
-    )
+    ):h('td',null,'—')
   )):[h('tr',null,h('td',{colSpan:13,style:{color:'var(--muted)'}},S.expeDepartLoading?'Chargement…':'Aucun départ en attente pour ce jour'))];
   const listCard=h('div',{className:'card'},
     h('div',{className:'card-header'},h('h3',{className:'expe-mobile-hide-head'},'Départs du jour (en attente de validation)')),
@@ -5616,7 +5750,7 @@ function renderExpeHistoriqueDeparts(){
     h('td',null,r.nb_palette!=null?String(r.nb_palette):'—'),
     h('td',null,r.poids_total_kg!=null?String(r.poids_total_kg):'—'),
     h('td',null,(r.date_livraison||'').slice(0,10)||'—'),
-    h('td',null,
+    expeCanWrite()?h('td',null,
       h('span',{style:{display:'inline-flex',alignItems:'center',gap:'2px'}},
         h('button',{className:'btn-ghost',title:'Copier',onClick:()=>expeOpenDepartModal(r,'new')},iconEl('copy',14)),
         h('button',{className:'btn-ghost',title:'Modifier',onClick:()=>expeOpenDepartModal(r,'edit')},iconEl('edit',14)),
@@ -5629,7 +5763,7 @@ function renderExpeHistoriqueDeparts(){
           }catch(e){toast(e.message||'Suppression impossible','error');}
         }},iconEl('trash',14))
       )
-    )
+    ):h('td',null,'—')
   )):[h('tr',null,h('td',{colSpan:12,style:{color:'var(--muted)'}},S.expeDepartHistLoading?'Chargement…':'Aucune entrée (ou affiner la recherche)'))];
   return h('div',null,
     h('div',{className:'card',style:{marginBottom:'12px',padding:'14px 18px'}},
@@ -5667,7 +5801,7 @@ function renderExpe(){
     S.expeTab='suivi_departs';
     S.expeDepartSubTab='historique';
   }
-  const tab=S.expeTab||'suivi_departs';
+  const tab=S.expeTab||'dashboard';
   const sub=S.expeDepartSubTab||'jour';
   const loadKey=tab==='suivi_departs'?tab+'_'+sub:tab;
   if(loadKey!==_expeLastRenderedInnerTab){
@@ -5676,6 +5810,7 @@ function renderExpe(){
       if(sub==='jour')void loadExpeDepartJour();
       else void loadExpeDepartHistorique();
     }else if(tab==='comparateur')void ensureExpeRawData();
+    else if(tab==='transporteurs'&&!T.panelOpen){T.panelOpen=true;void loadTransporteurs();}
   }
 
   const sidebar=h('nav',{className:'sidebar'},
@@ -5683,6 +5818,8 @@ function renderExpe(){
       h('div',{className:'logo-brand'},'My',h('span',null,'Expé')),
       h('div',{className:'logo-sub'},'by SIFA')
     ),
+    h('button',{className:'nav-btn'+(tab==='dashboard'?' active':''),onClick:()=>set({expeTab:'dashboard'})},
+      iconEl('grid',15),'  Tableau de bord'),
     h('button',{className:'nav-btn'+(tab==='suivi_departs'?' active':''),onClick:()=>set({expeTab:'suivi_departs'})},
       iconEl('clipboard',15),'  Suivi départs'),
     h('button',{className:'nav-btn'+(tab==='comparateur'?' active':''),onClick:()=>set({expeTab:'comparateur'})},
@@ -5714,13 +5851,15 @@ function renderExpe(){
     h('div',null,
       h('div',{className:'mobile-topbar-title'},'MyExpé'),
       h('div',{className:'mobile-topbar-sub'},
+        tab==='dashboard'?'Tableau de bord':
         tab==='suivi_departs'?(sub==='historique'?'Historique départs':'Départs du jour'):
         tab==='transporteurs'?'Transporteurs':tab==='poids'?'Poids envoi':'Comparateur tarifs')
     ),
     h('button',{type:'button',className:'mobile-home-btn',onClick:()=>{window.location.href='/'},'aria-label':'Accueil'},iconEl('home',20))
   );
 
-  const content=tab==='suivi_departs'?renderExpeSuiviDepartsWithSubtabs():
+  const content=tab==='dashboard'?renderExpeDashboard():
+    tab==='suivi_departs'?renderExpeSuiviDepartsWithSubtabs():
     tab==='transporteurs'?renderExpeTransporteurs():tab==='poids'?renderExpePoids():renderExpeComparateur();
 
   return h('div',null,
@@ -5731,16 +5870,21 @@ function renderExpe(){
         h('div',{className:'container',style:(tab==='suivi_departs'?{maxWidth:'1600px'}:null)},
           topbar,
           h('h1',null,'MyExpé'),
+          !expeCanWrite()?h('div',{className:'readonly-notice',style:{marginBottom:'12px'}},iconEl('eye',13),' Lecture seule — consultation des départs, transporteurs et délais'):null,
           h('div',{className:'subtitle'},
-            tab==='suivi_departs'?(sub==='historique'?'Recherche multi-critères sur les départs validés'
+            tab==='dashboard'?'Accès rapide aux outils MyExpé'
+            :tab==='suivi_departs'?(sub==='historique'?'Recherche multi-critères sur les départs validés'
               :'Enregistrement des enlèvements et validation vers l\'historique')
             :tab==='comparateur'?'Coupé · Coquelle · Ceva · Dimotrans — meilleur prix au poids et à la palette'
             :tab==='poids'?'Estimation du poids d\'un envoi d\'étiquettes'
-            :'Vos transporteurs et moyens de contact'),
+            :'Référentiel transporteurs, zones et tarifs'),
           content
         )
       )
     ),
+    renderExpeTranspPanel(),
+    renderExpeTransporteurModal(),
+    renderExpeCarteModal(),
     S.expeShowContacts?renderExpeContactModal():null
   );
 }
@@ -5916,6 +6060,7 @@ async function loadDevis(){const d=await api('/api/rentabilite/devis');if(d)set(
 
 async function loadComptaAcheteurs(){try{const d=await api('/api/compta/acheteurs');if(d)set({comptaAcheteurs:d});}catch(e){}}
 async function loadComptaComptes(){try{const d=await api('/api/compta/comptes');if(d)set({comptaComptes:d});}catch(e){}}
+async function loadComptaBanques(){try{const d=await api('/api/compta/banques');if(d)set({comptaBanques:d});}catch(e){}}
 
 async function comptaTransformPaste(text){
   try{
@@ -5995,6 +6140,26 @@ async function comptaUpdateCompte(id,item){
     set({comptaEditCompteId:null});
     loadComptaComptes();
   }catch(e){toast(e.message,'error');}
+}
+
+async function comptaUpsertBanques(items){
+  try{
+    await api('/api/compta/banques',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items})});
+    toast('Code de banque enregistré.');
+    loadComptaBanques();
+  }catch(e){toast(e.message,'error');}
+}
+async function comptaUpdateBanque(id,item){
+  try{
+    await api('/api/compta/banques/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(item)});
+    toast('Code de banque modifié.');
+    set({comptaEditBanqueId:null});
+    loadComptaBanques();
+  }catch(e){toast(e.message,'error');}
+}
+async function comptaDeleteBanque(id){
+  if(!confirm('Supprimer ce code de banque ?'))return;
+  try{await api('/api/compta/banques/'+id,{method:'DELETE'});loadComptaBanques();}catch(e){toast(e.message,'error');}
 }
 
 async function comptaDeleteAcheteur(id){
@@ -11020,6 +11185,10 @@ def render_frontend_html(initial_app: str = "portal") -> str:
         .replace("__PAGE_TITLE__", APP_PAGE_TITLE)
         .replace("__V_LABEL__", f"v{APP_VERSION}")
         .replace("__INITIAL_APP_VALUE__", initial_app)
+        .replace("__EXPE_TRANSPORTEURS_CSS__", EXPE_TRANSPORTEURS_CSS)
+        .replace("__EXPE_CARTE_FRANCE_CSS__", EXPE_CARTE_FRANCE_CSS)
+        .replace("__EXPE_TRANSPORTEURS_JS__", EXPE_TRANSPORTEURS_JS)
+        .replace("__EXPE_CARTE_FRANCE_JS__", EXPE_CARTE_FRANCE_JS)
     )
 
 

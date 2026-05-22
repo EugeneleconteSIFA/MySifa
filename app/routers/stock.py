@@ -72,6 +72,129 @@ def require_stock_write(request: Request) -> dict:
     return user
 
 
+_MP_CATEGORIES = frozenset({"mandrin", "palette", "adhesif", "carton"})
+_MP_TYPES_MVT = frozenset({"entree", "sortie", "ajustement", "transfert"})
+_STOCK_MATIERES_ADMIN_ROLES = frozenset({"superadmin", "direction", "administration"})
+
+
+def require_stock_matieres_admin(request: Request) -> dict:
+    user = require_stock(request)
+    if user.get("role") not in _STOCK_MATIERES_ADMIN_ROLES:
+        raise HTTPException(403, "Accès réservé à la Direction et Administration")
+    return user
+
+
+_HISTORIQUE_TYPES_MVT = frozenset({"entree", "sortie", "ajustement", "inventaire", "transfert"})
+_HISTORIQUE_TYPE_STOCK = frozenset({"tout", "mp", "produits"})
+
+_HISTORIQUE_SQL_MP = """
+    SELECT
+        'mp-' || m.id AS id,
+        'mp' AS type_stock,
+        mp.categorie,
+        mp.reference,
+        mp.designation,
+        m.type_mouvement,
+        m.quantite,
+        m.quantite_avant,
+        m.quantite_apres,
+        m.ref_bl,
+        m.note,
+        m.created_at,
+        m.created_by_name
+    FROM mp_mouvements m
+    JOIN matieres_premieres mp ON mp.id = m.matiere_id
+    WHERE {where}
+"""
+
+_HISTORIQUE_SQL_PF = """
+    SELECT
+        'pf-' || m.id AS id,
+        'produit' AS type_stock,
+        NULL AS categorie,
+        p.reference,
+        p.designation,
+        m.type_mouvement,
+        m.quantite,
+        m.quantite_avant,
+        m.quantite_apres,
+        NULL AS ref_bl,
+        m.note,
+        m.created_at,
+        m.created_by_name
+    FROM mouvements_stock m
+    JOIN produits p ON p.id = m.produit_id
+    WHERE {where}
+"""
+
+
+def _historique_where_clause(
+    is_mp: bool,
+    categorie: Optional[str],
+    reference: Optional[str],
+    type_mouvement: Optional[str],
+    date_debut: Optional[str],
+    date_fin: Optional[str],
+) -> tuple[str, list]:
+    parts = ["1=1"]
+    params: list[Any] = []
+    if is_mp and categorie:
+        parts.append("mp.categorie=?")
+        params.append(categorie)
+    if reference:
+        ref = reference.strip()
+        if ref:
+            pat = f"%{ref}%"
+            if is_mp:
+                parts.append(
+                    "(LOWER(mp.reference) LIKE LOWER(?) "
+                    "OR LOWER(IFNULL(mp.designation,'')) LIKE LOWER(?))"
+                )
+            else:
+                parts.append(
+                    "(LOWER(p.reference) LIKE LOWER(?) "
+                    "OR LOWER(IFNULL(p.designation,'')) LIKE LOWER(?))"
+                )
+            params.extend([pat, pat])
+    if type_mouvement:
+        parts.append("m.type_mouvement=?")
+        params.append(type_mouvement)
+    if date_debut:
+        d = date_debut.strip()
+        parts.append("m.created_at >= ?")
+        params.append(d if "T" in d else f"{d}T00:00:00")
+    if date_fin:
+        d = date_fin.strip()
+        parts.append("m.created_at <= ?")
+        params.append(d if "T" in d else f"{d}T23:59:59")
+    return " AND ".join(parts), params
+
+
+def _historique_row_dict(r) -> dict:
+    def _f(v):
+        return float(v) if v is not None else None
+
+    return {
+        "id": r["id"],
+        "type_stock": r["type_stock"],
+        "categorie": r["categorie"],
+        "reference": r["reference"],
+        "designation": r["designation"],
+        "type_mouvement": r["type_mouvement"],
+        "quantite": _f(r["quantite"]),
+        "quantite_avant": _f(r["quantite_avant"]),
+        "quantite_apres": _f(r["quantite_apres"]),
+        "ref_bl": r["ref_bl"],
+        "note": r["note"],
+        "created_at": r["created_at"],
+        "created_by_name": r["created_by_name"],
+    }
+
+
+def _historique_type_stock_label(type_stock: str) -> str:
+    return "Matières premières" if type_stock == "mp" else "Produits finis"
+
+
 # ── Helpers FIFO ──────────────────────────────────────────────────
 def get_stock_produit_total(conn, produit_id: int) -> dict:
     """Quantité totale + date FIFO (lot le plus ancien avec restant > 0)."""
@@ -782,6 +905,100 @@ def produits_a_inventorier(request: Request, jours: int = 180):
     return [dict(r) for r in rows]
 
 
+# ── Historique unifié ─────────────────────────────────────────────
+@router.get("/api/stock/historique-mouvements")
+def historique_mouvements(
+    request: Request,
+    type_stock: str = "tout",
+    categorie: Optional[str] = None,
+    reference: Optional[str] = None,
+    type_mouvement: Optional[str] = None,
+    date_debut: Optional[str] = None,
+    date_fin: Optional[str] = None,
+    limit: int = 200,
+    format: str = "json",
+):
+    require_stock(request)
+    ts = (type_stock or "tout").strip().lower()
+    if ts not in _HISTORIQUE_TYPE_STOCK:
+        raise HTTPException(400, "type_stock invalide — valeurs : tout, mp, produits.")
+    cat = (categorie or "").strip().lower() or None
+    if cat and cat not in _MP_CATEGORIES:
+        raise HTTPException(400, "Catégorie invalide.")
+    tm = (type_mouvement or "").strip().lower() or None
+    if tm and tm not in _HISTORIQUE_TYPES_MVT:
+        raise HTTPException(400, "Type de mouvement invalide.")
+    lim = max(1, min(int(limit), 500))
+    fmt = (format or "json").strip().lower()
+
+    rows_out: list[dict] = []
+    with get_db() as conn:
+        if ts in ("tout", "mp"):
+            where, params = _historique_where_clause(
+                True, cat, reference, tm, date_debut, date_fin
+            )
+            mp_rows = conn.execute(
+                _HISTORIQUE_SQL_MP.format(where=where), params
+            ).fetchall()
+            rows_out.extend(_historique_row_dict(r) for r in mp_rows)
+
+        if ts in ("tout", "produits"):
+            where, params = _historique_where_clause(
+                False, None, reference, tm, date_debut, date_fin
+            )
+            pf_rows = conn.execute(
+                _HISTORIQUE_SQL_PF.format(where=where), params
+            ).fetchall()
+            rows_out.extend(_historique_row_dict(r) for r in pf_rows)
+
+    rows_out.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+    rows_out = rows_out[:lim]
+
+    if fmt == "csv":
+        buf = io.StringIO()
+        writer = csv.writer(buf, delimiter=";")
+        writer.writerow([
+            "Date",
+            "Type stock",
+            "Catégorie",
+            "Référence",
+            "Désignation",
+            "Mouvement",
+            "Quantité",
+            "Avant",
+            "Après",
+            "Ref BL",
+            "Note",
+            "Opérateur",
+        ])
+        for r in rows_out:
+            writer.writerow([
+                r.get("created_at") or "",
+                _historique_type_stock_label(r.get("type_stock") or ""),
+                r.get("categorie") or "",
+                r.get("reference") or "",
+                r.get("designation") or "",
+                r.get("type_mouvement") or "",
+                r.get("quantite") if r.get("quantite") is not None else "",
+                r.get("quantite_avant") if r.get("quantite_avant") is not None else "",
+                r.get("quantite_apres") if r.get("quantite_apres") is not None else "",
+                r.get("ref_bl") or "",
+                r.get("note") or "",
+                r.get("created_by_name") or "",
+            ])
+        data = buf.getvalue().encode("utf-8-sig")
+        fname = f"historique_stock_{datetime.now().strftime('%Y%m%d')}.csv"
+        return StreamingResponse(
+            io.BytesIO(data),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+        )
+
+    if fmt != "json":
+        raise HTTPException(400, "Format non supporté (json ou csv).")
+    return rows_out
+
+
 # ── Stats dashboard ───────────────────────────────────────────────
 @router.get("/api/stock/dashboard")
 def dashboard(request: Request):
@@ -817,10 +1034,35 @@ def dashboard(request: Request):
                GROUP BY p.id ORDER BY stock_total DESC LIMIT 8""",
         ).fetchall()
 
+        alertes_mp = conn.execute(
+            """
+            SELECT mp.id, mp.categorie, mp.reference, mp.designation, mp.seuil_alerte,
+                   COALESCE(s.quantite, 0) AS quantite
+            FROM matieres_premieres mp
+            LEFT JOIN mp_stock s ON s.matiere_id = mp.id
+            WHERE mp.actif = 1 AND mp.seuil_alerte > 0
+              AND COALESCE(s.quantite, 0) <= mp.seuil_alerte
+            ORDER BY mp.categorie, mp.reference
+            """
+        ).fetchall()
+
+        derniers_mouvements_mp = conn.execute(
+            """
+            SELECT m.type_mouvement, m.quantite, m.quantite_apres, m.created_at,
+                   m.created_by_name, mp.reference, mp.designation, mp.categorie
+            FROM mp_mouvements m
+            JOIN matieres_premieres mp ON mp.id = m.matiere_id
+            ORDER BY m.created_at DESC
+            LIMIT 5
+            """
+        ).fetchall()
+
     return {
         "stats": dict(stats),
         "derniers_mouvements": [dict(r) for r in derniers_mvts],
         "top_refs": [dict(r) for r in top_refs],
+        "alertes_mp": [dict(r) for r in alertes_mp],
+        "derniers_mouvements_mp": [dict(r) for r in derniers_mouvements_mp],
     }
 
 
@@ -1128,6 +1370,289 @@ def _apply_produits_import_row(conn, r: dict, now: str) -> str:
         (ref, des, "", unite, now, now),
     )
     return "create"
+
+
+# ── Matières premières ────────────────────────────────────────────
+@router.get("/api/stock/matieres")
+def list_matieres_premieres(request: Request, all: int = 0):
+    user = require_stock(request)
+    include_inactive = bool(all) and user.get("role") in _STOCK_MATIERES_ADMIN_ROLES
+    with get_db() as conn:
+        where_actif = "" if include_inactive else "WHERE mp.actif = 1"
+        rows = conn.execute(
+            f"""
+            SELECT mp.id, mp.categorie, mp.reference, mp.designation,
+                   mp.seuil_alerte, mp.actif,
+                   COALESCE(s.quantite, 0) AS quantite
+            FROM matieres_premieres mp
+            LEFT JOIN mp_stock s ON s.matiere_id = mp.id
+            {where_actif}
+            ORDER BY mp.categorie ASC, mp.reference ASC
+            """
+        ).fetchall()
+    out = []
+    for r in rows:
+        seuil = float(r["seuil_alerte"] or 0)
+        qte = float(r["quantite"] or 0)
+        out.append({
+            "id": r["id"],
+            "categorie": r["categorie"],
+            "reference": r["reference"],
+            "designation": r["designation"],
+            "seuil_alerte": seuil,
+            "actif": r["actif"],
+            "quantite": qte,
+            "en_alerte": seuil > 0 and qte <= seuil,
+        })
+    return out
+
+
+@router.post("/api/stock/matieres")
+async def create_matiere_premiere(request: Request):
+    require_stock_matieres_admin(request)
+    body = await request.json()
+    categorie = (body.get("categorie") or "").strip().lower()
+    reference = (body.get("reference") or "").strip()
+    designation = (body.get("designation") or "").strip()
+    seuil_alerte = float(body.get("seuil_alerte") or 0)
+
+    if categorie not in _MP_CATEGORIES:
+        raise HTTPException(400, "Catégorie invalide.")
+    if not reference:
+        raise HTTPException(400, "Référence obligatoire.")
+    if not designation:
+        raise HTTPException(400, "Désignation obligatoire.")
+
+    with get_db() as conn:
+        try:
+            cur = conn.execute(
+                """
+                INSERT INTO matieres_premieres (categorie, reference, designation, seuil_alerte)
+                VALUES (?, ?, ?, ?)
+                """,
+                (categorie, reference, designation, seuil_alerte),
+            )
+            matiere_id = cur.lastrowid
+            conn.execute(
+                "INSERT INTO mp_stock (matiere_id, quantite) VALUES (?, 0)",
+                (matiere_id,),
+            )
+            conn.commit()
+            return {"ok": True, "id": matiere_id}
+        except sqlite3.IntegrityError:
+            conn.rollback()
+            raise HTTPException(
+                400,
+                "Cette référence existe déjà dans cette catégorie.",
+            ) from None
+
+
+@router.put("/api/stock/matieres/{matiere_id}")
+async def update_matiere_premiere(matiere_id: int, request: Request):
+    require_stock_matieres_admin(request)
+    body = await request.json()
+    sets = []
+    params: list[Any] = []
+
+    if "designation" in body:
+        des = (body.get("designation") or "").strip()
+        if not des:
+            raise HTTPException(400, "Désignation obligatoire.")
+        sets.append("designation=?")
+        params.append(des)
+    if "seuil_alerte" in body:
+        sets.append("seuil_alerte=?")
+        params.append(float(body.get("seuil_alerte") or 0))
+    if "actif" in body:
+        sets.append("actif=?")
+        params.append(1 if body.get("actif") else 0)
+
+    if not sets:
+        raise HTTPException(400, "Aucun champ à mettre à jour.")
+
+    sets.append("updated_at=strftime('%Y-%m-%dT%H:%M:%S','now','localtime')")
+    params.append(matiere_id)
+
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id FROM matieres_premieres WHERE id=?", (matiere_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Matière non trouvée.")
+        conn.execute(
+            f"UPDATE matieres_premieres SET {', '.join(sets)} WHERE id=?",
+            params,
+        )
+        conn.commit()
+    return {"ok": True}
+
+
+@router.delete("/api/stock/matieres/{matiere_id}")
+def delete_matiere_premiere(matiere_id: int, request: Request):
+    require_stock_matieres_admin(request)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id FROM matieres_premieres WHERE id=?", (matiere_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Matière non trouvée.")
+
+        has_mvt = conn.execute(
+            "SELECT 1 FROM mp_mouvements WHERE matiere_id=? LIMIT 1",
+            (matiere_id,),
+        ).fetchone()
+        if has_mvt:
+            stock = conn.execute(
+                "SELECT quantite FROM mp_stock WHERE matiere_id=?",
+                (matiere_id,),
+            ).fetchone()
+            qte = float(stock["quantite"]) if stock else 0.0
+            if qte > 0:
+                raise HTTPException(
+                    400,
+                    "Impossible de désactiver une matière avec du stock en cours.",
+                )
+
+        conn.execute(
+            """
+            UPDATE matieres_premieres
+            SET actif=0,
+                updated_at=strftime('%Y-%m-%dT%H:%M:%S','now','localtime')
+            WHERE id=?
+            """,
+            (matiere_id,),
+        )
+        conn.commit()
+    return {"ok": True}
+
+
+@router.post("/api/stock/matieres/mouvement")
+async def mouvement_matiere_premiere(request: Request):
+    user = require_stock_write(request)
+    body = await request.json()
+
+    matiere_id = body.get("matiere_id")
+    type_mvt = (body.get("type_mouvement") or "").strip().lower()
+    if matiere_id is None:
+        raise HTTPException(400, "matiere_id obligatoire")
+    matiere_id = int(matiere_id)
+    if type_mvt not in _MP_TYPES_MVT:
+        raise HTTPException(400, "Type de mouvement invalide.")
+
+    try:
+        quantite = float(body.get("quantite", 0))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Quantité invalide.") from None
+
+    ref_bl = (body.get("ref_bl") or "").strip() or None
+    note = (body.get("note") or "").strip() or None
+    emplacement_source = body.get("emplacement_source")
+    emplacement_dest = body.get("emplacement_dest")
+    if emplacement_source is not None:
+        emplacement_source = str(emplacement_source).strip() or None
+    if emplacement_dest is not None:
+        emplacement_dest = str(emplacement_dest).strip() or None
+
+    if type_mvt in ("entree", "sortie") and quantite <= 0:
+        raise HTTPException(400, "Quantité doit être positive.")
+    if type_mvt == "ajustement" and quantite < 0:
+        raise HTTPException(400, "Quantité invalide pour un ajustement.")
+
+    created_by = user.get("id")
+    created_by_name = (user.get("nom") or "").strip() or None
+
+    with get_db() as conn:
+        mp = conn.execute(
+            "SELECT id FROM matieres_premieres WHERE id=? AND actif=1",
+            (matiere_id,),
+        ).fetchone()
+        if not mp:
+            raise HTTPException(404, "Matière non trouvée.")
+
+        stock = conn.execute(
+            "SELECT quantite FROM mp_stock WHERE matiere_id=?",
+            (matiere_id,),
+        ).fetchone()
+        quantite_avant = float(stock["quantite"]) if stock else 0.0
+        mvt_quantite = quantite
+
+        if type_mvt == "entree":
+            quantite_apres = quantite_avant + quantite
+        elif type_mvt == "sortie":
+            quantite_apres = quantite_avant - quantite
+            if quantite_apres < 0:
+                raise HTTPException(
+                    400,
+                    f"Stock insuffisant — stock actuel : {quantite_avant:g} pal.",
+                )
+        elif type_mvt == "ajustement":
+            quantite_apres = quantite
+            mvt_quantite = abs(quantite_apres - quantite_avant)
+        else:  # transfert
+            quantite_apres = quantite_avant
+
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO mp_stock(matiere_id, quantite, updated_at, updated_by_name)
+            VALUES (
+                ?,
+                ?,
+                strftime('%Y-%m-%dT%H:%M:%S','now','localtime'),
+                ?
+            )
+            """,
+            (matiere_id, quantite_apres, created_by_name),
+        )
+        conn.execute(
+            """
+            INSERT INTO mp_mouvements (
+                matiere_id, type_mouvement, quantite,
+                quantite_avant, quantite_apres,
+                ref_bl, note, emplacement_source, emplacement_dest,
+                created_by, created_by_name
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                matiere_id,
+                type_mvt,
+                mvt_quantite,
+                quantite_avant,
+                quantite_apres,
+                ref_bl,
+                note,
+                emplacement_source,
+                emplacement_dest,
+                created_by,
+                created_by_name,
+            ),
+        )
+        conn.commit()
+
+    return {"ok": True, "quantite_apres": quantite_apres}
+
+
+@router.get("/api/stock/matieres/{matiere_id}/mouvements")
+def list_matiere_mouvements(matiere_id: int, request: Request):
+    require_stock(request)
+    with get_db() as conn:
+        mp = conn.execute(
+            "SELECT id FROM matieres_premieres WHERE id=?",
+            (matiere_id,),
+        ).fetchone()
+        if not mp:
+            raise HTTPException(404, "Matière non trouvée.")
+        rows = conn.execute(
+            """
+            SELECT m.*, mp.reference, mp.designation
+            FROM mp_mouvements m
+            JOIN matieres_premieres mp ON mp.id = m.matiere_id
+            WHERE m.matiere_id=?
+            ORDER BY m.created_at DESC
+            LIMIT 50
+            """,
+            (matiere_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
 
 
 @router.post("/api/stock/produits/import/preview")
