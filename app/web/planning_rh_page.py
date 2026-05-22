@@ -232,6 +232,9 @@ body.sb-open .sidebar-overlay{display:block}
   transition:all .15s;
 }
 .rh-chip.warn{background:rgba(251,191,36,.12);color:var(--warn);border-color:rgba(251,191,36,.3)}
+.rh-chip.sat{background:rgba(167,139,250,.12);color:var(--c2);border-color:rgba(167,139,250,.35)}
+.rh-dd-day-btn.sat-on{background:rgba(167,139,250,.12);border-color:var(--c2);color:var(--c2)}
+.rh-dd-day-btn.sat-on:not(.conge):hover{background:rgba(167,139,250,.18)}
 .rh-chip-inner{display:flex;flex-direction:column;gap:1px;line-height:1.2;min-width:0}
 .rh-chip-name{white-space:nowrap}
 .rh-conge-inline-badge{
@@ -692,23 +695,65 @@ const POSTE_LABELS = {
 const TYPE_CONGE_LABELS = { CP:'Congés payés', maladie:'Maladie', autre:'Autre' };
 const STATUT_CONGE_LABELS = { pose:'Posé', valide:'Validé', refuse:'Refusé' };
 
-// ── Helpers bitmask jours (Lun=bit0 … Ven=bit4, 31=toute la semaine) ──
-const JOURS_LABELS  = ['Lun','Mar','Mer','Jeu','Ven'];
-const JOURS_LONGS   = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi'];
-const JOURS_FULL    = 31;
+// ── Helpers bitmask jours (Lun=bit0 … Ven=bit4, Sam=bit5 ; 31=lun–ven, 32=samedi) ──
+const JOURS_LABELS  = ['Lun','Mar','Mer','Jeu','Ven','Sam'];
+const JOURS_LONGS   = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
+const JOURS_MASK_WEEK = 31;
+const JOURS_MASK_ALL  = 63;
+const JOURS_BIT_SAMEDI = 32;
+const JOURS_FULL_WEEK = 31;
 
-function joursToFlags(jours){ // bitmask → [bool×5]
+function joursToFlags(jours){ // bitmask → [bool×6]
   return JOURS_LABELS.map((_,i)=>!!((jours>>i)&1));
 }
-function joursFromFlags(flags){ // [bool×5] → bitmask
+function joursFromFlags(flags){ // [bool×6] → bitmask
   return flags.reduce((acc,v,i)=>v?acc|(1<<i):acc, 0);
 }
-function joursToList(jours){ // bitmask → ['Lun','Mer',…]
+function joursToList(jours){ // bitmask → ['Lun','Mer',…,'Sam']
   return JOURS_LABELS.filter((_,i)=>(jours>>i)&1);
 }
-function joursToDisplay(jours){ // bitmask → '' (pleine semaine) ou 'Lun, Mer, Ven'
-  if((jours&31)===31) return '';
-  return joursToList(jours).join(', ');
+function joursToDisplay(jours){ // '' si lun–ven complets sans samedi, sinon liste des jours
+  const wk=jours&JOURS_MASK_WEEK;
+  const sat=!!(jours&JOURS_BIT_SAMEDI);
+  if(wk===JOURS_FULL_WEEK&&!sat) return '';
+  const parts=[];
+  if(wk<JOURS_FULL_WEEK) parts.push(...JOURS_LABELS.slice(0,5).filter((_,i)=>(wk>>i)&1));
+  if(sat) parts.push('Sam');
+  return parts.join(', ');
+}
+function chipClassForJours(joursVal){
+  if(joursVal&JOURS_BIT_SAMEDI) return ' sat';
+  if((joursVal&JOURS_MASK_WEEK)<JOURS_FULL_WEEK) return ' warn';
+  return '';
+}
+function weekSaturdayDate(ws){
+  const mon=weekMonday(ws);
+  const sat=new Date(mon); sat.setDate(mon.getDate()+5);
+  return sat.toISOString().split('T')[0];
+}
+async function isSamediProdTravaille(machineId,semaine){
+  if(!machineId) return true;
+  const ds=weekSaturdayDate(semaine);
+  try{
+    const r=await fetch(`/api/planning/machines/${machineId}/day-work?start=${ds}&end=${ds}`,{credentials:'include'});
+    if(!r.ok) return true;
+    const data=await r.json();
+    const row=Array.isArray(data)?data.find(x=>x.date===ds):null;
+    return row?Number(row.is_worked)===1:true;
+  }catch(e){ return true; }
+}
+function warnSamediProdNonTravaille(){
+  toast(
+    'Le samedi n\'est pas marqué comme travaillé dans le planning de production (MyProd › Planning). '+
+    'Contactez le gestionnaire du planning production pour activer le samedi sur cette machine et cette semaine.',
+    'warn'
+  );
+}
+async function alertSamediProdIfNeeded(machineId,semaine,jours,prevJours){
+  if(!(jours&JOURS_BIT_SAMEDI)) return;
+  if((prevJours!==undefined)&&(prevJours&JOURS_BIT_SAMEDI)) return;
+  const ok=await isSamediProdTravaille(machineId,semaine);
+  if(!ok) warnSamediProdNonTravaille();
 }
 // Bitmask des jours de congé d'un opérateur sur une semaine donnée
 function congeJoursBitmask(userId, ws){
@@ -748,7 +793,7 @@ const S = {
   personSearch: '',
   modalTarget: null,     // { semaine, machineCode, poste, creneau, machineId }
   dayDetailTarget: null, // { semaine, machineCode, poste, creneau, machineId }
-  dayDetailEdit: {},     // { [planId]: joursFlags [bool×5] }
+  dayDetailEdit: {},     // { [planId]: joursFlags [bool×6] }
 };
 
 // ── Helpers semaines ───────────────────────────────────
@@ -845,7 +890,7 @@ function userAssignedInCell(userId,target){
   return S.planning.some(p=>p.user_id===userId&&planningKey(p)===key);
 }
 function userFreeDaysMask(userId,ws){
-  return 31 & ~userBusyDaysMask(userId,ws) & ~congeJoursBitmask(userId,ws);
+  return JOURS_MASK_WEEK & ~userBusyDaysMask(userId,ws) & ~congeJoursBitmask(userId,ws);
 }
 
 // ── API ────────────────────────────────────────────────
@@ -931,7 +976,11 @@ async function addAssignment(target, force=false){
         catch(e){ toast('Erreur réseau : '+e.message,'error'); S.modal=null; render(); return; }
         if(resp2.ok){
           const d=await resp2.json().catch(()=>null);
-          if(d){ S.planning.push(d); toast(p.nom+(isAssign?' affecté (jours libres)':' affecté (congé partiel)'),'success'); }
+          if(d){
+            S.planning.push(d);
+            toast(p.nom+(isAssign?' affecté (jours libres)':' affecté (congé partiel)'),'success');
+            await alertSamediProdIfNeeded(target.machineId,target.semaine,d.jours!==undefined?d.jours:31,0);
+          }
           S.modal=null; render(); return;
         }
         const e2=await resp2.json().catch(()=>({}));
@@ -955,7 +1004,11 @@ async function addAssignment(target, force=false){
   }
 
   const d=await resp.json().catch(()=>null);
-  if(d){ S.planning.push(d); toast(p.nom+' affecté','success'); }
+  if(d){
+    S.planning.push(d);
+    toast(p.nom+' affecté','success');
+    await alertSamediProdIfNeeded(target.machineId,target.semaine,d.jours!==undefined?d.jours:31,0);
+  }
   S.modal=null; render();
 }
 
@@ -1479,10 +1532,10 @@ function buildPlanningGrid(){
           assignments.forEach(a=>{
             // Jours travaillés (depuis le bitmask de l'affectation)
             const joursVal=a.jours!==undefined?a.jours:31;
-            const hasPartialJours=(joursVal&31)<31;
+            const hasPartialJours=((joursVal&JOURS_MASK_WEEK)<JOURS_FULL_WEEK)||!!(joursVal&JOURS_BIT_SAMEDI);
 
             const chip=document.createElement('span');
-            chip.className='rh-chip'+(hasPartialJours?' warn':'');
+            chip.className='rh-chip'+chipClassForJours(joursVal);
 
             // Contenu interne : nom + jours travaillés si partiel
             const inner=document.createElement('span');
@@ -1526,7 +1579,10 @@ function buildPlanningGrid(){
             cell.appendChild(eyeBtn);
           }
 
-          const hasPartialAny=assignments.some(a=>(a.jours!==undefined&&(a.jours&31)<31));
+          const hasPartialAny=assignments.some(a=>{
+            const j=a.jours!==undefined?a.jours:31;
+            return (j&JOURS_MASK_WEEK)<JOURS_FULL_WEEK||(j&JOURS_BIT_SAMEDI);
+          });
           const needsPrintDetail=assignments.length>0&&(assignments.length>=2||hasPartialAny);
 
           // Bloc impression jour-par-jour (caché à l'écran, visible en print)
@@ -1538,7 +1594,7 @@ function buildPlanningGrid(){
             // En-tête : initiales des jours
             const hdrRow=document.createElement('tr');
             const th0=document.createElement('th'); th0.textContent=''; hdrRow.appendChild(th0);
-            ['L','M','M','J','V'].forEach(l=>{
+            ['L','M','M','J','V','S'].forEach(l=>{
               const th=document.createElement('th'); th.textContent=l; hdrRow.appendChild(th);
             });
             tbl.appendChild(hdrRow);
@@ -1557,9 +1613,9 @@ function buildPlanningGrid(){
               tdName.title=a.user_nom;
               tr.appendChild(tdName);
               // Cases jours
-              for(let i=0;i<5;i++){
+              for(let i=0;i<6;i++){
                 const td=document.createElement('td');
-                const isConge=!!((congeMask>>i)&1);
+                const isConge=i<5&&!!((congeMask>>i)&1);
                 const isOn=!!((joursVal>>i)&1);
                 if(isConge){
                   td.className='rh-pdt-conge'; td.textContent='cp';
@@ -1646,7 +1702,7 @@ function renderPersonList(){
     const assignedHere=userAssignedInCell(p.id,t);
     const busyMask=userBusyDaysMask(p.id,t.semaine);
     const assignJours=joursToList(busyMask);
-    const assignFullWeek=(busyMask&31)===31;
+    const assignFullWeek=(busyMask&JOURS_MASK_WEEK)===JOURS_FULL_WEEK;
     const assignPartiel=busyMask>0&&!assignFullWeek;
     const conges=userCongesThisWeek(p.id,t.semaine);
 
@@ -1732,8 +1788,8 @@ function buildDayDetailModal(){
   `;
   box.appendChild(hdr);
 
-  // Construire les dates Lun-Ven de la semaine
-  const dayDates=Array.from({length:5},(_,i)=>{
+  // Construire les dates Lun–Sam de la semaine
+  const dayDates=Array.from({length:6},(_,i)=>{
     const d=new Date(mon); d.setDate(mon.getDate()+i); return d;
   });
   const fmtDate=d=>`${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}`;
@@ -1767,23 +1823,25 @@ function buildDayDetailModal(){
     tdName.textContent=a.user_nom; tr.appendChild(tdName);
 
     flags.forEach((isOn,i)=>{
-      const isConge=!!((congeMask>>i)&1);
+      const isSat=i===5;
+      const isConge=!isSat&&!!((congeMask>>i)&1);
       const td=document.createElement('td');
       const btn=document.createElement('button');
-      btn.className='rh-dd-day-btn'+(isConge?' conge':(isOn?' on':''));
-      btn.title=isConge?'Congé':'Cliquer pour basculer';
+      const btnOn=isSat?(isOn?' sat-on':''):(isOn?' on':'');
+      btn.className='rh-dd-day-btn'+(isConge?' conge':btnOn);
+      btn.title=isConge?'Congé':(isSat?'Samedi — cliquer pour basculer':'Cliquer pour basculer');
 
       if(isConge){
-        // Afficher le type de congé depuis rh_conges
         const cg=userCongesThisWeek(a.user_id,t.semaine)[0];
         btn.textContent=cg?cg.type_conge.toUpperCase():'CP';
       } else {
         btn.textContent=isOn?'✓':'—';
-        btn.onclick=()=>{
+        btn.onclick=async()=>{
           S.dayDetailEdit[a.id][i]=!S.dayDetailEdit[a.id][i];
-          // Mise à jour visuelle directe sans re-render complet
-          btn.className='rh-dd-day-btn'+(S.dayDetailEdit[a.id][i]?' on':'');
-          btn.textContent=S.dayDetailEdit[a.id][i]?'✓':'—';
+          const on=S.dayDetailEdit[a.id][i];
+          btn.className='rh-dd-day-btn'+(isSat?(on?' sat-on':''):(on?' on':''));
+          btn.textContent=on?'✓':'—';
+          if(isSat&&on) await alertSamediProdIfNeeded(t.machineId,t.semaine,JOURS_BIT_SAMEDI,0);
         };
       }
       td.appendChild(btn); tr.appendChild(td);
@@ -1809,11 +1867,14 @@ function buildDayDetailModal(){
 
 async function saveDayDetail(assignments){
   let hasError=false;
+  const t=S.dayDetailTarget;
   for(const a of assignments){
     const flags=S.dayDetailEdit[a.id];
     if(!flags) continue;
     const jours=joursFromFlags(flags);
-    if(jours===(a.jours!==undefined?a.jours:31)) continue; // pas de changement
+    const prevJours=a.jours!==undefined?a.jours:31;
+    if(jours===prevJours) continue;
+    if(jours===0){ toast('Au moins un jour doit rester coché','error'); return; }
     try{
       const resp=await fetch(API+'/planning/'+a.id,{
         credentials:'include',method:'PUT',
@@ -1826,6 +1887,7 @@ async function saveDayDetail(assignments){
           const idx=S.planning.findIndex(p=>p.id===a.id);
           if(idx>=0) S.planning[idx]={...S.planning[idx],jours:updated.jours};
         }
+        await alertSamediProdIfNeeded(t?.machineId,t?.semaine,jours,prevJours);
       } else { hasError=true; }
     } catch(e){ hasError=true; }
   }
@@ -2340,10 +2402,8 @@ function getPrenom(userNom){
 function formatPrintName(a){
   const prenom=getPrenom(a.user_nom);
   const joursVal=a.jours!==undefined?a.jours:31;
-  const hasPartial=(joursVal&31)<31;
-  if(hasPartial){
-    return prenom+' ('+joursToList(joursVal).join(', ')+')';
-  }
+  const lbl=joursToDisplay(joursVal);
+  if(lbl) return prenom+' ('+lbl+')';
   return prenom;
 }
 function buildPivotTable(machines,weeks,hasMatinAprem){

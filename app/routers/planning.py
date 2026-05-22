@@ -624,7 +624,7 @@ def _hours_for_date_factory(
     day_worked_map: Dict[str, int],
     day_horaires_map: Optional[Dict[str, Tuple[float, float]]] = None,
 ):
-    """get_hours_for_date(dt) — même priorité que getWhForDate côté planning (override journalier d'abord)."""
+    """get_hours_for_date(dt) — jours non travaillés exclus avant tout override horaire."""
     dh_map = day_horaires_map or {}
     base_hours = {}
     for day_idx, field in [(0, "horaires_lundi"), (1, "horaires_mardi"),
@@ -644,9 +644,6 @@ def _hours_for_date_factory(
 
     def get_hours_for_date(dt: datetime):
         dkey = dt.strftime("%Y-%m-%d")
-        dh = dh_map.get(dkey)
-        if dh is not None:
-            return dh
         wd = dt.weekday()
         if wd <= 4 and int(off_days.get(dkey, 0) or 0):
             return None
@@ -654,6 +651,16 @@ def _hours_for_date_factory(
         if wd in base_hours:
             if dw is not None and int(dw) == 0:
                 return None
+        elif wd == 5:
+            if dw is None:
+                if int(configs.get(week_key(dt), 0) or 0) == 0:
+                    return None
+            elif int(dw) == 0:
+                return None
+        dh = dh_map.get(dkey)
+        if dh is not None:
+            return dh
+        if wd in base_hours:
             if _parity_defs is not None:
                 par = "pair" if _is_pair_week(dt) else "impair"
                 slot = "fri" if wd == 4 else "week"
@@ -663,12 +670,6 @@ def _hours_for_date_factory(
                 return (float(h[0]), float(h[1]))
             return base_hours[wd]
         if wd == 5:
-            if dw is None:
-                if int(configs.get(week_key(dt), 0) or 0) == 0:
-                    return None
-                return sat_hours_t
-            if int(dw) == 0:
-                return None
             return sat_hours_t
         return None
 

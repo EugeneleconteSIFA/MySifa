@@ -67,13 +67,16 @@ def _week_bounds(semaine: str):
         raise HTTPException(400, f"Format de semaine invalide : '{semaine}' (attendu YYYY-WNN)")
 
 
-JOURS_NOMS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"]
-JOURS_ABREVS = ["Lun", "Mar", "Mer", "Jeu", "Ven"]
+JOURS_NOMS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"]
+JOURS_ABREVS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"]
+JOURS_MASK_WEEK = 31   # Lun–Ven (bits 0–4)
+JOURS_MASK_ALL = 63    # Lun–Sam (bits 0–5)
+JOURS_BIT_SAMEDI = 32
 
 
 def _bits_to_day_labels(bits: int, short: bool = True) -> list[str]:
     labels = JOURS_ABREVS if short else JOURS_NOMS
-    return [labels[i] for i in range(5) if (bits >> i) & 1]
+    return [labels[i] for i in range(6) if (bits >> i) & 1]
 
 
 def _same_planning_slot(
@@ -229,7 +232,7 @@ async def create_planning(request: Request):
 
         busy_bits = 0
         for ex in existing_rows:
-            ex_jours = int(ex["jours"] or 31) & 31
+            ex_jours = int(ex["jours"] or 31) & JOURS_MASK_ALL
             busy_bits |= ex_jours
             if _same_planning_slot(
                 poste, creneau, machine_id,
@@ -242,7 +245,7 @@ async def create_planning(request: Request):
                 )
 
         assign_days = _bits_to_day_labels(busy_bits)
-        is_full_assigned = (busy_bits & 31) == 31
+        is_full_assigned = (busy_bits & JOURS_MASK_WEEK) == JOURS_MASK_WEEK
 
         # Congé qui chevauche la semaine ?
         conge = conn.execute(
@@ -293,7 +296,7 @@ async def create_planning(request: Request):
                 )
             # force=True → on affecte malgré le congé partiel
 
-        unavailable_bits = (busy_bits | conge_day_bits) & 31
+        unavailable_bits = (busy_bits | conge_day_bits) & JOURS_MASK_ALL
 
         if is_full_assigned:
             raise HTTPException(
@@ -306,16 +309,16 @@ async def create_planning(request: Request):
         #   - Si le client fournit une valeur explicite → l'utiliser (masquée sur 5 bits)
         #   - Sinon → jours libres (hors congé et hors affectations existantes)
         if jours_req is not None:
-            jours = int(jours_req) & 31
+            jours = int(jours_req) & JOURS_MASK_ALL
         else:
-            jours = 31 & ~unavailable_bits
+            jours = JOURS_MASK_WEEK & ~unavailable_bits
 
         overlap = jours & unavailable_bits
         if overlap:
             if not force:
                 from fastapi.responses import JSONResponse
 
-                if busy_bits and not (busy_bits & 31 == 31):
+                if busy_bits and not (busy_bits & JOURS_MASK_WEEK == JOURS_MASK_WEEK):
                     days_str = ", ".join(assign_days) if assign_days else "?"
                     return JSONResponse(
                         status_code=409,
@@ -406,9 +409,9 @@ async def update_planning_jours(plan_id: int, request: Request):
     jours = body.get("jours")
     if jours is None:
         raise HTTPException(400, "Champ 'jours' requis (bitmask 0–31)")
-    jours = int(jours) & 31
+    jours = int(jours) & JOURS_MASK_ALL
     if jours == 0:
-        raise HTTPException(400, "Au moins un jour ouvré doit être sélectionné")
+        raise HTTPException(400, "Au moins un jour doit être sélectionné (lun–ven ou samedi)")
 
     with get_db() as conn:
         row = conn.execute(
@@ -424,7 +427,7 @@ async def update_planning_jours(plan_id: int, request: Request):
             (row["user_id"], row["semaine"], plan_id),
         ).fetchall()
         for o in others:
-            other_busy |= int(o["jours"] or 31) & 31
+            other_busy |= int(o["jours"] or 31) & JOURS_MASK_ALL
 
         if jours & other_busy:
             days_str = ", ".join(_bits_to_day_labels(other_busy))

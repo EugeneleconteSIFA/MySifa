@@ -1126,7 +1126,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 11, "matiere_params_base_config")
 
-    # v12 — jours travaillés par affectation RH (bitmask Lun=bit0…Ven=bit4, 31=semaine entière)
+    # v12 — jours travaillés par affectation RH (bitmask Lun=bit0…Ven=bit4, Sam=bit5 ; 31=lun–ven, 32=sam)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=12 LIMIT 1").fetchone():
         try:
             conn.execute(
@@ -1711,6 +1711,109 @@ def _migrate(conn):
         seed_expe_transporteurs_if_empty(conn)
         conn.commit()
         _record_schema_migration(conn, 44, "expe_transporteurs_seed")
+
+    # v45 — MyAO : demandes
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=45 LIMIT 1").fetchone():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS ao_demandes (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                reference         TEXT NOT NULL UNIQUE,
+                titre             TEXT NOT NULL,
+                description       TEXT,
+                date_creation     TEXT NOT NULL,
+                date_limite       TEXT,
+                statut            TEXT NOT NULL DEFAULT 'brouillon',
+                created_by        INTEGER,
+                responsable_email TEXT
+            )
+        """)
+        conn.commit()
+        _record_schema_migration(conn, 45, "ao_demandes")
+
+    # v46 — MyAO : lignes
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=46 LIMIT 1").fetchone():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS ao_lignes (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                ao_id       INTEGER NOT NULL REFERENCES ao_demandes(id) ON DELETE CASCADE,
+                ref_produit TEXT NOT NULL,
+                designation TEXT NOT NULL,
+                quantite    REAL NOT NULL,
+                unite       TEXT DEFAULT 'unité',
+                notes       TEXT,
+                position    INTEGER DEFAULT 0
+            )
+        """)
+        conn.commit()
+        _record_schema_migration(conn, 46, "ao_lignes")
+
+    # v47 — MyAO : fournisseurs invités
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=47 LIMIT 1").fetchone():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS ao_fournisseurs (
+                id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+                ao_id              INTEGER NOT NULL REFERENCES ao_demandes(id) ON DELETE CASCADE,
+                nom_fournisseur    TEXT NOT NULL,
+                email_contact      TEXT NOT NULL,
+                token              TEXT NOT NULL UNIQUE,
+                statut             TEXT NOT NULL DEFAULT 'invite',
+                date_envoi         TEXT,
+                date_ouverture     TEXT,
+                date_reponse       TEXT,
+                commentaire_global TEXT
+            )
+        """)
+        conn.commit()
+        _record_schema_migration(conn, 47, "ao_fournisseurs")
+
+    # v48 — MyAO : réponses par ligne
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=48 LIMIT 1").fetchone():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS ao_reponses (
+                id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+                ao_fournisseur_id  INTEGER NOT NULL REFERENCES ao_fournisseurs(id) ON DELETE CASCADE,
+                ligne_id           INTEGER NOT NULL REFERENCES ao_lignes(id) ON DELETE CASCADE,
+                prix_unitaire      REAL,
+                delai_jours        INTEGER,
+                commentaire        TEXT,
+                UNIQUE(ao_fournisseur_id, ligne_id)
+            )
+        """)
+        conn.commit()
+        _record_schema_migration(conn, 48, "ao_reponses")
+
+    # v49 — MyAO : messages portail
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=49 LIMIT 1").fetchone():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS ao_messages (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                ao_fournisseur_id INTEGER NOT NULL REFERENCES ao_fournisseurs(id) ON DELETE CASCADE,
+                expediteur        TEXT NOT NULL,
+                auteur_nom        TEXT,
+                message           TEXT NOT NULL,
+                date              TEXT NOT NULL,
+                lu                INTEGER DEFAULT 0
+            )
+        """)
+        conn.commit()
+        _record_schema_migration(conn, 49, "ao_messages")
+
+    # v50 — MyAO : pièces jointes
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=50 LIMIT 1").fetchone():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS ao_pieces_jointes (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                ao_id             INTEGER REFERENCES ao_demandes(id) ON DELETE CASCADE,
+                ao_fournisseur_id INTEGER REFERENCES ao_fournisseurs(id) ON DELETE CASCADE,
+                filename          TEXT NOT NULL,
+                stored_name       TEXT NOT NULL,
+                taille_octets     INTEGER,
+                uploaded_by       TEXT,
+                date              TEXT NOT NULL
+            )
+        """)
+        conn.commit()
+        _record_schema_migration(conn, 50, "ao_pieces_jointes")
 
     _record_schema_migration(
         conn,

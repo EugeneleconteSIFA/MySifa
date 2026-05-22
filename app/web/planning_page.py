@@ -988,6 +988,7 @@ async function setDayNonTravail(dateStr,isSaturday,nonTravailChecked){
     await api(`/machines/${MID}/day-work`,{method:"PUT",body:JSON.stringify({date:dateStr,is_worked:nonTravailChecked?0:1})});
   }else{
     await api(`/machines/${MID}/holidays`,{method:"PUT",body:JSON.stringify({date:dateStr,is_off:nonTravailChecked?1:0})});
+    await api(`/machines/${MID}/day-work`,{method:"PUT",body:JSON.stringify({date:dateStr,is_worked:nonTravailChecked?0:1})});
   }
   await load();
 }
@@ -1251,8 +1252,7 @@ function workHoursBetween(startDt,endDt){
       const ds = ymdate(day);
       const di = day.getDay(); // 0..6 (lun=1 ... sam=6)
       if(di === 0){ cur = addD(day,1); continue; } // dimanche
-      const isSat = (di === 6);
-      const isOff = isSat ? !S.dayWorked[ds] : !!S.holidays[ds];
+      const isOff = isPlanningDayOff(di, ds);
       if(isOff){ cur = addD(day,1); continue; }
       const wh = getWhForDate(di, day, ds);
       const ws = new Date(day.getTime() + (wh.s||0)*36e5);
@@ -1360,7 +1360,16 @@ function isWeekPair(d){
   const w=wkNum(d);
   return (w%2)===0;
 }
+/** Jour non travaillé — aligné backend (fériés + planning_day_worked). */
+function isPlanningDayOff(di,ds){
+  const isSat=di===6;
+  if(isSat) return !S.dayWorked[ds];
+  if(!!S.holidays[ds]) return true;
+  if(Object.prototype.hasOwnProperty.call(S.dayWorked||{},ds)&&!S.dayWorked[ds]) return true;
+  return false;
+}
 function getWhForDate(di,dateObj,ds){
+  if(ds&&isPlanningDayOff(di,ds)) return null;
   // Priorité 1 : override ponctuel par date (planning_day_horaires)
   if(ds && S.dayHoraires && S.dayHoraires[ds]){
     return S.dayHoraires[ds];
@@ -2003,12 +2012,12 @@ function computeTlWeekModel(mon){
     if(di===0)continue;
     const ds=ymd(d);
     const isSat=di===6;
+    const off=isPlanningDayOff(di,ds);
     const w=getWhForDate(di,d,ds);
     if(!w)continue;
-    const off=isSat?!S.dayWorked[ds]:!!S.holidays[ds];
     const dayT=off?0:(w.e-w.s);
     const hourLbl=off?"—":fmtWindow(w.s,w.e);
-    const nonTravail=isSat?!S.dayWorked[ds]:!!S.holidays[ds];
+    const nonTravail=off;
     days.push({date:d,di,ds,s:w.s,e:w.e,tWork:dayT,flex:off?HF:dayT,off,hourLbl,nonTravail,isSat});
   }
   if(!days.length) return{err:"nodays"};
@@ -2143,7 +2152,7 @@ function mkTL(mon,slots){
       data-deb="${escAttr(fdt(ss))}" data-fin="${escAttr(fdt(se))}" data-st="${escAttr(st)}" data-co="${escAttr(co)}"${termineTitle?` title="${escAttr(termineTitle)}"`:""}>
       ${destock?`<div style="position:absolute;top:4px;right:4px;width:10px;height:10px;border-radius:50%;background:rgba(71,85,105,.9);pointer-events:none;z-index:5;flex-shrink:0"></div>`:""}
       ${resizeHandle}
-      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}${fscBadgeHtml(s)}</span>${line2Txt?`<span class="line2">${escAttr(line2Txt)}</span>`:""}${line3Txt?`<span class="line3">${escAttr(line3Txt)}</span>`:""}${exig?`<span class="line-exig" title="${escAttr(exig)}">EXIG. ${escAttr(exig)}</span>`:""}</div>`:""}</div>`;
+      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}${fscBadgeHtml(s)}</span>${line2Txt?`<span class="line2">${escAttr(line2Txt)}</span>`:""}${line3Txt?`<span class="line3">${escAttr(line3Txt)}</span>`:""}${exig?`<span class="line-exig" title="${escAttr(exig)}">${escAttr(exig)}</span>`:""}</div>`:""}</div>`;
   });
 
   const np=gp(now);
@@ -3461,8 +3470,7 @@ function openWeekSettingsModal(monTs){
     if(di===0) continue;
     const ds=ymd(d);
     const isSat=di===6;
-    const isOff=isSat?!S.dayWorked[ds]:!!S.holidays[ds];
-    const worked=!isOff;
+    const worked=!isPlanningDayOff(di,ds);
     const wh=getWhForDate(di,d,ds);
     const startVal=fracToTimeInput(wh.s);
     const endVal=fracToTimeInput(wh.e);
@@ -3520,8 +3528,9 @@ async function submitWeekSettings(monTs){
         await api(`/machines/${MID}/day-work`,{method:"PUT",body:JSON.stringify({date:op.ds,is_worked:op.worked?1:0})});
       }else{
         await api(`/machines/${MID}/holidays`,{method:"PUT",body:JSON.stringify({date:op.ds,is_off:op.worked?0:1})});
+        await api(`/machines/${MID}/day-work`,{method:"PUT",body:JSON.stringify({date:op.ds,is_worked:op.worked?1:0})});
       }
-      if(op.st&&op.en){
+      if(op.worked&&op.st&&op.en){
         const hd=toFrac(op.st),hf=toFrac(op.en);
         if(hf>hd) await api(`/machines/${MID}/day-horaires`,{method:"PUT",body:JSON.stringify({date:op.ds,heure_debut:hd,heure_fin:hf})});
       }

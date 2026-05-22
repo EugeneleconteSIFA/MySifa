@@ -618,13 +618,10 @@ function renderExpeTransporteurs(){
 """
 
 EXPE_CARTE_FRANCE_CSS = r"""
-/* ── MyExpé — carte France délais (widget dock) ── */
-.expe-carte-fab{display:flex;align-items:center;justify-content:center;background:var(--card);border:1px solid var(--border);color:var(--accent)}
-.expe-carte-fab-icon{width:22px;height:22px;flex-shrink:0;background-color:currentColor;
+/* ── MyExpé — carte France délais (widget dock, style calculette) ── */
+.expe-carte-fab-icon{width:22px;height:22px;flex-shrink:0;background-color:var(--bg);
   mask:url(/static/expe_france_fab_icon.png) center/contain no-repeat;
   -webkit-mask:url(/static/expe_france_fab_icon.png) center/contain no-repeat}
-.expe-carte-fab:hover{border-color:var(--accent);filter:brightness(1.05)}
-.expe-carte-fab.expe-carte-fab-active,.expe-carte-fab.mysifa-dock-fab-active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
 .expe-carte-panel{width:min(920px,calc(100vw - 48px));max-height:min(720px,calc(100dvh - 100px))}
 .expe-carte-panel-body{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:12px;padding:12px 14px 14px}
 .expe-carte-toolbar-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;flex-shrink:0}

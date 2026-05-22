@@ -94,6 +94,16 @@ _HISTORIQUE_SQL_MP = """
         mp.categorie,
         mp.reference,
         mp.designation,
+        'palette' AS unite,
+        CASE
+            WHEN m.type_mouvement = 'transfert'
+                 AND TRIM(COALESCE(m.emplacement_source,'')) != ''
+                 AND TRIM(COALESCE(m.emplacement_dest,'')) != ''
+                THEN TRIM(m.emplacement_source) || ' → ' || TRIM(m.emplacement_dest)
+            WHEN TRIM(COALESCE(m.emplacement_dest,'')) != '' THEN TRIM(m.emplacement_dest)
+            WHEN TRIM(COALESCE(m.emplacement_source,'')) != '' THEN TRIM(m.emplacement_source)
+            ELSE NULL
+        END AS emplacement,
         m.type_mouvement,
         m.quantite,
         m.quantite_avant,
@@ -114,6 +124,8 @@ _HISTORIQUE_SQL_PF = """
         NULL AS categorie,
         p.reference,
         p.designation,
+        p.unite,
+        m.emplacement,
         m.type_mouvement,
         m.quantite,
         m.quantite_avant,
@@ -180,6 +192,8 @@ def _historique_row_dict(r) -> dict:
         "categorie": r["categorie"],
         "reference": r["reference"],
         "designation": r["designation"],
+        "unite": r["unite"],
+        "emplacement": r["emplacement"],
         "type_mouvement": r["type_mouvement"],
         "quantite": _f(r["quantite"]),
         "quantite_avant": _f(r["quantite_avant"]),
@@ -963,6 +977,7 @@ def historique_mouvements(
             "Catégorie",
             "Référence",
             "Désignation",
+            "Unité",
             "Mouvement",
             "Quantité",
             "Avant",
@@ -978,6 +993,7 @@ def historique_mouvements(
                 r.get("categorie") or "",
                 r.get("reference") or "",
                 r.get("designation") or "",
+                r.get("unite") or "",
                 r.get("type_mouvement") or "",
                 r.get("quantite") if r.get("quantite") is not None else "",
                 r.get("quantite_avant") if r.get("quantite_avant") is not None else "",

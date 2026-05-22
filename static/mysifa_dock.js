@@ -102,6 +102,175 @@
     el.style.zIndex = String(zIndex || Z_PANEL);
   }
 
+  function isExpeApp() {
+    return (window.__MYSIFA_APP__ || '') === 'expe';
+  }
+
+  /** MyExpé — grille 2×2 : bas [calc | carte], haut [messagerie | IA] */
+  function layoutExpe2x2(calcFab, calcPanel, carteFab, cartePanel, aiBtn, aiPanel, chatBubble, chatBar, chatPanel) {
+    const aiRoot = document.getElementById('ai-chat-root');
+    const base = minFabBaseBottom();
+    const step = FAB_SIZE + GAP;
+    const gridH = step * 2;
+    const mobile = isMobile();
+    const landscape = isMobileLandscape();
+
+    const hasCalc = isDockFab(calcFab);
+    const hasCarte = isDockFab(carteFab);
+    const hasAi = isVisible(aiRoot) && isDockFab(aiBtn);
+    const chatFab =
+      isDockFab(chatBubble) ? chatBubble : isDockFab(chatBar) ? chatBar : null;
+
+    function placeFab(el, col, row) {
+      if (!el) return;
+      applyFab(el, safeRight(col * step), safeBottom(base + row * step));
+      el.style.zIndex = String(Z_FAB);
+      el.style.boxShadow = SHADOW_FAB;
+    }
+
+    function panelBottom(row) {
+      return base + row * step + FAB_SIZE + 14;
+    }
+
+    if (chatBar && isDockFab(chatBar)) {
+      chatBar.style.right = '';
+      chatBar.style.bottom = '';
+      chatBar.style.left = '';
+      chatBar.style.top = '';
+      chatBar.style.width = '';
+      chatBar.style.maxWidth = '';
+      chatBar.style.boxShadow = '';
+    }
+    if (chatBubble && isDockFab(chatBubble)) {
+      chatBubble.style.left = '';
+    }
+
+    if (hasCalc) {
+      placeFab(calcFab, 0, 0);
+      if (calcPanel && getComputedStyle(calcPanel).display !== 'none') {
+        calcPanel.style.right = safeRight(0);
+        calcPanel.style.bottom = safeBottom(panelBottom(0));
+        calcPanel.style.left = 'auto';
+        calcPanel.style.top = 'auto';
+        calcPanel.style.boxShadow = SHADOW_PANEL;
+        calcPanel.style.zIndex = String(Z_PANEL);
+      }
+    }
+    if (hasCarte) {
+      placeFab(carteFab, 1, 0);
+      layoutExpeCartePanel(cartePanel, step, panelBottom(0), Z_PANEL);
+    }
+    if (chatFab) placeFab(chatFab, 0, 1);
+    if (hasAi) placeFab(aiBtn, 1, 1);
+
+    const panelAboveGrid = base + gridH + 14;
+
+    function layoutLandscapePanel(el, z) {
+      if (!el) return;
+      el.style.top = 'max(8px, env(safe-area-inset-top, 0px))';
+      el.style.left = 'max(12px, env(safe-area-inset-left, 0px))';
+      el.style.right = 'max(12px, env(safe-area-inset-right, 0px))';
+      el.style.width = 'auto';
+      el.style.maxWidth = 'none';
+      el.style.marginLeft = '0';
+      el.style.marginRight = '0';
+      el.style.bottom = safeBottom(panelAboveGrid);
+      const panelMaxH = 'calc(100dvh - ' + (panelAboveGrid + 12) + 'px)';
+      el.style.height = panelMaxH;
+      el.style.maxHeight = panelMaxH;
+      el.style.minHeight = '0';
+      el.style.borderRadius = '12px';
+      el.style.boxShadow = SHADOW_PANEL;
+      el.style.zIndex = String(z);
+    }
+
+    function layoutFloaterPanel(el, rightCol, row, z) {
+      if (!el) return;
+      const pb = panelBottom(row);
+      el.style.top = 'auto';
+      el.style.left = 'max(12px, env(safe-area-inset-left, 0px))';
+      el.style.right = 'max(12px, env(safe-area-inset-right, 0px))';
+      el.style.width = 'auto';
+      el.style.maxWidth = rightCol === 0 ? 'min(420px, calc(100vw - 24px))' : 'none';
+      el.style.marginLeft = 'auto';
+      el.style.marginRight = 'auto';
+      el.style.bottom = safeBottom(pb);
+      const panelMaxH = 'calc(100dvh - ' + (pb + FAB_SIZE + 8) + 'px)';
+      const panelMinH = 'min(560px, ' + panelMaxH + ')';
+      el.style.height = panelMinH;
+      el.style.maxHeight = panelMaxH;
+      el.style.borderRadius = '14px';
+      el.style.boxShadow = SHADOW_PANEL;
+      el.style.zIndex = String(z);
+    }
+
+    if (mobile && landscape) {
+      if (hasCarte && cartePanel && getComputedStyle(cartePanel).display !== 'none') {
+        layoutLandscapePanel(cartePanel, 8017);
+      }
+      if (chatPanel && !chatPanel.classList.contains('cw-hidden')) {
+        layoutChatLandscapePanel(chatPanel);
+      }
+      if (hasAi && aiPanel && aiPanel.classList.contains('open')) {
+        layoutLandscapePanel(aiPanel, 8016);
+      } else if (hasAi && aiPanel) {
+        aiPanel.style.top = '';
+        aiPanel.style.left = '';
+        aiPanel.style.right = safeRight(step);
+        aiPanel.style.bottom = safeBottom(base + step);
+        aiPanel.style.width = '';
+        aiPanel.style.maxWidth = '';
+        aiPanel.style.height = '';
+        aiPanel.style.maxHeight = '';
+        aiPanel.style.minHeight = '';
+        aiPanel.style.zIndex = '8002';
+        aiPanel.style.boxShadow = '';
+      }
+    } else if (mobile) {
+      if (hasCarte && cartePanel && getComputedStyle(cartePanel).display !== 'none') {
+        layoutFloaterPanel(cartePanel, 1, 0, 8017);
+        cartePanel.style.maxWidth = 'none';
+      }
+      if (chatPanel && !chatPanel.classList.contains('cw-hidden') && chatFab) {
+        layoutFloaterPanel(chatPanel, 0, 1, 8015);
+      }
+      if (hasAi && aiPanel) {
+        if (aiPanel.classList.contains('open')) {
+          layoutFloaterPanel(aiPanel, 1, 1, 8016);
+        } else {
+          aiPanel.style.left = '';
+          aiPanel.style.right = safeRight(step);
+          aiPanel.style.bottom = safeBottom(base + step);
+          aiPanel.style.width = '';
+          aiPanel.style.maxWidth = '';
+          aiPanel.style.height = '';
+          aiPanel.style.maxHeight = '';
+          aiPanel.style.zIndex = '8002';
+          aiPanel.style.boxShadow = '';
+        }
+      }
+    } else {
+      if (chatPanel && !chatPanel.classList.contains('cw-hidden') && chatFab) {
+        chatPanel.style.right = safeRight(0);
+        chatPanel.style.bottom = safeBottom(panelBottom(1));
+        chatPanel.style.left = 'auto';
+        chatPanel.style.top = 'auto';
+        chatPanel.style.boxShadow = SHADOW_PANEL;
+        chatPanel.style.zIndex = String(Z_PANEL);
+      }
+      if (hasAi && aiPanel) {
+        aiPanel.style.right = safeRight(step);
+        aiPanel.style.bottom = safeBottom(panelBottom(1));
+        aiPanel.style.left = 'auto';
+        aiPanel.style.top = 'auto';
+        aiPanel.style.boxShadow = SHADOW_PANEL;
+        aiPanel.style.zIndex = String(Z_PANEL);
+      }
+    }
+
+    applyActiveFabZIndex();
+  }
+
   function isDockFab(el) {
     if (!el) return false;
     return isVisible(el);
@@ -338,6 +507,11 @@
     const hasAi = isVisible(aiRoot) && isVisible(aiBtn);
     const hasChatBubble = isVisible(chatBubble);
     const hasChatBar = isVisible(chatBar);
+
+    if (isExpeApp()) {
+      layoutExpe2x2(calcFab, calcPanel, carteFab, cartePanel, aiBtn, aiPanel, chatBubble, chatBar, chatPanel);
+      return;
+    }
 
     if (mobile) {
       if (landscape) {

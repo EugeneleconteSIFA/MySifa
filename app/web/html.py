@@ -3550,6 +3550,7 @@ function renderPortal(){
   const isComptaPlan = urole === 'comptabilite';
   const isPaie = isSuper || !!(urole && ['direction','administration','comptabilite'].includes(urole));
   const isDevis = aa ? !!aa.devis : (isSuper || urole==='direction');
+  const isAo = isSuper || !!(urole && ['direction','administration','commercial'].includes(urole));
   const isLight=document.body.classList.contains('light');
 
   const order=(S.user&&Array.isArray(S.user.portal_apps_order))?S.user.portal_apps_order:[];
@@ -3667,6 +3668,20 @@ function renderPortal(){
       h('div',{className:'portal-app-icon'},iconEl('file-text',28)),
       h('div',{className:'portal-app-name'},'MyDevis'),
       h('div',{className:'portal-app-desc'},'Paramètres matière & Base prix')
+    )});
+  }
+
+  if(isAo){
+    const id='ao';
+    tileSpecs.push({id,el:h('div',{
+      className:'portal-app',
+      'data-portal-id':id,
+      draggable:'true',
+      onClick:()=>{if(_portalDragSuppressClick)return;window.location.href='/ao';}
+    },
+      h('div',{className:'portal-app-icon'},iconEl('clipboard',28)),
+      h('div',{className:'portal-app-name'},'MyAO'),
+      h('div',{className:'portal-app-desc'},'Appels d\'offre fournisseurs')
     )});
   }
 

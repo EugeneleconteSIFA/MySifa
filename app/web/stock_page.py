@@ -391,6 +391,8 @@ body.light .field-input.empl-upper::placeholder{
   font-size:12px;font-weight:600;color:var(--text);cursor:pointer;font-family:inherit;text-align:left;
   transition:border-color .15s,background .15s;line-height:1.35}
 .dash-quick-btn:hover{border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
+.dash-quick-btn-accent{background:var(--accent-bg);border-color:rgba(34,211,238,.35);color:var(--accent);font-weight:700}
+.dash-quick-btn-accent:hover{filter:brightness(1.05)}
 @media(max-width:768px){.dash-quick-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:480px){.dash-quick-grid{grid-template-columns:1fr}}
 .dash-section{border-top:1px solid var(--border);padding-top:22px;margin-top:22px}
@@ -414,18 +416,25 @@ body.light .field-input.empl-upper::placeholder{
 .dash-mp-cat-carton{background:rgba(5,150,105,.15);color:#059669}
 .dash-act-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
 .dash-act-list{display:flex;flex-direction:column}
-.dash-act-row{display:grid;grid-template-columns:auto auto 1fr auto;align-items:center;gap:10px 12px;
-  padding:12px 16px;border-bottom:1px solid var(--border);font-size:13px;color:var(--text)}
+.dash-act-row{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border);font-size:13px;color:var(--text)}
 .dash-act-row:last-child{border-bottom:none}
 .dash-act-row:hover{background:var(--accent-bg)}
-.dash-act-main{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
-.dash-act-meta{color:var(--muted);font-size:12px;white-space:nowrap;text-align:right}
+.dash-act-badges{display:flex;flex-wrap:wrap;gap:6px;flex-shrink:0;padding-top:2px}
+.dash-act-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.dash-act-ref{font-family:ui-monospace,monospace;font-size:14px;font-weight:800;color:var(--text);letter-spacing:-.2px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dash-act-highlight{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 16px}
+.dash-act-qte{font-size:18px;font-weight:800;font-family:ui-monospace,monospace;color:var(--accent);line-height:1.2}
+.dash-act-row .dash-act-qte.dash-act-qte-entree{color:var(--success)}
+.dash-act-row .dash-act-qte.dash-act-qte-sortie{color:var(--danger)}
+.dash-act-empl{font-family:ui-monospace,monospace;font-size:13px;font-weight:700;color:var(--text2);
+  padding:4px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px}
+.dash-act-foot{font-size:11px;color:var(--muted);line-height:1.45}
 .dash-act-empty{padding:28px 16px;text-align:center;color:var(--muted);font-size:13px}
 @media(max-width:640px){
-  .dash-act-row{grid-template-columns:auto 1fr;grid-template-rows:auto auto;gap:6px 8px;padding:12px 14px}
-  .dash-act-row .dash-badge:nth-child(2){grid-column:1}
-  .dash-act-main{grid-column:1/-1;white-space:normal}
-  .dash-act-meta{grid-column:1/-1;text-align:left;white-space:normal}
+  .dash-act-row{flex-direction:column;gap:8px;padding:12px 14px}
+  .dash-act-ref{white-space:normal;word-break:break-word}
+  .dash-act-highlight{flex-direction:column;align-items:flex-start;gap:8px}
 }
 .dash-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;letter-spacing:.3px;flex-shrink:0;white-space:nowrap}
 .dash-badge-stock-mp{background:rgba(124,58,237,.12);color:#7c3aed}
@@ -527,7 +536,8 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
 .hist-results-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
 .hist-count{font-size:12px;font-weight:600;color:var(--text2)}
 .hist-table-wrap{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
-.hist-table{width:100%;min-width:880px;border-collapse:collapse;font-size:13px}
+.hist-table{width:100%;min-width:960px;border-collapse:collapse;font-size:13px}
+.hist-unite{font-size:12px;color:var(--text2);white-space:nowrap}
 .hist-table thead th{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);
   background:var(--bg);border-bottom:1px solid var(--border);padding:11px 14px;text-align:left;font-weight:600;white-space:nowrap}
 .hist-table tbody td{padding:12px 14px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle}
@@ -971,6 +981,7 @@ let S = {
   matieresQ: '',
   matieresCardMenuId: null,
   mpModal: null,
+  addPfModalOpen: false,
   matieresAdminOpen: false,
   matieresAdminList: null,
   matieresAdminEditId: null,
@@ -1290,13 +1301,20 @@ function isStockEmplacementCode(s) {
   }
   return true;
 }
-function hidePageAddEmplDropdown() {
-  const list = document.getElementById('stock-page-add-empl-suggestions');
+const ADD_PF_FIELD_IDS = {
+  emplInput: 'dash-add-pf-empl-input',
+  emplList: 'dash-add-pf-empl-suggestions',
+  unitInput: 'dash-add-pf-unit-input',
+  unitList: 'dash-add-pf-unit-suggestions',
+};
+
+function hideAddEmplDropdown(listId) {
+  const list = document.getElementById(listId);
   if (list) list.style.display = 'none';
 }
-function refreshPageAddEmplDropdownInner() {
-  const input = document.getElementById('stock-page-add-empl-input');
-  const list = document.getElementById('stock-page-add-empl-suggestions');
+function refreshAddEmplDropdownInner(inputId, listId) {
+  const input = document.getElementById(inputId);
+  const list = document.getElementById(listId);
   if (!input || !list) return;
   const q = String(input.value || '').trim().toUpperCase();
   const all = allPageEmplacementChoices();
@@ -1307,7 +1325,7 @@ function refreshPageAddEmplDropdownInner() {
     const row = document.createElement('div');
     row.className = 'empl-suggest-item';
     row.textContent = code;
-    row.addEventListener('mousedown', e => { e.preventDefault(); input.value = code; hidePageAddEmplDropdown(); });
+    row.addEventListener('mousedown', e => { e.preventDefault(); input.value = code; hideAddEmplDropdown(listId); });
     list.appendChild(row);
   });
   const addRow = document.createElement('div');
@@ -1323,23 +1341,23 @@ function refreshPageAddEmplDropdownInner() {
     if (addPageCustomEmplacement(raw)) showToast('Emplacement ajouté : ' + raw);
     else showToast('Emplacement déjà dans la liste', 'warn');
     input.value = raw;
-    hidePageAddEmplDropdown();
-    refreshPageAddEmplDropdownInner();
+    hideAddEmplDropdown(listId);
+    refreshAddEmplDropdownInner(inputId, listId);
   });
   list.appendChild(addRow);
 }
-function wireStockPageAddEmplCombo() {
-  const input = document.getElementById('stock-page-add-empl-input');
+function wireAddEmplCombo(inputId, listId) {
+  const input = document.getElementById(inputId);
   if (!input || input.dataset.wired === '1') return;
   input.dataset.wired = '1';
-  const list = document.getElementById('stock-page-add-empl-suggestions');
+  const list = document.getElementById(listId);
   input.addEventListener('focus', () => {
-    if (list) { list.style.display = 'block'; refreshPageAddEmplDropdownInner(); }
+    if (list) { list.style.display = 'block'; refreshAddEmplDropdownInner(inputId, listId); }
   });
   input.addEventListener('input', () => {
-    if (list) { list.style.display = 'block'; refreshPageAddEmplDropdownInner(); }
+    if (list) { list.style.display = 'block'; refreshAddEmplDropdownInner(inputId, listId); }
   });
-  input.addEventListener('blur', () => { setTimeout(hidePageAddEmplDropdown, 200); });
+  input.addEventListener('blur', () => { setTimeout(() => hideAddEmplDropdown(listId), 200); });
 }
 
 function loadPageUnitCustom(){
@@ -1386,13 +1404,13 @@ function allUnitLabels(){
   const custom=loadPageUnitCustom().map(x=>x.label);
   return [...new Set([...STOCK_UNITS_BASE, ...custom])];
 }
-function hidePageAddUnitDropdown(){
-  const list=document.getElementById('stock-page-add-unit-suggestions');
+function hideAddUnitDropdown(listId){
+  const list=document.getElementById(listId);
   if(list) list.style.display='none';
 }
-function refreshPageAddUnitDropdownInner(){
-  const input=document.getElementById('stock-page-add-unit-input');
-  const list=document.getElementById('stock-page-add-unit-suggestions');
+function refreshAddUnitDropdownInner(inputId, listId){
+  const input=document.getElementById(inputId);
+  const list=document.getElementById(listId);
   if(!input || !list) return;
   const q=String(input.value||'').trim().toLowerCase();
   const all=allUnitLabels();
@@ -1403,7 +1421,7 @@ function refreshPageAddUnitDropdownInner(){
     const row=document.createElement('div');
     row.className='unit-suggest-item';
     row.textContent=lbl;
-    row.addEventListener('mousedown', e=>{ e.preventDefault(); input.value=lbl; hidePageAddUnitDropdown(); });
+    row.addEventListener('mousedown', e=>{ e.preventDefault(); input.value=lbl; hideAddUnitDropdown(listId); });
     list.appendChild(row);
   });
   const addRow=document.createElement('div');
@@ -1419,18 +1437,18 @@ function refreshPageAddUnitDropdownInner(){
   });
   list.appendChild(addRow);
 }
-function wireStockPageAddUnitCombo(){
-  const input=document.getElementById('stock-page-add-unit-input');
+function wireAddUnitCombo(inputId, listId){
+  const input=document.getElementById(inputId);
   if(!input || input.dataset.wired==='1') return;
   input.dataset.wired='1';
-  const list=document.getElementById('stock-page-add-unit-suggestions');
+  const list=document.getElementById(listId);
   input.addEventListener('focus', ()=>{
-    if(list){ list.style.display='block'; refreshPageAddUnitDropdownInner(); }
+    if(list){ list.style.display='block'; refreshAddUnitDropdownInner(inputId, listId); }
   });
   input.addEventListener('input', ()=>{
-    if(list){ list.style.display='block'; refreshPageAddUnitDropdownInner(); }
+    if(list){ list.style.display='block'; refreshAddUnitDropdownInner(inputId, listId); }
   });
-  input.addEventListener('blur', ()=>{ setTimeout(hidePageAddUnitDropdown, 200); });
+  input.addEventListener('blur', ()=>{ setTimeout(()=>hideAddUnitDropdown(listId), 200); });
 }
 
 function _checkUnitQtyRange(unite, qte){
@@ -1486,6 +1504,7 @@ async function createProduit(ref, commentaire, quantite, emplacement, uniteVente
       : ('Produit créé — ' + fU(qte, unite) + ' en ' + empl);
     showToast(msg);
     S.showAddForm = false;
+    closeDashboardAddPfModal();
     await loadDashboard();
     renderContent();
   } catch(e) { showToast(e.message, 'error'); }
@@ -1502,6 +1521,7 @@ function goToTab(tab) {
   // Arrêter la caméra si on quitte l'onglet réception
   if (tab !== 'reception' && S.recepScanning) recepStopCamera();
   S.tab = tab; S.selProduit = null; S.selEmpl = null; S.searchResults = null; S.showAddForm = false;
+  if (tab !== 'dashboard') closeDashboardAddPfModal();
   if (tab !== 'traca') S.tracaPoste = null;
   clearSearch(); closeSidebar();
   if (tab === 'historique') S.historiqueLoading = true;
@@ -2425,6 +2445,16 @@ function closeMroot() {
   const m = document.getElementById('mroot');
   if (m) m.innerHTML = '';
   S.mpModal = null;
+  S.addPfModalOpen = false;
+}
+
+function closeDashboardAddPfModal() {
+  closeMroot();
+}
+
+function openDashboardAddPfModal() {
+  S.addPfModalOpen = true;
+  renderDashboardAddPfModal();
 }
 
 function filterMatieresList() {
@@ -2599,10 +2629,10 @@ function renderMpMouvementModal(type, matiere) {
   const list = (S.matieres || []).filter(m => m.actif !== 0);
   let mat = matiere || null;
   if (!mat && list.length === 1) mat = list[0];
-  S.mpModal = { type: typeMvt, matiere: mat, matiereId: mat ? mat.id : null };
   closeMroot();
   const mroot = document.getElementById('mroot');
   if (!mroot) return;
+  S.mpModal = { type: typeMvt, matiere: mat, matiereId: mat ? mat.id : null };
   const stockActuel = mat ? (parseFloat(mat.quantite) || 0) : 0;
 
   const overlay = el('div', {
@@ -2753,11 +2783,24 @@ function renderMpMouvementModal(type, matiere) {
   const noteTa = el('textarea', { attrs: { placeholder: 'Commentaire (optionnel)' } });
   box.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Note'), noteTa));
   const prevGetBody = S.mpModal.getBody;
-  S.mpModal.getBody = () => {
-    const b = prevGetBody();
-    b.note = (noteTa.value || '').trim() || null;
-    return b;
-  };
+  if (prevGetBody) {
+    S.mpModal.getBody = () => {
+      const b = prevGetBody();
+      b.note = (noteTa.value || '').trim() || null;
+      return b;
+    };
+  } else {
+    S.mpModal.getBody = () => ({
+      matiere_id: S.mpModal.matiereId,
+      type_mouvement: typeMvt,
+      quantite: 0,
+      ref_bl: null,
+      note: (noteTa.value || '').trim() || null,
+      emplacement_source: null,
+      emplacement_dest: null,
+    });
+    S.mpModal.validate = () => 'Type de mouvement non reconnu.';
+  }
 
   const actions = el('div', { cls: 'mp-modal-actions' },
     el('button', { cls: 'btn-cancel', type: 'button', on: { click: closeMroot } }, 'Annuler'),
@@ -3141,12 +3184,16 @@ function buildHistoriqueFiltersBar() {
   return bar;
 }
 
+function histUniteLabel(m) {
+  const u = String(m.unite || '').trim();
+  if (u) return u;
+  return m.type_stock === 'mp' ? 'palette' : '—';
+}
+
 function histQteLabel(m) {
-  const isMp = m.type_stock === 'mp';
-  const unit = isMp ? ' pal.' : '';
   const t = (m.type_mouvement || '').toLowerCase();
   const sign = t === 'entree' ? '+' : (t === 'sortie' ? '−' : '');
-  const qte = (sign || '') + fN(m.quantite) + unit;
+  const qte = (sign || '') + fN(m.quantite);
   const cls = 'hist-qte' + (t === 'entree' ? ' hist-qte-entree' : t === 'sortie' ? ' hist-qte-sortie' : '');
   return { qte, cls };
 }
@@ -3162,6 +3209,7 @@ function buildHistoriqueTableRow(m) {
     el('td', null, el('div', { cls: 'hist-cell-badges' }, histStockBadge(m.type_stock), histMvtBadge(m.type_mouvement))),
     el('td', { cls: 'hist-ref' }, m.reference || '—'),
     el('td', { cls: 'hist-des', title: m.designation || '' }, truncStr(m.designation, 36) || '—'),
+    el('td', { cls: 'hist-unite' }, histUniteLabel(m)),
     el('td', null, el('span', { cls: qteCls }, qte)),
     el('td', { cls: 'hist-muted' }, avant + ' → ' + apres),
     el('td', { cls: 'hist-note-cell hist-muted', title: blNote }, truncStr(blNote, 40) || '—'),
@@ -3176,6 +3224,8 @@ function buildHistoriqueCard(m) {
   const op = (m.created_by_name || '').trim();
   const blNote = [m.ref_bl, m.note].filter(Boolean).join(' · ');
   const stats = el('dl', { cls: 'hist-card-stats' },
+    el('dt', null, 'Unité'),
+    el('dd', null, histUniteLabel(m)),
     el('dt', null, 'Quantité'),
     el('dd', null, el('span', { cls: qteCls }, qte)),
     el('dt', null, 'Stock'),
@@ -3237,6 +3287,7 @@ function buildHistorique() {
     el('th', null, 'Stock / Mouvement'),
     el('th', null, 'Référence'),
     el('th', null, 'Désignation'),
+    el('th', null, 'Unité'),
     el('th', null, 'Quantité'),
     el('th', null, 'Avant → Après'),
     el('th', null, 'Ref BL / Note'),
@@ -3299,10 +3350,15 @@ function buildDashboardKpis(s) {
 }
 
 function buildDashboardShortcuts() {
-  const mk = (label, onClick) => el('button', { cls: 'dash-quick-btn', type: 'button', on: { click: onClick } }, label);
+  const mk = (label, onClick, extraCls) => el('button', {
+    cls: 'dash-quick-btn' + (extraCls ? ' ' + extraCls : ''),
+    type: 'button',
+    on: { click: onClick },
+  }, label);
   return el('div', { cls: 'dash-quick-card' },
     el('div', { cls: 'dash-quick-card-title' }, 'Actions rapides'),
     el('div', { cls: 'dash-quick-grid' },
+      mk('Ajouter stock produits finis', openDashboardAddPfModal, 'dash-quick-btn-accent'),
       mk('Réception matière', openReceptionQuick),
       mk('Entrée MP', () => openModalMouvement('entree')),
       mk('Sortie MP', () => openModalMouvement('sortie')),
@@ -3333,6 +3389,27 @@ function buildDashboardAlertes(d) {
   );
 }
 
+function dashActUniteLabel(m) {
+  const u = String(m.unite || '').trim();
+  if (u) return u;
+  return m.type_stock === 'mp' ? 'palette' : '';
+}
+
+function dashActQteDisplay(m) {
+  const unit = dashActUniteLabel(m);
+  const t = (m.type_mouvement || '').toLowerCase();
+  const sign = t === 'entree' ? '+' : (t === 'sortie' ? '−' : '');
+  const n = m.quantite;
+  const text = unit ? (sign || '') + fU(n, unit) : (sign || '') + fN(n);
+  const cls = 'dash-act-qte' + (t === 'entree' ? ' dash-act-qte-entree' : t === 'sortie' ? ' dash-act-qte-sortie' : '');
+  return { text, cls };
+}
+
+function dashActEmplacement(m) {
+  const e = String(m.emplacement || '').trim();
+  return e || null;
+}
+
 function buildDashboardActivite(d) {
   const rows = d.activiteRecente || [];
   const list = el('div', { cls: 'dash-act-list' });
@@ -3340,15 +3417,26 @@ function buildDashboardActivite(d) {
     list.appendChild(el('div', { cls: 'dash-act-empty' }, 'Aucun mouvement enregistré.'));
   } else {
     rows.forEach(m => {
+      const ref = (m.reference || '—').trim();
+      const { text: qteText, cls: qteCls } = dashActQteDisplay(m);
+      const empl = dashActEmplacement(m);
       const actor = (m.created_by_name || '').trim();
-      const refDes = (m.reference || '') + ' · ' + (m.designation || '');
-      const qte = fN(m.quantite);
-      const meta = [qte, actor, timeAgo(m.created_at)].filter(Boolean).join(' · ');
+      const when = timeAgo(m.created_at);
+      const foot = [when, actor].filter(Boolean).join(' · ');
+      const highlight = el('div', { cls: 'dash-act-highlight' },
+        el('span', { cls: qteCls }, qteText),
+      );
+      if (empl) highlight.appendChild(el('span', { cls: 'dash-act-empl' }, empl));
       list.appendChild(el('div', { cls: 'dash-act-row' },
-        dashStockTypeBadge(m.type_stock),
-        dashMvtBadge(m.type_mouvement),
-        el('span', { cls: 'dash-act-main' }, refDes),
-        el('span', { cls: 'dash-act-meta' }, meta),
+        el('div', { cls: 'dash-act-badges' },
+          dashStockTypeBadge(m.type_stock),
+          dashMvtBadge(m.type_mouvement),
+        ),
+        el('div', { cls: 'dash-act-body' },
+          el('div', { cls: 'dash-act-ref' }, ref),
+          highlight,
+          foot ? el('div', { cls: 'dash-act-foot' }, foot) : null,
+        ),
       ));
     });
   }
@@ -3356,6 +3444,141 @@ function buildDashboardActivite(d) {
     el('div', { cls: 'dash-section-title' }, 'Activité récente'),
     el('div', { cls: 'dash-act-card' }, list),
   );
+}
+
+function renderDashboardAddPfModal() {
+  const mroot = document.getElementById('mroot');
+  if (!mroot) return;
+  mroot.innerHTML = '';
+  S.mpModal = null;
+
+  const F = ADD_PF_FIELD_IDS;
+  const refI = el('input', { cls: 'field-input', id: 'dash-add-pf-ref', placeholder: 'Référence (neuve ou déjà en base)', autocomplete: 'off', style: { direction: 'ltr' } });
+  const qtyI = el('input', { cls: 'field-input', id: 'dash-add-pf-qty', type: 'text', inputmode: 'decimal', placeholder: 'Quantité', autocomplete: 'off', style: { direction: 'ltr' } });
+  const unitWrap = el('div', { cls: 'empl-combo-wrap' });
+  const unitInp = el('input', {
+    cls: 'field-input', type: 'text', id: F.unitInput,
+    placeholder: 'Unité de vente (ex. cartons, 500 cartons…)', autocomplete: 'off',
+    title: 'Obligatoire — suggestions + ligne violette « Autre »', style: { direction: 'ltr' },
+  });
+  const unitList = el('div', { cls: 'empl-suggestions', id: F.unitList, style: { display: 'none' } });
+  unitWrap.appendChild(unitInp);
+  unitWrap.appendChild(unitList);
+  const emplWrap = el('div', { cls: 'empl-combo-wrap' });
+  const emplInp = el('input', {
+    cls: 'field-input empl-upper', type: 'text', id: F.emplInput,
+    placeholder: 'Emplacement (ex. a121, z999…)', autocomplete: 'off',
+    title: 'Obligatoire — suggestions + ligne violette « Ajouter emplacement »', style: { direction: 'ltr' },
+  });
+  const emplList = el('div', { cls: 'empl-suggestions', id: F.emplList, style: { display: 'none' } });
+  emplWrap.appendChild(emplInp);
+  emplWrap.appendChild(emplList);
+  const comI = el('input', { cls: 'field-input', id: 'dash-add-pf-comment', placeholder: 'Commentaire (facultatif)', autocomplete: 'off', style: { direction: 'ltr' } });
+
+  const today = new Date().toISOString().slice(0, 10);
+  const prodDateInp = el('input', { cls: 'field-input', type: 'date', value: today, style: { direction: 'ltr' } });
+  const prodDateField = el('div', { cls: 'modal-field', style: { display: 'none', marginTop: '6px' } },
+    el('label', { cls: 'field-label' }, 'Date de production'),
+    prodDateInp,
+  );
+  const prodCb = el('input', { type: 'checkbox', id: 'dash-add-pf-prod-check' });
+  const sousTraitCb = el('input', { type: 'checkbox', id: 'dash-add-pf-strait-check' });
+  prodCb.addEventListener('change', () => {
+    if (prodCb.checked) { sousTraitCb.checked = false; prodDateField.style.display = ''; }
+    else { prodDateField.style.display = 'none'; }
+  });
+  sousTraitCb.addEventListener('change', () => {
+    if (sousTraitCb.checked) { prodCb.checked = false; prodDateField.style.display = 'none'; }
+  });
+  const origineBlock = el('div', { cls: 'modal-field', style: { marginBottom: '0' } },
+    el('label', { cls: 'field-label' }, 'Origine'),
+    el('div', { cls: 'mvt-origin-group' },
+      el('label', { cls: 'mvt-origin-label' }, prodCb, 'Production'),
+      el('label', { cls: 'mvt-origin-label' }, sousTraitCb, 'Sous-traitance'),
+    ),
+    prodDateField,
+  );
+
+  const resetForm = () => {
+    refI.value = '';
+    qtyI.value = '';
+    comI.value = '';
+    emplInp.value = '';
+    unitInp.value = '';
+    prodCb.checked = false;
+    sousTraitCb.checked = false;
+    prodDateField.style.display = 'none';
+  };
+
+  const submitBtn = el('button', { cls: 'btn btn-accent', type: 'button' }, 'Ajouter au stock');
+  submitBtn.addEventListener('click', async () => {
+    const raw = (refI.value || '').trim();
+    const ref = raw.toUpperCase();
+    if (!ref) { showToast('Référence requise', 'error'); return; }
+    const qRaw = (qtyI.value || '').trim();
+    const emplVal = String((emplInp.value || '').trim().toUpperCase());
+    if (!emplVal || !isStockEmplacementCode(emplVal)) {
+      showToast('Emplacement obligatoire (une lettre puis des chiffres, ex. Z999)', 'error');
+      return;
+    }
+    const qte = parseFloat(qRaw.replace(',', '.'));
+    if (!qRaw || Number.isNaN(qte) || qte <= 0) {
+      showToast('Quantité obligatoire (nombre supérieur à 0)', 'error');
+      return;
+    }
+    let prefix = '';
+    if (prodCb.checked) {
+      const dp = prodDateInp.value;
+      prefix = dp ? 'Production | ' + dp : 'Production';
+    } else if (sousTraitCb.checked) {
+      prefix = 'Sous-traitance';
+    }
+    const userNote = (comI.value || '').trim();
+    const finalNote = [prefix, userNote].filter(Boolean).join(' | ');
+    await createProduit(ref, finalNote, qte, emplVal, unitInp.value);
+    resetForm();
+  });
+
+  const overlay = el('div', {
+    id: 'dash-add-pf-overlay',
+    cls: 'modal-overlay',
+    on: { click: (e) => { if (e.target === overlay) closeDashboardAddPfModal(); } },
+  });
+  const sheet = el('div', { cls: 'modal-sheet', on: { click: (e) => e.stopPropagation() } },
+    el('span', { cls: 'modal-handle' }),
+    el('div', { cls: 'modal-title' }, 'Ajouter stock produits finis'),
+    el('div', { cls: 'modal-sub', style: { marginBottom: '14px', lineHeight: '1.45' } },
+      'Même référence qu\'un produit existant : une entrée de stock est enregistrée, sans dupliquer la fiche.'),
+    el('div', { cls: 'modal-field' },
+      el('label', { cls: 'field-label' }, 'Référence *'),
+      refI,
+    ),
+    el('div', { cls: 'add-form-row', style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' } },
+      el('div', null, el('label', { cls: 'field-label' }, 'Quantité *'), qtyI),
+      el('div', null, el('label', { cls: 'field-label' }, 'Unité de vente *'), unitWrap),
+    ),
+    el('div', { cls: 'modal-field' },
+      el('label', { cls: 'field-label' }, 'Emplacement *'),
+      emplWrap,
+    ),
+    origineBlock,
+    el('div', { cls: 'modal-field', style: { marginTop: '10px' } },
+      el('label', { cls: 'field-label' }, 'Commentaire'),
+      comI,
+    ),
+    el('div', { style: { display: 'flex', gap: '10px', marginTop: '18px' } },
+      el('button', { cls: 'btn-cancel', type: 'button', style: { flex: 1 }, on: { click: closeDashboardAddPfModal } }, 'Annuler'),
+      el('div', { style: { flex: 2 } }, submitBtn),
+    ),
+  );
+  overlay.appendChild(sheet);
+  mroot.appendChild(overlay);
+
+  requestAnimationFrame(() => {
+    wireAddEmplCombo(F.emplInput, F.emplList);
+    wireAddUnitCombo(F.unitInput, F.unitList);
+    refI.focus();
+  });
 }
 
 function buildDashboard() {
@@ -3368,105 +3591,6 @@ function buildDashboard() {
   ];
   if (!S.stockReadOnly) parts.push(buildDashboardShortcuts());
   parts.push(buildDashboardAlertes(d));
-  if (!S.stockReadOnly) parts.push(el('div',{cls:'dash-section',style:{paddingTop:'22px',marginTop:'22px',borderTop:'1px solid var(--border)'}},
-    el('div',{cls:'dash-section-title'},'Ajouter au stock'),
-    el('div',{cls:'card',style:{overflow:'visible',marginBottom:0}},
-      el('div',{cls:'add-form'},
-        (function(){
-          const refI = el('input',{cls:'field-input',placeholder:'Référence (neuve ou déjà en base)',autocomplete:'off',style:{direction:'ltr'}});
-          const qtyI = el('input',{cls:'field-input',type:'text',inputmode:'decimal',placeholder:'Quantité *',autocomplete:'off',style:{direction:'ltr'}});
-          const unitWrap = el('div', { cls: 'empl-combo-wrap' });
-          const unitInp = el('input', { cls: 'field-input', type: 'text', id: 'stock-page-add-unit-input',
-            placeholder: 'Unité de vente * (ex. cartons, 500 cartons…)', autocomplete: 'off',
-            title: 'Obligatoire — suggestions + ligne violette « Autre »', style: { direction: 'ltr' } });
-          const unitList = el('div', { cls: 'empl-suggestions', id: 'stock-page-add-unit-suggestions', style: { display: 'none' } });
-          unitWrap.appendChild(unitInp);
-          unitWrap.appendChild(unitList);
-          const emplWrap = el('div', { cls: 'empl-combo-wrap' });
-          const emplInp = el('input', { cls: 'field-input empl-upper', type: 'text', id: 'stock-page-add-empl-input',
-            placeholder: 'Emplacement * (ex. a121, z999…)', autocomplete: 'off',
-            title: 'Obligatoire — suggestions + ligne violette « Ajouter emplacement »', style: { direction: 'ltr' } });
-          const emplList = el('div', { cls: 'empl-suggestions', id: 'stock-page-add-empl-suggestions', style: { display: 'none' } });
-          emplWrap.appendChild(emplInp);
-          emplWrap.appendChild(emplList);
-          const comI = el('input',{cls:'field-input',placeholder:'Commentaire (facultatif)',autocomplete:'off',style:{direction:'ltr'}});
-
-          // ── Origine : Production / Sous-traitance ─────────────────
-          const today = new Date().toISOString().slice(0,10);
-          const dashProdDateInp = el('input',{cls:'field-input',type:'date',value:today,style:{direction:'ltr'}});
-          const dashProdDateField = el('div',{cls:'modal-field',style:{display:'none',marginTop:'6px'}},
-            el('label',{cls:'field-label'},'Date de production'),
-            dashProdDateInp
-          );
-          const dashProdCb      = el('input',{type:'checkbox',id:'dash-prod-check'});
-          const dashSousTraitCb = el('input',{type:'checkbox',id:'dash-strait-check'});
-          dashProdCb.addEventListener('change',()=>{
-            if(dashProdCb.checked){dashSousTraitCb.checked=false;dashProdDateField.style.display='';}
-            else{dashProdDateField.style.display='none';}
-          });
-          dashSousTraitCb.addEventListener('change',()=>{
-            if(dashSousTraitCb.checked){dashProdCb.checked=false;dashProdDateField.style.display='none';}
-          });
-          const origineBlock = el('div',{cls:'modal-field',style:{marginBottom:'0'}},
-            el('label',{cls:'field-label'},'Origine'),
-            el('div',{cls:'mvt-origin-group'},
-              el('label',{cls:'mvt-origin-label'},dashProdCb,'Production'),
-              el('label',{cls:'mvt-origin-label'},dashSousTraitCb,'Sous-traitance')
-            ),
-            dashProdDateField
-          );
-
-          return el('div',{cls:'add-form-inner'},
-            el('div',{style:{fontSize:'12px',color:'var(--muted)',marginBottom:'10px',lineHeight:'1.45'}},
-              'Même référence qu\'un produit existant : une entrée de stock est enregistrée, sans dupliquer la fiche.'),
-            el('div',{cls:'add-form-row',style:{gridTemplateColumns:'1fr'}},
-              el('div',null,el('label',{cls:'field-label'},'Référence *'),refI)
-            ),
-            el('div',{cls:'add-form-row'},
-              el('div',null,el('label',{cls:'field-label'},'Quantité *'),qtyI),
-              el('div',null,el('label',{cls:'field-label'},'Unité de vente *'),unitWrap)
-            ),
-            el('div',{cls:'add-form-row',style:{gridTemplateColumns:'1fr'}},
-              el('div',null,el('label',{cls:'field-label'},'Emplacement *'),emplWrap)
-            ),
-            origineBlock,
-            el('div',{cls:'modal-field',style:{marginTop:'10px',marginBottom:'0'}},el('label',{cls:'field-label'},'Commentaire'),comI),
-            el('div',{cls:'add-form-actions'},
-              el('button',{cls:'btn',on:{click:async()=>{
-                const raw = (refI.value||'').trim();
-                const ref = raw.toUpperCase();
-                if(!ref){showToast('Référence requise','error');return;}
-                const qRaw = (qtyI.value||'').trim();
-                const emplVal = String((emplInp.value||'').trim().toUpperCase());
-                if (!emplVal || !isStockEmplacementCode(emplVal)) {
-                  showToast('Emplacement obligatoire (une lettre puis des chiffres, ex. Z999)', 'error');
-                  return;
-                }
-                const qte = parseFloat(qRaw.replace(',','.'));
-                if (!qRaw || Number.isNaN(qte) || qte <= 0) {
-                  showToast('Quantité obligatoire (nombre supérieur à 0)', 'error');
-                  return;
-                }
-                // Préfixe origine + commentaire libre
-                let prefix = '';
-                if (dashProdCb.checked) {
-                  const dp = dashProdDateInp.value;
-                  prefix = dp ? 'Production | ' + dp : 'Production';
-                } else if (dashSousTraitCb.checked) {
-                  prefix = 'Sous-traitance';
-                }
-                const userNote = (comI.value||'').trim();
-                const finalNote = [prefix, userNote].filter(Boolean).join(' | ');
-                await createProduit(ref, finalNote, qte, emplVal, unitInp.value);
-                refI.value=''; qtyI.value=''; comI.value=''; emplInp.value=''; unitInp.value='';
-                dashProdCb.checked=false; dashSousTraitCb.checked=false; dashProdDateField.style.display='none';
-              }}},'Ajouter au stock')
-            )
-          );
-        })()
-      )
-    )
-  ));
   parts.push(buildDashboardActivite(d));
   return el('div',{cls:'content dash-page'},...parts);
 }
@@ -4028,12 +4152,6 @@ function renderContent() {
   else content = buildDashboard();
 
   if (content) area.appendChild(content);
-  if (S.tab === 'dashboard' && !S.selProduit && !S.selEmpl){
-    requestAnimationFrame(() => {
-      wireStockPageAddEmplCombo();
-      wireStockPageAddUnitCombo();
-    });
-  }
 }
 
 // ── Réception matière ───────────────────────────────────────────
@@ -4921,7 +5039,7 @@ function render() {
       if(!r.ok){ showToast(r.reason||'Erreur','error'); return; }
       // affecte dans le champ unité si présent
       try{
-        const inp=document.getElementById('stock-page-add-unit-input');
+        const inp=document.getElementById(ADD_PF_FIELD_IDS.unitInput);
         if(inp) inp.value=l;
       }catch(e){}
       S.unitModalOpen=false;
@@ -4938,6 +5056,10 @@ function render() {
   if (S.importRefsOpen) renderImportRefsModal();
 
   renderContent();
+
+  if (S.addPfModalOpen && !document.getElementById('dash-add-pf-overlay')) {
+    renderDashboardAddPfModal();
+  }
 
   // Calculette flottante (montée une seule fois, persiste entre les rendus)
   window._calc_mount && window._calc_mount();
