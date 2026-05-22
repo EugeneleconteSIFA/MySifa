@@ -1,0 +1,264 @@
+"""MySifa — Import OF PDF (Sage) pour MyProd."""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+from datetime import datetime
+from io import BytesIO
+from typing import Any, Optional
+from zoneinfo import ZoneInfo
+
+import pdfplumber
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse
+
+from config import UPLOAD_DIR
+from database import get_db
+from services.auth_service import get_current_user, require_superadmin
+
+router = APIRouter()
+
+_PARIS = ZoneInfo("Europe/Paris")
+OF_UPLOAD_DIR = os.path.join(UPLOAD_DIR, "of")
+OF_ALLOWED_ROLES = frozenset({"superadmin", "direction", "administration"})
+
+OF_REAL_FIELDS = frozenset({
+    "laize", "qte_adhesif_g", "qte_adhesif_kg", "qte_au_mille",
+    "qte_bobines", "mandrin_longueur", "outil_1_hauteur",
+})
+OF_INT_FIELDS = frozenset({
+    "nb_levees", "qte_etiquettes", "metrage", "nb_cartons",
+    "nb_mandrins", "nb_tubes",
+})
+
+OF_DATA_FIELDS = [
+    "of_numero", "date_creation", "delai_client", "reference", "machine",
+    "laize", "format", "matiere", "ref_matiere", "glassine", "ref_adhesif",
+    "qte_adhesif_g", "qte_adhesif_kg", "adhesif_label", "qte_au_mille", "nb_levees",
+    "qte_etiquettes", "qte_bobines", "metrage", "conditionnement", "tolerance",
+    "cartons_type", "nb_cartons", "mandrins_dia", "mandrin_longueur", "nb_mandrins",
+    "nb_tubes", "bobinettes_completes", "outil_1_forme", "outil_1_numero",
+    "outil_1_angle", "outil_1_mag", "outil_1_cp", "outil_1_hauteur", "outil_1_fournisseur",
+    "outil_2_forme", "outil_2_numero", "outil_2_angle", "outil_2_cp",
+    "outil_alt_forme", "outil_alt_numero", "outil_alt_angle", "outil_alt_fournisseur",
+]
+
+_PATTERNS = {
+    "of_numero": r"OF n[°o]\s*(\d+)",
+    "date_creation": r"Date cr[eé]a\.\s*([\d/]+)",
+    "delai_client": r"D[eé]lai client\s*([\d/]+)",
+    "reference": r"R[eé]f\s*:\s*([\w/]+)",
+    "machine": r"Machine\s*:\s*(.+?)(?:\n|$)",
+    "laize": r"Laize\s+(\d+)",
+    "format": r"Format\s*:\s*([\d x]+mm)",
+    "matiere": r"Mati[eè]re\s+(.+?)(?:\n|$)",
+    "ref_adhesif": r"R[eé]f,?\s*Adh[eé]sif\s+(\d+)",
+    "qte_adhesif_g": r"Qt[eé]\s*:\s*([\d,\.]+)\s*g",
+    "qte_adhesif_kg": r"Qt[eé] totale\s+([\d,\.]+)\s*kg",
+    "qte_au_mille": r"Quantit[eé] au mille\s+([\d,\.]+)",
+    "nb_levees": r"Nb de lev[eé]es\s+(\d+)",
+    "qte_etiquettes": r"Quantit[eé] [eé]tiq\.\s+([\d\s]+)",
+    "qte_bobines": r"Quantit[eé] bobines\s+([\d,\.]+)",
+    "metrage": r"M[eé]trage\s+([\d\s]+)",
+    "conditionnement": r"Conditionnement\s+(.+?)(?:\n|$)",
+    "tolerance": r"Tolerance\s+(.+?)(?:\n|$)",
+    "cartons_type": r"Cartons\s+(Carton.+?)(?:\n|$)",
+    "mandrins_dia": r"Mandrins dia\.\s+(.+?)(?:Long\.|$)",
+    "mandrin_longueur": r"Long\.\s+([\d,\.]+)",
+    "nb_cartons": r"Cartons\s+(\d+)(?!\s*x)",
+    "nb_mandrins": r"Mandrins\s+(\d+)",
+    "nb_tubes": r"Tubes\s+(\d+)",
+    "bobinettes_completes": r"Bobinettes compl[eè]tes\s+(\w+)",
+}
+
+
+def _now_paris_iso() -> str:
+    return datetime.now(_PARIS).replace(tzinfo=None).strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def _require_of_access(request: Request) -> dict:
+    user = get_current_user(request)
+    if user.get("role") not in OF_ALLOWED_ROLES:
+        raise HTTPException(status_code=403, detail="Accès réservé à l'administration")
+    return user
+
+
+def _clean_num(raw: Optional[str]) -> Optional[float]:
+    if raw is None:
+        return None
+    s = str(raw).strip().replace(" ", "").replace(",", ".")
+    if not s:
+        return None
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def _clean_int(raw: Optional[str]) -> Optional[int]:
+    f = _clean_num(raw)
+    if f is None:
+        return None
+    return int(round(f))
+
+
+def _normalize_field(key: str, value: Optional[str]) -> Any:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if key in OF_REAL_FIELDS:
+        return _clean_num(text)
+    if key in OF_INT_FIELDS:
+        return _clean_int(text)
+    return text
+
+
+def _extract_pdf_text(content: bytes) -> str:
+    parts: list[str] = []
+    with pdfplumber.open(BytesIO(content)) as pdf:
+        for page in pdf.pages:
+            parts.append(page.extract_text() or "")
+    return "\n".join(parts)
+
+
+def parse_of_pdf(content: bytes) -> dict[str, Any]:
+    text = _extract_pdf_text(content)
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="PDF illisible ou vide.")
+
+    result: dict[str, Any] = {k: None for k in OF_DATA_FIELDS}
+    for key, pattern in _PATTERNS.items():
+        m = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
+        if m:
+            result[key] = _normalize_field(key, m.group(1))
+    return result
+
+
+def _coerce_payload(data: dict) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for key in OF_DATA_FIELDS:
+        raw = data.get(key)
+        if raw is None or raw == "":
+            out[key] = None
+            continue
+        if key in OF_REAL_FIELDS:
+            out[key] = _clean_num(str(raw))
+        elif key in OF_INT_FIELDS:
+            out[key] = _clean_int(str(raw))
+        else:
+            out[key] = str(raw).strip()
+    return out
+
+
+def _row_dict(row) -> dict:
+    return dict(row) if row else {}
+
+
+@router.post("/api/of/parse")
+async def parse_of(request: Request, file: UploadFile = File(...)):
+    _require_of_access(request)
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Fichier PDF requis.")
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Fichier vide.")
+    return parse_of_pdf(content)
+
+
+@router.post("/api/of/validate")
+async def validate_of(
+    request: Request,
+    file: UploadFile = File(...),
+    data: str = Form(...),
+):
+    user = _require_of_access(request)
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Fichier PDF requis.")
+    try:
+        payload = json.loads(data)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="Données JSON invalides.") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Données JSON invalides.")
+
+    fields = _coerce_payload(payload)
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Fichier vide.")
+
+    os.makedirs(OF_UPLOAD_DIR, exist_ok=True)
+    of_num = (fields.get("of_numero") or "inconnu").strip()
+    safe_of = re.sub(r"[^\w\-]+", "_", str(of_num))
+    ts = datetime.now(_PARIS).replace(tzinfo=None).strftime("%Y%m%d_%H%M%S")
+    pdf_filename = f"{safe_of}_{ts}.pdf"
+    dest_path = os.path.join(OF_UPLOAD_DIR, pdf_filename)
+    with open(dest_path, "wb") as f:
+        f.write(content)
+
+    now = _now_paris_iso()
+    imported_by = user.get("nom") or user.get("email") or str(user.get("id", ""))
+    cols = list(OF_DATA_FIELDS) + ["pdf_filename", "date_import", "imported_by", "statut"]
+    placeholders = ", ".join("?" * len(cols))
+    values = [fields.get(c) for c in OF_DATA_FIELDS]
+    values.extend([pdf_filename, now, imported_by, "valide"])
+
+    with get_db() as conn:
+        cur = conn.execute(
+            f"INSERT INTO of_imports ({', '.join(cols)}) VALUES ({placeholders})",
+            values,
+        )
+        conn.commit()
+        new_id = cur.lastrowid
+
+    return {"id": new_id, "pdf_filename": pdf_filename}
+
+
+@router.get("/api/of/list")
+def list_of_imports(request: Request):
+    _require_of_access(request)
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT id, of_numero, reference, machine, delai_client,
+                      qte_etiquettes, metrage, date_import, statut, pdf_filename,
+                      imported_by
+               FROM of_imports
+               ORDER BY date_import DESC"""
+        ).fetchall()
+    return [_row_dict(r) for r in rows]
+
+
+@router.get("/api/of/{of_id}/pdf")
+def download_of_pdf(request: Request, of_id: int):
+    _require_of_access(request)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT pdf_filename FROM of_imports WHERE id=?",
+            (of_id,),
+        ).fetchone()
+    if not row or not row["pdf_filename"]:
+        raise HTTPException(status_code=404, detail="OF introuvable.")
+    path = os.path.join(OF_UPLOAD_DIR, row["pdf_filename"])
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="Fichier PDF introuvable.")
+    return FileResponse(
+        path,
+        media_type="application/pdf",
+        filename=row["pdf_filename"],
+        headers={"Content-Disposition": f'attachment; filename="{row["pdf_filename"]}"'},
+    )
+
+
+@router.delete("/api/of/{of_id}")
+def delete_of_import(request: Request, of_id: int):
+    require_superadmin(request)
+    with get_db() as conn:
+        row = conn.execute("SELECT id FROM of_imports WHERE id=?", (of_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="OF introuvable.")
+        conn.execute("DELETE FROM of_imports WHERE id=?", (of_id,))
+        conn.commit()
+    return {"ok": True}

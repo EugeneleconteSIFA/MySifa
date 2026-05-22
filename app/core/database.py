@@ -1865,6 +1865,97 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 55, "chat_messages_pin")
 
+    # v56 — Import OF PDF (MyProd)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=56 LIMIT 1").fetchone():
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS of_imports (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                of_numero TEXT,
+                date_creation TEXT,
+                delai_client TEXT,
+                reference TEXT,
+                machine TEXT,
+                laize REAL,
+                format TEXT,
+                matiere TEXT,
+                ref_matiere TEXT,
+                glassine TEXT,
+                ref_adhesif TEXT,
+                qte_adhesif_g REAL,
+                qte_adhesif_kg REAL,
+                adhesif_label TEXT,
+                qte_au_mille REAL,
+                nb_levees INTEGER,
+                qte_etiquettes INTEGER,
+                qte_bobines REAL,
+                metrage INTEGER,
+                conditionnement TEXT,
+                tolerance TEXT,
+                cartons_type TEXT,
+                nb_cartons INTEGER,
+                mandrins_dia TEXT,
+                mandrin_longueur REAL,
+                nb_mandrins INTEGER,
+                nb_tubes INTEGER,
+                bobinettes_completes TEXT,
+                outil_1_forme TEXT,
+                outil_1_numero TEXT,
+                outil_1_angle TEXT,
+                outil_1_mag TEXT,
+                outil_1_cp TEXT,
+                outil_1_hauteur REAL,
+                outil_1_fournisseur TEXT,
+                outil_2_forme TEXT,
+                outil_2_numero TEXT,
+                outil_2_angle TEXT,
+                outil_2_cp TEXT,
+                outil_alt_forme TEXT,
+                outil_alt_numero TEXT,
+                outil_alt_angle TEXT,
+                outil_alt_fournisseur TEXT,
+                pdf_filename TEXT,
+                date_import TEXT,
+                imported_by TEXT,
+                statut TEXT DEFAULT 'en_attente'
+            );
+            CREATE INDEX IF NOT EXISTS idx_of_imports_date ON of_imports(date_import);
+            CREATE INDEX IF NOT EXISTS idx_of_imports_numero ON of_imports(of_numero);
+            """
+        )
+        conn.commit()
+        _record_schema_migration(conn, 56, "of_imports")
+
+    # v57 — Post-its portail (desktop, par utilisateur)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=57 LIMIT 1").fetchone():
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS postits (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              user_id INTEGER NOT NULL,
+              type TEXT NOT NULL CHECK(type IN ('today', 'someday')),
+              title TEXT NOT NULL,
+              pos_x INTEGER DEFAULT 100,
+              pos_y INTEGER DEFAULT 100,
+              width INTEGER DEFAULT 260,
+              created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+              FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS postit_tasks (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              postit_id INTEGER NOT NULL,
+              text TEXT NOT NULL,
+              done INTEGER DEFAULT 0,
+              order_index INTEGER DEFAULT 0,
+              FOREIGN KEY (postit_id) REFERENCES postits(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_postits_user ON postits(user_id);
+            CREATE INDEX IF NOT EXISTS idx_postit_tasks_postit ON postit_tasks(postit_id);
+            """
+        )
+        conn.commit()
+        _record_schema_migration(conn, 57, "postits")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

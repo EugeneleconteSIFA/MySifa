@@ -1,7 +1,7 @@
 """MySifa — MyAO (appels d'offre) — API interne.
 
 Routes : /api/ao/*
-Rôles : superadmin, direction, administration, commercial
+Rôles : superadmin, direction, administration
 """
 from __future__ import annotations
 
@@ -23,7 +23,6 @@ from app.services.auth_service import get_current_user
 from config import (
     BASE_URL,
     ROLE_ADMINISTRATION,
-    ROLE_COMMERCIAL,
     ROLE_DIRECTION,
     ROLE_SUPERADMIN,
     UPLOAD_DIR,
@@ -39,7 +38,6 @@ _AO_ROLES = frozenset({
     ROLE_SUPERADMIN,
     ROLE_DIRECTION,
     ROLE_ADMINISTRATION,
-    ROLE_COMMERCIAL,
 })
 
 

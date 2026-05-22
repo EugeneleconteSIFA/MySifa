@@ -448,6 +448,35 @@ body.light .fab-dossier-fictif,body.light .fab-fictif-label{color:#7c3aed}
 .fab-tab-btn:hover:not(.active){color:var(--text2);background:rgba(255,255,255,.04)}
 .fab-tab-btn svg{opacity:.65}
 .fab-tab-btn.active svg{opacity:1}
+/* ── Onglet OF (import PDF) ─────────────────────────────────── */
+.fab-of-panel{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.fab-of-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.fab-of-toolbar-title{font-size:15px;font-weight:700;color:var(--text)}
+.fab-of-table-wrap{flex:1;overflow-y:auto;padding:0}
+table.fab-of-table{width:100%;border-collapse:collapse;font-size:12px}
+table.fab-of-table th{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px;
+  padding:8px 10px;text-align:left;border-bottom:1px solid var(--border);background:var(--bg);position:sticky;top:0;z-index:1}
+table.fab-of-table td{padding:8px 10px;border-bottom:1px solid var(--border);color:var(--text2);vertical-align:middle}
+table.fab-of-table tr:last-child td{border-bottom:none}
+.fab-of-statut{font-size:11px;font-weight:700;padding:2px 8px;border-radius:8px;display:inline-block}
+.fab-of-statut--valide{color:var(--success);background:rgba(52,211,153,.12)}
+.fab-of-statut--attente{color:var(--warn);background:rgba(251,191,36,.12)}
+.fab-of-statut--rejete{color:var(--danger);background:rgba(248,113,113,.12)}
+.fab-of-actions{display:flex;gap:6px;align-items:center}
+.fab-of-dropzone{border:2px dashed var(--border);border-radius:12px;padding:32px 20px;text-align:center;
+  background:var(--bg);cursor:pointer;transition:border-color .15s,background .15s}
+.fab-of-dropzone:hover,.fab-of-dropzone.fab-of-dropzone--active{border-color:var(--accent);background:var(--accent-bg)}
+.fab-of-dropzone-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px}
+.fab-of-dropzone-sub{font-size:12px;color:var(--muted)}
+.fab-of-preview-table{width:100%;border-collapse:collapse;font-size:12px;margin:12px 0}
+.fab-of-preview-table th,.fab-of-preview-table td{padding:8px 10px;border-bottom:1px solid var(--border);text-align:left;vertical-align:middle}
+.fab-of-preview-table th{width:38%;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.fab-of-preview-table tr.fab-of-missing td{background:rgba(251,191,36,.08)}
+.fab-of-preview-table input{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;
+  background:var(--bg);color:var(--text);font-size:13px;font-family:inherit}
+.fab-of-preview-table input:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.fab-of-modal-wide{max-width:720px;width:100%;max-height:88vh;overflow-y:auto}
+.fab-of-spinner{display:flex;align-items:center;justify-content:center;gap:10px;padding:40px;color:var(--muted);font-size:13px}
 
 /* ── Print panel ─────────────────────────────────────────────── */
 .fab-panel{
@@ -803,7 +832,12 @@ let S = {
   searchQuery: '',
 
   // Footer tabs
-  fabTab: 'saisie',   // 'saisie' | 'print' | 'traca'
+  fabTab: 'saisie',   // 'saisie' | 'print' | 'traca' | 'of'
+
+  // Import OF PDF
+  ofImports: [],
+  ofImportsLoading: false,
+  ofImportModal: null,  // null | { step, file, parsed, parsing }
 
   // Traça matières
   tracaMatieres: [],
@@ -1073,6 +1107,9 @@ function icon(name,size=16){
     camera:'<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
     'video-off':'<path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/><path d="M7.5 4H14a2 2 0 0 1 2 2v3.5"/><polyline points="22 8 22 16 18 13"/><line x1="2" y1="2" x2="22" y2="22"/>',
     trash:'<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>',
+    download:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+    file:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',
+    upload:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
     headset:'<path d="M4 12a8 8 0 0 1 16 0"/><path d="M6 12v5a2 2 0 0 0 2 2h1v-7H8a2 2 0 0 0-2 2z"/><path d="M18 12v5a2 2 0 0 1-2 2h-1v-7h1a2 2 0 0 1 2 2z"/>',
   };
   const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
@@ -1403,6 +1440,263 @@ async function switchFabTab(tab){
     await loadFournisseursFSC();
     if(S.tracaMatieres.length===0) await loadMatieres();
   }
+  if(tab==='of'){
+    await loadOfImports();
+  }
+}
+
+/* ── Import OF PDF ───────────────────────────────────────────── */
+const OF_FIELD_LABELS = {
+  of_numero:'OF n°', date_creation:'Date création', delai_client:'Délai client',
+  reference:'Référence', machine:'Machine', laize:'Laize', format:'Format',
+  matiere:'Matière', ref_matiere:'Réf. matière', glassine:'Glassine',
+  ref_adhesif:'Réf. adhésif', qte_adhesif_g:'Qté adhésif (g)', qte_adhesif_kg:'Qté adhésif (kg)',
+  adhesif_label:'Adhésif', qte_au_mille:'Quantité au mille', nb_levees:'Nb levées',
+  qte_etiquettes:'Qté étiquettes', qte_bobines:'Qté bobines', metrage:'Métrage',
+  conditionnement:'Conditionnement', tolerance:'Tolérance', cartons_type:'Type cartons',
+  nb_cartons:'Nb cartons', mandrins_dia:'Mandrins dia.', mandrin_longueur:'Mandrin long.',
+  nb_mandrins:'Nb mandrins', nb_tubes:'Nb tubes', bobinettes_completes:'Bobinettes complètes',
+  outil_1_forme:'Outil 1 — forme', outil_1_numero:'Outil 1 — n°', outil_1_angle:'Outil 1 — angle',
+  outil_1_mag:'Outil 1 — mag.', outil_1_cp:'Outil 1 — CP', outil_1_hauteur:'Outil 1 — hauteur',
+  outil_1_fournisseur:'Outil 1 — fournisseur', outil_2_forme:'Outil 2 — forme',
+  outil_2_numero:'Outil 2 — n°', outil_2_angle:'Outil 2 — angle', outil_2_cp:'Outil 2 — CP',
+  outil_alt_forme:'Outil alt. — forme', outil_alt_numero:'Outil alt. — n°',
+  outil_alt_angle:'Outil alt. — angle', outil_alt_fournisseur:'Outil alt. — fournisseur',
+};
+
+function canAccessOfTab(){
+  const r = S.user && S.user.role;
+  return r==='superadmin' || r==='direction' || r==='administration';
+}
+
+function ofStatutLabel(st){
+  const m = {en_attente:'En attente', valide:'Validé', rejete:'Rejeté'};
+  return m[st] || st || '—';
+}
+
+function ofStatutClass(st){
+  if(st==='valide') return 'fab-of-statut fab-of-statut--valide';
+  if(st==='rejete') return 'fab-of-statut fab-of-statut--rejete';
+  return 'fab-of-statut fab-of-statut--attente';
+}
+
+async function loadOfImports(){
+  set({ofImportsLoading:true});
+  try{
+    const rows = await apiFetch('/api/of/list');
+    set({ofImports:Array.isArray(rows)?rows:[], ofImportsLoading:false});
+  }catch(e){
+    set({ofImportsLoading:false});
+    showToast(e.message||'Erreur chargement des OF','danger');
+  }
+}
+
+function openOfImportModal(){
+  fabPauseAutoRefresh(120000);
+  set({ofImportModal:{step:1, file:null, parsed:null, parsing:false}});
+  renderOfImportModal();
+}
+
+function closeOfImportModal(){
+  const mr = document.getElementById('mroot');
+  if(mr) mr.innerHTML = '';
+  set({ofImportModal:null});
+}
+
+async function ofHandlePdfFile(file){
+  if(!file || !/\.pdf$/i.test(file.name||'')){
+    showToast('Fichier PDF requis.','danger');
+    return;
+  }
+  set({ofImportModal:{step:1, file, parsed:null, parsing:true}});
+  renderOfImportModal();
+  const fd = new FormData();
+  fd.append('file', file);
+  try{
+    const parsed = await fetch('/api/of/parse',{method:'POST',credentials:'include',body:fd})
+      .then(async r=>{
+        if(r.status===401){ window.location.href='/'; return null; }
+        if(!r.ok){
+          const e = await r.json().catch(()=>({}));
+          throw new Error(e.detail||'Erreur '+r.status);
+        }
+        return r.json();
+      });
+    if(!parsed) return;
+    set({ofImportModal:{step:2, file, parsed, parsing:false}});
+    renderOfImportModal();
+  }catch(e){
+    set({ofImportModal:{step:1, file:null, parsed:null, parsing:false}});
+    renderOfImportModal();
+    showToast(e.message||'Analyse PDF impossible.','danger');
+  }
+}
+
+async function ofValidateImport(){
+  const m = S.ofImportModal;
+  if(!m || !m.file || !m.parsed) return;
+  const data = {};
+  Object.keys(OF_FIELD_LABELS).forEach(k=>{
+    const el = document.getElementById('of-f-'+k);
+    const v = el ? el.value.trim() : '';
+    data[k] = v === '' ? null : v;
+  });
+  const fd = new FormData();
+  fd.append('file', m.file);
+  fd.append('data', JSON.stringify(data));
+  try{
+    const r = await fetch('/api/of/validate',{method:'POST',credentials:'include',body:fd});
+    if(r.status===401){ window.location.href='/'; return; }
+    if(!r.ok){
+      const e = await r.json().catch(()=>({}));
+      throw new Error(e.detail||'Erreur '+r.status);
+    }
+    closeOfImportModal();
+    showToast('OF importé.','success');
+    if(S.fabTab==='of') await loadOfImports();
+    else await switchFabTab('of');
+  }catch(e){
+    showToast(e.message||'Validation impossible.','danger');
+  }
+}
+
+async function ofDeleteImport(id){
+  if(!confirm('Supprimer cet import OF de la base ?')) return;
+  try{
+    await apiFetch('/api/of/'+id,{method:'DELETE'});
+    showToast('Import supprimé.','success');
+    await loadOfImports();
+  }catch(e){
+    showToast(e.message||'Suppression impossible.','danger');
+  }
+}
+
+function renderOfPanel(){
+  const rows = (S.ofImports||[]).map(row=>{
+    const stCls = ofStatutClass(row.statut);
+    const dlBtn = h('button',{
+      className:'fab-btn fab-btn-ghost fab-btn-sm',
+      title:'Télécharger PDF',
+      onClick:()=>{ window.open('/api/of/'+row.id+'/pdf','_blank'); },
+    }, svgIcon('download',14));
+    const acts = [dlBtn];
+    if(S.user && S.user.role==='superadmin'){
+      acts.push(h('button',{
+        className:'fab-btn fab-btn-ghost fab-btn-sm',
+        title:'Supprimer',
+        onClick:()=>ofDeleteImport(row.id),
+      }, svgIcon('trash',14)));
+    }
+    const fmtDate = row.date_import ? fmtDate(row.date_import.slice(0,10)) : '—';
+    return h('tr',null,
+      h('td',null, escHtml(row.of_numero||'—')),
+      h('td',null, escHtml(row.reference||'—')),
+      h('td',null, escHtml(row.machine||'—')),
+      h('td',null, escHtml(row.delai_client||'—')),
+      h('td',null, row.qte_etiquettes!=null ? escHtml(String(row.qte_etiquettes)) : '—'),
+      h('td',null, row.metrage!=null ? escHtml(String(row.metrage)) : '—'),
+      h('td',null, fmtDate),
+      h('td',null, h('span',{className:stCls}, ofStatutLabel(row.statut))),
+      h('td',null, h('div',{className:'fab-of-actions'}, ...acts)),
+    );
+  });
+  const empty = h('tr',null,
+    h('td',{colspan:'9',style:{textAlign:'center',color:'var(--muted)',padding:'24px'}},
+      S.ofImportsLoading ? 'Chargement…' : 'Aucun OF importé'));
+  return h('div',{className:'fab-of-panel'},
+    h('div',{className:'fab-of-toolbar'},
+      h('div',{className:'fab-of-toolbar-title'},'Ordres de fabrication importés'),
+      h('button',{className:'fab-btn fab-btn-accent',onClick:openOfImportModal},
+        svgIcon('upload',14),' Importer un OF')
+    ),
+    h('div',{className:'fab-of-table-wrap'},
+      h('table',{className:'fab-of-table'},
+        h('thead',null, h('tr',null,
+          h('th',null,'OF n°'), h('th',null,'Référence'), h('th',null,'Machine'),
+          h('th',null,'Délai client'), h('th',null,'Qté étiquettes'), h('th',null,'Métrage'),
+          h('th',null,'Date import'), h('th',null,'Statut'), h('th',null,'Actions')
+        )),
+        h('tbody',null, ...(rows.length ? rows : [empty]))
+      )
+    )
+  );
+}
+
+function renderOfImportModal(){
+  const mr = document.getElementById('mroot');
+  if(!mr) return;
+  mr.innerHTML = '';
+  const m = S.ofImportModal;
+  if(!m) return;
+
+  let body;
+  if(m.parsing){
+    body = h('div',{className:'fab-of-spinner'},
+      h('div',{className:'fab-spinner'}), 'Analyse du PDF…');
+  }else if(m.step===1){
+    const fileInput = h('input',{type:'file',accept:'.pdf,application/pdf',style:{display:'none'},id:'of-file-input'});
+    const pickFile = ()=>fileInput.click();
+    fileInput.onchange = ()=>{
+      const f = fileInput.files && fileInput.files[0];
+      if(f) ofHandlePdfFile(f);
+    };
+    const dropzone = h('div',{
+      className:'fab-of-dropzone',
+      onClick:pickFile,
+      onDragover:(e)=>{ e.preventDefault(); e.currentTarget.classList.add('fab-of-dropzone--active'); },
+      onDragleave:(e)=>{ e.currentTarget.classList.remove('fab-of-dropzone--active'); },
+      onDrop:(e)=>{
+        e.preventDefault();
+        e.currentTarget.classList.remove('fab-of-dropzone--active');
+        const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if(f) ofHandlePdfFile(f);
+      },
+    },
+      svgIcon('file',28),
+      h('div',{className:'fab-of-dropzone-title'},'Déposer un PDF Sage ici'),
+      h('div',{className:'fab-of-dropzone-sub'},'ou cliquer pour sélectionner — .pdf uniquement')
+    );
+    body = h('div',null, fileInput, dropzone,
+      h('div',{style:{marginTop:'14px',textAlign:'center'}},
+        h('button',{className:'fab-btn fab-btn-ghost',onClick:pickFile},'Sélectionner un fichier')
+      )
+    );
+  }else{
+    const parsed = m.parsed || {};
+    const previewRows = Object.keys(OF_FIELD_LABELS).map(k=>{
+      const val = parsed[k];
+      const missing = val == null || val === '';
+      const display = val == null ? '' : String(val);
+      return h('tr',{className:missing?'fab-of-missing':''},
+        h('th',null, OF_FIELD_LABELS[k]),
+        h('td',null,
+          h('input',{type:'text',id:'of-f-'+k,value:display})
+        )
+      );
+    });
+    body = h('div',null,
+      h('p',{className:'fab-modal-sub',style:{marginBottom:'8px'}},
+        'Vérifiez les champs extraits. Les lignes surlignées indiquent une extraction manquante.'),
+      h('table',{className:'fab-of-preview-table'},
+        h('tbody',null, ...previewRows)
+      ),
+      h('div',{className:'fab-modal-btns'},
+        h('button',{className:'fab-btn fab-btn-ghost',onClick:closeOfImportModal},'Annuler'),
+        h('button',{className:'fab-btn fab-btn-accent',onClick:()=>ofValidateImport()},'Valider l\'import')
+      )
+    );
+  }
+
+  const overlay = h('div',{className:'fab-modal-overlay',onClick:(e)=>{
+    if(e.target===e.currentTarget) closeOfImportModal();
+  }},
+    h('div',{className:'fab-modal fab-of-modal-wide',onClick:(e)=>e.stopPropagation()},
+      h('div',{className:'fab-modal-title'},
+        m.step===2 ? 'Prévisualisation OF' : 'Importer un OF PDF'),
+      body
+    )
+  );
+  mr.appendChild(overlay);
 }
 
 /* ── Print panel ─────────────────────────────────────────────── */
@@ -2157,6 +2451,7 @@ function renderTracaPanel(){
 }
 
 function renderMain(){
+  if(S.fabTab==='of') return renderOfPanel();
   if(S.fabTab==='print') return renderPrintPanel();
   if(S.fabTab==='traca') return renderTracaPanel();
 
@@ -2598,14 +2893,21 @@ function renderFooter(){
   );
 
   // Tab nav (always visible at bottom of footer)
-  const tabNav = h('div',{className:'fab-tab-nav'},
+  const tabBtns = [
     h('button',{className:'fab-tab-btn'+(S.fabTab==='saisie'?' active':''),onClick:()=>{ void switchFabTab('saisie'); }},
       svgIcon('edit',16),'Saisie'),
     h('button',{className:'fab-tab-btn'+(S.fabTab==='print'?' active':''),onClick:()=>{ void switchFabTab('print'); }},
       svgIcon('printer',16),'Imprimer'),
     h('button',{className:'fab-tab-btn'+(S.fabTab==='traca'?' active':''),onClick:()=>{ void switchFabTab('traca'); }},
-      svgIcon('scan',16),'Traça')
-  );
+      svgIcon('scan',16),'Traça'),
+  ];
+  if(canAccessOfTab()){
+    tabBtns.push(
+      h('button',{className:'fab-tab-btn'+(S.fabTab==='of'?' active':''),onClick:()=>{ void switchFabTab('of'); }},
+        svgIcon('file',16),'OF')
+    );
+  }
+  const tabNav = h('div',{className:'fab-tab-nav'}, ...tabBtns);
 
   const isOperatorView = S.saisieViewMode === 'operator';
 
@@ -3331,6 +3633,7 @@ function render(){
   if(S.showCommentModal)  root.appendChild(renderCommentModal());
 
   renderArret50Modal();
+  renderOfImportModal();
 
   if(S.loading) root.appendChild(renderLoading());
 

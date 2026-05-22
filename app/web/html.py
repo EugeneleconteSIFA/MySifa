@@ -1125,6 +1125,140 @@ body.light .portal-app--busy::after{background:rgba(255,255,255,.88);color:var(-
 body.light .portal-logout:hover{text-shadow:0 0 12px rgba(8,145,178,.35)}
 body.light .portal-logout:hover:last-of-type{text-shadow:0 0 12px rgba(220,38,38,.35)}
 
+/* ── Post-its portail (desktop >= 1024px) ─────────────────────── */
+.postit-layer{display:none}
+@media (min-width:1024px){.postit-layer{display:block}}
+.postit{
+  position:fixed;
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:12px;
+  width:260px;
+  min-height:120px;
+  box-shadow:0 4px 24px rgba(0,0,0,0.18);
+  z-index:200;
+  display:flex;
+  flex-direction:column;
+  user-select:none;
+}
+.postit[data-type="today"] .postit-header{border-top:3px solid var(--accent)}
+.postit[data-type="someday"] .postit-header{border-top:3px solid var(--warn)}
+.postit-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:10px 12px 8px;
+  cursor:grab;
+  border-radius:12px 12px 0 0;
+  background:var(--card);
+  gap:8px;
+}
+.postit-header:active{cursor:grabbing}
+.postit-type-label{
+  font-size:10px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:0.5px;
+}
+.postit[data-type="today"] .postit-type-label{color:var(--accent)}
+.postit[data-type="someday"] .postit-type-label{color:var(--warn)}
+.postit-title{
+  flex:1;
+  background:transparent;
+  border:none;
+  color:var(--text);
+  font-size:13px;
+  font-weight:600;
+  outline:none;
+  min-width:0;
+}
+.postit-body{padding:4px 12px 8px;flex:1}
+.postit-task{display:flex;align-items:flex-start;gap:8px;padding:4px 0}
+.postit-task input[type="checkbox"]{
+  margin-top:2px;
+  accent-color:var(--accent);
+  flex-shrink:0;
+  cursor:pointer;
+}
+.postit-task-text{
+  font-size:13px;
+  color:var(--text);
+  flex:1;
+  background:transparent;
+  border:none;
+  outline:none;
+  resize:none;
+  line-height:1.5;
+  padding:0;
+  font-family:inherit;
+}
+.postit-task.done .postit-task-text{
+  text-decoration:line-through;
+  color:var(--muted);
+}
+.postit-footer{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:6px 12px 10px;
+  border-top:1px solid var(--border);
+}
+.postit-clear-btn{
+  font-size:11px;
+  color:var(--muted);
+  background:none;
+  border:none;
+  cursor:pointer;
+  padding:2px 4px;
+}
+.postit-clear-btn:hover{color:var(--danger)}
+.postit-add-task-btn{
+  font-size:11px;
+  color:var(--accent);
+  background:none;
+  border:none;
+  cursor:pointer;
+  padding:2px 4px;
+  font-weight:600;
+}
+.postit-delete-btn{
+  background:none;
+  border:none;
+  color:var(--muted);
+  cursor:pointer;
+  font-size:16px;
+  line-height:1;
+  padding:0 2px;
+}
+.postit-delete-btn:hover{color:var(--danger)}
+.postit-fab-group{
+  position:fixed;
+  bottom:32px;
+  right:32px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  z-index:300;
+}
+.postit-fab{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:10px 16px;
+  border-radius:10px;
+  border:1px solid var(--border);
+  background:var(--card);
+  color:var(--text);
+  font-size:12px;
+  font-weight:700;
+  cursor:pointer;
+  box-shadow:0 2px 12px rgba(0,0,0,0.15);
+  transition:filter .15s;
+}
+.postit-fab:hover{filter:brightness(1.08)}
+.postit-fab.today{border-color:var(--accent);color:var(--accent)}
+.postit-fab.someday{border-color:var(--warn);color:var(--warn)}
+
 @media (max-width:900px){
   /* Portail mobile / tablette : layout vertical, tuiles compactes */
   .portal-page{padding:20px 16px 28px;gap:16px}
@@ -1817,6 +1951,13 @@ function apiDetailMsg(detail){
   if(typeof detail==='object') return detail.msg||detail.message||JSON.stringify(detail);
   return String(detail);
 }
+function escHtml(s){
+  return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escAttr(s){
+  return escHtml(s).replace(/'/g,'&#39;');
+}
+
 async function api(p,o){
   try{
     const r=await fetch(API+p,{credentials:'include',...o});
@@ -3536,6 +3677,238 @@ function attachPortalReorder(appsWrap){
   appsWrap.addEventListener('drop',e=>{e.preventDefault();});
 }
 
+// ── Post-its portail ─────────────────────────────────────────────
+const PostitState={items:[]};
+let _postitDrag=null;
+
+async function loadPostits(){
+  try{
+    const data=await api('/api/postits');
+    if(data==null) return;
+    PostitState.items=Array.isArray(data)?data:[];
+    renderPostits();
+  }catch(e){
+    showToast((e&&e.message)||'Chargement des post-its impossible.','danger');
+  }
+}
+
+function renderPostits(){
+  const layer=document.getElementById('postitLayer');
+  if(!layer) return;
+  layer.querySelectorAll('.postit').forEach(el=>el.remove());
+  PostitState.items.forEach(p=>layer.appendChild(buildPostitEl(p)));
+}
+
+function buildPostitEl(p){
+  const el=document.createElement('div');
+  el.className='postit';
+  el.dataset.id=String(p.id);
+  el.dataset.type=p.type;
+  el.style.left=(p.pos_x!=null?p.pos_x:100)+'px';
+  el.style.top=(p.pos_y!=null?p.pos_y:100)+'px';
+  const tasks=Array.isArray(p.tasks)?p.tasks:[];
+  const hasDone=tasks.some(t=>t.done);
+  const typeLabel=p.type==='today'?'Aujourd\'hui':'Un jour';
+  el.innerHTML=`
+    <div class="postit-header" onmousedown="startPostitDrag(event, ${p.id})">
+      <span class="postit-type-label">${escHtml(typeLabel)}</span>
+      <input class="postit-title" value="${escAttr(p.title||'')}"
+        onchange="renamePostit(${p.id}, this.value)"
+        onmousedown="event.stopPropagation()">
+      <button type="button" class="postit-delete-btn" onclick="deletePostit(${p.id})" title="Supprimer">×</button>
+    </div>
+    <div class="postit-body" id="postit-body-${p.id}">
+      ${tasks.map(t=>buildPostitTaskHtml(p.id, t)).join('')}
+    </div>
+    <div class="postit-footer">
+      <button type="button" class="postit-add-task-btn" onclick="addPostitTask(${p.id})">+ Ajouter</button>
+      ${hasDone?`<button type="button" class="postit-clear-btn" onclick="clearPostitDone(${p.id})">Effacer terminées</button>`:''}
+    </div>
+  `;
+  return el;
+}
+
+function buildPostitTaskHtml(postitId, t){
+  const done=!!t.done;
+  return `
+    <div class="postit-task${done?' done':''}" data-task-id="${t.id}">
+      <input type="checkbox" ${done?'checked':''}
+        onchange="togglePostitTask(${postitId}, ${t.id}, this.checked)">
+      <textarea class="postit-task-text" rows="1"
+        onchange="editPostitTask(${postitId}, ${t.id}, this.value)"
+        onmousedown="event.stopPropagation()"
+        onfocus="autoResizePostitTask(this)"
+        oninput="autoResizePostitTask(this)">${escHtml(t.text||'')}</textarea>
+      <button type="button" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:0 2px"
+        onclick="deletePostitTask(${postitId}, ${t.id})" title="Supprimer">×</button>
+    </div>
+  `;
+}
+
+function autoResizePostitTask(el){
+  el.style.height='auto';
+  el.style.height=el.scrollHeight+'px';
+}
+
+function startPostitDrag(e, id){
+  if(e.button!==0) return;
+  const el=document.querySelector('.postit[data-id="'+id+'"]');
+  if(!el) return;
+  const rect=el.getBoundingClientRect();
+  _postitDrag={el, id, ox:e.clientX-rect.left, oy:e.clientY-rect.top};
+  el.style.zIndex='500';
+  document.addEventListener('mousemove', onPostitDragMove);
+  document.addEventListener('mouseup', onPostitDragEnd);
+}
+
+function onPostitDragMove(e){
+  if(!_postitDrag) return;
+  _postitDrag.el.style.left=(e.clientX-_postitDrag.ox)+'px';
+  _postitDrag.el.style.top=(e.clientY-_postitDrag.oy)+'px';
+}
+
+function onPostitDragEnd(){
+  if(!_postitDrag) return;
+  const x=parseInt(_postitDrag.el.style.left,10)||0;
+  const y=parseInt(_postitDrag.el.style.top,10)||0;
+  _postitDrag.el.style.zIndex='200';
+  const pid=_postitDrag.id;
+  _postitDrag=null;
+  document.removeEventListener('mousemove', onPostitDragMove);
+  document.removeEventListener('mouseup', onPostitDragEnd);
+  api('/api/postits/'+pid+'/pos',{method:'PATCH',body:JSON.stringify({x,y})}).catch(e=>{
+    showToast((e&&e.message)||'Position non enregistrée.','danger');
+  });
+  const p=PostitState.items.find(x=>x.id===pid);
+  if(p){p.pos_x=x;p.pos_y=y;}
+}
+
+async function addPostit(type){
+  const title=type==='today'?'À faire aujourd\'hui':'À faire un jour';
+  try{
+    const p=await api('/api/postits',{method:'POST',body:JSON.stringify({type,title})});
+    if(!p) return;
+    PostitState.items.push({...p, tasks:[]});
+    renderPostits();
+  }catch(e){
+    showToast((e&&e.message)||'Création impossible.','danger');
+  }
+}
+
+async function deletePostit(id){
+  try{
+    await api('/api/postits/'+id,{method:'DELETE'});
+    PostitState.items=PostitState.items.filter(p=>p.id!==id);
+    renderPostits();
+  }catch(e){
+    showToast((e&&e.message)||'Suppression impossible.','danger');
+  }
+}
+
+async function renamePostit(id, title){
+  const t=String(title||'').trim();
+  if(!t){ showToast('Titre obligatoire.','danger'); return; }
+  try{
+    await api('/api/postits/'+id,{method:'PATCH',body:JSON.stringify({title:t})});
+    const p=PostitState.items.find(x=>x.id===id);
+    if(p) p.title=t;
+  }catch(e){
+    showToast((e&&e.message)||'Renommage impossible.','danger');
+  }
+}
+
+async function addPostitTask(postitId){
+  try{
+    const task=await api('/api/postits/'+postitId+'/tasks',{method:'POST',body:JSON.stringify({text:''})});
+    if(!task) return;
+    const p=PostitState.items.find(x=>x.id===postitId);
+    if(p){
+      if(!Array.isArray(p.tasks)) p.tasks=[];
+      p.tasks.push(task);
+    }
+    renderPostits();
+    requestAnimationFrame(()=>{
+      const body=document.getElementById('postit-body-'+postitId);
+      const textareas=body&&body.querySelectorAll('.postit-task-text');
+      const last=textareas&&textareas[textareas.length-1];
+      if(last){ last.focus(); autoResizePostitTask(last); }
+    });
+  }catch(e){
+    showToast((e&&e.message)||'Ajout de tâche impossible.','danger');
+  }
+}
+
+async function togglePostitTask(postitId, taskId, done){
+  try{
+    await api('/api/postits/'+postitId+'/tasks/'+taskId,
+      {method:'PATCH',body:JSON.stringify({done:done?1:0})});
+    const p=PostitState.items.find(x=>x.id===postitId);
+    const t=p&&p.tasks&&p.tasks.find(x=>x.id===taskId);
+    if(t) t.done=done?1:0;
+    renderPostits();
+  }catch(e){
+    showToast((e&&e.message)||'Mise à jour impossible.','danger');
+  }
+}
+
+async function editPostitTask(postitId, taskId, text){
+  try{
+    await api('/api/postits/'+postitId+'/tasks/'+taskId,
+      {method:'PATCH',body:JSON.stringify({text})});
+    const p=PostitState.items.find(x=>x.id===postitId);
+    const t=p&&p.tasks&&p.tasks.find(x=>x.id===taskId);
+    if(t) t.text=text;
+  }catch(e){
+    showToast((e&&e.message)||'Modification impossible.','danger');
+  }
+}
+
+async function deletePostitTask(postitId, taskId){
+  try{
+    await api('/api/postits/'+postitId+'/tasks/'+taskId,{method:'DELETE'});
+    const p=PostitState.items.find(x=>x.id===postitId);
+    if(p&&p.tasks) p.tasks=p.tasks.filter(t=>t.id!==taskId);
+    renderPostits();
+  }catch(e){
+    showToast((e&&e.message)||'Suppression impossible.','danger');
+  }
+}
+
+async function clearPostitDone(postitId){
+  try{
+    await api('/api/postits/'+postitId+'/tasks/done/clear',{method:'DELETE'});
+    const p=PostitState.items.find(x=>x.id===postitId);
+    if(p&&p.tasks) p.tasks=p.tasks.filter(t=>!t.done);
+    renderPostits();
+  }catch(e){
+    showToast((e&&e.message)||'Effacement impossible.','danger');
+  }
+}
+
+function portalPostitLayerEl(){
+  const layer=document.createElement('div');
+  layer.className='postit-layer';
+  layer.id='postitLayer';
+  const fab=document.createElement('div');
+  fab.className='postit-fab-group';
+  const btnToday=document.createElement('button');
+  btnToday.type='button';
+  btnToday.className='postit-fab today';
+  btnToday.title='Nouveau post-it aujourd\'hui';
+  btnToday.textContent='Aujourd\'hui';
+  btnToday.addEventListener('click',()=>addPostit('today'));
+  const btnSomeday=document.createElement('button');
+  btnSomeday.type='button';
+  btnSomeday.className='postit-fab someday';
+  btnSomeday.title='Nouveau post-it un jour';
+  btnSomeday.textContent='Un jour';
+  btnSomeday.addEventListener('click',()=>addPostit('someday'));
+  fab.appendChild(btnToday);
+  fab.appendChild(btnSomeday);
+  layer.appendChild(fab);
+  return layer;
+}
+
 function renderPortal(){
   const aa = S.user && S.user.app_access ? S.user.app_access : null;
   const urole = S.user && S.user.role ? S.user.role : '';
@@ -3543,7 +3916,7 @@ function renderPortal(){
   const isStock = aa ? !!aa.stock : (isSuper || !!(urole && ['direction','administration','logistique','expedition','commercial'].includes(urole)));
   const isProd  = aa ? !!aa.prod : (isSuper || !!(urole && ['direction','administration','fabrication','expedition','commercial'].includes(urole)));
   const isCompta = aa ? !!aa.compta : (isSuper || !!(urole && ['direction','administration','comptabilite'].includes(urole)));
-  const isExpe = aa ? !!aa.expe : (isSuper || !!(urole && ['direction','administration','expedition','logistique'].includes(urole)));
+  const isExpe = aa ? !!aa.expe : (isSuper || !!(urole && ['direction','administration','expedition','logistique','commercial'].includes(urole)));
   const isFab = aa ? !!aa.fabrication : (isSuper || urole==='fabrication' || !!(urole && ['direction','administration'].includes(urole)));
   const isPrint = isSuper || !!(urole && ['fabrication','logistique','expedition'].includes(urole));
   const isCom = urole==='commercial';
@@ -3551,7 +3924,7 @@ function renderPortal(){
   const isComptaPlan = urole === 'comptabilite';
   const isPaie = isSuper || !!(urole && ['direction','administration','comptabilite'].includes(urole));
   const isDevis = aa ? !!aa.devis : (isSuper || urole==='direction');
-  const isAo = isSuper || !!(urole && ['direction','administration','commercial'].includes(urole));
+  const isAo = isSuper || !!(urole && ['direction','administration'].includes(urole));
   const isLight=document.body.classList.contains('light');
 
   const order=(S.user&&Array.isArray(S.user.portal_apps_order))?S.user.portal_apps_order:[];
@@ -3640,7 +4013,7 @@ function renderPortal(){
       h('div',{className:'portal-app-icon'},iconEl('truck',28)),
       h('div',{className:'portal-app-name'},'MyExpé'),
       h('div',{className:'portal-app-desc'},
-        (urole==='logistique'&&!isSuper)?'Expédition & suivi — lecture seule':'Expédition & Suivi')
+        ((urole==='logistique'||urole==='commercial')&&!isSuper)?'Expédition & suivi — lecture seule':'Expédition & Suivi')
     )});
   }
 
@@ -3687,18 +4060,6 @@ function renderPortal(){
   }
 
   if(isCom){
-    const id1='com_expe';
-    tileSpecs.push({id:id1,el:h('div',{
-      className:'portal-app portal-app--disabled',
-      'data-portal-id':id1,
-      draggable:'true',
-      onClick:()=>{if(_portalDragSuppressClick)return;}
-    },
-      h('div',{className:'portal-app-icon',style:{opacity:.4}},iconEl('truck',28)),
-      h('div',{className:'portal-app-name',style:{opacity:.5}},'MyExpé'),
-      h('div',{className:'portal-app-desc'},'Expédition & Suivi'),
-      h('span',{className:'badge-dev'},'En développement')
-    )});
     const id2='com_devis';
     tileSpecs.push({id:id2,el:h('div',{
       className:'portal-app portal-app--disabled',
@@ -3770,7 +4131,7 @@ function renderPortal(){
   const profRingBadge=(profPct<100)?portalProfileRingEl(profPct):null;
   const profTitle=profPct<100?('Mon profil — '+profPct+' % complété'):'Mon profil';
 
-  return h('div',{className:'portal-page'},
+  const portalEl=h('div',{className:'portal-page'},
     h('div',{className:'portal-corner-stack'},
       h('button',{
         type:'button',
@@ -3830,6 +4191,9 @@ function renderPortal(){
       h('button',{className:'portal-logout',onClick:doLogout},'Déconnexion')
     )
   );
+  portalEl.appendChild(portalPostitLayerEl());
+  setTimeout(()=>{ loadPostits().catch(()=>{}); },0);
+  return portalEl;
 }
 
 function renderStock(){
@@ -11090,7 +11454,14 @@ function render(){
   if(S.app!=='prod'){stopMachineStatusPolling();}
 
   if(!S.user||S.app==='login'){root.appendChild(renderLogin());}
-  else if(S.app==='portal'){root.appendChild(renderPortal());}
+  else if(S.app==='portal'){
+    root.appendChild(renderPortal());
+    if(_postitDrag){
+      document.removeEventListener('mousemove', onPostitDragMove);
+      document.removeEventListener('mouseup', onPostitDragEnd);
+      _postitDrag=null;
+    }
+  }
   else if(S.app==='stock'){root.appendChild(renderStock());}
   else if(S.app==='compta'){root.appendChild(renderCompta());}
   else if(S.app==='expe'){root.appendChild(renderExpe());}

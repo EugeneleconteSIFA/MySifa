@@ -12,7 +12,7 @@ from app.web.access_denied import access_denied_response
 
 router = APIRouter()
 
-_AO_ROLES = frozenset({"superadmin", "direction", "administration", "commercial"})
+_AO_ROLES = frozenset({"superadmin", "direction", "administration"})
 
 
 @router.get("/ao", response_class=HTMLResponse)

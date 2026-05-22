@@ -102,7 +102,7 @@ def user_has_app_access(user: dict, app: str) -> bool:
 
 
 def user_can_write_expe(user: dict) -> bool:
-    """MyExpé — écriture (départs, transporteurs). Logistique : lecture seule."""
+    """MyExpé — écriture (départs, transporteurs). Logistique et commercial : lecture seule."""
     return user.get("role") in ROLES_EXPE_WRITE
 
 

@@ -37,6 +37,7 @@ from app.routers.expe_departs import router as expe_departs_router
 from app.routers.settings import router as settings_api_router
 from frontend.settings_page import router as settings_page_router
 from app.routers.fabrication import router as fabrication_api_router
+from app.routers.of_import import router as of_import_router
 from app.web.fabrication_page import router as fabrication_page_router
 from app.routers.planning_rh import router as planning_rh_api_router
 from app.web.planning_rh_page import router as planning_rh_page_router
@@ -52,6 +53,7 @@ from app.web.calendrier_page import router as calendrier_page_router
 from app.routers.ai import router as ai_router
 from app.routers.chat import router as chat_router
 from app.routers.alerts import router as alerts_router
+from app.routers.postit import router as postit_router
 from app.routers.ao import router as ao_router
 from app.routers.ao_portail import router_api as ao_portail_api_router
 from app.routers.ao_portail import router_html as ao_portail_html_router
@@ -133,6 +135,7 @@ app.include_router(expe_departs_router, prefix="/api/expe")
 app.include_router(settings_api_router)
 app.include_router(settings_page_router)
 app.include_router(fabrication_api_router)
+app.include_router(of_import_router, prefix="")
 app.include_router(fabrication_page_router)
 app.include_router(planning_rh_api_router)
 app.include_router(planning_rh_page_router)
@@ -148,6 +151,7 @@ app.include_router(calendrier_page_router)
 app.include_router(ai_router)
 app.include_router(chat_router)
 app.include_router(alerts_router)
+app.include_router(postit_router)
 app.include_router(ao_router)
 app.include_router(ao_portail_html_router)
 app.include_router(ao_portail_api_router)
