@@ -172,6 +172,7 @@ if ! ssh -o BatchMode=no -o ConnectTimeout=15 "$VPS_USER@$VPS_IP" "
   git fetch --all
   git reset --hard origin/main
   chown -R sifa:sifa $VPS_PATH
+  sudo -u sifa $VPS_PATH/venv/bin/pip install -r requirements.txt -q
   systemctl restart mysifa
   systemctl status mysifa --no-pager -l
 "; then
@@ -179,7 +180,7 @@ if ! ssh -o BatchMode=no -o ConnectTimeout=15 "$VPS_USER@$VPS_IP" "
   echo "Échec SSH / mise à jour VPS — le code GitHub est à jour, le serveur ne l'est pas."
   echo "Relancer manuellement :"
   echo "  ssh $VPS_USER@$VPS_IP"
-  echo "  cd $VPS_PATH && git fetch --all && git reset --hard origin/main && chown -R sifa:sifa . && systemctl restart mysifa"
+  echo "  cd $VPS_PATH && git fetch --all && git reset --hard origin/main && chown -R sifa:sifa . && sudo -u sifa venv/bin/pip install -r requirements.txt -q && systemctl restart mysifa"
   echo "Installateurs widget : ./deploy.sh --widget"
   exit 1
 fi
