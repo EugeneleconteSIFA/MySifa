@@ -1,5 +1,5 @@
 from config import APP_VERSION, APP_META_DESCRIPTION, APP_PAGE_TITLE, THEME_COLOR_META
-from app.web.expe_page import (
+from app.web.expe_assets import (
     EXPE_CARTE_FRANCE_CSS,
     EXPE_CARTE_FRANCE_JS,
     EXPE_TRANSPORTEURS_CSS,
