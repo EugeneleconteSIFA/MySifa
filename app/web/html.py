@@ -750,6 +750,21 @@ table.table-std th{font-size:10px;color:var(--muted);font-weight:700;text-transf
 table.table-std td{padding:10px 16px;border-bottom:1px solid var(--border)}
 table.table-std tr:last-child td{border-bottom:none}
 table.table-std tr:hover td{background:var(--accent-bg)}
+/* ── MyProd — Import OF PDF ── */
+.prod-of-dropzone{border:2px dashed var(--border);border-radius:12px;padding:32px 20px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s}
+.prod-of-dropzone:hover,.prod-of-dropzone.prod-of-dropzone--active{border-color:var(--accent);background:var(--accent-bg)}
+.prod-of-dropzone-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px}
+.prod-of-dropzone-sub{font-size:12px;color:var(--muted)}
+.prod-of-preview-table{width:100%;border-collapse:collapse;font-size:12px;margin:12px 0}
+.prod-of-preview-table th,.prod-of-preview-table td{padding:8px 10px;border-bottom:1px solid var(--border);text-align:left;vertical-align:middle}
+.prod-of-preview-table th{width:38%;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.prod-of-preview-table tr.prod-of-missing td{background:rgba(251,191,36,.08)}
+.prod-of-preview-table input{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box}
+.prod-of-preview-table input:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.prod-of-statut{font-size:11px;font-weight:700;padding:2px 8px;border-radius:8px;display:inline-block}
+.prod-of-statut--valide{color:var(--success);background:rgba(52,211,153,.12)}
+.prod-of-statut--attente{color:var(--warn);background:rgba(251,191,36,.12)}
+.prod-of-statut--rejete{color:var(--danger);background:rgba(248,113,113,.12)}
 .show-trac-attente-btn{padding:7px 14px;font-size:11px;color:var(--muted);cursor:pointer;text-align:center;
   border-bottom:1px solid var(--border);background:var(--bg);user-select:none;letter-spacing:.3px}
 .show-trac-attente-btn:hover{color:var(--accent);background:var(--accent-bg)}
@@ -1231,20 +1246,28 @@ body.light .portal-logout:hover:last-of-type{text-shadow:0 0 12px rgba(220,38,38
   padding:0 2px;
 }
 .postit-delete-btn:hover{color:var(--danger)}
-.postit-fab-group{
-  position:fixed;
-  bottom:32px;
-  right:32px;
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-  z-index:300;
+
+/* Widget post-it (dock, à gauche de l’agent IA — portail desktop) */
+#postit-dock-root{display:none}
+#postit-dock-btn{
+  background:var(--card);
+  color:var(--warn);
+  border:1px solid var(--border);
+  box-shadow:0 4px 16px rgba(0,0,0,0.2);
 }
-.postit-fab{
-  display:flex;
-  align-items:center;
+#postit-dock-btn:hover{box-shadow:0 6px 24px rgba(0,0,0,0.28)}
+#postit-dock-btn svg{color:var(--warn)}
+#postit-dock-menu{
+  position:fixed;
+  display:none;
+  flex-direction:column;
   gap:8px;
-  padding:10px 16px;
+  min-width:220px;
+  z-index:8004;
+}
+#postit-dock-menu.open{display:flex}
+.postit-dock-menu-btn{
+  padding:10px 14px;
   border-radius:10px;
   border:1px solid var(--border);
   background:var(--card);
@@ -1252,12 +1275,14 @@ body.light .portal-logout:hover:last-of-type{text-shadow:0 0 12px rgba(220,38,38
   font-size:12px;
   font-weight:700;
   cursor:pointer;
+  text-align:left;
+  font-family:inherit;
   box-shadow:0 2px 12px rgba(0,0,0,0.15);
-  transition:filter .15s;
+  transition:filter .15s,border-color .15s;
 }
-.postit-fab:hover{filter:brightness(1.08)}
-.postit-fab.today{border-color:var(--accent);color:var(--accent)}
-.postit-fab.someday{border-color:var(--warn);color:var(--warn)}
+.postit-dock-menu-btn:hover{filter:brightness(1.08)}
+.postit-dock-menu-btn.someday{border-color:var(--warn);color:var(--warn)}
+.postit-dock-menu-btn.today{border-color:var(--accent);color:var(--accent)}
 
 @media (max-width:900px){
   /* Portail mobile / tablette : layout vertical, tuiles compactes */
@@ -1889,6 +1914,7 @@ __EXPE_CARTE_FRANCE_CSS__
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/mysifa_expe_carte.js"></script>
 <script src="/static/chat_widget.js"></script>
+<script src="/static/chat_widget_v2.js"></script>
 <script src="/static/mysifa_ai_chat.js"></script>
 <script src="/static/mysifa_landscape.js"></script>
 <script>
@@ -2054,6 +2080,7 @@ let S={
   tracSort:{col:null,dir:'asc'},
   tracShowAttente:false,
   imports:[],selImp:null,impData:null,
+  ofImports:[],ofImportsLoading:false,ofImportModal:null,
   saisies:null,
   dossiers:[],
   devisList:[],selDevis:null,comparaison:null,devisPreview:null,
@@ -2347,7 +2374,7 @@ async function checkAuth(){
       if(S.app==='prod' && p==='users'){window.location.href='/settings';return;}
       if(S.app==='prod' && p==='matiere_prix'){window.location.href='/devis';return;}
       if(S.app==='prod' && p==='profil'){window.location.href='/profil';return;}
-      const allowed=new Set(['production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite']);
+      const allowed=new Set(['production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite','of']);
       if(S.app==='prod' && allowed.has(p)) S.page=p;
     }catch(e){}
     if(S.app==='prod'){
@@ -2356,6 +2383,7 @@ async function checkAuth(){
       await loadProd();
       await loadHist();
       await loadMachineStatus();
+      if(S.page==='of' && canAccessOfTab()) await loadOfImports();
     }else if(S.app==='devis'){
       await loadMatierePrixPage();
     }else if(S.app==='stock'){
@@ -2504,7 +2532,7 @@ async function doLogin(email,password){
       if(S.app==='prod' && p==='users'){window.location.href='/settings';return;}
       if(S.app==='prod' && p==='matiere_prix'){window.location.href='/devis';return;}
       if(S.app==='prod' && p==='profil'){window.location.href='/profil';return;}
-      const allowed=new Set(['production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite']);
+      const allowed=new Set(['production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite','of']);
       if(S.app==='prod' && allowed.has(p)) S.page=p;
     }catch(e){}
     S.loginError=null;
@@ -2531,6 +2559,7 @@ async function doLogin(email,password){
       await loadProd();
       await loadHist();
       await loadMachineStatus();
+      if(S.page==='of' && canAccessOfTab()) await loadOfImports();
     }else if(S.app==='devis'){
       await loadMatierePrixPage();
     }else if(S.app==='stock'){
@@ -3708,7 +3737,7 @@ function buildPostitEl(p){
   el.style.top=(p.pos_y!=null?p.pos_y:100)+'px';
   const tasks=Array.isArray(p.tasks)?p.tasks:[];
   const hasDone=tasks.some(t=>t.done);
-  const typeLabel=p.type==='today'?'Aujourd\'hui':'Un jour';
+  const typeLabel=p.type==='today'?'Tâche quotidienne':'À faire';
   el.innerHTML=`
     <div class="postit-header" onmousedown="startPostitDrag(event, ${p.id})">
       <span class="postit-type-label">${escHtml(typeLabel)}</span>
@@ -3784,7 +3813,8 @@ function onPostitDragEnd(){
 }
 
 async function addPostit(type){
-  const title=type==='today'?'À faire aujourd\'hui':'À faire un jour';
+  const title=type==='today'?'Post-it tâche quotidienne':'Post-it à faire';
+  closePostitDockMenu();
   try{
     const p=await api('/api/postits',{method:'POST',body:JSON.stringify({type,title})});
     if(!p) return;
@@ -3793,6 +3823,69 @@ async function addPostit(type){
   }catch(e){
     showToast((e&&e.message)||'Création impossible.','danger');
   }
+}
+
+let _postitDockMenuOpen=false;
+let _postitDockBound=false;
+
+const POSTIT_DOCK_ICON='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10a2 2 0 0 1 2 2v12l-4-4H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M15 4v5h5"/></svg>';
+
+function closePostitDockMenu(){
+  _postitDockMenuOpen=false;
+  const menu=document.getElementById('postit-dock-menu');
+  const btn=document.getElementById('postit-dock-btn');
+  if(menu) menu.classList.remove('open');
+  if(btn) btn.classList.remove('mysifa-dock-fab-active');
+  if(window.MySifaDock&&typeof window.MySifaDock.layout==='function') window.MySifaDock.layout();
+}
+
+function togglePostitDockMenu(){
+  _postitDockMenuOpen=!_postitDockMenuOpen;
+  const menu=document.getElementById('postit-dock-menu');
+  const btn=document.getElementById('postit-dock-btn');
+  if(menu) menu.classList.toggle('open',_postitDockMenuOpen);
+  if(btn) btn.classList.toggle('mysifa-dock-fab-active',_postitDockMenuOpen);
+  if(window.MySifaDock&&typeof window.MySifaDock.layout==='function') window.MySifaDock.layout();
+}
+
+function initPostitDock(){
+  let root=document.getElementById('postit-dock-root');
+  if(!root){
+    root=document.createElement('div');
+    root.id='postit-dock-root';
+    root.innerHTML=
+      '<button type="button" id="postit-dock-btn" class="mysifa-dock-fab" aria-label="Post-its" title="Post-its">'+POSTIT_DOCK_ICON+'</button>'+
+      '<div id="postit-dock-menu" role="menu" aria-label="Créer un post-it">'+
+      '<button type="button" class="postit-dock-menu-btn someday" role="menuitem">Post-it à faire</button>'+
+      '<button type="button" class="postit-dock-menu-btn today" role="menuitem">Post-it tâche quotidienne</button>'+
+      '</div>';
+    document.body.appendChild(root);
+    const btn=root.querySelector('#postit-dock-btn');
+    const menu=root.querySelector('#postit-dock-menu');
+    if(btn) btn.addEventListener('click',(e)=>{e.stopPropagation();togglePostitDockMenu();});
+    menu&&menu.querySelectorAll('.postit-dock-menu-btn').forEach(b=>{
+      b.addEventListener('click',(e)=>{
+        e.stopPropagation();
+        const t=b.classList.contains('today')?'today':'someday';
+        addPostit(t);
+      });
+    });
+    if(!_postitDockBound){
+      _postitDockBound=true;
+      document.addEventListener('click',(e)=>{
+        if(!_postitDockMenuOpen) return;
+        const r=document.getElementById('postit-dock-root');
+        if(r&&!r.contains(e.target)) closePostitDockMenu();
+      });
+      window.addEventListener('resize',()=>{
+        if(S.app==='portal'&&typeof initPostitDock==='function') initPostitDock();
+      });
+    }
+  }
+  const show=!!(S.user&&S.app==='portal'&&window.matchMedia('(min-width:1024px)').matches);
+  root.style.display=show?'block':'none';
+  if(!show) closePostitDockMenu();
+  if(window.MySifaDock&&typeof window.MySifaDock.layout==='function') window.MySifaDock.layout();
 }
 
 async function deletePostit(id){
@@ -3889,23 +3982,6 @@ function portalPostitLayerEl(){
   const layer=document.createElement('div');
   layer.className='postit-layer';
   layer.id='postitLayer';
-  const fab=document.createElement('div');
-  fab.className='postit-fab-group';
-  const btnToday=document.createElement('button');
-  btnToday.type='button';
-  btnToday.className='postit-fab today';
-  btnToday.title='Nouveau post-it aujourd\'hui';
-  btnToday.textContent='Aujourd\'hui';
-  btnToday.addEventListener('click',()=>addPostit('today'));
-  const btnSomeday=document.createElement('button');
-  btnSomeday.type='button';
-  btnSomeday.className='postit-fab someday';
-  btnSomeday.title='Nouveau post-it un jour';
-  btnSomeday.textContent='Un jour';
-  btnSomeday.addEventListener('click',()=>addPostit('someday'));
-  fab.appendChild(btnToday);
-  fab.appendChild(btnSomeday);
-  layer.appendChild(fab);
   return layer;
 }
 
@@ -6735,6 +6811,7 @@ function renderSidebar(){
     {key:'production',label:'Production',icon:'wrench'},
     {key:'traceabilite',label:'Traçabilité',icon:'layers'},
     ...(admin?[{key:'rentabilite',label:'Rentabilité',icon:'trending-up'}]:[]),
+    ...(canAccessOfTab()?[{key:'of',label:'OF',icon:'file'}]:[]),
   ];
   const isLight=document.body.classList.contains('light');
   return h('nav',{className:'sidebar'},
@@ -9935,6 +10012,234 @@ function renderDos(){
   return h('div',null,form,list);
 }
 
+// ── Import OF PDF (Sage) ─────────────────────────────────────────
+function canAccessOfTab(){
+  return isAdmin(S.user);
+}
+function prodOfFmtDate(iso){
+  if(!iso) return '—';
+  const d=String(iso).slice(0,10);
+  const m=d.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? m[3]+'/'+m[2]+'/'+m[1] : d;
+}
+const OF_FIELD_LABELS={
+  of_numero:'OF n°',date_creation:'Date création',delai_client:'Délai client',
+  reference:'Référence',machine:'Machine',laize:'Laize',format:'Format',
+  matiere:'Matière',ref_matiere:'Réf. matière',glassine:'Glassine',
+  ref_adhesif:'Réf. adhésif',qte_adhesif_g:'Qté adhésif (g)',qte_adhesif_kg:'Qté adhésif (kg)',
+  adhesif_label:'Adhésif',qte_au_mille:'Quantité au mille',nb_levees:'Nb levées',
+  qte_etiquettes:'Qté étiquettes',qte_bobines:'Qté bobines',metrage:'Métrage',
+  conditionnement:'Conditionnement',tolerance:'Tolérance',cartons_type:'Type cartons',
+  nb_cartons:'Nb cartons',mandrins_dia:'Mandrins dia.',mandrin_longueur:'Mandrin long.',
+  nb_mandrins:'Nb mandrins',nb_tubes:'Nb tubes',bobinettes_completes:'Bobinettes complètes',
+  outil_1_forme:'Outil 1 — forme',outil_1_numero:'Outil 1 — n°',outil_1_angle:'Outil 1 — angle',
+  outil_1_mag:'Outil 1 — mag.',outil_1_cp:'Outil 1 — CP',outil_1_hauteur:'Outil 1 — hauteur',
+  outil_1_fournisseur:'Outil 1 — fournisseur',outil_2_forme:'Outil 2 — forme',
+  outil_2_numero:'Outil 2 — n°',outil_2_angle:'Outil 2 — angle',outil_2_cp:'Outil 2 — CP',
+  outil_alt_forme:'Outil alt. — forme',outil_alt_numero:'Outil alt. — n°',
+  outil_alt_angle:'Outil alt. — angle',outil_alt_fournisseur:'Outil alt. — fournisseur',
+};
+function prodOfStatutLabel(st){
+  const m={en_attente:'En attente',valide:'Validé',rejete:'Rejeté'};
+  return m[st]||st||'—';
+}
+function prodOfStatutClass(st){
+  if(st==='valide') return 'prod-of-statut prod-of-statut--valide';
+  if(st==='rejete') return 'prod-of-statut prod-of-statut--rejete';
+  return 'prod-of-statut prod-of-statut--attente';
+}
+async function loadOfImports(){
+  set({ofImportsLoading:true});
+  try{
+    const rows=await api('/api/of/list');
+    set({ofImports:Array.isArray(rows)?rows:[],ofImportsLoading:false});
+  }catch(e){
+    set({ofImportsLoading:false});
+    toast(e.message||'Erreur chargement des OF','error');
+  }
+}
+function openOfImportModal(){
+  set({ofImportModal:{step:1,file:null,parsed:null,parsing:false}});
+  render();
+}
+function closeOfImportModal(){
+  set({ofImportModal:null});
+  render();
+}
+async function ofHandlePdfFile(file){
+  if(!file||!/\.pdf$/i.test(file.name||'')){toast('Fichier PDF requis.','error');return;}
+  set({ofImportModal:{step:1,file,parsed:null,parsing:true}});
+  render();
+  const fd=new FormData();
+  fd.append('file',file);
+  try{
+    const parsed=await fetch('/api/of/parse',{method:'POST',credentials:'include',body:fd})
+      .then(async r=>{
+        if(r.status===401){window.location.href='/';return null;}
+        if(!r.ok){
+          const err=await r.json().catch(()=>({}));
+          throw new Error(err.detail||('Erreur '+r.status));
+        }
+        return r.json();
+      });
+    if(!parsed) return;
+    set({ofImportModal:{step:2,file,parsed,parsing:false}});
+    render();
+  }catch(e){
+    set({ofImportModal:{step:1,file:null,parsed:null,parsing:false}});
+    toast(e.message||'Analyse PDF impossible.','error');
+    render();
+  }
+}
+async function ofValidateImport(){
+  const m=S.ofImportModal;
+  if(!m||!m.file) return;
+  const data={};
+  Object.keys(OF_FIELD_LABELS).forEach(k=>{
+    const el=document.getElementById('of-f-'+k);
+    if(el) data[k]=el.value;
+  });
+  const fd=new FormData();
+  fd.append('file',m.file);
+  fd.append('data',JSON.stringify(data));
+  try{
+    const r=await fetch('/api/of/validate',{method:'POST',credentials:'include',body:fd});
+    if(!r.ok){
+      const err=await r.json().catch(()=>({}));
+      throw new Error(err.detail||('Erreur '+r.status));
+    }
+    toast('OF importé.');
+    set({ofImportModal:null});
+    await loadOfImports();
+    render();
+  }catch(e){
+    toast(e.message||'Import impossible.','error');
+  }
+}
+async function ofDeleteImport(id){
+  if(!confirm('Supprimer cet import OF de la base ?')) return;
+  try{
+    await api('/api/of/'+id,{method:'DELETE'});
+    toast('Import supprimé.');
+    await loadOfImports();
+    render();
+  }catch(e){
+    toast(e.message||'Suppression impossible.','error');
+  }
+}
+function renderOfPage(){
+  const rows=(S.ofImports||[]).map(row=>{
+    const stCls=prodOfStatutClass(row.statut);
+    const acts=[
+      h('button',{className:'btn-ghost btn-sm',title:'Télécharger PDF',
+        onClick:()=>{window.open('/api/of/'+row.id+'/pdf','_blank');}},
+        iconEl('download',13)),
+    ];
+    if(S.user&&S.user.role==='superadmin'){
+      acts.push(h('button',{className:'btn-danger btn-sm',title:'Supprimer',
+        onClick:()=>ofDeleteImport(row.id)},iconEl('trash',13)));
+    }
+    return h('tr',null,
+      h('td',null,escHtml(row.of_numero||'—')),
+      h('td',null,escHtml(row.reference||'—')),
+      h('td',null,escHtml(row.machine||'—')),
+      h('td',null,escHtml(row.delai_client||'—')),
+      h('td',null,row.qte_etiquettes!=null?escHtml(String(row.qte_etiquettes)):'—'),
+      h('td',null,row.metrage!=null?escHtml(String(row.metrage)):'—'),
+      h('td',null,prodOfFmtDate(row.date_import)),
+      h('td',null,h('span',{className:stCls},prodOfStatutLabel(row.statut))),
+      h('td',null,h('div',{style:{display:'flex',gap:'6px'}},...acts)),
+    );
+  });
+  const empty=h('tr',null,
+    h('td',{colspan:'9',style:{textAlign:'center',color:'var(--muted)',padding:'24px'}},
+      S.ofImportsLoading?'Chargement…':'Aucun OF importé'));
+  return h('div',{className:'card'},
+    h('div',{className:'card-header'},
+      h('h3',null,'Ordres de fabrication importés'),
+      h('button',{className:'btn-sm',onClick:openOfImportModal},iconEl('upload',13),' Importer un OF')
+    ),
+    h('div',{style:{overflowX:'auto'}},
+      h('table',{className:'table-std'},
+        h('thead',null,h('tr',null,
+          h('th',null,'OF n°'),h('th',null,'Référence'),h('th',null,'Machine'),
+          h('th',null,'Délai client'),h('th',null,'Qté étiquettes'),h('th',null,'Métrage'),
+          h('th',null,'Date import'),h('th',null,'Statut'),h('th',null,'Actions')
+        )),
+        h('tbody',null,...(rows.length?rows:[empty]))
+      )
+    )
+  );
+}
+function renderOfImportModal(){
+  const m=S.ofImportModal;
+  if(!m) return null;
+  let body;
+  if(m.parsing){
+    body=h('div',{style:{display:'flex',alignItems:'center',justifyContent:'center',gap:10,padding:'40px',color:'var(--muted)'}},
+      'Analyse du PDF…');
+  }else if(m.step===1){
+    const fileInput=h('input',{type:'file',accept:'.pdf,application/pdf',style:{display:'none'},id:'of-file-input'});
+    const pickFile=()=>fileInput.click();
+    fileInput.onchange=()=>{
+      const f=fileInput.files&&fileInput.files[0];
+      if(f) ofHandlePdfFile(f);
+    };
+    const dropzone=h('div',{className:'prod-of-dropzone',onClick:pickFile,
+      onDragover:e=>{e.preventDefault();e.currentTarget.classList.add('prod-of-dropzone--active');},
+      onDragleave:e=>{e.currentTarget.classList.remove('prod-of-dropzone--active');},
+      onDrop:e=>{
+        e.preventDefault();
+        e.currentTarget.classList.remove('prod-of-dropzone--active');
+        const f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0];
+        if(f) ofHandlePdfFile(f);
+      }},
+      iconEl('file',28),
+      h('div',{className:'prod-of-dropzone-title'},'Déposer un PDF Sage ici'),
+      h('div',{className:'prod-of-dropzone-sub'},'ou cliquer pour sélectionner — .pdf uniquement')
+    );
+    body=h('div',null,fileInput,dropzone,
+      h('div',{style:{marginTop:'14px',textAlign:'center'}},
+        h('button',{className:'btn-ghost',onClick:pickFile},'Sélectionner un fichier')
+      )
+    );
+  }else{
+    const parsed=m.parsed||{};
+    const previewRows=Object.keys(OF_FIELD_LABELS).map(k=>{
+      const val=parsed[k];
+      const missing=val==null||val==='';
+      const display=val==null?'':String(val);
+      return h('tr',{className:missing?'prod-of-missing':''},
+        h('th',null,OF_FIELD_LABELS[k]),
+        h('td',null,h('input',{type:'text',id:'of-f-'+k,value:display}))
+      );
+    });
+    body=h('div',null,
+      h('p',{className:'subtitle',style:{marginBottom:'8px'}},
+        'Vérifiez les champs extraits. Les lignes surlignées indiquent une extraction manquante.'),
+      h('table',{className:'prod-of-preview-table'},
+        h('tbody',null,...previewRows)
+      ),
+      h('div',{className:'contact-modal-actions',style:{marginTop:'12px'}},
+        h('button',{className:'btn-ghost',onClick:closeOfImportModal},'Annuler'),
+        h('button',{className:'btn-sm',onClick:()=>ofValidateImport()},'Valider l\'import')
+      )
+    );
+  }
+  const overlay=h('div',{className:'contact-modal-overlay',onClick:e=>{
+    if(e.target===e.currentTarget) closeOfImportModal();
+  }});
+  const box=h('div',{className:'contact-modal',style:{maxWidth:'720px',maxHeight:'88vh',overflowY:'auto'}},
+    h('div',{className:'contact-modal-head'},
+      h('h3',null,m.step===2?'Prévisualisation OF':'Importer un OF PDF'),
+      h('button',{className:'contact-close-btn',onClick:closeOfImportModal},'×')
+    ),
+    h('div',{className:'contact-modal-body'},body)
+  );
+  overlay.appendChild(box);
+  return overlay;
+}
+
 // ── Rentabilité ──────────────────────────────────────────────────
 async function loadComparaison(devisId){
   const d=await api('/api/rentabilite/devis/'+devisId+'/comparaison');
@@ -11448,6 +11753,7 @@ function render(){
     window.__MYSIFA_UID__ = 0;
   }
   if(typeof initAiChatWidget === 'function') initAiChatWidget();
+  if(typeof initPostitDock === 'function') initPostitDock();
   if(S.app!=='expe'){_expeLastRenderedInnerTab=null;}
 
   // Nettoyage polling machine quand on quitte MyProd
@@ -11475,7 +11781,7 @@ function render(){
       traceabilite:'Traçabilité',
       // rétrocompat URL directe
       historique:'Historique & Erreurs',saisies:'Saisies',import:'Import XLSX',
-      dossiers:'Dossiers',rentabilite:'Rentabilité',
+      dossiers:'Dossiers',rentabilite:'Rentabilité',of:'Ordres de fabrication',
     };
     const subs={
       production: S.subPage==='saisies'?'Consulter, corriger et importer des saisies':
@@ -11483,6 +11789,7 @@ function render(){
                   'KPIs, temps, quantités et qualité de saisie',
       suivi:'Dossiers de production et comparaison devis / réel',
       traceabilite:'Matières utilisées par dossier',
+      of:'Import PDF Sage et consultation des OF',
       historique:'',saisies:'',import:'',dossiers:'',rentabilite:'',
     };
     const topbar=h('div',{className:'mobile-topbar'},
@@ -11504,6 +11811,10 @@ function render(){
     if(S.page==='import') prodPageContent.push(renderImport());
     if(S.page==='dossiers') prodPageContent.push(renderDos());
     if(S.page==='rentabilite') prodPageContent.push(renderRentabilite());
+    if(S.page==='of'){
+      if(canAccessOfTab()) prodPageContent.push(renderOfPage());
+      else prodPageContent.push(h('div',{className:'card-empty'},'Accès réservé à l\'administration.'));
+    }
     const containerKids=[
       topbar,
       h('h1',null,titles[S.page]||''),
@@ -11527,6 +11838,10 @@ function render(){
 
   if(S.contactOpen){
     root.appendChild(renderContactModal());
+  }
+  if(S.app==='prod' && S.ofImportModal){
+    const ofModal=renderOfImportModal();
+    if(ofModal) root.appendChild(ofModal);
   }
   // contact modal for expe is rendered inside renderExpe()
 
@@ -11584,6 +11899,7 @@ async function nav(){
   else if(S.page==='rentabilite'){await loadDevis();await loadRentPlanning();}
   else if(S.page==='dossiers')await loadDos();
   else if(S.page==='traceabilite'){S.traceabilite=null;S.traceabiliteDossier=undefined;S.tracShowAttente=false;await loadTracabilite();}
+  else if(S.page==='of' && canAccessOfTab()) await loadOfImports();
   render();
 }
 

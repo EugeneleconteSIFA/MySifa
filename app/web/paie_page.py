@@ -374,6 +374,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 <script>window.__MYSIFA_APP__='paie';</script>
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/chat_widget.js"></script>
+<script src="/static/chat_widget_v2.js"></script>
 <script>
 'use strict';
 

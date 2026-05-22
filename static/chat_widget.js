@@ -244,6 +244,11 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
 .cw-pending-chip button:hover{color:var(--danger)}
 .cw-msg-attach{display:block;margin-top:6px}
 .cw-msg-attach-img img{max-width:220px;max-height:160px;border-radius:8px;display:block}
+.upd-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9010;display:flex;align-items:center;justify-content:center;padding:16px}
+.upd-card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:28px 22px;width:min(540px,100%);max-height:88vh;overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,.55)}
+.upd-card .upd-body{font-size:13px;line-height:1.8;color:var(--text2)}
+.upd-card .upd-body ul{padding-left:18px;margin:8px 0}
+.upd-ok-btn{margin-top:16px;width:100%;padding:12px;border-radius:10px;background:var(--accent);color:var(--bg);border:none;font-weight:700;cursor:pointer;font-family:inherit}
 .cw-msg-attach-file{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;
   background:var(--accent-bg);border:1px solid rgba(34,211,238,.25);border-radius:8px;
   font-size:12px;color:var(--accent);text-decoration:none}
@@ -1929,6 +1934,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
         dockLayout();
         document.addEventListener('click', unlockAudio, { once: false, capture: true });
         startBgPoll();
+        checkChatUpdates();
         return true;
       } catch (e) {
         CW._inited = false;
@@ -1939,6 +1945,28 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     })();
     return CW._initPromise;
   };
+
+  async function checkChatUpdates() {
+    try {
+      const updates = await fetch('/api/updates/pending?scope=messages', { credentials: 'include' }).then(
+        (r) => (r.ok ? r.json() : [])
+      );
+      if (!updates || !updates.length) return;
+      const overlay = document.createElement('div');
+      overlay.className = 'upd-overlay';
+      const ids = updates.map((u) => u.id);
+      const bodies = updates
+        .map((u) => '<div class="upd-body">' + u.message + '</div>')
+        .join('<hr style="border:none;border-top:1px solid var(--border);margin:16px 0">');
+      overlay.innerHTML =
+        '<div class="upd-card">' +
+        bodies +
+        '<button type="button" class="upd-ok-btn" onclick="Promise.all([' +
+        ids.join(',') +
+        '].map(function(id){return fetch(\'/api/updates/\'+id+\'/acknowledge\',{method:\'POST\',credentials:\'include\'});})).catch(function(){});this.closest(\'.upd-overlay\').remove()">Compris</button></div>';
+      document.body.appendChild(overlay);
+    } catch (e) {}
+  }
 
   CW.ensureReady = async function () {
     syncFromWindow();
@@ -1998,6 +2026,14 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       dockLayout();
     }, 80);
   });
+
+  CW.renderMsg = renderMsg;
+  CW.selectChannel = selectChannel;
+  CW.sendMessage = sendMessage;
+  CW.api = api;
+  CW.escCW = escCW;
+  CW.fmtTime = fmtTime;
+  CW.checkChatUpdates = checkChatUpdates;
 
   boot();
   window._CW = CW;

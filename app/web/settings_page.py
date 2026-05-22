@@ -728,6 +728,7 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 <script>window.__MYSIFA_APP__='settings';</script>
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/chat_widget.js"></script>
+<script src="/static/chat_widget_v2.js"></script>
 <script>
 /*__TRACA_GUIDE__*/
 const API = window.location.origin;

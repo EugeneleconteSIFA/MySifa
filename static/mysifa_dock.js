@@ -70,6 +70,16 @@
     return !!(p && p.classList.contains('open'));
   }
 
+  function postitDockMenuOpen() {
+    var m = document.getElementById('postit-dock-menu');
+    return !!(m && m.classList.contains('open'));
+  }
+
+  function hasPostitDock() {
+    var root = document.getElementById('postit-dock-root');
+    return isVisible(root) && isDockFab(document.getElementById('postit-dock-btn'));
+  }
+
   function expeCartePanelOpen() {
     if (typeof window.expeCartePanelOpen === 'function') return window.expeCartePanelOpen();
     var p = document.getElementById('expe-carte-panel');
@@ -90,6 +100,16 @@
       chatPanelOpen()
     );
     raiseFabIfOpen(document.getElementById('ai-chat-btn'), aiPanelOpen());
+    raiseFabIfOpen(document.getElementById('postit-dock-btn'), postitDockMenuOpen());
+  }
+
+  function layoutPostitDockMenu(btn, menu) {
+    if (!btn || !menu || !menu.classList.contains('open')) return;
+    menu.style.right = btn.style.right;
+    menu.style.left = 'auto';
+    menu.style.top = 'auto';
+    menu.style.bottom = safeBottom(minFabBaseBottom() + FAB_SIZE + GAP);
+    menu.style.zIndex = String(Z_FAB_ACTIVE);
   }
 
   function layoutExpeCartePanel(el, rightCol, bottom, zIndex) {
@@ -562,6 +582,7 @@
 
     if (hasAi) {
       applyFab(aiBtn, safeRight(offsetRight), safeBottom(0));
+      if (aiBtn) aiBtn.style.boxShadow = SHADOW_FAB;
       if (!hasCalc) bottomRowH = FAB_SIZE;
       else bottomRowH = Math.max(bottomRowH, FAB_SIZE);
       const aiCol = offsetRight;
@@ -572,6 +593,15 @@
         aiPanel.style.bottom = safeBottom(hasCalc ? 62 : 62);
         aiPanel.style.boxShadow = SHADOW_PANEL;
       }
+    }
+
+    if (hasPostitDock()) {
+      const postitBtn = document.getElementById('postit-dock-btn');
+      const postitMenu = document.getElementById('postit-dock-menu');
+      applyFab(postitBtn, safeRight(offsetRight), safeBottom(0));
+      if (postitBtn) postitBtn.style.boxShadow = SHADOW_FAB;
+      layoutPostitDockMenu(postitBtn, postitMenu);
+      offsetRight += FAB_SIZE + GAP;
     }
 
     function chatColumnOffset() {

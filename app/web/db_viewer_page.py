@@ -316,6 +316,7 @@ body.light .user-chip:hover{{background:rgba(8,145,178,.12)}}
 <link rel="stylesheet" href="/static/mysifa_landscape.css">
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/chat_widget.js"></script>
+<script src="/static/chat_widget_v2.js"></script>
 <script src="/static/mysifa_landscape.js"></script>
 <script>window.MySifaLandscape&&MySifaLandscape.enable();</script>
 <script>

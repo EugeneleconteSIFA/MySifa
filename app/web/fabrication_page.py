@@ -208,6 +208,10 @@ body.light table.fab-table tr.fab-row-last td{
   padding:12px 16px;
   overflow:hidden;
 }
+.fab-footer.fab-footer--admin{
+  display:flex;align-items:center;justify-content:space-between;
+  grid-template-columns:unset;flex-wrap:wrap;
+}
 /* Left: dossier info */
 .fab-footer-info{
   display:flex;flex-direction:column;gap:4px;overflow:hidden;
@@ -753,6 +757,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/mysifa_ai_chat.js"></script>
 <script src="/static/chat_widget.js"></script>
+<script src="/static/chat_widget_v2.js"></script>
 <script src="/static/mysifa_landscape.js"></script>
 <script>window.MySifaLandscape&&MySifaLandscape.enable();</script>
 <script>
@@ -2717,10 +2722,24 @@ function renderFooter(){
   const isAdminUser = S.user && (S.user.role==='superadmin'||S.user.role==='administration'||S.user.role==='direction');
   const isAdminView = !!isAdminUser && S.saisieViewMode==='admin';
   if(isAdminView){
-    return h('div',{className:'fab-footer',style:{justifyContent:'center'}},
-      h('div',{style:{fontSize:'12px',color:'var(--muted)',fontWeight:'800',letterSpacing:'.4px',textTransform:'uppercase'}},
-        'Vue admin — lecture seule'
-      )
+    const adminTabBtns = [
+      h('button',{className:'fab-tab-btn'+(S.fabTab==='saisie'?' active':''),onClick:()=>{ void switchFabTab('saisie'); }},
+        svgIcon('edit',16),'Saisie'),
+      h('button',{className:'fab-tab-btn'+(S.fabTab==='print'?' active':''),onClick:()=>{ void switchFabTab('print'); }},
+        svgIcon('printer',16),'Imprimer'),
+      h('button',{className:'fab-tab-btn'+(S.fabTab==='traca'?' active':''),onClick:()=>{ void switchFabTab('traca'); }},
+        svgIcon('scan',16),'Traça'),
+    ];
+    if(canAccessOfTab()){
+      adminTabBtns.push(
+        h('button',{className:'fab-tab-btn'+(S.fabTab==='of'?' active':''),onClick:()=>{ void switchFabTab('of'); }},
+          svgIcon('file',16),'OF')
+      );
+    }
+    return h('div',{className:'fab-footer fab-footer--admin'},
+      h('div',{style:{fontSize:'12px',color:'var(--muted)',fontWeight:'800',letterSpacing:'.4px',textTransform:'uppercase',flexShrink:0}},
+        'Vue admin — lecture seule'),
+      h('div',{className:'fab-tab-nav',style:{marginLeft:'auto'}}, ...adminTabBtns)
     );
   }
 

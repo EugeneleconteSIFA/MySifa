@@ -13,8 +13,23 @@ router = APIRouter()
 
 @router.get("/messages", response_class=HTMLResponse)
 def messages_page(request: Request):
-    """Redirection — le chat est dans le widget flottant."""
-    return RedirectResponse(url="/", status_code=302)
+    try:
+        user = get_current_user(request)
+    except HTTPException as e:
+        if e.status_code == 401:
+            return RedirectResponse(url="/?next=/messages", status_code=302)
+        raise
+    nom = json.dumps((user.get("nom") or "").strip() or user.get("email", ""))
+    role = json.dumps(user.get("role", ""))
+    avatar = json.dumps(user.get("avatar_url") or "")
+    html = (
+        MESSAGES_HTML.replace("__V_LABEL__", f"v{APP_VERSION}")
+        .replace("__USER_ID__", str(user.get("id", 0)))
+        .replace("__USER_NOM_JSON__", nom)
+        .replace("__USER_ROLE_JSON__", role)
+        .replace("__USER_AVATAR_JSON__", avatar)
+    )
+    return HTMLResponse(content=html)
 
 
 MESSAGES_HTML = r"""<!DOCTYPE html>
@@ -515,6 +530,8 @@ body.sb-open .sidebar-overlay{display:block}
 <div id="mroot"></div>
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_chat_badge.js"></script>
+<script src="/static/chat_widget.js"></script>
+<script src="/static/chat_widget_v2.js"></script>
 <script>
 window.__MYSIFA_UID__ = __USER_ID__;
 window.__MYSIFA_NOM__ = __USER_NOM_JSON__;
@@ -559,6 +576,27 @@ function _getAudioCtx(){
 }
 
 const NOTIF_PERM_KEY='mysifa_notif_asked_v1';
+
+async function checkUpdates(){
+  try{
+    const updates=await fetch('/api/updates/pending?scope=messages',{credentials:'include'}).then(r=>r.ok?r.json():[]);
+    if(!updates||!updates.length)return;
+    showUpdatePopup(updates);
+  }catch(e){}
+}
+
+function showUpdatePopup(updates){
+  const overlay=document.createElement('div');
+  overlay.className='upd-overlay';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px';
+  const ids=updates.map(u=>u.id);
+  const bodies=updates.map(u=>'<div class="upd-body">'+u.message+'</div>').join('<hr style="border:none;border-top:1px solid var(--border);margin:16px 0">');
+  overlay.innerHTML='<div class="upd-card" style="background:var(--card);border:1px solid var(--border);border-radius:18px;padding:28px;max-width:540px;max-height:88vh;overflow-y:auto">'
+    +bodies
+    +'<button type="button" class="upd-ok-btn" style="margin-top:16px;width:100%;padding:12px;border-radius:10px;background:var(--accent);color:var(--bg);border:none;font-weight:700;cursor:pointer;font-family:inherit" onclick="'
+    +'Promise.all(['+ids.join(',')+'].map(id=>fetch(\'/api/updates/\'+id+\'/acknowledge\',{method:\'POST\',credentials:\'include\'}))).catch(()=>{});this.closest(\'.upd-overlay\').remove()">Compris</button></div>';
+  document.body.appendChild(overlay);
+}
 
 function checkNotifPermission(){
   if(localStorage.getItem(NOTIF_PERM_KEY))return;
@@ -1504,6 +1542,7 @@ document.getElementById('btn-logout').onclick=async()=>{
   syncThemeBtn();
   await loadChannels();
   checkNotifPermission();
+  checkUpdates();
   const params=new URLSearchParams(location.search);
   const openId=parseInt(params.get('channel')||'0',10);
   if(openId)selectChannel(openId);
