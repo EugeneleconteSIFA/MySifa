@@ -91,6 +91,7 @@ _HISTORIQUE_SQL_MP = """
     SELECT
         'mp-' || m.id AS id,
         'mp' AS type_stock,
+        m.matiere_id,
         mp.categorie,
         mp.reference,
         mp.designation,
@@ -121,6 +122,7 @@ _HISTORIQUE_SQL_PF = """
     SELECT
         'pf-' || m.id AS id,
         'produit' AS type_stock,
+        m.produit_id,
         NULL AS categorie,
         p.reference,
         p.designation,
@@ -189,6 +191,8 @@ def _historique_row_dict(r) -> dict:
     return {
         "id": r["id"],
         "type_stock": r["type_stock"],
+        "produit_id": r["produit_id"] if "produit_id" in r.keys() else None,
+        "matiere_id": r["matiere_id"] if "matiere_id" in r.keys() else None,
         "categorie": r["categorie"],
         "reference": r["reference"],
         "designation": r["designation"],

@@ -416,26 +416,20 @@ body.light .field-input.empl-upper::placeholder{
 .dash-mp-cat-carton{background:rgba(5,150,105,.15);color:#059669}
 .dash-act-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
 .dash-act-list{display:flex;flex-direction:column}
-.dash-act-row{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border);font-size:13px;color:var(--text)}
+.dash-act-row{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);font-size:13px;color:var(--text)}
 .dash-act-row:last-child{border-bottom:none}
 .dash-act-row:hover{background:var(--accent-bg)}
-.dash-act-badges{display:flex;flex-wrap:wrap;gap:6px;flex-shrink:0;padding-top:2px}
-.dash-act-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
-.dash-act-ref{font-family:ui-monospace,monospace;font-size:14px;font-weight:800;color:var(--text);letter-spacing:-.2px;
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dash-act-highlight{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 16px}
-.dash-act-qte{font-size:18px;font-weight:800;font-family:ui-monospace,monospace;color:var(--accent);line-height:1.2}
+.dash-act-badges{display:flex;gap:6px;flex-shrink:0}
+.dash-act-main{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-family:ui-monospace,monospace;font-weight:700;color:var(--text)}
+.dash-act-qte{flex-shrink:0;font-weight:800;font-family:ui-monospace,monospace;font-size:13px;color:var(--accent);white-space:nowrap}
 .dash-act-row .dash-act-qte.dash-act-qte-entree{color:var(--success)}
 .dash-act-row .dash-act-qte.dash-act-qte-sortie{color:var(--danger)}
-.dash-act-empl{font-family:ui-monospace,monospace;font-size:13px;font-weight:700;color:var(--text2);
-  padding:4px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px}
-.dash-act-foot{font-size:11px;color:var(--muted);line-height:1.45}
+.dash-act-meta{flex-shrink:0;font-size:11px;color:var(--muted);white-space:nowrap;display:inline-flex;align-items:center;flex-wrap:wrap;gap:0}
+.dash-act-meta .mvt-empl-link{color:var(--muted);font-size:11px;font-weight:600}
+.dash-act-main .mvt-ref-link{font-family:inherit;font-size:inherit;font-weight:inherit;color:inherit}
+.dash-act-des{color:var(--text2);font-weight:400}
 .dash-act-empty{padding:28px 16px;text-align:center;color:var(--muted);font-size:13px}
-@media(max-width:640px){
-  .dash-act-row{flex-direction:column;gap:8px;padding:12px 14px}
-  .dash-act-ref{white-space:normal;word-break:break-word}
-  .dash-act-highlight{flex-direction:column;align-items:flex-start;gap:8px}
-}
 .dash-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;letter-spacing:.3px;flex-shrink:0;white-space:nowrap}
 .dash-badge-stock-mp{background:rgba(124,58,237,.12);color:#7c3aed}
 .dash-badge-stock-pf{background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent)}
@@ -536,7 +530,7 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
 .hist-results-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
 .hist-count{font-size:12px;font-weight:600;color:var(--text2)}
 .hist-table-wrap{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
-.hist-table{width:100%;min-width:960px;border-collapse:collapse;font-size:13px}
+.hist-table{width:100%;min-width:1040px;border-collapse:collapse;font-size:13px}
 .hist-unite{font-size:12px;color:var(--text2);white-space:nowrap}
 .hist-table thead th{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);
   background:var(--bg);border-bottom:1px solid var(--border);padding:11px 14px;text-align:left;font-weight:600;white-space:nowrap}
@@ -545,6 +539,10 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
 .hist-table tbody tr:hover{background:var(--accent-bg)}
 .hist-cell-badges{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .hist-ref{font-family:ui-monospace,monospace;font-size:12px;font-weight:700;color:var(--text)}
+.hist-ref .mvt-ref-link,.hist-card-ref .mvt-ref-link{font-family:inherit;font-size:inherit;font-weight:inherit;color:inherit}
+.hist-empl{font-size:12px;white-space:nowrap}
+.hist-empl-chain{display:inline-flex;align-items:center;flex-wrap:wrap;gap:0}
+.hist-empl-sep{color:var(--muted);pointer-events:none}
 .hist-des{color:var(--text2);font-size:13px}
 .hist-muted{color:var(--muted);font-size:12px;white-space:nowrap}
 .hist-qte{font-weight:700;font-family:ui-monospace,monospace;font-size:13px}
@@ -1218,6 +1216,96 @@ async function loadEmplacement(empl) {
     const d = await api('/api/stock/emplacements/' + encodeURIComponent(empl));
     if (d) { S.selEmpl = d; S.selProduit = null; S.searchResults = null; clearSearch(); render(); }
   } catch(e) { showToast(e.message, 'error'); }
+}
+
+function parseHistEmplacements(raw) {
+  const s = String(raw || '').trim();
+  if (!s) return [];
+  if (s.includes('→')) {
+    const parts = s.split('→').map(p => p.trim()).filter(Boolean);
+    return parts.length ? parts : [s];
+  }
+  return [s];
+}
+
+async function openHistoriqueRef(m) {
+  if (!m) return;
+  if (m.type_stock === 'mp') {
+    const ref = (m.reference || '').trim();
+    if (m.matiere_id || ref) {
+      S.matieresQ = ref;
+      S.matieresCat = 'tout';
+      goToTab('matieres');
+    }
+    return;
+  }
+  if (m.produit_id) {
+    await loadProduit(m.produit_id);
+    return;
+  }
+  const ref = (m.reference || '').trim();
+  if (!ref) return;
+  try {
+    const r = await api('/api/stock/search?q=' + encodeURIComponent(ref) + '&limit=10');
+    const p = (r && r.produits || []).find(x => (x.reference || '').toUpperCase() === ref.toUpperCase());
+    if (p && p.id) await loadProduit(p.id);
+    else showToast('Référence introuvable.', 'error');
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+function stockHistRefLink(m, label) {
+  const txt = label != null ? label : (m.reference || '—');
+  const can = m.type_stock === 'mp'
+    ? !!(m.matiere_id || (m.reference || '').trim())
+    : !!(m.produit_id || (m.reference || '').trim());
+  if (!can || txt === '—') return el('span', null, txt);
+  return el('button', {
+    cls: 'mvt-ref-link', type: 'button',
+    on: { click: (e) => { e.stopPropagation(); openHistoriqueRef(m); } },
+  }, txt);
+}
+
+function stockHistEmplLinks(raw) {
+  const codes = parseHistEmplacements(raw);
+  if (!codes.length) return el('span', { cls: 'hist-muted' }, '—');
+  if (codes.length === 1) {
+    return el('button', {
+      cls: 'mvt-empl-link', type: 'button',
+      on: { click: (e) => { e.stopPropagation(); loadEmplacement(codes[0]); } },
+    }, codes[0]);
+  }
+  const wrap = el('span', { cls: 'hist-empl-chain' });
+  codes.forEach((code, i) => {
+    if (i) wrap.appendChild(el('span', { cls: 'hist-empl-sep' }, ' → '));
+    wrap.appendChild(el('button', {
+      cls: 'mvt-empl-link', type: 'button',
+      on: { click: (e) => { e.stopPropagation(); loadEmplacement(code); } },
+    }, code));
+  });
+  return wrap;
+}
+
+function stockHistMetaSep(parent) {
+  if (parent.childNodes.length) parent.appendChild(el('span', { cls: 'hist-empl-sep' }, ' · '));
+}
+
+function stockHistMetaRow(m) {
+  const empl = dashActEmplacement(m);
+  const actor = (m.created_by_name || '').trim();
+  const when = timeAgo(m.created_at);
+  const meta = el('span', { cls: 'dash-act-meta' });
+  if (empl) {
+    meta.appendChild(stockHistEmplLinks(empl));
+  }
+  if (actor) {
+    stockHistMetaSep(meta);
+    meta.appendChild(el('span', null, actor));
+  }
+  if (when) {
+    stockHistMetaSep(meta);
+    meta.appendChild(el('span', null, when));
+  }
+  return meta.childNodes.length ? meta : null;
 }
 
 async function loadDashboard() {
@@ -2186,7 +2274,10 @@ function buildMvtHistory(mouvements, unite='', opts=null) {
             el('span',{cls:'mvt-qte-'+m.type_mouvement},signe+fU(m.quantite, unit))
           ),
           el('div',{cls:'mvt-line2'},
-            fD(m.created_at)+' · '+(m.emplacement||'')+(actor?' · '+actor:'')
+            fD(m.created_at),
+            (m.emplacement ? el('span',null,' · ') : null),
+            (m.emplacement ? stockHistEmplLinks(m.emplacement) : null),
+            (actor ? el('span',null,' · '+actor) : null),
           ),
           m.note?el('div',{cls:'mvt-note'},m.note):null
         )
@@ -3207,8 +3298,9 @@ function buildHistoriqueTableRow(m) {
   return el('tr', null,
     el('td', { cls: 'hist-muted' }, fDateTime(m.created_at)),
     el('td', null, el('div', { cls: 'hist-cell-badges' }, histStockBadge(m.type_stock), histMvtBadge(m.type_mouvement))),
-    el('td', { cls: 'hist-ref' }, m.reference || '—'),
+    el('td', { cls: 'hist-ref' }, stockHistRefLink(m)),
     el('td', { cls: 'hist-des', title: m.designation || '' }, truncStr(m.designation, 36) || '—'),
+    el('td', { cls: 'hist-empl' }, stockHistEmplLinks(m.emplacement)),
     el('td', { cls: 'hist-unite' }, histUniteLabel(m)),
     el('td', null, el('span', { cls: qteCls }, qte)),
     el('td', { cls: 'hist-muted' }, avant + ' → ' + apres),
@@ -3224,6 +3316,8 @@ function buildHistoriqueCard(m) {
   const op = (m.created_by_name || '').trim();
   const blNote = [m.ref_bl, m.note].filter(Boolean).join(' · ');
   const stats = el('dl', { cls: 'hist-card-stats' },
+    el('dt', null, 'Emplacement'),
+    el('dd', null, stockHistEmplLinks(m.emplacement)),
     el('dt', null, 'Unité'),
     el('dd', null, histUniteLabel(m)),
     el('dt', null, 'Quantité'),
@@ -3237,7 +3331,7 @@ function buildHistoriqueCard(m) {
       el('div', { cls: 'hist-card-badges' }, histStockBadge(m.type_stock), histMvtBadge(m.type_mouvement)),
       el('span', { cls: 'hist-card-date' }, fDateTime(m.created_at)),
     ),
-    el('div', { cls: 'hist-card-ref' }, m.reference || '—'),
+    el('div', { cls: 'hist-card-ref' }, stockHistRefLink(m)),
     m.designation ? el('div', { cls: 'hist-card-des' }, m.designation) : null,
     stats,
     blNote ? el('div', { cls: 'hist-card-note' }, blNote) : null,
@@ -3287,6 +3381,7 @@ function buildHistorique() {
     el('th', null, 'Stock / Mouvement'),
     el('th', null, 'Référence'),
     el('th', null, 'Désignation'),
+    el('th', null, 'Emplacement'),
     el('th', null, 'Unité'),
     el('th', null, 'Quantité'),
     el('th', null, 'Avant → Après'),
@@ -3418,25 +3513,26 @@ function buildDashboardActivite(d) {
   } else {
     rows.forEach(m => {
       const ref = (m.reference || '—').trim();
+      const des = (m.designation || '').trim();
       const { text: qteText, cls: qteCls } = dashActQteDisplay(m);
       const empl = dashActEmplacement(m);
       const actor = (m.created_by_name || '').trim();
       const when = timeAgo(m.created_at);
-      const foot = [when, actor].filter(Boolean).join(' · ');
-      const highlight = el('div', { cls: 'dash-act-highlight' },
-        el('span', { cls: qteCls }, qteText),
-      );
-      if (empl) highlight.appendChild(el('span', { cls: 'dash-act-empl' }, empl));
+      const fullTitle = [ref, des, empl, qteText, actor, when].filter(Boolean).join(' · ');
+      const mainEl = el('span', { cls: 'dash-act-main', title: fullTitle });
+      mainEl.appendChild(stockHistRefLink(m, ref));
+      if (des) {
+        mainEl.appendChild(el('span', null, ' · '));
+        mainEl.appendChild(el('span', { cls: 'dash-act-des' }, truncStr(des, 48)));
+      }
       list.appendChild(el('div', { cls: 'dash-act-row' },
         el('div', { cls: 'dash-act-badges' },
           dashStockTypeBadge(m.type_stock),
           dashMvtBadge(m.type_mouvement),
         ),
-        el('div', { cls: 'dash-act-body' },
-          el('div', { cls: 'dash-act-ref' }, ref),
-          highlight,
-          foot ? el('div', { cls: 'dash-act-foot' }, foot) : null,
-        ),
+        mainEl,
+        el('span', { cls: qteCls }, qteText),
+        stockHistMetaRow(m),
       ));
     });
   }

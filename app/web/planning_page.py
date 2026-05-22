@@ -1368,8 +1368,9 @@ function isPlanningDayOff(di,ds){
   if(Object.prototype.hasOwnProperty.call(S.dayWorked||{},ds)&&!S.dayWorked[ds]) return true;
   return false;
 }
-function getWhForDate(di,dateObj,ds){
-  if(ds&&isPlanningDayOff(di,ds)) return null;
+/** forEdit=true : horaires pour formulaire (modale semaine / jour), même si jour non travaillé. */
+function getWhForDate(di,dateObj,ds,forEdit){
+  if(!forEdit&&ds&&isPlanningDayOff(di,ds)) return null;
   // Priorité 1 : override ponctuel par date (planning_day_horaires)
   if(ds && S.dayHoraires && S.dayHoraires[ds]){
     return S.dayHoraires[ds];
@@ -3315,7 +3316,8 @@ function openHorairesModal(ds, di){
   if(!S.machine) return;
   // Lire les horaires actuels pour cette date (override ou hebdo)
   const dateObj = ds ? new Date(ds) : new Date();
-  const {s,e} = getWhForDate(di, dateObj, ds);
+  const wh=getWhForDate(di,dateObj,ds,true);
+  const s=wh.s,e=wh.e;
   const dn = {1:"Lundi",2:"Mardi",3:"Mercredi",4:"Jeudi",5:"Vendredi",6:"Samedi"}[di]||"Jour";
   // Afficher la date lisible
   const dateLabel = ds ? new Date(ds+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'}) : dn;
@@ -3471,7 +3473,7 @@ function openWeekSettingsModal(monTs){
     const ds=ymd(d);
     const isSat=di===6;
     const worked=!isPlanningDayOff(di,ds);
-    const wh=getWhForDate(di,d,ds);
+    const wh=getWhForDate(di,d,ds,true);
     const startVal=fracToTimeInput(wh.s);
     const endVal=fracToTimeInput(wh.e);
     const hasOv=!!(S.dayHoraires&&S.dayHoraires[ds]);

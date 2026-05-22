@@ -726,20 +726,26 @@ function chipClassForJours(joursVal){
   if((joursVal&JOURS_MASK_WEEK)<JOURS_FULL_WEEK) return ' warn';
   return '';
 }
+function toLocalDateStr(d){
+  const y=d.getFullYear();
+  const m=String(d.getMonth()+1).padStart(2,'0');
+  const day=String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
 function weekSaturdayDate(ws){
   const mon=weekMonday(ws);
-  const sat=new Date(mon); sat.setDate(mon.getDate()+5);
-  return sat.toISOString().split('T')[0];
+  const sat=new Date(mon);
+  sat.setDate(mon.getDate()+5);
+  return toLocalDateStr(sat);
 }
 async function isSamediProdTravaille(machineId,semaine){
   if(!machineId) return true;
-  const ds=weekSaturdayDate(semaine);
   try{
-    const r=await fetch(`/api/planning/machines/${machineId}/day-work?start=${ds}&end=${ds}`,{credentials:'include'});
+    const q=new URLSearchParams({machine_id:String(machineId),semaine});
+    const r=await fetch(`${API}/samedi-prod-travaille?${q}`,{credentials:'include'});
     if(!r.ok) return true;
     const data=await r.json();
-    const row=Array.isArray(data)?data.find(x=>x.date===ds):null;
-    return row?Number(row.is_worked)===1:true;
+    return !!data.samedi_travaille;
   }catch(e){ return true; }
 }
 function warnSamediProdNonTravaille(){
@@ -857,7 +863,7 @@ function getMachineId(code){
 }
 function userCongesThisWeek(userId,ws){
   const mon=weekMonday(ws); const sun=new Date(mon); sun.setDate(mon.getDate()+6);
-  const monS=mon.toISOString().split('T')[0]; const sunS=sun.toISOString().split('T')[0];
+  const monS=toLocalDateStr(mon); const sunS=toLocalDateStr(sun);
   return S.conges.filter(c=>c.user_id===userId&&c.statut!=='refuse'&&c.date_debut<=sunS&&c.date_fin>=monS);
 }
 // Retourne les noms abrégés des jours ouvrés couverts par les congés de la semaine ws
@@ -904,11 +910,15 @@ async function api(path,opts={}){
 
 async function loadMachines(){
   try{
-    const d=await fetch('/api/planning/machines',{credentials:'include'}).then(r=>r.json());
-    // L'API retourne un tableau plat (pas enveloppé dans {machines:[...]})
-    if(Array.isArray(d)) S.machines=d;
-    else if(d&&d.machines) S.machines=d.machines;
-  }catch(e){}
+    const d=await api('/machines');
+    if(d&&d.machines) S.machines=d.machines;
+  }catch(e){
+    try{
+      const d=await fetch('/api/planning/machines',{credentials:'include'}).then(r=>r.json());
+      if(Array.isArray(d)) S.machines=d;
+      else if(d&&d.machines) S.machines=d.machines;
+    }catch(_){}
+  }
 }
 
 async function loadData(){
@@ -1571,7 +1581,10 @@ function buildPlanningGrid(){
               ?'Répartition par jour'
               :'Répartition par jour — ajoutez une personne avec +';
             eyeBtn.innerHTML=`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
-            const cellTarget={semaine:ws,machineCode:mdef.code,poste,creneau:cr.key,machineId:getMachineId(mdef.code)};
+            const cellTarget={
+              semaine:ws,machineCode:mdef.code,poste,creneau:cr.key,
+              machineId:getMachineId(mdef.code)||assignments[0]?.machine_id||null,
+            };
             eyeBtn.onclick=()=>{
               if(assignments.length) openDayDetailModal(cellTarget);
               else openAddPersonModal(cellTarget);
@@ -1637,7 +1650,10 @@ function buildPlanningGrid(){
             addBtn.className='rh-add-btn';
             addBtn.title='Ajouter';
             addBtn.innerHTML='+';
-            addBtn.onclick=()=>openAddPersonModal({semaine:ws,machineCode:mdef.code,poste,creneau:cr.key,machineId:getMachineId(mdef.code)});
+            addBtn.onclick=()=>openAddPersonModal({
+              semaine:ws,machineCode:mdef.code,poste,creneau:cr.key,
+              machineId:getMachineId(mdef.code)||assignments[0]?.machine_id||null,
+            });
             cell.appendChild(addBtn);
           }
 

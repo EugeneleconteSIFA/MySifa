@@ -152,6 +152,56 @@ def get_personnel(request: Request):
     return {"personnel": [dict(r) for r in rows]}
 
 
+@router.get("/machines")
+def get_machines(request: Request):
+    """Machines actives (pour résoudre machine_id sans accès MyProd › Planning)."""
+    _require_view(request)
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT id, code, nom FROM machines WHERE actif = 1 ORDER BY nom COLLATE NOCASE"
+        ).fetchall()
+    return {"machines": [dict(r) for r in rows]}
+
+
+def _samedi_prod_travaille(conn, machine_id: int, semaine: str) -> tuple[str, bool]:
+    """Samedi travaillé côté planning production (aligné GET /api/planning/.../day-work)."""
+    monday, _ = _week_bounds(semaine)
+    saturday = monday + timedelta(days=5)
+    ds = saturday.isoformat()
+
+    row = conn.execute(
+        "SELECT is_worked FROM planning_day_worked WHERE machine_id=? AND date=?",
+        (machine_id, ds),
+    ).fetchone()
+    if row is not None:
+        return ds, int(row["is_worked"] or 0) == 1
+
+    cfg = conn.execute(
+        "SELECT samedi_travaille FROM planning_config WHERE machine_id=? AND semaine=?",
+        (machine_id, semaine),
+    ).fetchone()
+    return ds, bool(cfg and int(cfg["samedi_travaille"] or 0) == 1)
+
+
+@router.get("/samedi-prod-travaille")
+def get_samedi_prod_travaille(request: Request, machine_id: int, semaine: str):
+    """Vérifie si le samedi de la semaine est ouvré dans le planning de production."""
+    _require_view(request)
+    with get_db() as conn:
+        m = conn.execute(
+            "SELECT id FROM machines WHERE id=? AND actif=1", (machine_id,)
+        ).fetchone()
+        if not m:
+            raise HTTPException(404, "Machine introuvable")
+        ds, worked = _samedi_prod_travaille(conn, machine_id, semaine)
+    return {
+        "machine_id": machine_id,
+        "semaine": semaine,
+        "date": ds,
+        "samedi_travaille": worked,
+    }
+
+
 # ── Planning : affectations hebdomadaires ────────────────────────
 @router.get("/planning")
 def get_planning(
