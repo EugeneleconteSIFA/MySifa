@@ -249,11 +249,11 @@ function canAccess(key) {
   if (aa && typeof aa[key] === 'boolean') return aa[key];
   const r = u.role;
   const defs = {
-    prod: ['direction','administration','fabrication','commercial'],
-    stock: ['direction','administration','logistique','commercial'],
+    prod: ['direction','administration','fabrication','expedition','commercial'],
+    stock: ['direction','administration','logistique','expedition','commercial'],
     compta: ['direction','administration','comptabilite'],
     expe: ['direction','administration','expedition','logistique'],
-    planning_rh: ['direction','administration','fabrication','logistique','comptabilite'],
+    planning_rh: ['direction','administration','fabrication','logistique','expedition','comptabilite'],
     devis: ['direction'],
     fabrication: ['fabrication','direction','administration']
   };
@@ -630,7 +630,7 @@ function bindDetailEvents() {
       showToast('Ligne supprimée.', 'success');
       await loadDetail(S.ao.id); render();
     } catch(e) { showToast(e.message, 'danger'); }
-  });
+  }));
   document.getElementById('btn-add-f')?.addEventListener('click', openModalFourni);
   document.querySelectorAll('.btn-copy').forEach(b => b.addEventListener('click', () => {
     const f = (S.detail.fournisseurs||[]).find(x => x.token === b.dataset.token);
@@ -648,7 +648,7 @@ function bindDetailEvents() {
       showToast('Fournisseur supprimé.', 'success');
       await loadDetail(S.ao.id); render();
     } catch(e) { showToast(e.message, 'danger'); }
-  });
+  }));
   document.getElementById('msg-fourni-sel')?.addEventListener('change', e => {
     S.messages_fourni = parseInt(e.target.value, 10) || null;
     if (S.messages_fourni) loadMessages(S.ao.id, S.messages_fourni).then(() => render());
@@ -683,7 +683,7 @@ function bindDetailEvents() {
       showToast('Document supprimé.', 'success');
       render();
     } catch(e) { showToast(e.message, 'danger'); }
-  });
+  }));
 }
 
 function render() {

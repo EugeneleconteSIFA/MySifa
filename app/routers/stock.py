@@ -95,7 +95,7 @@ _HISTORIQUE_SQL_MP = """
         mp.categorie,
         mp.reference,
         mp.designation,
-        'palette' AS unite,
+        CASE WHEN mp.categorie = 'carton' THEN 'unité' ELSE 'palette' END AS unite,
         CASE
             WHEN m.type_mouvement = 'transfert'
                  AND TRIM(COALESCE(m.emplacement_source,'')) != ''
@@ -934,6 +934,7 @@ def historique_mouvements(
     date_debut: Optional[str] = None,
     date_fin: Optional[str] = None,
     limit: int = 200,
+    offset: int = 0,
     format: str = "json",
 ):
     require_stock(request)
@@ -947,6 +948,7 @@ def historique_mouvements(
     if tm and tm not in _HISTORIQUE_TYPES_MVT:
         raise HTTPException(400, "Type de mouvement invalide.")
     lim = max(1, min(int(limit), 500))
+    off = max(0, int(offset))
     fmt = (format or "json").strip().lower()
 
     rows_out: list[dict] = []
@@ -970,7 +972,7 @@ def historique_mouvements(
             rows_out.extend(_historique_row_dict(r) for r in pf_rows)
 
     rows_out.sort(key=lambda x: x.get("created_at") or "", reverse=True)
-    rows_out = rows_out[:lim]
+    rows_out = rows_out[off : off + lim]
 
     if fmt == "csv":
         buf = io.StringIO()
@@ -1569,9 +1571,21 @@ async def mouvement_matiere_premiere(request: Request):
     emplacement_source = body.get("emplacement_source")
     emplacement_dest = body.get("emplacement_dest")
     if emplacement_source is not None:
-        emplacement_source = str(emplacement_source).strip() or None
+        emplacement_source = str(emplacement_source).strip().upper() or None
     if emplacement_dest is not None:
-        emplacement_dest = str(emplacement_dest).strip() or None
+        emplacement_dest = str(emplacement_dest).strip().upper() or None
+
+    def _check_emplacement_code(code: Optional[str]) -> str:
+        if not code:
+            raise HTTPException(400, "Emplacement obligatoire.")
+        if not code[0].isalpha() or not code[1:].isdigit():
+            raise HTTPException(400, f"Format emplacement invalide : {code}")
+        return code
+
+    if type_mvt == "entree":
+        emplacement_dest = _check_emplacement_code(emplacement_dest)
+    elif type_mvt == "sortie":
+        emplacement_source = _check_emplacement_code(emplacement_source)
 
     if type_mvt in ("entree", "sortie") and quantite <= 0:
         raise HTTPException(400, "Quantité doit être positive.")
@@ -1583,11 +1597,12 @@ async def mouvement_matiere_premiere(request: Request):
 
     with get_db() as conn:
         mp = conn.execute(
-            "SELECT id FROM matieres_premieres WHERE id=? AND actif=1",
+            "SELECT id, categorie FROM matieres_premieres WHERE id=? AND actif=1",
             (matiere_id,),
         ).fetchone()
         if not mp:
             raise HTTPException(404, "Matière non trouvée.")
+        unite_mp = "unité" if mp["categorie"] == "carton" else "palette"
 
         stock = conn.execute(
             "SELECT quantite FROM mp_stock WHERE matiere_id=?",
@@ -1603,7 +1618,7 @@ async def mouvement_matiere_premiere(request: Request):
             if quantite_apres < 0:
                 raise HTTPException(
                     400,
-                    f"Stock insuffisant — stock actuel : {quantite_avant:g} pal.",
+                    f"Stock insuffisant — stock actuel : {quantite_avant:g} {unite_mp}.",
                 )
         elif type_mvt == "ajustement":
             quantite_apres = quantite

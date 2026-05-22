@@ -1,6 +1,12 @@
-"""Données par défaut — délais livraison par département (MyExpé carte France)."""
+"""Données par défaut — délais livraison par département (MyExpé carte France).
+
+Tous les délais sont calculés depuis le site d'expédition SIFA : Roubaix (59 — Nord).
+"""
 import json
 from pathlib import Path
+
+ORIGINE_DEPT = "59"
+ORIGINE_LABEL = "Roubaix (59 — Nord)"
 
 _DEPT_LABELS: dict[str, str] = {
     "01": "Ain", "02": "Aisne", "03": "Allier", "04": "Alpes-de-Haute-Provence",
@@ -32,10 +38,24 @@ _DEPT_LABELS: dict[str, str] = {
 }
 
 _IDF = {"75", "77", "78", "91", "92", "93", "94", "95"}
-_J1 = {"59", "62", "80", "02", "08", "51", "54", "57", "67", "68", "25", "39"}
-_CORSICA = {"2A", "2B"}
 _DOM = {"971", "972", "973", "974", "976"}
-_REMOTE = {"29", "56", "22", "64", "65", "48", "04", "05", "06", "66", "2A", "2B"}
+_CORSICA = {"2A", "2B"}
+
+# J+1 — Hauts-de-France et proches voisins (rayon ~150 km depuis Roubaix)
+_J1_HDF = {"59", "62", "80", "02", "60"}
+_J1_NORD_EST = {"08", "10", "51", "52", "54", "55", "57", "67", "68", "88", "90"}
+_J1_NORMANDIE = {"76", "14", "27", "61", "50"}
+
+# J+1 — hubs messagerie (lignes régulières depuis le nord)
+_MESSAGERIE = {"35", "44", "33", "31", "34", "69", "38", "21", "45"}
+
+# J+3 — zones éloignées ou difficiles d'accès depuis Roubaix
+_REMOTE = {
+    "29", "56", "22",           # Bretagne ouest
+    "64", "65", "40", "09", "48",  # Sud-Ouest / montagne
+    "04", "05", "06", "66", "83",  # Sud-Est / montagne / littoral
+    "2A", "2B",
+}
 
 
 def _default_entry(dept: str) -> dict[str, str]:
@@ -48,12 +68,10 @@ def _default_entry(dept: str) -> dict[str, str]:
         return {"label": label, "delai": delai, "zone": zone}
     if dept in _CORSICA or dept in _REMOTE:
         return {"label": label, "delai": "J+3", "zone": "france"}
-    if dept in _J1:
+    if dept in _J1_HDF or dept in _J1_NORD_EST or dept in _J1_NORMANDIE:
         return {"label": label, "delai": "J+1", "zone": "france"}
-    if dept in {"13", "31", "33", "34", "69", "38", "44", "35"}:
+    if dept in _MESSAGERIE:
         return {"label": label, "delai": "J+1", "zone": "messagerie"}
-    if dept in {"76", "14", "50", "37", "45", "28"}:
-        return {"label": label, "delai": "J+2", "zone": "france"}
     return {"label": label, "delai": "J+2", "zone": "france"}
 
 

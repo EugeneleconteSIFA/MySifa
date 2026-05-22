@@ -440,8 +440,6 @@ body.light .field-input.empl-upper::placeholder{
 .dash-badge-mvt-inventaire{background:color-mix(in srgb,var(--success) 15%,transparent);color:var(--success)}
 /* ── Matières premières ── */
 .mp-page{padding:0 0 24px}
-.mp-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}
-.mp-head h2{margin:0}
 .mp-pills{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
 .mp-pill{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:6px 14px;
   font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;font-family:inherit;transition:all .15s}
@@ -557,6 +555,10 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
 .hist-badge-mvt-sortie{background:color-mix(in srgb,var(--danger) 15%,transparent);color:var(--danger)}
 .hist-badge-mvt-ajustement{background:color-mix(in srgb,var(--warn) 15%,transparent);color:var(--warn)}
 .hist-badge-mvt-transfert{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
+.hist-pagination{display:flex;align-items:center;justify-content:center;gap:12px;padding:14px 16px;
+  border-top:1px solid var(--border);flex-wrap:wrap}
+.hist-pagination-info{font-size:12px;color:var(--text2);font-weight:600;min-width:100px;text-align:center}
+.hist-pagination .btn{min-width:96px}
 .hist-cards{display:none;flex-direction:column;gap:0}
 .hist-card{padding:14px 16px;border-bottom:1px solid var(--border)}
 .hist-card:last-child{border-bottom:none}
@@ -569,6 +571,10 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
 .hist-card-stats dt{color:var(--muted);font-weight:600}
 .hist-card-stats dd{margin:0;color:var(--text2)}
 .hist-card-note{font-size:12px;color:var(--muted);margin-top:10px;padding-top:10px;border-top:1px solid var(--border);line-height:1.45}
+@media(max-width:1100px){
+  .hist-col-optional{display:none}
+  .hist-table{min-width:720px}
+}
 @media(max-width:1000px){
   .hist-filters-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
@@ -576,12 +582,18 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
   .hist-filters-toggle{display:flex}
   .hist-filters-card.collapsed .hist-filters-grid,.hist-filters-card.collapsed .hist-filters-actions{display:none}
   .hist-filters-grid{grid-template-columns:1fr 1fr;gap:10px}
+  .hist-head{flex-direction:column;align-items:stretch}
+  .hist-head-actions{width:100%}
+  .hist-head-actions .btn{flex:1}
   .hist-table-wrap{display:none}
   .hist-cards{display:flex}
   .hist-results-head{flex-wrap:wrap}
+  .hist-pagination{gap:8px;padding:12px}
+  .hist-pagination .btn{flex:1;min-width:0}
 }
 @media(max-width:480px){
   .hist-filters-grid{grid-template-columns:1fr}
+  .hist-title{font-size:18px}
 }
 .stat-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px}
 .stat-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:6px}
@@ -996,7 +1008,11 @@ let S = {
   },
   historiqueLoading: false,
   historiqueFiltresOpen: false,
+  historiquePage: 0,
+  historiqueHasMore: false,
 };
+
+const HIST_PAGE_SIZE = 50;
 
 const ROLE_LABELS = {
   direction:'Direction', administration:'Administration', fabrication:'Fabrication',
@@ -2491,6 +2507,29 @@ function renderImportRefsModal() {
 }
 
 const MP_CAT_LABELS = { mandrin: 'Mandrin', palette: 'Palette', adhesif: 'Adhésif', carton: 'Carton' };
+
+function mpCategorieKey(cat) {
+  return String(cat || '').trim().toLowerCase();
+}
+function mpUniteNom(cat) {
+  return mpCategorieKey(cat) === 'carton' ? 'unité' : 'palette';
+}
+function mpUniteShort(cat) {
+  return mpCategorieKey(cat) === 'carton' ? 'u.' : 'pal.';
+}
+function mpQuantiteFieldLabel(cat) {
+  return mpCategorieKey(cat) === 'carton' ? 'Quantité (unités)' : 'Quantité (palettes)';
+}
+function mpSeuilFieldLabel(cat) {
+  return mpCategorieKey(cat) === 'carton' ? 'Seuil d\'alerte (u.)' : 'Seuil d\'alerte (pal.)';
+}
+function mpStockLine(qty, cat) {
+  return fN(qty) + ' ' + mpUniteShort(cat);
+}
+function mpQuantiteInputAttrs(cat) {
+  const carton = mpCategorieKey(cat) === 'carton';
+  return { type: 'number', min: carton ? '1' : '0.5', step: carton ? '1' : '0.5' };
+}
 const MVT_TYPE_LABELS = {
   entree: 'Entrée', sortie: 'Sortie', ajustement: 'Ajustement',
   transfert: 'Transfert', inventaire: 'Inventaire',
@@ -2632,18 +2671,25 @@ function matieresCardActions(m) {
 
 function buildMatieres() {
   if (S.matieres === null) {
-    return el('div', { cls: 'content mp-page' }, el('div', { cls: 'card-empty' }, 'Chargement…'));
+    return el('div', { cls: 'content' }, el('div', { cls: 'hist-page' },
+      el('div', { cls: 'card-empty' }, 'Chargement…')));
   }
   const filtered = filterMatieresList();
   const q = (S.matieresQ || '').trim();
-  const head = el('div', { cls: 'mp-head' },
-    el('h2', { cls: 'ref-page-title', style: { margin: 0 } }, 'Matières premières'),
+  const head = el('div', { cls: 'hist-head' },
+    el('div', null,
+      el('h2', { cls: 'hist-title' }, 'Matières premières'),
+      el('p', { cls: 'hist-subtitle' },
+        'Mandrins, palettes, adhésifs et cartons — entrées et sorties par emplacement'),
+    ),
     isMatieresAdmin()
-      ? el('button', {
-          cls: 'btn btn-ghost',
-          type: 'button',
-          on: { click: () => openMatieresAdminDrawer() },
-        }, 'Gérer les références')
+      ? el('div', { cls: 'hist-head-actions' },
+          el('button', {
+            cls: 'btn btn-ghost',
+            type: 'button',
+            on: { click: () => openMatieresAdminDrawer() },
+          }, 'Gérer les références'),
+        )
       : null,
   );
   const pills = el('div', { cls: 'mp-pills' },
@@ -2687,18 +2733,48 @@ function buildMatieres() {
         el('div', { cls: 'mp-card-top' },
           dashMpCatBadge(m.categorie),
           el('span', { cls: 'mp-card-ref' }, m.reference || ''),
-          el('span', { cls: 'mp-card-stock' }, fN(m.quantite) + ' pal.'),
+          el('span', { cls: 'mp-card-stock' }, mpStockLine(m.quantite, m.categorie)),
         ),
         el('div', { cls: 'mp-card-des' }, m.designation || ''),
         m.en_alerte
-          ? el('div', { cls: 'mp-card-warn' }, 'Sous le seuil (min. ' + fN(seuil) + ' pal.)')
+          ? el('div', { cls: 'mp-card-warn' }, 'Sous le seuil (min. ' + mpStockLine(seuil, m.categorie) + ')')
           : null,
         matieresCardActions(m),
       ));
     });
   }
-  return el('div', { cls: 'content mp-page' }, head, pills,
-    el('div', { cls: 'mp-search-wrap' }, searchInp), list);
+  return el('div', { cls: 'content' },
+    el('div', { cls: 'hist-page' }, head, pills,
+      el('div', { cls: 'mp-search-wrap' }, searchInp), list));
+}
+
+function buildMpEmplacementField() {
+  const emplInp = el('input', {
+    cls: 'field-input empl-upper',
+    attrs: { type: 'text', placeholder: 'Ex: A123, B211…', autocomplete: 'off' },
+    style: { direction: 'ltr' },
+  });
+  const suggWrap = el('div', { cls: 'empl-suggestions' });
+  emplInp.addEventListener('input', e => {
+    emplInp.value = e.target.value.toUpperCase();
+    searchEmplSugg(emplInp.value, suggWrap);
+  });
+  const wrap = el('div', { cls: 'mp-field' },
+    el('label', null, 'Emplacement'),
+    emplInp,
+    suggWrap,
+  );
+  return { wrap, emplInp };
+}
+
+function mpEmplacementValue(emplInp) {
+  return String(emplInp?.value || '').trim().toUpperCase();
+}
+
+function validateMpEmplacement(empl) {
+  if (!empl) return 'Emplacement obligatoire.';
+  if (!isStockEmplacementCode(empl)) return 'Format invalide — une lettre puis des chiffres (ex. A123).';
+  return null;
 }
 
 function openModalMouvement(type, matiere) {
@@ -2725,6 +2801,7 @@ function renderMpMouvementModal(type, matiere) {
   if (!mroot) return;
   S.mpModal = { type: typeMvt, matiere: mat, matiereId: mat ? mat.id : null };
   const stockActuel = mat ? (parseFloat(mat.quantite) || 0) : 0;
+  const mpCat = mat ? mat.categorie : (list.find(x => x.id === S.mpModal.matiereId)?.categorie || '');
 
   const overlay = el('div', {
     cls: 'mp-modal-overlay',
@@ -2764,14 +2841,16 @@ function renderMpMouvementModal(type, matiere) {
   const errEl = el('div', { cls: 'mp-hint err', style: { display: 'none' } }, '');
 
   if (typeMvt === 'entree') {
+    const { wrap: emplWrap, emplInp } = buildMpEmplacementField();
     const blInp = el('input', { attrs: { type: 'text', placeholder: 'BL-2024-001' } });
-    const qInp = el('input', { attrs: { type: 'number', min: '0.5', step: '0.5' } });
+    const qInp = el('input', { attrs: mpQuantiteInputAttrs(mpCat) });
+    box.appendChild(emplWrap);
     box.appendChild(el('div', { cls: 'mp-field' },
       el('label', null, 'Référence BL / Fournisseur'),
       blInp,
     ));
     box.appendChild(el('div', { cls: 'mp-field' },
-      el('label', null, 'Quantité (palettes)'),
+      el('label', null, mpQuantiteFieldLabel(mpCat)),
       qInp,
     ));
     S.mpModal.getBody = () => ({
@@ -2781,17 +2860,20 @@ function renderMpMouvementModal(type, matiere) {
       ref_bl: (blInp.value || '').trim() || null,
       note: null,
       emplacement_source: null,
-      emplacement_dest: null,
+      emplacement_dest: mpEmplacementValue(emplInp) || null,
     });
     S.mpModal.validate = () => {
       const q = parseFloat(qInp.value);
       if (!S.mpModal.matiereId) return 'Matière obligatoire.';
+      const emplErr = validateMpEmplacement(mpEmplacementValue(emplInp));
+      if (emplErr) return emplErr;
       if (!q || q <= 0) return 'Quantité invalide.';
       return null;
     };
   } else if (typeMvt === 'sortie') {
-    hintEl.textContent = 'Stock actuel : ' + fN(stockActuel) + ' pal.';
-    const qInp = el('input', { attrs: { type: 'number', min: '0.5', step: '0.5' } });
+    const { wrap: emplWrap, emplInp } = buildMpEmplacementField();
+    hintEl.textContent = 'Stock actuel : ' + mpStockLine(stockActuel, mpCat);
+    const qInp = el('input', { attrs: mpQuantiteInputAttrs(mpCat) });
     const checkQ = () => {
       const q = parseFloat(qInp.value);
       if (q > stockActuel) {
@@ -2802,8 +2884,9 @@ function renderMpMouvementModal(type, matiere) {
       }
     };
     qInp.addEventListener('input', checkQ);
+    box.appendChild(emplWrap);
     box.appendChild(el('div', { cls: 'mp-field' },
-      el('label', null, 'Quantité (palettes)'),
+      el('label', null, mpQuantiteFieldLabel(mpCat)),
       qInp,
       hintEl,
       errEl,
@@ -2814,22 +2897,24 @@ function renderMpMouvementModal(type, matiere) {
       quantite: parseFloat(qInp.value),
       ref_bl: null,
       note: null,
-      emplacement_source: null,
+      emplacement_source: mpEmplacementValue(emplInp) || null,
       emplacement_dest: null,
     });
     S.mpModal.validate = () => {
       const q = parseFloat(qInp.value);
       if (!S.mpModal.matiereId) return 'Matière obligatoire.';
+      const emplErr = validateMpEmplacement(mpEmplacementValue(emplInp));
+      if (emplErr) return emplErr;
       if (!q || q <= 0) return 'Quantité invalide.';
       if (q > stockActuel) return 'Stock insuffisant.';
       return null;
     };
   } else if (typeMvt === 'ajustement') {
-    hintEl.textContent = 'Stock actuel : ' + fN(stockActuel) + ' pal.';
-    const qInp = el('input', { attrs: { type: 'number', min: '0', step: '0.5' } });
+    hintEl.textContent = 'Stock actuel : ' + mpStockLine(stockActuel, mpCat);
+    const qInp = el('input', { attrs: { type: 'number', min: '0', step: mpCategorieKey(mpCat) === 'carton' ? '1' : '0.5' } });
     box.appendChild(el('div', { cls: 'mp-field' },
       hintEl,
-      el('label', null, 'Nouveau stock (palettes)'),
+      el('label', null, 'Nouveau stock (' + (mpCategorieKey(mpCat) === 'carton' ? 'unités' : 'palettes') + ')'),
       qInp,
     ));
     S.mpModal.getBody = () => ({
@@ -2848,10 +2933,10 @@ function renderMpMouvementModal(type, matiere) {
       return null;
     };
   } else if (typeMvt === 'transfert') {
-    const qInp = el('input', { attrs: { type: 'number', min: '0.5', step: '0.5' } });
+    const qInp = el('input', { attrs: mpQuantiteInputAttrs(mpCat) });
     const srcInp = el('input', { attrs: { type: 'text' } });
     const dstInp = el('input', { attrs: { type: 'text' } });
-    box.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Quantité (palettes)'), qInp));
+    box.appendChild(el('div', { cls: 'mp-field' }, el('label', null, mpQuantiteFieldLabel(mpCat)), qInp));
     box.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Emplacement source'), srcInp));
     box.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Emplacement destination'), dstInp));
     S.mpModal.getBody = () => ({
@@ -2992,7 +3077,7 @@ function buildMatieresAdminRow(item) {
     dashMpCatBadge(item.categorie),
     el('strong', null, item.reference || ''),
     el('span', { style: { color: 'var(--text2)', fontSize: '13px' } }, item.designation || ''),
-    el('span', { style: { fontSize: '12px', color: 'var(--muted)' } }, 'Seuil ' + fN(item.seuil_alerte) + ' pal.'),
+    el('span', { style: { fontSize: '12px', color: 'var(--muted)' } }, 'Seuil ' + mpStockLine(item.seuil_alerte, item.categorie)),
     el('span', { style: { fontSize: '11px', fontWeight: '600', color: actif ? 'var(--success)' : 'var(--muted)' } },
       actif ? 'Actif' : 'Inactif'),
   ));
@@ -3025,7 +3110,7 @@ function buildMatieresAdminEditForm(item) {
   seuilInp.value = String(item.seuil_alerte ?? 0);
   const wrap = el('div', { cls: 'mp-admin-edit' },
     el('div', { cls: 'mp-field' }, el('label', null, 'Désignation'), desInp),
-    el('div', { cls: 'mp-field' }, el('label', null, 'Seuil d\'alerte (pal.)'), seuilInp),
+    el('div', { cls: 'mp-field' }, el('label', null, mpSeuilFieldLabel(item.categorie)), seuilInp),
     el('button', {
       cls: 'btn',
       type: 'button',
@@ -3091,7 +3176,8 @@ function buildMatieresAdminAddForm() {
     el('div', { cls: 'mp-field' }, el('label', null, 'Catégorie'), catSel),
     el('div', { cls: 'mp-field' }, el('label', null, 'Référence'), refInp),
     el('div', { cls: 'mp-field' }, el('label', null, 'Désignation'), desInp),
-    el('div', { cls: 'mp-field' }, el('label', null, 'Seuil d\'alerte (pal., 0 = pas d\'alerte)'), seuilInp),
+    el('div', { cls: 'mp-field' }, el('label', null, 'Seuil d\'alerte (0 = pas d\'alerte)'), seuilInp),
+    el('div', { cls: 'mp-hint' }, 'Mandrins, palettes, adhésifs : pal. — cartons : u.'),
     errEl,
     el('button', {
       cls: 'btn',
@@ -3174,7 +3260,43 @@ function resetHistoriqueFiltres() {
     date_debut: '',
     date_fin: '',
   };
+  S.historiquePage = 0;
   loadHistorique();
+}
+
+function historiqueGoPage(delta) {
+  const next = (S.historiquePage || 0) + delta;
+  if (next < 0) return;
+  if (delta > 0 && !S.historiqueHasMore) return;
+  S.historiquePage = next;
+  loadHistorique();
+}
+
+function buildHistoriquePagination(rowsLen) {
+  const page = S.historiquePage || 0;
+  const hasPrev = page > 0;
+  const hasNext = !!S.historiqueHasMore;
+  if (!hasPrev && !hasNext && rowsLen === 0) return null;
+  const start = page * HIST_PAGE_SIZE + (rowsLen ? 1 : 0);
+  const end = page * HIST_PAGE_SIZE + rowsLen;
+  const info = rowsLen
+    ? (start === end ? String(start) : start + '–' + end) + (hasNext ? '+' : '')
+    : '—';
+  return el('div', { cls: 'hist-pagination' },
+    el('button', {
+      cls: 'btn btn-ghost',
+      type: 'button',
+      disabled: !hasPrev ? true : null,
+      on: { click: () => historiqueGoPage(-1) },
+    }, '‹ Préc.'),
+    el('span', { cls: 'hist-pagination-info' }, 'Page ' + (page + 1) + ' · ' + info),
+    el('button', {
+      cls: 'btn btn-ghost',
+      type: 'button',
+      disabled: !hasNext ? true : null,
+      on: { click: () => historiqueGoPage(1) },
+    }, 'Suiv. ›'),
+  );
 }
 
 function exportHistoriqueCSV() {
@@ -3188,25 +3310,35 @@ function exportHistoriqueCSV() {
   window.location.href = API + '/api/stock/historique-mouvements?' + params.toString();
 }
 
-async function loadHistorique() {
+async function loadHistorique(resetPage) {
+  if (resetPage) S.historiquePage = 0;
   S.historiqueLoading = true;
   renderHistoriqueView();
   try {
     const f = S.historiqueFiltres;
-    const params = new URLSearchParams({ limit: '200' });
+    const page = S.historiquePage || 0;
+    const params = new URLSearchParams({
+      limit: String(HIST_PAGE_SIZE),
+      offset: String(page * HIST_PAGE_SIZE),
+    });
     if (f.type_stock !== 'tout') params.set('type_stock', f.type_stock);
     if (f.categorie) params.set('categorie', f.categorie);
     if (f.type_mouvement) params.set('type_mouvement', f.type_mouvement);
     if (f.date_debut) params.set('date_debut', f.date_debut);
     if (f.date_fin) params.set('date_fin', f.date_fin);
     const d = await api('/api/stock/historique-mouvements?' + params.toString());
-    S.historique = Array.isArray(d) ? d : [];
+    const rows = Array.isArray(d) ? d : [];
+    S.historiqueHasMore = rows.length >= HIST_PAGE_SIZE;
+    S.historique = rows;
   } catch (e) {
     S.historique = [];
+    S.historiqueHasMore = false;
     showToast(e.message, 'error');
   }
   S.historiqueLoading = false;
   renderHistoriqueView();
+  const area = document.getElementById('scroll-area');
+  if (area) area.scrollTop = 0;
 }
 
 function renderHistoriqueView() {
@@ -3268,7 +3400,7 @@ function buildHistoriqueFiltersBar() {
     buildHistoriqueFilterField('Au', dateFin),
   );
   const actions = el('div', { cls: 'hist-filters-actions' },
-    el('button', { cls: 'btn btn-accent', type: 'button', on: { click: loadHistorique } }, 'Appliquer'),
+    el('button', { cls: 'btn btn-accent', type: 'button', on: { click: () => loadHistorique(true) } }, 'Appliquer'),
     el('button', { cls: 'btn btn-ghost', type: 'button', on: { click: resetHistoriqueFiltres } }, 'Réinitialiser'),
   );
   bar.append(grid, actions);
@@ -3278,7 +3410,8 @@ function buildHistoriqueFiltersBar() {
 function histUniteLabel(m) {
   const u = String(m.unite || '').trim();
   if (u) return u;
-  return m.type_stock === 'mp' ? 'palette' : '—';
+  if (m.type_stock === 'mp') return mpUniteNom(m.categorie);
+  return '—';
 }
 
 function histQteLabel(m) {
@@ -3299,13 +3432,13 @@ function buildHistoriqueTableRow(m) {
     el('td', { cls: 'hist-muted' }, fDateTime(m.created_at)),
     el('td', null, el('div', { cls: 'hist-cell-badges' }, histStockBadge(m.type_stock), histMvtBadge(m.type_mouvement))),
     el('td', { cls: 'hist-ref' }, stockHistRefLink(m)),
-    el('td', { cls: 'hist-des', title: m.designation || '' }, truncStr(m.designation, 36) || '—'),
+    el('td', { cls: 'hist-des hist-col-optional', title: m.designation || '' }, truncStr(m.designation, 36) || '—'),
     el('td', { cls: 'hist-empl' }, stockHistEmplLinks(m.emplacement)),
     el('td', { cls: 'hist-unite' }, histUniteLabel(m)),
     el('td', null, el('span', { cls: qteCls }, qte)),
-    el('td', { cls: 'hist-muted' }, avant + ' → ' + apres),
-    el('td', { cls: 'hist-note-cell hist-muted', title: blNote }, truncStr(blNote, 40) || '—'),
-    el('td', { cls: 'hist-op' }, op),
+    el('td', { cls: 'hist-muted hist-col-optional' }, avant + ' → ' + apres),
+    el('td', { cls: 'hist-note-cell hist-muted hist-col-optional', title: blNote }, truncStr(blNote, 40) || '—'),
+    el('td', { cls: 'hist-op hist-col-optional' }, op),
   );
 }
 
@@ -3369,37 +3502,49 @@ function buildHistorique() {
   }
 
   const rows = S.historique || [];
+  const page = S.historiquePage || 0;
   if (!rows.length) {
-    body.appendChild(el('div', { cls: 'hist-empty' }, 'Aucun mouvement trouvé pour ces critères.'));
+    const emptyMsg = page > 0
+      ? 'Aucun mouvement sur cette page.'
+      : 'Aucun mouvement trouvé pour ces critères.';
+    body.appendChild(el('div', { cls: 'hist-empty' }, emptyMsg));
+    const pagEmpty = buildHistoriquePagination(0);
+    if (pagEmpty) body.appendChild(pagEmpty);
     return el('div', { cls: 'content' }, body);
   }
 
-  const countLbl = rows.length + ' mouvement' + (rows.length > 1 ? 's' : '');
+  const startIdx = page * HIST_PAGE_SIZE + 1;
+  const endIdx = page * HIST_PAGE_SIZE + rows.length;
+  const countLbl = (startIdx === endIdx ? String(startIdx) : startIdx + '–' + endIdx)
+    + (S.historiqueHasMore ? '+' : '') + ' mouvement' + (rows.length > 1 ? 's' : '');
   const table = el('table', { cls: 'hist-table' });
   const thead = el('thead', null, el('tr', null,
     el('th', null, 'Date'),
     el('th', null, 'Stock / Mouvement'),
     el('th', null, 'Référence'),
-    el('th', null, 'Désignation'),
+    el('th', { cls: 'hist-col-optional' }, 'Désignation'),
     el('th', null, 'Emplacement'),
     el('th', null, 'Unité'),
     el('th', null, 'Quantité'),
-    el('th', null, 'Avant → Après'),
-    el('th', null, 'Ref BL / Note'),
-    el('th', null, 'Opérateur'),
+    el('th', { cls: 'hist-col-optional' }, 'Avant → Après'),
+    el('th', { cls: 'hist-col-optional' }, 'Ref BL / Note'),
+    el('th', { cls: 'hist-col-optional' }, 'Opérateur'),
   ));
   const tbody = el('tbody', null, ...rows.map(buildHistoriqueTableRow));
   table.append(thead, tbody);
 
   const cards = el('div', { cls: 'hist-cards' }, ...rows.map(buildHistoriqueCard));
-  body.appendChild(el('div', { cls: 'hist-results-card' },
+  const pag = buildHistoriquePagination(rows.length);
+  const resultsCard = el('div', { cls: 'hist-results-card' },
     el('div', { cls: 'hist-results-head' },
       el('span', { cls: 'hist-results-title' }, 'Résultats'),
       el('span', { cls: 'hist-count' }, countLbl),
     ),
     el('div', { cls: 'hist-table-wrap' }, table),
     cards,
-  ));
+  );
+  if (pag) resultsCard.appendChild(pag);
+  body.appendChild(resultsCard);
 
   return el('div', { cls: 'content' }, body);
 }
@@ -3474,7 +3619,7 @@ function buildDashboardAlertes(d) {
             (a.reference || '') + ' — ' + (a.designation || '')
           ),
           el('span', { cls: 'dash-alert-qty' },
-            fN(a.quantite) + ' pal. / min. ' + fN(a.seuil_alerte) + ' pal.'
+            mpStockLine(a.quantite, a.categorie) + ' / min. ' + mpStockLine(a.seuil_alerte, a.categorie)
           ),
         )))
       : el('div', { cls: 'dash-alert-ok' }, 'Toutes les matières sont au-dessus des seuils.');
@@ -3487,7 +3632,8 @@ function buildDashboardAlertes(d) {
 function dashActUniteLabel(m) {
   const u = String(m.unite || '').trim();
   if (u) return u;
-  return m.type_stock === 'mp' ? 'palette' : '';
+  if (m.type_stock === 'mp') return mpUniteNom(m.categorie);
+  return '';
 }
 
 function dashActQteDisplay(m) {
@@ -4236,9 +4382,7 @@ function renderContent() {
   else if (S.selEmpl) content = buildEmplacementDetail();
   else if (S.tab === 'dashboard') content = buildDashboard();
   else if (S.tab === 'matieres') {
-    content = S.matieres === null
-      ? el('div', { cls: 'content mp-page' }, el('div', { cls: 'card-empty' }, 'Chargement…'))
-      : buildMatieres();
+    content = buildMatieres();
   }
   else if (S.tab === 'referentiel') content = buildReferentielPage();
   else if (S.tab === 'inventaire') content = buildInventaire();

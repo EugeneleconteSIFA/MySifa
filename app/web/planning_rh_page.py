@@ -418,6 +418,31 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 .rh-btn.secondary:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 .rh-btn:disabled{opacity:.5;cursor:not-allowed}
 
+/* Alerte samedi non travaillé (production) */
+#rh-alert-root{position:relative;z-index:1100}
+.rh-samedi-warn-ov{
+  position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1100;
+  display:flex;align-items:center;justify-content:center;padding:16px;
+  backdrop-filter:blur(4px);
+}
+.rh-samedi-warn-box{
+  background:var(--card);border:1px solid rgba(251,191,36,.35);border-radius:16px;
+  padding:28px 32px;width:100%;max-width:440px;
+  box-shadow:0 24px 80px rgba(0,0,0,.5);text-align:center;
+}
+.rh-samedi-warn-icon{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:52px;height:52px;border-radius:50%;
+  background:rgba(251,191,36,.12);color:var(--warn);margin-bottom:16px;
+}
+.rh-samedi-warn-box h3{
+  font-size:16px;font-weight:800;color:var(--text);margin:0 0 12px;padding:0;
+}
+.rh-samedi-warn-box p{
+  font-size:13px;line-height:1.65;color:var(--text2);margin:0 0 24px;text-align:left;
+}
+.rh-samedi-warn-box .rh-modal-acts{margin-top:0;justify-content:center}
+
 /* Modale détail jours */
 .rh-dd-modal-box{
   background:var(--card);border-radius:16px;padding:28px 32px;
@@ -659,6 +684,7 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 </div>
 <div id="rh-toast"></div>
 <div id="rh-modal-root"></div>
+<div id="rh-alert-root"></div>
 
 <script>
 // ── Constantes grille ─────────────────────────────────────
@@ -748,12 +774,37 @@ async function isSamediProdTravaille(machineId,semaine){
     return !!data.samedi_travaille;
   }catch(e){ return true; }
 }
+function closeSamediProdWarn(){
+  const root=document.getElementById('rh-alert-root');
+  if(root) root.innerHTML='';
+}
 function warnSamediProdNonTravaille(){
-  toast(
-    'Le samedi n\'est pas marqué comme travaillé dans le planning de production (MyProd › Planning). '+
-    'Contactez le gestionnaire du planning production pour activer le samedi sur cette machine et cette semaine.',
-    'warn'
-  );
+  const root=document.getElementById('rh-alert-root');
+  if(!root) return;
+  root.innerHTML='';
+  const ov=document.createElement('div');
+  ov.className='rh-samedi-warn-ov';
+  ov.setAttribute('role','dialog');
+  ov.setAttribute('aria-modal','true');
+  ov.setAttribute('aria-labelledby','rh-samedi-warn-title');
+  const box=document.createElement('div');
+  box.className='rh-samedi-warn-box';
+  box.innerHTML=
+    '<div class="rh-samedi-warn-icon">'+icon('alert',28)+'</div>'+
+    '<h3 id="rh-samedi-warn-title">Samedi non travaillé en production</h3>'+
+    '<p>Le samedi n\'est pas marqué comme travaillé dans le planning de production '+
+    '(MyProd › Planning). Contactez le gestionnaire du planning production pour activer '+
+    'le samedi sur cette machine et cette semaine.</p>'+
+    '<div class="rh-modal-acts">'+
+    '<button type="button" class="rh-btn primary" id="rh-samedi-warn-ok">Compris</button>'+
+    '</div>';
+  ov.appendChild(box);
+  root.appendChild(ov);
+  const btn=document.getElementById('rh-samedi-warn-ok');
+  if(btn){
+    btn.onclick=closeSamediProdWarn;
+    requestAnimationFrame(()=>btn.focus());
+  }
 }
 async function alertSamediProdIfNeeded(machineId,semaine,jours,prevJours){
   if(!(jours&JOURS_BIT_SAMEDI)) return;
@@ -1293,6 +1344,7 @@ function icon(name,sz=14){
     x:'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
     check:'<polyline points="20 6 9 17 4 12"/>',
     mail:'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    alert:'<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
   };
   return`<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icons[name]||''}</svg>`;
 }

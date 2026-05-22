@@ -10,7 +10,7 @@
   var open = false;
   var loading = false;
   var history = [];
-  var AI_ROLES = ['superadmin', 'direction', 'administration'];
+  var AI_ROLES = ['superadmin', 'direction', 'administration', 'expedition'];
 
   var ICO_AI =
     '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">' +
@@ -102,6 +102,7 @@
       var greetingsByRole = {
         fabrication: 'Production du jour, état des machines — posez vos questions.',
         logistique: 'Stock, emplacements, expéditions à venir — posez vos questions.',
+        expedition: 'Stock, planning, expéditions — posez vos questions.',
         direction: 'KPIs, synthèse production, planning, stock — posez vos questions.',
         administration: 'Congés, paie, expéditions — posez vos questions.',
       };

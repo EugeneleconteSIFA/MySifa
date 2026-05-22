@@ -3539,14 +3539,14 @@ function renderPortal(){
   const aa = S.user && S.user.app_access ? S.user.app_access : null;
   const urole = S.user && S.user.role ? S.user.role : '';
   const isSuper = urole === 'superadmin';
-  const isStock = aa ? !!aa.stock : (isSuper || !!(urole && ['direction','administration','logistique','commercial'].includes(urole)));
-  const isProd  = aa ? !!aa.prod : (isSuper || !!(urole && ['direction','administration','fabrication','commercial'].includes(urole)));
+  const isStock = aa ? !!aa.stock : (isSuper || !!(urole && ['direction','administration','logistique','expedition','commercial'].includes(urole)));
+  const isProd  = aa ? !!aa.prod : (isSuper || !!(urole && ['direction','administration','fabrication','expedition','commercial'].includes(urole)));
   const isCompta = aa ? !!aa.compta : (isSuper || !!(urole && ['direction','administration','comptabilite'].includes(urole)));
   const isExpe = aa ? !!aa.expe : (isSuper || !!(urole && ['direction','administration','expedition','logistique'].includes(urole)));
   const isFab = aa ? !!aa.fabrication : (isSuper || urole==='fabrication' || !!(urole && ['direction','administration'].includes(urole)));
-  const isPrint = isSuper || !!(urole && ['fabrication','logistique'].includes(urole));
+  const isPrint = isSuper || !!(urole && ['fabrication','logistique','expedition'].includes(urole));
   const isCom = urole==='commercial';
-  const isRH   = aa ? !!aa.planning_rh : (isSuper || !!(urole && ['direction','administration','fabrication','logistique','comptabilite'].includes(urole)));
+  const isRH   = aa ? !!aa.planning_rh : (isSuper || !!(urole && ['direction','administration','fabrication','logistique','expedition','comptabilite'].includes(urole)));
   const isComptaPlan = urole === 'comptabilite';
   const isPaie = isSuper || !!(urole && ['direction','administration','comptabilite'].includes(urole));
   const isDevis = aa ? !!aa.devis : (isSuper || urole==='direction');

@@ -29,32 +29,31 @@ EXPE_TRANSPORTEURS_CSS = r"""
   cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
 .expe-trp-close:hover{border-color:var(--accent);color:var(--accent)}
 
-.expe-trp-list{display:flex;flex-direction:column;gap:10px}
-.expe-trp-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;
-  display:grid;gap:10px;transition:opacity .15s}
-.expe-trp-card.inactive{opacity:.5}
-.expe-trp-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
-.expe-trp-name{font-size:15px;font-weight:800;color:var(--text);line-height:1.25}
-.expe-trp-actions{display:inline-flex;align-items:center;gap:6px;flex-shrink:0}
-.expe-trp-zones{display:flex;flex-wrap:wrap;gap:6px}
-.expe-trp-zone{font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;background:var(--accent-bg);
-  color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);letter-spacing:.2px}
-.expe-trp-meta{font-size:12px;color:var(--text2);display:flex;flex-wrap:wrap;gap:12px;align-items:center}
-.expe-trp-contact{display:flex;flex-wrap:wrap;gap:10px 16px;font-size:12px;color:var(--text2);align-items:center}
-.expe-trp-contact-item{display:inline-flex;align-items:center;gap:6px;min-width:0}
-.expe-trp-contact-item svg{flex-shrink:0;color:var(--muted)}
-.expe-trp-tarif{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:var(--text2)}
-.expe-trp-tarif a{color:var(--accent);font-weight:600;text-decoration:none}
+.expe-trp-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;background:var(--card)}
+.expe-trp-table-wrap table.table-std{margin:0}
+.expe-trp-table-wrap table.table-std td{vertical-align:middle}
+.expe-trp-row-inactive td{opacity:.55}
+.expe-trp-name{font-size:13px;font-weight:800;color:var(--text);line-height:1.3;white-space:nowrap}
+.expe-trp-actions{display:inline-flex;align-items:center;gap:4px;flex-shrink:0}
+.expe-trp-cell-badges{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.expe-trp-zone{font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;background:var(--accent-bg);
+  color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);letter-spacing:.2px;white-space:nowrap}
+.expe-trp-contact-col{font-size:12px;color:var(--text2);line-height:1.45;min-width:140px}
+.expe-trp-contact-line{display:inline-flex;align-items:center;gap:5px;max-width:220px}
+.expe-trp-contact-line svg{flex-shrink:0;color:var(--muted)}
+.expe-trp-contact-line a{color:var(--accent);text-decoration:none;font-weight:600}
+.expe-trp-contact-line a:hover{text-decoration:underline}
+.expe-trp-tarif a{color:var(--accent);font-weight:600;text-decoration:none;font-size:12px;display:inline-flex;align-items:center;gap:5px}
 .expe-trp-tarif a:hover{text-decoration:underline}
-.expe-trp-badge-inactif{font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;background:color-mix(in srgb,var(--muted) 18%,transparent);
-  color:var(--muted);border:1px solid var(--border)}
+.expe-trp-badge-inactif{font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;background:color-mix(in srgb,var(--muted) 18%,transparent);
+  color:var(--muted);border:1px solid var(--border);margin-left:8px;vertical-align:middle}
 .expe-trp-empty{padding:24px;text-align:center;color:var(--muted);font-size:13px}
 .expe-trp-page-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
 .expe-trp-page-head .expe-trp-search{flex:1;min-width:200px;max-width:400px}
-.expe-trp-services{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
-.expe-trp-svc{font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;background:var(--bg);border:1px solid var(--border);color:var(--text2)}
-.expe-trp-portail{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--accent);text-decoration:none}
+.expe-trp-svc{font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;background:var(--bg);border:1px solid var(--border);color:var(--text2);white-space:nowrap}
+.expe-trp-portail{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:var(--accent);text-decoration:none}
 .expe-trp-portail:hover{text-decoration:underline}
+.expe-trp-num{font-variant-numeric:tabular-nums;font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px}
 
 .expe-trp-modal-overlay{position:fixed;inset:0;background:color-mix(in srgb,var(--bg) 60%,transparent);z-index:12000;
   display:flex;align-items:center;justify-content:center;padding:16px}
@@ -389,6 +388,40 @@ async function toggleActif(id,actif){
   }
 }
 
+function expeTrpBadgesCell(badges,cls){
+  if(!badges||!badges.length)return h('span',{style:{color:'var(--muted)'}},'—');
+  return h('div',{className:'expe-trp-cell-badges'},...badges.map(b=>h('span',{className:cls||'expe-trp-zone'},b)));
+}
+
+function expeTrpContactCell(tr){
+  const emailRaw=(tr.contact_email||'').trim();
+  const lines=[];
+  if(tr.contact_nom){
+    lines.push(h('div',{className:'expe-trp-contact-line'},iconEl('user',12),' ',escHtml(tr.contact_nom)));
+  }
+  if(tr.contact_tel){
+    lines.push(h('div',{className:'expe-trp-contact-line'},expeTrpIconPhone(12),' ',escHtml(tr.contact_tel)));
+  }
+  if(emailRaw){
+    if(expeTrpIsPortailUrl(emailRaw)){
+      lines.push(h('a',{className:'expe-trp-portail',href:emailRaw,target:'_blank',rel:'noopener',onClick:e=>e.stopPropagation()},
+        iconEl('arrow-right',12),' Portail'));
+    }else{
+      lines.push(h('a',{className:'expe-trp-contact-line',href:'mailto:'+encodeURIComponent(emailRaw),onClick:e=>e.stopPropagation()},
+        iconEl('mail',12),' ',escHtml(emailRaw)));
+    }
+  }
+  if(!lines.length)return h('span',{style:{color:'var(--muted)'}},'—');
+  const kids=[...lines];
+  if(emailRaw||tr.contact_tel){
+    kids.push(h('button',{type:'button',className:'btn-ghost',style:{marginTop:'4px',padding:'4px 8px',fontSize:'11px'},
+      onClick:()=>expeTrpOpenContact(tr)},
+      iconEl(expeTrpIsPortailUrl(emailRaw)?'arrow-right':'mail',12),
+      ' ',expeTrpIsPortailUrl(emailRaw)?'Portail':'Contacter'));
+  }
+  return h('div',{className:'expe-trp-contact-col'},...kids);
+}
+
 function renderExpeTranspList(){
   const rows=expeTrpFiltered();
   if(T.loading&&!rows.length){
@@ -400,62 +433,48 @@ function renderExpeTranspList(){
       q?'Aucun résultat pour « '+escHtml(q)+' »':'Aucun transporteur enregistré.'
     );
   }
-  return h('div',{className:'expe-trp-list'},
-    ...rows.map(tr=>{
-      const inactive=!Number(tr.actif);
-      const zones=expeTrpZonesBadges(tr);
-      const taxe=tr.taxe_carburant_pct!=null?Number(tr.taxe_carburant_pct):0;
-      const services=expeTrpServiceBadges(tr.nom||'');
-      const contactParts=[];
-      const emailRaw=(tr.contact_email||'').trim();
-      if(tr.contact_nom){
-        contactParts.push(h('span',{className:'expe-trp-contact-item'},iconEl('user',13),' ',escHtml(tr.contact_nom)));
-      }
-      if(tr.contact_tel){
-        contactParts.push(h('span',{className:'expe-trp-contact-item'},expeTrpIconPhone(13),' ',escHtml(tr.contact_tel)));
-      }
-      if(emailRaw){
-        if(expeTrpIsPortailUrl(emailRaw)){
-          contactParts.push(h('a',{className:'expe-trp-portail',href:emailRaw,target:'_blank',rel:'noopener',onClick:e=>e.stopPropagation()},
-            iconEl('arrow-right',13),' Portail'));
-        }else{
-          contactParts.push(h('a',{className:'expe-trp-contact-item',href:'mailto:'+encodeURIComponent(emailRaw),style:{color:'var(--accent)',textDecoration:'none'}},
-            iconEl('mail',13),' ',escHtml(emailRaw)));
-        }
-      }
-      let tarifEl;
-      if(tr.tarif_url){
-        const a=h('a',{href:expeTrpTarifUrl(tr.id),target:'_blank',rel:'noopener'},iconEl('file',13),' ',escHtml(tr.tarif_filename||'Voir le tarif'));
-        tarifEl=h('div',{className:'expe-trp-tarif'},a);
-      }else{
-        tarifEl=h('div',{className:'expe-trp-tarif',style:{color:'var(--muted)'}},'— Aucun tarif');
-      }
-      const isActive=!!Number(tr.actif);
-      return h('div',{className:'expe-trp-card'+(inactive?' inactive':'')},
-        h('div',{className:'expe-trp-card-top'},
-          h('div',null,
-            h('div',{className:'expe-trp-name'},escHtml(tr.nom||'')),
-            inactive?h('span',{className:'expe-trp-badge-inactif',style:{marginTop:'6px',display:'inline-block'}},'Inactif'):null
-          ),
-          expeCanWrite()?h('div',{className:'expe-trp-actions'},
-            h('button',{type:'button',className:'btn-ghost',title:'Modifier',onClick:()=>openTransporteurModal(tr.id)},iconEl('edit',14)),
-            h('button',{type:'button',className:'btn-ghost',title:isActive?'Désactiver':'Réactiver',
-              onClick:()=>toggleActif(tr.id,isActive?0:1)},iconEl('sliders',14))
-          ):null
-        ),
-        zones.length?h('div',{className:'expe-trp-zones'},...zones.map(z=>h('span',{className:'expe-trp-zone'},z))):null,
-        services.length?h('div',{className:'expe-trp-services'},...services.map(s=>h('span',{className:'expe-trp-svc'},s))):null,
-        h('div',{className:'expe-trp-meta'},
-          h('span',null,'Taxe carburant : ',h('strong',null,escHtml(String(taxe))),' %')
-        ),
-        contactParts.length?h('div',{className:'expe-trp-contact'},...contactParts):null,
-        (emailRaw||tr.contact_tel)?h('button',{type:'button',className:'btn btn-ghost',style:{marginTop:'8px',alignSelf:'flex-start'},
-          onClick:()=>expeTrpOpenContact(tr)},
-          iconEl(expeTrpIsPortailUrl(emailRaw)?'arrow-right':'mail',13),
-          ' ',expeTrpIsPortailUrl(emailRaw)?'Ouvrir le portail':'Contacter'):null,
-        tarifEl
-      );
-    })
+  const head=h('tr',null,
+    h('th',null,'Transporteur'),
+    h('th',null,'Zones'),
+    h('th',null,'Comparateur'),
+    h('th',null,'Carburant'),
+    h('th',null,'Contact'),
+    h('th',null,'Tarif'),
+    expeCanWrite()?h('th',{style:{width:'1%',whiteSpace:'nowrap'}},''):null
+  );
+  const body=rows.map(tr=>{
+    const inactive=!Number(tr.actif);
+    const zones=expeTrpZonesBadges(tr);
+    const taxe=tr.taxe_carburant_pct!=null?Number(tr.taxe_carburant_pct):0;
+    const services=expeTrpServiceBadges(tr.nom||'');
+    const isActive=!!Number(tr.actif);
+    const nameCell=h('td',null,
+      h('span',{className:'expe-trp-name'},escHtml(tr.nom||'')),
+      inactive?h('span',{className:'expe-trp-badge-inactif'},'Inactif'):null
+    );
+    const tarifCell=tr.tarif_url
+      ? h('td',{className:'expe-trp-tarif'},
+          h('a',{href:expeTrpTarifUrl(tr.id),target:'_blank',rel:'noopener'},iconEl('file',12),' ',escHtml(tr.tarif_filename||'Tarif')))
+      : h('td',{style:{color:'var(--muted)',fontSize:'12px'}},'—');
+    const actionCell=expeCanWrite()?h('td',{style:{whiteSpace:'nowrap'}},
+      h('div',{className:'expe-trp-actions'},
+        h('button',{type:'button',className:'btn-ghost',title:'Modifier',onClick:()=>openTransporteurModal(tr.id)},iconEl('edit',14)),
+        h('button',{type:'button',className:'btn-ghost',title:isActive?'Désactiver':'Réactiver',
+          onClick:()=>toggleActif(tr.id,isActive?0:1)},iconEl('sliders',14))
+      )
+    ):null;
+    return h('tr',{className:inactive?'expe-trp-row-inactive':''},
+      nameCell,
+      h('td',null,expeTrpBadgesCell(zones,'expe-trp-zone')),
+      h('td',null,expeTrpBadgesCell(services,'expe-trp-svc')),
+      h('td',{className:'expe-trp-num'},escHtml(String(taxe))+' %'),
+      h('td',null,expeTrpContactCell(tr)),
+      tarifCell,
+      actionCell
+    );
+  });
+  return h('div',{className:'expe-trp-table-wrap'},
+    h('table',{className:'table-std expe-trp-table'},h('thead',null,head),h('tbody',null,...body))
   );
 }
 
@@ -635,7 +654,7 @@ EXPE_CARTE_FRANCE_CSS = r"""
 .expe-carte-svg-wrap{width:100%;min-height:400px;max-height:700px;overflow:hidden;display:flex;align-items:center;justify-content:center;
   background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:8px}
 .expe-carte-svg{width:100%;height:auto;max-height:680px;display:block}
-.expe-carte-svg path,.expe-carte-svg rect[id]{cursor:pointer;transition:fill .15s,stroke .15s,filter .15s}
+.expe-carte-svg path,.expe-carte-svg rect[id]{cursor:pointer;stroke:var(--border);stroke-width:1.2;transition:fill .15s,stroke .15s,filter .15s}
 .expe-carte-svg path:hover,.expe-carte-svg rect[id]:hover{filter:brightness(1.08)}
 .expe-carte-dept--highlight{stroke:var(--accent)!important;stroke-width:2.5!important;filter:drop-shadow(0 0 6px color-mix(in srgb,var(--accent) 45%,transparent))}
 .expe-carte-dept--selected{stroke:var(--text)!important;stroke-width:2!important}
@@ -667,7 +686,7 @@ const DELAIS_FRANCE_DEFAULT = """
 const EXPE_FRANCE_SVG_MARKUP = """
     + json.dumps(EXPE_FRANCE_SVG_MARKUP)
     + r""";
-const EXPE_LS_DELAIS_KEY = 'mysifa_expe_delais';
+const EXPE_LS_DELAIS_KEY = 'mysifa_expe_delais_v2';
 const EXPE_ZONE_COLORS = {
   france: 'var(--accent)',
   france_hors_paris: 'var(--warn)',
@@ -752,7 +771,7 @@ function applyDelaisToMap(){
     if(!d)return;
     el.setAttribute('fill',expeZoneFill(d.zone));
     el.setAttribute('stroke','var(--border)');
-    el.setAttribute('stroke-width','0.5');
+    el.setAttribute('stroke-width','1.2');
   });
 }
 
@@ -920,7 +939,7 @@ function renderExpeCarteLegend(){
       h('span',{className:'expe-carte-swatch',style:{background:expeZoneFill(z)}}),
       h('span',null,EXPE_ZONE_LABELS[z]+' — '+samples[z])
     )),
-    h('div',{className:'expe-carte-hint'},'Survolez un département pour voir les délais.')
+    h('div',{className:'expe-carte-hint'},'Départs depuis Roubaix (59 — Nord). Survolez un département pour voir les délais.')
   );
 }
 

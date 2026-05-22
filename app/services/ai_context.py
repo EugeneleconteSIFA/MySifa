@@ -11,6 +11,7 @@ ROLE_SCOPE: dict[str, list[str]] = {
     "superadmin": ["production", "planning", "stock", "expe", "rh", "paie", "admin"],
     "direction": ["production", "planning", "stock", "expe", "rh", "paie", "admin"],
     "administration": ["production", "planning", "stock", "expe", "rh", "paie", "admin"],
+    "expedition": ["production", "planning", "stock", "expe", "rh"],
 }
 
 READ_TOOL_NAMES: list[str] = [
@@ -38,6 +39,16 @@ def get_user_scope(role: str) -> list[str]:
     return ROLE_SCOPE.get(role, [])
 
 
+EXPEDITION_READ_TOOLS = [
+    "production_detail",
+    "planning_detail",
+    "planning_client_schedule",
+    "stock_search",
+    "stock_emplacement",
+    "expe_detail",
+]
+
+
 def get_tools_for_role(role: str) -> list[str]:
     """Outils autorisés pour le rôle. Étendre ici pour ouvrir à d'autres rôles."""
     if role == "superadmin":
@@ -46,6 +57,8 @@ def get_tools_for_role(role: str) -> list[str]:
         return list(ALL_TOOL_NAMES)
     if role == "administration":
         return list(ACTION_TOOL_NAMES)
+    if role == "expedition":
+        return list(EXPEDITION_READ_TOOLS)
     return []
 
 def _load_sifa_context() -> str:
@@ -68,6 +81,10 @@ def _role_access_note(role: str, scope: list[str]) -> str:
     elif role == "direction":
         lines.append(
             "Vous disposez d'une vue consolidée sur tous les modules listés ci-dessus."
+        )
+    elif role == "expedition":
+        lines.append(
+            "Accès lecture : production, planning machine, stock, expéditions et planning RH."
         )
     return "\n".join(lines)
 
