@@ -51,6 +51,7 @@ from app.routers.calendrier import router as calendrier_api_router
 from app.web.calendrier_page import router as calendrier_page_router
 from app.routers.ai import router as ai_router
 from app.routers.chat import router as chat_router
+from app.routers.alerts import router as alerts_router
 
 
 @asynccontextmanager
@@ -142,6 +143,7 @@ app.include_router(calendrier_api_router)
 app.include_router(calendrier_page_router)
 app.include_router(ai_router)
 app.include_router(chat_router)
+app.include_router(alerts_router)
 
 
 @app.get("/", response_class=HTMLResponse)

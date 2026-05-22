@@ -496,6 +496,7 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 </head>
 <body>
 <script src="/static/mysifa_theme.js"></script>
+<script src="/static/mysifa_favicon_badge.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
 <div class="sidebar-overlay" id="sb-ov"></div>
 <div id="app"></div>

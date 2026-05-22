@@ -294,6 +294,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 </head>
 <body>
 <script src="/static/mysifa_theme.js"></script>
+<script src="/static/mysifa_favicon_badge.js"></script>
 
 <!-- ── Password overlay ── -->
 <div id="pw-overlay">

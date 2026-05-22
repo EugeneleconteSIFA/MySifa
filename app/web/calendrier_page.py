@@ -368,6 +368,7 @@ body.light .cal-allday-row{background:#f8fafc}
 </head>
 <body class="has-topbar">
 <script src="/static/mysifa_theme.js"></script>
+<script src="/static/mysifa_favicon_badge.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
 <script src="/static/mysifa_calendar.js"></script>
 <script>window.__MYSIFA_APP__='calendrier';</script>

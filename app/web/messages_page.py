@@ -266,6 +266,7 @@ body.sb-open .sidebar-overlay{display:block}
 </head>
 <body>
 <script src="/static/mysifa_theme.js"></script>
+<script src="/static/mysifa_favicon_badge.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
 <div class="sidebar-overlay" id="sb-ov" onclick="document.body.classList.remove('sb-open')"></div>
 <div id="chat-app">

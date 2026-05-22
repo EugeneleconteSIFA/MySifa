@@ -713,6 +713,7 @@ body.has-topbar .fab-main{padding-top:74px}
 </head>
 <body>
 <script src="/static/mysifa_theme.js"></script>
+<script src="/static/mysifa_favicon_badge.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
 <div id="root"></div>
 <div id="mroot"></div>

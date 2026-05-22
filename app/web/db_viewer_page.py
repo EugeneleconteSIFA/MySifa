@@ -311,6 +311,7 @@ body.light .user-chip:hover{{background:rgba(8,145,178,.12)}}
 </head>
 <body class="has-topbar">
 <script src="/static/mysifa_theme.js"></script>
+<script src="/static/mysifa_favicon_badge.js"></script>
 <script>window.__MYSIFA_APP__='db';</script>
 <link rel="stylesheet" href="/static/mysifa_landscape.css">
 <script src="/static/mysifa_dock.js"></script>

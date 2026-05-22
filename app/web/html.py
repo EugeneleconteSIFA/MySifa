@@ -1828,8 +1828,11 @@ async function api(p,o){
     }
     if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(apiDetailMsg(e.detail)||('Erreur '+r.status));}
     const ct=r.headers.get('content-type')||'';
-    if(ct.includes('spreadsheet')||ct.includes('octet-stream'))return r.blob();
-    return await r.json();
+    let out;
+    if(ct.includes('spreadsheet')||ct.includes('octet-stream'))out=await r.blob();
+    else out=await r.json();
+    if(shouldRefreshAlertsFromApi(p,o))refreshAlertsBadge().catch(()=>{});
+    return out;
   }catch(e){if(e.message.includes('Failed to fetch'))throw new Error('API non disponible');throw e;}
 }
 
@@ -1923,6 +1926,7 @@ let S={
   rentOffset:0,
   rentLimit:12,
   toast:null,
+  alertsCount:0,
   selectedRows:new Set(),   // ids des lignes sélectionnées
   sortState:{col:null,asc:true}, // tri tableau saisies
   addRowTemplate:null,
@@ -1957,6 +1961,7 @@ let S={
   matiereSearch:'',
   matiereLoading:false,
 };
+window.S=S;
 
 // Charger la persistance MyExpé (si présent) avant le 1er render.
 expeLoadLocalState();
@@ -1972,6 +1977,71 @@ function toast(m,t='success'){set({toast:{message:m,type:t}});setTimeout(()=>set
 function showToast(message,type){
   const t=type==='danger'?'error':(type==='success'?'success':'success');
   toast(message,t);
+}
+
+function updateFaviconBadge(count){
+  const canvas=document.createElement('canvas');
+  canvas.width=32;canvas.height=32;
+  const ctx=canvas.getContext('2d');
+  if(!ctx)return;
+
+  ctx.fillStyle='#0a0e17';
+  ctx.beginPath();
+  if(typeof ctx.roundRect==='function')ctx.roundRect(0,0,32,32,6);
+  else ctx.rect(0,0,32,32);
+  ctx.fill();
+
+  ctx.fillStyle='#f1f5f9';
+  ctx.font='bold 20px system-ui';
+  ctx.textAlign='center';
+  ctx.textBaseline='middle';
+  ctx.fillText('M',16,17);
+
+  if(count>0){
+    ctx.fillStyle='#f87171';
+    ctx.beginPath();
+    ctx.arc(24,8,7,0,Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle='#ffffff';
+    ctx.font='bold 9px system-ui';
+    ctx.textAlign='center';
+    ctx.textBaseline='middle';
+    ctx.fillText(count>9?'9+':String(count),24,8);
+  }
+
+  let link=document.querySelector('link[rel="icon"]');
+  if(!link){
+    link=document.createElement('link');
+    link.rel='icon';
+    document.head.appendChild(link);
+  }
+  link.href=canvas.toDataURL();
+}
+
+async function refreshAlertsBadge(){
+  try{
+    const r=await api('/api/alerts/count');
+    if(r&&typeof r.total==='number'){
+      S.alertsCount=r.total;
+      updateFaviconBadge(r.total);
+    }
+  }catch(e){}
+}
+
+let _alertsBadgeInterval=null;
+function startAlertsBadgePolling(){
+  refreshAlertsBadge().catch(()=>{});
+  if(_alertsBadgeInterval)return;
+  _alertsBadgeInterval=setInterval(()=>{refreshAlertsBadge().catch(()=>{});},60000);
+}
+
+function shouldRefreshAlertsFromApi(path,opts){
+  const m=String((opts&&opts.method)||'GET').toUpperCase();
+  if(m==='GET')return false;
+  const p=String(path||'');
+  if(p.includes('/api/alerts/count'))return false;
+  return /\/api\/(messages|expe\/departs|dossiers|planning)/.test(p);
 }
 
 function closeSidebar(){if(S.sidebarOpen){S.sidebarOpen=false;render();}}
@@ -2117,6 +2187,7 @@ async function checkAuth(){
     S.app=HAS_INITIAL_APP ? INITIAL_APP : 'portal';
     // Garder le badge Messagerie à jour, même sur le portail
     try{ startMessagesPolling(); }catch(e){}
+    try{ startAlertsBadgePolling(); }catch(e){}
     try{ checkGlobalUpdates(); }catch(e){}
     // Support : redirection post-login (ex: /?next=/planning)
     try{
@@ -2217,6 +2288,7 @@ async function markMessageRead(id){
   if(!id)return;
   await api('/api/messages/'+id+'/mark-read',{method:'POST'});
   await loadMessagesUnread();
+  refreshAlertsBadge().catch(()=>{});
   // Optimistic local update
   try{
     const list=(S.msgList||[]).map(m=>m.id===id?({...m,read_at:m.read_at||new Date().toISOString()}):m);
@@ -2243,6 +2315,7 @@ async function sendContact(){
   set({contactSending:true});
   try{
     await api('/api/messages/contact',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({subject:subj,message:msg})});
+    refreshAlertsBadge().catch(()=>{});
     toast('Message envoyé au support');
     set({contactOpen:false,contactSubject:'',contactMessage:'',contactSending:false});
   }catch(e){

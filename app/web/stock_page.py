@@ -396,8 +396,6 @@ body.light .field-input.empl-upper::placeholder{
 .dash-section{border-top:1px solid var(--border);padding-top:22px;margin-top:22px}
 .dash-section-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;
   color:var(--muted);margin:0 0 14px}
-.dash-alert-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:stretch}
-@media(max-width:700px){.dash-alert-grid{grid-template-columns:1fr}}
 .dash-alert-block{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;
   display:flex;flex-direction:column;min-height:100px}
 .dash-alert-block h4{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:0 0 12px;flex-shrink:0}
@@ -899,6 +897,7 @@ body.light .recep-fourn-sel:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 </head>
 <body>
 <script src="/static/mysifa_theme.js"></script>
+<script src="/static/mysifa_favicon_badge.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
 <div id="root"></div>
 <div id="mroot"></div>
@@ -1212,16 +1211,14 @@ async function loadEmplacement(empl) {
 
 async function loadDashboard() {
   try {
-    const [dash, activite, inventaire] = await Promise.all([
+    const [dash, activite] = await Promise.all([
       api('/api/stock/dashboard'),
       api('/api/stock/historique-mouvements?limit=10').catch(() => []),
-      api('/api/stock/inventaire/produits-a-inventorier').catch(() => []),
     ]);
     if (dash) {
       S.dashboard = {
         ...dash,
         activiteRecente: Array.isArray(activite) ? activite : [],
-        alertesPf: Array.isArray(inventaire) ? inventaire : [],
       };
       renderContent();
     }
@@ -3316,7 +3313,6 @@ function buildDashboardShortcuts() {
 
 function buildDashboardAlertes(d) {
   const alertesMp = d.alertes_mp || [];
-  const alertesPf = d.alertesPf || [];
   const mpRows = alertesMp.length
       ? el('div', { cls: 'dash-alert-rows' }, ...alertesMp.map(a => el('div', {
           cls: 'dash-alert-row',
@@ -3331,30 +3327,9 @@ function buildDashboardAlertes(d) {
           ),
         )))
       : el('div', { cls: 'dash-alert-ok' }, 'Toutes les matières sont au-dessus des seuils.');
-  const mpBlock = el('div', { cls: 'dash-alert-block' },
-    el('h4', null, 'Matières premières'),
-    mpRows,
-  );
-  const pfRows = alertesPf.length
-      ? el('div', { cls: 'dash-alert-rows' }, ...alertesPf.slice(0, 12).map(a => el('div', {
-          cls: 'dash-alert-row',
-          on: { click: () => goToTab('inventaire') },
-        },
-          el('span', { cls: 'dash-alert-main' },
-            (a.reference || '') + ' — ' + (a.designation || '')
-          ),
-          el('span', { cls: 'dash-alert-qty' },
-            (a.emplacement || '') + ' · ' + (a.jours_depuis === 999999 ? 'jamais' : (a.jours_depuis + 'j'))
-          ),
-        )))
-      : el('div', { cls: 'dash-alert-ok' }, 'Tous les produits finis sont à jour.');
-  const pfBlock = el('div', { cls: 'dash-alert-block' },
-    el('h4', null, 'Produits finis'),
-    pfRows,
-  );
   return el('div', { cls: 'dash-section' },
     el('div', { cls: 'dash-section-title' }, 'Stocks à réapprovisionner'),
-    el('div', { cls: 'dash-alert-grid' }, mpBlock, pfBlock),
+    el('div', { cls: 'dash-alert-block' }, mpRows),
   );
 }
 

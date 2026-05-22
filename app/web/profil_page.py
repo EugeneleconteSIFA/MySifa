@@ -271,6 +271,7 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 </head>
 <body class="has-topbar">
 <script src="/static/mysifa_theme.js"></script>
+<script src="/static/mysifa_favicon_badge.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
 <script src="/static/mysifa_calendar.js"></script>
 
