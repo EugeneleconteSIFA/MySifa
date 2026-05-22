@@ -53,6 +53,7 @@ AO_HTML = r"""<!DOCTYPE html>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <link rel="stylesheet" href="/static/mysifa_theme.css">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
+<link rel="stylesheet" href="/static/support_widget.css">
 <style>
 :root{--bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;--muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,.12);--success:#34d399;--warn:#fbbf24;--danger:#f87171;}
 body.light{--bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--muted:#64748b;--accent:#0891b2;--accent-bg:rgba(8,145,178,.1);--success:#059669;--warn:#d97706;--danger:#dc2626;}
@@ -68,8 +69,15 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .nav-btn{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border-radius:8px;border:none;background:transparent;color:var(--text2);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left;margin-bottom:2px;transition:background .15s,color .15s}
 .nav-btn svg{flex-shrink:0}
 .nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
-.nav-section{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);padding:12px 12px 6px}
-.sidebar-bottom{margin-top:auto;display:flex;flex-direction:column;gap:6px;padding-top:12px;border-top:1px solid var(--border)}
+.nav-section-label{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);font-weight:600;padding:14px 12px 4px;user-select:none;pointer-events:none}
+.nav-btn-sub{padding-left:28px;font-size:12px}
+.sidebar-nav{padding:4px 0;flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.sidebar-nav::-webkit-scrollbar{width:4px}
+.sidebar-nav::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.sidebar-bottom{margin-top:auto;display:flex;flex-direction:column;gap:6px;padding:12px 8px;border-top:1px solid var(--border);flex-shrink:0;background:var(--card)}
+.support-btn{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-size:12px;width:100%;font-family:inherit;transition:all .15s}
+.support-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+.support-ico{display:inline-flex;align-items:center;justify-content:center}
 .back-mysifa{font-weight:400!important;color:var(--text2)!important}
 .back-mysifa .wm{font-weight:800;color:var(--text)}.back-mysifa .wm span{color:var(--accent)}
 .theme-btn,.logout-btn{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:12px;width:100%;cursor:pointer;font-family:inherit}
@@ -153,9 +161,11 @@ label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bot
 <div id="toast"></div>
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
+<script src="/static/support_widget.js"></script>
 <script>
 const BASE_URL = __BASE_URL__;
 const S = {
+  section: 'ao',
   view: 'list',
   tab: 'lignes',
   aos: [],
@@ -202,7 +212,10 @@ function icon(name, size) {
     trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>',
     'arrow-left': '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
     mail: '<path d="M4 6h16v12H4z"/><path d="M4 7l8 6 8-6"/>',
-    calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/>'
+    calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/>',
+    grid: '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
+    user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+    'building-2': '<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/>'
   };
   return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0">'+(p[name]||'')+'</svg>';
 }
@@ -241,35 +254,104 @@ function formatEur(n) {
   return Number(n).toLocaleString('fr-FR', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' €';
 }
 
-function canAccess(key) {
-  const u = S.user;
-  if (!u) return false;
-  if (u.role === 'superadmin') return true;
-  const aa = u.app_access;
-  if (aa && typeof aa[key] === 'boolean') return aa[key];
-  const r = u.role;
-  const defs = {
-    prod: ['direction','administration','fabrication','expedition','commercial'],
-    stock: ['direction','administration','logistique','expedition','commercial'],
-    compta: ['direction','administration','comptabilite'],
-    expe: ['direction','administration','expedition','logistique'],
-    planning_rh: ['direction','administration','fabrication','logistique','expedition','comptabilite'],
-    devis: ['direction'],
-    fabrication: ['fabrication','direction','administration']
-  };
-  return !!(defs[key] && defs[key].includes(r));
+function buildAoSidebarNavStructure() {
+  const sec = S.section;
+  return [
+    {kind:'btn', section:'dashboard', icon:'grid', label:'Tableau de bord'},
+    {kind:'btn', section:'ao', icon:'clipboard', label:'Appel d\'offre'},
+    {kind:'sep', label:'Contact'},
+    {kind:'btn', section:'contact_fournisseur', icon:'truck', label:'Fournisseur', sub:true},
+    {kind:'btn', section:'contact_client', icon:'user', label:'Client', sub:true},
+    {kind:'btn', section:'produits', icon:'package', label:'Produits'},
+  ].map(n => (n.kind === 'btn' ? {...n, active: sec === n.section} : n));
 }
 
-function buildSidebarNav() {
-  const items = [{href:'/ao',icon:'clipboard',label:'Appels d\'offre',active:true}];
-  if (canAccess('prod')) items.push({href:'/planning',icon:'calendar',label:'Planning'});
-  if (canAccess('fabrication')) items.push({href:'/fabrication',icon:'edit',label:'Saisie Prod'});
-  if (canAccess('stock')) items.push({href:'/stock',icon:'package',label:'MyStock'});
-  if (canAccess('compta')) items.push({href:'/compta',icon:'calculator',label:'MyCompta'});
-  if (canAccess('expe')) items.push({href:'/expe',icon:'truck',label:'MyExpé'});
-  if (canAccess('planning_rh')) items.push({href:'/planning-rh',icon:'users',label:'Planning RH'});
-  if (canAccess('devis')) items.push({href:'/devis',icon:'file-text',label:'MyDevis'});
-  return items;
+function aoMobileTitle() {
+  const m = {
+    dashboard: ['Tableau de bord', 'Vue d\'ensemble'],
+    ao: S.view === 'detail' && S.ao ? [S.ao.reference, 'Appel d\'offre'] : ['Appels d\'offre', 'Appel d\'offre'],
+    contact_fournisseur: ['Fournisseurs', 'Contacts'],
+    contact_client: ['Clients', 'Contacts'],
+    produits: ['Produits', 'Référentiel'],
+  };
+  const x = m[S.section] || ['MyAO', 'Appels d\'offre'];
+  return {title: x[0], sub: x[1]};
+}
+
+function goToAoSection(section) {
+  if (S.section === section) { closeSidebar(); return; }
+  if (S.polling) { clearInterval(S.polling); S.polling = null; }
+  S.section = section;
+  if (section !== 'ao') {
+    S.view = 'list';
+    S.ao = null;
+    S.detail = null;
+  }
+  closeSidebar();
+  render();
+}
+
+function openSupport() {
+  if (window.MySifaSupport && typeof window.MySifaSupport.open === 'function') {
+    window.MySifaSupport.open({
+      user: S.user,
+      page: 'MyAO',
+      notify: (m, t) => showToast(m, t === 'error' ? 'danger' : (t || 'info')),
+      api
+    });
+  } else {
+    showToast('Support indisponible.', 'danger');
+  }
+}
+
+function renderAoSidebarNavHtml() {
+  let html = '';
+  buildAoSidebarNavStructure().forEach(n => {
+    if (n.kind === 'sep') {
+      html += '<div class="nav-section-label">'+escHtml(n.label)+'</div>';
+      return;
+    }
+    const cls = 'nav-btn'+(n.sub?' nav-btn-sub':'')+(n.active?' active':'');
+    html += '<button type="button" class="'+cls+'" data-section="'+escAttr(n.section)+'">'+icon(n.icon,16)+'<span>'+escHtml(n.label)+'</span></button>';
+  });
+  return html;
+}
+
+function renderUserChipHtml() {
+  if (!S.user) return '';
+  if (window.MySifaUserChip && typeof window.MySifaUserChip.innerHtml === 'function') {
+    return '<div class="user-chip" id="user-chip" style="cursor:pointer" title="Modifier mon profil">'+
+      window.MySifaUserChip.innerHtml(S.user, {roleLabels: ROLE_LABELS})+'</div>';
+  }
+  return '<div class="user-chip" id="user-chip" style="cursor:pointer" title="Modifier mon profil">'+
+    '<div class="uc-name">'+escHtml(S.user.nom)+'</div>'+
+    '<div class="uc-role">'+escHtml(ROLE_LABELS[S.user.role]||S.user.role)+'</div></div>';
+}
+
+function renderDashboard() {
+  const aos = S.aos || [];
+  const nb = (s) => aos.filter(a => a.statut === s).length;
+  const recent = aos.slice(0, 8);
+  let rows = '';
+  recent.forEach(a => {
+    rows += '<tr><td><strong>'+escHtml(a.reference)+'</strong></td><td>'+escHtml(a.titre)+'</td><td>'+statutBadge(a.statut)+'</td>'+
+      '<td><button class="btn btn-ghost btn-sm btn-view" data-id="'+a.id+'">Voir</button></td></tr>';
+  });
+  return '<div class="page-hdr"><h1>Tableau de bord</h1></div>'+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin-bottom:20px">'+
+    '<div class="card" style="margin:0"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600">Total</div><div style="font-size:24px;font-weight:800;margin-top:6px">'+aos.length+'</div></div>'+
+    '<div class="card" style="margin:0"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600">Brouillon</div><div style="font-size:24px;font-weight:800;margin-top:6px">'+nb('brouillon')+'</div></div>'+
+    '<div class="card" style="margin:0"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600">Envoyée</div><div style="font-size:24px;font-weight:800;margin-top:6px">'+nb('envoyee')+'</div></div>'+
+    '<div class="card" style="margin:0"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600">Clôturée</div><div style="font-size:24px;font-weight:800;margin-top:6px">'+nb('cloturee')+'</div></div>'+
+    '</div>'+
+    '<div class="page-hdr" style="margin-bottom:12px"><h2 style="font-size:16px;font-weight:700">Appels d\'offre récents</h2></div>'+
+    (recent.length ? '<div class="card"><table class="data-table"><thead><tr><th>Référence</th><th>Titre</th><th>Statut</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>' :
+    '<div class="card empty-state"><strong>Aucun appel d\'offre</strong>Créez un premier appel d\'offre depuis l\'onglet Appel d\'offre.</div>');
+}
+
+function renderSectionPlaceholder(title, hint) {
+  return '<div class="page-hdr"><h1>'+escHtml(title)+'</h1></div>'+
+    '<div class="card empty-state"><strong>'+escHtml(title)+'</strong>'+escHtml(hint)+'</div>';
 }
 
 function toggleSidebar() {
@@ -304,6 +386,7 @@ function filteredAos() {
 }
 
 function openDetail(id) {
+  S.section = 'ao';
   S.view = 'detail';
   S.tab = 'lignes';
   S.messages_fourni = null;
@@ -696,25 +779,23 @@ function render() {
 
   const root = document.getElementById('root');
   const isLight = document.body.classList.contains('light');
-  const navItems = buildSidebarNav();
-  let navHtml = '<div class="nav-section">Modules</div>';
-  navItems.forEach(n => {
-    navHtml += '<button type="button" class="nav-btn'+(n.active?' active':'')+'" data-href="'+escAttr(n.href)+'">'+icon(n.icon,16)+'<span>'+escHtml(n.label)+'</span></button>';
-  });
+  const mob = aoMobileTitle();
+  const navHtml = renderAoSidebarNavHtml();
 
   root.innerHTML =
     '<div class="sidebar-overlay" id="sb-overlay"></div>'+
     '<nav class="sidebar"><div class="logo"><div class="logo-brand">My<span>AO</span></div><div class="logo-sub">by SIFA</div></div>'+
-    '<div style="flex:1;overflow-y:auto">'+navHtml+'</div>'+
+    '<div class="sidebar-nav">'+navHtml+'</div>'+
     '<div class="sidebar-bottom">'+
     '<button type="button" class="nav-btn back-mysifa" id="btn-home">← Retour <span class="wm">My<span>Sifa</span></span></button>'+
-    (S.user ? '<div class="user-chip" id="user-chip" style="cursor:pointer"><div class="uc-name">'+escHtml(S.user.nom)+'</div><div class="uc-role">'+escHtml(ROLE_LABELS[S.user.role]||S.user.role)+'</div></div>' : '')+
+    renderUserChipHtml()+
+    '<button type="button" class="support-btn" id="btn-support"><span class="support-ico" id="support-ico"></span><span>Contacter le support</span></button>'+
     '<button type="button" class="theme-btn" id="btn-theme">'+icon(isLight?'sun':'moon',16)+' '+(isLight?'Mode clair':'Mode sombre')+'</button>'+
     '<button type="button" class="logout-btn" id="btn-logout">'+icon('log-out',14)+' Déconnexion</button>'+
     '<div class="version">MyAO __V_LABEL__</div></div></nav>'+
     '<div class="main"><div class="mobile-topbar">'+
     '<button type="button" class="mobile-menu-btn" id="btn-menu">'+icon('menu',20)+'</button>'+
-    '<div><div class="mobile-topbar-title">Appels d\'offre</div><div class="mobile-topbar-sub">MyAO</div></div>'+
+    '<div><div class="mobile-topbar-title">'+escHtml(mob.title)+'</div><div class="mobile-topbar-sub">'+escHtml(mob.sub)+'</div></div>'+
     '<button type="button" class="mobile-home-btn" id="btn-home-m">'+icon('home',20)+'</button></div>'+
     '<div class="scroll-area" id="scroll-area"></div></div>';
 
@@ -724,13 +805,27 @@ function render() {
   document.getElementById('btn-home-m').onclick = () => location.href = '/';
   document.getElementById('btn-theme').onclick = () => { if (window.MySifaTheme) MySifaTheme.toggleMode(); render(); };
   document.getElementById('btn-logout').onclick = async () => { await api('/api/auth/logout', {method:'POST'}); location.href = '/'; };
+  document.getElementById('btn-support').onclick = openSupport;
+  const supportIco = document.getElementById('support-ico');
+  if (supportIco && window.MySifaSupport && window.MySifaSupport.iconSvg) {
+    try { supportIco.innerHTML = window.MySifaSupport.iconSvg(); } catch(e) {}
+  }
   document.getElementById('user-chip')?.addEventListener('click', () => location.href = '/profil');
-  document.querySelectorAll('.sidebar .nav-btn[data-href]').forEach(b => {
-    if (!b.classList.contains('active')) b.onclick = () => location.href = b.dataset.href;
+  document.querySelectorAll('.sidebar .nav-btn[data-section]').forEach(b => {
+    b.onclick = () => goToAoSection(b.dataset.section);
   });
 
   const area = document.getElementById('scroll-area');
-  if (S.view === 'list') {
+  if (S.section === 'dashboard') {
+    area.innerHTML = renderDashboard();
+    bindListEvents();
+  } else if (S.section === 'contact_fournisseur') {
+    area.innerHTML = renderSectionPlaceholder('Fournisseurs', 'Référentiel fournisseurs — contenu à venir.');
+  } else if (S.section === 'contact_client') {
+    area.innerHTML = renderSectionPlaceholder('Clients', 'Référentiel clients — contenu à venir.');
+  } else if (S.section === 'produits') {
+    area.innerHTML = renderSectionPlaceholder('Produits', 'Référentiel produits — contenu à venir.');
+  } else if (S.view === 'list') {
     area.innerHTML = renderList();
     bindListEvents();
   } else if (S.detail && S.ao) {

@@ -1815,6 +1815,56 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 50, "ao_pieces_jointes")
 
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=51 LIMIT 1").fetchone():
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(chat_channels)").fetchall()}
+        if 'emoji' not in cols:
+            conn.execute("ALTER TABLE chat_channels ADD COLUMN emoji TEXT DEFAULT NULL")
+        conn.commit()
+        _record_schema_migration(conn, 51, "chat_channels_emoji")
+
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=52 LIMIT 1").fetchone():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS chat_mentions (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                message_id        INTEGER NOT NULL REFERENCES chat_messages(id) ON DELETE CASCADE,
+                channel_id        INTEGER NOT NULL,
+                mentioned_user_id INTEGER,
+                is_all            INTEGER NOT NULL DEFAULT 0,
+                created_at        TEXT    NOT NULL,
+                read_at           TEXT    DEFAULT NULL
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mentions_user ON chat_mentions(mentioned_user_id, read_at)"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 52, "chat_mentions")
+
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=53 LIMIT 1").fetchone():
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
+        if 'notif_asked_at' not in cols:
+            conn.execute("ALTER TABLE users ADD COLUMN notif_asked_at TEXT DEFAULT NULL")
+        if 'notif_browser' not in cols:
+            conn.execute("ALTER TABLE users ADD COLUMN notif_browser INTEGER NOT NULL DEFAULT 0")
+        conn.commit()
+        _record_schema_migration(conn, 53, "users_notif_prefs")
+
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=54 LIMIT 1").fetchone():
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(chat_messages)").fetchall()}
+        if 'edited_at' not in cols:
+            conn.execute("ALTER TABLE chat_messages ADD COLUMN edited_at TEXT DEFAULT NULL")
+        conn.commit()
+        _record_schema_migration(conn, 54, "chat_messages_edited_at")
+
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=55 LIMIT 1").fetchone():
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(chat_messages)").fetchall()}
+        if 'pinned_at' not in cols:
+            conn.execute("ALTER TABLE chat_messages ADD COLUMN pinned_at TEXT DEFAULT NULL")
+        if 'pinned_by' not in cols:
+            conn.execute("ALTER TABLE chat_messages ADD COLUMN pinned_by INTEGER DEFAULT NULL")
+        conn.commit()
+        _record_schema_migration(conn, 55, "chat_messages_pin")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

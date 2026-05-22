@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Request
 from database import get_db
-from services.auth_service import get_current_user, is_admin, is_fabrication
+from services.auth_service import get_current_user, is_fabrication, can_view_all_prod
 from services.prod_machine_filter import list_filter_machines
 
 router = APIRouter()
@@ -9,8 +9,8 @@ router = APIRouter()
 def get_filters(request: Request):
     user = get_current_user(request)
     with get_db() as conn:
-        if is_admin(user):
-            # Admin: voir tous les opérateurs qui ont saisi
+        if can_view_all_prod(user):
+            # Direction, commercial, expédition : tous les opérateurs ayant saisi
             ops = conn.execute("""
                 SELECT DISTINCT operateur FROM production_data
                 WHERE operateur IS NOT NULL AND operateur!=''

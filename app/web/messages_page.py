@@ -159,6 +159,7 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
 }
 .chat-msg.theirs .chat-msg-bubble{background:var(--card);border:1px solid var(--border);color:var(--text);border-bottom-left-radius:3px}
 .chat-msg.mine .chat-msg-bubble{background:var(--accent);color:var(--bg);font-weight:600;border-bottom-right-radius:3px}
+.chat-msg.pinned .chat-msg-bubble{border-top:2px solid var(--warn)}
 .chat-msg-del{
   position:absolute;top:-4px;right:-4px;width:20px;height:20px;border-radius:50%;
   border:1px solid var(--border);background:var(--card);color:var(--muted);
@@ -167,12 +168,71 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
 }
 .chat-msg:hover .chat-msg-del{display:flex}
 .chat-msg.mine .chat-msg-del{right:auto;left:-4px}
+.chat-msg-edit{
+  position:absolute;top:-4px;right:20px;width:20px;height:20px;border-radius:50%;
+  border:1px solid var(--border);background:var(--card);color:var(--muted);
+  font-size:11px;line-height:1;cursor:pointer;display:none;align-items:center;justify-content:center;
+  font-family:inherit;padding:0;
+}
+.chat-msg:hover .chat-msg-edit{display:flex}
+.chat-msg.mine .chat-msg-edit{right:auto;left:20px}
+.chat-msg-pin{
+  position:absolute;top:-4px;right:38px;width:20px;height:20px;border-radius:50%;
+  border:1px solid var(--border);background:var(--card);color:var(--muted);
+  font-size:9px;line-height:1;cursor:pointer;display:none;align-items:center;justify-content:center;
+  font-family:inherit;padding:0;
+}
+.chat-msg:hover .chat-msg-pin{display:flex}
+.chat-msg.mine .chat-msg-pin{right:auto;left:38px}
+.chat-msg-pin.pinned-active{color:var(--warn);border-color:var(--warn)}
+.chat-pinned-item{padding:10px 0;border-bottom:1px solid var(--border)}
+.chat-pinned-item:last-child{border-bottom:none}
+.chat-pinned-item-meta{font-size:10px;color:var(--muted);margin-bottom:4px}
+.chat-pinned-item-body{font-size:13px;color:var(--text);line-height:1.5;word-break:break-word}
+.chat-pinned-unpin{margin-top:6px;font-size:11px;font-weight:700;padding:4px 10px;border-radius:7px;
+  border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit}
+.chat-pinned-unpin:hover{border-color:var(--warn);color:var(--warn)}
+.chat-msg-edited{font-size:10px;color:var(--muted);font-style:italic;margin-left:6px}
+.msg-edit-area{
+  width:100%;background:var(--bg);border:1px solid var(--accent);border-radius:8px;
+  padding:8px 10px;color:var(--text);font-size:13px;font-family:inherit;
+  resize:none;outline:none;min-height:36px;max-height:120px;line-height:1.4;
+}
+.msg-edit-actions{display:flex;gap:6px;margin-top:6px;justify-content:flex-end}
+.msg-edit-actions button{
+  padding:5px 12px;border-radius:7px;font-size:12px;font-weight:700;
+  cursor:pointer;font-family:inherit;border:1px solid var(--border);background:transparent;color:var(--text2);
+}
+.msg-edit-actions button.primary{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+/* Réactions */
+.msg-reactions{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.react-chip{
+  display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;
+  border:1px solid var(--border);background:transparent;font-size:12px;cursor:pointer;
+  font-family:inherit;transition:background .1s,border-color .1s;line-height:1.5;
+}
+.react-chip.mine{border-color:var(--accent);background:var(--accent-bg)}
+.react-chip:hover{border-color:var(--accent);background:var(--accent-bg)}
+.react-chip .rc-count{font-size:11px;color:var(--muted);font-weight:600}
+.react-picker{
+  display:none;position:absolute;
+  background:var(--card);border:1px solid var(--border);border-radius:10px;
+  padding:6px;box-shadow:0 8px 32px rgba(0,0,0,.35);z-index:100;white-space:nowrap;
+}
+.react-picker.show{display:flex;gap:4px}
+.chat-msg.mine .react-picker{right:0}
+.chat-msg.theirs .react-picker{left:0}
+.react-pick-btn{
+  font-size:18px;padding:4px 6px;border-radius:6px;border:none;
+  background:transparent;cursor:pointer;line-height:1;
+}
+.react-pick-btn:hover{background:var(--accent-bg)}
 #chat-input-area{
   padding:10px 14px;border-top:1px solid var(--border);
   display:flex;gap:8px;align-items:flex-end;flex-shrink:0;background:var(--card);
 }
 #chat-input{
-  flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;
+  width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;
   color:var(--text);font-size:13px;font-family:inherit;padding:8px 12px;
   resize:none;max-height:80px;min-height:36px;outline:none;line-height:1.4;
   transition:border-color .15s;
@@ -192,6 +252,81 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
   flex-shrink:0;color:var(--muted);transition:border-color .15s,color .15s,background .15s;
 }
 #chat-attach:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-bg)}
+/* Bouton + et actions étendues */
+#chat-action-expand{
+  width:36px;height:36px;border-radius:8px;background:transparent;
+  border:1px solid var(--border);cursor:pointer;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;color:var(--text2);font-size:22px;font-weight:300;line-height:1;
+  transition:border-color .15s,color .15s,background .15s;font-family:inherit;
+}
+#chat-action-expand.open,#chat-action-expand:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+#chat-action-btns{display:none;align-items:center;gap:6px;flex-shrink:0}
+#chat-action-btns.show{display:flex}
+#chat-gif-btn{
+  font-size:11px;font-weight:800;padding:0 8px;color:var(--accent);
+  border:1px solid var(--accent);border-radius:8px;height:36px;
+  background:transparent;cursor:pointer;font-family:inherit;letter-spacing:.5px;
+  transition:background .15s;
+}
+#chat-gif-btn:hover{background:var(--accent-bg)}
+/* Picker GIF */
+.chat-gif-grid{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:6px;
+  max-height:260px;overflow-y:auto;margin-top:10px;
+  scrollbar-width:thin;scrollbar-color:var(--border) transparent;
+}
+.chat-gif-item{border-radius:6px;overflow:hidden;cursor:pointer;aspect-ratio:1;background:var(--border)}
+.chat-gif-item img{width:100%;height:100%;object-fit:cover;display:block}
+.chat-gif-item:hover{opacity:.82}
+/* @mentions dropdown */
+#mention-dropdown{
+  position:absolute;bottom:calc(100% + 4px);left:0;right:0;
+  background:var(--card);border:1px solid var(--border);border-radius:10px;
+  max-height:200px;overflow-y:auto;z-index:200;
+  box-shadow:0 8px 32px rgba(0,0,0,.35);
+}
+.mention-item{
+  display:flex;align-items:center;gap:8px;padding:9px 12px;cursor:pointer;
+  font-size:13px;color:var(--text);border-bottom:1px solid var(--border);
+}
+.mention-item:last-child{border-bottom:none}
+.mention-item:hover,.mention-item.focused{background:var(--accent-bg);color:var(--accent)}
+.mention-item .mi-name{font-weight:600}
+.mention-item .mi-role{font-size:11px;color:var(--muted)}
+/* Badge @mention sur canal */
+.chat-mention-badge{
+  flex-shrink:0;min-width:18px;height:16px;padding:0 5px;border-radius:20px;
+  background:var(--warn);color:#0a0e17;font-size:9px;font-weight:800;
+  display:inline-flex;align-items:center;justify-content:center;margin-left:2px;
+}
+.chat-mention-badge.hidden{display:none}
+/* Toast @mention (apparaît en haut, centré) */
+.mention-toast{
+  position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:10002;
+  background:var(--card);border:1px solid var(--warn);border-radius:12px;
+  padding:12px 18px;font-size:13px;font-weight:600;color:var(--text);
+  box-shadow:0 10px 36px rgba(0,0,0,.45);max-width:360px;width:calc(100% - 40px);
+  text-align:center;animation:toast-in .2s ease;cursor:pointer;
+}
+#notif-perm-modal{
+  position:fixed;inset:0;z-index:20000;background:rgba(0,0,0,.7);
+  display:flex;align-items:center;justify-content:center;padding:20px;
+}
+.notif-perm-card{
+  background:var(--card);border:1px solid var(--border);border-radius:16px;
+  padding:28px 24px;width:min(380px,100%);text-align:center;
+  box-shadow:0 24px 64px rgba(0,0,0,.5);
+}
+.notif-perm-card h2{margin:0 0 8px;font-size:16px;font-weight:700;color:var(--text)}
+.notif-perm-card p{margin:0 0 20px;font-size:13px;color:var(--text2);line-height:1.6}
+.notif-perm-actions{display:flex;gap:10px;justify-content:center}
+.notif-perm-actions button{
+  padding:10px 20px;border-radius:10px;font-size:13px;font-weight:700;
+  cursor:pointer;font-family:inherit;border:1px solid var(--border);
+  background:transparent;color:var(--text2);transition:border-color .15s;
+}
+.notif-perm-actions button.primary{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+.notif-perm-actions button:hover:not(.primary){border-color:var(--muted)}
 #chat-file-input{display:none}
 #chat-pending-row{padding:6px 14px 0;display:none}
 #chat-pending-row.show{display:block}
@@ -325,10 +460,20 @@ body.sb-open .sidebar-overlay{display:block}
             <div id="chat-header-title">—</div>
             <div id="chat-header-sub"></div>
           </div>
+          <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
           <button type="button" id="sound-toggle-btn" onclick="toggleSound()" class="hbtn"
             title="Couper le son" aria-label="Activer ou couper la sonnerie">
             <span id="sound-toggle-icon" aria-hidden="true"></span>
           </button>
+          <button type="button" id="chan-pinned-btn" class="hbtn" title="Messages épinglés"
+            onclick="openPinnedMessages()" style="display:none" aria-label="Messages épinglés">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>
+          </button>
+          <button type="button" id="chan-settings-btn" class="hbtn" title="Réglages du canal"
+            onclick="openChannelSettings()" style="display:none" aria-label="Réglages du canal">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M21 12h-2M5 12H3M19.07 19.07l-1.41-1.41M4.93 19.07l1.41-1.41M12 21v-2M12 5V3"/></svg>
+          </button>
+          </div>
         </div>
       </div>
       <div id="chat-empty">Sélectionnez un canal ou démarrez une conversation.</div>
@@ -336,14 +481,34 @@ body.sb-open .sidebar-overlay{display:block}
       <div id="chat-pending-row"></div>
       <div id="chat-input-area" style="display:none">
         <input type="file" id="chat-file-input" accept=".jpg,.jpeg,.png,.webp,.gif,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip">
-        <button type="button" id="chat-attach" aria-label="Pièce jointe" title="Pièce jointe" onclick="document.getElementById('chat-file-input').click()">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-        </button>
-        <textarea id="chat-input" placeholder="Message…" rows="1" aria-label="Message"></textarea>
+        <button type="button" id="chat-action-expand" aria-label="Plus d'options" onclick="toggleChatActions()">+</button>
+        <div id="chat-action-btns">
+          <button type="button" id="chat-attach" aria-label="Pièce jointe" title="Pièce jointe" onclick="document.getElementById('chat-file-input').click()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+          </button>
+          <button type="button" id="chat-gif-btn" aria-label="Envoyer un GIF" title="Envoyer un GIF" onclick="openGifPicker()">GIF</button>
+        </div>
+        <div id="chat-input-wrap" style="flex:1;min-width:0;position:relative">
+          <div id="mention-dropdown" style="display:none"></div>
+          <textarea id="chat-input" placeholder="Message…" rows="1" aria-label="Message"></textarea>
+        </div>
         <button type="button" id="chat-send" aria-label="Envoyer" onclick="sendMessage()">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         </button>
       </div>
+    </div>
+  </div>
+</div>
+<div id="notif-perm-modal" style="display:none" role="dialog" aria-modal="true" aria-label="Notifications">
+  <div class="notif-perm-card">
+    <div style="margin-bottom:14px">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+    </div>
+    <h2>Notifications</h2>
+    <p>Recevoir des alertes quand vous recevez un message ou êtes mentionné, même si l'onglet est en arrière-plan ?</p>
+    <div class="notif-perm-actions">
+      <button type="button" onclick="dismissNotifPerm(false)">Non merci</button>
+      <button type="button" class="primary" onclick="dismissNotifPerm(true)">Activer</button>
     </div>
   </div>
 </div>
@@ -373,6 +538,10 @@ let listPollTimer = null;
 let allUsers = [];
 let newChannelMembers = [];
 let pendingChatFile = null;
+let channelMembers = [];
+let mentionQuery = null;
+let mentionStart = 0;
+let mentionFocusIdx = -1;
 
 // ── Sonnerie notification ─────────────────────────────────
 let _audioCtx = null;
@@ -387,6 +556,54 @@ function _getAudioCtx(){
   }
   if(_audioCtx.state==='suspended')_audioCtx.resume();
   return _audioCtx;
+}
+
+const NOTIF_PERM_KEY='mysifa_notif_asked_v1';
+
+function checkNotifPermission(){
+  if(localStorage.getItem(NOTIF_PERM_KEY))return;
+  if(typeof Notification!=='undefined'&&Notification.permission!=='default')return;
+  setTimeout(()=>{
+    document.getElementById('notif-perm-modal').style.display='flex';
+  },3500);
+}
+
+async function dismissNotifPerm(enable){
+  document.getElementById('notif-perm-modal').style.display='none';
+  localStorage.setItem(NOTIF_PERM_KEY,'1');
+  try{_getAudioCtx();}catch(e){}
+  if(enable){
+    try{
+      const perm=await Notification.requestPermission();
+      await api('/api/chat/notif-prefs',{
+        method:'PATCH',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({browser_notif:perm==='granted'})
+      });
+    }catch(e){}
+  }else{
+    try{
+      await api('/api/chat/notif-prefs',{
+        method:'PATCH',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({browser_notif:false})
+      });
+    }catch(e){}
+  }
+}
+
+function sendBrowserNotif(title,body,channelId){
+  if(typeof Notification==='undefined')return;
+  if(Notification.permission!=='granted')return;
+  if(document.visibilityState==='visible')return;
+  try{
+    const n=new Notification(title,{
+      body:(body||'').substring(0,100),
+      icon:'/static/mys_icon_192.png',
+      tag:'chat-'+channelId,
+    });
+    n.onclick=()=>{window.focus();selectChannel(channelId);n.close();};
+  }catch(e){}
 }
 
 function playNotifSound(){
@@ -485,12 +702,15 @@ function renderChannelLists(){
   const mkItem=(c)=>{
     const unread=Number(c.unread_count)||0;
     const badge=unread>0?'<span class="chat-unread-badge">'+esc(unread>99?'99+':String(unread))+'</span>':'';
+    const mCount=Number(c.mention_count)||0;
+    const mBadge=mCount>0?'<span class="chat-mention-badge">@</span>':'';
+    const chanEmoji=(c.emoji&&c.type==='channel')?'<span style="margin-right:5px">'+esc(c.emoji)+'</span>':'';
     const prev=c.last_message_body?(esc(c.last_message_from||'')+': '+esc(c.last_message_body)):'';
     const active=c.id===activeId?' active':'';
     return '<button type="button" class="chat-chan-item'+active+'" data-id="'+c.id+'" onclick="selectChannel('+c.id+')">'+
-      '<div class="chat-chan-body"><div class="chat-chan-name">'+esc(c.display_name||(c.name||'Canal'))+'</div>'+
+      '<div class="chat-chan-body"><div class="chat-chan-name">'+chanEmoji+esc(c.display_name||(c.name||'Canal'))+'</div>'+
       (prev?'<div class="chat-chan-preview">'+prev+'</div>':'')+
-      '</div>'+badge+'</button>';
+      '</div>'+badge+mBadge+'</button>';
   };
   document.getElementById('chat-channels-list').innerHTML=chans.length?chans.map(mkItem).join(''):'<p style="padding:8px 10px;font-size:12px;color:var(--muted);margin:0">Aucun canal</p>';
   document.getElementById('chat-dms-list').innerHTML=dms.length?dms.map(mkItem).join(''):'<p style="padding:8px 10px;font-size:12px;color:var(--muted);margin:0">Aucun message direct</p>';
@@ -509,14 +729,22 @@ async function selectChannel(id){
   document.getElementById('chat-input-area').style.display='';
   const ch=channels.find(c=>c.id===id);
   if(ch){
-    document.getElementById('chat-header-title').textContent=ch.display_name||(ch.name||'Canal');
+    const emojiPfx=ch.emoji?ch.emoji+' ':'';
+    document.getElementById('chat-header-title').textContent=emojiPfx+(ch.display_name||ch.name||'Canal');
     const sub=ch.type==='direct'?'Message direct':(ch.description||'Canal d\'équipe');
     document.getElementById('chat-header-sub').textContent=sub;
+    const pb=document.getElementById('chan-pinned-btn');
+    if(pb)pb.style.display=ch.type==='channel'?'':'none';
+    const sb=document.getElementById('chan-settings-btn');
+    if(sb)sb.style.display=(ch.type==='channel'&&ADMIN_ROLES.has(window.__MYSIFA_ROLE__))?'':'none';
   }
   messages=[];
   hasMore=false;
   lastMsgId=0;
   await loadMessages(true);
+  try{
+    channelMembers=await api('/api/chat/channels/'+id+'/members')||[];
+  }catch(e){channelMembers=[];}
   startPolling();
 }
 
@@ -597,18 +825,114 @@ function clearPendingChatFile(){
 
 function buildMsgEl(m){
   const wrap=document.createElement('div');
-  wrap.className='chat-msg '+(m.is_mine?'mine':'theirs');
+  wrap.className='chat-msg '+(m.is_mine?'mine':'theirs')+(m.pinned_at?' pinned':'');
   wrap.dataset.id=String(m.id);
+  const ch=channels.find(c=>c.id===activeId);
   const canDel=m.is_mine||ADMIN_ROLES.has(window.__MYSIFA_ROLE__);
+  const canPin=ch&&ch.type==='channel'&&ADMIN_ROLES.has(window.__MYSIFA_ROLE__);
+  const msgAge=Date.now()-new Date((m.created_at||'').replace(' ','T')).getTime();
+  const canEdit=m.is_mine&&!m.attachment_url&&msgAge<900000;
   const body=(m.body||'').trim();
   let bubble=body?esc(body):'';
+  if(bubble)bubble=bubble.replace(/@(\w+)/g,'<span style="color:var(--accent);font-weight:700">@$1</span>');
   if(m.attachment_url)bubble+=(bubble?'<br>':'')+chatAttachmentHtml(m);
   if(!bubble)bubble='<span style="color:var(--muted);font-size:12px">Pièce jointe</span>';
   wrap.innerHTML=
-    '<div class="chat-msg-label">'+esc(m.user_nom)+' · '+esc(fmtTime(m.created_at))+'</div>'+
+    '<div class="chat-msg-label">'+esc(m.user_nom)+' · '+esc(fmtTime(m.created_at))+(m.edited_at?'<span class="chat-msg-edited">(modifié)</span>':'')+'</div>'+
     '<div class="chat-msg-bubble">'+bubble+'</div>'+
-    (canDel?'<button type="button" class="chat-msg-del" title="Supprimer" onclick="deleteMsg('+m.id+')">×</button>':'');
+    (canDel?'<button type="button" class="chat-msg-del" title="Supprimer" onclick="deleteMsg('+m.id+')">×</button>':'')+
+    (canEdit?'<button type="button" class="chat-msg-edit" title="Modifier" onclick="startEdit('+m.id+')">✎</button>':'')+
+    (canPin?'<button type="button" class="chat-msg-pin'+(m.pinned_at?' pinned-active':'')+'" title="'+(m.pinned_at?'Désépingler':'Épingler')+'" onclick="togglePin('+m.id+','+(m.pinned_at?'true':'false')+')" aria-label="'+(m.pinned_at?'Désépingler':'Épingler')+'"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg></button>':'');
+  if(m.reactions&&m.reactions.length){
+    const rDiv=document.createElement('div');
+    rDiv.className='msg-reactions';
+    m.reactions.forEach(r=>{
+      const btn=document.createElement('button');
+      btn.type='button';
+      btn.className='react-chip'+(r.reacted_by_me?' mine':'');
+      btn.title=(r.users||[]).slice(0,5).join(', ');
+      btn.innerHTML=r.emoji+' <span class="rc-count">'+r.count+'</span>';
+      btn.onclick=()=>toggleReaction(m.id,r.emoji);
+      rDiv.appendChild(btn);
+    });
+    const bubbleEl=wrap.querySelector('.chat-msg-bubble');
+    if(bubbleEl)bubbleEl.after(rDiv);
+  }
+  const picker=document.createElement('div');
+  picker.className='react-picker';
+  picker.style.position='absolute';
+  picker.style.top='-44px';
+  ['👍','✅','👀','⚠️','🔧','❌'].forEach(emoji=>{
+    const b=document.createElement('button');
+    b.type='button';b.className='react-pick-btn';b.textContent=emoji;
+    b.onclick=e=>{e.stopPropagation();picker.classList.remove('show');toggleReaction(m.id,emoji);};
+    picker.appendChild(b);
+  });
+  wrap.style.position='relative';
+  wrap.appendChild(picker);
+  wrap.addEventListener('mouseenter',()=>picker.classList.add('show'));
+  wrap.addEventListener('mouseleave',()=>picker.classList.remove('show'));
   return wrap;
+}
+
+async function toggleReaction(msgId,emoji){
+  if(!activeId)return;
+  try{
+    await api('/api/chat/channels/'+activeId+'/messages/'+msgId+'/reactions',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({emoji})
+    });
+    await loadMessages(false);
+  }catch(e){
+    showToast(e.message||'Réaction impossible','danger');
+  }
+}
+
+function startEdit(msgId){
+  const wrap=document.querySelector('.chat-msg[data-id="'+msgId+'"]');
+  if(!wrap)return;
+  const bubble=wrap.querySelector('.chat-msg-bubble');
+  if(!bubble)return;
+  const msg=messages.find(m=>m.id===msgId);
+  if(!msg)return;
+  const originalText=msg.body||'';
+  const originalHtml=bubble.innerHTML;
+  bubble.innerHTML=
+    '<textarea class="msg-edit-area" id="edit-ta-'+msgId+'">'+esc(originalText)+'</textarea>'+
+    '<div class="msg-edit-actions">'+
+    '<button type="button" onclick="cancelEdit(\''+msgId+'\',\''+encodeURIComponent(originalHtml)+'\')">Annuler</button>'+
+    '<button type="button" class="primary" onclick="saveEdit('+msgId+')">Enregistrer</button>'+
+    '</div>';
+  requestAnimationFrame(()=>{
+    const ta=document.getElementById('edit-ta-'+msgId);
+    if(ta){ta.focus();ta.style.height=ta.scrollHeight+'px';}
+  });
+}
+
+function cancelEdit(msgId,originalHtml){
+  const wrap=document.querySelector('.chat-msg[data-id="'+msgId+'"]');
+  if(!wrap)return;
+  const bubble=wrap.querySelector('.chat-msg-bubble');
+  if(bubble)bubble.innerHTML=decodeURIComponent(originalHtml);
+}
+
+async function saveEdit(msgId){
+  const ta=document.getElementById('edit-ta-'+msgId);
+  if(!ta)return;
+  const newBody=ta.value.trim();
+  if(!newBody){showToast('Message vide','danger');return;}
+  try{
+    await api('/api/chat/channels/'+activeId+'/messages/'+msgId,{
+      method:'PATCH',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({body:newBody})
+    });
+    await loadMessages(false);
+    showToast('Message modifié','success');
+  }catch(e){
+    showToast(e.message||'Modification impossible','danger');
+  }
 }
 
 function appendNewMessages(msgs){
@@ -639,7 +963,20 @@ async function pollMessages(){
     if(!incoming.length)return;
     const fresh=incoming.filter(m=>m.id>lastMsgId);
     if(fresh.some(m=>!m.is_mine))playNotifSound();
+    const fresh2=fresh.filter(m=>!m.is_mine);
+    if(fresh2.length){
+      const ch=channels.find(c=>c.id===activeId);
+      const chanName=ch?(ch.display_name||ch.name||'Canal'):'Message';
+      const latest=fresh2[fresh2.length-1];
+      sendBrowserNotif(latest.user_nom+' · '+chanName,latest.body,activeId);
+    }
     if(fresh.length)appendNewMessages(fresh);
+    fresh.filter(m=>!m.is_mine).forEach(m=>{
+      const myNom=(window.__MYSIFA_NOM__||'').toLowerCase().replace(/\s/g,'');
+      const body=(m.body||'').toLowerCase();
+      const mentioned=body.includes('@'+myNom)||body.includes('@tous')||body.includes('@all');
+      if(mentioned)showMentionToast(m.user_nom,m.body,activeId);
+    });
     const maxId=Math.max(...incoming.map(m=>m.id));
     if(maxId>lastMsgId)lastMsgId=maxId;
   }catch(e){}
@@ -690,6 +1027,7 @@ async function sendMessage(){
       });
     }
     inp.value='';
+    closeChatActions();
     inp.style.height='auto';
     pendingChatFile=null;
     renderPendingChatFile();
@@ -715,6 +1053,119 @@ async function deleteMsg(msgId){
 }
 
 function closeModal(){document.getElementById('mroot').innerHTML='';}
+
+async function togglePin(msgId,isPinned){
+  if(!activeId)return;
+  try{
+    if(isPinned){
+      await api('/api/chat/channels/'+activeId+'/messages/'+msgId+'/pin',{method:'DELETE'});
+      showToast('Message désépinglé','success');
+    }else{
+      await api('/api/chat/channels/'+activeId+'/messages/'+msgId+'/pin',{method:'POST'});
+      showToast('Message épinglé','success');
+    }
+    await loadMessages(false);
+  }catch(e){
+    showToast(e.message||'Action impossible','danger');
+  }
+}
+
+async function openPinnedMessages(){
+  if(!activeId)return;
+  const ch=channels.find(c=>c.id===activeId);
+  if(!ch||ch.type==='direct')return;
+  let pinned=[];
+  try{
+    pinned=await api('/api/chat/channels/'+activeId+'/pinned')||[];
+  }catch(e){
+    showToast(e.message||'Chargement impossible','danger');
+    return;
+  }
+  const overlay=document.createElement('div');
+  overlay.className='chat-modal-overlay';
+  overlay.onclick=e=>{if(e.target===overlay)closeModal();};
+  const isAdmin=ADMIN_ROLES.has(window.__MYSIFA_ROLE__);
+  let listHtml='';
+  if(!pinned.length){
+    listHtml='<p style="color:var(--muted);font-size:13px;margin:0">Aucun message épinglé.</p>';
+  }else{
+    listHtml=pinned.map(m=>{
+      const body=esc((m.body||'').trim()||'(pièce jointe)');
+      const unpinBtn=isAdmin
+        ?'<button type="button" class="chat-pinned-unpin" onclick="unpinFromModal('+m.id+')">Désépingler</button>'
+        :'';
+      return '<div class="chat-pinned-item">'+
+        '<div class="chat-pinned-item-meta">'+esc(m.user_nom)+' · '+esc(fmtTime(m.created_at))+'</div>'+
+        '<div class="chat-pinned-item-body">'+body+'</div>'+
+        unpinBtn+'</div>';
+    }).join('');
+  }
+  overlay.innerHTML=
+    '<div class="chat-modal" role="dialog" style="width:min(480px,100%)">'+
+    '<h3>Messages épinglés</h3>'+
+    '<div id="pinned-list">'+listHtml+'</div>'+
+    '<div class="chat-modal-actions" style="margin-top:14px">'+
+    '<button type="button" class="primary" onclick="closeModal()">Fermer</button>'+
+    '</div></div>';
+  document.getElementById('mroot').appendChild(overlay);
+}
+
+async function unpinFromModal(msgId){
+  if(!activeId)return;
+  try{
+    await api('/api/chat/channels/'+activeId+'/messages/'+msgId+'/pin',{method:'DELETE'});
+    showToast('Message désépinglé','success');
+    closeModal();
+    await loadMessages(false);
+  }catch(e){
+    showToast(e.message||'Désépinglage impossible','danger');
+  }
+}
+
+async function openChannelSettings(){
+  const ch=channels.find(c=>c.id===activeId);
+  if(!ch||ch.type==='direct')return;
+  const overlay=document.createElement('div');
+  overlay.className='chat-modal-overlay';
+  overlay.onclick=e=>{if(e.target===overlay)closeModal();};
+  overlay.innerHTML=
+    '<div class="chat-modal" role="dialog">'+
+    '<h3>Réglages — '+esc(ch.display_name||ch.name||'Canal')+'</h3>'+
+    '<label for="cs-emoji">Emoji du canal</label>'+
+    '<input type="text" id="cs-emoji" maxlength="4" placeholder="ex. 🔧 📦 🔑" value="'+esc(ch.emoji||'')+'">'+
+    '<p style="font-size:11px;color:var(--muted);margin:-8px 0 14px">Un seul emoji. Laissez vide pour aucun.</p>'+
+    '<label for="cs-name">Nom</label>'+
+    '<input type="text" id="cs-name" maxlength="60" value="'+esc(ch.name||'')+'">'+
+    '<label for="cs-desc">Description</label>'+
+    '<textarea id="cs-desc" rows="2">'+esc(ch.description||'')+'</textarea>'+
+    '<div class="chat-modal-actions">'+
+    '<button type="button" onclick="closeModal()">Annuler</button>'+
+    '<button type="button" class="primary" id="cs-save-btn">Enregistrer</button>'+
+    '</div></div>';
+  document.getElementById('mroot').appendChild(overlay);
+  document.getElementById('cs-save-btn').onclick=async()=>{
+    const emoji=(document.getElementById('cs-emoji').value||'').trim();
+    const name=(document.getElementById('cs-name').value||'').trim();
+    const description=(document.getElementById('cs-desc').value||'').trim();
+    if(!name){showToast('Nom requis','danger');return;}
+    try{
+      await api('/api/chat/channels/'+activeId,{
+        method:'PATCH',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({emoji,name,description})
+      });
+      closeModal();
+      await loadChannels();
+      const upd=channels.find(c=>c.id===activeId);
+      if(upd){
+        const e2=upd.emoji?upd.emoji+' ':'';
+        document.getElementById('chat-header-title').textContent=e2+(upd.display_name||upd.name||'Canal');
+      }
+      showToast('Canal mis à jour','success');
+    }catch(e){showToast(e.message||'Erreur','danger');}
+  };
+  requestAnimationFrame(()=>document.getElementById('cs-emoji')?.focus());
+}
 
 async function openNewDm(){
   try{
@@ -835,12 +1286,183 @@ async function openNewChannel(){
   };
 }
 
+// ── Bouton + ──────────────────────────────────────────────
+function toggleChatActions(){
+  const btns=document.getElementById('chat-action-btns');
+  const btn=document.getElementById('chat-action-expand');
+  const isOpen=btns.classList.contains('show');
+  if(isOpen){closeChatActions();}
+  else{btns.classList.add('show');btn.classList.add('open');}
+}
+function closeChatActions(){
+  document.getElementById('chat-action-btns').classList.remove('show');
+  document.getElementById('chat-action-expand').classList.remove('open');
+}
+
+// ── GIF picker ────────────────────────────────────────────
+async function openGifPicker(){
+  closeChatActions();
+  const overlay=document.createElement('div');
+  overlay.className='chat-modal-overlay';
+  overlay.onclick=e=>{if(e.target===overlay)closeModal();};
+  overlay.innerHTML=
+    '<div class="chat-modal" role="dialog" style="width:min(500px,100%)">'+
+    '<h3>GIF</h3>'+
+    '<input type="search" id="gif-search" placeholder="Rechercher un GIF…" autocomplete="off" style="width:100%;margin-bottom:4px">'+
+    '<div id="gif-grid" class="chat-gif-grid"><p style="grid-column:1/-1;text-align:center;color:var(--muted);font-size:12px;padding:20px 0">Chargement…</p></div>'+
+    '</div>';
+  document.getElementById('mroot').appendChild(overlay);
+  requestAnimationFrame(()=>document.getElementById('gif-search')?.focus());
+  loadGifs('');
+  let gifDebounce=null;
+  document.getElementById('gif-search').oninput=function(){
+    clearTimeout(gifDebounce);
+    gifDebounce=setTimeout(()=>loadGifs(this.value.trim()),400);
+  };
+}
+
+async function loadGifs(q){
+  const grid=document.getElementById('gif-grid');
+  if(!grid)return;
+  grid.innerHTML='<p style="grid-column:1/-1;text-align:center;color:var(--muted);font-size:12px;padding:20px 0">Chargement…</p>';
+  try{
+    const ep=q?'/api/chat/giphy/search?q='+encodeURIComponent(q):'/api/chat/giphy/trending';
+    const res=await api(ep);
+    if(res.disabled){
+      grid.innerHTML='<p style="grid-column:1/-1;text-align:center;color:var(--muted);font-size:12px;padding:20px 0">GIFs non activés — configurer GIPHY_API_KEY.</p>';
+      return;
+    }
+    const gifs=res.data||[];
+    if(!gifs.length){
+      grid.innerHTML='<p style="grid-column:1/-1;text-align:center;color:var(--muted);font-size:12px;padding:20px 0">Aucun résultat.</p>';
+      return;
+    }
+    grid.innerHTML=gifs.map(g=>
+      '<div class="chat-gif-item" onclick="selectGif(\''+esc(g.url)+'\')">'+
+      '<img src="'+esc(g.preview_url||g.url)+'" alt="'+esc(g.title||'GIF')+'" loading="lazy"></div>'
+    ).join('');
+  }catch(e){
+    if(grid)grid.innerHTML='<p style="grid-column:1/-1;text-align:center;color:var(--danger);font-size:12px;padding:20px 0">Erreur de chargement.</p>';
+  }
+}
+
+async function selectGif(gifUrl){
+  closeModal();
+  if(!activeId)return;
+  const btn=document.getElementById('chat-send');
+  if(btn)btn.disabled=true;
+  try{
+    await api('/api/chat/channels/'+activeId+'/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({body:'',gif_url:gifUrl})
+    });
+    await loadMessages(false);
+  }catch(e){
+    showToast(e.message||'Envoi impossible','danger');
+  }finally{
+    if(btn)btn.disabled=false;
+  }
+}
+
+document.getElementById('chat-input').addEventListener('focus',()=>{
+  if(document.getElementById('chat-action-btns').classList.contains('show'))closeChatActions();
+});
+function renderMentionDropdown(){
+  const dd=document.getElementById('mention-dropdown');
+  if(!dd)return;
+  const q=mentionQuery||'';
+  const myUid=window.__MYSIFA_UID__;
+  const candidates=[
+    {id:'all',nom:'tous',role:'Mentionner tout le canal'},
+    ...channelMembers.filter(m=>(m.id||m.user_id)!==myUid)
+  ].filter(m=>{
+    const name=(m.id==='all'?'tous':m.nom||'').toLowerCase();
+    return !q||name.startsWith(q);
+  }).slice(0,8);
+  if(!candidates.length){closeMentionDropdown();return;}
+  mentionFocusIdx=-1;
+  dd.style.display='';
+  dd.innerHTML=candidates.map((m,i)=>
+    '<div class="mention-item" data-idx="'+i+'" data-nom="'+(m.id==='all'?'tous':esc(m.nom))+'" onclick="insertMention(\''+(m.id==='all'?'tous':esc(m.nom))+'\')">'+
+    '<span class="mi-name">'+(m.id==='all'?'@tous':'@'+esc(m.nom))+'</span>'+
+    '<span class="mi-role">'+esc(m.id==='all'?'Tout le canal':ROLE_LABELS[m.role]||m.role||'')+'</span>'+
+    '</div>'
+  ).join('');
+}
+function closeMentionDropdown(){
+  mentionQuery=null;
+  const dd=document.getElementById('mention-dropdown');
+  if(dd)dd.style.display='none';
+}
+function insertMention(nom){
+  const inp=document.getElementById('chat-input');
+  const val=inp.value;
+  const before=val.substring(0,mentionStart);
+  const after=val.substring(inp.selectionStart);
+  inp.value=before+'@'+nom+' '+after;
+  inp.focus();
+  const pos=before.length+nom.length+2;
+  inp.setSelectionRange(pos,pos);
+  closeMentionDropdown();
+}
+function showMentionToast(from,body,chanId){
+  const existing=document.querySelector('.mention-toast');
+  if(existing)existing.remove();
+  const t=document.createElement('div');
+  t.className='mention-toast';
+  const ch=channels.find(c=>c.id===chanId);
+  const chanName=ch?(ch.display_name||ch.name||'Canal'):'Canal';
+  t.innerHTML=
+    '<div style="font-size:11px;color:var(--warn);font-weight:700;margin-bottom:4px">Mention · '+esc(chanName)+'</div>'+
+    '<div style="color:var(--text2)">'+esc(from)+' : '+esc((body||'').substring(0,80))+'</div>';
+  t.onclick=()=>{t.remove();selectChannel(chanId);};
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(),6000);
+}
+document.addEventListener('click',e=>{
+  if(!e.target.closest('#chat-input-wrap')&&!e.target.closest('#mention-dropdown'))closeMentionDropdown();
+});
+
 document.getElementById('chat-input').addEventListener('keydown',e=>{
+  if(mentionQuery!==null&&document.getElementById('mention-dropdown').style.display!=='none'){
+    const items=document.querySelectorAll('.mention-item');
+    if(e.key==='ArrowDown'){
+      e.preventDefault();
+      mentionFocusIdx=Math.min(mentionFocusIdx+1,items.length-1);
+      items.forEach((el,i)=>el.classList.toggle('focused',i===mentionFocusIdx));
+      return;
+    }
+    if(e.key==='ArrowUp'){
+      e.preventDefault();
+      mentionFocusIdx=Math.max(mentionFocusIdx-1,0);
+      items.forEach((el,i)=>el.classList.toggle('focused',i===mentionFocusIdx));
+      return;
+    }
+    if(e.key==='Enter'&&mentionFocusIdx>=0){
+      e.preventDefault();
+      const nom=items[mentionFocusIdx]?.dataset.nom;
+      if(nom)insertMention(nom);
+      return;
+    }
+    if(e.key==='Escape'){closeMentionDropdown();return;}
+  }
   if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}
 });
 document.getElementById('chat-input').addEventListener('input',function(){
   this.style.height='auto';
   this.style.height=Math.min(this.scrollHeight,80)+'px';
+  const val=this.value;
+  const cur=this.selectionStart;
+  const before=val.substring(0,cur);
+  const atMatch=before.match(/@(\w*)$/);
+  if(atMatch){
+    mentionQuery=atMatch[1].toLowerCase();
+    mentionStart=before.lastIndexOf('@');
+    renderMentionDropdown();
+  }else{
+    closeMentionDropdown();
+  }
 });
 document.getElementById('chat-file-input').addEventListener('change',function(){
   pendingChatFile=(this.files&&this.files[0])||null;
@@ -881,6 +1503,7 @@ document.getElementById('btn-logout').onclick=async()=>{
   if(window.MySifaTheme)MySifaTheme.applyTheme();
   syncThemeBtn();
   await loadChannels();
+  checkNotifPermission();
   const params=new URLSearchParams(location.search);
   const openId=parseInt(params.get('channel')||'0',10);
   if(openId)selectChannel(openId);

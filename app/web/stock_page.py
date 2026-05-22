@@ -523,8 +523,14 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
 .hist-empty{text-align:center;color:var(--muted);font-size:13px;padding:48px 20px;background:var(--card);
   border:1px solid var(--border);border-radius:12px;line-height:1.5}
 .hist-results-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
-.hist-results-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;
-  border-bottom:1px solid var(--border);background:var(--bg)}
+.hist-results-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;
+  border-bottom:1px solid var(--border);background:#fff;color:#0f172a;flex-wrap:wrap}
+.hist-results-head-left{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.hist-results-head-nav{display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap}
+.hist-results-head .hist-results-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:#64748b}
+.hist-results-head .hist-count{font-size:12px;font-weight:600;color:#475569}
+.hist-results-head .hist-pagination-info{font-size:12px;color:#475569;font-weight:600;min-width:88px;text-align:center;white-space:nowrap}
+.hist-results-head-nav .btn{min-width:96px}
 .hist-results-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
 .hist-count{font-size:12px;font-weight:600;color:var(--text2)}
 .hist-table-wrap{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
@@ -555,10 +561,6 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
 .hist-badge-mvt-sortie{background:color-mix(in srgb,var(--danger) 15%,transparent);color:var(--danger)}
 .hist-badge-mvt-ajustement{background:color-mix(in srgb,var(--warn) 15%,transparent);color:var(--warn)}
 .hist-badge-mvt-transfert{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
-.hist-pagination{display:flex;align-items:center;justify-content:center;gap:12px;padding:14px 16px;
-  border-top:1px solid var(--border);flex-wrap:wrap}
-.hist-pagination-info{font-size:12px;color:var(--text2);font-weight:600;min-width:100px;text-align:center}
-.hist-pagination .btn{min-width:96px}
 .hist-cards{display:none;flex-direction:column;gap:0}
 .hist-card{padding:14px 16px;border-bottom:1px solid var(--border)}
 .hist-card:last-child{border-bottom:none}
@@ -587,9 +589,9 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
   .hist-head-actions .btn{flex:1}
   .hist-table-wrap{display:none}
   .hist-cards{display:flex}
-  .hist-results-head{flex-wrap:wrap}
-  .hist-pagination{gap:8px;padding:12px}
-  .hist-pagination .btn{flex:1;min-width:0}
+  .hist-results-head{flex-direction:column;align-items:stretch}
+  .hist-results-head-nav{width:100%;justify-content:space-between}
+  .hist-results-head-nav .btn{flex:1;min-width:0}
 }
 @media(max-width:480px){
   .hist-filters-grid{grid-template-columns:1fr}
@@ -3272,31 +3274,42 @@ function historiqueGoPage(delta) {
   loadHistorique();
 }
 
-function buildHistoriquePagination(rowsLen) {
+function buildHistoriqueResultsHead(rowsLen) {
   const page = S.historiquePage || 0;
   const hasPrev = page > 0;
   const hasNext = !!S.historiqueHasMore;
-  if (!hasPrev && !hasNext && rowsLen === 0) return null;
   const start = page * HIST_PAGE_SIZE + (rowsLen ? 1 : 0);
   const end = page * HIST_PAGE_SIZE + rowsLen;
-  const info = rowsLen
+  const countLbl = rowsLen
+    ? (start === end ? String(start) : start + '–' + end)
+      + (hasNext ? '+' : '') + ' mouvement' + (rowsLen > 1 ? 's' : '')
+    : (page > 0 ? 'Page ' + (page + 1) : '0 mouvement');
+  const rangeInfo = rowsLen
     ? (start === end ? String(start) : start + '–' + end) + (hasNext ? '+' : '')
     : '—';
-  return el('div', { cls: 'hist-pagination' },
+  const showNav = rowsLen > 0 || page > 0;
+  const left = el('div', { cls: 'hist-results-head-left' },
+    el('span', { cls: 'hist-results-title' }, 'Résultats'),
+    el('span', { cls: 'hist-count' }, countLbl),
+  );
+  const nav = el('div', { cls: 'hist-results-head-nav' },
     el('button', {
       cls: 'btn btn-ghost',
       type: 'button',
       disabled: !hasPrev ? true : null,
       on: { click: () => historiqueGoPage(-1) },
-    }, '‹ Préc.'),
-    el('span', { cls: 'hist-pagination-info' }, 'Page ' + (page + 1) + ' · ' + info),
+    }, 'Précédent'),
+    el('span', { cls: 'hist-pagination-info' },
+      'Page ' + (page + 1) + (showNav ? ' · ' + rangeInfo : '')),
     el('button', {
       cls: 'btn btn-ghost',
       type: 'button',
       disabled: !hasNext ? true : null,
       on: { click: () => historiqueGoPage(1) },
-    }, 'Suiv. ›'),
+    }, 'Suivant'),
   );
+  if (!showNav) nav.style.display = 'none';
+  return el('div', { cls: 'hist-results-head' }, left, nav);
 }
 
 function exportHistoriqueCSV() {
@@ -3507,16 +3520,17 @@ function buildHistorique() {
     const emptyMsg = page > 0
       ? 'Aucun mouvement sur cette page.'
       : 'Aucun mouvement trouvé pour ces critères.';
-    body.appendChild(el('div', { cls: 'hist-empty' }, emptyMsg));
-    const pagEmpty = buildHistoriquePagination(0);
-    if (pagEmpty) body.appendChild(pagEmpty);
+    if (page > 0) {
+      body.appendChild(el('div', { cls: 'hist-results-card' },
+        buildHistoriqueResultsHead(0),
+        el('div', { cls: 'hist-empty', style: { border: 'none', borderRadius: 0 } }, emptyMsg),
+      ));
+    } else {
+      body.appendChild(el('div', { cls: 'hist-empty' }, emptyMsg));
+    }
     return el('div', { cls: 'content' }, body);
   }
 
-  const startIdx = page * HIST_PAGE_SIZE + 1;
-  const endIdx = page * HIST_PAGE_SIZE + rows.length;
-  const countLbl = (startIdx === endIdx ? String(startIdx) : startIdx + '–' + endIdx)
-    + (S.historiqueHasMore ? '+' : '') + ' mouvement' + (rows.length > 1 ? 's' : '');
   const table = el('table', { cls: 'hist-table' });
   const thead = el('thead', null, el('tr', null,
     el('th', null, 'Date'),
@@ -3534,16 +3548,11 @@ function buildHistorique() {
   table.append(thead, tbody);
 
   const cards = el('div', { cls: 'hist-cards' }, ...rows.map(buildHistoriqueCard));
-  const pag = buildHistoriquePagination(rows.length);
   const resultsCard = el('div', { cls: 'hist-results-card' },
-    el('div', { cls: 'hist-results-head' },
-      el('span', { cls: 'hist-results-title' }, 'Résultats'),
-      el('span', { cls: 'hist-count' }, countLbl),
-    ),
+    buildHistoriqueResultsHead(rows.length),
     el('div', { cls: 'hist-table-wrap' }, table),
     cards,
   );
-  if (pag) resultsCard.appendChild(pag);
   body.appendChild(resultsCard);
 
   return el('div', { cls: 'content' }, body);

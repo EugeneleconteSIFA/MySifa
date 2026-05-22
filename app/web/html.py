@@ -2168,6 +2168,7 @@ const fDSecs=d=>{
 const opName=s=>{if(!s)return'';const p=s.split(' - ');return p.length>1?p.slice(1).join(' - '):s;};
 const fMin=m=>{if(!m&&m!==0)return'-';const hh=Math.floor(m/60),mm=Math.round(m%60);return hh>0?hh+'h '+String(mm).padStart(2,'0')+'min':mm+'min';};
 const isAdmin=u=>u&&(u.role==='direction'||u.role==='administration'||u.role==='superadmin');
+const canViewAllProd=u=>u&&(isAdmin(u)||u.role==='commercial'||u.role==='expedition');
 const isComptaPlanning=u=>u&&u.role==='comptabilite';
 const canPlanningNav=u=>!!(u&&u.app_access&&u.app_access.planning);
 const isFab=u=>u&&u.role==='fabrication';
@@ -6048,7 +6049,7 @@ async function loadFilters(){
 }
 function buildParams(){
   const p=new URLSearchParams();
-  if(isAdmin(S.user)){
+  if(canViewAllProd(S.user)){
     (S.fv.operateurs||[]).forEach(o=>p.append('operateur',o));
     (S.fv.dossiers||[]).forEach(d=>p.append('no_dossier',d));
   }
@@ -6812,7 +6813,7 @@ function makeDateInput(value, onChange, ariaLabel){
 }
 
 function renderFilters(){
-  const admin=isAdmin(S.user);
+  const viewAll=canViewAllProd(S.user);
   const ops=S.filters.operators||[];
   const dos=S.filters.dossiers||[];
   const MACHINE_FILTER_ORDER=['Cohésio 1','Cohésio 2','DSI','Repiquage'];
@@ -6820,7 +6821,7 @@ function renderFilters(){
   const machs=machList.map(m=>({value:m,label:m}));
   const parts=[];
  
-  if(admin){
+  if(viewAll){
     // ── Multi-select opérateurs ──────────────────────────────────
     parts.push(makeMultiSelect(
       'Opérateurs',
@@ -6848,7 +6849,7 @@ function renderFilters(){
   parts.push(h('button',{className:'filters-apply-btn',onClick:applyF},'Filtrer'));
 
   const row = h('div',{className:'filters'},...parts);
-  const chipsRow = admin ? renderDossierFilterChipsRow() : null;
+  const chipsRow = viewAll ? renderDossierFilterChipsRow() : null;
   return h('div',{className:'filters-panel'},row,chipsRow||null);
 }
 
@@ -8327,7 +8328,7 @@ function renderProdKpis(){
   if(d.blocked)return h('div',{className:'card'},h('div',{className:'card-blocked'},h('div',{className:'cb-icon'},iconEl('lock',32)),h('div',{className:'cb-msg'},d.message)));
   const prod = d.produit||{};
   const tt=d.temps_totaux||{};const parts=[];
-  if(isAdmin(S.user)){
+  if(canViewAllProd(S.user)){
     parts.push(renderMachineStatusCards());
   }
 
@@ -9200,7 +9201,7 @@ function renderSaisies(){
   if(!d) return h('div',{className:'card-empty'},'Chargement...');
   // Pour fabrication: utiliser nom si operateur_lie n'est pas défini
   const userOperateur = (S.user && (S.user.operateur_lie || S.user.nom)) || '';
-  if(!isAdmin(S.user) && !userOperateur)
+  if(!canViewAllProd(S.user) && !userOperateur)
     return h('div',{className:'card'},h('div',{className:'card-blocked'},h('div',{className:'cb-icon'},iconEl('lock',32)),h('div',{className:'cb-msg'},'Compte non lié à un opérateur.')));
  
   const readOnly=isFab(S.user);

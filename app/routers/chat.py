@@ -27,7 +27,8 @@ _MAX_BODY = 4000
 _PAGE_SIZE = 50
 _MAX_ATTACHMENT = 10 * 1024 * 1024
 _ALLOWED_EMOJIS = {"👍", "✅", "👀", "⚠️", "🔧", "❌"}
-_MSG_SELECT = """m.id, m.user_id, m.user_nom, m.body, m.created_at,
+_MSG_SELECT = """m.id, m.user_id, m.user_nom, m.body, m.created_at, m.edited_at,
+                   m.pinned_at, m.pinned_by,
                    m.attachment_url, m.attachment_name, m.attachment_mime, m.attachment_size,
                    u.avatar_url"""
 _ALLOWED_ATTACHMENT_EXT = {
@@ -96,6 +97,9 @@ def _message_dict(row, uid: int, reactions: Optional[list] = None) -> dict:
         "user_nom": row["user_nom"],
         "body": row["body"] or "",
         "created_at": row["created_at"],
+        "edited_at": row["edited_at"] or "",
+        "pinned_at": row["pinned_at"] or "",
+        "pinned_by": row["pinned_by"] or None,
         "avatar_url": row["avatar_url"] or "",
         "attachment_url": row["attachment_url"] or "",
         "attachment_name": row["attachment_name"] or "",
@@ -233,8 +237,13 @@ def list_channels(request: Request):
     uid = user["id"]
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT c.id, c.type, c.name, c.description, c.created_at, c.created_by,
+            """SELECT c.id, c.type, c.name, c.description, c.emoji, c.created_at, c.created_by,
                       cm.last_read_at,
+                      (SELECT COUNT(*) FROM chat_mentions mn
+                       WHERE mn.channel_id = c.id
+                         AND mn.mentioned_user_id = ?
+                         AND mn.read_at IS NULL
+                      ) as mention_count,
                       (SELECT COUNT(*) FROM chat_messages m
                        WHERE m.channel_id = c.id AND m.deleted_at IS NULL
                          AND m.user_id != ?
@@ -255,7 +264,7 @@ def list_channels(request: Request):
                JOIN chat_members cm ON cm.channel_id = c.id AND cm.user_id = ?
                WHERE c.archived_at IS NULL
                ORDER BY last_message_at DESC NULLS LAST""",
-            (uid, uid),
+            (uid, uid, uid),
         ).fetchall()
 
         result = []
@@ -365,6 +374,40 @@ async def create_channel(request: Request):
         conn.commit()
 
     return {"id": ch_id, "existing": False}
+
+
+@router.patch("/channels/{channel_id}")
+async def update_channel(channel_id: int, request: Request):
+    """Mettre à jour nom, description et emoji d'un canal. Réservé admins ou créateur."""
+    user = _require(request)
+    is_admin = user.get("role") in {"superadmin", "direction", "administration"}
+    data = await request.json()
+    with get_db() as conn:
+        ch = conn.execute(
+            "SELECT id, type, created_by FROM chat_channels WHERE id=? AND archived_at IS NULL LIMIT 1",
+            (channel_id,),
+        ).fetchone()
+        if not ch:
+            raise HTTPException(status_code=404, detail="Canal introuvable")
+        if ch["type"] == "direct":
+            raise HTTPException(status_code=400, detail="Impossible de modifier un DM")
+        if not is_admin and ch["created_by"] != user["id"]:
+            raise HTTPException(status_code=403, detail="Action réservée aux administrateurs ou au créateur")
+        name = (data.get("name") or "").strip()
+        description = (data.get("description") or "").strip() or None
+        emoji = (data.get("emoji") or "").strip() or None
+        if not name:
+            raise HTTPException(status_code=400, detail="Nom requis")
+        if len(name) > 60:
+            raise HTTPException(status_code=400, detail="Nom trop long (max 60 caractères)")
+        if emoji and len(emoji) > 4:
+            raise HTTPException(status_code=400, detail="Emoji invalide")
+        conn.execute(
+            "UPDATE chat_channels SET name=?, description=?, emoji=? WHERE id=?",
+            (name, description, emoji, channel_id),
+        )
+        conn.commit()
+    return {"updated": True}
 
 
 @router.post("/channels/{channel_id}/join")
@@ -565,6 +608,8 @@ async def send_message(
     user = _require(request)
     body = ""
     upload = file
+    gif_url = ""
+    att_url, att_name, att_mime, att_size = "", "", "", 0
     content_type = (request.headers.get("content-type") or "").lower()
     if "multipart/form-data" in content_type:
         form = await request.form()
@@ -577,13 +622,28 @@ async def send_message(
     else:
         data = await request.json()
         body = (data.get("body") or "").strip()
+        gif_url = (data.get("gif_url") or "").strip()
+        if gif_url:
+            allowed_prefixes = (
+                "https://media.giphy.com/",
+                "https://media0.giphy.com/",
+                "https://media1.giphy.com/",
+                "https://media2.giphy.com/",
+                "https://media3.giphy.com/",
+                "https://media4.giphy.com/",
+            )
+            if not any(gif_url.startswith(p) for p in allowed_prefixes):
+                raise HTTPException(status_code=400, detail="URL GIF non autorisée")
+            att_url = gif_url
+            att_name = "GIF"
+            att_mime = "image/gif"
+            att_size = 0
 
-    if not body and not upload:
+    if not body and not upload and not gif_url:
         raise HTTPException(status_code=400, detail="Message vide")
     if body and len(body) > _MAX_BODY:
         raise HTTPException(status_code=400, detail=f"Message trop long (max {_MAX_BODY} caractères)")
 
-    att_url, att_name, att_mime, att_size = "", "", "", 0
     if upload is not None and (upload.filename or ""):
         with get_db() as conn:
             _assert_member(conn, channel_id, user["id"])
@@ -614,6 +674,39 @@ async def send_message(
             (now, channel_id, user["id"]),
         )
         conn.commit()
+        try:
+            if body:
+                now_m = _now_iso()
+                members = conn.execute(
+                    """SELECT u.id, u.nom FROM chat_members cm
+                       JOIN users u ON u.id = cm.user_id
+                       WHERE cm.channel_id = ? AND u.id != ?""",
+                    (channel_id, user["id"]),
+                ).fetchall()
+                msg_id = cur.lastrowid
+                if re.search(r"@(tous|all)\b", body, re.IGNORECASE):
+                    for m in members:
+                        conn.execute(
+                            """INSERT INTO chat_mentions
+                               (message_id, channel_id, mentioned_user_id, is_all, created_at)
+                               VALUES (?,?,?,1,?)""",
+                            (msg_id, channel_id, m["id"], now_m),
+                        )
+                else:
+                    tokens = re.findall(r"@(\w+)", body)
+                    for token in tokens:
+                        for m in members:
+                            if (m["nom"] or "").lower().startswith(token.lower()):
+                                conn.execute(
+                                    """INSERT INTO chat_mentions
+                                       (message_id, channel_id, mentioned_user_id, is_all, created_at)
+                                       VALUES (?,?,?,0,?)""",
+                                    (msg_id, channel_id, m["id"], now_m),
+                                )
+                                break
+                conn.commit()
+        except Exception:
+            pass
     return {
         "id": cur.lastrowid,
         "created_at": now,
@@ -623,6 +716,111 @@ async def send_message(
         "attachment_mime": att_mime,
         "attachment_size": att_size,
     }
+
+
+@router.patch("/channels/{channel_id}/messages/{msg_id}")
+async def edit_message(channel_id: int, msg_id: int, request: Request):
+    """Modifier un message (auteur uniquement, 15 min max après envoi)."""
+    user = _require(request)
+    data = await request.json()
+    new_body = (data.get("body") or "").strip()
+    if not new_body:
+        raise HTTPException(status_code=400, detail="Message vide")
+    if len(new_body) > _MAX_BODY:
+        raise HTTPException(status_code=400, detail=f"Message trop long (max {_MAX_BODY} caractères)")
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT user_id, created_at, deleted_at FROM chat_messages WHERE id=? AND channel_id=? LIMIT 1",
+            (msg_id, channel_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Message introuvable")
+        if row["deleted_at"]:
+            raise HTTPException(status_code=410, detail="Message supprimé")
+        if row["user_id"] != user["id"]:
+            raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres messages")
+        try:
+            sent = datetime.fromisoformat(row["created_at"])
+            age = (datetime.now(_PARIS).replace(tzinfo=None) - sent).total_seconds()
+            if age > 900:
+                raise HTTPException(status_code=403, detail="Modification impossible après 15 minutes")
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+        conn.execute(
+            "UPDATE chat_messages SET body=?, edited_at=? WHERE id=?",
+            (new_body, _now_iso(), msg_id),
+        )
+        conn.commit()
+    return {"edited": True, "body": new_body}
+
+
+@router.get("/channels/{channel_id}/pinned")
+def pinned_messages(channel_id: int, request: Request):
+    """Messages épinglés du canal (max 10)."""
+    user = _require(request)
+    uid = user["id"]
+    with get_db() as conn:
+        _assert_member(conn, channel_id, uid)
+        rows = conn.execute(
+            f"""SELECT {_MSG_SELECT}
+               FROM chat_messages m
+               LEFT JOIN users u ON u.id = m.user_id
+               WHERE m.channel_id=? AND m.pinned_at IS NOT NULL AND m.deleted_at IS NULL
+               ORDER BY m.pinned_at DESC LIMIT 10""",
+            (channel_id,),
+        ).fetchall()
+        reactions_map = _fetch_reactions_map(conn, [r["id"] for r in rows], uid)
+    return [_message_dict(r, uid, reactions_map.get(r["id"], [])) for r in rows]
+
+
+@router.post("/channels/{channel_id}/messages/{msg_id}/pin")
+def pin_message(channel_id: int, msg_id: int, request: Request):
+    """Épingler un message. Réservé admins ou créateur du canal."""
+    user = _require(request)
+    is_admin = user.get("role") in {"superadmin", "direction", "administration"}
+    with get_db() as conn:
+        ch = conn.execute(
+            "SELECT created_by FROM chat_channels WHERE id=? AND archived_at IS NULL LIMIT 1",
+            (channel_id,),
+        ).fetchone()
+        if not ch:
+            raise HTTPException(status_code=404, detail="Canal introuvable")
+        if not is_admin and ch["created_by"] != user["id"]:
+            raise HTTPException(status_code=403, detail="Réservé aux administrateurs ou au créateur du canal")
+        msg = conn.execute(
+            "SELECT id FROM chat_messages WHERE id=? AND channel_id=? AND deleted_at IS NULL LIMIT 1",
+            (msg_id, channel_id),
+        ).fetchone()
+        if not msg:
+            raise HTTPException(status_code=404, detail="Message introuvable")
+        conn.execute(
+            "UPDATE chat_messages SET pinned_at=?, pinned_by=? WHERE id=?",
+            (_now_iso(), user["id"], msg_id),
+        )
+        conn.commit()
+    return {"pinned": True}
+
+
+@router.delete("/channels/{channel_id}/messages/{msg_id}/pin")
+def unpin_message(channel_id: int, msg_id: int, request: Request):
+    """Retirer l'épingle d'un message."""
+    user = _require(request)
+    is_admin = user.get("role") in {"superadmin", "direction", "administration"}
+    with get_db() as conn:
+        ch = conn.execute(
+            "SELECT created_by FROM chat_channels WHERE id=? LIMIT 1",
+            (channel_id,),
+        ).fetchone()
+        if not is_admin and (not ch or ch["created_by"] != user["id"]):
+            raise HTTPException(status_code=403, detail="Réservé aux administrateurs")
+        conn.execute(
+            "UPDATE chat_messages SET pinned_at=NULL, pinned_by=NULL WHERE id=? AND channel_id=?",
+            (msg_id, channel_id),
+        )
+        conn.commit()
+    return {"unpinned": True}
 
 
 @router.delete("/channels/{channel_id}/messages/{msg_id}")
@@ -693,6 +891,94 @@ async def toggle_reaction(channel_id: int, msg_id: int, request: Request):
         )
         conn.commit()
     return {"added": True, "emoji": emoji, "replaced": replaced}
+
+
+# ─── Mentions, GIPHY, préférences ────────────────────────────────────────────
+
+@router.get("/mentions/unread")
+def unread_mentions(request: Request):
+    """Nombre total de mentions non lues pour l'utilisateur connecté."""
+    user = _require(request)
+    uid = user["id"]
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) as n FROM chat_mentions WHERE mentioned_user_id=? AND read_at IS NULL",
+            (uid,),
+        ).fetchone()
+    return {"count": int(row["n"] if row else 0)}
+
+
+def _fmt_gif(g: dict) -> dict:
+    images = g.get("images", {})
+    preview = images.get("fixed_height_small", {}).get("url", "")
+    original = images.get("original", {}).get("url", "")
+    downsized = images.get("downsized", {}).get("url", original)
+    return {
+        "id": g.get("id", ""),
+        "title": g.get("title", ""),
+        "url": downsized or original,
+        "preview_url": preview or downsized or original,
+    }
+
+
+@router.get("/giphy/search")
+def giphy_search(request: Request, q: str = "", limit: int = 24):
+    """Proxy GIPHY search. Nécessite GIPHY_API_KEY dans config.py."""
+    _require(request)
+    from config import GIPHY_API_KEY
+    if not GIPHY_API_KEY:
+        return {"data": [], "disabled": True}
+    limit = max(1, min(int(limit), 48))
+    try:
+        import httpx
+        r = httpx.get(
+            "https://api.giphy.com/v1/gifs/search",
+            params={"api_key": GIPHY_API_KEY, "q": q, "limit": limit, "rating": "pg", "lang": "fr"},
+            timeout=8.0,
+        )
+        r.raise_for_status()
+        gifs = r.json().get("data", [])
+    except Exception:
+        raise HTTPException(status_code=502, detail="Erreur GIPHY")
+    return {"data": [_fmt_gif(g) for g in gifs], "disabled": False}
+
+
+@router.get("/giphy/trending")
+def giphy_trending(request: Request, limit: int = 24):
+    """Proxy GIPHY trending."""
+    _require(request)
+    from config import GIPHY_API_KEY
+    if not GIPHY_API_KEY:
+        return {"data": [], "disabled": True}
+    limit = max(1, min(int(limit), 48))
+    try:
+        import httpx
+        r = httpx.get(
+            "https://api.giphy.com/v1/gifs/trending",
+            params={"api_key": GIPHY_API_KEY, "limit": limit, "rating": "pg"},
+            timeout=8.0,
+        )
+        r.raise_for_status()
+        gifs = r.json().get("data", [])
+    except Exception:
+        raise HTTPException(status_code=502, detail="Erreur GIPHY")
+    return {"data": [_fmt_gif(g) for g in gifs], "disabled": False}
+
+
+@router.patch("/notif-prefs")
+async def update_notif_prefs(request: Request):
+    """Enregistre la préférence notifications navigateur."""
+    user = _require(request)
+    data = await request.json()
+    browser_notif = 1 if data.get("browser_notif") else 0
+    now = _now_iso()
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE users SET notif_browser=?, notif_asked_at=? WHERE id=?",
+            (browser_notif, now, user["id"]),
+        )
+        conn.commit()
+    return {"ok": True}
 
 
 # ─── Utilitaires ─────────────────────────────────────────────────────────────

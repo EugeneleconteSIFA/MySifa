@@ -291,3 +291,6 @@ def classify_operation(op_str):
 
 # URL de base (pour construire les liens dans les emails)
 BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
+
+# ─── Chat (GIPHY) ─────────────────────────────────────────────────
+GIPHY_API_KEY = os.getenv("GIPHY_API_KEY", "")

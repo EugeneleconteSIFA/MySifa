@@ -18,6 +18,7 @@ from config import (
     ROLE_SUPERADMIN,
     ROLE_DIRECTION,
     ROLE_ADMINISTRATION,
+    ROLE_EXPEDITION,
     ROLES_EXPE_WRITE,
     default_app_access_for_role,
 )
@@ -162,8 +163,12 @@ def is_commercial(user: dict) -> bool:
     return user.get("role") == "commercial"
 
 def can_view_all_prod(user: dict) -> bool:
-    """Admin et commercial voient toute la production (le commercial en lecture seule)."""
-    return is_admin(user) or is_commercial(user)
+    """Vue globale MyProd : toutes machines et opérateurs (lecture seule hors admin)."""
+    return (
+        is_admin(user)
+        or is_commercial(user)
+        or user.get("role") == ROLE_EXPEDITION
+    )
 
 def is_fabrication(user: dict) -> bool:
     return user["role"] == "fabrication"

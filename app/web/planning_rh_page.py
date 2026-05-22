@@ -418,10 +418,9 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 .rh-btn.secondary:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 .rh-btn:disabled{opacity:.5;cursor:not-allowed}
 
-/* Alerte samedi non travaillé (production) */
-#rh-alert-root{position:relative;z-index:1100}
+/* Alerte samedi non travaillé (production) — au-dessus modales, toast et dock */
 .rh-samedi-warn-ov{
-  position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1100;
+  position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:12000;
   display:flex;align-items:center;justify-content:center;padding:16px;
   backdrop-filter:blur(4px);
 }
@@ -769,21 +768,27 @@ async function isSamediProdTravaille(machineId,semaine){
   try{
     const q=new URLSearchParams({machine_id:String(machineId),semaine});
     const r=await fetch(`${API}/samedi-prod-travaille?${q}`,{credentials:'include'});
-    if(!r.ok) return true;
+    if(!r.ok) return false;
     const data=await r.json();
     return !!data.samedi_travaille;
-  }catch(e){ return true; }
+  }catch(e){ return false; }
 }
 function closeSamediProdWarn(){
+  document.getElementById('rh-samedi-warn-active')?.remove();
   const root=document.getElementById('rh-alert-root');
   if(root) root.innerHTML='';
+  if(typeof S._afterSamediWarn==='function'){
+    const fn=S._afterSamediWarn;
+    S._afterSamediWarn=null;
+    fn();
+  }
 }
-function warnSamediProdNonTravaille(){
-  const root=document.getElementById('rh-alert-root');
-  if(!root) return;
-  root.innerHTML='';
+function warnSamediProdNonTravaille(afterClose){
+  closeSamediProdWarn();
+  if(typeof afterClose==='function') S._afterSamediWarn=afterClose;
   const ov=document.createElement('div');
   ov.className='rh-samedi-warn-ov';
+  ov.id='rh-samedi-warn-active';
   ov.setAttribute('role','dialog');
   ov.setAttribute('aria-modal','true');
   ov.setAttribute('aria-labelledby','rh-samedi-warn-title');
@@ -799,18 +804,22 @@ function warnSamediProdNonTravaille(){
     '<button type="button" class="rh-btn primary" id="rh-samedi-warn-ok">Compris</button>'+
     '</div>';
   ov.appendChild(box);
-  root.appendChild(ov);
+  document.body.appendChild(ov);
   const btn=document.getElementById('rh-samedi-warn-ok');
   if(btn){
     btn.onclick=closeSamediProdWarn;
     requestAnimationFrame(()=>btn.focus());
   }
+  return true;
 }
-async function alertSamediProdIfNeeded(machineId,semaine,jours,prevJours){
-  if(!(jours&JOURS_BIT_SAMEDI)) return;
-  if((prevJours!==undefined)&&(prevJours&JOURS_BIT_SAMEDI)) return;
-  const ok=await isSamediProdTravaille(machineId,semaine);
-  if(!ok) warnSamediProdNonTravaille();
+async function alertSamediProdIfNeeded(machineId,semaine,jours,prevJours,afterClose){
+  if(!(jours&JOURS_BIT_SAMEDI)) return false;
+  if((prevJours!==undefined)&&(prevJours&JOURS_BIT_SAMEDI)) return false;
+  const mid=machineId??null;
+  if(!mid) return false;
+  const ok=await isSamediProdTravaille(mid,semaine);
+  if(!ok) return warnSamediProdNonTravaille(afterClose);
+  return false;
 }
 // Bitmask des jours de congé d'un opérateur sur une semaine donnée
 function congeJoursBitmask(userId, ws){
@@ -910,7 +919,14 @@ function getAssignments(machineCode,creneau,poste,semaine){
 function getMachineId(code){
   if(code==='LOG'||code==='RESP')return null;
   const m=S.machines.find(x=>x.code===code);
-  return m?m.id:null;
+  return m?(Number(m.id)||m.id):null;
+}
+function resolveRhMachineId(target,assignment){
+  if(!target&&!assignment) return null;
+  let id=target?.machineId??assignment?.machine_id??null;
+  if(id!=null&&id!=='') return Number(id)||id;
+  if(target?.machineCode) return getMachineId(target.machineCode);
+  return null;
 }
 function userCongesThisWeek(userId,ws){
   const mon=weekMonday(ws); const sun=new Date(mon); sun.setDate(mon.getDate()+6);
@@ -1040,9 +1056,11 @@ async function addAssignment(target, force=false){
           if(d){
             S.planning.push(d);
             toast(p.nom+(isAssign?' affecté (jours libres)':' affecté (congé partiel)'),'success');
-            await alertSamediProdIfNeeded(target.machineId,target.semaine,d.jours!==undefined?d.jours:31,0);
-          }
-          S.modal=null; render(); return;
+            const mid=resolveRhMachineId(target,d);
+            const alerted=await alertSamediProdIfNeeded(mid,target.semaine,d.jours!==undefined?d.jours:31,0,()=>{S.modal=null;render();});
+            if(!alerted){S.modal=null;render();}
+          } else { S.modal=null; render(); }
+          return;
         }
         const e2=await resp2.json().catch(()=>({}));
         toast(typeof e2.detail==='string'?e2.detail:'Erreur affectation','error');
@@ -1068,7 +1086,10 @@ async function addAssignment(target, force=false){
   if(d){
     S.planning.push(d);
     toast(p.nom+' affecté','success');
-    await alertSamediProdIfNeeded(target.machineId,target.semaine,d.jours!==undefined?d.jours:31,0);
+    const mid=resolveRhMachineId(target,d);
+    const alerted=await alertSamediProdIfNeeded(mid,target.semaine,d.jours!==undefined?d.jours:31,0,()=>{S.modal=null;render();});
+    if(!alerted){S.modal=null;render();}
+    return;
   }
   S.modal=null; render();
 }
@@ -1909,7 +1930,7 @@ function buildDayDetailModal(){
           const on=S.dayDetailEdit[a.id][i];
           btn.className='rh-dd-day-btn'+(isSat?(on?' sat-on':''):(on?' on':''));
           btn.textContent=on?'✓':'—';
-          if(isSat&&on) await alertSamediProdIfNeeded(t.machineId,t.semaine,JOURS_BIT_SAMEDI,0);
+          if(isSat&&on) await alertSamediProdIfNeeded(resolveRhMachineId(t,a),t.semaine,JOURS_BIT_SAMEDI,0);
         };
       }
       td.appendChild(btn); tr.appendChild(td);
@@ -1935,7 +1956,9 @@ function buildDayDetailModal(){
 
 async function saveDayDetail(assignments){
   let hasError=false;
+  let showedAlert=false;
   const t=S.dayDetailTarget;
+  const finish=()=>{S.modal=null;render();};
   for(const a of assignments){
     const flags=S.dayDetailEdit[a.id];
     if(!flags) continue;
@@ -1955,13 +1978,14 @@ async function saveDayDetail(assignments){
           const idx=S.planning.findIndex(p=>p.id===a.id);
           if(idx>=0) S.planning[idx]={...S.planning[idx],jours:updated.jours};
         }
-        await alertSamediProdIfNeeded(t?.machineId,t?.semaine,jours,prevJours);
+        const mid=resolveRhMachineId(t,a);
+        if(await alertSamediProdIfNeeded(mid,t?.semaine,jours,prevJours,finish)) showedAlert=true;
       } else { hasError=true; }
     } catch(e){ hasError=true; }
   }
   if(hasError) toast('Une ou plusieurs modifications ont échoué','error');
   else toast('Répartition mise à jour','success');
-  S.modal=null; render();
+  if(!showedAlert) finish();
 }
 
 // ── Congés tab ─────────────────────────────────────────

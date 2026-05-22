@@ -1,6 +1,6 @@
 """SIFA — Production v0.9 — métrage produit = fin_machine - debut_machine"""
 from typing import Optional, List
-from fastapi import APIRouter, Request, Query
+from fastapi import APIRouter, HTTPException, Request, Query
 from datetime import datetime as _dt_cls
 from zoneinfo import ZoneInfo as _ZoneInfo
 _TZ_PARIS = _ZoneInfo('Europe/Paris')
@@ -135,9 +135,11 @@ def _compute_duree_min(status_key: str, rows_today: list, now: _dt_cls) -> Optio
 def machine_status(request: Request):
     """
     Statut en temps réel des machines C1 et C2 basé sur les saisies de prod du jour.
-    Accessible uniquement à la Direction, Administration et Super Admin.
+    Accessible aux rôles avec vue globale MyProd (direction, commercial, expédition…).
     """
-    require_admin(request)   # direction, administration ou superadmin uniquement
+    user = get_current_user(request)
+    if not can_view_all_prod(user):
+        raise HTTPException(status_code=403, detail="Accès non autorisé")
 
     now  = _dt_cls.now(_TZ_PARIS).replace(tzinfo=None)
     iso_today = now.strftime('%Y-%m-%d')           # 'YYYY-MM-DD'
