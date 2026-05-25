@@ -286,13 +286,18 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
 #chat-gif-btn:hover{background:var(--accent-bg)}
 /* Picker GIF */
 .chat-gif-grid{
-  display:grid;grid-template-columns:repeat(3,1fr);gap:6px;
-  max-height:260px;overflow-y:auto;margin-top:10px;
+  display:grid;grid-template-columns:repeat(3,1fr);gap:8px;
+  max-height:360px;overflow-y:auto;margin-top:10px;
   scrollbar-width:thin;scrollbar-color:var(--border) transparent;
 }
-.chat-gif-item{border-radius:6px;overflow:hidden;cursor:pointer;aspect-ratio:1;background:var(--border)}
-.chat-gif-item img{width:100%;height:100%;object-fit:cover;display:block}
-.chat-gif-item:hover{opacity:.82}
+.chat-gif-item{
+  border-radius:6px;overflow:hidden;cursor:pointer;
+  aspect-ratio:1;background:var(--bg);border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;padding:4px;
+  min-height:0;
+}
+.chat-gif-item img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;display:block}
+.chat-gif-item:hover{border-color:var(--accent);background:var(--accent-bg)}
 /* @mentions dropdown */
 #mention-dropdown{
   position:absolute;bottom:calc(100% + 4px);left:0;right:0;
@@ -774,7 +779,9 @@ async function selectChannel(id){
     const pb=document.getElementById('chan-pinned-btn');
     if(pb)pb.style.display=ch.type==='channel'?'':'none';
     const sb=document.getElementById('chan-settings-btn');
-    if(sb)sb.style.display=(ch.type==='channel'&&ADMIN_ROLES.has(window.__MYSIFA_ROLE__))?'':'none';
+    const canManage=ADMIN_ROLES.has(window.__MYSIFA_ROLE__)||(ch.created_by&&Number(ch.created_by)===Number(window.__MYSIFA_UID__));
+    if(sb)sb.style.display=(ch.type==='channel')?'':'none';
+    if(sb)sb.title=canManage?'Réglages du canal':'Membres du canal';
   }
   messages=[];
   hasMore=false;
@@ -1160,49 +1167,157 @@ async function unpinFromModal(msgId){
   }
 }
 
+function canManageChannel(ch){
+  return ADMIN_ROLES.has(window.__MYSIFA_ROLE__)||(ch.created_by&&Number(ch.created_by)===Number(window.__MYSIFA_UID__));
+}
+
+function renderSettingsMembersList(members,canManage){
+  const el=document.getElementById('cs-members-list');
+  if(!el)return;
+  if(!members.length){
+    el.innerHTML='<p style="padding:8px 0;margin:0;font-size:12px;color:var(--muted)">Aucun membre.</p>';
+    return;
+  }
+  el.innerHTML=members.map(m=>{
+    const rl=ROLE_LABELS[m.role]||m.role||'';
+    const isSelf=Number(m.id)===Number(window.__MYSIFA_UID__);
+    const removeBtn=(!isSelf&&canManage)
+      ?'<button type="button" class="chat-user-row" style="justify-content:center;color:var(--danger);margin-top:4px" data-remove="'+m.id+'">Retirer</button>'
+      :'';
+    return '<div style="padding:8px 0;border-bottom:1px solid var(--border)">'+
+      '<div style="font-weight:600;font-size:13px">'+esc(m.nom)+'</div>'+
+      '<div style="font-size:11px;color:var(--muted)">'+esc(rl)+'</div>'+removeBtn+'</div>';
+  }).join('');
+  el.querySelectorAll('[data-remove]').forEach(btn=>{
+    btn.onclick=async()=>{
+      const uid=parseInt(btn.dataset.remove,10);
+      const m=members.find(x=>x.id===uid);
+      if(!confirm('Retirer '+(m?.nom||'ce membre')+' du canal ?'))return;
+      try{
+        await api('/api/chat/channels/'+activeId+'/members/'+uid,{method:'DELETE'});
+        await refreshSettingsMembers(canManage);
+        await loadChannels();
+        showToast('Membre retiré','success');
+      }catch(e){showToast(e.message||'Retrait impossible','danger');}
+    };
+  });
+}
+
+async function refreshSettingsMembers(canManage){
+  const members=await api('/api/chat/channels/'+activeId+'/members')||[];
+  channelMembers=members;
+  renderSettingsMembersList(members,canManage);
+  const pick=document.getElementById('cs-user-pick');
+  if(pick&&pick._allUsers){
+    const ids=new Set(members.map(m=>m.id));
+    pick._memberIds=ids;
+    renderSettingsAddPick(pick._allUsers,ids,canManage);
+  }
+}
+
+function renderSettingsAddPick(users,memberIds,canManage){
+  const pick=document.getElementById('cs-user-pick');
+  const search=document.getElementById('cs-add-search');
+  if(!pick||!canManage)return;
+  const ids=pick._memberIds||memberIds;
+  const ql=(search?.value||'').toLowerCase();
+  const list=users.filter(u=>!ids.has(u.id)&&(!ql||(u.nom||'').toLowerCase().includes(ql)));
+  if(!list.length){pick.innerHTML='<p style="padding:10px;margin:0;font-size:12px;color:var(--muted)">—</p>';return;}
+  pick.innerHTML=list.map(u=>'<button type="button" class="chat-user-row" data-uid="'+u.id+'">'+esc(u.nom)+
+    ' <span style="color:var(--muted);font-size:11px">'+esc(ROLE_LABELS[u.role]||u.role||'')+'</span></button>').join('');
+  pick.querySelectorAll('.chat-user-row').forEach(btn=>{
+    btn.onclick=async()=>{
+      const uid=parseInt(btn.dataset.uid,10);
+      try{
+        await api('/api/chat/channels/'+activeId+'/members',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({user_id:uid})
+        });
+        if(search)search.value='';
+        await refreshSettingsMembers(canManage);
+        await loadChannels();
+        showToast('Membre ajouté','success');
+      }catch(e){showToast(e.message||'Ajout impossible','danger');}
+    };
+  });
+}
+
 async function openChannelSettings(){
   const ch=channels.find(c=>c.id===activeId);
   if(!ch||ch.type==='direct')return;
+  const canManage=canManageChannel(ch);
   const overlay=document.createElement('div');
   overlay.className='chat-modal-overlay';
   overlay.onclick=e=>{if(e.target===overlay)closeModal();};
+  const generalBlock=canManage
+    ?('<label for="cs-emoji">Icône du canal</label>'+
+      '<input type="text" id="cs-emoji" maxlength="4" placeholder="ex. 🔧 📦 🔑" value="'+esc(ch.emoji||'')+'">'+
+      '<p style="font-size:11px;color:var(--muted);margin:-8px 0 14px">Un seul emoji. Laissez vide pour aucun.</p>'+
+      '<label for="cs-name">Nom</label>'+
+      '<input type="text" id="cs-name" maxlength="60" value="'+esc(ch.name||'')+'">'+
+      '<label for="cs-desc">Description</label>'+
+      '<textarea id="cs-desc" rows="2">'+esc(ch.description||'')+'</textarea>')
+    :('<p style="margin:0 0 8px;font-size:14px;font-weight:600;color:var(--text)">'+
+      esc((ch.emoji?ch.emoji+' ':'')+(ch.name||ch.display_name||'Canal'))+'</p>'+
+      (ch.description?'<p style="margin:0;font-size:13px;color:var(--text2)">'+esc(ch.description)+'</p>':
+        '<p style="margin:0;font-size:12px;color:var(--muted)">Sans description</p>'));
+  const addBlock=canManage
+    ?('<label for="cs-add-search" style="margin-top:12px">Ajouter un membre</label>'+
+      '<input type="search" id="cs-add-search" placeholder="Rechercher un collègue…" autocomplete="off">'+
+      '<div class="chat-user-list" id="cs-user-pick" style="max-height:140px"></div>')
+    :'';
   overlay.innerHTML=
-    '<div class="chat-modal" role="dialog">'+
+    '<div class="chat-modal" role="dialog" style="max-height:88vh;overflow-y:auto">'+
     '<h3>Réglages — '+esc(ch.display_name||ch.name||'Canal')+'</h3>'+
-    '<label for="cs-emoji">Emoji du canal</label>'+
-    '<input type="text" id="cs-emoji" maxlength="4" placeholder="ex. 🔧 📦 🔑" value="'+esc(ch.emoji||'')+'">'+
-    '<p style="font-size:11px;color:var(--muted);margin:-8px 0 14px">Un seul emoji. Laissez vide pour aucun.</p>'+
-    '<label for="cs-name">Nom</label>'+
-    '<input type="text" id="cs-name" maxlength="60" value="'+esc(ch.name||'')+'">'+
-    '<label for="cs-desc">Description</label>'+
-    '<textarea id="cs-desc" rows="2">'+esc(ch.description||'')+'</textarea>'+
+    generalBlock+
+    '<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">'+
+    '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:10px">Membres</div>'+
+    '<div id="cs-members-list"><p style="color:var(--muted);font-size:12px">Chargement…</p></div>'+
+    addBlock+'</div>'+
     '<div class="chat-modal-actions">'+
-    '<button type="button" onclick="closeModal()">Annuler</button>'+
-    '<button type="button" class="primary" id="cs-save-btn">Enregistrer</button>'+
+    (canManage?'<button type="button" onclick="closeModal()">Annuler</button><button type="button" class="primary" id="cs-save-btn">Enregistrer</button>':
+      '<button type="button" class="primary" onclick="closeModal()">Fermer</button>')+
     '</div></div>';
   document.getElementById('mroot').appendChild(overlay);
-  document.getElementById('cs-save-btn').onclick=async()=>{
-    const emoji=(document.getElementById('cs-emoji').value||'').trim();
-    const name=(document.getElementById('cs-name').value||'').trim();
-    const description=(document.getElementById('cs-desc').value||'').trim();
-    if(!name){showToast('Nom requis','danger');return;}
+  if(canManage){
+    document.getElementById('cs-save-btn').onclick=async()=>{
+      const emoji=(document.getElementById('cs-emoji').value||'').trim();
+      const name=(document.getElementById('cs-name').value||'').trim();
+      const description=(document.getElementById('cs-desc').value||'').trim();
+      if(!name){showToast('Nom requis','danger');return;}
+      try{
+        await api('/api/chat/channels/'+activeId,{
+          method:'PATCH',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({emoji:emoji||null,name,description})
+        });
+        closeModal();
+        await loadChannels();
+        const upd=channels.find(c=>c.id===activeId);
+        if(upd){
+          const e2=upd.emoji?upd.emoji+' ':'';
+          document.getElementById('chat-header-title').textContent=e2+(upd.display_name||upd.name||'Canal');
+        }
+        showToast('Canal mis à jour','success');
+      }catch(e){showToast(e.message||'Erreur','danger');}
+    };
     try{
-      await api('/api/chat/channels/'+activeId,{
-        method:'PATCH',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({emoji,name,description})
-      });
-      closeModal();
-      await loadChannels();
-      const upd=channels.find(c=>c.id===activeId);
-      if(upd){
-        const e2=upd.emoji?upd.emoji+' ':'';
-        document.getElementById('chat-header-title').textContent=e2+(upd.display_name||upd.name||'Canal');
-      }
-      showToast('Canal mis à jour','success');
-    }catch(e){showToast(e.message||'Erreur','danger');}
-  };
-  requestAnimationFrame(()=>document.getElementById('cs-emoji')?.focus());
+      allUsers=await api('/api/chat/users')||[];
+    }catch(e){allUsers=[];}
+    const pick=document.getElementById('cs-user-pick');
+    if(pick){
+      pick._allUsers=allUsers;
+      const search=document.getElementById('cs-add-search');
+      if(search)search.oninput=()=>renderSettingsAddPick(allUsers,pick._memberIds||new Set(),canManage);
+    }
+  }
+  try{
+    await refreshSettingsMembers(canManage);
+  }catch(e){
+    const el=document.getElementById('cs-members-list');
+    if(el)el.innerHTML='<p style="color:var(--danger);font-size:12px">Chargement impossible.</p>';
+  }
+  if(canManage)requestAnimationFrame(()=>document.getElementById('cs-emoji')?.focus());
 }
 
 async function openNewDm(){

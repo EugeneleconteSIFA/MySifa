@@ -209,6 +209,21 @@
     return el;
   }
 
+  function autoResizePostitTask(el) {
+    if (!el) return;
+    el.style.height = '0';
+    var lineH = parseFloat(getComputedStyle(el).lineHeight) || 18;
+    var minH = Math.ceil(lineH);
+    el.style.height = Math.max(minH, el.scrollHeight) + 'px';
+  }
+
+  function fitPostitTaskTextareas(root) {
+    if (!root) return;
+    root.querySelectorAll('.postit-task-text').forEach(function (ta) {
+      autoResizePostitTask(ta);
+    });
+  }
+
   function renderPostits() {
     var layer = ensurePostitLayer();
     if (!layer) return;
@@ -216,7 +231,9 @@
       el.remove();
     });
     postitsForCurrentPage().forEach(function (p) {
-      layer.appendChild(buildPostitEl(p));
+      var el = buildPostitEl(p);
+      layer.appendChild(el);
+      fitPostitTaskTextareas(el.querySelector('.postit-body'));
     });
   }
 
@@ -436,12 +453,11 @@
       renderPostits();
       requestAnimationFrame(function () {
         var body = document.getElementById('postit-body-' + postitId);
-        var textareas = body && body.querySelectorAll('.postit-task-text');
-        var last = textareas && textareas[textareas.length - 1];
-        if (last) {
-          last.focus();
-          autoResizePostitTask(last);
-        }
+        if (!body) return;
+        fitPostitTaskTextareas(body);
+        var textareas = body.querySelectorAll('.postit-task-text');
+        var last = textareas[textareas.length - 1];
+        if (last) last.focus();
       });
     } catch (e) {
       postitToast((e && e.message) || 'Ajout de tâche impossible.', 'danger');
@@ -517,11 +533,6 @@
     } catch (e) {
       postitToast((e && e.message) || 'Effacement impossible.', 'danger');
     }
-  }
-
-  function autoResizePostitTask(el) {
-    el.style.height = 'auto';
-    el.style.height = el.scrollHeight + 'px';
   }
 
   window.PostitState = PostitState;

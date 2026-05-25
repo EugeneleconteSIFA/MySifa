@@ -380,7 +380,6 @@ async def create_channel(request: Request):
 async def update_channel(channel_id: int, request: Request):
     """Mettre à jour nom, description et emoji d'un canal. Réservé admins ou créateur."""
     user = _require(request)
-    is_admin = user.get("role") in {"superadmin", "direction", "administration"}
     data = await request.json()
     with get_db() as conn:
         ch = conn.execute(
@@ -391,7 +390,7 @@ async def update_channel(channel_id: int, request: Request):
             raise HTTPException(status_code=404, detail="Canal introuvable")
         if ch["type"] == "direct":
             raise HTTPException(status_code=400, detail="Impossible de modifier un DM")
-        if not is_admin and ch["created_by"] != user["id"]:
+        if not _can_manage_channel(user, ch):
             raise HTTPException(status_code=403, detail="Action réservée aux administrateurs ou au créateur")
         name = (data.get("name") or "").strip()
         description = (data.get("description") or "").strip() or None
@@ -431,6 +430,56 @@ def join_channel(channel_id: int, request: Request):
     return {"joined": True}
 
 
+def _can_manage_channel(user: dict, ch) -> bool:
+    is_admin = user.get("role") in {"superadmin", "direction", "administration"}
+    return is_admin or ch["created_by"] == user["id"]
+
+
+@router.post("/channels/{channel_id}/members")
+async def add_member(channel_id: int, request: Request):
+    """Ajouter un membre à un canal (admin, direction, administration ou créateur)."""
+    user = _require(request)
+    data = await request.json()
+    target_id = data.get("user_id")
+    if target_id is None:
+        raise HTTPException(status_code=400, detail="user_id requis")
+    target_id = int(target_id)
+
+    with get_db() as conn:
+        ch = conn.execute(
+            "SELECT id, type, created_by FROM chat_channels WHERE id=? AND archived_at IS NULL LIMIT 1",
+            (channel_id,),
+        ).fetchone()
+        if not ch:
+            raise HTTPException(status_code=404, detail="Canal introuvable")
+        if ch["type"] == "direct":
+            raise HTTPException(status_code=403, detail="Impossible d'ajouter un membre à un DM")
+        if not _can_manage_channel(user, ch):
+            raise HTTPException(
+                status_code=403,
+                detail="Action réservée aux administrateurs ou au créateur du canal",
+            )
+        _assert_member(conn, channel_id, user["id"])
+        target = conn.execute(
+            "SELECT id FROM users WHERE id=? AND actif=1 LIMIT 1",
+            (target_id,),
+        ).fetchone()
+        if not target:
+            raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+        existing = conn.execute(
+            "SELECT 1 FROM chat_members WHERE channel_id=? AND user_id=? LIMIT 1",
+            (channel_id, target_id),
+        ).fetchone()
+        if existing:
+            return {"added": False, "already_member": True}
+        conn.execute(
+            "INSERT INTO chat_members (channel_id, user_id, joined_at) VALUES (?,?,?)",
+            (channel_id, target_id, _now_iso()),
+        )
+        conn.commit()
+    return {"added": True}
+
+
 @router.get("/channels/{channel_id}/members")
 def channel_members(channel_id: int, request: Request):
     user = _require(request)
@@ -448,9 +497,8 @@ def channel_members(channel_id: int, request: Request):
 
 @router.delete("/channels/{channel_id}/members/{target_user_id}")
 def remove_member(channel_id: int, target_user_id: int, request: Request):
-    """Retire un membre d'un canal (admin, direction ou créateur du canal)."""
+    """Retire un membre d'un canal (admin, direction, administration ou créateur du canal)."""
     user = _require(request)
-    is_admin = user.get("role") in {"superadmin", "direction"}
 
     with get_db() as conn:
         ch = conn.execute(
@@ -462,8 +510,7 @@ def remove_member(channel_id: int, target_user_id: int, request: Request):
         if ch["type"] == "direct":
             raise HTTPException(status_code=403, detail="Impossible de retirer un membre d'un DM")
 
-        is_creator = ch["created_by"] == user["id"]
-        if not is_admin and not is_creator:
+        if not _can_manage_channel(user, ch):
             raise HTTPException(
                 status_code=403,
                 detail="Action réservée aux administrateurs ou au créateur du canal",

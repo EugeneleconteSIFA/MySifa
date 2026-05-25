@@ -2516,24 +2516,56 @@ const MP_CAT_LABELS = { mandrin: 'Mandrin', palette: 'Palette', adhesif: 'Adhés
 function mpCategorieKey(cat) {
   return String(cat || '').trim().toLowerCase();
 }
-function mpUniteNom(cat) {
-  return mpCategorieKey(cat) === 'carton' ? 'unité' : 'palette';
+function mpCtx(catOrMatiere) {
+  if (catOrMatiere && typeof catOrMatiere === 'object') {
+    return {
+      categorie: mpCategorieKey(catOrMatiere.categorie),
+      palettes_par_pile: parseFloat(catOrMatiere.palettes_par_pile) || 0,
+    };
+  }
+  return { categorie: mpCategorieKey(catOrMatiere), palettes_par_pile: 0 };
 }
-function mpUniteShort(cat) {
-  return mpCategorieKey(cat) === 'carton' ? 'u.' : 'pal.';
+function mpUniteNom(catOrMatiere) {
+  const c = mpCtx(catOrMatiere).categorie;
+  if (c === 'palette') return 'pile';
+  if (c === 'carton') return 'palette';
+  return 'palette';
 }
-function mpQuantiteFieldLabel(cat) {
-  return mpCategorieKey(cat) === 'carton' ? 'Quantité (unités)' : 'Quantité (palettes)';
+function mpUniteShort(catOrMatiere) {
+  const u = mpUniteNom(catOrMatiere);
+  if (u === 'pile') return 'pile';
+  if (u === 'palette') return 'pal.';
+  return 'pal.';
 }
-function mpSeuilFieldLabel(cat) {
-  return mpCategorieKey(cat) === 'carton' ? 'Seuil d\'alerte (u.)' : 'Seuil d\'alerte (pal.)';
+function mpQuantiteFieldLabel(catOrMatiere) {
+  const u = mpUniteNom(catOrMatiere);
+  if (u === 'pile') return 'Quantité (piles)';
+  if (u === 'palette') return 'Quantité (palettes)';
+  return 'Quantité (palettes)';
 }
-function mpStockLine(qty, cat) {
-  return fN(qty) + ' ' + mpUniteShort(cat);
+function mpSeuilFieldLabel(catOrMatiere) {
+  const u = mpUniteNom(catOrMatiere);
+  if (u === 'pile') return 'Seuil d\'alerte (piles)';
+  if (u === 'palette') return 'Seuil d\'alerte (pal.)';
+  return 'Seuil d\'alerte (pal.)';
 }
-function mpQuantiteInputAttrs(cat) {
-  const carton = mpCategorieKey(cat) === 'carton';
-  return { type: 'number', min: carton ? '1' : '0.5', step: carton ? '1' : '0.5' };
+function mpStockLine(qty, catOrMatiere) {
+  const ctx = mpCtx(catOrMatiere);
+  const base = fN(qty) + ' ' + mpUniteShort(ctx);
+  if (ctx.categorie === 'palette' && ctx.palettes_par_pile > 0) {
+    const pal = (parseFloat(qty) || 0) * ctx.palettes_par_pile;
+    return base + ' (' + fN(pal) + ' pal.)';
+  }
+  return base;
+}
+function mpQuantiteInputAttrs(catOrMatiere) {
+  const c = mpCtx(catOrMatiere).categorie;
+  if (c === 'palette') return { type: 'number', min: '1', step: '1' };
+  if (c === 'carton') return { type: 'number', min: '1', step: '1' };
+  return { type: 'number', min: '0.5', step: '0.5' };
+}
+function mpIsPaletteCategory(catOrMatiere) {
+  return mpCtx(catOrMatiere).categorie === 'palette';
 }
 const MVT_TYPE_LABELS = {
   entree: 'Entrée', sortie: 'Sortie', ajustement: 'Ajustement',
@@ -2685,7 +2717,7 @@ function buildMatieres() {
     el('div', null,
       el('h2', { cls: 'hist-title' }, 'Matières premières'),
       el('p', { cls: 'hist-subtitle' },
-        'Mandrins, palettes, adhésifs et cartons — entrées et sorties par emplacement'),
+        'Mandrins, adhésifs (pal.), palettes (piles), cartons (pal.) — mouvements par emplacement'),
     ),
     isMatieresAdmin()
       ? el('div', { cls: 'hist-head-actions' },
@@ -2738,11 +2770,15 @@ function buildMatieres() {
         el('div', { cls: 'mp-card-top' },
           dashMpCatBadge(m.categorie),
           el('span', { cls: 'mp-card-ref' }, m.reference || ''),
-          el('span', { cls: 'mp-card-stock' }, mpStockLine(m.quantite, m.categorie)),
+          el('span', { cls: 'mp-card-stock' }, mpStockLine(m.quantite, m)),
         ),
         el('div', { cls: 'mp-card-des' }, m.designation || ''),
+        mpIsPaletteCategory(m) && m.palettes_par_pile > 0
+          ? el('div', { cls: 'mp-card-meta', style: { fontSize: '12px', color: 'var(--muted)' } },
+              fN(m.palettes_par_pile) + ' pal. / pile')
+          : null,
         m.en_alerte
-          ? el('div', { cls: 'mp-card-warn' }, 'Sous le seuil (min. ' + mpStockLine(seuil, m.categorie) + ')')
+          ? el('div', { cls: 'mp-card-warn' }, 'Sous le seuil (min. ' + mpStockLine(seuil, m) + ')')
           : null,
         matieresCardActions(m),
       ));
@@ -2806,7 +2842,7 @@ function renderMpMouvementModal(type, matiere) {
   if (!mroot) return;
   S.mpModal = { type: typeMvt, matiere: mat, matiereId: mat ? mat.id : null };
   const stockActuel = mat ? (parseFloat(mat.quantite) || 0) : 0;
-  const mpCat = mat ? mat.categorie : (list.find(x => x.id === S.mpModal.matiereId)?.categorie || '');
+  const mpCat = mat || list.find(x => x.id === S.mpModal.matiereId) || null;
 
   const overlay = el('div', {
     cls: 'mp-modal-overlay',
@@ -2916,10 +2952,11 @@ function renderMpMouvementModal(type, matiere) {
     };
   } else if (typeMvt === 'ajustement') {
     hintEl.textContent = 'Stock actuel : ' + mpStockLine(stockActuel, mpCat);
-    const qInp = el('input', { attrs: { type: 'number', min: '0', step: mpCategorieKey(mpCat) === 'carton' ? '1' : '0.5' } });
+    const stepAdj = mpIsPaletteCategory(mpCat) || mpCategorieKey(mpCat?.categorie) === 'carton' ? '1' : '0.5';
+    const qInp = el('input', { attrs: { type: 'number', min: '0', step: stepAdj } });
     box.appendChild(el('div', { cls: 'mp-field' },
       hintEl,
-      el('label', null, 'Nouveau stock (' + (mpCategorieKey(mpCat) === 'carton' ? 'unités' : 'palettes') + ')'),
+      el('label', null, 'Nouveau stock (' + mpUniteNom(mpCat) + 's)'),
       qInp,
     ));
     S.mpModal.getBody = () => ({
@@ -3082,7 +3119,11 @@ function buildMatieresAdminRow(item) {
     dashMpCatBadge(item.categorie),
     el('strong', null, item.reference || ''),
     el('span', { style: { color: 'var(--text2)', fontSize: '13px' } }, item.designation || ''),
-    el('span', { style: { fontSize: '12px', color: 'var(--muted)' } }, 'Seuil ' + mpStockLine(item.seuil_alerte, item.categorie)),
+    el('span', { style: { fontSize: '12px', color: 'var(--muted)' } }, 'Seuil ' + mpStockLine(item.seuil_alerte, item)),
+    mpIsPaletteCategory(item) && item.palettes_par_pile > 0
+      ? el('span', { style: { fontSize: '12px', color: 'var(--muted)' } },
+          ' · ' + fN(item.palettes_par_pile) + ' pal./pile')
+      : null,
     el('span', { style: { fontSize: '11px', fontWeight: '600', color: actif ? 'var(--success)' : 'var(--muted)' } },
       actif ? 'Actif' : 'Inactif'),
   ));
@@ -3111,23 +3152,38 @@ function buildMatieresAdminRow(item) {
 function buildMatieresAdminEditForm(item) {
   const desInp = el('input', { attrs: { type: 'text' } });
   desInp.value = item.designation || '';
-  const seuilInp = el('input', { attrs: { type: 'number', min: '0', step: '0.5' } });
+  const seuilStep = mpIsPaletteCategory(item) || mpCategorieKey(item.categorie) === 'carton' ? '1' : '0.5';
+  const seuilInp = el('input', { attrs: { type: 'number', min: '0', step: seuilStep } });
   seuilInp.value = String(item.seuil_alerte ?? 0);
+  const pppWrap = el('div', { cls: 'mp-field', style: { display: mpIsPaletteCategory(item) ? '' : 'none' } });
+  const pppInp = el('input', { attrs: { type: 'number', min: '1', step: '1' } });
+  pppInp.value = String(item.palettes_par_pile > 0 ? item.palettes_par_pile : '');
+  pppWrap.append(el('label', null, 'Palettes par pile'), pppInp);
   const wrap = el('div', { cls: 'mp-admin-edit' },
     el('div', { cls: 'mp-field' }, el('label', null, 'Désignation'), desInp),
-    el('div', { cls: 'mp-field' }, el('label', null, mpSeuilFieldLabel(item.categorie)), seuilInp),
+    pppWrap,
+    el('div', { cls: 'mp-field' }, el('label', null, mpSeuilFieldLabel(item)), seuilInp),
     el('button', {
       cls: 'btn',
       type: 'button',
       on: { click: async () => {
         try {
+          const payload = {
+            designation: desInp.value.trim(),
+            seuil_alerte: parseFloat(seuilInp.value) || 0,
+          };
+          if (mpIsPaletteCategory(item)) {
+            const ppp = parseFloat(pppInp.value);
+            if (!ppp || ppp <= 0) {
+              showToast('Palettes par pile obligatoire (valeur positive).', 'error');
+              return;
+            }
+            payload.palettes_par_pile = ppp;
+          }
           await api('/api/stock/matieres/' + item.id, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              designation: desInp.value.trim(),
-              seuil_alerte: parseFloat(seuilInp.value) || 0,
-            }),
+            body: JSON.stringify(payload),
           });
           showToast('Référence mise à jour.', 'success');
           S.matieresAdminEditId = null;
@@ -3176,13 +3232,36 @@ function buildMatieresAdminAddForm() {
   const refInp = el('input', { attrs: { type: 'text', placeholder: '76MM-3P' } });
   const desInp = el('input', { attrs: { type: 'text' } });
   const seuilInp = el('input', { attrs: { type: 'number', min: '0', step: '0.5', value: '0' } });
+  const pppWrap = el('div', { cls: 'mp-field' });
+  const pppInp = el('input', { attrs: { type: 'number', min: '1', step: '1', placeholder: 'Ex. 24' } });
+  const pppLbl = el('label', null, 'Palettes par pile');
+  const seuilLbl = el('label', null, 'Seuil d\'alerte (0 = pas d\'alerte)');
+  const hintEl = el('div', { cls: 'mp-hint' }, '');
   const errEl = el('div', { cls: 'mp-admin-err' }, S.matieresAdminAddError || '');
+  function syncAdminAddFields() {
+    const cat = catSel.value;
+    const isPal = cat === 'palette';
+    const isCarton = cat === 'carton';
+    pppWrap.style.display = isPal ? '' : 'none';
+    pppLbl.textContent = 'Palettes par pile';
+    seuilLbl.textContent = mpSeuilFieldLabel(cat);
+    seuilInp.step = isPal || isCarton ? '1' : '0.5';
+    hintEl.textContent = isPal
+      ? 'Stock géré en piles. Indiquez combien de palettes composent une pile.'
+      : isCarton
+        ? 'Stock géré en palettes.'
+        : 'Stock géré en palettes (pal.).';
+  }
+  catSel.addEventListener('change', syncAdminAddFields);
+  pppWrap.append(pppLbl, pppInp);
+  syncAdminAddFields();
   foot.append(
     el('div', { cls: 'mp-field' }, el('label', null, 'Catégorie'), catSel),
     el('div', { cls: 'mp-field' }, el('label', null, 'Référence'), refInp),
     el('div', { cls: 'mp-field' }, el('label', null, 'Désignation'), desInp),
-    el('div', { cls: 'mp-field' }, el('label', null, 'Seuil d\'alerte (0 = pas d\'alerte)'), seuilInp),
-    el('div', { cls: 'mp-hint' }, 'Mandrins, palettes, adhésifs : pal. — cartons : u.'),
+    pppWrap,
+    el('div', { cls: 'mp-field' }, seuilLbl, seuilInp),
+    hintEl,
     errEl,
     el('button', {
       cls: 'btn',
@@ -3193,25 +3272,39 @@ function buildMatieresAdminAddForm() {
         errEl.textContent = '';
         const ref = refInp.value.trim();
         const des = desInp.value.trim();
+        const cat = catSel.value;
         if (!ref || !des) {
           S.matieresAdminAddError = 'Référence et désignation obligatoires.';
           errEl.textContent = S.matieresAdminAddError;
           return;
         }
+        if (cat === 'palette') {
+          const ppp = parseFloat(pppInp.value);
+          if (!ppp || ppp <= 0) {
+            S.matieresAdminAddError = 'Palettes par pile obligatoire (valeur positive).';
+            errEl.textContent = S.matieresAdminAddError;
+            return;
+          }
+        }
         try {
+          const payload = {
+            categorie: cat,
+            reference: ref,
+            designation: des,
+            seuil_alerte: parseFloat(seuilInp.value) || 0,
+          };
+          if (cat === 'palette') {
+            payload.palettes_par_pile = parseFloat(pppInp.value);
+          }
           await api('/api/stock/matieres', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              categorie: catSel.value,
-              reference: ref,
-              designation: des,
-              seuil_alerte: parseFloat(seuilInp.value) || 0,
-            }),
+            body: JSON.stringify(payload),
           });
           showToast('Référence ajoutée.', 'success');
           refInp.value = '';
           desInp.value = '';
+          pppInp.value = '';
           seuilInp.value = '0';
           await loadMatieresAdminList();
           await loadMatieres();
@@ -3631,7 +3724,7 @@ function buildDashboardAlertes(d) {
             (a.reference || '') + ' — ' + (a.designation || '')
           ),
           el('span', { cls: 'dash-alert-qty' },
-            mpStockLine(a.quantite, a.categorie) + ' / min. ' + mpStockLine(a.seuil_alerte, a.categorie)
+            mpStockLine(a.quantite, a) + ' / min. ' + mpStockLine(a.seuil_alerte, a)
           ),
         )))
       : el('div', { cls: 'dash-alert-ok' }, 'Toutes les matières sont au-dessus des seuils.');

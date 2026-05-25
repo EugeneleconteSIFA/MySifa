@@ -290,6 +290,10 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
 .cw-btn-primary{background:var(--accent);border:none;color:#0a0e17}
 .cw-btn-primary:disabled{opacity:.5;cursor:not-allowed}
 .cw-overlay-err{font-size:12px;color:var(--danger);margin-top:8px}
+.cw-settings-section{margin-top:16px;padding-top:14px;border-top:1px solid var(--border)}
+.cw-settings-section:first-child{margin-top:0;padding-top:0;border-top:none}
+.cw-settings-section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:0 0 10px}
+.cw-settings-hint{font-size:11px;color:var(--muted);margin:-6px 0 10px;line-height:1.5}
 #cw-back-list.cw-hidden{display:none}
 .cw-list-topbar{display:none}
 @media (max-width:900px){
@@ -640,7 +644,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       '<button type="button" class="cw-header-btn cw-hidden" id="cw-back-list" aria-label="Retour aux conversations">←</button>' +
       '<span id="cw-header-avatar" class="cw-header-avatar cw-hidden"></span>' +
       '<span id="cw-panel-title">Messagerie</span>' +
-      '<button type="button" class="cw-header-btn cw-hidden" id="cw-channel-info" title="Membres du canal" aria-label="Membres du canal">' +
+      '<button type="button" class="cw-header-btn cw-hidden" id="cw-channel-info" title="Réglages du canal" aria-label="Réglages du canal">' +
       ICO_SETTINGS +
       '</button>' +
       '<button type="button" id="cw-close" aria-label="Fermer">×</button></div>' +
@@ -685,7 +689,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     document.getElementById('cw-send').addEventListener('click', () => sendMessage());
     document.getElementById('cw-add-dm').addEventListener('click', () => openNewDm());
     document.getElementById('cw-add-channel').addEventListener('click', () => openNewChannel());
-    document.getElementById('cw-channel-info').addEventListener('click', () => openChannelMembers());
+    document.getElementById('cw-channel-info').addEventListener('click', () => openChannelSettings());
     syncAdminButtons();
     const inp = document.getElementById('cw-input');
     inp.addEventListener('keydown', (e) => {
@@ -1193,7 +1197,9 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     if (unread > 0) cls += ' cw-unread';
     btn.className = cls;
     btn.dataset.id = String(ch.id);
-    const label = ch.display_name || ch.name || 'Canal';
+    const label =
+      (ch.type === 'channel' && ch.emoji ? ch.emoji + ' ' : '') +
+      (ch.display_name || ch.name || 'Canal');
     const avUrl =
       ch.type === 'direct' ? ch.other_user_avatar_url || '' : '';
     if (ch.type === 'direct' && ch.other_user_id) {
@@ -1237,7 +1243,10 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     const title = document.getElementById('cw-panel-title');
     const avWrap = document.getElementById('cw-header-avatar');
     const infoBtn = document.getElementById('cw-channel-info');
-    if (title) title.textContent = ch ? ch.display_name || ch.name || 'Canal' : 'Messagerie';
+    if (title) {
+      const pfx = ch && ch.type === 'channel' && ch.emoji ? ch.emoji + ' ' : '';
+      title.textContent = ch ? pfx + (ch.display_name || ch.name || 'Canal') : 'Messagerie';
+    }
     if (avWrap) {
       if (ch && ch.type === 'direct') {
         avWrap.innerHTML = cwAvatarHtml(
@@ -1498,129 +1507,297 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     await syncChatState(false);
   }
 
-  async function openChannelMembers() {
+  function canManageChannel(ch) {
+    return (
+      ADMIN_ROLES.has(CW.role) ||
+      !!(ch && ch.created_by && Number(ch.created_by) === Number(CW.uid))
+    );
+  }
+
+  function renderSettingsMemberRows(membersEl, members, ch, canManage) {
+    if (!membersEl) return;
+    membersEl.innerHTML = '';
+    if (!members.length) {
+      membersEl.innerHTML =
+        '<p style="color:var(--muted);font-size:13px;margin:0">Aucun membre.</p>';
+      return;
+    }
+    members.forEach((m) => {
+      const rl = ROLE_LABELS[m.role] || m.role || '';
+      cacheUserAvatar(m.id, m.nom, m.avatar_url);
+      const isSelf = Number(m.id) === Number(CW.uid);
+      const row = document.createElement('div');
+      row.className = 'cw-member-row';
+      row.innerHTML =
+        cwAvatarHtml(m.nom, m.avatar_url, 32) +
+        '<div class="cw-member-body"><div>' +
+        escCW(m.nom || 'Utilisateur') +
+        '</div><div class="cw-member-role">' +
+        escCW(rl) +
+        '</div></div>' +
+        (!isSelf
+          ? '<button type="button" class="cw-member-actions-btn" title="Actions" aria-label="Actions">⋮</button>' +
+            '<div class="cw-member-dropdown cw-hidden">' +
+            '<button type="button" class="cw-dropdown-item" data-action="dm">Envoyer un message</button>' +
+            (canManage
+              ? '<button type="button" class="cw-dropdown-item cw-danger" data-action="remove">Retirer du canal</button>'
+              : '') +
+            '</div>'
+          : '');
+      const actBtn = row.querySelector('.cw-member-actions-btn');
+      const dropdown = row.querySelector('.cw-member-dropdown');
+      if (actBtn && dropdown) {
+        actBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          membersEl.querySelectorAll('.cw-member-dropdown').forEach((d) => {
+            if (d !== dropdown) d.classList.add('cw-hidden');
+          });
+          dropdown.classList.toggle('cw-hidden');
+        });
+        document.addEventListener('click', function closeDD(e) {
+          if (!dropdown.contains(e.target) && e.target !== actBtn) {
+            dropdown.classList.add('cw-hidden');
+            document.removeEventListener('click', closeDD);
+          }
+        });
+        dropdown.querySelectorAll('.cw-dropdown-item').forEach((item) => {
+          item.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            dropdown.classList.add('cw-hidden');
+            const action = item.dataset.action;
+            if (action === 'dm') {
+              closeOverlay();
+              try {
+                const r = await api('/api/chat/channels', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ type: 'direct', user_id: m.id }),
+                });
+                await loadChannels();
+                await selectChannel(r.id);
+              } catch (ex) {}
+            }
+            if (action === 'remove') {
+              if (
+                !window.confirm('Retirer ' + (m.nom || 'cet utilisateur') + ' du canal ?')
+              ) {
+                return;
+              }
+              try {
+                await api('/api/chat/channels/' + CW.activeId + '/members/' + m.id, {
+                  method: 'DELETE',
+                });
+                await refreshChannelSettingsMembers(ch, canManage);
+                await syncChatState(false);
+              } catch (ex) {
+                window.alert(ex.message || 'Erreur lors de la suppression.');
+              }
+            }
+          });
+        });
+      }
+      membersEl.appendChild(row);
+    });
+  }
+
+  async function refreshChannelSettingsMembers(ch, canManage) {
+    const membersEl = document.getElementById('cw-settings-members');
+    if (!membersEl) return;
+    try {
+      const members =
+        (await api('/api/chat/channels/' + CW.activeId + '/members')) || [];
+      renderSettingsMemberRows(membersEl, members, ch, canManage);
+      const memberIds = new Set(members.map((m) => m.id));
+      const pickEl = document.getElementById('cw-settings-user-pick');
+      if (pickEl) {
+        pickEl._memberIds = memberIds;
+        if (pickEl._allUsers) {
+          renderSettingsAddPick(pickEl._allUsers, memberIds, ch, canManage);
+        }
+      }
+    } catch (e) {
+      membersEl.innerHTML = '<p class="cw-overlay-err">Chargement impossible.</p>';
+    }
+  }
+
+  function renderSettingsAddPick(users, memberIds, ch, canManage) {
+    const pickEl = document.getElementById('cw-settings-user-pick');
+    const searchEl = document.getElementById('cw-settings-add-search');
+    if (!pickEl || !canManage) return;
+    const ids = pickEl._memberIds || memberIds;
+    const q = (searchEl && searchEl.value) || '';
+    const ql = q.toLowerCase();
+    const list = users.filter(
+      (u) =>
+        u.id !== CW.uid &&
+        !ids.has(u.id) &&
+        (!ql || (u.nom || '').toLowerCase().includes(ql))
+    );
+    if (!list.length) {
+      pickEl.innerHTML =
+        '<p style="padding:10px;margin:0;font-size:12px;color:var(--muted)">—</p>';
+      return;
+    }
+    pickEl.innerHTML = list
+      .map(
+        (u) =>
+          '<button type="button" class="cw-dm-row" data-uid="' +
+          u.id +
+          '">' +
+          escCW(u.nom) +
+          ' <span style="color:var(--muted);font-size:11px">' +
+          escCW(ROLE_LABELS[u.role] || u.role || '') +
+          '</span></button>'
+      )
+      .join('');
+    pickEl.querySelectorAll('.cw-dm-row').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const uid = parseInt(btn.getAttribute('data-uid'), 10);
+        try {
+          await api('/api/chat/channels/' + CW.activeId + '/members', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: uid }),
+          });
+          if (searchEl) searchEl.value = '';
+          await refreshChannelSettingsMembers(ch, canManage);
+          await syncChatState(false);
+        } catch (ex) {
+          window.alert(ex.message || 'Ajout impossible.');
+        }
+      });
+    });
+  }
+
+  async function openChannelSettings() {
     if (!CW.activeId) return;
     const ch = CW.channels.find((c) => c.id === CW.activeId);
     if (!ch || ch.type !== 'channel') return;
+    const canManage = canManageChannel(ch);
     closeOverlay();
     const picker = document.getElementById('cw-dm-picker');
     if (picker) picker.classList.add('cw-hidden');
     const ov = document.getElementById('cw-overlay');
     if (!ov) return;
     ov.classList.remove('cw-hidden');
+    const chTitle = escCW(ch.display_name || ch.name || 'Canal');
     ov.innerHTML =
       '<div class="cw-overlay-head"><button type="button" class="cw-overlay-back" id="cw-ov-back" aria-label="Retour">×</button>' +
-      '<h3>Membres — ' +
-      escCW(ch.display_name || ch.name || 'Canal') +
+      '<h3>Réglages — ' +
+      chTitle +
       '</h3></div>' +
-      '<div class="cw-overlay-body" id="cw-ov-body"><p style="color:var(--muted);font-size:13px;margin:0">Chargement…</p></div>';
+      '<div class="cw-overlay-body" id="cw-ov-body"><p style="color:var(--muted);font-size:13px;margin:0">Chargement…</p></div>' +
+      (canManage
+        ? '<div class="cw-overlay-actions">' +
+          '<button type="button" class="cw-btn-ghost" id="cw-settings-cancel">Annuler</button>' +
+          '<button type="button" class="cw-btn-primary" id="cw-settings-save">Enregistrer</button></div>'
+        : '<div class="cw-overlay-actions">' +
+          '<button type="button" class="cw-btn-primary" id="cw-settings-close">Fermer</button></div>');
     document.getElementById('cw-ov-back').addEventListener('click', closeOverlay);
-    try {
-      const members = (await api('/api/chat/channels/' + CW.activeId + '/members')) || [];
-      const body = document.getElementById('cw-ov-body');
-      if (!body) return;
-      if (!members.length) {
-        body.innerHTML = '<p style="color:var(--muted);font-size:13px;margin:0">Aucun membre.</p>';
+    document.getElementById('cw-settings-cancel')?.addEventListener('click', closeOverlay);
+    document.getElementById('cw-settings-close')?.addEventListener('click', closeOverlay);
+
+    const body = document.getElementById('cw-ov-body');
+    if (!body) return;
+
+    let generalHtml = '';
+    if (canManage) {
+      generalHtml =
+        '<div class="cw-settings-section">' +
+        '<p class="cw-settings-section-title">Général</p>' +
+        '<label for="cw-cs-emoji">Icône du canal</label>' +
+        '<input type="text" id="cw-cs-emoji" maxlength="4" placeholder="ex. 🔧 📦" value="' +
+        escAttr(ch.emoji || '') +
+        '">' +
+        '<p class="cw-settings-hint">Un seul emoji. Laissez vide pour aucun.</p>' +
+        '<label for="cw-cs-name">Nom</label>' +
+        '<input type="text" id="cw-cs-name" maxlength="60" value="' +
+        escAttr(ch.name || '') +
+        '">' +
+        '<label for="cw-cs-desc">Description</label>' +
+        '<textarea id="cw-cs-desc" rows="2">' +
+        escCW(ch.description || '') +
+        '</textarea></div>';
+    } else {
+      const pfx = ch.emoji ? ch.emoji + ' ' : '';
+      generalHtml =
+        '<div class="cw-settings-section">' +
+        '<p class="cw-settings-section-title">Général</p>' +
+        '<p style="margin:0 0 6px;font-size:14px;font-weight:600;color:var(--text)">' +
+        escCW(pfx + (ch.name || ch.display_name || 'Canal')) +
+        '</p>' +
+        (ch.description
+          ? '<p style="margin:0;font-size:13px;color:var(--text2)">' + escCW(ch.description) + '</p>'
+          : '<p style="margin:0;font-size:12px;color:var(--muted)">Sans description</p>') +
+        '</div>';
+    }
+
+    body.innerHTML =
+      generalHtml +
+      '<div class="cw-settings-section">' +
+      '<p class="cw-settings-section-title">Membres</p>' +
+      '<div id="cw-settings-members"><p style="color:var(--muted);font-size:13px;margin:0">Chargement…</p></div>' +
+      (canManage
+        ? '<label for="cw-settings-add-search" style="margin-top:12px">Ajouter un membre</label>' +
+          '<input type="search" id="cw-settings-add-search" placeholder="Rechercher un collègue…" autocomplete="off">' +
+          '<div class="cw-user-pick" id="cw-settings-user-pick"></div>'
+        : '') +
+      '</div>';
+
+    document.getElementById('cw-settings-save')?.addEventListener('click', async () => {
+      const emoji = (document.getElementById('cw-cs-emoji')?.value || '').trim();
+      const name = (document.getElementById('cw-cs-name')?.value || '').trim();
+      const description = (document.getElementById('cw-cs-desc')?.value || '').trim();
+      if (!name) {
+        window.alert('Nom requis.');
         return;
       }
-      const canManage =
-        CW_MANAGE_ROLES.has(CW.role) ||
-        (ch && ch.created_by && Number(ch.created_by) === Number(CW.uid));
+      try {
+        await api('/api/chat/channels/' + CW.activeId, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ emoji: emoji || null, name, description }),
+        });
+        await loadChannels();
+        updateChannelHeader();
+        renderChannelLists();
+        closeOverlay();
+      } catch (ex) {
+        window.alert(ex.message || 'Enregistrement impossible.');
+      }
+    });
 
-      body.innerHTML = '';
-
-      members.forEach((m) => {
-        const rl = ROLE_LABELS[m.role] || m.role || '';
-        cacheUserAvatar(m.id, m.nom, m.avatar_url);
-        const isSelf = Number(m.id) === Number(CW.uid);
-
-        const row = document.createElement('div');
-        row.className = 'cw-member-row';
-
-        row.innerHTML =
-          cwAvatarHtml(m.nom, m.avatar_url, 32) +
-          '<div class="cw-member-body">' +
-          '<div>' +
-          escCW(m.nom || 'Utilisateur') +
-          '</div>' +
-          '<div class="cw-member-role">' +
-          escCW(rl) +
-          '</div>' +
-          '</div>' +
-          (!isSelf
-            ? '<button type="button" class="cw-member-actions-btn" title="Actions" aria-label="Actions pour ' +
-              escCW(m.nom) +
-              '">⋮</button>' +
-              '<div class="cw-member-dropdown cw-hidden">' +
-              '<button type="button" class="cw-dropdown-item" data-action="dm">Envoyer un message</button>' +
-              (canManage
-                ? '<button type="button" class="cw-dropdown-item cw-danger" data-action="remove">Retirer du canal</button>'
-                : '') +
-              '</div>'
-            : '');
-
-        const actBtn = row.querySelector('.cw-member-actions-btn');
-        const dropdown = row.querySelector('.cw-member-dropdown');
-        if (actBtn && dropdown) {
-          actBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            body.querySelectorAll('.cw-member-dropdown').forEach((d) => {
-              if (d !== dropdown) d.classList.add('cw-hidden');
-            });
-            dropdown.classList.toggle('cw-hidden');
-          });
-
-          document.addEventListener('click', function closeDD(e) {
-            if (!dropdown.contains(e.target) && e.target !== actBtn) {
-              dropdown.classList.add('cw-hidden');
-              document.removeEventListener('click', closeDD);
-            }
-          });
-
-          dropdown.querySelectorAll('.cw-dropdown-item').forEach((item) => {
-            item.addEventListener('click', async (e) => {
-              e.stopPropagation();
-              dropdown.classList.add('cw-hidden');
-              const action = item.dataset.action;
-
-              if (action === 'dm') {
-                closeOverlay();
-                try {
-                  const r = await api('/api/chat/channels', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ type: 'direct', user_id: m.id }),
-                  });
-                  await loadChannels();
-                  await selectChannel(r.id);
-                } catch (ex) {}
-              }
-
-              if (action === 'remove') {
-                const confirmed = window.confirm(
-                  'Retirer ' + (m.nom || 'cet utilisateur') + ' du canal ?'
-                );
-                if (!confirmed) return;
-                try {
-                  await api(
-                    '/api/chat/channels/' + CW.activeId + '/members/' + m.id,
-                    { method: 'DELETE' }
-                  );
-                  openChannelMembers();
-                  await syncChatState(false);
-                } catch (ex) {
-                  window.alert(ex.message || 'Erreur lors de la suppression.');
-                }
-              }
-            });
-          });
+    try {
+      const members =
+        (await api('/api/chat/channels/' + CW.activeId + '/members')) || [];
+      const memberIds = new Set(members.map((m) => m.id));
+      renderSettingsMemberRows(
+        document.getElementById('cw-settings-members'),
+        members,
+        ch,
+        canManage
+      );
+      if (canManage) {
+        let users = [];
+        try {
+          users = (await api('/api/chat/users')) || [];
+        } catch (e) {
+          users = [];
         }
-
-        body.appendChild(row);
-      });
+        const pickEl = document.getElementById('cw-settings-user-pick');
+        if (pickEl) {
+          pickEl._allUsers = users;
+          pickEl._memberIds = memberIds;
+          renderSettingsAddPick(users, memberIds, ch, canManage);
+          const searchEl = document.getElementById('cw-settings-add-search');
+          if (searchEl) {
+            searchEl.oninput = () =>
+              renderSettingsAddPick(users, pickEl._memberIds, ch, canManage);
+          }
+        }
+      }
     } catch (e) {
-      const body = document.getElementById('cw-ov-body');
-      if (body) body.innerHTML = '<p class="cw-overlay-err">Chargement impossible.</p>';
+      body.innerHTML += '<p class="cw-overlay-err">Chargement des membres impossible.</p>';
     }
   }
 

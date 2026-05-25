@@ -77,6 +77,37 @@ _MP_TYPES_MVT = frozenset({"entree", "sortie", "ajustement", "transfert"})
 _STOCK_MATIERES_ADMIN_ROLES = frozenset({"superadmin", "direction", "administration"})
 
 
+def _mp_unite_gestion(categorie: str) -> str:
+    """Unité de gestion du stock selon la catégorie matière première."""
+    cat = (categorie or "").strip().lower()
+    if cat == "palette":
+        return "pile"
+    if cat == "carton":
+        return "palette"
+    return "palette"
+
+
+def _mp_row_dict(r) -> dict:
+    """Normalise une ligne matieres_premieres + stock pour l'API."""
+    seuil = float(r["seuil_alerte"] or 0)
+    qte = float(r["quantite"] or 0)
+    cat = r["categorie"]
+    ppp = r["palettes_par_pile"] if "palettes_par_pile" in r.keys() else None
+    palettes_par_pile = float(ppp) if ppp is not None and float(ppp) > 0 else None
+    return {
+        "id": r["id"],
+        "categorie": cat,
+        "reference": r["reference"],
+        "designation": r["designation"],
+        "seuil_alerte": seuil,
+        "actif": r["actif"],
+        "quantite": qte,
+        "en_alerte": seuil > 0 and qte <= seuil,
+        "unite": _mp_unite_gestion(cat),
+        "palettes_par_pile": palettes_par_pile,
+    }
+
+
 def require_stock_matieres_admin(request: Request) -> dict:
     user = require_stock(request)
     if user.get("role") not in _STOCK_MATIERES_ADMIN_ROLES:
@@ -95,7 +126,11 @@ _HISTORIQUE_SQL_MP = """
         mp.categorie,
         mp.reference,
         mp.designation,
-        CASE WHEN mp.categorie = 'carton' THEN 'unité' ELSE 'palette' END AS unite,
+        CASE
+            WHEN mp.categorie = 'palette' THEN 'pile'
+            WHEN mp.categorie = 'carton' THEN 'palette'
+            ELSE 'palette'
+        END AS unite,
         CASE
             WHEN m.type_mouvement = 'transfert'
                  AND TRIM(COALESCE(m.emplacement_source,'')) != ''
@@ -1059,6 +1094,7 @@ def dashboard(request: Request):
         alertes_mp = conn.execute(
             """
             SELECT mp.id, mp.categorie, mp.reference, mp.designation, mp.seuil_alerte,
+                   mp.palettes_par_pile,
                    COALESCE(s.quantite, 0) AS quantite
             FROM matieres_premieres mp
             LEFT JOIN mp_stock s ON s.matiere_id = mp.id
@@ -1404,7 +1440,7 @@ def list_matieres_premieres(request: Request, all: int = 0):
         rows = conn.execute(
             f"""
             SELECT mp.id, mp.categorie, mp.reference, mp.designation,
-                   mp.seuil_alerte, mp.actif,
+                   mp.seuil_alerte, mp.actif, mp.palettes_par_pile,
                    COALESCE(s.quantite, 0) AS quantite
             FROM matieres_premieres mp
             LEFT JOIN mp_stock s ON s.matiere_id = mp.id
@@ -1412,21 +1448,7 @@ def list_matieres_premieres(request: Request, all: int = 0):
             ORDER BY mp.categorie ASC, mp.reference ASC
             """
         ).fetchall()
-    out = []
-    for r in rows:
-        seuil = float(r["seuil_alerte"] or 0)
-        qte = float(r["quantite"] or 0)
-        out.append({
-            "id": r["id"],
-            "categorie": r["categorie"],
-            "reference": r["reference"],
-            "designation": r["designation"],
-            "seuil_alerte": seuil,
-            "actif": r["actif"],
-            "quantite": qte,
-            "en_alerte": seuil > 0 and qte <= seuil,
-        })
-    return out
+    return [_mp_row_dict(r) for r in rows]
 
 
 @router.post("/api/stock/matieres")
@@ -1437,6 +1459,17 @@ async def create_matiere_premiere(request: Request):
     reference = (body.get("reference") or "").strip()
     designation = (body.get("designation") or "").strip()
     seuil_alerte = float(body.get("seuil_alerte") or 0)
+    palettes_par_pile = None
+    if categorie == "palette":
+        try:
+            palettes_par_pile = float(body.get("palettes_par_pile") or 0)
+        except (TypeError, ValueError):
+            palettes_par_pile = 0.0
+        if palettes_par_pile <= 0:
+            raise HTTPException(
+                400,
+                "Palettes par pile obligatoire (valeur positive).",
+            )
 
     if categorie not in _MP_CATEGORIES:
         raise HTTPException(400, "Catégorie invalide.")
@@ -1449,10 +1482,12 @@ async def create_matiere_premiere(request: Request):
         try:
             cur = conn.execute(
                 """
-                INSERT INTO matieres_premieres (categorie, reference, designation, seuil_alerte)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO matieres_premieres (
+                    categorie, reference, designation, seuil_alerte, palettes_par_pile
+                )
+                VALUES (?, ?, ?, ?, ?)
                 """,
-                (categorie, reference, designation, seuil_alerte),
+                (categorie, reference, designation, seuil_alerte, palettes_par_pile),
             )
             matiere_id = cur.lastrowid
             conn.execute(
@@ -1485,6 +1520,9 @@ async def update_matiere_premiere(matiere_id: int, request: Request):
     if "seuil_alerte" in body:
         sets.append("seuil_alerte=?")
         params.append(float(body.get("seuil_alerte") or 0))
+    if "palettes_par_pile" in body:
+        sets.append("palettes_par_pile=?")
+        params.append(float(body.get("palettes_par_pile") or 0))
     if "actif" in body:
         sets.append("actif=?")
         params.append(1 if body.get("actif") else 0)
@@ -1497,10 +1535,25 @@ async def update_matiere_premiere(matiere_id: int, request: Request):
 
     with get_db() as conn:
         row = conn.execute(
-            "SELECT id FROM matieres_premieres WHERE id=?", (matiere_id,)
+            "SELECT id, categorie FROM matieres_premieres WHERE id=?", (matiere_id,)
         ).fetchone()
         if not row:
             raise HTTPException(404, "Matière non trouvée.")
+        if "palettes_par_pile" in body:
+            if row["categorie"] != "palette":
+                raise HTTPException(
+                    400,
+                    "Palettes par pile uniquement pour les références palette.",
+                )
+            try:
+                ppp = float(body.get("palettes_par_pile") or 0)
+            except (TypeError, ValueError):
+                raise HTTPException(400, "Palettes par pile invalide.") from None
+            if ppp <= 0:
+                raise HTTPException(
+                    400,
+                    "Palettes par pile doit être une valeur positive.",
+                )
         conn.execute(
             f"UPDATE matieres_premieres SET {', '.join(sets)} WHERE id=?",
             params,
@@ -1602,7 +1655,7 @@ async def mouvement_matiere_premiere(request: Request):
         ).fetchone()
         if not mp:
             raise HTTPException(404, "Matière non trouvée.")
-        unite_mp = "unité" if mp["categorie"] == "carton" else "palette"
+        unite_mp = _mp_unite_gestion(mp["categorie"])
 
         stock = conn.execute(
             "SELECT quantite FROM mp_stock WHERE matiere_id=?",

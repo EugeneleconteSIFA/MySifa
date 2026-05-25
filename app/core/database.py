@@ -2006,6 +2006,27 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 59, "postits_multi_page")
 
+    # v60 — Matières premières : piles (palettes) et palettes (cartons)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=60 LIMIT 1").fetchone():
+        mp_cols = {
+            r["name"]
+            for r in conn.execute("PRAGMA table_info(matieres_premieres)").fetchall()
+        }
+        if "palettes_par_pile" not in mp_cols:
+            conn.execute(
+                "ALTER TABLE matieres_premieres ADD COLUMN palettes_par_pile REAL"
+            )
+        conn.execute(
+            """
+            UPDATE matieres_premieres
+            SET palettes_par_pile = 1
+            WHERE categorie = 'palette'
+              AND (palettes_par_pile IS NULL OR palettes_par_pile <= 0)
+            """
+        )
+        conn.commit()
+        _record_schema_migration(conn, 60, "matieres_premieres_palettes_par_pile")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,
