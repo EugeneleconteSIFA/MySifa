@@ -2780,7 +2780,7 @@ function buildMatieres() {
     isMatieresAdmin()
       ? el('div', { cls: 'hist-head-actions' },
           el('button', {
-            cls: 'btn btn-ghost',
+            cls: 'btn',
             type: 'button',
             on: { click: () => openMatieresAdminDrawer() },
           }, 'Gérer les références'),

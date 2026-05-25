@@ -723,7 +723,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     syncAdminButtons();
     const inp = document.getElementById('cw-input');
     inp.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
+      if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault();
         sendMessage();
       }

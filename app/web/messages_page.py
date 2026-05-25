@@ -1663,7 +1663,7 @@ document.getElementById('chat-input').addEventListener('keydown',e=>{
     }
     if(e.key==='Escape'){closeMentionDropdown();return;}
   }
-  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}
+  if(e.key==='Enter'&&!e.shiftKey&&!e.ctrlKey&&!e.altKey){e.preventDefault();sendMessage();}
 });
 document.getElementById('chat-input').addEventListener('input',function(){
   this.style.height='auto';

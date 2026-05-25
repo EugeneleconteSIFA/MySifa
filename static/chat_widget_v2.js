@@ -119,7 +119,7 @@
     if (inp) {
       inp.addEventListener('keydown', (e) => {
         if (handleMentionKeys(e, inp)) return;
-        if (e.key === 'Enter' && !e.shiftKey) {
+        if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
           e.preventDefault();
           CW.sendMessage();
         }
