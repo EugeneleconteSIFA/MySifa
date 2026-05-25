@@ -118,8 +118,23 @@
     const inp = document.getElementById('cw-input');
     if (inp) {
       inp.addEventListener('keydown', (e) => {
+        const CM = window.ChatMentions;
+        if (CM && CM.handleEnterKey) {
+          CM.handleEnterKey(e, inp, () => CW.sendMessage(), (ev, el) => handleMentionKeys(ev, el));
+          return;
+        }
         if (handleMentionKeys(e, inp)) return;
-        if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
+        if (e.key === 'Enter' && (e.shiftKey || e.ctrlKey || e.altKey)) {
+          e.preventDefault();
+          const start = inp.selectionStart;
+          const end = inp.selectionEnd;
+          inp.value =
+            inp.value.slice(0, start) + '\n' + inp.value.slice(end);
+          inp.setSelectionRange(start + 1, start + 1);
+          inp.dispatchEvent(new Event('input', { bubbles: true }));
+          return;
+        }
+        if (e.key === 'Enter') {
           e.preventDefault();
           CW.sendMessage();
         }
@@ -242,7 +257,7 @@
       items.forEach((el, i) => el.classList.toggle('focused', i === mentionFocusIdx));
       return true;
     }
-    if (e.key === 'Enter' && mentionFocusIdx >= 0) {
+    if (e.key === 'Enter' && mentionFocusIdx >= 0 && !e.shiftKey && !e.ctrlKey) {
       e.preventDefault();
       const val = items[mentionFocusIdx]?.dataset.insert;
       if (val) insertMention(val);

@@ -725,7 +725,21 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     syncAdminButtons();
     const inp = document.getElementById('cw-input');
     inp.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
+      const CM = window.ChatMentions;
+      if (CM && CM.handleEnterKey) {
+        CM.handleEnterKey(e, inp, sendMessage, null);
+        return;
+      }
+      if (e.key === 'Enter' && (e.shiftKey || e.ctrlKey || e.altKey)) {
+        e.preventDefault();
+        const start = inp.selectionStart;
+        const end = inp.selectionEnd;
+        inp.value = inp.value.slice(0, start) + '\n' + inp.value.slice(end);
+        inp.setSelectionRange(start + 1, start + 1);
+        inp.dispatchEvent(new Event('input', { bubbles: true }));
+        return;
+      }
+      if (e.key === 'Enter') {
         e.preventDefault();
         sendMessage();
       }
@@ -1400,7 +1414,10 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
   async function sendMessage() {
     if (!CW.activeId) return;
     const inp = document.getElementById('cw-input');
-    const body = (inp && inp.value || '').trim();
+    const rawBody = (inp && inp.value) || '';
+    const body = window.ChatMentions
+      ? window.ChatMentions.trimChatBody(rawBody)
+      : rawBody.replace(/^\s+|\s+$/g, '');
     const file = CW.pendingFile;
     if (!body && !file) return;
     const btn = document.getElementById('cw-send');

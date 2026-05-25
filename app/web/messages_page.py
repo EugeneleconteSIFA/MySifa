@@ -1113,7 +1113,7 @@ async function loadMoreMessages(){
 
 async function sendMessage(){
   const inp=document.getElementById('chat-input');
-  const body=(inp.value||'').trim();
+  const body=window.ChatMentions?ChatMentions.trimChatBody(inp.value):(inp.value||'').replace(/^\s+|\s+$/g,'');
   const file=pendingChatFile;
   if((!body&&!file)||!activeId)return;
   const btn=document.getElementById('chat-send');
@@ -1642,30 +1642,47 @@ document.addEventListener('click',e=>{
   if(!e.target.closest('#chat-input-wrap')&&!e.target.closest('#mention-dropdown'))closeMentionDropdown();
 });
 
-document.getElementById('chat-input').addEventListener('keydown',e=>{
-  if(mentionQuery!==null&&document.getElementById('mention-dropdown').style.display!=='none'){
-    const items=document.querySelectorAll('.mention-item');
-    if(e.key==='ArrowDown'){
-      e.preventDefault();
-      mentionFocusIdx=Math.min(mentionFocusIdx+1,items.length-1);
-      items.forEach((el,i)=>el.classList.toggle('focused',i===mentionFocusIdx));
-      return;
-    }
-    if(e.key==='ArrowUp'){
-      e.preventDefault();
-      mentionFocusIdx=Math.max(mentionFocusIdx-1,0);
-      items.forEach((el,i)=>el.classList.toggle('focused',i===mentionFocusIdx));
-      return;
-    }
-    if(e.key==='Enter'&&mentionFocusIdx>=0){
-      e.preventDefault();
-      const val=items[mentionFocusIdx]?.dataset.insert;
-      if(val)insertMention(val);
-      return;
-    }
-    if(e.key==='Escape'){closeMentionDropdown();return;}
+function mentionKeydownHandler(e){
+  if(mentionQuery===null||document.getElementById('mention-dropdown').style.display==='none')return false;
+  const items=document.querySelectorAll('.mention-item');
+  if(e.key==='ArrowDown'){
+    e.preventDefault();
+    mentionFocusIdx=Math.min(mentionFocusIdx+1,items.length-1);
+    items.forEach((el,i)=>el.classList.toggle('focused',i===mentionFocusIdx));
+    return true;
   }
-  if(e.key==='Enter'&&!e.shiftKey&&!e.ctrlKey&&!e.altKey){e.preventDefault();sendMessage();}
+  if(e.key==='ArrowUp'){
+    e.preventDefault();
+    mentionFocusIdx=Math.max(mentionFocusIdx-1,0);
+    items.forEach((el,i)=>el.classList.toggle('focused',i===mentionFocusIdx));
+    return true;
+  }
+  if(e.key==='Enter'&&mentionFocusIdx>=0&&!e.shiftKey&&!e.ctrlKey){
+    e.preventDefault();
+    const val=items[mentionFocusIdx]?.dataset.insert;
+    if(val)insertMention(val);
+    return true;
+  }
+  if(e.key==='Escape'){closeMentionDropdown();return true;}
+  return false;
+}
+document.getElementById('chat-input').addEventListener('keydown',e=>{
+  const inp=document.getElementById('chat-input');
+  if(window.ChatMentions&&ChatMentions.handleEnterKey){
+    ChatMentions.handleEnterKey(e,inp,sendMessage,mentionKeydownHandler);
+    return;
+  }
+  if(mentionKeydownHandler(e))return;
+  if(e.key==='Enter'&&(e.shiftKey||e.ctrlKey||e.altKey)){
+    e.preventDefault();
+    const start=inp.selectionStart;
+    const end=inp.selectionEnd;
+    inp.value=inp.value.slice(0,start)+'\n'+inp.value.slice(end);
+    inp.setSelectionRange(start+1,start+1);
+    inp.dispatchEvent(new Event('input',{bubbles:true}));
+    return;
+  }
+  if(e.key==='Enter'){e.preventDefault();sendMessage();}
 });
 document.getElementById('chat-input').addEventListener('input',function(){
   this.style.height='auto';

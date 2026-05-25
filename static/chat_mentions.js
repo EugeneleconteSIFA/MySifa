@@ -59,6 +59,35 @@
     return !!(compact && b.includes('@' + compact));
   }
 
+  function trimChatBody(text) {
+    return String(text || '').replace(/^\s+|\s+$/g, '');
+  }
+
+  function insertNewline(inp) {
+    if (!inp) return;
+    const start = inp.selectionStart != null ? inp.selectionStart : inp.value.length;
+    const end = inp.selectionEnd != null ? inp.selectionEnd : start;
+    const val = inp.value || '';
+    inp.value = val.slice(0, start) + '\n' + val.slice(end);
+    const pos = start + 1;
+    inp.setSelectionRange(pos, pos);
+    inp.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  /** Entrée = envoyer ; Maj/Ctrl/Alt + Entrée = nouvelle ligne (insertion explicite). */
+  function handleEnterKey(e, inp, onSend, onMentionKeys) {
+    if (e.key !== 'Enter' || e.isComposing) return false;
+    if (onMentionKeys && onMentionKeys(e, inp)) return true;
+    if (e.shiftKey || e.ctrlKey || e.altKey) {
+      e.preventDefault();
+      insertNewline(inp);
+      return true;
+    }
+    e.preventDefault();
+    if (onSend) onSend();
+    return true;
+  }
+
   function formatBodyHtml(body, members, escFn) {
     const esc = escFn || ((s) => String(s || ''));
     let safe = esc(String(body || '').replace(/\r\n/g, '\n'));
@@ -86,5 +115,8 @@
     mentionInsertValue,
     bodyMentionsUser,
     formatBodyHtml,
+    trimChatBody,
+    insertNewline,
+    handleEnterKey,
   };
 })();
