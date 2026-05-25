@@ -61,7 +61,8 @@
 
   function formatBodyHtml(body, members, escFn) {
     const esc = escFn || ((s) => String(s || ''));
-    let safe = esc(body || '');
+    let safe = esc(String(body || '').replace(/\r\n/g, '\n'));
+    safe = safe.replace(/\n/g, '<br>');
     safe = safe.replace(
       /@(tous|all)\b/gi,
       '<span style="color:var(--accent);font-weight:700">@$1</span>'

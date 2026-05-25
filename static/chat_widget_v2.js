@@ -407,10 +407,13 @@
         const CM = window.ChatMentions;
         const html = CM
           ? CM.formatBodyHtml((msg.body || '').trim(), channelMembers, CW.escCW)
-          : CW.escCW((msg.body || '').trim()).replace(
-              /@([A-Za-z0-9_]+)/g,
-              '<span style="color:var(--accent);font-weight:700">@$1</span>'
-            );
+          : CW.escCW((msg.body || '').trim())
+              .replace(/\r\n/g, '\n')
+              .replace(/\n/g, '<br>')
+              .replace(
+                /@([A-Za-z0-9_]+)/g,
+                '<span style="color:var(--accent);font-weight:700">@$1</span>'
+              );
         const attach = bodyEl.querySelector('.cw-msg-attach');
         const meta = bodyEl.querySelector('.cw-msg-meta');
         bodyEl.innerHTML = (meta ? meta.outerHTML : '') + html + (attach ? attach.outerHTML : '');

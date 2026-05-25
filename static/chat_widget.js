@@ -212,9 +212,11 @@ body.light .cw-channel-item:hover{background:rgba(0,0,0,.04)}
 .cw-reaction-pill.cw-reacted{border-color:var(--accent);background:var(--accent-bg);color:var(--accent);font-weight:600}
 .cw-reaction-count{font-size:12px;font-weight:600}
 .cw-msg-mine{background:var(--accent-bg);border:1px solid rgba(34,211,238,.2);
-  border-radius:10px 0 10px 10px;padding:8px 12px;font-size:13px;color:var(--text)}
+  border-radius:10px 0 10px 10px;padding:8px 12px;font-size:13px;color:var(--text);
+  white-space:pre-wrap;word-break:break-word}
 .cw-msg-theirs{background:rgba(255,255,255,.05);border:1px solid var(--border);
-  border-radius:0 10px 10px 10px;padding:8px 12px;font-size:13px;color:var(--text)}
+  border-radius:0 10px 10px 10px;padding:8px 12px;font-size:13px;color:var(--text);
+  white-space:pre-wrap;word-break:break-word}
 body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
 #cw-typing-bar{height:20px;padding:0 14px;font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;min-height:20px;transition:opacity .2s;flex-shrink:0}
 .cw-typing-dot{width:5px;height:5px;border-radius:50%;background:var(--muted);display:inline-block;animation:cwTypDot 1.2s ease-in-out infinite}
@@ -1188,12 +1190,20 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     const picker = '<div class="cw-react-picker" aria-label="Réactions">' + pickerBtns + '</div>';
 
     const body = (msg.body || '').trim();
+    let bodyHtml = '';
+    if (body) {
+      if (window.ChatMentions && window.ChatMentions.formatBodyHtml) {
+        bodyHtml = window.ChatMentions.formatBodyHtml(body, [], escCW);
+      } else {
+        bodyHtml = escCW(body).replace(/\r\n/g, '\n').replace(/\n/g, '<br>');
+      }
+    }
     const bubble =
       '<div class="' +
       (mine ? 'cw-msg-mine' : 'cw-msg-theirs') +
       '">' +
       metaEl +
-      (body ? escCW(body) : '') +
+      bodyHtml +
       attachmentHtml(msg) +
       '</div>';
 

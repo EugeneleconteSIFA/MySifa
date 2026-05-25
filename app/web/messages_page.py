@@ -186,7 +186,8 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
 .chat-msg-label{font-size:10px;color:var(--muted);margin-bottom:3px}
 .chat-msg.mine .chat-msg-label{text-align:right}
 .chat-msg-bubble{
-  padding:8px 12px;border-radius:10px;font-size:13px;line-height:1.5;word-break:break-word;
+  padding:8px 12px;border-radius:10px;font-size:13px;line-height:1.5;
+  word-break:break-word;white-space:pre-wrap;
 }
 .chat-msg.theirs .chat-msg-bubble{background:var(--card);border:1px solid var(--border);color:var(--text);border-bottom-left-radius:3px}
 .chat-msg.mine .chat-msg-bubble{background:var(--accent);color:var(--bg);font-weight:600;border-bottom-right-radius:3px}
@@ -935,6 +936,7 @@ function buildMsgEl(m){
   if(bubble&&window.ChatMentions){
     bubble=ChatMentions.formatBodyHtml(body,channelMembers,esc);
   }else if(bubble){
+    bubble=bubble.replace(/\r\n/g,'\n').replace(/\n/g,'<br>');
     bubble=bubble.replace(/@([A-Za-z0-9_]+)/g,'<span style="color:var(--accent);font-weight:700">@$1</span>');
   }
   if(m.attachment_url)bubble+=(bubble?'<br>':'')+chatAttachmentHtml(m);

@@ -309,15 +309,17 @@ body.light .field-input.empl-upper::placeholder{
   color:#64748b;
   opacity:.95;
 }
-.btn{background:var(--accent);color:var(--text);border:none;border-radius:10px;padding:10px 20px;
+.btn{background:var(--accent);color:var(--bg);border:none;border-radius:10px;padding:10px 20px;
   font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:filter .15s,box-shadow .15s,transform .05s;white-space:nowrap}
 .btn:hover{filter:brightness(1.05);box-shadow:0 0 0 4px rgba(34,211,238,.18)}
 .btn:active{transform:translateY(1px)}
+body.light .btn{color:#fff}
 .btn-ghost{background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:10px;
   padding:10px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
 .btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
-.btn-sm{background:var(--accent);color:var(--text);border:none;border-radius:8px;padding:7px 14px;
+.btn-sm{background:var(--accent);color:var(--bg);border:none;border-radius:8px;padding:7px 14px;
   font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:filter .15s,box-shadow .15s,transform .05s}
+body.light .btn-sm{color:#fff}
 .btn-sm:hover{filter:brightness(1.05);box-shadow:0 0 0 4px rgba(34,211,238,.18)}
 .btn-sm:active{transform:translateY(1px)}
 .btn-danger{background:rgba(248,113,113,.15);color:var(--danger);border:1px solid rgba(248,113,113,.3);
