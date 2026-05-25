@@ -455,14 +455,18 @@ body.light .btn-sm{color:#fff}
 .mp-list{display:flex;flex-direction:column;gap:12px}
 .mp-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;cursor:pointer;transition:border-color .15s}
 .mp-card:hover{border-color:var(--accent)}
-.mp-card-top{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap}
+.mp-card-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .mp-card-ref{font-family:ui-monospace,monospace;font-size:14px;font-weight:700;color:var(--text);flex:1;min-width:120px}
 .mp-card-stock{font-size:20px;font-weight:700;color:var(--text);white-space:nowrap}
+.mp-act-icon{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;
+  border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text2);cursor:pointer;
+  flex-shrink:0;transition:border-color .15s,color .15s,background .15s;font-family:inherit}
+.mp-act-icon:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 .mp-card-des{font-size:13px;color:var(--text2);margin-top:6px;width:100%}
 .mp-card-warn{font-size:12px;color:var(--warn);margin-top:4px}
-.mp-card-actions{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
-.mp-card-actions-desktop{display:flex;gap:8px;flex-wrap:wrap}
-.mp-card-actions-mobile{display:none;position:relative}
+.mp-card-actions{margin-top:12px;width:100%}
+.mp-card-actions .action-bar{margin:0}
+.mp-card-actions .action-btn{flex:1;min-width:0}
 .mp-act-btn{border:none;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
 .mp-act-entree{background:color-mix(in srgb,var(--success) 15%,transparent);color:var(--success)}
 .mp-act-sortie{background:color-mix(in srgb,var(--danger) 15%,transparent);color:var(--danger)}
@@ -478,10 +482,18 @@ body.light .btn-sm{color:#fff}
 #mroot:not(:empty){pointer-events:auto}
 .mp-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:18px}
 .mp-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;width:100%;max-width:420px;max-height:90vh;overflow-y:auto}
-.mp-modal h3{margin:0 0 16px;font-size:16px;font-weight:700;color:var(--text)}
+.mp-modal > h3{margin:0 0 16px;font-size:16px;font-weight:700;color:var(--text)}
+.mp-modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px}
+.mp-modal-head h3{margin:0;font-size:16px;font-weight:700;color:var(--text)}
+.mp-modal-close{background:transparent;border:none;color:var(--muted);font-size:22px;line-height:1;cursor:pointer;
+  padding:0 4px;border-radius:6px;flex-shrink:0;font-family:inherit}
+.mp-modal-close:hover{color:var(--text)}
+.mp-modal-sub{font-size:12px;color:var(--muted);margin:-8px 0 14px;line-height:1.5}
 .mp-field{margin-bottom:12px}
 .mp-field label{display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px}
-.mp-field input,.mp-field select,.mp-field textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-size:14px;font-family:inherit}
+.mp-field input,.mp-field select,.mp-field textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-size:14px;font-family:inherit;transition:border-color .15s,box-shadow .15s}
+.mp-field input:focus,.mp-field select:focus,.mp-field textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+body.light .mp-field input:focus,body.light .mp-field select:focus,body.light .mp-field textarea:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .mp-field textarea{min-height:72px;resize:vertical}
 .mp-readonly{padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:10px;font-size:13px;color:var(--text2)}
 .mp-hint{font-size:12px;color:var(--muted);margin-top:4px}
@@ -498,8 +510,6 @@ body.light .btn-sm{color:#fff}
 .mp-admin-edit{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:10px}
 .mp-admin-err{font-size:12px;color:var(--danger);margin-top:8px}
 @media(max-width:640px){
-  .mp-card-actions-desktop{display:none}
-  .mp-card-actions-mobile{display:block}
   .mp-drawer{max-width:100%}
 }
 /* ── Historique mouvements ── */
@@ -1019,7 +1029,6 @@ let S = {
   matieresCat: 'tout',
   matieresQ: '',
   matieresCardMenuId: null,
-  matieresEditId: null,
   selMatiere: null,
   mpModal: null,
   addPfModalOpen: false,
@@ -2385,7 +2394,6 @@ async function loadRefClientSearch(q) {
 
 function onRefClientSearchInput(val) {
   S.refClientQ = val;
-  renderReferentielView();
   clearTimeout(_refClientSearchTimer);
   const q = String(val || '').trim();
   if (!q) {
@@ -2394,6 +2402,8 @@ function onRefClientSearchInput(val) {
     renderReferentielView();
     return;
   }
+  S.refClientLoading = true;
+  renderReferentielView();
   _refClientSearchTimer = setTimeout(() => loadRefClientSearch(q), 280);
 }
 
@@ -2454,7 +2464,9 @@ function buildReferentielClientSearchCard() {
     bodyKids.push(el('div', { cls: 'ref-client-loading' }, 'Recherche…'));
   } else if (q) {
     const rows = S.refClientResults;
-    if (rows !== null && !rows.length) {
+    if (rows === null) {
+      /* attente debounce / API */
+    } else if (!rows.length) {
       bodyKids.push(el('div', { cls: 'ref-client-empty' }, 'Aucun résultat pour « ' + q + ' »'));
     } else {
       const units = [...new Set(rows.map(r => String(r.unite || '').trim()).filter(Boolean))].sort();
@@ -2863,7 +2875,6 @@ async function loadMatiere(id) {
     };
     S.selProduit = null;
     S.selEmpl = null;
-    S.matieresEditId = null;
     S.searchResults = null;
     clearSearch();
     if (S.tab !== 'matieres') S.tab = 'matieres';
@@ -2967,25 +2978,40 @@ function buildMatiereDetail() {
     on: { click: clearMatiereSel },
   }, '← Retour aux matières premières');
 
-  const actions = S.stockReadOnly ? null : el('div', { cls: 'action-bar', style: { marginTop: '14px' } },
-    el('button', {
-      cls: 'action-btn entree',
+  const actionBtns = [];
+  if (!S.stockReadOnly) {
+    actionBtns.push(
+      el('button', {
+        cls: 'action-btn entree',
+        type: 'button',
+        on: { click: () => openModalMouvement('entree', m) },
+      }, '↓ Entrée'),
+      el('button', {
+        cls: 'action-btn sortie',
+        type: 'button',
+        on: { click: () => openModalMouvement('sortie', m) },
+      }, '↑ Sortie'),
+    );
+    if (isMatieresAdmin()) {
+      actionBtns.push(el('button', {
+        cls: 'action-btn inventaire',
+        type: 'button',
+        on: { click: () => openModalMouvement('ajustement', m) },
+      }, '= Ajustement'));
+    }
+  }
+  if (isMatieresAdmin()) {
+    actionBtns.push(el('button', {
+      cls: 'mp-act-icon',
       type: 'button',
-      on: { click: () => openModalMouvement('entree', m) },
-    }, '↓ Entrée'),
-    el('button', {
-      cls: 'action-btn sortie',
-      type: 'button',
-      on: { click: () => openModalMouvement('sortie', m) },
-    }, '↑ Sortie'),
-    isMatieresAdmin()
-      ? el('button', {
-          cls: 'action-btn inventaire',
-          type: 'button',
-          on: { click: () => openModalMouvement('ajustement', m) },
-        }, '= Ajustement')
-      : null,
-  );
+      style: { flex: '0 0 auto', minWidth: '44px' },
+      attrs: { title: 'Modifier la référence', 'aria-label': 'Modifier la référence' },
+      on: { click: () => openMatiereRefEditModal(m) },
+    }, iconEl('edit', 16)));
+  }
+  const actions = actionBtns.length
+    ? el('div', { cls: 'action-bar', style: { marginTop: '14px' } }, ...actionBtns)
+    : null;
 
   const meta = [];
   if (mpIsPaletteCategory(m) && m.palettes_par_pile > 0) {
@@ -3018,14 +3044,6 @@ function buildMatiereDetail() {
     ),
     actions,
     buildMpMvtHistory(mouvements, m),
-    isMatieresAdmin()
-      ? el('div', { style: { marginTop: '16px' } },
-          buildMatiereRefEditForm(m, async () => {
-            await loadMatieres();
-            await refreshSelMatiere();
-          }),
-        )
-      : null,
   );
 }
 
@@ -3051,32 +3069,40 @@ function renderMatieresView() {
   }
 }
 
+function mpCardEditBtn(m) {
+  if (!isMatieresAdmin()) return null;
+  return el('button', {
+    cls: 'mp-act-icon',
+    type: 'button',
+    attrs: { title: 'Modifier la référence', 'aria-label': 'Modifier la référence' },
+    on: { click: (e) => { e.stopPropagation(); openMatiereRefEditModal(m); } },
+  }, iconEl('edit', 16));
+}
+
 function matieresCardActions(m) {
   if (S.stockReadOnly) return null;
-  const mk = (lbl, cls, type) => el('button', {
-    cls: 'mp-act-btn ' + cls,
-    type: 'button',
-    on: { click: (e) => { e.stopPropagation(); S.matieresCardMenuId = null; openModalMouvement(type, m); } },
-  }, lbl);
-  const btns = [
-    mk('Entrée', 'mp-act-entree', 'entree'),
-    mk('Sortie', 'mp-act-sortie', 'sortie'),
-  ];
-  if (isMatieresAdmin()) {
-    btns.push(el('button', {
-      cls: 'mp-act-btn mp-act-edit',
-      type: 'button',
-      on: { click: (e) => {
-        e.stopPropagation();
-        S.matieresCardMenuId = null;
-        S.matieresEditId = S.matieresEditId === m.id ? null : m.id;
-        renderMatieresView();
-      } },
-    }, S.matieresEditId === m.id ? 'Fermer' : 'Modifier'));
-  }
-  return el('div', { cls: 'mp-card-actions' },
-    el('div', { cls: 'mp-card-actions-desktop' }, ...btns),
-    el('div', { cls: 'mp-card-actions-mobile' }, ...btns),
+  return el('div', {
+    cls: 'mp-card-actions',
+    on: { click: (e) => e.stopPropagation() },
+  },
+    el('div', { cls: 'action-bar' },
+      el('button', {
+        cls: 'action-btn entree',
+        type: 'button',
+        on: { click: (e) => {
+          e.stopPropagation();
+          openModalMouvement('entree', m);
+        } },
+      }, '↓ Entrée'),
+      el('button', {
+        cls: 'action-btn sortie',
+        type: 'button',
+        on: { click: (e) => {
+          e.stopPropagation();
+          openModalMouvement('sortie', m);
+        } },
+      }, '↑ Sortie'),
+    ),
   );
 }
 
@@ -3088,7 +3114,26 @@ async function saveMatiereRef(item, payload) {
   });
 }
 
-function buildMatiereRefEditForm(item, onSaved) {
+function matiereRefEditPayload(item, fields) {
+  const ref = fields.refInp.value.trim();
+  const des = fields.desInp.value.trim();
+  if (!ref || !des) return { error: 'Référence et description obligatoires.' };
+  const payload = {
+    reference: ref,
+    designation: des,
+    seuil_alerte: parseFloat(fields.seuilInp.value) || 0,
+  };
+  if (mpIsPaletteCategory(item)) {
+    const ppp = parseFloat(fields.pppInp.value);
+    if (!ppp || ppp <= 0) {
+      return { error: 'Palettes par pile obligatoire (valeur positive).' };
+    }
+    payload.palettes_par_pile = ppp;
+  }
+  return { payload };
+}
+
+function appendMatiereRefEditFields(parent, item) {
   const refInp = el('input', { attrs: { type: 'text' } });
   refInp.value = item.reference || '';
   const desInp = el('input', { attrs: { type: 'text' } });
@@ -3100,45 +3145,86 @@ function buildMatiereRefEditForm(item, onSaved) {
   const pppInp = el('input', { attrs: { type: 'number', min: '1', step: '1' } });
   pppInp.value = String(item.palettes_par_pile > 0 ? item.palettes_par_pile : '');
   pppWrap.append(el('label', null, 'Palettes par pile'), pppInp);
-  const wrap = el('div', { cls: 'mp-admin-edit' },
+  parent.append(
+    el('div', { cls: 'mp-field' },
+      el('label', null, 'Catégorie'),
+      el('div', { cls: 'mp-readonly' }, MP_CAT_LABELS[item.categorie] || item.categorie || '—'),
+    ),
     el('div', { cls: 'mp-field' }, el('label', null, 'Référence'), refInp),
     el('div', { cls: 'mp-field' }, el('label', null, 'Description'), desInp),
     pppWrap,
     el('div', { cls: 'mp-field' }, el('label', null, mpSeuilFieldLabel(item)), seuilInp),
     el('div', { cls: 'mp-hint' }, '0 = pas d\'alerte stock bas.'),
+  );
+  return { refInp, desInp, seuilInp, pppInp };
+}
+
+async function submitMatiereRefEdit(item, fields, onSaved) {
+  const parsed = matiereRefEditPayload(item, fields);
+  if (parsed.error) {
+    showToast(parsed.error, 'error');
+    return;
+  }
+  try {
+    await saveMatiereRef(item, parsed.payload);
+    showToast('Référence mise à jour.', 'success');
+    if (onSaved) await onSaved();
+  } catch (e) {
+    showToast(e.message, 'error');
+  }
+}
+
+function openMatiereRefEditModal(item) {
+  if (!item || !isMatieresAdmin()) return;
+  closeMroot();
+  const mroot = document.getElementById('mroot');
+  if (!mroot) return;
+  const overlay = el('div', {
+    cls: 'mp-modal-overlay',
+    on: { click: (e) => { if (e.target === overlay) closeMroot(); } },
+  });
+  const box = el('div', { cls: 'mp-modal', on: { click: (e) => e.stopPropagation() } });
+  box.appendChild(el('div', { cls: 'mp-modal-head' },
+    el('h3', null, 'Modifier la référence'),
+    el('button', {
+      cls: 'mp-modal-close',
+      type: 'button',
+      attrs: { title: 'Fermer', 'aria-label': 'Fermer' },
+      on: { click: closeMroot },
+    }, '×'),
+  ));
+  box.appendChild(el('div', { cls: 'mp-modal-sub' },
+    (item.reference || '') + (item.designation ? ' — ' + item.designation : ''),
+  ));
+  const fields = appendMatiereRefEditFields(box, item);
+  const onSaved = async () => {
+    closeMroot();
+    await loadMatieres();
+    if (S.selMatiere && S.selMatiere.matiere && S.selMatiere.matiere.id === item.id) {
+      await refreshSelMatiere();
+    }
+  };
+  box.appendChild(el('div', { cls: 'mp-modal-actions' },
+    el('button', { cls: 'btn-cancel', type: 'button', on: { click: closeMroot } }, 'Annuler'),
     el('button', {
       cls: 'btn',
       type: 'button',
-      on: { click: async () => {
-        const ref = refInp.value.trim();
-        const des = desInp.value.trim();
-        if (!ref || !des) {
-          showToast('Référence et description obligatoires.', 'error');
-          return;
-        }
-        const payload = {
-          reference: ref,
-          designation: des,
-          seuil_alerte: parseFloat(seuilInp.value) || 0,
-        };
-        if (mpIsPaletteCategory(item)) {
-          const ppp = parseFloat(pppInp.value);
-          if (!ppp || ppp <= 0) {
-            showToast('Palettes par pile obligatoire (valeur positive).', 'error');
-            return;
-          }
-          payload.palettes_par_pile = ppp;
-        }
-        try {
-          await saveMatiereRef(item, payload);
-          showToast('Référence mise à jour.', 'success');
-          await onSaved();
-        } catch (e) {
-          showToast(e.message, 'error');
-        }
-      } },
+      on: { click: () => submitMatiereRefEdit(item, fields, onSaved) },
     }, 'Enregistrer'),
-  );
+  ));
+  overlay.appendChild(box);
+  mroot.appendChild(overlay);
+  requestAnimationFrame(() => fields.refInp.focus());
+}
+
+function buildMatiereRefEditForm(item, onSaved) {
+  const wrap = el('div', { cls: 'mp-admin-edit' });
+  const fields = appendMatiereRefEditFields(wrap, item);
+  wrap.appendChild(el('button', {
+    cls: 'btn',
+    type: 'button',
+    on: { click: () => submitMatiereRefEdit(item, fields, onSaved) },
+  }, 'Enregistrer'));
   return wrap;
 }
 
@@ -3209,6 +3295,7 @@ function buildMatieres() {
         el('div', { cls: 'mp-card-top' },
           dashMpCatBadge(m.categorie),
           el('span', { cls: 'mp-card-ref' }, m.reference || ''),
+          mpCardEditBtn(m),
           el('span', { cls: 'mp-card-stock' }, mpStockLine(m.quantite, m)),
         ),
         el('div', { cls: 'mp-card-des' }, m.designation || ''),
@@ -3220,12 +3307,6 @@ function buildMatieres() {
           ? el('div', { cls: 'mp-card-warn' }, 'Sous le seuil (min. ' + mpStockLine(seuil, m) + ')')
           : null,
         matieresCardActions(m),
-        S.matieresEditId === m.id
-          ? buildMatiereRefEditForm(m, async () => {
-              S.matieresEditId = null;
-              await loadMatieres();
-            })
-          : null,
       ));
     });
   }
