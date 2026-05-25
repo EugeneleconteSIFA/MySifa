@@ -248,10 +248,16 @@ async function api(path, options) {
   if (!r.ok) {
     let d = 'Erreur ' + r.status;
     try { const j = await r.json(); d = j.detail || d; } catch(e) {}
-    throw new Error(typeof d === 'string' ? d : JSON.stringify(d));
+    const err = new Error(typeof d === 'string' ? d : JSON.stringify(d));
+    err.status = r.status;
+    throw err;
   }
   if (r.status === 204) return null;
   return r.json();
+}
+
+function redirectToLogin() {
+  location.href = '/?next=/ao';
 }
 
 function statutBadge(s) {
@@ -1172,25 +1178,52 @@ function render() {
 }
 
 (async function init() {
+  const embedded = S.user && S.user.id;
   try {
     const me = await api('/api/auth/me');
-    if (me && me.id) S.user = me;
-    const u = S.user || {};
-    if (u.id) {
-      window.__MYSIFA_UID__ = u.id;
-      window.__MYSIFA_NOM__ = u.nom || '';
-      window.__MYSIFA_ROLE__ = u.role || '';
-      window.__MYSIFA_USER__ = { nom: u.nom || '', role: u.role || '' };
+    if (me && me.id) {
+      S.user = me;
+    } else if (!embedded) {
+      redirectToLogin();
+      return;
     }
-    if (window._CW && typeof window._CW.syncUser === 'function') window._CW.syncUser();
-    if (window.MySifaDock && typeof window.MySifaDock.bootPageWidgets === 'function') {
-      window.MySifaDock.bootPageWidgets();
+  } catch (e) {
+    if (e.status === 401 || !embedded) {
+      redirectToLogin();
+      return;
     }
-    await Promise.all([loadList(), loadCarnet(), loadProduits()]);
-    render();
-  } catch(e) {
-    location.href = '/?next=/ao';
   }
+  const u = S.user || {};
+  if (u.id) {
+    window.__MYSIFA_UID__ = u.id;
+    window.__MYSIFA_NOM__ = u.nom || '';
+    window.__MYSIFA_ROLE__ = u.role || '';
+    window.__MYSIFA_USER__ = { nom: u.nom || '', role: u.role || '' };
+  }
+  if (window._CW && typeof window._CW.syncUser === 'function') window._CW.syncUser();
+  if (window.MySifaDock && typeof window.MySifaDock.bootPageWidgets === 'function') {
+    window.MySifaDock.bootPageWidgets();
+  }
+  const loads = await Promise.allSettled([loadList(), loadCarnet(), loadProduits()]);
+  const labels = ['appels d\'offre', 'carnet fournisseurs', 'produits'];
+  const errors = [];
+  loads.forEach((res, i) => {
+    if (res.status === 'rejected') {
+      if (res.reason && res.reason.status === 401) errors.push({ auth: true });
+      else errors.push({ msg: (res.reason && res.reason.message) || labels[i] });
+    }
+  });
+  if (errors.some(x => x.auth)) {
+    redirectToLogin();
+    return;
+  }
+  if (errors.length) {
+    showToast('Chargement partiel : ' + errors.map(x => x.msg).join(' · '), 'danger');
+    if (!S.aos) S.aos = [];
+    if (!S.carnet) S.carnet = [];
+    if (!S.produits) S.produits = [];
+  }
+  render();
 })();
 </script>
 </body>

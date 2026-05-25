@@ -214,6 +214,19 @@ async def validate_of(
         conn.commit()
         new_id = cur.lastrowid
 
+    # Auto-link : relier les dossiers planning dont le numero_of correspond
+    of_num_clean = (fields.get("of_numero") or "").strip()
+    if of_num_clean:
+        with get_db() as conn2:
+            conn2.execute(
+                """UPDATE planning_entries
+                   SET of_import_id = ?
+                   WHERE LOWER(TRIM(numero_of)) = LOWER(TRIM(?))
+                     AND (of_import_id IS NULL OR of_import_id != ?)""",
+                (new_id, of_num_clean, new_id),
+            )
+            conn2.commit()
+
     return {"id": new_id, "pdf_filename": pdf_filename}
 
 
@@ -222,13 +235,60 @@ def list_of_imports(request: Request):
     _require_of_access(request)
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT id, of_numero, reference, machine, delai_client,
-                      qte_etiquettes, metrage, date_import, statut, pdf_filename,
-                      imported_by
-               FROM of_imports
-               ORDER BY date_import DESC"""
+            """SELECT
+                   o.id, o.of_numero, o.reference, o.machine, o.delai_client,
+                   o.qte_etiquettes, o.metrage, o.date_import, o.statut,
+                   o.pdf_filename, o.imported_by,
+                   CASE WHEN pe.of_import_id IS NOT NULL THEN 1 ELSE 0 END AS lie
+               FROM of_imports o
+               LEFT JOIN planning_entries pe ON pe.of_import_id = o.id
+               GROUP BY o.id
+               ORDER BY o.date_import DESC"""
         ).fetchall()
-    return [_row_dict(r) for r in rows]
+    return [{**_row_dict(r), "lie": bool(r["lie"])} for r in rows]
+
+
+@router.get("/api/of/planning/{entry_id}")
+def get_of_for_planning_entry(entry_id: int, request: Request):
+    get_current_user(request)  # authentification simple, pas de rôle requis
+    with get_db() as conn:
+        entry = conn.execute(
+            "SELECT of_import_id, numero_of FROM planning_entries WHERE id=?",
+            (entry_id,),
+        ).fetchone()
+    if not entry or not entry["of_import_id"]:
+        return {"linked": False, "entry_numero_of": entry["numero_of"] if entry else None}
+    with get_db() as conn:
+        row = conn.execute(
+            """SELECT id, of_numero, reference, machine, pdf_filename,
+                      date_import, imported_by, delai_client, qte_etiquettes, metrage
+               FROM of_imports WHERE id=?""",
+            (entry["of_import_id"],),
+        ).fetchone()
+    if not row:
+        return {"linked": False, "entry_numero_of": entry["numero_of"]}
+    return {"linked": True, "of": _row_dict(row), "entry_numero_of": entry["numero_of"]}
+
+
+@router.get("/api/of/{of_id}/pdf-preview")
+def preview_of_pdf(of_id: int, request: Request):
+    get_current_user(request)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT pdf_filename FROM of_imports WHERE id=?",
+            (of_id,),
+        ).fetchone()
+    if not row or not row["pdf_filename"]:
+        raise HTTPException(status_code=404, detail="OF introuvable.")
+    path = os.path.join(OF_UPLOAD_DIR, row["pdf_filename"])
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="Fichier PDF introuvable.")
+    return FileResponse(
+        path,
+        media_type="application/pdf",
+        filename=row["pdf_filename"],
+        headers={"Content-Disposition": f'inline; filename="{row["pdf_filename"]}"'},
+    )
 
 
 @router.get("/api/of/{of_id}/pdf")

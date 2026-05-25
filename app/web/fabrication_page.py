@@ -463,9 +463,8 @@ table.fab-of-table th{font-size:10px;color:var(--muted);font-weight:700;text-tra
 table.fab-of-table td{padding:8px 10px;border-bottom:1px solid var(--border);color:var(--text2);vertical-align:middle}
 table.fab-of-table tr:last-child td{border-bottom:none}
 .fab-of-statut{font-size:11px;font-weight:700;padding:2px 8px;border-radius:8px;display:inline-block}
-.fab-of-statut--valide{color:var(--success);background:rgba(52,211,153,.12)}
-.fab-of-statut--attente{color:var(--warn);background:rgba(251,191,36,.12)}
-.fab-of-statut--rejete{color:var(--danger);background:rgba(248,113,113,.12)}
+.fab-of-statut--lie{color:var(--accent);background:var(--accent-bg)}
+.fab-of-statut--nonlie{color:var(--muted);background:rgba(148,163,184,.10)}
 .fab-of-actions{display:flex;gap:6px;align-items:center}
 .fab-of-dropzone{border:2px dashed var(--border);border-radius:12px;padding:32px 20px;text-align:center;
   background:var(--bg);cursor:pointer;transition:border-color .15s,background .15s}
@@ -1478,15 +1477,12 @@ function canAccessOfTab(){
   return r==='superadmin' || r==='direction' || r==='administration';
 }
 
-function ofStatutLabel(st){
-  const m = {en_attente:'En attente', valide:'Validé', rejete:'Rejeté'};
-  return m[st] || st || '—';
+function ofStatutLabel(lie){
+  return lie ? 'Lié' : 'Non lié';
 }
 
-function ofStatutClass(st){
-  if(st==='valide') return 'fab-of-statut fab-of-statut--valide';
-  if(st==='rejete') return 'fab-of-statut fab-of-statut--rejete';
-  return 'fab-of-statut fab-of-statut--attente';
+function ofStatutClass(lie){
+  return lie ? 'fab-of-statut fab-of-statut--lie' : 'fab-of-statut fab-of-statut--nonlie';
 }
 
 async function loadOfImports(){
@@ -1582,7 +1578,7 @@ async function ofDeleteImport(id){
 
 function renderOfPanel(){
   const rows = (S.ofImports||[]).map(row=>{
-    const stCls = ofStatutClass(row.statut);
+    const stCls = ofStatutClass(row.lie);
     const dlBtn = h('button',{
       className:'fab-btn fab-btn-ghost fab-btn-sm',
       title:'Télécharger PDF',
@@ -1605,7 +1601,7 @@ function renderOfPanel(){
       h('td',null, row.qte_etiquettes!=null ? escHtml(String(row.qte_etiquettes)) : '—'),
       h('td',null, row.metrage!=null ? escHtml(String(row.metrage)) : '—'),
       h('td',null, fmtDate),
-      h('td',null, h('span',{className:stCls}, ofStatutLabel(row.statut))),
+      h('td',null, h('span',{className:stCls}, ofStatutLabel(row.lie))),
       h('td',null, h('div',{className:'fab-of-actions'}, ...acts)),
     );
   });

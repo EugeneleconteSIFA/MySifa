@@ -34,8 +34,14 @@ def planning_page(request: Request, machine: Optional[int] = None):
     # 0 = laisser le JS choisir l’id réel après /api/planning/machines (évite de forcer
     # ?machine=1 implicite alors que l’id SQLite « Cohésio 1 » n’est pas 1 en prod).
     ssr_mid = str(machine) if machine is not None else "0"
+    of_admin_js = (
+        "true"
+        if user.get("role") in {"superadmin", "direction", "administration"}
+        else "false"
+    )
     html = (
         PLANNING_HTML.replace("__MACHINE_ID__", ssr_mid)
+        .replace("__IS_OF_ADMIN__", of_admin_js)
         .replace("__PLANNING_TITLE__", APP_PLANNING_PAGE_TITLE)
         .replace("__META_DESCRIPTION__", APP_META_DESCRIPTION)
         .replace("__THEME_COLOR__", THEME_COLOR_META)
@@ -492,6 +498,21 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
     box-shadow:0 16px 48px rgba(0,0,0,.55)}
   body.sb-open .sidebar{transform:translateX(0)}
 }
+.of-preview-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9000;
+  display:flex;align-items:center;justify-content:center;padding:16px}
+.of-preview-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;
+  width:100%;max-width:860px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden}
+.of-preview-header{display:flex;align-items:center;justify-content:space-between;
+  padding:14px 18px;border-bottom:1px solid var(--border);flex-shrink:0}
+.of-preview-title{font-size:15px;font-weight:700;color:var(--text)}
+.of-preview-actions{display:flex;gap:8px;align-items:center}
+.of-preview-iframe{flex:1;border:none;min-height:480px}
+.of-empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:14px;padding:48px 24px;text-align:center}
+.of-empty-state-icon{color:var(--muted);opacity:.5}
+.of-empty-state-msg{font-size:14px;color:var(--muted);line-height:1.6}
+.of-mismatch-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;
+  max-width:440px;width:100%;padding:28px 24px;display:flex;flex-direction:column;gap:16px}
 </style>
 </head>
 <body>
@@ -573,6 +594,7 @@ let _allTlMatches=[];
 let ME=null;
 let CAN_EDIT=false;
 let IS_DIR_OR_SUPER=false;
+const IS_OF_ADMIN=__IS_OF_ADMIN__;
 let SHOW_DOSSIERS=false;
 let _autoScrollKey=null;
 let _suppressAutoScroll=false;
@@ -3001,7 +3023,21 @@ function openEdit(id){
       Rapport FSC
     </button>`
     :"";
-  const headerAction=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${fscBtn}${statsBtn}<button type="button" id="destock-btn-${id}" onclick="toggleDestockage(${id})"
+  const ofEyeBtn=`<button type="button"
+    onclick="openOfPreview(${id})"
+    title="Voir l'OF relié à ce dossier"
+    style="display:flex;align-items:center;justify-content:center;width:36px;height:36px;
+           border-radius:6px;border:1.5px solid var(--border2);background:var(--card);
+           color:var(--muted);cursor:pointer;transition:all .15s;font-family:inherit;flex-shrink:0"
+    onmouseenter="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
+    onmouseleave="this.style.borderColor='var(--border2)';this.style.color='var(--muted)'">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+      <circle cx="12" cy="12" r="3"/>
+    </svg>
+  </button>`;
+  const headerAction=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${fscBtn}${statsBtn}${ofEyeBtn}<button type="button" id="destock-btn-${id}" onclick="toggleDestockage(${id})"
     title="${destockDone?"Matières destockées — cliquer pour annuler":"Matières à destocker — cliquer pour valider"}"
     style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;border:1.5px solid ${destockBorder};background:${destockBg};color:${destockColor};font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;font-family:inherit;white-space:nowrap"
     onmouseenter="this.style.opacity='.75'" onmouseleave="this.style.opacity='1'">
@@ -3068,6 +3104,298 @@ async function submitEdit(id){
     let msg="Modification impossible.";
     try{const j=await err.json();if(j&&j.detail)msg=typeof j.detail==="string"?j.detail:JSON.stringify(j.detail);}catch(x){}
     alert(msg);
+  }
+}
+
+async function openOfPreview(entryId){
+  const ov=document.createElement('div');
+  ov.className='of-preview-overlay';
+  ov.id='of-preview-overlay';
+  ov.onclick=function(evt){ if(evt.target===ov) closeOfPreview(); };
+  document.body.appendChild(ov);
+
+  ov.innerHTML=`<div class="of-preview-modal">
+    <div class="of-preview-header">
+      <span class="of-preview-title">Ordre de fabrication</span>
+      <button onclick="closeOfPreview()" style="background:none;border:none;color:var(--muted);
+        cursor:pointer;font-size:20px;line-height:1;font-family:inherit">×</button>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:center;padding:48px;color:var(--muted);font-size:13px">
+      Chargement…
+    </div>
+  </div>`;
+
+  let data;
+  try{
+    const r=await fetch('/api/of/planning/'+entryId,{credentials:'include'});
+    data=await r.json();
+  }catch(e){
+    ov.querySelector('.of-preview-modal').innerHTML+=
+      `<div style="padding:24px;color:var(--danger);font-size:13px">Erreur de chargement.</div>`;
+    return;
+  }
+
+  if(data.linked && data.of){
+    const of=data.of;
+    const ofId=of.id;
+    const ofNum=escHtml(of.of_numero||'—');
+    const refLabel=of.reference?` — ${escHtml(of.reference)}`:'';
+
+    ov.innerHTML=`<div class="of-preview-modal" style="max-height:92vh">
+      <div class="of-preview-header">
+        <span class="of-preview-title">OF ${ofNum}${refLabel}</span>
+        <div class="of-preview-actions">
+          <a href="/api/of/${ofId}/pdf" target="_blank" download
+             style="display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;
+                    border:1.5px solid var(--accent);background:var(--accent-bg);color:var(--accent);
+                    font-size:12px;font-weight:700;text-decoration:none;white-space:nowrap">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Télécharger
+          </a>
+          <button onclick="closeOfPreview()" style="background:none;border:none;color:var(--muted);
+            cursor:pointer;font-size:22px;line-height:1;font-family:inherit;padding:0 4px">×</button>
+        </div>
+      </div>
+      <iframe class="of-preview-iframe" src="/api/of/${ofId}/pdf-preview"
+              style="flex:1;border:none;min-height:520px;width:100%">
+      </iframe>
+    </div>`;
+    return;
+  }
+
+  const importBtn = (typeof IS_OF_ADMIN!=='undefined' && IS_OF_ADMIN)
+    ? `<button type="button" onclick="openOfImportFromPlanning(${entryId})"
+         style="display:flex;align-items:center;gap:8px;padding:9px 18px;border-radius:8px;
+                border:1.5px solid var(--accent);background:var(--accent-bg);color:var(--accent);
+                font-size:13px;font-weight:700;cursor:pointer;font-family:inherit"
+         onmouseenter="this.style.opacity='.75'" onmouseleave="this.style.opacity='1'">
+         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+           <polyline points="17 8 12 3 7 8"/>
+           <line x1="12" y1="3" x2="12" y2="15"/>
+         </svg>
+         Importer OF
+       </button>`
+    : '';
+
+  ov.innerHTML=`<div class="of-preview-modal">
+    <div class="of-preview-header">
+      <span class="of-preview-title">Ordre de fabrication</span>
+      <button onclick="closeOfPreview()" style="background:none;border:none;color:var(--muted);
+        cursor:pointer;font-size:22px;line-height:1;font-family:inherit;padding:0 4px">×</button>
+    </div>
+    <div class="of-empty-state">
+      <div class="of-empty-state-icon">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="9" y1="13" x2="15" y2="13"/>
+        </svg>
+      </div>
+      <div class="of-empty-state-msg">
+        Aucun OF relié à ce dossier de production.<br>
+        <span style="font-size:12px;color:var(--muted)">
+          Le numéro d'OF attendu est
+          <strong style="color:var(--text)">${escHtml(data.entry_numero_of||'non renseigné')}</strong>.
+        </span>
+      </div>
+      ${importBtn}
+    </div>
+  </div>`;
+}
+
+function closeOfPreview(){
+  const ov=document.getElementById('of-preview-overlay');
+  if(ov) ov.remove();
+}
+
+let _ofPlanningFile=null, _ofPlanningParsed=null, _ofPlanningEntryId=null;
+
+async function openOfImportFromPlanning(entryId){
+  _ofPlanningFile=null; _ofPlanningParsed=null; _ofPlanningEntryId=entryId;
+  closeOfPreview();
+
+  const ov=document.createElement('div');
+  ov.className='of-preview-overlay';
+  ov.id='of-planning-import-overlay';
+  ov.innerHTML=`<div class="of-preview-modal" style="max-width:560px">
+    <div class="of-preview-header">
+      <span class="of-preview-title">Importer un OF</span>
+      <button onclick="closeOfPlanningImport()" style="background:none;border:none;
+        color:var(--muted);cursor:pointer;font-size:22px;line-height:1;font-family:inherit">×</button>
+    </div>
+    <div style="padding:24px">
+      <div id="of-pl-dropzone"
+           style="border:2px dashed var(--border);border-radius:12px;padding:36px 20px;
+                  text-align:center;cursor:pointer;transition:all .15s"
+           onclick="document.getElementById('of-pl-file').click()"
+           ondragover="event.preventDefault();this.style.borderColor='var(--accent)';this.style.background='var(--accent-bg)'"
+           ondragleave="this.style.borderColor='var(--border)';this.style.background=''"
+           ondrop="ofPlanningHandleDrop(event)">
+        <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px">
+          Déposer le PDF de l'OF ici
+        </div>
+        <div style="font-size:12px;color:var(--muted)">ou cliquer pour parcourir</div>
+        <input type="file" id="of-pl-file" accept=".pdf" style="display:none"
+               onchange="ofPlanningHandleFile(this.files[0])">
+      </div>
+      <div id="of-pl-status" style="margin-top:12px;font-size:12px;color:var(--muted);text-align:center"></div>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+}
+
+function closeOfPlanningImport(){
+  const ov=document.getElementById('of-planning-import-overlay');
+  if(ov) ov.remove();
+}
+
+function ofPlanningHandleDrop(evt){
+  evt.preventDefault();
+  const dz=document.getElementById('of-pl-dropzone');
+  if(dz){ dz.style.borderColor='var(--border)'; dz.style.background=''; }
+  const f=evt.dataTransfer?.files?.[0];
+  if(f && f.name.toLowerCase().endsWith('.pdf')) ofPlanningHandleFile(f);
+  else showToast('Fichier PDF requis.','danger');
+}
+
+async function ofPlanningHandleFile(file){
+  if(!file) return;
+  _ofPlanningFile=file;
+  const st=document.getElementById('of-pl-status');
+  if(st) st.textContent='Analyse du PDF en cours…';
+
+  const fd=new FormData();
+  fd.append('file',file);
+  let parsed;
+  try{
+    const r=await fetch('/api/of/parse',{method:'POST',credentials:'include',body:fd});
+    if(!r.ok){ const j=await r.json(); throw new Error(j.detail||'Erreur parsing'); }
+    parsed=await r.json();
+  }catch(e){
+    if(st) st.textContent='';
+    showToast(e.message||'Erreur lecture PDF.','danger');
+    return;
+  }
+
+  let entryNoOf='';
+  try{
+    const re=await fetch('/api/of/planning/'+_ofPlanningEntryId,{credentials:'include'});
+    const de=await re.json();
+    entryNoOf=(de.entry_numero_of||'').trim();
+  }catch(e){}
+
+  const pdfNoOf=(parsed.of_numero||'').trim();
+
+  if(entryNoOf && pdfNoOf && entryNoOf.toLowerCase()!==pdfNoOf.toLowerCase()){
+    closeOfPlanningImport();
+    const ov2=document.createElement('div');
+    ov2.className='of-preview-overlay';
+    ov2.id='of-mismatch-overlay';
+    ov2.innerHTML=`<div class="of-mismatch-modal">
+      <div style="font-size:15px;font-weight:700;color:var(--text)">
+        Numéros d'OF incompatibles
+      </div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.6">
+        Le PDF importé correspond à l'OF
+        <strong style="color:var(--danger)">${escHtml(pdfNoOf||'inconnu')}</strong>,
+        mais ce dossier est associé à l'OF
+        <strong style="color:var(--text)">${escHtml(entryNoOf)}</strong>.
+        <br><br>
+        L'import est bloqué. Vérifiez que vous avez sélectionné le bon fichier PDF.
+      </div>
+      <div style="display:flex;justify-content:flex-end">
+        <button onclick="document.getElementById('of-mismatch-overlay').remove()"
+          style="padding:9px 20px;border-radius:8px;border:1.5px solid var(--border);
+                 background:transparent;color:var(--text);font-size:13px;font-weight:600;
+                 cursor:pointer;font-family:inherit">
+          Annuler
+        </button>
+      </div>
+    </div>`;
+    document.body.appendChild(ov2);
+    return;
+  }
+
+  _ofPlanningParsed=parsed;
+  ofPlanningShowValidationForm();
+}
+
+function ofPlanningShowValidationForm(){
+  const p=_ofPlanningParsed||{};
+  const OF_FIELD_LABELS={
+    of_numero:'OF n°', date_creation:'Date création', delai_client:'Délai client',
+    reference:'Référence', machine:'Machine', laize:'Laize (mm)',
+    format:'Format', matiere:'Matière', qte_etiquettes:'Qté étiquettes',
+    qte_bobines:'Qté bobines', metrage:'Métrage',
+    conditionnement:'Conditionnement', nb_mandrins:'Nb mandrins',
+  };
+  const rows=Object.entries(OF_FIELD_LABELS).map(([k,lbl])=>{
+    const val=p[k]!=null?String(p[k]):'';
+    const missing=!val;
+    return `<tr style="${missing?'background:rgba(251,191,36,.06)':''}">
+      <td style="padding:7px 10px;font-size:11px;font-weight:700;color:var(--muted);
+                 text-transform:uppercase;letter-spacing:.4px;width:40%">${escHtml(lbl)}</td>
+      <td style="padding:7px 10px">
+        <input id="of-pl-field-${k}" value="${escAttr(val)}" data-key="${k}"
+               style="width:100%;padding:7px 10px;border:1px solid ${missing?'var(--warn)':'var(--border)'};
+                      border-radius:8px;background:var(--bg);color:var(--text);font-size:13px;
+                      font-family:inherit;box-sizing:border-box">
+      </td>
+    </tr>`;
+  }).join('');
+
+  const ov=document.getElementById('of-planning-import-overlay');
+  if(!ov) return;
+  ov.querySelector('.of-preview-modal').innerHTML=`
+    <div class="of-preview-header">
+      <span class="of-preview-title">Vérifier et valider l'OF</span>
+      <button onclick="closeOfPlanningImport()" style="background:none;border:none;
+        color:var(--muted);cursor:pointer;font-size:22px;line-height:1;font-family:inherit">×</button>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:0 24px">
+      <table style="width:100%;border-collapse:collapse;margin:12px 0">${rows}</table>
+    </div>
+    <div style="padding:16px 24px;border-top:1px solid var(--border);display:flex;
+                justify-content:flex-end;gap:10px">
+      <button onclick="closeOfPlanningImport()"
+        style="padding:9px 18px;border-radius:8px;border:1.5px solid var(--border);
+               background:transparent;color:var(--text);font-size:13px;font-weight:600;
+               cursor:pointer;font-family:inherit">
+        Annuler
+      </button>
+      <button onclick="ofPlanningSubmitImport()"
+        style="padding:9px 20px;border-radius:8px;border:none;background:var(--accent);
+               color:#000;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">
+        Valider l'import
+      </button>
+    </div>`;
+}
+
+async function ofPlanningSubmitImport(){
+  if(!_ofPlanningFile || !_ofPlanningParsed) return;
+  const data={..._ofPlanningParsed};
+  document.querySelectorAll('[id^="of-pl-field-"]').forEach(inp=>{
+    data[inp.dataset.key]=inp.value.trim()||null;
+  });
+
+  const fd=new FormData();
+  fd.append('file',_ofPlanningFile);
+  fd.append('data',JSON.stringify(data));
+  try{
+    const r=await fetch('/api/of/validate',{method:'POST',credentials:'include',body:fd});
+    if(!r.ok){ const j=await r.json(); throw new Error(j.detail||'Erreur import'); }
+    closeOfPlanningImport();
+    showToast('OF importé et relié au dossier.','success');
+  }catch(e){
+    showToast(e.message||'Erreur lors de l\'import.','danger');
   }
 }
 

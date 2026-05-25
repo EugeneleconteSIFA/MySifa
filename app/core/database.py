@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Optional
 from datetime import datetime
 from contextlib import contextmanager
+import threading
 from config import DB_PATH, UPLOAD_DIR, ROLE_SUPERADMIN, SUPERADMIN_EMAIL, classify_operation
 from app.services.emplacements_plan import reload_emplacements_plan, sync_emplacements_plan_to_db
 
@@ -38,10 +39,28 @@ def _record_schema_migration(conn: sqlite3.Connection, version: int, name: str) 
     )
 
 
+_schema_migrate_lock = threading.Lock()
+_schema_migrate_done = False
+
+
+def _ensure_schema(conn: sqlite3.Connection) -> None:
+    """Applique les migrations manquantes (idempotent, une fois par process)."""
+    global _schema_migrate_done
+    if _schema_migrate_done:
+        return
+    with _schema_migrate_lock:
+        if _schema_migrate_done:
+            return
+        _migrate(conn)
+        conn.commit()
+        _schema_migrate_done = True
+
+
 @contextmanager
 def get_db():
     conn = sqlite3.connect(DB_PATH, timeout=5)
     conn.row_factory = sqlite3.Row
+    _ensure_schema(conn)
     try:
         yield conn
     finally:
@@ -153,6 +172,8 @@ def init_db():
         """)
         _migrate(conn)
         conn.commit()
+        global _schema_migrate_done
+        _schema_migrate_done = True
 
 
 def sync_emplacements_plan_from_csv(csv_path: Optional[Path] = None) -> int:
@@ -2254,6 +2275,16 @@ def _migrate(conn):
         )
         conn.commit()
         _record_schema_migration(conn, 70, "ao_produits")
+
+    # v71 — Liaison OF → planning_entries
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=71 LIMIT 1").fetchone():
+        pe_cols = {row[1] for row in conn.execute("PRAGMA table_info(planning_entries)").fetchall()}
+        if "of_import_id" not in pe_cols:
+            conn.execute(
+                "ALTER TABLE planning_entries ADD COLUMN of_import_id INTEGER"
+            )
+        conn.commit()
+        _record_schema_migration(conn, 71, "planning_entries_of_import_link")
 
     _record_schema_migration(
         conn,
