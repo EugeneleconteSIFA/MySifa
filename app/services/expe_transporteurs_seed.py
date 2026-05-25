@@ -19,6 +19,10 @@ EXPE_TRANSPORTEURS_SEED: list[dict[str, Any]] = [
         "zone_france_hors_paris": 0,
         "zone_affretement": 0,
         "zone_messagerie": 1,
+        "palette_max": 5,
+        "poids_max_kg": None,
+        "accepte_poids": 1,
+        "accepte_palette": 1,
     },
     {
         "nom": "Ceva",
@@ -30,6 +34,10 @@ EXPE_TRANSPORTEURS_SEED: list[dict[str, Any]] = [
         "zone_france_hors_paris": 0,
         "zone_affretement": 0,
         "zone_messagerie": 1,
+        "palette_max": 4,
+        "poids_max_kg": 2000.0,
+        "accepte_poids": 1,
+        "accepte_palette": 1,
     },
     {
         "nom": "Coquelle",
@@ -41,6 +49,10 @@ EXPE_TRANSPORTEURS_SEED: list[dict[str, Any]] = [
         "zone_france_hors_paris": 0,
         "zone_affretement": 1,
         "zone_messagerie": 0,
+        "palette_max": 33,
+        "poids_max_kg": None,
+        "accepte_poids": 0,
+        "accepte_palette": 1,
     },
     {
         "nom": "Dimotrans",
@@ -52,6 +64,10 @@ EXPE_TRANSPORTEURS_SEED: list[dict[str, Any]] = [
         "zone_france_hors_paris": 0,
         "zone_affretement": 1,
         "zone_messagerie": 0,
+        "palette_max": 28,
+        "poids_max_kg": None,
+        "accepte_poids": 0,
+        "accepte_palette": 1,
     },
 ]
 
@@ -68,8 +84,9 @@ def seed_expe_transporteurs_if_empty(conn) -> int:
             """INSERT INTO expe_transporteurs (
                 nom, taxe_carburant_pct, contact_nom, contact_email, contact_tel,
                 zone_france, zone_france_hors_paris, zone_affretement, zone_messagerie,
+                palette_max, poids_max_kg, accepte_poids, accepte_palette,
                 actif, created_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 item["nom"],
                 item["taxe_carburant_pct"],
@@ -80,9 +97,33 @@ def seed_expe_transporteurs_if_empty(conn) -> int:
                 item.get("zone_france_hors_paris", 0),
                 item.get("zone_affretement", 0),
                 item.get("zone_messagerie", 0),
+                item.get("palette_max"),
+                item.get("poids_max_kg"),
+                item.get("accepte_poids", 1),
+                item.get("accepte_palette", 1),
                 1,
                 now,
             ),
         )
         inserted += 1
     return inserted
+
+
+def update_expe_transporteurs_capacites(conn) -> int:
+    """Met à jour palette_max / poids / accepte_* pour les 4 transporteurs seedés."""
+    updated = 0
+    for item in EXPE_TRANSPORTEURS_SEED:
+        cur = conn.execute(
+            """UPDATE expe_transporteurs
+               SET palette_max=?, poids_max_kg=?, accepte_poids=?, accepte_palette=?
+               WHERE nom=?""",
+            (
+                item.get("palette_max"),
+                item.get("poids_max_kg"),
+                item.get("accepte_poids", 1),
+                item.get("accepte_palette", 1),
+                item["nom"],
+            ),
+        )
+        updated += cur.rowcount
+    return updated

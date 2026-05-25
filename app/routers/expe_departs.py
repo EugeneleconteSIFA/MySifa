@@ -2,6 +2,9 @@
 MyExpé — suivi des départs (exportations).
 Accès : utilisateurs avec droit application « expe ».
 """
+import csv
+import io
+import json
 import os
 import re
 import shutil
@@ -117,6 +120,16 @@ def _int_flag(body: dict, key: str, default: Optional[int] = None) -> Optional[i
     return 0
 
 
+def _int_opt(body: dict, key: str) -> Any:
+    v = body.get(key)
+    if v is None or v == "":
+        return None
+    try:
+        return int(v)
+    except (ValueError, TypeError):
+        return None
+
+
 def _safe_tarif_filename(name: str) -> str:
     base = Path(name or "tarif").name
     base = re.sub(r"[^\w.\- ]", "_", base, flags=re.UNICODE).strip("._ ") or "tarif"
@@ -197,14 +210,16 @@ def create_depart(request: Request, body: dict = Body(...)):
     with get_db() as conn:
         cur = conn.execute(
             """INSERT INTO expe_departs (
-                date_enlevement, affreteurs, transporteur, client, code_postal_destination,
+                date_enlevement, affreteurs, transporteur, transporteur_id, client,
+                code_postal_destination,
                 ref_sifa, arc, no_cde_transport, no_bl, nb_palette, poids_total_kg, date_livraison,
                 statut, created_at, created_by_email
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?, 'en_attente', ?, ?)""",
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?, 'en_attente', ?, ?)""",
             (
                 date_enl,
                 _f("affreteurs"),
                 _f("transporteur"),
+                _int_opt(body, "transporteur_id"),
                 _f("client"),
                 _f("code_postal_destination"),
                 _f("ref_sifa"),
@@ -310,6 +325,10 @@ async def update_depart(request: Request, depart_id: int, body: dict = Body(...)
         if k in body:
             sets.append(f"{k}=?")
             args.append(_f(k))
+
+    if "transporteur_id" in body:
+        sets.append("transporteur_id=?")
+        args.append(_int_opt(body, "transporteur_id"))
 
     fields_num = ["nb_palette", "poids_total_kg"]
     for k in fields_num:
@@ -428,8 +447,9 @@ def create_transporteur(request: Request, body: dict = Body(...)):
             """INSERT INTO expe_transporteurs (
                 nom, taxe_carburant_pct, contact_nom, contact_email, contact_tel,
                 zone_france, zone_france_hors_paris, zone_affretement, zone_messagerie,
+                palette_max, poids_max_kg, accepte_poids, accepte_palette,
                 actif, created_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 nom,
                 taxe,
@@ -440,6 +460,10 @@ def create_transporteur(request: Request, body: dict = Body(...)):
                 _int_flag(body, "zone_france_hors_paris", 0),
                 _int_flag(body, "zone_affretement", 0),
                 _int_flag(body, "zone_messagerie", 0),
+                _int_opt(body, "palette_max"),
+                _float_opt(body, "poids_max_kg"),
+                _int_flag(body, "accepte_poids", 1),
+                _int_flag(body, "accepte_palette", 1),
                 _int_flag(body, "actif", 1),
                 now,
             ),
@@ -490,10 +514,20 @@ def update_transporteur(
         "zone_affretement",
         "zone_messagerie",
         "actif",
+        "accepte_poids",
+        "accepte_palette",
     ):
         if k in body:
             sets.append(f"{k}=?")
             args.append(_int_flag(body, k, 0))
+
+    if "palette_max" in body:
+        sets.append("palette_max=?")
+        args.append(_int_opt(body, "palette_max"))
+
+    if "poids_max_kg" in body:
+        sets.append("poids_max_kg=?")
+        args.append(_float_opt(body, "poids_max_kg"))
 
     if not sets:
         raise HTTPException(status_code=400, detail="Aucun champ à mettre à jour")
@@ -663,3 +697,324 @@ def get_transporteur_tarif(request: Request, transporteur_id: int):
         raise HTTPException(status_code=404, detail="Fichier tarif introuvable")
     filename = (ex["tarif_filename"] or Path(path).name) or "tarif"
     return FileResponse(path=path, filename=filename)
+
+
+# ─── Tarifs structurés ─────────────────────────────────────────────
+
+
+@router.get("/transporteurs/{transporteur_id}/tarifs")
+def list_tarifs(request: Request, transporteur_id: int):
+    _require_expe(request)
+    with get_db() as conn:
+        if not conn.execute(
+            "SELECT 1 FROM expe_transporteurs WHERE id=?", (transporteur_id,)
+        ).fetchone():
+            raise HTTPException(status_code=404, detail="Transporteur introuvable")
+        lignes = conn.execute(
+            """SELECT * FROM expe_tarifs WHERE transporteur_id=?
+               ORDER BY type_envoi, zone_valeur, tranche_min""",
+            (transporteur_id,),
+        ).fetchall()
+        frais = conn.execute(
+            """SELECT * FROM expe_tarifs_frais WHERE transporteur_id=?
+               ORDER BY libelle""",
+            (transporteur_id,),
+        ).fetchall()
+    return {"lignes": [dict(r) for r in lignes], "frais": [dict(r) for r in frais]}
+
+
+@router.post("/transporteurs/{transporteur_id}/tarifs/import-csv")
+async def import_tarifs_csv(
+    request: Request,
+    transporteur_id: int,
+    file: UploadFile = File(...),
+):
+    user = _require_expe_write(request)
+    now = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
+    content = await file.read()
+    reader = csv.DictReader(io.StringIO(content.decode("utf-8-sig")))
+    cols_oblig = {
+        "type_envoi",
+        "base_calcul",
+        "zone_type",
+        "zone_valeur",
+        "tranche_min",
+        "prix",
+        "unite",
+    }
+    rows = list(reader)
+    if not rows:
+        raise HTTPException(status_code=400, detail="CSV vide")
+    if not cols_oblig.issubset(set(rows[0].keys())):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Colonnes manquantes. Attendu : {', '.join(sorted(cols_oblig))}",
+        )
+
+    def _csv_f(row: dict, k: str) -> Any:
+        v = (row.get(k) or "").strip()
+        return v or None
+
+    def _csv_r(row: dict, k: str) -> Any:
+        v = _csv_f(row, k)
+        return float(v) if v is not None else None
+
+    inserted = 0
+    with get_db() as conn:
+        if not conn.execute(
+            "SELECT 1 FROM expe_transporteurs WHERE id=?", (transporteur_id,)
+        ).fetchone():
+            raise HTTPException(status_code=404, detail="Transporteur introuvable")
+        for row in rows:
+            conn.execute(
+                """INSERT INTO expe_tarifs
+                   (transporteur_id, type_envoi, base_calcul, zone_type, zone_valeur,
+                    tranche_min, tranche_max, prix, unite, mini_perception,
+                    valid_from, valid_to, actif, source_filename, created_at, created_by_email)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?)""",
+                (
+                    transporteur_id,
+                    _csv_f(row, "type_envoi"),
+                    _csv_f(row, "base_calcul"),
+                    _csv_f(row, "zone_type"),
+                    _csv_f(row, "zone_valeur"),
+                    float(row.get("tranche_min") or 0),
+                    _csv_r(row, "tranche_max"),
+                    float(row.get("prix") or 0),
+                    _csv_f(row, "unite"),
+                    _csv_r(row, "mini_perception"),
+                    _csv_f(row, "valid_from"),
+                    _csv_f(row, "valid_to"),
+                    file.filename,
+                    now,
+                    user.get("email") or user.get("identifiant"),
+                ),
+            )
+            inserted += 1
+        conn.commit()
+    return {
+        "inserted": inserted,
+        "actif": 0,
+        "message": f"{inserted} lignes importées en brouillon — à valider.",
+    }
+
+
+@router.post("/transporteurs/{transporteur_id}/tarifs/valider")
+def valider_tarifs(
+    request: Request, transporteur_id: int, body: dict = Body(...)
+):
+    _require_expe_write(request)
+    ids = body.get("ids") or []
+    with get_db() as conn:
+        if not conn.execute(
+            "SELECT 1 FROM expe_transporteurs WHERE id=?", (transporteur_id,)
+        ).fetchone():
+            raise HTTPException(status_code=404, detail="Transporteur introuvable")
+        if ids:
+            placeholders = ",".join("?" * len(ids))
+            conn.execute(
+                f"""UPDATE expe_tarifs SET actif=1
+                    WHERE transporteur_id=? AND id IN ({placeholders})""",
+                (transporteur_id, *ids),
+            )
+        else:
+            conn.execute(
+                "UPDATE expe_tarifs SET actif=1 WHERE transporteur_id=? AND actif=0",
+                (transporteur_id,),
+            )
+        conn.commit()
+        updated = conn.execute(
+            "SELECT COUNT(*) AS n FROM expe_tarifs WHERE transporteur_id=? AND actif=1",
+            (transporteur_id,),
+        ).fetchone()["n"]
+    return {"actives": updated}
+
+
+_PROMPT_EXTRACTION_TARIF = """Tu es un expert en tarification transport en France.
+Analyse cette grille tarifaire et extrait TOUTES les lignes tarifaires au format JSON strict.
+
+Retourne UNIQUEMENT un objet JSON avec deux clés :
+- "lignes" : liste de lignes tarifaires
+- "frais" : liste de frais annexes (gasoil, sûreté, hayon, RDV, etc.)
+
+Chaque ligne tarifaire a ces champs (tous requis sauf mention) :
+{
+  "type_envoi": "messagerie" | "ramasse" | "affretement" | "express_intl",
+  "base_calcul": "poids" | "palette" | "metre_plancher",
+  "zone_type": "departement" | "code_postal" | "zone_intl" | "pays",
+  "zone_valeur": "59" (numéro département) | "59200" (CP) | "7" (zone intl) | "DE" (pays),
+  "tranche_min": 0,
+  "tranche_max": 10,
+  "prix": 12.50,
+  "unite": "forfait" | "au_100kg" | "au_kg",
+  "mini_perception": 8.50
+}
+
+Chaque frais annexe a ces champs :
+{
+  "libelle": "Gasoil",
+  "mode": "pct_transport" | "forfait_expedition" | "par_palette",
+  "valeur": 12.8,
+  "mini": null,
+  "applique_defaut": 1
+}
+
+Règles importantes :
+- Si la grille est par poids avec des tranches forfait puis au 100kg : utilise unite="forfait" pour les tranches ≤ 100 kg et unite="au_100kg" pour les tranches > 100 kg.
+- Si la grille est par palette : base_calcul="palette", unite="forfait".
+- zone_valeur pour les départements français : toujours en 2 caractères ("01".."95", "2A", "2B") ou 3 pour DOM ("971".."976").
+- Si une cellule est vide ou marquée "NC" / "-" : ignorer cette ligne.
+- Extraire les frais depuis les onglets "Conditions commerciales" ou équivalents.
+
+Ne retourne rien d'autre que le JSON.
+"""
+
+
+def _parse_tarif_json_raw(raw: str) -> dict:
+    text = (raw or "").strip()
+    if text.startswith("```"):
+        parts = text.split("```")
+        if len(parts) >= 2:
+            text = parts[1]
+            if text.startswith("json"):
+                text = text[4:]
+    return json.loads(text.strip())
+
+
+@router.post("/transporteurs/{transporteur_id}/tarif/parse")
+async def parse_tarif_ia(request: Request, transporteur_id: int):
+    user = _require_expe_write(request)
+    from config import ANTHROPIC_API_KEY
+
+    if not ANTHROPIC_API_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="Clé Anthropic non configurée — ajouter ANTHROPIC_API_KEY dans .env",
+        )
+
+    with get_db() as conn:
+        trp = conn.execute(
+            "SELECT * FROM expe_transporteurs WHERE id=?", (transporteur_id,)
+        ).fetchone()
+    if not trp:
+        raise HTTPException(status_code=404, detail="Transporteur introuvable")
+    if not trp["tarif_url"]:
+        raise HTTPException(status_code=400, detail="Aucun fichier tarif uploadé pour ce transporteur")
+
+    filepath = _resolve_tarif_path(trp["tarif_url"])
+    if not filepath:
+        raise HTTPException(status_code=404, detail="Fichier tarif introuvable sur le disque")
+
+    ext = os.path.splitext(filepath)[1].lower()
+
+    if ext in (".xlsx", ".xls"):
+        import openpyxl
+
+        wb = openpyxl.load_workbook(filepath, data_only=True)
+        parts = []
+        for ws in wb.worksheets:
+            parts.append(f"=== Feuille : {ws.title} ===")
+            for row in ws.iter_rows(values_only=True):
+                line = "\t".join("" if c is None else str(c) for c in row)
+                if line.strip():
+                    parts.append(line)
+        file_text = "\n".join(parts)
+        content_block = {
+            "type": "text",
+            "text": f"Voici la grille tarifaire au format texte (extrait Excel) :\n\n{file_text}",
+        }
+    elif ext == ".pdf":
+        import base64
+
+        with open(filepath, "rb") as f:
+            b64 = base64.standard_b64encode(f.read()).decode("utf-8")
+        content_block = {
+            "type": "document",
+            "source": {
+                "type": "base64",
+                "media_type": "application/pdf",
+                "data": b64,
+            },
+        }
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Format non supporté : {ext}. Uploader un .xlsx ou .pdf.",
+        )
+
+    import anthropic as _anthropic
+
+    client = _anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    message = client.messages.create(
+        model="claude-opus-4-6",
+        max_tokens=8192,
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    content_block,
+                    {"type": "text", "text": _PROMPT_EXTRACTION_TARIF},
+                ],
+            }
+        ],
+    )
+
+    raw = message.content[0].text
+    data = _parse_tarif_json_raw(raw)
+
+    now = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
+    lignes_data = data.get("lignes", [])
+    frais_data = data.get("frais", [])
+    source_name = trp["tarif_filename"] or trp["tarif_url"]
+    email = user.get("email") or user.get("identifiant")
+
+    with get_db() as conn:
+        for lg in lignes_data:
+            conn.execute(
+                """INSERT INTO expe_tarifs
+                   (transporteur_id, type_envoi, base_calcul, zone_type, zone_valeur,
+                    tranche_min, tranche_max, prix, unite, mini_perception,
+                    actif, source_filename, created_at, created_by_email)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,0,?,?,?)""",
+                (
+                    transporteur_id,
+                    lg.get("type_envoi"),
+                    lg.get("base_calcul"),
+                    lg.get("zone_type"),
+                    lg.get("zone_valeur"),
+                    lg.get("tranche_min", 0),
+                    lg.get("tranche_max"),
+                    lg.get("prix", 0),
+                    lg.get("unite"),
+                    lg.get("mini_perception"),
+                    source_name,
+                    now,
+                    email,
+                ),
+            )
+        for fr in frais_data:
+            conn.execute(
+                """INSERT OR IGNORE INTO expe_tarifs_frais
+                   (transporteur_id, libelle, mode, valeur, mini, applique_defaut)
+                   VALUES (?,?,?,?,?,?)""",
+                (
+                    transporteur_id,
+                    fr.get("libelle"),
+                    fr.get("mode"),
+                    fr.get("valeur", 0),
+                    fr.get("mini"),
+                    fr.get("applique_defaut", 1),
+                ),
+            )
+        conn.commit()
+
+    return {
+        "lignes_extraites": len(lignes_data),
+        "frais_extraits": len(frais_data),
+        "actif": 0,
+        "apercu_lignes": lignes_data[:10],
+        "message": (
+            f"{len(lignes_data)} lignes et {len(frais_data)} frais extraits — "
+            "à valider avant activation."
+        ),
+    }

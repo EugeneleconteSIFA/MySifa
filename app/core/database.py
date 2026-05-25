@@ -2035,6 +2035,88 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 61, "postits_hidden")
 
+    # v62 — Post-its : couleur personnalisable (pastille)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=62 LIMIT 1").fetchone():
+        conn.execute("ALTER TABLE postits ADD COLUMN color TEXT")
+        conn.execute(
+            "UPDATE postits SET color='#22d3ee' WHERE type='today' AND (color IS NULL OR color='')"
+        )
+        conn.execute(
+            "UPDATE postits SET color='#fbbf24' WHERE type='someday' AND (color IS NULL OR color='')"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 62, "postits_color")
+
+    # v63 — MyExpé : FK transporteur sur départs
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=63 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(expe_departs)").fetchall()}
+        if "transporteur_id" not in cols:
+            conn.execute(
+                "ALTER TABLE expe_departs ADD COLUMN transporteur_id INTEGER REFERENCES expe_transporteurs(id)"
+            )
+        conn.commit()
+        _record_schema_migration(conn, 63, "expe_departs_transporteur_fk")
+
+    # v64 — MyExpé : capacités transporteurs (comparateur)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=64 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(expe_transporteurs)").fetchall()}
+        for col, defn in [
+            ("palette_max", "INTEGER"),
+            ("poids_max_kg", "REAL"),
+            ("accepte_poids", "INTEGER DEFAULT 1"),
+            ("accepte_palette", "INTEGER DEFAULT 1"),
+        ]:
+            if col not in cols:
+                conn.execute(f"ALTER TABLE expe_transporteurs ADD COLUMN {col} {defn}")
+        conn.commit()
+        _record_schema_migration(conn, 64, "expe_transporteurs_capacites")
+        from app.services.expe_transporteurs_seed import update_expe_transporteurs_capacites
+
+        update_expe_transporteurs_capacites(conn)
+        conn.commit()
+
+    # v65 — MyExpé : grilles tarifaires structurées
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=65 LIMIT 1").fetchone():
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS expe_tarifs (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                transporteur_id  INTEGER NOT NULL,
+                type_envoi       TEXT NOT NULL,
+                base_calcul      TEXT NOT NULL,
+                zone_type        TEXT NOT NULL,
+                zone_valeur      TEXT NOT NULL,
+                tranche_min      REAL NOT NULL DEFAULT 0,
+                tranche_max      REAL,
+                prix             REAL NOT NULL,
+                unite            TEXT NOT NULL,
+                mini_perception  REAL,
+                valid_from       TEXT,
+                valid_to         TEXT,
+                actif            INTEGER DEFAULT 0,
+                source_filename  TEXT,
+                created_at       TEXT,
+                created_by_email TEXT,
+                FOREIGN KEY (transporteur_id) REFERENCES expe_transporteurs(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_expe_tarifs_lookup
+                ON expe_tarifs(transporteur_id, type_envoi, zone_type, zone_valeur, actif);
+
+            CREATE TABLE IF NOT EXISTS expe_tarifs_frais (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                transporteur_id  INTEGER NOT NULL,
+                libelle          TEXT NOT NULL,
+                mode             TEXT NOT NULL,
+                valeur           REAL NOT NULL,
+                mini             REAL,
+                applique_defaut  INTEGER DEFAULT 1,
+                FOREIGN KEY (transporteur_id) REFERENCES expe_transporteurs(id)
+            );
+            """
+        )
+        conn.commit()
+        _record_schema_migration(conn, 65, "expe_tarifs_schema")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

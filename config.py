@@ -304,3 +304,6 @@ BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
 
 # ─── Chat (GIPHY) ─────────────────────────────────────────────────
 GIPHY_API_KEY = os.getenv("GIPHY_API_KEY", "")
+
+# ─── MyExpé — parsing grilles tarifaires (IA) ───────────────────────
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")

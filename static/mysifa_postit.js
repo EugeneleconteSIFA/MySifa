@@ -9,6 +9,21 @@
   let _postitDrag = null;
   let _postitDockMenuOpen = false;
   let _postitDockBound = false;
+  let _postitColorPaletteOpen = null;
+
+  const POSTIT_DEFAULT_COLORS = { today: '#22d3ee', someday: '#fbbf24' };
+  const POSTIT_COLOR_PALETTE = [
+    '#22d3ee',
+    '#0891b2',
+    '#34d399',
+    '#fbbf24',
+    '#fb923c',
+    '#f87171',
+    '#a78bfa',
+    '#60a5fa',
+    '#f472b6',
+    '#94a3b8',
+  ];
 
   const POSTIT_WIDTH = 260;
   const POSTIT_DOCK_GAP = 10;
@@ -45,6 +60,122 @@
 
   function postitIsHidden(p) {
     return !!(p && (p.hidden === 1 || p.hidden === true));
+  }
+
+  function postitDefaultColor(type) {
+    return POSTIT_DEFAULT_COLORS[type] || POSTIT_DEFAULT_COLORS.today;
+  }
+
+  function postitResolveColor(p) {
+    var c = p && p.color ? String(p.color).trim() : '';
+    if (/^#[0-9A-Fa-f]{6}$/.test(c)) return c.toLowerCase();
+    return postitDefaultColor(p && p.type);
+  }
+
+  function applyPostitColor(el, color) {
+    if (!el || !color) return;
+    el.style.setProperty('--postit-color', color);
+    var dot = el.querySelector('.postit-color-dot');
+    if (dot) dot.style.background = color;
+  }
+
+  function ensurePostitColorPalette() {
+    var pal = document.getElementById('postit-color-palette');
+    if (pal) return pal;
+    pal = document.createElement('div');
+    pal.id = 'postit-color-palette';
+    pal.setAttribute('role', 'menu');
+    pal.setAttribute('aria-label', 'Couleur du post-it');
+    POSTIT_COLOR_PALETTE.forEach(function (hex) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'postit-color-swatch';
+      btn.style.background = hex;
+      btn.title = hex;
+      btn.dataset.color = hex;
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var pid = parseInt(pal.dataset.postitId, 10);
+        if (pid) setPostitColor(pid, hex);
+        closePostitColorPalette();
+      });
+    });
+    document.body.appendChild(pal);
+    return pal;
+  }
+
+  function closePostitColorPalette() {
+    var pal = document.getElementById('postit-color-palette');
+    if (pal) {
+      pal.classList.remove('open');
+      pal.dataset.postitId = '';
+    }
+    _postitColorPaletteOpen = null;
+  }
+
+  function positionPostitColorPalette(dot) {
+    var pal = ensurePostitColorPalette();
+    var rect = dot.getBoundingClientRect();
+    var palW = 200;
+    var left = rect.left;
+    var top = rect.bottom + 6;
+    if (left + palW > window.innerWidth - 12) left = window.innerWidth - palW - 12;
+    if (left < 12) left = 12;
+    if (top + 88 > window.innerHeight - 12) top = Math.max(12, rect.top - 88 - 6);
+    pal.style.left = left + 'px';
+    pal.style.top = top + 'px';
+  }
+
+  function updatePostitColorPaletteActive(color) {
+    var pal = document.getElementById('postit-color-palette');
+    if (!pal) return;
+    pal.querySelectorAll('.postit-color-swatch').forEach(function (btn) {
+      btn.classList.toggle('active', btn.dataset.color === color);
+    });
+  }
+
+  function togglePostitColorPalette(e, id) {
+    e.stopPropagation();
+    e.preventDefault();
+    if (_postitColorPaletteOpen === id) {
+      closePostitColorPalette();
+      return;
+    }
+    closePostitDockMenu();
+    var el = document.querySelector('.postit[data-id="' + id + '"]');
+    if (!el) return;
+    var dot = el.querySelector('.postit-color-dot');
+    if (!dot) return;
+    var p = PostitState.items.find(function (x) {
+      return x.id === id;
+    });
+    var color = postitResolveColor(p);
+    var pal = ensurePostitColorPalette();
+    pal.dataset.postitId = String(id);
+    updatePostitColorPaletteActive(color);
+    positionPostitColorPalette(dot);
+    pal.classList.add('open');
+    _postitColorPaletteOpen = id;
+  }
+
+  async function setPostitColor(id, color) {
+    var hex = String(color || '').toLowerCase();
+    if (!/^#[0-9a-f]{6}$/.test(hex)) return;
+    var p = PostitState.items.find(function (x) {
+      return x.id === id;
+    });
+    if (!p) return;
+    try {
+      var r = await postitApi('/api/postits/' + id, {
+        method: 'PATCH',
+        body: JSON.stringify({ color: hex }),
+      });
+      p.color = r && r.color ? r.color : hex;
+      var el = document.querySelector('.postit[data-id="' + id + '"]');
+      if (el) applyPostitColor(el, postitResolveColor(p));
+    } catch (e) {
+      postitToast((e && e.message) || 'Couleur non enregistrée.', 'danger');
+    }
   }
 
   function postitEscHtml(s) {
@@ -296,7 +427,6 @@
       return t.done;
     });
     var multiOn = !!p.multi_page;
-    var typeLabel = p.type === 'today' ? 'Tâche quotidienne' : 'À faire';
     var hideTitle = postitIsHidden(p)
       ? 'Afficher à la position enregistrée'
       : 'Réduire en bas de l\'écran';
@@ -304,9 +434,9 @@
       '<div class="postit-header" onmousedown="startPostitDrag(event, ' +
       p.id +
       ')">' +
-      '<span class="postit-type-label">' +
-      postitEscHtml(typeLabel) +
-      '</span>' +
+      '<button type="button" class="postit-color-dot" onmousedown="event.stopPropagation()" onclick="event.stopPropagation(); togglePostitColorPalette(event, ' +
+      p.id +
+      ')" title="Changer la couleur" aria-label="Changer la couleur"></button>' +
       '<input class="postit-title" value="' +
       postitEscAttr(p.title || '') +
       '" onchange="renamePostit(' +
@@ -351,6 +481,7 @@
           ')">Effacer terminées</button>'
         : '') +
       '</div>';
+    applyPostitColor(el, postitResolveColor(p));
     setupPostitInteractions(el, p);
     return el;
   }
@@ -371,6 +502,7 @@
   }
 
   function renderPostits() {
+    closePostitColorPalette();
     var layer = ensurePostitLayer();
     if (!layer) return;
     layer.querySelectorAll('.postit').forEach(function (el) {
@@ -471,9 +603,19 @@
       if (!_postitDockBound) {
         _postitDockBound = true;
         document.addEventListener('click', function (e) {
-          if (!_postitDockMenuOpen) return;
-          var r = document.getElementById('postit-dock-root');
-          if (r && !r.contains(e.target)) closePostitDockMenu();
+          if (_postitDockMenuOpen) {
+            var r = document.getElementById('postit-dock-root');
+            if (r && !r.contains(e.target)) closePostitDockMenu();
+          }
+          var pal = document.getElementById('postit-color-palette');
+          if (
+            pal &&
+            pal.classList.contains('open') &&
+            !pal.contains(e.target) &&
+            !e.target.closest('.postit-color-dot')
+          ) {
+            closePostitColorPalette();
+          }
         });
         window.addEventListener('resize', function () {
           if (postitUserLoggedIn() && postitCurrentApp() !== 'login') {
@@ -749,6 +891,9 @@
   window.renderPostits = renderPostits;
   window.startPostitDrag = startPostitDrag;
   window.togglePostitHidden = togglePostitHidden;
+  window.togglePostitColorPalette = togglePostitColorPalette;
+  window.setPostitColor = setPostitColor;
+  window.closePostitColorPalette = closePostitColorPalette;
   window.restorePostitFromHidden = restorePostitFromHidden;
   window.togglePostitMultiPage = togglePostitMultiPage;
   window.deletePostit = deletePostit;

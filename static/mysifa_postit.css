@@ -2,6 +2,7 @@
 .postit-layer{display:none}
 @media (min-width:1024px){.postit-layer{display:block}}
 .postit{
+  --postit-color:var(--accent);
   position:fixed;
   background:var(--card);
   border:1px solid var(--border);
@@ -14,8 +15,6 @@
   flex-direction:column;
   user-select:none;
 }
-.postit[data-type="today"] .postit-header{border-top:3px solid var(--accent)}
-.postit[data-type="someday"] .postit-header{border-top:3px solid var(--warn)}
 .postit-header{
   display:flex;
   align-items:center;
@@ -25,16 +24,56 @@
   border-radius:12px 12px 0 0;
   background:var(--card);
   gap:8px;
+  border-top:3px solid var(--postit-color);
 }
 .postit-header:active{cursor:grabbing}
-.postit-type-label{
-  font-size:10px;
-  font-weight:700;
-  text-transform:uppercase;
-  letter-spacing:0.5px;
+.postit-color-dot{
+  width:14px;
+  height:14px;
+  border-radius:50%;
+  flex-shrink:0;
+  background:var(--postit-color);
+  border:2px solid color-mix(in srgb,var(--postit-color) 55%,var(--border));
+  cursor:pointer;
+  padding:0;
+  transition:transform .15s,box-shadow .15s;
 }
-.postit[data-type="today"] .postit-type-label{color:var(--accent)}
-.postit[data-type="someday"] .postit-type-label{color:var(--warn)}
+.postit-color-dot:hover{
+  transform:scale(1.08);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--postit-color) 28%,transparent);
+}
+.postit-color-dot:focus-visible{
+  outline:none;
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--postit-color) 35%,transparent);
+}
+#postit-color-palette{
+  position:fixed;
+  display:none;
+  flex-wrap:wrap;
+  gap:8px;
+  padding:10px;
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:12px;
+  box-shadow:0 8px 28px rgba(0,0,0,0.28);
+  z-index:900;
+  max-width:200px;
+}
+#postit-color-palette.open{display:flex}
+.postit-color-swatch{
+  width:26px;
+  height:26px;
+  border-radius:50%;
+  border:2px solid transparent;
+  cursor:pointer;
+  padding:0;
+  transition:transform .12s,border-color .12s;
+}
+.postit-color-swatch:hover{transform:scale(1.1)}
+.postit-color-swatch.active{
+  border-color:var(--text);
+  box-shadow:0 0 0 2px var(--card);
+}
 .postit-title{
   flex:1;
   background:transparent;
@@ -50,7 +89,7 @@
 .postit-task+.postit-task{margin-top:2px}
 .postit-task input[type="checkbox"]{
   margin-top:3px;
-  accent-color:var(--accent);
+  accent-color:var(--postit-color);
   flex-shrink:0;
   cursor:pointer;
 }
@@ -94,7 +133,7 @@
 .postit-clear-btn:hover{color:var(--danger)}
 .postit-add-task-btn{
   font-size:11px;
-  color:var(--accent);
+  color:var(--postit-color);
   background:none;
   border:none;
   cursor:pointer;

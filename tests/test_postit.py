@@ -125,6 +125,45 @@ class TestPostitMultiPage(unittest.TestCase):
             row = conn.execute("SELECT hidden FROM postits WHERE id=1").fetchone()
         self.assertEqual(row["hidden"], 1)
 
+    def test_color_column_present(self):
+        from database import get_db
+
+        with get_db() as conn:
+            cols = [r[1] for r in conn.execute("PRAGMA table_info(postits)").fetchall()]
+        self.assertIn("color", cols)
+
+    def test_patch_color(self):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        from app.routers.postit import router
+
+        app = FastAPI()
+        app.include_router(router)
+        client = TestClient(app)
+        with patch("app.routers.postit.get_current_user", return_value={"id": 1}):
+            r = client.patch("/api/postits/1", json={"color": "#34d399"})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json().get("color"), "#34d399")
+        from database import get_db
+
+        with get_db() as conn:
+            row = conn.execute("SELECT color FROM postits WHERE id=1").fetchone()
+        self.assertEqual(row["color"], "#34d399")
+
+    def test_patch_invalid_color_rejected(self):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        from app.routers.postit import router
+
+        app = FastAPI()
+        app.include_router(router)
+        client = TestClient(app)
+        with patch("app.routers.postit.get_current_user", return_value={"id": 1}):
+            r = client.patch("/api/postits/1", json={"color": "rouge"})
+        self.assertEqual(r.status_code, 400)
+
     def test_patch_empty_body_rejected(self):
         from fastapi import FastAPI
         from fastapi.testclient import TestClient

@@ -1,5 +1,7 @@
 """MySifa — Post-its draggables (portail + pages applicatives si multi-page)."""
 
+import re
+
 from fastapi import APIRouter, HTTPException, Request
 
 from database import get_db
@@ -7,7 +9,24 @@ from services.auth_service import get_current_user
 
 router = APIRouter(tags=["postits"])
 
-_POSTIT_COLS = "id, user_id, type, title, pos_x, pos_y, width, multi_page, hidden, created_at"
+_POSTIT_COLS = "id, user_id, type, title, pos_x, pos_y, width, multi_page, hidden, color, created_at"
+_POSTIT_DEFAULT_COLORS = {"today": "#22d3ee", "someday": "#fbbf24"}
+_COLOR_HEX_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
+
+
+def _default_postit_color(ptype: str) -> str:
+    return _POSTIT_DEFAULT_COLORS.get(ptype, "#22d3ee")
+
+
+def _normalize_postit_color(value, ptype: str | None = None) -> str:
+    if value is None or (isinstance(value, str) and not str(value).strip()):
+        if ptype in _POSTIT_DEFAULT_COLORS:
+            return _default_postit_color(ptype)
+        raise HTTPException(400, "Couleur invalide — format #RRGGBB")
+    s = str(value).strip()
+    if not _COLOR_HEX_RE.match(s):
+        raise HTTPException(400, "Couleur invalide — format #RRGGBB")
+    return s.lower()
 
 
 def _user_id(request: Request) -> int:
@@ -55,10 +74,11 @@ async def create_postit(request: Request):
         raise HTTPException(400, "Type invalide — today ou someday")
     if not title:
         raise HTTPException(400, "Titre obligatoire")
+    color = _normalize_postit_color(body.get("color"), ptype)
     with get_db() as conn:
         cur = conn.execute(
-            "INSERT INTO postits (user_id, type, title) VALUES (?,?,?)",
-            (user_id, ptype, title),
+            "INSERT INTO postits (user_id, type, title, color) VALUES (?,?,?,?)",
+            (user_id, ptype, title, color),
         )
         pid = cur.lastrowid
         row = conn.execute(
@@ -97,6 +117,9 @@ async def patch_postit(postit_id: int, request: Request):
     if "hidden" in body:
         updates.append("hidden=?")
         params.append(1 if body.get("hidden") else 0)
+    if "color" in body:
+        updates.append("color=?")
+        params.append(_normalize_postit_color(body.get("color")))
     if not updates:
         raise HTTPException(400, "Aucune modification")
     with get_db() as conn:
