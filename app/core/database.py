@@ -1998,6 +1998,14 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 58, "update_announcements_messages_chat")
 
+    # v59 — Post-its visibles sur toutes les pages (option multi-page)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=59 LIMIT 1").fetchone():
+        conn.execute(
+            "ALTER TABLE postits ADD COLUMN multi_page INTEGER NOT NULL DEFAULT 0"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 59, "postits_multi_page")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

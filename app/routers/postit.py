@@ -1,4 +1,4 @@
-"""MySifa — Post-its draggables (portail, desktop)."""
+"""MySifa — Post-its draggables (portail + pages applicatives si multi-page)."""
 
 from fastapi import APIRouter, HTTPException, Request
 
@@ -7,6 +7,8 @@ from services.auth_service import get_current_user
 
 router = APIRouter(tags=["postits"])
 
+_POSTIT_COLS = "id, user_id, type, title, pos_x, pos_y, width, multi_page, created_at"
+
 
 def _user_id(request: Request) -> int:
     return int(get_current_user(request)["id"])
@@ -14,7 +16,7 @@ def _user_id(request: Request) -> int:
 
 def _get_postit_or_404(conn, postit_id: int, user_id: int) -> dict:
     row = conn.execute(
-        "SELECT id, user_id, type, title, pos_x, pos_y, width, created_at FROM postits WHERE id=? AND user_id=?",
+        f"SELECT {_POSTIT_COLS} FROM postits WHERE id=? AND user_id=?",
         (postit_id, user_id),
     ).fetchone()
     if not row:
@@ -27,8 +29,7 @@ def list_postits(request: Request):
     user_id = _user_id(request)
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT id, user_id, type, title, pos_x, pos_y, width, created_at
-               FROM postits WHERE user_id=? ORDER BY id""",
+            f"SELECT {_POSTIT_COLS} FROM postits WHERE user_id=? ORDER BY id",
             (user_id,),
         ).fetchall()
         out = []
@@ -61,7 +62,7 @@ async def create_postit(request: Request):
         )
         pid = cur.lastrowid
         row = conn.execute(
-            "SELECT id, user_id, type, title, pos_x, pos_y, width, created_at FROM postits WHERE id=?",
+            f"SELECT {_POSTIT_COLS} FROM postits WHERE id=?",
             (pid,),
         ).fetchone()
         conn.commit()
@@ -82,14 +83,34 @@ def delete_postit(postit_id: int, request: Request):
 async def patch_postit(postit_id: int, request: Request):
     user_id = _user_id(request)
     body = await request.json()
-    title = str(body.get("title") or "").strip()
-    if not title:
-        raise HTTPException(400, "Titre obligatoire")
+    updates = []
+    params = []
+    if "title" in body:
+        title = str(body.get("title") or "").strip()
+        if not title:
+            raise HTTPException(400, "Titre obligatoire")
+        updates.append("title=?")
+        params.append(title)
+    if "multi_page" in body:
+        updates.append("multi_page=?")
+        params.append(1 if body.get("multi_page") else 0)
+    if not updates:
+        raise HTTPException(400, "Aucune modification")
     with get_db() as conn:
         _get_postit_or_404(conn, postit_id, user_id)
-        conn.execute("UPDATE postits SET title=? WHERE id=?", (title, postit_id))
+        params.append(postit_id)
+        conn.execute(
+            f"UPDATE postits SET {', '.join(updates)} WHERE id=?",
+            params,
+        )
+        row = conn.execute(
+            f"SELECT {_POSTIT_COLS} FROM postits WHERE id=?",
+            (postit_id,),
+        ).fetchone()
         conn.commit()
-    return {"ok": True}
+    out = dict(row)
+    out["ok"] = True
+    return out
 
 
 @router.patch("/api/postits/{postit_id}/pos")

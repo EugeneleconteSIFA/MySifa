@@ -109,6 +109,7 @@
     menu.style.left = 'auto';
     menu.style.top = 'auto';
     menu.style.bottom = safeBottom(minFabBaseBottom() + FAB_SIZE + GAP);
+    menu.style.boxShadow = SHADOW_PANEL;
     menu.style.zIndex = String(Z_FAB_ACTIVE);
   }
 

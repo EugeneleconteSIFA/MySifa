@@ -1215,6 +1215,8 @@ body.light .portal-logout:hover:last-of-type{text-shadow:0 0 12px rgba(220,38,38
   display:flex;
   align-items:center;
   justify-content:space-between;
+  flex-wrap:wrap;
+  gap:4px 8px;
   padding:6px 12px 10px;
   border-top:1px solid var(--border);
 }
@@ -1236,6 +1238,20 @@ body.light .portal-logout:hover:last-of-type{text-shadow:0 0 12px rgba(220,38,38
   padding:2px 4px;
   font-weight:600;
 }
+.postit-multipage-btn{
+  font-size:11px;
+  color:var(--muted);
+  background:none;
+  border:none;
+  cursor:pointer;
+  padding:2px 4px;
+  font-weight:600;
+  white-space:nowrap;
+}
+.postit-multipage-btn:hover{color:var(--text2)}
+.postit-multipage-btn.on{color:var(--accent)}
+.postit-multipage-btn.on .postit-multipage-label{color:var(--accent)}
+.postit-multipage-label{font-weight:500;color:var(--muted)}
 .postit-delete-btn{
   background:none;
   border:none;
@@ -1247,42 +1263,44 @@ body.light .portal-logout:hover:last-of-type{text-shadow:0 0 12px rgba(220,38,38
 }
 .postit-delete-btn:hover{color:var(--danger)}
 
-/* Widget post-it (dock, à gauche de l’agent IA — portail desktop) */
+/* Widget post-it (dock — même style FAB/panneau que calculette / agent IA) */
 #postit-dock-root{display:none}
-#postit-dock-btn{
-  background:var(--card);
-  color:var(--warn);
-  border:1px solid var(--border);
-  box-shadow:0 4px 16px rgba(0,0,0,0.2);
-}
-#postit-dock-btn:hover{box-shadow:0 6px 24px rgba(0,0,0,0.28)}
-#postit-dock-btn svg{color:var(--warn)}
 #postit-dock-menu{
   position:fixed;
   display:none;
   flex-direction:column;
-  gap:8px;
+  gap:4px;
   min-width:220px;
+  padding:8px;
   z-index:8004;
 }
 #postit-dock-menu.open{display:flex}
 .postit-dock-menu-btn{
-  padding:10px 14px;
+  padding:10px 12px;
   border-radius:10px;
-  border:1px solid var(--border);
-  background:var(--card);
+  border:none;
+  background:transparent;
   color:var(--text);
   font-size:12px;
-  font-weight:700;
+  font-weight:600;
   cursor:pointer;
   text-align:left;
   font-family:inherit;
-  box-shadow:0 2px 12px rgba(0,0,0,0.15);
-  transition:filter .15s,border-color .15s;
+  transition:background .15s,color .15s;
 }
-.postit-dock-menu-btn:hover{filter:brightness(1.08)}
-.postit-dock-menu-btn.someday{border-color:var(--warn);color:var(--warn)}
-.postit-dock-menu-btn.today{border-color:var(--accent);color:var(--accent)}
+.postit-dock-menu-btn:hover{background:var(--accent-bg);color:var(--accent)}
+.postit-dock-menu-btn.someday::before,
+.postit-dock-menu-btn.today::before{
+  content:'';
+  display:inline-block;
+  width:6px;height:6px;
+  border-radius:50%;
+  margin-right:8px;
+  vertical-align:middle;
+  position:relative;top:-1px;
+}
+.postit-dock-menu-btn.someday::before{background:var(--warn)}
+.postit-dock-menu-btn.today::before{background:var(--accent)}
 
 @media (max-width:900px){
   /* Portail mobile / tablette : layout vertical, tuiles compactes */
@@ -3706,9 +3724,39 @@ function attachPortalReorder(appsWrap){
   appsWrap.addEventListener('drop',e=>{e.preventDefault();});
 }
 
-// ── Post-its portail ─────────────────────────────────────────────
+// ── Post-its (portail + pages applicatives si multi-page) ─────────
 const PostitState={items:[]};
 let _postitDrag=null;
+
+function postitDesktopEnabled(){
+  return !!(S.user&&window.matchMedia('(min-width:1024px)').matches);
+}
+
+function postitsForCurrentPage(){
+  const items=Array.isArray(PostitState.items)?PostitState.items:[];
+  if(S.app==='portal') return items;
+  return items.filter(p=>!!p.multi_page);
+}
+
+function ensurePostitLayer(){
+  let layer=document.getElementById('postitLayer');
+  if(!layer){
+    layer=document.createElement('div');
+    layer.className='postit-layer';
+    layer.id='postitLayer';
+    document.body.appendChild(layer);
+  }
+  const show=postitDesktopEnabled();
+  layer.style.display=show?'block':'none';
+  return layer;
+}
+
+function initPostitsApp(){
+  if(!S.user||S.app==='login') return;
+  ensurePostitLayer();
+  if(!postitDesktopEnabled()) return;
+  loadPostits().catch(()=>{});
+}
 
 async function loadPostits(){
   try{
@@ -3722,10 +3770,10 @@ async function loadPostits(){
 }
 
 function renderPostits(){
-  const layer=document.getElementById('postitLayer');
+  const layer=ensurePostitLayer();
   if(!layer) return;
   layer.querySelectorAll('.postit').forEach(el=>el.remove());
-  PostitState.items.forEach(p=>layer.appendChild(buildPostitEl(p)));
+  postitsForCurrentPage().forEach(p=>layer.appendChild(buildPostitEl(p)));
 }
 
 function buildPostitEl(p){
@@ -3737,6 +3785,7 @@ function buildPostitEl(p){
   el.style.top=(p.pos_y!=null?p.pos_y:100)+'px';
   const tasks=Array.isArray(p.tasks)?p.tasks:[];
   const hasDone=tasks.some(t=>t.done);
+  const multiOn=!!p.multi_page;
   const typeLabel=p.type==='today'?'Tâche quotidienne':'À faire';
   el.innerHTML=`
     <div class="postit-header" onmousedown="startPostitDrag(event, ${p.id})">
@@ -3751,6 +3800,10 @@ function buildPostitEl(p){
     </div>
     <div class="postit-footer">
       <button type="button" class="postit-add-task-btn" onclick="addPostitTask(${p.id})">+ Ajouter</button>
+      <button type="button" class="postit-multipage-btn${multiOn?' on':''}" onclick="togglePostitMultiPage(${p.id})"
+        title="${multiOn?'Visible sur toutes les pages — cliquer pour limiter au portail':'Visible sur le portail uniquement — cliquer pour afficher sur toutes les pages'}">
+        ${multiOn?'Désactiver':'Activer'} <span class="postit-multipage-label">(multi-page)</span>
+      </button>
       ${hasDone?`<button type="button" class="postit-clear-btn" onclick="clearPostitDone(${p.id})">Effacer terminées</button>`:''}
     </div>
   `;
@@ -3855,7 +3908,7 @@ function initPostitDock(){
     root.id='postit-dock-root';
     root.innerHTML=
       '<button type="button" id="postit-dock-btn" class="mysifa-dock-fab" aria-label="Post-its" title="Post-its">'+POSTIT_DOCK_ICON+'</button>'+
-      '<div id="postit-dock-menu" role="menu" aria-label="Créer un post-it">'+
+      '<div id="postit-dock-menu" class="mysifa-dock-panel" role="menu" aria-label="Créer un post-it">'+
       '<button type="button" class="postit-dock-menu-btn someday" role="menuitem">Post-it à faire</button>'+
       '<button type="button" class="postit-dock-menu-btn today" role="menuitem">Post-it tâche quotidienne</button>'+
       '</div>';
@@ -3878,14 +3931,32 @@ function initPostitDock(){
         if(r&&!r.contains(e.target)) closePostitDockMenu();
       });
       window.addEventListener('resize',()=>{
-        if(S.app==='portal'&&typeof initPostitDock==='function') initPostitDock();
+        if(S.user&&S.app!=='login'){
+          if(typeof initPostitDock==='function') initPostitDock();
+          if(typeof initPostitsApp==='function') initPostitsApp();
+        }
       });
     }
   }
-  const show=!!(S.user&&S.app==='portal'&&window.matchMedia('(min-width:1024px)').matches);
+  const show=postitDesktopEnabled();
   root.style.display=show?'block':'none';
   if(!show) closePostitDockMenu();
   if(window.MySifaDock&&typeof window.MySifaDock.layout==='function') window.MySifaDock.layout();
+}
+
+async function togglePostitMultiPage(id){
+  const p=PostitState.items.find(x=>x.id===id);
+  if(!p) return;
+  const next=!p.multi_page;
+  try{
+    const r=await api('/api/postits/'+id,{method:'PATCH',body:JSON.stringify({multi_page:next})});
+    if(r&&r.multi_page!=null) p.multi_page=r.multi_page?1:0;
+    else p.multi_page=next?1:0;
+    renderPostits();
+    showToast(next?'Post-it affiché sur toutes les pages.':'Post-it limité au portail.','success');
+  }catch(e){
+    showToast((e&&e.message)||'Modification impossible.','danger');
+  }
 }
 
 async function deletePostit(id){
@@ -3976,13 +4047,6 @@ async function clearPostitDone(postitId){
   }catch(e){
     showToast((e&&e.message)||'Effacement impossible.','danger');
   }
-}
-
-function portalPostitLayerEl(){
-  const layer=document.createElement('div');
-  layer.className='postit-layer';
-  layer.id='postitLayer';
-  return layer;
 }
 
 function renderPortal(){
@@ -4267,8 +4331,6 @@ function renderPortal(){
       h('button',{className:'portal-logout',onClick:doLogout},'Déconnexion')
     )
   );
-  portalEl.appendChild(portalPostitLayerEl());
-  setTimeout(()=>{ loadPostits().catch(()=>{}); },0);
   return portalEl;
 }
 
@@ -11754,6 +11816,7 @@ function render(){
   }
   if(typeof initAiChatWidget === 'function') initAiChatWidget();
   if(typeof initPostitDock === 'function') initPostitDock();
+  if(typeof initPostitsApp === 'function') initPostitsApp();
   if(S.app!=='expe'){_expeLastRenderedInnerTab=null;}
 
   // Nettoyage polling machine quand on quitte MyProd
