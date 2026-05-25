@@ -190,7 +190,11 @@ const S = {
   sidebarOpen: false,
   user: __USER_JSON__,
   modal: null,
-  modalData: {}
+  modalData: {},
+  carnet: [],
+  produits: [],
+  produitsSearch: '',
+  nonLus: {}
 };
 
 const ROLE_LABELS = {direction:'Direction',administration:'Administration',commercial:'Commercial',superadmin:'Super admin'};
@@ -272,7 +276,6 @@ function buildAoSidebarNavStructure() {
     {kind:'btn', section:'ao', icon:'clipboard', label:'Appel d\'offre'},
     {kind:'sep', label:'Contact'},
     {kind:'btn', section:'contact_fournisseur', icon:'truck', label:'Fournisseur', sub:true},
-    {kind:'btn', section:'contact_client', icon:'user', label:'Client', sub:true},
     {kind:'btn', section:'produits', icon:'package', label:'Produits'},
   ].map(n => (n.kind === 'btn' ? {...n, active: sec === n.section} : n));
 }
@@ -282,7 +285,6 @@ function aoMobileTitle() {
     dashboard: ['Tableau de bord', 'Vue d\'ensemble'],
     ao: S.view === 'detail' && S.ao ? [S.ao.reference, 'Appel d\'offre'] : ['Appels d\'offre', 'Appel d\'offre'],
     contact_fournisseur: ['Fournisseurs', 'Contacts'],
-    contact_client: ['Clients', 'Contacts'],
     produits: ['Produits', 'Référentiel'],
   };
   const x = m[S.section] || ['MyAO', 'Appels d\'offre'];
@@ -365,6 +367,125 @@ function renderSectionPlaceholder(title, hint) {
     '<div class="card empty-state"><strong>'+escHtml(title)+'</strong>'+escHtml(hint)+'</div>';
 }
 
+function renderCarnet() {
+  const list = S.carnet || [];
+  let rows = '';
+  list.forEach(c => {
+    rows += '<tr><td>'+escHtml(c.nom)+'</td><td>'+escHtml(c.email)+'</td><td>'+escHtml(c.pays||'—')+'</td><td>'+
+      '<button class="btn btn-ghost btn-sm btn-edit-carnet" data-id="'+c.id+'">Modifier</button> '+
+      '<button class="btn btn-ghost btn-sm btn-del-carnet" data-id="'+c.id+'">Supprimer</button></td></tr>';
+  });
+  const table = list.length
+    ? '<div class="card"><table class="data-table"><thead><tr><th>Nom</th><th>Email</th><th>Pays</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+    : '<div class="card empty-state"><strong>Aucun fournisseur dans le carnet.</strong></div>';
+  return '<div class="page-hdr"><h1>Carnet fournisseurs</h1>'+
+    '<button class="btn btn-accent" type="button" id="btn-add-carnet">'+icon('plus',14)+' Ajouter</button></div>'+table;
+}
+
+function filteredProduits() {
+  const q = (S.produitsSearch || '').trim().toLowerCase();
+  if (!q) return S.produits || [];
+  return (S.produits || []).filter(p => {
+    const hay = ((p.ref || '') + ' ' + (p.designation || '')).toLowerCase();
+    return hay.includes(q);
+  });
+}
+
+function renderProduitsRows() {
+  const ae = document.activeElement;
+  const focusId = ae?.id;
+  const caretStart = ae?.selectionStart;
+  const caretEnd = ae?.selectionEnd;
+  const el = document.getElementById('produits-list');
+  if (!el) return;
+  const q = (S.produitsSearch || '').trim();
+  const list = filteredProduits();
+  if (!list.length) {
+    el.innerHTML = q
+      ? '<div class="empty-state" style="padding:32px 16px"><strong>Aucun résultat pour « '+escHtml(q)+' »</strong></div>'
+      : '<div class="empty-state" style="padding:32px 16px"><strong>Aucun produit dans le catalogue.</strong></div>';
+  } else {
+    let rows = '';
+    list.forEach(p => {
+      rows += '<tr><td>'+escHtml(p.ref)+'</td><td>'+escHtml(p.designation)+'</td><td>'+escHtml(p.unite||'unité')+'</td><td>'+
+        '<button class="btn btn-ghost btn-sm btn-edit-produit" data-id="'+p.id+'">Modifier</button> '+
+        '<button class="btn btn-ghost btn-sm btn-del-produit" data-id="'+p.id+'">Supprimer</button></td></tr>';
+    });
+    el.innerHTML = '<table class="data-table"><thead><tr><th>Référence</th><th>Désignation</th><th>Unité</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>';
+    el.querySelectorAll('.btn-edit-produit').forEach(b => {
+      b.addEventListener('click', () => {
+        const p = (S.produits||[]).find(x => String(x.id) === String(b.dataset.id));
+        if (p) openModalProduit(p);
+      });
+    });
+    el.querySelectorAll('.btn-del-produit').forEach(b => {
+      b.addEventListener('click', async () => {
+        if (!confirm('Supprimer ce produit du catalogue ?')) return;
+        try {
+          await api('/api/ao/produits/'+b.dataset.id, {method:'DELETE'});
+          showToast('Produit supprimé.', 'success');
+          await loadProduits();
+          renderProduitsRows();
+        } catch(e) { showToast(e.message, 'danger'); }
+      });
+    });
+  }
+  if (focusId) {
+    const foc = document.getElementById(focusId);
+    if (foc) {
+      foc.focus();
+      if (caretStart != null) try { foc.setSelectionRange(caretStart, caretEnd); } catch(e) {}
+    }
+  }
+}
+
+function renderProduits() {
+  return '<div class="page-hdr"><h1>Catalogue produits</h1>'+
+    '<button class="btn btn-accent" type="button" id="btn-add-produit">'+icon('plus',14)+' Ajouter un produit</button></div>'+
+    '<div class="card">'+
+    '<input type="search" id="produits-search" placeholder="Rechercher (référence, désignation…)" value="'+escAttr(S.produitsSearch||'')+'" style="width:100%;margin-bottom:14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 16px;color:var(--text);font-size:14px">'+
+    '<div id="produits-list"></div></div>';
+}
+
+function bindProduitsEvents() {
+  renderProduitsRows();
+  const search = document.getElementById('produits-search');
+  search?.addEventListener('input', () => {
+    S.produitsSearch = search.value;
+    renderProduitsRows();
+  });
+  search?.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      S.produitsSearch = '';
+      search.value = '';
+      renderProduitsRows();
+      search.focus();
+    }
+  });
+  document.getElementById('btn-add-produit')?.addEventListener('click', () => openModalProduit(null));
+}
+
+function bindCarnetEvents() {
+  document.getElementById('btn-add-carnet')?.addEventListener('click', () => openModalCarnetEntry(null));
+  document.querySelectorAll('.btn-edit-carnet').forEach(b => {
+    b.addEventListener('click', () => {
+      const c = (S.carnet||[]).find(x => String(x.id) === String(b.dataset.id));
+      if (c) openModalCarnetEntry(c);
+    });
+  });
+  document.querySelectorAll('.btn-del-carnet').forEach(b => {
+    b.addEventListener('click', async () => {
+      if (!confirm('Supprimer cette entrée du carnet ?')) return;
+      try {
+        await api('/api/ao/carnet-fournisseurs/'+b.dataset.id, {method:'DELETE'});
+        showToast('Entrée supprimée.', 'success');
+        await loadCarnet();
+        render();
+      } catch(e) { showToast(e.message, 'danger'); }
+    });
+  });
+}
+
 function toggleSidebar() {
   S.sidebarOpen = !S.sidebarOpen;
   document.body.classList.toggle('sb-open', S.sidebarOpen);
@@ -375,9 +496,22 @@ async function loadList() {
   S.aos = await api('/api/ao');
 }
 
+async function loadCarnet() {
+  S.carnet = await api('/api/ao/carnet-fournisseurs');
+}
+
+async function loadProduits() {
+  S.produits = await api('/api/ao/produits');
+}
+
 async function loadDetail(id) {
   S.detail = await api('/api/ao/' + id);
   S.ao = S.detail.ao;
+  try {
+    S.nonLus = await api('/api/ao/' + id + '/non-lus');
+  } catch(e) {
+    S.nonLus = {};
+  }
   if (S.tab === 'comparaison') await loadComparaison(id);
   if (S.tab === 'messages' && S.messages_fourni) await loadMessages(id, S.messages_fourni);
 }
@@ -422,7 +556,12 @@ function setTab(tab) {
       const fournis = S.detail.fournisseurs || [];
       if (!S.messages_fourni && fournis.length) S.messages_fourni = fournis[0].id;
       if (S.messages_fourni) {
-        loadMessages(id, S.messages_fourni).then(() => {
+        loadMessages(id, S.messages_fourni).then(async () => {
+          try {
+            S.nonLus = await api('/api/ao/' + id + '/non-lus');
+          } catch(e) {
+            S.nonLus = {};
+          }
           startMsgPolling();
           render();
         });
@@ -468,6 +607,16 @@ function openModalFourni() {
   S.modalData = {nom_fournisseur:'',email_contact:''};
   renderModal();
 }
+function openModalCarnetEntry(edit) {
+  S.modal = 'carnet-entry';
+  S.modalData = edit ? {...edit} : {nom:'', email:'', pays:'', notes:''};
+  renderModal();
+}
+function openModalProduit(edit) {
+  S.modal = 'produit-entry';
+  S.modalData = edit ? {...edit} : {ref:'', designation:'', unite:'unité', notes:''};
+  renderModal();
+}
 function openModalConfirmEnvoi(n) {
   S.modal = 'confirm-envoi';
   S.modalData = {n};
@@ -507,39 +656,169 @@ function renderModal() {
     };
   } else if (S.modal === 'ligne') {
     const editId = S.modalData.id;
+    let prodOpts = '<option value="">— Saisie manuelle —</option>';
+    (S.produits||[]).forEach(p => {
+      prodOpts += '<option value="'+p.id+'">'+escHtml(p.ref)+' — '+escHtml(p.designation)+'</option>';
+    });
+    const saveCatHtml = editId ? '' :
+      '<label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:14px">'+
+      '<input type="checkbox" id="m-save-produit"> Enregistrer dans le catalogue</label>';
     box.innerHTML = '<h3>'+(editId?'Modifier':'Ajouter')+' une ligne</h3>'+
-      '<div class="field"><label>Réf. produit</label><input id="m-ref" value="'+escAttr(S.modalData.ref_produit)+'"></div>'+
-      '<div class="field"><label>Désignation</label><input id="m-des" value="'+escAttr(S.modalData.designation)+'"></div>'+
+      '<div class="field"><label>Produit du catalogue</label><select id="m-produit-pick">'+prodOpts+'</select></div>'+
+      '<div class="field"><label>Réf. produit</label><input id="m-ref" value="'+escAttr(S.modalData.ref_produit||'')+'"></div>'+
+      '<div class="field"><label>Désignation</label><input id="m-des" value="'+escAttr(S.modalData.designation||'')+'"></div>'+
       '<div class="form-row"><div class="field"><label>Quantité</label><input type="number" step="any" min="0" id="m-qte" value="'+escAttr(S.modalData.quantite)+'"></div>'+
       '<div class="field"><label>Unité</label><input id="m-unite" value="'+escAttr(S.modalData.unite||'unité')+'"></div></div>'+
       '<div class="field"><label>Notes</label><input id="m-notes" value="'+escAttr(S.modalData.notes||'')+'"></div>'+
+      saveCatHtml+
       '<div class="modal-actions"><button class="btn btn-ghost" id="m-cancel">Annuler</button><button class="btn btn-accent" id="m-ok">Enregistrer</button></div>';
     ov.appendChild(box); m.appendChild(ov);
+    const pickEl = document.getElementById('m-produit-pick');
+    const refEl = document.getElementById('m-ref');
+    const desEl = document.getElementById('m-des');
+    const uniteEl = document.getElementById('m-unite');
+    const notesEl = document.getElementById('m-notes');
+    const saveCb = document.getElementById('m-save-produit');
+    pickEl.onchange = () => {
+      const id = pickEl.value;
+      if (id) {
+        const p = (S.produits||[]).find(x => String(x.id) === String(id));
+        if (p) {
+          refEl.value = p.ref || '';
+          desEl.value = p.designation || '';
+          uniteEl.value = p.unite || 'unité';
+          if (p.notes) notesEl.value = p.notes;
+        }
+        if (saveCb) { saveCb.checked = false; saveCb.disabled = true; }
+      } else if (saveCb) {
+        saveCb.disabled = false;
+      }
+    };
     document.getElementById('m-cancel').onclick = closeModal;
     document.getElementById('m-ok').onclick = async () => {
-      const body = {ref_produit: document.getElementById('m-ref').value.trim(), designation: document.getElementById('m-des').value.trim(),
-        quantite: parseFloat(document.getElementById('m-qte').value), unite: document.getElementById('m-unite').value.trim(),
-        notes: document.getElementById('m-notes').value.trim() || null};
+      const ref = refEl.value.trim();
+      const designation = desEl.value.trim();
+      if (!ref || !designation) { showToast('Référence et désignation obligatoires.', 'danger'); return; }
+      const body = {ref_produit: ref, designation,
+        quantite: parseFloat(document.getElementById('m-qte').value), unite: uniteEl.value.trim(),
+        notes: notesEl.value.trim() || null};
       try {
         const path = '/api/ao/'+S.ao.id+'/lignes'+(editId?'/'+editId:'');
         await api(path, {method: editId?'PUT':'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+        if (!editId && !pickEl.value && saveCb && saveCb.checked) {
+          await api('/api/ao/produits', {method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ref, designation, unite: body.unite, notes: body.notes})});
+          await loadProduits();
+        }
         closeModal(); showToast('Ligne enregistrée.', 'success');
         await loadDetail(S.ao.id); render();
       } catch(e) { showToast(e.message, 'danger'); }
     };
   } else if (S.modal === 'fourni') {
+    let carnetOpts = '<option value="">— Saisie manuelle —</option>';
+    (S.carnet||[]).forEach(c => {
+      carnetOpts += '<option value="'+c.id+'">'+escHtml(c.nom)+' — '+escHtml(c.email)+'</option>';
+    });
     box.innerHTML = '<h3>Ajouter un fournisseur</h3>'+
+      '<div class="field"><label>Sélectionner depuis le carnet</label>'+
+      '<select id="m-carnet-pick">'+carnetOpts+'</select></div>'+
+      '<div id="m-fourni-form">'+
       '<div class="field"><label>Nom</label><input id="m-nom"></div>'+
-      '<div class="field"><label>Email</label><input type="email" id="m-mail"></div>'+
+      '<div class="field"><label>Email</label><input type="email" id="m-mail"></div></div>'+
+      '<label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:14px">'+
+      '<input type="checkbox" id="m-save-carnet"> Enregistrer dans le carnet</label>'+
       '<div class="modal-actions"><button class="btn btn-ghost" id="m-cancel">Annuler</button><button class="btn btn-accent" id="m-ok">Ajouter</button></div>';
+    ov.appendChild(box); m.appendChild(ov);
+    const pickEl = document.getElementById('m-carnet-pick');
+    const nomEl = document.getElementById('m-nom');
+    const mailEl = document.getElementById('m-mail');
+    const saveCb = document.getElementById('m-save-carnet');
+    pickEl.onchange = () => {
+      const id = pickEl.value;
+      if (id) {
+        const c = (S.carnet||[]).find(x => String(x.id) === String(id));
+        if (c) {
+          nomEl.value = c.nom || '';
+          mailEl.value = c.email || '';
+        }
+        saveCb.checked = false;
+        saveCb.disabled = true;
+      } else {
+        saveCb.disabled = false;
+      }
+    };
+    document.getElementById('m-cancel').onclick = closeModal;
+    document.getElementById('m-ok').onclick = async () => {
+      const nom = nomEl.value.trim();
+      const email = mailEl.value.trim();
+      if (!nom || !email) { showToast('Nom et email obligatoires.', 'danger'); return; }
+      try {
+        await api('/api/ao/'+S.ao.id+'/fournisseurs', {method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({nom_fournisseur: nom, email_contact: email})});
+        const manual = !pickEl.value;
+        if (manual && saveCb.checked) {
+          await api('/api/ao/carnet-fournisseurs', {method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({nom, email})});
+          await loadCarnet();
+        }
+        closeModal(); showToast('Fournisseur ajouté.', 'success');
+        await loadDetail(S.ao.id); render();
+      } catch(e) { showToast(e.message, 'danger'); }
+    };
+  } else if (S.modal === 'carnet-entry') {
+    const editId = S.modalData.id;
+    box.innerHTML = '<h3>'+(editId?'Modifier':'Ajouter')+' au carnet</h3>'+
+      '<div class="field"><label>Nom</label><input id="m-c-nom" value="'+escAttr(S.modalData.nom||'')+'"></div>'+
+      '<div class="field"><label>Email</label><input type="email" id="m-c-email" value="'+escAttr(S.modalData.email||'')+'"></div>'+
+      '<div class="field"><label>Pays</label><input id="m-c-pays" value="'+escAttr(S.modalData.pays||'')+'"></div>'+
+      '<div class="field"><label>Notes</label><textarea id="m-c-notes" rows="2">'+escHtml(S.modalData.notes||'')+'</textarea></div>'+
+      '<div class="modal-actions"><button class="btn btn-ghost" id="m-cancel">Annuler</button><button class="btn btn-accent" id="m-ok">Enregistrer</button></div>';
     ov.appendChild(box); m.appendChild(ov);
     document.getElementById('m-cancel').onclick = closeModal;
     document.getElementById('m-ok').onclick = async () => {
+      const body = {
+        nom: document.getElementById('m-c-nom').value.trim(),
+        email: document.getElementById('m-c-email').value.trim(),
+        pays: document.getElementById('m-c-pays').value.trim() || null,
+        notes: document.getElementById('m-c-notes').value.trim() || null
+      };
+      if (!body.nom || !body.email) { showToast('Nom et email obligatoires.', 'danger'); return; }
       try {
-        await api('/api/ao/'+S.ao.id+'/fournisseurs', {method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({nom_fournisseur: document.getElementById('m-nom').value.trim(), email_contact: document.getElementById('m-mail').value.trim()})});
-        closeModal(); showToast('Fournisseur ajouté.', 'success');
-        await loadDetail(S.ao.id); render();
+        if (editId) {
+          await api('/api/ao/carnet-fournisseurs/'+editId, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+        } else {
+          await api('/api/ao/carnet-fournisseurs', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+        }
+        closeModal(); showToast('Carnet enregistré.', 'success');
+        await loadCarnet(); render();
+      } catch(e) { showToast(e.message, 'danger'); }
+    };
+  } else if (S.modal === 'produit-entry') {
+    const editId = S.modalData.id;
+    box.innerHTML = '<h3>'+(editId?'Modifier':'Ajouter')+' un produit</h3>'+
+      '<div class="field"><label>Référence</label><input id="m-p-ref" value="'+escAttr(S.modalData.ref||'')+'"></div>'+
+      '<div class="field"><label>Désignation</label><input id="m-p-des" value="'+escAttr(S.modalData.designation||'')+'"></div>'+
+      '<div class="field"><label>Unité</label><input id="m-p-unite" value="'+escAttr(S.modalData.unite||'unité')+'"></div>'+
+      '<div class="field"><label>Notes</label><textarea id="m-p-notes" rows="2">'+escHtml(S.modalData.notes||'')+'</textarea></div>'+
+      '<div class="modal-actions"><button class="btn btn-ghost" id="m-cancel">Annuler</button><button class="btn btn-accent" id="m-ok">Enregistrer</button></div>';
+    ov.appendChild(box); m.appendChild(ov);
+    document.getElementById('m-cancel').onclick = closeModal;
+    document.getElementById('m-ok').onclick = async () => {
+      const body = {
+        ref: document.getElementById('m-p-ref').value.trim(),
+        designation: document.getElementById('m-p-des').value.trim(),
+        unite: document.getElementById('m-p-unite').value.trim() || 'unité',
+        notes: document.getElementById('m-p-notes').value.trim() || null
+      };
+      if (!body.ref || !body.designation) { showToast('Référence et désignation obligatoires.', 'danger'); return; }
+      try {
+        if (editId) {
+          await api('/api/ao/produits/'+editId, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+        } else {
+          await api('/api/ao/produits', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+        }
+        closeModal(); showToast('Produit enregistré.', 'success');
+        await loadProduits(); render();
       } catch(e) { showToast(e.message, 'danger'); }
     };
   } else if (S.modal === 'confirm-envoi') {
@@ -584,6 +863,12 @@ function renderDetailHeader() {
   if (st === 'brouillon') {
     const dis = (lignes < 1 || fournis < 1) ? ' disabled' : '';
     actions += '<button class="btn btn-accent" type="button" id="btn-envoyer"'+dis+'>Envoyer aux fournisseurs</button>';
+  } else if (st === 'envoyee') {
+    // Fournisseurs ajoutés après le premier envoi (date_envoi IS NULL, statut='invite')
+    const nonenvoyes = (d.fournisseurs||[]).filter(f => !f.date_envoi && f.statut === 'invite').length;
+    if (nonenvoyes > 0) {
+      actions += '<button class="btn btn-accent" type="button" id="btn-envoyer">Envoyer aux nouveaux ('+nonenvoyes+')</button>';
+    }
   }
   if (st === 'envoyee') actions += '<button class="btn btn-accent" type="button" id="btn-cloturer">Clôturer l\'AO</button>';
   return '<div class="breadcrumb"><a href="#" id="bc-list">Appels d\'offre</a> &gt; '+escHtml(ao.reference)+' — '+escHtml(ao.titre)+'</div>'+
@@ -591,10 +876,19 @@ function renderDetailHeader() {
     '<div class="detail-meta">'+escHtml(ao.titre)+'<br>Date limite : '+escHtml(ao.date_limite||'—')+' · Responsable : '+escHtml(ao.responsable_email||'—')+' · Réponses : '+escHtml(d.nb_reponses)+'</div>'+
     '<div class="detail-actions">'+actions+'</div>'+
     '<div class="detail-tabs">'+
-    ['lignes','fournisseurs','comparaison','messages','documents'].map(t=>{
-      const labels = {lignes:'Lignes',fournisseurs:'Fournisseurs',comparaison:'Comparaison',messages:'Messagerie',documents:'Documents'};
-      return '<button class="detail-tab'+(S.tab===t?' active':'')+'" data-tab="'+t+'">'+labels[t]+'</button>';
-    }).join('')+'</div>';
+    (() => {
+      const totalNonLus = Object.values(S.nonLus || {}).reduce((a, b) => a + b, 0);
+      const labels = {
+        lignes:'Lignes',fournisseurs:'Fournisseurs',comparaison:'Comparaison',
+        messages:'Messagerie'+(totalNonLus > 0
+          ? ' <span class="nav-badge" style="background:var(--danger);color:#fff;font-size:10px;padding:1px 6px;border-radius:999px;font-weight:700">'+escHtml(totalNonLus)+'</span>'
+          : ''),
+        documents:'Documents'
+      };
+      return ['lignes','fournisseurs','comparaison','messages','documents'].map(t =>
+        '<button class="detail-tab'+(S.tab===t?' active':'')+'" data-tab="'+t+'">'+labels[t]+'</button>'
+      ).join('');
+    })()+'</div>';
 }
 
 function renderLignes() {
@@ -615,10 +909,14 @@ function renderFournisseurs() {
   const base = (BASE_URL || window.location.origin).replace(/\/$/,'');
   let rows = fournis.map(f => {
     const lien = base+'/portail/ao/'+f.token;
+    const nb = S.nonLus[String(f.id)] || 0;
+    const unreadBadge = nb > 0
+      ? ' <span style="background:var(--danger);color:#fff;font-size:10px;padding:1px 6px;border-radius:999px;font-weight:700;display:inline-block">'+escHtml(nb)+' msg</span>'
+      : '';
     let act = '<button class="btn btn-ghost btn-sm btn-copy" data-token="'+escAttr(f.token)+'">Copier lien</button> '+
       '<button class="btn btn-ghost btn-sm btn-msg" data-id="'+f.id+'">Messagerie</button>';
     if (f.statut !== 'repondu') act += ' <button class="btn btn-ghost btn-sm btn-del-f" data-id="'+f.id+'">Supprimer</button>';
-    return '<tr><td>'+escHtml(f.nom_fournisseur)+'</td><td>'+escHtml(f.email_contact)+'</td><td>'+fourniBadge(f.statut)+'</td>'+
+    return '<tr><td>'+escHtml(f.nom_fournisseur)+'</td><td>'+escHtml(f.email_contact)+'</td><td>'+fourniBadge(f.statut)+unreadBadge+'</td>'+
       '<td>'+escHtml(f.date_envoi||'—')+'</td><td>'+escHtml(f.date_reponse||'—')+'</td><td>'+act+'</td></tr>';
   }).join('');
   return '<div class="card">'+(ao.statut!=='cloturee'?'<button class="btn btn-accent btn-sm" id="btn-add-f" style="margin-bottom:12px">'+icon('plus',14)+' Ajouter un fournisseur</button>':'')+
@@ -831,11 +1129,11 @@ function render() {
     area.innerHTML = renderDashboard();
     bindListEvents();
   } else if (S.section === 'contact_fournisseur') {
-    area.innerHTML = renderSectionPlaceholder('Fournisseurs', 'Référentiel fournisseurs — contenu à venir.');
-  } else if (S.section === 'contact_client') {
-    area.innerHTML = renderSectionPlaceholder('Clients', 'Référentiel clients — contenu à venir.');
+    area.innerHTML = renderCarnet();
+    bindCarnetEvents();
   } else if (S.section === 'produits') {
-    area.innerHTML = renderSectionPlaceholder('Produits', 'Référentiel produits — contenu à venir.');
+    area.innerHTML = renderProduits();
+    bindProduitsEvents();
   } else if (S.view === 'list') {
     area.innerHTML = renderList();
     bindListEvents();
@@ -888,7 +1186,7 @@ function render() {
     if (window.MySifaDock && typeof window.MySifaDock.bootPageWidgets === 'function') {
       window.MySifaDock.bootPageWidgets();
     }
-    await loadList();
+    await Promise.all([loadList(), loadCarnet(), loadProduits()]);
     render();
   } catch(e) {
     location.href = '/?next=/ao';

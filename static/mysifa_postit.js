@@ -28,6 +28,8 @@
   const POSTIT_WIDTH = 260;
   const POSTIT_DOCK_GAP = 10;
   const POSTIT_ANIM_MS = 360;
+  /** Décalage vertical supplémentaire des post-its masqués (≈ moitié de l'en-tête). */
+  const POSTIT_HIDDEN_LOWER_EXTRA = 21;
   /** Au-dessus des FAB dock actifs (8025) pour que les pastilles restent cliquables. */
   const POSTIT_COLOR_PALETTE_Z = 8030;
 
@@ -116,7 +118,8 @@
       var btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'postit-color-swatch';
-      btn.style.background = hex;
+      btn.style.setProperty('--postit-swatch-bg', hex);
+      btn.style.backgroundColor = hex;
       btn.title = hex;
       btn.dataset.color = hex;
       btn.addEventListener('mousedown', function (e) {
@@ -356,7 +359,12 @@
     }
     var vw = window.innerWidth || document.documentElement.clientWidth;
     var vh = window.innerHeight || document.documentElement.clientHeight;
-    return { left: 16, right: vw - 220, top: vh - 66, width: vw - 236 };
+    return {
+      left: 16,
+      right: vw - 220,
+      top: vh - 66 - POSTIT_HIDDEN_LOWER_EXTRA,
+      width: vw - 236,
+    };
   }
 
   function layoutHiddenPostits() {
@@ -372,7 +380,7 @@
     var band = getHiddenPostitBand();
     var bandLeft = band.left;
     var bandRight = band.right;
-    var top = band.top;
+    var top = band.top + POSTIT_HIDDEN_LOWER_EXTRA;
     var left = bandLeft;
     hidden.forEach(function (el) {
       var w = el.offsetWidth || POSTIT_WIDTH;

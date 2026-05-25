@@ -2221,6 +2221,40 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 68, "expe_delais")
 
+    # v69 — MyAO : carnet fournisseurs récurrents
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=69 LIMIT 1").fetchone():
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS ao_carnet_fournisseurs (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                nom         TEXT NOT NULL,
+                email       TEXT NOT NULL,
+                pays        TEXT,
+                notes       TEXT,
+                created_at  TEXT NOT NULL
+            )
+            """
+        )
+        conn.commit()
+        _record_schema_migration(conn, 69, "ao_carnet_fournisseurs")
+
+    # v70 — MyAO : catalogue produits récurrents
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=70 LIMIT 1").fetchone():
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS ao_produits (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                ref         TEXT NOT NULL,
+                designation TEXT NOT NULL,
+                unite       TEXT DEFAULT 'unité',
+                notes       TEXT,
+                created_at  TEXT NOT NULL
+            )
+            """
+        )
+        conn.commit()
+        _record_schema_migration(conn, 70, "ao_produits")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,
