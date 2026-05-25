@@ -357,7 +357,10 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='profil';</script>
+<link rel="stylesheet" href="/static/mysifa_dock.css">
+<link rel="stylesheet" href="/static/mysifa_postit.css">
 <script src="/static/mysifa_dock.js"></script>
+<script src="/static/mysifa_postit.js"></script>
 <script src="/static/chat_widget.js"></script>
 <script src="/static/chat_widget_v2.js"></script>
 <script>
@@ -902,6 +905,13 @@ document.getElementById('btn-logout').onclick=async()=>{
     ME=await api('/api/auth/me');
     if(ME&&window.MySifaTheme)MySifaTheme.mergeFromUser(ME);
     else if(ME&&window.MySifaCalendar)MySifaCalendar.mergeFromUser(ME);
+    if(ME&&ME.id){
+      window.__MYSIFA_UID__=ME.id;
+      window.__MYSIFA_NOM__=ME.nom||'';
+      window.__MYSIFA_ROLE__=ME.role||'';
+      window.__MYSIFA_USER__={nom:ME.nom||'',role:ME.role||''};
+    }
+    if(window.MySifaDock&&typeof window.MySifaDock.bootPageWidgets==='function')window.MySifaDock.bootPageWidgets();
     syncThemeBtn();
     updateUserChip();
     renderInfo();

@@ -726,7 +726,10 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 </div>
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='settings';</script>
+<link rel="stylesheet" href="/static/mysifa_dock.css">
+<link rel="stylesheet" href="/static/mysifa_postit.css">
 <script src="/static/mysifa_dock.js"></script>
+<script src="/static/mysifa_postit.js"></script>
 <script src="/static/chat_widget.js"></script>
 <script src="/static/chat_widget_v2.js"></script>
 <script>
@@ -902,6 +905,12 @@ async function refreshSidebarUser() {
   if (!me || typeof me !== 'object') return;
   if (window.MySifaTheme) MySifaTheme.mergeFromUser(me);
   window.__meUser = me;
+  if (me.id) {
+    window.__MYSIFA_UID__ = me.id;
+    window.__MYSIFA_NOM__ = me.nom || '';
+    window.__MYSIFA_ROLE__ = me.role || '';
+    window.__MYSIFA_USER__ = { nom: me.nom || '', role: me.role || '' };
+  }
   const chip = document.getElementById('sb-user-chip');
   if (chip && window.MySifaUserChip) {
     MySifaUserChip.fill(chip, me, {
@@ -1960,6 +1969,9 @@ document.getElementById('fh-four').addEventListener('change', async function() {
     fillRoleSelect();
     fillRoleFilterSelect();
     await refreshSidebarUser();
+    if (window.MySifaDock && typeof window.MySifaDock.bootPageWidgets === 'function') {
+      window.MySifaDock.bootPageWidgets();
+    }
     initSupportSidebar();
     await loadFilters();
     await loadMachines();

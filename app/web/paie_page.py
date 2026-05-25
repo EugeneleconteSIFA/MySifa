@@ -372,7 +372,10 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='paie';</script>
+<link rel="stylesheet" href="/static/mysifa_dock.css">
+<link rel="stylesheet" href="/static/mysifa_postit.css">
 <script src="/static/mysifa_dock.js"></script>
+<script src="/static/mysifa_postit.js"></script>
 <script src="/static/chat_widget.js"></script>
 <script src="/static/chat_widget_v2.js"></script>
 <script>
@@ -891,6 +894,15 @@ async function initApp() {
   updatePeriodLabel();
   try {
     _meUser = await api('/api/auth/me');
+    if (_meUser && _meUser.id) {
+      window.__MYSIFA_UID__ = _meUser.id;
+      window.__MYSIFA_NOM__ = _meUser.nom || '';
+      window.__MYSIFA_ROLE__ = _meUser.role || '';
+      window.__MYSIFA_USER__ = { nom: _meUser.nom || '', role: _meUser.role || '' };
+    }
+    if (window.MySifaDock && typeof window.MySifaDock.bootPageWidgets === 'function') {
+      window.MySifaDock.bootPageWidgets();
+    }
   } catch {}
 
   try {

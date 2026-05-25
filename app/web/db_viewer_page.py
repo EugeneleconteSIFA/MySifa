@@ -314,7 +314,10 @@ body.light .user-chip:hover{{background:rgba(8,145,178,.12)}}
 <script src="/static/mysifa_favicon_badge.js"></script>
 <script>window.__MYSIFA_APP__='db';</script>
 <link rel="stylesheet" href="/static/mysifa_landscape.css">
+<link rel="stylesheet" href="/static/mysifa_dock.css">
+<link rel="stylesheet" href="/static/mysifa_postit.css">
 <script src="/static/mysifa_dock.js"></script>
+<script src="/static/mysifa_postit.js"></script>
 <script src="/static/chat_widget.js"></script>
 <script src="/static/chat_widget_v2.js"></script>
 <script src="/static/mysifa_landscape.js"></script>
@@ -323,7 +326,8 @@ body.light .user-chip:hover{{background:rgba(8,145,178,.12)}}
 (function(){{
   function bootChatDock(){{
     if(window._CW&&typeof window._CW.syncUser==='function')window._CW.syncUser();
-    if(window.MySifaDock&&typeof window.MySifaDock.layout==='function')window.MySifaDock.layout();
+    if(window.MySifaDock&&typeof window.MySifaDock.bootPageWidgets==='function')window.MySifaDock.bootPageWidgets();
+    else if(window.MySifaDock&&typeof window.MySifaDock.layout==='function')window.MySifaDock.layout();
   }}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bootChatDock);
   else bootChatDock();

@@ -503,7 +503,10 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='planning';</script>
 <link rel="stylesheet" href="/static/mysifa_landscape.css">
+<link rel="stylesheet" href="/static/mysifa_dock.css">
+<link rel="stylesheet" href="/static/mysifa_postit.css">
 <script src="/static/mysifa_dock.js"></script>
+<script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/mysifa_ai_chat.js"></script>
 <script src="/static/chat_widget.js"></script>

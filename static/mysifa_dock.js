@@ -640,6 +640,8 @@
     if (app === 'expe' && typeof window._expe_carte_mount === 'function') window._expe_carte_mount();
     else if (typeof window._expe_carte_unmount === 'function') window._expe_carte_unmount();
     if (typeof window.initAiChatWidget === 'function') window.initAiChatWidget();
+    if (typeof window.initPostitDock === 'function') window.initPostitDock();
+    if (typeof window.initPostitsApp === 'function') window.initPostitsApp();
     layout();
   }
 

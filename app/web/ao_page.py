@@ -28,6 +28,7 @@ def ao_page(request: Request):
     html = AO_HTML.replace("__V_LABEL__", f"v{APP_VERSION}")
     html = html.replace("__BASE_URL__", json.dumps(BASE_URL))
     html = html.replace("__USER_JSON__", json.dumps({
+        "id": user.get("id"),
         "nom": user.get("nom"),
         "email": user.get("email"),
         "role": user.get("role"),
@@ -162,6 +163,15 @@ label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bot
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
 <script src="/static/support_widget.js"></script>
+<link rel="stylesheet" href="/static/mysifa_dock.css">
+<link rel="stylesheet" href="/static/mysifa_postit.css">
+<link rel="stylesheet" href="/static/mysifa_ai_chat.css">
+<script>window.__MYSIFA_APP__='ao';</script>
+<script src="/static/mysifa_dock.js"></script>
+<script src="/static/mysifa_postit.js"></script>
+<script src="/static/mysifa_ai_chat.js"></script>
+<script src="/static/chat_widget.js"></script>
+<script src="/static/chat_widget_v2.js"></script>
 <script>
 const BASE_URL = __BASE_URL__;
 const S = {
@@ -865,7 +875,18 @@ function render() {
 (async function init() {
   try {
     const me = await api('/api/auth/me');
-    if (me && me.user) S.user = me.user;
+    if (me && me.id) S.user = me;
+    const u = S.user || {};
+    if (u.id) {
+      window.__MYSIFA_UID__ = u.id;
+      window.__MYSIFA_NOM__ = u.nom || '';
+      window.__MYSIFA_ROLE__ = u.role || '';
+      window.__MYSIFA_USER__ = { nom: u.nom || '', role: u.role || '' };
+    }
+    if (window._CW && typeof window._CW.syncUser === 'function') window._CW.syncUser();
+    if (window.MySifaDock && typeof window.MySifaDock.bootPageWidgets === 'function') {
+      window.MySifaDock.bootPageWidgets();
+    }
     await loadList();
     render();
   } catch(e) {

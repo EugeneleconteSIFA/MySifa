@@ -1,0 +1,160 @@
+/* MySifa — Post-its (portail + pages applicatives si multi-page, desktop >= 1024px) */
+.postit-layer{display:none}
+@media (min-width:1024px){.postit-layer{display:block}}
+.postit{
+  position:fixed;
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:12px;
+  width:260px;
+  min-height:120px;
+  box-shadow:0 4px 24px rgba(0,0,0,0.18);
+  z-index:200;
+  display:flex;
+  flex-direction:column;
+  user-select:none;
+}
+.postit[data-type="today"] .postit-header{border-top:3px solid var(--accent)}
+.postit[data-type="someday"] .postit-header{border-top:3px solid var(--warn)}
+.postit-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:10px 12px 8px;
+  cursor:grab;
+  border-radius:12px 12px 0 0;
+  background:var(--card);
+  gap:8px;
+}
+.postit-header:active{cursor:grabbing}
+.postit-type-label{
+  font-size:10px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:0.5px;
+}
+.postit[data-type="today"] .postit-type-label{color:var(--accent)}
+.postit[data-type="someday"] .postit-type-label{color:var(--warn)}
+.postit-title{
+  flex:1;
+  background:transparent;
+  border:none;
+  color:var(--text);
+  font-size:13px;
+  font-weight:600;
+  outline:none;
+  min-width:0;
+}
+.postit-body{padding:4px 12px 8px;flex:1}
+.postit-task{display:flex;align-items:flex-start;gap:8px;padding:4px 0}
+.postit-task input[type="checkbox"]{
+  margin-top:2px;
+  accent-color:var(--accent);
+  flex-shrink:0;
+  cursor:pointer;
+}
+.postit-task-text{
+  font-size:13px;
+  color:var(--text);
+  flex:1;
+  background:transparent;
+  border:none;
+  outline:none;
+  resize:none;
+  line-height:1.5;
+  padding:0;
+  font-family:inherit;
+}
+.postit-task.done .postit-task-text{
+  text-decoration:line-through;
+  color:var(--muted);
+}
+.postit-footer{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  gap:4px 8px;
+  padding:6px 12px 10px;
+  border-top:1px solid var(--border);
+}
+.postit-clear-btn{
+  font-size:11px;
+  color:var(--muted);
+  background:none;
+  border:none;
+  cursor:pointer;
+  padding:2px 4px;
+}
+.postit-clear-btn:hover{color:var(--danger)}
+.postit-add-task-btn{
+  font-size:11px;
+  color:var(--accent);
+  background:none;
+  border:none;
+  cursor:pointer;
+  padding:2px 4px;
+  font-weight:600;
+}
+.postit-multipage-btn{
+  font-size:11px;
+  color:var(--muted);
+  background:none;
+  border:none;
+  cursor:pointer;
+  padding:2px 4px;
+  font-weight:600;
+  white-space:nowrap;
+}
+.postit-multipage-btn:hover{color:var(--text2)}
+.postit-multipage-btn.on{color:var(--accent)}
+.postit-multipage-btn.on .postit-multipage-label{color:var(--accent)}
+.postit-multipage-label{font-weight:500;color:var(--muted)}
+.postit-delete-btn{
+  background:none;
+  border:none;
+  color:var(--muted);
+  cursor:pointer;
+  font-size:16px;
+  line-height:1;
+  padding:0 2px;
+}
+.postit-delete-btn:hover{color:var(--danger)}
+
+#postit-dock-root{display:none}
+#postit-dock-menu{
+  position:fixed;
+  display:none;
+  flex-direction:column;
+  gap:4px;
+  min-width:220px;
+  padding:8px;
+  z-index:8004;
+}
+#postit-dock-menu.open{display:flex}
+.postit-dock-menu-btn{
+  padding:10px 12px;
+  border-radius:10px;
+  border:none;
+  background:transparent;
+  color:var(--text);
+  font-size:12px;
+  font-weight:600;
+  cursor:pointer;
+  text-align:left;
+  font-family:inherit;
+  transition:background .15s,color .15s;
+}
+.postit-dock-menu-btn:hover{background:var(--accent-bg);color:var(--accent)}
+.postit-dock-menu-btn.someday::before,
+.postit-dock-menu-btn.today::before{
+  content:'';
+  display:inline-block;
+  width:6px;height:6px;
+  border-radius:50%;
+  margin-right:8px;
+  vertical-align:middle;
+  position:relative;top:-1px;
+}
+.postit-dock-menu-btn.someday::before{background:var(--warn)}
+.postit-dock-menu-btn.today::before{background:var(--accent)}

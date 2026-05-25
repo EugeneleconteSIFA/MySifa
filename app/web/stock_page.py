@@ -58,6 +58,7 @@ STOCK_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_ai_chat.css">
 <link rel="stylesheet" href="/static/mysifa_dock.css">
+<link rel="stylesheet" href="/static/mysifa_postit.css">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -926,6 +927,7 @@ body.light .recep-fourn-sel:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='stock';</script>
 <script src="/static/mysifa_dock.js"></script>
+<script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/chat_widget.js"></script>
 <script src="/static/chat_widget_v2.js"></script>
@@ -5329,7 +5331,8 @@ async function init() {
   window.__MYSIFA_USER__={nom:user.nom||'',role:user.role||''};
   if(window._CW&&typeof window._CW.ensureReady==='function')await window._CW.ensureReady();
   else if(window._CW&&typeof window._CW.syncUser==='function')window._CW.syncUser();
-  if(typeof initAiChatWidget==='function')initAiChatWidget();
+  if(window.MySifaDock&&typeof window.MySifaDock.bootPageWidgets==='function')window.MySifaDock.bootPageWidgets();
+  else if(typeof initAiChatWidget==='function')initAiChatWidget();
   S.stockReadOnly = (user.role === 'commercial');
   // Fabrication : accès restreint à l'onglet traça uniquement
   S.tracaOnly = (user.role === 'fabrication');
