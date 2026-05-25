@@ -1197,6 +1197,7 @@ function icon(name,size=16){
     'settings': '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
     'home': '<path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/><path d="M10 21v-6h4v6"/>',
     'layers': '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
+    'file': '<path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/>',
     'arrow-up': '<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>',
     'arrow-down': '<line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>',
     'copy': '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 0 2 2v1"/>',
@@ -1439,6 +1440,7 @@ function fracToTimeInput(f){
 function isHHMM(s){return /^\d{2}:\d{2}$/.test(String(s||"").trim());}
 
 function isAdmin(u){return u&&(u.role==="direction"||u.role==="administration"||u.role==="superadmin");}
+function canAccessOfTab(){return isAdmin(ME);}
 function isComptaUser(u){return !!(u&&u.role==="comptabilite");}
 function canPlanningNav(u){return !!(u&&u.app_access&&u.app_access.planning);}
 function roleLabel(role){const R={direction:"Direction",administration:"Administration",fabrication:"Fabrication",logistique:"Logistique",comptabilite:"Comptabilité",expedition:"Expédition",commercial:"Commercial",superadmin:"Super admin"};return R[role]||role||"";}
@@ -1467,6 +1469,7 @@ function renderSidebar(){
       {key:"production",label:"Production",icon:"wrench",href:"/prod?page=production"},
       {key:"traceabilite",label:"Traçabilité",icon:"layers",href:"/prod?page=traceabilite"},
       ...(admin?[{key:"rentabilite",label:"Rentabilité",icon:"trending-up",href:"/prod?page=rentabilite"}]:[]),
+      ...(canAccessOfTab()?[{key:"of",label:"OF",icon:"file",href:"/prod?page=of"}]:[]),
     ]),
   ];
   const isLight=document.body.classList.contains("light");

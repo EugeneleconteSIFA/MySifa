@@ -176,6 +176,136 @@ async def create_ao(request: Request):
     return ao
 
 
+# ─── Carnet fournisseurs (routes statiques avant /{ao_id}) ───────
+
+@router.get("/carnet-fournisseurs")
+def list_carnet(request: Request):
+    _require_ao(request)
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM ao_carnet_fournisseurs ORDER BY nom COLLATE NOCASE"
+        ).fetchall()
+    return [_row_dict(r) for r in rows]
+
+
+@router.post("/carnet-fournisseurs")
+async def create_carnet(request: Request):
+    _require_ao(request)
+    body = await request.json()
+    nom = (body.get("nom") or "").strip()
+    email = (body.get("email") or "").strip().lower()
+    if not nom or not email:
+        raise HTTPException(status_code=400, detail="Nom et email obligatoires.")
+    pays = (body.get("pays") or "").strip() or None
+    notes = (body.get("notes") or "").strip() or None
+    now = _now_paris_iso()
+    with get_db() as conn:
+        cur = conn.execute(
+            "INSERT INTO ao_carnet_fournisseurs (nom, email, pays, notes, created_at) VALUES (?,?,?,?,?)",
+            (nom, email, pays, notes, now),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM ao_carnet_fournisseurs WHERE id=?", (cur.lastrowid,)).fetchone()
+    return _row_dict(row)
+
+
+@router.put("/carnet-fournisseurs/{entry_id}")
+async def update_carnet(request: Request, entry_id: int):
+    _require_ao(request)
+    body = await request.json()
+    nom = (body.get("nom") or "").strip()
+    email = (body.get("email") or "").strip().lower()
+    if not nom or not email:
+        raise HTTPException(status_code=400, detail="Nom et email obligatoires.")
+    with get_db() as conn:
+        cur = conn.execute(
+            "UPDATE ao_carnet_fournisseurs SET nom=?, email=?, pays=?, notes=? WHERE id=?",
+            (nom, email, (body.get("pays") or "").strip() or None,
+             (body.get("notes") or "").strip() or None, entry_id),
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Entrée introuvable")
+        conn.commit()
+        row = conn.execute("SELECT * FROM ao_carnet_fournisseurs WHERE id=?", (entry_id,)).fetchone()
+    return _row_dict(row)
+
+
+@router.delete("/carnet-fournisseurs/{entry_id}")
+def delete_carnet(request: Request, entry_id: int):
+    _require_ao(request)
+    with get_db() as conn:
+        cur = conn.execute("DELETE FROM ao_carnet_fournisseurs WHERE id=?", (entry_id,))
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Entrée introuvable")
+        conn.commit()
+    return {"ok": True}
+
+
+# ─── Catalogue produits (routes statiques avant /{ao_id}) ─────────
+
+@router.get("/produits")
+def list_produits(request: Request):
+    _require_ao(request)
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM ao_produits ORDER BY ref COLLATE NOCASE"
+        ).fetchall()
+    return [_row_dict(r) for r in rows]
+
+
+@router.post("/produits")
+async def create_produit(request: Request):
+    _require_ao(request)
+    body = await request.json()
+    ref = (body.get("ref") or "").strip()
+    designation = (body.get("designation") or "").strip()
+    if not ref or not designation:
+        raise HTTPException(status_code=400, detail="Référence et désignation obligatoires.")
+    unite = (body.get("unite") or "unité").strip() or "unité"
+    notes = (body.get("notes") or "").strip() or None
+    now = _now_paris_iso()
+    with get_db() as conn:
+        cur = conn.execute(
+            "INSERT INTO ao_produits (ref, designation, unite, notes, created_at) VALUES (?,?,?,?,?)",
+            (ref, designation, unite, notes, now),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM ao_produits WHERE id=?", (cur.lastrowid,)).fetchone()
+    return _row_dict(row)
+
+
+@router.put("/produits/{produit_id}")
+async def update_produit(request: Request, produit_id: int):
+    _require_ao(request)
+    body = await request.json()
+    ref = (body.get("ref") or "").strip()
+    designation = (body.get("designation") or "").strip()
+    if not ref or not designation:
+        raise HTTPException(status_code=400, detail="Référence et désignation obligatoires.")
+    with get_db() as conn:
+        cur = conn.execute(
+            "UPDATE ao_produits SET ref=?, designation=?, unite=?, notes=? WHERE id=?",
+            (ref, designation, (body.get("unite") or "unité").strip() or "unité",
+             (body.get("notes") or "").strip() or None, produit_id),
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Produit introuvable")
+        conn.commit()
+        row = conn.execute("SELECT * FROM ao_produits WHERE id=?", (produit_id,)).fetchone()
+    return _row_dict(row)
+
+
+@router.delete("/produits/{produit_id}")
+def delete_produit(request: Request, produit_id: int):
+    _require_ao(request)
+    with get_db() as conn:
+        cur = conn.execute("DELETE FROM ao_produits WHERE id=?", (produit_id,))
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Produit introuvable")
+        conn.commit()
+    return {"ok": True}
+
+
 # ─── Détail ──────────────────────────────────────────────────────
 
 @router.get("/{ao_id}")
@@ -669,136 +799,6 @@ def comparaison_ao(request: Request, ao_id: int):
             })
 
     return {"lignes": lignes_out, "fournisseurs": fournisseurs}
-
-
-# ─── Carnet fournisseurs ─────────────────────────────────────────
-
-@router.get("/carnet-fournisseurs")
-def list_carnet(request: Request):
-    _require_ao(request)
-    with get_db() as conn:
-        rows = conn.execute(
-            "SELECT * FROM ao_carnet_fournisseurs ORDER BY nom COLLATE NOCASE"
-        ).fetchall()
-    return [_row_dict(r) for r in rows]
-
-
-@router.post("/carnet-fournisseurs")
-async def create_carnet(request: Request):
-    _require_ao(request)
-    body = await request.json()
-    nom = (body.get("nom") or "").strip()
-    email = (body.get("email") or "").strip().lower()
-    if not nom or not email:
-        raise HTTPException(status_code=400, detail="Nom et email obligatoires.")
-    pays = (body.get("pays") or "").strip() or None
-    notes = (body.get("notes") or "").strip() or None
-    now = _now_paris_iso()
-    with get_db() as conn:
-        cur = conn.execute(
-            "INSERT INTO ao_carnet_fournisseurs (nom, email, pays, notes, created_at) VALUES (?,?,?,?,?)",
-            (nom, email, pays, notes, now),
-        )
-        conn.commit()
-        row = conn.execute("SELECT * FROM ao_carnet_fournisseurs WHERE id=?", (cur.lastrowid,)).fetchone()
-    return _row_dict(row)
-
-
-@router.put("/carnet-fournisseurs/{entry_id}")
-async def update_carnet(request: Request, entry_id: int):
-    _require_ao(request)
-    body = await request.json()
-    nom = (body.get("nom") or "").strip()
-    email = (body.get("email") or "").strip().lower()
-    if not nom or not email:
-        raise HTTPException(status_code=400, detail="Nom et email obligatoires.")
-    with get_db() as conn:
-        cur = conn.execute(
-            "UPDATE ao_carnet_fournisseurs SET nom=?, email=?, pays=?, notes=? WHERE id=?",
-            (nom, email, (body.get("pays") or "").strip() or None,
-             (body.get("notes") or "").strip() or None, entry_id),
-        )
-        if cur.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Entrée introuvable")
-        conn.commit()
-        row = conn.execute("SELECT * FROM ao_carnet_fournisseurs WHERE id=?", (entry_id,)).fetchone()
-    return _row_dict(row)
-
-
-@router.delete("/carnet-fournisseurs/{entry_id}")
-def delete_carnet(request: Request, entry_id: int):
-    _require_ao(request)
-    with get_db() as conn:
-        cur = conn.execute("DELETE FROM ao_carnet_fournisseurs WHERE id=?", (entry_id,))
-        if cur.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Entrée introuvable")
-        conn.commit()
-    return {"ok": True}
-
-
-# ─── Catalogue produits ──────────────────────────────────────────
-
-@router.get("/produits")
-def list_produits(request: Request):
-    _require_ao(request)
-    with get_db() as conn:
-        rows = conn.execute(
-            "SELECT * FROM ao_produits ORDER BY ref COLLATE NOCASE"
-        ).fetchall()
-    return [_row_dict(r) for r in rows]
-
-
-@router.post("/produits")
-async def create_produit(request: Request):
-    _require_ao(request)
-    body = await request.json()
-    ref = (body.get("ref") or "").strip()
-    designation = (body.get("designation") or "").strip()
-    if not ref or not designation:
-        raise HTTPException(status_code=400, detail="Référence et désignation obligatoires.")
-    unite = (body.get("unite") or "unité").strip() or "unité"
-    notes = (body.get("notes") or "").strip() or None
-    now = _now_paris_iso()
-    with get_db() as conn:
-        cur = conn.execute(
-            "INSERT INTO ao_produits (ref, designation, unite, notes, created_at) VALUES (?,?,?,?,?)",
-            (ref, designation, unite, notes, now),
-        )
-        conn.commit()
-        row = conn.execute("SELECT * FROM ao_produits WHERE id=?", (cur.lastrowid,)).fetchone()
-    return _row_dict(row)
-
-
-@router.put("/produits/{produit_id}")
-async def update_produit(request: Request, produit_id: int):
-    _require_ao(request)
-    body = await request.json()
-    ref = (body.get("ref") or "").strip()
-    designation = (body.get("designation") or "").strip()
-    if not ref or not designation:
-        raise HTTPException(status_code=400, detail="Référence et désignation obligatoires.")
-    with get_db() as conn:
-        cur = conn.execute(
-            "UPDATE ao_produits SET ref=?, designation=?, unite=?, notes=? WHERE id=?",
-            (ref, designation, (body.get("unite") or "unité").strip() or "unité",
-             (body.get("notes") or "").strip() or None, produit_id),
-        )
-        if cur.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Produit introuvable")
-        conn.commit()
-        row = conn.execute("SELECT * FROM ao_produits WHERE id=?", (produit_id,)).fetchone()
-    return _row_dict(row)
-
-
-@router.delete("/produits/{produit_id}")
-def delete_produit(request: Request, produit_id: int):
-    _require_ao(request)
-    with get_db() as conn:
-        cur = conn.execute("DELETE FROM ao_produits WHERE id=?", (produit_id,))
-        if cur.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Produit introuvable")
-        conn.commit()
-    return {"ok": True}
 
 
 @router.get("/{ao_id}/non-lus")
