@@ -107,18 +107,11 @@
     );
   }
 
-  function ensurePostitColorPalette() {
-    bindPostitColorPaletteDocClose();
-    var pal = document.getElementById('postit-color-palette');
-    if (pal) {
-      pal.style.zIndex = String(POSTIT_COLOR_PALETTE_Z);
-      return pal;
-    }
-    pal = document.createElement('div');
-    pal.id = 'postit-color-palette';
-    pal.style.zIndex = String(POSTIT_COLOR_PALETTE_Z);
-    pal.setAttribute('role', 'menu');
-    pal.setAttribute('aria-label', 'Couleur du post-it');
+  function fillPostitColorPalette(pal) {
+    if (!pal) return;
+    pal.querySelectorAll('.postit-color-swatch').forEach(function (btn) {
+      btn.remove();
+    });
     POSTIT_COLOR_PALETTE.forEach(function (hex) {
       var btn = document.createElement('button');
       btn.type = 'button';
@@ -136,8 +129,22 @@
         if (pid) setPostitColor(pid, hex);
         closePostitColorPalette();
       });
+      pal.appendChild(btn);
     });
-    document.body.appendChild(pal);
+  }
+
+  function ensurePostitColorPalette() {
+    bindPostitColorPaletteDocClose();
+    var pal = document.getElementById('postit-color-palette');
+    if (!pal) {
+      pal = document.createElement('div');
+      pal.id = 'postit-color-palette';
+      pal.setAttribute('role', 'menu');
+      pal.setAttribute('aria-label', 'Couleur du post-it');
+      document.body.appendChild(pal);
+    }
+    pal.style.zIndex = String(POSTIT_COLOR_PALETTE_Z);
+    if (!pal.querySelector('.postit-color-swatch')) fillPostitColorPalette(pal);
     return pal;
   }
 

@@ -568,9 +568,15 @@ body.light .mp-search-wrap:focus-within{
   display:flex;align-items:center;justify-content:center;gap:5px;border:1px solid transparent;
   transition:border-color .15s,opacity .15s,filter .15s}
 .action-bar .mp-act-btn:hover{filter:brightness(1.05)}
-.mp-act-btn{border:none;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+.action-bar .mp-act-btn.mp-act-entree:hover{border-color:var(--success)}
+.action-bar .mp-act-btn.mp-act-sortie:hover{border-color:var(--danger)}
+.mp-act-btn{border:1px solid transparent;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:600;cursor:pointer;
+  font-family:inherit;transition:border-color .15s,opacity .15s,filter .15s}
+.mp-act-btn:hover{filter:brightness(1.05)}
 .mp-act-entree{background:color-mix(in srgb,var(--success) 15%,transparent);color:var(--success)}
+.mp-act-entree:hover{border-color:var(--success)}
 .mp-act-sortie{background:color-mix(in srgb,var(--danger) 15%,transparent);color:var(--danger)}
+.mp-act-sortie:hover{border-color:var(--danger)}
 .mp-act-edit{background:color-mix(in srgb,var(--muted) 18%,transparent);color:var(--text2)}
 .mp-act-ajust{background:color-mix(in srgb,var(--warn) 15%,transparent);color:var(--warn)}
 .mp-act-transf{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
