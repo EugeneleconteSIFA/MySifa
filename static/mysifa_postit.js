@@ -94,17 +94,17 @@
   function bindPostitColorPaletteDocClose() {
     if (window._postitColorPaletteDocBound) return;
     window._postitColorPaletteDocBound = true;
-    document.addEventListener('click', function (e) {
-      var pal = document.getElementById('postit-color-palette');
-      if (
-        pal &&
-        pal.classList.contains('open') &&
-        !pal.contains(e.target) &&
-        !e.target.closest('.postit-color-dot')
-      ) {
+    /* capture:true — avant le mousedown sur la pastille, sans fermer la palette en cours d'ouverture */
+    document.addEventListener(
+      'mousedown',
+      function (e) {
+        var pal = document.getElementById('postit-color-palette');
+        if (!pal || !pal.classList.contains('open')) return;
+        if (pal.contains(e.target) || e.target.closest('.postit-color-dot')) return;
         closePostitColorPalette();
-      }
-    });
+      },
+      true
+    );
   }
 
   function ensurePostitColorPalette() {
@@ -145,9 +145,49 @@
     var pal = document.getElementById('postit-color-palette');
     if (pal) {
       pal.classList.remove('open');
+      pal.style.display = '';
       pal.dataset.postitId = '';
     }
     _postitColorPaletteOpen = null;
+  }
+
+  function postitColorPaletteIsOpen(id) {
+    return _postitColorPaletteOpen != null && Number(_postitColorPaletteOpen) === Number(id);
+  }
+
+  function openPostitColorPalette(id, dot) {
+    var nid = Number(id);
+    if (!nid) return;
+    if (postitColorPaletteIsOpen(nid)) {
+      closePostitColorPalette();
+      return;
+    }
+    closePostitDockMenu();
+    if (!dot) {
+      var el = document.querySelector('.postit[data-id="' + nid + '"]');
+      dot = el && el.querySelector('.postit-color-dot');
+    }
+    if (!dot) return;
+    var p = postitFindById(nid);
+    var pal = ensurePostitColorPalette();
+    pal.dataset.postitId = String(nid);
+    updatePostitColorPaletteActive(postitResolveColor(p));
+    positionPostitColorPalette(dot);
+    document.body.appendChild(pal);
+    pal.classList.add('open');
+    pal.style.display = 'flex';
+    _postitColorPaletteOpen = nid;
+  }
+
+  function setupPostitColorDot(el, id) {
+    var dot = el.querySelector('.postit-color-dot');
+    if (!dot || dot._postitColorBound) return;
+    dot._postitColorBound = true;
+    dot.addEventListener('mousedown', function (e) {
+      e.stopPropagation();
+      e.preventDefault();
+      openPostitColorPalette(id, dot);
+    });
   }
 
   function positionPostitColorPalette(dot) {
@@ -173,27 +213,13 @@
   }
 
   function togglePostitColorPalette(e, id) {
-    e.stopPropagation();
-    e.preventDefault();
-    if (_postitColorPaletteOpen === id) {
-      closePostitColorPalette();
-      return;
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
     }
-    closePostitDockMenu();
     var el = document.querySelector('.postit[data-id="' + id + '"]');
-    if (!el) return;
-    var dot = el.querySelector('.postit-color-dot');
-    if (!dot) return;
-    var p = PostitState.items.find(function (x) {
-      return x.id === id;
-    });
-    var color = postitResolveColor(p);
-    var pal = ensurePostitColorPalette();
-    pal.dataset.postitId = String(id);
-    updatePostitColorPaletteActive(color);
-    positionPostitColorPalette(dot);
-    pal.classList.add('open');
-    _postitColorPaletteOpen = id;
+    var dot = el && el.querySelector('.postit-color-dot');
+    openPostitColorPalette(id, dot);
   }
 
   async function setPostitColor(id, color) {
@@ -470,9 +496,7 @@
       '<div class="postit-header" onmousedown="startPostitDrag(event, ' +
       p.id +
       ')">' +
-      '<button type="button" class="postit-color-dot" onmousedown="event.stopPropagation()" onclick="event.stopPropagation(); togglePostitColorPalette(event, ' +
-      p.id +
-      ')" title="Changer la couleur" aria-label="Changer la couleur"></button>' +
+      '<button type="button" class="postit-color-dot" title="Changer la couleur" aria-label="Changer la couleur" aria-haspopup="menu"></button>' +
       '<input class="postit-title" value="' +
       postitEscAttr(p.title || '') +
       '" onchange="renamePostit(' +
@@ -518,6 +542,7 @@
         : '') +
       '</div>';
     applyPostitColor(el, postitResolveColor(p));
+    setupPostitColorDot(el, p.id);
     setupPostitInteractions(el, p);
     return el;
   }
@@ -920,6 +945,7 @@
   window.startPostitDrag = startPostitDrag;
   window.togglePostitHidden = togglePostitHidden;
   window.togglePostitColorPalette = togglePostitColorPalette;
+  window.openPostitColorPalette = openPostitColorPalette;
   window.setPostitColor = setPostitColor;
   window.closePostitColorPalette = closePostitColorPalette;
   window.restorePostitFromHidden = restorePostitFromHidden;
@@ -939,4 +965,6 @@
     document.removeEventListener('mouseup', onPostitDragEnd);
     _postitDrag = null;
   };
+
+  bindPostitColorPaletteDocClose();
 })();

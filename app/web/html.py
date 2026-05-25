@@ -42,6 +42,7 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
   --muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,0.12);
   --filter-input-bg:#1c2838;
   --success:#34d399;--warn:#fbbf24;--danger:#f87171;
+  --pf-entree:#059669;--pf-sortie:#dc2626;
   --c1:#22d3ee;--c2:#a78bfa;--c3:#34d399;--c4:#fbbf24;--c5:#f87171
 }
 body.light{
@@ -49,6 +50,7 @@ body.light{
   --muted:#94a3b8;--accent:#0891b2;--accent-bg:rgba(8,145,178,0.10);
   --filter-input-bg:#ffffff;
   --success:#059669;--warn:#d97706;--danger:#dc2626;
+  --pf-entree:#047857;--pf-sortie:#b91c1c;
   --c1:#0891b2;--c2:#7c3aed;--c3:#059669;--c4:#d97706;--c5:#dc2626
 }
 body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
@@ -1528,6 +1530,8 @@ body.light .portal-logout:hover:last-of-type{text-shadow:0 0 12px rgba(220,38,38
   font-family:monospace;margin-left:4px}
 .mvt-type-entree{color:var(--success);font-weight:700}
 .mvt-type-sortie{color:var(--danger);font-weight:700}
+.mvt-type-pf-entree{color:var(--pf-entree);font-weight:700}
+.mvt-type-pf-sortie{color:var(--pf-sortie);font-weight:700}
 .mvt-type-inventaire{color:var(--c2);font-weight:700}
 .search-bar{width:100%;background:var(--bg);border:1px solid var(--border);
   border-radius:10px;padding:10px 16px;color:var(--text);font-size:14px;
@@ -1553,6 +1557,10 @@ body.light .portal-logout:hover:last-of-type{text-shadow:0 0 12px rgba(220,38,38
   border-color:var(--success)}
 .mvt-btn.active-sortie{background:rgba(248,113,113,.15);color:var(--danger);
   border-color:var(--danger)}
+.mvt-btn.active-pf-entree{background:color-mix(in srgb,var(--pf-entree) 18%,transparent);color:var(--pf-entree);
+  border-color:var(--pf-entree)}
+.mvt-btn.active-pf-sortie{background:color-mix(in srgb,var(--pf-sortie) 18%,transparent);color:var(--pf-sortie);
+  border-color:var(--pf-sortie)}
 .mvt-btn.active-inventaire{background:rgba(167,139,250,.15);color:var(--c2);
   border-color:var(--c2)}
 .stock-search-row{display:flex;gap:10px;align-items:stretch;margin-bottom:16px;flex-wrap:wrap}
@@ -4049,7 +4057,7 @@ function renderStock(){
           h('td',{style:{fontFamily:'monospace',fontSize:'11px'}},fD(m.created_at)),
           h('td',{style:{fontFamily:'monospace',fontWeight:'700'}},m.reference),
           h('td',{style:{fontFamily:'monospace'}},m.emplacement),
-          h('td',null,h('span',{className:'mvt-type-'+m.type_mouvement},m.type_mouvement)),
+          h('td',null,h('span',{className:'mvt-type-'+(m.type_mouvement==='entree'||m.type_mouvement==='sortie'?'pf-'+m.type_mouvement:m.type_mouvement)},m.type_mouvement)),
           h('td',{style:{fontFamily:'monospace'}},fN(m.quantite)),
           h('td',{style:{fontSize:'11px',color:'var(--muted)'}},stockActor(m))
         )))
@@ -4137,9 +4145,10 @@ function renderStock(){
       const qte_inp=h('input',{type:'number',placeholder:'Quantité',min:'0',style:{width:'120px'}});
       const note_inp=h('input',{type:'text',placeholder:'Note (optionnel)',style:{flex:1}});
 
+      const pfMvtActiveCls={entree:'pf-entree',sortie:'pf-sortie',inventaire:'inventaire'};
       const mvtBtns=h('div',{className:'mvt-btns'},
         ...[['entree','Entrée ↓'],['sortie','Sortie ↑'],['inventaire','Inventaire =']].map(([t,l])=>{
-          const btn=h('button',{className:'mvt-btn'+(S.stockMvtType===t?' active-'+t:'')},l);
+          const btn=h('button',{className:'mvt-btn'+(S.stockMvtType===t?' active-'+pfMvtActiveCls[t]:'')},l);
           btn.addEventListener('click',()=>{S.stockMvtType=t;render();});
           return btn;
         })
@@ -4197,7 +4206,7 @@ function renderStock(){
             h('th',null,'Qté'),h('th',null,'Avant → Après'),h('th',null,'Note'),h('th',null,'Utilisateur'))),
           h('tbody',null,...mvts.map(m=>h('tr',null,
             h('td',{style:{fontSize:'11px',fontFamily:'monospace',whiteSpace:'nowrap'}},fD(m.created_at)),
-            h('td',null,h('span',{className:'mvt-type-'+m.type_mouvement},m.type_mouvement)),
+            h('td',null,h('span',{className:'mvt-type-'+(m.type_mouvement==='entree'||m.type_mouvement==='sortie'?'pf-'+m.type_mouvement:m.type_mouvement)},m.type_mouvement)),
             h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},m.emplacement),
             h('td',{style:{fontFamily:'monospace'}},fN(m.quantite)),
             h('td',{style:{fontSize:'11px',fontFamily:'monospace'}},fN(m.quantite_avant)+' → '+fN(m.quantite_apres)),
@@ -4271,7 +4280,7 @@ function renderStock(){
       h('div',{className:'card-header'},h('h3',null,'Raccourcis emplacements')),
       h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',padding:'16px'}},
         ...EMPL_GRID.map(e=>h('button',{
-          className:'mvt-btn'+(((sel&&sel.emplacement)===e)?' active-entree':''),
+          className:'mvt-btn'+(((sel&&sel.emplacement)===e)?' active-pf-entree':''),
           onClick:async()=>await loadStockEmplacement(e)
         },e))
       )
@@ -4313,7 +4322,7 @@ function renderStock(){
             h('th',null,'Avant → Après'),h('th',null,'Note'),h('th',null,'Utilisateur'))),
           h('tbody',null,...mvts.map(m=>h('tr',null,
             h('td',{style:{fontSize:'11px',fontFamily:'monospace',whiteSpace:'nowrap'}},fD(m.created_at)),
-            h('td',null,h('span',{className:'mvt-type-'+m.type_mouvement},m.type_mouvement)),
+            h('td',null,h('span',{className:'mvt-type-'+(m.type_mouvement==='entree'||m.type_mouvement==='sortie'?'pf-'+m.type_mouvement:m.type_mouvement)},m.type_mouvement)),
             h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},m.reference||'—'),
             h('td',{style:{fontFamily:'monospace'}},fN(m.quantite)),
             h('td',{style:{fontSize:'11px',fontFamily:'monospace'}},fN(m.quantite_avant)+' → '+fN(m.quantite_apres)),

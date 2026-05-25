@@ -65,11 +65,13 @@ STOCK_HTML = r"""<!DOCTYPE html>
   --bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;
   --muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,.12);
   --success:#34d399;--warn:#fbbf24;--danger:#f87171;--c2:#a78bfa;
+  --pf-entree:#059669;--pf-sortie:#dc2626;
 }
 body.light{
   --bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;
   --muted:#94a3b8;--accent:#0891b2;--accent-bg:rgba(8,145,178,.10);
   --success:#059669;--warn:#d97706;--danger:#dc2626;--c2:#7c3aed;
+  --pf-entree:#047857;--pf-sortie:#b91c1c;
 }
 html,body{height:100%}
 #root{display:flex;flex:1;flex-direction:column;min-height:0}
@@ -358,6 +360,10 @@ body.light .btn-sm{color:#fff}
 .action-btn.entree:hover{border-color:var(--success)}
 .action-btn.sortie{background:color-mix(in srgb,var(--danger) 20%,transparent);color:var(--danger)}
 .action-btn.sortie:hover{border-color:var(--danger)}
+.action-btn.pf-entree{background:color-mix(in srgb,var(--pf-entree) 24%,transparent);color:var(--pf-entree)}
+.action-btn.pf-entree:hover{border-color:var(--pf-entree)}
+.action-btn.pf-sortie{background:color-mix(in srgb,var(--pf-sortie) 24%,transparent);color:var(--pf-sortie)}
+.action-btn.pf-sortie:hover{border-color:var(--pf-sortie)}
 .action-btn.inventaire{background:color-mix(in srgb,var(--c2) 20%,transparent);color:var(--c2)}
 .action-btn.inventaire:hover{border-color:var(--c2)}
 
@@ -367,6 +373,8 @@ body.light .btn-sm{color:#fff}
 .mvt-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
 .mvt-icon.entree{background:rgba(52,211,153,.15);color:var(--success)}
 .mvt-icon.sortie{background:rgba(248,113,113,.15);color:var(--danger)}
+.mvt-icon.pf-entree{background:color-mix(in srgb,var(--pf-entree) 18%,transparent);color:var(--pf-entree)}
+.mvt-icon.pf-sortie{background:color-mix(in srgb,var(--pf-sortie) 18%,transparent);color:var(--pf-sortie)}
 .mvt-icon.inventaire{background:rgba(167,139,250,.15);color:var(--c2)}
 .mvt-body{flex:1;min-width:0}
 .mvt-line1{font-size:13px;font-weight:600;display:flex;justify-content:space-between;align-items:center;gap:8px}
@@ -380,6 +388,8 @@ body.light .btn-sm{color:#fff}
 .mvt-empl-link:active{transform:translateY(1px)}
 .mvt-qte-entree{color:var(--success);font-family:monospace;font-weight:700}
 .mvt-qte-sortie{color:var(--danger);font-family:monospace;font-weight:700}
+.mvt-qte-pf-entree{color:var(--pf-entree);font-family:monospace;font-weight:700}
+.mvt-qte-pf-sortie{color:var(--pf-sortie);font-family:monospace;font-weight:700}
 .mvt-qte-inventaire{color:var(--c2);font-family:monospace;font-weight:700}
 .mvt-line2{font-size:11px;color:var(--muted);margin-top:2px}
 .mvt-note{font-size:11px;color:var(--text2);margin-top:2px;font-style:italic}
@@ -437,6 +447,12 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .dash-quick-btn--danger{background:rgba(248,113,113,.08);border-color:rgba(248,113,113,.4);color:var(--danger)}
 .dash-quick-btn--danger .dash-quick-btn-icon{background:rgba(248,113,113,.18);color:var(--danger)}
 .dash-quick-btn--danger:hover{background:rgba(248,113,113,.14);border-color:var(--danger)}
+.dash-quick-btn--pf-entree{background:color-mix(in srgb,var(--pf-entree) 10%,transparent);border-color:color-mix(in srgb,var(--pf-entree) 45%,transparent);color:var(--pf-entree)}
+.dash-quick-btn--pf-entree .dash-quick-btn-icon{background:color-mix(in srgb,var(--pf-entree) 20%,transparent);color:var(--pf-entree)}
+.dash-quick-btn--pf-entree:hover{background:color-mix(in srgb,var(--pf-entree) 16%,transparent);border-color:var(--pf-entree)}
+.dash-quick-btn--pf-sortie{background:color-mix(in srgb,var(--pf-sortie) 10%,transparent);border-color:color-mix(in srgb,var(--pf-sortie) 45%,transparent);color:var(--pf-sortie)}
+.dash-quick-btn--pf-sortie .dash-quick-btn-icon{background:color-mix(in srgb,var(--pf-sortie) 20%,transparent);color:var(--pf-sortie)}
+.dash-quick-btn--pf-sortie:hover{background:color-mix(in srgb,var(--pf-sortie) 16%,transparent);border-color:var(--pf-sortie)}
 .dash-quick-btn--neutral{background:var(--card);border-color:var(--border);color:var(--text2)}
 .dash-quick-btn--neutral .dash-quick-btn-icon{background:var(--accent-bg);color:var(--accent);border:1px solid rgba(34,211,238,.2)}
 .dash-quick-btn--neutral:hover{border-color:var(--accent);color:var(--accent)}
@@ -547,7 +563,11 @@ body.light .mp-search-wrap:focus-within{
 .mp-card-meta{font-size:12px;color:var(--muted);margin-top:4px}
 .mp-card-warn{font-size:12px;color:var(--warn);margin-top:4px}
 .mp-card-actions-inline{display:flex;gap:6px;flex-wrap:nowrap}
-.mp-card-actions-inline .action-btn{flex:none;min-width:0;padding:6px 10px;font-size:11px;border-radius:8px;white-space:nowrap}
+.mp-card-actions-inline .mp-act-btn{flex:none;min-width:0;padding:6px 10px;font-size:11px;border-radius:8px;white-space:nowrap}
+.action-bar .mp-act-btn{flex:1;min-width:90px;padding:12px 8px;border-radius:12px;font-size:13px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;gap:5px;border:1px solid transparent;
+  transition:border-color .15s,opacity .15s,filter .15s}
+.action-bar .mp-act-btn:hover{filter:brightness(1.05)}
 .mp-act-btn{border:none;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
 .mp-act-entree{background:color-mix(in srgb,var(--success) 15%,transparent);color:var(--success)}
 .mp-act-sortie{background:color-mix(in srgb,var(--danger) 15%,transparent);color:var(--danger)}
@@ -573,6 +593,12 @@ body.light .mp-search-wrap:focus-within{
 .mp-modal-mvt-head-sortie{background:color-mix(in srgb,var(--danger) 16%,transparent);
   border-bottom:1px solid color-mix(in srgb,var(--danger) 32%,transparent)}
 .mp-modal-mvt-head-sortie h3{color:var(--danger)}
+.mp-modal-mvt-head-pf-entree{background:color-mix(in srgb,var(--pf-entree) 18%,transparent);
+  border-bottom:1px solid color-mix(in srgb,var(--pf-entree) 35%,transparent)}
+.mp-modal-mvt-head-pf-entree h3{color:var(--pf-entree)}
+.mp-modal-mvt-head-pf-sortie{background:color-mix(in srgb,var(--pf-sortie) 18%,transparent);
+  border-bottom:1px solid color-mix(in srgb,var(--pf-sortie) 35%,transparent)}
+.mp-modal-mvt-head-pf-sortie h3{color:var(--pf-sortie)}
 .mp-modal-mvt-head-ajustement{background:color-mix(in srgb,var(--warn) 14%,transparent);
   border-bottom:1px solid color-mix(in srgb,var(--warn) 28%,transparent)}
 .mp-modal-mvt-head-ajustement h3{color:var(--warn)}
@@ -824,6 +850,8 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
   font-family:inherit;text-align:center;transition:all .15s}
 .mvt-type-btn.sel-entree{background:rgba(52,211,153,.15);color:var(--success);border-color:var(--success)}
 .mvt-type-btn.sel-sortie{background:rgba(248,113,113,.15);color:var(--danger);border-color:var(--danger)}
+.mvt-type-btn.sel-pf-entree{background:color-mix(in srgb,var(--pf-entree) 18%,transparent);color:var(--pf-entree);border-color:var(--pf-entree)}
+.mvt-type-btn.sel-pf-sortie{background:color-mix(in srgb,var(--pf-sortie) 18%,transparent);color:var(--pf-sortie);border-color:var(--pf-sortie)}
 .mvt-type-btn.sel-inventaire{background:rgba(167,139,250,.15);color:var(--c2);border-color:var(--c2)}
 .modal-field{margin-bottom:14px}
 .empl-suggestions{background:var(--bg);border:1px solid var(--border);border-radius:8px;
@@ -930,7 +958,12 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
   cursor:pointer;font-family:inherit;color:#0a0e17}
 .btn-confirm.entree{background:var(--success)}
 .btn-confirm.sortie{background:var(--danger)}
+.btn-confirm.pf-entree{background:var(--pf-entree)}
+.btn-confirm.pf-sortie{background:var(--pf-sortie)}
 .btn-confirm.inventaire{background:var(--c2)}
+.mp-modal-actions .btn.btn-pf-entree{background:var(--pf-entree);color:#0a0e17;border:none;font-weight:700}
+.mp-modal-actions .btn.btn-pf-sortie{background:var(--pf-sortie);color:#fff;border:none;font-weight:700}
+body.light .mp-modal-actions .btn.btn-pf-entree{color:#fff}
 
 /* ── Toast ── */
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:600;
@@ -2190,7 +2223,7 @@ function openEmplEntreeModal(codeEmpl) {
     prodDateField2
   );
 
-  const confirmBtn = el('button', { cls:'btn-confirm entree', on:{ click: async () => {
+  const confirmBtn = el('button', { cls:'btn-confirm pf-entree', on:{ click: async () => {
     const ref  = refInp.value.trim().toUpperCase();
     const qte  = parseFloat(qteInp.value);
     const empl = codeEmpl;
@@ -2280,10 +2313,11 @@ function buildMvtModal() {
   const sheet = el('div', { cls:'modal-sheet' });
   sheet.addEventListener('click', e => e.stopPropagation());
 
+  const pfSelCls = { entree: 'pf-entree', sortie: 'pf-sortie', inventaire: 'inventaire' };
   const typeBtns = el('div', { cls:'mvt-type-btns' },
     ...['entree','sortie','inventaire'].map(t => {
       const labels = {entree:'↓ Entrée', sortie:'↑ Sortie', inventaire:'= Inventaire'};
-      const b = el('button', { cls:'mvt-type-btn'+(S.modalType===t?' sel-'+t:''), on:{ click: () => {
+      const b = el('button', { cls:'mvt-type-btn'+(S.modalType===t?' sel-'+pfSelCls[t]:''), on:{ click: () => {
         S.modalType = t;
         overlay.remove();
         document.body.appendChild(buildMvtModal());
@@ -2348,7 +2382,8 @@ function buildMvtModal() {
     );
   }
 
-  const confirmBtn = el('button', { cls:'btn-confirm '+type, on:{ click: async () => {
+  const confirmPfCls = type === 'inventaire' ? 'inventaire' : ('pf-' + type);
+  const confirmBtn = el('button', { cls:'btn-confirm '+confirmPfCls, on:{ click: async () => {
     const qte = parseFloat(qteInp.value);
     const empl = emplInp.value.trim().toUpperCase();
     if (!empl) { showToast('Emplacement requis','error'); return; }
@@ -2483,8 +2518,11 @@ function buildMvtHistory(mouvements, unite='', opts=null) {
       const unit = (m.unite || unite || '').trim();
       const refTxt = m.reference || m.emplacement || '';
       const primary = (opts && opts.primary) ? String(opts.primary) : '';
+      const t = m.type_mouvement || '';
+      const pfIconCls = (t === 'entree' || t === 'sortie') ? 'pf-' + t : t;
+      const pfQteCls = (t === 'entree' || t === 'sortie') ? 'mvt-qte-pf-' + t : 'mvt-qte-' + t;
       return el('div',{cls:'mvt-row'},
-        el('div',{cls:'mvt-icon '+m.type_mouvement},icons[m.type_mouvement]||'·'),
+        el('div',{cls:'mvt-icon '+pfIconCls},icons[t]||'·'),
         el('div',{cls:'mvt-body'},
           el('div',{cls:'mvt-line1'},
             (primary === 'emplacement' && m.emplacement)
@@ -2492,7 +2530,7 @@ function buildMvtHistory(mouvements, unite='', opts=null) {
               : ((m.produit_id && m.reference)
                 ? el('button',{cls:'mvt-ref-link',type:'button',on:{click:()=>loadProduit(m.produit_id)}},refTxt)
                 : el('span',null,refTxt)),
-            el('span',{cls:'mvt-qte-'+m.type_mouvement},signe+fU(m.quantite, unit))
+            el('span',{cls:pfQteCls},signe+fU(m.quantite, unit))
           ),
           el('div',{cls:'mvt-line2'},
             fD(m.created_at),
@@ -3136,12 +3174,12 @@ function buildMatiereDetail() {
   if (!S.stockReadOnly) {
     actionBtns.push(
       el('button', {
-        cls: 'action-btn entree',
+        cls: 'mp-act-btn mp-act-entree',
         type: 'button',
         on: { click: () => openModalMouvement('entree', m) },
       }, '↓ Entrée'),
       el('button', {
-        cls: 'action-btn sortie',
+        cls: 'mp-act-btn mp-act-sortie',
         type: 'button',
         on: { click: () => openModalMouvement('sortie', m) },
       }, '↑ Sortie'),
@@ -3240,7 +3278,7 @@ function matieresCardActions(m) {
     on: { click: (e) => e.stopPropagation() },
   },
     el('button', {
-      cls: 'action-btn entree',
+      cls: 'mp-act-btn mp-act-entree',
       type: 'button',
       on: { click: (e) => {
         e.stopPropagation();
@@ -3248,7 +3286,7 @@ function matieresCardActions(m) {
       } },
     }, '↓ Entrée'),
     el('button', {
-      cls: 'action-btn sortie',
+      cls: 'mp-act-btn mp-act-sortie',
       type: 'button',
       on: { click: (e) => {
         e.stopPropagation();
@@ -3859,7 +3897,7 @@ function renderPfMouvementModal(type, produit) {
     cls: 'mp-modal-overlay',
     on: { click: (e) => { if (e.target === overlay) closeMroot(); } },
   });
-  const headTypeCls = typeMvt;
+  const headTypeCls = typeMvt === 'entree' ? 'pf-entree' : 'pf-sortie';
   const box = el('div', { cls: 'mp-modal mp-modal-mvt' });
   box.appendChild(el('div', { cls: 'mp-modal-mvt-head mp-modal-mvt-head-' + headTypeCls },
     el('h3', null, PF_MVT_TITLES[typeMvt] || typeMvt),
@@ -4002,9 +4040,10 @@ function renderPfMouvementModal(type, produit) {
     return b;
   };
 
+  const pfBtnCls = typeMvt === 'entree' ? 'btn-pf-entree' : 'btn-pf-sortie';
   body.appendChild(el('div', { cls: 'mp-modal-actions' },
     el('button', { cls: 'btn-cancel', type: 'button', on: { click: closeMroot } }, 'Annuler'),
-    el('button', { cls: 'btn', type: 'button', on: { click: submitPfMouvement } }, 'Valider'),
+    el('button', { cls: 'btn ' + pfBtnCls, type: 'button', on: { click: submitPfMouvement } }, 'Valider'),
   ));
   box.appendChild(body);
   overlay.appendChild(box);
@@ -4659,8 +4698,8 @@ function buildDashboardShortcuts() {
     el('div', { cls: 'dash-quick-grid' },
       mk('Ajouter stock produits finis', openDashboardAddPfModal, 'accent', 'plus-circle'),
       mk('Réception matière', openReceptionQuick, 'warn', 'truck'),
-      mk('Entrée PF', () => openModalPfMouvement('entree'), 'success', 'upload'),
-      mk('Sortie PF', () => openModalPfMouvement('sortie'), 'danger', 'download'),
+      mk('Entrée PF', () => openModalPfMouvement('entree'), 'pf-entree', 'upload'),
+      mk('Sortie PF', () => openModalPfMouvement('sortie'), 'pf-sortie', 'download'),
       mk('Entrée MP', () => openModalMouvement('entree'), 'success', 'upload'),
       mk('Sortie MP', () => openModalMouvement('sortie'), 'danger', 'download'),
     ),
@@ -4935,8 +4974,8 @@ function buildProduitDetail() {
       );
 
   const actions = S.stockReadOnly ? el('div') : el('div',{cls:'action-bar',style:{marginTop:'14px'}},
-    el('button',{cls:'action-btn entree',on:{click:()=>openMvtModal(p.id,p.reference,'','entree')}},'↓ Entrée'),
-    el('button',{cls:'action-btn sortie',on:{click:()=>openMvtModal(p.id,p.reference,'','sortie')}},'↑ Sortie'),
+    el('button',{cls:'action-btn pf-entree',on:{click:()=>openMvtModal(p.id,p.reference,'','entree')}},'↓ Entrée'),
+    el('button',{cls:'action-btn pf-sortie',on:{click:()=>openMvtModal(p.id,p.reference,'','sortie')}},'↑ Sortie'),
     el('button',{cls:'action-btn inventaire',on:{click:()=>openMvtModal(p.id,p.reference,'','inventaire')}},'= Inventaire')
   );
 
@@ -4968,7 +5007,7 @@ function buildEmplacementDetail() {
   const back = el('button',{cls:'btn-ghost',style:{marginBottom:'14px'},on:{click:clearSel}},'← Retour au tableau de bord');
 
   const actions = S.stockReadOnly ? null : el('div',{cls:'action-bar',style:{marginTop:'14px'}},
-    el('button',{cls:'action-btn entree',on:{click:()=>openEmplEntreeModal(code)}},'↓ Entrée')
+    el('button',{cls:'action-btn pf-entree',on:{click:()=>openEmplEntreeModal(code)}},'↓ Entrée')
   );
 
   const head = el('div',{cls:'scorecard'},

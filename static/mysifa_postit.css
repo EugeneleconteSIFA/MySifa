@@ -59,7 +59,7 @@
   z-index:8030;
   max-width:200px;
 }
-#postit-color-palette.open{display:flex}
+#postit-color-palette.open{display:flex!important;visibility:visible;pointer-events:auto}
 .postit-color-swatch{
   width:26px;
   height:26px;
