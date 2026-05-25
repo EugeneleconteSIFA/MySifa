@@ -929,6 +929,7 @@ body.light .recep-fourn-sel:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_calc.js"></script>
+<script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js"></script>
 <script src="/static/chat_widget_v2.js"></script>
 <script src="/static/mysifa_ai_chat.js"></script>

@@ -377,6 +377,7 @@ body.light .cal-allday-row{background:#f8fafc}
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_ai_chat.js"></script>
+<script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js"></script>
 <script src="/static/chat_widget_v2.js"></script>
 <div class="sidebar-overlay" id="sb-ov"></div>

@@ -535,6 +535,7 @@ body.sb-open .sidebar-overlay{display:block}
 <div id="mroot"></div>
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_chat_badge.js"></script>
+<script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js"></script>
 <script src="/static/chat_widget_v2.js"></script>
 <script>
@@ -879,7 +880,11 @@ function buildMsgEl(m){
   const canEdit=m.is_mine&&!m.attachment_url&&msgAge<900000;
   const body=(m.body||'').trim();
   let bubble=body?esc(body):'';
-  if(bubble)bubble=bubble.replace(/@(\w+)/g,'<span style="color:var(--accent);font-weight:700">@$1</span>');
+  if(bubble&&window.ChatMentions){
+    bubble=ChatMentions.formatBodyHtml(body,channelMembers,esc);
+  }else if(bubble){
+    bubble=bubble.replace(/@([A-Za-z0-9_]+)/g,'<span style="color:var(--accent);font-weight:700">@$1</span>');
+  }
   if(m.attachment_url)bubble+=(bubble?'<br>':'')+chatAttachmentHtml(m);
   if(!bubble)bubble='<span style="color:var(--muted);font-size:12px">Pièce jointe</span>';
   wrap.innerHTML=
@@ -1017,9 +1022,10 @@ async function pollMessages(){
     }
     if(fresh.length)appendNewMessages(fresh);
     fresh.filter(m=>!m.is_mine).forEach(m=>{
-      const myNom=(window.__MYSIFA_NOM__||'').toLowerCase().replace(/\s/g,'');
-      const body=(m.body||'').toLowerCase();
-      const mentioned=body.includes('@'+myNom)||body.includes('@tous')||body.includes('@all');
+      const myNom=window.__MYSIFA_NOM__||'';
+      const mentioned=window.ChatMentions
+        ? ChatMentions.bodyMentionsUser(m.body,myNom)
+        : (m.body||'').toLowerCase().includes('@tous');
       if(mentioned)showMentionToast(m.user_nom,m.body,activeId);
     });
     const maxId=Math.max(...incoming.map(m=>m.id));
@@ -1521,27 +1527,32 @@ async function selectGif(gifUrl){
 document.getElementById('chat-input').addEventListener('focus',()=>{
   if(document.getElementById('chat-action-btns').classList.contains('show'))closeChatActions();
 });
-function renderMentionDropdown(){
+async function renderMentionDropdown(){
   const dd=document.getElementById('mention-dropdown');
-  if(!dd)return;
-  const q=mentionQuery||'';
-  const myUid=window.__MYSIFA_UID__;
-  const candidates=[
-    {id:'all',nom:'tous',role:'Mentionner tout le canal'},
-    ...channelMembers.filter(m=>(m.id||m.user_id)!==myUid)
-  ].filter(m=>{
-    const name=(m.id==='all'?'tous':m.nom||'').toLowerCase();
-    return !q||name.startsWith(q);
-  }).slice(0,8);
+  if(!dd||!window.ChatMentions)return;
+  if(!channelMembers.length&&activeId){
+    try{
+      channelMembers=await api('/api/chat/channels/'+activeId+'/members')||[];
+    }catch(e){channelMembers=[];}
+  }
+  const candidates=ChatMentions.filterCandidates(channelMembers,mentionQuery,window.__MYSIFA_UID__);
   if(!candidates.length){closeMentionDropdown();return;}
   mentionFocusIdx=-1;
   dd.style.display='';
-  dd.innerHTML=candidates.map((m,i)=>
-    '<div class="mention-item" data-idx="'+i+'" data-nom="'+(m.id==='all'?'tous':esc(m.nom))+'" onclick="insertMention(\''+(m.id==='all'?'tous':esc(m.nom))+'\')">'+
-    '<span class="mi-name">'+(m.id==='all'?'@tous':'@'+esc(m.nom))+'</span>'+
-    '<span class="mi-role">'+esc(m.id==='all'?'Tout le canal':ROLE_LABELS[m.role]||m.role||'')+'</span>'+
-    '</div>'
-  ).join('');
+  dd.innerHTML='';
+  candidates.forEach((m,i)=>{
+    const insertVal=ChatMentions.mentionInsertValue(m);
+    const label=m.id==='all'?'@tous':'@'+(m.nom||insertVal);
+    const row=document.createElement('div');
+    row.className='mention-item';
+    row.dataset.idx=String(i);
+    row.dataset.insert=insertVal;
+    row.innerHTML=
+      '<span class="mi-name">'+esc(label)+'</span>'+
+      '<span class="mi-role">'+esc(m.id==='all'?'Tout le canal':ROLE_LABELS[m.role]||m.role||'')+'</span>';
+    row.addEventListener('mousedown',e=>{e.preventDefault();insertMention(insertVal);});
+    dd.appendChild(row);
+  });
 }
 function closeMentionDropdown(){
   mentionQuery=null;
@@ -1594,8 +1605,8 @@ document.getElementById('chat-input').addEventListener('keydown',e=>{
     }
     if(e.key==='Enter'&&mentionFocusIdx>=0){
       e.preventDefault();
-      const nom=items[mentionFocusIdx]?.dataset.nom;
-      if(nom)insertMention(nom);
+      const val=items[mentionFocusIdx]?.dataset.insert;
+      if(val)insertMention(val);
       return;
     }
     if(e.key==='Escape'){closeMentionDropdown();return;}
@@ -1608,10 +1619,10 @@ document.getElementById('chat-input').addEventListener('input',function(){
   const val=this.value;
   const cur=this.selectionStart;
   const before=val.substring(0,cur);
-  const atMatch=before.match(/@(\w*)$/);
-  if(atMatch){
-    mentionQuery=atMatch[1].toLowerCase();
-    mentionStart=before.lastIndexOf('@');
+  const tok=window.ChatMentions?ChatMentions.mentionTokenFromBefore(before):null;
+  if(tok){
+    mentionQuery=tok.query;
+    mentionStart=tok.start;
     renderMentionDropdown();
   }else{
     closeMentionDropdown();

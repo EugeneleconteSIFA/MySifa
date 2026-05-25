@@ -170,6 +170,7 @@ label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bot
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_ai_chat.js"></script>
+<script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js"></script>
 <script src="/static/chat_widget_v2.js"></script>
 <script>

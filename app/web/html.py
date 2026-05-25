@@ -1771,6 +1771,7 @@ __EXPE_CARTE_FRANCE_CSS__
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/mysifa_expe_carte.js"></script>
+<script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js"></script>
 <script src="/static/chat_widget_v2.js"></script>
 <script src="/static/mysifa_ai_chat.js"></script>

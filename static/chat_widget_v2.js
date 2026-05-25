@@ -130,10 +130,11 @@
         const val = this.value;
         const cur = this.selectionStart;
         const before = val.substring(0, cur);
-        const atMatch = before.match(/@(\w*)$/);
-        if (atMatch) {
-          mentionQuery = atMatch[1].toLowerCase();
-          mentionStart = before.lastIndexOf('@');
+        const CM = window.ChatMentions;
+        const tok = CM ? CM.mentionTokenFromBefore(before) : null;
+        if (tok) {
+          mentionQuery = tok.query;
+          mentionStart = tok.start;
           renderMentionDd(CW);
         } else {
           closeMentionDd();
@@ -168,18 +169,20 @@
     }
   }
 
-  function renderMentionDd(CW) {
+  async function renderMentionDd(CW) {
     const dd = document.getElementById('cw-mention-dd');
     if (!dd) return;
-    const q = mentionQuery || '';
-    const myUid = CW.uid;
-    const candidates = [
-      { id: 'all', nom: 'tous', role: 'Mentionner tout le canal' },
-      ...channelMembers.filter((m) => (m.id || m.user_id) !== myUid),
-    ].filter((m) => {
-      const n = (m.nom || '').toLowerCase();
-      return !q || n.indexOf(q) >= 0;
-    });
+    const CM = window.ChatMentions;
+    if (!CM) return;
+    if (!channelMembers.length && CW.activeId) {
+      try {
+        channelMembers =
+          (await CW.api('/api/chat/channels/' + CW.activeId + '/members')) || [];
+      } catch (e) {
+        channelMembers = [];
+      }
+    }
+    const candidates = CM.filterCandidates(channelMembers, mentionQuery, CW.uid);
     if (!candidates.length) {
       closeMentionDd();
       return;
@@ -188,14 +191,15 @@
     dd.style.display = 'block';
     dd.innerHTML = candidates
       .map((m, i) => {
-        const nom = m.nom || '';
+        const insertVal = CM.mentionInsertValue(m);
+        const label = m.id === 'all' ? '@tous' : '@' + (m.nom || insertVal);
         return (
-          '<div class="cw-mention-item" data-nom="' +
-          CW.escCW(nom) +
+          '<div class="cw-mention-item" data-insert="' +
+          CW.escCW(insertVal) +
           '" data-idx="' +
           i +
           '"><span style="font-weight:600">' +
-          CW.escCW(nom) +
+          CW.escCW(label) +
           '</span><span style="font-size:11px;color:var(--muted);margin-left:6px">' +
           CW.escCW(m.role || '') +
           '</span></div>'
@@ -205,7 +209,7 @@
     dd.querySelectorAll('.cw-mention-item').forEach((el) => {
       el.addEventListener('mousedown', (e) => {
         e.preventDefault();
-        insertMention(el.dataset.nom || '');
+        insertMention(el.dataset.insert || '');
       });
     });
   }
@@ -241,8 +245,8 @@
     }
     if (e.key === 'Enter' && mentionFocusIdx >= 0) {
       e.preventDefault();
-      const nom = items[mentionFocusIdx]?.dataset.nom;
-      if (nom) insertMention(nom);
+      const val = items[mentionFocusIdx]?.dataset.insert;
+      if (val) insertMention(val);
       return true;
     }
     if (e.key === 'Escape') {
@@ -401,10 +405,13 @@
       if (msg.pinned_at) wrap.classList.add('cw-pinned');
       const bodyEl = wrap.querySelector('.cw-msg-mine, .cw-msg-theirs');
       if (bodyEl && msg.body) {
-        const html = CW.escCW((msg.body || '').trim()).replace(
-          /@(\w+)/g,
-          '<span style="color:var(--accent);font-weight:700">@$1</span>'
-        );
+        const CM = window.ChatMentions;
+        const html = CM
+          ? CM.formatBodyHtml((msg.body || '').trim(), channelMembers, CW.escCW)
+          : CW.escCW((msg.body || '').trim()).replace(
+              /@([A-Za-z0-9_]+)/g,
+              '<span style="color:var(--accent);font-weight:700">@$1</span>'
+            );
         const attach = bodyEl.querySelector('.cw-msg-attach');
         const meta = bodyEl.querySelector('.cw-msg-meta');
         bodyEl.innerHTML = (meta ? meta.outerHTML : '') + html + (attach ? attach.outerHTML : '');

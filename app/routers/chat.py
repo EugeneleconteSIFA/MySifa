@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 import time
+import unicodedata
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -52,6 +53,68 @@ _ALLOWED_ATTACHMENT_MIMES = {
 _typing_lock = Lock()
 _typing_state: dict[int, dict[int, dict]] = {}
 _TYPING_TTL = 6.0
+
+
+def _mention_slug(nom: str) -> str:
+    """Identifiant de mention sans espaces ni accents (ex. Jean Dupont → Jean_Dupont)."""
+    s = unicodedata.normalize("NFD", str(nom or ""))
+    s = "".join(c for c in s if unicodedata.category(c) != "Mn")
+    parts = re.findall(r"[A-Za-z0-9]+", s)
+    return "_".join(parts)
+
+
+def _record_mentions_from_body(
+    conn, msg_id: int, channel_id: int, body: str, author_id: int, now_m: str
+) -> None:
+    """Enregistre les mentions @tous et @SlugNom dans chat_mentions."""
+    members = conn.execute(
+        """SELECT u.id, u.nom FROM chat_members cm
+           JOIN users u ON u.id = cm.user_id
+           WHERE cm.channel_id = ? AND u.id != ?""",
+        (channel_id, author_id),
+    ).fetchall()
+    if re.search(r"@(tous|all)\b", body, re.IGNORECASE):
+        for m in members:
+            conn.execute(
+                """INSERT INTO chat_mentions
+                   (message_id, channel_id, mentioned_user_id, is_all, created_at)
+                   VALUES (?,?,?,1,?)""",
+                (msg_id, channel_id, m["id"], now_m),
+            )
+        return
+
+    tokens = {t.lower() for t in re.findall(r"@([A-Za-z0-9_]+)", body)}
+    tokens.discard("tous")
+    tokens.discard("all")
+    mentioned_ids: set[int] = set()
+    for token in tokens:
+        for m in members:
+            mid = int(m["id"])
+            if mid in mentioned_ids:
+                continue
+            slug = _mention_slug(m["nom"] or "")
+            if slug and slug.lower() == token:
+                conn.execute(
+                    """INSERT INTO chat_mentions
+                       (message_id, channel_id, mentioned_user_id, is_all, created_at)
+                       VALUES (?,?,?,0,?)""",
+                    (msg_id, channel_id, mid, now_m),
+                )
+                mentioned_ids.add(mid)
+                break
+            nom = (m["nom"] or "").strip()
+            for word in nom.split():
+                if word.lower().startswith(token) and len(token) >= 2:
+                    conn.execute(
+                        """INSERT INTO chat_mentions
+                           (message_id, channel_id, mentioned_user_id, is_all, created_at)
+                           VALUES (?,?,?,0,?)""",
+                        (msg_id, channel_id, mid, now_m),
+                    )
+                    mentioned_ids.add(mid)
+                    break
+            if mid in mentioned_ids:
+                break
 
 
 def _typing_cleanup(channel_id: int) -> None:
@@ -724,33 +787,10 @@ async def send_message(
         try:
             if body:
                 now_m = _now_iso()
-                members = conn.execute(
-                    """SELECT u.id, u.nom FROM chat_members cm
-                       JOIN users u ON u.id = cm.user_id
-                       WHERE cm.channel_id = ? AND u.id != ?""",
-                    (channel_id, user["id"]),
-                ).fetchall()
                 msg_id = cur.lastrowid
-                if re.search(r"@(tous|all)\b", body, re.IGNORECASE):
-                    for m in members:
-                        conn.execute(
-                            """INSERT INTO chat_mentions
-                               (message_id, channel_id, mentioned_user_id, is_all, created_at)
-                               VALUES (?,?,?,1,?)""",
-                            (msg_id, channel_id, m["id"], now_m),
-                        )
-                else:
-                    tokens = re.findall(r"@(\w+)", body)
-                    for token in tokens:
-                        for m in members:
-                            if (m["nom"] or "").lower().startswith(token.lower()):
-                                conn.execute(
-                                    """INSERT INTO chat_mentions
-                                       (message_id, channel_id, mentioned_user_id, is_all, created_at)
-                                       VALUES (?,?,?,0,?)""",
-                                    (msg_id, channel_id, m["id"], now_m),
-                                )
-                                break
+                _record_mentions_from_body(
+                    conn, msg_id, channel_id, body, user["id"], now_m
+                )
                 conn.commit()
         except Exception:
             pass
