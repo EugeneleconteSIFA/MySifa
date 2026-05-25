@@ -12,9 +12,6 @@
 
   const POSTIT_WIDTH = 260;
   const POSTIT_DOCK_GAP = 10;
-  const POSTIT_DOCK_BOTTOM = 24;
-  const POSTIT_DOCK_LEFT = 16;
-  const POSTIT_DOCK_RIGHT_RESERVE = 220;
   const POSTIT_ANIM_MS = 360;
 
   const POSTIT_DOCK_ICON =
@@ -153,31 +150,40 @@
     el.style.setProperty('--postit-peek-up', measurePostitPeekUp(el) + 'px');
   }
 
-  function hiddenPostitDockTop(el) {
+  function getHiddenPostitBand() {
+    if (window.MySifaDock && typeof window.MySifaDock.getHiddenPostitBand === 'function') {
+      return window.MySifaDock.getHiddenPostitBand();
+    }
+    var vw = window.innerWidth || document.documentElement.clientWidth;
     var vh = window.innerHeight || document.documentElement.clientHeight;
-    return vh - POSTIT_DOCK_BOTTOM - postitHeaderHeight(el);
+    return { left: 16, right: vw - 220, top: vh - 66, width: vw - 236 };
   }
 
   function layoutHiddenPostits() {
+    if (!postitDesktopEnabled()) return;
     var hidden = [];
     document.querySelectorAll('.postit.is-hidden').forEach(function (el) {
       hidden.push(el);
     });
+    if (!hidden.length) return;
     hidden.sort(function (a, b) {
       return (parseInt(a.dataset.id, 10) || 0) - (parseInt(b.dataset.id, 10) || 0);
     });
-    var maxRight = (window.innerWidth || 0) - POSTIT_DOCK_RIGHT_RESERVE;
-    var left = POSTIT_DOCK_LEFT;
-    var top = hidden.length ? hiddenPostitDockTop(hidden[0]) : 0;
+    var band = getHiddenPostitBand();
+    var bandLeft = band.left;
+    var bandRight = band.right;
+    var top = band.top;
+    var left = bandLeft;
     hidden.forEach(function (el) {
-      if (left + POSTIT_WIDTH > maxRight) {
-        left = POSTIT_DOCK_LEFT;
+      var w = el.offsetWidth || POSTIT_WIDTH;
+      if (left + w > bandRight) {
+        left = bandLeft;
         top -= postitHeaderHeight(el) + POSTIT_DOCK_GAP;
       }
       el.style.left = left + 'px';
       el.style.top = top + 'px';
       updatePostitPeekVar(el);
-      left += POSTIT_WIDTH + POSTIT_DOCK_GAP;
+      left += w + POSTIT_DOCK_GAP;
     });
   }
 
@@ -557,10 +563,8 @@
           ? 'Afficher à la position enregistrée'
           : 'Réduire en bas de l\'écran';
       }
+      dockLayout();
       applyPostitHiddenState(el, p, true);
-      if (!postitIsHidden(p)) {
-        layoutHiddenPostits();
-      }
     } catch (e) {
       postitToast((e && e.message) || 'Modification impossible.', 'danger');
     }
@@ -755,6 +759,7 @@
   window.deletePostitTask = deletePostitTask;
   window.clearPostitDone = clearPostitDone;
   window.autoResizePostitTask = autoResizePostitTask;
+  window.layoutHiddenPostits = layoutHiddenPostits;
   window._postitDragCleanup = function () {
     if (!_postitDrag) return;
     document.removeEventListener('mousemove', onPostitDragMove);

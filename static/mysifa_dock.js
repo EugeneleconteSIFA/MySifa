@@ -310,6 +310,69 @@
     el.style.boxShadow = SHADOW_FAB;
   }
 
+  var DOCK_WIDGET_FAB_IDS = ['_calc_fab', 'expe-carte-fab', 'ai-chat-btn', 'postit-dock-btn'];
+
+  function getChatDockFab() {
+    var bubble = document.getElementById('cw-bubble');
+    if (isDockFab(bubble)) return bubble;
+    var bar = document.getElementById('cw-bar');
+    if (isVisible(bar)) return bar;
+    return null;
+  }
+
+  /** Zone horizontale pour les post-its masqués : à droite de la messagerie, à gauche des widgets. */
+  function getHiddenPostitBand() {
+    var bandGap = 10;
+    var vw = window.innerWidth || document.documentElement.clientWidth;
+    var vh = window.innerHeight || document.documentElement.clientHeight;
+    var bandLeft = 16;
+    var bandRight = vw - 24;
+    var rowTop = vh - minFabBaseBottom() - FAB_SIZE - 24;
+
+    var chatEl = getChatDockFab();
+    var widgetLeft = vw;
+    var widgetTop = vh;
+
+    DOCK_WIDGET_FAB_IDS.forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!isDockFab(el)) return;
+      var r = el.getBoundingClientRect();
+      if (r.left < widgetLeft) widgetLeft = r.left;
+      if (r.top < widgetTop) widgetTop = r.top;
+    });
+
+    if (widgetLeft < vw) bandRight = widgetLeft - bandGap;
+
+    if (chatEl) {
+      var cr = chatEl.getBoundingClientRect();
+      if (cr.top < widgetTop) widgetTop = cr.top;
+      if (cr.right + bandGap < widgetLeft - bandGap) {
+        bandLeft = Math.max(16, cr.right + bandGap);
+        bandRight = widgetLeft - bandGap;
+      } else {
+        bandLeft = 16;
+        bandRight = Math.min(bandRight, widgetLeft - bandGap);
+      }
+    }
+
+    if (bandRight <= bandLeft + 60) {
+      bandRight = Math.max(bandLeft + 120, (widgetLeft < vw ? widgetLeft : vw - 72) - bandGap);
+    }
+
+    if (widgetTop < vh) rowTop = widgetTop;
+
+    return {
+      left: Math.round(bandLeft),
+      right: Math.round(bandRight),
+      top: Math.round(rowTop),
+      width: Math.max(0, Math.round(bandRight - bandLeft)),
+    };
+  }
+
+  function layoutHiddenPostitsDock() {
+    if (typeof window.layoutHiddenPostits === 'function') window.layoutHiddenPostits();
+  }
+
   /** Panneau messagerie paysage — même cadre vertical que l’assistant IA (8px haut, 62px bas). */
   function layoutChatLandscapePanel(el) {
     if (!el) return;
@@ -531,6 +594,7 @@
 
     if (isExpeApp()) {
       layoutExpe2x2(calcFab, calcPanel, carteFab, cartePanel, aiBtn, aiPanel, chatBubble, chatBar, chatPanel);
+      layoutHiddenPostitsDock();
       return;
     }
 
@@ -541,6 +605,7 @@
         layoutMobile(calcFab, calcPanel, carteFab, cartePanel, aiBtn, aiPanel, chatBubble, chatBar, chatPanel);
       }
       applyActiveFabZIndex();
+      layoutHiddenPostitsDock();
       return;
     }
 
@@ -630,6 +695,7 @@
       }
     }
     applyActiveFabZIndex();
+    layoutHiddenPostitsDock();
   }
 
   var CALC_APPS = { stock: 1, prod: 1, compta: 1, expe: 1, fabrication: 1, planning: 1 };
@@ -663,6 +729,7 @@
     layout: layout,
     bootPageWidgets: bootPageWidgets,
     isMobileLandscape: isMobileLandscape,
+    getHiddenPostitBand: getHiddenPostitBand,
     SHADOW_FAB: SHADOW_FAB,
     SHADOW_PANEL: SHADOW_PANEL,
   };
