@@ -69,11 +69,37 @@
     }, 3200);
   }
 
+  /** Appels post-its — toujours /api/postits (pas le api() local des pages planning, rh, stock…). */
   function postitApi(path, options) {
-    if (typeof api !== 'function') {
-      return Promise.reject(new Error('API indisponible sur cette page.'));
+    options = options || {};
+    var url = String(path || '');
+    if (url.indexOf('http') !== 0) {
+      if (url.indexOf('/') !== 0) url = '/' + url;
     }
-    return api(path, options);
+    var headers = Object.assign({ 'Content-Type': 'application/json' }, options.headers || {});
+    var fetchOpts = Object.assign({}, options, { credentials: 'include', headers: headers });
+    return fetch(url, fetchOpts).then(function (r) {
+      if (r.status === 401) {
+        try {
+          window.location.href = '/';
+        } catch (e) {}
+        return Promise.reject(new Error('Session expirée'));
+      }
+      if (!r.ok) {
+        return r.json().catch(function () {
+          return {};
+        }).then(function (j) {
+          var d = j && j.detail;
+          var msg =
+            typeof d === 'string' ? d : d ? JSON.stringify(d) : 'Erreur ' + r.status;
+          throw new Error(msg);
+        });
+      }
+      if (r.status === 204) return null;
+      var ct = r.headers.get('content-type') || '';
+      if (ct.indexOf('application/json') >= 0) return r.json();
+      return null;
+    });
   }
 
   function dockLayout() {
