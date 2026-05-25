@@ -1701,3 +1701,131 @@ def supprimer_prospect(request: Request, prospect_id: int):
         )
         conn.commit()
     return {"deleted": prospect_id}
+
+
+# ─── Délais carte France ───────────────────────────────────────────
+
+_DELAIS_EDIT_ROLES = {"superadmin", "direction", "administration", "expedition"}
+
+
+def _delai_jours_from_texte(delai_texte: str) -> int:
+    try:
+        return int(str(delai_texte).replace("J+", "").strip())
+    except (ValueError, AttributeError):
+        return 2
+
+
+@router.get("/delais")
+def get_delais(request: Request, type_envoi: str = "default"):
+    _require_expe(request)
+    with get_db() as conn:
+        rows = conn.execute(
+            """
+            SELECT departement, delai_texte, zone_label
+            FROM expe_delais
+            WHERE type_envoi=? AND transporteur_id IS NULL
+            """,
+            (type_envoi,),
+        ).fetchall()
+
+        if not rows and type_envoi != "default":
+            rows = conn.execute(
+                """
+                SELECT departement, delai_texte, zone_label
+                FROM expe_delais
+                WHERE type_envoi='default' AND transporteur_id IS NULL
+                """
+            ).fetchall()
+
+    from app.web.expe_france_delais_data import DELAIS_FRANCE_DEFAULT
+
+    result: dict[str, dict] = {}
+    for r in rows:
+        dept = r["departement"]
+        default_label = DELAIS_FRANCE_DEFAULT.get(dept, {}).get("label", dept)
+        result[dept] = {
+            "delai": r["delai_texte"],
+            "zone": r["zone_label"],
+            "label": default_label,
+        }
+    return result
+
+
+@router.put("/delais")
+def save_delais(request: Request, body: dict = Body(...)):
+    user = _require_expe_write(request)
+    role = (user.get("role") or "").strip()
+    if role not in _DELAIS_EDIT_ROLES:
+        raise HTTPException(
+            status_code=403,
+            detail="Accès refusé — rôle insuffisant pour modifier les délais",
+        )
+
+    overrides = body.get("overrides") or {}
+    if not overrides:
+        raise HTTPException(status_code=400, detail="overrides est vide")
+
+    now = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
+    type_envoi = (body.get("type_envoi") or "default").strip()
+    email = (user.get("email") or user.get("identifiant") or "").strip() or None
+
+    with get_db() as conn:
+        for dept, data in overrides.items():
+            delai_texte = str(data.get("delai") or "J+2").strip()
+            zone_label = str(data.get("zone") or "france").strip()
+            delai_jours = _delai_jours_from_texte(delai_texte)
+            conn.execute(
+                """
+                DELETE FROM expe_delais
+                WHERE departement=? AND type_envoi=? AND transporteur_id IS NULL
+                """,
+                (dept, type_envoi),
+            )
+            conn.execute(
+                """
+                INSERT INTO expe_delais
+                (departement, type_envoi, transporteur_id, delai_jours, zone_label,
+                 delai_texte, updated_at, updated_by_email)
+                VALUES (?, ?, NULL, ?, ?, ?, ?, ?)
+                """,
+                (dept, type_envoi, delai_jours, zone_label, delai_texte, now, email),
+            )
+        conn.commit()
+
+    return {"updated": len(overrides)}
+
+
+@router.post("/delais/reset")
+def reset_delais(request: Request, body: dict = Body(default_factory=dict)):
+    user = _require_expe_write(request)
+    role = (user.get("role") or "").strip()
+    if role not in _DELAIS_EDIT_ROLES:
+        raise HTTPException(status_code=403, detail="Accès refusé")
+
+    type_envoi = (body.get("type_envoi") or "default").strip()
+    now = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
+    email = (user.get("email") or user.get("identifiant") or "").strip() or None
+
+    from app.web.expe_france_delais_data import DELAIS_FRANCE_DEFAULT
+
+    with get_db() as conn:
+        conn.execute(
+            "DELETE FROM expe_delais WHERE type_envoi=? AND transporteur_id IS NULL",
+            (type_envoi,),
+        )
+        for dept, data in DELAIS_FRANCE_DEFAULT.items():
+            delai_texte = data.get("delai", "J+2")
+            zone_label = data.get("zone", "france")
+            delai_jours = _delai_jours_from_texte(str(delai_texte))
+            conn.execute(
+                """
+                INSERT INTO expe_delais
+                (departement, type_envoi, transporteur_id, delai_jours, zone_label,
+                 delai_texte, updated_at, updated_by_email)
+                VALUES (?, ?, NULL, ?, ?, ?, ?, ?)
+                """,
+                (dept, type_envoi, delai_jours, zone_label, delai_texte, now, email),
+            )
+        conn.commit()
+
+    return {"reset": True, "type_envoi": type_envoi}

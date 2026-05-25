@@ -993,6 +993,10 @@ function ouvrirComparateurDepuisDepart(departId,poids,nb_palette,cp){
     });
   });
 }
+"""
+
+EXPE_DEVIS_JS = r"""
+// ── MyExpé — devis & prospects ───────────────────────────────────
 
 function expeDevisIcon(size){
   const s=size||16;
@@ -1581,7 +1585,6 @@ const DELAIS_FRANCE_DEFAULT = """
 const EXPE_FRANCE_SVG_MARKUP = """
     + json.dumps(EXPE_FRANCE_SVG_MARKUP)
     + r""";
-const EXPE_LS_DELAIS_KEY = 'mysifa_expe_delais_v2';
 const EXPE_ZONE_COLORS = {
   france: 'var(--accent)',
   france_hors_paris: 'var(--warn)',
@@ -1611,36 +1614,28 @@ function expeCanEditDelais(){
   return expeCanWrite()&&((S.user&&S.user.role)==='superadmin'||(S.user&&S.user.role)==='direction');
 }
 
-function expeLoadDelaisOverrides(){
+async function expeLoadDelaisFromAPI(typeEnvoi){
+  typeEnvoi=typeEnvoi||'default';
   try{
-    const raw=localStorage.getItem(EXPE_LS_DELAIS_KEY);
-    return raw?JSON.parse(raw):{};
-  }catch(e){return {};}
+    const data=await api('/api/expe/delais?type_envoi='+encodeURIComponent(typeEnvoi));
+    DELAIS_FRANCE=Object.assign({},JSON.parse(JSON.stringify(DELAIS_FRANCE_DEFAULT)),data||{});
+  }catch(e){
+    console.warn('[expe] Impossible de charger les délais depuis l\'API, utilisation des défauts.',e);
+    DELAIS_FRANCE=JSON.parse(JSON.stringify(DELAIS_FRANCE_DEFAULT));
+  }
 }
 
-function expeSaveDelaisOverrides(ov){
-  try{localStorage.setItem(EXPE_LS_DELAIS_KEY,JSON.stringify(ov||{}));}catch(e){}
-}
-
-function expeMergeDelais(){
-  const base=JSON.parse(JSON.stringify(DELAIS_FRANCE_DEFAULT));
-  const ov=expeLoadDelaisOverrides();
-  Object.keys(ov).forEach(k=>{
-    if(!base[k])base[k]={label:k,zone:'france',delai:'J+2'};
-    if(ov[k].delai!=null)base[k].delai=ov[k].delai;
-    if(ov[k].zone)base[k].zone=ov[k].zone;
-    if(ov[k].label)base[k].label=ov[k].label;
-  });
-  DELAIS_FRANCE=base;
-}
-
-function expeResetDelais(){
-  if(!confirm('Réinitialiser tous les délais aux valeurs par défaut ?'))return;
-  try{localStorage.removeItem(EXPE_LS_DELAIS_KEY);}catch(e){}
-  expeMergeDelais();
-  applyDelaisToMap();
-  showToast('Délais réinitialisés.','success');
-  refreshExpeCartePanel();
+async function expeResetDelais(){
+  if(!confirm('Réinitialiser tous les délais aux valeurs par défaut ? Cette action s\'applique à tous les utilisateurs.'))return;
+  try{
+    await api('/api/expe/delais/reset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type_envoi:'default'})});
+    await expeLoadDelaisFromAPI();
+    applyDelaisToMap();
+    showToast('Délais réinitialisés.','success');
+    refreshExpeCartePanel();
+  }catch(e){
+    showToast(e.message||'Erreur lors de la réinitialisation','danger');
+  }
 }
 
 function getDeptData(num){
@@ -1720,9 +1715,8 @@ function setExpeCarteOpen(open){
   if(panel)panel.style.display=open?'flex':'none';
   if(fab)fab.classList.toggle('expe-carte-fab-active',open);
   if(open){
-    expeMergeDelais();
     refreshExpeCartePanel();
-    queueMicrotask(()=>initCarteExpe());
+    queueMicrotask(()=>void initCarteExpe());
   }else{
     C.editMode=false;
     hideTooltipDept();
@@ -1760,14 +1754,14 @@ function bindMapEvents(host){
   });
 }
 
-function initCarteExpe(){
+async function initCarteExpe(){
   const host=document.getElementById('expe-carte-svg-host');
   if(!host||!C.panelOpen)return;
   if(!host.querySelector('svg.expe-carte-svg')){
     host.innerHTML=EXPE_FRANCE_SVG_MARKUP;
     bindMapEvents(host);
   }
-  expeMergeDelais();
+  await expeLoadDelaisFromAPI();
   applyDelaisToMap();
   if(C.highlighted)highlightDept(C.highlighted);
 }
@@ -1805,20 +1799,36 @@ async function searchDept(query){
   refreshExpeCartePanel();
 }
 
-function saveEditDelais(){
+async function saveEditDelais(){
   if(!C.editDept||!expeCanEditDelais())return;
   const delInp=document.getElementById('expe-carte-edit-delai');
   const zoneSel=document.getElementById('expe-carte-edit-zone');
   const delai=(delInp&&delInp.value||'').trim();
   const zone=zoneSel&&zoneSel.value;
   if(!delai){showToast('Délai obligatoire','danger');return;}
-  const ov=expeLoadDelaisOverrides();
-  ov[C.editDept]={delai:delai,zone:zone||DELAIS_FRANCE[C.editDept].zone};
-  expeSaveDelaisOverrides(ov);
-  expeMergeDelais();
+  if(!DELAIS_FRANCE[C.editDept]){
+    DELAIS_FRANCE[C.editDept]={label:C.editDept,zone:'france',delai:'J+2'};
+  }
+  DELAIS_FRANCE[C.editDept].delai=delai;
+  DELAIS_FRANCE[C.editDept].zone=zone||DELAIS_FRANCE[C.editDept].zone;
   applyDelaisToMap();
   highlightDept(C.editDept);
-  showToast('Délai enregistré.','success');
+  try{
+    await api('/api/expe/delais',{
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        overrides:{[C.editDept]:{delai:delai,zone:DELAIS_FRANCE[C.editDept].zone}},
+        type_envoi:'default'
+      })
+    });
+    showToast('Délai enregistré.','success');
+  }catch(e){
+    showToast(e.message||'Erreur — délai non sauvegardé','danger');
+    await expeLoadDelaisFromAPI();
+    applyDelaisToMap();
+    if(C.highlighted)highlightDept(C.highlighted);
+  }
 }
 
 function renderExpeCarteLegend(){
@@ -1860,7 +1870,7 @@ function refreshExpeCartePanel(){
     h('button',{type:'button',className:'btn btn-ghost',onClick:()=>void searchDept(C.search)},iconEl('search',14),' Rechercher'),
     canEdit?h('button',{type:'button',className:'btn btn-ghost'+(C.editMode?' is-active':''),style:C.editMode?{borderColor:'var(--accent)',color:'var(--accent)'}:null,
       onClick:()=>{C.editMode=!C.editMode;C.editDept=null;refreshExpeCartePanel();queueMicrotask(()=>initCarteExpe());}},iconEl('edit',14),' Modifier les délais'):null,
-    canEdit?h('button',{type:'button',className:'btn btn-ghost',onClick:expeResetDelais},'Réinitialiser'):null
+    canEdit?h('button',{type:'button',className:'btn btn-ghost',onClick:()=>void expeResetDelais()},'Réinitialiser'):null
   );
   const mapHost=h('div',{id:'expe-carte-svg-host',className:'expe-carte-svg-wrap'});
   const msgEl=h('div',{className:'expe-carte-msg'},C.msg||'');
@@ -1874,7 +1884,7 @@ function refreshExpeCartePanel(){
     editBar.appendChild(h('div',null,h('label',null,'Département'),h('div',{style:{fontSize:'13px',fontWeight:'700',color:'var(--text)'}},escHtml(C.editDept)+' — '+escHtml(d.label))));
     editBar.appendChild(h('div',null,h('label',null,'Délai'),delInp));
     editBar.appendChild(h('div',null,h('label',null,'Zone'),zoneSel));
-    editBar.appendChild(h('button',{type:'button',className:'btn btn-accent',style:{alignSelf:'flex-end'},onClick:saveEditDelais},'Enregistrer'));
+    editBar.appendChild(h('button',{type:'button',className:'btn btn-accent',style:{alignSelf:'flex-end'},onClick:()=>void saveEditDelais()},'Enregistrer'));
   }
   const inner=h('div',null,
     h('div',{className:'expe-carte-toolbar-row'},search,toolbar),
@@ -1891,8 +1901,8 @@ function refreshExpeCartePanel(){
       if(caretStart!=null){try{el.setSelectionRange(caretStart,caretEnd);}catch(e){}}
     }
   }
-  if(!hadSvg)queueMicrotask(()=>initCarteExpe());
-  else{expeMergeDelais();applyDelaisToMap();if(C.highlighted)highlightDept(C.highlighted);}
+  if(!hadSvg)queueMicrotask(()=>void initCarteExpe());
+  else{void expeLoadDelaisFromAPI().then(()=>{applyDelaisToMap();if(C.highlighted)highlightDept(C.highlighted);});}
 }
 """
 )

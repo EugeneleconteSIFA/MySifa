@@ -2178,6 +2178,49 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 67, "expe_transporteurs_prospects")
 
+    # v68 — MyExpé : délais carte France (base partagée, remplace localStorage)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=68 LIMIT 1").fetchone():
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS expe_delais (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                departement      TEXT NOT NULL,
+                type_envoi       TEXT NOT NULL DEFAULT 'default',
+                transporteur_id  INTEGER,
+                delai_jours      INTEGER,
+                zone_label       TEXT NOT NULL DEFAULT 'france',
+                delai_texte      TEXT NOT NULL DEFAULT 'J+2',
+                updated_at       TEXT,
+                updated_by_email TEXT
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_expe_delais_unique
+                ON expe_delais(departement, type_envoi, COALESCE(transporteur_id, -1));
+            """
+        )
+        conn.commit()
+
+        from app.web.expe_france_delais_data import DELAIS_FRANCE_DEFAULT
+        from zoneinfo import ZoneInfo
+
+        now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
+        for dept, data in DELAIS_FRANCE_DEFAULT.items():
+            delai_texte = data.get("delai", "J+2")
+            zone_label = data.get("zone", "france")
+            try:
+                delai_jours = int(str(delai_texte).replace("J+", "").strip())
+            except (ValueError, AttributeError):
+                delai_jours = 2
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO expe_delais
+                (departement, type_envoi, transporteur_id, delai_jours, zone_label, delai_texte, updated_at)
+                VALUES (?, 'default', NULL, ?, ?, ?, ?)
+                """,
+                (dept, delai_jours, zone_label, delai_texte, now),
+            )
+        conn.commit()
+        _record_schema_migration(conn, 68, "expe_delais")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,
