@@ -453,7 +453,8 @@ body.light .btn-sm{color:#fff}
   color:var(--text);font-size:14px;font-family:inherit}
 .mp-search:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
 .mp-list{display:flex;flex-direction:column;gap:12px}
-.mp-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+.mp-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;cursor:pointer;transition:border-color .15s}
+.mp-card:hover{border-color:var(--accent)}
 .mp-card-top{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap}
 .mp-card-ref{font-family:ui-monospace,monospace;font-size:14px;font-weight:700;color:var(--text);flex:1;min-width:120px}
 .mp-card-stock{font-size:20px;font-weight:700;color:var(--text);white-space:nowrap}
@@ -767,6 +768,22 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
 .ref-units-card .ref-card-body{padding-top:6px}
 .ref-units-card .ref-card-desc{margin-bottom:16px}
 .ref-page .btn-ghost-sm{padding:9px 14px;border-radius:10px}
+.ref-client-search-wrap{margin-bottom:14px}
+.ref-client-search{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 16px;
+  color:var(--text);font-size:14px;font-family:inherit;transition:border-color .15s}
+.ref-client-search:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.ref-client-hint{font-size:12px;color:var(--muted);margin:0 0 12px;line-height:1.55}
+.ref-client-units{margin:0 0 14px;padding:12px 14px;background:var(--accent-bg);border:1px solid var(--border);border-radius:10px;font-size:13px;color:var(--text2);line-height:1.5}
+.ref-client-units strong{color:var(--text);font-weight:700}
+.ref-client-results{margin-top:4px}
+.ref-client-table{width:100%;border-collapse:collapse;font-size:13px}
+.ref-client-table th{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);
+  text-align:left;padding:8px 10px;border-bottom:1px solid var(--border)}
+.ref-client-table td{padding:10px;border-bottom:1px solid var(--border);vertical-align:top}
+.ref-client-table tr:last-child td{border-bottom:none}
+.ref-client-table .ref-col{font-family:monospace;font-weight:700;color:var(--text)}
+.ref-client-empty{font-size:13px;color:var(--muted);padding:8px 0}
+.ref-client-loading{font-size:12px;color:var(--accent);padding:8px 0}
 .ref-import-drop{padding:36px 24px;border-radius:14px;margin-top:4px}
 .ref-import-drop-title{font-size:14px;margin-bottom:8px}
 .ref-import-drop-sub{font-size:12px;line-height:1.5}
@@ -994,12 +1011,16 @@ let S = {
   importRefsPreview: null,
   importRefsLoading: false,
   importRefsApplying: false,
+  refClientQ: '',
+  refClientResults: null,
+  refClientLoading: false,
   // Matières premières
   matieres: null,
   matieresCat: 'tout',
   matieresQ: '',
   matieresCardMenuId: null,
   matieresEditId: null,
+  selMatiere: null,
   mpModal: null,
   addPfModalOpen: false,
   matieresAdminOpen: false,
@@ -1257,11 +1278,29 @@ function parseHistEmplacements(raw) {
 async function openHistoriqueRef(m) {
   if (!m) return;
   if (m.type_stock === 'mp') {
+    if (m.matiere_id) {
+      await loadMatiere(m.matiere_id);
+      return;
+    }
     const ref = (m.reference || '').trim();
-    if (m.matiere_id || ref) {
-      S.matieresQ = ref;
-      S.matieresCat = 'tout';
-      goToTab('matieres');
+    if (ref) {
+      try {
+        if (!S.matieres) {
+          const d = await api('/api/stock/matieres');
+          S.matieres = Array.isArray(d) ? d : [];
+        }
+        const found = (S.matieres || []).find(x =>
+          (x.reference || '').toUpperCase() === ref.toUpperCase()
+        );
+        if (found) await loadMatiere(found.id);
+        else {
+          S.matieresQ = ref;
+          S.matieresCat = 'tout';
+          goToTab('matieres');
+        }
+      } catch (e) {
+        showToast(e.message, 'error');
+      }
     }
     return;
   }
@@ -1345,7 +1384,8 @@ async function loadDashboard() {
         ...dash,
         activiteRecente: Array.isArray(activite) ? activite : [],
       };
-      renderContent();
+      if (S.tab === 'referentiel') renderReferentielView();
+      else renderContent();
     }
   } catch (e) {}
 }
@@ -1634,7 +1674,13 @@ function goToTab(tab) {
   if (S.tracaOnly && tab !== 'traca') return;
   // Arrêter la caméra si on quitte l'onglet réception
   if (tab !== 'reception' && S.recepScanning) recepStopCamera();
-  S.tab = tab; S.selProduit = null; S.selEmpl = null; S.searchResults = null; S.showAddForm = false;
+  S.tab = tab; S.selProduit = null; S.selEmpl = null; S.selMatiere = null; S.searchResults = null; S.showAddForm = false;
+  if (tab !== 'referentiel') {
+    S.refClientQ = '';
+    S.refClientResults = null;
+    S.refClientLoading = false;
+    clearTimeout(_refClientSearchTimer);
+  }
   if (tab !== 'dashboard') closeDashboardAddPfModal();
   if (tab !== 'traca') S.tracaPoste = null;
   clearSearch(); closeSidebar();
@@ -1651,7 +1697,7 @@ function goToTab(tab) {
 
 function updateNavActive() {
   document.querySelectorAll('.nav-btn[data-tab]').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.tab === S.tab && !S.selProduit && !S.selEmpl);
+    btn.classList.toggle('active', btn.dataset.tab === S.tab && !S.selProduit && !S.selEmpl && !S.selMatiere);
   });
 }
 
@@ -2313,6 +2359,140 @@ function buildMvtHistory(mouvements, unite='', opts=null) {
 }
 
 
+let _refClientSearchTimer = null;
+
+async function loadRefClientSearch(q) {
+  const term = String(q || '').trim();
+  if (!term) {
+    S.refClientResults = null;
+    S.refClientLoading = false;
+    renderReferentielView();
+    return;
+  }
+  S.refClientLoading = true;
+  renderReferentielView();
+  try {
+    const rows = await api('/api/stock/produits?client=' + encodeURIComponent(term) + '&limit=500');
+    S.refClientResults = Array.isArray(rows) ? rows : [];
+  } catch (e) {
+    S.refClientResults = [];
+    showToast(e.message || 'Recherche impossible', 'error');
+  } finally {
+    S.refClientLoading = false;
+    renderReferentielView();
+  }
+}
+
+function onRefClientSearchInput(val) {
+  S.refClientQ = val;
+  renderReferentielView();
+  clearTimeout(_refClientSearchTimer);
+  const q = String(val || '').trim();
+  if (!q) {
+    S.refClientResults = null;
+    S.refClientLoading = false;
+    renderReferentielView();
+    return;
+  }
+  _refClientSearchTimer = setTimeout(() => loadRefClientSearch(q), 280);
+}
+
+function renderReferentielView() {
+  if (S.tab !== 'referentiel' || S.selProduit || S.selEmpl) return;
+  const ae = document.activeElement;
+  const focusId = ae?.id;
+  const caretStart = ae?.selectionStart;
+  const caretEnd = ae?.selectionEnd;
+  const area = document.getElementById('scroll-area');
+  if (!area) return;
+  area.innerHTML = '';
+  const content = buildReferentielPage();
+  if (content) area.appendChild(content);
+  if (focusId) {
+    const foc = document.getElementById(focusId);
+    if (foc) {
+      foc.focus();
+      if (caretStart != null) {
+        try { foc.setSelectionRange(caretStart, caretEnd); } catch (e) {}
+      }
+    }
+  }
+}
+
+function buildReferentielClientSearchCard() {
+  const q = String(S.refClientQ || '').trim();
+  const searchInp = el('input', {
+    cls: 'ref-client-search',
+    id: 'ref-client-search',
+    attrs: {
+      type: 'text',
+      placeholder: 'Numéro client (ex. 12345)',
+      autocomplete: 'off',
+    },
+  });
+  searchInp.value = S.refClientQ || '';
+  searchInp.addEventListener('input', (e) => onRefClientSearchInput(e.target.value));
+  searchInp.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      S.refClientQ = '';
+      S.refClientResults = null;
+      S.refClientLoading = false;
+      clearTimeout(_refClientSearchTimer);
+      renderReferentielView();
+    }
+  });
+
+  const bodyKids = [
+    el('p', { cls: 'ref-client-hint' },
+      'Les références sont au format numéro client / numéro article. '
+      + 'Saisissez un numéro client pour lister les références et les unités de vente associées.'
+    ),
+    el('div', { cls: 'ref-client-search-wrap' }, searchInp),
+  ];
+
+  if (S.refClientLoading) {
+    bodyKids.push(el('div', { cls: 'ref-client-loading' }, 'Recherche…'));
+  } else if (q) {
+    const rows = S.refClientResults;
+    if (rows !== null && !rows.length) {
+      bodyKids.push(el('div', { cls: 'ref-client-empty' }, 'Aucun résultat pour « ' + q + ' »'));
+    } else {
+      const units = [...new Set(rows.map(r => String(r.unite || '').trim()).filter(Boolean))].sort();
+      bodyKids.push(el('div', { cls: 'ref-client-units' },
+        el('span', null, rows.length + ' référence' + (rows.length > 1 ? 's' : '') + ' — '),
+        el('strong', null, 'Unité' + (units.length > 1 ? 's' : '') + ' de vente : '),
+        units.length ? units.join(', ') : '—',
+      ));
+      const wrap = el('div', { cls: 'ref-client-results' });
+      const table = el('table', { cls: 'ref-client-table' });
+      table.appendChild(el('thead', null, el('tr', null,
+        el('th', null, 'Référence'),
+        el('th', null, 'Unité de vente'),
+        el('th', null, 'Désignation'),
+      )));
+      const tbody = el('tbody', null);
+      rows.slice().sort((a, b) => String(a.reference || '').localeCompare(String(b.reference || '')))
+        .forEach(r => {
+          tbody.appendChild(el('tr', null,
+            el('td', { cls: 'ref-col' }, r.reference || '—'),
+            el('td', null, r.unite || '—'),
+            el('td', null, r.designation || '—'),
+          ));
+        });
+      table.appendChild(tbody);
+      wrap.appendChild(table);
+      bodyKids.push(wrap);
+    }
+  }
+
+  return el('div', { cls: 'ref-card ref-client-card' },
+    el('div', { cls: 'ref-card-header' },
+      el('div', { cls: 'card-title' }, 'Recherche par numéro client'),
+    ),
+    el('div', { cls: 'ref-card-body' }, ...bodyKids),
+  );
+}
+
 function buildReferentielPage() {
   const s = (S.dashboard && S.dashboard.stats) ? S.dashboard.stats : {};
   return el('div', { cls: 'content ref-page' },
@@ -2328,6 +2508,7 @@ function buildReferentielPage() {
         )
       ) : null
     ),
+    buildReferentielClientSearchCard(),
     buildReferentielCard(),
     (!S.stockReadOnly) ? el('div', { cls: 'ref-card ref-units-card' },
       el('div', { cls: 'ref-card-header' },
@@ -2418,6 +2599,7 @@ async function confirmRefsImport() {
     S.importRefsOpen = false;
     S.importRefsPreview = null;
     await loadDashboard();
+    if (S.refClientQ.trim()) await loadRefClientSearch(S.refClientQ);
   } catch(e) {
     showToast(e.message || 'Import impossible', 'error');
   } finally {
@@ -2650,7 +2832,201 @@ async function loadMatieres() {
     S.matieres = [];
     showToast(e.message, 'error');
   }
+  if (S.selMatiere && S.selMatiere.matiere) {
+    const updated = (S.matieres || []).find(m => m.id === S.selMatiere.matiere.id);
+    if (updated) S.selMatiere.matiere = updated;
+  }
   renderMatieresView();
+}
+
+async function loadMatiere(id) {
+  if (!id) return;
+  try {
+    if (!S.matieres) {
+      const d = await api('/api/stock/matieres');
+      S.matieres = Array.isArray(d) ? d : [];
+    }
+    let matiere = (S.matieres || []).find(m => m.id === id);
+    if (!matiere) {
+      const d = await api('/api/stock/matieres');
+      S.matieres = Array.isArray(d) ? d : [];
+      matiere = S.matieres.find(m => m.id === id);
+    }
+    if (!matiere) {
+      showToast('Référence introuvable.', 'error');
+      return;
+    }
+    const mouvements = await api('/api/stock/matieres/' + id + '/mouvements');
+    S.selMatiere = {
+      matiere,
+      mouvements: Array.isArray(mouvements) ? mouvements : [],
+    };
+    S.selProduit = null;
+    S.selEmpl = null;
+    S.matieresEditId = null;
+    S.searchResults = null;
+    clearSearch();
+    if (S.tab !== 'matieres') S.tab = 'matieres';
+    closeSidebar();
+    render();
+  } catch (e) {
+    showToast(e.message, 'error');
+  }
+}
+
+async function refreshSelMatiere() {
+  if (!S.selMatiere || !S.selMatiere.matiere) return;
+  const id = S.selMatiere.matiere.id;
+  try {
+    const d = await api('/api/stock/matieres');
+    S.matieres = Array.isArray(d) ? d : [];
+    const matiere = S.matieres.find(m => m.id === id) || S.selMatiere.matiere;
+    const mouvements = await api('/api/stock/matieres/' + id + '/mouvements');
+    S.selMatiere = {
+      matiere,
+      mouvements: Array.isArray(mouvements) ? mouvements : [],
+    };
+    renderContent();
+    updateNavActive();
+  } catch (e) {
+    showToast(e.message, 'error');
+  }
+}
+
+function clearMatiereSel() {
+  S.selMatiere = null;
+  renderContent();
+  updateNavActive();
+}
+
+function mpMvtEmplacementLabel(m) {
+  const t = (m.type_mouvement || '').toLowerCase();
+  if (t === 'entree') return m.emplacement_dest || '';
+  if (t === 'sortie') return m.emplacement_source || '';
+  if (t === 'transfert') {
+    const a = m.emplacement_source || '';
+    const b = m.emplacement_dest || '';
+    if (a && b) return a + ' → ' + b;
+    return a || b;
+  }
+  return m.emplacement_dest || m.emplacement_source || '';
+}
+
+function buildMpMvtHistory(mouvements, matiere) {
+  const mpCat = matiere || null;
+  return el('div', { cls: 'card' },
+    el('div', { cls: 'card-header' }, el('div', { cls: 'card-title' }, 'Historique des mouvements')),
+    !mouvements.length
+      ? el('div', { cls: 'card-empty' }, 'Aucun mouvement')
+      : el('div', null, ...mouvements.slice(0, 30).map(m => {
+          const icons = { entree: '↓', sortie: '↑', ajustement: '=', transfert: '↔' };
+          const t = (m.type_mouvement || '').toLowerCase();
+          const signe = t === 'entree' ? '+' : t === 'sortie' ? '−' : t === 'ajustement' ? '=' : '';
+          const actor = (m.created_by_name || '').trim();
+          const empl = mpMvtEmplacementLabel(m);
+          const noteParts = [];
+          if (m.ref_bl) noteParts.push('BL ' + m.ref_bl);
+          if (m.note) noteParts.push(m.note);
+          return el('div', { cls: 'mvt-row' },
+            el('div', { cls: 'mvt-icon ' + t }, icons[t] || '·'),
+            el('div', { cls: 'mvt-body' },
+              el('div', { cls: 'mvt-line1' },
+                el('span', null, MVT_TYPE_LABELS[t] || t),
+                el('span', { cls: 'mvt-qte-' + t }, signe + mpStockLine(m.quantite, mpCat)),
+              ),
+              el('div', { cls: 'mvt-line2' },
+                fD(m.created_at),
+                empl ? el('span', null, ' · ' + empl) : null,
+                actor ? el('span', null, ' · ' + actor) : null,
+                (m.quantite_apres != null)
+                  ? el('span', null, ' · Stock ' + mpStockLine(m.quantite_apres, mpCat))
+                  : null,
+              ),
+              noteParts.length
+                ? el('div', { cls: 'mvt-note' }, noteParts.join(' · '))
+                : null,
+            ),
+          );
+        })),
+  );
+}
+
+function buildMatiereDetail() {
+  const sel = S.selMatiere;
+  if (!sel || !sel.matiere) {
+    return el('div', { cls: 'content' }, el('div', { cls: 'card-empty' }, 'Référence introuvable'));
+  }
+  const m = sel.matiere;
+  const mouvements = sel.mouvements || [];
+  const seuil = parseFloat(m.seuil_alerte) || 0;
+
+  const back = el('button', {
+    cls: 'btn-ghost',
+    style: { marginBottom: '14px' },
+    type: 'button',
+    on: { click: clearMatiereSel },
+  }, '← Retour aux matières premières');
+
+  const actions = S.stockReadOnly ? null : el('div', { cls: 'action-bar', style: { marginTop: '14px' } },
+    el('button', {
+      cls: 'action-btn entree',
+      type: 'button',
+      on: { click: () => openModalMouvement('entree', m) },
+    }, '↓ Entrée'),
+    el('button', {
+      cls: 'action-btn sortie',
+      type: 'button',
+      on: { click: () => openModalMouvement('sortie', m) },
+    }, '↑ Sortie'),
+    isMatieresAdmin()
+      ? el('button', {
+          cls: 'action-btn inventaire',
+          type: 'button',
+          on: { click: () => openModalMouvement('ajustement', m) },
+        }, '= Ajustement')
+      : null,
+  );
+
+  const meta = [];
+  if (mpIsPaletteCategory(m) && m.palettes_par_pile > 0) {
+    meta.push(fN(m.palettes_par_pile) + ' pal. / pile');
+  }
+  if (seuil > 0) meta.push('Seuil min. ' + mpStockLine(seuil, m));
+
+  return el('div', { cls: 'content' },
+    back,
+    el('div', { cls: 'scorecard' },
+      el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' } },
+        dashMpCatBadge(m.categorie),
+        m.en_alerte ? el('span', { style: { fontSize: '12px', color: 'var(--warn)', fontWeight: '600' } }, 'Sous le seuil') : null,
+      ),
+      el('div', { cls: 'sc-ref' }, m.reference || ''),
+      el('div', { cls: 'sc-des' }, m.designation || '—'),
+      meta.length
+        ? el('div', { style: { fontSize: '12px', color: 'var(--muted)', marginTop: '6px' } }, meta.join(' · '))
+        : null,
+      el('div', { cls: 'sc-stats' },
+        el('div', { cls: 'sc-stat' },
+          el('div', { cls: 'sc-stat-label' }, 'Stock actuel'),
+          el('div', { cls: 'sc-stat-value' }, mpStockLine(m.quantite, m)),
+        ),
+        el('div', { cls: 'sc-stat' },
+          el('div', { cls: 'sc-stat-label' }, 'Mouvements'),
+          el('div', { cls: 'sc-stat-value' }, String(mouvements.length)),
+        ),
+      ),
+    ),
+    actions,
+    buildMpMvtHistory(mouvements, m),
+    isMatieresAdmin()
+      ? el('div', { style: { marginTop: '16px' } },
+          buildMatiereRefEditForm(m, async () => {
+            await loadMatieres();
+            await refreshSelMatiere();
+          }),
+        )
+      : null,
+  );
 }
 
 function renderMatieresView() {
@@ -2662,7 +3038,7 @@ function renderMatieresView() {
   const area = document.getElementById('scroll-area');
   if (!area) return;
   area.innerHTML = '';
-  const content = buildMatieres();
+  const content = S.selMatiere ? buildMatiereDetail() : buildMatieres();
   if (content) area.appendChild(content);
   if (focusId) {
     const el = document.getElementById(focusId);
@@ -2826,7 +3202,10 @@ function buildMatieres() {
   } else {
     filtered.forEach(m => {
       const seuil = parseFloat(m.seuil_alerte) || 0;
-      list.appendChild(el('div', { cls: 'mp-card' },
+      list.appendChild(el('div', {
+        cls: 'mp-card',
+        on: { click: () => loadMatiere(m.id) },
+      },
         el('div', { cls: 'mp-card-top' },
           dashMpCatBadge(m.categorie),
           el('span', { cls: 'mp-card-ref' }, m.reference || ''),
@@ -3109,8 +3488,16 @@ async function submitMpMouvement() {
     if (res && res.ok) {
       closeMroot();
       showToast('Mouvement enregistré.', 'success');
-      await loadMatieres();
-      if (S.tab === 'dashboard') await loadDashboard();
+      if (S.selMatiere) {
+        try {
+          const d = await api('/api/stock/matieres');
+          S.matieres = Array.isArray(d) ? d : [];
+        } catch (e) { /* refreshSelMatiere affichera l'erreur */ }
+        await refreshSelMatiere();
+      } else {
+        await loadMatieres();
+        if (S.tab === 'dashboard') await loadDashboard();
+      }
     }
   } catch (e) {
     showToast(e.message || 'Erreur lors de l\'enregistrement.', 'error');
@@ -3193,21 +3580,32 @@ function buildMatieresAdminRow(item) {
     el('span', { style: { fontSize: '11px', fontWeight: '600', color: actif ? 'var(--success)' : 'var(--muted)' } },
       actif ? 'Actif' : 'Inactif'),
   ));
-  const actions = el('div', { cls: 'mp-admin-actions' },
-    el('button', {
-      cls: 'btn-ghost',
+  const actions = el('div', { cls: 'mp-admin-actions' });
+  if (!S.stockReadOnly && actif) {
+    actions.appendChild(el('button', {
+      cls: 'mp-act-btn mp-act-entree',
       type: 'button',
-      on: { click: () => {
-        S.matieresAdminEditId = S.matieresAdminEditId === item.id ? null : item.id;
-        renderMatieresAdminDrawer();
-      } },
-    }, S.matieresAdminEditId === item.id ? 'Fermer' : 'Modifier'),
-    el('button', {
-      cls: 'btn-ghost',
+      on: { click: (e) => { e.stopPropagation(); openModalMouvement('entree', item); } },
+    }, 'Entrée'));
+    actions.appendChild(el('button', {
+      cls: 'mp-act-btn mp-act-sortie',
       type: 'button',
-      on: { click: () => toggleMatieresActif(item) },
-    }, actif ? 'Désactiver' : 'Réactiver'),
-  );
+      on: { click: (e) => { e.stopPropagation(); openModalMouvement('sortie', item); } },
+    }, 'Sortie'));
+  }
+  actions.appendChild(el('button', {
+    cls: 'btn-ghost',
+    type: 'button',
+    on: { click: () => {
+      S.matieresAdminEditId = S.matieresAdminEditId === item.id ? null : item.id;
+      renderMatieresAdminDrawer();
+    } },
+  }, S.matieresAdminEditId === item.id ? 'Fermer' : 'Modifier'));
+  actions.appendChild(el('button', {
+    cls: 'btn-ghost',
+    type: 'button',
+    on: { click: () => toggleMatieresActif(item) },
+  }, actif ? 'Désactiver' : 'Réactiver'));
   row.appendChild(actions);
   if (S.matieresAdminEditId === item.id) {
     row.appendChild(buildMatieresAdminEditForm(item));
@@ -3970,6 +4368,7 @@ function buildDashboard() {
 function clearSel() {
   S.selProduit = null;
   S.selEmpl = null;
+  S.selMatiere = null;
   renderContent();
   updateNavActive();
 }
@@ -4510,11 +4909,15 @@ function renderContent() {
   let content;
   if (S.selProduit) content = buildProduitDetail();
   else if (S.selEmpl) content = buildEmplacementDetail();
+  else if (S.selMatiere) content = buildMatiereDetail();
   else if (S.tab === 'dashboard') content = buildDashboard();
   else if (S.tab === 'matieres') {
     content = buildMatieres();
   }
-  else if (S.tab === 'referentiel') content = buildReferentielPage();
+  else if (S.tab === 'referentiel') {
+    renderReferentielView();
+    return;
+  }
   else if (S.tab === 'inventaire') content = buildInventaire();
   else if (S.tab === 'traca') content = buildTraca();
   else if (S.tab === 'reception') content = buildReception();
@@ -5174,6 +5577,7 @@ const STOCK_TAB_MOBILE_TITLES = {
 
 function stockMobileTabTitle() {
   if (S.selProduit || S.selEmpl) return 'Stock';
+  if (S.selMatiere && S.selMatiere.matiere) return S.selMatiere.matiere.reference || 'Matière première';
   return STOCK_TAB_MOBILE_TITLES[S.tab] || 'MyStock';
 }
 

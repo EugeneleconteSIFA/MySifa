@@ -62,42 +62,63 @@ Ces trois points bloquent ou fragilisent les chantiers à venir. À traiter dans
 
 ### 5.1 Modèle de données
 
+> Schéma **calibré sur 4 grilles réelles** (CEVA, TRANSBENELUX, compte 100346, DSV XPress) — voir l'Annexe B pour le détail des formats observés.
+
 Nouvelle table `expe_tarifs` (lignes tarifaires normalisées) :
 
 ```sql
 CREATE TABLE IF NOT EXISTS expe_tarifs (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     transporteur_id INTEGER NOT NULL,
-    type_envoi      TEXT NOT NULL,          -- 'messagerie' | 'ramasse' | 'affretement'
-    zone            TEXT NOT NULL,          -- code département '59', ou libellé zone 'IDF' / 'NATIONAL'
-    poids_min       REAL NOT NULL DEFAULT 0,-- borne basse de la tranche (kg)
-    poids_max       REAL,                   -- borne haute (NULL = illimité)
-    prix            REAL NOT NULL,          -- montant unitaire
-    unite           TEXT NOT NULL,          -- 'forfait' | 'au_100kg' | 'au_kg' | 'par_palette' | 'par_tonne'
-    mini_perception REAL,                   -- forfait minimum de perception (mini de fret)
-    valid_from      TEXT,                   -- début de validité
-    valid_to        TEXT,                   -- fin de validité (NULL = en cours)
+    type_envoi      TEXT NOT NULL,          -- 'messagerie' | 'ramasse' | 'affretement' | 'express_intl'
+    base_calcul     TEXT NOT NULL,          -- AXE de la grille : 'poids' (kg) | 'palette' (nb) | 'metre_plancher' (ML)
+    zone_type       TEXT NOT NULL,          -- 'departement' | 'code_postal' | 'zone_intl' | 'pays'
+    zone_valeur     TEXT NOT NULL,          -- '59' | '59200' | '7' (zone intl) | 'DE'
+    tranche_min     REAL NOT NULL DEFAULT 0,-- borne basse (dans l'unité de base_calcul)
+    tranche_max     REAL,                   -- borne haute (NULL = illimité)
+    prix            REAL NOT NULL,
+    unite           TEXT NOT NULL,          -- 'forfait' (= total de la tranche) | 'au_100kg' | 'au_kg'
+    mini_perception REAL,                   -- mini de perception / mini de fret
+    valid_from      TEXT,
+    valid_to        TEXT,                   -- NULL = en cours
     actif           INTEGER DEFAULT 0,      -- 0 = brouillon importé, 1 = validé et utilisable
-    source_filename TEXT,                   -- fichier d'origine
+    source_filename TEXT,
     created_at      TEXT,
     created_by_email TEXT,
     FOREIGN KEY (transporteur_id) REFERENCES expe_transporteurs(id)
 );
 CREATE INDEX IF NOT EXISTS idx_expe_tarifs_lookup
-    ON expe_tarifs(transporteur_id, type_envoi, zone, actif);
+    ON expe_tarifs(transporteur_id, type_envoi, zone_type, zone_valeur, actif);
 ```
 
-Colonnes à ajouter sur `expe_transporteurs` (frais qui s'appliquent par-dessus la grille) :
+> Le couple `base_calcul` + `tranche_min/max` remplace `poids_min/max` : une grille palette s'indexe sur le **nombre de palettes** (TRANSBENELUX : 1 à 18), une grille messagerie sur le **poids**. Pour les grilles palette/mètre plancher, `unite='forfait'` et le prix lu EST le total (ex. 2 palettes ≠ 2 × le prix d'1 palette).
+
+Nouvelle table `expe_tarifs_frais` (frais annexes par transporteur — les grilles CEVA en comptent une douzaine) :
+
+```sql
+CREATE TABLE IF NOT EXISTS expe_tarifs_frais (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    transporteur_id INTEGER NOT NULL,
+    libelle         TEXT NOT NULL,          -- 'Gasoil', 'Taxe sûreté/sécurité', 'Prise de RDV', 'Ville excentrée'...
+    mode            TEXT NOT NULL,          -- 'pct_transport' | 'forfait_expedition' | 'par_palette'
+    valeur          REAL NOT NULL,
+    mini            REAL,                   -- minimum de facturation éventuel
+    applique_defaut INTEGER DEFAULT 1,      -- 1 = inclus auto dans le comparateur ; 0 = option à cocher
+    FOREIGN KEY (transporteur_id) REFERENCES expe_transporteurs(id)
+);
+```
+
+Colonnes à ajouter sur `expe_transporteurs` (limites de service, migrées depuis `EXPE_TRP_META` codé en JS) :
 
 ```
-taxe_carburant_pct   REAL   -- existe déjà
-taxe_securite_pct    REAL   -- taxe sûreté/sécurité (souvent un %)
-frais_dossier        REAL   -- frais fixes par expédition
-palette_max          INTEGER-- migré depuis EXPE_TRP_META.palMax
+palette_max          INTEGER-- nb max de palettes (Coupé 5, Ceva 4, Coquelle 33, Dimotrans 28)
+poids_max_kg         REAL   -- plafond de poids du service (ex. CEVA messagerie : 2000 kg)
 accepte_poids        INTEGER-- migré depuis EXPE_TRP_META.poids
 accepte_palette      INTEGER-- migré depuis EXPE_TRP_META.palette
 ```
 
+> `taxe_carburant_pct` existe déjà sur `expe_transporteurs` mais est désormais doublonné par une ligne `Gasoil` dans `expe_tarifs_frais` — choisir l'un des deux à la migration (recommandé : tout passer en `expe_tarifs_frais` pour homogénéiser, et garder `taxe_carburant_pct` en lecture seule le temps de la bascule).
+>
 > Note conventions : numéroter ces migrations à partir du prochain numéro libre dans `_migrate()` (au 25/05/2026 la dernière est ≥ v59 — vérifier le max avant d'assigner). Une migration par changement logique.
 
 ### 5.2 Skill d'import tarifaire (Cowork) — `import-tarif-transporteur`
@@ -143,14 +164,13 @@ Entrée : un envoi `{ poids_total_kg, nb_palette, code_postal_destination, type_
 Algorithme (côté serveur) :
 1. Déduire le **département** depuis le code postal (2 premiers caractères, gérer Corse 2A/2B et DOM 97x).
 2. **Filtrer les transporteurs éligibles** : `actif=1` ; zone du type d'envoi cochée (`zone_messagerie` / `zone_affretement` / `zone_france` / `zone_france_hors_paris`) ; `nb_palette <= palette_max` ; type accepté (poids/palette).
-3. Pour chaque éligible, **trouver la ligne tarifaire** `expe_tarifs` correspondante (`actif=1`, `type_envoi`, `zone` = département ou groupe de zones, `poids_total_kg` dans `[poids_min, poids_max)`).
+3. Pour chaque éligible, **trouver la ligne tarifaire** `expe_tarifs` correspondante : `actif=1`, `type_envoi`, résolution de zone **du plus précis au plus large** (`code_postal` exact → `departement` → `zone_intl`/`pays`), et valeur de la `base_calcul` (poids en kg, nb de palettes, ou mètre plancher) dans `[tranche_min, tranche_max)`.
 4. **Calculer le prix de base** selon `unite` :
-   - `au_100kg` → `prix * poids_total_kg / 100`
-   - `par_palette` → `prix * nb_palette`
+   - `forfait` → `prix` (le prix EST le total de la tranche — grilles palette / mètre plancher, et tranches messagerie ≤ 100 kg)
+   - `au_100kg` → `prix * poids_total_kg / 100` (tranches messagerie > 100 kg)
    - `au_kg` → `prix * poids_total_kg`
-   - `forfait` → `prix`
-   - appliquer `max(base, mini_perception)`.
-5. **Ajouter les frais** : `base * (1 + taxe_carburant_pct/100) * (1 + taxe_securite_pct/100) + frais_dossier`.
+   - puis `max(base, mini_perception)`.
+5. **Ajouter les frais** depuis `expe_tarifs_frais` : appliquer le gasoil (`pct_transport`) puis les frais `applique_defaut=1` (sûreté/sécurité…), chacun avec son `mini`. Les frais optionnels (prise de RDV, ville excentrée, hayon…) sont proposés en cases à cocher dans l'UI.
 6. **Croiser le délai** depuis `expe_delais` (Chantier 3 ; fallback sur la donnée carte actuelle en attendant).
 7. **Trier par prix croissant**, marquer le moins cher, exposer aussi un tri par délai.
 
@@ -304,3 +324,42 @@ Tailles indicatives : S ≈ une session, M ≈ quelques sessions, L ≈ chantier
 - Titre : `Expéditions — Comparateur de prix`
 - Nouveautés : choix du transporteur le moins cher en quelques secondes (taxe carburant et mini de perception inclus) ; comparaison directe depuis une ligne de départ ; affichage du délai à côté du prix.
 - Corrections : délais de livraison désormais partagés entre tous les postes (fin du stockage local par navigateur).
+
+---
+
+## 14. Annexe B — Formats de grilles tarifaires observés (4 exemples réels)
+
+Analysés le 25/05/2026 à partir des fichiers fournis. Sert de référence pour le skill d'import (5.2) et le parsing in-app (5.3). Origine d'expédition commune : **59 Roubaix / Tourcoing**.
+
+### B.1 Compte 100346 — « SIFA 010126 - P U » (xlsx, 2 feuilles)
+
+- **Feuille POIDS** (messagerie) : colonne A = `(NN) DÉPARTEMENT`, colonne B = n° département. Ligne d'en-tête « DE / A » = tranches de poids : 0-10, 10-20, … 90-100 (unité **Forfait**), puis 100-250, 250-500, 500-1000 (unité **Prx/100Kg**). Une cellule = un prix.
+- **Feuille PALETTE** : mêmes départements en lignes, colonnes = 1 à 5 palettes, unité **Forfait** (le prix est le total pour N palettes).
+- Corse (20) = lignes vides → pas de tarif (à gérer comme « non desservi »).
+- → `zone_type='departement'`, `base_calcul='poids'` (feuille 1) et `'palette'` (feuille 2).
+
+### B.2 CEVA Logistics — « TARIFS GN et PAL » (xlsx, 4 feuilles)
+
+- **Tarifs Messagerie Poids** : colonne « Département / zone Code Postal » → **certaines zones sont au code postal, pas au département**. Tranches forfait 1-10…91-100, puis **Prix au 100 kg** de 101-200 jusqu'à 1001-1500 kg. ~2200 lignes.
+- **Tarifs Palettes (SmartPal)** : par département, 1-4 palettes, avec équivalence **mètre plancher** (0,4 / 0,8 / 1,2 / 1,6 m). Norme : 1 à 6 palettes, poids max 800 kg/palette, hauteur max 2 m.
+- **Conditions commerciales** : nombreux frais annexes → alimentent `expe_tarifs_frais` : Technic (date impérative) 25 % min 12 €, Dynamic (délai garanti) 30 % min 15 €, 2ᵉ présentation 60 % min 25 €, ville excentrée/montagne forfait 16 € + 12 €/palette, prise de RDV 6 €, **taxe sûreté/sécurité 1,90 €/expédition**, My CO2tribution 0,63 €, centres urbains 6,50 €, frais de mesure 9 €, enlèvement ponctuel 28 €, retour 30 €. Norme messagerie : ≤ 5 palettes et 2000 kg.
+- → `zone_type` mixte (`departement` + `code_postal`), `base_calcul='poids'` et `'palette'`, + `expe_tarifs_frais` riche.
+
+### B.3 TRANSBENELUX — « SIFA VERS FRANCE 2026 » (xlsx)
+
+- Unité de tarif **MP (mètre plancher)**. Lignes = départements (FR01…), colonnes = **1 à 18 palettes** 80×120 (avec plage de mètres plancher associée). Couvre la zone affrètement (> 6 palettes).
+- Codes de lecture : FO = forfaitaire, PU = prix unitaire, PP = payant pour.
+- → `zone_type='departement'`, `base_calcul='palette'` (ou `'metre_plancher'`), `unite='forfait'`.
+
+### B.4 DSV XPress — « DSV_SIFA_26618 » (pdf, 16 pages) — hors périmètre actuel
+
+- Produit **express international** : zones 1-15 (mapping pays → zone), prix au poids par paliers de 0,5 kg (documents / marchandises), + table de **délais de livraison par pays**.
+- → `type_envoi='express_intl'`, `zone_type='zone_intl'`/`'pays'`, `base_calcul='poids'`. Documenté pour mémoire ; **non intégré pour l'instant** (décision §12).
+
+### Conclusions pour l'import
+
+1. Le skill doit détecter l'**axe** de chaque feuille (poids / palette / mètre plancher) et le **type de zone** (département vs code postal vs zone-pays).
+2. Les tranches sont à **bornes variables** d'un transporteur à l'autre → toujours extraire les bornes réelles depuis les lignes d'en-tête « DE / A », ne jamais présumer un découpage fixe.
+3. Distinguer dans une même grille les tranches **forfait** (≤ 100 kg, ou par palette) des tranches **au 100 kg** (> 100 kg).
+4. Extraire les **frais annexes** depuis les feuilles « Conditions » vers `expe_tarifs_frais`.
+5. Toujours passer par une **validation humaine** avant `actif=1` (cf. principe directeur).

@@ -1,0 +1,1689 @@
+transporteur,type_envoi,base_calcul,zone_type,zone_valeur,dept_label,tranche_min,tranche_max,prix,unite,mini_perception,source_filename
+Compte 100346,messagerie,poids,departement,01,AIN,0,10.0,21.32,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,01,AIN,10,20.0,25.81,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,01,AIN,20,30.0,30.37,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,01,AIN,30,40.0,34.84,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,01,AIN,40,50.0,39.48,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,01,AIN,50,60.0,44.24,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,01,AIN,60,70.0,48.96,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,01,AIN,70,80.0,53.39,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,01,AIN,80,90.0,58.99,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,01,AIN,90,100.0,63.07,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,01,AIN,100,250.0,63.07,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,01,AIN,250,500.0,26.52,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,01,AIN,500,1000.0,22.38,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,02,AISNE,0,10.0,11.96,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,02,AISNE,10,20.0,12.8,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,02,AISNE,20,30.0,14.51,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,02,AISNE,30,40.0,14.51,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,02,AISNE,40,50.0,16.19,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,02,AISNE,50,60.0,16.19,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,02,AISNE,60,70.0,17.48,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,02,AISNE,70,80.0,17.48,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,02,AISNE,80,90.0,18.14,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,02,AISNE,90,100.0,18.14,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,02,AISNE,100,250.0,16.56,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,02,AISNE,250,500.0,16.56,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,02,AISNE,500,1000.0,16.56,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,03,ALLIER,0,10.0,15.45,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,03,ALLIER,10,20.0,17.1,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,03,ALLIER,20,30.0,21.48,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,03,ALLIER,30,40.0,23.86,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,03,ALLIER,40,50.0,26.56,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,03,ALLIER,50,60.0,28.92,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,03,ALLIER,60,70.0,33.68,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,03,ALLIER,70,80.0,36.39,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,03,ALLIER,80,90.0,38.04,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,03,ALLIER,90,100.0,40.99,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,03,ALLIER,100,250.0,40.56,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,03,ALLIER,250,500.0,31.9,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,03,ALLIER,500,1000.0,30.24,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,04,ALPES (HTE-PROVENCE),0,10.0,25.41,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,04,ALPES (HTE-PROVENCE),10,20.0,30.06,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,04,ALPES (HTE-PROVENCE),20,30.0,34.75,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,04,ALPES (HTE-PROVENCE),30,40.0,39.43,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,04,ALPES (HTE-PROVENCE),40,50.0,47.0,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,04,ALPES (HTE-PROVENCE),50,60.0,51.65,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,04,ALPES (HTE-PROVENCE),60,70.0,59.37,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,04,ALPES (HTE-PROVENCE),70,80.0,64.05,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,04,ALPES (HTE-PROVENCE),80,90.0,71.66,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,04,ALPES (HTE-PROVENCE),90,100.0,76.04,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,04,ALPES (HTE-PROVENCE),100,250.0,76.04,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,04,ALPES (HTE-PROVENCE),250,500.0,70.82,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,04,ALPES (HTE-PROVENCE),500,1000.0,63.45,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,05,ALPES (HAUTES),0,10.0,25.2,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,05,ALPES (HAUTES),10,20.0,29.73,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,05,ALPES (HAUTES),20,30.0,34.2,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,05,ALPES (HAUTES),30,40.0,38.69,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,05,ALPES (HAUTES),40,50.0,46.12,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,05,ALPES (HAUTES),50,60.0,50.67,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,05,ALPES (HAUTES),60,70.0,58.18,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,05,ALPES (HAUTES),70,80.0,62.66,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,05,ALPES (HAUTES),80,90.0,70.14,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,05,ALPES (HAUTES),90,100.0,74.35,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,05,ALPES (HAUTES),100,250.0,74.35,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,05,ALPES (HAUTES),250,500.0,70.82,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,05,ALPES (HAUTES),500,1000.0,63.45,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,06,ALPES MARITIMES,0,10.0,22.41,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,06,ALPES MARITIMES,10,20.0,28.48,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,06,ALPES MARITIMES,20,30.0,34.55,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,06,ALPES MARITIMES,30,40.0,40.61,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,06,ALPES MARITIMES,40,50.0,46.68,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,06,ALPES MARITIMES,50,60.0,52.77,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,06,ALPES MARITIMES,60,70.0,53.82,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,06,ALPES MARITIMES,70,80.0,59.47,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,06,ALPES MARITIMES,80,90.0,65.72,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,06,ALPES MARITIMES,90,100.0,71.82,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,06,ALPES MARITIMES,100,250.0,71.82,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,06,ALPES MARITIMES,250,500.0,53.96,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,06,ALPES MARITIMES,500,1000.0,43.16,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,07,ARDECHE,0,10.0,18.41,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,07,ARDECHE,10,20.0,22.15,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,07,ARDECHE,20,30.0,26.25,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,07,ARDECHE,30,40.0,30.95,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,07,ARDECHE,40,50.0,35.58,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,07,ARDECHE,50,60.0,40.09,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,07,ARDECHE,60,70.0,44.71,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,07,ARDECHE,70,80.0,48.94,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,07,ARDECHE,80,90.0,53.9,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,07,ARDECHE,90,100.0,58.7,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,07,ARDECHE,100,250.0,58.7,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,07,ARDECHE,250,500.0,47.29,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,07,ARDECHE,500,1000.0,43.15,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,08,ARDENNES,0,10.0,13.8,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,08,ARDENNES,10,20.0,15.2,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,08,ARDENNES,20,30.0,17.43,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,08,ARDENNES,30,40.0,18.74,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,08,ARDENNES,40,50.0,21.62,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,08,ARDENNES,50,60.0,24.54,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,08,ARDENNES,60,70.0,27.39,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,08,ARDENNES,70,80.0,30.45,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,08,ARDENNES,80,90.0,32.27,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,08,ARDENNES,90,100.0,32.74,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,08,ARDENNES,100,250.0,27.65,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,08,ARDENNES,250,500.0,19.46,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,08,ARDENNES,500,1000.0,17.7,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,09,ARIEGE,0,10.0,19.26,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,09,ARIEGE,10,20.0,23.98,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,09,ARIEGE,20,30.0,29.23,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,09,ARIEGE,30,40.0,34.3,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,09,ARIEGE,40,50.0,39.99,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,09,ARIEGE,50,60.0,44.47,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,09,ARIEGE,60,70.0,50.36,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,09,ARIEGE,70,80.0,54.83,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,09,ARIEGE,80,90.0,60.03,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,09,ARIEGE,90,100.0,64.51,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,09,ARIEGE,100,250.0,62.82,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,09,ARIEGE,250,500.0,57.2,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,09,ARIEGE,500,1000.0,55.38,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,10,AUBE,0,10.0,15.78,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,10,AUBE,10,20.0,16.88,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,10,AUBE,20,30.0,18.24,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,10,AUBE,30,40.0,21.23,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,10,AUBE,40,50.0,23.95,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,10,AUBE,50,60.0,26.68,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,10,AUBE,60,70.0,29.88,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,10,AUBE,70,80.0,32.86,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,10,AUBE,80,90.0,34.08,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,10,AUBE,90,100.0,35.26,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,10,AUBE,100,250.0,36.96,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,10,AUBE,250,500.0,20.94,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,10,AUBE,500,1000.0,16.8,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,11,AUDE,0,10.0,21.49,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,11,AUDE,10,20.0,26.71,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,11,AUDE,20,30.0,31.94,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,11,AUDE,30,40.0,37.16,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,11,AUDE,40,50.0,42.39,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,11,AUDE,50,60.0,47.59,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,11,AUDE,60,70.0,48.79,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,11,AUDE,70,80.0,54.01,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,11,AUDE,80,90.0,58.81,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,11,AUDE,90,100.0,63.98,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,11,AUDE,100,250.0,58.04,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,11,AUDE,250,500.0,46.45,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,11,AUDE,500,1000.0,37.16,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,12,AVEYRON,0,10.0,15.97,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,12,AVEYRON,10,20.0,20.07,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,12,AVEYRON,20,30.0,26.37,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,12,AVEYRON,30,40.0,29.96,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,12,AVEYRON,40,50.0,33.82,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,12,AVEYRON,50,60.0,36.91,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,12,AVEYRON,60,70.0,41.81,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,12,AVEYRON,70,80.0,46.49,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,12,AVEYRON,80,90.0,51.04,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,12,AVEYRON,90,100.0,55.98,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,12,AVEYRON,100,250.0,55.98,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,12,AVEYRON,250,500.0,45.6,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,12,AVEYRON,500,1000.0,43.14,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,13,BOUCHES DU RHONE,0,10.0,21.25,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,13,BOUCHES DU RHONE,10,20.0,26.41,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,13,BOUCHES DU RHONE,20,30.0,31.57,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,13,BOUCHES DU RHONE,30,40.0,36.72,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,13,BOUCHES DU RHONE,40,50.0,41.91,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,13,BOUCHES DU RHONE,50,60.0,47.66,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,13,BOUCHES DU RHONE,60,70.0,52.57,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,13,BOUCHES DU RHONE,70,80.0,57.92,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,13,BOUCHES DU RHONE,80,90.0,63.19,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,13,BOUCHES DU RHONE,90,100.0,64.91,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,13,BOUCHES DU RHONE,100,250.0,63.44,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,13,BOUCHES DU RHONE,250,500.0,45.92,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,13,BOUCHES DU RHONE,500,1000.0,36.72,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,14,CALVADOS,0,10.0,18.67,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,14,CALVADOS,10,20.0,20.14,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,14,CALVADOS,20,30.0,21.62,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,14,CALVADOS,30,40.0,23.7,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,14,CALVADOS,40,50.0,25.69,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,14,CALVADOS,50,60.0,27.88,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,14,CALVADOS,60,70.0,30.53,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,14,CALVADOS,70,80.0,34.21,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,14,CALVADOS,80,90.0,36.43,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,14,CALVADOS,90,100.0,39.96,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,14,CALVADOS,100,250.0,31.69,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,14,CALVADOS,250,500.0,28.61,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,14,CALVADOS,500,1000.0,25.66,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,15,CANTAL,0,10.0,15.61,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,15,CANTAL,10,20.0,20.09,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,15,CANTAL,20,30.0,25.22,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,15,CANTAL,30,40.0,30.15,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,15,CANTAL,40,50.0,34.79,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,15,CANTAL,50,60.0,39.47,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,15,CANTAL,60,70.0,44.17,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,15,CANTAL,70,80.0,48.18,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,15,CANTAL,80,90.0,51.69,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,15,CANTAL,90,100.0,55.24,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,15,CANTAL,100,250.0,55.84,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,15,CANTAL,250,500.0,45.16,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,15,CANTAL,500,1000.0,42.05,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,16,CHARENTE,0,10.0,16.95,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,16,CHARENTE,10,20.0,19.9,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,16,CHARENTE,20,30.0,24.46,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,16,CHARENTE,30,40.0,27.57,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,16,CHARENTE,40,50.0,32.41,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,16,CHARENTE,50,60.0,35.5,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,16,CHARENTE,60,70.0,39.97,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,16,CHARENTE,70,80.0,43.06,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,16,CHARENTE,80,90.0,46.84,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,16,CHARENTE,90,100.0,49.93,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,16,CHARENTE,100,250.0,48.29,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,16,CHARENTE,250,500.0,42.89,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,16,CHARENTE,500,1000.0,41.13,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,17,CHARENTE MARITIME,0,10.0,18.74,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,17,CHARENTE MARITIME,10,20.0,22.99,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,17,CHARENTE MARITIME,20,30.0,27.7,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,17,CHARENTE MARITIME,30,40.0,32.25,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,17,CHARENTE MARITIME,40,50.0,36.47,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,17,CHARENTE MARITIME,50,60.0,40.78,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,17,CHARENTE MARITIME,60,70.0,45.22,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,17,CHARENTE MARITIME,70,80.0,49.92,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,17,CHARENTE MARITIME,80,90.0,54.3,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,17,CHARENTE MARITIME,90,100.0,58.86,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,17,CHARENTE MARITIME,100,250.0,50.76,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,17,CHARENTE MARITIME,250,500.0,45.36,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,17,CHARENTE MARITIME,500,1000.0,43.62,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,18,CHER,0,10.0,14.45,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,18,CHER,10,20.0,16.48,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,18,CHER,20,30.0,20.91,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,18,CHER,30,40.0,23.12,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,18,CHER,40,50.0,25.69,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,18,CHER,50,60.0,27.88,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,18,CHER,60,70.0,30.53,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,18,CHER,70,80.0,32.91,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,18,CHER,80,90.0,34.08,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,18,CHER,90,100.0,36.41,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,18,CHER,100,250.0,31.29,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,18,CHER,250,500.0,25.9,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,18,CHER,500,1000.0,24.15,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,19,CORREZE,0,10.0,18.91,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,19,CORREZE,10,20.0,22.41,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,19,CORREZE,20,30.0,25.95,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,19,CORREZE,30,40.0,29.44,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,19,CORREZE,40,50.0,32.54,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,19,CORREZE,50,60.0,35.26,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,19,CORREZE,60,70.0,37.61,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,19,CORREZE,70,80.0,39.96,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,19,CORREZE,80,90.0,42.6,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,19,CORREZE,90,100.0,46.45,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,19,CORREZE,100,250.0,44.37,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,19,CORREZE,250,500.0,37.71,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,19,CORREZE,500,1000.0,36.03,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,21,COTE D'OR,0,10.0,17.33,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,21,COTE D'OR,10,20.0,18.97,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,21,COTE D'OR,20,30.0,20.71,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,21,COTE D'OR,30,40.0,22.63,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,21,COTE D'OR,40,50.0,25.67,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,21,COTE D'OR,50,60.0,28.75,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,21,COTE D'OR,60,70.0,32.34,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,21,COTE D'OR,70,80.0,32.91,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,21,COTE D'OR,80,90.0,35.26,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,21,COTE D'OR,90,100.0,35.63,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,21,COTE D'OR,100,250.0,40.31,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,21,COTE D'OR,250,500.0,26.89,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,21,COTE D'OR,500,1000.0,25.21,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,22,COTES D ARMOR,0,10.0,19.04,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,22,COTES D ARMOR,10,20.0,21.44,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,22,COTES D ARMOR,20,30.0,24.94,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,22,COTES D ARMOR,30,40.0,27.38,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,22,COTES D ARMOR,40,50.0,30.37,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,22,COTES D ARMOR,50,60.0,32.84,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,22,COTES D ARMOR,60,70.0,35.71,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,22,COTES D ARMOR,70,80.0,40.09,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,22,COTES D ARMOR,80,90.0,42.57,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,22,COTES D ARMOR,90,100.0,46.92,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,22,COTES D ARMOR,100,250.0,43.25,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,22,COTES D ARMOR,250,500.0,35.62,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,22,COTES D ARMOR,500,1000.0,34.08,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,23,CREUSE,0,10.0,20.77,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,23,CREUSE,10,20.0,23.33,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,23,CREUSE,20,30.0,25.95,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,23,CREUSE,30,40.0,29.44,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,23,CREUSE,40,50.0,32.54,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,23,CREUSE,50,60.0,36.05,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,23,CREUSE,60,70.0,39.99,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,23,CREUSE,70,80.0,44.36,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,23,CREUSE,80,90.0,48.73,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,23,CREUSE,90,100.0,47.9,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,23,CREUSE,100,250.0,44.27,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,23,CREUSE,250,500.0,37.37,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,23,CREUSE,500,1000.0,35.78,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,24,DORDOGNE,0,10.0,26.06,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,24,DORDOGNE,10,20.0,29.57,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,24,DORDOGNE,20,30.0,33.4,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,24,DORDOGNE,30,40.0,36.9,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,24,DORDOGNE,40,50.0,41.75,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,24,DORDOGNE,50,60.0,45.27,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,24,DORDOGNE,60,70.0,50.11,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,24,DORDOGNE,70,80.0,55.53,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,24,DORDOGNE,80,90.0,59.05,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,24,DORDOGNE,90,100.0,64.89,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,24,DORDOGNE,100,250.0,61.59,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,24,DORDOGNE,250,500.0,55.32,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,24,DORDOGNE,500,1000.0,53.09,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,25,DOUBS,0,10.0,17.09,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,25,DOUBS,10,20.0,19.51,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,25,DOUBS,20,30.0,21.94,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,25,DOUBS,30,40.0,24.61,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,25,DOUBS,40,50.0,28.96,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,25,DOUBS,50,60.0,31.4,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,25,DOUBS,60,70.0,35.46,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,25,DOUBS,70,80.0,37.9,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,25,DOUBS,80,90.0,41.55,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,25,DOUBS,90,100.0,43.96,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,25,DOUBS,100,250.0,40.75,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,25,DOUBS,250,500.0,34.27,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,25,DOUBS,500,1000.0,30.12,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,26,DROME,0,10.0,17.59,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,26,DROME,10,20.0,20.48,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,26,DROME,20,30.0,23.39,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,26,DROME,30,40.0,26.56,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,26,DROME,40,50.0,31.38,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,26,DROME,50,60.0,34.75,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,26,DROME,60,70.0,39.28,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,26,DROME,70,80.0,43.6,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,26,DROME,80,90.0,47.78,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,26,DROME,90,100.0,52.34,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,26,DROME,100,250.0,52.34,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,26,DROME,250,500.0,36.68,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,26,DROME,500,1000.0,32.53,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,27,EURE,0,10.0,13.94,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,27,EURE,10,20.0,15.49,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,27,EURE,20,30.0,17.86,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,27,EURE,30,40.0,18.74,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,27,EURE,40,50.0,21.38,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,27,EURE,50,60.0,22.29,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,27,EURE,60,70.0,24.53,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,27,EURE,70,80.0,25.43,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,27,EURE,80,90.0,27.0,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,27,EURE,90,100.0,27.9,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,27,EURE,100,250.0,27.36,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,27,EURE,250,500.0,20.85,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,27,EURE,500,1000.0,19.1,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,28,EURE ET LOIRE,0,10.0,16.8,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,28,EURE ET LOIRE,10,20.0,17.92,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,28,EURE ET LOIRE,20,30.0,19.13,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,28,EURE ET LOIRE,30,40.0,20.17,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,28,EURE ET LOIRE,40,50.0,21.94,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,28,EURE ET LOIRE,50,60.0,22.96,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,28,EURE ET LOIRE,60,70.0,24.79,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,28,EURE ET LOIRE,70,80.0,27.1,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,28,EURE ET LOIRE,80,90.0,28.15,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,28,EURE ET LOIRE,90,100.0,30.39,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,28,EURE ET LOIRE,100,250.0,28.32,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,28,EURE ET LOIRE,250,500.0,21.65,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,28,EURE ET LOIRE,500,1000.0,19.97,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,29,FINISTERE,0,10.0,19.34,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,29,FINISTERE,10,20.0,22.03,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,29,FINISTERE,20,30.0,25.17,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,29,FINISTERE,30,40.0,27.94,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,29,FINISTERE,40,50.0,31.51,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,29,FINISTERE,50,60.0,35.79,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,29,FINISTERE,60,70.0,40.49,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,29,FINISTERE,70,80.0,45.0,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,29,FINISTERE,80,90.0,49.37,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,29,FINISTERE,90,100.0,54.1,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,29,FINISTERE,100,250.0,54.1,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,29,FINISTERE,250,500.0,38.58,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,29,FINISTERE,500,1000.0,37.04,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,30,GARD,0,10.0,22.47,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,30,GARD,10,20.0,27.94,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,30,GARD,20,30.0,33.42,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,30,GARD,30,40.0,38.9,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,30,GARD,40,50.0,44.34,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,30,GARD,50,60.0,49.84,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,30,GARD,60,70.0,49.84,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,30,GARD,70,80.0,55.29,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,30,GARD,80,90.0,55.3,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,30,GARD,90,100.0,60.76,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,30,GARD,100,250.0,60.76,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,30,GARD,250,500.0,48.62,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,30,GARD,500,1000.0,26.67,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,31,GARONNE (HAUTE),0,10.0,16.26,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,31,GARONNE (HAUTE),10,20.0,21.4,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,31,GARONNE (HAUTE),20,30.0,25.53,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,31,GARONNE (HAUTE),30,40.0,30.12,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,31,GARONNE (HAUTE),40,50.0,34.94,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,31,GARONNE (HAUTE),50,60.0,39.48,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,31,GARONNE (HAUTE),60,70.0,43.94,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,31,GARONNE (HAUTE),70,80.0,48.57,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,31,GARONNE (HAUTE),80,90.0,52.63,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,31,GARONNE (HAUTE),90,100.0,56.8,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,31,GARONNE (HAUTE),100,250.0,56.82,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,31,GARONNE (HAUTE),250,500.0,57.6,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,31,GARONNE (HAUTE),500,1000.0,57.6,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,32,GERS,0,10.0,19.26,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,32,GERS,10,20.0,23.98,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,32,GERS,20,30.0,29.23,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,32,GERS,30,40.0,34.3,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,32,GERS,40,50.0,39.34,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,32,GERS,50,60.0,43.83,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,32,GERS,60,70.0,49.66,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,32,GERS,70,80.0,54.14,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,32,GERS,80,90.0,59.31,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,32,GERS,90,100.0,63.98,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,32,GERS,100,250.0,62.15,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,32,GERS,250,500.0,56.75,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,32,GERS,500,1000.0,55.0,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,33,GIRONDE,0,10.0,23.15,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,33,GIRONDE,10,20.0,25.77,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,33,GIRONDE,20,30.0,28.68,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,33,GIRONDE,30,40.0,31.3,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,33,GIRONDE,40,50.0,35.05,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,33,GIRONDE,50,60.0,37.67,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,33,GIRONDE,60,70.0,41.5,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,33,GIRONDE,70,80.0,45.83,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,33,GIRONDE,80,90.0,48.45,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,33,GIRONDE,90,100.0,53.18,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,33,GIRONDE,100,250.0,50.17,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,33,GIRONDE,250,500.0,46.6,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,33,GIRONDE,500,1000.0,42.86,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,34,HERAULT,0,10.0,20.66,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,34,HERAULT,10,20.0,25.68,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,34,HERAULT,20,30.0,30.72,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,34,HERAULT,30,40.0,35.72,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,34,HERAULT,40,50.0,40.76,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,34,HERAULT,50,60.0,45.8,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,34,HERAULT,60,70.0,47.18,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,34,HERAULT,70,80.0,51.86,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,34,HERAULT,80,90.0,57.17,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,34,HERAULT,90,100.0,62.32,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,34,HERAULT,100,250.0,62.32,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,34,HERAULT,250,500.0,44.68,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,34,HERAULT,500,1000.0,35.88,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,35,ILLE ET VILAINE,0,10.0,18.67,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,35,ILLE ET VILAINE,10,20.0,20.69,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,35,ILLE ET VILAINE,20,30.0,23.15,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,35,ILLE ET VILAINE,30,40.0,25.24,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,35,ILLE ET VILAINE,40,50.0,27.75,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,35,ILLE ET VILAINE,50,60.0,29.85,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,35,ILLE ET VILAINE,60,70.0,33.22,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,35,ILLE ET VILAINE,70,80.0,36.63,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,35,ILLE ET VILAINE,80,90.0,40.01,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,35,ILLE ET VILAINE,90,100.0,43.72,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,35,ILLE ET VILAINE,100,250.0,43.72,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,35,ILLE ET VILAINE,250,500.0,31.83,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,35,ILLE ET VILAINE,500,1000.0,30.3,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,36,INDRE,0,10.0,17.63,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,36,INDRE,10,20.0,19.59,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,36,INDRE,20,30.0,21.62,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,36,INDRE,30,40.0,23.51,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,36,INDRE,40,50.0,26.17,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,36,INDRE,50,60.0,28.49,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,36,INDRE,60,70.0,31.18,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,36,INDRE,70,80.0,35.0,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,36,INDRE,80,90.0,37.28,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,36,INDRE,90,100.0,39.96,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,36,INDRE,100,250.0,36.65,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,36,INDRE,250,500.0,29.99,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,36,INDRE,500,1000.0,28.31,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,37,INDRE ET LOIRE,0,10.0,17.53,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,37,INDRE ET LOIRE,10,20.0,19.41,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,37,INDRE ET LOIRE,20,30.0,21.35,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,37,INDRE ET LOIRE,30,40.0,23.13,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,37,INDRE ET LOIRE,40,50.0,25.64,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,37,INDRE ET LOIRE,50,60.0,27.59,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,37,INDRE ET LOIRE,60,70.0,30.56,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,37,INDRE ET LOIRE,70,80.0,33.03,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,37,INDRE ET LOIRE,80,90.0,34.82,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,37,INDRE ET LOIRE,90,100.0,37.8,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,37,INDRE ET LOIRE,100,250.0,38.42,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,37,INDRE ET LOIRE,250,500.0,29.07,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,37,INDRE ET LOIRE,500,1000.0,27.38,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,38,ISERE,0,10.0,22.03,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,38,ISERE,10,20.0,25.77,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,38,ISERE,20,30.0,29.52,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,38,ISERE,30,40.0,33.58,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,38,ISERE,40,50.0,39.77,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,38,ISERE,50,60.0,43.5,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,38,ISERE,60,70.0,49.3,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,38,ISERE,70,80.0,53.04,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,38,ISERE,80,90.0,58.33,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,38,ISERE,90,100.0,62.07,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,38,ISERE,100,250.0,58.07,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,38,ISERE,250,500.0,50.76,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,38,ISERE,500,1000.0,45.57,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,39,JURA,0,10.0,18.01,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,39,JURA,10,20.0,21.26,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,39,JURA,20,30.0,25.07,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,39,JURA,30,40.0,28.57,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,39,JURA,40,50.0,31.82,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,39,JURA,50,60.0,34.08,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,39,JURA,60,70.0,36.41,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,39,JURA,70,80.0,38.77,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,39,JURA,80,90.0,41.42,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,39,JURA,90,100.0,43.84,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,39,JURA,100,250.0,40.62,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,39,JURA,250,500.0,34.2,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,39,JURA,500,1000.0,30.05,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,40,LANDES,0,10.0,18.13,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,40,LANDES,10,20.0,23.86,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,40,LANDES,20,30.0,30.42,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,40,LANDES,30,40.0,35.5,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,40,LANDES,40,50.0,42.35,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,40,LANDES,50,60.0,47.42,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,40,LANDES,60,70.0,53.86,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,40,LANDES,70,80.0,58.95,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,40,LANDES,80,90.0,64.71,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,40,LANDES,90,100.0,69.79,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,40,LANDES,100,250.0,68.15,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,40,LANDES,250,500.0,62.74,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,40,LANDES,500,1000.0,61.0,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,41,LOIR ET CHER,0,10.0,19.73,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,41,LOIR ET CHER,10,20.0,21.22,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,41,LOIR ET CHER,20,30.0,22.79,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,41,LOIR ET CHER,30,40.0,24.16,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,41,LOIR ET CHER,40,50.0,25.73,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,41,LOIR ET CHER,50,60.0,27.1,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,41,LOIR ET CHER,60,70.0,29.88,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,41,LOIR ET CHER,70,80.0,32.86,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,41,LOIR ET CHER,80,90.0,35.71,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,41,LOIR ET CHER,90,100.0,36.96,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,41,LOIR ET CHER,100,250.0,36.96,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,41,LOIR ET CHER,250,500.0,26.85,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,41,LOIR ET CHER,500,1000.0,25.26,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,42,LOIRE,0,10.0,16.79,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,42,LOIRE,10,20.0,21.17,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,42,LOIRE,20,30.0,26.41,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,42,LOIRE,30,40.0,30.15,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,42,LOIRE,40,50.0,35.63,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,42,LOIRE,50,60.0,39.37,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,42,LOIRE,60,70.0,44.49,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,42,LOIRE,70,80.0,48.22,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,42,LOIRE,80,90.0,52.64,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,42,LOIRE,90,100.0,56.39,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,42,LOIRE,100,250.0,54.75,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,42,LOIRE,250,500.0,49.35,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,42,LOIRE,500,1000.0,47.59,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,43,LOIRE (HAUTE),0,10.0,17.34,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,43,LOIRE (HAUTE),10,20.0,22.71,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,43,LOIRE (HAUTE),20,30.0,27.32,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,43,LOIRE (HAUTE),30,40.0,32.42,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,43,LOIRE (HAUTE),40,50.0,37.35,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,43,LOIRE (HAUTE),50,60.0,42.27,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,43,LOIRE (HAUTE),60,70.0,47.18,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,43,LOIRE (HAUTE),70,80.0,51.86,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,43,LOIRE (HAUTE),80,90.0,57.17,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,43,LOIRE (HAUTE),90,100.0,62.32,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,43,LOIRE (HAUTE),100,250.0,62.32,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,43,LOIRE (HAUTE),250,500.0,42.71,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,43,LOIRE (HAUTE),500,1000.0,30.5,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,44,LOIRE ATLANTIQUE,0,10.0,17.52,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,44,LOIRE ATLANTIQUE,10,20.0,19.36,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,44,LOIRE ATLANTIQUE,20,30.0,22.1,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,44,LOIRE ATLANTIQUE,30,40.0,24.68,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,44,LOIRE ATLANTIQUE,40,50.0,27.63,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,44,LOIRE ATLANTIQUE,50,60.0,30.18,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,44,LOIRE ATLANTIQUE,60,70.0,33.18,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,44,LOIRE ATLANTIQUE,70,80.0,37.32,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,44,LOIRE ATLANTIQUE,80,90.0,39.9,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,44,LOIRE ATLANTIQUE,90,100.0,43.98,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,44,LOIRE ATLANTIQUE,100,250.0,35.54,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,44,LOIRE ATLANTIQUE,250,500.0,28.88,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,44,LOIRE ATLANTIQUE,500,1000.0,27.2,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,45,LOIRET,0,10.0,18.67,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,45,LOIRET,10,20.0,20.77,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,45,LOIRET,20,30.0,22.73,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,45,LOIRET,30,40.0,25.62,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,45,LOIRET,40,50.0,25.96,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,45,LOIRET,50,60.0,28.85,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,45,LOIRET,60,70.0,29.14,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,45,LOIRET,70,80.0,31.97,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,45,LOIRET,80,90.0,32.91,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,45,LOIRET,90,100.0,34.08,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,45,LOIRET,100,250.0,35.99,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,45,LOIRET,250,500.0,22.95,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,45,LOIRET,500,1000.0,20.8,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,46,LOT,0,10.0,23.4,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,46,LOT,10,20.0,28.86,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,46,LOT,20,30.0,34.34,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,46,LOT,30,40.0,39.5,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,46,LOT,40,50.0,45.02,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,46,LOT,50,60.0,50.41,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,46,LOT,60,70.0,56.09,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,46,LOT,70,80.0,61.57,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,46,LOT,80,90.0,66.76,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,46,LOT,90,100.0,72.32,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,46,LOT,100,250.0,68.38,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,46,LOT,250,500.0,64.1,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,46,LOT,500,1000.0,59.34,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,47,LOT ET GARONNE,0,10.0,25.33,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,47,LOT ET GARONNE,10,20.0,29.22,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,47,LOT ET GARONNE,20,30.0,33.44,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,47,LOT ET GARONNE,30,40.0,37.3,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,47,LOT ET GARONNE,40,50.0,42.52,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,47,LOT ET GARONNE,50,60.0,46.42,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,47,LOT ET GARONNE,60,70.0,51.57,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,47,LOT ET GARONNE,70,80.0,57.26,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,47,LOT ET GARONNE,80,90.0,61.16,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,47,LOT ET GARONNE,90,100.0,67.27,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,47,LOT ET GARONNE,100,250.0,65.7,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,47,LOT ET GARONNE,250,500.0,64.24,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,47,LOT ET GARONNE,500,1000.0,61.64,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,48,LOZERE,0,10.0,17.49,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,48,LOZERE,10,20.0,22.74,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,48,LOZERE,20,30.0,27.68,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,48,LOZERE,30,40.0,30.96,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,48,LOZERE,40,50.0,36.3,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,48,LOZERE,50,60.0,40.41,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,48,LOZERE,60,70.0,43.78,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,48,LOZERE,70,80.0,48.98,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,48,LOZERE,80,90.0,53.15,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,48,LOZERE,90,100.0,57.22,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,48,LOZERE,100,250.0,52.94,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,48,LOZERE,250,500.0,45.6,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,48,LOZERE,500,1000.0,42.96,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,49,MAINE ET LOIRE,0,10.0,19.73,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,49,MAINE ET LOIRE,10,20.0,21.22,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,49,MAINE ET LOIRE,20,30.0,22.79,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,49,MAINE ET LOIRE,30,40.0,24.16,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,49,MAINE ET LOIRE,40,50.0,26.68,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,49,MAINE ET LOIRE,50,60.0,29.05,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,49,MAINE ET LOIRE,60,70.0,31.88,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,49,MAINE ET LOIRE,70,80.0,35.81,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,49,MAINE ET LOIRE,80,90.0,38.17,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,49,MAINE ET LOIRE,90,100.0,42.1,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,49,MAINE ET LOIRE,100,250.0,33.76,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,49,MAINE ET LOIRE,250,500.0,26.85,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,49,MAINE ET LOIRE,500,1000.0,25.26,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,50,MANCHE,0,10.0,18.76,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,50,MANCHE,10,20.0,20.31,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,50,MANCHE,20,30.0,24.09,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,50,MANCHE,30,40.0,26.26,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,50,MANCHE,40,50.0,28.92,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,50,MANCHE,50,60.0,31.11,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,50,MANCHE,60,70.0,33.71,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,50,MANCHE,70,80.0,37.84,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,50,MANCHE,80,90.0,40.01,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,50,MANCHE,90,100.0,44.06,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,50,MANCHE,100,250.0,32.51,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,50,MANCHE,250,500.0,29.43,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,50,MANCHE,500,1000.0,26.47,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,51,MARNE,0,10.0,14.98,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,51,MARNE,10,20.0,15.29,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,51,MARNE,20,30.0,15.61,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,51,MARNE,30,40.0,16.16,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,51,MARNE,40,50.0,18.41,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,51,MARNE,50,60.0,20.08,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,51,MARNE,60,70.0,22.09,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,51,MARNE,70,80.0,24.33,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,51,MARNE,80,90.0,25.32,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,51,MARNE,90,100.0,24.79,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,51,MARNE,100,250.0,20.98,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,51,MARNE,250,500.0,16.96,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,51,MARNE,500,1000.0,12.82,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,52,MARNE (HAUTE),0,10.0,16.0,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,52,MARNE (HAUTE),10,20.0,17.32,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,52,MARNE (HAUTE),20,30.0,18.95,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,52,MARNE (HAUTE),30,40.0,22.1,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,52,MARNE (HAUTE),40,50.0,25.08,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,52,MARNE (HAUTE),50,60.0,28.02,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,52,MARNE (HAUTE),60,70.0,31.49,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,52,MARNE (HAUTE),70,80.0,34.64,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,52,MARNE (HAUTE),80,90.0,37.77,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,52,MARNE (HAUTE),90,100.0,39.17,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,52,MARNE (HAUTE),100,250.0,39.17,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,52,MARNE (HAUTE),250,500.0,22.04,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,52,MARNE (HAUTE),500,1000.0,17.89,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,53,MAYENNE,0,10.0,19.98,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,53,MAYENNE,10,20.0,22.78,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,53,MAYENNE,20,30.0,25.56,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,53,MAYENNE,30,40.0,28.95,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,53,MAYENNE,40,50.0,32.2,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,53,MAYENNE,50,60.0,35.29,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,53,MAYENNE,60,70.0,38.91,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,53,MAYENNE,70,80.0,41.93,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,53,MAYENNE,80,90.0,45.03,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,53,MAYENNE,90,100.0,48.27,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,53,MAYENNE,100,250.0,44.8,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,53,MAYENNE,250,500.0,41.72,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,53,MAYENNE,500,1000.0,38.77,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,54,MEURTHE ET MOSELLE,0,10.0,17.07,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,54,MEURTHE ET MOSELLE,10,20.0,18.8,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,54,MEURTHE ET MOSELLE,20,30.0,20.52,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,54,MEURTHE ET MOSELLE,30,40.0,22.5,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,54,MEURTHE ET MOSELLE,40,50.0,26.27,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,54,MEURTHE ET MOSELLE,50,60.0,28.01,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,54,MEURTHE ET MOSELLE,60,70.0,31.46,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,54,MEURTHE ET MOSELLE,70,80.0,33.18,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,54,MEURTHE ET MOSELLE,80,90.0,36.16,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,54,MEURTHE ET MOSELLE,90,100.0,37.91,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,54,MEURTHE ET MOSELLE,100,250.0,36.29,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,54,MEURTHE ET MOSELLE,250,500.0,27.8,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,54,MEURTHE ET MOSELLE,500,1000.0,23.24,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,55,MEUSE,0,10.0,19.44,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,55,MEUSE,10,20.0,20.6,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,55,MEUSE,20,30.0,21.75,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,55,MEUSE,30,40.0,23.22,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,55,MEUSE,40,50.0,26.81,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,55,MEUSE,50,60.0,27.98,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,55,MEUSE,60,70.0,31.17,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,55,MEUSE,70,80.0,32.33,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,55,MEUSE,80,90.0,35.02,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,55,MEUSE,90,100.0,36.18,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,55,MEUSE,100,250.0,32.18,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,55,MEUSE,250,500.0,24.65,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,55,MEUSE,500,1000.0,19.46,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,56,MORBIHAN,0,10.0,20.82,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,56,MORBIHAN,10,20.0,23.33,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,56,MORBIHAN,20,30.0,26.31,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,56,MORBIHAN,30,40.0,28.94,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,56,MORBIHAN,40,50.0,31.98,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,56,MORBIHAN,50,60.0,34.61,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,56,MORBIHAN,60,70.0,38.1,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,56,MORBIHAN,70,80.0,42.12,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,56,MORBIHAN,80,90.0,44.74,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,56,MORBIHAN,90,100.0,48.71,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,56,MORBIHAN,100,250.0,46.33,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,56,MORBIHAN,250,500.0,37.92,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,56,MORBIHAN,500,1000.0,36.24,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,57,MOSELLE,0,10.0,20.01,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,57,MOSELLE,10,20.0,21.74,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,57,MOSELLE,20,30.0,23.46,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,57,MOSELLE,30,40.0,25.5,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,57,MOSELLE,40,50.0,29.68,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,57,MOSELLE,50,60.0,31.41,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,57,MOSELLE,60,70.0,35.18,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,57,MOSELLE,70,80.0,36.9,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,57,MOSELLE,80,90.0,40.15,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,57,MOSELLE,90,100.0,41.91,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,57,MOSELLE,100,250.0,37.9,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,57,MOSELLE,250,500.0,29.94,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,57,MOSELLE,500,1000.0,24.75,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,58,NIEVRE,0,10.0,17.99,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,58,NIEVRE,10,20.0,20.33,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,58,NIEVRE,20,30.0,24.09,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,58,NIEVRE,30,40.0,26.26,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,58,NIEVRE,40,50.0,28.92,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,58,NIEVRE,50,60.0,31.11,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,58,NIEVRE,60,70.0,33.71,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,58,NIEVRE,70,80.0,37.84,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,58,NIEVRE,80,90.0,40.01,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,58,NIEVRE,90,100.0,44.06,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,58,NIEVRE,100,250.0,40.32,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,58,NIEVRE,250,500.0,33.65,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,58,NIEVRE,500,1000.0,31.97,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,59,NORD,0,10.0,8.22,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,59,NORD,10,20.0,8.9,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,59,NORD,20,30.0,9.87,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,59,NORD,30,40.0,10.69,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,59,NORD,40,50.0,11.36,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,59,NORD,50,60.0,12.05,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,59,NORD,60,70.0,12.69,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,59,NORD,70,80.0,13.8,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,59,NORD,80,90.0,13.8,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,59,NORD,90,100.0,13.8,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,59,NORD,100,250.0,13.8,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,60,OISE,0,10.0,15.85,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,60,OISE,10,20.0,17.02,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,60,OISE,20,30.0,18.2,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,60,OISE,30,40.0,19.64,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,60,OISE,40,50.0,22.74,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,60,OISE,50,60.0,23.93,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,60,OISE,60,70.0,26.77,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,60,OISE,70,80.0,27.94,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,60,OISE,80,90.0,30.34,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,60,OISE,90,100.0,31.52,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,60,OISE,100,250.0,28.31,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,60,OISE,250,500.0,21.3,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,60,OISE,500,1000.0,17.16,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,61,ORNE,0,10.0,14.4,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,61,ORNE,10,20.0,16.39,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,61,ORNE,20,30.0,19.23,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,61,ORNE,30,40.0,21.58,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,61,ORNE,40,50.0,24.41,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,61,ORNE,50,60.0,27.28,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,61,ORNE,60,70.0,30.61,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,61,ORNE,70,80.0,33.65,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,61,ORNE,80,90.0,36.61,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,61,ORNE,90,100.0,37.94,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,61,ORNE,100,250.0,37.94,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,61,ORNE,250,500.0,25.43,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,61,ORNE,500,1000.0,23.68,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,62,PAS DE CALAIS,0,10.0,8.22,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,62,PAS DE CALAIS,10,20.0,8.9,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,62,PAS DE CALAIS,20,30.0,9.87,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,62,PAS DE CALAIS,30,40.0,10.69,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,62,PAS DE CALAIS,40,50.0,11.36,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,62,PAS DE CALAIS,50,60.0,12.05,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,62,PAS DE CALAIS,60,70.0,12.69,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,62,PAS DE CALAIS,70,80.0,13.8,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,62,PAS DE CALAIS,80,90.0,13.8,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,62,PAS DE CALAIS,90,100.0,13.8,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,62,PAS DE CALAIS,100,250.0,13.8,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,63,PUY DE DOME,0,10.0,17.49,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,63,PUY DE DOME,10,20.0,19.3,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,63,PUY DE DOME,20,30.0,22.03,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,63,PUY DE DOME,30,40.0,24.62,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,63,PUY DE DOME,40,50.0,27.52,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,63,PUY DE DOME,50,60.0,30.06,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,63,PUY DE DOME,60,70.0,33.03,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,63,PUY DE DOME,70,80.0,35.26,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,63,PUY DE DOME,80,90.0,36.41,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,63,PUY DE DOME,90,100.0,38.77,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,63,PUY DE DOME,100,250.0,35.24,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,63,PUY DE DOME,250,500.0,28.58,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,63,PUY DE DOME,500,1000.0,26.89,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,64,PYRENEES ATLANTIQUE,0,10.0,19.2,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,64,PYRENEES ATLANTIQUE,10,20.0,24.39,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,64,PYRENEES ATLANTIQUE,20,30.0,31.22,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,64,PYRENEES ATLANTIQUE,30,40.0,36.57,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,64,PYRENEES ATLANTIQUE,40,50.0,43.67,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,64,PYRENEES ATLANTIQUE,50,60.0,49.02,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,64,PYRENEES ATLANTIQUE,60,70.0,55.72,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,64,PYRENEES ATLANTIQUE,70,80.0,61.08,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,64,PYRENEES ATLANTIQUE,80,90.0,67.09,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,64,PYRENEES ATLANTIQUE,90,100.0,72.45,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,64,PYRENEES ATLANTIQUE,100,250.0,70.8,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,64,PYRENEES ATLANTIQUE,250,500.0,65.41,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,64,PYRENEES ATLANTIQUE,500,1000.0,63.66,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,65,PYRENEES (HAUTES),0,10.0,23.37,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,65,PYRENEES (HAUTES),10,20.0,28.75,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,65,PYRENEES (HAUTES),20,30.0,34.15,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,65,PYRENEES (HAUTES),30,40.0,39.34,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,65,PYRENEES (HAUTES),40,50.0,44.74,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,65,PYRENEES (HAUTES),50,60.0,50.15,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,65,PYRENEES (HAUTES),60,70.0,55.78,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,65,PYRENEES (HAUTES),70,80.0,61.16,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,65,PYRENEES (HAUTES),80,90.0,66.33,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,65,PYRENEES (HAUTES),90,100.0,71.82,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,65,PYRENEES (HAUTES),100,250.0,65.57,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,65,PYRENEES (HAUTES),250,500.0,60.17,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,65,PYRENEES (HAUTES),500,1000.0,58.43,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,66,PYRENEES ORIENTALES,0,10.0,23.4,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,66,PYRENEES ORIENTALES,10,20.0,28.86,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,66,PYRENEES ORIENTALES,20,30.0,34.34,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,66,PYRENEES ORIENTALES,30,40.0,39.5,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,66,PYRENEES ORIENTALES,40,50.0,45.02,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,66,PYRENEES ORIENTALES,50,60.0,50.41,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,66,PYRENEES ORIENTALES,60,70.0,56.09,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,66,PYRENEES ORIENTALES,70,80.0,61.57,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,66,PYRENEES ORIENTALES,80,90.0,66.76,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,66,PYRENEES ORIENTALES,90,100.0,72.32,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,66,PYRENEES ORIENTALES,100,250.0,60.23,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,66,PYRENEES ORIENTALES,250,500.0,45.68,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,66,PYRENEES ORIENTALES,500,1000.0,36.52,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,67,RHIN (BAS),0,10.0,16.32,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,67,RHIN (BAS),10,20.0,17.95,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,67,RHIN (BAS),20,30.0,19.59,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,67,RHIN (BAS),30,40.0,21.62,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,67,RHIN (BAS),40,50.0,25.16,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,67,RHIN (BAS),50,60.0,28.75,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,67,RHIN (BAS),60,70.0,31.71,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,67,RHIN (BAS),70,80.0,32.91,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,67,RHIN (BAS),80,90.0,34.49,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,67,RHIN (BAS),90,100.0,36.13,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,67,RHIN (BAS),100,250.0,33.7,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,67,RHIN (BAS),250,500.0,23.61,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,67,RHIN (BAS),500,1000.0,19.46,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,68,RHIN (HAUT),0,10.0,17.65,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,68,RHIN (HAUT),10,20.0,19.64,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,68,RHIN (HAUT),20,30.0,22.48,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,68,RHIN (HAUT),30,40.0,25.17,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,68,RHIN (HAUT),40,50.0,28.25,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,68,RHIN (HAUT),50,60.0,30.95,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,68,RHIN (HAUT),60,70.0,34.09,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,68,RHIN (HAUT),70,80.0,38.33,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,68,RHIN (HAUT),80,90.0,41.0,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,68,RHIN (HAUT),90,100.0,45.27,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,68,RHIN (HAUT),100,250.0,36.86,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,68,RHIN (HAUT),250,500.0,30.21,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,68,RHIN (HAUT),500,1000.0,28.52,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,69,RHONE,0,10.0,15.02,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,69,RHONE,10,20.0,17.65,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,69,RHONE,20,30.0,21.42,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,69,RHONE,30,40.0,25.45,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,69,RHONE,40,50.0,29.21,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,69,RHONE,50,60.0,32.98,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,69,RHONE,60,70.0,37.28,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,69,RHONE,70,80.0,41.31,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,69,RHONE,80,90.0,45.22,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,69,RHONE,90,100.0,49.5,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,69,RHONE,100,250.0,49.5,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,69,RHONE,250,500.0,31.68,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,69,RHONE,500,1000.0,29.93,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,70,SAONE (HAUTE),0,10.0,18.01,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,70,SAONE (HAUTE),10,20.0,21.26,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,70,SAONE (HAUTE),20,30.0,25.07,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,70,SAONE (HAUTE),30,40.0,28.57,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,70,SAONE (HAUTE),40,50.0,31.82,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,70,SAONE (HAUTE),50,60.0,35.14,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,70,SAONE (HAUTE),60,70.0,38.56,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,70,SAONE (HAUTE),70,80.0,42.33,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,70,SAONE (HAUTE),80,90.0,45.56,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,70,SAONE (HAUTE),90,100.0,49.33,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,70,SAONE (HAUTE),100,250.0,40.74,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,70,SAONE (HAUTE),250,500.0,34.26,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,70,SAONE (HAUTE),500,1000.0,30.11,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,71,SAONE ET LOIRE,0,10.0,18.01,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,71,SAONE ET LOIRE,10,20.0,21.26,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,71,SAONE ET LOIRE,20,30.0,25.07,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,71,SAONE ET LOIRE,30,40.0,28.57,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,71,SAONE ET LOIRE,40,50.0,31.82,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,71,SAONE ET LOIRE,50,60.0,35.18,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,71,SAONE ET LOIRE,60,70.0,39.75,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,71,SAONE ET LOIRE,70,80.0,43.14,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,71,SAONE ET LOIRE,80,90.0,47.31,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,71,SAONE ET LOIRE,90,100.0,50.54,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,71,SAONE ET LOIRE,100,250.0,48.92,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,71,SAONE ET LOIRE,250,500.0,48.93,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,71,SAONE ET LOIRE,500,1000.0,44.88,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,72,SARTHE,0,10.0,19.68,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,72,SARTHE,10,20.0,22.48,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,72,SARTHE,20,30.0,25.29,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,72,SARTHE,30,40.0,28.41,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,72,SARTHE,40,50.0,33.48,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,72,SARTHE,50,60.0,36.29,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,72,SARTHE,60,70.0,41.01,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,72,SARTHE,70,80.0,43.8,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,72,SARTHE,80,90.0,47.92,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,72,SARTHE,90,100.0,50.74,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,72,SARTHE,100,250.0,48.73,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,72,SARTHE,250,500.0,44.57,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,72,SARTHE,500,1000.0,39.63,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,73,SAVOIE,0,10.0,18.86,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,73,SAVOIE,10,20.0,22.53,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,73,SAVOIE,20,30.0,26.21,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,73,SAVOIE,30,40.0,30.16,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,73,SAVOIE,40,50.0,35.86,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,73,SAVOIE,50,60.0,39.54,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,73,SAVOIE,60,70.0,44.93,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,73,SAVOIE,70,80.0,48.6,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,73,SAVOIE,80,90.0,53.55,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,73,SAVOIE,90,100.0,57.23,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,73,SAVOIE,100,250.0,53.93,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,73,SAVOIE,250,500.0,47.49,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,73,SAVOIE,500,1000.0,43.19,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,74,SAVOIE (HAUTE),0,10.0,18.19,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,74,SAVOIE (HAUTE),10,20.0,21.7,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,74,SAVOIE (HAUTE),20,30.0,25.2,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,74,SAVOIE (HAUTE),30,40.0,28.96,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,74,SAVOIE (HAUTE),40,50.0,34.41,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,74,SAVOIE (HAUTE),50,60.0,37.93,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,74,SAVOIE (HAUTE),60,70.0,43.1,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,74,SAVOIE (HAUTE),70,80.0,46.61,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,74,SAVOIE (HAUTE),80,90.0,51.34,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,74,SAVOIE (HAUTE),90,100.0,54.86,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,74,SAVOIE (HAUTE),100,250.0,51.74,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,74,SAVOIE (HAUTE),250,500.0,39.71,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,74,SAVOIE (HAUTE),500,1000.0,35.56,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,75,PARIS.,0,10.0,33.44,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,75,PARIS.,10,20.0,33.75,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,75,PARIS.,20,30.0,34.08,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,75,PARIS.,30,40.0,34.39,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,75,PARIS.,40,50.0,35.93,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,75,PARIS.,50,60.0,36.25,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,75,PARIS.,60,70.0,37.91,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,75,PARIS.,70,80.0,40.78,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,75,PARIS.,80,90.0,41.11,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,75,PARIS.,90,100.0,43.87,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,75,PARIS.,100,250.0,37.35,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,75,PARIS.,250,500.0,24.6,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,75,PARIS.,500,1000.0,20.33,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,76,SEINE MARITIME,0,10.0,13.94,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,76,SEINE MARITIME,10,20.0,15.49,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,76,SEINE MARITIME,20,30.0,17.86,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,76,SEINE MARITIME,30,40.0,18.74,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,76,SEINE MARITIME,40,50.0,21.38,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,76,SEINE MARITIME,50,60.0,22.29,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,76,SEINE MARITIME,60,70.0,24.53,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,76,SEINE MARITIME,70,80.0,25.43,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,76,SEINE MARITIME,80,90.0,27.0,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,76,SEINE MARITIME,90,100.0,27.9,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,76,SEINE MARITIME,100,250.0,27.36,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,76,SEINE MARITIME,250,500.0,20.85,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,76,SEINE MARITIME,500,1000.0,19.1,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,77,SEINE ET MARNE,0,10.0,26.98,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,77,SEINE ET MARNE,10,20.0,27.3,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,77,SEINE ET MARNE,20,30.0,28.98,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,77,SEINE ET MARNE,30,40.0,29.3,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,77,SEINE ET MARNE,40,50.0,32.13,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,77,SEINE ET MARNE,50,60.0,32.44,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,77,SEINE ET MARNE,60,70.0,34.79,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,77,SEINE ET MARNE,70,80.0,39.1,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,77,SEINE ET MARNE,80,90.0,39.44,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,77,SEINE ET MARNE,90,100.0,42.84,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,77,SEINE ET MARNE,100,250.0,40.16,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,77,SEINE ET MARNE,250,500.0,30.22,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,77,SEINE ET MARNE,500,1000.0,26.64,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,78,YVELINES,0,10.0,25.67,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,78,YVELINES,10,20.0,25.98,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,78,YVELINES,20,30.0,26.59,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,78,YVELINES,30,40.0,26.63,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,78,YVELINES,40,50.0,28.94,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,78,YVELINES,50,60.0,28.94,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,78,YVELINES,60,70.0,30.52,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,78,YVELINES,70,80.0,34.7,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,78,YVELINES,80,90.0,34.7,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,78,YVELINES,90,100.0,37.94,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,78,YVELINES,100,250.0,37.35,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,78,YVELINES,250,500.0,23.05,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,78,YVELINES,500,1000.0,19.56,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,79,SEVRES (DEUX),0,10.0,20.68,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,79,SEVRES (DEUX),10,20.0,23.7,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,79,SEVRES (DEUX),20,30.0,26.74,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,79,SEVRES (DEUX),30,40.0,30.07,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,79,SEVRES (DEUX),40,50.0,35.44,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,79,SEVRES (DEUX),50,60.0,38.47,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,79,SEVRES (DEUX),60,70.0,43.5,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,79,SEVRES (DEUX),70,80.0,46.54,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,79,SEVRES (DEUX),80,90.0,51.04,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,79,SEVRES (DEUX),90,100.0,54.08,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,79,SEVRES (DEUX),100,250.0,52.0,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,79,SEVRES (DEUX),250,500.0,47.63,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,79,SEVRES (DEUX),500,1000.0,42.45,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,80,SOMME,0,10.0,11.85,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,80,SOMME,10,20.0,14.32,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,80,SOMME,20,30.0,16.96,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,80,SOMME,30,40.0,16.96,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,80,SOMME,40,50.0,19.66,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,80,SOMME,50,60.0,19.66,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,80,SOMME,60,70.0,21.93,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,80,SOMME,70,80.0,21.93,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,80,SOMME,80,90.0,23.04,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,80,SOMME,90,100.0,23.04,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,80,SOMME,100,250.0,21.36,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,80,SOMME,250,500.0,12.41,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,80,SOMME,500,1000.0,12.41,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,81,TARN,0,10.0,19.26,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,81,TARN,10,20.0,23.98,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,81,TARN,20,30.0,29.23,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,81,TARN,30,40.0,34.3,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,81,TARN,40,50.0,39.34,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,81,TARN,50,60.0,43.83,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,81,TARN,60,70.0,49.66,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,81,TARN,70,80.0,54.14,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,81,TARN,80,90.0,59.31,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,81,TARN,90,100.0,63.98,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,81,TARN,100,250.0,62.15,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,81,TARN,250,500.0,56.75,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,81,TARN,500,1000.0,55.0,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,82,TARN ET GARONNE,0,10.0,19.26,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,82,TARN ET GARONNE,10,20.0,23.98,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,82,TARN ET GARONNE,20,30.0,29.23,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,82,TARN ET GARONNE,30,40.0,34.3,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,82,TARN ET GARONNE,40,50.0,39.34,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,82,TARN ET GARONNE,50,60.0,43.83,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,82,TARN ET GARONNE,60,70.0,49.66,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,82,TARN ET GARONNE,70,80.0,54.14,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,82,TARN ET GARONNE,80,90.0,59.31,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,82,TARN ET GARONNE,90,100.0,63.98,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,82,TARN ET GARONNE,100,250.0,62.15,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,82,TARN ET GARONNE,250,500.0,56.75,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,82,TARN ET GARONNE,500,1000.0,55.0,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,83,VAR,0,10.0,22.96,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,83,VAR,10,20.0,28.11,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,83,VAR,20,30.0,33.19,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,83,VAR,30,40.0,40.37,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,83,VAR,40,50.0,45.8,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,83,VAR,50,60.0,51.53,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,83,VAR,60,70.0,58.22,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,83,VAR,70,80.0,62.77,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,83,VAR,80,90.0,67.87,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,83,VAR,90,100.0,73.3,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,83,VAR,100,250.0,73.3,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,83,VAR,250,500.0,73.3,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,83,VAR,500,1000.0,73.3,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,84,VAUCLUSE,0,10.0,18.6,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,84,VAUCLUSE,10,20.0,24.2,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,84,VAUCLUSE,20,30.0,29.99,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,84,VAUCLUSE,30,40.0,33.87,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,84,VAUCLUSE,40,50.0,37.93,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,84,VAUCLUSE,50,60.0,41.95,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,84,VAUCLUSE,60,70.0,46.87,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,84,VAUCLUSE,70,80.0,49.96,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,84,VAUCLUSE,80,90.0,53.65,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,84,VAUCLUSE,90,100.0,57.35,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,84,VAUCLUSE,100,250.0,57.36,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,84,VAUCLUSE,250,500.0,55.31,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,84,VAUCLUSE,500,1000.0,49.04,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,85,VENDEE,0,10.0,20.24,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,85,VENDEE,10,20.0,23.29,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,85,VENDEE,20,30.0,26.34,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,85,VENDEE,30,40.0,29.99,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,85,VENDEE,40,50.0,33.49,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,85,VENDEE,50,60.0,36.84,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,85,VENDEE,60,70.0,40.72,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,85,VENDEE,70,80.0,44.0,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,85,VENDEE,80,90.0,47.35,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,85,VENDEE,90,100.0,50.85,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,85,VENDEE,100,250.0,47.38,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,85,VENDEE,250,500.0,44.3,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,85,VENDEE,500,1000.0,41.35,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,86,VIENNE,0,10.0,19.59,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,86,VIENNE,10,20.0,22.32,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,86,VIENNE,20,30.0,25.03,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,86,VIENNE,30,40.0,28.05,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,86,VIENNE,40,50.0,33.03,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,86,VIENNE,50,60.0,35.76,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,86,VIENNE,60,70.0,40.38,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,86,VIENNE,70,80.0,43.1,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,86,VIENNE,80,90.0,47.14,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,86,VIENNE,90,100.0,49.86,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,86,VIENNE,100,250.0,47.85,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,86,VIENNE,250,500.0,43.68,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,86,VIENNE,500,1000.0,38.75,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,87,VIENNE (HAUTE),0,10.0,18.17,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,87,VIENNE (HAUTE),10,20.0,20.69,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,87,VIENNE (HAUTE),20,30.0,24.33,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,87,VIENNE (HAUTE),30,40.0,26.64,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,87,VIENNE (HAUTE),40,50.0,29.4,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,87,VIENNE (HAUTE),50,60.0,31.64,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,87,VIENNE (HAUTE),60,70.0,34.46,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,87,VIENNE (HAUTE),70,80.0,38.14,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,87,VIENNE (HAUTE),80,90.0,40.58,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,87,VIENNE (HAUTE),90,100.0,44.2,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,87,VIENNE (HAUTE),100,250.0,42.12,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,87,VIENNE (HAUTE),250,500.0,35.46,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,87,VIENNE (HAUTE),500,1000.0,33.78,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,88,VOSGES,0,10.0,16.12,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,88,VOSGES,10,20.0,17.57,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,88,VOSGES,20,30.0,19.27,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,88,VOSGES,30,40.0,22.92,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,88,VOSGES,40,50.0,26.31,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,88,VOSGES,50,60.0,29.83,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,88,VOSGES,60,70.0,33.22,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,88,VOSGES,70,80.0,34.08,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,88,VOSGES,80,90.0,36.41,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,88,VOSGES,90,100.0,37.61,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,88,VOSGES,100,250.0,33.19,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,88,VOSGES,250,500.0,22.65,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,88,VOSGES,500,1000.0,18.5,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,89,YONNE,0,10.0,14.21,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,89,YONNE,10,20.0,16.02,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,89,YONNE,20,30.0,18.66,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,89,YONNE,30,40.0,19.81,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,89,YONNE,40,50.0,22.74,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,89,YONNE,50,60.0,25.69,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,89,YONNE,60,70.0,28.75,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,89,YONNE,70,80.0,31.97,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,89,YONNE,80,90.0,34.05,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,89,YONNE,90,100.0,34.63,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,89,YONNE,100,250.0,29.49,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,89,YONNE,250,500.0,23.55,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,89,YONNE,500,1000.0,21.8,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,90,TERRITOIRE DE BELFOR,0,10.0,20.71,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,90,TERRITOIRE DE BELFOR,10,20.0,23.13,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,90,TERRITOIRE DE BELFOR,20,30.0,25.56,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,90,TERRITOIRE DE BELFOR,30,40.0,28.29,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,90,TERRITOIRE DE BELFOR,40,50.0,33.17,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,90,TERRITOIRE DE BELFOR,50,60.0,35.59,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,90,TERRITOIRE DE BELFOR,60,70.0,40.05,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,90,TERRITOIRE DE BELFOR,70,80.0,42.48,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,90,TERRITOIRE DE BELFOR,80,90.0,46.45,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,90,TERRITOIRE DE BELFOR,90,100.0,48.86,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,90,TERRITOIRE DE BELFOR,100,250.0,44.88,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,90,TERRITOIRE DE BELFOR,250,500.0,37.73,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,90,TERRITOIRE DE BELFOR,500,1000.0,32.54,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,91,ESSONNE,0,10.0,25.67,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,91,ESSONNE,10,20.0,25.98,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,91,ESSONNE,20,30.0,26.59,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,91,ESSONNE,30,40.0,26.63,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,91,ESSONNE,40,50.0,28.94,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,91,ESSONNE,50,60.0,28.94,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,91,ESSONNE,60,70.0,30.52,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,91,ESSONNE,70,80.0,34.7,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,91,ESSONNE,80,90.0,34.7,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,91,ESSONNE,90,100.0,37.94,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,91,ESSONNE,100,250.0,37.35,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,91,ESSONNE,250,500.0,23.05,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,91,ESSONNE,500,1000.0,19.56,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,92,HAUTS DE SEINE,0,10.0,25.67,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,92,HAUTS DE SEINE,10,20.0,25.98,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,92,HAUTS DE SEINE,20,30.0,26.59,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,92,HAUTS DE SEINE,30,40.0,26.63,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,92,HAUTS DE SEINE,40,50.0,28.94,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,92,HAUTS DE SEINE,50,60.0,28.94,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,92,HAUTS DE SEINE,60,70.0,30.52,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,92,HAUTS DE SEINE,70,80.0,34.7,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,92,HAUTS DE SEINE,80,90.0,34.7,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,92,HAUTS DE SEINE,90,100.0,37.94,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,92,HAUTS DE SEINE,100,250.0,37.35,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,92,HAUTS DE SEINE,250,500.0,23.05,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,92,HAUTS DE SEINE,500,1000.0,19.56,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,93,SEINE ST DENIS,0,10.0,25.67,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,93,SEINE ST DENIS,10,20.0,25.98,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,93,SEINE ST DENIS,20,30.0,26.59,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,93,SEINE ST DENIS,30,40.0,26.63,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,93,SEINE ST DENIS,40,50.0,28.94,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,93,SEINE ST DENIS,50,60.0,28.94,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,93,SEINE ST DENIS,60,70.0,30.52,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,93,SEINE ST DENIS,70,80.0,34.7,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,93,SEINE ST DENIS,80,90.0,34.7,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,93,SEINE ST DENIS,90,100.0,37.94,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,93,SEINE ST DENIS,100,250.0,37.35,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,93,SEINE ST DENIS,250,500.0,23.05,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,93,SEINE ST DENIS,500,1000.0,19.56,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,94,VAL DE MARNE,0,10.0,25.67,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,94,VAL DE MARNE,10,20.0,25.98,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,94,VAL DE MARNE,20,30.0,26.59,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,94,VAL DE MARNE,30,40.0,26.63,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,94,VAL DE MARNE,40,50.0,28.94,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,94,VAL DE MARNE,50,60.0,28.94,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,94,VAL DE MARNE,60,70.0,30.52,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,94,VAL DE MARNE,70,80.0,34.7,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,94,VAL DE MARNE,80,90.0,34.7,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,94,VAL DE MARNE,90,100.0,37.94,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,94,VAL DE MARNE,100,250.0,37.35,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,94,VAL DE MARNE,250,500.0,23.05,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,94,VAL DE MARNE,500,1000.0,19.56,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,95,VAL D'OISE,0,10.0,25.67,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,95,VAL D'OISE,10,20.0,25.98,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,95,VAL D'OISE,20,30.0,26.59,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,95,VAL D'OISE,30,40.0,26.63,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,95,VAL D'OISE,40,50.0,28.94,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,95,VAL D'OISE,50,60.0,28.94,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,95,VAL D'OISE,60,70.0,30.52,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,95,VAL D'OISE,70,80.0,34.7,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,95,VAL D'OISE,80,90.0,34.7,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,95,VAL D'OISE,90,100.0,37.94,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,95,VAL D'OISE,100,250.0,37.35,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,95,VAL D'OISE,250,500.0,23.05,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,poids,departement,95,VAL D'OISE,500,1000.0,19.56,au_100kg,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,01,AIN,0,1,122.9,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,01,AIN,1,2,184.32,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,01,AIN,2,3,241.02,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,01,AIN,3,4,289.71,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,01,AIN,4,5,340.08,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,02,AISNE,0,1,67.16,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,02,AISNE,1,2,96.66,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,02,AISNE,2,3,124.8,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,02,AISNE,3,4,160.27,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,02,AISNE,4,5,209.22,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,03,ALLIER,0,1,139.12,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,03,ALLIER,1,2,200.54,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,03,ALLIER,2,3,263.53,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,03,ALLIER,3,4,297.59,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,03,ALLIER,4,5,332.2,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,04,ALPES (HTE-PROVENCE),0,1,162.29,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,04,ALPES (HTE-PROVENCE),1,2,251.51,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,04,ALPES (HTE-PROVENCE),2,3,337.78,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,04,ALPES (HTE-PROVENCE),3,4,402.24,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,04,ALPES (HTE-PROVENCE),4,5,468.35,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,05,ALPES (HAUTES),0,1,149.54,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,05,ALPES (HAUTES),1,2,237.61,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,05,ALPES (HAUTES),2,3,333.28,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,05,ALPES (HAUTES),3,4,402.24,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,05,ALPES (HAUTES),4,5,468.35,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,06,ALPES MARITIMES,0,1,177.35,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,06,ALPES MARITIMES,1,2,273.52,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,06,ALPES MARITIMES,2,3,370.41,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,06,ALPES MARITIMES,3,4,451.74,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,06,ALPES MARITIMES,4,5,525.73,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,07,ARDECHE,0,1,135.64,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,07,ARDECHE,1,2,206.34,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,07,ARDECHE,2,3,270.28,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,07,ARDECHE,3,4,326.84,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,07,ARDECHE,4,5,380.59,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,08,ARDENNES,0,1,122.9,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,08,ARDENNES,1,2,177.37,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,08,ARDENNES,2,3,233.14,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,08,ARDENNES,3,4,276.21,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,08,ARDENNES,4,5,317.57,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,09,ARIEGE,0,1,162.29,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,09,ARIEGE,1,2,260.78,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,09,ARIEGE,2,3,352.41,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,09,ARIEGE,3,4,430.36,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,09,ARIEGE,4,5,498.73,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,10,AUBE,0,1,111.31,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,10,AUBE,1,2,158.84,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,10,AUBE,2,3,211.76,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,10,AUBE,3,4,251.46,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,10,AUBE,4,5,289.45,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,11,AUDE,0,1,191.26,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,11,AUDE,1,2,307.12,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,11,AUDE,2,3,412.05,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,11,AUDE,3,4,497.87,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,11,AUDE,4,5,538.12,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,12,AVEYRON,0,1,143.75,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,12,AVEYRON,1,2,224.87,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,12,AVEYRON,2,3,315.28,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,12,AVEYRON,3,4,388.73,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,12,AVEYRON,4,5,432.35,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,13,BOUCHES DU RHONE,0,1,154.18,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,13,BOUCHES DU RHONE,1,2,239.93,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,13,BOUCHES DU RHONE,2,3,328.79,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,13,BOUCHES DU RHONE,3,4,404.49,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,13,BOUCHES DU RHONE,4,5,470.6,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,14,CALVADOS,0,1,113.63,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,14,CALVADOS,1,2,162.31,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,14,CALVADOS,2,3,220.76,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,14,CALVADOS,3,4,262.71,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,14,CALVADOS,4,5,299.57,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,15,CANTAL,0,1,139.12,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,15,CANTAL,1,2,200.54,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,15,CANTAL,2,3,270.28,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,15,CANTAL,3,4,324.59,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,15,CANTAL,4,5,370.47,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,16,CHARENTE,0,1,132.16,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,16,CHARENTE,1,2,193.59,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,16,CHARENTE,2,3,255.64,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,16,CHARENTE,3,4,305.46,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,16,CHARENTE,4,5,353.58,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,17,CHARENTE MARITIME,0,1,125.22,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,17,CHARENTE MARITIME,1,2,185.47,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,17,CHARENTE MARITIME,2,3,245.52,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,17,CHARENTE MARITIME,3,4,294.22,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,17,CHARENTE MARITIME,4,5,344.58,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,18,CHER,0,1,122.9,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,18,CHER,1,2,179.68,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,18,CHER,2,3,238.77,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,18,CHER,3,4,285.22,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,18,CHER,4,5,319.83,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,19,CORREZE,0,1,143.75,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,19,CORREZE,1,2,208.64,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,19,CORREZE,2,3,279.27,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,19,CORREZE,3,4,333.59,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,19,CORREZE,4,5,383.96,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,21,COTE D'OR,0,1,119.41,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,21,COTE D'OR,1,2,172.73,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,21,COTE D'OR,2,3,233.14,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,21,COTE D'OR,3,4,277.34,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,21,COTE D'OR,4,5,315.33,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,22,COTES D ARMOR,0,1,129.85,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,22,COTES D ARMOR,1,2,188.95,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,22,COTES D ARMOR,2,3,254.52,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,22,COTES D ARMOR,3,4,302.09,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,22,COTES D ARMOR,4,5,346.83,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,23,CREUSE,0,1,124.05,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,23,CREUSE,1,2,183.16,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,23,CREUSE,2,3,238.77,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,23,CREUSE,3,4,285.22,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,23,CREUSE,4,5,332.2,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,24,DORDOGNE,0,1,141.43,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,24,DORDOGNE,1,2,220.24,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,24,DORDOGNE,2,3,284.9,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,24,DORDOGNE,3,4,348.22,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,24,DORDOGNE,4,5,394.09,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,25,DOUBS,0,1,125.22,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,25,DOUBS,1,2,180.84,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,25,DOUBS,2,3,243.27,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,25,DOUBS,3,4,289.71,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,25,DOUBS,4,5,329.95,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,26,DROME,0,1,135.64,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,26,DROME,1,2,202.85,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,26,DROME,2,3,270.28,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,26,DROME,3,4,326.84,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,26,DROME,4,5,373.84,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,27,EURE,0,1,115.95,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,27,EURE,1,2,165.78,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,27,EURE,2,3,223.02,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,27,EURE,3,4,263.84,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,27,EURE,4,5,302.94,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,28,EURE ET LOIRE,0,1,110.15,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,28,EURE ET LOIRE,1,2,157.67,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,28,EURE ET LOIRE,2,3,210.64,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,28,EURE ET LOIRE,3,4,249.2,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,28,EURE ET LOIRE,4,5,286.07,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,29,FINISTERE,0,1,151.85,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,29,FINISTERE,1,2,217.91,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,29,FINISTERE,2,3,290.53,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,29,FINISTERE,3,4,343.73,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,29,FINISTERE,4,5,396.34,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,30,GARD,0,1,143.75,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,30,GARD,1,2,224.87,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,30,GARD,2,3,315.28,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,30,GARD,3,4,388.73,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,30,GARD,4,5,453.73,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,31,GARONNE (HAUTE),0,1,143.02,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,31,GARONNE (HAUTE),1,2,224.4,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,31,GARONNE (HAUTE),2,3,318.83,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,31,GARONNE (HAUTE),3,4,393.54,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,31,GARONNE (HAUTE),4,5,460.1,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,32,GERS,0,1,153.03,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,32,GERS,1,2,235.29,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,32,GERS,2,3,320.91,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,32,GERS,3,4,393.23,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,32,GERS,4,5,455.98,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,33,GIRONDE,0,1,132.16,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,33,GIRONDE,1,2,195.9,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,33,GIRONDE,2,3,264.65,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,33,GIRONDE,3,4,320.09,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,33,GIRONDE,4,5,365.96,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,34,HERAULT,0,1,149.54,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,34,HERAULT,1,2,234.14,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,34,HERAULT,2,3,325.41,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,34,HERAULT,3,4,399.98,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,34,HERAULT,4,5,467.23,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,35,ILLE ET VILAINE,0,1,115.95,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,35,ILLE ET VILAINE,1,2,166.95,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,35,ILLE ET VILAINE,2,3,229.76,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,35,ILLE ET VILAINE,3,4,273.96,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,35,ILLE ET VILAINE,4,5,310.81,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,36,INDRE,0,1,122.9,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,36,INDRE,1,2,179.68,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,36,INDRE,2,3,238.77,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,36,INDRE,3,4,285.22,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,36,INDRE,4,5,320.95,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,37,INDRE ET LOIRE,0,1,113.63,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,37,INDRE ET LOIRE,1,2,165.78,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,37,INDRE ET LOIRE,2,3,218.51,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,37,INDRE ET LOIRE,3,4,260.46,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,37,INDRE ET LOIRE,4,5,300.7,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,38,ISERE,0,1,136.8,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,38,ISERE,1,2,198.22,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,38,ISERE,2,3,266.9,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,38,ISERE,3,4,318.97,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,38,ISERE,4,5,367.08,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,39,JURA,0,1,122.9,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,39,JURA,1,2,179.68,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,39,JURA,2,3,242.14,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,39,JURA,3,4,288.59,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,39,JURA,4,5,336.7,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,40,LANDES,0,1,161.13,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,40,LANDES,1,2,248.04,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,40,LANDES,2,3,336.66,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,40,LANDES,3,4,411.24,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,40,LANDES,4,5,467.23,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,41,LOIR ET CHER,0,1,119.41,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,41,LOIR ET CHER,1,2,168.11,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,41,LOIR ET CHER,2,3,226.39,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,41,LOIR ET CHER,3,4,267.21,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,41,LOIR ET CHER,4,5,306.32,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,42,LOIRE,0,1,133.32,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,42,LOIRE,1,2,193.59,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,42,LOIRE,2,3,261.27,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,42,LOIRE,3,4,313.35,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,42,LOIRE,4,5,359.21,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,43,LOIRE (HAUTE),0,1,139.12,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,43,LOIRE (HAUTE),1,2,209.81,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,43,LOIRE (HAUTE),2,3,290.53,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,43,LOIRE (HAUTE),3,4,349.35,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,43,LOIRE (HAUTE),4,5,386.21,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,44,LOIRE ATLANTIQUE,0,1,118.26,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,44,LOIRE ATLANTIQUE,1,2,171.58,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,44,LOIRE ATLANTIQUE,2,3,233.14,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,44,LOIRE ATLANTIQUE,3,4,278.47,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,44,LOIRE ATLANTIQUE,4,5,317.57,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,45,LOIRET,0,1,106.68,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,45,LOIRET,1,2,151.88,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,45,LOIRET,2,3,202.76,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,45,LOIRET,3,4,237.95,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,45,LOIRET,4,5,270.32,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,46,LOT,0,1,155.33,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,46,LOT,1,2,238.77,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,46,LOT,2,3,320.91,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,46,LOT,3,4,389.85,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,46,LOT,4,5,423.34,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,47,LOT ET GARONNE,0,1,141.43,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,47,LOT ET GARONNE,1,2,220.24,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,47,LOT ET GARONNE,2,3,308.53,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,47,LOT ET GARONNE,3,4,380.86,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,47,LOT ET GARONNE,4,5,430.1,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,48,LOZERE,0,1,142.58,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,48,LOZERE,1,2,222.55,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,48,LOZERE,2,3,313.03,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,48,LOZERE,3,4,384.23,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,48,LOZERE,4,5,435.72,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,49,MAINE ET LOIRE,0,1,117.1,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,49,MAINE ET LOIRE,1,2,171.58,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,49,MAINE ET LOIRE,2,3,227.51,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,49,MAINE ET LOIRE,3,4,271.71,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,49,MAINE ET LOIRE,4,5,316.45,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,50,MANCHE,0,1,121.74,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,50,MANCHE,1,2,175.05,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,50,MANCHE,2,3,236.52,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,50,MANCHE,3,4,280.72,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,50,MANCHE,4,5,319.83,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,51,MARNE,0,1,111.31,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,51,MARNE,1,2,159.99,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,51,MARNE,2,3,212.89,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,51,MARNE,3,4,252.58,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,51,MARNE,4,5,290.58,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,52,MARNE (HAUTE),0,1,115.95,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,52,MARNE (HAUTE),1,2,169.26,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,52,MARNE (HAUTE),2,3,223.02,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,52,MARNE (HAUTE),3,4,266.08,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,52,MARNE (HAUTE),4,5,308.57,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,53,MAYENNE,0,1,120.58,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,53,MAYENNE,1,2,177.37,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,53,MAYENNE,2,3,234.27,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,53,MAYENNE,3,4,279.59,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,53,MAYENNE,4,5,322.08,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,54,MEURTHE ET MOSELLE,0,1,118.26,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,54,MEURTHE ET MOSELLE,1,2,173.9,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,54,MEURTHE ET MOSELLE,2,3,228.63,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,54,MEURTHE ET MOSELLE,3,4,271.71,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,54,MEURTHE ET MOSELLE,4,5,315.33,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,55,MEUSE,0,1,115.95,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,55,MEUSE,1,2,169.26,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,55,MEUSE,2,3,223.02,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,55,MEUSE,3,4,266.08,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,55,MEUSE,4,5,308.57,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,56,MORBIHAN,0,1,137.96,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,56,MORBIHAN,1,2,198.22,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,56,MORBIHAN,2,3,265.77,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,56,MORBIHAN,3,4,316.72,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,56,MORBIHAN,4,5,361.45,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,57,MOSELLE,0,1,121.74,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,57,MOSELLE,1,2,178.53,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,57,MOSELLE,2,3,236.52,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,57,MOSELLE,3,4,284.1,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,57,MOSELLE,4,5,331.07,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,58,NIEVRE,0,1,113.63,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,58,NIEVRE,1,2,164.62,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,58,NIEVRE,2,3,218.51,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,58,NIEVRE,3,4,259.33,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,58,NIEVRE,4,5,299.57,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,59,NORD,0,1,44.99,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,59,NORD,1,2,56.16,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,59,NORD,2,3,70.21,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,59,NORD,3,4,118.18,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,59,NORD,4,5,154.15,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,60,OISE,0,1,90.53,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,60,OISE,1,2,112.54,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,60,OISE,2,3,134.59,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,60,OISE,3,4,172.52,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,60,OISE,4,5,228.81,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,61,ORNE,0,1,111.31,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,61,ORNE,1,2,159.99,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,61,ORNE,2,3,212.89,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,61,ORNE,3,4,252.58,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,61,ORNE,4,5,290.58,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,62,PAS DE CALAIS,0,1,44.99,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,62,PAS DE CALAIS,1,2,56.16,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,62,PAS DE CALAIS,2,3,70.21,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,62,PAS DE CALAIS,3,4,118.18,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,62,PAS DE CALAIS,4,5,154.15,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,63,PUY DE DOME,0,1,121.74,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,63,PUY DE DOME,1,2,182.01,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,63,PUY DE DOME,2,3,238.77,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,63,PUY DE DOME,3,4,286.34,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,63,PUY DE DOME,4,5,337.82,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,64,PYRENEES ATLANTIQUE,0,1,161.13,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,64,PYRENEES ATLANTIQUE,1,2,256.14,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,64,PYRENEES ATLANTIQUE,2,3,347.91,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,64,PYRENEES ATLANTIQUE,3,4,423.61,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,64,PYRENEES ATLANTIQUE,4,5,490.86,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,65,PYRENEES (HAUTES),0,1,161.13,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,65,PYRENEES (HAUTES),1,2,248.04,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,65,PYRENEES (HAUTES),2,3,336.66,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,65,PYRENEES (HAUTES),3,4,411.24,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,65,PYRENEES (HAUTES),4,5,477.35,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,66,PYRENEES ORIENTALES,0,1,173.87,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,66,PYRENEES ORIENTALES,1,2,286.27,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,66,PYRENEES ORIENTALES,2,3,404.18,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,66,PYRENEES ORIENTALES,3,4,494.5,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,66,PYRENEES ORIENTALES,4,5,534.74,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,67,RHIN (BAS),0,1,129.85,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,67,RHIN (BAS),1,2,191.28,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,67,RHIN (BAS),2,3,260.15,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,67,RHIN (BAS),3,4,312.22,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,67,RHIN (BAS),4,5,351.33,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,68,RHIN (HAUT),0,1,124.05,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,68,RHIN (HAUT),1,2,183.16,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,68,RHIN (HAUT),2,3,244.39,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,68,RHIN (HAUT),3,4,293.09,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,68,RHIN (HAUT),4,5,343.46,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,69,RHONE,0,1,126.37,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,69,RHONE,1,2,185.47,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,69,RHONE,2,3,245.52,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,69,RHONE,3,4,295.34,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,69,RHONE,4,5,343.46,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,70,SAONE (HAUTE),0,1,125.22,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,70,SAONE (HAUTE),1,2,180.84,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,70,SAONE (HAUTE),2,3,243.27,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,70,SAONE (HAUTE),3,4,289.71,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,70,SAONE (HAUTE),4,5,327.7,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,71,SAONE ET LOIRE,0,1,117.1,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,71,SAONE ET LOIRE,1,2,171.58,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,71,SAONE ET LOIRE,2,3,227.51,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,71,SAONE ET LOIRE,3,4,271.71,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,71,SAONE ET LOIRE,4,5,316.45,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,72,SARTHE,0,1,113.63,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,72,SARTHE,1,2,159.99,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,72,SARTHE,2,3,219.64,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,72,SARTHE,3,4,261.59,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,72,SARTHE,4,5,293.95,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,73,SAVOIE,0,1,131.01,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,73,SAVOIE,1,2,198.22,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,73,SAVOIE,2,3,259.01,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,73,SAVOIE,3,4,313.35,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,73,SAVOIE,4,5,367.08,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,74,SAVOIE (HAUTE),0,1,131.01,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,74,SAVOIE (HAUTE),1,2,198.22,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,74,SAVOIE (HAUTE),2,3,259.01,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,74,SAVOIE (HAUTE),3,4,313.35,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,74,SAVOIE (HAUTE),4,5,373.84,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,75,PARIS.,0,1,105.96,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,75,PARIS.,1,2,153.05,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,75,PARIS.,2,3,205.0,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,75,PARIS.,3,4,231.21,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,75,PARIS.,4,5,246.69,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,76,SEINE MARITIME,0,1,111.31,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,76,SEINE MARITIME,1,2,159.99,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,76,SEINE MARITIME,2,3,212.89,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,76,SEINE MARITIME,3,4,252.58,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,76,SEINE MARITIME,4,5,289.45,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,77,SEINE ET MARNE,0,1,105.96,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,77,SEINE ET MARNE,1,2,153.05,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,77,SEINE ET MARNE,2,3,206.14,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,77,SEINE ET MARNE,3,4,231.21,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,77,SEINE ET MARNE,4,5,245.56,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,78,YVELINES,0,1,105.96,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,78,YVELINES,1,2,153.05,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,78,YVELINES,2,3,205.0,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,78,YVELINES,3,4,231.21,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,78,YVELINES,4,5,246.69,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,79,SEVRES (DEUX),0,1,121.74,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,79,SEVRES (DEUX),1,2,178.53,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,79,SEVRES (DEUX),2,3,236.52,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,79,SEVRES (DEUX),3,4,284.1,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,79,SEVRES (DEUX),4,5,331.07,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,80,SOMME,0,1,67.16,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,80,SOMME,1,2,96.66,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,80,SOMME,2,3,124.8,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,80,SOMME,3,4,160.27,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,80,SOMME,4,5,205.54,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,81,TARN,0,1,162.29,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,81,TARN,1,2,252.68,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,81,TARN,2,3,343.41,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,81,TARN,3,4,416.85,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,81,TARN,4,5,467.23,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,82,TARN ET GARONNE,0,1,153.03,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,82,TARN ET GARONNE,1,2,235.29,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,82,TARN ET GARONNE,2,3,320.91,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,82,TARN ET GARONNE,3,4,389.85,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,82,TARN ET GARONNE,4,5,423.34,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,83,VAR,0,1,163.45,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,83,VAR,1,2,252.68,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,83,VAR,2,3,345.65,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,83,VAR,3,4,421.37,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,83,VAR,4,5,490.86,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,84,VAUCLUSE,0,1,142.58,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,84,VAUCLUSE,1,2,222.55,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,84,VAUCLUSE,2,3,310.77,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,84,VAUCLUSE,3,4,383.1,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,84,VAUCLUSE,4,5,446.97,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,85,VENDEE,0,1,129.85,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,85,VENDEE,1,2,190.11,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,85,VENDEE,2,3,256.77,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,85,VENDEE,3,4,307.73,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,85,VENDEE,4,5,351.33,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,86,VIENNE,0,1,129.85,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,86,VIENNE,1,2,190.11,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,86,VIENNE,2,3,251.14,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,86,VIENNE,3,4,297.59,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,86,VIENNE,4,5,332.2,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,87,VIENNE (HAUTE),0,1,124.05,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,87,VIENNE (HAUTE),1,2,183.16,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,87,VIENNE (HAUTE),2,3,238.77,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,87,VIENNE (HAUTE),3,4,285.22,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,87,VIENNE (HAUTE),4,5,332.2,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,88,VOSGES,0,1,121.74,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,88,VOSGES,1,2,179.68,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,88,VOSGES,2,3,236.52,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,88,VOSGES,3,4,284.1,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,88,VOSGES,4,5,332.2,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,89,YONNE,0,1,118.26,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,89,YONNE,1,2,168.11,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,89,YONNE,2,3,227.51,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,89,YONNE,3,4,269.46,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,89,YONNE,4,5,306.32,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,90,TERRITOIRE DE BELFOR,0,1,129.85,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,90,TERRITOIRE DE BELFOR,1,2,191.28,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,90,TERRITOIRE DE BELFOR,2,3,260.15,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,90,TERRITOIRE DE BELFOR,3,4,307.73,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,90,TERRITOIRE DE BELFOR,4,5,342.34,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,91,ESSONNE,0,1,105.96,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,91,ESSONNE,1,2,139.14,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,91,ESSONNE,2,3,190.38,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,91,ESSONNE,3,4,219.95,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,91,ESSONNE,4,5,241.06,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,92,HAUTS DE SEINE,0,1,105.96,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,92,HAUTS DE SEINE,1,2,153.05,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,92,HAUTS DE SEINE,2,3,205.0,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,92,HAUTS DE SEINE,3,4,231.21,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,92,HAUTS DE SEINE,4,5,246.69,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,93,SEINE ST DENIS,0,1,105.96,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,93,SEINE ST DENIS,1,2,153.05,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,93,SEINE ST DENIS,2,3,205.0,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,93,SEINE ST DENIS,3,4,231.21,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,93,SEINE ST DENIS,4,5,246.69,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,94,VAL DE MARNE,0,1,105.96,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,94,VAL DE MARNE,1,2,153.05,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,94,VAL DE MARNE,2,3,205.0,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,94,VAL DE MARNE,3,4,231.21,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,94,VAL DE MARNE,4,5,246.69,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,95,VAL D'OISE,0,1,105.96,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,95,VAL D'OISE,1,2,153.05,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,95,VAL D'OISE,2,3,205.0,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,95,VAL D'OISE,3,4,231.21,forfait,,SIFA 010126 - P U-1.xlsx
+Compte 100346,messagerie,palette,departement,95,VAL D'OISE,4,5,246.69,forfait,,SIFA 010126 - P U-1.xlsx

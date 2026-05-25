@@ -41,6 +41,21 @@ _NORM_DES_SQL = (
 )
 
 
+_CLIENT_REF_SQL = (
+    "CASE WHEN INSTR(p.reference, '/') > 0 "
+    "THEN UPPER(SUBSTR(p.reference, 1, INSTR(p.reference, '/') - 1)) "
+    "ELSE UPPER(TRIM(p.reference)) END"
+)
+
+
+def _produit_client_search_where_args(client: str) -> tuple[str, list]:
+    """Filtre par numéro client (segment avant le / dans la référence produit)."""
+    client = (client or "").strip().upper()
+    if not client:
+        return "(1=0)", []
+    return f"({_CLIENT_REF_SQL} LIKE ?)", [f"{client}%"]
+
+
 def _produit_search_where_args(q: str) -> tuple[str, list]:
     """Clause WHERE + paramètres : concordance sur la chaîne tapée et sur la forme sans séparateurs."""
     q = (q or "").strip()
@@ -428,10 +443,19 @@ def vue_globale(request: Request):
 
 # ── Produits CRUD ─────────────────────────────────────────────────
 @router.get("/api/stock/produits")
-def list_produits(request: Request, q: Optional[str] = None, limit: int = 50):
+def list_produits(
+    request: Request,
+    q: Optional[str] = None,
+    client: Optional[str] = None,
+    limit: int = 50,
+):
     require_stock(request)
+    client_qs = (client or "").strip()
     qs = (q or "").strip()
-    if qs:
+    if client_qs:
+        prod_where, prod_params = _produit_client_search_where_args(client_qs)
+        limit = min(max(limit, 1), 500)
+    elif qs:
         prod_where, prod_params = _produit_search_where_args(qs)
     else:
         prod_where = "(p.reference LIKE ? OR IFNULL(p.designation,'') LIKE ?)"
