@@ -7,7 +7,7 @@ from services.auth_service import get_current_user
 
 router = APIRouter(tags=["postits"])
 
-_POSTIT_COLS = "id, user_id, type, title, pos_x, pos_y, width, multi_page, created_at"
+_POSTIT_COLS = "id, user_id, type, title, pos_x, pos_y, width, multi_page, hidden, created_at"
 
 
 def _user_id(request: Request) -> int:
@@ -94,6 +94,9 @@ async def patch_postit(postit_id: int, request: Request):
     if "multi_page" in body:
         updates.append("multi_page=?")
         params.append(1 if body.get("multi_page") else 0)
+    if "hidden" in body:
+        updates.append("hidden=?")
+        params.append(1 if body.get("hidden") else 0)
     if not updates:
         raise HTTPException(400, "Aucune modification")
     with get_db() as conn:

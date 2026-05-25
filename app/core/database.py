@@ -2027,6 +2027,14 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 60, "matieres_premieres_palettes_par_pile")
 
+    # v61 — Post-its réduits en barre en bas de l'écran
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=61 LIMIT 1").fetchone():
+        conn.execute(
+            "ALTER TABLE postits ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 61, "postits_hidden")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

@@ -10,9 +10,19 @@
   let _postitDockMenuOpen = false;
   let _postitDockBound = false;
 
+  const POSTIT_WIDTH = 260;
+  const POSTIT_DOCK_GAP = 10;
+  const POSTIT_DOCK_BOTTOM = 24;
+  const POSTIT_DOCK_LEFT = 16;
+  const POSTIT_DOCK_RIGHT_RESERVE = 220;
+  const POSTIT_ANIM_MS = 360;
+
   const POSTIT_DOCK_ICON =
     '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">' +
     '<path d="M7 4h10a2 2 0 0 1 2 2v12l-4-4H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M15 4v5h5"/></svg>';
+
+  const POSTIT_HIDE_ICON =
+    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>';
 
   function postitCurrentApp() {
     if (typeof S !== 'undefined' && S && S.app) return S.app;
@@ -34,6 +44,10 @@
     return items.filter(function (p) {
       return !!p.multi_page;
     });
+  }
+
+  function postitIsHidden(p) {
+    return !!(p && (p.hidden === 1 || p.hidden === true));
   }
 
   function postitEscHtml(s) {
@@ -120,6 +134,118 @@
     return layer;
   }
 
+  function postitHeaderHeight(el) {
+    var h = el && el.querySelector('.postit-header');
+    return h ? h.offsetHeight : 42;
+  }
+
+  function measurePostitPeekUp(el) {
+    if (!el) return 140;
+    el.classList.add('is-peek');
+    var full = el.scrollHeight;
+    el.classList.remove('is-peek');
+    var headerH = postitHeaderHeight(el);
+    return Math.max(0, full - headerH);
+  }
+
+  function updatePostitPeekVar(el) {
+    if (!el || !el.classList.contains('is-hidden')) return;
+    el.style.setProperty('--postit-peek-up', measurePostitPeekUp(el) + 'px');
+  }
+
+  function hiddenPostitDockTop(el) {
+    var vh = window.innerHeight || document.documentElement.clientHeight;
+    return vh - POSTIT_DOCK_BOTTOM - postitHeaderHeight(el);
+  }
+
+  function layoutHiddenPostits() {
+    var hidden = [];
+    document.querySelectorAll('.postit.is-hidden').forEach(function (el) {
+      hidden.push(el);
+    });
+    hidden.sort(function (a, b) {
+      return (parseInt(a.dataset.id, 10) || 0) - (parseInt(b.dataset.id, 10) || 0);
+    });
+    var maxRight = (window.innerWidth || 0) - POSTIT_DOCK_RIGHT_RESERVE;
+    var left = POSTIT_DOCK_LEFT;
+    var top = hidden.length ? hiddenPostitDockTop(hidden[0]) : 0;
+    hidden.forEach(function (el) {
+      if (left + POSTIT_WIDTH > maxRight) {
+        left = POSTIT_DOCK_LEFT;
+        top -= postitHeaderHeight(el) + POSTIT_DOCK_GAP;
+      }
+      el.style.left = left + 'px';
+      el.style.top = top + 'px';
+      updatePostitPeekVar(el);
+      left += POSTIT_WIDTH + POSTIT_DOCK_GAP;
+    });
+  }
+
+  function animatePostitPosition(el, left, top, onDone) {
+    if (!el) {
+      if (onDone) onDone();
+      return;
+    }
+    el.classList.add('is-animating');
+    el.style.left = left + 'px';
+    el.style.top = top + 'px';
+    window.setTimeout(function () {
+      el.classList.remove('is-animating');
+      if (onDone) onDone();
+    }, POSTIT_ANIM_MS);
+  }
+
+  function applyPostitHiddenState(el, p, animate) {
+    if (!el || !p) return;
+    var hidden = postitIsHidden(p);
+    if (hidden) {
+      el.classList.add('is-hidden');
+      if (animate) {
+        el.classList.add('is-animating');
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            layoutHiddenPostits();
+            window.setTimeout(function () {
+              el.classList.remove('is-animating');
+            }, POSTIT_ANIM_MS);
+          });
+        });
+      } else {
+        layoutHiddenPostits();
+      }
+    } else {
+      el.classList.remove('is-hidden');
+      el.style.transform = '';
+      var x = p.pos_x != null ? p.pos_x : 100;
+      var y = p.pos_y != null ? p.pos_y : 100;
+      if (animate) {
+        el.classList.add('is-animating');
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            animatePostitPosition(el, x, y, function () {
+              el.classList.remove('is-animating');
+            });
+          });
+        });
+      } else {
+        el.style.left = x + 'px';
+        el.style.top = y + 'px';
+      }
+    }
+  }
+
+  function setupPostitInteractions(el, p) {
+    el.addEventListener('mouseenter', function () {
+      if (!el.classList.contains('is-hidden')) return;
+      updatePostitPeekVar(el);
+    });
+    el.addEventListener('click', function (e) {
+      if (!el.classList.contains('is-hidden')) return;
+      if (e.target.closest('button, input, textarea, label, a')) return;
+      restorePostitFromHidden(p.id);
+    });
+  }
+
   function buildPostitTaskHtml(postitId, t) {
     var done = !!t.done;
     return (
@@ -152,17 +278,22 @@
 
   function buildPostitEl(p) {
     var el = document.createElement('div');
-    el.className = 'postit';
+    el.className = 'postit' + (postitIsHidden(p) ? ' is-hidden' : '');
     el.dataset.id = String(p.id);
     el.dataset.type = p.type;
-    el.style.left = (p.pos_x != null ? p.pos_x : 100) + 'px';
-    el.style.top = (p.pos_y != null ? p.pos_y : 100) + 'px';
+    if (!postitIsHidden(p)) {
+      el.style.left = (p.pos_x != null ? p.pos_x : 100) + 'px';
+      el.style.top = (p.pos_y != null ? p.pos_y : 100) + 'px';
+    }
     var tasks = Array.isArray(p.tasks) ? p.tasks : [];
     var hasDone = tasks.some(function (t) {
       return t.done;
     });
     var multiOn = !!p.multi_page;
     var typeLabel = p.type === 'today' ? 'Tâche quotidienne' : 'À faire';
+    var hideTitle = postitIsHidden(p)
+      ? 'Afficher à la position enregistrée'
+      : 'Réduire en bas de l\'écran';
     el.innerHTML =
       '<div class="postit-header" onmousedown="startPostitDrag(event, ' +
       p.id +
@@ -175,9 +306,17 @@
       '" onchange="renamePostit(' +
       p.id +
       ', this.value)" onmousedown="event.stopPropagation()">' +
+      '<div class="postit-header-actions">' +
+      '<button type="button" class="postit-hide-btn" onclick="event.stopPropagation(); togglePostitHidden(' +
+      p.id +
+      ')" title="' +
+      postitEscAttr(hideTitle) +
+      '">' +
+      POSTIT_HIDE_ICON +
+      '</button>' +
       '<button type="button" class="postit-delete-btn" onclick="deletePostit(' +
       p.id +
-      ')" title="Supprimer">×</button></div>' +
+      ')" title="Supprimer">×</button></div></div>' +
       '<div class="postit-body" id="postit-body-' +
       p.id +
       '">' +
@@ -206,6 +345,7 @@
           ')">Effacer terminées</button>'
         : '') +
       '</div>';
+    setupPostitInteractions(el, p);
     return el;
   }
 
@@ -234,7 +374,9 @@
       var el = buildPostitEl(p);
       layer.appendChild(el);
       fitPostitTaskTextareas(el.querySelector('.postit-body'));
+      applyPostitHiddenState(el, p, false);
     });
+    layoutHiddenPostits();
   }
 
   async function loadPostits() {
@@ -331,6 +473,7 @@
           if (postitUserLoggedIn() && postitCurrentApp() !== 'login') {
             initPostitDock();
             initPostitsApp();
+            layoutHiddenPostits();
           }
         });
       }
@@ -343,7 +486,7 @@
   function startPostitDrag(e, id) {
     if (e.button !== 0) return;
     var el = document.querySelector('.postit[data-id="' + id + '"]');
-    if (!el) return;
+    if (!el || el.classList.contains('is-hidden')) return;
     var rect = el.getBoundingClientRect();
     _postitDrag = { el: el, id: id, ox: e.clientX - rect.left, oy: e.clientY - rect.top };
     el.style.zIndex = '500';
@@ -379,6 +522,64 @@
       p.pos_x = x;
       p.pos_y = y;
     }
+  }
+
+  async function setPostitHidden(id, hidden) {
+    var p = PostitState.items.find(function (x) {
+      return x.id === id;
+    });
+    if (!p) return;
+    var el = document.querySelector('.postit[data-id="' + id + '"]');
+    if (!el) return;
+
+    if (hidden && !postitIsHidden(p)) {
+      var x = parseInt(el.style.left, 10);
+      var y = parseInt(el.style.top, 10);
+      if (!isNaN(x) && !isNaN(y)) {
+        p.pos_x = x;
+        p.pos_y = y;
+        postitApi('/api/postits/' + id + '/pos', {
+          method: 'PATCH',
+          body: JSON.stringify({ x: x, y: y }),
+        }).catch(function () {});
+      }
+    }
+
+    try {
+      var r = await postitApi('/api/postits/' + id, {
+        method: 'PATCH',
+        body: JSON.stringify({ hidden: hidden }),
+      });
+      p.hidden = r && r.hidden != null ? (r.hidden ? 1 : 0) : hidden ? 1 : 0;
+      var hideBtn = el.querySelector('.postit-hide-btn');
+      if (hideBtn) {
+        hideBtn.title = postitIsHidden(p)
+          ? 'Afficher à la position enregistrée'
+          : 'Réduire en bas de l\'écran';
+      }
+      applyPostitHiddenState(el, p, true);
+      if (!postitIsHidden(p)) {
+        layoutHiddenPostits();
+      }
+    } catch (e) {
+      postitToast((e && e.message) || 'Modification impossible.', 'danger');
+    }
+  }
+
+  function togglePostitHidden(id) {
+    var p = PostitState.items.find(function (x) {
+      return x.id === id;
+    });
+    if (!p) return;
+    setPostitHidden(id, !postitIsHidden(p));
+  }
+
+  function restorePostitFromHidden(id) {
+    var p = PostitState.items.find(function (x) {
+      return x.id === id;
+    });
+    if (!p || !postitIsHidden(p)) return;
+    setPostitHidden(id, false);
   }
 
   async function togglePostitMultiPage(id) {
@@ -496,6 +697,8 @@
         return x.id === taskId;
       });
       if (t) t.text = text;
+      var el = document.querySelector('.postit[data-id="' + postitId + '"]');
+      if (el && el.classList.contains('is-hidden')) updatePostitPeekVar(el);
     } catch (e) {
       postitToast((e && e.message) || 'Modification impossible.', 'danger');
     }
@@ -541,6 +744,8 @@
   window.loadPostits = loadPostits;
   window.renderPostits = renderPostits;
   window.startPostitDrag = startPostitDrag;
+  window.togglePostitHidden = togglePostitHidden;
+  window.restorePostitFromHidden = restorePostitFromHidden;
   window.togglePostitMultiPage = togglePostitMultiPage;
   window.deletePostit = deletePostit;
   window.renamePostit = renamePostit;

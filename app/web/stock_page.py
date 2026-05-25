@@ -348,13 +348,18 @@ body.light .btn-sm{color:#fff}
 
 /* ── Action bar ── */
 .action-bar{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
-.action-btn{flex:1;min-width:90px;padding:12px 8px;border-radius:12px;border:none;
+.action-btn{flex:1;min-width:90px;padding:12px 8px;border-radius:12px;border:1px solid transparent;
   font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;
-  display:flex;align-items:center;justify-content:center;gap:5px;transition:opacity .15s}
+  display:flex;align-items:center;justify-content:center;gap:5px;
+  transition:border-color .15s,opacity .15s,filter .15s}
+.action-btn:hover{filter:brightness(1.05)}
 .action-btn:active{opacity:.75}
-.action-btn.entree{background:rgba(52,211,153,.2);color:var(--success)}
-.action-btn.sortie{background:rgba(248,113,113,.2);color:var(--danger)}
-.action-btn.inventaire{background:rgba(167,139,250,.2);color:var(--c2)}
+.action-btn.entree{background:color-mix(in srgb,var(--success) 20%,transparent);color:var(--success)}
+.action-btn.entree:hover{border-color:var(--success)}
+.action-btn.sortie{background:color-mix(in srgb,var(--danger) 20%,transparent);color:var(--danger)}
+.action-btn.sortie:hover{border-color:var(--danger)}
+.action-btn.inventaire{background:color-mix(in srgb,var(--c2) 20%,transparent);color:var(--c2)}
+.action-btn.inventaire:hover{border-color:var(--c2)}
 
 /* ── Historique mouvements ── */
 .mvt-row{padding:10px 16px;display:flex;gap:10px;align-items:flex-start;border-bottom:1px solid var(--border)}
@@ -456,17 +461,20 @@ body.light .btn-sm{color:#fff}
 .mp-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;cursor:pointer;transition:border-color .15s}
 .mp-card:hover{border-color:var(--accent)}
 .mp-card-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.mp-card-ref{font-family:ui-monospace,monospace;font-size:14px;font-weight:700;color:var(--text);flex:1;min-width:120px}
-.mp-card-stock{font-size:20px;font-weight:700;color:var(--text);white-space:nowrap}
+.mp-card-ref{font-family:ui-monospace,monospace;font-size:14px;font-weight:700;color:var(--text);flex:1;min-width:0}
+.mp-card-mid{display:flex;align-items:center;gap:12px;margin-top:8px}
+.mp-card-info{flex:1;min-width:0}
+.mp-card-side{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0}
+.mp-card-stock-mini{font-size:15px;font-weight:700;color:var(--text);white-space:nowrap;line-height:1.2}
 .mp-act-icon{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;
   border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text2);cursor:pointer;
   flex-shrink:0;transition:border-color .15s,color .15s,background .15s;font-family:inherit}
 .mp-act-icon:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
-.mp-card-des{font-size:13px;color:var(--text2);margin-top:6px;width:100%}
+.mp-card-des{font-size:13px;color:var(--text2);line-height:1.4}
+.mp-card-meta{font-size:12px;color:var(--muted);margin-top:4px}
 .mp-card-warn{font-size:12px;color:var(--warn);margin-top:4px}
-.mp-card-actions{margin-top:12px;width:100%}
-.mp-card-actions .action-bar{margin:0}
-.mp-card-actions .action-btn{flex:1;min-width:0}
+.mp-card-actions-inline{display:flex;gap:6px;flex-wrap:nowrap}
+.mp-card-actions-inline .action-btn{flex:none;min-width:0;padding:6px 10px;font-size:11px;border-radius:8px;white-space:nowrap}
 .mp-act-btn{border:none;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
 .mp-act-entree{background:color-mix(in srgb,var(--success) 15%,transparent);color:var(--success)}
 .mp-act-sortie{background:color-mix(in srgb,var(--danger) 15%,transparent);color:var(--danger)}
@@ -483,6 +491,22 @@ body.light .btn-sm{color:#fff}
 .mp-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:18px}
 .mp-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;width:100%;max-width:420px;max-height:90vh;overflow-y:auto}
 .mp-modal > h3{margin:0 0 16px;font-size:16px;font-weight:700;color:var(--text)}
+.mp-modal.mp-modal-mvt{padding:0;overflow:hidden;display:flex;flex-direction:column}
+.mp-modal-mvt-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px 20px;flex-shrink:0}
+.mp-modal-mvt-head h3{margin:0;font-size:16px;font-weight:700}
+.mp-modal-mvt-head-entree{background:color-mix(in srgb,var(--success) 16%,transparent);
+  border-bottom:1px solid color-mix(in srgb,var(--success) 32%,transparent)}
+.mp-modal-mvt-head-entree h3{color:var(--success)}
+.mp-modal-mvt-head-sortie{background:color-mix(in srgb,var(--danger) 16%,transparent);
+  border-bottom:1px solid color-mix(in srgb,var(--danger) 32%,transparent)}
+.mp-modal-mvt-head-sortie h3{color:var(--danger)}
+.mp-modal-mvt-head-ajustement{background:color-mix(in srgb,var(--warn) 14%,transparent);
+  border-bottom:1px solid color-mix(in srgb,var(--warn) 28%,transparent)}
+.mp-modal-mvt-head-ajustement h3{color:var(--warn)}
+.mp-modal-mvt-head-transfert{background:color-mix(in srgb,var(--accent) 14%,transparent);
+  border-bottom:1px solid color-mix(in srgb,var(--accent) 28%,transparent)}
+.mp-modal-mvt-head-transfert h3{color:var(--accent)}
+.mp-modal-mvt-body{padding:16px 20px 20px;overflow-y:auto;flex:1}
 .mp-modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px}
 .mp-modal-head h3{margin:0;font-size:16px;font-weight:700;color:var(--text)}
 .mp-modal-close{background:transparent;border:none;color:var(--muted);font-size:22px;line-height:1;cursor:pointer;
@@ -1175,6 +1199,29 @@ function fU(qty, unite) {
     return fN(n) + '\u00a0eti.';
   }
   return fN(n) + '\u00a0' + (Math.abs(n) > 1 ? u + 's' : u);
+}
+function refUnitePluriel(unite, qty) {
+  const u = String(unite || '').trim();
+  if (!u) return '—';
+  const n = Number(qty) || 0;
+  const uLow = u.toLowerCase();
+  if (uLow === 'étiquettes' || uLow === 'etiquettes' || uLow === 'étiquette' || uLow === 'etiquette') {
+    return n > 1 ? 'étiquettes' : 'étiquette';
+  }
+  return n > 1 ? u + 's' : u;
+}
+function refClientUnitsSummary(rows) {
+  const counts = new Map();
+  rows.forEach(r => {
+    const u = String(r.unite || '').trim();
+    counts.set(u, (counts.get(u) || 0) + 1);
+  });
+  const entries = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'fr'));
+  if (!entries.length) return '—';
+  return entries.map(([u, n]) => {
+    if (!u) return fN(n) + ' sans unité';
+    return fN(n) + ' par ' + refUnitePluriel(u, n);
+  }).join(', ');
 }
 // ── Icons (Feather-ish, inline SVG) ─────────────────────────────
 function icon(name, size=16){
@@ -2469,11 +2516,12 @@ function buildReferentielClientSearchCard() {
     } else if (!rows.length) {
       bodyKids.push(el('div', { cls: 'ref-client-empty' }, 'Aucun résultat pour « ' + q + ' »'));
     } else {
-      const units = [...new Set(rows.map(r => String(r.unite || '').trim()).filter(Boolean))].sort();
+      const unitKinds = [...new Set(rows.map(r => String(r.unite || '').trim()).filter(Boolean))];
+      const unitsSummary = refClientUnitsSummary(rows);
       bodyKids.push(el('div', { cls: 'ref-client-units' },
         el('span', null, rows.length + ' référence' + (rows.length > 1 ? 's' : '') + ' — '),
-        el('strong', null, 'Unité' + (units.length > 1 ? 's' : '') + ' de vente : '),
-        units.length ? units.join(', ') : '—',
+        el('strong', null, 'Unité' + (unitKinds.length > 1 ? 's' : '') + ' de vente : '),
+        unitsSummary,
       ));
       const wrap = el('div', { cls: 'ref-client-results' });
       const table = el('table', { cls: 'ref-client-table' });
@@ -3082,27 +3130,25 @@ function mpCardEditBtn(m) {
 function matieresCardActions(m) {
   if (S.stockReadOnly) return null;
   return el('div', {
-    cls: 'mp-card-actions',
+    cls: 'mp-card-actions-inline',
     on: { click: (e) => e.stopPropagation() },
   },
-    el('div', { cls: 'action-bar' },
-      el('button', {
-        cls: 'action-btn entree',
-        type: 'button',
-        on: { click: (e) => {
-          e.stopPropagation();
-          openModalMouvement('entree', m);
-        } },
-      }, '↓ Entrée'),
-      el('button', {
-        cls: 'action-btn sortie',
-        type: 'button',
-        on: { click: (e) => {
-          e.stopPropagation();
-          openModalMouvement('sortie', m);
-        } },
-      }, '↑ Sortie'),
-    ),
+    el('button', {
+      cls: 'action-btn entree',
+      type: 'button',
+      on: { click: (e) => {
+        e.stopPropagation();
+        openModalMouvement('entree', m);
+      } },
+    }, '↓ Entrée'),
+    el('button', {
+      cls: 'action-btn sortie',
+      type: 'button',
+      on: { click: (e) => {
+        e.stopPropagation();
+        openModalMouvement('sortie', m);
+      } },
+    }, '↑ Sortie'),
   );
 }
 
@@ -3288,6 +3334,15 @@ function buildMatieres() {
   } else {
     filtered.forEach(m => {
       const seuil = parseFloat(m.seuil_alerte) || 0;
+      const infoChildren = [el('div', { cls: 'mp-card-des' }, m.designation || '—')];
+      if (mpIsPaletteCategory(m) && m.palettes_par_pile > 0) {
+        infoChildren.push(el('div', { cls: 'mp-card-meta' },
+          fN(m.palettes_par_pile) + ' pal. / pile'));
+      }
+      if (m.en_alerte) {
+        infoChildren.push(el('div', { cls: 'mp-card-warn' },
+          'Sous le seuil (min. ' + mpStockLine(seuil, m) + ')'));
+      }
       list.appendChild(el('div', {
         cls: 'mp-card',
         on: { click: () => loadMatiere(m.id) },
@@ -3296,17 +3351,14 @@ function buildMatieres() {
           dashMpCatBadge(m.categorie),
           el('span', { cls: 'mp-card-ref' }, m.reference || ''),
           mpCardEditBtn(m),
-          el('span', { cls: 'mp-card-stock' }, mpStockLine(m.quantite, m)),
         ),
-        el('div', { cls: 'mp-card-des' }, m.designation || ''),
-        mpIsPaletteCategory(m) && m.palettes_par_pile > 0
-          ? el('div', { cls: 'mp-card-meta', style: { fontSize: '12px', color: 'var(--muted)' } },
-              fN(m.palettes_par_pile) + ' pal. / pile')
-          : null,
-        m.en_alerte
-          ? el('div', { cls: 'mp-card-warn' }, 'Sous le seuil (min. ' + mpStockLine(seuil, m) + ')')
-          : null,
-        matieresCardActions(m),
+        el('div', { cls: 'mp-card-mid' },
+          el('div', { cls: 'mp-card-info' }, ...infoChildren),
+          el('div', { cls: 'mp-card-side' },
+            el('span', { cls: 'mp-card-stock-mini' }, mpStockLine(m.quantite, m)),
+            matieresCardActions(m),
+          ),
+        ),
       ));
     });
   }
@@ -3374,11 +3426,21 @@ function renderMpMouvementModal(type, matiere) {
     cls: 'mp-modal-overlay',
     on: { click: (e) => { if (e.target === overlay) closeMroot(); } },
   });
-  const box = el('div', { cls: 'mp-modal' });
-  box.appendChild(el('h3', null, MP_MVT_TITLES[typeMvt] || typeMvt));
+  const headTypeCls = ['entree', 'sortie', 'ajustement', 'transfert'].includes(typeMvt) ? typeMvt : '';
+  const box = el('div', { cls: 'mp-modal mp-modal-mvt' });
+  box.appendChild(el('div', { cls: 'mp-modal-mvt-head mp-modal-mvt-head-' + headTypeCls },
+    el('h3', null, MP_MVT_TITLES[typeMvt] || typeMvt),
+    el('button', {
+      cls: 'mp-modal-close',
+      type: 'button',
+      attrs: { title: 'Fermer', 'aria-label': 'Fermer' },
+      on: { click: closeMroot },
+    }, '×'),
+  ));
+  const body = el('div', { cls: 'mp-modal-mvt-body' });
 
   if (mat) {
-    box.appendChild(el('div', { cls: 'mp-field' },
+    body.appendChild(el('div', { cls: 'mp-field' },
       el('label', null, 'Matière'),
       el('div', { cls: 'mp-readonly' }, (mat.reference || '') + ' — ' + (mat.designation || '')),
     ));
@@ -3396,13 +3458,8 @@ function renderMpMouvementModal(type, matiere) {
       const found = list.find(x => x.id === id);
       renderMpMouvementModal(typeMvt, found || null);
     });
-    box.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Matière'), sel));
+    body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Matière'), sel));
   }
-
-  box.appendChild(el('div', { cls: 'mp-field' },
-    el('label', null, 'Type de mouvement'),
-    el('div', { cls: 'mp-readonly' }, MP_MVT_TITLES[typeMvt] || typeMvt),
-  ));
 
   const hintEl = el('div', { cls: 'mp-hint' }, '');
   const errEl = el('div', { cls: 'mp-hint err', style: { display: 'none' } }, '');
@@ -3411,12 +3468,12 @@ function renderMpMouvementModal(type, matiere) {
     const { wrap: emplWrap, emplInp } = buildMpEmplacementField();
     const blInp = el('input', { attrs: { type: 'text', placeholder: 'BL-2024-001' } });
     const qInp = el('input', { attrs: mpQuantiteInputAttrs(mpCat) });
-    box.appendChild(emplWrap);
-    box.appendChild(el('div', { cls: 'mp-field' },
+    body.appendChild(emplWrap);
+    body.appendChild(el('div', { cls: 'mp-field' },
       el('label', null, 'Référence BL / Fournisseur'),
       blInp,
     ));
-    box.appendChild(el('div', { cls: 'mp-field' },
+    body.appendChild(el('div', { cls: 'mp-field' },
       el('label', null, mpQuantiteFieldLabel(mpCat)),
       qInp,
     ));
@@ -3451,8 +3508,8 @@ function renderMpMouvementModal(type, matiere) {
       }
     };
     qInp.addEventListener('input', checkQ);
-    box.appendChild(emplWrap);
-    box.appendChild(el('div', { cls: 'mp-field' },
+    body.appendChild(emplWrap);
+    body.appendChild(el('div', { cls: 'mp-field' },
       el('label', null, mpQuantiteFieldLabel(mpCat)),
       qInp,
       hintEl,
@@ -3480,7 +3537,7 @@ function renderMpMouvementModal(type, matiere) {
     hintEl.textContent = 'Stock actuel : ' + mpStockLine(stockActuel, mpCat);
     const stepAdj = mpIsPaletteCategory(mpCat) || mpCategorieKey(mpCat?.categorie) === 'carton' ? '1' : '0.5';
     const qInp = el('input', { attrs: { type: 'number', min: '0', step: stepAdj } });
-    box.appendChild(el('div', { cls: 'mp-field' },
+    body.appendChild(el('div', { cls: 'mp-field' },
       hintEl,
       el('label', null, 'Nouveau stock (' + mpUniteNom(mpCat) + 's)'),
       qInp,
@@ -3504,9 +3561,9 @@ function renderMpMouvementModal(type, matiere) {
     const qInp = el('input', { attrs: mpQuantiteInputAttrs(mpCat) });
     const srcInp = el('input', { attrs: { type: 'text' } });
     const dstInp = el('input', { attrs: { type: 'text' } });
-    box.appendChild(el('div', { cls: 'mp-field' }, el('label', null, mpQuantiteFieldLabel(mpCat)), qInp));
-    box.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Emplacement source'), srcInp));
-    box.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Emplacement destination'), dstInp));
+    body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, mpQuantiteFieldLabel(mpCat)), qInp));
+    body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Emplacement source'), srcInp));
+    body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Emplacement destination'), dstInp));
     S.mpModal.getBody = () => ({
       matiere_id: S.mpModal.matiereId,
       type_mouvement: 'transfert',
@@ -3525,7 +3582,7 @@ function renderMpMouvementModal(type, matiere) {
   }
 
   const noteTa = el('textarea', { attrs: { placeholder: 'Commentaire (optionnel)' } });
-  box.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Note'), noteTa));
+  body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Note'), noteTa));
   const prevGetBody = S.mpModal.getBody;
   if (prevGetBody) {
     S.mpModal.getBody = () => {
@@ -3546,11 +3603,11 @@ function renderMpMouvementModal(type, matiere) {
     S.mpModal.validate = () => 'Type de mouvement non reconnu.';
   }
 
-  const actions = el('div', { cls: 'mp-modal-actions' },
+  body.appendChild(el('div', { cls: 'mp-modal-actions' },
     el('button', { cls: 'btn-cancel', type: 'button', on: { click: closeMroot } }, 'Annuler'),
     el('button', { cls: 'btn', type: 'button', on: { click: submitMpMouvement } }, 'Valider'),
-  );
-  box.appendChild(actions);
+  ));
+  box.appendChild(body);
   overlay.appendChild(box);
   mroot.appendChild(overlay);
 }

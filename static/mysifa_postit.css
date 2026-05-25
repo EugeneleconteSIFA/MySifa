@@ -115,6 +115,13 @@
 .postit-multipage-btn.on{color:var(--accent)}
 .postit-multipage-btn.on .postit-multipage-label{color:var(--accent)}
 .postit-multipage-label{font-weight:500;color:var(--muted)}
+.postit-header-actions{
+  display:flex;
+  align-items:center;
+  gap:2px;
+  flex-shrink:0;
+}
+.postit-hide-btn,
 .postit-delete-btn{
   background:none;
   border:none;
@@ -122,9 +129,46 @@
   cursor:pointer;
   font-size:16px;
   line-height:1;
-  padding:0 2px;
+  padding:0 4px;
+  transition:color .15s;
 }
+.postit-hide-btn:hover{color:var(--accent)}
 .postit-delete-btn:hover{color:var(--danger)}
+.postit.is-hidden{
+  overflow:hidden;
+  min-height:0;
+  cursor:pointer;
+  transition:left .35s cubic-bezier(.4,0,.2,1),top .35s cubic-bezier(.4,0,.2,1),
+    transform .3s cubic-bezier(.4,0,.2,1),box-shadow .2s ease;
+}
+.postit.is-hidden .postit-header{
+  cursor:pointer;
+  border-radius:12px;
+}
+.postit.is-hidden .postit-body,
+.postit.is-hidden .postit-footer{
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .2s ease;
+}
+.postit.is-hidden:hover,
+.postit.is-hidden.is-peek{
+  overflow:visible;
+  z-index:450;
+  box-shadow:0 8px 32px rgba(0,0,0,0.28);
+  transform:translateY(calc(-1 * var(--postit-peek-up, 140px)));
+}
+.postit.is-hidden:hover .postit-body,
+.postit.is-hidden:hover .postit-footer,
+.postit.is-hidden.is-peek .postit-body,
+.postit.is-hidden.is-peek .postit-footer{
+  opacity:1;
+  pointer-events:auto;
+}
+.postit.is-animating{
+  pointer-events:none;
+  transition:left .35s cubic-bezier(.4,0,.2,1),top .35s cubic-bezier(.4,0,.2,1);
+}
 
 #postit-dock-root{display:none}
 #postit-dock-menu{
