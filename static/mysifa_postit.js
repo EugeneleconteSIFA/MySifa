@@ -45,7 +45,8 @@
 
   const POSTIT_DOCK_ICON =
     '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">' +
-    '<path d="M7 4h10a2 2 0 0 1 2 2v12l-4-4H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M15 4v5h5"/></svg>';
+    '<path d="M5 5h12l4 4v10H5V5z"/>' +
+    '<path d="M17 5v4h4"/></svg>';
 
   const POSTIT_HIDE_ICON =
     '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>';
