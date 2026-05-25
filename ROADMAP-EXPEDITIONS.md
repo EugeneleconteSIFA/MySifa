@@ -32,7 +32,7 @@ Le comparateur sert le gros du volume récurrent ; la prospection sert les coups
 | Tarifs transporteurs | Stockés comme **fichiers uploadés** (PDF/Excel/images) | **Non exploitables automatiquement** — c'est le nœud |
 | Prospection | Seul un `mailto:` "Demande de tarif SIFA" mono-transporteur | À construire |
 
-**Transporteurs seedés (v44) :** Coupé (max 5 pal.), Ceva (max 4 pal.), Coquelle (max 33 pal.), Dimotrans (max 28 pal.). **DSV est cité mais absent du seed** → à ajouter.
+**Transporteurs seedés (v44) :** Coupé (max 5 pal.), Ceva (max 4 pal.), Coquelle (max 33 pal.), Dimotrans (max 28 pal.). DSV est cité mais absent du seed → non intégré pour l'instant (décision du 25/05/2026).
 
 ---
 
@@ -201,19 +201,19 @@ CREATE TABLE IF NOT EXISTS expe_devis_reponses (
 
 - À partir d'un envoi, sélectionner N transporteurs éligibles (filtre zone/capacité, comme le comparateur) **et/ou** des prospects (cf. 7.4).
 - Générer un **RFQ standardisé** (réutiliser et industrialiser le gabarit `mailto` « Demande de tarif SIFA » déjà présent) : objet + corps pré-remplis avec poids, palettes, destination, délai souhaité.
-- Envoi par **SMTP serveur** (un compte d'envoi dédié — voir décisions ouvertes) à tous les destinataires en une action, création d'une ligne `expe_devis_reponses` par transporteur en `statut='envoyee'`.
+- Envoi par **SMTP serveur au nom de l'utilisateur connecté** (`From` / `Reply-To` = email de session, depuis `S.user`), avec **`expeditions@sifa.pro` systématiquement en copie (CC)** pour que la boîte partagée garde une trace de toutes les demandes — quel que soit l'utilisateur qui les envoie. Une ligne `expe_devis_reponses` par transporteur en `statut='envoyee'`.
 
 ### 7.3 Centralisation des réponses
 
 - Écran « Demande #X » listant les transporteurs sollicités et l'état de chaque réponse.
-- Saisie manuelle du prix/délai reçu (V1), puis comparaison côte à côte et bouton « Retenir » → peut créer/mettre à jour le départ avec le transporteur choisi.
-- V2 possible : parsing assisté des emails de réponse (même brique API qu'en 5.3).
+- **V1 retenue — saisie manuelle** du prix/délai reçu, puis comparaison côte à côte et bouton « Retenir » → peut créer/mettre à jour le départ avec le transporteur choisi.
+- V2 (option) — **parsing assisté des emails de réponse** : au lieu de ressaisir prix et délai, MySifa lit automatiquement l'email de réponse du transporteur et en extrait prix / délai / conditions pour pré-remplir la comparaison (même brique IA qu'en 5.3). Nécessite un accès en lecture à `expeditions@sifa.pro` (IMAP ou transfert dédié). Non prioritaire.
 
 ### 7.4 Élargir la base transporteurs (sourcing — réponse 4c)
 
-- Table `expe_transporteurs` étendue d'un flag `prospect` (ou table `expe_transporteurs_prospects`) : transporteurs candidats non encore référencés, avec zone(s) couverte(s), type (messagerie/affrètement), capacité, contact.
-- Vue « Trouver un transporteur » filtrable par zone + type + capacité, pour les cas où aucun historique ne couvre le besoin (ex. affrètement urgent vers une zone mal desservie).
-- Ajouter **DSV** au seed (cité mais absent).
+- **Vraie base de prospects entretenue** dans MySifa (table dédiée `expe_transporteurs_prospects`) : transporteurs candidats avec zone(s) couverte(s), type (messagerie/affrètement), capacité, contact, **statut de démarchage** (`a_contacter` / `en_discussion` / `reference` / `ecarte`) et notes. Un prospect passé en `reference` peut être promu en transporteur actif (`expe_transporteurs`).
+- Vue « Trouver un transporteur » filtrable par zone + type + capacité, couvrant transporteurs actifs **et** prospects, pour les cas où aucun historique ne dessert le besoin (ex. affrètement urgent vers une zone mal couverte).
+- **DSV** : non intégré pour l'instant (décision du 25/05/2026).
 
 ---
 
@@ -287,13 +287,13 @@ Tailles indicatives : S ≈ une session, M ≈ quelques sessions, L ≈ chantier
 
 ---
 
-## 12. Décisions à prendre / questions ouvertes
+## 12. Décisions arbitrées (25/05/2026)
 
-1. **SMTP** : quel compte d'envoi pour les RFQ et relances (boîte dédiée expéditions ? compte générique SIFA ?). Conditionne le Chantier 2.
-2. **Structure réelle des grilles** : tes transporteurs tarifent-ils par département individuel, par grandes zones, ou par couples origine-destination ? À confirmer en ouvrant 1-2 grilles — ça calibre le champ `zone` de `expe_tarifs`.
-3. **Réponses aux devis** : saisie manuelle (V1) suffisante, ou besoin du parsing email automatique dès le départ ?
-4. **DSV** : à intégrer au référentiel (zones, capacité, contact) ?
-5. **Périmètre du sourcing** : veux-tu une vraie base de prospects entretenue dans MySifa, ou juste un répertoire filtrable de transporteurs candidats ?
+1. **SMTP** — Tranché : l'email part **au nom de l'utilisateur connecté** (`From` / `Reply-To` = email de session), avec **`expeditions@sifa.pro` toujours en copie** pour la traçabilité dans la boîte partagée.
+2. **Structure des grilles** — En attente : Eugène fournit des modèles de grilles tarifaires. Le champ `zone` de `expe_tarifs` et le skill d'import seront calibrés sur ces formats réels (département individuel vs grandes zones vs couples origine-destination).
+3. **Réponses aux devis** — Tranché : **saisie manuelle en V1**. Le parsing email automatique (V2) reste une option ultérieure (cf. §7.3).
+4. **DSV** — Tranché : **non intégré pour l'instant**.
+5. **Sourcing** — Tranché : **vraie base de prospects entretenue** dans MySifa, avec statut de démarchage et promotion possible en transporteur actif (cf. §7.4).
 
 ---
 

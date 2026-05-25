@@ -463,6 +463,7 @@ body.light .field-input.empl-upper::placeholder{
 .mp-act-btn{border:none;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
 .mp-act-entree{background:color-mix(in srgb,var(--success) 15%,transparent);color:var(--success)}
 .mp-act-sortie{background:color-mix(in srgb,var(--danger) 15%,transparent);color:var(--danger)}
+.mp-act-edit{background:color-mix(in srgb,var(--muted) 18%,transparent);color:var(--text2)}
 .mp-act-ajust{background:color-mix(in srgb,var(--warn) 15%,transparent);color:var(--warn)}
 .mp-act-transf{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
 .mp-menu-btn{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:16px;cursor:pointer;color:var(--text2)}
@@ -996,6 +997,7 @@ let S = {
   matieresCat: 'tout',
   matieresQ: '',
   matieresCardMenuId: null,
+  matieresEditId: null,
   mpModal: null,
   addPfModalOpen: false,
   matieresAdminOpen: false,
@@ -2678,33 +2680,88 @@ function matieresCardActions(m) {
     type: 'button',
     on: { click: (e) => { e.stopPropagation(); S.matieresCardMenuId = null; openModalMouvement(type, m); } },
   }, lbl);
-  const desktop = el('div', { cls: 'mp-card-actions-desktop' },
+  const btns = [
     mk('Entrée', 'mp-act-entree', 'entree'),
     mk('Sortie', 'mp-act-sortie', 'sortie'),
-    mk('Ajust.', 'mp-act-ajust', 'ajustement'),
-    mk('Transfert', 'mp-act-transf', 'transfert'),
-  );
-  const mobileWrap = el('div', { cls: 'mp-card-actions-mobile' });
-  const menuBtn = el('button', {
-    cls: 'mp-menu-btn',
-    type: 'button',
-    on: { click: (e) => {
-      e.stopPropagation();
-      S.matieresCardMenuId = S.matieresCardMenuId === m.id ? null : m.id;
-      renderMatieresView();
-    } },
-  }, '···');
-  mobileWrap.appendChild(menuBtn);
-  if (S.matieresCardMenuId === m.id) {
-    const drop = el('div', { cls: 'mp-menu-drop' },
-      mk('Entrée', 'mp-act-entree', 'entree'),
-      mk('Sortie', 'mp-act-sortie', 'sortie'),
-      mk('Ajust.', 'mp-act-ajust', 'ajustement'),
-      mk('Transfert', 'mp-act-transf', 'transfert'),
-    );
-    mobileWrap.appendChild(drop);
+  ];
+  if (isMatieresAdmin()) {
+    btns.push(el('button', {
+      cls: 'mp-act-btn mp-act-edit',
+      type: 'button',
+      on: { click: (e) => {
+        e.stopPropagation();
+        S.matieresCardMenuId = null;
+        S.matieresEditId = S.matieresEditId === m.id ? null : m.id;
+        renderMatieresView();
+      } },
+    }, S.matieresEditId === m.id ? 'Fermer' : 'Modifier'));
   }
-  return el('div', { cls: 'mp-card-actions' }, desktop, mobileWrap);
+  return el('div', { cls: 'mp-card-actions' },
+    el('div', { cls: 'mp-card-actions-desktop' }, ...btns),
+    el('div', { cls: 'mp-card-actions-mobile' }, ...btns),
+  );
+}
+
+async function saveMatiereRef(item, payload) {
+  await api('/api/stock/matieres/' + item.id, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+function buildMatiereRefEditForm(item, onSaved) {
+  const refInp = el('input', { attrs: { type: 'text' } });
+  refInp.value = item.reference || '';
+  const desInp = el('input', { attrs: { type: 'text' } });
+  desInp.value = item.designation || '';
+  const seuilStep = mpIsPaletteCategory(item) || mpCategorieKey(item.categorie) === 'carton' ? '1' : '0.5';
+  const seuilInp = el('input', { attrs: { type: 'number', min: '0', step: seuilStep } });
+  seuilInp.value = String(item.seuil_alerte ?? 0);
+  const pppWrap = el('div', { cls: 'mp-field', style: { display: mpIsPaletteCategory(item) ? '' : 'none' } });
+  const pppInp = el('input', { attrs: { type: 'number', min: '1', step: '1' } });
+  pppInp.value = String(item.palettes_par_pile > 0 ? item.palettes_par_pile : '');
+  pppWrap.append(el('label', null, 'Palettes par pile'), pppInp);
+  const wrap = el('div', { cls: 'mp-admin-edit' },
+    el('div', { cls: 'mp-field' }, el('label', null, 'Référence'), refInp),
+    el('div', { cls: 'mp-field' }, el('label', null, 'Description'), desInp),
+    pppWrap,
+    el('div', { cls: 'mp-field' }, el('label', null, mpSeuilFieldLabel(item)), seuilInp),
+    el('div', { cls: 'mp-hint' }, '0 = pas d\'alerte stock bas.'),
+    el('button', {
+      cls: 'btn',
+      type: 'button',
+      on: { click: async () => {
+        const ref = refInp.value.trim();
+        const des = desInp.value.trim();
+        if (!ref || !des) {
+          showToast('Référence et description obligatoires.', 'error');
+          return;
+        }
+        const payload = {
+          reference: ref,
+          designation: des,
+          seuil_alerte: parseFloat(seuilInp.value) || 0,
+        };
+        if (mpIsPaletteCategory(item)) {
+          const ppp = parseFloat(pppInp.value);
+          if (!ppp || ppp <= 0) {
+            showToast('Palettes par pile obligatoire (valeur positive).', 'error');
+            return;
+          }
+          payload.palettes_par_pile = ppp;
+        }
+        try {
+          await saveMatiereRef(item, payload);
+          showToast('Référence mise à jour.', 'success');
+          await onSaved();
+        } catch (e) {
+          showToast(e.message, 'error');
+        }
+      } },
+    }, 'Enregistrer'),
+  );
+  return wrap;
 }
 
 function buildMatieres() {
@@ -2782,6 +2839,12 @@ function buildMatieres() {
           ? el('div', { cls: 'mp-card-warn' }, 'Sous le seuil (min. ' + mpStockLine(seuil, m) + ')')
           : null,
         matieresCardActions(m),
+        S.matieresEditId === m.id
+          ? buildMatiereRefEditForm(m, async () => {
+              S.matieresEditId = null;
+              await loadMatieres();
+            })
+          : null,
       ));
     });
   }
@@ -3151,53 +3214,12 @@ function buildMatieresAdminRow(item) {
 }
 
 function buildMatieresAdminEditForm(item) {
-  const desInp = el('input', { attrs: { type: 'text' } });
-  desInp.value = item.designation || '';
-  const seuilStep = mpIsPaletteCategory(item) || mpCategorieKey(item.categorie) === 'carton' ? '1' : '0.5';
-  const seuilInp = el('input', { attrs: { type: 'number', min: '0', step: seuilStep } });
-  seuilInp.value = String(item.seuil_alerte ?? 0);
-  const pppWrap = el('div', { cls: 'mp-field', style: { display: mpIsPaletteCategory(item) ? '' : 'none' } });
-  const pppInp = el('input', { attrs: { type: 'number', min: '1', step: '1' } });
-  pppInp.value = String(item.palettes_par_pile > 0 ? item.palettes_par_pile : '');
-  pppWrap.append(el('label', null, 'Palettes par pile'), pppInp);
-  const wrap = el('div', { cls: 'mp-admin-edit' },
-    el('div', { cls: 'mp-field' }, el('label', null, 'Désignation'), desInp),
-    pppWrap,
-    el('div', { cls: 'mp-field' }, el('label', null, mpSeuilFieldLabel(item)), seuilInp),
-    el('button', {
-      cls: 'btn',
-      type: 'button',
-      on: { click: async () => {
-        try {
-          const payload = {
-            designation: desInp.value.trim(),
-            seuil_alerte: parseFloat(seuilInp.value) || 0,
-          };
-          if (mpIsPaletteCategory(item)) {
-            const ppp = parseFloat(pppInp.value);
-            if (!ppp || ppp <= 0) {
-              showToast('Palettes par pile obligatoire (valeur positive).', 'error');
-              return;
-            }
-            payload.palettes_par_pile = ppp;
-          }
-          await api('/api/stock/matieres/' + item.id, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-          });
-          showToast('Référence mise à jour.', 'success');
-          S.matieresAdminEditId = null;
-          await loadMatieresAdminList();
-          await loadMatieres();
-          renderMatieresAdminDrawer();
-        } catch (e) {
-          showToast(e.message, 'error');
-        }
-      } },
-    }, 'Enregistrer'),
-  );
-  return wrap;
+  return buildMatiereRefEditForm(item, async () => {
+    S.matieresAdminEditId = null;
+    await loadMatieresAdminList();
+    await loadMatieres();
+    renderMatieresAdminDrawer();
+  });
 }
 
 async function toggleMatieresActif(item) {

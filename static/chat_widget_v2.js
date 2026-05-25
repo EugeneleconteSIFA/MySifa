@@ -55,11 +55,10 @@
   color:var(--muted);font-size:11px;padding:0}
 .cw-msg-wrap:hover .cw-msg-pin,.cw-msg-wrap:hover .cw-msg-edit,.cw-msg-wrap:hover .cw-msg-del{display:flex}
 .cw-msg-pin.pinned-active{color:var(--warn);border-color:var(--warn)}
-.cw-gif-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-height:360px;overflow-y:auto;margin-top:10px}
-.cw-gif-item{border-radius:6px;overflow:hidden;cursor:pointer;aspect-ratio:1;background:var(--bg);border:1px solid var(--border);
-  display:flex;align-items:center;justify-content:center;padding:4px;min-height:0}
-.cw-gif-item img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;display:block}
-.cw-gif-item:hover{border-color:var(--accent);background:var(--accent-bg)}
+.cw-gif-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:4px;max-height:min(70vh,480px);overflow-y:auto;margin-top:10px;padding:2px}
+.cw-gif-item{cursor:pointer;padding:0;margin:0;border:none;background:transparent;display:block;line-height:0}
+.cw-gif-item img{width:100%;height:auto;display:block;object-fit:contain;vertical-align:top;border-radius:3px}
+.cw-gif-item:hover img{opacity:.88;outline:2px solid var(--accent);outline-offset:1px}
 #cw-notif-modal{position:fixed;inset:0;z-index:20000;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;padding:20px}
 .cw-notif-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px 24px;width:min(380px,100%);text-align:center}
 .cw-modal-overlay{position:fixed;inset:0;z-index:8020;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px}

@@ -997,7 +997,10 @@ def unread_mentions(request: Request):
 
 def _fmt_gif(g: dict) -> dict:
     images = g.get("images", {})
-    preview = images.get("fixed_height_small", {}).get("url", "")
+    preview = (
+        images.get("fixed_height", {}).get("url", "")
+        or images.get("fixed_height_small", {}).get("url", "")
+    )
     original = images.get("original", {}).get("url", "")
     downsized = images.get("downsized", {}).get("url", original)
     return {

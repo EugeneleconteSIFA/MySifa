@@ -117,8 +117,22 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
   cursor:pointer;font-family:inherit;
 }
 #chat-left-foot button:hover{filter:brightness(1.05)}
+.chat-chan-icon{
+  width:32px;height:32px;border-radius:50%;flex-shrink:0;
+  display:inline-flex;align-items:center;justify-content:center;
+  background:var(--accent-bg);border:1px solid var(--border);
+}
+.chat-chan-icon-ph{font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.3px}
+.chat-chan-icon-emoji{font-size:18px;font-weight:400;line-height:1;background:var(--accent-bg)}
+.chat-header-icon{
+  width:36px;height:36px;border-radius:50%;flex-shrink:0;
+  display:inline-flex;align-items:center;justify-content:center;
+  background:var(--accent-bg);border:1px solid var(--border);
+}
+.chat-header-icon-ph{font-size:12px;font-weight:700;color:var(--accent)}
+.chat-header-icon-emoji{font-size:22px;line-height:1}
 .chat-chan-item{
-  display:flex;align-items:flex-start;gap:8px;width:100%;text-align:left;
+  display:flex;align-items:center;gap:10px;width:100%;text-align:left;
   padding:10px 10px;border-radius:8px;border:none;background:transparent;
   color:var(--text2);cursor:pointer;font-family:inherit;font-size:13px;
   transition:background .15s,color .15s;
@@ -139,7 +153,9 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
   padding:14px 18px;border-bottom:1px solid var(--border);background:var(--card);
   flex-shrink:0;
 }
-#chat-header-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+#chat-header-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+#chat-header-leading{display:flex;align-items:center;gap:10px;flex:1;min-width:0}
+#chat-header-icon{display:none}
 #chat-header-titles{flex:1;min-width:0}
 #chat-header-title{font-size:15px;font-weight:700;color:var(--text)}
 #chat-header-sub{font-size:11px;color:var(--muted);margin-top:3px}
@@ -286,18 +302,19 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
 #chat-gif-btn:hover{background:var(--accent-bg)}
 /* Picker GIF */
 .chat-gif-grid{
-  display:grid;grid-template-columns:repeat(3,1fr);gap:8px;
-  max-height:360px;overflow-y:auto;margin-top:10px;
+  display:grid;grid-template-columns:repeat(2,1fr);gap:4px;
+  max-height:min(70vh,480px);overflow-y:auto;margin-top:10px;padding:2px;
   scrollbar-width:thin;scrollbar-color:var(--border) transparent;
 }
 .chat-gif-item{
-  border-radius:6px;overflow:hidden;cursor:pointer;
-  aspect-ratio:1;background:var(--bg);border:1px solid var(--border);
-  display:flex;align-items:center;justify-content:center;padding:4px;
-  min-height:0;
+  cursor:pointer;padding:0;margin:0;border:none;background:transparent;
+  display:block;line-height:0;overflow:visible;
 }
-.chat-gif-item img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;display:block}
-.chat-gif-item:hover{border-color:var(--accent);background:var(--accent-bg)}
+.chat-gif-item img{
+  width:100%;height:auto;display:block;object-fit:contain;
+  vertical-align:top;border-radius:3px;
+}
+.chat-gif-item:hover img{opacity:.88;outline:2px solid var(--accent);outline-offset:1px}
 /* @mentions dropdown */
 #mention-dropdown{
   position:absolute;bottom:calc(100% + 4px);left:0;right:0;
@@ -476,9 +493,12 @@ body.sb-open .sidebar-overlay{display:block}
     <div id="chat-main">
       <div id="chat-header" style="display:none">
         <div id="chat-header-top">
-          <div id="chat-header-titles">
-            <div id="chat-header-title">—</div>
-            <div id="chat-header-sub"></div>
+          <div id="chat-header-leading">
+            <div id="chat-header-icon" class="chat-header-icon" aria-hidden="true"></div>
+            <div id="chat-header-titles">
+              <div id="chat-header-title">—</div>
+              <div id="chat-header-sub"></div>
+            </div>
           </div>
           <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
           <button type="button" id="sound-toggle-btn" onclick="toggleSound()" class="hbtn"
@@ -740,6 +760,37 @@ async function loadChannels(){
   }
 }
 
+function chanInitials(name){
+  const p=String(name||'').trim().split(/\s+/).filter(Boolean);
+  if(!p.length)return '?';
+  if(p.length===1)return p[0].slice(0,2).toUpperCase();
+  return (p[0][0]+p[p.length-1][0]).toUpperCase();
+}
+function chanIconHtml(c,size){
+  const sz=size||32;
+  const emoji=(c.emoji||'').trim();
+  if(c.type==='channel'&&emoji){
+    const fs=Math.max(16,Math.round(sz*0.56));
+    return '<span class="chat-chan-icon chat-chan-icon-emoji" style="width:'+sz+'px;height:'+sz+'px;font-size:'+fs+'px">'+esc(emoji)+'</span>';
+  }
+  const nom=c.type==='direct'?(c.display_name||''):(c.name||c.display_name||'C');
+  return '<span class="chat-chan-icon chat-chan-icon-ph" style="width:'+sz+'px;height:'+sz+'px">'+esc(chanInitials(nom))+'</span>';
+}
+function updateChatHeaderIcon(ch){
+  const el=document.getElementById('chat-header-icon');
+  if(!el)return;
+  if(!ch){el.style.display='none';el.innerHTML='';return;}
+  const emoji=(ch.emoji||'').trim();
+  if(ch.type==='channel'&&emoji){
+    el.className='chat-header-icon chat-header-icon-emoji';
+    el.textContent=emoji;
+  }else{
+    const nom=ch.type==='direct'?(ch.display_name||''):(ch.name||ch.display_name||'C');
+    el.className='chat-header-icon chat-header-icon-ph';
+    el.textContent=chanInitials(nom);
+  }
+  el.style.display='inline-flex';
+}
 function renderChannelLists(){
   const chans=channels.filter(c=>c.type==='channel');
   const dms=channels.filter(c=>c.type==='direct');
@@ -748,11 +799,12 @@ function renderChannelLists(){
     const badge=unread>0?'<span class="chat-unread-badge">'+esc(unread>99?'99+':String(unread))+'</span>':'';
     const mCount=Number(c.mention_count)||0;
     const mBadge=mCount>0?'<span class="chat-mention-badge">@</span>':'';
-    const chanEmoji=(c.emoji&&c.type==='channel')?'<span style="margin-right:5px">'+esc(c.emoji)+'</span>':'';
     const prev=c.last_message_body?(esc(c.last_message_from||'')+': '+esc(c.last_message_body)):'';
     const active=c.id===activeId?' active':'';
+    const label=c.display_name||(c.name||(c.type==='direct'?'Message':'Canal'));
     return '<button type="button" class="chat-chan-item'+active+'" data-id="'+c.id+'" onclick="selectChannel('+c.id+')">'+
-      '<div class="chat-chan-body"><div class="chat-chan-name">'+chanEmoji+esc(c.display_name||(c.name||'Canal'))+'</div>'+
+      chanIconHtml(c,32)+
+      '<div class="chat-chan-body"><div class="chat-chan-name">'+esc(label)+'</div>'+
       (prev?'<div class="chat-chan-preview">'+prev+'</div>':'')+
       '</div>'+badge+mBadge+'</button>';
   };
@@ -773,8 +825,8 @@ async function selectChannel(id){
   document.getElementById('chat-input-area').style.display='';
   const ch=channels.find(c=>c.id===id);
   if(ch){
-    const emojiPfx=ch.emoji?ch.emoji+' ':'';
-    document.getElementById('chat-header-title').textContent=emojiPfx+(ch.display_name||ch.name||'Canal');
+    document.getElementById('chat-header-title').textContent=ch.display_name||ch.name||(ch.type==='direct'?'Message':'Canal');
+    updateChatHeaderIcon(ch);
     const sub=ch.type==='direct'?'Message direct':(ch.description||'Canal d\'équipe');
     document.getElementById('chat-header-sub').textContent=sub;
     const pb=document.getElementById('chan-pinned-btn');
@@ -1301,8 +1353,8 @@ async function openChannelSettings(){
         await loadChannels();
         const upd=channels.find(c=>c.id===activeId);
         if(upd){
-          const e2=upd.emoji?upd.emoji+' ':'';
-          document.getElementById('chat-header-title').textContent=e2+(upd.display_name||upd.name||'Canal');
+          document.getElementById('chat-header-title').textContent=upd.display_name||upd.name||'Canal';
+          updateChatHeaderIcon(upd);
         }
         showToast('Canal mis à jour','success');
       }catch(e){showToast(e.message||'Erreur','danger');}

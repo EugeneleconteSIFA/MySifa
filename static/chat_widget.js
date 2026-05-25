@@ -129,6 +129,9 @@ body.light #cw-bubble-badge{border-color:#fff}
 .cw-avatar{object-fit:cover;border:1px solid var(--border);display:block}
 .cw-avatar-ph{display:inline-flex;align-items:center;justify-content:center;
   background:var(--accent-bg);color:var(--accent);font-size:10px;font-weight:700;letter-spacing:.3px}
+.cw-avatar-ph.cw-chan-emoji{font-size:17px;font-weight:400;letter-spacing:0;line-height:1;
+  text-transform:none;background:var(--accent-bg);color:var(--text)}
+.cw-header-avatar .cw-avatar-ph.cw-chan-emoji{font-size:20px}
 .cw-chan-body{flex:1;min-width:0;display:flex;align-items:center;gap:6px}
 .cw-msg-meta{display:flex;align-items:center;gap:6px;margin-bottom:4px}
 .cw-msg-meta .cw-avatar,.cw-msg-meta .cw-avatar-ph{width:20px;height:20px;font-size:9px}
@@ -450,6 +453,33 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     return (
       '<span class="cw-avatar-ph" aria-hidden="true">' + escCW(cwInitials(nom)) + '</span>'
     );
+  }
+
+  /** Icône liste / en-tête : emoji canal ou initiales ; avatar photo pour les DM. */
+  function cwChannelIconHtml(ch, size) {
+    const sz = size || 28;
+    if (!ch) return cwAvatarHtml('', '', sz);
+    if (ch.type === 'direct') {
+      const nom = ch.display_name || ch.name || '';
+      if (ch.other_user_id) cacheUserAvatar(ch.other_user_id, nom, ch.other_user_avatar_url || '');
+      return cwAvatarHtml(nom, ch.other_user_avatar_url || '', sz);
+    }
+    const emoji = (ch.emoji || '').trim();
+    if (emoji) {
+      const fs = Math.max(14, Math.round(sz * 0.6));
+      return (
+        '<span class="cw-avatar-ph cw-chan-emoji" aria-hidden="true" style="width:' +
+        sz +
+        'px;height:' +
+        sz +
+        'px;font-size:' +
+        fs +
+        'px">' +
+        escCW(emoji) +
+        '</span>'
+      );
+    }
+    return cwAvatarHtml(ch.display_name || ch.name || 'Canal', '', sz);
   }
 
   function fmtTime(iso) {
@@ -1197,16 +1227,9 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     if (unread > 0) cls += ' cw-unread';
     btn.className = cls;
     btn.dataset.id = String(ch.id);
-    const label =
-      (ch.type === 'channel' && ch.emoji ? ch.emoji + ' ' : '') +
-      (ch.display_name || ch.name || 'Canal');
-    const avUrl =
-      ch.type === 'direct' ? ch.other_user_avatar_url || '' : '';
-    if (ch.type === 'direct' && ch.other_user_id) {
-      cacheUserAvatar(ch.other_user_id, label, avUrl);
-    }
+    const label = ch.display_name || ch.name || (ch.type === 'direct' ? 'Message' : 'Canal');
     btn.innerHTML =
-      cwAvatarHtml(label, avUrl, 28) +
+      cwChannelIconHtml(ch, 28) +
       '<span class="cw-chan-body"><span class="cw-chan-label">' +
       escCW(label) +
       '</span>' +
@@ -1244,16 +1267,13 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     const avWrap = document.getElementById('cw-header-avatar');
     const infoBtn = document.getElementById('cw-channel-info');
     if (title) {
-      const pfx = ch && ch.type === 'channel' && ch.emoji ? ch.emoji + ' ' : '';
-      title.textContent = ch ? pfx + (ch.display_name || ch.name || 'Canal') : 'Messagerie';
+      title.textContent = ch
+        ? ch.display_name || ch.name || (ch.type === 'direct' ? 'Message' : 'Canal')
+        : 'Messagerie';
     }
     if (avWrap) {
-      if (ch && ch.type === 'direct') {
-        avWrap.innerHTML = cwAvatarHtml(
-          ch.display_name,
-          ch.other_user_avatar_url || '',
-          32
-        );
+      if (ch) {
+        avWrap.innerHTML = cwChannelIconHtml(ch, 32);
         avWrap.classList.remove('cw-hidden');
       } else {
         avWrap.innerHTML = '';

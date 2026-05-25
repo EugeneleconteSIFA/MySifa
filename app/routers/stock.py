@@ -1511,6 +1511,12 @@ async def update_matiere_premiere(matiere_id: int, request: Request):
     sets = []
     params: list[Any] = []
 
+    if "reference" in body:
+        reference = (body.get("reference") or "").strip()
+        if not reference:
+            raise HTTPException(400, "Référence obligatoire.")
+        sets.append("reference=?")
+        params.append(reference)
     if "designation" in body:
         des = (body.get("designation") or "").strip()
         if not des:
@@ -1554,11 +1560,18 @@ async def update_matiere_premiere(matiere_id: int, request: Request):
                     400,
                     "Palettes par pile doit être une valeur positive.",
                 )
-        conn.execute(
-            f"UPDATE matieres_premieres SET {', '.join(sets)} WHERE id=?",
-            params,
-        )
-        conn.commit()
+        try:
+            conn.execute(
+                f"UPDATE matieres_premieres SET {', '.join(sets)} WHERE id=?",
+                params,
+            )
+            conn.commit()
+        except sqlite3.IntegrityError:
+            conn.rollback()
+            raise HTTPException(
+                400,
+                "Cette référence existe déjà dans cette catégorie.",
+            ) from None
     return {"ok": True}
 
 
