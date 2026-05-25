@@ -156,6 +156,7 @@ def send_email(
     subject: str,
     html_body: str,
     reply_to: str | None = None,
+    cc: str | list[str] | None = None,
 ) -> bool:
     """
     Envoie un email HTML via SMTP (STARTTLS).
@@ -183,6 +184,12 @@ def send_email(
         msg["Subject"] = subject
         if reply_to:
             msg["Reply-To"] = reply_to
+        if cc:
+            cc_list = [cc] if isinstance(cc, str) else [str(x) for x in cc]
+            cc_list = [c.strip() for c in cc_list if c and str(c).strip()]
+            if cc_list:
+                msg["Cc"] = ", ".join(cc_list)
+                recipients = list(recipients) + cc_list
 
         msg.attach(MIMEText(html_body, "html", "utf-8"))
 

@@ -1142,6 +1142,7 @@ let S = {
   matieresCardMenuId: null,
   selMatiere: null,
   mpModal: null,
+  pfModal: null,
   addPfModalOpen: false,
   matieresAdminOpen: false,
   matieresAdminList: null,
@@ -1546,7 +1547,9 @@ async function submitMouvement(body) {
     if (!r) return;
     showToast('Stock mis à jour → ' + fN(r.quantite_apres));
     S.modalMvt = null;
+    S.pfModal = null;
     document.querySelector('.modal-overlay')?.remove();
+    closeMroot();
     if (S.selProduit) await loadProduit(S.selProduit.produit.id);
     else if (S.selEmpl) await loadEmplacement(S.selEmpl.emplacement);
     else if (S.tab === 'dashboard') await loadDashboard();
@@ -2941,6 +2944,10 @@ const MP_MVT_TITLES = {
   ajustement: 'Ajustement d\'inventaire',
   transfert: 'Transfert',
 };
+const PF_MVT_TITLES = {
+  entree: 'Entrée produit fini',
+  sortie: 'Sortie produit fini',
+};
 const MP_PILL_CATS = [
   { id: 'tout', label: 'Tout' },
   { id: 'mandrin', label: 'Mandrins' },
@@ -2957,6 +2964,7 @@ function closeMroot() {
   const m = document.getElementById('mroot');
   if (m) m.innerHTML = '';
   S.mpModal = null;
+  S.pfModal = null;
   S.addPfModalOpen = false;
 }
 
@@ -3796,6 +3804,226 @@ async function submitMpMouvement() {
   }
 }
 
+let _pfProduitSearchTimer = null;
+
+async function fetchPfStockAtEmpl(produitId, empl) {
+  if (!produitId || !empl) return 0;
+  try {
+    const d = await api('/api/stock/produits/' + produitId);
+    const row = (d.emplacements || []).find(e => String(e.emplacement || '').toUpperCase() === empl);
+    return row ? (parseFloat(row.quantite) || 0) : 0;
+  } catch (e) {
+    return 0;
+  }
+}
+
+function searchPfProduitSugg(q, suggWrap, onSelect) {
+  clearTimeout(_pfProduitSearchTimer);
+  if (!q || q.length < 1) { suggWrap.innerHTML = ''; return; }
+  _pfProduitSearchTimer = setTimeout(async () => {
+    try {
+      const rows = await api('/api/stock/produits?q=' + encodeURIComponent(q) + '&limit=20');
+      const list = Array.isArray(rows) ? rows : [];
+      suggWrap.innerHTML = '';
+      if (!list.length) {
+        suggWrap.appendChild(el('div', { cls: 'empl-sugg-item muted' }, 'Aucun résultat'));
+        return;
+      }
+      list.forEach(p => {
+        const label = (p.reference || '') + (p.designation ? ' — ' + p.designation : '');
+        suggWrap.appendChild(el('div', {
+          cls: 'empl-sugg-item',
+          on: { mousedown: (e) => { e.preventDefault(); onSelect(p); } },
+        }, label));
+      });
+    } catch (e) {
+      suggWrap.innerHTML = '';
+    }
+  }, 200);
+}
+
+function openModalPfMouvement(type, produit) {
+  renderPfMouvementModal(type, produit || null);
+}
+
+function renderPfMouvementModal(type, produit) {
+  const typeMvt = (type || 'entree').toLowerCase();
+  if (!['entree', 'sortie'].includes(typeMvt)) return;
+  closeMroot();
+  const mroot = document.getElementById('mroot');
+  if (!mroot) return;
+  let prod = produit || null;
+  S.pfModal = { type: typeMvt, produit: prod, produitId: prod ? prod.id : null };
+
+  const overlay = el('div', {
+    cls: 'mp-modal-overlay',
+    on: { click: (e) => { if (e.target === overlay) closeMroot(); } },
+  });
+  const headTypeCls = typeMvt;
+  const box = el('div', { cls: 'mp-modal mp-modal-mvt' });
+  box.appendChild(el('div', { cls: 'mp-modal-mvt-head mp-modal-mvt-head-' + headTypeCls },
+    el('h3', null, PF_MVT_TITLES[typeMvt] || typeMvt),
+    el('button', {
+      cls: 'mp-modal-close',
+      type: 'button',
+      attrs: { title: 'Fermer', 'aria-label': 'Fermer' },
+      on: { click: closeMroot },
+    }, '×'),
+  ));
+  const body = el('div', { cls: 'mp-modal-mvt-body' });
+  const hintEl = el('div', { cls: 'mp-hint' }, '');
+  const errEl = el('div', { cls: 'mp-hint err', style: { display: 'none' } }, '');
+
+  if (prod) {
+    const unit = (prod.unite || '').trim();
+    body.appendChild(el('div', { cls: 'mp-field' },
+      el('label', null, 'Produit fini'),
+      el('div', { cls: 'mp-readonly' },
+        (prod.reference || '') + (prod.designation ? ' — ' + prod.designation : '')
+        + (unit ? ' (' + unit + ')' : ''),
+      ),
+    ));
+  } else {
+    const refInp = el('input', {
+      cls: 'field-input',
+      attrs: { type: 'text', placeholder: 'Référence ou désignation…', autocomplete: 'off' },
+      style: { direction: 'ltr' },
+    });
+    const suggWrap = el('div', { cls: 'empl-suggestions' });
+    refInp.addEventListener('input', () => searchPfProduitSugg(refInp.value.trim(), suggWrap, (p) => {
+      renderPfMouvementModal(typeMvt, p);
+    }));
+    body.appendChild(el('div', { cls: 'mp-field' },
+      el('label', null, 'Produit fini'),
+      refInp,
+      suggWrap,
+    ));
+    requestAnimationFrame(() => refInp.focus());
+  }
+
+  const { wrap: emplWrap, emplInp } = buildMpEmplacementField();
+  const today = new Date().toISOString().slice(0, 10);
+  const dateInp = el('input', { attrs: { type: 'date', value: today } });
+  const qInp = el('input', { attrs: { type: 'number', min: '0', step: 'any', inputmode: 'decimal' } });
+
+  let stockEmpl = 0;
+  const refreshStockHint = async () => {
+    if (typeMvt !== 'sortie' || !S.pfModal.produitId) return;
+    const empl = mpEmplacementValue(emplInp);
+    if (!empl || !isStockEmplacementCode(empl)) {
+      hintEl.textContent = '';
+      errEl.style.display = 'none';
+      return;
+    }
+    stockEmpl = await fetchPfStockAtEmpl(S.pfModal.produitId, empl);
+    const unit = (S.pfModal.produit?.unite || prod?.unite || '').trim();
+    hintEl.textContent = 'Stock à cet emplacement : ' + (unit ? fU(stockEmpl, unit) : fN(stockEmpl));
+    checkSortieQte();
+  };
+
+  const checkSortieQte = () => {
+    if (typeMvt !== 'sortie') return;
+    const q = parseFloat(qInp.value);
+    if (q > stockEmpl) {
+      errEl.style.display = '';
+      errEl.textContent = 'Stock insuffisant.';
+    } else {
+      errEl.style.display = 'none';
+    }
+  };
+
+  emplInp.addEventListener('input', () => {
+    emplInp.value = emplInp.value.toUpperCase();
+    refreshStockHint();
+  });
+  emplInp.addEventListener('change', refreshStockHint);
+
+  if (typeMvt === 'entree') {
+    body.appendChild(emplWrap);
+    body.appendChild(el('div', { cls: 'mp-field' },
+      el('label', null, 'Quantité'),
+      qInp,
+    ));
+    body.appendChild(el('div', { cls: 'mp-field' },
+      el('label', null, 'Date du stock'),
+      dateInp,
+    ));
+    S.pfModal.validate = () => {
+      if (!S.pfModal.produitId) return 'Produit obligatoire.';
+      const emplErr = validateMpEmplacement(mpEmplacementValue(emplInp));
+      if (emplErr) return emplErr;
+      const q = parseFloat(qInp.value);
+      if (!q || q <= 0) return 'Quantité invalide.';
+      return null;
+    };
+    S.pfModal.getBody = () => ({
+      produit_id: S.pfModal.produitId,
+      emplacement: mpEmplacementValue(emplInp),
+      type_mouvement: 'entree',
+      quantite: parseFloat(qInp.value),
+      date_entree: dateInp.value || today,
+      note: null,
+    });
+  } else {
+    qInp.addEventListener('input', checkSortieQte);
+    body.appendChild(emplWrap);
+    body.appendChild(el('div', { cls: 'mp-field' },
+      el('label', null, 'Quantité'),
+      qInp,
+      hintEl,
+      errEl,
+    ));
+    if (S.pfModal.produitId) refreshStockHint();
+    S.pfModal.validate = () => {
+      if (!S.pfModal.produitId) return 'Produit obligatoire.';
+      const emplErr = validateMpEmplacement(mpEmplacementValue(emplInp));
+      if (emplErr) return emplErr;
+      const q = parseFloat(qInp.value);
+      if (!q || q <= 0) return 'Quantité invalide.';
+      if (q > stockEmpl) return 'Stock insuffisant.';
+      return null;
+    };
+    S.pfModal.getBody = () => ({
+      produit_id: S.pfModal.produitId,
+      emplacement: mpEmplacementValue(emplInp),
+      type_mouvement: 'sortie',
+      quantite: parseFloat(qInp.value),
+      date_entree: today,
+      note: null,
+    });
+  }
+
+  const noteTa = el('textarea', { attrs: { placeholder: 'Commentaire (optionnel)' } });
+  body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Note'), noteTa));
+  const prevGetBody = S.pfModal.getBody;
+  S.pfModal.getBody = () => {
+    const b = prevGetBody();
+    b.note = (noteTa.value || '').trim() || null;
+    return b;
+  };
+
+  body.appendChild(el('div', { cls: 'mp-modal-actions' },
+    el('button', { cls: 'btn-cancel', type: 'button', on: { click: closeMroot } }, 'Annuler'),
+    el('button', { cls: 'btn', type: 'button', on: { click: submitPfMouvement } }, 'Valider'),
+  ));
+  box.appendChild(body);
+  overlay.appendChild(box);
+  mroot.appendChild(overlay);
+}
+
+async function submitPfMouvement() {
+  if (!S.pfModal) return;
+  let err = S.pfModal.validate ? S.pfModal.validate() : null;
+  if (!err && S.pfModal.type === 'sortie' && S.pfModal.getBody) {
+    const b = S.pfModal.getBody();
+    const stock = await fetchPfStockAtEmpl(b.produit_id, b.emplacement);
+    if (b.quantite > stock) err = 'Stock insuffisant.';
+  }
+  if (err) { showToast(err, 'error'); return; }
+  const body = S.pfModal.getBody();
+  await submitMouvement(body);
+}
+
 async function loadMatieresAdminList() {
   try {
     const d = await api('/api/stock/matieres?all=1');
@@ -4035,6 +4263,7 @@ function buildMatieresAdminAddForm() {
 }
 
 window._stockOpenModalMouvement = openModalMouvement;
+window._stockOpenModalPfMouvement = openModalPfMouvement;
 
 function fDateTime(iso) {
   if (!iso) return '—';
@@ -4430,9 +4659,10 @@ function buildDashboardShortcuts() {
     el('div', { cls: 'dash-quick-grid' },
       mk('Ajouter stock produits finis', openDashboardAddPfModal, 'accent', 'plus-circle'),
       mk('Réception matière', openReceptionQuick, 'warn', 'truck'),
+      mk('Entrée PF', () => openModalPfMouvement('entree'), 'success', 'upload'),
+      mk('Sortie PF', () => openModalPfMouvement('sortie'), 'danger', 'download'),
       mk('Entrée MP', () => openModalMouvement('entree'), 'success', 'upload'),
       mk('Sortie MP', () => openModalMouvement('sortie'), 'danger', 'download'),
-      mk('Ajustement MP', () => openModalMouvement('ajustement'), 'neutral', 'settings'),
     ),
   );
 }
@@ -4523,6 +4753,7 @@ function renderDashboardAddPfModal() {
   if (!mroot) return;
   mroot.innerHTML = '';
   S.mpModal = null;
+  S.pfModal = null;
 
   const F = ADD_PF_FIELD_IDS;
   const refI = el('input', { cls: 'field-input', id: 'dash-add-pf-ref', placeholder: 'Référence (neuve ou déjà en base)', autocomplete: 'off', style: { direction: 'ltr' } });

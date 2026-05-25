@@ -20,6 +20,7 @@ from fastapi import APIRouter, Body, File, HTTPException, Query, Request, Upload
 from fastapi.responses import FileResponse
 
 from app.services.audit_service import log_action
+from app.services.email_service import send_email
 from app.services.expe_transporteurs_seed import seed_expe_transporteurs_if_empty
 from database import get_db
 from services.auth_service import get_current_user, user_can_write_expe, user_has_app_access
@@ -1018,3 +1019,685 @@ async def parse_tarif_ia(request: Request, transporteur_id: int):
             "à valider avant activation."
         ),
     }
+
+
+# ─── Comparateur de prix ───────────────────────────────────────────
+
+
+def _deduire_departement(cp: str) -> str:
+    """Déduit le département depuis le code postal (Corse, DOM, cas général)."""
+    cp = (cp or "").strip().upper()
+    if len(cp) < 2:
+        return cp
+    if cp.startswith("97") and len(cp) >= 3:
+        return cp[:3]
+    if cp.startswith("20") and len(cp) == 5 and cp.isdigit():
+        num = int(cp)
+        return "2A" if num <= 20190 else "2B"
+    return cp[:2]
+
+
+def _trouver_ligne_tarif(
+    conn,
+    transporteur_id: int,
+    type_envoi: str,
+    dept: str,
+    cp: str,
+    poids: float,
+    nb_pal: float,
+):
+    """Cherche la ligne expe_tarifs la plus précise (CP → département, palette → poids)."""
+    tentatives: list[tuple[str, float]] = []
+    if nb_pal > 0:
+        tentatives.append(("palette", nb_pal))
+    if poids > 0:
+        tentatives.append(("poids", poids))
+
+    zones_par_priorite = [
+        ("code_postal", cp),
+        ("departement", dept),
+    ]
+
+    for base_calcul, valeur_base in tentatives:
+        for zone_type, zone_valeur in zones_par_priorite:
+            ligne = conn.execute(
+                """
+                SELECT * FROM expe_tarifs
+                WHERE transporteur_id=?
+                  AND type_envoi=?
+                  AND base_calcul=?
+                  AND zone_type=?
+                  AND zone_valeur=?
+                  AND actif=1
+                  AND tranche_min <= ?
+                  AND (tranche_max IS NULL OR tranche_max > ?)
+                ORDER BY tranche_min DESC
+                LIMIT 1
+                """,
+                (
+                    transporteur_id,
+                    type_envoi,
+                    base_calcul,
+                    zone_type,
+                    zone_valeur,
+                    valeur_base,
+                    valeur_base,
+                ),
+            ).fetchone()
+            if ligne:
+                return ligne
+    return None
+
+
+def _calculer_prix_base(ligne, poids: float, nb_pal: float) -> tuple[float, str]:
+    """Calcule le prix de base selon l'unité de la ligne tarifaire."""
+    unite = ligne["unite"]
+    prix = float(ligne["prix"] or 0)
+    mini = float(ligne["mini_perception"] or 0)
+    base_calcul = ligne["base_calcul"]
+
+    if unite == "forfait":
+        prix_calc = prix
+        detail = f"forfait {prix:.2f} €"
+    elif unite == "au_100kg":
+        ref = poids if base_calcul == "poids" else nb_pal
+        prix_calc = prix * ref / 100
+        detail = f"{prix:.4f} €/100kg × {ref} = {prix_calc:.2f} €"
+    elif unite == "au_kg":
+        ref = poids if base_calcul == "poids" else nb_pal
+        prix_calc = prix * ref
+        detail = f"{prix:.4f} €/kg × {ref} = {prix_calc:.2f} €"
+    else:
+        prix_calc = prix
+        detail = f"{prix:.2f} € (unité inconnue : {unite})"
+
+    if mini and prix_calc < mini:
+        detail += f" → mini perception {mini:.2f} €"
+        prix_calc = mini
+
+    return prix_calc, detail
+
+
+def _appliquer_frais(
+    conn, transporteur_id: int, prix_base: float, nb_pal: float = 0
+) -> tuple[list[dict], float]:
+    """Applique les frais par défaut du transporteur."""
+    frais_rows = conn.execute(
+        """
+        SELECT * FROM expe_tarifs_frais
+        WHERE transporteur_id=? AND applique_defaut=1
+        ORDER BY libelle
+        """,
+        (transporteur_id,),
+    ).fetchall()
+
+    frais_list: list[dict] = []
+    total_frais = 0.0
+
+    for fr in frais_rows:
+        mode = fr["mode"]
+        valeur = float(fr["valeur"] or 0)
+        mini_fr = float(fr["mini"] or 0)
+
+        if mode == "pct_transport":
+            montant = prix_base * valeur / 100
+            if mini_fr and montant < mini_fr:
+                montant = mini_fr
+            detail = f"{valeur}% du transport = {montant:.2f} €"
+        elif mode == "forfait_expedition":
+            montant = valeur
+            detail = f"forfait {valeur:.2f} €"
+        elif mode == "par_palette":
+            montant = valeur * nb_pal if nb_pal > 0 else valeur
+            detail = (
+                f"{valeur:.2f} €/pal × {nb_pal} = {montant:.2f} €"
+                if nb_pal > 0
+                else f"{valeur:.2f} €"
+            )
+        else:
+            montant = valeur
+            detail = f"{valeur:.2f} €"
+
+        frais_list.append(
+            {
+                "libelle": fr["libelle"],
+                "montant": round(montant, 2),
+                "detail": detail,
+            }
+        )
+        total_frais += montant
+
+    return frais_list, total_frais
+
+
+def _calculer_comparateur(
+    conn,
+    poids: float,
+    nb_pal: float,
+    dept: str,
+    cp: str,
+    type_envoi: str,
+) -> tuple[list[dict], list[dict]]:
+    """Éligibilité et prix pour chaque transporteur actif."""
+    transporteurs = conn.execute(
+        "SELECT * FROM expe_transporteurs WHERE actif=1"
+    ).fetchall()
+
+    eligibles: list[dict] = []
+    non_eligibles: list[dict] = []
+
+    zone_col = {
+        "messagerie": "zone_messagerie",
+        "ramasse": "zone_messagerie",
+        "affretement": "zone_affretement",
+        "express_intl": "zone_france",
+    }.get(type_envoi, "zone_france")
+
+    for trp in transporteurs:
+        raisons_ineligibilite: list[str] = []
+
+        if not trp[zone_col]:
+            raisons_ineligibilite.append(f"hors zone ({type_envoi})")
+
+        pal_max = trp["palette_max"]
+        if pal_max is not None and nb_pal > 0 and nb_pal > float(pal_max):
+            raisons_ineligibilite.append(
+                f"capacité dépassée ({nb_pal:g} pal. > max {pal_max})"
+            )
+
+        if trp["accepte_poids"] == 0 and poids > 0 and nb_pal == 0:
+            raisons_ineligibilite.append("n'accepte pas le tarif au poids")
+        if trp["accepte_palette"] == 0 and nb_pal > 0:
+            raisons_ineligibilite.append("n'accepte pas les palettes")
+
+        ligne = _trouver_ligne_tarif(
+            conn, trp["id"], type_envoi, dept, cp, poids, nb_pal
+        )
+        if not ligne and not raisons_ineligibilite:
+            raisons_ineligibilite.append("aucune grille tarifaire pour ce poids/zone")
+
+        if raisons_ineligibilite:
+            non_eligibles.append(
+                {
+                    "transporteur_id": trp["id"],
+                    "transporteur": trp["nom"],
+                    "raison": " · ".join(raisons_ineligibilite),
+                }
+            )
+            continue
+
+        prix_base, detail = _calculer_prix_base(ligne, poids, nb_pal)
+        frais_list, prix_frais = _appliquer_frais(conn, trp["id"], prix_base, nb_pal)
+        prix_total = prix_base + prix_frais
+
+        eligibles.append(
+            {
+                "transporteur_id": trp["id"],
+                "transporteur": trp["nom"],
+                "prix_ht": round(prix_total, 2),
+                "prix_base_ht": round(prix_base, 2),
+                "detail_calcul": {
+                    "base": detail,
+                    "frais": frais_list,
+                },
+                "delai_jours": None,
+            }
+        )
+
+    eligibles.sort(key=lambda x: x["prix_ht"])
+    if eligibles:
+        eligibles[0]["moins_cher"] = True
+
+    return eligibles, non_eligibles
+
+
+@router.post("/comparateur")
+def comparateur(request: Request, body: dict = Body(...)):
+    """Calcule le prix de chaque transporteur éligible pour un envoi."""
+    _require_expe(request)
+
+    poids = float(body.get("poids_total_kg") or 0)
+    nb_pal = float(body.get("nb_palette") or 0)
+    cp = str(body.get("code_postal_destination") or "").strip()
+    type_envoi = str(body.get("type_envoi") or "messagerie").strip()
+
+    if not cp:
+        raise HTTPException(
+            status_code=400, detail="code_postal_destination est obligatoire"
+        )
+    if not poids and not nb_pal:
+        raise HTTPException(
+            status_code=400,
+            detail="Saisir au moins un poids ou un nombre de palettes",
+        )
+
+    dept = _deduire_departement(cp)
+
+    with get_db() as conn:
+        eligibles, non_eligibles = _calculer_comparateur(
+            conn, poids, nb_pal, dept, cp, type_envoi
+        )
+
+    return {
+        "departement_deduit": dept,
+        "eligibles": eligibles,
+        "non_eligibles": non_eligibles,
+    }
+
+
+# ─── Demandes de devis (prospection parallèle) ─────────────────────
+
+EXPE_DEVIS_CC = "expeditions@sifa.pro"
+
+
+def _generer_rfq_html(demande: dict, user: dict) -> tuple[str, str]:
+    """Génère le sujet et le corps HTML du RFQ standardisé."""
+    import html as _html
+
+    def _e(v: object) -> str:
+        return _html.escape(str(v or ""))
+
+    cp = demande.get("code_postal_destination") or "—"
+    poids = demande.get("poids_total_kg")
+    nb_pal = demande.get("nb_palette")
+    type_envoi = demande.get("type_envoi") or "messagerie"
+    contraintes = demande.get("contraintes") or ""
+    user_nom = user.get("nom") or user.get("email") or user.get("identifiant") or "SIFA"
+
+    lignes_detail = []
+    if poids:
+        lignes_detail.append(f"Poids total : <strong>{_e(poids)} kg</strong>")
+    if nb_pal:
+        lignes_detail.append(f"Nombre de palettes : <strong>{_e(nb_pal)}</strong>")
+    lignes_detail.append(f"Code postal destination : <strong>{_e(cp)}</strong>")
+    lignes_detail.append(f"Type d'envoi : <strong>{_e(type_envoi)}</strong>")
+    if contraintes:
+        lignes_detail.append(f"Contraintes : {_e(contraintes)}")
+
+    detail_html = "".join(
+        f'<li style="margin-bottom:6px">{l}</li>' for l in lignes_detail
+    )
+
+    sujet = f"Demande de tarif transport — SIFA Roubaix — {cp}"
+
+    corps = f"""
+<div style="font-family:'Segoe UI',system-ui,sans-serif;max-width:560px;margin:0 auto;
+            background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+  <div style="background:#0a0e17;padding:20px 28px">
+    <div style="font-size:18px;font-weight:700;color:#22d3ee">MySifa</div>
+    <div style="font-size:12px;color:#94a3b8;margin-top:2px">SIFA — Roubaix (59)</div>
+  </div>
+  <div style="padding:28px">
+    <p style="margin:0 0 16px;font-size:14px;color:#0f172a">Bonjour,</p>
+    <p style="margin:0 0 20px;font-size:14px;color:#475569;line-height:1.6">
+      Nous recherchons un transporteur pour l'envoi suivant et vous sollicitons pour un tarif.
+    </p>
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px 20px;margin-bottom:20px">
+      <ul style="margin:0;padding-left:18px;font-size:13px;color:#334155;line-height:1.8">
+        {detail_html}
+      </ul>
+    </div>
+    <p style="margin:0 0 20px;font-size:14px;color:#475569;line-height:1.6">
+      Merci de nous retourner votre meilleur tarif ainsi que le délai de livraison estimé
+      en répondant directement à cet email.
+    </p>
+    <p style="margin:0;font-size:13px;color:#64748b">
+      Cordialement,<br>
+      <strong style="color:#0f172a">{_e(user_nom)}</strong><br>
+      SIFA — Service expéditions<br>
+      Roubaix (59)
+    </p>
+  </div>
+</div>
+""".strip()
+
+    return sujet, corps
+
+
+@router.post("/devis/demandes")
+def creer_demande_devis(request: Request, body: dict = Body(...)):
+    user = _require_expe_write(request)
+    now = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
+    email = (user.get("email") or user.get("identifiant") or "").strip() or None
+    with get_db() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO expe_demandes_devis
+            (depart_id, poids_total_kg, nb_palette, code_postal_destination,
+             type_envoi, contraintes, statut, created_at, created_by_email)
+            VALUES (?,?,?,?,?,?,'ouverte',?,?)
+            """,
+            (
+                body.get("depart_id"),
+                body.get("poids_total_kg"),
+                body.get("nb_palette"),
+                (body.get("code_postal_destination") or "").strip(),
+                (body.get("type_envoi") or "messagerie").strip(),
+                (body.get("contraintes") or "").strip() or None,
+                now,
+                email,
+            ),
+        )
+        conn.commit()
+        demande = conn.execute(
+            "SELECT * FROM expe_demandes_devis WHERE id=?", (cur.lastrowid,)
+        ).fetchone()
+    return dict(demande)
+
+
+@router.get("/devis/demandes")
+def list_demandes_devis(request: Request, statut: str = "ouverte"):
+    _require_expe(request)
+    with get_db() as conn:
+        if statut == "toutes":
+            rows = conn.execute(
+                "SELECT * FROM expe_demandes_devis ORDER BY created_at DESC LIMIT 100"
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT * FROM expe_demandes_devis WHERE statut=?
+                   ORDER BY created_at DESC LIMIT 100""",
+                (statut,),
+            ).fetchall()
+        result = []
+        for d in rows:
+            dd = dict(d)
+            counts = conn.execute(
+                """
+                SELECT
+                  COUNT(*) AS total,
+                  SUM(CASE WHEN statut='recue' THEN 1 ELSE 0 END) AS recues,
+                  SUM(CASE WHEN statut='retenue' THEN 1 ELSE 0 END) AS retenues
+                FROM expe_devis_reponses WHERE demande_id=?
+                """,
+                (dd["id"],),
+            ).fetchone()
+            dd["nb_envoyes"] = counts["total"] or 0
+            dd["nb_recus"] = counts["recues"] or 0
+            dd["nb_retenus"] = counts["retenues"] or 0
+            result.append(dd)
+    return result
+
+
+@router.get("/devis/demandes/{demande_id}")
+def get_demande_devis(request: Request, demande_id: int):
+    _require_expe(request)
+    with get_db() as conn:
+        demande = conn.execute(
+            "SELECT * FROM expe_demandes_devis WHERE id=?", (demande_id,)
+        ).fetchone()
+        if not demande:
+            raise HTTPException(status_code=404, detail="Demande introuvable")
+        reponses = conn.execute(
+            """SELECT * FROM expe_devis_reponses WHERE demande_id=?
+               ORDER BY sent_at""",
+            (demande_id,),
+        ).fetchall()
+    return {"demande": dict(demande), "reponses": [dict(r) for r in reponses]}
+
+
+@router.post("/devis/demandes/{demande_id}/envoyer")
+def envoyer_rfq(request: Request, demande_id: int, body: dict = Body(...)):
+    user = _require_expe_write(request)
+    now = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
+    reply_to = (user.get("email") or user.get("identifiant") or "").strip() or None
+
+    with get_db() as conn:
+        demande_row = conn.execute(
+            "SELECT * FROM expe_demandes_devis WHERE id=?", (demande_id,)
+        ).fetchone()
+        if not demande_row:
+            raise HTTPException(status_code=404, detail="Demande introuvable")
+        demande = dict(demande_row)
+
+        destinataires: list[dict] = []
+        trp_ids = body.get("transporteur_ids") or []
+        if trp_ids:
+            placeholders = ",".join("?" * len(trp_ids))
+            trps = conn.execute(
+                f"""SELECT id, nom, contact_email FROM expe_transporteurs
+                    WHERE id IN ({placeholders}) AND actif=1""",
+                trp_ids,
+            ).fetchall()
+            for t in trps:
+                email_addr = (t["contact_email"] or "").strip()
+                if email_addr and "@" in email_addr:
+                    destinataires.append(
+                        {
+                            "transporteur_id": t["id"],
+                            "nom": t["nom"],
+                            "email": email_addr,
+                        }
+                    )
+
+        for extra in body.get("transporteur_extras") or []:
+            email_addr = (extra.get("email") or "").strip()
+            if email_addr and "@" in email_addr:
+                destinataires.append(
+                    {
+                        "transporteur_id": None,
+                        "nom": extra.get("nom") or email_addr,
+                        "email": email_addr,
+                    }
+                )
+
+        if not destinataires:
+            raise HTTPException(
+                status_code=400,
+                detail="Aucun destinataire valide — vérifier les emails des transporteurs",
+            )
+
+        sujet, corps_html = _generer_rfq_html(demande, user)
+
+        envois_ok: list[str] = []
+        envois_ko: list[str] = []
+        for dest in destinataires:
+            ok = send_email(
+                to=dest["email"],
+                subject=sujet,
+                html_body=corps_html,
+                reply_to=reply_to,
+                cc=EXPE_DEVIS_CC,
+            )
+            statut_envoi = "envoyee" if ok else "echec"
+            conn.execute(
+                """
+                INSERT INTO expe_devis_reponses
+                (demande_id, transporteur_id, nom_transporteur, statut, sent_at)
+                VALUES (?,?,?,?,?)
+                """,
+                (
+                    demande_id,
+                    dest["transporteur_id"],
+                    dest["nom"],
+                    statut_envoi,
+                    now if ok else None,
+                ),
+            )
+            if ok:
+                envois_ok.append(dest["nom"])
+            else:
+                envois_ko.append(dest["nom"])
+        conn.commit()
+
+    return {
+        "envoyes": len(envois_ok),
+        "echecs": len(envois_ko),
+        "destinataires_ok": envois_ok,
+        "destinataires_ko": envois_ko,
+    }
+
+
+@router.put("/devis/reponses/{reponse_id}")
+def saisir_reponse_devis(request: Request, reponse_id: int, body: dict = Body(...)):
+    _require_expe_write(request)
+    now = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_db() as conn:
+        rep = conn.execute(
+            "SELECT * FROM expe_devis_reponses WHERE id=?", (reponse_id,)
+        ).fetchone()
+        if not rep:
+            raise HTTPException(status_code=404, detail="Réponse introuvable")
+        conn.execute(
+            """
+            UPDATE expe_devis_reponses
+            SET prix=?, delai_jours=?, commentaire=?, statut='recue', recu_at=?
+            WHERE id=?
+            """,
+            (
+                body.get("prix"),
+                body.get("delai_jours"),
+                (body.get("commentaire") or "").strip() or None,
+                now,
+                reponse_id,
+            ),
+        )
+        conn.commit()
+        updated = conn.execute(
+            "SELECT * FROM expe_devis_reponses WHERE id=?", (reponse_id,)
+        ).fetchone()
+    return dict(updated)
+
+
+@router.post("/devis/reponses/{reponse_id}/retenir")
+def retenir_reponse_devis(request: Request, reponse_id: int):
+    _require_expe_write(request)
+    with get_db() as conn:
+        rep = conn.execute(
+            "SELECT * FROM expe_devis_reponses WHERE id=?", (reponse_id,)
+        ).fetchone()
+        if not rep:
+            raise HTTPException(status_code=404, detail="Réponse introuvable")
+        demande_id = rep["demande_id"]
+        conn.execute(
+            """
+            UPDATE expe_devis_reponses SET statut='refusee'
+            WHERE demande_id=? AND id!=? AND statut NOT IN ('retenue','refusee')
+            """,
+            (demande_id, reponse_id),
+        )
+        conn.execute(
+            "UPDATE expe_devis_reponses SET statut='retenue' WHERE id=?",
+            (reponse_id,),
+        )
+        conn.execute(
+            "UPDATE expe_demandes_devis SET statut='cloturee' WHERE id=?",
+            (demande_id,),
+        )
+        conn.commit()
+    return {"statut": "cloturee", "retenu": reponse_id}
+
+
+@router.delete("/devis/demandes/{demande_id}")
+def supprimer_demande_devis(request: Request, demande_id: int):
+    _require_expe_write(request)
+    with get_db() as conn:
+        if not conn.execute(
+            "SELECT 1 FROM expe_demandes_devis WHERE id=?", (demande_id,)
+        ).fetchone():
+            raise HTTPException(status_code=404, detail="Demande introuvable")
+        conn.execute("DELETE FROM expe_devis_reponses WHERE demande_id=?", (demande_id,))
+        conn.execute("DELETE FROM expe_demandes_devis WHERE id=?", (demande_id,))
+        conn.commit()
+    return {"deleted": demande_id}
+
+
+# ─── Prospects transporteurs ───────────────────────────────────────
+
+
+@router.get("/prospects")
+def list_prospects(request: Request):
+    _require_expe(request)
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT * FROM expe_transporteurs_prospects
+               ORDER BY statut_demarchage, nom"""
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+@router.post("/prospects")
+def creer_prospect(request: Request, body: dict = Body(...)):
+    _require_expe_write(request)
+    nom = (body.get("nom") or "").strip()
+    if not nom:
+        raise HTTPException(status_code=400, detail="Nom obligatoire")
+    now = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_db() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO expe_transporteurs_prospects
+            (nom, contact_nom, contact_email, contact_tel, zone_couverte,
+             type_service, capacite_max_pal, statut_demarchage, notes, created_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                nom,
+                (body.get("contact_nom") or "").strip() or None,
+                (body.get("contact_email") or "").strip() or None,
+                (body.get("contact_tel") or "").strip() or None,
+                (body.get("zone_couverte") or "").strip() or None,
+                (body.get("type_service") or "messagerie").strip(),
+                body.get("capacite_max_pal"),
+                (body.get("statut_demarchage") or "a_contacter").strip(),
+                (body.get("notes") or "").strip() or None,
+                now,
+            ),
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT * FROM expe_transporteurs_prospects WHERE id=?", (cur.lastrowid,)
+        ).fetchone()
+    return dict(row)
+
+
+@router.put("/prospects/{prospect_id}")
+def modifier_prospect(request: Request, prospect_id: int, body: dict = Body(...)):
+    _require_expe_write(request)
+    now = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
+    champs = [
+        "nom",
+        "contact_nom",
+        "contact_email",
+        "contact_tel",
+        "zone_couverte",
+        "type_service",
+        "capacite_max_pal",
+        "statut_demarchage",
+        "notes",
+    ]
+    sets = ["updated_at=?"]
+    args: list[Any] = [now]
+    for c in champs:
+        if c in body:
+            sets.append(f"{c}=?")
+            v = body[c]
+            if c == "nom":
+                v = (v or "").strip()
+            elif isinstance(v, str):
+                v = v.strip() or None
+            args.append(v)
+    args.append(prospect_id)
+    with get_db() as conn:
+        conn.execute(
+            f"UPDATE expe_transporteurs_prospects SET {', '.join(sets)} WHERE id=?",
+            args,
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT * FROM expe_transporteurs_prospects WHERE id=?", (prospect_id,)
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Prospect introuvable")
+    return dict(row)
+
+
+@router.delete("/prospects/{prospect_id}")
+def supprimer_prospect(request: Request, prospect_id: int):
+    _require_expe_write(request)
+    with get_db() as conn:
+        conn.execute(
+            "DELETE FROM expe_transporteurs_prospects WHERE id=?", (prospect_id,)
+        )
+        conn.commit()
+    return {"deleted": prospect_id}

@@ -2117,6 +2117,67 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 65, "expe_tarifs_schema")
 
+    # v66 — MyExpé : demandes de devis (prospection parallèle)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=66 LIMIT 1").fetchone():
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS expe_demandes_devis (
+                id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+                depart_id               INTEGER,
+                poids_total_kg          REAL,
+                nb_palette              REAL,
+                code_postal_destination TEXT,
+                type_envoi              TEXT,
+                contraintes             TEXT,
+                statut                  TEXT NOT NULL DEFAULT 'ouverte',
+                created_at              TEXT NOT NULL,
+                created_by_email        TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS expe_devis_reponses (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                demande_id       INTEGER NOT NULL,
+                transporteur_id  INTEGER,
+                nom_transporteur TEXT,
+                prix             REAL,
+                delai_jours      INTEGER,
+                commentaire      TEXT,
+                statut           TEXT NOT NULL DEFAULT 'envoyee',
+                sent_at          TEXT,
+                recu_at          TEXT,
+                FOREIGN KEY (demande_id) REFERENCES expe_demandes_devis(id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_devis_reponses_demande
+                ON expe_devis_reponses(demande_id);
+            """
+        )
+        conn.commit()
+        _record_schema_migration(conn, 66, "expe_demandes_devis")
+
+    # v67 — MyExpé : transporteurs prospects
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=67 LIMIT 1").fetchone():
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS expe_transporteurs_prospects (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                nom              TEXT NOT NULL,
+                contact_nom      TEXT,
+                contact_email    TEXT,
+                contact_tel      TEXT,
+                zone_couverte    TEXT,
+                type_service     TEXT,
+                capacite_max_pal INTEGER,
+                statut_demarchage TEXT NOT NULL DEFAULT 'a_contacter',
+                notes            TEXT,
+                created_at       TEXT NOT NULL,
+                updated_at       TEXT
+            );
+            """
+        )
+        conn.commit()
+        _record_schema_migration(conn, 67, "expe_transporteurs_prospects")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

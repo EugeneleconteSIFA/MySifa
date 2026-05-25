@@ -28,6 +28,18 @@
   const POSTIT_WIDTH = 260;
   const POSTIT_DOCK_GAP = 10;
   const POSTIT_ANIM_MS = 360;
+  /** Au-dessus des FAB dock actifs (8025) pour que les pastilles restent cliquables. */
+  const POSTIT_COLOR_PALETTE_Z = 8030;
+
+  function postitFindById(id) {
+    var nid = Number(id);
+    if (!nid) return null;
+    return (
+      PostitState.items.find(function (x) {
+        return Number(x.id) === nid;
+      }) || null
+    );
+  }
 
   const POSTIT_DOCK_ICON =
     '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">' +
@@ -79,11 +91,32 @@
     if (dot) dot.style.background = color;
   }
 
+  function bindPostitColorPaletteDocClose() {
+    if (window._postitColorPaletteDocBound) return;
+    window._postitColorPaletteDocBound = true;
+    document.addEventListener('click', function (e) {
+      var pal = document.getElementById('postit-color-palette');
+      if (
+        pal &&
+        pal.classList.contains('open') &&
+        !pal.contains(e.target) &&
+        !e.target.closest('.postit-color-dot')
+      ) {
+        closePostitColorPalette();
+      }
+    });
+  }
+
   function ensurePostitColorPalette() {
+    bindPostitColorPaletteDocClose();
     var pal = document.getElementById('postit-color-palette');
-    if (pal) return pal;
+    if (pal) {
+      pal.style.zIndex = String(POSTIT_COLOR_PALETTE_Z);
+      return pal;
+    }
     pal = document.createElement('div');
     pal.id = 'postit-color-palette';
+    pal.style.zIndex = String(POSTIT_COLOR_PALETTE_Z);
     pal.setAttribute('role', 'menu');
     pal.setAttribute('aria-label', 'Couleur du post-it');
     POSTIT_COLOR_PALETTE.forEach(function (hex) {
@@ -93,8 +126,12 @@
       btn.style.background = hex;
       btn.title = hex;
       btn.dataset.color = hex;
+      btn.addEventListener('mousedown', function (e) {
+        e.stopPropagation();
+      });
       btn.addEventListener('click', function (e) {
         e.stopPropagation();
+        e.preventDefault();
         var pid = parseInt(pal.dataset.postitId, 10);
         if (pid) setPostitColor(pid, hex);
         closePostitColorPalette();
@@ -129,8 +166,9 @@
   function updatePostitColorPaletteActive(color) {
     var pal = document.getElementById('postit-color-palette');
     if (!pal) return;
+    var norm = String(color || '').toLowerCase();
     pal.querySelectorAll('.postit-color-swatch').forEach(function (btn) {
-      btn.classList.toggle('active', btn.dataset.color === color);
+      btn.classList.toggle('active', String(btn.dataset.color || '').toLowerCase() === norm);
     });
   }
 
@@ -161,9 +199,7 @@
   async function setPostitColor(id, color) {
     var hex = String(color || '').toLowerCase();
     if (!/^#[0-9a-f]{6}$/.test(hex)) return;
-    var p = PostitState.items.find(function (x) {
-      return x.id === id;
-    });
+    var p = postitFindById(id);
     if (!p) return;
     try {
       var r = await postitApi('/api/postits/' + id, {
@@ -529,6 +565,7 @@
   }
 
   function initPostitsApp() {
+    bindPostitColorPaletteDocClose();
     if (!postitUserLoggedIn() || postitCurrentApp() === 'login') return;
     ensurePostitLayer();
     if (!postitDesktopEnabled()) return;
@@ -606,15 +643,6 @@
           if (_postitDockMenuOpen) {
             var r = document.getElementById('postit-dock-root');
             if (r && !r.contains(e.target)) closePostitDockMenu();
-          }
-          var pal = document.getElementById('postit-color-palette');
-          if (
-            pal &&
-            pal.classList.contains('open') &&
-            !pal.contains(e.target) &&
-            !e.target.closest('.postit-color-dot')
-          ) {
-            closePostitColorPalette();
           }
         });
         window.addEventListener('resize', function () {

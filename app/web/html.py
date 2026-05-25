@@ -2,6 +2,10 @@ from config import APP_VERSION, APP_META_DESCRIPTION, APP_PAGE_TITLE, THEME_COLO
 from app.web.expe_assets import (
     EXPE_CARTE_FRANCE_CSS,
     EXPE_CARTE_FRANCE_JS,
+    EXPE_COMPARATEUR_CSS,
+    EXPE_COMPARATEUR_JS,
+    EXPE_DEVIS_CSS,
+    EXPE_DEVIS_JS,
     EXPE_TRANSPORTEURS_CSS,
     EXPE_TRANSPORTEURS_JS,
 )
@@ -1706,6 +1710,8 @@ body.light .stock-empl-suggest-add:hover{background:rgba(124,58,237,.2);color:#1
   }
 }
 __EXPE_TRANSPORTEURS_CSS__
+__EXPE_COMPARATEUR_CSS__
+__EXPE_DEVIS_CSS__
 __EXPE_CARTE_FRANCE_CSS__
 /* ── Paie (onglet MyCompta) ── */
 .paie-layout{display:flex;gap:14px;height:calc(100vh - 210px);overflow:hidden}
@@ -2151,6 +2157,7 @@ function icon(name,size=16){
     'tag': '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>',
     'map-pin': '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>',
     'database': '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/>',
+    'users': '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
   };
   return `<svg ${a} aria-hidden="true" style="display:inline-block;vertical-align:middle;flex-shrink:0">${p[name]||p['alert-circle']}</svg>`;
 }
@@ -5374,59 +5381,10 @@ function renderExpeContactModal(){
   return overlay;
 }
 function renderExpeComparateur(){
-  if(!S.expeRaw&&!S.expeRawLoading&&!S.expeRawError)queueMicrotask(()=>ensureExpeRawData());
-  const results=S.expeResults;
-
-  const deptInp=h('input',{type:'text',value:S.expeDept||'',placeholder:'59',onInput:e=>{S.expeDept=e.target.value;}});
-  const fuelInp=h('input',{type:'number',step:'0.01',value:S.expeFuelPct||'',placeholder:'12.80',onInput:e=>{S.expeFuelPct=e.target.value;}});
-  const kgInp=h('input',{type:'number',step:'1',value:S.expeKg||'',placeholder:'500',onInput:e=>{S.expeKg=e.target.value;}});
-  const palInp=h('input',{type:'number',step:'1',value:S.expeNbPal||'',placeholder:'3',onInput:e=>{S.expeNbPal=e.target.value;}});
-  [deptInp,fuelInp,kgInp,palInp].forEach(el=>el.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();expeCompute();}}));
-
-  const form=h('div',{className:'card'},
-    h('div',{className:'card-header'},
-      h('h3',null,'Param\u00e8tres'),
-      h('div',{style:{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}},
-        S.expeRawLoading?h('span',{className:'readonly-notice'},'Chargement des grilles\u2026'):null,
-        S.expeRawError?h('span',{className:'badge-danger'},S.expeRawError):null,
-        expeCanWrite()?h('button',{className:'btn-ghost',onClick:()=>set({expeShowContacts:true})},iconEl('sliders',13),' Contacts'):null
-      )
-    ),
-    h('div',{style:{padding:'14px 18px'}},
-      h('div',{className:'expe-fields'},
-        h('div',{className:'expe-field'},h('label',null,'D\u00e9partement',h('span',{style:{fontWeight:400,marginLeft:6,fontSize:9,letterSpacing:0,textTransform:'none',color:'var(--text2)'}},'01 \u00e0 95')),deptInp),
-        h('div',{className:'expe-field'},h('label',null,'Taxe carburant (%)'),fuelInp,h('div',{className:'expe-help'},'Appliqu\u00e9e au tarif de base')),
-        h('div',{className:'expe-field'},h('label',null,'Poids (kg)'),kgInp,h('div',{className:'expe-help'},'Pour classement poids')),
-        h('div',{className:'expe-field'},h('label',null,'Palettes'),palInp,h('div',{className:'expe-help'},'Coup\u00e9 max 5 / Ceva max 4'))
-      ),
-      h('div',{style:{display:'flex',gap:16,marginTop:14,flexWrap:'wrap'}},
-        h('button',{className:'btn-sm',onClick:expeCompute,disabled:!!S.expeRawLoading||!S.expeRaw},'Calculer'),
-        h('button',{className:'btn-sec',style:{marginLeft:4},onClick:()=>set({expeResults:null})},'R\u00e9initialiser')
-      ),
-      h('div',{className:'expe-note'},'Tarifs HT \u00b7 taxe carburant appliqu\u00e9e \u00b7 Coup\u00e9 max 5 pal \u00b7 Ceva max 4 pal \u00b7 Coquelle max 33 pal \u00b7 Dimotrans max 28 pal')
-    )
-  );
-
-  if(!results)return h('div',null,form);
-
-  const poidsCards=results.poids&&results.poids.length
-    ? h('div',null,
-        h('div',{className:'section-title'},'Classement au poids \u00b7 '+results.kg+' kg \u00b7 dept '+results.dept+' \u00b7 taxe '+results.fuel+'%'),
-        h('div',{className:'expe-top3'},...results.poids.slice(0,3).map((r,i)=>renderExpeScore(r,i))),
-        results.poids.length>3?renderExpeRankTable('Tous les tarifs (poids)',results.poids):null
-      )
-    : h('div',{className:'card-empty'},'Renseigne le poids pour voir le classement.');
-
-  const palCards=results.palette&&results.palette.length
-    ? h('div',{style:{marginTop:18}},
-        h('div',{className:'section-title'},'Classement palette \u00b7 '+results.nbPal+' palette'+(results.nbPal>1?'s':'')+' \u00b7 dept '+results.dept+' \u00b7 taxe '+results.fuel+'%'),
-        h('div',{className:'expe-top3'},...results.palette.slice(0,3).map((r,i)=>renderExpeScore(r,i))),
-        results.palette.length>3?renderExpeRankTable('Tous les tarifs (palette)',results.palette):null
-      )
-    : h('div',{className:'card-empty',style:{marginTop:14}},'Renseigne le nombre de palettes pour voir le classement.');
-
-  return h('div',null,form,poidsCards,palCards);
+  return renderExpeComparateurTarifs();
 }
+__EXPE_COMPARATEUR_JS__
+__EXPE_DEVIS_JS__
 __EXPE_TRANSPORTEURS_JS__
 __EXPE_CARTE_FRANCE_JS__
 function renderExpePoids(){
@@ -5812,6 +5770,10 @@ function renderExpeSuiviDeparts(){
     // Empêcher la troncature (… en rouge) sur la colonne actions.
     expeCanWrite()?h('td',{style:{maxWidth:'none',overflow:'visible',textOverflow:'clip',whiteSpace:'nowrap'}},
       h('span',{style:{display:'inline-flex',alignItems:'center',gap:'2px'}},
+        r.code_postal_destination?h('button',{className:'btn-ghost',title:'Demande de devis pour ce départ',
+          onClick:()=>ouvrirDevisDepuisDepart(r.id,parseFloat(r.poids_total_kg)||0,parseFloat(r.nb_palette)||0,String(r.code_postal_destination||''))},expeDevisIcon(16)):null,
+        (r.code_postal_destination&&(r.poids_total_kg||r.nb_palette))?h('button',{className:'btn-ghost',title:'Comparer les prix pour ce départ',
+          onClick:()=>ouvrirComparateurDepuisDepart(r.id,parseFloat(r.poids_total_kg)||0,parseFloat(r.nb_palette)||0,String(r.code_postal_destination||''))},expeCompareIcon(16)):null,
         h('button',{className:'btn-ghost',title:'Copier',onClick:()=>expeOpenDepartModal(r,'new')},iconEl('copy',14)),
         h('button',{className:'btn-ghost',title:'Modifier',onClick:()=>expeOpenDepartModal(r,'edit')},iconEl('edit',14)),
         h('button',{className:'btn-danger',title:'Supprimer',onClick:async()=>{
@@ -5922,7 +5884,9 @@ function renderExpe(){
     if(tab==='suivi_departs'){
       if(sub==='jour')void loadExpeDepartJour();
       else void loadExpeDepartHistorique();
-    }else if(tab==='comparateur'){void ensureExpeRawData();if(!T.list.length&&!T.loading)void loadTransporteurs();}
+    }else if(tab==='comparateur'){if(!T.list.length&&!T.loading)void loadTransporteurs();}
+    else if(tab==='devis'){void chargerDemandes();if(!T.list.length&&!T.loading)void loadTransporteurs();}
+    else if(tab==='prospects'){void chargerProspects();}
     else if(tab==='transporteurs'&&!T.pageLoaded){T.pageLoaded=true;void loadTransporteurs();}
   }
 
@@ -5935,6 +5899,10 @@ function renderExpe(){
       iconEl('clipboard',15),'  Suivi départs'),
     h('button',{className:'nav-btn'+(tab==='comparateur'?' active':''),onClick:()=>set({expeTab:'comparateur'})},
       iconEl('package',15),'  Comparateur'),
+    h('button',{className:'nav-btn'+(tab==='devis'?' active':''),onClick:()=>set({expeTab:'devis'})},
+      iconEl('mail',15),'  Devis'),
+    h('button',{className:'nav-btn'+(tab==='prospects'?' active':''),onClick:()=>set({expeTab:'prospects'})},
+      iconEl('users',15),'  Prospects'),
     h('button',{className:'nav-btn'+(tab==='transporteurs'?' active':''),onClick:()=>set({expeTab:'transporteurs'})},
       iconEl('truck',15),'  Transporteurs'),
     h('button',{className:'nav-btn'+(tab==='poids'?' active':''),onClick:()=>set({expeTab:'poids'})},
@@ -5963,13 +5931,15 @@ function renderExpe(){
       h('div',{className:'mobile-topbar-title'},'MyExpé'),
       h('div',{className:'mobile-topbar-sub'},
         tab==='suivi_departs'?(sub==='historique'?'Historique départs':'Départs du jour'):
-        tab==='transporteurs'?'Transporteurs':tab==='poids'?'Poids envoi':'Comparateur tarifs')
+        tab==='transporteurs'?'Transporteurs':tab==='devis'?'Demandes de devis':tab==='prospects'?'Prospects transporteurs':tab==='poids'?'Poids envoi':'Comparateur tarifs')
     ),
     h('button',{type:'button',className:'mobile-home-btn',onClick:()=>{window.location.href='/'},'aria-label':'Accueil'},iconEl('home',20))
   );
 
   const content=tab==='suivi_departs'?renderExpeSuiviDepartsWithSubtabs():
-    tab==='transporteurs'?renderExpeTransporteurs():tab==='poids'?renderExpePoids():renderExpeComparateur();
+    tab==='transporteurs'?renderExpeTransporteurs():tab==='poids'?renderExpePoids():
+    tab==='devis'?renderExpeDevisSection():tab==='prospects'?renderExpeProspectsSection():
+    renderExpeComparateur();
 
   return h('div',null,
     S.sidebarOpen?h('div',{className:'sidebar-overlay',onClick:closeSidebar}):null,
@@ -5983,7 +5953,9 @@ function renderExpe(){
           h('div',{className:'subtitle'},
             tab==='suivi_departs'?(sub==='historique'?'Recherche multi-critères sur les départs validés'
               :'Enregistrement des enlèvements et validation vers l\'historique')
-            :tab==='comparateur'?'Coupé · Coquelle · Ceva · Dimotrans — meilleur prix au poids et à la palette'
+            :tab==='comparateur'?'Comparaison des transporteurs selon les grilles tarifaires actives en base'
+            :tab==='devis'?'Prospection parallèle — demandes de tarif aux transporteurs'
+            :tab==='prospects'?'Transporteurs hors référentiel — suivi de démarchage'
             :tab==='poids'?'Estimation du poids d\'un envoi d\'étiquettes'
             :'Référentiel transporteurs, zones et tarifs'),
           content
@@ -5992,6 +5964,7 @@ function renderExpe(){
     ),
     renderExpeTranspPanel(),
     renderExpeTransporteurModal(),
+    renderExpeDevisModal(),
     S.expeShowContacts?renderExpeContactModal():null
   );
 }
@@ -11546,7 +11519,11 @@ def render_frontend_html(initial_app: str = "portal") -> str:
         .replace("__V_LABEL__", f"v{APP_VERSION}")
         .replace("__INITIAL_APP_VALUE__", initial_app)
         .replace("__EXPE_TRANSPORTEURS_CSS__", EXPE_TRANSPORTEURS_CSS)
+        .replace("__EXPE_COMPARATEUR_CSS__", EXPE_COMPARATEUR_CSS)
+        .replace("__EXPE_DEVIS_CSS__", EXPE_DEVIS_CSS)
         .replace("__EXPE_CARTE_FRANCE_CSS__", EXPE_CARTE_FRANCE_CSS)
+        .replace("__EXPE_COMPARATEUR_JS__", EXPE_COMPARATEUR_JS)
+        .replace("__EXPE_DEVIS_JS__", EXPE_DEVIS_JS)
         .replace("__EXPE_TRANSPORTEURS_JS__", EXPE_TRANSPORTEURS_JS)
         .replace("__EXPE_CARTE_FRANCE_JS__", EXPE_CARTE_FRANCE_JS)
     )
