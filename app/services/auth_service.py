@@ -14,6 +14,7 @@ from config import (
     SESSION_HOURS,
     COOKIE_NAME,
     ROLES_ADMIN,
+    ROLES_PRICING,
     ACCESS_OVERRIDABLE_APPS,
     ROLE_SUPERADMIN,
     ROLE_DIRECTION,
@@ -111,7 +112,10 @@ def user_has_app_access(user: dict, app: str) -> bool:
         return user.get("role") == ROLE_SUPERADMIN
     if app == "devis":
         app = "pricing"
-    acc = merged_app_access(user.get("role"), user.get("access_overrides"))
+    role = user.get("role")
+    if app == "pricing" and role not in ROLES_PRICING:
+        return False
+    acc = merged_app_access(role, user.get("access_overrides"))
     return bool(acc.get(app))
 
 

@@ -8,7 +8,7 @@ import re
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from config import APP_VERSION, ROLES_ADMIN
+from config import APP_VERSION, ROLES_PRICING_WRITE
 from services.auth_service import get_current_user, user_has_app_access
 from app.web.access_denied import access_denied_response
 
@@ -33,7 +33,7 @@ def _pricing_html_response(request: Request) -> HTMLResponse:
         raise
     if not user_has_app_access(user, "pricing"):
         return access_denied_response("Coûts matières")
-    can_write = user.get("role") in ROLES_ADMIN
+    can_write = user.get("role") in ROLES_PRICING_WRITE
     html = (
         PRICING_SHELL.replace("__V__", f"v{APP_VERSION}")
         .replace("__CAN_WRITE__", "true" if can_write else "false")

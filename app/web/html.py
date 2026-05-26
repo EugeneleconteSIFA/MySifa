@@ -1035,7 +1035,7 @@ body.light .compta-add-bar-fields input:focus{box-shadow:0 0 0 3px rgba(8,145,17
   font-family:inherit;outline:none}
 
 /* ── Portail MySifa ─────────────────────────────────────────────── */
-.portal-page{min-height:100vh;display:flex;flex-direction:column;
+.portal-page{position:relative;z-index:1;min-height:100vh;display:flex;flex-direction:column;
   align-items:center;justify-content:flex-start;gap:32px;padding:48px 20px 32px}
 .portal-logo{text-align:center}
 .portal-logo .brand{font-size:42px;font-weight:800;letter-spacing:-2px}
@@ -1151,14 +1151,14 @@ body.light .portal-apps--reorderable .portal-app--placeholder:hover{background:r
 .portal-apps--reorderable .portal-app--disabled{cursor:grab}
 .portal-apps-hint{font-size:11px;color:var(--muted);text-align:center;margin:8px 0 0;width:100%;line-height:1.35}
 .portal-app{display:flex;flex-direction:column;align-items:center;gap:8px;
-  background:var(--card);border:1px solid var(--border);border-radius:16px;
+  background-color:var(--card);border:1px solid var(--border);border-radius:16px;
   padding:14px 12px;cursor:pointer;transition:all .2s;text-decoration:none;
   width:148px;height:132px;flex:0 0 148px;box-sizing:border-box;
   justify-content:center}
 .portal-app--disabled{cursor:default;opacity:.6;position:relative}
-.portal-app--disabled:hover{border-color:var(--border);background:var(--card)}
+.portal-app--disabled:hover{border-color:var(--border);background-color:var(--card)}
 .badge-dev{position:absolute;top:8px;right:8px;font-size:9px;font-weight:700;padding:2px 8px;border-radius:20px;background:var(--warn);color:#0a0e17;text-transform:uppercase;letter-spacing:.5px}
-.portal-app:hover{border-color:var(--accent);background:var(--accent-bg);
+.portal-app:hover{border-color:var(--accent);background-color:var(--card);
   transform:translateY(-3px);box-shadow:0 10px 32px rgba(34,211,238,.14)}
 .portal-app--busy{pointer-events:none;opacity:.8;position:relative;transform:none!important;box-shadow:none!important}
 .portal-app--busy::after{
@@ -1433,7 +1433,7 @@ body.light .portal-logout:hover:last-of-type{text-shadow:0 0 12px rgba(220,38,38
     padding:10px 8px;
     gap:6px;
     border-radius:14px;
-    background:var(--card);
+    background-color:var(--card);
     border:1px solid var(--border);
     box-sizing:border-box;
     justify-content:center;
@@ -1441,7 +1441,7 @@ body.light .portal-logout:hover:last-of-type{text-shadow:0 0 12px rgba(220,38,38
   .portal-app:hover{
     transform:none;
     border-color:var(--accent);
-    background:var(--accent-bg);
+    background-color:var(--card);
     box-shadow:none;
   }
   .portal-app-name{
@@ -3624,7 +3624,7 @@ function renderPortal(){
   const isRH   = aa ? !!aa.planning_rh : (isSuper || !!(urole && ['direction','administration','fabrication','logistique','expedition','comptabilite'].includes(urole)));
   const isComptaPlan = urole === 'comptabilite';
   const isPaie = isSuper || !!(urole && ['direction','administration','comptabilite'].includes(urole));
-  const isPricing = aa ? !!(aa.pricing ?? aa.devis) : (isSuper || urole==='direction' || urole==='administration');
+  const isPricing = aa ? !!(aa.pricing ?? aa.devis) : (isSuper || urole==='direction');
   const isAo = isSuper || urole === 'direction';
   const isLight=document.body.classList.contains('light');
 

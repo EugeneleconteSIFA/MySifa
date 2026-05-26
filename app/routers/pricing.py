@@ -13,7 +13,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
-from config import ROLES_ADMIN
+from config import ROLES_PRICING_WRITE
 from database import get_db
 from app.services.auth_service import get_current_user, user_has_app_access
 from app.services.pricing import (
@@ -79,10 +79,10 @@ def _require_read(request: Request) -> dict:
 
 def _require_write(request: Request) -> dict:
     user = _require_read(request)
-    if user.get("role") not in ROLES_ADMIN:
+    if user.get("role") not in ROLES_PRICING_WRITE:
         raise HTTPException(
             status_code=403,
-            detail="Écriture réservée à la Direction et l'Administration.",
+            detail="Écriture réservée à la Direction.",
         )
     return user
 

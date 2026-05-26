@@ -2563,6 +2563,38 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 80, "app_access_devis_to_pricing")
 
+    # v81 — Coûts matières : accès réservé Direction et super admin (retrait Administration)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=81 LIMIT 1").fetchone():
+        from config import ROLE_DIRECTION, ROLE_SUPERADMIN
+
+        allowed_roles = {ROLE_DIRECTION, ROLE_SUPERADMIN}
+        for row in conn.execute("SELECT id, role, access_overrides FROM users").fetchall():
+            if row["role"] in allowed_roles:
+                continue
+            ao = row["access_overrides"]
+            if not ao:
+                continue
+            try:
+                o = json.loads(ao) if isinstance(ao, str) else ao
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if not isinstance(o, dict):
+                continue
+            changed = False
+            for key in ("pricing", "devis"):
+                if key in o:
+                    del o[key]
+                    changed = True
+            if not changed:
+                continue
+            new_ao = json.dumps(o, ensure_ascii=False) if o else None
+            conn.execute(
+                "UPDATE users SET access_overrides=? WHERE id=?",
+                (new_ao, row["id"]),
+            )
+        conn.commit()
+        _record_schema_migration(conn, 81, "pricing_access_direction_superadmin_only")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

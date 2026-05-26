@@ -5,7 +5,7 @@
   "use strict";
 
   const INIT = window.__PRICING__ || { canWrite: false, user: {} };
-  const ADMIN_ROLES = new Set(["direction", "administration", "superadmin"]);
+  const ADMIN_ROLES = new Set(["direction", "superadmin"]);
 
   const S = {
     canWrite: !!INIT.canWrite,
