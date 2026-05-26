@@ -1915,6 +1915,8 @@ let S={
   expeDepartSubmitting:false,
   expeDepartModalOpen:false,
   expeDepartEditId:null,
+  expePaletteTypes:[],
+  expePaletteTypesLoading:false,
   expeDepartForm:{
     date_enlevement:'',
     affreteurs:'',
@@ -1925,6 +1927,7 @@ let S={
     arc:'',
     no_cde_transport:'',
     no_bl:'',
+    type_palette_matiere_id:'',
     nb_palette:'',
     poids_total_kg:'',
     date_livraison:'',
@@ -5562,8 +5565,33 @@ function expeParisDayISO(){
   try{return new Date().toLocaleDateString('sv-SE',{timeZone:'Europe/Paris'});}
   catch(e){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 }
+async function loadExpePaletteTypes(){
+  if(S.app!=='expe')return;
+  if(S.expePaletteTypesLoading) return;
+  if((S.expePaletteTypes||[]).length) return;
+  set({expePaletteTypesLoading:true});
+  try{
+    const rows=await api('/api/expe/matieres-palettes');
+    set({expePaletteTypes:Array.isArray(rows)?rows:[],expePaletteTypesLoading:false});
+  }catch(e){
+    set({expePaletteTypesLoading:false});
+  }
+}
+function expePaletteTypeLabel(row){
+  if(!row) return '—';
+  if(row.type_palette_label) return row.type_palette_label;
+  const id=row.type_palette_matiere_id;
+  if(id==null||id==='') return '—';
+  const items=S.expePaletteTypes||[];
+  const m=items.find(x=>String(x.id)===String(id));
+  if(!m) return '—';
+  const ref=(m.reference||'').trim();
+  const des=(m.designation||'').trim();
+  return ref?(des?ref+' — '+des:ref):'—';
+}
 async function loadExpeDepartJour(){
   if(S.app!=='expe')return;
+  void loadExpePaletteTypes();
   if(_expeJourInflight)return await _expeJourInflight;
   _expeJourInflight=(async()=>{
     set({expeDepartLoading:true});
@@ -5579,6 +5607,7 @@ async function loadExpeDepartJour(){
 }
 async function loadExpeDepartHistorique(){
   if(S.app!=='expe')return;
+  void loadExpePaletteTypes();
   // Préserver le focus/caret de la searchbar pendant les re-renders (chargement + résultats)
   const qEl = document.getElementById('expe-hist-search');
   const hadFocus = !!(qEl && document.activeElement === qEl);
@@ -5624,6 +5653,7 @@ function expeOpenDepartModal(prefill, mode){
   const dayVal=(S.expeDepartJourDate&&String(S.expeDepartJourDate).trim())||expeParisDayISO();
   const src = prefill || {};
   const srcDate = (src.date_enlevement||'') ? String(src.date_enlevement).slice(0,10) : '';
+  void loadExpePaletteTypes();
   set({
     expeDepartModalOpen:true,
     expeDepartEditId: (mode==='edit' && src && src.id) ? src.id : null,
@@ -5637,6 +5667,8 @@ function expeOpenDepartModal(prefill, mode){
       arc: src.arc||'',
       no_cde_transport: src.no_cde_transport||'',
       no_bl: src.no_bl||'',
+      type_palette_matiere_id: (src.type_palette_matiere_id!=null && src.type_palette_matiere_id!=='')
+        ? String(src.type_palette_matiere_id) : '',
       nb_palette: (src.nb_palette!=null && src.nb_palette!=='') ? String(src.nb_palette) : '',
       poids_total_kg: (src.poids_total_kg!=null && src.poids_total_kg!=='') ? String(src.poids_total_kg) : '',
       date_livraison: (src.date_livraison||'') ? String(src.date_livraison).slice(0,10) : '',
@@ -5655,8 +5687,34 @@ function renderExpeDepartModal(){
 
   function mk(label,key,type,ph){
     const i=h('input',{type:type||'text',placeholder:ph||'',value:(f[key]!=null?String(f[key]):''),name:key});
-    i.addEventListener('input',e=>{S.expeDepartForm[key]=e.target.value;});
+    i.addEventListener('input',e=>{S.expeDepartForm[key]=e.target.value; expeScheduleSaveLocal();});
     return h('div',{className:'expe-field'},h('label',null,label),i);
+  }
+
+  const paletteItems=S.expePaletteTypes||[];
+  const palSel=h('select',{name:'type_palette_matiere_id'});
+  palSel.appendChild(h('option',{value:''},'— Sélectionner —'));
+  paletteItems.forEach(m=>{
+    const ref=(m.reference||'').trim();
+    const des=(m.designation||'').trim();
+    const lbl=ref?(des?ref+' — '+des:ref):('Réf. #'+m.id);
+    const opt=h('option',{value:String(m.id)},lbl);
+    if(String(f.type_palette_matiere_id||'')===String(m.id)) opt.selected=true;
+    palSel.appendChild(opt);
+  });
+  palSel.addEventListener('change',e=>{
+    S.expeDepartForm.type_palette_matiere_id=e.target.value;
+    expeScheduleSaveLocal();
+  });
+  const palField=h('div',{className:'expe-field'},
+    h('label',null,'Type de palette'),
+    palSel
+  );
+  if(!paletteItems.length && S.expePaletteTypesLoading){
+    palField.appendChild(h('div',{style:{fontSize:'12px',color:'var(--muted)',marginTop:'4px'}},'Chargement des références…'));
+  }else if(!paletteItems.length){
+    palField.appendChild(h('div',{style:{fontSize:'12px',color:'var(--muted)',marginTop:'4px'}},
+      'Aucune référence palette active (MyStock > Matières premières).'));
   }
 
   const overlay=h('div',{className:'add-row-modal',style:{zIndex:12000}});
@@ -5683,6 +5741,7 @@ function renderExpeDepartModal(){
       arc:(S.expeDepartForm.arc||'').trim()||null,
       no_cde_transport:(S.expeDepartForm.no_cde_transport||'').trim()||null,
       no_bl:(S.expeDepartForm.no_bl||'').trim()||null,
+      type_palette_matiere_id:(S.expeDepartForm.type_palette_matiere_id||'').trim()||null,
       nb_palette:(S.expeDepartForm.nb_palette||'').trim()||null,
       poids_total_kg:(S.expeDepartForm.poids_total_kg||'').trim()||null,
       date_livraison:(S.expeDepartForm.date_livraison||'').trim()||null
@@ -5717,6 +5776,7 @@ function renderExpeDepartModal(){
     mk('ARC','arc'),
     mk('N° commande transporteur','no_cde_transport'),
     mk('N° BL','no_bl'),
+    palField,
     mk('Nombre de palettes','nb_palette','number','ex: 2'),
     mk('Poids total (kg)','poids_total_kg','number','ex: 1325'),
     mk('Date livraison (prévue)','date_livraison','date')
@@ -5761,7 +5821,7 @@ function renderExpeSuiviDeparts(){
   );
   const rows=S.expeDepartList||[];
   const head=h('tr',null,
-    ...['Date enl.','Affr.','Transp.','Client','Destination','Réf SIFA','ARC','Cde transp.','N° BL','Pal.','Poids kg','Liv. prév.',''].map(t=>h('th',null,t))
+    ...['Date enl.','Affr.','Transp.','Client','Destination','Réf SIFA','ARC','Cde transp.','N° BL','Type pal.','Pal.','Poids kg','Liv. prév.',''].map(t=>h('th',null,t))
   );
   const body=rows.length?rows.map(r=>h('tr',null,
     h('td',null,(r.date_enlevement||'').slice(0,10)),
@@ -5773,6 +5833,7 @@ function renderExpeSuiviDeparts(){
     h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.arc||'—'),
     h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.no_cde_transport||'—'),
     h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.no_bl||'—'),
+    h('td',{style:{fontSize:'12px',maxWidth:'120px'}},expePaletteTypeLabel(r)),
     h('td',null,r.nb_palette!=null?String(r.nb_palette):'—'),
     h('td',null,r.poids_total_kg!=null?String(r.poids_total_kg):'—'),
     h('td',null,(r.date_livraison||'').slice(0,10)||'—'),
@@ -5796,7 +5857,7 @@ function renderExpeSuiviDeparts(){
       ),
       h('button',{className:'btn',title:"Valider et envoyer dans l'historique",style:{marginLeft:'8px',padding:'8px 12px',fontSize:'12px',borderRadius:'10px'},onClick:()=>expeValiderDepart(r.id)},'Valider')
     ):h('td',null,'—')
-  )):[h('tr',null,h('td',{colSpan:13,style:{color:'var(--muted)'}},S.expeDepartLoading?'Chargement…':'Aucun départ en attente pour ce jour'))];
+  )):[h('tr',null,h('td',{colSpan:14,style:{color:'var(--muted)'}},S.expeDepartLoading?'Chargement…':'Aucun départ en attente pour ce jour'))];
   const listCard=h('div',{className:'card'},
     h('div',{className:'card-header'},h('h3',{className:'expe-mobile-hide-head'},'Départs du jour (en attente de validation)')),
     h('div',{style:{overflowX:'auto'}},h('table',{className:'table-std expe-departs-table'},h('thead',null,head),h('tbody',null,...body)))
@@ -5808,7 +5869,7 @@ function renderExpeHistoriqueDeparts(){
   const qInp=h('input',{
     id:'expe-hist-search',
     type:'search',
-    placeholder:'Réf. SIFA, client, ARC, BL, commande transport, transporteur…',
+    placeholder:'Réf. SIFA, client, ARC, BL, type palette, transporteur…',
     value:S.expeDepartHistQ||'',
     style:{width:'100%',maxWidth:'560px',padding:'10px 12px',borderRadius:'8px',border:'1px solid var(--border)',background:'var(--bg)',color:'var(--text)',marginBottom:'12px'},
     onInput:e=>{
@@ -5819,7 +5880,7 @@ function renderExpeHistoriqueDeparts(){
   });
   const rows=S.expeDepartHist||[];
   const head=h('tr',null,
-    ...['Validé le','Date enl.','Client','Réf SIFA','ARC','Cde transp.','N° BL','Transp.','Pal.','Poids','Liv. prév.',''].map(t=>h('th',null,t))
+    ...['Validé le','Date enl.','Client','Réf SIFA','ARC','Cde transp.','N° BL','Transp.','Type pal.','Pal.','Poids','Liv. prév.',''].map(t=>h('th',null,t))
   );
   const body=rows.length?rows.map(r=>h('tr',null,
     h('td',{style:{fontSize:'12px',whiteSpace:'nowrap'}},(r.validated_at||'').replace('T',' ').slice(0,16)||'—'),
@@ -5830,6 +5891,7 @@ function renderExpeHistoriqueDeparts(){
     h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.no_cde_transport||'—'),
     h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.no_bl||'—'),
     h('td',null,r.transporteur||'—'),
+    h('td',{style:{fontSize:'12px',maxWidth:'120px'}},expePaletteTypeLabel(r)),
     h('td',null,r.nb_palette!=null?String(r.nb_palette):'—'),
     h('td',null,r.poids_total_kg!=null?String(r.poids_total_kg):'—'),
     h('td',null,(r.date_livraison||'').slice(0,10)||'—'),
@@ -5847,7 +5909,7 @@ function renderExpeHistoriqueDeparts(){
         }},iconEl('trash',14))
       )
     ):h('td',null,'—')
-  )):[h('tr',null,h('td',{colSpan:12,style:{color:'var(--muted)'}},S.expeDepartHistLoading?'Chargement…':'Aucune entrée (ou affiner la recherche)'))];
+  )):[h('tr',null,h('td',{colSpan:13,style:{color:'var(--muted)'}},S.expeDepartHistLoading?'Chargement…':'Aucune entrée (ou affiner la recherche)'))];
   return h('div',null,
     h('div',{className:'card',style:{marginBottom:'12px',padding:'14px 18px'}},
       h('h3',{style:{fontSize:'14px',fontWeight:'700',marginBottom:'8px'}},'Recherche'),

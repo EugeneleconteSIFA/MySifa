@@ -2361,6 +2361,17 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 75, "ao_carnet_fournisseurs_societe_adresse")
 
+    # v76 — MyExpé : type de palette (réf. matières premières MyStock)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=76 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(expe_departs)").fetchall()}
+        if "type_palette_matiere_id" not in cols:
+            conn.execute(
+                "ALTER TABLE expe_departs ADD COLUMN type_palette_matiere_id INTEGER "
+                "REFERENCES matieres_premieres(id)"
+            )
+        conn.commit()
+        _record_schema_migration(conn, 76, "expe_departs_type_palette")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

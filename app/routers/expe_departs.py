@@ -71,6 +71,8 @@ def _row_blob(d: dict) -> str:
         d.get("arc"),
         d.get("no_cde_transport"),
         d.get("no_bl"),
+        d.get("type_palette_label"),
+        d.get("type_palette_reference"),
         d.get("nb_palette"),
         d.get("poids_total_kg"),
         d.get("date_livraison"),
@@ -79,6 +81,46 @@ def _row_blob(d: dict) -> str:
         d.get("validated_at"),
     ]
     return _norm_search(" ".join(str(p) for p in parts if p is not None and str(p) != ""))
+
+
+_DEPARTS_SELECT = """
+    SELECT d.*,
+           mp.reference AS type_palette_reference,
+           mp.designation AS type_palette_designation
+    FROM expe_departs d
+    LEFT JOIN matieres_premieres mp ON mp.id = d.type_palette_matiere_id
+"""
+
+
+def _depart_dict(row) -> dict:
+    d = dict(row)
+    ref = (d.get("type_palette_reference") or "").strip()
+    des = (d.get("type_palette_designation") or "").strip()
+    if ref:
+        d["type_palette_label"] = f"{ref} — {des}" if des else ref
+    else:
+        d["type_palette_label"] = None
+    return d
+
+
+def _validate_type_palette_matiere_id(conn, matiere_id: Any) -> Optional[int]:
+    if matiere_id is None or matiere_id == "":
+        return None
+    try:
+        mid = int(matiere_id)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Type de palette invalide.")
+    row = conn.execute(
+        """SELECT id FROM matieres_premieres
+           WHERE id=? AND actif=1 AND categorie='palette'""",
+        (mid,),
+    ).fetchone()
+    if not row:
+        raise HTTPException(
+            status_code=400,
+            detail="Type de palette introuvable ou inactif (réf. MyStock).",
+        )
+    return mid
 
 
 def _date_prefix(raw: str) -> str:
@@ -169,6 +211,20 @@ def _unlink_tarif(tarif_url: Optional[str]) -> None:
             pass
 
 
+@router.get("/matieres-palettes")
+def list_matieres_palettes_expe(request: Request):
+    """Références palettes actives (catégorie palette, MyStock matières premières)."""
+    _require_expe(request)
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT id, reference, designation, palettes_par_pile
+               FROM matieres_premieres
+               WHERE actif=1 AND categorie='palette'
+               ORDER BY reference COLLATE NOCASE"""
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 @router.get("/departs/jour")
 def list_departs_jour(
     request: Request,
@@ -177,11 +233,11 @@ def list_departs_jour(
     _require_expe(request)
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT * FROM expe_departs
-               WHERE statut = 'en_attente'
-               ORDER BY date_enlevement ASC, id ASC""",
+            f"""{_DEPARTS_SELECT}
+               WHERE d.statut = 'en_attente'
+               ORDER BY d.date_enlevement ASC, d.id ASC""",
         ).fetchall()
-    return [dict(r) for r in rows]
+    return [_depart_dict(r) for r in rows]
 
 
 @router.post("/departs")
@@ -209,13 +265,17 @@ def create_depart(request: Request, body: dict = Body(...)):
             return None
 
     with get_db() as conn:
+        type_palette_id = _validate_type_palette_matiere_id(
+            conn, body.get("type_palette_matiere_id")
+        )
         cur = conn.execute(
             """INSERT INTO expe_departs (
                 date_enlevement, affreteurs, transporteur, transporteur_id, client,
                 code_postal_destination,
-                ref_sifa, arc, no_cde_transport, no_bl, nb_palette, poids_total_kg, date_livraison,
+                ref_sifa, arc, no_cde_transport, no_bl, type_palette_matiere_id,
+                nb_palette, poids_total_kg, date_livraison,
                 statut, created_at, created_by_email
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?, 'en_attente', ?, ?)""",
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'en_attente', ?, ?)""",
             (
                 date_enl,
                 _f("affreteurs"),
@@ -227,6 +287,7 @@ def create_depart(request: Request, body: dict = Body(...)):
                 _f("arc"),
                 _f("no_cde_transport"),
                 _f("no_bl"),
+                type_palette_id,
                 _float_opt("nb_palette"),
                 _float_opt("poids_total_kg"),
                 _f("date_livraison"),
@@ -236,7 +297,9 @@ def create_depart(request: Request, body: dict = Body(...)):
         )
         conn.commit()
         rid = cur.lastrowid
-        row = conn.execute("SELECT * FROM expe_departs WHERE id=?", (rid,)).fetchone()
+        row = conn.execute(
+            f"{_DEPARTS_SELECT} WHERE d.id=?", (rid,)
+        ).fetchone()
     client_nom = (body.get("client") or "").strip() or "—"
     log_action(
         user=user,
@@ -245,7 +308,7 @@ def create_depart(request: Request, body: dict = Body(...)):
         objet=f"Départ {client_nom} · {date_enl}",
         ip=request.client.host if request.client else None,
     )
-    return dict(row)
+    return _depart_dict(row)
 
 
 @router.post("/departs/{depart_id}/valider")
@@ -268,7 +331,9 @@ def valider_depart(request: Request, depart_id: int):
             (now, email, depart_id),
         )
         conn.commit()
-        out = conn.execute("SELECT * FROM expe_departs WHERE id=?", (depart_id,)).fetchone()
+        out = conn.execute(
+            f"{_DEPARTS_SELECT} WHERE d.id=?", (depart_id,)
+        ).fetchone()
     client_nom = (out["client"] or "").strip() if out else "—"
     log_action(
         user=user,
@@ -277,7 +342,7 @@ def valider_depart(request: Request, depart_id: int):
         objet=f"Départ #{depart_id} validé · {client_nom}",
         ip=request.client.host if request.client else None,
     )
-    return dict(out)
+    return _depart_dict(out)
 
 
 @router.put("/departs/{depart_id}")
@@ -331,6 +396,10 @@ async def update_depart(request: Request, depart_id: int, body: dict = Body(...)
         sets.append("transporteur_id=?")
         args.append(_int_opt(body, "transporteur_id"))
 
+    if "type_palette_matiere_id" in body:
+        sets.append("type_palette_matiere_id=?")
+        args.append(None)  # remplacé après ouverture connexion
+
     fields_num = ["nb_palette", "poids_total_kg"]
     for k in fields_num:
         if k in body:
@@ -341,6 +410,11 @@ async def update_depart(request: Request, depart_id: int, body: dict = Body(...)
         raise HTTPException(status_code=400, detail="Aucun champ à mettre à jour")
 
     with get_db() as conn:
+        if "type_palette_matiere_id" in body:
+            idx = next(i for i, s in enumerate(sets) if s.startswith("type_palette_matiere_id"))
+            args[idx] = _validate_type_palette_matiere_id(
+                conn, body.get("type_palette_matiere_id")
+            )
         ex = conn.execute("SELECT id, statut FROM expe_departs WHERE id=?", (depart_id,)).fetchone()
         if not ex:
             raise HTTPException(status_code=404, detail="Départ introuvable")
@@ -349,7 +423,9 @@ async def update_depart(request: Request, depart_id: int, body: dict = Body(...)
 
         conn.execute(f"UPDATE expe_departs SET {', '.join(sets)} WHERE id=?", (*args, depart_id))
         conn.commit()
-        row = conn.execute("SELECT * FROM expe_departs WHERE id=?", (depart_id,)).fetchone()
+        row = conn.execute(
+            f"{_DEPARTS_SELECT} WHERE d.id=?", (depart_id,)
+        ).fetchone()
     client_nom = (row["client"] or "").strip() if row else "—"
     log_action(
         user=user,
@@ -358,7 +434,7 @@ async def update_depart(request: Request, depart_id: int, body: dict = Body(...)
         objet=f"Départ #{depart_id} · {client_nom}",
         ip=request.client.host if request.client else None,
     )
-    return dict(row)
+    return _depart_dict(row)
 
 
 @router.delete("/departs/{depart_id}")
@@ -396,13 +472,13 @@ def historique_departs(
     _require_expe(request)
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT * FROM expe_departs
-               WHERE statut = 'valide'
-               ORDER BY datetime(COALESCE(validated_at, created_at)) DESC, id DESC
+            f"""{_DEPARTS_SELECT}
+               WHERE d.statut = 'valide'
+               ORDER BY datetime(COALESCE(d.validated_at, d.created_at)) DESC, d.id DESC
                LIMIT ?""",
             (limit,),
         ).fetchall()
-    data = [dict(r) for r in rows]
+    data = [_depart_dict(r) for r in rows]
     qt = _norm_search(q)
     if not qt:
         return data

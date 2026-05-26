@@ -390,13 +390,12 @@ function renderCarnet() {
   const list = S.carnet || [];
   let rows = '';
   list.forEach(c => {
-    rows += '<tr><td>'+escHtml(c.societe||'—')+'</td><td>'+escHtml(c.nom)+'</td><td>'+escHtml(c.email)+'</td>'+
-      '<td>'+escHtml(c.adresse||'—')+'</td><td>'+
+    rows += '<tr><td>'+escHtml(c.societe||'—')+'</td><td>'+escHtml(c.nom)+'</td><td>'+escHtml(c.adresse||'—')+'</td><td>'+
       '<button class="btn btn-ghost btn-sm btn-edit-carnet" data-id="'+c.id+'">Modifier</button> '+
       '<button class="btn btn-ghost btn-sm btn-del-carnet" data-id="'+c.id+'">Supprimer</button></td></tr>';
   });
   const table = list.length
-    ? '<div class="card"><table class="data-table"><thead><tr><th>Société</th><th>Nom</th><th>Email</th><th>Adresse</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+    ? '<div class="card"><table class="data-table"><thead><tr><th>Société</th><th>Nom</th><th>Adresse</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
     : '<div class="card empty-state"><strong>Aucun fournisseur dans le carnet.</strong></div>';
   return '<div class="page-hdr"><h1>Carnet fournisseurs</h1>'+
     '<button class="btn btn-accent" type="button" id="btn-add-carnet">'+icon('plus',14)+' Ajouter</button></div>'+table;
@@ -406,12 +405,12 @@ function renderCarnetClients() {
   const list = S.carnetClients || [];
   let rows = '';
   list.forEach(c => {
-    rows += '<tr><td>'+escHtml(c.nom)+'</td><td>'+escHtml(c.email)+'</td><td>'+escHtml(c.pays||'—')+'</td><td>'+
+    rows += '<tr><td>'+escHtml(c.nom)+'</td><td>'+escHtml(c.notes||'—')+'</td><td>'+
       '<button class="btn btn-ghost btn-sm btn-edit-carnet-client" data-id="'+c.id+'">Modifier</button> '+
       '<button class="btn btn-ghost btn-sm btn-del-carnet-client" data-id="'+c.id+'">Supprimer</button></td></tr>';
   });
   const table = list.length
-    ? '<div class="card"><table class="data-table"><thead><tr><th>Nom</th><th>Email</th><th>Pays</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+    ? '<div class="card"><table class="data-table"><thead><tr><th>Nom</th><th>Notes</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
     : '<div class="card empty-state"><strong>Aucun client dans le carnet.</strong></div>';
   return '<div class="page-hdr"><h1>Carnet clients</h1>'+
     '<button class="btn btn-accent" type="button" id="btn-add-carnet-client">'+icon('plus',14)+' Ajouter</button></div>'+table;
@@ -675,12 +674,12 @@ function openModalFourni() {
 }
 function openModalCarnetEntry(edit) {
   S.modal = 'carnet-entry';
-  S.modalData = edit ? {...edit} : {nom:'', email:'', societe:'', adresse:'', notes:''};
+  S.modalData = edit ? {...edit} : {nom:'', societe:'', adresse:'', notes:''};
   renderModal();
 }
 function openModalCarnetClientEntry(edit) {
   S.modal = 'carnet-client-entry';
-  S.modalData = edit ? {...edit} : {nom:'', email:'', pays:'', notes:''};
+  S.modalData = edit ? {...edit} : {nom:'', notes:''};
   renderModal();
 }
 function openModalConfirmEnvoi(n) {
@@ -784,7 +783,7 @@ function renderModal() {
     box.className = 'modal modal-wide';
     let carnetOpts = '<option value="">— Saisie manuelle —</option>';
     (S.carnet||[]).forEach(c => {
-      const lbl = (c.societe ? escHtml(c.societe)+' — ' : '')+escHtml(c.nom)+' — '+escHtml(c.email);
+      const lbl = (c.societe ? escHtml(c.societe)+' — ' : '')+escHtml(c.nom);
       carnetOpts += '<option value="'+c.id+'">'+lbl+'</option>';
     });
     box.innerHTML = '<h3>Ajouter un fournisseur</h3>'+
@@ -812,7 +811,6 @@ function renderModal() {
         if (c) {
           societeEl.value = c.societe || '';
           nomEl.value = c.nom || '';
-          mailEl.value = c.email || '';
           adresseEl.value = c.adresse || '';
         }
         saveCb.checked = false;
@@ -834,7 +832,7 @@ function renderModal() {
         if (manual && saveCb.checked) {
           await api('/api/ao/carnet-fournisseurs', {method:'POST', headers:{'Content-Type':'application/json'},
             body: JSON.stringify({
-              nom, email,
+              nom,
               societe: societeEl.value.trim() || null,
               adresse: adresseEl.value.trim() || null
             })});
@@ -850,7 +848,6 @@ function renderModal() {
     box.innerHTML = '<h3>'+(editId?'Modifier':'Ajouter')+' au carnet</h3>'+
       '<div class="field"><label>Société</label><input id="m-c-societe" value="'+escAttr(S.modalData.societe||'')+'"></div>'+
       '<div class="field"><label>Nom</label><input id="m-c-nom" value="'+escAttr(S.modalData.nom||'')+'"></div>'+
-      '<div class="field"><label>Email</label><input type="email" id="m-c-email" value="'+escAttr(S.modalData.email||'')+'"></div>'+
       '<div class="field"><label>Adresse</label><textarea id="m-c-adresse" rows="2">'+escHtml(S.modalData.adresse||'')+'</textarea></div>'+
       '<div class="field"><label>Notes</label><textarea id="m-c-notes" rows="2">'+escHtml(S.modalData.notes||'')+'</textarea></div>'+
       '<div class="modal-actions"><button class="btn btn-ghost" id="m-cancel">Annuler</button><button class="btn btn-accent" id="m-ok">Enregistrer</button></div>';
@@ -860,11 +857,10 @@ function renderModal() {
       const body = {
         societe: document.getElementById('m-c-societe').value.trim() || null,
         nom: document.getElementById('m-c-nom').value.trim(),
-        email: document.getElementById('m-c-email').value.trim(),
         adresse: document.getElementById('m-c-adresse').value.trim() || null,
         notes: document.getElementById('m-c-notes').value.trim() || null
       };
-      if (!body.nom || !body.email) { showToast('Nom et email obligatoires.', 'danger'); return; }
+      if (!body.nom) { showToast('Nom obligatoire.', 'danger'); return; }
       try {
         if (editId) {
           await api('/api/ao/carnet-fournisseurs/'+editId, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
@@ -879,8 +875,6 @@ function renderModal() {
     const editId = S.modalData.id;
     box.innerHTML = '<h3>'+(editId?'Modifier':'Ajouter')+' au carnet</h3>'+
       '<div class="field"><label>Nom</label><input id="m-cc-nom" value="'+escAttr(S.modalData.nom||'')+'"></div>'+
-      '<div class="field"><label>Email</label><input type="email" id="m-cc-email" value="'+escAttr(S.modalData.email||'')+'"></div>'+
-      '<div class="field"><label>Pays</label><input id="m-cc-pays" value="'+escAttr(S.modalData.pays||'')+'"></div>'+
       '<div class="field"><label>Notes</label><textarea id="m-cc-notes" rows="2">'+escHtml(S.modalData.notes||'')+'</textarea></div>'+
       '<div class="modal-actions"><button class="btn btn-ghost" id="m-cancel">Annuler</button><button class="btn btn-accent" id="m-ok">Enregistrer</button></div>';
     ov.appendChild(box); m.appendChild(ov);
@@ -888,11 +882,9 @@ function renderModal() {
     document.getElementById('m-ok').onclick = async () => {
       const body = {
         nom: document.getElementById('m-cc-nom').value.trim(),
-        email: document.getElementById('m-cc-email').value.trim(),
-        pays: document.getElementById('m-cc-pays').value.trim() || null,
         notes: document.getElementById('m-cc-notes').value.trim() || null
       };
-      if (!body.nom || !body.email) { showToast('Nom et email obligatoires.', 'danger'); return; }
+      if (!body.nom) { showToast('Nom obligatoire.', 'danger'); return; }
       try {
         if (editId) {
           await api('/api/ao/carnet-clients/'+editId, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});

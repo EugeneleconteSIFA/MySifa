@@ -190,9 +190,9 @@ async def create_ao(request: Request):
 
 def _parse_carnet_fournisseur_body(body: dict) -> tuple[str, str, str | None, str | None, str | None]:
     nom = (body.get("nom") or "").strip()
+    if not nom:
+        raise HTTPException(status_code=400, detail="Nom obligatoire.")
     email = (body.get("email") or "").strip().lower()
-    if not nom or not email:
-        raise HTTPException(status_code=400, detail="Nom et email obligatoires.")
     societe = (body.get("societe") or "").strip() or None
     adresse = (body.get("adresse") or "").strip() or None
     notes = (body.get("notes") or "").strip() or None
@@ -272,9 +272,9 @@ async def create_carnet_client(request: Request):
     _require_ao(request)
     body = await request.json()
     nom = (body.get("nom") or "").strip()
+    if not nom:
+        raise HTTPException(status_code=400, detail="Nom obligatoire.")
     email = (body.get("email") or "").strip().lower()
-    if not nom or not email:
-        raise HTTPException(status_code=400, detail="Nom et email obligatoires.")
     pays = (body.get("pays") or "").strip() or None
     notes = (body.get("notes") or "").strip() or None
     now = _now_paris_iso()
@@ -293,9 +293,9 @@ async def update_carnet_client(request: Request, entry_id: int):
     _require_ao(request)
     body = await request.json()
     nom = (body.get("nom") or "").strip()
+    if not nom:
+        raise HTTPException(status_code=400, detail="Nom obligatoire.")
     email = (body.get("email") or "").strip().lower()
-    if not nom or not email:
-        raise HTTPException(status_code=400, detail="Nom et email obligatoires.")
     with get_db() as conn:
         cur = conn.execute(
             "UPDATE ao_carnet_clients SET nom=?, email=?, pays=?, notes=? WHERE id=?",
