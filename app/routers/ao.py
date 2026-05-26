@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sqlite3
 import os
 import uuid
 from datetime import datetime
@@ -383,6 +384,23 @@ def _client_nom(conn, client_id: int | None) -> str | None:
     return row["nom"] if row else None
 
 
+def _produit_ref_taken(conn, ref: str, exclude_id: int | None = None) -> bool:
+    ref = (ref or "").strip()
+    if not ref:
+        return False
+    if exclude_id is not None:
+        row = conn.execute(
+            "SELECT 1 FROM ao_produits WHERE LOWER(ref)=LOWER(?) AND id<>? LIMIT 1",
+            (ref, exclude_id),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT 1 FROM ao_produits WHERE LOWER(ref)=LOWER(?) LIMIT 1",
+            (ref,),
+        ).fetchone()
+    return row is not None
+
+
 def _produit_from_body(body: dict, conn) -> tuple[str, str, str, str | None, int | None, str]:
     ref = (body.get("ref") or "").strip()
     if not ref:
@@ -482,13 +500,19 @@ async def create_produit(request: Request):
     now = _now_paris_iso()
     with get_db() as conn:
         ref, designation, unite, notes, client_id, fiche_json = _produit_from_body(body, conn)
-        cur = conn.execute(
-            """INSERT INTO ao_produits
-               (ref, designation, unite, notes, client_id, fiche_json, created_at)
-               VALUES (?,?,?,?,?,?,?)""",
-            (ref, designation, unite, notes, client_id, fiche_json, now),
-        )
-        conn.commit()
+        if _produit_ref_taken(conn, ref):
+            raise HTTPException(status_code=400, detail="Référence déjà utilisée.")
+        try:
+            cur = conn.execute(
+                """INSERT INTO ao_produits
+                   (ref, designation, unite, notes, client_id, fiche_json, created_at)
+                   VALUES (?,?,?,?,?,?,?)""",
+                (ref, designation, unite, notes, client_id, fiche_json, now),
+            )
+            conn.commit()
+        except sqlite3.IntegrityError:
+            conn.rollback()
+            raise HTTPException(status_code=400, detail="Référence déjà utilisée.") from None
         row = conn.execute("SELECT * FROM ao_produits WHERE id=?", (cur.lastrowid,)).fetchone()
     return _serialize_produit_row(_row_dict(row), conn)
 
@@ -499,15 +523,21 @@ async def update_produit(request: Request, produit_id: int):
     body = await request.json()
     with get_db() as conn:
         ref, designation, unite, notes, client_id, fiche_json = _produit_from_body(body, conn)
-        cur = conn.execute(
-            """UPDATE ao_produits
-               SET ref=?, designation=?, unite=?, notes=?, client_id=?, fiche_json=?
-               WHERE id=?""",
-            (ref, designation, unite, notes, client_id, fiche_json, produit_id),
-        )
-        if cur.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Produit introuvable")
-        conn.commit()
+        if _produit_ref_taken(conn, ref, exclude_id=produit_id):
+            raise HTTPException(status_code=400, detail="Référence déjà utilisée.")
+        try:
+            cur = conn.execute(
+                """UPDATE ao_produits
+                   SET ref=?, designation=?, unite=?, notes=?, client_id=?, fiche_json=?
+                   WHERE id=?""",
+                (ref, designation, unite, notes, client_id, fiche_json, produit_id),
+            )
+            if cur.rowcount == 0:
+                raise HTTPException(status_code=404, detail="Produit introuvable")
+            conn.commit()
+        except sqlite3.IntegrityError:
+            conn.rollback()
+            raise HTTPException(status_code=400, detail="Référence déjà utilisée.") from None
         row = conn.execute("SELECT * FROM ao_produits WHERE id=?", (produit_id,)).fetchone()
     return _serialize_produit_row(_row_dict(row), conn)
 

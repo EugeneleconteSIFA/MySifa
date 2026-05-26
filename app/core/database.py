@@ -2361,6 +2361,22 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 75, "ao_carnet_fournisseurs_societe_adresse")
 
+    # v77 — MyAO : référence produit unique (insensible à la casse)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=77 LIMIT 1").fetchone():
+        dup = conn.execute(
+            """
+            SELECT LOWER(ref) FROM ao_produits
+            GROUP BY LOWER(ref) HAVING COUNT(*) > 1 LIMIT 1
+            """
+        ).fetchone()
+        if not dup:
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_ao_produits_ref "
+                "ON ao_produits(ref COLLATE NOCASE)"
+            )
+        conn.commit()
+        _record_schema_migration(conn, 77, "ao_produits_ref_unique")
+
     # v76 — MyExpé : type de palette (réf. matières premières MyStock)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=76 LIMIT 1").fetchone():
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(expe_departs)").fetchall()}

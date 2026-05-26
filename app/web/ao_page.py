@@ -150,12 +150,14 @@ label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bot
 .bubble.interne{align-self:flex-end;margin-left:auto;background:var(--accent-bg);border:1px solid var(--accent)}
 .bubble.fournisseur{align-self:flex-start;background:var(--card);border:1px solid var(--border)}
 .bubble .meta{font-size:11px;color:var(--muted);margin-bottom:4px}
-#toast{position:fixed;bottom:20px;right:20px;padding:12px 18px;border-radius:10px;font-size:13px;font-weight:600;z-index:999;display:none;max-width:360px}
-#toast.show{display:block}
+#toast{position:fixed;bottom:max(20px,env(safe-area-inset-bottom,0px));right:max(20px,env(safe-area-inset-right,0px));padding:12px 18px;border-radius:10px;font-size:13px;font-weight:600;z-index:12050;display:none;max-width:min(420px,calc(100vw - 32px));box-shadow:0 8px 32px rgba(0,0,0,.45);pointer-events:none}
+#toast.show{display:block;pointer-events:auto}
 #toast.success{background:var(--success);color:#0a0e17}
 #toast.danger{background:var(--danger);color:#fff}
 #toast.info{background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent)}
 #toast.warn{background:rgba(251,191,36,.2);color:var(--warn);border:1px solid var(--warn)}
+.prod-list-table .prod-ref-cell{font-family:ui-monospace,monospace;font-size:14px;font-weight:700;color:var(--text)}
+.prod-list-table .prod-actions-cell{text-align:right;white-space:nowrap}
 """ + AO_PRODUIT_FORM_CSS + r"""
 </style>
 </head>
@@ -420,8 +422,7 @@ function filteredProduits() {
   const q = (S.produitsSearch || '').trim().toLowerCase();
   if (!q) return S.produits || [];
   return (S.produits || []).filter(p => {
-    const hay = ((p.ref || '') + ' ' + (p.designation || '') + ' ' + (p.client_nom || '')).toLowerCase();
-    return hay.includes(q);
+    return (p.ref || '').toLowerCase().includes(q);
   });
 }
 
@@ -441,14 +442,12 @@ function renderProduitsRows() {
   } else {
     let rows = '';
     list.forEach(p => {
-      const tp = (p.fiche && p.fiche.type_produit) ? p.fiche.type_produit : '';
-      const cl = p.client_nom || '—';
-      rows += '<tr><td>'+escHtml(p.ref)+'</td><td>'+escHtml(p.designation)+'</td><td>'+escHtml(tp||'—')+'</td><td>'+escHtml(cl)+'</td><td>'+
+      rows += '<tr><td class="prod-ref-cell">'+escHtml(p.ref)+'</td><td class="prod-actions-cell">'+
         '<button class="btn btn-ghost btn-sm btn-edit-produit" data-id="'+p.id+'">Modifier</button> '+
         '<button class="btn btn-ghost btn-sm btn-export-produit" data-id="'+p.id+'">PDF</button> '+
         '<button class="btn btn-ghost btn-sm btn-del-produit" data-id="'+p.id+'">Supprimer</button></td></tr>';
     });
-    el.innerHTML = '<table class="data-table"><thead><tr><th>Référence</th><th>Désignation</th><th>Type</th><th>Client</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>';
+    el.innerHTML = '<table class="data-table prod-list-table"><thead><tr><th>Référence</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>';
     el.querySelectorAll('.btn-edit-produit').forEach(b => {
       b.addEventListener('click', () => {
         const p = (S.produits||[]).find(x => String(x.id) === String(b.dataset.id));
@@ -483,7 +482,7 @@ function renderProduits() {
   return '<div class="page-hdr"><h1>Catalogue produits</h1>'+
     '<button class="btn btn-accent" type="button" id="btn-add-produit">'+icon('plus',14)+' Ajouter un produit</button></div>'+
     '<div class="card">'+
-    '<input type="search" id="produits-search" placeholder="Rechercher (référence, désignation…)" value="'+escAttr(S.produitsSearch||'')+'" style="width:100%;margin-bottom:14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 16px;color:var(--text);font-size:14px">'+
+    '<input type="search" id="produits-search" placeholder="Rechercher une référence…" value="'+escAttr(S.produitsSearch||'')+'" style="width:100%;margin-bottom:14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 16px;color:var(--text);font-size:14px">'+
     '<div id="produits-list"></div></div>';
 }
 

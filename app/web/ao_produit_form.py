@@ -376,6 +376,12 @@ async function saveProduitForm() {
     return;
   }
   if (!body.ref) { showToast('Réf. produit obligatoire.', 'danger'); return; }
+  const refNorm = body.ref.trim().toLowerCase();
+  const dup = (S.produits || []).find(p =>
+    String(p.ref || '').trim().toLowerCase() === refNorm &&
+    String(p.id) !== String(S.produitForm.id || '')
+  );
+  if (dup) { showToast('Référence déjà utilisée.', 'danger'); return; }
   const saveBtn = document.getElementById('btn-pf-save');
   const saveBtn2 = document.getElementById('btn-pf-save-bottom');
   [saveBtn, saveBtn2].forEach(b => { if (b) b.disabled = true; });
