@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import unicodedata
@@ -25,6 +26,20 @@ from typing import Any, Optional
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+# .env + base VPS (app/data/production.db) avant import config
+_env_file = ROOT / ".env"
+if _env_file.is_file():
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv(_env_file)
+    except ImportError:
+        pass
+_app_db = ROOT / "app" / "data" / "production.db"
+_cfg_db = os.environ.get("DB_PATH", "").strip()
+if _app_db.is_file() and (not _cfg_db or not Path(_cfg_db).is_file()):
+    os.environ["DB_PATH"] = str(_app_db.resolve())
 
 from config import DB_PATH  # noqa: E402
 
@@ -105,6 +120,17 @@ def resolve_category(m: dict) -> str:
     if cat.startswith("GLS") or cat == "GL":
         return "GLASSINE"
     return "AUTRE"
+
+
+def resolve_product_code(p: dict) -> str:
+    """
+    Code unique en base : import_id si présent (30 variantes Excel),
+    sinon code commercial (souvent dupliqué ex. 1012 × 18).
+    """
+    imp = (p.get("import_id") or "").strip()
+    if imp:
+        return imp[:64]
+    return (p.get("code") or "").strip()[:64]
 
 
 def resolve_appellation_code(m: dict, name: str) -> str:
@@ -518,7 +544,7 @@ def run_seed(json_path: Path, dry_run: bool) -> Recap:
                         index.add(int(row["id"]), row["name"], row["appellation_code"])
 
             for p in data.get("products") or []:
-                code = (p.get("code") or "").strip()
+                code = resolve_product_code(p)
                 if not code:
                     recap.warnings.append("Produit sans code ignoré")
                     continue
@@ -608,9 +634,13 @@ def main() -> None:
     if args.json:
         json_path = args.json
     else:
-        fixed = ROOT / "data" / "uploads" / "excel-data-export-fixed.json"
-        fallback = ROOT / "data" / "uploads" / "excel-data-export.json"
-        json_path = fixed if fixed.is_file() else fallback
+        candidates = [
+            ROOT / "data" / "uploads" / "excel-data-export-fixed.json",
+            ROOT / "data" / "uploads" / "excel-data-export.json",
+            ROOT / "app" / "data" / "uploads" / "excel-data-export-fixed.json",
+            ROOT / "app" / "data" / "uploads" / "excel-data-export.json",
+        ]
+        json_path = next((p for p in candidates if p.is_file()), candidates[1])
 
     if not json_path.is_file():
         print(f"Fichier introuvable: {json_path}", file=sys.stderr)
@@ -618,6 +648,17 @@ def main() -> None:
 
     recap = run_seed(json_path, dry_run=args.dry_run)
     print_recap(recap, json_path)
+    if not recap.dry_run:
+        from database import get_db
+
+        with get_db() as conn:
+            n_mat = conn.execute(
+                "SELECT COUNT(*) FROM mc_material WHERE is_active=1"
+            ).fetchone()[0]
+            n_prod = conn.execute(
+                "SELECT COUNT(*) FROM mc_product WHERE is_active=1"
+            ).fetchone()[0]
+        print(f"\nVérification en base : {n_mat} matières actives, {n_prod} produits actifs.")
 
 
 if __name__ == "__main__":

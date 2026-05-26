@@ -764,7 +764,15 @@ def list_products(
     sql += " ORDER BY code COLLATE NOCASE"
     with get_db() as conn:
         rows = conn.execute(sql, args).fetchall()
-        items = [_product_out(conn, r, with_cost=with_cost) for r in rows]
+        items: list[McProductOut] = []
+        for r in rows:
+            try:
+                items.append(_product_out(conn, r, with_cost=with_cost))
+            except (HTTPException, PricingError):
+                if with_cost:
+                    items.append(_product_out(conn, r, with_cost=False))
+                else:
+                    raise
     return {"products": items}
 
 

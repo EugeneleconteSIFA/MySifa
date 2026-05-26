@@ -1409,6 +1409,7 @@
         await loadMaterialForm(S.route.id);
         renderMaterialForm(false);
       } else if (r === "products") {
+        await loadProductsList();
         await renderProductsList();
       } else if (r === "product-new") {
         if (!S.canWrite) {
