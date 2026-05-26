@@ -162,8 +162,12 @@ else
   echo "  dépôt git : $LOCAL_SOURCE"
 fi
 
-if [[ -n "$WORKDIR" && "$WORKDIR" != "$LOCAL_SOURCE" ]]; then
-  _sync_workdir_to_source "$WORKDIR" "$LOCAL_SOURCE"
+if [[ -z "${MYSIFA_SKIP_SYNC:-}" ]] && ! _has_flag "--skip-sync" "$@"; then
+  if [[ -n "$WORKDIR" && "$WORKDIR" != "$LOCAL_SOURCE" ]]; then
+    _sync_workdir_to_source "$WORKDIR" "$LOCAL_SOURCE"
+  fi
+else
+  echo "  (sync ignorée — MYSIFA_SKIP_SYNC ou --skip-sync)"
 fi
 
 cd "$LOCAL_SOURCE"
@@ -188,7 +192,13 @@ git add .
 git commit -m "deploy $(date '+%Y-%m-%d %H:%M')" || true
 git push origin main
 
-# 2. Sur le VPS : pull + redémarrage
+# 2. Sur le VPS : pull + redémarrage (sauf --push-only)
+if _has_flag "--push-only" "$@"; then
+  echo ""
+  echo "Push GitHub terminé (--push-only : VPS ignoré)."
+  exit 0
+fi
+
 echo ""
 echo "Mise à jour VPS..."
 if ! ssh -o BatchMode=no -o ConnectTimeout=15 "$VPS_USER@$VPS_IP" "
