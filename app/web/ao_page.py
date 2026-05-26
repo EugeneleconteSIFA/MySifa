@@ -103,7 +103,7 @@ body.sb-open .sidebar-overlay{display:block}
 .page-hdr h1{font-size:20px;font-weight:800}
 .btn{padding:10px 18px;border-radius:10px;border:none;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;transition:filter .15s}
 .btn:hover{filter:brightness(1.05)}
-.btn-accent{background:var(--accent);color:#0a0e17}
+.btn-accent{background:var(--accent);color:var(--bg)}
 .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text2)}
 .btn-danger{background:var(--danger);color:#fff}
 .btn-sm{padding:6px 12px;font-size:12px}
@@ -152,7 +152,7 @@ label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bot
 .bubble .meta{font-size:11px;color:var(--muted);margin-bottom:4px}
 #toast{position:fixed;bottom:max(20px,env(safe-area-inset-bottom,0px));right:max(20px,env(safe-area-inset-right,0px));padding:12px 18px;border-radius:10px;font-size:13px;font-weight:600;z-index:12050;display:none;max-width:min(420px,calc(100vw - 32px));box-shadow:0 8px 32px rgba(0,0,0,.45);pointer-events:none}
 #toast.show{display:block;pointer-events:auto}
-#toast.success{background:var(--success);color:#0a0e17}
+#toast.success{background:var(--success);color:var(--bg)}
 #toast.danger{background:var(--danger);color:#fff}
 #toast.info{background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent)}
 #toast.warn{background:rgba(251,191,36,.2);color:var(--warn);border:1px solid var(--warn)}

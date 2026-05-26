@@ -123,7 +123,7 @@ label.lbl{{
 .btn{{
   display:inline-flex;align-items:center;justify-content:center;gap:8px;
   padding:10px 18px;border-radius:10px;font-weight:700;font-size:14px;border:none;
-  cursor:pointer;font-family:inherit;background:var(--accent);color:#0a0e17;
+  cursor:pointer;font-family:inherit;background:var(--accent);color:var(--bg);
   transition:filter .15s;
 }}
 .btn:hover{{filter:brightness(1.05)}}
@@ -167,7 +167,7 @@ label.lbl{{
   display:none;box-shadow:0 8px 24px rgba(0,0,0,.25);
 }}
 #toast.show{{display:block}}
-#toast.success{{background:var(--success);color:#0a0e17}}
+#toast.success{{background:var(--success);color:var(--bg)}}
 #toast.danger{{background:var(--danger);color:#fff}}
 #toast.info{{background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent)}}
 #toast.warn{{background:rgba(251,191,36,.2);color:var(--warn);border:1px solid var(--warn)}}
