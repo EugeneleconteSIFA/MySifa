@@ -7,11 +7,16 @@
 #   .\deploy.ps1              # sync rapide (fichiers modifiés seulement)
 #   .\deploy.ps1 -Full        # miroir complet (plus lent, gère les suppressions)
 #   .\deploy.ps1 -SkipSync    # push + VPS sans recopier (miroir déjà à jour)
+#   .\deploy.ps1 -GitHubOnly  # push GitHub uniquement (pas de VPS)
+#   .\git-push.ps1            # raccourci : sync + push GitHub (pas de VPS)
 #   .\deploy.ps1 --widget
 
 param(
     [switch]$Full,
-    [switch]$SkipSync
+    [switch]$SkipSync,
+    [switch]$GitHubOnly,
+    [Alias("m")]
+    [string]$CommitMessage
 )
 
 $ErrorActionPreference = "Stop"
@@ -19,7 +24,7 @@ $ErrorActionPreference = "Stop"
 # Args transmis à deploy.sh (--widget, --uploads, etc.)
 $deployShArgs = @()
 foreach ($a in $args) {
-    if ($a -ne "-Full" -and $a -ne "-SkipSync") { $deployShArgs += $a }
+    if ($a -notin @("-Full", "-SkipSync", "-GitHubOnly")) { $deployShArgs += $a }
 }
 
 function Find-GitBash {
@@ -72,7 +77,6 @@ function Sync-TruthToMirror {
     Write-Host "  miroir git       : $MirrorDir"
     Write-Host ""
 
-    # Exclusions = alignees sur deploy.sh (+ fichiers Google Drive / builds lourds)
     $xd = @(
         ".git", "venv", ".venv", "__pycache__", "node_modules",
         "myprod-widget\node_modules",
@@ -110,7 +114,6 @@ function Sync-TruthToMirror {
     $ErrorActionPreference = $prevEap
 
     Write-Host ""
-    # Codes robocopy : bit 8 = echecs partiels (.gdoc, verrous) ; bit 16+ = erreur grave
     if (($code -band 16) -ne 0 -or $code -ge 16) {
         throw "Robocopy erreur grave (code $code)."
     }
@@ -133,6 +136,129 @@ function To-BashPath([string]$winPath) {
     return $p
 }
 
+function Invoke-GitInMirror {
+    param(
+        [string]$MirrorDir,
+        [Parameter(ValueFromRemainingArguments = $true)]
+        [string[]]$GitArgs
+    )
+    $prev = Get-Location
+    try {
+        Set-Location $MirrorDir
+        & git @GitArgs
+        if ($LASTEXITCODE -ne 0) {
+            throw "git $($GitArgs -join ' ') a echoue (code $LASTEXITCODE)."
+        }
+    } finally {
+        Set-Location $prev
+    }
+}
+
+function Push-MySifaGitHub {
+    <#
+    .SYNOPSIS
+        Sync Google Drive -> miroir git puis push origin main (Git natif Windows).
+    .PARAMETER SkipSync
+        Ne pas recopier les fichiers (miroir deja a jour).
+    .PARAMETER CommitMessage
+        Message de commit (defaut : deploy YYYY-MM-DD HH:mm).
+    #>
+    param(
+        [switch]$SkipSync,
+        [string]$CommitMessage
+    )
+
+    $scriptDir = Split-Path -Parent $MyInvocation.ScriptName
+    if (-not $scriptDir) { $scriptDir = (Get-Location).Path }
+
+    $truthDir = if ($env:MYSIFA_TRUTH) {
+        (Resolve-Path $env:MYSIFA_TRUTH).Path
+    } else {
+        $scriptDir
+    }
+
+    $mirrorDir = if (Test-Path (Join-Path $truthDir ".git")) {
+        $truthDir
+    } else {
+        Resolve-GitMirror
+    }
+
+    Write-Host "Push GitHub MySifa"
+    Write-Host "  source de verite : $truthDir"
+    if ($mirrorDir -ne $truthDir) {
+        Write-Host "  miroir git       : $mirrorDir"
+    }
+
+    if (-not $SkipSync -and $mirrorDir -ne $truthDir) {
+        Sync-TruthToMirror -TruthDir $truthDir -MirrorDir $mirrorDir -FullMirror:$false
+    } elseif ($SkipSync) {
+        Write-Host "  (sync ignoree)"
+    }
+
+    $deploySh = Join-Path $scriptDir "deploy.sh"
+    if (Test-Path $deploySh) {
+        Copy-Item -Path $deploySh -Destination (Join-Path $mirrorDir "deploy.sh") -Force
+    }
+
+    $msg = if ($CommitMessage) {
+        $CommitMessage
+    } else {
+        "deploy $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
+    }
+
+    Write-Host ""
+    Write-Host "Commit + push origin main..."
+    Invoke-GitInMirror $mirrorDir add .
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    & git -C $mirrorDir commit -m $msg 2>&1 | Out-Host
+    $commitCode = $LASTEXITCODE
+    $ErrorActionPreference = $prevEap
+    if ($commitCode -ne 0) {
+        $pending = & git -C $mirrorDir status --porcelain
+        if ($pending) {
+            throw "git commit a echoue alors que des changements sont presents."
+        }
+        Write-Host "Rien a committer - push des commits deja presents."
+    }
+    Invoke-GitInMirror $mirrorDir push origin main
+    Write-Host ""
+    Write-Host "Push GitHub termine."
+}
+
+function Invoke-DeploySh {
+    param(
+        [string]$BashExe,
+        [string]$GitPushDir,
+        [string]$TruthDir,
+        [bool]$SkipSync,
+        [bool]$GitHubOnly,
+        [string[]]$ExtraArgs
+    )
+
+    $bashPush = To-BashPath $GitPushDir
+    $bashTruth = To-BashPath $TruthDir
+    $skipVal = if ($SkipSync) { "1" } else { "" }
+    $argsStr = ($ExtraArgs + $(if ($SkipSync) { "--skip-sync" }) + $(if ($GitHubOnly) { "--push-only" })) -join " "
+
+    $inner = @"
+set -euo pipefail
+cd '$bashPush'
+export MYSIFA_SOURCE='$bashPush'
+export MYSIFA_WORKDIR='$bashTruth'
+export MYSIFA_SKIP_SYNC='$skipVal'
+./deploy.sh $argsStr
+"@
+
+    Write-Host ""
+    Write-Host "Lancement deploy.sh (git push + VPS)..."
+    & $BashExe -lc $inner
+    if ($LASTEXITCODE -ne 0) {
+        throw "deploy.sh a echoue (code $LASTEXITCODE)."
+    }
+}
+
+# --- Point d'entree ---
 $bash = Find-GitBash
 if (-not $bash) {
     throw "Git Bash introuvable - installez Git for Windows."
@@ -169,13 +295,10 @@ if (-not $SkipSync -and $gitPushDir -ne $truthDir) {
 
 Copy-Item -Path $deploySh -Destination (Join-Path $gitPushDir "deploy.sh") -Force
 
-$bashPush = To-BashPath $gitPushDir
-$bashTruth = To-BashPath $truthDir
-$extra = ($deployShArgs -join ' ').Trim()
+if ($GitHubOnly) {
+    Push-MySifaGitHub -SkipSync:$SkipSync -CommitMessage $CommitMessage
+    exit 0
+}
 
-Write-Host ""
-Write-Host "Lancement deploy.sh (git push + VPS)..."
-
-$cmd = "cd '$bashPush' && MYSIFA_SOURCE='$bashPush' MYSIFA_WORKDIR='$bashTruth' ./deploy.sh $extra"
-& $bash $cmd
-exit $LASTEXITCODE
+Invoke-DeploySh -BashExe $bash -GitPushDir $gitPushDir -TruthDir $truthDir `
+    -SkipSync:$SkipSync.IsPresent -GitHubOnly:$false -ExtraArgs $deployShArgs
