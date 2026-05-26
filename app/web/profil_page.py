@@ -267,6 +267,25 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
   cursor:pointer;font-family:inherit;padding:4px 6px;border-radius:6px;flex-shrink:0;
 }
 .cal-color-reset:hover{color:var(--accent);background:var(--accent-bg)}
+.bg-anim-row{
+  display:flex;align-items:center;justify-content:space-between;gap:16px;
+  background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px 16px;
+}
+.bg-anim-label{font-size:13px;font-weight:700;color:var(--text)}
+.bg-anim-sub{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.45}
+.toggle-switch{
+  position:relative;flex-shrink:0;width:48px;height:26px;border-radius:999px;
+  border:1px solid var(--border);background:var(--card);cursor:pointer;padding:0;
+  transition:background .2s,border-color .2s,box-shadow .2s;font-family:inherit;
+}
+.toggle-switch:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.toggle-switch.on{background:var(--accent);border-color:var(--accent)}
+.toggle-knob{
+  position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;
+  background:var(--text2);transition:transform .2s,background .2s;
+  box-shadow:0 1px 4px rgba(0,0,0,.25);
+}
+.toggle-switch.on .toggle-knob{transform:translateX(22px);background:var(--bg)}
 </style>
 </head>
 <body class="has-topbar">
@@ -374,7 +393,7 @@ const ROLE_LABELS={
 let ME=null;
 let CURRENT_TAB='info';
 
-function getPrefs(){ return window.MySifaTheme ? MySifaTheme.loadPrefs() : {palette:'mysifa',style:'defaut',mode:'dark'}; }
+function getPrefs(){ return window.MySifaTheme ? MySifaTheme.loadPrefs() : {palette:'mysifa',style:'defaut',mode:'dark',bgAnim:true}; }
 function setPrefs(partial){ return window.MySifaTheme ? MySifaTheme.setPrefs(partial) : null; }
 
 // ── SVG helpers ───────────────────────────────────────────────────
@@ -752,6 +771,20 @@ function modeCard(id,icoSvg,label,sub){
   </div>`;
 }
 
+function bgAnimToggleHtml(){
+  const on=getPrefs().bgAnim!==false;
+  return `<div class="bg-anim-row">
+    <div>
+      <div class="bg-anim-label">Fond animé</div>
+      <div class="bg-anim-sub">Points et brume en arrière-plan</div>
+    </div>
+    <button type="button" class="toggle-switch${on?' on':''}" role="switch" aria-checked="${on?'true':'false'}"
+      aria-label="Fond animé" onclick="toggleBgAnim()">
+      <span class="toggle-knob"></span>
+    </button>
+  </div>`;
+}
+
 function calColorRow(c){
   const col=(window.MySifaCalendar?MySifaCalendar.loadColorsMap():{})[c.id]||c.color;
   return `<div class="cal-color-row" id="cal-row-${esc(c.id)}">
@@ -837,6 +870,10 @@ function renderPrefs(){
           ${modeCard('light', ICO_SUN,  'Clair',  'Fond blanc')}
         </div>
       </div>
+      <h2 style="margin-top:20px">Fond animé</h2>
+      <div class="pref-section">
+        ${bgAnimToggleHtml()}
+      </div>
       <button class="btn-prefs-save" onclick="savePrefs()">Appliquer</button>
       <p class="pref-hint">Les préférences s'appliquent sur toutes les pages MySifa.</p>
     </div>`;
@@ -845,6 +882,11 @@ function renderPrefs(){
 function selectPalette(id){setPrefs({palette:id});renderPrefs();syncThemeBtn();}
 function selectStyle(id){setPrefs({style:id});renderPrefs();syncThemeBtn();}
 function selectMode(id){setPrefs({mode:id});renderPrefs();syncThemeBtn();}
+function toggleBgAnim(){
+  const on=getPrefs().bgAnim!==false;
+  setPrefs({bgAnim:!on});
+  renderPrefs();
+}
 
 async function saveThemePrefs(){
   try{

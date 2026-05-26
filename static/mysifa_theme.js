@@ -8,11 +8,12 @@
   var LS_PALETTE = 'mysifa_palette';
   var LS_STYLE = 'mysifa_style';
   var LS_MODE = 'theme';
+  var LS_BG_ANIM = 'mysifa_bg_anim';
 
   var PALETTES = ['mysifa', 'ambre', 'pivoine', 'foret', 'cendre', 'braise'];
   var STYLES = ['defaut', 'mini', 'round'];
   // Conserver les anciennes classes (forge/cocon) pour compatibilité.
-  var THEME_CLASSES = ['light', 'palette-ambre', 'palette-pivoine', 'palette-forge', 'palette-cocon', 'palette-foret', 'palette-cendre', 'palette-braise', 'style-mini', 'style-round'];
+  var THEME_CLASSES = ['light', 'palette-ambre', 'palette-pivoine', 'palette-forge', 'palette-cocon', 'palette-foret', 'palette-cendre', 'palette-braise', 'style-mini', 'style-round', 'bg-anim-off'];
 
   function normalizePalette(p) {
     // Alias pour rétrocompatibilité (anciennes prefs)
@@ -25,15 +26,26 @@
     return STYLES.indexOf(s) >= 0 ? s : 'defaut';
   }
 
+  function loadBgAnim() {
+    try {
+      var v = localStorage.getItem(LS_BG_ANIM);
+      if (v === null) return true;
+      return v !== '0';
+    } catch (e) {
+      return true;
+    }
+  }
+
   function loadPrefs() {
     try {
       return {
         palette: normalizePalette(localStorage.getItem(LS_PALETTE) || 'mysifa'),
         style: normalizeStyle(localStorage.getItem(LS_STYLE) || 'defaut'),
         mode: localStorage.getItem(LS_MODE) === 'light' ? 'light' : 'dark',
+        bgAnim: loadBgAnim(),
       };
     } catch (e) {
-      return { palette: 'mysifa', style: 'defaut', mode: 'dark' };
+      return { palette: 'mysifa', style: 'defaut', mode: 'dark', bgAnim: true };
     }
   }
 
@@ -42,6 +54,7 @@
       localStorage.setItem(LS_PALETTE, normalizePalette(prefs.palette));
       localStorage.setItem(LS_STYLE, normalizeStyle(prefs.style));
       localStorage.setItem(LS_MODE, prefs.mode === 'light' ? 'light' : 'dark');
+      localStorage.setItem(LS_BG_ANIM, prefs.bgAnim === false ? '0' : '1');
     } catch (e) { /* ignore */ }
   }
 
@@ -58,6 +71,7 @@
       palette: normalizePalette(prefs.palette),
       style: normalizeStyle(prefs.style),
       mode: prefs.mode === 'light' ? 'light' : 'dark',
+      bgAnim: prefs.bgAnim !== false,
     };
 
     var targets = [document.documentElement];
@@ -68,6 +82,7 @@
       if (prefs.mode === 'light') el.classList.add('light');
       if (prefs.palette !== 'mysifa') el.classList.add('palette-' + prefs.palette);
       if (prefs.style !== 'defaut') el.classList.add('style-' + prefs.style);
+      if (!prefs.bgAnim) el.classList.add('bg-anim-off');
     });
 
     return prefs;
@@ -90,6 +105,7 @@
     if (partial && partial.palette != null) prefs.palette = normalizePalette(partial.palette);
     if (partial && partial.style != null) prefs.style = normalizeStyle(partial.style);
     if (partial && partial.mode != null) prefs.mode = partial.mode === 'light' ? 'light' : 'dark';
+    if (partial && partial.bgAnim != null) prefs.bgAnim = !!partial.bgAnim;
     savePrefs(prefs);
     applyPrefs(prefs);
     if (opts && opts.syncServer) syncToServer(prefs);
@@ -105,6 +121,8 @@
       if (tp.palette != null) out.palette = normalizePalette(tp.palette);
       if (tp.style != null) out.style = normalizeStyle(tp.style);
       if (tp.mode === 'light' || tp.mode === 'dark') out.mode = tp.mode;
+      if (tp.bg_anim === false || tp.bg_anim === 0 || tp.bgAnim === false) out.bgAnim = false;
+      else if (tp.bg_anim === true || tp.bg_anim === 1 || tp.bgAnim === true) out.bgAnim = true;
       return out;
     } catch (e) {
       return null;
@@ -119,6 +137,7 @@
     if (sp.palette != null) prefs.palette = sp.palette;
     if (sp.style != null) prefs.style = sp.style;
     if (sp.mode != null) prefs.mode = sp.mode;
+    if (sp.bgAnim != null) prefs.bgAnim = sp.bgAnim;
     savePrefs(prefs);
     applyPrefs(prefs);
     if (global.MySifaCalendar && typeof global.MySifaCalendar.mergeFromUser === 'function') {
@@ -133,9 +152,12 @@
       palette: prefs.palette,
       style: prefs.style,
       mode: prefs.mode,
+      bg_anim: prefs.bgAnim !== false,
     };
     if (global.MySifaCalendar && typeof global.MySifaCalendar.buildThemePrefsPayload === 'function') {
-      return global.MySifaCalendar.buildThemePrefsPayload(tp);
+      var merged = global.MySifaCalendar.buildThemePrefsPayload(tp);
+      merged.bg_anim = tp.bg_anim;
+      return merged;
     }
     return tp;
   }

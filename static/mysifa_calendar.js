@@ -125,6 +125,8 @@
     if (themePrefs.palette != null) out.palette = themePrefs.palette;
     if (themePrefs.style != null) out.style = themePrefs.style;
     if (themePrefs.mode != null) out.mode = themePrefs.mode;
+    if (themePrefs.bg_anim != null) out.bg_anim = !!themePrefs.bg_anim;
+    else if (themePrefs.bgAnim != null) out.bg_anim = !!themePrefs.bgAnim;
     out.calendar_colors = getColorsForServer();
     return out;
   }
