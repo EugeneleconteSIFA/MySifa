@@ -1,15 +1,17 @@
 #!/bin/bash
 # Déploiement MySifa : push GitHub → pull VPS (+ options --db, --uploads, --widget)
 #
-# Dossiers (surcharge possible via variables d'environnement) :
-#   MYSIFA_SOURCE  — dépôt git utilisé pour commit/push (défaut : auto-détection)
-#   MYSIFA_WORKDIR — copie de travail à synchroniser vers SOURCE avant deploy
-#                    (défaut : ce dossier Google Drive si différent du dépôt git)
+# SOURCE DE VÉRITÉ : Google Drive (Forge/MySifa) — c'est là que vous codez.
+# MYSIFA_SOURCE (dépôt git) : utilisé uniquement pour commit/push (miroir si besoin).
+#
+# Variables d'environnement :
+#   MYSIFA_WORKDIR — source de vérité (défaut : Google Drive Forge/MySifa)
+#   MYSIFA_SOURCE  — dépôt git pour push (défaut : auto ; sinon ~/Documents/GitHub/MySifa)
 #
 # Exemples :
 #   ./deploy.sh
-#   MYSIFA_WORKDIR="$PWD" ./deploy.sh          # sync Google Drive → git puis deploy
-#   MYSIFA_SOURCE=~/Documents/GitHub/MySifa ./deploy.sh
+#   Windows : .\deploy.ps1                     # sync Google Drive → miroir git puis deploy
+#   MYSIFA_WORKDIR="/g/Mon Drive/.../MySifa" ./deploy.sh
 #   ./deploy.sh --db                           # transfert DB local → VPS (attention)
 #   ./deploy.sh --uploads                      # sync data/uploads
 #   ./deploy.sh --widget                       # upload DMG/EXE widget (scp)
@@ -33,10 +35,18 @@ REMOTE_DB="$VPS_PATH/app/data/production.db"
 REMOTE_UPLOADS="$VPS_PATH/app/data/uploads"
 REMOTE_UPLOADS_TRACA="$VPS_PATH/uploads"
 
-# Dépôt git par défaut (historique)
-MYSIFA_SOURCE_DEFAULT="${HOME}/Documents/GitHub/MySifa"
-# Copie Google Drive / Forge (nouveau dossier de travail)
+# Source de vérité par défaut : Google Drive / Forge
 MYSIFA_WORKDIR_DEFAULT="${HOME}/Library/CloudStorage/GoogleDrive-eugeneleconte@outlook.com/My Drive/Forge/Forge Saas/MySifa"
+if [[ -d "/g/Mon Drive/Forge/Forge Saas/MySifa" ]]; then
+  MYSIFA_WORKDIR_DEFAULT="/g/Mon Drive/Forge/Forge Saas/MySifa"
+fi
+# Miroir git local (push GitHub uniquement — pas la source de vérité)
+MYSIFA_GIT_MIRROR_DEFAULT="${HOME}/Documents/GitHub/MySifa"
+if [[ -n "${USERPROFILE:-}" ]] && [[ -d "${USERPROFILE}/Documents/GitHub/MySifa/.git" ]]; then
+  MYSIFA_GIT_MIRROR_DEFAULT="${USERPROFILE}/Documents/GitHub/MySifa"
+fi
+# Rétrocompat : MYSIFA_SOURCE_DEFAULT = miroir git
+MYSIFA_SOURCE_DEFAULT="${MYSIFA_GIT_MIRROR_DEFAULT}"
 
 _has_flag() {
   local flag="$1"
@@ -56,29 +66,33 @@ _resolve_git_root() {
   return 1
 }
 
-# Déterminer LOCAL_SOURCE (dépôt git)
-if [[ -n "${MYSIFA_SOURCE:-}" ]]; then
-  LOCAL_SOURCE="$(cd "$MYSIFA_SOURCE" && pwd)"
-elif _resolve_git_root "$SCRIPT_DIR"; then
-  LOCAL_SOURCE="$(_resolve_git_root "$SCRIPT_DIR")"
-elif [[ -d "$MYSIFA_SOURCE_DEFAULT/.git" ]]; then
-  LOCAL_SOURCE="$(cd "$MYSIFA_SOURCE_DEFAULT" && pwd)"
-else
-  echo ""
-  echo "Erreur : aucun dépôt git MySifa trouvé."
-  echo "  - Exécutez deploy.sh depuis le clone git, ou"
-  echo "  - export MYSIFA_SOURCE=~/Documents/GitHub/MySifa"
-  echo "  - ou initialisez git dans ce dossier."
-  echo ""
-  exit 1
-fi
-
-# Dossier de travail (optionnel) : sync vers LOCAL_SOURCE avant deploy
+# Source de vérité (Google Drive)
 WORKDIR=""
 if [[ -n "${MYSIFA_WORKDIR:-}" ]]; then
   WORKDIR="$(cd "$MYSIFA_WORKDIR" && pwd)"
 elif [[ -d "$MYSIFA_WORKDIR_DEFAULT" ]]; then
   WORKDIR="$(cd "$MYSIFA_WORKDIR_DEFAULT" && pwd)"
+elif [[ -d "$SCRIPT_DIR" ]]; then
+  WORKDIR="$(cd "$SCRIPT_DIR" && pwd)"
+fi
+
+# Dépôt git pour push : source de vérité si .git présent, sinon miroir
+if [[ -n "${MYSIFA_SOURCE:-}" ]]; then
+  LOCAL_SOURCE="$(cd "$MYSIFA_SOURCE" && pwd)"
+elif [[ -n "$WORKDIR" ]] && _resolve_git_root "$WORKDIR"; then
+  LOCAL_SOURCE="$(_resolve_git_root "$WORKDIR")"
+elif _resolve_git_root "$SCRIPT_DIR"; then
+  LOCAL_SOURCE="$(_resolve_git_root "$SCRIPT_DIR")"
+elif [[ -d "${MYSIFA_GIT_MIRROR_DEFAULT}/.git" ]]; then
+  LOCAL_SOURCE="$(cd "$MYSIFA_GIT_MIRROR_DEFAULT" && pwd)"
+else
+  echo ""
+  echo "Erreur : aucun dépôt git pour le push."
+  echo "  - Miroir attendu : $MYSIFA_GIT_MIRROR_DEFAULT"
+  echo "  - ou export MYSIFA_SOURCE=/chemin/vers/clone-git"
+  echo "  - Sous Windows : .\\deploy.ps1 depuis Google Drive"
+  echo ""
+  exit 1
 fi
 
 _sync_workdir_to_source() {
@@ -91,23 +105,28 @@ _sync_workdir_to_source() {
     return 0
   fi
   echo ""
-  echo "Sync copie de travail → dépôt git..."
-  echo "  depuis : $src"
-  echo "  vers   : $dest"
-  rsync -a --delete \
-    --exclude '.git/' \
-    --exclude 'venv/' \
-    --exclude '__pycache__/' \
-    --exclude '.DS_Store' \
-    --exclude 'myprod-widget/node_modules/' \
-    --exclude 'myprod-widget/dist/' \
-    --exclude 'data/production.db' \
-    --exclude 'data/*.bak' \
-    --exclude 'data/*.backup' \
-    --exclude 'data/production.db.*' \
-    --exclude 'mysifa.db' \
-    --exclude 'production.db' \
-    "$src/" "$dest/"
+  echo "Sync source de vérité → miroir git (push uniquement)..."
+  echo "  source de vérité : $src"
+  echo "  miroir git       : $dest"
+  if command -v rsync &>/dev/null; then
+    rsync -a --delete \
+      --exclude '.git/' \
+      --exclude 'venv/' \
+      --exclude '__pycache__/' \
+      --exclude '.DS_Store' \
+      --exclude 'myprod-widget/node_modules/' \
+      --exclude 'myprod-widget/dist/' \
+      --exclude 'data/production.db' \
+      --exclude 'data/*.bak' \
+      --exclude 'data/*.backup' \
+      --exclude 'data/production.db.*' \
+      --exclude 'mysifa.db' \
+      --exclude 'production.db' \
+      "$src/" "$dest/"
+  else
+    echo "rsync absent — utilisez deploy.ps1 sous Windows (sync robocopy) ou installez rsync."
+    exit 1
+  fi
   echo "Sync terminée."
 }
 
@@ -132,9 +151,15 @@ _clean_widget_artifacts() {
 }
 
 echo "Déploiement MySifa"
-echo "  dépôt git : $LOCAL_SOURCE"
+if [[ -n "$WORKDIR" ]]; then
+  echo "  source de vérité : $WORKDIR"
+fi
 if [[ -n "$WORKDIR" && "$WORKDIR" != "$LOCAL_SOURCE" ]]; then
-  echo "  copie travail : $WORKDIR"
+  echo "  miroir git (push) : $LOCAL_SOURCE"
+elif [[ -n "$WORKDIR" && "$WORKDIR" == "$LOCAL_SOURCE" ]]; then
+  echo "  dépôt git : $LOCAL_SOURCE"
+else
+  echo "  dépôt git : $LOCAL_SOURCE"
 fi
 
 if [[ -n "$WORKDIR" && "$WORKDIR" != "$LOCAL_SOURCE" ]]; then

@@ -1,0 +1,181 @@
+# Déploiement MySifa sous Windows (PowerShell)
+#
+# SOURCE DE VÉRITÉ : Google Drive (ce dossier)
+# Miroir git       : Documents\GitHub\MySifa (push GitHub / VPS uniquement)
+#
+# Usage :
+#   .\deploy.ps1              # sync rapide (fichiers modifiés seulement)
+#   .\deploy.ps1 -Full        # miroir complet (plus lent, gère les suppressions)
+#   .\deploy.ps1 -SkipSync    # push + VPS sans recopier (miroir déjà à jour)
+#   .\deploy.ps1 --widget
+
+param(
+    [switch]$Full,
+    [switch]$SkipSync
+)
+
+$ErrorActionPreference = "Stop"
+
+# Args transmis à deploy.sh (--widget, --uploads, etc.)
+$deployShArgs = @()
+foreach ($a in $args) {
+    if ($a -ne "-Full" -and $a -ne "-SkipSync") { $deployShArgs += $a }
+}
+
+function Find-GitBash {
+    @(
+        "${env:ProgramFiles}\Git\bin\bash.exe",
+        "${env:ProgramFiles(x86)}\Git\bin\bash.exe"
+    ) | ForEach-Object {
+        if (Test-Path $_) { return $_ }
+    }
+    return $null
+}
+
+function Resolve-GitMirror {
+    if ($env:MYSIFA_GIT_MIRROR -and (Test-Path (Join-Path $env:MYSIFA_GIT_MIRROR ".git"))) {
+        return (Resolve-Path $env:MYSIFA_GIT_MIRROR).Path
+    }
+    $default = Join-Path $env:USERPROFILE "Documents\GitHub\MySifa"
+    if (Test-Path (Join-Path $default ".git")) {
+        return (Resolve-Path $default).Path
+    }
+    throw @"
+Miroir git introuvable.
+  Clone attendu : $default
+  ou : `$env:MYSIFA_GIT_MIRROR = 'C:\chemin\vers\MySifa'
+"@
+}
+
+function Sync-TruthToMirror {
+    param(
+        [string]$TruthDir,
+        [string]$MirrorDir,
+        [bool]$FullMirror
+    )
+    if ($TruthDir -eq $MirrorDir) { return }
+
+    if (-not (Test-Path $TruthDir)) {
+        throw "Source de verite introuvable : $TruthDir"
+    }
+    if (-not (Test-Path $MirrorDir)) {
+        New-Item -ItemType Directory -Path $MirrorDir -Force | Out-Null
+    }
+
+    Write-Host ""
+    if ($FullMirror) {
+        Write-Host "Sync COMPLETE (miroir) - peut prendre 5-15 min sur Google Drive..."
+    } else {
+        Write-Host "Sync RAPIDE (fichiers modifies) - patientez 30 s a 3 min..."
+    }
+    Write-Host "  source de verite : $TruthDir"
+    Write-Host "  miroir git       : $MirrorDir"
+    Write-Host ""
+
+    # Exclusions = alignees sur deploy.sh (+ fichiers Google Drive / builds lourds)
+    $xd = @(
+        ".git", "venv", ".venv", "__pycache__", "node_modules",
+        "myprod-widget\node_modules",
+        "myprod-widget\dist",
+        "myprod-widget\dist\win-unpacked",
+        "myprod-widget\dist\mac",
+        "myprod-widget\dist\mac-arm64",
+        "data", ".cursor", "agent-transcripts", "terminals",
+        "uploads", "_tmp_planning_v2", "app\_tmp_planning_v2", "__in"
+    )
+    $xf = @(
+        ".DS_Store", "mysifa.db", "production.db", "Thumbs.db", "desktop.ini",
+        "*.gdoc", "*.gsheet", "*.gslides",
+        "*.dmg", "*.exe", "*.blockmap",
+        "nohup.out", "root@*"
+    )
+
+    $roboBase = @(
+        $TruthDir, $MirrorDir,
+        "/MT:4", "/R:0", "/W:1",
+        "/BYTES", "/TEE", "/ETA", "/NS", "/NC",
+        "/XD"
+    ) + $xd + @("/XF") + $xf
+
+    if ($FullMirror) {
+        $roboArgs = @($TruthDir, $MirrorDir, "/MIR") + $roboBase[2..($roboBase.Length - 1)]
+    } else {
+        $roboArgs = @($TruthDir, $MirrorDir, "/E", "/XO") + $roboBase[2..($roboBase.Length - 1)]
+    }
+
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    & robocopy @roboArgs
+    $code = $LASTEXITCODE
+    $ErrorActionPreference = $prevEap
+
+    Write-Host ""
+    # Codes robocopy : bit 8 = echecs partiels (.gdoc, verrous) ; bit 16+ = erreur grave
+    if (($code -band 16) -ne 0 -or $code -ge 16) {
+        throw "Robocopy erreur grave (code $code)."
+    }
+    if (($code -band 8) -ne 0) {
+        Write-Host "Sync terminee avec avertissements (code $code : fichiers ignores, ex. .gdoc Google Drive)." -ForegroundColor Yellow
+        Write-Host "Le code applicatif (app/, main.py, etc.) est copie - suite du deploy."
+    } else {
+        Write-Host "Sync terminee (robocopy code $code)."
+    }
+    if (-not $FullMirror) {
+        Write-Host "Astuce : apres une suppression de fichier, lancez .\deploy.ps1 -Full une fois."
+    }
+}
+
+function To-BashPath([string]$winPath) {
+    $p = (Resolve-Path $winPath).Path -replace '\\', '/'
+    if ($p -match '^([A-Za-z]):(.*)$') {
+        return "/" + $Matches[1].ToLower() + $Matches[2]
+    }
+    return $p
+}
+
+$bash = Find-GitBash
+if (-not $bash) {
+    throw "Git Bash introuvable - installez Git for Windows."
+}
+
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$truthDir = if ($env:MYSIFA_TRUTH) {
+    (Resolve-Path $env:MYSIFA_TRUTH).Path
+} else {
+    $scriptDir
+}
+
+$deploySh = Join-Path $scriptDir "deploy.sh"
+if (-not (Test-Path $deploySh)) {
+    throw "deploy.sh introuvable : $deploySh"
+}
+
+$gitPushDir = $truthDir
+if (-not (Test-Path (Join-Path $truthDir ".git"))) {
+    $gitPushDir = Resolve-GitMirror
+}
+
+Write-Host "Deploiement MySifa (Windows)"
+Write-Host "  SOURCE DE VERITE : $truthDir"
+if ($gitPushDir -ne $truthDir) {
+    Write-Host "  miroir git       : $gitPushDir"
+}
+
+if (-not $SkipSync -and $gitPushDir -ne $truthDir) {
+    Sync-TruthToMirror -TruthDir $truthDir -MirrorDir $gitPushDir -FullMirror:$Full.IsPresent
+} elseif ($SkipSync) {
+    Write-Host "  (sync ignoree -SkipSync)"
+}
+
+Copy-Item -Path $deploySh -Destination (Join-Path $gitPushDir "deploy.sh") -Force
+
+$bashPush = To-BashPath $gitPushDir
+$bashTruth = To-BashPath $truthDir
+$extra = ($deployShArgs -join ' ').Trim()
+
+Write-Host ""
+Write-Host "Lancement deploy.sh (git push + VPS)..."
+
+$cmd = "cd '$bashPush' && MYSIFA_SOURCE='$bashPush' MYSIFA_WORKDIR='$bashTruth' ./deploy.sh $extra"
+& $bash $cmd
+exit $LASTEXITCODE

@@ -2286,6 +2286,81 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 71, "planning_entries_of_import_link")
 
+    # v72 — MyAO : carnet clients récurrents
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=72 LIMIT 1").fetchone():
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS ao_carnet_clients (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                nom         TEXT NOT NULL,
+                email       TEXT NOT NULL,
+                pays        TEXT,
+                notes       TEXT,
+                created_at  TEXT NOT NULL
+            )
+            """
+        )
+        conn.commit()
+        _record_schema_migration(conn, 72, "ao_carnet_clients")
+
+    # v73 — MyAO : fiche produit complète (JSON + client)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=73 LIMIT 1").fetchone():
+        ap_cols = {row[1] for row in conn.execute("PRAGMA table_info(ao_produits)").fetchall()}
+        if "client_id" not in ap_cols:
+            conn.execute("ALTER TABLE ao_produits ADD COLUMN client_id INTEGER")
+        if "fiche_json" not in ap_cols:
+            conn.execute("ALTER TABLE ao_produits ADD COLUMN fiche_json TEXT")
+        conn.commit()
+        _record_schema_migration(conn, 73, "ao_produits_fiche")
+
+    # v74 — Matières premières : frontal, glassine (+ couleur)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=74 LIMIT 1").fetchone():
+        mp_cols = {row[1] for row in conn.execute("PRAGMA table_info(matieres_premieres)").fetchall()}
+        if "couleur" not in mp_cols:
+            conn.execute("ALTER TABLE matieres_premieres ADD COLUMN couleur TEXT")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS matieres_premieres_v74 (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                categorie TEXT NOT NULL,
+                reference TEXT NOT NULL,
+                designation TEXT NOT NULL,
+                seuil_alerte REAL DEFAULT 0,
+                actif INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+                updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+                palettes_par_pile REAL,
+                couleur TEXT,
+                UNIQUE(categorie, reference)
+            )
+            """
+        )
+        old_cols = [r[1] for r in conn.execute("PRAGMA table_info(matieres_premieres)").fetchall()]
+        sel = ["id", "categorie", "reference", "designation", "seuil_alerte", "actif", "created_at", "updated_at"]
+        if "palettes_par_pile" in old_cols:
+            sel.append("palettes_par_pile")
+        else:
+            sel.append("NULL AS palettes_par_pile")
+        sel.append("couleur" if "couleur" in old_cols else "NULL AS couleur")
+        conn.execute(
+            f"INSERT INTO matieres_premieres_v74 ({', '.join(sel)}) "
+            f"SELECT {', '.join(sel)} FROM matieres_premieres"
+        )
+        conn.execute("DROP TABLE matieres_premieres")
+        conn.execute("ALTER TABLE matieres_premieres_v74 RENAME TO matieres_premieres")
+        conn.commit()
+        _record_schema_migration(conn, 74, "matieres_premieres_frontal_glassine")
+
+    # v75 — MyAO : carnet fournisseurs — société et adresse
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=75 LIMIT 1").fetchone():
+        cf_cols = {row[1] for row in conn.execute("PRAGMA table_info(ao_carnet_fournisseurs)").fetchall()}
+        if "societe" not in cf_cols:
+            conn.execute("ALTER TABLE ao_carnet_fournisseurs ADD COLUMN societe TEXT")
+        if "adresse" not in cf_cols:
+            conn.execute("ALTER TABLE ao_carnet_fournisseurs ADD COLUMN adresse TEXT")
+        conn.commit()
+        _record_schema_migration(conn, 75, "ao_carnet_fournisseurs_societe_adresse")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

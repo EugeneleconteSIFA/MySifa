@@ -87,7 +87,7 @@ def require_stock_write(request: Request) -> dict:
     return user
 
 
-_MP_CATEGORIES = frozenset({"mandrin", "palette", "adhesif", "carton"})
+_MP_CATEGORIES = frozenset({"mandrin", "palette", "adhesif", "carton", "frontal", "glassine"})
 _MP_TYPES_MVT = frozenset({"entree", "sortie", "ajustement", "transfert"})
 _STOCK_MATIERES_ADMIN_ROLES = frozenset({"superadmin", "direction", "administration"})
 
@@ -120,6 +120,7 @@ def _mp_row_dict(r) -> dict:
         "en_alerte": seuil > 0 and qte <= seuil,
         "unite": _mp_unite_gestion(cat),
         "palettes_par_pile": palettes_par_pile,
+        "couleur": (r["couleur"] or "").strip() if "couleur" in r.keys() and r["couleur"] else None,
     }
 
 
@@ -1464,7 +1465,7 @@ def list_matieres_premieres(request: Request, all: int = 0):
         rows = conn.execute(
             f"""
             SELECT mp.id, mp.categorie, mp.reference, mp.designation,
-                   mp.seuil_alerte, mp.actif, mp.palettes_par_pile,
+                   mp.seuil_alerte, mp.actif, mp.palettes_par_pile, mp.couleur,
                    COALESCE(s.quantite, 0) AS quantite
             FROM matieres_premieres mp
             LEFT JOIN mp_stock s ON s.matiere_id = mp.id
@@ -1501,17 +1502,20 @@ async def create_matiere_premiere(request: Request):
         raise HTTPException(400, "Référence obligatoire.")
     if not designation:
         raise HTTPException(400, "Désignation obligatoire.")
+    couleur = (body.get("couleur") or "").strip() or None
+    if categorie == "glassine" and not couleur:
+        couleur = designation
 
     with get_db() as conn:
         try:
             cur = conn.execute(
                 """
                 INSERT INTO matieres_premieres (
-                    categorie, reference, designation, seuil_alerte, palettes_par_pile
+                    categorie, reference, designation, seuil_alerte, palettes_par_pile, couleur
                 )
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (categorie, reference, designation, seuil_alerte, palettes_par_pile),
+                (categorie, reference, designation, seuil_alerte, palettes_par_pile, couleur),
             )
             matiere_id = cur.lastrowid
             conn.execute(
@@ -1556,6 +1560,9 @@ async def update_matiere_premiere(matiere_id: int, request: Request):
     if "actif" in body:
         sets.append("actif=?")
         params.append(1 if body.get("actif") else 0)
+    if "couleur" in body:
+        sets.append("couleur=?")
+        params.append((body.get("couleur") or "").strip() or None)
 
     if not sets:
         raise HTTPException(400, "Aucun champ à mettre à jour.")

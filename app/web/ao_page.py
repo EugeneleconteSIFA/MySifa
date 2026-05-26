@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from config import APP_VERSION, BASE_URL
 from app.services.auth_service import get_current_user
 from app.web.access_denied import access_denied_response
+from app.web.ao_produit_form import AO_PRODUIT_FORM_CSS, AO_PRODUIT_FORM_JS
 
 router = APIRouter()
 
@@ -137,6 +138,7 @@ label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bot
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:500;display:flex;align-items:center;justify-content:center;padding:20px}
 .modal{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;max-width:480px;width:100%;max-height:90vh;overflow:auto}
 .modal h3{font-size:16px;font-weight:700;margin-bottom:16px}
+.modal.modal-wide{max-width:560px}
 .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
 .comp-table{width:100%;border-collapse:collapse;font-size:12px}
 .comp-table th,.comp-table td{padding:10px 8px;border:1px solid var(--border);text-align:center}
@@ -154,6 +156,7 @@ label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bot
 #toast.danger{background:var(--danger);color:#fff}
 #toast.info{background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent)}
 #toast.warn{background:rgba(251,191,36,.2);color:var(--warn);border:1px solid var(--warn)}
+""" + AO_PRODUIT_FORM_CSS + r"""
 </style>
 </head>
 <body>
@@ -192,8 +195,12 @@ const S = {
   modal: null,
   modalData: {},
   carnet: [],
+  carnetClients: [],
   produits: [],
   produitsSearch: '',
+  produitView: 'list',
+  produitForm: null,
+  matieres: {},
   nonLus: {}
 };
 
@@ -282,6 +289,7 @@ function buildAoSidebarNavStructure() {
     {kind:'btn', section:'ao', icon:'clipboard', label:'Appel d\'offre'},
     {kind:'sep', label:'Contact'},
     {kind:'btn', section:'contact_fournisseur', icon:'truck', label:'Fournisseur', sub:true},
+    {kind:'btn', section:'contact_client', icon:'building-2', label:'Client', sub:true},
     {kind:'btn', section:'produits', icon:'package', label:'Produits'},
   ].map(n => (n.kind === 'btn' ? {...n, active: sec === n.section} : n));
 }
@@ -291,6 +299,7 @@ function aoMobileTitle() {
     dashboard: ['Tableau de bord', 'Vue d\'ensemble'],
     ao: S.view === 'detail' && S.ao ? [S.ao.reference, 'Appel d\'offre'] : ['Appels d\'offre', 'Appel d\'offre'],
     contact_fournisseur: ['Fournisseurs', 'Contacts'],
+    contact_client: ['Clients', 'Contacts'],
     produits: ['Produits', 'Référentiel'],
   };
   const x = m[S.section] || ['MyAO', 'Appels d\'offre'];
@@ -301,6 +310,10 @@ function goToAoSection(section) {
   if (S.section === section) { closeSidebar(); return; }
   if (S.polling) { clearInterval(S.polling); S.polling = null; }
   S.section = section;
+  if (section !== 'produits') {
+    S.produitView = 'list';
+    S.produitForm = null;
+  }
   if (section !== 'ao') {
     S.view = 'list';
     S.ao = null;
@@ -377,22 +390,38 @@ function renderCarnet() {
   const list = S.carnet || [];
   let rows = '';
   list.forEach(c => {
-    rows += '<tr><td>'+escHtml(c.nom)+'</td><td>'+escHtml(c.email)+'</td><td>'+escHtml(c.pays||'—')+'</td><td>'+
+    rows += '<tr><td>'+escHtml(c.societe||'—')+'</td><td>'+escHtml(c.nom)+'</td><td>'+escHtml(c.email)+'</td>'+
+      '<td>'+escHtml(c.adresse||'—')+'</td><td>'+
       '<button class="btn btn-ghost btn-sm btn-edit-carnet" data-id="'+c.id+'">Modifier</button> '+
       '<button class="btn btn-ghost btn-sm btn-del-carnet" data-id="'+c.id+'">Supprimer</button></td></tr>';
   });
   const table = list.length
-    ? '<div class="card"><table class="data-table"><thead><tr><th>Nom</th><th>Email</th><th>Pays</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+    ? '<div class="card"><table class="data-table"><thead><tr><th>Société</th><th>Nom</th><th>Email</th><th>Adresse</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
     : '<div class="card empty-state"><strong>Aucun fournisseur dans le carnet.</strong></div>';
   return '<div class="page-hdr"><h1>Carnet fournisseurs</h1>'+
     '<button class="btn btn-accent" type="button" id="btn-add-carnet">'+icon('plus',14)+' Ajouter</button></div>'+table;
+}
+
+function renderCarnetClients() {
+  const list = S.carnetClients || [];
+  let rows = '';
+  list.forEach(c => {
+    rows += '<tr><td>'+escHtml(c.nom)+'</td><td>'+escHtml(c.email)+'</td><td>'+escHtml(c.pays||'—')+'</td><td>'+
+      '<button class="btn btn-ghost btn-sm btn-edit-carnet-client" data-id="'+c.id+'">Modifier</button> '+
+      '<button class="btn btn-ghost btn-sm btn-del-carnet-client" data-id="'+c.id+'">Supprimer</button></td></tr>';
+  });
+  const table = list.length
+    ? '<div class="card"><table class="data-table"><thead><tr><th>Nom</th><th>Email</th><th>Pays</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+    : '<div class="card empty-state"><strong>Aucun client dans le carnet.</strong></div>';
+  return '<div class="page-hdr"><h1>Carnet clients</h1>'+
+    '<button class="btn btn-accent" type="button" id="btn-add-carnet-client">'+icon('plus',14)+' Ajouter</button></div>'+table;
 }
 
 function filteredProduits() {
   const q = (S.produitsSearch || '').trim().toLowerCase();
   if (!q) return S.produits || [];
   return (S.produits || []).filter(p => {
-    const hay = ((p.ref || '') + ' ' + (p.designation || '')).toLowerCase();
+    const hay = ((p.ref || '') + ' ' + (p.designation || '') + ' ' + (p.client_nom || '')).toLowerCase();
     return hay.includes(q);
   });
 }
@@ -413,16 +442,22 @@ function renderProduitsRows() {
   } else {
     let rows = '';
     list.forEach(p => {
-      rows += '<tr><td>'+escHtml(p.ref)+'</td><td>'+escHtml(p.designation)+'</td><td>'+escHtml(p.unite||'unité')+'</td><td>'+
+      const tp = (p.fiche && p.fiche.type_produit) ? p.fiche.type_produit : '';
+      const cl = p.client_nom || '—';
+      rows += '<tr><td>'+escHtml(p.ref)+'</td><td>'+escHtml(p.designation)+'</td><td>'+escHtml(tp||'—')+'</td><td>'+escHtml(cl)+'</td><td>'+
         '<button class="btn btn-ghost btn-sm btn-edit-produit" data-id="'+p.id+'">Modifier</button> '+
+        '<button class="btn btn-ghost btn-sm btn-export-produit" data-id="'+p.id+'">PDF</button> '+
         '<button class="btn btn-ghost btn-sm btn-del-produit" data-id="'+p.id+'">Supprimer</button></td></tr>';
     });
-    el.innerHTML = '<table class="data-table"><thead><tr><th>Référence</th><th>Désignation</th><th>Unité</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>';
+    el.innerHTML = '<table class="data-table"><thead><tr><th>Référence</th><th>Désignation</th><th>Type</th><th>Client</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>';
     el.querySelectorAll('.btn-edit-produit').forEach(b => {
       b.addEventListener('click', () => {
         const p = (S.produits||[]).find(x => String(x.id) === String(b.dataset.id));
-        if (p) openModalProduit(p);
+        if (p) openProduitForm(p);
       });
+    });
+    el.querySelectorAll('.btn-export-produit').forEach(b => {
+      b.addEventListener('click', () => window.open('/api/ao/produits/'+b.dataset.id+'/export', '_blank'));
     });
     el.querySelectorAll('.btn-del-produit').forEach(b => {
       b.addEventListener('click', async () => {
@@ -468,7 +503,7 @@ function bindProduitsEvents() {
       search.focus();
     }
   });
-  document.getElementById('btn-add-produit')?.addEventListener('click', () => openModalProduit(null));
+  document.getElementById('btn-add-produit')?.addEventListener('click', () => openProduitForm(null));
 }
 
 function bindCarnetEvents() {
@@ -492,6 +527,27 @@ function bindCarnetEvents() {
   });
 }
 
+function bindCarnetClientsEvents() {
+  document.getElementById('btn-add-carnet-client')?.addEventListener('click', () => openModalCarnetClientEntry(null));
+  document.querySelectorAll('.btn-edit-carnet-client').forEach(b => {
+    b.addEventListener('click', () => {
+      const c = (S.carnetClients||[]).find(x => String(x.id) === String(b.dataset.id));
+      if (c) openModalCarnetClientEntry(c);
+    });
+  });
+  document.querySelectorAll('.btn-del-carnet-client').forEach(b => {
+    b.addEventListener('click', async () => {
+      if (!confirm('Supprimer cette entrée du carnet ?')) return;
+      try {
+        await api('/api/ao/carnet-clients/'+b.dataset.id, {method:'DELETE'});
+        showToast('Entrée supprimée.', 'success');
+        await loadCarnetClients();
+        render();
+      } catch(e) { showToast(e.message, 'danger'); }
+    });
+  });
+}
+
 function toggleSidebar() {
   S.sidebarOpen = !S.sidebarOpen;
   document.body.classList.toggle('sb-open', S.sidebarOpen);
@@ -504,6 +560,10 @@ async function loadList() {
 
 async function loadCarnet() {
   S.carnet = await api('/api/ao/carnet-fournisseurs');
+}
+
+async function loadCarnetClients() {
+  S.carnetClients = await api('/api/ao/carnet-clients');
 }
 
 async function loadProduits() {
@@ -615,12 +675,12 @@ function openModalFourni() {
 }
 function openModalCarnetEntry(edit) {
   S.modal = 'carnet-entry';
-  S.modalData = edit ? {...edit} : {nom:'', email:'', pays:'', notes:''};
+  S.modalData = edit ? {...edit} : {nom:'', email:'', societe:'', adresse:'', notes:''};
   renderModal();
 }
-function openModalProduit(edit) {
-  S.modal = 'produit-entry';
-  S.modalData = edit ? {...edit} : {ref:'', designation:'', unite:'unité', notes:''};
+function openModalCarnetClientEntry(edit) {
+  S.modal = 'carnet-client-entry';
+  S.modalData = edit ? {...edit} : {nom:'', email:'', pays:'', notes:''};
   renderModal();
 }
 function openModalConfirmEnvoi(n) {
@@ -713,7 +773,7 @@ function renderModal() {
         await api(path, {method: editId?'PUT':'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
         if (!editId && !pickEl.value && saveCb && saveCb.checked) {
           await api('/api/ao/produits', {method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({ref, designation, unite: body.unite, notes: body.notes})});
+            body: JSON.stringify({ref, designation, fiche: defaultProduitFiche()})});
           await loadProduits();
         }
         closeModal(); showToast('Ligne enregistrée.', 'success');
@@ -721,31 +781,39 @@ function renderModal() {
       } catch(e) { showToast(e.message, 'danger'); }
     };
   } else if (S.modal === 'fourni') {
+    box.className = 'modal modal-wide';
     let carnetOpts = '<option value="">— Saisie manuelle —</option>';
     (S.carnet||[]).forEach(c => {
-      carnetOpts += '<option value="'+c.id+'">'+escHtml(c.nom)+' — '+escHtml(c.email)+'</option>';
+      const lbl = (c.societe ? escHtml(c.societe)+' — ' : '')+escHtml(c.nom)+' — '+escHtml(c.email);
+      carnetOpts += '<option value="'+c.id+'">'+lbl+'</option>';
     });
     box.innerHTML = '<h3>Ajouter un fournisseur</h3>'+
       '<div class="field"><label>Sélectionner depuis le carnet</label>'+
       '<select id="m-carnet-pick">'+carnetOpts+'</select></div>'+
       '<div id="m-fourni-form">'+
+      '<div class="field"><label>Société</label><input id="m-societe"></div>'+
       '<div class="field"><label>Nom</label><input id="m-nom"></div>'+
-      '<div class="field"><label>Email</label><input type="email" id="m-mail"></div></div>'+
+      '<div class="field"><label>Email</label><input type="email" id="m-mail"></div>'+
+      '<div class="field"><label>Adresse</label><textarea id="m-adresse" rows="2"></textarea></div></div>'+
       '<label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:14px">'+
       '<input type="checkbox" id="m-save-carnet"> Enregistrer dans le carnet</label>'+
       '<div class="modal-actions"><button class="btn btn-ghost" id="m-cancel">Annuler</button><button class="btn btn-accent" id="m-ok">Ajouter</button></div>';
     ov.appendChild(box); m.appendChild(ov);
     const pickEl = document.getElementById('m-carnet-pick');
+    const societeEl = document.getElementById('m-societe');
     const nomEl = document.getElementById('m-nom');
     const mailEl = document.getElementById('m-mail');
+    const adresseEl = document.getElementById('m-adresse');
     const saveCb = document.getElementById('m-save-carnet');
     pickEl.onchange = () => {
       const id = pickEl.value;
       if (id) {
         const c = (S.carnet||[]).find(x => String(x.id) === String(id));
         if (c) {
+          societeEl.value = c.societe || '';
           nomEl.value = c.nom || '';
           mailEl.value = c.email || '';
+          adresseEl.value = c.adresse || '';
         }
         saveCb.checked = false;
         saveCb.disabled = true;
@@ -758,13 +826,18 @@ function renderModal() {
       const nom = nomEl.value.trim();
       const email = mailEl.value.trim();
       if (!nom || !email) { showToast('Nom et email obligatoires.', 'danger'); return; }
+      const label = societeEl.value.trim() || nom;
       try {
         await api('/api/ao/'+S.ao.id+'/fournisseurs', {method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({nom_fournisseur: nom, email_contact: email})});
+          body: JSON.stringify({nom_fournisseur: label, email_contact: email})});
         const manual = !pickEl.value;
         if (manual && saveCb.checked) {
           await api('/api/ao/carnet-fournisseurs', {method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({nom, email})});
+            body: JSON.stringify({
+              nom, email,
+              societe: societeEl.value.trim() || null,
+              adresse: adresseEl.value.trim() || null
+            })});
           await loadCarnet();
         }
         closeModal(); showToast('Fournisseur ajouté.', 'success');
@@ -773,19 +846,22 @@ function renderModal() {
     };
   } else if (S.modal === 'carnet-entry') {
     const editId = S.modalData.id;
+    box.className = 'modal modal-wide';
     box.innerHTML = '<h3>'+(editId?'Modifier':'Ajouter')+' au carnet</h3>'+
+      '<div class="field"><label>Société</label><input id="m-c-societe" value="'+escAttr(S.modalData.societe||'')+'"></div>'+
       '<div class="field"><label>Nom</label><input id="m-c-nom" value="'+escAttr(S.modalData.nom||'')+'"></div>'+
       '<div class="field"><label>Email</label><input type="email" id="m-c-email" value="'+escAttr(S.modalData.email||'')+'"></div>'+
-      '<div class="field"><label>Pays</label><input id="m-c-pays" value="'+escAttr(S.modalData.pays||'')+'"></div>'+
+      '<div class="field"><label>Adresse</label><textarea id="m-c-adresse" rows="2">'+escHtml(S.modalData.adresse||'')+'</textarea></div>'+
       '<div class="field"><label>Notes</label><textarea id="m-c-notes" rows="2">'+escHtml(S.modalData.notes||'')+'</textarea></div>'+
       '<div class="modal-actions"><button class="btn btn-ghost" id="m-cancel">Annuler</button><button class="btn btn-accent" id="m-ok">Enregistrer</button></div>';
     ov.appendChild(box); m.appendChild(ov);
     document.getElementById('m-cancel').onclick = closeModal;
     document.getElementById('m-ok').onclick = async () => {
       const body = {
+        societe: document.getElementById('m-c-societe').value.trim() || null,
         nom: document.getElementById('m-c-nom').value.trim(),
         email: document.getElementById('m-c-email').value.trim(),
-        pays: document.getElementById('m-c-pays').value.trim() || null,
+        adresse: document.getElementById('m-c-adresse').value.trim() || null,
         notes: document.getElementById('m-c-notes').value.trim() || null
       };
       if (!body.nom || !body.email) { showToast('Nom et email obligatoires.', 'danger'); return; }
@@ -799,32 +875,32 @@ function renderModal() {
         await loadCarnet(); render();
       } catch(e) { showToast(e.message, 'danger'); }
     };
-  } else if (S.modal === 'produit-entry') {
+  } else if (S.modal === 'carnet-client-entry') {
     const editId = S.modalData.id;
-    box.innerHTML = '<h3>'+(editId?'Modifier':'Ajouter')+' un produit</h3>'+
-      '<div class="field"><label>Référence</label><input id="m-p-ref" value="'+escAttr(S.modalData.ref||'')+'"></div>'+
-      '<div class="field"><label>Désignation</label><input id="m-p-des" value="'+escAttr(S.modalData.designation||'')+'"></div>'+
-      '<div class="field"><label>Unité</label><input id="m-p-unite" value="'+escAttr(S.modalData.unite||'unité')+'"></div>'+
-      '<div class="field"><label>Notes</label><textarea id="m-p-notes" rows="2">'+escHtml(S.modalData.notes||'')+'</textarea></div>'+
+    box.innerHTML = '<h3>'+(editId?'Modifier':'Ajouter')+' au carnet</h3>'+
+      '<div class="field"><label>Nom</label><input id="m-cc-nom" value="'+escAttr(S.modalData.nom||'')+'"></div>'+
+      '<div class="field"><label>Email</label><input type="email" id="m-cc-email" value="'+escAttr(S.modalData.email||'')+'"></div>'+
+      '<div class="field"><label>Pays</label><input id="m-cc-pays" value="'+escAttr(S.modalData.pays||'')+'"></div>'+
+      '<div class="field"><label>Notes</label><textarea id="m-cc-notes" rows="2">'+escHtml(S.modalData.notes||'')+'</textarea></div>'+
       '<div class="modal-actions"><button class="btn btn-ghost" id="m-cancel">Annuler</button><button class="btn btn-accent" id="m-ok">Enregistrer</button></div>';
     ov.appendChild(box); m.appendChild(ov);
     document.getElementById('m-cancel').onclick = closeModal;
     document.getElementById('m-ok').onclick = async () => {
       const body = {
-        ref: document.getElementById('m-p-ref').value.trim(),
-        designation: document.getElementById('m-p-des').value.trim(),
-        unite: document.getElementById('m-p-unite').value.trim() || 'unité',
-        notes: document.getElementById('m-p-notes').value.trim() || null
+        nom: document.getElementById('m-cc-nom').value.trim(),
+        email: document.getElementById('m-cc-email').value.trim(),
+        pays: document.getElementById('m-cc-pays').value.trim() || null,
+        notes: document.getElementById('m-cc-notes').value.trim() || null
       };
-      if (!body.ref || !body.designation) { showToast('Référence et désignation obligatoires.', 'danger'); return; }
+      if (!body.nom || !body.email) { showToast('Nom et email obligatoires.', 'danger'); return; }
       try {
         if (editId) {
-          await api('/api/ao/produits/'+editId, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+          await api('/api/ao/carnet-clients/'+editId, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
         } else {
-          await api('/api/ao/produits', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+          await api('/api/ao/carnet-clients', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
         }
-        closeModal(); showToast('Produit enregistré.', 'success');
-        await loadProduits(); render();
+        closeModal(); showToast('Carnet enregistré.', 'success');
+        await loadCarnetClients(); render();
       } catch(e) { showToast(e.message, 'danger'); }
     };
   } else if (S.modal === 'confirm-envoi') {
@@ -1137,9 +1213,17 @@ function render() {
   } else if (S.section === 'contact_fournisseur') {
     area.innerHTML = renderCarnet();
     bindCarnetEvents();
+  } else if (S.section === 'contact_client') {
+    area.innerHTML = renderCarnetClients();
+    bindCarnetClientsEvents();
   } else if (S.section === 'produits') {
-    area.innerHTML = renderProduits();
-    bindProduitsEvents();
+    if (S.produitView === 'form' && S.produitForm) {
+      area.innerHTML = renderProduitForm();
+      bindProduitFormEvents();
+    } else {
+      area.innerHTML = renderProduits();
+      bindProduitsEvents();
+    }
   } else if (S.view === 'list') {
     area.innerHTML = renderList();
     bindListEvents();
@@ -1177,6 +1261,7 @@ function render() {
   }
 }
 
+""" + AO_PRODUIT_FORM_JS + r"""
 (async function init() {
   const embedded = S.user && S.user.id;
   try {
@@ -1204,8 +1289,8 @@ function render() {
   if (window.MySifaDock && typeof window.MySifaDock.bootPageWidgets === 'function') {
     window.MySifaDock.bootPageWidgets();
   }
-  const loads = await Promise.allSettled([loadList(), loadCarnet(), loadProduits()]);
-  const labels = ['appels d\'offre', 'carnet fournisseurs', 'produits'];
+  const loads = await Promise.allSettled([loadList(), loadCarnet(), loadCarnetClients(), loadProduits(), loadMatieresForProduit()]);
+  const labels = ['appels d\'offre', 'carnet fournisseurs', 'carnet clients', 'produits', 'matières'];
   const errors = [];
   loads.forEach((res, i) => {
     if (res.status === 'rejected') {
@@ -1221,7 +1306,9 @@ function render() {
     showToast('Chargement partiel : ' + errors.map(x => x.msg).join(' · '), 'danger');
     if (!S.aos) S.aos = [];
     if (!S.carnet) S.carnet = [];
+    if (!S.carnetClients) S.carnetClients = [];
     if (!S.produits) S.produits = [];
+    if (!S.matieres) S.matieres = {};
   }
   render();
 })();
