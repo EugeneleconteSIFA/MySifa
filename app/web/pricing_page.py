@@ -40,7 +40,11 @@ def _pricing_html_response(request: Request) -> HTMLResponse:
         .replace(
             "__USER__",
             json.dumps(
-                {"nom": user.get("nom") or "", "role": user.get("role") or ""},
+                {
+                    "id": user.get("id"),
+                    "nom": user.get("nom") or "",
+                    "role": user.get("role") or "",
+                },
                 ensure_ascii=False,
             ),
         )
@@ -84,32 +88,39 @@ PRICING_SHELL = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/pricing_app.css">
 </head>
-<body>
+<body class="has-topbar mysifa-app-pricing">
 <div id="toast-root"></div>
 <div id="modal-root"></div>
 <div class="layout" id="app">
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-logo">
-      <div class="logo-brand">My<span>Sifa</span></div>
-      <div class="logo-sub">Coûts matières</div>
+      <div class="logo-brand">My<span>Coûts</span></div>
+      <div class="logo-sub">by SIFA</div>
     </div>
     <nav class="sidebar-nav" id="sidebar-nav"></nav>
     <div class="sidebar-bottom">
-      <div class="user-chip" id="user-chip"></div>
-      <button type="button" class="theme-btn" id="theme-btn">Thème</button>
-      <button type="button" class="logout-btn" id="logout-btn">Déconnexion</button>
+      <button type="button" class="nav-btn back-mysifa" id="btn-portal">← Retour <span class="wm">My<span>Sifa</span></span></button>
+      <div class="user-chip" id="user-chip" title="Mon profil"></div>
+      <button type="button" class="theme-btn" id="theme-btn" aria-label="Basculer le thème">
+        <span class="theme-ico" id="theme-ico"></span>
+        <span class="theme-label" id="theme-label">Mode sombre</span>
+      </button>
+      <button type="button" class="logout-btn" id="logout-btn">
+        <span id="logout-ico"></span>
+        <span>Déconnexion</span>
+      </button>
       <div class="version">__V__</div>
     </div>
   </aside>
   <div class="sidebar-overlay" id="sidebar-overlay"></div>
   <main class="main">
     <header class="mobile-topbar">
-      <button type="button" class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Menu">☰</button>
+      <button type="button" class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Menu"></button>
       <div class="mobile-topbar-titles">
         <div class="mobile-topbar-title" id="mobile-title">Coûts matières</div>
         <div class="mobile-topbar-sub" id="mobile-sub"></div>
       </div>
-      <a href="/" class="mobile-home-btn" title="Portail">⌂</a>
+      <a href="/" class="mobile-home-btn" title="Portail" id="mobile-home-btn" aria-label="Portail"></a>
     </header>
     <div class="content" id="content">
       <div class="loading-state" id="loading-state">
@@ -120,6 +131,8 @@ PRICING_SHELL = r"""<!DOCTYPE html>
   </main>
 </div>
 <script>window.__PRICING__={canWrite:__CAN_WRITE__,user:__USER__};</script>
+<script src="/static/mysifa_theme.js"></script>
+<script src="/static/mysifa_user_chip.js"></script>
 <script src="/static/pricing_app.js" defer></script>
 </body>
 </html>"""

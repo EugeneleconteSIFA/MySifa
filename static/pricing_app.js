@@ -65,6 +65,44 @@
     return escHtml(s).replace(/'/g, "&#39;");
   }
 
+  const ROLE_LABELS = {
+    direction: "Direction",
+    administration: "Administration",
+    fabrication: "Fabrication",
+    logistique: "Logistique",
+    comptabilite: "Comptabilité",
+    expedition: "Expédition",
+    commercial: "Commercial",
+    superadmin: "Super admin",
+  };
+
+  function icon(name, size) {
+    size = size || 16;
+    const a =
+      'width="' +
+      size +
+      '" height="' +
+      size +
+      '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:inline-block;vertical-align:middle;flex-shrink:0"';
+    const p = {
+      grid: '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
+      package:
+        '<line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>',
+      layers:
+        '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
+      settings:
+        '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+      menu: '<line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/>',
+      home: '<path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/><path d="M10 21v-6h4v6"/>',
+      sun: '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>',
+      moon: '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
+      "log-out":
+        '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
+      edit: '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
+    };
+    return "<svg " + a + ">" + (p[name] || p.grid) + "</svg>";
+  }
+
   /** Format nombre fr-FR (espace milliers, virgule décimale). */
   function fmtNum(n, minDec, maxDec) {
     const x = parseFloat(n);
@@ -195,6 +233,7 @@
   }
 
   function navigate(path) {
+    document.body.classList.remove("sb-open");
     if (window.location.pathname !== path) {
       history.pushState(null, "", path);
     }
@@ -240,15 +279,48 @@
     return `<div class="breakdown-stack"><div class="breakdown-bar">${segs}</div><div class="breakdown-legend">${legend}</div></div>`;
   }
 
+  function updateChromeControls() {
+    const isLight = document.body.classList.contains("light");
+    const themeIco = document.getElementById("theme-ico");
+    const themeLabel = document.getElementById("theme-label");
+    if (themeIco) themeIco.innerHTML = icon(isLight ? "sun" : "moon", 16);
+    if (themeLabel) themeLabel.textContent = isLight ? "Mode clair" : "Mode sombre";
+    const logoutIco = document.getElementById("logout-ico");
+    if (logoutIco) logoutIco.innerHTML = icon("log-out", 14);
+    const menuBtn = document.getElementById("mobile-menu-btn");
+    if (menuBtn) menuBtn.innerHTML = icon("menu", 20);
+    const homeBtn = document.getElementById("mobile-home-btn");
+    if (homeBtn) homeBtn.innerHTML = icon("home", 20);
+    const chip = document.getElementById("user-chip");
+    if (chip && S.user) {
+      if (window.MySifaUserChip) {
+        MySifaUserChip.fill(chip, S.user, {
+          roleLabels: ROLE_LABELS,
+          editIconHtml: icon("edit", 10),
+        });
+        chip.onclick = () => {
+          window.location.href = "/profil";
+        };
+      } else {
+        chip.innerHTML =
+          '<div class="uc-name">' +
+          escHtml(S.user.nom || "—") +
+          '</div><div class="uc-role">' +
+          escHtml(ROLE_LABELS[S.user.role] || S.user.role || "") +
+          "</div>";
+      }
+    }
+  }
+
   function renderSidebar() {
     const nav = document.getElementById("sidebar-nav");
     const items = [
-      { path: "/pricing", label: "Tableau de bord", route: "dashboard" },
-      { path: "/pricing/materials", label: "Matières", route: "materials" },
-      { path: "/pricing/products", label: "Produits", route: "products" },
+      { path: "/pricing", label: "Tableau de bord", route: "dashboard", icon: "grid" },
+      { path: "/pricing/materials", label: "Matières", route: "materials", icon: "package" },
+      { path: "/pricing/products", label: "Produits", route: "products", icon: "layers" },
     ];
     if (S.canWrite) {
-      items.push({ path: "/pricing/settings", label: "Paramètres", route: "settings" });
+      items.push({ path: "/pricing/settings", label: "Paramètres", route: "settings", icon: "settings" });
     }
     const active = S.route.name;
     nav.innerHTML = items
@@ -257,14 +329,18 @@
           active === it.route ||
           (it.route === "materials" && active.startsWith("material")) ||
           (it.route === "products" && active.startsWith("product"));
-        return `<button type="button" class="nav-btn${on ? " active" : ""}" data-nav="${escAttr(it.path)}">${escHtml(it.label)}</button>`;
+        return (
+          `<button type="button" class="nav-btn${on ? " active" : ""}" data-nav="${escAttr(it.path)}">` +
+          icon(it.icon, 16) +
+          `<span>${escHtml(it.label)}</span></button>`
+        );
       })
       .join("");
     nav.querySelectorAll("[data-nav]").forEach((btn) => {
       btn.onclick = () => navigate(btn.getAttribute("data-nav"));
     });
 
-    document.getElementById("user-chip").innerHTML = `<div class="uc-name">${escHtml(S.user.nom || "—")}</div><div class="uc-role">${escHtml(S.user.role || "")}</div>`;
+    updateChromeControls();
 
     const titles = {
       dashboard: ["Coûts matières", "Tableau de bord"],
@@ -1437,13 +1513,13 @@
   }
 
   function initChrome() {
-    const themeBtn = document.getElementById("theme-btn");
-    if (localStorage.getItem("theme") === "light") document.body.classList.add("light");
-    themeBtn.textContent = document.body.classList.contains("light") ? "Thème sombre" : "Thème clair";
-    themeBtn.onclick = () => {
-      document.body.classList.toggle("light");
-      localStorage.setItem("theme", document.body.classList.contains("light") ? "light" : "dark");
-      themeBtn.textContent = document.body.classList.contains("light") ? "Thème sombre" : "Thème clair";
+    document.getElementById("btn-portal").onclick = () => {
+      window.location.href = "/";
+    };
+    document.getElementById("theme-btn").onclick = () => {
+      if (window.MySifaTheme) MySifaTheme.toggleMode();
+      else document.body.classList.toggle("light");
+      updateChromeControls();
     };
     document.getElementById("logout-btn").onclick = async () => {
       try {
@@ -1453,12 +1529,35 @@
     };
     document.getElementById("mobile-menu-btn").onclick = () => document.body.classList.toggle("sb-open");
     document.getElementById("sidebar-overlay").onclick = () => document.body.classList.remove("sb-open");
+    updateChromeControls();
+  }
+
+  async function initApp() {
+    initChrome();
+    try {
+      const me = await api("/api/auth/me");
+      if (me && me.id) {
+        S.user = {
+          id: me.id,
+          nom: me.nom || "",
+          role: me.role || "",
+          avatar_url: me.avatar_url || "",
+        };
+        if (window.MySifaTheme) MySifaTheme.mergeFromUser(me);
+      }
+    } catch (e) {
+      if (e.status === 401) {
+        window.location.href = "/?next=" + encodeURIComponent(window.location.pathname);
+        return;
+      }
+    }
+    updateChromeControls();
+    S.route = parseRoute();
+    await bootRoute();
   }
 
   window.addEventListener("popstate", bootRoute);
   document.addEventListener("DOMContentLoaded", () => {
-    initChrome();
-    S.route = parseRoute();
-    bootRoute();
+    initApp();
   });
 })();

@@ -2595,6 +2595,38 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 81, "pricing_access_direction_superadmin_only")
 
+    # v82 — MyStock : produits finis (catalogue + mouvements)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=82 LIMIT 1").fetchone():
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS produits_finis (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                reference TEXT NOT NULL UNIQUE,
+                designation TEXT NOT NULL,
+                unite TEXT DEFAULT 'pièces',
+                created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now', 'localtime'))
+            );
+            CREATE TABLE IF NOT EXISTS pf_mouvements (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                reference TEXT NOT NULL,
+                designation TEXT NOT NULL,
+                type TEXT NOT NULL CHECK(type IN ('entree', 'sortie')),
+                quantite REAL NOT NULL,
+                unite TEXT DEFAULT 'pièces',
+                emplacement TEXT NOT NULL,
+                no_of TEXT,
+                commentaire TEXT,
+                user_login TEXT,
+                date_mouvement TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now', 'localtime'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_pf_mvt_ref ON pf_mouvements(reference);
+            CREATE INDEX IF NOT EXISTS idx_pf_mvt_date ON pf_mouvements(date_mouvement DESC);
+            CREATE INDEX IF NOT EXISTS idx_pf_mvt_empl ON pf_mouvements(emplacement);
+            """
+        )
+        conn.commit()
+        _record_schema_migration(conn, 82, "produits_finis_pf_mouvements")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

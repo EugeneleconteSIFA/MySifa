@@ -326,6 +326,10 @@ body.light .btn-sm{color:#fff}
 .btn-sm:active{transform:translateY(1px)}
 .btn-danger{background:rgba(248,113,113,.15);color:var(--danger);border:1px solid rgba(248,113,113,.3);
   border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+.btn.btn-accent{background:var(--accent);color:var(--bg);border:none}
+body.light .btn.btn-accent{color:#fff}
+.btn.btn-danger{background:var(--danger);color:#fff;border:none}
+.btn.btn-danger:hover{filter:brightness(1.05)}
 
 /* ── Scorecard ── */
 .scorecard{background:var(--card);border:1.5px solid var(--border);border-radius:16px;padding:20px;margin-bottom:16px}
@@ -587,6 +591,48 @@ body.light .mp-search-wrap:focus-within{
   border-radius:10px;padding:6px;min-width:140px;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,.25)}
 .mp-menu-drop button{display:block;width:100%;text-align:left;margin-bottom:4px}
 .mp-empty{text-align:center;color:var(--muted);font-size:13px;padding:32px 16px}
+/* ── Produits finis (onglet) ── */
+.pf-tab{padding:0 0 24px}
+.pf-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px}
+.pf-toolbar-search{flex:1;min-width:180px;position:relative;display:flex;align-items:center;
+  background:var(--card);border:1px solid var(--border);border-radius:10px;padding:0 12px 0 40px}
+.pf-toolbar-search:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.pf-toolbar-search-icon{position:absolute;left:12px;color:var(--muted);display:flex;pointer-events:none}
+.pf-toolbar-search input{width:100%;border:none;background:transparent;padding:11px 0;font-size:14px;color:var(--text);outline:none}
+.pf-toolbar-search input::placeholder{color:var(--muted)}
+.pf-toolbar-actions{display:flex;gap:8px;flex-shrink:0}
+.pf-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+@media(max-width:700px){.pf-kpis{grid-template-columns:1fr}}
+.pf-kpi{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+.pf-kpi-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px}
+.pf-kpi-value{font-size:22px;font-weight:800;font-family:ui-monospace,monospace;color:var(--text)}
+.pf-grid{display:grid;grid-template-columns:1fr 340px;gap:16px;align-items:start}
+@media(max-width:960px){.pf-grid{grid-template-columns:1fr}}
+.pf-col-title{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:10px}
+.pf-stock-list{display:flex;flex-direction:column;gap:10px}
+.pf-stock-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+.pf-stock-ref{font-family:ui-monospace,monospace;font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px}
+.pf-stock-des{font-size:13px;color:var(--text2);margin-bottom:8px;line-height:1.4}
+.pf-stock-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+.pf-stock-qte{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent);font-size:13px}
+.pf-empl-badge{font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;
+  background:var(--accent-bg);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 35%,transparent)}
+.pf-stock-meta{margin-top:6px;font-size:11px;color:var(--muted)}
+.pf-stock-actions{margin-top:10px;display:flex;justify-content:flex-end}
+.pf-mvt-list{display:flex;flex-direction:column;gap:8px;max-height:calc(100vh - 320px);overflow-y:auto}
+.pf-mvt-item{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;background:var(--card);
+  border:1px solid var(--border);border-radius:10px;font-size:12px}
+.pf-mvt-icon{font-size:14px;font-weight:800;line-height:1;flex-shrink:0;width:18px;text-align:center}
+.pf-mvt-icon.entree{color:var(--success)}
+.pf-mvt-icon.sortie{color:var(--danger)}
+.pf-mvt-main{flex:1;min-width:0}
+.pf-mvt-ref{font-weight:700;color:var(--text)}
+.pf-mvt-sub{color:var(--muted);margin-top:2px;font-size:11px}
+.pf-mvt-user{color:var(--text2);font-size:11px;flex-shrink:0;text-align:right;max-width:90px;overflow:hidden;text-overflow:ellipsis}
+.pf-empty{padding:24px;text-align:center;color:var(--muted);font-size:13px}
+.pf-detail-table{width:100%;border-collapse:collapse;font-size:12px}
+.pf-detail-table th,.pf-detail-table td{padding:8px 10px;border-bottom:1px solid var(--border);text-align:left}
+.pf-detail-table th{font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:600}
 #mroot{position:fixed;inset:0;z-index:550;pointer-events:none}
 #mroot:not(:empty){pointer-events:auto}
 .mp-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:18px}
@@ -1190,6 +1236,16 @@ let S = {
   matieresAdminEditId: null,
   matieresAdminAddError: '',
   matieresAdminSaving: false,
+  // Produits finis (onglet dédié)
+  pfStock: null,
+  pfMouvements: null,
+  pfCatalogue: null,
+  pfKpis: null,
+  pfQ: '',
+  pfEmplQ: '',
+  pfLoading: false,
+  pfModal: null,
+  pfConfirmSortie: null,
   // Historique mouvements
   historique: [],
   historiqueFiltres: {
@@ -1865,6 +1921,7 @@ function goToTab(tab) {
   // Arrêter la caméra si on quitte l'onglet réception
   if (tab !== 'reception' && S.recepScanning) recepStopCamera();
   S.tab = tab; S.selProduit = null; S.selEmpl = null; S.selMatiere = null; S.searchResults = null; S.showAddForm = false;
+  if (tab !== 'produits-finis') { S.pfModal = null; closeMroot(); }
   if (tab !== 'referentiel') {
     S.refClientQ = '';
     S.refClientResults = null;
@@ -1882,6 +1939,7 @@ function goToTab(tab) {
   else if (tab === 'inventaire') loadInventaireList();
   else if (tab === 'reception') loadRecepHistory();
   else if (tab === 'matieres') loadMatieres();
+  else if (tab === 'produits-finis') loadProduitsFinis();
   else if (tab === 'historique') loadHistorique();
 }
 
@@ -3290,6 +3348,539 @@ function renderMatieresView() {
         try { el.setSelectionRange(caretStart, caretEnd); } catch (e) {}
       }
     }
+  }
+}
+
+const PF_UNITES = ['pièces', 'kg', 'm', 'bobines', 'cartons', 'palettes', 'étiquettes', 'boîtes'];
+
+function pfFmtShortDateTime(iso) {
+  if (!iso) return '—';
+  const s = String(iso);
+  const d = s.slice(0, 10).split('-');
+  const hm = s.length >= 16 ? s.slice(11, 16) : '';
+  if (d.length === 3) return d[2] + '/' + d[1] + (hm ? ' ' + hm : '');
+  return fD(iso);
+}
+
+function filterPfStockList() {
+  const list = S.pfStock || [];
+  const q = (S.pfQ || '').trim().toLowerCase();
+  const eq = (S.pfEmplQ || '').trim().toLowerCase();
+  return list.filter(row => {
+    if (q) {
+      const hay = [
+        row.reference,
+        row.designation,
+        row.no_of,
+      ].map(x => String(x || '').toLowerCase()).join(' ');
+      if (!hay.includes(q)) return false;
+    }
+    if (eq) {
+      const em = String(row.emplacement || '').toLowerCase();
+      if (!em.includes(eq)) return false;
+    }
+    return true;
+  });
+}
+
+async function loadProduitsFinis() {
+  S.pfLoading = true;
+  renderProduitsFinisView();
+  try {
+    const [data, mvts] = await Promise.all([
+      api('/api/stock/produits-finis'),
+      api('/api/stock/produits-finis/mouvements?limit=20'),
+    ]);
+    S.pfStock = (data && data.stock) || [];
+    S.pfCatalogue = (data && data.catalogue) || [];
+    S.pfKpis = (data && data.kpis) || { references: 0, mouvements_aujourdhui: 0, emplacements_occupes: 0 };
+    S.pfMouvements = Array.isArray(mvts) ? mvts : [];
+  } catch (e) {
+    S.pfStock = [];
+    S.pfCatalogue = [];
+    S.pfMouvements = [];
+    S.pfKpis = { references: 0, mouvements_aujourdhui: 0, emplacements_occupes: 0 };
+    showToast(e.message || 'Chargement impossible.', 'error');
+  }
+  S.pfLoading = false;
+  renderProduitsFinisView();
+}
+
+function renderProduitsFinisView() {
+  if (S.tab !== 'produits-finis') return;
+  const ae = document.activeElement;
+  const focusId = ae?.id;
+  const caretStart = ae?.selectionStart;
+  const caretEnd = ae?.selectionEnd;
+  const area = document.getElementById('scroll-area');
+  if (!area) return;
+  area.innerHTML = '';
+  const content = buildProduitsFinisTab();
+  if (content) area.appendChild(content);
+  if (focusId) {
+    const elFocus = document.getElementById(focusId);
+    if (elFocus) {
+      elFocus.focus();
+      if (caretStart != null) {
+        try { elFocus.setSelectionRange(caretStart, caretEnd); } catch (e) {}
+      }
+    }
+  }
+}
+
+function buildPfSearchInput(id, placeholder, valueKey) {
+  const inp = el('input', {
+    id,
+    attrs: { type: 'text', placeholder, autocomplete: 'off' },
+  });
+  inp.value = S[valueKey] || '';
+  inp.addEventListener('input', e => {
+    S[valueKey] = e.target.value;
+    renderProduitsFinisView();
+  });
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      S[valueKey] = '';
+      renderProduitsFinisView();
+    }
+  });
+  return el('div', { cls: 'pf-toolbar-search' },
+    el('span', { cls: 'pf-toolbar-search-icon' }, iconEl('search', 16)),
+    inp,
+  );
+}
+
+function buildProduitsFinisTab() {
+  const wrap = el('div', { cls: 'content pf-tab', id: 'tab-produits-finis' });
+  const toolbar = el('div', { cls: 'pf-toolbar' },
+    buildPfSearchInput('pf-search-produit', 'Rechercher un produit (réf, désignation, OF…)', 'pfQ'),
+    buildPfSearchInput('pf-search-empl', 'Rechercher un emplacement', 'pfEmplQ'),
+    el('div', { cls: 'pf-toolbar-actions' },
+      S.stockReadOnly ? null : el('button', {
+        cls: 'btn btn-accent',
+        type: 'button',
+        on: { click: () => openPfMvtModal('entree') },
+      }, '+ Entrée'),
+      S.stockReadOnly ? null : el('button', {
+        cls: 'btn btn-danger',
+        type: 'button',
+        on: { click: () => openPfMvtModal('sortie') },
+      }, '− Sortie'),
+    ),
+  );
+  wrap.appendChild(toolbar);
+
+  const kpis = S.pfKpis || {};
+  wrap.appendChild(el('div', { cls: 'pf-kpis' },
+    el('div', { cls: 'pf-kpi' },
+      el('div', { cls: 'pf-kpi-label' }, 'Références en stock'),
+      el('div', { cls: 'pf-kpi-value' }, String(kpis.references != null ? kpis.references : '—')),
+    ),
+    el('div', { cls: 'pf-kpi' },
+      el('div', { cls: 'pf-kpi-label' }, 'Mouvements aujourd\'hui'),
+      el('div', { cls: 'pf-kpi-value' }, String(kpis.mouvements_aujourdhui != null ? kpis.mouvements_aujourdhui : '—')),
+    ),
+    el('div', { cls: 'pf-kpi' },
+      el('div', { cls: 'pf-kpi-label' }, 'Emplacements occupés'),
+      el('div', { cls: 'pf-kpi-value' }, String(kpis.emplacements_occupes != null ? kpis.emplacements_occupes : '—')),
+    ),
+  ));
+
+  if (S.pfLoading && S.pfStock === null) {
+    wrap.appendChild(el('div', { cls: 'pf-empty' }, 'Chargement…'));
+    return wrap;
+  }
+
+  const filtered = filterPfStockList();
+  const qProd = (S.pfQ || '').trim();
+  const qEmpl = (S.pfEmplQ || '').trim();
+
+  const stockList = el('div', { cls: 'pf-stock-list' });
+  if (!filtered.length) {
+    const msg = (qProd || qEmpl)
+      ? 'Aucun résultat pour « ' + [qProd, qEmpl].filter(Boolean).join(' » / « ') + ' »'
+      : 'Aucun stock enregistré.';
+    stockList.appendChild(el('div', { cls: 'pf-empty' }, msg));
+  } else {
+    filtered.forEach(row => {
+      stockList.appendChild(el('div', { cls: 'pf-stock-card' },
+        el('div', { cls: 'pf-stock-ref' }, row.reference || '—'),
+        el('div', { cls: 'pf-stock-des' }, row.designation || '—'),
+        el('div', { cls: 'pf-stock-row' },
+          el('span', { cls: 'pf-stock-qte' }, fU(row.quantite, row.unite)),
+          el('span', { cls: 'pf-empl-badge' }, row.emplacement || '—'),
+        ),
+        el('div', { cls: 'pf-stock-meta' },
+          'Dernière entrée : ' + fD(row.derniere_entree),
+        ),
+        el('div', { cls: 'pf-stock-actions' },
+          el('button', {
+            cls: 'btn-ghost-sm',
+            type: 'button',
+            on: { click: () => openPfDetailModal(row.reference) },
+          }, 'Détail'),
+        ),
+      ));
+    });
+  }
+
+  const mvtList = el('div', { cls: 'pf-mvt-list' });
+  const mvts = S.pfMouvements || [];
+  if (!mvts.length) {
+    mvtList.appendChild(el('div', { cls: 'pf-empty' }, 'Aucun mouvement récent.'));
+  } else {
+    mvts.forEach(m => {
+      const isEntree = m.type === 'entree';
+      mvtList.appendChild(el('div', { cls: 'pf-mvt-item' },
+        el('span', { cls: 'pf-mvt-icon ' + (isEntree ? 'entree' : 'sortie') }, isEntree ? '↑' : '↓'),
+        el('div', { cls: 'pf-mvt-main' },
+          el('div', { cls: 'pf-mvt-ref' },
+            (m.reference || '—') + ' · ' + fU(m.quantite, m.unite),
+          ),
+          el('div', { cls: 'pf-mvt-sub' },
+            (m.emplacement || '—') + ' · ' + pfFmtShortDateTime(m.date_mouvement),
+          ),
+        ),
+        el('div', { cls: 'pf-mvt-user' }, m.user_login || '—'),
+      ));
+    });
+  }
+
+  wrap.appendChild(el('div', { cls: 'pf-grid' },
+    el('div', { cls: 'pf-col-stock' },
+      el('div', { cls: 'pf-col-title' }, 'Stock actuel'),
+      stockList,
+    ),
+    el('div', { cls: 'pf-col-mvts' },
+      el('div', { cls: 'pf-col-title' }, 'Derniers mouvements'),
+      mvtList,
+    ),
+  ));
+  return wrap;
+}
+
+function pfCatalogueFind(ref) {
+  const r = String(ref || '').trim().toUpperCase();
+  return (S.pfCatalogue || []).find(c => String(c.reference || '').toUpperCase() === r) || null;
+}
+
+function pfEmplacementChoices(filter) {
+  const q = String(filter || '').trim().toUpperCase();
+  const fromStock = [...new Set((S.pfStock || []).map(r => String(r.emplacement || '').toUpperCase()).filter(Boolean))];
+  const fromDb = allPageEmplacementChoices();
+  const all = [...new Set([...fromStock, ...fromDb])].sort();
+  if (!q) return all.slice(0, 12);
+  return all.filter(e => e.includes(q)).slice(0, 12);
+}
+
+function pfProduitSuggestions(filter) {
+  const q = String(filter || '').trim().toLowerCase();
+  const cat = S.pfCatalogue || [];
+  if (!q) return cat.slice(0, 15);
+  return cat.filter(c => {
+    const hay = (String(c.reference || '') + ' ' + String(c.designation || '')).toLowerCase();
+    return hay.includes(q);
+  }).slice(0, 15);
+}
+
+function buildPfRefPickerField(refInp, desInp, uniteSel, onPick) {
+  const suggWrap = el('div', { cls: 'empl-suggestions' });
+  refInp.addEventListener('input', () => {
+    const picked = pfCatalogueFind(refInp.value);
+    if (picked) {
+      desInp.value = picked.designation || '';
+      if (uniteSel && picked.unite) uniteSel.value = picked.unite;
+    }
+    const list = pfProduitSuggestions(refInp.value);
+    suggWrap.innerHTML = '';
+    list.forEach(c => {
+      suggWrap.appendChild(el('div', {
+        cls: 'empl-sugg-item',
+        on: { mousedown: (e) => {
+          e.preventDefault();
+          refInp.value = c.reference || '';
+          desInp.value = c.designation || '';
+          if (uniteSel && c.unite) uniteSel.value = c.unite;
+          suggWrap.innerHTML = '';
+          if (onPick) onPick(c);
+        } },
+      }, (c.reference || '') + (c.designation ? ' — ' + c.designation : '')));
+    });
+  });
+  return suggWrap;
+}
+
+function buildPfEmplPickerField(emplInp) {
+  const suggWrap = el('div', { cls: 'empl-suggestions' });
+  emplInp.addEventListener('input', () => {
+    emplInp.value = emplInp.value.toUpperCase();
+    const list = pfEmplacementChoices(emplInp.value);
+    suggWrap.innerHTML = '';
+    list.forEach(code => {
+      suggWrap.appendChild(el('div', {
+        cls: 'empl-sugg-item',
+        on: { mousedown: (e) => { e.preventDefault(); emplInp.value = code; suggWrap.innerHTML = ''; } },
+      }, code));
+    });
+  });
+  return suggWrap;
+}
+
+function openPfMvtModal(type, preset) {
+  if (S.stockReadOnly) return;
+  const typeMvt = type === 'sortie' ? 'sortie' : 'entree';
+  S.pfModal = { type: typeMvt, preset: preset || null };
+  renderPfMvtModal();
+}
+
+function closePfModals() {
+  S.pfModal = null;
+  S.pfConfirmSortie = null;
+  const mroot = document.getElementById('mroot');
+  if (mroot) mroot.innerHTML = '';
+}
+
+function renderPfMvtModal() {
+  closePfModals();
+  const modal = S.pfModal;
+  if (!modal) return;
+  const mroot = document.getElementById('mroot');
+  if (!mroot) return;
+  const typeMvt = modal.type;
+  const isSortie = typeMvt === 'sortie';
+  const modalId = isSortie ? 'modal-pf-sortie' : 'modal-pf-entree';
+  const headCls = isSortie ? 'mp-modal-mvt-head-pf-sortie' : 'mp-modal-mvt-head-pf-entree';
+
+  const overlay = el('div', {
+    id: modalId,
+    cls: 'mp-modal-overlay',
+    on: { click: (e) => { if (e.target === overlay) closePfModals(); } },
+  });
+  const box = el('div', { cls: 'mp-modal mp-modal-mvt' });
+  box.appendChild(el('div', { cls: 'mp-modal-mvt-head ' + headCls },
+    el('h3', null, isSortie ? 'Sortie produit' : 'Entrée produit'),
+    el('button', { cls: 'mp-modal-close', type: 'button', on: { click: closePfModals } }, '×'),
+  ));
+  const body = el('div', { cls: 'mp-modal-mvt-body' });
+
+  const preset = modal.preset || {};
+  const refInp = el('input', {
+    cls: 'field-input',
+    attrs: { type: 'text', placeholder: 'Référence produit', autocomplete: 'off', required: true },
+    style: { direction: 'ltr' },
+  });
+  refInp.value = preset.reference || '';
+  const desInp = el('input', {
+    cls: 'field-input',
+    attrs: { type: 'text', placeholder: 'Désignation', autocomplete: 'off' },
+    style: { direction: 'ltr' },
+  });
+  desInp.value = preset.designation || '';
+  const uniteSel = el('select', { cls: 'field-input' });
+  PF_UNITES.forEach(u => {
+    const o = el('option', { attrs: { value: u } }, u);
+    if ((preset.unite || 'pièces') === u) o.selected = true;
+    uniteSel.appendChild(o);
+  });
+  const refSugg = buildPfRefPickerField(refInp, desInp, uniteSel);
+
+  const qInp = el('input', {
+    cls: 'field-input',
+    attrs: { type: 'number', min: '0.01', step: '0.01', inputmode: 'decimal', required: true },
+    style: { direction: 'ltr' },
+  });
+  const emplInp = el('input', {
+    cls: 'field-input empl-upper',
+    attrs: { type: 'text', placeholder: 'Emplacement', autocomplete: 'off', required: true },
+    style: { direction: 'ltr' },
+  });
+  emplInp.value = (preset.emplacement || '').toUpperCase();
+  const emplSugg = buildPfEmplPickerField(emplInp);
+  const ofInp = el('input', {
+    cls: 'field-input',
+    attrs: { type: 'text', placeholder: 'N° OF (facultatif)', autocomplete: 'off' },
+    style: { direction: 'ltr' },
+  });
+  const comTa = el('textarea', {
+    cls: 'field-input',
+    attrs: { rows: '2', placeholder: 'Commentaire (facultatif)' },
+    style: { resize: 'vertical', minHeight: '60px' },
+  });
+  const motifInp = isSortie ? el('input', {
+    cls: 'field-input',
+    attrs: { type: 'text', placeholder: 'Motif / destinataire (facultatif)', autocomplete: 'off' },
+    style: { direction: 'ltr' },
+  }) : null;
+
+  body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Référence produit *'), refInp, refSugg));
+  body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Désignation'), desInp));
+  body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Quantité *'), qInp));
+  body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Unité'), uniteSel));
+  body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Emplacement *'), emplInp, emplSugg));
+  body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'N° OF'), ofInp));
+  if (motifInp) body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Motif / destinataire'), motifInp));
+  body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Commentaire'), comTa));
+
+  const collectBody = () => ({
+    reference: refInp.value.trim().toUpperCase(),
+    designation: desInp.value.trim(),
+    quantite: parseFloat(qInp.value),
+    unite: uniteSel.value || 'pièces',
+    emplacement: emplInp.value.trim().toUpperCase(),
+    no_of: ofInp.value.trim() || null,
+    commentaire: comTa.value.trim() || null,
+    motif_destinataire: motifInp ? (motifInp.value.trim() || null) : null,
+  });
+
+  const validate = () => {
+    const b = collectBody();
+    if (!b.reference) return 'Référence obligatoire.';
+    if (!b.emplacement) return 'Emplacement obligatoire.';
+    if (!b.quantite || b.quantite < 0.01) return 'Quantité invalide — minimum 0,01.';
+    if (!b.designation) b.designation = b.reference;
+    return null;
+  };
+
+  const doSubmit = async () => {
+    const err = validate();
+    if (err) { showToast(err, 'error'); return; }
+    const b = collectBody();
+    if (!b.designation) b.designation = b.reference;
+    const path = isSortie ? '/api/stock/produits-finis/sortie' : '/api/stock/produits-finis/entree';
+    try {
+      await api(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(b),
+      });
+      showToast(isSortie ? 'Sortie enregistrée.' : 'Entrée enregistrée.');
+      closePfModals();
+      await loadProduitsFinis();
+    } catch (e) {
+      showToast(e.message || 'Enregistrement impossible.', 'error');
+    }
+  };
+
+  const onSave = () => {
+    const err = validate();
+    if (err) { showToast(err, 'error'); return; }
+    if (isSortie) {
+      const b = collectBody();
+      renderPfSortieConfirmModal(b, doSubmit);
+      return;
+    }
+    doSubmit();
+  };
+
+  body.appendChild(el('div', { cls: 'mp-modal-actions' },
+    el('button', { cls: 'btn btn-ghost', type: 'button', on: { click: closePfModals } }, 'Annuler'),
+    el('button', {
+      cls: 'btn ' + (isSortie ? 'btn-danger' : 'btn-accent'),
+      type: 'button',
+      on: { click: onSave },
+    }, 'Enregistrer'),
+  ));
+  box.appendChild(body);
+  overlay.appendChild(box);
+  mroot.appendChild(overlay);
+  requestAnimationFrame(() => { if (!refInp.value) refInp.focus(); });
+}
+
+function renderPfSortieConfirmModal(body, onConfirm) {
+  closePfModals();
+  S.pfConfirmSortie = body;
+  const mroot = document.getElementById('mroot');
+  if (!mroot) return;
+  const overlay = el('div', {
+    cls: 'mp-modal-overlay',
+    on: { click: (e) => { if (e.target === overlay) closePfModals(); } },
+  });
+  const box = el('div', { cls: 'mp-modal' },
+    el('h3', null, 'Confirmer la sortie'),
+    el('p', { style: { fontSize: '13px', color: 'var(--text2)', lineHeight: '1.6', marginBottom: '16px' } },
+      'Sortie de ' + fU(body.quantite, body.unite) + ' — réf. ' + body.reference
+      + ' depuis ' + body.emplacement + '.',
+    ),
+    el('div', { cls: 'mp-modal-actions' },
+      el('button', { cls: 'btn btn-ghost', type: 'button', on: { click: () => {
+        S.pfModal = { type: 'sortie' };
+        renderPfMvtModal();
+      } } }, 'Retour'),
+      el('button', { cls: 'btn btn-danger', type: 'button', on: { click: onConfirm } }, 'Confirmer la sortie'),
+    ),
+  );
+  overlay.appendChild(box);
+  mroot.appendChild(overlay);
+}
+
+async function openPfDetailModal(reference) {
+  const ref = String(reference || '').trim().toUpperCase();
+  if (!ref) return;
+  closePfModals();
+  const mroot = document.getElementById('mroot');
+  if (!mroot) return;
+  const overlay = el('div', {
+    id: 'modal-pf-detail',
+    cls: 'mp-modal-overlay',
+    on: { click: (e) => { if (e.target === overlay) closePfModals(); } },
+  });
+  const box = el('div', { cls: 'mp-modal', style: { maxWidth: '560px' } },
+    el('div', { cls: 'mp-modal-head' },
+      el('h3', null, 'Détail produit'),
+      el('button', { cls: 'mp-modal-close', type: 'button', on: { click: closePfModals } }, '×'),
+    ),
+    el('div', { cls: 'pf-empty' }, 'Chargement…'),
+  );
+  overlay.appendChild(box);
+  mroot.appendChild(overlay);
+  try {
+    const d = await api('/api/stock/produits-finis/' + encodeURIComponent(ref));
+    box.innerHTML = '';
+    box.appendChild(el('div', { cls: 'mp-modal-head' },
+      el('h3', null, d.reference || ref),
+      el('button', { cls: 'mp-modal-close', type: 'button', on: { click: closePfModals } }, '×'),
+    ));
+    box.appendChild(el('p', { style: { fontSize: '13px', color: 'var(--text2)', marginBottom: '8px' } }, d.designation || '—'));
+    box.appendChild(el('p', { style: { fontSize: '13px', fontWeight: '700', color: 'var(--accent)', marginBottom: '16px' } },
+      'Stock actuel : ' + fU(d.stock_total, d.unite),
+    ));
+    const hist = d.historique || [];
+    if (!hist.length) {
+      box.appendChild(el('div', { cls: 'pf-empty' }, 'Aucun mouvement enregistré.'));
+    } else {
+      const table = el('table', { cls: 'pf-detail-table' });
+      const thead = el('thead', null, el('tr', null,
+        el('th', null, 'Date'),
+        el('th', null, 'Type'),
+        el('th', null, 'Qté'),
+        el('th', null, 'Empl.'),
+        el('th', null, 'OF'),
+        el('th', null, 'Utilisateur'),
+      ));
+      table.appendChild(thead);
+      const tbody = el('tbody', null);
+      hist.forEach(m => {
+        tbody.appendChild(el('tr', null,
+          el('td', null, fDateTime(m.date_mouvement)),
+          el('td', null, m.type === 'entree' ? 'Entrée' : 'Sortie'),
+          el('td', null, fU(m.quantite, m.unite)),
+          el('td', null, m.emplacement || '—'),
+          el('td', null, m.no_of || '—'),
+          el('td', null, m.user_login || '—'),
+        ));
+      });
+      table.appendChild(tbody);
+      box.appendChild(table);
+    }
+    box.appendChild(el('div', { cls: 'mp-modal-actions', style: { marginTop: '16px' } },
+      el('button', { cls: 'btn btn-ghost', type: 'button', on: { click: closePfModals } }, 'Fermer'),
+    ));
+  } catch (e) {
+    box.innerHTML = '';
+    box.appendChild(el('div', { cls: 'pf-empty' }, e.message || 'Chargement impossible.'));
+    box.appendChild(el('div', { cls: 'mp-modal-actions' },
+      el('button', { cls: 'btn btn-ghost', type: 'button', on: { click: closePfModals } }, 'Fermer'),
+    ));
   }
 }
 
@@ -5540,6 +6131,10 @@ function renderContent() {
   else if (S.tab === 'matieres') {
     content = buildMatieres();
   }
+  else if (S.tab === 'produits-finis') {
+    renderProduitsFinisView();
+    return;
+  }
   else if (S.tab === 'referentiel') {
     renderReferentielView();
     return;
@@ -6184,6 +6779,7 @@ function buildReception() {
 const STOCK_TAB_DOC_TITLES = {
   dashboard: 'Tableau de bord — MyStock — MySifa',
   matieres: 'Matières premières — MyStock — MySifa',
+  'produits-finis': 'Produits finis — MyStock — MySifa',
   referentiel: 'Référentiel — MyStock — MySifa',
   inventaire: 'Inventaire — MyStock — MySifa',
   reception: 'Réception matière — MyStock — MySifa',
@@ -6194,6 +6790,7 @@ const STOCK_TAB_DOC_TITLES = {
 const STOCK_TAB_MOBILE_TITLES = {
   dashboard: 'Tableau de bord',
   matieres: 'Matières premières',
+  'produits-finis': 'Produits finis',
   referentiel: 'Référentiel',
   inventaire: 'Inventaire',
   reception: 'Réception matière',
@@ -6217,6 +6814,7 @@ function buildSidebarNavStructure() {
     { kind: 'btn', tab: 'matieres', icon: 'layers', label: 'Matières premières' },
     { kind: 'btn', tab: 'reception', icon: 'inbox', label: 'Réception matière' },
     { kind: 'sep', label: 'Produits' },
+    { kind: 'btn', tab: 'produits-finis', icon: 'package', label: 'Produits finis' },
     { kind: 'btn', tab: 'referentiel', icon: 'tag', label: 'Référentiel' },
   ];
   if (!S.stockReadOnly) {
@@ -6490,7 +7088,7 @@ async function init() {
   await fetchEmplacementsFromDB();
   // Onglet initial via URL param ?tab=...
   const urlTab = new URLSearchParams(window.location.search).get('tab');
-  if (urlTab && ['dashboard','matieres','referentiel','stock','inventaire','reception','historique','traca'].includes(urlTab)) {
+  if (urlTab && ['dashboard','matieres','produits-finis','referentiel','stock','inventaire','reception','historique','traca'].includes(urlTab)) {
     S.tab = urlTab;
   }
   // Forcer traça si accès restreint
@@ -6500,6 +7098,7 @@ async function init() {
   else if (S.tab === 'reception') { await loadRecepHistory(); }
   else if (S.tab === 'inventaire') { await loadInventaireList(); }
   else if (S.tab === 'matieres') { await loadMatieres(); }
+  else if (S.tab === 'produits-finis') { await loadProduitsFinis(); }
   else if (S.tab === 'historique') { await loadHistorique(); }
   else if (S.tab === 'referentiel') { await loadDashboard(); }
   else { await loadDashboard(); }

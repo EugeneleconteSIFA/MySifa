@@ -1790,6 +1790,346 @@ def list_matiere_mouvements(matiere_id: int, request: Request):
     return [dict(r) for r in rows]
 
 
+# ── Produits finis (onglet dédié) ─────────────────────────────────
+_PF_UNITES = frozenset(
+    {"pièces", "kg", "m", "bobines", "cartons", "palettes", "étiquettes", "boîtes"}
+)
+
+
+def _pf_user_login(user: dict) -> str:
+    return (user.get("email") or user.get("nom") or "").strip() or "—"
+
+
+def _pf_upsert_catalogue(
+    conn: sqlite3.Connection,
+    reference: str,
+    designation: str,
+    unite: str,
+) -> None:
+    ref = reference.strip().upper()
+    des = designation.strip() or ref
+    u = unite.strip() or "pièces"
+    conn.execute(
+        """
+        INSERT INTO produits_finis (reference, designation, unite)
+        VALUES (?, ?, ?)
+        ON CONFLICT(reference) DO UPDATE SET
+            designation = excluded.designation,
+            unite = excluded.unite
+        """,
+        (ref, des, u),
+    )
+
+
+def _pf_stock_at(conn: sqlite3.Connection, reference: str, emplacement: str) -> float:
+    row = conn.execute(
+        """
+        SELECT COALESCE(SUM(
+            CASE WHEN type = 'entree' THEN quantite ELSE -quantite END
+        ), 0) AS qte
+        FROM pf_mouvements
+        WHERE UPPER(TRIM(reference)) = UPPER(TRIM(?))
+          AND UPPER(TRIM(emplacement)) = UPPER(TRIM(?))
+        """,
+        (reference, emplacement),
+    ).fetchone()
+    return float(row["qte"] or 0) if row else 0.0
+
+
+def _pf_kpis(conn: sqlite3.Connection) -> dict:
+    today = datetime.now().strftime("%Y-%m-%d")
+    refs = conn.execute(
+        """
+        SELECT COUNT(DISTINCT reference) AS n FROM (
+            SELECT reference,
+                   SUM(CASE WHEN type = 'entree' THEN quantite ELSE -quantite END) AS qte
+            FROM pf_mouvements
+            GROUP BY reference
+            HAVING qte > 0.0001
+        )
+        """
+    ).fetchone()
+    empl = conn.execute(
+        """
+        SELECT COUNT(DISTINCT emplacement) AS n FROM (
+            SELECT emplacement,
+                   SUM(CASE WHEN type = 'entree' THEN quantite ELSE -quantite END) AS qte
+            FROM pf_mouvements
+            GROUP BY emplacement
+            HAVING qte > 0.0001
+        )
+        """
+    ).fetchone()
+    mvt_today = conn.execute(
+        """
+        SELECT COUNT(*) AS n FROM pf_mouvements
+        WHERE date_mouvement >= ?
+        """,
+        (today + "T00:00:00",),
+    ).fetchone()
+    return {
+        "references": int(refs["n"] or 0) if refs else 0,
+        "mouvements_aujourdhui": int(mvt_today["n"] or 0) if mvt_today else 0,
+        "emplacements_occupes": int(empl["n"] or 0) if empl else 0,
+    }
+
+
+@router.get("/api/stock/produits-finis")
+def list_produits_finis(request: Request):
+    require_stock(request)
+    with get_db() as conn:
+        stock_rows = conn.execute(
+            """
+            SELECT
+                UPPER(TRIM(m.reference)) AS reference,
+                COALESCE(NULLIF(TRIM(p.designation), ''), TRIM(m.designation)) AS designation,
+                COALESCE(NULLIF(TRIM(p.unite), ''), NULLIF(TRIM(m.unite), ''), 'pièces') AS unite,
+                UPPER(TRIM(m.emplacement)) AS emplacement,
+                SUM(CASE WHEN m.type = 'entree' THEN m.quantite ELSE -m.quantite END) AS quantite,
+                MAX(CASE WHEN m.type = 'entree' THEN m.date_mouvement END) AS derniere_entree
+            FROM pf_mouvements m
+            LEFT JOIN produits_finis p ON UPPER(TRIM(p.reference)) = UPPER(TRIM(m.reference))
+            GROUP BY UPPER(TRIM(m.reference)), UPPER(TRIM(m.emplacement))
+            HAVING quantite > 0.0001
+            ORDER BY reference ASC, emplacement ASC
+            """
+        ).fetchall()
+        catalogue = conn.execute(
+            """
+            SELECT reference, designation, unite
+            FROM produits_finis
+            ORDER BY reference ASC
+            """
+        ).fetchall()
+        kpis = _pf_kpis(conn)
+    return {
+        "stock": [
+            {
+                "reference": r["reference"],
+                "designation": r["designation"],
+                "unite": r["unite"],
+                "emplacement": r["emplacement"],
+                "quantite": float(r["quantite"] or 0),
+                "derniere_entree": r["derniere_entree"],
+            }
+            for r in stock_rows
+        ],
+        "catalogue": [dict(r) for r in catalogue],
+        "kpis": kpis,
+    }
+
+
+@router.get("/api/stock/produits-finis/mouvements")
+def list_produits_finis_mouvements(request: Request, limit: int = 20):
+    require_stock(request)
+    limit = max(1, min(int(limit or 20), 100))
+    with get_db() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, reference, designation, type, quantite, unite, emplacement,
+                   no_of, commentaire, user_login, date_mouvement
+            FROM pf_mouvements
+            ORDER BY date_mouvement DESC, id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+@router.get("/api/stock/produits-finis/{reference}")
+def get_produit_fini_detail(reference: str, request: Request):
+    require_stock(request)
+    ref = (reference or "").strip().upper()
+    if not ref:
+        raise HTTPException(400, "Référence obligatoire.")
+    with get_db() as conn:
+        cat = conn.execute(
+            "SELECT reference, designation, unite FROM produits_finis WHERE UPPER(TRIM(reference))=?",
+            (ref,),
+        ).fetchone()
+        stock_rows = conn.execute(
+            """
+            SELECT
+                UPPER(TRIM(emplacement)) AS emplacement,
+                SUM(CASE WHEN type = 'entree' THEN quantite ELSE -quantite END) AS quantite,
+                COALESCE(NULLIF(TRIM(MAX(CASE WHEN type = 'entree' THEN unite END)), ''), 'pièces') AS unite
+            FROM pf_mouvements
+            WHERE UPPER(TRIM(reference))=?
+            GROUP BY UPPER(TRIM(emplacement))
+            HAVING quantite > 0.0001
+            ORDER BY emplacement ASC
+            """,
+            (ref,),
+        ).fetchall()
+        historique = conn.execute(
+            """
+            SELECT id, reference, designation, type, quantite, unite, emplacement,
+                   no_of, commentaire, user_login, date_mouvement
+            FROM pf_mouvements
+            WHERE UPPER(TRIM(reference))=?
+            ORDER BY date_mouvement DESC, id DESC
+            """,
+            (ref,),
+        ).fetchall()
+    stock_total = sum(float(r["quantite"] or 0) for r in stock_rows)
+    designation = (
+        (cat["designation"] if cat else None)
+        or (historique[0]["designation"] if historique else ref)
+    )
+    unite = (
+        (cat["unite"] if cat else None)
+        or (historique[0]["unite"] if historique else "pièces")
+    )
+    return {
+        "reference": ref,
+        "designation": designation,
+        "unite": unite,
+        "stock_total": stock_total,
+        "emplacements": [
+            {
+                "emplacement": r["emplacement"],
+                "quantite": float(r["quantite"] or 0),
+                "unite": r["unite"],
+            }
+            for r in stock_rows
+        ],
+        "historique": [dict(r) for r in historique],
+    }
+
+
+@router.post("/api/stock/produits-finis/entree")
+async def produit_fini_entree(request: Request):
+    user = require_stock_write(request)
+    body = await request.json()
+    reference = (body.get("reference") or "").strip().upper()
+    designation = (body.get("designation") or "").strip()
+    emplacement = (body.get("emplacement") or "").strip().upper()
+    unite = (body.get("unite") or "pièces").strip() or "pièces"
+    no_of = (body.get("no_of") or "").strip() or None
+    commentaire = (body.get("commentaire") or "").strip() or None
+
+    if not reference:
+        raise HTTPException(400, "Référence obligatoire.")
+    if not emplacement:
+        raise HTTPException(400, "Emplacement obligatoire.")
+    try:
+        quantite = float(body.get("quantite", 0))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Quantité invalide.") from None
+    if quantite < 0.01:
+        raise HTTPException(400, "Quantité invalide — minimum 0,01.")
+
+    if not designation:
+        designation = reference
+
+    user_login = _pf_user_login(user)
+    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+
+    with get_db() as conn:
+        _pf_upsert_catalogue(conn, reference, designation, unite)
+        conn.execute(
+            """
+            INSERT INTO pf_mouvements (
+                reference, designation, type, quantite, unite, emplacement,
+                no_of, commentaire, user_login, date_mouvement
+            ) VALUES (?, ?, 'entree', ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                reference,
+                designation,
+                quantite,
+                unite,
+                emplacement,
+                no_of,
+                commentaire,
+                user_login,
+                now,
+            ),
+        )
+        conn.commit()
+
+    log_action(
+        user=user,
+        action="CREATE",
+        module="stock",
+        objet=f"PF entrée {reference} +{quantite:g} {unite} @ {emplacement}",
+        ip=request.client.host if request.client else None,
+    )
+    return {"ok": True}
+
+
+@router.post("/api/stock/produits-finis/sortie")
+async def produit_fini_sortie(request: Request):
+    user = require_stock_write(request)
+    body = await request.json()
+    reference = (body.get("reference") or "").strip().upper()
+    designation = (body.get("designation") or "").strip()
+    emplacement = (body.get("emplacement") or "").strip().upper()
+    unite = (body.get("unite") or "pièces").strip() or "pièces"
+    no_of = (body.get("no_of") or "").strip() or None
+    commentaire = (body.get("commentaire") or "").strip() or None
+    motif = (body.get("motif_destinataire") or "").strip()
+
+    if not reference:
+        raise HTTPException(400, "Référence obligatoire.")
+    if not emplacement:
+        raise HTTPException(400, "Emplacement obligatoire.")
+    try:
+        quantite = float(body.get("quantite", 0))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Quantité invalide.") from None
+    if quantite < 0.01:
+        raise HTTPException(400, "Quantité invalide — minimum 0,01.")
+
+    if not designation:
+        designation = reference
+
+    if motif:
+        commentaire = "Motif : " + motif + ((" | " + commentaire) if commentaire else "")
+
+    user_login = _pf_user_login(user)
+    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+
+    with get_db() as conn:
+        stock = _pf_stock_at(conn, reference, emplacement)
+        if quantite > stock + 0.0001:
+            raise HTTPException(
+                400,
+                f"Stock insuffisant — disponible : {stock:g} {unite}.",
+            )
+        _pf_upsert_catalogue(conn, reference, designation, unite)
+        conn.execute(
+            """
+            INSERT INTO pf_mouvements (
+                reference, designation, type, quantite, unite, emplacement,
+                no_of, commentaire, user_login, date_mouvement
+            ) VALUES (?, ?, 'sortie', ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                reference,
+                designation,
+                quantite,
+                unite,
+                emplacement,
+                no_of,
+                commentaire,
+                user_login,
+                now,
+            ),
+        )
+        conn.commit()
+
+    log_action(
+        user=user,
+        action="CREATE",
+        module="stock",
+        objet=f"PF sortie {reference} -{quantite:g} {unite} @ {emplacement}",
+        ip=request.client.host if request.client else None,
+    )
+    return {"ok": True}
+
+
 @router.post("/api/stock/produits/import/preview")
 async def preview_produits_import(request: Request, file: UploadFile = File(...)):
     require_stock_write(request)

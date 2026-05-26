@@ -151,6 +151,11 @@ body.palette-foret .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(61,214,
 body.palette-cendre .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(100,150,200,.28),0 0 16px rgba(100,150,200,.14)}
 body.palette-braise .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(240,112,48,.28),0 0 16px rgba(240,112,48,.14)}
 body.light .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(8,145,178,.32),0 0 16px rgba(8,145,178,.12)}
+.nav-scroll{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:2px;margin-bottom:8px;width:100%}
+.nav-group-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;
+  padding:4px 12px 2px;user-select:none;pointer-events:none;line-height:1.3}
+.nav-group-label:not(:first-child){margin-top:10px;padding-top:12px;border-top:1px solid var(--border)}
+.sidebar .nav-scroll.tabs{margin:0;flex-wrap:nowrap}
 .nav-badge{margin-left:auto;min-width:22px;height:18px;padding:0 6px;border-radius:999px;
   background:rgba(248,113,113,.14);border:1px solid rgba(248,113,113,.35);color:var(--danger);
   display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;font-family:monospace}
@@ -4873,7 +4878,7 @@ function renderCompta(){
         iconEl('file',15),'  Table des comptes'),
       h('button',{className:'nav-btn'+(tab==='banques'?' active':''),onClick:()=>{set({comptaTab:'banques'});loadComptaBanques();}},
         iconEl('credit-card',15),'  Code de banque'),
-      h('div',{className:'nav-group-label',style:{marginTop:'8px'}},'Autres modules'),
+      h('div',{className:'nav-group-label'},'Autres modules'),
       h('button',{className:'nav-btn'+(tab==='cession'?' active':''),onClick:()=>{set({comptaTab:'cession'});}},
         iconEl('clock',15),'  Cession (en cours)'),
       h('button',{className:'nav-btn'+(tab==='paie'?' active':''),onClick:()=>{if(!S.paieEmpLoaded){paieLoadEmployes();}paieLoadVars().then(()=>render());set({comptaTab:'paie'});}},
