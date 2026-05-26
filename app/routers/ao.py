@@ -1,7 +1,7 @@
 """MySifa — MyAO (appels d'offre) — API interne.
 
 Routes : /api/ao/*
-Rôles : superadmin, direction, administration
+Rôles : superadmin, direction
 """
 from __future__ import annotations
 
@@ -24,7 +24,6 @@ from app.services.path_safety import path_is_under_directory
 from app.services.auth_service import get_current_user
 from config import (
     BASE_URL,
-    ROLE_ADMINISTRATION,
     ROLE_DIRECTION,
     ROLE_SUPERADMIN,
     UPLOAD_DIR,
@@ -47,7 +46,6 @@ _PARIS = ZoneInfo("Europe/Paris")
 _AO_ROLES = frozenset({
     ROLE_SUPERADMIN,
     ROLE_DIRECTION,
-    ROLE_ADMINISTRATION,
 })
 
 

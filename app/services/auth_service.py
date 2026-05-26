@@ -67,18 +67,30 @@ def get_user_by_token(token: str) -> Optional[dict]:
     return dict(row) if row else None
 
 
+def _coerce_access_override_dict(o: dict) -> dict:
+    """Normalise les clés d'accès (devis → pricing, ancien MyDevis)."""
+    out: dict = {}
+    for k, v in o.items():
+        if not isinstance(v, bool):
+            continue
+        key = "pricing" if k == "devis" else k
+        if key in ACCESS_OVERRIDABLE_APPS:
+            out[key] = v
+    return out
+
+
 def parse_access_overrides_raw(raw: Any) -> dict:
     if raw is None or raw == "":
         return {}
     if isinstance(raw, dict):
-        return {k: bool(v) for k, v in raw.items() if k in ACCESS_OVERRIDABLE_APPS and isinstance(v, bool)}
+        return _coerce_access_override_dict(raw)
     try:
         o = json.loads(raw)
     except (json.JSONDecodeError, TypeError):
         return {}
     if not isinstance(o, dict):
         return {}
-    return {k: bool(v) for k, v in o.items() if k in ACCESS_OVERRIDABLE_APPS and isinstance(v, bool)}
+    return _coerce_access_override_dict(o)
 
 
 def merged_app_access(role: str, overrides_raw: Any) -> dict:
@@ -97,6 +109,8 @@ def user_has_app_access(user: dict, app: str) -> bool:
     """Accès effectif à une application (inclut surcharges par utilisateur sauf Paramètres)."""
     if app == "settings":
         return user.get("role") == ROLE_SUPERADMIN
+    if app == "devis":
+        app = "pricing"
     acc = merged_app_access(user.get("role"), user.get("access_overrides"))
     return bool(acc.get(app))
 

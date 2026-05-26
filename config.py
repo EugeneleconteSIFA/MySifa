@@ -94,7 +94,9 @@ ROLES_PROD  = {ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_FABRICATION, ROLE_EXPED
 ROLES_COMPTA = {ROLE_DIRECTION, ROLE_COMPTABILITE, ROLE_SUPERADMIN}
 ROLES_EXPE = {ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_EXPEDITION, ROLE_LOGISTIQUE, ROLE_COMMERCIAL, ROLE_SUPERADMIN}
 ROLES_EXPE_WRITE = {ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_EXPEDITION, ROLE_SUPERADMIN}
-ROLES_DEVIS = {ROLE_DIRECTION, ROLE_SUPERADMIN}
+# Tuile portail « Coûts matières » (/pricing)
+ROLES_PRICING = {ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_SUPERADMIN}
+ROLES_DEVIS = ROLES_PRICING  # alias rétrocompat
 ROLES_PLANNING_VIEW = {
     ROLE_DIRECTION,
     ROLE_ADMINISTRATION,
@@ -109,7 +111,7 @@ ROLES_PROD_COMPTA_PLANNING = {ROLE_COMPTABILITE}
 ROLES_SETTINGS = {ROLE_SUPERADMIN}
 
 # Applications dont l'accès peut être surchargé par utilisateur (hors Paramètres : réservé au rôle super admin).
-ACCESS_OVERRIDABLE_APPS = frozenset({"prod", "planning", "planning_rh", "stock", "compta", "expe", "devis"})
+ACCESS_OVERRIDABLE_APPS = frozenset({"prod", "planning", "planning_rh", "stock", "compta", "expe", "pricing"})
 
 # Rôles assignables lors de la création / édition d'utilisateurs (hors super admin).
 ASSIGNABLE_ROLES = frozenset(
@@ -153,7 +155,7 @@ def default_app_access_for_role(role: str) -> dict:
             "stock": True,
             "compta": True,
             "expe": True,
-            "devis": True,
+            "pricing": True,
             "fabrication": True,
             "settings": True,
             "planning_rh": True,
@@ -164,7 +166,7 @@ def default_app_access_for_role(role: str) -> dict:
         "stock": role in ROLES_STOCK,
         "compta": role in ROLES_COMPTA,
         "expe": role in ROLES_EXPE,
-        "devis": role in ROLES_DEVIS,
+        "pricing": role in ROLES_PRICING,
         "fabrication": role in ROLES_FABRICATION_APP,
         "settings": role in ROLES_SETTINGS,
         "planning_rh": role in ROLES_PLANNING_RH_VIEW,

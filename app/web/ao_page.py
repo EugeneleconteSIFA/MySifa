@@ -13,7 +13,7 @@ from app.web.ao_produit_form import AO_PRODUIT_FORM_CSS, AO_PRODUIT_FORM_JS
 
 router = APIRouter()
 
-_AO_ROLES = frozenset({"superadmin", "direction", "administration"})
+_AO_ROLES = frozenset({"superadmin", "direction"})
 
 
 @router.get("/ao", response_class=HTMLResponse)

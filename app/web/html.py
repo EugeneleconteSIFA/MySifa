@@ -54,6 +54,12 @@ body.light{
   --c1:#0891b2;--c2:#7c3aed;--c3:#059669;--c4:#d97706;--c5:#dc2626
 }
 body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+html{background:var(--bg);min-height:100%}
+body{background-color:transparent}
+@keyframes cloud-drift{0%{background-position:-20% 30%,88% 72%}50%{background-position:60% 50%,32% 46%}100%{background-position:110% 20%,-18% 32%}}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:-1;--bg-dot:color-mix(in srgb,var(--text) 7%,transparent);background-color:var(--bg-dot);-webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Ccircle cx='1.25' cy='1.25' r='1.2' fill='%23000'/%3E%3C/svg%3E");mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Ccircle cx='1.25' cy='1.25' r='1.2' fill='%23000'/%3E%3C/svg%3E");-webkit-mask-size:28px 28px;mask-size:28px 28px;-webkit-mask-repeat:repeat;mask-repeat:repeat}
+body.light::before{--bg-dot:color-mix(in srgb,var(--text) 6%,transparent)}
+body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:-1;background-image:radial-gradient(ellipse 600px 400px at center,color-mix(in srgb,var(--accent) 6%,transparent),transparent 72%),radial-gradient(ellipse 520px 340px at center,color-mix(in srgb,var(--accent) 4%,transparent),transparent 68%);background-repeat:no-repeat,no-repeat;background-size:600px 400px,520px 340px;animation:cloud-drift 52s ease-in-out infinite alternate}
 button:focus-visible,.nav-btn:focus-visible,.login-btn:focus-visible,.portal-logout:focus-visible,.theme-btn:focus-visible,.logout-btn:focus-visible,a:focus-visible{
   outline:2px solid var(--accent);outline-offset:2px}
 button:focus:not(:focus-visible){outline:none}
@@ -1798,7 +1804,6 @@ function isAuthMePath(p){
   return p==='/api/auth/me'||p.startsWith('/api/auth/me?');
 }
 let authEpoch=0;
-let _matiereMargeTimer=null;
 let _expeHistSearchT=null;
 let _expeLastRenderedInnerTab=null;
 let _expeJourInflight=null;
@@ -1997,13 +2002,6 @@ let S={
   paieAnnee:new Date().getFullYear(),paieMois:new Date().getMonth()+1,
   paieVarsCache:{},paiePendingFixed:{},paiePendingVar:{},
   paieExporting:false,paieShowHist:false,paieHistData:null,
-  matiereTab:'base',
-  matiereParams:[],
-  matiereBase:[],
-  matiereConfig:{marge_erreur:5,taux_change_usd:0.85,supplement_rotoflex_eur_m2:0.06},
-  matiereImportReplaceAll:true,
-  matiereSearch:'',
-  matiereLoading:false,
 };
 window.S=S;
 
@@ -2249,7 +2247,7 @@ async function checkAuth(){
       const sp=new URLSearchParams(window.location.search||'');
       const p=(sp.get('page')||'').trim();
       if(S.app==='prod' && p==='users'){window.location.href='/settings';return;}
-      if(S.app==='prod' && p==='matiere_prix'){window.location.href='/devis';return;}
+      if(S.app==='prod' && p==='matiere_prix'){window.location.href='/pricing';return;}
       if(S.app==='prod' && p==='profil'){window.location.href='/profil';return;}
       const allowed=new Set(['production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite','of']);
       if(S.app==='prod' && allowed.has(p)) S.page=p;
@@ -2262,7 +2260,8 @@ async function checkAuth(){
       await loadMachineStatus();
       if(S.page==='of' && canAccessOfTab()) await loadOfImports();
     }else if(S.app==='devis'){
-      await loadMatierePrixPage();
+      window.location.href='/pricing';
+      return;
     }else if(S.app==='stock'){
       await loadStockGlobale();
       await loadStockProduits();
@@ -2407,7 +2406,7 @@ async function doLogin(email,password){
       const sp=new URLSearchParams(window.location.search||'');
       const p=(sp.get('page')||'').trim();
       if(S.app==='prod' && p==='users'){window.location.href='/settings';return;}
-      if(S.app==='prod' && p==='matiere_prix'){window.location.href='/devis';return;}
+      if(S.app==='prod' && p==='matiere_prix'){window.location.href='/pricing';return;}
       if(S.app==='prod' && p==='profil'){window.location.href='/profil';return;}
       const allowed=new Set(['production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite','of']);
       if(S.app==='prod' && allowed.has(p)) S.page=p;
@@ -2438,7 +2437,8 @@ async function doLogin(email,password){
       await loadMachineStatus();
       if(S.page==='of' && canAccessOfTab()) await loadOfImports();
     }else if(S.app==='devis'){
-      await loadMatierePrixPage();
+      window.location.href='/pricing';
+      return;
     }else if(S.app==='stock'){
       await loadStockGlobale();
       await loadStockProduits();
@@ -3597,8 +3597,8 @@ function renderPortal(){
   const isRH   = aa ? !!aa.planning_rh : (isSuper || !!(urole && ['direction','administration','fabrication','logistique','expedition','comptabilite'].includes(urole)));
   const isComptaPlan = urole === 'comptabilite';
   const isPaie = isSuper || !!(urole && ['direction','administration','comptabilite'].includes(urole));
-  const isDevis = aa ? !!aa.devis : (isSuper || urole==='direction');
-  const isAo = isSuper || !!(urole && ['direction','administration'].includes(urole));
+  const isPricing = aa ? !!(aa.pricing ?? aa.devis) : (isSuper || urole==='direction' || urole==='administration');
+  const isAo = isSuper || urole === 'direction';
   const isLight=document.body.classList.contains('light');
 
   const order=(S.user&&Array.isArray(S.user.portal_apps_order))?S.user.portal_apps_order:[];
@@ -3705,17 +3705,17 @@ function renderPortal(){
     )});
   }
 
-  if(isDevis){
-    const id='devis';
+  if(isPricing){
+    const id='pricing';
     tileSpecs.push({id,el:h('div',{
       className:'portal-app',
       'data-portal-id':id,
       draggable:'true',
-      onClick:()=>{if(_portalDragSuppressClick)return;window.location.href='/devis';}
+      onClick:()=>{if(_portalDragSuppressClick)return;window.location.href='/pricing';}
     },
       h('div',{className:'portal-app-icon'},iconEl('file-text',28)),
-      h('div',{className:'portal-app-name'},'MyDevis'),
-      h('div',{className:'portal-app-desc'},'Paramètres matière & Base prix')
+      h('div',{className:'portal-app-name'},'Coûts matières'),
+      h('div',{className:'portal-app-desc'},'Matières, produits et calcul €/m²')
     )});
   }
 
@@ -3730,21 +3730,6 @@ function renderPortal(){
       h('div',{className:'portal-app-icon'},iconEl('clipboard',28)),
       h('div',{className:'portal-app-name'},'MyAO'),
       h('div',{className:'portal-app-desc'},'Appels d\'offre fournisseurs')
-    )});
-  }
-
-  if(isCom){
-    const id2='com_devis';
-    tileSpecs.push({id:id2,el:h('div',{
-      className:'portal-app portal-app--disabled',
-      'data-portal-id':id2,
-      draggable:'true',
-      onClick:()=>{if(_portalDragSuppressClick)return;}
-    },
-      h('div',{className:'portal-app-icon',style:{opacity:.4}},iconEl('file-text',28)),
-      h('div',{className:'portal-app-name',style:{opacity:.5}},'MyDevis'),
-      h('div',{className:'portal-app-desc'},'Devis & Chiffrage'),
-      h('span',{className:'badge-dev'},'En développement')
     )});
   }
 
@@ -6037,58 +6022,6 @@ function renderExpe(){
     renderExpeTransporteurModal(),
     renderExpeDevisModal(),
     S.expeShowContacts?renderExpeContactModal():null
-  );
-}
-
-function renderMyDevis(){
-  const isLight=document.body.classList.contains('light');
-  const sidebar=h('nav',{className:'sidebar'},
-    h('div',{className:'logo'},
-      h('div',{className:'logo-brand'},'My',h('span',null,'Devis')),
-      h('div',{className:'logo-sub'},'by SIFA')
-    ),
-    h('div',{style:{padding:'10px 14px',fontSize:'12px',color:'var(--text2)',lineHeight:1.45}},'Base matière et paramètres — aligné sur le suivi Excel métier.'),
-    h('div',{className:'sidebar-bottom'},
-      h('button',{className:'nav-btn back-mysifa',onClick:()=>{window.location.href='/'}},
-        '← Retour ',
-        h('span',{className:'wm'},'My',h('span',null,'Sifa'))
-      ),
-      sidebarUserChip(S.user),
-      (()=>{
-        const b=h('button',{className:'support-btn',title:'Contacter le support',onClick:()=>set({contactOpen:true})});
-        const ico=h('span',{className:'support-ico'});
-        try{ico.innerHTML=(window.MySifaSupport&&typeof window.MySifaSupport.iconSvg==='function')?window.MySifaSupport.iconSvg():'';}catch(e){ico.innerHTML='';}
-        b.appendChild(ico);b.appendChild(h('span',null,'Contacter le support'));return b;
-      })(),
-      h('button',{className:'theme-btn',onClick:()=>{MySifaTheme.toggleMode();render();}},
-        h('span',{className:'theme-ico'},iconEl(isLight?'sun':'moon',16)),
-        h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')
-      ),
-      h('button',{className:'logout-btn',onClick:doLogout},iconEl('log-out',14),' Déconnexion')
-    )
-  );
-  const topbar=h('div',{className:'mobile-topbar'},
-    h('button',{type:'button',className:'mobile-menu-btn',onClick:toggleSidebar,'aria-label':'Menu'},iconEl('menu',20)),
-    h('div',null,
-      h('div',{className:'mobile-topbar-title'},'MyDevis'),
-      h('div',{className:'mobile-topbar-sub'},'Paramètres matière et base prix')
-    ),
-    h('button',{type:'button',className:'mobile-home-btn',onClick:()=>{window.location.href='/'},'aria-label':'Accueil'},iconEl('home',20))
-  );
-  const inner=renderMatierePrix();
-  return h('div',null,
-    S.sidebarOpen?h('div',{className:'sidebar-overlay',onClick:closeSidebar}):null,
-    h('div',{className:'app'},
-      sidebar,
-      h('main',{className:'main'},
-        h('div',{className:'container'},
-          topbar,
-          h('h1',null,'MyDevis'),
-          h('div',{className:'subtitle'},'Chiffrage matière — base et paramètres'),
-          inner
-        )
-      )
-    )
   );
 }
 
@@ -9634,7 +9567,7 @@ function renderDos(){
   return h('div',null,form,list);
 }
 
-// ── Import OF PDF (Sage) ─────────────────────────────────────────
+// ── Import OF PDF ────────────────────────────────────────────────
 function canAccessOfTab(){
   return isAdmin(S.user);
 }
@@ -9817,7 +9750,7 @@ function renderOfImportModal(){
         if(f) ofHandlePdfFile(f);
       }},
       iconEl('file',28),
-      h('div',{className:'prod-of-dropzone-title'},'Déposer un PDF Sage ici'),
+      h('div',{className:'prod-of-dropzone-title'},'Déposer un PDF ici'),
       h('div',{className:'prod-of-dropzone-sub'},'ou cliquer pour sélectionner — .pdf uniquement')
     );
     body=h('div',null,fileInput,dropzone,
@@ -10057,7 +9990,8 @@ function renderLiaisonDossiers(devisId, dossiersLies, allDossiers){
 
 
 function canMatierePrixUser(u){
-  return !!(u && u.app_access && u.app_access.devis);
+  const a = u && u.app_access;
+  return !!(a && (a.pricing || a.devis));
 }
 function normMatiereTxt(s){
   return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
@@ -10516,7 +10450,7 @@ function renderMatierePrix(){
   if(!canMatierePrixUser(S.user)){
     return h('div',{className:'card',style:{padding:'24px'}},
       h('h3',null,'Accès refusé'),
-      h('p',{style:{color:'var(--text2)'}},'Accès réservé : droit application « MyDevis » (matrice Paramètres).')
+      h('p',{style:{color:'var(--text2)'}},'Accès réservé : droit application « Pricing » (matrice Paramètres).')
     );
   }
   const mc=S.matiereConfig||{marge_erreur:5,taux_change_usd:0.85,supplement_rotoflex_eur_m2:0.06};
@@ -11393,7 +11327,7 @@ function render(){
   else if(S.app==='stock'){root.appendChild(renderStock());}
   else if(S.app==='compta'){root.appendChild(renderCompta());}
   else if(S.app==='expe'){root.appendChild(renderExpe());}
-  else if(S.app==='devis'){root.appendChild(renderMyDevis());}
+  else if(S.app==='devis'){window.location.href='/pricing';return;}
   else if(S.app==='messages'){root.appendChild(renderMessagesApp());}
   else if(S.app==='prod'){
     if(isComptaPlanning(S.user)){window.location.href='/planning';return;}
@@ -11411,7 +11345,7 @@ function render(){
                   'KPIs, temps, quantités et qualité de saisie',
       suivi:'Dossiers de production et comparaison devis / réel',
       traceabilite:'Matières utilisées par dossier',
-      of:'Import PDF Sage et consultation des OF',
+      of:'Import PDF et consultation des OF',
       historique:'',saisies:'',import:'',dossiers:'',rentabilite:'',
     };
     const topbar=h('div',{className:'mobile-topbar'},

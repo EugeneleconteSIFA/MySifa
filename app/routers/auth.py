@@ -45,7 +45,7 @@ _PORTAL_TILE_IDS = frozenset(
         "compta",
         "expe",
         "planning_rh",
-        "devis",
+        "pricing",
         "com_expe",
         "com_devis",
     }
@@ -66,6 +66,8 @@ def _portal_order_list_from_db(val) -> List[str]:
     for x in arr:
         if isinstance(x, str):
             tid = x.strip()
+            if tid == "devis":
+                tid = "pricing"
             if tid in _PORTAL_TILE_IDS and tid not in seen:
                 out.append(tid)
                 seen.add(tid)
@@ -143,11 +145,12 @@ def _normalize_access_overrides_payload(raw: object) -> Optional[str]:
         raise HTTPException(status_code=400, detail="access_overrides doit être un objet")
     clean = {}
     for k, v in raw.items():
-        if k not in ACCESS_OVERRIDABLE_APPS:
+        key = "pricing" if k == "devis" else k
+        if key not in ACCESS_OVERRIDABLE_APPS:
             continue
         if not isinstance(v, bool):
             raise HTTPException(status_code=400, detail=f"Valeur booléenne attendue pour {k}")
-        clean[k] = v
+        clean[key] = v
     if not clean:
         return None
     return json.dumps(clean)

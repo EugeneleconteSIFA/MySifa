@@ -1,6 +1,7 @@
 """
-SIFA — MyDevis : paramètres matière & base prix.
-Accès : application « devis » (rôle par défaut : direction + superadmin ; matrice Paramètres).
+API legacy matiere_* — conservée pour scripts d'import / migration.
+Interface utilisateur : module Coûts matières (/pricing, tables mc_*).
+Accès : application « pricing » (matrice Paramètres).
 """
 import io
 import os
@@ -19,10 +20,10 @@ from config import DATA_DIR
 router = APIRouter()
 
 
-def _require_devis(request: Request) -> dict:
+def _require_pricing(request: Request) -> dict:
     user = get_current_user(request)
-    if not user_has_app_access(user, "devis"):
-        raise HTTPException(status_code=403, detail="Accès MyDevis requis")
+    if not user_has_app_access(user, "pricing"):
+        raise HTTPException(status_code=403, detail="Accès Coûts matières requis")
     return user
 
 
@@ -206,7 +207,7 @@ def _row_base_with_marge(conn, row: dict, params: Optional[list[dict]] = None) -
 
 @router.get("/config")
 def get_config(request: Request):
-    _require_devis(request)
+    _require_pricing(request)
     with get_db() as conn:
         cfg = _cfg_dict(conn)
         try:
@@ -226,7 +227,7 @@ def get_config(request: Request):
 
 @router.post("/config")
 def post_config(request: Request, body: dict = Body(...)):
-    _require_devis(request)
+    _require_pricing(request)
     try:
         marge = body.get("marge_erreur")
         taux = body.get("taux_change_usd")
@@ -299,7 +300,7 @@ def list_params(
     q: Optional[str] = None,
     categorie: Optional[str] = None,
 ):
-    _require_devis(request)
+    _require_pricing(request)
     where, args = _params_filters(q, categorie)
     with get_db() as conn:
         rows = conn.execute(
@@ -311,7 +312,7 @@ def list_params(
 
 @router.post("/params")
 def create_param(request: Request, body: dict = Body(...)):
-    _require_devis(request)
+    _require_pricing(request)
     cat = (body.get("categorie") or "").strip()
     des = (body.get("designation") or "").strip()
     if not cat or not des:
@@ -349,7 +350,7 @@ def create_param(request: Request, body: dict = Body(...)):
 
 @router.put("/params/{param_id}")
 def update_param(request: Request, param_id: int, body: dict = Body(...)):
-    _require_devis(request)
+    _require_pricing(request)
     now = datetime.now().isoformat()
     fields = [
         "categorie",
@@ -388,7 +389,7 @@ def update_param(request: Request, param_id: int, body: dict = Body(...)):
 
 @router.delete("/params/{param_id}")
 def delete_param(request: Request, param_id: int):
-    _require_devis(request)
+    _require_pricing(request)
     with get_db() as conn:
         conn.execute("DELETE FROM matiere_params WHERE id=?", (param_id,))
         conn.commit()
@@ -429,7 +430,7 @@ def list_base(
     frontal: Optional[str] = None,
     type_: Optional[str] = Query(None, alias="type"),
 ):
-    _require_devis(request)
+    _require_pricing(request)
     where, args = _base_filters(q, frontal, type_)
     with get_db() as conn:
         rows = conn.execute(
@@ -442,7 +443,7 @@ def list_base(
 
 @router.post("/base")
 def create_base(request: Request, body: dict = Body(...)):
-    _require_devis(request)
+    _require_pricing(request)
     des = (body.get("designation") or "").strip()
     if not des:
         raise HTTPException(status_code=400, detail="designation obligatoire")
@@ -484,7 +485,7 @@ def create_base(request: Request, body: dict = Body(...)):
 
 @router.put("/base/{base_id}")
 def update_base(request: Request, base_id: int, body: dict = Body(...)):
-    _require_devis(request)
+    _require_pricing(request)
     now = datetime.now().isoformat()
     fields = [
         "groupe",
@@ -527,7 +528,7 @@ def update_base(request: Request, base_id: int, body: dict = Body(...)):
 
 @router.delete("/base/{base_id}")
 def delete_base(request: Request, base_id: int):
-    _require_devis(request)
+    _require_pricing(request)
     with get_db() as conn:
         conn.execute("DELETE FROM matiere_base WHERE id=?", (base_id,))
         conn.commit()
@@ -790,7 +791,7 @@ async def import_excel(
     file: UploadFile = File(...),
     replace_all: bool = Form(False),
 ):
-    _require_devis(request)
+    _require_pricing(request)
     if not file.filename or not str(file.filename).lower().endswith((".xlsx", ".xlsm")):
         raise HTTPException(status_code=400, detail="Fichier .xlsx ou .xlsm attendu")
     raw = await file.read()
@@ -1004,7 +1005,7 @@ def import_from_data(
     - Si filename est absent: prend le dernier .xlsx/.xlsm correspondant (contient 'prix' ou 'matiere')
     - Écrit dans la DB active de l'app (config.DB_PATH)
     """
-    _require_devis(request)
+    _require_pricing(request)
     try:
         if filename:
             path = os.path.join(DATA_DIR, str(filename))

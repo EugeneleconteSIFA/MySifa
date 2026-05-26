@@ -108,9 +108,9 @@ def access_matrix(request: Request):
             "hint": "Expédition",
         },
         {
-            "id": "devis",
-            "label": "MyDevis",
-            "hint": "Chiffrage matière — base et paramètres",
+            "id": "pricing",
+            "label": "Pricing",
+            "hint": "Coûts matières et fiches produits (/pricing)",
         },
         {
             "id": "settings",

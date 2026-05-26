@@ -1658,7 +1658,7 @@ function renderOfImportModal(){
       },
     },
       svgIcon('file',28),
-      h('div',{className:'fab-of-dropzone-title'},'Déposer un PDF Sage ici'),
+      h('div',{className:'fab-of-dropzone-title'},'Déposer un PDF ici'),
       h('div',{className:'fab-of-dropzone-sub'},'ou cliquer pour sélectionner — .pdf uniquement')
     );
     body = h('div',null, fileInput, dropzone,

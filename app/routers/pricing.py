@@ -15,7 +15,7 @@ from fastapi.responses import StreamingResponse
 
 from config import ROLES_ADMIN
 from database import get_db
-from app.services.auth_service import get_current_user
+from app.services.auth_service import get_current_user, user_has_app_access
 from app.services.pricing import (
     PricingError,
     compute_material_price_per_m2,
@@ -71,11 +71,14 @@ _FX_SOURCE = "exchangerate.host"
 
 
 def _require_read(request: Request) -> dict:
-    return get_current_user(request)
+    user = get_current_user(request)
+    if not user_has_app_access(user, "pricing"):
+        raise HTTPException(status_code=403, detail="Accès Coûts matières requis")
+    return user
 
 
 def _require_write(request: Request) -> dict:
-    user = get_current_user(request)
+    user = _require_read(request)
     if user.get("role") not in ROLES_ADMIN:
         raise HTTPException(
             status_code=403,

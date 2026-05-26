@@ -2520,6 +2520,50 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 79, "mc_setting_fx_source")
 
+    # v80 — Accès applicatif MyDevis (devis) → pricing
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=80 LIMIT 1").fetchone():
+        for row in conn.execute(
+            "SELECT id, access_overrides, portal_apps_order FROM users"
+        ).fetchall():
+            uid = row["id"]
+            ao = row["access_overrides"]
+            if ao:
+                try:
+                    o = json.loads(ao) if isinstance(ao, str) else ao
+                except (json.JSONDecodeError, TypeError):
+                    o = None
+                if isinstance(o, dict) and "devis" in o:
+                    if "pricing" not in o:
+                        o["pricing"] = o["devis"]
+                    del o["devis"]
+                    conn.execute(
+                        "UPDATE users SET access_overrides=? WHERE id=?",
+                        (json.dumps(o, ensure_ascii=False), uid),
+                    )
+            po = row["portal_apps_order"]
+            if po:
+                try:
+                    arr = json.loads(po) if isinstance(po, str) else po
+                except (json.JSONDecodeError, TypeError):
+                    arr = None
+                if isinstance(arr, list):
+                    new_arr = []
+                    seen: set = set()
+                    for x in arr:
+                        if not isinstance(x, str):
+                            continue
+                        tid = "pricing" if x.strip() == "devis" else x.strip()
+                        if tid and tid not in seen:
+                            new_arr.append(tid)
+                            seen.add(tid)
+                    if new_arr != arr:
+                        conn.execute(
+                            "UPDATE users SET portal_apps_order=? WHERE id=?",
+                            (json.dumps(new_arr, ensure_ascii=False), uid),
+                        )
+        conn.commit()
+        _record_schema_migration(conn, 80, "app_access_devis_to_pricing")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,
