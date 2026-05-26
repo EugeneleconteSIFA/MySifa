@@ -95,6 +95,8 @@ _STOCK_MATIERES_ADMIN_ROLES = frozenset({"superadmin", "direction", "administrat
 def _mp_unite_gestion(categorie: str) -> str:
     """Unité de gestion du stock selon la catégorie matière première."""
     cat = (categorie or "").strip().lower()
+    if cat in ("mandrin", "frontal", "glassine"):
+        return "bobine"
     if cat == "palette":
         return "pile"
     if cat == "carton":
@@ -143,6 +145,7 @@ _HISTORIQUE_SQL_MP = """
         mp.reference,
         mp.designation,
         CASE
+            WHEN mp.categorie IN ('mandrin', 'frontal', 'glassine') THEN 'bobine'
             WHEN mp.categorie = 'palette' THEN 'pile'
             WHEN mp.categorie = 'carton' THEN 'palette'
             ELSE 'palette'

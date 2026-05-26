@@ -482,6 +482,8 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .dash-alert-qty{margin-left:auto;white-space:nowrap;color:var(--text2);font-size:11px;flex-shrink:0;text-align:right}
 .dash-mp-cat{font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;text-transform:uppercase;flex-shrink:0}
 .dash-mp-cat-mandrin{background:rgba(124,58,237,.15);color:#7c3aed}
+.dash-mp-cat-frontal{background:rgba(14,165,233,.15);color:#0ea5e9}
+.dash-mp-cat-glassine{background:rgba(236,72,153,.15);color:#ec4899}
 .dash-mp-cat-palette{background:rgba(8,145,178,.15);color:#0891b2}
 .dash-mp-cat-adhesif{background:rgba(217,119,6,.15);color:#d97706}
 .dash-mp-cat-carton{background:rgba(5,150,105,.15);color:#059669}
@@ -2895,7 +2897,7 @@ function renderImportRefsModal() {
   document.body.appendChild(ov);
 }
 
-const MP_CAT_LABELS = { mandrin: 'Mandrin', palette: 'Palette', adhesif: 'Adhésif', carton: 'Carton' };
+const MP_CAT_LABELS = { mandrin: 'Mandrin', palette: 'Palette', adhesif: 'Adhésif', carton: 'Carton', frontal: 'Frontal', glassine: 'Glassine' };
 
 function mpCategorieKey(cat) {
   return String(cat || '').trim().toLowerCase();
@@ -2905,30 +2907,42 @@ function mpCtx(catOrMatiere) {
     return {
       categorie: mpCategorieKey(catOrMatiere.categorie),
       palettes_par_pile: parseFloat(catOrMatiere.palettes_par_pile) || 0,
+      couleur: (catOrMatiere.couleur || '').trim(),
     };
   }
-  return { categorie: mpCategorieKey(catOrMatiere), palettes_par_pile: 0 };
+  return { categorie: mpCategorieKey(catOrMatiere), palettes_par_pile: 0, couleur: '' };
+}
+function mpIsBobineCategory(catOrMatiere) {
+  const c = mpCtx(catOrMatiere).categorie;
+  return c === 'mandrin' || c === 'frontal' || c === 'glassine';
+}
+function mpIsGlassineCategory(catOrMatiere) {
+  return mpCtx(catOrMatiere).categorie === 'glassine';
 }
 function mpUniteNom(catOrMatiere) {
   const c = mpCtx(catOrMatiere).categorie;
+  if (mpIsBobineCategory(c)) return 'bobine';
   if (c === 'palette') return 'pile';
   if (c === 'carton') return 'palette';
   return 'palette';
 }
 function mpUniteShort(catOrMatiere) {
   const u = mpUniteNom(catOrMatiere);
+  if (u === 'bobine') return 'bob.';
   if (u === 'pile') return 'pile';
   if (u === 'palette') return 'pal.';
   return 'pal.';
 }
 function mpQuantiteFieldLabel(catOrMatiere) {
   const u = mpUniteNom(catOrMatiere);
+  if (u === 'bobine') return 'Quantité (bobines)';
   if (u === 'pile') return 'Quantité (piles)';
   if (u === 'palette') return 'Quantité (palettes)';
   return 'Quantité (palettes)';
 }
 function mpSeuilFieldLabel(catOrMatiere) {
   const u = mpUniteNom(catOrMatiere);
+  if (u === 'bobine') return 'Seuil d\'alerte (bobines)';
   if (u === 'pile') return 'Seuil d\'alerte (piles)';
   if (u === 'palette') return 'Seuil d\'alerte (pal.)';
   return 'Seuil d\'alerte (pal.)';
@@ -2952,9 +2966,16 @@ function mpStockTotalLabel(catOrMatiere) {
 }
 function mpQuantiteInputAttrs(catOrMatiere) {
   const c = mpCtx(catOrMatiere).categorie;
-  if (c === 'palette') return { type: 'number', min: '1', step: '1' };
-  if (c === 'carton') return { type: 'number', min: '1', step: '1' };
+  if (mpIsBobineCategory(c) || c === 'palette' || c === 'carton') {
+    return { type: 'number', min: '1', step: '1' };
+  }
   return { type: 'number', min: '0.5', step: '0.5' };
+}
+function mpAdminHint(cat) {
+  if (cat === 'palette') return 'Stock géré en piles. Indiquez combien de palettes composent une pile.';
+  if (cat === 'carton') return 'Stock géré en palettes.';
+  if (mpIsBobineCategory(cat)) return 'Stock géré en bobines (réception par scan possible).';
+  return 'Stock géré en palettes (pal.).';
 }
 function mpIsPaletteCategory(catOrMatiere) {
   return mpCtx(catOrMatiere).categorie === 'palette';
@@ -2998,6 +3019,8 @@ const MP_PILL_CATS = [
   { id: 'palette', label: 'Palettes' },
   { id: 'adhesif', label: 'Adhésifs' },
   { id: 'carton', label: 'Cartons' },
+  { id: 'frontal', label: 'Frontaux' },
+  { id: 'glassine', label: 'Glassines' },
 ];
 
 function isMatieresAdmin() {
@@ -3215,6 +3238,9 @@ function buildMatiereDetail() {
   if (mpIsPaletteCategory(m) && m.palettes_par_pile > 0) {
     meta.push(fN(m.palettes_par_pile) + ' pal. / pile');
   }
+  if (mpIsGlassineCategory(m) && m.couleur) {
+    meta.push('Couleur : ' + m.couleur);
+  }
   if (seuil > 0) meta.push('Seuil min. ' + mpStockLine(seuil, m));
 
   return el('div', { cls: 'content' },
@@ -3326,6 +3352,9 @@ function matiereRefEditPayload(item, fields) {
     }
     payload.palettes_par_pile = ppp;
   }
+  if (mpIsGlassineCategory(item) && fields.couleurInp) {
+    payload.couleur = fields.couleurInp.value.trim() || des;
+  }
   return { payload };
 }
 
@@ -3334,13 +3363,17 @@ function appendMatiereRefEditFields(parent, item) {
   refInp.value = item.reference || '';
   const desInp = el('input', { attrs: { type: 'text' } });
   desInp.value = item.designation || '';
-  const seuilStep = mpIsPaletteCategory(item) || mpCategorieKey(item.categorie) === 'carton' ? '1' : '0.5';
+  const seuilStep = mpIsBobineCategory(item) || mpIsPaletteCategory(item) || mpCategorieKey(item.categorie) === 'carton' ? '1' : '0.5';
   const seuilInp = el('input', { attrs: { type: 'number', min: '0', step: seuilStep } });
   seuilInp.value = String(item.seuil_alerte ?? 0);
   const pppWrap = el('div', { cls: 'mp-field', style: { display: mpIsPaletteCategory(item) ? '' : 'none' } });
   const pppInp = el('input', { attrs: { type: 'number', min: '1', step: '1' } });
   pppInp.value = String(item.palettes_par_pile > 0 ? item.palettes_par_pile : '');
   pppWrap.append(el('label', null, 'Palettes par pile'), pppInp);
+  const couleurWrap = el('div', { cls: 'mp-field', style: { display: mpIsGlassineCategory(item) ? '' : 'none' } });
+  const couleurInp = el('input', { attrs: { type: 'text', placeholder: 'Ex. Blanc, Kraft…' } });
+  couleurInp.value = item.couleur || '';
+  couleurWrap.append(el('label', null, 'Couleur'), couleurInp);
   parent.append(
     el('div', { cls: 'mp-field' },
       el('label', null, 'Catégorie'),
@@ -3348,11 +3381,12 @@ function appendMatiereRefEditFields(parent, item) {
     ),
     el('div', { cls: 'mp-field' }, el('label', null, 'Référence'), refInp),
     el('div', { cls: 'mp-field' }, el('label', null, 'Description'), desInp),
+    couleurWrap,
     pppWrap,
     el('div', { cls: 'mp-field' }, el('label', null, mpSeuilFieldLabel(item)), seuilInp),
     el('div', { cls: 'mp-hint' }, '0 = pas d\'alerte stock bas.'),
   );
-  return { refInp, desInp, seuilInp, pppInp };
+  return { refInp, desInp, seuilInp, pppInp, couleurInp };
 }
 
 async function submitMatiereRefEdit(item, fields, onSaved) {
@@ -3478,7 +3512,7 @@ function buildMatieres() {
     el('div', null,
       el('h2', { cls: 'hist-title' }, 'Matières premières'),
       el('p', { cls: 'hist-subtitle' },
-        'Mandrins, adhésifs (pal.), palettes (piles), cartons (pal.) — mouvements par emplacement'),
+        'Mandrins, frontaux, glassines (bob.), adhésifs (pal.), palettes (piles), cartons (pal.)'),
     ),
     isMatieresAdmin()
       ? el('div', { cls: 'hist-head-actions' },
@@ -3540,6 +3574,9 @@ function buildMatieres() {
       if (mpIsPaletteCategory(m) && m.palettes_par_pile > 0) {
         infoChildren.push(el('div', { cls: 'mp-card-meta' },
           fN(m.palettes_par_pile) + ' pal. / pile'));
+      }
+      if (mpIsGlassineCategory(m) && m.couleur) {
+        infoChildren.push(el('div', { cls: 'mp-card-meta' }, 'Couleur : ' + m.couleur));
       }
       if (m.en_alerte) {
         infoChildren.push(el('div', { cls: 'mp-card-warn' },
@@ -4116,7 +4153,7 @@ function renderMatieresAdminDrawer() {
     if (!byCat[c]) byCat[c] = [];
     byCat[c].push(item);
   });
-  ['mandrin', 'palette', 'adhesif', 'carton'].forEach(cat => {
+  ['mandrin', 'frontal', 'glassine', 'palette', 'adhesif', 'carton'].forEach(cat => {
     if (!byCat[cat] || !byCat[cat].length) return;
     body.appendChild(el('div', { style: { fontSize: '11px', fontWeight: '600', color: 'var(--muted)', margin: '12px 0 8px', textTransform: 'uppercase' } },
       MP_CAT_LABELS[cat] || cat));
@@ -4137,6 +4174,9 @@ function buildMatieresAdminRow(item) {
     dashMpCatBadge(item.categorie),
     el('strong', null, item.reference || ''),
     el('span', { style: { color: 'var(--text2)', fontSize: '13px' } }, item.designation || ''),
+    mpIsGlassineCategory(item) && item.couleur
+      ? el('span', { style: { fontSize: '12px', color: 'var(--muted)' } }, ' · ' + item.couleur)
+      : null,
     el('span', { style: { fontSize: '12px', color: 'var(--muted)' } }, 'Seuil ' + mpStockLine(item.seuil_alerte, item)),
     mpIsPaletteCategory(item) && item.palettes_par_pile > 0
       ? el('span', { style: { fontSize: '12px', color: 'var(--muted)' } },
@@ -4214,7 +4254,7 @@ function buildMatieresAdminAddForm() {
   const foot = el('div', { cls: 'mp-drawer-foot' });
   foot.appendChild(el('div', { style: { fontSize: '12px', fontWeight: '600', marginBottom: '12px', color: 'var(--text)' } }, 'Ajouter une référence'));
   const catSel = el('select');
-  [['mandrin', 'Mandrin'], ['palette', 'Palette'], ['adhesif', 'Adhésif'], ['carton', 'Carton']].forEach(([v, l]) => {
+  [['mandrin', 'Mandrin'], ['palette', 'Palette'], ['adhesif', 'Adhésif'], ['carton', 'Carton'], ['frontal', 'Frontal'], ['glassine', 'Glassine']].forEach(([v, l]) => {
     catSel.appendChild(el('option', { value: v }, l));
   });
   const refInp = el('input', { attrs: { type: 'text', placeholder: '76MM-3P' } });
@@ -4223,6 +4263,9 @@ function buildMatieresAdminAddForm() {
   const pppWrap = el('div', { cls: 'mp-field' });
   const pppInp = el('input', { attrs: { type: 'number', min: '1', step: '1', placeholder: 'Ex. 24' } });
   const pppLbl = el('label', null, 'Palettes par pile');
+  const couleurWrap = el('div', { cls: 'mp-field' });
+  const couleurInp = el('input', { attrs: { type: 'text', placeholder: 'Ex. Blanc, Kraft…' } });
+  const couleurLbl = el('label', null, 'Couleur');
   const seuilLbl = el('label', null, 'Seuil d\'alerte (0 = pas d\'alerte)');
   const hintEl = el('div', { cls: 'mp-hint' }, '');
   const errEl = el('div', { cls: 'mp-admin-err' }, S.matieresAdminAddError || '');
@@ -4230,23 +4273,23 @@ function buildMatieresAdminAddForm() {
     const cat = catSel.value;
     const isPal = cat === 'palette';
     const isCarton = cat === 'carton';
+    const isGlass = cat === 'glassine';
     pppWrap.style.display = isPal ? '' : 'none';
+    couleurWrap.style.display = isGlass ? '' : 'none';
     pppLbl.textContent = 'Palettes par pile';
     seuilLbl.textContent = mpSeuilFieldLabel(cat);
-    seuilInp.step = isPal || isCarton ? '1' : '0.5';
-    hintEl.textContent = isPal
-      ? 'Stock géré en piles. Indiquez combien de palettes composent une pile.'
-      : isCarton
-        ? 'Stock géré en palettes.'
-        : 'Stock géré en palettes (pal.).';
+    seuilInp.step = isPal || isCarton || mpIsBobineCategory(cat) ? '1' : '0.5';
+    hintEl.textContent = mpAdminHint(cat);
   }
   catSel.addEventListener('change', syncAdminAddFields);
   pppWrap.append(pppLbl, pppInp);
+  couleurWrap.append(couleurLbl, couleurInp);
   syncAdminAddFields();
   foot.append(
     el('div', { cls: 'mp-field' }, el('label', null, 'Catégorie'), catSel),
     el('div', { cls: 'mp-field' }, el('label', null, 'Référence'), refInp),
     el('div', { cls: 'mp-field' }, el('label', null, 'Désignation'), desInp),
+    couleurWrap,
     pppWrap,
     el('div', { cls: 'mp-field' }, seuilLbl, seuilInp),
     hintEl,
@@ -4284,6 +4327,9 @@ function buildMatieresAdminAddForm() {
           if (cat === 'palette') {
             payload.palettes_par_pile = parseFloat(pppInp.value);
           }
+          if (cat === 'glassine') {
+            payload.couleur = couleurInp.value.trim() || des;
+          }
           await api('/api/stock/matieres', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -4293,6 +4339,7 @@ function buildMatieresAdminAddForm() {
           refInp.value = '';
           desInp.value = '';
           pppInp.value = '';
+          couleurInp.value = '';
           seuilInp.value = '0';
           await loadMatieresAdminList();
           await loadMatieres();
@@ -4465,7 +4512,8 @@ function buildHistoriqueFiltersBar() {
   });
 
   const catSel = el('select', { id: 'hist-f-categorie', disabled: f.type_stock === 'produits' ? true : null });
-  [['', 'Tout'], ['mandrin', 'Mandrins'], ['palette', 'Palettes'], ['adhesif', 'Adhésifs'], ['carton', 'Cartons']].forEach(([v, l]) => {
+  [['', 'Tout'], ['mandrin', 'Mandrins'], ['frontal', 'Frontaux'], ['glassine', 'Glassines'],
+    ['palette', 'Palettes'], ['adhesif', 'Adhésifs'], ['carton', 'Cartons']].forEach(([v, l]) => {
     catSel.appendChild(el('option', { value: v, selected: f.categorie === v ? true : null }, l));
   });
   catSel.addEventListener('change', () => { f.categorie = catSel.value; });

@@ -1,24 +1,50 @@
 """MyAO — Formulaire fiche produit (CSS + JS injectés dans ao_page)."""
 
 AO_PRODUIT_FORM_CSS = """
+.pf-wrap{max-width:1100px}
 .pf-sticky-bar{position:sticky;top:0;z-index:50;display:flex;flex-wrap:wrap;gap:10px;align-items:center;
-justify-content:space-between;padding:14px 0;margin-bottom:16px;background:var(--bg);
+justify-content:space-between;padding:10px 0;margin-bottom:12px;background:var(--bg);
 border-bottom:1px solid var(--border)}
-.pf-sticky-bar .pf-actions{display:flex;gap:10px;flex-wrap:wrap}
-.pf-section{margin-bottom:24px}
-.pf-section-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;
-color:var(--accent);margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border)}
-.pf-block{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px}
-.pf-block-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:12px}
-.pf-format-readonly{background:var(--accent-bg);border:1px solid var(--accent);border-radius:10px;
-padding:12px 16px;font-size:14px;font-weight:700;color:var(--accent);margin-bottom:14px}
-.pf-imp-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;padding:10px;
-background:var(--bg);border-radius:8px;border:1px solid var(--border)}
-.pf-imp-row label{font-size:11px}
-.pf-check-row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
-.pf-check-row input[type=checkbox]{width:auto}
+.pf-sticky-bar .pf-actions{display:flex;gap:8px;flex-wrap:wrap}
+.pf-section{margin-bottom:18px}
+.pf-section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;
+color:var(--accent);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.pf-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px}
+.pf-block{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px;height:100%}
+.pf-block-title{font-size:12px;font-weight:700;color:var(--text);margin-bottom:8px}
+.pf-cols-2{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start}
+.pf-cols-3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;align-items:start}
+.pf-general{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px 12px}
+.pf-lbl{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;
+line-height:1.25;margin:0;white-space:nowrap}
+.pf-inline{display:grid;grid-template-columns:minmax(72px,34%) minmax(0,1fr);align-items:center;gap:6px 8px;
+margin-bottom:5px}
+.pf-inline:last-child{margin-bottom:0}
+.pf-inline-wide{grid-template-columns:minmax(96px,40%) minmax(0,1fr)}
+.pf-inline input,.pf-inline select,.pf-inline textarea{width:100%;padding:6px 10px;font-size:13px;
+border-radius:8px;min-height:0}
+.pf-inline textarea{min-height:52px;resize:vertical}
+.pf-format-readonly{background:var(--accent-bg);border:1px solid var(--accent);border-radius:8px;
+padding:6px 10px;font-size:12px;font-weight:700;color:var(--accent);margin-bottom:8px;line-height:1.4}
+.pf-imp-row{display:grid;grid-template-columns:minmax(72px,28%) 1fr minmax(72px,28%) 1fr;gap:6px 8px;
+margin-bottom:6px;padding:6px 8px;background:var(--bg);border-radius:8px;border:1px solid var(--border);
+align-items:center}
+.pf-imp-row .pf-lbl{font-size:10px}
+.pf-imp-row input{padding:5px 8px;font-size:12px;border-radius:6px}
+.pf-check-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+.pf-check-row input[type=checkbox]{width:auto;padding:0}
+.pf-check-row .pf-lbl{text-transform:none;letter-spacing:0;font-size:13px}
+.pf-check-row input[type=number]{width:64px;padding:5px 8px;font-size:12px}
 .pf-hidden{display:none!important}
-@media(max-width:600px){.pf-imp-row{grid-template-columns:1fr}}
+@media(max-width:960px){
+.pf-general{grid-template-columns:1fr 1fr}
+.pf-cols-2,.pf-cols-3{grid-template-columns:1fr}
+}
+@media(max-width:560px){
+.pf-general{grid-template-columns:1fr}
+.pf-inline,.pf-inline-wide{grid-template-columns:1fr;gap:4px}
+.pf-imp-row{grid-template-columns:1fr 1fr}
+}
 """
 
 AO_PRODUIT_FORM_JS = r"""
@@ -71,7 +97,7 @@ function computeFormatEtiquette(et) {
 }
 
 function mpOptionsHtml(list, selectedId) {
-  let h = '<option value="">— Sélectionner —</option>';
+  let h = '<option value="">—</option>';
   (list || []).forEach(m => {
     const lbl = escHtml(m.reference) + ' — ' + escHtml(m.designation);
     h += '<option value="'+m.id+'"'+(String(m.id)===String(selectedId)?' selected':'')+'>'+lbl+'</option>';
@@ -79,16 +105,25 @@ function mpOptionsHtml(list, selectedId) {
   return h;
 }
 
+function pfLbl(text) {
+  return '<span class="pf-lbl">'+text+'</span>';
+}
+
+function pfRow(label, controlHtml, extraCls) {
+  return '<div class="pf-inline'+(extraCls ? ' '+extraCls : '')+'">'+pfLbl(label)+controlHtml+'</div>';
+}
+
 function buildImpDetailRows(kind, count, details) {
   let html = '';
   const n = Math.max(0, parseInt(count, 10) || 0);
+  const k = kind.charAt(0).toUpperCase() + kind.slice(1);
   for (let i = 0; i < n; i++) {
     const d = (details && details[i]) || {};
     html += '<div class="pf-imp-row" data-imp="'+kind+'" data-idx="'+i+'">'+
-      '<div class="field" style="margin:0"><label>'+kind.charAt(0).toUpperCase()+kind.slice(1)+' '+(i+1)+' — Couleur</label>'+
-      '<input type="text" class="imp-couleur" value="'+escAttr(d.couleur||'')+'" placeholder="Couleur"></div>'+
-      '<div class="field" style="margin:0"><label>Printing area</label>'+
-      '<input type="text" class="imp-area" value="'+escAttr(d.printing_area||'')+'" placeholder="Zone d\'impression"></div></div>';
+      pfLbl(k+' '+(i+1)+' couleur')+
+      '<input type="text" class="imp-couleur" value="'+escAttr(d.couleur||'')+'" placeholder="Couleur">'+
+      pfLbl('Printing area')+
+      '<input type="text" class="imp-area" value="'+escAttr(d.printing_area||'')+'" placeholder="Zone"></div>';
   }
   return html;
 }
@@ -113,79 +148,89 @@ function renderProduitForm() {
   const carton = mats.carton || [];
   const palette = mats.palette || [];
 
-  return '<div class="pf-sticky-bar">'+
-    '<button type="button" class="btn btn-ghost" id="btn-pf-back">'+icon('arrow-left',14)+' Retour au catalogue</button>'+
+  return '<div class="pf-wrap">'+
+    '<div class="pf-sticky-bar">'+
+    '<button type="button" class="btn btn-ghost btn-sm" id="btn-pf-back">'+icon('arrow-left',14)+' Catalogue</button>'+
     '<div class="pf-actions">'+
-    '<button type="button" class="btn btn-ghost" id="btn-pf-export"'+(d.id?'':' disabled')+'>'+icon('file-text',14)+' Exporter PDF</button>'+
-    '<button type="button" class="btn btn-accent" id="btn-pf-save" style="padding:12px 24px;font-size:14px">Enregistrer</button>'+
+    '<button type="button" class="btn btn-ghost btn-sm" id="btn-pf-export"'+(d.id?'':' disabled')+'>'+icon('file-text',14)+' PDF</button>'+
+    '<button type="button" class="btn btn-accent btn-sm" id="btn-pf-save">Enregistrer</button>'+
     '</div></div>'+
-    '<div class="page-hdr" style="margin-bottom:8px"><h1>'+(d.id?'Modifier':'Nouveau')+' produit</h1></div>'+
+    '<div class="page-hdr" style="margin-bottom:10px"><h1 style="font-size:18px">'+(d.id?'Modifier':'Nouveau')+' produit</h1></div>'+
 
-    '<div class="pf-section"><div class="pf-section-title">Section 1 — Infos générales</div><div class="card">'+
-    '<div class="form-row"><div class="field"><label>Réf. produit</label><input id="pf-ref" value="'+escAttr(d.ref)+'" required></div>'+
-    '<div class="field"><label>Type de produit</label><select id="pf-type">'+
-    '<option value="rouleau"'+(f.type_produit==='rouleau'?' selected':'')+'>Rouleau</option>'+
-    '<option value="paravent"'+(f.type_produit==='paravent'?' selected':'')+'>Paravent</option></select></div></div>'+
-    '<div class="form-row"><div class="field"><label>Impressions</label><select id="pf-impressions">'+
-    '<option value="1"'+(f.impressions?' selected':'')+'>Oui</option><option value="0"'+(f.impressions?'':' selected')+'>Non</option></select></div>'+
-    '<div class="field"><label>Pour quel client</label><select id="pf-client">'+clientOpts+'</select></div></div></div></div>'+
+    '<div class="pf-section"><div class="pf-section-title">Infos générales</div><div class="pf-card pf-general">'+
+    pfRow('Réf. produit', '<input id="pf-ref" value="'+escAttr(d.ref)+'" required>')+
+    pfRow('Type', '<select id="pf-type"><option value="rouleau"'+(f.type_produit==='rouleau'?' selected':'')+'>Rouleau</option>'+
+      '<option value="paravent"'+(f.type_produit==='paravent'?' selected':'')+'>Paravent</option></select>')+
+    pfRow('Impressions', '<select id="pf-impressions"><option value="1"'+(f.impressions?' selected':'')+'>Oui</option>'+
+      '<option value="0"'+(f.impressions?'':' selected')+'>Non</option></select>')+
+    pfRow('Client', '<select id="pf-client">'+clientOpts+'</select>', 'pf-inline-wide')+
+    '</div></div>'+
 
-    '<div class="pf-section"><div class="pf-section-title">Section 2 — Fiche technique</div>'+
-
+    '<div class="pf-section"><div class="pf-section-title">Fiche technique</div>'+
+    '<div class="pf-cols-2" style="margin-bottom:10px">'+
     '<div class="pf-block"><div class="pf-block-title">Étiquette</div>'+
-    '<div class="pf-format-readonly" id="pf-format-display">'+(fmt ? escHtml(fmt) : 'Format — renseigner laize et longueur')+'</div>'+
-    '<div class="form-row"><div class="field"><label>Laize (mm)</label><input type="number" step="any" min="0" id="pf-et-laize" value="'+escAttr(f.etiquette.laize)+'"></div>'+
-    '<div class="field"><label>Longueur (mm)</label><input type="number" step="any" min="0" id="pf-et-long" value="'+escAttr(f.etiquette.longueur)+'"></div></div>'+
-    '<div class="form-row"><div class="field"><label>Rayon (mm)</label><input type="number" step="any" min="0" id="pf-et-rayon" value="'+escAttr(f.etiquette.rayon)+'"></div>'+
-    '<div class="field"><label>Perforation</label><input id="pf-et-perf" value="'+escAttr(f.etiquette.perforation)+'" placeholder="Commentaire"></div></div></div>'+
-
+    '<div class="pf-format-readonly" id="pf-format-display">'+(fmt ? escHtml(fmt) : 'Format — laize × longueur')+'</div>'+
+  pfRow('Laize mm', '<input type="number" step="any" min="0" id="pf-et-laize" value="'+escAttr(f.etiquette.laize)+'">')+
+  pfRow('Long. mm', '<input type="number" step="any" min="0" id="pf-et-long" value="'+escAttr(f.etiquette.longueur)+'">')+
+  pfRow('Rayon mm', '<input type="number" step="any" min="0" id="pf-et-rayon" value="'+escAttr(f.etiquette.rayon)+'">')+
+  pfRow('Perforation', '<input id="pf-et-perf" value="'+escAttr(f.etiquette.perforation)+'" placeholder="Commentaire">')+
+    '</div>'+
     '<div class="pf-block"><div class="pf-block-title">Échenillage</div>'+
-    '<div class="form-row"><div class="field"><label>Espace à droite (mm)</label><input type="number" step="any" id="pf-ech-d" value="'+escAttr(f.echenillage.droite)+'"></div>'+
-    '<div class="field"><label>Espace à gauche (mm)</label><input type="number" step="any" id="pf-ech-g" value="'+escAttr(f.echenillage.gauche)+'"></div></div>'+
-    '<div class="field"><label>En avance (mm)</label><input type="number" step="any" id="pf-ech-a" value="'+escAttr(f.echenillage.avance)+'"></div></div>'+
+  pfRow('À droite mm', '<input type="number" step="any" id="pf-ech-d" value="'+escAttr(f.echenillage.droite)+'">')+
+  pfRow('À gauche mm', '<input type="number" step="any" id="pf-ech-g" value="'+escAttr(f.echenillage.gauche)+'">')+
+  pfRow('En avance mm', '<input type="number" step="any" id="pf-ech-a" value="'+escAttr(f.echenillage.avance)+'">')+
+    '</div></div>'+
 
+    '<div class="pf-cols-2" style="margin-bottom:10px">'+
     '<div class="pf-block"><div class="pf-block-title">Matière</div>'+
-    '<div class="form-row"><div class="field"><label>Frontal</label><select id="pf-mat-frontal">'+mpOptionsHtml(frontal, f.matiere.frontal_id)+'</select></div>'+
-    '<div class="field"><label>Adhésif</label><select id="pf-mat-adhesif">'+mpOptionsHtml(adhesif, f.matiere.adhesif_id)+'</select></div></div>'+
-    '<div class="form-row"><div class="field"><label>Grammage adhésif (gsm)</label><input type="number" step="1" min="0" id="pf-mat-gram" value="'+escAttr(f.matiere.grammage_adhesif)+'"></div>'+
-    '<div class="field"><label>Glassine</label><select id="pf-mat-glassine">'+mpOptionsHtml(glassine, f.matiere.glassine_id)+'</select></div></div>'+
-    '<div class="field"><label>Couleur glassine</label><input id="pf-mat-couleur" readonly value="'+escAttr(f.matiere.couleur_glassine)+'"></div></div>'+
-
+  pfRow('Frontal', '<select id="pf-mat-frontal">'+mpOptionsHtml(frontal, f.matiere.frontal_id)+'</select>', 'pf-inline-wide')+
+  pfRow('Adhésif', '<select id="pf-mat-adhesif">'+mpOptionsHtml(adhesif, f.matiere.adhesif_id)+'</select>', 'pf-inline-wide')+
+  pfRow('Grammage gsm', '<input type="number" step="1" min="0" id="pf-mat-gram" value="'+escAttr(f.matiere.grammage_adhesif)+'">')+
+  pfRow('Glassine', '<select id="pf-mat-glassine">'+mpOptionsHtml(glassine, f.matiere.glassine_id)+'</select>', 'pf-inline-wide')+
+  pfRow('Couleur', '<input id="pf-mat-couleur" readonly value="'+escAttr(f.matiere.couleur_glassine)+'">')+
+    '</div>'+
     '<div class="pf-block"><div class="pf-block-title">Bobines</div>'+
-    '<div class="form-row"><div class="field"><label>Diamètre mandrin (mm)</label><input type="number" step="any" id="pf-bob-mand" value="'+escAttr(f.bobines.diametre_mandrin)+'"></div>'+
-    '<div class="field"><label>Enroulement</label><select id="pf-bob-enr">'+
-    '<option value="interieur"'+(f.bobines.enroulement==='interieur'?' selected':'')+'>Intérieur</option>'+
-    '<option value="exterieur"'+(f.bobines.enroulement==='exterieur'?' selected':'')+'>Extérieur</option></select></div></div>'+
-    '<div class="form-row"><div class="field"><label>Diamètre bobine (mm)</label><input type="number" step="any" id="pf-bob-diam" value="'+escAttr(f.bobines.diametre_bobine)+'"></div>'+
-    '<div class="field"><label>Étiquettes / bobine</label><input type="number" step="1" min="0" id="pf-bob-nb" value="'+escAttr(f.bobines.nb_etiquettes)+'"></div></div></div>'+
+  pfRow('Mandrin mm', '<input type="number" step="any" id="pf-bob-mand" value="'+escAttr(f.bobines.diametre_mandrin)+'">')+
+  pfRow('Enroulement', '<select id="pf-bob-enr"><option value="interieur"'+(f.bobines.enroulement==='interieur'?' selected':'')+'>Intérieur</option>'+
+    '<option value="exterieur"'+(f.bobines.enroulement==='exterieur'?' selected':'')+'>Extérieur</option></select>')+
+  pfRow('Ø bobine mm', '<input type="number" step="any" id="pf-bob-diam" value="'+escAttr(f.bobines.diametre_bobine)+'">')+
+  pfRow('Étiq. / bobine', '<input type="number" step="1" min="0" id="pf-bob-nb" value="'+escAttr(f.bobines.nb_etiquettes)+'">')+
+    '</div></div>'+
 
-    '<div class="pf-block'+(showImp?'':' pf-hidden')+'" id="pf-bloc-impressions">'+
+    '<div class="pf-block'+(showImp?'':' pf-hidden')+'" id="pf-bloc-impressions" style="margin-bottom:10px">'+
     '<div class="pf-block-title">Impressions</div>'+
-    '<div class="pf-check-row"><input type="checkbox" id="pf-imp-aplat"'+(imp.aplat?' checked':'')+'>'+
-    '<label for="pf-imp-aplat" style="margin:0;text-transform:none;letter-spacing:0">Aplat</label>'+
-    '<input type="number" step="any" min="0" max="100" id="pf-imp-aplat-pct" value="'+escAttr(imp.aplat_pourcent)+'" placeholder="%" style="width:80px;margin-left:8px"'+(imp.aplat?'':' disabled')+'></div>'+
-    '<div class="form-row"><div class="field"><label>Recto (nombre)</label><input type="number" min="0" step="1" id="pf-imp-recto" value="'+escAttr(imp.recto)+'"></div>'+
-    '<div class="field"><label>Verso (nombre)</label><input type="number" min="0" step="1" id="pf-imp-verso" value="'+escAttr(imp.verso)+'"></div></div>'+
-    '<div id="pf-recto-details">'+buildImpDetailRows('recto', imp.recto, imp.recto_details)+'</div>'+
-    '<div id="pf-verso-details" style="margin-top:12px">'+buildImpDetailRows('verso', imp.verso, imp.verso_details)+'</div></div></div>'+
+    '<div class="pf-cols-2">'+
+    '<div><div class="pf-check-row"><input type="checkbox" id="pf-imp-aplat"'+(imp.aplat?' checked':'')+'>'+
+    '<label for="pf-imp-aplat" class="pf-lbl">Aplat</label>'+
+    '<input type="number" step="any" min="0" max="100" id="pf-imp-aplat-pct" value="'+escAttr(imp.aplat_pourcent)+'" placeholder="%"'+(imp.aplat?'':' disabled')+'></div>'+
+    pfRow('Recto (nb)', '<input type="number" min="0" step="1" id="pf-imp-recto" value="'+escAttr(imp.recto)+'">')+
+    '<div id="pf-recto-details">'+buildImpDetailRows('recto', imp.recto, imp.recto_details)+'</div></div>'+
+    '<div>'+
+    pfRow('Verso (nb)', '<input type="number" min="0" step="1" id="pf-imp-verso" value="'+escAttr(imp.verso)+'">')+
+    '<div id="pf-verso-details">'+buildImpDetailRows('verso', imp.verso, imp.verso_details)+'</div></div>'+
+    '</div></div></div>'+
 
-    '<div class="pf-section"><div class="pf-section-title">Section 3 — Conditionnement</div>'+
+    '<div class="pf-section"><div class="pf-section-title">Conditionnement</div>'+
+    '<div class="pf-cols-2">'+
     '<div class="pf-block"><div class="pf-block-title">Cartons</div>'+
-    '<div class="field"><label>Type de cartons</label><select id="pf-cart-type">'+mpOptionsHtml(carton, f.conditionnement.carton.matiere_id)+'</select></div>'+
-    '<div class="form-row"><div class="field"><label>Bobines au sol</label><input type="number" step="1" min="0" id="pf-cart-sol" value="'+escAttr(f.conditionnement.carton.bobines_sol)+'"></div>'+
-    '<div class="field"><label>Nombre d\'étages</label><input type="number" step="1" min="0" id="pf-cart-etages" value="'+escAttr(f.conditionnement.carton.nb_etages)+'"></div></div>'+
-    '<div class="field"><label>Bobines / carton</label><input type="number" step="1" min="0" id="pf-cart-bob" value="'+escAttr(f.conditionnement.carton.bobines_carton)+'"></div></div>'+
+  pfRow('Type', '<select id="pf-cart-type">'+mpOptionsHtml(carton, f.conditionnement.carton.matiere_id)+'</select>', 'pf-inline-wide')+
+  pfRow('Bobines / sol', '<input type="number" step="1" min="0" id="pf-cart-sol" value="'+escAttr(f.conditionnement.carton.bobines_sol)+'">')+
+  pfRow('Étages', '<input type="number" step="1" min="0" id="pf-cart-etages" value="'+escAttr(f.conditionnement.carton.nb_etages)+'">')+
+  pfRow('Bobines / carton', '<input type="number" step="1" min="0" id="pf-cart-bob" value="'+escAttr(f.conditionnement.carton.bobines_carton)+'">')+
+    '</div>'+
     '<div class="pf-block"><div class="pf-block-title">Palettes</div>'+
-    '<div class="field"><label>Type de palettes</label><select id="pf-pal-type">'+mpOptionsHtml(palette, f.conditionnement.palette.matiere_id)+'</select></div>'+
-    '<div class="form-row"><div class="field"><label>Cartons au sol</label><input type="number" step="1" min="0" id="pf-pal-sol" value="'+escAttr(f.conditionnement.palette.cartons_sol)+'"></div>'+
-    '<div class="field"><label>Étages de cartons</label><input type="number" step="1" min="0" id="pf-pal-etages" value="'+escAttr(f.conditionnement.palette.nb_etages)+'"></div></div>'+
-    '<div class="field"><label>Cartons / palette</label><input type="number" step="1" min="0" id="pf-pal-cart" value="'+escAttr(f.conditionnement.palette.cartons_palette)+'"></div></div></div>'+
+  pfRow('Type', '<select id="pf-pal-type">'+mpOptionsHtml(palette, f.conditionnement.palette.matiere_id)+'</select>', 'pf-inline-wide')+
+  pfRow('Cartons / sol', '<input type="number" step="1" min="0" id="pf-pal-sol" value="'+escAttr(f.conditionnement.palette.cartons_sol)+'">')+
+  pfRow('Étages', '<input type="number" step="1" min="0" id="pf-pal-etages" value="'+escAttr(f.conditionnement.palette.nb_etages)+'">')+
+  pfRow('Cartons / pal.', '<input type="number" step="1" min="0" id="pf-pal-cart" value="'+escAttr(f.conditionnement.palette.cartons_palette)+'">')+
+    '</div></div></div>'+
 
-    '<div class="pf-section"><div class="pf-section-title">Section 4 — Particularités</div>'+
-    '<div class="card"><div class="field" style="margin:0"><label>Particularités</label>'+
-    '<textarea id="pf-part" rows="5" placeholder="Notes spécifiques…">'+escHtml(f.particularites)+'</textarea></div></div>'+
-    '<div class="pf-sticky-bar" style="border-top:1px solid var(--border);border-bottom:none;margin-top:20px">'+
-    '<span></span><button type="button" class="btn btn-accent" id="btn-pf-save-bottom" style="padding:12px 28px;font-size:14px">Enregistrer</button></div>';
+    '<div class="pf-section"><div class="pf-section-title">Particularités</div>'+
+    '<div class="pf-card">'+
+    pfRow('Notes', '<textarea id="pf-part" rows="3" placeholder="Notes spécifiques…">'+escHtml(f.particularites)+'</textarea>', 'pf-inline-wide')+
+    '</div>'+
+    '<div class="pf-sticky-bar" style="border-top:1px solid var(--border);border-bottom:none;margin-top:14px;padding-top:12px">'+
+    '<span></span><button type="button" class="btn btn-accent btn-sm" id="btn-pf-save-bottom">Enregistrer</button></div></div>';
 }
 
 function pfNum(v) {
@@ -275,7 +320,7 @@ function pfUpdateFormatDisplay() {
   const laize = document.getElementById('pf-et-laize')?.value;
   const longueur = document.getElementById('pf-et-long')?.value;
   const fmt = computeFormatEtiquette({ laize, longueur });
-  el.textContent = fmt || 'Format — renseigner laize et longueur';
+  el.textContent = fmt || 'Format — laize × longueur';
 }
 
 function pfUpdateGlassineCouleur() {
