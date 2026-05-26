@@ -281,6 +281,11 @@ if (-not (Test-Path (Join-Path $truthDir ".git"))) {
     $gitPushDir = Resolve-GitMirror
 }
 
+if ($GitHubOnly) {
+    Push-MySifaGitHub -SkipSync:$SkipSync -CommitMessage $CommitMessage
+    exit 0
+}
+
 Write-Host "Deploiement MySifa (Windows)"
 Write-Host "  SOURCE DE VERITE : $truthDir"
 if ($gitPushDir -ne $truthDir) {
@@ -294,11 +299,6 @@ if (-not $SkipSync -and $gitPushDir -ne $truthDir) {
 }
 
 Copy-Item -Path $deploySh -Destination (Join-Path $gitPushDir "deploy.sh") -Force
-
-if ($GitHubOnly) {
-    Push-MySifaGitHub -SkipSync:$SkipSync -CommitMessage $CommitMessage
-    exit 0
-}
 
 Invoke-DeploySh -BashExe $bash -GitPushDir $gitPushDir -TruthDir $truthDir `
     -SkipSync:$SkipSync.IsPresent -GitHubOnly:$false -ExtraArgs $deployShArgs
