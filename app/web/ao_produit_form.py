@@ -36,6 +36,8 @@ align-items:center}
 .pf-check-row .pf-lbl{text-transform:none;letter-spacing:0;font-size:13px}
 .pf-check-row input[type=number]{width:64px;padding:5px 8px;font-size:12px}
 .pf-hidden{display:none!important}
+.pf-imp-col{display:flex;flex-direction:column;gap:6px}
+.pf-actions .btn:disabled{opacity:.45;cursor:not-allowed;pointer-events:none}
 @media(max-width:960px){
 .pf-general{grid-template-columns:1fr 1fr}
 .pf-cols-2,.pf-cols-3{grid-template-columns:1fr}
@@ -152,7 +154,9 @@ function renderProduitForm() {
     '<div class="pf-sticky-bar">'+
     '<button type="button" class="btn btn-ghost btn-sm" id="btn-pf-back">'+icon('arrow-left',14)+' Catalogue</button>'+
     '<div class="pf-actions">'+
-    '<button type="button" class="btn btn-ghost btn-sm" id="btn-pf-export"'+(d.id?'':' disabled')+'>'+icon('file-text',14)+' PDF</button>'+
+    '<button type="button" class="btn btn-ghost btn-sm" id="btn-pf-export"'+(d.id?'':' disabled')+
+    ' title="'+escAttr(d.id ? 'Exporter la fiche PDF' : 'Enregistrez le produit pour activer l\'export PDF')+'">'+
+    icon('file-text',14)+' PDF</button>'+
     '<button type="button" class="btn btn-accent btn-sm" id="btn-pf-save">Enregistrer</button>'+
     '</div></div>'+
     '<div class="page-hdr" style="margin-bottom:10px"><h1 style="font-size:18px">'+(d.id?'Modifier':'Nouveau')+' produit</h1></div>'+
@@ -200,15 +204,16 @@ function renderProduitForm() {
     '<div class="pf-block'+(showImp?'':' pf-hidden')+'" id="pf-bloc-impressions" style="margin-bottom:10px">'+
     '<div class="pf-block-title">Impressions</div>'+
     '<div class="pf-cols-2">'+
-    '<div><div class="pf-check-row"><input type="checkbox" id="pf-imp-aplat"'+(imp.aplat?' checked':'')+'>'+
+    '<div class="pf-imp-col">'+
+    '<div class="pf-check-row"><input type="checkbox" id="pf-imp-aplat"'+(imp.aplat?' checked':'')+'>'+
     '<label for="pf-imp-aplat" class="pf-lbl">Aplat</label>'+
     '<input type="number" step="any" min="0" max="100" id="pf-imp-aplat-pct" value="'+escAttr(imp.aplat_pourcent)+'" placeholder="%"'+(imp.aplat?'':' disabled')+'></div>'+
     pfRow('Recto (nb)', '<input type="number" min="0" step="1" id="pf-imp-recto" value="'+escAttr(imp.recto)+'">')+
     '<div id="pf-recto-details">'+buildImpDetailRows('recto', imp.recto, imp.recto_details)+'</div></div>'+
-    '<div>'+
+    '<div class="pf-imp-col">'+
     pfRow('Verso (nb)', '<input type="number" min="0" step="1" id="pf-imp-verso" value="'+escAttr(imp.verso)+'">')+
     '<div id="pf-verso-details">'+buildImpDetailRows('verso', imp.verso, imp.verso_details)+'</div></div>'+
-    '</div></div></div>'+
+    '</div></div></div></div>'+
 
     '<div class="pf-section"><div class="pf-section-title">Conditionnement</div>'+
     '<div class="pf-cols-2">'+
@@ -230,7 +235,7 @@ function renderProduitForm() {
     pfRow('Notes', '<textarea id="pf-part" rows="3" placeholder="Notes spécifiques…">'+escHtml(f.particularites)+'</textarea>', 'pf-inline-wide')+
     '</div>'+
     '<div class="pf-sticky-bar" style="border-top:1px solid var(--border);border-bottom:none;margin-top:14px;padding-top:12px">'+
-    '<span></span><button type="button" class="btn btn-accent btn-sm" id="btn-pf-save-bottom">Enregistrer</button></div></div>';
+    '<span></span><button type="button" class="btn btn-accent btn-sm" id="btn-pf-save-bottom">Enregistrer</button></div></div></div>';
 }
 
 function pfNum(v) {
@@ -328,7 +333,8 @@ function pfUpdateGlassineCouleur() {
   const out = document.getElementById('pf-mat-couleur');
   if (!sel || !out) return;
   const id = sel.value;
-  const g = (S.matieres.glassine || []).find(x => String(x.id) === String(id));
+  const glassines = (S.matieres && S.matieres.glassine) ? S.matieres.glassine : [];
+  const g = glassines.find(x => String(x.id) === String(id));
   out.value = g ? (g.couleur || g.designation || '') : '';
 }
 
@@ -362,8 +368,17 @@ function pfRebuildImpDetails() {
 }
 
 async function saveProduitForm() {
-  const body = collectProduitForm();
+  let body;
+  try {
+    body = collectProduitForm();
+  } catch (e) {
+    showToast('Formulaire invalide — rechargez la page.', 'danger');
+    return;
+  }
   if (!body.ref) { showToast('Réf. produit obligatoire.', 'danger'); return; }
+  const saveBtn = document.getElementById('btn-pf-save');
+  const saveBtn2 = document.getElementById('btn-pf-save-bottom');
+  [saveBtn, saveBtn2].forEach(b => { if (b) b.disabled = true; });
   try {
     let saved;
     if (S.produitForm.id) {
@@ -376,21 +391,31 @@ async function saveProduitForm() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       });
-      S.produitForm.id = saved.id;
+    }
+    if (!saved || saved.id == null) {
+      showToast('Réponse serveur invalide.', 'danger');
+      return;
     }
     showToast('Fiche produit enregistrée.', 'success');
     await loadProduits();
     S.produitForm = produitFromApi(saved);
     render();
-  } catch (e) { showToast(e.message, 'danger'); }
+  } catch (e) {
+    showToast(e.message || 'Erreur à l\'enregistrement.', 'danger');
+  } finally {
+    [saveBtn, saveBtn2].forEach(b => { if (b) b.disabled = false; });
+  }
 }
 
-function openProduitForm(edit) {
+async function openProduitForm(edit) {
   S.produitView = 'form';
   if (edit) {
     S.produitForm = produitFromApi(edit);
   } else {
     S.produitForm = { id: null, ref: '', client_id: '', fiche: defaultProduitFiche() };
+  }
+  if (!S.matieres) {
+    try { await loadMatieresForProduit(); } catch (e) { /* liste vide */ }
   }
   render();
 }
@@ -411,9 +436,12 @@ function exportProduitPdf() {
 
 function bindProduitFormEvents() {
   document.getElementById('btn-pf-back')?.addEventListener('click', closeProduitForm);
-  document.getElementById('btn-pf-save')?.addEventListener('click', saveProduitForm);
-  document.getElementById('btn-pf-save-bottom')?.addEventListener('click', saveProduitForm);
-  document.getElementById('btn-pf-export')?.addEventListener('click', exportProduitPdf);
+  document.getElementById('btn-pf-save')?.addEventListener('click', () => { saveProduitForm(); });
+  document.getElementById('btn-pf-save-bottom')?.addEventListener('click', () => { saveProduitForm(); });
+  const exportBtn = document.getElementById('btn-pf-export');
+  if (exportBtn && !exportBtn.disabled) {
+    exportBtn.addEventListener('click', exportProduitPdf);
+  }
   ['pf-et-laize','pf-et-long'].forEach(id => {
     document.getElementById(id)?.addEventListener('input', pfUpdateFormatDisplay);
   });
@@ -425,7 +453,11 @@ function bindProduitFormEvents() {
   });
   document.getElementById('pf-imp-recto')?.addEventListener('change', pfRebuildImpDetails);
   document.getElementById('pf-imp-verso')?.addEventListener('change', pfRebuildImpDetails);
-  pfUpdateGlassineCouleur();
+  try { pfUpdateGlassineCouleur(); } catch (e) { /* matières non chargées */ }
+  const refInp = document.getElementById('pf-ref');
+  if (refInp && !refInp.value.trim()) {
+    requestAnimationFrame(() => { refInp.focus(); });
+  }
 }
 
 async function loadMatieresForProduit() {
