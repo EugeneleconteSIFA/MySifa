@@ -926,7 +926,6 @@ def _migrate(conn):
 
     # Migration v6 : Configurer les overrides d'accès pour les utilisateurs spécifiques
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=6 LIMIT 1").fetchone():
-        import json
         # S'assurer que la colonne access_overrides existe
         existing_columns = {row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
         if "access_overrides" not in existing_columns:
