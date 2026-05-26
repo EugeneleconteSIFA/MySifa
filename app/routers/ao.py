@@ -28,6 +28,13 @@ from config import (
     ROLE_SUPERADMIN,
     UPLOAD_DIR,
 )
+from app.services.ao_pricing import (
+    DEVISES,
+    UNITES_QUOTATION,
+    enrich_reponse_pricing,
+    get_eur_usd_rate,
+    ligne_context_from_produit,
+)
 from app.services.ao_produit_fiche import (
     build_designation,
     default_fiche,
@@ -380,6 +387,36 @@ def _client_nom(conn, client_id: int | None) -> str | None:
         "SELECT nom FROM ao_carnet_clients WHERE id=?", (client_id,)
     ).fetchone()
     return row["nom"] if row else None
+
+
+def _produits_by_ref_map(conn) -> dict[str, dict]:
+    rows = conn.execute(
+        """SELECT p.*, c.nom AS client_nom
+           FROM ao_produits p
+           LEFT JOIN ao_carnet_clients c ON c.id = p.client_id"""
+    ).fetchall()
+    out: dict[str, dict] = {}
+    for row in rows:
+        d = _row_dict(row)
+        ref_key = (d.get("ref") or "").strip().lower()
+        if ref_key and ref_key not in out:
+            out[ref_key] = _serialize_produit_row(d, conn)
+    return out
+
+
+def _matiere_ids_from_produits(produits: dict[str, dict]) -> set[int]:
+    ids: set[int] = set()
+    for p in produits.values():
+        fiche = p.get("fiche") or parse_fiche(p.get("fiche_json"))
+        mat = fiche.get("matiere") or {}
+        for key in ("frontal_id", "adhesif_id", "glassine_id"):
+            try:
+                mid = mat.get(key)
+                if mid is not None:
+                    ids.add(int(mid))
+            except (TypeError, ValueError):
+                pass
+    return ids
 
 
 def _produit_ref_taken(conn, ref: str, exclude_id: int | None = None) -> bool:
@@ -1004,15 +1041,30 @@ def comparaison_ao(request: Request, ao_id: int):
                 (ao_id,),
             ).fetchall()
         ]
+        produits_map = _produits_by_ref_map(conn)
+        mat_ids = _matiere_ids_from_produits(produits_map)
+        matieres_map = _load_matieres_map(conn, mat_ids or None)
+        eur_usd = get_eur_usd_rate(conn)
 
         lignes_out: list[dict[str, Any]] = []
+        rows_flat: list[dict[str, Any]] = []
         for ln_row in lignes_rows:
             ln = _row_dict(ln_row)
-            reponses = [
+            ref_key = (ln.get("ref_produit") or "").strip().lower()
+            produit = produits_map.get(ref_key)
+            ctx = ligne_context_from_produit(
+                ln.get("ref_produit") or "",
+                ln.get("quantite"),
+                produit,
+                matieres_map,
+            )
+            reponses_raw = [
                 _row_dict(r)
                 for r in conn.execute(
-                    """SELECT f.id AS fourni_id, f.nom_fournisseur,
-                              r.prix_unitaire, r.delai_jours, r.commentaire
+                    """SELECT r.id AS reponse_id, f.id AS fourni_id, f.nom_fournisseur,
+                              r.quotation, r.prix_unitaire, r.devise, r.unite_quotation,
+                              r.coef, r.devise_prix_devis,
+                              r.delai_jours, r.commentaire
                        FROM ao_reponses r
                        JOIN ao_fournisseurs f ON f.id = r.ao_fournisseur_id
                        WHERE r.ligne_id=?
@@ -1020,30 +1072,142 @@ def comparaison_ao(request: Request, ao_id: int):
                     (ln["id"],),
                 ).fetchall()
             ]
-            prices = [
-                float(r["prix_unitaire"])
+            rep_by_fourni = {int(r["fourni_id"]): r for r in reponses_raw}
+            reponses = []
+            for f in fournisseurs:
+                raw = rep_by_fourni.get(int(f["id"]))
+                if raw:
+                    reponses.append(
+                        enrich_reponse_pricing(raw, ctx, eur_usd_rate=eur_usd)
+                    )
+            prices_mille = [
+                float(r["prix_au_mille"])
                 for r in reponses
-                if r.get("prix_unitaire") is not None
+                if r.get("prix_au_mille") is not None
             ]
-            if prices:
-                prix_min = min(prices)
-                prix_max = max(prices)
-                prix_moyen = sum(prices) / len(prices)
+            if prices_mille:
+                prix_min = min(prices_mille)
+                prix_max = max(prices_mille)
+                prix_moyen = sum(prices_mille) / len(prices_mille)
             else:
                 prix_min = prix_max = prix_moyen = None
-            lignes_out.append({
+            ligne_out = {
                 "id": ln["id"],
                 "ref_produit": ln["ref_produit"],
                 "designation": ln["designation"],
                 "quantite": ln["quantite"],
                 "unite": ln.get("unite"),
+                **ctx,
                 "reponses": reponses,
                 "prix_min": prix_min,
                 "prix_max": prix_max,
                 "prix_moyen": prix_moyen,
-            })
+            }
+            lignes_out.append(ligne_out)
+            for f in fournisseurs:
+                fid = int(f["id"])
+                raw = rep_by_fourni.get(fid)
+                if raw:
+                    rep = enrich_reponse_pricing(raw, ctx, eur_usd_rate=eur_usd)
+                else:
+                    rep = enrich_reponse_pricing(
+                        {
+                            "reponse_id": None,
+                            "fourni_id": fid,
+                            "nom_fournisseur": f.get("nom_fournisseur"),
+                            "quotation": None,
+                            "devise": "EUR",
+                            "unite_quotation": "mille",
+                            "coef": 1.0,
+                            "devise_prix_devis": "EUR",
+                        },
+                        ctx,
+                        eur_usd_rate=eur_usd,
+                    )
+                rows_flat.append({
+                    "ligne_id": ln["id"],
+                    "reponse_id": rep.get("reponse_id"),
+                    "fourni_id": rep.get("fourni_id"),
+                    "nom_fournisseur": rep.get("nom_fournisseur"),
+                    **ctx,
+                    **{k: rep.get(k) for k in (
+                        "quotation", "devise", "unite_quotation",
+                        "prix_calcule", "prix_au_mille", "coef",
+                        "devise_prix_devis", "prix_vente",
+                        "delai_jours", "commentaire",
+                    )},
+                })
 
-    return {"lignes": lignes_out, "fournisseurs": fournisseurs}
+    return {
+        "lignes": lignes_out,
+        "fournisseurs": fournisseurs,
+        "rows": rows_flat,
+        "eur_usd_rate": eur_usd,
+    }
+
+
+@router.patch("/{ao_id}/reponses/{reponse_id}")
+async def patch_reponse_pricing(request: Request, ao_id: int, reponse_id: int):
+    """Met à jour coef et devise du devis (saisie interne)."""
+    _require_ao(request)
+    body = await request.json()
+    coef = body.get("coef")
+    devise_prix_devis = body.get("devise_prix_devis")
+    if coef is not None:
+        try:
+            coef = float(coef)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Coefficient invalide.")
+        if coef <= 0:
+            raise HTTPException(status_code=400, detail="Coefficient invalide.")
+    if devise_prix_devis is not None:
+        devise_prix_devis = (devise_prix_devis or "").strip().upper()
+        if devise_prix_devis not in DEVISES:
+            raise HTTPException(status_code=400, detail="Devise invalide.")
+
+    with get_db() as conn:
+        _get_ao_or_404(conn, ao_id)
+        row = conn.execute(
+            """SELECT r.*, l.ao_id, l.ref_produit, l.quantite
+               FROM ao_reponses r
+               JOIN ao_lignes l ON l.id = r.ligne_id
+               WHERE r.id=? AND l.ao_id=?""",
+            (reponse_id, ao_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Réponse introuvable")
+        rep = _row_dict(row)
+        if coef is not None:
+            conn.execute(
+                "UPDATE ao_reponses SET coef=? WHERE id=?",
+                (coef, reponse_id),
+            )
+        if devise_prix_devis is not None:
+            conn.execute(
+                "UPDATE ao_reponses SET devise_prix_devis=? WHERE id=?",
+                (devise_prix_devis, reponse_id),
+            )
+        conn.commit()
+        updated = conn.execute(
+            "SELECT * FROM ao_reponses WHERE id=?", (reponse_id,)
+        ).fetchone()
+        rep_out = _row_dict(updated)
+        fourni = conn.execute(
+            "SELECT id, nom_fournisseur FROM ao_fournisseurs WHERE id=?",
+            (rep_out["ao_fournisseur_id"],),
+        ).fetchone()
+        if fourni:
+            rep_out["fourni_id"] = fourni["id"]
+            rep_out["nom_fournisseur"] = fourni["nom_fournisseur"]
+        produits_map = _produits_by_ref_map(conn)
+        mat_ids = _matiere_ids_from_produits(produits_map)
+        matieres_map = _load_matieres_map(conn, mat_ids or None)
+        eur_usd = get_eur_usd_rate(conn)
+        produit = produits_map.get((row["ref_produit"] or "").strip().lower())
+        ctx = ligne_context_from_produit(
+            row["ref_produit"], row["quantite"], produit, matieres_map
+        )
+        return enrich_reponse_pricing(rep_out, ctx, eur_usd_rate=eur_usd)
 
 
 @router.get("/{ao_id}/non-lus")

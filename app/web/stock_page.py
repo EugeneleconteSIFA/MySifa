@@ -605,11 +605,15 @@ body.light .mp-search-wrap:focus-within{
 @media(max-width:700px){.pf-kpis{grid-template-columns:1fr}}
 .pf-kpi{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
 .pf-kpi-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px}
-.pf-kpi-value{font-size:22px;font-weight:800;font-family:ui-monospace,monospace;color:var(--text)}
+.pf-kpi-value{font-size:24px;font-weight:700;font-family:ui-monospace,monospace;color:var(--accent)}
 .pf-grid{display:grid;grid-template-columns:1fr 340px;gap:16px;align-items:start}
 @media(max-width:960px){.pf-grid{grid-template-columns:1fr}}
 .pf-col-title{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:10px}
-.pf-stock-list{display:flex;flex-direction:column;gap:10px}
+.pf-stock-list{display:flex;flex-direction:column;gap:6px;max-height:calc(100vh - 340px);overflow-y:auto}
+.pf-stock-item{display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:10px;
+  border:1px solid var(--border);background:var(--card);cursor:pointer;transition:border-color .15s,background .15s}
+.pf-stock-item:hover{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 6%,var(--card))}
+.pf-stock-item-main{flex:1;min-width:0}
 .pf-stock-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
 .pf-stock-ref{font-family:ui-monospace,monospace;font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px}
 .pf-stock-des{font-size:13px;color:var(--text2);margin-bottom:8px;line-height:1.4}
@@ -622,9 +626,12 @@ body.light .mp-search-wrap:focus-within{
 .pf-mvt-list{display:flex;flex-direction:column;gap:8px;max-height:calc(100vh - 320px);overflow-y:auto}
 .pf-mvt-item{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;background:var(--card);
   border:1px solid var(--border);border-radius:10px;font-size:12px}
-.pf-mvt-icon{font-size:14px;font-weight:800;line-height:1;flex-shrink:0;width:18px;text-align:center}
+.pf-mvt-icon{font-size:16px;font-weight:700;line-height:1;flex-shrink:0;width:20px;text-align:center}
 .pf-mvt-icon.entree{color:var(--success)}
 .pf-mvt-icon.sortie{color:var(--danger)}
+.pf-empty-state{text-align:center;padding:48px 24px;color:var(--muted)}
+.pf-empty-state-title{font-size:14px;font-weight:600;color:var(--text2);margin:12px 0 6px}
+.pf-empty-state-hint{font-size:13px;line-height:1.5}
 .pf-mvt-main{flex:1;min-width:0}
 .pf-mvt-ref{font-weight:700;color:var(--text)}
 .pf-mvt-sub{color:var(--muted);margin-top:2px;font-size:11px}
@@ -1244,6 +1251,7 @@ let S = {
   pfQ: '',
   pfEmplQ: '',
   pfLoading: false,
+  pfTotalMouvements: 0,
   pfModal: null,
   pfConfirmSortie: null,
   // Historique mouvements
@@ -3351,7 +3359,26 @@ function renderMatieresView() {
   }
 }
 
-const PF_UNITES = ['pièces', 'kg', 'm', 'bobines', 'cartons', 'palettes', 'étiquettes', 'boîtes'];
+const PF_UNITES = ['étiquette', 'pièces', 'kg', 'm', 'bobines', 'cartons', 'palettes', 'étiquettes', 'boîtes'];
+
+function normalizePfMvt(m) {
+  if (!m || typeof m !== 'object') return m;
+  const type = (m.type || m.type_mouvement || '').toLowerCase();
+  return {
+    ...m,
+    type: type === 'entree' || type === 'sortie' ? type : type,
+    date_mouvement: m.date_mouvement || m.created_at,
+    user_login: m.user_login || m.created_by_name || m.created_by || '—',
+  };
+}
+
+function buildPfEmptyState(title, hint) {
+  return el('div', { cls: 'pf-empty-state' },
+    el('div', { style: { fontSize: '32px', marginBottom: '4px', color: 'var(--muted)' } }, '·'),
+    el('div', { cls: 'pf-empty-state-title' }, title),
+    el('div', { cls: 'pf-empty-state-hint' }, hint),
+  );
+}
 
 function pfFmtShortDateTime(iso) {
   if (!iso) return '—';
@@ -3385,21 +3412,28 @@ function filterPfStockList() {
 
 async function loadProduitsFinis() {
   S.pfLoading = true;
+  S.pfStock = null;
   renderProduitsFinisView();
   try {
     const [data, mvts] = await Promise.all([
       api('/api/stock/produits-finis'),
       api('/api/stock/produits-finis/mouvements?limit=20'),
     ]);
-    S.pfStock = (data && data.stock) || [];
-    S.pfCatalogue = (data && data.catalogue) || [];
-    S.pfKpis = (data && data.kpis) || { references: 0, mouvements_aujourdhui: 0, emplacements_occupes: 0 };
-    S.pfMouvements = Array.isArray(mvts) ? mvts : [];
+    const payload = data && typeof data === 'object' && !Array.isArray(data) ? data : {};
+    S.pfStock = payload.stock || payload.items || (Array.isArray(data) ? data : []);
+    S.pfCatalogue = payload.catalogue || [];
+    S.pfKpis = payload.kpis || { references: 0, mouvements_aujourdhui: 0, emplacements_occupes: 0 };
+    S.pfTotalMouvements = Number(S.pfKpis.total_mouvements) || 0;
+    const mvtsList = Array.isArray(mvts)
+      ? mvts
+      : (mvts && (mvts.mouvements || mvts.items)) || [];
+    S.pfMouvements = mvtsList.map(normalizePfMvt);
   } catch (e) {
     S.pfStock = [];
     S.pfCatalogue = [];
     S.pfMouvements = [];
     S.pfKpis = { references: 0, mouvements_aujourdhui: 0, emplacements_occupes: 0 };
+    S.pfTotalMouvements = 0;
     showToast(e.message || 'Chargement impossible.', 'error');
   }
   S.pfLoading = false;
@@ -3452,6 +3486,23 @@ function buildPfSearchInput(id, placeholder, valueKey) {
 
 function buildProduitsFinisTab() {
   const wrap = el('div', { cls: 'content pf-tab', id: 'tab-produits-finis' });
+
+  const kpis = S.pfKpis || {};
+  wrap.appendChild(el('div', { cls: 'pf-kpis' },
+    el('div', { cls: 'card pf-kpi', style: { padding: '16px 20px' } },
+      el('div', { cls: 'pf-kpi-label' }, 'Références en stock'),
+      el('div', { cls: 'pf-kpi-value', id: 'kpi-refs' }, S.pfLoading && S.pfStock === null ? '—' : String(kpis.references ?? 0)),
+    ),
+    el('div', { cls: 'card pf-kpi', style: { padding: '16px 20px' } },
+      el('div', { cls: 'pf-kpi-label' }, 'Mouvements aujourd\'hui'),
+      el('div', { cls: 'pf-kpi-value', id: 'kpi-mvt-today' }, S.pfLoading && S.pfStock === null ? '—' : String(kpis.mouvements_aujourdhui ?? 0)),
+    ),
+    el('div', { cls: 'card pf-kpi', style: { padding: '16px 20px' } },
+      el('div', { cls: 'pf-kpi-label' }, 'Emplacements occupés'),
+      el('div', { cls: 'pf-kpi-value', id: 'kpi-empl' }, S.pfLoading && S.pfStock === null ? '—' : String(kpis.emplacements_occupes ?? 0)),
+    ),
+  ));
+
   const toolbar = el('div', { cls: 'pf-toolbar' },
     buildPfSearchInput('pf-search-produit', 'Rechercher un produit (réf, désignation, OF…)', 'pfQ'),
     buildPfSearchInput('pf-search-empl', 'Rechercher un emplacement', 'pfEmplQ'),
@@ -3470,80 +3521,77 @@ function buildProduitsFinisTab() {
   );
   wrap.appendChild(toolbar);
 
-  const kpis = S.pfKpis || {};
-  wrap.appendChild(el('div', { cls: 'pf-kpis' },
-    el('div', { cls: 'pf-kpi' },
-      el('div', { cls: 'pf-kpi-label' }, 'Références en stock'),
-      el('div', { cls: 'pf-kpi-value' }, String(kpis.references != null ? kpis.references : '—')),
-    ),
-    el('div', { cls: 'pf-kpi' },
-      el('div', { cls: 'pf-kpi-label' }, 'Mouvements aujourd\'hui'),
-      el('div', { cls: 'pf-kpi-value' }, String(kpis.mouvements_aujourdhui != null ? kpis.mouvements_aujourdhui : '—')),
-    ),
-    el('div', { cls: 'pf-kpi' },
-      el('div', { cls: 'pf-kpi-label' }, 'Emplacements occupés'),
-      el('div', { cls: 'pf-kpi-value' }, String(kpis.emplacements_occupes != null ? kpis.emplacements_occupes : '—')),
-    ),
-  ));
+  const stockList = el('div', { cls: 'pf-stock-list', id: 'pf-stock-list' });
+  const mvtList = el('div', { cls: 'pf-mvt-list', id: 'pf-mvt-list' });
 
   if (S.pfLoading && S.pfStock === null) {
-    wrap.appendChild(el('div', { cls: 'pf-empty' }, 'Chargement…'));
-    return wrap;
-  }
-
-  const filtered = filterPfStockList();
-  const qProd = (S.pfQ || '').trim();
-  const qEmpl = (S.pfEmplQ || '').trim();
-
-  const stockList = el('div', { cls: 'pf-stock-list' });
-  if (!filtered.length) {
-    const msg = (qProd || qEmpl)
-      ? 'Aucun résultat pour « ' + [qProd, qEmpl].filter(Boolean).join(' » / « ') + ' »'
-      : 'Aucun stock enregistré.';
-    stockList.appendChild(el('div', { cls: 'pf-empty' }, msg));
+    stockList.appendChild(el('div', { cls: 'pf-empty', style: { padding: '32px', textAlign: 'center', fontSize: '13px' } }, 'Chargement…'));
+    mvtList.appendChild(el('div', { cls: 'pf-empty', style: { padding: '32px', textAlign: 'center', fontSize: '13px' } }, 'Chargement…'));
   } else {
-    filtered.forEach(row => {
-      stockList.appendChild(el('div', { cls: 'pf-stock-card' },
-        el('div', { cls: 'pf-stock-ref' }, row.reference || '—'),
-        el('div', { cls: 'pf-stock-des' }, row.designation || '—'),
-        el('div', { cls: 'pf-stock-row' },
-          el('span', { cls: 'pf-stock-qte' }, fU(row.quantite, row.unite)),
-          el('span', { cls: 'pf-empl-badge' }, row.emplacement || '—'),
-        ),
-        el('div', { cls: 'pf-stock-meta' },
-          'Dernière entrée : ' + fD(row.derniere_entree),
-        ),
-        el('div', { cls: 'pf-stock-actions' },
+    const filtered = filterPfStockList();
+    const qProd = (S.pfQ || '').trim();
+    const qEmpl = (S.pfEmplQ || '').trim();
+    const hasFilter = !!(qProd || qEmpl);
+    const neverHadMvt = !S.pfTotalMouvements;
+
+    if (!filtered.length) {
+      if (hasFilter) {
+        stockList.appendChild(el('div', { cls: 'pf-empty', style: { padding: '32px', textAlign: 'center', fontSize: '13px' } },
+          'Aucun résultat pour « ' + [qProd, qEmpl].filter(Boolean).join(' » / « ') + ' »',
+        ));
+      } else if (neverHadMvt) {
+        stockList.appendChild(buildPfEmptyState(
+          'Aucun produit en stock',
+          'Utilisez le bouton « Entrée » pour enregistrer votre premier mouvement.',
+        ));
+      } else {
+        stockList.appendChild(buildPfEmptyState('Aucun produit en stock', 'Tous les emplacements sont vides.'));
+      }
+    } else {
+      filtered.forEach(row => {
+        const item = el('div', {
+          cls: 'pf-stock-item',
+          on: { click: () => openPfDetailModal(row.reference) },
+        },
+          el('div', { cls: 'pf-stock-item-main' },
+            el('div', { cls: 'pf-stock-ref' }, row.reference || '—'),
+            el('div', { cls: 'pf-stock-des' }, row.designation || '—'),
+            el('div', { cls: 'pf-stock-row', style: { marginTop: '6px' } },
+              el('span', { cls: 'pf-stock-qte' }, fU(row.quantite, row.unite)),
+              el('span', { cls: 'pf-empl-badge' }, row.emplacement || '—'),
+            ),
+            el('div', { cls: 'pf-stock-meta' }, 'Dernière entrée : ' + fD(row.derniere_entree)),
+          ),
           el('button', {
             cls: 'btn-ghost-sm',
             type: 'button',
-            on: { click: () => openPfDetailModal(row.reference) },
+            on: { click: (e) => { e.stopPropagation(); openPfDetailModal(row.reference); } },
           }, 'Détail'),
-        ),
-      ));
-    });
-  }
+        );
+        stockList.appendChild(item);
+      });
+    }
 
-  const mvtList = el('div', { cls: 'pf-mvt-list' });
-  const mvts = S.pfMouvements || [];
-  if (!mvts.length) {
-    mvtList.appendChild(el('div', { cls: 'pf-empty' }, 'Aucun mouvement récent.'));
-  } else {
-    mvts.forEach(m => {
-      const isEntree = m.type === 'entree';
-      mvtList.appendChild(el('div', { cls: 'pf-mvt-item' },
-        el('span', { cls: 'pf-mvt-icon ' + (isEntree ? 'entree' : 'sortie') }, isEntree ? '↑' : '↓'),
-        el('div', { cls: 'pf-mvt-main' },
-          el('div', { cls: 'pf-mvt-ref' },
-            (m.reference || '—') + ' · ' + fU(m.quantite, m.unite),
-          ),
-          el('div', { cls: 'pf-mvt-sub' },
-            (m.emplacement || '—') + ' · ' + pfFmtShortDateTime(m.date_mouvement),
-          ),
-        ),
-        el('div', { cls: 'pf-mvt-user' }, m.user_login || '—'),
+    const mvts = S.pfMouvements || [];
+    if (!mvts.length) {
+      mvtList.appendChild(el('div', { cls: 'pf-empty', style: { padding: '24px', textAlign: 'center', fontSize: '13px' } },
+        neverHadMvt ? 'Aucun mouvement enregistré.' : 'Aucun mouvement récent.',
       ));
-    });
+    } else {
+      mvts.forEach(m => {
+        const isEntree = m.type === 'entree';
+        mvtList.appendChild(el('div', { cls: 'pf-mvt-item' },
+          el('span', { cls: 'pf-mvt-icon ' + (isEntree ? 'entree' : 'sortie') }, isEntree ? '↑' : '↓'),
+          el('div', { cls: 'pf-mvt-main' },
+            el('div', { cls: 'pf-mvt-ref' }, (m.reference || '—') + ' · ' + fU(m.quantite, m.unite)),
+            el('div', { cls: 'pf-mvt-sub' },
+              (m.emplacement || '—') + ' · ' + pfFmtShortDateTime(m.date_mouvement),
+            ),
+          ),
+          el('div', { cls: 'pf-mvt-user' }, m.user_login || '—'),
+        ));
+      });
+    }
   }
 
   wrap.appendChild(el('div', { cls: 'pf-grid' },
@@ -3584,6 +3632,12 @@ function pfProduitSuggestions(filter) {
 }
 
 function buildPfRefPickerField(refInp, desInp, uniteSel, onPick) {
+  const datalistId = 'pf-ref-datalist-' + Math.random().toString(36).slice(2, 8);
+  const dl = el('datalist', { id: datalistId });
+  (S.pfCatalogue || []).slice(0, 200).forEach(c => {
+    dl.appendChild(el('option', { attrs: { value: c.reference || '' } }));
+  });
+  refInp.setAttribute('list', datalistId);
   const suggWrap = el('div', { cls: 'empl-suggestions' });
   refInp.addEventListener('input', () => {
     const picked = pfCatalogueFind(refInp.value);
@@ -3607,10 +3661,26 @@ function buildPfRefPickerField(refInp, desInp, uniteSel, onPick) {
       }, (c.reference || '') + (c.designation ? ' — ' + c.designation : '')));
     });
   });
-  return suggWrap;
+  return { suggWrap, datalist: dl };
+}
+
+function pfStockAtEmpl(reference, emplacement) {
+  const ref = String(reference || '').trim().toUpperCase();
+  const empl = String(emplacement || '').trim().toUpperCase();
+  const row = (S.pfStock || []).find(r =>
+    String(r.reference || '').toUpperCase() === ref
+    && String(r.emplacement || '').toUpperCase() === empl,
+  );
+  return row ? (parseFloat(row.quantite) || 0) : 0;
 }
 
 function buildPfEmplPickerField(emplInp) {
+  const datalistId = 'pf-empl-datalist-' + Math.random().toString(36).slice(2, 8);
+  const dl = el('datalist', { id: datalistId });
+  pfEmplacementChoices('').forEach(code => {
+    dl.appendChild(el('option', { attrs: { value: code } }));
+  });
+  emplInp.setAttribute('list', datalistId);
   const suggWrap = el('div', { cls: 'empl-suggestions' });
   emplInp.addEventListener('input', () => {
     emplInp.value = emplInp.value.toUpperCase();
@@ -3623,7 +3693,7 @@ function buildPfEmplPickerField(emplInp) {
       }, code));
     });
   });
-  return suggWrap;
+  return { suggWrap, datalist: dl };
 }
 
 function openPfMvtModal(type, preset) {
@@ -3664,8 +3734,10 @@ function renderPfMvtModal() {
   const body = el('div', { cls: 'mp-modal-mvt-body' });
 
   const preset = modal.preset || {};
+  const refFieldId = isSortie ? 'pf-sortie-ref' : 'pf-entree-ref';
   const refInp = el('input', {
     cls: 'field-input',
+    id: refFieldId,
     attrs: { type: 'text', placeholder: 'Référence produit', autocomplete: 'off', required: true },
     style: { direction: 'ltr' },
   });
@@ -3682,7 +3754,7 @@ function renderPfMvtModal() {
     if ((preset.unite || 'pièces') === u) o.selected = true;
     uniteSel.appendChild(o);
   });
-  const refSugg = buildPfRefPickerField(refInp, desInp, uniteSel);
+  const { suggWrap: refSugg, datalist: refDl } = buildPfRefPickerField(refInp, desInp, uniteSel);
 
   const qInp = el('input', {
     cls: 'field-input',
@@ -3695,7 +3767,9 @@ function renderPfMvtModal() {
     style: { direction: 'ltr' },
   });
   emplInp.value = (preset.emplacement || '').toUpperCase();
-  const emplSugg = buildPfEmplPickerField(emplInp);
+  const { suggWrap: emplSugg, datalist: emplDl } = buildPfEmplPickerField(emplInp);
+  const hintEl = el('div', { cls: 'mp-hint', style: { display: isSortie ? '' : 'none' } }, '');
+  const errEl = el('div', { cls: 'mp-hint err', style: { display: 'none' } }, '');
   const ofInp = el('input', {
     cls: 'field-input',
     attrs: { type: 'text', placeholder: 'N° OF (facultatif)', autocomplete: 'off' },
@@ -3712,11 +3786,16 @@ function renderPfMvtModal() {
     style: { direction: 'ltr' },
   }) : null;
 
-  body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Référence produit *'), refInp, refSugg));
+  body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Référence produit *'), refInp, refDl, refSugg));
   body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Désignation'), desInp));
-  body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Quantité *'), qInp));
+  body.appendChild(el('div', { cls: 'mp-field' },
+    el('label', null, 'Quantité *'),
+    qInp,
+    isSortie ? hintEl : null,
+    isSortie ? errEl : null,
+  ));
   body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Unité'), uniteSel));
-  body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Emplacement *'), emplInp, emplSugg));
+  body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Emplacement *'), emplInp, emplDl, emplSugg));
   body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'N° OF'), ofInp));
   if (motifInp) body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Motif / destinataire'), motifInp));
   body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Commentaire'), comTa));
@@ -3741,12 +3820,50 @@ function renderPfMvtModal() {
     return null;
   };
 
+  const refreshStockHint = () => {
+    if (!isSortie) return;
+    const b = collectBody();
+    const stock = pfStockAtEmpl(b.reference, b.emplacement);
+    if (!b.reference || !b.emplacement) {
+      hintEl.textContent = '';
+      errEl.style.display = 'none';
+      return;
+    }
+    hintEl.textContent = 'Stock à cet emplacement : ' + fU(stock, uniteSel.value || 'étiquette');
+    const q = parseFloat(qInp.value);
+    if (q > stock) {
+      errEl.style.display = '';
+      errEl.textContent = 'Stock insuffisant.';
+    } else {
+      errEl.style.display = 'none';
+    }
+  };
+  if (isSortie) {
+    refInp.addEventListener('input', refreshStockHint);
+    emplInp.addEventListener('input', refreshStockHint);
+    qInp.addEventListener('input', refreshStockHint);
+    refreshStockHint();
+  }
+
+  const saveBtn = el('button', {
+    cls: 'btn ' + (isSortie ? 'btn-danger' : 'btn-accent'),
+    type: 'button',
+  }, 'Enregistrer');
+
   const doSubmit = async () => {
     const err = validate();
     if (err) { showToast(err, 'error'); return; }
     const b = collectBody();
     if (!b.designation) b.designation = b.reference;
+    if (isSortie) {
+      const stock = pfStockAtEmpl(b.reference, b.emplacement);
+      if (b.quantite > stock) {
+        showToast('Stock insuffisant.', 'error');
+        return;
+      }
+    }
     const path = isSortie ? '/api/stock/produits-finis/sortie' : '/api/stock/produits-finis/entree';
+    saveBtn.disabled = true;
     try {
       await api(path, {
         method: 'POST',
@@ -3758,6 +3875,7 @@ function renderPfMvtModal() {
       await loadProduitsFinis();
     } catch (e) {
       showToast(e.message || 'Enregistrement impossible.', 'error');
+      saveBtn.disabled = false;
     }
   };
 
@@ -3765,25 +3883,21 @@ function renderPfMvtModal() {
     const err = validate();
     if (err) { showToast(err, 'error'); return; }
     if (isSortie) {
-      const b = collectBody();
-      renderPfSortieConfirmModal(b, doSubmit);
+      renderPfSortieConfirmModal(collectBody(), doSubmit);
       return;
     }
     doSubmit();
   };
+  saveBtn.addEventListener('click', onSave);
 
   body.appendChild(el('div', { cls: 'mp-modal-actions' },
     el('button', { cls: 'btn btn-ghost', type: 'button', on: { click: closePfModals } }, 'Annuler'),
-    el('button', {
-      cls: 'btn ' + (isSortie ? 'btn-danger' : 'btn-accent'),
-      type: 'button',
-      on: { click: onSave },
-    }, 'Enregistrer'),
+    saveBtn,
   ));
   box.appendChild(body);
   overlay.appendChild(box);
   mroot.appendChild(overlay);
-  requestAnimationFrame(() => { if (!refInp.value) refInp.focus(); });
+  requestAnimationFrame(() => { document.getElementById(refFieldId)?.focus(); });
 }
 
 function renderPfSortieConfirmModal(body, onConfirm) {
@@ -3806,7 +3920,15 @@ function renderPfSortieConfirmModal(body, onConfirm) {
         S.pfModal = { type: 'sortie' };
         renderPfMvtModal();
       } } }, 'Retour'),
-      el('button', { cls: 'btn btn-danger', type: 'button', on: { click: onConfirm } }, 'Confirmer la sortie'),
+      el('button', {
+        cls: 'btn btn-danger',
+        type: 'button',
+        on: { click: async (e) => {
+          const btn = e.currentTarget;
+          btn.disabled = true;
+          try { await onConfirm(); } catch (err) { btn.disabled = false; }
+        } },
+      }, 'Confirmer la sortie'),
     ),
   );
   overlay.appendChild(box);
@@ -3859,10 +3981,12 @@ async function openPfDetailModal(reference) {
       ));
       table.appendChild(thead);
       const tbody = el('tbody', null);
-      hist.forEach(m => {
+      hist.forEach(raw => {
+        const m = normalizePfMvt(raw);
+        const t = m.type === 'entree' ? 'Entrée' : (m.type === 'sortie' ? 'Sortie' : (m.type || '—'));
         tbody.appendChild(el('tr', null,
           el('td', null, fDateTime(m.date_mouvement)),
-          el('td', null, m.type === 'entree' ? 'Entrée' : 'Sortie'),
+          el('td', null, t),
           el('td', null, fU(m.quantite, m.unite)),
           el('td', null, m.emplacement || '—'),
           el('td', null, m.no_of || '—'),

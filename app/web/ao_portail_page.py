@@ -337,24 +337,43 @@ function renderOffre() {{
   }}
 
   html += '<div class="table-wrap"><table><thead><tr>' +
-    '<th>Réf.</th><th>Désignation</th><th>Qté</th>' +
-    '<th>Prix unitaire (€)</th><th>Délai (jours)</th><th>Commentaire ligne</th>' +
+    '<th>Client</th><th>Réf.</th><th>Frontal</th><th>Adhésif</th>' +
+    '<th>Étiq. / bobine</th><th>Qté étiquettes</th>' +
+    '<th>Quotation</th><th>Devise</th><th>Unité</th>' +
+    '<th>Délai (j)</th><th>Commentaire</th>' +
     '</tr></thead><tbody>';
 
   const lignes = d.lignes || [];
   if (!lignes.length) {{
-    html += '<tr><td colspan="6" class="empty">Aucune ligne dans cette demande.</td></tr>';
+    html += '<tr><td colspan="11" class="empty">Aucune ligne dans cette demande.</td></tr>';
   }} else {{
     lignes.forEach(ln => {{
       const r = repMap[ln.id] || {{}};
       const dis = cloture ? " disabled" : "";
-      const prixVal = r.prix_unitaire != null && r.prix_unitaire !== "" ? r.prix_unitaire : "";
+      const qVal = r.quotation != null && r.quotation !== "" ? r.quotation
+        : (r.prix_unitaire != null && r.prix_unitaire !== "" ? r.prix_unitaire : "");
       const delaiVal = r.delai_jours != null && r.delai_jours !== "" ? r.delai_jours : "";
+      const dev = (r.devise || "EUR").toUpperCase();
+      const unite = (r.unite_quotation || "mille").toLowerCase();
+      const devSel = (code, sel) =>
+        '<option value="' + code + '"' + (sel === code ? " selected" : "") + ">" + code + "</option>";
+      const uniteSel = (code, label, sel) =>
+        '<option value="' + code + '"' + (sel === code ? " selected" : "") + ">" + label + "</option>";
       html += "<tr>" +
+        "<td>" + escHtml(ln.client_nom || "—") + "</td>" +
         "<td>" + escHtml(ln.ref_produit) + "</td>" +
-        "<td>" + escHtml(ln.designation) + "</td>" +
-        "<td>" + escHtml(ln.quantite) + " " + escHtml(ln.unite || "") + "</td>" +
-        '<td><input type="number" step="0.01" min="0" class="inp-prix" data-lid="' + ln.id + '" value="' + escHtml(prixVal) + '"' + dis + "></td>" +
+        "<td style=\"color:var(--muted);font-size:12px\">" + escHtml(ln.frontal || "—") + "</td>" +
+        "<td style=\"color:var(--muted);font-size:12px\">" + escHtml(ln.adhesif || "—") + "</td>" +
+        "<td>" + escHtml(ln.etiquettes_par_bobine != null ? ln.etiquettes_par_bobine : "—") + "</td>" +
+        "<td>" + escHtml(ln.quantite) + "</td>" +
+        '<td><input type="number" step="0.0001" min="0" class="inp-quotation" data-lid="' + ln.id + '" value="' + escHtml(qVal) + '"' + dis + "></td>" +
+        '<td><select class="inp-devise" data-lid="' + ln.id + '"' + dis + ">" +
+          devSel("EUR", dev) + devSel("USD", dev) +
+        "</select></td>" +
+        '<td><select class="inp-unite" data-lid="' + ln.id + '"' + dis + ">" +
+          uniteSel("mille", "Au mille", unite) +
+          uniteSel("bobine", "Par bobine", unite) +
+        "</select></td>" +
         '<td><input type="number" step="1" min="0" class="inp-delai" data-lid="' + ln.id + '" value="' + escHtml(delaiVal) + '"' + dis + "></td>" +
         '<td><input type="text" class="inp-com" data-lid="' + ln.id + '" value="' + escAttr(r.commentaire || "") + '"' + dis + "></td>" +
         "</tr>";
@@ -376,14 +395,16 @@ function renderOffre() {{
 
 async function submitOffre() {{
   const lignes = [];
-  let hasPrix = false;
-  document.querySelectorAll(".inp-prix").forEach(inp => {{
+  let hasQuotation = false;
+  document.querySelectorAll(".inp-quotation").forEach(inp => {{
     const lid = parseInt(inp.dataset.lid, 10);
-    const prixRaw = inp.value.trim();
-    const prix = prixRaw === "" ? null : parseFloat(prixRaw);
+    const qRaw = inp.value.trim();
+    const quotation = qRaw === "" ? null : parseFloat(qRaw);
     const delaiEl = document.querySelector('.inp-delai[data-lid="' + lid + '"]');
     const comEl = document.querySelector('.inp-com[data-lid="' + lid + '"]');
-    if (prix != null && !isNaN(prix)) hasPrix = true;
+    const devEl = document.querySelector('.inp-devise[data-lid="' + lid + '"]');
+    const uniteEl = document.querySelector('.inp-unite[data-lid="' + lid + '"]');
+    if (quotation != null && !isNaN(quotation)) hasQuotation = true;
     let delai = null;
     if (delaiEl && delaiEl.value.trim() !== "") {{
       delai = parseInt(delaiEl.value, 10);
@@ -391,13 +412,15 @@ async function submitOffre() {{
     }}
     lignes.push({{
       ligne_id: lid,
-      prix_unitaire: prix,
+      quotation: quotation,
+      devise: devEl ? devEl.value : "EUR",
+      unite_quotation: uniteEl ? uniteEl.value : "mille",
       delai_jours: delai,
       commentaire: comEl ? (comEl.value.trim() || null) : null
     }});
   }});
-  if (!hasPrix) {{
-    showToast("Indiquez au moins un prix unitaire.", "danger");
+  if (!hasQuotation) {{
+    showToast("Indiquez au moins une quotation.", "danger");
     return;
   }}
   const btn = document.getElementById("btn-submit");

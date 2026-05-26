@@ -2627,6 +2627,34 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 82, "produits_finis_pf_mouvements")
 
+    # v83 — MyAO : quotation, devise, unité et coef sur les réponses fournisseur
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=83 LIMIT 1").fetchone():
+        ar_cols = {row[1] for row in conn.execute("PRAGMA table_info(ao_reponses)").fetchall()}
+        if "quotation" not in ar_cols:
+            conn.execute("ALTER TABLE ao_reponses ADD COLUMN quotation REAL")
+        if "devise" not in ar_cols:
+            conn.execute("ALTER TABLE ao_reponses ADD COLUMN devise TEXT DEFAULT 'EUR'")
+        if "unite_quotation" not in ar_cols:
+            conn.execute(
+                "ALTER TABLE ao_reponses ADD COLUMN unite_quotation TEXT DEFAULT 'mille'"
+            )
+        if "coef" not in ar_cols:
+            conn.execute("ALTER TABLE ao_reponses ADD COLUMN coef REAL DEFAULT 1.0")
+        if "devise_prix_devis" not in ar_cols:
+            conn.execute(
+                "ALTER TABLE ao_reponses ADD COLUMN devise_prix_devis TEXT DEFAULT 'EUR'"
+            )
+        conn.execute(
+            """UPDATE ao_reponses
+               SET quotation = prix_unitaire
+               WHERE quotation IS NULL AND prix_unitaire IS NOT NULL"""
+        )
+        conn.execute(
+            """UPDATE ao_reponses SET coef = 1.0 WHERE coef IS NULL"""
+        )
+        conn.commit()
+        _record_schema_migration(conn, 83, "ao_reponses_quotation_pricing")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

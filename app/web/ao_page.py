@@ -141,10 +141,14 @@ label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bot
 .modal.modal-wide{max-width:560px}
 .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
 .comp-table{width:100%;border-collapse:collapse;font-size:12px}
-.comp-table th,.comp-table td{padding:10px 8px;border:1px solid var(--border);text-align:center}
-.comp-table th{background:var(--bg);font-size:10px;text-transform:uppercase;color:var(--muted)}
+.comp-table th,.comp-table td{padding:10px 8px;border:1px solid var(--border);text-align:center;vertical-align:middle}
+.comp-table th{background:var(--bg);font-size:10px;text-transform:uppercase;color:var(--muted);white-space:nowrap}
 .comp-table td.ref{text-align:left;font-weight:600}
+.comp-table td.txt-left{text-align:left}
 .comp-cell-best{background:var(--accent-bg);color:var(--accent);font-weight:700}
+.comp-table input[type=number],.comp-table select{font-size:12px;padding:6px 8px;min-width:0}
+.comp-table .inp-coef{max-width:72px}
+.comp-table .inp-dev-devis{max-width:80px}
 .msg-list{display:flex;flex-direction:column;gap:10px;max-height:360px;overflow-y:auto;margin-bottom:16px}
 .bubble{max-width:85%;padding:12px 14px;border-radius:12px;font-size:13px;line-height:1.5}
 .bubble.interne{align-self:flex-end;margin-left:auto;background:var(--accent-bg);border:1px solid var(--accent)}
@@ -282,6 +286,20 @@ function fourniBadge(s) {
 function formatEur(n) {
   if (n == null || isNaN(n)) return '—';
   return Number(n).toLocaleString('fr-FR', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' €';
+}
+function formatMoney(n, devise) {
+  if (n == null || isNaN(n)) return '—';
+  const d = (devise || 'EUR').toUpperCase();
+  const sym = d === 'USD' ? '$' : '€';
+  return Number(n).toLocaleString('fr-FR', {minimumFractionDigits:2, maximumFractionDigits:4}) + ' ' + sym;
+}
+function formatUniteQuot(u) {
+  const m = {mille: 'Au mille', bobine: 'Par bobine'};
+  return m[(u || '').toLowerCase()] || (u || '—');
+}
+function formatInt(n) {
+  if (n == null || n === '' || isNaN(n)) return '—';
+  return Number(n).toLocaleString('fr-FR', {maximumFractionDigits:0});
 }
 
 function buildAoSidebarNavStructure() {
@@ -731,8 +749,8 @@ function renderModal() {
       '<div class="field"><label>Produit du catalogue</label><select id="m-produit-pick">'+prodOpts+'</select></div>'+
       '<div class="field"><label>Réf. produit</label><input id="m-ref" value="'+escAttr(S.modalData.ref_produit||'')+'"></div>'+
       '<div class="field"><label>Désignation</label><input id="m-des" value="'+escAttr(S.modalData.designation||'')+'"></div>'+
-      '<div class="form-row"><div class="field"><label>Quantité</label><input type="number" step="any" min="0" id="m-qte" value="'+escAttr(S.modalData.quantite)+'"></div>'+
-      '<div class="field"><label>Unité</label><input id="m-unite" value="'+escAttr(S.modalData.unite||'unité')+'"></div></div>'+
+      '<div class="form-row"><div class="field"><label>Quantité d\'étiquettes</label><input type="number" step="1" min="0" id="m-qte" value="'+escAttr(S.modalData.quantite)+'"></div>'+
+      '<div class="field"><label>Unité (interne)</label><input id="m-unite" value="'+escAttr(S.modalData.unite||'étiquettes')+'"></div></div>'+
       '<div class="field"><label>Notes</label><input id="m-notes" value="'+escAttr(S.modalData.notes||'')+'"></div>'+
       saveCatHtml+
       '<div class="modal-actions"><button class="btn btn-ghost" id="m-cancel">Annuler</button><button class="btn btn-accent" id="m-ok">Enregistrer</button></div>';
@@ -750,7 +768,7 @@ function renderModal() {
         if (p) {
           refEl.value = p.ref || '';
           desEl.value = p.designation || '';
-          uniteEl.value = p.unite || 'unité';
+          uniteEl.value = p.unite || 'étiquettes';
           if (p.notes) notesEl.value = p.notes;
         }
         if (saveCb) { saveCb.checked = false; saveCb.disabled = true; }
@@ -952,7 +970,7 @@ function renderDetailHeader() {
     (() => {
       const totalNonLus = Object.values(S.nonLus || {}).reduce((a, b) => a + b, 0);
       const labels = {
-        lignes:'Lignes',fournisseurs:'Fournisseurs',comparaison:'Comparaison',
+        lignes:'Lignes',fournisseurs:'Fournisseurs',comparaison:'Demandes de prix',
         messages:'Messagerie'+(totalNonLus > 0
           ? ' <span class="nav-badge" style="background:var(--danger);color:#fff;font-size:10px;padding:1px 6px;border-radius:999px;font-weight:700">'+escHtml(totalNonLus)+'</span>'
           : ''),
@@ -997,31 +1015,87 @@ function renderFournisseurs() {
     (rows||'<tr><td colspan="6" style="color:var(--muted)">Aucun fournisseur</td></tr>')+'</tbody></table></div>';
 }
 
+async function saveReponsePricing(reponseId, patch) {
+  const aoId = S.ao && S.ao.id;
+  if (!aoId || !reponseId) return null;
+  const updated = await api('/api/ao/'+aoId+'/reponses/'+reponseId, {
+    method: 'PATCH',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(patch)
+  });
+  if (S.comparaison && S.comparaison.rows) {
+    const row = S.comparaison.rows.find(x => String(x.reponse_id) === String(reponseId));
+    if (row) {
+      Object.assign(row, {
+        coef: updated.coef,
+        devise_prix_devis: updated.devise_prix_devis,
+        prix_vente: updated.prix_vente,
+        prix_au_mille: updated.prix_au_mille,
+        prix_calcule: updated.prix_calcule
+      });
+      const pvCell = document.querySelector('[data-pv="'+reponseId+'"]');
+      if (pvCell) pvCell.textContent = formatMoney(updated.prix_vente, updated.devise_prix_devis);
+    }
+  }
+  return updated;
+}
+
 function renderComparaison() {
   const c = S.comparaison;
   if (!c) return '<div class="card" style="color:var(--muted)">Chargement…</div>';
-  const fournis = c.fournisseurs || [];
-  const lignes = c.lignes || [];
-  let head = '<tr><th class="ref">Réf. · Désignation · Qté</th>';
-  fournis.forEach(f => { head += '<th>'+escHtml(f.nom_fournisseur)+'<br>'+fourniBadge(f.statut)+'</th>'; });
-  head += '</tr>';
-  let body = '';
-  lignes.forEach(ln => {
-    const repMap = {};
-    (ln.reponses||[]).forEach(r => { repMap[r.fourni_id] = r; });
-    const summary = ln.prix_min != null
-      ? '<br><span style="font-size:10px;color:var(--muted)">Min '+formatEur(ln.prix_min)+' · Max '+formatEur(ln.prix_max)+' · Moy. '+formatEur(ln.prix_moyen)+'</span>'
-      : '';
-    body += '<tr><td class="ref" style="text-align:left">'+escHtml(ln.ref_produit)+'<br><span style="color:var(--muted);font-weight:400">'+escHtml(ln.designation)+'</span><br>'+escHtml(ln.quantite)+' '+escHtml(ln.unite)+summary+'</td>';
-    fournis.forEach(f => {
-      const r = repMap[f.id];
-      const cls = (ln.prix_min != null && r && r.prix_unitaire === ln.prix_min) ? ' comp-cell-best' : '';
-      const cell = r && r.prix_unitaire != null ? formatEur(r.prix_unitaire)+(r.delai_jours!=null?' · '+r.delai_jours+' j':'') : '—';
-      body += '<td class="'+cls.trim()+'">'+cell+(r&&r.commentaire?'<br><span style="font-size:10px;color:var(--muted)">'+escHtml(r.commentaire)+'</span>':'')+'</td>';
-    });
-    body += '</tr>';
+  const rows = c.rows || [];
+  if (!rows.length) {
+    const nLignes = (c.lignes || []).length;
+    const nFournis = (c.fournisseurs || []).length;
+    let msg = 'Ajoutez des lignes et des fournisseurs à cet appel d\'offre.';
+    if (!nLignes) msg = 'Ajoutez des lignes produit à cet appel d\'offre.';
+    else if (!nFournis) msg = 'Ajoutez des fournisseurs invités.';
+    return '<div class="card empty-state"><strong>Demandes de prix</strong>'+escHtml(msg)+'</div>';
+  }
+  let bestMille = null;
+  rows.forEach(r => {
+    if (r.prix_au_mille != null && (bestMille == null || r.prix_au_mille < bestMille)) bestMille = r.prix_au_mille;
   });
-  return '<div class="card" style="overflow:auto"><table class="comp-table"><thead>'+head+'</thead><tbody>'+body+'</tbody></table></div>';
+  const head = '<tr>'+
+    '<th>Client</th><th>Réf. produit</th><th>Frontal</th><th>Adhésif</th>'+
+    '<th>Étiq. / bobine</th><th>Qté étiquettes</th><th>Fournisseur</th>'+
+    '<th>Quotation</th><th>Devise</th><th>Unité quot.</th>'+
+    '<th>Prix calculé</th><th>Prix / mille</th><th>Coef</th>'+
+    '<th>Devise devis</th><th>Prix de vente</th></tr>';
+  let body = '';
+  rows.forEach(r => {
+    const best = bestMille != null && r.prix_au_mille === bestMille;
+    const cls = best ? ' comp-cell-best' : '';
+    const devF = (r.devise || 'EUR').toUpperCase();
+    const devD = (r.devise_prix_devis || 'EUR').toUpperCase();
+    const rid = r.reponse_id;
+    const noRep = rid == null || rid === '';
+    const dis = noRep ? ' disabled' : '';
+    body += '<tr data-reponse-id="'+escAttr(rid||'')+'">'+
+      '<td class="txt-left">'+escHtml(r.client_nom||'—')+'</td>'+
+      '<td class="ref">'+escHtml(r.ref_produit)+'</td>'+
+      '<td class="txt-left" style="font-size:11px;color:var(--text2)">'+escHtml(r.frontal||'—')+'</td>'+
+      '<td class="txt-left" style="font-size:11px;color:var(--text2)">'+escHtml(r.adhesif||'—')+'</td>'+
+      '<td>'+formatInt(r.etiquettes_par_bobine)+'</td>'+
+      '<td>'+formatInt(r.quantite_etiquettes)+'</td>'+
+      '<td class="txt-left">'+escHtml(r.nom_fournisseur||'')+'</td>'+
+      '<td class="'+cls.trim()+'">'+formatMoney(r.quotation, devF)+'</td>'+
+      '<td>'+escHtml(devF)+'</td>'+
+      '<td>'+escHtml(formatUniteQuot(r.unite_quotation))+'</td>'+
+      '<td>'+formatMoney(r.prix_calcule, devF)+'</td>'+
+      '<td class="'+cls.trim()+'">'+formatMoney(r.prix_au_mille, devF)+'</td>'+
+      '<td><input type="number" step="0.01" min="0.01" class="inp-coef" data-rep="'+escAttr(rid||'')+'" value="'+escAttr(r.coef != null ? r.coef : 1)+'"'+dis+'></td>'+
+      '<td><select class="inp-dev-devis" data-rep="'+escAttr(rid||'')+'"'+dis+'>'+
+        '<option value="EUR"'+(devD==='EUR'?' selected':'')+'>EUR</option>'+
+        '<option value="USD"'+(devD==='USD'?' selected':'')+'>USD</option>'+
+      '</select></td>'+
+      '<td class="'+cls.trim()+'" data-pv="'+escAttr(rid)+'">'+formatMoney(r.prix_vente, devD)+'</td>'+
+      '</tr>';
+  });
+  const fxNote = c.eur_usd_rate
+    ? '<p style="font-size:11px;color:var(--muted);margin-top:10px">Taux EUR/USD : '+Number(c.eur_usd_rate).toLocaleString('fr-FR', {maximumFractionDigits:4})+' — conversion appliquée sur le prix de vente si les devises diffèrent.</p>'
+    : '';
+  return '<div class="card" style="overflow:auto"><table class="comp-table"><thead>'+head+'</thead><tbody>'+body+'</tbody></table>'+fxNote+'</div>';
 }
 
 function renderMessagerieContent(container) {
@@ -1149,6 +1223,27 @@ function bindDetailEvents() {
       render();
     } catch(e) { showToast(e.message, 'danger'); }
   }));
+  document.querySelectorAll('.inp-coef').forEach(inp => {
+    inp.addEventListener('change', async () => {
+      const rid = inp.dataset.rep;
+      const v = parseFloat(inp.value);
+      if (!rid || isNaN(v) || v <= 0) { showToast('Coefficient invalide.', 'danger'); return; }
+      try {
+        await saveReponsePricing(rid, {coef: v});
+        showToast('Coefficient enregistré.', 'success');
+      } catch(e) { showToast(e.message, 'danger'); }
+    });
+  });
+  document.querySelectorAll('.inp-dev-devis').forEach(sel => {
+    sel.addEventListener('change', async () => {
+      const rid = sel.dataset.rep;
+      if (!rid) return;
+      try {
+        await saveReponsePricing(rid, {devise_prix_devis: sel.value});
+        showToast('Devise enregistrée.', 'success');
+      } catch(e) { showToast(e.message, 'danger'); }
+    });
+  });
 }
 
 function render() {

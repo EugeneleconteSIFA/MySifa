@@ -13,6 +13,8 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 
+from app.services.ao_pricing import DEVISES, UNITES_QUOTATION
+from app.services.ao_produit_fiche import parse_fiche
 from app.services.email_service import email_accuse_reception, send_email
 from app.services.path_safety import path_is_under_directory
 from app.web.ao_portail_page import get_portail_404_html, get_portail_html
@@ -113,21 +115,70 @@ def _ao_pj_path(ao_id: int, stored_name: str, fourni_id: int | None = None) -> s
     return os.path.join(UPLOAD_DIR, "ao", str(ao_id), stored_name)
 
 
+def _mp_label(conn, mid: Any) -> str | None:
+    if mid is None:
+        return None
+    try:
+        mid = int(mid)
+    except (TypeError, ValueError):
+        return None
+    m = conn.execute(
+        "SELECT reference, designation FROM matieres_premieres WHERE id=? AND actif=1",
+        (mid,),
+    ).fetchone()
+    if not m:
+        return None
+    ref = (m["reference"] or "").strip()
+    des = (m["designation"] or "").strip()
+    return f"{ref} — {des}".strip(" —") or None
+
+
+def _produit_ctx_for_ligne(conn, ref_produit: str) -> dict:
+    row = conn.execute(
+        """SELECT p.fiche_json, c.nom AS client_nom
+           FROM ao_produits p
+           LEFT JOIN ao_carnet_clients c ON c.id = p.client_id
+           WHERE LOWER(p.ref) = LOWER(?)
+           LIMIT 1""",
+        ((ref_produit or "").strip(),),
+    ).fetchone()
+    if not row:
+        return {}
+    fiche = parse_fiche(row["fiche_json"])
+    mat = fiche.get("matiere") or {}
+    bob = fiche.get("bobines") or {}
+    nb = bob.get("nb_etiquettes")
+    try:
+        nb = float(nb) if nb is not None else None
+    except (TypeError, ValueError):
+        nb = None
+    return {
+        "client_nom": row["client_nom"],
+        "frontal": _mp_label(conn, mat.get("frontal_id")),
+        "adhesif": _mp_label(conn, mat.get("adhesif_id")),
+        "etiquettes_par_bobine": nb,
+    }
+
+
 def _portail_payload(conn, ao: dict, fourni: dict) -> dict[str, Any]:
     ao_id = int(ao["id"])
     fourni_id = int(fourni["id"])
-    lignes = [
-        _row_dict(r)
-        for r in conn.execute(
-            """SELECT id, ref_produit, designation, quantite, unite, notes, position
-               FROM ao_lignes WHERE ao_id=? ORDER BY position, id""",
-            (ao_id,),
-        ).fetchall()
-    ]
+    lignes_raw = conn.execute(
+        """SELECT id, ref_produit, designation, quantite, unite, notes, position
+           FROM ao_lignes WHERE ao_id=? ORDER BY position, id""",
+        (ao_id,),
+    ).fetchall()
+    lignes = []
+    for r in lignes_raw:
+        ln = _row_dict(r)
+        ctx = _produit_ctx_for_ligne(conn, ln.get("ref_produit") or "")
+        ln.update(ctx)
+        lignes.append(ln)
     reponses = [
         _row_dict(r)
         for r in conn.execute(
-            """SELECT ligne_id, prix_unitaire, delai_jours, commentaire
+            """SELECT ligne_id, quotation, prix_unitaire, devise, unite_quotation,
+                      delai_jours, commentaire
                FROM ao_reponses WHERE ao_fournisseur_id=?""",
             (fourni_id,),
         ).fetchall()
@@ -263,12 +314,20 @@ async def repondre_ao(request: Request, token: str):
                 continue
             if ligne_id not in valid_ligne_ids:
                 raise HTTPException(status_code=400, detail="Ligne invalide.")
-            prix = item.get("prix_unitaire")
-            if prix is not None:
+            quotation = item.get("quotation")
+            if quotation is None:
+                quotation = item.get("prix_unitaire")
+            if quotation is not None:
                 try:
-                    prix = float(prix)
+                    quotation = float(quotation)
                 except (TypeError, ValueError):
-                    prix = None
+                    quotation = None
+            devise = (item.get("devise") or "EUR").strip().upper()
+            if devise not in DEVISES:
+                devise = "EUR"
+            unite_q = (item.get("unite_quotation") or "mille").strip().lower()
+            if unite_q not in UNITES_QUOTATION:
+                unite_q = "mille"
             delai = item.get("delai_jours")
             if delai is not None:
                 try:
@@ -278,9 +337,19 @@ async def repondre_ao(request: Request, token: str):
             commentaire = (item.get("commentaire") or "").strip() or None
             conn.execute(
                 """INSERT OR REPLACE INTO ao_reponses
-                   (ao_fournisseur_id, ligne_id, prix_unitaire, delai_jours, commentaire)
-                   VALUES (?,?,?,?,?)""",
-                (fourni_id, ligne_id, prix, delai, commentaire),
+                   (ao_fournisseur_id, ligne_id, quotation, prix_unitaire,
+                    devise, unite_quotation, delai_jours, commentaire)
+                   VALUES (?,?,?,?,?,?,?,?)""",
+                (
+                    fourni_id,
+                    ligne_id,
+                    quotation,
+                    quotation,
+                    devise,
+                    unite_q,
+                    delai,
+                    commentaire,
+                ),
             )
 
         conn.execute(
