@@ -977,3 +977,49 @@ async def set_machine_dernier_metrage(machine_id: int, request: Request):
         ip=request.client.host if request.client else None,
     )
     return {"success": True, "dernier_metrage": new_val}
+
+
+@router.put("/api/settings/machines/{machine_id}/nom")
+async def rename_machine(machine_id: int, request: Request):
+    """Renommage du nom affiché d'une machine — super admin uniquement."""
+    user = require_superadmin(request)
+    body = await request.json()
+    if not isinstance(body, dict) or "nom" not in body:
+        raise HTTPException(status_code=400, detail="Champ nom requis")
+
+    new_nom = str(body["nom"]).strip()
+    if not new_nom:
+        raise HTTPException(status_code=400, detail="Le nom ne peut pas être vide")
+    if len(new_nom) > 80:
+        raise HTTPException(status_code=400, detail="Nom trop long (80 caractères max)")
+
+    from database import get_db
+
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id, nom FROM machines WHERE id=? AND actif=1",
+            (machine_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Machine introuvable")
+
+        conflict = conn.execute(
+            "SELECT id FROM machines WHERE lower(nom)=lower(?) AND id!=? AND actif=1",
+            (new_nom, machine_id),
+        ).fetchone()
+        if conflict:
+            raise HTTPException(status_code=409, detail="Ce nom est déjà utilisé par une autre machine")
+
+        old_nom = row["nom"] or ""
+        conn.execute("UPDATE machines SET nom=? WHERE id=?", (new_nom, machine_id))
+        conn.commit()
+
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="settings",
+        objet=f"Renommage machine #{machine_id}",
+        detail={"machine_id": machine_id, "ancien": old_nom, "nouveau": new_nom},
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True, "id": machine_id, "nom": new_nom}

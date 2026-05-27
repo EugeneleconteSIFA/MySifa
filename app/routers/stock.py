@@ -342,6 +342,32 @@ def apply_fifo_sortie(
     return {"quantite_avant": quantite_avant, "quantite_apres": quantite_apres}
 
 
+def sortir_lot_fifo(
+    conn,
+    produit_id: int,
+    emplacement: str,
+    user_email: str,
+    user_name: Optional[str] = None,
+    note: str = "",
+) -> dict:
+    """Sortie du lot FIFO le plus ancien à un emplacement (quantité = lot entier)."""
+    lot = conn.execute(
+        """SELECT id, quantite_restante
+           FROM lots_stock
+           WHERE produit_id=? AND emplacement=? AND quantite_restante > 0
+           ORDER BY date_entree ASC LIMIT 1""",
+        (produit_id, emplacement),
+    ).fetchone()
+    if not lot:
+        raise HTTPException(404, "Aucun lot actif à cet emplacement")
+    qte_lot = float(lot["quantite_restante"])
+    final_note = (note or "").strip() or "Sortie lot FIFO"
+    result = apply_fifo_sortie(
+        conn, produit_id, emplacement, qte_lot, user_email, user_name, final_note
+    )
+    return {**result, "quantite_sortie": qte_lot}
+
+
 # ── Recherche instantanée ─────────────────────────────────────────
 @router.get("/api/stock/search")
 def search(request: Request, q: str = "", limit: int = 12):
@@ -543,7 +569,12 @@ def get_produit(produit_id: int, request: Request):
         empls = conn.execute(
             """SELECT l.emplacement,
                       SUM(l.quantite_restante) as quantite,
+                      COUNT(*) as nb_lots,
                       MIN(CASE WHEN l.quantite_restante>0 THEN l.date_entree END) as date_fifo_empl,
+                      (SELECT l2.quantite_restante FROM lots_stock l2
+                       WHERE l2.produit_id=? AND l2.emplacement=l.emplacement
+                         AND l2.quantite_restante > 0
+                       ORDER BY l2.date_entree ASC LIMIT 1) as quantite_lot_fifo,
                       MAX(s.derniere_inventaire) as derniere_inventaire,
                       MAX(s.updated_at) as updated_at,
                       MAX(s.updated_by) as updated_by,
@@ -553,7 +584,7 @@ def get_produit(produit_id: int, request: Request):
                WHERE l.produit_id=? AND l.quantite_restante>0
                GROUP BY l.emplacement
                ORDER BY l.emplacement""",
-            (produit_id,),
+            (produit_id, produit_id),
         ).fetchall()
 
         # FIFO global
@@ -738,7 +769,12 @@ def get_emplacement(emplacement: str, request: Request):
         refs = conn.execute(
             """SELECT p.id, p.reference, p.designation, p.unite,
                       SUM(l.quantite_restante) as quantite,
+                      COUNT(*) as nb_lots,
                       MIN(CASE WHEN l.quantite_restante>0 THEN l.date_entree END) as date_fifo,
+                      (SELECT l2.quantite_restante FROM lots_stock l2
+                       WHERE l2.produit_id=l.produit_id AND l2.emplacement=?
+                         AND l2.quantite_restante > 0
+                       ORDER BY l2.date_entree ASC LIMIT 1) as quantite_lot_fifo,
                       MAX(s.derniere_inventaire) as derniere_inventaire,
                       MAX(s.updated_at) as updated_at,
                       MAX(s.updated_by) as updated_by
@@ -748,7 +784,7 @@ def get_emplacement(emplacement: str, request: Request):
                WHERE l.emplacement=? AND l.quantite_restante>0
                GROUP BY l.produit_id
                ORDER BY p.reference""",
-            (emplacement,),
+            (emplacement, emplacement),
         ).fetchall()
 
         mvts = conn.execute(
@@ -986,6 +1022,45 @@ async def mouvement_stock(request: Request):
         module="stock",
         objet=f"{type_mvt} · {ref_audit} · {emplacement} · {quantite}",
         detail={"type_mouvement": type_mvt, "quantite": quantite},
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True, **result}
+
+
+@router.post("/api/stock/sortir-lot")
+async def api_sortir_lot(request: Request):
+    """Sortie du lot FIFO le plus ancien (produit + emplacement)."""
+    user = require_stock_write(request)
+    body = await request.json()
+    produit_id = body.get("produit_id")
+    emplacement = (body.get("emplacement") or "").strip().upper()
+    note = (body.get("note") or "").strip()
+
+    if not produit_id or not emplacement:
+        raise HTTPException(400, "produit_id et emplacement obligatoires")
+    if not emplacement[0].isalpha() or not emplacement[1:].isdigit():
+        raise HTTPException(400, f"Format emplacement invalide : {emplacement}")
+
+    with get_db() as conn:
+        created_by_name = _resolve_created_by_name(conn, user)
+        p = conn.execute(
+            "SELECT id, reference FROM produits WHERE id=?", (produit_id,)
+        ).fetchone()
+        if not p:
+            raise HTTPException(404, "Produit non trouvé")
+        ref_audit = p["reference"] or ""
+
+        result = sortir_lot_fifo(
+            conn, int(produit_id), emplacement, user["email"], created_by_name, note
+        )
+        conn.commit()
+
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="stock",
+        objet=f"Sortie lot FIFO · {ref_audit} · {emplacement} · {result['quantite_sortie']}",
+        detail={"emplacement": emplacement, "quantite": result["quantite_sortie"]},
         ip=request.client.host if request.client else None,
     )
     return {"success": True, **result}
@@ -1843,7 +1918,7 @@ def list_matiere_mouvements(matiere_id: int, request: Request):
 
 # ── Produits finis (onglet dédié — source : produits / mouvements_stock) ──
 _PF_MVT_SQL = f"""
-    SELECT m.id, p.reference, p.designation, m.type_mouvement AS type,
+    SELECT m.id, p.id AS produit_id, p.reference, p.designation, m.type_mouvement AS type,
            m.quantite, p.unite, m.emplacement, m.note AS commentaire,
            COALESCE(NULLIF(TRIM(m.created_by_name),''), u.nom, m.created_by) AS user_login,
            m.created_at AS date_mouvement
@@ -1899,6 +1974,7 @@ def _pf_list_stock_rows(conn: sqlite3.Connection) -> list:
     rows = conn.execute(
         """
         SELECT
+            p.id AS produit_id,
             p.reference,
             p.designation,
             p.unite,
@@ -1917,6 +1993,7 @@ def _pf_list_stock_rows(conn: sqlite3.Connection) -> list:
     return conn.execute(
         """
         SELECT
+            p.id AS produit_id,
             p.reference,
             p.designation,
             p.unite,
@@ -1996,6 +2073,7 @@ def list_produits_finis(request: Request):
     return {
         "stock": [
             {
+                "produit_id": r["produit_id"],
                 "reference": r["reference"],
                 "designation": r["designation"],
                 "unite": r["unite"],

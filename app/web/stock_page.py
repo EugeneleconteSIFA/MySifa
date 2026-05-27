@@ -351,6 +351,11 @@ body.light .btn.btn-accent{color:#fff}
 .empl-info{font-size:11px;color:var(--muted);margin-top:2px}
 .empl-qte{font-family:monospace;font-weight:700;font-size:13px;text-align:right}
 .empl-date{font-size:11px;color:var(--muted);text-align:right;margin-top:2px}
+.empl-row-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.empl-lot-out-btn{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;padding:0;
+  border-radius:10px;border:1px solid color-mix(in srgb,var(--danger) 35%,transparent);
+  background:color-mix(in srgb,var(--danger) 12%,transparent);color:var(--danger);cursor:pointer;flex-shrink:0}
+.empl-lot-out-btn:hover{border-color:var(--danger);background:color-mix(in srgb,var(--danger) 22%,transparent)}
 
 /* ── Action bar ── */
 .action-bar{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
@@ -616,6 +621,7 @@ body.light .mp-search-wrap:focus-within{
 .pf-stock-item-main{flex:1;min-width:0}
 .pf-stock-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
 .pf-stock-ref{font-family:ui-monospace,monospace;font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px}
+.pf-stock-ref .mvt-ref-link{font-family:inherit;font-size:inherit;font-weight:inherit;color:inherit}
 .pf-stock-des{font-size:13px;color:var(--text2);margin-bottom:8px;line-height:1.4}
 .pf-stock-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
 .pf-stock-qte{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent);font-size:13px}
@@ -633,7 +639,10 @@ body.light .mp-search-wrap:focus-within{
 .pf-empty-state-title{font-size:14px;font-weight:600;color:var(--text2);margin:12px 0 6px}
 .pf-empty-state-hint{font-size:13px;line-height:1.5}
 .pf-mvt-main{flex:1;min-width:0}
+.pf-mvt-line{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
 .pf-mvt-ref{font-weight:700;color:var(--text)}
+.pf-mvt-ref .mvt-ref-link{font-family:inherit;font-size:inherit;font-weight:inherit;color:inherit}
+.pf-mvt-qte{font-family:ui-monospace,monospace;font-size:12px;color:var(--text2)}
 .pf-mvt-sub{color:var(--muted);margin-top:2px;font-size:11px}
 .pf-mvt-user{color:var(--text2);font-size:11px;flex-shrink:0;text-align:right;max-width:90px;overflow:hidden;text-overflow:ellipsis}
 .pf-empty{padding:24px;text-align:center;color:var(--muted);font-size:13px}
@@ -1506,8 +1515,41 @@ function doSearch(q) {
 async function loadProduit(id) {
   try {
     const d = await api('/api/stock/produits/' + id);
-    if (d) { S.selProduit = d; S.selEmpl = null; S.searchResults = null; clearSearch(); render(); }
+    if (d) {
+      S.selProduit = d;
+      S.selEmpl = null;
+      S.selMatiere = null;
+      S.searchResults = null;
+      clearSearch();
+      closeSidebar();
+      render();
+    }
   } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function openPfProduitPage(reference, produitId) {
+  const pid = parseInt(produitId, 10);
+  if (pid > 0) {
+    await loadProduit(pid);
+    return;
+  }
+  const ref = String(reference || '').trim();
+  if (!ref) return;
+  try {
+    const r = await api('/api/stock/search?q=' + encodeURIComponent(ref) + '&limit=10');
+    const p = (r && r.produits || []).find(x => (x.reference || '').toUpperCase() === ref.toUpperCase());
+    if (p && p.id) await loadProduit(p.id);
+    else showToast('Référence introuvable.', 'error');
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+function stockPfRefLink(reference, produitId, label) {
+  const txt = label != null ? label : (reference || '—');
+  if (!reference || txt === '—') return el('span', null, txt);
+  return el('button', {
+    cls: 'mvt-ref-link', type: 'button',
+    on: { click: (e) => { e.stopPropagation(); openPfProduitPage(reference, produitId); } },
+  }, txt);
 }
 
 async function loadEmplacement(empl) {
@@ -1658,8 +1700,47 @@ async function submitMouvement(body) {
     if (S.selProduit) await loadProduit(S.selProduit.produit.id);
     else if (S.selEmpl) await loadEmplacement(S.selEmpl.emplacement);
     else if (S.tab === 'dashboard') await loadDashboard();
+    else if (S.tab === 'produits-finis') await loadProduitsFinis();
     else if (S.tab === 'inventaire') await loadInventaireList();
   } catch(e) { showToast(e.message, 'error'); }
+}
+
+function buildLotOutBtn(produitId, emplacement, row) {
+  const qLot = row.quantite_lot_fifo != null ? row.quantite_lot_fifo : row.quantite;
+  const unite = row.unite || (S.selProduit && S.selProduit.produit && S.selProduit.produit.unite) || '';
+  const refLabel = row.reference || (S.selProduit && S.selProduit.produit && S.selProduit.produit.reference) || '';
+  return el('button', {
+    cls: 'empl-lot-out-btn',
+    type: 'button',
+    attrs: { title: 'Sortir le lot FIFO', 'aria-label': 'Sortir le lot FIFO' },
+    on: { click: (ev) => {
+      ev.stopPropagation();
+      sortirLot(produitId, emplacement, qLot, unite, refLabel, row.nb_lots);
+    }},
+  }, iconEl('trash-2', 18));
+}
+
+async function sortirLot(produitId, emplacement, qLot, unite, refLabel, nbLots) {
+  const qLabel = fU(qLot, unite || '');
+  const loc = refLabel ? (refLabel + ' · ' + emplacement) : emplacement;
+  let msg = 'Sortir le lot FIFO (' + qLabel + ') — ' + loc + ' ?';
+  if (nbLots > 1) {
+    msg += '\n\n' + nbLots + ' lots actifs à cet emplacement — seul le plus ancien sera retiré.';
+  }
+  if (!confirm(msg)) return;
+  try {
+    const r = await api('/api/stock/sortir-lot', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ produit_id: produitId, emplacement }),
+    });
+    if (!r) return;
+    showToast('Lot sorti — stock : ' + fN(r.quantite_apres));
+    if (S.selProduit) await loadProduit(S.selProduit.produit.id);
+    else if (S.selEmpl) await loadEmplacement(S.selEmpl.emplacement);
+    else if (S.tab === 'produits-finis') await loadProduitsFinis();
+    else if (S.tab === 'dashboard') await loadDashboard();
+  } catch (e) { showToast(e.message, 'error'); }
 }
 
 // Emplacements chargés depuis /api/stock/emplacements-list (plan + stock réel)
@@ -3551,10 +3632,10 @@ function buildProduitsFinisTab() {
       filtered.forEach(row => {
         const item = el('div', {
           cls: 'pf-stock-item',
-          on: { click: () => openPfDetailModal(row.reference) },
+          on: { click: () => openPfProduitPage(row.reference, row.produit_id) },
         },
           el('div', { cls: 'pf-stock-item-main' },
-            el('div', { cls: 'pf-stock-ref' }, row.reference || '—'),
+            el('div', { cls: 'pf-stock-ref' }, stockPfRefLink(row.reference, row.produit_id)),
             el('div', { cls: 'pf-stock-des' }, row.designation || '—'),
             el('div', { cls: 'pf-stock-row', style: { marginTop: '6px' } },
               el('span', { cls: 'pf-stock-qte' }, fU(row.quantite, row.unite)),
@@ -3562,11 +3643,6 @@ function buildProduitsFinisTab() {
             ),
             el('div', { cls: 'pf-stock-meta' }, 'Dernière entrée : ' + fD(row.derniere_entree)),
           ),
-          el('button', {
-            cls: 'btn-ghost-sm',
-            type: 'button',
-            on: { click: (e) => { e.stopPropagation(); openPfDetailModal(row.reference); } },
-          }, 'Détail'),
         );
         stockList.appendChild(item);
       });
@@ -3583,7 +3659,10 @@ function buildProduitsFinisTab() {
         mvtList.appendChild(el('div', { cls: 'pf-mvt-item' },
           el('span', { cls: 'pf-mvt-icon ' + (isEntree ? 'entree' : 'sortie') }, isEntree ? '↑' : '↓'),
           el('div', { cls: 'pf-mvt-main' },
-            el('div', { cls: 'pf-mvt-ref' }, (m.reference || '—') + ' · ' + fU(m.quantite, m.unite)),
+            el('div', { cls: 'pf-mvt-line' },
+              el('span', { cls: 'pf-mvt-ref' }, stockPfRefLink(m.reference, m.produit_id)),
+              el('span', { cls: 'pf-mvt-qte' }, fU(m.quantite, m.unite)),
+            ),
             el('div', { cls: 'pf-mvt-sub' },
               (m.emplacement || '—') + ' · ' + pfFmtShortDateTime(m.date_mouvement),
             ),
@@ -5712,6 +5791,7 @@ function clearSel() {
   S.selMatiere = null;
   renderContent();
   updateNavActive();
+  if (S.tab === 'produits-finis') loadProduitsFinis();
 }
 
 function buildProduitDetail() {
@@ -5721,7 +5801,8 @@ function buildProduitDetail() {
   const empls = sel.emplacements || [];
   const unite = p.unite || 'étiquettes';
 
-  const back = el('button',{cls:'btn-ghost',style:{marginBottom:'14px'},on:{click:clearSel}},'← Retour au tableau de bord');
+  const backLabel = S.tab === 'produits-finis' ? '← Retour aux produits finis' : '← Retour au tableau de bord';
+  const back = el('button',{cls:'btn-ghost',style:{marginBottom:'14px'},on:{click:clearSel}}, backLabel);
 
   const emplBlock = empls.length === 0
     ? el('div',{cls:'card'},el('div',{cls:'card-empty'},'Aucun stock actif pour cette référence.'))
@@ -5735,9 +5816,12 @@ function buildProduitDetail() {
             el('div',{cls:'empl-code'},e.emplacement),
             el('div',{cls:'empl-info'},'FIFO lot : '+fD(e.date_fifo_empl)+(e.alerte_inventaire?' · inventaire':'')+(e.jours_stock!=null?' · ~'+e.jours_stock+'j':''))
           ),
-          el('div',null,
-            el('div',{cls:'empl-qte'},fU(e.quantite, unite)),
-            el('div',{cls:'empl-date'},fD(e.updated_at||e.date_fifo_empl))
+          el('div',{cls:'empl-row-right'},
+            el('div',null,
+              el('div',{cls:'empl-qte'},fU(e.quantite, unite)),
+              el('div',{cls:'empl-date'},fD(e.updated_at||e.date_fifo_empl))
+            ),
+            S.stockReadOnly ? null : buildLotOutBtn(p.id, e.emplacement, e)
           )
         )))
       );
@@ -5773,7 +5857,8 @@ function buildEmplacementDetail() {
   const refs = sel.refs || [];
   const code = sel.emplacement;
 
-  const back = el('button',{cls:'btn-ghost',style:{marginBottom:'14px'},on:{click:clearSel}},'← Retour au tableau de bord');
+  const backLabel = S.tab === 'produits-finis' ? '← Retour aux produits finis' : '← Retour au tableau de bord';
+  const back = el('button',{cls:'btn-ghost',style:{marginBottom:'14px'},on:{click:clearSel}}, backLabel);
 
   const actions = S.stockReadOnly ? null : el('div',{cls:'action-bar',style:{marginTop:'14px'}},
     el('button',{cls:'action-btn pf-entree',on:{click:()=>openEmplEntreeModal(code)}},'↓ Entrée')
@@ -5797,7 +5882,13 @@ function buildEmplacementDetail() {
           on:{click:()=>loadProduit(r.id)}
         },
           el('div',null,el('div',{cls:'empl-code'},r.reference),el('div',{cls:'empl-info'},r.designation||'')),
-          el('div',null,el('div',{cls:'empl-qte'},fU(r.quantite, r.unite||'')),el('div',{cls:'empl-date'},fD(r.date_fifo)))
+          el('div',{cls:'empl-row-right'},
+            el('div',null,
+              el('div',{cls:'empl-qte'},fU(r.quantite, r.unite||'')),
+              el('div',{cls:'empl-date'},fD(r.date_fifo))
+            ),
+            S.stockReadOnly ? null : buildLotOutBtn(r.id, code, r)
+          )
         )))
       );
 
