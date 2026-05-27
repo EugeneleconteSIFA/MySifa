@@ -334,13 +334,13 @@ body.light .btn.btn-accent{color:#fff}
 .btn.btn-soft-entree{
   background:color-mix(in srgb,var(--success) 18%,transparent);
   border-color:color-mix(in srgb,var(--success) 32%,transparent);
-  color:var(--success);
+  color:var(--success)!important;
 }
 .btn.btn-soft-entree:hover{border-color:var(--success);color:var(--success);filter:brightness(1.05)}
 .btn.btn-soft-sortie{
   background:color-mix(in srgb,var(--danger) 18%,transparent);
   border-color:color-mix(in srgb,var(--danger) 32%,transparent);
-  color:var(--danger);
+  color:var(--danger)!important;
 }
 .btn.btn-soft-sortie:hover{border-color:var(--danger);color:var(--danger);filter:brightness(1.05)}
 
