@@ -75,6 +75,10 @@ PLANNING_HTML = r"""<!DOCTYPE html>
   --blue:#38bdf8;--purple:#a78bfa;--mono:ui-monospace,'Cascadia Code',monospace;--sans:'Segoe UI',system-ui,sans-serif;
   --bg-dark:#080c12;--border2:#334155;--dim:#cbd5e1;
   --green:var(--success);--red:var(--danger);--amber:var(--warn);
+  --slot-l1:#1e293b;--slot-l2:#334155;--slot-l3:#475569;
+  --slot-l1-h:#020617;--slot-l2-h:#0f172a;--slot-l3-h:#1e293b;
+  --tip-k:#cbd5e1;--tip-v:#f1f5f9;--tip-lbl:#e2e8f0;
+  --fd-label:#e2e8f0;
 }
 body.light{
   --bg:#f1f5f9;--card:#ffffff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;
@@ -82,6 +86,10 @@ body.light{
   --success:#059669;--warn:#d97706;--danger:#dc2626;
   --c1:#0891b2;--c2:#7c3aed;--c3:#059669;--c4:#d97706;--c5:#dc2626;
   --blue:#0ea5e9;--purple:#7c3aed;--bg-dark:#e2e8f0;--border2:#cbd5e1;--dim:#64748b;
+  --slot-l1:#0f172a;--slot-l2:#1e293b;--slot-l3:#334155;
+  --slot-l1-h:#020617;--slot-l2-h:#0f172a;--slot-l3-h:#1e293b;
+  --tip-k:#475569;--tip-v:#0f172a;--tip-lbl:#334155;
+  --fd-label:#334155;
 }
 body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh}
 ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
@@ -259,15 +267,21 @@ body.light .slot-resize-handle::after{color:rgba(30,41,59,.85)}
 .slot:hover{top:5px;bottom:5px;z-index:20}
 .slot-inner{display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.15;
   text-align:center;max-width:100%;pointer-events:none}
-.slot .line1{font-size:13px;color:#1e293b;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-.slot .line2{font-size:10px;font-weight:600;color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-.slot .line3{font-size:9px;font-weight:500;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;margin-top:1px}
+.slot .line1{font-size:13px;color:var(--slot-l1);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.slot .line2{font-size:10px;font-weight:600;color:var(--slot-l2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.slot .line3{font-size:9px;font-weight:500;color:var(--slot-l3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;margin-top:1px}
+.slot:hover .line1{color:var(--slot-l1-h)}
+.slot:hover .line2{color:var(--slot-l2-h)}
+.slot:hover .line3{color:var(--slot-l3-h)}
+.slot:hover .line1,.slot:hover .line2,.slot:hover .line3{text-shadow:0 0 1px rgba(255,255,255,.85),0 1px 2px rgba(0,0,0,.12)}
+body.light .slot:hover .line1,body.light .slot:hover .line2,body.light .slot:hover .line3{text-shadow:0 1px 1px rgba(255,255,255,.9),0 0 1px rgba(0,0,0,.08)}
+.slot-vert-txt{font-size:9px;font-weight:700;color:var(--slot-l1);overflow:hidden;max-height:100%;pointer-events:none;white-space:nowrap}
+.slot:hover .slot-vert-txt{color:var(--slot-l1-h);text-shadow:0 0 1px rgba(255,255,255,.85),0 1px 2px rgba(0,0,0,.12)}
 .slot .line-exig{display:block;width:calc(100% - 4px);max-width:100%;margin-top:4px;padding:3px 5px;border-radius:5px;
   background:#fef08a;color:#713f12;font-size:10px;font-weight:800;line-height:1.25;text-align:center;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border:1.5px solid #eab308;
   box-shadow:0 1px 4px rgba(0,0,0,.35);letter-spacing:.2px}
 body.light .slot .line-exig{background:#fef9c3;color:#713f12;border-color:#ca8a04}
-body.light .slot .line1{color:#1e293b}body.light .slot .line2{color:#334155}body.light .slot .line3{color:#64748b}
 .tip-exig{margin-top:10px;padding:8px 10px;border-radius:8px;background:rgba(251,191,36,.18);border:1.5px solid var(--warn);
   font-size:12px;font-weight:700;color:var(--warn);line-height:1.4}
 .tip-exig .k{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:4px;font-weight:600}
@@ -280,10 +294,10 @@ body.light .slot .line1{color:#1e293b}body.light .slot .line2{color:#334155}body
 .tip-hdr{display:flex;align-items:center;gap:10px;margin-bottom:10px}
 .tip-bar{width:6px;height:32px;border-radius:3px;flex-shrink:0}
 .tip-ref{font-size:13px;font-weight:700;color:var(--text);font-family:var(--mono)}
-.tip-lbl{font-size:12px;color:var(--text2);margin-top:2px}
+.tip-lbl{font-size:12px;color:var(--tip-lbl);margin-top:2px;font-weight:500}
 .tip-grid{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:11px;
   border-top:1px solid var(--border2);padding-top:10px}
-.tip-grid .k{color:var(--muted)}.tip-grid .v{color:var(--text2);font-family:var(--mono)}
+.tip-grid .k{color:var(--tip-k);font-weight:600}.tip-grid .v{color:var(--tip-v);font-family:var(--mono);font-weight:500}
 .tip-livraison{margin-top:8px;padding:4px 0 2px;font-size:12px;color:var(--text);font-weight:600;line-height:1.35}
 .tip-livraison+.tip-grid{border-top:none;padding-top:6px}
 
@@ -442,16 +456,38 @@ body.light .btn-p{color:#fff}
 @media(min-width:901px){.dossier-fgrid--2{grid-template-columns:1fr 1fr}}
 .dossier-fgrid .fd--full{grid-column:1/-1}
 .dossier-fgrid .fd{margin-bottom:0}
-.dossier-sections{display:grid;grid-template-columns:1fr;gap:18px}
-.dossier-section{margin:0!important;padding:0}
+.dossier-sections{display:grid;grid-template-columns:1fr;gap:0}
+.dossier-section{margin:0!important;padding:20px 0 0}
+.dossier-section:first-child{padding-top:0}
+.dossier-section:not(:first-child){border-top:1px solid var(--border)}
 .dossier-section-label{font-size:10px;text-transform:uppercase;letter-spacing:.6px;font-weight:700;color:var(--accent);margin-bottom:12px;display:block}
 .dossier-section > .fd{margin-bottom:16px}
 .dossier-section > .fd:last-child{margin-bottom:0}
 @media (max-height:780px) and (min-width:901px){
   .dossier-sections{grid-template-columns:1fr 1fr}
   .dossier-section--full{grid-column:1/-1}
+  .dossier-section:nth-child(2){border-top:none;padding-top:0}
 }
 .md.md--dossier{width:min(860px,95vw);max-height:92vh;overflow-y:auto}
+.md--dossier .dossier-section-label{
+  font-family:var(--sans);font-size:15px;font-weight:700;text-transform:none;letter-spacing:0;
+  color:var(--text);margin-bottom:14px;padding-left:11px;border-left:3px solid var(--accent);line-height:1.3}
+.md--dossier .fd label{
+  color:var(--fd-label);font-family:var(--sans);font-size:12px;font-weight:600;
+  text-transform:none;letter-spacing:.2px;margin-bottom:7px}
+.md--dossier .fd input,.md--dossier .fd select,.md--dossier .fd textarea{
+  font-family:var(--sans)}
+.md--dossier .dossier-check-lbl{
+  display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;font-weight:600;
+  color:var(--fd-label);font-family:var(--sans);text-transform:none;letter-spacing:0;margin-bottom:0}
+.md--dossier .dossier-sub-lbl{
+  font-size:12px;font-weight:600;color:var(--fd-label);font-family:var(--sans);
+  text-transform:none;letter-spacing:.2px;display:block;margin-bottom:8px}
+.md--dossier .dossier-ta{
+  width:100%;padding:10px 12px;border:1px solid var(--border2);border-radius:10px;
+  background:var(--bg);color:var(--text);font-size:14px;font-family:var(--sans);
+  resize:vertical;outline:none}
+.md--dossier .dossier-ta:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
 .md-acts{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:28px}
 .btn-s{padding:10px 24px;background:transparent;color:var(--dim);border:1px solid var(--border2);
   border-radius:8px;cursor:pointer;font-size:14px;font-family:var(--mono)}
@@ -1329,6 +1365,7 @@ function weekHeaderRow(mn,lblCls){
   </div>`;
 }
 function fmtDur(h){const hrs=Math.floor(+h||0);const mins=Math.round(((+h||0)-hrs)*60);return mins>0?`${hrs}h${String(mins).padStart(2,"0")}`:`${hrs}h`}
+function fmtQty(n){if(n==null||n===""||isNaN(n))return"";return Math.round(Number(n)).toLocaleString("fr-FR");}
 
 // Durée "ouvrée" entre 2 timestamps (créneaux de production), pour l'affichage uniquement.
 // IMPORTANT: ne pas impacter la timeline (taille slots, positions, etc.).
@@ -2247,12 +2284,12 @@ function mkTL(mon,slots){
     h+=`<div class="slot ${matchCls} ${aplacerCls} ${reelTermineCls} ${termineSlideCls}" data-eid="${s.entry_id||idx}" data-statut="${escAttr(s.statut||"attente")}" data-statut-reel="${escAttr(sr)}" ${canDragSlot?'draggable="true"':''} style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${isActive?"border:2px solid var(--accent);animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
       onmouseenter="showTip(event,this)" onmousemove="moveTip(event)" onmouseleave="hideTip()"
       ondblclick="hideTip();openEdit(${s.entry_id||idx});event.stopPropagation()"
-      data-livraison="${escAttr(fmtLivraisonLong(s.date_livraison||""))}" data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-rfp="${escAttr(s.ref_produit||"")}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(fmtDur(durAff))}" data-exigences="${escAttr(exig)}" data-qte-etiq="${escAttr(qteEtiq!=null?String(qteEtiq):"")}"
+      data-livraison="${escAttr(fmtLivraisonLong(s.date_livraison||""))}" data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-rfp="${escAttr(s.ref_produit||"")}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(fmtDur(durAff))}" data-exigences="${escAttr(exig)}" data-qte-etiq="${escAttr(qteEtiq!=null?fmtQty(qteEtiq):"")}"
       data-planned-start="${escAttr(String(s.start||""))}" data-planned-end="${escAttr(String(s.end||""))}"
       data-deb="${escAttr(fdt(ss))}" data-fin="${escAttr(fdt(se))}" data-st="${escAttr(st)}" data-co="${escAttr(co)}"${termineTitle?` title="${escAttr(termineTitle)}"`:""}>
       ${destock?`<div style="position:absolute;top:4px;right:4px;width:10px;height:10px;border-radius:50%;background:rgba(71,85,105,.9);pointer-events:none;z-index:5;flex-shrink:0"></div>`:""}
       ${resizeHandle}
-      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}${fscBadgeHtml(s)}</span>${line2Txt?`<span class="line2">${escAttr(line2Txt)}</span>`:""}${line3Txt?`<span class="line3">${escAttr(line3Txt)}</span>`:""}${exig?`<span class="line-exig" title="${escAttr(exig)}">${escAttr(exig)}</span>`:""}</div>`:w>1.8?`<div style="overflow:hidden;height:100%;display:flex;align-items:center;justify-content:center"><div style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg);font-size:9px;font-weight:700;color:#1e293b;overflow:hidden;max-height:100%;pointer-events:none;white-space:nowrap">${escAttr((cli.slice(0,6)+(cli.length>6?".":"")).toUpperCase())}</div></div>`:""}</div>`;
+      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}${fscBadgeHtml(s)}</span>${line2Txt?`<span class="line2">${escAttr(line2Txt)}</span>`:""}${line3Txt?`<span class="line3">${escAttr(line3Txt)}</span>`:""}${exig?`<span class="line-exig" title="${escAttr(exig)}">${escAttr(exig)}</span>`:""}</div>`:w>1.8?`<div style="overflow:hidden;height:100%;display:flex;align-items:center;justify-content:center"><div class="slot-vert-txt" style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg)">${escAttr((cli.slice(0,6)+(cli.length>6?".":"")).toUpperCase())}</div></div>`:""}</div>`;
   });
 
   const np=gp(now);
@@ -2899,7 +2936,7 @@ function dossierFields(numero_of,client,ref_produit,laize,date_livraison,comment
           <option value="termine" ${statut==="termine"?"selected":""}>Terminé</option>
         </select></div>`:""}
         <div class="fd">
-          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--text2);text-transform:none;letter-spacing:0">
+          <label class="dossier-check-lbl">
             <input type="checkbox" id="f-aplacer" ${aPlacer?"checked":""} style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
             À placer au planning
           </label>
@@ -2913,13 +2950,13 @@ function dossierFields(numero_of,client,ref_produit,laize,date_livraison,comment
           <div class="fd"><label>Largeur (mm)</label><input type="number" id="f-fl" value="${escAttr(fl)}" placeholder="100"></div>
           <div class="fd"><label>Hauteur (mm)</label><input type="number" id="f-fh" value="${escAttr(fh)}" placeholder="70"></div>
           <div class="fd fd--full">
-            <label style="font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:700;display:block;margin-bottom:8px">Certification FSC</label>
+            <span class="dossier-sub-lbl">Certification FSC</span>
             <div style="display:flex;align-items:center;gap:12px">
               <input type="checkbox" id="fsc-requis-chk" ${fscOn?"checked":""} onchange="onFscRequisChange()" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
-              <label for="fsc-requis-chk" style="font-weight:600;cursor:pointer;font-size:13px;color:var(--text2);text-transform:none;letter-spacing:0">Certification FSC requise sur ce dossier</label>
+              <label for="fsc-requis-chk" class="dossier-check-lbl" style="margin:0">Certification FSC requise sur ce dossier</label>
             </div>
             <div id="fsc-type-wrap" style="display:${fscOn?"block":"none"};margin-top:8px">
-              <label style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Type requis</label>
+              <label class="dossier-sub-lbl" style="margin-bottom:4px">Type requis</label>
               <select id="fsc-type-requis" class="form-sel" style="width:100%">
                 <option value="fsc_100" ${fscTyp==="fsc_100"?"selected":""}>FSC 100%</option>
                 <option value="fsc_mix" ${fscTyp==="fsc_mix"?"selected":""}>FSC Mix</option>
@@ -2935,7 +2972,7 @@ function dossierFields(numero_of,client,ref_produit,laize,date_livraison,comment
           <div class="fd"><label>Date de livraison</label><input type="date" id="f-dl" value="${escAttr(dlVal)}"></div>
           <div class="fd"><label>Département de livraison</label><input id="f-dept" value="${escAttr(deptLivraison)}" placeholder="Ex : 75, 69, Rhône…"></div>
           <div class="fd fd--full">
-            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--text2);text-transform:none;letter-spacing:0">
+            <label class="dossier-check-lbl">
               <input type="checkbox" id="f-rdv" ${rdvOn?"checked":""} style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
               Prise de rendez-vous de livraison confirmée
             </label>
@@ -2945,7 +2982,7 @@ function dossierFields(numero_of,client,ref_produit,laize,date_livraison,comment
       <div class="dossier-section dossier-section--full">
         <span class="dossier-section-label">Particularités et commentaires</span>
         <div class="fd"><label>Commentaire</label><input id="f-com" value="${escAttr(commentaire)}" placeholder="Bobine, contraintes, etc."></div>
-        <div class="fd"><label>Exigences de production</label><textarea id="f-exig" rows="2" placeholder="Consignes impératives pour l'atelier (visibles en priorité sur la timeline)" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;resize:vertical;outline:none">${escHtml(exigences_production||"")}</textarea></div>
+        <div class="fd"><label>Exigences de production</label><textarea id="f-exig" class="dossier-ta" rows="2" placeholder="Consignes impératives pour l'atelier (visibles en priorité sur la timeline)">${escHtml(exigences_production||"")}</textarea></div>
       </div>
     </div>`
 }
