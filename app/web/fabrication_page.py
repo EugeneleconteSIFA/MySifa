@@ -1630,9 +1630,9 @@ function renderOfPanel(){
 function renderOfImportModal(){
   const mr = document.getElementById('mroot');
   if(!mr) return;
+  mr.innerHTML = '';
   const m = S.ofImportModal;
   if(!m) return;
-  mr.innerHTML = '';
 
   let body;
   if(m.parsing){
@@ -1658,7 +1658,7 @@ function renderOfImportModal(){
       },
     },
       svgIcon('file',28),
-      h('div',{className:'fab-of-dropzone-title'},'Déposer un PDF Sage ici'),
+      h('div',{className:'fab-of-dropzone-title'},'Déposer un PDF ici'),
       h('div',{className:'fab-of-dropzone-sub'},'ou cliquer pour sélectionner — .pdf uniquement')
     );
     body = h('div',null, fileInput, dropzone,
@@ -3511,11 +3511,8 @@ function renderFinModal(){
 function renderArret50Modal(){
   const mr = document.getElementById('mroot');
   if(!mr) return;
-  if(!S.showArret50Modal){
-    mr.querySelector('[data-fab-modal="arret50"]')?.remove();
-    return;
-  }
-  mr.querySelector('[data-fab-modal="arret50"]')?.remove();
+  mr.innerHTML = '';
+  if(!S.showArret50Modal) return;
 
   let submitBtn;
   const ta = h('textarea',{
@@ -3550,7 +3547,7 @@ function renderArret50Modal(){
   },'Valider');
 
   mr.appendChild(
-    h('div',{'data-fab-modal':'arret50',className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)closeArret50();}},
+    h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)closeArret50();}},
       h('div',{className:'fab-modal'},
         h('div',{className:'fab-modal-title'},svgIcon('alert',18),' 50 — Arrêt machine'),
         h('div',{className:'fab-modal-sub'},
@@ -3654,8 +3651,8 @@ function render(){
   if(S.showFinModal)      root.appendChild(renderFinModal());
   if(S.showCommentModal)  root.appendChild(renderCommentModal());
 
-  renderOfImportModal();
   renderArret50Modal();
+  renderOfImportModal();
 
   if(S.loading) root.appendChild(renderLoading());
 

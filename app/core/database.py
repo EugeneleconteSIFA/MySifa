@@ -926,7 +926,6 @@ def _migrate(conn):
 
     # Migration v6 : Configurer les overrides d'accès pour les utilisateurs spécifiques
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=6 LIMIT 1").fetchone():
-        import json
         # S'assurer que la colonne access_overrides existe
         existing_columns = {row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
         if "access_overrides" not in existing_columns:
@@ -2285,6 +2284,376 @@ def _migrate(conn):
             )
         conn.commit()
         _record_schema_migration(conn, 71, "planning_entries_of_import_link")
+
+    # v72 — MyAO : carnet clients récurrents
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=72 LIMIT 1").fetchone():
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS ao_carnet_clients (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                nom         TEXT NOT NULL,
+                email       TEXT NOT NULL,
+                pays        TEXT,
+                notes       TEXT,
+                created_at  TEXT NOT NULL
+            )
+            """
+        )
+        conn.commit()
+        _record_schema_migration(conn, 72, "ao_carnet_clients")
+
+    # v73 — MyAO : fiche produit complète (JSON + client)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=73 LIMIT 1").fetchone():
+        ap_cols = {row[1] for row in conn.execute("PRAGMA table_info(ao_produits)").fetchall()}
+        if "client_id" not in ap_cols:
+            conn.execute("ALTER TABLE ao_produits ADD COLUMN client_id INTEGER")
+        if "fiche_json" not in ap_cols:
+            conn.execute("ALTER TABLE ao_produits ADD COLUMN fiche_json TEXT")
+        conn.commit()
+        _record_schema_migration(conn, 73, "ao_produits_fiche")
+
+    # v74 — Matières premières : frontal, glassine (+ couleur)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=74 LIMIT 1").fetchone():
+        mp_cols = {row[1] for row in conn.execute("PRAGMA table_info(matieres_premieres)").fetchall()}
+        if "couleur" not in mp_cols:
+            conn.execute("ALTER TABLE matieres_premieres ADD COLUMN couleur TEXT")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS matieres_premieres_v74 (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                categorie TEXT NOT NULL,
+                reference TEXT NOT NULL,
+                designation TEXT NOT NULL,
+                seuil_alerte REAL DEFAULT 0,
+                actif INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+                updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+                palettes_par_pile REAL,
+                couleur TEXT,
+                UNIQUE(categorie, reference)
+            )
+            """
+        )
+        old_cols = [r[1] for r in conn.execute("PRAGMA table_info(matieres_premieres)").fetchall()]
+        sel = ["id", "categorie", "reference", "designation", "seuil_alerte", "actif", "created_at", "updated_at"]
+        if "palettes_par_pile" in old_cols:
+            sel.append("palettes_par_pile")
+        else:
+            sel.append("NULL AS palettes_par_pile")
+        sel.append("couleur" if "couleur" in old_cols else "NULL AS couleur")
+        conn.execute(
+            f"INSERT INTO matieres_premieres_v74 ({', '.join(sel)}) "
+            f"SELECT {', '.join(sel)} FROM matieres_premieres"
+        )
+        conn.execute("DROP TABLE matieres_premieres")
+        conn.execute("ALTER TABLE matieres_premieres_v74 RENAME TO matieres_premieres")
+        conn.commit()
+        _record_schema_migration(conn, 74, "matieres_premieres_frontal_glassine")
+
+    # v75 — MyAO : carnet fournisseurs — société et adresse
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=75 LIMIT 1").fetchone():
+        cf_cols = {row[1] for row in conn.execute("PRAGMA table_info(ao_carnet_fournisseurs)").fetchall()}
+        if "societe" not in cf_cols:
+            conn.execute("ALTER TABLE ao_carnet_fournisseurs ADD COLUMN societe TEXT")
+        if "adresse" not in cf_cols:
+            conn.execute("ALTER TABLE ao_carnet_fournisseurs ADD COLUMN adresse TEXT")
+        conn.commit()
+        _record_schema_migration(conn, 75, "ao_carnet_fournisseurs_societe_adresse")
+
+    # v77 — MyAO : référence produit unique (insensible à la casse)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=77 LIMIT 1").fetchone():
+        dup = conn.execute(
+            """
+            SELECT LOWER(ref) FROM ao_produits
+            GROUP BY LOWER(ref) HAVING COUNT(*) > 1 LIMIT 1
+            """
+        ).fetchone()
+        if not dup:
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_ao_produits_ref "
+                "ON ao_produits(ref COLLATE NOCASE)"
+            )
+        conn.commit()
+        _record_schema_migration(conn, 77, "ao_produits_ref_unique")
+
+    # v76 — MyExpé : type de palette (réf. matières premières MyStock)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=76 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(expe_departs)").fetchall()}
+        if "type_palette_matiere_id" not in cols:
+            conn.execute(
+                "ALTER TABLE expe_departs ADD COLUMN type_palette_matiere_id INTEGER "
+                "REFERENCES matieres_premieres(id)"
+            )
+        conn.commit()
+        _record_schema_migration(conn, 76, "expe_departs_type_palette")
+
+    # v78 — Calcul coûts matières (remplace Excel / schéma distinct de MyDevis matiere_*)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=78 LIMIT 1").fetchone():
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS mc_setting (
+                key TEXT PRIMARY KEY NOT NULL,
+                value_decimal REAL NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+                updated_by INTEGER REFERENCES users(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS mc_supplier (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                country TEXT,
+                notes TEXT,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+                updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime'))
+            );
+
+            CREATE TABLE IF NOT EXISTS mc_material_category (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                code TEXT NOT NULL UNIQUE
+                    CHECK(code IN ('FRONTAL', 'ADHESIF', 'SILICONE', 'GLASSINE', 'AUTRE')),
+                label TEXT NOT NULL,
+                sort_order INTEGER NOT NULL DEFAULT 0
+            );
+
+            CREATE TABLE IF NOT EXISTS mc_material (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                appellation_code TEXT NOT NULL,
+                category_id INTEGER NOT NULL
+                    REFERENCES mc_material_category(id),
+                supplier_id INTEGER REFERENCES mc_supplier(id),
+                weight_per_m2 REAL NOT NULL DEFAULT 0,
+                weight_gsm INTEGER,
+                price_currency TEXT NOT NULL DEFAULT 'EUR'
+                    CHECK(price_currency IN ('EUR', 'USD')),
+                unit_price REAL NOT NULL DEFAULT 0,
+                price_basis TEXT NOT NULL DEFAULT 'PER_KG'
+                    CHECK(price_basis IN ('PER_KG', 'PER_M2')),
+                tax_incidence REAL NOT NULL DEFAULT 1.0,
+                is_imported INTEGER NOT NULL DEFAULT 0,
+                container_kg REAL,
+                container_cost_usd REAL,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+                updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime'))
+            );
+
+            CREATE TABLE IF NOT EXISTS mc_material_price_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                material_id INTEGER NOT NULL REFERENCES mc_material(id),
+                unit_price REAL NOT NULL,
+                price_currency TEXT NOT NULL
+                    CHECK(price_currency IN ('EUR', 'USD')),
+                tax_incidence REAL NOT NULL DEFAULT 1.0,
+                effective_date TEXT NOT NULL,
+                source TEXT,
+                created_by INTEGER REFERENCES users(id),
+                created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime'))
+            );
+
+            CREATE TABLE IF NOT EXISTS mc_product (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                code TEXT NOT NULL,
+                name TEXT NOT NULL,
+                frontal_id INTEGER REFERENCES mc_material(id),
+                adhesif_id INTEGER REFERENCES mc_material(id),
+                silicone_id INTEGER REFERENCES mc_material(id),
+                glassine_id INTEGER REFERENCES mc_material(id),
+                custom_margin_eur_m2 REAL,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+                updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime'))
+            );
+
+            CREATE TABLE IF NOT EXISTS mc_product_extra_material (
+                product_id INTEGER NOT NULL REFERENCES mc_product(id) ON DELETE CASCADE,
+                material_id INTEGER NOT NULL REFERENCES mc_material(id),
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (product_id, material_id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_mc_material_appellation
+                ON mc_material(appellation_code);
+            CREATE INDEX IF NOT EXISTS idx_mc_material_category
+                ON mc_material(category_id);
+            CREATE INDEX IF NOT EXISTS idx_mc_material_active
+                ON mc_material(is_active);
+            CREATE INDEX IF NOT EXISTS idx_mc_material_price_history_material
+                ON mc_material_price_history(material_id, effective_date);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_mc_product_code
+                ON mc_product(code COLLATE NOCASE);
+            CREATE INDEX IF NOT EXISTS idx_mc_product_active
+                ON mc_product(is_active);
+            CREATE INDEX IF NOT EXISTS idx_mc_supplier_active
+                ON mc_supplier(is_active);
+            """
+        )
+        conn.executemany(
+            "INSERT OR IGNORE INTO mc_material_category (code, label, sort_order) VALUES (?,?,?)",
+            [
+                ("FRONTAL", "Frontal", 1),
+                ("ADHESIF", "Adhésif", 2),
+                ("SILICONE", "Silicone", 3),
+                ("GLASSINE", "Glassine", 4),
+                ("AUTRE", "Autre", 5),
+            ],
+        )
+        conn.executemany(
+            "INSERT OR IGNORE INTO mc_setting (key, value_decimal) VALUES (?,?)",
+            [
+                ("eur_usd_rate", 0.85),
+                ("default_container_cost_usd", 4000.0),
+                ("default_container_kg", 26000.0),
+                ("default_margin_eur_m2", 0.06),
+            ],
+        )
+        conn.commit()
+        _record_schema_migration(conn, 78, "mc_material_cost_schema")
+
+    # v79 — Coûts matières : source du taux FX sur mc_setting
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=79 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(mc_setting)").fetchall()}
+        if "source" not in cols:
+            conn.execute("ALTER TABLE mc_setting ADD COLUMN source TEXT")
+        conn.commit()
+        _record_schema_migration(conn, 79, "mc_setting_fx_source")
+
+    # v80 — Accès applicatif MyDevis (devis) → pricing
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=80 LIMIT 1").fetchone():
+        for row in conn.execute(
+            "SELECT id, access_overrides, portal_apps_order FROM users"
+        ).fetchall():
+            uid = row["id"]
+            ao = row["access_overrides"]
+            if ao:
+                try:
+                    o = json.loads(ao) if isinstance(ao, str) else ao
+                except (json.JSONDecodeError, TypeError):
+                    o = None
+                if isinstance(o, dict) and "devis" in o:
+                    if "pricing" not in o:
+                        o["pricing"] = o["devis"]
+                    del o["devis"]
+                    conn.execute(
+                        "UPDATE users SET access_overrides=? WHERE id=?",
+                        (json.dumps(o, ensure_ascii=False), uid),
+                    )
+            po = row["portal_apps_order"]
+            if po:
+                try:
+                    arr = json.loads(po) if isinstance(po, str) else po
+                except (json.JSONDecodeError, TypeError):
+                    arr = None
+                if isinstance(arr, list):
+                    new_arr = []
+                    seen: set = set()
+                    for x in arr:
+                        if not isinstance(x, str):
+                            continue
+                        tid = "pricing" if x.strip() == "devis" else x.strip()
+                        if tid and tid not in seen:
+                            new_arr.append(tid)
+                            seen.add(tid)
+                    if new_arr != arr:
+                        conn.execute(
+                            "UPDATE users SET portal_apps_order=? WHERE id=?",
+                            (json.dumps(new_arr, ensure_ascii=False), uid),
+                        )
+        conn.commit()
+        _record_schema_migration(conn, 80, "app_access_devis_to_pricing")
+
+    # v81 — Coûts matières : accès réservé Direction et super admin (retrait Administration)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=81 LIMIT 1").fetchone():
+        from config import ROLE_DIRECTION, ROLE_SUPERADMIN
+
+        allowed_roles = {ROLE_DIRECTION, ROLE_SUPERADMIN}
+        for row in conn.execute("SELECT id, role, access_overrides FROM users").fetchall():
+            if row["role"] in allowed_roles:
+                continue
+            ao = row["access_overrides"]
+            if not ao:
+                continue
+            try:
+                o = json.loads(ao) if isinstance(ao, str) else ao
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if not isinstance(o, dict):
+                continue
+            changed = False
+            for key in ("pricing", "devis"):
+                if key in o:
+                    del o[key]
+                    changed = True
+            if not changed:
+                continue
+            new_ao = json.dumps(o, ensure_ascii=False) if o else None
+            conn.execute(
+                "UPDATE users SET access_overrides=? WHERE id=?",
+                (new_ao, row["id"]),
+            )
+        conn.commit()
+        _record_schema_migration(conn, 81, "pricing_access_direction_superadmin_only")
+
+    # v82 — MyStock : produits finis (catalogue + mouvements)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=82 LIMIT 1").fetchone():
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS produits_finis (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                reference TEXT NOT NULL UNIQUE,
+                designation TEXT NOT NULL,
+                unite TEXT DEFAULT 'pièces',
+                created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now', 'localtime'))
+            );
+            CREATE TABLE IF NOT EXISTS pf_mouvements (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                reference TEXT NOT NULL,
+                designation TEXT NOT NULL,
+                type TEXT NOT NULL CHECK(type IN ('entree', 'sortie')),
+                quantite REAL NOT NULL,
+                unite TEXT DEFAULT 'pièces',
+                emplacement TEXT NOT NULL,
+                no_of TEXT,
+                commentaire TEXT,
+                user_login TEXT,
+                date_mouvement TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now', 'localtime'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_pf_mvt_ref ON pf_mouvements(reference);
+            CREATE INDEX IF NOT EXISTS idx_pf_mvt_date ON pf_mouvements(date_mouvement DESC);
+            CREATE INDEX IF NOT EXISTS idx_pf_mvt_empl ON pf_mouvements(emplacement);
+            """
+        )
+        conn.commit()
+        _record_schema_migration(conn, 82, "produits_finis_pf_mouvements")
+
+    # v83 — MyAO : quotation, devise, unité et coef sur les réponses fournisseur
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=83 LIMIT 1").fetchone():
+        ar_cols = {row[1] for row in conn.execute("PRAGMA table_info(ao_reponses)").fetchall()}
+        if "quotation" not in ar_cols:
+            conn.execute("ALTER TABLE ao_reponses ADD COLUMN quotation REAL")
+        if "devise" not in ar_cols:
+            conn.execute("ALTER TABLE ao_reponses ADD COLUMN devise TEXT DEFAULT 'EUR'")
+        if "unite_quotation" not in ar_cols:
+            conn.execute(
+                "ALTER TABLE ao_reponses ADD COLUMN unite_quotation TEXT DEFAULT 'mille'"
+            )
+        if "coef" not in ar_cols:
+            conn.execute("ALTER TABLE ao_reponses ADD COLUMN coef REAL DEFAULT 1.0")
+        if "devise_prix_devis" not in ar_cols:
+            conn.execute(
+                "ALTER TABLE ao_reponses ADD COLUMN devise_prix_devis TEXT DEFAULT 'EUR'"
+            )
+        conn.execute(
+            """UPDATE ao_reponses
+               SET quotation = prix_unitaire
+               WHERE quotation IS NULL AND prix_unitaire IS NOT NULL"""
+        )
+        conn.execute(
+            """UPDATE ao_reponses SET coef = 1.0 WHERE coef IS NULL"""
+        )
+        conn.commit()
+        _record_schema_migration(conn, 83, "ao_reponses_quotation_pricing")
 
     _record_schema_migration(
         conn,

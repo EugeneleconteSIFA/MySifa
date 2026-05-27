@@ -1,4 +1,4 @@
-"""MySifa — Import OF PDF (Sage) pour MyProd."""
+"""MySifa — Import OF PDF pour MyProd."""
 
 from __future__ import annotations
 
@@ -46,7 +46,8 @@ OF_DATA_FIELDS = [
 ]
 
 _PATTERNS = {
-    "of_numero": r"OF n[°o]\s*(\d+)",
+    # "OF n° 123456" ou "OF : 123456 + Stock" (un mot après +)
+    "of_numero": r"OF\s*(?:n[°o]|n°|:)\s*(\d+(?:\s*\+\s*[\w]+)?)",
     "date_creation": r"Date cr[eé]a\.\s*([\d/]+)",
     "delai_client": r"D[eé]lai client\s*([\d/]+)",
     "reference": r"R[eé]f\s*:\s*([\w/]+)",
