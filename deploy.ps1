@@ -41,7 +41,9 @@ function Resolve-GitMirror {
     if ($env:MYSIFA_GIT_MIRROR -and (Test-Path (Join-Path $env:MYSIFA_GIT_MIRROR ".git"))) {
         return (Resolve-Path $env:MYSIFA_GIT_MIRROR).Path
     }
-    $default = Join-Path $env:USERPROFILE "Documents\GitHub\MySifa"
+    # Par defaut, stocker le clone git hors Google Drive, dans un dossier dedie.
+    # Le contenu du Drive reste la SOURCE DE VERITE.
+    $default = Join-Path $env:USERPROFILE ".mysifa-git\MySifa"
     if (Test-Path (Join-Path $default ".git")) {
         return (Resolve-Path $default).Path
     }
@@ -50,6 +52,91 @@ Miroir git introuvable.
   Clone attendu : $default
   ou : `$env:MYSIFA_GIT_MIRROR = 'C:\chemin\vers\MySifa'
 "@
+}
+
+function Resolve-GitMetaRepo {
+    <#
+    Repo git local (metadonnees) utilise pour pousser le contenu du Google Drive.
+    Le work-tree reste la SOURCE DE VERITE.
+    #>
+    if ($env:MYSIFA_GIT_META_REPO) { return $env:MYSIFA_GIT_META_REPO }
+    return (Join-Path $env:USERPROFILE ".mysifa-git\MySifa")
+}
+
+function Ensure-GitMetaRepo {
+    param(
+        [string]$MetaRepo,
+        [string]$OriginUrl
+    )
+    if (Test-Path (Join-Path $MetaRepo ".git")) { return }
+    New-Item -ItemType Directory -Path $MetaRepo -Force | Out-Null
+    Write-Host ""
+    Write-Host "Initialisation repo git local (metadonnees)..." -ForegroundColor Yellow
+    Write-Host "  meta repo : $MetaRepo"
+    Write-Host "  origin    : $OriginUrl"
+    # git clone ecrit souvent sur stderr (progress), ce qui peut faire echouer le script
+    # si $ErrorActionPreference = Stop. On force donc un mode tolerant pendant l'appel.
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    & git clone $OriginUrl $MetaRepo 2>&1 | Out-Host
+    $code = $LASTEXITCODE
+    $ErrorActionPreference = $prevEap
+    if ($code -ne 0) {
+        throw "Impossible d'initialiser le repo git meta (clone echoue)."
+    }
+    if (-not (Test-Path (Join-Path $MetaRepo ".git"))) {
+        throw "Repo git meta invalide : .git absent apres clone."
+    }
+}
+
+function Ensure-GitDriveExcludes {
+    param(
+        [string]$MetaRepo
+    )
+    $excludePath = Join-Path $MetaRepo ".git\info\exclude"
+    if (-not (Test-Path $excludePath)) {
+        New-Item -ItemType File -Path $excludePath -Force | Out-Null
+    }
+    $existing = @()
+    try { $existing = Get-Content -Path $excludePath -ErrorAction SilentlyContinue } catch {}
+    $existingSet = New-Object 'System.Collections.Generic.HashSet[string]'
+    foreach ($l in ($existing | ForEach-Object { $_.Trim() })) {
+        if ($l) { [void]$existingSet.Add($l) }
+    }
+
+    # Fichiers "Google Drive" non indexables par git (placeholders).
+    $wanted = @(
+        "*.gdoc",
+        "*.gsheet",
+        "*.gslides",
+        ".DS_Store",
+        "Thumbs.db",
+        "desktop.ini",
+        "nohup.out",
+        "root@*"
+    )
+    $toAdd = @()
+    foreach ($w in $wanted) {
+        if (-not $existingSet.Contains($w)) { $toAdd += $w }
+    }
+    if ($toAdd.Count -gt 0) {
+        Add-Content -Path $excludePath -Value ""
+        Add-Content -Path $excludePath -Value "# Auto-added for Google Drive work-tree"
+        Add-Content -Path $excludePath -Value $toAdd
+    }
+}
+
+function Invoke-GitWorkTree {
+    param(
+        [string]$GitDir,
+        [string]$WorkTree,
+        [Parameter(ValueFromRemainingArguments = $true)]
+        [string[]]$GitArgs
+    )
+    & git --git-dir $GitDir --work-tree $WorkTree @GitArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "git $($GitArgs -join ' ') a echoue (code $LASTEXITCODE)."
+    }
 }
 
 function Sync-TruthToMirror {
@@ -177,27 +264,32 @@ function Push-MySifaGitHub {
         $scriptDir
     }
 
-    $mirrorDir = if (Test-Path (Join-Path $truthDir ".git")) {
-        $truthDir
-    } else {
-        Resolve-GitMirror
-    }
+    $isTruthGitRepo = Test-Path (Join-Path $truthDir ".git")
+    $mirrorDir = if ($isTruthGitRepo) { $truthDir } else { Resolve-GitMetaRepo }
+    $useWorkTreeMode = (-not $isTruthGitRepo)
 
     Write-Host "Push GitHub MySifa"
     Write-Host "  source de verite : $truthDir"
-    if ($mirrorDir -ne $truthDir) {
-        Write-Host "  miroir git       : $mirrorDir"
-    }
+    if ($useWorkTreeMode) { Write-Host "  git meta repo    : $mirrorDir" }
 
-    if (-not $SkipSync -and $mirrorDir -ne $truthDir) {
-        Sync-TruthToMirror -TruthDir $truthDir -MirrorDir $mirrorDir -FullMirror:$false
-    } elseif ($SkipSync) {
-        Write-Host "  (sync ignoree)"
+    if ($useWorkTreeMode) {
+        # Pas de sync: le work-tree est la source de verite (Google Drive).
+        $origin = if ($env:MYSIFA_GIT_ORIGIN) { $env:MYSIFA_GIT_ORIGIN } else { "https://github.com/EugeneleconteSIFA/MySifa.git" }
+        Ensure-GitMetaRepo -MetaRepo $mirrorDir -OriginUrl $origin
+        Ensure-GitDriveExcludes -MetaRepo $mirrorDir
+    } else {
+        if (-not $SkipSync -and $mirrorDir -ne $truthDir) {
+            Sync-TruthToMirror -TruthDir $truthDir -MirrorDir $mirrorDir -FullMirror:$false
+        } elseif ($SkipSync) {
+            Write-Host "  (sync ignoree)"
+        }
     }
 
     $deploySh = Join-Path $scriptDir "deploy.sh"
     if (Test-Path $deploySh) {
-        Copy-Item -Path $deploySh -Destination (Join-Path $mirrorDir "deploy.sh") -Force
+        if (-not $useWorkTreeMode) {
+            Copy-Item -Path $deploySh -Destination (Join-Path $mirrorDir "deploy.sh") -Force
+        }
     }
 
     $msg = if ($CommitMessage) {
@@ -208,20 +300,60 @@ function Push-MySifaGitHub {
 
     Write-Host ""
     Write-Host "Commit + push origin main..."
-    Invoke-GitInMirror $mirrorDir add .
+    if ($useWorkTreeMode) {
+        $gitDir = Join-Path $mirrorDir ".git"
+        Invoke-GitWorkTree -GitDir $gitDir -WorkTree $truthDir add .
+    } else {
+        Invoke-GitInMirror $mirrorDir add .
+    }
     $prevEap = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
-    & git -C $mirrorDir commit -m $msg 2>&1 | Out-Host
+    if ($useWorkTreeMode) {
+        $gitDir = Join-Path $mirrorDir ".git"
+        & git --git-dir $gitDir --work-tree $truthDir commit -m $msg 2>&1 | Out-Host
+    } else {
+        & git -C $mirrorDir commit -m $msg 2>&1 | Out-Host
+    }
     $commitCode = $LASTEXITCODE
     $ErrorActionPreference = $prevEap
     if ($commitCode -ne 0) {
-        $pending = & git -C $mirrorDir status --porcelain
+        $pending = if ($useWorkTreeMode) {
+            $gitDir = Join-Path $mirrorDir ".git"
+            & git --git-dir $gitDir --work-tree $truthDir status --porcelain
+        } else {
+            & git -C $mirrorDir status --porcelain
+        }
         if ($pending) {
             throw "git commit a echoue alors que des changements sont presents."
         }
         Write-Host "Rien a committer - push des commits deja presents."
     }
-    Invoke-GitInMirror $mirrorDir push origin main
+
+    # Evite les blocages silencieux (prompt credentials) dans un terminal non-interactif.
+    # - GIT_TERMINAL_PROMPT=0 : pas de demande d'auth en ligne de commande (fail fast)
+    # - timeout : rend toujours la main si push suspendu (réseau/credentials)
+    $prevPrompt = $env:GIT_TERMINAL_PROMPT
+    $env:GIT_TERMINAL_PROMPT = "0"
+    try {
+        $pushTimeoutSec = 120
+        $pushArgs = if ($useWorkTreeMode) {
+            $gitDir = Join-Path $mirrorDir ".git"
+            @("--git-dir", $gitDir, "--work-tree", $truthDir, "push", "origin", "main")
+        } else {
+            @("-C", $mirrorDir, "push", "origin", "main")
+        }
+        $p = Start-Process -FilePath "git" -ArgumentList $pushArgs -NoNewWindow -PassThru
+        $done = $p.WaitForExit($pushTimeoutSec * 1000)
+        if (-not $done) {
+            try { Stop-Process -Id $p.Id -Force } catch {}
+            throw "git push bloque (timeout ${pushTimeoutSec}s). Verifiez l'acces au remote (auth/SSH, réseau, VPN)."
+        }
+        if ($p.ExitCode -ne 0) {
+            throw "git push a echoue (code $($p.ExitCode))."
+        }
+    } finally {
+        $env:GIT_TERMINAL_PROMPT = $prevPrompt
+    }
     Write-Host ""
     Write-Host "Push GitHub termine."
 }
@@ -276,14 +408,14 @@ if (-not (Test-Path $deploySh)) {
     throw "deploy.sh introuvable : $deploySh"
 }
 
-$gitPushDir = $truthDir
-if (-not (Test-Path (Join-Path $truthDir ".git"))) {
-    $gitPushDir = Resolve-GitMirror
-}
-
 if ($GitHubOnly) {
     Push-MySifaGitHub -SkipSync:$SkipSync -CommitMessage $CommitMessage
     exit 0
+}
+
+$gitPushDir = $truthDir
+if (-not (Test-Path (Join-Path $truthDir ".git"))) {
+    $gitPushDir = Resolve-GitMirror
 }
 
 Write-Host "Deploiement MySifa (Windows)"

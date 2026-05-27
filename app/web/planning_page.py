@@ -445,7 +445,7 @@ body.light .btn-p{color:#fff}
 .ds-cat-production{color:var(--success)}
 .ds-cat-arret{color:var(--danger)}
 .md h3{color:var(--text);font-size:18px;font-family:var(--mono);margin-bottom:24px}
-.fd{margin-bottom:16px}
+.fd{margin-bottom:14px}
 .fd label{display:block;margin-bottom:6px;color:var(--dim);font-size:12px;text-transform:uppercase;letter-spacing:1px}
 .fd input,.fd select{width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border2);
   border-radius:8px;color:var(--text);font-size:14px;font-family:var(--mono);outline:none}
@@ -457,18 +457,20 @@ body.light .btn-p{color:#fff}
 .dossier-fgrid .fd--full{grid-column:1/-1}
 .dossier-fgrid .fd{margin-bottom:0}
 .dossier-sections{display:grid;grid-template-columns:1fr;gap:0}
-.dossier-section{margin:0!important;padding:20px 0 0}
+.dossier-section{margin:0!important;padding:14px 0 0}
 .dossier-section:first-child{padding-top:0}
 .dossier-section:not(:first-child){border-top:1px solid var(--border)}
 .dossier-section-label{font-size:10px;text-transform:uppercase;letter-spacing:.6px;font-weight:700;color:var(--accent);margin-bottom:12px;display:block}
 .dossier-section > .fd{margin-bottom:16px}
 .dossier-section > .fd:last-child{margin-bottom:0}
-@media (max-height:780px) and (min-width:901px){
-  .dossier-sections{grid-template-columns:1fr 1fr}
-  .dossier-section--full{grid-column:1/-1}
-  .dossier-section:nth-child(2){border-top:none;padding-top:0}
+@media (min-width:901px){
+  .dossier-sections{grid-template-columns:1fr 1fr;column-gap:18px;row-gap:0}
+  .dossier-section{padding-top:0}
+  .dossier-section:nth-child(2){border-top:none}
+  .dossier-section:nth-child(3){border-top:1px solid var(--border);padding-top:14px;margin-top:14px}
+  .dossier-section:nth-child(4){border-top:1px solid var(--border);padding-top:14px;margin-top:14px}
 }
-.md.md--dossier{width:min(860px,95vw);max-height:92vh;overflow-y:auto}
+.md.md--dossier{width:min(860px,95vw);max-height:calc(100vh - 56px);overflow-y:hidden;padding:22px 24px}
 .md--dossier .dossier-section-label{
   font-family:var(--sans);font-size:15px;font-weight:700;text-transform:none;letter-spacing:0;
   color:var(--text);margin-bottom:14px;padding-left:11px;border-left:3px solid var(--accent);line-height:1.3}
@@ -484,9 +486,9 @@ body.light .btn-p{color:#fff}
   font-size:12px;font-weight:600;color:var(--fd-label);font-family:var(--sans);
   text-transform:none;letter-spacing:.2px;display:block;margin-bottom:8px}
 .md--dossier .dossier-ta{
-  width:100%;padding:10px 12px;border:1px solid var(--border2);border-radius:10px;
-  background:var(--bg);color:var(--text);font-size:14px;font-family:var(--sans);
-  resize:vertical;outline:none}
+  width:100%;padding:9px 10px;border:1px solid var(--border2);border-radius:10px;
+  background:var(--bg);color:var(--text);font-size:13px;font-family:var(--sans);
+  resize:none;outline:none;min-height:54px}
 .md--dossier .dossier-ta:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
 .md-acts{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:28px}
 .btn-s{padding:10px 24px;background:transparent;color:var(--dim);border:1px solid var(--border2);
@@ -2979,7 +2981,7 @@ function dossierFields(numero_of,client,ref_produit,laize,date_livraison,comment
           </div>
         </div>
       </div>
-      <div class="dossier-section dossier-section--full">
+      <div class="dossier-section">
         <span class="dossier-section-label">Particularités et commentaires</span>
         <div class="fd"><label>Commentaire</label><input id="f-com" value="${escAttr(commentaire)}" placeholder="Bobine, contraintes, etc."></div>
         <div class="fd"><label>Exigences de production</label><textarea id="f-exig" class="dossier-ta" rows="2" placeholder="Consignes impératives pour l'atelier (visibles en priorité sur la timeline)">${escHtml(exigences_production||"")}</textarea></div>
