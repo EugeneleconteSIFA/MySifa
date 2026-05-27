@@ -332,17 +332,19 @@ body.light .btn.btn-accent{color:#fff}
 .btn.btn-danger:hover{filter:brightness(1.05)}
 .btn-soft{background:transparent;border:1px solid transparent}
 .btn.btn-soft-entree{
+  --soft-entree-b: color-mix(in srgb,var(--success) 32%,transparent);
   background:color-mix(in srgb,var(--success) 18%,transparent);
-  border-color:color-mix(in srgb,var(--success) 32%,transparent);
-  color:var(--success);
+  border-color:var(--soft-entree-b);
+  color:var(--soft-entree-b);
 }
-.btn.btn-soft-entree:hover{border-color:var(--success);filter:brightness(1.05)}
+.btn.btn-soft-entree:hover{border-color:var(--success);color:var(--success);filter:brightness(1.05)}
 .btn.btn-soft-sortie{
+  --soft-sortie-b: color-mix(in srgb,var(--danger) 32%,transparent);
   background:color-mix(in srgb,var(--danger) 18%,transparent);
-  border-color:color-mix(in srgb,var(--danger) 32%,transparent);
-  color:var(--danger);
+  border-color:var(--soft-sortie-b);
+  color:var(--soft-sortie-b);
 }
-.btn.btn-soft-sortie:hover{border-color:var(--danger);filter:brightness(1.05)}
+.btn.btn-soft-sortie:hover{border-color:var(--danger);color:var(--danger);filter:brightness(1.05)}
 
 /* ── Scorecard ── */
 .scorecard{background:var(--card);border:1.5px solid var(--border);border-radius:16px;padding:20px;margin-bottom:16px}
@@ -614,9 +616,9 @@ body.light .mp-search-wrap:focus-within{
 .pf-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px}
 .pf-toolbar-search{flex:1;min-width:240px;position:relative}
 .pf-toolbar-searchbox{position:relative;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-  background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px 12px 8px 40px;min-height:44px}
+  background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px 12px 8px 34px;min-height:44px}
 .pf-toolbar-searchbox:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
-.pf-toolbar-search-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);display:flex;pointer-events:none}
+.pf-toolbar-search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);display:flex;pointer-events:none}
 .pf-toolbar-searchbox input{flex:1;min-width:180px;border:none;background:transparent;padding:0;font-size:14px;color:var(--text);outline:none}
 .pf-toolbar-searchbox input::placeholder{color:var(--muted)}
 .pf-tags{display:flex;flex-wrap:wrap;gap:6px}
@@ -3643,7 +3645,7 @@ function buildPfUnifiedSearch() {
   const inp = el('input', {
     id: 'pf-search',
     type: 'text',
-    placeholder: 'Rechercher (réf, emplacement, désignation…) — sélectionner pour ajouter un tag',
+    placeholder: 'Rechercher (réf, empl, désignation…)',
     autocomplete: 'off',
     spellcheck: 'false',
   });
