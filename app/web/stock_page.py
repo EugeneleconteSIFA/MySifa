@@ -328,10 +328,21 @@ body.light .btn-sm{color:#fff}
   border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
 .btn.btn-accent{background:var(--accent);color:var(--bg);border:none}
 body.light .btn.btn-accent{color:#fff}
-.btn.btn-success{background:var(--success);color:var(--bg);border:none}
-body.light .btn.btn-success{color:#fff}
 .btn.btn-danger{background:var(--danger);color:#fff;border:none}
 .btn.btn-danger:hover{filter:brightness(1.05)}
+.btn-soft{background:transparent;border:1px solid transparent}
+.btn.btn-soft-entree{
+  background:color-mix(in srgb,var(--success) 18%,transparent);
+  border-color:color-mix(in srgb,var(--success) 32%,transparent);
+  color:var(--success);
+}
+.btn.btn-soft-entree:hover{border-color:var(--success);filter:brightness(1.05)}
+.btn.btn-soft-sortie{
+  background:color-mix(in srgb,var(--danger) 18%,transparent);
+  border-color:color-mix(in srgb,var(--danger) 32%,transparent);
+  color:var(--danger);
+}
+.btn.btn-soft-sortie:hover{border-color:var(--danger);filter:brightness(1.05)}
 
 /* ── Scorecard ── */
 .scorecard{background:var(--card);border:1.5px solid var(--border);border-radius:16px;padding:20px;margin-bottom:16px}
@@ -3631,12 +3642,10 @@ function buildPfUnifiedSearch() {
 
   const inp = el('input', {
     id: 'pf-search',
-    attrs: {
-      type: 'text',
-      placeholder: 'Rechercher (réf, emplacement, désignation…) — sélectionner pour ajouter un tag',
-      autocomplete: 'off',
-      spellcheck: 'false',
-    },
+    type: 'text',
+    placeholder: 'Rechercher (réf, emplacement, désignation…) — sélectionner pour ajouter un tag',
+    autocomplete: 'off',
+    spellcheck: 'false',
   });
   inp.value = String(fs.q || '');
 
@@ -3730,7 +3739,6 @@ function buildPfUnifiedSearch() {
     el('div', { cls: 'pf-toolbar-searchbox' }, inp),
     tags,
     dd,
-    el('div', { cls: 'pf-search-hint' }, 'Astuce : Échap vide le champ, puis Échap efface tous les tags.'),
   );
 
   // Après render, recalcul suggestions
@@ -3761,12 +3769,12 @@ function buildProduitsFinisTab() {
     buildPfUnifiedSearch(),
     el('div', { cls: 'pf-toolbar-actions' },
       S.stockReadOnly ? null : el('button', {
-        cls: 'btn btn-success',
+        cls: 'btn btn-soft btn-soft-entree',
         type: 'button',
         on: { click: () => openPfMvtModal('entree') },
       }, iconEl('upload', 14), ' Entrée'),
       S.stockReadOnly ? null : el('button', {
-        cls: 'btn btn-danger',
+        cls: 'btn btn-soft btn-soft-sortie',
         type: 'button',
         on: { click: () => openPfMvtModal('sortie') },
       }, iconEl('download', 14), ' Sortie'),
@@ -3975,7 +3983,10 @@ function renderPfExportCsvModal() {
     const inp = el('input', {
       cls: 'field-input' + (isRef ? '' : ' empl-upper'),
       id: inputId,
-      attrs: { type: 'text', placeholder, autocomplete: 'off', spellcheck: 'false' },
+      type: 'text',
+      placeholder,
+      autocomplete: 'off',
+      spellcheck: 'false',
       style: { direction: 'ltr' },
     });
     inp.value = String(fs[qKey] || '');
