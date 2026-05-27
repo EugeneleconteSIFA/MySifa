@@ -221,7 +221,26 @@ function Push-MySifaGitHub {
         }
         Write-Host "Rien a committer - push des commits deja presents."
     }
-    Invoke-GitInMirror $mirrorDir push origin main
+
+    # Evite les blocages silencieux (prompt credentials) dans un terminal non-interactif.
+    # - GIT_TERMINAL_PROMPT=0 : pas de demande d'auth en ligne de commande (fail fast)
+    # - timeout : rend toujours la main si push suspendu (réseau/credentials)
+    $prevPrompt = $env:GIT_TERMINAL_PROMPT
+    $env:GIT_TERMINAL_PROMPT = "0"
+    try {
+        $pushTimeoutSec = 120
+        $p = Start-Process -FilePath "git" -ArgumentList @("-C", $mirrorDir, "push", "origin", "main") -NoNewWindow -PassThru
+        $done = $p.WaitForExit($pushTimeoutSec * 1000)
+        if (-not $done) {
+            try { Stop-Process -Id $p.Id -Force } catch {}
+            throw "git push bloque (timeout ${pushTimeoutSec}s). Verifiez l'acces au remote (auth/SSH, réseau, VPN)."
+        }
+        if ($p.ExitCode -ne 0) {
+            throw "git push a echoue (code $($p.ExitCode))."
+        }
+    } finally {
+        $env:GIT_TERMINAL_PROMPT = $prevPrompt
+    }
     Write-Host ""
     Write-Host "Push GitHub termine."
 }
