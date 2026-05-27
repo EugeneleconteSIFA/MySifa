@@ -46,6 +46,38 @@
 }
 
 @media (max-width:900px){
+  /*
+   * #mroot (modals) est souvent position:fixed inset:0 z-index>300.
+   * Comme il est hors de #root/.app, il recouvre la sidebar mobile (z-index 300)
+   * même si les enfants de la sidebar ont un z-index plus élevé.
+   */
+  #mroot:empty{
+    display:none!important;
+    position:static!important;
+    inset:auto!important;
+    width:0!important;
+    height:0!important;
+    overflow:hidden!important;
+    z-index:auto!important;
+    pointer-events:none!important;
+  }
+  body.sb-open #mroot{
+    z-index:50!important;
+    pointer-events:none!important;
+  }
+  body.sb-open #mroot > *{
+    pointer-events:none!important;
+  }
+  body.sb-open .sidebar,
+  body.sb-open .fab-sidebar,
+  body.sb-open .paie-sidebar{
+    z-index:9500!important;
+  }
+  body.sb-open .sidebar-overlay,
+  body.sb-open .fab-sidebar-overlay{
+    z-index:9400!important;
+  }
+
   .mobile-topbar{
     display:flex;
     position:fixed;

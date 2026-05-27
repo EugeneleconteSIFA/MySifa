@@ -442,6 +442,16 @@ body.light .btn-p{color:#fff}
 @media(min-width:901px){.dossier-fgrid--2{grid-template-columns:1fr 1fr}}
 .dossier-fgrid .fd--full{grid-column:1/-1}
 .dossier-fgrid .fd{margin-bottom:0}
+.dossier-sections{display:grid;grid-template-columns:1fr;gap:18px}
+.dossier-section{margin:0!important;padding:0}
+.dossier-section-label{font-size:10px;text-transform:uppercase;letter-spacing:.6px;font-weight:700;color:var(--accent);margin-bottom:12px;display:block}
+.dossier-section > .fd{margin-bottom:16px}
+.dossier-section > .fd:last-child{margin-bottom:0}
+@media (max-height:780px) and (min-width:901px){
+  .dossier-sections{grid-template-columns:1fr 1fr}
+  .dossier-section--full{grid-column:1/-1}
+}
+.md.md--dossier{width:min(860px,95vw);max-height:92vh;overflow-y:auto}
 .md-acts{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:28px}
 .btn-s{padding:10px 24px;background:transparent;color:var(--dim);border:1px solid var(--border2);
   border-radius:8px;cursor:pointer;font-size:14px;font-family:var(--mono)}
@@ -487,11 +497,17 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 .view-tab:not(:first-child){margin-left:-1px}
 .view-tab.active{background:var(--accent-bg);color:var(--accent);border-color:var(--accent);z-index:1;position:relative}
 .view-tab:hover:not(.active){background:var(--border);color:var(--text2)}
-.planning-vue-badge-wrap{padding:0 16px 10px;display:flex}
-.planning-vue-badge{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:4px 10px;border-radius:999px;background:var(--accent-bg);color:var(--accent);border:1px solid var(--border)}
-@media(min-width:901px){.planning-vue-badge-wrap{display:none}}
-.planning-vue-badge--desktop{display:none}
-@media(min-width:901px){.planning-vue-badge--desktop{display:inline-flex;margin-left:10px;vertical-align:middle}}
+.planning-vue-sel{
+  appearance:none;-webkit-appearance:none;
+  font-size:16px;font-weight:600;color:var(--text2);
+  background:var(--card);border:1px solid var(--border);border-radius:10px;
+  padding:8px 36px 8px 14px;cursor:pointer;max-width:100%;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 12px center;
+  transition:border-color .15s,box-shadow .15s
+}
+.planning-vue-sel:hover{border-color:var(--accent)}
+.planning-vue-sel:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px rgba(34,211,238,.12)}
 .of-dropzone{border:2px dashed var(--border);border-radius:12px;padding:36px 20px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s}
 .of-dropzone:hover,.of-dropzone.of-dropzone--active{border-color:var(--accent);background:var(--accent-bg)}
 
@@ -596,29 +612,38 @@ const DEFAULTS_BY_KEY={
 };
 const DAY_API={1:"lundi",2:"mardi",3:"mercredi",4:"jeudi",5:"vendredi",6:"samedi"};
 const DAY_FIELD={1:"horaires_lundi",2:"horaires_mardi",3:"horaires_mercredi",4:"horaires_jeudi",5:"horaires_vendredi",6:"horaires_samedi"};
+const PLANNING_VUES=[
+  {key:"prod", label:"Planning : Production"},
+  {key:"expe", label:"Planning : Expédition"},
+  {key:"prod_expe", label:"Planning : Production + Expédition"},
+];
 function parsePlanningVueParam(){
   const v=new URLSearchParams(location.search||"").get("vue");
   if(v==="expe") return "expe";
   if(v==="prod_expe") return "prod_expe";
   return "prod";
 }
-function planningVueTopbarTitle(){
-  if(S.planningVue==="expe") return "Planning · Expédition";
-  if(S.planningVue==="prod_expe") return "Planning · Prod + Expé";
-  return "Planning · Production";
+function planningVueLabel(){
+  const item=PLANNING_VUES.find(x=>x.key===S.planningVue);
+  return item?item.label:"Planning : Production";
 }
-function planningVueBadgeLabel(){
-  if(S.planningVue==="expe") return "Expédition";
-  if(S.planningVue==="prod_expe") return "Production + Expédition";
-  return "Production";
+function planningVueTopbarTitle(){ return planningVueLabel(); }
+function renderPlanningVueSelect(){
+  return `<select class="planning-vue-sel" aria-label="Mode planning" onchange="setPlanningVue(this.value)">${
+    PLANNING_VUES.map(v=>`<option value="${escAttr(v.key)}"${S.planningVue===v.key?" selected":""}>${escHtml(v.label)}</option>`).join("")
+  }</select>`;
 }
-function planningVueBadgeHtml(cls){
-  const c=cls||"planning-vue-badge";
-  return `<span class="${c}">${escHtml(planningVueBadgeLabel())}</span>`;
+function setPlanningVue(key){
+  if(!PLANNING_VUES.some(x=>x.key===key)) key="prod";
+  const sp=new URLSearchParams(location.search||"");
+  if(key==="expe") sp.set("vue","expe");
+  else if(key==="prod_expe") sp.set("vue","prod_expe");
+  else sp.delete("vue");
+  location.href="/planning?"+sp.toString();
 }
 function renderPlanningMobileTopbar(sub){
-  const subTxt=sub||"KPIs, temps, quantités et qualité de saisie";
-  return `<div class="mobile-topbar"><button type="button" class="mobile-menu-btn" onclick="toggleSidebar()" aria-label="Menu"><span style="display: inline-flex; align-items: center; flex-shrink: 0;">${icon('menu',20)}</span></button><div><div class="mobile-topbar-title">${escHtml(planningVueTopbarTitle())}</div><div class="mobile-topbar-sub">${escHtml(subTxt)}</div></div><button type="button" class="mobile-home-btn" onclick="location.href='/'" aria-label="Accueil"><span style="display: inline-flex; align-items: center; flex-shrink: 0;">${icon('home',20)}</span></button></div><div class="planning-vue-badge-wrap">${planningVueBadgeHtml()}</div>`;
+  const subTxt=sub||"Timeline machines, dossiers et horaires";
+  return `<div class="mobile-topbar"><button type="button" class="mobile-menu-btn" onclick="toggleSidebar()" aria-label="Menu"><span style="display: inline-flex; align-items: center; flex-shrink: 0;">${icon('menu',20)}</span></button><div><div class="mobile-topbar-title">${escHtml(planningVueTopbarTitle())}</div><div class="mobile-topbar-sub">${escHtml(subTxt)}</div></div><button type="button" class="mobile-home-btn" onclick="location.href='/'" aria-label="Accueil"><span style="display: inline-flex; align-items: center; flex-shrink: 0;">${icon('home',20)}</span></button></div>`;
 }
 function appendPlanningVueParam(sp){
   if(S.planningVue==="expe") sp.set("vue","expe");
@@ -1635,7 +1660,7 @@ function render(){
         <select class="m-sel" onchange="changeMachine(this.value)" aria-label="Sélection de la machine">
           ${(S.machines||[]).map(x=>`<option value="${x.id}" ${x.id===MID?"selected":""}>${escAttr(x.nom||'')}</option>`).join("")}
         </select>
-        <div class="m-sub">Planning de production — MyProd by SIFA ${planningVueBadgeHtml("planning-vue-badge planning-vue-badge--desktop")}</div>
+        <div class="m-sub">${escHtml(planningVueLabel())} — MyProd by SIFA</div>
       </div>
     </div>
     <div class="h-right">
@@ -1650,7 +1675,7 @@ function render(){
   </header>
     <section class="sec">
       <div class="sec-hdr">
-        <div class="sec-title">Vue Planning</div>
+        ${renderPlanningVueSelect()}
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           <div class="view-tabs">
             <button type="button" class="view-tab ${S.view==="1w"?"active":""}" onclick="setView('1w')">Semaine</button>
@@ -2227,7 +2252,7 @@ function mkTL(mon,slots){
       data-deb="${escAttr(fdt(ss))}" data-fin="${escAttr(fdt(se))}" data-st="${escAttr(st)}" data-co="${escAttr(co)}"${termineTitle?` title="${escAttr(termineTitle)}"`:""}>
       ${destock?`<div style="position:absolute;top:4px;right:4px;width:10px;height:10px;border-radius:50%;background:rgba(71,85,105,.9);pointer-events:none;z-index:5;flex-shrink:0"></div>`:""}
       ${resizeHandle}
-      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}${fscBadgeHtml(s)}</span>${line2Txt?`<span class="line2">${escAttr(line2Txt)}</span>`:""}${line3Txt?`<span class="line3">${escAttr(line3Txt)}</span>`:""}${qteEtiq!=null?`<span class="line3" style="color:var(--accent);margin-top:2px">qté. étiq. : ${escAttr(String(qteEtiq))}</span>`:""}${exig?`<span class="line-exig" title="${escAttr(exig)}">${escAttr(exig)}</span>`:""}</div>`:w>1.8?`<div style="overflow:hidden;height:100%;display:flex;align-items:center;justify-content:center"><div style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg);font-size:9px;font-weight:700;color:#1e293b;overflow:hidden;max-height:100%;pointer-events:none;white-space:nowrap">${escAttr((cli.slice(0,6)+(cli.length>6?".":"")).toUpperCase())}</div></div>`:""}</div>`;
+      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}${fscBadgeHtml(s)}</span>${line2Txt?`<span class="line2">${escAttr(line2Txt)}</span>`:""}${line3Txt?`<span class="line3">${escAttr(line3Txt)}</span>`:""}${exig?`<span class="line-exig" title="${escAttr(exig)}">${escAttr(exig)}</span>`:""}</div>`:w>1.8?`<div style="overflow:hidden;height:100%;display:flex;align-items:center;justify-content:center"><div style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg);font-size:9px;font-weight:700;color:#1e293b;overflow:hidden;max-height:100%;pointer-events:none;white-space:nowrap">${escAttr((cli.slice(0,6)+(cli.length>6?".":"")).toUpperCase())}</div></div>`:""}</div>`;
   });
 
   const np=gp(now);
@@ -2695,7 +2720,7 @@ function duplicateEntry(id){
     "Dupliquer le dossier",
     dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.exigences_production||"",e.format_l||"",e.format_h||"",e.duree_heures,"attente",false,1,e.fsc_requis||0,e.fsc_type_requis||"",e.departement_livraison||"",e.prise_rdv||0),
     "Ajouter","submitDuplicate()"
-  );
+  ,"","",false,"md--dossier");
 }
 async function submitDuplicate(){
   const d=getFormData(false);
@@ -2813,8 +2838,9 @@ async function confirmSwitch(targetMachineId,afterEntryId){
 // ── Modals ──
 function durBar(v){return((v-MIND)/(MAXD-MIND)*100)+"%"}
 
-function modalHTML(title,fields,submitLabel,onSubmitFn,headerAction="",footerLeft="",compact=false){
-  return`<div class="mo" onclick="if(event.target===this)closeM()"><div class="md${compact?' md--compact':''}">
+function modalHTML(title,fields,submitLabel,onSubmitFn,headerAction="",footerLeft="",compact=false,extraMdClass=""){
+  const cls=`md${compact?' md--compact':''}${extraMdClass?(' '+extraMdClass):''}`;
+  return`<div class="mo" onclick="if(event.target===this)closeM()"><div class="${cls}">
     <div class="md-hdr" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;gap:12px;flex-wrap:wrap">
       <h3 style="margin:0;font-size:18px;font-family:var(--mono);color:var(--text);line-height:1.3">${title}</h3>
       ${headerAction?`<div style="flex-shrink:0">${headerAction}</div>`:""}
@@ -2857,70 +2883,70 @@ function dossierFields(numero_of,client,ref_produit,laize,date_livraison,comment
   const fscTyp=(fscType&&["fsc_100","fsc_mix","fsc_recycled"].includes(fscType))?fscType:"fsc_mix";
   const rdvOn=priseRdv===1||priseRdv===true;
   const dlVal=/^\d{4}-\d{2}-\d{2}$/.test(date_livraison)?date_livraison:"";
-  const secS="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:12px";
-  const secLbl="font-size:10px;text-transform:uppercase;letter-spacing:.6px;font-weight:700;color:var(--muted);margin-bottom:12px;display:block";
   return`
-    <div style="${secS}">
-      <span style="${secLbl}">Informations générales</span>
-      <div class="fd"><label>Numéro d'OF</label><input id="f-of" value="${escAttr(numero_of)}" placeholder="9936280"></div>
-      <div class="fd"><label>Client</label><input id="f-cli" value="${escAttr(client)}" placeholder="Nom du client"></div>
-      <div class="fd"><label>Durée (${MIND}–${MAXD}h)</label>
-        <input type="number" id="f-dur" min="${MIND}" max="${MAXD}" step="0.25" value="${dur}" oninput="document.getElementById('f-dur-fill').style.width=((Math.max(${MIND},Math.min(${MAXD},+this.value||${MIND}))-${MIND})/(${MAXD}-${MIND})*100)+'%'">
-        <div class="dur-b"><div class="dur-f" id="f-dur-fill" style="width:${durBar(dur)}"></div></div>
-      </div>
-      ${showStatut?`<div class="fd"><label>Statut</label><select id="f-stat">
-        <option value="attente" ${statut==="attente"?"selected":""}>En attente</option>
-        <option value="en_cours" ${statut==="en_cours"?"selected":""}>En cours</option>
-        <option value="termine" ${statut==="termine"?"selected":""}>Terminé</option>
-      </select></div>`:""}
-      <div class="fd">
-        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--text2);text-transform:none;letter-spacing:0">
-          <input type="checkbox" id="f-aplacer" ${aPlacer?"checked":""} style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
-          À placer au planning
-        </label>
-      </div>
-    </div>
-    <div style="${secS}">
-      <span style="${secLbl}">Fiche produit</span>
-      <div class="dossier-fgrid dossier-fgrid--2">
-        <div class="fd"><label>Réf produit</label><input id="f-rp" value="${escAttr(ref_produit)}" placeholder="REF-PROD"></div>
-        <div class="fd"><label>Laize (mm)</label><input type="number" id="f-laize" value="${escAttr(laize)}" placeholder="510"></div>
-        <div class="fd"><label>Largeur (mm)</label><input type="number" id="f-fl" value="${escAttr(fl)}" placeholder="100"></div>
-        <div class="fd"><label>Hauteur (mm)</label><input type="number" id="f-fh" value="${escAttr(fh)}" placeholder="70"></div>
-        <div class="fd fd--full">
-          <label style="font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:700;display:block;margin-bottom:8px">Certification FSC</label>
-          <div style="display:flex;align-items:center;gap:12px">
-            <input type="checkbox" id="fsc-requis-chk" ${fscOn?"checked":""} onchange="onFscRequisChange()" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
-            <label for="fsc-requis-chk" style="font-weight:600;cursor:pointer;font-size:13px;color:var(--text2);text-transform:none;letter-spacing:0">Certification FSC requise sur ce dossier</label>
-          </div>
-          <div id="fsc-type-wrap" style="display:${fscOn?"block":"none"};margin-top:8px">
-            <label style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Type requis</label>
-            <select id="fsc-type-requis" class="form-sel" style="width:100%">
-              <option value="fsc_100" ${fscTyp==="fsc_100"?"selected":""}>FSC 100%</option>
-              <option value="fsc_mix" ${fscTyp==="fsc_mix"?"selected":""}>FSC Mix</option>
-              <option value="fsc_recycled" ${fscTyp==="fsc_recycled"?"selected":""}>FSC Recycled</option>
-            </select>
-          </div>
+    <div class="dossier-sections">
+      <div class="dossier-section">
+        <span class="dossier-section-label">Informations générales</span>
+        <div class="fd"><label>Numéro d'OF</label><input id="f-of" value="${escAttr(numero_of)}" placeholder="9936280"></div>
+        <div class="fd"><label>Client</label><input id="f-cli" value="${escAttr(client)}" placeholder="Nom du client"></div>
+        <div class="fd"><label>Durée (${MIND}–${MAXD}h)</label>
+          <input type="number" id="f-dur" min="${MIND}" max="${MAXD}" step="0.25" value="${dur}" oninput="document.getElementById('f-dur-fill').style.width=((Math.max(${MIND},Math.min(${MAXD},+this.value||${MIND}))-${MIND})/(${MAXD}-${MIND})*100)+'%'">
+          <div class="dur-b"><div class="dur-f" id="f-dur-fill" style="width:${durBar(dur)}"></div></div>
         </div>
-      </div>
-    </div>
-    <div style="${secS}">
-      <span style="${secLbl}">Livraison</span>
-      <div class="dossier-fgrid dossier-fgrid--2">
-        <div class="fd"><label>Date de livraison</label><input type="date" id="f-dl" value="${escAttr(dlVal)}"></div>
-        <div class="fd"><label>Département de livraison</label><input id="f-dept" value="${escAttr(deptLivraison)}" placeholder="Ex : 75, 69, Rhône…"></div>
-        <div class="fd fd--full">
+        ${showStatut?`<div class="fd"><label>Statut</label><select id="f-stat">
+          <option value="attente" ${statut==="attente"?"selected":""}>En attente</option>
+          <option value="en_cours" ${statut==="en_cours"?"selected":""}>En cours</option>
+          <option value="termine" ${statut==="termine"?"selected":""}>Terminé</option>
+        </select></div>`:""}
+        <div class="fd">
           <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--text2);text-transform:none;letter-spacing:0">
-            <input type="checkbox" id="f-rdv" ${rdvOn?"checked":""} style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
-            Prise de rendez-vous de livraison confirmée
+            <input type="checkbox" id="f-aplacer" ${aPlacer?"checked":""} style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
+            À placer au planning
           </label>
         </div>
       </div>
-    </div>
-    <div style="${secS}">
-      <span style="${secLbl}">Particularités et commentaires</span>
-      <div class="fd"><label>Commentaire</label><input id="f-com" value="${escAttr(commentaire)}" placeholder="Bobine, contraintes, etc."></div>
-      <div class="fd"><label>Exigences de production</label><textarea id="f-exig" rows="2" placeholder="Consignes impératives pour l'atelier (visibles en priorité sur la timeline)" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;resize:vertical;outline:none">${escHtml(exigences_production||"")}</textarea></div>
+      <div class="dossier-section">
+        <span class="dossier-section-label">Fiche produit</span>
+        <div class="dossier-fgrid dossier-fgrid--2">
+          <div class="fd"><label>Réf produit</label><input id="f-rp" value="${escAttr(ref_produit)}" placeholder="REF-PROD"></div>
+          <div class="fd"><label>Laize (mm)</label><input type="number" id="f-laize" value="${escAttr(laize)}" placeholder="510"></div>
+          <div class="fd"><label>Largeur (mm)</label><input type="number" id="f-fl" value="${escAttr(fl)}" placeholder="100"></div>
+          <div class="fd"><label>Hauteur (mm)</label><input type="number" id="f-fh" value="${escAttr(fh)}" placeholder="70"></div>
+          <div class="fd fd--full">
+            <label style="font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:700;display:block;margin-bottom:8px">Certification FSC</label>
+            <div style="display:flex;align-items:center;gap:12px">
+              <input type="checkbox" id="fsc-requis-chk" ${fscOn?"checked":""} onchange="onFscRequisChange()" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
+              <label for="fsc-requis-chk" style="font-weight:600;cursor:pointer;font-size:13px;color:var(--text2);text-transform:none;letter-spacing:0">Certification FSC requise sur ce dossier</label>
+            </div>
+            <div id="fsc-type-wrap" style="display:${fscOn?"block":"none"};margin-top:8px">
+              <label style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Type requis</label>
+              <select id="fsc-type-requis" class="form-sel" style="width:100%">
+                <option value="fsc_100" ${fscTyp==="fsc_100"?"selected":""}>FSC 100%</option>
+                <option value="fsc_mix" ${fscTyp==="fsc_mix"?"selected":""}>FSC Mix</option>
+                <option value="fsc_recycled" ${fscTyp==="fsc_recycled"?"selected":""}>FSC Recycled</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="dossier-section">
+        <span class="dossier-section-label">Livraison</span>
+        <div class="dossier-fgrid dossier-fgrid--2">
+          <div class="fd"><label>Date de livraison</label><input type="date" id="f-dl" value="${escAttr(dlVal)}"></div>
+          <div class="fd"><label>Département de livraison</label><input id="f-dept" value="${escAttr(deptLivraison)}" placeholder="Ex : 75, 69, Rhône…"></div>
+          <div class="fd fd--full">
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--text2);text-transform:none;letter-spacing:0">
+              <input type="checkbox" id="f-rdv" ${rdvOn?"checked":""} style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
+              Prise de rendez-vous de livraison confirmée
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="dossier-section dossier-section--full">
+        <span class="dossier-section-label">Particularités et commentaires</span>
+        <div class="fd"><label>Commentaire</label><input id="f-com" value="${escAttr(commentaire)}" placeholder="Bobine, contraintes, etc."></div>
+        <div class="fd"><label>Exigences de production</label><textarea id="f-exig" rows="2" placeholder="Consignes impératives pour l'atelier (visibles en priorité sur la timeline)" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;resize:vertical;outline:none">${escHtml(exigences_production||"")}</textarea></div>
+      </div>
     </div>`
 }
 
@@ -3005,7 +3031,7 @@ function renderAddModal(){
     ? `<button type="button" class="btn-p" onclick="submitAdd()"><span style="font-size:18px;line-height:1">+</span> Ajouter</button>`
     : (_addOfParsed?`<button type="button" class="btn-p" onclick="submitAddFromOf()">Valider et créer le dossier</button>`:'');
   document.getElementById("mroot").innerHTML=`<div class="mo modal-backdrop" onclick="if(event.target===this)closeM()">
-    <div class="md" style="max-width:680px;width:100%;max-height:90vh;overflow-y:auto;padding:28px 32px">
+    <div class="md md--dossier" style="max-width:860px;width:100%;max-height:92vh;overflow-y:auto;padding:28px 32px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px">
         <h3 style="margin:0;font-size:18px;font-family:var(--mono);color:var(--text)">Ajouter un dossier</h3>
         <button type="button" onclick="closeM()" aria-label="Fermer"
@@ -3297,7 +3323,8 @@ function openEdit(id){
     "Enregistrer",`submitEdit(${id})`,
     headerAction,
     delBtn,
-    true
+    true,
+    "md--dossier"
   );
 }
 
@@ -3635,7 +3662,7 @@ function openInsert(afterId){
     "Insérer un dossier après",
     dossierFields("","","","","","","","","",8,"attente",false),
     "Insérer",`submitInsert(${afterId})`
-  );
+  ,"","",false,"md--dossier");
 }
 async function submitInsert(afterId){
   const d=getFormData(false);

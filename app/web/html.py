@@ -1740,18 +1740,6 @@ body.light .stock-empl-suggest-add:hover{background:rgba(124,58,237,.2);color:#1
 .expe-score .price .unit{font-size:13px;font-weight:500;color:var(--muted);margin-left:4px}
 .expe-score .medal{font-size:24px;flex-shrink:0}
 .expe-note{font-size:10px;color:rgba(148,163,184,.8);margin-top:12px}
-.expe-planning-nav{margin:14px 0 10px;padding:0 4px}
-.expe-planning-nav-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
-.expe-planning-nav-row{display:flex;flex-direction:column;gap:8px}
-.expe-planning-nav-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.expe-planning-nav .view-tabs{display:flex;gap:0;align-items:stretch;flex:1;min-width:0}
-.expe-planning-nav .view-tab{padding:6px 8px;background:var(--card);border:1px solid var(--border);color:var(--muted);
-  cursor:pointer;font-size:10px;font-family:inherit;font-weight:600;transition:all .15s;flex:1 1 0;text-align:center;line-height:1.25}
-.expe-planning-nav .view-tab:first-child{border-radius:8px 0 0 8px}
-.expe-planning-nav .view-tab:last-child{border-radius:0 8px 8px 0}
-.expe-planning-nav .view-tab:not(:first-child){margin-left:-1px}
-.expe-planning-nav .view-tab.active{background:var(--accent-bg);color:var(--accent);border-color:var(--accent);z-index:1;position:relative}
-.expe-planning-nav .view-tab:hover:not(.active){background:var(--accent-bg);color:var(--text2)}
 
 /* MyExpé — mobile : titres de page / sections déjà dans la topbar */
 @media (max-width:900px){
@@ -1853,50 +1841,16 @@ let _expeLastRenderedInnerTab=null;
 let _expeJourInflight=null;
 let _portalDragSuppressClick=false;
 
-// ── MyExpé : navigation planning ───────────────────────────────────
-const LS_EXPE_PLANNING_VUE = 'mysifa.expe.planning.vue';
-const EXPE_PLANNING_VUES = [
-  {key:'prod', label:'Planning : Production', short:'Production', url:'/planning'},
-  {key:'expe', label:'Planning : Expédition', short:'Expédition', url:'/planning?vue=expe'},
-  {key:'prod_expe', label:'Planning : Production + Expédition', short:'Prod + Expé', url:'/planning?vue=prod_expe'},
-];
-function expeGetPlanningVue(){
-  const v=localStorage.getItem(LS_EXPE_PLANNING_VUE);
-  return EXPE_PLANNING_VUES.some(x=>x.key===v)?v:'prod';
-}
-function expePlanningVueUrl(key){
-  const item=EXPE_PLANNING_VUES.find(x=>x.key===key);
-  return item?item.url:'/planning';
-}
-function expeSetPlanningVue(key){
-  if(!EXPE_PLANNING_VUES.some(x=>x.key===key)) key='prod';
-  localStorage.setItem(LS_EXPE_PLANNING_VUE, key);
-  location.href=expePlanningVueUrl(key);
-}
+// ── MyExpé : entrée planning (défaut vue expédition) ─────────────────
+const EXPE_PLANNING_ENTRY_URL = '/planning?vue=expe';
 function renderExpePlanningNav(){
   if(!canPlanningNav(S.user)) return null;
-  const cur=expeGetPlanningVue();
-  return h('div',{className:'expe-planning-nav'},
-    h('div',{className:'expe-planning-nav-label'},'Planning'),
-    h('div',{className:'expe-planning-nav-row'},
-      h('div',{className:'expe-planning-nav-actions'},
-        h('button',{
-          type:'button',
-          className:'btn btn-ghost',
-          style:{padding:'8px 12px',fontSize:'12px',fontWeight:700,whiteSpace:'nowrap'},
-          onClick:()=>{location.href=expePlanningVueUrl('prod');}
-        },'Planning : Production'),
-        h('div',{className:'view-tabs',role:'group','aria-label':'Vue planning'},
-          ...EXPE_PLANNING_VUES.map(v=>h('button',{
-            type:'button',
-            className:'view-tab'+(cur===v.key?' active':''),
-            title:v.label,
-            onClick:()=>{ if(cur!==v.key) expeSetPlanningVue(v.key); else location.href=v.url; }
-          }, v.short))
-        )
-      )
-    )
-  );
+  return h('button',{
+    type:'button',
+    className:'nav-btn',
+    title:'Planning : Expédition',
+    onClick:()=>{ location.href=EXPE_PLANNING_ENTRY_URL; }
+  }, iconEl('calendar',15), '  Planning');
 }
 
 // ── MyExpé : persistance locale (départs) ─────────────────────────
@@ -3546,9 +3500,8 @@ function portalOrderTileSpecs(specs, order){
   return out;
 }
 function portalGetDragInsertBefore(container,x,y){
-  const drag=container.querySelector('.portal-app--dragging');
   const elems=[...container.querySelectorAll('.portal-app')].filter(ch=>
-    ch!==drag && !ch.classList.contains('portal-app--placeholder')
+    ch.style.display!=='none' && !ch.classList.contains('portal-app--placeholder')
   );
   if(!elems.length)return null;
   // Regrouper par ligne (flex-wrap) selon la coordonnée top, puis choisir la ligne
@@ -3615,6 +3568,9 @@ async function savePortalAppsOrder(ids){
 function attachPortalReorder(appsWrap){
   if(appsWrap._portalDndBound)return;
   appsWrap._portalDndBound=true;
+  const DRAG_THRESHOLD=6;
+  let dragState=null;
+
   function ensurePlaceholder(){
     let ph=appsWrap.querySelector('.portal-app--placeholder');
     if(ph)return ph;
@@ -3624,32 +3580,69 @@ function attachPortalReorder(appsWrap){
     ph.innerHTML='<div class="portal-ph-plus">+</div><div class="portal-ph-label">Déplacer ici</div>';
     return ph;
   }
-  function cleanupPlaceholder(){
-    const ph=appsWrap.querySelector('.portal-app--placeholder');
-    if(ph&&ph.parentNode)ph.parentNode.removeChild(ph);
+
+  function clearDocumentListeners(){
+    document.removeEventListener('pointermove',onPointerMove,true);
+    document.removeEventListener('pointerup',onPointerUp,true);
+    document.removeEventListener('pointercancel',onPointerUp,true);
   }
-  appsWrap.addEventListener('dragstart',e=>{
-    const t=e.target.closest('.portal-app');
-    if(!t||!appsWrap.contains(t))return;
-    t.classList.add('portal-app--dragging');
-    try{e.dataTransfer.setData('text/plain',t.getAttribute('data-portal-id')||'');}catch(err){}
-    e.dataTransfer.effectAllowed='move';
-    // Placeholder à l'emplacement d'origine, puis on masque la tuile (le drag image natif reste visible)
+
+  function activateDrag(tile,e){
+    const rect=tile.getBoundingClientRect();
+    dragState.offX=e.clientX-rect.left;
+    dragState.offY=e.clientY-rect.top;
+    dragState.active=true;
+
+    const ghost=tile.cloneNode(true);
+    ghost.classList.add('portal-app--ghost');
+    ghost.setAttribute('aria-hidden','true');
+    ghost.style.cssText=[
+      'position:fixed',
+      'left:'+rect.left+'px',
+      'top:'+rect.top+'px',
+      'width:'+rect.width+'px',
+      'height:'+rect.height+'px',
+      'margin:0',
+      'z-index:10000',
+      'pointer-events:none',
+      'cursor:grabbing',
+      'opacity:.92',
+      'transform:scale(1.02)',
+      'box-shadow:0 12px 36px rgba(0,0,0,.35)',
+    ].join(';');
+    document.body.appendChild(ghost);
+    dragState.ghost=ghost;
+
     const ph=ensurePlaceholder();
-    try{appsWrap.insertBefore(ph,t);}catch(err){}
-    setTimeout(()=>{ try{t.style.display='none';}catch(err){} },0);
-  });
-  appsWrap.addEventListener('dragend',e=>{
-    const t=e.target.closest('.portal-app');
-    const ph=appsWrap.querySelector('.portal-app--placeholder');
-    if(t){
-      t.classList.remove('portal-app--dragging');
-      try{t.style.display='';}catch(err){}
-      if(ph&&ph.parentNode){
-        try{appsWrap.insertBefore(t,ph);}catch(err){}
-      }
+    ph.style.width=rect.width+'px';
+    ph.style.minHeight=rect.height+'px';
+    appsWrap.insertBefore(ph,tile);
+    tile.style.display='none';
+    dragState.placeholder=ph;
+  }
+
+  function movePlaceholder(clientX,clientY){
+    const ph=dragState&&dragState.placeholder;
+    if(!ph)return;
+    const after=portalGetDragInsertBefore(appsWrap,clientX,clientY);
+    if(after==null||after===ph)appsWrap.appendChild(ph);
+    else appsWrap.insertBefore(ph,after);
+  }
+
+  function finishDrag(){
+    if(!dragState)return;
+    const {tile,active,ghost,placeholder:ph}=dragState;
+    dragState=null;
+    clearDocumentListeners();
+    if(!active)return;
+
+    tile.style.display='';
+    if(ph&&ph.parentNode){
+      appsWrap.insertBefore(tile,ph);
+      ph.parentNode.removeChild(ph);
     }
-    cleanupPlaceholder();
+    if(ghost&&ghost.parentNode)ghost.parentNode.removeChild(ghost);
+
     const ids=[...appsWrap.querySelectorAll('.portal-app')]
       .filter(n=>!n.classList.contains('portal-app--placeholder'))
       .map(n=>n.getAttribute('data-portal-id')).filter(Boolean);
@@ -3660,17 +3653,47 @@ function attachPortalReorder(appsWrap){
       setTimeout(()=>{_portalDragSuppressClick=false;},450);
       savePortalAppsOrder(ids);
     }
-  });
-  appsWrap.addEventListener('dragover',e=>{
+  }
+
+  function onPointerMove(e){
+    if(!dragState||e.pointerId!==dragState.pointerId)return;
+    const dx=e.clientX-dragState.startX;
+    const dy=e.clientY-dragState.startY;
+    if(!dragState.active){
+      if(Math.abs(dx)<DRAG_THRESHOLD&&Math.abs(dy)<DRAG_THRESHOLD)return;
+      activateDrag(dragState.tile,e);
+    }
     e.preventDefault();
-    const dragEl=appsWrap.querySelector('.portal-app--dragging');
-    if(!dragEl)return;
-    const ph=ensurePlaceholder();
-    const after=portalGetDragInsertBefore(appsWrap,e.clientX,e.clientY);
-    if(after==null||after===ph)appsWrap.appendChild(ph);
-    else appsWrap.insertBefore(ph,after);
+    const {ghost,offX,offY}=dragState;
+    ghost.style.left=(e.clientX-offX)+'px';
+    ghost.style.top=(e.clientY-offY)+'px';
+    movePlaceholder(e.clientX,e.clientY);
+  }
+
+  function onPointerUp(e){
+    if(!dragState||e.pointerId!==dragState.pointerId)return;
+    finishDrag();
+  }
+
+  appsWrap.addEventListener('dragstart',e=>e.preventDefault());
+
+  appsWrap.addEventListener('pointerdown',e=>{
+    if(e.button!==0)return;
+    const tile=e.target.closest('.portal-app');
+    if(!tile||!appsWrap.contains(tile))return;
+    if(tile.classList.contains('portal-app--busy'))return;
+    if(tile.getAttribute('draggable')==='false')return;
+    dragState={
+      tile,
+      startX:e.clientX,
+      startY:e.clientY,
+      active:false,
+      pointerId:e.pointerId,
+    };
+    document.addEventListener('pointermove',onPointerMove,true);
+    document.addEventListener('pointerup',onPointerUp,true);
+    document.addEventListener('pointercancel',onPointerUp,true);
   });
-  appsWrap.addEventListener('drop',e=>{e.preventDefault();});
 }
 
 function renderPortal(){

@@ -650,7 +650,10 @@ body.light .mp-search-wrap:focus-within{
 .pf-detail-table th,.pf-detail-table td{padding:8px 10px;border-bottom:1px solid var(--border);text-align:left}
 .pf-detail-table th{font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:600}
 #mroot{position:fixed;inset:0;z-index:550;pointer-events:none}
-#mroot:not(:empty){pointer-events:auto}
+#mroot:empty{display:none;position:static;inset:auto;width:0;height:0;overflow:hidden;z-index:auto}
+#mroot>*{pointer-events:auto}
+body.sb-open #mroot{pointer-events:none!important;z-index:50!important}
+body.sb-open #mroot>*{pointer-events:none!important}
 .mp-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:18px}
 .mp-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;width:100%;max-width:420px;max-height:90vh;overflow-y:auto}
 .mp-modal > h3{margin:0 0 16px;font-size:16px;font-weight:700;color:var(--text)}
