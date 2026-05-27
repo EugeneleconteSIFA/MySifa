@@ -292,8 +292,11 @@ if ($gitPushDir -ne $truthDir) {
     Write-Host "  miroir git       : $gitPushDir"
 }
 
+$skipDeployShSync = $SkipSync.IsPresent
 if (-not $SkipSync -and $gitPushDir -ne $truthDir) {
     Sync-TruthToMirror -TruthDir $truthDir -MirrorDir $gitPushDir -FullMirror:$Full.IsPresent
+    # Robocopy a deja synchronise : eviter le rsync deploy.sh (code 3 frequent sous Windows)
+    $skipDeployShSync = $true
 } elseif ($SkipSync) {
     Write-Host "  (sync ignoree -SkipSync)"
 }
@@ -301,4 +304,4 @@ if (-not $SkipSync -and $gitPushDir -ne $truthDir) {
 Copy-Item -Path $deploySh -Destination (Join-Path $gitPushDir "deploy.sh") -Force
 
 Invoke-DeploySh -BashExe $bash -GitPushDir $gitPushDir -TruthDir $truthDir `
-    -SkipSync:$SkipSync.IsPresent -GitHubOnly:$false -ExtraArgs $deployShArgs
+    -SkipSync:$skipDeployShSync -GitHubOnly:$false -ExtraArgs $deployShArgs
