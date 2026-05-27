@@ -336,20 +336,23 @@ function Push-MySifaGitHub {
     $env:GIT_TERMINAL_PROMPT = "0"
     try {
         $pushTimeoutSec = 120
-        $pushArgs = if ($useWorkTreeMode) {
+        if ($useWorkTreeMode) {
             $gitDir = Join-Path $mirrorDir ".git"
-            @("--git-dir", $gitDir, "--work-tree", $truthDir, "push", "origin", "main")
+            # Start-Process construit une ligne de commande: on quote explicitement les chemins avec espaces.
+            $argLine = "--git-dir `"$gitDir`" --work-tree `"$truthDir`" push origin main"
+            $p = Start-Process -FilePath "git" -ArgumentList $argLine -NoNewWindow -PassThru
         } else {
-            @("-C", $mirrorDir, "push", "origin", "main")
+            $pushArgs = @("-C", $mirrorDir, "push", "origin", "main")
+            $p = Start-Process -FilePath "git" -ArgumentList $pushArgs -NoNewWindow -PassThru
         }
-        $p = Start-Process -FilePath "git" -ArgumentList $pushArgs -NoNewWindow -PassThru
         $done = $p.WaitForExit($pushTimeoutSec * 1000)
         if (-not $done) {
             try { Stop-Process -Id $p.Id -Force } catch {}
             throw "git push bloque (timeout ${pushTimeoutSec}s). Verifiez l'acces au remote (auth/SSH, réseau, VPN)."
         }
-        if ($p.ExitCode -ne 0) {
-            throw "git push a echoue (code $($p.ExitCode))."
+        $ec = $p.ExitCode
+        if ($ec -ne 0) {
+            throw "git push a echoue (code $ec)."
         }
     } finally {
         $env:GIT_TERMINAL_PROMPT = $prevPrompt
