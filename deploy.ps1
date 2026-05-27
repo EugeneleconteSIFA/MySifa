@@ -350,7 +350,8 @@ function Push-MySifaGitHub {
             try { Stop-Process -Id $p.Id -Force } catch {}
             throw "git push bloque (timeout ${pushTimeoutSec}s). Verifiez l'acces au remote (auth/SSH, réseau, VPN)."
         }
-        $ec = $p.ExitCode
+        # Sur certaines versions PowerShell/Start-Process, ExitCode peut etre null malgré un process termine.
+        $ec = if ($null -eq $p.ExitCode) { 0 } else { $p.ExitCode }
         if ($ec -ne 0) {
             throw "git push a echoue (code $ec)."
         }
