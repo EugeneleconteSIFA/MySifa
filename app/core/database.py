@@ -2655,6 +2655,20 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 83, "ao_reponses_quotation_pricing")
 
+    # v84 — planning_entries : département livraison et prise de RDV
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=84 LIMIT 1").fetchone():
+        pe_cols = {row[1] for row in conn.execute("PRAGMA table_info(planning_entries)").fetchall()}
+        if "departement_livraison" not in pe_cols:
+            conn.execute(
+                "ALTER TABLE planning_entries ADD COLUMN departement_livraison TEXT DEFAULT ''"
+            )
+        if "prise_rdv" not in pe_cols:
+            conn.execute(
+                "ALTER TABLE planning_entries ADD COLUMN prise_rdv INTEGER DEFAULT 0"
+            )
+        conn.commit()
+        _record_schema_migration(conn, 84, "planning_entries_dept_livraison_prise_rdv")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

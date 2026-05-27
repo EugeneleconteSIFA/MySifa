@@ -328,6 +328,8 @@ body.light table.fab-table tr.fab-row-last td{
 #mroot{position:fixed;inset:0;z-index:1100;pointer-events:none}
 #mroot:empty{display:none}
 #mroot>*{pointer-events:auto}
+body.sb-open #mroot{pointer-events:none!important}
+body.sb-open #mroot>*{pointer-events:none!important}
 #mroot .fab-modal{border-radius:12px}
 .btn{
   border-radius:10px;padding:10px 18px;font-size:13px;font-weight:700;
@@ -572,6 +574,8 @@ body.has-topbar .fab-main{padding-top:74px}
   }
   body.sb-open .fab-sidebar{transform:translateX(0)}
   body.sb-open .fab-sidebar-overlay{display:block}
+  body.sb-open .fab-sidebar{z-index:4000}
+  body.sb-open .fab-sidebar-overlay{z-index:3900}
   .fab-main{
     grid-column:1;grid-row:1;
   }

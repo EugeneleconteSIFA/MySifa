@@ -1740,6 +1740,18 @@ body.light .stock-empl-suggest-add:hover{background:rgba(124,58,237,.2);color:#1
 .expe-score .price .unit{font-size:13px;font-weight:500;color:var(--muted);margin-left:4px}
 .expe-score .medal{font-size:24px;flex-shrink:0}
 .expe-note{font-size:10px;color:rgba(148,163,184,.8);margin-top:12px}
+.expe-planning-nav{margin:14px 0 10px;padding:0 4px}
+.expe-planning-nav-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.expe-planning-nav-row{display:flex;flex-direction:column;gap:8px}
+.expe-planning-nav-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.expe-planning-nav .view-tabs{display:flex;gap:0;align-items:stretch;flex:1;min-width:0}
+.expe-planning-nav .view-tab{padding:6px 8px;background:var(--card);border:1px solid var(--border);color:var(--muted);
+  cursor:pointer;font-size:10px;font-family:inherit;font-weight:600;transition:all .15s;flex:1 1 0;text-align:center;line-height:1.25}
+.expe-planning-nav .view-tab:first-child{border-radius:8px 0 0 8px}
+.expe-planning-nav .view-tab:last-child{border-radius:0 8px 8px 0}
+.expe-planning-nav .view-tab:not(:first-child){margin-left:-1px}
+.expe-planning-nav .view-tab.active{background:var(--accent-bg);color:var(--accent);border-color:var(--accent);z-index:1;position:relative}
+.expe-planning-nav .view-tab:hover:not(.active){background:var(--accent-bg);color:var(--text2)}
 
 /* MyExpé — mobile : titres de page / sections déjà dans la topbar */
 @media (max-width:900px){
@@ -1840,6 +1852,52 @@ let _expeHistSearchT=null;
 let _expeLastRenderedInnerTab=null;
 let _expeJourInflight=null;
 let _portalDragSuppressClick=false;
+
+// ── MyExpé : navigation planning ───────────────────────────────────
+const LS_EXPE_PLANNING_VUE = 'mysifa.expe.planning.vue';
+const EXPE_PLANNING_VUES = [
+  {key:'prod', label:'Planning : Production', short:'Production', url:'/planning'},
+  {key:'expe', label:'Planning : Expédition', short:'Expédition', url:'/planning?vue=expe'},
+  {key:'prod_expe', label:'Planning : Production + Expédition', short:'Prod + Expé', url:'/planning?vue=prod_expe'},
+];
+function expeGetPlanningVue(){
+  const v=localStorage.getItem(LS_EXPE_PLANNING_VUE);
+  return EXPE_PLANNING_VUES.some(x=>x.key===v)?v:'prod';
+}
+function expePlanningVueUrl(key){
+  const item=EXPE_PLANNING_VUES.find(x=>x.key===key);
+  return item?item.url:'/planning';
+}
+function expeSetPlanningVue(key){
+  if(!EXPE_PLANNING_VUES.some(x=>x.key===key)) key='prod';
+  localStorage.setItem(LS_EXPE_PLANNING_VUE, key);
+  location.href=expePlanningVueUrl(key);
+}
+function renderExpePlanningNav(){
+  if(!canPlanningNav(S.user)) return null;
+  const cur=expeGetPlanningVue();
+  return h('div',{className:'expe-planning-nav'},
+    h('div',{className:'expe-planning-nav-label'},'Planning'),
+    h('div',{className:'expe-planning-nav-row'},
+      h('div',{className:'expe-planning-nav-actions'},
+        h('button',{
+          type:'button',
+          className:'btn btn-ghost',
+          style:{padding:'8px 12px',fontSize:'12px',fontWeight:700,whiteSpace:'nowrap'},
+          onClick:()=>{location.href=expePlanningVueUrl('prod');}
+        },'Planning : Production'),
+        h('div',{className:'view-tabs',role:'group','aria-label':'Vue planning'},
+          ...EXPE_PLANNING_VUES.map(v=>h('button',{
+            type:'button',
+            className:'view-tab'+(cur===v.key?' active':''),
+            title:v.label,
+            onClick:()=>{ if(cur!==v.key) expeSetPlanningVue(v.key); else location.href=v.url; }
+          }, v.short))
+        )
+      )
+    )
+  );
+}
 
 // ── MyExpé : persistance locale (départs) ─────────────────────────
 const LS_EXPE_DEPARTS_STATE = 'mysifa.expe.departs.state.v1';
@@ -5995,6 +6053,7 @@ function renderExpe(){
       iconEl('truck',15),'  Transporteurs'),
     h('button',{className:'nav-btn'+(tab==='poids'?' active':''),onClick:()=>set({expeTab:'poids'})},
       iconEl('calculator',15),'  Poids envoi'),
+    renderExpePlanningNav(),
     h('div',{className:'sidebar-bottom'},
       h('button',{className:'nav-btn back-mysifa',onClick:()=>{window.location.href='/'}},
         '← Retour ',h('span',{className:'wm'},'My',h('span',null,'Sifa'))

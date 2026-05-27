@@ -34,6 +34,8 @@ _PLANNING_ENTRY_COL_DDLS = [
     ("updated_by", "ALTER TABLE planning_entries ADD COLUMN updated_by TEXT"),
     ("fsc_requis", "ALTER TABLE planning_entries ADD COLUMN fsc_requis INTEGER DEFAULT 0"),
     ("fsc_type_requis", "ALTER TABLE planning_entries ADD COLUMN fsc_type_requis TEXT DEFAULT ''"),
+    ("departement_livraison", "ALTER TABLE planning_entries ADD COLUMN departement_livraison TEXT DEFAULT ''"),
+    ("prise_rdv", "ALTER TABLE planning_entries ADD COLUMN prise_rdv INTEGER DEFAULT 0"),
 ]
 
 _FSC_TYPES = frozenset({"fsc_100", "fsc_mix", "fsc_recycled"})
@@ -764,7 +766,26 @@ def _planned_end_iso_for_machine(
         return None
 
 
+def _of_timeline_fields(e: dict) -> Tuple[bool, Optional[float]]:
+    """OF PDF lié (of_import_id) et qté étiquettes affichable (non nulle, pas 0)."""
+    of_id = e.get("of_import_id")
+    has_of = of_id is not None and int(of_id or 0) > 0
+    if not has_of:
+        return False, None
+    raw = e.get("_of_qte_etiquettes")
+    if raw is None:
+        return True, None
+    try:
+        v = float(raw)
+    except (TypeError, ValueError):
+        return True, None
+    if v == 0:
+        return True, None
+    return True, v
+
+
 def _slot_payload(e: dict, start_iso: str, end_iso: str) -> dict:
+    has_of, qte_etiquettes = _of_timeline_fields(e)
     return {
         "entry_id": e["id"],
         "reference": e["reference"],
@@ -794,6 +815,8 @@ def _slot_payload(e: dict, start_iso: str, end_iso: str) -> dict:
         "notes": e["notes"],
         "start": start_iso,
         "end": end_iso,
+        "has_of": has_of,
+        "qte_etiquettes": qte_etiquettes,
     }
 
 
@@ -1337,6 +1360,8 @@ async def add_entry(machine_id: int, request: Request):
         "fsc_type_requis": _parse_fsc_type_requis(
             body.get("fsc_type_requis"), fsc_requis_val
         ),
+        "departement_livraison": (body.get("departement_livraison") or "").strip() or "",
+        "prise_rdv": _parse_a_placer(body.get("prise_rdv"), default=0),
         "created_by": user_name,
         "updated_by": user_name,
     }
@@ -1560,7 +1585,7 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
                 duree_heures=?, statut=?, notes=?, updated_at=?, updated_by=?,
                 dos_rvgi=?, numero_of=?, ref_produit=?, laize=?, date_livraison=?, commentaire=?,
                 exigences_production=?, planned_start=?, planned_end=?, planned_end_manual=?, a_placer=?,
-                fsc_requis=?, fsc_type_requis=?
+                fsc_requis=?, fsc_type_requis=?, departement_livraison=?, prise_rdv=?
             WHERE id=?
         """, (
             body.get("reference", ex["reference"]),
@@ -1591,6 +1616,12 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
             body.get("a_placer", ex["a_placer"] if "a_placer" in ex.keys() else 0),
             fsc_requis_new,
             fsc_type_new,
+            (body.get("departement_livraison") or "").strip()
+            if "departement_livraison" in body
+            else (ex["departement_livraison"] if "departement_livraison" in ex.keys() else ""),
+            _parse_a_placer(body.get("prise_rdv"), default=int(ex.get("prise_rdv") or 0))
+            if "prise_rdv" in body
+            else int(ex.get("prise_rdv") or 0),
             entry_id
         ))
 
@@ -2206,6 +2237,8 @@ async def insert_after(machine_id: int, after_entry_id: int, request: Request):
         "fsc_type_requis": _parse_fsc_type_requis(
             body.get("fsc_type_requis"), fsc_requis_val
         ),
+        "departement_livraison": (body.get("departement_livraison") or "").strip() or "",
+        "prise_rdv": _parse_a_placer(body.get("prise_rdv"), default=0),
     }
     with get_db() as conn:
         pe_cols = _ensure_planning_entry_columns(conn)
@@ -2626,9 +2659,11 @@ def get_timeline(machine_id: int, request: Request, semaine: Optional[str] = Non
 
         rows = conn.execute(
             """
-            SELECT * FROM planning_entries
-            WHERE machine_id = ?
-            ORDER BY position ASC
+            SELECT pe.*, oi.qte_etiquettes AS _of_qte_etiquettes
+            FROM planning_entries pe
+            LEFT JOIN of_imports oi ON oi.id = pe.of_import_id
+            WHERE pe.machine_id = ?
+            ORDER BY pe.position ASC
             """,
             (machine_id,),
         ).fetchall()
