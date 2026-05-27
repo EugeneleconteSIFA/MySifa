@@ -54,39 +54,6 @@ body.light{
   --c1:#0891b2;--c2:#7c3aed;--c3:#059669;--c4:#d97706;--c5:#dc2626
 }
 body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
-/* ── Fond animé ── */
-body::before{
-  content:"";
-  position:fixed;inset:0;
-  pointer-events:none;z-index:0;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Ccircle cx='1.5' cy='1.5' r='1.2' fill='rgba(255,255,255,0.07)'/%3E%3C/svg%3E");
-  background-size:28px 28px;
-  background-repeat:repeat;
-}
-body.light::before{
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Ccircle cx='1.5' cy='1.5' r='1.2' fill='rgba(0,0,0,0.055)'/%3E%3C/svg%3E");
-}
-body::after{
-  content:"";
-  position:fixed;inset:0;
-  pointer-events:none;z-index:0;
-  background-image:
-    radial-gradient(ellipse 700px 420px at 20% 40%,rgba(34,211,238,0.055),transparent 72%),
-    radial-gradient(ellipse 500px 320px at 75% 65%,rgba(34,211,238,0.035),transparent 68%);
-  background-repeat:no-repeat,no-repeat;
-  animation:cloud-drift 55s ease-in-out infinite alternate;
-}
-body.light::after{
-  background-image:
-    radial-gradient(ellipse 700px 420px at 20% 40%,rgba(8,145,178,0.06),transparent 72%),
-    radial-gradient(ellipse 500px 320px at 75% 65%,rgba(8,145,178,0.04),transparent 68%);
-}
-@keyframes cloud-drift{
-  0%  {background-position:-10% 30%,-10% 30%}
-  50% {background-position:55% 48%,55% 48%}
-  100%{background-position:108% 18%,108% 18%}
-}
-body.bg-anim-off::before,body.bg-anim-off::after{display:none}
 button:focus-visible,.nav-btn:focus-visible,.login-btn:focus-visible,.portal-logout:focus-visible,.theme-btn:focus-visible,.logout-btn:focus-visible,a:focus-visible{
   outline:2px solid var(--accent);outline-offset:2px}
 button:focus:not(:focus-visible){outline:none}
@@ -97,7 +64,7 @@ button:focus:not(:focus-visible){outline:none}
 .saisies-table-wrap{border-radius:10px;border:1px solid var(--border);overflow:hidden}
 .saisies-table-wrap .saisies-bot{max-height:68vh;overflow:auto}
 .saisies-table-wrap table thead th{position:sticky;top:0;z-index:5;background:var(--card)}
-.login-page{position:relative;z-index:1;min-height:100vh;display:flex;align-items:center;justify-content:center}
+.login-page{min-height:100vh;display:flex;align-items:center;justify-content:center}
 .login-box{width:100%;max-width:420px;padding:24px}
 .login-logo{text-align:center;margin-bottom:40px}
 .brand{font-size:32px;font-weight:800;letter-spacing:-1px}.brand span{color:var(--accent)}
@@ -114,7 +81,7 @@ button:focus:not(:focus-visible){outline:none}
 .login-error{background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.3);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--danger);margin-bottom:16px;display:none}
 .login-error.show{display:block}
 .login-footer{text-align:center;margin-top:20px;font-size:11px;color:var(--muted)}
-.app{position:relative;z-index:1;display:flex;min-height:100vh}
+.app{display:flex;min-height:100vh}
 .sidebar{width:220px;background:var(--card);border-right:1px solid var(--border);padding:20px 12px;display:flex;flex-direction:column;flex-shrink:0;height:100vh;position:sticky;top:0;overflow-y:auto}
 .sidebar::-webkit-scrollbar{width:0}
 .sidebar{scrollbar-width:none}
@@ -151,11 +118,6 @@ body.palette-foret .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(61,214,
 body.palette-cendre .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(100,150,200,.28),0 0 16px rgba(100,150,200,.14)}
 body.palette-braise .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(240,112,48,.28),0 0 16px rgba(240,112,48,.14)}
 body.light .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(8,145,178,.32),0 0 16px rgba(8,145,178,.12)}
-.nav-scroll{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:2px;margin-bottom:8px;width:100%}
-.nav-group-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;
-  padding:4px 12px 2px;user-select:none;pointer-events:none;line-height:1.3}
-.nav-group-label:not(:first-child){margin-top:10px;padding-top:12px;border-top:1px solid var(--border)}
-.sidebar .nav-scroll.tabs{margin:0;flex-wrap:nowrap}
 .nav-badge{margin-left:auto;min-width:22px;height:18px;padding:0 6px;border-radius:999px;
   background:rgba(248,113,113,.14);border:1px solid rgba(248,113,113,.35);color:var(--danger);
   display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;font-family:monospace}
@@ -1040,7 +1002,7 @@ body.light .compta-add-bar-fields input:focus{box-shadow:0 0 0 3px rgba(8,145,17
   font-family:inherit;outline:none}
 
 /* ── Portail MySifa ─────────────────────────────────────────────── */
-.portal-page{position:relative;z-index:1;min-height:100vh;display:flex;flex-direction:column;
+.portal-page{min-height:100vh;display:flex;flex-direction:column;
   align-items:center;justify-content:flex-start;gap:32px;padding:48px 20px 32px}
 .portal-logo{text-align:center}
 .portal-logo .brand{font-size:42px;font-weight:800;letter-spacing:-2px}
@@ -1156,14 +1118,14 @@ body.light .portal-apps--reorderable .portal-app--placeholder:hover{background:r
 .portal-apps--reorderable .portal-app--disabled{cursor:grab}
 .portal-apps-hint{font-size:11px;color:var(--muted);text-align:center;margin:8px 0 0;width:100%;line-height:1.35}
 .portal-app{display:flex;flex-direction:column;align-items:center;gap:8px;
-  background-color:var(--card);border:1px solid var(--border);border-radius:16px;
+  background:var(--card);border:1px solid var(--border);border-radius:16px;
   padding:14px 12px;cursor:pointer;transition:all .2s;text-decoration:none;
   width:148px;height:132px;flex:0 0 148px;box-sizing:border-box;
   justify-content:center}
 .portal-app--disabled{cursor:default;opacity:.6;position:relative}
-.portal-app--disabled:hover{border-color:var(--border);background-color:var(--card)}
+.portal-app--disabled:hover{border-color:var(--border);background:var(--card)}
 .badge-dev{position:absolute;top:8px;right:8px;font-size:9px;font-weight:700;padding:2px 8px;border-radius:20px;background:var(--warn);color:#0a0e17;text-transform:uppercase;letter-spacing:.5px}
-.portal-app:hover{border-color:var(--accent);background-color:var(--card);
+.portal-app:hover{border-color:var(--accent);background:var(--accent-bg);
   transform:translateY(-3px);box-shadow:0 10px 32px rgba(34,211,238,.14)}
 .portal-app--busy{pointer-events:none;opacity:.8;position:relative;transform:none!important;box-shadow:none!important}
 .portal-app--busy::after{
@@ -1438,7 +1400,7 @@ body.light .portal-logout:hover:last-of-type{text-shadow:0 0 12px rgba(220,38,38
     padding:10px 8px;
     gap:6px;
     border-radius:14px;
-    background-color:var(--card);
+    background:var(--card);
     border:1px solid var(--border);
     box-sizing:border-box;
     justify-content:center;
@@ -1446,7 +1408,7 @@ body.light .portal-logout:hover:last-of-type{text-shadow:0 0 12px rgba(220,38,38
   .portal-app:hover{
     transform:none;
     border-color:var(--accent);
-    background-color:var(--card);
+    background:var(--accent-bg);
     box-shadow:none;
   }
   .portal-app-name{
@@ -1836,6 +1798,7 @@ function isAuthMePath(p){
   return p==='/api/auth/me'||p.startsWith('/api/auth/me?');
 }
 let authEpoch=0;
+let _matiereMargeTimer=null;
 let _expeHistSearchT=null;
 let _expeLastRenderedInnerTab=null;
 let _expeJourInflight=null;
@@ -1952,8 +1915,6 @@ let S={
   expeDepartSubmitting:false,
   expeDepartModalOpen:false,
   expeDepartEditId:null,
-  expePaletteTypes:[],
-  expePaletteTypesLoading:false,
   expeDepartForm:{
     date_enlevement:'',
     affreteurs:'',
@@ -1964,7 +1925,6 @@ let S={
     arc:'',
     no_cde_transport:'',
     no_bl:'',
-    type_palette_matiere_id:'',
     nb_palette:'',
     poids_total_kg:'',
     date_livraison:'',
@@ -2034,6 +1994,13 @@ let S={
   paieAnnee:new Date().getFullYear(),paieMois:new Date().getMonth()+1,
   paieVarsCache:{},paiePendingFixed:{},paiePendingVar:{},
   paieExporting:false,paieShowHist:false,paieHistData:null,
+  matiereTab:'base',
+  matiereParams:[],
+  matiereBase:[],
+  matiereConfig:{marge_erreur:5,taux_change_usd:0.85,supplement_rotoflex_eur_m2:0.06},
+  matiereImportReplaceAll:true,
+  matiereSearch:'',
+  matiereLoading:false,
 };
 window.S=S;
 
@@ -2279,7 +2246,7 @@ async function checkAuth(){
       const sp=new URLSearchParams(window.location.search||'');
       const p=(sp.get('page')||'').trim();
       if(S.app==='prod' && p==='users'){window.location.href='/settings';return;}
-      if(S.app==='prod' && p==='matiere_prix'){window.location.href='/pricing';return;}
+      if(S.app==='prod' && p==='matiere_prix'){window.location.href='/devis';return;}
       if(S.app==='prod' && p==='profil'){window.location.href='/profil';return;}
       const allowed=new Set(['production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite','of']);
       if(S.app==='prod' && allowed.has(p)) S.page=p;
@@ -2292,8 +2259,7 @@ async function checkAuth(){
       await loadMachineStatus();
       if(S.page==='of' && canAccessOfTab()) await loadOfImports();
     }else if(S.app==='devis'){
-      window.location.href='/pricing';
-      return;
+      await loadMatierePrixPage();
     }else if(S.app==='stock'){
       await loadStockGlobale();
       await loadStockProduits();
@@ -2438,7 +2404,7 @@ async function doLogin(email,password){
       const sp=new URLSearchParams(window.location.search||'');
       const p=(sp.get('page')||'').trim();
       if(S.app==='prod' && p==='users'){window.location.href='/settings';return;}
-      if(S.app==='prod' && p==='matiere_prix'){window.location.href='/pricing';return;}
+      if(S.app==='prod' && p==='matiere_prix'){window.location.href='/devis';return;}
       if(S.app==='prod' && p==='profil'){window.location.href='/profil';return;}
       const allowed=new Set(['production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite','of']);
       if(S.app==='prod' && allowed.has(p)) S.page=p;
@@ -2469,8 +2435,7 @@ async function doLogin(email,password){
       await loadMachineStatus();
       if(S.page==='of' && canAccessOfTab()) await loadOfImports();
     }else if(S.app==='devis'){
-      window.location.href='/pricing';
-      return;
+      await loadMatierePrixPage();
     }else if(S.app==='stock'){
       await loadStockGlobale();
       await loadStockProduits();
@@ -3629,8 +3594,8 @@ function renderPortal(){
   const isRH   = aa ? !!aa.planning_rh : (isSuper || !!(urole && ['direction','administration','fabrication','logistique','expedition','comptabilite'].includes(urole)));
   const isComptaPlan = urole === 'comptabilite';
   const isPaie = isSuper || !!(urole && ['direction','administration','comptabilite'].includes(urole));
-  const isPricing = aa ? !!(aa.pricing ?? aa.devis) : (isSuper || urole==='direction');
-  const isAo = isSuper || urole === 'direction';
+  const isDevis = aa ? !!aa.devis : (isSuper || urole==='direction');
+  const isAo = isSuper || !!(urole && ['direction','administration'].includes(urole));
   const isLight=document.body.classList.contains('light');
 
   const order=(S.user&&Array.isArray(S.user.portal_apps_order))?S.user.portal_apps_order:[];
@@ -3737,17 +3702,17 @@ function renderPortal(){
     )});
   }
 
-  if(isPricing){
-    const id='pricing';
+  if(isDevis){
+    const id='devis';
     tileSpecs.push({id,el:h('div',{
       className:'portal-app',
       'data-portal-id':id,
       draggable:'true',
-      onClick:()=>{if(_portalDragSuppressClick)return;window.location.href='/pricing';}
+      onClick:()=>{if(_portalDragSuppressClick)return;window.location.href='/devis';}
     },
       h('div',{className:'portal-app-icon'},iconEl('file-text',28)),
-      h('div',{className:'portal-app-name'},'Coûts matières'),
-      h('div',{className:'portal-app-desc'},'Matières, produits et calcul €/m²')
+      h('div',{className:'portal-app-name'},'MyDevis'),
+      h('div',{className:'portal-app-desc'},'Paramètres matière & Base prix')
     )});
   }
 
@@ -3762,6 +3727,21 @@ function renderPortal(){
       h('div',{className:'portal-app-icon'},iconEl('clipboard',28)),
       h('div',{className:'portal-app-name'},'MyAO'),
       h('div',{className:'portal-app-desc'},'Appels d\'offre fournisseurs')
+    )});
+  }
+
+  if(isCom){
+    const id2='com_devis';
+    tileSpecs.push({id:id2,el:h('div',{
+      className:'portal-app portal-app--disabled',
+      'data-portal-id':id2,
+      draggable:'true',
+      onClick:()=>{if(_portalDragSuppressClick)return;}
+    },
+      h('div',{className:'portal-app-icon',style:{opacity:.4}},iconEl('file-text',28)),
+      h('div',{className:'portal-app-name',style:{opacity:.5}},'MyDevis'),
+      h('div',{className:'portal-app-desc'},'Devis & Chiffrage'),
+      h('span',{className:'badge-dev'},'En développement')
     )});
   }
 
@@ -4878,7 +4858,7 @@ function renderCompta(){
         iconEl('file',15),'  Table des comptes'),
       h('button',{className:'nav-btn'+(tab==='banques'?' active':''),onClick:()=>{set({comptaTab:'banques'});loadComptaBanques();}},
         iconEl('credit-card',15),'  Code de banque'),
-      h('div',{className:'nav-group-label'},'Autres modules'),
+      h('div',{className:'nav-group-label',style:{marginTop:'8px'}},'Autres modules'),
       h('button',{className:'nav-btn'+(tab==='cession'?' active':''),onClick:()=>{set({comptaTab:'cession'});}},
         iconEl('clock',15),'  Cession (en cours)'),
       h('button',{className:'nav-btn'+(tab==='paie'?' active':''),onClick:()=>{if(!S.paieEmpLoaded){paieLoadEmployes();}paieLoadVars().then(()=>render());set({comptaTab:'paie'});}},
@@ -5582,33 +5562,8 @@ function expeParisDayISO(){
   try{return new Date().toLocaleDateString('sv-SE',{timeZone:'Europe/Paris'});}
   catch(e){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 }
-async function loadExpePaletteTypes(){
-  if(S.app!=='expe')return;
-  if(S.expePaletteTypesLoading) return;
-  if((S.expePaletteTypes||[]).length) return;
-  set({expePaletteTypesLoading:true});
-  try{
-    const rows=await api('/api/expe/matieres-palettes');
-    set({expePaletteTypes:Array.isArray(rows)?rows:[],expePaletteTypesLoading:false});
-  }catch(e){
-    set({expePaletteTypesLoading:false});
-  }
-}
-function expePaletteTypeLabel(row){
-  if(!row) return '—';
-  if(row.type_palette_label) return row.type_palette_label;
-  const id=row.type_palette_matiere_id;
-  if(id==null||id==='') return '—';
-  const items=S.expePaletteTypes||[];
-  const m=items.find(x=>String(x.id)===String(id));
-  if(!m) return '—';
-  const ref=(m.reference||'').trim();
-  const des=(m.designation||'').trim();
-  return ref?(des?ref+' — '+des:ref):'—';
-}
 async function loadExpeDepartJour(){
   if(S.app!=='expe')return;
-  void loadExpePaletteTypes();
   if(_expeJourInflight)return await _expeJourInflight;
   _expeJourInflight=(async()=>{
     set({expeDepartLoading:true});
@@ -5624,7 +5579,6 @@ async function loadExpeDepartJour(){
 }
 async function loadExpeDepartHistorique(){
   if(S.app!=='expe')return;
-  void loadExpePaletteTypes();
   // Préserver le focus/caret de la searchbar pendant les re-renders (chargement + résultats)
   const qEl = document.getElementById('expe-hist-search');
   const hadFocus = !!(qEl && document.activeElement === qEl);
@@ -5670,7 +5624,6 @@ function expeOpenDepartModal(prefill, mode){
   const dayVal=(S.expeDepartJourDate&&String(S.expeDepartJourDate).trim())||expeParisDayISO();
   const src = prefill || {};
   const srcDate = (src.date_enlevement||'') ? String(src.date_enlevement).slice(0,10) : '';
-  void loadExpePaletteTypes();
   set({
     expeDepartModalOpen:true,
     expeDepartEditId: (mode==='edit' && src && src.id) ? src.id : null,
@@ -5684,8 +5637,6 @@ function expeOpenDepartModal(prefill, mode){
       arc: src.arc||'',
       no_cde_transport: src.no_cde_transport||'',
       no_bl: src.no_bl||'',
-      type_palette_matiere_id: (src.type_palette_matiere_id!=null && src.type_palette_matiere_id!=='')
-        ? String(src.type_palette_matiere_id) : '',
       nb_palette: (src.nb_palette!=null && src.nb_palette!=='') ? String(src.nb_palette) : '',
       poids_total_kg: (src.poids_total_kg!=null && src.poids_total_kg!=='') ? String(src.poids_total_kg) : '',
       date_livraison: (src.date_livraison||'') ? String(src.date_livraison).slice(0,10) : '',
@@ -5704,34 +5655,8 @@ function renderExpeDepartModal(){
 
   function mk(label,key,type,ph){
     const i=h('input',{type:type||'text',placeholder:ph||'',value:(f[key]!=null?String(f[key]):''),name:key});
-    i.addEventListener('input',e=>{S.expeDepartForm[key]=e.target.value; expeScheduleSaveLocal();});
+    i.addEventListener('input',e=>{S.expeDepartForm[key]=e.target.value;});
     return h('div',{className:'expe-field'},h('label',null,label),i);
-  }
-
-  const paletteItems=S.expePaletteTypes||[];
-  const palSel=h('select',{name:'type_palette_matiere_id'});
-  palSel.appendChild(h('option',{value:''},'— Sélectionner —'));
-  paletteItems.forEach(m=>{
-    const ref=(m.reference||'').trim();
-    const des=(m.designation||'').trim();
-    const lbl=ref?(des?ref+' — '+des:ref):('Réf. #'+m.id);
-    const opt=h('option',{value:String(m.id)},lbl);
-    if(String(f.type_palette_matiere_id||'')===String(m.id)) opt.selected=true;
-    palSel.appendChild(opt);
-  });
-  palSel.addEventListener('change',e=>{
-    S.expeDepartForm.type_palette_matiere_id=e.target.value;
-    expeScheduleSaveLocal();
-  });
-  const palField=h('div',{className:'expe-field'},
-    h('label',null,'Type de palette'),
-    palSel
-  );
-  if(!paletteItems.length && S.expePaletteTypesLoading){
-    palField.appendChild(h('div',{style:{fontSize:'12px',color:'var(--muted)',marginTop:'4px'}},'Chargement des références…'));
-  }else if(!paletteItems.length){
-    palField.appendChild(h('div',{style:{fontSize:'12px',color:'var(--muted)',marginTop:'4px'}},
-      'Aucune référence palette active (MyStock > Matières premières).'));
   }
 
   const overlay=h('div',{className:'add-row-modal',style:{zIndex:12000}});
@@ -5758,7 +5683,6 @@ function renderExpeDepartModal(){
       arc:(S.expeDepartForm.arc||'').trim()||null,
       no_cde_transport:(S.expeDepartForm.no_cde_transport||'').trim()||null,
       no_bl:(S.expeDepartForm.no_bl||'').trim()||null,
-      type_palette_matiere_id:(S.expeDepartForm.type_palette_matiere_id||'').trim()||null,
       nb_palette:(S.expeDepartForm.nb_palette||'').trim()||null,
       poids_total_kg:(S.expeDepartForm.poids_total_kg||'').trim()||null,
       date_livraison:(S.expeDepartForm.date_livraison||'').trim()||null
@@ -5793,7 +5717,6 @@ function renderExpeDepartModal(){
     mk('ARC','arc'),
     mk('N° commande transporteur','no_cde_transport'),
     mk('N° BL','no_bl'),
-    palField,
     mk('Nombre de palettes','nb_palette','number','ex: 2'),
     mk('Poids total (kg)','poids_total_kg','number','ex: 1325'),
     mk('Date livraison (prévue)','date_livraison','date')
@@ -5838,7 +5761,7 @@ function renderExpeSuiviDeparts(){
   );
   const rows=S.expeDepartList||[];
   const head=h('tr',null,
-    ...['Date enl.','Affr.','Transp.','Client','Destination','Réf SIFA','ARC','Cde transp.','N° BL','Type pal.','Pal.','Poids kg','Liv. prév.',''].map(t=>h('th',null,t))
+    ...['Date enl.','Affr.','Transp.','Client','Destination','Réf SIFA','ARC','Cde transp.','N° BL','Pal.','Poids kg','Liv. prév.',''].map(t=>h('th',null,t))
   );
   const body=rows.length?rows.map(r=>h('tr',null,
     h('td',null,(r.date_enlevement||'').slice(0,10)),
@@ -5850,7 +5773,6 @@ function renderExpeSuiviDeparts(){
     h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.arc||'—'),
     h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.no_cde_transport||'—'),
     h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.no_bl||'—'),
-    h('td',{style:{fontSize:'12px',maxWidth:'120px'}},expePaletteTypeLabel(r)),
     h('td',null,r.nb_palette!=null?String(r.nb_palette):'—'),
     h('td',null,r.poids_total_kg!=null?String(r.poids_total_kg):'—'),
     h('td',null,(r.date_livraison||'').slice(0,10)||'—'),
@@ -5874,7 +5796,7 @@ function renderExpeSuiviDeparts(){
       ),
       h('button',{className:'btn',title:"Valider et envoyer dans l'historique",style:{marginLeft:'8px',padding:'8px 12px',fontSize:'12px',borderRadius:'10px'},onClick:()=>expeValiderDepart(r.id)},'Valider')
     ):h('td',null,'—')
-  )):[h('tr',null,h('td',{colSpan:14,style:{color:'var(--muted)'}},S.expeDepartLoading?'Chargement…':'Aucun départ en attente pour ce jour'))];
+  )):[h('tr',null,h('td',{colSpan:13,style:{color:'var(--muted)'}},S.expeDepartLoading?'Chargement…':'Aucun départ en attente pour ce jour'))];
   const listCard=h('div',{className:'card'},
     h('div',{className:'card-header'},h('h3',{className:'expe-mobile-hide-head'},'Départs du jour (en attente de validation)')),
     h('div',{style:{overflowX:'auto'}},h('table',{className:'table-std expe-departs-table'},h('thead',null,head),h('tbody',null,...body)))
@@ -5886,7 +5808,7 @@ function renderExpeHistoriqueDeparts(){
   const qInp=h('input',{
     id:'expe-hist-search',
     type:'search',
-    placeholder:'Réf. SIFA, client, ARC, BL, type palette, transporteur…',
+    placeholder:'Réf. SIFA, client, ARC, BL, commande transport, transporteur…',
     value:S.expeDepartHistQ||'',
     style:{width:'100%',maxWidth:'560px',padding:'10px 12px',borderRadius:'8px',border:'1px solid var(--border)',background:'var(--bg)',color:'var(--text)',marginBottom:'12px'},
     onInput:e=>{
@@ -5897,7 +5819,7 @@ function renderExpeHistoriqueDeparts(){
   });
   const rows=S.expeDepartHist||[];
   const head=h('tr',null,
-    ...['Validé le','Date enl.','Client','Réf SIFA','ARC','Cde transp.','N° BL','Transp.','Type pal.','Pal.','Poids','Liv. prév.',''].map(t=>h('th',null,t))
+    ...['Validé le','Date enl.','Client','Réf SIFA','ARC','Cde transp.','N° BL','Transp.','Pal.','Poids','Liv. prév.',''].map(t=>h('th',null,t))
   );
   const body=rows.length?rows.map(r=>h('tr',null,
     h('td',{style:{fontSize:'12px',whiteSpace:'nowrap'}},(r.validated_at||'').replace('T',' ').slice(0,16)||'—'),
@@ -5908,7 +5830,6 @@ function renderExpeHistoriqueDeparts(){
     h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.no_cde_transport||'—'),
     h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.no_bl||'—'),
     h('td',null,r.transporteur||'—'),
-    h('td',{style:{fontSize:'12px',maxWidth:'120px'}},expePaletteTypeLabel(r)),
     h('td',null,r.nb_palette!=null?String(r.nb_palette):'—'),
     h('td',null,r.poids_total_kg!=null?String(r.poids_total_kg):'—'),
     h('td',null,(r.date_livraison||'').slice(0,10)||'—'),
@@ -5926,7 +5847,7 @@ function renderExpeHistoriqueDeparts(){
         }},iconEl('trash',14))
       )
     ):h('td',null,'—')
-  )):[h('tr',null,h('td',{colSpan:13,style:{color:'var(--muted)'}},S.expeDepartHistLoading?'Chargement…':'Aucune entrée (ou affiner la recherche)'))];
+  )):[h('tr',null,h('td',{colSpan:12,style:{color:'var(--muted)'}},S.expeDepartHistLoading?'Chargement…':'Aucune entrée (ou affiner la recherche)'))];
   return h('div',null,
     h('div',{className:'card',style:{marginBottom:'12px',padding:'14px 18px'}},
       h('h3',{style:{fontSize:'14px',fontWeight:'700',marginBottom:'8px'}},'Recherche'),
@@ -6054,6 +5975,58 @@ function renderExpe(){
     renderExpeTransporteurModal(),
     renderExpeDevisModal(),
     S.expeShowContacts?renderExpeContactModal():null
+  );
+}
+
+function renderMyDevis(){
+  const isLight=document.body.classList.contains('light');
+  const sidebar=h('nav',{className:'sidebar'},
+    h('div',{className:'logo'},
+      h('div',{className:'logo-brand'},'My',h('span',null,'Devis')),
+      h('div',{className:'logo-sub'},'by SIFA')
+    ),
+    h('div',{style:{padding:'10px 14px',fontSize:'12px',color:'var(--text2)',lineHeight:1.45}},'Base matière et paramètres — aligné sur le suivi Excel métier.'),
+    h('div',{className:'sidebar-bottom'},
+      h('button',{className:'nav-btn back-mysifa',onClick:()=>{window.location.href='/'}},
+        '← Retour ',
+        h('span',{className:'wm'},'My',h('span',null,'Sifa'))
+      ),
+      sidebarUserChip(S.user),
+      (()=>{
+        const b=h('button',{className:'support-btn',title:'Contacter le support',onClick:()=>set({contactOpen:true})});
+        const ico=h('span',{className:'support-ico'});
+        try{ico.innerHTML=(window.MySifaSupport&&typeof window.MySifaSupport.iconSvg==='function')?window.MySifaSupport.iconSvg():'';}catch(e){ico.innerHTML='';}
+        b.appendChild(ico);b.appendChild(h('span',null,'Contacter le support'));return b;
+      })(),
+      h('button',{className:'theme-btn',onClick:()=>{MySifaTheme.toggleMode();render();}},
+        h('span',{className:'theme-ico'},iconEl(isLight?'sun':'moon',16)),
+        h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')
+      ),
+      h('button',{className:'logout-btn',onClick:doLogout},iconEl('log-out',14),' Déconnexion')
+    )
+  );
+  const topbar=h('div',{className:'mobile-topbar'},
+    h('button',{type:'button',className:'mobile-menu-btn',onClick:toggleSidebar,'aria-label':'Menu'},iconEl('menu',20)),
+    h('div',null,
+      h('div',{className:'mobile-topbar-title'},'MyDevis'),
+      h('div',{className:'mobile-topbar-sub'},'Paramètres matière et base prix')
+    ),
+    h('button',{type:'button',className:'mobile-home-btn',onClick:()=>{window.location.href='/'},'aria-label':'Accueil'},iconEl('home',20))
+  );
+  const inner=renderMatierePrix();
+  return h('div',null,
+    S.sidebarOpen?h('div',{className:'sidebar-overlay',onClick:closeSidebar}):null,
+    h('div',{className:'app'},
+      sidebar,
+      h('main',{className:'main'},
+        h('div',{className:'container'},
+          topbar,
+          h('h1',null,'MyDevis'),
+          h('div',{className:'subtitle'},'Chiffrage matière — base et paramètres'),
+          inner
+        )
+      )
+    )
   );
 }
 
@@ -9599,7 +9572,7 @@ function renderDos(){
   return h('div',null,form,list);
 }
 
-// ── Import OF PDF ────────────────────────────────────────────────
+// ── Import OF PDF (Sage) ─────────────────────────────────────────
 function canAccessOfTab(){
   return isAdmin(S.user);
 }
@@ -9782,7 +9755,7 @@ function renderOfImportModal(){
         if(f) ofHandlePdfFile(f);
       }},
       iconEl('file',28),
-      h('div',{className:'prod-of-dropzone-title'},'Déposer un PDF ici'),
+      h('div',{className:'prod-of-dropzone-title'},'Déposer un PDF Sage ici'),
       h('div',{className:'prod-of-dropzone-sub'},'ou cliquer pour sélectionner — .pdf uniquement')
     );
     body=h('div',null,fileInput,dropzone,
@@ -10022,8 +9995,7 @@ function renderLiaisonDossiers(devisId, dossiersLies, allDossiers){
 
 
 function canMatierePrixUser(u){
-  const a = u && u.app_access;
-  return !!(a && (a.pricing || a.devis));
+  return !!(u && u.app_access && u.app_access.devis);
 }
 function normMatiereTxt(s){
   return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
@@ -10482,7 +10454,7 @@ function renderMatierePrix(){
   if(!canMatierePrixUser(S.user)){
     return h('div',{className:'card',style:{padding:'24px'}},
       h('h3',null,'Accès refusé'),
-      h('p',{style:{color:'var(--text2)'}},'Accès réservé : droit application « Pricing » (matrice Paramètres).')
+      h('p',{style:{color:'var(--text2)'}},'Accès réservé : droit application « MyDevis » (matrice Paramètres).')
     );
   }
   const mc=S.matiereConfig||{marge_erreur:5,taux_change_usd:0.85,supplement_rotoflex_eur_m2:0.06};
@@ -11359,7 +11331,7 @@ function render(){
   else if(S.app==='stock'){root.appendChild(renderStock());}
   else if(S.app==='compta'){root.appendChild(renderCompta());}
   else if(S.app==='expe'){root.appendChild(renderExpe());}
-  else if(S.app==='devis'){window.location.href='/pricing';return;}
+  else if(S.app==='devis'){root.appendChild(renderMyDevis());}
   else if(S.app==='messages'){root.appendChild(renderMessagesApp());}
   else if(S.app==='prod'){
     if(isComptaPlanning(S.user)){window.location.href='/planning';return;}
@@ -11377,7 +11349,7 @@ function render(){
                   'KPIs, temps, quantités et qualité de saisie',
       suivi:'Dossiers de production et comparaison devis / réel',
       traceabilite:'Matières utilisées par dossier',
-      of:'Import PDF et consultation des OF',
+      of:'Import PDF Sage et consultation des OF',
       historique:'',saisies:'',import:'',dossiers:'',rentabilite:'',
     };
     const topbar=h('div',{className:'mobile-topbar'},

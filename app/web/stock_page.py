@@ -326,10 +326,6 @@ body.light .btn-sm{color:#fff}
 .btn-sm:active{transform:translateY(1px)}
 .btn-danger{background:rgba(248,113,113,.15);color:var(--danger);border:1px solid rgba(248,113,113,.3);
   border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
-.btn.btn-accent{background:var(--accent);color:var(--bg);border:none}
-body.light .btn.btn-accent{color:#fff}
-.btn.btn-danger{background:var(--danger);color:#fff;border:none}
-.btn.btn-danger:hover{filter:brightness(1.05)}
 
 /* ── Scorecard ── */
 .scorecard{background:var(--card);border:1.5px solid var(--border);border-radius:16px;padding:20px;margin-bottom:16px}
@@ -351,6 +347,12 @@ body.light .btn.btn-accent{color:#fff}
 .empl-info{font-size:11px;color:var(--muted);margin-top:2px}
 .empl-qte{font-family:monospace;font-weight:700;font-size:13px;text-align:right}
 .empl-date{font-size:11px;color:var(--muted);text-align:right;margin-top:2px}
+.empl-row-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.empl-lot-out-btn{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;padding:0;
+  border-radius:10px;border:1px solid color-mix(in srgb,var(--danger) 35%,transparent);
+  background:color-mix(in srgb,var(--danger) 12%,transparent);color:var(--danger);cursor:pointer;flex-shrink:0}
+.empl-lot-out-btn:hover{border-color:var(--danger);background:color-mix(in srgb,var(--danger) 22%,transparent)}
+.empl-lot-out-btn svg{display:block}
 
 /* ── Action bar ── */
 .action-bar{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
@@ -486,8 +488,6 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .dash-alert-qty{margin-left:auto;white-space:nowrap;color:var(--text2);font-size:11px;flex-shrink:0;text-align:right}
 .dash-mp-cat{font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;text-transform:uppercase;flex-shrink:0}
 .dash-mp-cat-mandrin{background:rgba(124,58,237,.15);color:#7c3aed}
-.dash-mp-cat-frontal{background:rgba(14,165,233,.15);color:#0ea5e9}
-.dash-mp-cat-glassine{background:rgba(236,72,153,.15);color:#ec4899}
 .dash-mp-cat-palette{background:rgba(8,145,178,.15);color:#0891b2}
 .dash-mp-cat-adhesif{background:rgba(217,119,6,.15);color:#d97706}
 .dash-mp-cat-carton{background:rgba(5,150,105,.15);color:#059669}
@@ -591,55 +591,6 @@ body.light .mp-search-wrap:focus-within{
   border-radius:10px;padding:6px;min-width:140px;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,.25)}
 .mp-menu-drop button{display:block;width:100%;text-align:left;margin-bottom:4px}
 .mp-empty{text-align:center;color:var(--muted);font-size:13px;padding:32px 16px}
-/* ── Produits finis (onglet) ── */
-.pf-tab{padding:0 0 24px}
-.pf-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px}
-.pf-toolbar-search{flex:1;min-width:180px;position:relative;display:flex;align-items:center;
-  background:var(--card);border:1px solid var(--border);border-radius:10px;padding:0 12px 0 40px}
-.pf-toolbar-search:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
-.pf-toolbar-search-icon{position:absolute;left:12px;color:var(--muted);display:flex;pointer-events:none}
-.pf-toolbar-search input{width:100%;border:none;background:transparent;padding:11px 0;font-size:14px;color:var(--text);outline:none}
-.pf-toolbar-search input::placeholder{color:var(--muted)}
-.pf-toolbar-actions{display:flex;gap:8px;flex-shrink:0}
-.pf-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
-@media(max-width:700px){.pf-kpis{grid-template-columns:1fr}}
-.pf-kpi{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
-.pf-kpi-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px}
-.pf-kpi-value{font-size:24px;font-weight:700;font-family:ui-monospace,monospace;color:var(--accent)}
-.pf-grid{display:grid;grid-template-columns:1fr 340px;gap:16px;align-items:start}
-@media(max-width:960px){.pf-grid{grid-template-columns:1fr}}
-.pf-col-title{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:10px}
-.pf-stock-list{display:flex;flex-direction:column;gap:6px;max-height:calc(100vh - 340px);overflow-y:auto}
-.pf-stock-item{display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:10px;
-  border:1px solid var(--border);background:var(--card);cursor:pointer;transition:border-color .15s,background .15s}
-.pf-stock-item:hover{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 6%,var(--card))}
-.pf-stock-item-main{flex:1;min-width:0}
-.pf-stock-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
-.pf-stock-ref{font-family:ui-monospace,monospace;font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px}
-.pf-stock-des{font-size:13px;color:var(--text2);margin-bottom:8px;line-height:1.4}
-.pf-stock-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
-.pf-stock-qte{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent);font-size:13px}
-.pf-empl-badge{font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;
-  background:var(--accent-bg);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 35%,transparent)}
-.pf-stock-meta{margin-top:6px;font-size:11px;color:var(--muted)}
-.pf-stock-actions{margin-top:10px;display:flex;justify-content:flex-end}
-.pf-mvt-list{display:flex;flex-direction:column;gap:8px;max-height:calc(100vh - 320px);overflow-y:auto}
-.pf-mvt-item{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;background:var(--card);
-  border:1px solid var(--border);border-radius:10px;font-size:12px}
-.pf-mvt-icon{font-size:16px;font-weight:700;line-height:1;flex-shrink:0;width:20px;text-align:center}
-.pf-mvt-icon.entree{color:var(--success)}
-.pf-mvt-icon.sortie{color:var(--danger)}
-.pf-empty-state{text-align:center;padding:48px 24px;color:var(--muted)}
-.pf-empty-state-title{font-size:14px;font-weight:600;color:var(--text2);margin:12px 0 6px}
-.pf-empty-state-hint{font-size:13px;line-height:1.5}
-.pf-mvt-main{flex:1;min-width:0}
-.pf-mvt-ref{font-weight:700;color:var(--text)}
-.pf-mvt-sub{color:var(--muted);margin-top:2px;font-size:11px}
-.pf-mvt-user{color:var(--text2);font-size:11px;flex-shrink:0;text-align:right;max-width:90px;overflow:hidden;text-overflow:ellipsis}
-.pf-empty{padding:24px;text-align:center;color:var(--muted);font-size:13px}
-.pf-detail-table{width:100%;border-collapse:collapse;font-size:12px}
-.pf-detail-table th,.pf-detail-table td{padding:8px 10px;border-bottom:1px solid var(--border);text-align:left}
-.pf-detail-table th{font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:600}
 #mroot{position:fixed;inset:0;z-index:550;pointer-events:none}
 #mroot:not(:empty){pointer-events:auto}
 .mp-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:18px}
@@ -1243,17 +1194,6 @@ let S = {
   matieresAdminEditId: null,
   matieresAdminAddError: '',
   matieresAdminSaving: false,
-  // Produits finis (onglet dédié)
-  pfStock: null,
-  pfMouvements: null,
-  pfCatalogue: null,
-  pfKpis: null,
-  pfQ: '',
-  pfEmplQ: '',
-  pfLoading: false,
-  pfTotalMouvements: 0,
-  pfModal: null,
-  pfConfirmSortie: null,
   // Historique mouvements
   historique: [],
   historiqueFiltres: {
@@ -1662,6 +1602,43 @@ async function submitMouvement(body) {
   } catch(e) { showToast(e.message, 'error'); }
 }
 
+function buildLotOutBtn(produitId, emplacement, row) {
+  const qLot = row.quantite_lot_fifo != null ? row.quantite_lot_fifo : row.quantite;
+  const unite = row.unite || (S.selProduit && S.selProduit.produit && S.selProduit.produit.unite) || '';
+  const refLabel = row.reference || (S.selProduit && S.selProduit.produit && S.selProduit.produit.reference) || '';
+  return el('button', {
+    cls: 'empl-lot-out-btn',
+    type: 'button',
+    attrs: { title: 'Sortir le lot FIFO', 'aria-label': 'Sortir le lot FIFO' },
+    on: { click: (ev) => {
+      ev.stopPropagation();
+      sortirLot(produitId, emplacement, qLot, unite, refLabel, row.nb_lots);
+    }},
+  }, iconEl('trash-2', 18));
+}
+
+async function sortirLot(produitId, emplacement, qLot, unite, refLabel, nbLots) {
+  const qLabel = fU(qLot, unite || '');
+  const loc = refLabel ? (refLabel + ' · ' + emplacement) : emplacement;
+  let msg = 'Sortir le lot FIFO (' + qLabel + ') — ' + loc + ' ?';
+  if (nbLots > 1) {
+    msg += '\n\n' + nbLots + ' lots actifs à cet emplacement — seul le plus ancien sera retiré.';
+  }
+  if (!confirm(msg)) return;
+  try {
+    const r = await api('/api/stock/sortir-lot', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ produit_id: produitId, emplacement }),
+    });
+    if (!r) return;
+    showToast('Lot sorti — reste : ' + fN(r.quantite_apres), 'success');
+    if (S.selProduit) await loadProduit(S.selProduit.produit.id);
+    else if (S.selEmpl) await loadEmplacement(S.selEmpl.emplacement);
+    else if (S.tab === 'dashboard') await loadDashboard();
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
 // Emplacements chargés depuis /api/stock/emplacements-list (plan + stock réel)
 let _emplListFromDB = [];
 const LS_STOCK_EMPL_CUSTOM = 'mysifa_stock_empl_custom';
@@ -1929,7 +1906,6 @@ function goToTab(tab) {
   // Arrêter la caméra si on quitte l'onglet réception
   if (tab !== 'reception' && S.recepScanning) recepStopCamera();
   S.tab = tab; S.selProduit = null; S.selEmpl = null; S.selMatiere = null; S.searchResults = null; S.showAddForm = false;
-  if (tab !== 'produits-finis') { S.pfModal = null; closeMroot(); }
   if (tab !== 'referentiel') {
     S.refClientQ = '';
     S.refClientResults = null;
@@ -1947,7 +1923,6 @@ function goToTab(tab) {
   else if (tab === 'inventaire') loadInventaireList();
   else if (tab === 'reception') loadRecepHistory();
   else if (tab === 'matieres') loadMatieres();
-  else if (tab === 'produits-finis') loadProduitsFinis();
   else if (tab === 'historique') loadHistorique();
 }
 
@@ -2963,7 +2938,7 @@ function renderImportRefsModal() {
   document.body.appendChild(ov);
 }
 
-const MP_CAT_LABELS = { mandrin: 'Mandrin', palette: 'Palette', adhesif: 'Adhésif', carton: 'Carton', frontal: 'Frontal', glassine: 'Glassine' };
+const MP_CAT_LABELS = { mandrin: 'Mandrin', palette: 'Palette', adhesif: 'Adhésif', carton: 'Carton' };
 
 function mpCategorieKey(cat) {
   return String(cat || '').trim().toLowerCase();
@@ -2973,42 +2948,30 @@ function mpCtx(catOrMatiere) {
     return {
       categorie: mpCategorieKey(catOrMatiere.categorie),
       palettes_par_pile: parseFloat(catOrMatiere.palettes_par_pile) || 0,
-      couleur: (catOrMatiere.couleur || '').trim(),
     };
   }
-  return { categorie: mpCategorieKey(catOrMatiere), palettes_par_pile: 0, couleur: '' };
-}
-function mpIsBobineCategory(catOrMatiere) {
-  const c = mpCtx(catOrMatiere).categorie;
-  return c === 'mandrin' || c === 'frontal' || c === 'glassine';
-}
-function mpIsGlassineCategory(catOrMatiere) {
-  return mpCtx(catOrMatiere).categorie === 'glassine';
+  return { categorie: mpCategorieKey(catOrMatiere), palettes_par_pile: 0 };
 }
 function mpUniteNom(catOrMatiere) {
   const c = mpCtx(catOrMatiere).categorie;
-  if (mpIsBobineCategory(c)) return 'bobine';
   if (c === 'palette') return 'pile';
   if (c === 'carton') return 'palette';
   return 'palette';
 }
 function mpUniteShort(catOrMatiere) {
   const u = mpUniteNom(catOrMatiere);
-  if (u === 'bobine') return 'bob.';
   if (u === 'pile') return 'pile';
   if (u === 'palette') return 'pal.';
   return 'pal.';
 }
 function mpQuantiteFieldLabel(catOrMatiere) {
   const u = mpUniteNom(catOrMatiere);
-  if (u === 'bobine') return 'Quantité (bobines)';
   if (u === 'pile') return 'Quantité (piles)';
   if (u === 'palette') return 'Quantité (palettes)';
   return 'Quantité (palettes)';
 }
 function mpSeuilFieldLabel(catOrMatiere) {
   const u = mpUniteNom(catOrMatiere);
-  if (u === 'bobine') return 'Seuil d\'alerte (bobines)';
   if (u === 'pile') return 'Seuil d\'alerte (piles)';
   if (u === 'palette') return 'Seuil d\'alerte (pal.)';
   return 'Seuil d\'alerte (pal.)';
@@ -3032,16 +2995,9 @@ function mpStockTotalLabel(catOrMatiere) {
 }
 function mpQuantiteInputAttrs(catOrMatiere) {
   const c = mpCtx(catOrMatiere).categorie;
-  if (mpIsBobineCategory(c) || c === 'palette' || c === 'carton') {
-    return { type: 'number', min: '1', step: '1' };
-  }
+  if (c === 'palette') return { type: 'number', min: '1', step: '1' };
+  if (c === 'carton') return { type: 'number', min: '1', step: '1' };
   return { type: 'number', min: '0.5', step: '0.5' };
-}
-function mpAdminHint(cat) {
-  if (cat === 'palette') return 'Stock géré en piles. Indiquez combien de palettes composent une pile.';
-  if (cat === 'carton') return 'Stock géré en palettes.';
-  if (mpIsBobineCategory(cat)) return 'Stock géré en bobines (réception par scan possible).';
-  return 'Stock géré en palettes (pal.).';
 }
 function mpIsPaletteCategory(catOrMatiere) {
   return mpCtx(catOrMatiere).categorie === 'palette';
@@ -3085,8 +3041,6 @@ const MP_PILL_CATS = [
   { id: 'palette', label: 'Palettes' },
   { id: 'adhesif', label: 'Adhésifs' },
   { id: 'carton', label: 'Cartons' },
-  { id: 'frontal', label: 'Frontaux' },
-  { id: 'glassine', label: 'Glassines' },
 ];
 
 function isMatieresAdmin() {
@@ -3304,9 +3258,6 @@ function buildMatiereDetail() {
   if (mpIsPaletteCategory(m) && m.palettes_par_pile > 0) {
     meta.push(fN(m.palettes_par_pile) + ' pal. / pile');
   }
-  if (mpIsGlassineCategory(m) && m.couleur) {
-    meta.push('Couleur : ' + m.couleur);
-  }
   if (seuil > 0) meta.push('Seuil min. ' + mpStockLine(seuil, m));
 
   return el('div', { cls: 'content' },
@@ -3356,655 +3307,6 @@ function renderMatieresView() {
         try { el.setSelectionRange(caretStart, caretEnd); } catch (e) {}
       }
     }
-  }
-}
-
-const PF_UNITES = ['étiquette', 'pièces', 'kg', 'm', 'bobines', 'cartons', 'palettes', 'étiquettes', 'boîtes'];
-
-function normalizePfMvt(m) {
-  if (!m || typeof m !== 'object') return m;
-  const type = (m.type || m.type_mouvement || '').toLowerCase();
-  return {
-    ...m,
-    type: type === 'entree' || type === 'sortie' ? type : type,
-    date_mouvement: m.date_mouvement || m.created_at,
-    user_login: m.user_login || m.created_by_name || m.created_by || '—',
-  };
-}
-
-function buildPfEmptyState(title, hint) {
-  return el('div', { cls: 'pf-empty-state' },
-    el('div', { style: { fontSize: '32px', marginBottom: '4px', color: 'var(--muted)' } }, '·'),
-    el('div', { cls: 'pf-empty-state-title' }, title),
-    el('div', { cls: 'pf-empty-state-hint' }, hint),
-  );
-}
-
-function pfFmtShortDateTime(iso) {
-  if (!iso) return '—';
-  const s = String(iso);
-  const d = s.slice(0, 10).split('-');
-  const hm = s.length >= 16 ? s.slice(11, 16) : '';
-  if (d.length === 3) return d[2] + '/' + d[1] + (hm ? ' ' + hm : '');
-  return fD(iso);
-}
-
-function filterPfStockList() {
-  const list = S.pfStock || [];
-  const q = (S.pfQ || '').trim().toLowerCase();
-  const eq = (S.pfEmplQ || '').trim().toLowerCase();
-  return list.filter(row => {
-    if (q) {
-      const hay = [
-        row.reference,
-        row.designation,
-        row.no_of,
-      ].map(x => String(x || '').toLowerCase()).join(' ');
-      if (!hay.includes(q)) return false;
-    }
-    if (eq) {
-      const em = String(row.emplacement || '').toLowerCase();
-      if (!em.includes(eq)) return false;
-    }
-    return true;
-  });
-}
-
-async function loadProduitsFinis() {
-  S.pfLoading = true;
-  S.pfStock = null;
-  renderProduitsFinisView();
-  try {
-    const [data, mvts] = await Promise.all([
-      api('/api/stock/produits-finis'),
-      api('/api/stock/produits-finis/mouvements?limit=20'),
-    ]);
-    const payload = data && typeof data === 'object' && !Array.isArray(data) ? data : {};
-    S.pfStock = payload.stock || payload.items || (Array.isArray(data) ? data : []);
-    S.pfCatalogue = payload.catalogue || [];
-    S.pfKpis = payload.kpis || { references: 0, mouvements_aujourdhui: 0, emplacements_occupes: 0 };
-    S.pfTotalMouvements = Number(S.pfKpis.total_mouvements) || 0;
-    const mvtsList = Array.isArray(mvts)
-      ? mvts
-      : (mvts && (mvts.mouvements || mvts.items)) || [];
-    S.pfMouvements = mvtsList.map(normalizePfMvt);
-  } catch (e) {
-    S.pfStock = [];
-    S.pfCatalogue = [];
-    S.pfMouvements = [];
-    S.pfKpis = { references: 0, mouvements_aujourdhui: 0, emplacements_occupes: 0 };
-    S.pfTotalMouvements = 0;
-    showToast(e.message || 'Chargement impossible.', 'error');
-  }
-  S.pfLoading = false;
-  renderProduitsFinisView();
-}
-
-function renderProduitsFinisView() {
-  if (S.tab !== 'produits-finis') return;
-  const ae = document.activeElement;
-  const focusId = ae?.id;
-  const caretStart = ae?.selectionStart;
-  const caretEnd = ae?.selectionEnd;
-  const area = document.getElementById('scroll-area');
-  if (!area) return;
-  area.innerHTML = '';
-  const content = buildProduitsFinisTab();
-  if (content) area.appendChild(content);
-  if (focusId) {
-    const elFocus = document.getElementById(focusId);
-    if (elFocus) {
-      elFocus.focus();
-      if (caretStart != null) {
-        try { elFocus.setSelectionRange(caretStart, caretEnd); } catch (e) {}
-      }
-    }
-  }
-}
-
-function buildPfSearchInput(id, placeholder, valueKey) {
-  const inp = el('input', {
-    id,
-    attrs: { type: 'text', placeholder, autocomplete: 'off' },
-  });
-  inp.value = S[valueKey] || '';
-  inp.addEventListener('input', e => {
-    S[valueKey] = e.target.value;
-    renderProduitsFinisView();
-  });
-  inp.addEventListener('keydown', e => {
-    if (e.key === 'Escape') {
-      S[valueKey] = '';
-      renderProduitsFinisView();
-    }
-  });
-  return el('div', { cls: 'pf-toolbar-search' },
-    el('span', { cls: 'pf-toolbar-search-icon' }, iconEl('search', 16)),
-    inp,
-  );
-}
-
-function buildProduitsFinisTab() {
-  const wrap = el('div', { cls: 'content pf-tab', id: 'tab-produits-finis' });
-
-  const kpis = S.pfKpis || {};
-  wrap.appendChild(el('div', { cls: 'pf-kpis' },
-    el('div', { cls: 'card pf-kpi', style: { padding: '16px 20px' } },
-      el('div', { cls: 'pf-kpi-label' }, 'Références en stock'),
-      el('div', { cls: 'pf-kpi-value', id: 'kpi-refs' }, S.pfLoading && S.pfStock === null ? '—' : String(kpis.references ?? 0)),
-    ),
-    el('div', { cls: 'card pf-kpi', style: { padding: '16px 20px' } },
-      el('div', { cls: 'pf-kpi-label' }, 'Mouvements aujourd\'hui'),
-      el('div', { cls: 'pf-kpi-value', id: 'kpi-mvt-today' }, S.pfLoading && S.pfStock === null ? '—' : String(kpis.mouvements_aujourdhui ?? 0)),
-    ),
-    el('div', { cls: 'card pf-kpi', style: { padding: '16px 20px' } },
-      el('div', { cls: 'pf-kpi-label' }, 'Emplacements occupés'),
-      el('div', { cls: 'pf-kpi-value', id: 'kpi-empl' }, S.pfLoading && S.pfStock === null ? '—' : String(kpis.emplacements_occupes ?? 0)),
-    ),
-  ));
-
-  const toolbar = el('div', { cls: 'pf-toolbar' },
-    buildPfSearchInput('pf-search-produit', 'Rechercher un produit (réf, désignation, OF…)', 'pfQ'),
-    buildPfSearchInput('pf-search-empl', 'Rechercher un emplacement', 'pfEmplQ'),
-    el('div', { cls: 'pf-toolbar-actions' },
-      S.stockReadOnly ? null : el('button', {
-        cls: 'btn btn-accent',
-        type: 'button',
-        on: { click: () => openPfMvtModal('entree') },
-      }, '+ Entrée'),
-      S.stockReadOnly ? null : el('button', {
-        cls: 'btn btn-danger',
-        type: 'button',
-        on: { click: () => openPfMvtModal('sortie') },
-      }, '− Sortie'),
-    ),
-  );
-  wrap.appendChild(toolbar);
-
-  const stockList = el('div', { cls: 'pf-stock-list', id: 'pf-stock-list' });
-  const mvtList = el('div', { cls: 'pf-mvt-list', id: 'pf-mvt-list' });
-
-  if (S.pfLoading && S.pfStock === null) {
-    stockList.appendChild(el('div', { cls: 'pf-empty', style: { padding: '32px', textAlign: 'center', fontSize: '13px' } }, 'Chargement…'));
-    mvtList.appendChild(el('div', { cls: 'pf-empty', style: { padding: '32px', textAlign: 'center', fontSize: '13px' } }, 'Chargement…'));
-  } else {
-    const filtered = filterPfStockList();
-    const qProd = (S.pfQ || '').trim();
-    const qEmpl = (S.pfEmplQ || '').trim();
-    const hasFilter = !!(qProd || qEmpl);
-    const neverHadMvt = !S.pfTotalMouvements;
-
-    if (!filtered.length) {
-      if (hasFilter) {
-        stockList.appendChild(el('div', { cls: 'pf-empty', style: { padding: '32px', textAlign: 'center', fontSize: '13px' } },
-          'Aucun résultat pour « ' + [qProd, qEmpl].filter(Boolean).join(' » / « ') + ' »',
-        ));
-      } else if (neverHadMvt) {
-        stockList.appendChild(buildPfEmptyState(
-          'Aucun produit en stock',
-          'Utilisez le bouton « Entrée » pour enregistrer votre premier mouvement.',
-        ));
-      } else {
-        stockList.appendChild(buildPfEmptyState('Aucun produit en stock', 'Tous les emplacements sont vides.'));
-      }
-    } else {
-      filtered.forEach(row => {
-        const item = el('div', {
-          cls: 'pf-stock-item',
-          on: { click: () => openPfDetailModal(row.reference) },
-        },
-          el('div', { cls: 'pf-stock-item-main' },
-            el('div', { cls: 'pf-stock-ref' }, row.reference || '—'),
-            el('div', { cls: 'pf-stock-des' }, row.designation || '—'),
-            el('div', { cls: 'pf-stock-row', style: { marginTop: '6px' } },
-              el('span', { cls: 'pf-stock-qte' }, fU(row.quantite, row.unite)),
-              el('span', { cls: 'pf-empl-badge' }, row.emplacement || '—'),
-            ),
-            el('div', { cls: 'pf-stock-meta' }, 'Dernière entrée : ' + fD(row.derniere_entree)),
-          ),
-          el('button', {
-            cls: 'btn-ghost-sm',
-            type: 'button',
-            on: { click: (e) => { e.stopPropagation(); openPfDetailModal(row.reference); } },
-          }, 'Détail'),
-        );
-        stockList.appendChild(item);
-      });
-    }
-
-    const mvts = S.pfMouvements || [];
-    if (!mvts.length) {
-      mvtList.appendChild(el('div', { cls: 'pf-empty', style: { padding: '24px', textAlign: 'center', fontSize: '13px' } },
-        neverHadMvt ? 'Aucun mouvement enregistré.' : 'Aucun mouvement récent.',
-      ));
-    } else {
-      mvts.forEach(m => {
-        const isEntree = m.type === 'entree';
-        mvtList.appendChild(el('div', { cls: 'pf-mvt-item' },
-          el('span', { cls: 'pf-mvt-icon ' + (isEntree ? 'entree' : 'sortie') }, isEntree ? '↑' : '↓'),
-          el('div', { cls: 'pf-mvt-main' },
-            el('div', { cls: 'pf-mvt-ref' }, (m.reference || '—') + ' · ' + fU(m.quantite, m.unite)),
-            el('div', { cls: 'pf-mvt-sub' },
-              (m.emplacement || '—') + ' · ' + pfFmtShortDateTime(m.date_mouvement),
-            ),
-          ),
-          el('div', { cls: 'pf-mvt-user' }, m.user_login || '—'),
-        ));
-      });
-    }
-  }
-
-  wrap.appendChild(el('div', { cls: 'pf-grid' },
-    el('div', { cls: 'pf-col-stock' },
-      el('div', { cls: 'pf-col-title' }, 'Stock actuel'),
-      stockList,
-    ),
-    el('div', { cls: 'pf-col-mvts' },
-      el('div', { cls: 'pf-col-title' }, 'Derniers mouvements'),
-      mvtList,
-    ),
-  ));
-  return wrap;
-}
-
-function pfCatalogueFind(ref) {
-  const r = String(ref || '').trim().toUpperCase();
-  return (S.pfCatalogue || []).find(c => String(c.reference || '').toUpperCase() === r) || null;
-}
-
-function pfEmplacementChoices(filter) {
-  const q = String(filter || '').trim().toUpperCase();
-  const fromStock = [...new Set((S.pfStock || []).map(r => String(r.emplacement || '').toUpperCase()).filter(Boolean))];
-  const fromDb = allPageEmplacementChoices();
-  const all = [...new Set([...fromStock, ...fromDb])].sort();
-  if (!q) return all.slice(0, 12);
-  return all.filter(e => e.includes(q)).slice(0, 12);
-}
-
-function pfProduitSuggestions(filter) {
-  const q = String(filter || '').trim().toLowerCase();
-  const cat = S.pfCatalogue || [];
-  if (!q) return cat.slice(0, 15);
-  return cat.filter(c => {
-    const hay = (String(c.reference || '') + ' ' + String(c.designation || '')).toLowerCase();
-    return hay.includes(q);
-  }).slice(0, 15);
-}
-
-function buildPfRefPickerField(refInp, desInp, uniteSel, onPick) {
-  const datalistId = 'pf-ref-datalist-' + Math.random().toString(36).slice(2, 8);
-  const dl = el('datalist', { id: datalistId });
-  (S.pfCatalogue || []).slice(0, 200).forEach(c => {
-    dl.appendChild(el('option', { attrs: { value: c.reference || '' } }));
-  });
-  refInp.setAttribute('list', datalistId);
-  const suggWrap = el('div', { cls: 'empl-suggestions' });
-  refInp.addEventListener('input', () => {
-    const picked = pfCatalogueFind(refInp.value);
-    if (picked) {
-      desInp.value = picked.designation || '';
-      if (uniteSel && picked.unite) uniteSel.value = picked.unite;
-    }
-    const list = pfProduitSuggestions(refInp.value);
-    suggWrap.innerHTML = '';
-    list.forEach(c => {
-      suggWrap.appendChild(el('div', {
-        cls: 'empl-sugg-item',
-        on: { mousedown: (e) => {
-          e.preventDefault();
-          refInp.value = c.reference || '';
-          desInp.value = c.designation || '';
-          if (uniteSel && c.unite) uniteSel.value = c.unite;
-          suggWrap.innerHTML = '';
-          if (onPick) onPick(c);
-        } },
-      }, (c.reference || '') + (c.designation ? ' — ' + c.designation : '')));
-    });
-  });
-  return { suggWrap, datalist: dl };
-}
-
-function pfStockAtEmpl(reference, emplacement) {
-  const ref = String(reference || '').trim().toUpperCase();
-  const empl = String(emplacement || '').trim().toUpperCase();
-  const row = (S.pfStock || []).find(r =>
-    String(r.reference || '').toUpperCase() === ref
-    && String(r.emplacement || '').toUpperCase() === empl,
-  );
-  return row ? (parseFloat(row.quantite) || 0) : 0;
-}
-
-function buildPfEmplPickerField(emplInp) {
-  const datalistId = 'pf-empl-datalist-' + Math.random().toString(36).slice(2, 8);
-  const dl = el('datalist', { id: datalistId });
-  pfEmplacementChoices('').forEach(code => {
-    dl.appendChild(el('option', { attrs: { value: code } }));
-  });
-  emplInp.setAttribute('list', datalistId);
-  const suggWrap = el('div', { cls: 'empl-suggestions' });
-  emplInp.addEventListener('input', () => {
-    emplInp.value = emplInp.value.toUpperCase();
-    const list = pfEmplacementChoices(emplInp.value);
-    suggWrap.innerHTML = '';
-    list.forEach(code => {
-      suggWrap.appendChild(el('div', {
-        cls: 'empl-sugg-item',
-        on: { mousedown: (e) => { e.preventDefault(); emplInp.value = code; suggWrap.innerHTML = ''; } },
-      }, code));
-    });
-  });
-  return { suggWrap, datalist: dl };
-}
-
-function openPfMvtModal(type, preset) {
-  if (S.stockReadOnly) return;
-  const typeMvt = type === 'sortie' ? 'sortie' : 'entree';
-  S.pfModal = { type: typeMvt, preset: preset || null };
-  renderPfMvtModal();
-}
-
-function closePfModals() {
-  S.pfModal = null;
-  S.pfConfirmSortie = null;
-  const mroot = document.getElementById('mroot');
-  if (mroot) mroot.innerHTML = '';
-}
-
-function renderPfMvtModal() {
-  closePfModals();
-  const modal = S.pfModal;
-  if (!modal) return;
-  const mroot = document.getElementById('mroot');
-  if (!mroot) return;
-  const typeMvt = modal.type;
-  const isSortie = typeMvt === 'sortie';
-  const modalId = isSortie ? 'modal-pf-sortie' : 'modal-pf-entree';
-  const headCls = isSortie ? 'mp-modal-mvt-head-pf-sortie' : 'mp-modal-mvt-head-pf-entree';
-
-  const overlay = el('div', {
-    id: modalId,
-    cls: 'mp-modal-overlay',
-    on: { click: (e) => { if (e.target === overlay) closePfModals(); } },
-  });
-  const box = el('div', { cls: 'mp-modal mp-modal-mvt' });
-  box.appendChild(el('div', { cls: 'mp-modal-mvt-head ' + headCls },
-    el('h3', null, isSortie ? 'Sortie produit' : 'Entrée produit'),
-    el('button', { cls: 'mp-modal-close', type: 'button', on: { click: closePfModals } }, '×'),
-  ));
-  const body = el('div', { cls: 'mp-modal-mvt-body' });
-
-  const preset = modal.preset || {};
-  const refFieldId = isSortie ? 'pf-sortie-ref' : 'pf-entree-ref';
-  const refInp = el('input', {
-    cls: 'field-input',
-    id: refFieldId,
-    attrs: { type: 'text', placeholder: 'Référence produit', autocomplete: 'off', required: true },
-    style: { direction: 'ltr' },
-  });
-  refInp.value = preset.reference || '';
-  const desInp = el('input', {
-    cls: 'field-input',
-    attrs: { type: 'text', placeholder: 'Désignation', autocomplete: 'off' },
-    style: { direction: 'ltr' },
-  });
-  desInp.value = preset.designation || '';
-  const uniteSel = el('select', { cls: 'field-input' });
-  PF_UNITES.forEach(u => {
-    const o = el('option', { attrs: { value: u } }, u);
-    if ((preset.unite || 'pièces') === u) o.selected = true;
-    uniteSel.appendChild(o);
-  });
-  const { suggWrap: refSugg, datalist: refDl } = buildPfRefPickerField(refInp, desInp, uniteSel);
-
-  const qInp = el('input', {
-    cls: 'field-input',
-    attrs: { type: 'number', min: '0.01', step: '0.01', inputmode: 'decimal', required: true },
-    style: { direction: 'ltr' },
-  });
-  const emplInp = el('input', {
-    cls: 'field-input empl-upper',
-    attrs: { type: 'text', placeholder: 'Emplacement', autocomplete: 'off', required: true },
-    style: { direction: 'ltr' },
-  });
-  emplInp.value = (preset.emplacement || '').toUpperCase();
-  const { suggWrap: emplSugg, datalist: emplDl } = buildPfEmplPickerField(emplInp);
-  const hintEl = el('div', { cls: 'mp-hint', style: { display: isSortie ? '' : 'none' } }, '');
-  const errEl = el('div', { cls: 'mp-hint err', style: { display: 'none' } }, '');
-  const ofInp = el('input', {
-    cls: 'field-input',
-    attrs: { type: 'text', placeholder: 'N° OF (facultatif)', autocomplete: 'off' },
-    style: { direction: 'ltr' },
-  });
-  const comTa = el('textarea', {
-    cls: 'field-input',
-    attrs: { rows: '2', placeholder: 'Commentaire (facultatif)' },
-    style: { resize: 'vertical', minHeight: '60px' },
-  });
-  const motifInp = isSortie ? el('input', {
-    cls: 'field-input',
-    attrs: { type: 'text', placeholder: 'Motif / destinataire (facultatif)', autocomplete: 'off' },
-    style: { direction: 'ltr' },
-  }) : null;
-
-  body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Référence produit *'), refInp, refDl, refSugg));
-  body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Désignation'), desInp));
-  body.appendChild(el('div', { cls: 'mp-field' },
-    el('label', null, 'Quantité *'),
-    qInp,
-    isSortie ? hintEl : null,
-    isSortie ? errEl : null,
-  ));
-  body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Unité'), uniteSel));
-  body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Emplacement *'), emplInp, emplDl, emplSugg));
-  body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'N° OF'), ofInp));
-  if (motifInp) body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Motif / destinataire'), motifInp));
-  body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Commentaire'), comTa));
-
-  const collectBody = () => ({
-    reference: refInp.value.trim().toUpperCase(),
-    designation: desInp.value.trim(),
-    quantite: parseFloat(qInp.value),
-    unite: uniteSel.value || 'pièces',
-    emplacement: emplInp.value.trim().toUpperCase(),
-    no_of: ofInp.value.trim() || null,
-    commentaire: comTa.value.trim() || null,
-    motif_destinataire: motifInp ? (motifInp.value.trim() || null) : null,
-  });
-
-  const validate = () => {
-    const b = collectBody();
-    if (!b.reference) return 'Référence obligatoire.';
-    if (!b.emplacement) return 'Emplacement obligatoire.';
-    if (!b.quantite || b.quantite < 0.01) return 'Quantité invalide — minimum 0,01.';
-    if (!b.designation) b.designation = b.reference;
-    return null;
-  };
-
-  const refreshStockHint = () => {
-    if (!isSortie) return;
-    const b = collectBody();
-    const stock = pfStockAtEmpl(b.reference, b.emplacement);
-    if (!b.reference || !b.emplacement) {
-      hintEl.textContent = '';
-      errEl.style.display = 'none';
-      return;
-    }
-    hintEl.textContent = 'Stock à cet emplacement : ' + fU(stock, uniteSel.value || 'étiquette');
-    const q = parseFloat(qInp.value);
-    if (q > stock) {
-      errEl.style.display = '';
-      errEl.textContent = 'Stock insuffisant.';
-    } else {
-      errEl.style.display = 'none';
-    }
-  };
-  if (isSortie) {
-    refInp.addEventListener('input', refreshStockHint);
-    emplInp.addEventListener('input', refreshStockHint);
-    qInp.addEventListener('input', refreshStockHint);
-    refreshStockHint();
-  }
-
-  const saveBtn = el('button', {
-    cls: 'btn ' + (isSortie ? 'btn-danger' : 'btn-accent'),
-    type: 'button',
-  }, 'Enregistrer');
-
-  const doSubmit = async () => {
-    const err = validate();
-    if (err) { showToast(err, 'error'); return; }
-    const b = collectBody();
-    if (!b.designation) b.designation = b.reference;
-    if (isSortie) {
-      const stock = pfStockAtEmpl(b.reference, b.emplacement);
-      if (b.quantite > stock) {
-        showToast('Stock insuffisant.', 'error');
-        return;
-      }
-    }
-    const path = isSortie ? '/api/stock/produits-finis/sortie' : '/api/stock/produits-finis/entree';
-    saveBtn.disabled = true;
-    try {
-      await api(path, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(b),
-      });
-      showToast(isSortie ? 'Sortie enregistrée.' : 'Entrée enregistrée.');
-      closePfModals();
-      await loadProduitsFinis();
-    } catch (e) {
-      showToast(e.message || 'Enregistrement impossible.', 'error');
-      saveBtn.disabled = false;
-    }
-  };
-
-  const onSave = () => {
-    const err = validate();
-    if (err) { showToast(err, 'error'); return; }
-    if (isSortie) {
-      renderPfSortieConfirmModal(collectBody(), doSubmit);
-      return;
-    }
-    doSubmit();
-  };
-  saveBtn.addEventListener('click', onSave);
-
-  body.appendChild(el('div', { cls: 'mp-modal-actions' },
-    el('button', { cls: 'btn btn-ghost', type: 'button', on: { click: closePfModals } }, 'Annuler'),
-    saveBtn,
-  ));
-  box.appendChild(body);
-  overlay.appendChild(box);
-  mroot.appendChild(overlay);
-  requestAnimationFrame(() => { document.getElementById(refFieldId)?.focus(); });
-}
-
-function renderPfSortieConfirmModal(body, onConfirm) {
-  closePfModals();
-  S.pfConfirmSortie = body;
-  const mroot = document.getElementById('mroot');
-  if (!mroot) return;
-  const overlay = el('div', {
-    cls: 'mp-modal-overlay',
-    on: { click: (e) => { if (e.target === overlay) closePfModals(); } },
-  });
-  const box = el('div', { cls: 'mp-modal' },
-    el('h3', null, 'Confirmer la sortie'),
-    el('p', { style: { fontSize: '13px', color: 'var(--text2)', lineHeight: '1.6', marginBottom: '16px' } },
-      'Sortie de ' + fU(body.quantite, body.unite) + ' — réf. ' + body.reference
-      + ' depuis ' + body.emplacement + '.',
-    ),
-    el('div', { cls: 'mp-modal-actions' },
-      el('button', { cls: 'btn btn-ghost', type: 'button', on: { click: () => {
-        S.pfModal = { type: 'sortie' };
-        renderPfMvtModal();
-      } } }, 'Retour'),
-      el('button', {
-        cls: 'btn btn-danger',
-        type: 'button',
-        on: { click: async (e) => {
-          const btn = e.currentTarget;
-          btn.disabled = true;
-          try { await onConfirm(); } catch (err) { btn.disabled = false; }
-        } },
-      }, 'Confirmer la sortie'),
-    ),
-  );
-  overlay.appendChild(box);
-  mroot.appendChild(overlay);
-}
-
-async function openPfDetailModal(reference) {
-  const ref = String(reference || '').trim().toUpperCase();
-  if (!ref) return;
-  closePfModals();
-  const mroot = document.getElementById('mroot');
-  if (!mroot) return;
-  const overlay = el('div', {
-    id: 'modal-pf-detail',
-    cls: 'mp-modal-overlay',
-    on: { click: (e) => { if (e.target === overlay) closePfModals(); } },
-  });
-  const box = el('div', { cls: 'mp-modal', style: { maxWidth: '560px' } },
-    el('div', { cls: 'mp-modal-head' },
-      el('h3', null, 'Détail produit'),
-      el('button', { cls: 'mp-modal-close', type: 'button', on: { click: closePfModals } }, '×'),
-    ),
-    el('div', { cls: 'pf-empty' }, 'Chargement…'),
-  );
-  overlay.appendChild(box);
-  mroot.appendChild(overlay);
-  try {
-    const d = await api('/api/stock/produits-finis/' + encodeURIComponent(ref));
-    box.innerHTML = '';
-    box.appendChild(el('div', { cls: 'mp-modal-head' },
-      el('h3', null, d.reference || ref),
-      el('button', { cls: 'mp-modal-close', type: 'button', on: { click: closePfModals } }, '×'),
-    ));
-    box.appendChild(el('p', { style: { fontSize: '13px', color: 'var(--text2)', marginBottom: '8px' } }, d.designation || '—'));
-    box.appendChild(el('p', { style: { fontSize: '13px', fontWeight: '700', color: 'var(--accent)', marginBottom: '16px' } },
-      'Stock actuel : ' + fU(d.stock_total, d.unite),
-    ));
-    const hist = d.historique || [];
-    if (!hist.length) {
-      box.appendChild(el('div', { cls: 'pf-empty' }, 'Aucun mouvement enregistré.'));
-    } else {
-      const table = el('table', { cls: 'pf-detail-table' });
-      const thead = el('thead', null, el('tr', null,
-        el('th', null, 'Date'),
-        el('th', null, 'Type'),
-        el('th', null, 'Qté'),
-        el('th', null, 'Empl.'),
-        el('th', null, 'OF'),
-        el('th', null, 'Utilisateur'),
-      ));
-      table.appendChild(thead);
-      const tbody = el('tbody', null);
-      hist.forEach(raw => {
-        const m = normalizePfMvt(raw);
-        const t = m.type === 'entree' ? 'Entrée' : (m.type === 'sortie' ? 'Sortie' : (m.type || '—'));
-        tbody.appendChild(el('tr', null,
-          el('td', null, fDateTime(m.date_mouvement)),
-          el('td', null, t),
-          el('td', null, fU(m.quantite, m.unite)),
-          el('td', null, m.emplacement || '—'),
-          el('td', null, m.no_of || '—'),
-          el('td', null, m.user_login || '—'),
-        ));
-      });
-      table.appendChild(tbody);
-      box.appendChild(table);
-    }
-    box.appendChild(el('div', { cls: 'mp-modal-actions', style: { marginTop: '16px' } },
-      el('button', { cls: 'btn btn-ghost', type: 'button', on: { click: closePfModals } }, 'Fermer'),
-    ));
-  } catch (e) {
-    box.innerHTML = '';
-    box.appendChild(el('div', { cls: 'pf-empty' }, e.message || 'Chargement impossible.'));
-    box.appendChild(el('div', { cls: 'mp-modal-actions' },
-      el('button', { cls: 'btn btn-ghost', type: 'button', on: { click: closePfModals } }, 'Fermer'),
-    ));
   }
 }
 
@@ -4067,9 +3369,6 @@ function matiereRefEditPayload(item, fields) {
     }
     payload.palettes_par_pile = ppp;
   }
-  if (mpIsGlassineCategory(item) && fields.couleurInp) {
-    payload.couleur = fields.couleurInp.value.trim() || des;
-  }
   return { payload };
 }
 
@@ -4078,17 +3377,13 @@ function appendMatiereRefEditFields(parent, item) {
   refInp.value = item.reference || '';
   const desInp = el('input', { attrs: { type: 'text' } });
   desInp.value = item.designation || '';
-  const seuilStep = mpIsBobineCategory(item) || mpIsPaletteCategory(item) || mpCategorieKey(item.categorie) === 'carton' ? '1' : '0.5';
+  const seuilStep = mpIsPaletteCategory(item) || mpCategorieKey(item.categorie) === 'carton' ? '1' : '0.5';
   const seuilInp = el('input', { attrs: { type: 'number', min: '0', step: seuilStep } });
   seuilInp.value = String(item.seuil_alerte ?? 0);
   const pppWrap = el('div', { cls: 'mp-field', style: { display: mpIsPaletteCategory(item) ? '' : 'none' } });
   const pppInp = el('input', { attrs: { type: 'number', min: '1', step: '1' } });
   pppInp.value = String(item.palettes_par_pile > 0 ? item.palettes_par_pile : '');
   pppWrap.append(el('label', null, 'Palettes par pile'), pppInp);
-  const couleurWrap = el('div', { cls: 'mp-field', style: { display: mpIsGlassineCategory(item) ? '' : 'none' } });
-  const couleurInp = el('input', { attrs: { type: 'text', placeholder: 'Ex. Blanc, Kraft…' } });
-  couleurInp.value = item.couleur || '';
-  couleurWrap.append(el('label', null, 'Couleur'), couleurInp);
   parent.append(
     el('div', { cls: 'mp-field' },
       el('label', null, 'Catégorie'),
@@ -4096,12 +3391,11 @@ function appendMatiereRefEditFields(parent, item) {
     ),
     el('div', { cls: 'mp-field' }, el('label', null, 'Référence'), refInp),
     el('div', { cls: 'mp-field' }, el('label', null, 'Description'), desInp),
-    couleurWrap,
     pppWrap,
     el('div', { cls: 'mp-field' }, el('label', null, mpSeuilFieldLabel(item)), seuilInp),
     el('div', { cls: 'mp-hint' }, '0 = pas d\'alerte stock bas.'),
   );
-  return { refInp, desInp, seuilInp, pppInp, couleurInp };
+  return { refInp, desInp, seuilInp, pppInp };
 }
 
 async function submitMatiereRefEdit(item, fields, onSaved) {
@@ -4227,7 +3521,7 @@ function buildMatieres() {
     el('div', null,
       el('h2', { cls: 'hist-title' }, 'Matières premières'),
       el('p', { cls: 'hist-subtitle' },
-        'Mandrins, frontaux, glassines (bob.), adhésifs (pal.), palettes (piles), cartons (pal.)'),
+        'Mandrins, adhésifs (pal.), palettes (piles), cartons (pal.) — mouvements par emplacement'),
     ),
     isMatieresAdmin()
       ? el('div', { cls: 'hist-head-actions' },
@@ -4289,9 +3583,6 @@ function buildMatieres() {
       if (mpIsPaletteCategory(m) && m.palettes_par_pile > 0) {
         infoChildren.push(el('div', { cls: 'mp-card-meta' },
           fN(m.palettes_par_pile) + ' pal. / pile'));
-      }
-      if (mpIsGlassineCategory(m) && m.couleur) {
-        infoChildren.push(el('div', { cls: 'mp-card-meta' }, 'Couleur : ' + m.couleur));
       }
       if (m.en_alerte) {
         infoChildren.push(el('div', { cls: 'mp-card-warn' },
@@ -4868,7 +4159,7 @@ function renderMatieresAdminDrawer() {
     if (!byCat[c]) byCat[c] = [];
     byCat[c].push(item);
   });
-  ['mandrin', 'frontal', 'glassine', 'palette', 'adhesif', 'carton'].forEach(cat => {
+  ['mandrin', 'palette', 'adhesif', 'carton'].forEach(cat => {
     if (!byCat[cat] || !byCat[cat].length) return;
     body.appendChild(el('div', { style: { fontSize: '11px', fontWeight: '600', color: 'var(--muted)', margin: '12px 0 8px', textTransform: 'uppercase' } },
       MP_CAT_LABELS[cat] || cat));
@@ -4889,9 +4180,6 @@ function buildMatieresAdminRow(item) {
     dashMpCatBadge(item.categorie),
     el('strong', null, item.reference || ''),
     el('span', { style: { color: 'var(--text2)', fontSize: '13px' } }, item.designation || ''),
-    mpIsGlassineCategory(item) && item.couleur
-      ? el('span', { style: { fontSize: '12px', color: 'var(--muted)' } }, ' · ' + item.couleur)
-      : null,
     el('span', { style: { fontSize: '12px', color: 'var(--muted)' } }, 'Seuil ' + mpStockLine(item.seuil_alerte, item)),
     mpIsPaletteCategory(item) && item.palettes_par_pile > 0
       ? el('span', { style: { fontSize: '12px', color: 'var(--muted)' } },
@@ -4969,7 +4257,7 @@ function buildMatieresAdminAddForm() {
   const foot = el('div', { cls: 'mp-drawer-foot' });
   foot.appendChild(el('div', { style: { fontSize: '12px', fontWeight: '600', marginBottom: '12px', color: 'var(--text)' } }, 'Ajouter une référence'));
   const catSel = el('select');
-  [['mandrin', 'Mandrin'], ['palette', 'Palette'], ['adhesif', 'Adhésif'], ['carton', 'Carton'], ['frontal', 'Frontal'], ['glassine', 'Glassine']].forEach(([v, l]) => {
+  [['mandrin', 'Mandrin'], ['palette', 'Palette'], ['adhesif', 'Adhésif'], ['carton', 'Carton']].forEach(([v, l]) => {
     catSel.appendChild(el('option', { value: v }, l));
   });
   const refInp = el('input', { attrs: { type: 'text', placeholder: '76MM-3P' } });
@@ -4978,9 +4266,6 @@ function buildMatieresAdminAddForm() {
   const pppWrap = el('div', { cls: 'mp-field' });
   const pppInp = el('input', { attrs: { type: 'number', min: '1', step: '1', placeholder: 'Ex. 24' } });
   const pppLbl = el('label', null, 'Palettes par pile');
-  const couleurWrap = el('div', { cls: 'mp-field' });
-  const couleurInp = el('input', { attrs: { type: 'text', placeholder: 'Ex. Blanc, Kraft…' } });
-  const couleurLbl = el('label', null, 'Couleur');
   const seuilLbl = el('label', null, 'Seuil d\'alerte (0 = pas d\'alerte)');
   const hintEl = el('div', { cls: 'mp-hint' }, '');
   const errEl = el('div', { cls: 'mp-admin-err' }, S.matieresAdminAddError || '');
@@ -4988,23 +4273,23 @@ function buildMatieresAdminAddForm() {
     const cat = catSel.value;
     const isPal = cat === 'palette';
     const isCarton = cat === 'carton';
-    const isGlass = cat === 'glassine';
     pppWrap.style.display = isPal ? '' : 'none';
-    couleurWrap.style.display = isGlass ? '' : 'none';
     pppLbl.textContent = 'Palettes par pile';
     seuilLbl.textContent = mpSeuilFieldLabel(cat);
-    seuilInp.step = isPal || isCarton || mpIsBobineCategory(cat) ? '1' : '0.5';
-    hintEl.textContent = mpAdminHint(cat);
+    seuilInp.step = isPal || isCarton ? '1' : '0.5';
+    hintEl.textContent = isPal
+      ? 'Stock géré en piles. Indiquez combien de palettes composent une pile.'
+      : isCarton
+        ? 'Stock géré en palettes.'
+        : 'Stock géré en palettes (pal.).';
   }
   catSel.addEventListener('change', syncAdminAddFields);
   pppWrap.append(pppLbl, pppInp);
-  couleurWrap.append(couleurLbl, couleurInp);
   syncAdminAddFields();
   foot.append(
     el('div', { cls: 'mp-field' }, el('label', null, 'Catégorie'), catSel),
     el('div', { cls: 'mp-field' }, el('label', null, 'Référence'), refInp),
     el('div', { cls: 'mp-field' }, el('label', null, 'Désignation'), desInp),
-    couleurWrap,
     pppWrap,
     el('div', { cls: 'mp-field' }, seuilLbl, seuilInp),
     hintEl,
@@ -5042,9 +4327,6 @@ function buildMatieresAdminAddForm() {
           if (cat === 'palette') {
             payload.palettes_par_pile = parseFloat(pppInp.value);
           }
-          if (cat === 'glassine') {
-            payload.couleur = couleurInp.value.trim() || des;
-          }
           await api('/api/stock/matieres', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -5054,7 +4336,6 @@ function buildMatieresAdminAddForm() {
           refInp.value = '';
           desInp.value = '';
           pppInp.value = '';
-          couleurInp.value = '';
           seuilInp.value = '0';
           await loadMatieresAdminList();
           await loadMatieres();
@@ -5227,8 +4508,7 @@ function buildHistoriqueFiltersBar() {
   });
 
   const catSel = el('select', { id: 'hist-f-categorie', disabled: f.type_stock === 'produits' ? true : null });
-  [['', 'Tout'], ['mandrin', 'Mandrins'], ['frontal', 'Frontaux'], ['glassine', 'Glassines'],
-    ['palette', 'Palettes'], ['adhesif', 'Adhésifs'], ['carton', 'Cartons']].forEach(([v, l]) => {
+  [['', 'Tout'], ['mandrin', 'Mandrins'], ['palette', 'Palettes'], ['adhesif', 'Adhésifs'], ['carton', 'Cartons']].forEach(([v, l]) => {
     catSel.appendChild(el('option', { value: v, selected: f.categorie === v ? true : null }, l));
   });
   catSel.addEventListener('change', () => { f.categorie = catSel.value; });
@@ -5728,16 +5008,19 @@ function buildProduitDetail() {
     : el('div',{cls:'card'},
         el('div',{cls:'card-header'},el('div',{cls:'card-title'},'Stock par emplacement')),
         el('div',null,...empls.map(e => el('div',{
-          cls:'empl-row',
+          cls:'empl-row'+(e.alerte_inventaire?' alerte':''),
           on:{click:()=>loadEmplacement(e.emplacement)}
         },
           el('div',null,
             el('div',{cls:'empl-code'},e.emplacement),
             el('div',{cls:'empl-info'},'FIFO lot : '+fD(e.date_fifo_empl)+(e.alerte_inventaire?' · inventaire':'')+(e.jours_stock!=null?' · ~'+e.jours_stock+'j':''))
           ),
-          el('div',null,
-            el('div',{cls:'empl-qte'},fU(e.quantite, unite)),
-            el('div',{cls:'empl-date'},fD(e.updated_at||e.date_fifo_empl))
+          el('div',{cls:'empl-row-right'},
+            el('div',null,
+              el('div',{cls:'empl-qte'},fU(e.quantite, unite)),
+              el('div',{cls:'empl-date'},fD(e.updated_at||e.date_fifo_empl))
+            ),
+            S.stockReadOnly ? null : buildLotOutBtn(p.id, e.emplacement, e)
           )
         )))
       );
@@ -5797,7 +5080,13 @@ function buildEmplacementDetail() {
           on:{click:()=>loadProduit(r.id)}
         },
           el('div',null,el('div',{cls:'empl-code'},r.reference),el('div',{cls:'empl-info'},r.designation||'')),
-          el('div',null,el('div',{cls:'empl-qte'},fU(r.quantite, r.unite||'')),el('div',{cls:'empl-date'},fD(r.date_fifo)))
+          el('div',{cls:'empl-row-right'},
+            el('div',null,
+              el('div',{cls:'empl-qte'},fU(r.quantite, r.unite||'')),
+              el('div',{cls:'empl-date'},fD(r.date_fifo))
+            ),
+            S.stockReadOnly ? null : buildLotOutBtn(r.id, code, r)
+          )
         )))
       );
 
@@ -6254,10 +5543,6 @@ function renderContent() {
   else if (S.tab === 'dashboard') content = buildDashboard();
   else if (S.tab === 'matieres') {
     content = buildMatieres();
-  }
-  else if (S.tab === 'produits-finis') {
-    renderProduitsFinisView();
-    return;
   }
   else if (S.tab === 'referentiel') {
     renderReferentielView();
@@ -6903,7 +6188,6 @@ function buildReception() {
 const STOCK_TAB_DOC_TITLES = {
   dashboard: 'Tableau de bord — MyStock — MySifa',
   matieres: 'Matières premières — MyStock — MySifa',
-  'produits-finis': 'Produits finis — MyStock — MySifa',
   referentiel: 'Référentiel — MyStock — MySifa',
   inventaire: 'Inventaire — MyStock — MySifa',
   reception: 'Réception matière — MyStock — MySifa',
@@ -6914,7 +6198,6 @@ const STOCK_TAB_DOC_TITLES = {
 const STOCK_TAB_MOBILE_TITLES = {
   dashboard: 'Tableau de bord',
   matieres: 'Matières premières',
-  'produits-finis': 'Produits finis',
   referentiel: 'Référentiel',
   inventaire: 'Inventaire',
   reception: 'Réception matière',
@@ -6938,7 +6221,6 @@ function buildSidebarNavStructure() {
     { kind: 'btn', tab: 'matieres', icon: 'layers', label: 'Matières premières' },
     { kind: 'btn', tab: 'reception', icon: 'inbox', label: 'Réception matière' },
     { kind: 'sep', label: 'Produits' },
-    { kind: 'btn', tab: 'produits-finis', icon: 'package', label: 'Produits finis' },
     { kind: 'btn', tab: 'referentiel', icon: 'tag', label: 'Référentiel' },
   ];
   if (!S.stockReadOnly) {
@@ -7212,7 +6494,7 @@ async function init() {
   await fetchEmplacementsFromDB();
   // Onglet initial via URL param ?tab=...
   const urlTab = new URLSearchParams(window.location.search).get('tab');
-  if (urlTab && ['dashboard','matieres','produits-finis','referentiel','stock','inventaire','reception','historique','traca'].includes(urlTab)) {
+  if (urlTab && ['dashboard','matieres','referentiel','stock','inventaire','reception','historique','traca'].includes(urlTab)) {
     S.tab = urlTab;
   }
   // Forcer traça si accès restreint
@@ -7222,7 +6504,6 @@ async function init() {
   else if (S.tab === 'reception') { await loadRecepHistory(); }
   else if (S.tab === 'inventaire') { await loadInventaireList(); }
   else if (S.tab === 'matieres') { await loadMatieres(); }
-  else if (S.tab === 'produits-finis') { await loadProduitsFinis(); }
   else if (S.tab === 'historique') { await loadHistorique(); }
   else if (S.tab === 'referentiel') { await loadDashboard(); }
   else { await loadDashboard(); }

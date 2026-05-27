@@ -10,18 +10,11 @@ from unittest.mock import patch
 
 # DB isolée avant tout import projet (init_db au chargement de database.py)
 _test_tmp = tempfile.mkdtemp(prefix="mysifa_postit_test_")
-_test_db = os.path.join(_test_tmp, "test.db")
-os.environ["DB_PATH"] = _test_db
+os.environ["DB_PATH"] = os.path.join(_test_tmp, "test.db")
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-
-_src_db = ROOT / "data" / "production.db"
-if _src_db.is_file():
-    import shutil
-
-    shutil.copy2(_src_db, _test_db)
 
 
 class TestPostitMultiPage(unittest.TestCase):

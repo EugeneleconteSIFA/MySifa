@@ -484,6 +484,10 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
           Métrage total
         </button>
+        <button type="button" class="btn btn-sec mac-sub-btn" data-macsub="mac-nom">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          Renommer
+        </button>
       </div>
       <div class="card">
         <div style="display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
@@ -511,6 +515,16 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
             <p class="hint" id="mac-metrage-hint" style="margin-top:8px"></p>
           </div>
           <button type="button" class="btn" id="mac-metr-save" style="margin-top:14px">Enregistrer le métrage</button>
+        </div>
+        <div id="mac-nom-wrap" class="hidden">
+          <p class="sub" style="margin-top:-4px;margin-bottom:14px">Nom affiché dans toutes les applications MySifa (planning, saisie production, planning RH…). Le changement prend effet immédiatement partout.</p>
+          <div style="max-width:360px">
+            <label class="sub" style="display:block;margin-bottom:6px">Nom de la machine</label>
+            <input type="text" id="mac-nom-inp" maxlength="80" placeholder="Ex. Cohésio 1" autocomplete="off"
+              style="width:100%;font-size:14px">
+            <p class="hint" id="mac-nom-hint" style="margin-top:8px"></p>
+          </div>
+          <button type="button" class="btn" id="mac-nom-save" style="margin-top:14px">Enregistrer le nom</button>
         </div>
       </div>
     </section>
@@ -1063,8 +1077,10 @@ function setMacSubTab(id) {
   });
   const hor = document.getElementById('mac-horaires-wrap');
   const met = document.getElementById('mac-metrage-wrap');
+  const nom = document.getElementById('mac-nom-wrap');
   if (hor) hor.classList.toggle('hidden', id !== 'mac-horaires');
   if (met) met.classList.toggle('hidden', id !== 'mac-metrage');
+  if (nom) nom.classList.toggle('hidden', id !== 'mac-nom');
 }
 
 function renderMacHorairesForm() {
@@ -1125,6 +1141,36 @@ function renderMacMetrageForm() {
   }
 }
 
+function renderMacNomForm() {
+  const inp = document.getElementById('mac-nom-inp');
+  const hint = document.getElementById('mac-nom-hint');
+  if (!inp || !macMachine) return;
+  inp.value = macMachine.nom || '';
+  if (hint) hint.textContent = macMachine.code ? 'Code interne : ' + macMachine.code : '';
+}
+
+async function saveMacNom() {
+  const inp = document.getElementById('mac-nom-inp');
+  if (!inp || !macMachine) return;
+  const newNom = inp.value.trim();
+  if (!newNom) { toast('Le nom ne peut pas être vide', true); return; }
+  const btn = document.getElementById('mac-nom-save');
+  if (btn) btn.disabled = true;
+  try {
+    await api('/api/settings/machines/' + macMachine.id + '/nom', {
+      method: 'PUT',
+      body: JSON.stringify({ nom: newNom }),
+    });
+    toast('Nom enregistré.');
+    await loadMacMachineDetail();
+    await loadMachines();
+  } catch (e) {
+    toast(e.message || 'Erreur lors du renommage', true);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 async function loadMacMachineDetail() {
   const sel = document.getElementById('mac-select');
   const hint = document.getElementById('mac-hint');
@@ -1138,6 +1184,7 @@ async function loadMacMachineDetail() {
     if (hint) hint.textContent = (macMachine && macMachine.code) ? ('Code ' + macMachine.code) : '';
     renderMacHorairesForm();
     renderMacMetrageForm();
+    renderMacNomForm();
   } catch (e) {
     macMachine = null;
     if (hint) hint.textContent = '';
@@ -1296,9 +1343,11 @@ function initMachinesPanel() {
     const hs = document.getElementById('mac-hor-save');
     const hr = document.getElementById('mac-hor-reset');
     const ms = document.getElementById('mac-metr-save');
+    const ns = document.getElementById('mac-nom-save');
     if (hs) hs.addEventListener('click', saveMacHoraires);
     if (hr) hr.addEventListener('click', resetMacHoraires);
     if (ms) ms.addEventListener('click', saveMacMetrage);
+    if (ns) ns.addEventListener('click', saveMacNom);
   }
   setMacSubTab(macSubTab);
   loadMacMachineDetail();

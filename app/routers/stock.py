@@ -87,7 +87,7 @@ def require_stock_write(request: Request) -> dict:
     return user
 
 
-_MP_CATEGORIES = frozenset({"mandrin", "palette", "adhesif", "carton", "frontal", "glassine"})
+_MP_CATEGORIES = frozenset({"mandrin", "palette", "adhesif", "carton"})
 _MP_TYPES_MVT = frozenset({"entree", "sortie", "ajustement", "transfert"})
 _STOCK_MATIERES_ADMIN_ROLES = frozenset({"superadmin", "direction", "administration"})
 
@@ -95,8 +95,6 @@ _STOCK_MATIERES_ADMIN_ROLES = frozenset({"superadmin", "direction", "administrat
 def _mp_unite_gestion(categorie: str) -> str:
     """Unité de gestion du stock selon la catégorie matière première."""
     cat = (categorie or "").strip().lower()
-    if cat in ("mandrin", "frontal", "glassine"):
-        return "bobine"
     if cat == "palette":
         return "pile"
     if cat == "carton":
@@ -122,7 +120,6 @@ def _mp_row_dict(r) -> dict:
         "en_alerte": seuil > 0 and qte <= seuil,
         "unite": _mp_unite_gestion(cat),
         "palettes_par_pile": palettes_par_pile,
-        "couleur": (r["couleur"] or "").strip() if "couleur" in r.keys() and r["couleur"] else None,
     }
 
 
@@ -145,7 +142,6 @@ _HISTORIQUE_SQL_MP = """
         mp.reference,
         mp.designation,
         CASE
-            WHEN mp.categorie IN ('mandrin', 'frontal', 'glassine') THEN 'bobine'
             WHEN mp.categorie = 'palette' THEN 'pile'
             WHEN mp.categorie = 'carton' THEN 'palette'
             ELSE 'palette'
@@ -340,6 +336,32 @@ def apply_fifo_sortie(
         (produit_id, emplacement, "sortie", quantite, quantite_avant, quantite_apres, note, now, user_email, user_name),
     )
     return {"quantite_avant": quantite_avant, "quantite_apres": quantite_apres}
+
+
+def sortir_lot_fifo(
+    conn,
+    produit_id: int,
+    emplacement: str,
+    user_email: str,
+    user_name: Optional[str] = None,
+    note: str = "",
+) -> dict:
+    """Sortie du lot FIFO le plus ancien à un emplacement (quantité = lot entier)."""
+    lot = conn.execute(
+        """SELECT id, quantite_restante
+           FROM lots_stock
+           WHERE produit_id=? AND emplacement=? AND quantite_restante > 0
+           ORDER BY date_entree ASC LIMIT 1""",
+        (produit_id, emplacement),
+    ).fetchone()
+    if not lot:
+        raise HTTPException(404, "Aucun lot actif à cet emplacement")
+    qte_lot = float(lot["quantite_restante"])
+    final_note = (note or "").strip() or "Sortie lot FIFO"
+    result = apply_fifo_sortie(
+        conn, produit_id, emplacement, qte_lot, user_email, user_name, final_note
+    )
+    return {**result, "quantite_sortie": qte_lot}
 
 
 # ── Recherche instantanée ─────────────────────────────────────────
@@ -543,7 +565,12 @@ def get_produit(produit_id: int, request: Request):
         empls = conn.execute(
             """SELECT l.emplacement,
                       SUM(l.quantite_restante) as quantite,
+                      COUNT(*) as nb_lots,
                       MIN(CASE WHEN l.quantite_restante>0 THEN l.date_entree END) as date_fifo_empl,
+                      (SELECT l2.quantite_restante FROM lots_stock l2
+                       WHERE l2.produit_id=? AND l2.emplacement=l.emplacement
+                         AND l2.quantite_restante > 0
+                       ORDER BY l2.date_entree ASC LIMIT 1) as quantite_lot_fifo,
                       MAX(s.derniere_inventaire) as derniere_inventaire,
                       MAX(s.updated_at) as updated_at,
                       MAX(s.updated_by) as updated_by,
@@ -553,7 +580,7 @@ def get_produit(produit_id: int, request: Request):
                WHERE l.produit_id=? AND l.quantite_restante>0
                GROUP BY l.emplacement
                ORDER BY l.emplacement""",
-            (produit_id,),
+            (produit_id, produit_id),
         ).fetchall()
 
         # FIFO global
@@ -738,7 +765,12 @@ def get_emplacement(emplacement: str, request: Request):
         refs = conn.execute(
             """SELECT p.id, p.reference, p.designation, p.unite,
                       SUM(l.quantite_restante) as quantite,
+                      COUNT(*) as nb_lots,
                       MIN(CASE WHEN l.quantite_restante>0 THEN l.date_entree END) as date_fifo,
+                      (SELECT l2.quantite_restante FROM lots_stock l2
+                       WHERE l2.produit_id=l.produit_id AND l2.emplacement=?
+                         AND l2.quantite_restante > 0
+                       ORDER BY l2.date_entree ASC LIMIT 1) as quantite_lot_fifo,
                       MAX(s.derniere_inventaire) as derniere_inventaire,
                       MAX(s.updated_at) as updated_at,
                       MAX(s.updated_by) as updated_by
@@ -748,7 +780,7 @@ def get_emplacement(emplacement: str, request: Request):
                WHERE l.emplacement=? AND l.quantite_restante>0
                GROUP BY l.produit_id
                ORDER BY p.reference""",
-            (emplacement,),
+            (emplacement, emplacement),
         ).fetchall()
 
         mvts = conn.execute(
@@ -790,163 +822,6 @@ def get_emplacement(emplacement: str, request: Request):
     }
 
 
-def _resolve_created_by_name(conn: sqlite3.Connection, user: dict) -> Optional[str]:
-    created_by_name = (user.get("nom") or "").strip() or None
-    if created_by_name:
-        return created_by_name
-    try:
-        if user.get("id") is not None:
-            r = conn.execute(
-                "SELECT nom FROM users WHERE id=? LIMIT 1", (int(user["id"]),)
-            ).fetchone()
-        else:
-            r = conn.execute(
-                "SELECT nom FROM users WHERE LOWER(TRIM(COALESCE(email,'')))=? LIMIT 1",
-                (str(user.get("email") or "").strip().lower(),),
-            ).fetchone()
-        return (str(r["nom"] or "").strip() if r else "") or None
-    except Exception:
-        return None
-
-
-def _apply_stock_mouvement(
-    conn: sqlite3.Connection,
-    user: dict,
-    produit_id: int,
-    emplacement: str,
-    type_mvt: str,
-    quantite: float,
-    note: str,
-    date_entree: Optional[str] = None,
-) -> tuple[dict, str, str]:
-    """Applique un mouvement PF (entree / sortie / inventaire) sur la base existante."""
-    now = datetime.now().isoformat()
-    date_entree = date_entree or datetime.now().strftime("%Y-%m-%d")
-    created_by_name = _resolve_created_by_name(conn, user)
-
-    p = conn.execute(
-        "SELECT id, reference FROM produits WHERE id=?", (produit_id,)
-    ).fetchone()
-    if not p:
-        raise HTTPException(404, "Produit non trouvé")
-    ref_audit = p["reference"] or ""
-    if type_mvt == "entree":
-        audit_action = "CREATE"
-    elif type_mvt == "sortie":
-        audit_action = "DELETE"
-    else:
-        audit_action = "UPDATE"
-
-    ex = conn.execute(
-        "SELECT quantite FROM stock_emplacements WHERE produit_id=? AND emplacement=?",
-        (produit_id, emplacement),
-    ).fetchone()
-    qte_avant = float(ex["quantite"]) if ex else 0.0
-
-    if type_mvt == "entree":
-        conn.execute(
-            """INSERT INTO lots_stock
-               (produit_id,emplacement,quantite_initiale,quantite_restante,date_entree,note,created_by,created_at)
-               VALUES (?,?,?,?,?,?,?,?)""",
-            (produit_id, emplacement, quantite, quantite, date_entree, note, user["email"], now),
-        )
-        qte_apres = qte_avant + quantite
-        if ex:
-            conn.execute(
-                """UPDATE stock_emplacements
-                   SET quantite=?,updated_at=?,updated_by=?,derniere_inventaire=?,commentaire=?
-                   WHERE produit_id=? AND emplacement=?""",
-                (qte_apres, now, user["email"], now, note or None, produit_id, emplacement),
-            )
-        else:
-            conn.execute(
-                """INSERT INTO stock_emplacements
-                   (produit_id,emplacement,quantite,updated_at,updated_by,derniere_inventaire,commentaire)
-                   VALUES (?,?,?,?,?,?,?)""",
-                (produit_id, emplacement, qte_apres, now, user["email"], now, note or None),
-            )
-        conn.execute(
-            """INSERT INTO mouvements_stock
-               (produit_id,emplacement,type_mouvement,quantite,quantite_avant,quantite_apres,note,created_at,created_by,created_by_name)
-               VALUES (?,?,?,?,?,?,?,?,?,?)""",
-            (
-                produit_id,
-                emplacement,
-                "entree",
-                quantite,
-                qte_avant,
-                qte_apres,
-                note,
-                now,
-                user["email"],
-                created_by_name,
-            ),
-        )
-        result = {"quantite_avant": qte_avant, "quantite_apres": qte_apres}
-
-    elif type_mvt == "sortie":
-        result = apply_fifo_sortie(
-            conn, produit_id, emplacement, quantite, user["email"], created_by_name, note
-        )
-
-    elif type_mvt == "inventaire":
-        conn.execute(
-            "UPDATE lots_stock SET quantite_restante=0 WHERE produit_id=? AND emplacement=?",
-            (produit_id, emplacement),
-        )
-        conn.execute(
-            """INSERT INTO lots_stock
-               (produit_id,emplacement,quantite_initiale,quantite_restante,date_entree,note,created_by,created_at)
-               VALUES (?,?,?,?,?,?,?,?)""",
-            (
-                produit_id,
-                emplacement,
-                quantite,
-                quantite,
-                date_entree,
-                f"Inventaire — {note}",
-                user["email"],
-                now,
-            ),
-        )
-        if ex:
-            conn.execute(
-                """UPDATE stock_emplacements
-                   SET quantite=?,updated_at=?,updated_by=?,derniere_inventaire=?,commentaire=?
-                   WHERE produit_id=? AND emplacement=?""",
-                (quantite, now, user["email"], now, note or None, produit_id, emplacement),
-            )
-        else:
-            conn.execute(
-                """INSERT INTO stock_emplacements
-                   (produit_id,emplacement,quantite,updated_at,updated_by,derniere_inventaire,commentaire)
-                   VALUES (?,?,?,?,?,?,?)""",
-                (produit_id, emplacement, quantite, now, user["email"], now, note or None),
-            )
-        conn.execute(
-            """INSERT INTO mouvements_stock
-               (produit_id,emplacement,type_mouvement,quantite,quantite_avant,quantite_apres,note,created_at,created_by,created_by_name)
-               VALUES (?,?,?,?,?,?,?,?,?,?)""",
-            (
-                produit_id,
-                emplacement,
-                "inventaire",
-                quantite,
-                qte_avant,
-                quantite,
-                note,
-                now,
-                user["email"],
-                created_by_name,
-            ),
-        )
-        result = {"quantite_avant": qte_avant, "quantite_apres": quantite}
-    else:
-        raise HTTPException(400, "Type de mouvement invalide.")
-
-    return result, ref_audit, audit_action
-
-
 # ── Mouvement de stock ────────────────────────────────────────────
 @router.post("/api/stock/mouvement")
 async def mouvement_stock(request: Request):
@@ -967,17 +842,123 @@ async def mouvement_stock(request: Request):
     if quantite <= 0:
         raise HTTPException(400, "Quantité doit être positive")
 
+    now = datetime.now().isoformat()
+    # Toujours tracer un "Nom Prénom" fiable (champ #ed-nom → users.nom).
+    # Certains contextes peuvent renvoyer un user.nom vide : on complète via la DB.
+    created_by_name = (user.get("nom") or "").strip() or None
+    ref_audit = ""
+    audit_action = "UPDATE"
+
     with get_db() as conn:
-        result, ref_audit, audit_action = _apply_stock_mouvement(
-            conn,
-            user,
-            int(produit_id),
-            emplacement,
-            type_mvt,
-            quantite,
-            note,
-            date_entree,
-        )
+        if not created_by_name:
+            try:
+                if user.get("id") is not None:
+                    r = conn.execute("SELECT nom FROM users WHERE id=? LIMIT 1", (int(user["id"]),)).fetchone()
+                else:
+                    r = conn.execute(
+                        "SELECT nom FROM users WHERE LOWER(TRIM(COALESCE(email,'')))=? LIMIT 1",
+                        (str(user.get("email") or "").strip().lower(),),
+                    ).fetchone()
+                created_by_name = (str(r["nom"] or "").strip() if r else "") or None
+            except Exception:
+                created_by_name = None
+
+        # Vérifier produit
+        p = conn.execute(
+            "SELECT id, reference FROM produits WHERE id=?", (produit_id,)
+        ).fetchone()
+        if not p:
+            raise HTTPException(404, "Produit non trouvé")
+        ref_audit = p["reference"] or ""
+        if type_mvt == "entree":
+            audit_action = "CREATE"
+        elif type_mvt == "sortie":
+            audit_action = "DELETE"
+        else:
+            audit_action = "UPDATE"
+
+        ex = conn.execute(
+            "SELECT quantite FROM stock_emplacements WHERE produit_id=? AND emplacement=?",
+            (produit_id, emplacement),
+        ).fetchone()
+        qte_avant = ex["quantite"] if ex else 0.0
+
+        if type_mvt == "entree":
+            # Créer un nouveau lot FIFO
+            conn.execute(
+                """INSERT INTO lots_stock
+                   (produit_id,emplacement,quantite_initiale,quantite_restante,date_entree,note,created_by,created_at)
+                   VALUES (?,?,?,?,?,?,?,?)""",
+                (produit_id, emplacement, quantite, quantite, date_entree, note, user["email"], now),
+            )
+            qte_apres = qte_avant + quantite
+
+            # Upsert stock_emplacements
+            if ex:
+                conn.execute(
+                    """UPDATE stock_emplacements
+                       SET quantite=?,updated_at=?,updated_by=?,derniere_inventaire=?,commentaire=?
+                       WHERE produit_id=? AND emplacement=?""",
+                    (qte_apres, now, user["email"], now, note or None, produit_id, emplacement),
+                )
+            else:
+                conn.execute(
+                    """INSERT INTO stock_emplacements
+                       (produit_id,emplacement,quantite,updated_at,updated_by,derniere_inventaire,commentaire)
+                       VALUES (?,?,?,?,?,?,?)""",
+                    (produit_id, emplacement, qte_apres, now, user["email"], now, note or None),
+                )
+
+            # Historique
+            conn.execute(
+                """INSERT INTO mouvements_stock
+                   (produit_id,emplacement,type_mouvement,quantite,quantite_avant,quantite_apres,note,created_at,created_by,created_by_name)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                (produit_id, emplacement, "entree", quantite, qte_avant, qte_apres, note, now, user["email"], created_by_name),
+            )
+            result = {"quantite_avant": qte_avant, "quantite_apres": qte_apres}
+
+        elif type_mvt == "sortie":
+            result = apply_fifo_sortie(conn, produit_id, emplacement, quantite, user["email"], created_by_name, note)
+            qte_apres = result["quantite_apres"]
+
+        elif type_mvt == "inventaire":
+            # Annuler tous les lots existants sur cet emplacement
+            conn.execute(
+                "UPDATE lots_stock SET quantite_restante=0 WHERE produit_id=? AND emplacement=?",
+                (produit_id, emplacement),
+            )
+            # Créer un nouveau lot unique avec la quantité inventoriée
+            conn.execute(
+                """INSERT INTO lots_stock
+                   (produit_id,emplacement,quantite_initiale,quantite_restante,date_entree,note,created_by,created_at)
+                   VALUES (?,?,?,?,?,?,?,?)""",
+                (produit_id, emplacement, quantite, quantite, date_entree, f"Inventaire — {note}", user["email"], now),
+            )
+            # Mettre à jour stock_emplacements + date inventaire
+            if ex:
+                conn.execute(
+                    """UPDATE stock_emplacements
+                       SET quantite=?,updated_at=?,updated_by=?,derniere_inventaire=?,commentaire=?
+                       WHERE produit_id=? AND emplacement=?""",
+                    (quantite, now, user["email"], now, note or None, produit_id, emplacement),
+                )
+            else:
+                conn.execute(
+                    """INSERT INTO stock_emplacements
+                       (produit_id,emplacement,quantite,updated_at,updated_by,derniere_inventaire,commentaire)
+                       VALUES (?,?,?,?,?,?,?)""",
+                    (produit_id, emplacement, quantite, now, user["email"], now, note or None),
+                )
+            conn.execute(
+                """INSERT INTO mouvements_stock
+                   (produit_id,emplacement,type_mouvement,quantite,quantite_avant,quantite_apres,note,created_at,created_by,created_by_name)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                (produit_id, emplacement, "inventaire", quantite, qte_avant, quantite, note, now, user["email"], created_by_name),
+            )
+            result = {"quantite_avant": qte_avant, "quantite_apres": quantite}
+            qte_apres = quantite
+
         conn.commit()
 
     log_action(
@@ -986,6 +967,60 @@ async def mouvement_stock(request: Request):
         module="stock",
         objet=f"{type_mvt} · {ref_audit} · {emplacement} · {quantite}",
         detail={"type_mouvement": type_mvt, "quantite": quantite},
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True, **result}
+
+
+@router.post("/api/stock/sortir-lot")
+async def api_sortir_lot(request: Request):
+    """Sortie du lot FIFO le plus ancien (produit + emplacement)."""
+    user = require_stock_write(request)
+    body = await request.json()
+    produit_id = body.get("produit_id")
+    emplacement = (body.get("emplacement") or "").strip().upper()
+    note = (body.get("note") or "").strip()
+
+    if not produit_id or not emplacement:
+        raise HTTPException(400, "produit_id et emplacement obligatoires")
+    if not emplacement[0].isalpha() or not emplacement[1:].isdigit():
+        raise HTTPException(400, f"Format emplacement invalide : {emplacement}")
+
+    created_by_name = (user.get("nom") or "").strip() or None
+    ref_audit = ""
+
+    with get_db() as conn:
+        if not created_by_name:
+            try:
+                if user.get("id") is not None:
+                    r = conn.execute("SELECT nom FROM users WHERE id=? LIMIT 1", (int(user["id"]),)).fetchone()
+                else:
+                    r = conn.execute(
+                        "SELECT nom FROM users WHERE LOWER(TRIM(COALESCE(email,'')))=? LIMIT 1",
+                        (str(user.get("email") or "").strip().lower(),),
+                    ).fetchone()
+                created_by_name = (str(r["nom"] or "").strip() if r else "") or None
+            except Exception:
+                created_by_name = None
+
+        p = conn.execute(
+            "SELECT id, reference FROM produits WHERE id=?", (produit_id,)
+        ).fetchone()
+        if not p:
+            raise HTTPException(404, "Produit non trouvé")
+        ref_audit = p["reference"] or ""
+
+        result = sortir_lot_fifo(
+            conn, int(produit_id), emplacement, user["email"], created_by_name, note
+        )
+        conn.commit()
+
+    log_action(
+        user=user,
+        action="DELETE",
+        module="stock",
+        objet=f"Sortie lot FIFO · {ref_audit} · {emplacement} · {result['quantite_sortie']}",
+        detail={"emplacement": emplacement, "quantite": result["quantite_sortie"]},
         ip=request.client.host if request.client else None,
     )
     return {"success": True, **result}
@@ -1519,7 +1554,7 @@ def list_matieres_premieres(request: Request, all: int = 0):
         rows = conn.execute(
             f"""
             SELECT mp.id, mp.categorie, mp.reference, mp.designation,
-                   mp.seuil_alerte, mp.actif, mp.palettes_par_pile, mp.couleur,
+                   mp.seuil_alerte, mp.actif, mp.palettes_par_pile,
                    COALESCE(s.quantite, 0) AS quantite
             FROM matieres_premieres mp
             LEFT JOIN mp_stock s ON s.matiere_id = mp.id
@@ -1556,20 +1591,17 @@ async def create_matiere_premiere(request: Request):
         raise HTTPException(400, "Référence obligatoire.")
     if not designation:
         raise HTTPException(400, "Désignation obligatoire.")
-    couleur = (body.get("couleur") or "").strip() or None
-    if categorie == "glassine" and not couleur:
-        couleur = designation
 
     with get_db() as conn:
         try:
             cur = conn.execute(
                 """
                 INSERT INTO matieres_premieres (
-                    categorie, reference, designation, seuil_alerte, palettes_par_pile, couleur
+                    categorie, reference, designation, seuil_alerte, palettes_par_pile
                 )
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?)
                 """,
-                (categorie, reference, designation, seuil_alerte, palettes_par_pile, couleur),
+                (categorie, reference, designation, seuil_alerte, palettes_par_pile),
             )
             matiere_id = cur.lastrowid
             conn.execute(
@@ -1614,9 +1646,6 @@ async def update_matiere_premiere(matiere_id: int, request: Request):
     if "actif" in body:
         sets.append("actif=?")
         params.append(1 if body.get("actif") else 0)
-    if "couleur" in body:
-        sets.append("couleur=?")
-        params.append((body.get("couleur") or "").strip() or None)
 
     if not sets:
         raise HTTPException(400, "Aucun champ à mettre à jour.")
@@ -1839,336 +1868,6 @@ def list_matiere_mouvements(matiere_id: int, request: Request):
             (matiere_id,),
         ).fetchall()
     return [dict(r) for r in rows]
-
-
-# ── Produits finis (onglet dédié — source : produits / mouvements_stock) ──
-_PF_MVT_SQL = f"""
-    SELECT m.id, p.reference, p.designation, m.type_mouvement AS type,
-           m.quantite, p.unite, m.emplacement, m.note AS commentaire,
-           COALESCE(NULLIF(TRIM(m.created_by_name),''), u.nom, m.created_by) AS user_login,
-           m.created_at AS date_mouvement
-    FROM mouvements_stock m
-    JOIN produits p ON p.id = m.produit_id
-    {_STOCK_USER_JOIN}
-"""
-
-
-def _pf_compose_note(body: dict) -> str:
-    parts: list[str] = []
-    no_of = (body.get("no_of") or "").strip()
-    if no_of:
-        parts.append("OF " + no_of)
-    motif = (body.get("motif_destinataire") or "").strip()
-    if motif:
-        parts.append("Motif : " + motif)
-    com = (body.get("commentaire") or "").strip()
-    if com:
-        parts.append(com)
-    return " | ".join(parts)
-
-
-def _pf_ensure_produit_id(
-    conn: sqlite3.Connection,
-    reference: str,
-    designation: str,
-    unite: str,
-    now: str,
-) -> int:
-    ref = reference.strip().upper()
-    row = conn.execute(
-        "SELECT id, designation, unite FROM produits WHERE reference=?", (ref,)
-    ).fetchone()
-    des = designation.strip() or ref
-    u = (unite or "").strip() or "étiquette"
-    if row:
-        conn.execute(
-            "UPDATE produits SET designation=?, unite=?, updated_at=? WHERE id=?",
-            (des, u, now, row["id"]),
-        )
-        return int(row["id"])
-    cur = conn.execute(
-        "INSERT INTO produits (reference, designation, description, unite, created_at, updated_at) "
-        "VALUES (?,?,?,?,?,?)",
-        (ref, des, "", u, now, now),
-    )
-    return int(cur.lastrowid)
-
-
-def _pf_list_stock_rows(conn: sqlite3.Connection) -> list:
-    """Stock PF : lots FIFO (comme le tableau de bord), repli sur stock_emplacements."""
-    rows = conn.execute(
-        """
-        SELECT
-            p.reference,
-            p.designation,
-            p.unite,
-            l.emplacement,
-            SUM(l.quantite_restante) AS quantite,
-            MAX(l.date_entree) AS derniere_entree
-        FROM lots_stock l
-        JOIN produits p ON p.id = l.produit_id
-        WHERE l.quantite_restante > 0.0001
-        GROUP BY l.emplacement, p.id, p.reference, p.designation, p.unite
-        ORDER BY p.reference ASC, l.emplacement ASC
-        """
-    ).fetchall()
-    if rows:
-        return rows
-    return conn.execute(
-        """
-        SELECT
-            p.reference,
-            p.designation,
-            p.unite,
-            s.emplacement,
-            s.quantite,
-            (
-                SELECT MAX(m.created_at)
-                FROM mouvements_stock m
-                WHERE m.produit_id = s.produit_id
-                  AND m.emplacement = s.emplacement
-                  AND m.type_mouvement = 'entree'
-            ) AS derniere_entree
-        FROM stock_emplacements s
-        JOIN produits p ON p.id = s.produit_id
-        WHERE s.quantite > 0.0001
-        ORDER BY p.reference ASC, s.emplacement ASC
-        """
-    ).fetchall()
-
-
-def _pf_kpis(conn: sqlite3.Connection) -> dict:
-    today = datetime.now().strftime("%Y-%m-%d")
-    refs = conn.execute(
-        """
-        SELECT COUNT(DISTINCT produit_id) AS n FROM (
-            SELECT produit_id FROM lots_stock WHERE quantite_restante > 0.0001
-            UNION
-            SELECT produit_id FROM stock_emplacements WHERE quantite > 0.0001
-        )
-        """
-    ).fetchone()
-    empl = conn.execute(
-        """
-        SELECT COUNT(DISTINCT emplacement) AS n FROM (
-            SELECT l.emplacement FROM lots_stock l WHERE l.quantite_restante > 0.0001
-            UNION
-            SELECT s.emplacement FROM stock_emplacements s WHERE s.quantite > 0.0001
-        )
-        """
-    ).fetchone()
-    mvt_today = conn.execute(
-        """
-        SELECT COUNT(*) AS n FROM mouvements_stock
-        WHERE created_at >= ?
-          AND type_mouvement IN ('entree', 'sortie')
-        """,
-        (today + "T00:00:00",),
-    ).fetchone()
-    total_mvt = conn.execute("SELECT COUNT(*) AS n FROM mouvements_stock").fetchone()
-    return {
-        "references": int(refs["n"] or 0) if refs else 0,
-        "mouvements_aujourdhui": int(mvt_today["n"] or 0) if mvt_today else 0,
-        "emplacements_occupes": int(empl["n"] or 0) if empl else 0,
-        "total_mouvements": int(total_mvt["n"] or 0) if total_mvt else 0,
-    }
-
-
-def _pf_normalize_mvt_row(r) -> dict:
-    d = dict(r)
-    t = (d.get("type") or d.get("type_mouvement") or "").strip().lower()
-    if t in ("entree", "sortie"):
-        d["type"] = t
-    d["date_mouvement"] = d.get("date_mouvement") or d.get("created_at")
-    d["user_login"] = d.get("user_login") or d.get("created_by_name") or d.get("created_by")
-    return d
-
-
-@router.get("/api/stock/produits-finis")
-def list_produits_finis(request: Request):
-    require_stock(request)
-    with get_db() as conn:
-        stock_rows = _pf_list_stock_rows(conn)
-        catalogue = conn.execute(
-            "SELECT reference, designation, unite FROM produits ORDER BY reference ASC"
-        ).fetchall()
-        kpis = _pf_kpis(conn)
-    return {
-        "stock": [
-            {
-                "reference": r["reference"],
-                "designation": r["designation"],
-                "unite": r["unite"],
-                "emplacement": r["emplacement"],
-                "quantite": float(r["quantite"] or 0),
-                "derniere_entree": r["derniere_entree"],
-            }
-            for r in stock_rows
-        ],
-        "catalogue": [dict(r) for r in catalogue],
-        "kpis": kpis,
-    }
-
-
-@router.get("/api/stock/produits-finis/mouvements")
-def list_produits_finis_mouvements(request: Request, limit: int = 20):
-    require_stock(request)
-    limit = max(1, min(int(limit or 20), 100))
-    with get_db() as conn:
-        rows = conn.execute(
-            _PF_MVT_SQL
-            + """
-            WHERE m.type_mouvement IN ('entree', 'sortie')
-            ORDER BY m.created_at DESC, m.id DESC
-            LIMIT ?
-            """,
-            (limit,),
-        ).fetchall()
-    return [_pf_normalize_mvt_row(r) for r in rows]
-
-
-@router.get("/api/stock/produits-finis/{reference}")
-def get_produit_fini_detail(reference: str, request: Request):
-    require_stock(request)
-    ref = (reference or "").strip().upper()
-    if not ref:
-        raise HTTPException(400, "Référence obligatoire.")
-    with get_db() as conn:
-        cat = conn.execute(
-            "SELECT id, reference, designation, unite FROM produits WHERE reference=?",
-            (ref,),
-        ).fetchone()
-        if not cat:
-            raise HTTPException(404, "Référence non trouvée.")
-        produit_id = cat["id"]
-        stock_rows = conn.execute(
-            """
-            SELECT emplacement, SUM(quantite_restante) AS quantite
-            FROM lots_stock
-            WHERE produit_id=? AND quantite_restante > 0.0001
-            GROUP BY emplacement
-            ORDER BY emplacement ASC
-            """,
-            (produit_id,),
-        ).fetchall()
-        if not stock_rows:
-            stock_rows = conn.execute(
-                """
-                SELECT emplacement, quantite
-                FROM stock_emplacements
-                WHERE produit_id=? AND quantite > 0.0001
-                ORDER BY emplacement ASC
-                """,
-                (produit_id,),
-            ).fetchall()
-        historique = conn.execute(
-            _PF_MVT_SQL
-            + """
-            WHERE p.id=?
-            ORDER BY m.created_at DESC, m.id DESC
-            """,
-            (produit_id,),
-        ).fetchall()
-    stock_total = sum(float(r["quantite"] or 0) for r in stock_rows)
-    return {
-        "reference": ref,
-        "designation": cat["designation"],
-        "unite": cat["unite"],
-        "stock_total": stock_total,
-        "emplacements": [
-            {
-                "emplacement": r["emplacement"],
-                "quantite": float(r["quantite"] or 0),
-                "unite": cat["unite"],
-            }
-            for r in stock_rows
-        ],
-        "historique": [_pf_normalize_mvt_row(r) for r in historique],
-    }
-
-
-def _pf_validate_mouvement_body(body: dict) -> tuple[str, str, str, float, str]:
-    reference = (body.get("reference") or "").strip().upper()
-    designation = (body.get("designation") or "").strip()
-    emplacement = (body.get("emplacement") or "").strip().upper()
-    unite = (body.get("unite") or "étiquette").strip() or "étiquette"
-    if not reference:
-        raise HTTPException(400, "Référence obligatoire.")
-    if not emplacement:
-        raise HTTPException(400, "Emplacement obligatoire.")
-    if not emplacement[0].isalpha() or not emplacement[1:].isdigit():
-        raise HTTPException(400, f"Format emplacement invalide : {emplacement}")
-    try:
-        quantite = float(body.get("quantite", 0))
-    except (TypeError, ValueError):
-        raise HTTPException(400, "Quantité invalide.") from None
-    if quantite < 0.01:
-        raise HTTPException(400, "Quantité invalide — minimum 0,01.")
-    if not designation:
-        designation = reference
-    return reference, designation, emplacement, quantite, unite
-
-
-@router.post("/api/stock/produits-finis/entree")
-async def produit_fini_entree(request: Request):
-    user = require_stock_write(request)
-    body = await request.json()
-    reference, designation, emplacement, quantite, unite = _pf_validate_mouvement_body(body)
-    note = _pf_compose_note(body)
-    now = datetime.now().isoformat()
-
-    with get_db() as conn:
-        produit_id = _pf_ensure_produit_id(conn, reference, designation, unite, now)
-        result, ref_audit, audit_action = _apply_stock_mouvement(
-            conn, user, produit_id, emplacement, "entree", quantite, note
-        )
-        conn.commit()
-
-    log_action(
-        user=user,
-        action=audit_action,
-        module="stock",
-        objet=f"PF entrée {ref_audit} +{quantite:g} @ {emplacement}",
-        detail={"type_mouvement": "entree", "quantite": quantite},
-        ip=request.client.host if request.client else None,
-    )
-    return {"ok": True, **result}
-
-
-@router.post("/api/stock/produits-finis/sortie")
-async def produit_fini_sortie(request: Request):
-    user = require_stock_write(request)
-    body = await request.json()
-    reference, designation, emplacement, quantite, unite = _pf_validate_mouvement_body(body)
-    note = _pf_compose_note(body)
-    now = datetime.now().isoformat()
-
-    with get_db() as conn:
-        produit_id = _pf_ensure_produit_id(conn, reference, designation, unite, now)
-        ex = conn.execute(
-            "SELECT quantite FROM stock_emplacements WHERE produit_id=? AND emplacement=?",
-            (produit_id, emplacement),
-        ).fetchone()
-        stock = float(ex["quantite"]) if ex else 0.0
-        if quantite > stock + 0.0001:
-            raise HTTPException(
-                400,
-                f"Stock insuffisant — disponible : {stock:g} {unite}.",
-            )
-        result, ref_audit, audit_action = _apply_stock_mouvement(
-            conn, user, produit_id, emplacement, "sortie", quantite, note
-        )
-        conn.commit()
-
-    log_action(
-        user=user,
-        action=audit_action,
-        module="stock",
-        objet=f"PF sortie {ref_audit} -{quantite:g} @ {emplacement}",
-        detail={"type_mouvement": "sortie", "quantite": quantite},
-        ip=request.client.host if request.client else None,
-    )
-    return {"ok": True, **result}
 
 
 @router.post("/api/stock/produits/import/preview")
