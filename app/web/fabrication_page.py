@@ -1630,9 +1630,12 @@ function renderOfPanel(){
 function renderOfImportModal(){
   const mr = document.getElementById('mroot');
   if(!mr) return;
-  mr.innerHTML = '';
   const m = S.ofImportModal;
-  if(!m) return;
+  if(!m){
+    if(!S.showArret50Modal) mr.innerHTML = '';
+    return;
+  }
+  mr.innerHTML = '';
 
   let body;
   if(m.parsing){
@@ -3511,8 +3514,11 @@ function renderFinModal(){
 function renderArret50Modal(){
   const mr = document.getElementById('mroot');
   if(!mr) return;
+  if(!S.showArret50Modal){
+    if(!S.ofImportModal) mr.innerHTML = '';
+    return;
+  }
   mr.innerHTML = '';
-  if(!S.showArret50Modal) return;
 
   let submitBtn;
   const ta = h('textarea',{
@@ -3652,8 +3658,8 @@ function render(){
   if(S.showFinModal)      root.appendChild(renderFinModal());
   if(S.showCommentModal)  root.appendChild(renderCommentModal());
 
-  renderArret50Modal();
   renderOfImportModal();
+  renderArret50Modal();
 
   if(S.loading) root.appendChild(renderLoading());
 
