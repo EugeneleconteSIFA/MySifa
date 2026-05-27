@@ -332,17 +332,15 @@ body.light .btn.btn-accent{color:#fff}
 .btn.btn-danger:hover{filter:brightness(1.05)}
 .btn-soft{background:transparent;border:1px solid transparent}
 .btn.btn-soft-entree{
-  --soft-entree-b: color-mix(in srgb,var(--success) 32%,transparent);
   background:color-mix(in srgb,var(--success) 18%,transparent);
-  border-color:var(--soft-entree-b);
-  color:var(--soft-entree-b);
+  border-color:color-mix(in srgb,var(--success) 32%,transparent);
+  color:var(--success);
 }
 .btn.btn-soft-entree:hover{border-color:var(--success);color:var(--success);filter:brightness(1.05)}
 .btn.btn-soft-sortie{
-  --soft-sortie-b: color-mix(in srgb,var(--danger) 32%,transparent);
   background:color-mix(in srgb,var(--danger) 18%,transparent);
-  border-color:var(--soft-sortie-b);
-  color:var(--soft-sortie-b);
+  border-color:color-mix(in srgb,var(--danger) 32%,transparent);
+  color:var(--danger);
 }
 .btn.btn-soft-sortie:hover{border-color:var(--danger);color:var(--danger);filter:brightness(1.05)}
 
