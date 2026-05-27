@@ -328,6 +328,8 @@ body.light .btn-sm{color:#fff}
   border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
 .btn.btn-accent{background:var(--accent);color:var(--bg);border:none}
 body.light .btn.btn-accent{color:#fff}
+.btn.btn-success{background:var(--success);color:var(--bg);border:none}
+body.light .btn.btn-success{color:#fff}
 .btn.btn-danger{background:var(--danger);color:#fff;border:none}
 .btn.btn-danger:hover{filter:brightness(1.05)}
 
@@ -607,6 +609,7 @@ body.light .mp-search-wrap:focus-within{
 .pf-toolbar-searchbox input{flex:1;min-width:180px;border:none;background:transparent;padding:0;font-size:14px;color:var(--text);outline:none}
 .pf-toolbar-searchbox input::placeholder{color:var(--muted)}
 .pf-tags{display:flex;flex-wrap:wrap;gap:6px}
+.pf-tags-below{margin-top:8px}
 .pf-tag{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);
   background:var(--bg);color:var(--text2);border-radius:999px;padding:5px 10px;font-size:12px;font-weight:700}
 .pf-tag-kind{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.35px}
@@ -614,6 +617,13 @@ body.light .mp-search-wrap:focus-within{
 .pf-tag-x:hover{color:var(--accent)}
 .pf-search-dd{position:absolute;left:0;right:0;top:100%;margin-top:6px;z-index:160}
 .pf-search-dd .empl-suggestions{background:var(--card);border-radius:10px}
+.pf-sugg-item{padding:10px 14px;cursor:pointer;font-family:inherit;font-size:13px;color:var(--text);
+  border-bottom:1px solid var(--border);line-height:1.35}
+.pf-sugg-item:last-child{border-bottom:none}
+.pf-sugg-item:hover{background:var(--accent-bg)}
+.pf-sugg-item .pf-sugg-kind{font-size:10px;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.35px}
+.pf-sugg-item .pf-sugg-main{font-weight:700}
+.pf-sugg-item .pf-sugg-sub{color:var(--text2);font-weight:600}
 .pf-search-hint{font-size:11px;color:var(--muted);margin-top:6px}
 .pf-toolbar-actions{display:flex;gap:8px;flex-shrink:0}
 .pf-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
@@ -3623,7 +3633,7 @@ function buildPfUnifiedSearch() {
     id: 'pf-search',
     attrs: {
       type: 'text',
-      placeholder: 'Filtrer (réf, désignation, emplacement…) — sélectionner pour ajouter un tag',
+      placeholder: 'Rechercher (réf, emplacement, désignation…) — sélectionner pour ajouter un tag',
       autocomplete: 'off',
       spellcheck: 'false',
     },
@@ -3643,15 +3653,22 @@ function buildPfUnifiedSearch() {
     const empls = pfEmplacementChoices(q).slice(0, 8);
 
     const pushItem = (kind, label, sub) => {
+      const kindLbl = kind === 'ref' ? 'Réf' : 'Empl';
       ddList.appendChild(el('div', {
-        cls: 'empl-sugg-item',
+        cls: 'pf-sugg-item',
         on: { mousedown: (e) => {
           e.preventDefault(); // évite blur avant click
           pfAddFilterTag(kind, label);
           renderProduitsFinisView();
           requestAnimationFrame(() => { try { document.getElementById('pf-search')?.focus(); } catch (e2) {} });
         } },
-      }, (kind === 'ref' ? 'Réf: ' : 'Empl: ') + label + (sub ? ' — ' + sub : '')));
+      },
+      el('span', { cls: 'pf-sugg-kind' }, kindLbl),
+      el('span', null, ' · '),
+      el('span', { cls: 'pf-sugg-main' }, label),
+      sub ? el('span', null, ' — ') : null,
+      sub ? el('span', { cls: 'pf-sugg-sub' }, sub) : null,
+      ));
     };
 
     prod.forEach(p => pushItem('ref', String(p.reference || '').toUpperCase(), p.designation || ''));
@@ -3695,7 +3712,7 @@ function buildPfUnifiedSearch() {
     }
   });
 
-  const tags = el('div', { cls: 'pf-tags' },
+  const tags = el('div', { cls: 'pf-tags pf-tags-below' },
     ...(fs.refs || []).map(r => el('span', { cls: 'pf-tag' },
       el('span', { cls: 'pf-tag-kind' }, 'Réf'),
       el('span', null, r),
@@ -3710,7 +3727,8 @@ function buildPfUnifiedSearch() {
 
   const box = el('div', { cls: 'pf-toolbar-search' },
     el('span', { cls: 'pf-toolbar-search-icon' }, iconEl('search', 16)),
-    el('div', { cls: 'pf-toolbar-searchbox' }, tags, inp),
+    el('div', { cls: 'pf-toolbar-searchbox' }, inp),
+    tags,
     dd,
     el('div', { cls: 'pf-search-hint' }, 'Astuce : Échap vide le champ, puis Échap efface tous les tags.'),
   );
@@ -3743,15 +3761,15 @@ function buildProduitsFinisTab() {
     buildPfUnifiedSearch(),
     el('div', { cls: 'pf-toolbar-actions' },
       S.stockReadOnly ? null : el('button', {
-        cls: 'btn btn-accent',
+        cls: 'btn btn-success',
         type: 'button',
         on: { click: () => openPfMvtModal('entree') },
-      }, '+ Entrée'),
+      }, iconEl('upload', 14), ' Entrée'),
       S.stockReadOnly ? null : el('button', {
         cls: 'btn btn-danger',
         type: 'button',
         on: { click: () => openPfMvtModal('sortie') },
-      }, '− Sortie'),
+      }, iconEl('download', 14), ' Sortie'),
       el('button', {
         cls: 'btn-ghost',
         type: 'button',
