@@ -1619,9 +1619,9 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
             (body.get("departement_livraison") or "").strip()
             if "departement_livraison" in body
             else (ex["departement_livraison"] if "departement_livraison" in ex.keys() else ""),
-            _parse_a_placer(body.get("prise_rdv"), default=int(ex.get("prise_rdv") or 0))
+            _parse_a_placer(body.get("prise_rdv"), default=int(exd.get("prise_rdv") or 0))
             if "prise_rdv" in body
-            else int(ex.get("prise_rdv") or 0),
+            else int(exd.get("prise_rdv") or 0),
             entry_id
         ))
 
