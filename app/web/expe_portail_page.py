@@ -58,11 +58,26 @@ def get_portail_html(token: str) -> str:
     }}
     *{{box-sizing:border-box;margin:0;padding:0}}
     body{{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}}
-    .wrap{{max-width:920px;margin:0 auto;padding:20px 16px 48px}}
-    .hdr{{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:16px}}
-    .brand strong{{color:var(--accent);font-size:18px;font-weight:900;letter-spacing:-.4px}}
-    .brand div{{font-size:12px;color:var(--muted);margin-top:2px}}
-    .chip{{font-size:12px;color:var(--muted);font-family:ui-monospace,monospace;padding:6px 10px;border:1px solid var(--border);border-radius:10px;background:var(--card)}}
+    .wrap{{max-width:860px;margin:0 auto;padding:20px 16px 48px}}
+    .hdr{{
+      display:flex;justify-content:space-between;align-items:flex-start;gap:16px;
+      flex-wrap:wrap;margin-bottom:16px;
+    }}
+    .hdr-brand strong{{color:var(--accent);font-size:16px;font-weight:800;letter-spacing:-.3px}}
+    .hdr-brand div{{font-size:13px;color:var(--muted);margin-top:4px;line-height:1.5}}
+    .hdr-actions{{display:flex;gap:8px;align-items:center;flex-wrap:wrap}}
+    .chip{{font-size:12px;color:var(--muted);font-family:ui-monospace,monospace;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card)}}
+    .theme-btn{{
+      padding:8px 12px;border-radius:10px;border:1px solid var(--border);background:var(--card);
+      color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;
+    }}
+    .theme-btn:hover{{border-color:var(--accent);color:var(--accent)}}
+    .banner{{
+      background:var(--card);border:1px solid var(--border);border-radius:12px;
+      padding:20px 22px;margin-bottom:16px;
+    }}
+    .banner h1{{font-size:18px;font-weight:700;margin-bottom:8px;color:var(--text)}}
+    .banner p{{font-size:13px;color:var(--text2);line-height:1.65;margin:0}}
     .card{{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 16px 14px}}
     .muted{{color:var(--muted)}}
     .list{{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-top:12px}}
@@ -75,8 +90,12 @@ def get_portail_html(token: str) -> str:
     .pill.muted{{color:var(--muted);background:rgba(148,163,184,.10)}}
     .btn{{border-radius:10px;padding:10px 16px;font-weight:900;cursor:pointer;font-family:inherit;border:1px solid var(--border);background:transparent;color:var(--text);transition:filter .15s,border-color .15s,color .15s,background .15s}}
     .btn:hover{{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}}
-    .btn-accent{{background:var(--accent);border-color:var(--accent);color:var(--bg)}}
-    .btn-accent:hover{{filter:brightness(1.05)}}
+    .btn-accent{{
+      background:var(--accent);border-color:var(--accent);color:#0a0e17;
+      font-weight:700;
+    }}
+    .btn-accent:hover{{filter:brightness(1.05);color:#0a0e17}}
+    body.light .btn-accent{{color:#fff}}
     .btn-ghost{{background:transparent}}
     .row{{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}}
     label{{display:block;font-size:11px;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}}
@@ -97,21 +116,31 @@ def get_portail_html(token: str) -> str:
 </head>
 <body>
   <div class="wrap">
-    <div class="hdr">
-      <div class="brand">
+    <header class="hdr">
+      <div class="hdr-brand">
         <strong>MySifa</strong>
-        <div>Portail transporteur — réponse aux demandes de tarif</div>
+        <div>Portail transporteur — demandes de tarif SIFA</div>
       </div>
-      <div class="chip" id="who">Chargement…</div>
+      <div class="hdr-actions">
+        <div class="chip" id="who">Chargement…</div>
+        <button type="button" class="theme-btn" id="themeBtn" title="Thème clair / sombre">Thème</button>
+      </div>
+    </header>
+
+    <div class="banner">
+      <h1>Vos demandes de tarif</h1>
+      <p>
+        Pour chaque envoi, indiquez un <strong>prix HT</strong> et un <strong>délai</strong> (en jours).
+        La réponse est enregistrée dès validation.
+      </p>
     </div>
 
     <div class="card">
-      <div style="font-size:13px;color:var(--text2);line-height:1.7">
-        Merci de répondre pour chaque demande avec un <strong>prix HT</strong> et un <strong>délai</strong> estimé.<br>
-        Les réponses sont enregistrées immédiatement.
-      </div>
       <div class="list" id="list"></div>
     </div>
+    <p class="foot" style="margin-top:28px;font-size:11px;color:var(--muted);text-align:center;line-height:1.6;padding-top:16px;border-top:1px solid var(--border)">
+      SIFA — Roubaix (59) · Portail sécurisé MySifa
+    </p>
   </div>
 
   <div class="modal-ov" id="ov">
@@ -148,6 +177,13 @@ def get_portail_html(token: str) -> str:
   const S = {{ data:null, editing:null }};
 
   function esc(s){{ return String(s??'').replace(/[&<>\"']/g,c=>({{'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}}[c])); }}
+  function apiErr(j,txt){{
+    if(!j) return txt||'Erreur';
+    const d=j.detail;
+    if(typeof d==='string') return d;
+    if(Array.isArray(d)) return d.map(x=>x.msg||(x.loc?x.loc.join('.'):'')||String(x)).filter(Boolean).join(' — ')||txt;
+    return txt||'Erreur';
+  }}
   function pill(st){{
     const m={{ envoyee:['Envoyée','muted'], ouvert:['Ouverte','warn'], recue:['Reçue','ok'], retenue:['Retenue','ok'], refusee:['Refusée','muted'], echec:['Échec','muted'] }};
     const x=m[st]||[st||'—','muted'];
@@ -239,6 +275,7 @@ def get_portail_html(token: str) -> str:
         method:'POST',
         headers:{{'Content-Type':'application/json'}},
         body:JSON.stringify({{
+          reponse_id: it.reponse_id,
           prix,
           delai_jours: delai,
           commentaire: (document.getElementById('com').value||'').trim()||null
@@ -249,6 +286,12 @@ def get_portail_html(token: str) -> str:
       await load();
     }}catch(e){{ showToast(e.message||'Erreur', 'bad'); }}
   }});
+
+  document.getElementById('themeBtn').addEventListener('click',()=>{{
+    document.body.classList.toggle('light');
+    try{{ localStorage.setItem('mysifa_theme', document.body.classList.contains('light')?'light':'dark'); }}catch(e){{}}
+  }});
+  try{{ if(localStorage.getItem('mysifa_theme')==='light') document.body.classList.add('light'); }}catch(e){{}}
 
   load().catch(e=>{{ document.getElementById('who').textContent='Erreur'; showToast(e.message||'Erreur', 'bad'); }});
   </script>

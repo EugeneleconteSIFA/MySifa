@@ -17,7 +17,7 @@ from email.mime.text import MIMEText
 import html as html_module
 
 from config import (
-    BASE_URL,
+    public_base_url,
     MS_CLIENT_ID,
     MS_CLIENT_SECRET,
     MS_SENDER_UPN,
@@ -38,6 +38,43 @@ _GRAPH_TOKEN = {"access_token": None, "expires_at": 0.0}
 
 def _esc(text: object) -> str:
     return html_module.escape(str(text or ""))
+
+
+def email_mysifa_layout(
+    *,
+    subtitle: str,
+    body_html: str,
+    cta_href: str | None = None,
+    cta_label: str | None = None,
+    footer_note: str | None = None,
+) -> str:
+    """Enveloppe HTML email MySifa (dark header, typo Segoe UI)."""
+    cta_block = ""
+    if cta_href and cta_label:
+        cta_block = f"""
+    <div style="margin:26px 0 8px;text-align:center">
+      <a href="{_esc(cta_href)}" style="background:#22d3ee;color:#0a0e17;font-weight:800;font-size:14px;padding:12px 24px;border-radius:10px;text-decoration:none;display:inline-block">
+        {_esc(cta_label)}
+      </a>
+    </div>
+    <p style="margin:10px 0 0;font-size:11px;color:#94a3b8;line-height:1.6;text-align:center;word-break:break-all">
+      Si le bouton ne fonctionne pas :<br>
+      <span style="font-family:ui-monospace,monospace;font-size:11px">{_esc(cta_href)}</span>
+    </p>"""
+    foot = footer_note or f"Notification automatique MySifa — {_esc(public_base_url())}"
+    return f"""<div style="font-family:'Segoe UI',system-ui,sans-serif;max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+  <div style="background:#0a0e17;padding:22px 28px">
+    <div style="font-size:20px;font-weight:800;color:#22d3ee;letter-spacing:-.3px">MySifa</div>
+    <div style="font-size:12px;color:#94a3b8;margin-top:4px;text-transform:uppercase;letter-spacing:.5px;font-weight:600">{_esc(subtitle)}</div>
+  </div>
+  <div style="padding:28px 32px;font-size:14px;color:#334155;line-height:1.65">
+    {body_html}
+    {cta_block}
+    <p style="margin:20px 0 0;font-size:11px;color:#94a3b8;line-height:1.6;border-top:1px solid #e2e8f0;padding-top:14px">
+      {foot}
+    </p>
+  </div>
+</div>"""
 
 
 def email_invitation_ao(
@@ -103,7 +140,7 @@ def email_invitation_ao(
     </div>
     <p style="margin:0;font-size:12px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:16px;line-height:1.6">
       Ce lien est personnel et sécurisé. Ne le partagez pas.<br>
-      MySifa — {_esc(BASE_URL)}
+      MySifa — {_esc(public_base_url())}
     </p>
   </div>
 </div>"""
@@ -193,45 +230,40 @@ def email_expe_reponse_recue(
     delai_s = f"J+{int(delai_jours)}"
 
     subject = f"[MySifa] Réponse transporteur — Demande #{demande_id} — {nom_transporteur}"
-    body = f"""<div style="font-family:'Segoe UI',system-ui,sans-serif;max-width:640px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
-  <div style="background:#0a0e17;padding:24px 32px">
-    <div style="font-size:20px;font-weight:700;color:#22d3ee">MySifa</div>
-    <div style="font-size:13px;color:#94a3b8;margin-top:4px">Réponse transporteur reçue</div>
-  </div>
-  <div style="padding:28px 32px">
-    <p style="margin:0 0 14px;font-size:14px;color:#0f172a;line-height:1.6">
+    expe_url = f"{public_base_url()}/expe"
+    inner = f"""
+    <p style="margin:0 0 14px;color:#0f172a">
       Le transporteur <strong>{_esc(nom_transporteur)}</strong> a répondu à la demande <strong>#{_esc(demande_id)}</strong>.
     </p>
     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;margin:0 0 16px">
-      <div style="font-size:12px;color:#64748b;line-height:1.7">
-        Destination: <strong>{_esc(cp)}</strong><br>
-        Type d'envoi: <strong>{_esc(type_envoi)}</strong><br>
-        {('Poids: <strong>'+_esc(poids)+' kg</strong><br>') if poids is not None else ''}
-        {('Palettes: <strong>'+_esc(nb_pal)+'</strong><br>') if nb_pal is not None else ''}
-        {('Contraintes: '+_esc(contraintes)+'<br>') if contraintes else ''}
+      <div style="font-size:13px;color:#64748b;line-height:1.7">
+        Destination : <strong style="color:#0f172a">{_esc(cp)}</strong><br>
+        Type d'envoi : <strong style="color:#0f172a">{_esc(type_envoi)}</strong><br>
+        {('Poids : <strong style="color:#0f172a">'+_esc(poids)+' kg</strong><br>') if poids is not None else ''}
+        {('Palettes : <strong style="color:#0f172a">'+_esc(nb_pal)+'</strong><br>') if nb_pal is not None else ''}
+        {('Contraintes : '+_esc(contraintes)+'<br>') if contraintes else ''}
       </div>
     </div>
-    <div style="display:flex;gap:12px;flex-wrap:wrap;margin:0 0 16px">
-      <div style="background:rgba(34,211,238,.10);border:1px solid rgba(34,211,238,.25);border-radius:10px;padding:10px 14px">
-        <div style="font-size:11px;color:#0891b2;text-transform:uppercase;letter-spacing:.5px;font-weight:800;margin-bottom:2px">Prix HT</div>
-        <div style="font-size:16px;color:#0f172a;font-weight:900">{_esc(prix_s)}</div>
-      </div>
-      <div style="background:rgba(52,211,153,.10);border:1px solid rgba(52,211,153,.25);border-radius:10px;padding:10px 14px">
-        <div style="font-size:11px;color:#059669;text-transform:uppercase;letter-spacing:.5px;font-weight:800;margin-bottom:2px">Délai</div>
-        <div style="font-size:16px;color:#0f172a;font-weight:900">{_esc(delai_s)}</div>
-      </div>
-    </div>
-    {f'<div style=\"font-size:13px;color:#475569;line-height:1.7;margin:0 0 16px\"><strong>Commentaire :</strong><br>{_esc(commentaire)}</div>' if commentaire else ''}
-    <div style="margin:18px 0 0;text-align:center">
-      <a href="{_esc(BASE_URL.rstrip('/'))}/expe" style="background:#22d3ee;color:#0a0e17;font-weight:800;font-size:14px;padding:12px 20px;border-radius:10px;text-decoration:none;display:inline-block">
-        Ouvrir MyExpé
-      </a>
-    </div>
-    <p style="margin:16px 0 0;font-size:11px;color:#94a3b8;line-height:1.6">
-      Notification automatique MySifa — { _esc(BASE_URL) }
-    </p>
-  </div>
-</div>"""
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 16px">
+      <tr>
+        <td style="background:rgba(34,211,238,.10);border:1px solid rgba(34,211,238,.25);border-radius:10px;padding:10px 14px">
+          <div style="font-size:11px;color:#0891b2;text-transform:uppercase;letter-spacing:.5px;font-weight:800">Prix HT</div>
+          <div style="font-size:16px;color:#0f172a;font-weight:900">{_esc(prix_s)}</div>
+        </td>
+        <td width="12"></td>
+        <td style="background:rgba(52,211,153,.10);border:1px solid rgba(52,211,153,.25);border-radius:10px;padding:10px 14px">
+          <div style="font-size:11px;color:#059669;text-transform:uppercase;letter-spacing:.5px;font-weight:800">Délai</div>
+          <div style="font-size:16px;color:#0f172a;font-weight:900">{_esc(delai_s)}</div>
+        </td>
+      </tr>
+    </table>
+    {f'<p style="margin:0 0 8px;color:#475569"><strong>Commentaire</strong><br>{_esc(commentaire)}</p>' if commentaire else ''}"""
+    body = email_mysifa_layout(
+        subtitle="Réponse transporteur reçue",
+        body_html=inner,
+        cta_href=expe_url,
+        cta_label="Ouvrir MyExpé",
+    )
     return subject, body
 
 

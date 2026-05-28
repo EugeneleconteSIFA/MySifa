@@ -304,6 +304,21 @@ def classify_operation(op_str):
 
 # URL de base (pour construire les liens dans les emails)
 BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
+# Domaine public prod (liens portail / emails) — surcharge via PUBLIC_BASE_URL ou BASE_URL
+PUBLIC_BASE_URL_DEFAULT = "https://www.mysifa.com"
+
+
+def public_base_url() -> str:
+    """URL absolue pour liens emails et portail (jamais localhost si non configuré)."""
+    raw = (
+        os.getenv("PUBLIC_BASE_URL")
+        or os.getenv("BASE_URL")
+        or PUBLIC_BASE_URL_DEFAULT
+    ).strip().rstrip("/")
+    low = raw.lower()
+    if not raw or "localhost" in low or "127.0.0.1" in low:
+        return PUBLIC_BASE_URL_DEFAULT.rstrip("/")
+    return raw
 
 # ─── Chat (GIPHY) ─────────────────────────────────────────────────
 GIPHY_API_KEY = os.getenv("GIPHY_API_KEY", "")

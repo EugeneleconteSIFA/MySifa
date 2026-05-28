@@ -20,8 +20,8 @@ from fastapi import APIRouter, Body, File, HTTPException, Query, Request, Upload
 from fastapi.responses import FileResponse
 
 from app.services.audit_service import log_action
-from app.services.email_service import send_email
-from config import BASE_URL
+from app.services.email_service import email_mysifa_layout, send_email
+from config import public_base_url
 from app.services.expe_transporteurs_seed import seed_expe_transporteurs_if_empty
 from database import get_db
 from services.auth_service import get_current_user, user_can_write_expe, user_has_app_access
@@ -1398,52 +1398,31 @@ def _generer_rfq_html(demande: dict, user: dict, *, portail_lien: str) -> tuple[
     sujet = f"Demande de tarif transport — SIFA Roubaix — {cp}"
 
     lien = (portail_lien or "").strip()
-    lien_html = ""
-    if lien:
-        lien_html = f"""
-    <div style="margin:22px 0 18px;text-align:center">
-      <a href="{_e(lien)}" style="background:#22d3ee;color:#0a0e17;font-weight:700;font-size:14px;padding:12px 22px;border-radius:10px;text-decoration:none;display:inline-block">
-        Répondre sur le portail
-      </a>
-      <div style="margin-top:10px;font-size:12px;color:#64748b;line-height:1.5">
-        Si le bouton ne fonctionne pas, copier/coller ce lien :<br>
-        <span style="font-family:ui-monospace,monospace">{_e(lien)}</span>
-      </div>
-    </div>
-"""
-
-    corps = f"""
-<div style="font-family:'Segoe UI',system-ui,sans-serif;max-width:560px;margin:0 auto;
-            background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
-  <div style="background:#0a0e17;padding:20px 28px">
-    <div style="font-size:18px;font-weight:700;color:#22d3ee">MySifa</div>
-    <div style="font-size:12px;color:#94a3b8;margin-top:2px">SIFA — Roubaix (59)</div>
-  </div>
-  <div style="padding:28px">
-    <p style="margin:0 0 16px;font-size:14px;color:#0f172a">Bonjour,</p>
-    <p style="margin:0 0 20px;font-size:14px;color:#475569;line-height:1.6">
+    inner = f"""
+    <p style="margin:0 0 16px;color:#0f172a">Bonjour,</p>
+    <p style="margin:0 0 18px;color:#475569">
       Nous recherchons un transporteur pour l'envoi suivant et vous sollicitons pour un tarif.
     </p>
-    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px 20px;margin-bottom:20px">
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px 20px;margin:0 0 18px">
       <ul style="margin:0;padding-left:18px;font-size:13px;color:#334155;line-height:1.8">
         {detail_html}
       </ul>
     </div>
-    <p style="margin:0 0 20px;font-size:14px;color:#475569;line-height:1.6">
-      Merci de nous retourner votre meilleur tarif ainsi que le délai de livraison estimé
-      via le portail ci-dessous.
+    <p style="margin:0 0 4px;color:#475569">
+      Merci de nous retourner votre meilleur tarif HT et le délai de livraison estimé via le portail.
     </p>
-    {lien_html}
-    <p style="margin:0;font-size:13px;color:#64748b">
+    <p style="margin:18px 0 0;color:#64748b;font-size:13px">
       Cordialement,<br>
       <strong style="color:#0f172a">{_e(user_nom)}</strong><br>
-      SIFA — Service expéditions<br>
-      Roubaix (59)
-    </p>
-  </div>
-</div>
-""".strip()
-
+      SIFA — Service expéditions · Roubaix (59)
+    </p>"""
+    corps = email_mysifa_layout(
+        subtitle="Demande de tarif transport",
+        body_html=inner,
+        cta_href=lien or None,
+        cta_label="Répondre sur le portail" if lien else None,
+        footer_note="SIFA — Roubaix (59) · MySifa",
+    )
     return sujet, corps
 
 
@@ -1608,7 +1587,13 @@ def envoyer_rfq(request: Request, demande_id: int, body: dict = Body(...)):
                         now,
                     ),
                 )
-            portail_lien = f"{BASE_URL.rstrip('/')}/portail/expe/{token}"
+                row2 = conn.execute(
+                    "SELECT token FROM expe_portal_transporteurs WHERE LOWER(email)=LOWER(?) AND actif=1 LIMIT 1",
+                    (email_norm,),
+                ).fetchone()
+                if row2 and row2["token"]:
+                    token = str(row2["token"])
+            portail_lien = f"{public_base_url()}/portail/expe/{token}"
             sujet, corps_html = _generer_rfq_html(demande, user, portail_lien=portail_lien)
 
             ok = send_email(

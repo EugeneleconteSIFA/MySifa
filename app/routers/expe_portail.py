@@ -81,8 +81,13 @@ def _get_account_or_404(conn, token: str, *, ip: str) -> dict:
     return acc
 
 
+def _account_email(acc: dict) -> str:
+    return (acc.get("email") or "").strip().lower()
+
+
 def _mark_opened(conn, *, acc: dict, ip: str) -> None:
     now = _now_paris_iso()
+    email = _account_email(acc)
     # Best-effort: marquer l'ouverture dans le compte + sur les lignes de réponse
     conn.execute(
         """
@@ -95,13 +100,78 @@ def _mark_opened(conn, *, acc: dict, ip: str) -> None:
     conn.execute(
         """
         UPDATE expe_devis_reponses
-        SET opened_at=?, opened_ip=?
+        SET opened_at=?, opened_ip=?,
+            statut=CASE WHEN statut='envoyee' THEN 'ouvert' ELSE statut END
         WHERE opened_at IS NULL
-          AND destinataire_email=?
+          AND LOWER(TRIM(COALESCE(destinataire_email,''))) = LOWER(TRIM(COALESCE(?,'')))
           AND statut IN ('envoyee','ouvert','echec')
         """,
-        (now, ip, (acc.get("email") or "").strip().lower()),
+        (now, ip, email),
     )
+    tid = acc.get("transporteur_id")
+    if tid:
+        conn.execute(
+            """
+            UPDATE expe_devis_reponses
+            SET opened_at=?, opened_ip=?,
+                destinataire_email=COALESCE(NULLIF(TRIM(destinataire_email),''), ?),
+                statut=CASE WHEN statut='envoyee' THEN 'ouvert' ELSE statut END
+            WHERE opened_at IS NULL
+              AND COALESCE(TRIM(destinataire_email),'') = ''
+              AND transporteur_id=?
+              AND statut IN ('envoyee','ouvert','echec')
+            """,
+            (now, ip, email, int(tid)),
+        )
+
+
+def _find_reponse_row(
+    conn,
+    *,
+    demande_id: int,
+    acc: dict,
+    reponse_id: int | None = None,
+) -> dict | None:
+    """Retrouve la ligne expe_devis_reponses liée au compte portail."""
+    email = _account_email(acc)
+    tid = acc.get("transporteur_id")
+    if reponse_id:
+        row = conn.execute(
+            """
+            SELECT id, statut, destinataire_email, transporteur_id
+            FROM expe_devis_reponses
+            WHERE id=? AND demande_id=?
+            """,
+            (int(reponse_id), int(demande_id)),
+        ).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        dest = (d.get("destinataire_email") or "").strip().lower()
+        if dest and dest != email:
+            return None
+        if not dest and tid and d.get("transporteur_id") not in (None, int(tid)):
+            return None
+        return d
+    row = conn.execute(
+        """
+        SELECT id, statut, destinataire_email, transporteur_id
+        FROM expe_devis_reponses
+        WHERE demande_id=?
+          AND (
+            LOWER(TRIM(COALESCE(destinataire_email,''))) = LOWER(TRIM(COALESCE(?,'')))
+            OR (
+              COALESCE(TRIM(destinataire_email),'') = ''
+              AND transporteur_id IS NOT NULL
+              AND transporteur_id = ?
+            )
+          )
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (int(demande_id), email, int(tid) if tid else -1),
+    ).fetchone()
+    return dict(row) if row else None
 
 
 @router_html.get("/portail/expe/{token}", response_class=HTMLResponse)
@@ -129,8 +199,9 @@ def portail_expe_data(request: Request, token: str):
         _mark_opened(conn, acc=acc, ip=ip)
         conn.commit()
 
-        email = (acc.get("email") or "").strip().lower()
-        # Liste des demandes liées à cet email (expe_devis_reponses.destinataire_email)
+        email = _account_email(acc)
+        tid = acc.get("transporteur_id")
+        # Liste des demandes liées à cet email (ou transporteur_id si anciennes lignes)
         rows = conn.execute(
             """
             SELECT
@@ -154,10 +225,15 @@ def portail_expe_data(request: Request, token: str):
             FROM expe_devis_reponses r
             JOIN expe_demandes_devis d ON d.id = r.demande_id
             WHERE LOWER(TRIM(COALESCE(r.destinataire_email,''))) = LOWER(TRIM(COALESCE(?,'')))
+               OR (
+                 COALESCE(TRIM(r.destinataire_email),'') = ''
+                 AND r.transporteur_id IS NOT NULL
+                 AND r.transporteur_id = ?
+               )
             ORDER BY d.created_at DESC, r.id DESC
             LIMIT 200
             """,
-            (email,),
+            (email, int(tid) if tid else -1),
         ).fetchall()
         demandes = [dict(x) for x in rows]
         return {"email": email, "demandes": demandes}
@@ -171,7 +247,12 @@ def portail_expe_repondre(
     now = _now_paris_iso()
     with get_db() as conn:
         acc = _get_account_or_404(conn, token, ip=ip)
-        email = (acc.get("email") or "").strip().lower()
+        email = _account_email(acc)
+        reponse_id_body = body.get("reponse_id")
+        try:
+            reponse_id_int = int(reponse_id_body) if reponse_id_body is not None else None
+        except (TypeError, ValueError):
+            reponse_id_int = None
 
         try:
             prix = float(body.get("prix"))
@@ -191,26 +272,23 @@ def portail_expe_repondre(
         if commentaire and len(commentaire) > 2000:
             raise HTTPException(status_code=400, detail="Commentaire trop long.")
 
-        rep = conn.execute(
-            """
-            SELECT id, statut FROM expe_devis_reponses
-            WHERE demande_id=?
-              AND LOWER(TRIM(COALESCE(destinataire_email,''))) = LOWER(TRIM(COALESCE(?,'')))
-            ORDER BY id DESC
-            LIMIT 1
-            """,
-            (int(demande_id), email),
-        ).fetchone()
+        rep = _find_reponse_row(
+            conn,
+            demande_id=int(demande_id),
+            acc=acc,
+            reponse_id=reponse_id_int,
+        )
         if not rep:
             raise HTTPException(status_code=404, detail="Demande introuvable.")
 
         conn.execute(
             """
             UPDATE expe_devis_reponses
-            SET prix=?, delai_jours=?, commentaire=?, statut='recue', recu_at=?
+            SET prix=?, delai_jours=?, commentaire=?, statut='recue', recu_at=?,
+                destinataire_email=COALESCE(NULLIF(TRIM(destinataire_email),''), ?)
             WHERE id=?
             """,
-            (prix, delai, commentaire, now, int(rep["id"])),
+            (prix, delai, commentaire, now, email, int(rep["id"])),
         )
         conn.execute(
             """
