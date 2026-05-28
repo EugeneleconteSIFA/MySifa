@@ -2824,6 +2824,108 @@ async def pack_termines(machine_id: int, request: Request):
     return {"success": True, "updated": updated, "end": _fmt_ts(dt_end)}
 
 
+@router.post("/machines/{machine_id}/pack-attente")
+async def pack_attente(machine_id: int, request: Request):
+    """Recale les dossiers en attente les uns derrière les autres (durées en heures ouvrées machine).
+
+    - Ne modifie que les entrées statut='attente'
+    - Point d'ancrage : fin du dossier "en cours" si planifiée, sinon maintenant (arrondi à l'heure)
+    - Affecte planned_start/planned_end (persisté) et remet planned_end_manual à 0
+    """
+    require_admin(request)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    start_iso = (body.get("start_iso") or "").strip()
+
+    with get_db() as conn:
+        require_planning_machine(request, conn, machine_id)
+        mrow = conn.execute("SELECT * FROM machines WHERE id=?", (machine_id,)).fetchone()
+        if not mrow:
+            raise HTTPException(404, "Machine non trouvée")
+        m = dict(mrow)
+
+        cfgs, off, dw, dh = _load_planning_calendar_maps(conn, machine_id)
+        advance_to_work, consume_from = _make_work_duration_consumer(m, cfgs, off, dw, dh)
+
+        # Ancrage : fin en_cours, sinon start_iso, sinon maintenant (arrondi à l'heure, heure Paris)
+        anchor = conn.execute(
+            """SELECT planned_end, planned_start, duree_heures
+               FROM planning_entries
+               WHERE machine_id=? AND statut='en_cours'
+               ORDER BY position ASC LIMIT 1""",
+            (machine_id,),
+        ).fetchone()
+
+        dt0: Optional[datetime] = None
+        if anchor and (anchor["planned_end"] or "").strip():
+            dt0 = _parse_planned_dt(anchor["planned_end"])
+        if not dt0 and start_iso:
+            dt0 = _parse_planned_dt(start_iso)
+            if not dt0:
+                raise HTTPException(status_code=400, detail="start_iso invalide.")
+        if not dt0 and anchor and (anchor["planned_start"] or "").strip():
+            dt_ps = _parse_planned_dt(anchor["planned_start"])
+            if dt_ps:
+                try:
+                    dur = float(anchor["duree_heures"] or 0.0)
+                except Exception:
+                    dur = 0.0
+                if dur > 1e-6:
+                    _, dt0, _ = consume_from(dt_ps.replace(microsecond=0), dur)
+        if not dt0:
+            dt0 = datetime.now(_TZ_PARIS).replace(
+                tzinfo=None, minute=0, second=0, microsecond=0
+            )
+
+        cursor = advance_to_work(dt0.replace(second=0, microsecond=0))
+
+        waits = conn.execute(
+            """SELECT id, position, duree_heures, a_placer
+               FROM planning_entries
+               WHERE machine_id=? AND statut='attente'
+               ORDER BY position ASC""",
+            (machine_id,),
+        ).fetchall()
+        waits_list = [dict(r) for r in waits]
+
+        # Garder la logique "à placer" à la fin, comme la timeline.
+        main_entries: List[dict] = []
+        aplacer_entries: List[dict] = []
+        for e in waits_list:
+            try:
+                ap = int(e.get("a_placer") or 0)
+            except Exception:
+                ap = 0
+            (aplacer_entries if ap == 1 else main_entries).append(e)
+        ordered = main_entries + aplacer_entries
+
+        now_u = datetime.now().isoformat()
+        updated = 0
+        for e in ordered:
+            try:
+                dur = float(e.get("duree_heures") or 0.0)
+            except Exception:
+                dur = 0.0
+            if dur <= 1e-6:
+                continue
+            slot_start, slot_end, cursor = consume_from(cursor, dur)
+            conn.execute(
+                """UPDATE planning_entries
+                   SET planned_start=?, planned_end=?, planned_end_manual=0, updated_at=?
+                   WHERE id=? AND machine_id=?""",
+                (_fmt_ts(slot_start), _fmt_ts(slot_end), now_u, int(e["id"]), machine_id),
+            )
+            updated += 1
+
+        conn.commit()
+
+    return {"success": True, "updated": updated, "start": _fmt_ts(dt0)}
+
+
 def _pack_termines_before_anchor(
     conn,
     machine_id: int,
