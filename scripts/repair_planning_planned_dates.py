@@ -12,9 +12,15 @@ Ne modifie jamais les dossiers 'termine' ni 'en_cours'.
 from __future__ import annotations
 
 import argparse
+import os
+import sys
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Iterable, List, Optional, Tuple
+
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
 
 from app.core.database import get_db
 
