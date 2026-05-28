@@ -2669,6 +2669,36 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 84, "planning_entries_dept_livraison_prise_rdv")
 
+    # v85 — MyExpé : portail transporteur (réponses en ligne)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=85 LIMIT 1").fetchone():
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS expe_portal_transporteurs (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                email           TEXT NOT NULL UNIQUE,
+                token           TEXT NOT NULL UNIQUE,
+                transporteur_id INTEGER,
+                prospect_id     INTEGER,
+                created_at      TEXT NOT NULL,
+                last_opened_at  TEXT,
+                last_opened_ip  TEXT,
+                actif           INTEGER NOT NULL DEFAULT 1,
+                FOREIGN KEY (transporteur_id) REFERENCES expe_transporteurs(id),
+                FOREIGN KEY (prospect_id) REFERENCES expe_transporteurs_prospects(id)
+            );
+            """
+        )
+
+        dr_cols = {row[1] for row in conn.execute("PRAGMA table_info(expe_devis_reponses)").fetchall()}
+        if "destinataire_email" not in dr_cols:
+            conn.execute("ALTER TABLE expe_devis_reponses ADD COLUMN destinataire_email TEXT")
+        if "opened_at" not in dr_cols:
+            conn.execute("ALTER TABLE expe_devis_reponses ADD COLUMN opened_at TEXT")
+        if "opened_ip" not in dr_cols:
+            conn.execute("ALTER TABLE expe_devis_reponses ADD COLUMN opened_ip TEXT")
+        conn.commit()
+        _record_schema_migration(conn, 85, "expe_portal_transporteurs")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

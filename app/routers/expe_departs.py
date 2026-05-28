@@ -21,6 +21,7 @@ from fastapi.responses import FileResponse
 
 from app.services.audit_service import log_action
 from app.services.email_service import send_email
+from config import BASE_URL
 from app.services.expe_transporteurs_seed import seed_expe_transporteurs_if_empty
 from database import get_db
 from services.auth_service import get_current_user, user_can_write_expe, user_has_app_access
@@ -1366,7 +1367,7 @@ def comparateur(request: Request, body: dict = Body(...)):
 EXPE_DEVIS_CC = "expeditions@sifa.pro"
 
 
-def _generer_rfq_html(demande: dict, user: dict) -> tuple[str, str]:
+def _generer_rfq_html(demande: dict, user: dict, *, portail_lien: str) -> tuple[str, str]:
     """Génère le sujet et le corps HTML du RFQ standardisé."""
     import html as _html
 
@@ -1396,6 +1397,21 @@ def _generer_rfq_html(demande: dict, user: dict) -> tuple[str, str]:
 
     sujet = f"Demande de tarif transport — SIFA Roubaix — {cp}"
 
+    lien = (portail_lien or "").strip()
+    lien_html = ""
+    if lien:
+        lien_html = f"""
+    <div style="margin:22px 0 18px;text-align:center">
+      <a href="{_e(lien)}" style="background:#22d3ee;color:#0a0e17;font-weight:700;font-size:14px;padding:12px 22px;border-radius:10px;text-decoration:none;display:inline-block">
+        Répondre sur le portail
+      </a>
+      <div style="margin-top:10px;font-size:12px;color:#64748b;line-height:1.5">
+        Si le bouton ne fonctionne pas, copier/coller ce lien :<br>
+        <span style="font-family:ui-monospace,monospace">{_e(lien)}</span>
+      </div>
+    </div>
+"""
+
     corps = f"""
 <div style="font-family:'Segoe UI',system-ui,sans-serif;max-width:560px;margin:0 auto;
             background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
@@ -1415,8 +1431,9 @@ def _generer_rfq_html(demande: dict, user: dict) -> tuple[str, str]:
     </div>
     <p style="margin:0 0 20px;font-size:14px;color:#475569;line-height:1.6">
       Merci de nous retourner votre meilleur tarif ainsi que le délai de livraison estimé
-      en répondant directement à cet email.
+      via le portail ci-dessous.
     </p>
+    {lien_html}
     <p style="margin:0;font-size:13px;color:#64748b">
       Cordialement,<br>
       <strong style="color:#0f172a">{_e(user_nom)}</strong><br>
@@ -1563,11 +1580,37 @@ def envoyer_rfq(request: Request, demande_id: int, body: dict = Body(...)):
                 detail="Aucun destinataire valide — vérifier les emails des transporteurs",
             )
 
-        sujet, corps_html = _generer_rfq_html(demande, user)
-
         envois_ok: list[str] = []
         envois_ko: list[str] = []
         for dest in destinataires:
+            import uuid as _uuid
+
+            email_norm = (dest.get("email") or "").strip().lower()
+            token_row = conn.execute(
+                "SELECT token FROM expe_portal_transporteurs WHERE LOWER(email)=LOWER(?) AND actif=1 LIMIT 1",
+                (email_norm,),
+            ).fetchone()
+            if token_row and token_row["token"]:
+                token = str(token_row["token"])
+            else:
+                token = str(_uuid.uuid4())
+                conn.execute(
+                    """
+                    INSERT OR IGNORE INTO expe_portal_transporteurs
+                    (email, token, transporteur_id, prospect_id, created_at, actif)
+                    VALUES (?,?,?,?,?,1)
+                    """,
+                    (
+                        email_norm,
+                        token,
+                        dest.get("transporteur_id"),
+                        None,
+                        now,
+                    ),
+                )
+            portail_lien = f"{BASE_URL.rstrip('/')}/portail/expe/{token}"
+            sujet, corps_html = _generer_rfq_html(demande, user, portail_lien=portail_lien)
+
             ok = send_email(
                 to=dest["email"],
                 subject=sujet,
@@ -1579,8 +1622,8 @@ def envoyer_rfq(request: Request, demande_id: int, body: dict = Body(...)):
             conn.execute(
                 """
                 INSERT INTO expe_devis_reponses
-                (demande_id, transporteur_id, nom_transporteur, statut, sent_at)
-                VALUES (?,?,?,?,?)
+                (demande_id, transporteur_id, nom_transporteur, statut, sent_at, destinataire_email)
+                VALUES (?,?,?,?,?,?)
                 """,
                 (
                     demande_id,
@@ -1588,6 +1631,7 @@ def envoyer_rfq(request: Request, demande_id: int, body: dict = Body(...)):
                     dest["nom"],
                     statut_envoi,
                     now if ok else None,
+                    email_norm,
                 ),
             )
             if ok:

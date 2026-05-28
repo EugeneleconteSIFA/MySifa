@@ -173,6 +173,68 @@ def email_accuse_reception(
     return subject, body
 
 
+def email_expe_reponse_recue(
+    *,
+    demande: dict,
+    nom_transporteur: str,
+    prix: float,
+    delai_jours: int,
+    commentaire: str | None,
+) -> tuple[str, str]:
+    """Sujet et corps HTML — notification interne 'réponse transporteur reçue' (MyExpé)."""
+    cp = demande.get("code_postal_destination") or ""
+    type_envoi = demande.get("type_envoi") or ""
+    poids = demande.get("poids_total_kg")
+    nb_pal = demande.get("nb_palette")
+    contraintes = demande.get("contraintes") or ""
+    demande_id = demande.get("id")
+
+    prix_s = f"{float(prix):.2f} €"
+    delai_s = f"J+{int(delai_jours)}"
+
+    subject = f"[MySifa] Réponse transporteur — Demande #{demande_id} — {nom_transporteur}"
+    body = f"""<div style="font-family:'Segoe UI',system-ui,sans-serif;max-width:640px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+  <div style="background:#0a0e17;padding:24px 32px">
+    <div style="font-size:20px;font-weight:700;color:#22d3ee">MySifa</div>
+    <div style="font-size:13px;color:#94a3b8;margin-top:4px">Réponse transporteur reçue</div>
+  </div>
+  <div style="padding:28px 32px">
+    <p style="margin:0 0 14px;font-size:14px;color:#0f172a;line-height:1.6">
+      Le transporteur <strong>{_esc(nom_transporteur)}</strong> a répondu à la demande <strong>#{_esc(demande_id)}</strong>.
+    </p>
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;margin:0 0 16px">
+      <div style="font-size:12px;color:#64748b;line-height:1.7">
+        Destination: <strong>{_esc(cp)}</strong><br>
+        Type d'envoi: <strong>{_esc(type_envoi)}</strong><br>
+        {('Poids: <strong>'+_esc(poids)+' kg</strong><br>') if poids is not None else ''}
+        {('Palettes: <strong>'+_esc(nb_pal)+'</strong><br>') if nb_pal is not None else ''}
+        {('Contraintes: '+_esc(contraintes)+'<br>') if contraintes else ''}
+      </div>
+    </div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin:0 0 16px">
+      <div style="background:rgba(34,211,238,.10);border:1px solid rgba(34,211,238,.25);border-radius:10px;padding:10px 14px">
+        <div style="font-size:11px;color:#0891b2;text-transform:uppercase;letter-spacing:.5px;font-weight:800;margin-bottom:2px">Prix HT</div>
+        <div style="font-size:16px;color:#0f172a;font-weight:900">{_esc(prix_s)}</div>
+      </div>
+      <div style="background:rgba(52,211,153,.10);border:1px solid rgba(52,211,153,.25);border-radius:10px;padding:10px 14px">
+        <div style="font-size:11px;color:#059669;text-transform:uppercase;letter-spacing:.5px;font-weight:800;margin-bottom:2px">Délai</div>
+        <div style="font-size:16px;color:#0f172a;font-weight:900">{_esc(delai_s)}</div>
+      </div>
+    </div>
+    {f'<div style=\"font-size:13px;color:#475569;line-height:1.7;margin:0 0 16px\"><strong>Commentaire :</strong><br>{_esc(commentaire)}</div>' if commentaire else ''}
+    <div style="margin:18px 0 0;text-align:center">
+      <a href="{_esc(BASE_URL.rstrip('/'))}/expe" style="background:#22d3ee;color:#0a0e17;font-weight:800;font-size:14px;padding:12px 20px;border-radius:10px;text-decoration:none;display:inline-block">
+        Ouvrir MyExpé
+      </a>
+    </div>
+    <p style="margin:16px 0 0;font-size:11px;color:#94a3b8;line-height:1.6">
+      Notification automatique MySifa — { _esc(BASE_URL) }
+    </p>
+  </div>
+</div>"""
+    return subject, body
+
+
 def send_email(
     to: str | list[str],
     subject: str,
