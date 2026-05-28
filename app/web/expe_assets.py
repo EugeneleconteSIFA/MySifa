@@ -1223,12 +1223,23 @@ async function supprimerProspect(prospectId){
 function expeDevisStatutLabel(st){
   const m={
     envoyee:{t:'Envoyée',c:'var(--muted)'},
+    ouvert:{t:'Ouverte',c:'var(--warn)'},
     recue:{t:'Reçue',c:'var(--accent)'},
     retenue:{t:'Retenue',c:'var(--success)'},
     refusee:{t:'Refusée',c:'var(--muted)',strike:true},
     echec:{t:'Échec envoi',c:'var(--danger)'}
   };
   return m[st]||{t:st||'—',c:'var(--muted)'};
+}
+
+function expeDevisSuiviTag(d){
+  const env=Number(d.nb_envoyes)||0;
+  const rep=Number(d.nb_recus)||0;
+  if(!env&&!rep)return null;
+  const parts=[];
+  if(env)parts.push(env+' envoyé'+(env>1?'s':''));
+  if(rep)parts.push(rep+' réponse'+(rep>1?'s':''));
+  return h('span',{className:'expe-devis-pill accent'},parts.join(' / '));
 }
 
 function renderExpeDevisModal(){
@@ -1441,9 +1452,9 @@ function renderExpeDevisSection(){
     list=h('div',{className:'expe-devis-cards'},
       ...demandes.map(d=>{
         const pills=[];
-        if(d.nb_envoyes)pills.push(h('span',{className:'expe-devis-pill accent'},d.nb_envoyes+' envoyé'+(d.nb_envoyes>1?'s':'')));
-        if(d.nb_recus)pills.push(h('span',{className:'expe-devis-pill ok'},d.nb_recus+' réponse'+(d.nb_recus>1?'s':'')));
-        if(d.statut==='cloturee')pills.push(h('span',{style:{fontSize:'11px',color:'var(--muted)'}},'Cloturée'));
+        const suivi=expeDevisSuiviTag(d);
+        if(suivi)pills.push(suivi);
+        if(d.statut==='cloturee')pills.push(h('span',{className:'expe-devis-pill muted'},'Clôturée'));
         const card=h('div',{className:'expe-devis-card',onClick:()=>void ouvrirDetailDemande(d.id)},
           h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:'12px'}},
             h('div',null,
@@ -1525,8 +1536,9 @@ EXPE_DEVIS_CSS = r"""
 .expe-devis-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 20px;cursor:pointer;
   transition:border-color .15s}
 .expe-devis-card:hover{border-color:var(--accent)}
-.expe-devis-pill{font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px}
+.expe-devis-pill{font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;white-space:nowrap}
 .expe-devis-pill.accent{background:var(--accent-bg);color:var(--accent)}
+.expe-devis-pill.muted{background:color-mix(in srgb,var(--muted) 12%,transparent);color:var(--muted)}
 .expe-devis-pill.ok{background:color-mix(in srgb,var(--success) 15%,transparent);color:var(--success)}
 .expe-devis-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:10px}
 .expe-devis-table-wrap table.table-std{margin:0;font-size:13px}

@@ -466,6 +466,7 @@ table.fab-of-table tr:last-child td{border-bottom:none}
 .fab-of-statut--lie{color:var(--accent);background:var(--accent-bg)}
 .fab-of-statut--nonlie{color:var(--muted);background:rgba(148,163,184,.10)}
 .fab-of-actions{display:flex;gap:6px;align-items:center}
+.fab-of-row-sub{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.35}
 .fab-of-dropzone{border:2px dashed var(--border);border-radius:12px;padding:32px 20px;text-align:center;
   background:var(--bg);cursor:pointer;transition:border-color .15s,background .15s}
 .fab-of-dropzone:hover,.fab-of-dropzone.fab-of-dropzone--active{border-color:var(--accent);background:var(--accent-bg)}
@@ -1593,8 +1594,14 @@ function renderOfPanel(){
       }, svgIcon('trash',14)));
     }
     const fmtDate = row.date_import ? fmtDate(row.date_import.slice(0,10)) : '—';
+    const ofSub = row.imported_by
+      ? h('div',{className:'fab-of-row-sub'}, 'Ajouté par '+escHtml(row.imported_by))
+      : null;
     return h('tr',null,
-      h('td',null, escHtml(row.of_numero||'—')),
+      h('td',null,
+        h('div',null, escHtml(row.of_numero||'—')),
+        ofSub,
+      ),
       h('td',null, escHtml(row.reference||'—')),
       h('td',null, escHtml(row.machine||'—')),
       h('td',null, escHtml(row.delai_client||'—')),

@@ -20,7 +20,7 @@ from fastapi import APIRouter, Body, File, HTTPException, Query, Request, Upload
 from fastapi.responses import FileResponse
 
 from app.services.audit_service import log_action
-from app.services.email_service import email_mysifa_layout, send_email
+from app.services.email_service import email_expe_rfq_transport, send_email
 from config import public_base_url
 from app.services.expe_transporteurs_seed import seed_expe_transporteurs_if_empty
 from database import get_db
@@ -1367,65 +1367,6 @@ def comparateur(request: Request, body: dict = Body(...)):
 EXPE_DEVIS_CC = "expeditions@sifa.pro"
 
 
-def _generer_rfq_html(demande: dict, user: dict, *, portail_lien: str) -> tuple[str, str]:
-    """Génère le sujet et le corps HTML du RFQ standardisé."""
-    import html as _html
-
-    def _e(v: object) -> str:
-        return _html.escape(str(v or ""))
-
-    cp = demande.get("code_postal_destination") or "—"
-    poids = demande.get("poids_total_kg")
-    nb_pal = demande.get("nb_palette")
-    type_envoi = demande.get("type_envoi") or "messagerie"
-    contraintes = demande.get("contraintes") or ""
-    user_nom = user.get("nom") or user.get("email") or user.get("identifiant") or "SIFA"
-
-    lignes_detail = []
-    if poids:
-        lignes_detail.append(f"Poids total : <strong>{_e(poids)} kg</strong>")
-    if nb_pal:
-        lignes_detail.append(f"Nombre de palettes : <strong>{_e(nb_pal)}</strong>")
-    lignes_detail.append(f"Code postal destination : <strong>{_e(cp)}</strong>")
-    lignes_detail.append(f"Type d'envoi : <strong>{_e(type_envoi)}</strong>")
-    if contraintes:
-        lignes_detail.append(f"Contraintes : {_e(contraintes)}")
-
-    detail_html = "".join(
-        f'<li style="margin-bottom:6px">{l}</li>' for l in lignes_detail
-    )
-
-    sujet = f"Demande de tarif transport — SIFA Roubaix — {cp}"
-
-    lien = (portail_lien or "").strip()
-    inner = f"""
-    <p style="margin:0 0 16px;color:#0f172a">Bonjour,</p>
-    <p style="margin:0 0 18px;color:#475569">
-      Nous recherchons un transporteur pour l'envoi suivant et vous sollicitons pour un tarif.
-    </p>
-    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px 20px;margin:0 0 18px">
-      <ul style="margin:0;padding-left:18px;font-size:13px;color:#334155;line-height:1.8">
-        {detail_html}
-      </ul>
-    </div>
-    <p style="margin:0 0 4px;color:#475569">
-      Merci de nous retourner votre meilleur tarif HT et le délai de livraison estimé via le portail.
-    </p>
-    <p style="margin:18px 0 0;color:#64748b;font-size:13px">
-      Cordialement,<br>
-      <strong style="color:#0f172a">{_e(user_nom)}</strong><br>
-      SIFA — Service expéditions · Roubaix (59)
-    </p>"""
-    corps = email_mysifa_layout(
-        subtitle="Demande de tarif transport",
-        body_html=inner,
-        cta_href=lien or None,
-        cta_label="Répondre sur le portail" if lien else None,
-        footer_note="SIFA — Roubaix (59) · MySifa",
-    )
-    return sujet, corps
-
-
 @router.post("/devis/demandes")
 def creer_demande_devis(request: Request, body: dict = Body(...)):
     user = _require_expe_write(request)
@@ -1477,14 +1418,15 @@ def list_demandes_devis(request: Request, statut: str = "ouverte"):
             counts = conn.execute(
                 """
                 SELECT
-                  COUNT(*) AS total,
-                  SUM(CASE WHEN statut='recue' THEN 1 ELSE 0 END) AS recues,
+                  SUM(CASE WHEN statut IN ('envoyee','ouvert','recue','retenue','refusee')
+                      THEN 1 ELSE 0 END) AS envoyes,
+                  SUM(CASE WHEN statut IN ('recue','retenue') THEN 1 ELSE 0 END) AS recues,
                   SUM(CASE WHEN statut='retenue' THEN 1 ELSE 0 END) AS retenues
                 FROM expe_devis_reponses WHERE demande_id=?
                 """,
                 (dd["id"],),
             ).fetchone()
-            dd["nb_envoyes"] = counts["total"] or 0
+            dd["nb_envoyes"] = counts["envoyes"] or 0
             dd["nb_recus"] = counts["recues"] or 0
             dd["nb_retenus"] = counts["retenues"] or 0
             result.append(dd)
@@ -1594,7 +1536,9 @@ def envoyer_rfq(request: Request, demande_id: int, body: dict = Body(...)):
                 if row2 and row2["token"]:
                     token = str(row2["token"])
             portail_lien = f"{public_base_url()}/portail/expe/{token}"
-            sujet, corps_html = _generer_rfq_html(demande, user, portail_lien=portail_lien)
+            sujet, corps_html = email_expe_rfq_transport(
+                demande=demande, user=user, portail_lien=portail_lien
+            )
 
             ok = send_email(
                 to=dest["email"],
@@ -1604,21 +1548,54 @@ def envoyer_rfq(request: Request, demande_id: int, body: dict = Body(...)):
                 cc=EXPE_DEVIS_CC,
             )
             statut_envoi = "envoyee" if ok else "echec"
-            conn.execute(
+            existing = conn.execute(
                 """
-                INSERT INTO expe_devis_reponses
-                (demande_id, transporteur_id, nom_transporteur, statut, sent_at, destinataire_email)
-                VALUES (?,?,?,?,?,?)
+                SELECT id, statut, prix FROM expe_devis_reponses
+                WHERE demande_id=?
+                  AND LOWER(TRIM(COALESCE(destinataire_email,''))) = LOWER(TRIM(COALESCE(?,'')))
+                ORDER BY id DESC
+                LIMIT 1
                 """,
-                (
-                    demande_id,
-                    dest["transporteur_id"],
-                    dest["nom"],
-                    statut_envoi,
-                    now if ok else None,
-                    email_norm,
-                ),
-            )
+                (demande_id, email_norm),
+            ).fetchone()
+            if existing:
+                keep_statut = existing["statut"]
+                if keep_statut not in ("recue", "retenue"):
+                    keep_statut = statut_envoi
+                conn.execute(
+                    """
+                    UPDATE expe_devis_reponses
+                    SET transporteur_id=?, nom_transporteur=?, statut=?,
+                        sent_at=CASE WHEN ? IS NOT NULL THEN ? ELSE sent_at END,
+                        destinataire_email=?
+                    WHERE id=?
+                    """,
+                    (
+                        dest["transporteur_id"],
+                        dest["nom"],
+                        keep_statut,
+                        now if ok else None,
+                        now if ok else None,
+                        email_norm,
+                        int(existing["id"]),
+                    ),
+                )
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO expe_devis_reponses
+                    (demande_id, transporteur_id, nom_transporteur, statut, sent_at, destinataire_email)
+                    VALUES (?,?,?,?,?,?)
+                    """,
+                    (
+                        demande_id,
+                        dest["transporteur_id"],
+                        dest["nom"],
+                        statut_envoi,
+                        now if ok else None,
+                        email_norm,
+                    ),
+                )
             if ok:
                 envois_ok.append(dest["nom"])
             else:

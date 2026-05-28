@@ -47,34 +47,202 @@ def email_mysifa_layout(
     cta_href: str | None = None,
     cta_label: str | None = None,
     footer_note: str | None = None,
+    footer_contact: bool = False,
 ) -> str:
     """Enveloppe HTML email MySifa (dark header, typo Segoe UI)."""
     cta_block = ""
     if cta_href and cta_label:
         cta_block = f"""
     <div style="margin:26px 0 8px;text-align:center">
-      <a href="{_esc(cta_href)}" style="background:#22d3ee;color:#0a0e17;font-weight:800;font-size:14px;padding:12px 24px;border-radius:10px;text-decoration:none;display:inline-block">
+      <a href="{_esc(cta_href)}" style="background:#22d3ee;color:#0a0e17;font-weight:800;font-size:14px;padding:14px 28px;border-radius:10px;text-decoration:none;display:inline-block">
         {_esc(cta_label)}
       </a>
     </div>
-    <p style="margin:10px 0 0;font-size:11px;color:#94a3b8;line-height:1.6;text-align:center;word-break:break-all">
-      Si le bouton ne fonctionne pas :<br>
-      <span style="font-family:ui-monospace,monospace;font-size:11px">{_esc(cta_href)}</span>
+    <p style="margin:12px 0 0;font-size:11px;color:#94a3b8;line-height:1.6;text-align:center;word-break:break-all">
+      Si le bouton ne fonctionne pas, copier ce lien :<br>
+      <a href="{_esc(cta_href)}" style="font-family:ui-monospace,monospace;font-size:11px;color:#0891b2;text-decoration:none">{_esc(cta_href)}</a>
+    </p>"""
+    contact_block = ""
+    if footer_contact:
+        contact_block = """
+    <p style="margin:14px 0 0;font-size:12px;color:#64748b;line-height:1.7;text-align:center">
+      <strong style="color:#0f172a">SIFA — Roubaix (59)</strong><br>
+      <a href="tel:+33320690101" style="color:#0891b2;text-decoration:none">03 20 69 01 01</a>
+      &nbsp;·&nbsp;
+      <a href="mailto:expeditions@sifa.pro" style="color:#0891b2;text-decoration:none">expeditions@sifa.pro</a>
     </p>"""
     foot = footer_note or f"Notification automatique MySifa — {_esc(public_base_url())}"
     return f"""<div style="font-family:'Segoe UI',system-ui,sans-serif;max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
-  <div style="background:#0a0e17;padding:22px 28px">
+  <div style="background:#0a0e17;padding:24px 32px">
     <div style="font-size:20px;font-weight:800;color:#22d3ee;letter-spacing:-.3px">MySifa</div>
-    <div style="font-size:12px;color:#94a3b8;margin-top:4px;text-transform:uppercase;letter-spacing:.5px;font-weight:600">{_esc(subtitle)}</div>
+    <div style="font-size:12px;color:#94a3b8;margin-top:6px;text-transform:uppercase;letter-spacing:.5px;font-weight:600">{_esc(subtitle)}</div>
   </div>
-  <div style="padding:28px 32px;font-size:14px;color:#334155;line-height:1.65">
+  <div style="padding:32px;font-size:14px;color:#334155;line-height:1.65">
     {body_html}
     {cta_block}
-    <p style="margin:20px 0 0;font-size:11px;color:#94a3b8;line-height:1.6;border-top:1px solid #e2e8f0;padding-top:14px">
+    {contact_block}
+    <p style="margin:20px 0 0;font-size:11px;color:#94a3b8;line-height:1.6;border-top:1px solid #e2e8f0;padding-top:14px;text-align:center">
       {foot}
     </p>
   </div>
 </div>"""
+
+
+def _email_detail_table(rows: list[tuple[str, str]]) -> str:
+    """Tableau label / valeur pour emails (valeurs déjà échappées si besoin)."""
+    body_rows = ""
+    for label, value in rows:
+        body_rows += (
+            f"<tr>"
+            f"<td style=\"padding:11px 14px;border-bottom:1px solid #e2e8f0;font-size:11px;"
+            f"text-transform:uppercase;letter-spacing:.45px;color:#64748b;font-weight:700;"
+            f"width:40%;vertical-align:top\">{_esc(label)}</td>"
+            f"<td style=\"padding:11px 14px;border-bottom:1px solid #e2e8f0;font-size:14px;"
+            f"color:#0f172a;font-weight:600;vertical-align:top\">{value}</td>"
+            f"</tr>"
+        )
+    return (
+        "<table role=\"presentation\" style=\"width:100%;border-collapse:collapse;"
+        "background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;margin:0 0 22px\">"
+        f"<tbody>{body_rows}</tbody></table>"
+    )
+
+
+_EMAIL_FLAG_FR = (
+    '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="18" viewBox="0 0 3 2" '
+    'style="display:block;border-radius:2px;border:1px solid #e2e8f0">'
+    '<rect width="1" height="2" fill="#002395"/><rect x="1" width="1" height="2" fill="#fff"/>'
+    '<rect x="2" width="1" height="2" fill="#ED2939"/></svg>'
+)
+_EMAIL_FLAG_GB = (
+    '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="18" viewBox="0 0 60 30" '
+    'style="display:block;border-radius:2px;border:1px solid #e2e8f0">'
+    '<rect width="60" height="30" fill="#012169"/>'
+    '<path d="M0,0 L60,30 M60,0 L0,30" stroke="#fff" stroke-width="6"/>'
+    '<path d="M0,0 L60,30 M60,0 L0,30" stroke="#C8102E" stroke-width="3"/>'
+    '<path d="M30,0 V30 M0,15 H60" stroke="#fff" stroke-width="10"/>'
+    '<path d="M30,0 V30 M0,15 H60" stroke="#C8102E" stroke-width="6"/></svg>'
+)
+
+
+def _email_lang_picker_html() -> str:
+    """Sélecteur FR/EN (radios + CSS — clients mail modernes)."""
+    return f"""
+    <input type="radio" name="mysifa-lang" id="mysifa-lang-fr" checked style="display:none!important">
+    <input type="radio" name="mysifa-lang" id="mysifa-lang-en" style="display:none!important">
+    <div style="text-align:center;margin:0 0 18px">
+      <div style="font-size:11px;color:#94a3b8;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px;font-weight:600">
+        Langue / Language
+      </div>
+      <label for="mysifa-lang-fr" style="cursor:pointer;margin:0 8px;display:inline-block;vertical-align:middle" title="Français">{_EMAIL_FLAG_FR}</label>
+      <label for="mysifa-lang-en" style="cursor:pointer;margin:0 8px;display:inline-block;vertical-align:middle" title="English">{_EMAIL_FLAG_GB}</label>
+    </div>
+    <style type="text/css">
+      .mysifa-em-en {{ display:none !important; }}
+      #mysifa-lang-en:checked ~ .mysifa-em-fr {{ display:none !important; }}
+      #mysifa-lang-en:checked ~ .mysifa-em-en {{ display:block !important; }}
+    </style>"""
+
+
+def _rfq_email_body_block(
+    *,
+    demande: dict,
+    user: dict,
+    lang: str,
+    portail_lien: str,
+) -> str:
+    from app.services.expe_email_i18n import expe_rfq_email_strings, expe_type_envoi_label
+
+    cp = (demande.get("code_postal_destination") or "—").strip()
+    poids = demande.get("poids_total_kg")
+    nb_pal = demande.get("nb_palette")
+    type_raw = (demande.get("type_envoi") or "messagerie").strip()
+    contraintes = (demande.get("contraintes") or "").strip()
+    user_nom = user.get("nom") or user.get("email") or user.get("identifiant") or "SIFA"
+    s = expe_rfq_email_strings(lang, cp=cp, user_nom=user_nom)
+    type_envoi = expe_type_envoi_label(type_raw, lang)
+
+    detail_rows: list[tuple[str, str]] = [
+        (s["type_label"], f"<span style=\"color:#0891b2\">{_esc(type_envoi)}</span>"),
+    ]
+    if poids is not None and str(poids).strip() != "":
+        detail_rows.append((s["weight_label"], f"{_esc(poids)} kg"))
+    if nb_pal is not None and str(nb_pal).strip() != "":
+        detail_rows.append((s["pallets_label"], _esc(nb_pal)))
+    if contraintes:
+        detail_rows.append((s["constraints_label"], _esc(contraintes)))
+
+    detail_table = _email_detail_table(detail_rows)
+    cp_highlight = f"""
+    <div style="background:rgba(34,211,238,.10);border:1px solid rgba(34,211,238,.28);border-radius:12px;
+                padding:16px 20px;margin:0 0 22px;text-align:center">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.55px;color:#0891b2;font-weight:800">
+        {_esc(s["cp_label"])}
+      </div>
+      <div style="font-size:26px;font-weight:800;color:#0f172a;margin-top:6px;letter-spacing:-.5px">{_esc(cp)}</div>
+    </div>"""
+
+    cta = ""
+    lien = (portail_lien or "").strip()
+    if lien:
+        lang_q = f"{lien}{'&' if '?' in lien else '?'}lang={lang}"
+        cta = f"""
+    <div style="margin:24px 0 8px;text-align:center">
+      <a href="{_esc(lang_q)}" style="background:#22d3ee;color:#0a0e17;font-weight:800;font-size:14px;padding:14px 28px;border-radius:10px;text-decoration:none;display:inline-block">
+        {_esc(s["cta"])}
+      </a>
+    </div>"""
+
+    return f"""
+    <p style="margin:0 0 14px;font-size:15px;color:#0f172a;font-weight:600">{_esc(s["hello"])}</p>
+    <p style="margin:0 0 22px;font-size:14px;color:#475569;line-height:1.65">{s["intro"]}</p>
+    {cp_highlight}
+    {detail_table}
+    <p style="margin:0 0 6px;font-size:14px;color:#475569;line-height:1.65">{s["ask"]}</p>
+    <p style="margin:0;font-size:13px;color:#94a3b8;line-height:1.6">{_esc(s["hint"])}</p>
+    {cta}
+    <p style="margin:22px 0 0;font-size:13px;color:#64748b;line-height:1.65">
+      {_esc(s["regards"])}<br>
+      <strong style="color:#0f172a;font-size:14px">{_esc(user_nom)}</strong><br>
+      {_esc(s["service"])}
+    </p>"""
+
+
+def email_expe_rfq_transport(
+    *,
+    demande: dict,
+    user: dict,
+    portail_lien: str,
+) -> tuple[str, str]:
+    """Sujet et corps HTML — demande de tarif transport (MyExpé → transporteur, FR/EN)."""
+    from app.services.expe_email_i18n import expe_rfq_email_strings
+
+    cp = (demande.get("code_postal_destination") or "—").strip()
+    lien = (portail_lien or "").strip()
+    s_fr = expe_rfq_email_strings("fr", cp=cp, user_nom="")
+    s_en = expe_rfq_email_strings("en", cp=cp, user_nom="")
+
+    fr_body = _rfq_email_body_block(demande=demande, user=user, lang="fr", portail_lien=lien)
+    en_body = _rfq_email_body_block(demande=demande, user=user, lang="en", portail_lien=lien)
+
+    picker = _email_lang_picker_html()
+    inner = (
+        f"{picker}"
+        f'<div class="mysifa-em-fr">{fr_body}</div>'
+        f'<div class="mysifa-em-en">{en_body}</div>'
+    )
+
+    subject = f"Demande de tarif transport / Transport quote — SIFA — {cp}"
+
+    body = email_mysifa_layout(
+        subtitle="Demande de tarif / Transport quote",
+        body_html=inner,
+        cta_href=None,
+        cta_label=None,
+        footer_note=f"{s_fr['footer']} / {s_en['footer']}",
+        footer_contact=True,
+    )
+    return subject, body
 
 
 def email_invitation_ao(

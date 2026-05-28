@@ -85,6 +85,37 @@ def _account_email(acc: dict) -> str:
     return (acc.get("email") or "").strip().lower()
 
 
+_REPONSE_STATUT_RANK = {
+    "recue": 0,
+    "retenue": 1,
+    "ouvert": 2,
+    "envoyee": 3,
+    "refusee": 4,
+    "echec": 5,
+}
+
+
+def _portail_reponse_rank(row: dict) -> tuple:
+    """Plus le tuple est petit, plus la ligne est prioritaire à afficher."""
+    st = (row.get("reponse_statut") or row.get("statut") or "").strip()
+    rid = int(row.get("reponse_id") or row.get("id") or 0)
+    has_answer = 0 if row.get("prix") is not None else 1
+    return (has_answer, _REPONSE_STATUT_RANK.get(st, 9), -rid)
+
+
+def _dedupe_portail_demandes(rows: list[dict]) -> list[dict]:
+    """Une seule carte par demande de devis (doublons d'envoi RFQ)."""
+    best: dict[int, dict] = {}
+    for row in rows:
+        did = int(row["demande_id"])
+        cur = best.get(did)
+        if cur is None or _portail_reponse_rank(row) < _portail_reponse_rank(cur):
+            best[did] = row
+    out = list(best.values())
+    out.sort(key=lambda r: (r.get("created_at") or ""), reverse=True)
+    return out
+
+
 def _mark_opened(conn, *, acc: dict, ip: str) -> None:
     now = _now_paris_iso()
     email = _account_email(acc)
@@ -166,7 +197,14 @@ def _find_reponse_row(
               AND transporteur_id = ?
             )
           )
-        ORDER BY id DESC
+        ORDER BY
+          CASE WHEN prix IS NOT NULL THEN 0 ELSE 1 END,
+          CASE statut
+            WHEN 'recue' THEN 0 WHEN 'retenue' THEN 1 WHEN 'ouvert' THEN 2
+            WHEN 'envoyee' THEN 3 WHEN 'refusee' THEN 4 WHEN 'echec' THEN 5
+            ELSE 6
+          END,
+          id DESC
         LIMIT 1
         """,
         (int(demande_id), email, int(tid) if tid else -1),
@@ -184,7 +222,10 @@ def portail_expe_page(request: Request, token: str):
                 return HTMLResponse(content=get_portail_404_html(), status_code=404)
             _mark_opened(conn, acc=acc, ip=ip)
             conn.commit()
-        return HTMLResponse(get_portail_html(token))
+        lang = (request.query_params.get("lang") or "fr").strip().lower()
+        if lang not in ("fr", "en"):
+            lang = "fr"
+        return HTMLResponse(get_portail_html(token, lang=lang))
     except HTTPException as exc:
         if exc.status_code == 429:
             return HTMLResponse(content=get_portail_404_html(), status_code=429)
@@ -235,7 +276,7 @@ def portail_expe_data(request: Request, token: str):
             """,
             (email, int(tid) if tid else -1),
         ).fetchall()
-        demandes = [dict(x) for x in rows]
+        demandes = _dedupe_portail_demandes([dict(x) for x in rows])
         return {"email": email, "demandes": demandes}
 
 
