@@ -1998,6 +1998,20 @@ function renderTL(){
 // (recréés à chaque render). _tlDDContainerBound évite les doublons de listeners.
 let _tlDragEid=null;
 let _tlDDContainerBound=false;
+function lockedPositionsFromIds(ids){
+  const locked = (S.entries||[]).filter(e=>e.statut==="en_cours"||e.statut==="termine").map(e=>e.id);
+  const pos={};
+  locked.forEach(id=>{ const i=ids.indexOf(id); if(i>=0) pos[id]=i; });
+  return pos;
+}
+function reorderKeepsLocked(idsBefore, idsAfter){
+  const p0=lockedPositionsFromIds(idsBefore);
+  for(const k in p0){
+    const id=+k;
+    if(idsAfter.indexOf(id)!==p0[k]) return false;
+  }
+  return true;
+}
 function setupTlDD(){
   if(!CAN_EDIT) return;
   const container=document.getElementById("tl-blocks-container");
@@ -2045,6 +2059,11 @@ function setupTlDD(){
     const fromEid=_tlDragEid;
     _tlDragEid=null;
     if(!target||!fromEid) return;
+    const targetStat=(target.dataset&&target.dataset.statut)?String(target.dataset.statut):"";
+    if(targetStat && targetStat!=="attente"){
+      showToast("Déplacement impossible — cible verrouillée (en cours/terminé).","info");
+      return;
+    }
     const eid=+target.dataset.eid;
     if(eid===fromEid) return;
     const ids=S.entries.map(e=>e.id);
@@ -2053,6 +2072,11 @@ function setupTlDD(){
     if(fromIdx<0||toIdx<0) return;
     const [moved]=ids.splice(fromIdx,1);
     ids.splice(toIdx,0,moved);
+    if(!reorderKeepsLocked(S.entries.map(e=>e.id), ids)){
+      showToast("Déplacement impossible — cela déplacerait un dossier en cours/terminé.","danger");
+      await load();
+      return;
+    }
     try{
       await api(`/machines/${MID}/reorder`,{method:"POST",body:JSON.stringify({entry_ids:ids})});
       await load();
@@ -2612,6 +2636,12 @@ function setupDD(){
   tbody.addEventListener("dragstart",(e)=>{
     const row=e.target.closest(".tr[draggable]");
     if(!row) return;
+    const st = (row.dataset&&row.dataset.statut)?String(row.dataset.statut):"";
+    if(st==="en_cours" || st==="termine"){
+      e.preventDefault();
+      showToast("Déplacement impossible — dossier en cours/terminé.","info");
+      return;
+    }
     _ddDragIdx=parseInt(row.dataset.idx,10);
     row.classList.add("dra");
     e.dataTransfer.effectAllowed="move";
@@ -2677,9 +2707,16 @@ function setupDD(){
     const savedTbodyScroll=tbody.scrollTop??0;
 
     // Réordonner
-    const ids=S.entries.map(en=>en.id);
+    const idsBefore=S.entries.map(en=>en.id);
+    const ids=idsBefore.slice();
     const [moved]=ids.splice(_ddDragIdx,1);
     ids.splice(insertAt,0,moved);
+    if(!reorderKeepsLocked(idsBefore, ids)){
+      clearState();
+      showToast("Déplacement impossible — cela déplacerait un dossier en cours/terminé.","danger");
+      await load();
+      return;
+    }
 
     clearState();
     _suppressAutoScroll=true;
