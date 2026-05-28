@@ -1,84 +1,33 @@
+"""Compat shim — ne pas utiliser directement.
+
+Historique: `app/config.py` est une ancienne copie incomplète. Certains environnements
+peuvent toutefois résoudre `import config` vers ce fichier selon le `sys.path`,
+ce qui casse l'app (ex: `ROLES_PRICING` manquant).
+
+Ce module relaie donc *toutes* les constantes depuis le `config.py` racine.
 """
-SIFA — Configuration & constantes v0.6
-"""
-import os
-import re
-import json
-import secrets
 
-# ─── Chemins ──────────────────────────────────────────────────────
-BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR   = os.path.join(BASE_DIR, "data")
-DB_PATH    = os.getenv("DB_PATH", os.path.join(DATA_DIR, "production.db"))
-UPLOAD_DIR = os.path.join(DATA_DIR, "uploads")
+from __future__ import annotations
 
-os.makedirs(DATA_DIR,   exist_ok=True)
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+import importlib.util
+from pathlib import Path
 
-# ─── App ──────────────────────────────────────────────────────────
-APP_VERSION = "0.6.1"
-# Titre API / OpenAPI
-APP_TITLE = "MySifa"
-# Onglet navigateur & SEO (injecté dans frontend/html.py)
-APP_PAGE_TITLE = "MySifa — Portail interne SIFA"
-APP_META_DESCRIPTION = (
-    "Portail interne SIFA : production, stocks, planning et outils métier."
-)
-# Couleur barre d’état mobile (thème sombre par défaut)
-THEME_COLOR_META = "#0a0e17"
-# Page planning (/planning) — titre d’onglet
-APP_PLANNING_PAGE_TITLE = "Planning — MySifa"
-HOST        = "0.0.0.0"
-PORT        = 8000
 
-# ─── Sécurité ─────────────────────────────────────────────────────
-SECRET_KEY    = os.getenv("SECRET_KEY", secrets.token_hex(32))
-SESSION_HOURS = 6
-COOKIE_NAME   = "sifa_token"
+def _load_root_config():
+    root_path = Path(__file__).resolve().parent.parent / "config.py"
+    spec = importlib.util.spec_from_file_location("_mysifa_root_config", str(root_path))
+    if spec is None or spec.loader is None:
+        raise RuntimeError("Impossible de charger le config.py racine")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
-# ─── Rôles ────────────────────────────────────────────────────────
-# direction     : accès total (même droits qu'administration pour l'instant)
-# administration: gestion complète sauf rien de plus que direction
-# fabrication   : lecture seule sur ses propres données
-ROLE_DIRECTION      = "direction"
-ROLE_ADMINISTRATION = "administration"
-ROLE_FABRICATION    = "fabrication"
-ROLE_LOGISTIQUE     = "logistique"
 
-# Rôles ayant accès aux fonctions d'administration
-ROLES_ADMIN = {ROLE_DIRECTION, ROLE_ADMINISTRATION}
-ROLES_STOCK = {ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_LOGISTIQUE}
-ROLES_PROD  = {ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_FABRICATION}
+_root = _load_root_config()
 
-# Admin par défaut
-DEFAULT_ADMIN_EMAIL = "admin@sifa.fr"
-DEFAULT_ADMIN_NOM   = "Administrateur"
-DEFAULT_ADMIN_PWD   = "Admin1234!"
+# Exporter toutes les variables "publiques" (sauf dunders) dans ce module.
+for _k, _v in vars(_root).items():
+    if _k.startswith("__"):
+        continue
+    globals()[_k] = _v
 
-# ─── Codes opérations ─────────────────────────────────────────────
-CODE_ARRIVEE    = "86"
-CODE_DEPART     = "87"
-CODE_DEBUT_DOS  = "01"
-CODE_FIN_DOS    = "89"
-CODE_CALAGE     = "02"
-CODE_PRODUCTION = "03"
-CODE_REPRISE    = "88"
-
-# ─── Classification opérations ────────────────────────────────────
-def load_operations():
-    path = os.path.join(BASE_DIR, "operations.json")
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-OPERATION_SEVERITY = load_operations()
-
-def classify_operation(op_str):
-    if not op_str:
-        return {"code": "", "label": str(op_str), "severity": "info", "category": "autre"}
-    op_clean = str(op_str).strip()
-    match = re.match(r'^(\d+)', op_clean)
-    if match:
-        code = match.group(1)
-        info = OPERATION_SEVERITY.get(code, {"severity": "info", "label": op_clean, "category": "autre"})
-        return {"code": code, **info}
-    return {"code": "", "label": op_clean, "severity": "info", "category": "autre"}
