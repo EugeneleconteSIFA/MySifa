@@ -46,72 +46,72 @@ def get_portail_html(token: str) -> str:
   <meta name="theme-color" content="#0a0e17">
   <title>Portail transporteur — MySifa</title>
   <style>
-    :root{{
+    :root{
       --bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;
       --muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,.12);
       --success:#34d399;--warn:#fbbf24;--danger:#f87171;
-    }}
-    body.light{{
+    }
+    body.light{
       --bg:#f1f5f9;--card:#ffffff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;
       --muted:#94a3b8;--accent:#0891b2;--accent-bg:rgba(8,145,178,.10);
       --success:#059669;--warn:#d97706;--danger:#dc2626;
-    }}
-    *{{box-sizing:border-box;margin:0;padding:0}}
-    body{{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}}
-    .wrap{{max-width:860px;margin:0 auto;padding:20px 16px 48px}}
-    .hdr{{
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+    .wrap{max-width:860px;margin:0 auto;padding:20px 16px 48px}
+    .hdr{
       display:flex;justify-content:space-between;align-items:flex-start;gap:16px;
       flex-wrap:wrap;margin-bottom:16px;
-    }}
-    .hdr-brand strong{{color:var(--accent);font-size:16px;font-weight:800;letter-spacing:-.3px}}
-    .hdr-brand div{{font-size:13px;color:var(--muted);margin-top:4px;line-height:1.5}}
-    .hdr-actions{{display:flex;gap:8px;align-items:center;flex-wrap:wrap}}
-    .chip{{font-size:12px;color:var(--muted);font-family:ui-monospace,monospace;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card)}}
-    .theme-btn{{
+    }
+    .hdr-brand strong{color:var(--accent);font-size:16px;font-weight:800;letter-spacing:-.3px}
+    .hdr-brand div{font-size:13px;color:var(--muted);margin-top:4px;line-height:1.5}
+    .hdr-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .chip{font-size:12px;color:var(--muted);font-family:ui-monospace,monospace;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card)}
+    .theme-btn{
       padding:8px 12px;border-radius:10px;border:1px solid var(--border);background:var(--card);
       color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;
-    }}
-    .theme-btn:hover{{border-color:var(--accent);color:var(--accent)}}
-    .banner{{
+    }
+    .theme-btn:hover{border-color:var(--accent);color:var(--accent)}
+    .banner{
       background:var(--card);border:1px solid var(--border);border-radius:12px;
       padding:20px 22px;margin-bottom:16px;
-    }}
-    .banner h1{{font-size:18px;font-weight:700;margin-bottom:8px;color:var(--text)}}
-    .banner p{{font-size:13px;color:var(--text2);line-height:1.65;margin:0}}
-    .card{{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 16px 14px}}
-    .muted{{color:var(--muted)}}
-    .list{{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-top:12px}}
-    .d{{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px}}
-    .d h3{{font-size:14px;font-weight:900;margin-bottom:6px}}
-    .meta{{font-size:12px;color:var(--text2);line-height:1.7}}
-    .pill{{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:11px;font-weight:800;margin-right:6px;border:1px solid var(--border)}}
-    .pill.ok{{color:var(--success);background:rgba(52,211,153,.10);border-color:rgba(52,211,153,.25)}}
-    .pill.warn{{color:var(--warn);background:rgba(251,191,36,.10);border-color:rgba(251,191,36,.25)}}
-    .pill.muted{{color:var(--muted);background:rgba(148,163,184,.10)}}
-    .btn{{border-radius:10px;padding:10px 16px;font-weight:900;cursor:pointer;font-family:inherit;border:1px solid var(--border);background:transparent;color:var(--text);transition:filter .15s,border-color .15s,color .15s,background .15s}}
-    .btn:hover{{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}}
-    .btn-accent{{
+    }
+    .banner h1{font-size:18px;font-weight:700;margin-bottom:8px;color:var(--text)}
+    .banner p{font-size:13px;color:var(--text2);line-height:1.65;margin:0}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 16px 14px}
+    .muted{color:var(--muted)}
+    .list{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-top:12px}
+    .d{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px}
+    .d h3{font-size:14px;font-weight:900;margin-bottom:6px}
+    .meta{font-size:12px;color:var(--text2);line-height:1.7}
+    .pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:11px;font-weight:800;margin-right:6px;border:1px solid var(--border)}
+    .pill.ok{color:var(--success);background:rgba(52,211,153,.10);border-color:rgba(52,211,153,.25)}
+    .pill.warn{color:var(--warn);background:rgba(251,191,36,.10);border-color:rgba(251,191,36,.25)}
+    .pill.muted{color:var(--muted);background:rgba(148,163,184,.10)}
+    .btn{border-radius:10px;padding:10px 16px;font-weight:900;cursor:pointer;font-family:inherit;border:1px solid var(--border);background:transparent;color:var(--text);transition:filter .15s,border-color .15s,color .15s,background .15s}
+    .btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+    .btn-accent{
       background:var(--accent);border-color:var(--accent);color:#0a0e17;
       font-weight:700;
-    }}
-    .btn-accent:hover{{filter:brightness(1.05);color:#0a0e17}}
-    body.light .btn-accent{{color:#fff}}
-    .btn-ghost{{background:transparent}}
-    .row{{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}}
-    label{{display:block;font-size:11px;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}}
-    input,textarea{{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:11px 12px;color:var(--text);font-size:14px;font-family:inherit}}
-    input:focus,textarea:focus{{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}}
-    body.light input:focus,body.light textarea:focus{{box-shadow:0 0 0 3px rgba(8,145,178,.12)}}
-    .modal-ov{{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:18px;z-index:9999}}
-    body.light .modal-ov{{background:rgba(15,23,42,.42)}}
-    .modal{{width:100%;max-width:520px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px}}
-    .mh{{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px}}
-    .mh h2{{font-size:15px;font-weight:900;margin:0}}
-    .x{{width:34px;height:34px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--muted);cursor:pointer;font-size:18px;line-height:1}}
-    .x:hover{{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}}
-    .toast{{position:fixed;right:16px;bottom:16px;z-index:10000;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;max-width:min(520px,calc(100vw - 32px));display:none}}
-    .toast.ok{{border-color:rgba(52,211,153,.35)}}
-    .toast.bad{{border-color:rgba(248,113,113,.35)}}
+    }
+    .btn-accent:hover{filter:brightness(1.05);color:#0a0e17}
+    body.light .btn-accent{color:#fff}
+    .btn-ghost{background:transparent}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
+    label{display:block;font-size:11px;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+    input,textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:11px 12px;color:var(--text);font-size:14px;font-family:inherit}
+    input:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+    body.light input:focus,body.light textarea:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
+    .modal-ov{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:18px;z-index:9999}
+    body.light .modal-ov{background:rgba(15,23,42,.42)}
+    .modal{width:100%;max-width:520px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px}
+    .mh{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px}
+    .mh h2{font-size:15px;font-weight:900;margin:0}
+    .x{width:34px;height:34px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--muted);cursor:pointer;font-size:18px;line-height:1}
+    .x:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+    .toast{position:fixed;right:16px;bottom:16px;z-index:10000;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;max-width:min(520px,calc(100vw - 32px));display:none}
+    .toast.ok{border-color:rgba(52,211,153,.35)}
+    .toast.bad{border-color:rgba(248,113,113,.35)}
   </style>
 </head>
 <body>
@@ -174,59 +174,59 @@ def get_portail_html(token: str) -> str:
 
   <script>
   const TOKEN = __TOKEN_JS__;
-  const S = {{ data:null, editing:null }};
+  const S = { data:null, editing:null };
 
-  function esc(s){{ return String(s??'').replace(/[&<>\"']/g,c=>({{'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}}[c])); }}
-  function apiErr(j,txt){{
+  function esc(s){ return String(s??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c])); }
+  function apiErr(j,txt){
     if(!j) return txt||'Erreur';
     const d=j.detail;
     if(typeof d==='string') return d;
     if(Array.isArray(d)) return d.map(x=>x.msg||(x.loc?x.loc.join('.'):'')||String(x)).filter(Boolean).join(' — ')||txt;
     return txt||'Erreur';
-  }}
-  function pill(st){{
-    const m={{ envoyee:['Envoyée','muted'], ouvert:['Ouverte','warn'], recue:['Reçue','ok'], retenue:['Retenue','ok'], refusee:['Refusée','muted'], echec:['Échec','muted'] }};
+  }
+  function pill(st){
+    const m={ envoyee:['Envoyée','muted'], ouvert:['Ouverte','warn'], recue:['Reçue','ok'], retenue:['Retenue','ok'], refusee:['Refusée','muted'], echec:['Échec','muted'] };
     const x=m[st]||[st||'—','muted'];
     return `<span class="pill ${x[1]}">${esc(x[0])}</span>`;
-  }}
-  function showToast(msg,kind){{
+  }
+  function showToast(msg,kind){
     const t=document.getElementById('toast');
     t.className='toast '+(kind==='ok'?'ok':'bad');
     t.textContent=msg;
     t.style.display='block';
     clearTimeout(t._to);
-    t._to=setTimeout(()=>{{t.style.display='none';}},3200);
-  }}
-  async function api(path, opts){{
-    const r=await fetch(path, Object.assign({{credentials:'omit'}}, opts||{{}}));
+    t._to=setTimeout(()=>{t.style.display='none';},3200);
+  }
+  async function api(path, opts){
+    const r=await fetch(path, Object.assign({credentials:'omit'}, opts||{}));
     const txt=await r.text();
-    let j=null; try{{ j=JSON.parse(txt); }}catch(e){{}}
-    if(!r.ok) throw new Error((j&&j.detail)||txt||('HTTP '+r.status));
+    let j=null; try{ j=JSON.parse(txt); }catch(e){}
+    if(!r.ok) throw new Error(apiErr(j,txt)||('HTTP '+r.status));
     return j;
-  }}
-  function openModal(item){{
+  }
+  function openModal(item){
     S.editing=item;
     document.getElementById('mt').textContent='Demande #'+item.demande_id+' — '+(item.code_postal_destination||'');
     document.getElementById('prix').value = item.prix!=null ? String(item.prix) : '';
     document.getElementById('delai').value = item.delai_jours!=null ? String(item.delai_jours) : '';
     document.getElementById('com').value = item.commentaire||'';
     document.getElementById('ov').style.display='flex';
-    setTimeout(()=>{{ document.getElementById('prix').focus(); }},0);
-  }}
-  function closeModal(){{ document.getElementById('ov').style.display='none'; S.editing=null; }}
+    setTimeout(()=>{ document.getElementById('prix').focus(); },0);
+  }
+  function closeModal(){ document.getElementById('ov').style.display='none'; S.editing=null; }
 
-  function render(){{
+  function render(){
     const who=document.getElementById('who');
     const list=document.getElementById('list');
     const d=S.data;
     who.textContent = d ? ('Compte: '+(d.email||'—')) : 'Chargement…';
     list.innerHTML='';
     const rows=(d&&d.demandes)||[];
-    if(!rows.length){{
+    if(!rows.length){
       list.innerHTML = `<div class="d"><h3>Aucune demande</h3><div class="meta">Aucune demande de tarif n’est associée à ce lien.</div></div>`;
       return;
-    }}
-    rows.forEach(it=>{{
+    }
+    rows.forEach(it=>{
       const meta = [
         it.poids_total_kg!=null ? (it.poids_total_kg+' kg') : null,
         it.nb_palette!=null ? (it.nb_palette+' pal.') : null,
@@ -253,47 +253,47 @@ def get_portail_html(token: str) -> str:
       const b=node.querySelector('button[data-id]');
       if(b) b.addEventListener('click',()=>openModal(it));
       list.appendChild(node);
-    }});
-  }}
+    });
+  }
 
-  async function load(){{
+  async function load(){
     S.data = await api('/api/portail/expe/'+encodeURIComponent(TOKEN));
     render();
-  }}
+  }
 
   document.getElementById('mx').addEventListener('click',closeModal);
   document.getElementById('cancel').addEventListener('click',closeModal);
-  document.getElementById('ov').addEventListener('click',e=>{{ if(e.target.id==='ov') closeModal(); }});
-  document.getElementById('save').addEventListener('click', async ()=>{{
+  document.getElementById('ov').addEventListener('click',e=>{ if(e.target.id==='ov') closeModal(); });
+  document.getElementById('save').addEventListener('click', async ()=>{
     const it=S.editing; if(!it) return;
     const prix=parseFloat(document.getElementById('prix').value);
     const delai=parseInt(document.getElementById('delai').value,10);
-    if(!isFinite(prix) || prix<=0){{ showToast('Prix invalide.', 'bad'); return; }}
-    if(!isFinite(delai) || delai<0){{ showToast('Délai invalide.', 'bad'); return; }}
-    try{{
-      await api('/api/portail/expe/'+encodeURIComponent(TOKEN)+'/demandes/'+it.demande_id+'/repondre', {{
+    if(!isFinite(prix) || prix<=0){ showToast('Prix invalide.', 'bad'); return; }
+    if(!isFinite(delai) || delai<0){ showToast('Délai invalide.', 'bad'); return; }
+    try{
+      await api('/api/portail/expe/'+encodeURIComponent(TOKEN)+'/demandes/'+it.demande_id+'/repondre', {
         method:'POST',
-        headers:{{'Content-Type':'application/json'}},
-        body:JSON.stringify({{
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
           reponse_id: it.reponse_id,
           prix,
           delai_jours: delai,
           commentaire: (document.getElementById('com').value||'').trim()||null
-        }})
-      }});
+        })
+      });
       showToast('Réponse enregistrée.', 'ok');
       closeModal();
       await load();
-    }}catch(e){{ showToast(e.message||'Erreur', 'bad'); }}
-  }});
+    }catch(e){ showToast(e.message||'Erreur', 'bad'); }
+  });
 
-  document.getElementById('themeBtn').addEventListener('click',()=>{{
+  document.getElementById('themeBtn').addEventListener('click',()=>{
     document.body.classList.toggle('light');
-    try{{ localStorage.setItem('mysifa_theme', document.body.classList.contains('light')?'light':'dark'); }}catch(e){{}}
-  }});
-  try{{ if(localStorage.getItem('mysifa_theme')==='light') document.body.classList.add('light'); }}catch(e){{}}
+    try{ localStorage.setItem('mysifa_theme', document.body.classList.contains('light')?'light':'dark'); }catch(e){}
+  });
+  try{ if(localStorage.getItem('mysifa_theme')==='light') document.body.classList.add('light'); }catch(e){}
 
-  load().catch(e=>{{ document.getElementById('who').textContent='Erreur'; showToast(e.message||'Erreur', 'bad'); }});
+  load().catch(e=>{ document.getElementById('who').textContent='Erreur'; showToast(e.message||'Erreur', 'bad'); });
   </script>
 </body>
 </html>"""
