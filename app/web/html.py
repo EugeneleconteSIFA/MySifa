@@ -810,6 +810,7 @@ table.table-std tr:hover td{background:var(--accent-bg)}
 .prod-of-statut--valide{color:var(--success);background:rgba(52,211,153,.12)}
 .prod-of-statut--attente{color:var(--warn);background:rgba(251,191,36,.12)}
 .prod-of-statut--rejete{color:var(--danger);background:rgba(248,113,113,.12)}
+.prod-of-row-sub{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.35}
 .show-trac-attente-btn{padding:7px 14px;font-size:11px;color:var(--muted);cursor:pointer;text-align:center;
   border-bottom:1px solid var(--border);background:var(--bg);user-select:none;letter-spacing:.3px}
 .show-trac-attente-btn:hover{color:var(--accent);background:var(--accent-bg)}
@@ -9808,8 +9809,14 @@ function renderOfPage(){
       acts.push(h('button',{className:'btn-danger btn-sm',title:'Supprimer',
         onClick:()=>ofDeleteImport(row.id)},iconEl('trash',13)));
     }
+    const ofSub=row.imported_by
+      ? h('div',{className:'prod-of-row-sub'},'Ajouté par '+escHtml(row.imported_by))
+      : null;
     return h('tr',null,
-      h('td',null,escHtml(row.of_numero||'—')),
+      h('td',null,
+        h('div',null,escHtml(row.of_numero||'—')),
+        ofSub,
+      ),
       h('td',null,escHtml(row.reference||'—')),
       h('td',null,escHtml(row.machine||'—')),
       h('td',null,escHtml(row.delai_client||'—')),

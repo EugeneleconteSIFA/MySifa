@@ -371,16 +371,43 @@ async function importTarifsCsv(file){
   }
 }
 
-async function parseTarifIa(){
+function _tarifsFileExt(){
+  const fname=(T.form&&(T.form.tarif_filename||T.form.tarif_url))||'';
+  if(fname){
+    const parts=fname.split('.');
+    if(parts.length>1)return parts.pop().toLowerCase();
+  }
+  const tr=(T.list||[]).find(t=>Number(t.id)===Number(T.editId));
+  const fn=(tr&&(tr.tarif_filename||tr.tarif_url))||'';
+  const p=fn.split('.');
+  return p.length>1?p.pop().toLowerCase():'';
+}
+
+function _tarifsParserLabel(){
+  return ['xlsx','xls'].includes(_tarifsFileExt())?'Parser (Excel)':'Parser avec IA';
+}
+
+async function parserTarifs(){
   if(T.editId==null)return;
+  const ext=_tarifsFileExt();
+  const isExcel=['xlsx','xls'].includes(ext);
+  const endpoint=isExcel
+    ?'/api/expe/transporteurs/'+T.editId+'/tarifs/parse-excel'
+    :'/api/expe/transporteurs/'+T.editId+'/tarif/parse';
   T.tarifs_parsing=true;
   render();
   try{
-    const res=await api('/api/expe/transporteurs/'+T.editId+'/tarif/parse',{method:'POST'});
+    const res=await api(endpoint,{method:'POST'});
     showToast(res.message||(res.lignes_extraites+' lignes extraites.'),'success');
     await loadTarifsTransporteur(T.editId);
   }catch(e){
-    showToast(e.message||'Analyse impossible','danger');
+    const msg=e&&e.message?String(e.message):'Erreur lors du parsing.';
+    if(msg.indexOf('Format non reconnu')>=0){
+      showToast('Format non reconnu. Contacter l\'équipe pour ajouter le support de ce format.','danger');
+      console.error('Structure du fichier :',msg);
+    }else{
+      showToast(msg,'danger');
+    }
   }
   T.tarifs_parsing=false;
   render();
@@ -402,9 +429,11 @@ function renderTarifsOnglet(){
     });
     kids.push(h('div',{className:'expe-trp-tarif-actions'},
       h('button',{type:'button',className:'btn btn-ghost',onClick:()=>csvInp.click()},'Importer CSV'),
-      h('button',{type:'button',className:'btn btn-ghost',disabled:!!T.tarifs_parsing,
-        onClick:()=>void parseTarifIa()},
-        T.tarifs_parsing?'Analyse en cours…':'Parser avec IA'),
+      h('button',{type:'button',id:'btn-parser-tarif',className:'btn btn-ghost',disabled:!!T.tarifs_parsing,
+        onClick:()=>void parserTarifs()},
+        T.tarifs_parsing
+          ?(['xlsx','xls'].includes(_tarifsFileExt())?'Analyse Excel en cours…':'Analyse IA en cours…')
+          :_tarifsParserLabel()),
       csvInp
     ));
   }
