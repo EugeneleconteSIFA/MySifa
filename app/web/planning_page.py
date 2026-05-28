@@ -1248,9 +1248,13 @@ function renderEntries(){
   // On recherche dans la liste COMPLÈTE (S.entries) pour conserver les bons data-idx.
   const terminated=filtered.filter(e=>e.statut==="termine");
   const active=filtered.filter(e=>e.statut!=="termine");
+  const activeRun=active.filter(e=>e.statut==="en_cours");
+  const activeWait=active.filter(e=>e.statut!=="en_cours");
   const hiddenCount=_showAllTermine?0:Math.max(0,terminated.length-TERMINE_KEEP);
   const visibleTerminated=_showAllTermine?terminated:terminated.slice(-TERMINE_KEEP);
-  const visible=[...visibleTerminated,...active];
+  // Ordre UX attendu : "En cours" puis "En attente", puis les derniers "Terminé" en bas.
+  // Ne pas trier S.entries : on reconstruit uniquement l'ordre d'affichage (data-idx reste cohérent).
+  const visible=[...activeRun,...activeWait,...visibleTerminated];
 
   // ── Construction HTML ─────────────────────────────────────────────────────
   let html="";
