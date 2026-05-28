@@ -1,17 +1,39 @@
-"""MySifa — Envoi d'emails SMTP (infrastructure générique)."""
+"""MySifa — Envoi d'emails (SMTP + fallback Microsoft Graph).
+
+Contrat: `send_email()` retourne True/False et **ne lève jamais**.
+"""
 from __future__ import annotations
 
 import logging
 import smtplib
 import ssl
+import time
+import json
+import urllib.parse
+import urllib.request
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 import html as html_module
 
-from config import BASE_URL, SMTP_FROM, SMTP_FROM_NAME, SMTP_HOST, SMTP_PASS, SMTP_PORT, SMTP_USER
+from config import (
+    BASE_URL,
+    MS_CLIENT_ID,
+    MS_CLIENT_SECRET,
+    MS_SENDER_UPN,
+    MS_TENANT_ID,
+    SMTP_FROM,
+    SMTP_FROM_NAME,
+    SMTP_HOST,
+    SMTP_PASS,
+    SMTP_PORT,
+    SMTP_USER,
+    SUPPORT_EMAIL_PROVIDER,
+)
 
 logger = logging.getLogger(__name__)
+
+_GRAPH_TOKEN = {"access_token": None, "expires_at": 0.0}
 
 
 def _esc(text: object) -> str:
@@ -159,20 +181,83 @@ def send_email(
     cc: str | list[str] | None = None,
 ) -> bool:
     """
-    Envoie un email HTML via SMTP (STARTTLS).
+    Envoie un email HTML via SMTP (STARTTLS) + fallback Microsoft Graph (si configuré).
     Retourne True si OK, False sinon — ne lève jamais d'exception.
     """
-    if not SMTP_HOST:
-        logger.warning("Email non configuré")
-        return False
-
     recipients = [to] if isinstance(to, str) else [str(x) for x in to]
     recipients = [r.strip() for r in recipients if r and str(r).strip()]
     if not recipients:
         logger.error("send_email: aucun destinataire")
         return False
 
-    try:
+    cc_list: list[str] = []
+    if cc:
+        cc_list = [cc] if isinstance(cc, str) else [str(x) for x in cc]
+        cc_list = [c.strip() for c in cc_list if c and str(c).strip()]
+
+    def _can_smtp() -> bool:
+        return bool(SMTP_HOST)
+
+    def _can_graph() -> bool:
+        return bool(MS_TENANT_ID and MS_CLIENT_ID and MS_CLIENT_SECRET and MS_SENDER_UPN)
+
+    def _graph_get_token() -> str:
+        now = time.time()
+        if _GRAPH_TOKEN["access_token"] and float(_GRAPH_TOKEN["expires_at"] or 0) - now > 60:
+            return str(_GRAPH_TOKEN["access_token"])
+
+        url = f"https://login.microsoftonline.com/{MS_TENANT_ID}/oauth2/v2.0/token"
+        data = urllib.parse.urlencode(
+            {
+                "grant_type": "client_credentials",
+                "client_id": MS_CLIENT_ID,
+                "client_secret": MS_CLIENT_SECRET,
+                "scope": "https://graph.microsoft.com/.default",
+            }
+        ).encode("utf-8")
+        req = urllib.request.Request(url, data=data, method="POST")
+        req.add_header("Content-Type", "application/x-www-form-urlencoded")
+        with urllib.request.urlopen(req, timeout=20) as r:
+            raw = r.read().decode("utf-8", errors="replace")
+        j = json.loads(raw)
+        tok = j.get("access_token")
+        exp = j.get("expires_in", 3600)
+        if not tok:
+            raise RuntimeError("Token Graph manquant")
+        _GRAPH_TOKEN["access_token"] = tok
+        try:
+            _GRAPH_TOKEN["expires_at"] = now + float(exp)
+        except Exception:
+            _GRAPH_TOKEN["expires_at"] = now + 3600.0
+        return str(tok)
+
+    def _send_graph() -> None:
+        token = _graph_get_token()
+        url = f"https://graph.microsoft.com/v1.0/users/{urllib.parse.quote(MS_SENDER_UPN)}/sendMail"
+        payload: dict = {
+            "message": {
+                "subject": subject,
+                "body": {"contentType": "HTML", "content": html_body},
+                "toRecipients": [{"emailAddress": {"address": addr}} for addr in recipients],
+            },
+            "saveToSentItems": "true",
+        }
+        if cc_list:
+            payload["message"]["ccRecipients"] = [
+                {"emailAddress": {"address": addr}} for addr in cc_list
+            ]
+        if reply_to:
+            payload["message"]["replyTo"] = [{"emailAddress": {"address": reply_to}}]
+
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data, method="POST")
+        req.add_header("Authorization", f"Bearer {token}")
+        req.add_header("Content-Type", "application/json")
+        with urllib.request.urlopen(req, timeout=20) as r:
+            if getattr(r, "status", 202) not in (200, 201, 202):
+                raise RuntimeError("Graph sendMail refusé")
+
+    def _send_smtp() -> None:
         msg = MIMEMultipart("alternative")
         from_header = (
             f"{SMTP_FROM_NAME} <{SMTP_FROM}>"
@@ -184,24 +269,48 @@ def send_email(
         msg["Subject"] = subject
         if reply_to:
             msg["Reply-To"] = reply_to
-        if cc:
-            cc_list = [cc] if isinstance(cc, str) else [str(x) for x in cc]
-            cc_list = [c.strip() for c in cc_list if c and str(c).strip()]
-            if cc_list:
-                msg["Cc"] = ", ".join(cc_list)
-                recipients = list(recipients) + cc_list
+        if cc_list:
+            msg["Cc"] = ", ".join(cc_list)
 
         msg.attach(MIMEText(html_body, "html", "utf-8"))
 
         context = ssl.create_default_context()
+        all_rcpt = list(recipients) + list(cc_list)
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as smtp:
             smtp.ehlo()
             smtp.starttls(context=context)
             smtp.ehlo()
             if SMTP_USER and SMTP_PASS:
                 smtp.login(SMTP_USER, SMTP_PASS)
-            smtp.sendmail(SMTP_FROM, recipients, msg.as_string())
+            smtp.sendmail(SMTP_FROM, all_rcpt, msg.as_string())
 
+    try:
+        provider = (SUPPORT_EMAIL_PROVIDER or "").strip().lower()
+        # Si provider est forcé, on l'essaie en premier, sinon on privilégie Graph si dispo (prod).
+        if provider in {"smtp", "graph"}:
+            order = [provider, "graph" if provider == "smtp" else "smtp"]
+        else:
+            order = ["graph", "smtp"]
+
+        last_err: Exception | None = None
+        for p in order:
+            try:
+                if p == "graph":
+                    if not _can_graph():
+                        raise RuntimeError("Graph non configuré (MS_* manquants)")
+                    _send_graph()
+                else:
+                    if not _can_smtp():
+                        raise RuntimeError("SMTP non configuré (SMTP_HOST manquant)")
+                    _send_smtp()
+                last_err = None
+                break
+            except Exception as e:
+                last_err = e
+                continue
+
+        if last_err is not None:
+            raise last_err
         return True
     except Exception as exc:
         logger.error("Échec envoi email: %s", exc, exc_info=True)
