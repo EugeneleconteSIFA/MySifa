@@ -853,7 +853,9 @@ def _compute_timeline_slots(
             ps, pe = e["planned_start"], e["planned_end"]
             pend = _parse_planned_dt(pe)
             if pend:
-                cursor = advance_to_work(pend)
+                cand = advance_to_work(pend)
+                if cand and cand > cursor:
+                    cursor = cand
             slots.append(_slot_payload(e, ps, pe))
             continue
         if st == "termine":
@@ -895,7 +897,9 @@ def _compute_timeline_slots(
                 ps, pe = e["planned_start"], e["planned_end"]
             pend = _parse_planned_dt(pe)
             if pend:
-                cursor = advance_to_work(pend)
+                cand = advance_to_work(pend)
+                if cand and cand > cursor:
+                    cursor = cand
             slots.append(_slot_payload(e, ps, pe))
             continue
 
