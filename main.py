@@ -10,7 +10,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from config import APP_TITLE, APP_VERSION, HOST, PORT, BASE_DIR
-from frontend.html import render_frontend_html
+from app.web.html import render_frontend_html
 
 from routers.auth       import router as auth_router
 from routers.imports    import router as router_imports
@@ -27,15 +27,15 @@ from routers.stock import router as router_stock
 from routers.support import router as support_router
 from app.routers.messages import router as messages_router
 from app.routers.compta import router as compta_router
-from frontend.planning_page import router as planning_page_router
-from frontend.prod_page import router as prod_page_router
-from frontend.stock_page import router as stock_page_router
-from frontend.compta_page import router as compta_page_router
+from app.web.planning_page import router as planning_page_router
+from app.web.prod_page import router as prod_page_router
+from app.web.stock_page import router as stock_page_router
+from app.web.compta_page import router as compta_page_router
 from app.web.expe_page import router as expe_page_router
 from app.web.devis_page import router as devis_page_router
 from app.routers.expe_departs import router as expe_departs_router
 from app.routers.settings import router as settings_api_router
-from frontend.settings_page import router as settings_page_router
+from app.web.settings_page import router as settings_page_router
 from app.routers.fabrication import router as fabrication_api_router
 from app.routers.of_import import router as of_import_router
 from app.web.fabrication_page import router as fabrication_page_router
