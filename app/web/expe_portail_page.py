@@ -38,7 +38,7 @@ def get_portail_404_html() -> str:
 
 def get_portail_html(token: str) -> str:
     token_js = json.dumps(token)
-    return f"""<!DOCTYPE html>
+    html = """<!DOCTYPE html>
 <html lang="fr">
 <head>
   <meta charset="utf-8">
@@ -144,7 +144,7 @@ def get_portail_html(token: str) -> str:
   <div class="toast" id="toast"></div>
 
   <script>
-  const TOKEN = {token_js};
+  const TOKEN = __TOKEN_JS__;
   const S = {{ data:null, editing:null }};
 
   function esc(s){{ return String(s??'').replace(/[&<>\"']/g,c=>({{'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}}[c])); }}
@@ -254,4 +254,5 @@ def get_portail_html(token: str) -> str:
   </script>
 </body>
 </html>"""
+    return html.replace("__TOKEN_JS__", token_js)
 
