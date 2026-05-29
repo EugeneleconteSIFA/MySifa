@@ -1730,14 +1730,25 @@ body.light .stock-empl-suggest-add:hover{background:rgba(124,58,237,.2);color:#1
   display:flex;align-items:center;justify-content:center;border-radius:6px}
 .expe-dep-valider-btn{margin:0;padding:8px 12px;font-size:11px;font-weight:700;border-radius:10px;
   white-space:nowrap;flex-shrink:0}
-.expe-dep-ab[title],.expe-dep-valider-btn[title]{position:relative;overflow:visible}
-.expe-dep-ab[title]:hover::after,.expe-dep-valider-btn[title]:hover::after{
+.expe-dep-invalider-btn{margin:0;padding:8px 12px;font-size:11px;font-weight:700;border-radius:10px;
+  white-space:nowrap;flex-shrink:0;background:color-mix(in srgb,var(--warn) 18%,transparent);
+  border:1px solid color-mix(in srgb,var(--warn) 45%,var(--border));color:var(--warn)}
+.expe-dep-invalider-btn:hover{filter:brightness(1.06)}
+.expe-hist-pager{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;
+  padding:12px 18px;border-top:1px solid var(--border)}
+.expe-hist-pager .page-btn{padding:6px 12px;border-radius:7px;border:1px solid var(--border);
+  background:transparent;color:var(--text2);cursor:pointer;font-size:12px;font-family:inherit}
+.expe-hist-pager .page-btn:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+.expe-hist-pager .page-btn:disabled{opacity:.35;cursor:not-allowed}
+.expe-hist-pager .page-info{font-size:12px;color:var(--muted);padding:0 4px;white-space:nowrap}
+.expe-dep-ab[title],.expe-dep-valider-btn[title],.expe-dep-invalider-btn[title]{position:relative;overflow:visible}
+.expe-dep-ab[title]:hover::after,.expe-dep-valider-btn[title]:hover::after,.expe-dep-invalider-btn[title]:hover::after{
   content:attr(title);position:absolute;bottom:calc(100% + 7px);left:50%;transform:translateX(-50%);
   background:var(--card);border:1px solid var(--border);border-radius:7px;
   padding:6px 10px;font-size:10px;font-weight:500;color:var(--text2);line-height:1.4;
   white-space:normal;max-width:240px;text-align:center;
   pointer-events:none;z-index:200;box-shadow:0 4px 16px color-mix(in srgb,var(--bg) 55%,transparent)}
-.expe-dep-ab[title]:hover::before,.expe-dep-valider-btn[title]:hover::before{
+.expe-dep-ab[title]:hover::before,.expe-dep-valider-btn[title]:hover::before,.expe-dep-invalider-btn[title]:hover::before{
   content:'';position:absolute;bottom:calc(100% + 2px);left:50%;transform:translateX(-50%);
   border:5px solid transparent;border-top-color:var(--border);pointer-events:none;z-index:200}
 .expe-hist-table th{padding:6px 10px;font-size:9px}
@@ -1979,6 +1990,9 @@ let S={
   expeDepartHist:[],
   expeDepartHistQ:'',
   expeDepartHistLoading:false,
+  expeDepartHistPage:1,
+  expeDepartHistPages:1,
+  expeDepartHistTotal:0,
   expeDepartSubmitting:false,
   expeDepartModalOpen:false,
   expeDepartEditId:null,
@@ -5721,9 +5735,10 @@ async function loadExpeDepartJour(){
   })();
   try{return await _expeJourInflight;}finally{_expeJourInflight=null;}
 }
-async function loadExpeDepartHistorique(){
+async function loadExpeDepartHistorique(resetPage){
   if(S.app!=='expe')return;
   void loadExpePaletteTypes();
+  if(resetPage) S.expeDepartHistPage=1;
   // Préserver le focus/caret de la searchbar pendant les re-renders (chargement + résultats)
   const qEl = document.getElementById('expe-hist-search');
   const hadFocus = !!(qEl && document.activeElement === qEl);
@@ -5732,8 +5747,16 @@ async function loadExpeDepartHistorique(){
   set({expeDepartHistLoading:true});
   try{
     const qq=(S.expeDepartHistQ||'').trim();
-    const rows=await api('/api/expe/departs/historique?q='+encodeURIComponent(qq)+'&limit=800');
-    set({expeDepartHist:Array.isArray(rows)?rows:[],expeDepartHistLoading:false});
+    const page=S.expeDepartHistPage||1;
+    const data=await api('/api/expe/departs/historique?q='+encodeURIComponent(qq)+'&page='+page+'&limit=50');
+    const rows=Array.isArray(data)?data:(data&&data.rows)||[];
+    set({
+      expeDepartHist:rows,
+      expeDepartHistTotal:data&&data.total!=null?data.total:rows.length,
+      expeDepartHistPage:data&&data.page!=null?data.page:page,
+      expeDepartHistPages:data&&data.pages!=null?data.pages:1,
+      expeDepartHistLoading:false
+    });
   }catch(e){
     set({expeDepartHistLoading:false});
     toast(e.message||'Chargement impossible','error');
@@ -5755,7 +5778,14 @@ async function loadExpeDepartHistorique(){
 }
 function scheduleExpeHistSearch(){
   if(_expeHistSearchT)clearTimeout(_expeHistSearchT);
-  _expeHistSearchT=setTimeout(()=>{loadExpeDepartHistorique();},380);
+  _expeHistSearchT=setTimeout(()=>{loadExpeDepartHistorique(true);},380);
+}
+function expeHistChangePage(delta){
+  const pages=S.expeDepartHistPages||1;
+  const next=(S.expeDepartHistPage||1)+delta;
+  if(next<1||next>pages)return;
+  S.expeDepartHistPage=next;
+  void loadExpeDepartHistorique();
 }
 async function expeValiderDepart(id){
   try{
@@ -5763,6 +5793,15 @@ async function expeValiderDepart(id){
     toast('Départ validé — entrée dans l\'historique');
     await loadExpeDepartJour();
   }catch(e){toast(e.message||'Validation impossible','error');}
+}
+async function expeInvaliderDepart(id){
+  if(!confirm('Remettre ce départ dans le suivi du jour ?\n\nIl disparaîtra de l\'historique et pourra être modifié ou validé à nouveau.')) return;
+  try{
+    await api('/api/expe/departs/'+id+'/invalider',{method:'POST'});
+    toast('Départ remis dans le suivi du jour');
+    await loadExpeDepartHistorique();
+    if((S.expeDepartSubTab||'jour')==='jour') await loadExpeDepartJour();
+  }catch(e){toast(e.message||'Action impossible','error');}
 }
 
 function expeOpenDepartModal(prefill, mode){
@@ -6008,6 +6047,12 @@ function renderExpeHistoriqueDeparts(){
     }
   });
   const rows=S.expeDepartHist||[];
+  const total=S.expeDepartHistTotal||0;
+  const page=S.expeDepartHistPage||1;
+  const pages=S.expeDepartHistPages||1;
+  const limit=50;
+  const from=total===0?0:(page-1)*limit+1;
+  const to=Math.min(page*limit,total);
   const head=h('tr',null,
     ...['Validé le','Date enl.','Client','Réf SIFA','ARC','Cde transp.','N° BL','Transp.','Type pal.','Pal.','Poids','Liv. prév.',''].map(t=>h('th',null,t))
   );
@@ -6038,18 +6083,29 @@ function renderExpeHistoriqueDeparts(){
             await loadExpeDepartHistorique();
           }catch(e){toast(e.message||'Suppression impossible','error');}
         }},iconEl('trash',14))
-      ])
+      ],
+      h('button',{className:'btn expe-dep-invalider-btn',type:'button',
+        title:'Annuler la validation et remettre ce départ dans le suivi du jour',
+        onClick:()=>void expeInvaliderDepart(r.id)},'Invalider'))
     ):h('td',null,'—')
   )):[h('tr',null,h('td',{colSpan:13,style:{color:'var(--muted)'}},S.expeDepartHistLoading?'Chargement…':'Aucune entrée (ou affiner la recherche)'))];
+  const pager=h('div',{className:'expe-hist-pager'},
+    h('span',{className:'page-info'},
+      total===0?'Aucun résultat':(from+'–'+to+' / '+total.toLocaleString('fr')+(pages>1?' · page '+page+'/'+pages:''))
+    ),
+    h('button',{type:'button',className:'page-btn',disabled:page<=1,onClick:()=>expeHistChangePage(-1)},'‹ Précédent'),
+    h('button',{type:'button',className:'page-btn',disabled:page>=pages,onClick:()=>expeHistChangePage(1)},'Suivant ›')
+  );
   return h('div',null,
     h('div',{className:'card',style:{marginBottom:'12px',padding:'14px 18px'}},
       h('h3',{style:{fontSize:'14px',fontWeight:'700',marginBottom:'8px'}},'Recherche'),
-      h('div',{className:'expe-help',style:{marginBottom:'8px'}},'Mots séparés par des espaces : tous doivent être trouvés (ref., client, ARC, BL, etc.). Insensible à la casse et aux accents. Portée : les 800 derniers départs validés.'),
+      h('div',{className:'expe-help',style:{marginBottom:'8px'}},'Mots séparés par des espaces : tous doivent être trouvés (ref., client, ARC, BL, etc.). Insensible à la casse. Résultats paginés par 50.'),
       qInp
     ),
     h('div',{className:'card'},
       h('div',{className:'card-header'},h('h3',{className:'expe-mobile-hide-head'},'Historique des départs validés')),
-      h('div',{style:{overflowX:'auto'}},h('table',{className:'table-std expe-hist-table'},h('thead',null,head),h('tbody',null,...body)))
+      h('div',{style:{overflowX:'auto'}},h('table',{className:'table-std expe-hist-table'},h('thead',null,head),h('tbody',null,...body))),
+      pager
     )
   );
 }

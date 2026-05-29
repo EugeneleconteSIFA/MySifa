@@ -84,6 +84,47 @@ def _row_blob(d: dict) -> str:
     return _norm_search(" ".join(str(p) for p in parts if p is not None and str(p) != ""))
 
 
+_HIST_SEARCH_COLS = (
+    "d.date_enlevement",
+    "d.affreteurs",
+    "d.transporteur",
+    "d.client",
+    "d.code_postal_destination",
+    "d.ref_sifa",
+    "d.arc",
+    "d.no_cde_transport",
+    "d.no_bl",
+    "mp.reference",
+    "mp.designation",
+    "d.nb_palette",
+    "d.poids_total_kg",
+    "d.date_livraison",
+    "d.created_by_email",
+    "d.validated_by_email",
+    "d.validated_at",
+)
+
+
+def _historique_search_clause(q: str) -> tuple[str, list[Any]]:
+    """Clause SQL AND … pour la recherche multi-mots (tous les tokens requis)."""
+    qt = _norm_search(q)
+    if not qt:
+        return "", []
+    tokens = [t for t in qt.split(" ") if t]
+    if not tokens:
+        return "", []
+    parts: list[str] = []
+    params: list[Any] = []
+    ncols = len(_HIST_SEARCH_COLS)
+    for tok in tokens:
+        likes = " OR ".join(
+            f"LOWER(COALESCE(CAST({c} AS TEXT), '')) LIKE ?" for c in _HIST_SEARCH_COLS
+        )
+        parts.append(f"({likes})")
+        params.extend([f"%{tok}%"] * ncols)
+    return " AND ".join(parts), params
+
+
 _DEPARTS_SELECT = """
     SELECT d.*,
            mp.reference AS type_palette_reference,
@@ -346,6 +387,43 @@ def valider_depart(request: Request, depart_id: int):
     return _depart_dict(out)
 
 
+@router.post("/departs/{depart_id}/invalider")
+def invalider_depart(request: Request, depart_id: int):
+    """Remet un départ validé dans le suivi du jour (statut en_attente)."""
+    user = _require_expe_write(request)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id, statut, client FROM expe_departs WHERE id=?",
+            (depart_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Départ introuvable")
+        if row["statut"] != "valide":
+            raise HTTPException(
+                status_code=400,
+                detail="Seuls les départs validés peuvent être remis en suivi.",
+            )
+        conn.execute(
+            """UPDATE expe_departs
+               SET statut='en_attente', validated_at=NULL, validated_by_email=NULL
+               WHERE id=?""",
+            (depart_id,),
+        )
+        conn.commit()
+        out = conn.execute(
+            f"{_DEPARTS_SELECT} WHERE d.id=?", (depart_id,)
+        ).fetchone()
+    client_nom = (out["client"] or "").strip() if out else "—"
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="expe",
+        objet=f"Départ #{depart_id} remis en suivi · {client_nom}",
+        ip=request.client.host if request.client else None,
+    )
+    return _depart_dict(out)
+
+
 @router.put("/departs/{depart_id}")
 async def update_depart(request: Request, depart_id: int, body: dict = Body(...)):
     """Modifie un départ (en attente ou validé)."""
@@ -468,30 +546,40 @@ def delete_depart(request: Request, depart_id: int):
 def historique_departs(
     request: Request,
     q: str = "",
-    limit: int = Query(500, ge=1, le=2000),
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=200),
 ):
     _require_expe(request)
+    search_sql, search_params = _historique_search_clause(q)
+    where = "WHERE d.statut = 'valide'"
+    if search_sql:
+        where += f" AND ({search_sql})"
+    offset = (page - 1) * limit
     with get_db() as conn:
+        total = conn.execute(
+            f"""SELECT COUNT(*) AS n
+                FROM expe_departs d
+                LEFT JOIN matieres_premieres mp ON mp.id = d.type_palette_matiere_id
+                {where}""",
+            search_params,
+        ).fetchone()["n"]
         rows = conn.execute(
             f"""{_DEPARTS_SELECT}
-               WHERE d.statut = 'valide'
-               ORDER BY datetime(COALESCE(d.validated_at, d.created_at)) DESC, d.id DESC
-               LIMIT ?""",
-            (limit,),
+                {where}
+                ORDER BY datetime(COALESCE(d.validated_at, d.created_at)) DESC, d.id DESC
+                LIMIT ? OFFSET ?""",
+            (*search_params, limit, offset),
         ).fetchall()
-    data = [_depart_dict(r) for r in rows]
-    qt = _norm_search(q)
-    if not qt:
-        return data
-    tokens = [t for t in qt.split(" ") if t]
-    if not tokens:
-        return data
-    out = []
-    for d in data:
-        blob = _row_blob(d)
-        if all(tok in blob for tok in tokens):
-            out.append(d)
-    return out
+    pages = max(1, (int(total) + limit - 1) // limit) if total else 1
+    if page > pages:
+        page = pages
+    return {
+        "rows": [_depart_dict(r) for r in rows],
+        "total": int(total),
+        "page": page,
+        "limit": limit,
+        "pages": pages,
+    }
 
 
 # ─── Transporteurs ───────────────────────────────────────────────────

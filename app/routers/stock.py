@@ -14,12 +14,27 @@ from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 
 from app.services.audit_service import log_action
+from config import STOCK_EMPLACEMENT_AU_SOL, STOCK_EMPLACEMENT_AU_SOL_LABEL
 from database import get_db, parse_file
 from services.auth_service import get_current_user, user_has_app_access
 
 router = APIRouter()
 
 INVENTAIRE_ALERTE_JOURS = 180  # 6 mois
+
+
+def _normalize_emplacement(code: str) -> str:
+    return (code or "").strip().upper()
+
+
+def _is_valid_emplacement(code: str) -> bool:
+    """Code grille (A121…) ou zone spéciale Au sol (Z0)."""
+    empl = _normalize_emplacement(code)
+    if not empl:
+        return False
+    if empl == STOCK_EMPLACEMENT_AU_SOL:
+        return True
+    return empl[0].isalpha() and empl[1:].isdigit()
 
 # Colonnes mouvements (évite m.* + collision avec join users)
 _MVT_FIELDS = (
@@ -756,8 +771,13 @@ def list_emplacements(request: Request):
         ).fetchall()
     codes_plan = {r["code"] for r in plan}
     codes_reels = {r["emplacement"] for r in reels}
-    tous = sorted(codes_plan | codes_reels)
-    return {"emplacements": tous}
+    tous = sorted(codes_plan | codes_reels | {STOCK_EMPLACEMENT_AU_SOL})
+    ordered = [STOCK_EMPLACEMENT_AU_SOL] + [c for c in tous if c != STOCK_EMPLACEMENT_AU_SOL]
+    return {
+        "emplacements": ordered,
+        "emplacement_au_sol": STOCK_EMPLACEMENT_AU_SOL,
+        "emplacement_au_sol_label": STOCK_EMPLACEMENT_AU_SOL_LABEL,
+    }
 
 
 @router.get("/api/stock/emplacements/{emplacement}")
@@ -817,12 +837,48 @@ def get_emplacement(emplacement: str, request: Request):
             d["alerte_inventaire"] = True
         refs_data.append(d)
 
+    label = (
+        STOCK_EMPLACEMENT_AU_SOL_LABEL
+        if emplacement == STOCK_EMPLACEMENT_AU_SOL
+        else emplacement
+    )
     return {
         "emplacement": emplacement,
+        "label": label,
+        "est_au_sol": emplacement == STOCK_EMPLACEMENT_AU_SOL,
         "refs": refs_data,
         "total_unites": sum(r["quantite"] for r in refs),
         "nb_refs": len(refs),
         "mouvements": [dict(r) for r in mvts],
+    }
+
+
+@router.get("/api/stock/a-expedier")
+def stock_a_expedier(request: Request):
+    """Produits finis en zone Au sol — stock à expédier prochainement."""
+    require_stock(request)
+    empl = STOCK_EMPLACEMENT_AU_SOL
+    with get_db() as conn:
+        refs = conn.execute(
+            """SELECT p.id, p.reference, p.designation, p.unite,
+                      SUM(l.quantite_restante) as quantite,
+                      COUNT(*) as nb_lots,
+                      MIN(CASE WHEN l.quantite_restante>0 THEN l.date_entree END) as date_fifo
+               FROM lots_stock l
+               JOIN produits p ON p.id=l.produit_id
+               WHERE l.emplacement=? AND l.quantite_restante>0
+               GROUP BY p.id
+               ORDER BY p.reference""",
+            (empl,),
+        ).fetchall()
+    refs_data = [dict(r) for r in refs]
+    total = sum(float(r["quantite"] or 0) for r in refs_data)
+    return {
+        "emplacement": empl,
+        "label": STOCK_EMPLACEMENT_AU_SOL_LABEL,
+        "refs": refs_data,
+        "total_unites": total,
+        "nb_refs": len(refs_data),
     }
 
 
@@ -998,7 +1054,7 @@ async def mouvement_stock(request: Request):
 
     if not produit_id or not emplacement:
         raise HTTPException(400, "produit_id et emplacement obligatoires")
-    if not emplacement[0].isalpha() or not emplacement[1:].isdigit():
+    if not _is_valid_emplacement(emplacement):
         raise HTTPException(400, f"Format emplacement invalide : {emplacement}")
     if quantite <= 0:
         raise HTTPException(400, "Quantité doit être positive")
@@ -1038,7 +1094,7 @@ async def api_sortir_lot(request: Request):
 
     if not produit_id or not emplacement:
         raise HTTPException(400, "produit_id et emplacement obligatoires")
-    if not emplacement[0].isalpha() or not emplacement[1:].isdigit():
+    if not _is_valid_emplacement(emplacement):
         raise HTTPException(400, f"Format emplacement invalide : {emplacement}")
 
     with get_db() as conn:
@@ -1804,9 +1860,9 @@ async def mouvement_matiere_premiere(request: Request):
     def _check_emplacement_code(code: Optional[str]) -> str:
         if not code:
             raise HTTPException(400, "Emplacement obligatoire.")
-        if not code[0].isalpha() or not code[1:].isdigit():
+        if not _is_valid_emplacement(code):
             raise HTTPException(400, f"Format emplacement invalide : {code}")
-        return code
+        return _normalize_emplacement(code)
 
     if type_mvt == "entree":
         emplacement_dest = _check_emplacement_code(emplacement_dest)
@@ -2174,7 +2230,7 @@ def _pf_validate_mouvement_body(body: dict) -> tuple[str, str, str, float, str]:
         raise HTTPException(400, "Référence obligatoire.")
     if not emplacement:
         raise HTTPException(400, "Emplacement obligatoire.")
-    if not emplacement[0].isalpha() or not emplacement[1:].isdigit():
+    if not _is_valid_emplacement(emplacement):
         raise HTTPException(400, f"Format emplacement invalide : {emplacement}")
     try:
         quantite = float(body.get("quantite", 0))
@@ -2184,7 +2240,7 @@ def _pf_validate_mouvement_body(body: dict) -> tuple[str, str, str, float, str]:
         raise HTTPException(400, "Quantité invalide — minimum 0,01.")
     if not designation:
         designation = reference
-    return reference, designation, emplacement, quantite, unite
+    return reference, designation, _normalize_emplacement(emplacement), quantite, unite
 
 
 @router.post("/api/stock/produits-finis/entree")

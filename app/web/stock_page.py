@@ -361,6 +361,17 @@ body.light .btn.btn-accent{color:#fff}
 .empl-row:hover{background:var(--accent-bg)}
 .empl-row.alerte{border-left:3px solid var(--warn)}
 .empl-code{font-family:monospace;font-weight:800;font-size:14px;color:var(--accent)}
+.empl-code.empl-au-sol{font-family:inherit;color:var(--warn)}
+.empl-au-sol-hint{font-size:12px;color:var(--warn);margin-top:8px;line-height:1.5;font-weight:600}
+.a-exp-list{display:flex;flex-direction:column;gap:8px;max-height:min(60vh,420px);overflow-y:auto;margin-top:12px}
+.a-exp-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;cursor:pointer;transition:background .12s,border-color .12s}
+.a-exp-row:hover{background:var(--accent-bg);border-color:rgba(34,211,238,.35)}
+.a-exp-ref{font-family:monospace;font-weight:800;font-size:14px;color:var(--accent)}
+.a-exp-des{font-size:12px;color:var(--text2);margin-top:2px}
+.a-exp-qte{font-size:13px;font-weight:700;color:var(--text);white-space:nowrap}
+.mvt-empl-link-au-sol{color:var(--warn)!important}
+.pf-empl-badge.pf-empl-au-sol{background:rgba(251,191,36,.12);color:var(--warn);border-color:rgba(251,191,36,.4)}
+.empl-suggest-au-sol{font-weight:700;color:var(--warn)}
 .empl-info{font-size:11px;color:var(--muted);margin-top:2px}
 .empl-qte{font-family:monospace;font-weight:700;font-size:13px;text-align:right}
 .empl-date{font-size:11px;color:var(--muted);text-align:right;margin-top:2px}
@@ -1663,17 +1674,19 @@ function stockHistEmplLinks(raw) {
   if (!codes.length) return el('span', { cls: 'hist-muted' }, '—');
   if (codes.length === 1) {
     return el('button', {
-      cls: 'mvt-empl-link', type: 'button',
+      cls: 'mvt-empl-link' + (isStockEmplacementAuSol(codes[0]) ? ' mvt-empl-link-au-sol' : ''),
+      type: 'button',
       on: { click: (e) => { e.stopPropagation(); loadEmplacement(codes[0]); } },
-    }, codes[0]);
+    }, stockEmplLabel(codes[0]));
   }
   const wrap = el('span', { cls: 'hist-empl-chain' });
   codes.forEach((code, i) => {
     if (i) wrap.appendChild(el('span', { cls: 'hist-empl-sep' }, ' → '));
     wrap.appendChild(el('button', {
-      cls: 'mvt-empl-link', type: 'button',
+      cls: 'mvt-empl-link' + (isStockEmplacementAuSol(code) ? ' mvt-empl-link-au-sol' : ''),
+      type: 'button',
       on: { click: (e) => { e.stopPropagation(); loadEmplacement(code); } },
-    }, code));
+    }, stockEmplLabel(code)));
   });
   return wrap;
 }
@@ -1756,7 +1769,8 @@ function buildLotOutBtn(produitId, emplacement, row) {
 
 async function sortirLot(produitId, emplacement, qLot, unite, refLabel, nbLots) {
   const qLabel = fU(qLot, unite || '');
-  const loc = refLabel ? (refLabel + ' · ' + emplacement) : emplacement;
+  const locLbl = stockEmplLabel(emplacement);
+  const loc = refLabel ? (refLabel + ' · ' + locLbl) : locLbl;
   let msg = 'Sortir le lot FIFO (' + qLabel + ') — ' + loc + ' ?';
   if (nbLots > 1) {
     msg += '\n\n' + nbLots + ' lots actifs à cet emplacement — seul le plus ancien sera retiré.';
@@ -1779,6 +1793,8 @@ async function sortirLot(produitId, emplacement, qLot, unite, refLabel, nbLots) 
 
 // Emplacements chargés depuis /api/stock/emplacements-list (plan + stock réel)
 let _emplListFromDB = [];
+const STOCK_EMPL_AU_SOL = 'Z0';
+const STOCK_EMPL_AU_SOL_LABEL = 'Au sol';
 const LS_STOCK_EMPL_CUSTOM = 'mysifa_stock_empl_custom';
 const STOCK_UNITS_BASE = ['cartons','bobines','étiquettes','palettes','paravents','boîtes'];
 const LS_STOCK_UNITS_CUSTOM = 'mysifa_stock_units_custom_v1';
@@ -1811,9 +1827,16 @@ function addPageCustomEmplacement(code) {
   cur.push(t); savePageEmplCustom(cur); return true;
 }
 function allPageEmplacementChoices() {
-  return [...new Set([..._emplListFromDB, ...loadPageEmplCustom()])].sort();
+  const base = [...new Set([..._emplListFromDB, ...loadPageEmplCustom()])]
+    .filter(c => c !== STOCK_EMPL_AU_SOL)
+    .sort();
+  return [STOCK_EMPL_AU_SOL, ...base];
+}
+function isStockEmplacementAuSol(code) {
+  return String(code || '').trim().toUpperCase() === STOCK_EMPL_AU_SOL;
 }
 function isStockEmplacementCode(s) {
+  if (isStockEmplacementAuSol(s)) return true;
   const t = String(s || '').trim().toUpperCase();
   if (t.length < 2) return false;
   const c0 = t.charCodeAt(0);
@@ -1823,6 +1846,12 @@ function isStockEmplacementCode(s) {
     if (c < 48 || c > 57) return false;
   }
   return true;
+}
+function stockEmplLabel(code) {
+  return isStockEmplacementAuSol(code) ? STOCK_EMPL_AU_SOL_LABEL : String(code || '').trim().toUpperCase();
+}
+function stockEmplCodeClass(code) {
+  return 'empl-code' + (isStockEmplacementAuSol(code) ? ' empl-au-sol' : '');
 }
 const ADD_PF_FIELD_IDS = {
   emplInput: 'dash-add-pf-empl-input',
@@ -1846,8 +1875,10 @@ function refreshAddEmplDropdownInner(inputId, listId) {
   list.innerHTML = '';
   filtered.forEach(code => {
     const row = document.createElement('div');
-    row.className = 'empl-suggest-item';
-    row.textContent = code;
+    row.className = 'empl-suggest-item' + (isStockEmplacementAuSol(code) ? ' empl-suggest-au-sol' : '');
+    row.textContent = isStockEmplacementAuSol(code)
+      ? (STOCK_EMPL_AU_SOL_LABEL + ' — stock à expédier')
+      : code;
     row.addEventListener('mousedown', e => { e.preventDefault(); input.value = code; hideAddEmplDropdown(listId); });
     list.appendChild(row);
   });
@@ -2681,7 +2712,14 @@ function updateSearchResults() {
     box.appendChild(el('div',{cls:'search-section-title'},'📍 Emplacements'));
     emplacements.forEach(e => box.appendChild(
       el('div',{cls:'search-item',on:{click:()=>loadEmplacement(e.emplacement)}},
-        el('div',null,el('div',{cls:'si-ref'},e.emplacement),el('div',{cls:'si-des'},e.nb_refs+' référence'+(e.nb_refs>1?'s':''))),
+        el('div',null,
+          el('div',{cls:'si-ref'},stockEmplLabel(e.emplacement)),
+          el('div',{cls:'si-des'},
+            isStockEmplacementAuSol(e.emplacement)
+              ? 'Stock à expédier · ' + e.nb_refs + ' référence' + (e.nb_refs > 1 ? 's' : '')
+              : e.nb_refs + ' référence' + (e.nb_refs > 1 ? 's' : '')
+          ),
+        ),
         el('div',{cls:'si-badge'},fN(e.total_unites))
       )
     ));
@@ -2705,26 +2743,25 @@ function buildMvtHistory(mouvements, unite='', opts=null) {
       const signe=m.type_mouvement==='entree'?'+':m.type_mouvement==='sortie'?'-':'=';
       const actor = (m.created_by_nom || m.created_by_name || '').trim();
       const unit = (m.unite || unite || '').trim();
-      const refTxt = m.reference || m.emplacement || '';
       const primary = (opts && opts.primary) ? String(opts.primary) : '';
+      const refTxt = m.reference || (primary === 'emplacement' ? '' : m.emplacement) || '';
       const t = m.type_mouvement || '';
       const pfIconCls = (t === 'entree' || t === 'sortie') ? 'pf-' + t : t;
       const pfQteCls = (t === 'entree' || t === 'sortie') ? 'mvt-qte-pf-' + t : 'mvt-qte-' + t;
+      const showEmplOnLine2 = primary !== 'emplacement' && m.emplacement;
       return el('div',{cls:'mvt-row'},
         el('div',{cls:'mvt-icon '+pfIconCls},icons[t]||'·'),
         el('div',{cls:'mvt-body'},
           el('div',{cls:'mvt-line1'},
-            (primary === 'emplacement' && m.emplacement)
-              ? el('button',{cls:'mvt-empl-link',type:'button',on:{click:()=>loadEmplacement(m.emplacement)}},m.emplacement)
-              : ((m.produit_id && m.reference)
-                ? el('button',{cls:'mvt-ref-link',type:'button',on:{click:()=>loadProduit(m.produit_id)}},refTxt)
-                : el('span',null,refTxt)),
+            (m.produit_id && m.reference)
+              ? el('button',{cls:'mvt-ref-link',type:'button',on:{click:()=>loadProduit(m.produit_id)}},m.reference)
+              : el('span',null,refTxt || '—'),
             el('span',{cls:pfQteCls},signe+fU(m.quantite, unit))
           ),
           el('div',{cls:'mvt-line2'},
             fD(m.created_at),
-            (m.emplacement ? el('span',null,' · ') : null),
-            (m.emplacement ? stockHistEmplLinks(m.emplacement) : null),
+            (showEmplOnLine2 ? el('span',null,' · ') : null),
+            (showEmplOnLine2 ? stockHistEmplLinks(m.emplacement) : null),
             (actor ? el('span',null,' · '+actor) : null),
           ),
           m.note?el('div',{cls:'mvt-note'},m.note):null
@@ -3827,7 +3864,9 @@ function buildProduitsFinisTab() {
             el('div', { cls: 'pf-stock-des' }, row.designation || '—'),
             el('div', { cls: 'pf-stock-row', style: { marginTop: '6px' } },
               el('span', { cls: 'pf-stock-qte' }, fU(row.quantite, row.unite)),
-              el('span', { cls: 'pf-empl-badge' }, row.emplacement || '—'),
+              el('span', {
+                cls: 'pf-empl-badge' + (isStockEmplacementAuSol(row.emplacement) ? ' pf-empl-au-sol' : ''),
+              }, stockEmplLabel(row.emplacement) || '—'),
             ),
             el('div', { cls: 'pf-stock-meta' }, 'Dernière entrée : ' + fD(row.derniere_entree)),
           ),
@@ -4832,7 +4871,9 @@ function mpEmplacementValue(emplInp) {
 
 function validateMpEmplacement(empl) {
   if (!empl) return 'Emplacement obligatoire.';
-  if (!isStockEmplacementCode(empl)) return 'Format invalide — une lettre puis des chiffres (ex. A123).';
+  if (!isStockEmplacementCode(empl)) {
+    return 'Format invalide — grille (ex. A123) ou zone « ' + STOCK_EMPL_AU_SOL_LABEL + ' » (' + STOCK_EMPL_AU_SOL + ').';
+  }
   return null;
 }
 
@@ -5929,6 +5970,75 @@ function buildDashboardKpis(s) {
   );
 }
 
+async function openStockAExpedierQuick() {
+  const mroot = document.getElementById('mroot');
+  if (!mroot) return;
+  closeMroot();
+  const overlay = el('div', {
+    cls: 'modal-overlay',
+    on: { click: (e) => { if (e.target === overlay) closeMroot(); } },
+  });
+  const sheet = el('div', { cls: 'modal-sheet', style: { maxWidth: '560px' }, on: { click: (e) => e.stopPropagation() } });
+  sheet.appendChild(el('div', { cls: 'modal-title' }, 'Stock à expédier'));
+  sheet.appendChild(el('div', { cls: 'modal-sub' }, 'Chargement…'));
+  overlay.appendChild(sheet);
+  mroot.appendChild(overlay);
+  try {
+    const d = await api('/api/stock/a-expedier');
+    renderStockAExpedierModalContent(sheet, d);
+  } catch (e) {
+    sheet.innerHTML = '';
+    sheet.appendChild(el('div', { cls: 'modal-title' }, 'Stock à expédier'));
+    sheet.appendChild(el('div', { cls: 'mp-hint err' }, e.message || 'Erreur de chargement.'));
+    sheet.appendChild(el('button', {
+      cls: 'btn-cancel', type: 'button', style: { marginTop: '14px', width: '100%' },
+      on: { click: closeMroot },
+    }, 'Fermer'));
+  }
+}
+
+function renderStockAExpedierModalContent(sheet, data) {
+  sheet.innerHTML = '';
+  const refs = data?.refs || [];
+  const label = data?.label || STOCK_EMPL_AU_SOL_LABEL;
+  sheet.appendChild(el('div', { cls: 'modal-title' }, 'Stock à expédier'));
+  sheet.appendChild(el('div', { cls: 'modal-sub' },
+    'Références en zone « ' + label + ' » — prêtes à partir prochainement.',
+  ));
+  if (!refs.length) {
+    sheet.appendChild(el('div', { cls: 'card-empty', style: { padding: '24px 8px' } },
+      'Aucun produit en zone Au sol pour le moment.',
+    ));
+  } else {
+    const list = el('div', { cls: 'a-exp-list' });
+    refs.forEach(r => {
+      list.appendChild(el('div', {
+        cls: 'a-exp-row',
+        on: { click: () => { closeMroot(); loadProduit(r.id); } },
+      },
+        el('div', null,
+          el('div', { cls: 'a-exp-ref' }, r.reference || '—'),
+          el('div', { cls: 'a-exp-des' }, r.designation || ''),
+        ),
+        el('div', { cls: 'a-exp-qte' }, fU(r.quantite, r.unite || '')),
+      ));
+    });
+    sheet.appendChild(list);
+    sheet.appendChild(el('div', {
+      style: { fontSize: '12px', color: 'var(--muted)', marginTop: '10px' },
+    }, refs.length + ' référence' + (refs.length > 1 ? 's' : '') + ' · ' + fN(data.total_unites || 0) + ' u.'));
+  }
+  const actions = el('div', { cls: 'modal-actions', style: { marginTop: '16px' } });
+  actions.appendChild(el('button', { cls: 'btn-cancel', type: 'button', on: { click: closeMroot } }, 'Fermer'));
+  if (refs.length) {
+    actions.appendChild(el('button', {
+      cls: 'btn btn-accent', type: 'button',
+      on: { click: () => { closeMroot(); loadEmplacement(data?.emplacement || STOCK_EMPL_AU_SOL); } },
+    }, 'Voir zone ' + label));
+  }
+  sheet.appendChild(actions);
+}
+
 function buildDashboardShortcuts() {
   const mk = (label, onClick, variant, iconName) => el('button', {
     cls: 'dash-quick-btn dash-quick-btn--' + variant,
@@ -5948,6 +6058,7 @@ function buildDashboardShortcuts() {
     ),
     el('div', { cls: 'dash-quick-grid' },
       mk('Ajouter stock produits finis', openDashboardAddPfModal, 'accent', 'plus-circle'),
+      mk('Stock à expédier', openStockAExpedierQuick, 'warn', 'package'),
       mk('Réception matière', openReceptionQuick, 'warn', 'truck'),
       mk('Entrée PF', () => openModalPfMouvement('entree'), 'pf-entree', 'upload'),
       mk('Sortie PF', () => openModalPfMouvement('sortie'), 'pf-sortie', 'download'),
@@ -6060,7 +6171,7 @@ function renderDashboardAddPfModal() {
   const emplWrap = el('div', { cls: 'empl-combo-wrap' });
   const emplInp = el('input', {
     cls: 'field-input empl-upper', type: 'text', id: F.emplInput,
-    placeholder: 'Emplacement (ex. a121, z999…)', autocomplete: 'off',
+    placeholder: 'Emplacement (ex. a121) ou Au sol (' + STOCK_EMPL_AU_SOL + ')', autocomplete: 'off',
     title: 'Obligatoire — suggestions + ligne violette « Ajouter emplacement »', style: { direction: 'ltr' },
   });
   const emplList = el('div', { cls: 'empl-suggestions', id: F.emplList, style: { display: 'none' } });
@@ -6111,7 +6222,7 @@ function renderDashboardAddPfModal() {
     const qRaw = (qtyI.value || '').trim();
     const emplVal = String((emplInp.value || '').trim().toUpperCase());
     if (!emplVal || !isStockEmplacementCode(emplVal)) {
-      showToast('Emplacement obligatoire (une lettre puis des chiffres, ex. Z999)', 'error');
+      showToast('Emplacement obligatoire (grille ex. A121 ou ' + STOCK_EMPL_AU_SOL_LABEL + ' ' + STOCK_EMPL_AU_SOL + ')', 'error');
       return;
     }
     const qte = parseFloat(qRaw.replace(',', '.'));
@@ -6216,7 +6327,7 @@ function buildProduitDetail() {
           on:{click:()=>loadEmplacement(e.emplacement)}
         },
           el('div',null,
-            el('div',{cls:'empl-code'},e.emplacement),
+            el('div',{cls:stockEmplCodeClass(e.emplacement)},stockEmplLabel(e.emplacement)),
             el('div',{cls:'empl-info'},'FIFO lot : '+fD(e.date_fifo_empl)+(e.alerte_inventaire?' · inventaire':'')+(e.jours_stock!=null?' · ~'+e.jours_stock+'j':''))
           ),
           el('div',{cls:'empl-row-right'},
@@ -6268,7 +6379,10 @@ function buildEmplacementDetail() {
   );
 
   const head = el('div',{cls:'scorecard'},
-    el('div',{cls:'sc-ref'},code),
+    el('div',{cls:stockEmplCodeClass(code)},stockEmplLabel(code)),
+    isStockEmplacementAuSol(code)
+      ? el('div',{cls:'empl-au-sol-hint'},'Stock prêt à expédier — ces références partiront prochainement.')
+      : null,
     el('div',{cls:'sc-des'},(sel.nb_refs||0)+' réf. · '+fN(sel.total_unites)+' u. en stock'),
     el('div',{cls:'sc-stats'},
       el('div',{cls:'sc-stat'},el('div',{cls:'sc-stat-label'},'Références'),el('div',{cls:'sc-stat-value'},String(refs.length))),
