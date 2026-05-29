@@ -1579,9 +1579,11 @@ def _trouver_ligne_tarif(
     nb_pal: float,
 ):
     """Cherche la ligne expe_tarifs la plus précise (CP → département, palette → poids)."""
+    _MP_PAR_PALETTE = 0.4  # 1 palette 80x120 = 0.4 mètre plancher
     tentatives: list[tuple[str, float]] = []
     if nb_pal > 0:
         tentatives.append(("palette", nb_pal))
+        tentatives.append(("metre_plancher", round(nb_pal * _MP_PAR_PALETTE, 4)))
     if poids > 0:
         tentatives.append(("poids", poids))
 

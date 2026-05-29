@@ -1266,6 +1266,19 @@ async function supprimerProspect(prospectId){
   }
 }
 
+function expeDevisMeilleursReponses(reps){
+  const list=(reps||[]).filter(r=>r.statut!=='refusee');
+  const avecPrix=list.filter(r=>r.prix!=null);
+  const avecDelai=list.filter(r=>r.delai_jours!=null);
+  const bestPrix=avecPrix.length?Math.min(...avecPrix.map(r=>Number(r.prix))):null;
+  const bestDelai=avecDelai.length?Math.min(...avecDelai.map(r=>Number(r.delai_jours))):null;
+  return {bestPrix,bestDelai};
+}
+
+function expeDevisCellValeur(txt,isBest){
+  return isBest?h('strong',null,txt):txt;
+}
+
 function expeDevisStatutLabel(st){
   const m={
     envoyee:{t:'Envoyée',c:'var(--muted)'},
@@ -1345,6 +1358,7 @@ function renderExpeDevisModal(){
         h('button',{type:'button',className:'btn btn-accent',onClick:()=>void ouvrirModalEnvoi(d.id)},'Envoyer les demandes')
       ));
     }
+    const {bestPrix,bestDelai}=expeDevisMeilleursReponses(reps);
     const head=h('tr',null,
       h('th',null,'Transporteur'),h('th',null,'Statut'),h('th',null,'Prix HT'),
       h('th',null,'Délai'),h('th',null,'Commentaire'),h('th',null,'')
@@ -1354,11 +1368,15 @@ function renderExpeDevisModal(){
       const acts=[];
       if(r.statut==='recue'&&expeCanWrite())acts.push(h('button',{type:'button',className:'btn-ghost',style:{fontSize:'12px',color:'var(--success)'},onClick:()=>void retenirReponse(r.id,d.id)},'Retenir'));
       if((r.statut==='envoyee'||r.statut==='echec')&&expeCanWrite())acts.push(h('button',{type:'button',className:'btn-ghost',style:{fontSize:'12px'},onClick:()=>ouvrirSaisieReponse(r.id,d.id)},'Saisir réponse'));
+      const prixTxt=r.prix!=null?Number(r.prix).toFixed(2)+' €':'—';
+      const delTxt=r.delai_jours!=null?'J+'+r.delai_jours:'—';
+      const isBestPrix=r.prix!=null&&bestPrix!=null&&Number(r.prix)===bestPrix;
+      const isBestDelai=r.delai_jours!=null&&bestDelai!=null&&Number(r.delai_jours)===bestDelai;
       return h('tr',null,
         h('td',{style:{fontWeight:'600'}},escHtml(r.nom_transporteur||'—')),
         h('td',null,h('span',{style:{color:sl.c,textDecoration:sl.strike?'line-through':'none'}},sl.t)),
-        h('td',null,r.prix!=null?Number(r.prix).toFixed(2)+' €':'—'),
-        h('td',null,r.delai_jours!=null?'J+'+r.delai_jours:'—'),
+        h('td',null,expeDevisCellValeur(prixTxt,isBestPrix)),
+        h('td',null,expeDevisCellValeur(delTxt,isBestDelai)),
         h('td',{style:{fontSize:'12px',color:'var(--text2)'}},escHtml(r.commentaire||'')),
         h('td',null,...acts)
       );

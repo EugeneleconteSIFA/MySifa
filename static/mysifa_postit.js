@@ -536,7 +536,9 @@
         return buildPostitTaskHtml(p.id, t);
       }).join('') +
       '</div>' +
-      '<div class="postit-footer">' +
+      '<div class="postit-footer" onmousedown="startPostitDrag(event, ' +
+      p.id +
+      ')">' +
       '<button type="button" class="postit-add-task-btn" onclick="addPostitTask(' +
       p.id +
       ')">+ Ajouter</button>' +
@@ -702,6 +704,7 @@
 
   function startPostitDrag(e, id) {
     if (e.button !== 0) return;
+    if (e.target.closest('button, input, textarea, label, a')) return;
     var el = document.querySelector('.postit[data-id="' + id + '"]');
     if (!el || el.classList.contains('is-hidden')) return;
     var rect = el.getBoundingClientRect();

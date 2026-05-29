@@ -378,10 +378,20 @@ def email_accuse_reception(
     return subject, body
 
 
+def _expe_label_transporteur(nom: str | None, email: str | None) -> str:
+    """Libellé affiché : nom du transporteur, email entre parenthèses si distinct."""
+    n = (nom or "").strip()
+    e = (email or "").strip()
+    if n and e and n.lower() != e.lower():
+        return f"{n} ({e})"
+    return n or e or "Transporteur"
+
+
 def email_expe_reponse_recue(
     *,
     demande: dict,
     nom_transporteur: str,
+    email_transporteur: str | None = None,
     prix: float,
     delai_jours: int,
     commentaire: str | None,
@@ -393,15 +403,16 @@ def email_expe_reponse_recue(
     nb_pal = demande.get("nb_palette")
     contraintes = demande.get("contraintes") or ""
     demande_id = demande.get("id")
+    label = _expe_label_transporteur(nom_transporteur, email_transporteur)
 
     prix_s = f"{float(prix):.2f} €"
     delai_s = f"J+{int(delai_jours)}"
 
-    subject = f"[MySifa] Réponse transporteur — Demande #{demande_id} — {nom_transporteur}"
+    subject = f"[MySifa] Réponse transporteur — Demande #{demande_id} — {label}"
     expe_url = f"{public_base_url()}/expe"
     inner = f"""
     <p style="margin:0 0 14px;color:#0f172a">
-      Le transporteur <strong>{_esc(nom_transporteur)}</strong> a répondu à la demande <strong>#{_esc(demande_id)}</strong>.
+      Le transporteur <strong>{_esc(label)}</strong> a répondu à la demande <strong>#{_esc(demande_id)}</strong>.
     </p>
     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;margin:0 0 16px">
       <div style="font-size:13px;color:#64748b;line-height:1.7">

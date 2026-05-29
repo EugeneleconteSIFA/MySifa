@@ -169,7 +169,7 @@ def _find_reponse_row(
     if reponse_id:
         row = conn.execute(
             """
-            SELECT id, statut, destinataire_email, transporteur_id
+            SELECT id, statut, destinataire_email, transporteur_id, nom_transporteur
             FROM expe_devis_reponses
             WHERE id=? AND demande_id=?
             """,
@@ -186,7 +186,7 @@ def _find_reponse_row(
         return d
     row = conn.execute(
         """
-        SELECT id, statut, destinataire_email, transporteur_id
+        SELECT id, statut, destinataire_email, transporteur_id, nom_transporteur
         FROM expe_devis_reponses
         WHERE demande_id=?
           AND (
@@ -353,7 +353,8 @@ def portail_expe_repondre(
                 if to_email:
                     subject, html_body = email_expe_reponse_recue(
                         demande=demande,
-                        nom_transporteur=(acc.get("email") or "Transporteur"),
+                        nom_transporteur=(rep.get("nom_transporteur") or "").strip() or "Transporteur",
+                        email_transporteur=email or None,
                         prix=prix,
                         delai_jours=delai,
                         commentaire=commentaire,
