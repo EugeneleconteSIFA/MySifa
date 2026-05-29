@@ -2560,23 +2560,133 @@ function openMvtModal(produit_id, ref, emplacement, type='entree') {
 
 let emplTimer = null;
 let emplInpRef = null;
-function searchEmplSugg(q, suggWrap) {
+
+async function resolvePfProduitByRef(ref) {
+  const term = String(ref || '').trim();
+  if (!term) return null;
+  const upper = term.toUpperCase();
+  try {
+    const r = await api('/api/stock/search?q=' + encodeURIComponent(term) + '&limit=15');
+    const list = (r && r.produits) ? r.produits : [];
+    let found = list.find(p => String(p.reference || '').toUpperCase() === upper);
+    if (found) return found;
+    if (list.length === 1) return list[0];
+    const rows = await api('/api/stock/produits?q=' + encodeURIComponent(term) + '&limit=15');
+    const arr = Array.isArray(rows) ? rows : [];
+    found = arr.find(p => String(p.reference || '').toUpperCase() === upper);
+    if (found) return found;
+    return arr.length === 1 ? arr[0] : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function wireStockProduitSearch(refInp, suggWrap, onSelect) {
+  let timer = null;
+  const runSearch = async (q) => {
+    if (!q || q.length < 1) {
+      suggWrap.innerHTML = '';
+      return;
+    }
+    try {
+      const r = await api('/api/stock/search?q=' + encodeURIComponent(q) + '&limit=8');
+      const list = (r && r.produits) ? r.produits : [];
+      suggWrap.innerHTML = '';
+      if (!list.length) {
+        suggWrap.appendChild(el('div', { cls: 'empl-sugg-item muted' }, 'Aucun résultat pour « ' + q + ' »'));
+        return;
+      }
+      list.forEach(p => {
+        const label = (p.reference || '') + (p.designation ? ' — ' + p.designation : '');
+        suggWrap.appendChild(el('div', {
+          cls: 'empl-sugg-item',
+          on: { mousedown: (e) => { e.preventDefault(); onSelect(p); } },
+        }, label));
+      });
+    } catch (e) {
+      suggWrap.innerHTML = '';
+    }
+  };
+  refInp.addEventListener('input', () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => runSearch(refInp.value.trim()), 220);
+  });
+  refInp.addEventListener('keydown', async (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const p = await resolvePfProduitByRef(refInp.value);
+    if (p) onSelect(p);
+    else showToast('Référence introuvable.', 'error');
+  });
+  refInp.addEventListener('blur', () => {
+    setTimeout(() => { suggWrap.innerHTML = ''; }, 180);
+  });
+}
+
+function wireStockEmplSearch(emplInp, suggWrap) {
+  let timer = null;
+  const pick = (code) => {
+    emplInp.value = String(code || '').toUpperCase();
+    suggWrap.innerHTML = '';
+  };
+  const renderList = (codes) => {
+    suggWrap.innerHTML = '';
+    if (!codes.length) {
+      suggWrap.appendChild(el('div', { cls: 'empl-sugg-item muted' }, 'Aucun emplacement'));
+      return;
+    }
+    codes.forEach(code => {
+      suggWrap.appendChild(el('div', {
+        cls: 'empl-sugg-item',
+        on: { mousedown: (e) => { e.preventDefault(); pick(code); } },
+      }, stockEmplLabel(code)));
+    });
+  };
+  emplInp.addEventListener('input', () => {
+    emplInp.value = emplInp.value.toUpperCase();
+    const q = emplInp.value.trim();
+    clearTimeout(timer);
+    if (!q) { suggWrap.innerHTML = ''; return; }
+    const local = allPageEmplacementChoices().filter(c => c.includes(q)).slice(0, 10);
+    timer = setTimeout(async () => {
+      try {
+        const r = await api('/api/stock/search?q=' + encodeURIComponent(q) + '&limit=8');
+        const fromApi = (r?.emplacements || []).map(e => e.emplacement);
+        renderList([...new Set([...local, ...fromApi])].slice(0, 12));
+      } catch (e) {
+        renderList(local);
+      }
+    }, 220);
+  });
+  emplInp.addEventListener('blur', () => {
+    setTimeout(() => { suggWrap.innerHTML = ''; }, 180);
+  });
+}
+
+function searchEmplSugg(q, suggWrap, emplInp) {
+  const inp = emplInp || emplInpRef;
+  if (!inp) return;
   clearTimeout(emplTimer);
   if (!q) { suggWrap.innerHTML = ''; return; }
   emplTimer = setTimeout(async () => {
     try {
-      const r = await api('/api/stock/search?q=' + encodeURIComponent(q) + '&limit=6');
-      const list = (r?.emplacements || []).map(e => e.emplacement);
+      const local = allPageEmplacementChoices().filter(c => c.includes(String(q).toUpperCase())).slice(0, 8);
+      const r = await api('/api/stock/search?q=' + encodeURIComponent(q) + '&limit=8');
+      const fromApi = (r?.emplacements || []).map(e => e.emplacement);
+      const list = [...new Set([...local, ...fromApi])].slice(0, 12);
       suggWrap.innerHTML = '';
       list.forEach(emp => {
-        const item = el('div', { cls:'empl-sugg-item', on:{ click: () => {
-          emplInpRef.value = emp;
-          suggWrap.innerHTML = '';
-        }}}, emp);
-        suggWrap.appendChild(item);
+        suggWrap.appendChild(el('div', {
+          cls: 'empl-sugg-item',
+          on: { mousedown: (e) => {
+            e.preventDefault();
+            inp.value = emp;
+            suggWrap.innerHTML = '';
+          }},
+        }, stockEmplLabel(emp)));
       });
-    } catch(e) {}
-  }, 180);
+    } catch (e) {}
+  }, 220);
 }
 
 function buildMvtModal() {
@@ -2603,7 +2713,10 @@ function buildMvtModal() {
   const emplInp = el('input', { cls:'field-input empl-upper', type:'text', placeholder:'Ex: a123, b211…', value: emplacement, style:{direction:'ltr'} });
   emplInpRef = emplInp;
   const suggWrap = el('div', { cls:'empl-suggestions' });
-  emplInp.addEventListener('input', e => { emplInp.value = e.target.value.toUpperCase(); searchEmplSugg(emplInp.value, suggWrap); });
+  emplInp.addEventListener('input', e => {
+    emplInp.value = e.target.value.toUpperCase();
+    searchEmplSugg(emplInp.value, suggWrap, emplInp);
+  });
 
   const qteInp = el('input', { cls:'field-input', type:'number', placeholder:'0', min:'0', inputmode:'numeric', style:{direction:'ltr'} });
 
@@ -4213,28 +4326,21 @@ function buildPfRefPickerField(refInp, desInp, uniteSel, onPick) {
   });
   refInp.setAttribute('list', datalistId);
   const suggWrap = el('div', { cls: 'empl-suggestions' });
+  const applyPick = (c) => {
+    refInp.value = c.reference || '';
+    desInp.value = c.designation || '';
+    if (uniteSel && c.unite) uniteSel.value = c.unite;
+    suggWrap.innerHTML = '';
+    if (onPick) onPick(c);
+  };
   refInp.addEventListener('input', () => {
     const picked = pfCatalogueFind(refInp.value);
     if (picked) {
       desInp.value = picked.designation || '';
       if (uniteSel && picked.unite) uniteSel.value = picked.unite;
     }
-    const list = pfProduitSuggestions(refInp.value);
-    suggWrap.innerHTML = '';
-    list.forEach(c => {
-      suggWrap.appendChild(el('div', {
-        cls: 'empl-sugg-item',
-        on: { mousedown: (e) => {
-          e.preventDefault();
-          refInp.value = c.reference || '';
-          desInp.value = c.designation || '';
-          if (uniteSel && c.unite) uniteSel.value = c.unite;
-          suggWrap.innerHTML = '';
-          if (onPick) onPick(c);
-        } },
-      }, (c.reference || '') + (c.designation ? ' — ' + c.designation : '')));
-    });
   });
+  wireStockProduitSearch(refInp, suggWrap, applyPick);
   return { suggWrap, datalist: dl };
 }
 
@@ -4256,17 +4362,7 @@ function buildPfEmplPickerField(emplInp) {
   });
   emplInp.setAttribute('list', datalistId);
   const suggWrap = el('div', { cls: 'empl-suggestions' });
-  emplInp.addEventListener('input', () => {
-    emplInp.value = emplInp.value.toUpperCase();
-    const list = pfEmplacementChoices(emplInp.value);
-    suggWrap.innerHTML = '';
-    list.forEach(code => {
-      suggWrap.appendChild(el('div', {
-        cls: 'empl-sugg-item',
-        on: { mousedown: (e) => { e.preventDefault(); emplInp.value = code; suggWrap.innerHTML = ''; } },
-      }, code));
-    });
-  });
+  wireStockEmplSearch(emplInp, suggWrap);
   return { suggWrap, datalist: dl };
 }
 
@@ -4903,14 +4999,15 @@ function buildMatieres() {
 function buildMpEmplacementField() {
   const emplInp = el('input', {
     cls: 'field-input empl-upper',
-    attrs: { type: 'text', placeholder: 'Ex: A123, B211…', autocomplete: 'off' },
+    attrs: {
+      type: 'text',
+      placeholder: 'Emplacement (ex. A121, Au sol ' + STOCK_EMPL_AU_SOL + ')…',
+      autocomplete: 'off',
+    },
     style: { direction: 'ltr' },
   });
   const suggWrap = el('div', { cls: 'empl-suggestions' });
-  emplInp.addEventListener('input', e => {
-    emplInp.value = e.target.value.toUpperCase();
-    searchEmplSugg(emplInp.value, suggWrap);
-  });
+  wireStockEmplSearch(emplInp, suggWrap);
   const wrap = el('div', { cls: 'mp-field' },
     el('label', null, 'Emplacement'),
     emplInp,
@@ -5177,8 +5274,6 @@ async function submitMpMouvement() {
   }
 }
 
-let _pfProduitSearchTimer = null;
-
 async function fetchPfStockAtEmpl(produitId, empl) {
   if (!produitId || !empl) return 0;
   try {
@@ -5188,31 +5283,6 @@ async function fetchPfStockAtEmpl(produitId, empl) {
   } catch (e) {
     return 0;
   }
-}
-
-function searchPfProduitSugg(q, suggWrap, onSelect) {
-  clearTimeout(_pfProduitSearchTimer);
-  if (!q || q.length < 1) { suggWrap.innerHTML = ''; return; }
-  _pfProduitSearchTimer = setTimeout(async () => {
-    try {
-      const rows = await api('/api/stock/produits?q=' + encodeURIComponent(q) + '&limit=20');
-      const list = Array.isArray(rows) ? rows : [];
-      suggWrap.innerHTML = '';
-      if (!list.length) {
-        suggWrap.appendChild(el('div', { cls: 'empl-sugg-item muted' }, 'Aucun résultat'));
-        return;
-      }
-      list.forEach(p => {
-        const label = (p.reference || '') + (p.designation ? ' — ' + p.designation : '');
-        suggWrap.appendChild(el('div', {
-          cls: 'empl-sugg-item',
-          on: { mousedown: (e) => { e.preventDefault(); onSelect(p); } },
-        }, label));
-      });
-    } catch (e) {
-      suggWrap.innerHTML = '';
-    }
-  }, 200);
 }
 
 function openModalPfMouvement(type, produit) {
@@ -5226,7 +5296,7 @@ function renderPfMouvementModal(type, produit) {
   const mroot = document.getElementById('mroot');
   if (!mroot) return;
   let prod = produit || null;
-  S.pfModal = { type: typeMvt, produit: prod, produitId: prod ? prod.id : null };
+  S.pfModal = { type: typeMvt, produit: prod, produitId: prod ? prod.id : null, refInp: null };
 
   const overlay = el('div', {
     cls: 'mp-modal-overlay',
@@ -5259,13 +5329,18 @@ function renderPfMouvementModal(type, produit) {
   } else {
     const refInp = el('input', {
       cls: 'field-input',
-      attrs: { type: 'text', placeholder: 'Référence ou désignation…', autocomplete: 'off' },
+      attrs: {
+        type: 'text',
+        placeholder: 'Référence produit (comme la recherche en haut)…',
+        autocomplete: 'off',
+      },
       style: { direction: 'ltr' },
     });
     const suggWrap = el('div', { cls: 'empl-suggestions' });
-    refInp.addEventListener('input', () => searchPfProduitSugg(refInp.value.trim(), suggWrap, (p) => {
+    S.pfModal.refInp = refInp;
+    wireStockProduitSearch(refInp, suggWrap, (p) => {
       renderPfMouvementModal(typeMvt, p);
-    }));
+    });
     body.appendChild(el('div', { cls: 'mp-field' },
       el('label', null, 'Produit fini'),
       refInp,
@@ -5387,6 +5462,16 @@ function renderPfMouvementModal(type, produit) {
 
 async function submitPfMouvement() {
   if (!S.pfModal) return;
+  if (!S.pfModal.produitId) {
+    const refVal = S.pfModal.refInp ? S.pfModal.refInp.value : '';
+    const p = await resolvePfProduitByRef(refVal);
+    if (!p) {
+      showToast('Référence introuvable — sélectionnez un produit dans la liste ou vérifiez la saisie.', 'error');
+      return;
+    }
+    S.pfModal.produitId = p.id;
+    S.pfModal.produit = p;
+  }
   let err = S.pfModal.validate ? S.pfModal.validate() : null;
   if (!err && S.pfModal.type === 'sortie' && S.pfModal.getBody) {
     const b = S.pfModal.getBody();
