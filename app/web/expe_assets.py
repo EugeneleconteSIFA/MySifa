@@ -605,29 +605,33 @@ function expeTrpBadgesCell(badges,cls){
 
 function expeTrpContactCell(tr){
   const emailRaw=(tr.contact_email||'').trim();
+  const isPortail=expeTrpIsPortailUrl(emailRaw);
   const lines=[];
-  if(tr.contact_nom){
-    lines.push(h('div',{className:'expe-trp-contact-line'},iconEl('user',12),' ',escHtml(tr.contact_nom)));
-  }
-  if(tr.contact_tel){
-    lines.push(h('div',{className:'expe-trp-contact-line'},expeTrpIconPhone(12),' ',escHtml(tr.contact_tel)));
-  }
-  if(emailRaw){
-    if(expeTrpIsPortailUrl(emailRaw)){
-      lines.push(h('a',{className:'expe-trp-portail',href:emailRaw,target:'_blank',rel:'noopener',onClick:e=>e.stopPropagation()},
-        iconEl('arrow-right',12),' Portail'));
-    }else{
+  if(isPortail){
+    const label=(tr.contact_nom||'').trim()||'Portail';
+    lines.push(h('a',{className:'expe-trp-portail',href:emailRaw,target:'_blank',rel:'noopener',onClick:e=>e.stopPropagation()},
+      escHtml(label)));
+    if(tr.contact_tel){
+      lines.push(h('div',{className:'expe-trp-contact-line'},expeTrpIconPhone(12),' ',escHtml(tr.contact_tel)));
+    }
+  }else{
+    if(tr.contact_nom){
+      lines.push(h('div',{className:'expe-trp-contact-line'},iconEl('user',12),' ',escHtml(tr.contact_nom)));
+    }
+    if(tr.contact_tel){
+      lines.push(h('div',{className:'expe-trp-contact-line'},expeTrpIconPhone(12),' ',escHtml(tr.contact_tel)));
+    }
+    if(emailRaw){
       lines.push(h('a',{className:'expe-trp-contact-line',href:'mailto:'+encodeURIComponent(emailRaw),onClick:e=>e.stopPropagation()},
         iconEl('mail',12),' ',escHtml(emailRaw)));
     }
   }
   if(!lines.length)return h('span',{style:{color:'var(--muted)'}},'—');
   const kids=[...lines];
-  if(emailRaw||tr.contact_tel){
+  if(!isPortail&&(emailRaw||tr.contact_tel)){
     kids.push(h('button',{type:'button',className:'btn-ghost',style:{marginTop:'4px',padding:'4px 8px',fontSize:'11px'},
       onClick:()=>expeTrpOpenContact(tr)},
-      iconEl(expeTrpIsPortailUrl(emailRaw)?'arrow-right':'mail',12),
-      ' ',expeTrpIsPortailUrl(emailRaw)?'Portail':'Contacter'));
+      iconEl('mail',12),' Contacter'));
   }
   return h('div',{className:'expe-trp-contact-col'},...kids);
 }
@@ -860,12 +864,23 @@ function renderExpeTransporteurs(){
 EXPE_COMPARATEUR_CSS = r"""
 /* ── MyExpé — comparateur tarifs (API) ── */
 .expe-cmp-wrap{max-width:640px}
-.expe-cmp-title{font-size:15px;font-weight:700;color:var(--text);margin:0 0 20px}
-.expe-cmp-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.expe-cmp-title{font-size:15px;font-weight:700;color:var(--text);margin:0 0 14px}
+.expe-cmp-form{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin-bottom:4px}
+.expe-cmp-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 12px;margin-bottom:16px}
 @media(max-width:520px){.expe-cmp-grid{grid-template-columns:1fr}}
 .expe-cmp-label{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text2)}
-.expe-cmp-inp{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 16px;color:var(--text);font-size:14px;font-family:inherit;outline:none;width:100%}
-.expe-cmp-inp:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 12%,transparent)}
+.expe-cmp-inp{background:color-mix(in srgb,var(--bg) 88%,var(--card));border:1px solid var(--border);border-radius:10px;
+  padding:12px 16px;color:var(--text);font-size:14px;font-family:inherit;outline:none;width:100%;
+  transition:border-color .15s,box-shadow .15s,background .15s}
+.expe-cmp-inp:hover{background:color-mix(in srgb,var(--bg) 72%,var(--card));border-color:color-mix(in srgb,var(--accent) 25%,var(--border))}
+.expe-cmp-inp:focus{background:var(--bg);border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 12%,transparent)}
+.expe-cmp-inp:is(select){cursor:pointer;appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 14px center;padding-right:40px}
+body.light .expe-cmp-inp{background:var(--bg)}
+body.light .expe-cmp-inp:hover{background:color-mix(in srgb,var(--bg) 94%,var(--border))}
+body.light .expe-cmp-inp:focus{background:var(--card)}
+.expe-cmp-form-actions{display:flex;justify-content:flex-start}
 .expe-cmp-btn{background:var(--accent);color:var(--bg);border:none;border-radius:10px;padding:12px 24px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit}
 .expe-cmp-btn:hover:not(:disabled){filter:brightness(1.05)}
 .expe-cmp-btn:disabled{opacity:.5;cursor:not-allowed}
@@ -992,8 +1007,10 @@ function renderExpeComparateurTarifs(){
   typeSel.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();void lancerComparateur();}});
   const wrap=h('div',{id:'section-comparateur',className:'expe-cmp-wrap'},
     h('h2',{className:'expe-cmp-title'},'Comparer les transporteurs'),
-    grid,
-    btn,
+    h('div',{className:'expe-cmp-form'},
+      grid,
+      h('div',{className:'expe-cmp-form-actions'},btn)
+    ),
     h('div',{id:'cmp-resultats',className:'expe-cmp-results'})
   );
   return wrap;
@@ -1523,7 +1540,8 @@ function renderExpeProspectsSection(){
   );
   const tbody=rows.length?rows.map(p=>{
     const s=LABELS[p.statut_demarchage]||{label:p.statut_demarchage,color:'var(--muted)'};
-    return h('tr',null,
+    const rowCls=p.statut_demarchage==='ecarte'?'expe-prospect-ecarte':'';
+    return h('tr',{className:rowCls},
       h('td',{style:{fontWeight:'600'}},escHtml(p.nom)),
       h('td',null,escHtml(p.zone_couverte||'—')),
       h('td',null,escHtml(p.type_service||'—')),
@@ -1535,8 +1553,8 @@ function renderExpeProspectsSection(){
   }):[h('tr',null,h('td',{colSpan:7,style:{color:'var(--muted)',fontStyle:'italic'}},'Aucun prospect.'))];
   return h('div',{id:'section-prospects'},
     head,
-    h('div',{className:'expe-devis-table-wrap'},
-      h('table',{className:'table-std'},h('thead',null,thead),h('tbody',null,...tbody))
+    h('div',{className:'expe-prospects-table-wrap'},
+      h('table',{className:'table-std expe-prospects-table'},h('thead',null,thead),h('tbody',null,...tbody))
     )
   );
 }
@@ -1571,6 +1589,39 @@ EXPE_DEVIS_CSS = r"""
 .expe-devis-pill.ok{background:color-mix(in srgb,var(--success) 15%,transparent);color:var(--success)}
 .expe-devis-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:10px}
 .expe-devis-table-wrap table.table-std{margin:0;font-size:13px}
+.expe-prospects-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;background:var(--card)}
+.expe-prospects-table-wrap table.expe-prospects-table{margin:0;font-size:13px}
+.expe-prospects-table-wrap .expe-prospects-table th{
+  background:color-mix(in srgb,var(--bg) 50%,var(--card));
+  border-bottom:1px solid var(--border);
+  padding:10px 14px;
+}
+.expe-prospects-table-wrap .expe-prospects-table td{
+  padding:10px 14px;
+  border-bottom:1px solid color-mix(in srgb,var(--border) 65%,transparent);
+  vertical-align:middle;
+  color:var(--text);
+}
+.expe-prospects-table tbody tr:nth-child(even) td{
+  background:color-mix(in srgb,var(--muted) 7%,transparent);
+}
+.expe-prospects-table tbody tr:hover td{
+  background:color-mix(in srgb,var(--accent) 11%,transparent);
+}
+.expe-prospects-table tbody tr.expe-prospect-ecarte td{
+  color:var(--text2);
+  background:color-mix(in srgb,var(--muted) 5%,transparent);
+}
+.expe-prospects-table tbody tr.expe-prospect-ecarte:nth-child(even) td{
+  background:color-mix(in srgb,var(--muted) 10%,transparent);
+}
+.expe-prospects-table tbody tr:last-child td{border-bottom:none}
+body.light .expe-prospects-table tbody tr:nth-child(even) td{
+  background:color-mix(in srgb,var(--border) 40%,var(--card));
+}
+body.light .expe-prospects-table tbody tr:hover td{
+  background:color-mix(in srgb,var(--accent) 9%,var(--card));
+}
 .expe-devis-envoi-list{max-height:320px;overflow-y:auto;margin-bottom:12px}
 .expe-devis-envoi-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer;font-size:13px}
 .expe-devis-envoi-sep{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:12px 0 4px}
