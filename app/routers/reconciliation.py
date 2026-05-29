@@ -21,9 +21,9 @@ _PARIS = ZoneInfo("Europe/Paris")
 
 # Alias normalisés (minuscules, espaces unifiés) — correspondance exacte ou préfixe
 _ERP_COL_ALIASES: dict[str, tuple[str, ...]] = {
-    "code1": ("code 1", "code1"),
-    "code2": ("code 2", "code2"),
-    "stock": ("stock réel", "stock reel", "stock réel pf", "stock pf"),
+    "code1": ("code 1", "code1", "code article", "référence", "ref", "article"),
+    "code2": ("code 2", "code2", "désignation", "libellé", "libelle"),
+    "stock": ("stock réel", "stock reel", "stock réel pf", "stock pf", "quantité", "qte", "stock"),
     "designation": (
         "désignation produit",
         "designation produit",
@@ -371,15 +371,17 @@ def _diagnose_erp_workbook(contents: bytes) -> dict:
 
     err_parts = []
     if best:
-        err_parts.append(
-            "Colonnes manquantes : " + ", ".join(best.get("missing") or [])
-        )
+        sheet_name = best.get("name", "inconnue")
+        missing_cols = ", ".join(best.get("missing") or [])
+        err_parts.append(f"Feuille analysée : {sheet_name}")
+        if missing_cols:
+            err_parts.append(f"Colonnes manquantes : {missing_cols}")
         if best.get("headers"):
-            err_parts.append(
-                "En-têtes : " + " | ".join(best["headers"][:15])
-            )
+            found_cols = " | ".join(best["headers"][:15])
+            err_parts.append(f"Colonnes trouvées : {found_cols}")
+        err_parts.append("Vérifiez que le fichier est bien l'export Table Stocks ERP (.xlsx).")
     else:
-        err_parts.append("Aucune feuille avec données.")
+        err_parts.append("Aucune feuille avec données reconnue.")
 
     return {
         "ok": False,

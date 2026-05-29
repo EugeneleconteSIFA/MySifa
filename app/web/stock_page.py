@@ -7516,7 +7516,7 @@ async function monitoringImportFile(file) {
     showToast(msg.length > 220 ? msg.slice(0, 217) + '…' : msg, 'error');
     S.toast = { message: msg, type: 'error' };
     renderToast();
-    setTimeout(() => { S.toast = null; renderToast(); }, 8000);
+    setTimeout(() => { S.toast = null; renderToast(); }, 10000);
   } finally {
     m.importing = false;
     renderMonitoringView(true);

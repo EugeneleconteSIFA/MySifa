@@ -270,7 +270,7 @@ label.lbl{{
     <div class="hdr-brand"><strong>MySifa</strong><br><span id="i18n-subtitle">Portail fournisseur</span></div>
     <div class="hdr-actions" style="flex-direction:column;align-items:flex-end">
       <div class="hdr-actions">
-        <a class="btn btn-ghost" id="link-mes-demandes" href="/portail/ao/{_esc(token)}/mes-demandes" style="font-size:12px;padding:8px 12px">Mes demandes</a>
+        <a class="btn btn-ghost" id="link-mes-demandes" href="/portail/ao/{_esc(token)}/mes-demandes" style="font-size:12px;padding:8px 12px">Toutes mes demandes</a>
         <button type="button" class="lang-btn" id="langBtn" title="English" aria-label="English"></button>
         <button type="button" class="theme-btn" id="themeBtn" title="Thème clair / sombre" aria-label="Thème clair / sombre"></button>
       </div>
