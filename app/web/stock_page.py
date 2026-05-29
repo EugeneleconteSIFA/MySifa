@@ -64,13 +64,13 @@ STOCK_HTML = r"""<!DOCTYPE html>
 :root{
   --bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;
   --muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,.12);
-  --success:#34d399;--warn:#fbbf24;--danger:#f87171;--c2:#a78bfa;
+  --success:#34d399;--warn:#fbbf24;--danger:#f87171;--c2:#a78bfa;--violet:#8b5cf6;
   --pf-entree:#059669;--pf-sortie:#dc2626;
 }
 body.light{
   --bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;
   --muted:#94a3b8;--accent:#0891b2;--accent-bg:rgba(8,145,178,.10);
-  --success:#059669;--warn:#d97706;--danger:#dc2626;--c2:#7c3aed;
+  --success:#059669;--warn:#d97706;--danger:#dc2626;--c2:#7c3aed;--violet:#8b5cf6;
   --pf-entree:#047857;--pf-sortie:#b91c1c;
 }
 html,body{height:100%}
@@ -386,6 +386,11 @@ body.light .btn.btn-accent{color:#fff}
   background:rgba(251,191,36,.08);color:var(--warn);cursor:pointer;flex-shrink:0;transition:border-color .15s,background .15s}
 .empl-lot-exp-btn:hover{border-color:var(--warn);background:rgba(251,191,36,.14)}
 body.light .empl-lot-exp-btn{border-color:rgba(217,119,6,.35);background:rgba(251,191,36,.1)}
+.empl-lot-move-btn{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;padding:0;
+  border-radius:10px;border:1px solid rgba(139,92,246,.4);
+  background:rgba(139,92,246,.08);color:#8b5cf6;cursor:pointer;flex-shrink:0;transition:border-color .15s,background .15s}
+.empl-lot-move-btn:hover{border-color:#8b5cf6;background:rgba(139,92,246,.14)}
+body.light .empl-lot-move-btn{border-color:rgba(124,58,237,.35);background:rgba(139,92,246,.1)}
 
 /* ── Action bar ── */
 .action-bar{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
@@ -1559,6 +1564,7 @@ function icon(name, size=16){
     'settings': '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
     'tag': '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>',
     'chevron-right': '<polyline points="9 18 15 12 9 6"/>',
+    'move': '<polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/>',
     'atelier': '<path d="M2 20h20"/><path d="M4 20V10l8-6 8 6v10"/><path d="M9 20v-5h6v5"/><path d="M10 10h4"/><path d="M12 10v5"/>',
     'scan': '<rect x="3" y="3" width="5" height="5"/><rect x="16" y="3" width="5" height="5"/><rect x="3" y="16" width="5" height="5"/><line x1="21" y1="16" x2="21" y2="21"/><line x1="16" y1="21" x2="21" y2="21"/><line x1="11" y1="3" x2="11" y2="7"/><line x1="11" y1="11" x2="11" y2="17"/><line x1="3" y1="11" x2="7" y2="11"/><line x1="11" y1="11" x2="17" y2="11"/>',
     'inbox': '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
@@ -1865,12 +1871,166 @@ function buildLotOutBtn(produitId, emplacement, row) {
   }, iconEl('trash-2', 18));
 }
 
+function buildLotMoveBtn(produitId, emplacement, row) {
+  const qLot = row.quantite_lot_fifo != null ? row.quantite_lot_fifo : row.quantite;
+  const unite = row.unite || (S.selProduit && S.selProduit.produit && S.selProduit.produit.unite) || '';
+  const refLabel = row.reference || (S.selProduit && S.selProduit.produit && S.selProduit.produit.reference) || '';
+  return el('button', {
+    cls: 'empl-lot-move-btn',
+    type: 'button',
+    attrs: { title: 'Déplacer le lot', 'aria-label': 'Déplacer le lot' },
+    on: { click: (ev) => {
+      ev.stopPropagation();
+      openMoveLotModal(produitId, emplacement, qLot, unite, refLabel, row.nb_lots);
+    }},
+  }, iconEl('move', 18));
+}
+
 function buildLotActionBtns(produitId, emplacement, row) {
   if (S.stockReadOnly) return null;
   return el('div', { cls: 'empl-lot-actions' },
     buildLotTransporteurBtn(produitId, emplacement, row),
     buildLotOutBtn(produitId, emplacement, row),
+    buildLotMoveBtn(produitId, emplacement, row),
   );
+}
+
+async function openMoveLotModal(produitId, emplacement, qLot, unite, refLabel, nbLots) {
+  document.querySelector('.modal-overlay')?.remove();
+  
+  const qLabel = fU(qLot, unite || '');
+  const locLbl = stockEmplLabel(emplacement);
+  const loc = refLabel ? (refLabel + ' · ' + locLbl) : locLbl;
+  
+  const overlay = el('div', { cls:'modal-overlay', on:{ click: e => { if(e.target===overlay) closeMroot(); }}});
+  const sheet = el('div', { cls:'modal-sheet', style: { maxWidth: '480px' } });
+  sheet.addEventListener('click', e => e.stopPropagation());
+  
+  // Destination emplacement input with suggestions
+  const destEmplInp = el('input', { 
+    cls:'field-input', 
+    type:'text', 
+    placeholder:'Emplacement destination (ex. A001)', 
+    autocomplete:'off',
+    style:{direction:'ltr', textTransform:'uppercase'}
+  });
+  const suggWrap = el('div', { cls:'empl-suggestions', style:{position:'absolute', top:'100%', left:'0', right:'0', zIndex:'120'} });
+  const destError = el('div', { cls:'field-error', style:{color:'var(--danger)',fontSize:'12px',marginTop:'4px',display:'none'} });
+  
+  let destTimer = null;
+  let selectedDestEmpl = null;
+  
+  destEmplInp.addEventListener('input', () => {
+    selectedDestEmpl = null;
+    destError.style.display = 'none';
+    clearTimeout(destTimer);
+    const q = destEmpl.value.trim().toUpperCase();
+    if (!q) { suggWrap.innerHTML = ''; suggWrap.style.display = 'none'; return; }
+    destTimer = setTimeout(() => {
+      const empls = getStockEmplacements();
+      const filtered = empls.filter(e => e.includes(q)).slice(0, 8);
+      suggWrap.innerHTML = '';
+      if (!filtered.length) { suggWrap.style.display = 'none'; return; }
+      filtered.forEach(code => {
+        const row = el('div', { cls:'empl-suggest-item' + (isStockEmplacementAuSol(code) ? ' empl-suggest-au-sol' : ''),
+          on:{ click: () => {
+            destEmplInp.value = code;
+            selectedDestEmpl = code;
+            suggWrap.innerHTML = '';
+            suggWrap.style.display = 'none';
+          }}
+        }, isStockEmplacementAuSol(code) ? (STOCK_EMPL_AU_SOL_LABEL + ' — stock à expédier') : code);
+        suggWrap.appendChild(row);
+      });
+      suggWrap.style.display = '';
+    }, 150);
+  });
+  
+  const confirmBtn = el('button', { 
+    cls:'btn-confirm', 
+    style:{background:'var(--violet)', color:'#fff'},
+    on:{ click: async () => {
+      const destEmpl = (destEmplInp.value.trim().toUpperCase() || selectedDestEmpl);
+      if (!destEmpl) { showToast('Emplacement destination requis', 'error'); return; }
+      if (destEmpl === emplacement) { showToast('Même emplacement que la source', 'error'); return; }
+      
+      // Confirmation modal
+      const confirmOverlay = el('div', { cls:'modal-overlay', on:{ click: e => { if(e.target===confirmOverlay) closeMroot(); }}});
+      const confirmSheet = el('div', { cls:'modal-sheet', style: { maxWidth: '420px' } });
+      confirmSheet.addEventListener('click', e => e.stopPropagation());
+      
+      const qtyHighlight = el('span', { style:{fontWeight:'800', fontSize:'18px', color:'var(--violet)'} }, qLabel);
+      const destHighlight = el('span', { style:{fontWeight:'700', color:'var(--violet)'} }, stockEmplLabel(destEmpl));
+      
+      confirmSheet.appendChild(el('div', { cls:'modal-title' }, 'Confirmer le déplacement'));
+      confirmSheet.appendChild(el('div', { cls:'modal-sub' }, 
+        'Déplacer ', qtyHighlight, ' vers ', destHighlight, ' ?'
+      ));
+      if (nbLots > 1) {
+        confirmSheet.appendChild(el('div', { cls:'mp-hint', style:{marginTop:'8px'} }, 
+          nbLots + ' lots actifs à cet emplacement — seul le plus ancien sera déplacé.'
+        ));
+      }
+      
+      confirmSheet.appendChild(el('div', { cls:'modal-actions', style:{marginTop:'20px'} },
+        el('button', { cls:'btn-cancel', type:'button', on:{ click:() => closeMroot() } }, 'Annuler'),
+        el('button', { 
+          cls:'btn-confirm', 
+          style:{background:'var(--violet)', color:'#fff'},
+          on:{ click: async () => {
+            try {
+              const r = await api('/api/stock/deplacer-lot', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  produit_id: produitId,
+                  emplacement_source: emplacement,
+                  emplacement_destination: destEmpl,
+                }),
+              });
+              if (!r) return;
+              showToast('Lot déplacé — stock : ' + fN(r.quantite_apres));
+              closeMroot();
+              if (S.selProduit) await loadProduit(S.selProduit.produit.id);
+              else if (S.selEmpl) await loadEmplacement(S.selEmpl.emplacement);
+              else if (S.tab === 'produits-finis') await loadProduitsFinis();
+              else if (S.tab === 'dashboard') await loadDashboard();
+            } catch (e) { showToast(e.message, 'error'); }
+          }}
+        }, 'Faire le déplacement')
+      ));
+      
+      confirmOverlay.appendChild(confirmSheet);
+      document.body.appendChild(confirmOverlay);
+    }}
+  }, 'Déplacer');
+  
+  const destField = el('div', { cls:'modal-field', style:{position:'relative'} },
+    el('label', { cls:'field-label' }, 'Emplacement destination'),
+    destEmplInp,
+    suggWrap,
+    destError
+  );
+  
+  sheet.appendChild(el('div', { cls:'modal-title' }, 'Déplacer le lot'));
+  sheet.appendChild(el('div', { cls:'modal-sub' }, 
+    'Déplacer ', el('span', { style:{fontWeight:'700', fontSize:'16px', color:'var(--violet)'} }, qLabel), 
+    ' depuis ', el('span', { style:{fontWeight:'600'} }, loc)
+  ));
+  if (nbLots > 1) {
+    sheet.appendChild(el('div', { cls:'mp-hint', style:{marginTop:'8px'} }, 
+      nbLots + ' lots actifs à cet emplacement — seul le plus ancien sera déplacé.'
+    ));
+  }
+  sheet.appendChild(destField);
+  sheet.appendChild(el('div', { cls:'modal-actions', style:{marginTop:'20px'} },
+    el('button', { cls:'btn-cancel', type:'button', on:{ click:() => closeMroot() } }, 'Annuler'),
+    confirmBtn
+  ));
+  
+  overlay.appendChild(sheet);
+  document.body.appendChild(overlay);
+  destEmplInp.focus();
 }
 
 async function sortirLot(produitId, emplacement, qLot, unite, refLabel, nbLots, opts) {

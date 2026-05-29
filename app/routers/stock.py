@@ -383,6 +383,101 @@ def sortir_lot_fifo(
     return {**result, "quantite_sortie": qte_lot}
 
 
+def deplacer_lot_fifo(
+    conn,
+    produit_id: int,
+    emplacement_source: str,
+    emplacement_destination: str,
+    user_email: str,
+    user_name: Optional[str] = None,
+) -> dict:
+    """Déplace le lot FIFO le plus ancien d'un emplacement vers un autre."""
+    # Récupérer le lot FIFO source
+    lot = conn.execute(
+        """SELECT id, quantite_restante, date_entree
+           FROM lots_stock
+           WHERE produit_id=? AND emplacement=? AND quantite_restante > 0
+           ORDER BY date_entree ASC LIMIT 1""",
+        (produit_id, emplacement_source),
+    ).fetchone()
+    if not lot:
+        raise HTTPException(404, "Aucun lot actif à l'emplacement source")
+    
+    qte_lot = float(lot["quantite_restante"])
+    lot_id = lot["id"]
+    date_entree = lot["date_entree"]
+    now = datetime.now().isoformat()
+    
+    # Quantité avant le déplacement
+    quantite_avant_source = qte_lot
+    
+    # Mettre à jour le lot source (quantite_restante = 0)
+    conn.execute(
+        "UPDATE lots_stock SET quantite_restante=? WHERE id=?",
+        (0, lot_id),
+    )
+    
+    # Créer un nouveau lot à la destination
+    cursor = conn.execute(
+        """INSERT INTO lots_stock (produit_id, emplacement, quantite_restante, date_entree, created_at)
+           VALUES (?, ?, ?, ?, ?)""",
+        (produit_id, emplacement_destination, qte_lot, date_entree, now),
+    )
+    
+    # Mettre à jour stock_emplacements pour la source
+    conn.execute(
+        """UPDATE stock_emplacements
+           SET quantite=?, updated_at=?, updated_by=?, commentaire='Déplacement vers ' || ?
+           WHERE produit_id=? AND emplacement=?""",
+        (0, now, user_email, emplacement_destination, produit_id, emplacement_source),
+    )
+    
+    # Mettre à jour ou créer stock_emplacements pour la destination
+    existing_dest = conn.execute(
+        "SELECT quantite FROM stock_emplacements WHERE produit_id=? AND emplacement=?",
+        (produit_id, emplacement_destination),
+    ).fetchone()
+    
+    if existing_dest:
+        quantite_apres_dest = float(existing_dest["quantite"]) + qte_lot
+        conn.execute(
+            """UPDATE stock_emplacements
+               SET quantite=?, updated_at=?, updated_by=?, commentaire='Déplacement depuis ' || ?
+               WHERE produit_id=? AND emplacement=?""",
+            (quantite_apres_dest, now, user_email, emplacement_source, produit_id, emplacement_destination),
+        )
+    else:
+        quantite_apres_dest = qte_lot
+        conn.execute(
+            """INSERT INTO stock_emplacements (produit_id, emplacement, quantite, updated_at, updated_by, commentaire)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (produit_id, emplacement_destination, quantite_apres_dest, now, user_email, f'Déplacement depuis {emplacement_source}'),
+        )
+    
+    # Historique : sortie de la source
+    conn.execute(
+        """INSERT INTO mouvements_stock
+           (produit_id,emplacement,type_mouvement,quantite,quantite_avant,quantite_apres,note,created_at,created_by,created_by_name)
+           VALUES (?,?,?,?,?,?,?,?,?,?)""",
+        (produit_id, emplacement_source, "sortie", qte_lot, quantite_avant_source, 0, f"Déplacement vers {emplacement_destination}", now, user_email, user_name),
+    )
+    
+    # Historique : entrée à la destination
+    quantite_avant_dest = quantite_apres_dest - qte_lot
+    conn.execute(
+        """INSERT INTO mouvements_stock
+           (produit_id,emplacement,type_mouvement,quantite,quantite_avant,quantite_apres,note,created_at,created_by,created_by_name)
+           VALUES (?,?,?,?,?,?,?,?,?,?)""",
+        (produit_id, emplacement_destination, "entree", qte_lot, quantite_avant_dest, quantite_apres_dest, f"Déplacement depuis {emplacement_source}", now, user_email, user_name),
+    )
+    
+    return {
+        "quantite_avant": quantite_avant_source,
+        "quantite_apres": 0,
+        "quantite_deplacee": qte_lot,
+    }
+
+
 # ── Recherche instantanée ─────────────────────────────────────────
 @router.get("/api/stock/search")
 def search(request: Request, q: str = "", limit: int = 12):
@@ -1117,6 +1212,49 @@ async def api_sortir_lot(request: Request):
         module="stock",
         objet=f"Sortie lot FIFO · {ref_audit} · {emplacement} · {result['quantite_sortie']}",
         detail={"emplacement": emplacement, "quantite": result["quantite_sortie"]},
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True, **result}
+
+
+@router.post("/api/stock/deplacer-lot")
+async def api_deplacer_lot(request: Request):
+    """Déplace le lot FIFO le plus ancien d'un emplacement vers un autre."""
+    user = require_stock_write(request)
+    body = await request.json()
+    produit_id = body.get("produit_id")
+    emplacement_source = (body.get("emplacement_source") or "").strip().upper()
+    emplacement_destination = (body.get("emplacement_destination") or "").strip().upper()
+
+    if not produit_id or not emplacement_source or not emplacement_destination:
+        raise HTTPException(400, "produit_id, emplacement_source et emplacement_destination obligatoires")
+    if not _is_valid_emplacement(emplacement_source):
+        raise HTTPException(400, f"Format emplacement source invalide : {emplacement_source}")
+    if not _is_valid_emplacement(emplacement_destination):
+        raise HTTPException(400, f"Format emplacement destination invalide : {emplacement_destination}")
+    if emplacement_source == emplacement_destination:
+        raise HTTPException(400, "Les emplacements source et destination doivent être différents")
+
+    with get_db() as conn:
+        created_by_name = _resolve_created_by_name(conn, user)
+        p = conn.execute(
+            "SELECT id, reference FROM produits WHERE id=?", (produit_id,)
+        ).fetchone()
+        if not p:
+            raise HTTPException(404, "Produit non trouvé")
+        ref_audit = p["reference"] or ""
+
+        result = deplacer_lot_fifo(
+            conn, int(produit_id), emplacement_source, emplacement_destination, user["email"], created_by_name
+        )
+        conn.commit()
+
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="stock",
+        objet=f"Déplacement lot · {ref_audit} · {emplacement_source} → {emplacement_destination} · {result['quantite_deplacee']}",
+        detail={"emplacement_source": emplacement_source, "emplacement_destination": emplacement_destination, "quantite": result["quantite_deplacee"]},
         ip=request.client.host if request.client else None,
     )
     return {"success": True, **result}

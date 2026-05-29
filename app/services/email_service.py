@@ -128,8 +128,8 @@ _EMAIL_FLAG_GB = (
 def _email_lang_picker_html() -> str:
     """Sélecteur FR/EN (radios + CSS — clients mail modernes)."""
     return f"""
-    <input type="radio" name="mysifa-lang" id="mysifa-lang-fr" checked style="display:none!important">
-    <input type="radio" name="mysifa-lang" id="mysifa-lang-en" style="display:none!important">
+    <input type="radio" name="mysifa-lang" id="mysifa-lang-fr" style="display:none!important">
+    <input type="radio" name="mysifa-lang" id="mysifa-lang-en" checked style="display:none!important">
     <div style="text-align:center;margin:0 0 18px">
       <div style="font-size:11px;color:#94a3b8;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px;font-weight:600">
         Langue / Language
@@ -138,9 +138,9 @@ def _email_lang_picker_html() -> str:
       <label for="mysifa-lang-en" style="cursor:pointer;margin:0 8px;display:inline-block;vertical-align:middle" title="English">{_EMAIL_FLAG_GB}</label>
     </div>
     <style type="text/css">
-      .mysifa-em-en {{ display:none !important; }}
-      #mysifa-lang-en:checked ~ .mysifa-em-fr {{ display:none !important; }}
-      #mysifa-lang-en:checked ~ .mysifa-em-en {{ display:block !important; }}
+      .mysifa-em-fr {{ display:none !important; }}
+      #mysifa-lang-fr:checked ~ .mysifa-em-en {{ display:none !important; }}
+      #mysifa-lang-fr:checked ~ .mysifa-em-fr {{ display:block !important; }}
     </style>"""
 
 
@@ -245,73 +245,143 @@ def email_expe_rfq_transport(
     return subject, body
 
 
-def email_invitation_ao(
+def _ao_invitation_email_strings(lang: str, *, reference: str, titre: str, nom: str) -> dict[str, str]:
+    """Textes email invitation AO (FR/EN)."""
+    if lang == "en":
+        return {
+            "subtitle": "Quote request",
+            "hello": f"Hello {_esc(nom)},",
+            "intro": (
+                f"You are invited to submit a quote for the request <strong>{_esc(reference)}</strong> "
+                f"— {_esc(titre)}."
+            ),
+            "th_ref": "Ref.",
+            "th_qty": "Label qty",
+            "th_labels_roll": "Labels / roll",
+            "no_lines": "No line items for now.",
+            "deadline": f"Deadline: <strong>{_esc(lang)}</strong>",
+            "cta": "Access quote request",
+            "footer": "This link is personal and secure. Do not share it.",
+            "subject": f"[MySifa] Quote request — {reference} — {titre}",
+        }
+    return {
+        "subtitle": "Demande de prix",
+        "hello": f"Bonjour {_esc(nom)},",
+        "intro": (
+            f"Vous êtes invité à soumettre une offre pour la demande de prix "
+            f"<strong>{_esc(reference)}</strong> — {_esc(titre)}."
+        ),
+        "th_ref": "Réf.",
+        "th_qty": "Qté étiquettes",
+        "th_labels_roll": "Étiq. / bobine",
+        "no_lines": "Aucune ligne détaillée pour le moment.",
+        "deadline": f"Date limite de réponse : <strong>{_esc(lang)}</strong>",
+        "cta": "Accéder à la demande de prix",
+        "footer": "Ce lien est personnel et sécurisé. Ne le partagez pas.",
+        "subject": f"[MySifa] Demande de prix — {reference} — {titre}",
+    }
+
+
+def _ao_invitation_email_body_block(
+    *,
     ao: dict,
     fournisseur: dict,
-    lien_portail: str,
     lignes: list[dict],
-) -> tuple[str, str]:
-    """Sujet et corps HTML pour l'invitation fournisseur à répondre à un AO."""
+    lang: str,
+    lien_portail: str,
+) -> str:
     reference = ao.get("reference") or ""
     titre = ao.get("titre") or ""
     nom = fournisseur.get("nom_fournisseur") or ""
     date_limite = ao.get("date_limite") or ""
+    s = _ao_invitation_email_strings(lang, reference=reference, titre=titre, nom=nom)
 
     rows_html = ""
     for ln in lignes:
+        labels_roll = ln.get("etiquettes_par_bobine")
+        labels_roll_str = str(labels_roll) if labels_roll is not None else "—"
         rows_html += (
             f"<tr>"
             f"<td style=\"padding:8px 12px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#0f172a\">{_esc(ln.get('ref_produit'))}</td>"
-            f"<td style=\"padding:8px 12px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#475569\">{_esc(ln.get('designation'))}</td>"
             f"<td style=\"padding:8px 12px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#475569;text-align:right\">{_esc(ln.get('quantite'))} {_esc(ln.get('unite') or '')}</td>"
+            f"<td style=\"padding:8px 12px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#475569\">{_esc(labels_roll_str)}</td>"
             f"</tr>"
         )
     if not rows_html:
         rows_html = (
-            "<tr><td colspan=\"3\" style=\"padding:12px;font-size:13px;color:#94a3b8\">"
-            "Aucune ligne détaillée pour le moment.</td></tr>"
+            f"<tr><td colspan=\"3\" style=\"padding:12px;font-size:13px;color:#94a3b8\">"
+            f"{s['no_lines']}</td></tr>"
         )
 
     limite_block = ""
     if date_limite:
         limite_block = (
             f"<p style=\"margin:0 0 24px;font-size:13px;color:#475569\">"
-            f"Date limite de réponse : <strong>{_esc(date_limite)}</strong></p>"
+            f"{s['deadline'].replace(lang, date_limite)}</p>"
         )
 
-    subject = f"[MySifa] Demande de prix — {reference} — {titre}"
-    body = f"""<div style="font-family:'Segoe UI',system-ui,sans-serif;max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
-  <div style="background:#0a0e17;padding:24px 32px">
-    <div style="font-size:20px;font-weight:700;color:#22d3ee;letter-spacing:-0.5px">MySifa</div>
-    <div style="font-size:13px;color:#94a3b8;margin-top:4px">Demande de prix</div>
-  </div>
-  <div style="padding:32px">
-    <p style="margin:0 0 16px;font-size:14px;color:#0f172a">Bonjour {_esc(nom)},</p>
-    <p style="margin:0 0 24px;font-size:14px;color:#475569;line-height:1.6">
-      Vous êtes invité à soumettre une offre pour la demande de prix <strong>{_esc(reference)}</strong> — {_esc(titre)}.
-    </p>
+    return f"""
+    <p style="margin:0 0 16px;font-size:14px;color:#0f172a;font-weight:600">{s['hello']}</p>
+    <p style="margin:0 0 24px;font-size:14px;color:#475569;line-height:1.65">{s['intro']}</p>
     <table style="width:100%;border-collapse:collapse;margin:0 0 24px">
       <thead>
         <tr style="background:#f1f5f9">
-          <th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#64748b">Réf.</th>
-          <th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#64748b">Désignation</th>
-          <th style="padding:8px 12px;text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#64748b">Quantité</th>
+          <th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#64748b">{s['th_ref']}</th>
+          <th style="padding:8px 12px;text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#64748b">{s['th_qty']}</th>
+          <th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#64748b">{s['th_labels_roll']}</th>
         </tr>
       </thead>
       <tbody>{rows_html}</tbody>
     </table>
     {limite_block}
-    <div style="margin:32px 0;text-align:center">
-      <a href="{_esc(lien_portail)}" style="background:#22d3ee;color:#0a0e17;font-weight:700;font-size:14px;padding:14px 28px;border-radius:10px;text-decoration:none;display:inline-block">
-        Accéder à la demande de prix
+    <div style="margin:24px 0 8px;text-align:center">
+      <a href="{_esc(lien_portail)}" style="background:#22d3ee;color:#0a0e17;font-weight:800;font-size:14px;padding:14px 28px;border-radius:10px;text-decoration:none;display:inline-block">
+        {s['cta']}
       </a>
     </div>
-    <p style="margin:0;font-size:12px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:16px;line-height:1.6">
-      Ce lien est personnel et sécurisé. Ne le partagez pas.<br>
+    <p style="margin:22px 0 0;font-size:13px;color:#64748b;line-height:1.65">
+      {s['footer']}<br>
       MySifa — {_esc(public_base_url())}
-    </p>
-  </div>
-</div>"""
+    </p>"""
+
+
+def email_invitation_ao(
+    ao: dict,
+    fournisseur: dict,
+    lien_portail: str,
+    lignes: list[dict],
+) -> tuple[str, str]:
+    """Sujet et corps HTML pour l'invitation fournisseur à répondre à un AO (FR/EN)."""
+    reference = ao.get("reference") or ""
+    titre = ao.get("titre") or ""
+    
+    s_en = _ao_invitation_email_strings("en", reference=reference, titre=titre, nom="")
+    s_fr = _ao_invitation_email_strings("fr", reference=reference, titre=titre, nom="")
+    
+    en_body = _ao_invitation_email_body_block(
+        ao=ao, fournisseur=fournisseur, lignes=lignes, lang="en", lien_portail=lien_portail
+    )
+    fr_body = _ao_invitation_email_body_block(
+        ao=ao, fournisseur=fournisseur, lignes=lignes, lang="fr", lien_portail=lien_portail
+    )
+    
+    picker = _email_lang_picker_html()
+    inner = (
+        f"{picker}"
+        f'<div class="mysifa-em-en">{en_body}</div>'
+        f'<div class="mysifa-em-fr">{fr_body}</div>'
+    )
+    
+    subject = f"{s_en['subject']} / {s_fr['subject']}"
+    
+    body = email_mysifa_layout(
+        subtitle=f"{s_en['subtitle']} / {s_fr['subtitle']}",
+        body_html=inner,
+        cta_href=None,
+        cta_label=None,
+        footer_note=f"{s_en['footer']} / {s_fr['footer']}",
+        footer_contact=True,
+    )
     return subject, body
 
 
