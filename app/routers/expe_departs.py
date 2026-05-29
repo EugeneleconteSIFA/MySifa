@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shutil
+import sqlite3
 import unicodedata
 import uuid
 from io import BytesIO
@@ -1750,6 +1751,72 @@ def _trouver_ligne_tarif(
     return None
 
 
+_METHODE_TARIF_LIBELLE: dict[str, str] = {
+    "poids": "Tarif au poids",
+    "palette": "Tarif à la palette",
+    "metre_plancher": "Tarif au mètre plancher",
+}
+
+
+def _trouver_toutes_lignes_tarif(
+    conn,
+    transporteur_id: int,
+    type_envoi: str,
+    dept: str,
+    cp: str,
+    poids: float,
+    nb_pal: float,
+) -> list[sqlite3.Row]:
+    """Collecte toutes les lignes expe_tarifs applicables (palette, MP, poids)."""
+    _MP_PAR_PALETTE = 0.4
+    tentatives: list[tuple[str, float]] = []
+    if nb_pal > 0:
+        tentatives.append(("palette", nb_pal))
+        tentatives.append(("metre_plancher", round(nb_pal * _MP_PAR_PALETTE, 4)))
+    if poids > 0:
+        tentatives.append(("poids", poids))
+
+    zones_par_priorite = [
+        ("code_postal", cp),
+        ("departement", dept),
+    ]
+
+    result: list[sqlite3.Row] = []
+    for base_calcul, valeur_base in tentatives:
+        ligne: sqlite3.Row | None = None
+        for zone_type, zone_valeur in zones_par_priorite:
+            row = conn.execute(
+                """
+                SELECT * FROM expe_tarifs
+                WHERE transporteur_id=?
+                  AND type_envoi=?
+                  AND base_calcul=?
+                  AND zone_type=?
+                  AND zone_valeur=?
+                  AND actif=1
+                  AND tranche_min <= ?
+                  AND (tranche_max IS NULL OR tranche_max > ?)
+                ORDER BY tranche_min DESC
+                LIMIT 1
+                """,
+                (
+                    transporteur_id,
+                    type_envoi,
+                    base_calcul,
+                    zone_type,
+                    zone_valeur,
+                    valeur_base,
+                    valeur_base,
+                ),
+            ).fetchone()
+            if row:
+                ligne = row
+                break
+        if ligne:
+            result.append(ligne)
+    return result
+
+
 def _calculer_prix_base(ligne, poids: float, nb_pal: float) -> tuple[float, str]:
     """Calcule le prix de base selon l'unité de la ligne tarifaire."""
     unite = ligne["unite"]
@@ -1871,10 +1938,10 @@ def _calculer_comparateur(
         if trp["accepte_palette"] == 0 and nb_pal > 0:
             raisons_ineligibilite.append("n'accepte pas les palettes")
 
-        ligne = _trouver_ligne_tarif(
+        lignes = _trouver_toutes_lignes_tarif(
             conn, trp["id"], type_envoi, dept, cp, poids, nb_pal
         )
-        if not ligne and not raisons_ineligibilite:
+        if not lignes and not raisons_ineligibilite:
             raisons_ineligibilite.append("aucune grille tarifaire pour ce poids/zone")
 
         if raisons_ineligibilite:
@@ -1887,23 +1954,28 @@ def _calculer_comparateur(
             )
             continue
 
-        prix_base, detail = _calculer_prix_base(ligne, poids, nb_pal)
-        frais_list, prix_frais = _appliquer_frais(conn, trp["id"], prix_base, nb_pal)
-        prix_total = prix_base + prix_frais
+        for ligne in lignes:
+            prix_base, detail = _calculer_prix_base(ligne, poids, nb_pal)
+            frais_list, prix_frais = _appliquer_frais(conn, trp["id"], prix_base, nb_pal)
+            prix_total = prix_base + prix_frais
+            base_calcul = ligne["base_calcul"] or ""
 
-        eligibles.append(
-            {
-                "transporteur_id": trp["id"],
-                "transporteur": trp["nom"],
-                "prix_ht": round(prix_total, 2),
-                "prix_base_ht": round(prix_base, 2),
-                "detail_calcul": {
-                    "base": detail,
-                    "frais": frais_list,
-                },
-                "delai_jours": None,
-            }
-        )
+            eligibles.append(
+                {
+                    "transporteur_id": trp["id"],
+                    "transporteur": trp["nom"],
+                    "prix_ht": round(prix_total, 2),
+                    "prix_base_ht": round(prix_base, 2),
+                    "methode_tarification": _METHODE_TARIF_LIBELLE.get(
+                        base_calcul, base_calcul
+                    ),
+                    "detail_calcul": {
+                        "base": detail,
+                        "frais": frais_list,
+                    },
+                    "delai_jours": None,
+                }
+            )
 
     eligibles.sort(key=lambda x: x["prix_ht"])
     if eligibles:

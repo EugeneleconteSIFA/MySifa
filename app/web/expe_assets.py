@@ -916,7 +916,15 @@ body.light .expe-cmp-inp:focus{background:var(--card)}
 .expe-cmp-results{margin-top:24px}
 .expe-cmp-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;position:relative}
 .expe-cmp-card.best{border-color:var(--accent)}
+.expe-cmp-card-cont{margin-left:8px;border-left:2px solid var(--border);border-top-left-radius:0;border-bottom-left-radius:0}
 .expe-cmp-badge{position:absolute;top:12px;right:12px;background:var(--accent);color:var(--bg);font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px}
+.expe-cmp-methode-badge{display:inline-block;background:var(--accent-bg);color:var(--accent);border-radius:6px;font-size:11px;font-weight:600;padding:2px 8px}
+.expe-cmp-card-header{display:flex;flex-direction:column;align-items:flex-start;gap:4px;margin-bottom:8px}
+.expe-cmp-card-name{font-size:15px;font-weight:700;color:var(--text);display:block}
+.expe-cmp-card-price-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.expe-cmp-card-price{font-size:18px;font-weight:700;color:var(--text)}
+.expe-cmp-card.best .expe-cmp-card-price{color:var(--accent)}
+.expe-cmp-card-price-ht{font-size:12px;color:var(--muted)}
 .expe-cmp-cards{display:flex;flex-direction:column;gap:8px}
 .expe-cmp-ne-row{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
 """
@@ -948,19 +956,32 @@ function renderResultatsComparateur(data){
     html+='<p style="font-size:12px;color:var(--muted);margin:0 0 16px">Département déduit du code postal : <strong>'+escHtml(data.departement_deduit)+'</strong></p>';
   }
   if(elig.length){
+    const nbTrp=new Set(elig.map(e=>e.transporteur_id)).size;
     html+='<div style="margin-bottom:24px"><div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:10px">'
-      +elig.length+' transporteur'+(elig.length>1?'s':'')+' éligible'+(elig.length>1?'s':'')
+      +nbTrp+' transporteur'+(nbTrp>1?'s':'')+' éligible'+(nbTrp>1?'s':'')
       +'</div><div class="expe-cmp-cards">';
-    elig.forEach(e=>{
+    elig.forEach((e,i)=>{
       const mc=!!e.moins_cher;
-      html+='<div class="expe-cmp-card'+(mc?' best':'')+'">'
+      const prev=i>0?elig[i-1]:null;
+      const isCont=prev&&prev.transporteur_id===e.transporteur_id;
+      const methode=e.methode_tarification||'';
+      const cardCls='expe-cmp-card'+(mc?' best':'')+(isCont?' expe-cmp-card-cont':'');
+      let header='';
+      if(!isCont){
+        header+='<span class="expe-cmp-card-name">'+escHtml(e.transporteur)+'</span>';
+      }
+      if(methode){
+        header+='<span class="expe-cmp-methode-badge">'+escHtml(methode)+'</span>';
+      }
+      html+='<div class="'+cardCls+'">'
         +(mc?'<span class="expe-cmp-badge">Moins cher</span>':'')
-        +'<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap">'
-        +'<span style="font-size:15px;font-weight:700;color:var(--text)">'+escHtml(e.transporteur)+'</span>'
-        +'<span style="font-size:18px;font-weight:700;color:'+(mc?'var(--accent)':'var(--text)')+'">'+Number(e.prix_ht).toFixed(2)+' €</span>'
-        +'<span style="font-size:12px;color:var(--muted)">HT</span></div>'
+        +(header?'<div class="expe-cmp-card-header">'+header+'</div>':'')
+        +'<div class="expe-cmp-card-price-row">'
+        +'<span class="expe-cmp-card-price">'+Number(e.prix_ht).toFixed(2)+' €</span>'
+        +'<span class="expe-cmp-card-price-ht">HT</span></div>'
         +'<details style="font-size:12px;color:var(--text2)"><summary style="cursor:pointer;color:var(--muted);margin-bottom:4px">Détail du calcul</summary>'
         +'<div style="margin-top:8px;padding:10px;background:var(--bg);border-radius:8px;display:flex;flex-direction:column;gap:4px">'
+        +'<div>Méthode : '+escHtml(methode)+'</div>'
         +'<div>Base : '+escHtml((e.detail_calcul&&e.detail_calcul.base)||'')+'</div>'
         +((e.detail_calcul&&e.detail_calcul.frais)||[]).map(fr=>'<div>'+escHtml(fr.libelle)+' : '+escHtml(fr.detail)+'</div>').join('')
         +'<div style="border-top:1px solid var(--border);margin-top:6px;padding-top:6px;font-weight:700;color:var(--text)">Total : '+Number(e.prix_ht).toFixed(2)+' € HT</div>'
