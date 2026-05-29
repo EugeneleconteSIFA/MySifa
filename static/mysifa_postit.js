@@ -480,7 +480,11 @@
       postitId +
       ', ' +
       t.id +
-      ', this.value)" onmousedown="event.stopPropagation()" onfocus="autoResizePostitTask(this)" oninput="autoResizePostitTask(this)">' +
+      ', this.value)" onkeydown="onPostitTaskKeydown(event, ' +
+      postitId +
+      ', ' +
+      t.id +
+      ')" onmousedown="event.stopPropagation()" onfocus="autoResizePostitTask(this)" oninput="autoResizePostitTask(this)">' +
       postitEscHtml(t.text || '') +
       '</textarea>' +
       '<button type="button" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:0 2px" onclick="deletePostitTask(' +
@@ -855,6 +859,19 @@
     }
   }
 
+  async function onPostitTaskKeydown(e, postitId, taskId) {
+    if (!e || e.key !== 'Enter' || !e.shiftKey) return;
+    e.preventDefault();
+    var ta = e.target;
+    if (!ta || !ta.classList.contains('postit-task-text')) return;
+    try {
+      await editPostitTask(postitId, taskId, ta.value);
+      await addPostitTask(postitId);
+    } catch (err) {
+      /* editPostitTask / addPostitTask affichent déjà un toast */
+    }
+  }
+
   async function addPostitTask(postitId) {
     try {
       var task = await postitApi('/api/postits/' + postitId + '/tasks', {
@@ -972,6 +989,7 @@
   window.deletePostit = deletePostit;
   window.renamePostit = renamePostit;
   window.addPostitTask = addPostitTask;
+  window.onPostitTaskKeydown = onPostitTaskKeydown;
   window.togglePostitTask = togglePostitTask;
   window.editPostitTask = editPostitTask;
   window.deletePostitTask = deletePostitTask;

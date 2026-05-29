@@ -822,6 +822,20 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
 .hist-table tbody td{padding:12px 14px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle}
 .hist-table tbody tr:last-child td{border-bottom:none}
 .hist-table tbody tr:hover{background:var(--accent-bg)}
+.mon-page .mon-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px}
+.mon-page .mon-actions .mon-snapshot-select{flex:1;min-width:200px;max-width:420px;background:var(--bg);border:1px solid var(--border);
+  border-radius:10px;padding:10px 14px;color:var(--text);font-size:14px}
+.mon-page .mon-filters-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
+.mon-page .mon-search-wrap{flex:1;min-width:220px;display:flex;align-items:center;gap:8px;background:var(--bg);
+  border:1px solid var(--border);border-radius:10px;padding:0 12px}
+.mon-page .mon-search-wrap input{flex:1;border:none;background:transparent;padding:12px 0;color:var(--text);font-size:14px;outline:none}
+.mon-page .mon-search-wrap:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.mon-statut{display:inline-flex;align-items:center;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:3px 10px;border-radius:20px}
+.mon-statut-ok{background:rgba(52,211,153,.12);color:var(--success)}
+.mon-statut-ecart{background:rgba(248,113,113,.12);color:var(--danger)}
+.mon-statut-warn{background:rgba(251,191,36,.12);color:var(--warn)}
+.mon-ecart-danger{color:var(--danger);font-weight:700;font-variant-numeric:tabular-nums}
+.mon-qty-neg{color:var(--danger);font-weight:600}
 .hist-cell-badges{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .hist-ref{font-family:ui-monospace,monospace;font-size:12px;font-weight:700;color:var(--text)}
 .hist-ref .mvt-ref-link,.hist-card-ref .mvt-ref-link{font-family:inherit;font-size:inherit;font-weight:inherit;color:inherit}
@@ -883,6 +897,7 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
 .stat-value{font-size:26px;font-weight:800;font-family:monospace}
 .stat-value.accent{color:var(--accent)}
 .stat-value.warn{color:var(--warn)}
+.stat-value.danger{color:var(--danger)}
 
 /* ── Étiquettes traçabilité ── */
 .traca-section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:16px 0 10px;padding:0 2px}
@@ -1335,6 +1350,8 @@ let S = {
   historiqueFiltresOpen: false,
   historiquePage: 0,
   historiqueHasMore: false,
+  // Monitoring réconciliation ERP
+  monitoring: null,
 };
 
 const HIST_PAGE_SIZE = 50;
@@ -1446,6 +1463,16 @@ function showToast(m, t='success') {
 }
 
 // ── Helpers ─────────────────────────────────────────────────────
+function escHtml(s) {
+  if (s == null || s === undefined) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+function escAttr(s) { return escHtml(s).replace(/'/g, '&#39;'); }
+
 const fN = n => n != null ? Number(n).toLocaleString('fr-FR') : '0';
 const fD = d => d ? d.slice(0,10).split('-').reverse().join('/') : '—';
 const joursDepuis = d => { if (!d) return null; return Math.round((Date.now() - new Date(d).getTime()) / 86400000); };
@@ -2146,6 +2173,12 @@ function goToTab(tab) {
   }
   if (tab !== 'dashboard') closeDashboardAddPfModal();
   if (tab !== 'traca') S.tracaPoste = null;
+  if (tab !== 'monitoring') {
+    if (S.monitoring) {
+      S.monitoring.query = '';
+      S.monitoring.filterStatut = null;
+    }
+  }
   clearSearch(); closeSidebar();
   if (tab === 'historique') S.historiqueLoading = true;
   updateNavActive();
@@ -2157,6 +2190,7 @@ function goToTab(tab) {
   else if (tab === 'matieres') loadMatieres();
   else if (tab === 'produits-finis') loadProduitsFinis();
   else if (tab === 'historique') loadHistorique();
+  else if (tab === 'monitoring') loadMonitoring();
 }
 
 function updateNavActive() {
@@ -7037,6 +7071,18 @@ function buildInventaire() {
 function renderContent() {
   const area = document.getElementById('scroll-area');
   if (!area) return;
+  if (S.tab === 'produits-finis') {
+    renderProduitsFinisView();
+    return;
+  }
+  if (S.tab === 'referentiel') {
+    renderReferentielView();
+    return;
+  }
+  if (S.tab === 'monitoring') {
+    renderMonitoringView(true);
+    return;
+  }
   area.innerHTML = '';
 
   let content;
@@ -7047,14 +7093,6 @@ function renderContent() {
   else if (S.tab === 'matieres') {
     content = buildMatieres();
   }
-  else if (S.tab === 'produits-finis') {
-    renderProduitsFinisView();
-    return;
-  }
-  else if (S.tab === 'referentiel') {
-    renderReferentielView();
-    return;
-  }
   else if (S.tab === 'inventaire') content = buildInventaire();
   else if (S.tab === 'traca') content = buildTraca();
   else if (S.tab === 'reception') content = buildReception();
@@ -7062,6 +7100,398 @@ function renderContent() {
   else content = buildDashboard();
 
   if (content) area.appendChild(content);
+}
+
+// ── Monitoring réconciliation ERP ───────────────────────────────
+
+function monEnsureState() {
+  if (!S.monitoring) {
+    S.monitoring = {
+      snapshots: [],
+      current: null,
+      lines: [],
+      allLines: [],
+      filterStatut: null,
+      query: '',
+      loading: false,
+      importing: false,
+      selectedId: null,
+    };
+  }
+  return S.monitoring;
+}
+
+function monSnapshotLabel(s) {
+  const dt = fDateTime(s.created_at);
+  const who = (s.created_by_name || '').trim();
+  const file = (s.source_filename || '').trim();
+  if (who) return dt + ' — ' + who;
+  if (file) return dt + ' — ' + file;
+  return dt;
+}
+
+function monFilteredLines() {
+  const m = monEnsureState();
+  let rows = m.allLines || m.lines || [];
+  if (m.filterStatut === 'sans_corresp') {
+    rows = rows.filter(r =>
+      r.statut === 'sans_corresp_erp' || r.statut === 'sans_corresp_mysifa'
+    );
+  } else if (m.filterStatut) {
+    rows = rows.filter(r => r.statut === m.filterStatut);
+  }
+  const q = (m.query || '').trim().toLowerCase();
+  if (q) {
+    rows = rows.filter(r =>
+      (r.reference || '').toLowerCase().includes(q) ||
+      (r.designation || '').toLowerCase().includes(q)
+    );
+  }
+  return rows;
+}
+
+function monFmtEcart(val) {
+  if (val == null || val === '') return '—';
+  const n = Number(val);
+  if (Number.isNaN(n)) return '—';
+  const sign = n > 0 ? '+' : '';
+  return sign + fN(n);
+}
+
+function monStatutBadge(statut) {
+  if (statut === 'ok') return el('span', { cls: 'mon-statut mon-statut-ok' }, 'OK');
+  if (statut === 'ecart') return el('span', { cls: 'mon-statut mon-statut-ecart' }, 'Écart');
+  if (statut === 'sans_corresp_erp') return el('span', { cls: 'mon-statut mon-statut-warn' }, 'Absent ERP');
+  if (statut === 'sans_corresp_mysifa') return el('span', { cls: 'mon-statut mon-statut-warn' }, 'Absent MySifa');
+  return el('span', { cls: 'mon-statut' }, statut || '—');
+}
+
+function monQtyTd(val, unite) {
+  const n = val != null && val !== '' ? Number(val) : null;
+  const style = n != null && n < 0 ? { color: 'var(--danger)', fontWeight: '600' } : {};
+  const txt = val != null && val !== '' ? (unite ? fU(val, unite) : fN(val)) : '—';
+  return el('td', { style }, txt);
+}
+
+function monEcartTd(ln) {
+  if (ln.ecart == null || ln.ecart === '') return el('td', null, '—');
+  const cls = ln.statut === 'ecart' ? 'mon-ecart-danger' : '';
+  return el('td', null, el('span', { cls }, monFmtEcart(ln.ecart)));
+}
+
+function monMvtErpCell(ln) {
+  const lib = (ln.erp_dernier_mvt_libelle || '').trim();
+  const dt = ln.erp_dernier_mvt_date ? fDateTime(ln.erp_dernier_mvt_date) : '';
+  if (!lib && !dt) return el('td', { cls: 'hist-muted' }, '—');
+  return el('td', null,
+    lib ? el('div', { title: escAttr(lib) }, truncStr(lib, 48)) : null,
+    dt ? el('div', { cls: 'hist-muted', style: { fontSize: '11px', marginTop: '2px' } }, dt) : null,
+  );
+}
+
+function buildMonitoringKpis(snap, allLines) {
+  const sansMysifa = (allLines || []).filter(l => l.statut === 'sans_corresp_mysifa').length;
+  const sansTotal = (snap.nb_sans_corresp || 0) + sansMysifa;
+  const kpis = [
+    { label: 'Références comparées', value: snap.nb_matched || 0, mod: 'accent' },
+    { label: 'Écarts', value: snap.nb_ecarts || 0, mod: (snap.nb_ecarts > 0 ? 'danger' : 'accent') },
+    { label: 'Sans correspondance', value: sansTotal, mod: (sansTotal > 0 ? 'warn' : 'accent') },
+    { label: 'Stocks négatifs', value: snap.nb_negatifs || 0, mod: (snap.nb_negatifs > 0 ? 'danger' : 'accent') },
+  ];
+  return el('div', { cls: 'dash-kpi-grid', style: { marginBottom: '16px' } },
+    ...kpis.map(k => el('div', { cls: 'stat-card' },
+      el('div', { cls: 'stat-label' }, k.label),
+      el('div', { cls: 'stat-value ' + k.mod }, fN(k.value)),
+    )),
+  );
+}
+
+function buildMonitoringTableRow(ln) {
+  const ref = ln.reference || '—';
+  const des = ln.designation || '—';
+  const unite = ln.unite || '';
+  return el('tr', null,
+    el('td', { cls: 'hist-ref' }, ref),
+    el('td', { cls: 'hist-des', title: escAttr(des) }, truncStr(des, 40) || '—'),
+    el('td', { cls: 'hist-unite' }, unite || '—'),
+    monQtyTd(ln.stock_erp, unite),
+    monQtyTd(ln.stock_mysifa, unite),
+    monEcartTd(ln),
+    monMvtErpCell(ln),
+    el('td', { cls: 'hist-muted' }, ln.mysifa_date_fifo ? fDateTime(ln.mysifa_date_fifo) : '—'),
+    el('td', null, monStatutBadge(ln.statut)),
+  );
+}
+
+function renderMonitoringResults(container) {
+  if (!container) return;
+  container.innerHTML = '';
+  const m = monEnsureState();
+  if (m.loading) {
+    container.appendChild(el('div', { cls: 'hist-loading' },
+      el('div', { cls: 'hist-spinner' }),
+      'Chargement…',
+    ));
+    return;
+  }
+  if (!m.current) {
+    container.appendChild(el('div', { cls: 'hist-empty' },
+      'Aucun snapshot — importez un export ERP Table Stocks (.xlsx) pour démarrer la réconciliation.',
+    ));
+    return;
+  }
+  const rows = monFilteredLines();
+  const q = (m.query || '').trim();
+  const card = el('div', { cls: 'hist-results-card' });
+  card.appendChild(el('div', { cls: 'hist-results-head' },
+    el('div', { cls: 'hist-results-head-left' },
+      el('span', { cls: 'hist-results-title' }, 'Lignes comparées'),
+      el('span', { cls: 'hist-count' }, fN(rows.length) + ' ligne' + (rows.length > 1 ? 's' : '')),
+    ),
+  ));
+  if (!rows.length) {
+    card.appendChild(el('div', { cls: 'hist-empty', style: { border: 'none', borderRadius: '0' } },
+      q
+        ? 'Aucun résultat pour « ' + escHtml(q) + ' ».'
+        : 'Aucune ligne pour ce filtre.',
+    ));
+  } else {
+    const table = el('table', { cls: 'hist-table' });
+    table.appendChild(el('thead', null, el('tr', null,
+      el('th', null, 'Référence'),
+      el('th', null, 'Désignation'),
+      el('th', null, 'Unité'),
+      el('th', null, 'Stock ERP'),
+      el('th', null, 'Stock MySifa'),
+      el('th', null, 'Écart'),
+      el('th', null, 'Dernier mvt ERP'),
+      el('th', null, 'Dernier flux MySifa'),
+      el('th', null, 'Statut'),
+    )));
+    const tbody = el('tbody', null);
+    rows.forEach(ln => tbody.appendChild(buildMonitoringTableRow(ln)));
+    table.appendChild(tbody);
+    card.appendChild(el('div', { cls: 'hist-table-wrap' }, table));
+  }
+  container.appendChild(card);
+}
+
+function renderMonitoringView(fullRebuild) {
+  if (S.tab !== 'monitoring') return;
+  const ae = document.activeElement;
+  const focusId = ae?.id;
+  const caretStart = ae?.selectionStart;
+  const caretEnd = ae?.selectionEnd;
+  const area = document.getElementById('scroll-area');
+  if (!area) return;
+  const resultsOnly = !fullRebuild && document.getElementById('mon-results-wrap');
+  if (resultsOnly) {
+    renderMonitoringResults(document.getElementById('mon-results-wrap'));
+    if (focusId) {
+      const foc = document.getElementById(focusId);
+      if (foc) {
+        foc.focus();
+        if (caretStart != null) {
+          try { foc.setSelectionRange(caretStart, caretEnd); } catch (e) {}
+        }
+      }
+    }
+    return;
+  }
+  area.innerHTML = '';
+  const content = buildMonitoring();
+  if (content) area.appendChild(content);
+  renderMonitoringResults(document.getElementById('mon-results-wrap'));
+  if (focusId) {
+    const foc = document.getElementById(focusId);
+    if (foc) {
+      foc.focus();
+      if (caretStart != null) {
+        try { foc.setSelectionRange(caretStart, caretEnd); } catch (e) {}
+      }
+    }
+  }
+}
+
+function buildMonitoring() {
+  const m = monEnsureState();
+  const head = el('div', { cls: 'hist-head' },
+    el('div', null,
+      el('h2', { cls: 'hist-title' }, 'Monitoring stocks PF'),
+      el('p', { cls: 'hist-subtitle' }, 'Réconciliation hebdomadaire ERP vs MySifa — produits finis'),
+    ),
+  );
+
+  const fileInp = el('input', {
+    type: 'file',
+    accept: '.xlsx',
+    style: { display: 'none' },
+    id: 'mon-import-file',
+  });
+  fileInp.addEventListener('change', async () => {
+    const f = fileInp.files && fileInp.files[0];
+    fileInp.value = '';
+    if (!f) return;
+    await monitoringImportFile(f);
+  });
+
+  const importBtn = el('button', {
+    cls: 'btn btn-accent',
+    type: 'button',
+    disabled: m.importing ? true : null,
+    on: { click: () => fileInp.click() },
+  }, m.importing ? 'Import en cours…' : 'Importer l\'export ERP (.xlsx)');
+
+  const snapSel = el('select', {
+    cls: 'mon-snapshot-select',
+    id: 'mon-snapshot-select',
+    disabled: !m.snapshots.length ? true : null,
+  });
+  if (!m.snapshots.length) {
+    snapSel.appendChild(el('option', { value: '' }, 'Aucun snapshot'));
+  } else {
+    m.snapshots.forEach(s => {
+      snapSel.appendChild(el('option', {
+        value: String(s.id),
+        selected: String(m.selectedId) === String(s.id) ? true : null,
+      }, monSnapshotLabel(s)));
+    });
+  }
+  snapSel.addEventListener('change', () => {
+    const id = parseInt(snapSel.value, 10);
+    if (id) loadMonitoringSnapshot(id);
+  });
+
+  const actions = el('div', { cls: 'mon-actions', id: 'mon-actions-bar' },
+    importBtn,
+    fileInp,
+    snapSel,
+  );
+
+  const kpisWrap = el('div', { id: 'mon-kpis-wrap' });
+  if (m.current) kpisWrap.appendChild(buildMonitoringKpis(m.current, m.allLines));
+
+  const filterDefs = [
+    { id: null, label: 'Tout' },
+    { id: 'ecart', label: 'Écarts' },
+    { id: 'ok', label: 'OK' },
+    { id: 'sans_corresp', label: 'Sans correspondance' },
+  ];
+  const pills = el('div', { cls: 'mp-pills', id: 'mon-filter-pills' },
+    ...filterDefs.map(fd => el('button', {
+      cls: 'mp-pill' + (
+        (fd.id == null && !m.filterStatut) || m.filterStatut === fd.id ? ' active' : ''
+      ),
+      type: 'button',
+      on: { click: () => {
+        m.filterStatut = fd.id;
+        renderMonitoringView(false);
+      } },
+    }, fd.label)),
+  );
+
+  const searchInp = el('input', {
+    type: 'search',
+    id: 'mon-search',
+    placeholder: 'Rechercher (référence, désignation…)',
+    autocomplete: 'off',
+    spellcheck: 'false',
+  });
+  searchInp.value = m.query || '';
+  searchInp.addEventListener('input', (e) => {
+    m.query = e.target.value;
+    renderMonitoringView(false);
+  });
+  searchInp.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      m.query = '';
+      renderMonitoringView(false);
+    }
+  });
+
+  const filtersRow = el('div', { cls: 'mon-filters-row', id: 'mon-filters-bar' },
+    el('div', { cls: 'mon-search-wrap' },
+      el('span', { attrs: { 'aria-hidden': 'true' } }, iconEl('search', 18)),
+      searchInp,
+    ),
+    pills,
+  );
+
+  const resultsWrap = el('div', { id: 'mon-results-wrap' });
+
+  return el('div', { cls: 'content mon-page hist-page' },
+    head,
+    actions,
+    kpisWrap,
+    filtersRow,
+    resultsWrap,
+  );
+}
+
+async function loadMonitoringSnapshot(snapshotId) {
+  const m = monEnsureState();
+  m.loading = true;
+  renderMonitoringView(false);
+  try {
+    const d = await api('/api/reconciliation/snapshots/' + snapshotId);
+    if (d) {
+      m.current = d.snapshot;
+      m.lines = d.lines || [];
+      m.allLines = d.lines || [];
+      m.selectedId = snapshotId;
+    }
+  } catch (e) {
+    showToast(e.message || 'Chargement impossible.', 'error');
+  }
+  m.loading = false;
+  renderMonitoringView(true);
+}
+
+async function loadMonitoring(selectSnapshotId) {
+  const m = monEnsureState();
+  m.loading = true;
+  renderMonitoringView(true);
+  try {
+    const snaps = await api('/api/reconciliation/snapshots');
+    m.snapshots = snaps || [];
+    let id = selectSnapshotId;
+    if (!id && m.snapshots.length) id = m.snapshots[0].id;
+    if (id) {
+      await loadMonitoringSnapshot(id);
+      return;
+    }
+    m.current = null;
+    m.lines = [];
+    m.allLines = [];
+    m.selectedId = null;
+    m.loading = false;
+    renderMonitoringView(true);
+  } catch (e) {
+    m.loading = false;
+    showToast(e.message || 'Chargement impossible.', 'error');
+    renderMonitoringView(true);
+  }
+}
+
+async function monitoringImportFile(file) {
+  const m = monEnsureState();
+  m.importing = true;
+  renderMonitoringView(true);
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    const r = await apiUpload('/api/reconciliation/import', fd);
+    const msg = 'Snapshot enregistré'
+      + (r.nb_ecarts != null ? ' — ' + r.nb_ecarts + ' écart(s)' : '')
+      + '.';
+    showToast(msg);
+    await loadMonitoring(r.snapshot_id);
+  } catch (e) {
+    showToast(e.message || 'Import impossible.', 'error');
+  } finally {
+    m.importing = false;
+    renderMonitoringView(true);
+  }
 }
 
 // ── Réception matière ───────────────────────────────────────────
@@ -7701,6 +8131,7 @@ const STOCK_TAB_DOC_TITLES = {
   reception: 'Réception matière — MyStock — MySifa',
   historique: 'Historique — MyStock — MySifa',
   traca: 'Étiquettes traça — MyStock — MySifa',
+  monitoring: 'Monitoring — MyStock — MySifa',
 };
 
 const STOCK_TAB_MOBILE_TITLES = {
@@ -7712,6 +8143,7 @@ const STOCK_TAB_MOBILE_TITLES = {
   reception: 'Réception matière',
   historique: 'Historique',
   traca: 'Étiquettes traça',
+  monitoring: 'Monitoring',
 };
 
 function stockMobileTabTitle() {
@@ -7735,6 +8167,10 @@ function buildSidebarNavStructure() {
   ];
   if (!S.stockReadOnly) {
     items.push({ kind: 'btn', tab: 'inventaire', icon: 'clipboard', label: 'Inventaire' });
+  }
+  if (S.user && ['superadmin', 'direction', 'administration'].includes(S.user.role)) {
+    items.push({ kind: 'sep', label: 'Contrôle' });
+    items.push({ kind: 'btn', tab: 'monitoring', icon: 'clipboard', label: 'Monitoring' });
   }
   items.push(
     { kind: 'sep', label: 'Outils' },
@@ -8004,8 +8440,12 @@ async function init() {
   await fetchEmplacementsFromDB();
   // Onglet initial via URL param ?tab=...
   const urlTab = new URLSearchParams(window.location.search).get('tab');
-  if (urlTab && ['dashboard','matieres','produits-finis','referentiel','stock','inventaire','reception','historique','traca'].includes(urlTab)) {
+  if (urlTab && ['dashboard','matieres','produits-finis','referentiel','stock','inventaire','reception','historique','traca','monitoring'].includes(urlTab)) {
     S.tab = urlTab;
+  }
+  if (S.tab === 'monitoring' && S.user
+      && !['superadmin', 'direction', 'administration'].includes(S.user.role)) {
+    S.tab = 'dashboard';
   }
   // Forcer traça si accès restreint
   if (S.tracaOnly) S.tab = 'traca';
@@ -8016,6 +8456,7 @@ async function init() {
   else if (S.tab === 'matieres') { await loadMatieres(); }
   else if (S.tab === 'produits-finis') { await loadProduitsFinis(); }
   else if (S.tab === 'historique') { await loadHistorique(); }
+  else if (S.tab === 'monitoring') { await loadMonitoring(); }
   else if (S.tab === 'referentiel') { await loadDashboard(); }
   else { await loadDashboard(); }
 }

@@ -2699,6 +2699,49 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 85, "expe_portal_transporteurs")
 
+    # v86 — MyStock Monitoring : réconciliation stocks PF ERP vs MySifa
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=86 LIMIT 1").fetchone():
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS reconciliation_snapshots (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at          TEXT NOT NULL,
+                created_by_name     TEXT,
+                source_filename     TEXT,
+                nb_refs_erp         INTEGER DEFAULT 0,
+                nb_refs_mysifa      INTEGER DEFAULT 0,
+                nb_matched          INTEGER DEFAULT 0,
+                nb_ecarts           INTEGER DEFAULT 0,
+                nb_sans_corresp     INTEGER DEFAULT 0,
+                nb_negatifs         INTEGER DEFAULT 0
+            );
+
+            CREATE TABLE IF NOT EXISTS reconciliation_lines (
+                id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+                snapshot_id             INTEGER NOT NULL,
+                reference               TEXT NOT NULL,
+                designation             TEXT,
+                unite                   TEXT,
+                stock_erp               REAL,
+                stock_mysifa            REAL,
+                ecart                   REAL,
+                statut                  TEXT NOT NULL,
+                erp_dernier_mvt_libelle TEXT,
+                erp_dernier_mvt_date    TEXT,
+                erp_dernier_mvt_qte     REAL,
+                mysifa_date_fifo        TEXT,
+                FOREIGN KEY (snapshot_id) REFERENCES reconciliation_snapshots(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_reconciliation_lines_snapshot
+                ON reconciliation_lines(snapshot_id);
+            CREATE INDEX IF NOT EXISTS idx_reconciliation_lines_snapshot_statut
+                ON reconciliation_lines(snapshot_id, statut);
+            """
+        )
+        conn.commit()
+        _record_schema_migration(conn, 86, "reconciliation_snapshots_pf")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,
