@@ -380,6 +380,12 @@ body.light .btn.btn-accent{color:#fff}
   border-radius:10px;border:1px solid color-mix(in srgb,var(--danger) 35%,transparent);
   background:color-mix(in srgb,var(--danger) 12%,transparent);color:var(--danger);cursor:pointer;flex-shrink:0}
 .empl-lot-out-btn:hover{border-color:var(--danger);background:color-mix(in srgb,var(--danger) 22%,transparent)}
+.empl-lot-actions{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.empl-lot-exp-btn{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;padding:0;
+  border-radius:10px;border:1px solid rgba(251,191,36,.4);
+  background:rgba(251,191,36,.08);color:var(--warn);cursor:pointer;flex-shrink:0;transition:border-color .15s,background .15s}
+.empl-lot-exp-btn:hover{border-color:var(--warn);background:rgba(251,191,36,.14)}
+body.light .empl-lot-exp-btn{border-color:rgba(217,119,6,.35);background:rgba(251,191,36,.1)}
 
 /* ── Action bar ── */
 .action-bar{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
@@ -1752,6 +1758,39 @@ async function submitMouvement(body) {
   } catch(e) { showToast(e.message, 'error'); }
 }
 
+function fmtStockParisNow() {
+  const d = new Date();
+  try {
+    const parts = new Intl.DateTimeFormat('fr-FR', {
+      timeZone: 'Europe/Paris',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    }).formatToParts(d);
+    const g = (t) => (parts.find(p => p.type === t) || {}).value || '';
+    return g('day') + '/' + g('month') + '/' + g('year') + ' ' + g('hour') + ':' + g('minute');
+  } catch (e) {
+    return fDateTime(d.toISOString().slice(0, 16));
+  }
+}
+
+function buildLotTransporteurBtn(produitId, emplacement, row) {
+  const qLot = row.quantite_lot_fifo != null ? row.quantite_lot_fifo : row.quantite;
+  const unite = row.unite || (S.selProduit && S.selProduit.produit && S.selProduit.produit.unite) || '';
+  const refLabel = row.reference || (S.selProduit && S.selProduit.produit && S.selProduit.produit.reference) || '';
+  return el('button', {
+    cls: 'empl-lot-exp-btn',
+    type: 'button',
+    attrs: {
+      title: 'Sortir pour expédition transporteur',
+      'aria-label': 'Transporteur — expédition',
+    },
+    on: { click: (ev) => {
+      ev.stopPropagation();
+      sortirLot(produitId, emplacement, qLot, unite, refLabel, row.nb_lots, { expedition: true });
+    }},
+  }, iconEl('truck', 18));
+}
+
 function buildLotOutBtn(produitId, emplacement, row) {
   const qLot = row.quantite_lot_fifo != null ? row.quantite_lot_fifo : row.quantite;
   const unite = row.unite || (S.selProduit && S.selProduit.produit && S.selProduit.produit.unite) || '';
@@ -1767,23 +1806,38 @@ function buildLotOutBtn(produitId, emplacement, row) {
   }, iconEl('trash-2', 18));
 }
 
-async function sortirLot(produitId, emplacement, qLot, unite, refLabel, nbLots) {
+function buildLotActionBtns(produitId, emplacement, row) {
+  if (S.stockReadOnly) return null;
+  return el('div', { cls: 'empl-lot-actions' },
+    buildLotTransporteurBtn(produitId, emplacement, row),
+    buildLotOutBtn(produitId, emplacement, row),
+  );
+}
+
+async function sortirLot(produitId, emplacement, qLot, unite, refLabel, nbLots, opts) {
+  const expedition = !!(opts && opts.expedition);
   const qLabel = fU(qLot, unite || '');
   const locLbl = stockEmplLabel(emplacement);
   const loc = refLabel ? (refLabel + ' · ' + locLbl) : locLbl;
-  let msg = 'Sortir le lot FIFO (' + qLabel + ') — ' + loc + ' ?';
+  let msg = expedition
+    ? ('Expédition transporteur — sortir le lot FIFO (' + qLabel + ') — ' + loc + ' ?')
+    : ('Sortir le lot FIFO (' + qLabel + ') — ' + loc + ' ?');
   if (nbLots > 1) {
     msg += '\n\n' + nbLots + ' lots actifs à cet emplacement — seul le plus ancien sera retiré.';
   }
   if (!confirm(msg)) return;
+  const payload = { produit_id: produitId, emplacement };
+  if (expedition) {
+    payload.note = 'Expédition transporteur — ' + fmtStockParisNow();
+  }
   try {
     const r = await api('/api/stock/sortir-lot', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ produit_id: produitId, emplacement }),
+      body: JSON.stringify(payload),
     });
     if (!r) return;
-    showToast('Lot sorti — stock : ' + fN(r.quantite_apres));
+    showToast(expedition ? 'Lot expédié — stock : ' + fN(r.quantite_apres) : 'Lot sorti — stock : ' + fN(r.quantite_apres));
     if (S.selProduit) await loadProduit(S.selProduit.produit.id);
     else if (S.selEmpl) await loadEmplacement(S.selEmpl.emplacement);
     else if (S.tab === 'produits-finis') await loadProduitsFinis();
@@ -6335,7 +6389,7 @@ function buildProduitDetail() {
               el('div',{cls:'empl-qte'},fU(e.quantite, unite)),
               el('div',{cls:'empl-date'},fD(e.updated_at||e.date_fifo_empl))
             ),
-            S.stockReadOnly ? null : buildLotOutBtn(p.id, e.emplacement, e)
+            buildLotActionBtns(p.id, e.emplacement, e)
           )
         )))
       );
@@ -6404,7 +6458,7 @@ function buildEmplacementDetail() {
               el('div',{cls:'empl-qte'},fU(r.quantite, r.unite||'')),
               el('div',{cls:'empl-date'},fD(r.date_fifo))
             ),
-            S.stockReadOnly ? null : buildLotOutBtn(r.id, code, r)
+            buildLotActionBtns(r.id, code, r)
           )
         )))
       );
