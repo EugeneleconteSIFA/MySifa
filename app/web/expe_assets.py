@@ -358,6 +358,32 @@ function activerTarifsSelection(){
   void validerTarifsBrouillon(ids);
 }
 
+async function viderTarifsTransporteur(){
+  if(T.editId==null)return;
+  const nL=(T.tarifs_lignes||[]).length;
+  const nF=(T.tarifs_frais||[]).length;
+  if(!nL&&!nF){
+    showToast('Aucun tarif importé à supprimer.','info');
+    return;
+  }
+  const msg='Supprimer tous les tarifs importés pour ce transporteur ?\n\n'
+    +(nL?nL+' ligne(s) tarifaire(s)':'')
+    +(nL&&nF?' et ':'')
+    +(nF?nF+' frais annexe(s)':'')
+    +'\n\nLe fichier source uploadé n\'est pas supprimé.';
+  if(!confirm(msg))return;
+  try{
+    const res=await api('/api/expe/transporteurs/'+T.editId+'/tarifs',{method:'DELETE'});
+    const dl=res.deleted_lignes!=null?res.deleted_lignes:0;
+    const df=res.deleted_frais!=null?res.deleted_frais:0;
+    showToast('Tarifs supprimés ('+dl+' ligne(s), '+df+' frais).','success');
+    await loadTarifsTransporteur(T.editId);
+    render();
+  }catch(e){
+    showToast(e.message||'Suppression impossible','danger');
+  }
+}
+
 async function importTarifsCsv(file){
   if(!file||T.editId==null)return;
   const fd=new FormData();
@@ -427,6 +453,7 @@ function renderTarifsOnglet(){
       if(f)void importTarifsCsv(f);
       e.target.value='';
     });
+    const hasTarifs=(T.tarifs_lignes||[]).length>0||(T.tarifs_frais||[]).length>0;
     kids.push(h('div',{className:'expe-trp-tarif-actions'},
       h('button',{type:'button',className:'btn btn-ghost',onClick:()=>csvInp.click()},'Importer CSV'),
       h('button',{type:'button',id:'btn-parser-tarif',className:'btn btn-ghost',disabled:!!T.tarifs_parsing,
@@ -434,6 +461,8 @@ function renderTarifsOnglet(){
         T.tarifs_parsing
           ?(['xlsx','xls'].includes(_tarifsFileExt())?'Analyse Excel en cours…':'Analyse IA en cours…')
           :_tarifsParserLabel()),
+      h('button',{type:'button',className:'btn btn-danger',disabled:!hasTarifs,
+        onClick:()=>void viderTarifsTransporteur()},'Vider les tarifs'),
       csvInp
     ));
   }

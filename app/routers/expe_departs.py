@@ -908,6 +908,45 @@ def valider_tarifs(
     return {"actives": updated}
 
 
+@router.delete("/transporteurs/{transporteur_id}/tarifs")
+def vider_tarifs_transporteur(request: Request, transporteur_id: int):
+    """Supprime toutes les lignes tarifaires importées (grille + frais annexes)."""
+    user = _require_expe_write(request)
+    with get_db() as conn:
+        ex = conn.execute(
+            "SELECT id, nom FROM expe_transporteurs WHERE id=?",
+            (transporteur_id,),
+        ).fetchone()
+        if not ex:
+            raise HTTPException(status_code=404, detail="Transporteur introuvable")
+        n_lignes = conn.execute(
+            "SELECT COUNT(*) AS n FROM expe_tarifs WHERE transporteur_id=?",
+            (transporteur_id,),
+        ).fetchone()["n"]
+        n_frais = conn.execute(
+            "SELECT COUNT(*) AS n FROM expe_tarifs_frais WHERE transporteur_id=?",
+            (transporteur_id,),
+        ).fetchone()["n"]
+        conn.execute(
+            "DELETE FROM expe_tarifs WHERE transporteur_id=?",
+            (transporteur_id,),
+        )
+        conn.execute(
+            "DELETE FROM expe_tarifs_frais WHERE transporteur_id=?",
+            (transporteur_id,),
+        )
+        conn.commit()
+    nom_log = (ex["nom"] or "").strip() or f"#{transporteur_id}"
+    log_action(
+        user=user,
+        action="DELETE",
+        module="expe",
+        objet=f"Transporteur {nom_log} · tarifs vidés ({n_lignes} lignes, {n_frais} frais)",
+        ip=request.client.host if request.client else None,
+    )
+    return {"deleted_lignes": n_lignes, "deleted_frais": n_frais}
+
+
 _PROMPT_EXTRACTION_TARIF = """Tu es un expert en tarification transport en France.
 Analyse cette grille tarifaire et extrait TOUTES les lignes tarifaires au format JSON strict.
 
