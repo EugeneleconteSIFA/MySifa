@@ -830,6 +830,7 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
   border:1px solid var(--border);border-radius:10px;padding:0 12px}
 .mon-page .mon-search-wrap input{flex:1;border:none;background:transparent;padding:12px 0;color:var(--text);font-size:14px;outline:none}
 .mon-page .mon-search-wrap:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.content.mon-page.hist-page{padding:16px 20px 24px 24px;max-width:1100px}
 .mon-statut{display:inline-flex;align-items:center;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:3px 10px;border-radius:20px}
 .mon-statut-ok{background:rgba(52,211,153,.12);color:var(--success)}
 .mon-statut-ecart{background:rgba(248,113,113,.12);color:var(--danger)}
@@ -1415,7 +1416,10 @@ async function api(p, o) {
   try {
     const r = await fetch(API + p, { credentials: 'include', ...o });
     if (r.status === 401) { window.location.href = '/'; return null; }
-    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.detail || 'Erreur ' + r.status); }
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      throw new Error(apiErrorDetail(e.detail, r.status));
+    }
     return await r.json();
   } catch(e) {
     if (e.message && e.message.includes('Failed to fetch')) throw new Error('API non disponible');
@@ -1423,13 +1427,33 @@ async function api(p, o) {
   }
 }
 
+function apiErrorDetail(detail, status) {
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    return detail.map(d => d.msg || d.message || JSON.stringify(d)).join(' — ');
+  }
+  if (detail && typeof detail === 'object') {
+    return detail.msg || detail.message || JSON.stringify(detail);
+  }
+  return 'Erreur ' + status;
+}
+
 async function apiUpload(path, formData) {
   const r = await fetch(API + path, { method: 'POST', credentials: 'include', body: formData });
   if (r.status === 401) { window.location.href = '/'; return null; }
   if (!r.ok) {
-    const e = await r.json().catch(() => ({}));
-    const detail = e.detail;
-    throw new Error(typeof detail === 'string' ? detail : (detail?.msg || 'Erreur ' + r.status));
+    let detail = null;
+    const ct = (r.headers.get('content-type') || '').toLowerCase();
+    if (ct.includes('application/json')) {
+      const e = await r.json().catch(() => ({}));
+      detail = e.detail;
+    } else {
+      detail = await r.text().catch(() => null);
+    }
+    const msg = apiErrorDetail(detail, r.status);
+    const err = new Error(msg);
+    err.status = r.status;
+    throw err;
   }
   return await r.json();
 }
@@ -7487,7 +7511,12 @@ async function monitoringImportFile(file) {
     showToast(msg);
     await loadMonitoring(r.snapshot_id);
   } catch (e) {
-    showToast(e.message || 'Import impossible.', 'error');
+    console.error('reconciliation import:', e.message, e);
+    const msg = (e && e.message) ? String(e.message) : 'Import impossible.';
+    showToast(msg.length > 220 ? msg.slice(0, 217) + '…' : msg, 'error');
+    S.toast = { message: msg, type: 'error' };
+    renderToast();
+    setTimeout(() => { S.toast = null; renderToast(); }, 8000);
   } finally {
     m.importing = false;
     renderMonitoringView(true);

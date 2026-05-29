@@ -590,12 +590,31 @@ def delete_produit(request: Request, produit_id: int):
 
 # ─── Détail ──────────────────────────────────────────────────────
 
+def _enrich_ligne_display(
+    ln: dict,
+    produits_map: dict[str, dict],
+    matieres_map: dict[int, dict],
+) -> dict:
+    """Ajoute client et étiq./bobine depuis le catalogue produit (fiche)."""
+    ref_key = (ln.get("ref_produit") or "").strip().lower()
+    produit = produits_map.get(ref_key)
+    ctx = ligne_context_from_produit(
+        ln.get("ref_produit") or "",
+        ln.get("quantite"),
+        produit,
+        matieres_map,
+    )
+    ln["client_nom"] = ctx.get("client_nom")
+    ln["etiquettes_par_bobine"] = ctx.get("etiquettes_par_bobine")
+    return ln
+
+
 @router.get("/{ao_id}")
 def get_ao(request: Request, ao_id: int):
     _require_ao(request)
     with get_db() as conn:
         ao = _get_ao_or_404(conn, ao_id)
-        lignes = conn.execute(
+        lignes_rows = conn.execute(
             "SELECT * FROM ao_lignes WHERE ao_id=? ORDER BY position, id",
             (ao_id,),
         ).fetchall()
@@ -604,9 +623,16 @@ def get_ao(request: Request, ao_id: int):
             (ao_id,),
         ).fetchall()
         nb_reponses = _nb_reponses(conn, ao_id)
+        produits_map = _produits_by_ref_map(conn)
+        mat_ids = _matiere_ids_from_produits(produits_map)
+        matieres_map = _load_matieres_map(conn, mat_ids or None)
+        lignes = [
+            _enrich_ligne_display(_row_dict(r), produits_map, matieres_map)
+            for r in lignes_rows
+        ]
     return {
         "ao": ao,
-        "lignes": [_row_dict(r) for r in lignes],
+        "lignes": lignes,
         "fournisseurs": [_row_dict(r) for r in fournisseurs],
         "nb_reponses": nb_reponses,
     }

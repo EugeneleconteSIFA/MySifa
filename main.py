@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from config import APP_TITLE, APP_VERSION, HOST, PORT, BASE_DIR
@@ -109,7 +109,7 @@ async def no_cache_planning(request: Request, call_next):
     """Évite cache navigateur / proxy sur le planning (données toujours lues en base)."""
     response = await call_next(request)
     p = request.url.path
-    if p.startswith("/api/planning") or p == "/planning":
+    if p.startswith("/api/planning") or p == "/planning" or p.startswith("/portail/ao/"):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         response.headers["Pragma"] = "no-cache"
     return response
@@ -166,6 +166,11 @@ app.include_router(expe_portail_api_router)
 app.include_router(ao_page_router)
 app.include_router(pricing_router)
 app.include_router(pricing_page_router)
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return FileResponse(os.path.join(BASE_DIR, "static", "favicon.ico"))
 
 
 @app.get("/", response_class=HTMLResponse)

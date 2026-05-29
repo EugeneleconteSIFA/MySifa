@@ -315,38 +315,92 @@ def email_invitation_ao(
     return subject, body
 
 
+def _unite_quotation_label(unite: str | None) -> str:
+    u = (unite or "mille").strip().lower()
+    if u == "bobine":
+        return "Par bobine"
+    return "Au mille"
+
+
+def _format_quotation_email(rep: dict | None) -> str:
+    if not rep:
+        return "—"
+    q = rep.get("quotation")
+    if q is None:
+        q = rep.get("prix_unitaire")
+    if q is None:
+        return "—"
+    try:
+        qf = float(q)
+    except (TypeError, ValueError):
+        return "—"
+    devise = (rep.get("devise") or "EUR").strip().upper()
+    if devise not in ("EUR", "USD"):
+        devise = "EUR"
+    return f"{qf:.4g} {devise}"
+
+
+def _fiche_technique_link(ref_produit: str | None, produits_by_ref: dict[str, int]) -> str:
+    ref = (ref_produit or "").strip()
+    if not ref:
+        return "—"
+    produit_id = produits_by_ref.get(ref.lower())
+    if not produit_id:
+        return "—"
+    url = f"{public_base_url()}/api/ao/produits/{produit_id}/export"
+    return (
+        f'<a href="{_esc(url)}" style="color:#0891b2;font-weight:600;text-decoration:none">'
+        f"Fiche technique</a>"
+    )
+
+
 def email_accuse_reception(
     ao: dict,
     fournisseur: dict,
     lignes: list[dict],
     reponses: list[dict],
+    *,
+    produits_by_ref: dict[str, int] | None = None,
 ) -> tuple[str, str]:
     """Sujet et corps HTML — accusé de réception envoyé au responsable interne."""
     reference = ao.get("reference") or ""
     titre = ao.get("titre") or ""
     nom = fournisseur.get("nom_fournisseur") or ""
+    produits_map = produits_by_ref or {}
 
     rep_by_ligne = {int(r["ligne_id"]): r for r in reponses if r.get("ligne_id") is not None}
     rows_html = ""
     for ln in lignes:
         lid = ln.get("id")
         rep = rep_by_ligne.get(int(lid)) if lid is not None else None
-        prix = rep.get("prix_unitaire") if rep else None
         delai = rep.get("delai_jours") if rep else None
-        prix_s = f"{prix:.2f} €" if prix is not None else "—"
+        quotation_s = _format_quotation_email(rep)
+        unite_s = _unite_quotation_label(rep.get("unite_quotation") if rep else None)
         delai_s = str(delai) if delai is not None else "—"
+        fiche_s = _fiche_technique_link(ln.get("ref_produit"), produits_map)
         rows_html += (
             f"<tr>"
             f"<td style=\"padding:8px 12px;border-bottom:1px solid #e2e8f0;font-size:13px\">{_esc(ln.get('ref_produit'))}</td>"
-            f"<td style=\"padding:8px 12px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#475569\">{_esc(ln.get('designation'))}</td>"
             f"<td style=\"padding:8px 12px;border-bottom:1px solid #e2e8f0;font-size:13px;text-align:right\">{_esc(ln.get('quantite'))} {_esc(ln.get('unite') or '')}</td>"
-            f"<td style=\"padding:8px 12px;border-bottom:1px solid #e2e8f0;font-size:13px;text-align:right\">{_esc(prix_s)}</td>"
+            f"<td style=\"padding:8px 12px;border-bottom:1px solid #e2e8f0;font-size:13px;text-align:right\">{_esc(quotation_s)}</td>"
+            f"<td style=\"padding:8px 12px;border-bottom:1px solid #e2e8f0;font-size:13px\">{_esc(unite_s)}</td>"
             f"<td style=\"padding:8px 12px;border-bottom:1px solid #e2e8f0;font-size:13px;text-align:right\">{_esc(delai_s)}</td>"
+            f"<td style=\"padding:8px 12px;border-bottom:1px solid #e2e8f0;font-size:13px\">{fiche_s}</td>"
             f"</tr>"
         )
     if not rows_html:
         rows_html = (
-            "<tr><td colspan=\"5\" style=\"padding:12px;color:#94a3b8\">Aucune ligne.</td></tr>"
+            "<tr><td colspan=\"6\" style=\"padding:12px;color:#94a3b8\">Aucune ligne.</td></tr>"
+        )
+
+    ao_id = ao.get("id")
+    ao_link = ""
+    if ao_id:
+        ao_url = f"{public_base_url()}/ao"
+        ao_link = (
+            f'<p style="margin:0 0 16px;font-size:13px;color:#475569">'
+            f'<a href="{_esc(ao_url)}" style="color:#0891b2;font-weight:600;text-decoration:none">'
+            f"Ouvrir la demande dans MySifa</a></p>"
         )
 
     subject = f"[MySifa] Réponse reçue — {reference} — {nom}"
@@ -364,15 +418,17 @@ def email_accuse_reception(
       <thead>
         <tr style="background:#f1f5f9">
           <th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;color:#64748b">Réf.</th>
-          <th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;color:#64748b">Désignation</th>
           <th style="padding:8px 12px;text-align:right;font-size:11px;text-transform:uppercase;color:#64748b">Qté</th>
-          <th style="padding:8px 12px;text-align:right;font-size:11px;text-transform:uppercase;color:#64748b">Prix</th>
-          <th style="padding:8px 12px;text-align:right;font-size:11px;text-transform:uppercase;color:#64748b">Délai</th>
+          <th style="padding:8px 12px;text-align:right;font-size:11px;text-transform:uppercase;color:#64748b">Quotation</th>
+          <th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;color:#64748b">Unité</th>
+          <th style="padding:8px 12px;text-align:right;font-size:11px;text-transform:uppercase;color:#64748b">Délai (j)</th>
+          <th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;color:#64748b">Fiche</th>
         </tr>
       </thead>
       <tbody>{rows_html}</tbody>
     </table>
-    <p style="margin:0;font-size:13px;color:#475569">Connectez-vous à MySifa pour consulter la comparaison des prix.</p>
+    {ao_link}
+    <p style="margin:0;font-size:13px;color:#475569">La fiche technique ouvre le détail produit (connexion MySifa requise).</p>
   </div>
 </div>"""
     return subject, body
