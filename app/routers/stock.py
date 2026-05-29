@@ -1325,12 +1325,34 @@ def dashboard(request: Request):
             """
         ).fetchall()
 
+        refs_a_expedier = conn.execute(
+            """
+            SELECT COUNT(DISTINCT l.produit_id) AS nb
+            FROM lots_stock l
+            WHERE l.emplacement = ? AND l.quantite_restante > 0
+            """,
+            (STOCK_EMPLACEMENT_AU_SOL,),
+        ).fetchone()
+
+        today_prefix = datetime.now().strftime("%Y-%m-%d")
+        departs_jour = conn.execute(
+            """
+            SELECT COUNT(*) AS nb
+            FROM expe_departs
+            WHERE date_enlevement LIKE ?
+            """,
+            (today_prefix + "%",),
+        ).fetchone()
+
     return {
         "stats": dict(stats),
         "derniers_mouvements": [dict(r) for r in derniers_mvts],
         "top_refs": [dict(r) for r in top_refs],
         "alertes_mp": [dict(r) for r in alertes_mp],
         "derniers_mouvements_mp": [dict(r) for r in derniers_mouvements_mp],
+        "nb_mp_a_approvisionner": len(alertes_mp),
+        "nb_refs_a_expedier": refs_a_expedier["nb"] if refs_a_expedier else 0,
+        "nb_departs_aujourd_hui": departs_jour["nb"] if departs_jour else 0,
     }
 
 

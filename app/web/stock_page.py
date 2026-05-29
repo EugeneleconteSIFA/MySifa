@@ -815,7 +815,7 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
 .hist-results-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
 .hist-count{font-size:12px;font-weight:600;color:var(--text2)}
 .hist-table-wrap{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
-.hist-table{width:100%;min-width:1040px;border-collapse:collapse;font-size:13px}
+.hist-table{width:100%;min-width:1200px;border-collapse:collapse;font-size:13px}
 .hist-unite{font-size:12px;color:var(--text2);white-space:nowrap}
 .hist-table thead th{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);
   background:var(--bg);border-bottom:1px solid var(--border);padding:11px 14px;text-align:left;font-weight:600;white-space:nowrap}
@@ -826,7 +826,7 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
 .mon-page .mon-actions .mon-snapshot-select{flex:1;min-width:200px;max-width:420px;background:var(--bg);border:1px solid var(--border);
   border-radius:10px;padding:10px 14px;color:var(--text);font-size:14px}
 .mon-page .mon-filters-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
-.mon-page .mon-search-wrap{flex:1;min-width:220px;display:flex;align-items:center;gap:8px;background:var(--bg);
+.mon-page .mon-search-wrap{flex:1;min-width:220px;display:flex;align-items:center;gap:8px;background:#fff;
   border:1px solid var(--border);border-radius:10px;padding:0 12px}
 .mon-page .mon-search-wrap input{flex:1;border:none;background:transparent;padding:12px 0;color:var(--text);font-size:14px;outline:none}
 .mon-page .mon-search-wrap:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
@@ -6199,10 +6199,29 @@ function dashStockTypeBadge(typeStock) {
 
 function buildDashboardKpis(s) {
   const kpis = [
-    { label: 'Références', value: s.nb_refs || 0, mod: 'accent' },
-    { label: 'Emplacements occupés', value: s.nb_empl_occupes || 0, mod: 'accent' },
-    { label: 'Unités en stock', value: s.total_unites || 0, mod: 'accent' },
-    { label: 'À inventorier', value: s.nb_a_inventorier || 0, mod: (s.nb_a_inventorier > 0 ? 'warn' : 'accent') },
+    {
+      label: 'MP à approvisionner',
+      value: (S.dashboard && S.dashboard.nb_mp_a_approvisionner != null)
+               ? S.dashboard.nb_mp_a_approvisionner : 0,
+      mod: (S.dashboard && S.dashboard.nb_mp_a_approvisionner > 0) ? 'warn' : 'accent',
+    },
+    {
+      label: 'Références à expédier',
+      value: (S.dashboard && S.dashboard.nb_refs_a_expedier != null)
+               ? S.dashboard.nb_refs_a_expedier : 0,
+      mod: 'accent',
+    },
+    {
+      label: "Expéditions aujourd'hui",
+      value: (S.dashboard && S.dashboard.nb_departs_aujourd_hui != null)
+               ? S.dashboard.nb_departs_aujourd_hui : 0,
+      mod: (S.dashboard && S.dashboard.nb_departs_aujourd_hui > 0) ? 'ok' : 'muted',
+    },
+    {
+      label: 'Références en stock',
+      value: (s && s.nb_refs != null) ? s.nb_refs : 0,
+      mod: 'accent',
+    },
   ];
   return el('div', { cls: 'dash-kpi-grid' },
     ...kpis.map(k => el('div', { cls: 'stat-card' },

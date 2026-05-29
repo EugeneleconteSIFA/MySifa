@@ -410,12 +410,12 @@ function renderCarnet() {
   const list = S.carnet || [];
   let rows = '';
   list.forEach(c => {
-    rows += '<tr><td>'+escHtml(c.societe||'—')+'</td><td>'+escHtml(c.nom)+'</td><td>'+escHtml(c.adresse||'—')+'</td><td>'+
+    rows += '<tr><td>'+escHtml(c.societe||'—')+'</td><td>'+escHtml(c.nom)+'</td><td>'+escHtml(c.email||'—')+'</td><td>'+escHtml(c.adresse||'—')+'</td><td>'+
       '<button class="btn btn-ghost btn-sm btn-edit-carnet" data-id="'+c.id+'">Modifier</button> '+
       '<button class="btn btn-ghost btn-sm btn-del-carnet" data-id="'+c.id+'">Supprimer</button></td></tr>';
   });
   const table = list.length
-    ? '<div class="card"><table class="data-table"><thead><tr><th>Société</th><th>Nom</th><th>Adresse</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+    ? '<div class="card"><table class="data-table"><thead><tr><th>Société</th><th>Nom</th><th>Email</th><th>Adresse</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
     : '<div class="card empty-state"><strong>Aucun fournisseur dans le carnet.</strong></div>';
   return '<div class="page-hdr"><h1>Carnet fournisseurs</h1>'+
     '<button class="btn btn-accent" type="button" id="btn-add-carnet">'+icon('plus',14)+' Ajouter</button></div>'+table;
