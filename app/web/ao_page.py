@@ -691,7 +691,7 @@ function openModalFourni() {
 }
 function openModalCarnetEntry(edit) {
   S.modal = 'carnet-entry';
-  S.modalData = edit ? {...edit} : {nom:'', societe:'', adresse:'', notes:''};
+  S.modalData = edit ? {...edit} : {nom:'', societe:'', email:'', adresse:'', notes:''};
   renderModal();
 }
 function openModalCarnetClientEntry(edit) {
@@ -828,6 +828,7 @@ function renderModal() {
         if (c) {
           societeEl.value = c.societe || '';
           nomEl.value = c.nom || '';
+          mailEl.value = c.email || '';
           adresseEl.value = c.adresse || '';
         }
         saveCb.checked = false;
@@ -850,6 +851,7 @@ function renderModal() {
           await api('/api/ao/carnet-fournisseurs', {method:'POST', headers:{'Content-Type':'application/json'},
             body: JSON.stringify({
               nom,
+              email: email,
               societe: societeEl.value.trim() || null,
               adresse: adresseEl.value.trim() || null
             })});
@@ -865,6 +867,7 @@ function renderModal() {
     box.innerHTML = '<h3>'+(editId?'Modifier':'Ajouter')+' au carnet</h3>'+
       '<div class="field"><label>Société</label><input id="m-c-societe" value="'+escAttr(S.modalData.societe||'')+'"></div>'+
       '<div class="field"><label>Nom</label><input id="m-c-nom" value="'+escAttr(S.modalData.nom||'')+'"></div>'+
+      '<div class="field"><label>Email</label><input type="email" id="m-c-email" value="'+escAttr(S.modalData.email||'')+'"></div>'+
       '<div class="field"><label>Adresse</label><textarea id="m-c-adresse" rows="2">'+escHtml(S.modalData.adresse||'')+'</textarea></div>'+
       '<div class="field"><label>Notes</label><textarea id="m-c-notes" rows="2">'+escHtml(S.modalData.notes||'')+'</textarea></div>'+
       '<div class="modal-actions"><button class="btn btn-ghost" id="m-cancel">Annuler</button><button class="btn btn-accent" id="m-ok">Enregistrer</button></div>';
@@ -874,6 +877,7 @@ function renderModal() {
       const body = {
         societe: document.getElementById('m-c-societe').value.trim() || null,
         nom: document.getElementById('m-c-nom').value.trim(),
+        email: document.getElementById('m-c-email').value.trim() || null,
         adresse: document.getElementById('m-c-adresse').value.trim() || null,
         notes: document.getElementById('m-c-notes').value.trim() || null
       };
