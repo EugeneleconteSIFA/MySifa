@@ -1,7 +1,9 @@
 """MyStock — Monitoring : réconciliation stocks PF ERP vs MySifa."""
 import io
+import re
 import sqlite3
-from datetime import date, datetime
+import unicodedata
+from datetime import date, datetime, timedelta
 from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
@@ -17,23 +19,47 @@ router = APIRouter()
 _MONITORING_ROLES = frozenset({"superadmin", "direction", "administration"})
 _PARIS = ZoneInfo("Europe/Paris")
 
-_ERP_COL_CODE1 = "Code 1"
-_ERP_COL_CODE2 = "Code 2"
-_ERP_COL_STOCK = "Stock réel"
-_ERP_COL_DESIGNATION = "Désignation produit "
-_ERP_COL_MVT_LIB = "Libellé dernier Mvt"
-_ERP_COL_MVT_DATE = "Date dernier Mvt"
-_ERP_COL_MVT_QTE = "Quantité dernier Mvt"
+# Alias normalisés (minuscules, espaces unifiés) — correspondance exacte ou préfixe
+_ERP_COL_ALIASES: dict[str, tuple[str, ...]] = {
+    "code1": ("code 1", "code1"),
+    "code2": ("code 2", "code2"),
+    "stock": ("stock réel", "stock reel", "stock réel pf", "stock pf"),
+    "designation": (
+        "désignation produit",
+        "designation produit",
+        "désignation",
+        "designation",
+    ),
+    "mvt_lib": (
+        "libellé dernier mvt",
+        "libelle dernier mvt",
+        "libellé du dernier mvt",
+        "libelle du dernier mvt",
+    ),
+    "mvt_date": (
+        "date dernier mvt",
+        "date du dernier mvt",
+        "date mvt",
+    ),
+    "mvt_qte": (
+        "quantité dernier mvt",
+        "quantite dernier mvt",
+        "quantité du dernier mvt",
+        "qte dernier mvt",
+    ),
+}
 
-_REQUIRED_ERP_COLS = (
-    _ERP_COL_CODE1,
-    _ERP_COL_CODE2,
-    _ERP_COL_STOCK,
-    _ERP_COL_DESIGNATION,
-    _ERP_COL_MVT_LIB,
-    _ERP_COL_MVT_DATE,
-    _ERP_COL_MVT_QTE,
-)
+_ERP_REQUIRED_KEYS = ("code1", "code2", "stock")
+_ERP_OPTIONAL_KEYS = ("designation", "mvt_lib", "mvt_date", "mvt_qte")
+_ERP_REQUIRED_LABELS = {
+    "code1": "Code 1",
+    "code2": "Code 2",
+    "stock": "Stock réel",
+    "designation": "Désignation produit",
+    "mvt_lib": "Libellé dernier Mvt",
+    "mvt_date": "Date dernier Mvt",
+    "mvt_qte": "Quantité dernier Mvt",
+}
 
 
 def require_monitoring(request: Request) -> dict:
@@ -70,6 +96,14 @@ def _to_iso_datetime(val: Any) -> Optional[str]:
         return val.strftime("%Y-%m-%dT%H:%M:%S")
     if isinstance(val, date):
         return datetime(val.year, val.month, val.day).strftime("%Y-%m-%dT%H:%M:%S")
+    if isinstance(val, (int, float)) and not isinstance(val, bool):
+        # Sériel Excel (jours depuis 1899-12-30)
+        try:
+            base = datetime(1899, 12, 30)
+            dt = base + timedelta(days=float(val))
+            return dt.strftime("%Y-%m-%dT%H:%M:%S")
+        except (OverflowError, ValueError):
+            pass
     s = str(val).strip()
     if not s:
         return None
@@ -93,68 +127,265 @@ def _cell_str(val: Any) -> str:
     return str(val).strip()
 
 
+def _norm_header(val: Any) -> str:
+    s = _cell_str(val)
+    if not s:
+        return ""
+    s = unicodedata.normalize("NFKC", s)
+    s = re.sub(r"\s+", " ", s)
+    return s.lower()
+
+
+def _erp_code_part(val: Any) -> str:
+    if val is None or val == "":
+        return ""
+    if isinstance(val, bool):
+        return ""
+    if isinstance(val, int):
+        return str(val)
+    if isinstance(val, float):
+        if val == int(val):
+            return str(int(val))
+        return str(val).strip().replace(",", ".")
+    s = _cell_str(val)
+    if not s:
+        return ""
+    try:
+        f = float(s.replace(",", "."))
+        if f == int(f):
+            return str(int(f))
+    except ValueError:
+        pass
+    return s
+
+
+def _erp_code2_part(val: Any) -> str:
+    c2 = _erp_code_part(val)
+    if c2.isdigit() and len(c2) < 4:
+        return c2.zfill(4)
+    return c2
+
+
 def _erp_reference(code1: Any, code2: Any) -> Optional[str]:
-    c1 = _cell_str(code1)
+    c1 = _erp_code_part(code1)
     if not c1:
         return None
-    c2 = _cell_str(code2)
+    c2 = _erp_code2_part(code2)
     return f"{c1}/{c2}" if c2 else c1
 
 
-def _parse_erp_workbook(contents: bytes) -> dict[str, dict]:
+def _header_matches(norm: str, aliases: tuple[str, ...]) -> bool:
+    if not norm:
+        return False
+    for alias in aliases:
+        if norm == alias:
+            return True
+        if norm.startswith(alias + " ") or norm.startswith(alias + "("):
+            return True
+        # Correspondance partielle uniquement pour alias longs et spécifiques
+        if len(alias) >= 14 and alias in norm:
+            return True
+    return False
+
+
+def _row_looks_like_erp_header(row: list) -> bool:
+    norms = [_norm_header(c) for c in row if _norm_header(c)]
+    has_code1 = any(_header_matches(n, _ERP_COL_ALIASES["code1"]) for n in norms)
+    has_stock = any(_header_matches(n, _ERP_COL_ALIASES["stock"]) for n in norms)
+    return has_code1 and has_stock
+
+
+def _find_header_row_index(rows: list) -> int:
+    for i, row in enumerate(rows[:30]):
+        if row and _row_looks_like_erp_header(row):
+            return i
+    return 0
+
+
+def _resolve_erp_columns(headers: list) -> dict[str, int]:
+    norms = [_norm_header(h) for h in headers]
+    col_idx: dict[str, int] = {}
+    for key, aliases in _ERP_COL_ALIASES.items():
+        for i, h in enumerate(norms):
+            if _header_matches(h, aliases):
+                col_idx[key] = i
+                break
+    return col_idx
+
+
+def _score_column_map(col_idx: dict[str, int]) -> int:
+    score = 0
+    for k in _ERP_REQUIRED_KEYS:
+        if k in col_idx:
+            score += 100
+    for k in _ERP_OPTIONAL_KEYS:
+        if k in col_idx:
+            score += 1
+    return score
+
+
+def _open_erp_workbook(contents: bytes) -> CalamineWorkbook:
     try:
-        wb = CalamineWorkbook.from_filelike(io.BytesIO(contents))
+        return CalamineWorkbook.from_filelike(io.BytesIO(contents))
     except Exception as e:
         raise HTTPException(
             400,
             "Fichier illisible — vérifiez qu'il s'agit bien de l'export Table Stocks (.xlsx).",
         ) from e
 
-    if not wb.sheet_names:
-        raise HTTPException(400, "Fichier vide — aucune feuille trouvée.")
 
-    sheet = wb.get_sheet_by_name(wb.sheet_names[0])
-    rows = sheet.to_python()
+def _sheet_names_priority(wb: CalamineWorkbook) -> list[str]:
+    names = list(wb.sheet_names or [])
+    if not names:
+        return []
+    if "A" in names:
+        return ["A"] + [n for n in names if n != "A"]
+    return names
+
+
+def _parse_erp_sheet_rows(rows: list) -> tuple[dict[str, dict], int, dict[str, int], list]:
     if not rows:
         raise HTTPException(400, "Fichier vide — aucune ligne de données.")
 
-    headers = [_cell_str(h) for h in rows[0]]
-    col_idx: dict[str, int] = {}
-    for i, h in enumerate(headers):
-        if h and h not in col_idx:
-            col_idx[h] = i
+    header_i = _find_header_row_index(rows)
+    headers = rows[header_i]
+    col_idx = _resolve_erp_columns(headers)
 
-    missing = [c for c in _REQUIRED_ERP_COLS if c not in col_idx]
+    missing = [k for k in _ERP_REQUIRED_KEYS if k not in col_idx]
     if missing:
+        found = [_cell_str(h) for h in headers if _cell_str(h)][:20]
+        missing_labels = ", ".join(_ERP_REQUIRED_LABELS[k] for k in missing)
+        found_hint = (
+            " Colonnes détectées : " + " | ".join(found) + "."
+            if found
+            else ""
+        )
         raise HTTPException(
             400,
-            f"Colonnes manquantes dans l'export ERP : {', '.join(missing)}.",
+            f"Colonnes manquantes : {missing_labels}.{found_hint}",
         )
 
     erp_index: dict[str, dict] = {}
-    for row in rows[1:]:
+
+    def _col(row: list, key: str) -> Any:
+        if key not in col_idx:
+            return None
+        i = col_idx[key]
+        return row[i] if i < len(row) else None
+
+    for row in rows[header_i + 1 :]:
         if not row:
             continue
-        ref = _erp_reference(
-            row[col_idx[_ERP_COL_CODE1]] if col_idx[_ERP_COL_CODE1] < len(row) else None,
-            row[col_idx[_ERP_COL_CODE2]] if col_idx[_ERP_COL_CODE2] < len(row) else None,
-        )
+        ref = _erp_reference(_col(row, "code1"), _col(row, "code2"))
         if not ref:
             continue
-
-        def _col(name: str) -> Any:
-            i = col_idx[name]
-            return row[i] if i < len(row) else None
-
         erp_index[ref] = {
-            "stock_erp": _to_float(_col(_ERP_COL_STOCK)),
-            "designation": _cell_str(_col(_ERP_COL_DESIGNATION)) or None,
-            "mvt_libelle": _cell_str(_col(_ERP_COL_MVT_LIB)) or None,
-            "mvt_date": _to_iso_datetime(_col(_ERP_COL_MVT_DATE)),
-            "mvt_qte": _to_float(_col(_ERP_COL_MVT_QTE)),
+            "stock_erp": _to_float(_col(row, "stock")),
+            "designation": _cell_str(_col(row, "designation")) or None,
+            "mvt_libelle": _cell_str(_col(row, "mvt_lib")) or None,
+            "mvt_date": _to_iso_datetime(_col(row, "mvt_date")),
+            "mvt_qte": _to_float(_col(row, "mvt_qte")),
         }
 
-    return erp_index
+    if not erp_index:
+        raise HTTPException(
+            400,
+            "Aucune référence lisible — vérifiez que le fichier contient des lignes avec Code 1 renseigné.",
+        )
+
+    return erp_index, header_i, col_idx, headers
+
+
+def _parse_erp_workbook(contents: bytes) -> dict[str, dict]:
+    wb = _open_erp_workbook(contents)
+    if not wb.sheet_names:
+        raise HTTPException(400, "Fichier vide — aucune feuille trouvée.")
+
+    best: Optional[tuple[dict[str, dict], int]] = None
+    best_score = -1
+    last_exc: Optional[HTTPException] = None
+
+    for sheet_name in _sheet_names_priority(wb):
+        rows = wb.get_sheet_by_name(sheet_name).to_python()
+        if not rows:
+            continue
+        try:
+            erp_index, header_i, col_idx, _headers = _parse_erp_sheet_rows(rows)
+            score = _score_column_map(col_idx) + len(erp_index)
+            if score > best_score:
+                best_score = score
+                best = (erp_index, header_i)
+        except HTTPException as exc:
+            last_exc = exc
+            continue
+
+    if best:
+        return best[0]
+
+    if last_exc:
+        raise last_exc
+
+    raise HTTPException(
+        400,
+        "Fichier illisible — aucune feuille Table Stocks reconnue (Code 1, Code 2, Stock réel).",
+    )
+
+
+def _diagnose_erp_workbook(contents: bytes) -> dict:
+    """Analyse le fichier sans importer (diagnostic 400)."""
+    try:
+        wb = _open_erp_workbook(contents)
+    except HTTPException as exc:
+        return {"ok": False, "error": str(exc.detail)}
+
+    sheets_out = []
+    for sheet_name in _sheet_names_priority(wb):
+        rows = wb.get_sheet_by_name(sheet_name).to_python()
+        if not rows:
+            sheets_out.append({"name": sheet_name, "empty": True})
+            continue
+        header_i = _find_header_row_index(rows)
+        headers = [_cell_str(h) for h in rows[header_i] if _cell_str(h)]
+        col_idx = _resolve_erp_columns(rows[header_i])
+        missing = [k for k in _ERP_REQUIRED_KEYS if k not in col_idx]
+        sheets_out.append({
+            "name": sheet_name,
+            "header_row": header_i,
+            "headers": headers[:30],
+            "columns_found": list(col_idx.keys()),
+            "missing": [_ERP_REQUIRED_LABELS[k] for k in missing],
+            "score": _score_column_map(col_idx),
+        })
+
+    scored = [s for s in sheets_out if not s.get("empty")]
+    best = max(scored, key=lambda s: s.get("score", 0)) if scored else None
+    if best and not best.get("missing"):
+        return {
+            "ok": True,
+            "sheet": best["name"],
+            "header_row": best["header_row"],
+            "headers": best["headers"],
+            "columns_found": best["columns_found"],
+            "sheets": sheets_out,
+        }
+
+    err_parts = []
+    if best:
+        err_parts.append(
+            "Colonnes manquantes : " + ", ".join(best.get("missing") or [])
+        )
+        if best.get("headers"):
+            err_parts.append(
+                "En-têtes : " + " | ".join(best["headers"][:15])
+            )
+    else:
+        err_parts.append("Aucune feuille avec données.")
+
+    return {
+        "ok": False,
+        "error": ". ".join(err_parts),
+        "sheets": sheets_out,
+    }
 
 
 def _load_mysifa_index(conn: sqlite3.Connection) -> dict[str, dict]:
@@ -280,6 +511,18 @@ def _row_to_dict(row: sqlite3.Row) -> dict:
     return {k: row[k] for k in row.keys()}
 
 
+@router.post("/api/reconciliation/import/preview")
+async def preview_reconciliation_import(
+    request: Request, file: UploadFile = File(...)
+):
+    """Diagnostic : en-têtes détectés sans enregistrer de snapshot."""
+    require_monitoring(request)
+    contents = await file.read()
+    if not contents:
+        raise HTTPException(400, "Fichier vide — sélectionnez un export Table Stocks (.xlsx).")
+    return _diagnose_erp_workbook(contents)
+
+
 @router.post("/api/reconciliation/import")
 async def import_reconciliation(
     request: Request, file: UploadFile = File(...)
@@ -292,10 +535,17 @@ async def import_reconciliation(
             "Format non supporté — importez l'export Table Stocks au format .xlsx.",
         )
 
+    contents = await file.read()
+    if not contents:
+        raise HTTPException(400, "Fichier vide — sélectionnez un export Table Stocks (.xlsx).")
+
     try:
-        contents = await file.read()
         erp_index = _parse_erp_workbook(contents)
-    except HTTPException:
+    except HTTPException as exc:
+        if exc.status_code == 400:
+            diag = _diagnose_erp_workbook(contents)
+            if not diag.get("ok") and diag.get("error"):
+                raise HTTPException(400, str(diag["error"])) from exc
         raise
     except Exception as e:
         raise HTTPException(
