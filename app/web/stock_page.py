@@ -3095,7 +3095,7 @@ function mpCtx(catOrMatiere) {
 }
 function mpIsBobineCategory(catOrMatiere) {
   const c = mpCtx(catOrMatiere).categorie;
-  return c === 'mandrin' || c === 'frontal' || c === 'glassine';
+  return c === 'frontal' || c === 'glassine';
 }
 function mpIsGlassineCategory(catOrMatiere) {
   return mpCtx(catOrMatiere).categorie === 'glassine';
@@ -3147,7 +3147,7 @@ function mpStockTotalLabel(catOrMatiere) {
 }
 function mpQuantiteInputAttrs(catOrMatiere) {
   const c = mpCtx(catOrMatiere).categorie;
-  if (mpIsBobineCategory(c) || c === 'palette' || c === 'carton') {
+  if (mpIsBobineCategory(c) || c === 'mandrin' || c === 'palette' || c === 'carton') {
     return { type: 'number', min: '1', step: '1' };
   }
   return { type: 'number', min: '0.5', step: '0.5' };
@@ -4559,7 +4559,8 @@ function appendMatiereRefEditFields(parent, item) {
   refInp.value = item.reference || '';
   const desInp = el('input', { attrs: { type: 'text' } });
   desInp.value = item.designation || '';
-  const seuilStep = mpIsBobineCategory(item) || mpIsPaletteCategory(item) || mpCategorieKey(item.categorie) === 'carton' ? '1' : '0.5';
+  const seuilStep = mpIsBobineCategory(item) || mpIsPaletteCategory(item)
+    || mpCategorieKey(item.categorie) === 'carton' || mpCategorieKey(item.categorie) === 'mandrin' ? '1' : '0.5';
   const seuilInp = el('input', { attrs: { type: 'number', min: '0', step: seuilStep } });
   seuilInp.value = String(item.seuil_alerte ?? 0);
   const pppWrap = el('div', { cls: 'mp-field', style: { display: mpIsPaletteCategory(item) ? '' : 'none' } });
@@ -4708,7 +4709,7 @@ function buildMatieres() {
     el('div', null,
       el('h2', { cls: 'hist-title' }, 'Matières premières'),
       el('p', { cls: 'hist-subtitle' },
-        'Mandrins, frontaux, glassines (bob.), adhésifs (pal.), palettes (piles), cartons (pal.)'),
+        'Mandrins (pal.), frontaux et glassines (bob.), adhésifs (pal.), palettes (piles), cartons (pal.)'),
     ),
     isMatieresAdmin()
       ? el('div', { cls: 'hist-head-actions' },
@@ -4974,7 +4975,7 @@ function renderMpMouvementModal(type, matiere) {
     };
   } else if (typeMvt === 'ajustement') {
     hintEl.textContent = 'Stock actuel : ' + mpStockLine(stockActuel, mpCat);
-    const stepAdj = mpIsPaletteCategory(mpCat) || mpCategorieKey(mpCat?.categorie) === 'carton' ? '1' : '0.5';
+    const stepAdj = mpIsPaletteCategory(mpCat) || ['carton', 'mandrin'].includes(mpCategorieKey(mpCat?.categorie)) ? '1' : '0.5';
     const qInp = el('input', { attrs: { type: 'number', min: '0', step: stepAdj } });
     body.appendChild(el('div', { cls: 'mp-field' },
       hintEl,
@@ -5474,7 +5475,7 @@ function buildMatieresAdminAddForm() {
     couleurWrap.style.display = isGlass ? '' : 'none';
     pppLbl.textContent = 'Palettes par pile';
     seuilLbl.textContent = mpSeuilFieldLabel(cat);
-    seuilInp.step = isPal || isCarton || mpIsBobineCategory(cat) ? '1' : '0.5';
+    seuilInp.step = isPal || isCarton || cat === 'mandrin' || mpIsBobineCategory(cat) ? '1' : '0.5';
     hintEl.textContent = mpAdminHint(cat);
   }
   catSel.addEventListener('change', syncAdminAddFields);

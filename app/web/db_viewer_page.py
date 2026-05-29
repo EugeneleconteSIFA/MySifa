@@ -294,6 +294,39 @@ body.light .user-chip:hover{{background:rgba(8,145,178,.12)}}
 .view-tab.active{{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}}
 .view-tab:hover:not(.active){{border-color:rgba(34,211,238,.3);color:var(--text)}}
 
+/* Recherche IA */
+.ai-query-bar{{
+  padding:12px 24px;border-bottom:1px solid var(--border);flex-shrink:0;
+  background:color-mix(in srgb,var(--accent) 6%,var(--card));
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+}}
+.ai-query-label{{
+  font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
+  color:var(--accent);white-space:nowrap;display:flex;align-items:center;gap:6px;
+}}
+.ai-query-input{{
+  flex:1;min-width:220px;padding:10px 14px;background:var(--bg);border:1px solid var(--border);
+  border-radius:10px;color:var(--text);font-size:13px;font-family:inherit;outline:none;
+}}
+.ai-query-input:focus{{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 12%,transparent)}}
+.ai-query-btn{{
+  padding:10px 16px;border-radius:10px;border:none;background:var(--accent);color:var(--bg);
+  font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;
+  transition:filter .15s;
+}}
+.ai-query-btn:hover:not(:disabled){{filter:brightness(1.08)}}
+.ai-query-btn:disabled{{opacity:.5;cursor:not-allowed}}
+.ai-result-head{{
+  padding:14px 24px;border-bottom:1px solid var(--border);flex-shrink:0;
+  background:var(--card);font-size:12px;color:var(--text2);line-height:1.6;
+}}
+.ai-result-head strong{{color:var(--text)}}
+.ai-sql-block{{
+  margin-top:8px;padding:10px 12px;background:var(--bg);border:1px solid var(--border);
+  border-radius:8px;font-family:ui-monospace,monospace;font-size:11px;color:var(--accent);
+  white-space:pre-wrap;word-break:break-all;
+}}
+
 @media(max-width:900px){{
   #app{{grid-template-columns:1fr}}
   .sidebar{{
@@ -391,6 +424,19 @@ body.light .user-chip:hover{{background:rgba(8,145,178,.12)}}
       <div class="spinner" style="width:18px;height:18px;border-width:2px"></div>
     </div>
 
+    <!-- Recherche IA -->
+    <div class="ai-query-bar">
+      <span class="ai-query-label">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z"/></svg>
+        IA
+      </span>
+      <input class="ai-query-input" type="search" id="ai-query-input"
+             placeholder="Question en français — ex. : les 10 derniers départs validés pour Roubaix"
+             autocomplete="off"
+             onkeydown="if(event.key==='Enter'){{event.preventDefault();runAiQuery();}}">
+      <button type="button" class="ai-query-btn" id="ai-query-btn" onclick="runAiQuery()">Rechercher</button>
+    </div>
+
     <!-- Topbar (table active) -->
     <div class="topbar" id="topbar" style="display:none">
       <div class="topbar-title" id="topbar-title">—</div>
@@ -447,6 +493,8 @@ const S = {{
   schema: [],
   data: null,           // {{columns, rows, total, pages}}
   loading: false,
+  aiResult: null,
+  aiLoading: false,
 }};
 
 /* ── Boot ── */
@@ -471,9 +519,19 @@ function toggleTheme() {{
 }}
 
 /* ── API ── */
-async function api(path) {{
-  const r = await fetch(path, {{credentials:'same-origin'}});
-  if (!r.ok) throw new Error(await r.text());
+async function api(path, opts) {{
+  const o = opts || {{}};
+  const r = await fetch(path, {{
+    credentials:'same-origin',
+    method: o.method || 'GET',
+    headers: o.body ? {{'Content-Type':'application/json', ...(o.headers||{{}})}} : (o.headers||{{}}),
+    body: o.body ? JSON.stringify(o.body) : undefined,
+  }});
+  if (!r.ok) {{
+    let msg = await r.text();
+    try {{ const j = JSON.parse(msg); msg = j.detail || msg; }} catch(_) {{}}
+    throw new Error(typeof msg === 'string' ? msg : 'Erreur serveur');
+  }}
   return r.json();
 }}
 
@@ -574,9 +632,84 @@ function filterTables() {{
   renderTables();
 }}
 
+/* ── Recherche IA ── */
+async function runAiQuery() {{
+  const inp = document.getElementById('ai-query-input');
+  const btn = document.getElementById('ai-query-btn');
+  const q = (inp && inp.value || '').trim();
+  if (!q) {{ showToast('Saisissez une question.', 'danger'); return; }}
+  if (S.aiLoading) return;
+  S.aiLoading = true;
+  S.aiResult = null;
+  if (btn) btn.disabled = true;
+  document.getElementById('topbar').style.display = 'none';
+  document.getElementById('content').innerHTML =
+    `<div class="state-center"><div class="spinner"></div><p style="margin-top:8px;color:var(--muted)">Génération de la requête SQL…</p></div>`;
+  try {{
+    S.aiResult = await api('/api/db/ai-query', {{method:'POST', body:{{question:q}}}});
+    renderAiResult();
+    showToast(S.aiResult.total + ' ligne(s) trouvée(s).', 'success');
+  }} catch(e) {{
+    renderError(e.message || 'Recherche impossible');
+    showToast(e.message || 'Recherche impossible', 'danger');
+  }} finally {{
+    S.aiLoading = false;
+    if (btn) btn.disabled = false;
+  }}
+}}
+
+function renderAiResult() {{
+  const d = S.aiResult;
+  if (!d) return;
+  const trunc = d.truncated ? ' <span style="color:var(--warn)">(résultats tronqués à 200 lignes)</span>' : '';
+  const head = document.createElement('div');
+  head.className = 'ai-result-head';
+  head.innerHTML = `
+    <div><strong>Question</strong> — ${{escHtml(d.question)}}</div>
+    <div style="margin-top:6px"><strong>Interprétation</strong> — ${{escHtml(d.explanation || '—')}}</div>
+    <div class="ai-sql-block">${{escHtml(d.sql || '')}}</div>
+    <div style="margin-top:8px;color:var(--muted)">${{d.total}} ligne(s)${{trunc}}</div>`;
+
+  const wrap = document.createElement('div');
+  wrap.style.flex = '1';
+  wrap.style.overflow = 'hidden';
+  wrap.style.display = 'flex';
+  wrap.style.flexDirection = 'column';
+
+  if (!d.columns || !d.columns.length) {{
+    const empty = document.createElement('div');
+    empty.className = 'state-center';
+    empty.innerHTML = '<p>Aucun résultat.</p>';
+    wrap.appendChild(empty);
+  }} else {{
+    const thead = `<thead><tr>${{d.columns.map(c =>
+      `<th><div class="th-inner">${{escHtml(c)}}</div></th>`
+    ).join('')}}</tr></thead>`;
+    const tbody = `<tbody>${{(d.rows||[]).map(row => `<tr>${{row.map(cell => {{
+      if (cell === null || cell === undefined) return '<td><span class="td-null">null</span></td>';
+      const str = String(cell);
+      return `<td title="${{escAttr(str.length > 80 ? str : '')}}">${{escHtml(str.length > 120 ? str.slice(0,117)+'…' : str)}}</td>`;
+    }}).join('')}}</tr>`).join('')}}</tbody>`;
+    const area = document.createElement('div');
+    area.className = 'tbl-area';
+    area.innerHTML = `<table class="data-table">${{thead}}${{tbody}}</table>`;
+    wrap.appendChild(area);
+  }}
+
+  const content = document.getElementById('content');
+  content.style.flex = '1';
+  content.style.overflow = 'hidden';
+  content.style.display = 'flex';
+  content.style.flexDirection = 'column';
+  content.innerHTML = '';
+  content.appendChild(head);
+  content.appendChild(wrap);
+}}
+
 /* ── Select table ── */
 async function selectTable(name) {{
   if (S.activeTable === name && !S.loading) return;
+  S.aiResult = null;
   S.activeTable = name;
   S.page = 1;
   S.search = '';
