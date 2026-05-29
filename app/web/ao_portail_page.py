@@ -16,6 +16,9 @@ def get_portail_404_html() -> str:
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#0a0e17">
+<link rel="icon" type="image/png" sizes="512x512" href="/static/mys_icon_512.png">
+<link rel="apple-touch-icon" href="/static/mys_icon_180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <title>Lien invalide — MySifa</title>
 <style>
 :root{--bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;--muted:#94a3b8;--accent:#22d3ee;--danger:#f87171}
@@ -46,6 +49,9 @@ def get_portail_html(token: str, ao: dict, fournisseur: dict) -> str:
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#0a0e17">
+<link rel="icon" type="image/png" sizes="512x512" href="/static/mys_icon_512.png">
+<link rel="apple-touch-icon" href="/static/mys_icon_180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <title>{ref_init} — Portail fournisseur</title>
 <style>
 :root{{
@@ -108,6 +114,8 @@ th{{
   font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);
   font-weight:600;background:var(--bg);
 }}
+.td-muted{{color:var(--muted);font-size:12px}}
+.notice-danger{{border-color:var(--danger);color:var(--danger)}}
 td input[type="number"],td input[type="text"]{{min-width:88px}}
 input,textarea,select{{
   width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;
@@ -362,8 +370,8 @@ function renderOffre() {{
       html += "<tr>" +
         "<td>" + escHtml(ln.client_nom || "—") + "</td>" +
         "<td>" + escHtml(ln.ref_produit) + "</td>" +
-        "<td style=\"color:var(--muted);font-size:12px\">" + escHtml(ln.frontal || "—") + "</td>" +
-        "<td style=\"color:var(--muted);font-size:12px\">" + escHtml(ln.adhesif || "—") + "</td>" +
+        '<td class="td-muted">' + escHtml(ln.frontal || "—") + "</td>" +
+        '<td class="td-muted">' + escHtml(ln.adhesif || "—") + "</td>" +
         "<td>" + escHtml(ln.etiquettes_par_bobine != null ? ln.etiquettes_par_bobine : "—") + "</td>" +
         "<td>" + escHtml(ln.quantite) + "</td>" +
         '<td><input type="number" step="0.0001" min="0" class="inp-quotation" data-lid="' + ln.id + '" value="' + escHtml(qVal) + '"' + dis + "></td>" +
@@ -602,7 +610,7 @@ async function init() {{
     render();
   }} catch (e) {{
     document.getElementById("panel-offre").innerHTML =
-      '<p class="notice" style="border-color:var(--danger);color:var(--danger)">' + escHtml(e.message) + "</p>";
+      '<p class="notice notice-danger">' + escHtml(e.message) + "</p>";
   }}
 }}
 

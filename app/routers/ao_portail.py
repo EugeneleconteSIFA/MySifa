@@ -26,6 +26,12 @@ logger = logging.getLogger(__name__)
 router_html = APIRouter(tags=["ao_portail"])
 router_api = APIRouter(prefix="/api/portail", tags=["ao_portail_api"])
 
+_PORTAIL_HTML_HEADERS = {
+    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    "Pragma": "no-cache",
+    "Expires": "0",
+}
+
 _PARIS = ZoneInfo("Europe/Paris")
 _RATE_WINDOW_SEC = 3600
 _RATE_MAX_INVALID = 10
@@ -236,6 +242,7 @@ def portail_page(request: Request, token: str):
                 return HTMLResponse(
                     content=get_portail_404_html(),
                     status_code=404,
+                    headers=_PORTAIL_HTML_HEADERS,
                 )
             ao, fourni = found
             if not fourni.get("date_ouverture"):
@@ -249,7 +256,10 @@ def portail_page(request: Request, token: str):
                 conn.commit()
                 fourni["statut"] = "ouvert"
                 fourni["date_ouverture"] = now
-        return HTMLResponse(get_portail_html(token, ao, fourni))
+        return HTMLResponse(
+            get_portail_html(token, ao, fourni),
+            headers=_PORTAIL_HTML_HEADERS,
+        )
     except HTTPException as exc:
         if exc.status_code == 429:
             return HTMLResponse(
@@ -261,6 +271,7 @@ def portail_page(request: Request, token: str):
                     "Réessayez plus tard.",
                 ),
                 status_code=429,
+                headers=_PORTAIL_HTML_HEADERS,
             )
         raise
 
