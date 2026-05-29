@@ -326,6 +326,16 @@ body.light .user-chip:hover{{background:rgba(8,145,178,.12)}}
   border-radius:8px;font-family:ui-monospace,monospace;font-size:11px;color:var(--accent);
   white-space:pre-wrap;word-break:break-all;
 }}
+.ai-result-toolbar{{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px;flex-wrap:wrap;
+}}
+.ai-export-btn{{
+  padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg);
+  color:var(--text);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;
+  transition:border-color .15s,color .15s;
+}}
+.ai-export-btn:hover:not(:disabled){{border-color:var(--accent);color:var(--accent)}}
+.ai-export-btn:disabled{{opacity:.4;cursor:not-allowed}}
 
 @media(max-width:900px){{
   #app{{grid-template-columns:1fr}}
@@ -658,17 +668,54 @@ async function runAiQuery() {{
   }}
 }}
 
+function csvEscapeCell(v) {{
+  if (v === null || v === undefined) return '';
+  const s = String(v);
+  if (/[",\\n\\r;]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}}
+
+function exportAiResultCsv() {{
+  const d = S.aiResult;
+  if (!d || !d.columns || !d.columns.length) {{
+    showToast('Aucune donnée à exporter.', 'danger');
+    return;
+  }}
+  const sep = ';';
+  const lines = [d.columns.map(csvEscapeCell).join(sep)];
+  (d.rows || []).forEach(row => {{
+    lines.push(row.map(csvEscapeCell).join(sep));
+  }});
+  const blob = new Blob(['\\ufeff' + lines.join('\\n')], {{type: 'text/csv;charset=utf-8'}});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+  a.href = url;
+  a.download = 'db-recherche-ia-' + stamp + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  const n = (d.rows || []).length;
+  showToast(n + ' ligne(s) exportée(s).', 'success');
+}}
+
 function renderAiResult() {{
   const d = S.aiResult;
   if (!d) return;
-  const trunc = d.truncated ? ' <span style="color:var(--warn)">(résultats tronqués à 200 lignes)</span>' : '';
+  const trunc = d.truncated ? ' <span style="color:var(--warn)">(résultats tronqués à 200 lignes max.)</span>' : '';
+  const canExport = !!(d.columns && d.columns.length);
   const head = document.createElement('div');
   head.className = 'ai-result-head';
   head.innerHTML = `
     <div><strong>Question</strong> — ${{escHtml(d.question)}}</div>
     <div style="margin-top:6px"><strong>Interprétation</strong> — ${{escHtml(d.explanation || '—')}}</div>
     <div class="ai-sql-block">${{escHtml(d.sql || '')}}</div>
-    <div style="margin-top:8px;color:var(--muted)">${{d.total}} ligne(s)${{trunc}}</div>`;
+    <div class="ai-result-toolbar">
+      <span style="color:var(--muted)">${{d.total}} ligne(s) affichée(s)${{trunc}}</span>
+      <button type="button" class="ai-export-btn" ${{canExport ? '' : 'disabled'}}
+        onclick="exportAiResultCsv()">Exporter CSV</button>
+    </div>`;
 
   const wrap = document.createElement('div');
   wrap.style.flex = '1';

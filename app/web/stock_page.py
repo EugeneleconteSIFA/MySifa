@@ -705,7 +705,7 @@ body.sb-open #mroot>*{pointer-events:none!important}
 .mp-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:18px}
 .mp-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;width:100%;max-width:420px;max-height:90vh;overflow-y:auto}
 .mp-modal > h3{margin:0 0 16px;font-size:16px;font-weight:700;color:var(--text)}
-.mp-modal.mp-modal-mvt{padding:0;overflow:hidden;display:flex;flex-direction:column}
+.mp-modal.mp-modal-mvt{padding:0;overflow:visible;display:flex;flex-direction:column}
 .mp-modal-mvt-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px 20px;flex-shrink:0}
 .mp-modal-mvt-head h3{margin:0;font-size:16px;font-weight:700}
 .mp-modal-mvt-head-entree{background:color-mix(in srgb,var(--success) 16%,transparent);
@@ -726,7 +726,15 @@ body.sb-open #mroot>*{pointer-events:none!important}
 .mp-modal-mvt-head-transfert{background:color-mix(in srgb,var(--accent) 14%,transparent);
   border-bottom:1px solid color-mix(in srgb,var(--accent) 28%,transparent)}
 .mp-modal-mvt-head-transfert h3{color:var(--accent)}
-.mp-modal-mvt-body{padding:16px 20px 20px;overflow-y:auto;flex:1}
+.mp-modal-mvt-body{padding:16px 20px 20px;overflow-y:auto;overflow-x:visible;flex:1}
+.mp-field.empl-field-wrap,.mp-field.ref-field-wrap{position:relative;overflow:visible}
+.mp-modal-mvt-body .mp-field.empl-field-wrap:focus-within,.mp-modal-mvt-body .mp-field.ref-field-wrap:focus-within{z-index:30}
+.empl-combo-wrap .empl-suggestions{
+  position:absolute;top:100%;left:0;right:0;z-index:400;display:block;
+  margin-top:4px;max-height:200px;overflow-y:auto;
+  background:var(--card);border:1px solid var(--border);border-radius:8px;
+  box-shadow:0 8px 24px rgba(0,0,0,.28)}
+body.light .empl-combo-wrap .empl-suggestions{box-shadow:0 8px 20px rgba(15,23,42,.12)}
 .mp-modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px}
 .mp-modal-head h3{margin:0;font-size:16px;font-weight:700;color:var(--text)}
 .mp-modal-close{background:transparent;border:none;color:var(--muted);font-size:22px;line-height:1;cursor:pointer;
@@ -2594,6 +2602,7 @@ function wireStockProduitSearch(refInp, suggWrap, onSelect) {
       suggWrap.innerHTML = '';
       if (!list.length) {
         suggWrap.appendChild(el('div', { cls: 'empl-sugg-item muted' }, 'Aucun résultat pour « ' + q + ' »'));
+        suggWrap.style.display = 'block';
         return;
       }
       list.forEach(p => {
@@ -2603,13 +2612,18 @@ function wireStockProduitSearch(refInp, suggWrap, onSelect) {
           on: { mousedown: (e) => { e.preventDefault(); onSelect(p); } },
         }, label));
       });
+      suggWrap.style.display = 'block';
     } catch (e) {
       suggWrap.innerHTML = '';
+      suggWrap.style.display = 'none';
     }
   };
   refInp.addEventListener('input', () => {
     clearTimeout(timer);
     timer = setTimeout(() => runSearch(refInp.value.trim()), 220);
+  });
+  refInp.addEventListener('focus', () => {
+    runSearch(refInp.value.trim());
   });
   refInp.addEventListener('keydown', async (e) => {
     if (e.key !== 'Enter') return;
@@ -2619,7 +2633,11 @@ function wireStockProduitSearch(refInp, suggWrap, onSelect) {
     else showToast('Référence introuvable.', 'error');
   });
   refInp.addEventListener('blur', () => {
-    setTimeout(() => { suggWrap.innerHTML = ''; }, 180);
+    setTimeout(() => {
+      if (document.activeElement === refInp) return;
+      suggWrap.innerHTML = '';
+      suggWrap.style.display = 'none';
+    }, 220);
   });
 }
 
@@ -2628,11 +2646,13 @@ function wireStockEmplSearch(emplInp, suggWrap) {
   const pick = (code) => {
     emplInp.value = String(code || '').toUpperCase();
     suggWrap.innerHTML = '';
+    suggWrap.style.display = 'none';
   };
   const renderList = (codes) => {
     suggWrap.innerHTML = '';
     if (!codes.length) {
       suggWrap.appendChild(el('div', { cls: 'empl-sugg-item muted' }, 'Aucun emplacement'));
+      suggWrap.style.display = 'block';
       return;
     }
     codes.forEach(code => {
@@ -2641,25 +2661,43 @@ function wireStockEmplSearch(emplInp, suggWrap) {
         on: { mousedown: (e) => { e.preventDefault(); pick(code); } },
       }, stockEmplLabel(code)));
     });
+    suggWrap.style.display = 'block';
   };
+  const runLocal = (q) => {
+    const qq = String(q || '').trim().toUpperCase();
+    if (!qq) return allPageEmplacementChoices().slice(0, 12);
+    return allPageEmplacementChoices().filter(c => c.includes(qq)).slice(0, 12);
+  };
+  const runSearch = async (q) => {
+    const local = runLocal(q);
+    if (!q) {
+      renderList(local);
+      return;
+    }
+    renderList(local);
+    try {
+      const r = await api('/api/stock/search?q=' + encodeURIComponent(q) + '&limit=8');
+      const fromApi = (r?.emplacements || []).map(e => e.emplacement);
+      renderList([...new Set([...local, ...fromApi])].slice(0, 12));
+    } catch (e) {
+      renderList(local);
+    }
+  };
+  emplInp.addEventListener('focus', () => {
+    runSearch(emplInp.value.trim());
+  });
   emplInp.addEventListener('input', () => {
     emplInp.value = emplInp.value.toUpperCase();
     const q = emplInp.value.trim();
     clearTimeout(timer);
-    if (!q) { suggWrap.innerHTML = ''; return; }
-    const local = allPageEmplacementChoices().filter(c => c.includes(q)).slice(0, 10);
-    timer = setTimeout(async () => {
-      try {
-        const r = await api('/api/stock/search?q=' + encodeURIComponent(q) + '&limit=8');
-        const fromApi = (r?.emplacements || []).map(e => e.emplacement);
-        renderList([...new Set([...local, ...fromApi])].slice(0, 12));
-      } catch (e) {
-        renderList(local);
-      }
-    }, 220);
+    timer = setTimeout(() => runSearch(q), 180);
   });
   emplInp.addEventListener('blur', () => {
-    setTimeout(() => { suggWrap.innerHTML = ''; }, 180);
+    setTimeout(() => {
+      if (document.activeElement === emplInp) return;
+      suggWrap.innerHTML = '';
+      suggWrap.style.display = 'none';
+    }, 220);
   });
 }
 
@@ -4325,12 +4363,13 @@ function buildPfRefPickerField(refInp, desInp, uniteSel, onPick) {
     dl.appendChild(el('option', { attrs: { value: c.reference || '' } }));
   });
   refInp.setAttribute('list', datalistId);
-  const suggWrap = el('div', { cls: 'empl-suggestions' });
+  const suggWrap = el('div', { cls: 'empl-suggestions', style: { display: 'none' } });
   const applyPick = (c) => {
     refInp.value = c.reference || '';
     desInp.value = c.designation || '';
     if (uniteSel && c.unite) uniteSel.value = c.unite;
     suggWrap.innerHTML = '';
+    suggWrap.style.display = 'none';
     if (onPick) onPick(c);
   };
   refInp.addEventListener('input', () => {
@@ -4341,7 +4380,8 @@ function buildPfRefPickerField(refInp, desInp, uniteSel, onPick) {
     }
   });
   wireStockProduitSearch(refInp, suggWrap, applyPick);
-  return { suggWrap, datalist: dl };
+  const refCombo = el('div', { cls: 'empl-combo-wrap' }, refInp, suggWrap);
+  return { suggWrap, datalist: dl, refCombo };
 }
 
 function pfStockAtEmpl(reference, emplacement) {
@@ -4361,9 +4401,10 @@ function buildPfEmplPickerField(emplInp) {
     dl.appendChild(el('option', { attrs: { value: code } }));
   });
   emplInp.setAttribute('list', datalistId);
-  const suggWrap = el('div', { cls: 'empl-suggestions' });
+  const suggWrap = el('div', { cls: 'empl-suggestions', style: { display: 'none' } });
   wireStockEmplSearch(emplInp, suggWrap);
-  return { suggWrap, datalist: dl };
+  const emplCombo = el('div', { cls: 'empl-combo-wrap' }, emplInp, suggWrap);
+  return { suggWrap, datalist: dl, emplCombo, emplInp };
 }
 
 function openPfMvtModal(type, preset) {
@@ -4424,7 +4465,7 @@ function renderPfMvtModal() {
     if ((preset.unite || 'pièces') === u) o.selected = true;
     uniteSel.appendChild(o);
   });
-  const { suggWrap: refSugg, datalist: refDl } = buildPfRefPickerField(refInp, desInp, uniteSel);
+  const { refCombo, datalist: refDl } = buildPfRefPickerField(refInp, desInp, uniteSel);
 
   const qInp = el('input', {
     cls: 'field-input',
@@ -4437,7 +4478,7 @@ function renderPfMvtModal() {
     style: { direction: 'ltr' },
   });
   emplInp.value = (preset.emplacement || '').toUpperCase();
-  const { suggWrap: emplSugg, datalist: emplDl } = buildPfEmplPickerField(emplInp);
+  const { emplCombo, datalist: emplDl } = buildPfEmplPickerField(emplInp);
   const hintEl = el('div', { cls: 'mp-hint', style: { display: isSortie ? '' : 'none' } }, '');
   const errEl = el('div', { cls: 'mp-hint err', style: { display: 'none' } }, '');
   const ofInp = el('input', {
@@ -4456,7 +4497,9 @@ function renderPfMvtModal() {
     style: { direction: 'ltr' },
   }) : null;
 
-  body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Référence produit *'), refInp, refDl, refSugg));
+  body.appendChild(el('div', { cls: 'mp-field ref-field-wrap' },
+    el('label', null, 'Référence produit *'), refCombo, refDl,
+  ));
   body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Désignation'), desInp));
   body.appendChild(el('div', { cls: 'mp-field' },
     el('label', null, 'Quantité *'),
@@ -4465,7 +4508,9 @@ function renderPfMvtModal() {
     isSortie ? errEl : null,
   ));
   body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Unité'), uniteSel));
-  body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Emplacement *'), emplInp, emplDl, emplSugg));
+  body.appendChild(el('div', { cls: 'mp-field empl-field-wrap' },
+    el('label', null, 'Emplacement *'), emplCombo, emplDl,
+  ));
   body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'N° OF'), ofInp));
   if (motifInp) body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Motif / destinataire'), motifInp));
   body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Commentaire'), comTa));
@@ -5006,12 +5051,12 @@ function buildMpEmplacementField() {
     },
     style: { direction: 'ltr' },
   });
-  const suggWrap = el('div', { cls: 'empl-suggestions' });
+  const suggWrap = el('div', { cls: 'empl-suggestions', style: { display: 'none' } });
   wireStockEmplSearch(emplInp, suggWrap);
-  const wrap = el('div', { cls: 'mp-field' },
+  const combo = el('div', { cls: 'empl-combo-wrap' }, emplInp, suggWrap);
+  const wrap = el('div', { cls: 'mp-field empl-field-wrap' },
     el('label', null, 'Emplacement'),
-    emplInp,
-    suggWrap,
+    combo,
   );
   return { wrap, emplInp };
 }
@@ -5336,15 +5381,15 @@ function renderPfMouvementModal(type, produit) {
       },
       style: { direction: 'ltr' },
     });
-    const suggWrap = el('div', { cls: 'empl-suggestions' });
+    const suggWrap = el('div', { cls: 'empl-suggestions', style: { display: 'none' } });
     S.pfModal.refInp = refInp;
     wireStockProduitSearch(refInp, suggWrap, (p) => {
       renderPfMouvementModal(typeMvt, p);
     });
-    body.appendChild(el('div', { cls: 'mp-field' },
+    const refCombo = el('div', { cls: 'empl-combo-wrap' }, refInp, suggWrap);
+    body.appendChild(el('div', { cls: 'mp-field ref-field-wrap' },
       el('label', null, 'Produit fini'),
-      refInp,
-      suggWrap,
+      refCombo,
     ));
     requestAnimationFrame(() => refInp.focus());
   }
