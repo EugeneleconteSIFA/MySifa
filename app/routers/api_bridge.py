@@ -7,6 +7,7 @@ Endpoints :
   GET  /api/bridge/health      → ping sans auth
   GET  /api/bridge/of          → liste les OF importés (of:read)
   POST /api/bridge/of          → pousse un OF depuis Access (of:write)
+  GET  /api/bridge/fiches      → liste les fiches techniques importées (of:read)
 """
 import hashlib
 from datetime import datetime
@@ -89,6 +90,20 @@ def list_of_imports(x_api_key: Optional[str] = Header(default=None)):
     return {"of": [dict(r) for r in rows]}
 
 
+@router.get("/fiches")
+def list_fiches_bridge(x_api_key: Optional[str] = Header(default=None)):
+    """Liste les références de fiches techniques déjà importées."""
+    _require_scope(x_api_key, "of:read")
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT id, reference, designation, client, source, date_import
+               FROM fiches_techniques
+               ORDER BY date_import DESC
+               LIMIT 500"""
+        ).fetchall()
+    return {"fiches": [dict(r) for r in rows]}
+
+
 @router.post("/of")
 def push_of(
     body: OFPushIn,
@@ -149,3 +164,60 @@ def push_of(
             "id": cur.lastrowid,
             "of_numero": numero,
         }
+
+
+class FicheTechniqueIn(BaseModel):
+    reference:       str
+    designation:     Optional[str] = None
+    client:          Optional[str] = None
+    format:          Optional[str] = None
+    laize:           Optional[float] = None
+    matiere:         Optional[str] = None
+    adhesif:         Optional[str] = None
+    nb_couleurs:     Optional[int] = None
+    conditionnement: Optional[str] = None
+    notes:           Optional[str] = None
+
+
+@router.post("/fiche-technique")
+def push_fiche_technique(
+    body: FicheTechniqueIn,
+    x_api_key: Optional[str] = Header(default=None),
+):
+    """
+    Crée ou met à jour une fiche technique (upsert par référence).
+    Si la référence existe déjà : mise à jour des champs fournis.
+    Scope requis : of:write
+    """
+    _require_scope(x_api_key, "of:write")
+    ref = body.reference.strip()
+    if not ref:
+        raise HTTPException(status_code=400, detail="Le champ 'reference' est obligatoire.")
+
+    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    with get_db() as conn:
+        existing = conn.execute(
+            "SELECT id FROM fiches_techniques WHERE LOWER(TRIM(reference))=LOWER(TRIM(?)) LIMIT 1",
+            (ref,)
+        ).fetchone()
+        if existing:
+            fields = {k: v for k, v in body.model_dump().items() if k != "reference" and v is not None}
+            if fields:
+                conn.execute(
+                    f"UPDATE fiches_techniques SET {', '.join(f'{k}=?' for k in fields)} WHERE id=?",
+                    list(fields.values()) + [existing["id"]],
+                )
+                conn.commit()
+            return {"action": "updated", "id": existing["id"], "reference": ref}
+        else:
+            cur = conn.execute(
+                """INSERT INTO fiches_techniques
+                   (reference, designation, client, format, laize, matiere,
+                    adhesif, nb_couleurs, conditionnement, notes, source, date_import, imported_by)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (ref, body.designation, body.client, body.format, body.laize,
+                 body.matiere, body.adhesif, body.nb_couleurs, body.conditionnement,
+                 body.notes, "access_bridge", now, "access_bridge")
+            )
+            conn.commit()
+            return {"action": "created", "id": cur.lastrowid, "reference": ref}

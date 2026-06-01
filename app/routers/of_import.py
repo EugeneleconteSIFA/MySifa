@@ -234,19 +234,85 @@ async def validate_of(
 @router.get("/api/of/list")
 def list_of_imports(request: Request):
     _require_of_access(request)
+    q      = (request.query_params.get("q")      or "").strip()
+    offset = int(request.query_params.get("offset") or 0)
+    limit  = int(request.query_params.get("limit")  or 50)
+    limit  = min(limit, 200)   # plafond de sécurité
+
+    like = f"%{q}%"
+    search_filter = ""
+    params_count: list = []
+    params_rows:  list = []
+
+    if q:
+        search_filter = """AND (
+            LOWER(COALESCE(o.of_numero,''))    LIKE LOWER(?)
+         OR LOWER(COALESCE(o.reference,''))   LIKE LOWER(?)
+         OR LOWER(COALESCE(o.machine,''))     LIKE LOWER(?)
+         OR LOWER(COALESCE(o.delai_client,'')) LIKE LOWER(?)
+        )"""
+        params_count = [like, like, like, like]
+        params_rows  = [like, like, like, like, limit, offset]
+    else:
+        params_rows = [limit, offset]
+
     with get_db() as conn:
+        total = conn.execute(
+            f"""SELECT COUNT(DISTINCT o.id)
+                FROM of_imports o
+                LEFT JOIN planning_entries pe ON pe.of_import_id = o.id
+                WHERE 1=1 {search_filter}""",
+            params_count,
+        ).fetchone()[0]
+
         rows = conn.execute(
-            """SELECT
-                   o.id, o.of_numero, o.reference, o.machine, o.delai_client,
-                   o.qte_etiquettes, o.metrage, o.date_import, o.statut,
-                   o.pdf_filename, o.imported_by,
-                   CASE WHEN pe.of_import_id IS NOT NULL THEN 1 ELSE 0 END AS lie
-               FROM of_imports o
-               LEFT JOIN planning_entries pe ON pe.of_import_id = o.id
-               GROUP BY o.id
-               ORDER BY o.date_import DESC"""
+            f"""SELECT
+                    o.id, o.of_numero, o.reference, o.machine, o.delai_client,
+                    o.format, o.date_creation, o.qte_etiquettes, o.qte_bobines,
+                    o.metrage, o.date_import, o.statut, o.pdf_filename, o.imported_by,
+                    CASE WHEN pe.of_import_id IS NOT NULL THEN 1 ELSE 0 END AS lie
+                FROM of_imports o
+                LEFT JOIN planning_entries pe ON pe.of_import_id = o.id
+                WHERE 1=1 {search_filter}
+                GROUP BY o.id
+                ORDER BY COALESCE(o.date_creation, o.date_import) DESC
+                LIMIT ? OFFSET ?""",
+            params_rows,
         ).fetchall()
-    return [{**_row_dict(r), "lie": bool(r["lie"])} for r in rows]
+
+    return {
+        "total":  total,
+        "offset": offset,
+        "limit":  limit,
+        "rows":   [{**_row_dict(r), "lie": bool(r["lie"])} for r in rows],
+    }
+
+
+@router.patch("/api/of/{of_id}")
+async def update_of_import(of_id: int, request: Request):
+    """Modifier les champs éditables d'un OF importé."""
+    _require_of_access(request)
+    body = await request.json()
+
+    EDITABLE = {
+        "of_numero", "reference", "machine", "delai_client",
+        "format", "date_creation", "qte_etiquettes", "qte_bobines", "metrage",
+    }
+    updates = {k: v for k, v in body.items() if k in EDITABLE}
+    if not updates:
+        raise HTTPException(status_code=400, detail="Aucun champ modifiable fourni.")
+
+    with get_db() as conn:
+        row = conn.execute("SELECT id FROM of_imports WHERE id=?", (of_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="OF introuvable.")
+        set_clause = ", ".join(f"{k}=?" for k in updates)
+        conn.execute(
+            f"UPDATE of_imports SET {set_clause} WHERE id=?",
+            list(updates.values()) + [of_id],
+        )
+        conn.commit()
+    return {"updated": True, "id": of_id}
 
 
 @router.get("/api/of/planning/{entry_id}")
@@ -313,6 +379,21 @@ def download_of_pdf(request: Request, of_id: int):
     )
 
 
+@router.delete("/api/of/bulk")
+async def bulk_delete_of(request: Request):
+    """Suppression en masse d'OFs. Body JSON : {"ids": [1, 2, 3]}"""
+    require_superadmin(request)
+    body = await request.json()
+    ids  = [int(i) for i in (body.get("ids") or []) if str(i).isdigit()]
+    if not ids:
+        raise HTTPException(status_code=400, detail="Liste d'ids vide.")
+    placeholders = ",".join("?" * len(ids))
+    with get_db() as conn:
+        conn.execute(f"DELETE FROM of_imports WHERE id IN ({placeholders})", ids)
+        conn.commit()
+    return {"deleted": len(ids), "ids": ids}
+
+
 @router.delete("/api/of/{of_id}")
 def delete_of_import(request: Request, of_id: int):
     require_superadmin(request)
@@ -323,3 +404,77 @@ def delete_of_import(request: Request, of_id: int):
         conn.execute("DELETE FROM of_imports WHERE id=?", (of_id,))
         conn.commit()
     return {"ok": True}
+
+
+# ══════════════════════════════════════════════════
+# Fiches techniques
+# ══════════════════════════════════════════════════
+
+@router.get("/api/fiches-techniques/list")
+def list_fiches(request: Request):
+    _require_of_access(request)
+    q      = (request.query_params.get("q")      or "").strip()
+    offset = int(request.query_params.get("offset") or 0)
+    limit  = min(int(request.query_params.get("limit") or 50), 200)
+
+    like = f"%{q}%"
+    where = "WHERE 1=1"
+    params_c: list = []
+    params_r: list = []
+    if q:
+        where += " AND (LOWER(COALESCE(reference,'')) LIKE LOWER(?) OR LOWER(COALESCE(designation,'')) LIKE LOWER(?) OR LOWER(COALESCE(client,'')) LIKE LOWER(?))"
+        params_c = [like, like, like]
+        params_r = [like, like, like, limit, offset]
+    else:
+        params_r = [limit, offset]
+
+    with get_db() as conn:
+        total = conn.execute(f"SELECT COUNT(*) FROM fiches_techniques {where}", params_c).fetchone()[0]
+        rows  = conn.execute(
+            f"SELECT * FROM fiches_techniques {where} ORDER BY date_import DESC LIMIT ? OFFSET ?",
+            params_r,
+        ).fetchall()
+    return {"total": total, "offset": offset, "limit": limit, "rows": [_row_dict(r) for r in rows]}
+
+
+@router.patch("/api/fiches-techniques/{fiche_id}")
+async def update_fiche(fiche_id: int, request: Request):
+    _require_of_access(request)
+    body = await request.json()
+    EDITABLE = {"reference","designation","client","format","laize","matiere","adhesif","nb_couleurs","conditionnement","notes"}
+    updates = {k: v for k, v in body.items() if k in EDITABLE}
+    if not updates:
+        raise HTTPException(status_code=400, detail="Aucun champ modifiable.")
+    with get_db() as conn:
+        if not conn.execute("SELECT id FROM fiches_techniques WHERE id=?", (fiche_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="Fiche introuvable.")
+        conn.execute(
+            f"UPDATE fiches_techniques SET {', '.join(f'{k}=?' for k in updates)} WHERE id=?",
+            list(updates.values()) + [fiche_id],
+        )
+        conn.commit()
+    return {"updated": True, "id": fiche_id}
+
+
+@router.delete("/api/fiches-techniques/bulk")
+async def bulk_delete_fiches(request: Request):
+    """Suppression en masse de fiches techniques. Body JSON : {"ids": [1, 2, 3]}"""
+    require_superadmin(request)
+    body = await request.json()
+    ids  = [int(i) for i in (body.get("ids") or []) if str(i).isdigit()]
+    if not ids:
+        raise HTTPException(status_code=400, detail="Liste d'ids vide.")
+    placeholders = ",".join("?" * len(ids))
+    with get_db() as conn:
+        conn.execute(f"DELETE FROM fiches_techniques WHERE id IN ({placeholders})", ids)
+        conn.commit()
+    return {"deleted": len(ids), "ids": ids}
+
+
+@router.delete("/api/fiches-techniques/{fiche_id}")
+def delete_fiche(fiche_id: int, request: Request):
+    require_superadmin(request)
+    with get_db() as conn:
+        conn.execute("DELETE FROM fiches_techniques WHERE id=?", (fiche_id,))
+        conn.commit()
+    return {"deleted": True, "id": fiche_id}

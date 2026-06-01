@@ -2800,6 +2800,30 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 89, "api_keys")
 
+    # v90 — Fiches techniques produits
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=90 LIMIT 1").fetchone():
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS fiches_techniques (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                reference    TEXT NOT NULL,
+                designation  TEXT,
+                client       TEXT,
+                format       TEXT,
+                laize        REAL,
+                matiere      TEXT,
+                adhesif      TEXT,
+                nb_couleurs  INTEGER,
+                conditionnement TEXT,
+                notes        TEXT,
+                source       TEXT DEFAULT 'manuel',
+                date_import  TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+                imported_by  TEXT
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_fiches_ref ON fiches_techniques(reference COLLATE NOCASE);
+        """)
+        conn.commit()
+        _record_schema_migration(conn, 90, "fiches_techniques")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

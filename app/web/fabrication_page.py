@@ -847,6 +847,19 @@ let S = {
   ofImports: [],
   ofImportsLoading: false,
   ofImportModal: null,  // null | { step, file, parsed, parsing }
+  ofSearch: '',
+  ofPage: 0,
+  ofTotal: 0,
+  ofEditModal: null,
+  ofSelected: new Set(),   // Set d'ids d'OFs sélectionnés
+  ofSubTab: 'of',        // 'of' | 'fiche'
+  ficheSearch: '',
+  fichePage: 0,
+  ficheTotal: 0,
+  fiches: [],
+  fichesLoading: false,
+  ficheEditModal: null,
+  ficheSelected: new Set(),   // Set d'ids de fiches sélectionnées
 
   // Traça matières
   tracaMatieres: [],
@@ -1451,6 +1464,8 @@ async function switchFabTab(tab){
   }
   if(tab==='of'){
     await loadOfImports();
+    // Pré-charger les fiches si sous-onglet actif
+    if(S.ofSubTab==='fiche') await loadFiches();
   }
 }
 
@@ -1489,12 +1504,178 @@ function ofStatutClass(lie){
 async function loadOfImports(){
   set({ofImportsLoading:true});
   try{
-    const rows = await apiFetch('/api/of/list');
-    set({ofImports:Array.isArray(rows)?rows:[], ofImportsLoading:false});
+    const q      = encodeURIComponent(S.ofSearch||'');
+    const offset = (S.ofPage||0) * 50;
+    const url    = `/api/of/list?limit=50&offset=${offset}${q?'&q='+q:''}`;
+    const data   = await apiFetch(url);
+    set({
+      ofImports:       Array.isArray(data.rows) ? data.rows : [],
+      ofTotal:         data.total || 0,
+      ofImportsLoading: false,
+    });
   }catch(e){
     set({ofImportsLoading:false});
     showToast(e.message||'Erreur chargement des OF','danger');
   }
+}
+
+async function loadFiches(){
+  set({fichesLoading:true});
+  try{
+    const q      = encodeURIComponent(S.ficheSearch||'');
+    const offset = (S.fichePage||0)*50;
+    const url    = `/api/fiches-techniques/list?limit=50&offset=${offset}${q?'&q='+q:''}`;
+    const data   = await apiFetch(url);
+    set({fiches: Array.isArray(data.rows)?data.rows:[], ficheTotal:data.total||0, fichesLoading:false});
+  }catch(e){
+    set({fichesLoading:false});
+    showToast(e.message||'Erreur chargement fiches techniques','danger');
+  }
+}
+
+function openFicheEditModal(row){
+  set({ficheEditModal:{...row}});
+  renderFicheEditModal();
+}
+function closeFicheEditModal(){
+  set({ficheEditModal:null});
+  const mr=document.getElementById('mroot');
+  if(mr) mr.innerHTML='';
+}
+async function saveFicheEdit(){
+  const m=S.ficheEditModal;
+  if(!m) return;
+  const payload={
+    reference:       document.getElementById('fce-ref')?.value.trim()||null,
+    designation:     document.getElementById('fce-desig')?.value.trim()||null,
+    client:          document.getElementById('fce-client')?.value.trim()||null,
+    format:          document.getElementById('fce-format')?.value.trim()||null,
+    laize:           parseFloat(document.getElementById('fce-laize')?.value)||null,
+    matiere:         document.getElementById('fce-matiere')?.value.trim()||null,
+    adhesif:         document.getElementById('fce-adhesif')?.value.trim()||null,
+    conditionnement: document.getElementById('fce-cond')?.value.trim()||null,
+    notes:           document.getElementById('fce-notes')?.value.trim()||null,
+  };
+  try{
+    await apiFetch('/api/fiches-techniques/'+m.id,{method:'PATCH',body:JSON.stringify(payload)});
+    showToast('Fiche mise à jour.','success');
+    closeFicheEditModal();
+    await loadFiches();
+  }catch(e){
+    showToast(e.message||'Erreur mise à jour.','danger');
+  }
+}
+function renderFicheEditModal(){
+  const mr=document.getElementById('mroot');
+  if(!mr) return;
+  const m=S.ficheEditModal;
+  if(!m){mr.innerHTML='';return;}
+  function field(id,label,val,type='text'){
+    return `<div style="margin-bottom:12px">
+      <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:5px">${label}</label>
+      <input id="${id}" type="${type}" value="${escAttr(String(val||''))}"
+        style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box"
+        onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
+    </div>`;
+  }
+  const overlay=document.createElement('div');
+  overlay.className='fab-modal-overlay';
+  overlay.onclick=(e)=>{if(e.target===e.currentTarget)closeFicheEditModal();};
+  overlay.innerHTML=`
+    <div class="fab-modal" onclick="event.stopPropagation()" style="max-width:560px;width:100%">
+      <div class="fab-modal-title">Modifier la fiche technique</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 16px">
+        ${field('fce-ref',    'Référence',      m.reference)}
+        ${field('fce-desig',  'Désignation',    m.designation)}
+        ${field('fce-client', 'Client',         m.client)}
+        ${field('fce-format', 'Format',         m.format)}
+        ${field('fce-laize',  'Laize (mm)',      m.laize,'number')}
+        ${field('fce-matiere','Matière',         m.matiere)}
+        ${field('fce-adhesif','Adhésif',         m.adhesif)}
+        ${field('fce-cond',   'Conditionnement', m.conditionnement)}
+      </div>
+      ${field('fce-notes','Notes',m.notes)}
+      <div class="fab-modal-btns">
+        <button class="fab-btn fab-btn-ghost" onclick="closeFicheEditModal()">Annuler</button>
+        <button class="fab-btn fab-btn-accent" onclick="saveFicheEdit()">Enregistrer</button>
+      </div>
+    </div>`;
+  mr.innerHTML='';
+  mr.appendChild(overlay);
+}
+
+function openOfEditModal(row){
+  set({ofEditModal: {...row}});
+  renderOfEditModal();
+}
+
+function closeOfEditModal(){
+  set({ofEditModal:null});
+  const mr = document.getElementById('mroot');
+  if(mr) mr.innerHTML='';
+}
+
+async function saveOfEdit(){
+  const m = S.ofEditModal;
+  if(!m) return;
+  const payload = {
+    of_numero:      document.getElementById('ofe-numero')?.value.trim()||null,
+    reference:      document.getElementById('ofe-reference')?.value.trim()||null,
+    machine:        document.getElementById('ofe-machine')?.value.trim()||null,
+    delai_client:   document.getElementById('ofe-delai')?.value.trim()||null,
+    format:         document.getElementById('ofe-format')?.value.trim()||null,
+    date_creation:  document.getElementById('ofe-date')?.value.trim()||null,
+    qte_etiquettes: parseFloat(document.getElementById('ofe-qte')?.value)||null,
+    qte_bobines:    parseFloat(document.getElementById('ofe-bobines')?.value)||null,
+  };
+  try{
+    await apiFetch('/api/of/'+m.id, {method:'PATCH', body:JSON.stringify(payload)});
+    showToast('OF mis à jour.','success');
+    closeOfEditModal();
+    await loadOfImports();
+  }catch(e){
+    showToast(e.message||'Erreur lors de la mise à jour.','danger');
+  }
+}
+
+function renderOfEditModal(){
+  const mr = document.getElementById('mroot');
+  if(!mr) return;
+  const m = S.ofEditModal;
+  if(!m){ mr.innerHTML=''; return; }
+
+  function field(id, label, val, type='text'){
+    return `<div style="margin-bottom:12px">
+      <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:5px">${label}</label>
+      <input id="${id}" type="${type}" value="${escAttr(String(val||''))}"
+        style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box"
+        onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
+    </div>`;
+  }
+
+  const overlay = document.createElement('div');
+  overlay.className = 'fab-modal-overlay';
+  overlay.onclick = (e)=>{ if(e.target===e.currentTarget) closeOfEditModal(); };
+  overlay.innerHTML = `
+    <div class="fab-modal" onclick="event.stopPropagation()" style="max-width:520px;width:100%">
+      <div class="fab-modal-title">Modifier l'OF</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 16px">
+        ${field('ofe-numero',   'OF n°',          m.of_numero)}
+        ${field('ofe-reference','Référence',       m.reference)}
+        ${field('ofe-machine',  'Machine',         m.machine)}
+        ${field('ofe-delai',    'Délai client',    m.delai_client)}
+        ${field('ofe-format',   'Format',          m.format)}
+        ${field('ofe-date',     'Date création',   (m.date_creation||'').slice(0,10), 'date')}
+        ${field('ofe-qte',      'Qté étiquettes',  m.qte_etiquettes, 'number')}
+        ${field('ofe-bobines',  'Qté bobines',     m.qte_bobines, 'number')}
+      </div>
+      <div class="fab-modal-btns">
+        <button class="fab-btn fab-btn-ghost" onclick="closeOfEditModal()">Annuler</button>
+        <button class="fab-btn fab-btn-accent" onclick="saveOfEdit()">Enregistrer</button>
+      </div>
+    </div>`;
+  mr.innerHTML='';
+  mr.appendChild(overlay);
 }
 
 function openOfImportModal(){
@@ -1578,26 +1759,87 @@ async function ofDeleteImport(id){
 }
 
 function renderOfPanel(){
+  const PAGE_SIZE = 50;
+  const total     = S.ofTotal || 0;
+  const page      = S.ofPage  || 0;
+  const totalPages= Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const start     = total === 0 ? 0 : page * PAGE_SIZE + 1;
+  const end       = Math.min((page + 1) * PAGE_SIZE, total);
+
+  // ── Searchbar (hors conteneur re-rendu) ───────────────────────
+  const searchWrap = h('div',{style:{flex:'1',maxWidth:'320px',position:'relative'}},
+    h('input',{
+      id:          'of-search-input',
+      type:        'text',
+      placeholder: 'Rechercher (OF n°, référence, machine…)',
+      value:       S.ofSearch||'',
+      style:       'width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:9px 14px 9px 36px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box',
+      oninput:     async function(e){
+        const v = e.target.value;
+        // Sauvegarder focus + caret
+        const sel = [e.target.selectionStart, e.target.selectionEnd];
+        set({ofSearch: v, ofPage: 0});
+        await loadOfImports();
+        // Restaurer focus
+        requestAnimationFrame(()=>{
+          const el = document.getElementById('of-search-input');
+          if(el){ el.focus(); try{ el.setSelectionRange(sel[0],sel[1]); }catch(x){} }
+        });
+      },
+      onkeydown: function(e){
+        if(e.key==='Escape'){
+          set({ofSearch:'',ofPage:0});
+          loadOfImports();
+          e.target.value='';
+        }
+      },
+      onfocus:   "this.style.borderColor='var(--accent)'",
+      onblur:    "this.style.borderColor='var(--border)'",
+    })
+  );
+
+  // ── Lignes du tableau ─────────────────────────────────────────
   const rows = (S.ofImports||[]).map(row=>{
-    const stCls = ofStatutClass(row.lie);
-    const dlBtn = h('button',{
-      className:'fab-btn fab-btn-ghost fab-btn-sm',
-      title:'Télécharger PDF',
-      onClick:()=>{ window.open('/api/of/'+row.id+'/pdf','_blank'); },
-    }, svgIcon('download',14));
-    const acts = [dlBtn];
+    const stCls  = ofStatutClass(row.lie);
+    const actBtns = [
+      h('button',{
+        className:'fab-btn fab-btn-ghost fab-btn-sm',
+        title:'Modifier',
+        onClick:()=>openOfEditModal(row),
+      }, svgIcon('edit',14)),
+    ];
+    if(row.pdf_filename){
+      actBtns.push(h('button',{
+        className:'fab-btn fab-btn-ghost fab-btn-sm',
+        title:'Télécharger PDF',
+        onClick:()=>{ window.open('/api/of/'+row.id+'/pdf','_blank'); },
+      }, svgIcon('download',14)));
+    }
     if(S.user && S.user.role==='superadmin'){
-      acts.push(h('button',{
+      actBtns.push(h('button',{
         className:'fab-btn fab-btn-ghost fab-btn-sm',
         title:'Supprimer',
         onClick:()=>ofDeleteImport(row.id),
       }, svgIcon('trash',14)));
     }
-    const fmtDate = row.date_import ? fmtDate(row.date_import.slice(0,10)) : '—';
-    const ofSub = row.imported_by
+    const dateCrea = row.date_creation ? row.date_creation.slice(0,10) : '—';
+    const ofSub    = row.imported_by
       ? h('div',{className:'fab-of-row-sub'}, 'Ajouté par '+escHtml(row.imported_by))
       : null;
     return h('tr',null,
+      h('td',{style:{width:'36px',paddingRight:'4px'}},
+        h('input',{
+          type:'checkbox',
+          checked: S.ofSelected.has(row.id),
+          style:'cursor:pointer',
+          onChange: function(e){
+            const sel = new Set(S.ofSelected);
+            if(e.target.checked) sel.add(row.id); else sel.delete(row.id);
+            set({ofSelected: sel});
+            render();
+          },
+        })
+      ),
       h('td',null,
         h('div',null, escHtml(row.of_numero||'—')),
         ofSub,
@@ -1606,31 +1848,234 @@ function renderOfPanel(){
       h('td',null, escHtml(row.machine||'—')),
       h('td',null, escHtml(row.delai_client||'—')),
       h('td',null, row.qte_etiquettes!=null ? escHtml(String(row.qte_etiquettes)) : '—'),
-      h('td',null, row.metrage!=null ? escHtml(String(row.metrage)) : '—'),
-      h('td',null, fmtDate),
+      h('td',null, escHtml(dateCrea)),
       h('td',null, h('span',{className:stCls}, ofStatutLabel(row.lie))),
-      h('td',null, h('div',{className:'fab-of-actions'}, ...acts)),
+      h('td',null, h('div',{className:'fab-of-actions'}, ...actBtns)),
     );
   });
+
   const empty = h('tr',null,
-    h('td',{colspan:'9',style:{textAlign:'center',color:'var(--muted)',padding:'24px'}},
-      S.ofImportsLoading ? 'Chargement…' : 'Aucun OF importé'));
+    h('td',{colSpan:'9',style:{textAlign:'center',color:'var(--muted)',padding:'24px'}},
+      S.ofImportsLoading
+        ? 'Chargement…'
+        : (S.ofSearch ? `Aucun résultat pour « ${escHtml(S.ofSearch)} »` : 'Aucun OF importé')
+    )
+  );
+
+  // ── Pagination ────────────────────────────────────────────────
+  const pagination = h('div',{style:{display:'flex',alignItems:'center',gap:'10px',padding:'12px 16px',borderTop:'1px solid var(--border)',fontSize:'12px',color:'var(--muted)'}},
+    h('button',{
+      className:'fab-btn fab-btn-ghost fab-btn-sm',
+      disabled: page === 0,
+      onClick: async ()=>{ if(page>0){ set({ofPage:page-1}); await loadOfImports(); } },
+    },'← Préc.'),
+    h('span',null, total===0 ? 'Aucun résultat' : `${start}–${end} sur ${total}`),
+    h('button',{
+      className:'fab-btn fab-btn-ghost fab-btn-sm',
+      disabled: page >= totalPages - 1,
+      onClick: async ()=>{ if(page<totalPages-1){ set({ofPage:page+1}); await loadOfImports(); } },
+    },'Suiv. →'),
+  );
+
   return h('div',{className:'fab-of-panel'},
     h('div',{className:'fab-of-toolbar'},
-      h('div',{className:'fab-of-toolbar-title'},'Ordres de fabrication importés'),
+      h('div',{className:'fab-of-toolbar-title'},'Ordres de fabrication'),
+      searchWrap,
       h('button',{className:'fab-btn fab-btn-accent',onClick:openOfImportModal},
-        svgIcon('upload',14),' Importer un OF')
+        svgIcon('upload',14),' Importer un OF'),
+      S.user && S.user.role==='superadmin' && S.ofSelected.size > 0
+        ? h('button',{
+            className:'fab-btn fab-btn-danger',
+            style:'white-space:nowrap',
+            onClick: async()=>{
+              const n = S.ofSelected.size;
+              if(!confirm(`Supprimer ${n} OF${n>1?'s':''} sélectionné${n>1?'s':''} ?`)) return;
+              try{
+                await apiFetch('/api/of/bulk',{
+                  method:'DELETE',
+                  body: JSON.stringify({ids:[...S.ofSelected]}),
+                });
+                showToast(`${n} OF${n>1?'s':''} supprimé${n>1?'s':''}.`,'success');
+                set({ofSelected: new Set()});
+                await loadOfImports();
+              }catch(e){
+                showToast(e.message||'Erreur suppression.','danger');
+              }
+            },
+          },
+          svgIcon('trash',14), ` Supprimer (${S.ofSelected.size})`
+        )
+        : null
     ),
     h('div',{className:'fab-of-table-wrap'},
       h('table',{className:'fab-of-table'},
         h('thead',null, h('tr',null,
+          h('th',{style:{width:'36px',paddingRight:'4px'}},
+            h('input',{
+              type:'checkbox',
+              title:'Tout sélectionner',
+              checked: (S.ofImports||[]).length>0 && (S.ofImports||[]).every(r=>S.ofSelected.has(r.id)),
+              style:'cursor:pointer',
+              onChange: function(e){
+                const ids = (S.ofImports||[]).map(r=>r.id);
+                if(e.target.checked){ set({ofSelected: new Set(ids)}); }
+                else { set({ofSelected: new Set()}); }
+                render();
+              },
+            })
+          ),
           h('th',null,'OF n°'), h('th',null,'Référence'), h('th',null,'Machine'),
-          h('th',null,'Délai client'), h('th',null,'Qté étiquettes'), h('th',null,'Métrage'),
-          h('th',null,'Date import'), h('th',null,'Statut'), h('th',null,'Actions')
+          h('th',null,'Délai client'), h('th',null,'Qté étiquettes'), h('th',null,'Date création'),
+          h('th',null,'Statut'), h('th',null,'Actions')
         )),
         h('tbody',null, ...(rows.length ? rows : [empty]))
       )
+    ),
+    pagination,
+  );
+}
+
+function renderFichesPanel(){
+  const PAGE_SIZE=50;
+  const total=S.ficheTotal||0;
+  const page=S.fichePage||0;
+  const totalPages=Math.max(1,Math.ceil(total/PAGE_SIZE));
+  const start=total===0?0:page*PAGE_SIZE+1;
+  const end=Math.min((page+1)*PAGE_SIZE,total);
+
+  const searchWrap=h('div',{style:{flex:'1',maxWidth:'320px',position:'relative'}},
+    h('input',{
+      id:'fiche-search-input',
+      type:'text',
+      placeholder:'Rechercher (référence, désignation, client…)',
+      value:S.ficheSearch||'',
+      style:'width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:9px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box',
+      oninput:async function(e){
+        const v=e.target.value;
+        const sel=[e.target.selectionStart,e.target.selectionEnd];
+        set({ficheSearch:v,fichePage:0});
+        await loadFiches();
+        requestAnimationFrame(()=>{
+          const el=document.getElementById('fiche-search-input');
+          if(el){el.focus();try{el.setSelectionRange(sel[0],sel[1]);}catch(x){}}
+        });
+      },
+      onkeydown:function(e){
+        if(e.key==='Escape'){set({ficheSearch:'',fichePage:0});loadFiches();e.target.value='';}
+      },
+      onfocus:"this.style.borderColor='var(--accent)'",
+      onblur:"this.style.borderColor='var(--border)'",
+    })
+  );
+
+  const rows=(S.fiches||[]).map(row=>{
+    const acts=[
+      h('button',{className:'fab-btn fab-btn-ghost fab-btn-sm',title:'Modifier',onClick:()=>openFicheEditModal(row)},svgIcon('edit',14)),
+    ];
+    if(S.user&&S.user.role==='superadmin'){
+      acts.push(h('button',{
+        className:'fab-btn fab-btn-ghost fab-btn-sm',title:'Supprimer',
+        onClick:async()=>{
+          if(!confirm('Supprimer cette fiche technique ?')) return;
+          try{await apiFetch('/api/fiches-techniques/'+row.id,{method:'DELETE'});showToast('Fiche supprimée.','success');await loadFiches();}
+          catch(e){showToast(e.message||'Erreur','danger');}
+        },
+      },svgIcon('trash',14)));
+    }
+    return h('tr',null,
+      h('td',{style:{width:'36px',paddingRight:'4px'}},
+        h('input',{
+          type:'checkbox',
+          checked: S.ficheSelected.has(row.id),
+          style:'cursor:pointer',
+          onChange: function(e){
+            const sel=new Set(S.ficheSelected);
+            if(e.target.checked) sel.add(row.id); else sel.delete(row.id);
+            set({ficheSelected:sel});
+            render();
+          },
+        })
+      ),
+      h('td',null,escHtml(row.reference||'—')),
+      h('td',null,escHtml(row.designation||'—')),
+      h('td',null,escHtml(row.client||'—')),
+      h('td',null,escHtml(row.format||'—')),
+      h('td',null,row.laize!=null?escHtml(String(row.laize)+' mm'):'—'),
+      h('td',null,escHtml(row.matiere||'—')),
+      h('td',null,escHtml(row.source||'—')),
+      h('td',null,h('div',{className:'fab-of-actions'},...acts)),
+    );
+  });
+
+  const empty=h('tr',null,
+    h('td',{colSpan:'9',style:{textAlign:'center',color:'var(--muted)',padding:'24px'}},
+      S.fichesLoading?'Chargement…':(S.ficheSearch?`Aucun résultat pour « ${escHtml(S.ficheSearch)} »`:'Aucune fiche technique importée')
     )
+  );
+
+  const pagination=h('div',{style:{display:'flex',alignItems:'center',gap:'10px',padding:'12px 16px',borderTop:'1px solid var(--border)',fontSize:'12px',color:'var(--muted)'}},
+    h('button',{className:'fab-btn fab-btn-ghost fab-btn-sm',disabled:page===0,
+      onClick:async()=>{if(page>0){set({fichePage:page-1});await loadFiches();}}
+    },'← Préc.'),
+    h('span',null,total===0?'Aucun résultat':`${start}–${end} sur ${total}`),
+    h('button',{className:'fab-btn fab-btn-ghost fab-btn-sm',disabled:page>=totalPages-1,
+      onClick:async()=>{if(page<totalPages-1){set({fichePage:page+1});await loadFiches();}}
+    },'Suiv. →'),
+  );
+
+  return h('div',{className:'fab-of-panel'},
+    h('div',{className:'fab-of-toolbar'},
+      h('div',{className:'fab-of-toolbar-title'},'Fiches techniques'),
+      searchWrap,
+      S.user && S.user.role==='superadmin' && S.ficheSelected.size > 0
+        ? h('button',{
+            className:'fab-btn fab-btn-danger',
+            style:'white-space:nowrap',
+            onClick: async()=>{
+              const n=S.ficheSelected.size;
+              if(!confirm(`Supprimer ${n} fiche${n>1?'s':''} sélectionnée${n>1?'s':''} ?`)) return;
+              try{
+                await apiFetch('/api/fiches-techniques/bulk',{
+                  method:'DELETE',
+                  body:JSON.stringify({ids:[...S.ficheSelected]}),
+                });
+                showToast(`${n} fiche${n>1?'s':''} supprimée${n>1?'s':''}.`,'success');
+                set({ficheSelected:new Set()});
+                await loadFiches();
+              }catch(e){
+                showToast(e.message||'Erreur suppression.','danger');
+              }
+            },
+          },
+          svgIcon('trash',14), ` Supprimer (${S.ficheSelected.size})`
+        )
+        : null
+    ),
+    h('div',{className:'fab-of-table-wrap'},
+      h('table',{className:'fab-of-table'},
+        h('thead',null,h('tr',null,
+          h('th',{style:{width:'36px',paddingRight:'4px'}},
+            h('input',{
+              type:'checkbox',
+              title:'Tout sélectionner',
+              checked: (S.fiches||[]).length>0 && (S.fiches||[]).every(r=>S.ficheSelected.has(r.id)),
+              style:'cursor:pointer',
+              onChange: function(e){
+                const ids=(S.fiches||[]).map(r=>r.id);
+                if(e.target.checked){ set({ficheSelected:new Set(ids)}); }
+                else { set({ficheSelected:new Set()}); }
+                render();
+              },
+            })
+          ),
+          h('th',null,'Référence'),h('th',null,'Désignation'),h('th',null,'Client'),
+          h('th',null,'Format'),h('th',null,'Laize'),h('th',null,'Matière'),
+          h('th',null,'Source'),h('th',null,'Actions')
+        )),
+        h('tbody',null,...(rows.length?rows:[empty]))
+      )
+    ),
+    pagination,
   );
 }
 
@@ -2466,7 +2911,25 @@ function renderTracaPanel(){
 }
 
 function renderMain(){
-  if(S.fabTab==='of') return renderOfPanel();
+  if(S.fabTab==='of'){
+    return h('div',{className:'fab-of-panel',style:{display:'flex',flexDirection:'column',flex:'1',minHeight:0}},
+      // Sous-navigation OF / Fiches techniques
+      h('div',{style:{display:'flex',borderBottom:'1px solid var(--border)',padding:'0 16px',gap:'0',flexShrink:0}},
+        h('button',{
+          style:`padding:10px 16px;font-size:12px;font-weight:600;border:none;background:transparent;cursor:pointer;border-bottom:2px solid ${S.ofSubTab==='of'?'var(--accent)':'transparent'};color:${S.ofSubTab==='of'?'var(--accent)':'var(--muted)'};font-family:inherit`,
+          onClick:()=>{ set({ofSubTab:'of'}); render(); },
+        },'Ordres de fabrication'),
+        h('button',{
+          style:`padding:10px 16px;font-size:12px;font-weight:600;border:none;background:transparent;cursor:pointer;border-bottom:2px solid ${S.ofSubTab==='fiche'?'var(--accent)':'transparent'};color:${S.ofSubTab==='fiche'?'var(--accent)':'var(--muted)'};font-family:inherit`,
+          onClick:async()=>{ set({ofSubTab:'fiche'}); await loadFiches(); render(); },
+        },'Fiches techniques'),
+      ),
+      // Contenu du sous-onglet actif
+      h('div',{style:{flex:'1',minHeight:0,overflow:'auto'}},
+        S.ofSubTab==='fiche' ? renderFichesPanel() : renderOfPanel()
+      ),
+    );
+  }
   if(S.fabTab==='print') return renderPrintPanel();
   if(S.fabTab==='traca') return renderTracaPanel();
 
@@ -2743,7 +3206,7 @@ function renderFooter(){
     if(canAccessOfTab()){
       adminTabBtns.push(
         h('button',{className:'fab-tab-btn'+(S.fabTab==='of'?' active':''),onClick:()=>{ void switchFabTab('of'); }},
-          svgIcon('file',16),'OF')
+          svgIcon('file',16),'Fiches + OF')
       );
     }
     return h('div',{className:'fab-footer fab-footer--admin'},
@@ -2933,7 +3396,7 @@ function renderFooter(){
   if(canAccessOfTab()){
     tabBtns.push(
       h('button',{className:'fab-tab-btn'+(S.fabTab==='of'?' active':''),onClick:()=>{ void switchFabTab('of'); }},
-        svgIcon('file',16),'OF')
+        svgIcon('file',16),'Fiches + OF')
     );
   }
   const tabNav = h('div',{className:'fab-tab-nav'}, ...tabBtns);
