@@ -2742,6 +2742,43 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 86, "reconciliation_snapshots_pf")
 
+    # v87 — Tableaux de bord : référentiel créé par le superadmin
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=87 LIMIT 1").fetchone():
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS dashboards (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                titre       TEXT NOT NULL,
+                description TEXT DEFAULT '',
+                widget_type TEXT NOT NULL CHECK(widget_type IN ('stock_alerts','planning_summary','expe_today')),
+                config_json TEXT NOT NULL DEFAULT '{}',
+                actif       INTEGER NOT NULL DEFAULT 1,
+                created_by_id INTEGER REFERENCES users(id),
+                created_at  TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+                updated_at  TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_dashboards_actif ON dashboards(actif);
+        """)
+        conn.commit()
+        _record_schema_migration(conn, 87, "dashboards")
+
+    # v88 — Tableaux de bord : association utilisateur ↔ dashboard
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=88 LIMIT 1").fetchone():
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS user_dashboards (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                dashboard_id INTEGER NOT NULL REFERENCES dashboards(id) ON DELETE CASCADE,
+                pos_x        REAL NOT NULL DEFAULT 20,
+                pos_y        REAL NOT NULL DEFAULT 80,
+                minimized    INTEGER NOT NULL DEFAULT 0,
+                added_at     TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+                UNIQUE(user_id, dashboard_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_user_dashboards_user ON user_dashboards(user_id);
+        """)
+        conn.commit()
+        _record_schema_migration(conn, 88, "user_dashboards")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

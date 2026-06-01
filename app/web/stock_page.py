@@ -7321,6 +7321,8 @@ function monEnsureState() {
       importing: false,
       selectedId: null,
       monPage: 'quantites',
+      sortColumn: null,
+      sortDirection: 'asc',
     };
   }
   return S.monitoring;
@@ -7371,7 +7373,67 @@ function monFilteredLines() {
     const isStockMysifaZero = stockMysifa === 0 || r.stock_mysifa == null || r.stock_mysifa === '';
     return !(isStockErpZero && isStockMysifaZero);
   });
+  // Apply sorting
+  if (m.sortColumn) {
+    rows.sort((a, b) => {
+      let valA, valB;
+      switch (m.sortColumn) {
+        case 'reference':
+          valA = (a.reference || '').toLowerCase();
+          valB = (b.reference || '').toLowerCase();
+          break;
+        case 'designation':
+          valA = (a.designation || '').toLowerCase();
+          valB = (b.designation || '').toLowerCase();
+          break;
+        case 'unite':
+          valA = (a.unite || '').toLowerCase();
+          valB = (b.unite || '').toLowerCase();
+          break;
+        case 'stock_erp':
+          valA = Number(a.stock_erp) || 0;
+          valB = Number(b.stock_erp) || 0;
+          break;
+        case 'stock_mysifa':
+          valA = Number(a.stock_mysifa) || 0;
+          valB = Number(b.stock_mysifa) || 0;
+          break;
+        case 'ecart':
+          valA = (Number(a.stock_erp) || 0) - (Number(a.stock_mysifa) || 0);
+          valB = (Number(b.stock_erp) || 0) - (Number(b.stock_mysifa) || 0);
+          break;
+        case 'dernier_mvt_erp':
+          valA = a.dernier_mvt_erp || '';
+          valB = b.dernier_mvt_erp || '';
+          break;
+        case 'mysifa_date_fifo':
+          valA = a.mysifa_date_fifo || '';
+          valB = b.mysifa_date_fifo || '';
+          break;
+        case 'statut':
+          valA = (a.statut || '').toLowerCase();
+          valB = (b.statut || '').toLowerCase();
+          break;
+        default:
+          return 0;
+      }
+      if (valA < valB) return m.sortDirection === 'asc' ? -1 : 1;
+      if (valA > valB) return m.sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }
   return rows;
+}
+
+function monToggleSort(column) {
+  const m = monEnsureState();
+  if (m.sortColumn === column) {
+    m.sortDirection = m.sortDirection === 'asc' ? 'desc' : 'asc';
+  } else {
+    m.sortColumn = column;
+    m.sortDirection = 'asc';
+  }
+  renderMonitoringView(false);
 }
 
 function monFmtEcart(val) {
@@ -7485,16 +7547,48 @@ function renderMonitoringResults(container) {
     ));
   } else {
     const table = el('table', { cls: 'hist-table' });
+    const m = monEnsureState();
+    const sortIcon = (col) => {
+      if (m.sortColumn !== col) return '';
+      return m.sortDirection === 'asc' ? ' ▲' : ' ▼';
+    };
     table.appendChild(el('thead', null, el('tr', null,
-      el('th', null, 'Référence'),
-      el('th', null, 'Désignation'),
-      el('th', null, 'Unité'),
-      el('th', null, 'Stock ERP'),
-      el('th', null, 'Stock MySifa'),
-      el('th', null, 'Écart'),
-      el('th', null, 'Dernier mvt ERP'),
-      el('th', null, 'Dernier flux MySifa'),
-      el('th', null, 'Statut'),
+      el('th', { 
+        style: { cursor: 'pointer', userSelect: 'none' },
+        on: { click: () => monToggleSort('reference') }
+      }, 'Référence' + sortIcon('reference')),
+      el('th', { 
+        style: { cursor: 'pointer', userSelect: 'none' },
+        on: { click: () => monToggleSort('designation') }
+      }, 'Désignation' + sortIcon('designation')),
+      el('th', { 
+        style: { cursor: 'pointer', userSelect: 'none' },
+        on: { click: () => monToggleSort('unite') }
+      }, 'Unité' + sortIcon('unite')),
+      el('th', { 
+        style: { cursor: 'pointer', userSelect: 'none' },
+        on: { click: () => monToggleSort('stock_erp') }
+      }, 'Stock ERP' + sortIcon('stock_erp')),
+      el('th', { 
+        style: { cursor: 'pointer', userSelect: 'none' },
+        on: { click: () => monToggleSort('stock_mysifa') }
+      }, 'Stock MySifa' + sortIcon('stock_mysifa')),
+      el('th', { 
+        style: { cursor: 'pointer', userSelect: 'none' },
+        on: { click: () => monToggleSort('ecart') }
+      }, 'Écart' + sortIcon('ecart')),
+      el('th', { 
+        style: { cursor: 'pointer', userSelect: 'none' },
+        on: { click: () => monToggleSort('dernier_mvt_erp') }
+      }, 'Dernier mvt ERP' + sortIcon('dernier_mvt_erp')),
+      el('th', { 
+        style: { cursor: 'pointer', userSelect: 'none' },
+        on: { click: () => monToggleSort('mysifa_date_fifo') }
+      }, 'Dernier flux MySifa' + sortIcon('mysifa_date_fifo')),
+      el('th', { 
+        style: { cursor: 'pointer', userSelect: 'none' },
+        on: { click: () => monToggleSort('statut') }
+      }, 'Statut' + sortIcon('statut')),
     )));
     const tbody = el('tbody', null);
     rows.forEach(ln => tbody.appendChild(buildMonitoringTableRow(ln)));

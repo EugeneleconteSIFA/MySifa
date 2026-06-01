@@ -297,6 +297,10 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
         </svg>
         Log
       </button>
+      <button type="button" class="nav-btn" data-tab="dashboards">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        Tableaux de bord
+      </button>
       <button type="button" class="nav-btn" data-tab="fsc">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"/>
@@ -645,6 +649,10 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
       </div>
     </section>
 
+    <section id="panel-dashboards" class="hidden">
+      <div id="settings-tab-content"></div>
+    </section>
+
     <!-- Modal nouvelle annonce -->
     <div id="upd-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:800;align-items:center;justify-content:center" class="hidden">
       <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;width:min(560px,95vw);max-height:90vh;overflow:auto">
@@ -832,7 +840,7 @@ function setTab(id) {
   document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === id);
   });
-  ['users', 'matrix', 'defaults', 'fournisseurs', 'operations', 'machines', 'updates', 'audit', 'fsc'].forEach(p => {
+  ['users', 'matrix', 'defaults', 'fournisseurs', 'operations', 'machines', 'updates', 'audit', 'fsc', 'dashboards'].forEach(p => {
     const el = document.getElementById('panel-' + p);
     if (el) el.classList.toggle('hidden', p !== id);
   });
@@ -843,6 +851,7 @@ function setTab(id) {
   if (id === 'updates') loadUpdates();
   if (id === 'audit') loadAuditLogs();
   if (id === 'fsc') initFscPanel();
+  if (id === 'dashboards') renderSettingsDashboards();
 }
 
 document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
@@ -2651,6 +2660,261 @@ function initFscPanel() {
   }
   loadFscStats();
   loadFscRegistre();
+}
+
+async function renderSettingsDashboards() {
+  const root = document.getElementById('settings-tab-content');
+  if (!root) return;
+  root.innerHTML = '<div style="padding:20px;color:var(--muted);font-size:13px">Chargement…</div>';
+
+  let dashboards = [];
+  try {
+    const r = await fetch('/api/dashboards/admin', { credentials: 'include' });
+    if (r.ok) dashboards = await r.json();
+  } catch(e) {}
+
+  const WIDGET_TYPES = [
+    { value: 'stock_alerts',     label: 'Alertes stock matières premières' },
+    { value: 'planning_summary', label: 'Résumé planning production' },
+    { value: 'expe_today',       label: 'Départs expédition du jour' },
+  ];
+  const CATEGORIES_MP = ['mandrin','palette','adhesif','carton'];
+
+  function renderList() {
+    const listEl = document.createElement('div');
+    listEl.style.cssText = 'display:flex;flex-direction:column;gap:10px;margin-top:16px';
+
+    if (!dashboards.length) {
+      listEl.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:24px 0">Aucun tableau de bord créé.</div>';
+    } else {
+      dashboards.forEach(d => {
+        const card = document.createElement('div');
+        card.style.cssText = 'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:12px';
+
+        const typeInfo = WIDGET_TYPES.find(t => t.value === d.widget_type) || { label: d.widget_type };
+        const statusBadge = d.actif
+          ? '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:rgba(52,211,153,.15);color:var(--success)">Actif</span>'
+          : '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:var(--accent-bg);color:var(--muted)">Inactif</span>';
+
+        card.innerHTML = `
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span style="font-size:14px;font-weight:700;color:var(--text)">${escHtml(d.titre)}</span>
+              ${statusBadge}
+            </div>
+            <div style="font-size:12px;color:var(--muted);margin-top:4px">${escHtml(typeInfo.label)}</div>
+            ${d.description ? `<div style="font-size:12px;color:var(--text2);margin-top:2px">${escHtml(d.description)}</div>` : ''}
+          </div>
+          <div style="display:flex;gap:8px;flex-shrink:0">
+            <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px" data-edit="${d.id}">Modifier</button>
+            <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px;color:var(--danger)" data-del="${d.id}">Supprimer</button>
+          </div>`;
+
+        card.querySelector('[data-edit]').addEventListener('click', () => openDashboardModal(d));
+        card.querySelector('[data-del]').addEventListener('click', () => deleteDashboard(d.id, d.titre));
+        listEl.appendChild(card);
+      });
+    }
+    return listEl;
+  }
+
+  async function deleteDashboard(id, titre) {
+    if (!confirm(`Supprimer le tableau de bord "${titre}" ? Il sera retiré du portail de tous les utilisateurs.`)) return;
+    try {
+      const r = await fetch(`/api/dashboards/admin/${id}`, { method: 'DELETE', credentials: 'include' });
+      if (r.ok) {
+        dashboards = dashboards.filter(d => d.id !== id);
+        rebuildPage();
+        showToast('Tableau de bord supprimé.', 'success');
+      } else {
+        showToast('Erreur lors de la suppression.', 'danger');
+      }
+    } catch(e) { showToast('Erreur réseau.', 'danger'); }
+  }
+
+  function openDashboardModal(existing) {
+    const isEdit = !!existing;
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.55);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center';
+    overlay.addEventListener('click', e => { if(e.target===overlay) overlay.remove(); });
+
+    const modal = document.createElement('div');
+    modal.style.cssText = 'background:var(--card);border:1px solid var(--border);border-radius:16px;width:420px;max-width:92vw;box-shadow:0 16px 48px rgba(0,0,0,.4);display:flex;flex-direction:column;overflow:hidden';
+
+    const head = document.createElement('div');
+    head.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)';
+    head.innerHTML = `<span style="font-size:15px;font-weight:700;color:var(--text)">${isEdit ? 'Modifier' : 'Nouveau tableau de bord'}</span>`;
+    const btnX = document.createElement('button');
+    btnX.className = 'db-panel-btn';
+    btnX.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+    btnX.addEventListener('click', () => overlay.remove());
+    head.appendChild(btnX);
+
+    const body = document.createElement('div');
+    body.style.cssText = 'padding:20px;display:flex;flex-direction:column;gap:14px';
+
+    // Champ titre
+    const fTitre = document.createElement('div');
+    fTitre.innerHTML = `<label style="font-size:12px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">Titre</label>
+      <input id="db-f-titre" type="text" placeholder="Ex: Stocks à réapprovisionner" value="${escAttr(existing?.titre||'')}" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:14px">`;
+
+    // Champ description
+    const fDesc = document.createElement('div');
+    fDesc.innerHTML = `<label style="font-size:12px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">Description <span style="color:var(--muted);font-weight:400">(optionnel)</span></label>
+      <input id="db-f-desc" type="text" placeholder="Ex: Mandrins, cartons, palettes et adhésif" value="${escAttr(existing?.description||'')}" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:14px">`;
+
+    // Champ type (désactivé en édition)
+    const fType = document.createElement('div');
+    const typeOpts = WIDGET_TYPES.map(t =>
+      `<option value="${t.value}" ${(existing?.widget_type===t.value||(!existing&&t.value==='stock_alerts'))?'selected':''}>${t.label}</option>` 
+    ).join('');
+    fType.innerHTML = `<label style="font-size:12px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">Type de widget</label>
+      <select id="db-f-type" ${isEdit?'disabled':''} style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:14px">${typeOpts}</select>
+      ${isEdit?'<div style="font-size:11px;color:var(--muted);margin-top:4px">Le type ne peut pas être modifié après création.</div>':''}`;
+
+    // Config dynamique selon le type (stock_alerts → catégories)
+    const fConfig = document.createElement('div');
+    fConfig.id = 'db-f-config';
+
+    function renderConfigFields(type, currentConfig) {
+      fConfig.innerHTML = '';
+      if (type === 'stock_alerts') {
+        const cats = currentConfig?.categories || [];
+        fConfig.innerHTML = `<div>
+          <label style="font-size:12px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:8px">Catégories affichées</label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            ${CATEGORIES_MP.map(c => `
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);cursor:pointer;padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg)">
+                <input type="checkbox" value="${c}" ${cats.includes(c)||!cats.length?'checked':''} style="accent-color:var(--accent)">
+                ${c.charAt(0).toUpperCase()+c.slice(1)}
+              </label>`).join('')}
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:6px">Si aucune sélectionnée, toutes les catégories sont affichées.</div>
+        </div>`;
+      }
+      // Pour planning_summary et expe_today : pas de config supplémentaire pour l'instant
+    }
+
+    const initType = existing?.widget_type || 'stock_alerts';
+    renderConfigFields(initType, existing?.config_json || {});
+
+    fType.querySelector('select')?.addEventListener('change', (e) => {
+      renderConfigFields(e.target.value, {});
+    });
+
+    // Champ actif
+    const fActif = document.createElement('div');
+    fActif.innerHTML = `<label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--text2)">
+      <input id="db-f-actif" type="checkbox" ${(existing?.actif!==false)?'checked':''} style="accent-color:var(--accent);width:16px;height:16px">
+      Dashboard actif (visible par les utilisateurs)
+    </label>`;
+
+    // Bouton soumettre
+    const footer = document.createElement('div');
+    footer.style.cssText = 'padding:0 20px 20px;display:flex;justify-content:flex-end;gap:10px';
+    const btnCancel = document.createElement('button');
+    btnCancel.className = 'btn btn-ghost';
+    btnCancel.textContent = 'Annuler';
+    btnCancel.addEventListener('click', () => overlay.remove());
+
+    const btnSave = document.createElement('button');
+    btnSave.className = 'btn btn-accent';
+    btnSave.textContent = isEdit ? 'Enregistrer' : 'Créer';
+    btnSave.addEventListener('click', async () => {
+      const titre = document.getElementById('db-f-titre')?.value?.trim();
+      if (!titre) { showToast('Le titre est requis.', 'danger'); return; }
+      const widget_type = document.getElementById('db-f-type')?.value || initType;
+      const desc = document.getElementById('db-f-desc')?.value?.trim() || '';
+      const actif = document.getElementById('db-f-actif')?.checked !== false;
+
+      // Collecter config
+      let config_json = {};
+      if (widget_type === 'stock_alerts') {
+        const checked = [...document.querySelectorAll('#db-f-config input[type=checkbox]:checked')].map(el => el.value);
+        if (checked.length && checked.length < CATEGORIES_MP.length) {
+          config_json.categories = checked;
+        }
+      }
+
+      btnSave.disabled = true;
+      btnSave.textContent = isEdit ? 'Enregistrement…' : 'Création…';
+
+      try {
+        let r;
+        if (isEdit) {
+          r = await fetch(`/api/dashboards/admin/${existing.id}`, {
+            method: 'PATCH', credentials: 'include',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ titre, description: desc, config_json, actif }),
+          });
+        } else {
+          r = await fetch('/api/dashboards/admin', {
+            method: 'POST', credentials: 'include',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ titre, description: desc, widget_type, config_json, actif }),
+          });
+        }
+        if (r.ok) {
+          overlay.remove();
+          // Recharger la liste
+          const r2 = await fetch('/api/dashboards/admin', { credentials: 'include' });
+          if (r2.ok) dashboards = await r2.json();
+          rebuildPage();
+          showToast(isEdit ? 'Tableau de bord modifié.' : 'Tableau de bord créé.', 'success');
+        } else {
+          const err = await r.json().catch(() => ({}));
+          showToast(err.detail || 'Erreur lors de la sauvegarde.', 'danger');
+          btnSave.disabled = false;
+          btnSave.textContent = isEdit ? 'Enregistrer' : 'Créer';
+        }
+      } catch(e) {
+        showToast('Erreur réseau.', 'danger');
+        btnSave.disabled = false;
+        btnSave.textContent = isEdit ? 'Enregistrer' : 'Créer';
+      }
+    });
+
+    body.appendChild(fTitre);
+    body.appendChild(fDesc);
+    body.appendChild(fType);
+    body.appendChild(fConfig);
+    body.appendChild(fActif);
+    footer.appendChild(btnCancel);
+    footer.appendChild(btnSave);
+    modal.appendChild(head);
+    modal.appendChild(body);
+    modal.appendChild(footer);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => document.getElementById('db-f-titre')?.focus());
+  }
+
+  function rebuildPage() {
+    root.innerHTML = '';
+    buildPage();
+  }
+
+  function buildPage() {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'max-width:760px;margin:0 auto;padding:0 0 40px';
+
+    const topRow = document.createElement('div');
+    topRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:4px';
+    const h = document.createElement('div');
+    h.innerHTML = '<div style="font-size:16px;font-weight:700;color:var(--text)">Tableaux de bord</div><div style="font-size:13px;color:var(--muted);margin-top:4px">Créez des tableaux de bord que les utilisateurs peuvent ajouter à leur portail.</div>';
+    const btnNew = document.createElement('button');
+    btnNew.className = 'btn btn-accent';
+    btnNew.innerHTML = '+ Nouveau';
+    btnNew.style.cssText = 'flex-shrink:0;padding:8px 16px;font-size:13px';
+    btnNew.addEventListener('click', () => openDashboardModal(null));
+    topRow.appendChild(h);
+    topRow.appendChild(btnNew);
+    wrap.appendChild(topRow);
+    wrap.appendChild(renderList());
+    root.appendChild(wrap);
+  }
+
+  buildPage();
 }
 
 function fscClaimBadgeHtml(claim) {
