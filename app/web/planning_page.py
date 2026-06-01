@@ -3043,7 +3043,7 @@ function dossierFields(numero_of,client,ref_produit,laize,date_livraison,comment
           <div class="fd fd--full">
             <label class="dossier-check-lbl">
               <input type="checkbox" id="f-rdv" ${rdvOn?"checked":""} style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
-              Prise de rendez-vous de livraison confirmée
+              Prendre un Rendez-Vous
             </label>
           </div>
         </div>

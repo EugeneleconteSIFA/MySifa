@@ -235,7 +235,7 @@ Structure des sections :
 **Section 3 — Livraison** (grille 2 col sur desktop)
 - Date de livraison (`f-dl`)
 - Département de livraison (`f-dept`) : input texte, placeholder "Ex : 75, 69, Rhône…"
-- Case à cocher "Prise de RDV" (`f-rdv`) : checkbox + label "Prise de rendez-vous de livraison confirmée"
+- Case à cocher "Prise de RDV" (`f-rdv`) : checkbox + label "Prendre un Rendez-Vous"
 
 **Section 4 — Particularités et commentaires** (colonne unique)
 - Commentaire (`f-com`)
