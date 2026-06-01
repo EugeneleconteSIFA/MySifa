@@ -7709,7 +7709,7 @@ function buildMonitoring() {
       type: 'button',
       on: { click: () => {
         m.monPage = pd.id;
-        renderMonitoringView(false);
+        renderMonitoringView(true);
       } },
     }, pd.label)),
   );
@@ -7732,7 +7732,7 @@ function buildMonitoring() {
         type: 'button',
         on: { click: () => {
           m.filterStatut = fd.id;
-          renderMonitoringView(false);
+          renderMonitoringView(true);
         } },
       }, fd.label)),
     );
