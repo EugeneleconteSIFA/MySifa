@@ -1973,9 +1973,9 @@ async function openMoveLotModal(produitId, emplacement, qLot, unite, refLabel, n
       }
       
       confirmSheet.appendChild(el('div', { cls:'modal-actions', style:{marginTop:'20px'} },
-        el('button', { cls:'btn-cancel', type:'button', on:{ click:() => closeMroot() } }, 'Annuler'),
-        el('button', { 
-          cls:'btn-confirm', 
+        el('button', { cls:'btn-cancel', type:'button', on:{ click:() => confirmOverlay.remove() } }, 'Annuler'),
+        el('button', {
+          cls:'btn-confirm',
           style:{background:'var(--violet)', color:'#fff'},
           on:{ click: async () => {
             try {
@@ -1990,7 +1990,7 @@ async function openMoveLotModal(produitId, emplacement, qLot, unite, refLabel, n
               });
               if (!r) return;
               showToast('Lot déplacé — stock : ' + fN(r.quantite_apres));
-              closeMroot();
+              overlay.remove();
               if (S.selProduit) await loadProduit(S.selProduit.produit.id);
               else if (S.selEmpl) await loadEmplacement(S.selEmpl.emplacement);
               else if (S.tab === 'produits-finis') await loadProduitsFinis();
@@ -2024,7 +2024,7 @@ async function openMoveLotModal(produitId, emplacement, qLot, unite, refLabel, n
   }
   sheet.appendChild(destField);
   sheet.appendChild(el('div', { cls:'modal-actions', style:{marginTop:'20px'} },
-    el('button', { cls:'btn-cancel', type:'button', on:{ click:() => closeMroot() } }, 'Annuler'),
+    el('button', { cls:'btn-cancel', type:'button', on:{ click:() => overlay.remove() } }, 'Annuler'),
     confirmBtn
   ));
   
@@ -7350,6 +7350,13 @@ function monFilteredLines() {
       (r.designation || '').toLowerCase().includes(q)
     );
   }
+  // Exclure les références avec stock mySifa = 0 et sans correspondance ERP
+  rows = rows.filter(r => {
+    const stockMysifa = Number(r.stock_mysifa);
+    const isStockMysifaZero = stockMysifa === 0 || r.stock_mysifa == null || r.stock_mysifa === '';
+    const isSansCorrespErp = r.statut === 'sans_corresp_erp';
+    return !(isStockMysifaZero && isSansCorrespErp);
+  });
   return rows;
 }
 
