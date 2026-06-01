@@ -1107,6 +1107,11 @@ body.light .compta-add-bar-fields input:focus{box-shadow:0 0 0 3px rgba(8,145,17
   width:30px;height:30px;background:transparent;border:none;border-radius:50%;
   box-shadow:none;
 }
+.portal-humeur-badge{
+  position:absolute;bottom:-4px;left:-4px;z-index:3;pointer-events:none;
+  font-size:16px;line-height:1;
+  filter:drop-shadow(0 1px 3px rgba(0,0,0,.55));
+}
 .portal-prof-ring.prof-ring svg{width:30px;height:30px}
 .portal-prof-ring .prof-ring-label{opacity:1;font-size:8px}
 .prof-ring{position:relative;flex-shrink:0;width:34px;height:34px}
@@ -1388,6 +1393,7 @@ body.light .portal-logout:hover:last-of-type{text-shadow:0 0 12px rgba(220,38,38
   .portal-prof-ring.prof-ring{width:22px;height:22px;top:-2px;left:-2px}
   .portal-prof-ring.prof-ring svg{width:22px;height:22px}
   .portal-corner-badge{top:2px;left:2px;min-width:14px;height:14px;font-size:8px}
+  .portal-humeur-badge{bottom:-2px;left:-2px;font-size:13px}
   .portal-apps-block{
     grid-row:2;
     grid-column:1 / -1;
@@ -2145,6 +2151,8 @@ let S={
   tracShowAttente:false,
   imports:[],selImp:null,impData:null,
   ofImports:[],ofImportsLoading:false,ofImportModal:null,
+  ofSearch:'',ofPage:0,ofTotal:0,ofSubTab:'of',ofSelected:new Set(),ofEditModal:null,
+  fiches:[],fichesLoading:false,ficheSearch:'',fichePage:0,ficheTotal:0,ficheSelected:new Set(),ficheEditModal:null,
 ofSearch:'',ofPage:0,ofTotal:0,ofSubTab:'of',
 ofSelected:new Set(),
 fiches:[],fichesLoading:false,ficheSearch:'',fichePage:0,ficheTotal:0,
@@ -2354,6 +2362,7 @@ function icon(name,size=16){
     'map-pin': '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>',
     'database': '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/>',
     'users': '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+    'palette': '<circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>',
   };
   return `<svg ${a} aria-hidden="true" style="display:inline-block;vertical-align:middle;flex-shrink:0">${p[name]||p['alert-circle']}</svg>`;
 }
@@ -4005,7 +4014,7 @@ function renderPortal(){
       draggable:'true',
       onClick:()=>{if(_portalDragSuppressClick)return;window.location.href='/bat';}
     },
-      h('div',{className:'portal-app-icon'},iconEl('monitor',28)),
+      h('div',{className:'portal-app-icon'},iconEl('palette',28)),
       h('div',{className:'portal-app-name'},'MyBAT'),
       h('div',{className:'portal-app-desc'},'Bons À Tirer — suivi client')
     )});
@@ -4069,6 +4078,10 @@ function renderPortal(){
   const profPct=profileCompletionPercent(S.user);
   const profRingBadge=(profPct<100)?portalProfileRingEl(profPct):null;
   const profTitle=profPct<100?('Mon profil — '+profPct+' % complété'):'Mon profil';
+  // Badge humeur sur l'icône profil
+  const _todayIso=(()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');})();
+  const _humeurVal=(S.user&&S.user.humeur_active&&S.user.humeur_valeur&&S.user.humeur_date===_todayIso)?S.user.humeur_valeur:null;
+  const profHumeurBadge=_humeurVal?(()=>{const sp=document.createElement('span');sp.className='portal-humeur-badge';sp.textContent=_humeurVal;return sp;})():null;
 
   const portalEl=h('div',{className:'portal-page'},
     h('div',{className:'portal-corner-stack'},
@@ -4078,7 +4091,7 @@ function renderPortal(){
         'aria-label':profTitle,
         title:profTitle,
         onClick:()=>{window.location.href='/profil';}
-      },profRingBadge,iconEl('user',24)),
+      },profRingBadge,profHumeurBadge,iconEl('user',24)),
       (isSuper||urole==='direction')?h('button',{
         type:'button',
         className:'portal-settings-corner',
@@ -10458,11 +10471,13 @@ function renderOfEditModal(){
         ${field('ofe-bobines','Qté bobines',m.qte_bobines,'number')}
       </div>
       <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px">
-        <button onclick="closeOfEditModal()" style="padding:9px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit;font-size:13px">Annuler</button>
-        <button onclick="saveOfEdit()" style="padding:9px 16px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700">Enregistrer</button>
+        <button id="ofe-cancel-btn" style="padding:9px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit;font-size:13px">Annuler</button>
+        <button id="ofe-save-btn" style="padding:9px 16px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700">Enregistrer</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
+  overlay.querySelector('#ofe-cancel-btn').onclick=closeOfEditModal;
+  overlay.querySelector('#ofe-save-btn').onclick=saveOfEdit;
 }
 
 function openFicheEditModal(row){
@@ -10528,11 +10543,13 @@ function renderFicheEditModal(){
       </div>
       ${field('fce-notes','Notes',m.notes)}
       <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px">
-        <button onclick="closeFicheEditModal()" style="padding:9px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit;font-size:13px">Annuler</button>
-        <button onclick="saveFicheEdit()" style="padding:9px 16px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700">Enregistrer</button>
+        <button id="fce-cancel-btn" style="padding:9px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit;font-size:13px">Annuler</button>
+        <button id="fce-save-btn" style="padding:9px 16px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700">Enregistrer</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
+  overlay.querySelector('#fce-cancel-btn').onclick=closeFicheEditModal;
+  overlay.querySelector('#fce-save-btn').onclick=saveFicheEdit;
 }
 function openOfImportModal(){
   set({ofImportModal:{step:1,file:null,parsed:null,parsing:false}});
@@ -10722,6 +10739,10 @@ function renderOfTab(){
 
   return h('div',{className:'card'},
     toolbar,
+    renderPaginationBar(page,total,50,
+      async()=>{if(page>0){set({ofPage:page-1});await loadOfImports();render();}},
+      async()=>{if(page<Math.ceil(total/50)-1){set({ofPage:page+1});await loadOfImports();render();}}
+    ),
     h('div',{style:{overflowX:'auto'}},
       h('table',{className:'table-std'},
         h('thead',null,h('tr',null,
@@ -10741,10 +10762,6 @@ function renderOfTab(){
         h('tbody',null,...(rows.length?rows:[empty]))
       )
     ),
-    renderPaginationBar(page,total,50,
-      async()=>{if(page>0){set({ofPage:page-1});await loadOfImports();render();}},
-      async()=>{if(page<Math.ceil(total/50)-1){set({ofPage:page+1});await loadOfImports();render();}}
-    )
   );
 }
 
@@ -10838,6 +10855,10 @@ function renderFichesTab(){
 
   return h('div',{className:'card'},
     toolbar,
+    renderPaginationBar(page,total,50,
+      async()=>{if(page>0){set({fichePage:page-1});await loadFiches();render();}},
+      async()=>{if(page<Math.ceil(total/50)-1){set({fichePage:page+1});await loadFiches();render();}}
+    ),
     h('div',{style:{overflowX:'auto'}},
       h('table',{className:'table-std'},
         h('thead',null,h('tr',null,
@@ -10857,10 +10878,6 @@ function renderFichesTab(){
         h('tbody',null,...(rows.length?rows:[empty]))
       )
     ),
-    renderPaginationBar(page,total,50,
-      async()=>{if(page>0){set({fichePage:page-1});await loadFiches();render();}},
-      async()=>{if(page<Math.ceil(total/50)-1){set({fichePage:page+1});await loadFiches();render();}}
-    )
   );
 }
 
