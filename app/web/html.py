@@ -5622,6 +5622,10 @@ function renderExpePoids(){
     );
   }));
 
+  const resetBtn=h('button',{className:'btn-ghost',style:{padding:'0.25rem 0.65rem',fontSize:'0.8rem',marginRight:'0.4rem'}},'Remettre à 0');
+  resetBtn.addEventListener('click',()=>{
+    set({expePoidsRows:[{qty:'',laize:'',dev:''},{qty:'',laize:'',dev:''},{qty:'',laize:'',dev:''},{qty:'',laize:'',dev:''}]});
+  });
   const addBtn=h('button',{style:{padding:'0.25rem 0.65rem',fontSize:'0.8rem',borderRadius:'6px',cursor:'pointer',
     border:'1px solid var(--border)',background:'transparent',color:'var(--fg)'}},'+\u00a0Ligne');
   addBtn.addEventListener('click',()=>set({expePoidsRows:[...rows,{qty:'',laize:'',dev:''}]}));
@@ -5632,7 +5636,7 @@ function renderExpePoids(){
   const rowsCard=h('div',{className:'card',style:{marginBottom:'1rem'}},
     h('div',{className:'card-header',style:{display:'flex',alignItems:'center',justifyContent:'space-between'}},
       h('span',null,'Étiquettes'),
-      h('div',null,addBtn,delBtn||null)
+      h('div',null,resetBtn,addBtn,delBtn||null)
     ),
     h('div',{style:{overflowX:'auto',padding:'0.25rem 0.75rem 0.75rem'}},
       h('table',{style:{width:'100%',borderCollapse:'collapse',fontSize:'0.88rem'}},thead,tbody)

@@ -1924,7 +1924,7 @@ async function openMoveLotModal(produitId, emplacement, qLot, unite, refLabel, n
     selectedDestEmpl = null;
     destError.style.display = 'none';
     clearTimeout(destTimer);
-    const q = destEmpl.value.trim().toUpperCase();
+    const q = destEmplInp.value.trim().toUpperCase();
     if (!q) { suggWrap.innerHTML = ''; suggWrap.style.display = 'none'; return; }
     destTimer = setTimeout(() => {
       const empls = getStockEmplacements();
@@ -2361,6 +2361,7 @@ function goToTab(tab) {
     if (S.monitoring) {
       S.monitoring.query = '';
       S.monitoring.filterStatut = null;
+      S.monitoring.monPage = 'quantites';
     }
   }
   clearSearch(); closeSidebar();
@@ -7319,6 +7320,7 @@ function monEnsureState() {
       loading: false,
       importing: false,
       selectedId: null,
+      monPage: 'quantites',
     };
   }
   return S.monitoring;
@@ -7340,6 +7342,10 @@ function monFilteredLines() {
     rows = rows.filter(r =>
       r.statut === 'sans_corresp_erp' || r.statut === 'sans_corresp_mysifa'
     );
+  } else if (m.filterStatut === 'stock_mysifa_zero') {
+    rows = rows.filter(r => r.stock_mysifa === 0);
+  } else if (m.filterStatut === 'stock_erp_zero') {
+    rows = rows.filter(r => r.stock_erp === 0);
   } else if (m.filterStatut) {
     rows = rows.filter(r => r.statut === m.filterStatut);
   }
@@ -7437,6 +7443,10 @@ function renderMonitoringResults(container) {
   if (!container) return;
   container.innerHTML = '';
   const m = monEnsureState();
+  if (m.monPage === 'mouvements') {
+    renderMonitoringMovements(container);
+    return;
+  }
   if (m.loading) {
     container.appendChild(el('div', { cls: 'hist-loading' },
       el('div', { cls: 'hist-spinner' }),
@@ -7480,6 +7490,114 @@ function renderMonitoringResults(container) {
     )));
     const tbody = el('tbody', null);
     rows.forEach(ln => tbody.appendChild(buildMonitoringTableRow(ln)));
+    table.appendChild(tbody);
+    card.appendChild(el('div', { cls: 'hist-table-wrap' }, table));
+  }
+  container.appendChild(card);
+}
+
+function renderMonitoringMovements(container) {
+  if (!container) return;
+  container.innerHTML = '';
+  const m = monEnsureState();
+  if (m.loading) {
+    container.appendChild(el('div', { cls: 'hist-loading' },
+      el('div', { cls: 'hist-spinner' }),
+      'Chargement…',
+    ));
+    return;
+  }
+  if (!m.current) {
+    container.appendChild(el('div', { cls: 'hist-empty' },
+      'Aucun snapshot — importez un export ERP Table Stocks (.xlsx) pour démarrer la réconciliation.',
+    ));
+    return;
+  }
+  const cutoff = Date.now() - 7 * 24 * 3600 * 1000;
+  let rows = (m.allLines || []).filter(ln => {
+    const stockErp = Number(ln.stock_erp);
+    const stockMysifa = Number(ln.stock_mysifa);
+    const isStockErpZero = stockErp === 0 || ln.stock_erp == null || ln.stock_erp === '';
+    const isStockMysifaZero = stockMysifa === 0 || ln.stock_mysifa == null || ln.stock_mysifa === '';
+    if (isStockErpZero && isStockMysifaZero) return false;
+    const erpMs = ln.erp_dernier_mvt_date ? new Date(ln.erp_dernier_mvt_date).getTime() : 0;
+    const erpBougeCetteSemaine = erpMs > cutoff;
+    const mysifaBougeCetteSemaine = (ln.mysifa_mvt_semaine_count || 0) > 0;
+    return erpBougeCetteSemaine || mysifaBougeCetteSemaine;
+  });
+  const card = el('div', { cls: 'hist-results-card' });
+  card.appendChild(el('div', { cls: 'hist-results-head' },
+    el('div', { cls: 'hist-results-head-left' },
+      el('span', { cls: 'hist-results-title' }, 'Mouvements de la semaine'),
+      el('span', { cls: 'hist-count' }, fN(rows.length) + ' référence(s) avec activité cette semaine'),
+    ),
+  ));
+  if (!rows.length) {
+    card.appendChild(el('div', { cls: 'hist-empty', style: { border: 'none', borderRadius: '0' } },
+      'Aucun mouvement ERP ou MySifa enregistré sur les 7 derniers jours.',
+    ));
+  } else {
+    const table = el('table', { cls: 'hist-table' });
+    table.appendChild(el('thead', null, el('tr', null,
+      el('th', null, 'Référence'),
+      el('th', null, 'Désignation'),
+      el('th', null, 'Dernier mvt ERP'),
+      el('th', null, 'Dernier mvt MySifa'),
+      el('th', null, 'ERP semaine'),
+      el('th', null, 'MySifa semaine'),
+      el('th', null, 'Correspondance'),
+    )));
+    const tbody = el('tbody', null);
+    rows.forEach(ln => {
+      const erpMs = ln.erp_dernier_mvt_date ? new Date(ln.erp_dernier_mvt_date).getTime() : 0;
+      const erpBougeCetteSemaine = erpMs > cutoff;
+      const mysifaBougeCetteSemaine = (ln.mysifa_mvt_semaine_count || 0) > 0;
+      const erpColor = erpBougeCetteSemaine ? 'var(--text)' : 'var(--muted)';
+      const mysifaColor = mysifaBougeCetteSemaine ? 'var(--text)' : 'var(--muted)';
+      const erpLib = (ln.erp_dernier_mvt_libelle || '').trim();
+      const erpDt = ln.erp_dernier_mvt_date ? fDateTime(ln.erp_dernier_mvt_date) : '';
+      const erpQte = ln.erp_dernier_mvt_qte != null ? fN(ln.erp_dernier_mvt_qte) : '';
+      const mysifaDt = ln.mysifa_dernier_mvt_date ? fDateTime(ln.mysifa_dernier_mvt_date) : (ln.mysifa_date_fifo ? fDateTime(ln.mysifa_date_fifo) : '');
+      let erpBadge = null;
+      if (erpBougeCetteSemaine) {
+        erpBadge = el('span', { cls: 'mon-statut mon-statut-ok' }, 'Cette semaine');
+      } else {
+        erpBadge = el('span', { cls: 'hist-muted' }, '—');
+      }
+      let mysifaBadge = null;
+      if (mysifaBougeCetteSemaine) {
+        mysifaBadge = el('span', { cls: 'mon-statut mon-statut-ok' }, 'Cette semaine');
+      } else if (ln.mysifa_mvt_semaine_count == null) {
+        mysifaBadge = el('span', { cls: 'hist-muted' }, '?');
+      } else {
+        mysifaBadge = el('span', { cls: 'hist-muted' }, '—');
+      }
+      let correspBadge = null;
+      if (erpBougeCetteSemaine && mysifaBougeCetteSemaine) {
+        correspBadge = el('span', { cls: 'mon-statut mon-statut-ok' }, 'OK');
+      } else if (erpBougeCetteSemaine && !mysifaBougeCetteSemaine) {
+        correspBadge = el('span', { cls: 'mon-statut mon-statut-ecart' }, 'ERP sans MySifa');
+      } else if (!erpBougeCetteSemaine && mysifaBougeCetteSemaine) {
+        correspBadge = el('span', { cls: 'mon-statut mon-statut-warn' }, 'MySifa sans ERP');
+      } else {
+        correspBadge = el('span', { cls: 'hist-muted' }, '—');
+      }
+      tbody.appendChild(el('tr', null,
+        el('td', { cls: 'hist-ref' }, ln.reference || '—'),
+        el('td', { cls: 'hist-des', title: escAttr(ln.designation || '') }, truncStr(ln.designation || '', 40) || '—'),
+        el('td', null,
+          erpLib ? el('div', { style: { color: erpColor }, title: escAttr(erpLib) }, truncStr(erpLib, 36)) : null,
+          erpDt ? el('div', { cls: 'hist-muted', style: { fontSize: '11px', marginTop: '2px', color: erpColor } }, erpDt) : null,
+          erpQte ? el('div', { cls: 'hist-muted', style: { fontSize: '11px', marginTop: '2px', color: erpColor } }, erpQte) : null,
+        ),
+        el('td', null,
+          mysifaDt ? el('div', { style: { color: mysifaColor } }, mysifaDt) : el('span', { cls: 'hist-muted' }, '—'),
+        ),
+        el('td', null, erpBadge),
+        el('td', null, mysifaBadge),
+        el('td', null, correspBadge),
+      ));
+    });
     table.appendChild(tbody);
     card.appendChild(el('div', { cls: 'hist-table-wrap' }, table));
   }
@@ -7581,51 +7699,71 @@ function buildMonitoring() {
   const kpisWrap = el('div', { id: 'mon-kpis-wrap' });
   if (m.current) kpisWrap.appendChild(buildMonitoringKpis(m.current, m.allLines));
 
-  const filterDefs = [
-    { id: null, label: 'Tout' },
-    { id: 'ecart', label: 'Écarts' },
-    { id: 'ok', label: 'OK' },
-    { id: 'sans_corresp', label: 'Sans correspondance' },
+  const pageDefs = [
+    { id: 'quantites', label: 'Quantités' },
+    { id: 'mouvements', label: 'Mouvements' },
   ];
-  const pills = el('div', { cls: 'mp-pills', id: 'mon-filter-pills' },
-    ...filterDefs.map(fd => el('button', {
-      cls: 'mp-pill' + (
-        (fd.id == null && !m.filterStatut) || m.filterStatut === fd.id ? ' active' : ''
-      ),
+  const pagePills = el('div', { cls: 'mp-pills', id: 'mon-page-pills' },
+    ...pageDefs.map(pd => el('button', {
+      cls: 'mp-pill' + (m.monPage === pd.id ? ' active' : ''),
       type: 'button',
       on: { click: () => {
-        m.filterStatut = fd.id;
+        m.monPage = pd.id;
         renderMonitoringView(false);
       } },
-    }, fd.label)),
+    }, pd.label)),
   );
 
-  const searchInp = el('input', {
-    type: 'search',
-    id: 'mon-search',
-    placeholder: 'Rechercher (référence, désignation…)',
-    autocomplete: 'off',
-    spellcheck: 'false',
-  });
-  searchInp.value = m.query || '';
-  searchInp.addEventListener('input', (e) => {
-    m.query = e.target.value;
-    renderMonitoringView(false);
-  });
-  searchInp.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      m.query = '';
+  let filtersRow = null;
+  if (m.monPage === 'quantites') {
+    const filterDefs = [
+      { id: null, label: 'Tout' },
+      { id: 'ecart', label: 'Écarts' },
+      { id: 'ok', label: 'OK' },
+      { id: 'sans_corresp', label: 'Sans correspondance' },
+      { id: 'stock_mysifa_zero', label: 'Stock MySIFA = 0' },
+      { id: 'stock_erp_zero', label: 'Stock ERP = 0' },
+    ];
+    const pills = el('div', { cls: 'mp-pills', id: 'mon-filter-pills' },
+      ...filterDefs.map(fd => el('button', {
+        cls: 'mp-pill' + (
+          (fd.id == null && !m.filterStatut) || m.filterStatut === fd.id ? ' active' : ''
+        ),
+        type: 'button',
+        on: { click: () => {
+          m.filterStatut = fd.id;
+          renderMonitoringView(false);
+        } },
+      }, fd.label)),
+    );
+
+    const searchInp = el('input', {
+      type: 'search',
+      id: 'mon-search',
+      placeholder: 'Rechercher (référence, désignation…)',
+      autocomplete: 'off',
+      spellcheck: 'false',
+    });
+    searchInp.value = m.query || '';
+    searchInp.addEventListener('input', (e) => {
+      m.query = e.target.value;
       renderMonitoringView(false);
-    }
-  });
+    });
+    searchInp.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        m.query = '';
+        renderMonitoringView(false);
+      }
+    });
 
-  const filtersRow = el('div', { cls: 'mon-filters-row', id: 'mon-filters-bar' },
-    el('div', { cls: 'mon-search-wrap' },
-      el('span', { attrs: { 'aria-hidden': 'true' } }, iconEl('search', 18)),
-      searchInp,
-    ),
-    pills,
-  );
+    filtersRow = el('div', { cls: 'mon-filters-row', id: 'mon-filters-bar' },
+      el('div', { cls: 'mon-search-wrap' },
+        el('span', { attrs: { 'aria-hidden': 'true' } }, iconEl('search', 18)),
+        searchInp,
+      ),
+      pills,
+    );
+  }
 
   const resultsWrap = el('div', { id: 'mon-results-wrap' });
 
@@ -7633,6 +7771,7 @@ function buildMonitoring() {
     head,
     actions,
     kpisWrap,
+    pagePills,
     filtersRow,
     resultsWrap,
   );

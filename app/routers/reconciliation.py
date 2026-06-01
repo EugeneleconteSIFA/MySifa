@@ -687,9 +687,43 @@ def get_snapshot(
 
         line_rows = conn.execute(sql, params).fetchall()
 
+        # Enrichir avec les données pf_mouvements si des lignes existent
+        pf_mvt_index: dict[str, dict] = {}
+        if line_rows:
+            # Extraire les références uniques
+            refs = list({r["reference"] for r in line_rows})
+            # Calculer la date seuil (7 jours glissants)
+            seuil_date = (datetime.now(_PARIS) - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%S")
+            # Requête groupée pour éviter N+1
+            placeholders = ",".join("?" * len(refs))
+            mvt_rows = conn.execute(
+                f"""
+                SELECT reference,
+                       COUNT(CASE WHEN date_mouvement >= ? THEN 1 END) AS mvt_semaine_count,
+                       MAX(date_mouvement) AS dernier_mvt_date
+                FROM pf_mouvements
+                WHERE reference IN ({placeholders})
+                GROUP BY reference
+                """,
+                [seuil_date] + refs,
+            ).fetchall()
+            # Construire l'index
+            for mr in mvt_rows:
+                pf_mvt_index[mr["reference"]] = {
+                    "count": mr["mvt_semaine_count"] or 0,
+                    "dernier": mr["dernier_mvt_date"],
+                }
+
     return {
         "snapshot": _row_to_dict(snap),
-        "lines": [_row_to_dict(r) for r in line_rows],
+        "lines": [
+            {
+                **_row_to_dict(r),
+                "mysifa_mvt_semaine_count": pf_mvt_index.get(r["reference"], {}).get("count", 0),
+                "mysifa_dernier_mvt_date": pf_mvt_index.get(r["reference"], {}).get("dernier", None),
+            }
+            for r in line_rows
+        ],
     }
 
 

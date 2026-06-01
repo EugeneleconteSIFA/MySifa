@@ -1045,6 +1045,15 @@ function renderExpeComparateurTarifs(){
   );
   const btn=h('button',{id:'btn-comparer',type:'button',className:'expe-cmp-btn'},'Comparer');
   btn.addEventListener('click',()=>void lancerComparateur());
+  const resetBtn=h('button',{type:'button',className:'btn-ghost',style:{marginLeft:'8px'}},'Remettre à 0');
+  resetBtn.addEventListener('click',()=>{
+    document.getElementById('cmp-poids').value='';
+    document.getElementById('cmp-pal').value='';
+    document.getElementById('cmp-cp').value='';
+    document.getElementById('cmp-type').value='messagerie';
+    document.getElementById('cmp-resultats').innerHTML='';
+    S.comparateur_form={poids_total_kg:'',nb_palette:'',code_postal_destination:'',type_envoi:'messagerie'};
+  });
   const grid=h('div',{className:'expe-cmp-grid'},
     h('label',{className:'expe-cmp-label'},'Poids total (kg)',mkInp('cmp-poids','number',f.poids_total_kg,'ex : 340',{step:'0.1',min:'0'})),
     h('label',{className:'expe-cmp-label'},'Nombre de palettes',mkInp('cmp-pal','number',f.nb_palette,'ex : 3',{step:'1',min:'0'})),
@@ -1059,7 +1068,7 @@ function renderExpeComparateurTarifs(){
     h('h2',{className:'expe-cmp-title'},'Comparer les transporteurs'),
     h('div',{className:'expe-cmp-form'},
       grid,
-      h('div',{className:'expe-cmp-form-actions'},btn)
+      h('div',{className:'expe-cmp-form-actions'},btn,resetBtn)
     ),
     h('div',{id:'cmp-resultats',className:'expe-cmp-results'})
   );
