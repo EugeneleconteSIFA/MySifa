@@ -2787,11 +2787,11 @@ async function renderSettingsDashboards() {
       if (r.ok) {
         dashboards = dashboards.filter(d => d.id !== id);
         rebuildPage();
-        showToast('Tableau de bord supprimé.', 'success');
+        toast('Tableau de bord supprimé.', false);
       } else {
-        showToast('Erreur lors de la suppression.', 'danger');
+        toast('Erreur lors de la suppression.', true);
       }
-    } catch(e) { showToast('Erreur réseau.', 'danger'); }
+    } catch(e) { toast('Erreur réseau.', true); }
   }
 
   function openDashboardModal(existing) {
@@ -2884,7 +2884,7 @@ async function renderSettingsDashboards() {
     btnSave.textContent = isEdit ? 'Enregistrer' : 'Créer';
     btnSave.addEventListener('click', async () => {
       const titre = document.getElementById('db-f-titre')?.value?.trim();
-      if (!titre) { showToast('Le titre est requis.', 'danger'); return; }
+      if (!titre) { toast('Le titre est requis.', true); return; }
       const widget_type = document.getElementById('db-f-type')?.value || initType;
       const desc = document.getElementById('db-f-desc')?.value?.trim() || '';
       const actif = document.getElementById('db-f-actif')?.checked !== false;
@@ -2922,15 +2922,15 @@ async function renderSettingsDashboards() {
           const r2 = await fetch('/api/dashboards/admin', { credentials: 'include' });
           if (r2.ok) dashboards = await r2.json();
           rebuildPage();
-          showToast(isEdit ? 'Tableau de bord modifié.' : 'Tableau de bord créé.', 'success');
+          toast(isEdit ? 'Tableau de bord modifié.' : 'Tableau de bord créé.', false);
         } else {
           const err = await r.json().catch(() => ({}));
-          showToast(err.detail || 'Erreur lors de la sauvegarde.', 'danger');
+          toast(err.detail || 'Erreur lors de la sauvegarde.', true);
           btnSave.disabled = false;
           btnSave.textContent = isEdit ? 'Enregistrer' : 'Créer';
         }
       } catch(e) {
-        showToast('Erreur réseau.', 'danger');
+        toast('Erreur réseau.', true);
         btnSave.disabled = false;
         btnSave.textContent = isEdit ? 'Enregistrer' : 'Créer';
       }

@@ -1038,7 +1038,7 @@ def _hash_key(raw: str) -> str:
 
 class ApiKeyCreateIn(BaseModel):
     name: str
-    scopes: str = "planning:read,planning:write"
+    scopes: str = "of:read,of:write"
 
 
 @router.get("/api/settings/api-keys")

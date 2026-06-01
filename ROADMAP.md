@@ -15,6 +15,64 @@ Ce qui ne peut pas attendre.
 
 ---
 
+### 1.5 Déploiement sans interruption (zero-downtime + rollback)
+**Effort : 2–3 jours · Impact : critique**
+
+Aujourd'hui, toute mise à jour modifie directement la version en production. Un crash pendant un déploiement impacte les utilisateurs en temps réel.
+
+**Architecture cible sur le VPS**
+
+```
+/home/sifa/
+├── production-saas-v1/   (version active)
+├── production-saas-v2/   (nouvelle version en préparation)
+└── current -> production-saas-v1  (lien symbolique — Nginx et systemd pointent ici)
+```
+
+`DB_PATH` dans `.env` pointe toujours vers le même fichier physique (`data/production.db`), indépendamment de la version active. Les deux versions partagent la même base sans jamais la déplacer.
+
+**Workflow de déploiement**
+
+1. Cloner le dépôt dans `production-saas-v2/`
+2. Installer les dépendances : `pip install -r requirements.txt`
+3. Lancer les migrations DB (`_migrate()` est idempotent)
+4. Tester sur le port 8001 : `uvicorn main:app --port 8001`
+5. Si OK → basculer : `ln -sfn /home/sifa/production-saas-v2 /home/sifa/current`
+6. Recharger le service : `systemctl reload mysifa`
+
+**Rollback immédiat en cas de problème**
+
+```bash
+ln -sfn /home/sifa/production-saas-v1 /home/sifa/current
+systemctl reload mysifa
+```
+
+Retour à l'ancienne version en 5 secondes, sans toucher à la DB.
+
+**Environnement de staging (étape suivante)**
+
+- Sous-domaine `staging.mysifa.com` → même VPS, port différent, même DB en lecture ou DB de test dédiée
+- Tester chaque mise à jour sur staging avant de basculer le lien symbolique en production
+- Workflow : `dev → staging → tests → production`
+
+**Script `tools/deploy.sh`** à créer :
+```bash
+#!/bin/bash
+# Usage : ./tools/deploy.sh v2
+VERSION=$1
+DEPLOY_DIR="/home/sifa/production-saas-$VERSION"
+git clone ... $DEPLOY_DIR
+cd $DEPLOY_DIR && pip install -r requirements.txt --quiet
+# Migrations
+python -c "from app.core.database import _migrate; _migrate()"
+# Bascule
+ln -sfn $DEPLOY_DIR /home/sifa/current
+systemctl reload mysifa
+echo "Déployé : $VERSION"
+```
+
+---
+
 ## 2. Présence permanente au bureau
 
 Objectif : MySifa est l'onglet qu'on ne ferme jamais. Point de départ naturel de chaque journée. Les leviers ci-dessous sont ordonnés par impact / effort.

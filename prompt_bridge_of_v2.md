@@ -1,3 +1,19 @@
+# Prompt Windsurf — Bridge OF : réécriture finale de api_bridge.py
+
+## Contexte
+
+`app/routers/api_bridge.py` contient actuellement de mauvais endpoints (saisies de production).
+Il faut le réécrire entièrement pour pousser des OFs depuis Access vers la table `of_imports`.
+
+La table `of_imports` existe déjà (migration v56). Ne pas la modifier.
+Le router est importé dans `main.py` ligne 67 mais PAS encore inclus via `include_router`.
+**Ne jamais modifier DB_PATH, ne jamais toucher production_data, planning_entries, fabrication.py.**
+
+---
+
+## ÉTAPE 1 — Réécrire intégralement `app/routers/api_bridge.py`
+
+```python
 """
 Pont API — Access → MySifa
 Authentification : header X-Api-Key
@@ -149,3 +165,34 @@ def push_of(
             "id": cur.lastrowid,
             "of_numero": numero,
         }
+```
+
+---
+
+## ÉTAPE 2 — Corriger le scope par défaut dans `app/routers/settings.py`
+
+Cherche :
+```python
+scopes: str = "production:read,production:write"
+```
+Remplace par :
+```python
+scopes: str = "of:read,of:write"
+```
+
+---
+
+## ÉTAPE 3 — Finaliser l'enregistrement dans `main.py`
+
+L'import est déjà là (ligne 67). Cherche le bloc `app.include_router(...)` et ajoute :
+```python
+app.include_router(bridge_router)
+```
+
+---
+
+## Vérification
+
+- `GET /api/bridge/health` → `{"status": "ok"}` sans clé
+- `POST /api/bridge/of` sans clé → 401
+- `POST /api/bridge/of` avec une clé dont le scope ne contient pas `of:write` → 403
