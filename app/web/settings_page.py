@@ -308,6 +308,10 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
         </svg>
         Registre FSC
       </button>
+      <button type="button" class="nav-btn" data-tab="api">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        Clés API
+      </button>
     </div>
     <div class="sidebar-bottom">
       <button type="button" class="nav-btn back-mysifa" onclick="location.href='/'">
@@ -649,6 +653,57 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
       </div>
     </section>
 
+    <!-- ═══════════════════════ PANEL API ═══════════════════════ -->
+    <section id="panel-api" class="hidden">
+      <div style="max-width:860px">
+        <div style="margin-bottom:24px">
+          <div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:6px">Clés API</div>
+          <div style="font-size:13px;color:var(--muted)">
+            Générez des clés pour permettre à des scripts externes (pont Access) d'accéder à MySifa.
+            La clé secrète n'est affichée qu'une seule fois à la création — conservez-la.
+          </div>
+        </div>
+
+        <!-- Formulaire création -->
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:24px">
+          <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:14px;text-transform:uppercase;letter-spacing:.5px">Nouvelle clé</div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+            <div style="flex:1;min-width:200px">
+              <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:6px">Nom</label>
+              <input id="ak-name" type="text" placeholder="ex: Pont Access Usine"
+                style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:13px;outline:none;font-family:inherit"
+                onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
+            </div>
+            <button class="btn btn-accent" onclick="createApiKey()" style="white-space:nowrap">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:6px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Générer la clé
+            </button>
+          </div>
+        </div>
+
+        <!-- Alerte clé générée (affichée une seule fois) -->
+        <div id="ak-reveal" style="display:none;background:rgba(34,211,238,.1);border:1px solid var(--accent);border-radius:12px;padding:16px 20px;margin-bottom:24px">
+          <div style="font-size:12px;font-weight:600;color:var(--accent);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">
+            Copiez cette clé maintenant — elle ne sera plus affichée
+          </div>
+          <div style="display:flex;gap:10px;align-items:center">
+            <code id="ak-reveal-value" style="flex:1;font-family:monospace;font-size:13px;color:var(--text);word-break:break-all;background:var(--bg);padding:10px 14px;border-radius:8px;border:1px solid var(--border)"></code>
+            <button class="btn btn-ghost" onclick="copyApiKey()" title="Copier" style="border:1px solid var(--border);padding:10px 12px">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Liste des clés -->
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+          <div style="padding:16px 20px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600;color:var(--text)">Clés existantes</div>
+          <div id="ak-list" style="padding:8px 0">
+            <div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Chargement…</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section id="panel-dashboards" class="hidden">
       <div id="settings-tab-content"></div>
     </section>
@@ -840,7 +895,7 @@ function setTab(id) {
   document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === id);
   });
-  ['users', 'matrix', 'defaults', 'fournisseurs', 'operations', 'machines', 'updates', 'audit', 'fsc', 'dashboards'].forEach(p => {
+  ['users', 'matrix', 'defaults', 'fournisseurs', 'operations', 'machines', 'updates', 'audit', 'fsc', 'dashboards', 'api'].forEach(p => {
     const el = document.getElementById('panel-' + p);
     if (el) el.classList.toggle('hidden', p !== id);
   });
@@ -852,6 +907,7 @@ function setTab(id) {
   if (id === 'audit') loadAuditLogs();
   if (id === 'fsc') initFscPanel();
   if (id === 'dashboards') renderSettingsDashboards();
+  if (id === 'api') loadApiKeys();
 }
 
 document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
@@ -945,6 +1001,12 @@ async function refreshSidebarUser() {
 }
 
 function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s == null ? '' : String(s);
+  return d.innerHTML;
+}
+
+function escHtml(s) {
   const d = document.createElement('div');
   d.textContent = s == null ? '' : String(s);
   return d.innerHTML;
@@ -3052,6 +3114,74 @@ function exportFscCsv() {
   if (du) params.set('du', du);
   if (au) params.set('au', au);
   window.location.href = '/api/fsc/registre?' + params.toString();
+}
+
+// ── Clés API ──────────────────────────────────────────────────────
+async function loadApiKeys() {
+  const res = await fetch('/api/settings/api-keys', {credentials:'include'});
+  const data = await res.json();
+  const list = document.getElementById('ak-list');
+  if (!data.keys || data.keys.length === 0) {
+    list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Aucune clé créée.</div>';
+    return;
+  }
+  list.innerHTML = data.keys.map(k => `
+    <div style="display:flex;align-items:center;gap:14px;padding:12px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap">
+      <div style="flex:1;min-width:160px">
+        <div style="font-size:13px;font-weight:600;color:var(--text)">${escHtml(k.name)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;font-family:monospace">${escHtml(k.key_prefix)}…</div>
+      </div>
+      <div style="font-size:11px;color:var(--muted)">${escHtml(k.scopes||'')}</div>
+      <div style="font-size:11px;color:var(--muted)">${k.last_used_at ? 'Dernière utilisation : '+escHtml(k.last_used_at.replace('T',' ').slice(0,16)) : 'Jamais utilisée'}</div>
+      <div>
+        <span style="display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;${k.is_active ? 'background:rgba(52,211,153,.15);color:var(--ok)' : 'background:rgba(248,113,113,.15);color:var(--danger)'}">
+          ${k.is_active ? 'Active' : 'Révoquée'}
+        </span>
+      </div>
+      <div style="display:flex;gap:6px">
+        ${k.is_active ? `<button class="btn btn-ghost" style="padding:6px 12px;font-size:12px;border:1px solid var(--border)" onclick="revokeApiKey(${k.id})">Révoquer</button>` : ''}
+        <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px;border:1px solid rgba(248,113,113,.4);color:var(--danger)" onclick="deleteApiKey(${k.id})">Supprimer</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function createApiKey() {
+  const name = document.getElementById('ak-name').value.trim();
+  if (!name) { toast('Donnez un nom à cette clé.', true); return; }
+  const res = await fetch('/api/settings/api-keys', {
+    method:'POST', credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({name})
+  });
+  if (!res.ok) { toast('Erreur lors de la création.', true); return; }
+  const data = await res.json();
+  document.getElementById('ak-name').value = '';
+  document.getElementById('ak-reveal-value').textContent = data.key;
+  document.getElementById('ak-reveal').style.display = 'block';
+  toast('Clé créée. Copiez-la maintenant.', false);
+  loadApiKeys();
+}
+
+function copyApiKey() {
+  const val = document.getElementById('ak-reveal-value').textContent;
+  navigator.clipboard.writeText(val).then(() => toast('Clé copiée.', false));
+}
+
+async function revokeApiKey(id) {
+  if (!confirm('Révoquer cette clé ? Le pont Access ne pourra plus s\'authentifier.')) return;
+  const res = await fetch(`/api/settings/api-keys/${id}/revoke`, {method:'PATCH', credentials:'include'});
+  if (!res.ok) { toast('Erreur lors de la révocation.', true); return; }
+  toast('Clé révoquée.', false);
+  loadApiKeys();
+}
+
+async function deleteApiKey(id) {
+  if (!confirm('Supprimer définitivement cette clé ?')) return;
+  const res = await fetch(`/api/settings/api-keys/${id}`, {method:'DELETE', credentials:'include'});
+  if (!res.ok) { toast('Erreur lors de la suppression.', true); return; }
+  toast('Clé supprimée.', false);
+  loadApiKeys();
 }
 </script>
 </body>

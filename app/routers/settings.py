@@ -1,5 +1,7 @@
 """Paramètres & matrice d'accès — super administrateur uniquement."""
 
+import hashlib
+import secrets
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -7,6 +9,7 @@ from typing import Optional
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from pydantic import BaseModel
 
 from config import (
     ASSIGNABLE_ROLES,
@@ -1023,3 +1026,78 @@ async def rename_machine(machine_id: int, request: Request):
         ip=request.client.host if request.client else None,
     )
     return {"success": True, "id": machine_id, "nom": new_nom}
+
+
+# ══════════════════════════════════════════════════════════════════
+# Gestion des clés API (superadmin uniquement)
+# ══════════════════════════════════════════════════════════════════
+
+def _hash_key(raw: str) -> str:
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+class ApiKeyCreateIn(BaseModel):
+    name: str
+    scopes: str = "planning:read,planning:write"
+
+
+@router.get("/api/settings/api-keys")
+def list_api_keys(request: Request):
+    require_superadmin(request)
+    from database import get_db
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT id, name, key_prefix, scopes, is_active,
+                      created_by, created_at, last_used_at, revoked_at
+               FROM api_keys ORDER BY created_at DESC"""
+        ).fetchall()
+    return {"keys": [dict(r) for r in rows]}
+
+
+@router.post("/api/settings/api-keys")
+def create_api_key(body: ApiKeyCreateIn, request: Request):
+    require_superadmin(request)
+    user = get_current_user(request)
+    from database import get_db
+
+    raw = "msk_" + secrets.token_hex(32)   # 68 chars, préfixe "msk_"
+    h = _hash_key(raw)
+    prefix = raw[:12]  # affiché dans la liste pour identification visuelle
+
+    with get_db() as conn:
+        conn.execute(
+            """INSERT INTO api_keys (name, key_prefix, key_hash, scopes, is_active, created_by)
+               VALUES (?,?,?,?,1,?)""",
+            (body.name.strip(), prefix, h, body.scopes.strip(), user.get("email", ""))
+        )
+        conn.commit()
+
+    # La clé brute n'est retournée QU'UNE SEULE FOIS ici — elle n'est jamais stockée en clair
+    return {"key": raw, "prefix": prefix, "name": body.name}
+
+
+@router.patch("/api/settings/api-keys/{key_id}/revoke")
+def revoke_api_key(key_id: int, request: Request):
+    require_superadmin(request)
+    from database import get_db
+    from datetime import datetime
+    with get_db() as conn:
+        row = conn.execute("SELECT id FROM api_keys WHERE id=?", (key_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Clé introuvable.")
+        conn.execute(
+            "UPDATE api_keys SET is_active=0, revoked_at=? WHERE id=?",
+            (datetime.now().strftime("%Y-%m-%dT%H:%M:%S"), key_id)
+        )
+        conn.commit()
+    return {"revoked": True, "id": key_id}
+
+
+@router.delete("/api/settings/api-keys/{key_id}")
+def delete_api_key(key_id: int, request: Request):
+    require_superadmin(request)
+    from database import get_db
+    with get_db() as conn:
+        conn.execute("DELETE FROM api_keys WHERE id=?", (key_id,))
+        conn.commit()
+    return {"deleted": True, "id": key_id}

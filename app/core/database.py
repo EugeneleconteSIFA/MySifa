@@ -2779,6 +2779,27 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 88, "user_dashboards")
 
+    # v89 — Table des clés API (pont Access ↔ MySifa)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=89 LIMIT 1").fetchone():
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS api_keys (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                name        TEXT NOT NULL,
+                key_prefix  TEXT NOT NULL,
+                key_hash    TEXT NOT NULL UNIQUE,
+                scopes      TEXT NOT NULL DEFAULT 'production:read,production:write',
+                is_active   INTEGER NOT NULL DEFAULT 1,
+                created_by  TEXT,
+                created_at  TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+                last_used_at TEXT,
+                revoked_at  TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash);
+            CREATE INDEX IF NOT EXISTS idx_api_keys_active ON api_keys(is_active);
+        """)
+        conn.commit()
+        _record_schema_migration(conn, 89, "api_keys")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,
