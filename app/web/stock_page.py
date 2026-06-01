@@ -7363,6 +7363,14 @@ function monFilteredLines() {
     const isSansCorrespErp = r.statut === 'sans_corresp_erp';
     return !(isStockMysifaZero && isSansCorrespErp);
   });
+  // Exclure les lignes où stock ERP et stock Mysifa sont tous deux égaux à 0
+  rows = rows.filter(r => {
+    const stockErp = Number(r.stock_erp);
+    const stockMysifa = Number(r.stock_mysifa);
+    const isStockErpZero = stockErp === 0 || r.stock_erp == null || r.stock_erp === '';
+    const isStockMysifaZero = stockMysifa === 0 || r.stock_mysifa == null || r.stock_mysifa === '';
+    return !(isStockErpZero && isStockMysifaZero);
+  });
   return rows;
 }
 
