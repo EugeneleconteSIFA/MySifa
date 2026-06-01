@@ -124,6 +124,12 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
 }
 .chat-chan-icon-ph{font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.3px}
 .chat-chan-icon-emoji{font-size:18px;font-weight:400;line-height:1;background:var(--accent-bg)}
+.chat-icon-wrap{position:relative;flex-shrink:0;display:inline-block}
+.chat-humeur-badge{
+  position:absolute;bottom:-2px;left:-2px;
+  font-size:11px;line-height:1;pointer-events:none;
+  filter:drop-shadow(0 1px 2px rgba(0,0,0,.5));
+}
 .chat-header-icon{
   width:36px;height:36px;border-radius:50%;flex-shrink:0;
   display:inline-flex;align-items:center;justify-content:center;
@@ -559,6 +565,7 @@ body.sb-open .sidebar-overlay{display:block}
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js"></script>
 <script src="/static/chat_widget_v2.js"></script>
+<script src="/static/mysifa_humeur.js"></script>
 <script>
 window.__MYSIFA_UID__ = __USER_ID__;
 window.__MYSIFA_NOM__ = __USER_NOM_JSON__;
@@ -770,17 +777,25 @@ function chanInitials(name){
 function chanIconHtml(c,size){
   const sz=size||32;
   const emoji=(c.emoji||'').trim();
+  let iconHtml;
   if(c.type==='channel'&&emoji){
     const fs=Math.max(16,Math.round(sz*0.56));
-    return '<span class="chat-chan-icon chat-chan-icon-emoji" style="width:'+sz+'px;height:'+sz+'px;font-size:'+fs+'px">'+esc(emoji)+'</span>';
+    iconHtml='<span class="chat-chan-icon chat-chan-icon-emoji" style="width:'+sz+'px;height:'+sz+'px;font-size:'+fs+'px">'+esc(emoji)+'</span>';
+  } else {
+    const nom=c.type==='direct'?(c.display_name||''):(c.name||c.display_name||'C');
+    iconHtml='<span class="chat-chan-icon chat-chan-icon-ph" style="width:'+sz+'px;height:'+sz+'px">'+esc(chanInitials(nom))+'</span>';
   }
-  const nom=c.type==='direct'?(c.display_name||''):(c.name||c.display_name||'C');
-  return '<span class="chat-chan-icon chat-chan-icon-ph" style="width:'+sz+'px;height:'+sz+'px">'+esc(chanInitials(nom))+'</span>';
+  const humeur=c.type==='direct'?(c.other_user_humeur||''):'';
+  if(humeur){
+    return '<span class="chat-icon-wrap">'+iconHtml+'<span class="chat-humeur-badge">'+esc(humeur)+'</span></span>';
+  }
+  return iconHtml;
 }
 function updateChatHeaderIcon(ch){
+  const wrap=document.getElementById('chat-header-icon-wrap');
   const el=document.getElementById('chat-header-icon');
   if(!el)return;
-  if(!ch){el.style.display='none';el.innerHTML='';return;}
+  if(!ch){el.style.display='none';el.innerHTML='';if(wrap)wrap.innerHTML='';return;}
   const emoji=(ch.emoji||'').trim();
   if(ch.type==='channel'&&emoji){
     el.className='chat-header-icon chat-header-icon-emoji';
@@ -791,6 +806,21 @@ function updateChatHeaderIcon(ch){
     el.textContent=chanInitials(nom);
   }
   el.style.display='inline-flex';
+  // Humeur badge sur l'en-tête DM
+  const oldBadge=document.getElementById('chat-header-humeur');
+  if(oldBadge)oldBadge.remove();
+  const humeur=ch.type==='direct'?(ch.other_user_humeur||''):'';
+  if(humeur){
+    const badge=document.createElement('span');
+    badge.id='chat-header-humeur';
+    badge.className='chat-humeur-badge';
+    badge.style.fontSize='14px';
+    badge.style.bottom='-3px';
+    badge.style.left='-3px';
+    badge.textContent=humeur;
+    el.style.position='relative';
+    el.appendChild(badge);
+  }
 }
 function renderChannelLists(){
   const chans=channels.filter(c=>c.type==='channel');
@@ -1238,14 +1268,16 @@ function renderSettingsMembersList(members,canManage){
     el.innerHTML='<p style="padding:8px 0;margin:0;font-size:12px;color:var(--muted)">Aucun membre.</p>';
     return;
   }
+  const today=new Date().toISOString().slice(0,10);
   el.innerHTML=members.map(m=>{
     const rl=ROLE_LABELS[m.role]||m.role||'';
     const isSelf=Number(m.id)===Number(window.__MYSIFA_UID__);
     const removeBtn=(!isSelf&&canManage)
       ?'<button type="button" class="chat-user-row" style="justify-content:center;color:var(--danger);margin-top:4px" data-remove="'+m.id+'">Retirer</button>'
       :'';
+    const humeur=(m.humeur_active&&m.humeur_valeur&&m.humeur_date===today)?(' <span title="Humeur du jour">'+esc(m.humeur_valeur)+'</span>'):'';
     return '<div style="padding:8px 0;border-bottom:1px solid var(--border)">'+
-      '<div style="font-weight:600;font-size:13px">'+esc(m.nom)+'</div>'+
+      '<div style="font-weight:600;font-size:13px">'+esc(m.nom)+humeur+'</div>'+
       '<div style="font-size:11px;color:var(--muted)">'+esc(rl)+'</div>'+removeBtn+'</div>';
   }).join('');
   el.querySelectorAll('[data-remove]').forEach(btn=>{
@@ -1737,6 +1769,11 @@ document.getElementById('btn-logout').onclick=async()=>{
   }
   if(window.MySifaTheme)MySifaTheme.applyTheme();
   syncThemeBtn();
+  // Humeur popup
+  try{
+    const meData=await fetch('/api/auth/me',{credentials:'include'}).then(r=>r.json()).catch(()=>null);
+    if(meData&&window.MySifaHumeur)requestAnimationFrame(()=>MySifaHumeur.maybeShow(meData));
+  }catch(e){}
   await loadChannels();
   checkNotifPermission();
   checkUpdates();

@@ -324,7 +324,7 @@ def me(request: Request):
         return PlainResponse(content=b"null", media_type="application/json")
     with get_db() as conn:
         row = conn.execute(
-            "SELECT id,email,identifiant,nom,role,operateur_lie,machine_id,telephone,adresse,date_naissance,avatar_url,access_overrides,portal_apps_order,theme_prefs FROM users WHERE id=?",
+            "SELECT id,email,identifiant,nom,role,operateur_lie,machine_id,telephone,adresse,date_naissance,avatar_url,access_overrides,portal_apps_order,theme_prefs,humeur_active,humeur_valeur,humeur_date FROM users WHERE id=?",
             (user["id"],)
         ).fetchone()
     if not row:
@@ -467,6 +467,48 @@ def delete_my_avatar(request: Request):
         ip=client_ip,
     )
     return {"ok": True}
+
+
+# ─── Humeur utilisateur ───────────────────────────────────────────
+HUMEURS_VALIDES = {"😊", "😩", "😢", "🤒", "😐"}
+
+@router.put("/api/auth/me/humeur")
+async def update_humeur(request: Request):
+    """Met à jour l'humeur du jour et/ou le toggle actif/inactif."""
+    user = get_current_user(request)
+    body = await request.json()
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    with get_db() as conn:
+        ex = conn.execute("SELECT humeur_active,humeur_valeur,humeur_date FROM users WHERE id=?", (user["id"],)).fetchone()
+        if not ex:
+            raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+
+        humeur_active = ex["humeur_active"] if ex["humeur_active"] is not None else 0
+        humeur_valeur = ex["humeur_valeur"]
+        humeur_date = ex["humeur_date"]
+
+        if "humeur_active" in body:
+            humeur_active = 1 if body["humeur_active"] else 0
+
+        if "humeur_valeur" in body:
+            val = body["humeur_valeur"]
+            if val is None or val == "":
+                humeur_valeur = None
+                humeur_date = None
+            elif val in HUMEURS_VALIDES:
+                humeur_valeur = val
+                humeur_date = today
+            else:
+                raise HTTPException(status_code=400, detail="Humeur invalide")
+
+        conn.execute(
+            "UPDATE users SET humeur_active=?,humeur_valeur=?,humeur_date=? WHERE id=?",
+            (humeur_active, humeur_valeur, humeur_date, user["id"]),
+        )
+        conn.commit()
+
+    return {"ok": True, "humeur_active": humeur_active, "humeur_valeur": humeur_valeur, "humeur_date": humeur_date}
 
 
 # ─── Gestion utilisateurs (super admin uniquement) ──────────────

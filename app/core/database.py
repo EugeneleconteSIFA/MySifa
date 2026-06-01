@@ -2824,6 +2824,43 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 90, "fiches_techniques")
 
+    # v91 — Humeur utilisateur (indicateur quotidien)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=91 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
+        if "humeur_active" not in cols:
+            conn.execute("ALTER TABLE users ADD COLUMN humeur_active INTEGER NOT NULL DEFAULT 0")
+        if "humeur_valeur" not in cols:
+            conn.execute("ALTER TABLE users ADD COLUMN humeur_valeur TEXT")
+        if "humeur_date" not in cols:
+            conn.execute("ALTER TABLE users ADD COLUMN humeur_date TEXT")
+        conn.commit()
+        _record_schema_migration(conn, 91, "users_humeur")
+
+    # v92 — MyBAT : gestion des Bons À Tirer
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=92 LIMIT 1").fetchone():
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS bat_entries (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                numero_client   TEXT NOT NULL,
+                numero_article  TEXT NOT NULL,
+                statut          TEXT NOT NULL DEFAULT 'a_faire',
+                pdf_path        TEXT,
+                notes           TEXT,
+                created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+                updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+                created_by      INTEGER REFERENCES users(id),
+                updated_by      INTEGER REFERENCES users(id),
+                UNIQUE(numero_client, numero_article)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bat_statut ON bat_entries(statut)"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 92, "bat_entries")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

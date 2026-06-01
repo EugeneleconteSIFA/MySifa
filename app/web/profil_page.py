@@ -286,6 +286,24 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
   box-shadow:0 1px 4px rgba(0,0,0,.25);
 }
 .toggle-switch.on .toggle-knob{transform:translateX(22px);background:var(--bg)}
+
+/* ── Humeur ── */
+.humeur-row{display:flex;align-items:center;justify-content:space-between;gap:16px;
+  padding:14px 16px;background:var(--bg);border:1px solid var(--border);border-radius:12px;margin-bottom:14px}
+.humeur-info-label{font-size:13px;font-weight:700;color:var(--text)}
+.humeur-info-sub{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.45}
+.humeur-emojis{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+.humeur-btn{
+  font-size:22px;width:46px;height:46px;border-radius:12px;border:2px solid var(--border);
+  background:var(--bg);cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:border-color .15s,background .15s,transform .1s;line-height:1;padding:0;
+  flex-shrink:0;
+}
+.humeur-btn:hover{border-color:var(--accent);background:var(--accent-bg);transform:scale(1.1)}
+.humeur-btn.selected{border-color:var(--accent);background:var(--accent-bg);transform:scale(1.08)}
+.humeur-label{font-size:10px;color:var(--muted);text-align:center;margin-top:3px}
+.humeur-item{display:flex;flex-direction:column;align-items:center;gap:2px}
+.humeur-none-label{font-size:11px;color:var(--muted);font-style:italic;margin-top:4px}
 </style>
 </head>
 <body class="has-topbar">
@@ -379,6 +397,7 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 <link rel="stylesheet" href="/static/mysifa_dock.css">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <script src="/static/mysifa_dock.js"></script>
+<script src="/static/mysifa_humeur.js"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js"></script>
@@ -601,12 +620,93 @@ function renderInfo(){
           ${u.last_login?`<div>Dernière connexion : ${esc(fD(u.last_login))}</div>`:''}
         </div>
       </form>
-    </div>`;
+    </div>
+    <div id="humeur-card-wrap"></div>`;
   document.getElementById('btn-save').onclick=saveInfo;
   document.getElementById('btn-avatar-pick').onclick=()=>document.getElementById('prof-avatar-input')?.click();
   document.getElementById('prof-avatar-input').onchange=uploadAvatar;
   document.getElementById('btn-avatar-del').onclick=deleteAvatar;
+  renderHumeurCard();
 }
+
+// ── Humeur ────────────────────────────────────────────────────────
+const HUMEURS=[
+  {val:'😊',label:'Joyeux'},
+  {val:'😩',label:'Épuisé'},
+  {val:'😢',label:'Triste'},
+  {val:'🤒',label:'Malade'},
+  {val:'😐',label:'Normal'},
+];
+
+function todayIso(){
+  const d=new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function humeurActuelle(){
+  if(!ME)return null;
+  if(!ME.humeur_active)return null;
+  if(ME.humeur_date!==todayIso())return null;
+  return ME.humeur_valeur||null;
+}
+function renderHumeurCard(){
+  const wrap=document.getElementById('humeur-card-wrap');
+  if(!wrap)return;
+  const active=!!(ME&&ME.humeur_active);
+  const today=todayIso();
+  const valeur=(ME&&ME.humeur_date===today)?ME.humeur_valeur:null;
+  const selected=valeur||'';
+  wrap.innerHTML=`
+    <div class="card">
+      <h2 style="margin-bottom:14px">Mon humeur</h2>
+      <div class="humeur-row">
+        <div>
+          <div class="humeur-info-label">Partager mon humeur</div>
+          <div class="humeur-info-sub">Visible dans la messagerie par vos collègues.</div>
+        </div>
+        <button type="button" class="toggle-switch${active?' on':''}" id="humeur-toggle"
+          role="switch" aria-checked="${active?'true':'false'}" aria-label="Partager mon humeur"
+          onclick="toggleHumeurActive()">
+          <span class="toggle-knob"></span>
+        </button>
+      </div>
+      ${active?`
+      <div style="margin-bottom:4px">
+        <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Humeur du jour</div>
+        <div class="humeur-emojis">
+          ${HUMEURS.map(h=>`
+            <div class="humeur-item">
+              <button type="button" class="humeur-btn${selected===h.val?' selected':''}"
+                onclick="setHumeur('${h.val}')" title="${h.label}">${h.val}</button>
+              <div class="humeur-label">${h.label}</div>
+            </div>`).join('')}
+        </div>
+        ${!selected?`<div class="humeur-none-label">Aucune humeur choisie pour aujourd'hui.</div>`:''}
+        ${selected?`<div style="font-size:12px;color:var(--text2);margin-top:10px">Humeur du jour : <strong>${selected}</strong> — <button type="button" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:12px;font-family:inherit;padding:0;text-decoration:underline" onclick="setHumeur(null)">Réinitialiser</button></div>`:''}
+      </div>`:''}
+    </div>`;
+}
+
+async function toggleHumeurActive(){
+  if(!ME)return;
+  const newActive=!ME.humeur_active;
+  try{
+    const r=await api('/api/auth/me/humeur',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({humeur_active:newActive})});
+    ME.humeur_active=r.humeur_active;
+    renderHumeurCard();
+  }catch(e){toast(e.message||'Enregistrement impossible',false);}
+}
+
+async function setHumeur(val){
+  if(!ME)return;
+  try{
+    const r=await api('/api/auth/me/humeur',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({humeur_valeur:val===null?'':val})});
+    ME.humeur_valeur=r.humeur_valeur;
+    ME.humeur_date=r.humeur_date;
+    renderHumeurCard();
+    toast(val?'Humeur enregistrée':'Humeur réinitialisée',true);
+  }catch(e){toast(e.message||'Enregistrement impossible',false);}
+}
+
 
 async function uploadAvatar(){
   const inp=document.getElementById('prof-avatar-input');
@@ -958,6 +1058,7 @@ document.getElementById('btn-logout').onclick=async()=>{
     syncThemeBtn();
     updateUserChip();
     renderInfo();
+    if(window.MySifaHumeur)requestAnimationFrame(()=>MySifaHumeur.maybeShow(ME));
     const tabParam=new URLSearchParams(location.search).get('tab');
     if(tabParam==='prefs')showTab('prefs');
     else if(tabParam==='calendrier')showTab('calendrier');

@@ -335,7 +335,7 @@ def list_channels(request: Request):
             d = dict(r)
             if d["type"] == "direct":
                 other = conn.execute(
-                    """SELECT u.nom, u.id, u.avatar_url FROM chat_members cm2
+                    """SELECT u.nom, u.id, u.avatar_url, u.humeur_active, u.humeur_valeur, u.humeur_date FROM chat_members cm2
                        JOIN users u ON u.id = cm2.user_id
                        WHERE cm2.channel_id = ? AND cm2.user_id != ?
                        LIMIT 1""",
@@ -344,6 +344,11 @@ def list_channels(request: Request):
                 d["display_name"] = other["nom"] if other else "Utilisateur inconnu"
                 d["other_user_id"] = other["id"] if other else None
                 d["other_user_avatar_url"] = (other["avatar_url"] or "") if other else ""
+                today = datetime.now().strftime("%Y-%m-%d")
+                if other and other["humeur_active"] and other["humeur_valeur"] and other["humeur_date"] == today:
+                    d["other_user_humeur"] = other["humeur_valeur"]
+                else:
+                    d["other_user_humeur"] = ""
             else:
                 d["display_name"] = d["name"] or "Canal sans nom"
                 d["other_user_id"] = None
@@ -549,7 +554,7 @@ def channel_members(channel_id: int, request: Request):
     with get_db() as conn:
         _assert_member(conn, channel_id, user["id"])
         rows = conn.execute(
-            """SELECT u.id, u.nom, u.role, u.avatar_url, cm.joined_at, cm.last_read_at
+            """SELECT u.id, u.nom, u.role, u.avatar_url, u.humeur_active, u.humeur_valeur, u.humeur_date, cm.joined_at, cm.last_read_at
                FROM chat_members cm JOIN users u ON u.id = cm.user_id
                WHERE cm.channel_id = ?
                ORDER BY u.nom""",
@@ -1080,7 +1085,7 @@ def list_users(request: Request, q: str = ""):
     uid = user["id"]
     with get_db() as conn:
         rows = conn.execute(
-            "SELECT id, nom, role, avatar_url FROM users WHERE actif=1 ORDER BY nom",
+            "SELECT id, nom, role, avatar_url, humeur_active, humeur_valeur, humeur_date FROM users WHERE actif=1 ORDER BY nom",
         ).fetchall()
     users = [dict(r) for r in rows if r["id"] != uid]
     if q:
