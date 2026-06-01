@@ -1793,8 +1793,8 @@ function renderOfPanel(){
           e.target.value='';
         }
       },
-      onfocus:   "this.style.borderColor='var(--accent)'",
-      onblur:    "this.style.borderColor='var(--border)'",
+      onFocus:   function(e){ e.target.style.borderColor='var(--accent)'; },
+      onBlur:    function(e){ e.target.style.borderColor='var(--border)'; },
     })
   );
 
@@ -1963,8 +1963,8 @@ function renderFichesPanel(){
       onkeydown:function(e){
         if(e.key==='Escape'){set({ficheSearch:'',fichePage:0});loadFiches();e.target.value='';}
       },
-      onfocus:"this.style.borderColor='var(--accent)'",
-      onblur:"this.style.borderColor='var(--border)'",
+      onFocus:function(e){ e.target.style.borderColor='var(--accent)'; },
+      onBlur:function(e){ e.target.style.borderColor='var(--border)'; },
     })
   );
 
