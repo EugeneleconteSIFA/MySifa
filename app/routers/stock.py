@@ -28,7 +28,7 @@ def _normalize_emplacement(code: str) -> str:
 
 
 def _is_valid_emplacement(code: str) -> bool:
-    """Code grille (A121…) ou zone spéciale Au sol (Z0)."""
+    """Code grille (A121…) ou zone spéciale Au sol - à expédier (Z0)."""
     empl = _normalize_emplacement(code)
     if not empl:
         return False
@@ -950,7 +950,7 @@ def get_emplacement(emplacement: str, request: Request):
 
 @router.get("/api/stock/a-expedier")
 def stock_a_expedier(request: Request):
-    """Produits finis en zone Au sol — stock à expédier prochainement."""
+    """Produits finis en zone Au sol - à expédier — stock à expédier prochainement."""
     require_stock(request)
     empl = STOCK_EMPLACEMENT_AU_SOL
     with get_db() as conn:

@@ -2067,7 +2067,7 @@ async function sortirLot(produitId, emplacement, qLot, unite, refLabel, nbLots, 
 // Emplacements chargés depuis /api/stock/emplacements-list (plan + stock réel)
 let _emplListFromDB = [];
 const STOCK_EMPL_AU_SOL = 'Z0';
-const STOCK_EMPL_AU_SOL_LABEL = 'Au sol';
+const STOCK_EMPL_AU_SOL_LABEL = 'Au sol - à expédier';
 const LS_STOCK_EMPL_CUSTOM = 'mysifa_stock_empl_custom';
 const STOCK_UNITS_BASE = ['cartons','bobines','étiquettes','palettes','paravents','boîtes'];
 const LS_STOCK_UNITS_CUSTOM = 'mysifa_stock_units_custom_v1';
@@ -6429,7 +6429,7 @@ function renderStockAExpedierModalContent(sheet, data) {
   ));
   if (!refs.length) {
     sheet.appendChild(el('div', { cls: 'card-empty', style: { padding: '24px 8px' } },
-      'Aucun produit en zone Au sol pour le moment.',
+      'Aucun produit en zone Au sol pour expédition pour le moment.',
     ));
   } else {
     const list = el('div', { cls: 'a-exp-list' });
