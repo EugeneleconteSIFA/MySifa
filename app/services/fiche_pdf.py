@@ -215,6 +215,11 @@ def generate_fiche_pdf(fiche: dict) -> bytes:
                "", "", "Epaisseur", _f("outil2_epaisseur"), "µm")
     _outil_dents_row(_f("outil2_nb_dents"), _f("outil2_nb_front"), _f("outil2_nb_avance"))
 
+    # Outil 3
+    _outil_row("", "OUTIL 3", _f("outil3_forme"), _f("outil3_numero_sifa"),
+               "", "", "Epaisseur", _f("outil3_epaisseur"), "µm")
+    _outil_dents_row(_f("outil3_nb_dents"), _f("outil3_nb_front"), _f("outil3_nb_avance"))
+
     y -= 1 * mm
 
     # ── MATIÈRE ──────────────────────────────────────────────────────

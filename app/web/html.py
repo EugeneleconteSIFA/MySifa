@@ -10837,6 +10837,10 @@ function renderFichesTab(){
     const acts=[
       h('button',{
         style:'padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer',
+        title:'Prévisualiser PDF',onClick:()=>window.open('/api/fiches-techniques/'+row.id+'/pdf-preview','_blank')
+      },iconEl('file',13)),
+      h('button',{
+        style:'padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer',
         title:'Modifier',onClick:()=>openFicheEditModal(row)
       },iconEl('edit',13)),
     ];

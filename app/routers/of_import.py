@@ -469,7 +469,22 @@ def list_fiches(request: Request):
 async def update_fiche(fiche_id: int, request: Request):
     _require_of_access(request)
     body = await request.json()
-    EDITABLE = {"reference","designation","client","format","laize","matiere","adhesif","nb_couleurs","conditionnement","notes"}
+    EDITABLE = {
+        "reference","designation","client","format",
+        "eti_laize","eti_longueur","eti_rayons","eti_perforations",
+        "mod_laize","mod_longueur","mod_nb_front",
+        "support","matiere","glassine","laize_optimale","laize_optionnelle",
+        "epaisseur","adhesif","qte_au_mille",
+        "machine","nb_couleurs","recto","verso",
+        "tete1_pantone","tete1_couleur","tete1_anilox","tete1_composition",
+        "tete2_pantone","tete2_couleur","tete2_anilox","tete2_composition",
+        "tete3_pantone","tete3_couleur","tete3_anilox","tete3_composition",
+        "remarque","mandrin_dia","mandrin_longueur","enroulement","nb_etiq_bobin",
+        "dia_ext","poids","conditionnement","cales_sachets","cartons",
+        "nb_au_sol","nb_etage","nb_bobines_carton",
+        "palette_type","palette_nb_cartons_sol","palette_nb_cartons_hauteur","palette_hauteur_max",
+        "particularite","notes",
+    }
     updates = {k: v for k, v in body.items() if k in EDITABLE}
     if not updates:
         raise HTTPException(status_code=400, detail="Aucun champ modifiable.")
@@ -482,6 +497,29 @@ async def update_fiche(fiche_id: int, request: Request):
         )
         conn.commit()
     return {"updated": True, "id": fiche_id}
+
+
+@router.get("/api/fiches-techniques/{fiche_id}/pdf-preview")
+def preview_fiche_pdf(fiche_id: int, request: Request):
+    """Génère et retourne le PDF d'une fiche technique (auth session)."""
+    get_current_user(request)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM fiches_techniques WHERE id=?", (fiche_id,)
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Fiche introuvable.")
+    try:
+        from app.services.fiche_pdf import generate_fiche_pdf
+        pdf_bytes = generate_fiche_pdf(dict(row))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Erreur génération PDF : {exc}") from exc
+    ref = re.sub(r"[^\w\-]+", "_", str(row["reference"] or fiche_id))
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="fiche_{ref}.pdf"'},
+    )
 
 
 @router.delete("/api/fiches-techniques/bulk")

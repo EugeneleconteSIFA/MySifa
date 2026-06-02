@@ -1989,6 +1989,7 @@ function renderFichesPanel(){
 
   const rows=(S.fiches||[]).map(row=>{
     const acts=[
+      h('button',{className:'fab-btn fab-btn-ghost fab-btn-sm',title:'Prévisualiser PDF',onClick:()=>window.open('/api/fiches-techniques/'+row.id+'/pdf-preview','_blank')},svgIcon('file',14)),
       h('button',{className:'fab-btn fab-btn-ghost fab-btn-sm',title:'Modifier',onClick:()=>openFicheEditModal(row)},svgIcon('edit',14)),
     ];
     if(S.user&&S.user.role==='superadmin'){

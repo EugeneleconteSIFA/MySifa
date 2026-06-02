@@ -985,6 +985,97 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
 .inv-days.urgent{color:var(--danger)}
 .inv-days.attention{color:var(--warn)}
 
+/* ── Inventaire v2 (par emplacement, thème violet) ── */
+.invv2-page-header{margin-bottom:12px}
+.invv2-page-title{font-size:20px;font-weight:800;color:var(--text);letter-spacing:.2px}
+.invv2-page-sub{font-size:12px;color:var(--muted);margin-top:4px}
+.invv2-legend{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px;padding:8px 12px;background:var(--card);border:1px solid var(--border);border-radius:10px}
+.invv2-legend-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+.invv2-dot{display:inline-block;width:8px;height:8px;border-radius:50%}
+.invv2-c-vert .invv2-dot{background:var(--success)}
+.invv2-c-jaune .invv2-dot{background:var(--warn)}
+.invv2-c-orange .invv2-dot{background:#fb923c}
+.invv2-c-rouge .invv2-dot{background:var(--danger)}
+.invv2-search-wrap{margin-bottom:10px}
+.invv2-search-input{width:100%}
+.invv2-list-card{padding:4px 0;overflow:hidden}
+.invv2-empl-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;cursor:pointer;border-bottom:1px solid var(--border);transition:background .15s,border-color .15s}
+.invv2-empl-row:last-child{border-bottom:0}
+.invv2-empl-row:hover{background:rgba(139,92,246,.10)}
+.invv2-empl-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.invv2-empl-code{font-size:15px;font-weight:800;color:var(--text);font-family:monospace;letter-spacing:.3px}
+.invv2-empl-meta{font-size:11px;color:var(--muted);line-height:1.4}
+.invv2-empl-right{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0}
+.invv2-jours{font-weight:800;font-size:18px;padding:4px 12px;border-radius:10px;min-width:72px;text-align:center;line-height:1.2;font-family:monospace}
+.invv2-jours-sub{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;text-align:right;max-width:160px}
+.invv2-c-vert .invv2-jours{background:color-mix(in srgb,var(--success) 18%,transparent);color:var(--success)}
+.invv2-c-jaune .invv2-jours{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
+.invv2-c-orange .invv2-jours{background:color-mix(in srgb,#fb923c 22%,transparent);color:#fb923c}
+.invv2-c-rouge .invv2-jours{background:color-mix(in srgb,var(--danger) 18%,transparent);color:var(--danger)}
+
+/* Détail emplacement (violet) */
+.invv2-detail .invv2-back{margin-bottom:14px}
+.invv2-scorecard{background:var(--card);border:1px solid var(--border);border-left:4px solid var(--c2);border-radius:12px;padding:16px 18px;margin-bottom:14px}
+.invv2-detail-title{font-size:22px;font-weight:800;color:var(--c2);font-family:monospace;letter-spacing:.3px;margin-bottom:8px}
+.invv2-last-info{font-size:13px;color:var(--text2);margin-bottom:12px}
+.invv2-last-info strong{color:var(--text);font-weight:700}
+.invv2-last-info.invv2-last-none{color:var(--muted);font-style:italic}
+.invv2-detail-stats{display:flex;gap:10px;flex-wrap:wrap}
+.invv2-stat{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 14px;min-width:90px}
+.invv2-stat-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:2px}
+.invv2-stat-value{font-size:18px;font-weight:800;color:var(--text);line-height:1.1}
+.invv2-prod-card{margin-bottom:4px}
+.invv2-prod-list{padding:0}
+.invv2-prod-row{display:flex;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid var(--border);transition:background .2s}
+.invv2-prod-row:last-child{border-bottom:0}
+.invv2-prod-row.invv2-validated{background:color-mix(in srgb,var(--success) 12%,transparent)}
+.invv2-prod-main{flex:1;min-width:0}
+.invv2-prod-ref{font-family:monospace;font-weight:800;font-size:14px;color:var(--text);letter-spacing:.2px}
+.invv2-prod-info{font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.invv2-prod-qty{display:flex;flex-direction:column;align-items:flex-end;gap:1px;font-family:monospace;min-width:100px;text-align:right}
+.invv2-prod-qty-main{font-size:14px;font-weight:700;color:var(--text)}
+.invv2-prod-qty-new{font-size:15px;font-weight:800;color:var(--c2)}
+.invv2-prod-qty-old{font-size:11px;color:var(--muted);text-decoration:line-through}
+.invv2-prod-actions{display:flex;gap:6px;flex-shrink:0}
+.invv2-btn-modify{background:rgba(139,92,246,.12);color:var(--c2);border:1px solid var(--c2);border-radius:8px;padding:7px 12px;font-weight:700;font-size:12px;cursor:pointer;font-family:inherit;transition:filter .15s,background .15s}
+.invv2-btn-modify:hover{background:rgba(139,92,246,.22)}
+.invv2-btn-validate{background:var(--success);color:#0a0e17;border:0;border-radius:8px;padding:7px 12px;font-weight:900;font-size:14px;cursor:pointer;min-width:38px;font-family:inherit;line-height:1;transition:filter .15s}
+.invv2-btn-validate:hover{filter:brightness(1.06)}
+.invv2-btn-cancel{background:var(--success);color:#0a0e17;border:0;border-radius:8px;padding:7px 12px;font-weight:900;font-size:14px;cursor:pointer;min-width:38px;font-family:inherit;line-height:1;transition:filter .15s,background .15s,color .15s}
+.invv2-btn-cancel:hover{background:var(--danger);color:#fff}
+.invv2-empty-card{margin-bottom:4px}
+.invv2-action-bar{display:flex;justify-content:center;margin:14px 0 4px}
+.invv2-btn-to-validate{background:var(--card);border:1px solid var(--border);color:var(--text2);border-radius:12px;padding:12px 24px;font-weight:700;font-size:14px;opacity:.85}
+.invv2-btn-validate-all{background:var(--c2);color:#0a0e17;border:0;border-radius:12px;padding:14px 32px;font-weight:800;font-size:15px;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(139,92,246,.32);transition:filter .15s,transform .1s}
+.invv2-btn-validate-all:hover{filter:brightness(1.08)}
+.invv2-btn-validate-all:active{transform:translateY(1px)}
+.invv2-history-card{margin-top:4px}
+.invv2-hist-list{padding:0}
+.invv2-hist-row{display:grid;grid-template-columns:110px 1fr auto;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);font-size:13px;align-items:center}
+.invv2-hist-row:last-child{border-bottom:0}
+.invv2-hist-date{color:var(--text);font-weight:700;font-family:monospace}
+.invv2-hist-op{color:var(--text2)}
+.invv2-hist-meta{font-size:11px;color:var(--muted);font-family:monospace}
+.invv2-btn-more{background:transparent;border:1px solid var(--border);color:var(--c2);border-radius:8px;padding:9px 14px;font-weight:700;font-size:12px;cursor:pointer;font-family:inherit;width:calc(100% - 24px);margin:10px 12px 10px;transition:background .15s,border-color .15s}
+.invv2-btn-more:hover{border-color:var(--c2);background:rgba(139,92,246,.10)}
+
+/* Mobile */
+@media (max-width: 720px){
+  .invv2-empl-row{padding:12px}
+  .invv2-empl-code{font-size:14px}
+  .invv2-jours{font-size:16px;padding:3px 10px;min-width:60px}
+  .invv2-jours-sub{font-size:9px}
+  .invv2-legend{gap:6px;padding:6px 10px}
+  .invv2-legend-item{font-size:10px}
+  .invv2-prod-row{flex-wrap:wrap;gap:10px}
+  .invv2-prod-main{flex:1 1 100%;min-width:0}
+  .invv2-prod-qty{min-width:auto;flex-direction:row;align-items:baseline;gap:8px}
+  .invv2-prod-actions{margin-left:auto}
+  .invv2-hist-row{grid-template-columns:1fr;gap:2px}
+  .invv2-hist-date{font-size:12px}
+  .invv2-hist-op{font-size:12px}
+}
+
 /* ── Modal mouvement (bottom sheet) ── */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:500;
   display:flex;flex-direction:column;justify-content:flex-end}
@@ -1279,6 +1370,14 @@ let S = {
   selEmpl: null,
   dashboard: null,
   inventaireList: [],
+  // Inventaire v2 (par emplacement)
+  invV2List: null,           // [{emplacement, label, nb_refs, total_qte, jours_depuis, couleur, ...}]
+  invV2Detail: null,         // {emplacement, refs, history, last_inventaire}
+  invV2Search: '',           // recherche emplacement
+  invV2Validated: {},        // { [produit_id]: true } produits validés (vert)
+  invV2Modifs: {},           // { [produit_id]: {qte_avant, qte_apres} } modifs en attente
+  invV2HistoryExpanded: false,
+  invV2Submitting: false,
   modalMvt: null,
   modalType: 'entree',
   toast: null,
@@ -1813,7 +1912,161 @@ async function loadDashboard() {
 }
 
 async function loadInventaireList() {
-  try { const d = await api('/api/stock/inventaire/produits-a-inventorier'); if (d) { S.inventaireList = d; renderContent(); } } catch(e) {}
+  // Inventaire v2 : liste des emplacements avec jours depuis dernier inventaire complet.
+  S.invV2Detail = null;
+  S.invV2Validated = {};
+  S.invV2Modifs = {};
+  S.invV2HistoryExpanded = false;
+  try {
+    const d = await api('/api/stock/inventaire-v2/emplacements');
+    if (d) { S.invV2List = Array.isArray(d) ? d : []; renderContent(); }
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function loadInventaireEmpl(code) {
+  try {
+    const d = await api('/api/stock/inventaire-v2/emplacement/' + encodeURIComponent(code));
+    if (d) {
+      S.invV2Detail = d;
+      S.invV2Validated = {};
+      S.invV2Modifs = {};
+      S.invV2HistoryExpanded = false;
+      renderContent();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+function clearInventaireEmpl() {
+  S.invV2Detail = null;
+  S.invV2Validated = {};
+  S.invV2Modifs = {};
+  S.invV2HistoryExpanded = false;
+  loadInventaireList();
+}
+
+function invV2ToggleValidate(pid) {
+  S.invV2Validated[pid] = true;
+  renderContent();
+}
+
+function invV2CancelValidate(pid) {
+  // Modal de confirmation pour annuler la validation
+  closeMroot();
+  const overlay = el('div', { cls:'modal-overlay', on:{ click: e => { if(e.target===overlay) closeMroot(); }}});
+  const sheet = el('div', { cls:'modal-sheet', style: { maxWidth: '420px' } },
+    el('span', { cls:'modal-handle' }),
+    el('div', { cls:'modal-title', style:{color:'var(--c2)'} }, 'Annuler la validation ?'),
+    el('div', { cls:'modal-sub' }, 'Voulez-vous vraiment annuler ce que vous venez de valider ? La ligne redeviendra modifiable.'),
+    el('div', { cls:'modal-actions', style:{marginTop:'20px'} },
+      el('button', { cls:'btn-cancel', on:{ click: closeMroot } }, 'Non, garder'),
+      el('button', { cls:'btn-confirm inventaire', on:{ click: () => {
+        delete S.invV2Validated[pid];
+        delete S.invV2Modifs[pid];
+        closeMroot();
+        renderContent();
+      }}}, 'Oui, annuler')
+    )
+  );
+  overlay.appendChild(sheet);
+  document.getElementById('mroot').appendChild(overlay);
+}
+
+function invV2OpenModifyModal(pid, currentQty, reference, designation, unite) {
+  closeMroot();
+  let valStr = String(currentQty != null ? currentQty : '');
+  const overlay = el('div', { cls:'modal-overlay', on:{ click: e => { if(e.target===overlay) closeMroot(); }}});
+  const inp = el('input', {
+    cls:'field-input',
+    type:'number', step:'0.01', min:'0', value: valStr, autocomplete:'off', inputmode:'decimal',
+    style:{ width:'100%', fontSize:'16px', textAlign:'right', fontFamily:'monospace', direction:'ltr' }
+  });
+  inp.addEventListener('input', e => { valStr = e.target.value; });
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') validateBtn.click(); });
+  const validateBtn = el('button', { cls:'btn-confirm inventaire', on:{ click: () => {
+    const q = parseFloat(valStr);
+    if (isNaN(q) || q < 0) { showToast('Quantité invalide.', 'error'); return; }
+    S.invV2Modifs[pid] = { qte_avant: parseFloat(currentQty)||0, qte_apres: q };
+    S.invV2Validated[pid] = true;
+    closeMroot();
+    renderContent();
+  }}}, 'Valider la modification');
+  const sheet = el('div', { cls:'modal-sheet', style: { maxWidth: '440px' } },
+    el('span', { cls:'modal-handle' }),
+    el('div', { cls:'modal-title', style:{color:'var(--c2)'} }, 'Modifier la quantité'),
+    el('div', { cls:'modal-sub' }, escHtml(reference) + (designation ? ' — ' + escHtml(designation) : '')),
+    el('div', { cls:'modal-field' },
+      el('label', { cls:'field-label' }, 'Quantité réelle comptée' + (unite ? ' ('+escHtml(unite)+')' : '')),
+      inp
+    ),
+    el('div', { cls:'modal-actions', style:{marginTop:'14px'} },
+      el('button', { cls:'btn-cancel', on:{ click: closeMroot } }, 'Annuler'),
+      validateBtn
+    )
+  );
+  overlay.appendChild(sheet);
+  document.getElementById('mroot').appendChild(overlay);
+  requestAnimationFrame(() => { try { inp.focus(); inp.select(); } catch(e){} });
+}
+
+function invV2ValidateFullInventaire() {
+  const d = S.invV2Detail; if (!d) return;
+  const modifications = Object.keys(S.invV2Modifs).map(pid => ({
+    produit_id: parseInt(pid, 10),
+    qte_apres: parseFloat(S.invV2Modifs[pid].qte_apres),
+  }));
+  const nbProduits = (d.refs || []).length;
+  const nbModifs = modifications.length;
+
+  closeMroot();
+  const overlay = el('div', { cls:'modal-overlay', on:{ click: e => { if(e.target===overlay) closeMroot(); }}});
+  const confirmBtn = el('button', { cls:'btn-confirm inventaire', on:{ click: async () => {
+    if (S.invV2Submitting) return;
+    S.invV2Submitting = true;
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Validation en cours…';
+    try {
+      const r = await api('/api/stock/inventaire-v2/valider', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          emplacement: d.emplacement,
+          nb_produits: nbProduits,
+          modifications,
+        })
+      });
+      if (r && r.success) {
+        showToast('Inventaire validé · ' + (r.nb_modifications||0) + ' modification(s) appliquée(s).');
+        closeMroot();
+        clearInventaireEmpl();
+      }
+    } catch(e) {
+      showToast(e.message || 'Erreur lors de la validation.', 'error');
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = 'Confirmer la validation';
+    } finally {
+      S.invV2Submitting = false;
+    }
+  }}}, 'Confirmer la validation');
+
+  const sheet = el('div', { cls:'modal-sheet', style: { maxWidth: '460px' } },
+    el('span', { cls:'modal-handle' }),
+    el('div', { cls:'modal-title', style:{color:'var(--c2)'} }, "Valider l'inventaire ?"),
+    el('div', { cls:'modal-sub' },
+      'Emplacement ' + escHtml(d.label || d.emplacement) + ' · ' +
+      nbProduits + ' produit' + (nbProduits>1?'s':'') + ' inventorié' + (nbProduits>1?'s':'') + ' · ' +
+      nbModifs + ' modification' + (nbModifs>1?'s':'') + ' à appliquer.'
+    ),
+    el('div', { style:{fontSize:'12px',color:'var(--muted)',marginBottom:'14px',lineHeight:'1.5'} },
+      'Les ajustements de stock seront appliqués maintenant et tracés dans l\'historique des mouvements.'
+    ),
+    el('div', { cls:'modal-actions', style:{marginTop:'14px'} },
+      el('button', { cls:'btn-cancel', on:{ click: closeMroot } }, 'Annuler'),
+      confirmBtn
+    )
+  );
+  overlay.appendChild(sheet);
+  document.getElementById('mroot').appendChild(overlay);
 }
 
 async function submitMouvement(body) {
@@ -7332,45 +7585,252 @@ function buildTraca() {
 }
 
 function buildInventaire() {
-  const isSuperAdmin = S.user && S.user.role === 'superadmin';
+  if (S.invV2Detail) return buildInventaireEmplDetail();
+  return buildInventaireList();
+}
 
-  // Utilisateurs non-superadmin : page "en cours de développement"
-  if (!isSuperAdmin) {
-    return el('div',{cls:'content'},
-      el('div',{cls:'card'},
-        el('div',{cls:'wip-page'},
-          el('div',{cls:'wip-page-icon'},'🚧'),
-          el('div',{cls:'wip-page-title'},'En cours de développement'),
-          el('div',{cls:'wip-page-sub'},"Cette fonctionnalité sera bientôt disponible.")
+function buildInventaireList() {
+  const list = S.invV2List || [];
+  const q = (S.invV2Search || '').trim().toLowerCase();
+  const filtered = q
+    ? list.filter(e =>
+        String(e.emplacement || '').toLowerCase().includes(q) ||
+        String(e.label || '').toLowerCase().includes(q))
+    : list;
+
+  // Searchbar dans un conteneur séparé pour ne pas perdre le focus au re-render
+  const searchInput = el('input', {
+    cls:'field-input invv2-search-input',
+    id:'invv2-search', type:'text', placeholder:'Rechercher un emplacement (code ou zone)…',
+    value: S.invV2Search || '', autocomplete:'off'
+  });
+  searchInput.addEventListener('input', e => {
+    S.invV2Search = e.target.value;
+    invV2RenderListItems();
+  });
+  searchInput.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { S.invV2Search = ''; e.target.value = ''; invV2RenderListItems(); }
+  });
+
+  const searchWrap = el('div', { cls:'invv2-search-wrap' }, searchInput);
+
+  const listContainer = el('div', { cls:'card invv2-list-card', id:'invv2-list-container' });
+  invV2BuildListItems(listContainer, filtered);
+
+  return el('div', { cls:'content' },
+    el('div', { cls:'invv2-page-header' },
+      el('div', { cls:'invv2-page-title' }, 'Inventaire'),
+      el('div', { cls:'invv2-page-sub' }, 'Emplacements triés du plus ancien au plus récent inventaire')
+    ),
+    el('div', { cls:'invv2-legend' },
+      el('div', { cls:'invv2-legend-item invv2-c-vert' }, el('span', { cls:'invv2-dot' }), '< 15 j'),
+      el('div', { cls:'invv2-legend-item invv2-c-jaune' }, el('span', { cls:'invv2-dot' }), '15–30 j'),
+      el('div', { cls:'invv2-legend-item invv2-c-orange' }, el('span', { cls:'invv2-dot' }), '30–60 j'),
+      el('div', { cls:'invv2-legend-item invv2-c-rouge' }, el('span', { cls:'invv2-dot' }), '> 60 j / Jamais')
+    ),
+    searchWrap,
+    listContainer
+  );
+}
+
+function invV2RenderListItems() {
+  const container = document.getElementById('invv2-list-container');
+  if (!container) return;
+  const list = S.invV2List || [];
+  const q = (S.invV2Search || '').trim().toLowerCase();
+  const filtered = q
+    ? list.filter(e =>
+        String(e.emplacement || '').toLowerCase().includes(q) ||
+        String(e.label || '').toLowerCase().includes(q))
+    : list;
+  container.innerHTML = '';
+  invV2BuildListItems(container, filtered);
+}
+
+function invV2BuildListItems(container, items) {
+  if (!items.length) {
+    const q = (S.invV2Search || '').trim();
+    container.appendChild(el('div', { cls:'card-empty' },
+      q ? 'Aucun résultat pour « ' + q + ' »' : 'Aucun emplacement avec stock à inventorier.'
+    ));
+    return;
+  }
+  items.forEach(e => {
+    const j = e.jours_depuis;
+    const joursLabel = (j == null) ? 'Jamais' : (j + ' j');
+    const sub = (j == null)
+      ? 'jamais inventorié'
+      : ('depuis le ' + fD(e.derniere_date));
+    container.appendChild(el('div', {
+      cls: 'invv2-empl-row invv2-c-' + e.couleur,
+      on: { click: () => loadInventaireEmpl(e.emplacement) }
+    },
+      el('div', { cls:'invv2-empl-main' },
+        el('div', { cls:'invv2-empl-code' }, e.label || e.emplacement),
+        el('div', { cls:'invv2-empl-meta' },
+          (e.nb_refs || 0) + ' réf · ' + fN(e.total_qte || 0) + ' u.' +
+          (e.dernier_operateur ? ' · dernier inv. par ' + e.dernier_operateur : '')
         )
+      ),
+      el('div', { cls:'invv2-empl-right' },
+        el('div', { cls:'invv2-jours invv2-c-' + e.couleur }, joursLabel),
+        el('div', { cls:'invv2-jours-sub' }, sub)
       )
+    ));
+  });
+}
+
+function buildInventaireEmplDetail() {
+  const d = S.invV2Detail;
+  if (!d) return el('div', { cls:'content' }, el('div', { cls:'card-empty' }, 'Emplacement introuvable'));
+  const refs = d.refs || [];
+  const total = refs.length;
+  const validated = refs.filter(r => S.invV2Validated[r.produit_id]).length;
+  const allValidated = (total === 0) || (validated === total && total > 0);
+
+  const back = el('button', { cls:'btn-ghost invv2-back', on:{ click: clearInventaireEmpl } }, '← Retour aux emplacements');
+
+  const last = d.last_inventaire;
+  const head = el('div', { cls:'invv2-scorecard' },
+    el('div', { cls:'invv2-detail-title' }, d.label || d.emplacement),
+    last
+      ? el('div', { cls:'invv2-last-info' },
+          'Dernier inventaire : ',
+          el('strong', null, fD(last.date_validation)),
+          ' · par ',
+          el('strong', null, last.operateur_nom || '—')
+        )
+      : el('div', { cls:'invv2-last-info invv2-last-none' }, 'Aucun inventaire enregistré pour cet emplacement.'),
+    el('div', { cls:'invv2-detail-stats' },
+      el('div', { cls:'invv2-stat' },
+        el('div', { cls:'invv2-stat-label' }, 'Produits'),
+        el('div', { cls:'invv2-stat-value' }, String(total))
+      ),
+      el('div', { cls:'invv2-stat' },
+        el('div', { cls:'invv2-stat-label' }, 'Validés'),
+        el('div', { cls:'invv2-stat-value' }, validated + ' / ' + total)
+      )
+    )
+  );
+
+  // Liste des produits
+  let refsBlock;
+  if (total === 0) {
+    refsBlock = el('div', { cls:'card invv2-empty-card' },
+      el('div', { cls:'card-empty' }, 'Cet emplacement est vide — vous pouvez valider directement l\'inventaire à vide.')
+    );
+  } else {
+    refsBlock = el('div', { cls:'card invv2-prod-card' },
+      el('div', { cls:'card-header' }, el('div', { cls:'card-title' }, 'Produits à inventorier')),
+      el('div', { cls:'invv2-prod-list' }, ...refs.map(r => invV2BuildProductRow(r)))
     );
   }
 
-  // Superadmin : bannière avertissement + contenu normal
-  const list = S.inventaireList||[];
-  return el('div',{cls:'content'},
-    el('div',{cls:'wip-admin-banner'},
-      '⚠️ Attention — cet onglet est en cours de développement pour les autres utilisateurs.'
+  // Bouton d'action principal
+  const actionBar = el('div', { cls:'invv2-action-bar' });
+  if (allValidated) {
+    actionBar.appendChild(el('button', {
+      cls:'invv2-btn-validate-all',
+      on:{ click: invV2ValidateFullInventaire }
+    }, "Valider l'inventaire"));
+  } else {
+    actionBar.appendChild(el('div', { cls:'invv2-btn-to-validate' },
+      'Produits à valider · ' + validated + ' / ' + total
+    ));
+  }
+
+  // Historique
+  const history = d.history || [];
+  const histExpanded = !!S.invV2HistoryExpanded;
+  const histVisible = histExpanded ? history : history.slice(0, 5);
+  let histBlock;
+  if (history.length === 0) {
+    histBlock = el('div', { cls:'card invv2-history-card' },
+      el('div', { cls:'card-header' }, el('div', { cls:'card-title' }, 'Historique des inventaires')),
+      el('div', { cls:'card-empty' }, 'Aucun inventaire enregistré pour cet emplacement.')
+    );
+  } else {
+    const histRows = histVisible.map(h => el('div', { cls:'invv2-hist-row' },
+      el('div', { cls:'invv2-hist-date' }, fD(h.date_validation)),
+      el('div', { cls:'invv2-hist-op' }, h.operateur_nom || '—'),
+      el('div', { cls:'invv2-hist-meta' },
+        (h.nb_produits || 0) + ' réf · ' + (h.nb_modifications || 0) + ' modif.'
+      )
+    ));
+    const moreBtn = (history.length > 5)
+      ? el('button', { cls:'invv2-btn-more', on:{ click: () => { S.invV2HistoryExpanded = !histExpanded; renderContent(); } } },
+          histExpanded ? 'Voir moins' : ('Voir plus (' + (history.length - 5) + ')'))
+      : null;
+    histBlock = el('div', { cls:'card invv2-history-card' },
+      el('div', { cls:'card-header' }, el('div', { cls:'card-title' }, 'Historique des inventaires')),
+      el('div', { cls:'invv2-hist-list' }, ...histRows),
+      moreBtn
+    );
+  }
+
+  return el('div', { cls:'content invv2-detail' }, back, head, refsBlock, actionBar, histBlock);
+}
+
+function invV2BuildProductRow(r) {
+  const pid = r.produit_id;
+  const isValidated = !!S.invV2Validated[pid];
+  const modif = S.invV2Modifs[pid];
+  const qteActuelle = parseFloat(r.quantite) || 0;
+  const unite = r.unite || '';
+
+  const nbLots = (r.lots && r.lots.length) || 1;
+  const lotsTxt = nbLots > 1 ? (nbLots + ' lots') : '1 lot';
+
+  // Quantité affichée
+  let qtyEl;
+  if (modif && Math.abs(modif.qte_apres - modif.qte_avant) > 1e-9) {
+    qtyEl = el('div', { cls:'invv2-prod-qty' },
+      el('span', { cls:'invv2-prod-qty-new' }, fU(modif.qte_apres, unite)),
+      el('span', { cls:'invv2-prod-qty-old' }, fU(modif.qte_avant, unite))
+    );
+  } else {
+    qtyEl = el('div', { cls:'invv2-prod-qty' },
+      el('span', { cls:'invv2-prod-qty-main' }, fU(qteActuelle, unite))
+    );
+  }
+
+  // Boutons
+  let buttons;
+  if (isValidated) {
+    buttons = el('div', { cls:'invv2-prod-actions' },
+      el('button', {
+        cls:'invv2-btn-cancel',
+        type:'button',
+        title:'Annuler la validation',
+        on:{ click: e => { e.stopPropagation(); invV2CancelValidate(pid); } }
+      }, '✓')
+    );
+  } else {
+    buttons = el('div', { cls:'invv2-prod-actions' },
+      el('button', {
+        cls:'invv2-btn-modify',
+        type:'button',
+        title:'Modifier la quantité',
+        on:{ click: e => { e.stopPropagation(); invV2OpenModifyModal(pid, qteActuelle, r.reference, r.designation, unite); } }
+      }, 'Modifier'),
+      el('button', {
+        cls:'invv2-btn-validate',
+        type:'button',
+        title:'Valider',
+        on:{ click: e => { e.stopPropagation(); invV2ToggleValidate(pid); } }
+      }, '✓')
+    );
+  }
+
+  return el('div', { cls: 'invv2-prod-row' + (isValidated ? ' invv2-validated' : '') },
+    el('div', { cls:'invv2-prod-main' },
+      el('div', { cls:'invv2-prod-ref' }, r.reference || '—'),
+      el('div', { cls:'invv2-prod-info' },
+        (r.designation ? r.designation + ' · ' : '') + lotsTxt
+      )
     ),
-    el('div',{cls:'card',style:{marginBottom:'12px'}},
-      el('div',{cls:'card-header'},
-        el('div',{cls:'card-title'},'⚠ À inventorier ('+list.length+')'),
-        el('button',{cls:'btn-sm',on:{click:()=>loadInventaireList()}}, iconEl('refresh-ccw',14), ' Rafraîchir')
-      ),
-      el('div',{style:{padding:'10px 16px 12px',fontSize:'12px',color:'var(--muted)'}},'Non inventoriés depuis plus de 6 mois. Cliquez pour inventorier.')
-    ),
-    list.length===0
-      ? el('div',{cls:'card'},el('div',{cls:'card-empty'},'✅ Tous les stocks ont été inventoriés récemment'))
-      : el('div',{cls:'card'},el('div',null,...list.slice(0,50).map(item=>{
-          const j=item.jours_depuis;
-          const cls=j>365?'urgent':'attention';
-          return el('div',{cls:'inv-item',on:{click:()=>openMvtModal(item.id,item.reference,item.emplacement,'inventaire')}},
-            el('div',{cls:'inv-dot '+cls}),
-            el('div',{cls:'inv-label'},el('div',{cls:'inv-ref'},item.reference),el('div',{cls:'inv-empl'},item.emplacement+' · '+fN(item.quantite)+' '+item.unite)),
-            el('div',{cls:'inv-days '+cls},j===9999?'Jamais':j+'j')
-          );
-        })))
+    qtyEl,
+    buttons
   );
 }
 
@@ -8739,21 +9199,9 @@ function buildSidebarNavStructure() {
 }
 
 function renderSidebarNavBtn(n) {
-  const isSuperAdmin = S.user && S.user.role === 'superadmin';
-  const wipBadge = n.tab === 'inventaire'
-    ? el('button', { cls: 'nav-wip-badge', type: 'button', title: 'En cours de développement', on: { click: e => {
-        e.stopPropagation();
-        if (!isSuperAdmin) {
-          showToast('🚧 En cours de développement', 'warn');
-        } else {
-          showToast('⚠️ Cet onglet est en cours de développement pour les autres utilisateurs', 'warn');
-        }
-      } } }, '🚧')
-    : null;
   return el('button', { cls: 'nav-btn' + (S.tab === n.tab ? ' active' : ''), 'data-tab': n.tab, on: { click: () => goToTab(n.tab) } },
     iconEl(n.icon, 16),
-    el('span', null, ' ' + n.label),
-    wipBadge
+    el('span', null, ' ' + n.label)
   );
 }
 

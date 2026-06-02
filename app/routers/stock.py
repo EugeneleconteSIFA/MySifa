@@ -4,6 +4,7 @@ Accès : direction, administration, logistique.
 """
 import csv
 import io
+import json
 import re
 import sqlite3
 from datetime import datetime, timedelta
@@ -1346,6 +1347,272 @@ def produits_a_inventorier(request: Request, jours: int = 180):
             (limite,),
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+# ── Inventaire v2 (par emplacement) ──────────────────────────────
+# Seuils en jours depuis le dernier inventaire complet d'un emplacement.
+INV_V2_SEUIL_VERT = 15   # < 15 jours = vert
+INV_V2_SEUIL_JAUNE = 30  # 15-30 jours = jaune
+INV_V2_SEUIL_ORANGE = 60 # 30-60 jours = orange, > 60 ou jamais = rouge
+
+
+def _inv_v2_couleur(jours: Optional[int]) -> str:
+    if jours is None:
+        return "rouge"
+    if jours < INV_V2_SEUIL_VERT:
+        return "vert"
+    if jours < INV_V2_SEUIL_JAUNE:
+        return "jaune"
+    if jours < INV_V2_SEUIL_ORANGE:
+        return "orange"
+    return "rouge"
+
+
+def _inv_v2_empl_label(empl: str) -> str:
+    if empl == STOCK_EMPLACEMENT_AU_SOL:
+        return STOCK_EMPLACEMENT_AU_SOL_LABEL
+    if empl == STOCK_EMPLACEMENT_SORTIE_PROD:
+        return STOCK_EMPLACEMENT_SORTIE_PROD_LABEL
+    return empl
+
+
+@router.get("/api/stock/inventaire-v2/emplacements")
+def inventaire_v2_emplacements(request: Request):
+    """Liste des emplacements avec stock + jours depuis dernier inventaire complet.
+
+    Triés du plus ancien (rouge / jamais) au plus récent (vert).
+    """
+    require_stock(request)
+    now = datetime.now()
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT l.emplacement,
+                      COUNT(DISTINCT l.produit_id) AS nb_refs,
+                      SUM(l.quantite_restante) AS total_qte
+               FROM lots_stock l
+               WHERE l.quantite_restante > 0
+               GROUP BY l.emplacement
+               ORDER BY l.emplacement"""
+        ).fetchall()
+        # Dernier inventaire par emplacement
+        last_invs = {
+            r["emplacement"]: r
+            for r in conn.execute(
+                """SELECT s.emplacement, s.date_validation, s.operateur_nom, s.operateur_email
+                   FROM inventaires_sessions s
+                   JOIN (
+                       SELECT emplacement, MAX(date_validation) AS d
+                       FROM inventaires_sessions
+                       GROUP BY emplacement
+                   ) m ON m.emplacement=s.emplacement AND m.d=s.date_validation"""
+            ).fetchall()
+        }
+    out = []
+    for r in rows:
+        empl = r["emplacement"]
+        inv = last_invs.get(empl)
+        jours = None
+        d_iso = None
+        op_nom = None
+        if inv and inv["date_validation"]:
+            d_iso = inv["date_validation"]
+            try:
+                jours = (now - datetime.fromisoformat(str(d_iso)[:19])).days
+            except Exception:
+                jours = None
+            op_nom = inv["operateur_nom"]
+        out.append({
+            "emplacement": empl,
+            "label": _inv_v2_empl_label(empl),
+            "nb_refs": int(r["nb_refs"] or 0),
+            "total_qte": float(r["total_qte"] or 0),
+            "derniere_date": d_iso,
+            "dernier_operateur": op_nom,
+            "jours_depuis": jours,
+            "couleur": _inv_v2_couleur(jours),
+        })
+    # Tri : jamais inventorié d'abord, puis plus anciens d'abord
+    out.sort(key=lambda x: (
+        0 if x["jours_depuis"] is None else 1,
+        -(x["jours_depuis"] or 0),
+        x["emplacement"],
+    ))
+    return out
+
+
+@router.get("/api/stock/inventaire-v2/emplacement/{emplacement}")
+def inventaire_v2_emplacement(emplacement: str, request: Request):
+    """Détail d'un emplacement pour l'inventaire : produits + historique."""
+    require_stock(request)
+    emplacement = _normalize_emplacement(emplacement)
+    if not _is_valid_emplacement(emplacement):
+        raise HTTPException(400, f"Format emplacement invalide : {emplacement}")
+    with get_db() as conn:
+        refs = conn.execute(
+            """SELECT p.id AS produit_id, p.reference, p.designation, p.unite,
+                      SUM(l.quantite_restante) AS quantite,
+                      COUNT(*) AS nb_lots,
+                      GROUP_CONCAT(l.id) AS lot_ids,
+                      MIN(CASE WHEN l.quantite_restante>0 THEN l.date_entree END) AS date_fifo
+               FROM lots_stock l
+               JOIN produits p ON p.id = l.produit_id
+               WHERE l.emplacement = ? AND l.quantite_restante > 0
+               GROUP BY p.id
+               ORDER BY p.reference""",
+            (emplacement,),
+        ).fetchall()
+
+        # Lots détaillés par produit (pour affichage référence / lots)
+        refs_data = []
+        for r in refs:
+            d = dict(r)
+            lots = conn.execute(
+                """SELECT id, quantite_restante, date_entree
+                   FROM lots_stock
+                   WHERE produit_id=? AND emplacement=? AND quantite_restante > 0
+                   ORDER BY date_entree ASC""",
+                (d["produit_id"], emplacement),
+            ).fetchall()
+            d["lots"] = [dict(l) for l in lots]
+            refs_data.append(d)
+
+        history = conn.execute(
+            """SELECT id, operateur_nom, operateur_email, date_validation,
+                      nb_produits, nb_modifications
+               FROM inventaires_sessions
+               WHERE emplacement = ?
+               ORDER BY date_validation DESC
+               LIMIT 100""",
+            (emplacement,),
+        ).fetchall()
+
+    history_list = [dict(h) for h in history]
+    return {
+        "emplacement": emplacement,
+        "label": _inv_v2_empl_label(emplacement),
+        "refs": refs_data,
+        "nb_refs": len(refs_data),
+        "total_qte": sum(float(r["quantite"] or 0) for r in refs_data),
+        "history": history_list,
+        "last_inventaire": history_list[0] if history_list else None,
+    }
+
+
+@router.post("/api/stock/inventaire-v2/valider")
+async def inventaire_v2_valider(request: Request):
+    """Valide un inventaire complet d'un emplacement.
+
+    Body :
+      {
+        emplacement: "A121",
+        nb_produits: 4,
+        modifications: [{produit_id: 12, qte_apres: 250}, ...]
+      }
+
+    - Applique chaque modification via un mouvement de stock 'inventaire'
+    - Crée une ligne dans inventaires_sessions (avec snapshot des modifs)
+    """
+    user = require_stock_write(request)
+    body = await request.json()
+    emplacement = _normalize_emplacement(body.get("emplacement") or "")
+    if not _is_valid_emplacement(emplacement):
+        raise HTTPException(400, f"Format emplacement invalide : {emplacement}")
+
+    try:
+        nb_produits = int(body.get("nb_produits") or 0)
+    except Exception:
+        nb_produits = 0
+    modifications = body.get("modifications") or []
+    if not isinstance(modifications, list):
+        raise HTTPException(400, "modifications doit être une liste")
+
+    now = datetime.now().isoformat()
+    modifs_applied: list[dict] = []
+    with get_db() as conn:
+        for mod in modifications:
+            try:
+                pid = int(mod.get("produit_id"))
+                qte_apres = float(mod.get("qte_apres"))
+            except Exception:
+                continue
+            if qte_apres < 0:
+                qte_apres = 0.0
+
+            pref_row = conn.execute(
+                "SELECT reference FROM produits WHERE id=?", (pid,)
+            ).fetchone()
+            if not pref_row:
+                continue
+            ref_str = pref_row["reference"] or f"#{pid}"
+
+            ex = conn.execute(
+                "SELECT quantite FROM stock_emplacements WHERE produit_id=? AND emplacement=?",
+                (pid, emplacement),
+            ).fetchone()
+            qte_avant = float(ex["quantite"]) if ex else 0.0
+            if abs(qte_apres - qte_avant) < 1e-9:
+                # Aucun écart : on ne crée pas de mouvement, mais on marque la ligne
+                # comme inventoriée plus bas (update derniere_inventaire).
+                continue
+            try:
+                _apply_stock_mouvement(
+                    conn,
+                    user,
+                    pid,
+                    emplacement,
+                    "inventaire",
+                    qte_apres,
+                    "Inventaire emplacement",
+                )
+                modifs_applied.append({
+                    "produit_id": pid,
+                    "reference": ref_str,
+                    "qte_avant": qte_avant,
+                    "qte_apres": qte_apres,
+                })
+            except Exception:
+                pass
+
+        # Tag derniere_inventaire pour TOUS les produits actuellement
+        # présents à cet emplacement (y compris ceux non modifiés mais validés).
+        conn.execute(
+            """UPDATE stock_emplacements
+               SET derniere_inventaire=?, updated_at=?, updated_by=?
+               WHERE emplacement=?""",
+            (now, now, user.get("email"), emplacement),
+        )
+
+        operateur_nom = _resolve_created_by_name(conn, user) or (user.get("email") or "")
+        conn.execute(
+            """INSERT INTO inventaires_sessions
+               (emplacement, operateur_email, operateur_nom, date_validation,
+                nb_produits, nb_modifications, modifications_json)
+               VALUES (?,?,?,?,?,?,?)""",
+            (
+                emplacement,
+                user.get("email"),
+                operateur_nom,
+                now,
+                nb_produits,
+                len(modifs_applied),
+                json.dumps(modifs_applied, ensure_ascii=False),
+            ),
+        )
+        conn.commit()
+
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="stock",
+        objet=f"Inventaire emplacement {emplacement}",
+        detail={"nb_produits": nb_produits, "nb_modifs": len(modifs_applied)},
+        ip=request.client.host if request.client else None,
+    )
+    return {
+        "success": True,
+        "nb_modifications": len(modifs_applied),
+        "date_validation": now,
+    }
 
 
 # ── Historique unifié ─────────────────────────────────────────────

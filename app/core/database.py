@@ -2967,6 +2967,26 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 94, "fiches_techniques_extended")
 
+    # v95 — MyStock : sessions d'inventaire par emplacement (outil inventaire v2)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=95 LIMIT 1").fetchone():
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS inventaires_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                emplacement TEXT NOT NULL,
+                operateur_email TEXT,
+                operateur_nom TEXT,
+                date_validation TEXT NOT NULL,
+                nb_produits INTEGER DEFAULT 0,
+                nb_modifications INTEGER DEFAULT 0,
+                modifications_json TEXT
+            )"""
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_inv_sessions_empl ON inventaires_sessions(emplacement, date_validation DESC)"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 95, "inventaires_sessions")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,
