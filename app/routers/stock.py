@@ -924,6 +924,29 @@ def get_emplacement(emplacement: str, request: Request):
             (emplacement,),
         ).fetchall()
 
+        # Dernière session d'inventaire complète (table inventaires_sessions)
+        last_inv_row = conn.execute(
+            """SELECT date_validation, operateur_nom, operateur_email,
+                      nb_produits, nb_modifications
+               FROM inventaires_sessions
+               WHERE emplacement = ?
+               ORDER BY date_validation DESC LIMIT 1""",
+            (emplacement,),
+        ).fetchone()
+
+    last_inventaire = None
+    inv_jours_depuis = None
+    inv_couleur = "rouge"
+    if last_inv_row and last_inv_row["date_validation"]:
+        last_inventaire = dict(last_inv_row)
+        try:
+            d_iso = str(last_inv_row["date_validation"])[:19]
+            inv_jours_depuis = (now - datetime.fromisoformat(d_iso)).days
+            inv_couleur = _inv_v2_couleur(inv_jours_depuis)
+        except Exception:
+            inv_jours_depuis = None
+            inv_couleur = "rouge"
+
     refs_data = []
     for r in refs:
         d = dict(r)
@@ -959,6 +982,9 @@ def get_emplacement(emplacement: str, request: Request):
         "total_unites": sum(r["quantite"] for r in refs),
         "nb_refs": len(refs),
         "mouvements": [dict(r) for r in mvts],
+        "last_inventaire": last_inventaire,
+        "inv_jours_depuis": inv_jours_depuis,
+        "inv_couleur": inv_couleur,
     }
 
 

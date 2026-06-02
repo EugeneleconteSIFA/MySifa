@@ -415,6 +415,31 @@ body.light .empl-lot-move-btn{border-color:rgba(124,58,237,.35);background:rgba(
 .action-btn.pf-sortie:hover{border-color:var(--pf-sortie)}
 .action-btn.inventaire{background:color-mix(in srgb,var(--c2) 20%,transparent);color:var(--c2)}
 .action-btn.inventaire:hover{border-color:var(--c2)}
+/* Bouton inventaire violet forcé (indépendant du thème de palette) */
+.action-btn.empl-inv-btn{background:rgba(139,92,246,.20);color:#8b5cf6;border:1.5px solid rgba(139,92,246,.45)}
+.action-btn.empl-inv-btn:hover{background:rgba(139,92,246,.32);border-color:#8b5cf6}
+body.light .action-btn.empl-inv-btn{color:#7c3aed;border-color:rgba(124,58,237,.45)}
+body.light .action-btn.empl-inv-btn:hover{border-color:#7c3aed}
+
+/* Bloc info dernier inventaire sur la scorecard emplacement */
+.empl-inv-info{margin-top:12px;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.empl-inv-label{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text2)}
+.empl-inv-dot{display:inline-block;width:10px;height:10px;border-radius:50%}
+.empl-inv-detail{display:flex;align-items:baseline;gap:0;font-family:monospace;flex-wrap:wrap}
+.empl-inv-jours{font-size:17px;font-weight:800;padding:2px 12px;border-radius:8px;letter-spacing:.3px}
+.empl-inv-meta{font-size:11px;color:var(--text2);margin-left:6px;font-family:'Segoe UI',system-ui,sans-serif}
+.empl-inv-c-vert{border-color:color-mix(in srgb,var(--success) 40%,transparent)}
+.empl-inv-c-vert .empl-inv-dot{background:var(--success)}
+.empl-inv-c-vert .empl-inv-jours{background:color-mix(in srgb,var(--success) 22%,transparent);color:var(--success)}
+.empl-inv-c-jaune{border-color:color-mix(in srgb,var(--warn) 40%,transparent)}
+.empl-inv-c-jaune .empl-inv-dot{background:var(--warn)}
+.empl-inv-c-jaune .empl-inv-jours{background:color-mix(in srgb,var(--warn) 22%,transparent);color:var(--warn)}
+.empl-inv-c-orange{border-color:color-mix(in srgb,#fb923c 40%,transparent)}
+.empl-inv-c-orange .empl-inv-dot{background:#fb923c}
+.empl-inv-c-orange .empl-inv-jours{background:color-mix(in srgb,#fb923c 26%,transparent);color:#fb923c}
+.empl-inv-c-rouge{border-color:color-mix(in srgb,var(--danger) 40%,transparent)}
+.empl-inv-c-rouge .empl-inv-dot{background:var(--danger)}
+.empl-inv-c-rouge .empl-inv-jours{background:color-mix(in srgb,var(--danger) 22%,transparent);color:var(--danger)}
 
 /* ── Historique mouvements ── */
 .mvt-row{padding:10px 16px;display:flex;gap:10px;align-items:flex-start;border-bottom:1px solid var(--border)}
@@ -1968,14 +1993,48 @@ async function loadInventaireEmpl(code) {
   try {
     const d = await api('/api/stock/inventaire-v2/emplacement/' + encodeURIComponent(code));
     if (d) {
+      // Bascule sur l'onglet inventaire et nettoie tout autre détail
+      S.tab = 'inventaire';
+      S.selEmpl = null;
+      S.selProduit = null;
+      S.selMatiere = null;
       S.invV2Detail = d;
       S.invV2Validated = {};
       S.invV2Modifs = {};
       S.invV2HistoryExpanded = false;
+      try { updateNavActive(); } catch(e){}
       renderContent();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   } catch(e) { showToast(e.message, 'error'); }
+}
+
+function openEmplInventaireConfirm(code) {
+  closeMroot();
+  const label = (typeof stockEmplLabel === 'function') ? stockEmplLabel(code) : code;
+  const overlay = el('div', { cls:'modal-overlay', on:{ click: e => { if(e.target===overlay) closeMroot(); }}});
+  const sheet = el('div', { cls:'modal-sheet', style:{ maxWidth:'440px' } },
+    el('span', { cls:'modal-handle' }),
+    el('div', { cls:'modal-title invv2-modal-title' }, 'Lancer un inventaire ?'),
+    el('div', { cls:'modal-sub' },
+      'Vous êtes sur le point de lancer un inventaire pour l\'emplacement ',
+      el('span', { cls:'invv2-modal-sub-empl' }, label),
+      '. Toutes les références présentes devront être comptées et validées.'
+    ),
+    el('div', { style:{ fontSize:'12px', color:'var(--muted)', marginBottom:'14px', lineHeight:'1.5' } },
+      'Aucune modification ne sera appliquée tant que vous n\'aurez pas validé l\'inventaire complet en fin de procédure.'
+    ),
+    el('div', { cls:'modal-actions', style:{ marginTop:'14px' } },
+      el('button', { cls:'btn-cancel', on:{ click: closeMroot } }, 'Annuler'),
+      el('button', { cls:'btn-confirm invv2-confirm', on:{ click: () => {
+        closeMroot();
+        loadInventaireEmpl(code);
+      }}}, 'Lancer l\'inventaire')
+    )
+  );
+  sheet.addEventListener('click', e => e.stopPropagation());
+  overlay.appendChild(sheet);
+  document.getElementById('mroot').appendChild(overlay);
 }
 
 function clearInventaireEmpl() {
@@ -7328,7 +7387,30 @@ function buildEmplacementDetail() {
   const back = el('button',{cls:'btn-ghost',style:{marginBottom:'14px'},on:{click:clearSel}}, backLabel);
 
   const actions = S.stockReadOnly ? null : el('div',{cls:'action-bar',style:{marginTop:'14px'}},
-    el('button',{cls:'action-btn entree',on:{click:()=>openEmplEntreeModal(code)}},'↓ Entrée')
+    el('button',{cls:'action-btn entree',on:{click:()=>openEmplEntreeModal(code)}},'↓ Entrée'),
+    el('button',{cls:'action-btn empl-inv-btn',type:'button',on:{click:()=>openEmplInventaireConfirm(code)}},'☑ Inventaire')
+  );
+
+  // Bloc info inventaire (durée depuis dernier inventaire complet)
+  const lastInv = sel.last_inventaire;
+  const invJours = sel.inv_jours_depuis;
+  const invCouleur = sel.inv_couleur || 'rouge';
+  const invInfo = el('div', { cls: 'empl-inv-info empl-inv-c-' + invCouleur },
+    el('div', { cls: 'empl-inv-label' },
+      el('span', { cls: 'empl-inv-dot' }),
+      'Inventaire complet'
+    ),
+    lastInv
+      ? el('div', { cls: 'empl-inv-detail' },
+          el('span', { cls: 'empl-inv-jours' }, (invJours == null ? '—' : (invJours + ' j'))),
+          el('span', { cls: 'empl-inv-meta' },
+            ' · dernier le ' + fD(lastInv.date_validation) + ' par ' + (lastInv.operateur_nom || '—')
+          )
+        )
+      : el('div', { cls: 'empl-inv-detail' },
+          el('span', { cls: 'empl-inv-jours' }, 'Jamais'),
+          el('span', { cls: 'empl-inv-meta' }, ' · aucun inventaire enregistré')
+        )
   );
 
   const head = el('div',{cls:'scorecard'},
@@ -7342,7 +7424,8 @@ function buildEmplacementDetail() {
     el('div',{cls:'sc-stats'},
       el('div',{cls:'sc-stat'},el('div',{cls:'sc-stat-label'},'Références'),el('div',{cls:'sc-stat-value'},String(refs.length))),
       el('div',{cls:'sc-stat'},el('div',{cls:'sc-stat-label'},'Unités'),el('div',{cls:'sc-stat-value'},fN(sel.total_unites)))
-    )
+    ),
+    invInfo
   );
 
   const refBlock = refs.length === 0
