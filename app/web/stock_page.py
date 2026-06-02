@@ -985,88 +985,128 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
 .inv-days.urgent{color:var(--danger)}
 .inv-days.attention{color:var(--warn)}
 
-/* ── Inventaire v2 (par emplacement, thème violet) ── */
+/* ── Inventaire v2 (par emplacement, thème violet forcé) ── */
+/* Variables violet INDÉPENDANTES du thème de palette (cendre, ambre, etc.) */
+:root{
+  --inv-v:#8b5cf6;            /* violet principal */
+  --inv-v-strong:#7c3aed;     /* violet plus foncé pour bordures et hover */
+  --inv-v-light:#a78bfa;      /* violet clair pour accents */
+  --inv-v-bg:rgba(139,92,246,.22);          /* fond violet doux */
+  --inv-v-bg-strong:rgba(139,92,246,.36);   /* fond violet renforcé (hover) */
+  --inv-v-bg-soft:rgba(139,92,246,.10);     /* fond violet très léger */
+  --inv-v-shadow:rgba(139,92,246,.45);       /* ombre violette */
+  --inv-v-text:#0a0e17;        /* texte sur fond violet — dark theme = noir */
+}
+body.light{
+  --inv-v-text:#ffffff;        /* texte sur fond violet — light theme = blanc */
+}
+
 .invv2-page-header{margin-bottom:12px}
-.invv2-page-title{font-size:20px;font-weight:800;color:var(--text);letter-spacing:.2px}
-.invv2-page-sub{font-size:12px;color:var(--muted);margin-top:4px}
-.invv2-legend{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px;padding:8px 12px;background:var(--card);border:1px solid var(--border);border-radius:10px}
-.invv2-legend-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.4px}
-.invv2-dot{display:inline-block;width:8px;height:8px;border-radius:50%}
+.invv2-page-title{font-size:22px;font-weight:800;color:var(--inv-v);letter-spacing:.3px}
+.invv2-page-sub{font-size:12px;color:var(--text2);margin-top:4px;font-weight:500}
+.invv2-legend{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px;padding:10px 14px;background:var(--card);border:1px solid var(--border);border-left:4px solid var(--inv-v);border-radius:10px}
+.invv2-legend-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text);font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+.invv2-dot{display:inline-block;width:10px;height:10px;border-radius:50%}
 .invv2-c-vert .invv2-dot{background:var(--success)}
 .invv2-c-jaune .invv2-dot{background:var(--warn)}
 .invv2-c-orange .invv2-dot{background:#fb923c}
 .invv2-c-rouge .invv2-dot{background:var(--danger)}
 .invv2-search-wrap{margin-bottom:10px}
-.invv2-search-input{width:100%}
-.invv2-list-card{padding:4px 0;overflow:hidden}
-.invv2-empl-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;cursor:pointer;border-bottom:1px solid var(--border);transition:background .15s,border-color .15s}
+.invv2-search-input{width:100%;border:1.5px solid var(--border);transition:border-color .15s,box-shadow .15s}
+.invv2-search-input:focus{border-color:var(--inv-v);box-shadow:0 0 0 3px var(--inv-v-bg-soft);outline:none}
+.invv2-list-card{padding:0;overflow:hidden;border:1.5px solid var(--inv-v-bg-soft)}
+.invv2-empl-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;cursor:pointer;border-bottom:1px solid var(--border);transition:background .15s,border-color .15s,box-shadow .15s;position:relative}
 .invv2-empl-row:last-child{border-bottom:0}
-.invv2-empl-row:hover{background:rgba(139,92,246,.10)}
+.invv2-empl-row::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:transparent;transition:background .15s}
+.invv2-empl-row:hover{background:var(--inv-v-bg)}
+.invv2-empl-row:hover::before{background:var(--inv-v)}
 .invv2-empl-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
-.invv2-empl-code{font-size:15px;font-weight:800;color:var(--text);font-family:monospace;letter-spacing:.3px}
-.invv2-empl-meta{font-size:11px;color:var(--muted);line-height:1.4}
+.invv2-empl-code{font-size:16px;font-weight:800;color:var(--text);font-family:monospace;letter-spacing:.3px}
+.invv2-empl-meta{font-size:11px;color:var(--text2);line-height:1.4}
 .invv2-empl-right{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0}
-.invv2-jours{font-weight:800;font-size:18px;padding:4px 12px;border-radius:10px;min-width:72px;text-align:center;line-height:1.2;font-family:monospace}
-.invv2-jours-sub{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;text-align:right;max-width:160px}
-.invv2-c-vert .invv2-jours{background:color-mix(in srgb,var(--success) 18%,transparent);color:var(--success)}
-.invv2-c-jaune .invv2-jours{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
-.invv2-c-orange .invv2-jours{background:color-mix(in srgb,#fb923c 22%,transparent);color:#fb923c}
-.invv2-c-rouge .invv2-jours{background:color-mix(in srgb,var(--danger) 18%,transparent);color:var(--danger)}
+.invv2-jours{font-weight:800;font-size:19px;padding:5px 14px;border-radius:10px;min-width:78px;text-align:center;line-height:1.2;font-family:monospace;border:1.5px solid transparent}
+.invv2-jours-sub{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;text-align:right;max-width:180px;font-weight:600}
+.invv2-c-vert .invv2-jours{background:color-mix(in srgb,var(--success) 22%,transparent);color:var(--success);border-color:color-mix(in srgb,var(--success) 38%,transparent)}
+.invv2-c-jaune .invv2-jours{background:color-mix(in srgb,var(--warn) 22%,transparent);color:var(--warn);border-color:color-mix(in srgb,var(--warn) 38%,transparent)}
+.invv2-c-orange .invv2-jours{background:color-mix(in srgb,#fb923c 26%,transparent);color:#fb923c;border-color:color-mix(in srgb,#fb923c 42%,transparent)}
+.invv2-c-rouge .invv2-jours{background:color-mix(in srgb,var(--danger) 22%,transparent);color:var(--danger);border-color:color-mix(in srgb,var(--danger) 38%,transparent)}
 
-/* Détail emplacement (violet) */
-.invv2-detail .invv2-back{margin-bottom:14px}
-.invv2-scorecard{background:var(--card);border:1px solid var(--border);border-left:4px solid var(--c2);border-radius:12px;padding:16px 18px;margin-bottom:14px}
-.invv2-detail-title{font-size:22px;font-weight:800;color:var(--c2);font-family:monospace;letter-spacing:.3px;margin-bottom:8px}
-.invv2-last-info{font-size:13px;color:var(--text2);margin-bottom:12px}
-.invv2-last-info strong{color:var(--text);font-weight:700}
-.invv2-last-info.invv2-last-none{color:var(--muted);font-style:italic}
+/* Détail emplacement (violet forcé) */
+.invv2-detail .invv2-back{margin-bottom:14px;color:var(--inv-v);font-weight:700}
+.invv2-detail .invv2-back:hover{background:var(--inv-v-bg-soft)}
+.invv2-scorecard{background:linear-gradient(135deg,var(--card) 0%,var(--inv-v-bg-soft) 100%);border:1.5px solid var(--inv-v-bg);border-left:6px solid var(--inv-v);border-radius:12px;padding:18px 20px;margin-bottom:14px;box-shadow:0 2px 8px var(--inv-v-bg-soft)}
+.invv2-detail-title{font-size:24px;font-weight:800;color:var(--inv-v);font-family:monospace;letter-spacing:.3px;margin-bottom:10px;text-shadow:0 0 1px var(--inv-v-bg)}
+.invv2-last-info{font-size:13px;color:var(--text);margin-bottom:14px;font-weight:500}
+.invv2-last-info strong{color:var(--inv-v);font-weight:800}
+.invv2-last-info.invv2-last-none{color:var(--text2);font-style:italic}
 .invv2-detail-stats{display:flex;gap:10px;flex-wrap:wrap}
-.invv2-stat{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 14px;min-width:90px}
-.invv2-stat-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:2px}
-.invv2-stat-value{font-size:18px;font-weight:800;color:var(--text);line-height:1.1}
-.invv2-prod-card{margin-bottom:4px}
+.invv2-stat{background:var(--card);border:1.5px solid var(--inv-v-bg);border-radius:10px;padding:8px 14px;min-width:90px}
+.invv2-stat-label{font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:2px}
+.invv2-stat-value{font-size:18px;font-weight:800;color:var(--inv-v);line-height:1.1;font-family:monospace}
+
+/* Header carte avec bouton "Ajouter un produit" */
+.invv2-prod-card{margin-bottom:4px;border:1.5px solid var(--inv-v-bg)}
+.invv2-prod-card .card-header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;border-bottom:1.5px solid var(--inv-v-bg);background:var(--inv-v-bg-soft)}
+.invv2-prod-card .card-title{color:var(--inv-v);font-weight:800;letter-spacing:.2px}
+.invv2-btn-add-product{background:var(--inv-v);color:var(--inv-v-text);border:0;border-radius:8px;padding:8px 14px;font-weight:800;font-size:12px;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px;transition:filter .15s,box-shadow .15s;box-shadow:0 2px 6px var(--inv-v-shadow)}
+.invv2-btn-add-product:hover{filter:brightness(1.06);box-shadow:0 3px 10px var(--inv-v-shadow)}
+.invv2-btn-add-product:active{transform:translateY(1px)}
 .invv2-prod-list{padding:0}
-.invv2-prod-row{display:flex;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid var(--border);transition:background .2s}
+.invv2-prod-row{display:flex;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid var(--border);transition:background .2s,border-color .2s;position:relative}
 .invv2-prod-row:last-child{border-bottom:0}
-.invv2-prod-row.invv2-validated{background:color-mix(in srgb,var(--success) 12%,transparent)}
+.invv2-prod-row:not(.invv2-validated):hover{background:var(--inv-v-bg-soft)}
+.invv2-prod-row.invv2-validated{background:color-mix(in srgb,var(--success) 18%,transparent);border-left:4px solid var(--success)}
+.invv2-prod-row.invv2-added{border-left:4px solid var(--inv-v)}
+.invv2-prod-row.invv2-added.invv2-validated{border-left:4px solid var(--success)}
 .invv2-prod-main{flex:1;min-width:0}
-.invv2-prod-ref{font-family:monospace;font-weight:800;font-size:14px;color:var(--text);letter-spacing:.2px}
-.invv2-prod-info{font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.invv2-prod-ref{font-family:monospace;font-weight:800;font-size:14px;color:var(--text);letter-spacing:.2px;display:flex;align-items:center;gap:6px}
+.invv2-prod-badge-new{display:inline-block;background:var(--inv-v);color:var(--inv-v-text);font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;letter-spacing:.5px;text-transform:uppercase}
+.invv2-prod-info{font-size:11px;color:var(--text2);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .invv2-prod-qty{display:flex;flex-direction:column;align-items:flex-end;gap:1px;font-family:monospace;min-width:100px;text-align:right}
 .invv2-prod-qty-main{font-size:14px;font-weight:700;color:var(--text)}
-.invv2-prod-qty-new{font-size:15px;font-weight:800;color:var(--c2)}
+.invv2-prod-qty-new{font-size:15px;font-weight:800;color:var(--inv-v)}
 .invv2-prod-qty-old{font-size:11px;color:var(--muted);text-decoration:line-through}
 .invv2-prod-actions{display:flex;gap:6px;flex-shrink:0}
-.invv2-btn-modify{background:rgba(139,92,246,.12);color:var(--c2);border:1px solid var(--c2);border-radius:8px;padding:7px 12px;font-weight:700;font-size:12px;cursor:pointer;font-family:inherit;transition:filter .15s,background .15s}
-.invv2-btn-modify:hover{background:rgba(139,92,246,.22)}
-.invv2-btn-validate{background:var(--success);color:#0a0e17;border:0;border-radius:8px;padding:7px 12px;font-weight:900;font-size:14px;cursor:pointer;min-width:38px;font-family:inherit;line-height:1;transition:filter .15s}
+.invv2-btn-modify{background:var(--inv-v-bg);color:var(--inv-v);border:1.5px solid var(--inv-v);border-radius:8px;padding:7px 14px;font-weight:800;font-size:12px;cursor:pointer;font-family:inherit;transition:filter .15s,background .15s}
+.invv2-btn-modify:hover{background:var(--inv-v-bg-strong)}
+.invv2-btn-validate{background:var(--success);color:var(--inv-v-text);border:0;border-radius:8px;padding:7px 12px;font-weight:900;font-size:14px;cursor:pointer;min-width:38px;font-family:inherit;line-height:1;transition:filter .15s;box-shadow:0 2px 6px color-mix(in srgb,var(--success) 30%,transparent)}
 .invv2-btn-validate:hover{filter:brightness(1.06)}
-.invv2-btn-cancel{background:var(--success);color:#0a0e17;border:0;border-radius:8px;padding:7px 12px;font-weight:900;font-size:14px;cursor:pointer;min-width:38px;font-family:inherit;line-height:1;transition:filter .15s,background .15s,color .15s}
+.invv2-btn-cancel{background:var(--success);color:var(--inv-v-text);border:0;border-radius:8px;padding:7px 12px;font-weight:900;font-size:14px;cursor:pointer;min-width:38px;font-family:inherit;line-height:1;transition:filter .15s,background .15s,color .15s}
 .invv2-btn-cancel:hover{background:var(--danger);color:#fff}
-.invv2-empty-card{margin-bottom:4px}
-.invv2-action-bar{display:flex;justify-content:center;margin:14px 0 4px}
-.invv2-btn-to-validate{background:var(--card);border:1px solid var(--border);color:var(--text2);border-radius:12px;padding:12px 24px;font-weight:700;font-size:14px;opacity:.85}
-.invv2-btn-validate-all{background:var(--c2);color:#0a0e17;border:0;border-radius:12px;padding:14px 32px;font-weight:800;font-size:15px;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(139,92,246,.32);transition:filter .15s,transform .1s}
-.invv2-btn-validate-all:hover{filter:brightness(1.08)}
+.invv2-empty-card{margin-bottom:4px;border:1.5px solid var(--inv-v-bg)}
+.invv2-action-bar{display:flex;justify-content:center;margin:16px 0 4px}
+.invv2-btn-to-validate{background:var(--card);border:1.5px solid var(--inv-v-bg);color:var(--text2);border-radius:12px;padding:12px 28px;font-weight:700;font-size:14px;opacity:.9}
+.invv2-btn-validate-all{background:var(--inv-v);color:var(--inv-v-text);border:0;border-radius:12px;padding:14px 36px;font-weight:800;font-size:15px;cursor:pointer;font-family:inherit;box-shadow:0 4px 16px var(--inv-v-shadow);transition:filter .15s,transform .1s,box-shadow .15s;letter-spacing:.3px}
+.invv2-btn-validate-all:hover{filter:brightness(1.08);box-shadow:0 6px 20px var(--inv-v-shadow)}
 .invv2-btn-validate-all:active{transform:translateY(1px)}
-.invv2-history-card{margin-top:4px}
+.invv2-history-card{margin-top:4px;border:1.5px solid var(--inv-v-bg)}
+.invv2-history-card .card-header{background:var(--inv-v-bg-soft);border-bottom:1.5px solid var(--inv-v-bg)}
+.invv2-history-card .card-title{color:var(--inv-v);font-weight:800}
 .invv2-hist-list{padding:0}
-.invv2-hist-row{display:grid;grid-template-columns:110px 1fr auto;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);font-size:13px;align-items:center}
+.invv2-hist-row{display:grid;grid-template-columns:110px 1fr auto;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);font-size:13px;align-items:center;transition:background .15s}
 .invv2-hist-row:last-child{border-bottom:0}
-.invv2-hist-date{color:var(--text);font-weight:700;font-family:monospace}
-.invv2-hist-op{color:var(--text2)}
-.invv2-hist-meta{font-size:11px;color:var(--muted);font-family:monospace}
-.invv2-btn-more{background:transparent;border:1px solid var(--border);color:var(--c2);border-radius:8px;padding:9px 14px;font-weight:700;font-size:12px;cursor:pointer;font-family:inherit;width:calc(100% - 24px);margin:10px 12px 10px;transition:background .15s,border-color .15s}
-.invv2-btn-more:hover{border-color:var(--c2);background:rgba(139,92,246,.10)}
+.invv2-hist-row:hover{background:var(--inv-v-bg-soft)}
+.invv2-hist-date{color:var(--inv-v);font-weight:700;font-family:monospace}
+.invv2-hist-op{color:var(--text)}
+.invv2-hist-meta{font-size:11px;color:var(--text2);font-family:monospace;font-weight:600}
+.invv2-btn-more{background:transparent;border:1.5px solid var(--inv-v);color:var(--inv-v);border-radius:8px;padding:9px 14px;font-weight:800;font-size:12px;cursor:pointer;font-family:inherit;width:calc(100% - 24px);margin:10px 12px 10px;transition:background .15s,color .15s}
+.invv2-btn-more:hover{background:var(--inv-v);color:var(--inv-v-text)}
+
+/* Modals violets — texte boutons selon thème */
+.btn-confirm.invv2-confirm{background:var(--inv-v);color:var(--inv-v-text);font-weight:800}
+.btn-confirm.invv2-confirm:hover{filter:brightness(1.06)}
+.invv2-modal-title{color:var(--inv-v);font-weight:800}
+.invv2-modal-sub-empl{color:var(--inv-v);font-weight:700}
 
 /* Mobile */
 @media (max-width: 720px){
   .invv2-empl-row{padding:12px}
   .invv2-empl-code{font-size:14px}
-  .invv2-jours{font-size:16px;padding:3px 10px;min-width:60px}
-  .invv2-jours-sub{font-size:9px}
-  .invv2-legend{gap:6px;padding:6px 10px}
+  .invv2-jours{font-size:16px;padding:4px 10px;min-width:66px}
+  .invv2-jours-sub{font-size:9px;max-width:140px}
+  .invv2-legend{gap:6px;padding:8px 10px}
   .invv2-legend-item{font-size:10px}
+  .invv2-prod-card .card-header{flex-wrap:wrap;gap:8px}
   .invv2-prod-row{flex-wrap:wrap;gap:10px}
   .invv2-prod-main{flex:1 1 100%;min-width:0}
   .invv2-prod-qty{min-width:auto;flex-direction:row;align-items:baseline;gap:8px}
@@ -1074,6 +1114,7 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
   .invv2-hist-row{grid-template-columns:1fr;gap:2px}
   .invv2-hist-date{font-size:12px}
   .invv2-hist-op{font-size:12px}
+  .invv2-detail-title{font-size:20px}
 }
 
 /* ── Modal mouvement (bottom sheet) ── */
@@ -1951,21 +1992,30 @@ function invV2ToggleValidate(pid) {
 }
 
 function invV2CancelValidate(pid) {
+  const d = S.invV2Detail;
+  const row = d && (d.refs || []).find(r => r.produit_id === pid);
+  const isAdded = !!(row && row._added);
   // Modal de confirmation pour annuler la validation
   closeMroot();
   const overlay = el('div', { cls:'modal-overlay', on:{ click: e => { if(e.target===overlay) closeMroot(); }}});
   const sheet = el('div', { cls:'modal-sheet', style: { maxWidth: '420px' } },
     el('span', { cls:'modal-handle' }),
-    el('div', { cls:'modal-title', style:{color:'var(--c2)'} }, 'Annuler la validation ?'),
-    el('div', { cls:'modal-sub' }, 'Voulez-vous vraiment annuler ce que vous venez de valider ? La ligne redeviendra modifiable.'),
+    el('div', { cls:'modal-title invv2-modal-title' }, isAdded ? 'Retirer ce produit ?' : 'Annuler la validation ?'),
+    el('div', { cls:'modal-sub' }, isAdded
+      ? 'Ce produit a été ajouté manuellement. Il sera retiré de cet inventaire.'
+      : 'Voulez-vous vraiment annuler ce que vous venez de valider ? La ligne redeviendra modifiable.'
+    ),
     el('div', { cls:'modal-actions', style:{marginTop:'20px'} },
       el('button', { cls:'btn-cancel', on:{ click: closeMroot } }, 'Non, garder'),
-      el('button', { cls:'btn-confirm inventaire', on:{ click: () => {
+      el('button', { cls:'btn-confirm invv2-confirm', on:{ click: () => {
         delete S.invV2Validated[pid];
         delete S.invV2Modifs[pid];
+        if (isAdded && d) {
+          d.refs = d.refs.filter(r => r.produit_id !== pid);
+        }
         closeMroot();
         renderContent();
-      }}}, 'Oui, annuler')
+      }}}, isAdded ? 'Oui, retirer' : 'Oui, annuler')
     )
   );
   overlay.appendChild(sheet);
@@ -1983,7 +2033,7 @@ function invV2OpenModifyModal(pid, currentQty, reference, designation, unite) {
   });
   inp.addEventListener('input', e => { valStr = e.target.value; });
   inp.addEventListener('keydown', e => { if (e.key === 'Enter') validateBtn.click(); });
-  const validateBtn = el('button', { cls:'btn-confirm inventaire', on:{ click: () => {
+  const validateBtn = el('button', { cls:'btn-confirm invv2-confirm', on:{ click: () => {
     const q = parseFloat(valStr);
     if (isNaN(q) || q < 0) { showToast('Quantité invalide.', 'error'); return; }
     S.invV2Modifs[pid] = { qte_avant: parseFloat(currentQty)||0, qte_apres: q };
@@ -1993,7 +2043,7 @@ function invV2OpenModifyModal(pid, currentQty, reference, designation, unite) {
   }}}, 'Valider la modification');
   const sheet = el('div', { cls:'modal-sheet', style: { maxWidth: '440px' } },
     el('span', { cls:'modal-handle' }),
-    el('div', { cls:'modal-title', style:{color:'var(--c2)'} }, 'Modifier la quantité'),
+    el('div', { cls:'modal-title invv2-modal-title' }, 'Modifier la quantité'),
     el('div', { cls:'modal-sub' }, escHtml(reference) + (designation ? ' — ' + escHtml(designation) : '')),
     el('div', { cls:'modal-field' },
       el('label', { cls:'field-label' }, 'Quantité réelle comptée' + (unite ? ' ('+escHtml(unite)+')' : '')),
@@ -2009,6 +2059,134 @@ function invV2OpenModifyModal(pid, currentQty, reference, designation, unite) {
   requestAnimationFrame(() => { try { inp.focus(); inp.select(); } catch(e){} });
 }
 
+function invV2OpenAddProductModal() {
+  const d = S.invV2Detail;
+  if (!d) return;
+  closeMroot();
+  let _pid = null, _ref = '', _designation = '', _unite = '';
+
+  const overlay = el('div', { cls:'modal-overlay', on:{ click: e => { if(e.target===overlay) closeMroot(); }}});
+
+  const refInp = el('input', {
+    cls:'field-input',
+    type:'text', placeholder:'Référence produit (ex. 973/0019)', autocomplete:'off',
+    style:{ direction:'ltr' }
+  });
+  const suggWrap = el('div', { cls:'empl-suggestions', style:{ display:'none' } });
+  const refError = el('div', { style:{ color:'var(--danger)', fontSize:'12px', marginTop:'4px', display:'none' } });
+
+  let refTimer = null;
+  refInp.addEventListener('input', () => {
+    _pid = null; refError.style.display = 'none';
+    clearTimeout(refTimer);
+    const q = refInp.value.trim();
+    if (!q) { suggWrap.innerHTML = ''; suggWrap.style.display = 'none'; return; }
+    refTimer = setTimeout(async () => {
+      try {
+        const r = await api('/api/stock/search?q=' + encodeURIComponent(q) + '&limit=8');
+        const prods = (r && r.produits) || [];
+        suggWrap.innerHTML = '';
+        if (!prods.length) { suggWrap.style.display = 'none'; return; }
+        prods.forEach(p => {
+          const item = el('div', { cls:'empl-suggestion-item',
+            on:{ click: () => {
+              refInp.value = p.reference;
+              _pid = p.id; _ref = p.reference;
+              _designation = p.designation || '';
+              _unite = p.unite || '';
+              refError.style.display = 'none';
+              suggWrap.innerHTML = ''; suggWrap.style.display = 'none';
+              try { qteInp.focus(); } catch(e){}
+            }}
+          },
+            el('span', { style:{ fontWeight:'700', marginRight:'8px' } }, p.reference),
+            el('span', { style:{ color:'var(--muted)', fontSize:'12px' } }, p.designation || '')
+          );
+          suggWrap.appendChild(item);
+        });
+        suggWrap.style.display = '';
+      } catch(e) { /* silence */ }
+    }, 180);
+  });
+
+  const qteInp = el('input', {
+    cls:'field-input',
+    type:'number', step:'0.01', min:'0', placeholder:'0', inputmode:'decimal',
+    style:{ direction:'ltr', textAlign:'right', fontFamily:'monospace', fontSize:'16px' }
+  });
+
+  const confirmBtn = el('button', { cls:'btn-confirm invv2-confirm', on:{ click: async () => {
+    const ref = refInp.value.trim();
+    const qte = parseFloat(qteInp.value);
+    if (!ref) { showToast('Référence requise.', 'error'); return; }
+    if (!qte || qte <= 0) { showToast('Quantité requise (> 0).', 'error'); return; }
+    if (!_pid) {
+      try {
+        const r = await api('/api/stock/search?q=' + encodeURIComponent(ref) + '&limit=10');
+        const match = (r && r.produits || []).find(p =>
+          (p.reference || '').toUpperCase() === ref.toUpperCase()
+        );
+        if (!match) {
+          refError.textContent = 'Référence produit introuvable.';
+          refError.style.display = '';
+          return;
+        }
+        _pid = match.id; _ref = match.reference;
+        _designation = match.designation || '';
+        _unite = match.unite || '';
+      } catch(e) { showToast(e.message, 'error'); return; }
+    }
+    const existing = (d.refs || []).find(r => r.produit_id === _pid);
+    if (existing) {
+      // Si déjà présent, on bascule sur "modifier" pour cette ligne
+      closeMroot();
+      const qActuelle = parseFloat(existing.quantite) || 0;
+      showToast('Produit déjà présent — ouvrez « Modifier ».', 'info');
+      return;
+    }
+    d.refs.push({
+      produit_id: _pid,
+      reference: _ref,
+      designation: _designation,
+      unite: _unite,
+      quantite: 0,
+      nb_lots: 0,
+      lots: [],
+      _added: true,
+    });
+    S.invV2Modifs[_pid] = { qte_avant: 0, qte_apres: qte };
+    S.invV2Validated[_pid] = true;
+    closeMroot();
+    renderContent();
+    showToast(_ref + ' ajouté · ' + fU(qte, _unite));
+  }}}, 'Ajouter le produit');
+
+  const sheet = el('div', { cls:'modal-sheet', style:{ maxWidth:'480px' } },
+    el('span', { cls:'modal-handle' }),
+    el('div', { cls:'modal-title invv2-modal-title' }, 'Ajouter un produit à l\'inventaire'),
+    el('div', { cls:'modal-sub' },
+      'Emplacement ',
+      el('span', { cls:'invv2-modal-sub-empl' }, d.label || d.emplacement)
+    ),
+    el('div', { cls:'modal-field' },
+      el('label', { cls:'field-label' }, 'Référence produit *'),
+      refInp, suggWrap, refError
+    ),
+    el('div', { cls:'modal-field' },
+      el('label', { cls:'field-label' }, 'Quantité comptée *' + (_unite ? ' ('+_unite+')' : '')),
+      qteInp
+    ),
+    el('div', { cls:'modal-actions', style:{ marginTop:'14px' } },
+      el('button', { cls:'btn-cancel', on:{ click: closeMroot } }, 'Annuler'),
+      confirmBtn
+    )
+  );
+  sheet.addEventListener('click', e => e.stopPropagation());
+  overlay.appendChild(sheet);
+  document.getElementById('mroot').appendChild(overlay);
+  requestAnimationFrame(() => { try { refInp.focus(); } catch(e){} });
+}
+
 function invV2ValidateFullInventaire() {
   const d = S.invV2Detail; if (!d) return;
   const modifications = Object.keys(S.invV2Modifs).map(pid => ({
@@ -2020,7 +2198,7 @@ function invV2ValidateFullInventaire() {
 
   closeMroot();
   const overlay = el('div', { cls:'modal-overlay', on:{ click: e => { if(e.target===overlay) closeMroot(); }}});
-  const confirmBtn = el('button', { cls:'btn-confirm inventaire', on:{ click: async () => {
+  const confirmBtn = el('button', { cls:'btn-confirm invv2-confirm', on:{ click: async () => {
     if (S.invV2Submitting) return;
     S.invV2Submitting = true;
     confirmBtn.disabled = true;
@@ -2051,7 +2229,7 @@ function invV2ValidateFullInventaire() {
 
   const sheet = el('div', { cls:'modal-sheet', style: { maxWidth: '460px' } },
     el('span', { cls:'modal-handle' }),
-    el('div', { cls:'modal-title', style:{color:'var(--c2)'} }, "Valider l'inventaire ?"),
+    el('div', { cls:'modal-title invv2-modal-title' }, "Valider l'inventaire ?"),
     el('div', { cls:'modal-sub' },
       'Emplacement ' + escHtml(d.label || d.emplacement) + ' · ' +
       nbProduits + ' produit' + (nbProduits>1?'s':'') + ' inventorié' + (nbProduits>1?'s':'') + ' · ' +
@@ -7714,14 +7892,28 @@ function buildInventaireEmplDetail() {
   );
 
   // Liste des produits
+  const addBtn = el('button', {
+    cls:'invv2-btn-add-product',
+    type:'button',
+    title:'Ajouter un produit à cet emplacement',
+    on:{ click: () => invV2OpenAddProductModal() }
+  }, '+ Ajouter un produit');
+
   let refsBlock;
   if (total === 0) {
-    refsBlock = el('div', { cls:'card invv2-empty-card' },
-      el('div', { cls:'card-empty' }, 'Cet emplacement est vide — vous pouvez valider directement l\'inventaire à vide.')
+    refsBlock = el('div', { cls:'card invv2-prod-card invv2-empty-card' },
+      el('div', { cls:'card-header' },
+        el('div', { cls:'card-title' }, 'Produits à inventorier'),
+        addBtn
+      ),
+      el('div', { cls:'card-empty' }, 'Cet emplacement est vide — vous pouvez valider directement l\'inventaire à vide, ou ajouter un produit ci-dessus.')
     );
   } else {
     refsBlock = el('div', { cls:'card invv2-prod-card' },
-      el('div', { cls:'card-header' }, el('div', { cls:'card-title' }, 'Produits à inventorier')),
+      el('div', { cls:'card-header' },
+        el('div', { cls:'card-title' }, 'Produits à inventorier · ' + total),
+        addBtn
+      ),
       el('div', { cls:'invv2-prod-list' }, ...refs.map(r => invV2BuildProductRow(r)))
     );
   }
@@ -7777,9 +7969,12 @@ function invV2BuildProductRow(r) {
   const modif = S.invV2Modifs[pid];
   const qteActuelle = parseFloat(r.quantite) || 0;
   const unite = r.unite || '';
+  const isAdded = !!r._added;
 
-  const nbLots = (r.lots && r.lots.length) || 1;
-  const lotsTxt = nbLots > 1 ? (nbLots + ' lots') : '1 lot';
+  const nbLots = (r.lots && r.lots.length) || (isAdded ? 0 : 1);
+  const lotsTxt = isAdded
+    ? 'nouveau produit pour cet emplacement'
+    : (nbLots > 1 ? (nbLots + ' lots') : '1 lot');
 
   // Quantité affichée
   let qtyEl;
@@ -7822,9 +8017,16 @@ function invV2BuildProductRow(r) {
     );
   }
 
-  return el('div', { cls: 'invv2-prod-row' + (isValidated ? ' invv2-validated' : '') },
+  const refContent = isAdded
+    ? el('div', { cls:'invv2-prod-ref' },
+        r.reference || '—',
+        el('span', { cls:'invv2-prod-badge-new' }, 'Ajouté')
+      )
+    : el('div', { cls:'invv2-prod-ref' }, r.reference || '—');
+
+  return el('div', { cls: 'invv2-prod-row' + (isValidated ? ' invv2-validated' : '') + (isAdded ? ' invv2-added' : '') },
     el('div', { cls:'invv2-prod-main' },
-      el('div', { cls:'invv2-prod-ref' }, r.reference || '—'),
+      refContent,
       el('div', { cls:'invv2-prod-info' },
         (r.designation ? r.designation + ' · ' : '') + lotsTxt
       )
