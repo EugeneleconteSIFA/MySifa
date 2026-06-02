@@ -1615,6 +1615,7 @@ function closeOfEditModal(){
   const mr = document.getElementById('mroot');
   if(mr) mr.innerHTML='';
 }
+window.closeOfEditModal = closeOfEditModal;
 
 async function saveOfEdit(){
   const m = S.ofEditModal;
@@ -1645,6 +1646,7 @@ async function saveOfEdit(){
     showToast(e.message||'Erreur lors de la mise à jour.','danger');
   }
 }
+window.saveOfEdit = saveOfEdit;
 
 function renderOfEditModal(){
   const mr = document.getElementById('mroot');

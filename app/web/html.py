@@ -10418,18 +10418,27 @@ function closeOfEditModal(){
   set({ofEditModal:null});
   render();
 }
+window.closeOfEditModal = closeOfEditModal;
+
 async function saveOfEdit(){
   const m=S.ofEditModal;
   if(!m) return;
   const payload={
-    of_numero:     document.getElementById('ofe-numero')?.value.trim()||null,
-    reference:     document.getElementById('ofe-reference')?.value.trim()||null,
-    machine:       document.getElementById('ofe-machine')?.value.trim()||null,
-    delai_client:  document.getElementById('ofe-delai')?.value.trim()||null,
-    format:        document.getElementById('ofe-format')?.value.trim()||null,
-    date_creation: document.getElementById('ofe-date')?.value.trim()||null,
-    qte_etiquettes:parseFloat(document.getElementById('ofe-qte')?.value)||null,
-    qte_bobines:   parseFloat(document.getElementById('ofe-bobines')?.value)||null,
+    of_numero:       document.getElementById('ofe-numero')?.value.trim()||null,
+    reference:       document.getElementById('ofe-reference')?.value.trim()||null,
+    machine:         document.getElementById('ofe-machine')?.value.trim()||null,
+    delai_client:    document.getElementById('ofe-delai')?.value.trim()||null,
+    format:          document.getElementById('ofe-format')?.value.trim()||null,
+    date_creation:   document.getElementById('ofe-date')?.value.trim()||null,
+    qte_etiquettes:  parseFloat(document.getElementById('ofe-qte')?.value)||null,
+    qte_bobines:     parseFloat(document.getElementById('ofe-bobines')?.value)||null,
+    metrage:         parseInt(document.getElementById('ofe-metrage')?.value)||null,
+    matiere:         document.getElementById('ofe-matiere')?.value.trim()||null,
+    conditionnement: document.getElementById('ofe-cond')?.value.trim()||null,
+    outil_1_numero:  document.getElementById('ofe-outil')?.value.trim()||null,
+    nb_mandrins:     parseInt(document.getElementById('ofe-mandrins')?.value)||null,
+    nb_cartons:      parseInt(document.getElementById('ofe-cartons')?.value)||null,
+    nb_tubes:        parseInt(document.getElementById('ofe-tubes')?.value)||null,
   };
   try{
     await api('/api/of/'+m.id,{method:'PATCH',body:JSON.stringify(payload)});
@@ -10441,6 +10450,7 @@ async function saveOfEdit(){
     toast(e.message||'Erreur mise à jour.','error');
   }
 }
+window.saveOfEdit = saveOfEdit;
 function renderOfEditModal(){
   const existing=document.getElementById('of-edit-overlay');
   if(existing) existing.remove();
@@ -10463,12 +10473,19 @@ function renderOfEditModal(){
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 16px">
         ${field('ofe-numero','OF n°',m.of_numero)}
         ${field('ofe-reference','Référence',m.reference)}
-        ${field('ofe-machine','Machine',m.machine)}
-        ${field('ofe-delai','Délai client',m.delai_client)}
-        ${field('ofe-format','Format',m.format)}
         ${field('ofe-date','Date création',(m.date_creation||'').slice(0,10),'date')}
+        ${field('ofe-delai','Délai client',m.delai_client)}
+        ${field('ofe-machine','Machine',m.machine)}
+        ${field('ofe-format','Format',m.format)}
+        ${field('ofe-matiere','Matière',m.matiere)}
+        ${field('ofe-cond','Conditionnement',m.conditionnement)}
+        ${field('ofe-outil','N° plaque',m.outil_1_numero)}
         ${field('ofe-qte','Qté étiquettes',m.qte_etiquettes,'number')}
         ${field('ofe-bobines','Qté bobines',m.qte_bobines,'number')}
+        ${field('ofe-metrage','Métrage',m.metrage,'number')}
+        ${field('ofe-mandrins','Nb mandrins',m.nb_mandrins,'number')}
+        ${field('ofe-cartons','Nb cartons',m.nb_cartons,'number')}
+        ${field('ofe-tubes','Nb tubes',m.nb_tubes,'number')}
       </div>
       <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px">
         <button id="ofe-cancel-btn" style="padding:9px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit;font-size:13px">Annuler</button>

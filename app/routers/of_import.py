@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 
 import pdfplumber
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from config import UPLOAD_DIR
 from database import get_db
@@ -269,7 +269,9 @@ def list_of_imports(request: Request):
             f"""SELECT
                     o.id, o.of_numero, o.reference, o.machine, o.delai_client,
                     o.format, o.date_creation, o.qte_etiquettes, o.qte_bobines,
-                    o.metrage, o.date_import, o.statut, o.pdf_filename, o.imported_by,
+                    o.metrage, o.matiere, o.conditionnement, o.outil_1_numero,
+                    o.nb_mandrins, o.nb_cartons, o.nb_tubes,
+                    o.date_import, o.statut, o.pdf_filename, o.imported_by,
                     CASE WHEN pe.of_import_id IS NOT NULL THEN 1 ELSE 0 END AS lie
                 FROM of_imports o
                 LEFT JOIN planning_entries pe ON pe.of_import_id = o.id
@@ -344,19 +346,43 @@ def preview_of_pdf(of_id: int, request: Request):
     get_current_user(request)
     with get_db() as conn:
         row = conn.execute(
-            "SELECT pdf_filename FROM of_imports WHERE id=?",
+            """SELECT id, of_numero, reference, date_creation, delai_client,
+                      machine, format, matiere, laize, qte_etiquettes, qte_bobines,
+                      metrage, conditionnement, nb_cartons, nb_mandrins, nb_tubes,
+                      mandrins_dia, outil_1_numero, pdf_filename
+               FROM of_imports WHERE id=?""",
             (of_id,),
         ).fetchone()
-    if not row or not row["pdf_filename"]:
+    if not row:
         raise HTTPException(status_code=404, detail="OF introuvable.")
-    path = os.path.join(OF_UPLOAD_DIR, row["pdf_filename"])
-    if not os.path.isfile(path):
-        raise HTTPException(status_code=404, detail="Fichier PDF introuvable.")
-    return FileResponse(
-        path,
+
+    # OF importé via PDF → servir le fichier original
+    if row["pdf_filename"]:
+        path = os.path.join(OF_UPLOAD_DIR, row["pdf_filename"])
+        if not os.path.isfile(path):
+            raise HTTPException(status_code=404, detail="Fichier PDF introuvable.")
+        return FileResponse(
+            path,
+            media_type="application/pdf",
+            filename=row["pdf_filename"],
+            headers={"Content-Disposition": f'inline; filename="{row["pdf_filename"]}"'},
+        )
+
+    # OF importé via API (pas de PDF) → générer depuis le template vierge
+    try:
+        from app.services.of_pdf_generator import generate_of_pdf
+        pdf_bytes = generate_of_pdf(dict(row))
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Erreur génération PDF : {exc}") from exc
+
+    safe_num = re.sub(r"[^\w\-]+", "_", str(row["of_numero"] or of_id))
+    filename = f"OF_{safe_num}.pdf"
+    return Response(
+        content=pdf_bytes,
         media_type="application/pdf",
-        filename=row["pdf_filename"],
-        headers={"Content-Disposition": f'inline; filename="{row["pdf_filename"]}"'},
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
     )
 
 
