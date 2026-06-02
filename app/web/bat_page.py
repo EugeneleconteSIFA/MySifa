@@ -48,6 +48,8 @@ BAT_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_theme.css">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <script>try{if(localStorage.getItem('mysifa_theme')==='light')document.documentElement.classList.add('light-pre');}catch(e){}</script>
+<script src="/static/mysifa_theme.js"></script>
+<script src="/static/mysifa_user_chip.js"></script>
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -853,6 +855,9 @@ async function submitDelete(){
   });
 })();
 </script>
+<script src="/static/chat_mentions.js"></script>
+<script src="/static/chat_widget.js"></script>
+<script src="/static/chat_widget_v2.js"></script>
 <script src="/static/support_widget.js"></script>
 </body>
 </html>"""

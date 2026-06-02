@@ -10712,6 +10712,10 @@ function renderOfTab(){
         title:'Modifier', onClick:()=>openOfEditModal(row)
       },iconEl('edit',13)),
     ];
+    acts.push(h('button',{
+      style:'padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer',
+      title:'Aperçu OF', onClick:()=>{window.open('/api/of/'+row.id+'/pdf-preview','_blank');}
+    },iconEl('eye',13)));
     if(row.pdf_filename){
       acts.push(h('button',{
         style:'padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer',
