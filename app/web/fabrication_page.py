@@ -1132,6 +1132,7 @@ function icon(name,size=16){
     download:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
     file:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',
     upload:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
+    eye:'<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
     headset:'<path d="M4 12a8 8 0 0 1 16 0"/><path d="M6 12v5a2 2 0 0 0 2 2h1v-7H8a2 2 0 0 0-2 2z"/><path d="M18 12v5a2 2 0 0 1-2 2h-1v-7h1a2 2 0 0 1 2 2z"/>',
   };
   const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
@@ -1825,6 +1826,11 @@ function renderOfPanel(){
         onClick:()=>openOfEditModal(row),
       }, svgIcon('edit',14)),
     ];
+    actBtns.push(h('button',{
+      className:'fab-btn fab-btn-ghost fab-btn-sm',
+      title:'Aperçu OF',
+      onClick:()=>{ window.open('/api/of/'+row.id+'/pdf-preview','_blank'); },
+    }, svgIcon('eye',14)));
     if(row.pdf_filename){
       actBtns.push(h('button',{
         className:'fab-btn fab-btn-ghost fab-btn-sm',
