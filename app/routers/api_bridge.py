@@ -14,9 +14,11 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Header, HTTPException
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 from app.core.database import get_db
+from app.services.fiche_pdf import generate_fiche_pdf
 
 router = APIRouter(prefix="/api/bridge", tags=["bridge"])
 
@@ -167,16 +169,98 @@ def push_of(
 
 
 class FicheTechniqueIn(BaseModel):
-    reference:       str
-    designation:     Optional[str] = None
-    client:          Optional[str] = None
-    format:          Optional[str] = None
-    laize:           Optional[float] = None
-    matiere:         Optional[str] = None
-    adhesif:         Optional[str] = None
-    nb_couleurs:     Optional[int] = None
-    conditionnement: Optional[str] = None
-    notes:           Optional[str] = None
+    # Identification
+    reference:              str
+    designation:            Optional[str]   = None
+    client:                 Optional[str]   = None
+    date_modif:             Optional[str]   = None
+    # Format / étiquette
+    format:                 Optional[str]   = None
+    eti_laize:              Optional[float] = None
+    eti_longueur:           Optional[float] = None
+    eti_rayons:             Optional[float] = None
+    eti_perforations:       Optional[str]   = None
+    # Module
+    mod_laize:              Optional[float] = None
+    mod_longueur:           Optional[float] = None
+    mod_nb_front:           Optional[int]   = None
+    # Échenillage
+    lateral_ext:            Optional[float] = None
+    horizontal:             Optional[float] = None
+    lateral_int:            Optional[float] = None
+    # Outil 1
+    outil1_forme:           Optional[str]   = None
+    outil1_numero_sifa:     Optional[str]   = None
+    outil1_laize:           Optional[float] = None
+    machine:                Optional[str]   = None
+    outil1_epaisseur:       Optional[float] = None
+    outil1_nb_dents:        Optional[int]   = None
+    outil1_nb_front:        Optional[int]   = None
+    outil1_nb_avance:       Optional[int]   = None
+    # Outil 2
+    outil2_forme:           Optional[str]   = None
+    outil2_numero_sifa:     Optional[str]   = None
+    outil2_epaisseur:       Optional[float] = None
+    outil2_nb_dents:        Optional[int]   = None
+    outil2_nb_front:        Optional[int]   = None
+    outil2_nb_avance:       Optional[int]   = None
+    # Outil 3
+    outil3_forme:           Optional[str]   = None
+    outil3_numero_sifa:     Optional[str]   = None
+    outil3_epaisseur:       Optional[float] = None
+    outil3_nb_dents:        Optional[int]   = None
+    outil3_nb_front:        Optional[int]   = None
+    outil3_nb_avance:       Optional[int]   = None
+    # Matière
+    support:                Optional[str]   = None
+    matiere:                Optional[str]   = None   # alias support (compatibilité)
+    glassine:               Optional[str]   = None
+    laize_optimale:         Optional[float] = None
+    laize_optionnelle:      Optional[float] = None
+    epaisseur:              Optional[float] = None
+    adhesif:                Optional[str]   = None
+    qte_au_mille:           Optional[float] = None
+    # Impression
+    nb_couleurs:            Optional[int]   = None
+    recto:                  Optional[int]   = None
+    verso:                  Optional[int]   = None
+    tete1_pantone:          Optional[str]   = None
+    tete1_couleur:          Optional[str]   = None
+    tete1_anilox:           Optional[str]   = None
+    tete1_composition:      Optional[str]   = None
+    tete2_pantone:          Optional[str]   = None
+    tete2_couleur:          Optional[str]   = None
+    tete2_anilox:           Optional[str]   = None
+    tete2_composition:      Optional[str]   = None
+    tete3_pantone:          Optional[str]   = None
+    tete3_couleur:          Optional[str]   = None
+    tete3_anilox:           Optional[str]   = None
+    tete3_composition:      Optional[str]   = None
+    remarque:               Optional[str]   = None
+    # Conditionnement
+    mandrin_dia:            Optional[str]   = None
+    mandrin_longueur:       Optional[float] = None
+    enroulement:            Optional[str]   = None
+    nb_etiq_bobin:          Optional[int]   = None
+    dia_ext:                Optional[float] = None
+    poids:                  Optional[float] = None
+    conditionnement:        Optional[str]   = None
+    cales_sachets:          Optional[str]   = None
+    cartons:                Optional[str]   = None
+    nb_au_sol:              Optional[int]   = None
+    nb_etage:               Optional[int]   = None
+    nb_bobines_carton:      Optional[int]   = None
+    # Palettisation
+    palette_type:               Optional[str]   = None
+    palette_nb_cartons_sol:     Optional[int]   = None
+    palette_nb_cartons_hauteur: Optional[int]   = None
+    palette_hauteur_max:        Optional[float] = None
+    particularite:              Optional[str]   = None
+    notes:                      Optional[str]   = None
+
+
+# Colonnes DB gérées manuellement (non mappées depuis le modèle)
+_FT_META_COLS = {"source", "date_import", "imported_by"}
 
 
 @router.post("/fiche-technique")
@@ -195,29 +279,61 @@ def push_fiche_technique(
         raise HTTPException(status_code=400, detail="Le champ 'reference' est obligatoire.")
 
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+
+    # Tous les champs non-null sauf référence et méta
+    data = {
+        k: v for k, v in body.model_dump().items()
+        if k != "reference" and v is not None and k not in _FT_META_COLS
+    }
+
     with get_db() as conn:
         existing = conn.execute(
             "SELECT id FROM fiches_techniques WHERE LOWER(TRIM(reference))=LOWER(TRIM(?)) LIMIT 1",
             (ref,)
         ).fetchone()
         if existing:
-            fields = {k: v for k, v in body.model_dump().items() if k != "reference" and v is not None}
-            if fields:
+            if data:
                 conn.execute(
-                    f"UPDATE fiches_techniques SET {', '.join(f'{k}=?' for k in fields)} WHERE id=?",
-                    list(fields.values()) + [existing["id"]],
+                    f"UPDATE fiches_techniques SET {', '.join(f'{k}=?' for k in data)} WHERE id=?",
+                    list(data.values()) + [existing["id"]],
                 )
                 conn.commit()
             return {"action": "updated", "id": existing["id"], "reference": ref}
         else:
+            cols = ["reference", "source", "date_import", "imported_by"] + list(data.keys())
+            vals = [ref, "access_bridge", now, "access_bridge"] + list(data.values())
             cur = conn.execute(
-                """INSERT INTO fiches_techniques
-                   (reference, designation, client, format, laize, matiere,
-                    adhesif, nb_couleurs, conditionnement, notes, source, date_import, imported_by)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (ref, body.designation, body.client, body.format, body.laize,
-                 body.matiere, body.adhesif, body.nb_couleurs, body.conditionnement,
-                 body.notes, "access_bridge", now, "access_bridge")
+                f"INSERT INTO fiches_techniques ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})",
+                vals,
             )
             conn.commit()
             return {"action": "created", "id": cur.lastrowid, "reference": ref}
+
+
+@router.get("/fiche-technique/{reference}/pdf")
+def preview_fiche_pdf(
+    reference: str,
+    x_api_key: Optional[str] = Header(default=None),
+):
+    """
+    Génère et retourne le PDF de prévisualisation d'une fiche technique.
+    Scope requis : of:read
+    """
+    _require_scope(x_api_key, "of:read")
+
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM fiches_techniques WHERE LOWER(TRIM(reference))=LOWER(TRIM(?)) LIMIT 1",
+            (reference,)
+        ).fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Fiche '{reference}' introuvable.")
+
+    pdf_bytes = generate_fiche_pdf(dict(row))
+    safe_ref = reference.replace("/", "-").replace(" ", "_")
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="fiche_{safe_ref}.pdf"'},
+    )

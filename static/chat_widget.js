@@ -407,7 +407,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
   .cw-msg-wrap{max-width:72%}
 }
 .cw-icon-wrap{position:relative;display:inline-block;flex-shrink:0}
-.cw-humeur-badge{position:absolute;bottom:-2px;left:-2px;font-size:11px;line-height:1;pointer-events:none;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))}
+.cw-humeur-badge{position:absolute;bottom:-2px;left:-2px;font-size:14px;line-height:1;pointer-events:auto;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5));cursor:default}
 `;
 
   function escAttr(s) {
@@ -459,6 +459,11 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     );
   }
 
+  const HUMEUR_LABELS={
+    '😊':'Joyeux','😩':'Épuisé','😢':'Triste','🤒':'Malade','😐':'Normal',
+    '😠':'Colère','🥵':'Chaud','🥶':'Froid','🤮':'Nauséeux','🥱':'Fatigué'
+  };
+
   /** Icône liste / en-tête : emoji canal ou initiales ; avatar photo pour les DM. */
   function cwChannelIconHtml(ch, size) {
     const sz = size || 28;
@@ -494,7 +499,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       return (
         '<span class="cw-icon-wrap">' +
         iconHtml +
-        '<span class="cw-humeur-badge">' +
+        '<span class="cw-humeur-badge" title="' + escCW(HUMEUR_LABELS[humeur] || '') + '">' +
         escCW(humeur) +
         '</span></span>'
       );

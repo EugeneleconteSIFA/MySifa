@@ -636,6 +636,11 @@ const HUMEURS=[
   {val:'😢',label:'Triste'},
   {val:'🤒',label:'Malade'},
   {val:'😐',label:'Normal'},
+  {val:'😠',label:'Colère'},
+  {val:'🥵',label:'Chaud'},
+  {val:'🥶',label:'Froid'},
+  {val:'🤮',label:'Nauséeux'},
+  {val:'🥱',label:'Fatigué'},
 ];
 
 function todayIso(){

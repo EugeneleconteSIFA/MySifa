@@ -424,9 +424,9 @@ def deplacer_lot_fifo(
     
     # Créer un nouveau lot à la destination
     cursor = conn.execute(
-        """INSERT INTO lots_stock (produit_id, emplacement, quantite_restante, date_entree, created_at)
-           VALUES (?, ?, ?, ?, ?)""",
-        (produit_id, emplacement_destination, qte_lot, date_entree, now),
+        """INSERT INTO lots_stock (produit_id, emplacement, quantite_initiale, quantite_restante, date_entree, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (produit_id, emplacement_destination, qte_lot, qte_lot, date_entree, now),
     )
     
     # Mettre à jour stock_emplacements pour la source

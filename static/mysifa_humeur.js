@@ -1,11 +1,16 @@
 /* MySifa — Humeur quotidienne (popup partagé entre toutes les pages) */
 (function(){
   const HUMEURS=[
-    {val:'\u{1F60A}',label:'Joyeux'},
-    {val:'\u{1F629}',label:'Épuisé'},
-    {val:'\u{1F622}',label:'Triste'},
-    {val:'\u{1F912}',label:'Malade'},
-    {val:'\u{1F610}',label:'Normal'},
+    {val:'😊',label:'Joyeux'},
+    {val:'😩',label:'Épuisé'},
+    {val:'😢',label:'Triste'},
+    {val:'🤒',label:'Malade'},
+    {val:'😐',label:'Normal'},
+    {val:'😠',label:'Colère'},
+    {val:'🥵',label:'Chaud'},
+    {val:'🥶',label:'Froid'},
+    {val:'🤮',label:'Nauséeux'},
+    {val:'🥱',label:'Fatigué'},
   ];
 
   function todayIso(){

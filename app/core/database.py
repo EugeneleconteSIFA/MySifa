@@ -2874,6 +2874,99 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 93, "bat_entries_v2")
 
+    # v94 — fiches_techniques : colonnes étendues depuis Access
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=94 LIMIT 1").fetchone():
+        cols_to_add = [
+            # Étiquette
+            ("eti_laize",          "REAL"),
+            ("eti_longueur",       "REAL"),
+            ("eti_rayons",         "REAL"),
+            ("eti_perforations",   "TEXT"),
+            # Module
+            ("mod_laize",          "REAL"),
+            ("mod_longueur",       "REAL"),
+            ("mod_nb_front",       "INTEGER"),
+            # Échenillage
+            ("lateral_ext",        "REAL"),
+            ("horizontal",         "REAL"),
+            ("lateral_int",        "REAL"),
+            # Outil 1
+            ("outil1_forme",       "TEXT"),
+            ("outil1_numero_sifa", "TEXT"),
+            ("outil1_laize",       "REAL"),
+            ("machine",            "TEXT"),
+            ("outil1_epaisseur",   "REAL"),
+            ("outil1_nb_dents",    "INTEGER"),
+            ("outil1_nb_front",    "INTEGER"),
+            ("outil1_nb_avance",   "INTEGER"),
+            # Outil 2
+            ("outil2_forme",       "TEXT"),
+            ("outil2_numero_sifa", "TEXT"),
+            ("outil2_epaisseur",   "REAL"),
+            ("outil2_nb_dents",    "INTEGER"),
+            ("outil2_nb_front",    "INTEGER"),
+            ("outil2_nb_avance",   "INTEGER"),
+            # Outil 3
+            ("outil3_forme",       "TEXT"),
+            ("outil3_numero_sifa", "TEXT"),
+            ("outil3_epaisseur",   "REAL"),
+            ("outil3_nb_dents",    "INTEGER"),
+            ("outil3_nb_front",    "INTEGER"),
+            ("outil3_nb_avance",   "INTEGER"),
+            # Matière
+            ("support",            "TEXT"),
+            ("glassine",           "TEXT"),
+            ("laize_optimale",     "REAL"),
+            ("laize_optionnelle",  "REAL"),
+            ("epaisseur",          "REAL"),
+            ("qte_au_mille",       "REAL"),
+            ("date_modif",         "TEXT"),
+            # Impression
+            ("nb_couleurs",        "INTEGER"),
+            ("recto",              "INTEGER"),
+            ("verso",              "INTEGER"),
+            ("tete1_pantone",      "TEXT"),
+            ("tete1_couleur",      "TEXT"),
+            ("tete1_anilox",       "TEXT"),
+            ("tete1_composition",  "TEXT"),
+            ("tete2_pantone",      "TEXT"),
+            ("tete2_couleur",      "TEXT"),
+            ("tete2_anilox",       "TEXT"),
+            ("tete2_composition",  "TEXT"),
+            ("tete3_pantone",      "TEXT"),
+            ("tete3_couleur",      "TEXT"),
+            ("tete3_anilox",       "TEXT"),
+            ("tete3_composition",  "TEXT"),
+            ("remarque",           "TEXT"),
+            # Conditionnement
+            ("mandrin_dia",        "TEXT"),
+            ("mandrin_longueur",   "REAL"),
+            ("enroulement",        "TEXT"),
+            ("nb_etiq_bobin",      "INTEGER"),
+            ("dia_ext",            "REAL"),
+            ("poids",              "REAL"),
+            ("cales_sachets",      "TEXT"),
+            ("cartons",            "TEXT"),
+            ("nb_au_sol",          "INTEGER"),
+            ("nb_etage",           "INTEGER"),
+            ("nb_bobines_carton",  "INTEGER"),
+            # Palettisation
+            ("palette_type",              "TEXT"),
+            ("palette_nb_cartons_sol",    "INTEGER"),
+            ("palette_nb_cartons_hauteur","INTEGER"),
+            ("palette_hauteur_max",       "REAL"),
+            ("particularite",             "TEXT"),
+        ]
+        existing_cols = {r["name"] for r in conn.execute("PRAGMA table_info(fiches_techniques)").fetchall()}
+        for col_name, col_type in cols_to_add:
+            if col_name not in existing_cols:
+                try:
+                    conn.execute(f"ALTER TABLE fiches_techniques ADD COLUMN {col_name} {col_type}")
+                except Exception:
+                    pass
+        conn.commit()
+        _record_schema_migration(conn, 94, "fiches_techniques_extended")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

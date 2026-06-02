@@ -297,6 +297,8 @@ async def update_of_import(of_id: int, request: Request):
     EDITABLE = {
         "of_numero", "reference", "machine", "delai_client",
         "format", "date_creation", "qte_etiquettes", "qte_bobines", "metrage",
+        "matiere", "conditionnement", "outil_1_numero",
+        "nb_mandrins", "nb_cartons", "nb_tubes",
     }
     updates = {k: v for k, v in body.items() if k in EDITABLE}
     if not updates:

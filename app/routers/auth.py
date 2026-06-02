@@ -470,7 +470,7 @@ def delete_my_avatar(request: Request):
 
 
 # ─── Humeur utilisateur ───────────────────────────────────────────
-HUMEURS_VALIDES = {"😊", "😩", "😢", "🤒", "😐"}
+HUMEURS_VALIDES = {"😊", "😩", "😢", "🤒", "😐", "😠", "🥵", "🥶", "🤮", "🥱"}
 
 @router.put("/api/auth/me/humeur")
 async def update_humeur(request: Request):

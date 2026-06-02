@@ -1605,6 +1605,7 @@ function renderFicheEditModal(){
 }
 
 function openOfEditModal(row){
+  fabPauseAutoRefresh(120000);
   set({ofEditModal: {...row}});
   renderOfEditModal();
 }
@@ -1619,14 +1620,21 @@ async function saveOfEdit(){
   const m = S.ofEditModal;
   if(!m) return;
   const payload = {
-    of_numero:      document.getElementById('ofe-numero')?.value.trim()||null,
-    reference:      document.getElementById('ofe-reference')?.value.trim()||null,
-    machine:        document.getElementById('ofe-machine')?.value.trim()||null,
-    delai_client:   document.getElementById('ofe-delai')?.value.trim()||null,
-    format:         document.getElementById('ofe-format')?.value.trim()||null,
-    date_creation:  document.getElementById('ofe-date')?.value.trim()||null,
-    qte_etiquettes: parseFloat(document.getElementById('ofe-qte')?.value)||null,
-    qte_bobines:    parseFloat(document.getElementById('ofe-bobines')?.value)||null,
+    of_numero:       document.getElementById('ofe-numero')?.value.trim()||null,
+    reference:       document.getElementById('ofe-reference')?.value.trim()||null,
+    machine:         document.getElementById('ofe-machine')?.value.trim()||null,
+    delai_client:    document.getElementById('ofe-delai')?.value.trim()||null,
+    format:          document.getElementById('ofe-format')?.value.trim()||null,
+    date_creation:   document.getElementById('ofe-date')?.value.trim()||null,
+    qte_etiquettes:  parseFloat(document.getElementById('ofe-qte')?.value)||null,
+    qte_bobines:     parseFloat(document.getElementById('ofe-bobines')?.value)||null,
+    metrage:         parseInt(document.getElementById('ofe-metrage')?.value)||null,
+    matiere:         document.getElementById('ofe-matiere')?.value.trim()||null,
+    conditionnement: document.getElementById('ofe-cond')?.value.trim()||null,
+    outil_1_numero:  document.getElementById('ofe-outil')?.value.trim()||null,
+    nb_mandrins:     parseInt(document.getElementById('ofe-mandrins')?.value)||null,
+    nb_cartons:      parseInt(document.getElementById('ofe-cartons')?.value)||null,
+    nb_tubes:        parseInt(document.getElementById('ofe-tubes')?.value)||null,
   };
   try{
     await apiFetch('/api/of/'+m.id, {method:'PATCH', body:JSON.stringify(payload)});
@@ -1660,14 +1668,21 @@ function renderOfEditModal(){
     <div class="fab-modal" onclick="event.stopPropagation()" style="max-width:520px;width:100%">
       <div class="fab-modal-title">Modifier l'OF</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 16px">
-        ${field('ofe-numero',   'OF n°',          m.of_numero)}
-        ${field('ofe-reference','Référence',       m.reference)}
-        ${field('ofe-machine',  'Machine',         m.machine)}
-        ${field('ofe-delai',    'Délai client',    m.delai_client)}
-        ${field('ofe-format',   'Format',          m.format)}
-        ${field('ofe-date',     'Date création',   (m.date_creation||'').slice(0,10), 'date')}
-        ${field('ofe-qte',      'Qté étiquettes',  m.qte_etiquettes, 'number')}
-        ${field('ofe-bobines',  'Qté bobines',     m.qte_bobines, 'number')}
+        ${field('ofe-numero',   'OF n°',           m.of_numero)}
+        ${field('ofe-reference','Référence',        m.reference)}
+        ${field('ofe-date',     'Date création',    (m.date_creation||'').slice(0,10), 'date')}
+        ${field('ofe-delai',    'Délai client',     m.delai_client)}
+        ${field('ofe-machine',  'Machine',          m.machine)}
+        ${field('ofe-format',   'Format',           m.format)}
+        ${field('ofe-matiere',  'Matière',          m.matiere)}
+        ${field('ofe-cond',     'Conditionnement',  m.conditionnement)}
+        ${field('ofe-outil',    'N° plaque',        m.outil_1_numero)}
+        ${field('ofe-qte',      'Qté étiquettes',   m.qte_etiquettes, 'number')}
+        ${field('ofe-bobines',  'Qté bobines',      m.qte_bobines, 'number')}
+        ${field('ofe-metrage',  'Métrage',          m.metrage, 'number')}
+        ${field('ofe-mandrins', 'Nb mandrins',      m.nb_mandrins, 'number')}
+        ${field('ofe-cartons',  'Nb cartons',       m.nb_cartons, 'number')}
+        ${field('ofe-tubes',    'Nb tubes',         m.nb_tubes, 'number')}
       </div>
       <div class="fab-modal-btns">
         <button class="fab-btn fab-btn-ghost" onclick="closeOfEditModal()">Annuler</button>
@@ -2084,7 +2099,7 @@ function renderOfImportModal(){
   if(!mr) return;
   const m = S.ofImportModal;
   if(!m){
-    if(!S.showArret50Modal) mr.innerHTML = '';
+    if(!S.showArret50Modal && !S.ofEditModal && !S.ficheEditModal) mr.innerHTML = '';
     return;
   }
   mr.innerHTML = '';
@@ -3985,7 +4000,7 @@ function renderArret50Modal(){
   const mr = document.getElementById('mroot');
   if(!mr) return;
   if(!S.showArret50Modal){
-    if(!S.ofImportModal) mr.innerHTML = '';
+    if(!S.ofImportModal && !S.ofEditModal && !S.ficheEditModal) mr.innerHTML = '';
     return;
   }
   mr.innerHTML = '';
