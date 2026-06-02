@@ -14,7 +14,12 @@ from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 
 from app.services.audit_service import log_action
-from config import STOCK_EMPLACEMENT_AU_SOL, STOCK_EMPLACEMENT_AU_SOL_LABEL
+from config import (
+    STOCK_EMPLACEMENT_AU_SOL,
+    STOCK_EMPLACEMENT_AU_SOL_LABEL,
+    STOCK_EMPLACEMENT_SORTIE_PROD,
+    STOCK_EMPLACEMENT_SORTIE_PROD_LABEL,
+)
 from database import get_db, parse_file
 from services.auth_service import get_current_user, user_has_app_access
 
@@ -28,11 +33,11 @@ def _normalize_emplacement(code: str) -> str:
 
 
 def _is_valid_emplacement(code: str) -> bool:
-    """Code grille (A121…) ou zone spéciale Au sol - à expédier (Z0)."""
+    """Code grille (A121…) ou zones spéciales Z0 / Z1."""
     empl = _normalize_emplacement(code)
     if not empl:
         return False
-    if empl == STOCK_EMPLACEMENT_AU_SOL:
+    if empl in (STOCK_EMPLACEMENT_AU_SOL, STOCK_EMPLACEMENT_SORTIE_PROD):
         return True
     return empl[0].isalpha() and empl[1:].isdigit()
 
@@ -866,12 +871,18 @@ def list_emplacements(request: Request):
         ).fetchall()
     codes_plan = {r["code"] for r in plan}
     codes_reels = {r["emplacement"] for r in reels}
-    tous = sorted(codes_plan | codes_reels | {STOCK_EMPLACEMENT_AU_SOL})
-    ordered = [STOCK_EMPLACEMENT_AU_SOL] + [c for c in tous if c != STOCK_EMPLACEMENT_AU_SOL]
+    zones_speciales = {STOCK_EMPLACEMENT_AU_SOL, STOCK_EMPLACEMENT_SORTIE_PROD}
+    tous = sorted(codes_plan | codes_reels | zones_speciales)
+    ordered = (
+        [STOCK_EMPLACEMENT_AU_SOL, STOCK_EMPLACEMENT_SORTIE_PROD]
+        + [c for c in tous if c not in zones_speciales]
+    )
     return {
         "emplacements": ordered,
         "emplacement_au_sol": STOCK_EMPLACEMENT_AU_SOL,
         "emplacement_au_sol_label": STOCK_EMPLACEMENT_AU_SOL_LABEL,
+        "emplacement_sortie_prod": STOCK_EMPLACEMENT_SORTIE_PROD,
+        "emplacement_sortie_prod_label": STOCK_EMPLACEMENT_SORTIE_PROD_LABEL,
     }
 
 
@@ -932,15 +943,17 @@ def get_emplacement(emplacement: str, request: Request):
             d["alerte_inventaire"] = True
         refs_data.append(d)
 
-    label = (
-        STOCK_EMPLACEMENT_AU_SOL_LABEL
-        if emplacement == STOCK_EMPLACEMENT_AU_SOL
-        else emplacement
-    )
+    if emplacement == STOCK_EMPLACEMENT_AU_SOL:
+        label = STOCK_EMPLACEMENT_AU_SOL_LABEL
+    elif emplacement == STOCK_EMPLACEMENT_SORTIE_PROD:
+        label = STOCK_EMPLACEMENT_SORTIE_PROD_LABEL
+    else:
+        label = emplacement
     return {
         "emplacement": emplacement,
         "label": label,
         "est_au_sol": emplacement == STOCK_EMPLACEMENT_AU_SOL,
+        "est_sortie_prod": emplacement == STOCK_EMPLACEMENT_SORTIE_PROD,
         "refs": refs_data,
         "total_unites": sum(r["quantite"] for r in refs),
         "nb_refs": len(refs),
@@ -971,6 +984,35 @@ def stock_a_expedier(request: Request):
     return {
         "emplacement": empl,
         "label": STOCK_EMPLACEMENT_AU_SOL_LABEL,
+        "refs": refs_data,
+        "total_unites": total,
+        "nb_refs": len(refs_data),
+    }
+
+
+@router.get("/api/stock/sortie-prod")
+def stock_sortie_prod(request: Request):
+    """Produits en zone En attente - sortie de prod (Z1) — stock fraîchement sorti de production."""
+    require_stock(request)
+    empl = STOCK_EMPLACEMENT_SORTIE_PROD
+    with get_db() as conn:
+        refs = conn.execute(
+            """SELECT p.id, p.reference, p.designation, p.unite,
+                      SUM(l.quantite_restante) as quantite,
+                      COUNT(*) as nb_lots,
+                      MIN(CASE WHEN l.quantite_restante>0 THEN l.date_entree END) as date_fifo
+               FROM lots_stock l
+               JOIN produits p ON p.id=l.produit_id
+               WHERE l.emplacement=? AND l.quantite_restante>0
+               GROUP BY p.id
+               ORDER BY p.reference""",
+            (empl,),
+        ).fetchall()
+    refs_data = [dict(r) for r in refs]
+    total = sum(float(r["quantite"] or 0) for r in refs_data)
+    return {
+        "emplacement": empl,
+        "label": STOCK_EMPLACEMENT_SORTIE_PROD_LABEL,
         "refs": refs_data,
         "total_unites": total,
         "nb_refs": len(refs_data),

@@ -363,6 +363,8 @@ body.light .btn.btn-accent{color:#fff}
 .empl-code{font-family:monospace;font-weight:800;font-size:14px;color:var(--accent)}
 .empl-code.empl-au-sol{font-family:inherit;color:var(--warn)}
 .empl-au-sol-hint{font-size:12px;color:var(--warn);margin-top:8px;line-height:1.5;font-weight:600}
+.empl-code.empl-sortie-prod{font-family:inherit;color:var(--success)}
+.empl-sortie-prod-hint{font-size:12px;color:var(--success);margin-top:8px;line-height:1.5;font-weight:600}
 .a-exp-list{display:flex;flex-direction:column;gap:8px;max-height:min(60vh,420px);overflow-y:auto;margin-top:12px}
 .a-exp-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;cursor:pointer;transition:background .12s,border-color .12s}
 .a-exp-row:hover{background:var(--accent-bg);border-color:rgba(34,211,238,.35)}
@@ -370,8 +372,11 @@ body.light .btn.btn-accent{color:#fff}
 .a-exp-des{font-size:12px;color:var(--text2);margin-top:2px}
 .a-exp-qte{font-size:13px;font-weight:700;color:var(--text);white-space:nowrap}
 .mvt-empl-link-au-sol{color:var(--warn)!important}
+.mvt-empl-link-sortie-prod{color:var(--success)!important}
 .pf-empl-badge.pf-empl-au-sol{background:rgba(251,191,36,.12);color:var(--warn);border-color:rgba(251,191,36,.4)}
+.pf-empl-badge.pf-empl-sortie-prod{background:rgba(52,211,153,.12);color:var(--success);border-color:rgba(52,211,153,.4)}
 .empl-suggest-au-sol{font-weight:700;color:var(--warn)}
+.empl-suggest-sortie-prod{font-weight:700;color:var(--success)}
 .empl-info{font-size:11px;color:var(--muted);margin-top:2px}
 .empl-qte{font-family:monospace;font-weight:700;font-size:13px;text-align:right}
 .empl-date{font-size:11px;color:var(--muted);text-align:right;margin-top:2px}
@@ -1743,9 +1748,14 @@ function stockHistRefLink(m, label) {
 function stockHistEmplLinks(raw) {
   const codes = parseHistEmplacements(raw);
   if (!codes.length) return el('span', { cls: 'hist-muted' }, '—');
+  const _emplLinkCls = (code) => {
+    if (isStockEmplacementAuSol(code)) return 'mvt-empl-link mvt-empl-link-au-sol';
+    if (isStockEmplacementSortieProd(code)) return 'mvt-empl-link mvt-empl-link-sortie-prod';
+    return 'mvt-empl-link';
+  };
   if (codes.length === 1) {
     return el('button', {
-      cls: 'mvt-empl-link' + (isStockEmplacementAuSol(codes[0]) ? ' mvt-empl-link-au-sol' : ''),
+      cls: _emplLinkCls(codes[0]),
       type: 'button',
       on: { click: (e) => { e.stopPropagation(); loadEmplacement(codes[0]); } },
     }, stockEmplLabel(codes[0]));
@@ -1754,7 +1764,7 @@ function stockHistEmplLinks(raw) {
   codes.forEach((code, i) => {
     if (i) wrap.appendChild(el('span', { cls: 'hist-empl-sep' }, ' → '));
     wrap.appendChild(el('button', {
-      cls: 'mvt-empl-link' + (isStockEmplacementAuSol(code) ? ' mvt-empl-link-au-sol' : ''),
+      cls: _emplLinkCls(code),
       type: 'button',
       on: { click: (e) => { e.stopPropagation(); loadEmplacement(code); } },
     }, stockEmplLabel(code)));
@@ -1932,14 +1942,16 @@ async function openMoveLotModal(produitId, emplacement, qLot, unite, refLabel, n
       suggWrap.innerHTML = '';
       if (!filtered.length) { suggWrap.style.display = 'none'; return; }
       filtered.forEach(code => {
-        const row = el('div', { cls:'empl-suggest-item' + (isStockEmplacementAuSol(code) ? ' empl-suggest-au-sol' : ''),
+        const _dCls = 'empl-suggest-item' + (isStockEmplacementAuSol(code) ? ' empl-suggest-au-sol' : isStockEmplacementSortieProd(code) ? ' empl-suggest-sortie-prod' : '');
+        const _dTxt = isStockEmplacementAuSol(code) ? (STOCK_EMPL_AU_SOL_LABEL + ' — stock à expédier') : isStockEmplacementSortieProd(code) ? STOCK_EMPL_SORTIE_PROD_LABEL : code;
+        const row = el('div', { cls: _dCls,
           on:{ click: () => {
             destEmplInp.value = code;
             selectedDestEmpl = code;
             suggWrap.innerHTML = '';
             suggWrap.style.display = 'none';
           }}
-        }, isStockEmplacementAuSol(code) ? (STOCK_EMPL_AU_SOL_LABEL + ' — stock à expédier') : code);
+        }, _dTxt);
         suggWrap.appendChild(row);
       });
       suggWrap.style.display = '';
@@ -2068,6 +2080,8 @@ async function sortirLot(produitId, emplacement, qLot, unite, refLabel, nbLots, 
 let _emplListFromDB = [];
 const STOCK_EMPL_AU_SOL = 'Z0';
 const STOCK_EMPL_AU_SOL_LABEL = 'Au sol - à expédier';
+const STOCK_EMPL_SORTIE_PROD = 'Z1';
+const STOCK_EMPL_SORTIE_PROD_LABEL = 'En attente - sortie de prod';
 const LS_STOCK_EMPL_CUSTOM = 'mysifa_stock_empl_custom';
 const STOCK_UNITS_BASE = ['cartons','bobines','étiquettes','palettes','paravents','boîtes'];
 const LS_STOCK_UNITS_CUSTOM = 'mysifa_stock_units_custom_v1';
@@ -2099,17 +2113,24 @@ function addPageCustomEmplacement(code) {
   if (cur.includes(t)) return false;
   cur.push(t); savePageEmplCustom(cur); return true;
 }
+const _STOCK_ZONES_SPECIALES = [STOCK_EMPL_AU_SOL, STOCK_EMPL_SORTIE_PROD];
 function allPageEmplacementChoices() {
   const base = [...new Set([..._emplListFromDB, ...loadPageEmplCustom()])]
-    .filter(c => c !== STOCK_EMPL_AU_SOL)
+    .filter(c => !_STOCK_ZONES_SPECIALES.includes(c))
     .sort();
-  return [STOCK_EMPL_AU_SOL, ...base];
+  return [..._STOCK_ZONES_SPECIALES, ...base];
 }
 function isStockEmplacementAuSol(code) {
   return String(code || '').trim().toUpperCase() === STOCK_EMPL_AU_SOL;
 }
+function isStockEmplacementSortieProd(code) {
+  return String(code || '').trim().toUpperCase() === STOCK_EMPL_SORTIE_PROD;
+}
+function isStockZoneSpeciale(code) {
+  return _STOCK_ZONES_SPECIALES.includes(String(code || '').trim().toUpperCase());
+}
 function isStockEmplacementCode(s) {
-  if (isStockEmplacementAuSol(s)) return true;
+  if (isStockZoneSpeciale(s)) return true;
   const t = String(s || '').trim().toUpperCase();
   if (t.length < 2) return false;
   const c0 = t.charCodeAt(0);
@@ -2121,10 +2142,14 @@ function isStockEmplacementCode(s) {
   return true;
 }
 function stockEmplLabel(code) {
-  return isStockEmplacementAuSol(code) ? STOCK_EMPL_AU_SOL_LABEL : String(code || '').trim().toUpperCase();
+  if (isStockEmplacementAuSol(code)) return STOCK_EMPL_AU_SOL_LABEL;
+  if (isStockEmplacementSortieProd(code)) return STOCK_EMPL_SORTIE_PROD_LABEL;
+  return String(code || '').trim().toUpperCase();
 }
 function stockEmplCodeClass(code) {
-  return 'empl-code' + (isStockEmplacementAuSol(code) ? ' empl-au-sol' : '');
+  if (isStockEmplacementAuSol(code)) return 'empl-code empl-au-sol';
+  if (isStockEmplacementSortieProd(code)) return 'empl-code empl-sortie-prod';
+  return 'empl-code';
 }
 const ADD_PF_FIELD_IDS = {
   emplInput: 'dash-add-pf-empl-input',
@@ -2148,10 +2173,12 @@ function refreshAddEmplDropdownInner(inputId, listId) {
   list.innerHTML = '';
   filtered.forEach(code => {
     const row = document.createElement('div');
-    row.className = 'empl-suggest-item' + (isStockEmplacementAuSol(code) ? ' empl-suggest-au-sol' : '');
-    row.textContent = isStockEmplacementAuSol(code)
-      ? (STOCK_EMPL_AU_SOL_LABEL + ' — stock à expédier')
-      : code;
+    let extraCls = '';
+    let label = code;
+    if (isStockEmplacementAuSol(code)) { extraCls = ' empl-suggest-au-sol'; label = STOCK_EMPL_AU_SOL_LABEL + ' — stock à expédier'; }
+    else if (isStockEmplacementSortieProd(code)) { extraCls = ' empl-suggest-sortie-prod'; label = STOCK_EMPL_SORTIE_PROD_LABEL; }
+    row.className = 'empl-suggest-item' + extraCls;
+    row.textContent = label;
     row.addEventListener('mousedown', e => { e.preventDefault(); input.value = code; hideAddEmplDropdown(listId); });
     list.appendChild(row);
   });
@@ -3141,7 +3168,9 @@ function updateSearchResults() {
           el('div',{cls:'si-des'},
             isStockEmplacementAuSol(e.emplacement)
               ? 'Stock à expédier · ' + e.nb_refs + ' référence' + (e.nb_refs > 1 ? 's' : '')
-              : e.nb_refs + ' référence' + (e.nb_refs > 1 ? 's' : '')
+              : isStockEmplacementSortieProd(e.emplacement)
+                ? 'Sortie de prod · ' + e.nb_refs + ' référence' + (e.nb_refs > 1 ? 's' : '')
+                : e.nb_refs + ' référence' + (e.nb_refs > 1 ? 's' : '')
           ),
         ),
         el('div',{cls:'si-badge'},fN(e.total_unites))
@@ -4289,7 +4318,7 @@ function buildProduitsFinisTab() {
             el('div', { cls: 'pf-stock-row', style: { marginTop: '6px' } },
               el('span', { cls: 'pf-stock-qte' }, fU(row.quantite, row.unite)),
               el('span', {
-                cls: 'pf-empl-badge' + (isStockEmplacementAuSol(row.emplacement) ? ' pf-empl-au-sol' : ''),
+                cls: 'pf-empl-badge' + (isStockEmplacementAuSol(row.emplacement) ? ' pf-empl-au-sol' : isStockEmplacementSortieProd(row.emplacement) ? ' pf-empl-sortie-prod' : ''),
               }, stockEmplLabel(row.emplacement) || '—'),
             ),
             el('div', { cls: 'pf-stock-meta' }, 'Dernière entrée : ' + fD(row.derniere_entree)),
@@ -5265,7 +5294,7 @@ function buildMpEmplacementField() {
     cls: 'field-input empl-upper',
     attrs: {
       type: 'text',
-      placeholder: 'Emplacement (ex. A121, Au sol ' + STOCK_EMPL_AU_SOL + ')…',
+      placeholder: 'Emplacement (ex. A121, ' + STOCK_EMPL_AU_SOL + ', ' + STOCK_EMPL_SORTIE_PROD + ')…',
       autocomplete: 'off',
     },
     style: { direction: 'ltr' },
@@ -5287,7 +5316,7 @@ function mpEmplacementValue(emplInp) {
 function validateMpEmplacement(empl) {
   if (!empl) return 'Emplacement obligatoire.';
   if (!isStockEmplacementCode(empl)) {
-    return 'Format invalide — grille (ex. A123) ou zone « ' + STOCK_EMPL_AU_SOL_LABEL + ' » (' + STOCK_EMPL_AU_SOL + ').';
+    return 'Format invalide — grille (ex. A123), « ' + STOCK_EMPL_AU_SOL_LABEL + ' » (' + STOCK_EMPL_AU_SOL + ') ou « ' + STOCK_EMPL_SORTIE_PROD_LABEL + ' » (' + STOCK_EMPL_SORTIE_PROD + ').';
   }
   return null;
 }
@@ -6358,6 +6387,75 @@ function dashStockTypeBadge(typeStock) {
   return el('span', { cls: 'dash-badge dash-badge-stock-' + ts }, lbl);
 }
 
+async function openStockSortieProdQuick() {
+  const mroot = document.getElementById('mroot');
+  if (!mroot) return;
+  closeMroot();
+  const overlay = el('div', {
+    cls: 'modal-overlay',
+    on: { click: (e) => { if (e.target === overlay) closeMroot(); } },
+  });
+  const sheet = el('div', { cls: 'modal-sheet', style: { maxWidth: '560px' }, on: { click: (e) => e.stopPropagation() } });
+  sheet.appendChild(el('div', { cls: 'modal-title' }, 'En attente - sortie de prod'));
+  sheet.appendChild(el('div', { cls: 'modal-sub' }, 'Chargement…'));
+  overlay.appendChild(sheet);
+  mroot.appendChild(overlay);
+  try {
+    const d = await api('/api/stock/sortie-prod');
+    renderStockSortieProdModalContent(sheet, d);
+  } catch (e) {
+    sheet.innerHTML = '';
+    sheet.appendChild(el('div', { cls: 'modal-title' }, 'En attente - sortie de prod'));
+    sheet.appendChild(el('div', { cls: 'mp-hint err' }, e.message || 'Erreur de chargement.'));
+    sheet.appendChild(el('button', {
+      cls: 'btn-cancel', type: 'button', style: { marginTop: '14px', width: '100%' },
+      on: { click: closeMroot },
+    }, 'Fermer'));
+  }
+}
+
+function renderStockSortieProdModalContent(sheet, data) {
+  sheet.innerHTML = '';
+  const refs = data?.refs || [];
+  const label = data?.label || STOCK_EMPL_SORTIE_PROD_LABEL;
+  sheet.appendChild(el('div', { cls: 'modal-title' }, 'En attente - sortie de prod'));
+  sheet.appendChild(el('div', { cls: 'modal-sub' },
+    'Références en zone « ' + label + ' » — sorties de production, en attente de rangement.',
+  ));
+  if (!refs.length) {
+    sheet.appendChild(el('div', { cls: 'card-empty', style: { padding: '24px 8px' } },
+      'Aucun produit en zone sortie de prod pour le moment.',
+    ));
+  } else {
+    const list = el('div', { cls: 'a-exp-list' });
+    refs.forEach(r => {
+      list.appendChild(el('div', {
+        cls: 'a-exp-row',
+        on: { click: () => { closeMroot(); loadProduit(r.id); } },
+      },
+        el('div', null,
+          el('div', { cls: 'a-exp-ref' }, r.reference || '—'),
+          el('div', { cls: 'a-exp-des' }, r.designation || ''),
+        ),
+        el('div', { cls: 'a-exp-qte' }, fU(r.quantite, r.unite || '')),
+      ));
+    });
+    sheet.appendChild(list);
+    sheet.appendChild(el('div', {
+      style: { fontSize: '12px', color: 'var(--muted)', marginTop: '10px' },
+    }, refs.length + ' référence' + (refs.length > 1 ? 's' : '') + ' · ' + fN(data.total_unites || 0) + ' u.'));
+  }
+  const actions = el('div', { cls: 'modal-actions', style: { marginTop: '16px' } });
+  actions.appendChild(el('button', { cls: 'btn-cancel', type: 'button', on: { click: closeMroot } }, 'Fermer'));
+  if (refs.length) {
+    actions.appendChild(el('button', {
+      cls: 'btn btn-accent', type: 'button',
+      on: { click: () => { closeMroot(); loadEmplacement(data?.emplacement || STOCK_EMPL_SORTIE_PROD); } },
+    }, 'Voir zone ' + label));
+  }
+  sheet.appendChild(actions);
+}
+
 function buildDashboardKpis(s) {
   const kpis = [
     {
@@ -6481,6 +6579,7 @@ function buildDashboardShortcuts() {
     el('div', { cls: 'dash-quick-grid' },
       mk('Ajouter stock produits finis', openDashboardAddPfModal, 'accent', 'plus-circle'),
       mk('Stock à expédier', openStockAExpedierQuick, 'warn', 'package'),
+      mk('Sortie de prod', openStockSortieProdQuick, 'success', 'layers'),
       mk('Réception matière', openReceptionQuick, 'warn', 'truck'),
       mk('Entrée PF', () => openModalPfMouvement('entree'), 'pf-entree', 'upload'),
       mk('Sortie PF', () => openModalPfMouvement('sortie'), 'pf-sortie', 'download'),
@@ -6593,7 +6692,7 @@ function renderDashboardAddPfModal() {
   const emplWrap = el('div', { cls: 'empl-combo-wrap' });
   const emplInp = el('input', {
     cls: 'field-input empl-upper', type: 'text', id: F.emplInput,
-    placeholder: 'Emplacement (ex. a121) ou Au sol (' + STOCK_EMPL_AU_SOL + ')', autocomplete: 'off',
+    placeholder: 'Emplacement (ex. A121, ' + STOCK_EMPL_AU_SOL + ', ' + STOCK_EMPL_SORTIE_PROD + ')', autocomplete: 'off',
     title: 'Obligatoire — suggestions + ligne violette « Ajouter emplacement »', style: { direction: 'ltr' },
   });
   const emplList = el('div', { cls: 'empl-suggestions', id: F.emplList, style: { display: 'none' } });
@@ -6644,7 +6743,7 @@ function renderDashboardAddPfModal() {
     const qRaw = (qtyI.value || '').trim();
     const emplVal = String((emplInp.value || '').trim().toUpperCase());
     if (!emplVal || !isStockEmplacementCode(emplVal)) {
-      showToast('Emplacement obligatoire (grille ex. A121 ou ' + STOCK_EMPL_AU_SOL_LABEL + ' ' + STOCK_EMPL_AU_SOL + ')', 'error');
+      showToast('Emplacement obligatoire (ex. A121, ' + STOCK_EMPL_AU_SOL + ' ou ' + STOCK_EMPL_SORTIE_PROD + ')', 'error');
       return;
     }
     const qte = parseFloat(qRaw.replace(',', '.'));
@@ -6804,7 +6903,9 @@ function buildEmplacementDetail() {
     el('div',{cls:stockEmplCodeClass(code)},stockEmplLabel(code)),
     isStockEmplacementAuSol(code)
       ? el('div',{cls:'empl-au-sol-hint'},'Stock prêt à expédier — ces références partiront prochainement.')
-      : null,
+      : isStockEmplacementSortieProd(code)
+        ? el('div',{cls:'empl-sortie-prod-hint'},'Stock sorti de production — en attente de rangement ou d\'expédition.')
+        : null,
     el('div',{cls:'sc-des'},(sel.nb_refs||0)+' réf. · '+fN(sel.total_unites)+' u. en stock'),
     el('div',{cls:'sc-stats'},
       el('div',{cls:'sc-stat'},el('div',{cls:'sc-stat-label'},'Références'),el('div',{cls:'sc-stat-value'},String(refs.length))),
