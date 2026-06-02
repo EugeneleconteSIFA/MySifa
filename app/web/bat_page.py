@@ -855,6 +855,7 @@ async function submitDelete(){
   });
 })();
 </script>
+<script>window.__MYSIFA_APP__='bat';</script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js"></script>
 <script src="/static/chat_widget_v2.js"></script>
