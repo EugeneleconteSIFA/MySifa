@@ -406,6 +406,8 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
   #cw-messages{padding:8px 10px}
   .cw-msg-wrap{max-width:72%}
 }
+.cw-icon-wrap{position:relative;display:inline-block;flex-shrink:0}
+.cw-humeur-badge{position:absolute;bottom:-2px;left:-2px;font-size:11px;line-height:1;pointer-events:none;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))}
 `;
 
   function escAttr(s) {
@@ -461,27 +463,43 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
   function cwChannelIconHtml(ch, size) {
     const sz = size || 28;
     if (!ch) return cwAvatarHtml('', '', sz);
+
+    let iconHtml;
+
     if (ch.type === 'direct') {
       const nom = ch.display_name || ch.name || '';
       if (ch.other_user_id) cacheUserAvatar(ch.other_user_id, nom, ch.other_user_avatar_url || '');
-      return cwAvatarHtml(nom, ch.other_user_avatar_url || '', sz);
+      iconHtml = cwAvatarHtml(nom, ch.other_user_avatar_url || '', sz);
+    } else {
+      const emoji = (ch.emoji || '').trim();
+      if (emoji) {
+        const fs = Math.max(14, Math.round(sz * 0.6));
+        iconHtml =
+          '<span class="cw-avatar-ph cw-chan-emoji" aria-hidden="true" style="width:' +
+          sz +
+          'px;height:' +
+          sz +
+          'px;font-size:' +
+          fs +
+          'px">' +
+          escCW(emoji) +
+          '</span>';
+      } else {
+        iconHtml = cwAvatarHtml(ch.display_name || ch.name || 'Canal', '', sz);
+      }
     }
-    const emoji = (ch.emoji || '').trim();
-    if (emoji) {
-      const fs = Math.max(14, Math.round(sz * 0.6));
+
+    const humeur = ch.type === 'direct' ? (ch.other_user_humeur || '') : '';
+    if (humeur) {
       return (
-        '<span class="cw-avatar-ph cw-chan-emoji" aria-hidden="true" style="width:' +
-        sz +
-        'px;height:' +
-        sz +
-        'px;font-size:' +
-        fs +
-        'px">' +
-        escCW(emoji) +
-        '</span>'
+        '<span class="cw-icon-wrap">' +
+        iconHtml +
+        '<span class="cw-humeur-badge">' +
+        escCW(humeur) +
+        '</span></span>'
       );
     }
-    return cwAvatarHtml(ch.display_name || ch.name || 'Canal', '', sz);
+    return iconHtml;
   }
 
   function fmtTime(iso) {
