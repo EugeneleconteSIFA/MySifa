@@ -38,8 +38,9 @@ def _now() -> str:
 
 def _row_to_dict(row) -> dict:
     d = dict(row)
-    # Construire la référence BAT affichée
-    d["reference"] = f"{d['numero_client']}/{d['numero_article']}"
+    desc = d.get("description") or d.get("numero_client") or ""
+    d["description"] = desc
+    d["reference"] = f"{desc}/{d['numero_article']}" if desc else d["numero_article"]
     d["has_pdf"] = bool(d.get("pdf_path"))
     return d
 
@@ -91,34 +92,47 @@ def get_bat(bat_id: int, request: Request):
 # ─── Création ─────────────────────────────────────────────────────────────────
 
 class BatCreate(BaseModel):
-    numero_client: str
+    description: str
     numero_article: str
+    delai_client: Optional[str] = None
     notes: Optional[str] = None
 
 
 @router.post("/api/bat")
 def create_bat(body: BatCreate, request: Request):
     user = _require_bat_access(request)
-    numero_client = body.numero_client.strip()
+    description = body.description.strip()
     numero_article = body.numero_article.strip()
-    if not numero_client or not numero_article:
-        raise HTTPException(status_code=400, detail="Numéro client et numéro article obligatoires")
+    if not description or not numero_article:
+        raise HTTPException(status_code=400, detail="Description et numéro article obligatoires")
     now = _now()
     with get_db() as conn:
+        # Récupérer les colonnes disponibles
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(bat_entries)").fetchall()}
+        desc_col = "description" if "description" in cols else "numero_client"
+
         existing = conn.execute(
-            "SELECT id FROM bat_entries WHERE numero_client=? AND numero_article=?",
-            (numero_client, numero_article),
+            f"SELECT id FROM bat_entries WHERE {desc_col}=? AND numero_article=?",
+            (description, numero_article),
         ).fetchone()
         if existing:
             raise HTTPException(
                 status_code=409,
-                detail=f"Un BAT existe déjà pour {numero_client}/{numero_article}",
+                detail=f"Un BAT existe déjà pour {description}/{numero_article}",
             )
-        cur = conn.execute(
-            """INSERT INTO bat_entries (numero_client, numero_article, statut, notes, created_at, updated_at, created_by, updated_by)
-               VALUES (?, ?, 'a_faire', ?, ?, ?, ?, ?)""",
-            (numero_client, numero_article, body.notes, now, now, user["id"], user["id"]),
-        )
+
+        if "delai_client" in cols:
+            cur = conn.execute(
+                f"""INSERT INTO bat_entries ({desc_col}, numero_article, statut, delai_client, notes, created_at, updated_at, created_by, updated_by)
+                   VALUES (?, ?, 'a_faire', ?, ?, ?, ?, ?, ?)""",
+                (description, numero_article, body.delai_client, body.notes, now, now, user["id"], user["id"]),
+            )
+        else:
+            cur = conn.execute(
+                f"""INSERT INTO bat_entries ({desc_col}, numero_article, statut, notes, created_at, updated_at, created_by, updated_by)
+                   VALUES (?, ?, 'a_faire', ?, ?, ?, ?, ?)""",
+                (description, numero_article, body.notes, now, now, user["id"], user["id"]),
+            )
         conn.commit()
         row = conn.execute(
             "SELECT b.*, u1.nom AS created_by_nom, u2.nom AS updated_by_nom "
@@ -131,11 +145,14 @@ def create_bat(body: BatCreate, request: Request):
     return _row_to_dict(row)
 
 
-# ─── Mise à jour statut / notes ───────────────────────────────────────────────
+# ─── Mise à jour ──────────────────────────────────────────────────────────────
 
 class BatUpdate(BaseModel):
     statut: Optional[str] = None
     notes: Optional[str] = None
+    description: Optional[str] = None
+    numero_article: Optional[str] = None
+    delai_client: Optional[str] = None
 
 
 @router.put("/api/bat/{bat_id}")
@@ -147,6 +164,9 @@ def update_bat(bat_id: int, body: BatUpdate, request: Request):
             raise HTTPException(status_code=404, detail="BAT introuvable")
 
         current = dict(row)
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(bat_entries)").fetchall()}
+        desc_col = "description" if "description" in cols else "numero_client"
+
         new_statut = body.statut if body.statut is not None else current["statut"]
         if new_statut not in BAT_STATUTS:
             raise HTTPException(status_code=400, detail="Statut invalide")
@@ -158,12 +178,25 @@ def update_bat(bat_id: int, body: BatUpdate, request: Request):
                 detail="Un PDF doit être importé avant de passer en statut 'en attente'",
             )
 
-        new_notes = body.notes if body.notes is not None else current["notes"]
+        new_notes = body.notes if body.notes is not None else current.get("notes")
+        new_desc = body.description.strip() if body.description is not None else current.get(desc_col, current.get("description", ""))
+        new_article = body.numero_article.strip() if body.numero_article is not None else current["numero_article"]
+        new_delai = body.delai_client if body.delai_client is not None else current.get("delai_client")
+
+        if not new_desc or not new_article:
+            raise HTTPException(status_code=400, detail="Description et numéro article obligatoires")
+
         now = _now()
-        conn.execute(
-            "UPDATE bat_entries SET statut=?, notes=?, updated_at=?, updated_by=? WHERE id=?",
-            (new_statut, new_notes, now, user["id"], bat_id),
-        )
+        if "delai_client" in cols:
+            conn.execute(
+                f"UPDATE bat_entries SET statut=?, notes=?, {desc_col}=?, numero_article=?, delai_client=?, updated_at=?, updated_by=? WHERE id=?",
+                (new_statut, new_notes, new_desc, new_article, new_delai, now, user["id"], bat_id),
+            )
+        else:
+            conn.execute(
+                f"UPDATE bat_entries SET statut=?, notes=?, {desc_col}=?, numero_article=?, updated_at=?, updated_by=? WHERE id=?",
+                (new_statut, new_notes, new_desc, new_article, now, user["id"], bat_id),
+            )
         conn.commit()
         updated = conn.execute(
             "SELECT b.*, u1.nom AS created_by_nom, u2.nom AS updated_by_nom "
@@ -240,7 +273,8 @@ def download_bat_pdf(bat_id: int, request: Request):
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="Fichier PDF introuvable sur le serveur")
 
-    ref = f"{current['numero_client']}_{current['numero_article']}"
+    desc = current.get("description") or current.get("numero_client") or "BAT"
+    ref = f"{desc}_{current['numero_article']}"
     return FileResponse(
         path,
         media_type="application/pdf",

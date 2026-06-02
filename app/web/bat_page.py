@@ -47,6 +47,7 @@ BAT_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/support_widget.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
+<script>try{if(localStorage.getItem('mysifa_theme')==='light')document.documentElement.classList.add('light-pre');}catch(e){}</script>
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -55,7 +56,7 @@ BAT_HTML = r"""<!DOCTYPE html>
   --ok:#34d399;--danger:#f87171;--warn:#fbbf24;--success:#34d399;
   --sidebar-w:220px;
 }
-body.light{
+html.light-pre body,body.light{
   --bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;
   --muted:#64748b;--accent:#0891b2;--accent-bg:rgba(8,145,178,.08);
   --ok:#059669;--danger:#dc2626;--warn:#d97706;
@@ -111,7 +112,7 @@ body.sb-open .sidebar-overlay{display:block}
 .mobile-home-btn:hover{color:var(--accent)}
 
 /* ── Content ── */
-.content{padding:28px 32px;max-width:1200px;width:100%}
+.content{padding:28px 32px;max-width:1280px;width:100%}
 @media(max-width:768px){.content{padding:16px}}
 
 /* ── Page header ── */
@@ -147,7 +148,7 @@ body.sb-open .sidebar-overlay{display:block}
 /* ── Table ── */
 .table-wrap{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
 .table-wrap table{width:100%;border-collapse:collapse}
-.table-wrap th{padding:11px 16px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;text-align:left;border-bottom:1px solid var(--border)}
+.table-wrap th{padding:11px 16px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
 .table-wrap td{padding:13px 16px;font-size:13px;border-bottom:1px solid var(--border);vertical-align:middle}
 .table-wrap tr:last-child td{border-bottom:none}
 .table-wrap tr:hover td{background:rgba(255,255,255,.02)}
@@ -158,6 +159,8 @@ body.light .table-wrap tr:hover td{background:rgba(0,0,0,.02)}
 .badge-afaire{background:rgba(251,191,36,.14);color:var(--warn)}
 .badge-attente{background:rgba(34,211,238,.12);color:var(--accent)}
 .badge-valide{background:rgba(52,211,153,.12);color:var(--ok)}
+.badge-clickable{cursor:pointer;transition:filter .15s}
+.badge-clickable:hover{filter:brightness(1.2)}
 
 /* ── Action group ── */
 .action-group{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
@@ -174,7 +177,7 @@ body.light .table-wrap tr:hover td{background:rgba(0,0,0,.02)}
 
 /* ── Modal overlay ── */
 .modal-ov{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px}
-.modal{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px 28px 24px;width:100%;max-width:440px;position:relative;box-shadow:0 24px 80px rgba(0,0,0,.5)}
+.modal{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px 28px 24px;width:100%;max-width:460px;position:relative;box-shadow:0 24px 80px rgba(0,0,0,.5)}
 .modal-close{position:absolute;top:16px;right:16px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:22px;line-height:1;padding:4px;border-radius:6px;transition:.15s}
 .modal-close:hover{color:var(--danger)}
 .modal-title{font-size:16px;font-weight:700;margin-bottom:20px}
@@ -194,6 +197,15 @@ body.light .table-wrap tr:hover td{background:rgba(0,0,0,.02)}
 .upload-zone-label{font-size:13px;margin-top:8px}
 .upload-zone-sub{font-size:11px;margin-top:4px;opacity:.7}
 .upload-progress{font-size:12px;color:var(--accent);margin-top:10px;display:none}
+
+/* ── Statut modal ── */
+.statut-options{display:flex;flex-direction:column;gap:8px;margin-top:4px}
+.statut-opt{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:10px;border:1.5px solid var(--border);cursor:pointer;transition:.15s;background:transparent;width:100%;font-family:inherit;text-align:left}
+.statut-opt:not([disabled]):hover{border-color:var(--accent);background:var(--accent-bg)}
+.statut-opt[disabled]{opacity:.38;cursor:not-allowed}
+.statut-opt.current{border-color:var(--accent);background:var(--accent-bg)}
+.statut-opt-label{font-size:13px;font-weight:600;color:var(--text)}
+.statut-opt-sub{font-size:11px;color:var(--muted);margin-top:2px}
 
 /* ── Toast ── */
 .toast-wrap{position:fixed;bottom:24px;right:24px;display:flex;flex-direction:column;gap:8px;z-index:2000}
@@ -280,7 +292,7 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
             type="text"
             id="search-input"
             class="search-input"
-            placeholder="Rechercher (client, article, référence…)"
+            placeholder="Rechercher (description, article, notes…)"
             oninput="onSearch(this.value)"
             onkeydown="if(event.key==='Escape'){this.value='';onSearch('');}"
           >
@@ -299,17 +311,20 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
     <button type="button" class="modal-close" onclick="closeCreateModal()">×</button>
     <div class="modal-title">Nouveau BAT</div>
     <div class="form-group">
-      <label class="form-label" for="inp-client">Numéro client</label>
-      <input type="text" class="form-input" id="inp-client" placeholder="ex : 10034" autocomplete="off">
+      <label class="form-label" for="inp-desc">Description</label>
+      <input type="text" class="form-input" id="inp-desc" placeholder="ex : Etiquette boîte conserve client XYZ" autocomplete="off">
     </div>
     <div class="form-group">
       <label class="form-label" for="inp-article">Numéro article</label>
       <input type="text" class="form-input" id="inp-article" placeholder="ex : ART-2024-001" autocomplete="off">
-      <div class="form-hint">Référence BAT : [numéro client] / [numéro article]</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="inp-delai">Délai client (facultatif)</label>
+      <input type="date" class="form-input" id="inp-delai">
     </div>
     <div class="form-group">
       <label class="form-label" for="inp-notes">Notes (facultatif)</label>
-      <textarea class="form-input" id="inp-notes" rows="3" placeholder="Informations complémentaires…" style="resize:vertical"></textarea>
+      <textarea class="form-input" id="inp-notes" rows="2" placeholder="Informations complémentaires…" style="resize:vertical"></textarea>
     </div>
     <div class="modal-actions">
       <button type="button" class="btn btn-ghost" onclick="closeCreateModal()">Annuler</button>
@@ -337,29 +352,42 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
   </div>
 </div>
 
-<!-- Modal notes / statut -->
+<!-- Modal édition (description + article + délai + notes) -->
 <div class="modal-ov" id="edit-modal" style="display:none" onclick="if(event.target===this)closeEditModal()">
   <div class="modal" onclick="event.stopPropagation()">
     <button type="button" class="modal-close" onclick="closeEditModal()">×</button>
     <div class="modal-title" id="edit-modal-title">Modifier le BAT</div>
     <div class="form-group">
-      <label class="form-label" for="edit-statut">Statut</label>
-      <select class="form-select" id="edit-statut">
-        <option value="a_faire">À faire</option>
-        <option value="en_attente">En attente</option>
-        <option value="valide">Validé</option>
-      </select>
-      <div class="form-hint" id="edit-statut-hint" style="display:none;color:var(--warn)">
-        Pour passer en "En attente", un PDF doit d'abord être importé.
-      </div>
+      <label class="form-label" for="edit-desc">Description</label>
+      <input type="text" class="form-input" id="edit-desc" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="edit-article">Numéro article</label>
+      <input type="text" class="form-input" id="edit-article" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="edit-delai">Délai client</label>
+      <input type="date" class="form-input" id="edit-delai">
     </div>
     <div class="form-group">
       <label class="form-label" for="edit-notes">Notes</label>
-      <textarea class="form-input" id="edit-notes" rows="3" style="resize:vertical"></textarea>
+      <textarea class="form-input" id="edit-notes" rows="2" style="resize:vertical"></textarea>
     </div>
     <div class="modal-actions">
       <button type="button" class="btn btn-ghost" onclick="closeEditModal()">Annuler</button>
       <button type="button" class="btn btn-accent" onclick="submitEdit()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal changement de statut -->
+<div class="modal-ov" id="statut-modal" style="display:none" onclick="if(event.target===this)closeStatutModal()">
+  <div class="modal" onclick="event.stopPropagation()" style="max-width:380px">
+    <button type="button" class="modal-close" onclick="closeStatutModal()">×</button>
+    <div class="modal-title" id="statut-modal-title">Changer le statut</div>
+    <div class="statut-options" id="statut-options"></div>
+    <div class="modal-actions" style="margin-top:18px">
+      <button type="button" class="btn btn-ghost" onclick="closeStatutModal()">Annuler</button>
     </div>
   </div>
 </div>
@@ -386,13 +414,13 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
 // ── État central ───────────────────────────────────────────────────
 const S = {
   entries: [],
-  statut: 'all',      // filtre actif
+  statut: 'all',
   search: '',
   me: null,
   uploadBatId: null,
   uploadFile: null,
   editBatId: null,
-  editHasPdf: false,
+  statutBatId: null,
   delBatId: null,
 };
 
@@ -419,6 +447,7 @@ function closeSidebar(){document.body.classList.remove('sb-open');}
 
 function toggleTheme(){
   const l=document.body.classList.toggle('light');
+  document.documentElement.classList.toggle('light-pre', l);
   try{localStorage.setItem('mysifa_theme',l?'light':'dark');}catch(e){}
   updateThemeBtn();
 }
@@ -441,9 +470,9 @@ async function doLogout(){
 
 // ── Badges ────────────────────────────────────────────────────────
 function statutLabel(s){return{a_faire:'À faire',en_attente:'En attente',valide:'Validé'}[s]||s;}
-function statutBadge(s){
-  const cls={a_faire:'badge-afaire',en_attente:'badge-attente',valide:'badge-valide'}[s]||'';
-  return `<span class="badge ${cls}">${escHtml(statutLabel(s))}</span>`;
+function statutBadge(e){
+  const cls={a_faire:'badge-afaire',en_attente:'badge-attente',valide:'badge-valide'}[e.statut]||'';
+  return `<span class="badge ${cls} badge-clickable" onclick="openStatutModal(${e.id})" title="Cliquer pour modifier le statut">${escHtml(statutLabel(e.statut))}</span>`;
 }
 
 // ── Filtrage ──────────────────────────────────────────────────────
@@ -453,13 +482,22 @@ function filteredEntries(){
   if(S.search.trim()){
     const q=S.search.trim().toLowerCase();
     list=list.filter(e=>(
-      (e.numero_client||'').toLowerCase().includes(q)||
+      (e.description||'').toLowerCase().includes(q)||
       (e.numero_article||'').toLowerCase().includes(q)||
       (e.reference||'').toLowerCase().includes(q)||
       (e.notes||'').toLowerCase().includes(q)
     ));
   }
   return list;
+}
+
+// ── Formatage date ─────────────────────────────────────────────────
+function fmtDate(s){
+  if(!s) return '—';
+  // YYYY-MM-DD → JJ/MM/AAAA
+  const m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(m) return `${m[3]}/${m[2]}/${m[1]}`;
+  return s.slice(0,10);
 }
 
 // ── Rendu ─────────────────────────────────────────────────────────
@@ -481,7 +519,6 @@ function renderTabs(){
 }
 
 function renderTable(){
-  // Préserver focus searchbar
   const ae=document.activeElement;
   const focusId=ae?.id;
   const cs=ae?.selectionStart;
@@ -513,17 +550,20 @@ function renderTable(){
       const editBtn=`<button type="button" class="ico-btn" onclick="openEditModal(${e.id})" title="Modifier">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         </button>`;
-      const delBtn=`<button type="button" class="ico-btn danger" onclick="openDelModal(${e.id},'${escHtml(e.reference)}')" title="Supprimer">
+      const delBtn=`<button type="button" class="ico-btn danger" onclick="openDelModal(${e.id},'${escHtml(e.description||e.numero_article)}')" title="Supprimer">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
         </button>`;
       const updDate=e.updated_at?e.updated_at.slice(0,16).replace('T',' '):'—';
-      const notesCell=e.notes?`<span title="${escHtml(e.notes)}" style="color:var(--text2);max-width:180px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(e.notes)}</span>`:'<span style="color:var(--muted)">—</span>';
+      const notesCell=e.notes?`<span title="${escHtml(e.notes)}" style="color:var(--text2);max-width:160px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(e.notes)}</span>`:'<span style="color:var(--muted)">—</span>';
+      const descCell=`<span style="font-weight:600;max-width:220px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(e.description||'')}">${escHtml(e.description||'—')}</span>`;
+      const delaiCell=e.delai_client?`<span style="font-family:ui-monospace,monospace;font-size:12px;color:var(--text2)">${escHtml(fmtDate(e.delai_client))}</span>`:'<span style="color:var(--muted)">—</span>';
       return `<tr>
-        <td><span style="font-weight:700;font-family:ui-monospace,monospace;font-size:12px;color:var(--accent)">${escHtml(e.numero_client)}</span></td>
-        <td><span style="font-weight:600;font-size:13px">${escHtml(e.numero_article)}</span></td>
-        <td>${statutBadge(e.statut)}</td>
+        <td>${descCell}</td>
+        <td><span style="font-weight:700;font-family:ui-monospace,monospace;font-size:12px;color:var(--accent)">${escHtml(e.numero_article)}</span></td>
+        <td>${statutBadge(e)}</td>
+        <td>${delaiCell}</td>
         <td>${notesCell}</td>
-        <td style="color:var(--muted);font-size:12px">${escHtml(updDate)}</td>
+        <td style="color:var(--muted);font-size:12px;white-space:nowrap">${escHtml(updDate)}</td>
         <td>
           <div class="action-group">
             ${pdfBtn}
@@ -536,7 +576,7 @@ function renderTable(){
     }).join('');
     wrap.innerHTML=`<table>
       <thead><tr>
-        <th>N° Client</th><th>N° Article</th><th>Statut</th><th>Notes</th><th>Mise à jour</th><th>Actions</th>
+        <th>Description</th><th>N° Article</th><th>Statut</th><th>Délai client</th><th>Notes</th><th>Mise à jour</th><th>Actions</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
@@ -582,23 +622,25 @@ async function loadMe(){
 
 // ── Modals — Création ──────────────────────────────────────────────
 function openCreateModal(){
-  document.getElementById('inp-client').value='';
+  document.getElementById('inp-desc').value='';
   document.getElementById('inp-article').value='';
+  document.getElementById('inp-delai').value='';
   document.getElementById('inp-notes').value='';
   document.getElementById('create-modal').style.display='flex';
-  requestAnimationFrame(()=>document.getElementById('inp-client').focus());
+  requestAnimationFrame(()=>document.getElementById('inp-desc').focus());
 }
 function closeCreateModal(){document.getElementById('create-modal').style.display='none';}
 
 async function submitCreate(){
-  const client=document.getElementById('inp-client').value.trim();
+  const desc=document.getElementById('inp-desc').value.trim();
   const article=document.getElementById('inp-article').value.trim();
-  const notes=document.getElementById('inp-notes').value.trim();
-  if(!client||!article){showToast('Numéro client et article obligatoires','danger');return;}
+  const delai=document.getElementById('inp-delai').value||null;
+  const notes=document.getElementById('inp-notes').value.trim()||null;
+  if(!desc||!article){showToast('Description et numéro article obligatoires','danger');return;}
   const btn=document.getElementById('create-btn');
   btn.disabled=true;btn.textContent='Création…';
   try{
-    const r=await api('/api/bat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({numero_client:client,numero_article:article,notes:notes||null})});
+    const r=await api('/api/bat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({description:desc,numero_article:article,delai_client:delai,notes})});
     if(!r.ok){
       const d=await r.json().catch(()=>({}));
       showToast(d.detail||'Erreur lors de la création','danger');
@@ -607,7 +649,7 @@ async function submitCreate(){
       S.entries.unshift(entry);
       render();
       closeCreateModal();
-      showToast(`BAT ${entry.reference} créé.`,'success');
+      showToast(`BAT créé.`,'success');
     }
   }catch(e){if(e.message!=='unauth')showToast('Erreur réseau','danger');}
   btn.disabled=false;btn.textContent='Créer le BAT';
@@ -653,7 +695,7 @@ async function submitUpload(){
     const r=await fetch(`/api/bat/${S.uploadBatId}/upload`,{method:'POST',credentials:'include',body:fd});
     if(!r.ok){
       const d=await r.json().catch(()=>({}));
-      showToast(d.detail||'Erreur lors de l\'import','danger');
+      showToast(d.detail||"Erreur lors de l'import",'danger');
     } else {
       const entry=await r.json();
       const idx=S.entries.findIndex(e=>e.id===entry.id);
@@ -670,28 +712,26 @@ async function submitUpload(){
 function openEditModal(id){
   const e=S.entries.find(x=>x.id===id);
   if(!e) return;
-  S.editBatId=id;S.editHasPdf=e.has_pdf;
+  S.editBatId=id;
   document.getElementById('edit-modal-title').textContent=`Modifier — ${e.reference}`;
-  document.getElementById('edit-statut').value=e.statut;
+  document.getElementById('edit-desc').value=e.description||'';
+  document.getElementById('edit-article').value=e.numero_article||'';
+  document.getElementById('edit-delai').value=e.delai_client||'';
   document.getElementById('edit-notes').value=e.notes||'';
-  const hint=document.getElementById('edit-statut-hint');
-  hint.style.display='none';
-  document.getElementById('edit-statut').onchange=function(){
-    hint.style.display=(this.value==='en_attente'&&!S.editHasPdf)?'block':'none';
-  };
   document.getElementById('edit-modal').style.display='flex';
+  requestAnimationFrame(()=>document.getElementById('edit-desc').focus());
 }
 function closeEditModal(){document.getElementById('edit-modal').style.display='none';S.editBatId=null;}
 
 async function submitEdit(){
   if(!S.editBatId) return;
-  const statut=document.getElementById('edit-statut').value;
+  const desc=document.getElementById('edit-desc').value.trim();
+  const article=document.getElementById('edit-article').value.trim();
+  const delai=document.getElementById('edit-delai').value||null;
   const notes=document.getElementById('edit-notes').value.trim()||null;
-  if(statut==='en_attente'&&!S.editHasPdf){
-    showToast('Un PDF doit être importé avant de passer en statut "En attente"','danger');return;
-  }
+  if(!desc||!article){showToast('Description et numéro article obligatoires','danger');return;}
   try{
-    const r=await api(`/api/bat/${S.editBatId}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({statut,notes})});
+    const r=await api(`/api/bat/${S.editBatId}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({description:desc,numero_article:article,delai_client:delai,notes})});
     if(!r.ok){
       const d=await r.json().catch(()=>({}));
       showToast(d.detail||'Erreur de mise à jour','danger');
@@ -706,10 +746,73 @@ async function submitEdit(){
   }catch(e){if(e.message!=='unauth')showToast('Erreur réseau','danger');}
 }
 
+// ── Modals — Changement statut ────────────────────────────────────
+function openStatutModal(id){
+  const e=S.entries.find(x=>x.id===id);
+  if(!e) return;
+  S.statutBatId=id;
+
+  document.getElementById('statut-modal-title').textContent=`Statut — ${e.description||e.numero_article}`;
+
+  const opts=[
+    {
+      val:'a_faire',
+      label:'À faire',
+      sub:'BAT en attente de document.',
+      disabled: e.statut==='a_faire',
+    },
+    {
+      val:'en_attente',
+      label:'En attente de validation',
+      sub: e.has_pdf ? 'PDF présent — passage possible.' : 'Un PDF doit être importé au préalable.',
+      disabled: !e.has_pdf || e.statut==='en_attente',
+    },
+    {
+      val:'valide',
+      label:'Validé',
+      sub:'BAT approuvé définitivement.',
+      disabled: e.statut==='valide',
+    },
+  ];
+
+  const optHtml=opts.map(o=>`
+    <button type="button" class="statut-opt${e.statut===o.val?' current':''}" ${o.disabled?'disabled':''} onclick="submitStatutChange('${o.val}')">
+      <div style="flex:1">
+        <div class="statut-opt-label">${escHtml(o.label)}</div>
+        <div class="statut-opt-sub">${escHtml(o.sub)}</div>
+      </div>
+      ${e.statut===o.val?'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>':''}
+    </button>`).join('');
+
+  document.getElementById('statut-options').innerHTML=optHtml;
+  document.getElementById('statut-modal').style.display='flex';
+}
+function closeStatutModal(){document.getElementById('statut-modal').style.display='none';S.statutBatId=null;}
+
+async function submitStatutChange(newStatut){
+  if(!S.statutBatId) return;
+  const e=S.entries.find(x=>x.id===S.statutBatId);
+  if(!e||e.statut===newStatut){closeStatutModal();return;}
+  try{
+    const r=await api(`/api/bat/${S.statutBatId}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({statut:newStatut})});
+    if(!r.ok){
+      const d=await r.json().catch(()=>({}));
+      showToast(d.detail||'Erreur de mise à jour','danger');
+    } else {
+      const entry=await r.json();
+      const idx=S.entries.findIndex(x=>x.id===entry.id);
+      if(idx>=0)S.entries[idx]=entry;
+      render();
+      closeStatutModal();
+      showToast(`Statut mis à jour : ${statutLabel(newStatut)}.`,'success');
+    }
+  }catch(e){if(e.message!=='unauth')showToast('Erreur réseau','danger');}
+}
+
 // ── Modals — Suppression ──────────────────────────────────────────
 function openDelModal(id,ref){
   S.delBatId=id;
-  document.getElementById('del-modal-msg').textContent=`Le BAT ${ref} sera définitivement supprimé. Cette action est irréversible.`;
+  document.getElementById('del-modal-msg').textContent=`Le BAT "${ref}" sera définitivement supprimé. Cette action est irréversible.`;
   document.getElementById('del-modal').style.display='flex';
 }
 function closeDelModal(){document.getElementById('del-modal').style.display='none';S.delBatId=null;}
@@ -733,24 +836,23 @@ async function submitDelete(){
 
 // ── Init ──────────────────────────────────────────────────────────
 (function init(){
-  // Thème
   try{
     const t=localStorage.getItem('mysifa_theme');
-    if(t==='light')document.body.classList.add('light');
+    if(t==='light') document.body.classList.add('light');
+    else document.body.classList.remove('light');
     updateThemeBtn();
   }catch(e){}
 
-  // Charger les données
   loadMe();
   loadEntries();
 
-  // Fermer sidebar au clic overlay (mobile)
   document.addEventListener('keydown', e=>{
     if(e.key==='Escape'){
-      closeCreateModal();closeUploadModal();closeEditModal();closeDelModal();
+      closeCreateModal();closeUploadModal();closeEditModal();closeStatutModal();closeDelModal();
     }
   });
 })();
 </script>
+<script src="/static/support_widget.js"></script>
 </body>
 </html>"""

@@ -2861,6 +2861,19 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 92, "bat_entries")
 
+    # v93 — MyBAT : renommage numero_client→description + ajout delai_client
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=93 LIMIT 1").fetchone():
+        try:
+            conn.execute("ALTER TABLE bat_entries RENAME COLUMN numero_client TO description")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE bat_entries ADD COLUMN delai_client TEXT")
+        except Exception:
+            pass
+        conn.commit()
+        _record_schema_migration(conn, 93, "bat_entries_v2")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,
