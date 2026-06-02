@@ -10415,6 +10415,8 @@ function openOfEditModal(row){
   renderOfEditModal();
 }
 function closeOfEditModal(){
+  const existing=document.getElementById('of-edit-overlay');
+  if(existing) existing.remove();
   set({ofEditModal:null});
   render();
 }
@@ -10502,6 +10504,8 @@ function openFicheEditModal(row){
   renderFicheEditModal();
 }
 function closeFicheEditModal(){
+  const existing=document.getElementById('fiche-edit-overlay');
+  if(existing) existing.remove();
   set({ficheEditModal:null});
   render();
 }

@@ -450,9 +450,9 @@ def list_fiches(request: Request):
     params_c: list = []
     params_r: list = []
     if q:
-        where += " AND (LOWER(COALESCE(reference,'')) LIKE LOWER(?) OR LOWER(COALESCE(designation,'')) LIKE LOWER(?) OR LOWER(COALESCE(client,'')) LIKE LOWER(?))"
-        params_c = [like, like, like]
-        params_r = [like, like, like, limit, offset]
+        where += " AND (LOWER(COALESCE(reference,'')) LIKE LOWER(?) OR LOWER(COALESCE(format,'')) LIKE LOWER(?) OR LOWER(COALESCE(support,'')) LIKE LOWER(?) OR LOWER(COALESCE(machine,'')) LIKE LOWER(?))"
+        params_c = [like, like, like, like]
+        params_r = [like, like, like, like, limit, offset]
     else:
         params_r = [limit, offset]
 

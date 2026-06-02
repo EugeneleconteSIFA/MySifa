@@ -17,10 +17,10 @@ from datetime import datetime
 # ── Configuration ────────────────────────────────────────────────────
 ACCESS_DB_PATH  = r"\\IDEFIX\sifa_pub\Fiches techniques Access\sifa_fiches_techniques.mdb"
 LAST_RUN_FILE   = r"\\IDEFIX\sifa_pub\Fiches techniques Access\last_sync_fiches.txt"
-TABLE_NAME      = "t_fiches"       # ← adapter si besoin (voir instructions ci-dessous)
+TABLE_NAME      = "fiches_techniques"
 MYSIFA_BASE_URL = "https://mysifa.com"
 MYSIFA_API_KEY  = "msk_b5ffcec1a8d91e7f46a6bcfe305360f704d6da503f37d5e9fadd31421f47e83d"
-DATE_FALLBACK   = "2020-01-01"     # première sync : toutes les fiches
+DATE_FALLBACK   = "2025-01-01"     # première sync : fiches depuis 2025
 
 HEADERS = {
     "X-Api-Key":    MYSIFA_API_KEY,

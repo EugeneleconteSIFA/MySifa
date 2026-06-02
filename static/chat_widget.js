@@ -58,7 +58,7 @@
 
   const CW_STYLES = `
 @keyframes cwPulse{0%,100%{opacity:1}50%{opacity:.3}}
-#cw-bar{position:fixed;bottom:24px;left:24px;right:auto!important;z-index:8002;width:340px;max-width:calc(100vw - 48px);
+#cw-bar{position:fixed;bottom:24px;left:24px;right:auto!important;z-index:9100;width:340px;max-width:calc(100vw - 48px);
   background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px 16px;
   display:none;align-items:center;gap:12px;cursor:pointer;transition:border-color .15s,box-shadow .18s,transform .18s;
   font-family:inherit;box-shadow:0 4px 16px rgba(0,0,0,.2)}
@@ -89,7 +89,7 @@ body.light #cw-bar.cw-portal-accent #cw-bar-icon{background:rgba(255,255,255,.22
 #cw-bar-badge{position:absolute;top:-6px;right:-6px}
 #cw-bar.cw-portal-accent #cw-bar-badge{background:#fff;color:#0a0e17;border:2px solid rgba(10,14,23,.15)}
 body.light #cw-bar.cw-portal-accent #cw-bar-badge{border-color:rgba(15,23,42,.12)}
-#cw-bubble{position:fixed;z-index:8002;
+#cw-bubble{position:fixed;z-index:9100;
   right:max(24px,env(safe-area-inset-right,0px));
   bottom:max(24px,env(safe-area-inset-bottom,0px));
   left:auto!important;
@@ -102,7 +102,7 @@ body.light #cw-bar.cw-portal-accent #cw-bar-badge{border-color:rgba(15,23,42,.12
 #cw-bubble-badge{position:absolute;top:-6px;right:-6px;z-index:2;
   border:2px solid var(--bg)}
 body.light #cw-bubble-badge{border-color:#fff}
-#cw-panel{position:fixed;z-index:8003;width:440px;height:580px;max-height:calc(100vh - 64px);
+#cw-panel{position:fixed;z-index:9101;width:440px;height:580px;max-height:calc(100vh - 64px);
   background:var(--card);border:1px solid var(--border);border-radius:14px;display:flex;overflow:hidden;
   font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;
   box-shadow:0 12px 48px rgba(0,0,0,0.5)}
@@ -201,7 +201,7 @@ body.light .cw-channel-item:hover{background:rgba(0,0,0,.04)}
   border-radius:99px;font-size:12px;cursor:pointer;border:1px solid var(--border);
   background:transparent;color:var(--text2);font-family:inherit;transition:border-color .1s,background .1s}
 #cw-reaction-tip-float{
-  display:none;position:fixed;z-index:8025;pointer-events:none;
+  display:none;position:fixed;z-index:9125;pointer-events:none;
   background:var(--card);border:1px solid var(--border);border-radius:8px;
   padding:8px 10px;font-size:12px;line-height:1.45;color:var(--text2);
   box-shadow:0 8px 24px rgba(0,0,0,.35);max-width:240px;max-height:180px;overflow-y:auto;
@@ -324,7 +324,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     margin-left:auto!important;margin-right:auto!important;
     border-radius:14px!important;border:1px solid var(--border)!important;
     box-shadow:0 12px 48px rgba(0,0,0,.5)!important;
-    z-index:8015!important;
+    z-index:9115!important;
   }
   #cw-panel-left{
     width:100%;max-width:100%;flex:1;min-width:0;border-right:none;

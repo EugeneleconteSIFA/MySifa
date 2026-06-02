@@ -1,9 +1,9 @@
 """
-Génération PDF — Ordre de Fabrication depuis template vierge.
+Generation PDF -- Ordre de Fabrication depuis template vierge.
 
-Utilisé pour prévisualiser les OFs importés via l'API (sans PDF uploadé).
+Utilise pour previsualiser les OFs importes via l'API (sans PDF uploade).
 Template : data/of_template.pdf (sifa_pdf_cdi_of.pdf)
-Dépendances : reportlab (déjà dans requirements.txt), pypdf (via pdfplumber)
+Dependances : reportlab (deja dans requirements.txt), pypdf
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from pypdf import PdfReader, PdfWriter
 
 from config import BASE_DIR
 
-# Chemin du template vierge (à déployer sur le VPS)
+# Chemin du template vierge (a deployer sur le VPS)
 _TEMPLATE_PATH = os.path.join(BASE_DIR, "data", "of_template.pdf")
 
 # Dimensions US Letter (page du template)
@@ -26,7 +26,7 @@ _PAGE_H = 792.0
 
 
 def _fmt(v: Any) -> str:
-    """Formate une valeur pour l'affichage (None → '', float entier → sans décimale)."""
+    """Formate une valeur pour l'affichage (None -> '', float entier -> sans decimale)."""
     if v is None or v == "":
         return ""
     if isinstance(v, float) and v == int(v):
@@ -35,23 +35,29 @@ def _fmt(v: Any) -> str:
 
 
 def _fmt_qte(v: Any) -> str:
-    """Formate une quantité avec séparateur milliers espace."""
+    """Formate une quantite avec separateur milliers (espace ASCII simple)."""
     if v is None:
         return ""
     try:
         n = int(float(v))
-        return f"{n:,}".replace(",", " ")  # espace fine insécable
+        s = str(n)
+        groups = []
+        while len(s) > 3:
+            groups.append(s[-3:])
+            s = s[:-3]
+        groups.append(s)
+        return " ".join(reversed(groups))
     except (TypeError, ValueError):
         return str(v)
 
 
 def generate_of_pdf(of_data: dict, template_path: Optional[str] = None) -> bytes:
     """
-    Génère un PDF rempli à partir du template vierge.
+    Genere un PDF rempli a partir du template vierge.
 
     Args:
         of_data : dict avec les colonnes de of_imports
-        template_path : chemin vers le template (défaut : data/of_template.pdf)
+        template_path : chemin vers le template (defaut : data/of_template.pdf)
 
     Returns:
         Contenu PDF en bytes.
@@ -62,19 +68,15 @@ def generate_of_pdf(of_data: dict, template_path: Optional[str] = None) -> bytes
     tpl = template_path or _TEMPLATE_PATH
     if not os.path.isfile(tpl):
         raise FileNotFoundError(
-            f"Template OF introuvable : {tpl}. "
-            "Déposez sifa_pdf_cdi_of.pdf dans data/of_template.pdf sur le VPS."
+            "Template OF introuvable : {}. "
+            "Deposez sifa_pdf_cdi_of.pdf dans data/of_template.pdf sur le VPS.".format(tpl)
         )
 
     buf = BytesIO()
     c = canvas.Canvas(buf, pagesize=(_PAGE_W, _PAGE_H))
 
-    def _write(x: float, y0_mu: float, y1_mu: float, text: str,
-               fontsize: float = 10.8, bold: bool = False) -> None:
-        """
-        Écrit du texte sur le canvas.
-        Coordonnées y en convention PyMuPDF (origine haut de page).
-        """
+    def _write(x, y0_mu, y1_mu, text, fontsize=10.8, bold=False):
+        """Ecrit du texte sur le canvas. Coords y en convention PyMuPDF (origine haut de page)."""
         if not text:
             return
         baseline = _PAGE_H - y1_mu + 2.0
@@ -84,7 +86,7 @@ def generate_of_pdf(of_data: dict, template_path: Optional[str] = None) -> bytes
 
     d = of_data
 
-    # ── En-tête ─────────────────────────────────────────────────────────
+    # En-tete
     _write(55,  20.7, 33.9, _fmt(d.get("of_numero")),    fontsize=11, bold=True)
     _write(55,  40.9, 54.0, _fmt(d.get("reference")))
     _write(235, 40.9, 54.0, _fmt(d.get("date_creation")))
@@ -92,23 +94,23 @@ def generate_of_pdf(of_data: dict, template_path: Optional[str] = None) -> bytes
     _write(55,  61.0, 74.2, _fmt(d.get("machine")))
     _write(292, 63.8, 76.9, _fmt(d.get("format")))
 
-    # ── Matière ─────────────────────────────────────────────────────────
+    # Matiere
     _write(92,  81.4, 100.1, _fmt(d.get("matiere")))
     _write(292, 118.4, 131.5, _fmt(d.get("laize")))
 
-    # ── Quantités (décalées +10px droite pour alignement visuel) ────────
+    # Quantites (decalees +10px droite pour alignement visuel)
     _write(429, 118.6, 131.8, _fmt_qte(d.get("qte_etiquettes")))
     _write(429, 139.2, 152.3, _fmt_qte(d.get("qte_bobines")))
     _write(429, 173.7, 186.9, _fmt(d.get("metrage")))
 
-    # ── Conditionnement ─────────────────────────────────────────────────
+    # Conditionnement
     _write(93,  220.6, 233.8, _fmt(d.get("conditionnement")))
-    _write(429, 237.9, 251.1, _fmt(d.get("nb_cartons")))    # Cartons nb
-    _write(429, 255.2, 268.3, _fmt(d.get("nb_mandrins")))   # Mandrins nb
-    _write(419, 272.5, 285.6, _fmt(d.get("nb_tubes")))      # Tubes nb
+    _write(429, 237.9, 251.1, _fmt(d.get("nb_cartons")))
+    _write(429, 255.2, 268.3, _fmt(d.get("nb_mandrins")))
+    _write(419, 272.5, 285.6, _fmt(d.get("nb_tubes")))
     _write(76,  289.5, 302.7, _fmt(d.get("mandrins_dia", "")))
 
-    # ── Outils ──────────────────────────────────────────────────────────
+    # Outils
     _write(158, 419.1, 432.3, _fmt(d.get("outil_1_numero")), fontsize=8.4)
 
     c.save()

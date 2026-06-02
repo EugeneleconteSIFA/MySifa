@@ -298,6 +298,7 @@ body.light table.fab-table tr.fab-row-last td{
   padding:24px;min-width:320px;max-width:560px;width:100%;
   box-shadow:0 24px 64px rgba(0,0,0,.5);
   animation:fadeUp .18s ease-out;
+  max-height:calc(100vh - 40px);overflow-y:auto;
 }
 @keyframes fadeUp{from{transform:translateY(8px);opacity:0}to{transform:translateY(0);opacity:1}}
 .fab-modal-title{font-size:16px;font-weight:800;margin-bottom:16px;color:var(--text)}
@@ -1534,6 +1535,7 @@ async function loadFiches(){
 }
 
 function openFicheEditModal(row){
+  fabPauseAutoRefresh(120000);
   set({ficheEditModal:{...row}});
   renderFicheEditModal();
 }
@@ -1964,7 +1966,7 @@ function renderFichesPanel(){
     h('input',{
       id:'fiche-search-input',
       type:'text',
-      placeholder:'Rechercher (référence, désignation, client…)',
+      placeholder:'Rechercher (référence, format, support, machine…)',
       value:S.ficheSearch||'',
       style:'width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:9px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box',
       oninput:async function(e){
@@ -2014,11 +2016,11 @@ function renderFichesPanel(){
         })
       ),
       h('td',null,escHtml(row.reference||'—')),
-      h('td',null,escHtml(row.designation||'—')),
-      h('td',null,escHtml(row.client||'—')),
       h('td',null,escHtml(row.format||'—')),
-      h('td',null,row.laize!=null?escHtml(String(row.laize)+' mm'):'—'),
-      h('td',null,escHtml(row.matiere||'—')),
+      h('td',null,row.eti_laize!=null?escHtml(String(row.eti_laize)+' mm'):'—'),
+      h('td',null,escHtml(row.support||row.matiere||'—')),
+      h('td',null,escHtml(row.machine||'—')),
+      h('td',null,row.nb_couleurs!=null?escHtml(String(row.nb_couleurs)):'—'),
       h('td',null,escHtml(row.source||'—')),
       h('td',null,h('div',{className:'fab-of-actions'},...acts)),
     );
@@ -2085,8 +2087,8 @@ function renderFichesPanel(){
               },
             })
           ),
-          h('th',null,'Référence'),h('th',null,'Désignation'),h('th',null,'Client'),
-          h('th',null,'Format'),h('th',null,'Laize'),h('th',null,'Matière'),
+          h('th',null,'Référence'),h('th',null,'Format'),h('th',null,'Laize eti.'),
+          h('th',null,'Support'),h('th',null,'Machine'),h('th',null,'Nb coul.'),
           h('th',null,'Source'),h('th',null,'Actions')
         )),
         h('tbody',null,...(rows.length?rows:[empty]))
