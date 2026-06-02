@@ -10517,8 +10517,8 @@ async function saveFicheEdit(){
     designation:    document.getElementById('fce-desig')?.value.trim()||null,
     client:         document.getElementById('fce-client')?.value.trim()||null,
     format:         document.getElementById('fce-format')?.value.trim()||null,
-    laize:          parseFloat(document.getElementById('fce-laize')?.value)||null,
-    matiere:        document.getElementById('fce-matiere')?.value.trim()||null,
+    eti_laize:      parseFloat(document.getElementById('fce-laize')?.value)||null,
+    support:        document.getElementById('fce-matiere')?.value.trim()||null,
     adhesif:        document.getElementById('fce-adhesif')?.value.trim()||null,
     conditionnement:document.getElementById('fce-cond')?.value.trim()||null,
     notes:          document.getElementById('fce-notes')?.value.trim()||null,
@@ -10557,8 +10557,8 @@ function renderFicheEditModal(){
         ${field('fce-desig','Désignation',m.designation)}
         ${field('fce-client','Client',m.client)}
         ${field('fce-format','Format',m.format)}
-        ${field('fce-laize','Laize (mm)',m.laize,'number')}
-        ${field('fce-matiere','Matière',m.matiere)}
+        ${field('fce-laize','Laize eti. (mm)',m.eti_laize,'number')}
+        ${field('fce-matiere','Support',m.support||m.matiere)}
         ${field('fce-adhesif','Adhésif',m.adhesif)}
         ${field('fce-cond','Conditionnement',m.conditionnement)}
       </div>
@@ -10862,11 +10862,11 @@ function renderFichesTab(){
         })
       ),
       h('td',null,escHtml(row.reference||'—')),
-      h('td',null,escHtml(row.designation||'—')),
-      h('td',null,escHtml(row.client||'—')),
       h('td',null,escHtml(row.format||'—')),
-      h('td',null,row.laize!=null?escHtml(String(row.laize)+' mm'):'—'),
-      h('td',null,escHtml(row.matiere||'—')),
+      h('td',null,row.eti_laize!=null?escHtml(String(row.eti_laize)+' mm'):'—'),
+      h('td',null,escHtml(row.support||row.matiere||'—')),
+      h('td',null,escHtml(row.machine||'—')),
+      h('td',null,row.nb_couleurs!=null?escHtml(String(row.nb_couleurs)):'—'),
       h('td',null,escHtml(row.source||'—')),
       h('td',null,h('div',{style:{display:'flex',gap:'4px'}},...acts)),
     );
@@ -10896,8 +10896,8 @@ function renderFichesTab(){
               }
             })
           ),
-          h('th',null,'Référence'),h('th',null,'Désignation'),h('th',null,'Client'),
-          h('th',null,'Format'),h('th',null,'Laize'),h('th',null,'Matière'),
+          h('th',null,'Référence'),h('th',null,'Format'),h('th',null,'Laize eti.'),
+          h('th',null,'Support'),h('th',null,'Machine'),h('th',null,'Nb coul.'),
           h('th',null,'Source'),h('th',null,'Actions')
         )),
         h('tbody',null,...(rows.length?rows:[empty]))

@@ -1552,8 +1552,8 @@ async function saveFicheEdit(){
     designation:     document.getElementById('fce-desig')?.value.trim()||null,
     client:          document.getElementById('fce-client')?.value.trim()||null,
     format:          document.getElementById('fce-format')?.value.trim()||null,
-    laize:           parseFloat(document.getElementById('fce-laize')?.value)||null,
-    matiere:         document.getElementById('fce-matiere')?.value.trim()||null,
+    eti_laize:       parseFloat(document.getElementById('fce-laize')?.value)||null,
+    support:         document.getElementById('fce-matiere')?.value.trim()||null,
     adhesif:         document.getElementById('fce-adhesif')?.value.trim()||null,
     conditionnement: document.getElementById('fce-cond')?.value.trim()||null,
     notes:           document.getElementById('fce-notes')?.value.trim()||null,
@@ -1591,8 +1591,8 @@ function renderFicheEditModal(){
         ${field('fce-desig',  'Désignation',    m.designation)}
         ${field('fce-client', 'Client',         m.client)}
         ${field('fce-format', 'Format',         m.format)}
-        ${field('fce-laize',  'Laize (mm)',      m.laize,'number')}
-        ${field('fce-matiere','Matière',         m.matiere)}
+        ${field('fce-laize',  'Laize eti. (mm)', m.eti_laize,'number')}
+        ${field('fce-matiere','Support',         m.support||m.matiere)}
         ${field('fce-adhesif','Adhésif',         m.adhesif)}
         ${field('fce-cond',   'Conditionnement', m.conditionnement)}
       </div>
