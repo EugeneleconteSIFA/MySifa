@@ -2002,6 +2002,7 @@ async function openMoveLotModal(produitId, emplacement, qLot, unite, refLabel, n
               });
               if (!r) return;
               showToast('Lot déplacé — stock : ' + fN(r.quantite_apres));
+              confirmOverlay.remove();
               overlay.remove();
               if (S.selProduit) await loadProduit(S.selProduit.produit.id);
               else if (S.selEmpl) await loadEmplacement(S.selEmpl.emplacement);
