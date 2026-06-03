@@ -2554,29 +2554,39 @@ def _pf_ensure_produit_id(
     designation: str,
     unite: str,
     now: str,
+    produit_type: str = "fabrique",
 ) -> int:
     ref = reference.strip().upper()
     row = conn.execute(
-        "SELECT id, designation, unite FROM produits WHERE reference=?", (ref,)
+        "SELECT id, designation, unite, type FROM produits WHERE reference=?", (ref,)
     ).fetchone()
     des = designation.strip() or ref
     u = (unite or "").strip() or "étiquette"
     if row:
+        existing_type = row["type"] or "fabrique"
+        if existing_type != produit_type:
+            label_existing = "produit fabriqué" if existing_type == "fabrique" else "produit de négoce"
+            label_wanted = "produit de négoce" if produit_type == "negoce" else "produit fabriqué"
+            raise HTTPException(
+                409,
+                f"La référence {ref} est déjà enregistrée comme {label_existing}. "
+                f"Impossible de l'utiliser comme {label_wanted}.",
+            )
         conn.execute(
             "UPDATE produits SET designation=?, unite=?, updated_at=? WHERE id=?",
             (des, u, now, row["id"]),
         )
         return int(row["id"])
     cur = conn.execute(
-        "INSERT INTO produits (reference, designation, description, unite, created_at, updated_at) "
-        "VALUES (?,?,?,?,?,?)",
-        (ref, des, "", u, now, now),
+        "INSERT INTO produits (reference, designation, description, unite, type, created_at, updated_at) "
+        "VALUES (?,?,?,?,?,?,?)",
+        (ref, des, "", u, produit_type, now, now),
     )
     return int(cur.lastrowid)
 
 
-def _pf_list_stock_rows(conn: sqlite3.Connection) -> list:
-    """Stock PF : lots FIFO (comme le tableau de bord), repli sur stock_emplacements."""
+def _pf_list_stock_rows(conn: sqlite3.Connection, produit_type: str = "fabrique") -> list:
+    """Stock PF/négoce : lots FIFO, repli sur stock_emplacements. Filtré par type."""
     rows = conn.execute(
         """
         SELECT
@@ -2590,9 +2600,11 @@ def _pf_list_stock_rows(conn: sqlite3.Connection) -> list:
         FROM lots_stock l
         JOIN produits p ON p.id = l.produit_id
         WHERE l.quantite_restante > 0.0001
+          AND COALESCE(p.type, 'fabrique') = ?
         GROUP BY l.emplacement, p.id, p.reference, p.designation, p.unite
         ORDER BY p.reference ASC, l.emplacement ASC
-        """
+        """,
+        (produit_type,),
     ).fetchall()
     if rows:
         return rows
@@ -2615,40 +2627,61 @@ def _pf_list_stock_rows(conn: sqlite3.Connection) -> list:
         FROM stock_emplacements s
         JOIN produits p ON p.id = s.produit_id
         WHERE s.quantite > 0.0001
+          AND COALESCE(p.type, 'fabrique') = ?
         ORDER BY p.reference ASC, s.emplacement ASC
-        """
+        """,
+        (produit_type,),
     ).fetchall()
 
 
-def _pf_kpis(conn: sqlite3.Connection) -> dict:
+def _pf_kpis(conn: sqlite3.Connection, produit_type: str = "fabrique") -> dict:
     today = datetime.now().strftime("%Y-%m-%d")
     refs = conn.execute(
         """
-        SELECT COUNT(DISTINCT produit_id) AS n FROM (
+        SELECT COUNT(DISTINCT l.produit_id) AS n
+        FROM (
             SELECT produit_id FROM lots_stock WHERE quantite_restante > 0.0001
             UNION
             SELECT produit_id FROM stock_emplacements WHERE quantite > 0.0001
-        )
-        """
+        ) l
+        JOIN produits p ON p.id = l.produit_id
+        WHERE COALESCE(p.type, 'fabrique') = ?
+        """,
+        (produit_type,),
     ).fetchone()
     empl = conn.execute(
         """
-        SELECT COUNT(DISTINCT emplacement) AS n FROM (
-            SELECT l.emplacement FROM lots_stock l WHERE l.quantite_restante > 0.0001
+        SELECT COUNT(DISTINCT l.emplacement) AS n
+        FROM (
+            SELECT ls.emplacement, ls.produit_id FROM lots_stock ls WHERE ls.quantite_restante > 0.0001
             UNION
-            SELECT s.emplacement FROM stock_emplacements s WHERE s.quantite > 0.0001
-        )
-        """
+            SELECT s.emplacement, s.produit_id FROM stock_emplacements s WHERE s.quantite > 0.0001
+        ) l
+        JOIN produits p ON p.id = l.produit_id
+        WHERE COALESCE(p.type, 'fabrique') = ?
+        """,
+        (produit_type,),
     ).fetchone()
     mvt_today = conn.execute(
         """
-        SELECT COUNT(*) AS n FROM mouvements_stock
-        WHERE created_at >= ?
-          AND type_mouvement IN ('entree', 'sortie')
+        SELECT COUNT(*) AS n
+        FROM mouvements_stock m
+        JOIN produits p ON p.id = m.produit_id
+        WHERE m.created_at >= ?
+          AND m.type_mouvement IN ('entree', 'sortie')
+          AND COALESCE(p.type, 'fabrique') = ?
         """,
-        (today + "T00:00:00",),
+        (today + "T00:00:00", produit_type),
     ).fetchone()
-    total_mvt = conn.execute("SELECT COUNT(*) AS n FROM mouvements_stock").fetchone()
+    total_mvt = conn.execute(
+        """
+        SELECT COUNT(*) AS n
+        FROM mouvements_stock m
+        JOIN produits p ON p.id = m.produit_id
+        WHERE COALESCE(p.type, 'fabrique') = ?
+        """,
+        (produit_type,),
+    ).fetchone()
     return {
         "references": int(refs["n"] or 0) if refs else 0,
         "mouvements_aujourdhui": int(mvt_today["n"] or 0) if mvt_today else 0,
@@ -2671,11 +2704,12 @@ def _pf_normalize_mvt_row(r) -> dict:
 def list_produits_finis(request: Request):
     require_stock(request)
     with get_db() as conn:
-        stock_rows = _pf_list_stock_rows(conn)
+        stock_rows = _pf_list_stock_rows(conn, produit_type="fabrique")
         catalogue = conn.execute(
-            "SELECT reference, designation, unite FROM produits ORDER BY reference ASC"
+            "SELECT reference, designation, unite FROM produits "
+            "WHERE COALESCE(type,'fabrique')='fabrique' ORDER BY reference ASC"
         ).fetchall()
-        kpis = _pf_kpis(conn)
+        kpis = _pf_kpis(conn, produit_type="fabrique")
     return {
         "stock": [
             {
@@ -2853,6 +2887,246 @@ async def produit_fini_sortie(request: Request):
         ip=request.client.host if request.client else None,
     )
     return {"ok": True, **result}
+
+
+# ── Produits de négoce ─────────────────────────────────────────────
+# Même mécanique que produits-finis, filtrée sur type='negoce'.
+
+@router.get("/api/stock/negoce")
+def list_negoce(request: Request):
+    require_stock(request)
+    with get_db() as conn:
+        stock_rows = _pf_list_stock_rows(conn, produit_type="negoce")
+        catalogue = conn.execute(
+            "SELECT reference, designation, unite FROM produits "
+            "WHERE COALESCE(type,'fabrique')='negoce' ORDER BY reference ASC"
+        ).fetchall()
+        kpis = _pf_kpis(conn, produit_type="negoce")
+    return {
+        "stock": [
+            {
+                "produit_id": r["produit_id"],
+                "reference": r["reference"],
+                "designation": r["designation"],
+                "unite": r["unite"],
+                "emplacement": r["emplacement"],
+                "quantite": float(r["quantite"] or 0),
+                "derniere_entree": r["derniere_entree"],
+            }
+            for r in stock_rows
+        ],
+        "catalogue": [dict(r) for r in catalogue],
+        "kpis": kpis,
+    }
+
+
+@router.get("/api/stock/negoce/mouvements")
+def list_negoce_mouvements(request: Request, limit: int = 20):
+    require_stock(request)
+    limit = max(1, min(int(limit or 20), 100))
+    with get_db() as conn:
+        rows = conn.execute(
+            _PF_MVT_SQL
+            + """
+            WHERE m.type_mouvement IN ('entree', 'sortie')
+              AND COALESCE(p.type, 'fabrique') = 'negoce'
+            ORDER BY m.created_at DESC, m.id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return [_pf_normalize_mvt_row(r) for r in rows]
+
+
+@router.get("/api/stock/negoce/{reference}")
+def get_negoce_detail(reference: str, request: Request):
+    require_stock(request)
+    ref = (reference or "").strip().upper()
+    if not ref:
+        raise HTTPException(400, "Référence obligatoire.")
+    with get_db() as conn:
+        cat = conn.execute(
+            "SELECT id, reference, designation, unite FROM produits "
+            "WHERE reference=? AND COALESCE(type,'fabrique')='negoce'",
+            (ref,),
+        ).fetchone()
+        if not cat:
+            raise HTTPException(404, "Référence non trouvée.")
+        produit_id = cat["id"]
+        stock_rows = conn.execute(
+            """
+            SELECT emplacement, SUM(quantite_restante) AS quantite
+            FROM lots_stock
+            WHERE produit_id=? AND quantite_restante > 0.0001
+            GROUP BY emplacement
+            ORDER BY emplacement ASC
+            """,
+            (produit_id,),
+        ).fetchall()
+        if not stock_rows:
+            stock_rows = conn.execute(
+                """
+                SELECT emplacement, quantite
+                FROM stock_emplacements
+                WHERE produit_id=? AND quantite > 0.0001
+                ORDER BY emplacement ASC
+                """,
+                (produit_id,),
+            ).fetchall()
+        historique = conn.execute(
+            _PF_MVT_SQL
+            + """
+            WHERE p.id=?
+            ORDER BY m.created_at DESC, m.id DESC
+            """,
+            (produit_id,),
+        ).fetchall()
+    stock_total = sum(float(r["quantite"] or 0) for r in stock_rows)
+    return {
+        "reference": ref,
+        "designation": cat["designation"],
+        "unite": cat["unite"],
+        "stock_total": stock_total,
+        "emplacements": [
+            {
+                "emplacement": r["emplacement"],
+                "quantite": float(r["quantite"] or 0),
+                "unite": cat["unite"],
+            }
+            for r in stock_rows
+        ],
+        "historique": [_pf_normalize_mvt_row(r) for r in historique],
+    }
+
+
+@router.post("/api/stock/negoce/entree")
+async def negoce_entree(request: Request):
+    user = require_stock_write(request)
+    body = await request.json()
+    reference, designation, emplacement, quantite, unite = _pf_validate_mouvement_body(body)
+    # Unité par défaut rouleau pour le négoce
+    if not (body.get("unite") or "").strip():
+        unite = "rouleau"
+    note = _pf_compose_note(body)
+    now = datetime.now().isoformat()
+
+    with get_db() as conn:
+        produit_id = _pf_ensure_produit_id(conn, reference, designation, unite, now, produit_type="negoce")
+        result, ref_audit, audit_action = _apply_stock_mouvement(
+            conn, user, produit_id, emplacement, "entree", quantite, note
+        )
+        conn.commit()
+
+    log_action(
+        user=user,
+        action=audit_action,
+        module="stock",
+        objet=f"Négoce entrée {ref_audit} +{quantite:g} @ {emplacement}",
+        detail={"type_mouvement": "entree", "quantite": quantite, "produit_type": "negoce"},
+        ip=request.client.host if request.client else None,
+    )
+    return {"ok": True, **result}
+
+
+@router.post("/api/stock/negoce/sortie")
+async def negoce_sortie(request: Request):
+    user = require_stock_write(request)
+    body = await request.json()
+    reference, designation, emplacement, quantite, unite = _pf_validate_mouvement_body(body)
+    note = _pf_compose_note(body)
+    now = datetime.now().isoformat()
+
+    with get_db() as conn:
+        produit_id = _pf_ensure_produit_id(conn, reference, designation, unite, now, produit_type="negoce")
+        ex = conn.execute(
+            "SELECT quantite FROM stock_emplacements WHERE produit_id=? AND emplacement=?",
+            (produit_id, emplacement),
+        ).fetchone()
+        stock = float(ex["quantite"]) if ex else 0.0
+        if quantite > stock + 0.0001:
+            raise HTTPException(
+                400,
+                f"Stock insuffisant — disponible : {stock:g} {unite}.",
+            )
+        result, ref_audit, audit_action = _apply_stock_mouvement(
+            conn, user, produit_id, emplacement, "sortie", quantite, note
+        )
+        conn.commit()
+
+    log_action(
+        user=user,
+        action=audit_action,
+        module="stock",
+        objet=f"Négoce sortie {ref_audit} -{quantite:g} @ {emplacement}",
+        detail={"type_mouvement": "sortie", "quantite": quantite, "produit_type": "negoce"},
+        ip=request.client.host if request.client else None,
+    )
+    return {"ok": True, **result}
+
+
+@router.post("/api/stock/negoce/produit")
+async def upsert_negoce_produit(request: Request):
+    """Créer ou mettre à jour un produit de négoce dans le catalogue."""
+    require_stock_write(request)
+    body = await request.json()
+    reference = (body.get("reference") or "").strip().upper()
+    designation = (body.get("designation") or "").strip()
+    unite = (body.get("unite") or "rouleau").strip() or "rouleau"
+    if not reference:
+        raise HTTPException(400, "Référence obligatoire.")
+    now = datetime.now().isoformat()
+    with get_db() as conn:
+        existing = conn.execute(
+            "SELECT id, type FROM produits WHERE reference=?", (reference,)
+        ).fetchone()
+        if existing:
+            if (existing["type"] or "fabrique") != "negoce":
+                raise HTTPException(
+                    409,
+                    f"La référence {reference} existe déjà comme produit fabriqué.",
+                )
+            conn.execute(
+                "UPDATE produits SET designation=?, unite=?, updated_at=? WHERE id=?",
+                (designation or reference, unite, now, existing["id"]),
+            )
+            produit_id = existing["id"]
+        else:
+            cur = conn.execute(
+                "INSERT INTO produits (reference, designation, description, unite, type, created_at, updated_at) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (reference, designation or reference, "", unite, "negoce", now, now),
+            )
+            produit_id = cur.lastrowid
+        conn.commit()
+    return {"ok": True, "produit_id": produit_id}
+
+
+@router.delete("/api/stock/negoce/produit/{reference}")
+def delete_negoce_produit(reference: str, request: Request):
+    """Supprimer un produit de négoce (seulement si stock = 0)."""
+    require_stock_write(request)
+    ref = (reference or "").strip().upper()
+    with get_db() as conn:
+        cat = conn.execute(
+            "SELECT id, type FROM produits WHERE reference=?", (ref,)
+        ).fetchone()
+        if not cat:
+            raise HTTPException(404, "Référence non trouvée.")
+        if (cat["type"] or "fabrique") != "negoce":
+            raise HTTPException(403, "Ce produit n'est pas un produit de négoce.")
+        has_stock = conn.execute(
+            "SELECT 1 FROM lots_stock WHERE produit_id=? AND quantite_restante > 0.0001 LIMIT 1",
+            (cat["id"],),
+        ).fetchone()
+        if has_stock:
+            raise HTTPException(
+                409, "Impossible de supprimer : stock non nul. Soldez le stock d'abord."
+            )
+        conn.execute("DELETE FROM stock_emplacements WHERE produit_id=?", (cat["id"],))
+        conn.execute("DELETE FROM lots_stock WHERE produit_id=?", (cat["id"],))
+        conn.execute("DELETE FROM produits WHERE id=?", (cat["id"],))
+        conn.commit()
+    return {"ok": True}
 
 
 @router.post("/api/stock/produits/import/preview")

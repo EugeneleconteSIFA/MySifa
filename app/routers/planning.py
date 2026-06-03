@@ -769,25 +769,25 @@ def _planned_end_iso_for_machine(
 
 def _compute_nb_palettes(e: dict) -> Optional[int]:
     """Calcule le nombre de palettes nécessaires.
-    Formule : nb_cartons = ceil(qte_bobines / nb_bobines_carton)
-              nb_palettes = ceil(nb_cartons / (nb_au_sol * nb_etage))
+    Formule : nb_cartons  = ceil(qte_bobines / nb_bobines_carton)
+              nb_palettes = ceil(nb_cartons / (palette_nb_cartons_sol * palette_nb_cartons_hauteur))
     Retourne None si une des données est manquante ou invalide.
     """
     try:
-        qte_bobines     = e.get("_of_qte_bobines")
+        qte_bobines       = e.get("_of_qte_bobines")
         nb_bobines_carton = e.get("_ft_nb_bobines_carton")
-        nb_au_sol       = e.get("_ft_nb_au_sol")
-        nb_etage        = e.get("_ft_nb_etage")
-        if any(v is None for v in (qte_bobines, nb_bobines_carton, nb_au_sol, nb_etage)):
+        cartons_sol       = e.get("_ft_palette_nb_cartons_sol")
+        cartons_haut      = e.get("_ft_palette_nb_cartons_hauteur")
+        if any(v is None for v in (qte_bobines, nb_bobines_carton, cartons_sol, cartons_haut)):
             return None
         qb  = float(qte_bobines)
         nbc = float(nb_bobines_carton)
-        nas = float(nb_au_sol)
-        ne  = float(nb_etage)
-        if nbc <= 0 or nas <= 0 or ne <= 0 or qb <= 0:
+        cso = float(cartons_sol)
+        cha = float(cartons_haut)
+        if nbc <= 0 or cso <= 0 or cha <= 0 or qb <= 0:
             return None
         nb_cartons  = math.ceil(qb / nbc)
-        nb_palettes = math.ceil(nb_cartons / (nas * ne))
+        nb_palettes = math.ceil(nb_cartons / (cso * cha))
         return int(nb_palettes)
     except Exception:
         return None
@@ -2696,9 +2696,9 @@ def get_timeline(machine_id: int, request: Request, semaine: Optional[str] = Non
             SELECT pe.*,
                    oi.qte_etiquettes  AS _of_qte_etiquettes,
                    oi.qte_bobines     AS _of_qte_bobines,
-                   ft.nb_bobines_carton AS _ft_nb_bobines_carton,
-                   ft.nb_au_sol       AS _ft_nb_au_sol,
-                   ft.nb_etage        AS _ft_nb_etage
+                   ft.nb_bobines_carton          AS _ft_nb_bobines_carton,
+                   ft.palette_nb_cartons_sol     AS _ft_palette_nb_cartons_sol,
+                   ft.palette_nb_cartons_hauteur AS _ft_palette_nb_cartons_hauteur
             FROM planning_entries pe
             LEFT JOIN of_imports oi
                 ON oi.id = pe.of_import_id

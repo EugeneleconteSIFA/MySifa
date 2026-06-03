@@ -182,8 +182,22 @@ def sync_emplacements_plan_from_csv(csv_path: Optional[Path] = None) -> int:
 
 
 def _migrate_emplacements_plan(conn):
-    """Référentiel plan MyStock (recherche, suggestions)."""
-    reload_emplacements_plan(conn)
+    """Référentiel plan MyStock — crée la table si besoin, seed depuis CSV uniquement si vide.
+
+    Les modifications manuelles (ajout/suppression via l'UI Paramètres) sont préservées
+    au redémarrage. Le bouton 'Recharger depuis CSV' est le seul déclencheur d'un
+    rechargement complet intentionnel.
+    """
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS emplacements_plan (
+            code TEXT PRIMARY KEY NOT NULL,
+            imported_at TEXT NOT NULL
+        )"""
+    )
+    count = conn.execute("SELECT COUNT(*) FROM emplacements_plan").fetchone()[0]
+    if count == 0:
+        # Table vide : seed initial depuis le CSV
+        reload_emplacements_plan(conn)
 
 
 def _migrate(conn):
@@ -2994,6 +3008,14 @@ def _migrate(conn):
             conn.execute("ALTER TABLE expe_transporteurs ADD COLUMN couleur TEXT")
         conn.commit()
         _record_schema_migration(conn, 96, "expe_transporteurs_couleur")
+
+    # v97 — MyStock : produits de négoce (type sur produits)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=97 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(produits)").fetchall()}
+        if "type" not in cols:
+            conn.execute("ALTER TABLE produits ADD COLUMN type TEXT NOT NULL DEFAULT 'fabrique'")
+        conn.commit()
+        _record_schema_migration(conn, 97, "produits_type_negoce")
 
     _record_schema_migration(
         conn,

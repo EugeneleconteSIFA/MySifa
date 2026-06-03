@@ -1536,6 +1536,15 @@ let S = {
   pfTotalMouvements: 0,
   pfModal: null,
   pfConfirmSortie: null,
+  // Produits de négoce (onglet dédié)
+  ngStock: null,
+  ngMouvements: null,
+  ngCatalogue: null,
+  ngKpis: null,
+  ngLoading: false,
+  ngTotalMouvements: 0,
+  ngModal: null,
+  ngFilters: null,
   // Historique mouvements
   historique: [],
   historiqueFiltres: {
@@ -1770,6 +1779,8 @@ function icon(name, size=16){
     'plus-circle': '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>',
     'zap': '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
     'mail': '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    'shopping-cart': '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>',
+    'trash': '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
   };
   return `<svg ${a} aria-hidden="true" style="display:inline-block;vertical-align:middle;flex-shrink:0">${p[name]||p['grid']}</svg>`;
 }
@@ -2910,6 +2921,7 @@ function goToTab(tab) {
   if (tab !== 'reception' && S.recepScanning) recepStopCamera();
   S.tab = tab; S.selProduit = null; S.selEmpl = null; S.selMatiere = null; S.searchResults = null; S.showAddForm = false;
   if (tab !== 'produits-finis') { S.pfModal = null; closeMroot(); }
+  if (tab !== 'negoce') { S.ngModal = null; }
   if (tab !== 'referentiel') {
     S.refClientQ = '';
     S.refClientResults = null;
@@ -2935,6 +2947,7 @@ function goToTab(tab) {
   else if (tab === 'reception') loadRecepHistory();
   else if (tab === 'matieres') loadMatieres();
   else if (tab === 'produits-finis') loadProduitsFinis();
+  else if (tab === 'negoce') loadNegoce();
   else if (tab === 'historique') loadHistorique();
   else if (tab === 'plan-entrepot') loadPlanEntrepot();
   else if (tab === 'monitoring') loadMonitoring();
@@ -5493,6 +5506,779 @@ async function openPfDetailModal(reference) {
     ));
   }
 }
+
+// ══════════════════════════════════════════════════════════════
+// PRODUITS DE NÉGOCE
+// ══════════════════════════════════════════════════════════════
+
+const NG_UNITES = ['rouleau', 'pièces', 'kg', 'm', 'boîtes', 'cartons', 'palettes'];
+
+async function loadNegoce() {
+  S.ngLoading = true;
+  S.ngStock = null;
+  renderNegoceView();
+  try {
+    const [data, mvts] = await Promise.all([
+      api('/api/stock/negoce'),
+      api('/api/stock/negoce/mouvements?limit=20'),
+    ]);
+    const payload = data && typeof data === 'object' && !Array.isArray(data) ? data : {};
+    S.ngStock = payload.stock || (Array.isArray(data) ? data : []);
+    S.ngCatalogue = payload.catalogue || [];
+    S.ngKpis = payload.kpis || { references: 0, mouvements_aujourdhui: 0, emplacements_occupes: 0 };
+    S.ngTotalMouvements = Number(S.ngKpis.total_mouvements) || 0;
+    const mvtsList = Array.isArray(mvts) ? mvts : (mvts && (mvts.mouvements || mvts.items)) || [];
+    S.ngMouvements = mvtsList.map(normalizePfMvt);
+  } catch (e) {
+    S.ngStock = [];
+    S.ngCatalogue = [];
+    S.ngMouvements = [];
+    S.ngKpis = { references: 0, mouvements_aujourdhui: 0, emplacements_occupes: 0 };
+    S.ngTotalMouvements = 0;
+    showToast(e.message || 'Chargement impossible.', 'error');
+  }
+  S.ngLoading = false;
+  renderNegoceView();
+}
+
+function renderNegoceView() {
+  if (S.tab !== 'negoce') return;
+  const ae = document.activeElement;
+  const focusId = ae?.id;
+  const caretStart = ae?.selectionStart;
+  const caretEnd = ae?.selectionEnd;
+  const area = document.getElementById('scroll-area');
+  if (!area) return;
+  area.innerHTML = '';
+  const content = buildNegoceTab();
+  if (content) area.appendChild(content);
+  if (focusId) {
+    const elFocus = document.getElementById(focusId);
+    if (elFocus) {
+      elFocus.focus();
+      if (caretStart != null) {
+        try { elFocus.setSelectionRange(caretStart, caretEnd); } catch (e) {}
+      }
+    }
+  }
+}
+
+function filterNgStockList() {
+  const list = S.ngStock || [];
+  const fs = S.ngFilters || { refs: [], empls: [], q: '' };
+  const q = String(fs.q || '').trim().toLowerCase();
+  const refSet = new Set((fs.refs || []).map(x => String(x || '').trim().toUpperCase()).filter(Boolean));
+  const emplSet = new Set((fs.empls || []).map(x => String(x || '').trim().toUpperCase()).filter(Boolean));
+  return list.filter(row => {
+    if (refSet.size && !refSet.has(String(row.reference || '').toUpperCase())) return false;
+    if (emplSet.size && !emplSet.has(String(row.emplacement || '').toUpperCase())) return false;
+    if (q) {
+      const hay = [row.reference, row.designation].map(x => String(x || '').toLowerCase()).join(' ');
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function filterNgMouvementsList() {
+  const list = S.ngMouvements || [];
+  const fs = S.ngFilters || { refs: [], empls: [], q: '' };
+  const q = String(fs.q || '').trim().toLowerCase();
+  const refSet = new Set((fs.refs || []).map(x => String(x || '').trim().toUpperCase()).filter(Boolean));
+  const emplSet = new Set((fs.empls || []).map(x => String(x || '').trim().toUpperCase()).filter(Boolean));
+  return list.filter(m => {
+    if (refSet.size && !refSet.has(String(m.reference || '').toUpperCase())) return false;
+    if (emplSet.size && !emplSet.has(String(m.emplacement || '').toUpperCase())) return false;
+    if (q) {
+      const hay = [m.reference, m.emplacement, m.user_login].map(x => String(x || '').toLowerCase()).join(' ');
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function ngEmplacementChoices(filter) {
+  const q = String(filter || '').trim().toUpperCase();
+  const fromStock = [...new Set((S.ngStock || []).map(r => String(r.emplacement || '').toUpperCase()).filter(Boolean))];
+  const fromDb = allPageEmplacementChoices();
+  const all = [...new Set([...fromStock, ...fromDb])].sort();
+  if (!q) return all.slice(0, 12);
+  return all.filter(e => e.includes(q)).slice(0, 12);
+}
+
+function ngProduitSuggestions(filter) {
+  const q = String(filter || '').trim().toLowerCase();
+  const cat = S.ngCatalogue || [];
+  if (!q) return cat.slice(0, 15);
+  return cat.filter(c => {
+    const hay = (String(c.reference || '') + ' ' + String(c.designation || '')).toLowerCase();
+    return hay.includes(q);
+  }).slice(0, 15);
+}
+
+function ngCatalogueFind(ref) {
+  const r = String(ref || '').trim().toUpperCase();
+  return (S.ngCatalogue || []).find(c => String(c.reference || '').toUpperCase() === r) || null;
+}
+
+function ngStockAtEmpl(reference, emplacement) {
+  const ref = String(reference || '').trim().toUpperCase();
+  const empl = String(emplacement || '').trim().toUpperCase();
+  const row = (S.ngStock || []).find(r =>
+    String(r.reference || '').toUpperCase() === ref
+    && String(r.emplacement || '').toUpperCase() === empl,
+  );
+  return row ? (parseFloat(row.quantite) || 0) : 0;
+}
+
+function ngAddFilterTag(kind, value) {
+  const v = String(value || '').trim();
+  if (!v) return;
+  if (!S.ngFilters) S.ngFilters = { refs: [], empls: [], q: '' };
+  const fs = S.ngFilters;
+  if (kind === 'ref') {
+    const ref = v.toUpperCase();
+    if (!fs.refs) fs.refs = [];
+    if (!fs.refs.includes(ref)) fs.refs.push(ref);
+  } else if (kind === 'empl') {
+    const empl = v.toUpperCase();
+    if (!fs.empls) fs.empls = [];
+    if (!fs.empls.includes(empl)) fs.empls.push(empl);
+  }
+  if (!S.ngFilters) S.ngFilters = { refs: [], empls: [], q: '' };
+  S.ngFilters.q = '';
+}
+
+function ngRemoveFilterTag(kind, value) {
+  if (!S.ngFilters) return;
+  const fs = S.ngFilters;
+  const v = String(value || '').trim().toUpperCase();
+  if (kind === 'ref') fs.refs = (fs.refs || []).filter(x => String(x || '').toUpperCase() !== v);
+  if (kind === 'empl') fs.empls = (fs.empls || []).filter(x => String(x || '').toUpperCase() !== v);
+}
+
+function buildNgUnifiedSearch() {
+  if (!S.ngFilters) S.ngFilters = { refs: [], empls: [], q: '' };
+  const fs = S.ngFilters;
+
+  const inp = el('input', {
+    id: 'ng-search',
+    type: 'text',
+    placeholder: 'Rechercher (réf, empl, désignation…)',
+    autocomplete: 'off',
+    spellcheck: 'false',
+  });
+  inp.value = String(fs.q || '');
+
+  const dd = el('div', { cls: 'pf-search-dd' });
+  const ddList = el('div', { cls: 'empl-suggestions', style: { display: 'none' } });
+  dd.appendChild(ddList);
+
+  function renderDropdown() {
+    const q = String(fs.q || '').trim();
+    ddList.innerHTML = '';
+    if (!q) { ddList.style.display = 'none'; return; }
+    const prod = ngProduitSuggestions(q).slice(0, 8);
+    const empls = ngEmplacementChoices(q).slice(0, 8);
+    const pushItem = (kind, label, sub) => {
+      const kindLbl = kind === 'ref' ? 'Réf' : 'Empl';
+      ddList.appendChild(el('div', {
+        cls: 'pf-sugg-item',
+        on: { mousedown: (e) => {
+          e.preventDefault();
+          ngAddFilterTag(kind, label);
+          renderNegoceView();
+          requestAnimationFrame(() => { try { document.getElementById('ng-search')?.focus(); } catch (e2) {} });
+        } },
+      },
+      el('span', { cls: 'pf-sugg-kind' }, kindLbl),
+      el('span', null, ' · '),
+      el('span', { cls: 'pf-sugg-main' }, label),
+      sub ? el('span', null, ' — ') : null,
+      sub ? el('span', { cls: 'pf-sugg-sub' }, sub) : null,
+      ));
+    };
+    prod.forEach(p => pushItem('ref', String(p.reference || '').toUpperCase(), p.designation || ''));
+    empls.forEach(e => pushItem('empl', String(e || '').toUpperCase(), ''));
+    ddList.style.display = (ddList.childNodes.length ? 'block' : 'none');
+  }
+
+  inp.addEventListener('input', (e) => { fs.q = e.target.value; renderNegoceView(); });
+  inp.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      if (String(fs.q || '').trim()) { fs.q = ''; } else { fs.refs = []; fs.empls = []; }
+      renderNegoceView(); return;
+    }
+    if (e.key === 'Backspace' && !String(fs.q || '').trim()) {
+      const lastRef = (fs.refs || []).slice(-1)[0];
+      const lastEmpl = (fs.empls || []).slice(-1)[0];
+      if (lastRef) fs.refs = (fs.refs || []).slice(0, -1);
+      else if (lastEmpl) fs.empls = (fs.empls || []).slice(0, -1);
+      renderNegoceView(); return;
+    }
+    if (e.key === 'Enter') {
+      const first = ddList.firstElementChild;
+      if (first) { e.preventDefault(); first.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); }
+    }
+  });
+
+  const tags = el('div', { cls: 'pf-tags pf-tags-below' },
+    ...(fs.refs || []).map(r => el('span', { cls: 'pf-tag' },
+      el('span', { cls: 'pf-tag-kind' }, 'Réf'),
+      el('span', null, r),
+      el('button', { cls: 'pf-tag-x', attrs: { type: 'button', title: 'Retirer' }, on: { click: () => { ngRemoveFilterTag('ref', r); renderNegoceView(); } } }, '×'),
+    )),
+    ...(fs.empls || []).map(e => el('span', { cls: 'pf-tag' },
+      el('span', { cls: 'pf-tag-kind' }, 'Empl'),
+      el('span', null, e),
+      el('button', { cls: 'pf-tag-x', attrs: { type: 'button', title: 'Retirer' }, on: { click: () => { ngRemoveFilterTag('empl', e); renderNegoceView(); } } }, '×'),
+    )),
+  );
+
+  const box = el('div', { cls: 'pf-toolbar-search' },
+    el('span', { cls: 'pf-toolbar-search-icon' }, iconEl('search', 16)),
+    el('div', { cls: 'pf-toolbar-searchbox' }, inp),
+    tags,
+    dd,
+  );
+  requestAnimationFrame(renderDropdown);
+  return box;
+}
+
+function buildNgRefPickerField(refInp, desInp, uniteSel, onPick) {
+  const suggWrap = el('div', { cls: 'empl-suggestions', style: { display: 'none' } });
+  const applyPick = (c) => {
+    refInp.value = c.reference || '';
+    desInp.value = c.designation || '';
+    if (uniteSel && c.unite) uniteSel.value = c.unite;
+    suggWrap.innerHTML = '';
+    suggWrap.style.display = 'none';
+    if (onPick) onPick(c);
+  };
+  refInp.addEventListener('input', () => {
+    const picked = ngCatalogueFind(refInp.value);
+    if (picked) {
+      desInp.value = picked.designation || '';
+      if (uniteSel && picked.unite) uniteSel.value = picked.unite;
+    }
+  });
+  wireStockProduitSearch(refInp, suggWrap, applyPick);
+  const refCombo = el('div', { cls: 'empl-combo-wrap' }, refInp, suggWrap);
+  return { suggWrap, refCombo };
+}
+
+function buildNgEmplPickerField(emplInp) {
+  const suggWrap = el('div', { cls: 'empl-suggestions', style: { display: 'none' } });
+  wireStockEmplSearch(emplInp, suggWrap);
+  const emplCombo = el('div', { cls: 'empl-combo-wrap' }, emplInp, suggWrap);
+  return { suggWrap, emplCombo, emplInp };
+}
+
+function buildNegoceTab() {
+  const wrap = el('div', { cls: 'content pf-tab', id: 'tab-negoce' });
+
+  const kpis = S.ngKpis || {};
+  wrap.appendChild(el('div', { cls: 'pf-kpis' },
+    el('div', { cls: 'card pf-kpi', style: { padding: '16px 20px' } },
+      el('div', { cls: 'pf-kpi-label' }, 'Références en stock'),
+      el('div', { cls: 'pf-kpi-value' }, S.ngLoading && S.ngStock === null ? '—' : String(kpis.references ?? 0)),
+    ),
+    el('div', { cls: 'card pf-kpi', style: { padding: '16px 20px' } },
+      el('div', { cls: 'pf-kpi-label' }, 'Mouvements aujourd\'hui'),
+      el('div', { cls: 'pf-kpi-value' }, S.ngLoading && S.ngStock === null ? '—' : String(kpis.mouvements_aujourdhui ?? 0)),
+    ),
+    el('div', { cls: 'card pf-kpi', style: { padding: '16px 20px' } },
+      el('div', { cls: 'pf-kpi-label' }, 'Emplacements occupés'),
+      el('div', { cls: 'pf-kpi-value' }, S.ngLoading && S.ngStock === null ? '—' : String(kpis.emplacements_occupes ?? 0)),
+    ),
+  ));
+
+  const toolbar = el('div', { cls: 'pf-toolbar' },
+    buildNgUnifiedSearch(),
+    el('div', { cls: 'pf-toolbar-actions' },
+      S.stockReadOnly ? null : el('button', {
+        cls: 'btn btn-soft btn-soft-entree',
+        type: 'button',
+        on: { click: () => openNgMvtModal('entree') },
+      }, iconEl('upload', 14), ' Entrée'),
+      S.stockReadOnly ? null : el('button', {
+        cls: 'btn btn-soft btn-soft-sortie',
+        type: 'button',
+        on: { click: () => openNgMvtModal('sortie') },
+      }, iconEl('download', 14), ' Sortie'),
+      S.stockReadOnly ? null : el('button', {
+        cls: 'btn-ghost',
+        type: 'button',
+        on: { click: () => openNgCatalogueModal() },
+        style: { padding: '10px 14px' },
+      }, iconEl('tag', 16), ' Catalogue'),
+    ),
+  );
+  wrap.appendChild(toolbar);
+
+  const stockList = el('div', { cls: 'pf-stock-list', id: 'ng-stock-list' });
+  const mvtList = el('div', { cls: 'pf-mvt-list', id: 'ng-mvt-list' });
+
+  if (S.ngLoading && S.ngStock === null) {
+    stockList.appendChild(el('div', { cls: 'pf-empty', style: { padding: '32px', textAlign: 'center', fontSize: '13px' } }, 'Chargement…'));
+    mvtList.appendChild(el('div', { cls: 'pf-empty', style: { padding: '32px', textAlign: 'center', fontSize: '13px' } }, 'Chargement…'));
+  } else {
+    const filtered = filterNgStockList();
+    const fs = S.ngFilters || { refs: [], empls: [], q: '' };
+    const hasFilter = !!((fs.refs || []).length || (fs.empls || []).length || String(fs.q || '').trim());
+    const neverHadMvt = !S.ngTotalMouvements;
+
+    if (!filtered.length) {
+      if (hasFilter) {
+        stockList.appendChild(el('div', { cls: 'pf-empty', style: { padding: '32px', textAlign: 'center', fontSize: '13px' } },
+          'Aucun résultat pour ce filtre.',
+        ));
+      } else if (neverHadMvt) {
+        stockList.appendChild(buildPfEmptyState(
+          'Aucun produit en stock',
+          'Utilisez le bouton « Entrée » pour enregistrer votre premier mouvement.',
+        ));
+      } else {
+        stockList.appendChild(buildPfEmptyState('Aucun produit en stock', 'Tous les emplacements sont vides.'));
+      }
+    } else {
+      filtered.forEach(row => {
+        const item = el('div', {
+          cls: 'pf-stock-item',
+          on: { click: () => openNgDetailModal(row.reference) },
+        },
+          el('div', { cls: 'pf-stock-item-main' },
+            el('div', { cls: 'pf-stock-ref' }, String(row.reference || '—')),
+            el('div', { cls: 'pf-stock-des' }, row.designation || '—'),
+            el('div', { cls: 'pf-stock-row', style: { marginTop: '6px' } },
+              el('span', { cls: 'pf-stock-qte' }, fU(row.quantite, row.unite)),
+              el('span', {
+                cls: 'pf-empl-badge' + (isStockEmplacementAuSol(row.emplacement) ? ' pf-empl-au-sol' : isStockEmplacementSortieProd(row.emplacement) ? ' pf-empl-sortie-prod' : ''),
+              }, stockEmplLabel(row.emplacement) || '—'),
+            ),
+            el('div', { cls: 'pf-stock-meta' }, 'Dernière entrée : ' + fD(row.derniere_entree)),
+          ),
+        );
+        stockList.appendChild(item);
+      });
+    }
+
+    const mvts = filterNgMouvementsList();
+    if (!mvts.length) {
+      mvtList.appendChild(el('div', { cls: 'pf-empty', style: { padding: '24px', textAlign: 'center', fontSize: '13px' } },
+        hasFilter ? 'Aucun mouvement pour ce filtre.' : (neverHadMvt ? 'Aucun mouvement enregistré.' : 'Aucun mouvement récent.'),
+      ));
+    } else {
+      mvts.forEach(m => {
+        const isEntree = m.type === 'entree';
+        mvtList.appendChild(el('div', { cls: 'pf-mvt-item' },
+          el('span', { cls: 'pf-mvt-icon ' + (isEntree ? 'entree' : 'sortie') }, isEntree ? '↑' : '↓'),
+          el('div', { cls: 'pf-mvt-main' },
+            el('div', { cls: 'pf-mvt-line' },
+              el('span', { cls: 'pf-mvt-ref' }, String(m.reference || '—')),
+              el('span', { cls: 'pf-mvt-qte' }, fU(m.quantite, m.unite)),
+            ),
+            el('div', { cls: 'pf-mvt-sub' },
+              (m.emplacement || '—') + ' · ' + pfFmtShortDateTime(m.date_mouvement),
+            ),
+          ),
+          el('div', { cls: 'pf-mvt-user' }, m.user_login || '—'),
+        ));
+      });
+    }
+  }
+
+  wrap.appendChild(el('div', { cls: 'pf-grid' },
+    el('div', { cls: 'pf-col-stock' },
+      el('div', { cls: 'pf-col-title' }, 'Stock actuel'),
+      stockList,
+    ),
+    el('div', { cls: 'pf-col-mvts' },
+      el('div', { cls: 'pf-col-title' }, 'Derniers mouvements'),
+      mvtList,
+    ),
+  ));
+  return wrap;
+}
+
+function closeNgModals() {
+  S.ngModal = null;
+  const mroot = document.getElementById('mroot');
+  if (mroot) mroot.innerHTML = '';
+}
+
+function openNgMvtModal(type, preset) {
+  if (S.stockReadOnly) return;
+  S.ngModal = { type: type === 'sortie' ? 'sortie' : 'entree', preset: preset || null };
+  renderNgMvtModal();
+}
+
+function renderNgMvtModal() {
+  closeNgModals();
+  const modal = S.ngModal;
+  if (!modal) return;
+  const mroot = document.getElementById('mroot');
+  if (!mroot) return;
+  const isSortie = modal.type === 'sortie';
+  const headCls = isSortie ? 'mp-modal-mvt-head-pf-sortie' : 'mp-modal-mvt-head-pf-entree';
+
+  const overlay = el('div', {
+    id: isSortie ? 'modal-ng-sortie' : 'modal-ng-entree',
+    cls: 'mp-modal-overlay',
+    on: { click: (e) => { if (e.target === overlay) closeNgModals(); } },
+  });
+  const box = el('div', { cls: 'mp-modal mp-modal-mvt' });
+  box.appendChild(el('div', { cls: 'mp-modal-mvt-head ' + headCls },
+    el('h3', null, isSortie ? 'Sortie négoce' : 'Entrée négoce'),
+    el('button', { cls: 'mp-modal-close', type: 'button', on: { click: closeNgModals } }, '×'),
+  ));
+  const body = el('div', { cls: 'mp-modal-mvt-body' });
+
+  const preset = modal.preset || {};
+  const refFieldId = isSortie ? 'ng-sortie-ref' : 'ng-entree-ref';
+  const refInp = el('input', {
+    cls: 'field-input',
+    id: refFieldId,
+    attrs: { type: 'text', placeholder: 'Référence produit', autocomplete: 'off', required: true },
+    style: { direction: 'ltr' },
+  });
+  refInp.value = preset.reference || '';
+  const desInp = el('input', {
+    cls: 'field-input',
+    attrs: { type: 'text', placeholder: 'Désignation', autocomplete: 'off' },
+    style: { direction: 'ltr' },
+  });
+  desInp.value = preset.designation || '';
+  const uniteSel = el('select', { cls: 'field-input' });
+  NG_UNITES.forEach(u => {
+    const o = el('option', { attrs: { value: u } }, u);
+    if ((preset.unite || 'rouleau') === u) o.selected = true;
+    uniteSel.appendChild(o);
+  });
+  const { refCombo } = buildNgRefPickerField(refInp, desInp, uniteSel);
+
+  const qInp = el('input', {
+    cls: 'field-input',
+    attrs: { type: 'number', min: '0.01', step: '0.01', inputmode: 'decimal', required: true },
+    style: { direction: 'ltr' },
+  });
+  const emplInp = el('input', {
+    cls: 'field-input empl-upper',
+    attrs: { type: 'text', placeholder: 'Emplacement', autocomplete: 'off', required: true },
+    style: { direction: 'ltr' },
+  });
+  emplInp.value = (preset.emplacement || '').toUpperCase();
+  const { emplCombo } = buildNgEmplPickerField(emplInp);
+  const hintEl = el('div', { cls: 'mp-hint', style: { display: isSortie ? '' : 'none' } }, '');
+  const errEl = el('div', { cls: 'mp-hint err', style: { display: 'none' } }, '');
+  const comTa = el('textarea', {
+    cls: 'field-input',
+    attrs: { rows: '2', placeholder: 'Commentaire (facultatif)' },
+    style: { resize: 'vertical', minHeight: '60px' },
+  });
+  const motifInp = isSortie ? el('input', {
+    cls: 'field-input',
+    attrs: { type: 'text', placeholder: 'Motif / destinataire (facultatif)', autocomplete: 'off' },
+    style: { direction: 'ltr' },
+  }) : null;
+
+  body.appendChild(el('div', { cls: 'mp-field ref-field-wrap' }, el('label', null, 'Référence produit *'), refCombo));
+  body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Désignation'), desInp));
+  body.appendChild(el('div', { cls: 'mp-field' },
+    el('label', null, 'Quantité *'), qInp,
+    isSortie ? hintEl : null,
+    isSortie ? errEl : null,
+  ));
+  body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Unité'), uniteSel));
+  body.appendChild(el('div', { cls: 'mp-field empl-field-wrap' }, el('label', null, 'Emplacement *'), emplCombo));
+  if (motifInp) body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Motif / destinataire'), motifInp));
+  body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Commentaire'), comTa));
+
+  const collectBody = () => ({
+    reference: refInp.value.trim().toUpperCase(),
+    designation: desInp.value.trim(),
+    quantite: parseFloat(qInp.value),
+    unite: uniteSel.value || 'rouleau',
+    emplacement: emplInp.value.trim().toUpperCase(),
+    commentaire: comTa.value.trim() || null,
+    motif_destinataire: motifInp ? (motifInp.value.trim() || null) : null,
+  });
+
+  const refreshStockHint = () => {
+    if (!isSortie) return;
+    const b = collectBody();
+    const stock = ngStockAtEmpl(b.reference, b.emplacement);
+    if (!b.reference || !b.emplacement) { hintEl.textContent = ''; errEl.style.display = 'none'; return; }
+    hintEl.textContent = 'Stock à cet emplacement : ' + fU(stock, uniteSel.value || 'rouleau');
+    const q = parseFloat(qInp.value);
+    if (q > stock) { errEl.style.display = ''; errEl.textContent = 'Stock insuffisant.'; }
+    else { errEl.style.display = 'none'; }
+  };
+  if (isSortie) {
+    refInp.addEventListener('input', refreshStockHint);
+    emplInp.addEventListener('input', refreshStockHint);
+    qInp.addEventListener('input', refreshStockHint);
+    refreshStockHint();
+  }
+
+  const saveBtn = el('button', { cls: 'btn ' + (isSortie ? 'btn-danger' : 'btn-accent'), type: 'button' }, 'Enregistrer');
+
+  const doSubmit = async () => {
+    const b = collectBody();
+    if (!b.reference) { showToast('Référence obligatoire.', 'error'); return; }
+    if (!b.emplacement) { showToast('Emplacement obligatoire.', 'error'); return; }
+    if (!b.quantite || b.quantite < 0.01) { showToast('Quantité invalide — minimum 0,01.', 'error'); return; }
+    if (!b.designation) b.designation = b.reference;
+    if (isSortie) {
+      const stock = ngStockAtEmpl(b.reference, b.emplacement);
+      if (b.quantite > stock) { showToast('Stock insuffisant.', 'error'); return; }
+    }
+    const path = isSortie ? '/api/stock/negoce/sortie' : '/api/stock/negoce/entree';
+    saveBtn.disabled = true;
+    try {
+      await api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) });
+      showToast(isSortie ? 'Sortie enregistrée.' : 'Entrée enregistrée.');
+      closeNgModals();
+      await loadNegoce();
+    } catch (e) {
+      showToast(e.message || 'Enregistrement impossible.', 'error');
+      saveBtn.disabled = false;
+    }
+  };
+
+  const onSave = () => {
+    const b = collectBody();
+    if (!b.reference) { showToast('Référence obligatoire.', 'error'); return; }
+    if (!b.emplacement) { showToast('Emplacement obligatoire.', 'error'); return; }
+    if (!b.quantite || b.quantite < 0.01) { showToast('Quantité invalide — minimum 0,01.', 'error'); return; }
+    if (!b.designation) b.designation = b.reference;
+    if (isSortie) {
+      const stock = ngStockAtEmpl(b.reference, b.emplacement);
+      if (b.quantite > stock) { showToast('Stock insuffisant.', 'error'); return; }
+      // Confirmation sortie
+      const overlay2 = el('div', {
+        cls: 'mp-modal-overlay',
+        on: { click: (e) => { if (e.target === overlay2) { overlay2.remove(); renderNgMvtModal(); } } },
+      });
+      const box2 = el('div', { cls: 'mp-modal' },
+        el('h3', null, 'Confirmer la sortie'),
+        el('p', { style: { fontSize: '13px', color: 'var(--text2)', lineHeight: '1.6', marginBottom: '16px' } },
+          'Sortie de ' + fU(b.quantite, b.unite) + ' — réf. ' + b.reference + ' depuis ' + b.emplacement + '.',
+        ),
+        el('div', { cls: 'mp-modal-actions' },
+          el('button', { cls: 'btn btn-ghost', type: 'button', on: { click: () => { overlay2.remove(); renderNgMvtModal(); } } }, 'Retour'),
+          el('button', { cls: 'btn btn-danger', type: 'button', on: { click: async (e2) => {
+            e2.currentTarget.disabled = true;
+            await doSubmit();
+            overlay2.remove();
+          } } }, 'Confirmer la sortie'),
+        ),
+      );
+      overlay2.appendChild(box2);
+      mroot.innerHTML = '';
+      mroot.appendChild(overlay2);
+      return;
+    }
+    doSubmit();
+  };
+  saveBtn.addEventListener('click', onSave);
+
+  body.appendChild(el('div', { cls: 'mp-modal-actions' },
+    el('button', { cls: 'btn btn-ghost', type: 'button', on: { click: closeNgModals } }, 'Annuler'),
+    saveBtn,
+  ));
+  box.appendChild(body);
+  overlay.appendChild(box);
+  mroot.appendChild(overlay);
+  requestAnimationFrame(() => { document.getElementById(refFieldId)?.focus(); });
+}
+
+async function openNgDetailModal(reference) {
+  const ref = String(reference || '').trim().toUpperCase();
+  if (!ref) return;
+  closeNgModals();
+  const mroot = document.getElementById('mroot');
+  if (!mroot) return;
+  const overlay = el('div', {
+    id: 'modal-ng-detail',
+    cls: 'mp-modal-overlay',
+    on: { click: (e) => { if (e.target === overlay) closeNgModals(); } },
+  });
+  const box = el('div', { cls: 'mp-modal', style: { maxWidth: '560px' } },
+    el('div', { cls: 'mp-modal-head' },
+      el('h3', null, 'Détail produit'),
+      el('button', { cls: 'mp-modal-close', type: 'button', on: { click: closeNgModals } }, '×'),
+    ),
+    el('div', { cls: 'pf-empty' }, 'Chargement…'),
+  );
+  overlay.appendChild(box);
+  mroot.appendChild(overlay);
+  try {
+    const d = await api('/api/stock/negoce/' + encodeURIComponent(ref));
+    box.innerHTML = '';
+    box.appendChild(el('div', { cls: 'mp-modal-head' },
+      el('h3', null, d.reference || ref),
+      el('button', { cls: 'mp-modal-close', type: 'button', on: { click: closeNgModals } }, '×'),
+    ));
+    box.appendChild(el('p', { style: { fontSize: '13px', color: 'var(--text2)', marginBottom: '8px' } }, d.designation || '—'));
+    box.appendChild(el('p', { style: { fontSize: '13px', fontWeight: '700', color: 'var(--accent)', marginBottom: '16px' } },
+      'Stock actuel : ' + fU(d.stock_total, d.unite),
+    ));
+    const hist = d.historique || [];
+    if (!hist.length) {
+      box.appendChild(el('div', { cls: 'pf-empty' }, 'Aucun mouvement enregistré.'));
+    } else {
+      const table = el('table', { cls: 'pf-detail-table' });
+      table.appendChild(el('thead', null, el('tr', null,
+        el('th', null, 'Date'), el('th', null, 'Type'), el('th', null, 'Qté'),
+        el('th', null, 'Empl.'), el('th', null, 'Utilisateur'),
+      )));
+      const tbody = el('tbody', null);
+      hist.forEach(raw => {
+        const m = normalizePfMvt(raw);
+        tbody.appendChild(el('tr', null,
+          el('td', null, fDateTime(m.date_mouvement)),
+          el('td', null, m.type === 'entree' ? 'Entrée' : (m.type === 'sortie' ? 'Sortie' : (m.type || '—'))),
+          el('td', null, fU(m.quantite, m.unite)),
+          el('td', null, m.emplacement || '—'),
+          el('td', null, m.user_login || '—'),
+        ));
+      });
+      table.appendChild(tbody);
+      box.appendChild(table);
+    }
+    box.appendChild(el('div', { cls: 'mp-modal-actions', style: { marginTop: '16px' } },
+      el('button', { cls: 'btn btn-ghost', type: 'button', on: { click: closeNgModals } }, 'Fermer'),
+    ));
+  } catch (e) {
+    box.innerHTML = '';
+    box.appendChild(el('div', { cls: 'pf-empty' }, e.message || 'Chargement impossible.'));
+    box.appendChild(el('div', { cls: 'mp-modal-actions' },
+      el('button', { cls: 'btn btn-ghost', type: 'button', on: { click: closeNgModals } }, 'Fermer'),
+    ));
+  }
+}
+
+function openNgCatalogueModal() {
+  closeNgModals();
+  const mroot = document.getElementById('mroot');
+  if (!mroot) return;
+  const overlay = el('div', {
+    id: 'modal-ng-catalogue',
+    cls: 'mp-modal-overlay',
+    on: { click: (e) => { if (e.target === overlay) closeNgModals(); } },
+  });
+  const box = el('div', { cls: 'mp-modal', style: { maxWidth: '580px' } });
+  overlay.appendChild(box);
+  mroot.appendChild(overlay);
+
+  function renderCatalogueContent() {
+    box.innerHTML = '';
+    box.appendChild(el('div', { cls: 'mp-modal-head' },
+      el('h3', null, 'Catalogue négoce'),
+      el('button', { cls: 'mp-modal-close', type: 'button', on: { click: closeNgModals } }, '×'),
+    ));
+    box.appendChild(el('p', { style: { fontSize: '12px', color: 'var(--text2)', marginBottom: '14px', lineHeight: '1.5' } },
+      'Les produits sans stock peuvent être supprimés. L\'entrée d\'un mouvement crée automatiquement le produit s\'il n\'existe pas.',
+    ));
+
+    // Formulaire d'ajout
+    const addRef = el('input', { cls: 'field-input', attrs: { type: 'text', placeholder: 'Référence *', autocomplete: 'off' }, style: { direction: 'ltr' } });
+    const addDes = el('input', { cls: 'field-input', attrs: { type: 'text', placeholder: 'Désignation', autocomplete: 'off' }, style: { direction: 'ltr' } });
+    const addUnite = el('select', { cls: 'field-input' });
+    NG_UNITES.forEach(u => { const o = el('option', { attrs: { value: u } }, u); if (u === 'rouleau') o.selected = true; addUnite.appendChild(o); });
+    const addBtn = el('button', { cls: 'btn btn-accent', type: 'button', style: { flexShrink: '0' } }, 'Ajouter');
+    addBtn.addEventListener('click', async () => {
+      const ref = addRef.value.trim().toUpperCase();
+      const des = addDes.value.trim();
+      const unite = addUnite.value || 'rouleau';
+      if (!ref) { showToast('Référence obligatoire.', 'error'); return; }
+      addBtn.disabled = true;
+      try {
+        await api('/api/stock/negoce/produit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reference: ref, designation: des || ref, unite }),
+        });
+        showToast('Produit ajouté.');
+        await loadNegoce();
+        renderCatalogueContent();
+      } catch (e) {
+        showToast(e.message || 'Erreur lors de l\'ajout.', 'error');
+        addBtn.disabled = false;
+      }
+    });
+    box.appendChild(el('div', { cls: 'mp-field', style: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: '16px' } },
+      el('div', { style: { flex: '1', minWidth: '120px' } }, el('label', null, 'Réf.'), addRef),
+      el('div', { style: { flex: '2', minWidth: '160px' } }, el('label', null, 'Désignation'), addDes),
+      el('div', { style: { flex: '1', minWidth: '100px' } }, el('label', null, 'Unité'), addUnite),
+      addBtn,
+    ));
+
+    // Liste existante
+    const cat = S.ngCatalogue || [];
+    const stockByRef = {};
+    (S.ngStock || []).forEach(r => {
+      const k = String(r.reference || '').toUpperCase();
+      stockByRef[k] = (stockByRef[k] || 0) + parseFloat(r.quantite || 0);
+    });
+
+    if (!cat.length) {
+      box.appendChild(el('div', { cls: 'pf-empty', style: { padding: '16px', textAlign: 'center', fontSize: '13px' } }, 'Catalogue vide.'));
+    } else {
+      const tbl = el('table', { cls: 'pf-detail-table', style: { width: '100%', marginTop: '0' } });
+      tbl.appendChild(el('thead', null, el('tr', null,
+        el('th', null, 'Référence'), el('th', null, 'Désignation'), el('th', null, 'Unité'), el('th', null, 'Stock'), el('th', null, ''),
+      )));
+      const tbody = el('tbody', null);
+      cat.forEach(c => {
+        const ref = String(c.reference || '').toUpperCase();
+        const stock = stockByRef[ref] || 0;
+        const delBtn = el('button', {
+          cls: 'btn-ghost',
+          type: 'button',
+          style: { padding: '4px 8px', color: 'var(--danger)', opacity: stock > 0 ? '0.35' : '1', cursor: stock > 0 ? 'not-allowed' : 'pointer', fontSize: '12px' },
+          attrs: { title: stock > 0 ? 'Stock non nul — soldez avant suppression' : 'Supprimer', disabled: stock > 0 ? '' : null },
+        }, iconEl('trash', 14));
+        if (stock <= 0) {
+          delBtn.addEventListener('click', async () => {
+            if (!confirm('Supprimer « ' + ref + ' » du catalogue négoce ?')) return;
+            delBtn.disabled = true;
+            try {
+              await api('/api/stock/negoce/produit/' + encodeURIComponent(ref), { method: 'DELETE' });
+              showToast('Produit supprimé.');
+              await loadNegoce();
+              renderCatalogueContent();
+            } catch (e) {
+              showToast(e.message || 'Suppression impossible.', 'error');
+              delBtn.disabled = false;
+            }
+          });
+        }
+        tbody.appendChild(el('tr', null,
+          el('td', { style: { fontFamily: 'monospace', fontWeight: '700' } }, ref),
+          el('td', null, c.designation || '—'),
+          el('td', null, c.unite || '—'),
+          el('td', null, stock > 0 ? fU(stock, c.unite) : el('span', { style: { color: 'var(--muted)' } }, '0')),
+          el('td', null, delBtn),
+        ));
+      });
+      tbl.appendChild(tbody);
+      box.appendChild(el('div', { style: { maxHeight: '260px', overflowY: 'auto' } }, tbl));
+    }
+
+    box.appendChild(el('div', { cls: 'mp-modal-actions', style: { marginTop: '16px' } },
+      el('button', { cls: 'btn btn-ghost', type: 'button', on: { click: closeNgModals } }, 'Fermer'),
+    ));
+  }
+
+  renderCatalogueContent();
+  requestAnimationFrame(() => { overlay.querySelector('#modal-ng-catalogue input')?.focus(); });
+}
+
+// ══════════════════════════════════════════════════════════════
+// FIN PRODUITS DE NÉGOCE
+// ══════════════════════════════════════════════════════════════
 
 function mpCardEditBtn(m) {
   if (!isMatieresAdmin()) return null;
@@ -8274,6 +9060,10 @@ function renderContent() {
     renderProduitsFinisView();
     return;
   }
+  if (S.tab === 'negoce') {
+    renderNegoceView();
+    return;
+  }
   if (S.tab === 'referentiel') {
     renderReferentielView();
     return;
@@ -9578,6 +10368,7 @@ const STOCK_TAB_DOC_TITLES = {
   dashboard: 'Tableau de bord — MyStock — MySifa',
   matieres: 'Matières premières — MyStock — MySifa',
   'produits-finis': 'Produits finis — MyStock — MySifa',
+  negoce: 'Produits de négoce — MyStock — MySifa',
   referentiel: 'Référentiel — MyStock — MySifa',
   inventaire: 'Inventaire — MyStock — MySifa',
   reception: 'Réception matière — MyStock — MySifa',
@@ -9590,6 +10381,7 @@ const STOCK_TAB_MOBILE_TITLES = {
   dashboard: 'Tableau de bord',
   matieres: 'Matières premières',
   'produits-finis': 'Produits finis',
+  negoce: 'Produits de négoce',
   referentiel: 'Référentiel',
   inventaire: 'Inventaire',
   reception: 'Réception matière',
@@ -9615,6 +10407,7 @@ function buildSidebarNavStructure() {
     { kind: 'btn', tab: 'reception', icon: 'inbox', label: 'Réception matière' },
     { kind: 'sep', label: 'Produits' },
     { kind: 'btn', tab: 'produits-finis', icon: 'package', label: 'Produits finis' },
+    { kind: 'btn', tab: 'negoce', icon: 'shopping-cart', label: 'Produits de négoce' },
     { kind: 'btn', tab: 'referentiel', icon: 'tag', label: 'Référentiel' },
   ];
   if (!S.stockReadOnly) {
@@ -9917,7 +10710,7 @@ async function init() {
   await fetchEmplacementsFromDB();
   // Onglet initial via URL param ?tab=...
   const urlTab = new URLSearchParams(window.location.search).get('tab');
-  if (urlTab && ['dashboard','matieres','produits-finis','referentiel','stock','inventaire','reception','historique','traca','monitoring'].includes(urlTab)) {
+  if (urlTab && ['dashboard','matieres','produits-finis','negoce','referentiel','stock','inventaire','reception','historique','traca','monitoring'].includes(urlTab)) {
     S.tab = urlTab;
   }
   if (S.tab === 'monitoring' && S.user
@@ -9932,6 +10725,7 @@ async function init() {
   else if (S.tab === 'inventaire') { await loadInventaireList(); }
   else if (S.tab === 'matieres') { await loadMatieres(); }
   else if (S.tab === 'produits-finis') { await loadProduitsFinis(); }
+  else if (S.tab === 'negoce') { await loadNegoce(); }
   else if (S.tab === 'historique') { await loadHistorique(); }
   else if (S.tab === 'monitoring') { await loadMonitoring(); }
   else if (S.tab === 'referentiel') { await loadDashboard(); }
