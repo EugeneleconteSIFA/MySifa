@@ -1732,16 +1732,16 @@ body.light .stock-empl-suggest-add:hover{background:rgba(124,58,237,.2);color:#1
 .expe-dep-actions-td{max-width:none!important;overflow:visible;text-overflow:clip;white-space:normal;vertical-align:middle}
 .expe-day-sep-row td { padding: 0 !important; }
 .expe-day-sep-cell {
-  padding: 12px 12px !important;
+  padding: 20px 14px 8px !important;
   background: var(--bg);
   border-top: 2px solid var(--border);
 }
 .expe-day-sep-label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--muted);
+  letter-spacing: 0.6px;
+  color: var(--text2);
 }
 .expe-dep-actions-cell{display:flex;flex-direction:row;align-items:center;justify-content:flex-end;gap:10px}
 .expe-dep-acts{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;flex-shrink:0}
@@ -6537,6 +6537,15 @@ function renderExpeDepartModal(){
   return overlay;
 }
 
+// Résolution couleur transporteur : JOIN DB en priorité, sinon lookup par nom dans T.list
+function trpColorFromRow(r){
+  if(r.transporteur_couleur)return r.transporteur_couleur;
+  const nom=(r.transporteur||'').trim().toLowerCase();
+  if(!nom)return '';
+  const t=(T.list||[]).find(x=>(x.nom||'').trim().toLowerCase()===nom);
+  return t?(t.couleur||''):'';
+}
+
 function expeDepartActsGrid(buttons,validerBtn){
   const kids=(buttons||[]).filter(Boolean);
   if(!kids.length&&!validerBtn) return null;
@@ -6563,7 +6572,7 @@ function renderExpeSuiviDeparts(){
   };
   const topBar=h('div',{className:'card',style:{marginBottom:'12px'}},
     h('div',{className:'card-header',style:{display:'flex',justifyContent:'flex-start',alignItems:'center',gap:'12px',flexWrap:'wrap'}},
-      h('h3',{className:'expe-mobile-hide-head'},'Départs du jour'),
+      h('h3',{className:'expe-mobile-hide-head'},'Départs programmés'),
       expeCanWrite()?h('div',{style:btnBarStyle},
         h('button',{className:'btn',type:'button',style:btnPairStyle,onClick:()=>expeOpenDepartModal(null,'new')},iconEl('plus',14),' Ajouter')
       ):null
@@ -6597,9 +6606,7 @@ function renderExpeSuiviDeparts(){
     bodyRows.push(h('tr',null,
       h('td',null,dateEnl),
       h('td',null,r.affreteurs||'—'),
-      h('td',null,r.transporteur_couleur
-        ?trpTag(r.transporteur||'—',r.transporteur_couleur)
-        :(r.transporteur||'—')),
+      h('td',null,(c=>c?trpTag(r.transporteur||'—',c):(r.transporteur||'—'))(trpColorFromRow(r))),
       h('td',null,r.client||'—'),
       h('td',{style:{maxWidth:'140px',fontSize:'12px'}},r.code_postal_destination||'—'),
       h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.ref_sifa||'—'),
@@ -6638,7 +6645,7 @@ function renderExpeSuiviDeparts(){
   });
   const body=rows.length?bodyRows:[h('tr',null,h('td',{colSpan:14,style:{color:'var(--muted)'}},S.expeDepartLoading?'Chargement…':'Aucun départ en attente pour ce jour'))];
   const listCard=h('div',{className:'card'},
-    h('div',{className:'card-header'},h('h3',{className:'expe-mobile-hide-head'},'Départs du jour (en attente de validation)')),
+    h('div',{className:'card-header'},h('h3',{className:'expe-mobile-hide-head'},'Départs programmés (en attente de validation)')),
     h('div',{style:{overflowX:'auto'}},h('table',{className:'table-std expe-departs-table'},h('thead',null,head),h('tbody',null,...body)))
   );
   return h('div',null,topBar,listCard,renderExpeDepartModal());
@@ -6675,7 +6682,7 @@ function renderExpeHistoriqueDeparts(){
     h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.arc||'—'),
     h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.no_cde_transport||'—'),
     h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.no_bl||'—'),
-    h('td',null,r.transporteur_couleur?trpTag(r.transporteur||'—',r.transporteur_couleur):(r.transporteur||'—')),
+    h('td',null,(c=>c?trpTag(r.transporteur||'—',c):(r.transporteur||'—'))(trpColorFromRow(r))),
     h('td',{style:{fontSize:'12px',maxWidth:'120px'}},expePaletteTypeLabel(r)),
     h('td',null,r.nb_palette!=null?String(r.nb_palette):'—'),
     h('td',null,r.poids_total_kg!=null?String(r.poids_total_kg):'—'),
@@ -6724,7 +6731,7 @@ function renderExpeHistoriqueDeparts(){
 function renderExpeSuiviDepartsWithSubtabs(){
   const sub=S.expeDepartSubTab||'jour';
   const tabs=[
-    {key:'jour',label:'Départs du jour',icon:'clipboard'},
+    {key:'jour',label:'Départs programmés',icon:'clipboard'},
     {key:'historique',label:'Historique',icon:'folder'},
   ];
   const subNav=h('div',{className:'nav-tabs',style:{marginBottom:'16px'}},
@@ -6751,6 +6758,7 @@ function renderExpe(){
   if(loadKey!==_expeLastRenderedInnerTab){
     _expeLastRenderedInnerTab=loadKey;
     if(tab==='suivi_departs'){
+      if(!T.list.length&&!T.loading)void loadTransporteurs();
       if(sub==='jour')void loadExpeDepartJour();
       else void loadExpeDepartHistorique();
     }else if(tab==='comparateur'){if(!T.list.length&&!T.loading)void loadTransporteurs();}
@@ -6800,7 +6808,7 @@ function renderExpe(){
     h('div',null,
       h('div',{className:'mobile-topbar-title'},'MyExpé'),
       h('div',{className:'mobile-topbar-sub'},
-        tab==='suivi_departs'?(sub==='historique'?'Historique départs':'Départs du jour'):
+        tab==='suivi_departs'?(sub==='historique'?'Historique départs':'Départs programmés'):
         tab==='transporteurs'?'Transporteurs':tab==='devis'?'Demandes de devis':tab==='prospects'?'Prospects transporteurs':tab==='poids'?'Poids envoi':'Comparateur tarifs')
     ),
     h('button',{type:'button',className:'mobile-home-btn',onClick:()=>{window.location.href='/'},'aria-label':'Accueil'},iconEl('home',20))

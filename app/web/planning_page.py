@@ -1641,7 +1641,7 @@ function renderSidebar(){
       {key:"production",label:"Production",icon:"wrench",href:"/prod?page=production"},
       {key:"traceabilite",label:"Traçabilité",icon:"layers",href:"/prod?page=traceabilite"},
       ...(admin?[{key:"rentabilite",label:"Rentabilité",icon:"trending-up",href:"/prod?page=rentabilite"}]:[]),
-      ...(canAccessOfTab()?[{key:"of",label:"OF",icon:"file",href:"/prod?page=of"}]:[]),
+      ...(canAccessOfTab()?[{key:"of",label:"Fiches + OF",icon:"file",href:"/prod?page=of"}]:[]),
     ]),
   ];
   const isLight=document.body.classList.contains("light");
@@ -1796,11 +1796,9 @@ function render(){
   <div style="padding:0 0 16px">
     <div class="planning-tab-nav">
       <button type="button" class="planning-tab-btn ${S.planningTab==='timeline'?' active':''}" onclick="setPlanningTab('timeline')">${icon('calendar',16)} Timeline</button>
-      ${canAccessOfTab()?`<button type="button" class="planning-tab-btn ${S.planningTab==='of'?' active':''}" onclick="setPlanningTab('of')">${icon('file',16)} Fiches et OF</button>`:""}
     </div>
   </div>
-  ${S.planningTab==='of'?renderPlanningOfPanel():""}
-    <section class="sec" ${S.planningTab!=='timeline'?'style="display:none"':""}>
+    <section class="sec">
       <div class="sec-hdr">
         ${renderPlanningVueSelect()}
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
