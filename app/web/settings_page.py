@@ -191,6 +191,7 @@ body.light .empl-pill:hover{background:rgba(8,145,178,.06)}
 .empl-pill-code{font-family:ui-monospace,monospace;font-size:12px;font-weight:700;color:var(--text);letter-spacing:.03em}
 .empl-pill-del{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border:none;background:transparent;color:var(--muted);cursor:pointer;border-radius:4px;padding:0;transition:color .15s,background .15s;flex-shrink:0}
 .empl-pill-del:hover{color:var(--danger);background:rgba(248,113,113,.14)}
+#empl-add-form .btn,#empl-import-btn{color:var(--bg)}
 .empl-allee{flex:0 0 auto;width:fit-content;min-width:120px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;overflow:hidden}
 .empl-allee-hd{display:flex;align-items:center;gap:10px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)}
 .empl-allee-letter{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;background:rgba(34,211,238,.12);color:var(--accent);font-size:14px;font-weight:800;font-family:ui-monospace,monospace;flex-shrink:0}
@@ -222,7 +223,10 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .tabs{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
 .tabs .btn{display:inline-flex;align-items:center;gap:8px;vertical-align:middle}
 .tabs .btn svg{flex-shrink:0}
-.nav-group-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);padding:8px 12px 2px;opacity:.7}
+.nav-group-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);padding:6px 10px 4px;opacity:.7;display:flex;align-items:center;justify-content:space-between;cursor:pointer;border-radius:6px;user-select:none;transition:opacity .15s,background .15s}
+.nav-group-label:hover{opacity:1;background:rgba(148,163,184,.08)}
+.nav-group-chevron{display:inline-flex;flex-shrink:0;transition:transform .2s;opacity:.6}
+.nav-group-label.ngl-collapsed .nav-group-chevron{transform:rotate(-90deg)}
 .hidden{display:none}
 .legend{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
 .legend .item{padding:12px;border:1px solid var(--border);border-radius:10px;font-size:12px}
@@ -269,7 +273,7 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
   <aside class="sidebar">
     <div class="logo">My<span>Sifa</span><div class="logo-sub">by SIFA</div></div>
     <div class="nav-scroll tabs" style="width:100%;margin:0">
-      <div class="nav-group-label">Base</div>
+      <div class="nav-group-label"><span>Base</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
       <button type="button" class="nav-btn active" data-tab="users">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         Utilisateurs
@@ -290,7 +294,7 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
         Emplacements
       </button>
-      <div class="nav-group-label" style="margin-top:8px">Accès</div>
+      <div class="nav-group-label" style="margin-top:8px"><span>Accès</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
       <button type="button" class="nav-btn" data-tab="matrix">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
         Matrice d'accès
@@ -299,12 +303,12 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
         Référentiel rôles
       </button>
-      <div class="nav-group-label" style="margin-top:8px">Communication</div>
+      <div class="nav-group-label" style="margin-top:8px"><span>Communication</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
       <button type="button" class="nav-btn" data-tab="updates">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         Mises à jour
       </button>
-      <div class="nav-group-label" style="margin-top:8px">Audit</div>
+      <div class="nav-group-label" style="margin-top:8px"><span>Audit</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
       <button type="button" class="nav-btn" data-tab="audit">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -3210,6 +3214,21 @@ async function createApiKey() {
   loadApiKeys();
 }
 
+// ── Sidebar sections collapse ──
+(function initNavGroups() {
+  document.querySelectorAll('.nav-group-label').forEach(function(label) {
+    label.addEventListener('click', function() {
+      const collapsed = label.classList.toggle('ngl-collapsed');
+      // Parcourir les frères jusqu'au prochain nav-group-label
+      let el = label.nextElementSibling;
+      while (el && !el.classList.contains('nav-group-label')) {
+        el.style.display = collapsed ? 'none' : '';
+        el = el.nextElementSibling;
+      }
+    });
+  });
+})();
+
 function copyApiKey() {
   const val = document.getElementById('ak-reveal-value').textContent;
   navigator.clipboard.writeText(val).then(() => toast('Clé copiée.', false));
@@ -3317,10 +3336,14 @@ function renderEmplGrid() {
     byAllee[allee][rangee].push(code);
   }
 
+  const EMPL_LABELS = { 'Z0': 'Z0 – au sol pour expédition', 'Z1': 'Z1 – sortie de production' };
+
   function pillHtml(code) {
     const c = escHtml(code);
-    return `<span class="empl-pill" data-code="${c}">
-      <span class="empl-pill-code">${c}</span>
+    const label = escHtml(EMPL_LABELS[code] || code);
+    const title = EMPL_LABELS[code] ? escHtml(EMPL_LABELS[code]) : c;
+    return `<span class="empl-pill" data-code="${c}" title="${title}">
+      <span class="empl-pill-code">${label}</span>
       <button type="button" class="empl-pill-del" aria-label="Supprimer ${c}" onclick="deleteEmplacement('${c}')">
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>

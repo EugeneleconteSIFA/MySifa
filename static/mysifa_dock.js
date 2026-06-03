@@ -668,6 +668,7 @@
       if (postitBtn) postitBtn.style.boxShadow = SHADOW_FAB;
       layoutPostitDockMenu(postitBtn, postitMenu);
       offsetRight += FAB_SIZE + GAP;
+      bottomRowH = Math.max(bottomRowH, FAB_SIZE); // postit occupe la rangée basse → messagerie monte au-dessus
     }
 
     function chatColumnOffset() {
