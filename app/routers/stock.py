@@ -12,6 +12,7 @@ from typing import Any, Optional
 
 import pandas as pd
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
 
 from app.services.audit_service import log_action
@@ -856,6 +857,49 @@ def delete_produit(produit_id: int, request: Request):
         ip=request.client.host if request.client else None,
     )
     return {"success": True}
+
+
+# ── Plan entrepôt (référentiel emplacements_plan) ─────────────────
+@router.get("/api/stock/emplacements-plan")
+def get_emplacements_plan(request: Request):
+    """Liste des emplacements du plan (emplacements_plan). Lecture pour tous les rôles stock."""
+    require_stock(request)
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT code FROM emplacements_plan ORDER BY code"
+        ).fetchall()
+    return [r["code"] for r in rows]
+
+
+class _EmplacementPlanAdd(BaseModel):
+    code: str
+
+@router.post("/api/stock/emplacements-plan")
+def add_emplacement_plan(payload: _EmplacementPlanAdd, request: Request):
+    """Ajoute un emplacement au plan. Réservé direction / administration / superadmin."""
+    user = require_stock(request)
+    if user.get("role") not in {"superadmin", "direction", "administration"}:
+        raise HTTPException(403, "Ajout d'emplacement réservé aux administrateurs.")
+    code = payload.code.strip().upper()
+    if not code:
+        raise HTTPException(400, "Code emplacement vide.")
+    if len(code) > 20:
+        raise HTTPException(400, "Code trop long (20 caractères max).")
+    now = datetime.now().isoformat()
+    with get_db() as conn:
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS emplacements_plan (
+                code TEXT PRIMARY KEY NOT NULL,
+                imported_at TEXT NOT NULL
+            )"""
+        )
+        if conn.execute("SELECT 1 FROM emplacements_plan WHERE code=?", (code,)).fetchone():
+            raise HTTPException(409, f"L'emplacement {code} existe déjà.")
+        conn.execute(
+            "INSERT INTO emplacements_plan (code, imported_at) VALUES (?, ?)", (code, now)
+        )
+        conn.commit()
+    return {"code": code}
 
 
 # ── Emplacements ──────────────────────────────────────────────────

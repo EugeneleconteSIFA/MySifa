@@ -95,7 +95,10 @@ input,select{font-family:inherit}
   font-weight:500;width:100%;text-align:left;font-family:inherit;transition:all .15s;margin-bottom:2px}
 .nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
 .nav-section-label{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);
-  font-weight:600;padding:14px 16px 4px 16px;user-select:none;pointer-events:none}
+  font-weight:600;padding:10px 14px 4px 14px;user-select:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;border-radius:6px;transition:background .15s,opacity .15s}
+.nav-section-label:hover{background:rgba(148,163,184,.08);opacity:1}
+.nav-section-label .ngl-chevron{display:inline-flex;flex-shrink:0;transition:transform .2s;opacity:.55}
+.nav-section-label.ngl-collapsed .ngl-chevron{transform:rotate(-90deg)}
 .nav-btn--mysifa-portal{align-items:baseline;flex-wrap:wrap;gap:4px 8px;line-height:1.35}
 .nav-btn--mysifa-portal:hover{background:var(--accent-bg)}
 .nav-btn--mysifa-portal:hover .mysifa-back-preamble{color:var(--text2)}
@@ -1060,6 +1063,18 @@ body:not(.light) .invv2-c-jaune .invv2-jours{color:#fbbf24}
 body:not(.light) .invv2-c-orange .invv2-jours{color:#fb923c}
 body:not(.light) .invv2-c-rouge .invv2-jours{color:#f87171}
 
+/* Plan entrepôt */
+.plan-allee{flex:0 0 auto;width:fit-content;min-width:120px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;overflow:hidden}
+.plan-allee-hd{display:flex;align-items:center;gap:10px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.plan-allee-letter{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;background:rgba(34,211,238,.12);color:var(--accent);font-size:14px;font-weight:800;font-family:ui-monospace,monospace;flex-shrink:0}
+body.light .plan-allee-letter{background:rgba(8,145,178,.12)}
+.plan-allee-label{font-size:12px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
+.plan-allee-body{display:flex;flex-direction:column;gap:5px}
+.plan-rangee{display:flex;flex-wrap:nowrap;gap:4px}
+.plan-pill{display:inline-flex;align-items:center;padding:4px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);font-family:ui-monospace,monospace;font-size:12px;font-weight:700;color:var(--text);letter-spacing:.03em;transition:border-color .15s}
+.plan-pill:hover{border-color:var(--accent);background:rgba(34,211,238,.06)}
+body.light .plan-pill:hover{background:rgba(8,145,178,.06)}
+
 /* Détail emplacement (violet forcé) */
 .invv2-detail .invv2-back{margin-bottom:14px;color:var(--inv-v);font-weight:700}
 .invv2-detail .invv2-back:hover{background:var(--inv-v-bg-soft)}
@@ -1448,6 +1463,8 @@ let S = {
   invV2Modifs: {},           // { [produit_id]: {qte_avant, qte_apres} } modifs en attente
   invV2HistoryExpanded: false,
   invV2Submitting: false,
+  invAlertCount: null,       // nb d'emplacements rouge/orange (inventaire en retard)
+  planEntrepot: null,        // codes emplacements_plan
   modalMvt: null,
   modalType: 'entree',
   toast: null,
@@ -1989,8 +2006,28 @@ async function loadInventaireList() {
   S.invV2HistoryExpanded = false;
   try {
     const d = await api('/api/stock/inventaire-v2/emplacements');
-    if (d) { S.invV2List = Array.isArray(d) ? d : []; renderContent(); }
+    if (d) {
+      S.invV2List = Array.isArray(d) ? d : [];
+      _updateInvAlertCount();
+      renderContent();
+    }
   } catch(e) { showToast(e.message, 'error'); }
+}
+
+function _updateInvAlertCount() {
+  const list = S.invV2List || [];
+  S.invAlertCount = list.filter(e => e.couleur === 'rouge' || e.couleur === 'orange').length || null;
+}
+
+async function loadInvAlertCountBackground() {
+  try {
+    const d = await api('/api/stock/inventaire-v2/emplacements');
+    if (Array.isArray(d)) {
+      S.invV2List = d;
+      _updateInvAlertCount();
+      render(); // refresh sidebar badge
+    }
+  } catch(e) {}
 }
 
 async function loadInventaireEmpl(code) {
@@ -2897,6 +2934,7 @@ function goToTab(tab) {
   else if (tab === 'matieres') loadMatieres();
   else if (tab === 'produits-finis') loadProduitsFinis();
   else if (tab === 'historique') loadHistorique();
+  else if (tab === 'plan-entrepot') loadPlanEntrepot();
   else if (tab === 'monitoring') loadMonitoring();
 }
 
@@ -6620,6 +6658,125 @@ function exportHistoriqueCSV() {
   window.location.href = API + '/api/stock/historique-mouvements?' + params.toString();
 }
 
+// ── Plan entrepôt ──────────────────────────────────────────────────
+async function loadPlanEntrepot() {
+  S.planEntrepot = null;
+  buildPlanEntrepot();
+  try {
+    const r = await fetch('/api/stock/emplacements-plan', { credentials: 'include' });
+    S.planEntrepot = r.ok ? await r.json() : [];
+  } catch(e) { S.planEntrepot = []; }
+  buildPlanEntrepot();
+}
+
+function buildPlanEntrepot() {
+  const area = document.getElementById('scroll-area');
+  if (!area) return;
+  area.innerHTML = '';
+
+  const codes = S.planEntrepot; // null = loading, [] = empty, [...] = data
+  const canAdd = S.user && ['superadmin','direction','administration'].includes(S.user.role);
+
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'padding:20px;max-width:1200px';
+
+  // Header
+  const hd = document.createElement('div');
+  hd.style.cssText = 'display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px';
+  hd.innerHTML = '<div><div style="font-size:20px;font-weight:800;color:var(--text);margin-bottom:4px">Plan entrepôt</div>'
+    + '<div style="font-size:13px;color:var(--muted)">Référentiel des emplacements magasin'
+    + (codes ? ' · <span style="color:var(--accent);font-weight:700">' + codes.length + ' emplacement' + (codes.length>1?'s':'') + '</span>' : '')
+    + '</div></div>';
+
+  if (canAdd) {
+    const form = document.createElement('form');
+    form.style.cssText = 'display:flex;gap:6px;align-items:center;flex-shrink:0';
+    form.innerHTML = '<input id="plan-new-code" type="text" placeholder="Nouveau code (ex. A141)" maxlength="20" autocomplete="off"'
+      + ' style="width:180px;padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:ui-monospace,monospace;outline:none;text-transform:uppercase">'
+      + '<button type="submit" class="btn" style="padding:9px 16px;font-size:13px;color:var(--bg)">Ajouter</button>';
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const inp = document.getElementById('plan-new-code');
+      const code = (inp?.value || '').trim().toUpperCase();
+      if (!code) return;
+      const r = await fetch('/api/stock/emplacements-plan', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
+      });
+      if (r.status === 409) { showToast('Emplacement ' + code + ' déjà existant.', 'danger'); return; }
+      if (!r.ok) { showToast('Erreur lors de l\'ajout.', 'danger'); return; }
+      inp.value = '';
+      showToast('Emplacement ' + code + ' ajouté.', 'success');
+      loadPlanEntrepot();
+    });
+    hd.appendChild(form);
+  }
+  wrap.appendChild(hd);
+
+  if (!codes) {
+    const spin = document.createElement('div');
+    spin.style.cssText = 'color:var(--muted);font-size:13px;padding:20px 0';
+    spin.textContent = 'Chargement…';
+    wrap.appendChild(spin);
+    area.appendChild(wrap);
+    return;
+  }
+  if (!codes.length) {
+    const empty = document.createElement('div');
+    empty.style.cssText = 'color:var(--muted);font-size:13px;padding:20px 0';
+    empty.textContent = 'Aucun emplacement dans le référentiel.';
+    wrap.appendChild(empty);
+    area.appendChild(wrap);
+    return;
+  }
+
+  // Grouper allée / rangée (2 premiers chiffres)
+  const byAllee = {};
+  codes.forEach(code => {
+    const m = code.match(/^([A-Z]+)(\d{1,2})/i);
+    const allee = m ? m[1].toUpperCase() : code[0].toUpperCase();
+    const rangee = m ? m[2].padStart(2,'0') : '??';
+    if (!byAllee[allee]) byAllee[allee] = {};
+    if (!byAllee[allee][rangee]) byAllee[allee][rangee] = [];
+    byAllee[allee][rangee].push(code);
+  });
+
+  const grid = document.createElement('div');
+  grid.style.cssText = 'display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start';
+
+  Object.keys(byAllee).sort().forEach(allee => {
+    const card = document.createElement('div');
+    card.className = 'plan-allee';
+
+    const hdr = document.createElement('div');
+    hdr.className = 'plan-allee-hd';
+    hdr.innerHTML = '<span class="plan-allee-letter">' + escHtml(allee) + '</span>'
+      + '<span class="plan-allee-label">Allée ' + escHtml(allee) + '</span>';
+    card.appendChild(hdr);
+
+    const body = document.createElement('div');
+    body.className = 'plan-allee-body';
+
+    Object.keys(byAllee[allee]).sort().forEach(rangee => {
+      const row = document.createElement('div');
+      row.className = 'plan-rangee';
+      byAllee[allee][rangee].slice().sort().forEach(code => {
+        const pill = document.createElement('span');
+        pill.className = 'plan-pill';
+        pill.textContent = code;
+        row.appendChild(pill);
+      });
+      body.appendChild(row);
+    });
+    card.appendChild(body);
+    grid.appendChild(card);
+  });
+
+  wrap.appendChild(grid);
+  area.appendChild(wrap);
+}
+
 async function loadHistorique(resetPage) {
   if (resetPage) S.historiquePage = 0;
   S.historiqueLoading = true;
@@ -8152,6 +8309,7 @@ function renderContent() {
   else if (S.tab === 'traca') content = buildTraca();
   else if (S.tab === 'reception') content = buildReception();
   else if (S.tab === 'historique') content = buildHistorique();
+  else if (S.tab === 'plan-entrepot') { buildPlanEntrepot(); return; }
   else content = buildDashboard();
 
   if (content) area.appendChild(content);
@@ -9483,15 +9641,55 @@ function buildSidebarNavStructure() {
     { kind: 'sep', label: 'Outils' },
     { kind: 'btn', tab: 'historique', icon: 'clock', label: 'Historique mouvements' },
     { kind: 'btn', tab: 'traca', icon: 'printer', label: 'Étiquettes traça' },
+    { kind: 'btn', tab: 'plan-entrepot', icon: 'map-pin', label: 'Plan entrepôt' },
   );
   return items;
 }
 
 function renderSidebarNavBtn(n) {
+  const children = [iconEl(n.icon, 16), el('span', null, ' ' + n.label)];
+  if (n.tab === 'inventaire' && S.invAlertCount) {
+    const badge = document.createElement('span');
+    badge.style.cssText = 'margin-left:auto;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:800;background:#fb923c;color:#fff;flex-shrink:0';
+    badge.textContent = S.invAlertCount;
+    children.push(badge);
+  }
   return el('button', { cls: 'nav-btn' + (S.tab === n.tab ? ' active' : ''), 'data-tab': n.tab, on: { click: () => goToTab(n.tab) } },
-    iconEl(n.icon, 16),
-    el('span', null, ' ' + n.label)
+    ...children
   );
+}
+
+function renderSidebarItems(items) {
+  if (!S.navCollapsed) S.navCollapsed = new Set();
+  const nodes = [];
+  let currentGroup = null;
+  const CHV = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>';
+
+  items.forEach(item => {
+    if (item.kind === 'sep') {
+      currentGroup = item.label;
+      const collapsed = S.navCollapsed.has(currentGroup);
+      const sepEl = document.createElement('div');
+      sepEl.className = 'nav-section-label' + (collapsed ? ' ngl-collapsed' : '');
+      sepEl.innerHTML = '<span>' + item.label + '</span><span class="ngl-chevron">' + CHV + '</span>';
+      sepEl.addEventListener('click', () => {
+        const isNowCollapsed = S.navCollapsed.has(item.label);
+        if (isNowCollapsed) S.navCollapsed.delete(item.label); else S.navCollapsed.add(item.label);
+        sepEl.classList.toggle('ngl-collapsed', !isNowCollapsed);
+        let sib = sepEl.nextElementSibling;
+        while (sib && !sib.classList.contains('nav-section-label')) {
+          sib.style.display = !isNowCollapsed ? 'none' : '';
+          sib = sib.nextElementSibling;
+        }
+      });
+      nodes.push(sepEl);
+    } else {
+      const btn = renderSidebarNavBtn(item);
+      if (currentGroup && S.navCollapsed.has(currentGroup)) btn.style.display = 'none';
+      nodes.push(btn);
+    }
+  });
+  return nodes;
 }
 
 function buildStockTabPlaceholder(title) {
@@ -9526,10 +9724,7 @@ function render() {
       el('div', { cls:'logo-sub' }, 'by SIFA')
     ),
     el('div', { cls:'sidebar-nav' },
-      ...buildSidebarNavStructure().map(item => {
-        if (item.kind === 'sep') return el('div', { cls: 'nav-section-label' }, item.label);
-        return renderSidebarNavBtn(item);
-      })
+      ...renderSidebarItems(buildSidebarNavStructure())
     ),
     el('div', { cls:'sidebar-bottom' },
       el('button', { cls:'nav-btn back-mysifa', on:{ click:()=>{ window.location.href='/'; } } },
@@ -9753,7 +9948,10 @@ async function init() {
   else if (S.tab === 'historique') { await loadHistorique(); }
   else if (S.tab === 'monitoring') { await loadMonitoring(); }
   else if (S.tab === 'referentiel') { await loadDashboard(); }
+  else if (S.tab === 'plan-entrepot') { await loadPlanEntrepot(); }
   else { await loadDashboard(); }
+  // Charger le compteur d'alertes inventaire en arrière-plan (badge sidebar)
+  if (!S.tracaOnly) loadInvAlertCountBackground();
 }
 
 init();
