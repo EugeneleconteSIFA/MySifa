@@ -1071,7 +1071,7 @@ body.light .plan-allee-letter{background:rgba(8,145,178,.12)}
 .plan-allee-label{font-size:12px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
 .plan-allee-body{display:flex;flex-direction:column;gap:5px}
 .plan-rangee{display:flex;flex-wrap:nowrap;gap:4px}
-.plan-pill{display:inline-flex;align-items:center;padding:4px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);font-family:ui-monospace,monospace;font-size:12px;font-weight:700;color:var(--text);letter-spacing:.03em;transition:border-color .15s}
+.plan-pill{display:inline-flex;align-items:center;padding:4px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);font-family:ui-monospace,monospace;font-size:12px;font-weight:700;color:var(--text);letter-spacing:.03em;transition:border-color .15s,background .15s;cursor:pointer;font-family:inherit}
 .plan-pill:hover{border-color:var(--accent);background:rgba(34,211,238,.06)}
 body.light .plan-pill:hover{background:rgba(8,145,178,.06)}
 
@@ -6762,9 +6762,13 @@ function buildPlanEntrepot() {
       const row = document.createElement('div');
       row.className = 'plan-rangee';
       byAllee[allee][rangee].slice().sort().forEach(code => {
-        const pill = document.createElement('span');
+        const pill = document.createElement('button');
+        pill.type = 'button';
         pill.className = 'plan-pill';
         pill.textContent = code;
+        pill.title = 'Voir l\'emplacement ' + code;
+        pill.style.cursor = 'pointer';
+        pill.addEventListener('click', () => loadEmplacement(code));
         row.appendChild(pill);
       });
       body.appendChild(row);

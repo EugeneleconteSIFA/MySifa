@@ -3136,7 +3136,7 @@ function renderAddModal(){
   const footerBtn=_addTab==='manual'
     ? `<button type="button" class="btn-p" onclick="submitAdd()"><span style="font-size:18px;line-height:1">+</span> Ajouter</button>`
     : (_addOfParsed?`<button type="button" class="btn-p" onclick="submitAddFromOf()">Valider et créer le dossier</button>`:'');
-  document.getElementById("mroot").innerHTML=`<div class="mo modal-backdrop" onclick="if(event.target===this)closeM()">
+  document.getElementById("mroot").innerHTML=`<div class="mo modal-backdrop">
     <div class="md md--dossier" style="max-width:860px;width:100%;max-height:92vh;overflow-y:auto;padding:28px 32px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px">
         <h3 style="margin:0;font-size:18px;font-family:var(--mono);color:var(--text)">Ajouter un dossier</h3>
