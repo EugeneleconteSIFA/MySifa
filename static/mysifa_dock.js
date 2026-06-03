@@ -16,6 +16,9 @@
   /** FAB au-dessus du panneau ouvert pour permettre le 2e clic (fermer). */
   const Z_FAB_ACTIVE = 8025;
 
+  const SVG_EYE = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+  const SVG_EYE_OFF = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+
   function isMobile() {
     return window.matchMedia(MOBILE_BP).matches;
   }
@@ -701,6 +704,28 @@
 
   var CALC_APPS = { stock: 1, prod: 1, compta: 1, expe: 1, fabrication: 1, planning: 1 };
 
+  function initDockToggle() {
+    if (document.getElementById('mysifa-dock-toggle')) return;
+
+    var hidden = localStorage.getItem('mysifa_dock_hidden') === '1';
+    if (hidden) document.body.classList.add('mysifa-dock-hidden');
+
+    var btn = document.createElement('button');
+    btn.id = 'mysifa-dock-toggle';
+    btn.title = hidden ? 'Afficher les widgets' : 'Masquer les widgets';
+    btn.innerHTML = hidden ? SVG_EYE_OFF : SVG_EYE;
+
+    btn.addEventListener('click', function () {
+      var isHidden = document.body.classList.toggle('mysifa-dock-hidden');
+      localStorage.setItem('mysifa_dock_hidden', isHidden ? '1' : '');
+      btn.title = isHidden ? 'Afficher les widgets' : 'Masquer les widgets';
+      btn.innerHTML = isHidden ? SVG_EYE_OFF : SVG_EYE;
+      layout();
+    });
+
+    document.body.appendChild(btn);
+  }
+
   function bootPageWidgets() {
     var app = window.__MYSIFA_APP__ || '';
     if (CALC_APPS[app] && typeof window._calc_mount === 'function') window._calc_mount();
@@ -710,6 +735,7 @@
     if (typeof window.initPostitDock === 'function') window.initPostitDock();
     if (typeof window.initPostitsApp === 'function') window.initPostitsApp();
     layout();
+    initDockToggle();
   }
 
   window.addEventListener('resize', layout);
