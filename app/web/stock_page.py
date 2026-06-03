@@ -4128,28 +4128,25 @@ function mpIsGlassineCategory(catOrMatiere) {
 function mpUniteNom(catOrMatiere) {
   const c = mpCtx(catOrMatiere).categorie;
   if (mpIsBobineCategory(c)) return 'bobine';
-  if (c === 'palette') return 'unité';
   if (c === 'carton') return 'palette';
+  if (c === 'palette') return 'palette';
   return 'palette';
 }
 function mpUniteShort(catOrMatiere) {
   const u = mpUniteNom(catOrMatiere);
   if (u === 'bobine') return 'bob.';
-  if (u === 'unité') return 'ut.';
   if (u === 'palette') return 'pal.';
   return 'pal.';
 }
 function mpQuantiteFieldLabel(catOrMatiere) {
   const u = mpUniteNom(catOrMatiere);
   if (u === 'bobine') return 'Quantité (bobines)';
-  if (u === 'unité') return 'Quantité (unités)';
   if (u === 'palette') return 'Quantité (palettes)';
   return 'Quantité (palettes)';
 }
 function mpSeuilFieldLabel(catOrMatiere) {
   const u = mpUniteNom(catOrMatiere);
   if (u === 'bobine') return 'Seuil d\'alerte (bobines)';
-  if (u === 'unité') return 'Seuil d\'alerte (unités)';
   if (u === 'palette') return 'Seuil d\'alerte (pal.)';
   return 'Seuil d\'alerte (pal.)';
 }
@@ -4158,16 +4155,9 @@ function mpStockMini(qty, catOrMatiere) {
 }
 function mpStockLine(qty, catOrMatiere) {
   const ctx = mpCtx(catOrMatiere);
-  const base = fN(qty) + ' ' + mpUniteShort(ctx);
-  if (ctx.categorie === 'palette' && ctx.palettes_par_pile > 0) {
-    const pal = (parseFloat(qty) || 0) * ctx.palettes_par_pile;
-    return base + ' (' + fN(pal) + ' pal.)';
-  }
-  return base;
+  return fN(qty) + ' ' + mpUniteShort(ctx);
 }
 function mpStockTotalLabel(catOrMatiere) {
-  const ctx = mpCtx(catOrMatiere);
-  if (ctx.categorie === 'palette' && ctx.palettes_par_pile > 0) return 'Stock total';
   return 'Stock';
 }
 function mpQuantiteInputAttrs(catOrMatiere) {
@@ -4179,7 +4169,7 @@ function mpQuantiteInputAttrs(catOrMatiere) {
   return { type: 'number', min: '0.5', step: '0.5' };
 }
 function mpAdminHint(cat) {
-  if (cat === 'palette') return 'Stock géré en unités (palettes individuelles). Quantité minimale par saisie : 40.';
+  if (cat === 'palette') return 'Stock géré en palettes. Quantité minimale par saisie : 40.';
   if (cat === 'carton') return 'Stock géré en palettes.';
   if (mpIsBobineCategory(cat)) return 'Stock géré en bobines (réception par scan possible).';
   return 'Stock géré en palettes (pal.).';
@@ -4442,9 +4432,6 @@ function buildMatiereDetail() {
     : null;
 
   const meta = [];
-  if (mpIsPaletteCategory(m) && m.palettes_par_pile > 0) {
-    meta.push(fN(m.palettes_par_pile) + ' pal. / pile');
-  }
   if (mpIsGlassineCategory(m) && m.couleur) {
     meta.push('Couleur : ' + m.couleur);
   }
@@ -5559,13 +5546,6 @@ function matiereRefEditPayload(item, fields) {
     designation: des,
     seuil_alerte: parseFloat(fields.seuilInp.value) || 0,
   };
-  if (mpIsPaletteCategory(item)) {
-    const ppp = parseFloat(fields.pppInp.value);
-    if (!ppp || ppp <= 0) {
-      return { error: 'Palettes par pile obligatoire (valeur positive).' };
-    }
-    payload.palettes_par_pile = ppp;
-  }
   if (mpIsGlassineCategory(item) && fields.couleurInp) {
     payload.couleur = fields.couleurInp.value.trim() || des;
   }
@@ -5581,7 +5561,7 @@ function appendMatiereRefEditFields(parent, item) {
     || mpCategorieKey(item.categorie) === 'carton' || mpCategorieKey(item.categorie) === 'mandrin' ? '1' : '0.5';
   const seuilInp = el('input', { attrs: { type: 'number', min: '0', step: seuilStep } });
   seuilInp.value = String(item.seuil_alerte ?? 0);
-  const pppWrap = el('div', { cls: 'mp-field', style: { display: mpIsPaletteCategory(item) ? '' : 'none' } });
+  const pppWrap = el('div', { cls: 'mp-field', style: { display: 'none' } });
   const pppInp = el('input', { attrs: { type: 'number', min: '1', step: '1' } });
   pppInp.value = String(item.palettes_par_pile > 0 ? item.palettes_par_pile : '');
   pppWrap.append(el('label', null, 'Palettes par pile'), pppInp);

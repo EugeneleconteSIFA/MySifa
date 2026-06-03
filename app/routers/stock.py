@@ -120,7 +120,7 @@ def _mp_unite_gestion(categorie: str) -> str:
     if cat in ("frontal", "glassine"):
         return "bobine"
     if cat == "palette":
-        return "unité"
+        return "palette"
     if cat == "carton":
         return "palette"
     return "palette"
@@ -168,7 +168,7 @@ _HISTORIQUE_SQL_MP = """
         mp.designation,
         CASE
             WHEN mp.categorie IN ('frontal', 'glassine') THEN 'bobine'
-            WHEN mp.categorie = 'palette' THEN 'unité'
+            WHEN mp.categorie = 'palette' THEN 'palette'
             WHEN mp.categorie = 'carton' THEN 'palette'
             ELSE 'palette'
         END AS unite,
