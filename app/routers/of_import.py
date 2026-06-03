@@ -334,24 +334,55 @@ def get_of_for_planning_entry(entry_id: int, request: Request):
     numero_of    = entry["numero_of"]
     ref_produit  = entry["ref_produit"]
 
-    # Fallback : si of_import_id non défini, chercher par numero_of
-    if not of_import_id and numero_of:
-        with get_db() as conn2:
-            found = conn2.execute(
-                "SELECT id FROM of_imports WHERE LOWER(TRIM(of_numero))=LOWER(TRIM(?)) LIMIT 1",
-                (numero_of,),
+    def _lookup_by_numero(num: str):
+        """Cherche un OF par of_numero (case-insensitive, TRIM).
+        Tente aussi en normalisant les suffixes numériques (.0, .00…).
+        Retourne le dict de la row ou None."""
+        candidates = [num.strip()]
+        # normalise "9931861.0" → "9931861"
+        try:
+            candidates.append(str(int(float(num.strip()))))
+        except (ValueError, OverflowError):
+            pass
+        with get_db() as c:
+            for cand in dict.fromkeys(candidates):  # deduplique, préserve ordre
+                r = c.execute(
+                    """SELECT id, of_numero, reference, machine, pdf_filename,
+                              date_import, imported_by, delai_client, qte_etiquettes, metrage
+                       FROM of_imports
+                       WHERE LOWER(TRIM(of_numero))=LOWER(TRIM(?)) LIMIT 1""",
+                    (cand,),
+                ).fetchone()
+                if r:
+                    return r
+        return None
+
+    row = None
+
+    # 1. Lien direct par of_import_id
+    if of_import_id:
+        with get_db() as c:
+            row = c.execute(
+                """SELECT id, of_numero, reference, machine, pdf_filename,
+                          date_import, imported_by, delai_client, qte_etiquettes, metrage
+                   FROM of_imports WHERE id=?""",
+                (of_import_id,),
             ).fetchone()
-            if found:
-                of_import_id = found["id"]
-                # Persister le lien pour les prochains appels
-                try:
-                    conn2.execute(
+
+    # 2. Fallback : of_import_id absent ou lien mort → chercher par numero_of
+    if not row and numero_of:
+        row = _lookup_by_numero(numero_of)
+        if row:
+            # Persister le lien pour les prochains appels
+            try:
+                with get_db() as c2:
+                    c2.execute(
                         "UPDATE planning_entries SET of_import_id=? WHERE id=?",
-                        (of_import_id, entry_id),
+                        (row["id"], entry_id),
                     )
-                    conn2.commit()
-                except Exception:
-                    pass
+                    c2.commit()
+            except Exception:
+                pass
 
     # Chercher la fiche technique par ref_produit
     fiche_id = None
@@ -366,16 +397,6 @@ def get_of_for_planning_entry(entry_id: int, request: Request):
 
     base = {"entry_numero_of": numero_of, "ref_produit": ref_produit, "fiche_id": fiche_id}
 
-    if not of_import_id:
-        return {"linked": False, **base}
-
-    with get_db() as conn4:
-        row = conn4.execute(
-            """SELECT id, of_numero, reference, machine, pdf_filename,
-                      date_import, imported_by, delai_client, qte_etiquettes, metrage
-               FROM of_imports WHERE id=?""",
-            (of_import_id,),
-        ).fetchone()
     if not row:
         return {"linked": False, **base}
     return {"linked": True, "of": _row_dict(row), **base}

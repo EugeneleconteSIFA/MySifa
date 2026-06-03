@@ -2365,9 +2365,9 @@ function mkTL(mon,slots){
     const co=colorForId(s.entry_id||idx+1);
     const fm=s.format_l&&s.format_h?`${s.format_l} × ${s.format_h} mm`:"";
     const lz=s.laize?`${s.laize} mm`:"";
-    // Ligne 2 : format + laize
+    // Ligne 2 : format + laize (vue prod)
     const line2Txt=[fm,lz].filter(Boolean).join(" | ");
-    // Ligne 3 : date livraison + commentaire
+    // Ligne 3 : date livraison + commentaire (vue prod)
     const dateLiv=s.date_livraison?`à livrer pour ${s.date_livraison}`:"";
     const com=s.commentaire?String(s.commentaire).trim():"";
     const line3Parts=[dateLiv,com].filter(Boolean);
@@ -2401,15 +2401,32 @@ function mkTL(mon,slots){
     const termineTitle=termineSlideCls?"Dossier terminé — glisser pour décaler le créneau sur la ligne de temps":"";
     const sr = hasSaisieReelle() ? (s.statut_reel||"reellement_en_attente") : "reellement_en_attente";
     const durAff = (s.statut==="termine") ? (workHoursBetween(ss,se) ?? s.duree_heures) : s.duree_heures;
-    h+=`<div class="slot ${matchCls} ${aplacerCls} ${reelTermineCls} ${termineSlideCls}" data-eid="${s.entry_id||idx}" data-statut="${escAttr(s.statut||"attente")}" data-statut-reel="${escAttr(sr)}" ${canDragSlot?'draggable="true"':''} style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${isActive?"border:2px solid var(--accent);animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
+
+    // ── Vue Expédition : luminosité palettes + infos expé ─────────────
+    const isExpeVue = S.planningVue==="expe" || S.planningVue==="prod_expe";
+    const nbPalettes = (s.nb_palettes!=null && s.nb_palettes!==undefined) ? s.nb_palettes : null;
+    let expeBrightnessStyle="";
+    if(isExpeVue && nbPalettes!==null){
+      expeBrightnessStyle = nbPalettes>=6 ? "" : "filter:brightness(0.4);";
+    }
+    // Lignes en vue expé : line2 = date livraison + département, line3 = RDV si coché
+    const line2Slot = isExpeVue
+      ? [s.date_livraison||"", s.departement_livraison||""].filter(Boolean).join(" · ")
+      : line2Txt;
+    const line3Slot = isExpeVue
+      ? (s.prise_rdv ? "RDV à prendre" : (s.date_livraison?"":""))
+      : line3Txt;
+
+    h+=`<div class="slot ${matchCls} ${aplacerCls} ${reelTermineCls} ${termineSlideCls}" data-eid="${s.entry_id||idx}" data-statut="${escAttr(s.statut||"attente")}" data-statut-reel="${escAttr(sr)}" ${canDragSlot?'draggable="true"':''} style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${expeBrightnessStyle}${isActive?"border:2px solid var(--accent);animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
       onmouseenter="showTip(event,this)" onmousemove="moveTip(event)" onmouseleave="hideTip()"
       ondblclick="hideTip();openEdit(${s.entry_id||idx});event.stopPropagation()"
-      data-livraison="${escAttr(fmtLivraisonLong(s.date_livraison||""))}" data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-rfp="${escAttr(s.ref_produit||"")}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(fmtDur(durAff))}" data-exigences="${escAttr(exig)}" data-qte-etiq="${escAttr(qteEtiq!=null?fmtQty(qteEtiq):"")}"
-      data-planned-start="${escAttr(String(s.start||""))}" data-planned-end="${escAttr(String(s.end||""))}"
+      data-livraison="${escAttr(fmtLivraisonLong(s.date_livraison||""))}" data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-rfp="${escAttr(s.ref_produit||"")}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(fmtDur(durAff))}" data-exigences="${escAttr(exig)}" data-qte-etiq="${escAttr(qteEtiq!=null?fmtQty(qteEtiq):"")}" data-nb-palettes="${escAttr(nbPalettes!=null?String(nbPalettes):"")}"`+
+      ` data-prise-rdv="${s.prise_rdv?'1':'0'}" data-dept="${escAttr(s.departement_livraison||"")}"`+
+      ` data-planned-start="${escAttr(String(s.start||""))}" data-planned-end="${escAttr(String(s.end||""))}"
       data-deb="${escAttr(fdt(ss))}" data-fin="${escAttr(fdt(se))}" data-st="${escAttr(st)}" data-co="${escAttr(co)}"${termineTitle?` title="${escAttr(termineTitle)}"`:""}>
       ${destock?`<div style="position:absolute;top:4px;right:4px;width:10px;height:10px;border-radius:50%;background:rgba(71,85,105,.9);pointer-events:none;z-index:5;flex-shrink:0"></div>`:""}
       ${resizeHandle}
-      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}${fscBadgeHtml(s)}</span>${line2Txt?`<span class="line2">${escAttr(line2Txt)}</span>`:""}${line3Txt?`<span class="line3">${escAttr(line3Txt)}</span>`:""}${exig?`<span class="line-exig" title="${escAttr(exig)}">${escAttr(exig)}</span>`:""}</div>`:w>1.8?`<div style="overflow:hidden;height:100%;display:flex;align-items:center;justify-content:center"><div class="slot-vert-txt" style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg)">${escAttr((cli.slice(0,6)+(cli.length>6?".":"")).toUpperCase())}</div></div>`:""}</div>`;
+      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}${fscBadgeHtml(s)}</span>${line2Slot?`<span class="line2">${escAttr(line2Slot)}</span>`:""}${line3Slot?`<span class="line3">${escAttr(line3Slot)}</span>`:""}${exig?`<span class="line-exig" title="${escAttr(exig)}">${escAttr(exig)}</span>`:""}</div>`:w>1.8?`<div style="overflow:hidden;height:100%;display:flex;align-items:center;justify-content:center"><div class="slot-vert-txt" style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg)">${escAttr((cli.slice(0,6)+(cli.length>6?".":"")).toUpperCase())}</div></div>`:""}</div>`;
   });
 
   const np=gp(now);
@@ -2548,6 +2565,11 @@ function showTip(ev,el){hideTip();const d=el.dataset;_hoveredSlotEid=d.eid?+d.ei
   const sub=d.lbl?`<div class="tip-lbl">${d.lbl}</div>`:"";
   const liv=(d.livraison||"").trim();
   const exigTip=(d.exigences||"").trim();
+  const isExpeVueTip=S.planningVue==="expe"||S.planningVue==="prod_expe";
+  const nbPalTip=(d.nbPalettes||"").trim();
+  const deptTip=(d.dept||"").trim();
+  const rdvTip=d.priseRdv==="1";
+  const expeTipRows=isExpeVueTip?`${deptTip?`<span class="k">Département</span><span class="v">${escHtml(deptTip)}</span>`:""}${rdvTip?`<span class="k">RDV</span><span class="v" style="color:var(--warn);font-weight:600">À prendre</span>`:""}${nbPalTip?`<span class="k">Palettes prévues</span><span class="v" style="color:${+nbPalTip>=6?"var(--success)":"var(--muted)"};font-weight:700">${escHtml(nbPalTip)}</span>`:""}`:"" ;
   tipEl.innerHTML=`<div class="tip-hdr"><div class="tip-bar" style="background:${d.co||"#888"}"></div><div><div class="tip-ref">${d.ref||"—"}</div>${sub}</div></div>
     ${liv?`<div class="tip-livraison">Livraison : ${escHtml(liv)}</div>`:""}
     ${exigTip?`<div class="tip-exig"><span class="k">Exigences de production</span>${escHtml(exigTip)}</div>`:""}
@@ -2555,6 +2577,7 @@ function showTip(ev,el){hideTip();const d=el.dataset;_hoveredSlotEid=d.eid?+d.ei
     <span class="k">Début</span><span class="v">${d.deb||""}</span><span class="k">Fin</span><span class="v">${d.fin||""}</span>
     <span class="k">Statut</span><span class="v" style="color:${d.st==="En cours"?"var(--green)":d.st==="Terminé"?"var(--muted)":"var(--amber)"};font-weight:600">${d.st||""}</span>
     ${(d.qteEtiq||"").trim()?`<span class="k">Qté étiquettes</span><span class="v" style="color:var(--accent);font-weight:600">${escHtml(d.qteEtiq)}</span>`:""}
+    ${expeTipRows}
     ${(()=>{const r=d.statutReel||"";if(r==="reellement_termine")return`<span class="k">Saisie</span><span class="v" style="color:var(--muted)">✓ Terminé</span>`;if(r==="reellement_en_saisie")return`<span class="k">Saisie</span><span class="v" style="color:var(--success)">⚙ En cours</span>`;return"";})()} </div>
     ${CAN_EDIT&&d.st!=="Terminé"?`<div style="margin-top:10px;font-size:10px;color:var(--muted);text-align:center;letter-spacing:.5px">↵ Entrée · double-clic pour modifier</div>`:""}`
   el.closest(".tl-wrap").appendChild(tipEl);moveTip(ev)}

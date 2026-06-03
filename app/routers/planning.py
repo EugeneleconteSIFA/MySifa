@@ -10,6 +10,7 @@ Ajouter dans main.py :
 
 import json
 import logging
+import math
 import sqlite3
 import unicodedata
 from datetime import datetime, timedelta
@@ -766,6 +767,32 @@ def _planned_end_iso_for_machine(
         return None
 
 
+def _compute_nb_palettes(e: dict) -> Optional[int]:
+    """Calcule le nombre de palettes nécessaires.
+    Formule : nb_cartons = ceil(qte_bobines / nb_bobines_carton)
+              nb_palettes = ceil(nb_cartons / (nb_au_sol * nb_etage))
+    Retourne None si une des données est manquante ou invalide.
+    """
+    try:
+        qte_bobines     = e.get("_of_qte_bobines")
+        nb_bobines_carton = e.get("_ft_nb_bobines_carton")
+        nb_au_sol       = e.get("_ft_nb_au_sol")
+        nb_etage        = e.get("_ft_nb_etage")
+        if any(v is None for v in (qte_bobines, nb_bobines_carton, nb_au_sol, nb_etage)):
+            return None
+        qb  = float(qte_bobines)
+        nbc = float(nb_bobines_carton)
+        nas = float(nb_au_sol)
+        ne  = float(nb_etage)
+        if nbc <= 0 or nas <= 0 or ne <= 0 or qb <= 0:
+            return None
+        nb_cartons  = math.ceil(qb / nbc)
+        nb_palettes = math.ceil(nb_cartons / (nas * ne))
+        return int(nb_palettes)
+    except Exception:
+        return None
+
+
 def _of_timeline_fields(e: dict) -> Tuple[bool, Optional[float]]:
     """OF PDF lié (of_import_id) et qté étiquettes affichable (non nulle, pas 0)."""
     of_id = e.get("of_import_id")
@@ -817,6 +844,9 @@ def _slot_payload(e: dict, start_iso: str, end_iso: str) -> dict:
         "end": end_iso,
         "has_of": has_of,
         "qte_etiquettes": qte_etiquettes,
+        "nb_palettes": _compute_nb_palettes(e),
+        "prise_rdv": int(e.get("prise_rdv") or 0),
+        "departement_livraison": (e.get("departement_livraison") or "").strip(),
     }
 
 
@@ -2663,9 +2693,17 @@ def get_timeline(machine_id: int, request: Request, semaine: Optional[str] = Non
 
         rows = conn.execute(
             """
-            SELECT pe.*, oi.qte_etiquettes AS _of_qte_etiquettes
+            SELECT pe.*,
+                   oi.qte_etiquettes  AS _of_qte_etiquettes,
+                   oi.qte_bobines     AS _of_qte_bobines,
+                   ft.nb_bobines_carton AS _ft_nb_bobines_carton,
+                   ft.nb_au_sol       AS _ft_nb_au_sol,
+                   ft.nb_etage        AS _ft_nb_etage
             FROM planning_entries pe
-            LEFT JOIN of_imports oi ON oi.id = pe.of_import_id
+            LEFT JOIN of_imports oi
+                ON oi.id = pe.of_import_id
+            LEFT JOIN fiches_techniques ft
+                ON LOWER(TRIM(ft.reference)) = LOWER(TRIM(pe.ref_produit))
             WHERE pe.machine_id = ?
             ORDER BY pe.position ASC
             """,

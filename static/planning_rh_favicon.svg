@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Planning RH">
+  <defs>
+    <linearGradient id="tg" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="67%" stop-color="#ffffff"/>
+      <stop offset="67%" stop-color="#22d3ee"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="7" fill="#0a0e17"/>
+  <!-- personne avant : blanc -->
+  <g transform="translate(9,3) scale(0.5833)" stroke="#ffffff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="9" cy="7" r="4"/>
+    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+  </g>
+  <!-- personne arrière : bleu -->
+  <g transform="translate(9,3) scale(0.5833)" stroke="#22d3ee" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+  </g>
+  <text x="16" y="29" text-anchor="middle" font-family="Segoe UI, system-ui, sans-serif" font-size="9" font-weight="800" fill="url(#tg)">MyS</text>
+</svg>

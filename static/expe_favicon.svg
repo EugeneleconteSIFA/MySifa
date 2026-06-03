@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="MyExpé">
+  <defs>
+    <linearGradient id="tg" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="67%" stop-color="#ffffff"/>
+      <stop offset="67%" stop-color="#22d3ee"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="7" fill="#0a0e17"/>
+  <!-- caisse (remorque) : blanc -->
+  <g transform="translate(9,3) scale(0.5833)" stroke="#ffffff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 7h11v10H3z"/>
+  </g>
+  <!-- cabine + roues : bleu -->
+  <g transform="translate(9,3) scale(0.5833)" stroke="#22d3ee" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M14 10h4l3 3v4h-7z"/>
+    <circle cx="7.5" cy="17" r="2"/>
+    <circle cx="17.5" cy="17" r="2"/>
+  </g>
+  <text x="16" y="29" text-anchor="middle" font-family="Segoe UI, system-ui, sans-serif" font-size="9" font-weight="800" fill="url(#tg)">MyS</text>
+</svg>

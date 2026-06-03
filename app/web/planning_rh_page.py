@@ -44,8 +44,10 @@ PLANNING_RH_HTML = r"""<!DOCTYPE html>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0a0e17">
 <title>Planning RH — MySifa</title>
-<link rel="icon" type="image/png" sizes="512x512" href="/static/mys_icon_512.png">
-<link rel="apple-touch-icon" href="/static/mys_icon_180.png">
+<link rel="icon" type="image/svg+xml" href="/static/planning_rh_favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/planning_rh_favicon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/static/planning_rh_favicon-180.png">
+<meta name="apple-mobile-web-app-title" content="Planning RH">
 <link rel="stylesheet" href="/static/support_widget.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
