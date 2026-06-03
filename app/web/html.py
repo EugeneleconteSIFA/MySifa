@@ -1732,7 +1732,7 @@ body.light .stock-empl-suggest-add:hover{background:rgba(124,58,237,.2);color:#1
 .expe-dep-actions-td{max-width:none!important;overflow:visible;text-overflow:clip;white-space:normal;vertical-align:middle}
 .expe-day-sep-row td { padding: 0 !important; }
 .expe-day-sep-cell {
-  padding: 4px 12px !important;
+  padding: 12px 12px !important;
   background: var(--bg);
   border-top: 2px solid var(--border);
 }
@@ -6675,7 +6675,7 @@ function renderExpeHistoriqueDeparts(){
     h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.arc||'—'),
     h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.no_cde_transport||'—'),
     h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.no_bl||'—'),
-    h('td',null,r.transporteur||'—'),
+    h('td',null,r.transporteur_couleur?trpTag(r.transporteur||'—',r.transporteur_couleur):(r.transporteur||'—')),
     h('td',{style:{fontSize:'12px',maxWidth:'120px'}},expePaletteTypeLabel(r)),
     h('td',null,r.nb_palette!=null?String(r.nb_palette):'—'),
     h('td',null,r.poids_total_kg!=null?String(r.poids_total_kg):'—'),

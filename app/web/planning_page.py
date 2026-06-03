@@ -324,6 +324,39 @@ body.light .slot .line-exig{background:#fef9c3;color:#713f12;border-color:#ca8a0
 .lg-d:hover{transform:scale(1.3);box-shadow:0 0 0 2px rgba(255,255,255,.5)}
 body.light .lg-d{border-color:rgba(71,85,105,.3)}
 .lg-i span{font-family:var(--mono)}
+/* ── Planning tab nav ── */
+.planning-tab-nav{
+  display:inline-flex;border:1px solid var(--border);border-radius:10px;
+  overflow:hidden;background:var(--bg);
+}
+.planning-tab-btn{
+  width:auto;min-width:72px;padding:7px 12px 5px;display:flex;flex-direction:row;
+  align-items:center;gap:6px;background:none;border:none;cursor:pointer;
+  font-family:inherit;font-size:12px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.3px;color:var(--muted);
+  transition:color .15s,background .15s;
+}
+.planning-tab-btn+.planning-tab-btn{border-left:1px solid var(--border)}
+.planning-tab-btn.active{color:var(--accent);background:var(--accent-bg)}
+.planning-tab-btn:hover:not(.active){color:var(--text2);background:rgba(255,255,255,.04)}
+.planning-tab-btn svg{opacity:.65}
+.planning-tab-btn.active svg{opacity:1}
+/* ── OF panel ── */
+.planning-of-panel{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden;padding:16px 20px}
+.planning-of-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border);flex-wrap:wrap;margin-bottom:16px}
+.planning-of-toolbar-title{font-size:15px;font-weight:700;color:var(--text)}
+.planning-of-table-wrap{flex:1;overflow-y:auto;padding:0}
+table.planning-of-table{width:100%;border-collapse:collapse;font-size:12px}
+table.planning-of-table th{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px;
+  padding:8px 10px;text-align:left;border-bottom:1px solid var(--border);background:var(--bg);position:sticky;top:0;z-index:1}
+table.planning-of-table td{padding:8px 10px;border-bottom:1px solid var(--border);color:var(--text2);vertical-align:middle}
+table.planning-of-table tr:last-child td{border-bottom:none}
+.planning-of-statut{font-size:11px;font-weight:700;padding:2px 8px;border-radius:8px;display:inline-block}
+.planning-of-statut--lie{color:var(--accent);background:var(--accent-bg)}
+.planning-of-statut--nonlie{color:var(--muted);background:rgba(148,163,184,.10)}
+.planning-of-actions{display:flex;gap:6px;align-items:center}
+.planning-of-row-sub{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.35}
+.planning-of-empty{text-align:center;padding:40px 20px;color:var(--muted);font-size:13px}
 /* ── Color picker popup ── */
 .cpk{position:fixed;z-index:9999;background:var(--card);border:1px solid var(--border2);border-radius:12px;
   padding:10px;box-shadow:0 8px 32px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:8px;min-width:180px}
@@ -679,6 +712,10 @@ function setPlanningVue(key){
   else sp.delete("vue");
   location.href="/planning?"+sp.toString();
 }
+function setPlanningTab(tab){
+  S.planningTab=tab;
+  render();
+}
 function renderPlanningMobileTopbar(sub){
   const subTxt=sub||"Timeline machines, dossiers et horaires";
   return `<div class="mobile-topbar"><button type="button" class="mobile-menu-btn" onclick="toggleSidebar()" aria-label="Menu"><span style="display: inline-flex; align-items: center; flex-shrink: 0;">${icon('menu',20)}</span></button><div><div class="mobile-topbar-title">${escHtml(planningVueTopbarTitle())}</div><div class="mobile-topbar-sub">${escHtml(subTxt)}</div></div><button type="button" class="mobile-home-btn" onclick="location.href='/'" aria-label="Accueil"><span style="display: inline-flex; align-items: center; flex-shrink: 0;">${icon('home',20)}</span></button></div>`;
@@ -691,6 +728,7 @@ function appendPlanningVueParam(sp){
 let _planView=localStorage.getItem("mysifa.planning.view")||"2w";
 let S={machine:null,machines:[],entries:[],timeline:[],wo:0,loading:true,holidays:{},dayWorked:{},dayHoraires:{},weekComments:{},dayComments:{},view:_planView,
   planningVue:parsePlanningVueParam(),
+  planningTab:"timeline",
   contactOpen:false,contactSubject:"",contactMessage:"",contactSending:false,searchQuery:"",tlSearchQuery:"",tlSearchIdx:0,activeDossier:null,
   tlTotalDays:5,machineHoursPerDay:16};
 let _allTlMatches=[];
@@ -1612,6 +1650,19 @@ function renderSidebar(){
   }<div class="sidebar-bottom"><button type="button" class="nav-btn nav-btn--mysifa-portal" onclick="location.href='/'"><span class="mysifa-back-preamble">← Retour </span><span class="mysifa-back-brand">My<span class="mysifa-back-accent">Sifa</span></span></button>${planningUserChipHtml()}<button type="button" class="support-btn" onclick="openSupport()"><span class="support-ico">${(window.MySifaSupport&&window.MySifaSupport.iconSvg)?window.MySifaSupport.iconSvg():""}</span><span>Contacter le support</span></button><button type="button" class="theme-btn" onclick="toggleTheme()"><span class="theme-ico">${isLight?icon('sun',16):icon('moon',16)}</span><span class="theme-label">${isLight?"Mode clair":"Mode sombre"}</span></button><button type="button" class="logout-btn" onclick="doLogout()">${icon('log-out',14)} Déconnexion</button><div class="version">__V_LABEL__</div></div></nav>`;
 }
 function toggleTheme(){if(window.MySifaTheme)MySifaTheme.toggleMode();render();}
+function renderPlanningOfPanel(){
+  return `<div class="planning-of-panel">
+    <div class="planning-of-toolbar">
+      <div class="planning-of-toolbar-title">Fiches et OF</div>
+      <div style="font-size:12px;color:var(--muted)">Accès aux ordres de fabrication et fiches techniques</div>
+    </div>
+    <div class="planning-of-empty">
+      <div style="font-size:24px;margin-bottom:12px">${icon('file',32)}</div>
+      <div>La fonctionnalité Fiches et OF est disponible via l'onglet OF dans le menu Production.</div>
+      <div style="margin-top:8px"><a href="/prod?page=of" style="color:var(--accent);text-decoration:none;font-weight:700">Accéder à OF →</a></div>
+    </div>
+  </div>`;
+}
 async function doLogout(){try{await fetch("/api/auth/logout",{method:"POST",credentials:"include"});}catch(e){}location.href="/";}
 
 function openSupport(){
@@ -1742,7 +1793,14 @@ function render(){
       ${SHOW_DOSSIERS?`<div class="badge badge-info">${totH}h · ${nb} dossiers</div>`:""}
     </div>
   </header>
-    <section class="sec">
+  <div style="padding:0 0 16px">
+    <div class="planning-tab-nav">
+      <button type="button" class="planning-tab-btn ${S.planningTab==='timeline'?' active':''}" onclick="setPlanningTab('timeline')">${icon('calendar',16)} Timeline</button>
+      ${canAccessOfTab()?`<button type="button" class="planning-tab-btn ${S.planningTab==='of'?' active':''}" onclick="setPlanningTab('of')">${icon('file',16)} Fiches et OF</button>`:""}
+    </div>
+  </div>
+  ${S.planningTab==='of'?renderPlanningOfPanel():""}
+    <section class="sec" ${S.planningTab!=='timeline'?'style="display:none"':""}>
       <div class="sec-hdr">
         ${renderPlanningVueSelect()}
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
