@@ -1732,7 +1732,7 @@ body.light .stock-empl-suggest-add:hover{background:rgba(124,58,237,.2);color:#1
 .expe-dep-actions-td{max-width:none!important;overflow:visible;text-overflow:clip;white-space:normal;vertical-align:middle}
 .expe-day-sep-row td { padding: 0 !important; }
 .expe-day-sep-cell {
-  padding: 20px 14px 8px !important;
+  padding: 28px 14px 12px !important;
   background: var(--bg);
   border-top: 2px solid var(--border);
 }
