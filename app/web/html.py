@@ -1253,12 +1253,12 @@ body.light .portal-logout:hover:last-of-type{text-shadow:0 0 12px rgba(220,38,38
   }
   .portal-app-desc{display:none}
   .portal-app-name{
-    font-size:10px;
+    font-size:13px;
     font-weight:700;
     line-height:1.15;
     letter-spacing:.01em;
   }
-  .portal-app-icon svg{width:22px;height:22px}
+  .portal-app-icon svg{width:28px;height:28px}
   .badge-dev{top:4px;right:4px;font-size:8px;padding:1px 6px}
   .portal-apps--reorderable .portal-app--placeholder .portal-ph-plus{font-size:20px}
   .portal-apps--reorderable .portal-app--placeholder .portal-ph-label{font-size:9px}
