@@ -47,6 +47,7 @@ PLANNING_RH_HTML = r"""<!DOCTYPE html>
 <link rel="icon" type="image/svg+xml" href="/static/planning_rh_favicon.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="/static/planning_rh_favicon-32.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/static/planning_rh_favicon-180.png">
+<link rel="manifest" href="/manifest-planning-rh.webmanifest">
 <meta name="apple-mobile-web-app-title" content="Planning RH">
 <link rel="stylesheet" href="/static/support_widget.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css">

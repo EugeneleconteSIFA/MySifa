@@ -53,6 +53,7 @@ STOCK_HTML = r"""<!DOCTYPE html>
 <link rel="icon" type="image/svg+xml" href="/static/stock_favicon.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="/static/stock_favicon-32.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/static/stock_favicon-180.png">
+<link rel="manifest" href="/manifest-stock.webmanifest">
 <meta name="apple-mobile-web-app-title" content="MyStock">
 <link rel="stylesheet" href="/static/support_widget.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css">

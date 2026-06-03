@@ -22,12 +22,13 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <link rel="apple-touch-icon" __TOUCH_ICON__>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <link rel="icon" type="image/png" sizes="1024x1024" href="/static/mys_icon_1024.png">
+<link rel="manifest" href="__MANIFEST__">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="__APP_TITLE__">
 <meta name="theme-color" content="#0a0e17">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
-<title>__PAGE_TITLE__</title>
+<title>__APP_TITLE__ — MySifa</title>
 <link rel="stylesheet" href="/static/support_widget.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
@@ -12765,29 +12766,31 @@ checkAuth();
 </body>
 </html>"""
 
-_MODULE_ICONS: dict[str, tuple[str, str]] = {
-    # initial_app → (touch_icon_attr, apple-mobile-web-app-title)
-    "expe": (
-        'sizes="180x180" href="/static/expe_favicon-180.png"',
-        "MyExpé",
-    ),
+_MODULE_CONFIG: dict[str, dict] = {
+    # initial_app → config spécifique au module
+    "expe": {
+        "touch_icon": 'sizes="180x180" href="/static/expe_favicon-180.png"',
+        "app_title": "MyExpé",
+        "manifest": "/manifest-expe.webmanifest",
+    },
 }
-_DEFAULT_TOUCH_ICON = 'href="/static/mys_icon_180.png"'
-_DEFAULT_APP_TITLE = "MySifa"
+_DEFAULT_CONFIG = {
+    "touch_icon": 'href="/static/mys_icon_180.png"',
+    "app_title": "MySifa",
+    "manifest": "/manifest.webmanifest",
+}
 
 
 def render_frontend_html(initial_app: str = "portal") -> str:
-    touch_icon, app_title = _MODULE_ICONS.get(
-        initial_app, (_DEFAULT_TOUCH_ICON, _DEFAULT_APP_TITLE)
-    )
+    cfg = _MODULE_CONFIG.get(initial_app, _DEFAULT_CONFIG)
     return (
         _FRONTEND_HTML_TEMPLATE.replace("__META_DESCRIPTION__", APP_META_DESCRIPTION)
         .replace("__THEME_COLOR__", THEME_COLOR_META)
-        .replace("__PAGE_TITLE__", APP_PAGE_TITLE)
         .replace("__V_LABEL__", f"v{APP_VERSION}")
         .replace("__INITIAL_APP_VALUE__", initial_app)
-        .replace("__TOUCH_ICON__", touch_icon)
-        .replace("__APP_TITLE__", app_title)
+        .replace("__TOUCH_ICON__", cfg["touch_icon"])
+        .replace("__APP_TITLE__", cfg["app_title"])
+        .replace("__MANIFEST__", cfg["manifest"])
         .replace("__EXPE_TRANSPORTEURS_CSS__", EXPE_TRANSPORTEURS_CSS)
         .replace("__EXPE_COMPARATEUR_CSS__", EXPE_COMPARATEUR_CSS)
         .replace("__EXPE_DEVIS_CSS__", EXPE_DEVIS_CSS)
