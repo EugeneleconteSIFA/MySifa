@@ -4128,28 +4128,28 @@ function mpIsGlassineCategory(catOrMatiere) {
 function mpUniteNom(catOrMatiere) {
   const c = mpCtx(catOrMatiere).categorie;
   if (mpIsBobineCategory(c)) return 'bobine';
-  if (c === 'palette') return 'pile';
+  if (c === 'palette') return 'unité';
   if (c === 'carton') return 'palette';
   return 'palette';
 }
 function mpUniteShort(catOrMatiere) {
   const u = mpUniteNom(catOrMatiere);
   if (u === 'bobine') return 'bob.';
-  if (u === 'pile') return 'pile';
+  if (u === 'unité') return 'ut.';
   if (u === 'palette') return 'pal.';
   return 'pal.';
 }
 function mpQuantiteFieldLabel(catOrMatiere) {
   const u = mpUniteNom(catOrMatiere);
   if (u === 'bobine') return 'Quantité (bobines)';
-  if (u === 'pile') return 'Quantité (piles)';
+  if (u === 'unité') return 'Quantité (unités)';
   if (u === 'palette') return 'Quantité (palettes)';
   return 'Quantité (palettes)';
 }
 function mpSeuilFieldLabel(catOrMatiere) {
   const u = mpUniteNom(catOrMatiere);
   if (u === 'bobine') return 'Seuil d\'alerte (bobines)';
-  if (u === 'pile') return 'Seuil d\'alerte (piles)';
+  if (u === 'unité') return 'Seuil d\'alerte (unités)';
   if (u === 'palette') return 'Seuil d\'alerte (pal.)';
   return 'Seuil d\'alerte (pal.)';
 }
@@ -4172,13 +4172,14 @@ function mpStockTotalLabel(catOrMatiere) {
 }
 function mpQuantiteInputAttrs(catOrMatiere) {
   const c = mpCtx(catOrMatiere).categorie;
-  if (mpIsBobineCategory(c) || c === 'mandrin' || c === 'palette' || c === 'carton') {
+  if (c === 'palette') return { type: 'number', min: '40', step: '1' };
+  if (mpIsBobineCategory(c) || c === 'mandrin' || c === 'carton') {
     return { type: 'number', min: '1', step: '1' };
   }
   return { type: 'number', min: '0.5', step: '0.5' };
 }
 function mpAdminHint(cat) {
-  if (cat === 'palette') return 'Stock géré en piles. Indiquez combien de palettes composent une pile.';
+  if (cat === 'palette') return 'Stock géré en unités (palettes individuelles). Quantité minimale par saisie : 40.';
   if (cat === 'carton') return 'Stock géré en palettes.';
   if (mpIsBobineCategory(cat)) return 'Stock géré en bobines (réception par scan possible).';
   return 'Stock géré en palettes (pal.).';
