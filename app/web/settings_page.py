@@ -191,15 +191,15 @@ body.light .empl-pill:hover{background:rgba(8,145,178,.06)}
 .empl-pill-code{font-family:ui-monospace,monospace;font-size:12px;font-weight:700;color:var(--text);letter-spacing:.03em}
 .empl-pill-del{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border:none;background:transparent;color:var(--muted);cursor:pointer;border-radius:4px;padding:0;transition:color .15s,background .15s;flex-shrink:0}
 .empl-pill-del:hover{color:var(--danger);background:rgba(248,113,113,.14)}
-.empl-allee{margin-bottom:16px}
-.empl-allee-hd{display:flex;align-items:center;gap:10px;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.empl-allee{flex:1 1 180px;min-width:160px;max-width:340px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px}
+.empl-allee-hd{display:flex;align-items:center;gap:10px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)}
 .empl-allee-letter{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;background:rgba(34,211,238,.12);color:var(--accent);font-size:14px;font-weight:800;font-family:ui-monospace,monospace;flex-shrink:0}
 body.light .empl-allee-letter{background:rgba(8,145,178,.12)}
 .empl-allee-label{font-size:12px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
-.empl-allee-body{display:flex;flex-direction:column;gap:6px;padding-left:4px}
-.empl-rangee{display:flex;align-items:flex-start;gap:10px}
-.empl-rangee-label{flex-shrink:0;width:26px;font-size:10px;font-weight:700;color:var(--muted);font-family:ui-monospace,monospace;padding-top:6px;text-align:right}
-.empl-rangee-pills{display:flex;flex-wrap:wrap;gap:5px}
+.empl-allee-body{display:flex;flex-direction:column;gap:5px}
+.empl-rangee{display:flex;align-items:flex-start;gap:8px}
+.empl-rangee-label{flex-shrink:0;width:22px;font-size:9px;font-weight:800;color:var(--muted);font-family:ui-monospace,monospace;padding-top:5px;text-align:right;letter-spacing:.02em}
+.empl-rangee-pills{display:flex;flex-wrap:wrap;gap:4px}
 .pill--direction{border-color:rgba(244,114,182,.35);color:#f472b6;background:rgba(244,114,182,.12)}
 .pill--administration{border-color:rgba(167,139,250,.38);color:#a78bfa;background:rgba(167,139,250,.12)}
 .pill--fabrication{border-color:rgba(52,211,153,.35);color:var(--ok);background:rgba(52,211,153,.12)}
@@ -577,7 +577,7 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
             <button type="submit" class="btn btn-sm">Ajouter</button>
           </form>
         </div>
-        <div id="empl-grid" style="min-height:40px"></div>
+        <div id="empl-grid" style="display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start;min-height:40px"></div>
         <p id="empl-empty" class="sub" style="display:none;margin:16px 0 4px;font-size:13px">Aucun emplacement trouvé.</p>
       </div>
     </section>
@@ -3298,14 +3298,13 @@ function renderEmplGrid() {
   }
   if (empty) empty.style.display = 'none';
 
-  // Grouper : allée = 1re lettre(s) non-chiffre, rangée = 1er chiffre qui suit
+  // Grouper : allée = préfixe lettres, rangée = 2 premiers chiffres qui suivent
   const byAllee = {};
   for (const e of filtered) {
     const code = e.code;
-    // Extraire le préfixe lettres (allée) et le 1er chiffre (rangée)
-    const m = code.match(/^([A-Z]+)(\d)/i);
+    const m = code.match(/^([A-Z]+)(\d{1,2})/i);
     const allee  = m ? m[1].toUpperCase() : code[0].toUpperCase();
-    const rangee = m ? m[2] : '?';
+    const rangee = m ? m[2].padStart(2, '0') : '??';
     if (!byAllee[allee]) byAllee[allee] = {};
     if (!byAllee[allee][rangee]) byAllee[allee][rangee] = [];
     byAllee[allee][rangee].push(code);
@@ -3333,7 +3332,6 @@ function renderEmplGrid() {
     for (const rangee of Object.keys(rangees).sort()) {
       const codes = rangees[rangee].slice().sort();
       html += `<div class="empl-rangee">
-        <span class="empl-rangee-label">R${escHtml(rangee)}</span>
         <div class="empl-rangee-pills">${codes.map(pillHtml).join('')}</div>
       </div>`;
     }
