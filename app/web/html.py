@@ -1730,8 +1730,7 @@ body.light .stock-empl-suggest-add:hover{background:rgba(124,58,237,.2);color:#1
 .expe-departs-table tbody tr:nth-child(even) td{background:rgba(148,163,184,.06)}
 .expe-departs-table tbody tr:hover td{background:rgba(34,211,238,.06)}
 .expe-dep-actions-td{max-width:none!important;overflow:visible;text-overflow:clip;white-space:normal;vertical-align:middle}
-.expe-day-sep-row td { padding: 0 !important; }
-.expe-day-sep-cell {
+.expe-day-sep-row td.expe-day-sep-cell {
   padding: 28px 14px 12px !important;
   background: var(--bg);
   border-top: 2px solid var(--border);
