@@ -324,21 +324,61 @@ def get_of_for_planning_entry(entry_id: int, request: Request):
     get_current_user(request)  # authentification simple, pas de rôle requis
     with get_db() as conn:
         entry = conn.execute(
-            "SELECT of_import_id, numero_of FROM planning_entries WHERE id=?",
+            "SELECT of_import_id, numero_of, ref_produit FROM planning_entries WHERE id=?",
             (entry_id,),
         ).fetchone()
-    if not entry or not entry["of_import_id"]:
-        return {"linked": False, "entry_numero_of": entry["numero_of"] if entry else None}
-    with get_db() as conn:
-        row = conn.execute(
+    if not entry:
+        return {"linked": False, "entry_numero_of": None, "ref_produit": None, "fiche_id": None}
+
+    of_import_id = entry["of_import_id"]
+    numero_of    = entry["numero_of"]
+    ref_produit  = entry["ref_produit"]
+
+    # Fallback : si of_import_id non défini, chercher par numero_of
+    if not of_import_id and numero_of:
+        with get_db() as conn2:
+            found = conn2.execute(
+                "SELECT id FROM of_imports WHERE LOWER(TRIM(of_numero))=LOWER(TRIM(?)) LIMIT 1",
+                (numero_of,),
+            ).fetchone()
+            if found:
+                of_import_id = found["id"]
+                # Persister le lien pour les prochains appels
+                try:
+                    conn2.execute(
+                        "UPDATE planning_entries SET of_import_id=? WHERE id=?",
+                        (of_import_id, entry_id),
+                    )
+                    conn2.commit()
+                except Exception:
+                    pass
+
+    # Chercher la fiche technique par ref_produit
+    fiche_id = None
+    if ref_produit:
+        with get_db() as conn3:
+            fiche = conn3.execute(
+                "SELECT id FROM fiches_techniques WHERE LOWER(TRIM(reference))=LOWER(TRIM(?)) LIMIT 1",
+                (ref_produit,),
+            ).fetchone()
+            if fiche:
+                fiche_id = fiche["id"]
+
+    base = {"entry_numero_of": numero_of, "ref_produit": ref_produit, "fiche_id": fiche_id}
+
+    if not of_import_id:
+        return {"linked": False, **base}
+
+    with get_db() as conn4:
+        row = conn4.execute(
             """SELECT id, of_numero, reference, machine, pdf_filename,
                       date_import, imported_by, delai_client, qte_etiquettes, metrage
                FROM of_imports WHERE id=?""",
-            (entry["of_import_id"],),
+            (of_import_id,),
         ).fetchone()
     if not row:
-        return {"linked": False, "entry_numero_of": entry["numero_of"]}
-    return {"linked": True, "of": _row_dict(row), "entry_numero_of": entry["numero_of"]}
+        return {"linked": False, **base}
+    return {"linked": True, "of": _row_dict(row), **base}
 
 
 @router.get("/api/of/{of_id}/pdf-preview")

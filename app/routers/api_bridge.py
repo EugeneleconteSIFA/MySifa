@@ -161,11 +161,24 @@ def push_of(
             )
         )
         conn.commit()
-        return {
-            "inserted": True,
-            "id": cur.lastrowid,
-            "of_numero": numero,
-        }
+        new_id = cur.lastrowid
+
+    # Auto-link : relier les dossiers planning dont le numero_of correspond
+    with get_db() as conn2:
+        conn2.execute(
+            """UPDATE planning_entries
+               SET of_import_id = ?
+               WHERE LOWER(TRIM(numero_of)) = LOWER(TRIM(?))
+                 AND (of_import_id IS NULL OR of_import_id != ?)""",
+            (new_id, numero, new_id),
+        )
+        conn2.commit()
+
+    return {
+        "inserted": True,
+        "id": new_id,
+        "of_numero": numero,
+    }
 
 
 class FicheTechniqueIn(BaseModel):

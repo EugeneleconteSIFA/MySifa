@@ -604,11 +604,19 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
   padding:14px 18px;border-bottom:1px solid var(--border);flex-shrink:0}
 .of-preview-title{font-size:15px;font-weight:700;color:var(--text)}
 .of-preview-actions{display:flex;gap:8px;align-items:center}
-.of-preview-iframe{flex:1;border:none;min-height:480px}
+.of-preview-iframe{flex:1;border:none;min-height:480px;width:100%}
 .of-empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:14px;padding:48px 24px;text-align:center}
 .of-empty-state-icon{color:var(--muted);opacity:.5}
 .of-empty-state-msg{font-size:14px;color:var(--muted);line-height:1.6}
+.of-tabs-bar{display:flex;gap:0;border-bottom:1px solid var(--border);flex-shrink:0;padding:0 18px}
+.of-tab-btn{padding:10px 16px;font-size:13px;font-weight:600;color:var(--muted);background:none;
+  border:none;border-bottom:2px solid transparent;cursor:pointer;font-family:inherit;
+  margin-bottom:-1px;transition:color .15s,border-color .15s}
+.of-tab-btn:hover{color:var(--text)}
+.of-tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
+.of-tab-pane{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.of-tab-pane.hidden{display:none}
 .of-mismatch-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;
   max-width:440px;width:100%;padding:28px 24px;display:flex;flex-direction:column;gap:16px}
 </style>
@@ -3544,62 +3552,30 @@ async function openOfPreview(entryId){
     return;
   }
 
-  if(data.linked && data.of){
-    const of=data.of;
-    const ofId=of.id;
-    const ofNum=escHtml(of.of_numero||'—');
-    const refLabel=of.reference?` — ${escHtml(of.reference)}`:'';
+  // ── Contenu de l'onglet OF ────────────────────────────────────────
+  const ofId = data.linked && data.of ? data.of.id : null;
+  const hasPdf = data.of && data.of.pdf_filename;
 
-    ov.innerHTML=`<div class="of-preview-modal" style="max-height:92vh">
-      <div class="of-preview-header">
-        <span class="of-preview-title">OF ${ofNum}${refLabel}</span>
-        <div class="of-preview-actions">
-          <a href="/api/of/${ofId}/pdf" target="_blank" download
-             style="display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;
-                    border:1.5px solid var(--accent);background:var(--accent-bg);color:var(--accent);
-                    font-size:12px;font-weight:700;text-decoration:none;white-space:nowrap">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                 stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
-            Télécharger
-          </a>
-          <button onclick="closeOfPreview()" style="background:none;border:none;color:var(--muted);
-            cursor:pointer;font-size:22px;line-height:1;font-family:inherit;padding:0 4px">×</button>
-        </div>
-      </div>
-      <iframe class="of-preview-iframe" src="/api/of/${ofId}/pdf-preview"
-              style="flex:1;border:none;min-height:520px;width:100%">
-      </iframe>
-    </div>`;
-    return;
-  }
-
-  const importBtn = (typeof IS_OF_ADMIN!=='undefined' && IS_OF_ADMIN)
-    ? `<button type="button" onclick="openOfImportFromPlanning(${entryId})"
-         style="display:flex;align-items:center;gap:8px;padding:9px 18px;border-radius:8px;
-                border:1.5px solid var(--accent);background:var(--accent-bg);color:var(--accent);
-                font-size:13px;font-weight:700;cursor:pointer;font-family:inherit"
-         onmouseenter="this.style.opacity='.75'" onmouseleave="this.style.opacity='1'">
-         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-           <polyline points="17 8 12 3 7 8"/>
-           <line x1="12" y1="3" x2="12" y2="15"/>
-         </svg>
-         Importer OF
-       </button>`
-    : '';
-
-  ov.innerHTML=`<div class="of-preview-modal">
-    <div class="of-preview-header">
-      <span class="of-preview-title">Ordre de fabrication</span>
-      <button onclick="closeOfPreview()" style="background:none;border:none;color:var(--muted);
-        cursor:pointer;font-size:22px;line-height:1;font-family:inherit;padding:0 4px">×</button>
-    </div>
-    <div class="of-empty-state">
+  let ofTabContent;
+  if(ofId){
+    ofTabContent=`<iframe class="of-preview-iframe" src="/api/of/${ofId}/pdf-preview"></iframe>`;
+  }else{
+    const importBtn=(typeof IS_OF_ADMIN!=='undefined' && IS_OF_ADMIN)
+      ?`<button type="button" onclick="openOfImportFromPlanning(${entryId})"
+           style="display:flex;align-items:center;gap:8px;padding:9px 18px;border-radius:8px;
+                  border:1.5px solid var(--accent);background:var(--accent-bg);color:var(--accent);
+                  font-size:13px;font-weight:700;cursor:pointer;font-family:inherit"
+           onmouseenter="this.style.opacity='.75'" onmouseleave="this.style.opacity='1'">
+           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+             <polyline points="17 8 12 3 7 8"/>
+             <line x1="12" y1="3" x2="12" y2="15"/>
+           </svg>
+           Importer OF
+         </button>`
+      :'';
+    ofTabContent=`<div class="of-empty-state">
       <div class="of-empty-state-icon">
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -3616,8 +3592,107 @@ async function openOfPreview(entryId){
         </span>
       </div>
       ${importBtn}
+    </div>`;
+  }
+
+  // ── Contenu de l'onglet Fiche technique ──────────────────────────
+  const ficheId = data.fiche_id || null;
+  const refProduit = data.ref_produit || null;
+
+  let ficheTabContent;
+  if(ficheId){
+    ficheTabContent=`<iframe class="of-preview-iframe" src="/api/fiches-techniques/${ficheId}/pdf-preview"></iframe>`;
+  }else{
+    const msgFiche = refProduit
+      ? `Aucune fiche technique trouvée pour la référence <strong style="color:var(--text)">${escHtml(refProduit)}</strong>.`
+      : `Aucune référence produit renseignée sur ce dossier.`;
+    ficheTabContent=`<div class="of-empty-state">
+      <div class="of-empty-state-icon">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+          <line x1="3" y1="9" x2="21" y2="9"/>
+          <line x1="9" y1="21" x2="9" y2="9"/>
+        </svg>
+      </div>
+      <div class="of-empty-state-msg">${msgFiche}</div>
+    </div>`;
+  }
+
+  // ── Titre header selon onglet actif ──────────────────────────────
+  const ofNum  = data.of ? escHtml(data.of.of_numero||'—') : (data.entry_numero_of ? escHtml(data.entry_numero_of) : '—');
+  const ofRef  = data.of && data.of.reference ? ` — ${escHtml(data.of.reference)}` : '';
+  const titleOf    = `OF ${ofNum}${ofRef}`;
+  const titleFiche = refProduit ? `Fiche technique — ${escHtml(refProduit)}` : 'Fiche technique';
+
+  // ── Bouton téléchargement PDF OF ──────────────────────────────────
+  const dlBtn = (ofId && hasPdf)
+    ? `<a href="/api/of/${ofId}/pdf" target="_blank" download
+          style="display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;
+                 border:1.5px solid var(--accent);background:var(--accent-bg);color:var(--accent);
+                 font-size:12px;font-weight:700;text-decoration:none;white-space:nowrap">
+         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+           <polyline points="7 10 12 15 17 10"/>
+           <line x1="12" y1="15" x2="12" y2="3"/>
+         </svg>
+         Télécharger
+       </a>`
+    : '';
+
+  // ── Barre d'onglets (masquée si pas de ref_produit) ───────────────
+  const showTabs = !!refProduit;
+  // Stocker les titres dans une variable globale pour éviter tout pb d'échappement dans onclick
+  window._ofPreviewTitles = {of: titleOf, fiche: titleFiche};
+  const tabsBar = showTabs
+    ? `<div class="of-tabs-bar">
+        <button class="of-tab-btn active" id="of-tab-btn-of"
+          onclick="switchOfPreviewTab('of')">OF</button>
+        <button class="of-tab-btn" id="of-tab-btn-fiche"
+          onclick="switchOfPreviewTab('fiche')">Fiche technique</button>
+      </div>`
+    : '';
+
+  ov.innerHTML=`<div class="of-preview-modal" style="max-height:92vh">
+    <div class="of-preview-header">
+      <span class="of-preview-title" id="of-preview-title-txt">${titleOf}</span>
+      <div class="of-preview-actions">
+        <span id="of-dl-btn-wrap">${dlBtn}</span>
+        <button onclick="closeOfPreview()" style="background:none;border:none;color:var(--muted);
+          cursor:pointer;font-size:22px;line-height:1;font-family:inherit;padding:0 4px">×</button>
+      </div>
     </div>
+    ${tabsBar}
+    <div class="of-tab-pane" id="of-tab-pane-of">${ofTabContent}</div>
+    <div class="of-tab-pane hidden" id="of-tab-pane-fiche">${ficheTabContent}</div>
   </div>`;
+}
+
+function switchOfPreviewTab(tab){
+  const paneOf    = document.getElementById('of-tab-pane-of');
+  const paneFiche = document.getElementById('of-tab-pane-fiche');
+  const btnOf     = document.getElementById('of-tab-btn-of');
+  const btnFiche  = document.getElementById('of-tab-btn-fiche');
+  const titleEl   = document.getElementById('of-preview-title-txt');
+  const dlWrap    = document.getElementById('of-dl-btn-wrap');
+  const titles    = window._ofPreviewTitles || {};
+  if(!paneOf||!paneFiche) return;
+  if(tab==='of'){
+    paneOf.classList.remove('hidden');
+    paneFiche.classList.add('hidden');
+    btnOf&&btnOf.classList.add('active');
+    btnFiche&&btnFiche.classList.remove('active');
+    if(titleEl) titleEl.innerHTML=titles.of||'Ordre de fabrication';
+    if(dlWrap) dlWrap.style.display='';
+  }else{
+    paneOf.classList.add('hidden');
+    paneFiche.classList.remove('hidden');
+    btnOf&&btnOf.classList.remove('active');
+    btnFiche&&btnFiche.classList.add('active');
+    if(titleEl) titleEl.innerHTML=titles.fiche||'Fiche technique';
+    if(dlWrap) dlWrap.style.display='none';
+  }
 }
 
 function closeOfPreview(){
