@@ -191,15 +191,14 @@ body.light .empl-pill:hover{background:rgba(8,145,178,.06)}
 .empl-pill-code{font-family:ui-monospace,monospace;font-size:12px;font-weight:700;color:var(--text);letter-spacing:.03em}
 .empl-pill-del{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border:none;background:transparent;color:var(--muted);cursor:pointer;border-radius:4px;padding:0;transition:color .15s,background .15s;flex-shrink:0}
 .empl-pill-del:hover{color:var(--danger);background:rgba(248,113,113,.14)}
-.empl-allee{flex:1 1 180px;min-width:160px;max-width:340px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px}
+.empl-allee{flex:0 0 auto;width:fit-content;min-width:120px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;overflow:hidden}
 .empl-allee-hd{display:flex;align-items:center;gap:10px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)}
 .empl-allee-letter{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;background:rgba(34,211,238,.12);color:var(--accent);font-size:14px;font-weight:800;font-family:ui-monospace,monospace;flex-shrink:0}
 body.light .empl-allee-letter{background:rgba(8,145,178,.12)}
 .empl-allee-label{font-size:12px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
 .empl-allee-body{display:flex;flex-direction:column;gap:5px}
-.empl-rangee{display:flex;align-items:flex-start;gap:8px}
-.empl-rangee-label{flex-shrink:0;width:22px;font-size:9px;font-weight:800;color:var(--muted);font-family:ui-monospace,monospace;padding-top:5px;text-align:right;letter-spacing:.02em}
-.empl-rangee-pills{display:flex;flex-wrap:wrap;gap:4px}
+.empl-rangee{display:flex;align-items:flex-start}
+.empl-rangee-pills{display:flex;flex-wrap:nowrap;gap:4px}
 .pill--direction{border-color:rgba(244,114,182,.35);color:#f472b6;background:rgba(244,114,182,.12)}
 .pill--administration{border-color:rgba(167,139,250,.38);color:#a78bfa;background:rgba(167,139,250,.12)}
 .pill--fabrication{border-color:rgba(52,211,153,.35);color:var(--ok);background:rgba(52,211,153,.12)}
@@ -566,6 +565,8 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
             <button type="button" class="btn btn-sec btn-sm" id="empl-export-csv">Exporter CSV</button>
             <button type="button" class="btn btn-sec btn-sm" id="empl-reload-csv">Recharger depuis CSV</button>
+            <button type="button" class="btn btn-sm" id="empl-import-btn">Importer nouveau CSV</button>
+            <input type="file" id="empl-import-input" accept=".csv" style="display:none">
           </div>
         </div>
         <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
@@ -3248,6 +3249,12 @@ async function initEmplacementsPanel() {
     if (form) form.addEventListener('submit', e => { e.preventDefault(); addEmplacement(); });
     const reloadBtn = document.getElementById('empl-reload-csv');
     if (reloadBtn) reloadBtn.addEventListener('click', reloadEmplacementsCsv);
+    const importBtn = document.getElementById('empl-import-btn');
+    const importInput = document.getElementById('empl-import-input');
+    if (importBtn && importInput) {
+      importBtn.addEventListener('click', () => importInput.click());
+      importInput.addEventListener('change', () => importEmplacementsCsv(importInput));
+    }
     const exportBtn = document.getElementById('empl-export-csv');
     if (exportBtn) exportBtn.addEventListener('click', exportEmplacementsCsv);
     // focus style
@@ -3387,6 +3394,37 @@ async function reloadEmplacementsCsv() {
   } catch(e) { toast('Erreur réseau.', true); }
   finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Recharger depuis CSV'; }
+  }
+}
+
+async function importEmplacementsCsv(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  if (!confirm(`Remplacer le plan actuel par "${file.name}" ? Cette action écrasera tous les emplacements existants.`)) {
+    input.value = '';
+    return;
+  }
+  const btn = document.getElementById('empl-import-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Import en cours…'; }
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    const r = await fetch('/api/settings/emplacements/import-csv', {
+      method: 'POST', credentials: 'include', body: fd,
+    });
+    const data = r.ok ? await r.json() : null;
+    if (!r.ok) {
+      let msg = 'Erreur lors de l\'import.';
+      try { const e = await r.clone().json(); if (e.detail) msg = e.detail; } catch(_) {}
+      toast(msg, true);
+    } else {
+      toast(data.imported + ' emplacement' + (data.imported > 1 ? 's' : '') + ' importé' + (data.imported > 1 ? 's' : '') + ' — nouveau plan enregistré.', false);
+      await loadEmplacements();
+    }
+  } catch(e) { toast('Erreur réseau.', true); }
+  finally {
+    input.value = '';
+    if (btn) { btn.disabled = false; btn.textContent = 'Importer nouveau CSV'; }
   }
 }
 

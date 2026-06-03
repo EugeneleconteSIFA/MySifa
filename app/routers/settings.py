@@ -1184,3 +1184,24 @@ def reload_emplacements_csv(request: Request):
     if n == 0:
         raise HTTPException(422, "Fichier CSV introuvable ou vide — aucun emplacement importé.")
     return {"imported": n}
+
+
+@router.post("/api/settings/emplacements/import-csv")
+async def import_emplacements_csv(request: Request, file: UploadFile = File(...)):
+    require_superadmin(request)
+    if not (file.filename or "").lower().endswith(".csv"):
+        raise HTTPException(400, "Le fichier doit être au format CSV (.csv).")
+    contents = await file.read()
+    if not contents.strip():
+        raise HTTPException(422, "Le fichier CSV est vide.")
+    csv_path = Path(BASE_DIR) / "data" / "emplacements_plan.csv"
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    csv_path.write_bytes(contents)
+    from app.core.database import sync_emplacements_plan_from_csv
+    try:
+        n = sync_emplacements_plan_from_csv()
+    except Exception as exc:
+        raise HTTPException(500, f"Erreur lors du rechargement : {exc}")
+    if n == 0:
+        raise HTTPException(422, "CSV importé mais aucun emplacement reconnu — vérifiez le format.")
+    return {"imported": n}
