@@ -199,19 +199,21 @@ body.mysifa-landscape-required #cw-bubble {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--muted);
-  opacity: 0.4;
+  background: rgba(128, 128, 128, 0.15);
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  color: #888;
+  opacity: 0.7;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: opacity 0.15s;
+  transition: opacity 0.15s, background 0.15s;
   padding: 0;
 }
 #mysifa-dock-toggle:hover {
-  opacity: 0.85;
+  opacity: 1;
+  background: rgba(128, 128, 128, 0.25);
+  border-color: rgba(128, 128, 128, 0.6);
 }
 
 /* Quand les widgets sont masqués */

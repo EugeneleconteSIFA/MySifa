@@ -1516,8 +1516,18 @@ def inventaire_v2_emplacement(emplacement: str, request: Request):
     """Détail d'un emplacement pour l'inventaire : produits + historique."""
     require_stock(request)
     emplacement = _normalize_emplacement(emplacement)
-    if not _is_valid_emplacement(emplacement):
-        raise HTTPException(400, f"Format emplacement invalide : {emplacement}")
+    if not emplacement:
+        raise HTTPException(400, "Code emplacement vide.")
+    with get_db() as conn:
+        # Valider : soit dans le plan, soit dans le stock réel, soit zone spéciale
+        in_plan = conn.execute(
+            "SELECT 1 FROM emplacements_plan WHERE code=? LIMIT 1", (emplacement,)
+        ).fetchone()
+        in_stock = conn.execute(
+            "SELECT 1 FROM lots_stock WHERE emplacement=? AND quantite_restante>0 LIMIT 1", (emplacement,)
+        ).fetchone()
+        if not in_plan and not in_stock and not _is_valid_emplacement(emplacement):
+            raise HTTPException(404, f"Emplacement inconnu : {emplacement}")
     with get_db() as conn:
         refs = conn.execute(
             """SELECT p.id AS produit_id, p.reference, p.designation, p.unite,

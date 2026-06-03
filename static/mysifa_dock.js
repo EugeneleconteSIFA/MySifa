@@ -705,9 +705,14 @@
   var CALC_APPS = { stock: 1, prod: 1, compta: 1, expe: 1, fabrication: 1, planning: 1 };
 
   function initDockToggle() {
-    if (document.getElementById('mysifa-dock-toggle')) return;
+    console.log('[mysifa-dock] initDockToggle called');
+    if (document.getElementById('mysifa-dock-toggle')) {
+      console.log('[mysifa-dock] Button already exists, skipping');
+      return;
+    }
 
     var hidden = localStorage.getItem('mysifa_dock_hidden') === '1';
+    console.log('[mysifa-dock] Hidden state from localStorage:', hidden);
     if (hidden) document.body.classList.add('mysifa-dock-hidden');
 
     var btn = document.createElement('button');
@@ -724,6 +729,7 @@
     });
 
     document.body.appendChild(btn);
+    console.log('[mysifa-dock] Button appended to body');
   }
 
   function bootPageWidgets() {
