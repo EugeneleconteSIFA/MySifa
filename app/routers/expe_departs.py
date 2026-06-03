@@ -129,9 +129,11 @@ def _historique_search_clause(q: str) -> tuple[str, list[Any]]:
 _DEPARTS_SELECT = """
     SELECT d.*,
            mp.reference AS type_palette_reference,
-           mp.designation AS type_palette_designation
+           mp.designation AS type_palette_designation,
+           t.couleur AS transporteur_couleur
     FROM expe_departs d
     LEFT JOIN matieres_premieres mp ON mp.id = d.type_palette_matiere_id
+    LEFT JOIN expe_transporteurs t ON t.id = d.transporteur_id
 """
 
 
@@ -615,8 +617,8 @@ def create_transporteur(request: Request, body: dict = Body(...)):
                 nom, taxe_carburant_pct, contact_nom, contact_email, contact_tel,
                 zone_france, zone_france_hors_paris, zone_affretement, zone_messagerie,
                 palette_max, poids_max_kg, accepte_poids, accepte_palette,
-                actif, created_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                couleur, actif, created_at
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 nom,
                 taxe,
@@ -631,6 +633,7 @@ def create_transporteur(request: Request, body: dict = Body(...)):
                 _float_opt(body, "poids_max_kg"),
                 _int_flag(body, "accepte_poids", 1),
                 _int_flag(body, "accepte_palette", 1),
+                _f(body, "couleur"),
                 _int_flag(body, "actif", 1),
                 now,
             ),
@@ -670,7 +673,7 @@ def update_transporteur(
         sets.append("taxe_carburant_pct=?")
         args.append(0.0 if taxe is None else taxe)
 
-    for k in ("contact_nom", "contact_email", "contact_tel"):
+    for k in ("contact_nom", "contact_email", "contact_tel", "couleur"):
         if k in body:
             sets.append(f"{k}=?")
             args.append(_f(body, k))

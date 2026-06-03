@@ -2987,6 +2987,14 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 95, "inventaires_sessions")
 
+    # v96 — expe_transporteurs : couleur personnalisée
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=96 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(expe_transporteurs)").fetchall()}
+        if "couleur" not in cols:
+            conn.execute("ALTER TABLE expe_transporteurs ADD COLUMN couleur TEXT")
+        conn.commit()
+        _record_schema_migration(conn, 96, "expe_transporteurs_couleur")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

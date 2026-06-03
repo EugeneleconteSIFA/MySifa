@@ -1730,6 +1730,19 @@ body.light .stock-empl-suggest-add:hover{background:rgba(124,58,237,.2);color:#1
 .expe-departs-table tbody tr:nth-child(even) td{background:rgba(148,163,184,.06)}
 .expe-departs-table tbody tr:hover td{background:rgba(34,211,238,.06)}
 .expe-dep-actions-td{max-width:none!important;overflow:visible;text-overflow:clip;white-space:normal;vertical-align:middle}
+.expe-day-sep-row td { padding: 0 !important; }
+.expe-day-sep-cell {
+  padding: 4px 12px !important;
+  background: var(--bg);
+  border-top: 2px solid var(--border);
+}
+.expe-day-sep-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+}
 .expe-dep-actions-cell{display:flex;flex-direction:row;align-items:center;justify-content:flex-end;gap:10px}
 .expe-dep-acts{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;flex-shrink:0}
 .expe-dep-acts .btn-ghost,.expe-dep-acts .btn-danger{width:32px;height:30px;padding:0;margin:0;
@@ -6540,7 +6553,7 @@ function renderExpeSuiviDeparts(){
     padding:'10px 16px',
     fontSize:'13px',
     borderRadius:'10px',
-    fontWeight:800,
+    fontWeight:'800',
     whiteSpace:'nowrap',
     display:'inline-flex',
     alignItems:'center',
@@ -6560,45 +6573,70 @@ function renderExpeSuiviDeparts(){
   const head=h('tr',null,
     ...['Date enl.','Affr.','Transp.','Client','Destination','Réf SIFA','ARC','Cde transp.','N° BL','Type pal.','Pal.','Poids kg','Liv. prév.',''].map(t=>h('th',null,t))
   );
-  const body=rows.length?rows.map(r=>h('tr',null,
-    h('td',null,(r.date_enlevement||'').slice(0,10)),
-    h('td',null,r.affreteurs||'—'),
-    h('td',null,r.transporteur||'—'),
-    h('td',null,r.client||'—'),
-    h('td',{style:{maxWidth:'140px',fontSize:'12px'}},r.code_postal_destination||'—'),
-    h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.ref_sifa||'—'),
-    h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.arc||'—'),
-    h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.no_cde_transport||'—'),
-    h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.no_bl||'—'),
-    h('td',{style:{fontSize:'12px',maxWidth:'120px'}},expePaletteTypeLabel(r)),
-    h('td',null,r.nb_palette!=null?String(r.nb_palette):'—'),
-    h('td',null,r.poids_total_kg!=null?String(r.poids_total_kg):'—'),
-    h('td',null,(r.date_livraison||'').slice(0,10)||'—'),
-    expeCanWrite()?h('td',{className:'expe-dep-actions-td'},
-      expeDepartActsGrid([
-        r.code_postal_destination?h('button',{className:'btn-ghost expe-dep-ab',type:'button',
-          title:'Ouvrir une demande de devis préremplie avec les données de ce départ',
-          onClick:()=>ouvrirDevisDepuisDepart(r.id,parseFloat(r.poids_total_kg)||0,parseFloat(r.nb_palette)||0,String(r.code_postal_destination||''))},expeDevisIcon(14)):null,
-        (r.code_postal_destination&&(r.poids_total_kg||r.nb_palette))?h('button',{className:'btn-ghost expe-dep-ab',type:'button',
-          title:'Comparer les tarifs des transporteurs pour ce départ',
-          onClick:()=>ouvrirComparateurDepuisDepart(r.id,parseFloat(r.poids_total_kg)||0,parseFloat(r.nb_palette)||0,String(r.code_postal_destination||''))},expeCompareIcon(14)):null,
-        h('button',{className:'btn-ghost expe-dep-ab',type:'button',title:'Dupliquer ce départ en nouvelle saisie',
-          onClick:()=>expeOpenDepartModal(r,'new')},iconEl('copy',14)),
-        h('button',{className:'btn-ghost expe-dep-ab',type:'button',title:'Modifier les informations de ce départ',
-          onClick:()=>expeOpenDepartModal(r,'edit')},iconEl('edit',14)),
-        h('button',{className:'btn-danger expe-dep-ab',type:'button',title:'Supprimer définitivement ce départ',onClick:async()=>{
-          if(!confirm('Supprimer ce départ ?')) return;
-          try{
-            await api('/api/expe/departs/'+r.id,{method:'DELETE'});
-            toast('Départ supprimé');
-            await loadExpeDepartJour();
-          }catch(e){toast(e.message||'Suppression impossible','error');}
-        }},iconEl('trash',14))
-      ],h('button',{className:'btn expe-dep-valider-btn',type:'button',
-        title:'Valider ce départ et l\'archiver dans l\'historique',
-        onClick:()=>expeValiderDepart(r.id)},'Valider'))
-    ):h('td',null,'—')
-  )):[h('tr',null,h('td',{colSpan:14,style:{color:'var(--muted)'}},S.expeDepartLoading?'Chargement…':'Aucun départ en attente pour ce jour'))];
+  function formatDateFr(iso){
+    if(!iso||iso.length<10)return iso||'—';
+    const d=new Date(iso+'T00:00:00');
+    const jours=['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
+    const mois=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+    return jours[d.getDay()]+' '+d.getDate()+' '+mois[d.getMonth()]+' '+d.getFullYear();
+  }
+  let prevDate=null;
+  const bodyRows=[];
+  rows.forEach(r=>{
+    const dateEnl=(r.date_enlevement||'').slice(0,10);
+    if(dateEnl!==prevDate){
+      bodyRows.push(
+        h('tr',{className:'expe-day-sep-row'},
+          h('td',{colSpan:14,className:'expe-day-sep-cell'},
+            h('span',{className:'expe-day-sep-label'},formatDateFr(dateEnl))
+          )
+        )
+      );
+      prevDate=dateEnl;
+    }
+    bodyRows.push(h('tr',null,
+      h('td',null,dateEnl),
+      h('td',null,r.affreteurs||'—'),
+      h('td',null,r.transporteur_couleur
+        ?trpTag(r.transporteur||'—',r.transporteur_couleur)
+        :(r.transporteur||'—')),
+      h('td',null,r.client||'—'),
+      h('td',{style:{maxWidth:'140px',fontSize:'12px'}},r.code_postal_destination||'—'),
+      h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.ref_sifa||'—'),
+      h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.arc||'—'),
+      h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.no_cde_transport||'—'),
+      h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.no_bl||'—'),
+      h('td',{style:{fontSize:'12px',maxWidth:'120px'}},expePaletteTypeLabel(r)),
+      h('td',null,r.nb_palette!=null?String(r.nb_palette):'—'),
+      h('td',null,r.poids_total_kg!=null?String(r.poids_total_kg):'—'),
+      h('td',null,(r.date_livraison||'').slice(0,10)||'—'),
+      expeCanWrite()?h('td',{className:'expe-dep-actions-td'},
+        expeDepartActsGrid([
+          r.code_postal_destination?h('button',{className:'btn-ghost expe-dep-ab',type:'button',
+            title:'Ouvrir une demande de devis préremplie avec les données de ce départ',
+            onClick:()=>ouvrirDevisDepuisDepart(r.id,parseFloat(r.poids_total_kg)||0,parseFloat(r.nb_palette)||0,String(r.code_postal_destination||''))},expeDevisIcon(14)):null,
+          (r.code_postal_destination&&(r.poids_total_kg||r.nb_palette))?h('button',{className:'btn-ghost expe-dep-ab',type:'button',
+            title:'Comparer les tarifs des transporteurs pour ce départ',
+            onClick:()=>ouvrirComparateurDepuisDepart(r.id,parseFloat(r.poids_total_kg)||0,parseFloat(r.nb_palette)||0,String(r.code_postal_destination||''))},expeCompareIcon(14)):null,
+          h('button',{className:'btn-ghost expe-dep-ab',type:'button',title:'Dupliquer ce départ en nouvelle saisie',
+            onClick:()=>expeOpenDepartModal(r,'new')},iconEl('copy',14)),
+          h('button',{className:'btn-ghost expe-dep-ab',type:'button',title:'Modifier les informations de ce départ',
+            onClick:()=>expeOpenDepartModal(r,'edit')},iconEl('edit',14)),
+          h('button',{className:'btn-danger expe-dep-ab',type:'button',title:'Supprimer définitivement ce départ',onClick:async()=>{
+            if(!confirm('Supprimer ce départ ?')) return;
+            try{
+              await api('/api/expe/departs/'+r.id,{method:'DELETE'});
+              toast('Départ supprimé');
+              await loadExpeDepartJour();
+            }catch(e){toast(e.message||'Suppression impossible','error');}
+          }},iconEl('trash',14))
+        ],h('button',{className:'btn expe-dep-valider-btn',type:'button',
+          title:'Valider ce départ et l\'archiver dans l\'historique',
+          onClick:()=>expeValiderDepart(r.id)},'Valider'))
+      ):h('td',null,'—')
+    ));
+  });
+  const body=rows.length?bodyRows:[h('tr',null,h('td',{colSpan:14,style:{color:'var(--muted)'}},S.expeDepartLoading?'Chargement…':'Aucun départ en attente pour ce jour'))];
   const listCard=h('div',{className:'card'},
     h('div',{className:'card-header'},h('h3',{className:'expe-mobile-hide-head'},'Départs du jour (en attente de validation)')),
     h('div',{style:{overflowX:'auto'}},h('table',{className:'table-std expe-departs-table'},h('thead',null,head),h('tbody',null,...body)))

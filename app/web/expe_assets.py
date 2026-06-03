@@ -94,6 +94,53 @@ EXPE_TRANSPORTEURS_CSS = r"""
   .expe-trp-head{padding:12px 14px}
   .expe-trp-search{max-width:none;width:100%;order:3}
 }
+
+/* ── Tag coloré transporteur ── */
+.expe-trp-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+/* Picker de couleur */
+.trp-cpk-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.trp-cpk-sw {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: transform 0.1s, border-color 0.1s;
+  flex-shrink: 0;
+}
+.trp-cpk-sw:hover { transform: scale(1.15); border-color: var(--text); }
+.trp-cpk-sw.sel { border-color: var(--text); box-shadow: 0 0 0 2px var(--accent); }
+.trp-cpk-none {
+  background: var(--bg);
+  border: 2px dashed var(--border) !important;
+  position: relative;
+}
+.trp-cpk-none::after {
+  content: '×';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: var(--muted);
+  font-weight: 700;
+}
 """
 
 EXPE_TRANSPORTEURS_JS = r"""
@@ -116,6 +163,38 @@ const T={
   tarifs_loading:false,
   tarifs_parsing:false
 };
+
+const TRP_PALETTE = [
+  "#93c5fd","#c4b5fd","#6ee7b7","#fde68a","#fca5a5","#67e8f9",
+  "#a5b4fc","#bbf7d0","#f0abfc","#fdba74","#99f6e4","#fef08a",
+  "#bfdbfe","#ddd6fe","#a7f3d0","#fecaca","#fed7aa","#e9d5ff",
+  "#3b82f6","#8b5cf6","#10b981","#f59e0b","#ef4444","#06b6d4",
+  "#6366f1","#22c55e","#d946ef","#f97316","#64748b","#94a3b8",
+];
+
+function trpTag(nom, couleur) {
+  const bg = couleur || 'var(--accent-bg)';
+  const isHex = bg && bg.startsWith('#');
+  let textColor = 'var(--text)';
+  if (isHex) {
+    const r = parseInt(bg.slice(1,3),16);
+    const g = parseInt(bg.slice(3,5),16);
+    const b = parseInt(bg.slice(5,7),16);
+    const lum = (0.299*r + 0.587*g + 0.114*b) / 255;
+    textColor = lum > 0.55 ? '#1e293b' : '#f1f5f9';
+  }
+  const el = document.createElement('span');
+  el.className = 'expe-trp-tag';
+  el.style.background = bg;
+  el.style.color = textColor;
+  el.textContent = nom || '—';
+  return el;
+}
+
+function getTrpColor(transporteurId) {
+  const tr = (T.list || []).find(x => Number(x.id) === Number(transporteurId));
+  return tr ? (tr.couleur || '') : '';
+}
 
 function escHtml(t){
   return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -259,14 +338,15 @@ function openTransporteurModal(id){
       zone_messagerie:!!Number(tr.zone_messagerie),
       actif:tr.actif==null?true:!!Number(tr.actif),
       tarif_filename:tr.tarif_filename||'',
-      tarif_url:tr.tarif_url||''
+      tarif_url:tr.tarif_url||'',
+      couleur:tr.couleur||''
     };
   }else{
     T.editId=null;
     T.form={
       nom:'',taxe_carburant_pct:'0',contact_nom:'',contact_email:'',contact_tel:'',
       zone_france:true,zone_france_hors_paris:false,zone_affretement:false,zone_messagerie:false,
-      actif:true,tarif_filename:'',tarif_url:''
+      actif:true,tarif_filename:'',tarif_url:'',couleur:''
     };
   }
   T.tarifFile=null;
@@ -523,6 +603,7 @@ function expeTrpBodyFromForm(){
     zone_france_hors_paris:T.form.zone_france_hors_paris?1:0,
     zone_affretement:T.form.zone_affretement?1:0,
     zone_messagerie:T.form.zone_messagerie?1:0,
+    couleur:T.form.couleur||null,
     actif:T.form.actif?1:0
   };
 }
@@ -691,8 +772,9 @@ function renderExpeTranspList(){
     const taxe=tr.taxe_carburant_pct!=null?Number(tr.taxe_carburant_pct):0;
     const services=expeTrpServiceBadges(tr);
     const isActive=!!Number(tr.actif);
+    const curColor=tr.couleur||'';
     const nameCell=h('td',null,
-      h('span',{className:'expe-trp-name'},escHtml(tr.nom||'')),
+      curColor?trpTag(tr.nom||'',tr.couleur):h('span',{className:'expe-trp-name'},escHtml(tr.nom||'')),
       inactive?h('span',{className:'expe-trp-badge-inactif'},'Inactif'):null
     );
     const tarifCell=tr.tarif_url
@@ -789,6 +871,38 @@ function renderExpeTransporteurModal(){
       mkText('Nom du transporteur *','nom'),
       mkText('Taxe carburant %','taxe_carburant_pct',{type:'number',step:'0.1',min:'0'})
     );
+    const curColor=T.form.couleur||'';
+    const swatches=TRP_PALETTE.map(c=>{
+      const sw=document.createElement('div');
+      sw.className='trp-cpk-sw'+(c===curColor?' sel':'');
+      sw.style.background=c;
+      sw.title=c;
+      sw.addEventListener('click',()=>{
+        T.form.couleur=c;
+        render();
+      });
+      return sw;
+    });
+    const noColorBtn=document.createElement('div');
+    noColorBtn.className='trp-cpk-sw trp-cpk-none'+(!curColor?' sel':'');
+    noColorBtn.title='Aucune couleur';
+    noColorBtn.addEventListener('click',()=>{
+      T.form.couleur='';
+      render();
+    });
+    const cpkGrid=document.createElement('div');
+    cpkGrid.className='trp-cpk-grid';
+    cpkGrid.appendChild(noColorBtn);
+    swatches.forEach(sw=>cpkGrid.appendChild(sw));
+    const preview=curColor
+      ?trpTag(T.form.nom||'Aperçu',curColor)
+      :h('span',{style:{color:'var(--muted)',fontSize:'12px'}},'Aucune couleur sélectionnée');
+    const colorSec=h('div',{className:'expe-trp-field'},
+      h('label',null,'Couleur du transporteur'),
+      cpkGrid,
+      h('div',{style:{marginTop:'8px'}},preview)
+    );
+    ident.appendChild(colorSec);
     const contact=h('div',{className:'expe-trp-sec'},
       h('div',{className:'expe-trp-sec-title'},'Contact'),
       mkText('Nom du contact','contact_nom'),
@@ -968,7 +1082,16 @@ function renderResultatsComparateur(data){
       const cardCls='expe-cmp-card'+(mc?' best':'')+(isCont?' expe-cmp-card-cont':'');
       let header='';
       if(!isCont){
-        header+='<span class="expe-cmp-card-name">'+escHtml(e.transporteur)+'</span>';
+        const couleur=getTrpColor(e.transporteur_id);
+        if(couleur){
+          const bg=couleur;
+          const r2=parseInt(bg.slice(1,3),16),g2=parseInt(bg.slice(3,5),16),b2=parseInt(bg.slice(5,7),16);
+          const lum=(0.299*r2+0.587*g2+0.114*b2)/255;
+          const fg=lum>0.55?'#1e293b':'#f1f5f9';
+          header+='<span class="expe-trp-tag" style="background:'+escHtml(bg)+';color:'+fg+'">'+escHtml(e.transporteur)+'</span>';
+        }else{
+          header+='<span class="expe-cmp-card-name">'+escHtml(e.transporteur)+'</span>';
+        }
       }
       if(methode){
         header+='<span class="expe-cmp-methode-badge">'+escHtml(methode)+'</span>';
