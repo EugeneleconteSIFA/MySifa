@@ -185,6 +185,12 @@ body.light .btn-ghost:hover{box-shadow:0 0 0 1px rgba(8,145,178,.3),0 0 12px rgb
 .btn-ghost.danger:hover{border-color:var(--danger);color:var(--danger);box-shadow:0 0 0 1px rgba(248,113,113,.35),0 0 14px rgba(248,113,113,.12)}
 
 .pill{font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;border:1px solid var(--border);display:inline-flex;align-items:center;gap:6px;line-height:1.4}
+.empl-pill{display:inline-flex;align-items:center;gap:5px;padding:4px 8px 4px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);transition:border-color .15s,background .15s}
+.empl-pill:hover{border-color:var(--accent);background:rgba(34,211,238,.06)}
+body.light .empl-pill:hover{background:rgba(8,145,178,.06)}
+.empl-pill-code{font-family:ui-monospace,monospace;font-size:12px;font-weight:700;color:var(--text);letter-spacing:.03em}
+.empl-pill-del{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border:none;background:transparent;color:var(--muted);cursor:pointer;border-radius:4px;padding:0;transition:color .15s,background .15s;flex-shrink:0}
+.empl-pill-del:hover{color:var(--danger);background:rgba(248,113,113,.14)}
 .pill--direction{border-color:rgba(244,114,182,.35);color:#f472b6;background:rgba(244,114,182,.12)}
 .pill--administration{border-color:rgba(167,139,250,.38);color:#a78bfa;background:rgba(167,139,250,.12)}
 .pill--fabrication{border-color:rgba(52,211,153,.35);color:var(--ok);background:rgba(52,211,153,.12)}
@@ -271,6 +277,10 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
       <button type="button" class="nav-btn" data-tab="machines">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
         Machines
+      </button>
+      <button type="button" class="nav-btn" data-tab="emplacements">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
+        Emplacements
       </button>
       <div class="nav-group-label" style="margin-top:8px">Accès</div>
       <button type="button" class="nav-btn" data-tab="matrix">
@@ -534,6 +544,31 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
           </div>
           <button type="button" class="btn" id="mac-nom-save" style="margin-top:14px">Enregistrer le nom</button>
         </div>
+      </div>
+    </section>
+
+    <section id="panel-emplacements" class="hidden">
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+          <div>
+            <h2 style="margin:0 0 4px">Emplacements magasin</h2>
+            <p class="sub" style="margin:0;font-size:12px">Référentiel des emplacements utilisé dans MyStock. <span id="empl-count" style="color:var(--accent);font-weight:700"></span></p>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <button type="button" class="btn btn-sec btn-sm" id="empl-reload-csv">Recharger depuis CSV</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+          <input type="text" id="empl-search" placeholder="Filtrer les emplacements…" autocomplete="off"
+            style="flex:1;min-width:180px;max-width:300px;padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s">
+          <form id="empl-add-form" style="display:flex;gap:6px">
+            <input type="text" id="empl-new-code" placeholder="Nouveau code (ex. A12)" maxlength="20" autocomplete="off"
+              style="width:160px;padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:ui-monospace,monospace;outline:none;transition:border-color .15s,box-shadow .15s;text-transform:uppercase">
+            <button type="submit" class="btn btn-sm">Ajouter</button>
+          </form>
+        </div>
+        <div id="empl-grid" style="display:flex;flex-wrap:wrap;gap:6px;min-height:40px"></div>
+        <p id="empl-empty" class="sub" style="display:none;margin:16px 0 4px;font-size:13px">Aucun emplacement trouvé.</p>
       </div>
     </section>
 
@@ -895,7 +930,7 @@ function setTab(id) {
   document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === id);
   });
-  ['users', 'matrix', 'defaults', 'fournisseurs', 'operations', 'machines', 'updates', 'audit', 'fsc', 'dashboards', 'api'].forEach(p => {
+  ['users', 'matrix', 'defaults', 'fournisseurs', 'operations', 'machines', 'emplacements', 'updates', 'audit', 'fsc', 'dashboards', 'api'].forEach(p => {
     const el = document.getElementById('panel-' + p);
     if (el) el.classList.toggle('hidden', p !== id);
   });
@@ -903,6 +938,7 @@ function setTab(id) {
   if (id === 'fournisseurs') loadFournisseurs();
   if (id === 'operations') loadOperationCodes();
   if (id === 'machines') initMachinesPanel();
+  if (id === 'emplacements') initEmplacementsPanel();
   if (id === 'updates') loadUpdates();
   if (id === 'audit') loadAuditLogs();
   if (id === 'fsc') initFscPanel();
@@ -3182,6 +3218,134 @@ async function deleteApiKey(id) {
   if (!res.ok) { toast('Erreur lors de la suppression.', true); return; }
   toast('Clé supprimée.', false);
   loadApiKeys();
+}
+
+// ──────────────────────────────────────────────────
+// Emplacements
+// ──────────────────────────────────────────────────
+let _emplData = [];
+let _emplReady = false;
+
+async function initEmplacementsPanel() {
+  if (!_emplReady) {
+    _emplReady = true;
+    const search = document.getElementById('empl-search');
+    if (search) {
+      search.addEventListener('input', () => renderEmplGrid());
+      search.addEventListener('keydown', e => { if (e.key === 'Escape') { search.value = ''; renderEmplGrid(); } });
+    }
+    const form = document.getElementById('empl-add-form');
+    if (form) form.addEventListener('submit', e => { e.preventDefault(); addEmplacement(); });
+    const reloadBtn = document.getElementById('empl-reload-csv');
+    if (reloadBtn) reloadBtn.addEventListener('click', reloadEmplacementsCsv);
+    // focus style
+    ['empl-search', 'empl-new-code'].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('focus', () => { el.style.borderColor = 'var(--accent)'; el.style.boxShadow = '0 0 0 3px rgba(34,211,238,.12)'; });
+      el.addEventListener('blur',  () => { el.style.borderColor = ''; el.style.boxShadow = ''; });
+    });
+    const codeInp = document.getElementById('empl-new-code');
+    if (codeInp) codeInp.addEventListener('input', () => { codeInp.value = codeInp.value.toUpperCase(); });
+  }
+  await loadEmplacements();
+}
+
+async function loadEmplacements() {
+  const grid = document.getElementById('empl-grid');
+  if (grid) grid.innerHTML = '<span style="color:var(--muted);font-size:13px">Chargement…</span>';
+  try {
+    const r = await fetch('/api/settings/emplacements', { credentials: 'include' });
+    if (!r.ok) throw new Error('err');
+    _emplData = await r.json();
+  } catch(e) {
+    _emplData = [];
+    toast('Erreur lors du chargement des emplacements.', true);
+  }
+  renderEmplGrid();
+}
+
+function renderEmplGrid() {
+  const grid = document.getElementById('empl-grid');
+  const empty = document.getElementById('empl-empty');
+  const count = document.getElementById('empl-count');
+  if (!grid) return;
+
+  const q = (_norm || (s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')))
+    ((document.getElementById('empl-search')?.value || '').trim());
+
+  const filtered = q
+    ? _emplData.filter(e => e.code.toLowerCase().includes(q))
+    : _emplData.slice();
+
+  if (count) count.textContent = _emplData.length + ' emplacement' + (_emplData.length > 1 ? 's' : '');
+
+  if (!filtered.length) {
+    grid.innerHTML = '';
+    if (empty) { empty.style.display = ''; empty.textContent = q ? 'Aucun résultat pour « ' + escHtml(q) + ' ».' : 'Aucun emplacement. Ajoutez-en un ou rechargez depuis le CSV.'; }
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+
+  grid.innerHTML = filtered.map(e => {
+    const c = escHtml(e.code);
+    return `<span class="empl-pill" data-code="${c}" title="Supprimer ${c}">
+      <span class="empl-pill-code">${c}</span>
+      <button type="button" class="empl-pill-del" aria-label="Supprimer ${c}" onclick="deleteEmplacement('${c}')">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </span>`;
+  }).join('');
+}
+
+async function addEmplacement() {
+  const inp = document.getElementById('empl-new-code');
+  const code = (inp?.value || '').trim().toUpperCase();
+  if (!code) { toast('Saisissez un code emplacement.', true); inp?.focus(); return; }
+  const r = await fetch('/api/settings/emplacements', {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code }),
+  });
+  if (r.status === 409) { toast(`L'emplacement ${code} existe déjà.`, true); return; }
+  if (!r.ok) {
+    let msg = 'Erreur lors de l\'ajout.';
+    try { const d = await r.json(); if (d.detail) msg = d.detail; } catch(e) {}
+    toast(msg, true); return;
+  }
+  if (inp) inp.value = '';
+  toast(`Emplacement ${code} ajouté.`, false);
+  await loadEmplacements();
+}
+
+async function deleteEmplacement(code) {
+  if (!confirm(`Supprimer l'emplacement ${code} ?`)) return;
+  const r = await fetch('/api/settings/emplacements/' + encodeURIComponent(code), {
+    method: 'DELETE', credentials: 'include',
+  });
+  if (!r.ok) { toast('Erreur lors de la suppression.', true); return; }
+  toast(`Emplacement ${code} supprimé.`, false);
+  await loadEmplacements();
+}
+
+async function reloadEmplacementsCsv() {
+  const btn = document.getElementById('empl-reload-csv');
+  if (btn) { btn.disabled = true; btn.textContent = 'Rechargement…'; }
+  try {
+    const r = await fetch('/api/settings/emplacements/reload-csv', { method: 'POST', credentials: 'include' });
+    if (r.status === 422) {
+      toast('CSV introuvable ou vide — aucun emplacement importé.', true);
+    } else if (!r.ok) {
+      toast('Erreur lors du rechargement.', true);
+    } else {
+      const d = await r.json();
+      toast(d.imported + ' emplacement' + (d.imported > 1 ? 's' : '') + ' importé' + (d.imported > 1 ? 's' : '') + ' depuis le CSV.', false);
+      await loadEmplacements();
+    }
+  } catch(e) { toast('Erreur réseau.', true); }
+  finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Recharger depuis CSV'; }
+  }
 }
 </script>
 </body>

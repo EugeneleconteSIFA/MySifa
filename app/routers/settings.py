@@ -1101,3 +1101,86 @@ def delete_api_key(key_id: int, request: Request):
         conn.execute("DELETE FROM api_keys WHERE id=?", (key_id,))
         conn.commit()
     return {"deleted": True, "id": key_id}
+
+
+# ──────────────────────────────────────────────────
+# Emplacements (référentiel magasin)
+# ──────────────────────────────────────────────────
+
+class EmplacementCreate(BaseModel):
+    code: str
+
+
+@router.get("/api/settings/emplacements")
+def get_emplacements(request: Request):
+    require_superadmin(request)
+    from database import get_db
+    with get_db() as conn:
+        # Créer la table si elle n'existe pas encore
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS emplacements_plan (
+                code TEXT PRIMARY KEY NOT NULL,
+                imported_at TEXT NOT NULL
+            )"""
+        )
+        rows = conn.execute(
+            "SELECT code, imported_at FROM emplacements_plan ORDER BY code"
+        ).fetchall()
+    return [{"code": r["code"], "imported_at": r["imported_at"]} for r in rows]
+
+
+@router.post("/api/settings/emplacements")
+def create_emplacement(payload: EmplacementCreate, request: Request):
+    require_superadmin(request)
+    code = payload.code.strip().upper()
+    if not code:
+        raise HTTPException(400, "Code emplacement vide.")
+    if len(code) > 20:
+        raise HTTPException(400, "Code trop long (20 caractères max).")
+    from database import get_db
+    now = datetime.now().isoformat()
+    with get_db() as conn:
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS emplacements_plan (
+                code TEXT PRIMARY KEY NOT NULL,
+                imported_at TEXT NOT NULL
+            )"""
+        )
+        existing = conn.execute(
+            "SELECT 1 FROM emplacements_plan WHERE code=?", (code,)
+        ).fetchone()
+        if existing:
+            raise HTTPException(409, f"L'emplacement {code} existe déjà.")
+        conn.execute(
+            "INSERT INTO emplacements_plan (code, imported_at) VALUES (?, ?)",
+            (code, now),
+        )
+        conn.commit()
+    return {"code": code, "imported_at": now}
+
+
+@router.delete("/api/settings/emplacements/{code}")
+def delete_emplacement(code: str, request: Request):
+    require_superadmin(request)
+    from database import get_db
+    with get_db() as conn:
+        result = conn.execute(
+            "DELETE FROM emplacements_plan WHERE code=?", (code.upper(),)
+        )
+        conn.commit()
+        if result.rowcount == 0:
+            raise HTTPException(404, f"Emplacement {code} introuvable.")
+    return {"deleted": True, "code": code.upper()}
+
+
+@router.post("/api/settings/emplacements/reload-csv")
+def reload_emplacements_csv(request: Request):
+    require_superadmin(request)
+    from app.core.database import sync_emplacements_plan_from_csv
+    try:
+        n = sync_emplacements_plan_from_csv()
+    except Exception as exc:
+        raise HTTPException(500, f"Erreur lors du rechargement CSV : {exc}")
+    if n == 0:
+        raise HTTPException(422, "Fichier CSV introuvable ou vide — aucun emplacement importé.")
+    return {"imported": n}
