@@ -1032,10 +1032,10 @@ body.light{
 .invv2-legend{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px;padding:10px 14px;background:var(--card);border:1px solid var(--border);border-left:4px solid var(--inv-v);border-radius:10px}
 .invv2-legend-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text);font-weight:700;text-transform:uppercase;letter-spacing:.4px}
 .invv2-dot{display:inline-block;width:10px;height:10px;border-radius:50%}
-.invv2-c-vert .invv2-dot{background:var(--success)}
-.invv2-c-jaune .invv2-dot{background:var(--warn)}
+.invv2-c-vert .invv2-dot{background:#34d399}
+.invv2-c-jaune .invv2-dot{background:#fbbf24}
 .invv2-c-orange .invv2-dot{background:#fb923c}
-.invv2-c-rouge .invv2-dot{background:var(--danger)}
+.invv2-c-rouge .invv2-dot{background:#f87171}
 .invv2-search-wrap{margin-bottom:10px}
 .invv2-search-input{width:100%;border:1.5px solid var(--border);transition:border-color .15s,box-shadow .15s}
 .invv2-search-input:focus{border-color:var(--inv-v);box-shadow:0 0 0 3px var(--inv-v-bg-soft);outline:none}
@@ -1051,10 +1051,14 @@ body.light{
 .invv2-empl-right{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0}
 .invv2-jours{font-weight:800;font-size:19px;padding:5px 14px;border-radius:10px;min-width:78px;text-align:center;line-height:1.2;font-family:monospace;border:1.5px solid transparent}
 .invv2-jours-sub{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;text-align:right;max-width:180px;font-weight:600}
-.invv2-c-vert .invv2-jours{background:color-mix(in srgb,var(--success) 22%,transparent);color:var(--success);border-color:color-mix(in srgb,var(--success) 38%,transparent)}
-.invv2-c-jaune .invv2-jours{background:color-mix(in srgb,var(--warn) 22%,transparent);color:var(--warn);border-color:color-mix(in srgb,var(--warn) 38%,transparent)}
-.invv2-c-orange .invv2-jours{background:color-mix(in srgb,#fb923c 26%,transparent);color:#fb923c;border-color:color-mix(in srgb,#fb923c 42%,transparent)}
-.invv2-c-rouge .invv2-jours{background:color-mix(in srgb,var(--danger) 22%,transparent);color:var(--danger);border-color:color-mix(in srgb,var(--danger) 38%,transparent)}
+.invv2-c-vert .invv2-jours{background:rgba(52,211,153,.18);color:#16a34a;border-color:rgba(52,211,153,.50)}
+.invv2-c-jaune .invv2-jours{background:rgba(251,191,36,.22);color:#fbbf24;border-color:rgba(251,191,36,.55)}
+.invv2-c-orange .invv2-jours{background:rgba(251,146,60,.20);color:#fb923c;border-color:rgba(251,146,60,.50)}
+.invv2-c-rouge .invv2-jours{background:rgba(248,113,113,.20);color:#dc2626;border-color:rgba(248,113,113,.50)}
+body:not(.light) .invv2-c-vert .invv2-jours{color:#34d399}
+body:not(.light) .invv2-c-jaune .invv2-jours{color:#fbbf24}
+body:not(.light) .invv2-c-orange .invv2-jours{color:#fb923c}
+body:not(.light) .invv2-c-rouge .invv2-jours{color:#f87171}
 
 /* Détail emplacement (violet forcé) */
 .invv2-detail .invv2-back{margin-bottom:14px;color:var(--inv-v);font-weight:700}

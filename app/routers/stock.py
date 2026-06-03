@@ -1412,13 +1412,14 @@ def inventaire_v2_emplacements(request: Request):
     now = datetime.now()
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT l.emplacement,
+            """SELECT ep.code AS emplacement,
                       COUNT(DISTINCT l.produit_id) AS nb_refs,
-                      SUM(l.quantite_restante) AS total_qte
-               FROM lots_stock l
-               WHERE l.quantite_restante > 0
-               GROUP BY l.emplacement
-               ORDER BY l.emplacement"""
+                      COALESCE(SUM(l.quantite_restante), 0) AS total_qte
+               FROM emplacements_plan ep
+               LEFT JOIN lots_stock l
+                 ON l.emplacement = ep.code AND l.quantite_restante > 0
+               GROUP BY ep.code
+               ORDER BY ep.code"""
         ).fetchall()
         # Dernier inventaire par emplacement
         last_invs = {
