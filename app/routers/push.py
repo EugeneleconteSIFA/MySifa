@@ -44,7 +44,13 @@ def _vapid_public_key() -> str:
 
 
 def _vapid_private_key() -> str:
-    return (os.getenv("VAPID_PRIVATE_KEY") or "").strip()
+    raw = (os.getenv("VAPID_PRIVATE_KEY") or "").strip()
+    # Quand la clé PEM est stockée sur une seule ligne dans .env, les retours
+    # ligne sont échappés ("\n" littéraux). python-dotenv ne les décode pas :
+    # on le fait nous-mêmes sinon pywebpush n'arrive pas à parser le PEM.
+    if "\\n" in raw and "\n" not in raw:
+        raw = raw.replace("\\n", "\n")
+    return raw
 
 
 def _vapid_claim_email() -> str:

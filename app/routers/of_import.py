@@ -324,7 +324,11 @@ def get_of_for_planning_entry(entry_id: int, request: Request):
     get_current_user(request)  # authentification simple, pas de rôle requis
     with get_db() as conn:
         entry = conn.execute(
-            "SELECT of_import_id, numero_of, ref_produit FROM planning_entries WHERE id=?",
+            """SELECT pe.of_import_id, pe.numero_of, pe.ref_produit,
+                      pe.machine_id, m.nom AS machine_nom
+               FROM planning_entries pe
+               LEFT JOIN machines m ON m.id = pe.machine_id
+               WHERE pe.id = ?""",
             (entry_id,),
         ).fetchone()
     if not entry:
@@ -333,6 +337,7 @@ def get_of_for_planning_entry(entry_id: int, request: Request):
     of_import_id = entry["of_import_id"]
     numero_of    = entry["numero_of"]
     ref_produit  = entry["ref_produit"]
+    machine_nom  = entry["machine_nom"]
 
     def _lookup_by_numero(num: str):
         """Cherche un OF par of_numero (case-insensitive, TRIM).
@@ -388,9 +393,10 @@ def get_of_for_planning_entry(entry_id: int, request: Request):
     # On matche en priorité sur la clé produit normalisée (ref_produit_norm,
     # XXX/NNNN) — insensible à la variante machine/laize présente dans le
     # libellé de la fiche, et tolère "1315-0004" côté dossier vs "1315/0004
-    # - COHESIO 1" côté fiche. Fallback sur la référence textuelle complète
-    # pour les fiches non encore parsées (migration v101 pas appliquée, ou
-    # cas exotique non couvert par le parser).
+    # - COHESIO 1" côté fiche. Si plusieurs fiches partagent la même clé
+    # produit (cas fréquent : une variante par machine), on privilégie celle
+    # dont la machine correspond à la machine du planning. Fallback sur la
+    # référence textuelle complète pour les fiches non encore re-parsées.
     fiche_id = None
     if ref_produit:
         try:
@@ -400,11 +406,22 @@ def get_of_for_planning_entry(entry_id: int, request: Request):
             norm = None
         with get_db() as conn3:
             if norm:
+                # ORDER BY : la fiche dont la machine matche la machine du
+                # dossier au planning passe en premier ; en cas d'absence
+                # de machine sur la fiche, on garde quand même un candidat ;
+                # en dernier recours, fiche dont la machine ne matche pas.
                 fiche = conn3.execute(
                     """SELECT id FROM fiches_techniques
                        WHERE ref_produit_norm = ?
-                       ORDER BY id LIMIT 1""",
-                    (norm,),
+                       ORDER BY
+                         CASE
+                           WHEN LOWER(TRIM(COALESCE(machine,''))) = LOWER(TRIM(COALESCE(?,''))) AND TRIM(COALESCE(machine,'')) != '' THEN 0
+                           WHEN TRIM(COALESCE(machine,'')) = '' THEN 1
+                           ELSE 2
+                         END,
+                         id
+                       LIMIT 1""",
+                    (norm, machine_nom or ""),
                 ).fetchone()
                 if fiche:
                     fiche_id = fiche["id"]

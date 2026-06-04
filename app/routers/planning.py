@@ -2691,6 +2691,14 @@ def get_timeline(machine_id: int, request: Request, semaine: Optional[str] = Non
         _auto_complete_en_cours(conn, machine_id)
         _enforce_single_en_cours(conn, machine_id)
 
+        # Nom de la machine courante : utilisé pour sélectionner, parmi
+        # plusieurs fiches techniques partageant la même référence produit,
+        # celle dont la machine correspond au planning courant.
+        machine_nom_row = conn.execute(
+            "SELECT nom FROM machines WHERE id=?", (machine_id,)
+        ).fetchone()
+        machine_nom = machine_nom_row["nom"] if machine_nom_row else ""
+
         rows = conn.execute(
             """
             SELECT pe.*,
@@ -2704,17 +2712,31 @@ def get_timeline(machine_id: int, request: Request, semaine: Optional[str] = Non
                 ON oi.id = pe.of_import_id
             -- Liaison fiche ↔ dossier : on matche en priorité sur la clé
             -- produit normalisée (XXX/NNNN), insensible aux variantes
-            -- machine/laize présentes dans le libellé. Fallback sur la
-            -- référence textuelle complète pour les fiches non re-parsées.
-            LEFT JOIN fiches_techniques ft
-                ON COALESCE(NULLIF(TRIM(ft.ref_produit_norm), ''),
-                            LOWER(TRIM(ft.reference)))
-                 = COALESCE(NULLIF(TRIM(pe.ref_produit_norm), ''),
-                            LOWER(TRIM(pe.ref_produit)))
+            -- machine/laize présentes dans le libellé. Quand plusieurs
+            -- fiches partagent la même clé (une variante par machine),
+            -- on retient celle dont `machine` correspond à la machine
+            -- courante du planning. Fallback sur la référence textuelle
+            -- complète pour les fiches non encore re-parsées.
+            LEFT JOIN fiches_techniques ft ON ft.id = (
+                SELECT ft2.id FROM fiches_techniques ft2
+                WHERE COALESCE(NULLIF(TRIM(ft2.ref_produit_norm), ''),
+                               LOWER(TRIM(ft2.reference)))
+                    = COALESCE(NULLIF(TRIM(pe.ref_produit_norm), ''),
+                               LOWER(TRIM(pe.ref_produit)))
+                ORDER BY
+                  CASE
+                    WHEN LOWER(TRIM(COALESCE(ft2.machine,''))) = LOWER(TRIM(?))
+                         AND TRIM(COALESCE(ft2.machine,'')) != '' THEN 0
+                    WHEN TRIM(COALESCE(ft2.machine,'')) = '' THEN 1
+                    ELSE 2
+                  END,
+                  ft2.id
+                LIMIT 1
+            )
             WHERE pe.machine_id = ?
             ORDER BY pe.position ASC
             """,
-            (machine_id,),
+            (machine_nom or "", machine_id),
         ).fetchall()
         entries_list = [dict(r) for r in rows]
 
