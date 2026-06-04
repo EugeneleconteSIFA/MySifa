@@ -547,7 +547,11 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 }
 .dash-section{border-top:1px solid var(--border);padding-top:22px;margin-top:22px}
 .dash-section-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;
-  color:var(--muted);margin:0 0 14px}
+  color:var(--muted);margin:0 0 14px;display:flex;align-items:center;justify-content:space-between}
+.dash-section-toggle{background:none;border:1px solid var(--border);border-radius:6px;
+  color:var(--muted);font-size:11px;font-weight:500;padding:3px 8px;cursor:pointer;
+  text-transform:none;letter-spacing:0;transition:border-color .15s,color .15s;line-height:1.4}
+.dash-section-toggle:hover{border-color:var(--accent);color:var(--accent)}
 .dash-alert-block{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;
   display:flex;flex-direction:column;min-height:100px}
 .dash-alert-block h4{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:0 0 12px;flex-shrink:0}
@@ -8032,9 +8036,19 @@ function buildDashboardAlertes(d) {
           ),
         )))
       : el('div', { cls: 'dash-alert-ok' }, 'Toutes les matières sont au-dessus des seuils.');
+  const contentAlertes = el('div', { cls: 'dash-alert-block' }, mpRows);
+  const toggleAlertes = el('button', { cls: 'dash-section-toggle' }, 'Masquer');
+  toggleAlertes.onclick = () => {
+    const hidden = contentAlertes.style.display === 'none';
+    contentAlertes.style.display = hidden ? '' : 'none';
+    toggleAlertes.textContent = hidden ? 'Masquer' : 'Afficher';
+  };
   return el('div', { cls: 'dash-section' },
-    el('div', { cls: 'dash-section-title' }, 'Stocks à réapprovisionner'),
-    el('div', { cls: 'dash-alert-block' }, mpRows),
+    el('div', { cls: 'dash-section-title' },
+      el('span', null, 'Stocks à réapprovisionner'),
+      toggleAlertes,
+    ),
+    contentAlertes,
   );
 }
 
@@ -8091,9 +8105,19 @@ function buildDashboardActivite(d) {
       ));
     });
   }
+  const contentActiv = el('div', { cls: 'dash-act-card' }, list);
+  const toggleActiv = el('button', { cls: 'dash-section-toggle' }, 'Masquer');
+  toggleActiv.onclick = () => {
+    const hidden = contentActiv.style.display === 'none';
+    contentActiv.style.display = hidden ? '' : 'none';
+    toggleActiv.textContent = hidden ? 'Masquer' : 'Afficher';
+  };
   return el('div', { cls: 'dash-section' },
-    el('div', { cls: 'dash-section-title' }, 'Activité récente'),
-    el('div', { cls: 'dash-act-card' }, list),
+    el('div', { cls: 'dash-section-title' },
+      el('span', null, 'Activité récente'),
+      toggleActiv,
+    ),
+    contentActiv,
   );
 }
 
@@ -8309,7 +8333,7 @@ function buildProduitDetail() {
     ),
     actions,
     emplBlock,
-    buildMvtHistory(sel.mouvements||[], unite, { primary:'emplacement' })
+    buildMvtHistory(sel.mouvements||[], unite, {})
   );
 }
 
