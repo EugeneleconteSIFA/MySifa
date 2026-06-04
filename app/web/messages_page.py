@@ -204,17 +204,15 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
   width:26px;height:26px;border-radius:8px;
   border:1px solid var(--border);background:var(--card);color:var(--muted);
   font-size:15px;line-height:1;cursor:pointer;
-  display:none;align-items:center;justify-content:center;
+  display:flex;align-items:center;justify-content:center;
   font-family:inherit;padding:0 0 2px 0;
-  font-weight:700;letter-spacing:.5px;z-index:10;
-  transition:border-color .12s,color .12s;
+  font-weight:700;letter-spacing:.5px;z-index:20;
+  opacity:0;pointer-events:none;
+  transition:opacity .15s,border-color .12s,color .12s;
 }
-.chat-msg:hover .chat-msg-menu-btn{display:flex}
+.chat-msg:hover .chat-msg-menu-btn{opacity:1;pointer-events:auto}
 .chat-msg.mine .chat-msg-menu-btn{right:auto;left:0}
 .chat-msg-menu-btn:hover{border-color:var(--accent);color:var(--accent)}
-/* décale légèrement le label pour ne pas être couvert par le bouton ⋮ */
-.chat-msg:hover .chat-msg-label{padding-right:32px}
-.chat-msg.mine:hover .chat-msg-label{padding-right:0;padding-left:32px}
 .chat-msg-menu{
   position:absolute;top:28px;right:0;
   background:var(--card);border:1px solid var(--border);border-radius:10px;
@@ -236,6 +234,19 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
 .chat-msg-menu-item.danger:hover{background:rgba(248,113,113,.1);color:var(--danger)}
 /* Pin button (keep for admin, inside menu) */
 .chat-msg-pin.pinned-active{color:var(--warn)}
+/* ─── Séparateur de date ─────────────────────────────── */
+.chat-date-sep{
+  display:flex;align-items:center;gap:10px;
+  margin:10px 0 4px;flex-shrink:0;
+}
+.chat-date-sep::before,.chat-date-sep::after{
+  content:'';flex:1;height:1px;background:var(--border);
+}
+.chat-date-sep-label{
+  font-size:10px;font-weight:700;color:var(--muted);
+  letter-spacing:.6px;text-transform:uppercase;white-space:nowrap;
+  padding:0 4px;
+}
 /* ─── Reply context (quoted message) ─────────────────── */
 .chat-msg-reply-ctx{
   padding:5px 9px;margin-bottom:5px;
@@ -812,6 +823,33 @@ function fmtTime(iso){
     return d.toLocaleDateString('fr-FR',{day:'2-digit',month:'short'})+' '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
   }catch(e){return iso;}
 }
+function msgDateKey(iso){
+  if(!iso)return '';
+  try{
+    const d=new Date(iso.replace(' ','T'));
+    return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();
+  }catch(e){return '';}
+}
+function fmtDateSep(iso){
+  if(!iso)return '';
+  try{
+    const d=new Date(iso.replace(' ','T'));
+    const now=new Date();
+    const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+    const msgDay=new Date(d.getFullYear(),d.getMonth(),d.getDate());
+    const diff=Math.round((today-msgDay)/(86400000));
+    if(diff===0)return "Aujourd’hui";
+    if(diff===1)return 'Hier';
+    return d.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  }catch(e){return '';}
+}
+function buildDateSepEl(iso){
+  const div=document.createElement('div');
+  div.className='chat-date-sep';
+  div.dataset.dateKey=msgDateKey(iso);
+  div.innerHTML='<span class="chat-date-sep-label">'+esc(fmtDateSep(iso))+'</span>';
+  return div;
+}
 function stopPolling(){
   if(pollTimer){clearInterval(pollTimer);pollTimer=null;}
   if(listPollTimer){clearInterval(listPollTimer);listPollTimer=null;}
@@ -984,7 +1022,15 @@ function renderMessages(fullRebuild){
   const box=document.getElementById('chat-messages');
   if(fullRebuild){
     const frag=document.createDocumentFragment();
-    messages.forEach(m=>frag.appendChild(buildMsgEl(m)));
+    let lastDateKey='';
+    messages.forEach(m=>{
+      const dk=msgDateKey(m.created_at);
+      if(dk&&dk!==lastDateKey){
+        lastDateKey=dk;
+        frag.appendChild(buildDateSepEl(m.created_at));
+      }
+      frag.appendChild(buildMsgEl(m));
+    });
     box.innerHTML='';
     box.appendChild(frag);
     updateLoadMoreBtn();
@@ -1144,8 +1190,23 @@ function buildMsgEl(m){
     picker.appendChild(b);
   });
   wrap.appendChild(picker);
-  wrap.addEventListener('mouseenter',()=>picker.classList.add('show'));
-  wrap.addEventListener('mouseleave',()=>picker.classList.remove('show'));
+
+  // ── Hover : montrer/cacher bouton ⋮ et picker emoji ───
+  const menuBtn=wrap.querySelector('.chat-msg-menu-btn');
+  wrap.addEventListener('mouseenter',()=>{
+    picker.classList.add('show');
+    if(menuBtn)menuBtn.style.opacity='1';
+    if(menuBtn)menuBtn.style.pointerEvents='auto';
+  });
+  wrap.addEventListener('mouseleave',()=>{
+    picker.classList.remove('show');
+    // Ne cache pas le bouton si le menu dropdown est ouvert
+    const openMenu=wrap.querySelector('.chat-msg-menu.show');
+    if(!openMenu){
+      if(menuBtn)menuBtn.style.opacity='0';
+      if(menuBtn)menuBtn.style.pointerEvents='none';
+    }
+  });
 
   return wrap;
 }
@@ -1317,6 +1378,13 @@ function appendNewMessages(msgs){
   const wasBottom=isNearBottom(box);
   msgs.forEach(m=>{
     if(messages.some(x=>x.id===m.id))return;
+    // Insérer séparateur de date si le jour change
+    const prevMsg=messages.length?messages[messages.length-1]:null;
+    const prevDk=prevMsg?msgDateKey(prevMsg.created_at):'';
+    const newDk=msgDateKey(m.created_at);
+    if(newDk&&newDk!==prevDk){
+      box.appendChild(buildDateSepEl(m.created_at));
+    }
     messages.push(m);
     box.appendChild(buildMsgEl(m));
     if(m.id>lastMsgId)lastMsgId=m.id;

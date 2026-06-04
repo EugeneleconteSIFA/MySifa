@@ -104,8 +104,8 @@ def require_stock(request: Request) -> dict:
 
 def require_stock_write(request: Request) -> dict:
     user = require_stock(request)
-    if user.get("role") in ("commercial", "fabrication"):
-        raise HTTPException(403, "Accès en lecture seule pour ce rôle")
+    if user.get("role") == "commercial":
+        raise HTTPException(403, "Accès en lecture seule pour le rôle commercial")
     return user
 
 

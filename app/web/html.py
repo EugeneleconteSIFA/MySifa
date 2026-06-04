@@ -2421,8 +2421,8 @@ const fDSecs=d=>{
 const opName=s=>{if(!s)return'';const p=s.split(' - ');return p.length>1?p.slice(1).join(' - '):s;};
 const fMin=m=>{if(!m&&m!==0)return'-';const hh=Math.floor(m/60),mm=Math.round(m%60);return hh>0?hh+'h '+String(mm).padStart(2,'0')+'min':mm+'min';};
 const isAdmin=u=>u&&(u.role==='direction'||u.role==='administration'||u.role==='superadmin');
-const canViewAllProd=u=>u&&(isAdmin(u)||u.role==='commercial'||u.role==='expedition'||u.role==='logistique');
-const isComptaPlanning=u=>u&&u.role==='comptabilite';
+const canViewAllProd=u=>u&&(isAdmin(u)||u.role==='commercial'||u.role==='expedition');
+const isComptaPlanning=u=>u&&(u.role==='comptabilite'||u.role==='logistique');
 const canPlanningNav=u=>!!(u&&u.app_access&&u.app_access.planning);
 const isFab=u=>u&&u.role==='fabrication';
 
@@ -3915,7 +3915,7 @@ function renderPortal(){
     },
       h('div',{className:'portal-app-icon'},iconEl('wrench',28)),
       h('div',{className:'portal-app-name'},'MyProd'),
-      h('div',{className:'portal-app-desc'},isComptaPlan?'Planning production — lecture seule':(urole==='logistique'?'Suivi de production — lecture seule':'Suivi de production & Planning'))
+      h('div',{className:'portal-app-desc'},isComptaPlan?'Planning production — lecture seule':'Suivi de production & Planning')
     )});
   }
 
@@ -10030,7 +10030,7 @@ function renderSaisies(){
   if(!canViewAllProd(S.user) && !userOperateur)
     return h('div',{className:'card'},h('div',{className:'card-blocked'},h('div',{className:'cb-icon'},iconEl('lock',32)),h('div',{className:'cb-msg'},'Compte non lié à un opérateur.')));
  
-  const readOnly=isFab(S.user)||(S.user&&S.user.role==='logistique');
+  const readOnly=isFab(S.user);
  
   function fmtDurMin(m){
     if(m==null||!isFinite(m)||m<=0) return '-';

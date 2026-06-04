@@ -10714,7 +10714,7 @@ async function init() {
   else if(window._CW&&typeof window._CW.syncUser==='function')window._CW.syncUser();
   if(window.MySifaDock&&typeof window.MySifaDock.bootPageWidgets==='function')window.MySifaDock.bootPageWidgets();
   else if(typeof initAiChatWidget==='function')initAiChatWidget();
-  S.stockReadOnly = (user.role === 'commercial' || user.role === 'fabrication');
+  S.stockReadOnly = (user.role === 'commercial');
   S.tracaOnly = false;
   // Fabrication : accès limité aux sections Matières premières + Outils, lecture seule
   S.fabStockMode = (user.role === 'fabrication');
