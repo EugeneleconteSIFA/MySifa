@@ -198,23 +198,29 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
 .chat-msg.theirs .chat-msg-bubble{background:var(--card);border:1px solid var(--border);color:var(--text);border-bottom-left-radius:3px}
 .chat-msg.mine .chat-msg-bubble{background:var(--accent);color:var(--bg);font-weight:600;border-bottom-right-radius:3px}
 .chat-msg.pinned .chat-msg-bubble{border-top:2px solid var(--warn)}
+/* ─── Header message (label + bouton ⋮ inline) ─────────── */
+.chat-msg-header{
+  display:flex;align-items:center;gap:4px;
+  margin-bottom:3px;position:relative;
+}
+.chat-msg.mine .chat-msg-header{flex-direction:row-reverse}
+.chat-msg-header .chat-msg-label{flex:1;margin-bottom:0}
 /* ─── Menu ⋮ ───────────────────────────────────────────── */
 .chat-msg-menu-btn{
-  position:absolute;top:0;right:0;
-  width:26px;height:26px;border-radius:8px;
-  border:1px solid var(--border);background:var(--card);color:var(--muted);
-  font-size:15px;line-height:1;cursor:pointer;
+  flex-shrink:0;
+  width:22px;height:22px;border-radius:6px;
+  border:1px solid transparent;background:transparent;color:var(--muted);
+  font-size:14px;line-height:1;cursor:pointer;
   display:flex;align-items:center;justify-content:center;
   font-family:inherit;padding:0 0 2px 0;
-  font-weight:700;letter-spacing:.5px;z-index:20;
+  font-weight:700;
   opacity:0;pointer-events:none;
-  transition:opacity .15s,border-color .12s,color .12s;
+  transition:opacity .15s,border-color .12s,background .12s,color .12s;
 }
 .chat-msg:hover .chat-msg-menu-btn{opacity:1;pointer-events:auto}
-.chat-msg.mine .chat-msg-menu-btn{right:auto;left:0}
-.chat-msg-menu-btn:hover{border-color:var(--accent);color:var(--accent)}
+.chat-msg-menu-btn:hover{border-color:var(--border);background:var(--card);color:var(--accent)}
 .chat-msg-menu{
-  position:absolute;top:28px;right:0;
+  position:absolute;top:26px;right:0;
   background:var(--card);border:1px solid var(--border);border-radius:10px;
   padding:4px;box-shadow:0 8px 28px rgba(0,0,0,.4);
   z-index:200;min-width:152px;display:none;
@@ -1126,12 +1132,15 @@ function buildMsgEl(m){
   }
 
   // ── Build HTML ────────────────────────────────────────
+  // Le bouton ⋮ est inline dans le header (pas absolu) — plus fiable
   wrap.innerHTML=
+    '<div class="chat-msg-header">'+
     '<div class="chat-msg-label">'+esc(m.user_nom)+' · '+esc(fmtTime(m.created_at))+editedLabel+'</div>'+
+    '<button type="button" class="chat-msg-menu-btn" title="Options" aria-label="Options du message" onclick="openMsgMenu(event,'+m.id+')">⋮</button>'+
+    '</div>'+
     replyHtml+
     fwdTag+
-    '<div class="chat-msg-bubble'+(m.is_forwarded?' fwd':'')+'">'+bubble+'</div>'+
-    '<button type="button" class="chat-msg-menu-btn" title="Options" aria-label="Options du message" onclick="openMsgMenu(event,'+m.id+')">⋮</button>';
+    '<div class="chat-msg-bubble'+(m.is_forwarded?' fwd':'')+'">'+bubble+'</div>';
 
   // ── Reactions ─────────────────────────────────────────
   if(m.reactions&&m.reactions.length){
@@ -1191,22 +1200,10 @@ function buildMsgEl(m){
   });
   wrap.appendChild(picker);
 
-  // ── Hover : montrer/cacher bouton ⋮ et picker emoji ───
-  const menuBtn=wrap.querySelector('.chat-msg-menu-btn');
-  wrap.addEventListener('mouseenter',()=>{
-    picker.classList.add('show');
-    if(menuBtn)menuBtn.style.opacity='1';
-    if(menuBtn)menuBtn.style.pointerEvents='auto';
-  });
-  wrap.addEventListener('mouseleave',()=>{
-    picker.classList.remove('show');
-    // Ne cache pas le bouton si le menu dropdown est ouvert
-    const openMenu=wrap.querySelector('.chat-msg-menu.show');
-    if(!openMenu){
-      if(menuBtn)menuBtn.style.opacity='0';
-      if(menuBtn)menuBtn.style.pointerEvents='none';
-    }
-  });
+  // ── Hover emoji picker (JS) ───────────────────────────
+  // Le bouton ⋮ est géré par CSS :hover — pas besoin de JS pour lui
+  wrap.addEventListener('mouseenter',()=>picker.classList.add('show'));
+  wrap.addEventListener('mouseleave',()=>picker.classList.remove('show'));
 
   return wrap;
 }
