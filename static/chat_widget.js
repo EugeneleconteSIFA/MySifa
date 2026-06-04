@@ -200,11 +200,11 @@ body.light .cw-channel-item:hover{background:rgba(0,0,0,.04)}
 .cw-msg-wrap.cw-mine .cw-msg-header-text{text-align:right}
 /* ── Bouton ⋮ inline (sobre, toujours visible) ───────── */
 .cw-msg-menu-btn{display:inline-flex;align-items:center;justify-content:center;
-  width:22px;height:22px;flex-shrink:0;
+  width:14px;height:14px;flex-shrink:0;line-height:1;vertical-align:middle;
   border:none;background:transparent;
-  color:var(--text2);cursor:pointer;font-family:inherit;padding:0;
+  color:var(--text2);cursor:pointer;font-family:inherit;padding:0;margin:0;
   opacity:.5;transition:opacity .15s}
-.cw-msg-menu-btn svg{display:block;width:16px;height:16px}
+.cw-msg-menu-btn svg{display:block;width:14px;height:14px}
 .cw-msg-menu-btn:hover,
 .cw-msg-menu-btn:focus-visible,
 .cw-msg-menu-btn[aria-expanded="true"]{opacity:1}
@@ -1522,8 +1522,8 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     menuBtn.setAttribute('aria-haspopup', 'true');
     menuBtn.setAttribute('aria-expanded', 'false');
     menuBtn.innerHTML =
-      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+
-      '<circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/>'+
+      '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">'+
+      '<circle cx="8" cy="3" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="8" cy="13" r="1.5"/>'+
       '</svg>';
 
     const menu = document.createElement('div');
