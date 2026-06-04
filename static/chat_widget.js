@@ -1688,6 +1688,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       startTypingPoll();
       await syncChatState(false);
     } catch (e) {
+      console.error('[chat_widget] selectChannel id=' + id + ' a échoué :', e);
       box.innerHTML = '<div id="cw-empty-hint">Chargement impossible.</div>';
     }
     syncMobileChatUi();
