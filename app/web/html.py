@@ -12995,16 +12995,20 @@ async function nav(){
   render();
 }
 
-// Désactive temporairement toute trace PWA (service worker) pour éviter des effets de cache.
-// Certains navigateurs gardent un SW enregistré même après suppression du manifest.
+// Désactive le service worker pour éviter des effets de cache —
+// SAUF si l'utilisateur a activé les notifications push (le SW est alors requis).
 try{
   if('serviceWorker' in navigator){
-    const k='mysifa_sw_unreg_v1';
-    if(!sessionStorage.getItem(k)){
-      sessionStorage.setItem(k,'1');
-      navigator.serviceWorker.getRegistrations()
-        .then(rs=>Promise.all(rs.map(r=>r.unregister().catch(()=>false))))
-        .then(()=>{ try{ location.reload(); }catch(e){} });
+    let pushEnabled=false;
+    try{ pushEnabled=localStorage.getItem('mysifa_push_enabled')==='1'; }catch(e){}
+    if(!pushEnabled){
+      const k='mysifa_sw_unreg_v1';
+      if(!sessionStorage.getItem(k)){
+        sessionStorage.setItem(k,'1');
+        navigator.serviceWorker.getRegistrations()
+          .then(rs=>Promise.all(rs.map(r=>r.unregister().catch(()=>false))))
+          .then(()=>{ try{ location.reload(); }catch(e){} });
+      }
     }
   }
 }catch(e){}

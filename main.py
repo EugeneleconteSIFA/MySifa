@@ -68,6 +68,7 @@ from app.routers.api_bridge import router as bridge_router
 from app.routers.bat import router as bat_api_router
 from app.web.bat_page import router as bat_page_router
 from app.routers.pwa import router as pwa_router
+from app.routers.push import router as push_router
 
 
 @asynccontextmanager
@@ -181,6 +182,7 @@ app.include_router(bridge_router)
 app.include_router(bat_api_router)
 app.include_router(bat_page_router)
 app.include_router(pwa_router)
+app.include_router(push_router)
 
 
 @app.get("/favicon.ico", include_in_schema=False)

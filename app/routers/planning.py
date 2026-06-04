@@ -2702,8 +2702,15 @@ def get_timeline(machine_id: int, request: Request, semaine: Optional[str] = Non
             FROM planning_entries pe
             LEFT JOIN of_imports oi
                 ON oi.id = pe.of_import_id
+            -- Liaison fiche ↔ dossier : on matche en priorité sur la clé
+            -- produit normalisée (XXX/NNNN), insensible aux variantes
+            -- machine/laize présentes dans le libellé. Fallback sur la
+            -- référence textuelle complète pour les fiches non re-parsées.
             LEFT JOIN fiches_techniques ft
-                ON LOWER(TRIM(ft.reference)) = LOWER(TRIM(pe.ref_produit))
+                ON COALESCE(NULLIF(TRIM(ft.ref_produit_norm), ''),
+                            LOWER(TRIM(ft.reference)))
+                 = COALESCE(NULLIF(TRIM(pe.ref_produit_norm), ''),
+                            LOWER(TRIM(pe.ref_produit)))
             WHERE pe.machine_id = ?
             ORDER BY pe.position ASC
             """,

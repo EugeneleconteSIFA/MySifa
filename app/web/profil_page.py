@@ -335,6 +335,10 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
       Calendrier
     </button>
+    <button type="button" class="nav-btn" id="nav-notifs" onclick="showTab('notifs')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      Notifications
+    </button>
 
     <div class="sidebar-bottom">
       <button type="button" class="nav-btn back-mysifa" onclick="location.href='/'">
@@ -387,6 +391,7 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
       <!-- Onglet Mes préférences -->
       <div class="pane-tab" id="pane-prefs"></div>
       <div class="pane-tab" id="pane-calendrier"></div>
+      <div class="pane-tab" id="pane-notifs"></div>
 
     </div>
   </main>
@@ -494,7 +499,7 @@ function refreshAvatarPreview(){
 // ── Onglets ───────────────────────────────────────────────────────
 function showTab(tab){
   CURRENT_TAB=tab;
-  ['info','prefs','calendrier'].forEach(id=>{
+  ['info','prefs','calendrier','notifs'].forEach(id=>{
     const pane=document.getElementById('pane-'+id);
     const nav=document.getElementById('nav-'+id);
     if(pane)pane.classList.toggle('active',id===tab);
@@ -503,7 +508,8 @@ function showTab(tab){
   const subLabels={
     info:'Informations personnelles',
     prefs:'Thème et apparence',
-    calendrier:'Couleurs MyCalendrier'
+    calendrier:'Couleurs MyCalendrier',
+    notifs:'Notifications push'
   };
   const sub=document.getElementById('mobile-sub');
   if(sub)sub.textContent=subLabels[tab]||'';
@@ -511,10 +517,12 @@ function showTab(tab){
   if(pageSub){
     if(tab==='info')pageSub.textContent='Vos informations personnelles et mot de passe.';
     else if(tab==='calendrier')pageSub.textContent='Couleurs des calendriers affichés dans MyCalendrier.';
+    else if(tab==='notifs')pageSub.textContent='Notifications de messagerie sur cet appareil.';
     else pageSub.textContent='Personnalisez l\'apparence de MySifa.';
   }
   if(tab==='prefs')renderPrefs();
   if(tab==='calendrier')renderCalendrier();
+  if(tab==='notifs')renderNotifs();
   closeSidebar();
 }
 
@@ -1019,6 +1027,206 @@ async function saveCalColors(){
 }
 async function savePrefs(){return saveThemePrefs();}
 
+// ── Onglet Notifications push ─────────────────────────────────────
+const PUSH_LS_KEY='mysifa_push_enabled';
+let PUSH_STATE={
+  supported:false,
+  permission:'default',
+  configured:false,
+  subscribed:false,
+  iosNeedsInstall:false,
+  endpoint:'',
+  busy:false,
+};
+
+function pushSupportedHere(){
+  return ('serviceWorker' in navigator) && ('PushManager' in window) && ('Notification' in window);
+}
+function isIos(){
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+}
+function isStandalone(){
+  return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone===true;
+}
+
+function urlBase64ToUint8Array(base64String){
+  const padding='='.repeat((4-base64String.length%4)%4);
+  const base64=(base64String+padding).replace(/-/g,'+').replace(/_/g,'/');
+  const raw=window.atob(base64);
+  const out=new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++)out[i]=raw.charCodeAt(i);
+  return out;
+}
+
+async function pushDetectState(){
+  PUSH_STATE.supported=pushSupportedHere();
+  if(!PUSH_STATE.supported){
+    if(isIos()&&!isStandalone())PUSH_STATE.iosNeedsInstall=true;
+    return;
+  }
+  try{PUSH_STATE.permission=Notification.permission||'default';}catch(e){PUSH_STATE.permission='default';}
+  try{
+    const reg=await navigator.serviceWorker.getRegistration('/');
+    const sub=reg?await reg.pushManager.getSubscription():null;
+    PUSH_STATE.subscribed=!!sub;
+    PUSH_STATE.endpoint=sub?sub.endpoint:'';
+  }catch(e){PUSH_STATE.subscribed=false;PUSH_STATE.endpoint='';}
+  try{
+    const r=await api('/api/push/status');
+    PUSH_STATE.configured=!!(r&&r.configured);
+  }catch(e){PUSH_STATE.configured=false;}
+}
+
+function renderNotifs(){
+  const pane=document.getElementById('pane-notifs');
+  if(!pane)return;
+  pane.innerHTML=`<div class="card"><div class="loading">Chargement…</div></div>`;
+  pushDetectState().then(()=>{
+    let body='';
+    if(!PUSH_STATE.supported){
+      if(PUSH_STATE.iosNeedsInstall){
+        body=`
+          <p style="color:var(--text2);font-size:13px;line-height:1.6;margin:0 0 12px">
+            Sur iPhone / iPad, les notifications push ne sont disponibles qu'après avoir
+            ajouté MySifa à l'écran d'accueil.
+          </p>
+          <ol style="color:var(--text2);font-size:13px;line-height:1.7;padding-left:18px;margin:0">
+            <li>Ouvre MySifa dans Safari.</li>
+            <li>Appuie sur l'icône de partage, puis <strong>« Sur l'écran d'accueil »</strong>.</li>
+            <li>Ouvre MySifa depuis l'icône installée et reviens sur cette page.</li>
+          </ol>`;
+      } else {
+        body=`<p style="color:var(--text2);font-size:13px;line-height:1.6;margin:0">
+          Ce navigateur ne prend pas en charge les notifications push. Essaie depuis Chrome,
+          Edge, Firefox, ou Safari (iOS&nbsp;16.4+ avec l'app installée).
+        </p>`;
+      }
+      pane.innerHTML=`<div class="card"><h2 style="margin-bottom:10px">Notifications</h2>${body}</div>`;
+      return;
+    }
+    if(!PUSH_STATE.configured){
+      pane.innerHTML=`<div class="card">
+        <h2 style="margin-bottom:10px">Notifications</h2>
+        <p style="color:var(--text2);font-size:13px;line-height:1.6;margin:0">
+          Les notifications push ne sont pas encore configurées côté serveur.
+          Préviens l'administrateur (clés VAPID à générer).
+        </p>
+      </div>`;
+      return;
+    }
+    const on=PUSH_STATE.subscribed&&PUSH_STATE.permission==='granted';
+    const denied=PUSH_STATE.permission==='denied';
+    let stateLine='';
+    if(denied){
+      stateLine=`<div style="color:var(--danger);font-size:12px;margin-top:8px">
+        Les notifications ont été bloquées dans ce navigateur. Réautorise-les dans les
+        réglages du site pour activer la fonction.
+      </div>`;
+    } else if(on){
+      stateLine=`<div style="color:var(--ok);font-size:12px;margin-top:8px">
+        Activées sur cet appareil.
+      </div>`;
+    } else {
+      stateLine=`<div style="color:var(--muted);font-size:12px;margin-top:8px">
+        Désactivées sur cet appareil.
+      </div>`;
+    }
+    pane.innerHTML=`
+      <div class="card">
+        <h2 style="margin-bottom:6px">Notifications push</h2>
+        <p style="color:var(--muted);font-size:12px;line-height:1.6;margin:0 0 16px">
+          Reçois une notification système pour tes messages directs et les mentions
+          (@ton nom, @tous) sur cet appareil. Aucune notification pour les autres messages
+          de canaux.
+        </p>
+        <div class="bg-anim-row">
+          <div>
+            <div class="bg-anim-label">Activer sur cet appareil</div>
+            <div class="bg-anim-sub">PWA installée requise sur iPhone / iPad.</div>
+            ${stateLine}
+          </div>
+          <button type="button" class="toggle-switch${on?' on':''}" role="switch"
+            aria-checked="${on?'true':'false'}" aria-label="Activer les notifications"
+            onclick="pushTogglePref()" ${denied||PUSH_STATE.busy?'disabled':''}>
+            <span class="toggle-knob"></span>
+          </button>
+        </div>
+        <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
+          <button type="button" class="btn-avatar" onclick="pushSendTest()"
+            ${on?'':'disabled style="opacity:.5;cursor:not-allowed"'}>
+            Envoyer une notification de test
+          </button>
+        </div>
+      </div>`;
+  }).catch(e=>{
+    pane.innerHTML=`<div class="card"><p style="color:var(--danger);font-size:13px">Impossible de charger l'état des notifications.</p></div>`;
+  });
+}
+
+async function pushTogglePref(){
+  if(PUSH_STATE.busy)return;
+  PUSH_STATE.busy=true;
+  try{
+    if(PUSH_STATE.subscribed)await pushDisable();
+    else await pushEnable();
+  }catch(e){toast(e.message||'Opération impossible',false);}
+  finally{PUSH_STATE.busy=false;renderNotifs();}
+}
+
+async function pushEnable(){
+  if(!pushSupportedHere())throw new Error('Navigateur non compatible');
+  // 1. Service worker
+  let reg=await navigator.serviceWorker.getRegistration('/');
+  if(!reg)reg=await navigator.serviceWorker.register('/service-worker.js',{scope:'/'});
+  await navigator.serviceWorker.ready;
+  // 2. Permission
+  const perm=await Notification.requestPermission();
+  if(perm!=='granted')throw new Error('Permission refusée');
+  // 3. Clé publique
+  const j=await api('/api/push/public-key');
+  if(!j||!j.key)throw new Error('Configuration serveur incomplète');
+  // 4. Subscribe
+  let sub=await reg.pushManager.getSubscription();
+  if(!sub){
+    sub=await reg.pushManager.subscribe({
+      userVisibleOnly:true,
+      applicationServerKey:urlBase64ToUint8Array(j.key),
+    });
+  }
+  // 5. Envoi au serveur
+  await api('/api/push/subscribe',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(sub.toJSON()),
+  });
+  try{localStorage.setItem(PUSH_LS_KEY,'1');}catch(e){}
+  toast('Notifications activées',true);
+}
+
+async function pushDisable(){
+  const reg=await navigator.serviceWorker.getRegistration('/');
+  const sub=reg?await reg.pushManager.getSubscription():null;
+  const endpoint=sub?sub.endpoint:'';
+  if(sub){try{await sub.unsubscribe();}catch(e){}}
+  try{
+    await api('/api/push/unsubscribe',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({endpoint:endpoint}),
+    });
+  }catch(e){}
+  try{localStorage.removeItem(PUSH_LS_KEY);}catch(e){}
+  toast('Notifications désactivées',true);
+}
+
+async function pushSendTest(){
+  try{
+    const r=await api('/api/push/test',{method:'POST'});
+    if(r&&r.sent>0)toast('Notification envoyée — vérifie le centre de notifications',true);
+    else toast('Aucun appareil enregistré',false);
+  }catch(e){toast(e.message||'Envoi impossible',false);}
+}
+
 // ── Sidebar bottom : user chip + theme toggle + logout ────────────
 function updateUserChip(){
   if(!ME)return;
@@ -1067,6 +1275,7 @@ document.getElementById('btn-logout').onclick=async()=>{
     const tabParam=new URLSearchParams(location.search).get('tab');
     if(tabParam==='prefs')showTab('prefs');
     else if(tabParam==='calendrier')showTab('calendrier');
+    else if(tabParam==='notifs')showTab('notifs');
     if(location.hash.startsWith('#cal-'))openCalColorFromHash();
   }catch(e){
     if(e.message!=='auth'){

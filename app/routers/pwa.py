@@ -94,11 +94,54 @@ def manifest_planning_rh():
 
 @router.get("/service-worker.js")
 def service_worker():
-    # SW minimal (installabilité). On évite un cache agressif pour ne pas bloquer les mises à jour.
-    js = r"""/* MySifa service worker (minimal) */
+    # SW minimal + handlers Web Push (notifications).
+    # Pas de cache agressif côté fetch pour ne pas bloquer les mises à jour.
+    js = r"""/* MySifa service worker — installabilité PWA + notifications push */
 self.addEventListener('install', (event) => { self.skipWaiting(); });
 self.addEventListener('activate', (event) => { event.waitUntil(self.clients.claim()); });
 self.addEventListener('fetch', (event) => { /* passthrough */ });
+
+// ─── Notifications push ───────────────────────────────────────────
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; }
+  catch (e) {
+    try { data = { body: event.data ? event.data.text() : '' }; } catch (e2) {}
+  }
+  const title = data.title || 'MySifa';
+  const body = data.body || '';
+  const url = data.url || '/';
+  const tag = data.tag || ('mysifa-' + Date.now());
+  const options = {
+    body: body,
+    icon: '/static/mys_icon_192.png',
+    badge: '/static/mys_icon_192.png',
+    tag: tag,
+    renotify: true,
+    data: { url: url },
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || '/';
+  event.waitUntil((async () => {
+    const allClients = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+    // Focus l'onglet existant si déjà ouvert sur la même origine
+    for (const c of allClients) {
+      try {
+        const u = new URL(c.url);
+        if (u.origin === self.location.origin) {
+          await c.focus();
+          if ('navigate' in c) { try { c.navigate(target); } catch (e) {} }
+          return;
+        }
+      } catch (e) {}
+    }
+    if (clients.openWindow) await clients.openWindow(target);
+  })());
+});
 """
     return Response(
         content=js,

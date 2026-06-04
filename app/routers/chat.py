@@ -66,14 +66,18 @@ def _mention_slug(nom: str) -> str:
 
 def _record_mentions_from_body(
     conn, msg_id: int, channel_id: int, body: str, author_id: int, now_m: str
-) -> None:
-    """Enregistre les mentions @tous et @SlugNom dans chat_mentions."""
+) -> set[int]:
+    """Enregistre les mentions @tous et @SlugNom dans chat_mentions.
+
+    Retourne l'ensemble des user_id mentionnés (utilisé pour déclencher des push).
+    """
     members = conn.execute(
         """SELECT u.id, u.nom FROM chat_members cm
            JOIN users u ON u.id = cm.user_id
            WHERE cm.channel_id = ? AND u.id != ?""",
         (channel_id, author_id),
     ).fetchall()
+    mentioned_ids: set[int] = set()
     if re.search(r"@(tous|all)\b", body, re.IGNORECASE):
         for m in members:
             conn.execute(
@@ -82,12 +86,12 @@ def _record_mentions_from_body(
                    VALUES (?,?,?,1,?)""",
                 (msg_id, channel_id, m["id"], now_m),
             )
-        return
+            mentioned_ids.add(int(m["id"]))
+        return mentioned_ids
 
     tokens = {t.lower() for t in re.findall(r"@([A-Za-z0-9_]+)", body)}
     tokens.discard("tous")
     tokens.discard("all")
-    mentioned_ids: set[int] = set()
     for token in tokens:
         for m in members:
             mid = int(m["id"])
@@ -116,6 +120,74 @@ def _record_mentions_from_body(
                     break
             if mid in mentioned_ids:
                 break
+    return mentioned_ids
+
+
+def _push_notify_chat_message(
+    *,
+    channel_id: int,
+    author_id: int,
+    author_nom: str,
+    body: str,
+    mentioned_ids: Optional[set[int]] = None,
+    is_attachment: bool = False,
+) -> None:
+    """Envoie une notification push pour un nouveau message.
+
+    Règles :
+      - DM (type='direct')         : notif à l'autre membre du canal
+      - Canal type='channel'       : notif à chaque utilisateur mentionné (@nom ou @tous)
+
+    Jamais bloquant : toute erreur est avalée.
+    """
+    try:
+        from app.routers.push import send_push_safe
+    except Exception:
+        return
+    try:
+        with get_db() as conn:
+            ch = conn.execute(
+                "SELECT type, name FROM chat_channels WHERE id=? LIMIT 1",
+                (channel_id,),
+            ).fetchone()
+            if not ch:
+                return
+            ch_type = (ch["type"] or "").lower()
+            preview = (body or "").strip()
+            if not preview and is_attachment:
+                preview = "Pièce jointe"
+            if len(preview) > 140:
+                preview = preview[:137] + "…"
+            recipients: set[int] = set()
+            if ch_type == "direct":
+                rows = conn.execute(
+                    "SELECT user_id FROM chat_members WHERE channel_id=? AND user_id<>?",
+                    (channel_id, int(author_id)),
+                ).fetchall()
+                recipients = {int(r["user_id"]) for r in rows}
+                title = author_nom or "Message direct"
+                url = f"/messagerie?dm={channel_id}"
+            else:
+                recipients = {int(x) for x in (mentioned_ids or set()) if int(x) != int(author_id)}
+                if not recipients:
+                    return
+                channel_label = (ch["name"] or "").strip() or "Canal"
+                title = f"{author_nom or 'Quelqu’un'} t’a mentionné dans #{channel_label}"
+                url = f"/messagerie?canal={channel_id}"
+    except Exception:
+        return
+
+    for uid in recipients:
+        try:
+            send_push_safe(
+                uid,
+                title=title,
+                body=preview,
+                url=url,
+                tag=f"chat-{channel_id}",
+            )
+        except Exception:
+            pass
 
 
 def _typing_cleanup(channel_id: int) -> None:
@@ -836,16 +908,29 @@ async def send_message(
             (now, channel_id, user["id"]),
         )
         conn.commit()
+        mentioned_ids: set[int] = set()
         try:
             if body:
                 now_m = _now_iso()
                 msg_id = cur.lastrowid
-                _record_mentions_from_body(
+                mentioned_ids = _record_mentions_from_body(
                     conn, msg_id, channel_id, body, user["id"], now_m
-                )
+                ) or set()
                 conn.commit()
         except Exception:
-            pass
+            mentioned_ids = set()
+    # Notifications push (DM ou mentions). Hors transaction, jamais bloquant.
+    try:
+        _push_notify_chat_message(
+            channel_id=channel_id,
+            author_id=int(user["id"]),
+            author_nom=(user.get("nom") or user.get("email") or "MySifa"),
+            body=body,
+            mentioned_ids=mentioned_ids,
+            is_attachment=bool(att_url),
+        )
+    except Exception:
+        pass
     return {
         "id": cur.lastrowid,
         "created_at": now,
@@ -1085,6 +1170,21 @@ async def forward_message(channel_id: int, msg_id: int, request: Request):
             created_channel_ids.append(dm_id)
 
         conn.commit()
+
+    # Notifications push pour chaque DM créé par le forward (jamais bloquant).
+    try:
+        author_nom = user.get("nom") or user.get("email") or "MySifa"
+        for dm_id in created_channel_ids:
+            _push_notify_chat_message(
+                channel_id=dm_id,
+                author_id=uid,
+                author_nom=author_nom,
+                body=body or "",
+                mentioned_ids=None,
+                is_attachment=bool(att_url),
+            )
+    except Exception:
+        pass
 
     return {"forwarded": True, "channel_ids": created_channel_ids}
 

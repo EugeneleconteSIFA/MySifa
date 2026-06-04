@@ -3037,6 +3037,105 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 99, "expe_departs_type_colis")
 
+    # v100 — Notifications push (Web Push / VAPID)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=100 LIMIT 1").fetchone():
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS push_subscriptions (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                endpoint    TEXT NOT NULL UNIQUE,
+                p256dh      TEXT NOT NULL,
+                auth        TEXT NOT NULL,
+                user_agent  TEXT,
+                created_at  TEXT NOT NULL,
+                last_used_at TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_push_subs_user ON push_subscriptions(user_id);
+            """
+        )
+        conn.commit()
+        _record_schema_migration(conn, 100, "push_subscriptions")
+
+    # v101 — fiches_techniques + planning_entries : clé produit normalisée
+    # Permet la jointure planning_entries.ref_produit ↔ fiches_techniques
+    # sans dépendre du libellé textuel ni de la variante (machine, laize,
+    # conditionnement) saisie après le tiret. Trois dimensions extraites du
+    # libellé historique des fiches : machine, laize_mm, conditionnement_norm.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=101 LIMIT 1").fetchone():
+        ft_cols = {r["name"] for r in conn.execute("PRAGMA table_info(fiches_techniques)").fetchall()}
+        if "ref_produit_norm" not in ft_cols:
+            conn.execute("ALTER TABLE fiches_techniques ADD COLUMN ref_produit_norm TEXT")
+        if "laize_mm" not in ft_cols:
+            conn.execute("ALTER TABLE fiches_techniques ADD COLUMN laize_mm INTEGER")
+        if "conditionnement_norm" not in ft_cols:
+            conn.execute("ALTER TABLE fiches_techniques ADD COLUMN conditionnement_norm TEXT")
+        # NB: la colonne `machine` existe déjà depuis v94 — on la réutilise.
+
+        pe_cols = {r["name"] for r in conn.execute("PRAGMA table_info(planning_entries)").fetchall()}
+        if "ref_produit_norm" not in pe_cols:
+            conn.execute("ALTER TABLE planning_entries ADD COLUMN ref_produit_norm TEXT")
+
+        # Backfill via le parser. Sans écraser les valeurs renseignées à la main
+        # (machine, conditionnement) ; on remplit seulement les cases vides.
+        try:
+            from app.services.fiche_ref_parser import (
+                parse_fiche_reference,
+                normalize_ref_produit,
+            )
+        except Exception:
+            parse_fiche_reference = None
+            normalize_ref_produit = None
+
+        if parse_fiche_reference is not None:
+            rows = conn.execute(
+                "SELECT id, reference, machine, laize, conditionnement "
+                "FROM fiches_techniques"
+            ).fetchall()
+            for row in rows:
+                parsed = parse_fiche_reference(row["reference"])
+                updates = {}
+                if parsed.get("ref_produit_norm"):
+                    updates["ref_produit_norm"] = parsed["ref_produit_norm"]
+                if parsed.get("machine") and not (row["machine"] or "").strip():
+                    updates["machine"] = parsed["machine"]
+                if parsed.get("laize_mm"):
+                    updates["laize_mm"] = parsed["laize_mm"]
+                if parsed.get("conditionnement_norm") and not (
+                    (row["conditionnement"] or "").strip()
+                ):
+                    updates["conditionnement_norm"] = parsed["conditionnement_norm"]
+                if updates:
+                    conn.execute(
+                        f"UPDATE fiches_techniques "
+                        f"SET {', '.join(f'{k}=?' for k in updates)} WHERE id=?",
+                        list(updates.values()) + [row["id"]],
+                    )
+
+        if normalize_ref_produit is not None:
+            pe_rows = conn.execute(
+                "SELECT id, ref_produit FROM planning_entries "
+                "WHERE ref_produit IS NOT NULL AND TRIM(ref_produit) != ''"
+            ).fetchall()
+            for row in pe_rows:
+                norm = normalize_ref_produit(row["ref_produit"])
+                if norm:
+                    conn.execute(
+                        "UPDATE planning_entries SET ref_produit_norm=? WHERE id=?",
+                        (norm, row["id"]),
+                    )
+
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_fiches_ref_produit_norm "
+            "ON fiches_techniques(ref_produit_norm)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_planning_entries_ref_produit_norm "
+            "ON planning_entries(ref_produit_norm)"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 101, "fiches_techniques_ref_produit_norm")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,
