@@ -384,16 +384,37 @@ def get_of_for_planning_entry(entry_id: int, request: Request):
             except Exception:
                 pass
 
-    # Chercher la fiche technique par ref_produit
+    # Chercher la fiche technique par ref_produit.
+    # On matche en priorité sur la clé produit normalisée (ref_produit_norm,
+    # XXX/NNNN) — insensible à la variante machine/laize présente dans le
+    # libellé de la fiche, et tolère "1315-0004" côté dossier vs "1315/0004
+    # - COHESIO 1" côté fiche. Fallback sur la référence textuelle complète
+    # pour les fiches non encore parsées (migration v101 pas appliquée, ou
+    # cas exotique non couvert par le parser).
     fiche_id = None
     if ref_produit:
+        try:
+            from app.services.fiche_ref_parser import normalize_ref_produit
+            norm = normalize_ref_produit(ref_produit)
+        except Exception:
+            norm = None
         with get_db() as conn3:
-            fiche = conn3.execute(
-                "SELECT id FROM fiches_techniques WHERE LOWER(TRIM(reference))=LOWER(TRIM(?)) LIMIT 1",
-                (ref_produit,),
-            ).fetchone()
-            if fiche:
-                fiche_id = fiche["id"]
+            if norm:
+                fiche = conn3.execute(
+                    """SELECT id FROM fiches_techniques
+                       WHERE ref_produit_norm = ?
+                       ORDER BY id LIMIT 1""",
+                    (norm,),
+                ).fetchone()
+                if fiche:
+                    fiche_id = fiche["id"]
+            if fiche_id is None:
+                fiche = conn3.execute(
+                    "SELECT id FROM fiches_techniques WHERE LOWER(TRIM(reference))=LOWER(TRIM(?)) LIMIT 1",
+                    (ref_produit,),
+                ).fetchone()
+                if fiche:
+                    fiche_id = fiche["id"]
 
     base = {"entry_numero_of": numero_of, "ref_produit": ref_produit, "fiche_id": fiche_id}
 
