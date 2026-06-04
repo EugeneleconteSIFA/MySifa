@@ -10548,7 +10548,7 @@ function renderOfEditModal(){
     <input id="${id}" type="${type}" value="${String(val==null?'':val).replace(/"/g,'&quot;')}"
       style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 11px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
   </div>`;
-  const _sec=(title,fields,open=false)=>`
+  const _sec=(title,fields,open=true)=>`
     <div class="ofe-sec" style="border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden">
       <div class="ofe-sec-hd" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;cursor:pointer;background:var(--bg);user-select:none">
         <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text2)">${title}</span>
@@ -10765,7 +10765,7 @@ function renderFicheEditModal(){
       <option value="1" ${val==1?'selected':''}>Oui</option>
     </select>
   </div>`;
-  const _sec=(title,fields,open=false)=>`
+  const _sec=(title,fields,open=true)=>`
     <div class="fce-sec" style="border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden">
       <div class="fce-sec-hd" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;cursor:pointer;background:var(--bg);user-select:none">
         <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text2)">${title}</span>

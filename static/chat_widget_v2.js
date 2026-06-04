@@ -13,6 +13,7 @@
   let mentionStart = 0;
   let mentionFocusIdx = -1;
   let v2Patched = false;
+  let cwReplyTo = null; // { id, user_nom, body }
 
   function waitCW() {
     return new Promise((resolve) => {
@@ -64,6 +65,64 @@
 .cw-modal-overlay{position:fixed;inset:0;z-index:8020;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px}
 .cw-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;width:min(500px,100%);max-height:85vh;overflow-y:auto}
 .cw-modal h3{margin:0 0 14px;font-size:15px;font-weight:700}
+/* ── Bouton ⋮ ──────────────────────────────────────────── */
+.cw-msg-menu-btn{position:absolute;top:2px;right:2px;background:var(--card);border:1px solid var(--border);
+  border-radius:6px;width:24px;height:24px;cursor:pointer;display:none;align-items:center;justify-content:center;
+  color:var(--muted);font-size:14px;font-weight:700;z-index:5;font-family:inherit;padding:0 0 2px 0;
+  transition:border-color .1s,color .1s}
+.cw-msg-wrap:hover .cw-msg-menu-btn{display:flex}
+.cw-msg-wrap.cw-mine .cw-msg-menu-btn{right:auto;left:2px}
+.cw-msg-menu-btn:hover{border-color:var(--accent);color:var(--accent)}
+/* ── Dropdown menu ──────────────────────────────────────── */
+.cw-msg-menu{position:absolute;top:28px;right:2px;background:var(--card);border:1px solid var(--border);
+  border-radius:10px;padding:4px;box-shadow:0 8px 24px rgba(0,0,0,.4);z-index:300;min-width:148px;display:none}
+.cw-msg-menu.cw-open{display:block}
+.cw-msg-wrap.cw-mine .cw-msg-menu{right:auto;left:2px}
+.cw-msg-menu-item{display:flex;align-items:center;gap:8px;width:100%;padding:8px 12px;border:none;
+  background:transparent;color:var(--text2);font-size:13px;cursor:pointer;font-family:inherit;
+  border-radius:7px;text-align:left}
+.cw-msg-menu-item:hover{background:var(--accent-bg);color:var(--accent)}
+.cw-msg-menu-item.danger{color:var(--danger)}
+.cw-msg-menu-item.danger:hover{background:rgba(248,113,113,.1);color:var(--danger)}
+/* ── Reply context ──────────────────────────────────────── */
+.cw-msg-reply-ctx{padding:5px 9px;margin-bottom:5px;border-left:3px solid var(--accent);
+  background:var(--accent-bg);border-radius:6px;opacity:.7;cursor:pointer;font-size:11px}
+.cw-reply-name{font-weight:700;color:var(--text);margin-bottom:1px}
+.cw-reply-body{color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
+/* ── Forwarded ──────────────────────────────────────────── */
+.cw-msg-fwd-tag{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.5px;margin-bottom:4px;display:flex;align-items:center;gap:4px}
+.cw-msg-fwd{border-left:3px solid var(--muted)!important;padding-left:9px!important}
+/* ── Deleted ────────────────────────────────────────────── */
+.cw-msg-deleted{font-style:italic;color:var(--muted)!important;
+  background:transparent!important;border-style:dashed!important}
+/* ── Edited label ───────────────────────────────────────── */
+.cw-msg-edited-lbl{font-size:10px;color:var(--muted);font-style:italic;margin-left:5px}
+/* ── Date separator ─────────────────────────────────────── */
+.cw-date-sep{display:flex;align-items:center;gap:10px;margin:4px 0 2px;flex-shrink:0}
+.cw-date-sep::before,.cw-date-sep::after{content:'';flex:1;height:1px;background:var(--border)}
+.cw-date-sep-lbl{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.5px;
+  text-transform:uppercase;white-space:nowrap;padding:0 4px}
+/* ── Reply bar (above input) ────────────────────────────── */
+#cw-reply-bar{padding:6px 12px;background:var(--card);border-top:1px solid var(--border);
+  display:none;align-items:center;gap:8px;flex-shrink:0}
+#cw-reply-bar.cw-show{display:flex}
+.cw-reply-preview{flex:1;min-width:0;padding:5px 9px;border-left:3px solid var(--accent);
+  background:var(--accent-bg);border-radius:6px;font-size:12px}
+.cw-reply-preview-name{font-weight:700;color:var(--text)}
+.cw-reply-preview-body{color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cw-reply-cancel{width:24px;height:24px;border-radius:6px;border:1px solid var(--border);
+  background:transparent;color:var(--muted);cursor:pointer;font-size:16px;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.cw-reply-cancel:hover{border-color:var(--danger);color:var(--danger)}
+/* ── Edit area ──────────────────────────────────────────── */
+.cw-edit-area{width:100%;background:var(--bg);border:1px solid var(--accent);border-radius:8px;
+  padding:7px 10px;color:var(--text);font-size:13px;font-family:inherit;
+  resize:none;outline:none;min-height:36px;max-height:100px;line-height:1.4}
+.cw-edit-acts{display:flex;gap:6px;margin-top:6px;justify-content:flex-end}
+.cw-edit-acts button{padding:4px 12px;border-radius:7px;font-size:12px;font-weight:700;
+  cursor:pointer;font-family:inherit;border:1px solid var(--border);background:transparent;color:var(--text2)}
+.cw-edit-acts .primary{background:var(--accent);color:var(--bg);border-color:var(--accent)}
 `;
     document.head.appendChild(s);
   }
@@ -71,6 +130,14 @@
   function patchInputRow(CW) {
     const row = document.getElementById('cw-input-row');
     if (!row || document.getElementById('cw-action-expand')) return;
+    // Inject reply bar before input row
+    if (!document.getElementById('cw-reply-bar')) {
+      const rb = document.createElement('div');
+      rb.id = 'cw-reply-bar';
+      rb.innerHTML = '<div class="cw-reply-preview"><div class="cw-reply-preview-name" id="cw-reply-pname"></div><div class="cw-reply-preview-body" id="cw-reply-pbody"></div></div><button type="button" class="cw-reply-cancel" aria-label="Annuler">×</button>';
+      row.parentNode.insertBefore(rb, row);
+      rb.querySelector('.cw-reply-cancel').addEventListener('click', cwCancelReply);
+    }
     row.innerHTML =
       '<input type="file" id="cw-file-input" accept=".jpg,.jpeg,.png,.webp,.gif,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip">' +
       '<button type="button" id="cw-action-expand" aria-label="Plus d\'options">+</button>' +
@@ -409,49 +476,382 @@
     }
   }
 
+  // ── Date separators ─────────────────────────────────────
+  function msgDateKey(iso) {
+    if (!iso) return '';
+    try {
+      const d = new Date(iso.replace(' ', 'T'));
+      return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
+    } catch (e) { return ''; }
+  }
+  function fmtDateSep(iso) {
+    if (!iso) return '';
+    try {
+      const d = new Date(iso.replace(' ', 'T'));
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const msgDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      const diff = Math.round((today - msgDay) / 86400000);
+      if (diff === 0) return "Aujourd'hui";
+      if (diff === 1) return 'Hier';
+      return d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    } catch (e) { return ''; }
+  }
+  function buildDateSepEl(iso) {
+    const div = document.createElement('div');
+    div.className = 'cw-date-sep';
+    div.dataset.dateKey = msgDateKey(iso);
+    const span = document.createElement('span');
+    span.className = 'cw-date-sep-lbl';
+    span.textContent = fmtDateSep(iso);
+    div.appendChild(span);
+    return div;
+  }
+  function addDateSeparators() {
+    const box = document.getElementById('cw-messages');
+    if (!box) return;
+    const wraps = Array.from(box.querySelectorAll('.cw-msg-wrap'));
+    let lastDk = '';
+    wraps.forEach((w) => {
+      const at = w.dataset.at || '';
+      if (!at) return;
+      const dk = msgDateKey(at);
+      if (dk && dk !== lastDk) {
+        lastDk = dk;
+        const existingSep = w.previousElementSibling;
+        if (existingSep && existingSep.classList.contains('cw-date-sep') && existingSep.dataset.dateKey === dk) return;
+        box.insertBefore(buildDateSepEl(at), w);
+      }
+    });
+  }
+  function scrollToMsg(id) {
+    const box = document.getElementById('cw-messages');
+    const el = box && box.querySelector('.cw-msg-wrap[data-id="' + id + '"]');
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.style.outline = '2px solid var(--accent)';
+    setTimeout(() => { el.style.outline = ''; }, 1200);
+  }
+  // ── Reply ────────────────────────────────────────────────
+  function cwStartReply(msg) {
+    cwReplyTo = { id: msg.id, user_nom: msg.user_nom, body: msg.body || '' };
+    const bar = document.getElementById('cw-reply-bar');
+    const pname = document.getElementById('cw-reply-pname');
+    const pbody = document.getElementById('cw-reply-pbody');
+    if (bar) bar.classList.add('cw-show');
+    if (pname) pname.textContent = msg.user_nom || '';
+    if (pbody) pbody.textContent = (msg.body || '(pièce jointe)').substring(0, 80);
+    const inp = document.getElementById('cw-input');
+    if (inp) inp.focus();
+  }
+  function cwCancelReply() {
+    cwReplyTo = null;
+    const bar = document.getElementById('cw-reply-bar');
+    if (bar) bar.classList.remove('cw-show');
+  }
+  // ── Delete ───────────────────────────────────────────────
+  async function cwDeleteMsg(CW, msgId) {
+    if (!CW.activeId) return;
+    try {
+      await CW.api('/api/chat/channels/' + CW.activeId + '/messages/' + msgId, { method: 'DELETE' });
+      // Update DOM — replace bubble with deleted placeholder
+      const wrap = document.querySelector('.cw-msg-wrap[data-id="' + msgId + '"]');
+      if (wrap) {
+        const mine = wrap.classList.contains('cw-mine');
+        const bubble = wrap.querySelector('.cw-msg-mine, .cw-msg-theirs');
+        if (bubble) {
+          bubble.innerHTML = 'Message supprimé.';
+          bubble.className = (mine ? 'cw-msg-mine' : 'cw-msg-theirs') + ' cw-msg-deleted';
+        }
+        // Remove reactions, reply context, fwd tag, menu
+        wrap.querySelectorAll('.cw-msg-reply-ctx,.cw-msg-fwd-tag,.cw-reaction-pill,.cw-msg-menu-btn,.cw-msg-menu').forEach(e => e.remove());
+      }
+    } catch (e) { console.warn('[chat-v2]', e); }
+  }
+  // ── Edit ─────────────────────────────────────────────────
+  function cwStartEdit(CW, msg) {
+    const wrap = document.querySelector('.cw-msg-wrap[data-id="' + msg.id + '"]');
+    if (!wrap) return;
+    const bubble = wrap.querySelector('.cw-msg-mine, .cw-msg-theirs');
+    if (!bubble) return;
+    const origHtml = bubble.innerHTML;
+    bubble.innerHTML =
+      '<textarea class="cw-edit-area" rows="2">' + (msg.body || '').replace(/</g, '&lt;') + '</textarea>' +
+      '<div class="cw-edit-acts">' +
+      '<button type="button">Annuler</button>' +
+      '<button type="button" class="primary">Enregistrer</button></div>';
+    const ta = bubble.querySelector('.cw-edit-area');
+    const [cancelBtn, saveBtn] = bubble.querySelectorAll('.cw-edit-acts button');
+    if (ta) { ta.focus(); ta.style.height = ta.scrollHeight + 'px'; }
+    cancelBtn.addEventListener('click', () => { bubble.innerHTML = origHtml; });
+    saveBtn.addEventListener('click', async () => {
+      const newBody = (ta.value || '').trim();
+      if (!newBody) return;
+      try {
+        await CW.api('/api/chat/channels/' + CW.activeId + '/messages/' + msg.id, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ body: newBody }),
+        });
+        // Reload the channel to reflect changes
+        await CW.selectChannel(CW.activeId);
+      } catch (e) { console.warn('[chat-v2]', e); }
+    });
+  }
+  // ── Forward ──────────────────────────────────────────────
+  async function cwStartForward(CW, msg) {
+    let users = [];
+    try { users = (await CW.api('/api/chat/users')) || []; } catch (e) { return; }
+    const overlay = document.createElement('div');
+    overlay.className = 'cw-modal-overlay';
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+    let selected = new Set();
+    function renderList(q) {
+      const ql = (q || '').toLowerCase();
+      const list = users.filter(u => Number(u.id) !== Number(CW.uid) && (!ql || (u.nom || '').toLowerCase().includes(ql)));
+      const el = overlay.querySelector('#cw-fwd-list');
+      if (!el) return;
+      el.innerHTML = list.map(u => {
+        const sel = selected.has(u.id);
+        return '<button type="button" class="cw-dm-row" data-uid="' + u.id + '" style="' + (sel ? 'color:var(--accent);background:var(--accent-bg)' : '') + '">' +
+          (CW.escCW || ((s) => s))(u.nom || '') +
+          (sel ? ' <span style="margin-left:auto">✓</span>' : '') + '</button>';
+      }).join('') || '<p style="padding:12px;color:var(--muted);font-size:12px;margin:0">Aucun résultat</p>';
+      el.querySelectorAll('.cw-dm-row').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const uid = parseInt(btn.dataset.uid, 10);
+          if (selected.has(uid)) selected.delete(uid); else selected.add(uid);
+          const sendBtn = overlay.querySelector('#cw-fwd-send');
+          if (sendBtn) sendBtn.disabled = selected.size === 0;
+          renderList(overlay.querySelector('#cw-fwd-search').value);
+        });
+      });
+    }
+    const preview = (msg.body || '(pièce jointe)').substring(0, 60);
+    overlay.innerHTML =
+      '<div class="cw-modal"><h3>Transférer le message</h3>' +
+      '<div style="padding:5px 9px;margin-bottom:12px;border-left:3px solid var(--muted);background:var(--accent-bg);border-radius:6px;font-size:12px;color:var(--text2)">' + (CW.escCW || ((s) => s))(preview) + '</div>' +
+      '<input type="search" id="cw-fwd-search" placeholder="Rechercher…" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;margin-bottom:8px;box-sizing:border-box">' +
+      '<div id="cw-fwd-list" style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:8px"></div>' +
+      '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">' +
+      '<button type="button" class="cw-btn-ghost" onclick="this.closest(\'.cw-modal-overlay\').remove()">Annuler</button>' +
+      '<button type="button" id="cw-fwd-send" class="cw-btn-primary" disabled>Transférer</button></div></div>';
+    document.body.appendChild(overlay);
+    renderList('');
+    overlay.querySelector('#cw-fwd-search').addEventListener('input', function () { renderList(this.value); });
+    overlay.querySelector('#cw-fwd-send').addEventListener('click', async () => {
+      if (!selected.size) return;
+      try {
+        await CW.api('/api/chat/channels/' + CW.activeId + '/messages/' + msg.id + '/forward', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_ids: [...selected] }),
+        });
+        overlay.remove();
+        // Refresh channel list
+        if (CW.loadChannels) await CW.loadChannels(); else if (CW.syncChatState) await CW.syncChatState(true);
+      } catch (e) { console.warn('[chat-v2]', e); }
+    });
+    setTimeout(() => overlay.querySelector('#cw-fwd-search').focus(), 50);
+  }
+  // ── Close all menus on click outside ────────────────────
+  function setupMenuClose() {
+    if (document._cwMenuClose) return;
+    document._cwMenuClose = true;
+    document.addEventListener('click', () => {
+      document.querySelectorAll('.cw-msg-menu.cw-open').forEach(m => m.classList.remove('cw-open'));
+    });
+  }
+
   function patchRenderMsg(CW) {
     const orig = CW.renderMsg;
     CW.renderMsg = function (msg) {
+      const mine = Number(msg.user_id) === Number(CW.uid) || msg.is_mine;
+
+      // ── Deleted message placeholder ──────────────────────
+      if (msg.is_soft_deleted) {
+        const wrap = document.createElement('div');
+        wrap.className = 'cw-msg-wrap ' + (mine ? 'cw-mine' : 'cw-theirs');
+        wrap.dataset.id = String(msg.id);
+        if (msg.created_at) wrap.dataset.at = String(msg.created_at);
+        wrap.innerHTML = '<div class="cw-msg-bubble-wrap"><div class="' +
+          (mine ? 'cw-msg-mine' : 'cw-msg-theirs') + ' cw-msg-deleted">Message supprimé.</div></div>';
+        return wrap;
+      }
+
       const wrap = orig(msg);
       if (!wrap) return wrap;
+      wrap.style.position = 'relative';
+
       const ch = CW.channels.find((c) => c.id === CW.activeId);
       const canPin = ch && ch.type === 'channel' && ADMIN.has(CW.role);
+      const msgAge = Date.now() - new Date((msg.created_at || '').replace(' ', 'T')).getTime();
+      const canEdit = mine && !msg.attachment_url && msgAge < 900000;
+      const canDel = mine || ADMIN.has(CW.role);
+
       if (msg.pinned_at) wrap.classList.add('cw-pinned');
+
+      // ── Format body with mentions ────────────────────────
       const bodyEl = wrap.querySelector('.cw-msg-mine, .cw-msg-theirs');
       if (bodyEl && msg.body) {
         const CM = window.ChatMentions;
         const html = CM
           ? CM.formatBodyHtml((msg.body || '').trim(), channelMembers, CW.escCW)
-          : CW.escCW((msg.body || '').trim())
-              .replace(/\r\n/g, '\n')
-              .replace(/\n/g, '<br>')
-              .replace(
-                /@([A-Za-z0-9_]+)/g,
-                '<span style="color:var(--accent);font-weight:700">@$1</span>'
-              );
+          : CW.escCW((msg.body || '').trim()).replace(/\r\n/g, '\n').replace(/\n/g, '<br>')
+              .replace(/@([A-Za-z0-9_]+)/g, '<span style="color:var(--accent);font-weight:700">@$1</span>');
         const attach = bodyEl.querySelector('.cw-msg-attach');
         const meta = bodyEl.querySelector('.cw-msg-meta');
         bodyEl.innerHTML = (meta ? meta.outerHTML : '') + html + (attach ? attach.outerHTML : '');
       }
-      if (canPin) {
-        const pin = document.createElement('button');
-        pin.type = 'button';
-        pin.className = 'cw-msg-pin' + (msg.pinned_at ? ' pinned-active' : '');
-        pin.title = msg.pinned_at ? 'Désépingler' : 'Épingler';
-        pin.innerHTML =
-          '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>';
-        pin.onclick = () => togglePin(CW, msg.id, !!msg.pinned_at);
-        wrap.style.position = 'relative';
-        wrap.appendChild(pin);
+
+      // ── Edited label ─────────────────────────────────────
+      if (msg.edited_at && bodyEl) {
+        try {
+          const ed = new Date(msg.edited_at.replace(' ', 'T'));
+          const d = ed.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+          const lbl = document.createElement('span');
+          lbl.className = 'cw-msg-edited-lbl';
+          lbl.textContent = 'modifié le ' + d;
+          const meta = bodyEl.querySelector('.cw-msg-meta');
+          if (meta) meta.appendChild(lbl); else bodyEl.appendChild(lbl);
+        } catch (e) {}
       }
+
+      const bwrap = wrap.querySelector('.cw-msg-bubble-wrap');
+      if (bwrap) {
+        // ── Forwarded indicator ──────────────────────────────
+        if (msg.is_forwarded) {
+          const tag = document.createElement('div');
+          tag.className = 'cw-msg-fwd-tag';
+          tag.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/></svg>' +
+            'Transféré' + (msg.forwarded_from_nom ? ' · ' + CW.escCW(msg.forwarded_from_nom) : '');
+          bwrap.insertBefore(tag, bwrap.firstChild);
+          const bbl = bwrap.querySelector('.cw-msg-mine,.cw-msg-theirs');
+          if (bbl) bbl.classList.add('cw-msg-fwd');
+        }
+        // ── Reply context ────────────────────────────────────
+        if (msg.reply_to) {
+          const ctx = document.createElement('div');
+          ctx.className = 'cw-msg-reply-ctx';
+          const rb = msg.reply_to.is_soft_deleted
+            ? '<em>Message supprimé</em>'
+            : CW.escCW((msg.reply_to.body || '').substring(0, 80));
+          ctx.innerHTML = '<div class="cw-reply-name">' + CW.escCW(msg.reply_to.user_nom || '') + '</div>' +
+            '<div class="cw-reply-body">' + rb + '</div>';
+          ctx.addEventListener('click', () => scrollToMsg(msg.reply_to.id));
+          bwrap.insertBefore(ctx, bwrap.firstChild);
+        }
+      }
+
+      // ── ⋮ Menu button ────────────────────────────────────
+      const menuBtn = document.createElement('button');
+      menuBtn.type = 'button';
+      menuBtn.className = 'cw-msg-menu-btn';
+      menuBtn.title = 'Options';
+      menuBtn.textContent = '⋮';
+
+      const menu = document.createElement('div');
+      menu.className = 'cw-msg-menu';
+
+      const mkItem = (label, cls, cb) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'cw-msg-menu-item' + (cls ? ' ' + cls : '');
+        btn.textContent = label;
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          menu.classList.remove('cw-open');
+          cb();
+        });
+        return btn;
+      };
+
+      const icoSvg = {
+        reply: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg> ',
+        edit:  '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> ',
+        del:   '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg> ',
+        fwd:   '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/></svg> ',
+        pin:   '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg> ',
+      };
+
+      const replyBtn = mkItem('Répondre', '', () => cwStartReply(msg));
+      replyBtn.innerHTML = icoSvg.reply + 'Répondre';
+      menu.appendChild(replyBtn);
+
+      if (canEdit) {
+        const editBtn = mkItem('Modifier', '', () => cwStartEdit(CW, msg));
+        editBtn.innerHTML = icoSvg.edit + 'Modifier';
+        menu.appendChild(editBtn);
+      }
+      if (canDel) {
+        const delBtn = mkItem('Supprimer', 'danger', () => cwDeleteMsg(CW, msg.id));
+        delBtn.innerHTML = icoSvg.del + 'Supprimer';
+        menu.appendChild(delBtn);
+      }
+      const fwdBtn = mkItem('Transférer', '', () => cwStartForward(CW, msg));
+      fwdBtn.innerHTML = icoSvg.fwd + 'Transférer';
+      menu.appendChild(fwdBtn);
+
+      if (canPin) {
+        const pinBtn = mkItem(msg.pinned_at ? 'Désépingler' : 'Épingler', '', () => togglePin(CW, msg.id, !!msg.pinned_at));
+        pinBtn.innerHTML = icoSvg.pin + (msg.pinned_at ? 'Désépingler' : 'Épingler');
+        menu.appendChild(pinBtn);
+      }
+
+      menuBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const wasOpen = menu.classList.contains('cw-open');
+        document.querySelectorAll('.cw-msg-menu.cw-open').forEach(m => m.classList.remove('cw-open'));
+        if (!wasOpen) menu.classList.add('cw-open');
+      });
+
+      wrap.appendChild(menuBtn);
+      wrap.appendChild(menu);
       return wrap;
+    };
+  }
+
+  function patchSendMessage(CW) {
+    const orig = CW.sendMessage;
+    CW.sendMessage = async function () {
+      // Inject reply_to_id if replying
+      if (cwReplyTo) {
+        const origApi = CW.api;
+        const replyId = cwReplyTo.id;
+        const patchedApi = async function (path, opts) {
+          if (opts && opts.method === 'POST' && path.includes('/messages') && !path.includes('/forward') && !path.includes('/pin') && !path.includes('/reactions')) {
+            if (opts.headers && opts.headers['Content-Type'] === 'application/json' && opts.body) {
+              try {
+                const data = JSON.parse(opts.body);
+                if (data && !data.gif_url) {
+                  data.reply_to_id = replyId;
+                  opts = { ...opts, body: JSON.stringify(data) };
+                }
+              } catch (e) {}
+            }
+          }
+          return origApi.call(this, path, opts);
+        };
+        CW.api = patchedApi;
+        try {
+          await orig.apply(this, arguments);
+        } finally {
+          CW.api = origApi;
+          cwCancelReply();
+        }
+      } else {
+        await orig.apply(this, arguments);
+      }
     };
   }
 
   function patchSelectChannel(CW) {
     const orig = CW.selectChannel;
     CW.selectChannel = async function (id) {
+      cwCancelReply();
       await orig(id);
+      // Add date separators after messages are rendered
+      setTimeout(addDateSeparators, 50);
       try {
         channelMembers = (await CW.api('/api/chat/channels/' + id + '/members')) || [];
       } catch (e) {
@@ -524,7 +924,9 @@
       return ok;
     };
     patchRenderMsg(CW);
+    patchSendMessage(CW);
     patchSelectChannel(CW);
+    setupMenuClose();
     if (CW._inited) {
       patchInputRow(CW);
       checkNotifPerm();
