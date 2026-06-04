@@ -56,10 +56,33 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         _schema_migrate_done = True
 
 
+def _register_udfs(conn: sqlite3.Connection) -> None:
+    """
+    Enregistre les fonctions Python appelables depuis SQL/triggers.
+
+    `norm_ref_produit(s)` extrait la clé produit normalisée "XXX/NNNN" d'une
+    chaîne quelconque ("1013/0068 - COHESIO 1" → "1013/0068"). Utilisée par
+    les triggers qui maintiennent `planning_entries.ref_produit_norm` et
+    `fiches_techniques.ref_produit_norm` à jour automatiquement à chaque
+    insertion ou modification.
+    """
+    try:
+        from app.services.fiche_ref_parser import normalize_ref_produit
+    except Exception:
+        return
+    try:
+        # deterministic=True permet à SQLite de l'utiliser dans les index/triggers
+        conn.create_function("norm_ref_produit", 1, normalize_ref_produit, deterministic=True)
+    except TypeError:
+        # Python < 3.8 ou SQLite trop ancien : pas de flag deterministic
+        conn.create_function("norm_ref_produit", 1, normalize_ref_produit)
+
+
 @contextmanager
 def get_db():
     conn = sqlite3.connect(DB_PATH, timeout=5)
     conn.row_factory = sqlite3.Row
+    _register_udfs(conn)
     _ensure_schema(conn)
     try:
         yield conn
@@ -3133,6 +3156,52 @@ def _migrate(conn):
             "CREATE INDEX IF NOT EXISTS idx_planning_entries_ref_produit_norm "
             "ON planning_entries(ref_produit_norm)"
         )
+
+        # Triggers : maintiennent ref_produit_norm à jour automatiquement
+        # à chaque INSERT/UPDATE, sans devoir patcher tous les endpoints.
+        # S'appuient sur la fonction Python `norm_ref_produit()` enregistrée
+        # à chaque ouverture de connexion (cf. _register_udfs).
+        conn.executescript("""
+            DROP TRIGGER IF EXISTS trg_pe_ref_produit_norm_ins;
+            CREATE TRIGGER trg_pe_ref_produit_norm_ins
+            AFTER INSERT ON planning_entries
+            WHEN NEW.ref_produit IS NOT NULL AND TRIM(NEW.ref_produit) != ''
+            BEGIN
+                UPDATE planning_entries
+                   SET ref_produit_norm = norm_ref_produit(NEW.ref_produit)
+                 WHERE id = NEW.id
+                   AND (ref_produit_norm IS NULL OR ref_produit_norm = '');
+            END;
+
+            DROP TRIGGER IF EXISTS trg_pe_ref_produit_norm_upd;
+            CREATE TRIGGER trg_pe_ref_produit_norm_upd
+            AFTER UPDATE OF ref_produit ON planning_entries
+            BEGIN
+                UPDATE planning_entries
+                   SET ref_produit_norm = norm_ref_produit(NEW.ref_produit)
+                 WHERE id = NEW.id;
+            END;
+
+            DROP TRIGGER IF EXISTS trg_ft_ref_produit_norm_ins;
+            CREATE TRIGGER trg_ft_ref_produit_norm_ins
+            AFTER INSERT ON fiches_techniques
+            WHEN NEW.reference IS NOT NULL AND TRIM(NEW.reference) != ''
+            BEGIN
+                UPDATE fiches_techniques
+                   SET ref_produit_norm = norm_ref_produit(NEW.reference)
+                 WHERE id = NEW.id
+                   AND (ref_produit_norm IS NULL OR ref_produit_norm = '');
+            END;
+
+            DROP TRIGGER IF EXISTS trg_ft_ref_produit_norm_upd;
+            CREATE TRIGGER trg_ft_ref_produit_norm_upd
+            AFTER UPDATE OF reference ON fiches_techniques
+            BEGIN
+                UPDATE fiches_techniques
+                   SET ref_produit_norm = norm_ref_produit(NEW.reference)
+                 WHERE id = NEW.id;
+            END;
+        """)
         conn.commit()
         _record_schema_migration(conn, 101, "fiches_techniques_ref_produit_norm")
 

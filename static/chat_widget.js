@@ -193,20 +193,26 @@ body.light .cw-channel-item:hover{background:rgba(0,0,0,.04)}
 .cw-react-picker:hover{display:flex}
 .cw-msg-wrap.cw-mine .cw-react-picker{left:auto;right:0}
 .cw-msg-wrap.cw-theirs .cw-react-picker{left:0;right:auto}
-/* ── Bouton ⋮ et menu ─────────────────────────────────── */
-.cw-msg-menu-btn{position:absolute;top:2px;right:2px;background:var(--card);
-  border:1px solid var(--border);border-radius:6px;width:24px;height:24px;
-  cursor:pointer;display:none;align-items:center;justify-content:center;
-  color:var(--muted);font-size:14px;font-weight:700;z-index:15;
-  font-family:inherit;padding:0 0 2px 0;transition:border-color .1s,color .1s}
-.cw-msg-wrap:hover .cw-msg-menu-btn{display:flex}
-.cw-msg-wrap.cw-mine .cw-msg-menu-btn{right:auto;left:2px}
-.cw-msg-menu-btn:hover{border-color:var(--accent);color:var(--accent)}
-.cw-msg-menu{position:absolute;top:28px;right:2px;background:var(--card);
+/* ── Header message (nom + heure + bouton ⋮ inline) ──── */
+.cw-msg-header{display:flex;align-items:center;gap:5px;margin-bottom:4px;position:relative}
+.cw-msg-wrap.cw-mine .cw-msg-header{flex-direction:row-reverse}
+.cw-msg-header-text{font-size:11px;color:var(--muted);flex:1;line-height:1.2}
+.cw-msg-wrap.cw-mine .cw-msg-header-text{text-align:right}
+/* ── Bouton ⋮ inline ─────────────────────────────────── */
+.cw-msg-menu-btn{display:inline-flex;align-items:center;justify-content:center;
+  width:20px;height:16px;border-radius:5px;flex-shrink:0;
+  border:1px solid transparent;background:transparent;
+  color:var(--muted);font-size:13px;font-weight:700;cursor:pointer;
+  font-family:inherit;padding:0 0 1px 0;
+  opacity:0.3;transition:opacity .15s,border-color .1s,background .1s,color .1s}
+.cw-msg-wrap:hover .cw-msg-menu-btn{opacity:1}
+.cw-msg-menu-btn:hover{opacity:1;border-color:var(--border);background:var(--card);color:var(--accent)}
+/* ── Dropdown ─────────────────────────────────────────── */
+.cw-msg-menu{position:absolute;top:20px;right:0;background:var(--card);
   border:1px solid var(--border);border-radius:10px;padding:4px;
   box-shadow:0 8px 24px rgba(0,0,0,.4);z-index:300;min-width:148px;display:none}
 .cw-msg-menu.cw-open{display:block}
-.cw-msg-wrap.cw-mine .cw-msg-menu{right:auto;left:2px}
+.cw-msg-wrap.cw-mine .cw-msg-menu{right:auto;left:0}
 .cw-msg-menu-item{display:flex;align-items:center;gap:8px;width:100%;padding:8px 12px;
   border:none;background:transparent;color:var(--text2);font-size:13px;cursor:pointer;
   font-family:inherit;border-radius:7px;text-align:left;white-space:nowrap}
@@ -1393,19 +1399,6 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     const mine = Number(msg.user_id) === Number(CW.uid) || msg.is_mine;
     cacheUserAvatar(msg.user_id, msg.user_nom, msg.avatar_url);
 
-    let metaEl = '';
-    if (!mine) {
-      const av = cwAvatarHtml(msg.user_nom, msg.avatar_url, 20);
-      metaEl =
-        '<div class="cw-msg-meta">' +
-        av +
-        '<span class="cw-msg-meta-text">' +
-        escCW(msg.user_nom) +
-        ' · ' +
-        escCW(fmtTime(msg.created_at)) +
-        '</span></div>';
-    }
-
     const pickerBtns = CW_EMOJIS.map(
       (e) =>
         '<button type="button" class="cw-react-btn" data-emoji="' +
@@ -1477,7 +1470,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       } catch(e) {}
     }
 
-    const bubbleFull = '<div class="'+(mine?'cw-msg-mine':'cw-msg-theirs')+fwdCls+'">' + metaEl + editedLbl + bodyHtml + attachmentHtml(msg) + '</div>';
+    const bubbleFull = '<div class="'+(mine?'cw-msg-mine':'cw-msg-theirs')+fwdCls+'">' + bodyHtml + attachmentHtml(msg) + '</div>';
 
     wrap.innerHTML =
       '<div class="cw-msg-bubble-wrap">' + replyHtml + fwdHtml + bubbleFull + picker + '</div>' + rxHtml;
@@ -1493,13 +1486,21 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       });
     }
 
-    // ── ⋮ Menu button ──────────────────────────────────────
+    // ── Header : nom · heure [modifié] + bouton ⋮ ─────────
     const ch = CW.channels.find(c=>c.id===CW.activeId);
     const isAdmin = ['superadmin','direction','administration'].includes(CW.role);
     const msgAge = Date.now()-new Date((msg.created_at||'').replace(' ','T')).getTime();
     const canEdit = mine && !msg.attachment_url && msgAge < 900000;
     const canDel = mine || isAdmin;
     const canPin = ch && ch.type==='channel' && isAdmin;
+
+    const header = document.createElement('div');
+    header.className = 'cw-msg-header';
+
+    const headerText = document.createElement('span');
+    headerText.className = 'cw-msg-header-text';
+    headerText.textContent = (mine ? '' : (msg.user_nom||'') + ' · ') + fmtTime(msg.created_at||'');
+    if (editedLbl) headerText.innerHTML += '<span class="cw-msg-edited-lbl">modifié</span>';
 
     const menuBtn = document.createElement('button');
     menuBtn.type = 'button';
@@ -1534,8 +1535,10 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       if (!was) menu.classList.add('cw-open');
     });
 
-    wrap.appendChild(menuBtn);
-    wrap.appendChild(menu);
+    header.appendChild(headerText);
+    header.appendChild(menuBtn);
+    header.appendChild(menu);
+    wrap.insertBefore(header, wrap.firstChild);
     return wrap;
   }
 
