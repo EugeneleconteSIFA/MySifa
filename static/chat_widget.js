@@ -198,30 +198,30 @@ body.light .cw-channel-item:hover{background:rgba(0,0,0,.04)}
 .cw-msg-wrap.cw-mine .cw-msg-header{flex-direction:row-reverse}
 .cw-msg-header-text{font-size:11px;color:var(--muted);flex:1;line-height:1.2}
 .cw-msg-wrap.cw-mine .cw-msg-header-text{text-align:right}
-/* ── Bouton ⋮ inline ─────────────────────────────────── */
+/* ── Bouton ⋮ inline (sobre, toujours visible) ───────── */
 .cw-msg-menu-btn{display:inline-flex;align-items:center;justify-content:center;
-  width:26px;height:26px;border-radius:8px;flex-shrink:0;
-  border:1px solid transparent;background:transparent;
-  color:var(--muted);cursor:pointer;font-family:inherit;padding:0;
-  opacity:0;transition:opacity .15s,border-color .12s,background .12s,color .12s}
+  width:22px;height:22px;flex-shrink:0;
+  border:none;background:transparent;
+  color:var(--text2);cursor:pointer;font-family:inherit;padding:0;
+  opacity:.5;transition:opacity .15s}
 .cw-msg-menu-btn svg{display:block;width:16px;height:16px}
-.cw-msg-wrap:hover .cw-msg-menu-btn,
+.cw-msg-menu-btn:hover,
 .cw-msg-menu-btn:focus-visible,
 .cw-msg-menu-btn[aria-expanded="true"]{opacity:1}
-.cw-msg-menu-btn:hover{border-color:var(--border);background:var(--card);color:var(--accent)}
-.cw-msg-menu-btn[aria-expanded="true"]{border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
-@media (hover:none){.cw-msg-menu-btn{opacity:.85}}
+.cw-msg-menu-btn:focus{outline:none}
 /* ── Dropdown ─────────────────────────────────────────── */
-.cw-msg-menu{position:absolute;top:calc(100% + 4px);right:0;background:var(--card);
+/* Par défaut (messages reçus) : bouton à gauche → menu s'ouvre vers la droite */
+.cw-msg-menu{position:absolute;top:calc(100% + 4px);left:0;right:auto;background:var(--card);
   border:1px solid var(--border);border-radius:12px;padding:6px;
   box-shadow:0 12px 32px rgba(0,0,0,.45);z-index:300;min-width:184px;
   display:none;opacity:0;transform:translateY(-4px) scale(.97);
-  transform-origin:top right;
+  transform-origin:top left;
   transition:opacity .14s ease,transform .14s ease}
 .cw-msg-menu.cw-open{display:block;opacity:1;transform:translateY(0) scale(1)}
-.cw-msg-wrap.cw-mine .cw-msg-menu{right:auto;left:0;transform-origin:top left}
-.cw-msg-menu.cw-menu-up{top:auto;bottom:calc(100% + 4px);transform-origin:bottom right}
-.cw-msg-wrap.cw-mine .cw-msg-menu.cw-menu-up{transform-origin:bottom left}
+/* Mes messages : bouton à droite → menu s'ouvre vers la gauche, sous le bouton */
+.cw-msg-wrap.cw-mine .cw-msg-menu{left:auto;right:0;transform-origin:top right}
+.cw-msg-menu.cw-menu-up{top:auto;bottom:calc(100% + 4px);transform-origin:bottom left}
+.cw-msg-wrap.cw-mine .cw-msg-menu.cw-menu-up{transform-origin:bottom right}
 .cw-msg-menu-item{display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;
   border:none;background:transparent;color:var(--text2);font-size:13px;cursor:pointer;
   font-family:inherit;border-radius:8px;text-align:left;white-space:nowrap;
@@ -1598,9 +1598,12 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       if (!was) openMenu();
     });
 
-    header.appendChild(headerText);
+    // Ordre DOM : [⋮, menu, nom/heure]
+    // - Messages reçus (flex normal)     → ⋮ à gauche, nom/heure à droite
+    // - Mes messages   (flex-direction:row-reverse) → ⋮ à droite, heure à gauche
     header.appendChild(menuBtn);
     header.appendChild(menu);
+    header.appendChild(headerText);
     wrap.insertBefore(header, wrap.firstChild);
     return wrap;
   }
