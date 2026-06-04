@@ -426,6 +426,8 @@ const SECTIONS = [
       {key:'prime_inflation',        label:'Prime inflation (€)',         type:'number', step:'0.01'},
       {key:'prime_exceptionnelle',   label:'Prime exceptionnelle (€)',    type:'number', step:'0.01'},
       {key:'prime_equipe',           label:'Prime équipe (€)',            type:'number', step:'0.01'},
+      {key:'garantie_prime',         label:'Garantie prime (€)',          type:'number', step:'0.01'},
+      {key:'avantage_nature_voiture',label:'Avantage en nature voiture (€)',type:'number', step:'0.01'},
       {key:'panier',                 label:'Panier (6,47€/jour)',         type:'number', step:'0.01'},
       {key:'solde_tout_compte',      label:'Solde de tout compte',        type:'select', opts:['','Oui','Non']},
     ]

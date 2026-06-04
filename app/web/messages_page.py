@@ -198,31 +198,85 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
 .chat-msg.theirs .chat-msg-bubble{background:var(--card);border:1px solid var(--border);color:var(--text);border-bottom-left-radius:3px}
 .chat-msg.mine .chat-msg-bubble{background:var(--accent);color:var(--bg);font-weight:600;border-bottom-right-radius:3px}
 .chat-msg.pinned .chat-msg-bubble{border-top:2px solid var(--warn)}
-.chat-msg-del{
-  position:absolute;top:-4px;right:-4px;width:20px;height:20px;border-radius:50%;
+/* ─── Menu ⋮ ───────────────────────────────────────────── */
+.chat-msg-menu-btn{
+  position:absolute;top:-6px;right:-10px;
+  width:26px;height:26px;border-radius:8px;
   border:1px solid var(--border);background:var(--card);color:var(--muted);
-  font-size:12px;line-height:1;cursor:pointer;display:none;align-items:center;justify-content:center;
-  font-family:inherit;padding:0;
+  font-size:15px;line-height:1;cursor:pointer;
+  display:none;align-items:center;justify-content:center;
+  font-family:inherit;padding:0 0 2px 0;
+  font-weight:700;letter-spacing:.5px;z-index:10;
+  transition:border-color .12s,color .12s;
 }
-.chat-msg:hover .chat-msg-del{display:flex}
-.chat-msg.mine .chat-msg-del{right:auto;left:-4px}
-.chat-msg-edit{
-  position:absolute;top:-4px;right:20px;width:20px;height:20px;border-radius:50%;
-  border:1px solid var(--border);background:var(--card);color:var(--muted);
-  font-size:11px;line-height:1;cursor:pointer;display:none;align-items:center;justify-content:center;
-  font-family:inherit;padding:0;
+.chat-msg:hover .chat-msg-menu-btn{display:flex}
+.chat-msg.mine .chat-msg-menu-btn{right:auto;left:-10px}
+.chat-msg-menu-btn:hover{border-color:var(--accent);color:var(--accent)}
+.chat-msg-menu{
+  position:absolute;top:22px;right:-10px;
+  background:var(--card);border:1px solid var(--border);border-radius:10px;
+  padding:4px;box-shadow:0 8px 28px rgba(0,0,0,.4);
+  z-index:200;min-width:152px;display:none;
 }
-.chat-msg:hover .chat-msg-edit{display:flex}
-.chat-msg.mine .chat-msg-edit{right:auto;left:20px}
-.chat-msg-pin{
-  position:absolute;top:-4px;right:38px;width:20px;height:20px;border-radius:50%;
-  border:1px solid var(--border);background:var(--card);color:var(--muted);
-  font-size:9px;line-height:1;cursor:pointer;display:none;align-items:center;justify-content:center;
-  font-family:inherit;padding:0;
+.chat-msg-menu.show{display:block}
+.chat-msg.mine .chat-msg-menu{right:auto;left:-10px}
+.chat-msg-menu-item{
+  display:flex;align-items:center;gap:9px;
+  width:100%;padding:8px 12px;
+  border:none;background:transparent;
+  color:var(--text2);font-size:13px;
+  cursor:pointer;font-family:inherit;
+  border-radius:7px;text-align:left;
 }
-.chat-msg:hover .chat-msg-pin{display:flex}
-.chat-msg.mine .chat-msg-pin{right:auto;left:38px}
-.chat-msg-pin.pinned-active{color:var(--warn);border-color:var(--warn)}
+.chat-msg-menu-item:hover{background:var(--accent-bg);color:var(--accent)}
+.chat-msg-menu-item.danger{color:var(--danger)}
+.chat-msg-menu-item.danger:hover{background:rgba(248,113,113,.1);color:var(--danger)}
+/* Pin button (keep for admin, inside menu) */
+.chat-msg-pin.pinned-active{color:var(--warn)}
+/* ─── Reply context (quoted message) ─────────────────── */
+.chat-msg-reply-ctx{
+  padding:5px 9px;margin-bottom:5px;
+  border-left:3px solid var(--accent);
+  background:var(--accent-bg);border-radius:6px;
+  opacity:.65;cursor:pointer;
+}
+.chat-msg.mine .chat-msg-reply-ctx{border-left-color:rgba(255,255,255,.45)}
+.chat-msg-reply-ctx-name{font-size:10px;font-weight:700;color:var(--text);margin-bottom:1px}
+.chat-msg-reply-ctx-body{font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
+/* ─── Forwarded ───────────────────────────────────────── */
+.chat-msg-fwd-tag{
+  font-size:10px;font-weight:600;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;
+  display:flex;align-items:center;gap:5px;
+}
+.chat-msg-bubble.fwd{border-left:3px solid var(--muted);padding-left:9px}
+.chat-msg.mine .chat-msg-bubble.fwd{border-left-color:rgba(255,255,255,.35)}
+/* ─── Deleted ─────────────────────────────────────────── */
+.chat-msg-bubble.deleted-bubble{
+  font-style:italic;color:var(--muted);
+  background:transparent!important;border-style:dashed!important;
+}
+/* ─── Reply preview bar (above input) ────────────────── */
+#chat-reply-bar{
+  padding:7px 14px;background:var(--card);border-top:1px solid var(--border);
+  display:none;align-items:center;gap:8px;flex-shrink:0;
+}
+#chat-reply-bar.show{display:flex}
+.chat-reply-preview{
+  flex:1;min-width:0;padding:5px 9px;
+  border-left:3px solid var(--accent);
+  background:var(--accent-bg);border-radius:6px;font-size:12px;
+}
+.chat-reply-preview-name{font-weight:700;color:var(--text);margin-bottom:1px}
+.chat-reply-preview-body{color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-reply-cancel{
+  width:26px;height:26px;border-radius:8px;flex-shrink:0;
+  border:1px solid var(--border);background:transparent;
+  color:var(--muted);cursor:pointer;font-size:16px;
+  display:flex;align-items:center;justify-content:center;
+  transition:border-color .12s,color .12s;
+}
+.chat-reply-cancel:hover{border-color:var(--danger);color:var(--danger)}
 .chat-pinned-item{padding:10px 0;border-bottom:1px solid var(--border)}
 .chat-pinned-item:last-child{border-bottom:none}
 .chat-pinned-item-meta{font-size:10px;color:var(--muted);margin-bottom:4px}
@@ -526,6 +580,13 @@ body.sb-open .sidebar-overlay{display:block}
       <div id="chat-empty">Sélectionnez un canal ou démarrez une conversation.</div>
       <div id="chat-messages" style="display:none"></div>
       <div id="chat-pending-row"></div>
+      <div id="chat-reply-bar">
+        <div class="chat-reply-preview" id="reply-preview-content">
+          <div class="chat-reply-preview-name" id="reply-preview-name"></div>
+          <div class="chat-reply-preview-body" id="reply-preview-body"></div>
+        </div>
+        <button type="button" class="chat-reply-cancel" onclick="cancelReply()" aria-label="Annuler la réponse">×</button>
+      </div>
       <div id="chat-input-area" style="display:none">
         <input type="file" id="chat-file-input" accept=".jpg,.jpeg,.png,.webp,.gif,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip">
         <button type="button" id="chat-action-expand" aria-label="Plus d'options" onclick="toggleChatActions()">+</button>
@@ -593,6 +654,7 @@ let channelMembers = [];
 let mentionQuery = null;
 let mentionStart = 0;
 let mentionFocusIdx = -1;
+let replyToMsg = null; // {id, user_nom, body}
 
 // ── Sonnerie notification ─────────────────────────────────
 let _audioCtx = null;
@@ -847,6 +909,7 @@ async function selectChannel(id){
   activeId=id;
   pendingChatFile=null;
   renderPendingChatFile();
+  cancelReply();
   renderChannelLists();
   document.body.classList.add('chat-active');
   document.body.classList.remove('chat-list-open');
@@ -956,11 +1019,24 @@ function buildMsgEl(m){
   const wrap=document.createElement('div');
   wrap.className='chat-msg '+(m.is_mine?'mine':'theirs')+(m.pinned_at?' pinned':'');
   wrap.dataset.id=String(m.id);
+  wrap.style.position='relative';
+
+  // ── Deleted placeholder ───────────────────────────────
+  if(m.is_soft_deleted){
+    wrap.innerHTML=
+      '<div class="chat-msg-label">'+esc(m.user_nom)+' · '+esc(fmtTime(m.created_at))+'</div>'+
+      '<div class="chat-msg-bubble deleted-bubble">Message supprimé.</div>';
+    return wrap;
+  }
+
   const ch=channels.find(c=>c.id===activeId);
-  const canDel=m.is_mine||ADMIN_ROLES.has(window.__MYSIFA_ROLE__);
-  const canPin=ch&&ch.type==='channel'&&ADMIN_ROLES.has(window.__MYSIFA_ROLE__);
+  const isAdmin=ADMIN_ROLES.has(window.__MYSIFA_ROLE__);
   const msgAge=Date.now()-new Date((m.created_at||'').replace(' ','T')).getTime();
   const canEdit=m.is_mine&&!m.attachment_url&&msgAge<900000;
+  const canDel=m.is_mine||isAdmin;
+  const canPin=ch&&ch.type==='channel'&&isAdmin;
+
+  // ── Body ─────────────────────────────────────────────
   const body=(m.body||'').trim();
   let bubble=body?esc(body):'';
   if(bubble&&window.ChatMentions){
@@ -971,12 +1047,44 @@ function buildMsgEl(m){
   }
   if(m.attachment_url)bubble+=(bubble?'<br>':'')+chatAttachmentHtml(m);
   if(!bubble)bubble='<span style="color:var(--muted);font-size:12px">Pièce jointe</span>';
+
+  // ── Edited date label ─────────────────────────────────
+  let editedLabel='';
+  if(m.edited_at){
+    try{
+      const ed=new Date(m.edited_at.replace(' ','T'));
+      const d=ed.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'});
+      editedLabel='<span class="chat-msg-edited">modifié le '+d+'</span>';
+    }catch(e){editedLabel='<span class="chat-msg-edited">(modifié)</span>';}
+  }
+
+  // ── Reply context ─────────────────────────────────────
+  let replyHtml='';
+  if(m.reply_to){
+    const rn=esc(m.reply_to.user_nom||'');
+    const rb=m.reply_to.is_soft_deleted?'<em style="color:var(--muted)">Message supprimé</em>':esc((m.reply_to.body||'').substring(0,80));
+    replyHtml='<div class="chat-msg-reply-ctx" onclick="scrollToMsg('+m.reply_to.id+')">'+
+      '<div class="chat-msg-reply-ctx-name">'+rn+'</div>'+
+      '<div class="chat-msg-reply-ctx-body">'+rb+'</div></div>';
+  }
+
+  // ── Forwarded tag ─────────────────────────────────────
+  let fwdTag='';
+  if(m.is_forwarded){
+    fwdTag='<div class="chat-msg-fwd-tag">'+
+      '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/></svg>'+
+      'Transféré'+(m.forwarded_from_nom?' · '+esc(m.forwarded_from_nom):'')+'</div>';
+  }
+
+  // ── Build HTML ────────────────────────────────────────
   wrap.innerHTML=
-    '<div class="chat-msg-label">'+esc(m.user_nom)+' · '+esc(fmtTime(m.created_at))+(m.edited_at?'<span class="chat-msg-edited">(modifié)</span>':'')+'</div>'+
-    '<div class="chat-msg-bubble">'+bubble+'</div>'+
-    (canDel?'<button type="button" class="chat-msg-del" title="Supprimer" onclick="deleteMsg('+m.id+')">×</button>':'')+
-    (canEdit?'<button type="button" class="chat-msg-edit" title="Modifier" onclick="startEdit('+m.id+')">✎</button>':'')+
-    (canPin?'<button type="button" class="chat-msg-pin'+(m.pinned_at?' pinned-active':'')+'" title="'+(m.pinned_at?'Désépingler':'Épingler')+'" onclick="togglePin('+m.id+','+(m.pinned_at?'true':'false')+')" aria-label="'+(m.pinned_at?'Désépingler':'Épingler')+'"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg></button>':'');
+    '<div class="chat-msg-label">'+esc(m.user_nom)+' · '+esc(fmtTime(m.created_at))+editedLabel+'</div>'+
+    replyHtml+
+    fwdTag+
+    '<div class="chat-msg-bubble'+(m.is_forwarded?' fwd':'')+'">'+bubble+'</div>'+
+    '<button type="button" class="chat-msg-menu-btn" title="Options" aria-label="Options du message" onclick="openMsgMenu(event,'+m.id+')">⋮</button>';
+
+  // ── Reactions ─────────────────────────────────────────
   if(m.reactions&&m.reactions.length){
     const rDiv=document.createElement('div');
     rDiv.className='msg-reactions';
@@ -992,6 +1100,36 @@ function buildMsgEl(m){
     const bubbleEl=wrap.querySelector('.chat-msg-bubble');
     if(bubbleEl)bubbleEl.after(rDiv);
   }
+
+  // ── ⋮ Dropdown menu ───────────────────────────────────
+  const menu=document.createElement('div');
+  menu.className='chat-msg-menu';
+  menu.dataset.msgId=String(m.id);
+
+  const mkItem=(label,ico,cls,cb)=>{
+    const btn=document.createElement('button');
+    btn.type='button';
+    btn.className='chat-msg-menu-item'+(cls?' '+cls:'');
+    btn.innerHTML=ico+'<span>'+label+'</span>';
+    btn.onclick=e=>{e.stopPropagation();closeAllMsgMenus();cb();};
+    return btn;
+  };
+
+  const icoReply='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>';
+  const icoEdit='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+  const icoDel='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>';
+  const icoFwd='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/></svg>';
+  const icoPin='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>';
+
+  menu.appendChild(mkItem('Répondre',icoReply,'',()=>startReply(m.id)));
+  if(canEdit) menu.appendChild(mkItem('Modifier',icoEdit,'',()=>startEdit(m.id)));
+  if(canDel) menu.appendChild(mkItem('Supprimer',icoDel,'danger',()=>deleteMsg(m.id)));
+  menu.appendChild(mkItem('Transférer',icoFwd,'',()=>startForward(m.id)));
+  if(canPin) menu.appendChild(mkItem(m.pinned_at?'Désépingler':'Épingler',icoPin,'',()=>togglePin(m.id,!!m.pinned_at)));
+
+  wrap.appendChild(menu);
+
+  // ── Emoji picker ──────────────────────────────────────
   const picker=document.createElement('div');
   picker.className='react-picker';
   picker.style.position='absolute';
@@ -1002,11 +1140,113 @@ function buildMsgEl(m){
     b.onclick=e=>{e.stopPropagation();picker.classList.remove('show');toggleReaction(m.id,emoji);};
     picker.appendChild(b);
   });
-  wrap.style.position='relative';
   wrap.appendChild(picker);
   wrap.addEventListener('mouseenter',()=>picker.classList.add('show'));
   wrap.addEventListener('mouseleave',()=>picker.classList.remove('show'));
+
   return wrap;
+}
+
+function openMsgMenu(e,msgId){
+  e.stopPropagation();
+  const menu=document.querySelector('.chat-msg-menu[data-msg-id="'+msgId+'"]');
+  if(!menu)return;
+  const wasOpen=menu.classList.contains('show');
+  closeAllMsgMenus();
+  if(!wasOpen)menu.classList.add('show');
+}
+
+function closeAllMsgMenus(){
+  document.querySelectorAll('.chat-msg-menu.show').forEach(m=>m.classList.remove('show'));
+}
+
+document.addEventListener('click',()=>closeAllMsgMenus());
+
+function scrollToMsg(msgId){
+  const el=document.querySelector('.chat-msg[data-id="'+msgId+'"]');
+  if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.style.outline='2px solid var(--accent)';setTimeout(()=>{el.style.outline='';},1200);}
+}
+
+// ── Reply ────────────────────────────────────────────────────
+function startReply(msgId){
+  const m=messages.find(x=>x.id===msgId);
+  if(!m||m.is_soft_deleted)return;
+  replyToMsg=m;
+  document.getElementById('reply-preview-name').textContent=m.user_nom||'';
+  document.getElementById('reply-preview-body').textContent=(m.body||'(pièce jointe)').substring(0,80);
+  document.getElementById('chat-reply-bar').classList.add('show');
+  document.getElementById('chat-input').focus();
+}
+
+function cancelReply(){
+  replyToMsg=null;
+  document.getElementById('chat-reply-bar').classList.remove('show');
+}
+
+// ── Forward ──────────────────────────────────────────────────
+async function startForward(msgId){
+  const m=messages.find(x=>x.id===msgId);
+  if(!m)return;
+  try{
+    if(!allUsers.length)allUsers=await api('/api/chat/users')||[];
+  }catch(e){showToast(e.message||'Chargement impossible','danger');return;}
+
+  let selectedIds=new Set();
+  const overlay=document.createElement('div');
+  overlay.className='chat-modal-overlay';
+  overlay.onclick=ev=>{if(ev.target===overlay)closeModal();};
+
+  function renderFwdList(q){
+    const ql=(q||'').toLowerCase();
+    const list=allUsers.filter(u=>Number(u.id)!==Number(window.__MYSIFA_UID__)&&(!ql||(u.nom||'').toLowerCase().includes(ql)));
+    const el=document.getElementById('fwd-user-list');
+    if(!list.length){el.innerHTML='<p style="padding:12px;margin:0;font-size:12px;color:var(--muted)">Aucun résultat</p>';return;}
+    el.innerHTML=list.map(u=>{
+      const sel=selectedIds.has(u.id);
+      return '<button type="button" class="chat-user-row" data-uid="'+u.id+'" style="'+(sel?'color:var(--accent);background:var(--accent-bg)':'')+'">'
+        +esc(u.nom)+' <span style="color:var(--muted);font-size:11px">'+esc(ROLE_LABELS[u.role]||u.role||'')+'</span>'
+        +(sel?' <span style="margin-left:auto">✓</span>':'')
+        +'</button>';
+    }).join('');
+    el.querySelectorAll('.chat-user-row').forEach(btn=>{
+      btn.onclick=()=>{
+        const uid=parseInt(btn.dataset.uid,10);
+        if(selectedIds.has(uid))selectedIds.delete(uid);else selectedIds.add(uid);
+        renderFwdList(document.getElementById('fwd-search').value);
+        document.getElementById('fwd-send-btn').disabled=selectedIds.size===0;
+      };
+    });
+  }
+
+  const preview=(m.body||'(pièce jointe)').substring(0,60);
+  overlay.innerHTML=
+    '<div class="chat-modal" role="dialog">'+
+    '<h3>Transférer le message</h3>'+
+    '<div style="padding:6px 10px;margin-bottom:12px;border-left:3px solid var(--muted);background:var(--accent-bg);border-radius:6px;font-size:12px;color:var(--text2)">'+
+    esc(preview)+'</div>'+
+    '<label for="fwd-search">Destinataires</label>'+
+    '<input type="search" id="fwd-search" placeholder="Rechercher…" autocomplete="off">'+
+    '<div class="chat-user-list" id="fwd-user-list" style="max-height:200px"></div>'+
+    '<div class="chat-modal-actions">'+
+    '<button type="button" onclick="closeModal()">Annuler</button>'+
+    '<button type="button" class="primary" id="fwd-send-btn" disabled>Transférer</button></div></div>';
+  document.getElementById('mroot').appendChild(overlay);
+  renderFwdList('');
+  document.getElementById('fwd-search').oninput=function(){renderFwdList(this.value);};
+  document.getElementById('fwd-send-btn').onclick=async()=>{
+    if(!selectedIds.size)return;
+    try{
+      const r=await api('/api/chat/channels/'+activeId+'/messages/'+msgId+'/forward',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({user_ids:[...selectedIds]})
+      });
+      closeModal();
+      showToast('Message transféré','success');
+      if(r.channel_ids&&r.channel_ids.length)await loadChannels();
+    }catch(e){showToast(e.message||'Transfert impossible','danger');}
+  };
+  requestAnimationFrame(()=>document.getElementById('fwd-search')?.focus());
 }
 
 async function toggleReaction(msgId,emoji){
@@ -1148,6 +1388,7 @@ async function sendMessage(){
   if((!body&&!file)||!activeId)return;
   const btn=document.getElementById('chat-send');
   btn.disabled=true;
+  const rtoId=replyToMsg?replyToMsg.id:null;
   try{
     if(file){
       const fd=new FormData();
@@ -1158,7 +1399,7 @@ async function sendMessage(){
       await api('/api/chat/channels/'+activeId+'/messages',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({body})
+        body:JSON.stringify({body,reply_to_id:rtoId||undefined})
       });
     }
     inp.value='';
@@ -1166,6 +1407,7 @@ async function sendMessage(){
     inp.style.height='auto';
     pendingChatFile=null;
     renderPendingChatFile();
+    cancelReply();
     await loadMessages(false);
   }catch(e){
     showToast(e.message||'Envoi impossible','danger');
@@ -1175,12 +1417,17 @@ async function sendMessage(){
 }
 
 async function deleteMsg(msgId){
-  if(!activeId||!confirm('Supprimer ce message ?'))return;
+  if(!activeId)return;
   try{
     await api('/api/chat/channels/'+activeId+'/messages/'+msgId,{method:'DELETE'});
-    messages=messages.filter(m=>m.id!==msgId);
+    // Update local state — mark as soft-deleted, re-render
+    const idx=messages.findIndex(m=>m.id===msgId);
+    if(idx>=0){messages[idx]={...messages[idx],is_soft_deleted:true,body:'',edited_at:'',attachment_url:'',reactions:[]};}
     const el=document.querySelector('.chat-msg[data-id="'+msgId+'"]');
-    if(el)el.remove();
+    if(el){
+      const m=messages[idx];
+      if(m){const newEl=buildMsgEl(m);el.replaceWith(newEl);}
+    }
     showToast('Message supprimé','success');
   }catch(e){
     showToast(e.message||'Suppression impossible','danger');

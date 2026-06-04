@@ -207,7 +207,8 @@ const S = {
   produitView: 'list',
   produitForm: null,
   matieres: {},
-  nonLus: {}
+  nonLus: {},
+  fournisseursBase: []
 };
 
 const ROLE_LABELS = {direction:'Direction',administration:'Administration',commercial:'Commercial',superadmin:'Super admin'};
@@ -586,6 +587,48 @@ async function loadProduits() {
   S.produits = await api('/api/ao/produits');
 }
 
+async function loadFournisseursBase() {
+  try {
+    const data = await api('/api/fournisseurs');
+    S.fournisseursBase = Array.isArray(data) ? data : [];
+  } catch(e) { S.fournisseursBase = []; }
+}
+
+// Ouvre un mini-modal pour créer un fournisseur dans Paramètre > Fournisseurs
+// Appelle callback(nouveauFournisseur) après création réussie
+function openAddFournisseurBaseModal(callback) {
+  const backdrop = document.createElement('div');
+  backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;display:flex;align-items:center;justify-content:center;padding:16px';
+  const dlg = document.createElement('div');
+  dlg.style.cssText = 'background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;max-width:400px;width:100%';
+  dlg.innerHTML = '<h3 style="margin:0 0 16px;font-size:16px">Ajouter un fournisseur</h3>'+
+    '<div class="field"><label>Nom</label><input id="af-nom" placeholder="Nom du fournisseur" autocomplete="off"></div>'+
+    '<div class="field"><label>Licence FSC</label><input id="af-licence" placeholder="ex: FSC-C004451" autocomplete="off"></div>'+
+    '<div class="field"><label>Certificat FSC</label><input id="af-certificat" placeholder="ex: CU-COC-807907" autocomplete="off"></div>'+
+    '<div class="modal-actions"><button class="btn btn-ghost" id="af-cancel">Annuler</button><button class="btn btn-accent" id="af-ok">Ajouter</button></div>';
+  backdrop.appendChild(dlg);
+  document.body.appendChild(backdrop);
+  requestAnimationFrame(() => dlg.querySelector('#af-nom').focus());
+  dlg.querySelector('#af-cancel').onclick = () => backdrop.remove();
+  dlg.querySelector('#af-ok').onclick = async () => {
+    const nom = dlg.querySelector('#af-nom').value.trim();
+    const licence = dlg.querySelector('#af-licence').value.trim();
+    const certificat = dlg.querySelector('#af-certificat').value.trim();
+    if (!nom) { showToast('Nom du fournisseur requis.', 'danger'); return; }
+    try {
+      const created = await api('/api/fournisseurs', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({nom, licence, certificat})
+      });
+      await loadFournisseursBase();
+      backdrop.remove();
+      showToast('Fournisseur ajouté.', 'success');
+      if (callback) callback(created);
+    } catch(e) { showToast(e.message, 'danger'); }
+  };
+}
+
 async function loadDetail(id) {
   S.detail = await api('/api/ao/' + id);
   S.ao = S.detail.ao;
@@ -803,11 +846,19 @@ function renderModal() {
       const lbl = (c.societe ? escHtml(c.societe)+' — ' : '')+escHtml(c.nom);
       carnetOpts += '<option value="'+c.id+'">'+lbl+'</option>';
     });
+    let societeOpts = '<option value="">— Sélectionner une société —</option>';
+    (S.fournisseursBase||[]).forEach(f => {
+      societeOpts += '<option value="'+f.id+'">'+escHtml(f.nom)+'</option>';
+    });
     box.innerHTML = '<h3>Ajouter un fournisseur</h3>'+
       '<div class="field"><label>Sélectionner depuis le carnet</label>'+
       '<select id="m-carnet-pick">'+carnetOpts+'</select></div>'+
       '<div id="m-fourni-form">'+
-      '<div class="field"><label>Société</label><input id="m-societe"></div>'+
+      '<div class="field"><label>Société</label>'+
+      '<div style="display:flex;gap:8px;align-items:center">'+
+      '<select id="m-societe-sel" style="flex:1">'+societeOpts+'</select>'+
+      '<button type="button" class="btn btn-ghost" id="m-societe-add" style="white-space:nowrap;font-size:12px;padding:8px 12px">+ Ajouter</button>'+
+      '</div></div>'+
       '<div class="field"><label>Nom</label><input id="m-nom"></div>'+
       '<div class="field"><label>Email</label><input type="email" id="m-mail"></div>'+
       '<div class="field"><label>Adresse</label><textarea id="m-adresse" rows="2"></textarea></div></div>'+
@@ -816,17 +867,37 @@ function renderModal() {
       '<div class="modal-actions"><button class="btn btn-ghost" id="m-cancel">Annuler</button><button class="btn btn-accent" id="m-ok">Ajouter</button></div>';
     ov.appendChild(box); m.appendChild(ov);
     const pickEl = document.getElementById('m-carnet-pick');
-    const societeEl = document.getElementById('m-societe');
+    const societeSelEl = document.getElementById('m-societe-sel');
     const nomEl = document.getElementById('m-nom');
     const mailEl = document.getElementById('m-mail');
     const adresseEl = document.getElementById('m-adresse');
     const saveCb = document.getElementById('m-save-carnet');
+
+    // Rafraîchit les options de société dans le select
+    function refreshSocieteOpts(selectId) {
+      let opts = '<option value="">— Sélectionner une société —</option>';
+      (S.fournisseursBase||[]).forEach(f => {
+        opts += '<option value="'+f.id+'"'+(String(f.id)===String(selectId)?' selected':'')+'>'+escHtml(f.nom)+'</option>';
+      });
+      societeSelEl.innerHTML = opts;
+    }
+
+    document.getElementById('m-societe-add').onclick = () => {
+      openAddFournisseurBaseModal((created) => {
+        // created = {success: true, id: X} — sélectionner le nouveau fournisseur
+        const newId = created && created.id;
+        refreshSocieteOpts(newId);
+      });
+    };
+
     pickEl.onchange = () => {
       const id = pickEl.value;
       if (id) {
         const c = (S.carnet||[]).find(x => String(x.id) === String(id));
         if (c) {
-          societeEl.value = c.societe || '';
+          // Essayer de matcher la société du carnet avec fournisseursBase
+          const match = c.societe ? (S.fournisseursBase||[]).find(f => f.nom === c.societe) : null;
+          refreshSocieteOpts(match ? match.id : null);
           nomEl.value = c.nom || '';
           mailEl.value = c.email || '';
           adresseEl.value = c.adresse || '';
@@ -842,7 +913,9 @@ function renderModal() {
       const nom = nomEl.value.trim();
       const email = mailEl.value.trim();
       if (!nom || !email) { showToast('Nom et email obligatoires.', 'danger'); return; }
-      const label = societeEl.value.trim() || nom;
+      const societeId = societeSelEl.value;
+      const societeF = societeId ? (S.fournisseursBase||[]).find(f => String(f.id) === String(societeId)) : null;
+      const label = societeF ? societeF.nom : nom;
       try {
         await api('/api/ao/'+S.ao.id+'/fournisseurs', {method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({nom_fournisseur: label, email_contact: email})});
@@ -852,7 +925,7 @@ function renderModal() {
             body: JSON.stringify({
               nom,
               email: email,
-              societe: societeEl.value.trim() || null,
+              societe: societeF ? societeF.nom : null,
               adresse: adresseEl.value.trim() || null
             })});
           await loadCarnet();
@@ -1380,8 +1453,8 @@ function render() {
   if (window.MySifaDock && typeof window.MySifaDock.bootPageWidgets === 'function') {
     window.MySifaDock.bootPageWidgets();
   }
-  const loads = await Promise.allSettled([loadList(), loadCarnet(), loadCarnetClients(), loadProduits(), loadMatieresForProduit()]);
-  const labels = ['appels d\'offre', 'carnet fournisseurs', 'carnet clients', 'produits', 'matières'];
+  const loads = await Promise.allSettled([loadList(), loadCarnet(), loadCarnetClients(), loadProduits(), loadMatieresForProduit(), loadFournisseursBase()]);
+  const labels = ['appels d\'offre', 'carnet fournisseurs', 'carnet clients', 'produits', 'matières', 'fournisseurs'];
   const errors = [];
   loads.forEach((res, i) => {
     if (res.status === 'rejected') {
@@ -1400,6 +1473,7 @@ function render() {
     if (!S.carnetClients) S.carnetClients = [];
     if (!S.produits) S.produits = [];
     if (!S.matieres) S.matieres = {};
+    if (!S.fournisseursBase) S.fournisseursBase = [];
   }
   render();
 })();

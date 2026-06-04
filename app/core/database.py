@@ -3017,6 +3017,18 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 97, "produits_type_negoce")
 
+    # v98 — Chat : reply, forward, soft-delete visible
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=98 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(chat_messages)").fetchall()}
+        if "reply_to_id" not in cols:
+            conn.execute("ALTER TABLE chat_messages ADD COLUMN reply_to_id INTEGER DEFAULT NULL")
+        if "is_forwarded" not in cols:
+            conn.execute("ALTER TABLE chat_messages ADD COLUMN is_forwarded INTEGER NOT NULL DEFAULT 0")
+        if "forwarded_from_nom" not in cols:
+            conn.execute("ALTER TABLE chat_messages ADD COLUMN forwarded_from_nom TEXT DEFAULT NULL")
+        conn.commit()
+        _record_schema_migration(conn, 98, "chat_messages_reply_forward")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

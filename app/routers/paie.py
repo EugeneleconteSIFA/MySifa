@@ -55,6 +55,8 @@ EXPORT_FIELDS = [
     ("prime_exceptionnelle",      "Prime exceptionnelle"),
     ("solde_tout_compte",         "Solde tout compte (oui non)"),
     ("prime_equipe",              "Prime équipe"),
+    ("garantie_prime",            "Garantie prime"),
+    ("avantage_nature_voiture",   "Avantage en nature voiture"),
     ("absence_heures",            "Absence en heures"),
     ("absence_maladie_heures",    "Absence maladie en heures"),
     ("absence_maladie_jours",     "Absence maladie en jours"),
