@@ -74,10 +74,15 @@ from app.routers.pwa import router as pwa_router
 async def lifespan(app: FastAPI):
     """Startup / shutdown — remplace @app.on_event('startup') (déprécié)."""
     try:
-        from database import sync_emplacements_plan_from_csv
+        from app.core.database import get_db, sync_emplacements_plan_from_csv
 
-        n = sync_emplacements_plan_from_csv()
-        print(f"[MySifa] emplacements_plan : {n} code(s) depuis CSV")
+        with get_db() as _conn:
+            _count = _conn.execute("SELECT COUNT(*) FROM emplacements_plan").fetchone()[0]
+        if _count == 0:
+            n = sync_emplacements_plan_from_csv()
+            print(f"[MySifa] emplacements_plan : {n} code(s) depuis CSV (seed initial)")
+        else:
+            print(f"[MySifa] emplacements_plan : {_count} code(s) en base — import CSV ignoré")
     except Exception as e:
         print(f"[MySifa] emplacements_plan : import CSV ignoré ({e})")
     try:

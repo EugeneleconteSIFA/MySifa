@@ -2421,7 +2421,7 @@ const fDSecs=d=>{
 const opName=s=>{if(!s)return'';const p=s.split(' - ');return p.length>1?p.slice(1).join(' - '):s;};
 const fMin=m=>{if(!m&&m!==0)return'-';const hh=Math.floor(m/60),mm=Math.round(m%60);return hh>0?hh+'h '+String(mm).padStart(2,'0')+'min':mm+'min';};
 const isAdmin=u=>u&&(u.role==='direction'||u.role==='administration'||u.role==='superadmin');
-const canViewAllProd=u=>u&&(isAdmin(u)||u.role==='commercial'||u.role==='expedition');
+const canViewAllProd=u=>u&&(isAdmin(u)||u.role==='commercial'||u.role==='expedition'||u.role==='logistique');
 const isComptaPlanning=u=>u&&u.role==='comptabilite';
 const canPlanningNav=u=>!!(u&&u.app_access&&u.app_access.planning);
 const isFab=u=>u&&u.role==='fabrication';
@@ -3915,7 +3915,7 @@ function renderPortal(){
     },
       h('div',{className:'portal-app-icon'},iconEl('wrench',28)),
       h('div',{className:'portal-app-name'},'MyProd'),
-      h('div',{className:'portal-app-desc'},isComptaPlan?'Planning production — lecture seule':'Suivi de production & Planning')
+      h('div',{className:'portal-app-desc'},isComptaPlan?'Planning production — lecture seule':(urole==='logistique'?'Suivi de production — lecture seule':'Suivi de production & Planning'))
     )});
   }
 
@@ -6296,6 +6296,7 @@ async function loadExpePaletteTypes(){
 }
 function expePaletteTypeLabel(row){
   if(!row) return '—';
+  if((row.type_colis||'').trim().toLowerCase()==='vrac') return 'Vrac';
   if(row.type_palette_label) return row.type_palette_label;
   const id=row.type_palette_matiere_id;
   if(id==null||id==='') return '—';
@@ -6409,8 +6410,10 @@ function expeOpenDepartModal(prefill, mode){
       arc: src.arc||'',
       no_cde_transport: src.no_cde_transport||'',
       no_bl: src.no_bl||'',
-      type_palette_matiere_id: (src.type_palette_matiere_id!=null && src.type_palette_matiere_id!=='')
-        ? String(src.type_palette_matiere_id) : '',
+      type_palette_matiere_id: (src.type_colis||'').trim().toLowerCase()==='vrac'
+        ? '__vrac__'
+        : (src.type_palette_matiere_id!=null && src.type_palette_matiere_id!=='')
+          ? String(src.type_palette_matiere_id) : '',
       nb_palette: (src.nb_palette!=null && src.nb_palette!=='') ? String(src.nb_palette) : '',
       poids_total_kg: (src.poids_total_kg!=null && src.poids_total_kg!=='') ? String(src.poids_total_kg) : '',
       date_livraison: (src.date_livraison||'') ? String(src.date_livraison).slice(0,10) : '',
@@ -6444,6 +6447,9 @@ function renderExpeDepartModal(){
     if(String(f.type_palette_matiere_id||'')===String(m.id)) opt.selected=true;
     palSel.appendChild(opt);
   });
+  const vracOpt=h('option',{value:'__vrac__'},'Vrac (sans palette — UPS…)');
+  if(f.type_palette_matiere_id==='__vrac__') vracOpt.selected=true;
+  palSel.appendChild(vracOpt);
   palSel.addEventListener('change',e=>{
     S.expeDepartForm.type_palette_matiere_id=e.target.value;
     expeScheduleSaveLocal();
@@ -6483,7 +6489,8 @@ function renderExpeDepartModal(){
       arc:(S.expeDepartForm.arc||'').trim()||null,
       no_cde_transport:(S.expeDepartForm.no_cde_transport||'').trim()||null,
       no_bl:(S.expeDepartForm.no_bl||'').trim()||null,
-      type_palette_matiere_id:(S.expeDepartForm.type_palette_matiere_id||'').trim()||null,
+      type_palette_matiere_id:(S.expeDepartForm.type_palette_matiere_id||'')==='__vrac__'?null:(S.expeDepartForm.type_palette_matiere_id||'').trim()||null,
+      type_colis:(S.expeDepartForm.type_palette_matiere_id||'')==='__vrac__'?'vrac':null,
       nb_palette:(S.expeDepartForm.nb_palette||'').trim()||null,
       poids_total_kg:(S.expeDepartForm.poids_total_kg||'').trim()||null,
       date_livraison:(S.expeDepartForm.date_livraison||'').trim()||null
@@ -10023,7 +10030,7 @@ function renderSaisies(){
   if(!canViewAllProd(S.user) && !userOperateur)
     return h('div',{className:'card'},h('div',{className:'card-blocked'},h('div',{className:'cb-icon'},iconEl('lock',32)),h('div',{className:'cb-msg'},'Compte non lié à un opérateur.')));
  
-  const readOnly=isFab(S.user);
+  const readOnly=isFab(S.user)||(S.user&&S.user.role==='logistique');
  
   function fmtDurMin(m){
     if(m==null||!isFinite(m)||m<=0) return '-';

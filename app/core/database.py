@@ -3029,6 +3029,14 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 98, "chat_messages_reply_forward")
 
+    # v99 — MyExpé : type_colis pour les envois sans palette (ex: vrac / UPS)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=99 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(expe_departs)").fetchall()}
+        if "type_colis" not in cols:
+            conn.execute("ALTER TABLE expe_departs ADD COLUMN type_colis TEXT DEFAULT NULL")
+        conn.commit()
+        _record_schema_migration(conn, 99, "expe_departs_type_colis")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

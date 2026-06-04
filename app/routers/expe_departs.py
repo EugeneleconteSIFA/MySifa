@@ -75,6 +75,7 @@ def _row_blob(d: dict) -> str:
         d.get("no_bl"),
         d.get("type_palette_label"),
         d.get("type_palette_reference"),
+        d.get("type_colis"),
         d.get("nb_palette"),
         d.get("poids_total_kg"),
         d.get("date_livraison"),
@@ -97,6 +98,7 @@ _HIST_SEARCH_COLS = (
     "d.no_bl",
     "mp.reference",
     "mp.designation",
+    "d.type_colis",
     "d.nb_palette",
     "d.poids_total_kg",
     "d.date_livraison",
@@ -139,12 +141,12 @@ _DEPARTS_SELECT = """
 
 def _depart_dict(row) -> dict:
     d = dict(row)
-    ref = (d.get("type_palette_reference") or "").strip()
-    des = (d.get("type_palette_designation") or "").strip()
-    if ref:
-        d["type_palette_label"] = f"{ref} — {des}" if des else ref
+    if (d.get("type_colis") or "").strip().lower() == "vrac":
+        d["type_palette_label"] = "Vrac"
     else:
-        d["type_palette_label"] = None
+        ref = (d.get("type_palette_reference") or "").strip()
+        des = (d.get("type_palette_designation") or "").strip()
+        d["type_palette_label"] = (f"{ref} — {des}" if des else ref) if ref else None
     return d
 
 
@@ -313,14 +315,17 @@ def create_depart(request: Request, body: dict = Body(...)):
         type_palette_id = _validate_type_palette_matiere_id(
             conn, body.get("type_palette_matiere_id")
         )
+        type_colis_val = (str(body.get("type_colis") or "").strip().lower() or None)
+        if type_colis_val == "vrac":
+            type_palette_id = None  # pas de matière première pour vrac
         cur = conn.execute(
             """INSERT INTO expe_departs (
                 date_enlevement, affreteurs, transporteur, transporteur_id, client,
                 code_postal_destination,
                 ref_sifa, arc, no_cde_transport, no_bl, type_palette_matiere_id,
-                nb_palette, poids_total_kg, date_livraison,
+                type_colis, nb_palette, poids_total_kg, date_livraison,
                 statut, created_at, created_by_email
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'en_attente', ?, ?)""",
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'en_attente', ?, ?)""",
             (
                 date_enl,
                 _f("affreteurs"),
@@ -333,6 +338,7 @@ def create_depart(request: Request, body: dict = Body(...)):
                 _f("no_cde_transport"),
                 _f("no_bl"),
                 type_palette_id,
+                type_colis_val,
                 _float_opt("nb_palette"),
                 _float_opt("poids_total_kg"),
                 _f("date_livraison"),
@@ -482,6 +488,11 @@ async def update_depart(request: Request, depart_id: int, body: dict = Body(...)
         sets.append("type_palette_matiere_id=?")
         args.append(None)  # remplacé après ouverture connexion
 
+    if "type_colis" in body:
+        sets.append("type_colis=?")
+        tc = (str(body.get("type_colis") or "").strip().lower() or None)
+        args.append(tc)
+
     fields_num = ["nb_palette", "poids_total_kg"]
     for k in fields_num:
         if k in body:
@@ -494,9 +505,14 @@ async def update_depart(request: Request, depart_id: int, body: dict = Body(...)
     with get_db() as conn:
         if "type_palette_matiere_id" in body:
             idx = next(i for i, s in enumerate(sets) if s.startswith("type_palette_matiere_id"))
-            args[idx] = _validate_type_palette_matiere_id(
-                conn, body.get("type_palette_matiere_id")
-            )
+            # Si type_colis=vrac envoyé en même temps, pas de matière première associée
+            tc_in_body = (str(body.get("type_colis") or "").strip().lower() or None)
+            if tc_in_body == "vrac":
+                args[idx] = None
+            else:
+                args[idx] = _validate_type_palette_matiere_id(
+                    conn, body.get("type_palette_matiere_id")
+                )
         ex = conn.execute("SELECT id, statut FROM expe_departs WHERE id=?", (depart_id,)).fetchone()
         if not ex:
             raise HTTPException(status_code=404, detail="Départ introuvable")

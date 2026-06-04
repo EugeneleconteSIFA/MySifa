@@ -1449,7 +1449,8 @@ let S = {
   user: null,
   tab: 'dashboard',
   stockReadOnly: false,
-  tracaOnly: false,   // fabrication : accès limité à l'onglet traça
+  tracaOnly: false,
+  fabStockMode: false,  // fabrication : accès limité aux sections Matières premières + Outils
   sidebarOpen: false,
   searchQuery: '',
   searchResults: null,
@@ -2915,8 +2916,9 @@ function closeSidebar() { S.sidebarOpen = false; document.body.classList.remove(
 
 // ── Navigation ──────────────────────────────────────────────────
 function goToTab(tab) {
-  // Fabrication : accès limité au traça
+  // Accès restreints selon le mode
   if (S.tracaOnly && tab !== 'traca') return;
+  if (S.fabStockMode && !['matieres','historique','traca','plan-entrepot'].includes(tab)) return;
   // Arrêter la caméra si on quitte l'onglet réception
   if (tab !== 'reception' && S.recepScanning) recepStopCamera();
   S.tab = tab; S.selProduit = null; S.selEmpl = null; S.selMatiere = null; S.searchResults = null; S.showAddForm = false;
@@ -10400,6 +10402,17 @@ function buildSidebarNavStructure() {
   if (S.tracaOnly) {
     return [{ kind: 'btn', tab: 'traca', icon: 'printer', label: 'Étiquettes traça' }];
   }
+  // Fabrication : accès limité aux sections Matières premières + Outils (lecture seule)
+  if (S.fabStockMode) {
+    return [
+      { kind: 'sep', label: 'Matières premières' },
+      { kind: 'btn', tab: 'matieres', icon: 'layers', label: 'Matières premières' },
+      { kind: 'sep', label: 'Outils' },
+      { kind: 'btn', tab: 'historique', icon: 'clock', label: 'Historique mouvements' },
+      { kind: 'btn', tab: 'traca', icon: 'printer', label: 'Étiquettes traça' },
+      { kind: 'btn', tab: 'plan-entrepot', icon: 'map-pin', label: 'Plan entrepôt' },
+    ];
+  }
   const items = [
     { kind: 'btn', tab: 'dashboard', icon: 'grid', label: 'Tableau de bord' },
     { kind: 'sep', label: 'Matières premières' },
@@ -10701,9 +10714,10 @@ async function init() {
   else if(window._CW&&typeof window._CW.syncUser==='function')window._CW.syncUser();
   if(window.MySifaDock&&typeof window.MySifaDock.bootPageWidgets==='function')window.MySifaDock.bootPageWidgets();
   else if(typeof initAiChatWidget==='function')initAiChatWidget();
-  S.stockReadOnly = (user.role === 'commercial');
-  // Fabrication : accès restreint à l'onglet traça uniquement
-  S.tracaOnly = (user.role === 'fabrication');
+  S.stockReadOnly = (user.role === 'commercial' || user.role === 'fabrication');
+  S.tracaOnly = false;
+  // Fabrication : accès limité aux sections Matières premières + Outils, lecture seule
+  S.fabStockMode = (user.role === 'fabrication');
   // Charger les fournisseurs FSC
   await loadFournisseursFSC();
   // Charger la liste complète des emplacements depuis la base de données
@@ -10717,8 +10731,9 @@ async function init() {
       && !['superadmin', 'direction', 'administration'].includes(S.user.role)) {
     S.tab = 'dashboard';
   }
-  // Forcer traça si accès restreint
+  // Forcer onglet initial selon le mode d'accès restreint
   if (S.tracaOnly) S.tab = 'traca';
+  if (S.fabStockMode && !['matieres','historique','traca','plan-entrepot'].includes(S.tab)) S.tab = 'matieres';
   render();
   if (S.tab === 'traca') { /* rien à charger */ }
   else if (S.tab === 'reception') { await loadRecepHistory(); }
@@ -10732,7 +10747,7 @@ async function init() {
   else if (S.tab === 'plan-entrepot') { await loadPlanEntrepot(); }
   else { await loadDashboard(); }
   // Charger le compteur d'alertes inventaire en arrière-plan (badge sidebar)
-  if (!S.tracaOnly) loadInvAlertCountBackground();
+  if (!S.tracaOnly && !S.fabStockMode) loadInvAlertCountBackground();
 }
 
 init();

@@ -200,7 +200,7 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
 .chat-msg.pinned .chat-msg-bubble{border-top:2px solid var(--warn)}
 /* ─── Menu ⋮ ───────────────────────────────────────────── */
 .chat-msg-menu-btn{
-  position:absolute;top:-6px;right:-10px;
+  position:absolute;top:0;right:0;
   width:26px;height:26px;border-radius:8px;
   border:1px solid var(--border);background:var(--card);color:var(--muted);
   font-size:15px;line-height:1;cursor:pointer;
@@ -210,16 +210,19 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
   transition:border-color .12s,color .12s;
 }
 .chat-msg:hover .chat-msg-menu-btn{display:flex}
-.chat-msg.mine .chat-msg-menu-btn{right:auto;left:-10px}
+.chat-msg.mine .chat-msg-menu-btn{right:auto;left:0}
 .chat-msg-menu-btn:hover{border-color:var(--accent);color:var(--accent)}
+/* décale légèrement le label pour ne pas être couvert par le bouton ⋮ */
+.chat-msg:hover .chat-msg-label{padding-right:32px}
+.chat-msg.mine:hover .chat-msg-label{padding-right:0;padding-left:32px}
 .chat-msg-menu{
-  position:absolute;top:22px;right:-10px;
+  position:absolute;top:28px;right:0;
   background:var(--card);border:1px solid var(--border);border-radius:10px;
   padding:4px;box-shadow:0 8px 28px rgba(0,0,0,.4);
   z-index:200;min-width:152px;display:none;
 }
 .chat-msg-menu.show{display:block}
-.chat-msg.mine .chat-msg-menu{right:auto;left:-10px}
+.chat-msg.mine .chat-msg-menu{right:auto;left:0}
 .chat-msg-menu-item{
   display:flex;align-items:center;gap:9px;
   width:100%;padding:8px 12px;
