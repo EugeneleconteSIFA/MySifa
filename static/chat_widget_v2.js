@@ -670,7 +670,7 @@
       const canPin = ch && ch.type === 'channel' && ADMIN.has(CW.role);
       const msgAge = Date.now() - new Date((msg.created_at || '').replace(' ', 'T')).getTime();
       const canEdit = mine && !msg.attachment_url && msgAge < 900000;
-      const canDel = mine || ADMIN.has(CW.role);
+      const canDel = mine;
 
       if (msg.pinned_at) wrap.classList.add('cw-pinned');
 

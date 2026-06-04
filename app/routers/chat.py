@@ -1049,9 +1049,8 @@ def unpin_message(channel_id: int, msg_id: int, request: Request):
 
 @router.delete("/channels/{channel_id}/messages/{msg_id}")
 def delete_message(channel_id: int, msg_id: int, request: Request):
-    """Soft-delete (auteur ou admin)."""
+    """Soft-delete — réservé à l'auteur du message (les admins ne peuvent pas)."""
     user = _require(request)
-    is_admin = user.get("role") in {"superadmin", "direction", "administration"}
     with get_db() as conn:
         row = conn.execute(
             "SELECT user_id, deleted_at FROM chat_messages WHERE id=? AND channel_id=? LIMIT 1",
@@ -1061,7 +1060,7 @@ def delete_message(channel_id: int, msg_id: int, request: Request):
             raise HTTPException(status_code=404, detail="Message introuvable")
         if row["deleted_at"]:
             raise HTTPException(status_code=410, detail="Message déjà supprimé")
-        if not is_admin and row["user_id"] != user["id"]:
+        if row["user_id"] != user["id"]:
             raise HTTPException(status_code=403, detail="Vous ne pouvez supprimer que vos propres messages")
         conn.execute(
             "UPDATE chat_messages SET deleted_at=? WHERE id=?",

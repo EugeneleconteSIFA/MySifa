@@ -431,6 +431,14 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
   .cw-msg-attach-img img{max-width:min(240px,100%)}
   .cw-react-picker{margin-top:-8px}
   #cw-back-list{display:flex!important}
+  /* iOS Safari : empêche le zoom automatique au focus d'un champ
+     (déclenché lorsque font-size < 16px). On force 16px sur mobile. */
+  #cw-input,
+  .cw-edit-area,
+  #cw-fwd-search,
+  .cw-modal input[type="search"],
+  .cw-modal input[type="text"],
+  .cw-modal textarea{font-size:16px!important}
 }
 @media (max-width:900px) and (orientation:landscape){
   body.cw-mobile #cw-panel.cw-hidden{display:none!important}
@@ -1502,7 +1510,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     const isAdmin = ['superadmin','direction','administration'].includes(CW.role);
     const msgAge = Date.now()-new Date((msg.created_at||'').replace(' ','T')).getTime();
     const canEdit = mine && !msg.attachment_url && msgAge < 900000;
-    const canDel = mine || isAdmin;
+    const canDel = mine;
     const canPin = ch && ch.type==='channel' && isAdmin;
 
     const header = document.createElement('div');
