@@ -189,8 +189,6 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
 .chat-msg{display:flex;flex-direction:column;max-width:78%;position:relative}
 .chat-msg.mine{align-self:flex-end}
 .chat-msg.theirs{align-self:flex-start}
-.chat-msg-label{font-size:10px;color:var(--muted);margin-bottom:3px}
-.chat-msg.mine .chat-msg-label{text-align:right}
 .chat-msg-bubble{
   padding:8px 12px;border-radius:10px;font-size:13px;line-height:1.5;
   word-break:break-word;white-space:pre-wrap;
@@ -198,29 +196,28 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
 .chat-msg.theirs .chat-msg-bubble{background:var(--card);border:1px solid var(--border);color:var(--text);border-bottom-left-radius:3px}
 .chat-msg.mine .chat-msg-bubble{background:var(--accent);color:var(--bg);font-weight:600;border-bottom-right-radius:3px}
 .chat-msg.pinned .chat-msg-bubble{border-top:2px solid var(--warn)}
-/* ─── Header message (label + bouton ⋮ inline) ─────────── */
-.chat-msg-header{
-  display:flex;align-items:center;gap:4px;
-  margin-bottom:3px;position:relative;
+/* ─── Label (flex row : texte + bouton ⋮) ──────────────── */
+.chat-msg-label{
+  font-size:10px;color:var(--muted);margin-bottom:3px;
+  display:flex;align-items:center;gap:5px;
+  position:relative;
 }
-.chat-msg.mine .chat-msg-header{flex-direction:row-reverse}
-.chat-msg-header .chat-msg-label{flex:1;margin-bottom:0}
-/* ─── Menu ⋮ ───────────────────────────────────────────── */
+.chat-msg.mine .chat-msg-label{justify-content:flex-end}
+/* ─── Bouton ⋮ ──────────────────────────────────────────── */
 .chat-msg-menu-btn{
-  flex-shrink:0;
-  width:22px;height:22px;border-radius:6px;
-  border:1px solid transparent;background:transparent;color:var(--muted);
-  font-size:14px;line-height:1;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;
-  font-family:inherit;padding:0 0 2px 0;
-  font-weight:700;
+  display:inline-flex;align-items:center;justify-content:center;
+  width:20px;height:16px;border-radius:5px;flex-shrink:0;
+  border:1px solid transparent;background:transparent;
+  color:var(--muted);font-size:13px;line-height:1;
+  cursor:pointer;font-family:inherit;padding:0 0 1px 0;font-weight:700;
   opacity:0;pointer-events:none;
-  transition:opacity .15s,border-color .12s,background .12s,color .12s;
+  transition:opacity .15s,border-color .1s,background .1s;
 }
 .chat-msg:hover .chat-msg-menu-btn{opacity:1;pointer-events:auto}
 .chat-msg-menu-btn:hover{border-color:var(--border);background:var(--card);color:var(--accent)}
+/* ─── Dropdown ──────────────────────────────────────────── */
 .chat-msg-menu{
-  position:absolute;top:26px;right:0;
+  position:absolute;top:20px;right:0;
   background:var(--card);border:1px solid var(--border);border-radius:10px;
   padding:4px;box-shadow:0 8px 28px rgba(0,0,0,.4);
   z-index:200;min-width:152px;display:none;
@@ -1132,10 +1129,10 @@ function buildMsgEl(m){
   }
 
   // ── Build HTML ────────────────────────────────────────
-  // Le bouton ⋮ est inline dans le header (pas absolu) — plus fiable
+  // Bouton ⋮ inline dans le label (un seul élément flex)
   wrap.innerHTML=
-    '<div class="chat-msg-header">'+
-    '<div class="chat-msg-label">'+esc(m.user_nom)+' · '+esc(fmtTime(m.created_at))+editedLabel+'</div>'+
+    '<div class="chat-msg-label">'+
+    '<span>'+esc(m.user_nom)+' · '+esc(fmtTime(m.created_at))+editedLabel+'</span>'+
     '<button type="button" class="chat-msg-menu-btn" title="Options" aria-label="Options du message" onclick="openMsgMenu(event,'+m.id+')">⋮</button>'+
     '</div>'+
     replyHtml+
@@ -1185,7 +1182,9 @@ function buildMsgEl(m){
   menu.appendChild(mkItem('Transférer',icoFwd,'',()=>startForward(m.id)));
   if(canPin) menu.appendChild(mkItem(m.pinned_at?'Désépingler':'Épingler',icoPin,'',()=>togglePin(m.id,!!m.pinned_at)));
 
-  wrap.appendChild(menu);
+  // Dropdown attaché au label (position:relative) pour être correctement ancré
+  const labelEl=wrap.querySelector('.chat-msg-label');
+  if(labelEl)labelEl.appendChild(menu);else wrap.appendChild(menu);
 
   // ── Emoji picker ──────────────────────────────────────
   const picker=document.createElement('div');
