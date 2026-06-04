@@ -179,6 +179,7 @@
     loadPrefs: loadPrefs,
     savePrefs: savePrefs,
     applyPrefs: applyPrefs,
+    applyTheme: applyPrefs,       // alias rétrocompat
     initFromStorage: initFromStorage,
     isLight: isLight,
     toggleMode: toggleMode,
