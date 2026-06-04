@@ -193,6 +193,69 @@ body.light .cw-channel-item:hover{background:rgba(0,0,0,.04)}
 .cw-react-picker:hover{display:flex}
 .cw-msg-wrap.cw-mine .cw-react-picker{left:auto;right:0}
 .cw-msg-wrap.cw-theirs .cw-react-picker{left:0;right:auto}
+/* ── Bouton ⋮ et menu ─────────────────────────────────── */
+.cw-msg-menu-btn{position:absolute;top:2px;right:2px;background:var(--card);
+  border:1px solid var(--border);border-radius:6px;width:24px;height:24px;
+  cursor:pointer;display:none;align-items:center;justify-content:center;
+  color:var(--muted);font-size:14px;font-weight:700;z-index:15;
+  font-family:inherit;padding:0 0 2px 0;transition:border-color .1s,color .1s}
+.cw-msg-wrap:hover .cw-msg-menu-btn{display:flex}
+.cw-msg-wrap.cw-mine .cw-msg-menu-btn{right:auto;left:2px}
+.cw-msg-menu-btn:hover{border-color:var(--accent);color:var(--accent)}
+.cw-msg-menu{position:absolute;top:28px;right:2px;background:var(--card);
+  border:1px solid var(--border);border-radius:10px;padding:4px;
+  box-shadow:0 8px 24px rgba(0,0,0,.4);z-index:300;min-width:148px;display:none}
+.cw-msg-menu.cw-open{display:block}
+.cw-msg-wrap.cw-mine .cw-msg-menu{right:auto;left:2px}
+.cw-msg-menu-item{display:flex;align-items:center;gap:8px;width:100%;padding:8px 12px;
+  border:none;background:transparent;color:var(--text2);font-size:13px;cursor:pointer;
+  font-family:inherit;border-radius:7px;text-align:left;white-space:nowrap}
+.cw-msg-menu-item:hover{background:var(--accent-bg);color:var(--accent)}
+.cw-msg-menu-item.cw-danger{color:var(--danger)}
+.cw-msg-menu-item.cw-danger:hover{background:rgba(248,113,113,.1);color:var(--danger)}
+/* ── Reply context ──────────────────────────────────────── */
+.cw-msg-reply-ctx{padding:5px 9px;margin-bottom:5px;border-left:3px solid var(--accent);
+  background:var(--accent-bg);border-radius:6px;opacity:.7;cursor:pointer;font-size:11px;line-height:1.4}
+.cw-reply-name{font-weight:700;color:var(--text);margin-bottom:1px}
+.cw-reply-body{color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
+/* ── Forwarded ──────────────────────────────────────────── */
+.cw-msg-fwd-tag{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.5px;margin-bottom:4px;display:flex;align-items:center;gap:4px}
+.cw-msg-fwd{border-left:3px solid var(--muted)!important;padding-left:9px!important;
+  border-radius:0 10px 10px 10px!important}
+.cw-msg-wrap.cw-mine .cw-msg-fwd{border-radius:10px 0 10px 10px!important}
+/* ── Deleted ────────────────────────────────────────────── */
+.cw-msg-deleted{font-style:italic;color:var(--muted)!important;
+  background:transparent!important;border-style:dashed!important}
+/* ── Edited ─────────────────────────────────────────────── */
+.cw-msg-edited-lbl{font-size:10px;color:var(--muted);font-style:italic;margin-left:5px}
+/* ── Date separator ─────────────────────────────────────── */
+.cw-date-sep{display:flex;align-items:center;gap:10px;margin:4px 0;flex-shrink:0;width:100%}
+.cw-date-sep::before,.cw-date-sep::after{content:'';flex:1;height:1px;background:var(--border)}
+.cw-date-sep-lbl{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.5px;
+  text-transform:uppercase;white-space:nowrap;padding:0 4px}
+/* ── Reply bar ──────────────────────────────────────────── */
+#cw-reply-bar{padding:6px 12px;background:var(--card);border-top:1px solid var(--border);
+  display:none;align-items:center;gap:8px;flex-shrink:0}
+#cw-reply-bar.cw-show{display:flex}
+.cw-rp-preview{flex:1;min-width:0;padding:4px 9px;border-left:3px solid var(--accent);
+  background:var(--accent-bg);border-radius:6px;font-size:12px}
+.cw-rp-name{font-weight:700;color:var(--text)}
+.cw-rp-body{color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cw-rp-cancel{width:22px;height:22px;border-radius:6px;border:1px solid var(--border);
+  background:transparent;color:var(--muted);cursor:pointer;font-size:14px;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1}
+.cw-rp-cancel:hover{border-color:var(--danger);color:var(--danger)}
+/* ── Edit inline ────────────────────────────────────────── */
+.cw-edit-ta{width:100%;background:var(--bg);border:1px solid var(--accent);
+  border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;
+  font-family:inherit;resize:none;outline:none;line-height:1.4;
+  min-height:36px;max-height:100px;box-sizing:border-box}
+.cw-edit-row{display:flex;gap:6px;margin-top:5px;justify-content:flex-end}
+.cw-edit-row button{padding:4px 11px;border-radius:7px;font-size:12px;font-weight:700;
+  cursor:pointer;font-family:inherit;border:1px solid var(--border);
+  background:transparent;color:var(--text2)}
+.cw-edit-row .ok{background:var(--accent);color:var(--bg);border-color:var(--accent)}
 .cw-react-btn{background:none;border:none;cursor:pointer;font-size:16px;
   padding:2px 4px;border-radius:6px;line-height:1.2;transition:background .1s}
 .cw-react-btn:hover{background:var(--accent-bg)}
@@ -1195,6 +1258,137 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     } catch (e) {}
   }
 
+  // ── Date separators ──────────────────────────────────────
+  function cwDateKey(iso) {
+    if (!iso) return '';
+    try { const d = new Date(iso.replace(' ','T')); return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); } catch(e) { return ''; }
+  }
+  function cwFmtDate(iso) {
+    try {
+      const d = new Date(iso.replace(' ','T'));
+      const now = new Date();
+      const diff = Math.round((new Date(now.getFullYear(),now.getMonth(),now.getDate()) - new Date(d.getFullYear(),d.getMonth(),d.getDate()))/86400000);
+      if (diff === 0) return "Aujourd'hui";
+      if (diff === 1) return 'Hier';
+      return d.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+    } catch(e) { return ''; }
+  }
+  function cwBuildDateSep(iso) {
+    const el = document.createElement('div');
+    el.className = 'cw-date-sep';
+    el.dataset.dk = cwDateKey(iso);
+    el.innerHTML = '<span class="cw-date-sep-lbl">' + escCW(cwFmtDate(iso)) + '</span>';
+    return el;
+  }
+  // ── Reply bar ─────────────────────────────────────────────
+  function cwEnsureReplyBar() {
+    if (document.getElementById('cw-reply-bar')) return;
+    const panel = document.getElementById('cw-panel');
+    const inputRow = document.getElementById('cw-input-row') || (panel && panel.querySelector('#cw-pending-row'));
+    if (!inputRow) return;
+    const bar = document.createElement('div');
+    bar.id = 'cw-reply-bar';
+    bar.innerHTML = '<div class="cw-rp-preview"><div class="cw-rp-name" id="cw-rp-name"></div><div class="cw-rp-body" id="cw-rp-body"></div></div><button type="button" class="cw-rp-cancel" id="cw-rp-cancel">×</button>';
+    inputRow.parentNode.insertBefore(bar, inputRow);
+    document.getElementById('cw-rp-cancel').addEventListener('click', cwCancelReply);
+  }
+  function cwStartReply(msg) {
+    CW._replyToId = msg.id;
+    cwEnsureReplyBar();
+    const bar = document.getElementById('cw-reply-bar');
+    if (bar) bar.classList.add('cw-show');
+    const n = document.getElementById('cw-rp-name');
+    const b = document.getElementById('cw-rp-body');
+    if (n) n.textContent = msg.user_nom || '';
+    if (b) b.textContent = (msg.body || '(pièce jointe)').substring(0,80);
+    const inp = document.getElementById('cw-input');
+    if (inp) inp.focus();
+  }
+  function cwCancelReply() {
+    CW._replyToId = null;
+    const bar = document.getElementById('cw-reply-bar');
+    if (bar) bar.classList.remove('cw-show');
+  }
+  // ── Delete ────────────────────────────────────────────────
+  async function cwDeleteMsg(msgId) {
+    if (!CW.activeId) return;
+    try {
+      await api('/api/chat/channels/'+CW.activeId+'/messages/'+msgId, {method:'DELETE'});
+      const wrap = document.querySelector('.cw-msg-wrap[data-id="'+msgId+'"]');
+      if (wrap) {
+        const mine = wrap.classList.contains('cw-mine');
+        const bbl = wrap.querySelector('.cw-msg-mine,.cw-msg-theirs');
+        if (bbl) { bbl.innerHTML = 'Message supprimé.'; bbl.className = (mine?'cw-msg-mine':'cw-msg-theirs')+' cw-msg-deleted'; }
+        wrap.querySelectorAll('.cw-msg-reply-ctx,.cw-msg-fwd-tag,.cw-reactions,.cw-msg-menu-btn,.cw-msg-menu,.cw-react-picker').forEach(e=>e.remove());
+      }
+    } catch(e) { console.warn('[cw]',e); }
+  }
+  // ── Edit ──────────────────────────────────────────────────
+  function cwStartEdit(wrap, msg) {
+    const bbl = wrap.querySelector('.cw-msg-mine,.cw-msg-theirs');
+    if (!bbl) return;
+    const origHtml = bbl.innerHTML;
+    const txt = (msg.body||'').replace(/</g,'&lt;');
+    bbl.innerHTML = '<textarea class="cw-edit-ta" rows="2">'+txt+'</textarea><div class="cw-edit-row"><button type="button">Annuler</button><button type="button" class="ok">Enregistrer</button></div>';
+    const ta = bbl.querySelector('.cw-edit-ta');
+    const [cancelBtn, saveBtn] = bbl.querySelectorAll('.cw-edit-row button');
+    if (ta) { ta.focus(); ta.style.height = ta.scrollHeight+'px'; }
+    cancelBtn.addEventListener('click', () => { bbl.innerHTML = origHtml; });
+    saveBtn.addEventListener('click', async () => {
+      const nb = (ta.value||'').trim();
+      if (!nb) return;
+      try {
+        await api('/api/chat/channels/'+CW.activeId+'/messages/'+msg.id, {
+          method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({body:nb})
+        });
+        bbl.innerHTML = origHtml;
+        // Reload to get updated content
+        const box = document.getElementById('cw-messages');
+        if (box) { const was = isNearBottom(box,40); await CW.selectChannel(CW.activeId); if(was) scrollMessagesBottom(); }
+      } catch(e) { console.warn('[cw]',e); }
+    });
+  }
+  // ── Forward ───────────────────────────────────────────────
+  async function cwStartForward(msg) {
+    let users = [];
+    try { users = (await api('/api/chat/users'))||[]; } catch(e) { return; }
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:9500;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px';
+    let sel = new Set();
+    function renderList(q) {
+      const ql=(q||'').toLowerCase();
+      const list=users.filter(u=>Number(u.id)!==Number(CW.uid)&&(!ql||(u.nom||'').toLowerCase().includes(ql)));
+      const el=overlay.querySelector('#cw-fwd-list');
+      if(!el) return;
+      el.innerHTML=list.map(u=>'<button type="button" style="display:block;width:100%;text-align:left;padding:10px 12px;border:none;border-bottom:1px solid var(--border);background:'+(sel.has(u.id)?'var(--accent-bg)':'')+';color:'+(sel.has(u.id)?'var(--accent)':'var(--text)')+';font-family:inherit;font-size:13px;cursor:pointer" data-uid="'+u.id+'">'+escCW(u.nom||'')+(sel.has(u.id)?' ✓':'')+'</button>').join('')||'<p style="padding:10px;color:var(--muted);font-size:12px;margin:0">Aucun résultat</p>';
+      el.querySelectorAll('button[data-uid]').forEach(b=>{b.addEventListener('click',()=>{const id=parseInt(b.dataset.uid,10);if(sel.has(id))sel.delete(id);else sel.add(id);const sb=overlay.querySelector('#cw-fwd-ok');if(sb)sb.disabled=sel.size===0;renderList(overlay.querySelector('#cw-fwd-search').value);});});
+    }
+    overlay.innerHTML='<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;width:min(420px,100%);max-height:80vh;overflow-y:auto">'+
+      '<div style="font-size:15px;font-weight:700;margin-bottom:12px">Transférer le message</div>'+
+      '<div style="padding:5px 9px;margin-bottom:10px;border-left:3px solid var(--muted);background:var(--accent-bg);border-radius:6px;font-size:12px;color:var(--text2)">'+escCW((msg.body||'(pièce jointe)').substring(0,60))+'</div>'+
+      '<input type="search" id="cw-fwd-search" placeholder="Rechercher…" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;margin-bottom:8px;box-sizing:border-box">'+
+      '<div id="cw-fwd-list" style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:8px"></div>'+
+      '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">'+
+      '<button type="button" style="padding:9px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit;font-size:13px" onclick="this.closest(\'[style*=fixed]\').remove()">Annuler</button>'+
+      '<button type="button" id="cw-fwd-ok" disabled style="padding:9px 16px;border-radius:8px;border:none;background:var(--accent);color:var(--bg);font-weight:700;cursor:pointer;font-family:inherit;font-size:13px">Transférer</button></div></div>';
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
+    renderList('');
+    overlay.querySelector('#cw-fwd-search').addEventListener('input',function(){renderList(this.value);});
+    overlay.querySelector('#cw-fwd-ok').addEventListener('click',async()=>{
+      if(!sel.size)return;
+      try {
+        await api('/api/chat/channels/'+CW.activeId+'/messages/'+msg.id+'/forward',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_ids:[...sel]})});
+        overlay.remove();
+      } catch(e){console.warn('[cw]',e);}
+    });
+    setTimeout(()=>overlay.querySelector('#cw-fwd-search').focus(),50);
+  }
+  // ── Close menus on outside click ──────────────────────────
+  document.addEventListener('click',()=>{
+    document.querySelectorAll('.cw-msg-menu.cw-open').forEach(m=>m.classList.remove('cw-open'));
+  });
+
   function renderMsg(msg) {
     const mine = Number(msg.user_id) === Number(CW.uid) || msg.is_mine;
     cacheUserAvatar(msg.user_id, msg.user_nom, msg.avatar_url);
@@ -1250,9 +1444,98 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     wrap.className = 'cw-msg-wrap ' + (mine ? 'cw-mine' : 'cw-theirs');
     wrap.dataset.id = String(msg.id);
     if (msg.created_at) wrap.dataset.at = String(msg.created_at);
+    wrap.style.position = 'relative';
+    wrap._cwMsg = msg; // store msg data for actions
+
+    // ── Soft-deleted placeholder ───────────────────────────
+    if (msg.is_soft_deleted) {
+      const cls = mine ? 'cw-msg-mine' : 'cw-msg-theirs';
+      wrap.innerHTML = '<div class="cw-msg-bubble-wrap"><div class="'+cls+' cw-msg-deleted">Message supprimé.</div></div>';
+      return wrap;
+    }
+
+    // ── Reply context ──────────────────────────────────────
+    let replyHtml = '';
+    if (msg.reply_to) {
+      const rb = msg.reply_to.is_soft_deleted ? '<em>Message supprimé</em>' : escCW((msg.reply_to.body||'').substring(0,80));
+      replyHtml = '<div class="cw-msg-reply-ctx" data-reply-id="'+msg.reply_to.id+'"><div class="cw-reply-name">'+escCW(msg.reply_to.user_nom||'')+'</div><div class="cw-reply-body">'+rb+'</div></div>';
+    }
+
+    // ── Forwarded indicator ────────────────────────────────
+    let fwdHtml = '';
+    if (msg.is_forwarded) {
+      fwdHtml = '<div class="cw-msg-fwd-tag"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/></svg>Transféré'+(msg.forwarded_from_nom?' · '+escCW(msg.forwarded_from_nom):'')+'</div>';
+    }
+    const fwdCls = msg.is_forwarded ? ' cw-msg-fwd' : '';
+
+    // ── Edited label ───────────────────────────────────────
+    let editedLbl = '';
+    if (msg.edited_at) {
+      try {
+        const ed = new Date(msg.edited_at.replace(' ','T'));
+        editedLbl = '<span class="cw-msg-edited-lbl">modifié le '+ed.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'})+'</span>';
+      } catch(e) {}
+    }
+
+    const bubbleFull = '<div class="'+(mine?'cw-msg-mine':'cw-msg-theirs')+fwdCls+'">' + metaEl + editedLbl + bodyHtml + attachmentHtml(msg) + '</div>';
+
     wrap.innerHTML =
-      '<div class="cw-msg-bubble-wrap">' + bubble + picker + '</div>' + rxHtml;
+      '<div class="cw-msg-bubble-wrap">' + replyHtml + fwdHtml + bubbleFull + picker + '</div>' + rxHtml;
     bindReactionHandlers(wrap, msg.id);
+
+    // ── Scroll to reply on click ───────────────────────────
+    const rctx = wrap.querySelector('.cw-msg-reply-ctx');
+    if (rctx) {
+      rctx.addEventListener('click', () => {
+        const id = rctx.dataset.replyId;
+        const target = document.querySelector('.cw-msg-wrap[data-id="'+id+'"]');
+        if (target) { target.scrollIntoView({behavior:'smooth',block:'center'}); target.style.outline='2px solid var(--accent)'; setTimeout(()=>{target.style.outline='';},1200); }
+      });
+    }
+
+    // ── ⋮ Menu button ──────────────────────────────────────
+    const ch = CW.channels.find(c=>c.id===CW.activeId);
+    const isAdmin = ['superadmin','direction','administration'].includes(CW.role);
+    const msgAge = Date.now()-new Date((msg.created_at||'').replace(' ','T')).getTime();
+    const canEdit = mine && !msg.attachment_url && msgAge < 900000;
+    const canDel = mine || isAdmin;
+    const canPin = ch && ch.type==='channel' && isAdmin;
+
+    const menuBtn = document.createElement('button');
+    menuBtn.type = 'button';
+    menuBtn.className = 'cw-msg-menu-btn';
+    menuBtn.title = 'Options';
+    menuBtn.textContent = '⋮';
+
+    const menu = document.createElement('div');
+    menu.className = 'cw-msg-menu';
+
+    const mkItem = (label, cls, cb) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'cw-msg-menu-item'+(cls?' '+cls:'');
+      b.textContent = label;
+      b.addEventListener('click', e => { e.stopPropagation(); menu.classList.remove('cw-open'); cb(); });
+      return b;
+    };
+
+    menu.appendChild(mkItem('Répondre','',()=>cwStartReply(msg)));
+    if (canEdit) menu.appendChild(mkItem('Modifier','',()=>cwStartEdit(wrap,msg)));
+    if (canDel) menu.appendChild(mkItem('Supprimer','cw-danger',()=>cwDeleteMsg(msg.id)));
+    menu.appendChild(mkItem('Transférer','',()=>cwStartForward(msg)));
+    if (canPin) menu.appendChild(mkItem(msg.pinned_at?'Désépingler':'Épingler','',()=>{
+      api('/api/chat/channels/'+CW.activeId+'/messages/'+msg.id+'/pin',{method:msg.pinned_at?'DELETE':'POST'}).then(()=>CW.selectChannel(CW.activeId)).catch(()=>{});
+    }));
+
+    menuBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      const was = menu.classList.contains('cw-open');
+      document.querySelectorAll('.cw-msg-menu.cw-open').forEach(m=>m.classList.remove('cw-open'));
+      if (!was) menu.classList.add('cw-open');
+    });
+
+    wrap.appendChild(menuBtn);
+    wrap.appendChild(menu);
     return wrap;
   }
 
@@ -1384,7 +1667,10 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       const data = await api('/api/chat/channels/' + id + '/messages');
       const msgs = data.messages || [];
       box.innerHTML = '';
+      let _lastDk = '';
       msgs.forEach((m) => {
+        const dk = cwDateKey(m.created_at||'');
+        if (dk && dk !== _lastDk) { _lastDk = dk; box.appendChild(cwBuildDateSep(m.created_at)); }
         box.appendChild(renderMsg(m));
         if (m.id > CW.lastMsgId) CW.lastMsgId = m.id;
       });
@@ -1418,6 +1704,8 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       const hint = box.querySelector('#cw-empty-hint');
       if (hint) hint.remove();
       let played = false;
+      const _lastWrap = box.querySelector('.cw-msg-wrap:last-of-type');
+      let _pollLastDk = _lastWrap ? cwDateKey(_lastWrap.dataset.at||'') : '';
       incoming.forEach((m) => {
         if (m.id <= CW.lastMsgId) return;
         if (Number(m.user_id) !== Number(CW.uid) && !played) {
@@ -1425,6 +1713,8 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
           jouerSon();
           played = true;
         }
+        const dk = cwDateKey(m.created_at||'');
+        if (dk && dk !== _pollLastDk) { _pollLastDk = dk; box.appendChild(cwBuildDateSep(m.created_at)); }
         box.appendChild(renderMsg(m));
         if (m.id > CW.lastMsgId) CW.lastMsgId = m.id;
       });
@@ -1459,8 +1749,9 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
         sent = await api('/api/chat/channels/' + CW.activeId + '/messages', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ body }),
+          body: JSON.stringify({ body, reply_to_id: CW._replyToId || undefined }),
         });
+        cwCancelReply();
       }
       if (inp) {
         inp.value = '';
