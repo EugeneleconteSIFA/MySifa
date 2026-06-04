@@ -194,6 +194,12 @@ CODE_CALAGE     = "02"
 CODE_PRODUCTION = "03"
 CODE_REPRISE    = "88"
 
+# Ensemble complet des codes traités comme du temps de calage
+# (02 calage, 10-12 réglages, 58-60 préparations, 67 vidange, 74-75 essais)
+CODES_CALAGE: frozenset[str] = frozenset({
+    "02", "10", "11", "12", "58", "59", "60", "67", "74", "75"
+})
+
 # ─── Classification opérations ────────────────────────────────────
 _ALLOWED_SEVERITY = frozenset({"info", "attention", "critique"})
 

@@ -8,7 +8,7 @@ from database import get_db, parse_datetime
 from services.analyse import analyse_saisie_errors
 from services.auth_service import get_current_user, is_admin, can_view_all_prod
 from services.prod_machine_filter import append_machine_filter
-from config import CODE_ARRIVEE, CODE_DEPART, CODE_DEBUT_DOS, CODE_FIN_DOS, CODE_CALAGE, CODE_PRODUCTION, CODE_REPRISE
+from config import CODE_ARRIVEE, CODE_DEPART, CODE_DEBUT_DOS, CODE_FIN_DOS, CODE_CALAGE, CODES_CALAGE, CODE_PRODUCTION, CODE_REPRISE
 
 router = APIRouter()
 
@@ -79,7 +79,7 @@ def compute_sanity_score_v2(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     c_missing_metrage = 0
 
     prod_codes = {CODE_PRODUCTION, CODE_REPRISE}
-    calage_codes = {CODE_CALAGE, "10", "11", "59", "60", "74", "75"}
+    calage_codes = CODES_CALAGE
     tech_codes = {"64", "73", "76"}
 
     for (op, jour), lignes in by_op_day.items():

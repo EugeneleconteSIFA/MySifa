@@ -1,7 +1,7 @@
 from datetime import datetime
 from collections import defaultdict
 from database import parse_datetime
-from config import CODE_CALAGE, CODE_PRODUCTION, CODE_REPRISE, CODE_DEBUT_DOS, CODE_FIN_DOS
+from config import CODES_CALAGE, CODE_PRODUCTION, CODE_REPRISE, CODE_DEBUT_DOS, CODE_FIN_DOS
 
 # ─── Calcul temps par dossier ─────────────────────────────────────
 def compute_dossier_times(rows):
@@ -92,7 +92,7 @@ def compute_dossier_times(rows):
             if delta_min < 0 or delta_min > 480:   # ignorer écarts > 8h (pause, fin de journée)
                 continue
 
-            if code == CODE_CALAGE:
+            if code in CODES_CALAGE:
                 acc["temps_calage_min"] += delta_min
             elif code in (CODE_PRODUCTION, CODE_REPRISE):
                 acc["temps_prod_min"] += delta_min
