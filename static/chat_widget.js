@@ -200,25 +200,38 @@ body.light .cw-channel-item:hover{background:rgba(0,0,0,.04)}
 .cw-msg-wrap.cw-mine .cw-msg-header-text{text-align:right}
 /* ── Bouton ⋮ inline ─────────────────────────────────── */
 .cw-msg-menu-btn{display:inline-flex;align-items:center;justify-content:center;
-  width:20px;height:16px;border-radius:5px;flex-shrink:0;
+  width:26px;height:26px;border-radius:8px;flex-shrink:0;
   border:1px solid transparent;background:transparent;
-  color:var(--muted);font-size:13px;font-weight:700;cursor:pointer;
-  font-family:inherit;padding:0 0 1px 0;
-  opacity:0.3;transition:opacity .15s,border-color .1s,background .1s,color .1s}
-.cw-msg-wrap:hover .cw-msg-menu-btn{opacity:1}
-.cw-msg-menu-btn:hover{opacity:1;border-color:var(--border);background:var(--card);color:var(--accent)}
+  color:var(--muted);cursor:pointer;font-family:inherit;padding:0;
+  opacity:0;transition:opacity .15s,border-color .12s,background .12s,color .12s}
+.cw-msg-menu-btn svg{display:block;width:16px;height:16px}
+.cw-msg-wrap:hover .cw-msg-menu-btn,
+.cw-msg-menu-btn:focus-visible,
+.cw-msg-menu-btn[aria-expanded="true"]{opacity:1}
+.cw-msg-menu-btn:hover{border-color:var(--border);background:var(--card);color:var(--accent)}
+.cw-msg-menu-btn[aria-expanded="true"]{border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
+@media (hover:none){.cw-msg-menu-btn{opacity:.85}}
 /* ── Dropdown ─────────────────────────────────────────── */
-.cw-msg-menu{position:absolute;top:20px;right:0;background:var(--card);
-  border:1px solid var(--border);border-radius:10px;padding:4px;
-  box-shadow:0 8px 24px rgba(0,0,0,.4);z-index:300;min-width:148px;display:none}
-.cw-msg-menu.cw-open{display:block}
-.cw-msg-wrap.cw-mine .cw-msg-menu{right:auto;left:0}
-.cw-msg-menu-item{display:flex;align-items:center;gap:8px;width:100%;padding:8px 12px;
+.cw-msg-menu{position:absolute;top:calc(100% + 4px);right:0;background:var(--card);
+  border:1px solid var(--border);border-radius:12px;padding:6px;
+  box-shadow:0 12px 32px rgba(0,0,0,.45);z-index:300;min-width:184px;
+  display:none;opacity:0;transform:translateY(-4px) scale(.97);
+  transform-origin:top right;
+  transition:opacity .14s ease,transform .14s ease}
+.cw-msg-menu.cw-open{display:block;opacity:1;transform:translateY(0) scale(1)}
+.cw-msg-wrap.cw-mine .cw-msg-menu{right:auto;left:0;transform-origin:top left}
+.cw-msg-menu.cw-menu-up{top:auto;bottom:calc(100% + 4px);transform-origin:bottom right}
+.cw-msg-wrap.cw-mine .cw-msg-menu.cw-menu-up{transform-origin:bottom left}
+.cw-msg-menu-item{display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;
   border:none;background:transparent;color:var(--text2);font-size:13px;cursor:pointer;
-  font-family:inherit;border-radius:7px;text-align:left;white-space:nowrap}
+  font-family:inherit;border-radius:8px;text-align:left;white-space:nowrap;
+  transition:background .12s,color .12s}
+.cw-msg-menu-item svg{flex-shrink:0;width:15px;height:15px;color:currentColor;opacity:.8}
 .cw-msg-menu-item:hover{background:var(--accent-bg);color:var(--accent)}
+.cw-msg-menu-item:hover svg{opacity:1}
+.cw-msg-menu-sep{height:1px;background:var(--border);margin:5px 4px}
 .cw-msg-menu-item.cw-danger{color:var(--danger)}
-.cw-msg-menu-item.cw-danger:hover{background:rgba(248,113,113,.1);color:var(--danger)}
+.cw-msg-menu-item.cw-danger:hover{background:rgba(248,113,113,.12);color:var(--danger)}
 /* ── Reply context ──────────────────────────────────────── */
 .cw-msg-reply-ctx{padding:5px 9px;margin-bottom:5px;border-left:3px solid var(--accent);
   background:var(--accent-bg);border-radius:6px;opacity:.7;cursor:pointer;font-size:11px;line-height:1.4}
@@ -1505,33 +1518,84 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     menuBtn.type = 'button';
     menuBtn.className = 'cw-msg-menu-btn';
     menuBtn.title = 'Options';
-    menuBtn.textContent = '⋮';
+    menuBtn.setAttribute('aria-label', 'Options du message');
+    menuBtn.setAttribute('aria-haspopup', 'true');
+    menuBtn.setAttribute('aria-expanded', 'false');
+    menuBtn.innerHTML =
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+
+      '<circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/>'+
+      '</svg>';
 
     const menu = document.createElement('div');
     menu.className = 'cw-msg-menu';
+    menu.setAttribute('role', 'menu');
 
-    const mkItem = (label, cls, cb) => {
+    // Icones SVG inline pour les actions
+    const ICO = {
+      reply: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>',
+      edit:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+      fwd:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 0 1 4-4h12"/></svg>',
+      pin:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14l-2-5V5a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v7z"/></svg>',
+      unpin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="2" y1="2" x2="22" y2="22"/><path d="M5 17h14l-2-5V5a2 2 0 0 0-2-2H9"/></svg>',
+      del:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>',
+    };
+
+    const mkItem = (icon, label, cls, cb) => {
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'cw-msg-menu-item'+(cls?' '+cls:'');
-      b.textContent = label;
-      b.addEventListener('click', e => { e.stopPropagation(); menu.classList.remove('cw-open'); cb(); });
+      b.setAttribute('role', 'menuitem');
+      b.innerHTML = icon + '<span>' + escCW(label) + '</span>';
+      b.addEventListener('click', e => { e.stopPropagation(); closeMenu(); cb(); });
       return b;
     };
+    const addSep = () => {
+      const s = document.createElement('div');
+      s.className = 'cw-msg-menu-sep';
+      s.setAttribute('role', 'separator');
+      menu.appendChild(s);
+    };
 
-    menu.appendChild(mkItem('Répondre','',()=>cwStartReply(msg)));
-    if (canEdit) menu.appendChild(mkItem('Modifier','',()=>cwStartEdit(wrap,msg)));
-    if (canDel) menu.appendChild(mkItem('Supprimer','cw-danger',()=>cwDeleteMsg(msg.id)));
-    menu.appendChild(mkItem('Transférer','',()=>cwStartForward(msg)));
-    if (canPin) menu.appendChild(mkItem(msg.pinned_at?'Désépingler':'Épingler','',()=>{
-      api('/api/chat/channels/'+CW.activeId+'/messages/'+msg.id+'/pin',{method:msg.pinned_at?'DELETE':'POST'}).then(()=>CW.selectChannel(CW.activeId)).catch(()=>{});
-    }));
+    menu.appendChild(mkItem(ICO.reply, 'Répondre', '', ()=>cwStartReply(msg)));
+    if (canEdit) menu.appendChild(mkItem(ICO.edit, 'Modifier', '', ()=>cwStartEdit(wrap,msg)));
+    menu.appendChild(mkItem(ICO.fwd, 'Transférer', '', ()=>cwStartForward(msg)));
+    if (canPin) menu.appendChild(mkItem(
+      msg.pinned_at?ICO.unpin:ICO.pin,
+      msg.pinned_at?'Désépingler':'Épingler', '', ()=>{
+        api('/api/chat/channels/'+CW.activeId+'/messages/'+msg.id+'/pin',{method:msg.pinned_at?'DELETE':'POST'}).then(()=>CW.selectChannel(CW.activeId)).catch(()=>{});
+      }
+    ));
+    if (canDel) {
+      addSep();
+      menu.appendChild(mkItem(ICO.del, 'Supprimer', 'cw-danger', ()=>cwDeleteMsg(msg.id)));
+    }
+
+    const closeMenu = () => {
+      menu.classList.remove('cw-open','cw-menu-up');
+      menuBtn.setAttribute('aria-expanded', 'false');
+    };
+    const openMenu = () => {
+      // Décision flip up/down : si pas assez de place sous le bouton, on ouvre vers le haut.
+      menu.classList.remove('cw-menu-up');
+      menu.classList.add('cw-open');
+      menuBtn.setAttribute('aria-expanded', 'true');
+      requestAnimationFrame(() => {
+        const rect = menu.getBoundingClientRect();
+        const box = document.getElementById('cw-messages');
+        const limit = box ? box.getBoundingClientRect().bottom : window.innerHeight;
+        if (rect.bottom > limit - 8) menu.classList.add('cw-menu-up');
+      });
+    };
 
     menuBtn.addEventListener('click', e => {
       e.stopPropagation();
       const was = menu.classList.contains('cw-open');
-      document.querySelectorAll('.cw-msg-menu.cw-open').forEach(m=>m.classList.remove('cw-open'));
-      if (!was) menu.classList.add('cw-open');
+      document.querySelectorAll('.cw-msg-menu.cw-open').forEach(m => {
+        m.classList.remove('cw-open','cw-menu-up');
+        const b = m.parentElement && m.parentElement.querySelector('.cw-msg-menu-btn');
+        if (b) b.setAttribute('aria-expanded', 'false');
+      });
+      if (!was) openMenu();
     });
 
     header.appendChild(headerText);
