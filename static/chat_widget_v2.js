@@ -65,25 +65,8 @@
 .cw-modal-overlay{position:fixed;inset:0;z-index:8020;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px}
 .cw-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;width:min(500px,100%);max-height:85vh;overflow-y:auto}
 .cw-modal h3{margin:0 0 14px;font-size:15px;font-weight:700}
-/* ── Bouton ⋮ ──────────────────────────────────────────── */
-.cw-msg-menu-btn{position:absolute;top:2px;right:2px;background:var(--card);border:1px solid var(--border);
-  border-radius:6px;width:24px;height:24px;cursor:pointer;display:none;align-items:center;justify-content:center;
-  color:var(--muted);font-size:14px;font-weight:700;z-index:5;font-family:inherit;padding:0 0 2px 0;
-  transition:border-color .1s,color .1s}
-.cw-msg-wrap:hover .cw-msg-menu-btn{display:flex}
-.cw-msg-wrap.cw-mine .cw-msg-menu-btn{right:auto;left:2px}
-.cw-msg-menu-btn:hover{border-color:var(--accent);color:var(--accent)}
-/* ── Dropdown menu ──────────────────────────────────────── */
-.cw-msg-menu{position:absolute;top:28px;right:2px;background:var(--card);border:1px solid var(--border);
-  border-radius:10px;padding:4px;box-shadow:0 8px 24px rgba(0,0,0,.4);z-index:300;min-width:148px;display:none}
-.cw-msg-menu.cw-open{display:block}
-.cw-msg-wrap.cw-mine .cw-msg-menu{right:auto;left:2px}
-.cw-msg-menu-item{display:flex;align-items:center;gap:8px;width:100%;padding:8px 12px;border:none;
-  background:transparent;color:var(--text2);font-size:13px;cursor:pointer;font-family:inherit;
-  border-radius:7px;text-align:left}
-.cw-msg-menu-item:hover{background:var(--accent-bg);color:var(--accent)}
-.cw-msg-menu-item.danger{color:var(--danger)}
-.cw-msg-menu-item.danger:hover{background:rgba(248,113,113,.1);color:var(--danger)}
+/* Styles du bouton ⋮ et du menu déroulant définis dans chat_widget.js
+   (anciennes règles ici retirées car elles écrasaient le nouveau design). */
 /* ── Reply context ──────────────────────────────────────── */
 .cw-msg-reply-ctx{padding:5px 9px;margin-bottom:5px;border-left:3px solid var(--accent);
   background:var(--accent-bg);border-radius:6px;opacity:.7;cursor:pointer;font-size:11px}
@@ -743,70 +726,9 @@
         }
       }
 
-      // ── ⋮ Menu button ────────────────────────────────────
-      const menuBtn = document.createElement('button');
-      menuBtn.type = 'button';
-      menuBtn.className = 'cw-msg-menu-btn';
-      menuBtn.title = 'Options';
-      menuBtn.textContent = '⋮';
-
-      const menu = document.createElement('div');
-      menu.className = 'cw-msg-menu';
-
-      const mkItem = (label, cls, cb) => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'cw-msg-menu-item' + (cls ? ' ' + cls : '');
-        btn.textContent = label;
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          menu.classList.remove('cw-open');
-          cb();
-        });
-        return btn;
-      };
-
-      const icoSvg = {
-        reply: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg> ',
-        edit:  '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> ',
-        del:   '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg> ',
-        fwd:   '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/></svg> ',
-        pin:   '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg> ',
-      };
-
-      const replyBtn = mkItem('Répondre', '', () => cwStartReply(msg));
-      replyBtn.innerHTML = icoSvg.reply + 'Répondre';
-      menu.appendChild(replyBtn);
-
-      if (canEdit) {
-        const editBtn = mkItem('Modifier', '', () => cwStartEdit(CW, msg));
-        editBtn.innerHTML = icoSvg.edit + 'Modifier';
-        menu.appendChild(editBtn);
-      }
-      if (canDel) {
-        const delBtn = mkItem('Supprimer', 'danger', () => cwDeleteMsg(CW, msg.id));
-        delBtn.innerHTML = icoSvg.del + 'Supprimer';
-        menu.appendChild(delBtn);
-      }
-      const fwdBtn = mkItem('Transférer', '', () => cwStartForward(CW, msg));
-      fwdBtn.innerHTML = icoSvg.fwd + 'Transférer';
-      menu.appendChild(fwdBtn);
-
-      if (canPin) {
-        const pinBtn = mkItem(msg.pinned_at ? 'Désépingler' : 'Épingler', '', () => togglePin(CW, msg.id, !!msg.pinned_at));
-        pinBtn.innerHTML = icoSvg.pin + (msg.pinned_at ? 'Désépingler' : 'Épingler');
-        menu.appendChild(pinBtn);
-      }
-
-      menuBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const wasOpen = menu.classList.contains('cw-open');
-        document.querySelectorAll('.cw-msg-menu.cw-open').forEach(m => m.classList.remove('cw-open'));
-        if (!wasOpen) menu.classList.add('cw-open');
-      });
-
-      wrap.appendChild(menuBtn);
-      wrap.appendChild(menu);
+      // Le bouton ⋮ et le menu déroulant sont déjà créés par renderMsg
+      // dans chat_widget.js (appelé via orig(msg) ci-dessus).
+      // Ne PAS recréer ici sinon on a deux boutons superposés.
       return wrap;
     };
   }
