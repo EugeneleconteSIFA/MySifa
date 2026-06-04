@@ -1426,7 +1426,6 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       '<div class="' +
       (mine ? 'cw-msg-mine' : 'cw-msg-theirs') +
       '">' +
-      metaEl +
       bodyHtml +
       attachmentHtml(msg) +
       '</div>';
