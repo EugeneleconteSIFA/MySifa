@@ -194,10 +194,9 @@ body.light .cw-channel-item:hover{background:rgba(0,0,0,.04)}
 .cw-msg-wrap.cw-mine .cw-react-picker{left:auto;right:0}
 .cw-msg-wrap.cw-theirs .cw-react-picker{left:0;right:auto}
 /* ── Header message (nom + heure + bouton ⋮ inline) ──── */
-.cw-msg-header{display:flex;align-items:center;gap:5px;margin-bottom:4px;position:relative}
+.cw-msg-header{display:flex;align-items:center;gap:8px;margin-bottom:4px;position:relative}
 .cw-msg-wrap.cw-mine .cw-msg-header{flex-direction:row-reverse}
-.cw-msg-header-text{font-size:11px;color:var(--muted);flex:1;line-height:1.2}
-.cw-msg-wrap.cw-mine .cw-msg-header-text{text-align:right}
+.cw-msg-header-text{font-size:11px;color:var(--muted);line-height:1.2;white-space:nowrap}
 /* ── Bouton ⋮ inline (sobre, toujours visible) ───────── */
 .cw-msg-menu-btn{display:inline-flex;align-items:center;justify-content:center;
   width:14px;height:14px;flex-shrink:0;line-height:1;vertical-align:middle;
