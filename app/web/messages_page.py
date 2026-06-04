@@ -210,11 +210,11 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
   border:1px solid transparent;background:transparent;
   color:var(--muted);font-size:13px;line-height:1;
   cursor:pointer;font-family:inherit;padding:0 0 1px 0;font-weight:700;
-  opacity:0;pointer-events:none;
-  transition:opacity .15s,border-color .1s,background .1s;
+  opacity:0.25;
+  transition:opacity .15s,border-color .1s,background .1s,color .1s;
 }
-.chat-msg:hover .chat-msg-menu-btn{opacity:1;pointer-events:auto}
-.chat-msg-menu-btn:hover{border-color:var(--border);background:var(--card);color:var(--accent)}
+.chat-msg:hover .chat-msg-menu-btn,.chat-msg-menu-btn:focus{opacity:1}
+.chat-msg-menu-btn:hover{border-color:var(--border);background:var(--card);color:var(--accent);opacity:1}
 /* ─── Dropdown ──────────────────────────────────────────── */
 .chat-msg-menu{
   position:absolute;top:20px;right:0;
