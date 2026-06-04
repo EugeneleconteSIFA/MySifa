@@ -10479,22 +10479,53 @@ window.closeOfEditModal = closeOfEditModal;
 async function saveOfEdit(){
   const m=S.ofEditModal;
   if(!m) return;
+  const tv=id=>{const el=document.getElementById(id);return el?el.value.trim()||null:null;};
+  const nv=id=>{const el=document.getElementById(id);return el&&el.value!==''?parseFloat(el.value)||null:null;};
+  const iv=id=>{const el=document.getElementById(id);return el&&el.value!==''?parseInt(el.value)||null:null;};
   const payload={
-    of_numero:       document.getElementById('ofe-numero')?.value.trim()||null,
-    reference:       document.getElementById('ofe-reference')?.value.trim()||null,
-    machine:         document.getElementById('ofe-machine')?.value.trim()||null,
-    delai_client:    document.getElementById('ofe-delai')?.value.trim()||null,
-    format:          document.getElementById('ofe-format')?.value.trim()||null,
-    date_creation:   document.getElementById('ofe-date')?.value.trim()||null,
-    qte_etiquettes:  parseFloat(document.getElementById('ofe-qte')?.value)||null,
-    qte_bobines:     parseFloat(document.getElementById('ofe-bobines')?.value)||null,
-    metrage:         parseInt(document.getElementById('ofe-metrage')?.value)||null,
-    matiere:         document.getElementById('ofe-matiere')?.value.trim()||null,
-    conditionnement: document.getElementById('ofe-cond')?.value.trim()||null,
-    outil_1_numero:  document.getElementById('ofe-outil')?.value.trim()||null,
-    nb_mandrins:     parseInt(document.getElementById('ofe-mandrins')?.value)||null,
-    nb_cartons:      parseInt(document.getElementById('ofe-cartons')?.value)||null,
-    nb_tubes:        parseInt(document.getElementById('ofe-tubes')?.value)||null,
+    of_numero:            tv('ofe-numero'),
+    reference:            tv('ofe-reference'),
+    date_creation:        tv('ofe-date'),
+    delai_client:         tv('ofe-delai'),
+    machine:              tv('ofe-machine'),
+    laize:                nv('ofe-laize'),
+    format:               tv('ofe-format'),
+    matiere:              tv('ofe-matiere'),
+    ref_matiere:          tv('ofe-ref-matiere'),
+    glassine:             tv('ofe-glassine'),
+    ref_adhesif:          tv('ofe-ref-adhesif'),
+    qte_adhesif_g:        nv('ofe-qte-adhesif-g'),
+    qte_adhesif_kg:       nv('ofe-qte-adhesif-kg'),
+    adhesif_label:        tv('ofe-adhesif-label'),
+    qte_au_mille:         nv('ofe-qte-mille'),
+    nb_levees:            iv('ofe-nb-levees'),
+    qte_etiquettes:       iv('ofe-qte'),
+    qte_bobines:          nv('ofe-bobines'),
+    metrage:              iv('ofe-metrage'),
+    tolerance:            tv('ofe-tolerance'),
+    bobinettes_completes: tv('ofe-bobinettes'),
+    conditionnement:      tv('ofe-cond'),
+    cartons_type:         tv('ofe-cartons-type'),
+    nb_cartons:           iv('ofe-cartons'),
+    mandrins_dia:         tv('ofe-mandrins-dia'),
+    mandrin_longueur:     nv('ofe-mandrin-longueur'),
+    nb_mandrins:          iv('ofe-mandrins'),
+    nb_tubes:             iv('ofe-tubes'),
+    outil_1_forme:        tv('ofe-outil1-forme'),
+    outil_1_numero:       tv('ofe-outil1-numero'),
+    outil_1_angle:        tv('ofe-outil1-angle'),
+    outil_1_mag:          tv('ofe-outil1-mag'),
+    outil_1_cp:           tv('ofe-outil1-cp'),
+    outil_1_hauteur:      nv('ofe-outil1-hauteur'),
+    outil_1_fournisseur:  tv('ofe-outil1-fournisseur'),
+    outil_2_forme:        tv('ofe-outil2-forme'),
+    outil_2_numero:       tv('ofe-outil2-numero'),
+    outil_2_angle:        tv('ofe-outil2-angle'),
+    outil_2_cp:           tv('ofe-outil2-cp'),
+    outil_alt_forme:      tv('ofe-outa-forme'),
+    outil_alt_numero:     tv('ofe-outa-numero'),
+    outil_alt_angle:      tv('ofe-outa-angle'),
+    outil_alt_fournisseur:tv('ofe-outa-fournisseur'),
   };
   try{
     await api('/api/of/'+m.id,{method:'PATCH',body:JSON.stringify(payload)});
@@ -10512,43 +10543,101 @@ function renderOfEditModal(){
   if(existing) existing.remove();
   const m=S.ofEditModal;
   if(!m) return;
-  function field(id,label,val,type='text'){
-    return `<div style="margin-bottom:12px">
-      <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:5px">${label}</label>
-      <input id="${id}" type="${type}" value="${String(val||'').replace(/"/g,'&quot;')}"
-        style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
+  const _f=(id,lbl,val,type='text')=>`<div>
+    <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">${lbl}</label>
+    <input id="${id}" type="${type}" value="${String(val==null?'':val).replace(/"/g,'&quot;')}"
+      style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 11px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
+  </div>`;
+  const _sec=(title,fields,open=false)=>`
+    <div class="ofe-sec" style="border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden">
+      <div class="ofe-sec-hd" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;cursor:pointer;background:var(--bg);user-select:none">
+        <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text2)">${title}</span>
+        <svg class="sec-chev" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" style="color:var(--muted);transition:transform .18s;flex-shrink:0;${open?'transform:rotate(180deg)':''}"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div class="ofe-sec-body" style="display:${open?'grid':'none'};grid-template-columns:1fr 1fr 1fr;gap:10px 14px;padding:14px;background:var(--card)">
+        ${fields}
+      </div>
     </div>`;
-  }
   const overlay=document.createElement('div');
   overlay.id='of-edit-overlay';
-  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box';
   overlay.onclick=e=>{if(e.target===overlay)closeOfEditModal();};
   overlay.innerHTML=`
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;max-width:520px;width:100%;max-height:90vh;overflow-y:auto">
-      <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:20px">Modifier l'OF</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 16px">
-        ${field('ofe-numero','OF n°',m.of_numero)}
-        ${field('ofe-reference','Référence',m.reference)}
-        ${field('ofe-date','Date création',(m.date_creation||'').slice(0,10),'date')}
-        ${field('ofe-delai','Délai client',m.delai_client)}
-        ${field('ofe-machine','Machine',m.machine)}
-        ${field('ofe-format','Format',m.format)}
-        ${field('ofe-matiere','Matière',m.matiere)}
-        ${field('ofe-cond','Conditionnement',m.conditionnement)}
-        ${field('ofe-outil','N° plaque',m.outil_1_numero)}
-        ${field('ofe-qte','Qté étiquettes',m.qte_etiquettes,'number')}
-        ${field('ofe-bobines','Qté bobines',m.qte_bobines,'number')}
-        ${field('ofe-metrage','Métrage',m.metrage,'number')}
-        ${field('ofe-mandrins','Nb mandrins',m.nb_mandrins,'number')}
-        ${field('ofe-cartons','Nb cartons',m.nb_cartons,'number')}
-        ${field('ofe-tubes','Nb tubes',m.nb_tubes,'number')}
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px 24px 18px;max-width:900px;width:100%;max-height:92vh;overflow-y:auto;box-sizing:border-box">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <div style="font-size:15px;font-weight:700;color:var(--text)">Modifier l'OF</div>
+        <button onclick="closeOfEditModal()" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;font-size:20px;line-height:1;font-family:inherit">×</button>
       </div>
-      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px">
+      ${_sec('Identification',[
+        _f('ofe-numero','OF n°',m.of_numero),
+        _f('ofe-reference','Référence',m.reference),
+        _f('ofe-date','Date création',(m.date_creation||'').slice(0,10),'date'),
+        _f('ofe-delai','Délai client',m.delai_client),
+        _f('ofe-machine','Machine',m.machine),
+      ].join(''),true)}
+      ${_sec('Matière / Support',[
+        _f('ofe-laize','Laize',m.laize,'number'),
+        _f('ofe-format','Format',m.format),
+        _f('ofe-matiere','Matière',m.matiere),
+        _f('ofe-ref-matiere','Réf. matière',m.ref_matiere),
+        _f('ofe-glassine','Glassine',m.glassine),
+      ].join(''))}
+      ${_sec('Adhésif',[
+        _f('ofe-ref-adhesif','Réf. adhésif',m.ref_adhesif),
+        _f('ofe-qte-adhesif-g','Qté adhésif (g)',m.qte_adhesif_g,'number'),
+        _f('ofe-qte-adhesif-kg','Qté adhésif (kg)',m.qte_adhesif_kg,'number'),
+        _f('ofe-adhesif-label','Label adhésif',m.adhesif_label),
+      ].join(''))}
+      ${_sec('Quantités',[
+        _f('ofe-qte-mille','Qté au mille',m.qte_au_mille,'number'),
+        _f('ofe-nb-levees','Nb levées',m.nb_levees,'number'),
+        _f('ofe-qte','Qté étiquettes',m.qte_etiquettes,'number'),
+        _f('ofe-bobines','Qté bobines',m.qte_bobines,'number'),
+        _f('ofe-metrage','Métrage',m.metrage,'number'),
+        _f('ofe-tolerance','Tolérance',m.tolerance),
+        _f('ofe-bobinettes','Bobinettes complètes',m.bobinettes_completes),
+      ].join(''))}
+      ${_sec('Conditionnement',[
+        _f('ofe-cond','Conditionnement',m.conditionnement),
+        _f('ofe-cartons-type','Type cartons',m.cartons_type),
+        _f('ofe-cartons','Nb cartons',m.nb_cartons,'number'),
+        _f('ofe-mandrins-dia','Mandrins dia.',m.mandrins_dia),
+        _f('ofe-mandrin-longueur','Mandrin long.',m.mandrin_longueur,'number'),
+        _f('ofe-mandrins','Nb mandrins',m.nb_mandrins,'number'),
+        _f('ofe-tubes','Nb tubes',m.nb_tubes,'number'),
+      ].join(''))}
+      ${_sec('Outillage',[
+        _f('ofe-outil1-forme','Outil 1 — forme',m.outil_1_forme),
+        _f('ofe-outil1-numero','Outil 1 — n°',m.outil_1_numero),
+        _f('ofe-outil1-angle','Outil 1 — angle',m.outil_1_angle),
+        _f('ofe-outil1-mag','Outil 1 — mag.',m.outil_1_mag),
+        _f('ofe-outil1-cp','Outil 1 — CP',m.outil_1_cp),
+        _f('ofe-outil1-hauteur','Outil 1 — hauteur',m.outil_1_hauteur,'number'),
+        _f('ofe-outil1-fournisseur','Outil 1 — fournisseur',m.outil_1_fournisseur),
+        _f('ofe-outil2-forme','Outil 2 — forme',m.outil_2_forme),
+        _f('ofe-outil2-numero','Outil 2 — n°',m.outil_2_numero),
+        _f('ofe-outil2-angle','Outil 2 — angle',m.outil_2_angle),
+        _f('ofe-outil2-cp','Outil 2 — CP',m.outil_2_cp),
+        _f('ofe-outa-forme','Outil alt. — forme',m.outil_alt_forme),
+        _f('ofe-outa-numero','Outil alt. — n°',m.outil_alt_numero),
+        _f('ofe-outa-angle','Outil alt. — angle',m.outil_alt_angle),
+        _f('ofe-outa-fournisseur','Outil alt. — fournisseur',m.outil_alt_fournisseur),
+      ].join(''))}
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
         <button id="ofe-cancel-btn" style="padding:9px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit;font-size:13px">Annuler</button>
         <button id="ofe-save-btn" style="padding:9px 16px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700">Enregistrer</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
+  overlay.querySelectorAll('.ofe-sec-hd').forEach(hd=>{
+    hd.addEventListener('click',()=>{
+      const body=hd.nextElementSibling;
+      const chev=hd.querySelector('.sec-chev');
+      const open=body.style.display!=='none';
+      body.style.display=open?'none':'grid';
+      chev.style.transform=open?'':'rotate(180deg)';
+    });
+  });
   overlay.querySelector('#ofe-cancel-btn').onclick=closeOfEditModal;
   overlay.querySelector('#ofe-save-btn').onclick=saveOfEdit;
 }
@@ -10566,16 +10655,88 @@ function closeFicheEditModal(){
 async function saveFicheEdit(){
   const m=S.ficheEditModal;
   if(!m) return;
+  const tv=id=>{const el=document.getElementById(id);return el?el.value.trim()||null:null;};
+  const nv=id=>{const el=document.getElementById(id);return el&&el.value!==''?parseFloat(el.value)||null:null;};
+  const iv=id=>{const el=document.getElementById(id);return el&&el.value!==''?parseInt(el.value)||null:null;};
+  const bv=id=>{const el=document.getElementById(id);return el?parseInt(el.value)||0:0;};
   const payload={
-    reference:      document.getElementById('fce-ref')?.value.trim()||null,
-    designation:    document.getElementById('fce-desig')?.value.trim()||null,
-    client:         document.getElementById('fce-client')?.value.trim()||null,
-    format:         document.getElementById('fce-format')?.value.trim()||null,
-    eti_laize:      parseFloat(document.getElementById('fce-laize')?.value)||null,
-    support:        document.getElementById('fce-matiere')?.value.trim()||null,
-    adhesif:        document.getElementById('fce-adhesif')?.value.trim()||null,
-    conditionnement:document.getElementById('fce-cond')?.value.trim()||null,
-    notes:          document.getElementById('fce-notes')?.value.trim()||null,
+    reference:                  tv('fce-ref'),
+    designation:                tv('fce-desig'),
+    client:                     tv('fce-client'),
+    machine:                    tv('fce-machine'),
+    date_modif:                 tv('fce-date-modif'),
+    format:                     tv('fce-format'),
+    eti_laize:                  nv('fce-eti-laize'),
+    eti_longueur:               nv('fce-eti-longueur'),
+    eti_rayons:                 nv('fce-eti-rayons'),
+    eti_perforations:           tv('fce-eti-perforations'),
+    mod_laize:                  nv('fce-mod-laize'),
+    mod_longueur:               nv('fce-mod-longueur'),
+    mod_nb_front:               iv('fce-mod-front'),
+    lateral_ext:                nv('fce-lat-ext'),
+    horizontal:                 nv('fce-horizontal'),
+    lateral_int:                nv('fce-lat-int'),
+    support:                    tv('fce-support'),
+    matiere:                    tv('fce-matiere'),
+    adhesif:                    tv('fce-adhesif'),
+    glassine:                   tv('fce-glassine'),
+    laize_optimale:             nv('fce-laize-opt'),
+    laize_optionnelle:          nv('fce-laize-optn'),
+    epaisseur:                  nv('fce-epaisseur'),
+    qte_au_mille:               nv('fce-qte-mille'),
+    outil1_forme:               tv('fce-o1-forme'),
+    outil1_numero_sifa:         tv('fce-o1-numero'),
+    outil1_laize:               nv('fce-o1-laize'),
+    outil1_epaisseur:           nv('fce-o1-epaisseur'),
+    outil1_nb_dents:            iv('fce-o1-dents'),
+    outil1_nb_front:            iv('fce-o1-front'),
+    outil1_nb_avance:           iv('fce-o1-avance'),
+    outil2_forme:               tv('fce-o2-forme'),
+    outil2_numero_sifa:         tv('fce-o2-numero'),
+    outil2_epaisseur:           nv('fce-o2-epaisseur'),
+    outil2_nb_dents:            iv('fce-o2-dents'),
+    outil2_nb_front:            iv('fce-o2-front'),
+    outil2_nb_avance:           iv('fce-o2-avance'),
+    outil3_forme:               tv('fce-o3-forme'),
+    outil3_numero_sifa:         tv('fce-o3-numero'),
+    outil3_epaisseur:           nv('fce-o3-epaisseur'),
+    outil3_nb_dents:            iv('fce-o3-dents'),
+    outil3_nb_front:            iv('fce-o3-front'),
+    outil3_nb_avance:           iv('fce-o3-avance'),
+    nb_couleurs:                iv('fce-nb-couleurs'),
+    recto:                      bv('fce-recto'),
+    verso:                      bv('fce-verso'),
+    tete1_pantone:              tv('fce-t1-pantone'),
+    tete1_couleur:              tv('fce-t1-couleur'),
+    tete1_anilox:               tv('fce-t1-anilox'),
+    tete1_composition:          tv('fce-t1-compo'),
+    tete2_pantone:              tv('fce-t2-pantone'),
+    tete2_couleur:              tv('fce-t2-couleur'),
+    tete2_anilox:               tv('fce-t2-anilox'),
+    tete2_composition:          tv('fce-t2-compo'),
+    tete3_pantone:              tv('fce-t3-pantone'),
+    tete3_couleur:              tv('fce-t3-couleur'),
+    tete3_anilox:               tv('fce-t3-anilox'),
+    tete3_composition:          tv('fce-t3-compo'),
+    remarque:                   tv('fce-remarque'),
+    conditionnement:            tv('fce-cond'),
+    mandrin_dia:                tv('fce-mandrin-dia'),
+    mandrin_longueur:           nv('fce-mandrin-longueur'),
+    enroulement:                tv('fce-enroulement'),
+    nb_etiq_bobin:              iv('fce-nb-etiq-bobin'),
+    dia_ext:                    nv('fce-dia-ext'),
+    poids:                      nv('fce-poids'),
+    cales_sachets:              tv('fce-cales-sachets'),
+    cartons:                    tv('fce-cartons'),
+    nb_au_sol:                  iv('fce-nb-sol'),
+    nb_etage:                   iv('fce-nb-etage'),
+    nb_bobines_carton:          iv('fce-nb-bob-carton'),
+    palette_type:               tv('fce-palette-type'),
+    palette_nb_cartons_sol:     iv('fce-palette-sol'),
+    palette_nb_cartons_hauteur: iv('fce-palette-hauteur'),
+    palette_hauteur_max:        nv('fce-palette-hmax'),
+    particularite:              tv('fce-particularite'),
+    notes:                      tv('fce-notes'),
   };
   try{
     await api('/api/fiches-techniques/'+m.id,{method:'PATCH',body:JSON.stringify(payload)});
@@ -10592,37 +10753,155 @@ function renderFicheEditModal(){
   if(existing) existing.remove();
   const m=S.ficheEditModal;
   if(!m) return;
-  function field(id,label,val,type='text'){
-    return `<div style="margin-bottom:12px">
-      <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:5px">${label}</label>
-      <input id="${id}" type="${type}" value="${String(val||'').replace(/"/g,'&quot;')}"
-        style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
+  const _f=(id,lbl,val,type='text')=>`<div>
+    <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">${lbl}</label>
+    <input id="${id}" type="${type}" value="${String(val==null?'':val).replace(/"/g,'&quot;')}"
+      style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 11px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
+  </div>`;
+  const _cb=(id,lbl,val)=>`<div>
+    <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">${lbl}</label>
+    <select id="${id}" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 11px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
+      <option value="0" ${!val||val==0?'selected':''}>Non</option>
+      <option value="1" ${val==1?'selected':''}>Oui</option>
+    </select>
+  </div>`;
+  const _sec=(title,fields,open=false)=>`
+    <div class="fce-sec" style="border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden">
+      <div class="fce-sec-hd" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;cursor:pointer;background:var(--bg);user-select:none">
+        <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text2)">${title}</span>
+        <svg class="sec-chev" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" style="color:var(--muted);transition:transform .18s;flex-shrink:0;${open?'transform:rotate(180deg)':''}"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div class="fce-sec-body" style="display:${open?'grid':'none'};grid-template-columns:1fr 1fr 1fr;gap:10px 14px;padding:14px;background:var(--card)">
+        ${fields}
+      </div>
     </div>`;
-  }
   const overlay=document.createElement('div');
   overlay.id='fiche-edit-overlay';
-  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box';
   overlay.onclick=e=>{if(e.target===overlay)closeFicheEditModal();};
   overlay.innerHTML=`
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;max-width:560px;width:100%;max-height:90vh;overflow-y:auto">
-      <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:20px">Modifier la fiche technique</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 16px">
-        ${field('fce-ref','Référence',m.reference)}
-        ${field('fce-desig','Désignation',m.designation)}
-        ${field('fce-client','Client',m.client)}
-        ${field('fce-format','Format',m.format)}
-        ${field('fce-laize','Laize eti. (mm)',m.eti_laize,'number')}
-        ${field('fce-matiere','Support',m.support||m.matiere)}
-        ${field('fce-adhesif','Adhésif',m.adhesif)}
-        ${field('fce-cond','Conditionnement',m.conditionnement)}
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px 24px 18px;max-width:900px;width:100%;max-height:92vh;overflow-y:auto;box-sizing:border-box">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <div style="font-size:15px;font-weight:700;color:var(--text)">Modifier la fiche technique</div>
+        <button onclick="closeFicheEditModal()" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;font-size:20px;line-height:1;font-family:inherit">×</button>
       </div>
-      ${field('fce-notes','Notes',m.notes)}
-      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px">
+      ${_sec('Identification',[
+        _f('fce-ref','Référence',m.reference),
+        _f('fce-desig','Désignation',m.designation),
+        _f('fce-client','Client',m.client),
+        _f('fce-machine','Machine',m.machine),
+        _f('fce-date-modif','Date modif.',m.date_modif),
+      ].join(''),true)}
+      ${_sec('Étiquette',[
+        _f('fce-format','Format',m.format),
+        _f('fce-eti-laize','Laize eti. (mm)',m.eti_laize,'number'),
+        _f('fce-eti-longueur','Longueur eti. (mm)',m.eti_longueur,'number'),
+        _f('fce-eti-rayons','Rayons (mm)',m.eti_rayons,'number'),
+        _f('fce-eti-perforations','Perforations',m.eti_perforations),
+      ].join(''))}
+      ${_sec('Module',[
+        _f('fce-mod-laize','Laize module',m.mod_laize,'number'),
+        _f('fce-mod-longueur','Longueur module',m.mod_longueur,'number'),
+        _f('fce-mod-front','Nb front',m.mod_nb_front,'number'),
+      ].join(''))}
+      ${_sec('Échenillage',[
+        _f('fce-lat-ext','Latéral ext.',m.lateral_ext,'number'),
+        _f('fce-horizontal','Horizontal',m.horizontal,'number'),
+        _f('fce-lat-int','Latéral int.',m.lateral_int,'number'),
+      ].join(''))}
+      ${_sec('Matière',[
+        _f('fce-support','Support',m.support||m.matiere),
+        _f('fce-matiere','Matière',m.matiere),
+        _f('fce-adhesif','Adhésif',m.adhesif),
+        _f('fce-glassine','Glassine',m.glassine),
+        _f('fce-laize-opt','Laize optimale',m.laize_optimale,'number'),
+        _f('fce-laize-optn','Laize optionnelle',m.laize_optionnelle,'number'),
+        _f('fce-epaisseur','Épaisseur',m.epaisseur,'number'),
+        _f('fce-qte-mille','Qté au mille',m.qte_au_mille,'number'),
+      ].join(''))}
+      ${_sec('Outil 1',[
+        _f('fce-o1-forme','Forme',m.outil1_forme),
+        _f('fce-o1-numero','N° SIFA',m.outil1_numero_sifa),
+        _f('fce-o1-laize','Laize',m.outil1_laize,'number'),
+        _f('fce-o1-epaisseur','Épaisseur',m.outil1_epaisseur,'number'),
+        _f('fce-o1-dents','Nb dents',m.outil1_nb_dents,'number'),
+        _f('fce-o1-front','Nb front',m.outil1_nb_front,'number'),
+        _f('fce-o1-avance','Nb avance',m.outil1_nb_avance,'number'),
+      ].join(''))}
+      ${_sec('Outil 2',[
+        _f('fce-o2-forme','Forme',m.outil2_forme),
+        _f('fce-o2-numero','N° SIFA',m.outil2_numero_sifa),
+        _f('fce-o2-epaisseur','Épaisseur',m.outil2_epaisseur,'number'),
+        _f('fce-o2-dents','Nb dents',m.outil2_nb_dents,'number'),
+        _f('fce-o2-front','Nb front',m.outil2_nb_front,'number'),
+        _f('fce-o2-avance','Nb avance',m.outil2_nb_avance,'number'),
+      ].join(''))}
+      ${_sec('Outil 3',[
+        _f('fce-o3-forme','Forme',m.outil3_forme),
+        _f('fce-o3-numero','N° SIFA',m.outil3_numero_sifa),
+        _f('fce-o3-epaisseur','Épaisseur',m.outil3_epaisseur,'number'),
+        _f('fce-o3-dents','Nb dents',m.outil3_nb_dents,'number'),
+        _f('fce-o3-front','Nb front',m.outil3_nb_front,'number'),
+        _f('fce-o3-avance','Nb avance',m.outil3_nb_avance,'number'),
+      ].join(''))}
+      ${_sec('Impression',[
+        _f('fce-nb-couleurs','Nb couleurs',m.nb_couleurs,'number'),
+        _cb('fce-recto','Recto',m.recto),
+        _cb('fce-verso','Verso',m.verso),
+        _f('fce-t1-pantone','Tête 1 — Pantone',m.tete1_pantone),
+        _f('fce-t1-couleur','Tête 1 — Couleur',m.tete1_couleur),
+        _f('fce-t1-anilox','Tête 1 — Anilox',m.tete1_anilox),
+        _f('fce-t1-compo','Tête 1 — Composition',m.tete1_composition),
+        _f('fce-t2-pantone','Tête 2 — Pantone',m.tete2_pantone),
+        _f('fce-t2-couleur','Tête 2 — Couleur',m.tete2_couleur),
+        _f('fce-t2-anilox','Tête 2 — Anilox',m.tete2_anilox),
+        _f('fce-t2-compo','Tête 2 — Composition',m.tete2_composition),
+        _f('fce-t3-pantone','Tête 3 — Pantone',m.tete3_pantone),
+        _f('fce-t3-couleur','Tête 3 — Couleur',m.tete3_couleur),
+        _f('fce-t3-anilox','Tête 3 — Anilox',m.tete3_anilox),
+        _f('fce-t3-compo','Tête 3 — Composition',m.tete3_composition),
+        _f('fce-remarque','Remarque',m.remarque),
+      ].join(''))}
+      ${_sec('Conditionnement',[
+        _f('fce-cond','Conditionnement',m.conditionnement),
+        _f('fce-mandrin-dia','Mandrin dia.',m.mandrin_dia),
+        _f('fce-mandrin-longueur','Mandrin long.',m.mandrin_longueur,'number'),
+        _f('fce-enroulement','Enroulement',m.enroulement),
+        _f('fce-nb-etiq-bobin','Nb étiq./bobine',m.nb_etiq_bobin,'number'),
+        _f('fce-dia-ext','Dia. ext.',m.dia_ext,'number'),
+        _f('fce-poids','Poids',m.poids,'number'),
+        _f('fce-cales-sachets','Cales / sachets',m.cales_sachets),
+        _f('fce-cartons','Cartons',m.cartons),
+        _f('fce-nb-sol','Nb au sol',m.nb_au_sol,'number'),
+        _f('fce-nb-etage','Nb étages',m.nb_etage,'number'),
+        _f('fce-nb-bob-carton','Nb bob./carton',m.nb_bobines_carton,'number'),
+      ].join(''))}
+      ${_sec('Palettisation',[
+        _f('fce-palette-type','Type palette',m.palette_type),
+        _f('fce-palette-sol','Nb cartons/sol',m.palette_nb_cartons_sol,'number'),
+        _f('fce-palette-hauteur','Nb cartons/hauteur',m.palette_nb_cartons_hauteur,'number'),
+        _f('fce-palette-hmax','Hauteur max. (cm)',m.palette_hauteur_max,'number'),
+        _f('fce-particularite','Particularité',m.particularite),
+      ].join(''))}
+      ${_sec('Notes',[
+        `<div style="grid-column:1/-1"><label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Notes</label>
+        <textarea id="fce-notes" rows="3" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 11px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;resize:vertical">${String(m.notes||'').replace(/</g,'&lt;')}</textarea></div>`,
+      ].join(''))}
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
         <button id="fce-cancel-btn" style="padding:9px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit;font-size:13px">Annuler</button>
         <button id="fce-save-btn" style="padding:9px 16px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700">Enregistrer</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
+  overlay.querySelectorAll('.fce-sec-hd').forEach(hd=>{
+    hd.addEventListener('click',()=>{
+      const body=hd.nextElementSibling;
+      const chev=hd.querySelector('.sec-chev');
+      const open=body.style.display!=='none';
+      body.style.display=open?'none':'grid';
+      chev.style.transform=open?'':'rotate(180deg)';
+    });
+  });
   overlay.querySelector('#fce-cancel-btn').onclick=closeFicheEditModal;
   overlay.querySelector('#fce-save-btn').onclick=saveFicheEdit;
 }
