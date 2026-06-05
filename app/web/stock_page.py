@@ -1087,11 +1087,10 @@ body.light .plan-pill:hover{background:rgba(8,145,178,.06)}
 .plan-pill-c-orange .plan-pill-dot{background:#fb923c;box-shadow:0 0 0 2px rgba(251,146,60,.20)}
 .plan-pill-c-rouge .plan-pill-dot{background:#f87171;box-shadow:0 0 0 2px rgba(248,113,113,.20)}
 
-/* Tooltip custom emplacement */
-.plan-pill-tip{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%) translateY(4px);min-width:200px;max-width:260px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px;box-shadow:0 8px 24px rgba(0,0,0,.35);opacity:0;visibility:hidden;pointer-events:none;transition:opacity .12s ease,transform .12s ease;z-index:50;font-family:'Segoe UI',system-ui,sans-serif;font-weight:500;letter-spacing:normal;text-align:left;white-space:normal}
+/* Tooltip custom emplacement (position:fixed, attaché au body) */
+.plan-pill-tip{position:fixed;min-width:200px;max-width:260px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px;box-shadow:0 8px 24px rgba(0,0,0,.35);opacity:0;visibility:hidden;pointer-events:none;transition:opacity .12s ease;z-index:9000;font-family:'Segoe UI',system-ui,sans-serif;font-weight:500;letter-spacing:normal;text-align:left;white-space:normal}
 body.light .plan-pill-tip{box-shadow:0 8px 24px rgba(15,23,42,.12)}
-.plan-pill:hover .plan-pill-tip,.plan-pill:focus-visible .plan-pill-tip{opacity:1;visibility:visible;transform:translateX(-50%) translateY(0)}
-.plan-pill-tip::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:6px solid transparent;border-top-color:var(--border)}
+.plan-pill-tip.show{opacity:1;visibility:visible}
 .plan-pill-tip-code{font-family:ui-monospace,monospace;font-size:13px;font-weight:800;color:var(--text);margin-bottom:6px;letter-spacing:.03em}
 .plan-pill-tip-row{font-size:12px;color:var(--text2);line-height:1.4;display:flex;align-items:center;gap:6px;margin-top:2px}
 .plan-pill-tip-jours{font-weight:700}
@@ -7480,7 +7479,45 @@ async function loadPlanEntrepot() {
   buildPlanEntrepot();
 }
 
+// Tooltip global pour le Plan entrepôt (attaché au body, position fixed, hors scroll-area)
+function getPlanPillTipEl() {
+  let t = document.getElementById('plan-pill-tip');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'plan-pill-tip';
+    t.className = 'plan-pill-tip';
+    document.body.appendChild(t);
+  }
+  return t;
+}
+function showPlanPillTip(pill, html) {
+  const t = getPlanPillTipEl();
+  t.innerHTML = html;
+  // Préparer pour mesure (visible mais transparent)
+  t.style.left = '0px'; t.style.top = '0px';
+  t.classList.add('show');
+  const r = pill.getBoundingClientRect();
+  const tw = t.offsetWidth, th = t.offsetHeight;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const margin = 8;
+  // Position horizontale : centrée sur la pastille, clampée dans la viewport
+  let left = r.left + r.width / 2 - tw / 2;
+  if (left < margin) left = margin;
+  if (left + tw > vw - margin) left = vw - margin - tw;
+  // Position verticale : au-dessus de la pastille, sinon au-dessous
+  let top = r.top - th - 10;
+  if (top < margin) top = r.bottom + 10;
+  if (top + th > vh - margin) top = Math.max(margin, vh - margin - th);
+  t.style.left = left + 'px';
+  t.style.top = top + 'px';
+}
+function hidePlanPillTip() {
+  const t = document.getElementById('plan-pill-tip');
+  if (t) t.classList.remove('show');
+}
+
 function buildPlanEntrepot() {
+  hidePlanPillTip();
   const area = document.getElementById('scroll-area');
   if (!area) return;
   area.innerHTML = '';
@@ -7602,23 +7639,25 @@ function buildPlanEntrepot() {
         lbl.textContent = code;
         pill.appendChild(lbl);
 
-        // Tooltip custom (hover)
-        const tip = document.createElement('span');
-        tip.className = 'plan-pill-tip';
+        // Hover : tooltip global positionné en JS (évite le clipping du scroll-area)
         const joursTxt = (j == null)
           ? 'Jamais inventorié'
           : (j + ' j depuis le dernier inventaire');
         const dateTxt = dDate ? ('le ' + fD(dDate) + (op ? ' · ' + op : '')) : '';
         const refsTxt = nbRefs + ' réf' + (nbRefs > 1 ? 's' : '')
           + ' · ' + fN(totalQte) + ' u.';
-        tip.innerHTML =
+        const tipHTML =
           '<div class="plan-pill-tip-code">' + escHtml(code) + '</div>'
           + '<div class="plan-pill-tip-row plan-pill-tip-jours plan-pill-c-' + couleur + '">'
           +   '<span class="plan-pill-dot"></span>' + escHtml(joursTxt)
           + '</div>'
           + (dateTxt ? '<div class="plan-pill-tip-row plan-pill-tip-sub">' + escHtml(dateTxt) + '</div>' : '')
           + '<div class="plan-pill-tip-row plan-pill-tip-refs">' + escHtml(refsTxt) + '</div>';
-        pill.appendChild(tip);
+
+        pill.addEventListener('mouseenter', () => showPlanPillTip(pill, tipHTML));
+        pill.addEventListener('mouseleave', hidePlanPillTip);
+        pill.addEventListener('focus', () => showPlanPillTip(pill, tipHTML));
+        pill.addEventListener('blur', hidePlanPillTip);
 
         row.appendChild(pill);
       });
