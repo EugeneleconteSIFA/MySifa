@@ -3205,6 +3205,17 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 101, "fiches_techniques_ref_produit_norm")
 
+    # v102 — MyStock : commentaires par produit dans les sessions d'inventaire
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=102 LIMIT 1").fetchone():
+        existing = {r["name"] for r in conn.execute("PRAGMA table_info(inventaires_sessions)").fetchall()}
+        if "commentaires_json" not in existing:
+            try:
+                conn.execute("ALTER TABLE inventaires_sessions ADD COLUMN commentaires_json TEXT")
+            except Exception:
+                pass
+        conn.commit()
+        _record_schema_migration(conn, 102, "inventaires_sessions_commentaires")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

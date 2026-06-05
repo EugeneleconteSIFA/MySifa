@@ -1148,6 +1148,11 @@ body:not(.light) .plan-pill-tip-jours.plan-pill-c-rouge{color:#f87171}
 .invv2-btn-validate:hover{filter:brightness(1.06)}
 .invv2-btn-cancel{background:var(--success);color:var(--inv-v-text);border:0;border-radius:8px;padding:7px 12px;font-weight:900;font-size:14px;cursor:pointer;min-width:38px;font-family:inherit;line-height:1;transition:filter .15s,background .15s,color .15s}
 .invv2-btn-cancel:hover{background:var(--danger);color:#fff}
+.invv2-btn-note{background:transparent;color:var(--text2);border:1.5px solid var(--border);border-radius:8px;padding:7px 12px;font-weight:700;font-size:12px;cursor:pointer;font-family:inherit;transition:border-color .15s,color .15s,background .15s}
+.invv2-btn-note:hover{border-color:var(--inv-v);color:var(--inv-v);background:var(--inv-v-bg-soft)}
+.invv2-btn-note.has-comment{border-color:var(--inv-v);color:var(--inv-v);background:var(--inv-v-bg-soft);font-weight:800}
+.invv2-prod-comment-preview{margin-top:6px;font-size:12px;color:var(--text2);background:var(--inv-v-bg-soft);border:1px dashed var(--inv-v-bg);border-radius:8px;padding:6px 10px;line-height:1.4;display:flex;align-items:flex-start;gap:8px;font-style:italic}
+.invv2-prod-comment-tag{font-style:normal;font-weight:800;font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:var(--inv-v);background:var(--card);border:1px solid var(--inv-v-bg);border-radius:5px;padding:1px 6px;flex-shrink:0;margin-top:1px}
 .invv2-empty-card{margin-bottom:4px;border:1.5px solid var(--inv-v-bg)}
 .invv2-action-bar{display:flex;justify-content:center;margin:16px 0 4px}
 .invv2-btn-to-validate{background:var(--card);border:1.5px solid var(--inv-v-bg);color:var(--text2);border-radius:12px;padding:12px 28px;font-weight:700;font-size:14px;opacity:.9}
@@ -1166,6 +1171,15 @@ body:not(.light) .plan-pill-tip-jours.plan-pill-c-rouge{color:#f87171}
 .invv2-hist-meta{font-size:11px;color:var(--text2);font-family:monospace;font-weight:600}
 .invv2-btn-more{background:transparent;border:1.5px solid var(--inv-v);color:var(--inv-v);border-radius:8px;padding:9px 14px;font-weight:800;font-size:12px;cursor:pointer;font-family:inherit;width:calc(100% - 24px);margin:10px 12px 10px;transition:background .15s,color .15s}
 .invv2-btn-more:hover{background:var(--inv-v);color:var(--inv-v-text)}
+.invv2-hist-block{border-bottom:1px solid var(--border)}
+.invv2-hist-block:last-child{border-bottom:0}
+.invv2-hist-block .invv2-hist-row{border-bottom:0}
+.invv2-hist-comments{padding:0 16px 12px 16px;display:flex;flex-direction:column;gap:6px}
+.invv2-hist-comment{background:var(--inv-v-bg-soft);border-left:3px solid var(--inv-v);border-radius:6px;padding:8px 12px}
+.invv2-hist-comment-head{font-size:12px;color:var(--text);margin-bottom:3px;line-height:1.4}
+.invv2-hist-comment-ref{font-family:monospace;font-weight:800;color:var(--inv-v)}
+.invv2-hist-comment-des{color:var(--text2);font-weight:500}
+.invv2-hist-comment-body{font-size:13px;color:var(--text);line-height:1.5;white-space:pre-wrap;word-break:break-word}
 
 /* Modals violets — texte boutons selon thème */
 .btn-confirm.invv2-confirm{background:var(--inv-v);color:var(--inv-v-text);font-weight:800}
@@ -1493,6 +1507,7 @@ let S = {
   invV2Search: '',           // recherche emplacement
   invV2Validated: {},        // { [produit_id]: true } produits validés (vert)
   invV2Modifs: {},           // { [produit_id]: {qte_avant, qte_apres} } modifs en attente
+  invV2Comments: {},         // { [produit_id]: string } commentaires en attente (visibles après validation)
   invV2HistoryExpanded: false,
   invV2Submitting: false,
   invAlertCount: null,       // nb d'emplacements rouge/orange (inventaire en retard)
@@ -2046,6 +2061,7 @@ async function loadInventaireList() {
   S.invV2Detail = null;
   S.invV2Validated = {};
   S.invV2Modifs = {};
+  S.invV2Comments = {};
   S.invV2HistoryExpanded = false;
   try {
     const d = await api('/api/stock/inventaire-v2/emplacements');
@@ -2085,6 +2101,7 @@ async function loadInventaireEmpl(code) {
       S.invV2Detail = d;
       S.invV2Validated = {};
       S.invV2Modifs = {};
+      S.invV2Comments = {};
       S.invV2HistoryExpanded = false;
       try { updateNavActive(); } catch(e){}
       renderContent();
@@ -2125,6 +2142,7 @@ function clearInventaireEmpl() {
   S.invV2Detail = null;
   S.invV2Validated = {};
   S.invV2Modifs = {};
+  S.invV2Comments = {};
   S.invV2HistoryExpanded = false;
   loadInventaireList();
 }
@@ -2168,6 +2186,7 @@ function invV2CancelValidate(pid) {
 function invV2OpenModifyModal(pid, currentQty, reference, designation, unite) {
   closeMroot();
   let valStr = String(currentQty != null ? currentQty : '');
+  let commentStr = S.invV2Comments[pid] || '';
   const overlay = el('div', { cls:'modal-overlay', on:{ click: e => { if(e.target===overlay) closeMroot(); }}});
   const inp = el('input', {
     cls:'field-input',
@@ -2175,22 +2194,38 @@ function invV2OpenModifyModal(pid, currentQty, reference, designation, unite) {
     style:{ width:'100%', fontSize:'16px', textAlign:'right', fontFamily:'monospace', direction:'ltr' }
   });
   inp.addEventListener('input', e => { valStr = e.target.value; });
-  inp.addEventListener('keydown', e => { if (e.key === 'Enter') validateBtn.click(); });
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commentInp.focus(); } });
+  const commentInp = el('textarea', {
+    cls:'field-input',
+    placeholder:'Commentaire (optionnel — visible une fois l\'inventaire validé)',
+    rows: 3,
+    maxlength: 1000,
+    style:{ width:'100%', resize:'vertical', fontFamily:'inherit', fontSize:'13px', lineHeight:'1.5' }
+  });
+  commentInp.value = commentStr;
+  commentInp.addEventListener('input', e => { commentStr = e.target.value; });
   const validateBtn = el('button', { cls:'btn-confirm invv2-confirm', on:{ click: () => {
     const q = parseFloat(valStr);
     if (isNaN(q) || q < 0) { showToast('Quantité invalide.', 'error'); return; }
     S.invV2Modifs[pid] = { qte_avant: parseFloat(currentQty)||0, qte_apres: q };
     S.invV2Validated[pid] = true;
+    const txt = (commentStr || '').trim();
+    if (txt) S.invV2Comments[pid] = txt;
+    else delete S.invV2Comments[pid];
     closeMroot();
     renderContent();
-  }}}, 'Valider la modification');
-  const sheet = el('div', { cls:'modal-sheet', style: { maxWidth: '440px' } },
+  }}}, 'Valider');
+  const sheet = el('div', { cls:'modal-sheet', style: { maxWidth: '460px' } },
     el('span', { cls:'modal-handle' }),
     el('div', { cls:'modal-title invv2-modal-title' }, 'Modifier la quantité'),
     el('div', { cls:'modal-sub' }, escHtml(reference) + (designation ? ' — ' + escHtml(designation) : '')),
     el('div', { cls:'modal-field' },
       el('label', { cls:'field-label' }, 'Quantité réelle comptée' + (unite ? ' ('+escHtml(unite)+')' : '')),
       inp
+    ),
+    el('div', { cls:'modal-field' },
+      el('label', { cls:'field-label' }, 'Commentaire'),
+      commentInp
     ),
     el('div', { cls:'modal-actions', style:{marginTop:'14px'} },
       el('button', { cls:'btn-cancel', on:{ click: closeMroot } }, 'Annuler'),
@@ -2200,6 +2235,51 @@ function invV2OpenModifyModal(pid, currentQty, reference, designation, unite) {
   overlay.appendChild(sheet);
   document.getElementById('mroot').appendChild(overlay);
   requestAnimationFrame(() => { try { inp.focus(); inp.select(); } catch(e){} });
+}
+
+function invV2OpenCommentModal(pid, reference, designation) {
+  closeMroot();
+  let commentStr = S.invV2Comments[pid] || '';
+  const overlay = el('div', { cls:'modal-overlay', on:{ click: e => { if(e.target===overlay) closeMroot(); }}});
+  const ta = el('textarea', {
+    cls:'field-input',
+    placeholder:'Note libre · visible une fois l\'inventaire validé',
+    rows: 4,
+    maxlength: 1000,
+    style:{ width:'100%', resize:'vertical', fontFamily:'inherit', fontSize:'13px', lineHeight:'1.5' }
+  });
+  ta.value = commentStr;
+  ta.addEventListener('input', e => { commentStr = e.target.value; });
+  const saveBtn = el('button', { cls:'btn-confirm invv2-confirm', on:{ click: () => {
+    const txt = (commentStr || '').trim();
+    if (txt) S.invV2Comments[pid] = txt;
+    else delete S.invV2Comments[pid];
+    closeMroot();
+    renderContent();
+  }}}, 'Enregistrer');
+  const actions = [
+    el('button', { cls:'btn-cancel', on:{ click: closeMroot } }, 'Annuler'),
+    saveBtn,
+  ];
+  if (S.invV2Comments[pid]) {
+    actions.splice(1, 0, el('button', {
+      cls:'btn-ghost', style:{ color:'var(--danger)' },
+      on:{ click: () => { delete S.invV2Comments[pid]; closeMroot(); renderContent(); } }
+    }, 'Supprimer'));
+  }
+  const sheet = el('div', { cls:'modal-sheet', style: { maxWidth: '460px' } },
+    el('span', { cls:'modal-handle' }),
+    el('div', { cls:'modal-title invv2-modal-title' }, 'Note d\'inventaire'),
+    el('div', { cls:'modal-sub' }, escHtml(reference) + (designation ? ' — ' + escHtml(designation) : '')),
+    el('div', { cls:'modal-field' },
+      el('label', { cls:'field-label' }, 'Commentaire'),
+      ta
+    ),
+    el('div', { cls:'modal-actions', style:{marginTop:'14px',gap:'8px',flexWrap:'wrap'} }, ...actions)
+  );
+  overlay.appendChild(sheet);
+  document.getElementById('mroot').appendChild(overlay);
+  requestAnimationFrame(() => { try { ta.focus(); } catch(e){} });
 }
 
 function invV2OpenAddProductModal() {
@@ -2336,8 +2416,20 @@ function invV2ValidateFullInventaire() {
     produit_id: parseInt(pid, 10),
     qte_apres: parseFloat(S.invV2Modifs[pid].qte_apres),
   }));
+  const refsById = {};
+  (d.refs || []).forEach(r => { refsById[r.produit_id] = r; });
+  const commentaires = Object.keys(S.invV2Comments).map(pid => {
+    const r = refsById[parseInt(pid, 10)] || {};
+    return {
+      produit_id: parseInt(pid, 10),
+      reference: r.reference || '',
+      designation: r.designation || '',
+      commentaire: S.invV2Comments[pid],
+    };
+  }).filter(c => (c.commentaire || '').trim());
   const nbProduits = (d.refs || []).length;
   const nbModifs = modifications.length;
+  const nbComments = commentaires.length;
 
   closeMroot();
   const overlay = el('div', { cls:'modal-overlay', on:{ click: e => { if(e.target===overlay) closeMroot(); }}});
@@ -2354,6 +2446,7 @@ function invV2ValidateFullInventaire() {
           emplacement: d.emplacement,
           nb_produits: nbProduits,
           modifications,
+          commentaires,
         })
       });
       if (r && r.success) {
@@ -2376,7 +2469,8 @@ function invV2ValidateFullInventaire() {
     el('div', { cls:'modal-sub' },
       'Emplacement ' + escHtml(d.label || d.emplacement) + ' · ' +
       nbProduits + ' produit' + (nbProduits>1?'s':'') + ' inventorié' + (nbProduits>1?'s':'') + ' · ' +
-      nbModifs + ' modification' + (nbModifs>1?'s':'') + ' à appliquer.'
+      nbModifs + ' modification' + (nbModifs>1?'s':'') + ' à appliquer' +
+      (nbComments ? ' · ' + nbComments + ' note' + (nbComments>1?'s':'') : '') + '.'
     ),
     el('div', { style:{fontSize:'12px',color:'var(--muted)',marginBottom:'14px',lineHeight:'1.5'} },
       'Les ajustements de stock seront appliqués maintenant et tracés dans l\'historique des mouvements.'
@@ -9100,13 +9194,34 @@ function buildInventaireEmplDetail() {
       el('div', { cls:'card-empty' }, 'Aucun inventaire enregistré pour cet emplacement.')
     );
   } else {
-    const histRows = histVisible.map(h => el('div', { cls:'invv2-hist-row' },
-      el('div', { cls:'invv2-hist-date' }, fD(h.date_validation)),
-      el('div', { cls:'invv2-hist-op' }, h.operateur_nom || '—'),
-      el('div', { cls:'invv2-hist-meta' },
-        (h.nb_produits || 0) + ' réf · ' + (h.nb_modifications || 0) + ' modif.'
-      )
-    ));
+    const histRows = histVisible.map(h => {
+      const comments = Array.isArray(h.commentaires) ? h.commentaires : [];
+      const nbCom = comments.length;
+      const row = el('div', { cls:'invv2-hist-row' },
+        el('div', { cls:'invv2-hist-date' }, fD(h.date_validation)),
+        el('div', { cls:'invv2-hist-op' }, h.operateur_nom || '—'),
+        el('div', { cls:'invv2-hist-meta' },
+          (h.nb_produits || 0) + ' réf · ' + (h.nb_modifications || 0) + ' modif.' +
+          (nbCom ? ' · ' + nbCom + ' note' + (nbCom>1?'s':'') : '')
+        )
+      );
+      if (nbCom) {
+        const block = el('div', { cls:'invv2-hist-comments' });
+        comments.forEach(c => {
+          const ref = c.reference || ('#' + (c.produit_id || ''));
+          const des = c.designation || '';
+          block.appendChild(el('div', { cls:'invv2-hist-comment' },
+            el('div', { cls:'invv2-hist-comment-head' },
+              el('span', { cls:'invv2-hist-comment-ref' }, ref),
+              des ? el('span', { cls:'invv2-hist-comment-des' }, ' — ' + des) : null,
+            ),
+            el('div', { cls:'invv2-hist-comment-body' }, c.commentaire || '')
+          ));
+        });
+        return el('div', { cls:'invv2-hist-block' }, row, block);
+      }
+      return row;
+    });
     const moreBtn = (history.length > 5)
       ? el('button', { cls:'invv2-btn-more', on:{ click: () => { S.invV2HistoryExpanded = !histExpanded; renderContent(); } } },
           histExpanded ? 'Voir moins' : ('Voir plus (' + (history.length - 5) + ')'))
@@ -9125,6 +9240,8 @@ function invV2BuildProductRow(r) {
   const pid = r.produit_id;
   const isValidated = !!S.invV2Validated[pid];
   const modif = S.invV2Modifs[pid];
+  const commentTxt = S.invV2Comments[pid] || '';
+  const hasComment = !!commentTxt;
   const qteActuelle = parseFloat(r.quantite) || 0;
   const unite = r.unite || '';
   const isAdded = !!r._added;
@@ -9147,10 +9264,19 @@ function invV2BuildProductRow(r) {
     );
   }
 
+  // Bouton Note (toujours dispo, validé ou non)
+  const noteBtn = el('button', {
+    cls: 'invv2-btn-note' + (hasComment ? ' has-comment' : ''),
+    type:'button',
+    title: hasComment ? 'Modifier la note' : 'Ajouter une note',
+    on:{ click: e => { e.stopPropagation(); invV2OpenCommentModal(pid, r.reference, r.designation); } }
+  }, hasComment ? 'Note ●' : 'Note');
+
   // Boutons
   let buttons;
   if (isValidated) {
     buttons = el('div', { cls:'invv2-prod-actions' },
+      noteBtn,
       el('button', {
         cls:'invv2-btn-cancel',
         type:'button',
@@ -9160,6 +9286,7 @@ function invV2BuildProductRow(r) {
     );
   } else {
     buttons = el('div', { cls:'invv2-prod-actions' },
+      noteBtn,
       el('button', {
         cls:'invv2-btn-modify',
         type:'button',
@@ -9182,13 +9309,20 @@ function invV2BuildProductRow(r) {
       )
     : el('div', { cls:'invv2-prod-ref' }, r.reference || '—');
 
+  const infoTxt = (r.designation ? r.designation + ' · ' : '') + lotsTxt;
+  const mainChildren = [
+    refContent,
+    el('div', { cls:'invv2-prod-info' }, infoTxt),
+  ];
+  if (hasComment) {
+    mainChildren.push(el('div', { cls:'invv2-prod-comment-preview', title:'Note en attente (visible après validation)' },
+      el('span', { cls:'invv2-prod-comment-tag' }, 'Note'),
+      truncStr(commentTxt, 90)
+    ));
+  }
+
   return el('div', { cls: 'invv2-prod-row' + (isValidated ? ' invv2-validated' : '') + (isAdded ? ' invv2-added' : '') },
-    el('div', { cls:'invv2-prod-main' },
-      refContent,
-      el('div', { cls:'invv2-prod-info' },
-        (r.designation ? r.designation + ' · ' : '') + lotsTxt
-      )
-    ),
+    el('div', { cls:'invv2-prod-main' }, ...mainChildren),
     qtyEl,
     buttons
   );

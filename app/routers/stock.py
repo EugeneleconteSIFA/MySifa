@@ -1559,7 +1559,7 @@ def inventaire_v2_emplacement(emplacement: str, request: Request):
 
         history = conn.execute(
             """SELECT id, operateur_nom, operateur_email, date_validation,
-                      nb_produits, nb_modifications
+                      nb_produits, nb_modifications, commentaires_json
                FROM inventaires_sessions
                WHERE emplacement = ?
                ORDER BY date_validation DESC
@@ -1567,7 +1567,16 @@ def inventaire_v2_emplacement(emplacement: str, request: Request):
             (emplacement,),
         ).fetchall()
 
-    history_list = [dict(h) for h in history]
+    history_list = []
+    for h in history:
+        d = dict(h)
+        try:
+            d["commentaires"] = json.loads(d.pop("commentaires_json") or "[]")
+            if not isinstance(d["commentaires"], list):
+                d["commentaires"] = []
+        except Exception:
+            d["commentaires"] = []
+        history_list.append(d)
     return {
         "emplacement": emplacement,
         "label": _inv_v2_empl_label(emplacement),
@@ -1606,6 +1615,9 @@ async def inventaire_v2_valider(request: Request):
     modifications = body.get("modifications") or []
     if not isinstance(modifications, list):
         raise HTTPException(400, "modifications doit être une liste")
+    commentaires_in = body.get("commentaires") or []
+    if not isinstance(commentaires_in, list):
+        commentaires_in = []
 
     now = datetime.now().isoformat()
     modifs_applied: list[dict] = []
@@ -1663,12 +1675,43 @@ async def inventaire_v2_valider(request: Request):
             (now, now, user.get("email"), emplacement),
         )
 
+        # Normalise les commentaires (un seul par produit_id, vides ignorés)
+        commentaires_clean: list[dict] = []
+        seen_pids: set[int] = set()
+        for c in commentaires_in:
+            try:
+                pid = int(c.get("produit_id"))
+            except Exception:
+                continue
+            if pid in seen_pids:
+                continue
+            txt = (c.get("commentaire") or "").strip()
+            if not txt:
+                continue
+            # Charge réf / désignation si non fournie
+            ref_str = (c.get("reference") or "").strip()
+            des_str = (c.get("designation") or "").strip()
+            if not ref_str or not des_str:
+                row = conn.execute(
+                    "SELECT reference, designation FROM produits WHERE id=?", (pid,)
+                ).fetchone()
+                if row:
+                    ref_str = ref_str or (row["reference"] or "")
+                    des_str = des_str or (row["designation"] or "")
+            commentaires_clean.append({
+                "produit_id": pid,
+                "reference": ref_str,
+                "designation": des_str,
+                "commentaire": txt[:1000],
+            })
+            seen_pids.add(pid)
+
         operateur_nom = _resolve_created_by_name(conn, user) or (user.get("email") or "")
         conn.execute(
             """INSERT INTO inventaires_sessions
                (emplacement, operateur_email, operateur_nom, date_validation,
-                nb_produits, nb_modifications, modifications_json)
-               VALUES (?,?,?,?,?,?,?)""",
+                nb_produits, nb_modifications, modifications_json, commentaires_json)
+               VALUES (?,?,?,?,?,?,?,?)""",
             (
                 emplacement,
                 user.get("email"),
@@ -1677,6 +1720,7 @@ async def inventaire_v2_valider(request: Request):
                 nb_produits,
                 len(modifs_applied),
                 json.dumps(modifs_applied, ensure_ascii=False),
+                json.dumps(commentaires_clean, ensure_ascii=False),
             ),
         )
         conn.commit()
