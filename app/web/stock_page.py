@@ -1070,16 +1070,42 @@ body:not(.light) .invv2-c-orange .invv2-jours{color:#fb923c}
 body:not(.light) .invv2-c-rouge .invv2-jours{color:#f87171}
 
 /* Plan entrepôt */
-.plan-allee{flex:0 0 auto;width:fit-content;min-width:120px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;overflow:hidden}
+.plan-allee{flex:0 0 auto;width:fit-content;min-width:120px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;overflow:visible}
 .plan-allee-hd{display:flex;align-items:center;gap:10px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)}
 .plan-allee-letter{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;background:rgba(34,211,238,.12);color:var(--accent);font-size:14px;font-weight:800;font-family:ui-monospace,monospace;flex-shrink:0}
 body.light .plan-allee-letter{background:rgba(8,145,178,.12)}
 .plan-allee-label{font-size:12px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
 .plan-allee-body{display:flex;flex-direction:column;gap:5px}
 .plan-rangee{display:flex;flex-wrap:nowrap;gap:4px}
-.plan-pill{display:inline-flex;align-items:center;padding:4px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);font-family:ui-monospace,monospace;font-size:12px;font-weight:700;color:var(--text);letter-spacing:.03em;transition:border-color .15s,background .15s;cursor:pointer;font-family:inherit}
+.plan-pill{position:relative;display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);font-family:ui-monospace,monospace;font-size:12px;font-weight:700;color:var(--text);letter-spacing:.03em;transition:border-color .15s,background .15s;cursor:pointer;font-family:inherit}
 .plan-pill:hover{border-color:var(--accent);background:rgba(34,211,238,.06)}
 body.light .plan-pill:hover{background:rgba(8,145,178,.06)}
+.plan-pill-code{font-family:ui-monospace,monospace}
+.plan-pill-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#94a3b8;flex-shrink:0}
+.plan-pill-c-vert .plan-pill-dot{background:#34d399;box-shadow:0 0 0 2px rgba(52,211,153,.18)}
+.plan-pill-c-jaune .plan-pill-dot{background:#fbbf24;box-shadow:0 0 0 2px rgba(251,191,36,.22)}
+.plan-pill-c-orange .plan-pill-dot{background:#fb923c;box-shadow:0 0 0 2px rgba(251,146,60,.20)}
+.plan-pill-c-rouge .plan-pill-dot{background:#f87171;box-shadow:0 0 0 2px rgba(248,113,113,.20)}
+
+/* Tooltip custom emplacement */
+.plan-pill-tip{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%) translateY(4px);min-width:200px;max-width:260px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px;box-shadow:0 8px 24px rgba(0,0,0,.35);opacity:0;visibility:hidden;pointer-events:none;transition:opacity .12s ease,transform .12s ease;z-index:50;font-family:'Segoe UI',system-ui,sans-serif;font-weight:500;letter-spacing:normal;text-align:left;white-space:normal}
+body.light .plan-pill-tip{box-shadow:0 8px 24px rgba(15,23,42,.12)}
+.plan-pill:hover .plan-pill-tip,.plan-pill:focus-visible .plan-pill-tip{opacity:1;visibility:visible;transform:translateX(-50%) translateY(0)}
+.plan-pill-tip::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:6px solid transparent;border-top-color:var(--border)}
+.plan-pill-tip-code{font-family:ui-monospace,monospace;font-size:13px;font-weight:800;color:var(--text);margin-bottom:6px;letter-spacing:.03em}
+.plan-pill-tip-row{font-size:12px;color:var(--text2);line-height:1.4;display:flex;align-items:center;gap:6px;margin-top:2px}
+.plan-pill-tip-jours{font-weight:700}
+.plan-pill-tip-jours.plan-pill-c-vert{color:#16a34a}
+body:not(.light) .plan-pill-tip-jours.plan-pill-c-vert{color:#34d399}
+.plan-pill-tip-jours.plan-pill-c-jaune{color:#d97706}
+body:not(.light) .plan-pill-tip-jours.plan-pill-c-jaune{color:#fbbf24}
+.plan-pill-tip-jours.plan-pill-c-orange{color:#ea580c}
+body:not(.light) .plan-pill-tip-jours.plan-pill-c-orange{color:#fb923c}
+.plan-pill-tip-jours.plan-pill-c-rouge{color:#dc2626}
+body:not(.light) .plan-pill-tip-jours.plan-pill-c-rouge{color:#f87171}
+.plan-pill-tip-sub,.plan-pill-tip-refs{color:var(--muted);font-size:11px}
+.plan-legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px;font-size:11px;color:var(--muted)}
+.plan-legend-item{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:6px;background:var(--card);border:1px solid var(--border);font-weight:600}
 
 /* Détail emplacement (violet forcé) */
 .invv2-detail .invv2-back{margin-bottom:14px;color:var(--inv-v);font-weight:700}
@@ -7436,11 +7462,21 @@ function exportHistoriqueCSV() {
 // ── Plan entrepôt ──────────────────────────────────────────────────
 async function loadPlanEntrepot() {
   S.planEntrepot = null;
+  S.planEntrepotInv = {};
   buildPlanEntrepot();
   try {
-    const r = await fetch('/api/stock/emplacements-plan', { credentials: 'include' });
-    S.planEntrepot = r.ok ? await r.json() : [];
-  } catch(e) { S.planEntrepot = []; }
+    const [rPlan, rInv] = await Promise.all([
+      fetch('/api/stock/emplacements-plan', { credentials: 'include' }),
+      fetch('/api/stock/inventaire-v2/emplacements', { credentials: 'include' }),
+    ]);
+    S.planEntrepot = rPlan.ok ? await rPlan.json() : [];
+    if (rInv.ok) {
+      const invList = await rInv.json();
+      const map = {};
+      (invList || []).forEach(e => { if (e && e.emplacement) map[e.emplacement] = e; });
+      S.planEntrepotInv = map;
+    }
+  } catch(e) { S.planEntrepot = S.planEntrepot || []; }
   buildPlanEntrepot();
 }
 
@@ -7461,7 +7497,14 @@ function buildPlanEntrepot() {
   hd.innerHTML = '<div><div style="font-size:20px;font-weight:800;color:var(--text);margin-bottom:4px">Plan entrepôt</div>'
     + '<div style="font-size:13px;color:var(--muted)">Référentiel des emplacements magasin'
     + (codes ? ' · <span style="color:var(--accent);font-weight:700">' + codes.length + ' emplacement' + (codes.length>1?'s':'') + '</span>' : '')
-    + '</div></div>';
+    + '</div>'
+    + '<div class="plan-legend">'
+    +   '<span class="plan-legend-item plan-pill-c-vert"><span class="plan-pill-dot"></span>&lt; 15 j</span>'
+    +   '<span class="plan-legend-item plan-pill-c-jaune"><span class="plan-pill-dot"></span>15–30 j</span>'
+    +   '<span class="plan-legend-item plan-pill-c-orange"><span class="plan-pill-dot"></span>30–60 j</span>'
+    +   '<span class="plan-legend-item plan-pill-c-rouge"><span class="plan-pill-dot"></span>&gt; 60 j / Jamais</span>'
+    + '</div>'
+    + '</div>';
 
   if (canAdd) {
     const form = document.createElement('form');
@@ -7537,13 +7580,46 @@ function buildPlanEntrepot() {
       const row = document.createElement('div');
       row.className = 'plan-rangee';
       byAllee[allee][rangee].slice().sort().forEach(code => {
+        const inv = (S.planEntrepotInv || {})[code];
+        const couleur = inv ? (inv.couleur || 'rouge') : 'rouge';
+        const j = inv ? inv.jours_depuis : null;
+        const nbRefs = inv ? (inv.nb_refs || 0) : 0;
+        const totalQte = inv ? (inv.total_qte || 0) : 0;
+        const dDate = inv ? inv.derniere_date : null;
+        const op = inv ? (inv.dernier_operateur || '') : '';
+
         const pill = document.createElement('button');
         pill.type = 'button';
-        pill.className = 'plan-pill';
-        pill.textContent = code;
-        pill.title = 'Voir l\'emplacement ' + code;
+        pill.className = 'plan-pill plan-pill-c-' + couleur;
         pill.style.cursor = 'pointer';
         pill.addEventListener('click', () => loadEmplacement(code));
+
+        const dot = document.createElement('span');
+        dot.className = 'plan-pill-dot';
+        pill.appendChild(dot);
+        const lbl = document.createElement('span');
+        lbl.className = 'plan-pill-code';
+        lbl.textContent = code;
+        pill.appendChild(lbl);
+
+        // Tooltip custom (hover)
+        const tip = document.createElement('span');
+        tip.className = 'plan-pill-tip';
+        const joursTxt = (j == null)
+          ? 'Jamais inventorié'
+          : (j + ' j depuis le dernier inventaire');
+        const dateTxt = dDate ? ('le ' + fD(dDate) + (op ? ' · ' + op : '')) : '';
+        const refsTxt = nbRefs + ' réf' + (nbRefs > 1 ? 's' : '')
+          + ' · ' + fN(totalQte) + ' u.';
+        tip.innerHTML =
+          '<div class="plan-pill-tip-code">' + escHtml(code) + '</div>'
+          + '<div class="plan-pill-tip-row plan-pill-tip-jours plan-pill-c-' + couleur + '">'
+          +   '<span class="plan-pill-dot"></span>' + escHtml(joursTxt)
+          + '</div>'
+          + (dateTxt ? '<div class="plan-pill-tip-row plan-pill-tip-sub">' + escHtml(dateTxt) + '</div>' : '')
+          + '<div class="plan-pill-tip-row plan-pill-tip-refs">' + escHtml(refsTxt) + '</div>';
+        pill.appendChild(tip);
+
         row.appendChild(pill);
       });
       body.appendChild(row);
