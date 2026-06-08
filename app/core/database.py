@@ -3313,6 +3313,91 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 105, "bat_pdfs_multi")
 
+    # v106 — Module Qualité : NC (non-conformités), fichiers et messages
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=106 LIMIT 1").fetchone():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS nc_dossiers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                numero TEXT NOT NULL UNIQUE,
+                numero_ar TEXT,
+                numero_historique TEXT,
+                type_nc TEXT NOT NULL DEFAULT 'interne',
+                gravite TEXT NOT NULL DEFAULT 'mineure',
+                statut TEXT NOT NULL DEFAULT 'ouverte',
+                titre TEXT NOT NULL,
+                date_nc TEXT,
+                service_concerne TEXT,
+                emetteur_id INTEGER REFERENCES users(id),
+                client_fournisseur TEXT,
+                ref_client TEXT,
+                no_dossier TEXT,
+                descriptif_produit TEXT,
+                quantite_concernee TEXT,
+                description TEXT,
+                services_impliques TEXT,
+                analyse_causes TEXT,
+                action_corrective TEXT,
+                action_preventive TEXT,
+                pilote_id INTEGER REFERENCES users(id),
+                delai_cible TEXT,
+                cout_estime REAL,
+                date_cloture TEXT,
+                validation_qualite_id INTEGER REFERENCES users(id),
+                validation_qualite_at TEXT,
+                validation_industrielle_id INTEGER REFERENCES users(id),
+                validation_industrielle_at TEXT,
+                created_at TEXT NOT NULL,
+                created_by INTEGER REFERENCES users(id),
+                updated_at TEXT NOT NULL,
+                updated_by INTEGER REFERENCES users(id)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_nc_statut ON nc_dossiers(statut)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_nc_type ON nc_dossiers(type_nc)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_nc_numero ON nc_dossiers(numero)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_nc_dossier ON nc_dossiers(no_dossier)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_nc_pilote ON nc_dossiers(pilote_id)")
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS nc_fichiers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nc_id INTEGER NOT NULL REFERENCES nc_dossiers(id) ON DELETE CASCADE,
+                filename TEXT NOT NULL,
+                original_name TEXT NOT NULL,
+                mime_type TEXT,
+                size_bytes INTEGER,
+                uploaded_at TEXT NOT NULL,
+                uploaded_by INTEGER REFERENCES users(id)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_nc_fichiers_nc ON nc_fichiers(nc_id)")
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS nc_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nc_id INTEGER NOT NULL REFERENCES nc_dossiers(id) ON DELETE CASCADE,
+                author_id INTEGER REFERENCES users(id),
+                body TEXT NOT NULL,
+                attachment_id INTEGER REFERENCES nc_fichiers(id) ON DELETE SET NULL,
+                created_at TEXT NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_nc_messages_nc ON nc_messages(nc_id, created_at)")
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS nc_message_reads (
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                nc_id INTEGER NOT NULL REFERENCES nc_dossiers(id) ON DELETE CASCADE,
+                last_read_message_id INTEGER,
+                last_read_at TEXT NOT NULL,
+                PRIMARY KEY (user_id, nc_id)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_nc_reads_user ON nc_message_reads(user_id)")
+
+        conn.commit()
+        _record_schema_migration(conn, 106, "qualite_non_conformites")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,
@@ -3350,7 +3435,7 @@ def parse_french_number(val):
     s = str(val).strip()
     if not s:
         return 0
-    s = s.replace('\u202f','').replace('\xa0','').replace(' ','').replace(',','.')
+    s = s.replace(' ','').replace(' ','').replace(' ','').replace(',','.')
     try:
         return float(s)
     except ValueError:
@@ -3382,7 +3467,7 @@ def parse_file(file_bytes, filename):
     ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
     if ext == "csv":
         for encoding in ["utf-8", "latin-1", "cp1252"]:
-            for sep in [";", ",", "\t"]:
+            for sep in [";", ",", "	"]:
                 try:
                     df = pd.read_csv(io.BytesIO(file_bytes), encoding=encoding, sep=sep, dtype=str)
                     if len(df.columns) > 3:
