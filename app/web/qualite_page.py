@@ -322,7 +322,7 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
       Non-conformités
       <span class="nav-badge" id="sb-unread" style="display:none">0</span>
     </button>
-    <button type="button" class="nav-btn" onclick="openCanaux()">
+    <button type="button" class="nav-btn" onclick="toggleCanaux()">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
       Canaux NC
       <span class="nav-badge" id="sb-unread2" style="display:none">0</span>
@@ -374,7 +374,7 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
   <div class="canaux-list" id="canaux-list"></div>
 </div>
 
-<button class="canaux-fab" onclick="openCanaux()" title="Canaux NC">
+<button class="canaux-fab" onclick="toggleCanaux()" title="Canaux NC">
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
   <span class="fab-badge" id="fab-badge" style="display:none">0</span>
 </button>
@@ -1218,6 +1218,11 @@ function openCanaux(){
   closeSidebar();
 }
 function closeCanaux(){document.getElementById('canaux-panel').classList.remove('open');}
+function toggleCanaux(){
+  const p=document.getElementById('canaux-panel');
+  if(p.classList.contains('open')){closeCanaux();}
+  else{openCanaux();}
+}
 
 function renderCanaux(){
   const list=document.getElementById('canaux-list');
