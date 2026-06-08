@@ -970,7 +970,7 @@ function renderModal() {
       '<div class="field"><label>Société</label><input id="m-societe"></div>'+
       '<div class="field"><label>Nom</label><input id="m-nom"></div>'+
       '<div class="field"><label>Email</label><input type="email" id="m-mail"></div>'+
-      '<div class="field"><label>Langue de l\\'email d\\'invitation</label>'+
+      '<div class="field"><label>Langue de l\'email d\'invitation</label>'+
       '<select id="m-langue"><option value="fr">Français</option><option value="en">English</option></select></div>'+
       '<div class="field"><label>Adresse</label><textarea id="m-adresse" rows="2"></textarea></div></div>'+
       '<label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:14px">'+
@@ -1035,7 +1035,7 @@ function renderModal() {
       '<div class="field"><label>Société</label><input id="m-c-societe" value="'+escAttr(S.modalData.societe||'')+'"></div>'+
       '<div class="field"><label>Nom</label><input id="m-c-nom" value="'+escAttr(S.modalData.nom||'')+'"></div>'+
       '<div class="field"><label>Email</label><input type="email" id="m-c-email" value="'+escAttr(S.modalData.email||'')+'"></div>'+
-      '<div class="field"><label>Langue de l\\'email d\\'invitation</label>'+
+      '<div class="field"><label>Langue de l\'email d\'invitation</label>'+
       '<select id="m-c-langue">'+
         '<option value="fr"'+(curLang==='fr'?' selected':'')+'>Français</option>'+
         '<option value="en"'+(curLang==='en'?' selected':'')+'>English</option>'+
