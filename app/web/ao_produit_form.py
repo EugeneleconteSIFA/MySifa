@@ -177,10 +177,12 @@ function renderProduitForm() {
   const carton = mats.carton || [];
   const palette = mats.palette || [];
 
+  const navPager = d.id ? buildNavPagerHtml(filteredProduits(), d.id, 'produit') : '';
   return '<div class="pf-wrap">'+
     '<div class="pf-sticky-bar">'+
     '<button type="button" class="btn btn-ghost btn-sm" id="btn-pf-back">'+icon('arrow-left',14)+' Catalogue</button>'+
     '<div class="pf-actions">'+
+    navPager+
     '<button type="button" class="btn btn-ghost btn-sm" id="btn-pf-export"'+(d.id?'':' disabled')+
     ' title="'+escAttr(d.id ? 'Exporter la fiche PDF' : 'Enregistrez le produit pour activer l\'export PDF')+'">'+
     icon('file-text',14)+' PDF</button>'+
@@ -471,6 +473,17 @@ function bindProduitFormEvents() {
   document.getElementById('btn-pf-back')?.addEventListener('click', closeProduitForm);
   document.getElementById('btn-pf-save')?.addEventListener('click', () => { saveProduitForm(); });
   document.getElementById('btn-pf-save-bottom')?.addEventListener('click', () => { saveProduitForm(); });
+  document.querySelectorAll('.pf-sticky-bar .btn-nav-prev, .pf-sticky-bar .btn-nav-next').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const arr = filteredProduits();
+      const curId = S.produitForm?.id;
+      if (curId == null) return;
+      const idx = arr.findIndex(x => String(x.id) === String(curId));
+      if (idx < 0) return;
+      const target = btn.classList.contains('btn-nav-prev') ? arr[idx-1] : arr[idx+1];
+      if (target) openProduitForm(target);
+    });
+  });
   const exportBtn = document.getElementById('btn-pf-export');
   if (exportBtn && !exportBtn.disabled) {
     exportBtn.addEventListener('click', exportProduitPdf);

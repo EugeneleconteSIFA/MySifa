@@ -132,6 +132,10 @@ body.sb-open .sidebar-overlay{display:block}
 .breadcrumb a{color:var(--accent);cursor:pointer;text-decoration:none}
 .detail-hdr{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:8px}
 .detail-hdr h2{font-size:18px;font-weight:800}
+.detail-hdr .nav-pager{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.detail-hdr .nav-pager .nav-pos{padding:0 6px;font-weight:600;color:var(--text2);white-space:nowrap}
+.nav-pager .btn-icon{width:32px;height:32px}
+.nav-pager .btn-icon[disabled]{opacity:.35;cursor:not-allowed;pointer-events:none}
 .detail-meta{font-size:13px;color:var(--text2);line-height:1.6}
 .detail-actions{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}
 input,select,textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 16px;color:var(--text);font-size:14px;font-family:inherit}
@@ -246,6 +250,7 @@ function icon(name, size) {
     copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
     trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>',
     'arrow-left': '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
+    'arrow-right': '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',
     mail: '<path d="M4 6h16v12H4z"/><path d="M4 7l8 6 8-6"/>',
     calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/>',
     grid: '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
@@ -1344,6 +1349,23 @@ function renderList() {
     '<div class="card empty-state"><strong>Aucun appel d\'offre</strong>Créez un premier appel d\'offre pour inviter vos fournisseurs.</div>');
 }
 
+function buildNavPagerHtml(list, currentId, labelSingular) {
+  const arr = Array.isArray(list) ? list : [];
+  const total = arr.length;
+  if (total <= 1) return '';
+  const idx = arr.findIndex(x => String(x.id) === String(currentId));
+  if (idx < 0) return '';
+  const prevDis = idx <= 0 ? ' disabled' : '';
+  const nextDis = idx >= total - 1 ? ' disabled' : '';
+  const titlePrev = labelSingular ? ('Précédent — '+labelSingular) : 'Précédent';
+  const titleNext = labelSingular ? ('Suivant — '+labelSingular) : 'Suivant';
+  return '<div class="nav-pager">'+
+    '<button type="button" class="btn-icon btn-nav-prev"'+prevDis+' title="'+escAttr(titlePrev)+'">'+icon('arrow-left',14)+'</button>'+
+    '<span class="nav-pos">'+(idx+1)+' / '+total+'</span>'+
+    '<button type="button" class="btn-icon btn-nav-next"'+nextDis+' title="'+escAttr(titleNext)+'">'+icon('arrow-right',14)+'</button>'+
+    '</div>';
+}
+
 function renderDetailHeader() {
   const ao = S.ao;
   const d = S.detail;
@@ -1362,8 +1384,9 @@ function renderDetailHeader() {
     }
   }
   if (st === 'envoyee') actions += '<button class="btn btn-accent" type="button" id="btn-cloturer">Clôturer l\'AO</button>';
+  const navPager = buildNavPagerHtml(filteredAos(), ao.id, 'appel d\'offre');
   return '<div class="breadcrumb"><a href="#" id="bc-list">Appels d\'offre</a> &gt; '+escHtml(ao.reference)+' — '+escHtml(ao.titre)+'</div>'+
-    '<div class="detail-hdr"><h2>'+escHtml(ao.reference)+'</h2>'+statutBadge(st)+'</div>'+
+    '<div class="detail-hdr"><h2>'+escHtml(ao.reference)+'</h2>'+statutBadge(st)+navPager+'</div>'+
     '<div class="detail-meta">'+escHtml(ao.titre)+'<br>Date limite : '+escHtml(ao.date_limite||'—')+' · Responsable : '+escHtml(ao.responsable_email||'—')+' · Réponses : '+escHtml(d.nb_reponses)+'</div>'+
     '<div class="detail-actions">'+actions+'</div>'+
     '<div class="detail-tabs">'+
@@ -1552,6 +1575,15 @@ function bindDetailEvents() {
   document.getElementById('btn-back')?.addEventListener('click', backToList);
   document.getElementById('bc-list')?.addEventListener('click', e => { e.preventDefault(); backToList(); });
   document.querySelectorAll('.detail-tab').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
+  document.querySelectorAll('.detail-hdr .btn-nav-prev, .detail-hdr .btn-nav-next').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const arr = filteredAos();
+      const idx = arr.findIndex(x => String(x.id) === String(S.ao.id));
+      if (idx < 0) return;
+      const target = btn.classList.contains('btn-nav-prev') ? arr[idx-1] : arr[idx+1];
+      if (target) openDetail(target.id);
+    });
+  });
   document.getElementById('btn-envoyer')?.addEventListener('click', () => {
     const n = (S.detail.fournisseurs||[]).length;
     openModalConfirmEnvoi(n);

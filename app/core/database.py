@@ -3285,6 +3285,34 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 104, "ao_fournisseurs_langue")
 
+    # v105 — MyBAT : table bat_pdfs (multi-PDF par entrée)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=105 LIMIT 1").fetchone():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS bat_pdfs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                bat_id INTEGER NOT NULL REFERENCES bat_entries(id) ON DELETE CASCADE,
+                filename TEXT NOT NULL,
+                original_name TEXT NOT NULL,
+                uploaded_at TEXT NOT NULL,
+                uploaded_by INTEGER
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_bat_pdfs_bat ON bat_pdfs(bat_id)")
+        # Migrer les pdf_path existants
+        try:
+            existing = conn.execute(
+                "SELECT id, pdf_path, updated_at, updated_by FROM bat_entries WHERE pdf_path IS NOT NULL AND pdf_path != ''"
+            ).fetchall()
+            for row in existing:
+                conn.execute(
+                    "INSERT OR IGNORE INTO bat_pdfs (bat_id, filename, original_name, uploaded_at, uploaded_by) VALUES (?, ?, ?, ?, ?)",
+                    (row[0], row[1], row[1], row[2] or datetime.now().strftime("%Y-%m-%dT%H:%M:%S"), row[3]),
+                )
+        except Exception:
+            pass
+        conn.commit()
+        _record_schema_migration(conn, 105, "bat_pdfs_multi")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

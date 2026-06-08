@@ -342,7 +342,7 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
 <div class="modal-ov" id="upload-modal" style="display:none" onclick="if(event.target===this)closeUploadModal()">
   <div class="modal" onclick="event.stopPropagation()">
     <button type="button" class="modal-close" onclick="closeUploadModal()">×</button>
-    <div class="modal-title" id="upload-modal-title">Importer le BAT (PDF)</div>
+    <div class="modal-title" id="upload-modal-title">Ajouter un PDF</div>
     <label class="upload-zone" id="upload-zone" for="file-input" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
       <div class="upload-zone-label" id="upload-zone-label">Glisser-déposer un PDF ici, ou cliquer pour choisir</div>
@@ -410,6 +410,35 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
   </div>
 </div>
 
+<!-- Modal PDF picker -->
+<div class="modal-ov" id="pdf-picker-modal" style="display:none" onclick="if(event.target===this)closePdfPicker()">
+  <div class="modal" onclick="event.stopPropagation()" style="max-width:500px">
+    <button type="button" class="modal-close" onclick="closePdfPicker()">×</button>
+    <div class="modal-title" id="pdf-picker-title">Fichiers PDF</div>
+    <div id="pdf-picker-list"></div>
+    <div class="modal-actions" style="margin-top:18px">
+      <button type="button" class="btn btn-ghost btn-sm" onclick="openUploadFromPicker()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Ajouter un PDF
+      </button>
+      <button type="button" class="btn btn-ghost" onclick="closePdfPicker()">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal confirmation suppression PDF -->
+<div class="modal-ov" id="pdf-del-modal" style="display:none" onclick="if(event.target===this)closePdfDelModal()">
+  <div class="modal" onclick="event.stopPropagation()" style="max-width:380px">
+    <button type="button" class="modal-close" onclick="closePdfDelModal()">×</button>
+    <div class="modal-title">Supprimer ce PDF ?</div>
+    <p id="pdf-del-modal-msg" style="font-size:13px;color:var(--text2);line-height:1.6"></p>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" onclick="closePdfDelModal()">Annuler</button>
+      <button type="button" class="btn btn-danger" onclick="submitPdfDelete()">Supprimer</button>
+    </div>
+  </div>
+</div>
+
 <!-- Toasts -->
 <div class="toast-wrap" id="toast-wrap"></div>
 
@@ -427,6 +456,8 @@ const S = {
   editBatId: null,
   statutBatId: null,
   delBatId: null,
+  pdfPickerBatId: null,
+  pdfDelId: null,
 };
 
 // ── Utilitaires ───────────────────────────────────────────────────
@@ -542,15 +573,16 @@ function renderTable(){
     </div>`;
   } else {
     const rows=list.map(e=>{
+      const pdfLabel = e.pdf_count > 1 ? 'multi PDFs' : 'PDF';
       const pdfBtn=e.has_pdf
-        ?`<a href="/api/bat/${e.id}/pdf" target="_blank" class="ico-btn ok" title="Voir le PDF" style="text-decoration:none">
+        ?`<button type="button" class="ico-btn ok" onclick="openPdfPicker(${e.id})" title="Voir les PDF (${e.pdf_count})">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            PDF
-          </a>`
+            ${pdfLabel}
+          </button>`
         :'';
-      const uploadBtn=`<button type="button" class="ico-btn" onclick="openUploadModal(${e.id},'${escHtml(e.reference)}')" title="${e.has_pdf?'Remplacer le PDF':'Importer le PDF'}">
+      const uploadBtn=`<button type="button" class="ico-btn" onclick="openUploadModal(${e.id},'${escHtml(e.reference)}')" title="Ajouter un PDF">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          ${e.has_pdf?'Remplacer':'Import PDF'}
+          + PDF
         </button>`;
       const editBtn=`<button type="button" class="ico-btn" onclick="openEditModal(${e.id})" title="Modifier">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -663,7 +695,7 @@ async function submitCreate(){
 // ── Modals — Upload PDF ────────────────────────────────────────────
 function openUploadModal(id,ref){
   S.uploadBatId=id;S.uploadFile=null;
-  document.getElementById('upload-modal-title').textContent=`Importer le BAT PDF — ${ref}`;
+  document.getElementById('upload-modal-title').textContent=ref?`Ajouter un PDF — ${ref}`:'Ajouter un PDF';
   document.getElementById('upload-zone-label').textContent='Glisser-déposer un PDF ici, ou cliquer pour choisir';
   document.getElementById('upload-zone').classList.remove('drag');
   document.getElementById('upload-btn').disabled=true;
@@ -707,7 +739,7 @@ async function submitUpload(){
       if(idx>=0)S.entries[idx]=entry; else S.entries.unshift(entry);
       render();
       closeUploadModal();
-      showToast('PDF importé — statut mis à jour.','success');
+      showToast(`PDF ajouté${entry.pdf_count>1?' ('+entry.pdf_count+' PDFs)':''}.`,'success');
     }
   }catch(e){if(e.message!=='unauth')showToast('Erreur réseau','danger');}
   btn.disabled=false;prog.style.display='none';
@@ -839,6 +871,92 @@ async function submitDelete(){
   }catch(e){if(e.message!=='unauth')showToast('Erreur réseau','danger');}
 }
 
+// ── PDF Picker ────────────────────────────────────────────────────
+function openPdfPicker(id){
+  const e=S.entries.find(x=>x.id===id);
+  if(!e) return;
+  S.pdfPickerBatId=id;
+  document.getElementById('pdf-picker-title').textContent=`PDF — ${e.reference}`;
+  renderPdfPickerList(e);
+  document.getElementById('pdf-picker-modal').style.display='flex';
+}
+function closePdfPicker(){
+  document.getElementById('pdf-picker-modal').style.display='none';
+  S.pdfPickerBatId=null;
+}
+function renderPdfPickerList(e){
+  const list=e.pdfs||[];
+  const el=document.getElementById('pdf-picker-list');
+  if(!list.length){
+    el.innerHTML='<div style="color:var(--muted);font-size:13px;padding:12px 0">Aucun PDF associé.</div>';
+    return;
+  }
+  el.innerHTML=list.map(p=>{
+    const dt=p.uploaded_at?p.uploaded_at.slice(0,16).replace('T',' '):'';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--border)">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ok)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(p.original_name)}">${escHtml(p.original_name)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${escHtml(dt)}</div>
+      </div>
+      <a href="/api/bat/${e.id}/pdf/${p.id}" target="_blank" class="ico-btn ok btn-sm" style="text-decoration:none;flex-shrink:0">Ouvrir</a>
+      <button type="button" class="ico-btn danger btn-sm" onclick="openPdfDelModal(${e.id},${p.id},'${escHtml(p.original_name)}')" title="Supprimer ce PDF" style="flex-shrink:0">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+      </button>
+    </div>`;
+  }).join('');
+}
+function openUploadFromPicker(){
+  const id=S.pdfPickerBatId;
+  if(!id) return;
+  const e=S.entries.find(x=>x.id===id);
+  closePdfPicker();
+  openUploadModal(id, e?e.reference:'');
+}
+
+// ── PDF Delete (individuel) ───────────────────────────────────────
+function openPdfDelModal(batId,pdfId,name){
+  S.pdfPickerBatId=S.pdfPickerBatId||batId;
+  S.pdfDelId={batId,pdfId};
+  document.getElementById('pdf-del-modal-msg').textContent=`Le fichier "${name}" sera définitivement supprimé. Cette action est irréversible.`;
+  document.getElementById('pdf-del-modal').style.display='flex';
+}
+function closePdfDelModal(){
+  document.getElementById('pdf-del-modal').style.display='none';
+  S.pdfDelId=null;
+}
+async function submitPdfDelete(){
+  if(!S.pdfDelId) return;
+  const {batId,pdfId}=S.pdfDelId;
+  try{
+    const r=await api(`/api/bat/${batId}/pdf/${pdfId}`,{method:'DELETE'});
+    if(!r.ok){
+      const d=await r.json().catch(()=>({}));
+      showToast(d.detail||'Erreur de suppression','danger');
+    } else {
+      // Mettre à jour l'entrée en mémoire
+      const entry=S.entries.find(x=>x.id===batId);
+      if(entry){
+        entry.pdfs=(entry.pdfs||[]).filter(p=>p.id!==pdfId);
+        entry.pdf_count=entry.pdfs.length;
+        entry.has_pdf=entry.pdf_count>0;
+      }
+      render();
+      closePdfDelModal();
+      // Rouvrir le picker si l'entrée a encore des PDFs
+      if(entry&&entry.pdf_count>0){
+        S.pdfPickerBatId=batId;
+        document.getElementById('pdf-picker-title').textContent=`PDF — ${entry.reference}`;
+        renderPdfPickerList(entry);
+        document.getElementById('pdf-picker-modal').style.display='flex';
+      } else {
+        closePdfPicker();
+      }
+      showToast('PDF supprimé.','info');
+    }
+  }catch(e){if(e.message!=='unauth')showToast('Erreur réseau','danger');}
+}
+
 // ── Init ──────────────────────────────────────────────────────────
 (function init(){
   try{
@@ -854,6 +972,7 @@ async function submitDelete(){
   document.addEventListener('keydown', e=>{
     if(e.key==='Escape'){
       closeCreateModal();closeUploadModal();closeEditModal();closeStatutModal();closeDelModal();
+      closePdfPicker();closePdfDelModal();
     }
   });
 })();
@@ -871,3 +990,152 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 <script src="/static/support_widget.js"></script>
 </body>
 </html>"""
+ById('del-modal').style.display='flex';
+}
+function closeDelModal(){document.getElementById('del-modal').style.display='none';S.delBatId=null;}
+
+async function submitDelete(){
+  if(!S.delBatId) return;
+  const id=S.delBatId;
+  try{
+    const r=await api(`/api/bat/${id}`,{method:'DELETE'});
+    if(!r.ok){
+      const d=await r.json().catch(()=>({}));
+      showToast(d.detail||'Erreur de suppression','danger');
+    } else {
+      S.entries=S.entries.filter(e=>e.id!==id);
+      render();
+      closeDelModal();
+      showToast('BAT supprimé.','info');
+    }
+  }catch(e){if(e.message!=='unauth')showToast('Erreur réseau','danger');}
+}
+
+// ── PDF Picker ────────────────────────────────────────────────────
+function openPdfPicker(id){
+  const e=S.entries.find(x=>x.id===id);
+  if(!e) return;
+  S.pdfPickerBatId=id;
+  document.getElementById('pdf-picker-title').textContent=`PDF — ${e.reference}`;
+  renderPdfPickerList(e);
+  document.getElementById('pdf-picker-modal').style.display='flex';
+}
+function closePdfPicker(){
+  document.getElementById('pdf-picker-modal').style.display='none';
+  S.pdfPickerBatId=null;
+}
+function renderPdfPickerList(e){
+  const list=e.pdfs||[];
+  const el=document.getElementById('pdf-picker-list');
+  if(!list.length){
+    el.innerHTML='<div style="color:var(--muted);font-size:13px;padding:12px 0">Aucun PDF associé.</div>';
+    return;
+  }
+  el.innerHTML=list.map(p=>{
+    const dt=p.uploaded_at?p.uploaded_at.slice(0,16).replace('T',' '):'';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--border)">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ok)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(p.original_name)}">${escHtml(p.original_name)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${escHtml(dt)}</div>
+      </div>
+      <a href="/api/bat/${e.id}/pdf/${p.id}" target="_blank" class="ico-btn ok btn-sm" style="text-decoration:none;flex-shrink:0">Ouvrir</a>
+      <button type="button" class="ico-btn danger btn-sm" onclick="openPdfDelModal(${e.id},${p.id},'${escHtml(p.original_name)}')" title="Supprimer ce PDF" style="flex-shrink:0">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+      </button>
+    </div>`;
+  }).join('');
+}
+function openUploadFromPicker(){
+  const id=S.pdfPickerBatId;
+  if(!id) return;
+  const e=S.entries.find(x=>x.id===id);
+  closePdfPicker();
+  openUploadModal(id, e?e.reference:'');
+}
+
+// ── PDF Delete (individuel) ───────────────────────────────────────
+function openPdfDelModal(batId,pdfId,name){
+  S.pdfPickerBatId=S.pdfPickerBatId||batId;
+  S.pdfDelId={batId,pdfId};
+  document.getElementById('pdf-del-modal-msg').textContent=`Le fichier "${name}" sera définitivement supprimé. Cette action est irréversible.`;
+  document.getElementById('pdf-del-modal').style.display='flex';
+}
+function closePdfDelModal(){
+  document.getElementById('pdf-del-modal').style.display='none';
+  S.pdfDelId=null;
+}
+async function submitPdfDelete(){
+  if(!S.pdfDelId) return;
+  const {batId,pdfId}=S.pdfDelId;
+  try{
+    const r=await api(`/api/bat/${batId}/pdf/${pdfId}`,{method:'DELETE'});
+    if(!r.ok){
+      const d=await r.json().catch(()=>({}));
+      showToast(d.detail||'Erreur de suppression','danger');
+    } else {
+      const entry=S.entries.find(x=>x.id===batId);
+      if(entry){
+        entry.pdfs=(entry.pdfs||[]).filter(p=>p.id!==pdfId);
+        entry.pdf_count=entry.pdfs.length;
+        entry.has_pdf=entry.pdf_count>0;
+      }
+      render();
+      closePdfDelModal();
+      if(entry&&entry.pdf_count>0){
+        S.pdfPickerBatId=batId;
+        document.getElementById('pdf-picker-title').textContent=`PDF — ${entry.reference}`;
+        renderPdfPickerList(entry);
+        document.getElementById('pdf-picker-modal').style.display='flex';
+      } else {
+        closePdfPicker();
+      }
+      showToast('PDF supprimé.','info');
+    }
+  }catch(e){if(e.message!=='unauth')showToast('Erreur réseau','danger');}
+}
+
+// ── Init ──────────────────────────────────────────────────────────
+(function init(){
+  try{
+    const t=localStorage.getItem('mysifa_theme');
+    if(t==='light') document.body.classList.add('light');
+    else document.body.classList.remove('light');
+    updateThemeBtn();
+  }catch(e){}
+
+  loadMe();
+  loadEntries();
+
+  document.addEventListener('keydown', e=>{
+    if(e.key==='Escape'){
+      closeCreateModal();closeUploadModal();closeEditModal();closeStatutModal();closeDelModal();
+      closePdfPicker();closePdfDelModal();
+    }
+  });
+})();
+</script>
+<script>window.__MYSIFA_APP__='bat';</script>
+<script src="/static/mysifa_dock.js"></script>
+<script>
+if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPageWidgets === 'function'){
+  window.MySifaDock.bootPageWidgets();
+}
+</script>
+<script src="/static/chat_mentions.js"></script>
+<script src="/static/chat_widget.js?v=5"></script>
+<script src="/static/chat_widget_v2.js"></script>
+<script src="/static/support_widget.js"></script>
+</body>
+</html>"""
+();
+}
+</script>
+<script src="/static/chat_mentions.js"></script>
+<script src="/static/chat_widget.js?v=5"></script>
+<script src="/static/chat_widget_v2.js"></script>
+<script src="/static/support_widget.js"></script>
+</body>
+</html>"""
+tml>
+"""
