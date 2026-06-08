@@ -227,6 +227,10 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .nav-group-label:hover{opacity:1;background:rgba(148,163,184,.08)}
 .nav-group-chevron{display:inline-flex;flex-shrink:0;transition:transform .2s;opacity:.6}
 .nav-group-label.ngl-collapsed .nav-group-chevron{transform:rotate(-90deg)}
+.nav-subgroup-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);padding:4px 10px 2px 14px;opacity:.55;display:flex;align-items:center;justify-content:space-between;cursor:pointer;border-radius:6px;user-select:none;transition:opacity .15s,background .15s;margin-top:2px}
+.nav-subgroup-label:hover{opacity:.85;background:rgba(148,163,184,.06)}
+.nav-subgroup-chevron{display:inline-flex;flex-shrink:0;transition:transform .2s;opacity:.55}
+.nav-subgroup-label.nsl-collapsed .nav-subgroup-chevron{transform:rotate(-90deg)}
 .hidden{display:none}
 .legend{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
 .legend .item{padding:12px;border:1px solid var(--border);border-radius:10px;font-size:12px}
@@ -274,18 +278,7 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
     <div class="logo">My<span>Sifa</span><div class="logo-sub">by SIFA</div></div>
     <div class="nav-scroll tabs" style="width:100%;margin:0">
       <div class="nav-group-label"><span>Base</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <button type="button" class="nav-btn active" data-tab="users">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        Utilisateurs
-      </button>
-      <button type="button" class="nav-btn" data-tab="fournisseurs">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
-        Fournisseurs
-      </button>
-      <button type="button" class="nav-btn" data-tab="clients">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21V7l9-4 9 4v14"/><path d="M9 21V12h6v9"/><path d="M3 21h18"/></svg>
-        Clients
-      </button>
+      <div class="nav-subgroup-label"><span>Fabrication</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
       <button type="button" class="nav-btn" data-tab="operations">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         Opérations
@@ -297,6 +290,19 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
       <button type="button" class="nav-btn" data-tab="emplacements">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
         Emplacements
+      </button>
+      <div class="nav-subgroup-label"><span>Contacts</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn active" data-tab="users">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Utilisateurs
+      </button>
+      <button type="button" class="nav-btn" data-tab="fournisseurs">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+        Fournisseurs
+      </button>
+      <button type="button" class="nav-btn" data-tab="clients">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21V7l9-4 9 4v14"/><path d="M9 21V12h6v9"/><path d="M3 21h18"/></svg>
+        Clients
       </button>
       <div class="nav-group-label" style="margin-top:8px"><span>Accès</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
       <button type="button" class="nav-btn" data-tab="matrix">
@@ -3411,13 +3417,45 @@ async function createApiKey() {
 
 // ── Sidebar sections collapse ──
 (function initNavGroups() {
+  // Groupes principaux
   document.querySelectorAll('.nav-group-label').forEach(function(label) {
     label.addEventListener('click', function() {
       const collapsed = label.classList.toggle('ngl-collapsed');
       // Parcourir les frères jusqu'au prochain nav-group-label
       let el = label.nextElementSibling;
       while (el && !el.classList.contains('nav-group-label')) {
-        el.style.display = collapsed ? 'none' : '';
+        if (collapsed) {
+          el.style.display = 'none';
+        } else {
+          el.style.display = '';
+        }
+        el = el.nextElementSibling;
+      }
+      // Re-appliquer l'état des sous-groupes (qu'on aurait pu écraser en expandant)
+      if (!collapsed) {
+        let el2 = label.nextElementSibling;
+        let subCollapsed = null;
+        while (el2 && !el2.classList.contains('nav-group-label')) {
+          if (el2.classList.contains('nav-subgroup-label')) {
+            subCollapsed = el2.classList.contains('nsl-collapsed');
+          } else if (subCollapsed && el2.classList.contains('nav-btn')) {
+            el2.style.display = 'none';
+          }
+          el2 = el2.nextElementSibling;
+        }
+      }
+    });
+  });
+  // Sous-groupes (à l'intérieur d'un groupe principal)
+  document.querySelectorAll('.nav-subgroup-label').forEach(function(label) {
+    label.addEventListener('click', function(ev) {
+      ev.stopPropagation();
+      const collapsed = label.classList.toggle('nsl-collapsed');
+      let el = label.nextElementSibling;
+      while (el && !el.classList.contains('nav-subgroup-label') && !el.classList.contains('nav-group-label')) {
+        if (el.classList.contains('nav-btn')) {
+          el.style.display = collapsed ? 'none' : '';
+        }
         el = el.nextElementSibling;
       }
     });
