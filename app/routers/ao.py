@@ -654,12 +654,14 @@ def list_produits(request: Request):
     _require_ao(request)
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT p.*, c.nom AS client_nom
+            """SELECT p.*,
+                      COALESCE(cg.raison_sociale, lc.nom) AS client_nom
                FROM ao_produits p
-               LEFT JOIN ao_carnet_clients c ON c.id = p.client_id
+               LEFT JOIN clients            cg ON cg.id = p.client_id
+               LEFT JOIN ao_carnet_clients  lc ON lc.id = p.client_id
                ORDER BY p.ref COLLATE NOCASE"""
         ).fetchall()
-    return [_serialize_produit_row(_row_dict(r), conn) for r in rows]
+        return [_serialize_produit_row(_row_dict(r), conn) for r in rows]
 
 
 @router.get("/produits/{produit_id}")
@@ -667,15 +669,17 @@ def get_produit(request: Request, produit_id: int):
     _require_ao(request)
     with get_db() as conn:
         row = conn.execute(
-            """SELECT p.*, c.nom AS client_nom
+            """SELECT p.*,
+                      COALESCE(cg.raison_sociale, lc.nom) AS client_nom
                FROM ao_produits p
-               LEFT JOIN ao_carnet_clients c ON c.id = p.client_id
+               LEFT JOIN clients            cg ON cg.id = p.client_id
+               LEFT JOIN ao_carnet_clients  lc ON lc.id = p.client_id
                WHERE p.id=?""",
             (produit_id,),
         ).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Produit introuvable")
-    return _serialize_produit_row(_row_dict(row), conn)
+        return _serialize_produit_row(_row_dict(row), conn)
 
 
 @router.get("/produits/{produit_id}/export")
@@ -683,9 +687,11 @@ def export_produit_fiche(request: Request, produit_id: int):
     _require_ao(request)
     with get_db() as conn:
         row = conn.execute(
-            """SELECT p.*, c.nom AS client_nom
+            """SELECT p.*,
+                      COALESCE(cg.raison_sociale, lc.nom) AS client_nom
                FROM ao_produits p
-               LEFT JOIN ao_carnet_clients c ON c.id = p.client_id
+               LEFT JOIN clients            cg ON cg.id = p.client_id
+               LEFT JOIN ao_carnet_clients  lc ON lc.id = p.client_id
                WHERE p.id=?""",
             (produit_id,),
         ).fetchone()
@@ -728,7 +734,7 @@ async def create_produit(request: Request):
             conn.rollback()
             raise HTTPException(status_code=400, detail="Référence déjà utilisée.") from None
         row = conn.execute("SELECT * FROM ao_produits WHERE id=?", (cur.lastrowid,)).fetchone()
-    return _serialize_produit_row(_row_dict(row), conn)
+        return _serialize_produit_row(_row_dict(row), conn)
 
 
 @router.put("/produits/{produit_id}")
@@ -753,7 +759,7 @@ async def update_produit(request: Request, produit_id: int):
             conn.rollback()
             raise HTTPException(status_code=400, detail="Référence déjà utilisée.") from None
         row = conn.execute("SELECT * FROM ao_produits WHERE id=?", (produit_id,)).fetchone()
-    return _serialize_produit_row(_row_dict(row), conn)
+        return _serialize_produit_row(_row_dict(row), conn)
 
 
 @router.delete("/produits/{produit_id}")
@@ -839,12 +845,13 @@ def dupliquer_produit(request: Request, produit_id: int):
         row = conn.execute(
             "SELECT * FROM ao_produits WHERE id=?", (cur.lastrowid,)
         ).fetchone()
+        result = _serialize_produit_row(_row_dict(row), conn)
     log_action(
         user=user, action="DUPLICATE", module="ao",
         objet=f"Produit {src_d.get('ref')} → {new_ref}",
         ip=request.client.host if request.client else None,
     )
-    return _serialize_produit_row(_row_dict(row), conn)
+    return result
 
 
 # ─── Détail ──────────────────────────────────────────────────────
