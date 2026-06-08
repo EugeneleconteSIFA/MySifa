@@ -283,7 +283,7 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
         Fournisseurs
       </button>
       <button type="button" class="nav-btn" data-tab="clients">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21V7l9-4 9 4v14"/><path d="M9 21V12h6v9"/><path d="M3 21h18"/></svg>
         Clients
       </button>
       <button type="button" class="nav-btn" data-tab="operations">
@@ -508,7 +508,195 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
     </section>
 
     <section id="panel-clients" class="hidden">
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+          <div>
+            <h2 style="margin:0 0 4px">Clients (ERP)</h2>
+            <p class="sub" style="margin:0;font-size:12px">Référentiel clients utilisé par MyProd, MyExpé et MyCompta. <span id="cli-count" style="color:var(--accent);font-weight:700"></span></p>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <button type="button" class="btn btn-sec btn-sm" id="cli-export-csv">Exporter CSV</button>
+            <button type="button" class="btn btn-sec btn-sm" id="cli-import-btn">Importer xlsx</button>
+            <input type="file" id="cli-import-input" accept=".xlsx,.xlsm" style="display:none">
+            <button type="button" class="btn btn-sm" id="cli-new-btn">+ Nouveau client</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+          <input type="text" id="cli-search" placeholder="Rechercher (raison sociale, code, ville, SIRET, TVA, email…)" autocomplete="off"
+            style="flex:1;min-width:260px;padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s">
+          <select id="cli-filter-etat" style="padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;outline:none">
+            <option value="">Tous les états</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table id="cli-table" style="min-width:780px">
+            <thead>
+              <tr style="background:rgba(34,211,238,.06)">
+                <th style="text-align:left;padding:10px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);white-space:nowrap">N°</th>
+                <th style="text-align:left;padding:10px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);white-space:nowrap">Code</th>
+                <th style="text-align:left;padding:10px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Raison sociale</th>
+                <th style="text-align:left;padding:10px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);white-space:nowrap">Ville</th>
+                <th style="text-align:left;padding:10px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);white-space:nowrap">Pays</th>
+                <th style="text-align:left;padding:10px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);white-space:nowrap">Téléphone</th>
+                <th style="text-align:left;padding:10px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Email</th>
+                <th style="text-align:left;padding:10px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);white-space:nowrap">État</th>
+                <th style="padding:10px 12px;width:1px"></th>
+              </tr>
+            </thead>
+            <tbody id="cli-tbody">
+              <tr><td colspan="9" style="padding:24px 12px;color:var(--muted);font-size:13px;text-align:center">Chargement…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p id="cli-empty" class="sub" style="display:none;margin:16px 0 4px;font-size:13px"></p>
+      </div>
     </section>
+
+    <!-- Modal client (création / édition) -->
+    <div id="cli-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:800;align-items:center;justify-content:center" class="hidden">
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;width:min(880px,96vw);max-height:92vh;overflow:auto">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px">
+          <h2 id="cli-modal-title" style="margin:0;font-size:17px">Nouveau client</h2>
+          <button type="button" class="btn btn-sec btn-sm" onclick="closeCliModal()">×</button>
+        </div>
+        <div class="tabs" style="margin-bottom:14px">
+          <button type="button" class="btn btn-sec sub-tab-btn active" data-clisub="cli-tab-info">Identité</button>
+          <button type="button" class="btn btn-sec sub-tab-btn" data-clisub="cli-tab-addr">Adresse</button>
+          <button type="button" class="btn btn-sec sub-tab-btn" data-clisub="cli-tab-contact">Contact</button>
+          <button type="button" class="btn btn-sec sub-tab-btn" data-clisub="cli-tab-commerce">Commerce</button>
+          <button type="button" class="btn btn-sec sub-tab-btn" data-clisub="cli-tab-notes">Notes</button>
+        </div>
+
+        <div id="cli-tab-info" class="cli-tab">
+          <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr;gap:10px">
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">N°</label>
+              <input type="number" id="cli-numero" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Code</label>
+              <input type="text" id="cli-code" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">État</label>
+              <select id="cli-etat" style="width:100%">
+                <option value="Normal">Normal</option>
+                <option value="Bloqué">Bloqué</option>
+                <option value="Inactif">Inactif</option>
+              </select></div>
+            <div style="grid-column:span 3"><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Raison sociale *</label>
+              <input type="text" id="cli-raison" required style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">SIRET</label>
+              <input type="text" id="cli-siret" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">N° TVA</label>
+              <input type="text" id="cli-tva" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">RCS</label>
+              <input type="text" id="cli-rcs" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">EAN</label>
+              <input type="text" id="cli-ean" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">NIF</label>
+              <input type="text" id="cli-nif" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Groupe</label>
+              <input type="text" id="cli-groupe" style="width:100%"></div>
+          </div>
+        </div>
+
+        <div id="cli-tab-addr" class="cli-tab" style="display:none">
+          <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:10px">
+            <div style="grid-column:span 2"><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Adresse 1</label>
+              <input type="text" id="cli-adresse1" style="width:100%"></div>
+            <div style="grid-column:span 2"><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Adresse 2</label>
+              <input type="text" id="cli-adresse2" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">B.P.</label>
+              <input type="text" id="cli-bp" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Code postal</label>
+              <input type="text" id="cli-cp" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Ville</label>
+              <input type="text" id="cli-ville" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Code pays</label>
+              <input type="text" id="cli-code-pays" maxlength="3" style="width:100%"></div>
+            <div style="grid-column:span 2"><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Pays</label>
+              <input type="text" id="cli-pays" style="width:100%"></div>
+          </div>
+        </div>
+
+        <div id="cli-tab-contact" class="cli-tab" style="display:none">
+          <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:10px">
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Téléphone</label>
+              <input type="text" id="cli-tel" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Télécopie</label>
+              <input type="text" id="cli-fax" style="width:100%"></div>
+            <div style="grid-column:span 2"><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Email</label>
+              <input type="email" id="cli-email" style="width:100%"></div>
+            <div style="grid-column:span 2" class="sub" style="font-size:11px;color:var(--muted);margin-top:4px">Contact principal (interlocuteur)</div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Nom du contact</label>
+              <input type="text" id="cli-contact-nom" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Fonction</label>
+              <input type="text" id="cli-contact-fonction" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Email contact</label>
+              <input type="email" id="cli-contact-email" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Téléphone contact</label>
+              <input type="text" id="cli-contact-tel" style="width:100%"></div>
+          </div>
+        </div>
+
+        <div id="cli-tab-commerce" class="cli-tab" style="display:none">
+          <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:10px">
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Représentant</label>
+              <input type="text" id="cli-rep" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">ADV</label>
+              <input type="text" id="cli-adv" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Mode de livraison</label>
+              <input type="text" id="cli-mode-liv" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Mode de règlement</label>
+              <input type="text" id="cli-mode-reg" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Devise</label>
+              <input type="text" id="cli-devise" maxlength="4" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Encours autorisé</label>
+              <input type="number" id="cli-encours" step="0.01" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Code comptable</label>
+              <input type="text" id="cli-codecpta" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Catégorie 1</label>
+              <input type="text" id="cli-cat1" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Catégorie 2</label>
+              <input type="text" id="cli-cat2" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Catégorie 3</label>
+              <input type="text" id="cli-cat3" style="width:100%"></div>
+          </div>
+        </div>
+
+        <div id="cli-tab-notes" class="cli-tab" style="display:none">
+          <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Notes internes</label>
+          <textarea id="cli-notes" rows="8" placeholder="Remarques, conditions particulières…" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;resize:vertical"></textarea>
+        </div>
+
+        <div style="display:flex;gap:10px;justify-content:space-between;align-items:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border)">
+          <button type="button" class="btn btn-danger btn-sm" id="cli-delete-btn" style="display:none" onclick="deleteCliFromModal()">Supprimer</button>
+          <div style="display:flex;gap:10px;margin-left:auto">
+            <button type="button" class="btn btn-sec" onclick="closeCliModal()">Annuler</button>
+            <button type="button" class="btn" onclick="saveCliModal()">Enregistrer</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal import xlsx clients -->
+    <div id="cli-import-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:801;align-items:center;justify-content:center" class="hidden">
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;width:min(520px,95vw)">
+        <h2 style="margin:0 0 14px;font-size:17px">Import clients xlsx</h2>
+        <p class="sub" style="margin:0 0 14px;font-size:12px">Fichier : <strong id="cli-import-filename" style="color:var(--text)"></strong></p>
+        <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:6px">Mode d'import</label>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px">
+          <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px">
+            <input type="radio" name="cli-import-mode" value="merge" checked style="margin-top:2px">
+            <span><strong style="color:var(--text);font-size:13px">Fusionner (recommandé)</strong><br><span style="font-size:12px;color:var(--muted)">Les clients existants (même code) sont mis à jour, les nouveaux sont ajoutés. Aucune perte de données.</span></span>
+          </label>
+          <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px">
+            <input type="radio" name="cli-import-mode" value="replace" style="margin-top:2px">
+            <span><strong style="color:var(--danger);font-size:13px">Remplacer</strong><br><span style="font-size:12px;color:var(--muted)">Supprime tous les clients existants puis importe le fichier. Action irréversible.</span></span>
+          </label>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end">
+          <button type="button" class="btn btn-sec" onclick="closeCliImportModal()">Annuler</button>
+          <button type="button" class="btn" id="cli-import-confirm" onclick="confirmCliImport()">Lancer l'import</button>
+        </div>
+      </div>
+    </div>
 
     <section id="panel-machines" class="hidden">
       <div class="tabs" style="margin-bottom:14px">
@@ -957,6 +1145,7 @@ function setTab(id) {
   });
   syncSettingsPageHead(id);
   if (id === 'fournisseurs') loadFournisseurs();
+  if (id === 'clients') initClientsPanel();
   if (id === 'operations') loadOperationCodes();
   if (id === 'machines') initMachinesPanel();
   if (id === 'emplacements') initEmplacementsPanel();
@@ -3466,6 +3655,365 @@ function exportEmplacementsCsv() {
   const a = document.createElement('a');
   a.href = url;
   a.download = 'emplacements_' + new Date().toISOString().slice(0, 10) + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+}
+
+// ═══════════════════════════════════════════════════════════
+// Référentiel Clients (ERP)
+// ═══════════════════════════════════════════════════════════
+let _cliReady = false;
+let _cliData = [];
+let _cliEditing = null;        // id en cours d'édition, ou null pour création
+let _cliImportFile = null;
+let _cliSearchDebounce = null;
+
+async function initClientsPanel() {
+  if (!_cliReady) {
+    _cliReady = true;
+    const search = document.getElementById('cli-search');
+    if (search) {
+      search.addEventListener('input', () => {
+        clearTimeout(_cliSearchDebounce);
+        _cliSearchDebounce = setTimeout(loadClients, 220);
+      });
+      search.addEventListener('keydown', e => {
+        if (e.key === 'Escape') { search.value = ''; loadClients(); }
+      });
+    }
+    const etat = document.getElementById('cli-filter-etat');
+    if (etat) etat.addEventListener('change', loadClients);
+    const newBtn = document.getElementById('cli-new-btn');
+    if (newBtn) newBtn.addEventListener('click', () => openCliModal(null));
+    const importBtn = document.getElementById('cli-import-btn');
+    const importInput = document.getElementById('cli-import-input');
+    if (importBtn && importInput) {
+      importBtn.addEventListener('click', () => importInput.click());
+      importInput.addEventListener('change', () => onCliImportFile(importInput));
+    }
+    const exportBtn = document.getElementById('cli-export-csv');
+    if (exportBtn) exportBtn.addEventListener('click', exportClientsCsv);
+
+    // Sous-onglets du modal
+    document.querySelectorAll('#cli-modal-overlay [data-clisub]').forEach(b => {
+      b.addEventListener('click', () => {
+        document.querySelectorAll('#cli-modal-overlay [data-clisub]').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        document.querySelectorAll('#cli-modal-overlay .cli-tab').forEach(p => p.style.display = 'none');
+        const target = document.getElementById(b.dataset.clisub);
+        if (target) target.style.display = '';
+      });
+    });
+
+    // ESC ferme les modals
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        const m = document.getElementById('cli-modal-overlay');
+        const im = document.getElementById('cli-import-overlay');
+        if (m && m.style.display === 'flex') closeCliModal();
+        else if (im && im.style.display === 'flex') closeCliImportModal();
+      }
+    });
+  }
+  await loadClients();
+}
+
+async function loadClients() {
+  const tbody = document.getElementById('cli-tbody');
+  const search = (document.getElementById('cli-search')?.value || '').trim();
+  const etat = document.getElementById('cli-filter-etat')?.value || '';
+  if (tbody) tbody.innerHTML = '<tr><td colspan="9" style="padding:24px 12px;color:var(--muted);font-size:13px;text-align:center">Chargement…</td></tr>';
+  try {
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    if (etat) params.set('etat', etat);
+    params.set('limit', '2000');
+    const r = await fetch('/api/clients?' + params.toString(), { credentials: 'include' });
+    if (!r.ok) throw new Error('err');
+    const data = await r.json();
+    _cliData = data.items || [];
+    // Mettre à jour le filtre état si on a la liste complète
+    const sel = document.getElementById('cli-filter-etat');
+    if (sel && data.etats) {
+      const cur = sel.value;
+      const opts = ['<option value="">Tous les états</option>'].concat(
+        data.etats.map(e => `<option value="${escAttr(e)}"${e === cur ? ' selected' : ''}>${escHtml(e)}</option>`)
+      );
+      sel.innerHTML = opts.join('');
+    }
+    const count = document.getElementById('cli-count');
+    if (count) {
+      const n = data.total || 0;
+      count.textContent = n + ' client' + (n > 1 ? 's' : '') + (search || etat ? ' filtré' + (n > 1 ? 's' : '') : '');
+    }
+  } catch(e) {
+    _cliData = [];
+    toast('Erreur lors du chargement des clients.', true);
+  }
+  renderCliTable();
+}
+
+function renderCliTable() {
+  const tbody = document.getElementById('cli-tbody');
+  const empty = document.getElementById('cli-empty');
+  if (!tbody) return;
+  if (!_cliData.length) {
+    tbody.innerHTML = '';
+    if (empty) {
+      empty.style.display = '';
+      const q = (document.getElementById('cli-search')?.value || '').trim();
+      empty.textContent = q
+        ? 'Aucun résultat pour « ' + q + ' ».'
+        : 'Aucun client. Cliquez sur « + Nouveau client » ou importez un fichier xlsx.';
+    }
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+  const html = _cliData.map(c => {
+    const etat = c.etat || '';
+    const etatBg = etat === 'Bloqué' ? 'rgba(248,113,113,.15);color:#f87171;border-color:rgba(248,113,113,.35)'
+                : etat === 'Inactif' ? 'rgba(148,163,184,.18);color:var(--muted);border-color:rgba(148,163,184,.35)'
+                : 'rgba(52,211,153,.15);color:var(--success);border-color:rgba(52,211,153,.35)';
+    return `<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="openCliModal(${c.id})">
+      <td style="padding:9px 12px;font-family:ui-monospace,monospace;font-size:12px;color:var(--muted);white-space:nowrap">${c.numero == null ? '' : escHtml(String(c.numero))}</td>
+      <td style="padding:9px 12px;font-family:ui-monospace,monospace;font-size:12px;white-space:nowrap">${escHtml(c.code || '')}</td>
+      <td style="padding:9px 12px;font-weight:600">${escHtml(c.raison_sociale || '')}</td>
+      <td style="padding:9px 12px;white-space:nowrap">${escHtml(c.ville || '')}</td>
+      <td style="padding:9px 12px;white-space:nowrap">${escHtml(c.pays || '')}</td>
+      <td style="padding:9px 12px;font-family:ui-monospace,monospace;font-size:12px;white-space:nowrap">${escHtml(c.telephone || '')}</td>
+      <td style="padding:9px 12px;font-size:12px">${escHtml(c.email || '')}</td>
+      <td style="padding:9px 12px;white-space:nowrap"><span style="display:inline-block;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:700;background:${etatBg};border:1px solid">${escHtml(etat)}</span></td>
+      <td style="padding:9px 12px;white-space:nowrap"><button type="button" class="btn btn-sec btn-sm" onclick="event.stopPropagation();openCliModal(${c.id})">Modifier</button></td>
+    </tr>`;
+  }).join('');
+  tbody.innerHTML = html;
+}
+
+function openCliModal(id) {
+  _cliEditing = id;
+  const overlay = document.getElementById('cli-modal-overlay');
+  if (!overlay) return;
+  overlay.style.display = 'flex';
+  overlay.classList.remove('hidden');
+  // Reset onglets sur Identité
+  document.querySelectorAll('#cli-modal-overlay [data-clisub]').forEach(x => x.classList.remove('active'));
+  const firstTab = document.querySelector('#cli-modal-overlay [data-clisub="cli-tab-info"]');
+  if (firstTab) firstTab.classList.add('active');
+  document.querySelectorAll('#cli-modal-overlay .cli-tab').forEach(p => p.style.display = 'none');
+  const t = document.getElementById('cli-tab-info');
+  if (t) t.style.display = '';
+  // Reset values
+  const setV = (id, v) => { const el = document.getElementById(id); if (el) el.value = (v == null ? '' : v); };
+  setV('cli-numero', ''); setV('cli-code', ''); setV('cli-etat', 'Normal');
+  setV('cli-raison', ''); setV('cli-siret', ''); setV('cli-tva', '');
+  setV('cli-rcs', ''); setV('cli-ean', ''); setV('cli-nif', ''); setV('cli-groupe', '');
+  setV('cli-adresse1', ''); setV('cli-adresse2', ''); setV('cli-bp', '');
+  setV('cli-cp', ''); setV('cli-ville', ''); setV('cli-code-pays', ''); setV('cli-pays', '');
+  setV('cli-tel', ''); setV('cli-fax', ''); setV('cli-email', '');
+  setV('cli-contact-nom', ''); setV('cli-contact-fonction', '');
+  setV('cli-contact-email', ''); setV('cli-contact-tel', '');
+  setV('cli-rep', ''); setV('cli-adv', ''); setV('cli-mode-liv', ''); setV('cli-mode-reg', '');
+  setV('cli-devise', ''); setV('cli-encours', ''); setV('cli-codecpta', '');
+  setV('cli-cat1', ''); setV('cli-cat2', ''); setV('cli-cat3', '');
+  setV('cli-notes', '');
+  const delBtn = document.getElementById('cli-delete-btn');
+  const title = document.getElementById('cli-modal-title');
+
+  if (id == null) {
+    if (title) title.textContent = 'Nouveau client';
+    if (delBtn) delBtn.style.display = 'none';
+    requestAnimationFrame(() => document.getElementById('cli-raison')?.focus());
+    return;
+  }
+  if (title) title.textContent = 'Modifier le client';
+  if (delBtn) delBtn.style.display = '';
+  // Charger les données
+  fetch('/api/clients/' + id, { credentials: 'include' })
+    .then(r => r.json())
+    .then(c => {
+      setV('cli-numero', c.numero); setV('cli-code', c.code); setV('cli-etat', c.etat || 'Normal');
+      setV('cli-raison', c.raison_sociale); setV('cli-siret', c.siret); setV('cli-tva', c.tva);
+      setV('cli-rcs', c.rcs); setV('cli-ean', c.ean); setV('cli-nif', c.nif); setV('cli-groupe', c.groupe);
+      setV('cli-adresse1', c.adresse1); setV('cli-adresse2', c.adresse2); setV('cli-bp', c.bp);
+      setV('cli-cp', c.cp); setV('cli-ville', c.ville); setV('cli-code-pays', c.code_pays); setV('cli-pays', c.pays);
+      setV('cli-tel', c.telephone); setV('cli-fax', c.telecopie); setV('cli-email', c.email);
+      setV('cli-contact-nom', c.contact_nom); setV('cli-contact-fonction', c.contact_fonction);
+      setV('cli-contact-email', c.contact_email); setV('cli-contact-tel', c.contact_tel);
+      setV('cli-rep', c.representant); setV('cli-adv', c.adv);
+      setV('cli-mode-liv', c.mode_livraison); setV('cli-mode-reg', c.mode_reglement);
+      setV('cli-devise', c.devise); setV('cli-encours', c.encours_autorise); setV('cli-codecpta', c.code_comptable);
+      setV('cli-cat1', c.categorie1); setV('cli-cat2', c.categorie2); setV('cli-cat3', c.categorie3);
+      setV('cli-notes', c.notes);
+      requestAnimationFrame(() => document.getElementById('cli-raison')?.focus());
+    })
+    .catch(() => toast('Impossible de charger ce client.', true));
+}
+
+function closeCliModal() {
+  const overlay = document.getElementById('cli-modal-overlay');
+  if (!overlay) return;
+  overlay.style.display = 'none';
+  overlay.classList.add('hidden');
+  _cliEditing = null;
+}
+
+async function saveCliModal() {
+  const val = id => (document.getElementById(id)?.value || '').trim();
+  const raison = val('cli-raison');
+  if (!raison) {
+    toast('Raison sociale obligatoire.', true);
+    document.querySelector('#cli-modal-overlay [data-clisub="cli-tab-info"]')?.click();
+    document.getElementById('cli-raison')?.focus();
+    return;
+  }
+  const num = val('cli-numero');
+  const encours = val('cli-encours');
+  const payload = {
+    numero: num === '' ? null : parseInt(num, 10),
+    code: val('cli-code') || null,
+    raison_sociale: raison,
+    siret: val('cli-siret') || null,
+    tva: val('cli-tva') || null,
+    rcs: val('cli-rcs') || null,
+    ean: val('cli-ean') || null,
+    nif: val('cli-nif') || null,
+    groupe: val('cli-groupe') || null,
+    adresse1: val('cli-adresse1') || null,
+    adresse2: val('cli-adresse2') || null,
+    bp: val('cli-bp') || null,
+    cp: val('cli-cp') || null,
+    ville: val('cli-ville') || null,
+    code_pays: val('cli-code-pays') || null,
+    pays: val('cli-pays') || null,
+    telephone: val('cli-tel') || null,
+    telecopie: val('cli-fax') || null,
+    email: val('cli-email') || null,
+    contact_nom: val('cli-contact-nom') || null,
+    contact_fonction: val('cli-contact-fonction') || null,
+    contact_email: val('cli-contact-email') || null,
+    contact_tel: val('cli-contact-tel') || null,
+    representant: val('cli-rep') || null,
+    adv: val('cli-adv') || null,
+    mode_livraison: val('cli-mode-liv') || null,
+    mode_reglement: val('cli-mode-reg') || null,
+    devise: val('cli-devise') || null,
+    encours_autorise: encours === '' ? null : parseFloat(encours.replace(',', '.')),
+    code_comptable: val('cli-codecpta') || null,
+    categorie1: val('cli-cat1') || null,
+    categorie2: val('cli-cat2') || null,
+    categorie3: val('cli-cat3') || null,
+    etat: val('cli-etat') || 'Normal',
+    notes: val('cli-notes') || null,
+  };
+  const url = _cliEditing == null ? '/api/clients' : '/api/clients/' + _cliEditing;
+  const method = _cliEditing == null ? 'POST' : 'PUT';
+  try {
+    const r = await fetch(url, {
+      method, credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) {
+      let msg = 'Erreur lors de l\'enregistrement.';
+      try { const d = await r.json(); if (d.detail) msg = d.detail; } catch(_) {}
+      toast(msg, true);
+      return;
+    }
+    toast(_cliEditing == null ? 'Client créé.' : 'Client mis à jour.', false);
+    closeCliModal();
+    await loadClients();
+  } catch(e) {
+    toast('Erreur réseau.', true);
+  }
+}
+
+async function deleteCliFromModal() {
+  if (_cliEditing == null) return;
+  const raison = (document.getElementById('cli-raison')?.value || '').trim();
+  if (!confirm(`Supprimer le client « ${raison} » ? Cette action est irréversible.`)) return;
+  try {
+    const r = await fetch('/api/clients/' + _cliEditing, { method: 'DELETE', credentials: 'include' });
+    if (!r.ok) { toast('Erreur lors de la suppression.', true); return; }
+    toast('Client supprimé.', false);
+    closeCliModal();
+    await loadClients();
+  } catch(e) { toast('Erreur réseau.', true); }
+}
+
+function onCliImportFile(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  _cliImportFile = file;
+  const fn = document.getElementById('cli-import-filename');
+  if (fn) fn.textContent = file.name;
+  const overlay = document.getElementById('cli-import-overlay');
+  if (overlay) { overlay.style.display = 'flex'; overlay.classList.remove('hidden'); }
+}
+
+function closeCliImportModal() {
+  const overlay = document.getElementById('cli-import-overlay');
+  if (overlay) { overlay.style.display = 'none'; overlay.classList.add('hidden'); }
+  _cliImportFile = null;
+  const inp = document.getElementById('cli-import-input');
+  if (inp) inp.value = '';
+}
+
+async function confirmCliImport() {
+  if (!_cliImportFile) { closeCliImportModal(); return; }
+  const mode = (document.querySelector('input[name="cli-import-mode"]:checked')?.value || 'merge');
+  if (mode === 'replace' && !confirm('Mode REMPLACER : tous les clients existants seront supprimés avant import. Continuer ?')) return;
+  const btn = document.getElementById('cli-import-confirm');
+  if (btn) { btn.disabled = true; btn.textContent = 'Import en cours…'; }
+  try {
+    const fd = new FormData();
+    fd.append('file', _cliImportFile);
+    const r = await fetch('/api/clients/import-xlsx?mode=' + encodeURIComponent(mode), {
+      method: 'POST', credentials: 'include', body: fd,
+    });
+    if (!r.ok) {
+      let msg = 'Erreur lors de l\'import.';
+      try { const d = await r.json(); if (d.detail) msg = d.detail; } catch(_) {}
+      toast(msg, true);
+      return;
+    }
+    const data = await r.json();
+    let msg = `${data.inserted} créé${data.inserted > 1 ? 's' : ''}, ${data.updated} mis à jour`;
+    if (data.skipped) msg += `, ${data.skipped} ignoré${data.skipped > 1 ? 's' : ''}`;
+    msg += '.';
+    toast(msg, false);
+    if (data.errors && data.errors.length) {
+      console.warn('Erreurs import clients :', data.errors);
+    }
+    closeCliImportModal();
+    await loadClients();
+  } catch(e) { toast('Erreur réseau.', true); }
+  finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Lancer l\'import'; }
+  }
+}
+
+function exportClientsCsv() {
+  if (!_cliData.length) { toast('Aucun client à exporter.', true); return; }
+  const cols = [
+    ['numero', 'N°'], ['code', 'Code'], ['raison_sociale', 'Raison sociale'],
+    ['adresse1', 'Adresse 1'], ['adresse2', 'Adresse 2'], ['bp', 'B.P.'],
+    ['cp', 'C.P.'], ['ville', 'Ville'], ['code_pays', 'C.Pays'], ['pays', 'Pays'],
+    ['siret', 'Siret'], ['tva', 'N.TVA'], ['telephone', 'Téléphone'],
+    ['email', 'Email'], ['representant', 'Représentant'], ['adv', 'ADV'],
+    ['mode_reglement', 'Mode de règlement'], ['devise', 'Devise'],
+    ['encours_autorise', 'Encours autorisé'], ['code_comptable', 'Code Comptable'],
+    ['contact_nom', 'Contact'], ['contact_email', 'Email contact'],
+    ['contact_tel', 'Tél contact'], ['etat', 'État'],
+  ];
+  const head = cols.map(c => c[1]);
+  const rows = [head, ..._cliData.map(c => cols.map(([k]) => c[k] == null ? '' : c[k]))];
+  const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(';')).join('\r\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'clients_' + new Date().toISOString().slice(0, 10) + '.csv';
   document.body.appendChild(a);
   a.click();
   setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);

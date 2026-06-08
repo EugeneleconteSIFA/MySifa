@@ -3216,6 +3216,58 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 102, "inventaires_sessions_commentaires")
 
+    # v103 — Paramètres : référentiel Clients (ERP)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=103 LIMIT 1").fetchone():
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS clients (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                numero          INTEGER,
+                code            TEXT,
+                raison_sociale  TEXT NOT NULL,
+                adresse1        TEXT,
+                adresse2        TEXT,
+                bp              TEXT,
+                cp              TEXT,
+                ville           TEXT,
+                code_pays       TEXT,
+                pays            TEXT,
+                groupe          TEXT,
+                siret           TEXT,
+                rcs             TEXT,
+                tva             TEXT,
+                ean             TEXT,
+                nif             TEXT,
+                telephone       TEXT,
+                telecopie       TEXT,
+                email           TEXT,
+                representant    TEXT,
+                adv             TEXT,
+                categorie1      TEXT,
+                categorie2      TEXT,
+                categorie3      TEXT,
+                mode_livraison  TEXT,
+                mode_reglement  TEXT,
+                devise          TEXT,
+                encours_autorise REAL,
+                code_comptable  TEXT,
+                etat            TEXT NOT NULL DEFAULT 'Normal',
+                contact_nom     TEXT,
+                contact_fonction TEXT,
+                contact_email   TEXT,
+                contact_tel     TEXT,
+                notes           TEXT,
+                date_creation   TEXT,
+                date_modification TEXT,
+                created_at      TEXT NOT NULL,
+                updated_at      TEXT NOT NULL
+            )"""
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_clients_code ON clients(code)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_clients_raison ON clients(raison_sociale)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_clients_etat ON clients(etat)")
+        conn.commit()
+        _record_schema_migration(conn, 103, "clients_referentiel")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

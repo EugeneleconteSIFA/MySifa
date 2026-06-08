@@ -3825,12 +3825,25 @@ function updateSearchResults() {
   const box = el('div',{cls:'search-results'});
   if (produits.length) {
     box.appendChild(el('div',{cls:'search-section-title'},'📦 Produits'));
-    produits.forEach(p => box.appendChild(
-      el('div',{cls:'search-item',on:{click:()=>loadProduit(p.id)}},
-        el('div',null,el('div',{cls:'si-ref'},p.reference),el('div',{cls:'si-des'},p.designation)),
-        el('div',{cls:'si-badge'},fU(p.stock_total, p.unite))
-      )
-    ));
+    produits.forEach(p => {
+      const isNegoce = (p.type === 'negoce');
+      box.appendChild(
+        el('div',{cls:'search-item',on:{click:()=>{
+          if (isNegoce) {
+            S.searchResults = null; clearSearch();
+            openNgDetailModal(p.reference);
+          } else {
+            loadProduit(p.id);
+          }
+        }}},
+          el('div',null,
+            el('div',{cls:'si-ref'},p.reference),
+            el('div',{cls:'si-des'},p.designation + (isNegoce ? ' · négoce' : '')),
+          ),
+          el('div',{cls:'si-badge'},fU(p.stock_total, p.unite))
+        )
+      );
+    });
   }
   if (emplacements.length) {
     box.appendChild(el('div',{cls:'search-section-title'},'📍 Emplacements'));
@@ -5688,15 +5701,46 @@ function renderNegoceView() {
   }
 }
 
+function buildNgCatalogueRows() {
+  // Agrège ngStock par référence et fusionne avec ngCatalogue (tous produits, même stock=0)
+  const stockByRef = {};
+  (S.ngStock || []).forEach(r => {
+    const ref = String(r.reference || '').toUpperCase();
+    if (!stockByRef[ref]) {
+      stockByRef[ref] = { quantite: 0, derniere_entree: null, unite: r.unite, designation: r.designation };
+    }
+    stockByRef[ref].quantite += parseFloat(r.quantite || 0);
+    const de = r.derniere_entree;
+    if (de && (!stockByRef[ref].derniere_entree || de > stockByRef[ref].derniere_entree)) {
+      stockByRef[ref].derniere_entree = de;
+    }
+  });
+  const seen = new Set();
+  const rows = [];
+  // Produits du catalogue en premier (incluant 0-stock)
+  (S.ngCatalogue || []).forEach(c => {
+    const ref = String(c.reference || '').toUpperCase();
+    seen.add(ref);
+    const s = stockByRef[ref] || { quantite: 0, derniere_entree: null };
+    rows.push({ reference: ref, designation: c.designation || s.designation || ref, unite: c.unite || s.unite || 'rouleau', quantite: s.quantite, derniere_entree: s.derniere_entree });
+  });
+  // Produits en stock mais pas encore dans le catalogue (cas rare)
+  Object.entries(stockByRef).forEach(([ref, s]) => {
+    if (!seen.has(ref)) {
+      rows.push({ reference: ref, designation: s.designation || ref, unite: s.unite || 'rouleau', quantite: s.quantite, derniere_entree: s.derniere_entree });
+    }
+  });
+  return rows;
+}
+
 function filterNgStockList() {
-  const list = S.ngStock || [];
+  const list = buildNgCatalogueRows();
   const fs = S.ngFilters || { refs: [], empls: [], q: '' };
   const q = String(fs.q || '').trim().toLowerCase();
   const refSet = new Set((fs.refs || []).map(x => String(x || '').trim().toUpperCase()).filter(Boolean));
-  const emplSet = new Set((fs.empls || []).map(x => String(x || '').trim().toUpperCase()).filter(Boolean));
+  // Filtre emplacement ignoré dans la vue agrégée (les emplacements sont dans le détail)
   return list.filter(row => {
     if (refSet.size && !refSet.has(String(row.reference || '').toUpperCase())) return false;
-    if (emplSet.size && !emplSet.has(String(row.emplacement || '').toUpperCase())) return false;
     if (q) {
       const hay = [row.reference, row.designation].map(x => String(x || '').toLowerCase()).join(' ');
       if (!hay.includes(q)) return false;
@@ -5950,24 +5994,22 @@ function buildNegoceTab() {
   } else {
     const filtered = filterNgStockList();
     const fs = S.ngFilters || { refs: [], empls: [], q: '' };
-    const hasFilter = !!((fs.refs || []).length || (fs.empls || []).length || String(fs.q || '').trim());
-    const neverHadMvt = !S.ngTotalMouvements;
+    const hasFilter = !!((fs.refs || []).length || String(fs.q || '').trim());
 
     if (!filtered.length) {
       if (hasFilter) {
         stockList.appendChild(el('div', { cls: 'pf-empty', style: { padding: '32px', textAlign: 'center', fontSize: '13px' } },
           'Aucun résultat pour ce filtre.',
         ));
-      } else if (neverHadMvt) {
-        stockList.appendChild(buildPfEmptyState(
-          'Aucun produit en stock',
-          'Utilisez le bouton « Entrée » pour enregistrer votre premier mouvement.',
-        ));
       } else {
-        stockList.appendChild(buildPfEmptyState('Aucun produit en stock', 'Tous les emplacements sont vides.'));
+        stockList.appendChild(buildPfEmptyState(
+          'Catalogue vide',
+          'Ajoutez un produit via le bouton « Catalogue », puis enregistrez une entrée.',
+        ));
       }
     } else {
       filtered.forEach(row => {
+        const hasStock = row.quantite > 0;
         const item = el('div', {
           cls: 'pf-stock-item',
           on: { click: () => openNgDetailModal(row.reference) },
@@ -5976,12 +6018,23 @@ function buildNegoceTab() {
             el('div', { cls: 'pf-stock-ref' }, String(row.reference || '—')),
             el('div', { cls: 'pf-stock-des' }, row.designation || '—'),
             el('div', { cls: 'pf-stock-row', style: { marginTop: '6px' } },
-              el('span', { cls: 'pf-stock-qte' }, fU(row.quantite, row.unite)),
-              el('span', {
-                cls: 'pf-empl-badge' + (isStockEmplacementAuSol(row.emplacement) ? ' pf-empl-au-sol' : isStockEmplacementSortieProd(row.emplacement) ? ' pf-empl-sortie-prod' : ''),
-              }, stockEmplLabel(row.emplacement) || '—'),
+              hasStock
+                ? el('span', { cls: 'pf-stock-qte' }, fU(row.quantite, row.unite))
+                : el('span', { cls: 'pf-stock-qte', style: { color: 'var(--muted)' } }, '0 ' + (row.unite || 'rouleau')),
+              !S.stockReadOnly && !hasStock
+                ? el('button', {
+                    cls: 'btn-ghost',
+                    style: { marginLeft: '10px', padding: '3px 10px', fontSize: '12px', color: 'var(--success)', borderColor: 'var(--success)' },
+                    on: { click: (e) => {
+                      e.stopPropagation();
+                      openNgMvtModal('entree', { reference: row.reference, designation: row.designation, unite: row.unite });
+                    } },
+                  }, '+ Entrée')
+                : null,
             ),
-            el('div', { cls: 'pf-stock-meta' }, 'Dernière entrée : ' + fD(row.derniere_entree)),
+            hasStock
+              ? el('div', { cls: 'pf-stock-meta' }, 'Dernière entrée : ' + fD(row.derniere_entree))
+              : el('div', { cls: 'pf-stock-meta', style: { color: 'var(--muted)' } }, 'Aucun mouvement'),
           ),
         );
         stockList.appendChild(item);
@@ -6039,11 +6092,11 @@ function openNgMvtModal(type, preset) {
 }
 
 function renderNgMvtModal() {
-  closeNgModals();
   const modal = S.ngModal;
   if (!modal) return;
   const mroot = document.getElementById('mroot');
   if (!mroot) return;
+  mroot.innerHTML = '';
   const isSortie = modal.type === 'sortie';
   const headCls = isSortie ? 'mp-modal-mvt-head-pf-sortie' : 'mp-modal-mvt-head-pf-entree';
 

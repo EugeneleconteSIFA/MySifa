@@ -36,6 +36,7 @@ from app.web.expe_page import router as expe_page_router
 from app.web.devis_page import router as devis_page_router
 from app.routers.expe_departs import router as expe_departs_router
 from app.routers.settings import router as settings_api_router
+from app.routers.clients import router as clients_api_router
 from app.web.settings_page import router as settings_page_router
 from app.routers.fabrication import router as fabrication_api_router
 from app.routers.of_import import router as of_import_router
@@ -150,6 +151,7 @@ app.include_router(expe_page_router)
 app.include_router(devis_page_router)
 app.include_router(expe_departs_router, prefix="/api/expe")
 app.include_router(settings_api_router)
+app.include_router(clients_api_router)
 app.include_router(settings_page_router)
 app.include_router(fabrication_api_router)
 app.include_router(of_import_router, prefix="")

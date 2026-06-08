@@ -2607,9 +2607,36 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     dockLayout();
   };
 
+  // Ouverture automatique depuis une notification push : l'URL contient
+  // ?chat=<channel_id> (ou ?chat=open). On ouvre le panneau et on sélectionne
+  // le canal, puis on nettoie l'URL pour ne pas ré-ouvrir au refresh.
+  async function handleChatQueryParam() {
+    let params;
+    try { params = new URLSearchParams(window.location.search); }
+    catch (e) { return; }
+    if (!params.has('chat')) return;
+    const raw = params.get('chat') || '';
+    const chatId = parseInt(raw, 10);
+    try {
+      await openPanel();
+      if (chatId > 0) {
+        try { await selectChannel(chatId); } catch (e) {}
+      }
+    } catch (e) {}
+    // Retire ?chat=… de l'URL sans recharger
+    try {
+      const u = new URL(window.location.href);
+      u.searchParams.delete('chat');
+      const qs = u.searchParams.toString();
+      const newUrl = u.pathname + (qs ? '?' + qs : '') + u.hash;
+      window.history.replaceState({}, '', newUrl);
+    } catch (e) {}
+  }
+
   function boot() {
-    const run = () => {
-      void CW.ensureReady();
+    const run = async () => {
+      const ok = await CW.ensureReady();
+      if (ok) await handleChatQueryParam();
     };
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', run, { once: true });

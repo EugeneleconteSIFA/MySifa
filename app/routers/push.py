@@ -164,7 +164,7 @@ def push_test(request: Request):
         int(user["id"]),
         title="MySifa — test",
         body="Si tu vois ce message, les notifications fonctionnent.",
-        url="/messagerie",
+        url="/?chat=open",
         tag="mysifa-test",
     )
     return {"sent": sent}

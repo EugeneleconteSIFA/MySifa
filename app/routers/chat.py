@@ -166,14 +166,17 @@ def _push_notify_chat_message(
                 ).fetchall()
                 recipients = {int(r["user_id"]) for r in rows}
                 title = author_nom or "Message direct"
-                url = f"/messagerie?dm={channel_id}"
+                # Cible le portail d'accueil avec le canal pré-sélectionné dans la
+                # messagerie. Le service worker ouvre/focus l'onglet sur cette URL ;
+                # chat_widget.js lit ?chat=<id> au boot pour ouvrir le panneau.
+                url = f"/?chat={channel_id}"
             else:
                 recipients = {int(x) for x in (mentioned_ids or set()) if int(x) != int(author_id)}
                 if not recipients:
                     return
                 channel_label = (ch["name"] or "").strip() or "Canal"
                 title = f"{author_nom or 'Quelqu’un'} t’a mentionné dans #{channel_label}"
-                url = f"/messagerie?canal={channel_id}"
+                url = f"/?chat={channel_id}"
     except Exception:
         return
 

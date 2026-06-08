@@ -499,6 +499,7 @@ def search(request: Request, q: str = "", limit: int = 12):
     with get_db() as conn:
         produits = conn.execute(
             f"""SELECT p.id, p.reference, p.designation, p.unite,
+                      COALESCE(p.type, 'fabrique') AS type,
                       COALESCE(SUM(l.quantite_restante),0) as stock_total,
                       MIN(CASE WHEN l.quantite_restante>0 THEN l.date_entree END) as date_fifo
                FROM produits p
