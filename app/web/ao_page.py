@@ -1,4 +1,4 @@
-"""MySifa ÔÇö Appels d'offre (page interne /ao)."""
+"""MySifa — Appels d'offre (page interne /ao)."""
 from __future__ import annotations
 
 import json
@@ -51,7 +51,7 @@ AO_HTML = r"""<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#0a0e17">
-<title>Appels d'offre ÔÇö MySifa</title>
+<title>Appels d'offre — MySifa</title>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <link rel="stylesheet" href="/static/mysifa_theme.css">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
@@ -279,31 +279,31 @@ function redirectToLogin() {
 }
 
 function statutBadge(s) {
-  const m = {brouillon:['badge-muted','Brouillon'],envoyee:['badge-warn','Envoy├®e'],cloturee:['badge-success','Cl├┤tur├®e']};
+  const m = {brouillon:['badge-muted','Brouillon'],envoyee:['badge-warn','Envoyée'],cloturee:['badge-success','Clôturée']};
   const x = m[s] || ['badge-muted', s || ''];
   return '<span class="badge '+x[0]+'">'+escHtml(x[1])+'</span>';
 }
 function fourniBadge(s) {
-  const m = {invite:['badge-muted','Invit├®'],ouvert:['badge-warn','Ouvert'],repondu:['badge-success','R├®pondu'],decline:['badge-muted','D├®clin├®']};
+  const m = {invite:['badge-muted','Invité'],ouvert:['badge-warn','Ouvert'],repondu:['badge-success','Répondu'],decline:['badge-muted','Décliné']};
   const x = m[s] || ['badge-muted', s || ''];
   return '<span class="badge '+x[0]+'">'+escHtml(x[1])+'</span>';
 }
 function formatEur(n) {
-  if (n == null || isNaN(n)) return 'ÔÇö';
-  return Number(n).toLocaleString('fr-FR', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' Ôé¼';
+  if (n == null || isNaN(n)) return '—';
+  return Number(n).toLocaleString('fr-FR', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' €';
 }
 function formatMoney(n, devise) {
-  if (n == null || isNaN(n)) return 'ÔÇö';
+  if (n == null || isNaN(n)) return '—';
   const d = (devise || 'EUR').toUpperCase();
-  const sym = d === 'USD' ? '$' : 'Ôé¼';
+  const sym = d === 'USD' ? '$' : '€';
   return Number(n).toLocaleString('fr-FR', {minimumFractionDigits:2, maximumFractionDigits:4}) + ' ' + sym;
 }
 function formatUniteQuot(u) {
   const m = {mille: 'Au mille', bobine: 'Par bobine'};
-  return m[(u || '').toLowerCase()] || (u || 'ÔÇö');
+  return m[(u || '').toLowerCase()] || (u || '—');
 }
 function formatInt(n) {
-  if (n == null || n === '' || isNaN(n)) return 'ÔÇö';
+  if (n == null || n === '' || isNaN(n)) return '—';
   return Number(n).toLocaleString('fr-FR', {maximumFractionDigits:0});
 }
 
@@ -325,7 +325,7 @@ function aoMobileTitle() {
     ao: S.view === 'detail' && S.ao ? [S.ao.reference, 'Appel d\'offre'] : ['Appels d\'offre', 'Appel d\'offre'],
     contact_fournisseur: ['Fournisseurs', 'Contacts'],
     contact_client: ['Clients', 'Contacts'],
-    produits: ['Produits', 'R├®f├®rentiel'],
+    produits: ['Produits', 'Référentiel'],
   };
   const x = m[S.section] || ['MyAO', 'Appels d\'offre'];
   return {title: x[0], sub: x[1]};
@@ -398,12 +398,12 @@ function renderDashboard() {
     '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin-bottom:20px">'+
     '<div class="card" style="margin:0"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600">Total</div><div style="font-size:24px;font-weight:800;margin-top:6px">'+aos.length+'</div></div>'+
     '<div class="card" style="margin:0"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600">Brouillon</div><div style="font-size:24px;font-weight:800;margin-top:6px">'+nb('brouillon')+'</div></div>'+
-    '<div class="card" style="margin:0"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600">Envoy├®e</div><div style="font-size:24px;font-weight:800;margin-top:6px">'+nb('envoyee')+'</div></div>'+
-    '<div class="card" style="margin:0"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600">Cl├┤tur├®e</div><div style="font-size:24px;font-weight:800;margin-top:6px">'+nb('cloturee')+'</div></div>'+
+    '<div class="card" style="margin:0"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600">Envoyée</div><div style="font-size:24px;font-weight:800;margin-top:6px">'+nb('envoyee')+'</div></div>'+
+    '<div class="card" style="margin:0"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600">Clôturée</div><div style="font-size:24px;font-weight:800;margin-top:6px">'+nb('cloturee')+'</div></div>'+
     '</div>'+
-    '<div class="page-hdr" style="margin-bottom:12px"><h2 style="font-size:16px;font-weight:700">Appels d\'offre r├®cents</h2></div>'+
-    (recent.length ? '<div class="card"><table class="data-table"><thead><tr><th>R├®f├®rence</th><th>Titre</th><th>Statut</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>' :
-    '<div class="card empty-state"><strong>Aucun appel d\'offre</strong>Cr├®ez un premier appel d\'offre depuis l\'onglet Appel d\'offre.</div>');
+    '<div class="page-hdr" style="margin-bottom:12px"><h2 style="font-size:16px;font-weight:700">Appels d\'offre récents</h2></div>'+
+    (recent.length ? '<div class="card"><table class="data-table"><thead><tr><th>Référence</th><th>Titre</th><th>Statut</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>' :
+    '<div class="card empty-state"><strong>Aucun appel d\'offre</strong>Créez un premier appel d\'offre depuis l\'onglet Appel d\'offre.</div>');
 }
 
 function renderSectionPlaceholder(title, hint) {
@@ -415,12 +415,12 @@ function renderCarnet() {
   const list = S.carnet || [];
   let rows = '';
   list.forEach(c => {
-    rows += '<tr><td>'+escHtml(c.societe||'ÔÇö')+'</td><td>'+escHtml(c.nom)+'</td><td>'+escHtml(c.email||'ÔÇö')+'</td><td>'+escHtml(c.adresse||'ÔÇö')+'</td><td>'+
+    rows += '<tr><td>'+escHtml(c.societe||'—')+'</td><td>'+escHtml(c.nom)+'</td><td>'+escHtml(c.email||'—')+'</td><td>'+escHtml(c.adresse||'—')+'</td><td>'+
       '<button class="btn btn-ghost btn-sm btn-edit-carnet" data-id="'+c.id+'">Modifier</button> '+
       '<button class="btn btn-ghost btn-sm btn-del-carnet" data-id="'+c.id+'">Supprimer</button></td></tr>';
   });
   const table = list.length
-    ? '<div class="card"><table class="data-table"><thead><tr><th>Soci├®t├®</th><th>Nom</th><th>Email</th><th>Adresse</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+    ? '<div class="card"><table class="data-table"><thead><tr><th>Société</th><th>Nom</th><th>Email</th><th>Adresse</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
     : '<div class="card empty-state"><strong>Aucun fournisseur dans le carnet.</strong></div>';
   return '<div class="page-hdr"><h1>Carnet fournisseurs</h1>'+
     '<button class="btn btn-accent" type="button" id="btn-add-carnet">'+icon('plus',14)+' Ajouter</button></div>'+table;
@@ -430,7 +430,7 @@ function renderCarnetClients() {
   const list = S.carnetClients || [];
   let rows = '';
   list.forEach(c => {
-    rows += '<tr><td>'+escHtml(c.nom)+'</td><td>'+escHtml(c.notes||'ÔÇö')+'</td><td>'+
+    rows += '<tr><td>'+escHtml(c.nom)+'</td><td>'+escHtml(c.notes||'—')+'</td><td>'+
       '<button class="btn btn-ghost btn-sm btn-edit-carnet-client" data-id="'+c.id+'">Modifier</button> '+
       '<button class="btn btn-ghost btn-sm btn-del-carnet-client" data-id="'+c.id+'">Supprimer</button></td></tr>';
   });
@@ -460,7 +460,7 @@ function renderProduitsRows() {
   const list = filteredProduits();
   if (!list.length) {
     el.innerHTML = q
-      ? '<div class="empty-state" style="padding:32px 16px"><strong>Aucun r├®sultat pour ┬½ '+escHtml(q)+' ┬╗</strong></div>'
+      ? '<div class="empty-state" style="padding:32px 16px"><strong>Aucun résultat pour « '+escHtml(q)+' »</strong></div>'
       : '<div class="empty-state" style="padding:32px 16px"><strong>Aucun produit dans le catalogue.</strong></div>';
   } else {
     let rows = '';
@@ -470,7 +470,7 @@ function renderProduitsRows() {
         '<button class="btn btn-ghost btn-sm btn-export-produit" data-id="'+p.id+'">PDF</button> '+
         '<button class="btn btn-ghost btn-sm btn-del-produit" data-id="'+p.id+'">Supprimer</button></td></tr>';
     });
-    el.innerHTML = '<table class="data-table prod-list-table"><thead><tr><th>R├®f├®rence</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>';
+    el.innerHTML = '<table class="data-table prod-list-table"><thead><tr><th>Référence</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>';
     el.querySelectorAll('.btn-edit-produit').forEach(b => {
       b.addEventListener('click', () => {
         const p = (S.produits||[]).find(x => String(x.id) === String(b.dataset.id));
@@ -485,7 +485,7 @@ function renderProduitsRows() {
         if (!confirm('Supprimer ce produit du catalogue ?')) return;
         try {
           await api('/api/ao/produits/'+b.dataset.id, {method:'DELETE'});
-          showToast('Produit supprim├®.', 'success');
+          showToast('Produit supprimé.', 'success');
           await loadProduits();
           renderProduitsRows();
         } catch(e) { showToast(e.message, 'danger'); }
@@ -505,7 +505,7 @@ function renderProduits() {
   return '<div class="page-hdr"><h1>Catalogue produits</h1>'+
     '<button class="btn btn-accent" type="button" id="btn-add-produit">'+icon('plus',14)+' Ajouter un produit</button></div>'+
     '<div class="card">'+
-    '<input type="search" id="produits-search" placeholder="Rechercher une r├®f├®renceÔÇª" value="'+escAttr(S.produitsSearch||'')+'" style="width:100%;margin-bottom:14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 16px;color:var(--text);font-size:14px">'+
+    '<input type="search" id="produits-search" placeholder="Rechercher une référence…" value="'+escAttr(S.produitsSearch||'')+'" style="width:100%;margin-bottom:14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 16px;color:var(--text);font-size:14px">'+
     '<div id="produits-list"></div></div>';
 }
 
@@ -537,10 +537,10 @@ function bindCarnetEvents() {
   });
   document.querySelectorAll('.btn-del-carnet').forEach(b => {
     b.addEventListener('click', async () => {
-      if (!confirm('Supprimer cette entr├®e du carnet ?')) return;
+      if (!confirm('Supprimer cette entrée du carnet ?')) return;
       try {
         await api('/api/ao/carnet-fournisseurs/'+b.dataset.id, {method:'DELETE'});
-        showToast('Entr├®e supprim├®e.', 'success');
+        showToast('Entrée supprimée.', 'success');
         await loadCarnet();
         render();
       } catch(e) { showToast(e.message, 'danger'); }
@@ -558,10 +558,10 @@ function bindCarnetClientsEvents() {
   });
   document.querySelectorAll('.btn-del-carnet-client').forEach(b => {
     b.addEventListener('click', async () => {
-      if (!confirm('Supprimer cette entr├®e du carnet ?')) return;
+      if (!confirm('Supprimer cette entrée du carnet ?')) return;
       try {
         await api('/api/ao/carnet-clients/'+b.dataset.id, {method:'DELETE'});
-        showToast('Entr├®e supprim├®e.', 'success');
+        showToast('Entrée supprimée.', 'success');
         await loadCarnetClients();
         render();
       } catch(e) { showToast(e.message, 'danger'); }
@@ -686,7 +686,7 @@ function openModalCreate() {
 }
 function openModalLigne(edit) {
   S.modal = 'ligne';
-  S.modalData = edit ? {...edit} : {ref_produit:'',designation:'',quantite:'',unite:'unit├®',notes:''};
+  S.modalData = edit ? {...edit} : {ref_produit:'',designation:'',quantite:'',unite:'unité',notes:''};
   renderModal();
 }
 function openModalFourni() {
@@ -735,7 +735,7 @@ function renderModal() {
       '<div class="field"><label>Description</label><textarea id="m-desc" rows="3">'+escHtml(S.modalData.description)+'</textarea></div>'+
       '<div class="form-row"><div class="field"><label>Date limite</label><input type="date" id="m-limite" value="'+escAttr(S.modalData.date_limite)+'"></div>'+
       '<div class="field"><label>Email responsable</label><input type="email" id="m-email" value="'+escAttr(S.modalData.responsable_email)+'"></div></div>'+
-      '<div class="modal-actions"><button class="btn btn-ghost" type="button" id="m-cancel">Annuler</button><button class="btn btn-accent" type="button" id="m-ok">Cr├®er</button></div>';
+      '<div class="modal-actions"><button class="btn btn-ghost" type="button" id="m-cancel">Annuler</button><button class="btn btn-accent" type="button" id="m-ok">Créer</button></div>';
     ov.appendChild(box); m.appendChild(ov);
     document.getElementById('m-cancel').onclick = closeModal;
     document.getElementById('m-ok').onclick = async () => {
@@ -747,25 +747,25 @@ function renderModal() {
           body: JSON.stringify({titre, description: document.getElementById('m-desc').value.trim() || null,
             date_limite: document.getElementById('m-limite').value || null, responsable_email: email})});
         closeModal();
-        showToast('Appel d\'offre cr├®├®.', 'success');
+        showToast('Appel d\'offre créé.', 'success');
         openDetail(ao.id);
       } catch(e) { showToast(e.message, 'danger'); }
     };
   } else if (S.modal === 'ligne') {
     const editId = S.modalData.id;
-    let prodOpts = '<option value="">ÔÇö Saisie manuelle ÔÇö</option>';
+    let prodOpts = '<option value="">— Saisie manuelle —</option>';
     (S.produits||[]).forEach(p => {
-      prodOpts += '<option value="'+p.id+'">'+escHtml(p.ref)+' ÔÇö '+escHtml(p.designation)+'</option>';
+      prodOpts += '<option value="'+p.id+'">'+escHtml(p.ref)+' — '+escHtml(p.designation)+'</option>';
     });
     const saveCatHtml = editId ? '' :
       '<label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:14px">'+
       '<input type="checkbox" id="m-save-produit"> Enregistrer dans le catalogue</label>';
     box.innerHTML = '<h3>'+(editId?'Modifier':'Ajouter')+' une ligne</h3>'+
       '<div class="field"><label>Produit du catalogue</label><select id="m-produit-pick">'+prodOpts+'</select></div>'+
-      '<div class="field"><label>R├®f. produit</label><input id="m-ref" value="'+escAttr(S.modalData.ref_produit||'')+'"></div>'+
-      '<div class="field"><label>D├®signation</label><input id="m-des" value="'+escAttr(S.modalData.designation||'')+'"></div>'+
-      '<div class="form-row"><div class="field"><label>Quantit├® d\'├®tiquettes</label><input type="number" step="1" min="0" id="m-qte" value="'+escAttr(S.modalData.quantite)+'"></div>'+
-      '<div class="field"><label>Unit├® (interne)</label><input id="m-unite" value="'+escAttr(S.modalData.unite||'├®tiquettes')+'"></div></div>'+
+      '<div class="field"><label>Réf. produit</label><input id="m-ref" value="'+escAttr(S.modalData.ref_produit||'')+'"></div>'+
+      '<div class="field"><label>Désignation</label><input id="m-des" value="'+escAttr(S.modalData.designation||'')+'"></div>'+
+      '<div class="form-row"><div class="field"><label>Quantité d\'étiquettes</label><input type="number" step="1" min="0" id="m-qte" value="'+escAttr(S.modalData.quantite)+'"></div>'+
+      '<div class="field"><label>Unité (interne)</label><input id="m-unite" value="'+escAttr(S.modalData.unite||'étiquettes')+'"></div></div>'+
       '<div class="field"><label>Notes</label><input id="m-notes" value="'+escAttr(S.modalData.notes||'')+'"></div>'+
       saveCatHtml+
       '<div class="modal-actions"><button class="btn btn-ghost" id="m-cancel">Annuler</button><button class="btn btn-accent" id="m-ok">Enregistrer</button></div>';
@@ -783,7 +783,7 @@ function renderModal() {
         if (p) {
           refEl.value = p.ref || '';
           desEl.value = p.designation || '';
-          uniteEl.value = p.unite || '├®tiquettes';
+          uniteEl.value = p.unite || 'étiquettes';
           if (p.notes) notesEl.value = p.notes;
         }
         if (saveCb) { saveCb.checked = false; saveCb.disabled = true; }
@@ -795,7 +795,7 @@ function renderModal() {
     document.getElementById('m-ok').onclick = async () => {
       const ref = refEl.value.trim();
       const designation = desEl.value.trim();
-      if (!ref || !designation) { showToast('R├®f├®rence et d├®signation obligatoires.', 'danger'); return; }
+      if (!ref || !designation) { showToast('Référence et désignation obligatoires.', 'danger'); return; }
       const body = {ref_produit: ref, designation,
         quantite: parseFloat(document.getElementById('m-qte').value), unite: uniteEl.value.trim(),
         notes: notesEl.value.trim() || null};
@@ -807,22 +807,22 @@ function renderModal() {
             body: JSON.stringify({ref, designation, fiche: defaultProduitFiche()})});
           await loadProduits();
         }
-        closeModal(); showToast('Ligne enregistr├®e.', 'success');
+        closeModal(); showToast('Ligne enregistrée.', 'success');
         await loadDetail(S.ao.id); render();
       } catch(e) { showToast(e.message, 'danger'); }
     };
   } else if (S.modal === 'fourni') {
     box.className = 'modal modal-wide';
-    let carnetOpts = '<option value="">ÔÇö Saisie manuelle ÔÇö</option>';
+    let carnetOpts = '<option value="">— Saisie manuelle —</option>';
     (S.carnet||[]).forEach(c => {
-      const lbl = (c.societe ? escHtml(c.societe)+' ÔÇö ' : '')+escHtml(c.nom);
+      const lbl = (c.societe ? escHtml(c.societe)+' — ' : '')+escHtml(c.nom);
       carnetOpts += '<option value="'+c.id+'">'+lbl+'</option>';
     });
     box.innerHTML = '<h3>Ajouter un fournisseur</h3>'+
-      '<div class="field"><label>S├®lectionner depuis le carnet</label>'+
+      '<div class="field"><label>Sélectionner depuis le carnet</label>'+
       '<select id="m-carnet-pick">'+carnetOpts+'</select></div>'+
       '<div id="m-fourni-form">'+
-      '<div class="field"><label>Soci├®t├®</label><input id="m-societe"></div>'+
+      '<div class="field"><label>Société</label><input id="m-societe"></div>'+
       '<div class="field"><label>Nom</label><input id="m-nom"></div>'+
       '<div class="field"><label>Email</label><input type="email" id="m-mail"></div>'+
       '<div class="field"><label>Adresse</label><textarea id="m-adresse" rows="2"></textarea></div></div>'+
@@ -872,7 +872,7 @@ function renderModal() {
             })});
           await loadCarnet();
         }
-        closeModal(); showToast('Fournisseur ajout├®.', 'success');
+        closeModal(); showToast('Fournisseur ajouté.', 'success');
         await loadDetail(S.ao.id); render();
       } catch(e) { showToast(e.message, 'danger'); }
     };
@@ -880,7 +880,7 @@ function renderModal() {
     const editId = S.modalData.id;
     box.className = 'modal modal-wide';
     box.innerHTML = '<h3>'+(editId?'Modifier':'Ajouter')+' au carnet</h3>'+
-      '<div class="field"><label>Soci├®t├®</label><input id="m-c-societe" value="'+escAttr(S.modalData.societe||'')+'"></div>'+
+      '<div class="field"><label>Société</label><input id="m-c-societe" value="'+escAttr(S.modalData.societe||'')+'"></div>'+
       '<div class="field"><label>Nom</label><input id="m-c-nom" value="'+escAttr(S.modalData.nom||'')+'"></div>'+
       '<div class="field"><label>Email</label><input type="email" id="m-c-email" value="'+escAttr(S.modalData.email||'')+'"></div>'+
       '<div class="field"><label>Adresse</label><textarea id="m-c-adresse" rows="2">'+escHtml(S.modalData.adresse||'')+'</textarea></div>'+
@@ -903,7 +903,7 @@ function renderModal() {
         } else {
           await api('/api/ao/carnet-fournisseurs', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
         }
-        closeModal(); showToast('Carnet enregistr├®.', 'success');
+        closeModal(); showToast('Carnet enregistré.', 'success');
         await loadCarnet(); render();
       } catch(e) { showToast(e.message, 'danger'); }
     };
@@ -927,7 +927,7 @@ function renderModal() {
         } else {
           await api('/api/ao/carnet-clients', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
         }
-        closeModal(); showToast('Carnet enregistr├®.', 'success');
+        closeModal(); showToast('Carnet enregistré.', 'success');
         await loadCarnetClients(); render();
       } catch(e) { showToast(e.message, 'danger'); }
     };
@@ -940,16 +940,16 @@ function renderModal() {
       try {
         const r = await api('/api/ao/'+S.ao.id+'/envoyer', {method:'POST'});
         closeModal();
-        showToast('Envoy├®s : '+r.envoyes+(r.erreurs?' ÔÇö Erreurs : '+r.erreurs:''), r.erreurs?'warn':'success');
+        showToast('Envoyés : '+r.envoyes+(r.erreurs?' — Erreurs : '+r.erreurs:''), r.erreurs?'warn':'success');
         await loadDetail(S.ao.id); render();
       } catch(e) { showToast(e.message, 'danger'); }
     };
   } else if (S.modal === 'confirm-delete-ao') {
     const st = S.modalData.statut;
-    const stLabel = st === 'brouillon' ? 'Brouillon' : st === 'envoyee' ? 'Envoy├®e' : st === 'cloturee' ? 'Cl├┤tur├®e' : st;
+    const stLabel = st === 'brouillon' ? 'Brouillon' : st === 'envoyee' ? 'Envoyée' : st === 'cloturee' ? 'Clôturée' : st;
     const warn = (st === 'envoyee' || st === 'cloturee')
       ? '<div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.3);border-radius:8px;padding:12px;margin-bottom:14px;font-size:12px;color:var(--danger);line-height:1.5">'+
-        '<strong>Attention</strong> ÔÇö cet appel d\'offre est au statut ┬½ '+escHtml(stLabel)+' ┬╗. La suppression effacera aussi tous les fournisseurs, leurs r├®ponses, messages et documents associ├®s. Cette action est irr├®versible.</div>'
+        '<strong>Attention</strong> — cet appel d\'offre est au statut « '+escHtml(stLabel)+' ». La suppression effacera aussi tous les fournisseurs, leurs réponses, messages et documents associés. Cette action est irréversible.</div>'
       : '';
     box.innerHTML = '<h3>Supprimer l\'appel d\'offre</h3>'+
       '<p style="font-size:14px;color:var(--text2);line-height:1.6;margin-bottom:14px">Supprimer <strong>'+escHtml(S.modalData.ref)+'</strong> ?</p>'+
@@ -961,7 +961,7 @@ function renderModal() {
       try {
         await api('/api/ao/'+S.modalData.id, {method:'DELETE'});
         closeModal();
-        showToast('Appel d\'offre supprim├®.', 'success');
+        showToast('Appel d\'offre supprimé.', 'success');
         await loadList(); render();
       } catch(e) { showToast(e.message, 'danger'); }
     };
@@ -973,10 +973,10 @@ function renderModal() {
       '<div class="field"><label>Titre du nouvel appel d\'offre</label>'+
       '<input id="m-dup-titre" value="'+escAttr(defaultTitre)+'"></div>'+
       '<label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:10px">'+
-      '<input type="checkbox" id="m-dup-f" checked> Recopier les fournisseurs invit├®s</label>'+
+      '<input type="checkbox" id="m-dup-f" checked> Recopier les fournisseurs invités</label>'+
       '<label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:14px">'+
       '<input type="checkbox" id="m-dup-pj"> Recopier les documents joints</label>'+
-      '<p style="font-size:11px;color:var(--muted);line-height:1.5;margin-bottom:14px">Le nouvel appel d\'offre sera cr├®├® en <strong style="color:var(--text2)">brouillon</strong>. Les r├®ponses fournisseurs ne sont jamais recopi├®es.</p>'+
+      '<p style="font-size:11px;color:var(--muted);line-height:1.5;margin-bottom:14px">Le nouvel appel d\'offre sera créé en <strong style="color:var(--text2)">brouillon</strong>. Les réponses fournisseurs ne sont jamais recopiées.</p>'+
       '<div class="modal-actions"><button class="btn btn-ghost" type="button" id="m-cancel">Annuler</button><button class="btn btn-accent" type="button" id="m-ok">Dupliquer et ouvrir</button></div>';
     ov.appendChild(box); m.appendChild(ov);
     document.getElementById('m-cancel').onclick = closeModal;
@@ -992,7 +992,7 @@ function renderModal() {
         const ao = await api('/api/ao/'+md.id+'/dupliquer',
           {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
         closeModal();
-        showToast('Appel d\'offre dupliqu├® ÔÇö '+ao.reference, 'success');
+        showToast('Appel d\'offre dupliqué — '+ao.reference, 'success');
         await loadList();
         openDetail(ao.id);
       } catch(e) { showToast(e.message, 'danger'); }
@@ -1011,15 +1011,15 @@ function renderList() {
       '<button class="btn-icon btn-dup-ao" data-id="'+a.id+'" data-ref="'+ref+'" data-titre="'+titre+'" title="Dupliquer">'+icon('copy',14)+'</button> '+
       '<button class="btn-icon btn-del-ao" data-id="'+a.id+'" data-ref="'+ref+'" data-statut="'+escAttr(a.statut||'')+'" title="Supprimer">'+icon('trash',14)+'</button>';
     rows += '<tr><td><strong>'+escHtml(a.reference)+'</strong></td><td>'+escHtml(a.titre)+'</td><td>'+statutBadge(a.statut)+'</td>'+
-      '<td>'+escHtml(a.date_limite||'ÔÇö')+'</td><td>'+escHtml(a.nb_fournisseurs)+'</td><td>'+escHtml(a.nb_reponses)+'</td>'+
+      '<td>'+escHtml(a.date_limite||'—')+'</td><td>'+escHtml(a.nb_fournisseurs)+'</td><td>'+escHtml(a.nb_reponses)+'</td>'+
       '<td class="ao-actions-cell">'+actions+'</td></tr>';
   });
   return '<div class="page-hdr"><h1>Appels d\'offre</h1><button class="btn btn-accent" type="button" id="btn-new-ao">'+icon('plus',14)+' Nouvel appel d\'offre</button></div>'+
     '<div class="filter-tabs">'+
-    ['tous','brouillon','envoyee','cloturee'].map(f=>'<button class="filter-tab'+(S.filtre===f?' active':'')+'" data-f="'+f+'">'+escHtml(f==='tous'?'Tous':f==='brouillon'?'Brouillon':f==='envoyee'?'Envoy├®e':'Cl├┤tur├®e')+'</button>').join('')+
+    ['tous','brouillon','envoyee','cloturee'].map(f=>'<button class="filter-tab'+(S.filtre===f?' active':'')+'" data-f="'+f+'">'+escHtml(f==='tous'?'Tous':f==='brouillon'?'Brouillon':f==='envoyee'?'Envoyée':'Clôturée')+'</button>').join('')+
     '</div>'+
-    (list.length ? '<div class="card"><table class="data-table"><thead><tr><th>R├®f├®rence</th><th>Titre</th><th>Statut</th><th>Date limite</th><th>Fournisseurs</th><th>R├®ponses</th><th style="text-align:right">Actions</th></tr></thead><tbody>'+rows+'</tbody></table></div>' :
-    '<div class="card empty-state"><strong>Aucun appel d\'offre</strong>Cr├®ez un premier appel d\'offre pour inviter vos fournisseurs.</div>');
+    (list.length ? '<div class="card"><table class="data-table"><thead><tr><th>Référence</th><th>Titre</th><th>Statut</th><th>Date limite</th><th>Fournisseurs</th><th>Réponses</th><th style="text-align:right">Actions</th></tr></thead><tbody>'+rows+'</tbody></table></div>' :
+    '<div class="card empty-state"><strong>Aucun appel d\'offre</strong>Créez un premier appel d\'offre pour inviter vos fournisseurs.</div>');
 }
 
 function renderDetailHeader() {
@@ -1033,16 +1033,16 @@ function renderDetailHeader() {
     const dis = (lignes < 1 || fournis < 1) ? ' disabled' : '';
     actions += '<button class="btn btn-accent" type="button" id="btn-envoyer"'+dis+'>Envoyer aux fournisseurs</button>';
   } else if (st === 'envoyee') {
-    // Fournisseurs ajout├®s apr├¿s le premier envoi (date_envoi IS NULL, statut='invite')
+    // Fournisseurs ajoutés après le premier envoi (date_envoi IS NULL, statut='invite')
     const nonenvoyes = (d.fournisseurs||[]).filter(f => !f.date_envoi && f.statut === 'invite').length;
     if (nonenvoyes > 0) {
       actions += '<button class="btn btn-accent" type="button" id="btn-envoyer">Envoyer aux nouveaux ('+nonenvoyes+')</button>';
     }
   }
-  if (st === 'envoyee') actions += '<button class="btn btn-accent" type="button" id="btn-cloturer">Cl├┤turer l\'AO</button>';
-  return '<div class="breadcrumb"><a href="#" id="bc-list">Appels d\'offre</a> &gt; '+escHtml(ao.reference)+' ÔÇö '+escHtml(ao.titre)+'</div>'+
+  if (st === 'envoyee') actions += '<button class="btn btn-accent" type="button" id="btn-cloturer">Clôturer l\'AO</button>';
+  return '<div class="breadcrumb"><a href="#" id="bc-list">Appels d\'offre</a> &gt; '+escHtml(ao.reference)+' — '+escHtml(ao.titre)+'</div>'+
     '<div class="detail-hdr"><h2>'+escHtml(ao.reference)+'</h2>'+statutBadge(st)+'</div>'+
-    '<div class="detail-meta">'+escHtml(ao.titre)+'<br>Date limite : '+escHtml(ao.date_limite||'ÔÇö')+' ┬À Responsable : '+escHtml(ao.responsable_email||'ÔÇö')+' ┬À R├®ponses : '+escHtml(d.nb_reponses)+'</div>'+
+    '<div class="detail-meta">'+escHtml(ao.titre)+'<br>Date limite : '+escHtml(ao.date_limite||'—')+' · Responsable : '+escHtml(ao.responsable_email||'—')+' · Réponses : '+escHtml(d.nb_reponses)+'</div>'+
     '<div class="detail-actions">'+actions+'</div>'+
     '<div class="detail-tabs">'+
     (() => {
@@ -1064,12 +1064,12 @@ function renderLignes() {
   const st = S.ao.statut;
   const lignes = S.detail.lignes || [];
   let rows = lignes.map(l => '<tr><td>'+escHtml(l.position)+'</td><td>'+escHtml(l.ref_produit)+'</td>'+
-    '<td>'+escHtml(l.client_nom||'ÔÇö')+'</td><td>'+formatInt(l.etiquettes_par_bobine)+'</td>'+
+    '<td>'+escHtml(l.client_nom||'—')+'</td><td>'+formatInt(l.etiquettes_par_bobine)+'</td>'+
     '<td>'+escHtml(l.quantite)+' '+escHtml(l.unite)+'</td><td>'+escHtml(l.notes||'')+'</td><td>'+
     (st==='brouillon'?'<button class="btn btn-ghost btn-sm btn-edit-ligne" data-id="'+l.id+'">Modifier</button> <button class="btn btn-ghost btn-sm btn-del-ligne" data-id="'+l.id+'">Supprimer</button>':'')+
     '</td></tr>').join('');
   return '<div class="card">'+(st==='brouillon'?'<button class="btn btn-accent btn-sm" type="button" id="btn-add-ligne" style="margin-bottom:12px">'+icon('plus',14)+' Ajouter une ligne</button>':'')+
-    '<table class="data-table"><thead><tr><th>#</th><th>R├®f.</th><th>Client</th><th>├ëtiq. / bobine</th><th>Qt├®</th><th>Notes</th><th></th></tr></thead><tbody>'+
+    '<table class="data-table"><thead><tr><th>#</th><th>Réf.</th><th>Client</th><th>Étiq. / bobine</th><th>Qté</th><th>Notes</th><th></th></tr></thead><tbody>'+
     (rows||'<tr><td colspan="7" style="color:var(--muted)">Aucune ligne</td></tr>')+'</tbody></table></div>';
 }
 
@@ -1087,10 +1087,10 @@ function renderFournisseurs() {
       '<button class="btn btn-ghost btn-sm btn-msg" data-id="'+f.id+'">Messagerie</button>';
     if (f.statut !== 'repondu') act += ' <button class="btn btn-ghost btn-sm btn-del-f" data-id="'+f.id+'">Supprimer</button>';
     return '<tr><td>'+escHtml(f.nom_fournisseur)+'</td><td>'+escHtml(f.email_contact)+'</td><td>'+fourniBadge(f.statut)+unreadBadge+'</td>'+
-      '<td>'+escHtml(f.date_envoi||'ÔÇö')+'</td><td>'+escHtml(f.date_reponse||'ÔÇö')+'</td><td>'+act+'</td></tr>';
+      '<td>'+escHtml(f.date_envoi||'—')+'</td><td>'+escHtml(f.date_reponse||'—')+'</td><td>'+act+'</td></tr>';
   }).join('');
   return '<div class="card">'+(ao.statut!=='cloturee'?'<button class="btn btn-accent btn-sm" id="btn-add-f" style="margin-bottom:12px">'+icon('plus',14)+' Ajouter un fournisseur</button>':'')+
-    '<table class="data-table"><thead><tr><th>Nom</th><th>Email</th><th>Statut</th><th>Envoi</th><th>R├®ponse</th><th></th></tr></thead><tbody>'+
+    '<table class="data-table"><thead><tr><th>Nom</th><th>Email</th><th>Statut</th><th>Envoi</th><th>Réponse</th><th></th></tr></thead><tbody>'+
     (rows||'<tr><td colspan="6" style="color:var(--muted)">Aucun fournisseur</td></tr>')+'</tbody></table></div>';
 }
 
@@ -1121,14 +1121,14 @@ async function saveReponsePricing(reponseId, patch) {
 
 function renderComparaison() {
   const c = S.comparaison;
-  if (!c) return '<div class="card" style="color:var(--muted)">ChargementÔÇª</div>';
+  if (!c) return '<div class="card" style="color:var(--muted)">Chargement…</div>';
   const rows = c.rows || [];
   if (!rows.length) {
     const nLignes = (c.lignes || []).length;
     const nFournis = (c.fournisseurs || []).length;
-    let msg = 'Ajoutez des lignes et des fournisseurs ├á cet appel d\'offre.';
-    if (!nLignes) msg = 'Ajoutez des lignes produit ├á cet appel d\'offre.';
-    else if (!nFournis) msg = 'Ajoutez des fournisseurs invit├®s.';
+    let msg = 'Ajoutez des lignes et des fournisseurs à cet appel d\'offre.';
+    if (!nLignes) msg = 'Ajoutez des lignes produit à cet appel d\'offre.';
+    else if (!nFournis) msg = 'Ajoutez des fournisseurs invités.';
     return '<div class="card empty-state"><strong>Demandes de prix</strong>'+escHtml(msg)+'</div>';
   }
   let bestMille = null;
@@ -1136,10 +1136,10 @@ function renderComparaison() {
     if (r.prix_au_mille != null && (bestMille == null || r.prix_au_mille < bestMille)) bestMille = r.prix_au_mille;
   });
   const head = '<tr>'+
-    '<th>Client</th><th>R├®f. produit</th><th>Frontal</th><th>Adh├®sif</th>'+
-    '<th>├ëtiq. / bobine</th><th>Qt├® ├®tiquettes</th><th>Fournisseur</th>'+
-    '<th>Quotation</th><th>Devise</th><th>Unit├® quot.</th>'+
-    '<th>Prix calcul├®</th><th>Prix / mille</th><th>Coef</th>'+
+    '<th>Client</th><th>Réf. produit</th><th>Frontal</th><th>Adhésif</th>'+
+    '<th>Étiq. / bobine</th><th>Qté étiquettes</th><th>Fournisseur</th>'+
+    '<th>Quotation</th><th>Devise</th><th>Unité quot.</th>'+
+    '<th>Prix calculé</th><th>Prix / mille</th><th>Coef</th>'+
     '<th>Devise devis</th><th>Prix de vente</th></tr>';
   let body = '';
   rows.forEach(r => {
@@ -1151,10 +1151,10 @@ function renderComparaison() {
     const noRep = rid == null || rid === '';
     const dis = noRep ? ' disabled' : '';
     body += '<tr data-reponse-id="'+escAttr(rid||'')+'">'+
-      '<td class="txt-left">'+escHtml(r.client_nom||'ÔÇö')+'</td>'+
+      '<td class="txt-left">'+escHtml(r.client_nom||'—')+'</td>'+
       '<td class="ref">'+escHtml(r.ref_produit)+'</td>'+
-      '<td class="txt-left" style="font-size:11px;color:var(--text2)">'+escHtml(r.frontal||'ÔÇö')+'</td>'+
-      '<td class="txt-left" style="font-size:11px;color:var(--text2)">'+escHtml(r.adhesif||'ÔÇö')+'</td>'+
+      '<td class="txt-left" style="font-size:11px;color:var(--text2)">'+escHtml(r.frontal||'—')+'</td>'+
+      '<td class="txt-left" style="font-size:11px;color:var(--text2)">'+escHtml(r.adhesif||'—')+'</td>'+
       '<td>'+formatInt(r.etiquettes_par_bobine)+'</td>'+
       '<td>'+formatInt(r.quantite_etiquettes)+'</td>'+
       '<td class="txt-left">'+escHtml(r.nom_fournisseur||'')+'</td>'+
@@ -1172,14 +1172,14 @@ function renderComparaison() {
       '</tr>';
   });
   const fxNote = c.eur_usd_rate
-    ? '<p style="font-size:11px;color:var(--muted);margin-top:10px">Taux EUR/USD : '+Number(c.eur_usd_rate).toLocaleString('fr-FR', {maximumFractionDigits:4})+' ÔÇö conversion appliqu├®e sur le prix de vente si les devises diff├¿rent.</p>'
+    ? '<p style="font-size:11px;color:var(--muted);margin-top:10px">Taux EUR/USD : '+Number(c.eur_usd_rate).toLocaleString('fr-FR', {maximumFractionDigits:4})+' — conversion appliquée sur le prix de vente si les devises diffèrent.</p>'
     : '';
   return '<div class="card" style="overflow:auto"><table class="comp-table"><thead>'+head+'</thead><tbody>'+body+'</tbody></table>'+fxNote+'</div>';
 }
 
 function renderMessagerieContent(container) {
   const fournis = S.detail.fournisseurs || [];
-  let sel = '<select id="msg-fourni-sel"><option value="">ÔÇö Fournisseur ÔÇö</option>';
+  let sel = '<select id="msg-fourni-sel"><option value="">— Fournisseur —</option>';
   fournis.forEach(f => {
     sel += '<option value="'+f.id+'"'+(S.messages_fourni==f.id?' selected':'')+'>'+escHtml(f.nom_fournisseur)+'</option>';
   });
@@ -1187,7 +1187,7 @@ function renderMessagerieContent(container) {
   let bubbles = '';
   (S.messages||[]).forEach(m => {
     const cls = m.expediteur === 'interne' ? 'interne' : 'fournisseur';
-    bubbles += '<div class="bubble '+cls+'"><div class="meta">'+escHtml(m.auteur_nom||m.expediteur)+' ┬À '+escHtml(m.date)+'</div>'+escHtml(m.message)+'</div>';
+    bubbles += '<div class="bubble '+cls+'"><div class="meta">'+escHtml(m.auteur_nom||m.expediteur)+' · '+escHtml(m.date)+'</div>'+escHtml(m.message)+'</div>';
   });
   container.innerHTML = '<div class="card"><div class="field"><label>Fournisseur</label>'+sel+'</div>'+
     '<div class="msg-list" style="display:flex;flex-direction:column">'+bubbles+'</div>'+
@@ -1203,7 +1203,7 @@ function renderDocuments() {
   const aoId = S.ao.id;
   return api('/api/ao/'+aoId+'/pieces-jointes').then(pjs => {
     let rows = (pjs||[]).map(pj => '<tr><td>'+escHtml(pj.filename)+'</td><td>'+Math.round((pj.taille_octets||0)/1024)+' Ko</td><td>'+escHtml(pj.date)+'</td>'+
-      '<td><a class="btn btn-ghost btn-sm" href="/api/ao/'+aoId+'/pieces-jointes/'+pj.id+'/download">T├®l├®charger</a> '+
+      '<td><a class="btn btn-ghost btn-sm" href="/api/ao/'+aoId+'/pieces-jointes/'+pj.id+'/download">Télécharger</a> '+
       '<button class="btn btn-ghost btn-sm btn-del-pj" data-id="'+pj.id+'">Supprimer</button></td></tr>').join('');
     return '<div class="card"><p style="font-size:12px;color:var(--muted);margin-bottom:12px">Taille max. 10 Mo par fichier.</p>'+
       '<input type="file" id="pj-file" style="margin-bottom:10px"><button class="btn btn-accent btn-sm" id="btn-pj-upload">Ajouter un document</button>'+
@@ -1235,10 +1235,10 @@ function bindDetailEvents() {
     openModalConfirmEnvoi(n);
   });
   document.getElementById('btn-cloturer')?.addEventListener('click', async () => {
-    if (!confirm('Cl├┤turer cet appel d\'offre ?')) return;
+    if (!confirm('Clôturer cet appel d\'offre ?')) return;
     try {
       await api('/api/ao/'+S.ao.id+'/cloturer', {method:'PATCH'});
-      showToast('Appel d\'offre cl├┤tur├®.', 'success');
+      showToast('Appel d\'offre clôturé.', 'success');
       await loadDetail(S.ao.id); render();
     } catch(e) { showToast(e.message, 'danger'); }
   });
@@ -1253,7 +1253,7 @@ function bindDetailEvents() {
     if (!confirm('Supprimer cette ligne ?')) return;
     try {
       await api('/api/ao/'+S.ao.id+'/lignes/'+b.dataset.id, {method:'DELETE'});
-      showToast('Ligne supprim├®e.', 'success');
+      showToast('Ligne supprimée.', 'success');
       await loadDetail(S.ao.id); render();
     } catch(e) { showToast(e.message, 'danger'); }
   }));
@@ -1261,7 +1261,7 @@ function bindDetailEvents() {
   document.querySelectorAll('.btn-copy').forEach(b => b.addEventListener('click', () => {
     const f = (S.detail.fournisseurs||[]).find(x => x.token === b.dataset.token);
     const url = (BASE_URL||location.origin).replace(/\/$/,'')+'/portail/ao/'+b.dataset.token;
-    navigator.clipboard.writeText(url).then(() => showToast('Lien copi├®.', 'success')).catch(() => showToast('Copie impossible', 'danger'));
+    navigator.clipboard.writeText(url).then(() => showToast('Lien copié.', 'success')).catch(() => showToast('Copie impossible', 'danger'));
   }));
   document.querySelectorAll('.btn-msg').forEach(b => b.addEventListener('click', () => {
     S.messages_fourni = parseInt(b.dataset.id, 10);
@@ -1271,7 +1271,7 @@ function bindDetailEvents() {
     if (!confirm('Supprimer ce fournisseur ?')) return;
     try {
       await api('/api/ao/'+S.ao.id+'/fournisseurs/'+b.dataset.id, {method:'DELETE'});
-      showToast('Fournisseur supprim├®.', 'success');
+      showToast('Fournisseur supprimé.', 'success');
       await loadDetail(S.ao.id); render();
     } catch(e) { showToast(e.message, 'danger'); }
   }));
@@ -1286,7 +1286,7 @@ function bindDetailEvents() {
       await api('/api/ao/'+S.ao.id+'/fournisseurs/'+S.messages_fourni+'/messages',
         {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({message: msg})});
       document.getElementById('msg-body').value = '';
-      showToast('Message envoy├®.', 'success');
+      showToast('Message envoyé.', 'success');
       await loadMessages(S.ao.id, S.messages_fourni); render();
     } catch(e) { showToast(e.message, 'danger'); }
   });
@@ -1298,7 +1298,7 @@ function bindDetailEvents() {
     fd.append('file', f);
     try {
       await api('/api/ao/'+S.ao.id+'/pieces-jointes', {method:'POST', body: fd});
-      showToast('Document ajout├®.', 'success');
+      showToast('Document ajouté.', 'success');
       render();
     } catch(e) { showToast(e.message, 'danger'); }
   });
@@ -1306,7 +1306,7 @@ function bindDetailEvents() {
     if (!confirm('Supprimer ce document ?')) return;
     try {
       await api('/api/ao/'+S.ao.id+'/pieces-jointes/'+b.dataset.id, {method:'DELETE'});
-      showToast('Document supprim├®.', 'success');
+      showToast('Document supprimé.', 'success');
       render();
     } catch(e) { showToast(e.message, 'danger'); }
   }));
@@ -1317,7 +1317,7 @@ function bindDetailEvents() {
       if (!rid || isNaN(v) || v <= 0) { showToast('Coefficient invalide.', 'danger'); return; }
       try {
         await saveReponsePricing(rid, {coef: v});
-        showToast('Coefficient enregistr├®.', 'success');
+        showToast('Coefficient enregistré.', 'success');
       } catch(e) { showToast(e.message, 'danger'); }
     });
   });
@@ -1327,7 +1327,7 @@ function bindDetailEvents() {
       if (!rid) return;
       try {
         await saveReponsePricing(rid, {devise_prix_devis: sel.value});
-        showToast('Devise enregistr├®e.', 'success');
+        showToast('Devise enregistrée.', 'success');
       } catch(e) { showToast(e.message, 'danger'); }
     });
   });
@@ -1351,11 +1351,11 @@ function render() {
     '<nav class="sidebar"><div class="logo"><div class="logo-brand">My<span>AO</span></div><div class="logo-sub">by SIFA</div></div>'+
     '<div class="sidebar-nav">'+navHtml+'</div>'+
     '<div class="sidebar-bottom">'+
-    '<button type="button" class="nav-btn back-mysifa" id="btn-home">ÔåÉ Retour <span class="wm">My<span>Sifa</span></span></button>'+
+    '<button type="button" class="nav-btn back-mysifa" id="btn-home">← Retour <span class="wm">My<span>Sifa</span></span></button>'+
     renderUserChipHtml()+
     '<button type="button" class="support-btn" id="btn-support"><span class="support-ico" id="support-ico"></span><span>Contacter le support</span></button>'+
     '<button type="button" class="theme-btn" id="btn-theme">'+icon(isLight?'sun':'moon',16)+' '+(isLight?'Mode clair':'Mode sombre')+'</button>'+
-    '<button type="button" class="logout-btn" id="btn-logout">'+icon('log-out',14)+' D├®connexion</button>'+
+    '<button type="button" class="logout-btn" id="btn-logout">'+icon('log-out',14)+' Déconnexion</button>'+
     '<div class="version">MyAO __V_LABEL__</div></div></nav>'+
     '<div class="main"><div class="mobile-topbar">'+
     '<button type="button" class="mobile-menu-btn" id="btn-menu">'+icon('menu',20)+'</button>'+
@@ -1406,7 +1406,7 @@ function render() {
     else if (S.tab === 'fournisseurs') tabHtml += renderFournisseurs();
     else if (S.tab === 'comparaison') tabHtml += renderComparaison();
     else if (S.tab === 'messages') tabHtml += '<div id="tab-messages-wrap"></div>';
-    else if (S.tab === 'documents') tabHtml += '<div id="tab-docs">ChargementÔÇª</div>';
+    else if (S.tab === 'documents') tabHtml += '<div id="tab-docs">Chargement…</div>';
     area.innerHTML = tabHtml;
     bindDetailEvents();
     if (S.tab === 'messages') {
@@ -1420,7 +1420,7 @@ function render() {
       });
     }
   } else {
-    area.innerHTML = '<div class="card empty-state"><strong>ChargementÔÇª</strong></div>';
+    area.innerHTML = '<div class="card empty-state"><strong>Chargement…</strong></div>';
   }
 
   const newScroll = document.getElementById('scroll-area');
@@ -1463,7 +1463,7 @@ function render() {
     window.MySifaDock.bootPageWidgets();
   }
   const loads = await Promise.allSettled([loadList(), loadCarnet(), loadCarnetClients(), loadProduits(), loadMatieresForProduit()]);
-  const labels = ['appels d\'offre', 'carnet fournisseurs', 'carnet clients', 'produits', 'mati├¿res'];
+  const labels = ['appels d\'offre', 'carnet fournisseurs', 'carnet clients', 'produits', 'matières'];
   const errors = [];
   loads.forEach((res, i) => {
     if (res.status === 'rejected') {
@@ -1476,7 +1476,7 @@ function render() {
     return;
   }
   if (errors.length) {
-    showToast('Chargement partiel : ' + errors.map(x => x.msg).join(' ┬À '), 'danger');
+    showToast('Chargement partiel : ' + errors.map(x => x.msg).join(' · '), 'danger');
     if (!S.aos) S.aos = [];
     if (!S.carnet) S.carnet = [];
     if (!S.carnetClients) S.carnetClients = [];
