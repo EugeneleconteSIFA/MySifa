@@ -83,7 +83,7 @@ body.sb-open .sidebar-overlay{display:block}
 h1{font-size:22px;margin:0 0 6px}
 .sub{color:var(--muted);font-size:13px;margin-bottom:22px}
 .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px 20px;margin-bottom:16px}
-.card h2{font-size:15px;margin:0 0 14px}
+.card h2{font-size:15px;font-weight:700;color:var(--text);margin:0 0 14px}
 .table-wrap{overflow:auto;border-radius:10px;border:1px solid var(--border)}
 table{width:100%;border-collapse:collapse;font-size:12px}
 th,td{padding:8px 10px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap}
@@ -96,9 +96,13 @@ td.chk{text-align:center}.dot{display:inline-block;width:8px;height:8px;border-r
 input,select{width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit}
 .btn{background:var(--accent);color:var(--text);border:none;border-radius:10px;padding:10px 18px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit}
 .btn:hover{filter:brightness(1.06)}
-.btn-sec{background:transparent;border:1px solid var(--border);color:var(--muted);transition:box-shadow .2s,border-color .15s,color .15s,filter .15s}
+.btn-sec{background:transparent;border:1px solid var(--border);color:var(--muted);transition:box-shadow .2s,border-color .15s,color .15s,filter .15s,background .15s}
 .btn-sec:hover{box-shadow:0 0 0 1px rgba(34,211,238,.32),0 0 20px rgba(34,211,238,.2);border-color:rgba(34,211,238,.45);color:var(--accent)}
 body.light .btn-sec:hover{box-shadow:0 0 0 1px rgba(8,145,178,.35),0 0 18px rgba(8,145,178,.15);border-color:rgba(8,145,178,.4);color:var(--accent)}
+.tabs .btn-sec{color:var(--text2);background:rgba(15,23,42,.45);border-color:var(--border)}
+body.light .tabs .btn-sec{color:var(--text2);background:#e8edf4;border-color:#d5dee9}
+.tabs .btn-sec.active{background:rgba(34,211,238,.16);border-color:rgba(34,211,238,.55);color:var(--accent);font-weight:700}
+body.light .tabs .btn-sec.active{background:rgba(8,145,178,.14);border-color:rgba(8,145,178,.5);color:var(--accent)}
 .row-user{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)}
 .row-user:last-child{border-bottom:none}
 .prof-ring{position:relative;flex-shrink:0;width:34px;height:34px;cursor:default}
@@ -128,9 +132,9 @@ body.light .op-filter:focus{box-shadow:0 0 0 3px rgba(8,145,178,.1)}
 body.light .op-table tbody tr:hover td{background:rgba(8,145,178,.05)}
 .op-table tr.op-cat-row td{
   padding:14px 12px 6px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;
-  color:var(--accent);background:rgba(34,211,238,.06);border-bottom:1px solid var(--border)
+  color:var(--accent);background:rgba(34,211,238,.14);border-bottom:1px solid var(--border)
 }
-body.light .op-table tr.op-cat-row td{background:rgba(8,145,178,.06)}
+body.light .op-table tr.op-cat-row td{background:rgba(8,145,178,.12);color:var(--accent)}
 .op-table tr.op-cat-row:first-child td{padding-top:8px}
 .op-code-cell{font-family:ui-monospace,monospace;font-weight:800;font-size:13px;color:var(--accent);width:56px}
 .op-lbl-cell{font-weight:600;color:var(--text);max-width:280px;white-space:normal}
@@ -160,7 +164,8 @@ body.light .op-table tr.op-cat-row td{background:rgba(8,145,178,.06)}
 .fsc-kpi-badge.danger{color:var(--danger);background:rgba(248,113,113,.12)}
 .fsc-kpi-badge.muted{color:var(--muted);background:rgba(148,163,184,.12)}
 .fsc-claim-badge{display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:3px 10px;border-radius:6px;line-height:1.3}
-.fsc-section-title{font-size:13px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px;margin:0 0 10px}
+.fsc-section-title{font-size:13px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px;margin:0 0 10px;padding:8px 12px;border-radius:8px;background:rgba(34,211,238,.1);border-left:3px solid var(--accent)}
+body.light .fsc-section-title{background:rgba(8,145,178,.1)}
 .fsc-date-inp{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:12px;font-family:inherit}
 .fsc-date-inp:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px rgba(34,211,238,.12)}
 .fsc-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border)}
@@ -208,10 +213,13 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .tabs{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
 .tabs .btn{display:inline-flex;align-items:center;gap:8px;vertical-align:middle}
 .tabs .btn svg{flex-shrink:0}
-.nav-group-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);padding:8px 12px 2px;opacity:.7}
+.nav-group-label{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text2);padding:10px 12px 4px;user-select:none;line-height:1.3}
+.nav-group-label:not(:first-child){margin-top:4px;padding-top:14px;border-top:1px solid var(--border)}
 .hidden{display:none}
 .legend{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
-.legend .item{padding:12px;border:1px solid var(--border);border-radius:10px;font-size:12px}
+.legend .item{padding:12px;border:1px solid var(--border);border-radius:10px;font-size:12px;background:rgba(15,23,42,.35)}
+body.light .legend .item{background:#f8fafc}
+.legend .item strong{color:var(--text);display:block;margin-bottom:6px;font-size:13px}
 .legend .item strong{display:block;margin-bottom:6px;font-size:13px}
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--border);padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;box-shadow:0 8px 32px rgba(0,0,0,.35);z-index:900}.toast.err{border-left:3px solid var(--danger)}
 @media(max-width:900px){
@@ -272,7 +280,7 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
         Machines
       </button>
-      <div class="nav-group-label" style="margin-top:8px">Accès</div>
+      <div class="nav-group-label">Accès</div>
       <button type="button" class="nav-btn" data-tab="matrix">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
         Matrice d'accès
@@ -281,12 +289,12 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
         Référentiel rôles
       </button>
-      <div class="nav-group-label" style="margin-top:8px">Communication</div>
+      <div class="nav-group-label">Communication</div>
       <button type="button" class="nav-btn" data-tab="updates">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         Mises à jour
       </button>
-      <div class="nav-group-label" style="margin-top:8px">Audit</div>
+      <div class="nav-group-label">Audit</div>
       <button type="button" class="nav-btn" data-tab="audit">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
