@@ -324,6 +324,39 @@ body.light .slot .line-exig{background:#fef9c3;color:#713f12;border-color:#ca8a0
 .lg-d:hover{transform:scale(1.3);box-shadow:0 0 0 2px rgba(255,255,255,.5)}
 body.light .lg-d{border-color:rgba(71,85,105,.3)}
 .lg-i span{font-family:var(--mono)}
+/* ── Planning tab nav ── */
+.planning-tab-nav{
+  display:inline-flex;border:1px solid var(--border);border-radius:10px;
+  overflow:hidden;background:var(--bg);
+}
+.planning-tab-btn{
+  width:auto;min-width:72px;padding:7px 12px 5px;display:flex;flex-direction:row;
+  align-items:center;gap:6px;background:none;border:none;cursor:pointer;
+  font-family:inherit;font-size:12px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.3px;color:var(--muted);
+  transition:color .15s,background .15s;
+}
+.planning-tab-btn+.planning-tab-btn{border-left:1px solid var(--border)}
+.planning-tab-btn.active{color:var(--accent);background:var(--accent-bg)}
+.planning-tab-btn:hover:not(.active){color:var(--text2);background:rgba(255,255,255,.04)}
+.planning-tab-btn svg{opacity:.65}
+.planning-tab-btn.active svg{opacity:1}
+/* ── OF panel ── */
+.planning-of-panel{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden;padding:16px 20px}
+.planning-of-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border);flex-wrap:wrap;margin-bottom:16px}
+.planning-of-toolbar-title{font-size:15px;font-weight:700;color:var(--text)}
+.planning-of-table-wrap{flex:1;overflow-y:auto;padding:0}
+table.planning-of-table{width:100%;border-collapse:collapse;font-size:12px}
+table.planning-of-table th{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px;
+  padding:8px 10px;text-align:left;border-bottom:1px solid var(--border);background:var(--bg);position:sticky;top:0;z-index:1}
+table.planning-of-table td{padding:8px 10px;border-bottom:1px solid var(--border);color:var(--text2);vertical-align:middle}
+table.planning-of-table tr:last-child td{border-bottom:none}
+.planning-of-statut{font-size:11px;font-weight:700;padding:2px 8px;border-radius:8px;display:inline-block}
+.planning-of-statut--lie{color:var(--accent);background:var(--accent-bg)}
+.planning-of-statut--nonlie{color:var(--muted);background:rgba(148,163,184,.10)}
+.planning-of-actions{display:flex;gap:6px;align-items:center}
+.planning-of-row-sub{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.35}
+.planning-of-empty{text-align:center;padding:40px 20px;color:var(--muted);font-size:13px}
 /* ── Color picker popup ── */
 .cpk{position:fixed;z-index:9999;background:var(--card);border:1px solid var(--border2);border-radius:12px;
   padding:10px;box-shadow:0 8px 32px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:8px;min-width:180px}
@@ -571,11 +604,19 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
   padding:14px 18px;border-bottom:1px solid var(--border);flex-shrink:0}
 .of-preview-title{font-size:15px;font-weight:700;color:var(--text)}
 .of-preview-actions{display:flex;gap:8px;align-items:center}
-.of-preview-iframe{flex:1;border:none;min-height:480px}
+.of-preview-iframe{flex:1;border:none;min-height:480px;width:100%}
 .of-empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:14px;padding:48px 24px;text-align:center}
 .of-empty-state-icon{color:var(--muted);opacity:.5}
 .of-empty-state-msg{font-size:14px;color:var(--muted);line-height:1.6}
+.of-tabs-bar{display:flex;gap:0;border-bottom:1px solid var(--border);flex-shrink:0;padding:0 18px}
+.of-tab-btn{padding:10px 16px;font-size:13px;font-weight:600;color:var(--muted);background:none;
+  border:none;border-bottom:2px solid transparent;cursor:pointer;font-family:inherit;
+  margin-bottom:-1px;transition:color .15s,border-color .15s}
+.of-tab-btn:hover{color:var(--text)}
+.of-tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
+.of-tab-pane{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.of-tab-pane.hidden{display:none}
 .of-mismatch-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;
   max-width:440px;width:100%;padding:28px 24px;display:flex;flex-direction:column;gap:16px}
 </style>
@@ -596,7 +637,7 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/mysifa_ai_chat.js"></script>
 <script src="/static/chat_mentions.js"></script>
-<script src="/static/chat_widget.js"></script>
+<script src="/static/chat_widget.js?v=5"></script>
 <script src="/static/chat_widget_v2.js"></script>
 <script src="/static/mysifa_landscape.js"></script>
 <script>window.MySifaLandscape&&MySifaLandscape.enable();</script>
@@ -679,6 +720,10 @@ function setPlanningVue(key){
   else sp.delete("vue");
   location.href="/planning?"+sp.toString();
 }
+function setPlanningTab(tab){
+  S.planningTab=tab;
+  render();
+}
 function renderPlanningMobileTopbar(sub){
   const subTxt=sub||"Timeline machines, dossiers et horaires";
   return `<div class="mobile-topbar"><button type="button" class="mobile-menu-btn" onclick="toggleSidebar()" aria-label="Menu"><span style="display: inline-flex; align-items: center; flex-shrink: 0;">${icon('menu',20)}</span></button><div><div class="mobile-topbar-title">${escHtml(planningVueTopbarTitle())}</div><div class="mobile-topbar-sub">${escHtml(subTxt)}</div></div><button type="button" class="mobile-home-btn" onclick="location.href='/'" aria-label="Accueil"><span style="display: inline-flex; align-items: center; flex-shrink: 0;">${icon('home',20)}</span></button></div>`;
@@ -691,6 +736,7 @@ function appendPlanningVueParam(sp){
 let _planView=localStorage.getItem("mysifa.planning.view")||"2w";
 let S={machine:null,machines:[],entries:[],timeline:[],wo:0,loading:true,holidays:{},dayWorked:{},dayHoraires:{},weekComments:{},dayComments:{},view:_planView,
   planningVue:parsePlanningVueParam(),
+  planningTab:"timeline",
   contactOpen:false,contactSubject:"",contactMessage:"",contactSending:false,searchQuery:"",tlSearchQuery:"",tlSearchIdx:0,activeDossier:null,
   tlTotalDays:5,machineHoursPerDay:16};
 let _allTlMatches=[];
@@ -764,6 +810,31 @@ async function packTerminesToNow(){
     }
     const j=await res.json().catch(()=>({}));
     showToast(`Terminés recalés (${j.updated||0}).`,"success");
+  }catch(_){
+    showToast("Erreur réseau.","danger");
+  }
+  await load();
+}
+
+async function packAttenteAfterEnCours(){
+  if(!CAN_EDIT||!MID) return;
+  if(!confirm("Recaler les dossiers en attente les uns derrière les autres (après le dossier en cours) ?")) return;
+  try{
+    const res=await fetch(`/api/planning/machines/${MID}/pack-attente`,{
+      method:"POST",
+      credentials:"include",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({})
+    });
+    if(!res.ok){
+      const j=await res.json().catch(()=>({}));
+      const d=j.detail;
+      const msg=typeof d==="string"?d:(Array.isArray(d)?d.map(x=>x.msg||JSON.stringify(x)).join(" "):"Erreur recalage en attente.");
+      showToast(msg,"danger");
+      return;
+    }
+    const j=await res.json().catch(()=>({}));
+    showToast(`En attente recalés (${j.updated||0}).`,"success");
   }catch(_){
     showToast("Erreur réseau.","danger");
   }
@@ -1248,9 +1319,13 @@ function renderEntries(){
   // On recherche dans la liste COMPLÈTE (S.entries) pour conserver les bons data-idx.
   const terminated=filtered.filter(e=>e.statut==="termine");
   const active=filtered.filter(e=>e.statut!=="termine");
+  const activeRun=active.filter(e=>e.statut==="en_cours");
+  const activeWait=active.filter(e=>e.statut!=="en_cours");
   const hiddenCount=_showAllTermine?0:Math.max(0,terminated.length-TERMINE_KEEP);
   const visibleTerminated=_showAllTermine?terminated:terminated.slice(-TERMINE_KEEP);
-  const visible=[...visibleTerminated,...active];
+  // Ordre UX attendu : "En cours" puis "En attente", puis les derniers "Terminé" en bas.
+  // Ne pas trier S.entries : on reconstruit uniquement l'ordre d'affichage (data-idx reste cohérent).
+  const visible=[...activeRun,...activeWait,...visibleTerminated];
 
   // ── Construction HTML ─────────────────────────────────────────────────────
   let html="";
@@ -1574,7 +1649,7 @@ function renderSidebar(){
       {key:"production",label:"Production",icon:"wrench",href:"/prod?page=production"},
       {key:"traceabilite",label:"Traçabilité",icon:"layers",href:"/prod?page=traceabilite"},
       ...(admin?[{key:"rentabilite",label:"Rentabilité",icon:"trending-up",href:"/prod?page=rentabilite"}]:[]),
-      ...(canAccessOfTab()?[{key:"of",label:"OF",icon:"file",href:"/prod?page=of"}]:[]),
+      ...(canAccessOfTab()?[{key:"of",label:"Fiches + OF",icon:"file",href:"/prod?page=of"}]:[]),
     ]),
   ];
   const isLight=document.body.classList.contains("light");
@@ -1583,6 +1658,19 @@ function renderSidebar(){
   }<div class="sidebar-bottom"><button type="button" class="nav-btn nav-btn--mysifa-portal" onclick="location.href='/'"><span class="mysifa-back-preamble">← Retour </span><span class="mysifa-back-brand">My<span class="mysifa-back-accent">Sifa</span></span></button>${planningUserChipHtml()}<button type="button" class="support-btn" onclick="openSupport()"><span class="support-ico">${(window.MySifaSupport&&window.MySifaSupport.iconSvg)?window.MySifaSupport.iconSvg():""}</span><span>Contacter le support</span></button><button type="button" class="theme-btn" onclick="toggleTheme()"><span class="theme-ico">${isLight?icon('sun',16):icon('moon',16)}</span><span class="theme-label">${isLight?"Mode clair":"Mode sombre"}</span></button><button type="button" class="logout-btn" onclick="doLogout()">${icon('log-out',14)} Déconnexion</button><div class="version">__V_LABEL__</div></div></nav>`;
 }
 function toggleTheme(){if(window.MySifaTheme)MySifaTheme.toggleMode();render();}
+function renderPlanningOfPanel(){
+  return `<div class="planning-of-panel">
+    <div class="planning-of-toolbar">
+      <div class="planning-of-toolbar-title">Fiches et OF</div>
+      <div style="font-size:12px;color:var(--muted)">Accès aux ordres de fabrication et fiches techniques</div>
+    </div>
+    <div class="planning-of-empty">
+      <div style="font-size:24px;margin-bottom:12px">${icon('file',32)}</div>
+      <div>La fonctionnalité Fiches et OF est disponible via l'onglet OF dans le menu Production.</div>
+      <div style="margin-top:8px"><a href="/prod?page=of" style="color:var(--accent);text-decoration:none;font-weight:700">Accéder à OF →</a></div>
+    </div>
+  </div>`;
+}
 async function doLogout(){try{await fetch("/api/auth/logout",{method:"POST",credentials:"include"});}catch(e){}location.href="/";}
 
 function openSupport(){
@@ -1704,6 +1792,7 @@ function render(){
     </div>
     <div class="h-right">
       ${CAN_EDIT&&machineKey()==="C2"?`<button type="button" class="reset-days-btn" onclick="resetDefaultDaysCohesio2()" title="Réinitialiser jours (Cohésio 2)">↺ Base jours</button>`:""}
+      ${SHOW_DOSSIERS?`<button type="button" class="reset-days-btn" onclick="packAttenteAfterEnCours()" title="Recaler les en attente derrière le en cours">⇥ En attente</button>`:""}
       ${SHOW_DOSSIERS?`<button type="button" class="reset-days-btn" onclick="packTerminesToNow()" title="Recaler les terminés jusqu'à maintenant">⇤ Terminés</button>`:""}
       ${SHOW_DOSSIERS?`<button type="button" class="reset-days-btn" onclick="packTerminesBeforeEnCoursAll()" title="Replacer les terminés avant le en cours (toutes machines)">⇤ Terminés → en cours</button>`:""}
       ${CAN_EDIT?`<button type="button" class="gear-btn" onclick="openDefaultsModal()" title="Réglages horaires par défaut" aria-label="Réglages">${icon('settings',16)}</button>`:""}
@@ -1712,6 +1801,11 @@ function render(){
       ${SHOW_DOSSIERS?`<div class="badge badge-info">${totH}h · ${nb} dossiers</div>`:""}
     </div>
   </header>
+  <div style="padding:0 0 16px">
+    <div class="planning-tab-nav">
+      <button type="button" class="planning-tab-btn ${S.planningTab==='timeline'?' active':''}" onclick="setPlanningTab('timeline')">${icon('calendar',16)} Timeline</button>
+    </div>
+  </div>
     <section class="sec">
       <div class="sec-hdr">
         ${renderPlanningVueSelect()}
@@ -1968,6 +2062,20 @@ function renderTL(){
 // (recréés à chaque render). _tlDDContainerBound évite les doublons de listeners.
 let _tlDragEid=null;
 let _tlDDContainerBound=false;
+function lockedPositionsFromIds(ids){
+  const locked = (S.entries||[]).filter(e=>e.statut==="en_cours"||e.statut==="termine").map(e=>e.id);
+  const pos={};
+  locked.forEach(id=>{ const i=ids.indexOf(id); if(i>=0) pos[id]=i; });
+  return pos;
+}
+function reorderKeepsLocked(idsBefore, idsAfter){
+  const p0=lockedPositionsFromIds(idsBefore);
+  for(const k in p0){
+    const id=+k;
+    if(idsAfter.indexOf(id)!==p0[k]) return false;
+  }
+  return true;
+}
 function setupTlDD(){
   if(!CAN_EDIT) return;
   const container=document.getElementById("tl-blocks-container");
@@ -2015,6 +2123,11 @@ function setupTlDD(){
     const fromEid=_tlDragEid;
     _tlDragEid=null;
     if(!target||!fromEid) return;
+    const targetStat=(target.dataset&&target.dataset.statut)?String(target.dataset.statut):"";
+    if(targetStat && targetStat!=="attente"){
+      showToast("Déplacement impossible — cible verrouillée (en cours/terminé).","info");
+      return;
+    }
     const eid=+target.dataset.eid;
     if(eid===fromEid) return;
     const ids=S.entries.map(e=>e.id);
@@ -2023,6 +2136,11 @@ function setupTlDD(){
     if(fromIdx<0||toIdx<0) return;
     const [moved]=ids.splice(fromIdx,1);
     ids.splice(toIdx,0,moved);
+    if(!reorderKeepsLocked(S.entries.map(e=>e.id), ids)){
+      showToast("Déplacement impossible — cela déplacerait un dossier en cours/terminé.","danger");
+      await load();
+      return;
+    }
     try{
       await api(`/machines/${MID}/reorder`,{method:"POST",body:JSON.stringify({entry_ids:ids})});
       await load();
@@ -2247,9 +2365,9 @@ function mkTL(mon,slots){
     const co=colorForId(s.entry_id||idx+1);
     const fm=s.format_l&&s.format_h?`${s.format_l} × ${s.format_h} mm`:"";
     const lz=s.laize?`${s.laize} mm`:"";
-    // Ligne 2 : format + laize
+    // Ligne 2 : format + laize (vue prod)
     const line2Txt=[fm,lz].filter(Boolean).join(" | ");
-    // Ligne 3 : date livraison + commentaire
+    // Ligne 3 : date livraison + commentaire (vue prod)
     const dateLiv=s.date_livraison?`à livrer pour ${s.date_livraison}`:"";
     const com=s.commentaire?String(s.commentaire).trim():"";
     const line3Parts=[dateLiv,com].filter(Boolean);
@@ -2283,15 +2401,32 @@ function mkTL(mon,slots){
     const termineTitle=termineSlideCls?"Dossier terminé — glisser pour décaler le créneau sur la ligne de temps":"";
     const sr = hasSaisieReelle() ? (s.statut_reel||"reellement_en_attente") : "reellement_en_attente";
     const durAff = (s.statut==="termine") ? (workHoursBetween(ss,se) ?? s.duree_heures) : s.duree_heures;
-    h+=`<div class="slot ${matchCls} ${aplacerCls} ${reelTermineCls} ${termineSlideCls}" data-eid="${s.entry_id||idx}" data-statut="${escAttr(s.statut||"attente")}" data-statut-reel="${escAttr(sr)}" ${canDragSlot?'draggable="true"':''} style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${isActive?"border:2px solid var(--accent);animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
+
+    // ── Vue Expédition : luminosité palettes + infos expé ─────────────
+    const isExpeVue = S.planningVue==="expe" || S.planningVue==="prod_expe";
+    const nbPalettes = (s.nb_palettes!=null && s.nb_palettes!==undefined) ? s.nb_palettes : null;
+    let expeBrightnessStyle="";
+    if(isExpeVue && nbPalettes!==null){
+      expeBrightnessStyle = nbPalettes>=6 ? "" : "filter:brightness(0.4);";
+    }
+    // Lignes en vue expé : line2 = date livraison + département, line3 = RDV si coché
+    const line2Slot = isExpeVue
+      ? [s.date_livraison||"", s.departement_livraison||""].filter(Boolean).join(" · ")
+      : line2Txt;
+    const line3Slot = isExpeVue
+      ? (s.prise_rdv ? "RDV à prendre" : (s.date_livraison?"":""))
+      : line3Txt;
+
+    h+=`<div class="slot ${matchCls} ${aplacerCls} ${reelTermineCls} ${termineSlideCls}" data-eid="${s.entry_id||idx}" data-statut="${escAttr(s.statut||"attente")}" data-statut-reel="${escAttr(sr)}" ${canDragSlot?'draggable="true"':''} style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${expeBrightnessStyle}${isActive?"border:2px solid var(--accent);animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
       onmouseenter="showTip(event,this)" onmousemove="moveTip(event)" onmouseleave="hideTip()"
       ondblclick="hideTip();openEdit(${s.entry_id||idx});event.stopPropagation()"
-      data-livraison="${escAttr(fmtLivraisonLong(s.date_livraison||""))}" data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-rfp="${escAttr(s.ref_produit||"")}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(fmtDur(durAff))}" data-exigences="${escAttr(exig)}" data-qte-etiq="${escAttr(qteEtiq!=null?fmtQty(qteEtiq):"")}"
-      data-planned-start="${escAttr(String(s.start||""))}" data-planned-end="${escAttr(String(s.end||""))}"
+      data-livraison="${escAttr(fmtLivraisonLong(s.date_livraison||""))}" data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-rfp="${escAttr(s.ref_produit||"")}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(fmtDur(durAff))}" data-exigences="${escAttr(exig)}" data-qte-etiq="${escAttr(qteEtiq!=null?fmtQty(qteEtiq):"")}" data-nb-palettes="${escAttr(nbPalettes!=null?String(nbPalettes):"")}"`+
+      ` data-prise-rdv="${s.prise_rdv?'1':'0'}" data-dept="${escAttr(s.departement_livraison||"")}"`+
+      ` data-planned-start="${escAttr(String(s.start||""))}" data-planned-end="${escAttr(String(s.end||""))}"
       data-deb="${escAttr(fdt(ss))}" data-fin="${escAttr(fdt(se))}" data-st="${escAttr(st)}" data-co="${escAttr(co)}"${termineTitle?` title="${escAttr(termineTitle)}"`:""}>
       ${destock?`<div style="position:absolute;top:4px;right:4px;width:10px;height:10px;border-radius:50%;background:rgba(71,85,105,.9);pointer-events:none;z-index:5;flex-shrink:0"></div>`:""}
       ${resizeHandle}
-      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}${fscBadgeHtml(s)}</span>${line2Txt?`<span class="line2">${escAttr(line2Txt)}</span>`:""}${line3Txt?`<span class="line3">${escAttr(line3Txt)}</span>`:""}${exig?`<span class="line-exig" title="${escAttr(exig)}">${escAttr(exig)}</span>`:""}</div>`:w>1.8?`<div style="overflow:hidden;height:100%;display:flex;align-items:center;justify-content:center"><div class="slot-vert-txt" style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg)">${escAttr((cli.slice(0,6)+(cli.length>6?".":"")).toUpperCase())}</div></div>`:""}</div>`;
+      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}${fscBadgeHtml(s)}</span>${line2Slot?`<span class="line2">${escAttr(line2Slot)}</span>`:""}${line3Slot?`<span class="line3">${escAttr(line3Slot)}</span>`:""}${exig?`<span class="line-exig" title="${escAttr(exig)}">${escAttr(exig)}</span>`:""}</div>`:w>1.8?`<div style="overflow:hidden;height:100%;display:flex;align-items:center;justify-content:center"><div class="slot-vert-txt" style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg)">${escAttr((cli.slice(0,6)+(cli.length>6?".":"")).toUpperCase())}</div></div>`:""}</div>`;
   });
 
   const np=gp(now);
@@ -2430,6 +2565,11 @@ function showTip(ev,el){hideTip();const d=el.dataset;_hoveredSlotEid=d.eid?+d.ei
   const sub=d.lbl?`<div class="tip-lbl">${d.lbl}</div>`:"";
   const liv=(d.livraison||"").trim();
   const exigTip=(d.exigences||"").trim();
+  const isExpeVueTip=S.planningVue==="expe"||S.planningVue==="prod_expe";
+  const nbPalTip=(d.nbPalettes||"").trim();
+  const deptTip=(d.dept||"").trim();
+  const rdvTip=d.priseRdv==="1";
+  const expeTipRows=isExpeVueTip?`${deptTip?`<span class="k">Département</span><span class="v">${escHtml(deptTip)}</span>`:""}${rdvTip?`<span class="k">RDV</span><span class="v" style="color:var(--warn);font-weight:600">À prendre</span>`:""}${nbPalTip?`<span class="k">Palettes prévues</span><span class="v" style="color:${+nbPalTip>=6?"var(--success)":"var(--muted)"};font-weight:700">${escHtml(nbPalTip)}</span>`:""}`:"" ;
   tipEl.innerHTML=`<div class="tip-hdr"><div class="tip-bar" style="background:${d.co||"#888"}"></div><div><div class="tip-ref">${d.ref||"—"}</div>${sub}</div></div>
     ${liv?`<div class="tip-livraison">Livraison : ${escHtml(liv)}</div>`:""}
     ${exigTip?`<div class="tip-exig"><span class="k">Exigences de production</span>${escHtml(exigTip)}</div>`:""}
@@ -2437,6 +2577,7 @@ function showTip(ev,el){hideTip();const d=el.dataset;_hoveredSlotEid=d.eid?+d.ei
     <span class="k">Début</span><span class="v">${d.deb||""}</span><span class="k">Fin</span><span class="v">${d.fin||""}</span>
     <span class="k">Statut</span><span class="v" style="color:${d.st==="En cours"?"var(--green)":d.st==="Terminé"?"var(--muted)":"var(--amber)"};font-weight:600">${d.st||""}</span>
     ${(d.qteEtiq||"").trim()?`<span class="k">Qté étiquettes</span><span class="v" style="color:var(--accent);font-weight:600">${escHtml(d.qteEtiq)}</span>`:""}
+    ${expeTipRows}
     ${(()=>{const r=d.statutReel||"";if(r==="reellement_termine")return`<span class="k">Saisie</span><span class="v" style="color:var(--muted)">✓ Terminé</span>`;if(r==="reellement_en_saisie")return`<span class="k">Saisie</span><span class="v" style="color:var(--success)">⚙ En cours</span>`;return"";})()} </div>
     ${CAN_EDIT&&d.st!=="Terminé"?`<div style="margin-top:10px;font-size:10px;color:var(--muted);text-align:center;letter-spacing:.5px">↵ Entrée · double-clic pour modifier</div>`:""}`
   el.closest(".tl-wrap").appendChild(tipEl);moveTip(ev)}
@@ -2582,6 +2723,12 @@ function setupDD(){
   tbody.addEventListener("dragstart",(e)=>{
     const row=e.target.closest(".tr[draggable]");
     if(!row) return;
+    const st = (row.dataset&&row.dataset.statut)?String(row.dataset.statut):"";
+    if(st==="en_cours" || st==="termine"){
+      e.preventDefault();
+      showToast("Déplacement impossible — dossier en cours/terminé.","info");
+      return;
+    }
     _ddDragIdx=parseInt(row.dataset.idx,10);
     row.classList.add("dra");
     e.dataTransfer.effectAllowed="move";
@@ -2647,9 +2794,16 @@ function setupDD(){
     const savedTbodyScroll=tbody.scrollTop??0;
 
     // Réordonner
-    const ids=S.entries.map(en=>en.id);
+    const idsBefore=S.entries.map(en=>en.id);
+    const ids=idsBefore.slice();
     const [moved]=ids.splice(_ddDragIdx,1);
     ids.splice(insertAt,0,moved);
+    if(!reorderKeepsLocked(idsBefore, ids)){
+      clearState();
+      showToast("Déplacement impossible — cela déplacerait un dossier en cours/terminé.","danger");
+      await load();
+      return;
+    }
 
     clearState();
     _suppressAutoScroll=true;
@@ -2976,7 +3130,7 @@ function dossierFields(numero_of,client,ref_produit,laize,date_livraison,comment
           <div class="fd fd--full">
             <label class="dossier-check-lbl">
               <input type="checkbox" id="f-rdv" ${rdvOn?"checked":""} style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
-              Prise de rendez-vous de livraison confirmée
+              Prendre un Rendez-Vous
             </label>
           </div>
         </div>
@@ -3069,7 +3223,7 @@ function renderAddModal(){
   const footerBtn=_addTab==='manual'
     ? `<button type="button" class="btn-p" onclick="submitAdd()"><span style="font-size:18px;line-height:1">+</span> Ajouter</button>`
     : (_addOfParsed?`<button type="button" class="btn-p" onclick="submitAddFromOf()">Valider et créer le dossier</button>`:'');
-  document.getElementById("mroot").innerHTML=`<div class="mo modal-backdrop" onclick="if(event.target===this)closeM()">
+  document.getElementById("mroot").innerHTML=`<div class="mo modal-backdrop">
     <div class="md md--dossier" style="max-width:860px;width:100%;max-height:92vh;overflow-y:auto;padding:28px 32px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px">
         <h3 style="margin:0;font-size:18px;font-family:var(--mono);color:var(--text)">Ajouter un dossier</h3>
@@ -3421,62 +3575,30 @@ async function openOfPreview(entryId){
     return;
   }
 
-  if(data.linked && data.of){
-    const of=data.of;
-    const ofId=of.id;
-    const ofNum=escHtml(of.of_numero||'—');
-    const refLabel=of.reference?` — ${escHtml(of.reference)}`:'';
+  // ── Contenu de l'onglet OF ────────────────────────────────────────
+  const ofId = data.linked && data.of ? data.of.id : null;
+  const hasPdf = data.of && data.of.pdf_filename;
 
-    ov.innerHTML=`<div class="of-preview-modal" style="max-height:92vh">
-      <div class="of-preview-header">
-        <span class="of-preview-title">OF ${ofNum}${refLabel}</span>
-        <div class="of-preview-actions">
-          <a href="/api/of/${ofId}/pdf" target="_blank" download
-             style="display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;
-                    border:1.5px solid var(--accent);background:var(--accent-bg);color:var(--accent);
-                    font-size:12px;font-weight:700;text-decoration:none;white-space:nowrap">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                 stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
-            Télécharger
-          </a>
-          <button onclick="closeOfPreview()" style="background:none;border:none;color:var(--muted);
-            cursor:pointer;font-size:22px;line-height:1;font-family:inherit;padding:0 4px">×</button>
-        </div>
-      </div>
-      <iframe class="of-preview-iframe" src="/api/of/${ofId}/pdf-preview"
-              style="flex:1;border:none;min-height:520px;width:100%">
-      </iframe>
-    </div>`;
-    return;
-  }
-
-  const importBtn = (typeof IS_OF_ADMIN!=='undefined' && IS_OF_ADMIN)
-    ? `<button type="button" onclick="openOfImportFromPlanning(${entryId})"
-         style="display:flex;align-items:center;gap:8px;padding:9px 18px;border-radius:8px;
-                border:1.5px solid var(--accent);background:var(--accent-bg);color:var(--accent);
-                font-size:13px;font-weight:700;cursor:pointer;font-family:inherit"
-         onmouseenter="this.style.opacity='.75'" onmouseleave="this.style.opacity='1'">
-         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-           <polyline points="17 8 12 3 7 8"/>
-           <line x1="12" y1="3" x2="12" y2="15"/>
-         </svg>
-         Importer OF
-       </button>`
-    : '';
-
-  ov.innerHTML=`<div class="of-preview-modal">
-    <div class="of-preview-header">
-      <span class="of-preview-title">Ordre de fabrication</span>
-      <button onclick="closeOfPreview()" style="background:none;border:none;color:var(--muted);
-        cursor:pointer;font-size:22px;line-height:1;font-family:inherit;padding:0 4px">×</button>
-    </div>
-    <div class="of-empty-state">
+  let ofTabContent;
+  if(ofId){
+    ofTabContent=`<iframe class="of-preview-iframe" src="/api/of/${ofId}/pdf-preview"></iframe>`;
+  }else{
+    const importBtn=(typeof IS_OF_ADMIN!=='undefined' && IS_OF_ADMIN)
+      ?`<button type="button" onclick="openOfImportFromPlanning(${entryId})"
+           style="display:flex;align-items:center;gap:8px;padding:9px 18px;border-radius:8px;
+                  border:1.5px solid var(--accent);background:var(--accent-bg);color:var(--accent);
+                  font-size:13px;font-weight:700;cursor:pointer;font-family:inherit"
+           onmouseenter="this.style.opacity='.75'" onmouseleave="this.style.opacity='1'">
+           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+             <polyline points="17 8 12 3 7 8"/>
+             <line x1="12" y1="3" x2="12" y2="15"/>
+           </svg>
+           Importer OF
+         </button>`
+      :'';
+    ofTabContent=`<div class="of-empty-state">
       <div class="of-empty-state-icon">
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -3493,8 +3615,107 @@ async function openOfPreview(entryId){
         </span>
       </div>
       ${importBtn}
+    </div>`;
+  }
+
+  // ── Contenu de l'onglet Fiche technique ──────────────────────────
+  const ficheId = data.fiche_id || null;
+  const refProduit = data.ref_produit || null;
+
+  let ficheTabContent;
+  if(ficheId){
+    ficheTabContent=`<iframe class="of-preview-iframe" src="/api/fiches-techniques/${ficheId}/pdf-preview"></iframe>`;
+  }else{
+    const msgFiche = refProduit
+      ? `Aucune fiche technique trouvée pour la référence <strong style="color:var(--text)">${escHtml(refProduit)}</strong>.`
+      : `Aucune référence produit renseignée sur ce dossier.`;
+    ficheTabContent=`<div class="of-empty-state">
+      <div class="of-empty-state-icon">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+          <line x1="3" y1="9" x2="21" y2="9"/>
+          <line x1="9" y1="21" x2="9" y2="9"/>
+        </svg>
+      </div>
+      <div class="of-empty-state-msg">${msgFiche}</div>
+    </div>`;
+  }
+
+  // ── Titre header selon onglet actif ──────────────────────────────
+  const ofNum  = data.of ? escHtml(data.of.of_numero||'—') : (data.entry_numero_of ? escHtml(data.entry_numero_of) : '—');
+  const ofRef  = data.of && data.of.reference ? ` — ${escHtml(data.of.reference)}` : '';
+  const titleOf    = `OF ${ofNum}${ofRef}`;
+  const titleFiche = refProduit ? `Fiche technique — ${escHtml(refProduit)}` : 'Fiche technique';
+
+  // ── Bouton téléchargement PDF OF ──────────────────────────────────
+  const dlBtn = (ofId && hasPdf)
+    ? `<a href="/api/of/${ofId}/pdf" target="_blank" download
+          style="display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;
+                 border:1.5px solid var(--accent);background:var(--accent-bg);color:var(--accent);
+                 font-size:12px;font-weight:700;text-decoration:none;white-space:nowrap">
+         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+           <polyline points="7 10 12 15 17 10"/>
+           <line x1="12" y1="15" x2="12" y2="3"/>
+         </svg>
+         Télécharger
+       </a>`
+    : '';
+
+  // ── Barre d'onglets (masquée si pas de ref_produit) ───────────────
+  const showTabs = !!refProduit;
+  // Stocker les titres dans une variable globale pour éviter tout pb d'échappement dans onclick
+  window._ofPreviewTitles = {of: titleOf, fiche: titleFiche};
+  const tabsBar = showTabs
+    ? `<div class="of-tabs-bar">
+        <button class="of-tab-btn active" id="of-tab-btn-of"
+          onclick="switchOfPreviewTab('of')">OF</button>
+        <button class="of-tab-btn" id="of-tab-btn-fiche"
+          onclick="switchOfPreviewTab('fiche')">Fiche technique</button>
+      </div>`
+    : '';
+
+  ov.innerHTML=`<div class="of-preview-modal" style="max-height:92vh">
+    <div class="of-preview-header">
+      <span class="of-preview-title" id="of-preview-title-txt">${titleOf}</span>
+      <div class="of-preview-actions">
+        <span id="of-dl-btn-wrap">${dlBtn}</span>
+        <button onclick="closeOfPreview()" style="background:none;border:none;color:var(--muted);
+          cursor:pointer;font-size:22px;line-height:1;font-family:inherit;padding:0 4px">×</button>
+      </div>
     </div>
+    ${tabsBar}
+    <div class="of-tab-pane" id="of-tab-pane-of">${ofTabContent}</div>
+    <div class="of-tab-pane hidden" id="of-tab-pane-fiche">${ficheTabContent}</div>
   </div>`;
+}
+
+function switchOfPreviewTab(tab){
+  const paneOf    = document.getElementById('of-tab-pane-of');
+  const paneFiche = document.getElementById('of-tab-pane-fiche');
+  const btnOf     = document.getElementById('of-tab-btn-of');
+  const btnFiche  = document.getElementById('of-tab-btn-fiche');
+  const titleEl   = document.getElementById('of-preview-title-txt');
+  const dlWrap    = document.getElementById('of-dl-btn-wrap');
+  const titles    = window._ofPreviewTitles || {};
+  if(!paneOf||!paneFiche) return;
+  if(tab==='of'){
+    paneOf.classList.remove('hidden');
+    paneFiche.classList.add('hidden');
+    btnOf&&btnOf.classList.add('active');
+    btnFiche&&btnFiche.classList.remove('active');
+    if(titleEl) titleEl.innerHTML=titles.of||'Ordre de fabrication';
+    if(dlWrap) dlWrap.style.display='';
+  }else{
+    paneOf.classList.add('hidden');
+    paneFiche.classList.remove('hidden');
+    btnOf&&btnOf.classList.remove('active');
+    btnFiche&&btnFiche.classList.add('active');
+    if(titleEl) titleEl.innerHTML=titles.fiche||'Fiche technique';
+    if(dlWrap) dlWrap.style.display='none';
+  }
 }
 
 function closeOfPreview(){

@@ -89,7 +89,13 @@ SUPERADMIN_EMAIL = "eleconte@sifa.pro"
 
 # Rôles ayant accès aux fonctions d'administration (imports, dossiers, stats, etc.)
 ROLES_ADMIN = {ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_SUPERADMIN}
-ROLES_STOCK = {ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_LOGISTIQUE, ROLE_EXPEDITION, ROLE_COMMERCIAL, ROLE_SUPERADMIN}
+ROLES_STOCK = {ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_LOGISTIQUE, ROLE_EXPEDITION, ROLE_COMMERCIAL, ROLE_FABRICATION, ROLE_SUPERADMIN}
+
+# MyStock — zone « Au sol - à expédier » : stock prêt à expédier (code technique, affiché « Au sol - à expédier »)
+STOCK_EMPLACEMENT_AU_SOL = "Z0"
+STOCK_EMPLACEMENT_AU_SOL_LABEL = "Au sol - à expédier"
+STOCK_EMPLACEMENT_SORTIE_PROD = "Z1"
+STOCK_EMPLACEMENT_SORTIE_PROD_LABEL = "En attente - sortie de prod"
 ROLES_PROD  = {ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_FABRICATION, ROLE_EXPEDITION, ROLE_COMMERCIAL, ROLE_SUPERADMIN}
 ROLES_COMPTA = {ROLE_DIRECTION, ROLE_COMPTABILITE, ROLE_SUPERADMIN}
 ROLES_EXPE = {ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_EXPEDITION, ROLE_LOGISTIQUE, ROLE_COMMERCIAL, ROLE_SUPERADMIN}
@@ -105,51 +111,15 @@ ROLES_PLANNING_VIEW = {
     ROLE_EXPEDITION,
     ROLE_COMMERCIAL,
     ROLE_COMPTABILITE,
+    ROLE_LOGISTIQUE,
     ROLE_SUPERADMIN,
 }
-# MyProd : tuile portail pour la compta, accès limité au planning production (lecture seule côté UI/API).
-ROLES_PROD_COMPTA_PLANNING = {ROLE_COMPTABILITE}
+# MyProd : tuile portail pour la compta et la logistique, accès limité au planning production (lecture seule côté UI/API).
+ROLES_PROD_COMPTA_PLANNING = {ROLE_COMPTABILITE, ROLE_LOGISTIQUE}
 ROLES_SETTINGS = {ROLE_SUPERADMIN}
 
 # Applications dont l'accès peut être surchargé par utilisateur (hors Paramètres : réservé au rôle super admin).
 ACCESS_OVERRIDABLE_APPS = frozenset({"prod", "planning", "planning_rh", "stock", "compta", "expe", "pricing"})
-
-# Tableaux de bord affichés sur le portail d'accueil (préférence par utilisateur, gérée dans Mon profil).
-# Chaque entrée : id, label, description, app (clé app_access requise).
-PORTAL_DASHBOARD_WIDGETS: tuple[dict, ...] = (
-    {
-        "id": "stock_alertes",
-        "label": "Alertes stock",
-        "description": "Matières premières sous le seuil d'alerte.",
-        "app": "stock",
-    },
-    {
-        "id": "expe_departs",
-        "label": "Départs en attente",
-        "description": "Expéditions en attente de validation.",
-        "app": "expe",
-    },
-    {
-        "id": "planning_actif",
-        "label": "Planning production",
-        "description": "Dossiers en attente et en cours au planning.",
-        "app": "planning",
-    },
-    {
-        "id": "prod_jour",
-        "label": "Production du jour",
-        "description": "Dossiers terminés aujourd'hui et activité récente.",
-        "app": "prod",
-    },
-    {
-        "id": "fabrication_machine",
-        "label": "Ma machine",
-        "description": "Dossier en cours sur votre machine de fabrication.",
-        "app": "fabrication",
-    },
-)
-
-PORTAL_DASHBOARD_IDS = frozenset(w["id"] for w in PORTAL_DASHBOARD_WIDGETS)
 
 # Rôles assignables lors de la création / édition d'utilisateurs (hors super admin).
 ASSIGNABLE_ROLES = frozenset(
@@ -223,6 +193,12 @@ CODE_FIN_DOS    = "89"
 CODE_CALAGE     = "02"
 CODE_PRODUCTION = "03"
 CODE_REPRISE    = "88"
+
+# Ensemble complet des codes traités comme du temps de calage
+# (02 calage, 10-12 réglages, 58-60 préparations, 67 vidange, 74-75 essais)
+CODES_CALAGE: frozenset[str] = frozenset({
+    "02", "10", "11", "12", "58", "59", "60", "67", "74", "75"
+})
 
 # ─── Classification opérations ────────────────────────────────────
 _ALLOWED_SEVERITY = frozenset({"info", "attention", "critique"})
@@ -341,6 +317,21 @@ def classify_operation(op_str):
 
 # URL de base (pour construire les liens dans les emails)
 BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
+# Domaine public prod (liens portail / emails) — surcharge via PUBLIC_BASE_URL ou BASE_URL
+PUBLIC_BASE_URL_DEFAULT = "https://www.mysifa.com"
+
+
+def public_base_url() -> str:
+    """URL absolue pour liens emails et portail (jamais localhost si non configuré)."""
+    raw = (
+        os.getenv("PUBLIC_BASE_URL")
+        or os.getenv("BASE_URL")
+        or PUBLIC_BASE_URL_DEFAULT
+    ).strip().rstrip("/")
+    low = raw.lower()
+    if not raw or "localhost" in low or "127.0.0.1" in low:
+        return PUBLIC_BASE_URL_DEFAULT.rstrip("/")
+    return raw
 
 # ─── Chat (GIPHY) ─────────────────────────────────────────────────
 GIPHY_API_KEY = os.getenv("GIPHY_API_KEY", "")

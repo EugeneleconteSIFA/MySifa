@@ -56,10 +56,33 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         _schema_migrate_done = True
 
 
+def _register_udfs(conn: sqlite3.Connection) -> None:
+    """
+    Enregistre les fonctions Python appelables depuis SQL/triggers.
+
+    `norm_ref_produit(s)` extrait la clé produit normalisée "XXX/NNNN" d'une
+    chaîne quelconque ("1013/0068 - COHESIO 1" → "1013/0068"). Utilisée par
+    les triggers qui maintiennent `planning_entries.ref_produit_norm` et
+    `fiches_techniques.ref_produit_norm` à jour automatiquement à chaque
+    insertion ou modification.
+    """
+    try:
+        from app.services.fiche_ref_parser import normalize_ref_produit
+    except Exception:
+        return
+    try:
+        # deterministic=True permet à SQLite de l'utiliser dans les index/triggers
+        conn.create_function("norm_ref_produit", 1, normalize_ref_produit, deterministic=True)
+    except TypeError:
+        # Python < 3.8 ou SQLite trop ancien : pas de flag deterministic
+        conn.create_function("norm_ref_produit", 1, normalize_ref_produit)
+
+
 @contextmanager
 def get_db():
     conn = sqlite3.connect(DB_PATH, timeout=5)
     conn.row_factory = sqlite3.Row
+    _register_udfs(conn)
     _ensure_schema(conn)
     try:
         yield conn
@@ -182,8 +205,22 @@ def sync_emplacements_plan_from_csv(csv_path: Optional[Path] = None) -> int:
 
 
 def _migrate_emplacements_plan(conn):
-    """Référentiel plan MyStock (recherche, suggestions)."""
-    reload_emplacements_plan(conn)
+    """Référentiel plan MyStock — crée la table si besoin, seed depuis CSV uniquement si vide.
+
+    Les modifications manuelles (ajout/suppression via l'UI Paramètres) sont préservées
+    au redémarrage. Le bouton 'Recharger depuis CSV' est le seul déclencheur d'un
+    rechargement complet intentionnel.
+    """
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS emplacements_plan (
+            code TEXT PRIMARY KEY NOT NULL,
+            imported_at TEXT NOT NULL
+        )"""
+    )
+    count = conn.execute("SELECT COUNT(*) FROM emplacements_plan").fetchone()[0]
+    if count == 0:
+        # Table vide : seed initial depuis le CSV
+        reload_emplacements_plan(conn)
 
 
 def _migrate(conn):
@@ -2669,13 +2706,584 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 84, "planning_entries_dept_livraison_prise_rdv")
 
-    # v85 — Portail : tableaux de bord personnalisés par utilisateur
+    # v85 — MyExpé : portail transporteur (réponses en ligne)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=85 LIMIT 1").fetchone():
-        ucols = {r["name"] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
-        if "portal_dashboards" not in ucols:
-            conn.execute("ALTER TABLE users ADD COLUMN portal_dashboards TEXT")
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS expe_portal_transporteurs (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                email           TEXT NOT NULL UNIQUE,
+                token           TEXT NOT NULL UNIQUE,
+                transporteur_id INTEGER,
+                prospect_id     INTEGER,
+                created_at      TEXT NOT NULL,
+                last_opened_at  TEXT,
+                last_opened_ip  TEXT,
+                actif           INTEGER NOT NULL DEFAULT 1,
+                FOREIGN KEY (transporteur_id) REFERENCES expe_transporteurs(id),
+                FOREIGN KEY (prospect_id) REFERENCES expe_transporteurs_prospects(id)
+            );
+            """
+        )
+
+        dr_cols = {row[1] for row in conn.execute("PRAGMA table_info(expe_devis_reponses)").fetchall()}
+        if "destinataire_email" not in dr_cols:
+            conn.execute("ALTER TABLE expe_devis_reponses ADD COLUMN destinataire_email TEXT")
+        if "opened_at" not in dr_cols:
+            conn.execute("ALTER TABLE expe_devis_reponses ADD COLUMN opened_at TEXT")
+        if "opened_ip" not in dr_cols:
+            conn.execute("ALTER TABLE expe_devis_reponses ADD COLUMN opened_ip TEXT")
         conn.commit()
-        _record_schema_migration(conn, 85, "users_portal_dashboards")
+        _record_schema_migration(conn, 85, "expe_portal_transporteurs")
+
+    # v86 — MyStock Monitoring : réconciliation stocks PF ERP vs MySifa
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=86 LIMIT 1").fetchone():
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS reconciliation_snapshots (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at          TEXT NOT NULL,
+                created_by_name     TEXT,
+                source_filename     TEXT,
+                nb_refs_erp         INTEGER DEFAULT 0,
+                nb_refs_mysifa      INTEGER DEFAULT 0,
+                nb_matched          INTEGER DEFAULT 0,
+                nb_ecarts           INTEGER DEFAULT 0,
+                nb_sans_corresp     INTEGER DEFAULT 0,
+                nb_negatifs         INTEGER DEFAULT 0
+            );
+
+            CREATE TABLE IF NOT EXISTS reconciliation_lines (
+                id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+                snapshot_id             INTEGER NOT NULL,
+                reference               TEXT NOT NULL,
+                designation             TEXT,
+                unite                   TEXT,
+                stock_erp               REAL,
+                stock_mysifa            REAL,
+                ecart                   REAL,
+                statut                  TEXT NOT NULL,
+                erp_dernier_mvt_libelle TEXT,
+                erp_dernier_mvt_date    TEXT,
+                erp_dernier_mvt_qte     REAL,
+                mysifa_date_fifo        TEXT,
+                FOREIGN KEY (snapshot_id) REFERENCES reconciliation_snapshots(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_reconciliation_lines_snapshot
+                ON reconciliation_lines(snapshot_id);
+            CREATE INDEX IF NOT EXISTS idx_reconciliation_lines_snapshot_statut
+                ON reconciliation_lines(snapshot_id, statut);
+            """
+        )
+        conn.commit()
+        _record_schema_migration(conn, 86, "reconciliation_snapshots_pf")
+
+    # v87 — Tableaux de bord : référentiel créé par le superadmin
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=87 LIMIT 1").fetchone():
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS dashboards (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                titre       TEXT NOT NULL,
+                description TEXT DEFAULT '',
+                widget_type TEXT NOT NULL CHECK(widget_type IN ('stock_alerts','planning_summary','expe_today')),
+                config_json TEXT NOT NULL DEFAULT '{}',
+                actif       INTEGER NOT NULL DEFAULT 1,
+                created_by_id INTEGER REFERENCES users(id),
+                created_at  TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+                updated_at  TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_dashboards_actif ON dashboards(actif);
+        """)
+        conn.commit()
+        _record_schema_migration(conn, 87, "dashboards")
+
+    # v88 — Tableaux de bord : association utilisateur ↔ dashboard
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=88 LIMIT 1").fetchone():
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS user_dashboards (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                dashboard_id INTEGER NOT NULL REFERENCES dashboards(id) ON DELETE CASCADE,
+                pos_x        REAL NOT NULL DEFAULT 20,
+                pos_y        REAL NOT NULL DEFAULT 80,
+                minimized    INTEGER NOT NULL DEFAULT 0,
+                added_at     TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+                UNIQUE(user_id, dashboard_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_user_dashboards_user ON user_dashboards(user_id);
+        """)
+        conn.commit()
+        _record_schema_migration(conn, 88, "user_dashboards")
+
+    # v89 — Table des clés API (pont Access ↔ MySifa)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=89 LIMIT 1").fetchone():
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS api_keys (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                name        TEXT NOT NULL,
+                key_prefix  TEXT NOT NULL,
+                key_hash    TEXT NOT NULL UNIQUE,
+                scopes      TEXT NOT NULL DEFAULT 'production:read,production:write',
+                is_active   INTEGER NOT NULL DEFAULT 1,
+                created_by  TEXT,
+                created_at  TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+                last_used_at TEXT,
+                revoked_at  TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash);
+            CREATE INDEX IF NOT EXISTS idx_api_keys_active ON api_keys(is_active);
+        """)
+        conn.commit()
+        _record_schema_migration(conn, 89, "api_keys")
+
+    # v90 — Fiches techniques produits
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=90 LIMIT 1").fetchone():
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS fiches_techniques (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                reference    TEXT NOT NULL,
+                designation  TEXT,
+                client       TEXT,
+                format       TEXT,
+                laize        REAL,
+                matiere      TEXT,
+                adhesif      TEXT,
+                nb_couleurs  INTEGER,
+                conditionnement TEXT,
+                notes        TEXT,
+                source       TEXT DEFAULT 'manuel',
+                date_import  TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+                imported_by  TEXT
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_fiches_ref ON fiches_techniques(reference COLLATE NOCASE);
+        """)
+        conn.commit()
+        _record_schema_migration(conn, 90, "fiches_techniques")
+
+    # v91 — Humeur utilisateur (indicateur quotidien)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=91 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
+        if "humeur_active" not in cols:
+            conn.execute("ALTER TABLE users ADD COLUMN humeur_active INTEGER NOT NULL DEFAULT 0")
+        if "humeur_valeur" not in cols:
+            conn.execute("ALTER TABLE users ADD COLUMN humeur_valeur TEXT")
+        if "humeur_date" not in cols:
+            conn.execute("ALTER TABLE users ADD COLUMN humeur_date TEXT")
+        conn.commit()
+        _record_schema_migration(conn, 91, "users_humeur")
+
+    # v92 — MyBAT : gestion des Bons À Tirer
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=92 LIMIT 1").fetchone():
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS bat_entries (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                numero_client   TEXT NOT NULL,
+                numero_article  TEXT NOT NULL,
+                statut          TEXT NOT NULL DEFAULT 'a_faire',
+                pdf_path        TEXT,
+                notes           TEXT,
+                created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+                updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+                created_by      INTEGER REFERENCES users(id),
+                updated_by      INTEGER REFERENCES users(id),
+                UNIQUE(numero_client, numero_article)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bat_statut ON bat_entries(statut)"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 92, "bat_entries")
+
+    # v93 — MyBAT : renommage numero_client→description + ajout delai_client
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=93 LIMIT 1").fetchone():
+        try:
+            conn.execute("ALTER TABLE bat_entries RENAME COLUMN numero_client TO description")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE bat_entries ADD COLUMN delai_client TEXT")
+        except Exception:
+            pass
+        conn.commit()
+        _record_schema_migration(conn, 93, "bat_entries_v2")
+
+    # v94 — fiches_techniques : colonnes étendues depuis Access
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=94 LIMIT 1").fetchone():
+        cols_to_add = [
+            # Étiquette
+            ("eti_laize",          "REAL"),
+            ("eti_longueur",       "REAL"),
+            ("eti_rayons",         "REAL"),
+            ("eti_perforations",   "TEXT"),
+            # Module
+            ("mod_laize",          "REAL"),
+            ("mod_longueur",       "REAL"),
+            ("mod_nb_front",       "INTEGER"),
+            # Échenillage
+            ("lateral_ext",        "REAL"),
+            ("horizontal",         "REAL"),
+            ("lateral_int",        "REAL"),
+            # Outil 1
+            ("outil1_forme",       "TEXT"),
+            ("outil1_numero_sifa", "TEXT"),
+            ("outil1_laize",       "REAL"),
+            ("machine",            "TEXT"),
+            ("outil1_epaisseur",   "REAL"),
+            ("outil1_nb_dents",    "INTEGER"),
+            ("outil1_nb_front",    "INTEGER"),
+            ("outil1_nb_avance",   "INTEGER"),
+            # Outil 2
+            ("outil2_forme",       "TEXT"),
+            ("outil2_numero_sifa", "TEXT"),
+            ("outil2_epaisseur",   "REAL"),
+            ("outil2_nb_dents",    "INTEGER"),
+            ("outil2_nb_front",    "INTEGER"),
+            ("outil2_nb_avance",   "INTEGER"),
+            # Outil 3
+            ("outil3_forme",       "TEXT"),
+            ("outil3_numero_sifa", "TEXT"),
+            ("outil3_epaisseur",   "REAL"),
+            ("outil3_nb_dents",    "INTEGER"),
+            ("outil3_nb_front",    "INTEGER"),
+            ("outil3_nb_avance",   "INTEGER"),
+            # Matière
+            ("support",            "TEXT"),
+            ("glassine",           "TEXT"),
+            ("laize_optimale",     "REAL"),
+            ("laize_optionnelle",  "REAL"),
+            ("epaisseur",          "REAL"),
+            ("qte_au_mille",       "REAL"),
+            ("date_modif",         "TEXT"),
+            # Impression
+            ("nb_couleurs",        "INTEGER"),
+            ("recto",              "INTEGER"),
+            ("verso",              "INTEGER"),
+            ("tete1_pantone",      "TEXT"),
+            ("tete1_couleur",      "TEXT"),
+            ("tete1_anilox",       "TEXT"),
+            ("tete1_composition",  "TEXT"),
+            ("tete2_pantone",      "TEXT"),
+            ("tete2_couleur",      "TEXT"),
+            ("tete2_anilox",       "TEXT"),
+            ("tete2_composition",  "TEXT"),
+            ("tete3_pantone",      "TEXT"),
+            ("tete3_couleur",      "TEXT"),
+            ("tete3_anilox",       "TEXT"),
+            ("tete3_composition",  "TEXT"),
+            ("remarque",           "TEXT"),
+            # Conditionnement
+            ("mandrin_dia",        "TEXT"),
+            ("mandrin_longueur",   "REAL"),
+            ("enroulement",        "TEXT"),
+            ("nb_etiq_bobin",      "INTEGER"),
+            ("dia_ext",            "REAL"),
+            ("poids",              "REAL"),
+            ("cales_sachets",      "TEXT"),
+            ("cartons",            "TEXT"),
+            ("nb_au_sol",          "INTEGER"),
+            ("nb_etage",           "INTEGER"),
+            ("nb_bobines_carton",  "INTEGER"),
+            # Palettisation
+            ("palette_type",              "TEXT"),
+            ("palette_nb_cartons_sol",    "INTEGER"),
+            ("palette_nb_cartons_hauteur","INTEGER"),
+            ("palette_hauteur_max",       "REAL"),
+            ("particularite",             "TEXT"),
+        ]
+        existing_cols = {r["name"] for r in conn.execute("PRAGMA table_info(fiches_techniques)").fetchall()}
+        for col_name, col_type in cols_to_add:
+            if col_name not in existing_cols:
+                try:
+                    conn.execute(f"ALTER TABLE fiches_techniques ADD COLUMN {col_name} {col_type}")
+                except Exception:
+                    pass
+        conn.commit()
+        _record_schema_migration(conn, 94, "fiches_techniques_extended")
+
+    # v95 — MyStock : sessions d'inventaire par emplacement (outil inventaire v2)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=95 LIMIT 1").fetchone():
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS inventaires_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                emplacement TEXT NOT NULL,
+                operateur_email TEXT,
+                operateur_nom TEXT,
+                date_validation TEXT NOT NULL,
+                nb_produits INTEGER DEFAULT 0,
+                nb_modifications INTEGER DEFAULT 0,
+                modifications_json TEXT
+            )"""
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_inv_sessions_empl ON inventaires_sessions(emplacement, date_validation DESC)"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 95, "inventaires_sessions")
+
+    # v96 — expe_transporteurs : couleur personnalisée
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=96 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(expe_transporteurs)").fetchall()}
+        if "couleur" not in cols:
+            conn.execute("ALTER TABLE expe_transporteurs ADD COLUMN couleur TEXT")
+        conn.commit()
+        _record_schema_migration(conn, 96, "expe_transporteurs_couleur")
+
+    # v97 — MyStock : produits de négoce (type sur produits)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=97 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(produits)").fetchall()}
+        if "type" not in cols:
+            conn.execute("ALTER TABLE produits ADD COLUMN type TEXT NOT NULL DEFAULT 'fabrique'")
+        conn.commit()
+        _record_schema_migration(conn, 97, "produits_type_negoce")
+
+    # v98 — Chat : reply, forward, soft-delete visible
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=98 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(chat_messages)").fetchall()}
+        if "reply_to_id" not in cols:
+            conn.execute("ALTER TABLE chat_messages ADD COLUMN reply_to_id INTEGER DEFAULT NULL")
+        if "is_forwarded" not in cols:
+            conn.execute("ALTER TABLE chat_messages ADD COLUMN is_forwarded INTEGER NOT NULL DEFAULT 0")
+        if "forwarded_from_nom" not in cols:
+            conn.execute("ALTER TABLE chat_messages ADD COLUMN forwarded_from_nom TEXT DEFAULT NULL")
+        conn.commit()
+        _record_schema_migration(conn, 98, "chat_messages_reply_forward")
+
+    # v99 — MyExpé : type_colis pour les envois sans palette (ex: vrac / UPS)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=99 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(expe_departs)").fetchall()}
+        if "type_colis" not in cols:
+            conn.execute("ALTER TABLE expe_departs ADD COLUMN type_colis TEXT DEFAULT NULL")
+        conn.commit()
+        _record_schema_migration(conn, 99, "expe_departs_type_colis")
+
+    # v100 — Notifications push (Web Push / VAPID)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=100 LIMIT 1").fetchone():
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS push_subscriptions (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                endpoint    TEXT NOT NULL UNIQUE,
+                p256dh      TEXT NOT NULL,
+                auth        TEXT NOT NULL,
+                user_agent  TEXT,
+                created_at  TEXT NOT NULL,
+                last_used_at TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_push_subs_user ON push_subscriptions(user_id);
+            """
+        )
+        conn.commit()
+        _record_schema_migration(conn, 100, "push_subscriptions")
+
+    # v101 — fiches_techniques + planning_entries : clé produit normalisée
+    # Permet la jointure planning_entries.ref_produit ↔ fiches_techniques
+    # sans dépendre du libellé textuel ni de la variante (machine, laize,
+    # conditionnement) saisie après le tiret. Trois dimensions extraites du
+    # libellé historique des fiches : machine, laize_mm, conditionnement_norm.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=101 LIMIT 1").fetchone():
+        ft_cols = {r["name"] for r in conn.execute("PRAGMA table_info(fiches_techniques)").fetchall()}
+        if "ref_produit_norm" not in ft_cols:
+            conn.execute("ALTER TABLE fiches_techniques ADD COLUMN ref_produit_norm TEXT")
+        if "laize_mm" not in ft_cols:
+            conn.execute("ALTER TABLE fiches_techniques ADD COLUMN laize_mm INTEGER")
+        if "conditionnement_norm" not in ft_cols:
+            conn.execute("ALTER TABLE fiches_techniques ADD COLUMN conditionnement_norm TEXT")
+        # NB: la colonne `machine` existe déjà depuis v94 — on la réutilise.
+
+        pe_cols = {r["name"] for r in conn.execute("PRAGMA table_info(planning_entries)").fetchall()}
+        if "ref_produit_norm" not in pe_cols:
+            conn.execute("ALTER TABLE planning_entries ADD COLUMN ref_produit_norm TEXT")
+
+        # Backfill via le parser. Sans écraser les valeurs renseignées à la main
+        # (machine, conditionnement) ; on remplit seulement les cases vides.
+        try:
+            from app.services.fiche_ref_parser import (
+                parse_fiche_reference,
+                normalize_ref_produit,
+            )
+        except Exception:
+            parse_fiche_reference = None
+            normalize_ref_produit = None
+
+        if parse_fiche_reference is not None:
+            rows = conn.execute(
+                "SELECT id, reference, machine, laize, conditionnement "
+                "FROM fiches_techniques"
+            ).fetchall()
+            for row in rows:
+                parsed = parse_fiche_reference(row["reference"])
+                updates = {}
+                if parsed.get("ref_produit_norm"):
+                    updates["ref_produit_norm"] = parsed["ref_produit_norm"]
+                if parsed.get("machine") and not (row["machine"] or "").strip():
+                    updates["machine"] = parsed["machine"]
+                if parsed.get("laize_mm"):
+                    updates["laize_mm"] = parsed["laize_mm"]
+                if parsed.get("conditionnement_norm") and not (
+                    (row["conditionnement"] or "").strip()
+                ):
+                    updates["conditionnement_norm"] = parsed["conditionnement_norm"]
+                if updates:
+                    conn.execute(
+                        f"UPDATE fiches_techniques "
+                        f"SET {', '.join(f'{k}=?' for k in updates)} WHERE id=?",
+                        list(updates.values()) + [row["id"]],
+                    )
+
+        if normalize_ref_produit is not None:
+            pe_rows = conn.execute(
+                "SELECT id, ref_produit FROM planning_entries "
+                "WHERE ref_produit IS NOT NULL AND TRIM(ref_produit) != ''"
+            ).fetchall()
+            for row in pe_rows:
+                norm = normalize_ref_produit(row["ref_produit"])
+                if norm:
+                    conn.execute(
+                        "UPDATE planning_entries SET ref_produit_norm=? WHERE id=?",
+                        (norm, row["id"]),
+                    )
+
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_fiches_ref_produit_norm "
+            "ON fiches_techniques(ref_produit_norm)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_planning_entries_ref_produit_norm "
+            "ON planning_entries(ref_produit_norm)"
+        )
+
+        # Triggers : maintiennent ref_produit_norm à jour automatiquement
+        # à chaque INSERT/UPDATE, sans devoir patcher tous les endpoints.
+        # S'appuient sur la fonction Python `norm_ref_produit()` enregistrée
+        # à chaque ouverture de connexion (cf. _register_udfs).
+        conn.executescript("""
+            DROP TRIGGER IF EXISTS trg_pe_ref_produit_norm_ins;
+            CREATE TRIGGER trg_pe_ref_produit_norm_ins
+            AFTER INSERT ON planning_entries
+            WHEN NEW.ref_produit IS NOT NULL AND TRIM(NEW.ref_produit) != ''
+            BEGIN
+                UPDATE planning_entries
+                   SET ref_produit_norm = norm_ref_produit(NEW.ref_produit)
+                 WHERE id = NEW.id
+                   AND (ref_produit_norm IS NULL OR ref_produit_norm = '');
+            END;
+
+            DROP TRIGGER IF EXISTS trg_pe_ref_produit_norm_upd;
+            CREATE TRIGGER trg_pe_ref_produit_norm_upd
+            AFTER UPDATE OF ref_produit ON planning_entries
+            BEGIN
+                UPDATE planning_entries
+                   SET ref_produit_norm = norm_ref_produit(NEW.ref_produit)
+                 WHERE id = NEW.id;
+            END;
+
+            DROP TRIGGER IF EXISTS trg_ft_ref_produit_norm_ins;
+            CREATE TRIGGER trg_ft_ref_produit_norm_ins
+            AFTER INSERT ON fiches_techniques
+            WHEN NEW.reference IS NOT NULL AND TRIM(NEW.reference) != ''
+            BEGIN
+                UPDATE fiches_techniques
+                   SET ref_produit_norm = norm_ref_produit(NEW.reference)
+                 WHERE id = NEW.id
+                   AND (ref_produit_norm IS NULL OR ref_produit_norm = '');
+            END;
+
+            DROP TRIGGER IF EXISTS trg_ft_ref_produit_norm_upd;
+            CREATE TRIGGER trg_ft_ref_produit_norm_upd
+            AFTER UPDATE OF reference ON fiches_techniques
+            BEGIN
+                UPDATE fiches_techniques
+                   SET ref_produit_norm = norm_ref_produit(NEW.reference)
+                 WHERE id = NEW.id;
+            END;
+        """)
+        conn.commit()
+        _record_schema_migration(conn, 101, "fiches_techniques_ref_produit_norm")
+
+    # v102 — MyStock : commentaires par produit dans les sessions d'inventaire
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=102 LIMIT 1").fetchone():
+        existing = {r["name"] for r in conn.execute("PRAGMA table_info(inventaires_sessions)").fetchall()}
+        if "commentaires_json" not in existing:
+            try:
+                conn.execute("ALTER TABLE inventaires_sessions ADD COLUMN commentaires_json TEXT")
+            except Exception:
+                pass
+        conn.commit()
+        _record_schema_migration(conn, 102, "inventaires_sessions_commentaires")
+
+    # v103 — Paramètres : référentiel Clients (ERP)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=103 LIMIT 1").fetchone():
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS clients (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                numero          INTEGER,
+                code            TEXT,
+                raison_sociale  TEXT NOT NULL,
+                adresse1        TEXT,
+                adresse2        TEXT,
+                bp              TEXT,
+                cp              TEXT,
+                ville           TEXT,
+                code_pays       TEXT,
+                pays            TEXT,
+                groupe          TEXT,
+                siret           TEXT,
+                rcs             TEXT,
+                tva             TEXT,
+                ean             TEXT,
+                nif             TEXT,
+                telephone       TEXT,
+                telecopie       TEXT,
+                email           TEXT,
+                representant    TEXT,
+                adv             TEXT,
+                categorie1      TEXT,
+                categorie2      TEXT,
+                categorie3      TEXT,
+                mode_livraison  TEXT,
+                mode_reglement  TEXT,
+                devise          TEXT,
+                encours_autorise REAL,
+                code_comptable  TEXT,
+                etat            TEXT NOT NULL DEFAULT 'Normal',
+                contact_nom     TEXT,
+                contact_fonction TEXT,
+                contact_email   TEXT,
+                contact_tel     TEXT,
+                notes           TEXT,
+                date_creation   TEXT,
+                date_modification TEXT,
+                created_at      TEXT NOT NULL,
+                updated_at      TEXT NOT NULL
+            )"""
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_clients_code ON clients(code)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_clients_raison ON clients(raison_sociale)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_clients_etat ON clients(etat)")
+        conn.commit()
+        _record_schema_migration(conn, 103, "clients_referentiel")
+
+    # v104 — MyAO : langue préférée des fournisseurs (FR/EN) pour les invitations
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=104 LIMIT 1").fetchone():
+        af_cols = {row[1] for row in conn.execute("PRAGMA table_info(ao_fournisseurs)").fetchall()}
+        if "langue" not in af_cols:
+            try:
+                conn.execute("ALTER TABLE ao_fournisseurs ADD COLUMN langue TEXT DEFAULT 'fr'")
+            except Exception:
+                pass
+        carnet_cols = {row[1] for row in conn.execute("PRAGMA table_info(ao_carnet_fournisseurs)").fetchall()}
+        if "langue" not in carnet_cols:
+            try:
+                conn.execute("ALTER TABLE ao_carnet_fournisseurs ADD COLUMN langue TEXT DEFAULT 'fr'")
+            except Exception:
+                pass
+        conn.commit()
+        _record_schema_migration(conn, 104, "ao_fournisseurs_langue")
 
     _record_schema_migration(
         conn,

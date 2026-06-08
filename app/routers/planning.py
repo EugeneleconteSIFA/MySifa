@@ -10,6 +10,7 @@ Ajouter dans main.py :
 
 import json
 import logging
+import math
 import sqlite3
 import unicodedata
 from datetime import datetime, timedelta
@@ -766,6 +767,32 @@ def _planned_end_iso_for_machine(
         return None
 
 
+def _compute_nb_palettes(e: dict) -> Optional[int]:
+    """Calcule le nombre de palettes nécessaires.
+    Formule : nb_cartons  = ceil(qte_bobines / nb_bobines_carton)
+              nb_palettes = ceil(nb_cartons / (palette_nb_cartons_sol * palette_nb_cartons_hauteur))
+    Retourne None si une des données est manquante ou invalide.
+    """
+    try:
+        qte_bobines       = e.get("_of_qte_bobines")
+        nb_bobines_carton = e.get("_ft_nb_bobines_carton")
+        cartons_sol       = e.get("_ft_palette_nb_cartons_sol")
+        cartons_haut      = e.get("_ft_palette_nb_cartons_hauteur")
+        if any(v is None for v in (qte_bobines, nb_bobines_carton, cartons_sol, cartons_haut)):
+            return None
+        qb  = float(qte_bobines)
+        nbc = float(nb_bobines_carton)
+        cso = float(cartons_sol)
+        cha = float(cartons_haut)
+        if nbc <= 0 or cso <= 0 or cha <= 0 or qb <= 0:
+            return None
+        nb_cartons  = math.ceil(qb / nbc)
+        nb_palettes = math.ceil(nb_cartons / (cso * cha))
+        return int(nb_palettes)
+    except Exception:
+        return None
+
+
 def _of_timeline_fields(e: dict) -> Tuple[bool, Optional[float]]:
     """OF PDF lié (of_import_id) et qté étiquettes affichable (non nulle, pas 0)."""
     of_id = e.get("of_import_id")
@@ -817,6 +844,9 @@ def _slot_payload(e: dict, start_iso: str, end_iso: str) -> dict:
         "end": end_iso,
         "has_of": has_of,
         "qte_etiquettes": qte_etiquettes,
+        "nb_palettes": _compute_nb_palettes(e),
+        "prise_rdv": int(e.get("prise_rdv") or 0),
+        "departement_livraison": (e.get("departement_livraison") or "").strip(),
     }
 
 
@@ -853,7 +883,9 @@ def _compute_timeline_slots(
             ps, pe = e["planned_start"], e["planned_end"]
             pend = _parse_planned_dt(pe)
             if pend:
-                cursor = advance_to_work(pend)
+                cand = advance_to_work(pend)
+                if cand and cand > cursor:
+                    cursor = cand
             slots.append(_slot_payload(e, ps, pe))
             continue
         if st == "termine":
@@ -895,7 +927,9 @@ def _compute_timeline_slots(
                 ps, pe = e["planned_start"], e["planned_end"]
             pend = _parse_planned_dt(pe)
             if pend:
-                cursor = advance_to_work(pend)
+                cand = advance_to_work(pend)
+                if cand and cand > cursor:
+                    cursor = cand
             slots.append(_slot_payload(e, ps, pe))
             continue
 
@@ -1619,9 +1653,9 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
             (body.get("departement_livraison") or "").strip()
             if "departement_livraison" in body
             else (ex["departement_livraison"] if "departement_livraison" in ex.keys() else ""),
-            _parse_a_placer(body.get("prise_rdv"), default=int(ex.get("prise_rdv") or 0))
+            _parse_a_placer(body.get("prise_rdv"), default=int(exd.get("prise_rdv") or 0))
             if "prise_rdv" in body
-            else int(ex.get("prise_rdv") or 0),
+            else int(exd.get("prise_rdv") or 0),
             entry_id
         ))
 
@@ -2657,15 +2691,52 @@ def get_timeline(machine_id: int, request: Request, semaine: Optional[str] = Non
         _auto_complete_en_cours(conn, machine_id)
         _enforce_single_en_cours(conn, machine_id)
 
+        # Nom de la machine courante : utilisé pour sélectionner, parmi
+        # plusieurs fiches techniques partageant la même référence produit,
+        # celle dont la machine correspond au planning courant.
+        machine_nom_row = conn.execute(
+            "SELECT nom FROM machines WHERE id=?", (machine_id,)
+        ).fetchone()
+        machine_nom = machine_nom_row["nom"] if machine_nom_row else ""
+
         rows = conn.execute(
             """
-            SELECT pe.*, oi.qte_etiquettes AS _of_qte_etiquettes
+            SELECT pe.*,
+                   oi.qte_etiquettes  AS _of_qte_etiquettes,
+                   oi.qte_bobines     AS _of_qte_bobines,
+                   ft.nb_bobines_carton          AS _ft_nb_bobines_carton,
+                   ft.palette_nb_cartons_sol     AS _ft_palette_nb_cartons_sol,
+                   ft.palette_nb_cartons_hauteur AS _ft_palette_nb_cartons_hauteur
             FROM planning_entries pe
-            LEFT JOIN of_imports oi ON oi.id = pe.of_import_id
+            LEFT JOIN of_imports oi
+                ON oi.id = pe.of_import_id
+            -- Liaison fiche ↔ dossier : on matche en priorité sur la clé
+            -- produit normalisée (XXX/NNNN), insensible aux variantes
+            -- machine/laize présentes dans le libellé. Quand plusieurs
+            -- fiches partagent la même clé (une variante par machine),
+            -- on retient celle dont `machine` correspond à la machine
+            -- courante du planning. Fallback sur la référence textuelle
+            -- complète pour les fiches non encore re-parsées.
+            LEFT JOIN fiches_techniques ft ON ft.id = (
+                SELECT ft2.id FROM fiches_techniques ft2
+                WHERE COALESCE(NULLIF(TRIM(ft2.ref_produit_norm), ''),
+                               LOWER(TRIM(ft2.reference)))
+                    = COALESCE(NULLIF(TRIM(pe.ref_produit_norm), ''),
+                               LOWER(TRIM(pe.ref_produit)))
+                ORDER BY
+                  CASE
+                    WHEN LOWER(TRIM(COALESCE(ft2.machine,''))) = LOWER(TRIM(?))
+                         AND TRIM(COALESCE(ft2.machine,'')) != '' THEN 0
+                    WHEN TRIM(COALESCE(ft2.machine,'')) = '' THEN 1
+                    ELSE 2
+                  END,
+                  ft2.id
+                LIMIT 1
+            )
             WHERE pe.machine_id = ?
             ORDER BY pe.position ASC
             """,
-            (machine_id,),
+            (machine_nom or "", machine_id),
         ).fetchall()
         entries_list = [dict(r) for r in rows]
 
@@ -2822,6 +2893,108 @@ async def pack_termines(machine_id: int, request: Request):
         conn.commit()
 
     return {"success": True, "updated": updated, "end": _fmt_ts(dt_end)}
+
+
+@router.post("/machines/{machine_id}/pack-attente")
+async def pack_attente(machine_id: int, request: Request):
+    """Recale les dossiers en attente les uns derrière les autres (durées en heures ouvrées machine).
+
+    - Ne modifie que les entrées statut='attente'
+    - Point d'ancrage : fin du dossier "en cours" si planifiée, sinon maintenant (arrondi à l'heure)
+    - Affecte planned_start/planned_end (persisté) et remet planned_end_manual à 0
+    """
+    require_admin(request)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    start_iso = (body.get("start_iso") or "").strip()
+
+    with get_db() as conn:
+        require_planning_machine(request, conn, machine_id)
+        mrow = conn.execute("SELECT * FROM machines WHERE id=?", (machine_id,)).fetchone()
+        if not mrow:
+            raise HTTPException(404, "Machine non trouvée")
+        m = dict(mrow)
+
+        cfgs, off, dw, dh = _load_planning_calendar_maps(conn, machine_id)
+        advance_to_work, consume_from = _make_work_duration_consumer(m, cfgs, off, dw, dh)
+
+        # Ancrage : fin en_cours, sinon start_iso, sinon maintenant (arrondi à l'heure, heure Paris)
+        anchor = conn.execute(
+            """SELECT planned_end, planned_start, duree_heures
+               FROM planning_entries
+               WHERE machine_id=? AND statut='en_cours'
+               ORDER BY position ASC LIMIT 1""",
+            (machine_id,),
+        ).fetchone()
+
+        dt0: Optional[datetime] = None
+        if anchor and (anchor["planned_end"] or "").strip():
+            dt0 = _parse_planned_dt(anchor["planned_end"])
+        if not dt0 and start_iso:
+            dt0 = _parse_planned_dt(start_iso)
+            if not dt0:
+                raise HTTPException(status_code=400, detail="start_iso invalide.")
+        if not dt0 and anchor and (anchor["planned_start"] or "").strip():
+            dt_ps = _parse_planned_dt(anchor["planned_start"])
+            if dt_ps:
+                try:
+                    dur = float(anchor["duree_heures"] or 0.0)
+                except Exception:
+                    dur = 0.0
+                if dur > 1e-6:
+                    _, dt0, _ = consume_from(dt_ps.replace(microsecond=0), dur)
+        if not dt0:
+            dt0 = datetime.now(_TZ_PARIS).replace(
+                tzinfo=None, minute=0, second=0, microsecond=0
+            )
+
+        cursor = advance_to_work(dt0.replace(second=0, microsecond=0))
+
+        waits = conn.execute(
+            """SELECT id, position, duree_heures, a_placer
+               FROM planning_entries
+               WHERE machine_id=? AND statut='attente'
+               ORDER BY position ASC""",
+            (machine_id,),
+        ).fetchall()
+        waits_list = [dict(r) for r in waits]
+
+        # Garder la logique "à placer" à la fin, comme la timeline.
+        main_entries: List[dict] = []
+        aplacer_entries: List[dict] = []
+        for e in waits_list:
+            try:
+                ap = int(e.get("a_placer") or 0)
+            except Exception:
+                ap = 0
+            (aplacer_entries if ap == 1 else main_entries).append(e)
+        ordered = main_entries + aplacer_entries
+
+        now_u = datetime.now().isoformat()
+        updated = 0
+        for e in ordered:
+            try:
+                dur = float(e.get("duree_heures") or 0.0)
+            except Exception:
+                dur = 0.0
+            if dur <= 1e-6:
+                continue
+            slot_start, slot_end, cursor = consume_from(cursor, dur)
+            conn.execute(
+                """UPDATE planning_entries
+                   SET planned_start=?, planned_end=?, planned_end_manual=0, updated_at=?
+                   WHERE id=? AND machine_id=?""",
+                (_fmt_ts(slot_start), _fmt_ts(slot_end), now_u, int(e["id"]), machine_id),
+            )
+            updated += 1
+
+        conn.commit()
+
+    return {"success": True, "updated": updated, "start": _fmt_ts(dt0)}
 
 
 def _pack_termines_before_anchor(

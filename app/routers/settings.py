@@ -1,5 +1,7 @@
 """Paramètres & matrice d'accès — super administrateur uniquement."""
 
+import hashlib
+import secrets
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -7,6 +9,7 @@ from typing import Optional
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from pydantic import BaseModel
 
 from config import (
     ASSIGNABLE_ROLES,
@@ -1023,3 +1026,182 @@ async def rename_machine(machine_id: int, request: Request):
         ip=request.client.host if request.client else None,
     )
     return {"success": True, "id": machine_id, "nom": new_nom}
+
+
+# ══════════════════════════════════════════════════════════════════
+# Gestion des clés API (superadmin uniquement)
+# ══════════════════════════════════════════════════════════════════
+
+def _hash_key(raw: str) -> str:
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+class ApiKeyCreateIn(BaseModel):
+    name: str
+    scopes: str = "of:read,of:write"
+
+
+@router.get("/api/settings/api-keys")
+def list_api_keys(request: Request):
+    require_superadmin(request)
+    from database import get_db
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT id, name, key_prefix, scopes, is_active,
+                      created_by, created_at, last_used_at, revoked_at
+               FROM api_keys ORDER BY created_at DESC"""
+        ).fetchall()
+    return {"keys": [dict(r) for r in rows]}
+
+
+@router.post("/api/settings/api-keys")
+def create_api_key(body: ApiKeyCreateIn, request: Request):
+    require_superadmin(request)
+    user = get_current_user(request)
+    from database import get_db
+
+    raw = "msk_" + secrets.token_hex(32)   # 68 chars, préfixe "msk_"
+    h = _hash_key(raw)
+    prefix = raw[:12]  # affiché dans la liste pour identification visuelle
+
+    with get_db() as conn:
+        conn.execute(
+            """INSERT INTO api_keys (name, key_prefix, key_hash, scopes, is_active, created_by)
+               VALUES (?,?,?,?,1,?)""",
+            (body.name.strip(), prefix, h, body.scopes.strip(), user.get("email", ""))
+        )
+        conn.commit()
+
+    # La clé brute n'est retournée QU'UNE SEULE FOIS ici — elle n'est jamais stockée en clair
+    return {"key": raw, "prefix": prefix, "name": body.name}
+
+
+@router.patch("/api/settings/api-keys/{key_id}/revoke")
+def revoke_api_key(key_id: int, request: Request):
+    require_superadmin(request)
+    from database import get_db
+    from datetime import datetime
+    with get_db() as conn:
+        row = conn.execute("SELECT id FROM api_keys WHERE id=?", (key_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Clé introuvable.")
+        conn.execute(
+            "UPDATE api_keys SET is_active=0, revoked_at=? WHERE id=?",
+            (datetime.now().strftime("%Y-%m-%dT%H:%M:%S"), key_id)
+        )
+        conn.commit()
+    return {"revoked": True, "id": key_id}
+
+
+@router.delete("/api/settings/api-keys/{key_id}")
+def delete_api_key(key_id: int, request: Request):
+    require_superadmin(request)
+    from database import get_db
+    with get_db() as conn:
+        conn.execute("DELETE FROM api_keys WHERE id=?", (key_id,))
+        conn.commit()
+    return {"deleted": True, "id": key_id}
+
+
+# ──────────────────────────────────────────────────
+# Emplacements (référentiel magasin)
+# ──────────────────────────────────────────────────
+
+class EmplacementCreate(BaseModel):
+    code: str
+
+
+@router.get("/api/settings/emplacements")
+def get_emplacements(request: Request):
+    require_superadmin(request)
+    from database import get_db
+    with get_db() as conn:
+        # Créer la table si elle n'existe pas encore
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS emplacements_plan (
+                code TEXT PRIMARY KEY NOT NULL,
+                imported_at TEXT NOT NULL
+            )"""
+        )
+        rows = conn.execute(
+            "SELECT code, imported_at FROM emplacements_plan ORDER BY code"
+        ).fetchall()
+    return [{"code": r["code"], "imported_at": r["imported_at"]} for r in rows]
+
+
+@router.post("/api/settings/emplacements")
+def create_emplacement(payload: EmplacementCreate, request: Request):
+    require_superadmin(request)
+    code = payload.code.strip().upper()
+    if not code:
+        raise HTTPException(400, "Code emplacement vide.")
+    if len(code) > 20:
+        raise HTTPException(400, "Code trop long (20 caractères max).")
+    from database import get_db
+    now = datetime.now().isoformat()
+    with get_db() as conn:
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS emplacements_plan (
+                code TEXT PRIMARY KEY NOT NULL,
+                imported_at TEXT NOT NULL
+            )"""
+        )
+        existing = conn.execute(
+            "SELECT 1 FROM emplacements_plan WHERE code=?", (code,)
+        ).fetchone()
+        if existing:
+            raise HTTPException(409, f"L'emplacement {code} existe déjà.")
+        conn.execute(
+            "INSERT INTO emplacements_plan (code, imported_at) VALUES (?, ?)",
+            (code, now),
+        )
+        conn.commit()
+    return {"code": code, "imported_at": now}
+
+
+@router.delete("/api/settings/emplacements/{code}")
+def delete_emplacement(code: str, request: Request):
+    require_superadmin(request)
+    from database import get_db
+    with get_db() as conn:
+        result = conn.execute(
+            "DELETE FROM emplacements_plan WHERE code=?", (code.upper(),)
+        )
+        conn.commit()
+        if result.rowcount == 0:
+            raise HTTPException(404, f"Emplacement {code} introuvable.")
+    return {"deleted": True, "code": code.upper()}
+
+
+@router.post("/api/settings/emplacements/reload-csv")
+def reload_emplacements_csv(request: Request):
+    require_superadmin(request)
+    from app.core.database import sync_emplacements_plan_from_csv
+    try:
+        n = sync_emplacements_plan_from_csv()
+    except Exception as exc:
+        raise HTTPException(500, f"Erreur lors du rechargement CSV : {exc}")
+    if n == 0:
+        raise HTTPException(422, "Fichier CSV introuvable ou vide — aucun emplacement importé.")
+    return {"imported": n}
+
+
+@router.post("/api/settings/emplacements/import-csv")
+async def import_emplacements_csv(request: Request, file: UploadFile = File(...)):
+    require_superadmin(request)
+    if not (file.filename or "").lower().endswith(".csv"):
+        raise HTTPException(400, "Le fichier doit être au format CSV (.csv).")
+    contents = await file.read()
+    if not contents.strip():
+        raise HTTPException(422, "Le fichier CSV est vide.")
+    csv_path = Path(BASE_DIR) / "data" / "emplacements_plan.csv"
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    csv_path.write_bytes(contents)
+    from app.core.database import sync_emplacements_plan_from_csv
+    try:
+        n = sync_emplacements_plan_from_csv()
+    except Exception as exc:
+        raise HTTPException(500, f"Erreur lors du rechargement : {exc}")
+    if n == 0:
+        raise HTTPException(422, "CSV importé mais aucun emplacement reconnu — vérifiez le format.")
+    return {"imported": n}

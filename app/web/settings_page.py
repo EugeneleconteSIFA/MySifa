@@ -83,7 +83,7 @@ body.sb-open .sidebar-overlay{display:block}
 h1{font-size:22px;margin:0 0 6px}
 .sub{color:var(--muted);font-size:13px;margin-bottom:22px}
 .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px 20px;margin-bottom:16px}
-.card h2{font-size:15px;font-weight:700;color:var(--text);margin:0 0 14px}
+.card h2{font-size:15px;margin:0 0 14px}
 .table-wrap{overflow:auto;border-radius:10px;border:1px solid var(--border)}
 table{width:100%;border-collapse:collapse;font-size:12px}
 th,td{padding:8px 10px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap}
@@ -96,13 +96,9 @@ td.chk{text-align:center}.dot{display:inline-block;width:8px;height:8px;border-r
 input,select{width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit}
 .btn{background:var(--accent);color:var(--text);border:none;border-radius:10px;padding:10px 18px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit}
 .btn:hover{filter:brightness(1.06)}
-.btn-sec{background:transparent;border:1px solid var(--border);color:var(--muted);transition:box-shadow .2s,border-color .15s,color .15s,filter .15s,background .15s}
+.btn-sec{background:transparent;border:1px solid var(--border);color:var(--muted);transition:box-shadow .2s,border-color .15s,color .15s,filter .15s}
 .btn-sec:hover{box-shadow:0 0 0 1px rgba(34,211,238,.32),0 0 20px rgba(34,211,238,.2);border-color:rgba(34,211,238,.45);color:var(--accent)}
 body.light .btn-sec:hover{box-shadow:0 0 0 1px rgba(8,145,178,.35),0 0 18px rgba(8,145,178,.15);border-color:rgba(8,145,178,.4);color:var(--accent)}
-.tabs .btn-sec{color:var(--text2);background:rgba(15,23,42,.45);border-color:var(--border)}
-body.light .tabs .btn-sec{color:var(--text2);background:#e8edf4;border-color:#d5dee9}
-.tabs .btn-sec.active{background:rgba(34,211,238,.16);border-color:rgba(34,211,238,.55);color:var(--accent);font-weight:700}
-body.light .tabs .btn-sec.active{background:rgba(8,145,178,.14);border-color:rgba(8,145,178,.5);color:var(--accent)}
 .row-user{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)}
 .row-user:last-child{border-bottom:none}
 .prof-ring{position:relative;flex-shrink:0;width:34px;height:34px;cursor:default}
@@ -132,9 +128,9 @@ body.light .op-filter:focus{box-shadow:0 0 0 3px rgba(8,145,178,.1)}
 body.light .op-table tbody tr:hover td{background:rgba(8,145,178,.05)}
 .op-table tr.op-cat-row td{
   padding:14px 12px 6px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;
-  color:var(--accent);background:rgba(34,211,238,.14);border-bottom:1px solid var(--border)
+  color:var(--accent);background:rgba(34,211,238,.06);border-bottom:1px solid var(--border)
 }
-body.light .op-table tr.op-cat-row td{background:rgba(8,145,178,.12);color:var(--accent)}
+body.light .op-table tr.op-cat-row td{background:rgba(8,145,178,.06)}
 .op-table tr.op-cat-row:first-child td{padding-top:8px}
 .op-code-cell{font-family:ui-monospace,monospace;font-weight:800;font-size:13px;color:var(--accent);width:56px}
 .op-lbl-cell{font-weight:600;color:var(--text);max-width:280px;white-space:normal}
@@ -164,8 +160,7 @@ body.light .op-table tr.op-cat-row td{background:rgba(8,145,178,.12);color:var(-
 .fsc-kpi-badge.danger{color:var(--danger);background:rgba(248,113,113,.12)}
 .fsc-kpi-badge.muted{color:var(--muted);background:rgba(148,163,184,.12)}
 .fsc-claim-badge{display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:3px 10px;border-radius:6px;line-height:1.3}
-.fsc-section-title{font-size:13px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px;margin:0 0 10px;padding:8px 12px;border-radius:8px;background:rgba(34,211,238,.1);border-left:3px solid var(--accent)}
-body.light .fsc-section-title{background:rgba(8,145,178,.1)}
+.fsc-section-title{font-size:13px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px;margin:0 0 10px}
 .fsc-date-inp{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:12px;font-family:inherit}
 .fsc-date-inp:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px rgba(34,211,238,.12)}
 .fsc-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border)}
@@ -190,6 +185,21 @@ body.light .btn-ghost:hover{box-shadow:0 0 0 1px rgba(8,145,178,.3),0 0 12px rgb
 .btn-ghost.danger:hover{border-color:var(--danger);color:var(--danger);box-shadow:0 0 0 1px rgba(248,113,113,.35),0 0 14px rgba(248,113,113,.12)}
 
 .pill{font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;border:1px solid var(--border);display:inline-flex;align-items:center;gap:6px;line-height:1.4}
+.empl-pill{display:inline-flex;align-items:center;gap:5px;padding:4px 8px 4px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);transition:border-color .15s,background .15s}
+.empl-pill:hover{border-color:var(--accent);background:rgba(34,211,238,.06)}
+body.light .empl-pill:hover{background:rgba(8,145,178,.06)}
+.empl-pill-code{font-family:ui-monospace,monospace;font-size:12px;font-weight:700;color:var(--text);letter-spacing:.03em}
+.empl-pill-del{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border:none;background:transparent;color:var(--muted);cursor:pointer;border-radius:4px;padding:0;transition:color .15s,background .15s;flex-shrink:0}
+.empl-pill-del:hover{color:var(--danger);background:rgba(248,113,113,.14)}
+#empl-add-form .btn,#empl-import-btn{color:var(--bg)}
+.empl-allee{flex:0 0 auto;width:fit-content;min-width:120px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;overflow:hidden}
+.empl-allee-hd{display:flex;align-items:center;gap:10px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.empl-allee-letter{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;background:rgba(34,211,238,.12);color:var(--accent);font-size:14px;font-weight:800;font-family:ui-monospace,monospace;flex-shrink:0}
+body.light .empl-allee-letter{background:rgba(8,145,178,.12)}
+.empl-allee-label{font-size:12px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
+.empl-allee-body{display:flex;flex-direction:column;gap:5px}
+.empl-rangee{display:flex;align-items:flex-start}
+.empl-rangee-pills{display:flex;flex-wrap:nowrap;gap:4px}
 .pill--direction{border-color:rgba(244,114,182,.35);color:#f472b6;background:rgba(244,114,182,.12)}
 .pill--administration{border-color:rgba(167,139,250,.38);color:#a78bfa;background:rgba(167,139,250,.12)}
 .pill--fabrication{border-color:rgba(52,211,153,.35);color:var(--ok);background:rgba(52,211,153,.12)}
@@ -213,13 +223,17 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .tabs{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
 .tabs .btn{display:inline-flex;align-items:center;gap:8px;vertical-align:middle}
 .tabs .btn svg{flex-shrink:0}
-.nav-group-label{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text2);padding:10px 12px 4px;user-select:none;line-height:1.3}
-.nav-group-label:not(:first-child){margin-top:4px;padding-top:14px;border-top:1px solid var(--border)}
+.nav-group-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);padding:6px 10px 4px;opacity:.7;display:flex;align-items:center;justify-content:space-between;cursor:pointer;border-radius:6px;user-select:none;transition:opacity .15s,background .15s}
+.nav-group-label:hover{opacity:1;background:rgba(148,163,184,.08)}
+.nav-group-chevron{display:inline-flex;flex-shrink:0;transition:transform .2s;opacity:.6}
+.nav-group-label.ngl-collapsed .nav-group-chevron{transform:rotate(-90deg)}
+.nav-subgroup-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);padding:4px 10px 2px 14px;opacity:.55;display:flex;align-items:center;justify-content:space-between;cursor:pointer;border-radius:6px;user-select:none;transition:opacity .15s,background .15s;margin-top:2px}
+.nav-subgroup-label:hover{opacity:.85;background:rgba(148,163,184,.06)}
+.nav-subgroup-chevron{display:inline-flex;flex-shrink:0;transition:transform .2s;opacity:.55}
+.nav-subgroup-label.nsl-collapsed .nav-subgroup-chevron{transform:rotate(-90deg)}
 .hidden{display:none}
 .legend{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
-.legend .item{padding:12px;border:1px solid var(--border);border-radius:10px;font-size:12px;background:rgba(15,23,42,.35)}
-body.light .legend .item{background:#f8fafc}
-.legend .item strong{color:var(--text);display:block;margin-bottom:6px;font-size:13px}
+.legend .item{padding:12px;border:1px solid var(--border);border-radius:10px;font-size:12px}
 .legend .item strong{display:block;margin-bottom:6px;font-size:13px}
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--border);padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;box-shadow:0 8px 32px rgba(0,0,0,.35);z-index:900}.toast.err{border-left:3px solid var(--danger)}
 @media(max-width:900px){
@@ -263,15 +277,8 @@ body.light .legend .item{background:#f8fafc}
   <aside class="sidebar">
     <div class="logo">My<span>Sifa</span><div class="logo-sub">by SIFA</div></div>
     <div class="nav-scroll tabs" style="width:100%;margin:0">
-      <div class="nav-group-label">Base</div>
-      <button type="button" class="nav-btn active" data-tab="users">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        Utilisateurs
-      </button>
-      <button type="button" class="nav-btn" data-tab="fournisseurs">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
-        Fournisseurs
-      </button>
+      <div class="nav-group-label"><span>Base</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <div class="nav-subgroup-label"><span>Fabrication</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
       <button type="button" class="nav-btn" data-tab="operations">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         Opérations
@@ -280,7 +287,24 @@ body.light .legend .item{background:#f8fafc}
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
         Machines
       </button>
-      <div class="nav-group-label">Accès</div>
+      <button type="button" class="nav-btn" data-tab="emplacements">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
+        Emplacements
+      </button>
+      <div class="nav-subgroup-label"><span>Contacts</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn active" data-tab="users">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Utilisateurs
+      </button>
+      <button type="button" class="nav-btn" data-tab="fournisseurs">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+        Fournisseurs
+      </button>
+      <button type="button" class="nav-btn" data-tab="clients">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21V7l9-4 9 4v14"/><path d="M9 21V12h6v9"/><path d="M3 21h18"/></svg>
+        Clients
+      </button>
+      <div class="nav-group-label" style="margin-top:8px"><span>Accès</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
       <button type="button" class="nav-btn" data-tab="matrix">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
         Matrice d'accès
@@ -289,12 +313,12 @@ body.light .legend .item{background:#f8fafc}
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
         Référentiel rôles
       </button>
-      <div class="nav-group-label">Communication</div>
+      <div class="nav-group-label" style="margin-top:8px"><span>Communication</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
       <button type="button" class="nav-btn" data-tab="updates">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         Mises à jour
       </button>
-      <div class="nav-group-label">Audit</div>
+      <div class="nav-group-label" style="margin-top:8px"><span>Audit</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
       <button type="button" class="nav-btn" data-tab="audit">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -305,12 +329,20 @@ body.light .legend .item{background:#f8fafc}
         </svg>
         Log
       </button>
+      <button type="button" class="nav-btn" data-tab="dashboards">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        Tableaux de bord
+      </button>
       <button type="button" class="nav-btn" data-tab="fsc">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"/>
           <path d="M2 21c0-3 2.5-5 5-5"/>
         </svg>
         Registre FSC
+      </button>
+      <button type="button" class="nav-btn" data-tab="api">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        Clés API
       </button>
     </div>
     <div class="sidebar-bottom">
@@ -481,6 +513,196 @@ body.light .legend .item{background:#f8fafc}
       </div>
     </section>
 
+    <section id="panel-clients" class="hidden">
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+          <div>
+            <h2 style="margin:0 0 4px">Clients (ERP)</h2>
+            <p class="sub" style="margin:0;font-size:12px">Référentiel clients utilisé par MyProd, MyExpé et MyCompta. <span id="cli-count" style="color:var(--accent);font-weight:700"></span></p>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <button type="button" class="btn btn-sec btn-sm" id="cli-export-csv">Exporter CSV</button>
+            <button type="button" class="btn btn-sec btn-sm" id="cli-import-btn">Importer xlsx</button>
+            <input type="file" id="cli-import-input" accept=".xlsx,.xlsm" style="display:none">
+            <button type="button" class="btn btn-sm" id="cli-new-btn">+ Nouveau client</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+          <input type="text" id="cli-search" placeholder="Rechercher (raison sociale, code, ville, SIRET, TVA, email…)" autocomplete="off"
+            style="flex:1;min-width:260px;padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s">
+          <select id="cli-filter-etat" style="padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;outline:none">
+            <option value="">Tous les états</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table id="cli-table" style="min-width:780px">
+            <thead>
+              <tr style="background:rgba(34,211,238,.06)">
+                <th style="text-align:left;padding:10px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);white-space:nowrap">N°</th>
+                <th style="text-align:left;padding:10px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);white-space:nowrap">Code</th>
+                <th style="text-align:left;padding:10px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Raison sociale</th>
+                <th style="text-align:left;padding:10px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);white-space:nowrap">Ville</th>
+                <th style="text-align:left;padding:10px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);white-space:nowrap">Pays</th>
+                <th style="text-align:left;padding:10px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);white-space:nowrap">Téléphone</th>
+                <th style="text-align:left;padding:10px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Email</th>
+                <th style="text-align:left;padding:10px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);white-space:nowrap">État</th>
+                <th style="padding:10px 12px;width:1px"></th>
+              </tr>
+            </thead>
+            <tbody id="cli-tbody">
+              <tr><td colspan="9" style="padding:24px 12px;color:var(--muted);font-size:13px;text-align:center">Chargement…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p id="cli-empty" class="sub" style="display:none;margin:16px 0 4px;font-size:13px"></p>
+      </div>
+    </section>
+
+    <!-- Modal client (création / édition) -->
+    <div id="cli-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:800;align-items:center;justify-content:center" class="hidden">
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;width:min(880px,96vw);max-height:92vh;overflow:auto">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px">
+          <h2 id="cli-modal-title" style="margin:0;font-size:17px">Nouveau client</h2>
+          <button type="button" class="btn btn-sec btn-sm" onclick="closeCliModal()">×</button>
+        </div>
+        <div class="tabs" style="margin-bottom:14px">
+          <button type="button" class="btn btn-sec sub-tab-btn active" data-clisub="cli-tab-info">Identité</button>
+          <button type="button" class="btn btn-sec sub-tab-btn" data-clisub="cli-tab-addr">Adresse</button>
+          <button type="button" class="btn btn-sec sub-tab-btn" data-clisub="cli-tab-contact">Contact</button>
+          <button type="button" class="btn btn-sec sub-tab-btn" data-clisub="cli-tab-commerce">Commerce</button>
+          <button type="button" class="btn btn-sec sub-tab-btn" data-clisub="cli-tab-notes">Notes</button>
+        </div>
+
+        <div id="cli-tab-info" class="cli-tab">
+          <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr;gap:10px">
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">N°</label>
+              <input type="number" id="cli-numero" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Code</label>
+              <input type="text" id="cli-code" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">État</label>
+              <select id="cli-etat" style="width:100%">
+                <option value="Normal">Normal</option>
+                <option value="Bloqué">Bloqué</option>
+                <option value="Inactif">Inactif</option>
+              </select></div>
+            <div style="grid-column:span 3"><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Raison sociale *</label>
+              <input type="text" id="cli-raison" required style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">SIRET</label>
+              <input type="text" id="cli-siret" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">N° TVA</label>
+              <input type="text" id="cli-tva" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">RCS</label>
+              <input type="text" id="cli-rcs" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">EAN</label>
+              <input type="text" id="cli-ean" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">NIF</label>
+              <input type="text" id="cli-nif" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Groupe</label>
+              <input type="text" id="cli-groupe" style="width:100%"></div>
+          </div>
+        </div>
+
+        <div id="cli-tab-addr" class="cli-tab" style="display:none">
+          <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:10px">
+            <div style="grid-column:span 2"><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Adresse 1</label>
+              <input type="text" id="cli-adresse1" style="width:100%"></div>
+            <div style="grid-column:span 2"><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Adresse 2</label>
+              <input type="text" id="cli-adresse2" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">B.P.</label>
+              <input type="text" id="cli-bp" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Code postal</label>
+              <input type="text" id="cli-cp" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Ville</label>
+              <input type="text" id="cli-ville" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Code pays</label>
+              <input type="text" id="cli-code-pays" maxlength="3" style="width:100%"></div>
+            <div style="grid-column:span 2"><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Pays</label>
+              <input type="text" id="cli-pays" style="width:100%"></div>
+          </div>
+        </div>
+
+        <div id="cli-tab-contact" class="cli-tab" style="display:none">
+          <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:10px">
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Téléphone</label>
+              <input type="text" id="cli-tel" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Télécopie</label>
+              <input type="text" id="cli-fax" style="width:100%"></div>
+            <div style="grid-column:span 2"><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Email</label>
+              <input type="email" id="cli-email" style="width:100%"></div>
+            <div style="grid-column:span 2" class="sub" style="font-size:11px;color:var(--muted);margin-top:4px">Contact principal (interlocuteur)</div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Nom du contact</label>
+              <input type="text" id="cli-contact-nom" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Fonction</label>
+              <input type="text" id="cli-contact-fonction" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Email contact</label>
+              <input type="email" id="cli-contact-email" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Téléphone contact</label>
+              <input type="text" id="cli-contact-tel" style="width:100%"></div>
+          </div>
+        </div>
+
+        <div id="cli-tab-commerce" class="cli-tab" style="display:none">
+          <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:10px">
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Représentant</label>
+              <input type="text" id="cli-rep" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">ADV</label>
+              <input type="text" id="cli-adv" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Mode de livraison</label>
+              <input type="text" id="cli-mode-liv" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Mode de règlement</label>
+              <input type="text" id="cli-mode-reg" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Devise</label>
+              <input type="text" id="cli-devise" maxlength="4" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Encours autorisé</label>
+              <input type="number" id="cli-encours" step="0.01" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Code comptable</label>
+              <input type="text" id="cli-codecpta" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Catégorie 1</label>
+              <input type="text" id="cli-cat1" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Catégorie 2</label>
+              <input type="text" id="cli-cat2" style="width:100%"></div>
+            <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Catégorie 3</label>
+              <input type="text" id="cli-cat3" style="width:100%"></div>
+          </div>
+        </div>
+
+        <div id="cli-tab-notes" class="cli-tab" style="display:none">
+          <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Notes internes</label>
+          <textarea id="cli-notes" rows="8" placeholder="Remarques, conditions particulières…" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;resize:vertical"></textarea>
+        </div>
+
+        <div style="display:flex;gap:10px;justify-content:space-between;align-items:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border)">
+          <button type="button" class="btn btn-danger btn-sm" id="cli-delete-btn" style="display:none" onclick="deleteCliFromModal()">Supprimer</button>
+          <div style="display:flex;gap:10px;margin-left:auto">
+            <button type="button" class="btn btn-sec" onclick="closeCliModal()">Annuler</button>
+            <button type="button" class="btn" onclick="saveCliModal()">Enregistrer</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal import xlsx clients -->
+    <div id="cli-import-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:801;align-items:center;justify-content:center" class="hidden">
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;width:min(520px,95vw)">
+        <h2 style="margin:0 0 14px;font-size:17px">Import clients xlsx</h2>
+        <p class="sub" style="margin:0 0 14px;font-size:12px">Fichier : <strong id="cli-import-filename" style="color:var(--text)"></strong></p>
+        <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:6px">Mode d'import</label>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px">
+          <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px">
+            <input type="radio" name="cli-import-mode" value="merge" checked style="margin-top:2px">
+            <span><strong style="color:var(--text);font-size:13px">Fusionner (recommandé)</strong><br><span style="font-size:12px;color:var(--muted)">Les clients existants (même code) sont mis à jour, les nouveaux sont ajoutés. Aucune perte de données.</span></span>
+          </label>
+          <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px">
+            <input type="radio" name="cli-import-mode" value="replace" style="margin-top:2px">
+            <span><strong style="color:var(--danger);font-size:13px">Remplacer</strong><br><span style="font-size:12px;color:var(--muted)">Supprime tous les clients existants puis importe le fichier. Action irréversible.</span></span>
+          </label>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end">
+          <button type="button" class="btn btn-sec" onclick="closeCliImportModal()">Annuler</button>
+          <button type="button" class="btn" id="cli-import-confirm" onclick="confirmCliImport()">Lancer l'import</button>
+        </div>
+      </div>
+    </div>
 
     <section id="panel-machines" class="hidden">
       <div class="tabs" style="margin-bottom:14px">
@@ -534,6 +756,34 @@ body.light .legend .item{background:#f8fafc}
           </div>
           <button type="button" class="btn" id="mac-nom-save" style="margin-top:14px">Enregistrer le nom</button>
         </div>
+      </div>
+    </section>
+
+    <section id="panel-emplacements" class="hidden">
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+          <div>
+            <h2 style="margin:0 0 4px">Emplacements magasin</h2>
+            <p class="sub" style="margin:0;font-size:12px">Référentiel des emplacements utilisé dans MyStock. <span id="empl-count" style="color:var(--accent);font-weight:700"></span></p>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <button type="button" class="btn btn-sec btn-sm" id="empl-export-csv">Exporter CSV</button>
+            <button type="button" class="btn btn-sec btn-sm" id="empl-reload-csv">Recharger depuis CSV</button>
+            <button type="button" class="btn btn-sm" id="empl-import-btn">Importer nouveau CSV</button>
+            <input type="file" id="empl-import-input" accept=".csv" style="display:none">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+          <input type="text" id="empl-search" placeholder="Filtrer les emplacements…" autocomplete="off"
+            style="flex:1;min-width:180px;max-width:300px;padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s">
+          <form id="empl-add-form" style="display:flex;gap:6px">
+            <input type="text" id="empl-new-code" placeholder="Nouveau code (ex. A12)" maxlength="20" autocomplete="off"
+              style="width:160px;padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:ui-monospace,monospace;outline:none;transition:border-color .15s,box-shadow .15s;text-transform:uppercase">
+            <button type="submit" class="btn btn-sm">Ajouter</button>
+          </form>
+        </div>
+        <div id="empl-grid" style="display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start;min-height:40px"></div>
+        <p id="empl-empty" class="sub" style="display:none;margin:16px 0 4px;font-size:13px">Aucun emplacement trouvé.</p>
       </div>
     </section>
 
@@ -653,6 +903,61 @@ body.light .legend .item{background:#f8fafc}
       </div>
     </section>
 
+    <!-- ═══════════════════════ PANEL API ═══════════════════════ -->
+    <section id="panel-api" class="hidden">
+      <div style="max-width:860px">
+        <div style="margin-bottom:24px">
+          <div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:6px">Clés API</div>
+          <div style="font-size:13px;color:var(--muted)">
+            Générez des clés pour permettre à des scripts externes (pont Access) d'accéder à MySifa.
+            La clé secrète n'est affichée qu'une seule fois à la création — conservez-la.
+          </div>
+        </div>
+
+        <!-- Formulaire création -->
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:24px">
+          <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:14px;text-transform:uppercase;letter-spacing:.5px">Nouvelle clé</div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+            <div style="flex:1;min-width:200px">
+              <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:6px">Nom</label>
+              <input id="ak-name" type="text" placeholder="ex: Pont Access Usine"
+                style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:13px;outline:none;font-family:inherit"
+                onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
+            </div>
+            <button class="btn btn-accent" onclick="createApiKey()" style="white-space:nowrap">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:6px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Générer la clé
+            </button>
+          </div>
+        </div>
+
+        <!-- Alerte clé générée (affichée une seule fois) -->
+        <div id="ak-reveal" style="display:none;background:rgba(34,211,238,.1);border:1px solid var(--accent);border-radius:12px;padding:16px 20px;margin-bottom:24px">
+          <div style="font-size:12px;font-weight:600;color:var(--accent);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">
+            Copiez cette clé maintenant — elle ne sera plus affichée
+          </div>
+          <div style="display:flex;gap:10px;align-items:center">
+            <code id="ak-reveal-value" style="flex:1;font-family:monospace;font-size:13px;color:var(--text);word-break:break-all;background:var(--bg);padding:10px 14px;border-radius:8px;border:1px solid var(--border)"></code>
+            <button class="btn btn-ghost" onclick="copyApiKey()" title="Copier" style="border:1px solid var(--border);padding:10px 12px">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Liste des clés -->
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+          <div style="padding:16px 20px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600;color:var(--text)">Clés existantes</div>
+          <div id="ak-list" style="padding:8px 0">
+            <div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Chargement…</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="panel-dashboards" class="hidden">
+      <div id="settings-tab-content"></div>
+    </section>
+
     <!-- Modal nouvelle annonce -->
     <div id="upd-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:800;align-items:center;justify-content:center" class="hidden">
       <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;width:min(560px,95vw);max-height:90vh;overflow:auto">
@@ -753,7 +1058,7 @@ body.light .legend .item{background:#f8fafc}
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/chat_mentions.js"></script>
-<script src="/static/chat_widget.js"></script>
+<script src="/static/chat_widget.js?v=5"></script>
 <script src="/static/chat_widget_v2.js"></script>
 <script>
 /*__TRACA_GUIDE__*/
@@ -840,17 +1145,21 @@ function setTab(id) {
   document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === id);
   });
-  ['users', 'matrix', 'defaults', 'fournisseurs', 'operations', 'machines', 'updates', 'audit', 'fsc'].forEach(p => {
+  ['users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'machines', 'emplacements', 'updates', 'audit', 'fsc', 'dashboards', 'api'].forEach(p => {
     const el = document.getElementById('panel-' + p);
     if (el) el.classList.toggle('hidden', p !== id);
   });
   syncSettingsPageHead(id);
   if (id === 'fournisseurs') loadFournisseurs();
+  if (id === 'clients') initClientsPanel();
   if (id === 'operations') loadOperationCodes();
   if (id === 'machines') initMachinesPanel();
+  if (id === 'emplacements') initEmplacementsPanel();
   if (id === 'updates') loadUpdates();
   if (id === 'audit') loadAuditLogs();
   if (id === 'fsc') initFscPanel();
+  if (id === 'dashboards') renderSettingsDashboards();
+  if (id === 'api') loadApiKeys();
 }
 
 document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
@@ -944,6 +1253,12 @@ async function refreshSidebarUser() {
 }
 
 function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s == null ? '' : String(s);
+  return d.innerHTML;
+}
+
+function escHtml(s) {
   const d = document.createElement('div');
   d.textContent = s == null ? '' : String(s);
   return d.innerHTML;
@@ -2661,6 +2976,261 @@ function initFscPanel() {
   loadFscRegistre();
 }
 
+async function renderSettingsDashboards() {
+  const root = document.getElementById('settings-tab-content');
+  if (!root) return;
+  root.innerHTML = '<div style="padding:20px;color:var(--muted);font-size:13px">Chargement…</div>';
+
+  let dashboards = [];
+  try {
+    const r = await fetch('/api/dashboards/admin', { credentials: 'include' });
+    if (r.ok) dashboards = await r.json();
+  } catch(e) {}
+
+  const WIDGET_TYPES = [
+    { value: 'stock_alerts',     label: 'Alertes stock matières premières' },
+    { value: 'planning_summary', label: 'Résumé planning production' },
+    { value: 'expe_today',       label: 'Départs expédition du jour' },
+  ];
+  const CATEGORIES_MP = ['mandrin','palette','adhesif','carton'];
+
+  function renderList() {
+    const listEl = document.createElement('div');
+    listEl.style.cssText = 'display:flex;flex-direction:column;gap:10px;margin-top:16px';
+
+    if (!dashboards.length) {
+      listEl.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:24px 0">Aucun tableau de bord créé.</div>';
+    } else {
+      dashboards.forEach(d => {
+        const card = document.createElement('div');
+        card.style.cssText = 'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:12px';
+
+        const typeInfo = WIDGET_TYPES.find(t => t.value === d.widget_type) || { label: d.widget_type };
+        const statusBadge = d.actif
+          ? '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:rgba(52,211,153,.15);color:var(--success)">Actif</span>'
+          : '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:var(--accent-bg);color:var(--muted)">Inactif</span>';
+
+        card.innerHTML = `
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span style="font-size:14px;font-weight:700;color:var(--text)">${escHtml(d.titre)}</span>
+              ${statusBadge}
+            </div>
+            <div style="font-size:12px;color:var(--muted);margin-top:4px">${escHtml(typeInfo.label)}</div>
+            ${d.description ? `<div style="font-size:12px;color:var(--text2);margin-top:2px">${escHtml(d.description)}</div>` : ''}
+          </div>
+          <div style="display:flex;gap:8px;flex-shrink:0">
+            <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px" data-edit="${d.id}">Modifier</button>
+            <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px;color:var(--danger)" data-del="${d.id}">Supprimer</button>
+          </div>`;
+
+        card.querySelector('[data-edit]').addEventListener('click', () => openDashboardModal(d));
+        card.querySelector('[data-del]').addEventListener('click', () => deleteDashboard(d.id, d.titre));
+        listEl.appendChild(card);
+      });
+    }
+    return listEl;
+  }
+
+  async function deleteDashboard(id, titre) {
+    if (!confirm(`Supprimer le tableau de bord "${titre}" ? Il sera retiré du portail de tous les utilisateurs.`)) return;
+    try {
+      const r = await fetch(`/api/dashboards/admin/${id}`, { method: 'DELETE', credentials: 'include' });
+      if (r.ok) {
+        dashboards = dashboards.filter(d => d.id !== id);
+        rebuildPage();
+        toast('Tableau de bord supprimé.', false);
+      } else {
+        toast('Erreur lors de la suppression.', true);
+      }
+    } catch(e) { toast('Erreur réseau.', true); }
+  }
+
+  function openDashboardModal(existing) {
+    const isEdit = !!existing;
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.55);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center';
+    overlay.addEventListener('click', e => { if(e.target===overlay) overlay.remove(); });
+
+    const modal = document.createElement('div');
+    modal.style.cssText = 'background:var(--card);border:1px solid var(--border);border-radius:16px;width:420px;max-width:92vw;box-shadow:0 16px 48px rgba(0,0,0,.4);display:flex;flex-direction:column;overflow:hidden';
+
+    const head = document.createElement('div');
+    head.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)';
+    head.innerHTML = `<span style="font-size:15px;font-weight:700;color:var(--text)">${isEdit ? 'Modifier' : 'Nouveau tableau de bord'}</span>`;
+    const btnX = document.createElement('button');
+    btnX.className = 'db-panel-btn';
+    btnX.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+    btnX.addEventListener('click', () => overlay.remove());
+    head.appendChild(btnX);
+
+    const body = document.createElement('div');
+    body.style.cssText = 'padding:20px;display:flex;flex-direction:column;gap:14px';
+
+    // Champ titre
+    const fTitre = document.createElement('div');
+    fTitre.innerHTML = `<label style="font-size:12px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">Titre</label>
+      <input id="db-f-titre" type="text" placeholder="Ex: Stocks à réapprovisionner" value="${escAttr(existing?.titre||'')}" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:14px">`;
+
+    // Champ description
+    const fDesc = document.createElement('div');
+    fDesc.innerHTML = `<label style="font-size:12px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">Description <span style="color:var(--muted);font-weight:400">(optionnel)</span></label>
+      <input id="db-f-desc" type="text" placeholder="Ex: Mandrins, cartons, palettes et adhésif" value="${escAttr(existing?.description||'')}" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:14px">`;
+
+    // Champ type (désactivé en édition)
+    const fType = document.createElement('div');
+    const typeOpts = WIDGET_TYPES.map(t =>
+      `<option value="${t.value}" ${(existing?.widget_type===t.value||(!existing&&t.value==='stock_alerts'))?'selected':''}>${t.label}</option>` 
+    ).join('');
+    fType.innerHTML = `<label style="font-size:12px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">Type de widget</label>
+      <select id="db-f-type" ${isEdit?'disabled':''} style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:14px">${typeOpts}</select>
+      ${isEdit?'<div style="font-size:11px;color:var(--muted);margin-top:4px">Le type ne peut pas être modifié après création.</div>':''}`;
+
+    // Config dynamique selon le type (stock_alerts → catégories)
+    const fConfig = document.createElement('div');
+    fConfig.id = 'db-f-config';
+
+    function renderConfigFields(type, currentConfig) {
+      fConfig.innerHTML = '';
+      if (type === 'stock_alerts') {
+        const cats = currentConfig?.categories || [];
+        fConfig.innerHTML = `<div>
+          <label style="font-size:12px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:8px">Catégories affichées</label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            ${CATEGORIES_MP.map(c => `
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);cursor:pointer;padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg)">
+                <input type="checkbox" value="${c}" ${cats.includes(c)||!cats.length?'checked':''} style="accent-color:var(--accent)">
+                ${c.charAt(0).toUpperCase()+c.slice(1)}
+              </label>`).join('')}
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:6px">Si aucune sélectionnée, toutes les catégories sont affichées.</div>
+        </div>`;
+      }
+      // Pour planning_summary et expe_today : pas de config supplémentaire pour l'instant
+    }
+
+    const initType = existing?.widget_type || 'stock_alerts';
+    renderConfigFields(initType, existing?.config_json || {});
+
+    fType.querySelector('select')?.addEventListener('change', (e) => {
+      renderConfigFields(e.target.value, {});
+    });
+
+    // Champ actif
+    const fActif = document.createElement('div');
+    fActif.innerHTML = `<label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--text2)">
+      <input id="db-f-actif" type="checkbox" ${(existing?.actif!==false)?'checked':''} style="accent-color:var(--accent);width:16px;height:16px">
+      Dashboard actif (visible par les utilisateurs)
+    </label>`;
+
+    // Bouton soumettre
+    const footer = document.createElement('div');
+    footer.style.cssText = 'padding:0 20px 20px;display:flex;justify-content:flex-end;gap:10px';
+    const btnCancel = document.createElement('button');
+    btnCancel.className = 'btn btn-ghost';
+    btnCancel.textContent = 'Annuler';
+    btnCancel.addEventListener('click', () => overlay.remove());
+
+    const btnSave = document.createElement('button');
+    btnSave.className = 'btn btn-accent';
+    btnSave.textContent = isEdit ? 'Enregistrer' : 'Créer';
+    btnSave.addEventListener('click', async () => {
+      const titre = document.getElementById('db-f-titre')?.value?.trim();
+      if (!titre) { toast('Le titre est requis.', true); return; }
+      const widget_type = document.getElementById('db-f-type')?.value || initType;
+      const desc = document.getElementById('db-f-desc')?.value?.trim() || '';
+      const actif = document.getElementById('db-f-actif')?.checked !== false;
+
+      // Collecter config
+      let config_json = {};
+      if (widget_type === 'stock_alerts') {
+        const checked = [...document.querySelectorAll('#db-f-config input[type=checkbox]:checked')].map(el => el.value);
+        if (checked.length && checked.length < CATEGORIES_MP.length) {
+          config_json.categories = checked;
+        }
+      }
+
+      btnSave.disabled = true;
+      btnSave.textContent = isEdit ? 'Enregistrement…' : 'Création…';
+
+      try {
+        let r;
+        if (isEdit) {
+          r = await fetch(`/api/dashboards/admin/${existing.id}`, {
+            method: 'PATCH', credentials: 'include',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ titre, description: desc, config_json, actif }),
+          });
+        } else {
+          r = await fetch('/api/dashboards/admin', {
+            method: 'POST', credentials: 'include',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ titre, description: desc, widget_type, config_json, actif }),
+          });
+        }
+        if (r.ok) {
+          overlay.remove();
+          // Recharger la liste
+          const r2 = await fetch('/api/dashboards/admin', { credentials: 'include' });
+          if (r2.ok) dashboards = await r2.json();
+          rebuildPage();
+          toast(isEdit ? 'Tableau de bord modifié.' : 'Tableau de bord créé.', false);
+        } else {
+          const err = await r.json().catch(() => ({}));
+          toast(err.detail || 'Erreur lors de la sauvegarde.', true);
+          btnSave.disabled = false;
+          btnSave.textContent = isEdit ? 'Enregistrer' : 'Créer';
+        }
+      } catch(e) {
+        toast('Erreur réseau.', true);
+        btnSave.disabled = false;
+        btnSave.textContent = isEdit ? 'Enregistrer' : 'Créer';
+      }
+    });
+
+    body.appendChild(fTitre);
+    body.appendChild(fDesc);
+    body.appendChild(fType);
+    body.appendChild(fConfig);
+    body.appendChild(fActif);
+    footer.appendChild(btnCancel);
+    footer.appendChild(btnSave);
+    modal.appendChild(head);
+    modal.appendChild(body);
+    modal.appendChild(footer);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => document.getElementById('db-f-titre')?.focus());
+  }
+
+  function rebuildPage() {
+    root.innerHTML = '';
+    buildPage();
+  }
+
+  function buildPage() {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'max-width:760px;margin:0 auto;padding:0 0 40px';
+
+    const topRow = document.createElement('div');
+    topRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:4px';
+    const h = document.createElement('div');
+    h.innerHTML = '<div style="font-size:16px;font-weight:700;color:var(--text)">Tableaux de bord</div><div style="font-size:13px;color:var(--muted);margin-top:4px">Créez des tableaux de bord que les utilisateurs peuvent ajouter à leur portail.</div>';
+    const btnNew = document.createElement('button');
+    btnNew.className = 'btn btn-accent';
+    btnNew.innerHTML = '+ Nouveau';
+    btnNew.style.cssText = 'flex-shrink:0;padding:8px 16px;font-size:13px';
+    btnNew.addEventListener('click', () => openDashboardModal(null));
+    topRow.appendChild(h);
+    topRow.appendChild(btnNew);
+    wrap.appendChild(topRow);
+    wrap.appendChild(renderList());
+    root.appendChild(wrap);
+  }
+
+  buildPage();
+}
+
 function fscClaimBadgeHtml(claim) {
   const c = (claim || 'non_fsc').trim();
   const label = FSC_CLAIM_LABELS[c] || esc(c);
@@ -2796,6 +3366,695 @@ function exportFscCsv() {
   if (du) params.set('du', du);
   if (au) params.set('au', au);
   window.location.href = '/api/fsc/registre?' + params.toString();
+}
+
+// ── Clés API ──────────────────────────────────────────────────────
+async function loadApiKeys() {
+  const res = await fetch('/api/settings/api-keys', {credentials:'include'});
+  const data = await res.json();
+  const list = document.getElementById('ak-list');
+  if (!data.keys || data.keys.length === 0) {
+    list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Aucune clé créée.</div>';
+    return;
+  }
+  list.innerHTML = data.keys.map(k => `
+    <div style="display:flex;align-items:center;gap:14px;padding:12px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap">
+      <div style="flex:1;min-width:160px">
+        <div style="font-size:13px;font-weight:600;color:var(--text)">${escHtml(k.name)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;font-family:monospace">${escHtml(k.key_prefix)}…</div>
+      </div>
+      <div style="font-size:11px;color:var(--muted)">${escHtml(k.scopes||'')}</div>
+      <div style="font-size:11px;color:var(--muted)">${k.last_used_at ? 'Dernière utilisation : '+escHtml(k.last_used_at.replace('T',' ').slice(0,16)) : 'Jamais utilisée'}</div>
+      <div>
+        <span style="display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;${k.is_active ? 'background:rgba(52,211,153,.15);color:var(--ok)' : 'background:rgba(248,113,113,.15);color:var(--danger)'}">
+          ${k.is_active ? 'Active' : 'Révoquée'}
+        </span>
+      </div>
+      <div style="display:flex;gap:6px">
+        ${k.is_active ? `<button class="btn btn-ghost" style="padding:6px 12px;font-size:12px;border:1px solid var(--border)" onclick="revokeApiKey(${k.id})">Révoquer</button>` : ''}
+        <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px;border:1px solid rgba(248,113,113,.4);color:var(--danger)" onclick="deleteApiKey(${k.id})">Supprimer</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function createApiKey() {
+  const name = document.getElementById('ak-name').value.trim();
+  if (!name) { toast('Donnez un nom à cette clé.', true); return; }
+  const res = await fetch('/api/settings/api-keys', {
+    method:'POST', credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({name})
+  });
+  if (!res.ok) { toast('Erreur lors de la création.', true); return; }
+  const data = await res.json();
+  document.getElementById('ak-name').value = '';
+  document.getElementById('ak-reveal-value').textContent = data.key;
+  document.getElementById('ak-reveal').style.display = 'block';
+  toast('Clé créée. Copiez-la maintenant.', false);
+  loadApiKeys();
+}
+
+// ── Sidebar sections collapse ──
+(function initNavGroups() {
+  // Groupes principaux
+  document.querySelectorAll('.nav-group-label').forEach(function(label) {
+    label.addEventListener('click', function() {
+      const collapsed = label.classList.toggle('ngl-collapsed');
+      // Parcourir les frères jusqu'au prochain nav-group-label
+      let el = label.nextElementSibling;
+      while (el && !el.classList.contains('nav-group-label')) {
+        if (collapsed) {
+          el.style.display = 'none';
+        } else {
+          el.style.display = '';
+        }
+        el = el.nextElementSibling;
+      }
+      // Re-appliquer l'état des sous-groupes (qu'on aurait pu écraser en expandant)
+      if (!collapsed) {
+        let el2 = label.nextElementSibling;
+        let subCollapsed = null;
+        while (el2 && !el2.classList.contains('nav-group-label')) {
+          if (el2.classList.contains('nav-subgroup-label')) {
+            subCollapsed = el2.classList.contains('nsl-collapsed');
+          } else if (subCollapsed && el2.classList.contains('nav-btn')) {
+            el2.style.display = 'none';
+          }
+          el2 = el2.nextElementSibling;
+        }
+      }
+    });
+  });
+  // Sous-groupes (à l'intérieur d'un groupe principal)
+  document.querySelectorAll('.nav-subgroup-label').forEach(function(label) {
+    label.addEventListener('click', function(ev) {
+      ev.stopPropagation();
+      const collapsed = label.classList.toggle('nsl-collapsed');
+      let el = label.nextElementSibling;
+      while (el && !el.classList.contains('nav-subgroup-label') && !el.classList.contains('nav-group-label')) {
+        if (el.classList.contains('nav-btn')) {
+          el.style.display = collapsed ? 'none' : '';
+        }
+        el = el.nextElementSibling;
+      }
+    });
+  });
+})();
+
+function copyApiKey() {
+  const val = document.getElementById('ak-reveal-value').textContent;
+  navigator.clipboard.writeText(val).then(() => toast('Clé copiée.', false));
+}
+
+async function revokeApiKey(id) {
+  if (!confirm('Révoquer cette clé ? Le pont Access ne pourra plus s\'authentifier.')) return;
+  const res = await fetch(`/api/settings/api-keys/${id}/revoke`, {method:'PATCH', credentials:'include'});
+  if (!res.ok) { toast('Erreur lors de la révocation.', true); return; }
+  toast('Clé révoquée.', false);
+  loadApiKeys();
+}
+
+async function deleteApiKey(id) {
+  if (!confirm('Supprimer définitivement cette clé ?')) return;
+  const res = await fetch(`/api/settings/api-keys/${id}`, {method:'DELETE', credentials:'include'});
+  if (!res.ok) { toast('Erreur lors de la suppression.', true); return; }
+  toast('Clé supprimée.', false);
+  loadApiKeys();
+}
+
+// ──────────────────────────────────────────────────
+// Emplacements
+// ──────────────────────────────────────────────────
+let _emplData = [];
+let _emplReady = false;
+
+async function initEmplacementsPanel() {
+  if (!_emplReady) {
+    _emplReady = true;
+    const search = document.getElementById('empl-search');
+    if (search) {
+      search.addEventListener('input', () => renderEmplGrid());
+      search.addEventListener('keydown', e => { if (e.key === 'Escape') { search.value = ''; renderEmplGrid(); } });
+    }
+    const form = document.getElementById('empl-add-form');
+    if (form) form.addEventListener('submit', e => { e.preventDefault(); addEmplacement(); });
+    const reloadBtn = document.getElementById('empl-reload-csv');
+    if (reloadBtn) reloadBtn.addEventListener('click', reloadEmplacementsCsv);
+    const importBtn = document.getElementById('empl-import-btn');
+    const importInput = document.getElementById('empl-import-input');
+    if (importBtn && importInput) {
+      importBtn.addEventListener('click', () => importInput.click());
+      importInput.addEventListener('change', () => importEmplacementsCsv(importInput));
+    }
+    const exportBtn = document.getElementById('empl-export-csv');
+    if (exportBtn) exportBtn.addEventListener('click', exportEmplacementsCsv);
+    // focus style
+    ['empl-search', 'empl-new-code'].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('focus', () => { el.style.borderColor = 'var(--accent)'; el.style.boxShadow = '0 0 0 3px rgba(34,211,238,.12)'; });
+      el.addEventListener('blur',  () => { el.style.borderColor = ''; el.style.boxShadow = ''; });
+    });
+    const codeInp = document.getElementById('empl-new-code');
+    if (codeInp) codeInp.addEventListener('input', () => { codeInp.value = codeInp.value.toUpperCase(); });
+  }
+  await loadEmplacements();
+}
+
+async function loadEmplacements() {
+  const grid = document.getElementById('empl-grid');
+  if (grid) grid.innerHTML = '<span style="color:var(--muted);font-size:13px">Chargement…</span>';
+  try {
+    const r = await fetch('/api/settings/emplacements', { credentials: 'include' });
+    if (!r.ok) throw new Error('err');
+    _emplData = await r.json();
+  } catch(e) {
+    _emplData = [];
+    toast('Erreur lors du chargement des emplacements.', true);
+  }
+  renderEmplGrid();
+}
+
+function renderEmplGrid() {
+  const grid = document.getElementById('empl-grid');
+  const empty = document.getElementById('empl-empty');
+  const count = document.getElementById('empl-count');
+  if (!grid) return;
+
+  const q = (document.getElementById('empl-search')?.value || '').trim().toLowerCase();
+
+  const filtered = q
+    ? _emplData.filter(e => e.code.toLowerCase().includes(q))
+    : _emplData.slice();
+
+  if (count) count.textContent = _emplData.length + ' emplacement' + (_emplData.length > 1 ? 's' : '');
+
+  if (!filtered.length) {
+    grid.innerHTML = '';
+    if (empty) { empty.style.display = ''; empty.textContent = q ? 'Aucun résultat pour « ' + escHtml(q) + ' ».' : 'Aucun emplacement. Ajoutez-en un ou rechargez depuis le CSV.'; }
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+
+  // Grouper : allée = préfixe lettres, rangée = 2 premiers chiffres qui suivent
+  const byAllee = {};
+  for (const e of filtered) {
+    const code = e.code;
+    const m = code.match(/^([A-Z]+)(\d{1,2})/i);
+    const allee  = m ? m[1].toUpperCase() : code[0].toUpperCase();
+    const rangee = m ? m[2].padStart(2, '0') : '??';
+    if (!byAllee[allee]) byAllee[allee] = {};
+    if (!byAllee[allee][rangee]) byAllee[allee][rangee] = [];
+    byAllee[allee][rangee].push(code);
+  }
+
+  const EMPL_LABELS = { 'Z0': 'Z0 – au sol pour expédition', 'Z1': 'Z1 – sortie de production' };
+
+  function pillHtml(code) {
+    const c = escHtml(code);
+    const label = escHtml(EMPL_LABELS[code] || code);
+    const title = EMPL_LABELS[code] ? escHtml(EMPL_LABELS[code]) : c;
+    return `<span class="empl-pill" data-code="${c}" title="${title}">
+      <span class="empl-pill-code">${label}</span>
+      <button type="button" class="empl-pill-del" aria-label="Supprimer ${c}" onclick="deleteEmplacement('${c}')">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </span>`;
+  }
+
+  let html = '';
+  for (const allee of Object.keys(byAllee).sort()) {
+    const rangees = byAllee[allee];
+    html += `<div class="empl-allee">
+      <div class="empl-allee-hd">
+        <span class="empl-allee-letter">${escHtml(allee)}</span>
+        <span class="empl-allee-label">Allée ${escHtml(allee)}</span>
+      </div>
+      <div class="empl-allee-body">`;
+    for (const rangee of Object.keys(rangees).sort()) {
+      const codes = rangees[rangee].slice().sort();
+      html += `<div class="empl-rangee">
+        <div class="empl-rangee-pills">${codes.map(pillHtml).join('')}</div>
+      </div>`;
+    }
+    html += `</div></div>`;
+  }
+  grid.innerHTML = html;
+}
+
+async function addEmplacement() {
+  const inp = document.getElementById('empl-new-code');
+  const code = (inp?.value || '').trim().toUpperCase();
+  if (!code) { toast('Saisissez un code emplacement.', true); inp?.focus(); return; }
+  const r = await fetch('/api/settings/emplacements', {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code }),
+  });
+  if (r.status === 409) { toast(`L'emplacement ${code} existe déjà.`, true); return; }
+  if (!r.ok) {
+    let msg = 'Erreur lors de l\'ajout.';
+    try { const d = await r.json(); if (d.detail) msg = d.detail; } catch(e) {}
+    toast(msg, true); return;
+  }
+  if (inp) inp.value = '';
+  toast(`Emplacement ${code} ajouté.`, false);
+  await loadEmplacements();
+}
+
+async function deleteEmplacement(code) {
+  if (!confirm(`Supprimer l'emplacement ${code} ?`)) return;
+  const r = await fetch('/api/settings/emplacements/' + encodeURIComponent(code), {
+    method: 'DELETE', credentials: 'include',
+  });
+  if (!r.ok) { toast('Erreur lors de la suppression.', true); return; }
+  toast(`Emplacement ${code} supprimé.`, false);
+  await loadEmplacements();
+}
+
+async function reloadEmplacementsCsv() {
+  const btn = document.getElementById('empl-reload-csv');
+  if (btn) { btn.disabled = true; btn.textContent = 'Rechargement…'; }
+  try {
+    const r = await fetch('/api/settings/emplacements/reload-csv', { method: 'POST', credentials: 'include' });
+    if (r.status === 422) {
+      toast('CSV introuvable ou vide — aucun emplacement importé.', true);
+    } else if (!r.ok) {
+      toast('Erreur lors du rechargement.', true);
+    } else {
+      const d = await r.json();
+      toast(d.imported + ' emplacement' + (d.imported > 1 ? 's' : '') + ' importé' + (d.imported > 1 ? 's' : '') + ' depuis le CSV.', false);
+      await loadEmplacements();
+    }
+  } catch(e) { toast('Erreur réseau.', true); }
+  finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Recharger depuis CSV'; }
+  }
+}
+
+async function importEmplacementsCsv(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  if (!confirm(`Remplacer le plan actuel par "${file.name}" ? Cette action écrasera tous les emplacements existants.`)) {
+    input.value = '';
+    return;
+  }
+  const btn = document.getElementById('empl-import-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Import en cours…'; }
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    const r = await fetch('/api/settings/emplacements/import-csv', {
+      method: 'POST', credentials: 'include', body: fd,
+    });
+    const data = r.ok ? await r.json() : null;
+    if (!r.ok) {
+      let msg = 'Erreur lors de l\'import.';
+      try { const e = await r.clone().json(); if (e.detail) msg = e.detail; } catch(_) {}
+      toast(msg, true);
+    } else {
+      toast(data.imported + ' emplacement' + (data.imported > 1 ? 's' : '') + ' importé' + (data.imported > 1 ? 's' : '') + ' — nouveau plan enregistré.', false);
+      await loadEmplacements();
+    }
+  } catch(e) { toast('Erreur réseau.', true); }
+  finally {
+    input.value = '';
+    if (btn) { btn.disabled = false; btn.textContent = 'Importer nouveau CSV'; }
+  }
+}
+
+function exportEmplacementsCsv() {
+  if (!_emplData.length) { toast('Aucun emplacement à exporter.', true); return; }
+  const rows = [['code'], ..._emplData.map(e => [e.code])];
+  const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'emplacements_' + new Date().toISOString().slice(0, 10) + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+}
+
+// ═══════════════════════════════════════════════════════════
+// Référentiel Clients (ERP)
+// ═══════════════════════════════════════════════════════════
+let _cliReady = false;
+let _cliData = [];
+let _cliEditing = null;        // id en cours d'édition, ou null pour création
+let _cliImportFile = null;
+let _cliSearchDebounce = null;
+
+async function initClientsPanel() {
+  if (!_cliReady) {
+    _cliReady = true;
+    const search = document.getElementById('cli-search');
+    if (search) {
+      search.addEventListener('input', () => {
+        clearTimeout(_cliSearchDebounce);
+        _cliSearchDebounce = setTimeout(loadClients, 220);
+      });
+      search.addEventListener('keydown', e => {
+        if (e.key === 'Escape') { search.value = ''; loadClients(); }
+      });
+    }
+    const etat = document.getElementById('cli-filter-etat');
+    if (etat) etat.addEventListener('change', loadClients);
+    const newBtn = document.getElementById('cli-new-btn');
+    if (newBtn) newBtn.addEventListener('click', () => openCliModal(null));
+    const importBtn = document.getElementById('cli-import-btn');
+    const importInput = document.getElementById('cli-import-input');
+    if (importBtn && importInput) {
+      importBtn.addEventListener('click', () => importInput.click());
+      importInput.addEventListener('change', () => onCliImportFile(importInput));
+    }
+    const exportBtn = document.getElementById('cli-export-csv');
+    if (exportBtn) exportBtn.addEventListener('click', exportClientsCsv);
+
+    // Sous-onglets du modal
+    document.querySelectorAll('#cli-modal-overlay [data-clisub]').forEach(b => {
+      b.addEventListener('click', () => {
+        document.querySelectorAll('#cli-modal-overlay [data-clisub]').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        document.querySelectorAll('#cli-modal-overlay .cli-tab').forEach(p => p.style.display = 'none');
+        const target = document.getElementById(b.dataset.clisub);
+        if (target) target.style.display = '';
+      });
+    });
+
+    // ESC ferme les modals
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        const m = document.getElementById('cli-modal-overlay');
+        const im = document.getElementById('cli-import-overlay');
+        if (m && m.style.display === 'flex') closeCliModal();
+        else if (im && im.style.display === 'flex') closeCliImportModal();
+      }
+    });
+  }
+  await loadClients();
+}
+
+async function loadClients() {
+  const tbody = document.getElementById('cli-tbody');
+  const search = (document.getElementById('cli-search')?.value || '').trim();
+  const etat = document.getElementById('cli-filter-etat')?.value || '';
+  if (tbody) tbody.innerHTML = '<tr><td colspan="9" style="padding:24px 12px;color:var(--muted);font-size:13px;text-align:center">Chargement…</td></tr>';
+  try {
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    if (etat) params.set('etat', etat);
+    params.set('limit', '2000');
+    const r = await fetch('/api/clients?' + params.toString(), { credentials: 'include' });
+    if (!r.ok) throw new Error('err');
+    const data = await r.json();
+    _cliData = data.items || [];
+    // Mettre à jour le filtre état si on a la liste complète
+    const sel = document.getElementById('cli-filter-etat');
+    if (sel && data.etats) {
+      const cur = sel.value;
+      const opts = ['<option value="">Tous les états</option>'].concat(
+        data.etats.map(e => `<option value="${escAttr(e)}"${e === cur ? ' selected' : ''}>${escHtml(e)}</option>`)
+      );
+      sel.innerHTML = opts.join('');
+    }
+    const count = document.getElementById('cli-count');
+    if (count) {
+      const n = data.total || 0;
+      count.textContent = n + ' client' + (n > 1 ? 's' : '') + (search || etat ? ' filtré' + (n > 1 ? 's' : '') : '');
+    }
+  } catch(e) {
+    _cliData = [];
+    toast('Erreur lors du chargement des clients.', true);
+  }
+  renderCliTable();
+}
+
+function renderCliTable() {
+  const tbody = document.getElementById('cli-tbody');
+  const empty = document.getElementById('cli-empty');
+  if (!tbody) return;
+  if (!_cliData.length) {
+    tbody.innerHTML = '';
+    if (empty) {
+      empty.style.display = '';
+      const q = (document.getElementById('cli-search')?.value || '').trim();
+      empty.textContent = q
+        ? 'Aucun résultat pour « ' + q + ' ».'
+        : 'Aucun client. Cliquez sur « + Nouveau client » ou importez un fichier xlsx.';
+    }
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+  const html = _cliData.map(c => {
+    const etat = c.etat || '';
+    const etatBg = etat === 'Bloqué' ? 'rgba(248,113,113,.15);color:#f87171;border-color:rgba(248,113,113,.35)'
+                : etat === 'Inactif' ? 'rgba(148,163,184,.18);color:var(--muted);border-color:rgba(148,163,184,.35)'
+                : 'rgba(52,211,153,.15);color:var(--success);border-color:rgba(52,211,153,.35)';
+    return `<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="openCliModal(${c.id})">
+      <td style="padding:9px 12px;font-family:ui-monospace,monospace;font-size:12px;color:var(--muted);white-space:nowrap">${c.numero == null ? '' : escHtml(String(c.numero))}</td>
+      <td style="padding:9px 12px;font-family:ui-monospace,monospace;font-size:12px;white-space:nowrap">${escHtml(c.code || '')}</td>
+      <td style="padding:9px 12px;font-weight:600">${escHtml(c.raison_sociale || '')}</td>
+      <td style="padding:9px 12px;white-space:nowrap">${escHtml(c.ville || '')}</td>
+      <td style="padding:9px 12px;white-space:nowrap">${escHtml(c.pays || '')}</td>
+      <td style="padding:9px 12px;font-family:ui-monospace,monospace;font-size:12px;white-space:nowrap">${escHtml(c.telephone || '')}</td>
+      <td style="padding:9px 12px;font-size:12px">${escHtml(c.email || '')}</td>
+      <td style="padding:9px 12px;white-space:nowrap"><span style="display:inline-block;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:700;background:${etatBg};border:1px solid">${escHtml(etat)}</span></td>
+      <td style="padding:9px 12px;white-space:nowrap"><button type="button" class="btn btn-sec btn-sm" onclick="event.stopPropagation();openCliModal(${c.id})">Modifier</button></td>
+    </tr>`;
+  }).join('');
+  tbody.innerHTML = html;
+}
+
+function openCliModal(id) {
+  _cliEditing = id;
+  const overlay = document.getElementById('cli-modal-overlay');
+  if (!overlay) return;
+  overlay.style.display = 'flex';
+  overlay.classList.remove('hidden');
+  // Reset onglets sur Identité
+  document.querySelectorAll('#cli-modal-overlay [data-clisub]').forEach(x => x.classList.remove('active'));
+  const firstTab = document.querySelector('#cli-modal-overlay [data-clisub="cli-tab-info"]');
+  if (firstTab) firstTab.classList.add('active');
+  document.querySelectorAll('#cli-modal-overlay .cli-tab').forEach(p => p.style.display = 'none');
+  const t = document.getElementById('cli-tab-info');
+  if (t) t.style.display = '';
+  // Reset values
+  const setV = (id, v) => { const el = document.getElementById(id); if (el) el.value = (v == null ? '' : v); };
+  setV('cli-numero', ''); setV('cli-code', ''); setV('cli-etat', 'Normal');
+  setV('cli-raison', ''); setV('cli-siret', ''); setV('cli-tva', '');
+  setV('cli-rcs', ''); setV('cli-ean', ''); setV('cli-nif', ''); setV('cli-groupe', '');
+  setV('cli-adresse1', ''); setV('cli-adresse2', ''); setV('cli-bp', '');
+  setV('cli-cp', ''); setV('cli-ville', ''); setV('cli-code-pays', ''); setV('cli-pays', '');
+  setV('cli-tel', ''); setV('cli-fax', ''); setV('cli-email', '');
+  setV('cli-contact-nom', ''); setV('cli-contact-fonction', '');
+  setV('cli-contact-email', ''); setV('cli-contact-tel', '');
+  setV('cli-rep', ''); setV('cli-adv', ''); setV('cli-mode-liv', ''); setV('cli-mode-reg', '');
+  setV('cli-devise', ''); setV('cli-encours', ''); setV('cli-codecpta', '');
+  setV('cli-cat1', ''); setV('cli-cat2', ''); setV('cli-cat3', '');
+  setV('cli-notes', '');
+  const delBtn = document.getElementById('cli-delete-btn');
+  const title = document.getElementById('cli-modal-title');
+
+  if (id == null) {
+    if (title) title.textContent = 'Nouveau client';
+    if (delBtn) delBtn.style.display = 'none';
+    requestAnimationFrame(() => document.getElementById('cli-raison')?.focus());
+    return;
+  }
+  if (title) title.textContent = 'Modifier le client';
+  if (delBtn) delBtn.style.display = '';
+  // Charger les données
+  fetch('/api/clients/' + id, { credentials: 'include' })
+    .then(r => r.json())
+    .then(c => {
+      setV('cli-numero', c.numero); setV('cli-code', c.code); setV('cli-etat', c.etat || 'Normal');
+      setV('cli-raison', c.raison_sociale); setV('cli-siret', c.siret); setV('cli-tva', c.tva);
+      setV('cli-rcs', c.rcs); setV('cli-ean', c.ean); setV('cli-nif', c.nif); setV('cli-groupe', c.groupe);
+      setV('cli-adresse1', c.adresse1); setV('cli-adresse2', c.adresse2); setV('cli-bp', c.bp);
+      setV('cli-cp', c.cp); setV('cli-ville', c.ville); setV('cli-code-pays', c.code_pays); setV('cli-pays', c.pays);
+      setV('cli-tel', c.telephone); setV('cli-fax', c.telecopie); setV('cli-email', c.email);
+      setV('cli-contact-nom', c.contact_nom); setV('cli-contact-fonction', c.contact_fonction);
+      setV('cli-contact-email', c.contact_email); setV('cli-contact-tel', c.contact_tel);
+      setV('cli-rep', c.representant); setV('cli-adv', c.adv);
+      setV('cli-mode-liv', c.mode_livraison); setV('cli-mode-reg', c.mode_reglement);
+      setV('cli-devise', c.devise); setV('cli-encours', c.encours_autorise); setV('cli-codecpta', c.code_comptable);
+      setV('cli-cat1', c.categorie1); setV('cli-cat2', c.categorie2); setV('cli-cat3', c.categorie3);
+      setV('cli-notes', c.notes);
+      requestAnimationFrame(() => document.getElementById('cli-raison')?.focus());
+    })
+    .catch(() => toast('Impossible de charger ce client.', true));
+}
+
+function closeCliModal() {
+  const overlay = document.getElementById('cli-modal-overlay');
+  if (!overlay) return;
+  overlay.style.display = 'none';
+  overlay.classList.add('hidden');
+  _cliEditing = null;
+}
+
+async function saveCliModal() {
+  const val = id => (document.getElementById(id)?.value || '').trim();
+  const raison = val('cli-raison');
+  if (!raison) {
+    toast('Raison sociale obligatoire.', true);
+    document.querySelector('#cli-modal-overlay [data-clisub="cli-tab-info"]')?.click();
+    document.getElementById('cli-raison')?.focus();
+    return;
+  }
+  const num = val('cli-numero');
+  const encours = val('cli-encours');
+  const payload = {
+    numero: num === '' ? null : parseInt(num, 10),
+    code: val('cli-code') || null,
+    raison_sociale: raison,
+    siret: val('cli-siret') || null,
+    tva: val('cli-tva') || null,
+    rcs: val('cli-rcs') || null,
+    ean: val('cli-ean') || null,
+    nif: val('cli-nif') || null,
+    groupe: val('cli-groupe') || null,
+    adresse1: val('cli-adresse1') || null,
+    adresse2: val('cli-adresse2') || null,
+    bp: val('cli-bp') || null,
+    cp: val('cli-cp') || null,
+    ville: val('cli-ville') || null,
+    code_pays: val('cli-code-pays') || null,
+    pays: val('cli-pays') || null,
+    telephone: val('cli-tel') || null,
+    telecopie: val('cli-fax') || null,
+    email: val('cli-email') || null,
+    contact_nom: val('cli-contact-nom') || null,
+    contact_fonction: val('cli-contact-fonction') || null,
+    contact_email: val('cli-contact-email') || null,
+    contact_tel: val('cli-contact-tel') || null,
+    representant: val('cli-rep') || null,
+    adv: val('cli-adv') || null,
+    mode_livraison: val('cli-mode-liv') || null,
+    mode_reglement: val('cli-mode-reg') || null,
+    devise: val('cli-devise') || null,
+    encours_autorise: encours === '' ? null : parseFloat(encours.replace(',', '.')),
+    code_comptable: val('cli-codecpta') || null,
+    categorie1: val('cli-cat1') || null,
+    categorie2: val('cli-cat2') || null,
+    categorie3: val('cli-cat3') || null,
+    etat: val('cli-etat') || 'Normal',
+    notes: val('cli-notes') || null,
+  };
+  const url = _cliEditing == null ? '/api/clients' : '/api/clients/' + _cliEditing;
+  const method = _cliEditing == null ? 'POST' : 'PUT';
+  try {
+    const r = await fetch(url, {
+      method, credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) {
+      let msg = 'Erreur lors de l\'enregistrement.';
+      try { const d = await r.json(); if (d.detail) msg = d.detail; } catch(_) {}
+      toast(msg, true);
+      return;
+    }
+    toast(_cliEditing == null ? 'Client créé.' : 'Client mis à jour.', false);
+    closeCliModal();
+    await loadClients();
+  } catch(e) {
+    toast('Erreur réseau.', true);
+  }
+}
+
+async function deleteCliFromModal() {
+  if (_cliEditing == null) return;
+  const raison = (document.getElementById('cli-raison')?.value || '').trim();
+  if (!confirm(`Supprimer le client « ${raison} » ? Cette action est irréversible.`)) return;
+  try {
+    const r = await fetch('/api/clients/' + _cliEditing, { method: 'DELETE', credentials: 'include' });
+    if (!r.ok) { toast('Erreur lors de la suppression.', true); return; }
+    toast('Client supprimé.', false);
+    closeCliModal();
+    await loadClients();
+  } catch(e) { toast('Erreur réseau.', true); }
+}
+
+function onCliImportFile(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  _cliImportFile = file;
+  const fn = document.getElementById('cli-import-filename');
+  if (fn) fn.textContent = file.name;
+  const overlay = document.getElementById('cli-import-overlay');
+  if (overlay) { overlay.style.display = 'flex'; overlay.classList.remove('hidden'); }
+}
+
+function closeCliImportModal() {
+  const overlay = document.getElementById('cli-import-overlay');
+  if (overlay) { overlay.style.display = 'none'; overlay.classList.add('hidden'); }
+  _cliImportFile = null;
+  const inp = document.getElementById('cli-import-input');
+  if (inp) inp.value = '';
+}
+
+async function confirmCliImport() {
+  if (!_cliImportFile) { closeCliImportModal(); return; }
+  const mode = (document.querySelector('input[name="cli-import-mode"]:checked')?.value || 'merge');
+  if (mode === 'replace' && !confirm('Mode REMPLACER : tous les clients existants seront supprimés avant import. Continuer ?')) return;
+  const btn = document.getElementById('cli-import-confirm');
+  if (btn) { btn.disabled = true; btn.textContent = 'Import en cours…'; }
+  try {
+    const fd = new FormData();
+    fd.append('file', _cliImportFile);
+    const r = await fetch('/api/clients/import-xlsx?mode=' + encodeURIComponent(mode), {
+      method: 'POST', credentials: 'include', body: fd,
+    });
+    if (!r.ok) {
+      let msg = 'Erreur lors de l\'import.';
+      try { const d = await r.json(); if (d.detail) msg = d.detail; } catch(_) {}
+      toast(msg, true);
+      return;
+    }
+    const data = await r.json();
+    let msg = `${data.inserted} créé${data.inserted > 1 ? 's' : ''}, ${data.updated} mis à jour`;
+    if (data.skipped) msg += `, ${data.skipped} ignoré${data.skipped > 1 ? 's' : ''}`;
+    msg += '.';
+    toast(msg, false);
+    if (data.errors && data.errors.length) {
+      console.warn('Erreurs import clients :', data.errors);
+    }
+    closeCliImportModal();
+    await loadClients();
+  } catch(e) { toast('Erreur réseau.', true); }
+  finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Lancer l\'import'; }
+  }
+}
+
+function exportClientsCsv() {
+  if (!_cliData.length) { toast('Aucun client à exporter.', true); return; }
+  const cols = [
+    ['numero', 'N°'], ['code', 'Code'], ['raison_sociale', 'Raison sociale'],
+    ['adresse1', 'Adresse 1'], ['adresse2', 'Adresse 2'], ['bp', 'B.P.'],
+    ['cp', 'C.P.'], ['ville', 'Ville'], ['code_pays', 'C.Pays'], ['pays', 'Pays'],
+    ['siret', 'Siret'], ['tva', 'N.TVA'], ['telephone', 'Téléphone'],
+    ['email', 'Email'], ['representant', 'Représentant'], ['adv', 'ADV'],
+    ['mode_reglement', 'Mode de règlement'], ['devise', 'Devise'],
+    ['encours_autorise', 'Encours autorisé'], ['code_comptable', 'Code Comptable'],
+    ['contact_nom', 'Contact'], ['contact_email', 'Email contact'],
+    ['contact_tel', 'Tél contact'], ['etat', 'État'],
+  ];
+  const head = cols.map(c => c[1]);
+  const rows = [head, ..._cliData.map(c => cols.map(([k]) => c[k] == null ? '' : c[k]))];
+  const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(';')).join('\r\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'clients_' + new Date().toISOString().slice(0, 10) + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
 }
 </script>
 </body>

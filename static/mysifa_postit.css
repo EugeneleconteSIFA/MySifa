@@ -122,6 +122,12 @@
   text-decoration:line-through;
   color:var(--muted);
 }
+.postit:not(.is-hidden) .postit-footer{
+  cursor:grab;
+}
+.postit:not(.is-hidden) .postit-footer:active{
+  cursor:grabbing;
+}
 .postit-footer{
   display:flex;
   align-items:center;

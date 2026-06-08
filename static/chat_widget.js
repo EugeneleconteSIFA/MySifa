@@ -58,7 +58,7 @@
 
   const CW_STYLES = `
 @keyframes cwPulse{0%,100%{opacity:1}50%{opacity:.3}}
-#cw-bar{position:fixed;bottom:24px;left:24px;right:auto!important;z-index:8002;width:340px;max-width:calc(100vw - 48px);
+#cw-bar{position:fixed;bottom:24px;left:24px;right:auto!important;z-index:9100;width:340px;max-width:calc(100vw - 48px);
   background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px 16px;
   display:none;align-items:center;gap:12px;cursor:pointer;transition:border-color .15s,box-shadow .18s,transform .18s;
   font-family:inherit;box-shadow:0 4px 16px rgba(0,0,0,.2)}
@@ -89,7 +89,7 @@ body.light #cw-bar.cw-portal-accent #cw-bar-icon{background:rgba(255,255,255,.22
 #cw-bar-badge{position:absolute;top:-6px;right:-6px}
 #cw-bar.cw-portal-accent #cw-bar-badge{background:#fff;color:#0a0e17;border:2px solid rgba(10,14,23,.15)}
 body.light #cw-bar.cw-portal-accent #cw-bar-badge{border-color:rgba(15,23,42,.12)}
-#cw-bubble{position:fixed;z-index:8002;
+#cw-bubble{position:fixed;z-index:9100;
   right:max(24px,env(safe-area-inset-right,0px));
   bottom:max(24px,env(safe-area-inset-bottom,0px));
   left:auto!important;
@@ -102,7 +102,7 @@ body.light #cw-bar.cw-portal-accent #cw-bar-badge{border-color:rgba(15,23,42,.12
 #cw-bubble-badge{position:absolute;top:-6px;right:-6px;z-index:2;
   border:2px solid var(--bg)}
 body.light #cw-bubble-badge{border-color:#fff}
-#cw-panel{position:fixed;z-index:8003;width:440px;height:580px;max-height:calc(100vh - 64px);
+#cw-panel{position:fixed;z-index:9101;width:440px;height:580px;max-height:calc(100vh - 64px);
   background:var(--card);border:1px solid var(--border);border-radius:14px;display:flex;overflow:hidden;
   font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;
   box-shadow:0 12px 48px rgba(0,0,0,0.5)}
@@ -193,6 +193,87 @@ body.light .cw-channel-item:hover{background:rgba(0,0,0,.04)}
 .cw-react-picker:hover{display:flex}
 .cw-msg-wrap.cw-mine .cw-react-picker{left:auto;right:0}
 .cw-msg-wrap.cw-theirs .cw-react-picker{left:0;right:auto}
+/* ── Header message (nom + heure + bouton ⋮ inline) ──── */
+.cw-msg-header{display:flex;align-items:center;gap:8px;margin-bottom:4px;position:relative}
+.cw-msg-wrap.cw-mine .cw-msg-header{flex-direction:row-reverse}
+.cw-msg-header-text{font-size:11px;color:var(--muted);line-height:1.2;white-space:nowrap}
+/* ── Bouton ⋮ inline (sobre, toujours visible) ───────── */
+.cw-msg-menu-btn{display:inline-flex;align-items:center;justify-content:center;
+  width:14px;height:14px;flex-shrink:0;line-height:1;vertical-align:middle;
+  border:none;background:transparent;
+  color:var(--text2);cursor:pointer;font-family:inherit;padding:0;margin:0;
+  opacity:.5;transition:opacity .15s}
+.cw-msg-menu-btn svg{display:block;width:14px;height:14px}
+.cw-msg-menu-btn:hover,
+.cw-msg-menu-btn:focus-visible,
+.cw-msg-menu-btn[aria-expanded="true"]{opacity:1}
+.cw-msg-menu-btn:focus{outline:none}
+/* ── Dropdown ─────────────────────────────────────────── */
+/* Par défaut (messages reçus) : bouton à gauche → menu s'ouvre vers la droite */
+.cw-msg-menu{position:absolute;top:calc(100% + 4px);left:0;right:auto;background:var(--card);
+  border:1px solid var(--border);border-radius:12px;padding:6px;
+  box-shadow:0 12px 32px rgba(0,0,0,.45);z-index:300;min-width:184px;
+  display:none;opacity:0;transform:translateY(-4px) scale(.97);
+  transform-origin:top left;
+  transition:opacity .14s ease,transform .14s ease}
+.cw-msg-menu.cw-open{display:block;opacity:1;transform:translateY(0) scale(1)}
+/* Mes messages : bouton à droite → menu s'ouvre vers la gauche, sous le bouton */
+.cw-msg-wrap.cw-mine .cw-msg-menu{left:auto;right:0;transform-origin:top right}
+.cw-msg-menu.cw-menu-up{top:auto;bottom:calc(100% + 4px);transform-origin:bottom left}
+.cw-msg-wrap.cw-mine .cw-msg-menu.cw-menu-up{transform-origin:bottom right}
+.cw-msg-menu-item{display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;
+  border:none;background:transparent;color:var(--text2);font-size:13px;cursor:pointer;
+  font-family:inherit;border-radius:8px;text-align:left;white-space:nowrap;
+  transition:background .12s,color .12s}
+.cw-msg-menu-item svg{flex-shrink:0;width:15px;height:15px;color:currentColor;opacity:.8}
+.cw-msg-menu-item:hover{background:var(--accent-bg);color:var(--accent)}
+.cw-msg-menu-item:hover svg{opacity:1}
+.cw-msg-menu-sep{height:1px;background:var(--border);margin:5px 4px}
+.cw-msg-menu-item.cw-danger{color:var(--danger)}
+.cw-msg-menu-item.cw-danger:hover{background:rgba(248,113,113,.12);color:var(--danger)}
+/* ── Reply context ──────────────────────────────────────── */
+.cw-msg-reply-ctx{padding:5px 9px;margin-bottom:5px;border-left:3px solid var(--accent);
+  background:var(--accent-bg);border-radius:6px;opacity:.7;cursor:pointer;font-size:11px;line-height:1.4}
+.cw-reply-name{font-weight:700;color:var(--text);margin-bottom:1px}
+.cw-reply-body{color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
+/* ── Forwarded ──────────────────────────────────────────── */
+.cw-msg-fwd-tag{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.5px;margin-bottom:4px;display:flex;align-items:center;gap:4px}
+.cw-msg-fwd{border-left:3px solid var(--muted)!important;padding-left:9px!important;
+  border-radius:0 10px 10px 10px!important}
+.cw-msg-wrap.cw-mine .cw-msg-fwd{border-radius:10px 0 10px 10px!important}
+/* ── Deleted ────────────────────────────────────────────── */
+.cw-msg-deleted{font-style:italic;color:var(--muted)!important;
+  background:transparent!important;border-style:dashed!important}
+/* ── Edited ─────────────────────────────────────────────── */
+.cw-msg-edited-lbl{font-size:10px;color:var(--muted);font-style:italic;margin-left:5px}
+/* ── Date separator ─────────────────────────────────────── */
+.cw-date-sep{display:flex;align-items:center;gap:10px;margin:4px 0;flex-shrink:0;width:100%}
+.cw-date-sep::before,.cw-date-sep::after{content:'';flex:1;height:1px;background:var(--border)}
+.cw-date-sep-lbl{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.5px;
+  text-transform:uppercase;white-space:nowrap;padding:0 4px}
+/* ── Reply bar ──────────────────────────────────────────── */
+#cw-reply-bar{padding:6px 12px;background:var(--card);border-top:1px solid var(--border);
+  display:none;align-items:center;gap:8px;flex-shrink:0}
+#cw-reply-bar.cw-show{display:flex}
+.cw-rp-preview{flex:1;min-width:0;padding:4px 9px;border-left:3px solid var(--accent);
+  background:var(--accent-bg);border-radius:6px;font-size:12px}
+.cw-rp-name{font-weight:700;color:var(--text)}
+.cw-rp-body{color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cw-rp-cancel{width:22px;height:22px;border-radius:6px;border:1px solid var(--border);
+  background:transparent;color:var(--muted);cursor:pointer;font-size:14px;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1}
+.cw-rp-cancel:hover{border-color:var(--danger);color:var(--danger)}
+/* ── Edit inline ────────────────────────────────────────── */
+.cw-edit-ta{width:100%;background:var(--bg);border:1px solid var(--accent);
+  border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;
+  font-family:inherit;resize:none;outline:none;line-height:1.4;
+  min-height:36px;max-height:100px;box-sizing:border-box}
+.cw-edit-row{display:flex;gap:6px;margin-top:5px;justify-content:flex-end}
+.cw-edit-row button{padding:4px 11px;border-radius:7px;font-size:12px;font-weight:700;
+  cursor:pointer;font-family:inherit;border:1px solid var(--border);
+  background:transparent;color:var(--text2)}
+.cw-edit-row .ok{background:var(--accent);color:var(--bg);border-color:var(--accent)}
 .cw-react-btn{background:none;border:none;cursor:pointer;font-size:16px;
   padding:2px 4px;border-radius:6px;line-height:1.2;transition:background .1s}
 .cw-react-btn:hover{background:var(--accent-bg)}
@@ -201,7 +282,7 @@ body.light .cw-channel-item:hover{background:rgba(0,0,0,.04)}
   border-radius:99px;font-size:12px;cursor:pointer;border:1px solid var(--border);
   background:transparent;color:var(--text2);font-family:inherit;transition:border-color .1s,background .1s}
 #cw-reaction-tip-float{
-  display:none;position:fixed;z-index:8025;pointer-events:none;
+  display:none;position:fixed;z-index:9125;pointer-events:none;
   background:var(--card);border:1px solid var(--border);border-radius:8px;
   padding:8px 10px;font-size:12px;line-height:1.45;color:var(--text2);
   box-shadow:0 8px 24px rgba(0,0,0,.35);max-width:240px;max-height:180px;overflow-y:auto;
@@ -324,7 +405,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     margin-left:auto!important;margin-right:auto!important;
     border-radius:14px!important;border:1px solid var(--border)!important;
     box-shadow:0 12px 48px rgba(0,0,0,.5)!important;
-    z-index:8015!important;
+    z-index:9115!important;
   }
   #cw-panel-left{
     width:100%;max-width:100%;flex:1;min-width:0;border-right:none;
@@ -350,6 +431,14 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
   .cw-msg-attach-img img{max-width:min(240px,100%)}
   .cw-react-picker{margin-top:-8px}
   #cw-back-list{display:flex!important}
+  /* iOS Safari : empêche le zoom automatique au focus d'un champ
+     (déclenché lorsque font-size < 16px). On force 16px sur mobile. */
+  #cw-input,
+  .cw-edit-area,
+  #cw-fwd-search,
+  .cw-modal input[type="search"],
+  .cw-modal input[type="text"],
+  .cw-modal textarea{font-size:16px!important}
 }
 @media (max-width:900px) and (orientation:landscape){
   body.cw-mobile #cw-panel.cw-hidden{display:none!important}
@@ -406,6 +495,8 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
   #cw-messages{padding:8px 10px}
   .cw-msg-wrap{max-width:72%}
 }
+.cw-icon-wrap{position:relative;display:inline-block;flex-shrink:0}
+.cw-humeur-badge{position:absolute;bottom:-2px;left:-2px;font-size:14px;line-height:1;pointer-events:auto;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5));cursor:default}
 `;
 
   function escAttr(s) {
@@ -457,31 +548,52 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     );
   }
 
+  const HUMEUR_LABELS={
+    '😊':'Joyeux','😩':'Épuisé','😢':'Triste','🤒':'Malade','😐':'Normal',
+    '😠':'Colère','🥵':'Chaud','🥶':'Froid','🤮':'Nauséeux','🥱':'Fatigué'
+  };
+
   /** Icône liste / en-tête : emoji canal ou initiales ; avatar photo pour les DM. */
   function cwChannelIconHtml(ch, size) {
     const sz = size || 28;
     if (!ch) return cwAvatarHtml('', '', sz);
+
+    let iconHtml;
+
     if (ch.type === 'direct') {
       const nom = ch.display_name || ch.name || '';
       if (ch.other_user_id) cacheUserAvatar(ch.other_user_id, nom, ch.other_user_avatar_url || '');
-      return cwAvatarHtml(nom, ch.other_user_avatar_url || '', sz);
+      iconHtml = cwAvatarHtml(nom, ch.other_user_avatar_url || '', sz);
+    } else {
+      const emoji = (ch.emoji || '').trim();
+      if (emoji) {
+        const fs = Math.max(14, Math.round(sz * 0.6));
+        iconHtml =
+          '<span class="cw-avatar-ph cw-chan-emoji" aria-hidden="true" style="width:' +
+          sz +
+          'px;height:' +
+          sz +
+          'px;font-size:' +
+          fs +
+          'px">' +
+          escCW(emoji) +
+          '</span>';
+      } else {
+        iconHtml = cwAvatarHtml(ch.display_name || ch.name || 'Canal', '', sz);
+      }
     }
-    const emoji = (ch.emoji || '').trim();
-    if (emoji) {
-      const fs = Math.max(14, Math.round(sz * 0.6));
+
+    const humeur = ch.type === 'direct' ? (ch.other_user_humeur || '') : '';
+    if (humeur) {
       return (
-        '<span class="cw-avatar-ph cw-chan-emoji" aria-hidden="true" style="width:' +
-        sz +
-        'px;height:' +
-        sz +
-        'px;font-size:' +
-        fs +
-        'px">' +
-        escCW(emoji) +
-        '</span>'
+        '<span class="cw-icon-wrap">' +
+        iconHtml +
+        '<span class="cw-humeur-badge" title="' + escCW(HUMEUR_LABELS[humeur] || '') + '">' +
+        escCW(humeur) +
+        '</span></span>'
       );
     }
-    return cwAvatarHtml(ch.display_name || ch.name || 'Canal', '', sz);
+    return iconHtml;
   }
 
   function fmtTime(iso) {
@@ -1172,22 +1284,140 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     } catch (e) {}
   }
 
+  // ── Date separators ──────────────────────────────────────
+  function cwDateKey(iso) {
+    if (!iso) return '';
+    try { const d = new Date(iso.replace(' ','T')); return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); } catch(e) { return ''; }
+  }
+  function cwFmtDate(iso) {
+    try {
+      const d = new Date(iso.replace(' ','T'));
+      const now = new Date();
+      const diff = Math.round((new Date(now.getFullYear(),now.getMonth(),now.getDate()) - new Date(d.getFullYear(),d.getMonth(),d.getDate()))/86400000);
+      if (diff === 0) return "Aujourd'hui";
+      if (diff === 1) return 'Hier';
+      return d.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+    } catch(e) { return ''; }
+  }
+  function cwBuildDateSep(iso) {
+    const el = document.createElement('div');
+    el.className = 'cw-date-sep';
+    el.dataset.dk = cwDateKey(iso);
+    el.innerHTML = '<span class="cw-date-sep-lbl">' + escCW(cwFmtDate(iso)) + '</span>';
+    return el;
+  }
+  // ── Reply bar ─────────────────────────────────────────────
+  function cwEnsureReplyBar() {
+    if (document.getElementById('cw-reply-bar')) return;
+    const panel = document.getElementById('cw-panel');
+    const inputRow = document.getElementById('cw-input-row') || (panel && panel.querySelector('#cw-pending-row'));
+    if (!inputRow) return;
+    const bar = document.createElement('div');
+    bar.id = 'cw-reply-bar';
+    bar.innerHTML = '<div class="cw-rp-preview"><div class="cw-rp-name" id="cw-rp-name"></div><div class="cw-rp-body" id="cw-rp-body"></div></div><button type="button" class="cw-rp-cancel" id="cw-rp-cancel">×</button>';
+    inputRow.parentNode.insertBefore(bar, inputRow);
+    document.getElementById('cw-rp-cancel').addEventListener('click', cwCancelReply);
+  }
+  function cwStartReply(msg) {
+    CW._replyToId = msg.id;
+    cwEnsureReplyBar();
+    const bar = document.getElementById('cw-reply-bar');
+    if (bar) bar.classList.add('cw-show');
+    const n = document.getElementById('cw-rp-name');
+    const b = document.getElementById('cw-rp-body');
+    if (n) n.textContent = msg.user_nom || '';
+    if (b) b.textContent = (msg.body || '(pièce jointe)').substring(0,80);
+    const inp = document.getElementById('cw-input');
+    if (inp) inp.focus();
+  }
+  function cwCancelReply() {
+    CW._replyToId = null;
+    const bar = document.getElementById('cw-reply-bar');
+    if (bar) bar.classList.remove('cw-show');
+  }
+  // ── Delete ────────────────────────────────────────────────
+  async function cwDeleteMsg(msgId) {
+    if (!CW.activeId) return;
+    try {
+      await api('/api/chat/channels/'+CW.activeId+'/messages/'+msgId, {method:'DELETE'});
+      const wrap = document.querySelector('.cw-msg-wrap[data-id="'+msgId+'"]');
+      if (wrap) {
+        const mine = wrap.classList.contains('cw-mine');
+        const bbl = wrap.querySelector('.cw-msg-mine,.cw-msg-theirs');
+        if (bbl) { bbl.innerHTML = 'Message supprimé.'; bbl.className = (mine?'cw-msg-mine':'cw-msg-theirs')+' cw-msg-deleted'; }
+        wrap.querySelectorAll('.cw-msg-reply-ctx,.cw-msg-fwd-tag,.cw-reactions,.cw-msg-menu-btn,.cw-msg-menu,.cw-react-picker').forEach(e=>e.remove());
+      }
+    } catch(e) { console.warn('[cw]',e); }
+  }
+  // ── Edit ──────────────────────────────────────────────────
+  function cwStartEdit(wrap, msg) {
+    const bbl = wrap.querySelector('.cw-msg-mine,.cw-msg-theirs');
+    if (!bbl) return;
+    const origHtml = bbl.innerHTML;
+    const txt = (msg.body||'').replace(/</g,'&lt;');
+    bbl.innerHTML = '<textarea class="cw-edit-ta" rows="2">'+txt+'</textarea><div class="cw-edit-row"><button type="button">Annuler</button><button type="button" class="ok">Enregistrer</button></div>';
+    const ta = bbl.querySelector('.cw-edit-ta');
+    const [cancelBtn, saveBtn] = bbl.querySelectorAll('.cw-edit-row button');
+    if (ta) { ta.focus(); ta.style.height = ta.scrollHeight+'px'; }
+    cancelBtn.addEventListener('click', () => { bbl.innerHTML = origHtml; });
+    saveBtn.addEventListener('click', async () => {
+      const nb = (ta.value||'').trim();
+      if (!nb) return;
+      try {
+        await api('/api/chat/channels/'+CW.activeId+'/messages/'+msg.id, {
+          method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({body:nb})
+        });
+        bbl.innerHTML = origHtml;
+        // Reload to get updated content
+        const box = document.getElementById('cw-messages');
+        if (box) { const was = isNearBottom(box,40); await CW.selectChannel(CW.activeId); if(was) scrollMessagesBottom(); }
+      } catch(e) { console.warn('[cw]',e); }
+    });
+  }
+  // ── Forward ───────────────────────────────────────────────
+  async function cwStartForward(msg) {
+    let users = [];
+    try { users = (await api('/api/chat/users'))||[]; } catch(e) { return; }
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:9500;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px';
+    let sel = new Set();
+    function renderList(q) {
+      const ql=(q||'').toLowerCase();
+      const list=users.filter(u=>Number(u.id)!==Number(CW.uid)&&(!ql||(u.nom||'').toLowerCase().includes(ql)));
+      const el=overlay.querySelector('#cw-fwd-list');
+      if(!el) return;
+      el.innerHTML=list.map(u=>'<button type="button" style="display:block;width:100%;text-align:left;padding:10px 12px;border:none;border-bottom:1px solid var(--border);background:'+(sel.has(u.id)?'var(--accent-bg)':'')+';color:'+(sel.has(u.id)?'var(--accent)':'var(--text)')+';font-family:inherit;font-size:13px;cursor:pointer" data-uid="'+u.id+'">'+escCW(u.nom||'')+(sel.has(u.id)?' ✓':'')+'</button>').join('')||'<p style="padding:10px;color:var(--muted);font-size:12px;margin:0">Aucun résultat</p>';
+      el.querySelectorAll('button[data-uid]').forEach(b=>{b.addEventListener('click',()=>{const id=parseInt(b.dataset.uid,10);if(sel.has(id))sel.delete(id);else sel.add(id);const sb=overlay.querySelector('#cw-fwd-ok');if(sb)sb.disabled=sel.size===0;renderList(overlay.querySelector('#cw-fwd-search').value);});});
+    }
+    overlay.innerHTML='<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;width:min(420px,100%);max-height:80vh;overflow-y:auto">'+
+      '<div style="font-size:15px;font-weight:700;margin-bottom:12px">Transférer le message</div>'+
+      '<div style="padding:5px 9px;margin-bottom:10px;border-left:3px solid var(--muted);background:var(--accent-bg);border-radius:6px;font-size:12px;color:var(--text2)">'+escCW((msg.body||'(pièce jointe)').substring(0,60))+'</div>'+
+      '<input type="search" id="cw-fwd-search" placeholder="Rechercher…" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;margin-bottom:8px;box-sizing:border-box">'+
+      '<div id="cw-fwd-list" style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:8px"></div>'+
+      '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">'+
+      '<button type="button" style="padding:9px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit;font-size:13px" onclick="this.closest(\'[style*=fixed]\').remove()">Annuler</button>'+
+      '<button type="button" id="cw-fwd-ok" disabled style="padding:9px 16px;border-radius:8px;border:none;background:var(--accent);color:var(--bg);font-weight:700;cursor:pointer;font-family:inherit;font-size:13px">Transférer</button></div></div>';
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
+    renderList('');
+    overlay.querySelector('#cw-fwd-search').addEventListener('input',function(){renderList(this.value);});
+    overlay.querySelector('#cw-fwd-ok').addEventListener('click',async()=>{
+      if(!sel.size)return;
+      try {
+        await api('/api/chat/channels/'+CW.activeId+'/messages/'+msg.id+'/forward',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_ids:[...sel]})});
+        overlay.remove();
+      } catch(e){console.warn('[cw]',e);}
+    });
+    setTimeout(()=>overlay.querySelector('#cw-fwd-search').focus(),50);
+  }
+  // ── Close menus on outside click ──────────────────────────
+  document.addEventListener('click',()=>{
+    document.querySelectorAll('.cw-msg-menu.cw-open').forEach(m=>m.classList.remove('cw-open'));
+  });
+
   function renderMsg(msg) {
     const mine = Number(msg.user_id) === Number(CW.uid) || msg.is_mine;
     cacheUserAvatar(msg.user_id, msg.user_nom, msg.avatar_url);
-
-    let metaEl = '';
-    if (!mine) {
-      const av = cwAvatarHtml(msg.user_nom, msg.avatar_url, 20);
-      metaEl =
-        '<div class="cw-msg-meta">' +
-        av +
-        '<span class="cw-msg-meta-text">' +
-        escCW(msg.user_nom) +
-        ' · ' +
-        escCW(fmtTime(msg.created_at)) +
-        '</span></div>';
-    }
 
     const pickerBtns = CW_EMOJIS.map(
       (e) =>
@@ -1216,7 +1446,6 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       '<div class="' +
       (mine ? 'cw-msg-mine' : 'cw-msg-theirs') +
       '">' +
-      metaEl +
       bodyHtml +
       attachmentHtml(msg) +
       '</div>';
@@ -1227,9 +1456,162 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     wrap.className = 'cw-msg-wrap ' + (mine ? 'cw-mine' : 'cw-theirs');
     wrap.dataset.id = String(msg.id);
     if (msg.created_at) wrap.dataset.at = String(msg.created_at);
+    wrap.style.position = 'relative';
+    wrap._cwMsg = msg; // store msg data for actions
+
+    // ── Soft-deleted placeholder ───────────────────────────
+    if (msg.is_soft_deleted) {
+      const cls = mine ? 'cw-msg-mine' : 'cw-msg-theirs';
+      wrap.innerHTML = '<div class="cw-msg-bubble-wrap"><div class="'+cls+' cw-msg-deleted">Message supprimé.</div></div>';
+      return wrap;
+    }
+
+    // ── Reply context ──────────────────────────────────────
+    let replyHtml = '';
+    if (msg.reply_to) {
+      const rb = msg.reply_to.is_soft_deleted ? '<em>Message supprimé</em>' : escCW((msg.reply_to.body||'').substring(0,80));
+      replyHtml = '<div class="cw-msg-reply-ctx" data-reply-id="'+msg.reply_to.id+'"><div class="cw-reply-name">'+escCW(msg.reply_to.user_nom||'')+'</div><div class="cw-reply-body">'+rb+'</div></div>';
+    }
+
+    // ── Forwarded indicator ────────────────────────────────
+    let fwdHtml = '';
+    if (msg.is_forwarded) {
+      fwdHtml = '<div class="cw-msg-fwd-tag"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/></svg>Transféré'+(msg.forwarded_from_nom?' · '+escCW(msg.forwarded_from_nom):'')+'</div>';
+    }
+    const fwdCls = msg.is_forwarded ? ' cw-msg-fwd' : '';
+
+    // ── Edited label ───────────────────────────────────────
+    let editedLbl = '';
+    if (msg.edited_at) {
+      try {
+        const ed = new Date(msg.edited_at.replace(' ','T'));
+        editedLbl = '<span class="cw-msg-edited-lbl">modifié le '+ed.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'})+'</span>';
+      } catch(e) {}
+    }
+
+    const bubbleFull = '<div class="'+(mine?'cw-msg-mine':'cw-msg-theirs')+fwdCls+'">' + bodyHtml + attachmentHtml(msg) + '</div>';
+
     wrap.innerHTML =
-      '<div class="cw-msg-bubble-wrap">' + bubble + picker + '</div>' + rxHtml;
+      '<div class="cw-msg-bubble-wrap">' + replyHtml + fwdHtml + bubbleFull + picker + '</div>' + rxHtml;
     bindReactionHandlers(wrap, msg.id);
+
+    // ── Scroll to reply on click ───────────────────────────
+    const rctx = wrap.querySelector('.cw-msg-reply-ctx');
+    if (rctx) {
+      rctx.addEventListener('click', () => {
+        const id = rctx.dataset.replyId;
+        const target = document.querySelector('.cw-msg-wrap[data-id="'+id+'"]');
+        if (target) { target.scrollIntoView({behavior:'smooth',block:'center'}); target.style.outline='2px solid var(--accent)'; setTimeout(()=>{target.style.outline='';},1200); }
+      });
+    }
+
+    // ── Header : nom · heure [modifié] + bouton ⋮ ─────────
+    const ch = CW.channels.find(c=>c.id===CW.activeId);
+    const isAdmin = ['superadmin','direction','administration'].includes(CW.role);
+    const msgAge = Date.now()-new Date((msg.created_at||'').replace(' ','T')).getTime();
+    const canEdit = mine && !msg.attachment_url && msgAge < 900000;
+    const canDel = mine;
+    const canPin = ch && ch.type==='channel' && isAdmin;
+
+    const header = document.createElement('div');
+    header.className = 'cw-msg-header';
+
+    const headerText = document.createElement('span');
+    headerText.className = 'cw-msg-header-text';
+    headerText.textContent = (mine ? '' : (msg.user_nom||'') + ' · ') + fmtTime(msg.created_at||'');
+    if (editedLbl) headerText.innerHTML += '<span class="cw-msg-edited-lbl">modifié</span>';
+
+    const menuBtn = document.createElement('button');
+    menuBtn.type = 'button';
+    menuBtn.className = 'cw-msg-menu-btn';
+    menuBtn.title = 'Options';
+    menuBtn.setAttribute('aria-label', 'Options du message');
+    menuBtn.setAttribute('aria-haspopup', 'true');
+    menuBtn.setAttribute('aria-expanded', 'false');
+    menuBtn.innerHTML =
+      '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">'+
+      '<circle cx="8" cy="3" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="8" cy="13" r="1.5"/>'+
+      '</svg>';
+
+    const menu = document.createElement('div');
+    menu.className = 'cw-msg-menu';
+    menu.setAttribute('role', 'menu');
+
+    // Icones SVG inline pour les actions
+    const ICO = {
+      reply: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>',
+      edit:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+      fwd:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 0 1 4-4h12"/></svg>',
+      pin:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14l-2-5V5a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v7z"/></svg>',
+      unpin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="2" y1="2" x2="22" y2="22"/><path d="M5 17h14l-2-5V5a2 2 0 0 0-2-2H9"/></svg>',
+      del:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>',
+    };
+
+    const mkItem = (icon, label, cls, cb) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'cw-msg-menu-item'+(cls?' '+cls:'');
+      b.setAttribute('role', 'menuitem');
+      b.innerHTML = icon + '<span>' + escCW(label) + '</span>';
+      b.addEventListener('click', e => { e.stopPropagation(); closeMenu(); cb(); });
+      return b;
+    };
+    const addSep = () => {
+      const s = document.createElement('div');
+      s.className = 'cw-msg-menu-sep';
+      s.setAttribute('role', 'separator');
+      menu.appendChild(s);
+    };
+
+    menu.appendChild(mkItem(ICO.reply, 'Répondre', '', ()=>cwStartReply(msg)));
+    if (canEdit) menu.appendChild(mkItem(ICO.edit, 'Modifier', '', ()=>cwStartEdit(wrap,msg)));
+    menu.appendChild(mkItem(ICO.fwd, 'Transférer', '', ()=>cwStartForward(msg)));
+    if (canPin) menu.appendChild(mkItem(
+      msg.pinned_at?ICO.unpin:ICO.pin,
+      msg.pinned_at?'Désépingler':'Épingler', '', ()=>{
+        api('/api/chat/channels/'+CW.activeId+'/messages/'+msg.id+'/pin',{method:msg.pinned_at?'DELETE':'POST'}).then(()=>CW.selectChannel(CW.activeId)).catch(()=>{});
+      }
+    ));
+    if (canDel) {
+      addSep();
+      menu.appendChild(mkItem(ICO.del, 'Supprimer', 'cw-danger', ()=>cwDeleteMsg(msg.id)));
+    }
+
+    const closeMenu = () => {
+      menu.classList.remove('cw-open','cw-menu-up');
+      menuBtn.setAttribute('aria-expanded', 'false');
+    };
+    const openMenu = () => {
+      // Décision flip up/down : si pas assez de place sous le bouton, on ouvre vers le haut.
+      menu.classList.remove('cw-menu-up');
+      menu.classList.add('cw-open');
+      menuBtn.setAttribute('aria-expanded', 'true');
+      requestAnimationFrame(() => {
+        const rect = menu.getBoundingClientRect();
+        const box = document.getElementById('cw-messages');
+        const limit = box ? box.getBoundingClientRect().bottom : window.innerHeight;
+        if (rect.bottom > limit - 8) menu.classList.add('cw-menu-up');
+      });
+    };
+
+    menuBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      const was = menu.classList.contains('cw-open');
+      document.querySelectorAll('.cw-msg-menu.cw-open').forEach(m => {
+        m.classList.remove('cw-open','cw-menu-up');
+        const b = m.parentElement && m.parentElement.querySelector('.cw-msg-menu-btn');
+        if (b) b.setAttribute('aria-expanded', 'false');
+      });
+      if (!was) openMenu();
+    });
+
+    // Ordre DOM : [⋮, menu, nom/heure]
+    // - Messages reçus (flex normal)     → ⋮ à gauche, nom/heure à droite
+    // - Mes messages   (flex-direction:row-reverse) → ⋮ à droite, heure à gauche
+    header.appendChild(menuBtn);
+    header.appendChild(menu);
+    header.appendChild(headerText);
+    wrap.insertBefore(header, wrap.firstChild);
     return wrap;
   }
 
@@ -1361,7 +1743,10 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       const data = await api('/api/chat/channels/' + id + '/messages');
       const msgs = data.messages || [];
       box.innerHTML = '';
+      let _lastDk = '';
       msgs.forEach((m) => {
+        const dk = cwDateKey(m.created_at||'');
+        if (dk && dk !== _lastDk) { _lastDk = dk; box.appendChild(cwBuildDateSep(m.created_at)); }
         box.appendChild(renderMsg(m));
         if (m.id > CW.lastMsgId) CW.lastMsgId = m.id;
       });
@@ -1376,6 +1761,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       startTypingPoll();
       await syncChatState(false);
     } catch (e) {
+      console.error('[chat_widget] selectChannel id=' + id + ' a échoué :', e);
       box.innerHTML = '<div id="cw-empty-hint">Chargement impossible.</div>';
     }
     syncMobileChatUi();
@@ -1395,6 +1781,8 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       const hint = box.querySelector('#cw-empty-hint');
       if (hint) hint.remove();
       let played = false;
+      const _lastWrap = box.querySelector('.cw-msg-wrap:last-of-type');
+      let _pollLastDk = _lastWrap ? cwDateKey(_lastWrap.dataset.at||'') : '';
       incoming.forEach((m) => {
         if (m.id <= CW.lastMsgId) return;
         if (Number(m.user_id) !== Number(CW.uid) && !played) {
@@ -1402,6 +1790,8 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
           jouerSon();
           played = true;
         }
+        const dk = cwDateKey(m.created_at||'');
+        if (dk && dk !== _pollLastDk) { _pollLastDk = dk; box.appendChild(cwBuildDateSep(m.created_at)); }
         box.appendChild(renderMsg(m));
         if (m.id > CW.lastMsgId) CW.lastMsgId = m.id;
       });
@@ -1436,8 +1826,9 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
         sent = await api('/api/chat/channels/' + CW.activeId + '/messages', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ body }),
+          body: JSON.stringify({ body, reply_to_id: CW._replyToId || undefined }),
         });
+        cwCancelReply();
       }
       if (inp) {
         inp.value = '';
@@ -2216,9 +2607,36 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     dockLayout();
   };
 
+  // Ouverture automatique depuis une notification push : l'URL contient
+  // ?chat=<channel_id> (ou ?chat=open). On ouvre le panneau et on sélectionne
+  // le canal, puis on nettoie l'URL pour ne pas ré-ouvrir au refresh.
+  async function handleChatQueryParam() {
+    let params;
+    try { params = new URLSearchParams(window.location.search); }
+    catch (e) { return; }
+    if (!params.has('chat')) return;
+    const raw = params.get('chat') || '';
+    const chatId = parseInt(raw, 10);
+    try {
+      await openPanel();
+      if (chatId > 0) {
+        try { await selectChannel(chatId); } catch (e) {}
+      }
+    } catch (e) {}
+    // Retire ?chat=… de l'URL sans recharger
+    try {
+      const u = new URL(window.location.href);
+      u.searchParams.delete('chat');
+      const qs = u.searchParams.toString();
+      const newUrl = u.pathname + (qs ? '?' + qs : '') + u.hash;
+      window.history.replaceState({}, '', newUrl);
+    } catch (e) {}
+  }
+
   function boot() {
-    const run = () => {
-      void CW.ensureReady();
+    const run = async () => {
+      const ok = await CW.ensureReady();
+      if (ok) await handleChatQueryParam();
     };
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', run, { once: true });

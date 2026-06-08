@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shutil
+import sqlite3
 import unicodedata
 import uuid
 from io import BytesIO
@@ -20,7 +21,8 @@ from fastapi import APIRouter, Body, File, HTTPException, Query, Request, Upload
 from fastapi.responses import FileResponse
 
 from app.services.audit_service import log_action
-from app.services.email_service import send_email
+from app.services.email_service import email_expe_rfq_transport, send_email
+from config import public_base_url
 from app.services.expe_transporteurs_seed import seed_expe_transporteurs_if_empty
 from database import get_db
 from services.auth_service import get_current_user, user_can_write_expe, user_has_app_access
@@ -73,6 +75,7 @@ def _row_blob(d: dict) -> str:
         d.get("no_bl"),
         d.get("type_palette_label"),
         d.get("type_palette_reference"),
+        d.get("type_colis"),
         d.get("nb_palette"),
         d.get("poids_total_kg"),
         d.get("date_livraison"),
@@ -83,23 +86,67 @@ def _row_blob(d: dict) -> str:
     return _norm_search(" ".join(str(p) for p in parts if p is not None and str(p) != ""))
 
 
+_HIST_SEARCH_COLS = (
+    "d.date_enlevement",
+    "d.affreteurs",
+    "d.transporteur",
+    "d.client",
+    "d.code_postal_destination",
+    "d.ref_sifa",
+    "d.arc",
+    "d.no_cde_transport",
+    "d.no_bl",
+    "mp.reference",
+    "mp.designation",
+    "d.type_colis",
+    "d.nb_palette",
+    "d.poids_total_kg",
+    "d.date_livraison",
+    "d.created_by_email",
+    "d.validated_by_email",
+    "d.validated_at",
+)
+
+
+def _historique_search_clause(q: str) -> tuple[str, list[Any]]:
+    """Clause SQL AND … pour la recherche multi-mots (tous les tokens requis)."""
+    qt = _norm_search(q)
+    if not qt:
+        return "", []
+    tokens = [t for t in qt.split(" ") if t]
+    if not tokens:
+        return "", []
+    parts: list[str] = []
+    params: list[Any] = []
+    ncols = len(_HIST_SEARCH_COLS)
+    for tok in tokens:
+        likes = " OR ".join(
+            f"LOWER(COALESCE(CAST({c} AS TEXT), '')) LIKE ?" for c in _HIST_SEARCH_COLS
+        )
+        parts.append(f"({likes})")
+        params.extend([f"%{tok}%"] * ncols)
+    return " AND ".join(parts), params
+
+
 _DEPARTS_SELECT = """
     SELECT d.*,
            mp.reference AS type_palette_reference,
-           mp.designation AS type_palette_designation
+           mp.designation AS type_palette_designation,
+           t.couleur AS transporteur_couleur
     FROM expe_departs d
     LEFT JOIN matieres_premieres mp ON mp.id = d.type_palette_matiere_id
+    LEFT JOIN expe_transporteurs t ON t.id = d.transporteur_id
 """
 
 
 def _depart_dict(row) -> dict:
     d = dict(row)
-    ref = (d.get("type_palette_reference") or "").strip()
-    des = (d.get("type_palette_designation") or "").strip()
-    if ref:
-        d["type_palette_label"] = f"{ref} — {des}" if des else ref
+    if (d.get("type_colis") or "").strip().lower() == "vrac":
+        d["type_palette_label"] = "Vrac"
     else:
-        d["type_palette_label"] = None
+        ref = (d.get("type_palette_reference") or "").strip()
+        des = (d.get("type_palette_designation") or "").strip()
+        d["type_palette_label"] = (f"{ref} — {des}" if des else ref) if ref else None
     return d
 
 
@@ -268,14 +315,17 @@ def create_depart(request: Request, body: dict = Body(...)):
         type_palette_id = _validate_type_palette_matiere_id(
             conn, body.get("type_palette_matiere_id")
         )
+        type_colis_val = (str(body.get("type_colis") or "").strip().lower() or None)
+        if type_colis_val == "vrac":
+            type_palette_id = None  # pas de matière première pour vrac
         cur = conn.execute(
             """INSERT INTO expe_departs (
                 date_enlevement, affreteurs, transporteur, transporteur_id, client,
                 code_postal_destination,
                 ref_sifa, arc, no_cde_transport, no_bl, type_palette_matiere_id,
-                nb_palette, poids_total_kg, date_livraison,
+                type_colis, nb_palette, poids_total_kg, date_livraison,
                 statut, created_at, created_by_email
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'en_attente', ?, ?)""",
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'en_attente', ?, ?)""",
             (
                 date_enl,
                 _f("affreteurs"),
@@ -288,6 +338,7 @@ def create_depart(request: Request, body: dict = Body(...)):
                 _f("no_cde_transport"),
                 _f("no_bl"),
                 type_palette_id,
+                type_colis_val,
                 _float_opt("nb_palette"),
                 _float_opt("poids_total_kg"),
                 _f("date_livraison"),
@@ -340,6 +391,43 @@ def valider_depart(request: Request, depart_id: int):
         action="VALIDATE",
         module="expe",
         objet=f"Départ #{depart_id} validé · {client_nom}",
+        ip=request.client.host if request.client else None,
+    )
+    return _depart_dict(out)
+
+
+@router.post("/departs/{depart_id}/invalider")
+def invalider_depart(request: Request, depart_id: int):
+    """Remet un départ validé dans le suivi du jour (statut en_attente)."""
+    user = _require_expe_write(request)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id, statut, client FROM expe_departs WHERE id=?",
+            (depart_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Départ introuvable")
+        if row["statut"] != "valide":
+            raise HTTPException(
+                status_code=400,
+                detail="Seuls les départs validés peuvent être remis en suivi.",
+            )
+        conn.execute(
+            """UPDATE expe_departs
+               SET statut='en_attente', validated_at=NULL, validated_by_email=NULL
+               WHERE id=?""",
+            (depart_id,),
+        )
+        conn.commit()
+        out = conn.execute(
+            f"{_DEPARTS_SELECT} WHERE d.id=?", (depart_id,)
+        ).fetchone()
+    client_nom = (out["client"] or "").strip() if out else "—"
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="expe",
+        objet=f"Départ #{depart_id} remis en suivi · {client_nom}",
         ip=request.client.host if request.client else None,
     )
     return _depart_dict(out)
@@ -400,6 +488,11 @@ async def update_depart(request: Request, depart_id: int, body: dict = Body(...)
         sets.append("type_palette_matiere_id=?")
         args.append(None)  # remplacé après ouverture connexion
 
+    if "type_colis" in body:
+        sets.append("type_colis=?")
+        tc = (str(body.get("type_colis") or "").strip().lower() or None)
+        args.append(tc)
+
     fields_num = ["nb_palette", "poids_total_kg"]
     for k in fields_num:
         if k in body:
@@ -412,9 +505,14 @@ async def update_depart(request: Request, depart_id: int, body: dict = Body(...)
     with get_db() as conn:
         if "type_palette_matiere_id" in body:
             idx = next(i for i, s in enumerate(sets) if s.startswith("type_palette_matiere_id"))
-            args[idx] = _validate_type_palette_matiere_id(
-                conn, body.get("type_palette_matiere_id")
-            )
+            # Si type_colis=vrac envoyé en même temps, pas de matière première associée
+            tc_in_body = (str(body.get("type_colis") or "").strip().lower() or None)
+            if tc_in_body == "vrac":
+                args[idx] = None
+            else:
+                args[idx] = _validate_type_palette_matiere_id(
+                    conn, body.get("type_palette_matiere_id")
+                )
         ex = conn.execute("SELECT id, statut FROM expe_departs WHERE id=?", (depart_id,)).fetchone()
         if not ex:
             raise HTTPException(status_code=404, detail="Départ introuvable")
@@ -467,30 +565,40 @@ def delete_depart(request: Request, depart_id: int):
 def historique_departs(
     request: Request,
     q: str = "",
-    limit: int = Query(500, ge=1, le=2000),
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=200),
 ):
     _require_expe(request)
+    search_sql, search_params = _historique_search_clause(q)
+    where = "WHERE d.statut = 'valide'"
+    if search_sql:
+        where += f" AND ({search_sql})"
+    offset = (page - 1) * limit
     with get_db() as conn:
+        total = conn.execute(
+            f"""SELECT COUNT(*) AS n
+                FROM expe_departs d
+                LEFT JOIN matieres_premieres mp ON mp.id = d.type_palette_matiere_id
+                {where}""",
+            search_params,
+        ).fetchone()["n"]
         rows = conn.execute(
             f"""{_DEPARTS_SELECT}
-               WHERE d.statut = 'valide'
-               ORDER BY datetime(COALESCE(d.validated_at, d.created_at)) DESC, d.id DESC
-               LIMIT ?""",
-            (limit,),
+                {where}
+                ORDER BY datetime(COALESCE(d.validated_at, d.created_at)) DESC, d.id DESC
+                LIMIT ? OFFSET ?""",
+            (*search_params, limit, offset),
         ).fetchall()
-    data = [_depart_dict(r) for r in rows]
-    qt = _norm_search(q)
-    if not qt:
-        return data
-    tokens = [t for t in qt.split(" ") if t]
-    if not tokens:
-        return data
-    out = []
-    for d in data:
-        blob = _row_blob(d)
-        if all(tok in blob for tok in tokens):
-            out.append(d)
-    return out
+    pages = max(1, (int(total) + limit - 1) // limit) if total else 1
+    if page > pages:
+        page = pages
+    return {
+        "rows": [_depart_dict(r) for r in rows],
+        "total": int(total),
+        "page": page,
+        "limit": limit,
+        "pages": pages,
+    }
 
 
 # ─── Transporteurs ───────────────────────────────────────────────────
@@ -525,8 +633,8 @@ def create_transporteur(request: Request, body: dict = Body(...)):
                 nom, taxe_carburant_pct, contact_nom, contact_email, contact_tel,
                 zone_france, zone_france_hors_paris, zone_affretement, zone_messagerie,
                 palette_max, poids_max_kg, accepte_poids, accepte_palette,
-                actif, created_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                couleur, actif, created_at
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 nom,
                 taxe,
@@ -541,6 +649,7 @@ def create_transporteur(request: Request, body: dict = Body(...)):
                 _float_opt(body, "poids_max_kg"),
                 _int_flag(body, "accepte_poids", 1),
                 _int_flag(body, "accepte_palette", 1),
+                _f(body, "couleur"),
                 _int_flag(body, "actif", 1),
                 now,
             ),
@@ -580,7 +689,7 @@ def update_transporteur(
         sets.append("taxe_carburant_pct=?")
         args.append(0.0 if taxe is None else taxe)
 
-    for k in ("contact_nom", "contact_email", "contact_tel"):
+    for k in ("contact_nom", "contact_email", "contact_tel", "couleur"):
         if k in body:
             sets.append(f"{k}=?")
             args.append(_f(body, k))
@@ -907,6 +1016,45 @@ def valider_tarifs(
     return {"actives": updated}
 
 
+@router.delete("/transporteurs/{transporteur_id}/tarifs")
+def vider_tarifs_transporteur(request: Request, transporteur_id: int):
+    """Supprime toutes les lignes tarifaires importées (grille + frais annexes)."""
+    user = _require_expe_write(request)
+    with get_db() as conn:
+        ex = conn.execute(
+            "SELECT id, nom FROM expe_transporteurs WHERE id=?",
+            (transporteur_id,),
+        ).fetchone()
+        if not ex:
+            raise HTTPException(status_code=404, detail="Transporteur introuvable")
+        n_lignes = conn.execute(
+            "SELECT COUNT(*) AS n FROM expe_tarifs WHERE transporteur_id=?",
+            (transporteur_id,),
+        ).fetchone()["n"]
+        n_frais = conn.execute(
+            "SELECT COUNT(*) AS n FROM expe_tarifs_frais WHERE transporteur_id=?",
+            (transporteur_id,),
+        ).fetchone()["n"]
+        conn.execute(
+            "DELETE FROM expe_tarifs WHERE transporteur_id=?",
+            (transporteur_id,),
+        )
+        conn.execute(
+            "DELETE FROM expe_tarifs_frais WHERE transporteur_id=?",
+            (transporteur_id,),
+        )
+        conn.commit()
+    nom_log = (ex["nom"] or "").strip() or f"#{transporteur_id}"
+    log_action(
+        user=user,
+        action="DELETE",
+        module="expe",
+        objet=f"Transporteur {nom_log} · tarifs vidés ({n_lignes} lignes, {n_frais} frais)",
+        ip=request.client.host if request.client else None,
+    )
+    return {"deleted_lignes": n_lignes, "deleted_frais": n_frais}
+
+
 _PROMPT_EXTRACTION_TARIF = """Tu es un expert en tarification transport en France.
 Analyse cette grille tarifaire et extrait TOUTES les lignes tarifaires au format JSON strict.
 
@@ -1097,6 +1245,461 @@ async def parse_tarif_ia(request: Request, transporteur_id: int):
     }
 
 
+def _tarif_float(v, default=None):
+    """Convertit une valeur de cellule en float, None si impossible."""
+    import math as _math
+
+    try:
+        f = float(str(v).strip().replace(",", "."))
+        return None if _math.isnan(f) else f
+    except Exception:
+        return default
+
+
+def _tarif_dept_from_label(label):
+    """
+    Extrait le code département depuis des formats variés :
+      '(59) NORD'  →  '59'
+      '59 - NORD'  →  '59'
+      'FR59'       →  '59'
+      '02'         →  '02'
+    """
+    s = str(label or "").strip()
+    m = re.search(r"\((\w{1,3})\)", s)
+    if m:
+        code = m.group(1)
+        return code.upper() if code.upper() in ("2A", "2B") else code.zfill(2)
+    m = re.match(r"^FR(\w{2,3})$", s.upper())
+    if m:
+        code = m.group(1)
+        return code.upper() if code.upper() in ("2A", "2B") else code.lstrip("0").zfill(2)
+    m = re.match(r"^(\d{2,3})\s*[-–]?\s*", s)
+    if m:
+        code = m.group(1)
+        return code.zfill(2) if len(code) <= 3 else None
+    return None
+
+
+def _tarif_unite_norm(v):
+    s = str(v or "").strip().upper()
+    if "100" in s:
+        return "au_100kg"
+    if "KG" in s and "100" not in s:
+        return "au_kg"
+    return "forfait"
+
+
+def _tarif_find_header_row(ws, keywords, max_scan=40):
+    """Retourne le numéro de la première ligne contenant un keyword (insensible à la casse)."""
+    keywords_up = [k.upper() for k in keywords]
+    for r in range(1, max_scan + 1):
+        for c in range(1, min(ws.max_column + 1, 20)):
+            val = str(ws.cell(row=r, column=c).value or "").upper()
+            if any(k in val for k in keywords_up):
+                return r
+    return None
+
+
+def _detect_tarif_format(wb):
+    """
+    Détecte le format de la grille tarifaire en examinant noms de feuilles + cellules clés.
+    Retourne : 'compte100346' | 'ceva' | 'transbenelux' | 'generique'
+    """
+    sheet_names = " | ".join(ws.title.upper() for ws in wb.worksheets)
+
+    if any(k in sheet_names for k in ("MESSAGERIE", "SMARTPAL", "SMART PAL", "CONDITIONS COMMERCIALES")):
+        return "ceva"
+
+    if any(k in sheet_names for k in ("BENELUX", "TRANSBENELUX", "SIFA VERS FRANCE")):
+        return "transbenelux"
+
+    for ws in wb.worksheets:
+        a8 = str(ws["A8"].value or "").upper()
+        if "POIDS" in a8 or "PALETTE" in a8:
+            return "compte100346"
+
+    return "generique"
+
+
+def _parse_compte100346(wb, source_filename):
+    """
+    Format SIFA 010126 - P U (Compte 100346) :
+    - Feuille avec A8 = "POIDS" ou "PALETTE"
+    - Ligne 10 : bornes basses (DE)
+    - Ligne 11 : bornes hautes (A)
+    - Ligne 12 : unité (Forfait / Prx/100Kg)
+    - Données à partir de la ligne 13
+    - Col A : "(XX) NOM DÉPARTEMENT"
+    """
+    rows = []
+    for ws in wb.worksheets:
+        a8 = str(ws["A8"].value or "").upper()
+        if "POIDS" in a8:
+            base_calcul, type_envoi = "poids", "messagerie"
+        elif "PALETTE" in a8:
+            base_calcul, type_envoi = "palette", "messagerie"
+        else:
+            continue
+
+        cols = []
+        for c in range(3, ws.max_column + 1):
+            tmax = _tarif_float(ws.cell(row=11, column=c).value)
+            if tmax is None:
+                continue
+            tmin = _tarif_float(ws.cell(row=10, column=c).value, default=0)
+            unite = _tarif_unite_norm(ws.cell(row=12, column=c).value)
+            cols.append((c, tmin, tmax, unite))
+
+        for r in range(13, ws.max_row + 1):
+            dept = _tarif_dept_from_label(ws.cell(row=r, column=1).value)
+            if not dept:
+                continue
+            for c, tmin, tmax, unite in cols:
+                price = _tarif_float(ws.cell(row=r, column=c).value)
+                if price is None:
+                    continue
+                rows.append(
+                    {
+                        "type_envoi": type_envoi,
+                        "base_calcul": base_calcul,
+                        "zone_type": "departement",
+                        "zone_valeur": dept,
+                        "tranche_min": tmin,
+                        "tranche_max": int(tmax) if base_calcul == "palette" else tmax,
+                        "prix": round(price, 4),
+                        "unite": unite,
+                        "mini_perception": None,
+                        "source_filename": source_filename,
+                    }
+                )
+
+    return rows, []
+
+
+def _parse_ceva_messagerie(ws, source_filename):
+    rows = []
+    header_row = _tarif_find_header_row(
+        ws, ["DÉPARTEMENT", "DEPARTEMENT", "ZONE", "CODE POSTAL", "CP"]
+    )
+    if header_row is None:
+        return rows
+
+    cols = []
+    for c in range(2, ws.max_column + 1):
+        val = str(ws.cell(row=header_row, column=c).value or "").strip()
+        if not val:
+            continue
+        m = re.search(r"(\d+(?:[.,]\d+)?)\s*[-àaÀ]\s*(\d+(?:[.,]\d+)?)", val)
+        if m:
+            tmin = _tarif_float(m.group(1), 0)
+            tmax = _tarif_float(m.group(2))
+            unite = "forfait" if (tmax is not None and tmax <= 100) else "au_100kg"
+            cols.append((c, tmin, tmax, unite))
+
+    for r in range(header_row + 1, ws.max_row + 1):
+        zone_lbl = str(ws.cell(row=r, column=1).value or "").strip()
+        if not zone_lbl:
+            continue
+        dept = _tarif_dept_from_label(zone_lbl)
+        cp_m = re.match(r"^(\d{5})\b", zone_lbl)
+        if dept:
+            zone_type, zone_valeur = "departement", dept
+        elif cp_m:
+            zone_type, zone_valeur = "code_postal", cp_m.group(1)
+        else:
+            continue
+        for c, tmin, tmax, unite in cols:
+            if tmin is None:
+                continue
+            price = _tarif_float(ws.cell(row=r, column=c).value)
+            if price is None:
+                continue
+            rows.append(
+                {
+                    "type_envoi": "messagerie",
+                    "base_calcul": "poids",
+                    "zone_type": zone_type,
+                    "zone_valeur": zone_valeur,
+                    "tranche_min": tmin,
+                    "tranche_max": tmax,
+                    "prix": round(price, 4),
+                    "unite": unite,
+                    "mini_perception": None,
+                    "source_filename": source_filename,
+                }
+            )
+    return rows
+
+
+def _parse_ceva_palettes(ws, source_filename):
+    rows = []
+    header_row = _tarif_find_header_row(ws, ["DÉPARTEMENT", "DEPARTEMENT", "ZONE", "PALETTE", "PAL"])
+    if header_row is None:
+        return rows
+    cols = []
+    for c in range(2, ws.max_column + 1):
+        val = str(ws.cell(row=header_row, column=c).value or "").strip()
+        m = re.match(r"^(\d+)\s*(?:palette|pal\.?)?$", val, re.IGNORECASE)
+        if m:
+            nb = int(m.group(1))
+            if 1 <= nb <= 20:
+                cols.append((c, nb))
+    if not cols:
+        cols = [(c, i) for i, c in enumerate(range(2, min(ws.max_column + 1, 7)), start=1)]
+    for r in range(header_row + 1, ws.max_row + 1):
+        dept = _tarif_dept_from_label(ws.cell(row=r, column=1).value)
+        if not dept:
+            continue
+        for c, nb in cols:
+            price = _tarif_float(ws.cell(row=r, column=c).value)
+            if price is None:
+                continue
+            rows.append(
+                {
+                    "type_envoi": "messagerie",
+                    "base_calcul": "palette",
+                    "zone_type": "departement",
+                    "zone_valeur": dept,
+                    "tranche_min": nb,
+                    "tranche_max": nb,
+                    "prix": round(price, 4),
+                    "unite": "forfait",
+                    "mini_perception": None,
+                    "source_filename": source_filename,
+                }
+            )
+    return rows
+
+
+def _parse_ceva_frais(ws):
+    frais = []
+    patterns = [
+        (r"gasoil|carburant|fuel", "Gasoil", "pct_transport", 1),
+        (r"sûreté|surete|sécurité|securite", "Taxe sûreté/sécurité", "forfait_expedition", 1),
+        (r"prise.{0,10}rdv|rendez.{0,5}vous", "Prise de RDV", "forfait_expedition", 0),
+        (r"hayon|tail.?lift", "Hayon", "par_palette", 0),
+        (r"ville.{0,15}excentr", "Ville excentrée", "forfait_expedition", 0),
+        (r"co2|contribution", "CO2", "forfait_expedition", 1),
+        (r"centre.{0,10}urbain|urban", "Centres urbains", "forfait_expedition", 0),
+    ]
+    seen = set()
+    for r in range(1, ws.max_row + 1):
+        for c in range(1, min(ws.max_column + 1, 10)):
+            cell = str(ws.cell(row=r, column=c).value or "").strip()
+            if not cell:
+                continue
+            for pattern, libelle, mode, defaut in patterns:
+                if libelle in seen:
+                    continue
+                if re.search(pattern, cell, re.IGNORECASE):
+                    for cc in range(c + 1, min(c + 6, ws.max_column + 1)):
+                        val = _tarif_float(ws.cell(row=r, column=cc).value)
+                        if val is not None and val > 0:
+                            frais.append(
+                                {
+                                    "libelle": libelle,
+                                    "mode": mode,
+                                    "valeur": val,
+                                    "mini": None,
+                                    "applique_defaut": defaut,
+                                }
+                            )
+                            seen.add(libelle)
+                            break
+                    break
+    return frais
+
+
+def _parse_ceva(wb, source_filename):
+    rows = []
+    frais = []
+    for ws in wb.worksheets:
+        t = ws.title.upper().replace(" ", "")
+        if "MESSAGERIE" in t or ("TARIF" in t and "GN" in t):
+            rows += _parse_ceva_messagerie(ws, source_filename)
+        elif "PALETTE" in t or "SMARTPAL" in t or "SMART" in t:
+            rows += _parse_ceva_palettes(ws, source_filename)
+        elif "CONDITION" in t or "COMMERCIALE" in t or "ANNEXE" in t:
+            frais += _parse_ceva_frais(ws)
+    return rows, frais
+
+
+def _parse_transbenelux(wb, source_filename):
+    rows = []
+    for ws in wb.worksheets:
+        header_row = _tarif_find_header_row(ws, ["PALETTE", "PAL", "FRANCE", "DÉPARTEMENT"])
+        if header_row is None:
+            continue
+        cols = []
+        for c in range(2, ws.max_column + 1):
+            val = str(ws.cell(row=header_row, column=c).value or "").strip()
+            m = re.fullmatch(r"(\d{1,2})", val)
+            if m:
+                nb = int(m.group(1))
+                if 1 <= nb <= 20:
+                    cols.append((c, nb))
+        if not cols:
+            continue
+        for r in range(header_row + 1, ws.max_row + 1):
+            dept = _tarif_dept_from_label(ws.cell(row=r, column=1).value)
+            if not dept:
+                continue
+            for c, nb in cols:
+                raw = str(ws.cell(row=r, column=c).value or "").strip().upper()
+                if raw in ("", "FO", "PU", "PP", "-", "NC", "N/A"):
+                    continue
+                price = _tarif_float(raw)
+                if price is None or price <= 0:
+                    continue
+                rows.append(
+                    {
+                        "type_envoi": "affretement" if nb > 6 else "messagerie",
+                        "base_calcul": "palette",
+                        "zone_type": "departement",
+                        "zone_valeur": dept,
+                        "tranche_min": nb,
+                        "tranche_max": nb,
+                        "prix": round(price, 4),
+                        "unite": "forfait",
+                        "mini_perception": None,
+                        "source_filename": source_filename,
+                    }
+                )
+    return rows, []
+
+
+@router.post("/transporteurs/{transporteur_id}/tarifs/parse-excel")
+async def parse_tarif_excel(request: Request, transporteur_id: int):
+    """
+    Parser déterministe openpyxl pour grilles tarifaires Excel.
+    Ne dépend pas de l'API Anthropic — traite les fichiers volumineux (2000+ lignes).
+    Formats reconnus : Compte 100346, CEVA Logistics, TRANSBENELUX, générique.
+    """
+    user = _require_expe_write(request)
+
+    with get_db() as conn:
+        trp = conn.execute(
+            "SELECT * FROM expe_transporteurs WHERE id=?", (transporteur_id,)
+        ).fetchone()
+    if not trp:
+        raise HTTPException(status_code=404, detail="Transporteur introuvable")
+    if not trp["tarif_url"]:
+        raise HTTPException(status_code=400, detail="Aucun fichier tarif uploadé pour ce transporteur")
+
+    filepath = _resolve_tarif_path(trp["tarif_url"])
+    if not filepath:
+        raise HTTPException(status_code=404, detail="Fichier tarif introuvable sur le disque")
+
+    ext = os.path.splitext(filepath)[1].lower()
+    if ext not in (".xlsx", ".xls"):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Ce endpoint ne traite que les fichiers Excel (.xlsx). Fichier reçu : {ext}. "
+                "Utilisez le bouton 'Parser avec IA' pour les PDFs."
+            ),
+        )
+
+    try:
+        import openpyxl
+    except ImportError:
+        raise HTTPException(
+            status_code=503, detail="openpyxl non installé — lancer : pip install openpyxl"
+        )
+
+    wb = openpyxl.load_workbook(filepath, data_only=True)
+    source_name = trp["tarif_filename"] or os.path.basename(trp["tarif_url"])
+
+    fmt = _detect_tarif_format(wb)
+
+    if fmt == "compte100346":
+        lignes_data, frais_data = _parse_compte100346(wb, source_name)
+    elif fmt == "ceva":
+        lignes_data, frais_data = _parse_ceva(wb, source_name)
+    elif fmt == "transbenelux":
+        lignes_data, frais_data = _parse_transbenelux(wb, source_name)
+    else:
+        structure = []
+        for ws in wb.worksheets:
+            preview = []
+            for r in range(1, min(6, ws.max_row + 1)):
+                row_vals = [
+                    str(ws.cell(row=r, column=c).value or "")[:30]
+                    for c in range(1, min(ws.max_column + 1, 8))
+                ]
+                preview.append(row_vals)
+            structure.append({"sheet": ws.title, "preview": preview})
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "Format non reconnu automatiquement. Voici la structure du fichier.",
+                "structure": structure,
+                "hint": "Communiquer la structure à l'équipe pour ajouter le support de ce format.",
+            },
+        )
+
+    if not lignes_data:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Format '{fmt}' détecté mais aucune ligne extraite. Vérifier le fichier.",
+        )
+
+    now = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
+    email = user.get("email") or user.get("identifiant")
+
+    with get_db() as conn:
+        for lg in lignes_data:
+            conn.execute(
+                """INSERT INTO expe_tarifs
+                   (transporteur_id, type_envoi, base_calcul, zone_type, zone_valeur,
+                    tranche_min, tranche_max, prix, unite, mini_perception,
+                    actif, source_filename, created_at, created_by_email)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,0,?,?,?)""",
+                (
+                    transporteur_id,
+                    lg.get("type_envoi"),
+                    lg.get("base_calcul"),
+                    lg.get("zone_type"),
+                    lg.get("zone_valeur"),
+                    lg.get("tranche_min", 0),
+                    lg.get("tranche_max"),
+                    lg.get("prix", 0),
+                    lg.get("unite"),
+                    lg.get("mini_perception"),
+                    source_name,
+                    now,
+                    email,
+                ),
+            )
+        for fr in frais_data:
+            conn.execute(
+                """INSERT OR IGNORE INTO expe_tarifs_frais
+                   (transporteur_id, libelle, mode, valeur, mini, applique_defaut)
+                   VALUES (?,?,?,?,?,?)""",
+                (
+                    transporteur_id,
+                    fr.get("libelle"),
+                    fr.get("mode"),
+                    fr.get("valeur", 0),
+                    fr.get("mini"),
+                    fr.get("applique_defaut", 1),
+                ),
+            )
+        conn.commit()
+
+    return {
+        "format_detecte": fmt,
+        "lignes_extraites": len(lignes_data),
+        "frais_extraits": len(frais_data),
+        "actif": 0,
+        "apercu_lignes": lignes_data[:10],
+        "message": (
+            f"{len(lignes_data)} lignes extraites (format {fmt}) — "
+            "à valider avant activation."
+        ),
+    }
+
+
 # ─── Comparateur de prix ───────────────────────────────────────────
 
 
@@ -1123,9 +1726,11 @@ def _trouver_ligne_tarif(
     nb_pal: float,
 ):
     """Cherche la ligne expe_tarifs la plus précise (CP → département, palette → poids)."""
+    _MP_PAR_PALETTE = 0.4  # 1 palette 80x120 = 0.4 mètre plancher
     tentatives: list[tuple[str, float]] = []
     if nb_pal > 0:
         tentatives.append(("palette", nb_pal))
+        tentatives.append(("metre_plancher", round(nb_pal * _MP_PAR_PALETTE, 4)))
     if poids > 0:
         tentatives.append(("poids", poids))
 
@@ -1163,6 +1768,72 @@ def _trouver_ligne_tarif(
             if ligne:
                 return ligne
     return None
+
+
+_METHODE_TARIF_LIBELLE: dict[str, str] = {
+    "poids": "Tarif au poids",
+    "palette": "Tarif à la palette",
+    "metre_plancher": "Tarif au mètre plancher",
+}
+
+
+def _trouver_toutes_lignes_tarif(
+    conn,
+    transporteur_id: int,
+    type_envoi: str,
+    dept: str,
+    cp: str,
+    poids: float,
+    nb_pal: float,
+) -> list[sqlite3.Row]:
+    """Collecte toutes les lignes expe_tarifs applicables (palette, MP, poids)."""
+    _MP_PAR_PALETTE = 0.4
+    tentatives: list[tuple[str, float]] = []
+    if nb_pal > 0:
+        tentatives.append(("palette", nb_pal))
+        tentatives.append(("metre_plancher", round(nb_pal * _MP_PAR_PALETTE, 4)))
+    if poids > 0:
+        tentatives.append(("poids", poids))
+
+    zones_par_priorite = [
+        ("code_postal", cp),
+        ("departement", dept),
+    ]
+
+    result: list[sqlite3.Row] = []
+    for base_calcul, valeur_base in tentatives:
+        ligne: sqlite3.Row | None = None
+        for zone_type, zone_valeur in zones_par_priorite:
+            row = conn.execute(
+                """
+                SELECT * FROM expe_tarifs
+                WHERE transporteur_id=?
+                  AND type_envoi=?
+                  AND base_calcul=?
+                  AND zone_type=?
+                  AND zone_valeur=?
+                  AND actif=1
+                  AND tranche_min <= ?
+                  AND (tranche_max IS NULL OR tranche_max > ?)
+                ORDER BY tranche_min DESC
+                LIMIT 1
+                """,
+                (
+                    transporteur_id,
+                    type_envoi,
+                    base_calcul,
+                    zone_type,
+                    zone_valeur,
+                    valeur_base,
+                    valeur_base,
+                ),
+            ).fetchone()
+            if row:
+                ligne = row
+                break
+        if ligne:
+            result.append(ligne)
+    return result
 
 
 def _calculer_prix_base(ligne, poids: float, nb_pal: float) -> tuple[float, str]:
@@ -1286,10 +1957,10 @@ def _calculer_comparateur(
         if trp["accepte_palette"] == 0 and nb_pal > 0:
             raisons_ineligibilite.append("n'accepte pas les palettes")
 
-        ligne = _trouver_ligne_tarif(
+        lignes = _trouver_toutes_lignes_tarif(
             conn, trp["id"], type_envoi, dept, cp, poids, nb_pal
         )
-        if not ligne and not raisons_ineligibilite:
+        if not lignes and not raisons_ineligibilite:
             raisons_ineligibilite.append("aucune grille tarifaire pour ce poids/zone")
 
         if raisons_ineligibilite:
@@ -1302,23 +1973,28 @@ def _calculer_comparateur(
             )
             continue
 
-        prix_base, detail = _calculer_prix_base(ligne, poids, nb_pal)
-        frais_list, prix_frais = _appliquer_frais(conn, trp["id"], prix_base, nb_pal)
-        prix_total = prix_base + prix_frais
+        for ligne in lignes:
+            prix_base, detail = _calculer_prix_base(ligne, poids, nb_pal)
+            frais_list, prix_frais = _appliquer_frais(conn, trp["id"], prix_base, nb_pal)
+            prix_total = prix_base + prix_frais
+            base_calcul = ligne["base_calcul"] or ""
 
-        eligibles.append(
-            {
-                "transporteur_id": trp["id"],
-                "transporteur": trp["nom"],
-                "prix_ht": round(prix_total, 2),
-                "prix_base_ht": round(prix_base, 2),
-                "detail_calcul": {
-                    "base": detail,
-                    "frais": frais_list,
-                },
-                "delai_jours": None,
-            }
-        )
+            eligibles.append(
+                {
+                    "transporteur_id": trp["id"],
+                    "transporteur": trp["nom"],
+                    "prix_ht": round(prix_total, 2),
+                    "prix_base_ht": round(prix_base, 2),
+                    "methode_tarification": _METHODE_TARIF_LIBELLE.get(
+                        base_calcul, base_calcul
+                    ),
+                    "detail_calcul": {
+                        "base": detail,
+                        "frais": frais_list,
+                    },
+                    "delai_jours": None,
+                }
+            )
 
     eligibles.sort(key=lambda x: x["prix_ht"])
     if eligibles:
@@ -1364,70 +2040,6 @@ def comparateur(request: Request, body: dict = Body(...)):
 # ─── Demandes de devis (prospection parallèle) ─────────────────────
 
 EXPE_DEVIS_CC = "expeditions@sifa.pro"
-
-
-def _generer_rfq_html(demande: dict, user: dict) -> tuple[str, str]:
-    """Génère le sujet et le corps HTML du RFQ standardisé."""
-    import html as _html
-
-    def _e(v: object) -> str:
-        return _html.escape(str(v or ""))
-
-    cp = demande.get("code_postal_destination") or "—"
-    poids = demande.get("poids_total_kg")
-    nb_pal = demande.get("nb_palette")
-    type_envoi = demande.get("type_envoi") or "messagerie"
-    contraintes = demande.get("contraintes") or ""
-    user_nom = user.get("nom") or user.get("email") or user.get("identifiant") or "SIFA"
-
-    lignes_detail = []
-    if poids:
-        lignes_detail.append(f"Poids total : <strong>{_e(poids)} kg</strong>")
-    if nb_pal:
-        lignes_detail.append(f"Nombre de palettes : <strong>{_e(nb_pal)}</strong>")
-    lignes_detail.append(f"Code postal destination : <strong>{_e(cp)}</strong>")
-    lignes_detail.append(f"Type d'envoi : <strong>{_e(type_envoi)}</strong>")
-    if contraintes:
-        lignes_detail.append(f"Contraintes : {_e(contraintes)}")
-
-    detail_html = "".join(
-        f'<li style="margin-bottom:6px">{l}</li>' for l in lignes_detail
-    )
-
-    sujet = f"Demande de tarif transport — SIFA Roubaix — {cp}"
-
-    corps = f"""
-<div style="font-family:'Segoe UI',system-ui,sans-serif;max-width:560px;margin:0 auto;
-            background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
-  <div style="background:#0a0e17;padding:20px 28px">
-    <div style="font-size:18px;font-weight:700;color:#22d3ee">MySifa</div>
-    <div style="font-size:12px;color:#94a3b8;margin-top:2px">SIFA — Roubaix (59)</div>
-  </div>
-  <div style="padding:28px">
-    <p style="margin:0 0 16px;font-size:14px;color:#0f172a">Bonjour,</p>
-    <p style="margin:0 0 20px;font-size:14px;color:#475569;line-height:1.6">
-      Nous recherchons un transporteur pour l'envoi suivant et vous sollicitons pour un tarif.
-    </p>
-    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px 20px;margin-bottom:20px">
-      <ul style="margin:0;padding-left:18px;font-size:13px;color:#334155;line-height:1.8">
-        {detail_html}
-      </ul>
-    </div>
-    <p style="margin:0 0 20px;font-size:14px;color:#475569;line-height:1.6">
-      Merci de nous retourner votre meilleur tarif ainsi que le délai de livraison estimé
-      en répondant directement à cet email.
-    </p>
-    <p style="margin:0;font-size:13px;color:#64748b">
-      Cordialement,<br>
-      <strong style="color:#0f172a">{_e(user_nom)}</strong><br>
-      SIFA — Service expéditions<br>
-      Roubaix (59)
-    </p>
-  </div>
-</div>
-""".strip()
-
-    return sujet, corps
 
 
 @router.post("/devis/demandes")
@@ -1481,14 +2093,15 @@ def list_demandes_devis(request: Request, statut: str = "ouverte"):
             counts = conn.execute(
                 """
                 SELECT
-                  COUNT(*) AS total,
-                  SUM(CASE WHEN statut='recue' THEN 1 ELSE 0 END) AS recues,
+                  SUM(CASE WHEN statut IN ('envoyee','ouvert','recue','retenue','refusee')
+                      THEN 1 ELSE 0 END) AS envoyes,
+                  SUM(CASE WHEN statut IN ('recue','retenue') THEN 1 ELSE 0 END) AS recues,
                   SUM(CASE WHEN statut='retenue' THEN 1 ELSE 0 END) AS retenues
                 FROM expe_devis_reponses WHERE demande_id=?
                 """,
                 (dd["id"],),
             ).fetchone()
-            dd["nb_envoyes"] = counts["total"] or 0
+            dd["nb_envoyes"] = counts["envoyes"] or 0
             dd["nb_recus"] = counts["recues"] or 0
             dd["nb_retenus"] = counts["retenues"] or 0
             result.append(dd)
@@ -1563,11 +2176,45 @@ def envoyer_rfq(request: Request, demande_id: int, body: dict = Body(...)):
                 detail="Aucun destinataire valide — vérifier les emails des transporteurs",
             )
 
-        sujet, corps_html = _generer_rfq_html(demande, user)
-
         envois_ok: list[str] = []
         envois_ko: list[str] = []
         for dest in destinataires:
+            import uuid as _uuid
+
+            email_norm = (dest.get("email") or "").strip().lower()
+            token_row = conn.execute(
+                "SELECT token FROM expe_portal_transporteurs WHERE LOWER(email)=LOWER(?) AND actif=1 LIMIT 1",
+                (email_norm,),
+            ).fetchone()
+            if token_row and token_row["token"]:
+                token = str(token_row["token"])
+            else:
+                token = str(_uuid.uuid4())
+                conn.execute(
+                    """
+                    INSERT OR IGNORE INTO expe_portal_transporteurs
+                    (email, token, transporteur_id, prospect_id, created_at, actif)
+                    VALUES (?,?,?,?,?,1)
+                    """,
+                    (
+                        email_norm,
+                        token,
+                        dest.get("transporteur_id"),
+                        None,
+                        now,
+                    ),
+                )
+                row2 = conn.execute(
+                    "SELECT token FROM expe_portal_transporteurs WHERE LOWER(email)=LOWER(?) AND actif=1 LIMIT 1",
+                    (email_norm,),
+                ).fetchone()
+                if row2 and row2["token"]:
+                    token = str(row2["token"])
+            portail_lien = f"{public_base_url()}/portail/expe/{token}"
+            sujet, corps_html = email_expe_rfq_transport(
+                demande=demande, user=user, portail_lien=portail_lien
+            )
+
             ok = send_email(
                 to=dest["email"],
                 subject=sujet,
@@ -1576,20 +2223,54 @@ def envoyer_rfq(request: Request, demande_id: int, body: dict = Body(...)):
                 cc=EXPE_DEVIS_CC,
             )
             statut_envoi = "envoyee" if ok else "echec"
-            conn.execute(
+            existing = conn.execute(
                 """
-                INSERT INTO expe_devis_reponses
-                (demande_id, transporteur_id, nom_transporteur, statut, sent_at)
-                VALUES (?,?,?,?,?)
+                SELECT id, statut, prix FROM expe_devis_reponses
+                WHERE demande_id=?
+                  AND LOWER(TRIM(COALESCE(destinataire_email,''))) = LOWER(TRIM(COALESCE(?,'')))
+                ORDER BY id DESC
+                LIMIT 1
                 """,
-                (
-                    demande_id,
-                    dest["transporteur_id"],
-                    dest["nom"],
-                    statut_envoi,
-                    now if ok else None,
-                ),
-            )
+                (demande_id, email_norm),
+            ).fetchone()
+            if existing:
+                keep_statut = existing["statut"]
+                if keep_statut not in ("recue", "retenue"):
+                    keep_statut = statut_envoi
+                conn.execute(
+                    """
+                    UPDATE expe_devis_reponses
+                    SET transporteur_id=?, nom_transporteur=?, statut=?,
+                        sent_at=CASE WHEN ? IS NOT NULL THEN ? ELSE sent_at END,
+                        destinataire_email=?
+                    WHERE id=?
+                    """,
+                    (
+                        dest["transporteur_id"],
+                        dest["nom"],
+                        keep_statut,
+                        now if ok else None,
+                        now if ok else None,
+                        email_norm,
+                        int(existing["id"]),
+                    ),
+                )
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO expe_devis_reponses
+                    (demande_id, transporteur_id, nom_transporteur, statut, sent_at, destinataire_email)
+                    VALUES (?,?,?,?,?,?)
+                    """,
+                    (
+                        demande_id,
+                        dest["transporteur_id"],
+                        dest["nom"],
+                        statut_envoi,
+                        now if ok else None,
+                        email_norm,
+                    ),
+                )
             if ok:
                 envois_ok.append(dest["nom"])
             else:

@@ -4,6 +4,7 @@ Accès : direction, administration, logistique.
 """
 import csv
 import io
+import json
 import re
 import sqlite3
 from datetime import datetime, timedelta
@@ -11,15 +12,36 @@ from typing import Any, Optional
 
 import pandas as pd
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
 
 from app.services.audit_service import log_action
+from config import (
+    STOCK_EMPLACEMENT_AU_SOL,
+    STOCK_EMPLACEMENT_AU_SOL_LABEL,
+    STOCK_EMPLACEMENT_SORTIE_PROD,
+    STOCK_EMPLACEMENT_SORTIE_PROD_LABEL,
+)
 from database import get_db, parse_file
 from services.auth_service import get_current_user, user_has_app_access
 
 router = APIRouter()
 
 INVENTAIRE_ALERTE_JOURS = 180  # 6 mois
+
+
+def _normalize_emplacement(code: str) -> str:
+    return (code or "").strip().upper()
+
+
+def _is_valid_emplacement(code: str) -> bool:
+    """Code grille (A121…) ou zones spéciales Z0 / Z1."""
+    empl = _normalize_emplacement(code)
+    if not empl:
+        return False
+    if empl in (STOCK_EMPLACEMENT_AU_SOL, STOCK_EMPLACEMENT_SORTIE_PROD):
+        return True
+    return empl[0].isalpha() and empl[1:].isdigit()
 
 # Colonnes mouvements (évite m.* + collision avec join users)
 _MVT_FIELDS = (
@@ -95,10 +117,10 @@ _STOCK_MATIERES_ADMIN_ROLES = frozenset({"superadmin", "direction", "administrat
 def _mp_unite_gestion(categorie: str) -> str:
     """Unité de gestion du stock selon la catégorie matière première."""
     cat = (categorie or "").strip().lower()
-    if cat in ("mandrin", "frontal", "glassine"):
+    if cat in ("frontal", "glassine"):
         return "bobine"
     if cat == "palette":
-        return "pile"
+        return "palette"
     if cat == "carton":
         return "palette"
     return "palette"
@@ -145,8 +167,8 @@ _HISTORIQUE_SQL_MP = """
         mp.reference,
         mp.designation,
         CASE
-            WHEN mp.categorie IN ('mandrin', 'frontal', 'glassine') THEN 'bobine'
-            WHEN mp.categorie = 'palette' THEN 'pile'
+            WHEN mp.categorie IN ('frontal', 'glassine') THEN 'bobine'
+            WHEN mp.categorie = 'palette' THEN 'palette'
             WHEN mp.categorie = 'carton' THEN 'palette'
             ELSE 'palette'
         END AS unite,
@@ -368,6 +390,101 @@ def sortir_lot_fifo(
     return {**result, "quantite_sortie": qte_lot}
 
 
+def deplacer_lot_fifo(
+    conn,
+    produit_id: int,
+    emplacement_source: str,
+    emplacement_destination: str,
+    user_email: str,
+    user_name: Optional[str] = None,
+) -> dict:
+    """Déplace le lot FIFO le plus ancien d'un emplacement vers un autre."""
+    # Récupérer le lot FIFO source
+    lot = conn.execute(
+        """SELECT id, quantite_restante, date_entree
+           FROM lots_stock
+           WHERE produit_id=? AND emplacement=? AND quantite_restante > 0
+           ORDER BY date_entree ASC LIMIT 1""",
+        (produit_id, emplacement_source),
+    ).fetchone()
+    if not lot:
+        raise HTTPException(404, "Aucun lot actif à l'emplacement source")
+    
+    qte_lot = float(lot["quantite_restante"])
+    lot_id = lot["id"]
+    date_entree = lot["date_entree"]
+    now = datetime.now().isoformat()
+    
+    # Quantité avant le déplacement
+    quantite_avant_source = qte_lot
+    
+    # Mettre à jour le lot source (quantite_restante = 0)
+    conn.execute(
+        "UPDATE lots_stock SET quantite_restante=? WHERE id=?",
+        (0, lot_id),
+    )
+    
+    # Créer un nouveau lot à la destination
+    cursor = conn.execute(
+        """INSERT INTO lots_stock (produit_id, emplacement, quantite_initiale, quantite_restante, date_entree, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (produit_id, emplacement_destination, qte_lot, qte_lot, date_entree, now),
+    )
+    
+    # Mettre à jour stock_emplacements pour la source
+    conn.execute(
+        """UPDATE stock_emplacements
+           SET quantite=?, updated_at=?, updated_by=?, commentaire='Déplacement vers ' || ?
+           WHERE produit_id=? AND emplacement=?""",
+        (0, now, user_email, emplacement_destination, produit_id, emplacement_source),
+    )
+    
+    # Mettre à jour ou créer stock_emplacements pour la destination
+    existing_dest = conn.execute(
+        "SELECT quantite FROM stock_emplacements WHERE produit_id=? AND emplacement=?",
+        (produit_id, emplacement_destination),
+    ).fetchone()
+    
+    if existing_dest:
+        quantite_apres_dest = float(existing_dest["quantite"]) + qte_lot
+        conn.execute(
+            """UPDATE stock_emplacements
+               SET quantite=?, updated_at=?, updated_by=?, commentaire='Déplacement depuis ' || ?
+               WHERE produit_id=? AND emplacement=?""",
+            (quantite_apres_dest, now, user_email, emplacement_source, produit_id, emplacement_destination),
+        )
+    else:
+        quantite_apres_dest = qte_lot
+        conn.execute(
+            """INSERT INTO stock_emplacements (produit_id, emplacement, quantite, updated_at, updated_by, commentaire)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (produit_id, emplacement_destination, quantite_apres_dest, now, user_email, f'Déplacement depuis {emplacement_source}'),
+        )
+    
+    # Historique : sortie de la source
+    conn.execute(
+        """INSERT INTO mouvements_stock
+           (produit_id,emplacement,type_mouvement,quantite,quantite_avant,quantite_apres,note,created_at,created_by,created_by_name)
+           VALUES (?,?,?,?,?,?,?,?,?,?)""",
+        (produit_id, emplacement_source, "sortie", qte_lot, quantite_avant_source, 0, f"Déplacement vers {emplacement_destination}", now, user_email, user_name),
+    )
+    
+    # Historique : entrée à la destination
+    quantite_avant_dest = quantite_apres_dest - qte_lot
+    conn.execute(
+        """INSERT INTO mouvements_stock
+           (produit_id,emplacement,type_mouvement,quantite,quantite_avant,quantite_apres,note,created_at,created_by,created_by_name)
+           VALUES (?,?,?,?,?,?,?,?,?,?)""",
+        (produit_id, emplacement_destination, "entree", qte_lot, quantite_avant_dest, quantite_apres_dest, f"Déplacement depuis {emplacement_source}", now, user_email, user_name),
+    )
+    
+    return {
+        "quantite_avant": quantite_avant_source,
+        "quantite_apres": 0,
+        "quantite_deplacee": qte_lot,
+    }
+
+
 # ── Recherche instantanée ─────────────────────────────────────────
 @router.get("/api/stock/search")
 def search(request: Request, q: str = "", limit: int = 12):
@@ -382,6 +499,7 @@ def search(request: Request, q: str = "", limit: int = 12):
     with get_db() as conn:
         produits = conn.execute(
             f"""SELECT p.id, p.reference, p.designation, p.unite,
+                      COALESCE(p.type, 'fabrique') AS type,
                       COALESCE(SUM(l.quantite_restante),0) as stock_total,
                       MIN(CASE WHEN l.quantite_restante>0 THEN l.date_entree END) as date_fifo
                FROM produits p
@@ -742,6 +860,49 @@ def delete_produit(produit_id: int, request: Request):
     return {"success": True}
 
 
+# ── Plan entrepôt (référentiel emplacements_plan) ─────────────────
+@router.get("/api/stock/emplacements-plan")
+def get_emplacements_plan(request: Request):
+    """Liste des emplacements du plan (emplacements_plan). Lecture pour tous les rôles stock."""
+    require_stock(request)
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT code FROM emplacements_plan ORDER BY code"
+        ).fetchall()
+    return [r["code"] for r in rows]
+
+
+class _EmplacementPlanAdd(BaseModel):
+    code: str
+
+@router.post("/api/stock/emplacements-plan")
+def add_emplacement_plan(payload: _EmplacementPlanAdd, request: Request):
+    """Ajoute un emplacement au plan. Réservé direction / administration / superadmin."""
+    user = require_stock(request)
+    if user.get("role") not in {"superadmin", "direction", "administration"}:
+        raise HTTPException(403, "Ajout d'emplacement réservé aux administrateurs.")
+    code = payload.code.strip().upper()
+    if not code:
+        raise HTTPException(400, "Code emplacement vide.")
+    if len(code) > 20:
+        raise HTTPException(400, "Code trop long (20 caractères max).")
+    now = datetime.now().isoformat()
+    with get_db() as conn:
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS emplacements_plan (
+                code TEXT PRIMARY KEY NOT NULL,
+                imported_at TEXT NOT NULL
+            )"""
+        )
+        if conn.execute("SELECT 1 FROM emplacements_plan WHERE code=?", (code,)).fetchone():
+            raise HTTPException(409, f"L'emplacement {code} existe déjà.")
+        conn.execute(
+            "INSERT INTO emplacements_plan (code, imported_at) VALUES (?, ?)", (code, now)
+        )
+        conn.commit()
+    return {"code": code}
+
+
 # ── Emplacements ──────────────────────────────────────────────────
 @router.get("/api/stock/emplacements-list")
 def list_emplacements(request: Request):
@@ -756,8 +917,19 @@ def list_emplacements(request: Request):
         ).fetchall()
     codes_plan = {r["code"] for r in plan}
     codes_reels = {r["emplacement"] for r in reels}
-    tous = sorted(codes_plan | codes_reels)
-    return {"emplacements": tous}
+    zones_speciales = {STOCK_EMPLACEMENT_AU_SOL, STOCK_EMPLACEMENT_SORTIE_PROD}
+    tous = sorted(codes_plan | codes_reels | zones_speciales)
+    ordered = (
+        [STOCK_EMPLACEMENT_AU_SOL, STOCK_EMPLACEMENT_SORTIE_PROD]
+        + [c for c in tous if c not in zones_speciales]
+    )
+    return {
+        "emplacements": ordered,
+        "emplacement_au_sol": STOCK_EMPLACEMENT_AU_SOL,
+        "emplacement_au_sol_label": STOCK_EMPLACEMENT_AU_SOL_LABEL,
+        "emplacement_sortie_prod": STOCK_EMPLACEMENT_SORTIE_PROD,
+        "emplacement_sortie_prod_label": STOCK_EMPLACEMENT_SORTIE_PROD_LABEL,
+    }
 
 
 @router.get("/api/stock/emplacements/{emplacement}")
@@ -797,6 +969,29 @@ def get_emplacement(emplacement: str, request: Request):
             (emplacement,),
         ).fetchall()
 
+        # Dernière session d'inventaire complète (table inventaires_sessions)
+        last_inv_row = conn.execute(
+            """SELECT date_validation, operateur_nom, operateur_email,
+                      nb_produits, nb_modifications
+               FROM inventaires_sessions
+               WHERE emplacement = ?
+               ORDER BY date_validation DESC LIMIT 1""",
+            (emplacement,),
+        ).fetchone()
+
+    last_inventaire = None
+    inv_jours_depuis = None
+    inv_couleur = "rouge"
+    if last_inv_row and last_inv_row["date_validation"]:
+        last_inventaire = dict(last_inv_row)
+        try:
+            d_iso = str(last_inv_row["date_validation"])[:19]
+            inv_jours_depuis = (now - datetime.fromisoformat(d_iso)).days
+            inv_couleur = _inv_v2_couleur(inv_jours_depuis)
+        except Exception:
+            inv_jours_depuis = None
+            inv_couleur = "rouge"
+
     refs_data = []
     for r in refs:
         d = dict(r)
@@ -817,12 +1012,82 @@ def get_emplacement(emplacement: str, request: Request):
             d["alerte_inventaire"] = True
         refs_data.append(d)
 
+    if emplacement == STOCK_EMPLACEMENT_AU_SOL:
+        label = STOCK_EMPLACEMENT_AU_SOL_LABEL
+    elif emplacement == STOCK_EMPLACEMENT_SORTIE_PROD:
+        label = STOCK_EMPLACEMENT_SORTIE_PROD_LABEL
+    else:
+        label = emplacement
     return {
         "emplacement": emplacement,
+        "label": label,
+        "est_au_sol": emplacement == STOCK_EMPLACEMENT_AU_SOL,
+        "est_sortie_prod": emplacement == STOCK_EMPLACEMENT_SORTIE_PROD,
         "refs": refs_data,
         "total_unites": sum(r["quantite"] for r in refs),
         "nb_refs": len(refs),
         "mouvements": [dict(r) for r in mvts],
+        "last_inventaire": last_inventaire,
+        "inv_jours_depuis": inv_jours_depuis,
+        "inv_couleur": inv_couleur,
+    }
+
+
+@router.get("/api/stock/a-expedier")
+def stock_a_expedier(request: Request):
+    """Produits finis en zone Au sol - à expédier — stock à expédier prochainement."""
+    require_stock(request)
+    empl = STOCK_EMPLACEMENT_AU_SOL
+    with get_db() as conn:
+        refs = conn.execute(
+            """SELECT p.id, p.reference, p.designation, p.unite,
+                      SUM(l.quantite_restante) as quantite,
+                      COUNT(*) as nb_lots,
+                      MIN(CASE WHEN l.quantite_restante>0 THEN l.date_entree END) as date_fifo
+               FROM lots_stock l
+               JOIN produits p ON p.id=l.produit_id
+               WHERE l.emplacement=? AND l.quantite_restante>0
+               GROUP BY p.id
+               ORDER BY p.reference""",
+            (empl,),
+        ).fetchall()
+    refs_data = [dict(r) for r in refs]
+    total = sum(float(r["quantite"] or 0) for r in refs_data)
+    return {
+        "emplacement": empl,
+        "label": STOCK_EMPLACEMENT_AU_SOL_LABEL,
+        "refs": refs_data,
+        "total_unites": total,
+        "nb_refs": len(refs_data),
+    }
+
+
+@router.get("/api/stock/sortie-prod")
+def stock_sortie_prod(request: Request):
+    """Produits en zone En attente - sortie de prod (Z1) — stock fraîchement sorti de production."""
+    require_stock(request)
+    empl = STOCK_EMPLACEMENT_SORTIE_PROD
+    with get_db() as conn:
+        refs = conn.execute(
+            """SELECT p.id, p.reference, p.designation, p.unite,
+                      SUM(l.quantite_restante) as quantite,
+                      COUNT(*) as nb_lots,
+                      MIN(CASE WHEN l.quantite_restante>0 THEN l.date_entree END) as date_fifo
+               FROM lots_stock l
+               JOIN produits p ON p.id=l.produit_id
+               WHERE l.emplacement=? AND l.quantite_restante>0
+               GROUP BY p.id
+               ORDER BY p.reference""",
+            (empl,),
+        ).fetchall()
+    refs_data = [dict(r) for r in refs]
+    total = sum(float(r["quantite"] or 0) for r in refs_data)
+    return {
+        "emplacement": empl,
+        "label": STOCK_EMPLACEMENT_SORTIE_PROD_LABEL,
+        "refs": refs_data,
+        "total_unites": total,
+        "nb_refs": len(refs_data),
     }
 
 
@@ -998,7 +1263,7 @@ async def mouvement_stock(request: Request):
 
     if not produit_id or not emplacement:
         raise HTTPException(400, "produit_id et emplacement obligatoires")
-    if not emplacement[0].isalpha() or not emplacement[1:].isdigit():
+    if not _is_valid_emplacement(emplacement):
         raise HTTPException(400, f"Format emplacement invalide : {emplacement}")
     if quantite <= 0:
         raise HTTPException(400, "Quantité doit être positive")
@@ -1038,7 +1303,7 @@ async def api_sortir_lot(request: Request):
 
     if not produit_id or not emplacement:
         raise HTTPException(400, "produit_id et emplacement obligatoires")
-    if not emplacement[0].isalpha() or not emplacement[1:].isdigit():
+    if not _is_valid_emplacement(emplacement):
         raise HTTPException(400, f"Format emplacement invalide : {emplacement}")
 
     with get_db() as conn:
@@ -1061,6 +1326,49 @@ async def api_sortir_lot(request: Request):
         module="stock",
         objet=f"Sortie lot FIFO · {ref_audit} · {emplacement} · {result['quantite_sortie']}",
         detail={"emplacement": emplacement, "quantite": result["quantite_sortie"]},
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True, **result}
+
+
+@router.post("/api/stock/deplacer-lot")
+async def api_deplacer_lot(request: Request):
+    """Déplace le lot FIFO le plus ancien d'un emplacement vers un autre."""
+    user = require_stock_write(request)
+    body = await request.json()
+    produit_id = body.get("produit_id")
+    emplacement_source = (body.get("emplacement_source") or "").strip().upper()
+    emplacement_destination = (body.get("emplacement_destination") or "").strip().upper()
+
+    if not produit_id or not emplacement_source or not emplacement_destination:
+        raise HTTPException(400, "produit_id, emplacement_source et emplacement_destination obligatoires")
+    if not _is_valid_emplacement(emplacement_source):
+        raise HTTPException(400, f"Format emplacement source invalide : {emplacement_source}")
+    if not _is_valid_emplacement(emplacement_destination):
+        raise HTTPException(400, f"Format emplacement destination invalide : {emplacement_destination}")
+    if emplacement_source == emplacement_destination:
+        raise HTTPException(400, "Les emplacements source et destination doivent être différents")
+
+    with get_db() as conn:
+        created_by_name = _resolve_created_by_name(conn, user)
+        p = conn.execute(
+            "SELECT id, reference FROM produits WHERE id=?", (produit_id,)
+        ).fetchone()
+        if not p:
+            raise HTTPException(404, "Produit non trouvé")
+        ref_audit = p["reference"] or ""
+
+        result = deplacer_lot_fifo(
+            conn, int(produit_id), emplacement_source, emplacement_destination, user["email"], created_by_name
+        )
+        conn.commit()
+
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="stock",
+        objet=f"Déplacement lot · {ref_audit} · {emplacement_source} → {emplacement_destination} · {result['quantite_deplacee']}",
+        detail={"emplacement_source": emplacement_source, "emplacement_destination": emplacement_destination, "quantite": result["quantite_deplacee"]},
         ip=request.client.host if request.client else None,
     )
     return {"success": True, **result}
@@ -1110,6 +1418,327 @@ def produits_a_inventorier(request: Request, jours: int = 180):
             (limite,),
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+# ── Inventaire v2 (par emplacement) ──────────────────────────────
+# Seuils en jours depuis le dernier inventaire complet d'un emplacement.
+INV_V2_SEUIL_VERT = 15   # < 15 jours = vert
+INV_V2_SEUIL_JAUNE = 30  # 15-30 jours = jaune
+INV_V2_SEUIL_ORANGE = 60 # 30-60 jours = orange, > 60 ou jamais = rouge
+
+
+def _inv_v2_couleur(jours: Optional[int]) -> str:
+    if jours is None:
+        return "rouge"
+    if jours < INV_V2_SEUIL_VERT:
+        return "vert"
+    if jours < INV_V2_SEUIL_JAUNE:
+        return "jaune"
+    if jours < INV_V2_SEUIL_ORANGE:
+        return "orange"
+    return "rouge"
+
+
+def _inv_v2_empl_label(empl: str) -> str:
+    if empl == STOCK_EMPLACEMENT_AU_SOL:
+        return STOCK_EMPLACEMENT_AU_SOL_LABEL
+    if empl == STOCK_EMPLACEMENT_SORTIE_PROD:
+        return STOCK_EMPLACEMENT_SORTIE_PROD_LABEL
+    return empl
+
+
+@router.get("/api/stock/inventaire-v2/emplacements")
+def inventaire_v2_emplacements(request: Request):
+    """Liste des emplacements avec stock + jours depuis dernier inventaire complet.
+
+    Triés du plus ancien (rouge / jamais) au plus récent (vert).
+    """
+    require_stock(request)
+    now = datetime.now()
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT ep.code AS emplacement,
+                      COUNT(DISTINCT l.produit_id) AS nb_refs,
+                      COALESCE(SUM(l.quantite_restante), 0) AS total_qte
+               FROM emplacements_plan ep
+               LEFT JOIN lots_stock l
+                 ON l.emplacement = ep.code AND l.quantite_restante > 0
+               GROUP BY ep.code
+               ORDER BY ep.code"""
+        ).fetchall()
+        # Dernier inventaire par emplacement
+        last_invs = {
+            r["emplacement"]: r
+            for r in conn.execute(
+                """SELECT s.emplacement, s.date_validation, s.operateur_nom, s.operateur_email
+                   FROM inventaires_sessions s
+                   JOIN (
+                       SELECT emplacement, MAX(date_validation) AS d
+                       FROM inventaires_sessions
+                       GROUP BY emplacement
+                   ) m ON m.emplacement=s.emplacement AND m.d=s.date_validation"""
+            ).fetchall()
+        }
+    out = []
+    for r in rows:
+        empl = r["emplacement"]
+        inv = last_invs.get(empl)
+        jours = None
+        d_iso = None
+        op_nom = None
+        if inv and inv["date_validation"]:
+            d_iso = inv["date_validation"]
+            try:
+                jours = (now - datetime.fromisoformat(str(d_iso)[:19])).days
+            except Exception:
+                jours = None
+            op_nom = inv["operateur_nom"]
+        out.append({
+            "emplacement": empl,
+            "label": _inv_v2_empl_label(empl),
+            "nb_refs": int(r["nb_refs"] or 0),
+            "total_qte": float(r["total_qte"] or 0),
+            "derniere_date": d_iso,
+            "dernier_operateur": op_nom,
+            "jours_depuis": jours,
+            "couleur": _inv_v2_couleur(jours),
+        })
+    # Tri : jamais inventorié d'abord, puis plus anciens d'abord
+    out.sort(key=lambda x: (
+        0 if x["jours_depuis"] is None else 1,
+        -(x["jours_depuis"] or 0),
+        x["emplacement"],
+    ))
+    return out
+
+
+@router.get("/api/stock/inventaire-v2/emplacement/{emplacement}")
+def inventaire_v2_emplacement(emplacement: str, request: Request):
+    """Détail d'un emplacement pour l'inventaire : produits + historique."""
+    require_stock(request)
+    emplacement = _normalize_emplacement(emplacement)
+    if not emplacement:
+        raise HTTPException(400, "Code emplacement vide.")
+    with get_db() as conn:
+        # Valider : soit dans le plan, soit dans le stock réel, soit zone spéciale
+        in_plan = conn.execute(
+            "SELECT 1 FROM emplacements_plan WHERE code=? LIMIT 1", (emplacement,)
+        ).fetchone()
+        in_stock = conn.execute(
+            "SELECT 1 FROM lots_stock WHERE emplacement=? AND quantite_restante>0 LIMIT 1", (emplacement,)
+        ).fetchone()
+        if not in_plan and not in_stock and not _is_valid_emplacement(emplacement):
+            raise HTTPException(404, f"Emplacement inconnu : {emplacement}")
+    with get_db() as conn:
+        refs = conn.execute(
+            """SELECT p.id AS produit_id, p.reference, p.designation, p.unite,
+                      SUM(l.quantite_restante) AS quantite,
+                      COUNT(*) AS nb_lots,
+                      GROUP_CONCAT(l.id) AS lot_ids,
+                      MIN(CASE WHEN l.quantite_restante>0 THEN l.date_entree END) AS date_fifo
+               FROM lots_stock l
+               JOIN produits p ON p.id = l.produit_id
+               WHERE l.emplacement = ? AND l.quantite_restante > 0
+               GROUP BY p.id
+               ORDER BY p.reference""",
+            (emplacement,),
+        ).fetchall()
+
+        # Lots détaillés par produit (pour affichage référence / lots)
+        refs_data = []
+        for r in refs:
+            d = dict(r)
+            lots = conn.execute(
+                """SELECT id, quantite_restante, date_entree
+                   FROM lots_stock
+                   WHERE produit_id=? AND emplacement=? AND quantite_restante > 0
+                   ORDER BY date_entree ASC""",
+                (d["produit_id"], emplacement),
+            ).fetchall()
+            d["lots"] = [dict(l) for l in lots]
+            refs_data.append(d)
+
+        history = conn.execute(
+            """SELECT id, operateur_nom, operateur_email, date_validation,
+                      nb_produits, nb_modifications, commentaires_json
+               FROM inventaires_sessions
+               WHERE emplacement = ?
+               ORDER BY date_validation DESC
+               LIMIT 100""",
+            (emplacement,),
+        ).fetchall()
+
+    history_list = []
+    for h in history:
+        d = dict(h)
+        try:
+            d["commentaires"] = json.loads(d.pop("commentaires_json") or "[]")
+            if not isinstance(d["commentaires"], list):
+                d["commentaires"] = []
+        except Exception:
+            d["commentaires"] = []
+        history_list.append(d)
+    return {
+        "emplacement": emplacement,
+        "label": _inv_v2_empl_label(emplacement),
+        "refs": refs_data,
+        "nb_refs": len(refs_data),
+        "total_qte": sum(float(r["quantite"] or 0) for r in refs_data),
+        "history": history_list,
+        "last_inventaire": history_list[0] if history_list else None,
+    }
+
+
+@router.post("/api/stock/inventaire-v2/valider")
+async def inventaire_v2_valider(request: Request):
+    """Valide un inventaire complet d'un emplacement.
+
+    Body :
+      {
+        emplacement: "A121",
+        nb_produits: 4,
+        modifications: [{produit_id: 12, qte_apres: 250}, ...]
+      }
+
+    - Applique chaque modification via un mouvement de stock 'inventaire'
+    - Crée une ligne dans inventaires_sessions (avec snapshot des modifs)
+    """
+    user = require_stock_write(request)
+    body = await request.json()
+    emplacement = _normalize_emplacement(body.get("emplacement") or "")
+    if not _is_valid_emplacement(emplacement):
+        raise HTTPException(400, f"Format emplacement invalide : {emplacement}")
+
+    try:
+        nb_produits = int(body.get("nb_produits") or 0)
+    except Exception:
+        nb_produits = 0
+    modifications = body.get("modifications") or []
+    if not isinstance(modifications, list):
+        raise HTTPException(400, "modifications doit être une liste")
+    commentaires_in = body.get("commentaires") or []
+    if not isinstance(commentaires_in, list):
+        commentaires_in = []
+
+    now = datetime.now().isoformat()
+    modifs_applied: list[dict] = []
+    with get_db() as conn:
+        for mod in modifications:
+            try:
+                pid = int(mod.get("produit_id"))
+                qte_apres = float(mod.get("qte_apres"))
+            except Exception:
+                continue
+            if qte_apres < 0:
+                qte_apres = 0.0
+
+            pref_row = conn.execute(
+                "SELECT reference FROM produits WHERE id=?", (pid,)
+            ).fetchone()
+            if not pref_row:
+                continue
+            ref_str = pref_row["reference"] or f"#{pid}"
+
+            ex = conn.execute(
+                "SELECT quantite FROM stock_emplacements WHERE produit_id=? AND emplacement=?",
+                (pid, emplacement),
+            ).fetchone()
+            qte_avant = float(ex["quantite"]) if ex else 0.0
+            if abs(qte_apres - qte_avant) < 1e-9:
+                # Aucun écart : on ne crée pas de mouvement, mais on marque la ligne
+                # comme inventoriée plus bas (update derniere_inventaire).
+                continue
+            try:
+                _apply_stock_mouvement(
+                    conn,
+                    user,
+                    pid,
+                    emplacement,
+                    "inventaire",
+                    qte_apres,
+                    "Inventaire emplacement",
+                )
+                modifs_applied.append({
+                    "produit_id": pid,
+                    "reference": ref_str,
+                    "qte_avant": qte_avant,
+                    "qte_apres": qte_apres,
+                })
+            except Exception:
+                pass
+
+        # Tag derniere_inventaire pour TOUS les produits actuellement
+        # présents à cet emplacement (y compris ceux non modifiés mais validés).
+        conn.execute(
+            """UPDATE stock_emplacements
+               SET derniere_inventaire=?, updated_at=?, updated_by=?
+               WHERE emplacement=?""",
+            (now, now, user.get("email"), emplacement),
+        )
+
+        # Normalise les commentaires (un seul par produit_id, vides ignorés)
+        commentaires_clean: list[dict] = []
+        seen_pids: set[int] = set()
+        for c in commentaires_in:
+            try:
+                pid = int(c.get("produit_id"))
+            except Exception:
+                continue
+            if pid in seen_pids:
+                continue
+            txt = (c.get("commentaire") or "").strip()
+            if not txt:
+                continue
+            # Charge réf / désignation si non fournie
+            ref_str = (c.get("reference") or "").strip()
+            des_str = (c.get("designation") or "").strip()
+            if not ref_str or not des_str:
+                row = conn.execute(
+                    "SELECT reference, designation FROM produits WHERE id=?", (pid,)
+                ).fetchone()
+                if row:
+                    ref_str = ref_str or (row["reference"] or "")
+                    des_str = des_str or (row["designation"] or "")
+            commentaires_clean.append({
+                "produit_id": pid,
+                "reference": ref_str,
+                "designation": des_str,
+                "commentaire": txt[:1000],
+            })
+            seen_pids.add(pid)
+
+        operateur_nom = _resolve_created_by_name(conn, user) or (user.get("email") or "")
+        conn.execute(
+            """INSERT INTO inventaires_sessions
+               (emplacement, operateur_email, operateur_nom, date_validation,
+                nb_produits, nb_modifications, modifications_json, commentaires_json)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            (
+                emplacement,
+                user.get("email"),
+                operateur_nom,
+                now,
+                nb_produits,
+                len(modifs_applied),
+                json.dumps(modifs_applied, ensure_ascii=False),
+                json.dumps(commentaires_clean, ensure_ascii=False),
+            ),
+        )
+        conn.commit()
+
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="stock",
+        objet=f"Inventaire emplacement {emplacement}",
+        detail={"nb_produits": nb_produits, "nb_modifs": len(modifs_applied)},
+        ip=request.client.host if request.client else None,
+    )
+    return {
+        "success": True,
+        "nb_modifications": len(modifs_applied),
+        "date_validation": now,
+    }
 
 
 # ── Historique unifié ─────────────────────────────────────────────
@@ -1269,12 +1898,34 @@ def dashboard(request: Request):
             """
         ).fetchall()
 
+        refs_a_expedier = conn.execute(
+            """
+            SELECT COUNT(DISTINCT l.produit_id) AS nb
+            FROM lots_stock l
+            WHERE l.emplacement = ? AND l.quantite_restante > 0
+            """,
+            (STOCK_EMPLACEMENT_AU_SOL,),
+        ).fetchone()
+
+        today_prefix = datetime.now().strftime("%Y-%m-%d")
+        departs_jour = conn.execute(
+            """
+            SELECT COUNT(*) AS nb
+            FROM expe_departs
+            WHERE date_enlevement LIKE ?
+            """,
+            (today_prefix + "%",),
+        ).fetchone()
+
     return {
         "stats": dict(stats),
         "derniers_mouvements": [dict(r) for r in derniers_mvts],
         "top_refs": [dict(r) for r in top_refs],
         "alertes_mp": [dict(r) for r in alertes_mp],
         "derniers_mouvements_mp": [dict(r) for r in derniers_mouvements_mp],
+        "nb_mp_a_approvisionner": len(alertes_mp),
+        "nb_refs_a_expedier": refs_a_expedier["nb"] if refs_a_expedier else 0,
+        "nb_departs_aujourd_hui": departs_jour["nb"] if departs_jour else 0,
     }
 
 
@@ -1804,9 +2455,9 @@ async def mouvement_matiere_premiere(request: Request):
     def _check_emplacement_code(code: Optional[str]) -> str:
         if not code:
             raise HTTPException(400, "Emplacement obligatoire.")
-        if not code[0].isalpha() or not code[1:].isdigit():
+        if not _is_valid_emplacement(code):
             raise HTTPException(400, f"Format emplacement invalide : {code}")
-        return code
+        return _normalize_emplacement(code)
 
     if type_mvt == "entree":
         emplacement_dest = _check_emplacement_code(emplacement_dest)
@@ -1948,29 +2599,39 @@ def _pf_ensure_produit_id(
     designation: str,
     unite: str,
     now: str,
+    produit_type: str = "fabrique",
 ) -> int:
     ref = reference.strip().upper()
     row = conn.execute(
-        "SELECT id, designation, unite FROM produits WHERE reference=?", (ref,)
+        "SELECT id, designation, unite, type FROM produits WHERE reference=?", (ref,)
     ).fetchone()
     des = designation.strip() or ref
     u = (unite or "").strip() or "étiquette"
     if row:
+        existing_type = row["type"] or "fabrique"
+        if existing_type != produit_type:
+            label_existing = "produit fabriqué" if existing_type == "fabrique" else "produit de négoce"
+            label_wanted = "produit de négoce" if produit_type == "negoce" else "produit fabriqué"
+            raise HTTPException(
+                409,
+                f"La référence {ref} est déjà enregistrée comme {label_existing}. "
+                f"Impossible de l'utiliser comme {label_wanted}.",
+            )
         conn.execute(
             "UPDATE produits SET designation=?, unite=?, updated_at=? WHERE id=?",
             (des, u, now, row["id"]),
         )
         return int(row["id"])
     cur = conn.execute(
-        "INSERT INTO produits (reference, designation, description, unite, created_at, updated_at) "
-        "VALUES (?,?,?,?,?,?)",
-        (ref, des, "", u, now, now),
+        "INSERT INTO produits (reference, designation, description, unite, type, created_at, updated_at) "
+        "VALUES (?,?,?,?,?,?,?)",
+        (ref, des, "", u, produit_type, now, now),
     )
     return int(cur.lastrowid)
 
 
-def _pf_list_stock_rows(conn: sqlite3.Connection) -> list:
-    """Stock PF : lots FIFO (comme le tableau de bord), repli sur stock_emplacements."""
+def _pf_list_stock_rows(conn: sqlite3.Connection, produit_type: str = "fabrique") -> list:
+    """Stock PF/négoce : lots FIFO, repli sur stock_emplacements. Filtré par type."""
     rows = conn.execute(
         """
         SELECT
@@ -1984,9 +2645,11 @@ def _pf_list_stock_rows(conn: sqlite3.Connection) -> list:
         FROM lots_stock l
         JOIN produits p ON p.id = l.produit_id
         WHERE l.quantite_restante > 0.0001
+          AND COALESCE(p.type, 'fabrique') = ?
         GROUP BY l.emplacement, p.id, p.reference, p.designation, p.unite
         ORDER BY p.reference ASC, l.emplacement ASC
-        """
+        """,
+        (produit_type,),
     ).fetchall()
     if rows:
         return rows
@@ -2009,40 +2672,61 @@ def _pf_list_stock_rows(conn: sqlite3.Connection) -> list:
         FROM stock_emplacements s
         JOIN produits p ON p.id = s.produit_id
         WHERE s.quantite > 0.0001
+          AND COALESCE(p.type, 'fabrique') = ?
         ORDER BY p.reference ASC, s.emplacement ASC
-        """
+        """,
+        (produit_type,),
     ).fetchall()
 
 
-def _pf_kpis(conn: sqlite3.Connection) -> dict:
+def _pf_kpis(conn: sqlite3.Connection, produit_type: str = "fabrique") -> dict:
     today = datetime.now().strftime("%Y-%m-%d")
     refs = conn.execute(
         """
-        SELECT COUNT(DISTINCT produit_id) AS n FROM (
+        SELECT COUNT(DISTINCT l.produit_id) AS n
+        FROM (
             SELECT produit_id FROM lots_stock WHERE quantite_restante > 0.0001
             UNION
             SELECT produit_id FROM stock_emplacements WHERE quantite > 0.0001
-        )
-        """
+        ) l
+        JOIN produits p ON p.id = l.produit_id
+        WHERE COALESCE(p.type, 'fabrique') = ?
+        """,
+        (produit_type,),
     ).fetchone()
     empl = conn.execute(
         """
-        SELECT COUNT(DISTINCT emplacement) AS n FROM (
-            SELECT l.emplacement FROM lots_stock l WHERE l.quantite_restante > 0.0001
+        SELECT COUNT(DISTINCT l.emplacement) AS n
+        FROM (
+            SELECT ls.emplacement, ls.produit_id FROM lots_stock ls WHERE ls.quantite_restante > 0.0001
             UNION
-            SELECT s.emplacement FROM stock_emplacements s WHERE s.quantite > 0.0001
-        )
-        """
+            SELECT s.emplacement, s.produit_id FROM stock_emplacements s WHERE s.quantite > 0.0001
+        ) l
+        JOIN produits p ON p.id = l.produit_id
+        WHERE COALESCE(p.type, 'fabrique') = ?
+        """,
+        (produit_type,),
     ).fetchone()
     mvt_today = conn.execute(
         """
-        SELECT COUNT(*) AS n FROM mouvements_stock
-        WHERE created_at >= ?
-          AND type_mouvement IN ('entree', 'sortie')
+        SELECT COUNT(*) AS n
+        FROM mouvements_stock m
+        JOIN produits p ON p.id = m.produit_id
+        WHERE m.created_at >= ?
+          AND m.type_mouvement IN ('entree', 'sortie')
+          AND COALESCE(p.type, 'fabrique') = ?
         """,
-        (today + "T00:00:00",),
+        (today + "T00:00:00", produit_type),
     ).fetchone()
-    total_mvt = conn.execute("SELECT COUNT(*) AS n FROM mouvements_stock").fetchone()
+    total_mvt = conn.execute(
+        """
+        SELECT COUNT(*) AS n
+        FROM mouvements_stock m
+        JOIN produits p ON p.id = m.produit_id
+        WHERE COALESCE(p.type, 'fabrique') = ?
+        """,
+        (produit_type,),
+    ).fetchone()
     return {
         "references": int(refs["n"] or 0) if refs else 0,
         "mouvements_aujourdhui": int(mvt_today["n"] or 0) if mvt_today else 0,
@@ -2065,11 +2749,12 @@ def _pf_normalize_mvt_row(r) -> dict:
 def list_produits_finis(request: Request):
     require_stock(request)
     with get_db() as conn:
-        stock_rows = _pf_list_stock_rows(conn)
+        stock_rows = _pf_list_stock_rows(conn, produit_type="fabrique")
         catalogue = conn.execute(
-            "SELECT reference, designation, unite FROM produits ORDER BY reference ASC"
+            "SELECT reference, designation, unite FROM produits "
+            "WHERE COALESCE(type,'fabrique')='fabrique' ORDER BY reference ASC"
         ).fetchall()
-        kpis = _pf_kpis(conn)
+        kpis = _pf_kpis(conn, produit_type="fabrique")
     return {
         "stock": [
             {
@@ -2174,7 +2859,7 @@ def _pf_validate_mouvement_body(body: dict) -> tuple[str, str, str, float, str]:
         raise HTTPException(400, "Référence obligatoire.")
     if not emplacement:
         raise HTTPException(400, "Emplacement obligatoire.")
-    if not emplacement[0].isalpha() or not emplacement[1:].isdigit():
+    if not _is_valid_emplacement(emplacement):
         raise HTTPException(400, f"Format emplacement invalide : {emplacement}")
     try:
         quantite = float(body.get("quantite", 0))
@@ -2184,7 +2869,7 @@ def _pf_validate_mouvement_body(body: dict) -> tuple[str, str, str, float, str]:
         raise HTTPException(400, "Quantité invalide — minimum 0,01.")
     if not designation:
         designation = reference
-    return reference, designation, emplacement, quantite, unite
+    return reference, designation, _normalize_emplacement(emplacement), quantite, unite
 
 
 @router.post("/api/stock/produits-finis/entree")
@@ -2247,6 +2932,246 @@ async def produit_fini_sortie(request: Request):
         ip=request.client.host if request.client else None,
     )
     return {"ok": True, **result}
+
+
+# ── Produits de négoce ─────────────────────────────────────────────
+# Même mécanique que produits-finis, filtrée sur type='negoce'.
+
+@router.get("/api/stock/negoce")
+def list_negoce(request: Request):
+    require_stock(request)
+    with get_db() as conn:
+        stock_rows = _pf_list_stock_rows(conn, produit_type="negoce")
+        catalogue = conn.execute(
+            "SELECT reference, designation, unite FROM produits "
+            "WHERE COALESCE(type,'fabrique')='negoce' ORDER BY reference ASC"
+        ).fetchall()
+        kpis = _pf_kpis(conn, produit_type="negoce")
+    return {
+        "stock": [
+            {
+                "produit_id": r["produit_id"],
+                "reference": r["reference"],
+                "designation": r["designation"],
+                "unite": r["unite"],
+                "emplacement": r["emplacement"],
+                "quantite": float(r["quantite"] or 0),
+                "derniere_entree": r["derniere_entree"],
+            }
+            for r in stock_rows
+        ],
+        "catalogue": [dict(r) for r in catalogue],
+        "kpis": kpis,
+    }
+
+
+@router.get("/api/stock/negoce/mouvements")
+def list_negoce_mouvements(request: Request, limit: int = 20):
+    require_stock(request)
+    limit = max(1, min(int(limit or 20), 100))
+    with get_db() as conn:
+        rows = conn.execute(
+            _PF_MVT_SQL
+            + """
+            WHERE m.type_mouvement IN ('entree', 'sortie')
+              AND COALESCE(p.type, 'fabrique') = 'negoce'
+            ORDER BY m.created_at DESC, m.id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return [_pf_normalize_mvt_row(r) for r in rows]
+
+
+@router.get("/api/stock/negoce/{reference}")
+def get_negoce_detail(reference: str, request: Request):
+    require_stock(request)
+    ref = (reference or "").strip().upper()
+    if not ref:
+        raise HTTPException(400, "Référence obligatoire.")
+    with get_db() as conn:
+        cat = conn.execute(
+            "SELECT id, reference, designation, unite FROM produits "
+            "WHERE reference=? AND COALESCE(type,'fabrique')='negoce'",
+            (ref,),
+        ).fetchone()
+        if not cat:
+            raise HTTPException(404, "Référence non trouvée.")
+        produit_id = cat["id"]
+        stock_rows = conn.execute(
+            """
+            SELECT emplacement, SUM(quantite_restante) AS quantite
+            FROM lots_stock
+            WHERE produit_id=? AND quantite_restante > 0.0001
+            GROUP BY emplacement
+            ORDER BY emplacement ASC
+            """,
+            (produit_id,),
+        ).fetchall()
+        if not stock_rows:
+            stock_rows = conn.execute(
+                """
+                SELECT emplacement, quantite
+                FROM stock_emplacements
+                WHERE produit_id=? AND quantite > 0.0001
+                ORDER BY emplacement ASC
+                """,
+                (produit_id,),
+            ).fetchall()
+        historique = conn.execute(
+            _PF_MVT_SQL
+            + """
+            WHERE p.id=?
+            ORDER BY m.created_at DESC, m.id DESC
+            """,
+            (produit_id,),
+        ).fetchall()
+    stock_total = sum(float(r["quantite"] or 0) for r in stock_rows)
+    return {
+        "reference": ref,
+        "designation": cat["designation"],
+        "unite": cat["unite"],
+        "stock_total": stock_total,
+        "emplacements": [
+            {
+                "emplacement": r["emplacement"],
+                "quantite": float(r["quantite"] or 0),
+                "unite": cat["unite"],
+            }
+            for r in stock_rows
+        ],
+        "historique": [_pf_normalize_mvt_row(r) for r in historique],
+    }
+
+
+@router.post("/api/stock/negoce/entree")
+async def negoce_entree(request: Request):
+    user = require_stock_write(request)
+    body = await request.json()
+    reference, designation, emplacement, quantite, unite = _pf_validate_mouvement_body(body)
+    # Unité par défaut rouleau pour le négoce
+    if not (body.get("unite") or "").strip():
+        unite = "rouleau"
+    note = _pf_compose_note(body)
+    now = datetime.now().isoformat()
+
+    with get_db() as conn:
+        produit_id = _pf_ensure_produit_id(conn, reference, designation, unite, now, produit_type="negoce")
+        result, ref_audit, audit_action = _apply_stock_mouvement(
+            conn, user, produit_id, emplacement, "entree", quantite, note
+        )
+        conn.commit()
+
+    log_action(
+        user=user,
+        action=audit_action,
+        module="stock",
+        objet=f"Négoce entrée {ref_audit} +{quantite:g} @ {emplacement}",
+        detail={"type_mouvement": "entree", "quantite": quantite, "produit_type": "negoce"},
+        ip=request.client.host if request.client else None,
+    )
+    return {"ok": True, **result}
+
+
+@router.post("/api/stock/negoce/sortie")
+async def negoce_sortie(request: Request):
+    user = require_stock_write(request)
+    body = await request.json()
+    reference, designation, emplacement, quantite, unite = _pf_validate_mouvement_body(body)
+    note = _pf_compose_note(body)
+    now = datetime.now().isoformat()
+
+    with get_db() as conn:
+        produit_id = _pf_ensure_produit_id(conn, reference, designation, unite, now, produit_type="negoce")
+        ex = conn.execute(
+            "SELECT quantite FROM stock_emplacements WHERE produit_id=? AND emplacement=?",
+            (produit_id, emplacement),
+        ).fetchone()
+        stock = float(ex["quantite"]) if ex else 0.0
+        if quantite > stock + 0.0001:
+            raise HTTPException(
+                400,
+                f"Stock insuffisant — disponible : {stock:g} {unite}.",
+            )
+        result, ref_audit, audit_action = _apply_stock_mouvement(
+            conn, user, produit_id, emplacement, "sortie", quantite, note
+        )
+        conn.commit()
+
+    log_action(
+        user=user,
+        action=audit_action,
+        module="stock",
+        objet=f"Négoce sortie {ref_audit} -{quantite:g} @ {emplacement}",
+        detail={"type_mouvement": "sortie", "quantite": quantite, "produit_type": "negoce"},
+        ip=request.client.host if request.client else None,
+    )
+    return {"ok": True, **result}
+
+
+@router.post("/api/stock/negoce/produit")
+async def upsert_negoce_produit(request: Request):
+    """Créer ou mettre à jour un produit de négoce dans le catalogue."""
+    require_stock_write(request)
+    body = await request.json()
+    reference = (body.get("reference") or "").strip().upper()
+    designation = (body.get("designation") or "").strip()
+    unite = (body.get("unite") or "rouleau").strip() or "rouleau"
+    if not reference:
+        raise HTTPException(400, "Référence obligatoire.")
+    now = datetime.now().isoformat()
+    with get_db() as conn:
+        existing = conn.execute(
+            "SELECT id, type FROM produits WHERE reference=?", (reference,)
+        ).fetchone()
+        if existing:
+            if (existing["type"] or "fabrique") != "negoce":
+                raise HTTPException(
+                    409,
+                    f"La référence {reference} existe déjà comme produit fabriqué.",
+                )
+            conn.execute(
+                "UPDATE produits SET designation=?, unite=?, updated_at=? WHERE id=?",
+                (designation or reference, unite, now, existing["id"]),
+            )
+            produit_id = existing["id"]
+        else:
+            cur = conn.execute(
+                "INSERT INTO produits (reference, designation, description, unite, type, created_at, updated_at) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (reference, designation or reference, "", unite, "negoce", now, now),
+            )
+            produit_id = cur.lastrowid
+        conn.commit()
+    return {"ok": True, "produit_id": produit_id}
+
+
+@router.delete("/api/stock/negoce/produit/{reference}")
+def delete_negoce_produit(reference: str, request: Request):
+    """Supprimer un produit de négoce (seulement si stock = 0)."""
+    require_stock_write(request)
+    ref = (reference or "").strip().upper()
+    with get_db() as conn:
+        cat = conn.execute(
+            "SELECT id, type FROM produits WHERE reference=?", (ref,)
+        ).fetchone()
+        if not cat:
+            raise HTTPException(404, "Référence non trouvée.")
+        if (cat["type"] or "fabrique") != "negoce":
+            raise HTTPException(403, "Ce produit n'est pas un produit de négoce.")
+        has_stock = conn.execute(
+            "SELECT 1 FROM lots_stock WHERE produit_id=? AND quantite_restante > 0.0001 LIMIT 1",
+            (cat["id"],),
+        ).fetchone()
+        if has_stock:
+            raise HTTPException(
+                409, "Impossible de supprimer : stock non nul. Soldez le stock d'abord."
+            )
+        conn.execute("DELETE FROM stock_emplacements WHERE produit_id=?", (cat["id"],))
+        conn.execute("DELETE FROM lots_stock WHERE produit_id=?", (cat["id"],))
+        conn.execute("DELETE FROM produits WHERE id=?", (cat["id"],))
+        conn.commit()
+    return {"ok": True}
 
 
 @router.post("/api/stock/produits/import/preview")

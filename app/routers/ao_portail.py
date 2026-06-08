@@ -17,7 +17,11 @@ from app.services.ao_pricing import DEVISES, UNITES_QUOTATION
 from app.services.ao_produit_fiche import parse_fiche
 from app.services.email_service import email_accuse_reception, send_email
 from app.services.path_safety import path_is_under_directory
-from app.web.ao_portail_page import get_portail_404_html, get_portail_html
+from app.web.ao_portail_page import (
+    get_mes_demandes_html,
+    get_portail_404_html,
+    get_portail_html,
+)
 from config import BASE_URL, UPLOAD_DIR
 from database import get_db
 
@@ -25,6 +29,12 @@ logger = logging.getLogger(__name__)
 
 router_html = APIRouter(tags=["ao_portail"])
 router_api = APIRouter(prefix="/api/portail", tags=["ao_portail_api"])
+
+_PORTAIL_HTML_HEADERS = {
+    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    "Pragma": "no-cache",
+    "Expires": "0",
+}
 
 _PARIS = ZoneInfo("Europe/Paris")
 _RATE_WINDOW_SEC = 3600
@@ -34,6 +44,11 @@ _invalid_attempts: dict[str, list[float]] = {}
 
 def _now_paris_iso() -> str:
     return datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def _parse_lang(request: Request) -> str:
+    lang = (request.query_params.get("lang") or "fr").strip().lower()
+    return lang if lang in ("fr", "en") else "fr"
 
 
 def _row_dict(row) -> dict:
@@ -160,6 +175,69 @@ def _produit_ctx_for_ligne(conn, ref_produit: str) -> dict:
     }
 
 
+def _email_fourni(fourni: dict) -> str:
+    return (fourni.get("email_contact") or "").strip().lower()
+
+
+def _produit_ids_by_ref(conn, refs: list[str | None]) -> dict[str, int]:
+    """Réf. produit (lower) → id ao_produits pour les liens fiche technique."""
+    out: dict[str, int] = {}
+    for raw in refs:
+        ref = (raw or "").strip()
+        if not ref:
+            continue
+        key = ref.lower()
+        if key in out:
+            continue
+        row = conn.execute(
+            "SELECT id FROM ao_produits WHERE LOWER(ref)=LOWER(?) LIMIT 1",
+            (ref,),
+        ).fetchone()
+        if row:
+            out[key] = int(row["id"])
+    return out
+
+
+def _list_demandes_fournisseur(
+    conn, email: str, *, current_token: str | None = None
+) -> list[dict[str, Any]]:
+    """Toutes les invitations AO pour cet email (hors brouillons non envoyés)."""
+    rows = conn.execute(
+        """SELECT
+               f.token,
+               f.nom_fournisseur,
+               f.statut AS fournisseur_statut,
+               f.date_envoi,
+               f.date_ouverture,
+               f.date_reponse,
+               d.id AS ao_id,
+               d.reference,
+               d.titre,
+               d.description,
+               d.date_limite,
+               d.date_creation,
+               d.statut AS ao_statut
+           FROM ao_fournisseurs f
+           JOIN ao_demandes d ON d.id = f.ao_id
+           WHERE LOWER(TRIM(COALESCE(f.email_contact, ''))) = LOWER(TRIM(COALESCE(?, '')))
+             AND (
+               d.statut IN ('envoyee', 'cloturee')
+               OR f.date_envoi IS NOT NULL
+             )
+           ORDER BY COALESCE(f.date_envoi, d.date_creation) DESC, f.id DESC
+           LIMIT 200""",
+        (email,),
+    ).fetchall()
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        item = _row_dict(r)
+        item["is_current"] = bool(
+            current_token and item.get("token") == current_token
+        )
+        out.append(item)
+    return out
+
+
 def _portail_payload(conn, ao: dict, fourni: dict) -> dict[str, Any]:
     ao_id = int(ao["id"])
     fourni_id = int(fourni["id"])
@@ -236,6 +314,7 @@ def portail_page(request: Request, token: str):
                 return HTMLResponse(
                     content=get_portail_404_html(),
                     status_code=404,
+                    headers=_PORTAIL_HTML_HEADERS,
                 )
             ao, fourni = found
             if not fourni.get("date_ouverture"):
@@ -249,7 +328,11 @@ def portail_page(request: Request, token: str):
                 conn.commit()
                 fourni["statut"] = "ouvert"
                 fourni["date_ouverture"] = now
-        return HTMLResponse(get_portail_html(token, ao, fourni))
+        lang = _parse_lang(request)
+        return HTMLResponse(
+            get_portail_html(token, ao, fourni, lang=lang),
+            headers=_PORTAIL_HTML_HEADERS,
+        )
     except HTTPException as exc:
         if exc.status_code == 429:
             return HTMLResponse(
@@ -261,11 +344,69 @@ def portail_page(request: Request, token: str):
                     "Réessayez plus tard.",
                 ),
                 status_code=429,
+                headers=_PORTAIL_HTML_HEADERS,
+            )
+        raise
+
+
+@router_html.get("/portail/ao/{token}/mes-demandes", response_class=HTMLResponse)
+def portail_mes_demandes_page(request: Request, token: str):
+    ip = _client_ip(request)
+    try:
+        with get_db() as conn:
+            found = _lookup_token(conn, token, ip)
+            if not found:
+                return HTMLResponse(
+                    content=get_portail_404_html(),
+                    status_code=404,
+                    headers=_PORTAIL_HTML_HEADERS,
+                )
+            _ao, fourni = found
+            email = _email_fourni(fourni)
+        lang = _parse_lang(request)
+        return HTMLResponse(
+            get_mes_demandes_html(
+                token,
+                email=email,
+                nom_fournisseur=fourni.get("nom_fournisseur"),
+                lang=lang,
+            ),
+            headers=_PORTAIL_HTML_HEADERS,
+        )
+    except HTTPException as exc:
+        if exc.status_code == 429:
+            return HTMLResponse(
+                content=get_portail_404_html().replace(
+                    "Lien invalide ou expiré",
+                    "Trop de tentatives",
+                ).replace(
+                    "Ce lien de demande de prix n'est pas reconnu.",
+                    "Réessayez plus tard.",
+                ),
+                status_code=429,
+                headers=_PORTAIL_HTML_HEADERS,
             )
         raise
 
 
 # ─── API JSON ─────────────────────────────────────────────────────
+
+@router_api.get("/ao/{token}/demandes")
+def list_portail_demandes(request: Request, token: str):
+    """Liste toutes les demandes de prix accessibles pour l'email du fournisseur."""
+    ip = _client_ip(request)
+    with get_db() as conn:
+        _ao, fourni = _get_fourni_or_404(token, conn, ip=ip)
+        email = _email_fourni(fourni)
+        if not email:
+            raise HTTPException(status_code=400, detail="Email fournisseur manquant.")
+        demandes = _list_demandes_fournisseur(conn, email, current_token=token)
+        return {
+            "email": email,
+            "nom_fournisseur": fourni.get("nom_fournisseur"),
+            "demandes": demandes,
+        }
+
 
 @router_api.get("/ao/{token}")
 def get_portail_data(request: Request, token: str):
@@ -370,11 +511,15 @@ async def repondre_ao(request: Request, token: str):
         reponses_db = [
             _row_dict(r)
             for r in conn.execute(
-                """SELECT ligne_id, prix_unitaire, delai_jours, commentaire
+                """SELECT ligne_id, quotation, prix_unitaire, devise, unite_quotation,
+                          delai_jours, commentaire
                    FROM ao_reponses WHERE ao_fournisseur_id=?""",
                 (fourni_id,),
             ).fetchall()
         ]
+        produits_by_ref = _produit_ids_by_ref(
+            conn, [ln.get("ref_produit") for ln in lignes_db]
+        )
         fourni = _row_dict(
             conn.execute(
                 "SELECT * FROM ao_fournisseurs WHERE id=?", (fourni_id,)
@@ -384,7 +529,11 @@ async def repondre_ao(request: Request, token: str):
     responsable = (ao.get("responsable_email") or "").strip()
     if responsable:
         subject, html_body = email_accuse_reception(
-            ao, fourni, lignes_db, reponses_db
+            ao,
+            fourni,
+            lignes_db,
+            reponses_db,
+            produits_by_ref=produits_by_ref,
         )
         send_email(responsable, subject, html_body)
 

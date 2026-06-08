@@ -5,7 +5,7 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from config import CODE_CALAGE, CODE_PRODUCTION, CODE_REPRISE, OPERATION_SEVERITY
+from config import CODE_PRODUCTION, CODE_REPRISE, OPERATION_SEVERITY
 from database import parse_datetime
 from services.timings import compute_dossier_times
 

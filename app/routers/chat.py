@@ -29,7 +29,8 @@ _PAGE_SIZE = 50
 _MAX_ATTACHMENT = 10 * 1024 * 1024
 _ALLOWED_EMOJIS = {"👍", "✅", "👀", "⚠️", "🔧", "❌"}
 _MSG_SELECT = """m.id, m.user_id, m.user_nom, m.body, m.created_at, m.edited_at,
-                   m.pinned_at, m.pinned_by,
+                   m.pinned_at, m.pinned_by, m.deleted_at,
+                   m.reply_to_id, m.is_forwarded, m.forwarded_from_nom,
                    m.attachment_url, m.attachment_name, m.attachment_mime, m.attachment_size,
                    u.avatar_url"""
 _ALLOWED_ATTACHMENT_EXT = {
@@ -65,14 +66,18 @@ def _mention_slug(nom: str) -> str:
 
 def _record_mentions_from_body(
     conn, msg_id: int, channel_id: int, body: str, author_id: int, now_m: str
-) -> None:
-    """Enregistre les mentions @tous et @SlugNom dans chat_mentions."""
+) -> set[int]:
+    """Enregistre les mentions @tous et @SlugNom dans chat_mentions.
+
+    Retourne l'ensemble des user_id mentionnés (utilisé pour déclencher des push).
+    """
     members = conn.execute(
         """SELECT u.id, u.nom FROM chat_members cm
            JOIN users u ON u.id = cm.user_id
            WHERE cm.channel_id = ? AND u.id != ?""",
         (channel_id, author_id),
     ).fetchall()
+    mentioned_ids: set[int] = set()
     if re.search(r"@(tous|all)\b", body, re.IGNORECASE):
         for m in members:
             conn.execute(
@@ -81,12 +86,12 @@ def _record_mentions_from_body(
                    VALUES (?,?,?,1,?)""",
                 (msg_id, channel_id, m["id"], now_m),
             )
-        return
+            mentioned_ids.add(int(m["id"]))
+        return mentioned_ids
 
     tokens = {t.lower() for t in re.findall(r"@([A-Za-z0-9_]+)", body)}
     tokens.discard("tous")
     tokens.discard("all")
-    mentioned_ids: set[int] = set()
     for token in tokens:
         for m in members:
             mid = int(m["id"])
@@ -115,6 +120,77 @@ def _record_mentions_from_body(
                     break
             if mid in mentioned_ids:
                 break
+    return mentioned_ids
+
+
+def _push_notify_chat_message(
+    *,
+    channel_id: int,
+    author_id: int,
+    author_nom: str,
+    body: str,
+    mentioned_ids: Optional[set[int]] = None,
+    is_attachment: bool = False,
+) -> None:
+    """Envoie une notification push pour un nouveau message.
+
+    Règles :
+      - DM (type='direct')         : notif à l'autre membre du canal
+      - Canal type='channel'       : notif à chaque utilisateur mentionné (@nom ou @tous)
+
+    Jamais bloquant : toute erreur est avalée.
+    """
+    try:
+        from app.routers.push import send_push_safe
+    except Exception:
+        return
+    try:
+        with get_db() as conn:
+            ch = conn.execute(
+                "SELECT type, name FROM chat_channels WHERE id=? LIMIT 1",
+                (channel_id,),
+            ).fetchone()
+            if not ch:
+                return
+            ch_type = (ch["type"] or "").lower()
+            preview = (body or "").strip()
+            if not preview and is_attachment:
+                preview = "Pièce jointe"
+            if len(preview) > 140:
+                preview = preview[:137] + "…"
+            recipients: set[int] = set()
+            if ch_type == "direct":
+                rows = conn.execute(
+                    "SELECT user_id FROM chat_members WHERE channel_id=? AND user_id<>?",
+                    (channel_id, int(author_id)),
+                ).fetchall()
+                recipients = {int(r["user_id"]) for r in rows}
+                title = author_nom or "Message direct"
+                # Cible le portail d'accueil avec le canal pré-sélectionné dans la
+                # messagerie. Le service worker ouvre/focus l'onglet sur cette URL ;
+                # chat_widget.js lit ?chat=<id> au boot pour ouvrir le panneau.
+                url = f"/?chat={channel_id}"
+            else:
+                recipients = {int(x) for x in (mentioned_ids or set()) if int(x) != int(author_id)}
+                if not recipients:
+                    return
+                channel_label = (ch["name"] or "").strip() or "Canal"
+                title = f"{author_nom or 'Quelqu’un'} t’a mentionné dans #{channel_label}"
+                url = f"/?chat={channel_id}"
+    except Exception:
+        return
+
+    for uid in recipients:
+        try:
+            send_push_safe(
+                uid,
+                title=title,
+                body=preview,
+                url=url,
+                tag=f"chat-{channel_id}",
+            )
+        except Exception:
+            pass
 
 
 def _typing_cleanup(channel_id: int) -> None:
@@ -153,23 +229,31 @@ def _require(request: Request) -> dict:
     return get_current_user(request)
 
 
-def _message_dict(row, uid: int, reactions: Optional[list] = None) -> dict:
+def _message_dict(
+    row, uid: int, reactions: Optional[list] = None, reply_to: Optional[dict] = None
+) -> dict:
+    is_deleted = bool(row["deleted_at"])
     return {
         "id": row["id"],
         "user_id": row["user_id"],
         "user_nom": row["user_nom"],
-        "body": row["body"] or "",
+        "body": "" if is_deleted else (row["body"] or ""),
+        "is_soft_deleted": is_deleted,
         "created_at": row["created_at"],
-        "edited_at": row["edited_at"] or "",
+        "edited_at": "" if is_deleted else (row["edited_at"] or ""),
         "pinned_at": row["pinned_at"] or "",
         "pinned_by": row["pinned_by"] or None,
         "avatar_url": row["avatar_url"] or "",
-        "attachment_url": row["attachment_url"] or "",
-        "attachment_name": row["attachment_name"] or "",
-        "attachment_mime": row["attachment_mime"] or "",
+        "attachment_url": "" if is_deleted else (row["attachment_url"] or ""),
+        "attachment_name": "" if is_deleted else (row["attachment_name"] or ""),
+        "attachment_mime": "" if is_deleted else (row["attachment_mime"] or ""),
         "attachment_size": row["attachment_size"] or 0,
+        "reply_to_id": row["reply_to_id"] if row["reply_to_id"] else None,
+        "reply_to": reply_to,
+        "is_forwarded": bool(row["is_forwarded"]),
+        "forwarded_from_nom": row["forwarded_from_nom"] or "",
         "is_mine": row["user_id"] == uid,
-        "reactions": reactions if reactions is not None else [],
+        "reactions": [] if is_deleted else (reactions if reactions is not None else []),
     }
 
 
@@ -335,7 +419,7 @@ def list_channels(request: Request):
             d = dict(r)
             if d["type"] == "direct":
                 other = conn.execute(
-                    """SELECT u.nom, u.id, u.avatar_url FROM chat_members cm2
+                    """SELECT u.nom, u.id, u.avatar_url, u.humeur_active, u.humeur_valeur, u.humeur_date FROM chat_members cm2
                        JOIN users u ON u.id = cm2.user_id
                        WHERE cm2.channel_id = ? AND cm2.user_id != ?
                        LIMIT 1""",
@@ -344,6 +428,11 @@ def list_channels(request: Request):
                 d["display_name"] = other["nom"] if other else "Utilisateur inconnu"
                 d["other_user_id"] = other["id"] if other else None
                 d["other_user_avatar_url"] = (other["avatar_url"] or "") if other else ""
+                today = datetime.now().strftime("%Y-%m-%d")
+                if other and other["humeur_active"] and other["humeur_valeur"] and other["humeur_date"] == today:
+                    d["other_user_humeur"] = other["humeur_valeur"]
+                else:
+                    d["other_user_humeur"] = ""
             else:
                 d["display_name"] = d["name"] or "Canal sans nom"
                 d["other_user_id"] = None
@@ -549,7 +638,7 @@ def channel_members(channel_id: int, request: Request):
     with get_db() as conn:
         _assert_member(conn, channel_id, user["id"])
         rows = conn.execute(
-            """SELECT u.id, u.nom, u.role, u.avatar_url, cm.joined_at, cm.last_read_at
+            """SELECT u.id, u.nom, u.role, u.avatar_url, u.humeur_active, u.humeur_valeur, u.humeur_date, cm.joined_at, cm.last_read_at
                FROM chat_members cm JOIN users u ON u.id = cm.user_id
                WHERE cm.channel_id = ?
                ORDER BY u.nom""",
@@ -663,7 +752,7 @@ def get_messages(
                 f"""SELECT {_MSG_SELECT}
                    FROM chat_messages m
                    LEFT JOIN users u ON u.id = m.user_id
-                   WHERE m.channel_id=? AND m.deleted_at IS NULL AND m.id > ?
+                   WHERE m.channel_id=? AND m.id > ?
                    ORDER BY m.created_at ASC""",
                 (channel_id, after_id),
             ).fetchall()
@@ -672,7 +761,7 @@ def get_messages(
                 f"""SELECT {_MSG_SELECT}
                    FROM chat_messages m
                    LEFT JOIN users u ON u.id = m.user_id
-                   WHERE m.channel_id=? AND m.deleted_at IS NULL AND m.created_at < ?
+                   WHERE m.channel_id=? AND m.created_at < ?
                    ORDER BY m.created_at DESC LIMIT ?""",
                 (channel_id, before, _PAGE_SIZE),
             ).fetchall()
@@ -681,7 +770,7 @@ def get_messages(
                 f"""SELECT {_MSG_SELECT}
                    FROM chat_messages m
                    LEFT JOIN users u ON u.id = m.user_id
-                   WHERE m.channel_id=? AND m.deleted_at IS NULL
+                   WHERE m.channel_id=?
                    ORDER BY m.created_at DESC LIMIT ?""",
                 (channel_id, _PAGE_SIZE),
             ).fetchall()
@@ -694,6 +783,24 @@ def get_messages(
         msg_ids = [r["id"] for r in ordered]
         reactions_map = _fetch_reactions_map(conn, msg_ids, uid)
 
+        # Fetch reply_to messages (non-deleted only, lightweight)
+        reply_ids = list({r["reply_to_id"] for r in ordered if r["reply_to_id"]})
+        reply_map: dict[int, dict] = {}
+        if reply_ids:
+            ph = ",".join("?" * len(reply_ids))
+            rrows = conn.execute(
+                f"""SELECT m.id, m.user_nom, m.body, m.deleted_at
+                    FROM chat_messages m WHERE m.id IN ({ph})""",
+                reply_ids,
+            ).fetchall()
+            for rr in rrows:
+                reply_map[rr["id"]] = {
+                    "id": rr["id"],
+                    "user_nom": rr["user_nom"] or "",
+                    "body": "" if rr["deleted_at"] else (rr["body"] or ""),
+                    "is_soft_deleted": bool(rr["deleted_at"]),
+                }
+
         conn.execute(
             "UPDATE chat_members SET last_read_at=? WHERE channel_id=? AND user_id=?",
             (_now_iso(), channel_id, user["id"]),
@@ -701,7 +808,8 @@ def get_messages(
         conn.commit()
 
     messages = [
-        _message_dict(r, uid, reactions_map.get(r["id"], []))
+        _message_dict(r, uid, reactions_map.get(r["id"], []),
+                      reply_map.get(r["reply_to_id"]) if r["reply_to_id"] else None)
         for r in ordered
     ]
     has_more = len(rows) == _PAGE_SIZE if before else False
@@ -719,6 +827,7 @@ async def send_message(
     body = ""
     upload = file
     gif_url = ""
+    reply_to_id_raw = None
     att_url, att_name, att_mime, att_size = "", "", "", 0
     content_type = (request.headers.get("content-type") or "").lower()
     if "multipart/form-data" in content_type:
@@ -733,6 +842,7 @@ async def send_message(
         data = await request.json()
         body = (data.get("body") or "").strip()
         gif_url = (data.get("gif_url") or "").strip()
+        reply_to_id_raw = data.get("reply_to_id")
         if gif_url:
             allowed_prefixes = (
                 "https://media.giphy.com/",
@@ -760,13 +870,29 @@ async def send_message(
         att_url, att_name, att_mime, att_size = await _save_chat_attachment(channel_id, upload)
 
     now = _now_iso()
+    reply_to_id: Optional[int] = None
+    if reply_to_id_raw is not None:
+        try:
+            reply_to_id = int(reply_to_id_raw)
+        except (TypeError, ValueError):
+            reply_to_id = None
+
     with get_db() as conn:
         _assert_member(conn, channel_id, user["id"])
+        # Validate reply_to_id belongs to this channel
+        if reply_to_id is not None:
+            rcheck = conn.execute(
+                "SELECT id FROM chat_messages WHERE id=? AND channel_id=? LIMIT 1",
+                (reply_to_id, channel_id),
+            ).fetchone()
+            if not rcheck:
+                reply_to_id = None
         cur = conn.execute(
             """INSERT INTO chat_messages
                (channel_id, user_id, user_nom, body, created_at,
-                attachment_url, attachment_name, attachment_mime, attachment_size)
-               VALUES (?,?,?,?,?,?,?,?,?)""",
+                attachment_url, attachment_name, attachment_mime, attachment_size,
+                reply_to_id)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
             (
                 channel_id,
                 user["id"],
@@ -777,6 +903,7 @@ async def send_message(
                 att_name or None,
                 att_mime or None,
                 att_size or None,
+                reply_to_id,
             ),
         )
         conn.execute(
@@ -784,16 +911,29 @@ async def send_message(
             (now, channel_id, user["id"]),
         )
         conn.commit()
+        mentioned_ids: set[int] = set()
         try:
             if body:
                 now_m = _now_iso()
                 msg_id = cur.lastrowid
-                _record_mentions_from_body(
+                mentioned_ids = _record_mentions_from_body(
                     conn, msg_id, channel_id, body, user["id"], now_m
-                )
+                ) or set()
                 conn.commit()
         except Exception:
-            pass
+            mentioned_ids = set()
+    # Notifications push (DM ou mentions). Hors transaction, jamais bloquant.
+    try:
+        _push_notify_chat_message(
+            channel_id=channel_id,
+            author_id=int(user["id"]),
+            author_nom=(user.get("nom") or user.get("email") or "MySifa"),
+            body=body,
+            mentioned_ids=mentioned_ids,
+            is_attachment=bool(att_url),
+        )
+    except Exception:
+        pass
     return {
         "id": cur.lastrowid,
         "created_at": now,
@@ -912,9 +1052,8 @@ def unpin_message(channel_id: int, msg_id: int, request: Request):
 
 @router.delete("/channels/{channel_id}/messages/{msg_id}")
 def delete_message(channel_id: int, msg_id: int, request: Request):
-    """Soft-delete (auteur ou admin)."""
+    """Soft-delete — réservé à l'auteur du message (les admins ne peuvent pas)."""
     user = _require(request)
-    is_admin = user.get("role") in {"superadmin", "direction", "administration"}
     with get_db() as conn:
         row = conn.execute(
             "SELECT user_id, deleted_at FROM chat_messages WHERE id=? AND channel_id=? LIMIT 1",
@@ -924,7 +1063,7 @@ def delete_message(channel_id: int, msg_id: int, request: Request):
             raise HTTPException(status_code=404, detail="Message introuvable")
         if row["deleted_at"]:
             raise HTTPException(status_code=410, detail="Message déjà supprimé")
-        if not is_admin and row["user_id"] != user["id"]:
+        if row["user_id"] != user["id"]:
             raise HTTPException(status_code=403, detail="Vous ne pouvez supprimer que vos propres messages")
         conn.execute(
             "UPDATE chat_messages SET deleted_at=? WHERE id=?",
@@ -932,6 +1071,124 @@ def delete_message(channel_id: int, msg_id: int, request: Request):
         )
         conn.commit()
     return {"deleted": True}
+
+
+@router.post("/channels/{channel_id}/messages/{msg_id}/forward")
+async def forward_message(channel_id: int, msg_id: int, request: Request):
+    """Transférer un message vers un ou plusieurs utilisateurs (DMs).
+
+    Body: { "user_ids": [1, 2, 3] }
+    Crée un DM avec chaque utilisateur cible (ou réutilise l'existant)
+    et y envoie le message avec is_forwarded=1.
+    """
+    user = _require(request)
+    uid = user["id"]
+    data = await request.json()
+    target_user_ids: list[int] = [int(x) for x in (data.get("user_ids") or []) if x]
+    if not target_user_ids:
+        raise HTTPException(status_code=400, detail="Au moins un destinataire requis")
+    if len(target_user_ids) > 20:
+        raise HTTPException(status_code=400, detail="Maximum 20 destinataires")
+
+    now = _now_iso()
+    with get_db() as conn:
+        _assert_member(conn, channel_id, uid)
+        # Fetch original message
+        orig = conn.execute(
+            "SELECT id, user_nom, body, deleted_at, attachment_url, attachment_name, attachment_mime, attachment_size FROM chat_messages WHERE id=? AND channel_id=? LIMIT 1",
+            (msg_id, channel_id),
+        ).fetchone()
+        if not orig:
+            raise HTTPException(status_code=404, detail="Message introuvable")
+        if orig["deleted_at"]:
+            raise HTTPException(status_code=410, detail="Impossible de transférer un message supprimé")
+
+        forwarded_from_nom = orig["user_nom"] or ""
+        body = orig["body"] or ""
+        att_url = orig["attachment_url"] or ""
+        att_name = orig["attachment_name"] or ""
+        att_mime = orig["attachment_mime"] or ""
+        att_size = orig["attachment_size"] or 0
+
+        created_channel_ids: list[int] = []
+
+        for target_uid in target_user_ids:
+            if target_uid == uid:
+                continue
+            # Check user exists
+            tuser = conn.execute(
+                "SELECT id FROM users WHERE id=? AND actif=1 LIMIT 1", (target_uid,)
+            ).fetchone()
+            if not tuser:
+                continue
+            # Find or create DM
+            existing_dm = conn.execute(
+                """SELECT c.id FROM chat_channels c
+                   JOIN chat_members cm1 ON cm1.channel_id = c.id AND cm1.user_id = ?
+                   JOIN chat_members cm2 ON cm2.channel_id = c.id AND cm2.user_id = ?
+                   WHERE c.type = 'direct' AND c.archived_at IS NULL LIMIT 1""",
+                (uid, target_uid),
+            ).fetchone()
+            if existing_dm:
+                dm_id = existing_dm["id"]
+            else:
+                cur_dm = conn.execute(
+                    "INSERT INTO chat_channels (type, created_by, created_at) VALUES ('direct', ?, ?)",
+                    (uid, now),
+                )
+                dm_id = cur_dm.lastrowid
+                conn.execute(
+                    "INSERT OR IGNORE INTO chat_members (channel_id, user_id, joined_at) VALUES (?,?,?)",
+                    (dm_id, uid, now),
+                )
+                conn.execute(
+                    "INSERT OR IGNORE INTO chat_members (channel_id, user_id, joined_at) VALUES (?,?,?)",
+                    (dm_id, target_uid, now),
+                )
+            # Insert forwarded message
+            conn.execute(
+                """INSERT INTO chat_messages
+                   (channel_id, user_id, user_nom, body, created_at,
+                    attachment_url, attachment_name, attachment_mime, attachment_size,
+                    is_forwarded, forwarded_from_nom)
+                   VALUES (?,?,?,?,?,?,?,?,?,1,?)""",
+                (
+                    dm_id,
+                    uid,
+                    user.get("nom") or user.get("email", ""),
+                    body,
+                    now,
+                    att_url or None,
+                    att_name or None,
+                    att_mime or None,
+                    att_size or None,
+                    forwarded_from_nom,
+                ),
+            )
+            conn.execute(
+                "UPDATE chat_members SET last_read_at=? WHERE channel_id=? AND user_id=?",
+                (now, dm_id, uid),
+            )
+            created_channel_ids.append(dm_id)
+
+        conn.commit()
+
+    # Notifications push pour chaque DM créé par le forward (jamais bloquant).
+    try:
+        author_nom = user.get("nom") or user.get("email") or "MySifa"
+        for dm_id in created_channel_ids:
+            _push_notify_chat_message(
+                channel_id=dm_id,
+                author_id=uid,
+                author_nom=author_nom,
+                body=body or "",
+                mentioned_ids=None,
+                is_attachment=bool(att_url),
+            )
+    except Exception:
+        pass
+
+    return {"forwarded": True, "channel_ids": created_channel_ids}
 
 
 @router.post("/channels/{channel_id}/messages/{msg_id}/reactions")
@@ -1080,7 +1337,7 @@ def list_users(request: Request, q: str = ""):
     uid = user["id"]
     with get_db() as conn:
         rows = conn.execute(
-            "SELECT id, nom, role, avatar_url FROM users WHERE actif=1 ORDER BY nom",
+            "SELECT id, nom, role, avatar_url, humeur_active, humeur_valeur, humeur_date FROM users WHERE actif=1 ORDER BY nom",
         ).fetchall()
     users = [dict(r) for r in rows if r["id"] != uid]
     if q:

@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 
 import pdfplumber
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from config import UPLOAD_DIR
 from database import get_db
@@ -234,19 +234,89 @@ async def validate_of(
 @router.get("/api/of/list")
 def list_of_imports(request: Request):
     _require_of_access(request)
+    q      = (request.query_params.get("q")      or "").strip()
+    offset = int(request.query_params.get("offset") or 0)
+    limit  = int(request.query_params.get("limit")  or 50)
+    limit  = min(limit, 200)   # plafond de sécurité
+
+    like = f"%{q}%"
+    search_filter = ""
+    params_count: list = []
+    params_rows:  list = []
+
+    if q:
+        search_filter = """AND (
+            LOWER(COALESCE(o.of_numero,''))    LIKE LOWER(?)
+         OR LOWER(COALESCE(o.reference,''))   LIKE LOWER(?)
+         OR LOWER(COALESCE(o.machine,''))     LIKE LOWER(?)
+         OR LOWER(COALESCE(o.delai_client,'')) LIKE LOWER(?)
+        )"""
+        params_count = [like, like, like, like]
+        params_rows  = [like, like, like, like, limit, offset]
+    else:
+        params_rows = [limit, offset]
+
     with get_db() as conn:
+        total = conn.execute(
+            f"""SELECT COUNT(DISTINCT o.id)
+                FROM of_imports o
+                LEFT JOIN planning_entries pe ON pe.of_import_id = o.id
+                WHERE 1=1 {search_filter}""",
+            params_count,
+        ).fetchone()[0]
+
         rows = conn.execute(
-            """SELECT
-                   o.id, o.of_numero, o.reference, o.machine, o.delai_client,
-                   o.qte_etiquettes, o.metrage, o.date_import, o.statut,
-                   o.pdf_filename, o.imported_by,
-                   CASE WHEN pe.of_import_id IS NOT NULL THEN 1 ELSE 0 END AS lie
-               FROM of_imports o
-               LEFT JOIN planning_entries pe ON pe.of_import_id = o.id
-               GROUP BY o.id
-               ORDER BY o.date_import DESC"""
+            f"""SELECT
+                    o.id, o.of_numero, o.reference, o.machine, o.delai_client,
+                    o.format, o.date_creation, o.qte_etiquettes, o.qte_bobines,
+                    o.metrage, o.matiere, o.conditionnement, o.outil_1_numero,
+                    o.nb_mandrins, o.nb_cartons, o.nb_tubes,
+                    o.date_import, o.statut, o.pdf_filename, o.imported_by,
+                    CASE WHEN pe.of_import_id IS NOT NULL THEN 1 ELSE 0 END AS lie
+                FROM of_imports o
+                LEFT JOIN planning_entries pe ON pe.of_import_id = o.id
+                WHERE 1=1 {search_filter}
+                GROUP BY o.id
+                ORDER BY COALESCE(o.date_creation, o.date_import) DESC
+                LIMIT ? OFFSET ?""",
+            params_rows,
         ).fetchall()
-    return [{**_row_dict(r), "lie": bool(r["lie"])} for r in rows]
+
+    return {
+        "total":  total,
+        "offset": offset,
+        "limit":  limit,
+        "rows":   [{**_row_dict(r), "lie": bool(r["lie"])} for r in rows],
+    }
+
+
+@router.patch("/api/of/{of_id}")
+async def update_of_import(of_id: int, request: Request):
+    """Modifier les champs éditables d'un OF importé."""
+    _require_of_access(request)
+    body = await request.json()
+
+    EDITABLE = {
+        "of_numero", "reference", "machine", "delai_client",
+        "format", "date_creation", "qte_etiquettes", "qte_bobines", "metrage",
+        "matiere", "conditionnement", "outil_1_numero",
+        "nb_mandrins", "nb_cartons", "nb_tubes",
+    }
+    updates = {k: v for k, v in body.items() if k in EDITABLE}
+    if not updates:
+        raise HTTPException(status_code=400, detail="Aucun champ modifiable fourni.")
+
+    with get_db() as conn:
+        row = conn.execute("SELECT id FROM of_imports WHERE id=?", (of_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="OF introuvable.")
+        set_clause = ", ".join(f"{k}=?" for k in updates)
+        conn.execute(
+            f"UPDATE of_imports SET {set_clause} WHERE id=?",
+            list(updates.values()) + [of_id],
+        )
+        conn.commit()
+    return {"updated": True, "id": of_id}
 
 
 @router.get("/api/of/planning/{entry_id}")
@@ -254,21 +324,120 @@ def get_of_for_planning_entry(entry_id: int, request: Request):
     get_current_user(request)  # authentification simple, pas de rôle requis
     with get_db() as conn:
         entry = conn.execute(
-            "SELECT of_import_id, numero_of FROM planning_entries WHERE id=?",
+            """SELECT pe.of_import_id, pe.numero_of, pe.ref_produit,
+                      pe.machine_id, m.nom AS machine_nom
+               FROM planning_entries pe
+               LEFT JOIN machines m ON m.id = pe.machine_id
+               WHERE pe.id = ?""",
             (entry_id,),
         ).fetchone()
-    if not entry or not entry["of_import_id"]:
-        return {"linked": False, "entry_numero_of": entry["numero_of"] if entry else None}
-    with get_db() as conn:
-        row = conn.execute(
-            """SELECT id, of_numero, reference, machine, pdf_filename,
-                      date_import, imported_by, delai_client, qte_etiquettes, metrage
-               FROM of_imports WHERE id=?""",
-            (entry["of_import_id"],),
-        ).fetchone()
+    if not entry:
+        return {"linked": False, "entry_numero_of": None, "ref_produit": None, "fiche_id": None}
+
+    of_import_id = entry["of_import_id"]
+    numero_of    = entry["numero_of"]
+    ref_produit  = entry["ref_produit"]
+    machine_nom  = entry["machine_nom"]
+
+    def _lookup_by_numero(num: str):
+        """Cherche un OF par of_numero (case-insensitive, TRIM).
+        Tente aussi en normalisant les suffixes numériques (.0, .00…).
+        Retourne le dict de la row ou None."""
+        candidates = [num.strip()]
+        # normalise "9931861.0" → "9931861"
+        try:
+            candidates.append(str(int(float(num.strip()))))
+        except (ValueError, OverflowError):
+            pass
+        with get_db() as c:
+            for cand in dict.fromkeys(candidates):  # deduplique, préserve ordre
+                r = c.execute(
+                    """SELECT id, of_numero, reference, machine, pdf_filename,
+                              date_import, imported_by, delai_client, qte_etiquettes, metrage
+                       FROM of_imports
+                       WHERE LOWER(TRIM(of_numero))=LOWER(TRIM(?)) LIMIT 1""",
+                    (cand,),
+                ).fetchone()
+                if r:
+                    return r
+        return None
+
+    row = None
+
+    # 1. Lien direct par of_import_id
+    if of_import_id:
+        with get_db() as c:
+            row = c.execute(
+                """SELECT id, of_numero, reference, machine, pdf_filename,
+                          date_import, imported_by, delai_client, qte_etiquettes, metrage
+                   FROM of_imports WHERE id=?""",
+                (of_import_id,),
+            ).fetchone()
+
+    # 2. Fallback : of_import_id absent ou lien mort → chercher par numero_of
+    if not row and numero_of:
+        row = _lookup_by_numero(numero_of)
+        if row:
+            # Persister le lien pour les prochains appels
+            try:
+                with get_db() as c2:
+                    c2.execute(
+                        "UPDATE planning_entries SET of_import_id=? WHERE id=?",
+                        (row["id"], entry_id),
+                    )
+                    c2.commit()
+            except Exception:
+                pass
+
+    # Chercher la fiche technique par ref_produit.
+    # On matche en priorité sur la clé produit normalisée (ref_produit_norm,
+    # XXX/NNNN) — insensible à la variante machine/laize présente dans le
+    # libellé de la fiche, et tolère "1315-0004" côté dossier vs "1315/0004
+    # - COHESIO 1" côté fiche. Si plusieurs fiches partagent la même clé
+    # produit (cas fréquent : une variante par machine), on privilégie celle
+    # dont la machine correspond à la machine du planning. Fallback sur la
+    # référence textuelle complète pour les fiches non encore re-parsées.
+    fiche_id = None
+    if ref_produit:
+        try:
+            from app.services.fiche_ref_parser import normalize_ref_produit
+            norm = normalize_ref_produit(ref_produit)
+        except Exception:
+            norm = None
+        with get_db() as conn3:
+            if norm:
+                # ORDER BY : la fiche dont la machine matche la machine du
+                # dossier au planning passe en premier ; en cas d'absence
+                # de machine sur la fiche, on garde quand même un candidat ;
+                # en dernier recours, fiche dont la machine ne matche pas.
+                fiche = conn3.execute(
+                    """SELECT id FROM fiches_techniques
+                       WHERE ref_produit_norm = ?
+                       ORDER BY
+                         CASE
+                           WHEN LOWER(TRIM(COALESCE(machine,''))) = LOWER(TRIM(COALESCE(?,''))) AND TRIM(COALESCE(machine,'')) != '' THEN 0
+                           WHEN TRIM(COALESCE(machine,'')) = '' THEN 1
+                           ELSE 2
+                         END,
+                         id
+                       LIMIT 1""",
+                    (norm, machine_nom or ""),
+                ).fetchone()
+                if fiche:
+                    fiche_id = fiche["id"]
+            if fiche_id is None:
+                fiche = conn3.execute(
+                    "SELECT id FROM fiches_techniques WHERE LOWER(TRIM(reference))=LOWER(TRIM(?)) LIMIT 1",
+                    (ref_produit,),
+                ).fetchone()
+                if fiche:
+                    fiche_id = fiche["id"]
+
+    base = {"entry_numero_of": numero_of, "ref_produit": ref_produit, "fiche_id": fiche_id}
+
     if not row:
-        return {"linked": False, "entry_numero_of": entry["numero_of"]}
-    return {"linked": True, "of": _row_dict(row), "entry_numero_of": entry["numero_of"]}
+        return {"linked": False, **base}
+    return {"linked": True, "of": _row_dict(row), **base}
 
 
 @router.get("/api/of/{of_id}/pdf-preview")
@@ -276,19 +445,43 @@ def preview_of_pdf(of_id: int, request: Request):
     get_current_user(request)
     with get_db() as conn:
         row = conn.execute(
-            "SELECT pdf_filename FROM of_imports WHERE id=?",
+            """SELECT id, of_numero, reference, date_creation, delai_client,
+                      machine, format, matiere, laize, qte_etiquettes, qte_bobines,
+                      metrage, conditionnement, nb_cartons, nb_mandrins, nb_tubes,
+                      mandrins_dia, outil_1_numero, pdf_filename
+               FROM of_imports WHERE id=?""",
             (of_id,),
         ).fetchone()
-    if not row or not row["pdf_filename"]:
+    if not row:
         raise HTTPException(status_code=404, detail="OF introuvable.")
-    path = os.path.join(OF_UPLOAD_DIR, row["pdf_filename"])
-    if not os.path.isfile(path):
-        raise HTTPException(status_code=404, detail="Fichier PDF introuvable.")
-    return FileResponse(
-        path,
+
+    # OF importé via PDF → servir le fichier original
+    if row["pdf_filename"]:
+        path = os.path.join(OF_UPLOAD_DIR, row["pdf_filename"])
+        if not os.path.isfile(path):
+            raise HTTPException(status_code=404, detail="Fichier PDF introuvable.")
+        return FileResponse(
+            path,
+            media_type="application/pdf",
+            filename=row["pdf_filename"],
+            headers={"Content-Disposition": f'inline; filename="{row["pdf_filename"]}"'},
+        )
+
+    # OF importé via API (pas de PDF) → générer depuis le template vierge
+    try:
+        from app.services.of_pdf_generator import generate_of_pdf
+        pdf_bytes = generate_of_pdf(dict(row))
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Erreur génération PDF : {exc}") from exc
+
+    safe_num = re.sub(r"[^\w\-]+", "_", str(row["of_numero"] or of_id))
+    filename = f"OF_{safe_num}.pdf"
+    return Response(
+        content=pdf_bytes,
         media_type="application/pdf",
-        filename=row["pdf_filename"],
-        headers={"Content-Disposition": f'inline; filename="{row["pdf_filename"]}"'},
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
     )
 
 
@@ -313,6 +506,21 @@ def download_of_pdf(request: Request, of_id: int):
     )
 
 
+@router.delete("/api/of/bulk")
+async def bulk_delete_of(request: Request):
+    """Suppression en masse d'OFs. Body JSON : {"ids": [1, 2, 3]}"""
+    require_superadmin(request)
+    body = await request.json()
+    ids  = [int(i) for i in (body.get("ids") or []) if str(i).isdigit()]
+    if not ids:
+        raise HTTPException(status_code=400, detail="Liste d'ids vide.")
+    placeholders = ",".join("?" * len(ids))
+    with get_db() as conn:
+        conn.execute(f"DELETE FROM of_imports WHERE id IN ({placeholders})", ids)
+        conn.commit()
+    return {"deleted": len(ids), "ids": ids}
+
+
 @router.delete("/api/of/{of_id}")
 def delete_of_import(request: Request, of_id: int):
     require_superadmin(request)
@@ -323,3 +531,115 @@ def delete_of_import(request: Request, of_id: int):
         conn.execute("DELETE FROM of_imports WHERE id=?", (of_id,))
         conn.commit()
     return {"ok": True}
+
+
+# ══════════════════════════════════════════════════
+# Fiches techniques
+# ══════════════════════════════════════════════════
+
+@router.get("/api/fiches-techniques/list")
+def list_fiches(request: Request):
+    _require_of_access(request)
+    q      = (request.query_params.get("q")      or "").strip()
+    offset = int(request.query_params.get("offset") or 0)
+    limit  = min(int(request.query_params.get("limit") or 50), 200)
+
+    like = f"%{q}%"
+    where = "WHERE 1=1"
+    params_c: list = []
+    params_r: list = []
+    if q:
+        where += " AND (LOWER(COALESCE(reference,'')) LIKE LOWER(?) OR LOWER(COALESCE(format,'')) LIKE LOWER(?) OR LOWER(COALESCE(support,'')) LIKE LOWER(?) OR LOWER(COALESCE(machine,'')) LIKE LOWER(?))"
+        params_c = [like, like, like, like]
+        params_r = [like, like, like, like, limit, offset]
+    else:
+        params_r = [limit, offset]
+
+    with get_db() as conn:
+        total = conn.execute(f"SELECT COUNT(*) FROM fiches_techniques {where}", params_c).fetchone()[0]
+        rows  = conn.execute(
+            f"SELECT * FROM fiches_techniques {where} ORDER BY date_import DESC LIMIT ? OFFSET ?",
+            params_r,
+        ).fetchall()
+    return {"total": total, "offset": offset, "limit": limit, "rows": [_row_dict(r) for r in rows]}
+
+
+@router.patch("/api/fiches-techniques/{fiche_id}")
+async def update_fiche(fiche_id: int, request: Request):
+    _require_of_access(request)
+    body = await request.json()
+    EDITABLE = {
+        "reference","designation","client","format",
+        "eti_laize","eti_longueur","eti_rayons","eti_perforations",
+        "mod_laize","mod_longueur","mod_nb_front",
+        "support","matiere","glassine","laize_optimale","laize_optionnelle",
+        "epaisseur","adhesif","qte_au_mille",
+        "machine","nb_couleurs","recto","verso",
+        "tete1_pantone","tete1_couleur","tete1_anilox","tete1_composition",
+        "tete2_pantone","tete2_couleur","tete2_anilox","tete2_composition",
+        "tete3_pantone","tete3_couleur","tete3_anilox","tete3_composition",
+        "remarque","mandrin_dia","mandrin_longueur","enroulement","nb_etiq_bobin",
+        "dia_ext","poids","conditionnement","cales_sachets","cartons",
+        "nb_au_sol","nb_etage","nb_bobines_carton",
+        "palette_type","palette_nb_cartons_sol","palette_nb_cartons_hauteur","palette_hauteur_max",
+        "particularite","notes",
+    }
+    updates = {k: v for k, v in body.items() if k in EDITABLE}
+    if not updates:
+        raise HTTPException(status_code=400, detail="Aucun champ modifiable.")
+    with get_db() as conn:
+        if not conn.execute("SELECT id FROM fiches_techniques WHERE id=?", (fiche_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="Fiche introuvable.")
+        conn.execute(
+            f"UPDATE fiches_techniques SET {', '.join(f'{k}=?' for k in updates)} WHERE id=?",
+            list(updates.values()) + [fiche_id],
+        )
+        conn.commit()
+    return {"updated": True, "id": fiche_id}
+
+
+@router.get("/api/fiches-techniques/{fiche_id}/pdf-preview")
+def preview_fiche_pdf(fiche_id: int, request: Request):
+    """Génère et retourne le PDF d'une fiche technique (auth session)."""
+    get_current_user(request)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM fiches_techniques WHERE id=?", (fiche_id,)
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Fiche introuvable.")
+    try:
+        from app.services.fiche_pdf import generate_fiche_pdf
+        pdf_bytes = generate_fiche_pdf(dict(row))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Erreur génération PDF : {exc}") from exc
+    ref = re.sub(r"[^\w\-]+", "_", str(row["reference"] or fiche_id))
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="fiche_{ref}.pdf"'},
+    )
+
+
+@router.delete("/api/fiches-techniques/bulk")
+async def bulk_delete_fiches(request: Request):
+    """Suppression en masse de fiches techniques. Body JSON : {"ids": [1, 2, 3]}"""
+    require_superadmin(request)
+    body = await request.json()
+    ids  = [int(i) for i in (body.get("ids") or []) if str(i).isdigit()]
+    if not ids:
+        raise HTTPException(status_code=400, detail="Liste d'ids vide.")
+    placeholders = ",".join("?" * len(ids))
+    with get_db() as conn:
+        conn.execute(f"DELETE FROM fiches_techniques WHERE id IN ({placeholders})", ids)
+        conn.commit()
+    return {"deleted": len(ids), "ids": ids}
+
+
+@router.delete("/api/fiches-techniques/{fiche_id}")
+def delete_fiche(fiche_id: int, request: Request):
+    require_superadmin(request)
+    with get_db() as conn:
+        conn.execute("DELETE FROM fiches_techniques WHERE id=?", (fiche_id,))
+        conn.commit()
+    return {"deleted": True, "id": fiche_id}

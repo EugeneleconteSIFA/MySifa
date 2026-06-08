@@ -189,3 +189,49 @@ body.mysifa-landscape-required #cw-bubble {
     max-height: calc(100dvh - 72px) !important;
   }
 }
+
+/* ── Toggle masquage des widgets ── */
+#mysifa-dock-toggle {
+  position: fixed;
+  bottom: 6px;
+  right: 6px;
+  z-index: 9000;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(128, 128, 128, 0.15);
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  color: #888;
+  opacity: 0.7;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.15s, background 0.15s;
+  padding: 0;
+}
+#mysifa-dock-toggle:hover {
+  opacity: 1;
+  background: rgba(128, 128, 128, 0.25);
+  border-color: rgba(128, 128, 128, 0.6);
+}
+
+/* Quand les widgets sont masqués */
+body.mysifa-dock-hidden .mysifa-dock-fab,
+body.mysifa-dock-hidden .calc-fab,
+body.mysifa-dock-hidden #cw-bubble,
+body.mysifa-dock-hidden #cw-bar,
+body.mysifa-dock-hidden #ai-chat-root,
+body.mysifa-dock-hidden #postit-dock-root {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: opacity 0.2s;
+}
+
+body.mysifa-dock-hidden #_calc_panel,
+body.mysifa-dock-hidden #expe-carte-panel,
+body.mysifa-dock-hidden #ai-chat-panel,
+body.mysifa-dock-hidden #cw-panel,
+body.mysifa-dock-hidden #postit-dock-menu {
+  display: none !important;
+}

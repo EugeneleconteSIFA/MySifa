@@ -124,6 +124,12 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
 }
 .chat-chan-icon-ph{font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.3px}
 .chat-chan-icon-emoji{font-size:18px;font-weight:400;line-height:1;background:var(--accent-bg)}
+.chat-icon-wrap{position:relative;flex-shrink:0;display:inline-block}
+.chat-humeur-badge{
+  position:absolute;bottom:-2px;left:-2px;
+  font-size:11px;line-height:1;pointer-events:none;
+  filter:drop-shadow(0 1px 2px rgba(0,0,0,.5));
+}
 .chat-header-icon{
   width:36px;height:36px;border-radius:50%;flex-shrink:0;
   display:inline-flex;align-items:center;justify-content:center;
@@ -183,8 +189,6 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
 .chat-msg{display:flex;flex-direction:column;max-width:78%;position:relative}
 .chat-msg.mine{align-self:flex-end}
 .chat-msg.theirs{align-self:flex-start}
-.chat-msg-label{font-size:10px;color:var(--muted);margin-bottom:3px}
-.chat-msg.mine .chat-msg-label{text-align:right}
 .chat-msg-bubble{
   padding:8px 12px;border-radius:10px;font-size:13px;line-height:1.5;
   word-break:break-word;white-space:pre-wrap;
@@ -192,31 +196,104 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
 .chat-msg.theirs .chat-msg-bubble{background:var(--card);border:1px solid var(--border);color:var(--text);border-bottom-left-radius:3px}
 .chat-msg.mine .chat-msg-bubble{background:var(--accent);color:var(--bg);font-weight:600;border-bottom-right-radius:3px}
 .chat-msg.pinned .chat-msg-bubble{border-top:2px solid var(--warn)}
-.chat-msg-del{
-  position:absolute;top:-4px;right:-4px;width:20px;height:20px;border-radius:50%;
-  border:1px solid var(--border);background:var(--card);color:var(--muted);
-  font-size:12px;line-height:1;cursor:pointer;display:none;align-items:center;justify-content:center;
-  font-family:inherit;padding:0;
+/* ─── Label (flex row : texte + bouton ⋮) ──────────────── */
+.chat-msg-label{
+  font-size:10px;color:var(--muted);margin-bottom:3px;
+  display:flex;align-items:center;gap:5px;
+  position:relative;
 }
-.chat-msg:hover .chat-msg-del{display:flex}
-.chat-msg.mine .chat-msg-del{right:auto;left:-4px}
-.chat-msg-edit{
-  position:absolute;top:-4px;right:20px;width:20px;height:20px;border-radius:50%;
-  border:1px solid var(--border);background:var(--card);color:var(--muted);
-  font-size:11px;line-height:1;cursor:pointer;display:none;align-items:center;justify-content:center;
-  font-family:inherit;padding:0;
+.chat-msg.mine .chat-msg-label{justify-content:flex-end}
+/* ─── Bouton ⋮ ──────────────────────────────────────────── */
+.chat-msg-menu-btn{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:20px;height:16px;border-radius:5px;flex-shrink:0;
+  border:1px solid transparent;background:transparent;
+  color:var(--muted);font-size:13px;line-height:1;
+  cursor:pointer;font-family:inherit;padding:0 0 1px 0;font-weight:700;
+  opacity:0.25;
+  transition:opacity .15s,border-color .1s,background .1s,color .1s;
 }
-.chat-msg:hover .chat-msg-edit{display:flex}
-.chat-msg.mine .chat-msg-edit{right:auto;left:20px}
-.chat-msg-pin{
-  position:absolute;top:-4px;right:38px;width:20px;height:20px;border-radius:50%;
-  border:1px solid var(--border);background:var(--card);color:var(--muted);
-  font-size:9px;line-height:1;cursor:pointer;display:none;align-items:center;justify-content:center;
-  font-family:inherit;padding:0;
+.chat-msg:hover .chat-msg-menu-btn,.chat-msg-menu-btn:focus{opacity:1}
+.chat-msg-menu-btn:hover{border-color:var(--border);background:var(--card);color:var(--accent);opacity:1}
+/* ─── Dropdown ──────────────────────────────────────────── */
+.chat-msg-menu{
+  position:absolute;top:20px;right:0;
+  background:var(--card);border:1px solid var(--border);border-radius:10px;
+  padding:4px;box-shadow:0 8px 28px rgba(0,0,0,.4);
+  z-index:200;min-width:152px;display:none;
 }
-.chat-msg:hover .chat-msg-pin{display:flex}
-.chat-msg.mine .chat-msg-pin{right:auto;left:38px}
-.chat-msg-pin.pinned-active{color:var(--warn);border-color:var(--warn)}
+.chat-msg-menu.show{display:block}
+.chat-msg.mine .chat-msg-menu{right:auto;left:0}
+.chat-msg-menu-item{
+  display:flex;align-items:center;gap:9px;
+  width:100%;padding:8px 12px;
+  border:none;background:transparent;
+  color:var(--text2);font-size:13px;
+  cursor:pointer;font-family:inherit;
+  border-radius:7px;text-align:left;
+}
+.chat-msg-menu-item:hover{background:var(--accent-bg);color:var(--accent)}
+.chat-msg-menu-item.danger{color:var(--danger)}
+.chat-msg-menu-item.danger:hover{background:rgba(248,113,113,.1);color:var(--danger)}
+/* Pin button (keep for admin, inside menu) */
+.chat-msg-pin.pinned-active{color:var(--warn)}
+/* ─── Séparateur de date ─────────────────────────────── */
+.chat-date-sep{
+  display:flex;align-items:center;gap:10px;
+  margin:10px 0 4px;flex-shrink:0;
+}
+.chat-date-sep::before,.chat-date-sep::after{
+  content:'';flex:1;height:1px;background:var(--border);
+}
+.chat-date-sep-label{
+  font-size:10px;font-weight:700;color:var(--muted);
+  letter-spacing:.6px;text-transform:uppercase;white-space:nowrap;
+  padding:0 4px;
+}
+/* ─── Reply context (quoted message) ─────────────────── */
+.chat-msg-reply-ctx{
+  padding:5px 9px;margin-bottom:5px;
+  border-left:3px solid var(--accent);
+  background:var(--accent-bg);border-radius:6px;
+  opacity:.65;cursor:pointer;
+}
+.chat-msg.mine .chat-msg-reply-ctx{border-left-color:rgba(255,255,255,.45)}
+.chat-msg-reply-ctx-name{font-size:10px;font-weight:700;color:var(--text);margin-bottom:1px}
+.chat-msg-reply-ctx-body{font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
+/* ─── Forwarded ───────────────────────────────────────── */
+.chat-msg-fwd-tag{
+  font-size:10px;font-weight:600;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;
+  display:flex;align-items:center;gap:5px;
+}
+.chat-msg-bubble.fwd{border-left:3px solid var(--muted);padding-left:9px}
+.chat-msg.mine .chat-msg-bubble.fwd{border-left-color:rgba(255,255,255,.35)}
+/* ─── Deleted ─────────────────────────────────────────── */
+.chat-msg-bubble.deleted-bubble{
+  font-style:italic;color:var(--muted);
+  background:transparent!important;border-style:dashed!important;
+}
+/* ─── Reply preview bar (above input) ────────────────── */
+#chat-reply-bar{
+  padding:7px 14px;background:var(--card);border-top:1px solid var(--border);
+  display:none;align-items:center;gap:8px;flex-shrink:0;
+}
+#chat-reply-bar.show{display:flex}
+.chat-reply-preview{
+  flex:1;min-width:0;padding:5px 9px;
+  border-left:3px solid var(--accent);
+  background:var(--accent-bg);border-radius:6px;font-size:12px;
+}
+.chat-reply-preview-name{font-weight:700;color:var(--text);margin-bottom:1px}
+.chat-reply-preview-body{color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-reply-cancel{
+  width:26px;height:26px;border-radius:8px;flex-shrink:0;
+  border:1px solid var(--border);background:transparent;
+  color:var(--muted);cursor:pointer;font-size:16px;
+  display:flex;align-items:center;justify-content:center;
+  transition:border-color .12s,color .12s;
+}
+.chat-reply-cancel:hover{border-color:var(--danger);color:var(--danger)}
 .chat-pinned-item{padding:10px 0;border-bottom:1px solid var(--border)}
 .chat-pinned-item:last-child{border-bottom:none}
 .chat-pinned-item-meta{font-size:10px;color:var(--muted);margin-bottom:4px}
@@ -520,6 +597,13 @@ body.sb-open .sidebar-overlay{display:block}
       <div id="chat-empty">Sélectionnez un canal ou démarrez une conversation.</div>
       <div id="chat-messages" style="display:none"></div>
       <div id="chat-pending-row"></div>
+      <div id="chat-reply-bar">
+        <div class="chat-reply-preview" id="reply-preview-content">
+          <div class="chat-reply-preview-name" id="reply-preview-name"></div>
+          <div class="chat-reply-preview-body" id="reply-preview-body"></div>
+        </div>
+        <button type="button" class="chat-reply-cancel" onclick="cancelReply()" aria-label="Annuler la réponse">×</button>
+      </div>
       <div id="chat-input-area" style="display:none">
         <input type="file" id="chat-file-input" accept=".jpg,.jpeg,.png,.webp,.gif,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip">
         <button type="button" id="chat-action-expand" aria-label="Plus d'options" onclick="toggleChatActions()">+</button>
@@ -557,8 +641,9 @@ body.sb-open .sidebar-overlay{display:block}
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_chat_badge.js"></script>
 <script src="/static/chat_mentions.js"></script>
-<script src="/static/chat_widget.js"></script>
+<script src="/static/chat_widget.js?v=5"></script>
 <script src="/static/chat_widget_v2.js"></script>
+<script src="/static/mysifa_humeur.js"></script>
 <script>
 window.__MYSIFA_UID__ = __USER_ID__;
 window.__MYSIFA_NOM__ = __USER_NOM_JSON__;
@@ -586,6 +671,7 @@ let channelMembers = [];
 let mentionQuery = null;
 let mentionStart = 0;
 let mentionFocusIdx = -1;
+let replyToMsg = null; // {id, user_nom, body}
 
 // ── Sonnerie notification ─────────────────────────────────
 let _audioCtx = null;
@@ -740,6 +826,33 @@ function fmtTime(iso){
     return d.toLocaleDateString('fr-FR',{day:'2-digit',month:'short'})+' '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
   }catch(e){return iso;}
 }
+function msgDateKey(iso){
+  if(!iso)return '';
+  try{
+    const d=new Date(iso.replace(' ','T'));
+    return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();
+  }catch(e){return '';}
+}
+function fmtDateSep(iso){
+  if(!iso)return '';
+  try{
+    const d=new Date(iso.replace(' ','T'));
+    const now=new Date();
+    const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+    const msgDay=new Date(d.getFullYear(),d.getMonth(),d.getDate());
+    const diff=Math.round((today-msgDay)/(86400000));
+    if(diff===0)return "Aujourd’hui";
+    if(diff===1)return 'Hier';
+    return d.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  }catch(e){return '';}
+}
+function buildDateSepEl(iso){
+  const div=document.createElement('div');
+  div.className='chat-date-sep';
+  div.dataset.dateKey=msgDateKey(iso);
+  div.innerHTML='<span class="chat-date-sep-label">'+esc(fmtDateSep(iso))+'</span>';
+  return div;
+}
 function stopPolling(){
   if(pollTimer){clearInterval(pollTimer);pollTimer=null;}
   if(listPollTimer){clearInterval(listPollTimer);listPollTimer=null;}
@@ -770,17 +883,25 @@ function chanInitials(name){
 function chanIconHtml(c,size){
   const sz=size||32;
   const emoji=(c.emoji||'').trim();
+  let iconHtml;
   if(c.type==='channel'&&emoji){
     const fs=Math.max(16,Math.round(sz*0.56));
-    return '<span class="chat-chan-icon chat-chan-icon-emoji" style="width:'+sz+'px;height:'+sz+'px;font-size:'+fs+'px">'+esc(emoji)+'</span>';
+    iconHtml='<span class="chat-chan-icon chat-chan-icon-emoji" style="width:'+sz+'px;height:'+sz+'px;font-size:'+fs+'px">'+esc(emoji)+'</span>';
+  } else {
+    const nom=c.type==='direct'?(c.display_name||''):(c.name||c.display_name||'C');
+    iconHtml='<span class="chat-chan-icon chat-chan-icon-ph" style="width:'+sz+'px;height:'+sz+'px">'+esc(chanInitials(nom))+'</span>';
   }
-  const nom=c.type==='direct'?(c.display_name||''):(c.name||c.display_name||'C');
-  return '<span class="chat-chan-icon chat-chan-icon-ph" style="width:'+sz+'px;height:'+sz+'px">'+esc(chanInitials(nom))+'</span>';
+  const humeur=c.type==='direct'?(c.other_user_humeur||''):'';
+  if(humeur){
+    return '<span class="chat-icon-wrap">'+iconHtml+'<span class="chat-humeur-badge">'+esc(humeur)+'</span></span>';
+  }
+  return iconHtml;
 }
 function updateChatHeaderIcon(ch){
+  const wrap=document.getElementById('chat-header-icon-wrap');
   const el=document.getElementById('chat-header-icon');
   if(!el)return;
-  if(!ch){el.style.display='none';el.innerHTML='';return;}
+  if(!ch){el.style.display='none';el.innerHTML='';if(wrap)wrap.innerHTML='';return;}
   const emoji=(ch.emoji||'').trim();
   if(ch.type==='channel'&&emoji){
     el.className='chat-header-icon chat-header-icon-emoji';
@@ -791,6 +912,21 @@ function updateChatHeaderIcon(ch){
     el.textContent=chanInitials(nom);
   }
   el.style.display='inline-flex';
+  // Humeur badge sur l'en-tête DM
+  const oldBadge=document.getElementById('chat-header-humeur');
+  if(oldBadge)oldBadge.remove();
+  const humeur=ch.type==='direct'?(ch.other_user_humeur||''):'';
+  if(humeur){
+    const badge=document.createElement('span');
+    badge.id='chat-header-humeur';
+    badge.className='chat-humeur-badge';
+    badge.style.fontSize='14px';
+    badge.style.bottom='-3px';
+    badge.style.left='-3px';
+    badge.textContent=humeur;
+    el.style.position='relative';
+    el.appendChild(badge);
+  }
 }
 function renderChannelLists(){
   const chans=channels.filter(c=>c.type==='channel');
@@ -817,6 +953,7 @@ async function selectChannel(id){
   activeId=id;
   pendingChatFile=null;
   renderPendingChatFile();
+  cancelReply();
   renderChannelLists();
   document.body.classList.add('chat-active');
   document.body.classList.remove('chat-list-open');
@@ -888,7 +1025,15 @@ function renderMessages(fullRebuild){
   const box=document.getElementById('chat-messages');
   if(fullRebuild){
     const frag=document.createDocumentFragment();
-    messages.forEach(m=>frag.appendChild(buildMsgEl(m)));
+    let lastDateKey='';
+    messages.forEach(m=>{
+      const dk=msgDateKey(m.created_at);
+      if(dk&&dk!==lastDateKey){
+        lastDateKey=dk;
+        frag.appendChild(buildDateSepEl(m.created_at));
+      }
+      frag.appendChild(buildMsgEl(m));
+    });
     box.innerHTML='';
     box.appendChild(frag);
     updateLoadMoreBtn();
@@ -926,11 +1071,24 @@ function buildMsgEl(m){
   const wrap=document.createElement('div');
   wrap.className='chat-msg '+(m.is_mine?'mine':'theirs')+(m.pinned_at?' pinned':'');
   wrap.dataset.id=String(m.id);
+  wrap.style.position='relative';
+
+  // ── Deleted placeholder ───────────────────────────────
+  if(m.is_soft_deleted){
+    wrap.innerHTML=
+      '<div class="chat-msg-label">'+esc(m.user_nom)+' · '+esc(fmtTime(m.created_at))+'</div>'+
+      '<div class="chat-msg-bubble deleted-bubble">Message supprimé.</div>';
+    return wrap;
+  }
+
   const ch=channels.find(c=>c.id===activeId);
-  const canDel=m.is_mine||ADMIN_ROLES.has(window.__MYSIFA_ROLE__);
-  const canPin=ch&&ch.type==='channel'&&ADMIN_ROLES.has(window.__MYSIFA_ROLE__);
+  const isAdmin=ADMIN_ROLES.has(window.__MYSIFA_ROLE__);
   const msgAge=Date.now()-new Date((m.created_at||'').replace(' ','T')).getTime();
   const canEdit=m.is_mine&&!m.attachment_url&&msgAge<900000;
+  const canDel=m.is_mine||isAdmin;
+  const canPin=ch&&ch.type==='channel'&&isAdmin;
+
+  // ── Body ─────────────────────────────────────────────
   const body=(m.body||'').trim();
   let bubble=body?esc(body):'';
   if(bubble&&window.ChatMentions){
@@ -941,12 +1099,47 @@ function buildMsgEl(m){
   }
   if(m.attachment_url)bubble+=(bubble?'<br>':'')+chatAttachmentHtml(m);
   if(!bubble)bubble='<span style="color:var(--muted);font-size:12px">Pièce jointe</span>';
+
+  // ── Edited date label ─────────────────────────────────
+  let editedLabel='';
+  if(m.edited_at){
+    try{
+      const ed=new Date(m.edited_at.replace(' ','T'));
+      const d=ed.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'});
+      editedLabel='<span class="chat-msg-edited">modifié le '+d+'</span>';
+    }catch(e){editedLabel='<span class="chat-msg-edited">(modifié)</span>';}
+  }
+
+  // ── Reply context ─────────────────────────────────────
+  let replyHtml='';
+  if(m.reply_to){
+    const rn=esc(m.reply_to.user_nom||'');
+    const rb=m.reply_to.is_soft_deleted?'<em style="color:var(--muted)">Message supprimé</em>':esc((m.reply_to.body||'').substring(0,80));
+    replyHtml='<div class="chat-msg-reply-ctx" onclick="scrollToMsg('+m.reply_to.id+')">'+
+      '<div class="chat-msg-reply-ctx-name">'+rn+'</div>'+
+      '<div class="chat-msg-reply-ctx-body">'+rb+'</div></div>';
+  }
+
+  // ── Forwarded tag ─────────────────────────────────────
+  let fwdTag='';
+  if(m.is_forwarded){
+    fwdTag='<div class="chat-msg-fwd-tag">'+
+      '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/></svg>'+
+      'Transféré'+(m.forwarded_from_nom?' · '+esc(m.forwarded_from_nom):'')+'</div>';
+  }
+
+  // ── Build HTML ────────────────────────────────────────
+  // Bouton ⋮ inline dans le label (un seul élément flex)
   wrap.innerHTML=
-    '<div class="chat-msg-label">'+esc(m.user_nom)+' · '+esc(fmtTime(m.created_at))+(m.edited_at?'<span class="chat-msg-edited">(modifié)</span>':'')+'</div>'+
-    '<div class="chat-msg-bubble">'+bubble+'</div>'+
-    (canDel?'<button type="button" class="chat-msg-del" title="Supprimer" onclick="deleteMsg('+m.id+')">×</button>':'')+
-    (canEdit?'<button type="button" class="chat-msg-edit" title="Modifier" onclick="startEdit('+m.id+')">✎</button>':'')+
-    (canPin?'<button type="button" class="chat-msg-pin'+(m.pinned_at?' pinned-active':'')+'" title="'+(m.pinned_at?'Désépingler':'Épingler')+'" onclick="togglePin('+m.id+','+(m.pinned_at?'true':'false')+')" aria-label="'+(m.pinned_at?'Désépingler':'Épingler')+'"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg></button>':'');
+    '<div class="chat-msg-label">'+
+    '<span>'+esc(m.user_nom)+' · '+esc(fmtTime(m.created_at))+editedLabel+'</span>'+
+    '<button type="button" class="chat-msg-menu-btn" title="Options" aria-label="Options du message" onclick="openMsgMenu(event,'+m.id+')">⋮</button>'+
+    '</div>'+
+    replyHtml+
+    fwdTag+
+    '<div class="chat-msg-bubble'+(m.is_forwarded?' fwd':'')+'">'+bubble+'</div>';
+
+  // ── Reactions ─────────────────────────────────────────
   if(m.reactions&&m.reactions.length){
     const rDiv=document.createElement('div');
     rDiv.className='msg-reactions';
@@ -962,6 +1155,38 @@ function buildMsgEl(m){
     const bubbleEl=wrap.querySelector('.chat-msg-bubble');
     if(bubbleEl)bubbleEl.after(rDiv);
   }
+
+  // ── ⋮ Dropdown menu ───────────────────────────────────
+  const menu=document.createElement('div');
+  menu.className='chat-msg-menu';
+  menu.dataset.msgId=String(m.id);
+
+  const mkItem=(label,ico,cls,cb)=>{
+    const btn=document.createElement('button');
+    btn.type='button';
+    btn.className='chat-msg-menu-item'+(cls?' '+cls:'');
+    btn.innerHTML=ico+'<span>'+label+'</span>';
+    btn.onclick=e=>{e.stopPropagation();closeAllMsgMenus();cb();};
+    return btn;
+  };
+
+  const icoReply='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>';
+  const icoEdit='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+  const icoDel='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>';
+  const icoFwd='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/></svg>';
+  const icoPin='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>';
+
+  menu.appendChild(mkItem('Répondre',icoReply,'',()=>startReply(m.id)));
+  if(canEdit) menu.appendChild(mkItem('Modifier',icoEdit,'',()=>startEdit(m.id)));
+  if(canDel) menu.appendChild(mkItem('Supprimer',icoDel,'danger',()=>deleteMsg(m.id)));
+  menu.appendChild(mkItem('Transférer',icoFwd,'',()=>startForward(m.id)));
+  if(canPin) menu.appendChild(mkItem(m.pinned_at?'Désépingler':'Épingler',icoPin,'',()=>togglePin(m.id,!!m.pinned_at)));
+
+  // Dropdown attaché au label (position:relative) pour être correctement ancré
+  const labelEl=wrap.querySelector('.chat-msg-label');
+  if(labelEl)labelEl.appendChild(menu);else wrap.appendChild(menu);
+
+  // ── Emoji picker ──────────────────────────────────────
   const picker=document.createElement('div');
   picker.className='react-picker';
   picker.style.position='absolute';
@@ -972,11 +1197,116 @@ function buildMsgEl(m){
     b.onclick=e=>{e.stopPropagation();picker.classList.remove('show');toggleReaction(m.id,emoji);};
     picker.appendChild(b);
   });
-  wrap.style.position='relative';
   wrap.appendChild(picker);
+
+  // ── Hover emoji picker (JS) ───────────────────────────
+  // Le bouton ⋮ est géré par CSS :hover — pas besoin de JS pour lui
   wrap.addEventListener('mouseenter',()=>picker.classList.add('show'));
   wrap.addEventListener('mouseleave',()=>picker.classList.remove('show'));
+
   return wrap;
+}
+
+function openMsgMenu(e,msgId){
+  e.stopPropagation();
+  const menu=document.querySelector('.chat-msg-menu[data-msg-id="'+msgId+'"]');
+  if(!menu)return;
+  const wasOpen=menu.classList.contains('show');
+  closeAllMsgMenus();
+  if(!wasOpen)menu.classList.add('show');
+}
+
+function closeAllMsgMenus(){
+  document.querySelectorAll('.chat-msg-menu.show').forEach(m=>m.classList.remove('show'));
+}
+
+document.addEventListener('click',()=>closeAllMsgMenus());
+
+function scrollToMsg(msgId){
+  const el=document.querySelector('.chat-msg[data-id="'+msgId+'"]');
+  if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.style.outline='2px solid var(--accent)';setTimeout(()=>{el.style.outline='';},1200);}
+}
+
+// ── Reply ────────────────────────────────────────────────────
+function startReply(msgId){
+  const m=messages.find(x=>x.id===msgId);
+  if(!m||m.is_soft_deleted)return;
+  replyToMsg=m;
+  document.getElementById('reply-preview-name').textContent=m.user_nom||'';
+  document.getElementById('reply-preview-body').textContent=(m.body||'(pièce jointe)').substring(0,80);
+  document.getElementById('chat-reply-bar').classList.add('show');
+  document.getElementById('chat-input').focus();
+}
+
+function cancelReply(){
+  replyToMsg=null;
+  document.getElementById('chat-reply-bar').classList.remove('show');
+}
+
+// ── Forward ──────────────────────────────────────────────────
+async function startForward(msgId){
+  const m=messages.find(x=>x.id===msgId);
+  if(!m)return;
+  try{
+    if(!allUsers.length)allUsers=await api('/api/chat/users')||[];
+  }catch(e){showToast(e.message||'Chargement impossible','danger');return;}
+
+  let selectedIds=new Set();
+  const overlay=document.createElement('div');
+  overlay.className='chat-modal-overlay';
+  overlay.onclick=ev=>{if(ev.target===overlay)closeModal();};
+
+  function renderFwdList(q){
+    const ql=(q||'').toLowerCase();
+    const list=allUsers.filter(u=>Number(u.id)!==Number(window.__MYSIFA_UID__)&&(!ql||(u.nom||'').toLowerCase().includes(ql)));
+    const el=document.getElementById('fwd-user-list');
+    if(!list.length){el.innerHTML='<p style="padding:12px;margin:0;font-size:12px;color:var(--muted)">Aucun résultat</p>';return;}
+    el.innerHTML=list.map(u=>{
+      const sel=selectedIds.has(u.id);
+      return '<button type="button" class="chat-user-row" data-uid="'+u.id+'" style="'+(sel?'color:var(--accent);background:var(--accent-bg)':'')+'">'
+        +esc(u.nom)+' <span style="color:var(--muted);font-size:11px">'+esc(ROLE_LABELS[u.role]||u.role||'')+'</span>'
+        +(sel?' <span style="margin-left:auto">✓</span>':'')
+        +'</button>';
+    }).join('');
+    el.querySelectorAll('.chat-user-row').forEach(btn=>{
+      btn.onclick=()=>{
+        const uid=parseInt(btn.dataset.uid,10);
+        if(selectedIds.has(uid))selectedIds.delete(uid);else selectedIds.add(uid);
+        renderFwdList(document.getElementById('fwd-search').value);
+        document.getElementById('fwd-send-btn').disabled=selectedIds.size===0;
+      };
+    });
+  }
+
+  const preview=(m.body||'(pièce jointe)').substring(0,60);
+  overlay.innerHTML=
+    '<div class="chat-modal" role="dialog">'+
+    '<h3>Transférer le message</h3>'+
+    '<div style="padding:6px 10px;margin-bottom:12px;border-left:3px solid var(--muted);background:var(--accent-bg);border-radius:6px;font-size:12px;color:var(--text2)">'+
+    esc(preview)+'</div>'+
+    '<label for="fwd-search">Destinataires</label>'+
+    '<input type="search" id="fwd-search" placeholder="Rechercher…" autocomplete="off">'+
+    '<div class="chat-user-list" id="fwd-user-list" style="max-height:200px"></div>'+
+    '<div class="chat-modal-actions">'+
+    '<button type="button" onclick="closeModal()">Annuler</button>'+
+    '<button type="button" class="primary" id="fwd-send-btn" disabled>Transférer</button></div></div>';
+  document.getElementById('mroot').appendChild(overlay);
+  renderFwdList('');
+  document.getElementById('fwd-search').oninput=function(){renderFwdList(this.value);};
+  document.getElementById('fwd-send-btn').onclick=async()=>{
+    if(!selectedIds.size)return;
+    try{
+      const r=await api('/api/chat/channels/'+activeId+'/messages/'+msgId+'/forward',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({user_ids:[...selectedIds]})
+      });
+      closeModal();
+      showToast('Message transféré','success');
+      if(r.channel_ids&&r.channel_ids.length)await loadChannels();
+    }catch(e){showToast(e.message||'Transfert impossible','danger');}
+  };
+  requestAnimationFrame(()=>document.getElementById('fwd-search')?.focus());
 }
 
 async function toggleReaction(msgId,emoji){
@@ -1044,6 +1374,13 @@ function appendNewMessages(msgs){
   const wasBottom=isNearBottom(box);
   msgs.forEach(m=>{
     if(messages.some(x=>x.id===m.id))return;
+    // Insérer séparateur de date si le jour change
+    const prevMsg=messages.length?messages[messages.length-1]:null;
+    const prevDk=prevMsg?msgDateKey(prevMsg.created_at):'';
+    const newDk=msgDateKey(m.created_at);
+    if(newDk&&newDk!==prevDk){
+      box.appendChild(buildDateSepEl(m.created_at));
+    }
     messages.push(m);
     box.appendChild(buildMsgEl(m));
     if(m.id>lastMsgId)lastMsgId=m.id;
@@ -1118,6 +1455,7 @@ async function sendMessage(){
   if((!body&&!file)||!activeId)return;
   const btn=document.getElementById('chat-send');
   btn.disabled=true;
+  const rtoId=replyToMsg?replyToMsg.id:null;
   try{
     if(file){
       const fd=new FormData();
@@ -1128,7 +1466,7 @@ async function sendMessage(){
       await api('/api/chat/channels/'+activeId+'/messages',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({body})
+        body:JSON.stringify({body,reply_to_id:rtoId||undefined})
       });
     }
     inp.value='';
@@ -1136,6 +1474,7 @@ async function sendMessage(){
     inp.style.height='auto';
     pendingChatFile=null;
     renderPendingChatFile();
+    cancelReply();
     await loadMessages(false);
   }catch(e){
     showToast(e.message||'Envoi impossible','danger');
@@ -1145,12 +1484,17 @@ async function sendMessage(){
 }
 
 async function deleteMsg(msgId){
-  if(!activeId||!confirm('Supprimer ce message ?'))return;
+  if(!activeId)return;
   try{
     await api('/api/chat/channels/'+activeId+'/messages/'+msgId,{method:'DELETE'});
-    messages=messages.filter(m=>m.id!==msgId);
+    // Update local state — mark as soft-deleted, re-render
+    const idx=messages.findIndex(m=>m.id===msgId);
+    if(idx>=0){messages[idx]={...messages[idx],is_soft_deleted:true,body:'',edited_at:'',attachment_url:'',reactions:[]};}
     const el=document.querySelector('.chat-msg[data-id="'+msgId+'"]');
-    if(el)el.remove();
+    if(el){
+      const m=messages[idx];
+      if(m){const newEl=buildMsgEl(m);el.replaceWith(newEl);}
+    }
     showToast('Message supprimé','success');
   }catch(e){
     showToast(e.message||'Suppression impossible','danger');
@@ -1238,14 +1582,16 @@ function renderSettingsMembersList(members,canManage){
     el.innerHTML='<p style="padding:8px 0;margin:0;font-size:12px;color:var(--muted)">Aucun membre.</p>';
     return;
   }
+  const today=new Date().toISOString().slice(0,10);
   el.innerHTML=members.map(m=>{
     const rl=ROLE_LABELS[m.role]||m.role||'';
     const isSelf=Number(m.id)===Number(window.__MYSIFA_UID__);
     const removeBtn=(!isSelf&&canManage)
       ?'<button type="button" class="chat-user-row" style="justify-content:center;color:var(--danger);margin-top:4px" data-remove="'+m.id+'">Retirer</button>'
       :'';
+    const humeur=(m.humeur_active&&m.humeur_valeur&&m.humeur_date===today)?(' <span title="Humeur du jour">'+esc(m.humeur_valeur)+'</span>'):'';
     return '<div style="padding:8px 0;border-bottom:1px solid var(--border)">'+
-      '<div style="font-weight:600;font-size:13px">'+esc(m.nom)+'</div>'+
+      '<div style="font-weight:600;font-size:13px">'+esc(m.nom)+humeur+'</div>'+
       '<div style="font-size:11px;color:var(--muted)">'+esc(rl)+'</div>'+removeBtn+'</div>';
   }).join('');
   el.querySelectorAll('[data-remove]').forEach(btn=>{
@@ -1737,6 +2083,11 @@ document.getElementById('btn-logout').onclick=async()=>{
   }
   if(window.MySifaTheme)MySifaTheme.applyTheme();
   syncThemeBtn();
+  // Humeur popup
+  try{
+    const meData=await fetch('/api/auth/me',{credentials:'include'}).then(r=>r.json()).catch(()=>null);
+    if(meData&&window.MySifaHumeur)requestAnimationFrame(()=>MySifaHumeur.maybeShow(meData));
+  }catch(e){}
   await loadChannels();
   checkNotifPermission();
   checkUpdates();

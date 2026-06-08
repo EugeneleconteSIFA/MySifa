@@ -6,11 +6,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from config import APP_TITLE, APP_VERSION, HOST, PORT, BASE_DIR
-from frontend.html import render_frontend_html
+from app.web.html import render_frontend_html
 
 from routers.auth       import router as auth_router
 from routers.imports    import router as router_imports
@@ -24,18 +24,20 @@ from routers.rentabilite import router as router_rentabilite
 from app.routers.matiere_prix import router as router_matiere_prix
 from routers.planning import router as planning_router
 from routers.stock import router as router_stock
+from app.routers.reconciliation import router as reconciliation_router
 from routers.support import router as support_router
 from app.routers.messages import router as messages_router
 from app.routers.compta import router as compta_router
-from frontend.planning_page import router as planning_page_router
-from frontend.prod_page import router as prod_page_router
-from frontend.stock_page import router as stock_page_router
-from frontend.compta_page import router as compta_page_router
+from app.web.planning_page import router as planning_page_router
+from app.web.prod_page import router as prod_page_router
+from app.web.stock_page import router as stock_page_router
+from app.web.compta_page import router as compta_page_router
 from app.web.expe_page import router as expe_page_router
 from app.web.devis_page import router as devis_page_router
 from app.routers.expe_departs import router as expe_departs_router
 from app.routers.settings import router as settings_api_router
-from frontend.settings_page import router as settings_page_router
+from app.routers.clients import router as clients_api_router
+from app.web.settings_page import router as settings_page_router
 from app.routers.fabrication import router as fabrication_api_router
 from app.routers.of_import import router as of_import_router
 from app.web.fabrication_page import router as fabrication_page_router
@@ -57,20 +59,32 @@ from app.routers.postit import router as postit_router
 from app.routers.ao import router as ao_router
 from app.routers.ao_portail import router_api as ao_portail_api_router
 from app.routers.ao_portail import router_html as ao_portail_html_router
+from app.routers.expe_portail import router_api as expe_portail_api_router
+from app.routers.expe_portail import router_html as expe_portail_html_router
 from app.web.ao_page import router as ao_page_router
 from app.routers.pricing import router as pricing_router
 from app.web.pricing_page import router as pricing_page_router
-from app.routers.portal_dashboards import router as portal_dashboards_router
+from app.routers.dashboards import router as dashboards_router
+from app.routers.api_bridge import router as bridge_router
+from app.routers.bat import router as bat_api_router
+from app.web.bat_page import router as bat_page_router
+from app.routers.pwa import router as pwa_router
+from app.routers.push import router as push_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup / shutdown — remplace @app.on_event('startup') (déprécié)."""
     try:
-        from database import sync_emplacements_plan_from_csv
+        from app.core.database import get_db, sync_emplacements_plan_from_csv
 
-        n = sync_emplacements_plan_from_csv()
-        print(f"[MySifa] emplacements_plan : {n} code(s) depuis CSV")
+        with get_db() as _conn:
+            _count = _conn.execute("SELECT COUNT(*) FROM emplacements_plan").fetchone()[0]
+        if _count == 0:
+            n = sync_emplacements_plan_from_csv()
+            print(f"[MySifa] emplacements_plan : {n} code(s) depuis CSV (seed initial)")
+        else:
+            print(f"[MySifa] emplacements_plan : {_count} code(s) en base — import CSV ignoré")
     except Exception as e:
         print(f"[MySifa] emplacements_plan : import CSV ignoré ({e})")
     try:
@@ -107,7 +121,7 @@ async def no_cache_planning(request: Request, call_next):
     """Évite cache navigateur / proxy sur le planning (données toujours lues en base)."""
     response = await call_next(request)
     p = request.url.path
-    if p.startswith("/api/planning") or p == "/planning":
+    if p.startswith("/api/planning") or p == "/planning" or p.startswith("/portail/ao/"):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         response.headers["Pragma"] = "no-cache"
     return response
@@ -125,6 +139,7 @@ app.include_router(router_rentabilite)
 app.include_router(router_matiere_prix, prefix="/api/matiere")
 app.include_router(planning_router)
 app.include_router(router_stock)
+app.include_router(reconciliation_router)
 app.include_router(support_router)
 app.include_router(messages_router)
 app.include_router(compta_router)
@@ -136,6 +151,7 @@ app.include_router(expe_page_router)
 app.include_router(devis_page_router)
 app.include_router(expe_departs_router, prefix="/api/expe")
 app.include_router(settings_api_router)
+app.include_router(clients_api_router)
 app.include_router(settings_page_router)
 app.include_router(fabrication_api_router)
 app.include_router(of_import_router, prefix="")
@@ -158,10 +174,22 @@ app.include_router(postit_router)
 app.include_router(ao_router)
 app.include_router(ao_portail_html_router)
 app.include_router(ao_portail_api_router)
+app.include_router(expe_portail_html_router)
+app.include_router(expe_portail_api_router)
 app.include_router(ao_page_router)
 app.include_router(pricing_router)
 app.include_router(pricing_page_router)
-app.include_router(portal_dashboards_router)
+app.include_router(dashboards_router)
+app.include_router(bridge_router)
+app.include_router(bat_api_router)
+app.include_router(bat_page_router)
+app.include_router(pwa_router)
+app.include_router(push_router)
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return FileResponse(os.path.join(BASE_DIR, "static", "favicon.ico"))
 
 
 @app.get("/", response_class=HTMLResponse)

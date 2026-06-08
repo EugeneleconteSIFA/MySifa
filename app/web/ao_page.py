@@ -107,6 +107,11 @@ body.sb-open .sidebar-overlay{display:block}
 .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text2)}
 .btn-danger{background:var(--danger);color:#fff}
 .btn-sm{padding:6px 12px;font-size:12px}
+.btn-icon{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit;vertical-align:middle;transition:all .15s}
+.btn-icon:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+.btn-icon.btn-del-ao:hover{background:rgba(248,113,113,.12);color:var(--danger);border-color:var(--danger)}
+.ao-actions-cell{text-align:right;white-space:nowrap}
+.ao-actions-cell .btn{vertical-align:middle}
 .filter-tabs{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
 .filter-tab{padding:8px 14px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
 .filter-tab.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
@@ -161,6 +166,8 @@ label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bot
 #toast.info{background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent)}
 #toast.warn{background:rgba(251,191,36,.2);color:var(--warn);border:1px solid var(--warn)}
 .prod-list-table .prod-ref-cell{font-family:ui-monospace,monospace;font-size:14px;font-weight:700;color:var(--text)}
+.prod-list-table .prod-info-cell{font-size:12px;color:var(--text2);line-height:1.5}
+.prod-list-table .prod-info-cell strong{color:var(--text);font-weight:700}
 .prod-list-table .prod-actions-cell{text-align:right;white-space:nowrap}
 """ + AO_PRODUIT_FORM_CSS + r"""
 </style>
@@ -233,7 +240,7 @@ function icon(name, size) {
     menu: '<line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/>',
     home: '<path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/>',
     'log-out': '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
-    sun: '<circle cx="12" cy="12" r="5"/>',
+    sun: '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>',
     moon: '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
     plus: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
     copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
@@ -309,7 +316,6 @@ function buildAoSidebarNavStructure() {
     {kind:'btn', section:'ao', icon:'clipboard', label:'Appel d\'offre'},
     {kind:'sep', label:'Contact'},
     {kind:'btn', section:'contact_fournisseur', icon:'truck', label:'Fournisseur', sub:true},
-    {kind:'btn', section:'contact_client', icon:'building-2', label:'Client', sub:true},
     {kind:'btn', section:'produits', icon:'package', label:'Produits'},
   ].map(n => (n.kind === 'btn' ? {...n, active: sec === n.section} : n));
 }
@@ -319,7 +325,6 @@ function aoMobileTitle() {
     dashboard: ['Tableau de bord', 'Vue d\'ensemble'],
     ao: S.view === 'detail' && S.ao ? [S.ao.reference, 'Appel d\'offre'] : ['Appels d\'offre', 'Appel d\'offre'],
     contact_fournisseur: ['Fournisseurs', 'Contacts'],
-    contact_client: ['Clients', 'Contacts'],
     produits: ['Produits', 'Référentiel'],
   };
   const x = m[S.section] || ['MyAO', 'Appels d\'offre'];
@@ -406,16 +411,22 @@ function renderSectionPlaceholder(title, hint) {
     '<div class="card empty-state"><strong>'+escHtml(title)+'</strong>'+escHtml(hint)+'</div>';
 }
 
+function langueBadge(l) {
+  const lang = (l === 'en') ? 'en' : 'fr';
+  const lbl = lang === 'en' ? 'EN' : 'FR';
+  return '<span style="display:inline-block;padding:2px 8px;border-radius:6px;background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700;letter-spacing:.5px">'+lbl+'</span>';
+}
+
 function renderCarnet() {
   const list = S.carnet || [];
   let rows = '';
   list.forEach(c => {
-    rows += '<tr><td>'+escHtml(c.societe||'—')+'</td><td>'+escHtml(c.nom)+'</td><td>'+escHtml(c.adresse||'—')+'</td><td>'+
+    rows += '<tr><td>'+escHtml(c.societe||'—')+'</td><td>'+escHtml(c.nom)+'</td><td>'+escHtml(c.email||'—')+'</td><td>'+escHtml(c.adresse||'—')+'</td><td>'+langueBadge(c.langue)+'</td><td>'+
       '<button class="btn btn-ghost btn-sm btn-edit-carnet" data-id="'+c.id+'">Modifier</button> '+
       '<button class="btn btn-ghost btn-sm btn-del-carnet" data-id="'+c.id+'">Supprimer</button></td></tr>';
   });
   const table = list.length
-    ? '<div class="card"><table class="data-table"><thead><tr><th>Société</th><th>Nom</th><th>Adresse</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+    ? '<div class="card"><table class="data-table"><thead><tr><th>Société</th><th>Nom</th><th>Email</th><th>Adresse</th><th>Langue</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
     : '<div class="card empty-state"><strong>Aucun fournisseur dans le carnet.</strong></div>';
   return '<div class="page-hdr"><h1>Carnet fournisseurs</h1>'+
     '<button class="btn btn-accent" type="button" id="btn-add-carnet">'+icon('plus',14)+' Ajouter</button></div>'+table;
@@ -444,6 +455,46 @@ function filteredProduits() {
   });
 }
 
+function formatProduitImpressions(p) {
+  const f = (p && p.fiche) || {};
+  if (!f.impressions) {
+    return '<span style="color:var(--muted)">Non</span>';
+  }
+  const imp = f.impressions_detail || {};
+  const recto = parseInt(imp.recto, 10) || 0;
+  const verso = parseInt(imp.verso, 10) || 0;
+  if (!recto && !verso) {
+    return '<span style="color:var(--muted)">—</span>';
+  }
+  const parts = [];
+  if (recto) parts.push('<strong>'+recto+'</strong> recto');
+  if (verso) parts.push('<strong>'+verso+'</strong> verso');
+  if (imp.aplat) {
+    const pct = (imp.aplat_pourcent !== '' && imp.aplat_pourcent != null) ? (' '+imp.aplat_pourcent+'%') : '';
+    parts.push('<span style="color:var(--muted)">aplat'+escHtml(pct)+'</span>');
+  }
+  return parts.join(' · ');
+}
+
+function formatProduitConditionnement(p) {
+  const f = (p && p.fiche) || {};
+  const bob = f.bobines || {};
+  const cond = f.conditionnement || {};
+  const cart = cond.carton || {};
+  const pal = cond.palette || {};
+  const nbEt = parseInt(bob.nb_etiquettes, 10);
+  const diam = parseFloat(bob.diametre_bobine);
+  const bpc = parseInt(cart.bobines_carton, 10);
+  const cpp = parseInt(pal.cartons_palette, 10);
+  const parts = [];
+  if (!isNaN(diam) && diam > 0) parts.push('Ø '+formatInt(diam)+' mm');
+  if (!isNaN(nbEt) && nbEt > 0) parts.push('<strong>'+formatInt(nbEt)+'</strong> étiq./bobine');
+  if (!isNaN(bpc) && bpc > 0) parts.push('<strong>'+formatInt(bpc)+'</strong> bob./carton');
+  if (!isNaN(cpp) && cpp > 0) parts.push('<strong>'+formatInt(cpp)+'</strong> cartons/palette');
+  if (!parts.length) return '<span style="color:var(--muted)">—</span>';
+  return parts.join(' · ');
+}
+
 function renderProduitsRows() {
   const ae = document.activeElement;
   const focusId = ae?.id;
@@ -460,16 +511,42 @@ function renderProduitsRows() {
   } else {
     let rows = '';
     list.forEach(p => {
-      rows += '<tr><td class="prod-ref-cell">'+escHtml(p.ref)+'</td><td class="prod-actions-cell">'+
+      rows += '<tr>'+
+        '<td class="prod-ref-cell">'+escHtml(p.ref)+'</td>'+
+        '<td class="prod-info-cell">'+formatProduitImpressions(p)+'</td>'+
+        '<td class="prod-info-cell">'+formatProduitConditionnement(p)+'</td>'+
+        '<td class="prod-actions-cell">'+
         '<button class="btn btn-ghost btn-sm btn-edit-produit" data-id="'+p.id+'">Modifier</button> '+
+        '<button class="btn btn-ghost btn-sm btn-dup-produit" data-id="'+p.id+'" data-ref="'+escAttr(p.ref||'')+'">Dupliquer</button> '+
         '<button class="btn btn-ghost btn-sm btn-export-produit" data-id="'+p.id+'">PDF</button> '+
         '<button class="btn btn-ghost btn-sm btn-del-produit" data-id="'+p.id+'">Supprimer</button></td></tr>';
     });
-    el.innerHTML = '<table class="data-table prod-list-table"><thead><tr><th>Référence</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>';
+    el.innerHTML = '<table class="data-table prod-list-table">'+
+      '<thead><tr>'+
+      '<th>Référence</th>'+
+      '<th>Impressions</th>'+
+      '<th>Conditionnement bobine</th>'+
+      '<th></th>'+
+      '</tr></thead><tbody>'+rows+'</tbody></table>';
     el.querySelectorAll('.btn-edit-produit').forEach(b => {
       b.addEventListener('click', () => {
         const p = (S.produits||[]).find(x => String(x.id) === String(b.dataset.id));
         if (p) openProduitForm(p);
+      });
+    });
+    el.querySelectorAll('.btn-dup-produit').forEach(b => {
+      b.addEventListener('click', async () => {
+        b.disabled = true;
+        try {
+          const dup = await api('/api/ao/produits/'+b.dataset.id+'/dupliquer', {method:'POST'});
+          showToast('Produit dupliqué — '+dup.ref, 'success');
+          await loadProduits();
+          renderProduitsRows();
+        } catch(e) {
+          showToast(e.message || 'Erreur à la duplication.', 'danger');
+        } finally {
+          b.disabled = false;
+        }
       });
     });
     el.querySelectorAll('.btn-export-produit').forEach(b => {
@@ -691,7 +768,7 @@ function openModalFourni() {
 }
 function openModalCarnetEntry(edit) {
   S.modal = 'carnet-entry';
-  S.modalData = edit ? {...edit} : {nom:'', societe:'', adresse:'', notes:''};
+  S.modalData = edit ? {...edit} : {nom:'', societe:'', email:'', adresse:'', notes:'', langue:'fr'};
   renderModal();
 }
 function openModalCarnetClientEntry(edit) {
@@ -703,6 +780,89 @@ function openModalConfirmEnvoi(n) {
   S.modal = 'confirm-envoi';
   S.modalData = {n};
   renderModal();
+}
+function openModalConfirmDelete(id, ref, statut) {
+  S.modal = 'confirm-delete-ao';
+  S.modalData = {id, ref, statut};
+  renderModal();
+}
+function openModalDuplicate(id, ref, titre) {
+  S.modal = 'duplicate-ao';
+  S.modalData = {id, ref, titre, with_fournisseurs: true, with_pieces_jointes: false};
+  renderModal();
+}
+function openModalPickClient(onPick) {
+  S.modal = 'pick-client';
+  S.modalData = {search: '', results: [], loading: true, onPick};
+  renderModal();
+  pickClientFetch('');
+}
+function openModalCreateClient(onCreated) {
+  S.modal = 'create-client';
+  S.modalData = {
+    tab: 'identite', onCreated,
+    raison_sociale:'', code:'', numero:'', etat:'Normal', siret:'', tva:'',
+    adresse1:'', adresse2:'', cp:'', ville:'', pays:'', code_pays:'',
+    telephone:'', email:'', contact_nom:'', contact_fonction:'', contact_email:'', contact_tel:'',
+    representant:'', notes:''
+  };
+  renderModal();
+}
+async function pickClientFetch(q) {
+  if (!S.modalData) return;
+  S.modalData.search = q || '';
+  S.modalData.loading = true;
+  pickClientRenderList();
+  try {
+    const params = new URLSearchParams({search: q || '', limit: '40'});
+    const res = await api('/api/ao/picker/clients?' + params.toString());
+    if (S.modal === 'pick-client') {
+      S.modalData.results = res || [];
+      S.modalData.loading = false;
+      pickClientRenderList();
+    }
+  } catch(e) {
+    if (S.modal === 'pick-client') {
+      S.modalData.loading = false;
+      S.modalData.results = [];
+      pickClientRenderList();
+      showToast(e.message || 'Erreur de recherche.', 'danger');
+    }
+  }
+}
+function pickClientRenderList() {
+  const el = document.getElementById('m-pick-cli-list');
+  if (!el) return;
+  if (S.modalData.loading && !(S.modalData.results || []).length) {
+    el.innerHTML = '<div class="pf-pick-empty">Chargement…</div>';
+    return;
+  }
+  const list = S.modalData.results || [];
+  if (!list.length) {
+    const q = (S.modalData.search || '').trim();
+    el.innerHTML = q
+      ? '<div class="pf-pick-empty">Aucun résultat pour « '+escHtml(q)+' »</div>'
+      : '<div class="pf-pick-empty">Aucun client dans le référentiel.</div>';
+    return;
+  }
+  let h = '';
+  list.forEach(c => {
+    const meta = [c.code, c.ville, c.pays].filter(Boolean).map(escHtml).join(' · ');
+    h += '<div class="pf-pick-item" data-id="'+c.id+'">'+
+      '<div class="pi-main">'+escHtml(c.raison_sociale || 'Sans raison sociale')+'</div>'+
+      (meta ? '<div class="pi-meta">'+meta+'</div>' : '')+
+      '</div>';
+  });
+  el.innerHTML = h;
+  el.querySelectorAll('.pf-pick-item').forEach(it => {
+    it.addEventListener('click', () => {
+      const id = it.dataset.id;
+      const cli = (S.modalData.results || []).find(x => String(x.id) === String(id));
+      const cb = S.modalData.onPick;
+      closeModal();
+      if (cli && typeof cb === 'function') cb(cli);
+    });
+  });
 }
 
 function renderModal() {
@@ -810,6 +970,8 @@ function renderModal() {
       '<div class="field"><label>Société</label><input id="m-societe"></div>'+
       '<div class="field"><label>Nom</label><input id="m-nom"></div>'+
       '<div class="field"><label>Email</label><input type="email" id="m-mail"></div>'+
+      '<div class="field"><label>Langue de l\\'email d\\'invitation</label>'+
+      '<select id="m-langue"><option value="fr">Français</option><option value="en">English</option></select></div>'+
       '<div class="field"><label>Adresse</label><textarea id="m-adresse" rows="2"></textarea></div></div>'+
       '<label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:14px">'+
       '<input type="checkbox" id="m-save-carnet"> Enregistrer dans le carnet</label>'+
@@ -820,6 +982,7 @@ function renderModal() {
     const nomEl = document.getElementById('m-nom');
     const mailEl = document.getElementById('m-mail');
     const adresseEl = document.getElementById('m-adresse');
+    const langueEl = document.getElementById('m-langue');
     const saveCb = document.getElementById('m-save-carnet');
     pickEl.onchange = () => {
       const id = pickEl.value;
@@ -828,7 +991,9 @@ function renderModal() {
         if (c) {
           societeEl.value = c.societe || '';
           nomEl.value = c.nom || '';
+          mailEl.value = c.email || '';
           adresseEl.value = c.adresse || '';
+          langueEl.value = (c.langue === 'en') ? 'en' : 'fr';
         }
         saveCb.checked = false;
         saveCb.disabled = true;
@@ -840,18 +1005,21 @@ function renderModal() {
     document.getElementById('m-ok').onclick = async () => {
       const nom = nomEl.value.trim();
       const email = mailEl.value.trim();
+      const langue = (langueEl.value === 'en') ? 'en' : 'fr';
       if (!nom || !email) { showToast('Nom et email obligatoires.', 'danger'); return; }
       const label = societeEl.value.trim() || nom;
       try {
         await api('/api/ao/'+S.ao.id+'/fournisseurs', {method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({nom_fournisseur: label, email_contact: email})});
+          body: JSON.stringify({nom_fournisseur: label, email_contact: email, langue})});
         const manual = !pickEl.value;
         if (manual && saveCb.checked) {
           await api('/api/ao/carnet-fournisseurs', {method:'POST', headers:{'Content-Type':'application/json'},
             body: JSON.stringify({
               nom,
+              email: email,
               societe: societeEl.value.trim() || null,
-              adresse: adresseEl.value.trim() || null
+              adresse: adresseEl.value.trim() || null,
+              langue
             })});
           await loadCarnet();
         }
@@ -861,10 +1029,17 @@ function renderModal() {
     };
   } else if (S.modal === 'carnet-entry') {
     const editId = S.modalData.id;
+    const curLang = (S.modalData.langue === 'en') ? 'en' : 'fr';
     box.className = 'modal modal-wide';
     box.innerHTML = '<h3>'+(editId?'Modifier':'Ajouter')+' au carnet</h3>'+
       '<div class="field"><label>Société</label><input id="m-c-societe" value="'+escAttr(S.modalData.societe||'')+'"></div>'+
       '<div class="field"><label>Nom</label><input id="m-c-nom" value="'+escAttr(S.modalData.nom||'')+'"></div>'+
+      '<div class="field"><label>Email</label><input type="email" id="m-c-email" value="'+escAttr(S.modalData.email||'')+'"></div>'+
+      '<div class="field"><label>Langue de l\\'email d\\'invitation</label>'+
+      '<select id="m-c-langue">'+
+        '<option value="fr"'+(curLang==='fr'?' selected':'')+'>Français</option>'+
+        '<option value="en"'+(curLang==='en'?' selected':'')+'>English</option>'+
+      '</select></div>'+
       '<div class="field"><label>Adresse</label><textarea id="m-c-adresse" rows="2">'+escHtml(S.modalData.adresse||'')+'</textarea></div>'+
       '<div class="field"><label>Notes</label><textarea id="m-c-notes" rows="2">'+escHtml(S.modalData.notes||'')+'</textarea></div>'+
       '<div class="modal-actions"><button class="btn btn-ghost" id="m-cancel">Annuler</button><button class="btn btn-accent" id="m-ok">Enregistrer</button></div>';
@@ -874,8 +1049,10 @@ function renderModal() {
       const body = {
         societe: document.getElementById('m-c-societe').value.trim() || null,
         nom: document.getElementById('m-c-nom').value.trim(),
+        email: document.getElementById('m-c-email').value.trim() || null,
         adresse: document.getElementById('m-c-adresse').value.trim() || null,
-        notes: document.getElementById('m-c-notes').value.trim() || null
+        notes: document.getElementById('m-c-notes').value.trim() || null,
+        langue: (document.getElementById('m-c-langue').value === 'en') ? 'en' : 'fr'
       };
       if (!body.nom) { showToast('Nom obligatoire.', 'danger'); return; }
       try {
@@ -925,6 +1102,223 @@ function renderModal() {
         await loadDetail(S.ao.id); render();
       } catch(e) { showToast(e.message, 'danger'); }
     };
+  } else if (S.modal === 'confirm-delete-ao') {
+    const st = S.modalData.statut;
+    const stLabel = st === 'brouillon' ? 'Brouillon' : st === 'envoyee' ? 'Envoyée' : st === 'cloturee' ? 'Clôturée' : st;
+    const warn = (st === 'envoyee' || st === 'cloturee')
+      ? '<div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.3);border-radius:8px;padding:12px;margin-bottom:14px;font-size:12px;color:var(--danger);line-height:1.5">'+
+        '<strong>Attention</strong> — cet appel d\'offre est au statut « '+escHtml(stLabel)+' ». La suppression effacera aussi tous les fournisseurs, leurs réponses, messages et documents associés. Cette action est irréversible.</div>'
+      : '';
+    box.innerHTML = '<h3>Supprimer l\'appel d\'offre</h3>'+
+      '<p style="font-size:14px;color:var(--text2);line-height:1.6;margin-bottom:14px">Supprimer <strong>'+escHtml(S.modalData.ref)+'</strong> ?</p>'+
+      warn+
+      '<div class="modal-actions"><button class="btn btn-ghost" type="button" id="m-cancel">Annuler</button><button class="btn btn-danger" type="button" id="m-ok">Supprimer</button></div>';
+    ov.appendChild(box); m.appendChild(ov);
+    document.getElementById('m-cancel').onclick = closeModal;
+    document.getElementById('m-ok').onclick = async () => {
+      try {
+        await api('/api/ao/'+S.modalData.id, {method:'DELETE'});
+        closeModal();
+        showToast('Appel d\'offre supprimé.', 'success');
+        await loadList(); render();
+      } catch(e) { showToast(e.message, 'danger'); }
+    };
+  } else if (S.modal === 'duplicate-ao') {
+    const md = S.modalData;
+    const defaultTitre = (md.titre || '') + ' (copie)';
+    box.innerHTML = '<h3>Dupliquer l\'appel d\'offre</h3>'+
+      '<p style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:14px">Source : <strong style="color:var(--text2)">'+escHtml(md.ref)+'</strong></p>'+
+      '<div class="field"><label>Titre du nouvel appel d\'offre</label>'+
+      '<input id="m-dup-titre" value="'+escAttr(defaultTitre)+'"></div>'+
+      '<label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:10px">'+
+      '<input type="checkbox" id="m-dup-f" checked> Recopier les fournisseurs invités</label>'+
+      '<label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:14px">'+
+      '<input type="checkbox" id="m-dup-pj"> Recopier les documents joints</label>'+
+      '<p style="font-size:11px;color:var(--muted);line-height:1.5;margin-bottom:14px">Le nouvel appel d\'offre sera créé en <strong style="color:var(--text2)">brouillon</strong>. Les réponses fournisseurs ne sont jamais recopiées.</p>'+
+      '<div class="modal-actions"><button class="btn btn-ghost" type="button" id="m-cancel">Annuler</button><button class="btn btn-accent" type="button" id="m-ok">Dupliquer et ouvrir</button></div>';
+    ov.appendChild(box); m.appendChild(ov);
+    document.getElementById('m-cancel').onclick = closeModal;
+    document.getElementById('m-ok').onclick = async () => {
+      const titre = document.getElementById('m-dup-titre').value.trim();
+      if (!titre) { showToast('Titre obligatoire.', 'danger'); return; }
+      const body = {
+        titre,
+        with_fournisseurs: document.getElementById('m-dup-f').checked,
+        with_pieces_jointes: document.getElementById('m-dup-pj').checked,
+      };
+      try {
+        const ao = await api('/api/ao/'+md.id+'/dupliquer',
+          {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+        closeModal();
+        showToast('Appel d\'offre dupliqué — '+ao.reference, 'success');
+        await loadList();
+        openDetail(ao.id);
+      } catch(e) { showToast(e.message, 'danger'); }
+    };
+  } else if (S.modal === 'pick-client') {
+    box.className = 'modal modal-wide';
+    box.innerHTML = '<h3>Sélectionner un client</h3>'+
+      '<div class="field"><input type="search" id="m-pick-cli-search" placeholder="Rechercher (raison sociale, code, ville, email…)" autocomplete="off"></div>'+
+      '<div class="pf-pick-list" id="m-pick-cli-list"><div class="pf-pick-empty">Chargement…</div></div>'+
+      '<div class="modal-actions" style="justify-content:space-between">'+
+      '<button class="btn btn-ghost" type="button" id="m-pick-cli-create">+ Nouveau client</button>'+
+      '<button class="btn btn-ghost" type="button" id="m-cancel">Annuler</button>'+
+      '</div>';
+    ov.appendChild(box); m.appendChild(ov);
+    document.getElementById('m-cancel').onclick = closeModal;
+    pickClientRenderList();
+    const inp = document.getElementById('m-pick-cli-search');
+    let tm = null;
+    inp.addEventListener('input', () => {
+      clearTimeout(tm);
+      tm = setTimeout(() => pickClientFetch(inp.value), 180);
+    });
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { inp.value=''; pickClientFetch(''); }
+    });
+    requestAnimationFrame(() => { inp.focus(); });
+    document.getElementById('m-pick-cli-create').onclick = () => {
+      const onPick = S.modalData.onPick;
+      openModalCreateClient((cli) => {
+        if (typeof onPick === 'function') onPick(cli);
+      });
+    };
+  } else if (S.modal === 'create-client') {
+    box.className = 'modal modal-wide';
+    const d = S.modalData;
+    const tab = d.tab || 'identite';
+    const tabs = [
+      ['identite','Identité'],
+      ['adresse','Adresse'],
+      ['contact','Contact'],
+      ['notes','Notes']
+    ];
+    const tabsHtml = '<div class="pf-tabs-cli">'+tabs.map(t =>
+      '<button type="button" data-tab="'+t[0]+'" class="'+(tab===t[0]?'active':'')+'">'+escHtml(t[1])+'</button>'
+    ).join('')+'</div>';
+
+    let body = '';
+    if (tab === 'identite') {
+      body = '<div class="pf-cli-grid">'+
+        '<div class="full"><label>Raison sociale *</label><input id="m-cli-raison" value="'+escAttr(d.raison_sociale||'')+'"></div>'+
+        '<div><label>Code</label><input id="m-cli-code" value="'+escAttr(d.code||'')+'"></div>'+
+        '<div><label>N°</label><input type="number" id="m-cli-numero" value="'+escAttr(d.numero||'')+'"></div>'+
+        '<div><label>État</label><select id="m-cli-etat">'+
+          ['Normal','Bloqué','Inactif'].map(s => '<option value="'+s+'"'+(d.etat===s?' selected':'')+'>'+s+'</option>').join('')+
+          '</select></div>'+
+        '<div><label>SIRET</label><input id="m-cli-siret" value="'+escAttr(d.siret||'')+'"></div>'+
+        '<div class="full"><label>N° TVA</label><input id="m-cli-tva" value="'+escAttr(d.tva||'')+'"></div>'+
+        '</div>';
+    } else if (tab === 'adresse') {
+      body = '<div class="pf-cli-grid">'+
+        '<div class="full"><label>Adresse 1</label><input id="m-cli-adresse1" value="'+escAttr(d.adresse1||'')+'"></div>'+
+        '<div class="full"><label>Adresse 2</label><input id="m-cli-adresse2" value="'+escAttr(d.adresse2||'')+'"></div>'+
+        '<div><label>Code postal</label><input id="m-cli-cp" value="'+escAttr(d.cp||'')+'"></div>'+
+        '<div><label>Ville</label><input id="m-cli-ville" value="'+escAttr(d.ville||'')+'"></div>'+
+        '<div><label>Code pays</label><input id="m-cli-code-pays" maxlength="3" value="'+escAttr(d.code_pays||'')+'"></div>'+
+        '<div><label>Pays</label><input id="m-cli-pays" value="'+escAttr(d.pays||'')+'"></div>'+
+        '</div>';
+    } else if (tab === 'contact') {
+      body = '<div class="pf-cli-grid">'+
+        '<div><label>Téléphone</label><input id="m-cli-tel" value="'+escAttr(d.telephone||'')+'"></div>'+
+        '<div><label>Email</label><input type="email" id="m-cli-email" value="'+escAttr(d.email||'')+'"></div>'+
+        '<div class="full" style="font-size:11px;color:var(--muted);margin-top:4px">Contact principal</div>'+
+        '<div><label>Nom du contact</label><input id="m-cli-contact-nom" value="'+escAttr(d.contact_nom||'')+'"></div>'+
+        '<div><label>Fonction</label><input id="m-cli-contact-fonction" value="'+escAttr(d.contact_fonction||'')+'"></div>'+
+        '<div><label>Email contact</label><input type="email" id="m-cli-contact-email" value="'+escAttr(d.contact_email||'')+'"></div>'+
+        '<div><label>Téléphone contact</label><input id="m-cli-contact-tel" value="'+escAttr(d.contact_tel||'')+'"></div>'+
+        '</div>';
+    } else if (tab === 'notes') {
+      body = '<div class="pf-cli-grid">'+
+        '<div class="full"><label>Représentant</label><input id="m-cli-rep" value="'+escAttr(d.representant||'')+'"></div>'+
+        '<div class="full"><label>Notes internes</label><textarea id="m-cli-notes" rows="6" placeholder="Remarques, conditions particulières…">'+escHtml(d.notes||'')+'</textarea></div>'+
+        '</div>';
+    }
+
+    box.innerHTML = '<h3>Nouveau client</h3>'+tabsHtml+body+
+      '<div class="modal-actions">'+
+      '<button class="btn btn-ghost" type="button" id="m-cancel">Annuler</button>'+
+      '<button class="btn btn-accent" type="button" id="m-ok">Créer le client</button>'+
+      '</div>';
+    ov.appendChild(box); m.appendChild(ov);
+
+    function persistCurrentTab() {
+      const get = id => document.getElementById(id)?.value;
+      if (tab === 'identite') {
+        d.raison_sociale = get('m-cli-raison')||'';
+        d.code = get('m-cli-code')||'';
+        d.numero = get('m-cli-numero')||'';
+        d.etat = get('m-cli-etat')||'Normal';
+        d.siret = get('m-cli-siret')||'';
+        d.tva = get('m-cli-tva')||'';
+      } else if (tab === 'adresse') {
+        d.adresse1 = get('m-cli-adresse1')||'';
+        d.adresse2 = get('m-cli-adresse2')||'';
+        d.cp = get('m-cli-cp')||'';
+        d.ville = get('m-cli-ville')||'';
+        d.code_pays = get('m-cli-code-pays')||'';
+        d.pays = get('m-cli-pays')||'';
+      } else if (tab === 'contact') {
+        d.telephone = get('m-cli-tel')||'';
+        d.email = get('m-cli-email')||'';
+        d.contact_nom = get('m-cli-contact-nom')||'';
+        d.contact_fonction = get('m-cli-contact-fonction')||'';
+        d.contact_email = get('m-cli-contact-email')||'';
+        d.contact_tel = get('m-cli-contact-tel')||'';
+      } else if (tab === 'notes') {
+        d.representant = get('m-cli-rep')||'';
+        d.notes = get('m-cli-notes')||'';
+      }
+    }
+
+    document.querySelectorAll('.pf-tabs-cli button').forEach(b => {
+      b.addEventListener('click', () => {
+        persistCurrentTab();
+        d.tab = b.dataset.tab;
+        renderModal();
+      });
+    });
+    document.getElementById('m-cancel').onclick = closeModal;
+    document.getElementById('m-ok').onclick = async () => {
+      persistCurrentTab();
+      if (!(d.raison_sociale||'').trim()) {
+        d.tab = 'identite';
+        renderModal();
+        showToast('Raison sociale obligatoire.', 'danger');
+        return;
+      }
+      const body = {
+        raison_sociale: d.raison_sociale.trim(),
+        code: d.code?.trim() || null,
+        numero: d.numero ? Number(d.numero) : null,
+        etat: d.etat || 'Normal',
+        siret: d.siret?.trim() || null,
+        tva: d.tva?.trim() || null,
+        adresse1: d.adresse1?.trim() || null,
+        adresse2: d.adresse2?.trim() || null,
+        cp: d.cp?.trim() || null,
+        ville: d.ville?.trim() || null,
+        pays: d.pays?.trim() || null,
+        code_pays: d.code_pays?.trim() || null,
+        telephone: d.telephone?.trim() || null,
+        email: d.email?.trim() || null,
+        contact_nom: d.contact_nom?.trim() || null,
+        contact_fonction: d.contact_fonction?.trim() || null,
+        contact_email: d.contact_email?.trim() || null,
+        contact_tel: d.contact_tel?.trim() || null,
+        representant: d.representant?.trim() || null,
+        notes: d.notes?.trim() || null,
+      };
+      try {
+        const cli = await api('/api/ao/picker/clients', {
+          method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+        });
+        const cb = d.onCreated;
+        closeModal();
+        showToast('Client créé.', 'success');
+        if (typeof cb === 'function') cb(cli);
+      } catch(e) { showToast(e.message || 'Erreur à la création.', 'danger'); }
+    };
   }
 }
 
@@ -932,15 +1326,21 @@ function renderList() {
   const list = filteredAos();
   let rows = '';
   list.forEach(a => {
+    const ref = escAttr(a.reference||'');
+    const titre = escAttr(a.titre||'');
+    const actions =
+      '<button class="btn btn-ghost btn-sm btn-view" data-id="'+a.id+'">Voir</button> '+
+      '<button class="btn-icon btn-dup-ao" data-id="'+a.id+'" data-ref="'+ref+'" data-titre="'+titre+'" title="Dupliquer">'+icon('copy',14)+'</button> '+
+      '<button class="btn-icon btn-del-ao" data-id="'+a.id+'" data-ref="'+ref+'" data-statut="'+escAttr(a.statut||'')+'" title="Supprimer">'+icon('trash',14)+'</button>';
     rows += '<tr><td><strong>'+escHtml(a.reference)+'</strong></td><td>'+escHtml(a.titre)+'</td><td>'+statutBadge(a.statut)+'</td>'+
       '<td>'+escHtml(a.date_limite||'—')+'</td><td>'+escHtml(a.nb_fournisseurs)+'</td><td>'+escHtml(a.nb_reponses)+'</td>'+
-      '<td><button class="btn btn-ghost btn-sm btn-view" data-id="'+a.id+'">Voir</button></td></tr>';
+      '<td class="ao-actions-cell">'+actions+'</td></tr>';
   });
   return '<div class="page-hdr"><h1>Appels d\'offre</h1><button class="btn btn-accent" type="button" id="btn-new-ao">'+icon('plus',14)+' Nouvel appel d\'offre</button></div>'+
     '<div class="filter-tabs">'+
     ['tous','brouillon','envoyee','cloturee'].map(f=>'<button class="filter-tab'+(S.filtre===f?' active':'')+'" data-f="'+f+'">'+escHtml(f==='tous'?'Tous':f==='brouillon'?'Brouillon':f==='envoyee'?'Envoyée':'Clôturée')+'</button>').join('')+
     '</div>'+
-    (list.length ? '<div class="card"><table class="data-table"><thead><tr><th>Référence</th><th>Titre</th><th>Statut</th><th>Date limite</th><th>Fournisseurs</th><th>Réponses</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>' :
+    (list.length ? '<div class="card"><table class="data-table"><thead><tr><th>Référence</th><th>Titre</th><th>Statut</th><th>Date limite</th><th>Fournisseurs</th><th>Réponses</th><th style="text-align:right">Actions</th></tr></thead><tbody>'+rows+'</tbody></table></div>' :
     '<div class="card empty-state"><strong>Aucun appel d\'offre</strong>Créez un premier appel d\'offre pour inviter vos fournisseurs.</div>');
 }
 
@@ -985,13 +1385,14 @@ function renderDetailHeader() {
 function renderLignes() {
   const st = S.ao.statut;
   const lignes = S.detail.lignes || [];
-  let rows = lignes.map(l => '<tr><td>'+escHtml(l.position)+'</td><td>'+escHtml(l.ref_produit)+'</td><td>'+escHtml(l.designation)+'</td>'+
+  let rows = lignes.map(l => '<tr><td>'+escHtml(l.position)+'</td><td>'+escHtml(l.ref_produit)+'</td>'+
+    '<td>'+escHtml(l.client_nom||'—')+'</td><td>'+formatInt(l.etiquettes_par_bobine)+'</td>'+
     '<td>'+escHtml(l.quantite)+' '+escHtml(l.unite)+'</td><td>'+escHtml(l.notes||'')+'</td><td>'+
     (st==='brouillon'?'<button class="btn btn-ghost btn-sm btn-edit-ligne" data-id="'+l.id+'">Modifier</button> <button class="btn btn-ghost btn-sm btn-del-ligne" data-id="'+l.id+'">Supprimer</button>':'')+
     '</td></tr>').join('');
   return '<div class="card">'+(st==='brouillon'?'<button class="btn btn-accent btn-sm" type="button" id="btn-add-ligne" style="margin-bottom:12px">'+icon('plus',14)+' Ajouter une ligne</button>':'')+
-    '<table class="data-table"><thead><tr><th>#</th><th>Réf.</th><th>Désignation</th><th>Qté</th><th>Notes</th><th></th></tr></thead><tbody>'+
-    (rows||'<tr><td colspan="6" style="color:var(--muted)">Aucune ligne</td></tr>')+'</tbody></table></div>';
+    '<table class="data-table"><thead><tr><th>#</th><th>Réf.</th><th>Client</th><th>Étiq. / bobine</th><th>Qté</th><th>Notes</th><th></th></tr></thead><tbody>'+
+    (rows||'<tr><td colspan="7" style="color:var(--muted)">Aucune ligne</td></tr>')+'</tbody></table></div>';
 }
 
 function renderFournisseurs() {
@@ -1137,6 +1538,14 @@ function bindListEvents() {
   document.getElementById('btn-new-ao')?.addEventListener('click', openModalCreate);
   document.querySelectorAll('.filter-tab').forEach(b => b.addEventListener('click', () => { S.filtre = b.dataset.f; render(); }));
   document.querySelectorAll('.btn-view').forEach(b => b.addEventListener('click', () => openDetail(parseInt(b.dataset.id,10))));
+  document.querySelectorAll('.btn-del-ao').forEach(b => b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openModalConfirmDelete(parseInt(b.dataset.id,10), b.dataset.ref, b.dataset.statut);
+  }));
+  document.querySelectorAll('.btn-dup-ao').forEach(b => b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openModalDuplicate(parseInt(b.dataset.id,10), b.dataset.ref, b.dataset.titre);
+  }));
 }
 
 function bindDetailEvents() {
@@ -1299,9 +1708,6 @@ function render() {
   } else if (S.section === 'contact_fournisseur') {
     area.innerHTML = renderCarnet();
     bindCarnetEvents();
-  } else if (S.section === 'contact_client') {
-    area.innerHTML = renderCarnetClients();
-    bindCarnetClientsEvents();
   } else if (S.section === 'produits') {
     if (S.produitView === 'form' && S.produitForm) {
       area.innerHTML = renderProduitForm();
@@ -1375,8 +1781,8 @@ function render() {
   if (window.MySifaDock && typeof window.MySifaDock.bootPageWidgets === 'function') {
     window.MySifaDock.bootPageWidgets();
   }
-  const loads = await Promise.allSettled([loadList(), loadCarnet(), loadCarnetClients(), loadProduits(), loadMatieresForProduit()]);
-  const labels = ['appels d\'offre', 'carnet fournisseurs', 'carnet clients', 'produits', 'matières'];
+  const loads = await Promise.allSettled([loadList(), loadCarnet(), loadProduits(), loadMatieresForProduit()]);
+  const labels = ['appels d\'offre', 'carnet fournisseurs', 'produits', 'matières'];
   const errors = [];
   loads.forEach((res, i) => {
     if (res.status === 'rejected') {
@@ -1392,7 +1798,6 @@ function render() {
     showToast('Chargement partiel : ' + errors.map(x => x.msg).join(' · '), 'danger');
     if (!S.aos) S.aos = [];
     if (!S.carnet) S.carnet = [];
-    if (!S.carnetClients) S.carnetClients = [];
     if (!S.produits) S.produits = [];
     if (!S.matieres) S.matieres = {};
   }

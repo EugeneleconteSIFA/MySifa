@@ -5,15 +5,17 @@ Endpoints :
   GET /api/db/tables                       → liste des tables avec nb colonnes + nb lignes
   GET /api/db/table/{name}/schema          → colonnes (name, type, notnull, pk, default)
   GET /api/db/table/{name}/rows            → lignes paginées, avec recherche plein-texte
+  POST /api/db/ai-query                    → question en langage naturel → SQL SELECT + résultats
 """
 
 import os
 import sqlite3
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Body, HTTPException, Query, Request
 
 from app.services.auth_service import get_current_user
+from app.services.db_ai_query import run_natural_language_query
 from config import DB_PATH, ROLE_SUPERADMIN, ROLE_DIRECTION
 
 router = APIRouter(tags=["db-viewer"])
@@ -206,5 +208,24 @@ def db_table_rows(
             "limit": limit,
             "pages": max(1, (total + limit - 1) // limit),
         }
+    finally:
+        conn.close()
+
+
+@router.post("/api/db/ai-query")
+def db_ai_query(request: Request, body: dict = Body(...)):
+    """Transforme une question en français en SELECT SQLite (Claude) et exécute en lecture seule."""
+    _require_db_access(request)
+    question = body.get("question") or body.get("q") or ""
+    conn = _get_conn()
+    try:
+        return run_natural_language_query(conn, str(question))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erreur lors de l'exécution : {e}",
+        ) from e
     finally:
         conn.close()

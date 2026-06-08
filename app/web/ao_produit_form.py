@@ -38,6 +38,24 @@ align-items:center}
 .pf-hidden{display:none!important}
 .pf-imp-col{display:flex;flex-direction:column;gap:6px}
 .pf-actions .btn:disabled{opacity:.45;cursor:not-allowed;pointer-events:none}
+.pf-client-picker{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pf-client-display{flex:1;min-width:0;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:13px;color:var(--text);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pf-client-display.is-empty{font-weight:400}
+.pf-pick-list{max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:10px}
+.pf-pick-item{display:flex;flex-direction:column;gap:2px;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s}
+.pf-pick-item:last-child{border-bottom:none}
+.pf-pick-item:hover{background:var(--accent-bg)}
+.pf-pick-item .pi-main{font-size:13px;font-weight:600;color:var(--text)}
+.pf-pick-item .pi-meta{font-size:11px;color:var(--muted)}
+.pf-pick-empty{padding:24px 16px;text-align:center;color:var(--muted);font-size:13px}
+.pf-tabs-cli{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+.pf-tabs-cli button{padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+.pf-tabs-cli button.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.pf-cli-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pf-cli-grid .full{grid-column:span 2}
+.pf-cli-grid label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;display:block}
+.pf-cli-grid input,.pf-cli-grid select,.pf-cli-grid textarea{width:100%;padding:8px 10px;font-size:13px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit}
+@media(max-width:560px){.pf-cli-grid{grid-template-columns:1fr}.pf-cli-grid .full{grid-column:span 1}}
 @media(max-width:960px){
 .pf-general{grid-template-columns:1fr 1fr}
 .pf-cols-2,.pf-cols-3{grid-template-columns:1fr}
@@ -85,6 +103,7 @@ function produitFromApi(p) {
     id: p.id,
     ref: p.ref || '',
     client_id: p.client_id != null ? String(p.client_id) : '',
+    client_label: p.client_nom || '',
     unite: p.unite || 'unité',
     notes: p.notes || '',
     fiche: base
@@ -138,10 +157,18 @@ function renderProduitForm() {
   const imp = f.impressions_detail;
   const showImp = !!f.impressions;
 
-  let clientOpts = '<option value="">— Client —</option>';
-  (S.carnetClients||[]).forEach(c => {
-    clientOpts += '<option value="'+c.id+'"'+(String(c.id)===String(d.client_id)?' selected':'')+'>'+escHtml(c.nom)+'</option>';
-  });
+  const clientPicker = (() => {
+    const hasClient = !!d.client_id;
+    const label = hasClient ? (d.client_label || ('Client #'+d.client_id)) : '';
+    return '<div class="pf-client-picker">'+
+      '<div class="pf-client-display'+(hasClient?'':' is-empty')+'" id="pf-client-display">'+
+      (hasClient ? escHtml(label) : '<span style="color:var(--muted)">Aucun client lié</span>')+
+      '</div>'+
+      '<button type="button" class="btn btn-ghost btn-sm" id="btn-pf-client-pick">'+
+      (hasClient ? 'Changer' : 'Sélectionner')+'</button>'+
+      (hasClient ? ' <button type="button" class="btn-icon" id="btn-pf-client-clear" title="Retirer le client" style="width:28px;height:28px">×</button>' : '')+
+      '</div>';
+  })();
 
   const mats = S.matieres || {};
   const frontal = mats.frontal || [];
@@ -167,7 +194,7 @@ function renderProduitForm() {
       '<option value="paravent"'+(f.type_produit==='paravent'?' selected':'')+'>Paravent</option></select>')+
     pfRow('Impressions', '<select id="pf-impressions"><option value="1"'+(f.impressions?' selected':'')+'>Oui</option>'+
       '<option value="0"'+(f.impressions?'':' selected')+'>Non</option></select>')+
-    pfRow('Client', '<select id="pf-client">'+clientOpts+'</select>', 'pf-inline-wide')+
+    pfRow('Client', clientPicker, 'pf-inline-wide')+
     '</div></div>'+
 
     '<div class="pf-section"><div class="pf-section-title">Fiche technique</div>'+
@@ -314,7 +341,7 @@ function collectProduitForm() {
   f.particularites = document.getElementById('pf-part')?.value.trim() || '';
   return {
     ref: document.getElementById('pf-ref')?.value.trim(),
-    client_id: document.getElementById('pf-client')?.value || null,
+    client_id: (S.produitForm && S.produitForm.client_id) ? S.produitForm.client_id : null,
     fiche: f
   };
 }
@@ -418,7 +445,7 @@ async function openProduitForm(edit) {
   if (edit) {
     S.produitForm = produitFromApi(edit);
   } else {
-    S.produitForm = { id: null, ref: '', client_id: '', fiche: defaultProduitFiche() };
+    S.produitForm = { id: null, ref: '', client_id: '', client_label: '', fiche: defaultProduitFiche() };
   }
   if (!S.matieres) {
     try { await loadMatieresForProduit(); } catch (e) { /* liste vide */ }
@@ -448,6 +475,21 @@ function bindProduitFormEvents() {
   if (exportBtn && !exportBtn.disabled) {
     exportBtn.addEventListener('click', exportProduitPdf);
   }
+  document.getElementById('btn-pf-client-pick')?.addEventListener('click', () => {
+    openModalPickClient((cli) => {
+      if (S.produitForm) {
+        S.produitForm.client_id = cli ? String(cli.id) : '';
+        S.produitForm.client_label = cli ? (cli.raison_sociale || '') : '';
+      }
+      render();
+    });
+  });
+  document.getElementById('btn-pf-client-clear')?.addEventListener('click', () => {
+    if (!S.produitForm) return;
+    S.produitForm.client_id = '';
+    S.produitForm.client_label = '';
+    render();
+  });
   ['pf-et-laize','pf-et-long'].forEach(id => {
     document.getElementById(id)?.addEventListener('input', pfUpdateFormatDisplay);
   });

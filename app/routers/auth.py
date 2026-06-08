@@ -32,10 +32,6 @@ from config import (
     SESSION_HOURS,
     SUPERADMIN_EMAIL,
 )
-from app.services.portal_dashboard_service import (
-    normalize_portal_dashboards_for_db,
-    portal_dashboards_list_from_db,
-)
 
 router = APIRouter()
 
@@ -328,7 +324,7 @@ def me(request: Request):
         return PlainResponse(content=b"null", media_type="application/json")
     with get_db() as conn:
         row = conn.execute(
-            "SELECT id,email,identifiant,nom,role,operateur_lie,machine_id,telephone,adresse,date_naissance,avatar_url,access_overrides,portal_apps_order,portal_dashboards,theme_prefs FROM users WHERE id=?",
+            "SELECT id,email,identifiant,nom,role,operateur_lie,machine_id,telephone,adresse,date_naissance,avatar_url,access_overrides,portal_apps_order,theme_prefs,humeur_active,humeur_valeur,humeur_date FROM users WHERE id=?",
             (user["id"],)
         ).fetchone()
     if not row:
@@ -338,7 +334,6 @@ def me(request: Request):
     d["access_overrides"] = parse_access_overrides_raw(ov_raw)
     d["app_access"] = merged_app_access(d.get("role"), ov_raw)
     d["portal_apps_order"] = _portal_order_list_from_db(d.get("portal_apps_order"))
-    d["portal_dashboards"] = portal_dashboards_list_from_db(d.get("portal_dashboards"))
     return d
 
 
@@ -386,10 +381,6 @@ async def update_me(request: Request):
         if "portal_apps_order" in body:
             portal_val = _normalize_portal_order_for_db(body.get("portal_apps_order"))
 
-        dashboards_val = exd.get("portal_dashboards")
-        if "portal_dashboards" in body:
-            dashboards_val = normalize_portal_dashboards_for_db(body.get("portal_dashboards"))
-
         theme_prefs_val = exd.get("theme_prefs")
         if "theme_prefs" in body:
             import json as _json
@@ -402,8 +393,8 @@ async def update_me(request: Request):
                 theme_prefs_val = str(tp)
 
         conn.execute(
-            "UPDATE users SET nom=?,email=?,telephone=?,adresse=?,date_naissance=?,password_hash=?,portal_apps_order=?,portal_dashboards=?,theme_prefs=? WHERE id=?",
-            (nom, email, telephone, adresse or None, date_naissance or None, pwd_hash, portal_val, dashboards_val, theme_prefs_val, user["id"]),
+            "UPDATE users SET nom=?,email=?,telephone=?,adresse=?,date_naissance=?,password_hash=?,portal_apps_order=?,theme_prefs=? WHERE id=?",
+            (nom, email, telephone, adresse or None, date_naissance or None, pwd_hash, portal_val, theme_prefs_val, user["id"]),
         )
         conn.commit()
 
@@ -476,6 +467,48 @@ def delete_my_avatar(request: Request):
         ip=client_ip,
     )
     return {"ok": True}
+
+
+# ─── Humeur utilisateur ───────────────────────────────────────────
+HUMEURS_VALIDES = {"😊", "😩", "😢", "🤒", "😐", "😠", "🥵", "🥶", "🤮", "🥱"}
+
+@router.put("/api/auth/me/humeur")
+async def update_humeur(request: Request):
+    """Met à jour l'humeur du jour et/ou le toggle actif/inactif."""
+    user = get_current_user(request)
+    body = await request.json()
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    with get_db() as conn:
+        ex = conn.execute("SELECT humeur_active,humeur_valeur,humeur_date FROM users WHERE id=?", (user["id"],)).fetchone()
+        if not ex:
+            raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+
+        humeur_active = ex["humeur_active"] if ex["humeur_active"] is not None else 0
+        humeur_valeur = ex["humeur_valeur"]
+        humeur_date = ex["humeur_date"]
+
+        if "humeur_active" in body:
+            humeur_active = 1 if body["humeur_active"] else 0
+
+        if "humeur_valeur" in body:
+            val = body["humeur_valeur"]
+            if val is None or val == "":
+                humeur_valeur = None
+                humeur_date = None
+            elif val in HUMEURS_VALIDES:
+                humeur_valeur = val
+                humeur_date = today
+            else:
+                raise HTTPException(status_code=400, detail="Humeur invalide")
+
+        conn.execute(
+            "UPDATE users SET humeur_active=?,humeur_valeur=?,humeur_date=? WHERE id=?",
+            (humeur_active, humeur_valeur, humeur_date, user["id"]),
+        )
+        conn.commit()
+
+    return {"ok": True, "humeur_active": humeur_active, "humeur_valeur": humeur_valeur, "humeur_date": humeur_date}
 
 
 # ─── Gestion utilisateurs (super admin uniquement) ──────────────

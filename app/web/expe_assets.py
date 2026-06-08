@@ -94,6 +94,53 @@ EXPE_TRANSPORTEURS_CSS = r"""
   .expe-trp-head{padding:12px 14px}
   .expe-trp-search{max-width:none;width:100%;order:3}
 }
+
+/* ── Tag coloré transporteur ── */
+.expe-trp-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+/* Picker de couleur */
+.trp-cpk-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.trp-cpk-sw {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: transform 0.1s, border-color 0.1s;
+  flex-shrink: 0;
+}
+.trp-cpk-sw:hover { transform: scale(1.15); border-color: var(--text); }
+.trp-cpk-sw.sel { border-color: var(--text); box-shadow: 0 0 0 2px var(--accent); }
+.trp-cpk-none {
+  background: var(--bg);
+  border: 2px dashed var(--border) !important;
+  position: relative;
+}
+.trp-cpk-none::after {
+  content: '×';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: var(--muted);
+  font-weight: 700;
+}
 """
 
 EXPE_TRANSPORTEURS_JS = r"""
@@ -116,6 +163,38 @@ const T={
   tarifs_loading:false,
   tarifs_parsing:false
 };
+
+const TRP_PALETTE = [
+  "#93c5fd","#c4b5fd","#6ee7b7","#fde68a","#fca5a5","#67e8f9",
+  "#a5b4fc","#bbf7d0","#f0abfc","#fdba74","#99f6e4","#fef08a",
+  "#bfdbfe","#ddd6fe","#a7f3d0","#fecaca","#fed7aa","#e9d5ff",
+  "#3b82f6","#8b5cf6","#10b981","#f59e0b","#ef4444","#06b6d4",
+  "#6366f1","#22c55e","#d946ef","#f97316","#64748b","#94a3b8",
+];
+
+function trpTag(nom, couleur) {
+  const bg = couleur || 'var(--accent-bg)';
+  const isHex = bg && bg.startsWith('#');
+  let textColor = 'var(--text)';
+  if (isHex) {
+    const r = parseInt(bg.slice(1,3),16);
+    const g = parseInt(bg.slice(3,5),16);
+    const b = parseInt(bg.slice(5,7),16);
+    const lum = (0.299*r + 0.587*g + 0.114*b) / 255;
+    textColor = lum > 0.55 ? '#1e293b' : '#f1f5f9';
+  }
+  const el = document.createElement('span');
+  el.className = 'expe-trp-tag';
+  el.style.background = bg;
+  el.style.color = textColor;
+  el.textContent = nom || '—';
+  return el;
+}
+
+function getTrpColor(transporteurId) {
+  const tr = (T.list || []).find(x => Number(x.id) === Number(transporteurId));
+  return tr ? (tr.couleur || '') : '';
+}
 
 function escHtml(t){
   return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -259,14 +338,15 @@ function openTransporteurModal(id){
       zone_messagerie:!!Number(tr.zone_messagerie),
       actif:tr.actif==null?true:!!Number(tr.actif),
       tarif_filename:tr.tarif_filename||'',
-      tarif_url:tr.tarif_url||''
+      tarif_url:tr.tarif_url||'',
+      couleur:tr.couleur||''
     };
   }else{
     T.editId=null;
     T.form={
       nom:'',taxe_carburant_pct:'0',contact_nom:'',contact_email:'',contact_tel:'',
       zone_france:true,zone_france_hors_paris:false,zone_affretement:false,zone_messagerie:false,
-      actif:true,tarif_filename:'',tarif_url:''
+      actif:true,tarif_filename:'',tarif_url:'',couleur:''
     };
   }
   T.tarifFile=null;
@@ -358,6 +438,32 @@ function activerTarifsSelection(){
   void validerTarifsBrouillon(ids);
 }
 
+async function viderTarifsTransporteur(){
+  if(T.editId==null)return;
+  const nL=(T.tarifs_lignes||[]).length;
+  const nF=(T.tarifs_frais||[]).length;
+  if(!nL&&!nF){
+    showToast('Aucun tarif importé à supprimer.','info');
+    return;
+  }
+  const msg='Supprimer tous les tarifs importés pour ce transporteur ?\n\n'
+    +(nL?nL+' ligne(s) tarifaire(s)':'')
+    +(nL&&nF?' et ':'')
+    +(nF?nF+' frais annexe(s)':'')
+    +'\n\nLe fichier source uploadé n\'est pas supprimé.';
+  if(!confirm(msg))return;
+  try{
+    const res=await api('/api/expe/transporteurs/'+T.editId+'/tarifs',{method:'DELETE'});
+    const dl=res.deleted_lignes!=null?res.deleted_lignes:0;
+    const df=res.deleted_frais!=null?res.deleted_frais:0;
+    showToast('Tarifs supprimés ('+dl+' ligne(s), '+df+' frais).','success');
+    await loadTarifsTransporteur(T.editId);
+    render();
+  }catch(e){
+    showToast(e.message||'Suppression impossible','danger');
+  }
+}
+
 async function importTarifsCsv(file){
   if(!file||T.editId==null)return;
   const fd=new FormData();
@@ -371,16 +477,43 @@ async function importTarifsCsv(file){
   }
 }
 
-async function parseTarifIa(){
+function _tarifsFileExt(){
+  const fname=(T.form&&(T.form.tarif_filename||T.form.tarif_url))||'';
+  if(fname){
+    const parts=fname.split('.');
+    if(parts.length>1)return parts.pop().toLowerCase();
+  }
+  const tr=(T.list||[]).find(t=>Number(t.id)===Number(T.editId));
+  const fn=(tr&&(tr.tarif_filename||tr.tarif_url))||'';
+  const p=fn.split('.');
+  return p.length>1?p.pop().toLowerCase():'';
+}
+
+function _tarifsParserLabel(){
+  return ['xlsx','xls'].includes(_tarifsFileExt())?'Parser (Excel)':'Parser avec IA';
+}
+
+async function parserTarifs(){
   if(T.editId==null)return;
+  const ext=_tarifsFileExt();
+  const isExcel=['xlsx','xls'].includes(ext);
+  const endpoint=isExcel
+    ?'/api/expe/transporteurs/'+T.editId+'/tarifs/parse-excel'
+    :'/api/expe/transporteurs/'+T.editId+'/tarif/parse';
   T.tarifs_parsing=true;
   render();
   try{
-    const res=await api('/api/expe/transporteurs/'+T.editId+'/tarif/parse',{method:'POST'});
+    const res=await api(endpoint,{method:'POST'});
     showToast(res.message||(res.lignes_extraites+' lignes extraites.'),'success');
     await loadTarifsTransporteur(T.editId);
   }catch(e){
-    showToast(e.message||'Analyse impossible','danger');
+    const msg=e&&e.message?String(e.message):'Erreur lors du parsing.';
+    if(msg.indexOf('Format non reconnu')>=0){
+      showToast('Format non reconnu. Contacter l\'équipe pour ajouter le support de ce format.','danger');
+      console.error('Structure du fichier :',msg);
+    }else{
+      showToast(msg,'danger');
+    }
   }
   T.tarifs_parsing=false;
   render();
@@ -400,11 +533,16 @@ function renderTarifsOnglet(){
       if(f)void importTarifsCsv(f);
       e.target.value='';
     });
+    const hasTarifs=(T.tarifs_lignes||[]).length>0||(T.tarifs_frais||[]).length>0;
     kids.push(h('div',{className:'expe-trp-tarif-actions'},
       h('button',{type:'button',className:'btn btn-ghost',onClick:()=>csvInp.click()},'Importer CSV'),
-      h('button',{type:'button',className:'btn btn-ghost',disabled:!!T.tarifs_parsing,
-        onClick:()=>void parseTarifIa()},
-        T.tarifs_parsing?'Analyse en cours…':'Parser avec IA'),
+      h('button',{type:'button',id:'btn-parser-tarif',className:'btn btn-ghost',disabled:!!T.tarifs_parsing,
+        onClick:()=>void parserTarifs()},
+        T.tarifs_parsing
+          ?(['xlsx','xls'].includes(_tarifsFileExt())?'Analyse Excel en cours…':'Analyse IA en cours…')
+          :_tarifsParserLabel()),
+      h('button',{type:'button',className:'btn btn-danger',disabled:!hasTarifs,
+        onClick:()=>void viderTarifsTransporteur()},'Vider les tarifs'),
       csvInp
     ));
   }
@@ -465,6 +603,7 @@ function expeTrpBodyFromForm(){
     zone_france_hors_paris:T.form.zone_france_hors_paris?1:0,
     zone_affretement:T.form.zone_affretement?1:0,
     zone_messagerie:T.form.zone_messagerie?1:0,
+    couleur:T.form.couleur||null,
     actif:T.form.actif?1:0
   };
 }
@@ -576,29 +715,33 @@ function expeTrpBadgesCell(badges,cls){
 
 function expeTrpContactCell(tr){
   const emailRaw=(tr.contact_email||'').trim();
+  const isPortail=expeTrpIsPortailUrl(emailRaw);
   const lines=[];
-  if(tr.contact_nom){
-    lines.push(h('div',{className:'expe-trp-contact-line'},iconEl('user',12),' ',escHtml(tr.contact_nom)));
-  }
-  if(tr.contact_tel){
-    lines.push(h('div',{className:'expe-trp-contact-line'},expeTrpIconPhone(12),' ',escHtml(tr.contact_tel)));
-  }
-  if(emailRaw){
-    if(expeTrpIsPortailUrl(emailRaw)){
-      lines.push(h('a',{className:'expe-trp-portail',href:emailRaw,target:'_blank',rel:'noopener',onClick:e=>e.stopPropagation()},
-        iconEl('arrow-right',12),' Portail'));
-    }else{
+  if(isPortail){
+    const label=(tr.contact_nom||'').trim()||'Portail';
+    lines.push(h('a',{className:'expe-trp-portail',href:emailRaw,target:'_blank',rel:'noopener',onClick:e=>e.stopPropagation()},
+      escHtml(label)));
+    if(tr.contact_tel){
+      lines.push(h('div',{className:'expe-trp-contact-line'},expeTrpIconPhone(12),' ',escHtml(tr.contact_tel)));
+    }
+  }else{
+    if(tr.contact_nom){
+      lines.push(h('div',{className:'expe-trp-contact-line'},iconEl('user',12),' ',escHtml(tr.contact_nom)));
+    }
+    if(tr.contact_tel){
+      lines.push(h('div',{className:'expe-trp-contact-line'},expeTrpIconPhone(12),' ',escHtml(tr.contact_tel)));
+    }
+    if(emailRaw){
       lines.push(h('a',{className:'expe-trp-contact-line',href:'mailto:'+encodeURIComponent(emailRaw),onClick:e=>e.stopPropagation()},
         iconEl('mail',12),' ',escHtml(emailRaw)));
     }
   }
   if(!lines.length)return h('span',{style:{color:'var(--muted)'}},'—');
   const kids=[...lines];
-  if(emailRaw||tr.contact_tel){
+  if(!isPortail&&(emailRaw||tr.contact_tel)){
     kids.push(h('button',{type:'button',className:'btn-ghost',style:{marginTop:'4px',padding:'4px 8px',fontSize:'11px'},
       onClick:()=>expeTrpOpenContact(tr)},
-      iconEl(expeTrpIsPortailUrl(emailRaw)?'arrow-right':'mail',12),
-      ' ',expeTrpIsPortailUrl(emailRaw)?'Portail':'Contacter'));
+      iconEl('mail',12),' Contacter'));
   }
   return h('div',{className:'expe-trp-contact-col'},...kids);
 }
@@ -629,8 +772,9 @@ function renderExpeTranspList(){
     const taxe=tr.taxe_carburant_pct!=null?Number(tr.taxe_carburant_pct):0;
     const services=expeTrpServiceBadges(tr);
     const isActive=!!Number(tr.actif);
+    const curColor=tr.couleur||'';
     const nameCell=h('td',null,
-      h('span',{className:'expe-trp-name'},escHtml(tr.nom||'')),
+      curColor?trpTag(tr.nom||'',tr.couleur):h('span',{className:'expe-trp-name'},escHtml(tr.nom||'')),
       inactive?h('span',{className:'expe-trp-badge-inactif'},'Inactif'):null
     );
     const tarifCell=tr.tarif_url
@@ -727,6 +871,38 @@ function renderExpeTransporteurModal(){
       mkText('Nom du transporteur *','nom'),
       mkText('Taxe carburant %','taxe_carburant_pct',{type:'number',step:'0.1',min:'0'})
     );
+    const curColor=T.form.couleur||'';
+    const swatches=TRP_PALETTE.map(c=>{
+      const sw=document.createElement('div');
+      sw.className='trp-cpk-sw'+(c===curColor?' sel':'');
+      sw.style.background=c;
+      sw.title=c;
+      sw.addEventListener('click',()=>{
+        T.form.couleur=c;
+        render();
+      });
+      return sw;
+    });
+    const noColorBtn=document.createElement('div');
+    noColorBtn.className='trp-cpk-sw trp-cpk-none'+(!curColor?' sel':'');
+    noColorBtn.title='Aucune couleur';
+    noColorBtn.addEventListener('click',()=>{
+      T.form.couleur='';
+      render();
+    });
+    const cpkGrid=document.createElement('div');
+    cpkGrid.className='trp-cpk-grid';
+    cpkGrid.appendChild(noColorBtn);
+    swatches.forEach(sw=>cpkGrid.appendChild(sw));
+    const preview=curColor
+      ?trpTag(T.form.nom||'Aperçu',curColor)
+      :h('span',{style:{color:'var(--muted)',fontSize:'12px'}},'Aucune couleur sélectionnée');
+    const colorSec=h('div',{className:'expe-trp-field'},
+      h('label',null,'Couleur du transporteur'),
+      cpkGrid,
+      h('div',{style:{marginTop:'8px'}},preview)
+    );
+    ident.appendChild(colorSec);
     const contact=h('div',{className:'expe-trp-sec'},
       h('div',{className:'expe-trp-sec-title'},'Contact'),
       mkText('Nom du contact','contact_nom'),
@@ -831,19 +1007,38 @@ function renderExpeTransporteurs(){
 EXPE_COMPARATEUR_CSS = r"""
 /* ── MyExpé — comparateur tarifs (API) ── */
 .expe-cmp-wrap{max-width:640px}
-.expe-cmp-title{font-size:15px;font-weight:700;color:var(--text);margin:0 0 20px}
-.expe-cmp-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.expe-cmp-title{font-size:15px;font-weight:700;color:var(--text);margin:0 0 14px}
+.expe-cmp-form{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin-bottom:4px}
+.expe-cmp-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 12px;margin-bottom:16px}
 @media(max-width:520px){.expe-cmp-grid{grid-template-columns:1fr}}
 .expe-cmp-label{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text2)}
-.expe-cmp-inp{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 16px;color:var(--text);font-size:14px;font-family:inherit;outline:none;width:100%}
-.expe-cmp-inp:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 12%,transparent)}
+.expe-cmp-inp{background:color-mix(in srgb,var(--bg) 88%,var(--card));border:1px solid var(--border);border-radius:10px;
+  padding:12px 16px;color:var(--text);font-size:14px;font-family:inherit;outline:none;width:100%;
+  transition:border-color .15s,box-shadow .15s,background .15s}
+.expe-cmp-inp:hover{background:color-mix(in srgb,var(--bg) 72%,var(--card));border-color:color-mix(in srgb,var(--accent) 25%,var(--border))}
+.expe-cmp-inp:focus{background:var(--bg);border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 12%,transparent)}
+.expe-cmp-inp:is(select){cursor:pointer;appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 14px center;padding-right:40px}
+body.light .expe-cmp-inp{background:var(--bg)}
+body.light .expe-cmp-inp:hover{background:color-mix(in srgb,var(--bg) 94%,var(--border))}
+body.light .expe-cmp-inp:focus{background:var(--card)}
+.expe-cmp-form-actions{display:flex;justify-content:flex-start}
 .expe-cmp-btn{background:var(--accent);color:var(--bg);border:none;border-radius:10px;padding:12px 24px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit}
 .expe-cmp-btn:hover:not(:disabled){filter:brightness(1.05)}
 .expe-cmp-btn:disabled{opacity:.5;cursor:not-allowed}
 .expe-cmp-results{margin-top:24px}
 .expe-cmp-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;position:relative}
 .expe-cmp-card.best{border-color:var(--accent)}
+.expe-cmp-card-cont{margin-left:8px;border-left:2px solid var(--border);border-top-left-radius:0;border-bottom-left-radius:0}
 .expe-cmp-badge{position:absolute;top:12px;right:12px;background:var(--accent);color:var(--bg);font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px}
+.expe-cmp-methode-badge{display:inline-block;background:var(--accent-bg);color:var(--accent);border-radius:6px;font-size:11px;font-weight:600;padding:2px 8px}
+.expe-cmp-card-header{display:flex;flex-direction:column;align-items:flex-start;gap:4px;margin-bottom:8px}
+.expe-cmp-card-name{font-size:15px;font-weight:700;color:var(--text);display:block}
+.expe-cmp-card-price-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.expe-cmp-card-price{font-size:18px;font-weight:700;color:var(--text)}
+.expe-cmp-card.best .expe-cmp-card-price{color:var(--accent)}
+.expe-cmp-card-price-ht{font-size:12px;color:var(--muted)}
 .expe-cmp-cards{display:flex;flex-direction:column;gap:8px}
 .expe-cmp-ne-row{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
 """
@@ -875,19 +1070,41 @@ function renderResultatsComparateur(data){
     html+='<p style="font-size:12px;color:var(--muted);margin:0 0 16px">Département déduit du code postal : <strong>'+escHtml(data.departement_deduit)+'</strong></p>';
   }
   if(elig.length){
+    const nbTrp=new Set(elig.map(e=>e.transporteur_id)).size;
     html+='<div style="margin-bottom:24px"><div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:10px">'
-      +elig.length+' transporteur'+(elig.length>1?'s':'')+' éligible'+(elig.length>1?'s':'')
+      +nbTrp+' transporteur'+(nbTrp>1?'s':'')+' éligible'+(nbTrp>1?'s':'')
       +'</div><div class="expe-cmp-cards">';
-    elig.forEach(e=>{
+    elig.forEach((e,i)=>{
       const mc=!!e.moins_cher;
-      html+='<div class="expe-cmp-card'+(mc?' best':'')+'">'
+      const prev=i>0?elig[i-1]:null;
+      const isCont=prev&&prev.transporteur_id===e.transporteur_id;
+      const methode=e.methode_tarification||'';
+      const cardCls='expe-cmp-card'+(mc?' best':'')+(isCont?' expe-cmp-card-cont':'');
+      let header='';
+      if(!isCont){
+        const couleur=getTrpColor(e.transporteur_id);
+        if(couleur){
+          const bg=couleur;
+          const r2=parseInt(bg.slice(1,3),16),g2=parseInt(bg.slice(3,5),16),b2=parseInt(bg.slice(5,7),16);
+          const lum=(0.299*r2+0.587*g2+0.114*b2)/255;
+          const fg=lum>0.55?'#1e293b':'#f1f5f9';
+          header+='<span class="expe-trp-tag" style="background:'+escHtml(bg)+';color:'+fg+'">'+escHtml(e.transporteur)+'</span>';
+        }else{
+          header+='<span class="expe-cmp-card-name">'+escHtml(e.transporteur)+'</span>';
+        }
+      }
+      if(methode){
+        header+='<span class="expe-cmp-methode-badge">'+escHtml(methode)+'</span>';
+      }
+      html+='<div class="'+cardCls+'">'
         +(mc?'<span class="expe-cmp-badge">Moins cher</span>':'')
-        +'<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap">'
-        +'<span style="font-size:15px;font-weight:700;color:var(--text)">'+escHtml(e.transporteur)+'</span>'
-        +'<span style="font-size:18px;font-weight:700;color:'+(mc?'var(--accent)':'var(--text)')+'">'+Number(e.prix_ht).toFixed(2)+' €</span>'
-        +'<span style="font-size:12px;color:var(--muted)">HT</span></div>'
+        +(header?'<div class="expe-cmp-card-header">'+header+'</div>':'')
+        +'<div class="expe-cmp-card-price-row">'
+        +'<span class="expe-cmp-card-price">'+Number(e.prix_ht).toFixed(2)+' €</span>'
+        +'<span class="expe-cmp-card-price-ht">HT</span></div>'
         +'<details style="font-size:12px;color:var(--text2)"><summary style="cursor:pointer;color:var(--muted);margin-bottom:4px">Détail du calcul</summary>'
         +'<div style="margin-top:8px;padding:10px;background:var(--bg);border-radius:8px;display:flex;flex-direction:column;gap:4px">'
+        +'<div>Méthode : '+escHtml(methode)+'</div>'
         +'<div>Base : '+escHtml((e.detail_calcul&&e.detail_calcul.base)||'')+'</div>'
         +((e.detail_calcul&&e.detail_calcul.frais)||[]).map(fr=>'<div>'+escHtml(fr.libelle)+' : '+escHtml(fr.detail)+'</div>').join('')
         +'<div style="border-top:1px solid var(--border);margin-top:6px;padding-top:6px;font-weight:700;color:var(--text)">Total : '+Number(e.prix_ht).toFixed(2)+' € HT</div>'
@@ -951,6 +1168,15 @@ function renderExpeComparateurTarifs(){
   );
   const btn=h('button',{id:'btn-comparer',type:'button',className:'expe-cmp-btn'},'Comparer');
   btn.addEventListener('click',()=>void lancerComparateur());
+  const resetBtn=h('button',{type:'button',className:'btn-ghost',style:{marginLeft:'8px'}},'Remettre à 0');
+  resetBtn.addEventListener('click',()=>{
+    document.getElementById('cmp-poids').value='';
+    document.getElementById('cmp-pal').value='';
+    document.getElementById('cmp-cp').value='';
+    document.getElementById('cmp-type').value='messagerie';
+    document.getElementById('cmp-resultats').innerHTML='';
+    S.comparateur_form={poids_total_kg:'',nb_palette:'',code_postal_destination:'',type_envoi:'messagerie'};
+  });
   const grid=h('div',{className:'expe-cmp-grid'},
     h('label',{className:'expe-cmp-label'},'Poids total (kg)',mkInp('cmp-poids','number',f.poids_total_kg,'ex : 340',{step:'0.1',min:'0'})),
     h('label',{className:'expe-cmp-label'},'Nombre de palettes',mkInp('cmp-pal','number',f.nb_palette,'ex : 3',{step:'1',min:'0'})),
@@ -963,8 +1189,10 @@ function renderExpeComparateurTarifs(){
   typeSel.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();void lancerComparateur();}});
   const wrap=h('div',{id:'section-comparateur',className:'expe-cmp-wrap'},
     h('h2',{className:'expe-cmp-title'},'Comparer les transporteurs'),
-    grid,
-    btn,
+    h('div',{className:'expe-cmp-form'},
+      grid,
+      h('div',{className:'expe-cmp-form-actions'},btn,resetBtn)
+    ),
     h('div',{id:'cmp-resultats',className:'expe-cmp-results'})
   );
   return wrap;
@@ -1220,15 +1448,39 @@ async function supprimerProspect(prospectId){
   }
 }
 
+function expeDevisMeilleursReponses(reps){
+  const list=(reps||[]).filter(r=>r.statut!=='refusee');
+  const avecPrix=list.filter(r=>r.prix!=null);
+  const avecDelai=list.filter(r=>r.delai_jours!=null);
+  const bestPrix=avecPrix.length?Math.min(...avecPrix.map(r=>Number(r.prix))):null;
+  const bestDelai=avecDelai.length?Math.min(...avecDelai.map(r=>Number(r.delai_jours))):null;
+  return {bestPrix,bestDelai};
+}
+
+function expeDevisCellValeur(txt,isBest){
+  return isBest?h('strong',null,txt):txt;
+}
+
 function expeDevisStatutLabel(st){
   const m={
     envoyee:{t:'Envoyée',c:'var(--muted)'},
+    ouvert:{t:'Ouverte',c:'var(--warn)'},
     recue:{t:'Reçue',c:'var(--accent)'},
     retenue:{t:'Retenue',c:'var(--success)'},
     refusee:{t:'Refusée',c:'var(--muted)',strike:true},
     echec:{t:'Échec envoi',c:'var(--danger)'}
   };
   return m[st]||{t:st||'—',c:'var(--muted)'};
+}
+
+function expeDevisSuiviTag(d){
+  const env=Number(d.nb_envoyes)||0;
+  const rep=Number(d.nb_recus)||0;
+  if(!env&&!rep)return null;
+  const parts=[];
+  if(env)parts.push(env+' envoyé'+(env>1?'s':''));
+  if(rep)parts.push(rep+' réponse'+(rep>1?'s':''));
+  return h('span',{className:'expe-devis-pill accent'},parts.join(' / '));
 }
 
 function renderExpeDevisModal(){
@@ -1288,6 +1540,7 @@ function renderExpeDevisModal(){
         h('button',{type:'button',className:'btn btn-accent',onClick:()=>void ouvrirModalEnvoi(d.id)},'Envoyer les demandes')
       ));
     }
+    const {bestPrix,bestDelai}=expeDevisMeilleursReponses(reps);
     const head=h('tr',null,
       h('th',null,'Transporteur'),h('th',null,'Statut'),h('th',null,'Prix HT'),
       h('th',null,'Délai'),h('th',null,'Commentaire'),h('th',null,'')
@@ -1297,11 +1550,15 @@ function renderExpeDevisModal(){
       const acts=[];
       if(r.statut==='recue'&&expeCanWrite())acts.push(h('button',{type:'button',className:'btn-ghost',style:{fontSize:'12px',color:'var(--success)'},onClick:()=>void retenirReponse(r.id,d.id)},'Retenir'));
       if((r.statut==='envoyee'||r.statut==='echec')&&expeCanWrite())acts.push(h('button',{type:'button',className:'btn-ghost',style:{fontSize:'12px'},onClick:()=>ouvrirSaisieReponse(r.id,d.id)},'Saisir réponse'));
+      const prixTxt=r.prix!=null?Number(r.prix).toFixed(2)+' €':'—';
+      const delTxt=r.delai_jours!=null?'J+'+r.delai_jours:'—';
+      const isBestPrix=r.prix!=null&&bestPrix!=null&&Number(r.prix)===bestPrix;
+      const isBestDelai=r.delai_jours!=null&&bestDelai!=null&&Number(r.delai_jours)===bestDelai;
       return h('tr',null,
         h('td',{style:{fontWeight:'600'}},escHtml(r.nom_transporteur||'—')),
         h('td',null,h('span',{style:{color:sl.c,textDecoration:sl.strike?'line-through':'none'}},sl.t)),
-        h('td',null,r.prix!=null?Number(r.prix).toFixed(2)+' €':'—'),
-        h('td',null,r.delai_jours!=null?'J+'+r.delai_jours:'—'),
+        h('td',null,expeDevisCellValeur(prixTxt,isBestPrix)),
+        h('td',null,expeDevisCellValeur(delTxt,isBestDelai)),
         h('td',{style:{fontSize:'12px',color:'var(--text2)'}},escHtml(r.commentaire||'')),
         h('td',null,...acts)
       );
@@ -1441,9 +1698,9 @@ function renderExpeDevisSection(){
     list=h('div',{className:'expe-devis-cards'},
       ...demandes.map(d=>{
         const pills=[];
-        if(d.nb_envoyes)pills.push(h('span',{className:'expe-devis-pill accent'},d.nb_envoyes+' envoyé'+(d.nb_envoyes>1?'s':'')));
-        if(d.nb_recus)pills.push(h('span',{className:'expe-devis-pill ok'},d.nb_recus+' réponse'+(d.nb_recus>1?'s':'')));
-        if(d.statut==='cloturee')pills.push(h('span',{style:{fontSize:'11px',color:'var(--muted)'}},'Cloturée'));
+        const suivi=expeDevisSuiviTag(d);
+        if(suivi)pills.push(suivi);
+        if(d.statut==='cloturee')pills.push(h('span',{className:'expe-devis-pill muted'},'Clôturée'));
         const card=h('div',{className:'expe-devis-card',onClick:()=>void ouvrirDetailDemande(d.id)},
           h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:'12px'}},
             h('div',null,
@@ -1483,7 +1740,8 @@ function renderExpeProspectsSection(){
   );
   const tbody=rows.length?rows.map(p=>{
     const s=LABELS[p.statut_demarchage]||{label:p.statut_demarchage,color:'var(--muted)'};
-    return h('tr',null,
+    const rowCls=p.statut_demarchage==='ecarte'?'expe-prospect-ecarte':'';
+    return h('tr',{className:rowCls},
       h('td',{style:{fontWeight:'600'}},escHtml(p.nom)),
       h('td',null,escHtml(p.zone_couverte||'—')),
       h('td',null,escHtml(p.type_service||'—')),
@@ -1495,8 +1753,8 @@ function renderExpeProspectsSection(){
   }):[h('tr',null,h('td',{colSpan:7,style:{color:'var(--muted)',fontStyle:'italic'}},'Aucun prospect.'))];
   return h('div',{id:'section-prospects'},
     head,
-    h('div',{className:'expe-devis-table-wrap'},
-      h('table',{className:'table-std'},h('thead',null,thead),h('tbody',null,...tbody))
+    h('div',{className:'expe-prospects-table-wrap'},
+      h('table',{className:'table-std expe-prospects-table'},h('thead',null,thead),h('tbody',null,...tbody))
     )
   );
 }
@@ -1525,11 +1783,45 @@ EXPE_DEVIS_CSS = r"""
 .expe-devis-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 20px;cursor:pointer;
   transition:border-color .15s}
 .expe-devis-card:hover{border-color:var(--accent)}
-.expe-devis-pill{font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px}
+.expe-devis-pill{font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;white-space:nowrap}
 .expe-devis-pill.accent{background:var(--accent-bg);color:var(--accent)}
+.expe-devis-pill.muted{background:color-mix(in srgb,var(--muted) 12%,transparent);color:var(--muted)}
 .expe-devis-pill.ok{background:color-mix(in srgb,var(--success) 15%,transparent);color:var(--success)}
 .expe-devis-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:10px}
 .expe-devis-table-wrap table.table-std{margin:0;font-size:13px}
+.expe-prospects-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;background:var(--card)}
+.expe-prospects-table-wrap table.expe-prospects-table{margin:0;font-size:13px}
+.expe-prospects-table-wrap .expe-prospects-table th{
+  background:color-mix(in srgb,var(--bg) 50%,var(--card));
+  border-bottom:1px solid var(--border);
+  padding:10px 14px;
+}
+.expe-prospects-table-wrap .expe-prospects-table td{
+  padding:10px 14px;
+  border-bottom:1px solid color-mix(in srgb,var(--border) 65%,transparent);
+  vertical-align:middle;
+  color:var(--text);
+}
+.expe-prospects-table tbody tr:nth-child(even) td{
+  background:color-mix(in srgb,var(--muted) 7%,transparent);
+}
+.expe-prospects-table tbody tr:hover td{
+  background:color-mix(in srgb,var(--accent) 11%,transparent);
+}
+.expe-prospects-table tbody tr.expe-prospect-ecarte td{
+  color:var(--text2);
+  background:color-mix(in srgb,var(--muted) 5%,transparent);
+}
+.expe-prospects-table tbody tr.expe-prospect-ecarte:nth-child(even) td{
+  background:color-mix(in srgb,var(--muted) 10%,transparent);
+}
+.expe-prospects-table tbody tr:last-child td{border-bottom:none}
+body.light .expe-prospects-table tbody tr:nth-child(even) td{
+  background:color-mix(in srgb,var(--border) 40%,var(--card));
+}
+body.light .expe-prospects-table tbody tr:hover td{
+  background:color-mix(in srgb,var(--accent) 9%,var(--card));
+}
 .expe-devis-envoi-list{max-height:320px;overflow-y:auto;margin-bottom:12px}
 .expe-devis-envoi-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer;font-size:13px}
 .expe-devis-envoi-sep{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:12px 0 4px}

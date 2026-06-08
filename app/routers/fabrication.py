@@ -700,8 +700,8 @@ async def create_saisie(request: Request):
 
                     if cl["code"] == "01" and current_reel != "reellement_termine":
                         conn.execute(
-                            """UPDATE planning_entries SET statut='attente', statut_force=0,
-                                   planned_start=NULL, planned_end=NULL, updated_at=?
+                            """UPDATE planning_entries SET statut='termine', statut_force=1,
+                                   updated_at=?
                                WHERE machine_id=? AND statut='en_cours' AND id != ?""",
                             (now_iso, machine_id_resolved, pe_id),
                         )
