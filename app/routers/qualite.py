@@ -639,13 +639,189 @@ def search_dossiers(request: Request, q: str = ""):
     return [dict(r) for r in rows]
 
 
+# ─── Import xlsx (fiche SIFA) ────────────────────────────────────────
+
+def _parse_sifa_nc_xlsx(file_bytes: bytes) -> dict:
+    """Parse une fiche xlsx SIFA NC (modèle V1-07/2024) et retourne les champs détectés."""
+    import openpyxl
+    from io import BytesIO
+    wb = openpyxl.load_workbook(BytesIO(file_bytes), data_only=True)
+    ws = wb.worksheets[0]
+
+    def _cell(coord):
+        v = ws[coord].value
+        if v is None:
+            return None
+        if hasattr(v, "isoformat"):  # datetime
+            return v.strftime("%Y-%m-%d")
+        return str(v).strip()
+
+    def _strip_prefix(val, prefixes):
+        if not val:
+            return val
+        v = val.strip().replace("\xa0", " ")
+        for p in prefixes:
+            if v.lower().startswith(p.lower()):
+                v = v[len(p):].strip(" :\t\n\r-—–\xa0").strip()
+        return v
+
+    # En-tête : "N° 668608  -  AR 9930854"
+    header = _cell("B3") or ""
+    numero_historique = None
+    numero_ar = None
+    if header:
+        m_n = re.search(r"N[°o]\s*([A-Za-z0-9\-_/]+)", header)
+        if m_n:
+            numero_historique = m_n.group(1)
+        m_ar = re.search(r"AR\s*([A-Za-z0-9\-_/]+)", header, re.IGNORECASE)
+        if m_ar:
+            numero_ar = m_ar.group(1)
+
+    # Date NC : B8 ou D15
+    date_nc = _cell("B8") or _cell("D15")
+    service_concerne = _cell("D8")
+
+    # Émetteur : "EMETTEUR DE LA FICHE : ADV - RL" en A9
+    emetteur_raw = _cell("A9") or ""
+    emetteur = _strip_prefix(emetteur_raw, ["EMETTEUR DE LA FICHE", "Emetteur de la fiche", "ÉMETTEUR DE LA FICHE"])
+
+    description = _cell("A11")
+    client_fournisseur = _cell("B15")
+    ref_client = _cell("B16")
+    no_dossier = _cell("D16")
+    descriptif_produit = _cell("B17")
+    quantite_concernee = _cell("B18")
+
+    # Services impliqués (B20 : "ADV - MECANIQUE - QUALITE")
+    services_line = _cell("B20") or ""
+    services = []
+    if services_line:
+        for tok in re.split(r"[-–—,;/]+", services_line):
+            t = tok.strip()
+            if t and len(t) < 30:
+                tl = t.lower()
+                mapping = {"adv": "ADV", "mecanique": "Mécanique", "mécanique": "Mécanique",
+                           "qualite": "Qualité", "qualité": "Qualité", "production": "Production",
+                           "logistique": "Logistique"}
+                services.append(mapping.get(tl, t))
+
+    analyse_causes = _cell("A21")
+    action_corrective = _cell("A25")
+    pilote_raw = _cell("A29") or ""
+    pilote_name = _strip_prefix(pilote_raw, ["Pilote", "PILOTE"])
+    action_preventive = _cell("A31")
+    raw_cloture = _cell("A37") or _cell("B37")
+    date_cloture = raw_cloture if (raw_cloture and re.match(r"^\d{4}-\d{2}-\d{2}", str(raw_cloture))) else None
+
+    if description:
+        titre = description.split(".")[0].strip()[:120]
+    else:
+        titre = "NC importée"
+
+    type_nc = "client" if client_fournisseur else "interne"
+
+    return {
+        "titre": titre,
+        "numero_ar": numero_ar,
+        "numero_historique": numero_historique,
+        "type_nc": type_nc,
+        "gravite": "majeure",
+        "date_nc": date_nc,
+        "service_concerne": service_concerne,
+        "client_fournisseur": client_fournisseur,
+        "ref_client": ref_client,
+        "no_dossier": no_dossier,
+        "descriptif_produit": descriptif_produit,
+        "quantite_concernee": quantite_concernee,
+        "description": description,
+        "services_impliques": services,
+        "analyse_causes": analyse_causes,
+        "action_corrective": action_corrective,
+        "action_preventive": action_preventive,
+        "emetteur_text": emetteur,
+        "pilote_text": pilote_name,
+        "date_cloture": date_cloture,
+    }
+
+
+@router.post("/api/qualite/import-xlsx")
+async def import_nc_xlsx(request: Request, file: UploadFile = File(...)):
+    user = _require_qualite_access(request)
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Aucun fichier")
+    name_lower = file.filename.lower()
+    if not (name_lower.endswith(".xlsx") or name_lower.endswith(".xlsm")):
+        raise HTTPException(status_code=400, detail="Format requis : .xlsx ou .xlsm")
+    raw = await file.read()
+    try:
+        parsed = _parse_sifa_nc_xlsx(raw)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Impossible de parser le fichier : {e}")
+
+    now = _now()
+    services_csv = ",".join(parsed.get("services_impliques") or []) or None
+
+    pilote_id = None
+    pilote_text = parsed.get("pilote_text") or ""
+    if pilote_text:
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT id FROM users WHERE actif=1 AND LOWER(nom) LIKE ? LIMIT 1",
+                (f"%{pilote_text.lower()}%",),
+            ).fetchone()
+            if row:
+                pilote_id = row["id"]
+
+    with get_db() as conn:
+        numero = _generate_numero(conn, parsed.get("numero_ar"))
+        cur = conn.execute(
+            """INSERT INTO nc_dossiers
+               (numero, numero_ar, numero_historique, type_nc, gravite, statut, titre,
+                date_nc, service_concerne, emetteur_id, client_fournisseur, ref_client,
+                no_dossier, descriptif_produit, quantite_concernee, description,
+                services_impliques, analyse_causes, action_corrective, action_preventive,
+                pilote_id, date_cloture,
+                created_at, created_by, updated_at, updated_by)
+               VALUES (?,?,?,?,?, 'ouverte', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                numero, parsed.get("numero_ar"), parsed.get("numero_historique"),
+                parsed.get("type_nc"), parsed.get("gravite"), parsed.get("titre"),
+                parsed.get("date_nc"), parsed.get("service_concerne"), user["id"],
+                parsed.get("client_fournisseur"), parsed.get("ref_client"), parsed.get("no_dossier"),
+                parsed.get("descriptif_produit"), parsed.get("quantite_concernee"), parsed.get("description"),
+                services_csv, parsed.get("analyse_causes"), parsed.get("action_corrective"),
+                parsed.get("action_preventive"), pilote_id, parsed.get("date_cloture"),
+                now, user["id"], now, user["id"],
+            ),
+        )
+        nc_id = cur.lastrowid
+
+        original = _sanitize_filename(file.filename)
+        ts = datetime.now().strftime("%Y%m%d%H%M%S%f")[:18]
+        ext = "." + name_lower.rsplit(".", 1)[1]
+        filename = f"nc_{nc_id}_{ts}{ext}"
+        dest = os.path.join(QUALITE_UPLOAD_DIR, filename)
+        with open(dest, "wb") as f:
+            f.write(raw)
+        size = os.path.getsize(dest)
+        conn.execute(
+            """INSERT INTO nc_fichiers (nc_id, filename, original_name, mime_type, size_bytes, uploaded_at, uploaded_by)
+               VALUES (?,?,?,?,?,?,?)""",
+            (nc_id, filename, original, file.content_type or "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+             size, now, user["id"]),
+        )
+        conn.commit()
+
+    return get_nc(nc_id, request)
+
+
 # ─── Export PDF ──────────────────────────────────────────────────────
 
 @router.get("/api/qualite/nc/{nc_id}/pdf")
 def export_nc_pdf(nc_id: int, request: Request):
     _require_qualite_access(request)
     from fastapi.responses import Response
-    from fastapi.responses import Response
+    from app.services.nc_pdf import render_nc_pdf
     nc = get_nc(nc_id, request)
     pdf_bytes = render_nc_pdf(nc)
     fname = (nc.get("numero") or f"NC_{nc_id}").replace(" ", "_") + ".pdf"

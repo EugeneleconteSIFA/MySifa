@@ -55,12 +55,14 @@ QUALITE_HTML = r"""<!DOCTYPE html>
   --bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;
   --muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,.10);
   --ok:#34d399;--danger:#f87171;--warn:#fbbf24;--success:#34d399;
+  --btn-fg:#0a0e17;
   --sidebar-w:220px;
 }
 html.light-pre body,body.light{
   --bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;
   --muted:#64748b;--accent:#0891b2;--accent-bg:rgba(8,145,178,.08);
   --ok:#059669;--danger:#dc2626;--warn:#d97706;
+  --btn-fg:#ffffff;
 }
 html,body{height:100%;overflow:hidden}
 body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:14px}
@@ -87,8 +89,8 @@ body.sb-open .sidebar-overlay{display:block}
 .logo-sub{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px}
 .nav-btn{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:13px;font-weight:500;width:100%;text-align:left;font-family:inherit;transition:all .15s;margin-bottom:2px;position:relative}
 .nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
-.nav-badge{margin-left:auto;background:var(--accent);color:#0a0e17;font-size:10px;font-weight:800;border-radius:999px;padding:1px 7px;min-width:18px;text-align:center}
-.nav-btn.active .nav-badge{background:var(--accent);color:#0a0e17}
+.nav-badge{margin-left:auto;background:var(--accent);color:var(--btn-fg);font-size:10px;font-weight:800;border-radius:999px;padding:1px 7px;min-width:18px;text-align:center}
+.nav-btn.active .nav-badge{background:var(--accent);color:var(--btn-fg)}
 .nav-btn--mysifa-portal{align-items:baseline;flex-wrap:wrap;gap:4px 8px;line-height:1.35}
 .nav-btn--mysifa-portal:hover{background:var(--accent-bg)}
 .mysifa-back-preamble{font-size:13px;font-weight:500;color:var(--text2)}
@@ -128,9 +130,9 @@ body.sb-open .sidebar-overlay{display:block}
 /* ── Boutons ── */
 .btn{display:inline-flex;align-items:center;gap:7px;padding:10px 18px;border-radius:10px;border:none;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;transition:filter .15s}
 .btn:hover{filter:brightness(1.08)}
-.btn-accent{background:var(--accent);color:#0a0e17}
+.btn-accent{background:var(--accent);color:var(--btn-fg)}
 .btn-danger{background:var(--danger);color:#fff}
-.btn-ok{background:var(--ok);color:#0a0e17}
+.btn-ok{background:var(--ok);color:var(--btn-fg)}
 .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text2)}
 .btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
 .btn-sm{padding:6px 13px;font-size:12px;border-radius:8px}
@@ -150,7 +152,7 @@ body.sb-open .sidebar-overlay{display:block}
 .stat-tab:hover{border-color:var(--accent);color:var(--accent)}
 .stat-tab.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
 .stat-count{background:var(--border);color:var(--muted);border-radius:999px;padding:1px 7px;font-size:11px;font-weight:700}
-.stat-tab.active .stat-count{background:var(--accent);color:#0a0e17}
+.stat-tab.active .stat-count{background:var(--accent);color:var(--btn-fg)}
 
 /* ── Table ── */
 .table-wrap{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
@@ -174,7 +176,7 @@ body.light .table-wrap tbody tr:hover td{background:rgba(0,0,0,.02)}
 .badge-grav-critique{background:rgba(248,113,113,.18);color:var(--danger)}
 .badge-type{background:var(--accent-bg);color:var(--accent);font-weight:600}
 .unread-dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--accent);margin-right:6px;vertical-align:middle;box-shadow:0 0 0 2px rgba(34,211,238,.25)}
-.unread-pill{display:inline-flex;align-items:center;justify-content:center;background:var(--accent);color:#0a0e17;font-size:10px;font-weight:800;border-radius:999px;padding:1px 7px;min-width:18px;margin-left:6px}
+.unread-pill{display:inline-flex;align-items:center;justify-content:center;background:var(--accent);color:var(--btn-fg);font-size:10px;font-weight:800;border-radius:999px;padding:1px 7px;min-width:18px;margin-left:6px}
 
 /* ── Empty state ── */
 .empty{text-align:center;padding:60px 20px;color:var(--muted)}
@@ -254,7 +256,7 @@ body.light .table-wrap tbody tr:hover td{background:rgba(0,0,0,.02)}
 .msg-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.10)}
 
 /* ── Canaux panel ── */
-.canaux-fab{position:fixed;bottom:24px;right:24px;width:54px;height:54px;border-radius:999px;background:var(--accent);color:#0a0e17;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 28px rgba(34,211,238,.35);z-index:300;transition:transform .15s}
+.canaux-fab{position:fixed;bottom:24px;right:24px;width:54px;height:54px;border-radius:999px;background:var(--accent);color:var(--btn-fg);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 28px rgba(34,211,238,.35);z-index:300;transition:transform .15s}
 .canaux-fab:hover{transform:scale(1.06)}
 .canaux-fab .fab-badge{position:absolute;top:-4px;right:-4px;background:var(--danger);color:#fff;font-size:10px;font-weight:800;border-radius:999px;padding:2px 6px;min-width:18px;text-align:center}
 .canaux-panel{position:fixed;top:0;right:0;bottom:0;width:360px;max-width:92vw;background:var(--card);border-left:1px solid var(--border);z-index:9500;transform:translateX(105%);transition:transform .2s ease;display:flex;flex-direction:column;box-shadow:-12px 0 32px rgba(0,0,0,.3)}
@@ -439,6 +441,29 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
     <div class="modal-actions">
       <button type="button" class="btn btn-ghost" onclick="closeCreateModal()">Annuler</button>
       <button type="button" class="btn btn-accent" id="create-btn" onclick="submitCreate()">Créer la NC</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal import xlsx -->
+<div class="modal-ov" id="import-modal" style="display:none" onclick="if(event.target===this)closeImportModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <button type="button" class="modal-close" onclick="closeImportModal()">×</button>
+    <div class="modal-title">Importer une NC depuis xlsx</div>
+    <p style="font-size:12px;color:var(--text2);line-height:1.55;margin-bottom:14px">
+      Déposez une fiche au format SIFA (modèle « Fiche NON CONFORMITE »). Les champs détectés (n° AR, n° historique, date, client, dossier, descriptif, quantité, services impliqués, analyse, actions, pilote…) seront pré-remplis. Le fichier original sera attaché en pièce jointe.
+    </p>
+    <label class="upload-zone" id="import-zone" ondragover="onImportDragOver(event)" ondragleave="onImportDragLeave(event)" ondrop="onImportDrop(event)">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
+      <div id="import-zone-label" style="font-size:13px;margin-top:8px">Glisser-déposer le fichier xlsx, ou cliquer pour choisir</div>
+      <div style="font-size:11px;margin-top:4px;opacity:.7">Format .xlsx ou .xlsm</div>
+      <input type="file" id="import-file" accept=".xlsx,.xlsm" onchange="onImportFile(event)">
+    </label>
+    <div id="import-progress" style="font-size:12px;color:var(--accent);margin-top:10px;display:none">
+      <span class="spin"></span> Import en cours…
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" onclick="closeImportModal()">Annuler</button>
     </div>
   </div>
 </div>
@@ -719,6 +744,10 @@ function renderList(){
         <div class="page-subtitle">Suivi des NC internes, clients, fournisseurs et logistiques</div>
       </div>
       <div class="header-actions">
+        <button type="button" class="btn btn-ghost" onclick="openImportModal()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Importer xlsx
+        </button>
         <button type="button" class="btn btn-accent" onclick="openCreateModal()">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Nouvelle NC
@@ -1245,6 +1274,54 @@ async function submitCreate(){
     openDetail(nc.id);
   }catch(e){if(e.message!=='unauth')showToast('Erreur réseau','danger');}
   btn.disabled=false;btn.textContent='Créer la NC';
+}
+
+// ── Import xlsx ────────────────────────────────────────────────────
+function openImportModal(){
+  document.getElementById('import-file').value='';
+  document.getElementById('import-zone-label').textContent='Glisser-déposer le fichier xlsx, ou cliquer pour choisir';
+  document.getElementById('import-progress').style.display='none';
+  document.getElementById('import-modal').style.display='flex';
+}
+function closeImportModal(){document.getElementById('import-modal').style.display='none';}
+function onImportDragOver(e){e.preventDefault();e.currentTarget.classList.add('drag');}
+function onImportDragLeave(e){e.currentTarget.classList.remove('drag');}
+function onImportDrop(e){
+  e.preventDefault();e.currentTarget.classList.remove('drag');
+  const files=Array.from(e.dataTransfer.files||[]);
+  if(files.length) submitImport(files[0]);
+}
+function onImportFile(e){
+  const files=Array.from(e.target.files||[]);
+  if(files.length) submitImport(files[0]);
+}
+async function submitImport(file){
+  const name=(file.name||'').toLowerCase();
+  if(!name.endsWith('.xlsx')&&!name.endsWith('.xlsm')){
+    showToast('Format requis : .xlsx ou .xlsm','danger');return;
+  }
+  const prog=document.getElementById('import-progress');
+  prog.style.display='block';
+  const label=document.getElementById('import-zone-label');
+  label.textContent=file.name;
+  try{
+    const fd=new FormData();fd.append('file',file);
+    const r=await api('/api/qualite/import-xlsx',{method:'POST',body:fd});
+    if(!r.ok){
+      const d=await r.json().catch(()=>({}));
+      showToast(d.detail||'Échec import','danger');
+      prog.style.display='none';
+      return;
+    }
+    const nc=await r.json();
+    closeImportModal();
+    showToast('NC importée : '+nc.numero,'success');
+    await loadNCs();
+    openDetail(nc.id);
+  }catch(e){
+    if(e.message!=='unauth')showToast('Erreur réseau','danger');
+    prog.style.display='none';
+  }
 }
 
 // ── Dossier picker ─────────────────────────────────────────────────

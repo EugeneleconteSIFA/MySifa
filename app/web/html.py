@@ -10480,6 +10480,75 @@ async function loadFiches(){
     toast(e.message||'Erreur chargement fiches techniques','error');
   }
 }
+function _csvEscape(v){
+  if(v==null) return '';
+  const s=String(v);
+  if(s.includes(';')||s.includes('"')||s.includes('\n')||s.includes('\r'))
+    return '"'+s.replace(/"/g,'""')+'"';
+  return s;
+}
+function _downloadCsv(filename, headers, cols, rows){
+  const lines=[headers.join(';')];
+  for(const r of rows){
+    lines.push(cols.map(c=>_csvEscape(r[c])).join(';'));
+  }
+  const csv='\ufeff'+lines.join('\r\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},800);
+}
+async function exportFichesCsv(){
+  try{
+    const q=encodeURIComponent(S.ficheSearch||'');
+    const all=[];
+    let offset=0;
+    const limit=200;
+    while(true){
+      const url='/api/fiches-techniques/list?limit='+limit+'&offset='+offset+(q?'&q='+q:'');
+      const data=await api(url);
+      const rows=Array.isArray(data.rows)?data.rows:[];
+      all.push(...rows);
+      if(rows.length<limit||all.length>=(data.total||0)) break;
+      offset+=limit;
+    }
+    if(!all.length){toast('Aucune fiche à exporter.','info');return;}
+    const cols=['id','reference','designation','client','format','eti_laize','eti_longueur','support','matiere','machine','nb_couleurs','source','date_import'];
+    const headers=['ID','Référence','Désignation','Client','Format','Laize eti. (mm)','Longueur eti.','Support','Matière','Machine','Nb couleurs','Source','Date import'];
+    const ymd=new Date().toISOString().slice(0,10);
+    _downloadCsv('fiches_techniques_'+ymd+'.csv',headers,cols,all);
+    toast(all.length+' fiche'+(all.length>1?'s':'')+' exportée'+(all.length>1?'s':'')+'.');
+  }catch(e){
+    toast(e.message||'Erreur export.','error');
+  }
+}
+async function exportOfCsv(){
+  try{
+    const q=encodeURIComponent(S.ofSearch||'');
+    const all=[];
+    let offset=0;
+    const limit=200;
+    while(true){
+      const url='/api/of/list?limit='+limit+'&offset='+offset+(q?'&q='+q:'');
+      const data=await api(url);
+      const rows=Array.isArray(data.rows)?data.rows:[];
+      all.push(...rows);
+      if(rows.length<limit||all.length>=(data.total||0)) break;
+      offset+=limit;
+    }
+    if(!all.length){toast('Aucun OF à exporter.','info');return;}
+    const cols=['id','of_numero','reference','machine','delai_client','format','date_creation','qte_etiquettes','qte_bobines','metrage','matiere','conditionnement','outil_1_numero','nb_mandrins','nb_cartons','nb_tubes','statut','date_import','imported_by'];
+    const headers=['ID','OF n°','Référence','Machine','Délai client','Format','Date création','Qté étiquettes','Qté bobines','Métrage','Matière','Conditionnement','Outil 1','Nb mandrins','Nb cartons','Nb tubes','Statut','Date import','Importé par'];
+    const ymd=new Date().toISOString().slice(0,10);
+    _downloadCsv('of_imports_'+ymd+'.csv',headers,cols,all);
+    toast(all.length+' OF exporté'+(all.length>1?'s':'')+'.');
+  }catch(e){
+    toast(e.message||'Erreur export.','error');
+  }
+}
 function openOfEditModal(row){
   set({ofEditModal:{...row}});
   renderOfEditModal();
@@ -11038,6 +11107,11 @@ function renderOfTab(){
       style:'padding:9px 14px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-size:13px;font-weight:700;white-space:nowrap',
       onClick:openOfImportModal
     },iconEl('upload',13),' Importer un OF'),
+    h('button',{
+      style:'padding:9px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-size:13px;font-weight:600;white-space:nowrap',
+      title:'Exporter tous les OF (filtre appliqué) en CSV',
+      onClick:exportOfCsv
+    },iconEl('download',13),' Exporter CSV'),
     S.user&&S.user.role==='superadmin'&&S.ofSelected.size>0
       ? h('button',{
           style:'padding:9px 14px;border-radius:8px;border:none;background:var(--danger);color:#fff;cursor:pointer;font-size:13px;font-weight:700;white-space:nowrap',
@@ -11111,7 +11185,7 @@ function renderOfTab(){
     )
   );
 
-  return h('div',{className:'card'},
+  return h('div',{className:'card',style:{padding:'18px 20px'}},
     toolbar,
     renderPaginationBar(page,total,50,
       async()=>{if(page>0){set({ofPage:page-1});await loadOfImports();render();}},
@@ -11165,6 +11239,11 @@ function renderFichesTab(){
         if(e.key==='Escape'){set({ficheSearch:'',fichePage:0});loadFiches().then(()=>render());e.target.value='';}
       },
     }),
+    h('button',{
+      style:'padding:9px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-size:13px;font-weight:600;white-space:nowrap',
+      title:'Exporter toutes les fiches (filtre appliqué) en CSV',
+      onClick:exportFichesCsv
+    },iconEl('download',13),' Exporter CSV'),
     S.user&&S.user.role==='superadmin'&&S.ficheSelected.size>0
       ? h('button',{
           style:'padding:9px 14px;border-radius:8px;border:none;background:var(--danger);color:#fff;cursor:pointer;font-size:13px;font-weight:700;white-space:nowrap',
@@ -11231,7 +11310,7 @@ function renderFichesTab(){
     )
   );
 
-  return h('div',{className:'card'},
+  return h('div',{className:'card',style:{padding:'18px 20px'}},
     toolbar,
     renderPaginationBar(page,total,50,
       async()=>{if(page>0){set({fichePage:page-1});await loadFiches();render();}},
@@ -11270,7 +11349,7 @@ function renderOfPage(){
       onClick:async()=>{set({ofSubTab:'fiche'});await loadFiches();render();}
     },'Fiches techniques'),
   );
-  return h('div',null,
+  return h('div',{style:{paddingLeft:'12px',paddingRight:'4px'}},
     subNav,
     S.ofSubTab==='fiche' ? renderFichesTab() : renderOfTab()
   );
