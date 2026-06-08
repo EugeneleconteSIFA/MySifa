@@ -414,21 +414,6 @@ def delete_bat(bat_id: int, request: Request):
         conn.execute("DELETE FROM bat_entries WHERE id=?", (bat_id,))
         conn.commit()
     return {"ok": True}
- associé à ce BAT")
-        path = os.path.join(BAT_UPLOAD_DIR, current["pdf_path"])
-        if not os.path.exists(path):
-            raise HTTPException(status_code=404, detail="Fichier PDF introuvable sur le serveur")
-        desc = current.get("description") or current.get("numero_client") or "BAT"
-        ref = f"{desc}_{current['numero_article']}"
-        return FileResponse(path, media_type="application/pdf", filename=f"BAT_{ref}.pdf",
-                            headers={"Content-Disposition": f'inline; filename="BAT_{ref}.pdf"'})
-
-    pdf = dict(pdf)
-    path = os.path.join(BAT_UPLOAD_DIR, pdf["filename"])
-    if not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="Fichier PDF introuvable sur le serveur")
-    return FileResponse(path, media_type="application/pdf", filename=pdf["original_name"],
-                        headers={"Content-Disposition": f'inline; filename="{pdf["original_name"]}"'})
 
 
 @router.get("/api/bat/{bat_id}/pdf/{pdf_id}")

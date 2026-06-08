@@ -643,3 +643,158 @@ def delete_fiche(fiche_id: int, request: Request):
         conn.execute("DELETE FROM fiches_techniques WHERE id=?", (fiche_id,))
         conn.commit()
     return {"deleted": True, "id": fiche_id}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Backfill ref_produit_norm (admin)
+#
+# Re-parse toutes les fiches_techniques et planning_entries pour remplir
+# ref_produit_norm, machine, laize_mm, conditionnement_norm. Idempotent :
+# ne touche que les colonnes vides ou désynchronisées. Ne modifie jamais
+# une machine/conditionnement déjà saisi à la main.
+#
+# Usage :
+#   POST /api/admin/backfill-ref-produit-norm            → applique
+#   POST /api/admin/backfill-ref-produit-norm?dry_run=1  → simulation (lecture seule)
+#
+# Réservé au superadmin (le backfill modifie potentiellement plusieurs centaines
+# de lignes en une fois — pas une action quotidienne).
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@router.post("/api/admin/backfill-ref-produit-norm")
+def admin_backfill_ref_produit_norm(request: Request):
+    require_superadmin(request)
+
+    dry_run = (request.query_params.get("dry_run") or "").lower() in ("1", "true", "yes", "on")
+
+    try:
+        from app.services.fiche_ref_parser import (
+            parse_fiche_reference,
+            normalize_ref_produit,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Parser indisponible : {exc}")
+
+    fiches_total = 0
+    fiches_updated = 0
+    fiches_unchanged = 0
+    fiches_no_match = 0
+    fiches_preview: list = []
+
+    pe_total = 0
+    pe_updated = 0
+    pe_unchanged = 0
+    pe_no_match = 0
+    pe_preview: list = []
+
+    with get_db() as conn:
+        ft_cols = {r["name"] for r in conn.execute("PRAGMA table_info(fiches_techniques)").fetchall()}
+        if "ref_produit_norm" not in ft_cols:
+            raise HTTPException(
+                status_code=500,
+                detail="Migration 101 non appliquée (colonne ref_produit_norm absente). Redémarre le service pour déclencher la migration.",
+            )
+
+        rows = conn.execute(
+            "SELECT id, reference, ref_produit_norm, machine, laize_mm, "
+            "       conditionnement, conditionnement_norm "
+            "FROM fiches_techniques"
+        ).fetchall()
+        fiches_total = len(rows)
+
+        for row in rows:
+            parsed = parse_fiche_reference(row["reference"])
+            updates: dict = {}
+
+            new_norm = parsed.get("ref_produit_norm")
+            cur_norm = (row["ref_produit_norm"] or "").strip()
+            if new_norm and new_norm != cur_norm:
+                updates["ref_produit_norm"] = new_norm
+
+            # Ne pas écraser une machine saisie à la main.
+            new_machine = parsed.get("machine")
+            cur_machine = (row["machine"] or "").strip()
+            if new_machine and not cur_machine:
+                updates["machine"] = new_machine
+
+            new_laize = parsed.get("laize_mm")
+            if new_laize and not row["laize_mm"]:
+                updates["laize_mm"] = new_laize
+
+            new_cond = parsed.get("conditionnement_norm")
+            cur_cond_norm = (row["conditionnement_norm"] or "").strip()
+            cur_cond_raw = (row["conditionnement"] or "").strip()
+            if new_cond and not cur_cond_norm and not cur_cond_raw:
+                updates["conditionnement_norm"] = new_cond
+
+            if not updates:
+                if new_norm:
+                    fiches_unchanged += 1
+                else:
+                    fiches_no_match += 1
+                continue
+
+            fiches_updated += 1
+            if len(fiches_preview) < 25:
+                fiches_preview.append({
+                    "id": row["id"],
+                    "reference": row["reference"],
+                    "updates": updates,
+                })
+            if not dry_run:
+                set_clause = ", ".join(f"{k}=?" for k in updates)
+                conn.execute(
+                    f"UPDATE fiches_techniques SET {set_clause} WHERE id=?",
+                    list(updates.values()) + [row["id"]],
+                )
+
+        pe_rows = conn.execute(
+            "SELECT id, ref_produit, ref_produit_norm "
+            "FROM planning_entries "
+            "WHERE ref_produit IS NOT NULL AND TRIM(ref_produit) != ''"
+        ).fetchall()
+        pe_total = len(pe_rows)
+
+        for row in pe_rows:
+            norm = normalize_ref_produit(row["ref_produit"])
+            if not norm:
+                pe_no_match += 1
+                continue
+            cur = (row["ref_produit_norm"] or "").strip()
+            if norm == cur:
+                pe_unchanged += 1
+                continue
+            pe_updated += 1
+            if len(pe_preview) < 25:
+                pe_preview.append({
+                    "id": row["id"],
+                    "ref_produit": row["ref_produit"],
+                    "ref_produit_norm": norm,
+                })
+            if not dry_run:
+                conn.execute(
+                    "UPDATE planning_entries SET ref_produit_norm=? WHERE id=?",
+                    (norm, row["id"]),
+                )
+
+        if not dry_run:
+            conn.commit()
+
+    return {
+        "dry_run": dry_run,
+        "fiches_techniques": {
+            "total": fiches_total,
+            "updated": fiches_updated,
+            "unchanged": fiches_unchanged,
+            "no_match": fiches_no_match,
+            "preview": fiches_preview,
+        },
+        "planning_entries": {
+            "total": pe_total,
+            "updated": pe_updated,
+            "unchanged": pe_unchanged,
+            "no_match": pe_no_match,
+            "preview": pe_preview,
+        },
+    }
