@@ -1331,12 +1331,20 @@ def envoyer_ao(request: Request, ao_id: int):
                 status_code=400,
                 detail="Envoi impossible — l'appel d'offre est clôturé.",
             )
-        lignes = [
+        lignes_raw = [
             _row_dict(r)
             for r in conn.execute(
                 "SELECT ref_produit, designation, quantite, unite FROM ao_lignes WHERE ao_id=? ORDER BY position, id",
                 (ao_id,),
             ).fetchall()
+        ]
+        # Enrichit chaque ligne avec etiquettes_par_bobine et client_nom (fiche produit)
+        produits_map = _produits_by_ref_map(conn)
+        mat_ids = _matiere_ids_from_produits(produits_map)
+        matieres_map = _load_matieres_map(conn, mat_ids or None)
+        lignes = [
+            _enrich_ligne_display(ln, produits_map, matieres_map)
+            for ln in lignes_raw
         ]
         fournisseurs = conn.execute(
             """SELECT * FROM ao_fournisseurs
