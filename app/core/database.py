@@ -3268,6 +3268,23 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 103, "clients_referentiel")
 
+    # v104 — MyAO : langue préférée des fournisseurs (FR/EN) pour les invitations
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=104 LIMIT 1").fetchone():
+        af_cols = {row[1] for row in conn.execute("PRAGMA table_info(ao_fournisseurs)").fetchall()}
+        if "langue" not in af_cols:
+            try:
+                conn.execute("ALTER TABLE ao_fournisseurs ADD COLUMN langue TEXT DEFAULT 'fr'")
+            except Exception:
+                pass
+        carnet_cols = {row[1] for row in conn.execute("PRAGMA table_info(ao_carnet_fournisseurs)").fetchall()}
+        if "langue" not in carnet_cols:
+            try:
+                conn.execute("ALTER TABLE ao_carnet_fournisseurs ADD COLUMN langue TEXT DEFAULT 'fr'")
+            except Exception:
+                pass
+        conn.commit()
+        _record_schema_migration(conn, 104, "ao_fournisseurs_langue")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,

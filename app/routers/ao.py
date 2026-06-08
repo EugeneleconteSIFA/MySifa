@@ -7,8 +7,9 @@ from __future__ import annotations
 
 import json
 import logging
-import sqlite3
 import os
+import re
+import sqlite3
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -194,7 +195,13 @@ async def create_ao(request: Request):
 # ─── Carnet fournisseurs (routes statiques avant /{ao_id}) ───────
 
 
-def _parse_carnet_fournisseur_body(body: dict) -> tuple[str, str, str | None, str | None, str | None]:
+def _normalize_langue(value: object) -> str:
+    """Normalise la langue : 'fr' ou 'en', défaut 'fr'."""
+    v = (str(value or "").strip().lower())
+    return "en" if v == "en" else "fr"
+
+
+def _parse_carnet_fournisseur_body(body: dict) -> tuple[str, str, str | None, str | None, str | None, str]:
     nom = (body.get("nom") or "").strip()
     if not nom:
         raise HTTPException(status_code=400, detail="Nom obligatoire.")
@@ -202,7 +209,8 @@ def _parse_carnet_fournisseur_body(body: dict) -> tuple[str, str, str | None, st
     societe = (body.get("societe") or "").strip() or None
     adresse = (body.get("adresse") or "").strip() or None
     notes = (body.get("notes") or "").strip() or None
-    return nom, email, societe, adresse, notes
+    langue = _normalize_langue(body.get("langue"))
+    return nom, email, societe, adresse, notes, langue
 
 
 @router.get("/carnet-fournisseurs")
@@ -219,13 +227,13 @@ def list_carnet(request: Request):
 async def create_carnet(request: Request):
     _require_ao(request)
     body = await request.json()
-    nom, email, societe, adresse, notes = _parse_carnet_fournisseur_body(body)
+    nom, email, societe, adresse, notes, langue = _parse_carnet_fournisseur_body(body)
     now = _now_paris_iso()
     with get_db() as conn:
         cur = conn.execute(
             """INSERT INTO ao_carnet_fournisseurs
-               (nom, email, societe, adresse, notes, created_at) VALUES (?,?,?,?,?,?)""",
-            (nom, email, societe, adresse, notes, now),
+               (nom, email, societe, adresse, notes, langue, created_at) VALUES (?,?,?,?,?,?,?)""",
+            (nom, email, societe, adresse, notes, langue, now),
         )
         conn.commit()
         row = conn.execute("SELECT * FROM ao_carnet_fournisseurs WHERE id=?", (cur.lastrowid,)).fetchone()
@@ -236,12 +244,12 @@ async def create_carnet(request: Request):
 async def update_carnet(request: Request, entry_id: int):
     _require_ao(request)
     body = await request.json()
-    nom, email, societe, adresse, notes = _parse_carnet_fournisseur_body(body)
+    nom, email, societe, adresse, notes, langue = _parse_carnet_fournisseur_body(body)
     with get_db() as conn:
         cur = conn.execute(
             """UPDATE ao_carnet_fournisseurs
-               SET nom=?, email=?, societe=?, adresse=?, notes=? WHERE id=?""",
-            (nom, email, societe, adresse, notes, entry_id),
+               SET nom=?, email=?, societe=?, adresse=?, notes=?, langue=? WHERE id=?""",
+            (nom, email, societe, adresse, notes, langue, entry_id),
         )
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="Entrée introuvable")
@@ -759,6 +767,86 @@ def delete_produit(request: Request, produit_id: int):
     return {"ok": True}
 
 
+_DUP_REF_RE = re.compile(r"^(?P<base>.+?)\((?P<n>\d+)\)\s*$")
+
+
+def _next_copy_ref(conn, source_ref: str) -> str:
+    """Calcule la prochaine référence de copie pour un produit.
+
+    Règle :
+      - "ABC"        → "ABC(1)" (ou "ABC(2)" si "ABC(1)" existe déjà)
+      - "ABC(1)"     → "ABC(2)" (jamais "ABC(1)(1)")
+      - "ABC(7)"     → "ABC(8)" si "ABC(8)" libre, sinon la 1re libre
+    """
+    source_ref = (source_ref or "").strip()
+    if not source_ref:
+        raise HTTPException(status_code=400, detail="Référence source vide.")
+    m = _DUP_REF_RE.match(source_ref)
+    base = m.group("base").rstrip() if m else source_ref
+    # Cherche toutes les réfs existantes en "base(N)" pour déterminer N max
+    rows = conn.execute(
+        "SELECT ref FROM ao_produits WHERE LOWER(ref) LIKE LOWER(?)",
+        (f"{base}(%)%",),
+    ).fetchall()
+    taken: set[int] = set()
+    for r in rows:
+        mm = _DUP_REF_RE.match(r["ref"] or "")
+        if mm and mm.group("base").rstrip().lower() == base.lower():
+            try:
+                taken.add(int(mm.group("n")))
+            except (TypeError, ValueError):
+                pass
+    # Première valeur libre ≥ 1
+    n = 1
+    while n in taken:
+        n += 1
+    return f"{base}({n})"
+
+
+@router.post("/produits/{produit_id}/dupliquer")
+def dupliquer_produit(request: Request, produit_id: int):
+    """Duplique une fiche produit. Nouvelle référence calculée selon la règle
+    `ref(N)` (incrémente N si déjà existant, sans imbrication)."""
+    user = _require_ao(request)
+    now = _now_paris_iso()
+    with get_db() as conn:
+        src = conn.execute(
+            "SELECT * FROM ao_produits WHERE id=?", (produit_id,)
+        ).fetchone()
+        if not src:
+            raise HTTPException(status_code=404, detail="Produit introuvable")
+        src_d = _row_dict(src)
+        new_ref = _next_copy_ref(conn, src_d.get("ref") or "")
+        try:
+            cur = conn.execute(
+                """INSERT INTO ao_produits
+                   (ref, designation, unite, notes, client_id, fiche_json, created_at)
+                   VALUES (?,?,?,?,?,?,?)""",
+                (
+                    new_ref,
+                    src_d.get("designation"),
+                    src_d.get("unite"),
+                    src_d.get("notes"),
+                    src_d.get("client_id"),
+                    src_d.get("fiche_json"),
+                    now,
+                ),
+            )
+            conn.commit()
+        except sqlite3.IntegrityError:
+            conn.rollback()
+            raise HTTPException(status_code=409, detail="Référence déjà utilisée.") from None
+        row = conn.execute(
+            "SELECT * FROM ao_produits WHERE id=?", (cur.lastrowid,)
+        ).fetchone()
+    log_action(
+        user=user, action="DUPLICATE", module="ao",
+        objet=f"Produit {src_d.get('ref')} → {new_ref}",
+        ip=request.client.host if request.client else None,
+    )
+    return _serialize_produit_row(_row_dict(row), conn)
+
+
 # ─── Détail ──────────────────────────────────────────────────────
 
 def _enrich_ligne_display(
@@ -1016,15 +1104,17 @@ async def dupliquer_ao(request: Request, ao_id: int):
                 (ao_id,),
             ).fetchall()
             for f in src_fournis:
+                src_langue = _normalize_langue(f["langue"] if "langue" in f.keys() else "fr")
                 conn.execute(
                     """INSERT INTO ao_fournisseurs
-                       (ao_id, nom_fournisseur, email_contact, token, statut)
-                       VALUES (?,?,?,?,'invite')""",
+                       (ao_id, nom_fournisseur, email_contact, token, statut, langue)
+                       VALUES (?,?,?,?,'invite',?)""",
                     (
                         new_id,
                         f["nom_fournisseur"],
                         f["email_contact"],
                         str(uuid.uuid4()),
+                        src_langue,
                     ),
                 )
 
@@ -1182,15 +1272,16 @@ async def add_fournisseur(request: Request, ao_id: int):
     email = (body.get("email_contact") or "").strip().lower()
     if not nom or not email:
         raise HTTPException(status_code=400, detail="Nom et email du fournisseur obligatoires.")
+    langue = _normalize_langue(body.get("langue"))
 
     token = str(uuid.uuid4())
     with get_db() as conn:
         _get_ao_or_404(conn, ao_id)
         cur = conn.execute(
             """INSERT INTO ao_fournisseurs
-               (ao_id, nom_fournisseur, email_contact, token, statut)
-               VALUES (?,?,?,?,'invite')""",
-            (ao_id, nom, email, token),
+               (ao_id, nom_fournisseur, email_contact, token, statut, langue)
+               VALUES (?,?,?,?,'invite',?)""",
+            (ao_id, nom, email, token, langue),
         )
         conn.commit()
         row = conn.execute(
