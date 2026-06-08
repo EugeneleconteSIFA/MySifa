@@ -316,7 +316,7 @@ def download_bat_pdf(bat_id: int, request: Request):
     if not pdf:
         # Fallback legacy pdf_path
         if not current.get("pdf_path"):
-            raise HTTPException(status_code=404, detail="Aucun PDF associe a ce BAT")
+            raise HTTPException(status_code=404, detail="Aucun PDF associé à ce BAT")
         path = os.path.join(BAT_UPLOAD_DIR, current["pdf_path"])
         if not os.path.exists(path):
             raise HTTPException(status_code=404, detail="Fichier PDF introuvable sur le serveur")
@@ -331,89 +331,6 @@ def download_bat_pdf(bat_id: int, request: Request):
         raise HTTPException(status_code=404, detail="Fichier PDF introuvable sur le serveur")
     return FileResponse(path, media_type="application/pdf", filename=pdf["original_name"],
                         headers={"Content-Disposition": f'inline; filename="{pdf["original_name"]}"'})
-
-
-@router.get("/api/bat/{bat_id}/pdf/{pdf_id}")
-def download_bat_pdf_by_id(bat_id: int, pdf_id: int, request: Request):
-    """Sert un PDF specifique parmi ceux associes a ce BAT."""
-    _require_bat_access(request)
-    with get_db() as conn:
-        bat_row = conn.execute("SELECT id FROM bat_entries WHERE id=?", (bat_id,)).fetchone()
-        if not bat_row:
-            raise HTTPException(status_code=404, detail="BAT introuvable")
-        pdf = conn.execute(
-            "SELECT * FROM bat_pdfs WHERE id=? AND bat_id=?", (pdf_id, bat_id)
-        ).fetchone()
-
-    if not pdf:
-        raise HTTPException(status_code=404, detail="PDF introuvable")
-
-    pdf = dict(pdf)
-    path = os.path.join(BAT_UPLOAD_DIR, pdf["filename"])
-    if not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="Fichier PDF introuvable sur le serveur")
-    return FileResponse(path, media_type="application/pdf", filename=pdf["original_name"],
-                        headers={"Content-Disposition": f'inline; filename="{pdf["original_name"]}"'})
-
-
-# Suppression d'un PDF individuel
-
-@router.delete("/api/bat/{bat_id}/pdf/{pdf_id}")
-def delete_bat_pdf(bat_id: int, pdf_id: int, request: Request):
-    _require_bat_access(request)
-    with get_db() as conn:
-        bat_row = conn.execute("SELECT * FROM bat_entries WHERE id=?", (bat_id,)).fetchone()
-        if not bat_row:
-            raise HTTPException(status_code=404, detail="BAT introuvable")
-
-        pdf = conn.execute(
-            "SELECT * FROM bat_pdfs WHERE id=? AND bat_id=?", (pdf_id, bat_id)
-        ).fetchone()
-        if not pdf:
-            raise HTTPException(status_code=404, detail="PDF introuvable")
-
-        pdf = dict(pdf)
-        path = os.path.join(BAT_UPLOAD_DIR, pdf["filename"])
-        if os.path.exists(path):
-            os.remove(path)
-
-        conn.execute("DELETE FROM bat_pdfs WHERE id=?", (pdf_id,))
-        conn.commit()
-    return {"ok": True}
-
-
-# Suppression BAT
-
-@router.delete("/api/bat/{bat_id}")
-def delete_bat(bat_id: int, request: Request):
-    _require_bat_access(request)
-    with get_db() as conn:
-        row = conn.execute("SELECT * FROM bat_entries WHERE id=?", (bat_id,)).fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="BAT introuvable")
-        current = dict(row)
-
-        # Supprimer tous les PDFs associes
-        pdfs = conn.execute(
-            "SELECT filename FROM bat_pdfs WHERE bat_id=?", (bat_id,)
-        ).fetchall()
-        for pdf_row in pdfs:
-            path = os.path.join(BAT_UPLOAD_DIR, pdf_row[0])
-            if os.path.exists(path):
-                os.remove(path)
-
-        # Fallback : supprimer l'ancien pdf_path si non migre
-        if current.get("pdf_path"):
-            path = os.path.join(BAT_UPLOAD_DIR, current["pdf_path"])
-            if os.path.exists(path):
-                try:
-                    os.remove(path)
-                except Exception:
-                    pass
-
-        conn.execute("DELETE FROM bat_entries WHERE id=?", (bat_id,))
-        conn.commit()
-    return {"ok": True}
 
 
 @router.get("/api/bat/{bat_id}/pdf/{pdf_id}")
@@ -486,99 +403,6 @@ def delete_bat(bat_id: int, request: Request):
                 os.remove(path)
 
         # Fallback : supprimer l'ancien pdf_path si non migré
-        if current.get("pdf_path"):
-            path = os.path.join(BAT_UPLOAD_DIR, current["pdf_path"])
-            if os.path.exists(path):
-                try:
-                    os.remove(path)
-                except Exception:
-                    pass
-
-        conn.execute("DELETE FROM bat_entries WHERE id=?", (bat_id,))
-        conn.commit()
-    return {"ok": True}
- associe a ce BAT")
-        path = os.path.join(BAT_UPLOAD_DIR, current["pdf_path"])
-        if not os.path.exists(path):
-            raise HTTPException(status_code=404, detail="Fichier PDF introuvable sur le serveur")
-        desc = current.get("description") or current.get("numero_client") or "BAT"
-        ref = f"{desc}_{current['numero_article']}"
-        return FileResponse(path, media_type="application/pdf", filename=f"BAT_{ref}.pdf",
-                            headers={"Content-Disposition": f'inline; filename="BAT_{ref}.pdf"'})
-
-    pdf = dict(pdf)
-    path = os.path.join(BAT_UPLOAD_DIR, pdf["filename"])
-    if not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="Fichier PDF introuvable sur le serveur")
-    return FileResponse(path, media_type="application/pdf", filename=pdf["original_name"],
-                        headers={"Content-Disposition": f'inline; filename="{pdf["original_name"]}"'})
-
-
-@router.get("/api/bat/{bat_id}/pdf/{pdf_id}")
-def download_bat_pdf_by_id(bat_id: int, pdf_id: int, request: Request):
-    """Sert un PDF specifique parmi ceux associes a ce BAT."""
-    _require_bat_access(request)
-    with get_db() as conn:
-        bat_row = conn.execute("SELECT id FROM bat_entries WHERE id=?", (bat_id,)).fetchone()
-        if not bat_row:
-            raise HTTPException(status_code=404, detail="BAT introuvable")
-        pdf = conn.execute(
-            "SELECT * FROM bat_pdfs WHERE id=? AND bat_id=?", (pdf_id, bat_id)
-        ).fetchone()
-
-    if not pdf:
-        raise HTTPException(status_code=404, detail="PDF introuvable")
-
-    pdf = dict(pdf)
-    path = os.path.join(BAT_UPLOAD_DIR, pdf["filename"])
-    if not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="Fichier PDF introuvable sur le serveur")
-    return FileResponse(path, media_type="application/pdf", filename=pdf["original_name"],
-                        headers={"Content-Disposition": f'inline; filename="{pdf["original_name"]}"'})
-
-
-# Suppression d un PDF individuel
-
-@router.delete("/api/bat/{bat_id}/pdf/{pdf_id}")
-def delete_bat_pdf(bat_id: int, pdf_id: int, request: Request):
-    _require_bat_access(request)
-    with get_db() as conn:
-        bat_row = conn.execute("SELECT * FROM bat_entries WHERE id=?", (bat_id,)).fetchone()
-        if not bat_row:
-            raise HTTPException(status_code=404, detail="BAT introuvable")
-        pdf = conn.execute(
-            "SELECT * FROM bat_pdfs WHERE id=? AND bat_id=?", (pdf_id, bat_id)
-        ).fetchone()
-        if not pdf:
-            raise HTTPException(status_code=404, detail="PDF introuvable")
-        pdf = dict(pdf)
-        path = os.path.join(BAT_UPLOAD_DIR, pdf["filename"])
-        if os.path.exists(path):
-            os.remove(path)
-        conn.execute("DELETE FROM bat_pdfs WHERE id=?", (pdf_id,))
-        conn.commit()
-    return {"ok": True}
-
-
-# Suppression BAT
-
-@router.delete("/api/bat/{bat_id}")
-def delete_bat(bat_id: int, request: Request):
-    _require_bat_access(request)
-    with get_db() as conn:
-        row = conn.execute("SELECT * FROM bat_entries WHERE id=?", (bat_id,)).fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="BAT introuvable")
-        current = dict(row)
-
-        pdfs = conn.execute(
-            "SELECT filename FROM bat_pdfs WHERE bat_id=?", (bat_id,)
-        ).fetchall()
-        for pdf_row in pdfs:
-            path = os.path.join(BAT_UPLOAD_DIR, pdf_row[0])
-            if os.path.exists(path):
-                os.remove(path)
-
         if current.get("pdf_path"):
             path = os.path.join(BAT_UPLOAD_DIR, current["pdf_path"])
             if os.path.exists(path):
