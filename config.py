@@ -41,7 +41,20 @@ THEME_COLOR_META = "#0a0e17"
 # Page planning (/planning) — titre d’onglet
 APP_PLANNING_PAGE_TITLE = "Planning — MySifa"
 HOST        = "0.0.0.0"
-PORT        = 8000
+PORT        = int(os.getenv("PORT", 8000))
+
+# ─── Environnement (v1 staging / v2 prod) ────────────────────────────
+# ENV_NAME : "v2" (prod, défaut) ou "v1" (staging). Les deux instances tournent
+# côte à côte sur le VPS (v2:8000, v1:8002) et partagent la même DB.
+# Toute valeur autre que "v1" est traitée comme prod (sécurité par défaut).
+ENV_NAME = os.getenv("ENV_NAME", "v2").strip().lower()
+IS_STAGING = (ENV_NAME == "v1")
+
+# MIGRATIONS_DISABLED : désactive les migrations de schéma au boot. Obligatoire
+# sur v1 pour ne pas modifier la DB partagée avec la prod. Valeur par défaut :
+# désactivé sur v1, actif sur v2.
+_migrations_default = "1" if IS_STAGING else "0"
+MIGRATIONS_DISABLED = os.getenv("MIGRATIONS_DISABLED", _migrations_default) in {"1", "true", "True", "yes", "YES"}
 
 # ─── Support (email) ───────────────────────────────────────────────
 # Objectif: permettre au front d’envoyer un message au support via un endpoint FastAPI.

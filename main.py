@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from config import APP_TITLE, APP_VERSION, HOST, PORT, BASE_DIR
+from config import APP_TITLE, APP_VERSION, HOST, PORT, BASE_DIR, ENV_NAME, IS_STAGING
 from app.web.html import render_frontend_html
 
 from routers.auth       import router as auth_router
@@ -77,6 +77,13 @@ from app.routers.push import router as push_router
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup / shutdown — remplace @app.on_event('startup') (déprécié)."""
+    print(f"[MySifa] Boot — ENV_NAME={ENV_NAME} version={APP_VERSION} port={PORT}")
+    # v1 (staging) partage la DB avec la prod : aucune écriture au boot.
+    # Les seeds (emplacements_plan, chat channels) sont la responsabilité exclusive de v2.
+    if IS_STAGING:
+        print("[MySifa] Staging v1 : seeds de boot ignorés (DB partagée avec prod).")
+        yield
+        return
     try:
         from app.core.database import get_db, sync_emplacements_plan_from_csv
 
@@ -189,6 +196,28 @@ app.include_router(qualite_api_router)
 app.include_router(qualite_page_router)
 app.include_router(pwa_router)
 app.include_router(push_router)
+
+
+@app.get("/healthz", include_in_schema=False)
+def healthz():
+    """Sonde de santé — utilisée par le script de promotion v1→v2 pour valider
+    qu'une mise à jour n'a pas cassé l'instance. Pong DB minimal sans toucher
+    aux tables métier ; échec → réponse non-200 → rollback automatique."""
+    from fastapi.responses import JSONResponse
+    try:
+        from app.core.database import get_db
+        with get_db() as _conn:
+            _conn.execute("SELECT 1").fetchone()
+        return JSONResponse({
+            "status": "ok",
+            "env": ENV_NAME,
+            "version": APP_VERSION,
+        })
+    except Exception as e:
+        return JSONResponse(
+            {"status": "ko", "env": ENV_NAME, "version": APP_VERSION, "error": str(e)[:200]},
+            status_code=503,
+        )
 
 
 @app.get("/favicon.ico", include_in_schema=False)

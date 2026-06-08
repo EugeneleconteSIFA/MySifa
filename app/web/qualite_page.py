@@ -235,9 +235,10 @@ body.light .table-wrap tbody tr:hover td{background:rgba(0,0,0,.02)}
 .file-name{font-weight:600;color:var(--text);font-size:13px;word-break:break-all}
 .file-meta{font-size:11px;color:var(--muted);margin-top:2px}
 .file-actions{margin-left:auto;display:flex;gap:6px}
-.upload-zone{border:2px dashed var(--border);border-radius:12px;padding:28px 20px;text-align:center;cursor:pointer;transition:.15s;color:var(--muted);background:var(--bg)}
+.upload-zone{border:2px dashed var(--border);border-radius:12px;padding:24px 20px;text-align:center;cursor:pointer;transition:.15s;color:var(--muted);background:var(--bg);display:block}
 .upload-zone:hover,.upload-zone.drag{border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
 .upload-zone input{display:none}
+.upload-zone svg{flex-shrink:0;width:34px !important;height:34px !important;max-width:34px;max-height:34px}
 
 /* ── Discussion ── */
 .msg-list{display:flex;flex-direction:column;gap:14px;max-height:60vh;overflow-y:auto;padding:4px 4px 12px}
@@ -454,8 +455,14 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
       Déposez une fiche au format SIFA (modèle « Fiche NON CONFORMITE »). Les champs détectés (n° AR, n° historique, date, client, dossier, descriptif, quantité, services impliqués, analyse, actions, pilote…) seront pré-remplis. Le fichier original sera attaché en pièce jointe.
     </p>
     <label class="upload-zone" id="import-zone" ondragover="onImportDragOver(event)" ondragleave="onImportDragLeave(event)" ondrop="onImportDrop(event)">
-      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
-      <div id="import-zone-label" style="font-size:13px;margin-top:8px">Glisser-déposer le fichier xlsx, ou cliquer pour choisir</div>
+      <div style="display:flex;justify-content:center;margin-bottom:10px">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:block">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="17 8 12 3 7 8"/>
+          <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+      </div>
+      <div id="import-zone-label" style="font-size:13px">Glisser-déposer le fichier xlsx, ou cliquer pour choisir</div>
       <div style="font-size:11px;margin-top:4px;opacity:.7">Format .xlsx ou .xlsm</div>
       <input type="file" id="import-file" accept=".xlsx,.xlsm" onchange="onImportFile(event)">
     </label>
@@ -1099,8 +1106,14 @@ function renderFichiersTab(n){
   return `<div class="card">
     <div class="card-title">Pièces jointes</div>
     <label class="upload-zone" id="upload-zone" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event, ${n.id})">
-      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-      <div style="font-size:13px;margin-top:8px">Glisser-déposer un fichier ici, ou cliquer pour choisir</div>
+      <div style="display:flex;justify-content:center;margin-bottom:10px">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:block">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="17 8 12 3 7 8"/>
+          <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+      </div>
+      <div style="font-size:13px">Glisser-déposer un fichier ici, ou cliquer pour choisir</div>
       <div style="font-size:11px;margin-top:4px;opacity:.7">Email, PDF, image, Excel, Word…</div>
       <input type="file" id="file-input" onchange="onFileInput(event, ${n.id})" multiple>
     </label>
@@ -1378,7 +1391,6 @@ async function init(){
   updateThemeBtn();
   await Promise.all([loadMe(),loadUsers()]);
   await Promise.all([loadNCs(),loadCanaux(),loadUnread()]);
-  // Polling discret pour les non-lus / canaux
   setInterval(()=>{loadUnread();if(document.getElementById('canaux-panel').classList.contains('open'))loadCanaux();},30000);
 }
 init();

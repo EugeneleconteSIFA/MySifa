@@ -14,7 +14,7 @@ from typing import Optional
 from datetime import datetime
 from contextlib import contextmanager
 import threading
-from config import DB_PATH, UPLOAD_DIR, ROLE_SUPERADMIN, SUPERADMIN_EMAIL, classify_operation
+from config import DB_PATH, UPLOAD_DIR, ROLE_SUPERADMIN, SUPERADMIN_EMAIL, classify_operation, MIGRATIONS_DISABLED, ENV_NAME
 from app.services.emplacements_plan import reload_emplacements_plan, sync_emplacements_plan_to_db
 
 # Baselinage des migrations SQL déjà regroupées dans _migrate (historique).
@@ -44,12 +44,22 @@ _schema_migrate_done = False
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
-    """Applique les migrations manquantes (idempotent, une fois par process)."""
+    """Applique les migrations manquantes (idempotent, une fois par process).
+
+    Si MIGRATIONS_DISABLED=1 (env staging v1), ne joue AUCUNE migration : la DB
+    est partagée avec la prod v2, qui en a la responsabilité exclusive. Le flag
+    est posé une fois pour toutes pour ne pas re-tenter à chaque requête.
+    """
     global _schema_migrate_done
     if _schema_migrate_done:
         return
     with _schema_migrate_lock:
         if _schema_migrate_done:
+            return
+        if MIGRATIONS_DISABLED:
+            print(f"[MySifa] _ensure_schema : migrations DÉSACTIVÉES (ENV_NAME={ENV_NAME}). "
+                  f"La DB n'est PAS modifiée par cette instance.")
+            _schema_migrate_done = True
             return
         _migrate(conn)
         conn.commit()

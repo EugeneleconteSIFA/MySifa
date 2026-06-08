@@ -437,7 +437,12 @@ if (-not $SkipSync -and $gitPushDir -ne $truthDir) {
     Write-Host "  (sync ignoree -SkipSync)"
 }
 
-Copy-Item -Path $deploySh -Destination (Join-Path $gitPushDir "deploy.sh") -Force
+$deployShTarget = Join-Path $gitPushDir "deploy.sh"
+$sourceResolved = (Resolve-Path -LiteralPath $deploySh).Path
+$targetResolved = if (Test-Path -LiteralPath $deployShTarget) { (Resolve-Path -LiteralPath $deployShTarget).Path } else { $deployShTarget }
+if ($sourceResolved -ne $targetResolved) {
+    Copy-Item -Path $deploySh -Destination $deployShTarget -Force
+}
 
 Invoke-DeploySh -BashExe $bash -GitPushDir $gitPushDir -TruthDir $truthDir `
     -SkipSync:$skipDeployShSync -GitHubOnly:$false -ExtraArgs $deployShArgs

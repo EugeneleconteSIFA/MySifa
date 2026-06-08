@@ -1,4 +1,4 @@
-from config import APP_VERSION, APP_META_DESCRIPTION, APP_PAGE_TITLE, THEME_COLOR_META
+from config import APP_VERSION, APP_META_DESCRIPTION, APP_PAGE_TITLE, THEME_COLOR_META, ENV_NAME, IS_STAGING
 from app.web.expe_assets import (
     EXPE_CARTE_FRANCE_CSS,
     EXPE_CARTE_FRANCE_JS,
@@ -115,6 +115,16 @@ button:focus:not(:focus-visible){outline:none}
 .login-error{background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.3);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--danger);margin-bottom:16px;display:none}
 .login-error.show{display:block}
 .login-footer{text-align:center;margin-top:20px;font-size:11px;color:var(--muted)}
+/* Bandeau staging v1 — fine bande rouge permanente, n'apparaît que si ENV_NAME=v1 */
+.staging-bandeau{position:fixed;top:0;left:0;right:0;height:24px;background:#dc2626;color:#fff;
+  font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  z-index:9999;font-family:'Segoe UI',system-ui,sans-serif;
+  box-shadow:0 1px 6px rgba(220,38,38,.4)}
+.staging-bandeau::before{content:"●";color:#fef2f2;font-size:9px;line-height:1}
+body.has-staging-bandeau{padding-top:24px}
+body.has-staging-bandeau .sidebar{height:calc(100vh - 24px);top:24px}
+body.has-staging-bandeau .mobile-topbar{top:24px}
 .app{position:relative;z-index:1;display:flex;min-height:100vh}
 .sidebar{width:220px;background:var(--card);border-right:1px solid var(--border);padding:20px 12px;display:flex;flex-direction:column;flex-shrink:0;height:100vh;position:sticky;top:0;overflow-y:auto}
 .sidebar::-webkit-scrollbar{width:0}
@@ -1968,7 +1978,8 @@ __EXPE_CARTE_FRANCE_CSS__
 .db-add-empty{text-align:center;color:var(--muted);font-size:13px;padding:16px 0}
 </style>
 </head>
-<body>
+<body class="__STAGING_BODY_CLASS__">
+__STAGING_BANDEAU_HTML__
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
 <div id="root"></div>
@@ -13168,10 +13179,23 @@ _DEFAULT_CONFIG = {
 
 def render_frontend_html(initial_app: str = "portal") -> str:
     cfg = _MODULE_CONFIG.get(initial_app, _DEFAULT_CONFIG)
+    # Bandeau staging : injecté seulement si ENV_NAME=v1. v2 prod = chaîne vide.
+    if IS_STAGING:
+        staging_html = (
+            '<div class="staging-bandeau">'
+            'v1 — Environnement de test — DB partagée avec la prod'
+            '</div>'
+        )
+        staging_class = "has-staging-bandeau"
+    else:
+        staging_html = ""
+        staging_class = ""
     return (
         _FRONTEND_HTML_TEMPLATE.replace("__META_DESCRIPTION__", APP_META_DESCRIPTION)
         .replace("__THEME_COLOR__", THEME_COLOR_META)
         .replace("__V_LABEL__", f"v{APP_VERSION}")
+        .replace("__STAGING_BANDEAU_HTML__", staging_html)
+        .replace("__STAGING_BODY_CLASS__", staging_class)
         .replace("__INITIAL_APP_VALUE__", initial_app)
         .replace("__TOUCH_ICON__", cfg["touch_icon"])
         .replace("__APP_TITLE__", cfg["app_title"])
