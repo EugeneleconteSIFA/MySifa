@@ -1155,6 +1155,23 @@ body.light .portal-apps--reorderable .portal-app--placeholder:hover{background:r
 }
 .portal-apps--reorderable .portal-app--disabled{cursor:grab}
 .portal-apps-hint{font-size:11px;color:var(--muted);text-align:center;margin:8px 0 0;width:100%;line-height:1.35}
+.portal-dash-block{width:100%;max-width:900px;margin:0 auto}
+.portal-dash-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:20px 0 10px;text-align:center}
+.portal-dash-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+.portal-dash-card{
+  background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;
+  cursor:pointer;transition:border-color .15s,box-shadow .15s;text-align:left;
+}
+.portal-dash-card:hover{border-color:var(--accent);box-shadow:0 8px 24px rgba(34,211,238,.1)}
+body.light .portal-dash-card:hover{box-shadow:0 8px 20px rgba(8,145,178,.08)}
+.portal-dash-card-hdr{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px}
+.portal-dash-card-label{font-size:12px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.4px}
+.portal-dash-kpi{font-size:26px;font-weight:800;color:var(--accent);line-height:1}
+.portal-dash-kpi-sub{font-size:10px;font-weight:600;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.3px}
+.portal-dash-lines{margin:0;padding:0;list-style:none;font-size:11px;color:var(--text2);line-height:1.55}
+.portal-dash-lines li{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.portal-dash-empty{font-size:12px;color:var(--ok);line-height:1.5}
+.portal-dash-loading{font-size:12px;color:var(--muted);text-align:center;padding:12px 0}
 .portal-app{display:flex;flex-direction:column;align-items:center;gap:8px;
   background-color:var(--card);border:1px solid var(--border);border-radius:16px;
   padding:14px 12px;cursor:pointer;transition:all .2s;text-decoration:none;
@@ -3556,6 +3573,51 @@ function portalGetDragInsertBefore(container,x,y){
   }
   return (maxIdx>=0 && maxIdx+1<elems.length) ? elems[maxIdx+1] : null;
 }
+function escPortalText(s){
+  return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+}
+
+async function loadPortalDashboards(){
+  const block=document.getElementById('portal-dash-block');
+  const grid=document.getElementById('portal-dash-grid');
+  if(!block||!grid)return;
+  const enabled=(S.user&&Array.isArray(S.user.portal_dashboards))?S.user.portal_dashboards:[];
+  if(!enabled.length){
+    block.style.display='none';
+    return;
+  }
+  block.style.display='';
+  grid.innerHTML='<div class="portal-dash-loading">Chargement des tableaux de bord…</div>';
+  try{
+    const d=await api('/api/portal/dashboards/data');
+    const widgets=(d&&Array.isArray(d.widgets))?d.widgets:[];
+    if(!widgets.length){
+      block.style.display='none';
+      return;
+    }
+    grid.innerHTML=widgets.map(w=>{
+      const href=escPortalText(w.href||'/');
+      const kpi=escPortalText(w.kpi!=null?w.kpi:'—');
+      const kpiLabel=escPortalText(w.kpi_label||'');
+      const kpi2=w.kpi_secondary!=null?('<div class="portal-dash-kpi" style="font-size:18px;margin-top:6px">'+escPortalText(w.kpi_secondary)+'</div><div class="portal-dash-kpi-sub">'+escPortalText(w.kpi_secondary_label||'')+'</div>'):'';
+      let body='';
+      if(w.empty&&w.empty_text){
+        body='<p class="portal-dash-empty">'+escPortalText(w.empty_text)+'</p>';
+      }else if(Array.isArray(w.lines)&&w.lines.length){
+        body='<ul class="portal-dash-lines">'+w.lines.map(ln=>'<li>'+escPortalText(ln)+'</li>').join('')+'</ul>';
+      }
+      return '<article class="portal-dash-card" role="button" tabindex="0" data-href="'+href+'" onclick="if(!_portalDragSuppressClick)location.href=this.dataset.href">'+
+        '<div class="portal-dash-card-hdr"><div class="portal-dash-card-label">'+escPortalText(w.label||'')+'</div></div>'+
+        '<div class="portal-dash-kpi">'+kpi+'</div>'+
+        (kpiLabel?'<div class="portal-dash-kpi-sub">'+kpiLabel+'</div>':'')+
+        kpi2+body+
+        '</article>';
+    }).join('');
+  }catch(e){
+    grid.innerHTML='<div class="portal-dash-loading">Tableaux de bord indisponibles.</div>';
+  }
+}
+
 async function savePortalAppsOrder(ids){
   try{
     const prev=(S.user&&S.user.portal_apps_order)?S.user.portal_apps_order:[];
@@ -3849,11 +3911,20 @@ function renderPortal(){
   const orderedTiles=portalOrderTileSpecs(tileSpecs,order);
   const apps=orderedTiles.map(s=>s.el);
   const appsWrap=h('div',{className:'portal-apps portal-apps--reorderable'},...apps);
+  const dashGrid=h('div',{className:'portal-dash-grid',id:'portal-dash-grid'},
+    h('div',{className:'portal-dash-loading'},'Chargement des tableaux de bord…')
+  );
+  const dashBlock=h('div',{className:'portal-dash-block',id:'portal-dash-block',style:{display:'none'}},
+    h('div',{className:'portal-dash-title'},'Mes tableaux de bord'),
+    dashGrid
+  );
   const appsBlock=h('div',{className:'portal-apps-block',style:{width:'100%',maxWidth:'900px',margin:'0 auto'}},
     appsWrap,
-    apps.length?h('div',{className:'portal-apps-hint'},'Maintenir une tuile et la glisser pour réorganiser les accès (ordre enregistré pour votre compte).'):null
+    apps.length?h('div',{className:'portal-apps-hint'},'Maintenir une tuile et la glisser pour réorganiser les accès (ordre enregistré pour votre compte).'):null,
+    dashBlock
   );
   setTimeout(()=>{if(apps.length)attachPortalReorder(appsWrap);},0);
+  setTimeout(()=>{loadPortalDashboards();},0);
 
   function logPortalGoogleSearch(query){
     if(!S.user||!query) return;

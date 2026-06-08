@@ -286,6 +286,41 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
   box-shadow:0 1px 4px rgba(0,0,0,.25);
 }
 .toggle-switch.on .toggle-knob{transform:translateX(22px);background:var(--bg)}
+
+/* ── Mes dashboards ── */
+.dash-list{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}
+.dash-row{
+  display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:10px;
+  border:1px solid var(--border);background:var(--bg);
+}
+.dash-row-info{flex:1;min-width:0}
+.dash-row-title{font-size:13px;font-weight:700;color:var(--text)}
+.dash-row-desc{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.4}
+.dash-row-actions{display:flex;gap:6px;flex-shrink:0}
+.dash-add-panel{
+  margin-top:4px;padding:14px 16px;border-radius:12px;border:1px dashed var(--border);
+  background:var(--bg);
+}
+.dash-add-panel h3{margin:0 0 10px;font-size:12px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.5px;color:var(--muted)}
+.dash-pick{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
+.dash-pick select{
+  flex:1;min-width:200px;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);
+  background:var(--card);color:var(--text);font-size:13px;font-family:inherit;
+}
+.dash-pick .btn-add{
+  padding:10px 16px;border-radius:10px;border:none;background:var(--accent);color:#0a0e17;
+  font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;
+}
+.dash-pick .btn-add:hover{filter:brightness(1.06)}
+.dash-pick .btn-add:disabled{opacity:.5;cursor:not-allowed}
+.btn-dash-ghost{
+  padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;
+  color:var(--text2);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;
+}
+.btn-dash-ghost:hover{border-color:var(--accent);color:var(--accent)}
+.btn-dash-ghost.danger:hover{border-color:var(--danger);color:var(--danger)}
+.dash-empty{font-size:13px;color:var(--muted);line-height:1.5;padding:8px 0}
 </style>
 </head>
 <body class="has-topbar">
@@ -316,6 +351,10 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
     <button type="button" class="nav-btn" id="nav-calendrier" onclick="showTab('calendrier')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
       Calendrier
+    </button>
+    <button type="button" class="nav-btn" id="nav-dashboards" onclick="showTab('dashboards')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      Mes dashboards
     </button>
 
     <div class="sidebar-bottom">
@@ -369,6 +408,9 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
       <!-- Onglet Mes préférences -->
       <div class="pane-tab" id="pane-prefs"></div>
       <div class="pane-tab" id="pane-calendrier"></div>
+      <div class="pane-tab" id="pane-dashboards">
+        <div class="loading">Chargement…</div>
+      </div>
 
     </div>
   </main>
@@ -392,6 +434,8 @@ const ROLE_LABELS={
 
 let ME=null;
 let CURRENT_TAB='info';
+let DASH_CATALOG=[];
+let DASH_ENABLED=[];
 
 function getPrefs(){ return window.MySifaTheme ? MySifaTheme.loadPrefs() : {palette:'mysifa',style:'defaut',mode:'dark',bgAnim:true}; }
 function setPrefs(partial){ return window.MySifaTheme ? MySifaTheme.setPrefs(partial) : null; }
@@ -475,7 +519,7 @@ function refreshAvatarPreview(){
 // ── Onglets ───────────────────────────────────────────────────────
 function showTab(tab){
   CURRENT_TAB=tab;
-  ['info','prefs','calendrier'].forEach(id=>{
+  ['info','prefs','calendrier','dashboards'].forEach(id=>{
     const pane=document.getElementById('pane-'+id);
     const nav=document.getElementById('nav-'+id);
     if(pane)pane.classList.toggle('active',id===tab);
@@ -484,7 +528,8 @@ function showTab(tab){
   const subLabels={
     info:'Informations personnelles',
     prefs:'Thème et apparence',
-    calendrier:'Couleurs MyCalendrier'
+    calendrier:'Couleurs MyCalendrier',
+    dashboards:'Mes dashboards'
   };
   const sub=document.getElementById('mobile-sub');
   if(sub)sub.textContent=subLabels[tab]||'';
@@ -492,11 +537,132 @@ function showTab(tab){
   if(pageSub){
     if(tab==='info')pageSub.textContent='Vos informations personnelles et mot de passe.';
     else if(tab==='calendrier')pageSub.textContent='Couleurs des calendriers affichés dans MyCalendrier.';
+    else if(tab==='dashboards')pageSub.textContent='Tableaux de bord affichés sur votre portail d\'accueil.';
     else pageSub.textContent='Personnalisez l\'apparence de MySifa.';
   }
   if(tab==='prefs')renderPrefs();
   if(tab==='calendrier')renderCalendrier();
+  if(tab==='dashboards')loadDashboardsTab();
   closeSidebar();
+}
+
+// ── Onglet Mes dashboards ─────────────────────────────────────────
+async function loadDashboardsTab(){
+  const pane=document.getElementById('pane-dashboards');
+  if(!pane)return;
+  pane.innerHTML='<div class="loading">Chargement…</div>';
+  try{
+    const d=await api('/api/portal/dashboards/catalog');
+    DASH_CATALOG=Array.isArray(d&&d.catalog)?d.catalog:[];
+    DASH_ENABLED=Array.isArray(d&&d.enabled)?d.enabled.slice():[];
+    if(ME)ME.portal_dashboards=DASH_ENABLED.slice();
+    renderDashboardsTab();
+  }catch(e){
+    pane.innerHTML='<div class="card"><p style="color:var(--danger);font-size:13px">'+esc(e.message||'Erreur chargement')+'</p></div>';
+  }
+}
+
+function renderDashboardsTab(){
+  const pane=document.getElementById('pane-dashboards');
+  if(!pane)return;
+  const byId=new Map(DASH_CATALOG.map(w=>[w.id,w]));
+  const enabledRows=DASH_ENABLED.map(id=>{
+    const w=byId.get(id);
+    if(!w)return '';
+    return '<div class="dash-row" data-dash-id="'+esc(id)+'">'+
+      '<div class="dash-row-info">'+
+      '<div class="dash-row-title">'+esc(w.label)+'</div>'+
+      '<div class="dash-row-desc">'+esc(w.description||'')+'</div>'+
+      '</div>'+
+      '<div class="dash-row-actions">'+
+      '<button type="button" class="btn-dash-ghost" data-dash-up="'+esc(id)+'" title="Monter">↑</button>'+
+      '<button type="button" class="btn-dash-ghost" data-dash-down="'+esc(id)+'" title="Descendre">↓</button>'+
+      '<button type="button" class="btn-dash-ghost danger" data-dash-rm="'+esc(id)+'">Retirer</button>'+
+      '</div></div>';
+  }).filter(Boolean).join('');
+
+  const available=DASH_CATALOG.filter(w=>!DASH_ENABLED.includes(w.id));
+  const pickOpts=available.length
+    ? available.map(w=>'<option value="'+esc(w.id)+'">'+esc(w.label)+'</option>').join('')
+    : '<option value="">— Aucun tableau disponible —</option>';
+
+  pane.innerHTML=
+    '<div class="card">'+
+    '<h2>Tableaux de bord sur le portail</h2>'+
+    '<p class="subtitle" style="margin:-6px 0 16px">Choisissez les indicateurs affichés sur votre page d\'accueil MySifa.</p>'+
+    (enabledRows
+      ? '<div class="dash-list">'+enabledRows+'</div>'
+      : '<p class="dash-empty">Aucun tableau de bord actif. Ajoutez-en un ci-dessous.</p>')+
+    '<div class="dash-add-panel">'+
+    '<h3>Ajouter un tableau de bord</h3>'+
+    '<div class="dash-pick">'+
+    '<select id="dash-pick-select"'+(!available.length?' disabled':'')+'>'+pickOpts+'</select>'+
+    '<button type="button" class="btn-add" id="dash-pick-add"'+(available.length?'':' disabled')+'>Ajouter le tableau de bord</button>'+
+    '</div></div></div>';
+
+  const addBtn=document.getElementById('dash-pick-add');
+  if(addBtn)addBtn.onclick=addDashboardFromPick;
+  pane.querySelectorAll('[data-dash-rm]').forEach(btn=>{
+    btn.onclick=()=>removeDashboard(btn.getAttribute('data-dash-rm'));
+  });
+  pane.querySelectorAll('[data-dash-up]').forEach(btn=>{
+    btn.onclick=()=>moveDashboard(btn.getAttribute('data-dash-up'),-1);
+  });
+  pane.querySelectorAll('[data-dash-down]').forEach(btn=>{
+    btn.onclick=()=>moveDashboard(btn.getAttribute('data-dash-down'),1);
+  });
+}
+
+async function saveDashboards(ids){
+  await api('/api/auth/me',{
+    method:'PUT',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({portal_dashboards:ids})
+  });
+  DASH_ENABLED=ids.slice();
+  if(ME)ME.portal_dashboards=DASH_ENABLED.slice();
+}
+
+async function addDashboardFromPick(){
+  const sel=document.getElementById('dash-pick-select');
+  const id=sel&&sel.value?String(sel.value).trim():'';
+  if(!id){toast('Sélectionnez un tableau de bord',false);return;}
+  if(DASH_ENABLED.includes(id)){toast('Déjà ajouté',false);return;}
+  const next=DASH_ENABLED.concat([id]);
+  try{
+    await saveDashboards(next);
+    renderDashboardsTab();
+    toast('Tableau de bord ajouté',true);
+  }catch(e){
+    toast(e.message||'Enregistrement impossible',false);
+  }
+}
+
+async function removeDashboard(id){
+  if(!id||!DASH_ENABLED.includes(id))return;
+  const next=DASH_ENABLED.filter(x=>x!==id);
+  try{
+    await saveDashboards(next);
+    renderDashboardsTab();
+    toast('Tableau de bord retiré',true);
+  }catch(e){
+    toast(e.message||'Enregistrement impossible',false);
+  }
+}
+
+async function moveDashboard(id,dir){
+  const i=DASH_ENABLED.indexOf(id);
+  if(i<0)return;
+  const j=i+dir;
+  if(j<0||j>=DASH_ENABLED.length)return;
+  const next=DASH_ENABLED.slice();
+  const tmp=next[i];next[i]=next[j];next[j]=tmp;
+  try{
+    await saveDashboards(next);
+    renderDashboardsTab();
+  }catch(e){
+    toast(e.message||'Enregistrement impossible',false);
+  }
 }
 
 // ── Complétion profil ─────────────────────────────────────────────
@@ -961,6 +1127,7 @@ document.getElementById('btn-logout').onclick=async()=>{
     const tabParam=new URLSearchParams(location.search).get('tab');
     if(tabParam==='prefs')showTab('prefs');
     else if(tabParam==='calendrier')showTab('calendrier');
+    else if(tabParam==='dashboards')showTab('dashboards');
     if(location.hash.startsWith('#cal-'))openCalColorFromHash();
   }catch(e){
     if(e.message!=='auth'){

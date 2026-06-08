@@ -32,6 +32,10 @@ from config import (
     SESSION_HOURS,
     SUPERADMIN_EMAIL,
 )
+from app.services.portal_dashboard_service import (
+    normalize_portal_dashboards_for_db,
+    portal_dashboards_list_from_db,
+)
 
 router = APIRouter()
 
@@ -324,7 +328,7 @@ def me(request: Request):
         return PlainResponse(content=b"null", media_type="application/json")
     with get_db() as conn:
         row = conn.execute(
-            "SELECT id,email,identifiant,nom,role,operateur_lie,machine_id,telephone,adresse,date_naissance,avatar_url,access_overrides,portal_apps_order,theme_prefs FROM users WHERE id=?",
+            "SELECT id,email,identifiant,nom,role,operateur_lie,machine_id,telephone,adresse,date_naissance,avatar_url,access_overrides,portal_apps_order,portal_dashboards,theme_prefs FROM users WHERE id=?",
             (user["id"],)
         ).fetchone()
     if not row:
@@ -334,6 +338,7 @@ def me(request: Request):
     d["access_overrides"] = parse_access_overrides_raw(ov_raw)
     d["app_access"] = merged_app_access(d.get("role"), ov_raw)
     d["portal_apps_order"] = _portal_order_list_from_db(d.get("portal_apps_order"))
+    d["portal_dashboards"] = portal_dashboards_list_from_db(d.get("portal_dashboards"))
     return d
 
 
@@ -381,6 +386,10 @@ async def update_me(request: Request):
         if "portal_apps_order" in body:
             portal_val = _normalize_portal_order_for_db(body.get("portal_apps_order"))
 
+        dashboards_val = exd.get("portal_dashboards")
+        if "portal_dashboards" in body:
+            dashboards_val = normalize_portal_dashboards_for_db(body.get("portal_dashboards"))
+
         theme_prefs_val = exd.get("theme_prefs")
         if "theme_prefs" in body:
             import json as _json
@@ -393,8 +402,8 @@ async def update_me(request: Request):
                 theme_prefs_val = str(tp)
 
         conn.execute(
-            "UPDATE users SET nom=?,email=?,telephone=?,adresse=?,date_naissance=?,password_hash=?,portal_apps_order=?,theme_prefs=? WHERE id=?",
-            (nom, email, telephone, adresse or None, date_naissance or None, pwd_hash, portal_val, theme_prefs_val, user["id"]),
+            "UPDATE users SET nom=?,email=?,telephone=?,adresse=?,date_naissance=?,password_hash=?,portal_apps_order=?,portal_dashboards=?,theme_prefs=? WHERE id=?",
+            (nom, email, telephone, adresse or None, date_naissance or None, pwd_hash, portal_val, dashboards_val, theme_prefs_val, user["id"]),
         )
         conn.commit()
 

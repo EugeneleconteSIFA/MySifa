@@ -114,6 +114,43 @@ ROLES_SETTINGS = {ROLE_SUPERADMIN}
 # Applications dont l'accès peut être surchargé par utilisateur (hors Paramètres : réservé au rôle super admin).
 ACCESS_OVERRIDABLE_APPS = frozenset({"prod", "planning", "planning_rh", "stock", "compta", "expe", "pricing"})
 
+# Tableaux de bord affichés sur le portail d'accueil (préférence par utilisateur, gérée dans Mon profil).
+# Chaque entrée : id, label, description, app (clé app_access requise).
+PORTAL_DASHBOARD_WIDGETS: tuple[dict, ...] = (
+    {
+        "id": "stock_alertes",
+        "label": "Alertes stock",
+        "description": "Matières premières sous le seuil d'alerte.",
+        "app": "stock",
+    },
+    {
+        "id": "expe_departs",
+        "label": "Départs en attente",
+        "description": "Expéditions en attente de validation.",
+        "app": "expe",
+    },
+    {
+        "id": "planning_actif",
+        "label": "Planning production",
+        "description": "Dossiers en attente et en cours au planning.",
+        "app": "planning",
+    },
+    {
+        "id": "prod_jour",
+        "label": "Production du jour",
+        "description": "Dossiers terminés aujourd'hui et activité récente.",
+        "app": "prod",
+    },
+    {
+        "id": "fabrication_machine",
+        "label": "Ma machine",
+        "description": "Dossier en cours sur votre machine de fabrication.",
+        "app": "fabrication",
+    },
+)
+
+PORTAL_DASHBOARD_IDS = frozenset(w["id"] for w in PORTAL_DASHBOARD_WIDGETS)
+
 # Rôles assignables lors de la création / édition d'utilisateurs (hors super admin).
 ASSIGNABLE_ROLES = frozenset(
     {

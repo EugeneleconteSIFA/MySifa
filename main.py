@@ -60,6 +60,7 @@ from app.routers.ao_portail import router_html as ao_portail_html_router
 from app.web.ao_page import router as ao_page_router
 from app.routers.pricing import router as pricing_router
 from app.web.pricing_page import router as pricing_page_router
+from app.routers.portal_dashboards import router as portal_dashboards_router
 
 
 @asynccontextmanager
@@ -160,6 +161,7 @@ app.include_router(ao_portail_api_router)
 app.include_router(ao_page_router)
 app.include_router(pricing_router)
 app.include_router(pricing_page_router)
+app.include_router(portal_dashboards_router)
 
 
 @app.get("/", response_class=HTMLResponse)

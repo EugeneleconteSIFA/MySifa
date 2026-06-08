@@ -2669,6 +2669,14 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 84, "planning_entries_dept_livraison_prise_rdv")
 
+    # v85 — Portail : tableaux de bord personnalisés par utilisateur
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=85 LIMIT 1").fetchone():
+        ucols = {r["name"] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
+        if "portal_dashboards" not in ucols:
+            conn.execute("ALTER TABLE users ADD COLUMN portal_dashboards TEXT")
+        conn.commit()
+        _record_schema_migration(conn, 85, "users_portal_dashboards")
+
     _record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,
