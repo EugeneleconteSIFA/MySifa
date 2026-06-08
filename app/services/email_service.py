@@ -320,6 +320,27 @@ def _localize_unite(unite: str | None, lang: str) -> str:
     return unite or ""
 
 
+def _format_number(value, lang: str) -> str:
+    """Formate un nombre pour affichage email :
+       - les entiers (ou floats sans partie décimale) → sans .0
+       - séparateur de milliers : espace insécable en français, virgule en anglais.
+    """
+    if value is None or value == "":
+        return "—"
+    try:
+        n = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    if n.is_integer():
+        s = f"{int(n):,}"
+    else:
+        s = f"{n:,.2f}".rstrip("0").rstrip(".")
+    if lang == "en":
+        return s
+    # FR : espace insécable comme séparateur, virgule comme décimale
+    return s.replace(",", " ").replace(".", ",")
+
+
 def _ao_invitation_email_strings(lang: str, *, reference: str, titre: str, nom: str) -> dict[str, str]:
     """Textes email invitation AO (FR/EN), single-lang."""
     nom_esc = _esc(nom)
@@ -383,12 +404,13 @@ def email_invitation_ao(
     rows_html = ""
     for ln in lignes:
         labels_roll = ln.get("etiquettes_par_bobine")
-        labels_roll_str = _esc(str(labels_roll)) if labels_roll is not None else "&mdash;"
+        labels_roll_str = _esc(_format_number(labels_roll, lang)) if labels_roll is not None else "&mdash;"
         unite_loc = _localize_unite(ln.get("unite"), lang)
+        qty_str = _esc(_format_number(ln.get("quantite"), lang))
         rows_html += (
             f"<tr>"
             f"<td style=\"padding:12px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#0f172a;font-weight:600\">{_esc(ln.get('ref_produit'))}</td>"
-            f"<td style=\"padding:12px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#475569;text-align:right;white-space:nowrap\">{_esc(ln.get('quantite'))} {_esc(unite_loc)}</td>"
+            f"<td style=\"padding:12px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#475569;text-align:right;white-space:nowrap\">{qty_str} {_esc(unite_loc)}</td>"
             f"<td style=\"padding:12px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#475569;text-align:right\">{labels_roll_str}</td>"
             f"</tr>"
         )
