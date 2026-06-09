@@ -809,8 +809,6 @@ body.light .mp-search-wrap:focus-within{
 .ng-rupture-badge{font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:color-mix(in srgb,var(--danger) 14%,transparent);color:var(--danger);border:1px solid color-mix(in srgb,var(--danger) 35%,transparent);text-transform:uppercase;letter-spacing:.4px}
 /* Négoce — fiche détail */
 .ng-detail{display:flex;flex-direction:column;gap:18px;max-width:1100px;margin:0 auto}
-.ng-detail-back{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);background:none;border:none;cursor:pointer;padding:4px 0;align-self:flex-start}
-.ng-detail-back:hover{color:var(--accent)}
 .ng-detail-header{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 24px;display:flex;align-items:flex-start;gap:20px;flex-wrap:wrap}
 .ng-detail-header-main{flex:1;min-width:240px}
 .ng-detail-ref{font-family:ui-monospace,monospace;font-size:22px;font-weight:800;color:var(--text);letter-spacing:.5px}
@@ -6450,8 +6448,8 @@ function closeNgDetail() {
 
 function buildNegoceDetail() {
   const wrap = el('div', { cls: 'content ng-detail' });
-  const backBtn = el('button', { cls: 'ng-detail-back', type: 'button', on: { click: closeNgDetail } },
-    '← Retour à la liste',
+  const backBtn = el('button', { cls: 'btn-ghost', type: 'button', style: { alignSelf: 'flex-start' }, on: { click: closeNgDetail } },
+    '← Retour au catalogue négoce',
   );
   wrap.appendChild(backBtn);
 
