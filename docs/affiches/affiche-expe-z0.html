@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>MyStock — Tu prépares une expé ?</title>
+<style>
+  :root{
+    --bg:#0a0e17; --card:#1c2538; --border:#334155;
+    --text:#f1f5f9; --text2:#cbd5e1; --muted:#94a3b8;
+    --accent:#22d3ee; --accent-bg:rgba(34,211,238,0.16);
+    --warn:#fbbf24; --warn-bg:rgba(251,191,36,.14);
+  }
+  @page{ size:A4; margin:0 }
+  *{ box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact }
+  html,body{ margin:0; padding:0; background:var(--bg); color:var(--text);
+    font-family:'Segoe UI',system-ui,sans-serif }
+  .page{
+    width:210mm; height:297mm; padding:16mm 14mm 12mm;
+    display:flex; flex-direction:column; gap:10mm;
+  }
+  /* ── Brand mini ─────────────────────────── */
+  .hd{ display:flex; justify-content:space-between; align-items:flex-end;
+    font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:2px; font-weight:700 }
+  .hd .b{ display:flex; align-items:center; gap:10px }
+  .hd .b .logo-mark{
+    width:34px; height:34px; border-radius:9px;
+    background:var(--accent-bg); color:var(--accent);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .hd .b .logo-mark svg{ width:22px; height:22px }
+  .hd .b .logo-txt{ display:flex; flex-direction:column; align-items:flex-start; gap:2px }
+  .hd .logo-brand{ font-size:22px; font-weight:800; color:var(--text); letter-spacing:-.3px;
+    text-transform:none; line-height:1 }
+  .hd .logo-brand i{ font-style:normal; color:var(--accent) }
+  .hd .logo-sub{ font-size:10px; color:var(--muted); letter-spacing:1.5px; text-transform:uppercase; font-weight:700 }
+  /* ── Bouton "Déplacer" (réplique stock_page.empl-lot-move-btn, version éclaircie pour impression) ──── */
+  .empl-lot-move-btn{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:62px; height:62px; padding:0;
+    border-radius:12px; border:1.5px solid rgba(167,139,250,.7);
+    background:rgba(139,92,246,.28); color:#c4b5fd;
+  }
+  .empl-lot-move-btn svg{ width:34px; height:34px }
+  /* ── Question géante ────────────────────── */
+  .ask{
+    text-align:center; padding:6mm 0 2mm;
+  }
+  .ask .lbl{
+    display:inline-block; padding:6px 14px; border-radius:999px;
+    background:var(--accent-bg); color:var(--accent);
+    font-size:11px; font-weight:800; letter-spacing:2.5px; text-transform:uppercase;
+    margin-bottom:8mm;
+  }
+  .ask h1{
+    margin:0; font-size:82px; line-height:1.02; font-weight:800; color:var(--text);
+    letter-spacing:-2.5px;
+  }
+  .ask h1 em{ font-style:normal; color:var(--accent) }
+  /* ── Réflexe (le punchy) ────────────────── */
+  .reflex{
+    background:var(--card); border:1px solid var(--border);
+    border-left:6px solid var(--accent); border-radius:16px;
+    padding:9mm 10mm; display:flex; align-items:center; gap:14mm;
+  }
+  .reflex .pin{
+    width:80px; height:80px; border-radius:20px;
+    background:var(--accent-bg); color:var(--accent);
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .reflex .pin svg{ width:48px; height:48px }
+  .reflex .txt{ flex:1 }
+  .reflex .txt .small{
+    font-size:17px; color:var(--text2); text-transform:uppercase; letter-spacing:2.5px; font-weight:700;
+    margin-bottom:6px;
+  }
+  .reflex .txt h2{
+    margin:0; font-size:52px; line-height:1.05; font-weight:800; color:var(--text);
+    letter-spacing:-1px;
+  }
+  .reflex .txt h2 em{ font-style:normal; color:var(--accent) }
+  /* ── Mini-process ───────────────────────── */
+  .flow{
+    display:flex; align-items:center; justify-content:space-between; gap:6mm;
+    padding:6mm 4mm;
+  }
+  .node{
+    flex:1; background:var(--card); border:1px solid var(--border); border-radius:14px;
+    padding:6mm 4mm; text-align:center; display:flex; flex-direction:column; align-items:center; gap:6px;
+  }
+  .node .ic{
+    width:62px; height:62px; border-radius:14px;
+    background:rgba(255,255,255,.07); color:var(--text);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .node .ic svg{ width:34px; height:34px }
+  .node .lab{ font-size:18px; font-weight:800; color:var(--text); margin-top:4px }
+  .node .sub{ font-size:13px; color:var(--text2); text-transform:uppercase; letter-spacing:1.2px; font-weight:600 }
+  .arr{ color:var(--accent); flex-shrink:0 }
+  .arr svg{ width:26px; height:26px }
+  /* ── Bonus ──────────────────────────────── */
+  .bonus{
+    background:var(--warn-bg); border:1px dashed rgba(251,191,36,.4);
+    border-radius:14px; padding:6mm 8mm;
+    display:flex; align-items:center; gap:14px;
+    margin-top:auto;
+  }
+  .bonus .ic{
+    width:46px; height:46px; border-radius:12px;
+    background:rgba(251,191,36,.18); color:var(--warn);
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .bonus .ic svg{ width:28px; height:28px }
+  .bonus .t{ flex:1 }
+  .bonus .t .top{ font-size:11px; font-weight:800; letter-spacing:2px;
+    color:var(--warn); text-transform:uppercase; margin-bottom:2px }
+  .bonus .t .body{ font-size:17px; font-weight:700; color:var(--text); line-height:1.25 }
+  .bonus .t .body em{ font-style:normal; color:var(--warn) }
+  .ft{ font-size:10px; color:var(--muted); text-align:center;
+    text-transform:uppercase; letter-spacing:1.5px; padding-top:2mm }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="hd">
+    <div class="b">
+      <span class="logo-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/>
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+          <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+          <line x1="12" y1="22.08" x2="12" y2="12"/>
+        </svg>
+      </span>
+      <span class="logo-txt">
+        <span class="logo-brand">My<i>Stock</i></span>
+        <span class="logo-sub">by SIFA · Mémo</span>
+      </span>
+    </div>
+    <span>Entrepôt</span>
+  </div>
+
+  <div class="ask">
+    <span class="lbl">Mise en situation</span>
+    <h1>Tu prépares<br>une <em>expé</em> ?</h1>
+  </div>
+
+  <div class="reflex">
+    <div class="pin">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 7h11v10H3z"/><path d="M14 10h4l3 3v4h-7z"/>
+        <circle cx="7.5" cy="17" r="2"/><circle cx="17.5" cy="17" r="2"/>
+      </svg>
+    </div>
+    <div class="txt">
+      <div class="small">Pense à</div>
+      <h2>Déplacer ton stock en <em>Z0</em></h2>
+    </div>
+  </div>
+
+  <div class="flow">
+    <div class="node">
+      <div class="ic">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/>
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+          <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+          <line x1="12" y1="22.08" x2="12" y2="12"/>
+        </svg>
+      </div>
+      <div class="lab">MyStock</div>
+      <div class="sub">Le produit</div>
+    </div>
+    <div class="arr">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+      </svg>
+    </div>
+    <div class="node">
+      <button class="empl-lot-move-btn" type="button" aria-label="Déplacer le lot">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/>
+          <polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/>
+        </svg>
+      </button>
+      <div class="lab">Déplacer</div>
+      <div class="sub">Bouton violet</div>
+    </div>
+    <div class="arr">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+      </svg>
+    </div>
+    <div class="node">
+      <div class="ic" style="background:var(--accent-bg);color:var(--accent)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+        </svg>
+      </div>
+      <div class="lab" style="color:var(--accent)">Z0</div>
+      <div class="sub">Zone départ</div>
+    </div>
+  </div>
+
+  <div class="bonus" style="background:var(--accent-bg);border-color:rgba(34,211,238,.3)">
+    <div class="ic" style="background:rgba(34,211,238,.18);color:var(--accent)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+      </svg>
+    </div>
+    <div class="t">
+      <div class="top" style="color:var(--accent)">Règle d'or</div>
+      <div class="body">Le stock bouge physiquement → il bouge dans <em style="color:var(--accent)">MyStock</em>.</div>
+    </div>
+  </div>
+
+  <div class="ft">MySifa · /stock</div>
+
+</div>
+</body>
+</html>

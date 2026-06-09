@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>MyStock — Tu vérifies un stock ?</title>
+<style>
+  :root{
+    --bg:#0a0e17; --card:#1c2538; --border:#334155;
+    --text:#f1f5f9; --text2:#cbd5e1; --muted:#94a3b8;
+    /* Violet = couleur officielle de l'onglet Inventaire (stock_page) */
+    --violet:#8b5cf6; --violet-light:#a78bfa;
+    --violet-bg:rgba(139,92,246,0.28); --violet-bg-soft:rgba(139,92,246,0.12);
+    --success:#34d399; --success-bg:rgba(52,211,153,0.18);
+  }
+  @page{ size:A4; margin:0 }
+  *{ box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact }
+  html,body{ margin:0; padding:0; background:var(--bg); color:var(--text);
+    font-family:'Segoe UI',system-ui,sans-serif }
+  .page{
+    width:210mm; height:297mm; padding:16mm 14mm 12mm;
+    display:flex; flex-direction:column; gap:10mm;
+  }
+  .hd{ display:flex; justify-content:space-between; align-items:flex-end;
+    font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:2px; font-weight:700 }
+  .hd .b{ display:flex; align-items:center; gap:10px }
+  .hd .b .logo-mark{
+    width:34px; height:34px; border-radius:9px;
+    background:var(--violet-bg); color:var(--violet);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .hd .b .logo-mark svg{ width:22px; height:22px }
+  .hd .b .logo-txt{ display:flex; flex-direction:column; align-items:flex-start; gap:2px }
+  .hd .logo-brand{ font-size:22px; font-weight:800; color:var(--text); letter-spacing:-.3px;
+    text-transform:none; line-height:1 }
+  .hd .logo-brand i{ font-style:normal; color:var(--violet) }
+  .hd .logo-sub{ font-size:10px; color:var(--muted); letter-spacing:1.5px; text-transform:uppercase; font-weight:700 }
+  .ask{ text-align:center; padding:6mm 0 2mm }
+  .ask .lbl{
+    display:inline-block; padding:6px 14px; border-radius:999px;
+    background:var(--violet-bg); color:var(--violet);
+    font-size:11px; font-weight:800; letter-spacing:2.5px; text-transform:uppercase;
+    margin-bottom:8mm;
+  }
+  .ask h1{
+    margin:0; font-size:82px; line-height:1.02; font-weight:800; color:var(--text);
+    letter-spacing:-2.5px;
+  }
+  .ask h1 em{ font-style:normal; color:var(--violet) }
+  .reflex{
+    background:var(--card); border:1px solid var(--border);
+    border-left:6px solid var(--violet); border-radius:16px;
+    padding:9mm 10mm; display:flex; align-items:center; gap:14mm;
+  }
+  .reflex .pin{
+    width:80px; height:80px; border-radius:20px;
+    background:var(--violet-bg); color:var(--violet);
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .reflex .pin svg{ width:48px; height:48px }
+  .reflex .txt{ flex:1 }
+  .reflex .txt .small{
+    font-size:17px; color:var(--text2); text-transform:uppercase; letter-spacing:2.5px; font-weight:700;
+    margin-bottom:6px;
+  }
+  .reflex .txt h2{
+    margin:0; font-size:52px; line-height:1.05; font-weight:800; color:var(--text);
+    letter-spacing:-1px;
+  }
+  .reflex .txt h2 em{ font-style:normal; color:var(--violet) }
+  .flow{
+    display:flex; align-items:center; justify-content:space-between; gap:6mm;
+    padding:6mm 4mm;
+  }
+  .node{
+    flex:1; background:var(--card); border:1px solid var(--border); border-radius:14px;
+    padding:6mm 4mm; text-align:center; display:flex; flex-direction:column; align-items:center; gap:6px;
+  }
+  .node .ic{
+    width:62px; height:62px; border-radius:14px;
+    background:rgba(255,255,255,.07); color:var(--text);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .node .ic svg{ width:34px; height:34px }
+  .node .lab{ font-size:18px; font-weight:800; color:var(--text); margin-top:4px }
+  .node .sub{ font-size:13px; color:var(--text2); text-transform:uppercase; letter-spacing:1.2px; font-weight:600 }
+  .arr{ color:var(--violet); flex-shrink:0 }
+  .arr svg{ width:26px; height:26px }
+  .bonus{
+    background:var(--success-bg); border:1px dashed rgba(52,211,153,.4);
+    border-radius:14px; padding:6mm 8mm;
+    display:flex; align-items:center; gap:14px;
+    margin-top:auto;
+  }
+  .bonus .ic{
+    width:46px; height:46px; border-radius:12px;
+    background:rgba(52,211,153,.18); color:var(--success);
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .bonus .ic svg{ width:28px; height:28px }
+  .bonus .t{ flex:1 }
+  .bonus .t .top{ font-size:11px; font-weight:800; letter-spacing:2px;
+    color:var(--success); text-transform:uppercase; margin-bottom:2px }
+  .bonus .t .body{ font-size:17px; font-weight:700; color:var(--text); line-height:1.25 }
+  .bonus .t .body em{ font-style:normal; color:var(--success) }
+  .ft{ font-size:10px; color:var(--muted); text-align:center;
+    text-transform:uppercase; letter-spacing:1.5px; padding-top:2mm }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="hd">
+    <div class="b">
+      <span class="logo-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/>
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+          <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+          <line x1="12" y1="22.08" x2="12" y2="12"/>
+        </svg>
+      </span>
+      <span class="logo-txt">
+        <span class="logo-brand">My<i>Stock</i></span>
+        <span class="logo-sub">by SIFA · Mémo</span>
+      </span>
+    </div>
+    <span>Entrepôt</span>
+  </div>
+
+  <div class="ask">
+    <span class="lbl">Mise en situation</span>
+    <h1>Tu vérifies<br>un <em>stock</em> ?</h1>
+  </div>
+
+  <div class="reflex">
+    <div class="pin">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+        <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+      </svg>
+    </div>
+    <div class="txt">
+      <div class="small">Profites-en pour</div>
+      <h2>Faire l'<em>inventaire</em></h2>
+    </div>
+  </div>
+
+  <div class="flow">
+    <div class="node">
+      <div class="ic">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+        </svg>
+      </div>
+      <div class="lab">Emplacement</div>
+      <div class="sub">Ouvre</div>
+    </div>
+    <div class="arr">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+      </svg>
+    </div>
+    <div class="node">
+      <div class="ic">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="6" y="2.5" width="12" height="19" rx="2"/>
+          <line x1="8" y1="7" x2="16" y2="7"/>
+          <line x1="9" y1="11" x2="10" y2="11"/><line x1="12" y1="11" x2="13" y2="11"/><line x1="15" y1="11" x2="16" y2="11"/>
+          <line x1="9" y1="14" x2="10" y2="14"/><line x1="12" y1="14" x2="13" y2="14"/><line x1="15" y1="14" x2="16" y2="14"/>
+        </svg>
+      </div>
+      <div class="lab">Compte</div>
+      <div class="sub">Qté · Unité</div>
+    </div>
+    <div class="arr">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+      </svg>
+    </div>
+    <div class="node">
+      <div class="ic" style="background:var(--violet-bg);color:var(--violet)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/>
+        </svg>
+      </div>
+      <div class="lab" style="color:var(--violet)">Clôture</div>
+      <div class="sub">Valide</div>
+    </div>
+  </div>
+
+  <div class="bonus">
+    <div class="ic">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+      </svg>
+    </div>
+    <div class="t">
+      <div class="top">30 secondes</div>
+      <div class="body">L'emplacement repasse au <em>vert</em> pour toute l'équipe.</div>
+    </div>
+  </div>
+
+  <div class="ft">MySifa · /stock</div>
+
+</div>
+</body>
+</html>

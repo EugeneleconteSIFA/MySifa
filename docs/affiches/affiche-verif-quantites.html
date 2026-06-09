@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>MyStock — Vérifier quantités et unités</title>
+<style>
+  :root{
+    --bg:#0a0e17;
+    --card:#111827;
+    --border:#1e293b;
+    --text:#f1f5f9;
+    --text2:#cbd5e1;
+    --muted:#94a3b8;
+    --accent:#22d3ee;
+    --accent-bg:rgba(34,211,238,0.12);
+    --success:#34d399;
+    --success-bg:rgba(52,211,153,0.12);
+    --warn:#fbbf24;
+    --danger:#f87171;
+    --danger-bg:rgba(248,113,113,0.10);
+  }
+  @page{ size:A4; margin:0 }
+  *{ box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact }
+  html,body{ margin:0; padding:0; background:var(--bg); color:var(--text);
+    font-family:'Segoe UI',system-ui,sans-serif; -webkit-font-smoothing:antialiased }
+  .page{
+    width:210mm; height:297mm; padding:14mm 14mm 12mm;
+    background:var(--bg); display:flex; flex-direction:column; gap:8mm;
+    page-break-after:always;
+  }
+  /* ── Header ─────────────────────────────────────────── */
+  .hd{ display:flex; justify-content:space-between; align-items:center;
+    padding-bottom:6mm; border-bottom:1px solid var(--border) }
+  .brand{ display:flex; align-items:center; gap:10px }
+  .brand-mark{
+    width:42px; height:42px; border-radius:10px;
+    background:var(--success-bg); color:var(--success);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .brand-txt{ display:flex; flex-direction:column; line-height:1.1 }
+  .brand-txt b{ font-size:22px; letter-spacing:.5px }
+  .brand-txt span{ font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:1.5px }
+  .tag{
+    font-size:11px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase;
+    padding:6px 12px; border-radius:999px;
+    background:var(--success-bg); color:var(--success); border:1px solid rgba(52,211,153,.3);
+  }
+  /* ── Question (mise en situation) ───────────────────── */
+  .ask{
+    background:linear-gradient(135deg, rgba(52,211,153,.10), rgba(52,211,153,.02));
+    border:1px solid rgba(52,211,153,.25); border-left:4px solid var(--success);
+    border-radius:14px; padding:8mm 9mm;
+  }
+  .ask .lbl{ font-size:11px; font-weight:700; letter-spacing:2px;
+    color:var(--success); text-transform:uppercase; margin-bottom:6px }
+  .ask .q{ font-size:32px; font-weight:700; line-height:1.2; color:var(--text); margin:0 }
+  .ask .q em{ font-style:normal; color:var(--success) }
+  /* ── Titre action ───────────────────────────────────── */
+  .action-title{
+    display:flex; align-items:center; gap:10px;
+    font-size:13px; font-weight:700; letter-spacing:2px;
+    color:var(--muted); text-transform:uppercase;
+  }
+  .action-title .bar{ flex:1; height:1px; background:var(--border) }
+  /* ── Étapes ─────────────────────────────────────────── */
+  .steps{ display:flex; flex-direction:column; gap:6mm; flex:1 }
+  .step{
+    display:grid; grid-template-columns:64px 1fr auto; gap:14px;
+    align-items:center; padding:7mm 8mm;
+    background:var(--card); border:1px solid var(--border); border-radius:14px;
+  }
+  .step .num{
+    width:54px; height:54px; border-radius:14px;
+    background:var(--success-bg); color:var(--success);
+    display:flex; align-items:center; justify-content:center;
+    font-size:26px; font-weight:800;
+  }
+  .step .body{ display:flex; flex-direction:column; gap:4px }
+  .step .body h3{ margin:0; font-size:19px; font-weight:700; color:var(--text); line-height:1.25 }
+  .step .body p{ margin:0; font-size:13px; color:var(--text2); line-height:1.45 }
+  .step .body .chip{
+    display:inline-flex; align-items:center; gap:6px; align-self:flex-start;
+    background:rgba(255,255,255,.04); border:1px solid var(--border);
+    padding:4px 10px; border-radius:8px; font-size:11px; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.8px; font-weight:600; margin-top:4px
+  }
+  .step .ic{
+    width:56px; height:56px; border-radius:12px;
+    background:rgba(255,255,255,.03); border:1px solid var(--border);
+    color:var(--text2); display:flex; align-items:center; justify-content:center;
+  }
+  .arrow{
+    display:flex; justify-content:center; align-items:center;
+    color:var(--success); opacity:.7; height:6mm; margin:-3mm 0;
+  }
+  /* ── Footer warn ────────────────────────────────────── */
+  .alert{
+    display:flex; align-items:center; gap:12px;
+    background:var(--danger-bg); border:1px solid rgba(248,113,113,.3);
+    border-radius:12px; padding:5mm 6mm; color:var(--text2); font-size:13px; line-height:1.4;
+  }
+  .alert .ic{ color:var(--danger); flex-shrink:0 }
+  .alert b{ color:var(--text) }
+  .ft{
+    display:flex; justify-content:space-between; align-items:center;
+    font-size:10px; color:var(--muted); padding-top:4mm; border-top:1px solid var(--border);
+    text-transform:uppercase; letter-spacing:1.2px;
+  }
+  .ft .path{ color:var(--text2); font-family:'Consolas','Menlo',monospace; text-transform:none; letter-spacing:0 }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="hd">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+        </svg>
+      </div>
+      <div class="brand-txt"><b>MyStock</b><span>Mémo inventaire</span></div>
+    </div>
+    <div class="tag">Vérification</div>
+  </div>
+
+  <div class="ask">
+    <div class="lbl">Mise en situation</div>
+    <p class="q">Tu comptes le stock d'un <em>emplacement</em> ?</p>
+  </div>
+
+  <div class="action-title">
+    <span>Le bon réflexe en 3 étapes</span>
+    <span class="bar"></span>
+  </div>
+
+  <div class="steps">
+
+    <div class="step">
+      <div class="num">1</div>
+      <div class="body">
+        <h3>Lance l'inventaire de l'emplacement</h3>
+        <p>MyStock → onglet <b>Inventaire</b> → clique sur l'emplacement (la couleur indique l'urgence : rouge = en retard).</p>
+        <span class="chip">Sidebar → MyStock → Inventaire</span>
+      </div>
+      <div class="ic">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+          <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+        </svg>
+      </div>
+    </div>
+
+    <div class="arrow">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>
+      </svg>
+    </div>
+
+    <div class="step">
+      <div class="num">2</div>
+      <div class="body">
+        <h3>Compte physiquement chaque référence</h3>
+        <p>Vérifie la <b>quantité réelle</b> et que l'<b>unité</b> (carton, palette, pièce…) correspond à ce qui est saisi. Si l'unité est fausse → corrige-la.</p>
+        <span class="chip">Quantité · Unité · Référence</span>
+      </div>
+      <div class="ic">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="6" y="2.5" width="12" height="19" rx="2"/>
+          <line x1="8" y1="7" x2="16" y2="7"/>
+          <line x1="9" y1="11" x2="10" y2="11"/><line x1="12" y1="11" x2="13" y2="11"/><line x1="15" y1="11" x2="16" y2="11"/>
+          <line x1="9" y1="14" x2="10" y2="14"/><line x1="12" y1="14" x2="13" y2="14"/><line x1="15" y1="14" x2="16" y2="14"/>
+          <line x1="9" y1="17" x2="10" y2="17"/><line x1="12" y1="17" x2="13" y2="17"/><line x1="15" y1="17" x2="16" y2="17"/>
+        </svg>
+      </div>
+    </div>
+
+    <div class="arrow">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>
+      </svg>
+    </div>
+
+    <div class="step">
+      <div class="num">3</div>
+      <div class="body">
+        <h3>Saisis la quantité comptée et valide l'emplacement</h3>
+        <p>Quand toutes les références sont vérifiées, clique <b>Clôturer l'inventaire</b>. L'emplacement repasse au vert.</p>
+        <span class="chip">Clôturer l'inventaire</span>
+      </div>
+      <div class="ic">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/>
+        </svg>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="alert">
+    <div class="ic">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+    </div>
+    <div><b>Doute sur une quantité ?</b> Saisis ce que tu comptes réellement, pas ce que tu crois devoir trouver. Un écart vu maintenant, c'est un problème évité plus tard.</div>
+  </div>
+
+  <div class="ft">
+    <span>MySifa · Mémo entrepôt</span>
+    <span class="path">/stock → Inventaire</span>
+    <span>v1.0</span>
+  </div>
+
+</div>
+</body>
+</html>

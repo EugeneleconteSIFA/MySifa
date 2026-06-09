@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>MyStock — Déplacer un stock</title>
+<style>
+  :root{
+    --bg:#0a0e17;
+    --card:#111827;
+    --border:#1e293b;
+    --text:#f1f5f9;
+    --text2:#cbd5e1;
+    --muted:#94a3b8;
+    --accent:#22d3ee;
+    --accent-bg:rgba(34,211,238,0.12);
+    --success:#34d399;
+    --warn:#fbbf24;
+    --danger:#f87171;
+  }
+  @page{ size:A4; margin:0 }
+  *{ box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact }
+  html,body{ margin:0; padding:0; background:var(--bg); color:var(--text);
+    font-family:'Segoe UI',system-ui,sans-serif; -webkit-font-smoothing:antialiased }
+  .page{
+    width:210mm; height:297mm; padding:14mm 14mm 12mm;
+    background:var(--bg); display:flex; flex-direction:column; gap:8mm;
+    page-break-after:always;
+  }
+  /* ── Header ─────────────────────────────────────────── */
+  .hd{ display:flex; justify-content:space-between; align-items:center;
+    padding-bottom:6mm; border-bottom:1px solid var(--border) }
+  .brand{ display:flex; align-items:center; gap:10px }
+  .brand-mark{
+    width:42px; height:42px; border-radius:10px;
+    background:var(--accent-bg); color:var(--accent);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .brand-txt{ display:flex; flex-direction:column; line-height:1.1 }
+  .brand-txt b{ font-size:22px; letter-spacing:.5px }
+  .brand-txt span{ font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:1.5px }
+  .tag{
+    font-size:11px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase;
+    padding:6px 12px; border-radius:999px;
+    background:var(--accent-bg); color:var(--accent); border:1px solid rgba(34,211,238,.3);
+  }
+  /* ── Question (mise en situation) ───────────────────── */
+  .ask{
+    background:linear-gradient(135deg, rgba(34,211,238,.10), rgba(34,211,238,.02));
+    border:1px solid rgba(34,211,238,.25); border-left:4px solid var(--accent);
+    border-radius:14px; padding:8mm 9mm;
+  }
+  .ask .lbl{ font-size:11px; font-weight:700; letter-spacing:2px;
+    color:var(--accent); text-transform:uppercase; margin-bottom:6px }
+  .ask .q{ font-size:32px; font-weight:700; line-height:1.2; color:var(--text); margin:0 }
+  .ask .q em{ font-style:normal; color:var(--accent) }
+  /* ── Titre action ───────────────────────────────────── */
+  .action-title{
+    display:flex; align-items:center; gap:10px;
+    font-size:13px; font-weight:700; letter-spacing:2px;
+    color:var(--muted); text-transform:uppercase;
+  }
+  .action-title .bar{ flex:1; height:1px; background:var(--border) }
+  /* ── Étapes ─────────────────────────────────────────── */
+  .steps{ display:flex; flex-direction:column; gap:6mm; flex:1 }
+  .step{
+    display:grid; grid-template-columns:64px 1fr auto; gap:14px;
+    align-items:center; padding:7mm 8mm;
+    background:var(--card); border:1px solid var(--border); border-radius:14px;
+  }
+  .step .num{
+    width:54px; height:54px; border-radius:14px;
+    background:var(--accent-bg); color:var(--accent);
+    display:flex; align-items:center; justify-content:center;
+    font-size:26px; font-weight:800;
+  }
+  .step .body{ display:flex; flex-direction:column; gap:4px }
+  .step .body h3{ margin:0; font-size:19px; font-weight:700; color:var(--text); line-height:1.25 }
+  .step .body p{ margin:0; font-size:13px; color:var(--text2); line-height:1.45 }
+  .step .body .chip{
+    display:inline-flex; align-items:center; gap:6px; align-self:flex-start;
+    background:rgba(255,255,255,.04); border:1px solid var(--border);
+    padding:4px 10px; border-radius:8px; font-size:11px; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.8px; font-weight:600; margin-top:4px
+  }
+  .step .ic{
+    width:56px; height:56px; border-radius:12px;
+    background:rgba(255,255,255,.03); border:1px solid var(--border);
+    color:var(--text2); display:flex; align-items:center; justify-content:center;
+  }
+  .arrow{
+    display:flex; justify-content:center; align-items:center;
+    color:var(--accent); opacity:.7; height:6mm; margin:-3mm 0;
+  }
+  /* ── Footer warn ────────────────────────────────────── */
+  .alert{
+    display:flex; align-items:center; gap:12px;
+    background:rgba(251,191,36,.08); border:1px solid rgba(251,191,36,.3);
+    border-radius:12px; padding:5mm 6mm; color:var(--text2); font-size:13px; line-height:1.4;
+  }
+  .alert .ic{ color:var(--warn); flex-shrink:0 }
+  .alert b{ color:var(--text) }
+  .ft{
+    display:flex; justify-content:space-between; align-items:center;
+    font-size:10px; color:var(--muted); padding-top:4mm; border-top:1px solid var(--border);
+    text-transform:uppercase; letter-spacing:1.2px;
+  }
+  .ft .path{ color:var(--text2); font-family:'Consolas','Menlo',monospace; text-transform:none; letter-spacing:0 }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="hd">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+          <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+          <line x1="12" y1="22.08" x2="12" y2="12"/>
+        </svg>
+      </div>
+      <div class="brand-txt"><b>MyStock</b><span>Mémo entrepôt</span></div>
+    </div>
+    <div class="tag">Déplacement</div>
+  </div>
+
+  <div class="ask">
+    <div class="lbl">Mise en situation</div>
+    <p class="q">Tu déplaces un produit d'un <em>emplacement</em> à un autre ?</p>
+  </div>
+
+  <div class="action-title">
+    <span>Le bon réflexe en 3 étapes</span>
+    <span class="bar"></span>
+  </div>
+
+  <div class="steps">
+
+    <div class="step">
+      <div class="num">1</div>
+      <div class="body">
+        <h3>Ouvre MyStock et trouve le produit</h3>
+        <p>Onglet <b>Emplacements</b> ou <b>Références</b>. Tape le code, le nom ou scanne l'étiquette.</p>
+        <span class="chip">Sidebar → MyStock</span>
+      </div>
+      <div class="ic">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+      </div>
+    </div>
+
+    <div class="arrow">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>
+      </svg>
+    </div>
+
+    <div class="step">
+      <div class="num">2</div>
+      <div class="body">
+        <h3>Clique « Déplacer » et choisis la destination</h3>
+        <p>Sélectionne le <b>nouvel emplacement</b> dans la liste. Vérifie qu'il est bien le bon avant de confirmer.</p>
+        <span class="chip">Bouton Déplacer → Emplacement cible</span>
+      </div>
+      <div class="ic">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+        </svg>
+      </div>
+    </div>
+
+    <div class="arrow">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>
+      </svg>
+    </div>
+
+    <div class="step">
+      <div class="num">3</div>
+      <div class="body">
+        <h3>Saisis la quantité déplacée et valide</h3>
+        <p>Indique la <b>quantité réelle</b> transférée puis appuie sur <b>Valider</b>. Le stock se met à jour automatiquement.</p>
+        <span class="chip">Quantité + Valider</span>
+      </div>
+      <div class="ic">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+        </svg>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="alert">
+    <div class="ic">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+    </div>
+    <div><b>Jamais de déplacement « plus tard ».</b> Si le produit bouge physiquement, il bouge dans MyStock dans la foulée — sinon le stock est faux.</div>
+  </div>
+
+  <div class="ft">
+    <span>MySifa · Mémo entrepôt</span>
+    <span class="path">/stock → Emplacements</span>
+    <span>v1.0</span>
+  </div>
+
+</div>
+</body>
+</html>
