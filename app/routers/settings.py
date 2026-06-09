@@ -1205,3 +1205,162 @@ async def import_emplacements_csv(request: Request, file: UploadFile = File(...)
     if n == 0:
         raise HTTPException(422, "CSV importé mais aucun emplacement reconnu — vérifiez le format.")
     return {"imported": n}
+
+
+# ─── Promotion v1 → v2 ─────────────────────────────────────────────────────────
+# Endpoint pilote depuis l'instance v1. Lit l'état du dépôt v2 sur disque,
+# liste les commits en avance, et exécute scripts/promote_v2.sh quand demandé.
+
+import asyncio
+import subprocess as _subprocess
+from fastapi.responses import StreamingResponse
+from config import ENV_NAME, APP_VERSION
+
+V2_REPO_PATH = "/home/sifa/production-saas"
+V1_REPO_PATH = "/home/sifa/production-saas-v1"
+# Le script est exécuté depuis v1 (la version la plus récente est toujours là)
+# mais opère sur le dépôt v2.
+PROMOTE_SCRIPT = f"{V1_REPO_PATH}/scripts/promote_v2.sh"
+
+
+def _parse_version_from_text(text: str) -> Optional[str]:
+    for line in text.splitlines():
+        if line.strip().startswith("APP_VERSION"):
+            parts = line.split('"')
+            if len(parts) >= 2:
+                return parts[1]
+    return None
+
+
+def _read_v2_app_version() -> Optional[str]:
+    """Lit APP_VERSION depuis le config.py du dépôt v2 sur disque (sans import)."""
+    try:
+        with open(f"{V2_REPO_PATH}/config.py", "r", encoding="utf-8") as f:
+            return _parse_version_from_text(f.read())
+    except Exception:
+        return None
+
+
+def _read_origin_app_version() -> Optional[str]:
+    """Lit APP_VERSION dans config.py côté origin/main (via git show, sans pull)."""
+    try:
+        out = _subprocess.check_output(
+            ["git", "-C", V2_REPO_PATH, "show", "origin/main:config.py"],
+            text=True, timeout=10,
+        )
+        return _parse_version_from_text(out)
+    except Exception:
+        return None
+
+
+@router.get("/api/promote/status")
+def promote_status(request: Request):
+    require_superadmin(request)
+
+    # 1. Fetch silencieux pour avoir l'état à jour d'origin/main
+    try:
+        _subprocess.run(
+            ["git", "-C", V2_REPO_PATH, "fetch", "--quiet"],
+            check=False, capture_output=True, timeout=15,
+        )
+    except Exception:
+        pass  # On continue même si le fetch échoue, on travaille avec ce qu'on a
+
+    try:
+        v2_head = _subprocess.check_output(
+            ["git", "-C", V2_REPO_PATH, "rev-parse", "HEAD"],
+            text=True, timeout=5,
+        ).strip()
+        origin_main = _subprocess.check_output(
+            ["git", "-C", V2_REPO_PATH, "rev-parse", "origin/main"],
+            text=True, timeout=5,
+        ).strip()
+    except Exception as exc:
+        raise HTTPException(500, f"Lecture git impossible : {exc}")
+
+    v2_version = _read_v2_app_version()
+    next_version = _read_origin_app_version() or v2_version
+
+    commits_ahead = []
+    if v2_head != origin_main:
+        try:
+            log_out = _subprocess.check_output(
+                ["git", "-C", V2_REPO_PATH, "log",
+                 f"{v2_head}..{origin_main}",
+                 "--pretty=format:%h|%an|%ad|%s",
+                 "--date=format:%Y-%m-%d %H:%M"],
+                text=True, timeout=10,
+            )
+            for line in log_out.strip().split("\n"):
+                if not line:
+                    continue
+                parts = line.split("|", 3)
+                if len(parts) == 4:
+                    commits_ahead.append({
+                        "hash": parts[0],
+                        "author": parts[1],
+                        "date": parts[2],
+                        "subject": parts[3],
+                    })
+        except Exception:
+            pass
+
+    can_promote = (ENV_NAME == "v1") and len(commits_ahead) > 0
+    reason: Optional[str] = None
+    if ENV_NAME != "v1":
+        reason = "La promotion doit être lancée depuis https://v1.mysifa.com."
+    elif not commits_ahead:
+        reason = "Rien à promouvoir — v2 est déjà à jour."
+
+    return {
+        "env": ENV_NAME,
+        "v1_version": APP_VERSION,
+        "v2_version": v2_version,
+        "next_version": next_version,
+        "v2_head": v2_head[:7],
+        "origin_head": origin_main[:7],
+        "commits_ahead": commits_ahead,
+        "can_promote": can_promote,
+        "reason": reason,
+    }
+
+
+@router.post("/api/promote")
+async def promote_run(request: Request):
+    require_superadmin(request)
+    if ENV_NAME != "v1":
+        raise HTTPException(400, "Promotion uniquement disponible depuis v1.")
+
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    notes = (body.get("notes") or "").strip()
+
+    async def stream():
+        # Lance le script avec sudo (les droits sudo sans mot de passe sont
+        # configurés côté système pour l'utilisateur sifa sur ce script précis).
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "sudo", "-n", PROMOTE_SCRIPT, notes,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+        except Exception as exc:
+            yield f"ERREUR : impossible de lancer le script — {exc}\n".encode()
+            return
+
+        while True:
+            line = await proc.stdout.readline()
+            if not line:
+                break
+            yield line
+
+        rc = await proc.wait()
+        if rc == 0:
+            yield b"\n[script termine OK]\n"
+        else:
+            yield f"\n[script termine en erreur — code {rc}]\n".encode()
+
+    return StreamingResponse(stream(), media_type="text/plain; charset=utf-8")

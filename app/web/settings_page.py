@@ -344,6 +344,11 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
         Clés API
       </button>
+      <div class="nav-group-label" style="margin-top:8px"><span>Déploiement</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-tab="promote">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
+        Promouvoir v1 → v2
+      </button>
     </div>
     <div class="sidebar-bottom">
       <button type="button" class="nav-btn back-mysifa" onclick="location.href='/'">
@@ -958,6 +963,55 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
       <div id="settings-tab-content"></div>
     </section>
 
+    <section id="panel-promote" class="hidden">
+      <div class="card" style="margin-bottom:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+          <div>
+            <div style="font-size:17px;font-weight:700;color:var(--text)">Promouvoir v1 → v2</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:4px">Bascule en production les commits déjà en place sur v1.</div>
+          </div>
+          <button type="button" class="btn btn-sec" id="pr-refresh-btn" onclick="loadPromoteStatus()" style="font-size:12px">
+            Rafraîchir
+          </button>
+        </div>
+
+        <div id="pr-status" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px">
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;flex:1;min-width:140px">
+            <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">v2 actuelle</div>
+            <div id="pr-v2-version" style="font-size:15px;font-weight:700;color:var(--text);font-family:'SFMono-Regular',Menlo,monospace">…</div>
+            <div id="pr-v2-head" style="font-size:11px;color:var(--muted);font-family:'SFMono-Regular',Menlo,monospace;margin-top:2px">…</div>
+          </div>
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;flex:1;min-width:140px">
+            <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Prochaine version</div>
+            <div id="pr-next-version" style="font-size:15px;font-weight:700;color:var(--accent);font-family:'SFMono-Regular',Menlo,monospace">…</div>
+            <div id="pr-origin-head" style="font-size:11px;color:var(--muted);font-family:'SFMono-Regular',Menlo,monospace;margin-top:2px">…</div>
+          </div>
+        </div>
+
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Commits en avance sur v2</div>
+        <div id="pr-commits" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px;margin-bottom:18px;max-height:240px;overflow:auto">
+          <div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Chargement…</div>
+        </div>
+
+        <div style="margin-bottom:14px">
+          <label for="pr-notes" style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">Notes de release (optionnelles — postées en annonce si remplies)</label>
+          <textarea id="pr-notes" placeholder="ex. Correction du planning sur mobile, nouvelle vue Compta&hellip;" style="width:100%;min-height:70px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;resize:vertical"></textarea>
+        </div>
+
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <button type="button" id="pr-go-btn" class="btn btn-accent" onclick="runPromote()" disabled style="font-size:14px;padding:11px 22px;font-weight:700">
+            Promouvoir maintenant
+          </button>
+          <span id="pr-blocked-reason" style="font-size:12px;color:var(--warn)"></span>
+        </div>
+      </div>
+
+      <div class="card" id="pr-output-card" style="display:none">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Sortie du script</div>
+        <pre id="pr-output" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:12px;line-height:1.5;color:var(--text2);font-family:'SFMono-Regular',Menlo,monospace;max-height:420px;overflow:auto;margin:0;white-space:pre-wrap;word-break:break-word"></pre>
+      </div>
+    </section>
+
     <!-- Modal nouvelle annonce -->
     <div id="upd-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:800;align-items:center;justify-content:center" class="hidden">
       <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;width:min(560px,95vw);max-height:90vh;overflow:auto">
@@ -1145,7 +1199,7 @@ function setTab(id) {
   document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === id);
   });
-  ['users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'machines', 'emplacements', 'updates', 'audit', 'fsc', 'dashboards', 'api'].forEach(p => {
+  ['users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'machines', 'emplacements', 'updates', 'audit', 'fsc', 'dashboards', 'api', 'promote'].forEach(p => {
     const el = document.getElementById('panel-' + p);
     if (el) el.classList.toggle('hidden', p !== id);
   });
@@ -1160,6 +1214,7 @@ function setTab(id) {
   if (id === 'fsc') initFscPanel();
   if (id === 'dashboards') renderSettingsDashboards();
   if (id === 'api') loadApiKeys();
+  if (id === 'promote') loadPromoteStatus();
 }
 
 document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
@@ -4055,6 +4110,100 @@ function exportClientsCsv() {
   document.body.appendChild(a);
   a.click();
   setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+}
+
+// ─── Promotion v1 → v2 ──────────────────────────────────────────────
+function _prEsc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+async function loadPromoteStatus() {
+  const v2v = document.getElementById('pr-v2-version');
+  const v2h = document.getElementById('pr-v2-head');
+  const nxv = document.getElementById('pr-next-version');
+  const orh = document.getElementById('pr-origin-head');
+  const commitsEl = document.getElementById('pr-commits');
+  const goBtn = document.getElementById('pr-go-btn');
+  const blocked = document.getElementById('pr-blocked-reason');
+  if (commitsEl) commitsEl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Chargement…</div>';
+  let data;
+  try {
+    const r = await api('/api/promote/status');
+    if (!r) return;
+    data = await r.json();
+  } catch (e) {
+    commitsEl.innerHTML = '<div style="padding:18px;color:var(--danger);font-size:13px">Erreur de chargement</div>';
+    return;
+  }
+  v2v.textContent = data.v2_version ? 'v' + data.v2_version : '—';
+  v2h.textContent = data.v2_head || '';
+  nxv.textContent = data.next_version ? 'v' + data.next_version : '—';
+  orh.textContent = data.origin_head || '';
+
+  if (!data.commits_ahead || data.commits_ahead.length === 0) {
+    commitsEl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Rien à promouvoir — v2 est déjà à jour.</div>';
+  } else {
+    commitsEl.innerHTML = data.commits_ahead.map(c => (
+      '<div style="display:flex;gap:10px;padding:8px 10px;border-bottom:1px solid var(--border);align-items:flex-start">'
+        + '<span style="font-family:\'SFMono-Regular\',Menlo,monospace;font-size:11px;color:var(--accent);min-width:60px">' + _prEsc(c.hash) + '</span>'
+        + '<div style="flex:1;min-width:0">'
+          + '<div style="font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis">' + _prEsc(c.subject) + '</div>'
+          + '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + _prEsc(c.author) + ' · ' + _prEsc(c.date) + '</div>'
+        + '</div>'
+      + '</div>'
+    )).join('');
+  }
+
+  goBtn.disabled = !data.can_promote;
+  blocked.textContent = data.can_promote ? '' : (data.reason || '');
+}
+
+async function runPromote() {
+  const goBtn = document.getElementById('pr-go-btn');
+  const notesEl = document.getElementById('pr-notes');
+  const outCard = document.getElementById('pr-output-card');
+  const outEl = document.getElementById('pr-output');
+  const notes = (notesEl.value || '').trim();
+
+  // Garde-fou confirm
+  if (!confirm('Promouvoir v1 → v2 maintenant ?\\nBackup DB, pull, bump patch, restart, healthcheck.\\nRollback auto si KO.')) return;
+
+  goBtn.disabled = true;
+  goBtn.textContent = 'Promotion en cours…';
+  outCard.style.display = 'block';
+  outEl.textContent = '';
+
+  try {
+    const r = await fetch(API + '/api/promote', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes }),
+    });
+    if (!r.ok) {
+      outEl.textContent += '[HTTP ' + r.status + '] ' + (await r.text().catch(() => '')) + '\\n';
+      goBtn.disabled = false;
+      goBtn.textContent = 'Promouvoir maintenant';
+      return;
+    }
+    // Stream la réponse ligne par ligne
+    const reader = r.body.getReader();
+    const decoder = new TextDecoder();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      outEl.textContent += decoder.decode(value, { stream: true });
+      outEl.scrollTop = outEl.scrollHeight;
+    }
+  } catch (e) {
+    outEl.textContent += '\\n[Erreur réseau : ' + (e && e.message ? e.message : String(e)) + ']\\n';
+  } finally {
+    goBtn.textContent = 'Promouvoir maintenant';
+    // Recharger le statut (commits zéro après succès, ou inchangé après rollback)
+    setTimeout(() => loadPromoteStatus(), 500);
+  }
 }
 </script>
 </body>
