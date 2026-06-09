@@ -2455,6 +2455,8 @@ async function checkAuth(){
     try{ startMessagesPolling(); }catch(e){}
     try{ startAlertsBadgePolling(); }catch(e){}
     try{ checkGlobalUpdates(); }catch(e){}
+    // Badge 'Mappings OF à valider' dans la sidebar (admin/direction/superadmin)
+    try{ if(canAccessOfTab()) loadPendingOfCount(); }catch(e){}
     // Support : redirection post-login (ex: /?next=/planning)
     try{
       const sp=new URLSearchParams(window.location.search||'');
@@ -7223,7 +7225,7 @@ function renderSidebar(){
     {key:'production',label:'Production',icon:'wrench'},
     {key:'traceabilite',label:'Traçabilité',icon:'layers'},
     ...(admin?[{key:'rentabilite',label:'Rentabilité',icon:'trending-up'}]:[]),
-    ...(canAccessOfTab()?[{key:'of',label:'Fiches + OF',icon:'file'}]:[]),
+    ...(canAccessOfTab()?[{key:'of',label:'Fiches + OF',icon:'file',withPendingOfBadge:true}]:[]),
   ];
   const isLight=document.body.classList.contains('light');
   return h('nav',{className:'sidebar'},
@@ -7236,6 +7238,15 @@ function renderSidebar(){
       }});
       btn.appendChild(iconEl(i.icon,15));
       btn.appendChild(document.createTextNode('  '+i.label));
+      if(i.withPendingOfBadge){
+        const cnt=Number(S.pendingOfCount||0);
+        if(cnt>0){
+          btn.appendChild(h('span',{
+            style:'margin-left:auto;padding:1px 7px;border-radius:9px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;line-height:1.5;flex-shrink:0',
+            title:cnt+' OF à associer manuellement',
+          }, String(cnt)));
+        }
+      }
       return btn;
     }),
     h('div',{className:'sidebar-bottom'},
@@ -10578,7 +10589,7 @@ function renderPendingOfMappingsTab(){
         h('div',{style:'display:flex;gap:8px;align-items:center'},
           h('button',{
             style:'padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:12px;font-weight:600',
-            title:'Ignorer (laisse non lié, sera proposé à nouveau au prochain chargement)',
+            title:'Ignorer (laisse non lié, sera reproposé au prochain chargement)',
             onClick:()=>submitOfMapping(it.planning_id, null)
           },'Ignorer'),
           h('button',{

@@ -741,6 +741,7 @@ let S={machine:null,machines:[],entries:[],timeline:[],wo:0,loading:true,holiday
   tlTotalDays:5,machineHoursPerDay:16};
 let _allTlMatches=[];
 let ME=null;
+let PENDING_OF_COUNT=0;
 let CAN_EDIT=false;
 let IS_DIR_OR_SUPER=false;
 const IS_OF_ADMIN=__IS_OF_ADMIN__;
@@ -1649,13 +1650,28 @@ function renderSidebar(){
       {key:"production",label:"Production",icon:"wrench",href:"/prod?page=production"},
       {key:"traceabilite",label:"Traçabilité",icon:"layers",href:"/prod?page=traceabilite"},
       ...(admin?[{key:"rentabilite",label:"Rentabilité",icon:"trending-up",href:"/prod?page=rentabilite"}]:[]),
-      ...(canAccessOfTab()?[{key:"of",label:"Fiches + OF",icon:"file",href:"/prod?page=of"}]:[]),
+      ...(canAccessOfTab()?[{key:"of",label:"Fiches + OF",icon:"file",href:"/prod?page=of",withPendingBadge:true}]:[]),
     ]),
   ];
   const isLight=document.body.classList.contains("light");
   return`<nav class="sidebar"><div class="logo"><div class="logo-brand">My<span>Prod</span></div><div class="logo-sub">by SIFA</div></div>${
-    items.map(i=>`<button type="button" class="nav-btn${i.key==="_planning"?" active":""}" onclick="location.href='${i.href}'"><span style="display:inline-flex;align-items:center;gap:10px">${icon(i.icon,16)}${i.label}</span></button>`).join("")
+    items.map(i=>{
+      const badge=(i.withPendingBadge && PENDING_OF_COUNT>0)
+        ? `<span style="margin-left:auto;padding:1px 7px;border-radius:9px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;line-height:1.5;flex-shrink:0" title="${PENDING_OF_COUNT} OF à associer manuellement">${PENDING_OF_COUNT}</span>`
+        : "";
+      return `<button type="button" class="nav-btn${i.key==="_planning"?" active":""}" onclick="location.href='${i.href}'"><span style="display:inline-flex;align-items:center;gap:10px;width:100%">${icon(i.icon,16)}<span>${i.label}</span>${badge}</span></button>`;
+    }).join("")
   }<div class="sidebar-bottom"><button type="button" class="nav-btn nav-btn--mysifa-portal" onclick="location.href='/'"><span class="mysifa-back-preamble">← Retour </span><span class="mysifa-back-brand">My<span class="mysifa-back-accent">Sifa</span></span></button>${planningUserChipHtml()}<button type="button" class="support-btn" onclick="openSupport()"><span class="support-ico">${(window.MySifaSupport&&window.MySifaSupport.iconSvg)?window.MySifaSupport.iconSvg():""}</span><span>Contacter le support</span></button><button type="button" class="theme-btn" onclick="toggleTheme()"><span class="theme-ico">${isLight?icon('sun',16):icon('moon',16)}</span><span class="theme-label">${isLight?"Mode clair":"Mode sombre"}</span></button><button type="button" class="logout-btn" onclick="doLogout()">${icon('log-out',14)} Déconnexion</button><div class="version">__V_LABEL__</div></div></nav>`;
+}
+async function loadPendingOfCount(){
+  if(!canAccessOfTab())return;
+  try{
+    const r=await fetch("/api/admin/of-link-pending/count",{credentials:"include"});
+    if(!r.ok){PENDING_OF_COUNT=0;return;}
+    const data=await r.json();
+    PENDING_OF_COUNT=Number(data&&data.count||0);
+    try{render();}catch(e){}
+  }catch(e){PENDING_OF_COUNT=0;}
 }
 function toggleTheme(){if(window.MySifaTheme)MySifaTheme.toggleMode();render();}
 function renderPlanningOfPanel(){
@@ -4533,6 +4549,8 @@ async function boot(){
     else if(window.MySifaDock&&typeof window.MySifaDock.layout==="function")window.MySifaDock.layout();
   }
   if(window.MySifaTheme)MySifaTheme.mergeFromUser(ME);
+  // Badge 'Mappings OF à valider' pour admin/direction/superadmin
+  try{ loadPendingOfCount(); }catch(e){}
   try{
     const list=await api(`/machines`);
     const byName=new Map((list||[]).map(m=>[String(m.nom||""),m]));
