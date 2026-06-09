@@ -339,28 +339,13 @@ def get_of_for_planning_entry(entry_id: int, request: Request):
     ref_produit  = entry["ref_produit"]
     machine_nom  = entry["machine_nom"]
 
-    def _lookup_by_numero(num: str):
-        """Cherche un OF par of_numero (case-insensitive, TRIM).
-        Tente aussi en normalisant les suffixes numériques (.0, .00…).
-        Retourne le dict de la row ou None."""
-        candidates = [num.strip()]
-        # normalise "9931861.0" → "9931861"
-        try:
-            candidates.append(str(int(float(num.strip()))))
-        except (ValueError, OverflowError):
-            pass
-        with get_db() as c:
-            for cand in dict.fromkeys(candidates):  # deduplique, préserve ordre
-                r = c.execute(
-                    """SELECT id, of_numero, reference, machine, pdf_filename,
-                              date_import, imported_by, delai_client, qte_etiquettes, metrage
-                       FROM of_imports
-                       WHERE LOWER(TRIM(of_numero))=LOWER(TRIM(?)) LIMIT 1""",
-                    (cand,),
-                ).fetchone()
-                if r:
-                    return r
-        return None
+    # Pré-calculer ref_produit_norm pour aider à désambiguïser la lookup OF
+    # (cf. _lookup_of_by_numero en bas de ce module — phase 2 du cascade).
+    try:
+        from app.services.fiche_ref_parser import normalize_ref_produit as _norm_rp
+        _ref_produit_norm_for_of_lookup = _norm_rp(ref_produit) if ref_produit else None
+    except Exception:
+        _ref_produit_norm_for_of_lookup = None
 
     row = None
 
@@ -376,7 +361,7 @@ def get_of_for_planning_entry(entry_id: int, request: Request):
 
     # 2. Fallback : of_import_id absent ou lien mort → chercher par numero_of
     if not row and numero_of:
-        row = _lookup_by_numero(numero_of)
+        row = _lookup_of_by_numero(numero_of, _ref_produit_norm_for_of_lookup)
         if row:
             # Persister le lien pour les prochains appels
             try:
@@ -797,4 +782,200 @@ def admin_backfill_ref_produit_norm(request: Request):
             "no_match": pe_no_match,
             "preview": pe_preview,
         },
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Lookup OF par numero, en cascade.
+#
+# Ordre des passes :
+#   1. Match exact (LOWER/TRIM, + normalisation numérique 9931861.0 → 9931861)
+#   2. Match exact après retrait du préfixe "OF "
+#   3. Extraction du numéro racine 99XXXXX dans le numero, puis recherche
+#      d'OF dont l'of_numero contient ce numéro. Désambiguïsation par
+#      ref_produit_norm si fourni (l'OF dont la référence matche le produit
+#      du planning passe en premier), puis par date_import desc.
+#
+# Lecture seule (SELECT). Retourne None si rien ne matche.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_OF_RACINE_RE = re.compile(r"\b(99\d{5})\b")
+_OF_PREFIX_RE = re.compile(r"^\s*OF\s+(.+?)\s*$", re.IGNORECASE)
+
+_OF_SELECT_COLS = (
+    "id, of_numero, reference, machine, pdf_filename, "
+    "date_import, imported_by, delai_client, qte_etiquettes, metrage"
+)
+
+
+def _lookup_of_by_numero(num: Optional[str], ref_produit_norm: Optional[str] = None):
+    """Cherche un OF par numero avec normalisations en cascade.
+
+    Voir docstring du bloc ci-dessus pour la stratégie complète.
+    Lecture seule, retourne la row sqlite ou None.
+    """
+    if not num:
+        return None
+    s = str(num).strip()
+    if not s:
+        return None
+
+    candidates_exact: list = [s]
+    try:
+        candidates_exact.append(str(int(float(s))))
+    except (ValueError, OverflowError):
+        pass
+
+    m_prefix = _OF_PREFIX_RE.match(s)
+    if m_prefix:
+        inner = m_prefix.group(1).strip()
+        candidates_exact.append(inner)
+        try:
+            candidates_exact.append(str(int(float(inner))))
+        except (ValueError, OverflowError):
+            pass
+
+    try:
+        from app.services.fiche_ref_parser import normalize_ref_produit
+    except Exception:
+        normalize_ref_produit = None
+
+    with get_db() as c:
+        # Phase 1 : exact match en cascade
+        for cand in dict.fromkeys(candidates_exact):
+            r = c.execute(
+                f"""SELECT {_OF_SELECT_COLS}
+                    FROM of_imports
+                    WHERE LOWER(TRIM(of_numero)) = LOWER(TRIM(?))
+                    LIMIT 1""",
+                (cand,),
+            ).fetchone()
+            if r:
+                return r
+
+        # Phase 2 : extraction du numéro racine 99XXXXX
+        m = _OF_RACINE_RE.search(s)
+        if not m:
+            return None
+        racine = m.group(1)
+
+        rows = c.execute(
+            f"""SELECT {_OF_SELECT_COLS}
+                FROM of_imports
+                WHERE of_numero LIKE ?
+                ORDER BY
+                  CASE WHEN TRIM(of_numero) = ? THEN 0 ELSE 1 END,
+                  date_import DESC,
+                  id DESC""",
+            ("%" + racine + "%", racine),
+        ).fetchall()
+
+        if not rows:
+            return None
+
+        # Désambiguïsation par ref_produit_norm si fourni
+        if ref_produit_norm and normalize_ref_produit is not None:
+            for r in rows:
+                if not r["reference"]:
+                    continue
+                r_norm = normalize_ref_produit(r["reference"])
+                if r_norm and r_norm == ref_produit_norm:
+                    return r
+
+        return rows[0]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Relink OF en batch (admin)
+#
+# Parcourt les planning_entries qui ont un numero_of mais pas de of_import_id
+# (ou un lien mort), tente une lookup via _lookup_of_by_numero, et persiste
+# le lien si trouvé. Idempotent.
+#
+# Usage :
+#   POST /api/admin/relink-of            → applique
+#   POST /api/admin/relink-of?dry_run=1  → simulation (lecture seule)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@router.post("/api/admin/relink-of")
+def admin_relink_of(request: Request):
+    require_superadmin(request)
+
+    dry_run = (request.query_params.get("dry_run") or "").lower() in ("1", "true", "yes", "on")
+
+    try:
+        from app.services.fiche_ref_parser import normalize_ref_produit
+    except Exception:
+        normalize_ref_produit = None
+
+    total = 0
+    relinked = 0
+    already_linked = 0
+    unmatched = 0
+    preview: list = []
+
+    with get_db() as conn:
+        pe_cols = {r["name"] for r in conn.execute("PRAGMA table_info(planning_entries)").fetchall()}
+        has_norm = "ref_produit_norm" in pe_cols
+
+        sql = (
+            "SELECT id, numero_of, ref_produit, "
+            + ("ref_produit_norm, " if has_norm else "")
+            + "of_import_id "
+            "FROM planning_entries "
+            "WHERE numero_of IS NOT NULL AND TRIM(numero_of) != ''"
+        )
+        rows = conn.execute(sql).fetchall()
+        total = len(rows)
+
+        for row in rows:
+            # Si lien déjà en place et OF existe, on saute
+            if row["of_import_id"]:
+                check = conn.execute(
+                    "SELECT 1 FROM of_imports WHERE id=?",
+                    (row["of_import_id"],),
+                ).fetchone()
+                if check:
+                    already_linked += 1
+                    continue
+                # lien mort, on retente
+
+            ref_norm = None
+            if has_norm:
+                ref_norm = (row["ref_produit_norm"] or "").strip() or None
+            if not ref_norm and normalize_ref_produit is not None:
+                ref_norm = normalize_ref_produit(row["ref_produit"])
+
+            of_row = _lookup_of_by_numero(row["numero_of"], ref_norm)
+            if not of_row:
+                unmatched += 1
+                continue
+
+            relinked += 1
+            if len(preview) < 30:
+                preview.append({
+                    "planning_id": row["id"],
+                    "planning_numero_of": row["numero_of"],
+                    "planning_ref_produit": row["ref_produit"],
+                    "of_id": of_row["id"],
+                    "of_numero": of_row["of_numero"],
+                    "of_reference": of_row["reference"],
+                })
+            if not dry_run:
+                conn.execute(
+                    "UPDATE planning_entries SET of_import_id=? WHERE id=?",
+                    (of_row["id"], row["id"]),
+                )
+
+        if not dry_run:
+            conn.commit()
+
+    return {
+        "dry_run": dry_run,
+        "total_with_numero_of": total,
+        "already_linked": already_linked,
+        "relinked": relinked,
+        "unmatched": unmatched,
+        "preview": preview,
     }
