@@ -1064,7 +1064,8 @@ def stock_a_expedier(request: Request):
 
 @router.get("/api/stock/sortie-prod")
 def stock_sortie_prod(request: Request):
-    """Produits en zone En attente - sortie de prod (Z1) — stock fraîchement sorti de production."""
+    """Produits en zone En attente - sortie de prod (Z1) — stock fraîchement sorti de production.
+    Inclut la date de dernière entrée et le nom de l'opérateur qui l'a posée (pour la vue Production)."""
     require_stock(request)
     empl = STOCK_EMPLACEMENT_SORTIE_PROD
     with get_db() as conn:
@@ -1072,13 +1073,21 @@ def stock_sortie_prod(request: Request):
             """SELECT p.id, p.reference, p.designation, p.unite,
                       SUM(l.quantite_restante) as quantite,
                       COUNT(*) as nb_lots,
-                      MIN(CASE WHEN l.quantite_restante>0 THEN l.date_entree END) as date_fifo
+                      MIN(CASE WHEN l.quantite_restante>0 THEN l.date_entree END) as date_fifo,
+                      MAX(CASE WHEN l.quantite_restante>0 THEN l.date_entree END) as derniere_entree,
+                      (SELECT COALESCE(NULLIF(TRIM(u.nom),''), l2.created_by)
+                         FROM lots_stock l2
+                         LEFT JOIN users u ON LOWER(TRIM(COALESCE(u.email,''))) =
+                                              LOWER(TRIM(COALESCE(l2.created_by,'')))
+                         WHERE l2.produit_id = p.id AND l2.emplacement = ?
+                           AND l2.quantite_restante > 0
+                         ORDER BY l2.date_entree DESC LIMIT 1) as dernier_operateur
                FROM lots_stock l
                JOIN produits p ON p.id=l.produit_id
                WHERE l.emplacement=? AND l.quantite_restante>0
                GROUP BY p.id
-               ORDER BY p.reference""",
-            (empl,),
+               ORDER BY MAX(l.date_entree) DESC, p.reference""",
+            (empl, empl),
         ).fetchall()
     refs_data = [dict(r) for r in refs]
     total = sum(float(r["quantite"] or 0) for r in refs_data)
