@@ -232,39 +232,6 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .nav-subgroup-chevron{display:inline-flex;flex-shrink:0;transition:transform .2s;opacity:.55}
 .nav-subgroup-label.nsl-collapsed .nav-subgroup-chevron{transform:rotate(-90deg)}
 .hidden{display:none}
-/* ── Onglet Affiches mémo ───────────────────────────────────────── */
-.aff-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
-.aff-card{position:relative;border:1px solid var(--border);border-radius:14px;padding:16px 18px 14px;background:var(--bg);display:flex;flex-direction:column;gap:10px;transition:border-color .15s,box-shadow .2s}
-.aff-card:hover{border-color:var(--accent);box-shadow:0 0 0 1px rgba(34,211,238,.18),0 4px 18px rgba(34,211,238,.08)}
-body.light .aff-card:hover{box-shadow:0 0 0 1px rgba(8,145,178,.18),0 4px 18px rgba(8,145,178,.06)}
-.aff-card--cyan{border-left:4px solid #22d3ee}
-.aff-card--amber{border-left:4px solid #fbbf24}
-.aff-card--violet{border-left:4px solid #8b5cf6}
-body.light .aff-card--cyan{border-left-color:#0891b2}
-body.light .aff-card--amber{border-left-color:#b45309}
-body.light .aff-card--violet{border-left-color:#7c3aed}
-.aff-card-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.aff-card-tag{font-size:10px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)}
-.aff-card-icon{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:10px}
-.aff-card--cyan .aff-card-icon{background:rgba(34,211,238,.14);color:#22d3ee}
-.aff-card--amber .aff-card-icon{background:rgba(251,191,36,.16);color:#fbbf24}
-.aff-card--violet .aff-card-icon{background:rgba(139,92,246,.18);color:#a78bfa}
-body.light .aff-card--cyan .aff-card-icon{background:rgba(8,145,178,.12);color:#0891b2}
-body.light .aff-card--amber .aff-card-icon{background:rgba(180,83,9,.12);color:#b45309}
-body.light .aff-card--violet .aff-card-icon{background:rgba(124,58,237,.12);color:#7c3aed}
-.aff-card-title{font-size:16px;font-weight:800;color:var(--text);line-height:1.25}
-.aff-card-sub{font-size:13px;color:var(--text2);line-height:1.45;flex:1}
-.aff-card-sub b{color:var(--text)}
-.aff-card-actions{display:flex;gap:8px;margin-top:6px}
-.aff-btn{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:8px 12px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:12px;font-weight:700;text-decoration:none;font-family:inherit;transition:border-color .15s,color .15s,background .15s}
-.aff-btn:hover{color:var(--text);border-color:var(--accent);background:rgba(34,211,238,.06)}
-body.light .aff-btn:hover{background:rgba(8,145,178,.05)}
-.aff-btn-dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0}
-.aff-btn--dark .aff-btn-dot{background:#0a0e17;box-shadow:inset 0 0 0 1px rgba(148,163,184,.45)}
-.aff-btn--light .aff-btn-dot{background:#f1f5f9;box-shadow:inset 0 0 0 1px rgba(148,163,184,.45)}
-.aff-tip{margin-top:16px;display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:10px;border:1px dashed var(--border);font-size:12px;color:var(--muted)}
-.aff-tip svg{flex-shrink:0;color:var(--muted)}
-.aff-tip b{color:var(--text)}
 .legend{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
 .legend .item{padding:12px;border:1px solid var(--border);border-radius:10px;font-size:12px}
 .legend .item strong{display:block;margin-bottom:6px;font-size:13px}
@@ -350,10 +317,6 @@ body.light .aff-btn:hover{background:rgba(8,145,178,.05)}
       <button type="button" class="nav-btn" data-tab="updates">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         Mises à jour
-      </button>
-      <button type="button" class="nav-btn" data-tab="affiches">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-        Affiches mémo
       </button>
       <div class="nav-group-label" style="margin-top:8px"><span>Audit</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
       <button type="button" class="nav-btn" data-tab="audit">
@@ -871,67 +834,6 @@ body.light .aff-btn:hover{background:rgba(8,145,178,.05)}
       </div>
     </section>
 
-    <section id="panel-affiches" class="hidden">
-      <div class="card">
-        <h2 style="margin:0 0 6px">Affiches mémo · Entrepôt / Fabrication</h2>
-        <p class="sub" style="margin-top:0;margin-bottom:18px">Affiches A4 prêtes à imprimer pour rappeler les bons réflexes : déplacement vers Z0, ajout en Z1, inventaire opportuniste. Aperçu avant impression, version sombre ou claire au choix.</p>
-
-        <div class="aff-grid">
-
-          <div class="aff-card aff-card--cyan">
-            <div class="aff-card-head">
-              <div class="aff-card-tag">Expédition</div>
-              <div class="aff-card-icon">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h11v10H3z"/><path d="M14 10h4l3 3v4h-7z"/><circle cx="7.5" cy="17" r="2"/><circle cx="17.5" cy="17" r="2"/></svg>
-              </div>
-            </div>
-            <div class="aff-card-title">Tu prépares une expé ?</div>
-            <div class="aff-card-sub">Pense à déplacer ton stock en <b>Z0</b>.</div>
-            <div class="aff-card-actions">
-              <a class="aff-btn aff-btn--dark" href="/static/affiches/affiche-expe-z0.html" target="_blank" rel="noopener"><span class="aff-btn-dot"></span> Sombre</a>
-              <a class="aff-btn aff-btn--light" href="/static/affiches/affiche-expe-z0-light.html" target="_blank" rel="noopener"><span class="aff-btn-dot"></span> Clair</a>
-            </div>
-          </div>
-
-          <div class="aff-card aff-card--amber">
-            <div class="aff-card-head">
-              <div class="aff-card-tag">Fabrication</div>
-              <div class="aff-card-icon">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
-              </div>
-            </div>
-            <div class="aff-card-title">Ta palette est complète ?</div>
-            <div class="aff-card-sub">Pense à l'ajouter en <b>Z1</b>.</div>
-            <div class="aff-card-actions">
-              <a class="aff-btn aff-btn--dark" href="/static/affiches/affiche-palette-z1.html" target="_blank" rel="noopener"><span class="aff-btn-dot"></span> Sombre</a>
-              <a class="aff-btn aff-btn--light" href="/static/affiches/affiche-palette-z1-light.html" target="_blank" rel="noopener"><span class="aff-btn-dot"></span> Clair</a>
-            </div>
-          </div>
-
-          <div class="aff-card aff-card--violet">
-            <div class="aff-card-head">
-              <div class="aff-card-tag">Inventaire</div>
-              <div class="aff-card-icon">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
-              </div>
-            </div>
-            <div class="aff-card-title">Tu vérifies un stock ?</div>
-            <div class="aff-card-sub">Profites-en pour faire l'<b>inventaire</b>.</div>
-            <div class="aff-card-actions">
-              <a class="aff-btn aff-btn--dark" href="/static/affiches/affiche-verif-inventaire.html" target="_blank" rel="noopener"><span class="aff-btn-dot"></span> Sombre</a>
-              <a class="aff-btn aff-btn--light" href="/static/affiches/affiche-verif-inventaire-light.html" target="_blank" rel="noopener"><span class="aff-btn-dot"></span> Clair</a>
-            </div>
-          </div>
-
-        </div>
-
-        <div class="aff-tip">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-          <span>Une fois l'affiche ouverte : <b>Ctrl/Cmd + P</b> → marges sur <b>None</b> → impression couleur. Format A4 déjà figé.</span>
-        </div>
-      </div>
-    </section>
-
     <section id="panel-audit" class="hidden">
       <div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;
@@ -1297,7 +1199,7 @@ function setTab(id) {
   document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === id);
   });
-  ['users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'machines', 'emplacements', 'updates', 'affiches', 'audit', 'fsc', 'dashboards', 'api', 'promote'].forEach(p => {
+  ['users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'machines', 'emplacements', 'updates', 'audit', 'fsc', 'dashboards', 'api', 'promote'].forEach(p => {
     const el = document.getElementById('panel-' + p);
     if (el) el.classList.toggle('hidden', p !== id);
   });

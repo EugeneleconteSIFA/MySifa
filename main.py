@@ -4,9 +4,11 @@ MyProd by SIFA — v0.5.0
 import os
 from contextlib import asynccontextmanager
 
+import re
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from config import APP_TITLE, APP_VERSION, HOST, PORT, BASE_DIR, ENV_NAME, IS_STAGING
@@ -134,6 +136,74 @@ async def no_cache_planning(request: Request, call_next):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         response.headers["Pragma"] = "no-cache"
     return response
+
+
+# ── Bandeau staging v1 ───────────────────────────────────────────────────────
+# Injecté dans toutes les réponses HTML lorsque ENV_NAME=v1, pour qu'il apparaisse
+# sur les pages standalone (profil, calendrier, db_viewer, settings, planning,
+# fabrication, etc.) en plus du shell principal (app/web/html.py).
+# Pas d'effet en prod (v2) : la fonction sort tôt si IS_STAGING est faux.
+_STAGING_BANDEAU_CSS = (
+    "<style>"
+    ".staging-bandeau{position:fixed;top:0;left:0;right:0;height:24px;background:#dc2626;"
+    "color:#fff;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;"
+    "display:flex;align-items:center;justify-content:center;gap:10px;z-index:99999;"
+    "font-family:'Segoe UI',system-ui,sans-serif;box-shadow:0 1px 6px rgba(220,38,38,.4);"
+    "pointer-events:none}"
+    ".staging-bandeau::before{content:\"●\";color:#fef2f2;font-size:9px;line-height:1}"
+    "body{padding-top:24px!important}"
+    "body .sidebar{top:24px!important}"
+    "body .mobile-topbar{top:24px!important}"
+    "</style>"
+)
+_STAGING_BANDEAU_HTML = (
+    '<div class="staging-bandeau">'
+    'v1 — Environnement de test — DB partagée avec la prod'
+    '</div>'
+)
+_BODY_OPEN_RE = re.compile(rb"(<body[^>]*>)", re.IGNORECASE)
+
+
+@app.middleware("http")
+async def inject_staging_bandeau(request: Request, call_next):
+    """Injecte le bandeau staging dans toutes les réponses HTML quand ENV_NAME=v1."""
+    response = await call_next(request)
+    if not IS_STAGING:
+        return response
+    content_type = response.headers.get("content-type", "")
+    if "text/html" not in content_type.lower():
+        return response
+    if not hasattr(response, "body_iterator"):
+        return response
+    body_bytes = b""
+    async for chunk in response.body_iterator:
+        body_bytes += chunk if isinstance(chunk, (bytes, bytearray)) else chunk.encode("utf-8")
+    # Ne rien faire si déjà présent (page rendue via render_frontend_html)
+    if b"staging-bandeau" in body_bytes:
+        new_headers = {k: v for k, v in response.headers.items() if k.lower() != "content-length"}
+        return Response(
+            content=body_bytes,
+            status_code=response.status_code,
+            headers=new_headers,
+            media_type=response.media_type,
+        )
+    # Injection CSS avant </head>
+    css_bytes = _STAGING_BANDEAU_CSS.encode("utf-8")
+    if b"</head>" in body_bytes:
+        body_bytes = body_bytes.replace(b"</head>", css_bytes + b"</head>", 1)
+    # Injection HTML juste après <body…>
+    bandeau_bytes = _STAGING_BANDEAU_HTML.encode("utf-8")
+    new_body, count = _BODY_OPEN_RE.subn(rb"\1" + bandeau_bytes, body_bytes, count=1)
+    if count == 0:
+        # Pas de balise <body> : on n'a pas affaire à un document HTML complet, on laisse tel quel
+        new_body = body_bytes
+    new_headers = {k: v for k, v in response.headers.items() if k.lower() != "content-length"}
+    return Response(
+        content=new_body,
+        status_code=response.status_code,
+        headers=new_headers,
+        media_type=response.media_type,
+    )
 
 
 app.include_router(auth_router)

@@ -808,17 +808,26 @@ _OF_SELECT_COLS = (
 )
 
 
-def _lookup_of_by_numero(num: Optional[str], ref_produit_norm: Optional[str] = None):
-    """Cherche un OF par numero avec normalisations en cascade.
+def _lookup_of_candidates(num: Optional[str], ref_produit_norm: Optional[str] = None):
+    """Lookup OF en cascade — distingue match certain vs ambigu.
 
-    Voir docstring du bloc ci-dessus pour la stratégie complète.
-    Lecture seule, retourne la row sqlite ou None.
+    Retourne un tuple (certain_row_or_None, candidates_list).
+
+    - Phase 1 (match exact, avec ou sans préfixe "OF ") → (row, [])
+    - Phase 2 (extraction racine 99XXXXX), 1 seul candidat → (row, [])
+    - Phase 2 avec 2+ candidats et désambiguïsation par ref_produit_norm
+      identifie UN unique gagnant → (row, [])
+    - Phase 2 avec 2+ candidats sans désambiguïsation possible
+      → (None, candidates_list)  [le caller doit demander un choix humain]
+    - Aucun match → (None, [])
+
+    Lecture seule.
     """
     if not num:
-        return None
+        return (None, [])
     s = str(num).strip()
     if not s:
-        return None
+        return (None, [])
 
     candidates_exact: list = [s]
     try:
@@ -851,12 +860,12 @@ def _lookup_of_by_numero(num: Optional[str], ref_produit_norm: Optional[str] = N
                 (cand,),
             ).fetchone()
             if r:
-                return r
+                return (r, [])
 
         # Phase 2 : extraction du numéro racine 99XXXXX
         m = _OF_RACINE_RE.search(s)
         if not m:
-            return None
+            return (None, [])
         racine = m.group(1)
 
         rows = c.execute(
@@ -864,25 +873,46 @@ def _lookup_of_by_numero(num: Optional[str], ref_produit_norm: Optional[str] = N
                 FROM of_imports
                 WHERE of_numero LIKE ?
                 ORDER BY
-                  CASE WHEN TRIM(of_numero) = ? THEN 0 ELSE 1 END,
+                  CASE WHEN TRIM(of_numero) = ? THEN 0
+                       WHEN of_numero LIKE ? THEN 1
+                       ELSE 2
+                  END,
                   date_import DESC,
                   id DESC""",
-            ("%" + racine + "%", racine),
+            ("%" + racine + "%", racine, racine + "%"),
         ).fetchall()
 
         if not rows:
-            return None
+            return (None, [])
 
-        # Désambiguïsation par ref_produit_norm si fourni
+        if len(rows) == 1:
+            return (rows[0], [])
+
+        # Plusieurs candidats : essayer la désambiguïsation par ref_produit_norm
         if ref_produit_norm and normalize_ref_produit is not None:
+            matched_by_ref = []
             for r in rows:
                 if not r["reference"]:
                     continue
                 r_norm = normalize_ref_produit(r["reference"])
                 if r_norm and r_norm == ref_produit_norm:
-                    return r
+                    matched_by_ref.append(r)
+            if len(matched_by_ref) == 1:
+                return (matched_by_ref[0], [])
 
-        return rows[0]
+        # Pas de désambiguïsation possible → ambigu (human-in-the-loop)
+        return (None, [dict(r) for r in rows])
+
+
+def _lookup_of_by_numero(num: Optional[str], ref_produit_norm: Optional[str] = None):
+    """Variante "match certain uniquement" pour les appels qui ne gèrent pas
+    l'ambiguïté (ex. lookup à la volée depuis /api/of/planning/{id}).
+
+    Retourne la row si match certain, None sinon. Voir _lookup_of_candidates
+    pour le détail de la cascade.
+    """
+    certain, _ = _lookup_of_candidates(num, ref_produit_norm)
+    return certain
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -913,7 +943,9 @@ def admin_relink_of(request: Request):
     relinked = 0
     already_linked = 0
     unmatched = 0
+    pending_for_review = 0
     preview: list = []
+    pending_preview: list = []
 
     with get_db() as conn:
         pe_cols = {r["name"] for r in conn.execute("PRAGMA table_info(planning_entries)").fetchall()}
@@ -947,26 +979,43 @@ def admin_relink_of(request: Request):
             if not ref_norm and normalize_ref_produit is not None:
                 ref_norm = normalize_ref_produit(row["ref_produit"])
 
-            of_row = _lookup_of_by_numero(row["numero_of"], ref_norm)
-            if not of_row:
-                unmatched += 1
+            certain, candidates = _lookup_of_candidates(row["numero_of"], ref_norm)
+
+            if certain:
+                relinked += 1
+                if len(preview) < 30:
+                    preview.append({
+                        "planning_id": row["id"],
+                        "planning_numero_of": row["numero_of"],
+                        "planning_ref_produit": row["ref_produit"],
+                        "of_id": certain["id"],
+                        "of_numero": certain["of_numero"],
+                        "of_reference": certain["reference"],
+                    })
+                if not dry_run:
+                    conn.execute(
+                        "UPDATE planning_entries SET of_import_id=? WHERE id=?",
+                        (certain["id"], row["id"]),
+                    )
                 continue
 
-            relinked += 1
-            if len(preview) < 30:
-                preview.append({
-                    "planning_id": row["id"],
-                    "planning_numero_of": row["numero_of"],
-                    "planning_ref_produit": row["ref_produit"],
-                    "of_id": of_row["id"],
-                    "of_numero": of_row["of_numero"],
-                    "of_reference": of_row["reference"],
-                })
-            if not dry_run:
-                conn.execute(
-                    "UPDATE planning_entries SET of_import_id=? WHERE id=?",
-                    (of_row["id"], row["id"]),
-                )
+            if candidates:
+                # Ambigu : on n'auto-link pas, le service admin choisira via l'UI
+                pending_for_review += 1
+                if len(pending_preview) < 15:
+                    pending_preview.append({
+                        "planning_id": row["id"],
+                        "planning_numero_of": row["numero_of"],
+                        "planning_ref_produit": row["ref_produit"],
+                        "candidates_count": len(candidates),
+                        "candidates_sample": [
+                            {"of_id": c["id"], "of_numero": c["of_numero"]}
+                            for c in candidates[:3]
+                        ],
+                    })
+                continue
+
+            unmatched += 1
 
         if not dry_run:
             conn.commit()
@@ -976,6 +1025,126 @@ def admin_relink_of(request: Request):
         "total_with_numero_of": total,
         "already_linked": already_linked,
         "relinked": relinked,
+        "pending_for_review": pending_for_review,
+        "pending_preview": pending_preview,
         "unmatched": unmatched,
         "preview": preview,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Mappings OF "à valider" — human-in-the-loop
+#
+# Quand la lookup automatique trouve PLUSIEURS OF candidats pour un même
+# planning_entry (extraction racine 99XXXXX avec multiples matchs et sans
+# désambiguïsation possible), on ne lie pas automatiquement : le service
+# administration choisit le bon OF via une UI dédiée dans la page Fiches+OF.
+#
+# Endpoints :
+#   GET  /api/admin/of-link-pending/count  → juste le nombre (pour le badge)
+#   GET  /api/admin/of-link-pending        → liste détaillée avec candidats
+#   POST /api/admin/link-planning-of       → enregistre un choix manuel
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _iter_pending_planning_rows(conn):
+    """Itère sur les planning_entries sans of_import_id mais avec un numero_of.
+    Yield un tuple (row, ref_produit_norm, candidates) UNIQUEMENT pour les cas
+    ambigus (2+ candidats sans désambiguïsation possible).
+    """
+    pe_cols = {r["name"] for r in conn.execute("PRAGMA table_info(planning_entries)").fetchall()}
+    has_norm = "ref_produit_norm" in pe_cols
+
+    try:
+        from app.services.fiche_ref_parser import normalize_ref_produit
+    except Exception:
+        normalize_ref_produit = None
+
+    sql = (
+        "SELECT pe.id, pe.numero_of, pe.ref_produit, "
+        + ("pe.ref_produit_norm, " if has_norm else "")
+        + "pe.machine_id, m.nom AS machine_nom "
+        "FROM planning_entries pe "
+        "LEFT JOIN machines m ON m.id = pe.machine_id "
+        "WHERE pe.numero_of IS NOT NULL AND TRIM(pe.numero_of) != '' "
+        "AND pe.of_import_id IS NULL"
+    )
+    for row in conn.execute(sql).fetchall():
+        ref_norm = None
+        if has_norm:
+            ref_norm = (row["ref_produit_norm"] or "").strip() or None
+        if not ref_norm and normalize_ref_produit is not None:
+            ref_norm = normalize_ref_produit(row["ref_produit"])
+
+        certain, candidates = _lookup_of_candidates(row["numero_of"], ref_norm)
+        if certain:
+            continue
+        if not candidates or len(candidates) < 2:
+            continue
+        yield row, ref_norm, candidates
+
+
+@router.get("/api/admin/of-link-pending/count")
+def admin_of_link_pending_count(request: Request):
+    _require_of_access(request)
+    count = 0
+    with get_db() as conn:
+        for _ in _iter_pending_planning_rows(conn):
+            count += 1
+    return {"count": count}
+
+
+@router.get("/api/admin/of-link-pending")
+def admin_of_link_pending(request: Request):
+    _require_of_access(request)
+    items: list = []
+    with get_db() as conn:
+        for row, ref_norm, candidates in _iter_pending_planning_rows(conn):
+            items.append({
+                "planning_id": row["id"],
+                "numero_of": row["numero_of"],
+                "ref_produit": row["ref_produit"],
+                "ref_produit_norm": ref_norm,
+                "machine": row["machine_nom"],
+                "candidates": candidates,
+            })
+    return {"total": len(items), "items": items}
+
+
+@router.post("/api/admin/link-planning-of")
+async def admin_link_planning_of(request: Request):
+    _require_of_access(request)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Body JSON requis.")
+
+    planning_id = body.get("planning_id")
+    of_id = body.get("of_id")  # null = délier
+
+    if not isinstance(planning_id, int):
+        raise HTTPException(status_code=400, detail="planning_id (int) requis.")
+    if of_id is not None and not isinstance(of_id, int):
+        raise HTTPException(status_code=400, detail="of_id doit etre int ou null.")
+
+    with get_db() as conn:
+        pe = conn.execute(
+            "SELECT id FROM planning_entries WHERE id=?", (planning_id,)
+        ).fetchone()
+        if not pe:
+            raise HTTPException(status_code=404, detail="Planning introuvable.")
+
+        if of_id is not None:
+            oi = conn.execute(
+                "SELECT id FROM of_imports WHERE id=?", (of_id,)
+            ).fetchone()
+            if not oi:
+                raise HTTPException(status_code=404, detail="OF introuvable.")
+
+        conn.execute(
+            "UPDATE planning_entries SET of_import_id=? WHERE id=?",
+            (of_id, planning_id),
+        )
+        conn.commit()
+
+    return {"linked": True, "planning_id": planning_id, "of_id": of_id}

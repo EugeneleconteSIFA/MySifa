@@ -1079,6 +1079,32 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
 .traca-dev-banner{display:flex;align-items:center;gap:10px;background:var(--accent-bg);
   border:1px solid var(--accent);border-radius:10px;padding:10px 14px;
   font-size:12px;color:var(--accent);margin-bottom:14px;font-weight:600}
+/* -- Affiches memo (groupe Communication, poste Bureaux) -- */
+.traca-group-title{display:flex;align-items:center;gap:10px;margin:22px 0 12px;
+  font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px}
+.traca-group-title::after{content:"";flex:1;height:1px;background:var(--border)}
+.traca-aff-card{background:var(--card);border:1.5px solid var(--border);border-radius:14px;
+  padding:14px 16px;display:flex;align-items:center;gap:14px;transition:border-color .15s}
+.traca-aff-card:hover{border-color:var(--accent)}
+.traca-aff-card--cyan{border-left:4px solid #22d3ee}
+.traca-aff-card--amber{border-left:4px solid #fbbf24}
+.traca-aff-card--violet{border-left:4px solid #8b5cf6}
+body.light .traca-aff-card--cyan{border-left-color:#0891b2}
+body.light .traca-aff-card--amber{border-left-color:#b45309}
+body.light .traca-aff-card--violet{border-left-color:#7c3aed}
+.traca-aff-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.traca-aff-title{font-size:14px;font-weight:700;color:var(--text)}
+.traca-aff-sub{font-size:12px;color:var(--text2);line-height:1.4}
+.traca-aff-sub b{color:var(--text)}
+.traca-aff-actions{display:flex;gap:6px;flex-shrink:0}
+.traca-aff-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;
+  border-radius:9px;border:1px solid var(--border);background:transparent;
+  color:var(--text2);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;
+  text-decoration:none;transition:border-color .15s,color .15s,background .15s}
+.traca-aff-btn:hover{color:var(--text);border-color:var(--accent);background:var(--accent-bg)}
+.traca-aff-dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0}
+.traca-aff-btn--dark .traca-aff-dot{background:#0a0e17;box-shadow:inset 0 0 0 1px rgba(148,163,184,.45)}
+.traca-aff-btn--light .traca-aff-dot{background:#f1f5f9;box-shadow:inset 0 0 0 1px rgba(148,163,184,.45)}
 /* ── Formulaire étiquette palettes ── */
 .etiq-form-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
 .etiq-form-field{display:flex;flex-direction:column;gap:4px}
@@ -9209,6 +9235,28 @@ const TRACA_ETIQUETTES = [
   { id:'id_bobine',       label:'Identification bobine',   format:'40x20',  postes:['cohesio1','cohesio2']      },
 ];
 
+// -- Affiches memo (poste Bureaux > Communication) --
+const TRACA_AFFICHES = [
+  { id:'expe-z0',        variant:'cyan',
+    title:"Tu prepares une expe ?",
+    sub:"Pense a deplacer ton stock en <b>Z0</b>.",
+    icon:'truck',
+    dark:'/static/affiches/affiche-expe-z0.html',
+    light:'/static/affiches/affiche-expe-z0-light.html' },
+  { id:'palette-z1',     variant:'amber',
+    title:"Ta palette est complete ?",
+    sub:"Pense a l'ajouter en <b>Z1</b>.",
+    icon:'layers',
+    dark:'/static/affiches/affiche-palette-z1.html',
+    light:'/static/affiches/affiche-palette-z1-light.html' },
+  { id:'verif-inv',      variant:'violet',
+    title:"Tu verifies un stock ?",
+    sub:"Profites-en pour faire l'<b>inventaire</b>.",
+    icon:'clipboard',
+    dark:'/static/affiches/affiche-verif-inventaire.html',
+    light:'/static/affiches/affiche-verif-inventaire-light.html' },
+];
+
 // ── Helpers impression ────────────────────────────────────────────
 function _printWin(title, pageSize, css, body) {
   const w = window.open('', '_blank');
@@ -9551,7 +9599,43 @@ function buildTracaPosteView(poste) {
     });
     listEl = el('div',{cls:'traca-etiq-list'},...cards);
   }
-  return el('div',{cls:'content'}, backBar, listEl);
+
+  // -- Dossier "Communication" - uniquement pour le poste Bureaux --
+  let commSection = null;
+  if (poste.id === 'bureaux') {
+    const POSTE_TINT = {
+      cyan:   { bg:'rgba(34,211,238,.14)',  color:'#22d3ee' },
+      amber:  { bg:'rgba(251,191,36,.16)',  color:'#fbbf24' },
+      violet: { bg:'rgba(139,92,246,.18)',  color:'#a78bfa' },
+    };
+    const affCards = TRACA_AFFICHES.map(aff=>{
+      const tint = POSTE_TINT[aff.variant] || POSTE_TINT.cyan;
+      const body = el('div',{cls:'traca-aff-body'});
+      body.appendChild(el('div',{cls:'traca-aff-title'},aff.title));
+      const subEl = el('div',{cls:'traca-aff-sub'});
+      subEl.innerHTML = aff.sub;
+      body.appendChild(subEl);
+      return el('div',{cls:'traca-aff-card traca-aff-card--'+aff.variant},
+        el('div',{cls:'traca-etiq-icon-wrap',style:{background:tint.bg,color:tint.color}},
+          iconEl(aff.icon,18)),
+        body,
+        el('div',{cls:'traca-aff-actions'},
+          el('a',{cls:'traca-aff-btn traca-aff-btn--dark',
+            attrs:{href:aff.dark,target:'_blank',rel:'noopener'}},
+            el('span',{cls:'traca-aff-dot'}), 'Sombre'),
+          el('a',{cls:'traca-aff-btn traca-aff-btn--light',
+            attrs:{href:aff.light,target:'_blank',rel:'noopener'}},
+            el('span',{cls:'traca-aff-dot'}), 'Clair')
+        )
+      );
+    });
+    commSection = el('div',null,
+      el('div',{cls:'traca-group-title'}, iconEl('folder',12), 'Communication'),
+      el('div',{cls:'traca-etiq-list'}, ...affCards)
+    );
+  }
+
+  return el('div',{cls:'content'}, backBar, listEl, commSection);
 }
 
 function buildTraca() {

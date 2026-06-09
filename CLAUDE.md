@@ -32,6 +32,52 @@ MySifa est un outil interne de gestion de production industrielle développé po
 
 ---
 
+## Stratégie de déploiement v1 / v2 — LIRE EN PREMIER
+
+**Deux instances FastAPI tournent côte à côte sur le VPS, indépendantes**, sur des processus et ports séparés. C'est volontaire — ce n'est pas une erreur de configuration ni un reliquat à nettoyer.
+
+| Service systemd | Chemin code | Port | Domaine | Rôle |
+|---|---|---|---|---|
+| `mysifa` | `/home/sifa/production-saas/` | 8000 | `www.mysifa.com` | **Prod** — utilisée par tous les utilisateurs |
+| `mysifa-v1` | `/home/sifa/production-saas-v1/` | 8002 | `v1.mysifa.com` | **Staging** — réservée au super admin, bandeau rouge permanent en haut de chaque page |
+
+Les deux instances **partagent la même base de données** (`DB_PATH` pointe sur le même fichier dans les deux `.env`). C'est par choix : v1 voit les vraies données. La contrepartie : toute écriture faite via v1 impacte directement la prod. Une variable `MIGRATIONS_DISABLED=1` dans le `.env` de v1 empêche v1 de jouer une migration de schéma — seul v2 a le droit de modifier le schéma de la DB partagée.
+
+**Variables d'environnement clés** (déclarées dans `config.py`, lues depuis `.env`) :
+
+- `ENV_NAME` : `"v2"` par défaut, `"v1"` sur l'instance staging. Pilote l'affichage du bandeau rouge dans `app/web/html.py` et le skip des seeds au boot dans `main.py`.
+- `MIGRATIONS_DISABLED` : `0` par défaut, `1` sur v1. Le `_ensure_schema()` dans `app/core/database.py` sort tôt si cette variable vaut 1.
+- `PORT` : `8000` par défaut, `8002` sur v1.
+
+**Workflow de déploiement (obligatoire)**
+
+1. Tu codes en local, tu fais `git push origin main` comme d'habitude.
+2. Sur le VPS, le cron `/etc/cron.d/mysifa-v1-pull` exécute toutes les minutes `/usr/local/bin/mysifa-v1-pull.sh` qui pull v1 + restart `mysifa-v1` si l'origin a bougé. v1 reflète donc tes commits dans la minute.
+3. Tu testes sur `https://v1.mysifa.com`. Le bandeau rouge confirme que tu es sur le staging.
+4. Quand tu es satisfait, tu vas dans `/settings` sur v1 → onglet "Promouvoir v1 → v2" → tu remplis (optionnellement) les notes de release → clic.
+5. Le bouton appelle `POST /api/promote` qui lance `sudo /home/sifa/production-saas-v1/scripts/promote_v2.sh "notes"`. Le script fait : backup DB, capture HEAD v2, `git pull` sur v2, chown, `systemctl restart mysifa`, healthcheck sur `/healthz` (15s timeout), **rollback auto complet si KO** (restore DB + git reset HEAD précédent + restart + annonce d'échec), annonce de release si notes fournies.
+
+**Règles absolues — ne JAMAIS enfreindre**
+
+- **JAMAIS** de `git pull`, `git reset`, ou `systemctl restart mysifa` à la main sur `/home/sifa/production-saas/` (v2). v2 ne bouge **que** via le bouton "Promouvoir" depuis v1. Tout autre chemin contourne le backup pré-promotion et le rollback automatique.
+- **JAMAIS** de `git pull` manuel sur `/home/sifa/production-saas-v1/` (v1) — le cron s'en charge. Sinon les perms se cassent.
+- **JAMAIS** de migration de schéma jouée sur v1. Si tu testes une migration, fais-le dans une DB locale sur ton Mac/PC d'abord, puis pousse le code et promu sur v2.
+- Si une IA dans une autre conversation suggère de "git pull dans le dossier prod pour mettre à jour" ou de "restart le service mysifa", elle ignore cette stratégie — corrige-la avant de suivre ses instructions.
+
+**Numéro de version (footer)**
+
+`APP_VERSION` dans `config.py` ligne 31. Le script `promote_v2.sh` ne bump **pas** automatiquement. Pour incrémenter le numéro affiché en bas de page, édite la constante en local, commit, push, puis promu (la promotion utilisera la nouvelle valeur committée).
+
+**Endpoint santé**
+
+`GET /healthz` (dans `main.py`) répond `{"status":"ok","env":"v2","version":"0.6.1"}` si la DB répond, 503 sinon. C'est ce que le script de promotion utilise pour valider la mise à jour avant de conclure ou de rollback.
+
+**Conventions Git pour les scripts shell**
+
+Tout fichier `.sh` créé depuis Windows doit être marqué exécutable dans Git via `git update-index --chmod=+x scripts/foo.sh`, sinon le bit `+x` saute à chaque pull sur Linux. Le `.gitattributes` à la racine force les `.sh` en fins de ligne LF (sinon `bash` ne reconnaît pas le shebang).
+
+---
+
 ## Structure des fichiers
 
 ```

@@ -10491,6 +10491,116 @@ async function loadFiches(){
     toast(e.message||'Erreur chargement fiches techniques','error');
   }
 }
+async function loadPendingOfCount(){
+  try{
+    const data=await api('/api/admin/of-link-pending/count');
+    set({pendingOfCount:Number(data&&data.count||0)});
+  }catch(e){
+    set({pendingOfCount:0});
+  }
+}
+
+async function loadPendingOfMappings(){
+  set({pendingOfLoading:true});
+  try{
+    const data=await api('/api/admin/of-link-pending');
+    set({
+      pendingOfMappings:Array.isArray(data&&data.items)?data.items:[],
+      pendingOfCount:Number(data&&data.total||0),
+      pendingOfLoading:false,
+    });
+  }catch(e){
+    set({pendingOfLoading:false});
+    toast(e.message||'Erreur chargement mappings à valider','error');
+  }
+}
+
+async function submitOfMapping(planningId, ofId){
+  try{
+    await api('/api/admin/link-planning-of',{
+      method:'POST',
+      body:JSON.stringify({planning_id:planningId, of_id:ofId}),
+    });
+    toast(ofId==null?'Planning délié.':'OF lié.');
+    await loadPendingOfMappings();
+    render();
+  }catch(e){
+    toast(e.message||'Erreur enregistrement','error');
+  }
+}
+
+function renderPendingOfMappingsTab(){
+  if(S.pendingOfLoading){
+    return h('div',{className:'card',style:{padding:'24px',textAlign:'center',color:'var(--muted)'}},'Chargement…');
+  }
+  const items=S.pendingOfMappings||[];
+  if(items.length===0){
+    return h('div',{className:'card',style:{padding:'24px',textAlign:'center',color:'var(--muted)'}},
+      h('div',{style:{fontSize:'15px',fontWeight:600,color:'var(--text2)',marginBottom:'6px'}},'Aucun mapping à valider'),
+      h('div',null,'Tous les plannings avec un numero_of sont liés automatiquement à un OF, ou n\'ont aucun OF candidat.')
+    );
+  }
+  const intro=h('div',{style:{marginBottom:'16px',padding:'12px 16px',background:'var(--accent-bg)',border:'1px solid var(--border)',borderRadius:'10px',fontSize:'13px',color:'var(--text2)',lineHeight:1.6}},
+    h('div',{style:{fontWeight:600,color:'var(--text)',marginBottom:'4px'}},
+      items.length+' planning'+(items.length>1?'s':'')+' à associer manuellement'),
+    'Le moteur a trouvé plusieurs OF candidats sans pouvoir choisir. Sélectionne le bon OF pour chaque ligne.'
+  );
+
+  const cards=items.map(it=>{
+    const candRows=(it.candidates||[]).map(c=>{
+      const dateImp=(c.date_import||'').slice(0,10)||'—';
+      return h('label',{
+        style:'display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;background:var(--bg)',
+      },
+        h('input',{type:'radio',name:'pending-'+it.planning_id,value:String(c.id),style:'margin:0;flex-shrink:0'}),
+        h('div',{style:'flex:1;min-width:0'},
+          h('div',{style:'font-weight:600;color:var(--text);font-size:13px'},escHtml(c.of_numero||'—')),
+          h('div',{style:'font-size:12px;color:var(--muted);margin-top:2px'},
+            'Réf : ',escHtml(c.reference||'—'),
+            c.machine?' · '+escHtml(c.machine):'',
+            ' · importé ',dateImp,
+            c.imported_by?' par '+escHtml(c.imported_by):''
+          )
+        )
+      );
+    });
+
+    return h('div',{className:'card',style:{padding:'16px 18px',marginBottom:'14px'}},
+      h('div',{style:'display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px;flex-wrap:wrap'},
+        h('div',null,
+          h('div',{style:'font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px'},'Planning #'+it.planning_id),
+          h('div',{style:'font-size:14px;font-weight:600;color:var(--text)'},escHtml(it.numero_of||'—')),
+          h('div',{style:'font-size:12px;color:var(--muted);margin-top:2px'},
+            'Réf produit : ',escHtml(it.ref_produit||'—'),
+            it.machine?' · Machine : '+escHtml(it.machine):''
+          )
+        ),
+        h('div',{style:'display:flex;gap:8px;align-items:center'},
+          h('button',{
+            style:'padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:12px;font-weight:600',
+            title:'Ignorer (laisse non lié, sera proposé à nouveau au prochain chargement)',
+            onClick:()=>submitOfMapping(it.planning_id, null)
+          },'Ignorer'),
+          h('button',{
+            style:'padding:8px 14px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-size:12px;font-weight:700',
+            onClick:()=>{
+              const radios=document.getElementsByName('pending-'+it.planning_id);
+              let chosen=null;
+              for(const r of radios){ if(r.checked){ chosen=parseInt(r.value,10); break; } }
+              if(!chosen){ toast('Sélectionne un OF d\'abord.','error'); return; }
+              submitOfMapping(it.planning_id, chosen);
+            }
+          },'Lier l\'OF sélectionné')
+        )
+      ),
+      h('div',{style:'font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px'},
+        (it.candidates||[]).length+' candidat'+((it.candidates||[]).length>1?'s':'')+' trouvé'+((it.candidates||[]).length>1?'s':'')),
+      ...candRows
+    );
+  });
+
+  return h('div',null, intro, ...cards);
+}
 function _csvEscape(v){
   if(v==null) return '';
   const s=String(v);
@@ -11350,6 +11460,10 @@ function renderFichesTab(){
 }
 
 function renderOfPage(){
+  const pendingCount = Number(S.pendingOfCount || 0);
+  const pendingBadge = pendingCount > 0
+    ? h('span',{style:'display:inline-block;margin-left:8px;padding:2px 8px;border-radius:10px;background:var(--danger);color:#fff;font-size:11px;font-weight:700;line-height:1.4'}, String(pendingCount))
+    : null;
   const subNav=h('div',{style:{display:'flex',gap:'0',borderBottom:'1px solid var(--border)',marginBottom:'20px'}},
     h('button',{
       style:`padding:10px 18px;font-size:13px;font-weight:600;border:none;background:transparent;cursor:pointer;border-bottom:2px solid ${S.ofSubTab==='of'?'var(--accent)':'transparent'};color:${S.ofSubTab==='of'?'var(--accent)':'var(--muted)'};font-family:inherit`,
@@ -11359,10 +11473,16 @@ function renderOfPage(){
       style:`padding:10px 18px;font-size:13px;font-weight:600;border:none;background:transparent;cursor:pointer;border-bottom:2px solid ${S.ofSubTab==='fiche'?'var(--accent)':'transparent'};color:${S.ofSubTab==='fiche'?'var(--accent)':'var(--muted)'};font-family:inherit`,
       onClick:async()=>{set({ofSubTab:'fiche'});await loadFiches();render();}
     },'Fiches techniques'),
+    h('button',{
+      style:`padding:10px 18px;font-size:13px;font-weight:600;border:none;background:transparent;cursor:pointer;border-bottom:2px solid ${S.ofSubTab==='pending'?'var(--accent)':'transparent'};color:${S.ofSubTab==='pending'?'var(--accent)':'var(--muted)'};font-family:inherit;display:inline-flex;align-items:center`,
+      onClick:async()=>{set({ofSubTab:'pending'});await loadPendingOfMappings();render();}
+    },'Mappings à valider', pendingBadge),
   );
   return h('div',{style:{paddingLeft:'12px',paddingRight:'4px'}},
     subNav,
-    S.ofSubTab==='fiche' ? renderFichesTab() : renderOfTab()
+    S.ofSubTab==='fiche' ? renderFichesTab()
+      : S.ofSubTab==='pending' ? renderPendingOfMappingsTab()
+      : renderOfTab()
   );
 }
 function renderOfImportModal(){
@@ -13097,6 +13217,9 @@ async function nav(){
   else if(S.page==='of' && canAccessOfTab()){
     await loadOfImports();
     if(S.ofSubTab==='fiche') await loadFiches();
+    else if(S.ofSubTab==='pending') await loadPendingOfMappings();
+    // rafraîchit le badge 'Mappings à valider'
+    loadPendingOfCount();
   }
   render();
 }
