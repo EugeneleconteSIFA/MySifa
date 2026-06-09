@@ -2425,24 +2425,35 @@ function mkTL(mon,slots){
     if(isExpeVue && nbPalettes!==null){
       expeBrightnessStyle = nbPalettes>=6 ? "" : "filter:brightness(0.4);";
     }
+    // Date de livraison imposée — la date passe en rouge dans le slot et le tooltip
+    const dlImp=!!s.date_livraison_imposee;
+    const dlRed=dlImp?"color:var(--danger);font-weight:700":"";
     // Lignes en vue expé : line2 = date livraison + département, line3 = RDV si coché
-    const line2Slot = isExpeVue
-      ? [s.date_livraison||"", s.departement_livraison||""].filter(Boolean).join(" · ")
-      : line2Txt;
-    const line3Slot = isExpeVue
-      ? (s.prise_rdv ? "RDV à prendre" : (s.date_livraison?"":""))
-      : line3Txt;
+    let line2SlotHtml="", line3SlotHtml="";
+    if(isExpeVue){
+      const dlPart=s.date_livraison?`<span style="${dlRed}">${escHtml(s.date_livraison)}</span>`:"";
+      const deptPart=s.departement_livraison?escHtml(s.departement_livraison):"";
+      const parts=[dlPart,deptPart].filter(Boolean);
+      line2SlotHtml=parts.length?parts.join(" · "):"";
+      line3SlotHtml=s.prise_rdv?"RDV à prendre":"";
+    } else {
+      line2SlotHtml=line2Txt?escHtml(line2Txt):"";
+      const dateLivHtml=s.date_livraison?`<span style="${dlRed}">${escHtml("à livrer pour "+s.date_livraison)}</span>`:"";
+      const comHtml=com?escHtml(com):"";
+      const l3parts=[dateLivHtml,comHtml].filter(Boolean);
+      line3SlotHtml=l3parts.length?l3parts.join(" | "):"";
+    }
 
     h+=`<div class="slot ${matchCls} ${aplacerCls} ${reelTermineCls} ${termineSlideCls}" data-eid="${s.entry_id||idx}" data-statut="${escAttr(s.statut||"attente")}" data-statut-reel="${escAttr(sr)}" ${canDragSlot?'draggable="true"':''} style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${expeBrightnessStyle}${isActive?"border:2px solid var(--accent);animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
       onmouseenter="showTip(event,this)" onmousemove="moveTip(event)" onmouseleave="hideTip()"
       ondblclick="hideTip();openEdit(${s.entry_id||idx});event.stopPropagation()"
       data-livraison="${escAttr(fmtLivraisonLong(s.date_livraison||""))}" data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-rfp="${escAttr(s.ref_produit||"")}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(fmtDur(durAff))}" data-exigences="${escAttr(exig)}" data-qte-etiq="${escAttr(qteEtiq!=null?fmtQty(qteEtiq):"")}" data-nb-palettes="${escAttr(nbPalettes!=null?String(nbPalettes):"")}"`+
-      ` data-prise-rdv="${s.prise_rdv?'1':'0'}" data-dept="${escAttr(s.departement_livraison||"")}"`+
+      ` data-prise-rdv="${s.prise_rdv?'1':'0'}" data-dept="${escAttr(s.departement_livraison||"")}" data-dl-imp="${dlImp?'1':'0'}"`+
       ` data-planned-start="${escAttr(String(s.start||""))}" data-planned-end="${escAttr(String(s.end||""))}"
       data-deb="${escAttr(fdt(ss))}" data-fin="${escAttr(fdt(se))}" data-st="${escAttr(st)}" data-co="${escAttr(co)}"${termineTitle?` title="${escAttr(termineTitle)}"`:""}>
       ${destock?`<div style="position:absolute;top:4px;right:4px;width:10px;height:10px;border-radius:50%;background:rgba(71,85,105,.9);pointer-events:none;z-index:5;flex-shrink:0"></div>`:""}
       ${resizeHandle}
-      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}${fscBadgeHtml(s)}</span>${line2Slot?`<span class="line2">${escAttr(line2Slot)}</span>`:""}${line3Slot?`<span class="line3">${escAttr(line3Slot)}</span>`:""}${exig?`<span class="line-exig" title="${escAttr(exig)}">${escAttr(exig)}</span>`:""}</div>`:w>1.8?`<div style="overflow:hidden;height:100%;display:flex;align-items:center;justify-content:center"><div class="slot-vert-txt" style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg)">${escAttr((cli.slice(0,6)+(cli.length>6?".":"")).toUpperCase())}</div></div>`:""}</div>`;
+      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}${fscBadgeHtml(s)}</span>${line2SlotHtml?`<span class="line2">${line2SlotHtml}</span>`:""}${line3SlotHtml?`<span class="line3">${line3SlotHtml}</span>`:""}${exig?`<span class="line-exig" title="${escAttr(exig)}">${escAttr(exig)}</span>`:""}</div>`:w>1.8?`<div style="overflow:hidden;height:100%;display:flex;align-items:center;justify-content:center"><div class="slot-vert-txt" style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg)">${escAttr((cli.slice(0,6)+(cli.length>6?".":"")).toUpperCase())}</div></div>`:""}</div>`;
   });
 
   const np=gp(now);
@@ -2585,9 +2596,12 @@ function showTip(ev,el){hideTip();const d=el.dataset;_hoveredSlotEid=d.eid?+d.ei
   const nbPalTip=(d.nbPalettes||"").trim();
   const deptTip=(d.dept||"").trim();
   const rdvTip=d.priseRdv==="1";
+  const dlImpTip=d.dlImp==="1";
   const expeTipRows=isExpeVueTip?`${deptTip?`<span class="k">Département</span><span class="v">${escHtml(deptTip)}</span>`:""}${rdvTip?`<span class="k">RDV</span><span class="v" style="color:var(--warn);font-weight:600">À prendre</span>`:""}${nbPalTip?`<span class="k">Palettes prévues</span><span class="v" style="color:${+nbPalTip>=6?"var(--success)":"var(--muted)"};font-weight:700">${escHtml(nbPalTip)}</span>`:""}`:"" ;
+  const livStyle=dlImpTip?"color:var(--danger);font-weight:700":"";
+  const livSuffix=dlImpTip?' <span style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px">(imposée)</span>':"";
   tipEl.innerHTML=`<div class="tip-hdr"><div class="tip-bar" style="background:${d.co||"#888"}"></div><div><div class="tip-ref">${d.ref||"—"}</div>${sub}</div></div>
-    ${liv?`<div class="tip-livraison">Livraison : ${escHtml(liv)}</div>`:""}
+    ${liv?`<div class="tip-livraison" style="${livStyle}">Livraison : ${escHtml(liv)}${livSuffix}</div>`:""}
     ${exigTip?`<div class="tip-exig"><span class="k">Exigences de production</span>${escHtml(exigTip)}</div>`:""}
     <div class="tip-grid">${d.rfp?`<span class="k">Réf produit</span><span class="v">${d.rfp}</span>`:""}<span class="k">Format</span><span class="v">${d.fmt||"—"}</span><span class="k">Durée</span><span class="v">${d.dur||""}</span>
     <span class="k">Début</span><span class="v">${d.deb||""}</span><span class="k">Fin</span><span class="v">${d.fin||""}</span>
@@ -2927,7 +2941,7 @@ function duplicateEntry(id){
   if(!e) return;
   document.getElementById("mroot").innerHTML=modalHTML(
     "Dupliquer le dossier",
-    dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.exigences_production||"",e.format_l||"",e.format_h||"",e.duree_heures,"attente",false,1,e.fsc_requis||0,e.fsc_type_requis||"",e.departement_livraison||"",e.prise_rdv||0),
+    dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.exigences_production||"",e.format_l||"",e.format_h||"",e.duree_heures,"attente",false,1,e.fsc_requis||0,e.fsc_type_requis||"",e.departement_livraison||"",e.prise_rdv||0,e.date_livraison_imposee||0),
     "Ajouter","submitDuplicate()"
   ,"","",false,"md--dossier");
 }
@@ -3087,10 +3101,11 @@ function fscTypeRequisLabel(t){
   return typ;
 }
 
-function dossierFields(numero_of,client,ref_produit,laize,date_livraison,commentaire,exigences_production,fl,fh,dur,statut,showStatut,aPlacer=1,fscRequis=0,fscType="",deptLivraison="",priseRdv=0){
+function dossierFields(numero_of,client,ref_produit,laize,date_livraison,commentaire,exigences_production,fl,fh,dur,statut,showStatut,aPlacer=1,fscRequis=0,fscType="",deptLivraison="",priseRdv=0,dlImposee=0){
   const fscOn=fscRequis===1||fscRequis===true;
   const fscTyp=(fscType&&["fsc_100","fsc_mix","fsc_recycled"].includes(fscType))?fscType:"fsc_mix";
   const rdvOn=priseRdv===1||priseRdv===true;
+  const dlImpOn=dlImposee===1||dlImposee===true;
   const dlVal=/^\d{4}-\d{2}-\d{2}$/.test(date_livraison)?date_livraison:"";
   return`
     <div class="dossier-sections">
@@ -3144,10 +3159,16 @@ function dossierFields(numero_of,client,ref_produit,laize,date_livraison,comment
           <div class="fd"><label>Date de livraison</label><input type="date" id="f-dl" value="${escAttr(dlVal)}"></div>
           <div class="fd"><label>Département de livraison</label><input id="f-dept" value="${escAttr(deptLivraison)}" placeholder="Ex : 75, 69, Rhône…"></div>
           <div class="fd fd--full">
-            <label class="dossier-check-lbl">
-              <input type="checkbox" id="f-rdv" ${rdvOn?"checked":""} style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
-              Prendre un Rendez-Vous
-            </label>
+            <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:center">
+              <label class="dossier-check-lbl" style="margin:0">
+                <input type="checkbox" id="f-rdv" ${rdvOn?"checked":""} style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
+                Prendre un Rendez-Vous
+              </label>
+              <label class="dossier-check-lbl" style="margin:0">
+                <input type="checkbox" id="f-dl-imp" ${dlImpOn?"checked":""} style="width:16px;height:16px;accent-color:var(--danger);cursor:pointer">
+                Date de livraison imposée
+              </label>
+            </div>
           </div>
         </div>
       </div>
@@ -3174,6 +3195,7 @@ function getFormData(withStatut){
     a_placer:document.getElementById("f-aplacer")?.checked?1:0,
     departement_livraison:(document.getElementById("f-dept")?.value||"").trim(),
     prise_rdv:document.getElementById("f-rdv")?.checked?1:0,
+    date_livraison_imposee:document.getElementById("f-dl-imp")?.checked?1:0,
   };
   const fscChk=document.getElementById("fsc-requis-chk");
   const fscOn=!!(fscChk&&fscChk.checked);
@@ -3454,7 +3476,7 @@ function openEdit(id){
   const statLabel=isTermine?"Terminé":e.statut==="en_cours"?"En cours":"";
   const statColor=isTermine?"var(--danger)":"var(--accent)";
 
-  const fieldsHtml=dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.exigences_production||"",e.format_l||"",e.format_h||"",e.duree_heures,e.statut,true,e.a_placer??1,e.fsc_requis||0,e.fsc_type_requis||"",e.departement_livraison||"",e.prise_rdv||0);
+  const fieldsHtml=dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.exigences_production||"",e.format_l||"",e.format_h||"",e.duree_heures,e.statut,true,e.a_placer??1,e.fsc_requis||0,e.fsc_type_requis||"",e.departement_livraison||"",e.prise_rdv||0,e.date_livraison_imposee||0);
 
   // Bouton déstockage compact en en-tête
   const destockDone=e.destockage==="done";

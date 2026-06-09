@@ -3408,7 +3408,17 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 106, "qualite_non_conformites")
 
-    _record_schema_migration(
+        # v107 — planning_entries : date de livraison imposée (affichage rouge dans la timeline)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=107 LIMIT 1").fetchone():
+        pe_cols = {row[1] for row in conn.execute("PRAGMA table_info(planning_entries)").fetchall()}
+        if "date_livraison_imposee" not in pe_cols:
+            conn.execute(
+                "ALTER TABLE planning_entries ADD COLUMN date_livraison_imposee INTEGER DEFAULT 0"
+            )
+        conn.commit()
+        _record_schema_migration(conn, 107, "planning_entries_date_livraison_imposee")
+
+_record_schema_migration(
         conn,
         SCHEMA_MIGRATION_VERSION_BASELINE,
         "mysifa_aggregate_migrations_v1",
