@@ -3418,12 +3418,6 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 107, "planning_entries_date_livraison_imposee")
 
-_record_schema_migration(
-        conn,
-        SCHEMA_MIGRATION_VERSION_BASELINE,
-        "mysifa_aggregate_migrations_v1",
-    )
-
 
 def create_default_admin():
     import bcrypt
