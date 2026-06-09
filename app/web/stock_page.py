@@ -6049,6 +6049,7 @@ function buildNegoceTab() {
     const filtered = filterNgStockList();
     const fs = S.ngFilters || { refs: [], empls: [], q: '' };
     const hasFilter = !!((fs.refs || []).length || String(fs.q || '').trim());
+    const neverHadMvt = !S.ngTotalMouvements;
 
     if (!filtered.length) {
       if (hasFilter) {
@@ -6869,15 +6870,28 @@ function openModalMouvement(type, matiere) {
   })();
 }
 
-function renderMpMouvementModal(type, matiere) {
+function renderMpMouvementModal(type, matiere, categorieFilter) {
   const typeMvt = (type || 'entree').toLowerCase();
-  const list = (S.matieres || []).filter(m => m.actif !== 0);
+  const allList = (S.matieres || []).filter(m => m.actif !== 0);
   let mat = matiere || null;
+  // Catégorie du filtre : priorité au paramètre, sinon catégorie de la matière sélectionnée
+  let cat = (categorieFilter != null) ? String(categorieFilter || '').toLowerCase() : null;
+  if (cat == null && mat) cat = mpCategorieKey(mat.categorie);
+  if (cat == null) cat = '';
+  // Liste filtrée par catégorie (vide = toutes)
+  const list = cat
+    ? allList.filter(m => mpCategorieKey(m.categorie) === cat)
+    : allList;
+  // Si la matière courante ne matche plus le filtre, on la désélectionne
+  if (mat && cat && mpCategorieKey(mat.categorie) !== cat) mat = null;
   if (!mat && list.length === 1) mat = list[0];
   closeMroot();
   const mroot = document.getElementById('mroot');
   if (!mroot) return;
-  S.mpModal = { type: typeMvt, matiere: mat, matiereId: mat ? mat.id : null };
+  S.mpModal = {
+    type: typeMvt, matiere: mat, matiereId: mat ? mat.id : null,
+    categorie: cat || (mat ? mpCategorieKey(mat.categorie) : ''),
+  };
   const stockActuel = mat ? (parseFloat(mat.quantite) || 0) : 0;
   const mpCat = mat || list.find(x => x.id === S.mpModal.matiereId) || null;
 
@@ -6898,14 +6912,44 @@ function renderMpMouvementModal(type, matiere) {
   ));
   const body = el('div', { cls: 'mp-modal-mvt-body' });
 
+  // Sélecteur de type de MP (catégorie) — toujours présent
+  const catSel = el('select', { id: 'mp-modal-categorie-select' });
+  catSel.appendChild(el('option', { value: '' }, '— Tous les types —'));
+  const CAT_ORDER = ['frontal', 'glassine', 'mandrin', 'adhesif', 'carton', 'palette'];
+  CAT_ORDER.forEach(c => {
+    catSel.appendChild(el('option', {
+      value: c,
+      selected: S.mpModal.categorie === c ? true : null,
+    }, MP_CAT_LABELS[c] || c));
+  });
+  catSel.addEventListener('change', () => {
+    renderMpMouvementModal(typeMvt, null, catSel.value || '');
+  });
+  body.appendChild(el('div', { cls: 'mp-field' },
+    el('label', null, 'Type de matière'),
+    catSel,
+  ));
+
   if (mat) {
     body.appendChild(el('div', { cls: 'mp-field' },
       el('label', null, 'Matière'),
       el('div', { cls: 'mp-readonly' }, (mat.reference || '') + ' — ' + (mat.designation || '')),
+      el('div', { style: { marginTop: '6px' } },
+        el('button', {
+          cls: 'btn-ghost', type: 'button',
+          style: { fontSize: '11px', padding: '4px 8px', border: '1px solid var(--border)',
+                   borderRadius: '6px', background: 'transparent', color: 'var(--muted)',
+                   cursor: 'pointer', fontFamily: 'inherit' },
+          on: { click: () => renderMpMouvementModal(typeMvt, null, S.mpModal.categorie || '') },
+        }, '× Changer de matière'),
+      ),
     ));
   } else {
     const sel = el('select', { id: 'mp-modal-matiere-select' });
-    sel.appendChild(el('option', { value: '' }, '— Choisir une matière —'));
+    const placeholder = list.length
+      ? '— Choisir une matière —'
+      : (cat ? 'Aucune matière dans cette catégorie' : '— Choisir une matière —');
+    sel.appendChild(el('option', { value: '' }, placeholder));
     list.forEach(item => {
       sel.appendChild(el('option', {
         value: String(item.id),
@@ -6915,7 +6959,7 @@ function renderMpMouvementModal(type, matiere) {
     sel.addEventListener('change', () => {
       const id = parseInt(sel.value, 10);
       const found = list.find(x => x.id === id);
-      renderMpMouvementModal(typeMvt, found || null);
+      renderMpMouvementModal(typeMvt, found || null, S.mpModal.categorie || '');
     });
     body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Matière'), sel));
   }
