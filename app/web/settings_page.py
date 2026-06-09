@@ -4130,11 +4130,10 @@ async function loadPromoteStatus() {
   if (commitsEl) commitsEl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Chargement…</div>';
   let data;
   try {
-    const r = await api('/api/promote/status');
-    if (!r) return;
-    data = await r.json();
+    data = await api('/api/promote/status');
+    if (!data) return;
   } catch (e) {
-    commitsEl.innerHTML = '<div style="padding:18px;color:var(--danger);font-size:13px">Erreur de chargement</div>';
+    commitsEl.innerHTML = '<div style="padding:18px;color:var(--danger);font-size:13px">Erreur de chargement : ' + _prEsc(e && e.message ? e.message : String(e)) + '</div>';
     return;
   }
   v2v.textContent = data.v2_version ? 'v' + data.v2_version : '—';
