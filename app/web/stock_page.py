@@ -867,9 +867,18 @@ body.sb-open #mroot>*{pointer-events:none!important}
 body.light .empl-combo-wrap .empl-suggestions{box-shadow:0 8px 20px rgba(15,23,42,.12)}
 .mp-modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px}
 .mp-modal-head h3{margin:0;font-size:16px;font-weight:700;color:var(--text)}
-.mp-modal-close{background:transparent;border:none;color:var(--muted);font-size:22px;line-height:1;cursor:pointer;
-  padding:0 4px;border-radius:6px;flex-shrink:0;font-family:inherit}
-.mp-modal-close:hover{color:var(--text)}
+.mp-modal-close{background:transparent;border:none;color:var(--text2);font-size:22px;line-height:1;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;
+  border-radius:8px;flex-shrink:0;font-family:inherit;transition:background .15s,color .15s}
+.mp-modal-close:hover{color:var(--text);background:color-mix(in srgb,var(--text) 10%,transparent)}
+.mp-modal-mvt-head-pf-entree .mp-modal-close{color:color-mix(in srgb,var(--pf-entree) 75%,var(--text))}
+.mp-modal-mvt-head-pf-entree .mp-modal-close:hover{background:color-mix(in srgb,var(--pf-entree) 18%,transparent);color:var(--pf-entree)}
+.mp-modal-mvt-head-pf-sortie .mp-modal-close{color:color-mix(in srgb,var(--pf-sortie) 75%,var(--text))}
+.mp-modal-mvt-head-pf-sortie .mp-modal-close:hover{background:color-mix(in srgb,var(--pf-sortie) 18%,transparent);color:var(--pf-sortie)}
+.mp-modal-mvt-head-entree .mp-modal-close{color:color-mix(in srgb,var(--success) 70%,var(--text))}
+.mp-modal-mvt-head-entree .mp-modal-close:hover{background:color-mix(in srgb,var(--success) 18%,transparent);color:var(--success)}
+.mp-modal-mvt-head-sortie .mp-modal-close{color:color-mix(in srgb,var(--danger) 70%,var(--text))}
+.mp-modal-mvt-head-sortie .mp-modal-close:hover{background:color-mix(in srgb,var(--danger) 18%,transparent);color:var(--danger)}
 .mp-modal-sub{font-size:12px;color:var(--muted);margin:-8px 0 14px;line-height:1.5}
 .mp-field{margin-bottom:12px}
 .mp-field label{display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px}
@@ -880,7 +889,10 @@ body.light .mp-field input:focus,body.light .mp-field select:focus,body.light .m
 .mp-readonly{padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:10px;font-size:13px;color:var(--text2)}
 .mp-hint{font-size:12px;color:var(--muted);margin-top:4px}
 .mp-hint.err{color:var(--danger)}
-.mp-modal-actions{display:flex;gap:10px;margin-top:16px;align-items:center}
+.mp-modal-actions{display:flex;gap:10px;margin-top:16px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
+.mp-modal-actions .btn-ghost{min-width:96px}
+.mp-modal-actions .btn{min-width:120px}
+.mp-modal-actions .btn-ghost:hover{border-color:var(--text2);color:var(--text);background:color-mix(in srgb,var(--text) 6%,transparent)}
 .mp-modal-actions-right{display:flex;gap:10px;margin-left:auto}
 .mp-btn-icon-danger{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;padding:0;
   border:1px solid color-mix(in srgb,var(--danger) 35%,transparent);border-radius:10px;
