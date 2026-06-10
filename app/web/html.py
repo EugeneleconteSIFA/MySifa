@@ -13185,10 +13185,16 @@ function render(){
   }
   if(window.MySifaDock && typeof window.MySifaDock.layout==='function') window.MySifaDock.layout();
 
-  // Affichage vertical forcé sur toutes les pages : on retire tout résidu
-  // d'anciennes versions qui exigeaient le mode paysage.
-  document.body.classList.remove('mysifa-landscape-required');
-  document.body.classList.remove('mysifa-portrait');
+  if(S.app==='prod'||S.app==='expe'){
+    if(window.MySifaLandscape&&typeof window.MySifaLandscape.enable==='function') window.MySifaLandscape.enable();
+  }else{
+    if(window.MySifaLandscape&&typeof window.MySifaLandscape.disable==='function') window.MySifaLandscape.disable();
+    else{
+      document.body.classList.remove('mysifa-landscape-required');
+      document.body.classList.remove('mysifa-portrait');
+      document.body.classList.remove('mysifa-force-landscape');
+    }
+  }
 
   // PWA: feature temporairement retirée. (setupInstallButton supprimé)
 

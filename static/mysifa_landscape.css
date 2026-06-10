@@ -1,4 +1,46 @@
-/* MySifa — Paysage désactivé : affichage vertical forcé.
-   Ce fichier est conservé pour compatibilité ; aucun message de rotation
-   n'est affiché et aucun blocage de pointer-events n'est appliqué.
-   Tout est rendu en portrait, peu importe l'orientation du téléphone. */
+/* MySifa — paysage forcé sur mobile (façon YouTube plein écran).
+   Quand le téléphone est physiquement en portrait sur une page qui exige
+   le paysage (MyProd, MyExpé, Planning, Fabrication, DB viewer), on tourne
+   tout l'affichage de 90° en CSS pour donner une expérience paysage
+   continue, sans demander à l'utilisateur de tourner son appareil et
+   sans afficher de message bloquant. */
+
+@media (max-width: 900px) and (orientation: portrait) {
+
+  html {
+    overflow: hidden !important;
+  }
+
+  body.mysifa-force-landscape {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vh !important;
+    height: 100vw !important;
+    transform-origin: top left;
+    transform: translateX(100vw) rotate(90deg);
+    -webkit-transform-origin: top left;
+    -webkit-transform: translateX(100vw) rotate(90deg);
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Sécurité : pas de message ::before bloquant. */
+  body.mysifa-force-landscape::before,
+  body.mysifa-landscape-required::before {
+    content: none !important;
+    display: none !important;
+  }
+
+  /* Sécurité : pas de pointer-events:none résiduel sur le contenu. */
+  body.mysifa-force-landscape #root,
+  body.mysifa-force-landscape #app,
+  body.mysifa-force-landscape .app,
+  body.mysifa-force-landscape .layout,
+  body.mysifa-force-landscape .rh-main,
+  body.mysifa-force-landscape .planning-container {
+    pointer-events: auto !important;
+    user-select: auto !important;
+  }
+}
