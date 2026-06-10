@@ -2461,8 +2461,13 @@ async def mouvement_matiere_premiere(request: Request):
     if emplacement_dest is not None:
         emplacement_dest = str(emplacement_dest).strip().upper() or None
 
-    def _check_emplacement_code(code: Optional[str]) -> str:
+    is_fabrication_user = user.get("role") == "fabrication"
+
+    def _check_emplacement_code(code: Optional[str]) -> Optional[str]:
         if not code:
+            if is_fabrication_user:
+                # Service fabrication : emplacement non requis, stocké NULL.
+                return None
             raise HTTPException(400, "Emplacement obligatoire.")
         if not _is_valid_emplacement(code):
             raise HTTPException(400, f"Format emplacement invalide : {code}")

@@ -7259,10 +7259,11 @@ function renderMpMouvementModal(type, matiere, categorieFilter) {
   const errEl = el('div', { cls: 'mp-hint err', style: { display: 'none' } }, '');
 
   if (typeMvt === 'entree') {
-    const { wrap: emplWrap, emplInp } = buildMpEmplacementField();
+    const hideEmpl = !!S.fabStockMode;
+    const emplField = hideEmpl ? null : buildMpEmplacementField();
     const blInp = el('input', { attrs: { type: 'text', placeholder: 'BL-2024-001' } });
     const qInp = el('input', { attrs: mpQuantiteInputAttrs(mpCat) });
-    body.appendChild(emplWrap);
+    if (emplField) body.appendChild(emplField.wrap);
     body.appendChild(el('div', { cls: 'mp-field' },
       el('label', null, 'Référence BL / Fournisseur'),
       blInp,
@@ -7278,18 +7279,21 @@ function renderMpMouvementModal(type, matiere, categorieFilter) {
       ref_bl: (blInp.value || '').trim() || null,
       note: null,
       emplacement_source: null,
-      emplacement_dest: mpEmplacementValue(emplInp) || null,
+      emplacement_dest: emplField ? (mpEmplacementValue(emplField.emplInp) || null) : null,
     });
     S.mpModal.validate = () => {
       const q = parseFloat(qInp.value);
       if (!S.mpModal.matiereId) return 'Matière obligatoire.';
-      const emplErr = validateMpEmplacement(mpEmplacementValue(emplInp));
-      if (emplErr) return emplErr;
+      if (emplField) {
+        const emplErr = validateMpEmplacement(mpEmplacementValue(emplField.emplInp));
+        if (emplErr) return emplErr;
+      }
       if (!q || q <= 0) return 'Quantité invalide.';
       return null;
     };
   } else if (typeMvt === 'sortie') {
-    const { wrap: emplWrap, emplInp } = buildMpEmplacementField();
+    const hideEmpl = !!S.fabStockMode;
+    const emplField = hideEmpl ? null : buildMpEmplacementField();
     hintEl.textContent = 'Stock actuel : ' + mpStockLine(stockActuel, mpCat);
     const qInp = el('input', { attrs: mpQuantiteInputAttrs(mpCat) });
     const checkQ = () => {
@@ -7302,7 +7306,7 @@ function renderMpMouvementModal(type, matiere, categorieFilter) {
       }
     };
     qInp.addEventListener('input', checkQ);
-    body.appendChild(emplWrap);
+    if (emplField) body.appendChild(emplField.wrap);
     body.appendChild(el('div', { cls: 'mp-field' },
       el('label', null, mpQuantiteFieldLabel(mpCat)),
       qInp,
@@ -7315,14 +7319,16 @@ function renderMpMouvementModal(type, matiere, categorieFilter) {
       quantite: parseFloat(qInp.value),
       ref_bl: null,
       note: null,
-      emplacement_source: mpEmplacementValue(emplInp) || null,
+      emplacement_source: emplField ? (mpEmplacementValue(emplField.emplInp) || null) : null,
       emplacement_dest: null,
     });
     S.mpModal.validate = () => {
       const q = parseFloat(qInp.value);
       if (!S.mpModal.matiereId) return 'Matière obligatoire.';
-      const emplErr = validateMpEmplacement(mpEmplacementValue(emplInp));
-      if (emplErr) return emplErr;
+      if (emplField) {
+        const emplErr = validateMpEmplacement(mpEmplacementValue(emplField.emplInp));
+        if (emplErr) return emplErr;
+      }
       if (!q || q <= 0) return 'Quantité invalide.';
       if (q > stockActuel) return 'Stock insuffisant.';
       return null;
@@ -7627,24 +7633,70 @@ function renderPfMouvementModal(type, produit, defaultEmpl) {
 
 async function submitPfMouvement() {
   if (!S.pfModal) return;
+  const typeMvt = (S.pfModal.type || 'entree').toLowerCase();
+  // Si pas de produit_id mais on a une référence saisie, on tente la résolution.
+  // En entrée Z1, on autorise l'auto-création de la référence (unité = étiquette).
   if (!S.pfModal.produitId) {
-    const refVal = S.pfModal.refInp ? S.pfModal.refInp.value : '';
+    const refVal = (S.pfModal.refInp ? S.pfModal.refInp.value : '') || '';
+    const refClean = String(refVal).trim().toUpperCase();
+    if (!refClean) {
+      showToast('Référence obligatoire.', 'error');
+      return;
+    }
     const p = await resolvePfProduitByRef(refVal);
-    if (!p) {
+    if (p) {
+      S.pfModal.produitId = p.id;
+      S.pfModal.produit = p;
+    } else if (typeMvt === 'sortie') {
       showToast('Référence introuvable — sélectionnez un produit dans la liste ou vérifiez la saisie.', 'error');
       return;
     }
-    S.pfModal.produitId = p.id;
-    S.pfModal.produit = p;
+    // En entrée : on continuera avec la référence brute → l'endpoint auto-crée le produit.
   }
-  let err = S.pfModal.validate ? S.pfModal.validate() : null;
-  if (!err && S.pfModal.type === 'sortie' && S.pfModal.getBody) {
+  // Validation (sauf produitId obligatoire si entrée + auto-create)
+  let err = null;
+  if (S.pfModal.validate) {
+    const origErr = S.pfModal.validate();
+    // En entrée auto-create, ignorer l'erreur "Produit obligatoire."
+    if (origErr && !(typeMvt === 'entree' && !S.pfModal.produitId && /[Pp]roduit/.test(origErr))) {
+      err = origErr;
+    }
+  }
+  if (!err && typeMvt === 'sortie' && S.pfModal.getBody) {
     const b = S.pfModal.getBody();
     const stock = await fetchPfStockAtEmpl(b.produit_id, b.emplacement);
     if (b.quantite > stock) err = 'Stock insuffisant.';
   }
   if (err) { showToast(err, 'error'); return; }
   const body = S.pfModal.getBody();
+  // Si entrée sans produit_id : passer par l'endpoint produits-finis/entree qui auto-crée.
+  if (typeMvt === 'entree' && !S.pfModal.produitId) {
+    const refVal = (S.pfModal.refInp ? S.pfModal.refInp.value : '') || '';
+    const payload = {
+      reference: String(refVal).trim().toUpperCase(),
+      designation: String(refVal).trim().toUpperCase(),
+      unite: 'étiquette',
+      emplacement: body.emplacement,
+      quantite: body.quantite,
+      note: body.note,
+    };
+    try {
+      await api('/api/stock/produits-finis/entree', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      showToast('Entrée enregistrée — référence créée.', 'success');
+      S.pfModal = null;
+      closeMroot();
+      if (S.tab === 'production') await loadProduction();
+      else if (S.tab === 'produits-finis') await loadProduitsFinis();
+      else if (S.tab === 'dashboard') await loadDashboard();
+    } catch (e) {
+      showToast(e.message || 'Erreur lors de l\'enregistrement.', 'error');
+    }
+    return;
+  }
   await submitMouvement(body);
 }
 
