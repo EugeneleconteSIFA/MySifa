@@ -3418,6 +3418,20 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 107, "planning_entries_date_livraison_imposee")
 
+    # v109 — flag of_link_user_managed sur planning_entries
+    # Évite que get_of_for_planning_entry re-crée automatiquement un lien
+    # OF que l'utilisateur vient de retirer manuellement. Le flag est mis
+    # à 1 par les endpoints POST/DELETE sur planning_of_links et
+    # link-planning-of.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=109 LIMIT 1").fetchone():
+        pe_cols = {row[1] for row in conn.execute("PRAGMA table_info(planning_entries)").fetchall()}
+        if "of_link_user_managed" not in pe_cols:
+            conn.execute(
+                "ALTER TABLE planning_entries ADD COLUMN of_link_user_managed INTEGER DEFAULT 0"
+            )
+        conn.commit()
+        _record_schema_migration(conn, 109, "planning_entries_of_link_user_managed")
+
     # v108 — multi-OF par planning_entry : table de jonction planning_of_links
     # Un dossier de production peut être lié à plusieurs OF (lots, plages,
     # reliquats). La colonne planning_entries.of_import_id reste maintenue

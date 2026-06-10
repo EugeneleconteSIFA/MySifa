@@ -360,21 +360,36 @@ def get_of_for_planning_entry(entry_id: int, request: Request):
             ).fetchone()
 
     # 2. Fallback : of_import_id absent ou lien mort → chercher par numero_of
+    # Skippe si l'utilisateur a déjà géré manuellement (flag of_link_user_managed=1)
     if not row and numero_of:
-        row = _lookup_of_by_numero(numero_of, _ref_produit_norm_for_of_lookup)
-        if row:
-            # Persister le lien via planning_of_links (trigger sync of_import_id)
-            try:
-                with get_db() as c2:
-                    c2.execute(
-                        "INSERT OR IGNORE INTO planning_of_links "
-                        "(planning_entry_id, of_import_id, position, created_by, created_at) "
-                        "VALUES (?, ?, 0, 'auto_lookup', ?)",
-                        (entry_id, row["id"], _now_paris_iso()),
-                    )
-                    c2.commit()
-            except Exception:
-                pass
+        _skip_auto = False
+        try:
+            with get_db() as _c_check:
+                _pe_cols = {r["name"] for r in _c_check.execute("PRAGMA table_info(planning_entries)").fetchall()}
+                if "of_link_user_managed" in _pe_cols:
+                    _flag = _c_check.execute(
+                        "SELECT COALESCE(of_link_user_managed,0) FROM planning_entries WHERE id=?",
+                        (entry_id,),
+                    ).fetchone()
+                    _skip_auto = bool(_flag and int(_flag[0] or 0) == 1)
+        except Exception:
+            _skip_auto = False
+
+        if not _skip_auto:
+            row = _lookup_of_by_numero(numero_of, _ref_produit_norm_for_of_lookup)
+            if row:
+                # Persister le lien via planning_of_links (trigger sync of_import_id)
+                try:
+                    with get_db() as c2:
+                        c2.execute(
+                            "INSERT OR IGNORE INTO planning_of_links "
+                            "(planning_entry_id, of_import_id, position, created_by, created_at) "
+                            "VALUES (?, ?, 0, 'auto_lookup', ?)",
+                            (entry_id, row["id"], _now_paris_iso()),
+                        )
+                        c2.commit()
+                except Exception:
+                    pass
 
     # Chercher la fiche technique par ref_produit.
     # On matche en priorité sur la clé produit normalisée (ref_produit_norm,
@@ -1182,6 +1197,11 @@ async def admin_link_planning_of(request: Request):
                 "VALUES (?, ?, 0, ?, ?)",
                 (planning_id, of_id, who, _now_paris_iso()),
             )
+        # Action manuelle : désactive l'auto-link futur pour ce planning
+        try:
+            conn.execute("UPDATE planning_entries SET of_link_user_managed=1 WHERE id=?", (planning_id,))
+        except Exception:
+            pass
         conn.commit()
 
     return {"linked": True, "planning_id": planning_id, "of_id": of_id}
@@ -1298,6 +1318,11 @@ async def admin_add_planning_of_links(request: Request):
             )
             next_pos += 1
             added += 1
+        # Action manuelle : désactive l'auto-link futur pour ce planning
+        try:
+            conn.execute("UPDATE planning_entries SET of_link_user_managed=1 WHERE id=?", (planning_id,))
+        except Exception:
+            pass
         conn.commit()
     return {
         "planning_id": planning_id,
@@ -1323,6 +1348,11 @@ async def admin_remove_planning_of_link(request: Request):
             "DELETE FROM planning_of_links WHERE planning_entry_id=? AND of_import_id=?",
             (planning_id, of_id),
         )
+        # Action manuelle : désactive l'auto-link futur pour ce planning
+        try:
+            conn.execute("UPDATE planning_entries SET of_link_user_managed=1 WHERE id=?", (planning_id,))
+        except Exception:
+            pass
         conn.commit()
         deleted = cur.rowcount or 0
     return {"deleted": int(deleted), "planning_id": planning_id, "of_id": of_id}

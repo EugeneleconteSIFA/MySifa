@@ -845,9 +845,19 @@ body.light .mp-search-wrap:focus-within{
 .ng-chip{font-size:12px;font-weight:600;padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;transition:border-color .15s,background .15s,color .15s}
 .ng-chip:hover{border-color:var(--accent);color:var(--text)}
 .ng-chip.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
-.ng-toggle{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer;user-select:none}
-.ng-toggle input{accent-color:var(--accent);cursor:pointer}
-.ng-toggle:hover{color:var(--text)}
+.ng-toggle{display:inline-flex;align-items:center;gap:10px;font-size:12px;font-weight:600;
+  color:var(--text2);cursor:pointer;user-select:none;padding:6px 12px 6px 6px;border-radius:999px;
+  border:1px solid var(--border);background:var(--bg);transition:border-color .15s,background .15s,color .15s}
+.ng-toggle:hover{border-color:var(--accent);color:var(--text)}
+.ng-toggle.is-on{border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
+.ng-toggle .ng-toggle-input{position:absolute;opacity:0;width:0;height:0;pointer-events:none}
+.ng-toggle .ng-toggle-switch{position:relative;display:inline-block;width:34px;height:18px;
+  border-radius:999px;background:var(--border);transition:background .18s ease}
+.ng-toggle .ng-toggle-thumb{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;
+  background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .18s ease}
+.ng-toggle.is-on .ng-toggle-switch{background:var(--accent)}
+.ng-toggle.is-on .ng-toggle-thumb{transform:translateX(16px)}
+.ng-toggle .ng-toggle-label{line-height:1}
 .pf-stock-item.ng-rupture{opacity:0.78}
 .pf-stock-item.ng-rupture:hover{opacity:1}
 .ng-rupture-badge{font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:color-mix(in srgb,var(--danger) 14%,transparent);color:var(--danger);border:1px solid color-mix(in srgb,var(--danger) 35%,transparent);text-transform:uppercase;letter-spacing:.4px}
@@ -6468,14 +6478,21 @@ function buildNegoceTab() {
       sortChip('qte', 'Qté ↓'),
       sortChip('recent', 'Dernière entrée ↓'),
     ),
-    el('label', { cls: 'ng-toggle' },
-      el('input', {
-        attrs: { type: 'checkbox' },
-        on: { change: (e) => { if (!S.ngFilters) S.ngFilters = { refs: [], empls: [], q: '', sort: 'ref', hideRupture: false }; S.ngFilters.hideRupture = !!e.target.checked; renderNegoceView(); } },
-        ...(fsHideRupture ? { checked: true } : {}),
-      }),
-      el('span', null, 'Masquer ruptures'),
-    ),
+    (() => {
+      const cbAttrs = { type: 'checkbox', cls: 'ng-toggle-input' };
+      if (fsHideRupture) cbAttrs.checked = 'checked';
+      const cb = el('input', cbAttrs);
+      cb.addEventListener('change', (e) => {
+        if (!S.ngFilters) S.ngFilters = { refs: [], empls: [], q: '', sort: 'ref', hideRupture: false };
+        S.ngFilters.hideRupture = !!e.target.checked;
+        renderNegoceView();
+      });
+      return el('label', { cls: 'ng-toggle' + (fsHideRupture ? ' is-on' : '') },
+        cb,
+        el('span', { cls: 'ng-toggle-switch' }, el('span', { cls: 'ng-toggle-thumb' })),
+        el('span', { cls: 'ng-toggle-label' }, 'Masquer ruptures'),
+      );
+    })(),
   ));
 
   const stockList = el('div', { cls: 'pf-stock-list', id: 'ng-stock-list' });
