@@ -489,6 +489,802 @@
 
 
 
+
+  // ────────────────────────────────────────────────────────────────────
+  // ÉTAPE 2j — Onglets Dossiers + Suivi + Rentabilité
+  //
+  // Code extrait littéralement de app/web/html.py :
+  //   - createDos / updStatut : l. 7154-7155
+  //   - renderDos : l. 10403-10419
+  //   - loadComparaison / uploadDevis / saveDevis / linkDossiers / deleteDevis : l. 11792-11838
+  //   - renderDevisForm / renderComparaison / renderLiaisonDossiers : l. 11840-11982
+  //   - renderRentabilite : l. 11986-12404
+  //   - renderSuivi : l. 12407-12555
+  // ────────────────────────────────────────────────────────────────────
+
+async function createDos(d){try{await api('/api/dossiers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});toast('Dossier créé');loadDos();}catch(e){toast(e.message,'error');}}
+async function updStatut(id,s){try{await api('/api/dossiers/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({statut:s})});loadDos();}catch{}}
+
+function renderDos(){
+  const inputs={};
+  const form=h('div',{className:'card',style:{padding:'20px'}},h('h3',{style:{fontSize:'14px',fontWeight:'600',marginBottom:'16px'}},'Nouveau dossier'),
+    h('div',{className:'form-grid'},...Object.entries({reference:'Référence *',client:'Client',description:'Description',devis_montant:'Montant devis (€)'}).map(([k,l])=>{const i=h('input',{placeholder:l,type:k==='devis_montant'?'number':'text'});inputs[k]=i;return i;})),
+    h('button',{className:'btn',onClick:()=>{if(!inputs.reference.value)return;createDos({reference:inputs.reference.value,client:inputs.client.value,description:inputs.description.value,devis_montant:parseFloat(inputs.devis_montant.value)||0});Object.values(inputs).forEach(i=>i.value='');}},'Créer')
+  );
+  const sC={devis:'var(--c4)',en_cours:'var(--c1)',termine:'var(--c3)',annule:'var(--c5)'};const sL={devis:'Devis',en_cours:'En cours',termine:'Terminé',annule:'Annulé'};
+  const list=h('div',{className:'card'},h('div',{className:'card-header'},h('h3',null,'Dossiers ('+S.dossiers.length+')')),
+    S.dossiers.length===0?h('div',{className:'card-empty'},'Aucun dossier'):
+    h('div',null,...S.dossiers.map(d=>{
+      const sel=h('select',null,...Object.entries(sL).map(([k,v])=>{const o=h('option',{value:k},v);if(k===d.statut)o.selected=true;return o;}));
+      sel.addEventListener('change',e=>updStatut(d.id,e.target.value));
+      return h('div',{className:'dossier-row'},h('div',null,h('div',{style:{display:'flex',gap:'8px',alignItems:'center',marginBottom:'4px'}},h('span',{style:{fontFamily:'monospace',fontWeight:'600',fontSize:'14px'}},d.reference),h('span',{style:{fontSize:'11px',padding:'2px 10px',borderRadius:'20px',fontWeight:'600',background:(sC[d.statut]||'var(--muted)')+'22',color:sC[d.statut]||'var(--muted)'}},sL[d.statut]||d.statut)),h('div',{style:{fontSize:'13px',color:'var(--text2)'}},[d.client,d.description].filter(Boolean).join(' — '))),h('div',{style:{display:'flex',gap:'12px',alignItems:'center'}},d.devis_montant>0?h('span',{style:{fontFamily:'monospace',fontSize:'14px',color:'var(--success)',fontWeight:'600'}},d.devis_montant.toLocaleString()+' €'):null,sel));
+    }))
+  );
+  return h('div',null,form,list);
+}
+
+async function loadComparaison(devisId){
+  const d=await api('/api/rentabilite/devis/'+devisId+'/comparaison');
+  if(d)set({comparaison:d});
+}
+
+async function uploadDevis(file){
+  try{
+    const fd=new FormData();fd.append('file',file);
+    const r=await api('/api/rentabilite/devis/import',{method:'POST',body:fd});
+    if(!r)return;
+    if(r.parse_errors&&r.parse_errors.length){
+      toast('Parsed avec avertissements : '+r.parse_errors[0],'warn');
+    }
+    set({devisPreview:r.preview,selDevis:null,comparaison:null});
+  }catch(e){toast(e.message,'error');}
+}
+
+async function saveDevis(body){
+  try{
+    const r=await api('/api/rentabilite/devis',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!r)return;
+    toast('Devis enregistré');
+    set({devisPreview:null});
+    await loadDevis();
+  }catch(e){toast(e.message,'error');}
+}
+
+async function linkDossiers(devisId, dossiers){
+  try{
+    await api('/api/rentabilite/devis/'+devisId+'/dossiers',{method:'PUT',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({dossiers})});
+    toast('Dossiers liés');
+    await loadDevis();
+    await loadComparaison(devisId);
+  }catch(e){toast(e.message,'error');}
+}
+
+async function deleteDevis(id){
+  if(!confirm('Supprimer ce devis ?'))return;
+  try{
+    await api('/api/rentabilite/devis/'+id,{method:'DELETE'});
+    toast('Devis supprimé');
+    set({selDevis:null,comparaison:null});
+    await loadDevis();
+  }catch(e){toast(e.message,'error');}
+}
+
+function renderDevisForm(preview){
+  const inputs={};
+  const mkField=(label,key,type='text',val)=>{
+    const i=h('input',{type,value:val!=null?String(val):''});
+    inputs[key]=i;
+    return h('div',{className:'field-item'},h('label',null,label),i);
+  };
+
+  return h('div',{className:'card',style:{padding:'24px'}},
+    h('h3',{style:{fontSize:'16px',fontWeight:'700',marginBottom:'4px'}},'📋 Valider le devis importé'),
+    h('p',{style:{fontSize:'12px',color:'var(--muted)',marginBottom:'20px'}},
+      preview.filename+(((preview && preview.parse_errors && preview.parse_errors.length)?preview.parse_errors.length:0)?' — ⚠ '+preview.parse_errors.length+' avertissement(s)':' — Données extraites automatiquement')),
+
+    h('div',{className:'form-section'},
+      h('div',{className:'form-section-title'},'Informations générales'),
+      h('div',{className:'field-row'},mkField('Client','client','text',preview.client),mkField('Date devis','date_devis','text',preview.date_devis)),
+      h('div',{className:'field-row three'},
+        mkField('Format H (mm)','format_h','number',preview.format_h),
+        mkField('Format V (mm)','format_v','number',preview.format_v),
+        mkField('Laize (mm)','laize','number',preview.laize)
+      ),
+    ),
+
+    h('div',{className:'form-section'},
+      h('div',{className:'form-section-title'},'Données théoriques de production'),
+      h('div',{className:'field-row'},
+        mkField('Temps calage (mn)','temps_calage_mn','number',preview.temps_calage_mn),
+        mkField('Métrage calage (ml)','metrage_calage_ml','number',preview.metrage_calage_ml)
+      ),
+      h('div',{className:'field-row'},
+        mkField('Temps production (mn)','temps_production_mn','number',preview.temps_production_mn),
+        mkField('Métrage production (ml)','metrage_production_ml','number',preview.metrage_production_ml)
+      ),
+      h('div',{className:'field-row three'},
+        mkField('Vitesse (m/mn)','vitesse_theorique','number',preview.vitesse_theorique),
+        mkField('Qté étiquettes','qte_etiquettes','number',preview.qte_etiquettes),
+        mkField('Gâche (%)','gache','number',preview.gache)
+      ),
+    ),
+
+    h('div',{style:{display:'flex',gap:'10px',justifyContent:'flex-end',marginTop:'8px'}},
+      h('button',{className:'btn-ghost',onClick:()=>set({devisPreview:null})},'Annuler'),
+      h('button',{className:'btn-sm',onClick:()=>{
+        const body={};
+        Object.entries(inputs).forEach(([k,el])=>{
+          body[k]=el.type==='number'?parseFloat(el.value)||0:el.value;
+        });
+        body.filename=preview.filename;
+        saveDevis(body);
+      }},'✓ Enregistrer le devis')
+    )
+  );
+}
+
+function renderComparaison(comp){
+  if(!comp) return null;
+  if(comp.message) return h('div',{className:'card-empty'},comp.message);
+
+  const {theorique:th,reel:re,ecarts:ec,conclusion:co,devis:dv,dossiers}=comp;
+
+  const ROWS=[
+    {label:'⏱ Temps calage',     unit:'mn',  key:'temps_calage_mn', invert:true},
+    {label:'▶ Temps production', unit:'mn',  key:'temps_production_mn', invert:true},
+    {label:'📏 Métrage',         unit:'ml',  key:'metrage_ml'},
+    {label:'🏷 Qté étiquettes',  unit:'ex',  key:'qte_etiquettes'},
+    {label:'⚡ Vitesse',         unit:'m/mn',key:'vitesse'},
+    {label:'⚡ Vitesse + calage',unit:'m/mn',key:'vitesse_avec_calage'},
+  ];
+
+  const fN2=v=>v!=null?Number(v).toLocaleString('fr-FR',{maximumFractionDigits:1}):'-';
+  const ecartEl=(key,invert)=>{
+    const v=ec[key];
+    if(!v)return h('span',{className:'ecart-neu'},'—');
+    const num=parseFloat(v);
+    const good = invert ? num<0 : num>0;
+    return h('span',{className:good?'ecart-pos':'ecart-neg'},v);
+  };
+
+  const colMap={success:'var(--success)',warn:'var(--warn)',danger:'var(--danger)'};
+  const concl=h('div',{className:'conclusion-card',
+    style:{borderColor:colMap[co.color]+'66',background:colMap[co.color]+'0D'}},
+    h('div',null,
+      h('div',{className:'conclusion-label',style:{color:colMap[co.color]}},co.label),
+      h('div',{className:'conclusion-sub'},'Dossier'+(dossiers.length>1?'s':'')+' : '+dossiers.join(', '))
+    )
+  );
+
+  const table=h('div',{style:{overflowX:'auto'}},
+    h('table',{className:'compa-table'},
+      h('thead',null,h('tr',null,
+        h('th',null,'Indicateur'),
+        h('th',null,'Unité'),
+        h('th',null,'📋 Devis (théorique)'),
+        h('th',null,'🏭 Réel'),
+        h('th',null,'Écart'),
+      )),
+      h('tbody',null,...ROWS.map(row=>h('tr',null,
+        h('td',{className:'compa-row-label'},row.label),
+        h('td',{style:{color:'var(--muted)',fontSize:'11px'}},row.unit),
+        h('td',{className:'compa-val-theo'},fN2(th[row.key])),
+        h('td',{className:'compa-val-reel'},fN2(re[row.key])),
+        h('td',null,ecartEl(row.key,row.invert||false)),
+      )))
+    )
+  );
+
+  return h('div',null,concl,
+    h('div',{className:'card'},
+      h('div',{className:'card-header'},
+        h('h3',null,'Comparaison Devis / Réel'),
+        h('span',{style:{fontSize:'11px',color:'var(--muted)'}},(dv.client||'')+' — '+(dv.filename||''))
+      ),
+      table
+    )
+  );
+}
+
+function renderLiaisonDossiers(devisId, dossiersLies, allDossiers){
+  let current=[...dossiersLies];
+  const wrap=h('div',null);
+  const refresh=()=>{
+    wrap.innerHTML='';
+    const chips=h('div',{style:{marginBottom:'8px'}},
+      ...current.map(d=>h('span',{className:'dos-chip'},
+        'Dos. '+d,
+        h('button',{onClick:()=>{current=current.filter(x=>x!==d);refresh();}},'×')
+      ))
+    );
+    const sel=h('select',null,
+      h('option',{value:''},'+ Ajouter un dossier'),
+      ...allDossiers.filter(d=>!current.includes(d)).map(d=>h('option',{value:d},'Dos. '+d))
+    );
+    sel.addEventListener('change',()=>{
+      if(sel.value&&!current.includes(sel.value)){
+        current.push(sel.value);sel.value='';refresh();
+      }
+    });
+    const saveBtn=h('button',{className:'btn-sm',onClick:()=>linkDossiers(devisId,current)},'💾 Enregistrer les liaisons');
+    wrap.appendChild(h('div',null,chips,h('div',{className:'dos-add-row'},sel,saveBtn)));
+  };
+  refresh();
+  return wrap;
+}
+
+function renderRentabilite(){
+  const list = S.rentList || [];
+  const devisList = S.devisList || [];
+
+  const tags = Array.isArray(S.rentTags) ? S.rentTags : [];
+  const q = String(S.rentQuery||'').trim().toLowerCase();
+
+  function norm(x){return String(x||'').toLowerCase().trim();}
+  function fmtFormat(e){
+    const l=e.format_l!=null?String(e.format_l):'';
+    const h=e.format_h!=null?String(e.format_h):'';
+    if(!l&&!h) return '';
+    return l+'×'+h;
+  }
+
+  // Suggestions (machines, clients, refs, format, laize, date)
+  const pool=[];
+  const pushSug=(kind,value,label)=>{
+    if(!value) return;
+    const k=kind+'|'+String(value);
+    if(pool.some(x=>x._k===k)) return;
+    pool.push({_k:k,kind,value,label});
+  };
+  list.forEach(e=>{
+    pushSug('machine', e.machine_nom||e.machine_code, e.machine_nom||e.machine_code);
+    if(e.reference) pushSug('ref', e.reference, e.reference);
+    if(e.client) pushSug('client', e.client, e.client);
+    const ff=fmtFormat(e); if(ff) pushSug('format', ff, 'Format '+ff);
+    if(e.laize!=null && String(e.laize)!=='') pushSug('laize', String(e.laize), 'Laize '+String(e.laize));
+    if(e.date_livraison) pushSug('date', e.date_livraison, 'Livraison '+e.date_livraison);
+  });
+
+  const kindLabel = {machine:'Machine',client:'Client',ref:'Dossier',format:'Format',laize:'Laize',date:'Date'};
+  const kindOrder = {machine:0,client:1,ref:2,format:3,laize:4,date:5};
+  const filteredSuggestions = q
+    ? pool
+        .filter(s=>norm(s.label).includes(q) || norm(s.value).includes(q))
+        .sort((a,b)=>{
+          const ka = (kindOrder[a.kind]!=null)?kindOrder[a.kind]:99;
+          const kb = (kindOrder[b.kind]!=null)?kindOrder[b.kind]:99;
+          if(ka!==kb) return ka-kb;
+          return String(a.label||'').localeCompare(String(b.label||''), 'fr', {sensitivity:'base'});
+        })
+        .slice(0,12)
+    : [];
+
+  function addTag(sug){
+    const exists = tags.some(t=>t.kind===sug.kind && String(t.value)===String(sug.value));
+    if(exists) return;
+    set({rentTags:[...tags,{kind:sug.kind,value:sug.value,label:sug.label}],rentQuery:'',rentOffset:0});
+  }
+  function removeTag(i){
+    const nt=tags.slice(); nt.splice(i,1);
+    set({rentTags:nt,rentOffset:0});
+  }
+
+  // Group split entries by group_id (same dossier). Display group row.
+  const groups = {};
+  list.forEach(e=>{
+    const gid = String(e.group_id||e.id);
+    if(!groups[gid]) groups[gid]=[];
+    groups[gid].push(e);
+  });
+  const groupList = Object.entries(groups).map(([group_id, entries])=>{
+    entries.sort((a,b)=>Number(a.position||0)-Number(b.position||0));
+    const head=entries[0];
+    return {group_id, entries, head};
+  });
+
+  function matchesTags(g){
+    for(const t of tags){
+      const head=g.head;
+      if(t.kind==='machine'){
+        const v = norm(head.machine_nom||head.machine_code);
+        if(!v.includes(norm(t.value))) return false;
+      }else if(t.kind==='ref'){
+        if(!norm(head.reference).includes(norm(t.value))) return false;
+      }else if(t.kind==='client'){
+        const v = norm(head.client);
+        if(!v.includes(norm(t.value))) return false;
+      }else if(t.kind==='format'){
+        if(norm(fmtFormat(head))!==norm(t.value)) return false;
+      }else if(t.kind==='laize'){
+        if(norm(String(head.laize||''))!==norm(String(t.value))) return false;
+      }else if(t.kind==='date'){
+        if(norm(head.date_livraison)!==norm(t.value)) return false;
+      }
+    }
+    return true;
+  }
+
+  const shown = groupList.filter(matchesTags);
+  const totalShown = shown.length;
+  const lim = Number(S.rentLimit||12) || 12;
+  const off = Math.max(0, Number(S.rentOffset||0) || 0);
+  const pageStart = Math.min(totalShown, off);
+  const pageEnd = Math.min(totalShown, off + lim);
+  const shownPage = shown.slice(pageStart, pageEnd);
+
+  const searchBox = (()=>{
+    const wrap=h('div',{className:'card',style:{padding:'12px 14px',marginBottom:'14px'}});
+    const row=h('div',{style:{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}});
+    const inp=h('input',{type:'text',placeholder:'Rechercher (machine, dossier, format, client, date, laize)…',value:S.rentQuery||'',style:{flex:'1',minWidth:'260px'}});
+    inp.addEventListener('input',()=>set({rentQuery:inp.value}));
+    const chips=h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap'}},
+      ...tags.map((t,i)=>h('span',{className:'dos-chip',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},
+        t.label,
+        h('button',{onClick:()=>removeTag(i)},'×')
+      ))
+    );
+    row.appendChild(inp);
+    wrap.appendChild(row);
+    if(tags.length) wrap.appendChild(h('div',{style:{marginTop:'10px'}},chips));
+    if(filteredSuggestions.length){
+      const dd=h('div',{style:{marginTop:'10px',display:'flex',gap:'8px',flexWrap:'wrap'}},
+        ...filteredSuggestions.map(s=>h('button',{type:'button',className:'btn-sec',onClick:()=>addTag(s)},
+          (kindLabel[s.kind]? (kindLabel[s.kind]+' · ') : ''),
+          s.label
+        ))
+      );
+      wrap.appendChild(dd);
+    }
+    return wrap;
+  })();
+
+  function getLink(entryId){
+    const m = (S.rentLinksById||{})[entryId];
+    return m || {devis_id:null,no_dossiers:[]};
+  }
+
+  // In-flight de-duplication: évite de lancer 2x la même requête si ensureLinks est appelé
+  // depuis le clic + le prefetch simultanément.
+  if(!window._rentLinksPending) window._rentLinksPending = {};
+  async function ensureLinks(entryId){
+    const mp = S.rentLinksById || {};
+    if(mp[entryId]) return mp[entryId];
+    const key = String(entryId);
+    if(window._rentLinksPending[key]) return window._rentLinksPending[key];
+    const p = api('/api/rentabilite/links/'+entryId).then(d=>{
+      delete window._rentLinksPending[key];
+      const entry = {devis_id:d.devis_id||null,no_dossiers:d.no_dossiers||[]};
+      S.rentLinksById = {...(S.rentLinksById||{}), [entryId]:entry};
+      render();
+      return entry;
+    }).catch(e=>{
+      delete window._rentLinksPending[key];
+      throw e;
+    });
+    window._rentLinksPending[key] = p;
+    return p;
+  }
+
+  async function saveLinks(entryId, devis_id, no_dossiers){
+    await api('/api/rentabilite/links/'+entryId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({devis_id,no_dossiers})});
+    const mp = S.rentLinksById || {};
+    set({rentLinksById:{...mp,[entryId]:{devis_id:devis_id||null,no_dossiers:no_dossiers||[]}}});
+    toast('Liaisons enregistrées');
+  }
+
+  async function loadRentComparaison(entryId){
+    const d = await api('/api/rentabilite/planning/'+entryId+'/comparaison');
+    const mp = S.rentCompById || {};
+    set({rentCompById:{...mp,[entryId]:d}});
+  }
+
+  async function rentSuggestNoDossiers(q){
+    try{
+      const qq=String(q||'').trim();
+      if(!qq) return [];
+      const d = await api('/api/rentabilite/no-dossiers?q='+encodeURIComponent(qq)+'&limit=12');
+      return Array.isArray(d)?d:[];
+    }catch(e){return [];}
+  }
+
+  function renderPanel(g){
+    const head=g.head;
+    const entryId = Number(head.id);
+    const panel=h('div',{style:{borderLeft:'3px solid var(--accent)',background:'rgba(34,211,238,.04)',padding:'16px 20px',marginBottom:'2px'}});
+
+    // Links editor
+    const linkState = getLink(entryId);
+    const curDevis = linkState.devis_id;
+    let curDossiers = (linkState.no_dossiers||[]).slice();
+
+    const devisSel=h('select',{className:'form-sel',style:{minWidth:'280px'}},
+      h('option',{value:''},'Relier à un devis existant…'),
+      ...devisList.map(dv=>{
+        const opt=h('option',{value:String(dv.id)},(dv.client||dv.filename||('Devis #'+dv.id))+' (#'+dv.id+')');
+        if(curDevis && Number(curDevis)===Number(dv.id)) opt.selected=true;
+        return opt;
+      })
+    );
+    devisSel.addEventListener('change',()=>{ /* local */ });
+
+    const dosInput=h('input',{type:'text',placeholder:'Ajouter un n° dossier production (ex: 1003/0002)…',style:{minWidth:'260px'}});
+    const dosSugWrap=h('div',{style:{display:'none',gap:'8px',flexWrap:'wrap'}});
+    let dosSugToken=0;
+    const refreshDosSug=async()=>{
+      const v=String(dosInput.value||'').trim();
+      const tok=++dosSugToken;
+      if(v.length<2){ dosSugWrap.style.display='none'; dosSugWrap.innerHTML=''; return; }
+      const sugs=await rentSuggestNoDossiers(v);
+      if(tok!==dosSugToken) return;
+      dosSugWrap.innerHTML='';
+      if(!sugs.length){ dosSugWrap.style.display='none'; return; }
+      dosSugWrap.style.display='flex';
+      sugs.slice(0,8).forEach(s=>{
+        dosSugWrap.appendChild(h('button',{type:'button',className:'btn-sec',onClick:()=>{
+          const vv=String(s||'').trim();
+          if(vv && !curDossiers.includes(vv)){curDossiers.push(vv);refreshChips();}
+          dosInput.value='';
+          dosSugWrap.style.display='none';
+          dosSugWrap.innerHTML='';
+        }},s));
+      });
+    };
+    dosInput.addEventListener('input',()=>{ refreshDosSug(); });
+    const addDosBtn=h('button',{type:'button',className:'btn-sec',onClick:()=>{
+      const v=String(dosInput.value||'').trim();
+      if(!v) return;
+      if(!curDossiers.includes(v)){curDossiers.push(v);refreshChips();}
+      dosInput.value='';
+      dosSugWrap.style.display='none';
+      dosSugWrap.innerHTML='';
+    }},'+ Ajouter');
+
+    const chipsWrap=h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap'}});
+    const refreshChips=()=>{
+      chipsWrap.innerHTML='';
+      curDossiers.forEach((d,i)=>{
+        chipsWrap.appendChild(h('span',{className:'dos-chip'},'Dos. '+d,h('button',{onClick:()=>{curDossiers.splice(i,1);refreshChips();}},'×')));
+      });
+    };
+    refreshChips();
+
+    // Auto-détection : si aucun dossier n'est lié, chercher dans la prod via la référence planning
+    if(curDossiers.length===0 && (head.reference||'').trim()){
+      queueMicrotask(async()=>{
+        try{
+          const sugs = await rentSuggestNoDossiers((head.reference||'').trim());
+          if(sugs.length && curDossiers.length===0){
+            sugs.forEach(s=>{ if(!curDossiers.includes(s)) curDossiers.push(s); });
+            refreshChips();
+          }
+        }catch(_){}
+      });
+    }
+
+    const saveBtn=h('button',{type:'button',className:'btn-sm',onClick:async()=>{
+      const did = devisSel.value ? Number(devisSel.value) : null;
+      await saveLinks(entryId, did, curDossiers);
+      await loadRentComparaison(entryId).catch(()=>{});
+    }},'💾 Enregistrer');
+
+    const compBtn=h('button',{type:'button',className:'btn-sec',onClick:async()=>{
+      await ensureLinks(entryId);
+      await loadRentComparaison(entryId);
+    }},'Comparer');
+
+    // Import devis: keep existing workflow (creates devis + links via old devis_dossiers)
+    // For v2, we still allow import, then we set rent_links.devis_id to the created devis.
+    const dz=h('div',{className:'drop-zone',style:{padding:'20px',marginTop:'12px'}},
+      h('div',{className:'dz-icon',style:{fontSize:'24px'}},'📄'),
+      h('div',{className:'dz-title',style:{fontSize:'13px'}},'Importer un devis (Excel)'),
+      h('div',{className:'dz-sub'},'Le devis pourra être lié à cette ligne rentabilité')
+    );
+    const dzInp=h('input',{type:'file',accept:'.xlsx,.xls',style:{display:'none'}});
+    dzInp.addEventListener('change',async e=>{
+      const f=(e && e.target && e.target.files && e.target.files[0]) ? e.target.files[0] : null;
+      if(!f) return;
+      try{
+        const fd=new FormData();fd.append('file',f);
+        const preview=await api('/api/rentabilite/devis/import',{method:'POST',body:fd});
+        if(!preview||!preview.preview) return toast('Erreur import','error');
+        const r=await api('/api/rentabilite/devis',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...preview.preview,filename:f.name})});
+        if(!r||!r.devis_id) return toast('Erreur sauvegarde devis','error');
+        // Link in rent_links
+        await saveLinks(entryId, Number(r.devis_id), curDossiers);
+        toast('Devis importé');
+        await loadDevis();
+        await loadRentComparaison(entryId).catch(()=>{});
+      }catch(err){toast(err.message,'error');}
+    });
+    dz.addEventListener('click',()=>dzInp.click());
+    dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag');});
+    dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
+    dz.addEventListener('drop',e=>{
+      e.preventDefault();dz.classList.remove('drag');
+      const f=(e && e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) ? e.dataTransfer.files[0] : null;
+      if(!f) return;
+      dzInp.files=e.dataTransfer.files;
+      dzInp.dispatchEvent(new Event('change'));
+    });
+    panel.appendChild(h('div',{className:'form-section-title'},'🔗 Liaisons'));
+    panel.appendChild(h('div',{style:{display:'flex',gap:'10px',flexWrap:'wrap',alignItems:'center'}},devisSel,dosInput,addDosBtn,saveBtn,compBtn));
+    panel.appendChild(h('div',{style:{marginTop:'10px'}},dosSugWrap));
+    panel.appendChild(h('div',{style:{marginTop:'10px'}},chipsWrap));
+    panel.appendChild(dz);
+    panel.appendChild(dzInp);
+
+    const comp = (S.rentCompById||{})[entryId];
+    if(comp){
+      if(comp.reel) panel.appendChild(renderComparaison(comp));
+      else panel.appendChild(h('div',{className:'card-empty',style:{padding:'18px'}},comp.message||'Aucune donnée.'));
+    }else{
+      panel.appendChild(h('div',{className:'card-empty',style:{padding:'18px'}},'Clique sur “Comparer” après avoir lié un devis + des dossiers production.'));
+    }
+    return panel;
+  }
+
+  const rows = shownPage.map(g=>{
+    const head=g.head;
+    const isExp = String(S.rentSelEntryId||'')===String(head.id);
+    const topLine = [
+      (head.client||'').trim(),
+      (fmtFormat(head)?(fmtFormat(head)+' mm'):''),
+      (head.reference||'').trim()
+    ].filter(Boolean).join(' - ') || (head.reference||'(sans référence)');
+    const subBits = [
+      (head.machine_nom||'').trim(),
+      (head.duree_heures!=null?('durée '+String(head.duree_heures)+'h'):''),
+      (head.laize!=null?('laize '+head.laize):''),
+      (head.date_livraison?('date '+head.date_livraison):'')
+    ].filter(Boolean);
+
+    const link = (S.rentLinksById||{})[Number(head.id)] || null;
+    const devisLinked = link ? !!link.devis_id : null;
+    const prodLinked = link ? ((link.no_dossiers||[]).length>0) : null;
+    const stRaw = String(head.statut||'attente');
+    const stLbl = (stRaw==='en_cours')?'En cours':(stRaw==='termine')?'Terminé':'En attente';
+    const stCol = (stRaw==='termine')?'var(--success)':(stRaw==='en_cours')?'var(--warn)':'var(--muted)';
+    const mkBadge=(txt, okNull, okCol, noCol)=>{
+      const isOk = okNull===true;
+      const isNo = okNull===false;
+      const col = isOk?okCol:(isNo?noCol:'var(--muted)');
+      const bg = isOk?(okCol+'1A'):(isNo?(noCol+'1A'):'rgba(100,116,139,.10)');
+      return h('span',{style:{fontSize:'10px',fontWeight:'800',color:col,background:bg,border:'1px solid '+(col+'33'),padding:'3px 8px',borderRadius:'999px',whiteSpace:'nowrap'}},txt);
+    };
+    const row = h('div',{
+      className:'dossier-row',
+      style:{cursor:'pointer',background:isExp?'var(--accent-bg)':'',
+             borderLeft:isExp?'3px solid var(--accent)':'3px solid transparent',
+             transition:'all .15s'},
+      onClick:async()=>{
+        const next = isExp ? null : head.id;
+        set({rentSelEntryId:next});
+        if(next){
+          await ensureLinks(Number(next)).catch(()=>{});
+        }
+      }
+    },
+      h('div',{style:{flex:'1',minWidth:0}},
+        h('div',{style:{fontWeight:'700',color:'var(--text)',fontSize:'13px'}},topLine),
+        h('div',{style:{fontSize:'11px',color:'var(--muted)',marginTop:'2px'}},
+          subBits.length?subBits.join(' — '):'—')
+      ),
+      h('div',{style:{display:'flex',alignItems:'center',gap:'10px',flexShrink:0}},
+        h('div',{style:{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:'6px'}},
+          mkBadge(stLbl, true, stCol, stCol),
+          mkBadge(devisLinked===null?'Devis …':(devisLinked?'Devis lié':'Devis non lié'), devisLinked, 'var(--success)', 'var(--danger)'),
+          (stRaw==='termine')
+            ? mkBadge(prodLinked===null?'Prod …':(prodLinked?'Prod liée':'Prod non liée'), prodLinked, 'var(--success)', 'var(--danger)')
+            : null
+        ),
+        h('span',{style:{fontSize:'14px',color:'var(--muted)',transition:'transform .15s',
+          transform:isExp?'rotate(180deg)':'rotate(0deg)'}},'▾')
+      )
+    );
+    if(!isExp) return row;
+    return h('div',null,row,renderPanel(g));
+  });
+
+  // Précharger les liens avec une concurrence max de 3 pour ne pas saturer le navigateur.
+  try{
+    const CONCURRENCY = 3;
+    const toFetch = shownPage
+      .map(g=>Number(g.head&&g.head.id))
+      .filter(id=>id && !(S.rentLinksById||{})[id] && !((window._rentLinksPending||{})[id]));
+    if(toFetch.length){
+      queueMicrotask(async()=>{
+        let i = 0;
+        async function runNext(){
+          if(i >= toFetch.length) return;
+          const id = toFetch[i++];
+          await ensureLinks(id).catch(()=>{});
+          await runNext();
+        }
+        const workers = Array.from({length:Math.min(CONCURRENCY,toFetch.length)},()=>runNext());
+        await Promise.allSettled(workers);
+      });
+    }
+  }catch(e){}
+
+  const pager=h('div',{style:{display:'inline-flex',alignItems:'center',gap:'6px'}},
+    h('button',{className:'btn-ghost',title:'Page précédente',disabled:off<=0,onClick:()=>{
+      set({rentOffset:Math.max(0, off - lim)});
+    }},'‹'),
+    h('span',{style:{fontSize:'11px',color:'var(--muted)',fontFamily:'monospace'}},
+      totalShown?(`${pageStart+1}-${pageEnd}/${totalShown}`):'0'
+    ),
+    h('button',{className:'btn-ghost',title:'Page suivante',disabled:(off+lim)>=totalShown,onClick:()=>{
+      set({rentOffset:Math.min(Math.max(0,totalShown-lim), off + lim)});
+    }},'›'),
+  );
+
+  return h('div',null,
+    searchBox,
+    h('div',{className:'card'},
+      h('div',{className:'card-header'},
+        h('h3',null,'Rentabilité — Dossiers planning ('+totalShown+')'),
+        h('div',{style:{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}},
+          pager,
+          h('button',{type:'button',className:'btn-sec',onClick:async()=>{await loadRentPlanning();toast('Planning rechargé');}},'Rafraîchir')
+        )
+      ),
+      rows.length? h('div',null,...rows) : h('div',{className:'card-empty'},'Aucun dossier ne correspond aux filtres.')
+    )
+  );
+}
+
+function renderSuivi(){
+  const admin = isAdmin(S.user);
+  const dos = S.dossiers || [];
+  const devisList = S.devisList || [];
+  const parts = [];
+
+  if(admin){
+    const refI=h('input',{type:'text',placeholder:'Référence *',style:{width:'160px'}});
+    const cliI=h('input',{type:'text',placeholder:'Client',style:{flex:'1'}});
+    const desI=h('input',{type:'text',placeholder:'Description',style:{flex:'2'}});
+    const btnC=h('button',{className:'btn-sm',onClick:()=>{
+      if(!refI.value)return toast('Référence requise','error');
+      createDos({reference:refI.value,client:cliI.value,description:desI.value});
+      refI.value='';cliI.value='';desI.value='';
+    }},'+ Nouveau dossier');
+    parts.push(h('div',{className:'card',style:{padding:'16px',marginBottom:'16px'}},
+      h('div',{className:'form-section-title'},'Nouveau dossier'),
+      h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center'}},
+        refI,cliI,desI,btnC)
+    ));
+  }
+
+  if(!dos.length){
+    parts.push(h('div',{className:'card-empty'},'Aucun dossier.'));
+    return h('div',null,...parts);
+  }
+
+  const statMap={devis:'📋 Devis',en_cours:'▶ En cours',termine:'✅ Terminé',annule:'⛔ Annulé',archive:'🗄 Archivé'};
+  const statChoices=['devis','en_cours','termine','archive','annule'];
+
+  const rows = dos.map(d=>{
+    const isExp = S.selDossier===d.id;
+    const row = h('div',{
+      className:'dossier-row',
+      style:{cursor:'pointer',background:isExp?'var(--accent-bg)':'',
+             borderLeft:isExp?'3px solid var(--accent)':'3px solid transparent',
+             transition:'all .15s'},
+      onClick:async()=>{
+        if(isExp){set({selDossier:null,selDevis:null,comparaison:null});}
+        else{set({selDossier:d.id,selDevis:null,comparaison:null});}
+      }
+    },
+      h('div',{style:{flex:'1',minWidth:0}},
+        h('div',{style:{fontWeight:'600',color:'var(--text)',fontSize:'13px'}},d.reference),
+        h('div',{style:{fontSize:'11px',color:'var(--muted)',marginTop:'2px'}},
+          [d.client,d.description].filter(Boolean).join(' — ')||'—')
+      ),
+      h('div',{style:{display:'flex',alignItems:'center',gap:'10px',flexShrink:0}},
+        admin?h('select',{
+          className:'form-sel',
+          style:{fontSize:'11px',padding:'4px 8px'},
+          onClick:e=>e.stopPropagation(),
+          onChange:e=>{e.stopPropagation();updStatut(d.id,e.target.value);}
+        },
+          ...statChoices.map(s=>{
+            const opt=h('option',{value:s},statMap[s]||s);
+            if(d.statut===s)opt.selected=true;
+            return opt;
+          })
+        ):h('span',{style:{fontSize:'11px',color:'var(--text2)'}},statMap[d.statut]||d.statut||''),
+        h('span',{style:{fontSize:'14px',color:'var(--muted)',transition:'transform .15s',
+          transform:isExp?'rotate(180deg)':'rotate(0deg)'}},'▾')
+      )
+    );
+
+    if(!isExp) return row;
+
+    const panel = h('div',{style:{
+      borderLeft:'3px solid var(--accent)',background:'rgba(34,211,238,.04)',
+      padding:'16px 20px',marginBottom:'2px'
+    }});
+
+    // Import devis (admin)
+    if(admin){
+      const dz=h('div',{className:'drop-zone',style:{padding:'20px',marginBottom:'12px'}},
+        h('div',{className:'dz-icon',style:{fontSize:'24px'}},'📄'),
+        h('div',{className:'dz-title',style:{fontSize:'13px'}},'Importer un devis (Excel)'),
+        h('div',{className:'dz-sub'},'Le devis sera lié au dossier '+d.reference)
+      );
+      const dzInp=h('input',{type:'file',accept:'.xlsx,.xls',style:{display:'none'}});
+      dzInp.addEventListener('change',async e=>{
+        const f=(e && e.target && e.target.files && e.target.files[0]) ? e.target.files[0] : null;
+        if(!f)return;
+        try{
+          const fd=new FormData();fd.append('file',f);
+          const preview=await api('/api/rentabilite/devis/import',{method:'POST',body:fd});
+          if(!preview||!preview.preview)return toast('Erreur import','error');
+          const r=await api('/api/rentabilite/devis',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...preview.preview,filename:f.name})});
+          if(!r||!r.devis_id)return toast('Erreur sauvegarde devis','error');
+          await api('/api/rentabilite/devis/'+r.devis_id+'/dossiers',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({dossiers:[d.reference]})});
+          toast('Devis importé et lié à '+d.reference);
+          await loadDevis();
+          await loadComparaison(r.devis_id);
+          set({selDevis:r.devis_id});
+        }catch(err){toast(err.message,'error');}
+      });
+      dz.addEventListener('click',()=>dzInp.click());
+      dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag');});
+      dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
+      dz.addEventListener('drop',e=>{
+        e.preventDefault();dz.classList.remove('drag');
+        const f=(e && e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) ? e.dataTransfer.files[0] : null;
+        if(!f)return;
+        dzInp.files=e.dataTransfer.files;
+        dzInp.dispatchEvent(new Event('change'));
+      });
+      panel.appendChild(dz);
+      panel.appendChild(dzInp);
+    }
+
+    // Liaison manuelle à un devis existant
+    const sel=h('select',{className:'form-sel',style:{minWidth:'280px'}},
+      h('option',{value:''},'Lier un devis existant…'),
+      ...devisList.map(dv=>h('option',{value:String(dv.id)},(dv.client||dv.filename||('Devis #'+dv.id))+' (#'+dv.id+')'))
+    );
+    const linkBtn=h('button',{className:'btn-sm',onClick:async()=>{
+      const id=Number(sel.value||0);
+      if(!id)return toast('Choisis un devis','warn');
+      try{
+        await api('/api/rentabilite/devis/'+id+'/dossiers',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({dossiers:[d.reference]})});
+        toast('Devis lié à '+d.reference);
+        await loadDevis();
+        set({selDevis:id});
+        await loadComparaison(id);
+      }catch(e){toast(e.message,'error');}
+    }},'🔗 Lier');
+    panel.appendChild(h('div',{style:{display:'flex',gap:'10px',flexWrap:'wrap',alignItems:'center',marginBottom:'12px'}},sel,linkBtn));
+
+    // Comparaison
+    if(S.selDevis && S.comparaison){
+      if(S.comparaison.reel) panel.appendChild(renderComparaison(S.comparaison));
+      else panel.appendChild(h('div',{className:'card-empty',style:{padding:'18px'}},'📂 Aucune donnée de production correspondante pour ce dossier'));
+      panel.appendChild(h('button',{className:'btn-danger',style:{marginTop:'10px'},onClick:()=>deleteDevis(S.selDevis)},'🗑 Supprimer ce devis'));
+    } else {
+      panel.appendChild(h('div',{className:'card-empty',style:{padding:'18px'}},'Liez/importez un devis pour afficher la comparaison.'));
+    }
+
+    return h('div',null,row,panel);
+  });
+
+  parts.push(h('div',{className:'card'},
+    h('div',{className:'card-header'},
+      h('h3',null,'Dossiers ('+dos.length+')')
+    ),
+    ...rows
+  ));
+
+  return h('div',null,...parts);
+}
+
   // ────────────────────────────────────────────────────────────────────
   // ÉTAPE 2i — Onglets Historique + Saisies + Import
   //
@@ -2736,6 +3532,20 @@ function renderProdKpis(){
           await loadProd();
           await loadHist();
           await loadMachineStatus();
+        }else if(S.page === 'dossiers'){
+          await loadDos();
+        }else if(S.page === 'suivi'){
+          await loadDos();
+          await loadDevis();
+        }else if(S.page === 'rentabilite'){
+          await loadDevis();
+          await loadRentPlanning();
+        }else if(S.page === 'historique'){
+          await loadHist();
+        }else if(S.page === 'saisies'){
+          await loadSaisies();
+        }else if(S.page === 'import'){
+          await loadImports();
         }
       }catch(e){
         console.warn('[mysifa_prod_core] checkAuth load erreur:', e && e.message);
@@ -2804,8 +3614,22 @@ function renderProdKpis(){
           await loadProd();
           await loadHist();
           await loadMachineStatus();
-          render();
+        }else if(S.page === 'dossiers'){
+          await loadDos();
+        }else if(S.page === 'suivi'){
+          await loadDos();
+          await loadDevis();
+        }else if(S.page === 'rentabilite'){
+          await loadDevis();
+          await loadRentPlanning();
+        }else if(S.page === 'historique'){
+          await loadHist();
+        }else if(S.page === 'saisies'){
+          await loadSaisies();
+        }else if(S.page === 'import'){
+          await loadImports();
         }
+        render();
       }catch(e){
         console.warn('[mysifa_prod_core] doLogin load erreur:', e && e.message);
       }
@@ -2853,6 +3677,14 @@ function renderProdKpis(){
         await loadSaisies();
       }else if(S.page === 'import'){
         await loadImports();
+      }else if(S.page === 'dossiers'){
+        await loadDos();
+      }else if(S.page === 'suivi'){
+        await loadDos();
+        await loadDevis();
+      }else if(S.page === 'rentabilite'){
+        await loadDevis();
+        await loadRentPlanning();
       }
     }catch(e){
       console.warn('[mysifa_prod_core] nav() erreur:', e && e.message);
@@ -3012,11 +3844,23 @@ function renderProdKpis(){
                       S.subPage === 'erreurs' ? 'Sanity Score, incidents et erreurs de saisie' :
                       'KPIs, temps, quantit\u00e9s et qualit\u00e9 de saisie');
       pageContent = renderProdPage();
+    }else if(S.page === 'suivi'){
+      pageTitle = 'Rentabilité & Dossiers';
+      pageSubtitle = 'Dossiers de production et comparaison devis / réel';
+      pageContent = renderSuivi();
+    }else if(S.page === 'rentabilite'){
+      pageTitle = 'Rentabilité';
+      pageSubtitle = 'Suivi rentabilité par dossier (devis / réel)';
+      pageContent = renderRentabilite();
+    }else if(S.page === 'dossiers'){
+      pageTitle = 'Dossiers';
+      pageSubtitle = 'Liste et statuts des dossiers';
+      pageContent = renderDos();
     }else{
       pageContent = h('div', {className: 'card', style: {padding: '32px', textAlign: 'center'}},
         h('h2', {style: {marginBottom: '8px'}}, 'Sous-page : ' + (S.page || '')),
         h('p', {style: {color: 'var(--text2)', fontSize: '13px'}},
-          'Le contenu de cette sous-page sera ajout\u00e9 aux \u00e9tapes ult\u00e9rieures (2i \u00e0 2l). ' +
+          'Le contenu de cette sous-page sera ajout\u00e9 aux \u00e9tapes ult\u00e9rieures (2k - 2l). ' +
           'Bascule sur l\u0027onglet Production pour voir les KPIs r\u00e9els.'
         )
       );
@@ -3054,8 +3898,8 @@ function renderProdKpis(){
   // les compléter / les utiliser. À la fin du refactor (étape 2n), ces
   // exports pourront être retirés si plus nécessaire.
   window.__MYSIFA_PROD_STANDALONE__ = {
-    stage: '2i',
-    description: 'Onglets Historique + Saisies + Import',
+    stage: '2j',
+    description: 'Onglets Dossiers + Suivi + Rentabilite',
     loadedAt: new Date().toISOString(),
   };
   window.__prodCore = {
@@ -3087,9 +3931,13 @@ function renderProdKpis(){
     pushUndo, doUndo, doRedo, applyUndo,
     buildSaisieForm, openAddModal, openEditModal,
     bulkDelete, openFictifReassignModal,
+    createDos, updStatut,
+    loadComparaison, uploadDevis, saveDevis, linkDossiers, deleteDevis,
+    renderDos, renderDevisForm, renderComparaison, renderLiaisonDossiers,
+    renderRentabilite, renderSuivi,
   };
 
-  console.info('[mysifa_prod_core] saisies / hist / import charges - etape 2i', {
+  console.info('[mysifa_prod_core] dossiers / suivi / rentabilite charges - etape 2j', {
     helpers: Object.keys(window.__prodCore).length,
     stateFields: Object.keys(S).length,
   });

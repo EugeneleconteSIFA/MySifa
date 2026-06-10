@@ -820,3 +820,85 @@ td.editing input,td.editing select{
   border-radius:6px;padding:4px 8px;color:var(--text);font-size:13px;
   font-family:inherit;outline:none;
 }
+
+
+/* ────────────────────────────────────────────────────────────────────
+ * Étape 2j — Rentabilité + Devis + Comparaison + Dossiers
+ * Repris littéralement de app/web/html.py (lignes 997-1053).
+ * ──────────────────────────────────────────────────────────────────── */
+
+/* ── Rentabilité ─────────────────────────────────────────────── */
+.compa-table{width:100%;border-collapse:collapse;font-size:13px;margin-top:16px}
+.compa-table th{padding:10px 16px;text-align:left;font-size:11px;font-weight:700;
+  color:var(--muted);text-transform:uppercase;letter-spacing:.5px;
+  border-bottom:2px solid var(--border);white-space:nowrap}
+.compa-table td{padding:10px 16px;border-bottom:1px solid var(--border);vertical-align:middle}
+.compa-row-label{font-weight:600;color:var(--text);font-size:13px}
+.compa-val-theo{font-family:monospace;font-size:14px;color:var(--text2)}
+.compa-val-reel{font-family:monospace;font-size:14px;font-weight:700;color:var(--text)}
+.ecart-pos{font-family:monospace;font-size:12px;font-weight:700;
+  color:var(--success);background:rgba(52,211,153,.12);
+  padding:2px 8px;border-radius:20px;white-space:nowrap}
+.ecart-neg{font-family:monospace;font-size:12px;font-weight:700;
+  color:var(--danger);background:rgba(248,113,113,.12);
+  padding:2px 8px;border-radius:20px;white-space:nowrap}
+.ecart-neu{font-family:monospace;font-size:12px;color:var(--muted);
+  padding:2px 8px;white-space:nowrap}
+.conclusion-card{display:flex;align-items:center;gap:16px;
+  background:var(--card);border:1px solid var(--border);
+  border-radius:12px;padding:18px 24px;margin-bottom:20px}
+.conclusion-icon{font-size:32px}
+.conclusion-label{font-size:20px;font-weight:800}
+.conclusion-sub{font-size:13px;color:var(--muted);margin-top:2px}
+.devis-card{background:var(--card);border:1px solid var(--border);
+  border-radius:12px;padding:20px;margin-bottom:12px;cursor:pointer;
+  transition:border-color .15s}
+.devis-card:hover{border-color:var(--accent)}
+.devis-card.selected{border-color:var(--accent);background:var(--accent-bg)}
+.devis-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px}
+.devis-meta{font-size:12px;color:var(--muted);font-family:monospace}
+.devis-badges{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.badge-lie{font-size:10px;color:var(--c3);background:rgba(52,211,153,.12);
+  padding:2px 8px;border-radius:20px;font-weight:700}
+.badge-attente{font-size:10px;color:var(--c4);background:rgba(251,191,36,.12);
+  padding:2px 8px;border-radius:20px;font-weight:700}
+.form-section{margin-bottom:20px}
+.form-section-title{font-size:11px;font-weight:700;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;
+  padding-bottom:6px;border-bottom:1px solid var(--border)}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px}
+.field-row.three{grid-template-columns:1fr 1fr 1fr}
+.field-item label{display:block;font-size:11px;color:var(--muted);
+  font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.field-item input{width:100%;background:var(--bg);border:1px solid var(--border);
+  border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;
+  font-family:inherit;outline:none}
+.field-item input:focus{border-color:var(--accent)}
+.dos-chip{display:inline-flex;align-items:center;gap:6px;
+  background:var(--accent-bg);color:var(--accent);
+  border-radius:20px;padding:4px 10px;font-size:12px;font-weight:600;margin:2px}
+.dos-chip button{background:none;border:none;color:var(--accent);
+  cursor:pointer;font-size:14px;line-height:1;padding:0}
+.dos-add-row{display:flex;gap:8px;margin-top:8px}
+.dos-add-row select{flex:1;background:var(--bg);border:1px solid var(--border);
+  border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;
+  font-family:inherit;outline:none}
+
+/* ── Portail MySifa ─────────────────────────────────────────────── */
+
+/* ── Search bar standard ───────────────────────────────────────── */
+.search-bar{width:100%;background:var(--bg);border:1px solid var(--border);
+  border-radius:10px;padding:10px 16px;color:var(--text);font-size:14px;
+  font-family:inherit;outline:none;margin-bottom:16px}
+.search-bar:focus{border-color:var(--accent)}
+.stock-panel{display:flex;gap:20px;align-items:flex-start}
+.stock-left{flex:0 0 280px}
+
+/* ── Layout suivi / rentabilité (panneaux + grilles) ───────────── */
+.rent-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px}
+@media (max-width:900px){.rent-grid{grid-template-columns:1fr}}
+.rent-panel{background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:18px;display:flex;flex-direction:column;gap:10px}
+.rent-panel-title{font-size:13px;font-weight:700;color:var(--text);
+  text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.rent-panel-empty{padding:24px 12px;text-align:center;color:var(--muted);font-size:13px}
