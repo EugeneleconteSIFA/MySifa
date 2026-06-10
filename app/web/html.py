@@ -10505,9 +10505,13 @@ async function loadFiches(){
 async function loadPendingOfCount(){
   try{
     const data=await api('/api/admin/of-link-pending/count');
-    set({pendingOfCount:Number(data&&data.count||0)});
+    set({
+      pendingOfCount:Number(data&&data.count||0),
+      pendingOfAmbigus:Number(data&&data.ambigus||0),
+      pendingOfSansOf:Number(data&&data.sans_of||0),
+    });
   }catch(e){
-    set({pendingOfCount:0});
+    set({pendingOfCount:0,pendingOfAmbigus:0,pendingOfSansOf:0});
   }
 }
 
@@ -10539,6 +10543,207 @@ async function submitOfMapping(planningId, ofId){
     toast(e.message||'Erreur enregistrement','error');
   }
 }
+async function submitOfMappingMulti(planningId, ofIds){
+  if(!ofIds || !ofIds.length){ toast('Aucun OF sélectionné.','error'); return; }
+  try{
+    const data=await api('/api/admin/planning-of-links',{
+      method:'POST',
+      body:JSON.stringify({planning_id:planningId, of_ids:ofIds}),
+    });
+    const added=Number(data&&data.added||0);
+    const skip=Number(data&&data.skipped_existing||0);
+    let msg='';
+    if(added) msg=added+' OF lié'+(added>1?'s':'')+'.';
+    if(skip)  msg+=(msg?' ':'')+skip+' déjà liés ignorés.';
+    toast(msg||'Aucun changement.');
+    await loadPendingOfMappings();
+    await loadDossiersSansOf();
+    loadPendingOfCount();
+    render();
+  }catch(e){
+    toast(e.message||'Erreur enregistrement','error');
+  }
+}
+
+async function loadDossiersSansOf(){
+  set({dossiersSansOfLoading:true});
+  try{
+    const data=await api('/api/admin/dossiers-sans-of');
+    set({
+      dossiersSansOf:Array.isArray(data&&data.items)?data.items:[],
+      dossiersSansOfLoading:false,
+    });
+  }catch(e){
+    set({dossiersSansOfLoading:false});
+    toast(e.message||'Erreur chargement dossiers sans OF','error');
+  }
+}
+
+async function searchOfsForAttach(planningId, term){
+  const key='attach-'+planningId;
+  S[key+'-loading']=true; render();
+  try{
+    const q=encodeURIComponent(term||'');
+    const data=await api('/api/of/search?limit=20'+(q?'&q='+q:''));
+    S[key+'-results']=Array.isArray(data&&data.items)?data.items:[];
+    S[key+'-loading']=false;
+    render();
+    requestAnimationFrame(()=>{
+      const el=document.getElementById('attach-search-'+planningId);
+      if(el){ try{ el.focus(); }catch(e){} }
+    });
+  }catch(e){
+    S[key+'-loading']=false; render();
+    toast(e.message||'Erreur de recherche','error');
+  }
+}
+
+async function attachOfsToDossier(planningId, ofIds){
+  if(!ofIds || !ofIds.length){ toast('Coche au moins un OF.','error'); return; }
+  try{
+    const data=await api('/api/admin/planning-of-links',{
+      method:'POST',
+      body:JSON.stringify({planning_id:planningId, of_ids:ofIds}),
+    });
+    const added=Number(data&&data.added||0);
+    toast(added+' OF attaché'+(added>1?'s':'')+' au dossier.');
+    // Reset l'état du picker pour ce dossier
+    delete S['attach-'+planningId];
+    delete S['attach-'+planningId+'-results'];
+    delete S['attach-'+planningId+'-search'];
+    delete S['attach-'+planningId+'-loading'];
+    await loadDossiersSansOf();
+    loadPendingOfCount();
+    render();
+  }catch(e){
+    toast(e.message||'Erreur enregistrement','error');
+  }
+}
+
+function toggleAttachOfPicker(planningId){
+  const key='attach-'+planningId;
+  if(S[key]){
+    delete S[key];
+    delete S[key+'-results'];
+    delete S[key+'-search'];
+    delete S[key+'-loading'];
+    render();
+    return;
+  }
+  S[key]=true;
+  S[key+'-search']='';
+  // search initiale (vide → 20 plus récents)
+  searchOfsForAttach(planningId, '');
+}
+
+function renderDossiersSansOfTab(){
+  if(S.dossiersSansOfLoading){
+    return h('div',{className:'card',style:{padding:'24px',textAlign:'center',color:'var(--muted)'}},'Chargement…');
+  }
+  const items=S.dossiersSansOf||[];
+  if(items.length===0){
+    return h('div',{className:'card',style:{padding:'24px',textAlign:'center',color:'var(--muted)'}},
+      h('div',{style:{fontSize:'15px',fontWeight:600,color:'var(--text2)',marginBottom:'6px'}},'Aucun dossier sans OF'),
+      h('div',null,'Tous les dossiers actifs ont au moins un OF lié.')
+    );
+  }
+  const intro=h('div',{style:{marginBottom:'16px',padding:'12px 16px',background:'var(--accent-bg)',border:'1px solid var(--border)',borderRadius:'10px',fontSize:'13px',color:'var(--text2)',lineHeight:1.6}},
+    h('div',{style:{fontWeight:600,color:'var(--text)',marginBottom:'4px'}},
+      items.length+' dossier'+(items.length>1?'s':'')+' actif'+(items.length>1?'s':'')+' sans OF lié'),
+    'Recherche dans tous les OF existants pour en attacher un (ou plusieurs), ou importe un nouvel OF PDF.'
+  );
+
+  const cards=items.map(it=>{
+    const key='attach-'+it.planning_id;
+    const pickerOpen=!!S[key];
+    const results=S[key+'-results']||[];
+    const isLoading=!!S[key+'-loading'];
+    const searchVal=S[key+'-search']||'';
+
+    const head=h('div',{style:'display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap'},
+      h('div',{style:'min-width:0'},
+        h('div',{style:'font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px'},'Planning #'+it.planning_id),
+        h('div',{style:'font-size:14px;font-weight:600;color:var(--text)'},'OF attendu : '+escHtml(it.numero_of||'—')),
+        h('div',{style:'font-size:12px;color:var(--muted);margin-top:2px'},
+          'Réf produit : ',escHtml(it.ref_produit||'—'),
+          it.machine?' · Machine : '+escHtml(it.machine):'',
+          it.statut?' · '+escHtml(it.statut):''
+        )
+      ),
+      h('div',{style:'display:flex;gap:8px;align-items:center;flex-wrap:wrap'},
+        h('button',{
+          style:'padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap',
+          onClick:openOfImportModal,
+          title:'Importer un nouvel OF PDF (la liaison sera à faire ensuite)'
+        },iconEl('upload',12),' Importer OF PDF'),
+        h('button',{
+          style:'padding:8px 14px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-size:12px;font-weight:700;white-space:nowrap',
+          onClick:()=>toggleAttachOfPicker(it.planning_id)
+        },pickerOpen?'Fermer la recherche':'Chercher un OF')
+      )
+    );
+
+    if(!pickerOpen){
+      return h('div',{className:'card',style:{padding:'14px 18px',marginBottom:'12px'}}, head);
+    }
+
+    const searchInput=h('input',{
+      id:'attach-search-'+it.planning_id,
+      type:'text',
+      placeholder:'Rechercher par OF n°, référence, machine…',
+      value:searchVal,
+      style:'width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;margin-bottom:10px',
+      oninput:function(e){
+        const v=e.target.value;
+        S[key+'-search']=v;
+        clearTimeout(window['__attachDeb-'+it.planning_id]);
+        window['__attachDeb-'+it.planning_id]=setTimeout(()=>searchOfsForAttach(it.planning_id, v), 180);
+      },
+    });
+
+    const resultRows=isLoading
+      ? [h('div',{style:'padding:14px;color:var(--muted);font-size:13px;text-align:center'},'Recherche en cours…')]
+      : (results.length===0
+          ? [h('div',{style:'padding:14px;color:var(--muted);font-size:13px;text-align:center'},'Aucun résultat')]
+          : results.map(c=>{
+              const dateImp=(c.date_import||'').slice(0,10)||'—';
+              return h('label',{
+                style:'display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:5px;cursor:pointer;background:var(--bg)',
+              },
+                h('input',{type:'checkbox','data-attach-plan':String(it.planning_id),value:String(c.id),style:'margin:0;flex-shrink:0;cursor:pointer'}),
+                h('div',{style:'flex:1;min-width:0'},
+                  h('div',{style:'font-weight:600;color:var(--text);font-size:13px'},escHtml(c.of_numero||'—')),
+                  h('div',{style:'font-size:12px;color:var(--muted);margin-top:2px'},
+                    'Réf : ',escHtml(c.reference||'—'),
+                    c.machine?' · '+escHtml(c.machine):'',
+                    ' · importé ',dateImp
+                  )
+                )
+              );
+            })
+        );
+
+    const attachBtn=h('button',{
+      style:'margin-top:10px;padding:9px 14px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-size:12px;font-weight:700',
+      onClick:()=>{
+        const boxes=document.querySelectorAll('[data-attach-plan="'+it.planning_id+'"]:checked');
+        const ofIds=Array.from(boxes).map(b=>parseInt(b.value,10)).filter(x=>!isNaN(x));
+        attachOfsToDossier(it.planning_id, ofIds);
+      }
+    },'Attacher les OF sélectionnés au dossier');
+
+    return h('div',{className:'card',style:{padding:'14px 18px',marginBottom:'12px'}},
+      head,
+      h('div',{style:'margin-top:14px;padding-top:12px;border-top:1px dashed var(--border)'},
+        searchInput,
+        h('div',null, ...resultRows),
+        attachBtn
+      )
+    );
+  });
+
+  return h('div',null, intro, ...cards);
+}
 
 function renderPendingOfMappingsTab(){
   if(S.pendingOfLoading){
@@ -10563,7 +10768,7 @@ function renderPendingOfMappingsTab(){
       return h('label',{
         style:'display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;background:var(--bg)',
       },
-        h('input',{type:'radio',name:'pending-'+it.planning_id,value:String(c.id),style:'margin:0;flex-shrink:0'}),
+        h('input',{type:'checkbox','data-pending-plan':String(it.planning_id),value:String(c.id),style:'margin:0;flex-shrink:0;cursor:pointer'}),
         h('div',{style:'flex:1;min-width:0'},
           h('div',{style:'font-weight:600;color:var(--text);font-size:13px'},escHtml(c.of_numero||'—')),
           h('div',{style:'font-size:12px;color:var(--muted);margin-top:2px'},
@@ -10586,7 +10791,7 @@ function renderPendingOfMappingsTab(){
             it.machine?' · Machine : '+escHtml(it.machine):''
           )
         ),
-        h('div',{style:'display:flex;gap:8px;align-items:center'},
+        h('div',{style:'display:flex;gap:8px;align-items:center;flex-wrap:wrap'},
           h('button',{
             style:'padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:12px;font-weight:600',
             title:'Ignorer (laisse non lié, sera reproposé au prochain chargement)',
@@ -10595,13 +10800,12 @@ function renderPendingOfMappingsTab(){
           h('button',{
             style:'padding:8px 14px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-size:12px;font-weight:700',
             onClick:()=>{
-              const radios=document.getElementsByName('pending-'+it.planning_id);
-              let chosen=null;
-              for(const r of radios){ if(r.checked){ chosen=parseInt(r.value,10); break; } }
-              if(!chosen){ toast('Sélectionne un OF d\'abord.','error'); return; }
-              submitOfMapping(it.planning_id, chosen);
+              const boxes=document.querySelectorAll('[data-pending-plan="'+it.planning_id+'"]:checked');
+              const ofIds=Array.from(boxes).map(b=>parseInt(b.value,10)).filter(x=>!isNaN(x));
+              if(!ofIds.length){ toast('Coche au moins un OF.','error'); return; }
+              submitOfMappingMulti(it.planning_id, ofIds);
             }
-          },'Lier l\'OF sélectionné')
+          },'Lier les OF sélectionnés')
         )
       ),
       h('div',{style:'font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px'},
@@ -11471,11 +11675,15 @@ function renderFichesTab(){
 }
 
 function renderOfPage(){
-  const pendingCount = Number(S.pendingOfCount || 0);
-  const pendingBadge = pendingCount > 0
-    ? h('span',{style:'display:inline-block;margin-left:8px;padding:2px 8px;border-radius:10px;background:var(--danger);color:#fff;font-size:11px;font-weight:700;line-height:1.4'}, String(pendingCount))
+  const ambigusN = Number(S.pendingOfAmbigus || 0);
+  const sansOfN  = Number(S.pendingOfSansOf  || 0);
+  const pendingBadge = ambigusN > 0
+    ? h('span',{style:'display:inline-block;margin-left:8px;padding:2px 8px;border-radius:10px;background:var(--danger);color:#fff;font-size:11px;font-weight:700;line-height:1.4'}, String(ambigusN))
     : null;
-  const subNav=h('div',{style:{display:'flex',gap:'0',borderBottom:'1px solid var(--border)',marginBottom:'20px'}},
+  const sansOfBadge = sansOfN > 0
+    ? h('span',{style:'display:inline-block;margin-left:8px;padding:2px 8px;border-radius:10px;background:var(--danger);color:#fff;font-size:11px;font-weight:700;line-height:1.4'}, String(sansOfN))
+    : null;
+  const subNav=h('div',{style:{display:'flex',gap:'0',borderBottom:'1px solid var(--border)',marginBottom:'20px',flexWrap:'wrap'}},
     h('button',{
       style:`padding:10px 18px;font-size:13px;font-weight:600;border:none;background:transparent;cursor:pointer;border-bottom:2px solid ${S.ofSubTab==='of'?'var(--accent)':'transparent'};color:${S.ofSubTab==='of'?'var(--accent)':'var(--muted)'};font-family:inherit`,
       onClick:()=>{set({ofSubTab:'of'});render();}
@@ -11488,11 +11696,16 @@ function renderOfPage(){
       style:`padding:10px 18px;font-size:13px;font-weight:600;border:none;background:transparent;cursor:pointer;border-bottom:2px solid ${S.ofSubTab==='pending'?'var(--accent)':'transparent'};color:${S.ofSubTab==='pending'?'var(--accent)':'var(--muted)'};font-family:inherit;display:inline-flex;align-items:center`,
       onClick:async()=>{set({ofSubTab:'pending'});await loadPendingOfMappings();render();}
     },'Mappings à valider', pendingBadge),
+    h('button',{
+      style:`padding:10px 18px;font-size:13px;font-weight:600;border:none;background:transparent;cursor:pointer;border-bottom:2px solid ${S.ofSubTab==='sansof'?'var(--accent)':'transparent'};color:${S.ofSubTab==='sansof'?'var(--accent)':'var(--muted)'};font-family:inherit;display:inline-flex;align-items:center`,
+      onClick:async()=>{set({ofSubTab:'sansof'});await loadDossiersSansOf();render();}
+    },'Dossiers sans OF', sansOfBadge),
   );
   return h('div',{style:{paddingLeft:'12px',paddingRight:'4px'}},
     subNav,
-    S.ofSubTab==='fiche' ? renderFichesTab()
+    S.ofSubTab==='fiche'   ? renderFichesTab()
       : S.ofSubTab==='pending' ? renderPendingOfMappingsTab()
+      : S.ofSubTab==='sansof'  ? renderDossiersSansOfTab()
       : renderOfTab()
   );
 }
@@ -13232,7 +13445,8 @@ async function nav(){
     await loadOfImports();
     if(S.ofSubTab==='fiche') await loadFiches();
     else if(S.ofSubTab==='pending') await loadPendingOfMappings();
-    // rafraîchit le badge 'Mappings à valider'
+    else if(S.ofSubTab==='sansof') await loadDossiersSansOf();
+    // rafraîchit le badge unifié (ambigus + sans OF)
     loadPendingOfCount();
   }
   render();
