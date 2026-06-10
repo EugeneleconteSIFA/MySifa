@@ -38,6 +38,7 @@ _PLANNING_ENTRY_COL_DDLS = [
     ("departement_livraison", "ALTER TABLE planning_entries ADD COLUMN departement_livraison TEXT DEFAULT ''"),
     ("prise_rdv", "ALTER TABLE planning_entries ADD COLUMN prise_rdv INTEGER DEFAULT 0"),
     ("date_livraison_imposee", "ALTER TABLE planning_entries ADD COLUMN date_livraison_imposee INTEGER DEFAULT 0"),
+    ("valide", "ALTER TABLE planning_entries ADD COLUMN valide INTEGER DEFAULT 0"),
 ]
 
 _FSC_TYPES = frozenset({"fsc_100", "fsc_mix", "fsc_recycled"})
@@ -830,6 +831,7 @@ def _slot_payload(e: dict, start_iso: str, end_iso: str) -> dict:
         "fsc_requis": int(e.get("fsc_requis") or 0),
         "fsc_type_requis": (e.get("fsc_type_requis") or "").strip(),
         "a_placer": e.get("a_placer", 0),
+        "valide": int(e.get("valide") or 0),
         "destockage": e.get("destockage") or "todo",
         "statut_reel": e.get("statut_reel") or "reellement_en_attente",
         "duree_heures": e["duree_heures"],
@@ -1593,6 +1595,7 @@ async def add_entry(machine_id: int, request: Request):
         "commentaire": body.get("commentaire", "") or "",
         "exigences_production": (body.get("exigences_production") or "").strip() or None,
         "a_placer": _parse_a_placer(body.get("a_placer"), default=1),
+        "valide": _parse_a_placer(body.get("valide"), default=0),
         "fsc_requis": fsc_requis_val,
         "fsc_type_requis": _parse_fsc_type_requis(
             body.get("fsc_type_requis"), fsc_requis_val
@@ -1833,7 +1836,8 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
                 duree_heures=?, statut=?, notes=?, updated_at=?, updated_by=?,
                 dos_rvgi=?, numero_of=?, ref_produit=?, laize=?, date_livraison=?, commentaire=?,
                 exigences_production=?, planned_start=?, planned_end=?, planned_end_manual=?, a_placer=?,
-                fsc_requis=?, fsc_type_requis=?, departement_livraison=?, prise_rdv=?, date_livraison_imposee=?
+                fsc_requis=?, fsc_type_requis=?, departement_livraison=?, prise_rdv=?, date_livraison_imposee=?,
+                valide=?
             WHERE id=?
         """, (
             body.get("reference", ex["reference"]),
@@ -1873,6 +1877,9 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
             _parse_a_placer(body.get("date_livraison_imposee"), default=int(exd.get("date_livraison_imposee") or 0))
             if "date_livraison_imposee" in body
             else int(exd.get("date_livraison_imposee") or 0),
+            _parse_a_placer(body.get("valide"), default=int(exd.get("valide") or 0))
+            if "valide" in body
+            else int(exd.get("valide") or 0),
             entry_id
         ))
 
@@ -2352,8 +2359,8 @@ async def import_orphan_dossier(machine_id: int, request: Request):
                  duree_heures, statut, statut_reel, statut_force,
                  planned_start, planned_end,
                  created_at, updated_at, created_by, updated_by,
-                 numero_of, a_placer)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, 0)
+                 numero_of, a_placer, valide)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, 0, 1)
         """, (
             machine_id, insert_pos,
             no_dossier, client, "",
@@ -2484,6 +2491,7 @@ async def insert_after(machine_id: int, after_entry_id: int, request: Request):
         "commentaire": body.get("commentaire", "") or "",
         "exigences_production": (body.get("exigences_production") or "").strip() or None,
         "a_placer": _parse_a_placer(body.get("a_placer"), default=1),
+        "valide": _parse_a_placer(body.get("valide"), default=0),
         "fsc_requis": fsc_requis_val,
         "fsc_type_requis": _parse_fsc_type_requis(
             body.get("fsc_type_requis"), fsc_requis_val

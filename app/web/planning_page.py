@@ -2407,8 +2407,8 @@ function mkTL(mon,slots){
       const fields=[cli,s.numero_of||"",s.reference||"",s.ref_produit||"",s.description||"",fm,lz,s.laize?String(s.laize):"",exig,com].map(f=>f.toLowerCase());
       matchCls=fields.some(f=>f.includes(tlQ))?"tl-match":"tl-no-match";
     }
-    // a_placer striped
-    const aplacerCls=s.a_placer?"slot-aplacer":"";
+    // Zébré « à placer / non validé » : levé seulement si placé (a_placer=0) ET validé (valide=1)
+    const aplacerCls=(Number(s.a_placer||0)===0&&Number(s.valide||0)===1)?"":"slot-aplacer";
     const reelTermineCls=(hasSaisieReelle() && (s.statut_reel==="reellement_termine") && s.statut!=="en_cours")||s.statut==="termine"?"slot-reel-termine":"";
     const destock=s.destockage==="done";
     const reelForDrag=hasSaisieReelle() ? ((s.statut_reel||"reellement_en_attente")==="reellement_en_attente") : true;
@@ -2502,7 +2502,7 @@ function mkRow(e,i,slots){
          <option value="termine" ${e.statut==="termine"?"selected":""}>Terminé</option>
        </select>`;
   const com=escAttr(e.commentaire||"");
-  const aplacerRowCls=e.a_placer?"tr-aplacer":"";
+  const aplacerRowCls=(Number(e.a_placer||0)===0&&Number(e.valide||0)===1)?"":"tr-aplacer";
   const reelTermineRowCls=(hasSaisieReelle() && e.statut_reel==="reellement_termine")?"tr-reel-termine":"";
   const reelBadge=(()=>{
     if(!hasSaisieReelle()) return "";
@@ -2963,7 +2963,7 @@ function duplicateEntry(id){
   if(!e) return;
   document.getElementById("mroot").innerHTML=modalHTML(
     "Dupliquer le dossier",
-    dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.exigences_production||"",e.format_l||"",e.format_h||"",e.duree_heures,"attente",false,1,e.fsc_requis||0,e.fsc_type_requis||"",e.departement_livraison||"",e.prise_rdv||0,e.date_livraison_imposee||0),
+    dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.exigences_production||"",e.format_l||"",e.format_h||"",e.duree_heures,"attente",false,1,e.fsc_requis||0,e.fsc_type_requis||"",e.departement_livraison||"",e.prise_rdv||0,e.date_livraison_imposee||0,0),
     "Ajouter","submitDuplicate()"
   ,"","",false,"md--dossier");
 }
@@ -3123,11 +3123,12 @@ function fscTypeRequisLabel(t){
   return typ;
 }
 
-function dossierFields(numero_of,client,ref_produit,laize,date_livraison,commentaire,exigences_production,fl,fh,dur,statut,showStatut,aPlacer=1,fscRequis=0,fscType="",deptLivraison="",priseRdv=0,dlImposee=0){
+function dossierFields(numero_of,client,ref_produit,laize,date_livraison,commentaire,exigences_production,fl,fh,dur,statut,showStatut,aPlacer=1,fscRequis=0,fscType="",deptLivraison="",priseRdv=0,dlImposee=0,valide=0){
   const fscOn=fscRequis===1||fscRequis===true;
   const fscTyp=(fscType&&["fsc_100","fsc_mix","fsc_recycled"].includes(fscType))?fscType:"fsc_mix";
   const rdvOn=priseRdv===1||priseRdv===true;
   const dlImpOn=dlImposee===1||dlImposee===true;
+  const valideOn=valide===1||valide===true;
   const dlVal=/^\d{4}-\d{2}-\d{2}$/.test(date_livraison)?date_livraison:"";
   return`
     <div class="dossier-sections">
@@ -3145,10 +3146,16 @@ function dossierFields(numero_of,client,ref_produit,laize,date_livraison,comment
           <option value="termine" ${statut==="termine"?"selected":""}>Terminé</option>
         </select></div>`:""}
         <div class="fd">
-          <label class="dossier-check-lbl">
-            <input type="checkbox" id="f-aplacer" ${aPlacer?"checked":""} style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
-            À placer au planning
-          </label>
+          <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:center">
+            <label class="dossier-check-lbl" style="margin:0">
+              <input type="checkbox" id="f-aplacer" ${aPlacer?"checked":""} style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
+              À placer au planning
+            </label>
+            <label class="dossier-check-lbl" style="margin:0">
+              <input type="checkbox" id="f-valide" ${valideOn?"checked":""} style="width:16px;height:16px;accent-color:var(--success);cursor:pointer">
+              Dossier validé
+            </label>
+          </div>
         </div>
       </div>
       <div class="dossier-section">
@@ -3215,6 +3222,7 @@ function getFormData(withStatut){
     exigences_production:(document.getElementById("f-exig")?.value||"").trim(),
     duree_heures:Math.max(MIND,Math.min(MAXD,parseFloat(document.getElementById("f-dur").value)||8)),
     a_placer:document.getElementById("f-aplacer")?.checked?1:0,
+    valide:document.getElementById("f-valide")?.checked?1:0,
     departement_livraison:(document.getElementById("f-dept")?.value||"").trim(),
     prise_rdv:document.getElementById("f-rdv")?.checked?1:0,
     date_livraison_imposee:document.getElementById("f-dl-imp")?.checked?1:0,
@@ -3501,7 +3509,7 @@ function openEdit(id){
   const statLabel=isTermine?"Terminé":e.statut==="en_cours"?"En cours":"";
   const statColor=isTermine?"var(--danger)":"var(--accent)";
 
-  const fieldsHtml=dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.exigences_production||"",e.format_l||"",e.format_h||"",e.duree_heures,e.statut,true,e.a_placer??1,e.fsc_requis||0,e.fsc_type_requis||"",e.departement_livraison||"",e.prise_rdv||0,e.date_livraison_imposee||0);
+  const fieldsHtml=dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.exigences_production||"",e.format_l||"",e.format_h||"",e.duree_heures,e.statut,true,e.a_placer??1,e.fsc_requis||0,e.fsc_type_requis||"",e.departement_livraison||"",e.prise_rdv||0,e.date_livraison_imposee||0,e.valide??0);
 
   // Bouton déstockage compact en en-tête
   const destockDone=e.destockage==="done";

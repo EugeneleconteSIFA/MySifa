@@ -3507,6 +3507,23 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 108, "planning_of_links_multi")
 
+    # v110 — flag valide sur planning_entries
+    # Un dossier n'est plus zébré (« à placer / non finalisé ») que lorsqu'il est
+    # à la fois placé (a_placer=0) ET validé (valide=1). Les dossiers déjà placés
+    # avant cette migration sont considérés validés pour ne pas les faire basculer
+    # en zébré rétroactivement ; les dossiers encore « à placer » restent à valider.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=110 LIMIT 1").fetchone():
+        pe_cols = {row[1] for row in conn.execute("PRAGMA table_info(planning_entries)").fetchall()}
+        if "valide" not in pe_cols:
+            conn.execute(
+                "ALTER TABLE planning_entries ADD COLUMN valide INTEGER DEFAULT 0"
+            )
+        conn.execute(
+            "UPDATE planning_entries SET valide=1 WHERE COALESCE(a_placer,0)=0"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 110, "planning_entries_valide")
+
 
 def create_default_admin():
     import bcrypt

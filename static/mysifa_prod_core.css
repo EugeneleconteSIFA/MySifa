@@ -226,3 +226,284 @@ body.light .theme-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 18px rg
 .toast{position:fixed;bottom:24px;right:24px;background:var(--card);border:1px solid var(--border);
   border-radius:12px;padding:14px 20px;box-shadow:0 10px 30px rgba(0,0,0,.45);
   z-index:9500;font-size:13px;color:var(--text);max-width:380px}
+
+
+/* ────────────────────────────────────────────────────────────────────
+ * Étape 2g — Page Production (KPIs, statut, synthèse)
+ * Repris littéralement de app/web/html.py (lignes 218-222, 481-674,
+ * 864-874, 905-908, 957-958, 1726-1731).
+ * ──────────────────────────────────────────────────────────────────── */
+
+/* ── KPIs : stats ───────────────────────────────────────────────── */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:14px;margin-bottom:24px}
+.stat{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 20px}
+.stat-label{font-size:12px;color:var(--text2);font-weight:800;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+.stat-value{font-size:26px;font-weight:700;font-family:monospace;line-height:1.1;color:var(--text2)}
+.stat-sub{font-size:11px;color:var(--muted);margin-top:4px}
+
+/* ── Time KPI ───────────────────────────────────────────────────── */
+.time-kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:14px;margin-bottom:24px}
+.time-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px}
+.tc-label{font-size:11px;color:var(--text2);font-weight:800;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+.tc-value{font-size:22px;font-weight:700;font-family:monospace;color:var(--text2)}
+.tc-sub{font-size:11px;color:var(--muted);margin-top:3px}
+
+/* ── Section title ──────────────────────────────────────────────── */
+.section-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin:20px 0 10px}
+
+/* ── Boutons ────────────────────────────────────────────────────── */
+.btn-sm{background:var(--accent);color:var(--bg);border:none;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:filter .15s,box-shadow .15s,transform .05s}
+.btn-sm:hover{filter:brightness(1.05);box-shadow:0 0 0 4px rgba(34,211,238,.18)}
+.btn-sm:active{transform:translateY(1px)}
+.btn-ghost{background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:6px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:border-color .15s,color .15s,box-shadow .2s}
+.btn-ghost:hover{border-color:var(--accent);color:var(--accent);box-shadow:0 0 0 1px rgba(34,211,238,.28),0 0 20px rgba(34,211,238,.16)}
+.btn-danger{background:rgba(248,113,113,.15);color:var(--danger);border:1px solid rgba(248,113,113,.3);border-radius:6px;padding:5px 12px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit}
+
+/* ── Sous-onglets (nav-tabs) ────────────────────────────────────── */
+.nav-tabs{display:flex;gap:0;margin-bottom:24px;border-bottom:1px solid var(--border)}
+.nav-tab{padding:10px 18px;background:transparent;border:none;border-bottom:2px solid transparent;
+  color:var(--text2);cursor:pointer;font-size:13px;font-weight:500;font-family:inherit;
+  transition:all .15s;margin-bottom:-1px}
+.nav-tab:hover{color:var(--text);background:var(--accent-bg)}
+.nav-tab.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+
+/* ── MyExpé ─────────────────────────────────────────────────────── */
+.expe-fields{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:12px}
+
+/* ── Table standard ─────────────────────────────────────────────── */
+table{width:100%;border-collapse:collapse}
+table thead th{
+  position:sticky;top:0;z-index:5;background:var(--bg);
+  font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;
+  padding:8px 14px;text-align:left;border-bottom:1px solid var(--border);font-weight:700;
+}
+table tbody td{
+  padding:8px 14px;font-size:13px;
+  border-bottom:1px solid rgba(255,255,255,.04);
+  vertical-align:middle;color:var(--text2);
+}
+table tbody tr:last-child td{border-bottom:none}
+table tbody tr:hover td{background:var(--accent-bg)}
+.table-std{border-collapse:collapse;width:100%}
+
+/* ── Cards ──────────────────────────────────────────────────────── */
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:16px}
+.card-header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.card-header h3{font-size:14px;font-weight:600;margin:0;line-height:1.2}
+.card-empty{padding:24px;text-align:center;color:var(--muted);font-size:13px}
+.card-blocked{padding:32px 24px;text-align:center}
+.cb-icon{font-size:32px;margin-bottom:12px}
+.cb-msg{font-size:14px;color:var(--muted)}
+
+/* ── Modal de base (add-row-modal utilisé par openProdSynthDetail) ─ */
+.add-row-modal{
+  position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9000;
+  display:flex;align-items:center;justify-content:center;padding:16px;
+}
+.add-row-form{
+  background:var(--card);border:1px solid var(--border);border-radius:14px;
+  padding:24px;width:min(960px,100%);max-height:88vh;overflow-y:auto;
+  box-shadow:0 24px 64px rgba(0,0,0,.55);position:relative;
+}
+.add-row-close{
+  position:absolute;top:12px;right:12px;background:transparent;border:none;
+  color:var(--muted);font-size:24px;cursor:pointer;line-height:1;padding:4px 10px;
+  border-radius:6px;font-family:inherit;
+}
+.add-row-close:hover{color:var(--text);background:var(--accent-bg)}
+.add-row-counter{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--text2)}
+
+/* ── prod-synth (modal détail synthèse) ────────────────────────── */
+.prod-synth-key{cursor:pointer;font-weight:700;color:var(--text);text-decoration:underline;text-decoration-color:transparent;transition:text-decoration-color .15s,color .15s}
+.prod-synth-key:hover{color:var(--text);text-decoration-color:var(--text2)}
+.prod-synth-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin:16px 0}
+.prod-synth-kpi{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+.prod-synth-kpi .lbl{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px}
+.prod-synth-kpi .val{font-size:15px;font-weight:800;color:var(--text);font-family:monospace}
+.prod-synth-sub{font-size:12px;color:var(--muted);margin:-8px 0 12px}
+/* ── Modal détail synthèse production (lecture direction) ───────── */
+.prod-synth-modal .add-row-form.prod-synth-detail-form{
+  max-width:min(920px,96vw);
+  max-height:min(92vh,900px);
+  overflow:auto;
+  padding:26px 28px 24px;
+  border-top:3px solid var(--accent);
+  box-shadow:0 24px 80px rgba(0,0,0,.45);
+}
+.prod-synth-detail-head{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
+  margin-bottom:4px;
+  padding-right:40px;
+}
+.prod-synth-detail-title-main{min-width:0;flex:1}
+.prod-synth-detail-eyebrow{
+  display:block;
+  font-size:11px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.55px;
+  color:var(--muted);
+  margin-bottom:6px;
+}
+.prod-synth-detail-h3{
+  margin:0;
+  font-size:22px;
+  font-weight:800;
+  color:var(--text);
+  line-height:1.2;
+  letter-spacing:-.02em;
+  word-break:break-word;
+}
+.add-row-form.prod-synth-detail-form h3.prod-synth-detail-h3{
+  margin:0;
+  padding-right:0;
+  font-size:22px;
+  font-weight:800;
+  line-height:1.2;
+}
+.prod-synth-modal .add-row-counter{
+  flex-shrink:0;
+  padding:6px 8px;
+  border-radius:10px;
+  border:1px solid var(--border);
+  background:var(--bg);
+  font-size:13px;
+}
+.prod-synth-modal .add-row-nav-btn{
+  width:28px;
+  height:28px;
+  border-radius:10px;
+  font-size:16px;
+  font-weight:800;
+}
+.prod-synth-modal .prod-synth-sub{
+  margin:10px 0 0;
+  font-size:13px;
+  line-height:1.5;
+  color:var(--muted);
+}
+.prod-synth-modal .prod-synth-kpis{
+  grid-template-columns:repeat(auto-fit,minmax(132px,1fr));
+  gap:12px;
+  margin:18px 0 6px;
+}
+.prod-synth-modal .prod-synth-kpi{
+  padding:14px 14px;
+  border-radius:12px;
+  background:var(--bg);
+  border:1px solid var(--border);
+}
+.prod-synth-modal .prod-synth-kpi .lbl{font-size:11px;margin-bottom:6px}
+.prod-synth-modal .prod-synth-kpi .val{font-size:18px;font-weight:800}
+.prod-synth-detail-section-h{
+  font-size:11px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.5px;
+  color:var(--text2);
+  margin:22px 0 10px;
+  padding-bottom:6px;
+  border-bottom:1px solid var(--border);
+}
+.prod-synth-detail-table-wrap{
+  border:1px solid var(--border);
+  border-radius:12px;
+  overflow:auto;
+  max-height:min(440px,52vh);
+  background:var(--bg);
+}
+.prod-synth-modal table.prod-synth-detail-table{
+  font-size:14px;
+  width:100%;
+}
+.prod-synth-modal table.prod-synth-detail-table thead th{
+  position:sticky;
+  top:0;
+  z-index:2;
+  background:var(--card);
+  box-shadow:0 1px 0 var(--border);
+  padding:12px 14px;
+  font-size:11px;
+  font-weight:700;
+  color:var(--muted);
+  text-transform:uppercase;
+  letter-spacing:.45px;
+  border-bottom:1px solid var(--border);
+}
+.prod-synth-modal table.prod-synth-detail-table tbody td{
+  padding:12px 14px;
+  color:var(--text);
+  border-bottom:1px solid var(--border);
+  vertical-align:middle;
+}
+.prod-synth-modal table.prod-synth-detail-table tbody tr:last-child td{border-bottom:none}
+.prod-synth-modal table.prod-synth-detail-table tbody tr:nth-child(even) td{
+  background:rgba(148,163,184,.05);
+}
+body.light .prod-synth-modal table.prod-synth-detail-table tbody tr:nth-child(even) td{
+  background:rgba(100,116,139,.06);
+}
+.prod-synth-modal table.prod-synth-detail-table tbody tr:hover td{background:var(--accent-bg)}
+.prod-synth-detail-td-num{
+  text-align:right;
+  font-family:ui-monospace,Consolas,monospace;
+  font-variant-numeric:tabular-nums;
+  font-weight:700;
+  white-space:nowrap;
+}
+.prod-synth-detail-td-mono{
+  font-family:ui-monospace,Consolas,monospace;
+  font-weight:700;
+  white-space:nowrap;
+}
+.prod-synth-detail-td-text{white-space:nowrap}
+.prod-synth-detail-td-wrap{
+  white-space:normal;
+  max-width:260px;
+  min-width:120px;
+  color:var(--text2);
+  line-height:1.45;
+  font-size:13px;
+}
+.prod-synth-detail-td-vit{
+  text-align:right;
+  font-family:ui-monospace,Consolas,monospace;
+  font-variant-numeric:tabular-nums;
+  font-weight:800;
+  color:var(--warn);
+  white-space:nowrap;
+}
+.prod-synth-detail-empty{
+  text-align:center;
+  padding:26px 18px !important;
+  color:var(--muted);
+  font-size:14px;
+  font-weight:600;
+  line-height:1.5;
+  white-space:normal;
+}
+.prod-synth-detail-footer{
+  margin-top:18px;
+  padding:12px 14px;
+  border-radius:10px;
+  border:1px solid var(--border);
+  background:var(--bg);
+  font-size:12px;
+  font-weight:600;
+  color:var(--text2);
+  line-height:1.5;
+}
+.prod-synth-modal .add-row-close{
+  top:16px;
+  right:16px;
+  width:36px;
+  height:36px;
+  border-radius:10px;
+  font-size:20px;
+}
+.prod-synth-detail-sessions{display:block}
+.prod-synth-sessions-toggle{display:none}

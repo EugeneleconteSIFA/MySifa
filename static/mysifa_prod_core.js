@@ -294,6 +294,19 @@
     return /\/api\/(messages|expe\/departs|dossiers|planning)/.test(p);
   }
 
+  // Polling temps réel statut machines (15 s) — admin uniquement.
+  // Repris de app/web/html.py (lignes 2519, 2532-2540).
+  let _mstInterval = null;
+  function startMachineStatusPolling(){
+    if(_mstInterval) return;
+    if(!isAdmin(S.user)) return;
+    loadMachineStatus().catch(() => {});
+    _mstInterval = setInterval(() => { loadMachineStatus().catch(() => {}); }, 15000);
+  }
+  function stopMachineStatusPolling(){
+    if(_mstInterval){ clearInterval(_mstInterval); _mstInterval = null; }
+  }
+
   function closeSidebar(){
     if(S.sidebarOpen){ S.sidebarOpen = false; render(); }
   }
@@ -473,6 +486,496 @@
     return isAdmin(S.user);
   }
 
+
+  // ────────────────────────────────────────────────────────────────────
+  // ÉTAPE 2g — Loads + Page Production (KPIs)
+  //
+  // Code extrait littéralement de app/web/html.py :
+  //   - Loads + buildParams : lignes 6871-6985
+  //   - renderProdPage : lignes 8787-8816
+  //   - Helpers prodSynth : lignes 8988-9170
+  //   - renderProdKpis : lignes 9172-9294
+  //
+  // Stubs temporaires (remplacés en 2h/2i) :
+  //   - renderMachineStatusCards (2h)
+  //   - renderSanity (2h)
+  //   - renderHist (2i)
+  //   - renderSaisiesWithImport (2i)
+  // ────────────────────────────────────────────────────────────────────
+
+  // ── Stubs renvoyant un placeholder visuel ──────────────────────────
+  function renderMachineStatusCards(){
+    return h('div', {className: 'card-empty', style: {padding: '16px', fontStyle: 'italic'}},
+      'Statut machines — sera ajouté à l\u0027étape 2h.');
+  }
+  function renderSanity(sanity, title){
+    return null;  // Sanity reviendra en 2h via renderSanityEventsBlock
+  }
+  function renderHist(){
+    return h('div', {className: 'card-empty', style: {padding: '24px'}},
+      'Historique & Erreurs — sera ajouté à l\u0027étape 2i.');
+  }
+  function renderSaisiesWithImport(){
+    return h('div', {className: 'card-empty', style: {padding: '24px'}},
+      'Saisies — sera ajouté à l\u0027étape 2i.');
+  }
+  function renderSaisies(){ return renderSaisiesWithImport(); }
+
+async function loadFilters(){
+  try{
+    S.filters=await api('/api/filters')||{};
+    S.OPS_CONFIG=await api('/api/config/operations')||{};
+    // Pour utilisateur fabrication: auto-sélectionner son nom comme filtre opérateur
+    // pour qu'il voie immédiatement ses données de saisie
+    if(isFab(S.user) && S.user && S.user.nom){
+      const userOp = S.user.nom;
+      const ops = S.filters.operators || [];
+      // Si l'utilisateur n'est pas déjà dans la sélection et qu'il existe dans la liste
+      if(!S.fv.operateurs.length && ops.includes(userOp)){
+        S.fv.operateurs = [userOp];
+      }
+    }
+  }catch{}
+}
+function buildParams(){
+  const p=new URLSearchParams();
+  if(canViewAllProd(S.user)){
+    (S.fv.operateurs||[]).forEach(o=>p.append('operateur',o));
+    (S.fv.dossiers||[]).forEach(d=>p.append('no_dossier',d));
+  }
+  (S.fv.machines||[]).forEach(m=>p.append('machine',m));
+  if(S.fv.date_from)p.set('date_from',S.fv.date_from);
+  if(S.fv.date_to)p.set('date_to',S.fv.date_to);
+  return p;
+}
+
+async function loadHist(){const d=await api('/api/dashboard/historique?'+buildParams());if(d)S.historique=d;}
+async function loadProd(){const d=await api('/api/dashboard/production?'+buildParams());if(d)S.production=d;}
+async function loadMachineStatus(){
+  try{
+    const d=await api('/api/production/machine-status');
+    if(d){
+      S.machineStatus=d;
+      // Mise à jour DOM ciblée sans re-render global
+      updateMachineStatusDOM();
+    }
+  }catch(e){}
+}
+function updateMachineStatusDOM(){
+  const ms=S.machineStatus;
+  const ICONS={production:'▶',calage:'⚙',arret:'⛔',changement:'↻',nettoyage:'🧹',eteinte:'○',autre:'·'};
+  const DUREE_LABEL={production:'En production depuis',calage:'En calage depuis',arret:'En arrêt depuis',changement:'En changement depuis',nettoyage:'En nettoyage depuis',eteinte:'Éteinte depuis',autre:'Depuis'};
+  function fmtDuree(min){
+    if(min==null||min<0)return null;
+    if(min<1)return 'à l\'instant';
+    const h=Math.floor(min/60),m=min%60;
+    if(h===0)return m+' min';
+    return m===0?(h+'h'):(h+'h '+m+'min');
+  }
+  const grid=document.querySelector('.mst-grid');
+  if(!grid)return;
+  const cards=grid.querySelectorAll('.mst-card');
+  cards.forEach((card,idx)=>{
+    const mkey=idx===0?'C1':'C2';
+    const m=ms&&ms[mkey];
+    const sk=m?(m.statut_key||'eteinte'):'eteinte';
+    const label=m?(m.statut_label||'Éteinte'):'Éteinte';
+    const nom=m?m.nom:(mkey==='C1'?'Cohésio 1':'Cohésio 2');
+    const op=m?(m.operateur||''):'';
+    const dos=m?m.dossier:null;
+    const icon=ICONS[sk]||'·';
+    const isOn=sk!=='eteinte';
+    const dureeStr=m?fmtDuree(m.duree_min):null;
+    const dureeLabel=DUREE_LABEL[sk]||'Depuis';
+    // Mise à jour classes et contenu
+    card.className='mst-card mst-'+sk;
+    const headNom=card.querySelector('.mst-nom');
+    if(headNom)headNom.textContent=nom;
+    const dotWrap=card.querySelector('.mst-head div');
+    if(dotWrap){
+      dotWrap.innerHTML=isOn?'<span style="font-size:8px;color:#22c55e;animation:pulse 2s infinite;display:inline-block;border-radius:50%;width:8px;height:8px;background:#22c55e"></span><span class="mst-dot"></span>':'<span class="mst-dot"></span>';
+    }
+    const body=card.querySelector('.mst-body');
+    if(body){
+      let html='<div class="mst-statut">'+icon+' '+label+'</div>';
+      if(dureeStr)html+='<div class="mst-duree">'+dureeLabel+' <span class="mst-duree-val">'+dureeStr+'</span></div>';
+      if(op)html+='<div class="mst-op">👤 '+escapeHtml(op)+'</div>';
+      if(dos&&dos.no_dossier){
+        const isChangement=sk==='changement';
+        const dosStyle=isChangement?' style="opacity:.6;filter:grayscale(.4)"':'';
+        const dosPrefix=isChangement?'dossier précédent : #':'Dossier #';
+        html+='<div class="mst-dos"'+dosStyle+'><div class="mst-dos-ref">'+dosPrefix+escapeHtml(dos.no_dossier)+'</div>';
+        if(dos.client)html+='<div class="mst-dos-cli">'+escapeHtml(dos.client)+'</div>';
+        if(dos.designation)html+='<div class="mst-dos-des">'+escapeHtml(dos.designation)+'</div>';
+        html+='</div>';
+      }
+      body.innerHTML=html;
+    }
+  });
+}
+function escapeHtml(t){return(t||'').replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+async function loadImports(){const d=await api('/api/imports');if(d)set({imports:d});}
+async function loadDos(){const d=await api('/api/dossiers');if(d)set({dossiers:d});}
+async function loadMachines(){try{const d=await api('/api/planning/machines');if(d)set({machines:d});}catch(e){}}
+async function loadRentPlanning(){
+  try{
+    const d=await api('/api/rentabilite/planning-entries');
+    if(d)set({rentList:d});
+  }catch(e){
+    toast(e.message,'error');
+  }
+}
+async function loadSaisies(opts){
+  const off = (opts && typeof opts.offset==='number') ? opts.offset : (S.saisiesOffset||0);
+  const lim = (opts && typeof opts.limit==='number') ? opts.limit : (S.saisiesLimit||200);
+  const d=await api('/api/saisies?'+buildParams()+'&limit='+encodeURIComponent(String(lim))+'&offset='+encodeURIComponent(String(off)));
+  if(!d)return;
+  S.saisiesOffset = off;
+  S.saisiesLimit = lim;
+  if(opts&&opts.noRender)S.saisies=d;
+  else set({saisies:d});
+}
+async function loadDevis(){const d=await api('/api/rentabilite/devis');if(d)set({devisList:d});}
+
+function renderProdPage(){
+  const subPage = S.subPage || 'kpis';
+  // Gestion du polling temps réel machines
+  if(subPage==='kpis'){startMachineStatusPolling();}
+  else{stopMachineStatusPolling();}
+  const tabs = [
+    {key:'kpis',    label:"Vue d'ensemble", icon:'wrench'},
+    {key:'saisies', label:'Saisies', icon:'pencil'},
+    {key:'erreurs', label:'Erreurs & Qualité', icon:'alert-triangle'},
+  ];
+  const subNav = h('div',{className:'nav-tabs'},
+    ...tabs.map(t=>h('button',{
+      type:'button',
+      className:'nav-tab'+(subPage===t.key?' active':''),
+      onClick:async()=>{
+        S.subPage=t.key;
+        if(t.key==='kpis'){if(!S.production)await loadProd(); await loadMachineStatus(); startMachineStatusPolling();}
+        else{stopMachineStatusPolling();}
+        if(t.key==='saisies'&&!S.saisies)  await loadSaisies();
+        if(t.key==='erreurs'&&!S.historique) await loadHist();
+        render();
+      }
+    }, iconEl(t.icon,14),' '+t.label))
+  );
+  let content;
+  if(subPage==='saisies')  content = renderSaisiesWithImport();
+  else if(subPage==='erreurs') content = renderHist();
+  else content = renderProdKpis();
+  return h('div',null, subNav, content);
+}
+
+function formatJourLabel(j){
+  if(!j)return '—';
+  const m=String(j).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(m)return m[3]+'/'+m[2]+'/'+m[1];
+  return String(j);
+}
+function prodSynthPeriodLabel(){
+  const f=S.fv||{};
+  if(f.date_from&&f.date_to)return formatJourLabel(f.date_from)+' → '+formatJourLabel(f.date_to);
+  if(f.date_from)return 'Depuis le '+formatJourLabel(f.date_from);
+  if(f.date_to)return 'Jusqu\'au '+formatJourLabel(f.date_to);
+  return 'Période des filtres actifs';
+}
+function prodSynthDisplayKey(type,key){
+  if(type==='operator')return opName(key)||'—';
+  if(type==='day')return formatJourLabel(key);
+  return String(key||'—');
+}
+function prodSynthFilterSessions(type,key){
+  const rows=(S.production&&S.production.by_dossier)||[];
+  const k=String(key||'').trim();
+  return rows.filter(r=>{
+    if(type==='dossier')return String(r.no_dossier||'').trim()===k;
+    if(type==='operator')return String(r.operateur||'?').trim()===k;
+    if(type==='machine')return String(r.machine||'?').trim()===k;
+    if(type==='day')return String(r.jour||'').trim()===k;
+    return false;
+  }).sort((a,b)=>{
+    const dj=String(b.jour||'').localeCompare(String(a.jour||''));
+    if(dj!==0)return dj;
+    return opName(a.operateur).localeCompare(opName(b.operateur),'fr');
+  });
+}
+function prodSynthTotals(sessions){
+  const t={sessions:sessions.length,etiquettes:0,metrage_m:0,calage_min:0,prod_min:0,arret_min:0};
+  sessions.forEach(s=>{
+    t.etiquettes+=Number(s.etiquettes||0);
+    t.metrage_m+=Number(s.metrage_m||0);
+    t.calage_min+=Number(s.temps_calage_min||0);
+    t.prod_min+=Number(s.temps_prod_min||0);
+    t.arret_min+=Number(s.temps_arret_min||0);
+  });
+  t.metrage_m=Math.round(t.metrage_m*10)/10;
+  const den=t.prod_min+t.arret_min;
+  t.vitesse=den>0?(t.metrage_m/den).toFixed(2):'0.00';
+  return t;
+}
+function prodSynthCleanClient(c){
+  if(!c)return '';
+  const p=String(c).split(' - ');
+  if(p.length===2&&/^\d+$/.test(p[0].trim()))return p[1].trim();
+  return String(c).trim();
+}
+function closeProdSynthModal(){
+  try{
+    const m=document.querySelector('.prod-synth-modal');
+    if(m&&m._navKeyHandler){
+      document.removeEventListener('keydown',m._navKeyHandler,true);
+    }
+    if(m)m.remove();
+  }catch(e){}
+}
+function openProdSynthDetail(type,keys,index){
+  const list=(keys||[]).map(k=>String(k));
+  if(!list.length)return;
+  let idx=Number(index);
+  if(!Number.isFinite(idx)||idx<0)idx=0;
+  if(idx>=list.length)idx=list.length-1;
+  const key=list[idx];
+  closeProdSynthModal();
+  const TYPE_TITLES={dossier:'Dossier',operator:'Opérateur',machine:'Machine',day:'Jour'};
+  const sessions=prodSynthFilterSessions(type,key);
+  const tot=prodSynthTotals(sessions);
+  const total=list.length;
+  const goPrev=()=>{if(total>1)openProdSynthDetail(type,list,(idx-1+total)%total);};
+  const goNext=()=>{if(total>1)openProdSynthDetail(type,list,(idx+1)%total);};
+  const overlay=h('div',{className:'add-row-modal prod-synth-modal'});
+  overlay.addEventListener('click',e=>{if(e.target===overlay)closeProdSynthModal();});
+  const counter=h('span',{className:'add-row-counter',title:'← → pour naviguer'},
+    h('button',{type:'button',className:'add-row-nav-btn',title:'Précédent (←)',disabled:total<=1,onClick:e=>{e.stopPropagation();goPrev();}},'<'),
+    h('span',null,String(idx+1)+'/'+String(total)),
+    h('button',{type:'button',className:'add-row-nav-btn',title:'Suivant (→)',disabled:total<=1,onClick:e=>{e.stopPropagation();goNext();}},'>')
+  );
+  const titleRow=h('div',{className:'prod-synth-detail-head'},
+    h('div',{className:'prod-synth-detail-title-main'},
+      h('span',{className:'prod-synth-detail-eyebrow'}, TYPE_TITLES[type]||'Synthèse'),
+      h('h3',{className:'prod-synth-detail-h3'}, prodSynthDisplayKey(type,key))
+    ),
+    counter
+  );
+  const kpi=(lbl,val)=>h('div',{className:'prod-synth-kpi'},
+    h('div',{className:'lbl'},lbl),
+    h('div',{className:'val'},val)
+  );
+  const showDossierCol=type!=='dossier';
+  const sessionRows=sessions.length?sessions.map(s=>{
+    const den=Number(s.temps_prod_min||0)+Number(s.temps_arret_min||0);
+    const vit=den>0?(Number(s.metrage_m||0)/den).toFixed(2):'0.00';
+    const cli=prodSynthCleanClient(s.client);
+    const des=(s.designation||'').replace(/^,\s*/,'').trim();
+    return h('tr',null,
+      h('td',{className:'prod-synth-detail-td-text'},formatJourLabel(s.jour)),
+      h('td',{className:'prod-synth-detail-td-text'},opName(s.operateur)),
+      h('td',{className:'prod-synth-detail-td-text'},s.machine||'—'),
+      showDossierCol?h('td',{className:'prod-synth-detail-td-mono'},s.no_dossier||'—'):null,
+      h('td',{className:'prod-synth-detail-td-text'},cli||'—'),
+      h('td',{className:'prod-synth-detail-td-wrap'},des||'—'),
+      h('td',{className:'prod-synth-detail-td-num'},fN(s.etiquettes||0)),
+      h('td',{className:'prod-synth-detail-td-num'},fN(s.metrage_m||0)+' m'),
+      h('td',{className:'prod-synth-detail-td-num'},fMin(s.temps_calage_min)),
+      h('td',{className:'prod-synth-detail-td-num'},fMin(s.temps_prod_min)),
+      h('td',{className:'prod-synth-detail-td-num'},fMin(s.temps_arret_min)),
+      h('td',{className:'prod-synth-detail-td-vit'},vit+' m/min')
+    );
+  }):[h('tr',null,h('td',{colSpan:showDossierCol?11:10,className:'prod-synth-detail-empty'},'Aucune session sur la période filtrée.'))];
+  const isMobileSynth=window.innerWidth<=900;
+  if(isMobileSynth) overlay.classList.add('prod-synth-modal--compact');
+  const sessionsBlock=h('div',{className:'prod-synth-detail-sessions'},
+    h('div',{className:'prod-synth-detail-section-h'},'Détail par session'),
+    h('div',{className:'prod-synth-detail-table-wrap'},
+      h('table',{className:'table-std prod-synth-detail-table'},
+        h('thead',null,h('tr',null,
+          h('th',null,'Jour'),h('th',null,'Opérateur'),h('th',null,'Machine'),
+          showDossierCol?h('th',null,'Dossier'):null,
+          h('th',null,'Client'),h('th',null,'Désignation'),
+          h('th',{style:{textAlign:'right'}},'Étiquettes'),h('th',{style:{textAlign:'right'}},'Métrage'),h('th',{style:{textAlign:'right'}},'Calage'),
+          h('th',{style:{textAlign:'right'}},'Prod'),h('th',{style:{textAlign:'right'}},'Arrêts'),h('th',{style:{textAlign:'right'}},'Vitesse')
+        )),
+        h('tbody',null,...sessionRows)
+      )
+    )
+  );
+  const kpisBlock=h('div',{className:'prod-synth-kpis'},
+    kpi('Sessions',String(tot.sessions)),
+    kpi('Étiquettes',fN(tot.etiquettes)),
+    kpi('Métrage',fN(tot.metrage_m)+' m'),
+    kpi('Calage',fMin(tot.calage_min)),
+    kpi('Production',fMin(tot.prod_min)),
+    kpi('Arrêts',fMin(tot.arret_min)),
+    kpi('Vitesse',tot.vitesse+' m/min')
+  );
+  const formKids=[
+    h('button',{type:'button',className:'add-row-close',title:'Fermer (Échap)',onClick:e=>{e.stopPropagation();closeProdSynthModal();}},'×'),
+    titleRow,
+    h('div',{className:'prod-synth-sub'},prodSynthPeriodLabel(),' · ',sessions.length,' session'+(sessions.length>1?'s':'')),
+    kpisBlock,
+  ];
+  if(isMobileSynth&&sessions.length){
+    const sessLbl=sessions.length===1?'1 session':'Détail par session ('+sessions.length+')';
+    formKids.push(h('button',{
+      type:'button',
+      className:'btn-ghost prod-synth-sessions-toggle',
+      onClick:e=>{
+        e.stopPropagation();
+        const open=overlay.classList.toggle('prod-synth-modal--sessions-open');
+        const btn=e.currentTarget;
+        if(btn) btn.textContent=open?'Masquer le détail par session':sessLbl;
+      },
+    },sessLbl));
+  }
+  formKids.push(sessionsBlock);
+  if(!isMobileSynth){
+    formKids.push(h('div',{className:'prod-synth-detail-footer'},
+      'Navigation : flèches gauche et droite — Fermer : Échap'));
+  }
+  const form=h('div',{className:'add-row-form prod-synth-detail-form'},...formKids);
+  overlay.appendChild(form);
+  const handler=(e)=>{
+    if(e.key==='Escape'){e.preventDefault();closeProdSynthModal();return;}
+    if(e.key==='ArrowLeft'){e.preventDefault();goPrev();return;}
+    if(e.key==='ArrowRight'){e.preventDefault();goNext();}
+  };
+  document.addEventListener('keydown',handler,true);
+  overlay._navKeyHandler=handler;
+  document.getElementById('root').appendChild(overlay);
+}
+function makeProdSynthKeyCell(label,type,keys,index){
+  return h('td',{
+    className:'prod-synth-key',
+    title:'Voir le détail — flèches pour naviguer',
+    onClick:e=>{e.stopPropagation();openProdSynthDetail(type,keys,index);}
+  },label);
+}
+
+function renderProdKpis(){
+  const d=S.production;
+  if(!d)return h('div',{className:'card-empty'},'Chargement des données de production…');
+  if(d.blocked)return h('div',{className:'card'},h('div',{className:'card-blocked'},h('div',{className:'cb-icon'},iconEl('lock',32)),h('div',{className:'cb-msg'},d.message)));
+  const prod = d.produit||{};
+  const tt=d.temps_totaux||{};const parts=[];
+  if(canViewAllProd(S.user)){
+    parts.push(renderMachineStatusCards());
+  }
+
+  // ── Sanity score cliquable ─────────────────────────────────────
+  if(S.historique&&S.historique.sanity){
+    const sc=renderSanity(S.historique.sanity);
+    if(sc){
+      sc.style.cursor='pointer';
+      sc.title='Voir le détail des erreurs → Historique & Erreurs';
+      sc.addEventListener('click',async()=>{
+        S.subPage='erreurs';
+        if(!S.historique) await loadHist();
+        render();
+      });
+      sc.appendChild(h('div',{style:{fontSize:'11px',color:'var(--accent)',marginTop:'6px',textDecoration:'underline'}},'Voir le détail →'));
+      parts.push(sc);
+    }
+  }
+  parts.push(h('div',{className:'section-title'},iconEl('box',13),' Quantités'));
+  parts.push(h('div',{className:'stats'},
+    h('div',{className:'stat'},h('div',{className:'stat-label'},'Dossiers produits'),h('div',{className:'stat-value'},fN(prod.dossiers||0))),
+    h('div',{className:'stat'},h('div',{className:'stat-label'},'Qté étiquettes'),h('div',{className:'stat-value'},fN(prod.etiquettes||0))),
+    h('div',{className:'stat'},h('div',{className:'stat-label'},'Métrage'),h('div',{className:'stat-value'},fN(prod.metrage_m||0)+' m')),
+    h('div',{className:'stat'},h('div',{className:'stat-label'},'Vitesse'),h('div',{className:'stat-value'},((d.vitesse_m_min!=null)?Number(d.vitesse_m_min).toFixed(2):'0.00')+' m/min')),
+  ));
+  parts.push(h('div',{className:'section-title'},iconEl('clock',13),' Temps'));
+  const prodInclArrets = (Number(tt.production_min||0) + Number(tt.arret_min||0));
+  parts.push(h('div',{className:'time-kpi'},
+    h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('wrench',12),' Calage'),h('div',{className:'tc-value'},fMin(tt.calage_min))),
+    h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('play',12),' Production'),h('div',{className:'tc-value'},fMin(prodInclArrets))),
+    h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('alert-triangle',12),' Arrêts'),h('div',{className:'tc-value'},fMin(tt.arret_min))),
+  ));
+  const byDos = d.by_dossier || d.dossier_times || [];
+
+  function renderAggCard(title, rows, keyLabel, synthType){
+    if(!rows||!rows.length) return null;
+    const keys=rows.map(r=>String(r.key));
+    const typeMap={'Opérateur':'operator','Machine':'machine','Jour':'day'};
+    const st=synthType||(typeMap[keyLabel]||'');
+    return h('div',{className:'card'},
+      h('div',{className:'card-header'},h('h3',null,title),h('span',{style:{fontSize:'11px',color:'var(--muted)'}},rows.length+' items')),
+      h('div',{style:{overflowX:'auto'}},h('table',null,
+        h('thead',null,h('tr',null,h('th',null,keyLabel),h('th',null,'Dossiers'),h('th',null,'Étiquettes'),h('th',null,'Métrage'),h('th',null,'Calage'),h('th',null,'Prod'),h('th',null,'Arrêts'),h('th',null,'Vitesse'))),
+        h('tbody',null,...rows.map((r,i)=>h('tr',null,
+          makeProdSynthKeyCell(keyLabel==='Opérateur'?opName(r.key):(keyLabel==='Jour'?formatJourLabel(r.key):r.key),st,keys,i),
+          h('td',{style:{fontFamily:'monospace'}},fN(r.dossiers||0)),
+          h('td',{style:{fontFamily:'monospace'}},fN(r.etiquettes||0)),
+          h('td',{style:{fontFamily:'monospace'}},fN(r.metrage_m||0)+' m'),
+          h('td',{style:{fontFamily:'monospace'}},fMin(r.calage_min)),
+          h('td',{style:{fontFamily:'monospace'}},fMin(r.prod_min)),
+          h('td',{style:{fontFamily:'monospace'}},fMin(r.arret_min)),
+          h('td',{style:{fontFamily:'monospace',fontWeight:'800',color:'var(--warn)'}},String(r.vitesse_m_min||0)+' m/min')
+        )))
+      ))
+    );
+  }
+
+  parts.push(h('div',{className:'section-title'},'📌 Synthèse détaillée'));
+  // Détail par dossier en premier
+  if(byDos&&byDos.length){
+    // Agrégation par no_dossier
+    const byRef = {};
+    byDos.forEach(r=>{
+      const k = String(r.no_dossier||'').trim();
+      if(!k) return;
+      if(!byRef[k]){
+        byRef[k] = {
+          no_dossier: k,
+          etiquettes: 0,
+          metrage_m: 0,
+          temps_calage_min: 0,
+          temps_prod_min: 0,
+          temps_arret_min: 0,
+        };
+      }
+      byRef[k].etiquettes += Number(r.etiquettes||0);
+      byRef[k].metrage_m += Number(r.metrage_m||0);
+      byRef[k].temps_calage_min += Number(r.temps_calage_min||0);
+      byRef[k].temps_prod_min += Number(r.temps_prod_min||0);
+      byRef[k].temps_arret_min += Number(r.temps_arret_min||0);
+    });
+    const rowsAgg = Object.values(byRef).sort((a,b)=>String(a.no_dossier).localeCompare(String(b.no_dossier), 'fr', {numeric:true,sensitivity:'base'}));
+    const dossierKeys=rowsAgg.map(r=>String(r.no_dossier));
+
+    parts.push(h('div',{className:'card'},h('div',{className:'card-header'},h('h3',null,'Par numéro de dossier'),h('span',{style:{fontSize:'11px',color:'var(--muted)'}},rowsAgg.length+' dossiers')),
+      h('div',{style:{overflowX:'auto'}},h('table',null,
+        h('thead',null,h('tr',null,
+          h('th',null,'Dossier'),
+          h('th',null,'Étiquettes'),
+          h('th',null,'Métrage'),
+          h('th',null,'Calage'),
+          h('th',null,'Prod'),
+          h('th',null,'Arrêts'),
+          h('th',null,'Vitesse')
+        )),
+        h('tbody',null,...rowsAgg.map((r,i)=>h('tr',null,
+          makeProdSynthKeyCell(r.no_dossier||'','dossier',dossierKeys,i),
+          h('td',{style:{fontFamily:'monospace'}},fN(r.etiquettes||0)),
+          h('td',{style:{fontFamily:'monospace'}},fN(r.metrage_m||0)+' m'),
+          h('td',{style:{fontFamily:'monospace',color:'var(--text2)'}},fMin(r.temps_calage_min)),
+          h('td',{style:{fontFamily:'monospace',color:'var(--text2)'}},fMin(r.temps_prod_min)),
+          h('td',{style:{fontFamily:'monospace',color:'var(--text2)'}},fMin(r.temps_arret_min)),
+          h('td',{style:{fontFamily:'monospace',fontWeight:'800',color:'var(--warn)'}},(()=>{const den=Number(r.temps_prod_min||0)+Number(r.temps_arret_min||0);return (den>0?(Number(r.metrage_m||0)/den).toFixed(2):'0.00')+' m/min';})())
+        )))
+      ))
+    ));
+  }
+  const byOp=d.by_operator||[];
+  const byMach=d.by_machine||[];
+  const byDay=d.by_day||[];
+  parts.push(renderAggCard('Par opérateur',byOp,'Opérateur'));
+  parts.push(renderAggCard('Par machine',byMach,'Machine'));
+  parts.push(renderAggCard('Par jour',byDay,'Jour'));
+
+  return h('div',null,...parts);
+}
+
   // ── 11. Auth (checkAuth / doLogin / doLogout) ──────────────────────
   async function checkAuth(){
     const epoch = authEpoch;
@@ -504,8 +1007,18 @@
         const allowed = new Set(['production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite','of']);
         if(allowed.has(p)) S.page = p;
       }catch(e){}
-      // À l'étape 2f : pas encore de load* (ils arrivent en 2g). Render direct.
+      // Charger les données initiales pour la sous-page courante (étape 2g).
       try{ startAlertsBadgePolling(); }catch(e){}
+      try{
+        await loadFilters();
+        if(S.page === 'production'){
+          await loadProd();
+          await loadHist();
+          await loadMachineStatus();
+        }
+      }catch(e){
+        console.warn('[mysifa_prod_core] checkAuth load erreur:', e && e.message);
+      }
     }else{
       S.user = null;
       S.app = 'login';
@@ -564,6 +1077,17 @@
       S.loginSubmitting = false;
       render();
       try{ startAlertsBadgePolling(); }catch(e){}
+      try{
+        await loadFilters();
+        if(S.page === 'production'){
+          await loadProd();
+          await loadHist();
+          await loadMachineStatus();
+          render();
+        }
+      }catch(e){
+        console.warn('[mysifa_prod_core] doLogin load erreur:', e && e.message);
+      }
     }catch(e){
       S.loginError = e.message || 'Erreur de connexion';
       S.loginSubmitting = false;
@@ -585,11 +1109,23 @@
     render();
   }
 
-  // ── 12. nav() — stub à l'étape 2f ──────────────────────────────────
-  // Aux étapes 2g+, nav() chargera les données nécessaires à la page
-  // courante (loadFilters, loadProd, loadHist, etc.). À l'étape 2f,
-  // il se contente d'un render() (la sidebar reflète le changement).
-  function nav(){
+  // ── 12. nav() — déclencheur de chargement par sous-page ────────────
+  // Appelé par renderSidebar quand l'utilisateur change d'onglet. Charge
+  // les données nécessaires à la nouvelle page puis re-render.
+  async function nav(){
+    try{
+      if(S.page === 'production'){
+        if(S.subPage === 'kpis' || !S.subPage){
+          await loadProd();
+          if(!S.historique) await loadHist();  // pour sanity
+          await loadMachineStatus();
+        }
+        // Sous-onglets saisies/erreurs : stubs en 2g, étoffés en 2i
+      }
+      // Autres pages (suivi/historique/saisies/etc.) : chargements ajoutés en 2i+
+    }catch(e){
+      console.warn('[mysifa_prod_core] nav() erreur:', e && e.message);
+    }
     render();
   }
 
@@ -733,19 +1269,32 @@
         'aria-label': 'Accueil',
       }, iconEl('home', 20))
     );
-    const placeholder = h('div', {className: 'card', style: {padding: '32px', textAlign: 'center'}},
-      h('h2', {style: {marginBottom: '8px'}}, 'Sous-page : ' + (S.page || '')),
-      h('p', {style: {color: 'var(--text2)', fontSize: '13px'}},
-        'Le contenu de cette sous-page sera ajout\u00e9 aux \u00e9tapes 2g \u00e0 2l. ' +
-        'La sidebar est fonctionnelle : la navigation entre sous-pages, le mode clair/sombre, ' +
-        'et la d\u00e9connexion marchent d\u00e9j\u00e0.'
-      )
-    );
+    // Page Production = sous-onglets KPIs/Saisies/Erreurs via renderProdPage()
+    let pageContent;
+    let pageTitle = 'MyProd';
+    let pageSubtitle = 'Page standalone';
+    if(S.page === 'production'){
+      pageTitle = (S.subPage === 'saisies' ? 'Saisies' :
+                   S.subPage === 'erreurs' ? 'Historique & Erreurs' :
+                   'Production');
+      pageSubtitle = (S.subPage === 'saisies' ? 'Consulter, corriger et importer des saisies' :
+                      S.subPage === 'erreurs' ? 'Sanity Score, incidents et erreurs de saisie' :
+                      'KPIs, temps, quantit\u00e9s et qualit\u00e9 de saisie');
+      pageContent = renderProdPage();
+    }else{
+      pageContent = h('div', {className: 'card', style: {padding: '32px', textAlign: 'center'}},
+        h('h2', {style: {marginBottom: '8px'}}, 'Sous-page : ' + (S.page || '')),
+        h('p', {style: {color: 'var(--text2)', fontSize: '13px'}},
+          'Le contenu de cette sous-page sera ajout\u00e9 aux \u00e9tapes ult\u00e9rieures (2i \u00e0 2l). ' +
+          'Bascule sur l\u0027onglet Production pour voir les KPIs r\u00e9els.'
+        )
+      );
+    }
     const containerKids = [
       topbar,
-      h('h1', null, 'MyProd'),
-      h('div', {className: 'subtitle'}, 'Page standalone \u2014 \u00e9tape 2f (sidebar + auth + render squelette)'),
-      placeholder,
+      h('h1', null, pageTitle),
+      h('div', {className: 'subtitle'}, pageSubtitle),
+      pageContent,
     ];
     root.appendChild(h('div', null,
       S.sidebarOpen ? h('div', {className: 'sidebar-overlay', onClick: closeSidebar}) : null,
@@ -770,8 +1319,8 @@
   // les compléter / les utiliser. À la fin du refactor (étape 2n), ces
   // exports pourront être retirés si plus nécessaire.
   window.__MYSIFA_PROD_STANDALONE__ = {
-    stage: '2f',
-    description: 'Auth + sidebar + render squelette',
+    stage: '2g',
+    description: 'Loads + Page Production (KPIs)',
     loadedAt: new Date().toISOString(),
   };
   window.__prodCore = {
@@ -787,9 +1336,16 @@
     canAccessOfTab,
     checkAuth, doLogin, doLogout, nav,
     renderLogin, renderSidebar, render,
+    buildParams, loadFilters, loadHist, loadProd, loadMachineStatus,
+    loadImports, loadDos, loadMachines, loadRentPlanning, loadSaisies, loadDevis,
+    renderProdPage, renderProdKpis,
+    startMachineStatusPolling, stopMachineStatusPolling, updateMachineStatusDOM,
+    formatJourLabel, prodSynthPeriodLabel, prodSynthDisplayKey,
+    prodSynthFilterSessions, prodSynthTotals, prodSynthCleanClient,
+    closeProdSynthModal, openProdSynthDetail, makeProdSynthKeyCell,
   };
 
-  console.info('[mysifa_prod_core] auth + sidebar charges - etape 2f', {
+  console.info('[mysifa_prod_core] page Production chargee - etape 2g', {
     helpers: Object.keys(window.__prodCore).length,
     stateFields: Object.keys(S).length,
   });
