@@ -473,12 +473,296 @@
     return isAdmin(S.user);
   }
 
-  // ── 11. Stub render() ──────────────────────────────────────────────
-  // À l'étape 2e, render() est un no-op : le placeholder HTML reste
-  // affiché tel qu'inscrit dans PROD_HTML. Aux étapes 2f+, render()
-  // sera étoffé pour afficher la sidebar puis les sous-pages MyProd.
+  // ── 11. Auth (checkAuth / doLogin / doLogout) ──────────────────────
+  async function checkAuth(){
+    const epoch = authEpoch;
+    const user = await api('/api/auth/me');
+    if(epoch !== authEpoch) return;
+    if(user){
+      S.user = user;
+      try{ if(window.MySifaTheme) MySifaTheme.mergeFromUser(user); }catch(e){}
+      S.app = 'prod';
+      // Compta/logistique : redirection /prod -> /planning (cohérent monolithe).
+      if(isComptaPlanning(S.user)){ window.location.href = '/planning'; return; }
+      // Support : redirection post-login (?next=/xxx)
+      try{
+        const sp = new URLSearchParams(window.location.search || '');
+        const nxt = (sp.get('next') || '').trim();
+        if(nxt && nxt.startsWith('/') && nxt !== '/prod'){
+          window.location.href = nxt;
+          return;
+        }
+      }catch(e){}
+      // ?page=xxx : redirige hors-MyProd vers les routes dédiées, ou applique
+      // la sous-page MyProd si autorisée.
+      try{
+        const sp = new URLSearchParams(window.location.search || '');
+        const p = (sp.get('page') || '').trim();
+        if(p === 'users'){ window.location.href = '/settings'; return; }
+        if(p === 'matiere_prix'){ window.location.href = '/pricing'; return; }
+        if(p === 'profil'){ window.location.href = '/profil'; return; }
+        const allowed = new Set(['production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite','of']);
+        if(allowed.has(p)) S.page = p;
+      }catch(e){}
+      // À l'étape 2f : pas encore de load* (ils arrivent en 2g). Render direct.
+      try{ startAlertsBadgePolling(); }catch(e){}
+    }else{
+      S.user = null;
+      S.app = 'login';
+    }
+    render();
+  }
+
+  async function doLogin(email, password){
+    if(S.loginSubmitting) return;
+    S.loginError = null;
+    S.loginSubmitting = true;
+    render();
+    try{
+      const r = await api('/api/auth/login', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({email, password}),
+      });
+      if(!r || !r.user){
+        S.loginSubmitting = false;
+        if(r && !r.user) S.loginError = 'Réponse serveur invalide';
+        render();
+        return;
+      }
+      authEpoch++;
+      // Profil complet via /me (login partial reply)
+      try{
+        const me = await api('/api/auth/me');
+        S.user = me || r.user;
+      }catch(e){
+        S.user = r.user;
+      }
+      S.app = 'prod';
+      // Compta/logistique : redirection vers /planning
+      if(isComptaPlanning(S.user)){ window.location.href = '/planning'; return; }
+      // Support ?next=/xxx
+      try{
+        const sp = new URLSearchParams(window.location.search || '');
+        const nxt = (sp.get('next') || '').trim();
+        if(nxt && nxt.startsWith('/') && nxt !== '/prod'){
+          window.location.href = nxt;
+          return;
+        }
+      }catch(e){}
+      // ?page=xxx
+      try{
+        const sp = new URLSearchParams(window.location.search || '');
+        const p = (sp.get('page') || '').trim();
+        if(p === 'users'){ window.location.href = '/settings'; return; }
+        if(p === 'matiere_prix'){ window.location.href = '/pricing'; return; }
+        if(p === 'profil'){ window.location.href = '/profil'; return; }
+        const allowed = new Set(['production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite','of']);
+        if(allowed.has(p)) S.page = p;
+      }catch(e){}
+      S.loginError = null;
+      S.loginSubmitting = false;
+      render();
+      try{ startAlertsBadgePolling(); }catch(e){}
+    }catch(e){
+      S.loginError = e.message || 'Erreur de connexion';
+      S.loginSubmitting = false;
+      render();
+    }
+  }
+
+  async function doLogout(){
+    authEpoch++;
+    await api('/api/auth/logout', {method: 'POST'});
+    S.user = null;
+    S.app = 'login';
+    S.historique = null;
+    S.production = null;
+    S.traceabilite = null;
+    S.machineStatus = null;
+    S.loginSubmitting = false;
+    S.loginError = null;
+    render();
+  }
+
+  // ── 12. nav() — stub à l'étape 2f ──────────────────────────────────
+  // Aux étapes 2g+, nav() chargera les données nécessaires à la page
+  // courante (loadFilters, loadProd, loadHist, etc.). À l'étape 2f,
+  // il se contente d'un render() (la sidebar reflète le changement).
+  function nav(){
+    render();
+  }
+
+  // ── 13. renderLogin / renderSidebar ────────────────────────────────
+  // Repris littéralement de app/web/html.py (lignes 7169-7263).
+  function renderLogin(){
+    const errEl = h('div', {
+      className: 'login-error' + (S.loginError ? ' show' : ''),
+      id: 'login-error',
+    }, S.loginError || '');
+    const emailI = h('input', {
+      type: 'text', id: 'login-email', name: 'email',
+      autocomplete: 'username', placeholder: 'identifiant ou email',
+    });
+    const pwdI = h('input', {
+      type: 'password', id: 'login-password', name: 'password',
+      autocomplete: 'current-password', placeholder: '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022',
+    });
+    const submit = e => {
+      e.preventDefault();
+      if(S.loginSubmitting) return;
+      doLogin(emailI.value, pwdI.value);
+    };
+    return h('div', {className: 'login-page'},
+      h('div', {className: 'login-box'},
+        h('div', {className: 'login-logo'},
+          h('div', {className: 'brand'}, 'My', h('span', null, 'Sifa')),
+          h('div', {className: 'tagline'}, 'Portail interne \u2014 Production, stocks et outils m\u00e9tier')
+        ),
+        h('div', {className: 'login-card'},
+          h('h2', null, 'Connexion'),
+          h('p', null, 'Acc\u00e8s r\u00e9serv\u00e9 au personnel SIFA'),
+          errEl,
+          h('form', {onSubmit: submit},
+            h('div', {className: 'field'}, h('label', {'for': 'login-email'}, 'Identifiant ou email'), emailI),
+            h('div', {className: 'field'}, h('label', {'for': 'login-password'}, 'Mot de passe'), pwdI),
+            h('button', {
+              type: 'submit', className: 'login-btn',
+              disabled: !!S.loginSubmitting,
+            }, S.loginSubmitting ? 'Connexion\u2026' : 'Se connecter')
+          )
+        ),
+        h('div', {className: 'login-footer'}, '\u00a9 SIFA \u2014 MySifa ' + (window.__APP_VERSION__ || ''))
+      )
+    );
+  }
+
+  function renderSidebar(){
+    const admin = isAdmin(S.user);
+    const comptaPlan = isComptaPlanning(S.user);
+    const items = comptaPlan
+      ? (canPlanningNav(S.user) ? [{key: '_planning', label: 'Planning', icon: 'calendar'}] : [])
+      : [
+          ...(canPlanningNav(S.user) ? [{key: '_planning', label: 'Planning', icon: 'calendar'}] : []),
+          {key: 'production', label: 'Production', icon: 'wrench'},
+          {key: 'traceabilite', label: 'Tra\u00e7abilit\u00e9', icon: 'layers'},
+          ...(admin ? [{key: 'rentabilite', label: 'Rentabilit\u00e9', icon: 'trending-up'}] : []),
+          ...(canAccessOfTab() ? [{key: 'of', label: 'Fiches + OF', icon: 'file', withPendingOfBadge: true}] : []),
+        ];
+    const isLight = document.body.classList.contains('light');
+    return h('nav', {className: 'sidebar'},
+      h('div', {className: 'logo'},
+        h('div', {className: 'logo-brand'}, 'My', h('span', null, 'Prod')),
+        h('div', {className: 'logo-sub'}, 'by SIFA')
+      ),
+      ...items.map(i => {
+        const btn = h('button', {
+          className: 'nav-btn' + (S.page === i.key ? ' active' : ''),
+          onClick: () => {
+            if(i.key === '_planning'){ window.location.href = '/planning'; return; }
+            S.sidebarOpen = false;
+            set({page: i.key});
+            nav();
+          }
+        });
+        btn.appendChild(iconEl(i.icon, 15));
+        btn.appendChild(document.createTextNode('  ' + i.label));
+        if(i.withPendingOfBadge){
+          const cnt = Number(S.pendingOfCount || 0);
+          if(cnt > 0){
+            btn.appendChild(h('span', {
+              style: 'margin-left:auto;padding:1px 7px;border-radius:9px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;line-height:1.5;flex-shrink:0',
+              title: cnt + ' OF \u00e0 associer manuellement',
+            }, String(cnt)));
+          }
+        }
+        return btn;
+      }),
+      h('div', {className: 'sidebar-bottom'},
+        h('button', {
+          className: 'nav-btn back-mysifa',
+          onClick: () => { window.location.href = '/'; }
+        },
+          '\u2190 Retour ',
+          h('span', {className: 'wm'}, 'My', h('span', null, 'Sifa'))
+        ),
+        sidebarUserChip(S.user),
+        h('button', {
+          className: 'theme-btn',
+          onClick: () => {
+            try{ if(window.MySifaTheme) MySifaTheme.toggleMode(); }catch(e){}
+            render();
+          }
+        },
+          h('span', {className: 'theme-ico'}, iconEl(isLight ? 'sun' : 'moon', 16)),
+          h('span', {className: 'theme-label'}, isLight ? 'Mode clair' : 'Mode sombre')
+        ),
+        h('button', {className: 'logout-btn', onClick: doLogout}, iconEl('log-out', 14), ' D\u00e9connexion'),
+        h('div', {className: 'version'}, window.__APP_VERSION__ || '')
+      )
+    );
+  }
+
+  // ── 14. render() — squelette ─────────────────────────────────────────
+  // \u00c9tape 2f : pas connect\u00e9 -> renderLogin ; connect\u00e9 -> sidebar + main vide.
+  // Les sous-pages MyProd (Production, Historique, etc.) seront ajout\u00e9es aux
+  // \u00e9tapes 2g \u00e0 2l.
   function render(){
-    // no-op à l'étape 2e
+    const root = document.getElementById('root');
+    if(!root) return;
+    root.innerHTML = '';
+    document.body.classList.toggle('sb-open', !!S.sidebarOpen);
+
+    if(!S.user || S.app === 'login'){
+      root.appendChild(renderLogin());
+      return;
+    }
+    // Layout app + sidebar + main (container vide pour l'instant)
+    const topbar = h('div', {className: 'mobile-topbar'},
+      h('button', {
+        type: 'button', className: 'mobile-menu-btn',
+        onClick: toggleSidebar, 'aria-label': 'Menu',
+      }, iconEl('menu', 20)),
+      h('div', null,
+        h('div', {className: 'mobile-topbar-title'}, 'MyProd'),
+        h('div', {className: 'mobile-topbar-sub'}, S.page || '')
+      ),
+      h('button', {
+        type: 'button', className: 'mobile-home-btn',
+        onClick: () => { window.location.href = '/'; },
+        'aria-label': 'Accueil',
+      }, iconEl('home', 20))
+    );
+    const placeholder = h('div', {className: 'card', style: {padding: '32px', textAlign: 'center'}},
+      h('h2', {style: {marginBottom: '8px'}}, 'Sous-page : ' + (S.page || '')),
+      h('p', {style: {color: 'var(--text2)', fontSize: '13px'}},
+        'Le contenu de cette sous-page sera ajout\u00e9 aux \u00e9tapes 2g \u00e0 2l. ' +
+        'La sidebar est fonctionnelle : la navigation entre sous-pages, le mode clair/sombre, ' +
+        'et la d\u00e9connexion marchent d\u00e9j\u00e0.'
+      )
+    );
+    const containerKids = [
+      topbar,
+      h('h1', null, 'MyProd'),
+      h('div', {className: 'subtitle'}, 'Page standalone \u2014 \u00e9tape 2f (sidebar + auth + render squelette)'),
+      placeholder,
+    ];
+    root.appendChild(h('div', null,
+      S.sidebarOpen ? h('div', {className: 'sidebar-overlay', onClick: closeSidebar}) : null,
+      h('div', {className: 'app'},
+        renderSidebar(),
+        h('main', {className: 'main'}, h('div', {className: 'container'}, ...containerKids))
+      )
+    ));
+
+    // Toast
+    if(S.toast){
+      const c = {success: 'var(--success)', error: 'var(--danger)'};
+      root.appendChild(h('div', {
+        className: 'toast',
+        style: {borderLeft: '3px solid ' + (c[S.toast.type] || 'var(--accent)')},
+      }, h('span', {style: {fontSize: '14px', color: c[S.toast.type] || 'var(--accent)'}}, S.toast.message)));
+    }
   }
 
   // ── Exposition globale pour debugging et étapes suivantes ──────────
@@ -486,8 +770,8 @@
   // les compléter / les utiliser. À la fin du refactor (étape 2n), ces
   // exports pourront être retirés si plus nécessaire.
   window.__MYSIFA_PROD_STANDALONE__ = {
-    stage: '2e',
-    description: 'Socle JS — helpers + state S filtré',
+    stage: '2f',
+    description: 'Auth + sidebar + render squelette',
     loadedAt: new Date().toISOString(),
   };
   window.__prodCore = {
@@ -501,11 +785,19 @@
     isAdmin, canViewAllProd, isComptaPlanning, canPlanningNav, isFab, isFabrication, isCommercial, isSuperAdmin,
     ROLE_LABELS, ROLE_BADGE,
     canAccessOfTab,
-    render,
+    checkAuth, doLogin, doLogout, nav,
+    renderLogin, renderSidebar, render,
   };
 
-  console.info('[mysifa_prod_core] socle JS chargé — étape 2e', {
+  console.info('[mysifa_prod_core] auth + sidebar charges - etape 2f', {
     helpers: Object.keys(window.__prodCore).length,
     stateFields: Object.keys(S).length,
   });
+
+  // ── Bootstrap : declenche checkAuth au chargement ──────────────────
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', () => { checkAuth().catch(() => {}); });
+  }else{
+    checkAuth().catch(() => {});
+  }
 })();
