@@ -707,8 +707,16 @@ body.light .mp-search-wrap:focus-within{
 .prod-z1-des{font-size:12px;color:var(--text2);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .prod-z1-meta{display:flex;flex-wrap:wrap;gap:14px;margin-top:6px;font-size:11px;color:var(--muted)}
 .prod-z1-meta-date,.prod-z1-meta-op{display:inline-flex;align-items:center;gap:4px}
-.prod-z1-qty{flex-shrink:0;font-size:15px;font-weight:800;color:var(--success);
+.prod-z1-qty{font-size:15px;font-weight:800;color:var(--success);
   font-variant-numeric:tabular-nums;text-align:right}
+.prod-z1-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0}
+.prod-z1-actions{display:flex;gap:6px}
+.prod-z1-btn{display:inline-flex;align-items:center;gap:4px;padding:5px 9px;border-radius:7px;
+  border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;
+  font-size:11px;font-weight:700;font-family:inherit;transition:all .15s}
+.prod-z1-btn:hover{border-color:var(--accent);color:var(--accent)}
+.prod-z1-btn-add:hover{border-color:var(--success);color:var(--success)}
+.prod-z1-btn-edit:hover{border-color:var(--warn);color:var(--warn)}
 .prod-z1-empty{padding:32px 16px}
 .prod-z1-empty-hint{font-size:12px;color:var(--muted);margin-top:6px}
 @media (max-width:900px){
@@ -7464,7 +7472,13 @@ function renderPfMouvementModal(type, produit, defaultEmpl) {
   const mroot = document.getElementById('mroot');
   if (!mroot) return;
   let prod = produit || null;
-  S.pfModal = { type: typeMvt, produit: prod, produitId: prod ? prod.id : null, refInp: null };
+  S.pfModal = {
+    type: typeMvt,
+    produit: prod,
+    produitId: prod ? prod.id : null,
+    refInp: null,
+    defaultEmpl: defaultEmpl || null,
+  };
 
   const overlay = el('div', {
     cls: 'mp-modal-overlay',
@@ -7507,7 +7521,7 @@ function renderPfMouvementModal(type, produit, defaultEmpl) {
     const suggWrap = el('div', { cls: 'empl-suggestions', style: { display: 'none' } });
     S.pfModal.refInp = refInp;
     wireStockProduitSearch(refInp, suggWrap, (p) => {
-      renderPfMouvementModal(typeMvt, p);
+      renderPfMouvementModal(typeMvt, p, S.pfModal && S.pfModal.defaultEmpl);
     });
     const refCombo = el('div', { cls: 'empl-combo-wrap' }, refInp, suggWrap);
     body.appendChild(el('div', { cls: 'mp-field ref-field-wrap' },
@@ -8708,6 +8722,7 @@ function buildProductionView() {
     ));
   } else {
     const list = el('div', { cls: 'prod-z1-list' });
+    const currentName = String((S.user && S.user.nom) || '').trim().toLowerCase();
     z1.refs.forEach(r => {
       const row = el('div', { cls: 'prod-z1-row' });
       const left = el('div', { cls: 'prod-z1-left' },
@@ -8724,7 +8739,26 @@ function buildProductionView() {
           ),
         ),
       );
-      const right = el('div', { cls: 'prod-z1-qty' }, fU(r.quantite || 0, r.unite || ''));
+      const right = el('div', { cls: 'prod-z1-right' });
+      right.appendChild(el('div', { cls: 'prod-z1-qty' }, fU(r.quantite || 0, r.unite || '')));
+      // Actions : visibles uniquement si l'opérateur de la dernière entrée = utilisateur courant
+      const lineOp = String(r.dernier_operateur || '').trim().toLowerCase();
+      if (currentName && lineOp && currentName === lineOp) {
+        const actions = el('div', { cls: 'prod-z1-actions' });
+        actions.appendChild(el('button', {
+          cls: 'prod-z1-btn prod-z1-btn-add',
+          type: 'button',
+          attrs: { title: 'Ajouter une quantité à cette référence' },
+          on: { click: (ev) => { ev.stopPropagation(); openProductionAddTo(r); } },
+        }, iconEl('plus-circle', 12), ' Ajouter'));
+        actions.appendChild(el('button', {
+          cls: 'prod-z1-btn prod-z1-btn-edit',
+          type: 'button',
+          attrs: { title: 'Modifier la quantité totale en Z1' },
+          on: { click: (ev) => { ev.stopPropagation(); openProductionEdit(r); } },
+        }, iconEl('edit', 12), ' Modifier'));
+        right.appendChild(actions);
+      }
       row.appendChild(left);
       row.appendChild(right);
       list.appendChild(row);
@@ -8734,6 +8768,103 @@ function buildProductionView() {
 
   wrap.appendChild(card);
   return wrap;
+}
+
+
+// ── Production : actions sur lignes Z1 (Ajouter / Modifier) ──────────
+function openProductionAddTo(r) {
+  // Ouvre la modale Entrée Z1 pré-remplie avec ce produit
+  const prod = {
+    id: r.id,
+    reference: r.reference,
+    designation: r.designation,
+    unite: r.unite,
+  };
+  renderPfMouvementModal('entree', prod, STOCK_EMPL_SORTIE_PROD);
+}
+
+function openProductionEdit(r) {
+  // Modale simple : nouvelle quantité totale en Z1 (via type=inventaire)
+  closeMroot();
+  const mroot = document.getElementById('mroot');
+  if (!mroot) return;
+  const overlay = el('div', {
+    cls: 'mp-modal-overlay',
+    on: { click: (e) => { if (e.target === overlay) closeMroot(); } },
+  });
+  const box = el('div', { cls: 'mp-modal mp-modal-mvt' });
+  box.appendChild(el('div', { cls: 'mp-modal-mvt-head mp-modal-mvt-head-ajustement' },
+    el('h3', null, 'Modifier la quantité — Z1'),
+    el('button', {
+      cls: 'mp-modal-close', type: 'button',
+      attrs: { title: 'Fermer', 'aria-label': 'Fermer' },
+      on: { click: closeMroot },
+    }, '×'),
+  ));
+  const body = el('div', { cls: 'mp-modal-mvt-body' });
+  body.appendChild(el('div', { cls: 'mp-field' },
+    el('label', null, 'Référence'),
+    el('div', { cls: 'mp-readonly' },
+      (r.reference || '—') + (r.designation ? ' — ' + r.designation : ''),
+    ),
+  ));
+  const currentQty = Number(r.quantite || 0);
+  body.appendChild(el('div', { cls: 'mp-field' },
+    el('label', null, 'Quantité actuelle'),
+    el('div', { cls: 'mp-readonly' }, fU(currentQty, r.unite || '')),
+  ));
+  const qInp = el('input', {
+    attrs: { type: 'number', min: '0', step: 'any', inputmode: 'decimal', placeholder: 'Nouvelle quantité totale' },
+  });
+  qInp.value = String(currentQty);
+  body.appendChild(el('div', { cls: 'mp-field' },
+    el('label', null, 'Nouvelle quantité (' + (r.unite || '') + ')'),
+    qInp,
+    el('div', { cls: 'mp-hint' },
+      'La quantité saisie remplace le total actuel en Z1 pour cette référence.',
+    ),
+  ));
+  const noteTa = el('textarea', { attrs: { placeholder: 'Raison de la modification (optionnel)' } });
+  body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Note'), noteTa));
+
+  const submit = async () => {
+    const q = parseFloat(qInp.value);
+    if (Number.isNaN(q) || q < 0) {
+      showToast('Quantité invalide.', 'error');
+      return;
+    }
+    if (Math.abs(q - currentQty) < 0.0001) {
+      showToast('Aucun changement.', 'info');
+      closeMroot();
+      return;
+    }
+    try {
+      await api('/api/stock/mouvement', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          produit_id: r.id,
+          emplacement: STOCK_EMPL_SORTIE_PROD,
+          type_mouvement: 'inventaire',
+          quantite: q,
+          note: (noteTa.value || '').trim() || 'Ajustement Z1',
+        }),
+      });
+      showToast('Quantité modifiée.', 'success');
+      closeMroot();
+      if (S.tab === 'production') await loadProduction();
+    } catch (e) {
+      showToast(e.message || 'Erreur lors de la modification.', 'error');
+    }
+  };
+
+  body.appendChild(el('div', { cls: 'mp-modal-actions' },
+    el('button', { cls: 'btn-cancel', type: 'button', on: { click: closeMroot } }, 'Annuler'),
+    el('button', { cls: 'btn', type: 'button', on: { click: submit } }, 'Enregistrer'),
+  ));
+  box.appendChild(body);
+  overlay.appendChild(box);
+  mroot.appendChild(overlay);
 }
 
 function buildDashboardKpis(s) {
