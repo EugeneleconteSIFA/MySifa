@@ -657,3 +657,166 @@ body.light .prod-dossier-filter .search-bar:focus{box-shadow:0 0 0 3px rgba(8,14
 .si-mention{font-size:18px;font-weight:700;margin-bottom:4px}
 .si-label{font-size:12px;color:var(--muted);margin-bottom:10px}
 .sanity-pills{display:flex;gap:8px;flex-wrap:wrap}
+
+
+/* ────────────────────────────────────────────────────────────────────
+ * Étape 2i — Saisies + Historique + Import (UI tabulaire + modals)
+ * Repris littéralement de app/web/html.py.
+ * ──────────────────────────────────────────────────────────────────── */
+
+/* ── Table saisies (sticky header) ──────────────────────────────── */
+.saisies-table-wrap{border-radius:10px;border:1px solid var(--border);overflow:hidden}
+.saisies-table-wrap .saisies-bot{max-height:68vh;overflow:auto}
+.saisies-table-wrap table thead th{position:sticky;top:0;z-index:5;background:var(--card)}
+.login-page{position:relative;z-index:1;min-height:100vh;display:flex;align-items:center;justify-content:center}
+
+/* ── Drop-zone (import) ─────────────────────────────────────────── */
+.drop-zone{border:2px dashed var(--border);border-radius:16px;padding:48px 24px;text-align:center;cursor:pointer;background:var(--card);transition:all .2s;margin-bottom:20px}
+.drop-zone:hover,.drop-zone.drag{border-color:var(--accent);background:var(--accent-bg)}
+.dz-icon{font-size:36px;opacity:.4;margin-bottom:12px}
+.dz-title{font-size:16px;font-weight:600;margin-bottom:6px}
+.dz-sub{font-size:13px;color:var(--muted)}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{padding:8px 12px;text-align:left;font-weight:600;font-size:10px;color:var(--accent);border-bottom:1px solid var(--border);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;font-family:monospace}
+td{padding:7px 12px;color:var(--text2);white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis;border-bottom:1px solid var(--border);position:relative}
+td.editable{cursor:pointer;transition:background .12s}
+td.editable:hover{background:rgba(34,211,238,0.07);color:var(--text)}
+td.editable:hover::after{content:'✏';position:absolute;right:5px;top:50%;transform:translateY(-50%);font-size:9px;opacity:.35;pointer-events:none}
+td.editing{padding:0!important;background:rgba(34,211,238,0.1)!important;outline:2px solid var(--accent)}
+td.editing input,td.editing select{width:100%;height:100%;background:var(--card);border:none;color:var(--text);font-size:12px;font-family:inherit;padding:7px 10px;outline:none}
+tr.data-row{position:relative}
+.add-row-btn{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:22px;height:22px;background:var(--accent);color:#000;border:2px solid var(--bg);border-radius:50%;cursor:pointer;font-size:14px;font-weight:900;opacity:0;transition:opacity .15s;z-index:30;box-shadow:0 2px 8px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;pointer-events:none}
+tr.data-row:hover .add-row-btn{opacity:1;pointer-events:auto}
+tr.data-row:hover td{background:rgba(34,211,238,0.025)}
+.btn-fictif-sm{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:10px;border:1px solid rgba(167,139,250,.45);
+  background:rgba(167,139,250,.12);color:#a78bfa;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
+.btn-fictif-sm:hover{background:rgba(167,139,250,.22);border-color:#a78bfa}
+body.light .btn-fictif-sm{color:#7c3aed;border-color:rgba(124,58,237,.35);background:rgba(124,58,237,.08)}
+body.light .btn-fictif-sm:hover{background:rgba(124,58,237,.14)}
+.fictif-reassign-suggest{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.fictif-reassign-suggest button{font-size:12px;padding:6px 10px;border-radius:8px;border:1px solid var(--border2);
+  background:var(--bg);color:var(--text2);cursor:pointer;font-family:inherit}
+.fictif-reassign-suggest button:hover{border-color:var(--accent);color:var(--accent)}
+tr.data-row.saisie-row-fictif td{color:#a78bfa !important;font-weight:800 !important}
+tr.data-row.saisie-row-fictif td span{color:#a78bfa !important;font-weight:800 !important}
+tr.data-row.saisie-row-fictif:hover td{background:rgba(167,139,250,.08) !important}
+body.light tr.data-row.saisie-row-fictif td,
+body.light tr.data-row.saisie-row-fictif td span{color:#7c3aed !important}
+
+/* Formulaire ajout ligne — modal style */
+.add-row-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;display:flex;align-items:center;justify-content:center}
+.add-row-form{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;width:100%;max-width:540px;box-shadow:0 24px 64px rgba(0,0,0,.4);position:relative}
+.add-row-form h3{font-size:16px;font-weight:700;margin-bottom:20px;padding-right:34px}
+.add-row-close{position:absolute;top:14px;right:14px;width:32px;height:32px;border-radius:10px;
+  border:1px solid var(--border);background:var(--bg);color:var(--muted);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;font-size:18px;line-height:1}
+.add-row-close:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.add-row-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:20px;padding-right:34px;cursor:grab;user-select:none}
+.add-row-header:active{cursor:grabbing}
+.add-row-header h3{margin:0;padding:0}
+.add-row-counter{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:800;color:var(--muted);font-family:monospace;white-space:nowrap}
+.add-row-nav-btn{width:22px;height:22px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);
+  display:inline-flex;align-items:center;justify-content:center;cursor:pointer;line-height:1;font-size:14px;padding:0}
+.add-row-nav-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.add-row-nav-btn:active{transform:translateY(1px)}
+.prod-synth-key{cursor:pointer;font-weight:700;color:var(--text);text-decoration:underline;text-decoration-color:transparent;transition:text-decoration-color .15s,color .15s}
+
+/* ── Add-row form (internals) ───────────────────────────────────── */
+.add-row-form .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.add-row-form label{display:block;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.add-row-form input,.add-row-form select{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none}
+.add-row-form input:focus,.add-row-form select:focus{border-color:var(--accent)}
+.add-row-form .form-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
+.add-row-form .op-preview{font-size:11px;color:var(--muted);margin-top:4px;min-height:16px}
+
+
+/* ── Badges ─────────────────────────────────────────────────────── */
+.badge{font-size:11px;color:var(--accent);background:var(--accent-bg);padding:3px 10px;border-radius:20px;font-family:monospace}
+.badge-ok{color:var(--success);background:rgba(52,211,153,.12)}
+.badge-warn{color:var(--warn);background:rgba(251,191,36,.12)}
+table.table-std{width:100%;border-collapse:collapse;font-size:13px}
+table.table-std th{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:8px 16px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap}
+table.table-std td{padding:10px 16px;border-bottom:1px solid var(--border)}
+table.table-std tr:last-child td{border-bottom:none}
+table.table-std tr:hover td{background:var(--accent-bg)}
+/* ── MyProd — Import OF PDF ── */
+.prod-of-dropzone{border:2px dashed var(--border);border-radius:12px;padding:32px 20px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s}
+.prod-of-dropzone:hover,.prod-of-dropzone.prod-of-dropzone--active{border-color:var(--accent);background:var(--accent-bg)}
+.prod-of-dropzone-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px}
+.prod-of-dropzone-sub{font-size:12px;color:var(--muted)}
+.prod-of-preview-table{width:100%;border-collapse:collapse;font-size:12px;margin:12px 0}
+.prod-of-preview-table th,.prod-of-preview-table td{padding:8px 10px;border-bottom:1px solid var(--border);text-align:left;vertical-align:middle}
+.prod-of-preview-table th{width:38%;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.prod-of-preview-table tr.prod-of-missing td{background:rgba(251,191,36,.08)}
+.prod-of-preview-table input{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box}
+.prod-of-preview-table input:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.prod-of-statut{font-size:11px;font-weight:700;padding:2px 8px;border-radius:8px;display:inline-block}
+.prod-of-statut--valide{color:var(--success);background:rgba(52,211,153,.12)}
+.prod-of-statut--attente{color:var(--warn);background:rgba(251,191,36,.12)}
+.prod-of-statut--rejete{color:var(--danger);background:rgba(248,113,113,.12)}
+.prod-of-row-sub{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.35}
+.show-trac-attente-btn{padding:7px 14px;font-size:11px;color:var(--muted);cursor:pointer;text-align:center;
+  border-bottom:1px solid var(--border);background:var(--bg);user-select:none;letter-spacing:.3px}
+.show-trac-attente-btn:hover{color:var(--accent);background:var(--accent-bg)}
+tr.matiere-group td{padding:7px 16px;background:var(--card);font-weight:600;font-size:12px;color:var(--text2);border-bottom:1px solid var(--border);box-shadow:inset 0 1px 0 var(--border)}
+.badge-danger{font-size:11px;color:var(--danger);background:rgba(248,113,113,.12);padding:3px 10px;border-radius:20px;font-family:monospace;font-weight:700}
+.badge-manuel{font-size:10px;color:var(--c3);background:rgba(52,211,153,.12);padding:2px 7px;border-radius:12px;font-weight:600}
+.badge-modif{font-size:10px;color:var(--c4);background:rgba(251,191,36,.12);padding:2px 7px;border-radius:12px;font-weight:600;cursor:help}
+.badge-direction{font-size:10px;color:#f472b6;background:rgba(244,114,182,.12);padding:2px 8px;border-radius:20px;font-weight:700;text-transform:uppercase}
+.badge-administration{font-size:10px;color:#a78bfa;background:rgba(167,139,250,.12);padding:2px 8px;border-radius:20px;font-weight:700;text-transform:uppercase}
+.badge-fabrication{font-size:10px;color:var(--c3);background:rgba(52,211,153,.12);padding:2px 8px;border-radius:20px;font-weight:700;text-transform:uppercase}
+.badge-inactif{font-size:10px;color:var(--muted);background:rgba(100,116,139,.12);padding:2px 8px;border-radius:20px;font-weight:700;text-transform:uppercase}
+.bar-row{display:flex;align-items:center;gap:10px;margin-bottom:6px;padding:0 16px}
+
+/* ── Boutons : sec / danger ─────────────────────────────────────── */
+.btn-sec{
+  background:transparent;
+  color:var(--text2);
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:9px 14px;
+  font-size:12px;
+  font-weight:600;
+  cursor:pointer;
+  font-family:inherit;
+  transition:border-color .15s,color .15s,box-shadow .2s,transform .05s,filter .15s;
+}
+.btn-sec:hover{
+  border-color:var(--accent);
+  color:var(--accent);
+  background:var(--accent-bg);
+  box-shadow:0 0 0 1px rgba(34,211,238,.22),0 0 18px rgba(34,211,238,.12);
+}
+body.light .btn-sec:hover{
+  box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 16px rgba(8,145,178,.10);
+}
+.btn-sec:active{transform:translateY(1px)}
+.btn-sec:disabled{opacity:.7;cursor:not-allowed}
+.btn-sec.is-active{
+  border-color:var(--accent);
+.btn-danger{background:rgba(248,113,113,.15);color:var(--danger);border:1px solid rgba(248,113,113,.3);border-radius:6px;padding:5px 12px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit}
+
+/* ── Bouton fictif ──────────────────────────────────────────────── */
+.btn-fictif-sm{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:10px;border:1px solid rgba(167,139,250,.45);
+  background:rgba(167,139,250,.12);color:#a78bfa;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
+.btn-fictif-sm:hover{background:rgba(167,139,250,.22);border-color:#a78bfa}
+body.light .btn-fictif-sm{color:#7c3aed;border-color:rgba(124,58,237,.35);background:rgba(124,58,237,.08)}
+
+/* ── Imports (liste de fichiers) ────────────────────────────────── */
+.imports-list{display:flex;flex-direction:column;gap:6px}
+.imports-list .imports-item{
+  display:flex;align-items:center;gap:10px;padding:10px 14px;
+  background:var(--bg);border:1px solid var(--border);border-radius:10px;
+}
+.imports-list .imports-item:hover{border-color:var(--accent)}
+.imports-list .imports-name{flex:1;font-size:13px;color:var(--text)}
+.imports-list .imports-date{font-size:11px;color:var(--muted);font-family:monospace}
+
+/* ── Cellule éditable (saisies) ─────────────────────────────────── */
+td.editable{cursor:pointer}
+td.editable:hover{background:var(--accent-bg)}
+td.editing input,td.editing select{
+  width:100%;background:var(--bg);border:1px solid var(--accent);
+  border-radius:6px;padding:4px 8px;color:var(--text);font-size:13px;
+  font-family:inherit;outline:none;
+}

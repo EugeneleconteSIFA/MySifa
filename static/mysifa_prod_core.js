@@ -488,6 +488,1246 @@
 
 
 
+
+  // ────────────────────────────────────────────────────────────────────
+  // ÉTAPE 2i — Onglets Historique + Saisies + Import
+  //
+  // Code extrait littéralement de app/web/html.py :
+  //   - Actions API saisies : l. 7121-7153 (saveSaisie, addSaisie, upload,
+  //     deleteImport, exportBlob)
+  //   - renderHist : l. 8819-8902 (historique des erreurs + sanity)
+  //   - Helpers saisies : l. 9296-10044 (undoStack, pushUndo, doUndo,
+  //     doRedo, applyUndo, helpers date, buildSaisieForm, openAddModal,
+  //     openEditModal, makeEditable*, applyOpRules, sortRows, bulkDelete,
+  //     fictif*, openFictifReassignModal)
+  //   - renderSaisies : l. 10046-10338 (tableau saisies + actions inline)
+  //   - renderSaisiesWithImport : l. 10341-10382 (saisies + dropzone)
+  //   - renderImport : l. 10385-10400 (page Import XLSX)
+  // ────────────────────────────────────────────────────────────────────
+
+async function deleteImport(id,fn){
+  if(!confirm('Supprimer "'+fn+'" et toutes ses lignes ?'))return;
+  try{const r=await api('/api/imports/'+id,{method:'DELETE'});if(!r)return;toast(r.lignes_supprimees+' lignes supprimées');loadImports();}
+  catch(e){toast(e.message,'error');}
+}
+async function exportBlob(url,filename){
+  try{const blob=await api(url);if(!blob)return;const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:filename});document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1000);toast('Export téléchargé');}
+  catch(e){toast(e.message,'error');}
+}
+async function saveSaisie(id,field,value){
+  try{
+    await api('/api/saisies/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({[field]:value})});
+    toast('Sauvegardé');
+  }catch(e){toast(e.message,'error');}
+}
+async function addSaisie(body) {
+  try {
+    const r = await api('/api/saisies', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!r) return;
+    // Pousser dans undo avec l'id retourné par l'API
+    pushUndo('add', { ...body, id: r.id });
+    toast('Ligne ajoutée');
+    await loadSaisies();
+  } catch(e) { toast(e.message, 'error'); }
+}
+async function upload(f){
+  try{const fd=new FormData();fd.append('file',f);const r=await api('/api/import',{method:'POST',body:fd});if(!r)return;let msg=r.rows_imported+' lignes importées';if(r.doublons_ignores>0)msg+=' ('+r.doublons_ignores+' doublons ignorés)';toast(msg);loadImports();loadFilters();}
+  catch(e){toast(e.message,'error');}
+}
+
+function renderHist(){
+  const d=S.historique;
+  if(!d)return h('div',{className:'card-empty'},'Importez un fichier XLSX pour voir les données');
+  if(d.blocked)return h('div',{className:'card'},h('div',{className:'card-blocked'},h('div',{className:'cb-icon'},iconEl('lock',32)),h('div',{className:'cb-msg'},d.message)));
+  const sc=d.severity_counts||{};const seCount=d.saisie_errors_count||0;const parts=[];
+  if(d.sanity_by_operateur){
+    const ops=Object.keys(d.sanity_by_operateur||{});
+    ops.forEach(op=>parts.push(renderSanity(d.sanity_by_operateur[op], opName(op))));
+  }else if(d.sanity){
+    parts.push(renderSanity(d.sanity));
+  }
+  parts.push(h('div',{className:'stats'},
+    h('div',{className:'stat'},h('div',{className:'stat-label'},'Total opérations'),h('div',{className:'stat-value',style:{color:'var(--c1)'}},fN(d.total_operations))),
+    h('div',{className:'stat',style:{borderColor:'var(--danger)33'}},h('div',{className:'stat-label'},'🔴 Critique'),h('div',{className:'stat-value',style:{color:'var(--danger)'}},fN(sc.critique))),
+    h('div',{className:'stat',style:{borderColor:'var(--warn)33'}},h('div',{className:'stat-label'},'🟡 Attention'),h('div',{className:'stat-value',style:{color:'var(--warn)'}},fN(sc.attention))),
+    h('div',{className:'stat'},h('div',{className:'stat-label'},'🟢 Normal'),h('div',{className:'stat-value',style:{color:'var(--success)'}},fN(sc.info))),
+    h('div',{className:'stat',style:{borderColor:'var(--danger)55'}},h('div',{className:'stat-label'},'⛔ Erreurs saisie'),h('div',{className:'stat-value',style:{color:seCount>0?'var(--danger)':'var(--success)'}},fN(seCount))),
+  ));
+  parts.push(h('div',{className:'section-title'},'⛔ Erreurs de saisie'));
+  const sanityForList = (d.sanity_by_operateur && d.sanity_by_operateur[Object.keys(d.sanity_by_operateur||{})[0]]) ? null : d.sanity;
+  parts.push(h('div',{className:'card'},
+    h('div',{className:'card-header'},
+      h('h3',null,'Contrôles de saisie'),
+      seCount>0?h('span',{className:'badge-danger'},seCount+' erreur'+(seCount>1?'s':'')):h('span',{className:'badge'},'OK')
+    ),
+    d.sanity_by_operateur
+      ? h('div',null,
+          ...Object.keys(d.sanity_by_operateur||{}).map(op=>
+            h('div',{style:{borderTop:'1px solid var(--border)'}},
+              h('div',{style:{padding:'12px 20px',fontWeight:'800',color:'var(--text)'}},opName(op)),
+              renderSanityEventsBlock(d.sanity_by_operateur[op])
+            )
+          )
+        )
+      : renderSanityEventsBlock(sanityForList||d.sanity)
+  ));
+  if(d.operator_arrets&&d.operator_arrets.length){
+    const byOp={};
+    (d.operator_arrets||[]).forEach(r=>{
+      const op=String(r.operateur||'?');
+      if(!byOp[op]) byOp[op]=[];
+      byOp[op].push(r);
+    });
+    const ops=Object.keys(byOp).sort((a,b)=>opName(a).localeCompare(opName(b)));
+    parts.push(h('div',{className:'card'},
+      h('div',{className:'card-header'},h('h3',null,'Arrêts machine')),
+      h('div',{style:{padding:'10px 16px'}},
+        ...ops.map(op=>{
+          const rows=byOp[op]||[];
+          const total=rows.reduce((s,x)=>s+(+x.c||0),0);
+          return h('div',{style:{padding:'12px 4px',borderBottom:'1px solid var(--border)'}},
+            h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'12px',flexWrap:'wrap'}},
+              h('div',{style:{fontWeight:'800',color:'var(--text)'}},opName(op)),
+              h('span',{className:'badge-danger',style:{background:'rgba(251,191,36,.12)',border:'1px solid rgba(251,191,36,.25)',color:'var(--warn)'}},total+' arrêt'+(total>1?'s':''))
+            ),
+            h('div',{style:{marginTop:'8px',overflowX:'auto'}},
+              h('table',null,
+                h('thead',null,h('tr',null,h('th',null,'Type'),h('th',null,'Nb'),h('th',null,'Durée'))),
+                h('tbody',null,...rows.map(x=>{
+                  const code=String(x.operation_code||'');
+                  const lbl=(x.operation||'') || (S.OPS_CONFIG && S.OPS_CONFIG[code] && S.OPS_CONFIG[code].label) || ('Code '+code);
+                  return h('tr',null,
+                    h('td',null,lbl),
+                    h('td',{style:{fontFamily:'monospace',fontWeight:'800',color:'var(--warn)'}},String(x.c||0)),
+                    h('td',{style:{fontFamily:'monospace',fontWeight:'800',color:'var(--warn)'}},fMin(x.duree_min))
+                  );
+                }))
+              )
+            )
+          );
+        })
+      )
+    ));
+  }
+  if(d.issues&&d.issues.length){
+    parts.push(h('div',{className:'card'},h('div',{className:'card-header'},h('h3',null,'Détail incidents ('+d.issues.length+')')),
+      h('div',{style:{overflowX:'auto'}},h('table',null,
+        h('thead',null,h('tr',null,h('th',null,'Sévérité'),h('th',null,'Date'),h('th',null,'Opérateur'),h('th',null,'Opération'),h('th',null,'Machine'),h('th',null,'Dossier'),h('th',null,'Durée'))),
+        h('tbody',null,...d.issues.map(r=>h('tr',null,h('td',null,h('span',{className:'sev-dot '+r.operation_severity}),h('span',{className:'sev-'+r.operation_severity},r.operation_severity.toUpperCase())),h('td',null,fD(r.date_operation)),h('td',null,opName(r.operateur)),h('td',null,r.operation||''),h('td',null,r.machine||''),h('td',null,r.no_dossier||''),h('td',null,fMin(r.duree_min)))))
+      ))
+    ));
+  }
+  return h('div',null,...parts);
+}
+
+// ── Modal ajout ligne ───────────────────────────────────────────
+
+// ── Undo / Redo (session uniquement, tout en mémoire) ──────────
+let undoStack = [];  // [{id, snapshot}, ...]
+let redoStack = [];
+ 
+function pushUndo(action, data) {
+  // action : 'edit' | 'add' | 'delete'
+  // data   : pour edit/delete = snapshot de la ligne
+  //          pour add = { id } (on supprimera)
+  undoStack.push({ action, data: JSON.parse(JSON.stringify(data)) });
+  redoStack = [];
+  updateUndoRedoBtns();
+}
+ 
+function updateUndoRedoBtns() {
+  const btnU = document.getElementById('btn-undo');
+  const btnR = document.getElementById('btn-redo');
+  if (btnU) btnU.disabled = undoStack.length === 0;
+  if (btnR) btnR.disabled = redoStack.length === 0;
+}
+ 
+async function doUndo() {
+  if (!undoStack.length) return;
+  const entry = undoStack.pop();
+  const curRows = (S.saisies && S.saisies.rows) ? S.saisies.rows : [];
+  const current = curRows.find(r => r.id === entry.data.id);
+
+  // Pour edit : sauvegarder l'état actuel avant restauration
+  if (entry.action === 'edit' && current) {
+    redoStack.push({ action: 'edit', data: JSON.parse(JSON.stringify(current)) });
+  } else if (entry.action === 'add') {
+    redoStack.push({ action: 'delete_then_recreate', data: entry.data });
+  } else if (entry.action === 'delete') {
+    // On pousse un placeholder — applyUndo va corriger l'id après le POST
+    redoStack.push({ action: 'delete', data: { ...entry.data } });
+  }
+
+  await applyUndo(entry);
+}
+
+async function doRedo() {
+  if (!redoStack.length) return;
+  const entry = redoStack.pop();
+  const curRows2 = (S.saisies && S.saisies.rows) ? S.saisies.rows : [];
+  const current = curRows2.find(r => r.id === entry.data.id);
+  if (entry.action === 'edit' && current) {
+    undoStack.push({ action: 'edit', data: JSON.parse(JSON.stringify(current)) });
+    await api('/api/saisies/' + entry.data.id, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...entry.data, note: 'Restauration redo' })
+    });
+  } else if (entry.action === 'delete') {
+    // Redo d'une suppression = supprimer à nouveau
+    await api('/api/saisies/' + entry.data.id, { method: 'DELETE' });
+  } else if (entry.action === 'delete_then_recreate') {
+    // Redo d'un ajout = recréer
+    await api('/api/saisies', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...entry.data, note: 'Restauration redo (ajout)' })
+    });
+  }
+  toast('Action rétablie');
+  await loadSaisies();
+}
+
+ async function applyUndo(entry) {
+  try {
+    if (entry.action === 'edit') {
+      // Restaurer l'ancien état
+      await api('/api/saisies/' + entry.data.id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          operation:          entry.data.operation,
+          date_operation:     entry.data.date_operation,
+          operateur:          entry.data.operateur,
+          machine:            entry.data.machine,
+          no_dossier:         entry.data.no_dossier,
+          quantite_a_traiter: entry.data.quantite_a_traiter,
+          quantite_traitee:   entry.data.quantite_traitee,
+          metrage_prevu:     entry.data.metrage_prevu ?? null,
+          metrage_reel:      entry.data.metrage_reel ?? null,
+          commentaire:       entry.data.commentaire || '',
+          note:               'Restauration undo',
+        })
+      });
+    } else if (entry.action === 'add') {
+      // Annuler un ajout = supprimer la ligne créée
+      await api('/api/saisies/' + entry.data.id, { method: 'DELETE' });
+    } else if (entry.action === 'delete') {
+      // Annuler une suppression = recréer la ligne
+      const r = await api('/api/saisies', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          operation:          entry.data.operation,
+          date_operation:     entry.data.date_operation,
+          operateur:          entry.data.operateur,
+          machine:            entry.data.machine,
+          no_dossier:         entry.data.no_dossier,
+          quantite_a_traiter: entry.data.quantite_a_traiter,
+          quantite_traitee:   entry.data.quantite_traitee,
+          metrage_prevu:     entry.data.metrage_prevu ?? null,
+          metrage_reel:      entry.data.metrage_reel ?? null,
+          commentaire:       entry.data.commentaire || '',
+          note:               'Restauration undo (suppression annulée)',
+        })
+      });
+      // Mettre à jour le redo avec le NOUVEL id retourné par l'API
+      // car l'ancien id n'existe plus en base
+      if (r && r.id) {
+        // Corriger l'entrée redo qui vient d'être poussée dans doUndo
+        const lastRedo = redoStack[redoStack.length - 1];
+        if (lastRedo && lastRedo.action === 'delete') {
+          lastRedo.data = { ...entry.data, id: r.id };
+        }
+      }
+    }
+    toast('Action annulée');
+    await loadSaisies();
+  } catch(e) { toast(e.message, 'error'); }
+}
+ 
+// ── Helpers date 24h ───────────────────────────────────────────
+function dateToInputVal(dateStr) {
+  // Convertit '01/04/2026 12:53:45' → {date:'2026-04-01', time:'12:53:45'}
+  if (!dateStr) return { date: '', time: '' };
+  const s = dateStr.replace(/C$/, '').trim();
+  const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (m) return { date: m[3]+'-'+m[2]+'-'+m[1], time: m[4]+':'+m[5]+':'+(m[6]!=null?m[6]:'00') };
+  const m2 = s.match(/^(\d{4}-\d{2}-\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?)?/);
+  if (m2) return { date: m2[1], time: (m2[2]&&m2[3]) ? m2[2]+':'+m2[3]+':'+(m2[4]!=null?m2[4]:'00') : '00:00:00' };
+  return { date: '', time: '' };
+}
+ 
+function inputValToFrDate(dateVal, timeVal) {
+  // Convertit '2026-04-01' + '12:53:45' → '01/04/2026 12:53:45'
+  if (!dateVal) return datetime_now_fr();
+  const [y, mo, d] = dateVal.split('-');
+  const parts = String(timeVal || '00:00:00').split(':');
+  const hh = (parts[0] || '00').padStart(2, '0');
+  const mm = (parts[1] || '00').padStart(2, '0');
+  const ss = (parts[2] != null ? parts[2] : '00').padStart(2, '0');
+  return d+'/'+mo+'/'+y+' '+hh+':'+mm+':'+ss;
+}
+ 
+function datetime_now_fr() {
+  const now = new Date();
+  return String(now.getDate()).padStart(2,'0')+'/'+
+         String(now.getMonth()+1).padStart(2,'0')+'/'+
+         now.getFullYear()+' '+
+         String(now.getHours()).padStart(2,'0')+':'+
+         String(now.getMinutes()).padStart(2,'0')+':00';
+}
+ 
+function makeDateTimeFields(existingDateStr) {
+  // Retourne {wrapper, getVal()} avec deux inputs date + time en 24h
+  const { date: dv, time: tv } = dateToInputVal(existingDateStr);
+  const dateI = h('input', { type: 'date', value: dv, lang: 'fr', style: { flex: '1' } });
+  // IMPORTANT: input[type=time] peut afficher AM/PM selon OS/locale (iOS/Safari).
+  // On force donc une saisie manuelle HH:MM (24h) via un input texte.
+  const timeI = h('input', {
+    type: 'text',
+    inputmode: 'numeric',
+    autocomplete: 'off',
+    placeholder: 'HH:MM:SS',
+    value: (String(tv || '00:00:00').slice(0,8) || ''),
+    style: { width: '96px', fontFamily: 'monospace' }
+  });
+  timeI.setAttribute('maxlength', '8');
+
+  function normalizeTime(raw){
+    const s = String(raw||'').trim().replace(/[^\d:]/g,'');
+    const digits = s.replace(/:/g,'');
+    if(/^\d+$/.test(digits)){
+      if(digits.length <= 4){
+        const z = digits.padStart(4,'0');
+        return z.slice(0,2)+':'+z.slice(2,4)+':00';
+      }
+      if(digits.length <= 6){
+        const z = digits.padStart(6,'0');
+        return z.slice(0,2)+':'+z.slice(2,4)+':'+z.slice(4,6);
+      }
+    }
+    const m = s.match(/^(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?$/);
+    if(m){
+      const hh = String(m[1]).padStart(2,'0');
+      const mm = String(m[2]).padStart(2,'0');
+      const ss = m[3]!=null ? String(m[3]).padStart(2,'0') : '00';
+      return hh+':'+mm+':'+ss;
+    }
+    if(/^\d{2}:\d{2}:\d{2}$/.test(s)) return s;
+    return '';
+  }
+  function isValidHHMMSS(s){
+    const m = String(s||'').match(/^(\d{2}):(\d{2}):(\d{2})$/);
+    if(!m) return false;
+    const hh = parseInt(m[1],10), mm = parseInt(m[2],10), ss = parseInt(m[3],10);
+    return hh>=0 && hh<=23 && mm>=0 && mm<=59 && ss>=0 && ss<=59;
+  }
+  function getTimeVal(){
+    const norm = normalizeTime(timeI.value);
+    if(norm) timeI.value = norm;
+    return isValidHHMMSS(timeI.value) ? timeI.value : null;
+  }
+  timeI.addEventListener('input', ()=>{
+    let v = String(timeI.value||'').replace(/[^\d]/g,'').slice(0,6);
+    if(v.length >= 5) v = v.slice(0,2)+':'+v.slice(2,4)+':'+v.slice(4);
+    else if(v.length >= 3) v = v.slice(0,2)+':'+v.slice(2);
+    timeI.value = v;
+  });
+  timeI.addEventListener('blur', ()=>{ getTimeVal(); });
+
+  const wrapper = h('div', { style: { display:'flex', gap:'8px' } }, dateI, timeI);
+  return { wrapper, getVal: () => {
+    const t = getTimeVal();
+    if(!t) return null;
+    return inputValToFrDate(dateI.value, t);
+  }};
+}
+ 
+// ── Modal générique (add + edit) ───────────────────────────────
+function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
+  const ops = S.OPS_CONFIG;
+  const ops_list = S.filters.operators || [];
+  const inputs = {};
+ 
+  // Sélect opération
+  const opSel = h('select', null,
+    h('option', { value: '' }, '— Choisir une opération —'),
+    ...Object.entries(ops).map(([code, cfg]) => {
+      const opt = h('option', { value: code+'           '+cfg.label }, code+' — '+cfg.label);
+      // Pré-sélection si edit
+      if (prefill && prefill.operation && prefill.operation.startsWith(code)) opt.selected = true;
+      return opt;
+    })
+  );
+  const opPreview = h('div', { className: 'op-preview' });
+  opSel.addEventListener('change', () => {
+    const code = opSel.value.split(' ')[0];
+    const cfg = ops[code];
+    opPreview.textContent = cfg
+      ? (cfg.severity==='critique'?'🔴 Critique':cfg.severity==='attention'?'🟡 Attention':'🟢 '+cfg.category)
+      : '';
+  });
+  // Déclencher preview si pré-rempli
+  if (prefill && prefill.operation) {
+    const m = prefill.operation.match(/^(\d+)/);
+    const code = (m && m[1]) ? m[1] : null;
+    const cfg = code && ops[code];
+    if (cfg) opPreview.textContent = cfg.severity==='critique'?'🔴 Critique':cfg.severity==='attention'?'🟡 Attention':'🟢 '+cfg.category;
+  }
+ 
+  // Opérateur
+  let opField;
+  if (isAdmin(S.user)) {
+    opField = h('select', null,
+      h('option', { value: '' }, '— Choisir —'),
+      ...ops_list.map(o => {
+        const opt = h('option', { value: o }, opName(o));
+        if (o === ((prefill && prefill.operateur) ? prefill.operateur : '')) opt.selected = true;
+        return opt;
+      })
+    );
+  } else {
+    // Pour fabrication: utiliser nom si operateur_lie n'est pas défini
+    const userOp = (S.user && (S.user.operateur_lie || S.user.nom)) || '';
+    opField = h('input', { type: 'text', value: userOp });
+    opField.disabled = true;
+  }
+ 
+  // Date 24h
+  const { wrapper: dateWrapper, getVal: getDateVal } = makeDateTimeFields((prefill && prefill.date_operation) ? prefill.date_operation : '');
+ 
+  const machI  = h('input', { type: 'text', placeholder: 'ex: 1 - COHESIO 1', value: (prefill && prefill.machine) ? prefill.machine : '' });
+  const dosI   = h('input', { type: 'text', placeholder: 'ex: 1060',           value: (prefill && prefill.no_dossier) ? prefill.no_dossier : '' });
+  const qteTI  = h('input', { type: 'number', placeholder: '0',                value: (prefill && prefill.quantite_traitee!=null)   ? prefill.quantite_traitee   : 0 });
+  const noteI  = h('input', { type: 'text', placeholder: 'Raison (optionnel)',  value: '' });
+  const commentaireI = h('input', { type: 'text', placeholder: 'Observation, remarque...', value: (prefill && prefill.commentaire) ? prefill.commentaire : '' });
+  const metrageReelI      = h('input', { type: 'number', placeholder: '0', value: (prefill && prefill.metrage_reel!=null)        ? prefill.metrage_reel        : '' });
+  const metrageDebutI     = h('input', { type: 'number', placeholder: '0', value: (prefill && prefill.metrage_total_debut!=null) ? prefill.metrage_total_debut : '' });
+  const metrageFinI       = h('input', { type: 'number', placeholder: '0', value: (prefill && prefill.metrage_total_fin!=null)   ? prefill.metrage_total_fin   : '' });
+  inputs.metrage_reel         = metrageReelI;
+  inputs.metrage_total_debut  = metrageDebutI;
+  inputs.metrage_total_fin    = metrageFinI;
+ 
+  const form = h('div', { className: 'add-row-form' },
+      h('button',{type:'button',className:'add-row-close',title:'Fermer',onClick:(e)=>{e.stopPropagation();closeModal();}},'×'),
+      // Header (sert aussi de zone "grab" pour déplacer la fenêtre)
+      (title && typeof title === 'object' && title.nodeType)
+        ? h('div',{className:'add-row-header'}, title)
+        : (title && title.tagName)
+          ? h('div',{className:'add-row-header'}, title)
+          : h('div',{className:'add-row-header'}, h('h3', null, title)),
+      h('div', { className: 'form-row' },
+        h('div', null, h('label', null, 'Opération *'), opSel, opPreview),
+        h('div', null, h('label', null, 'Opérateur *'), opField)
+      ),
+      h('div', { className: 'form-row' },
+        h('div', null, h('label', null, 'Date & heure (JJ/MM/AAAA HH:MM:SS)'), dateWrapper),
+        h('div', null, h('label', null, 'Machine'), machI)
+      ),
+      h('div', { className: 'form-row' },
+        h('div', null, h('label', null, 'No Dossier'), dosI)
+      ),
+      h('div', { className: 'form-row' },
+        h('div', null, h('label', null, 'Qté traitée'), qteTI),
+        h('div', null, h('label', null, 'Note'), noteI)
+      ),
+      h('div', { className: 'form-row' },
+        h('div', null,
+          h('label', null, 'Métrage réel (m)'),
+          metrageReelI
+        )
+      ),
+      h('div', { className: 'form-row' },
+        h('div', null,
+          h('label', null, 'Compteur début (m)'),
+          metrageDebutI
+        ),
+        h('div', null,
+          h('label', null, 'Compteur fin (m)'),
+          metrageFinI
+        )
+      ),
+      h('div', { className: 'form-row' },
+        h('div', { style:{ gridColumn:'span 2' } },
+          h('label', null, 'Commentaire'),
+          commentaireI
+        )
+      ),
+      h('div', { className: 'form-actions' },
+        extraBtn || h('div', null), // bouton gauche (ex: Supprimer)
+        h('div', { style: { display:'flex', gap:'8px' } },
+          h('button', { className: 'btn-ghost', onClick: closeModal }, 'Annuler'),
+          h('button', { className: 'btn-sm', onClick: () => {
+            const opVal = opSel.value;
+            if (!opVal) { toast('Sélectionnez une opération', 'error'); return; }
+            const opText = opVal.replace('           ', ' ');
+            const dtVal = getDateVal();
+            if(!dtVal){ toast('Heure invalide (format HH:MM:SS, 24h)', 'error'); return; }
+            onSubmit({
+              operation:          opText,
+              operateur:          opField.value || '',
+              date_operation:     dtVal,
+              machine:            machI.value  || '',
+              no_dossier:         dosI.value   || '',
+              quantite_traitee:   parseFloat(qteTI.value) || 0,
+              note:               noteI.value  || '',
+              commentaire:       commentaireI.value || '',
+              metrage_reel:         parseFloat((inputs.metrage_reel         && inputs.metrage_reel.value)         ? inputs.metrage_reel.value         : '') || null,
+              metrage_total_debut:  parseFloat((inputs.metrage_total_debut  && inputs.metrage_total_debut.value)  ? inputs.metrage_total_debut.value  : '') || null,
+              metrage_total_fin:    parseFloat((inputs.metrage_total_fin    && inputs.metrage_total_fin.value)    ? inputs.metrage_total_fin.value    : '') || null,
+            });
+          }}, submitLabel)
+        )
+      )
+    )
+  ;
+  const modal = h('div', { className: 'add-row-modal', onClick: e => { if (e.target === modal) closeModal(); } }, form);
+  modal._formEl = form;
+  return modal;
+}
+ 
+function getVisibleSaisiesRowsForNav(){
+  // Base : déjà filtré côté API (/api/saisies + filtres). Ici on applique seulement tri + enrichissements UI.
+  const d = S.saisies;
+  if(!d) return [];
+  let rows = (d.rows || []).slice();
+  // Reprend la logique UI (durées) si la fonction existe (ajoutée dans renderSaisies).
+  try{
+    if(typeof addDurations === 'function') rows = addDurations(rows);
+  }catch(e){}
+  if(S.sortState && S.sortState.col) rows = sortRows(rows, S.sortState.col, S.sortState.asc);
+  return rows;
+}
+
+function attachSaisieNav(modal, currentId){
+  // Ctrl+← / Ctrl+→ : naviguer sur la liste affichée (bouclage).
+  const handler = (e)=>{
+    if(!e || !e.ctrlKey) return;
+    if(e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    const list = getVisibleSaisiesRowsForNav();
+    if(!list || !list.length) return;
+    const idx = list.findIndex(r=>String(r.id)===String(currentId));
+    if(idx < 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const nextIdx = (e.key === 'ArrowRight')
+      ? ((idx + 1) % list.length)
+      : ((idx - 1 + list.length) % list.length);
+    const nxt = list[nextIdx];
+    if(nxt) openEditModal(nxt);
+  };
+  // Éviter d'empiler des listeners si on remplace la modale.
+  document.addEventListener('keydown', handler, true);
+  modal._navKeyHandler = handler;
+}
+
+function attachModalDrag(modal){
+  const form = modal && modal._formEl ? modal._formEl : (modal ? modal.querySelector('.add-row-form') : null);
+  if(!form) return;
+  // Appliquer la dernière position (si l'utilisateur a déjà déplacé la fenêtre)
+  try{
+    if(S && S._saisieModalPos && isFinite(S._saisieModalPos.left) && isFinite(S._saisieModalPos.top)){
+      form.style.position = 'fixed';
+      form.style.margin = '0';
+      form.style.left = S._saisieModalPos.left + 'px';
+      form.style.top  = S._saisieModalPos.top + 'px';
+      form.style.transform = 'none';
+    }
+  }catch(e){}
+  let dragging = false;
+  let sx = 0, sy = 0, startLeft = 0, startTop = 0;
+  const onMove = (e)=>{
+    if(!dragging) return;
+    const dx = e.clientX - sx;
+    const dy = e.clientY - sy;
+    const left = (startLeft + dx);
+    const top  = (startTop  + dy);
+    form.style.left = left + 'px';
+    form.style.top  = top  + 'px';
+    try{ S._saisieModalPos = { left, top }; }catch(_){}
+  };
+  const onUp = ()=>{
+    if(!dragging) return;
+    dragging = false;
+    document.removeEventListener('mousemove', onMove, true);
+    document.removeEventListener('mouseup', onUp, true);
+  };
+  const onDown = (e)=>{
+    // Drag uniquement si on clique sur une zone qui n'est pas un champ/bouton.
+    const t = e.target;
+    if(t && (t.closest && t.closest('input,select,textarea,button'))) return;
+    // Laisser la sélection de texte dans un champ intacte.
+    if(e.button !== 0) return;
+    const r = form.getBoundingClientRect();
+    // Passer en position fixe pour pouvoir bouger, sans dépendre du flex-center.
+    form.style.position = 'fixed';
+    form.style.margin = '0';
+    form.style.left = r.left + 'px';
+    form.style.top  = r.top  + 'px';
+    form.style.transform = 'none';
+    dragging = true;
+    sx = e.clientX; sy = e.clientY;
+    startLeft = r.left; startTop = r.top;
+    try{ S._saisieModalPos = { left: startLeft, top: startTop }; }catch(_){}
+    document.addEventListener('mousemove', onMove, true);
+    document.addEventListener('mouseup', onUp, true);
+    e.preventDefault();
+  };
+  form.addEventListener('mousedown', onDown, true);
+  modal._dragDownHandler = onDown;
+  modal._dragMoveHandler = onMove;
+  modal._dragUpHandler = onUp;
+}
+ 
+function closeModal() {
+  try{
+    const m = document.querySelector('.add-row-modal');
+    if(m && m._navKeyHandler){
+      try{ document.removeEventListener('keydown', m._navKeyHandler, true); }catch(e){}
+    }
+    if(m && m._dragDownHandler){
+      try{
+        const form = m._formEl || m.querySelector('.add-row-form');
+        if(form) form.removeEventListener('mousedown', m._dragDownHandler, true);
+      }catch(e){}
+      try{ document.removeEventListener('mousemove', m._dragMoveHandler, true); }catch(e){}
+      try{ document.removeEventListener('mouseup', m._dragUpHandler, true); }catch(e){}
+    }
+    if(m) m.remove();
+  }catch(e){}
+}
+ 
+function openAddModal(templateRow) {
+  try{
+    const m = document.querySelector('.add-row-modal');
+    if(m) m.remove();
+  }catch(e){}
+  const modal = buildSaisieForm(
+    templateRow,
+    '➕ Ajouter une saisie',
+    '✓ Ajouter',
+    async (body) => { await addSaisie(body); }
+  );
+  document.getElementById('root').appendChild(modal);
+}
+ 
+function openEditModal(row) {
+  try{
+    const m = document.querySelector('.add-row-modal');
+    if(m) m.remove();
+  }catch(e){}
+ 
+  const list = getVisibleSaisiesRowsForNav();
+  const total = list.length || 0;
+  const curIdx0 = total ? list.findIndex(r=>String(r.id)===String(row.id)) : -1;
+  const idx = (curIdx0>=0) ? (curIdx0 + 1) : 0;
+  const prevRow = (total && curIdx0>=0) ? list[(curIdx0 - 1 + total) % total] : null;
+  const nextRow = (total && curIdx0>=0) ? list[(curIdx0 + 1) % total] : null;
+
+  const counter = h('span',{className:'add-row-counter',title:'Ctrl+← / Ctrl+→'},
+    h('button',{type:'button',className:'add-row-nav-btn',title:'Précédente (Ctrl+←)',onClick:(e)=>{e.stopPropagation(); if(prevRow) openEditModal(prevRow);}},'‹'),
+    h('span',null,(idx>0?String(idx):'—')+'/'+String(total)),
+    h('button',{type:'button',className:'add-row-nav-btn',title:'Suivante (Ctrl+→)',onClick:(e)=>{e.stopPropagation(); if(nextRow) openEditModal(nextRow);}},'›')
+  );
+  const titleNode = h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'12px',width:'100%'}},
+    h('h3',null,'Modifier la saisie'),
+    counter
+  );
+ 
+  const deleteBtn = h('button', {
+    className: 'btn-danger',
+    onClick: async e => {
+      e.stopPropagation();
+      if (!confirm('Supprimer cette saisie ?')) return;
+      pushUndo('delete', row);  // ← ajouter cette ligne
+      try {
+        await api('/api/saisies/' + row.id, { method: 'DELETE' });
+        toast('Saisie supprimée');
+        await loadSaisies();
+      } catch(err) { 
+        undoStack.pop(); // annuler le pushUndo si l'API échoue
+        toast(err.message, 'error'); 
+      }
+    }
+  }, iconEl('trash',13),' Supprimer');
+ 
+  const modal = buildSaisieForm(
+    row,
+    titleNode,
+    'Enregistrer',
+    async (body) => {
+      pushUndo('edit', row);  //
+      try {
+        await api('/api/saisies/' + row.id, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        toast('Saisie modifiée');
+        await loadSaisies();
+      } catch(e) { toast(e.message, 'error'); }
+    },
+    deleteBtn
+  );
+  attachSaisieNav(modal, row.id);
+  attachModalDrag(modal);
+  document.getElementById('root').appendChild(modal);
+}
+
+// ── Saisies ─────────────────────────────────────────────────────
+function makeEditable(row,field,displayVal){
+  const td=h('td',{className:'editable'});
+  td.appendChild(h('span',null,displayVal||'-'));
+  td.addEventListener('click',()=>{
+    if(td.classList.contains('editing'))return;
+    td.classList.add('editing');td.innerHTML='';
+    const inp=h('input',{type:'text',value:row[field]||''});
+    td.appendChild(inp);inp.focus();inp.select();
+    const save=()=>{const val=inp.value;td.classList.remove('editing');td.innerHTML='';td.appendChild(h('span',null,val||'-'));if(val!==String(row[field]||''))saveSaisie(row.id,field,val);};
+    inp.addEventListener('blur',save);
+    inp.addEventListener('keydown',e=>{if(e.key==='Enter')inp.blur();if(e.key==='Escape'){td.classList.remove('editing');td.innerHTML='';td.appendChild(h('span',null,displayVal||'-'));}});
+  });
+  return td;
+}
+
+// Commentaire — éditable inline (spécifique pour éviter les modifs autres champs)
+function makeEditableComment(row){
+  const td=h('td',{className:'editable',style:{maxWidth:'220px',minWidth:'120px'}});
+  const span=h('span',{style:{color:'var(--muted)',fontStyle:'italic'}},row.commentaire||'—');
+  td.appendChild(span);
+  td.addEventListener('click',e=>{
+    e.stopPropagation(); // ne pas ouvrir le modal modification
+    if(td.classList.contains('editing'))return;
+    td.classList.add('editing');td.innerHTML='';
+    const inp=h('input',{type:'text',value:row.commentaire||'',placeholder:'Ajouter un commentaire...'});
+    td.appendChild(inp);inp.focus();inp.select();
+    const save=()=>{
+      const val=inp.value;
+      td.classList.remove('editing');td.innerHTML='';
+      td.appendChild(h('span',{style:{color:'var(--muted)',fontStyle:'italic'}},val||'—'));
+      const old=(row.commentaire||'');
+      if(val!==old) saveSaisie(row.id,'commentaire',val);
+      // Mettre à jour l'objet local pour que la prochaine édition reflète la valeur
+      row.commentaire = val;
+    };
+    inp.addEventListener('blur',save);
+    inp.addEventListener('keydown',e=>{
+      if(e.key==='Enter')inp.blur();
+      if(e.key==='Escape'){
+        td.classList.remove('editing');
+        td.innerHTML='';
+        td.appendChild(h('span',{style:{color:'var(--muted)',fontStyle:'italic'}},row.commentaire||'—'));
+      }
+    });
+  });
+  return td;
+}
+
+
+// Codes sans dossier ni quantité
+const CODES_PERSONNEL = new Set(['86','87']);
+// Seul code avec quantité
+const CODE_FIN_DOS = '89';
+ 
+// ── Masquage champs selon opération dans le modal ───────────────
+function applyOpRules(opCode, form){
+  const isPers  = CODES_PERSONNEL.has(opCode);
+  const isFin   = opCode === CODE_FIN_DOS;
+  const fields  = ['no_dossier','quantite_a_traiter','quantite_traitee'];
+  fields.forEach(f=>{
+    const row = form.querySelector('[data-field="'+f+'"]');
+    if(!row) return;
+    if(isPers){
+      row.style.display='none';
+    } else if(!isFin && (f==='quantite_a_traiter'||f==='quantite_traitee')){
+      row.style.opacity='.4';
+      row.querySelector('input').disabled=true;
+      row.querySelector('input').value='0';
+    } else {
+      row.style.display='';row.style.opacity='';
+      if(row.querySelector('input')) row.querySelector('input').disabled=false;
+    }
+  });
+}
+ 
+// ── Tri tableau ─────────────────────────────────────────────────
+function sortRows(rows, col, asc){
+  return [...rows].sort((a,b)=>{
+    let va=a[col]||'', vb=b[col]||'';
+    if(typeof va==='number'||!isNaN(va)) {va=parseFloat(va)||0; vb=parseFloat(vb)||0;}
+    if(va<vb)return asc?-1:1;
+    if(va>vb)return asc?1:-1;
+    return 0;
+  });
+}
+ 
+// ── Suppression groupée ─────────────────────────────────────────
+async function bulkDelete(){
+  const ids=[...S.selectedRows];
+  if(!ids.length) return;
+  if(!confirm('Supprimer '+ids.length+' saisie(s) ?')) return;
+ 
+  // Sauvegarder pour undo
+  const snaps=(((S.saisies && S.saisies.rows) ? S.saisies.rows : [])).filter(r=>ids.includes(r.id));
+  snaps.forEach(row=>pushUndo('delete',row));
+ 
+  try{
+    const r=await api('/api/saisies/bulk',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids})});
+    if(!r)return;
+    toast(r.deleted+' saisie(s) supprimée(s)');
+    S.selectedRows=new Set();
+    await loadSaisies();
+  }catch(e){
+    // Annuler les pushUndo si erreur
+    snaps.forEach(()=>undoStack.pop());
+    toast(e.message,'error');
+  }
+}
+
+const SAISIE_FICTIF_PREFIX = 'FICTIF:';
+function isFictifDossierRef(ref){
+  if(!ref) return false;
+  return String(ref).trim().toUpperCase().startsWith(SAISIE_FICTIF_PREFIX);
+}
+function isFictifSaisieRow(row){
+  if(!row) return false;
+  return isFictifDossierRef(row.no_dossier) || isFictifDossierRef(row.reference);
+}
+
+function fictifOfDisplay(ref){
+  const s=String(ref||'').trim();
+  if(isFictifDossierRef(s)) return s.slice(SAISIE_FICTIF_PREFIX.length);
+  return s;
+}
+
+async function openFictifReassignModal(){
+  if(isFab(S.user)) return;
+  try{
+    const m=document.querySelector('.add-row-modal');
+    if(m) m.remove();
+  }catch(e){}
+  const sources=await api('/api/saisies/reassign/fictif-sources')||[];
+  const fromSel=h('select',{className:'form-sel',style:{width:'100%'}},
+    h('option',{value:''},'— Choisir un dossier fictif —'),
+    ...sources.map(s=>{
+      const opt=h('option',{value:s.no_dossier},
+        'OF fictif '+fictifOfDisplay(s.no_dossier)+' ('+s.nb_saisies+' saisie'+(s.nb_saisies>1?'s':'')+')');
+      return opt;
+    })
+  );
+  const toInp=h('input',{type:'text',className:'form-sel',style:{width:'100%'},
+    placeholder:'N° dossier planning (référence ou OF)…'});
+  const sugWrap=h('div',{className:'fictif-reassign-suggest'});
+  let sugTok=0;
+  const refreshSug=async()=>{
+    const q=String(toInp.value||'').trim();
+    const tok=++sugTok;
+    if(q.length<1){ sugWrap.innerHTML=''; return; }
+    const sugs=await api('/api/saisies/reassign/target-dossiers?q='+encodeURIComponent(q)+'&limit=12')||[];
+    if(tok!==sugTok) return;
+    sugWrap.innerHTML='';
+    (sugs||[]).slice(0,10).forEach(d=>{
+      const lbl=[d.no_dossier,d.client].filter(Boolean).join(' — ');
+      const btn=h('button',{type:'button',onClick:()=>{ toInp.value=d.no_dossier; sugWrap.innerHTML=''; }},
+        lbl+(d.statut?(' ['+d.statut+']'):''));
+      sugWrap.appendChild(btn);
+    });
+  };
+  toInp.addEventListener('input',()=>{ refreshSug(); });
+  const msg=h('p',{style:{fontSize:'12px',color:'var(--muted)',margin:'0 0 12px',lineHeight:1.5}},
+    'Toutes les saisies du dossier fictif seront rattachées au dossier réel choisi (production, matières traça, liens rentabilité).');
+  const form=h('div',{className:'add-row-form',style:{minWidth:'min(480px,92vw)'}},
+    h('button',{type:'button',className:'add-row-close',title:'Fermer',onClick:(e)=>{e.stopPropagation();closeModal();}},'×'),
+    h('h3',{style:{marginBottom:'12px',color:'#a78bfa'}},iconEl('file-text',16),' Rattacher un dossier fictif'),
+    msg,
+    h('div',{className:'fd'},h('label',null,'Dossier fictif'),fromSel),
+    h('div',{className:'fd',style:{marginTop:'14px'}},h('label',null,'Dossier réel existant'),toInp,sugWrap),
+    h('div',{style:{display:'flex',gap:'8px',justifyContent:'flex-end',marginTop:'18px'}},
+      h('button',{type:'button',className:'btn-ghost',onClick:()=>closeModal()},'Annuler'),
+      h('button',{type:'button',className:'btn-fictif-sm',onClick:async()=>{
+        const from=String(fromSel.value||'').trim();
+        const to=String(toInp.value||'').trim();
+        if(!from){ toast('Choisissez un dossier fictif','error'); return; }
+        if(!to){ toast('Indiquez le dossier cible','error'); return; }
+        if(!confirm('Rattacher « '+fictifOfDisplay(from)+' » → « '+to+' » ?\n\nToutes les saisies concernées seront modifiées.')) return;
+        try{
+          const r=await api('/api/saisies/reassign/fictif',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({from_no_dossier:from,to_no_dossier:to})
+          });
+          closeModal();
+          toast((r.updated_saisies||0)+' saisie(s) rattachée(s) → '+r.to_no_dossier,'success');
+          await loadFilters();
+          await loadSaisies();
+        }catch(err){ toast(err.message||'Rattachement impossible','error'); }
+      }},'Rattacher')
+    )
+  );
+  const modal=h('div',{className:'add-row-modal',onClick:e=>{if(e.target===modal)closeModal();}},form);
+  document.getElementById('root').appendChild(modal);
+  if(sources.length===1) fromSel.value=sources[0].no_dossier;
+}
+
+function renderSaisies(){
+  const d=S.saisies;
+  if(!d) return h('div',{className:'card-empty'},'Chargement...');
+  // Pour fabrication: utiliser nom si operateur_lie n'est pas défini
+  const userOperateur = (S.user && (S.user.operateur_lie || S.user.nom)) || '';
+  if(!canViewAllProd(S.user) && !userOperateur)
+    return h('div',{className:'card'},h('div',{className:'card-blocked'},h('div',{className:'cb-icon'},iconEl('lock',32)),h('div',{className:'cb-msg'},'Compte non lié à un opérateur.')));
+ 
+  const readOnly=isFab(S.user);
+ 
+  function fmtDurMin(m){
+    if(m==null||!isFinite(m)||m<=0) return '-';
+    const mm = Math.round(Number(m));
+    if(mm < 60) return mm+' min';
+    const hh = Math.floor(mm/60);
+    const rm = mm%60;
+    return hh+' h '+String(rm).padStart(2,'0')+' min';
+  }
+
+  function addDurations(baseRows){
+    const rows = (baseRows||[]).slice();
+    // Durée = écart avec la saisie suivante du même opérateur (en minutes)
+    const byOp = new Map();
+    rows.forEach(r=>{
+      const k = String(r.operateur||'').trim();
+      if(!byOp.has(k)) byOp.set(k, []);
+      byOp.get(k).push(r);
+    });
+    byOp.forEach(list=>{
+      list.sort((a,b)=>{
+        const da = Date.parse(String(a.date_operation||'')) || 0;
+        const db = Date.parse(String(b.date_operation||'')) || 0;
+        if(da !== db) return da - db;
+        return (Number(a.id)||0) - (Number(b.id)||0);
+      });
+      for(let i=0;i<list.length;i++){
+        const cur = list[i];
+        const nxt = list[i+1];
+        let dur = null;
+        if(nxt){
+          const t1 = Date.parse(String(cur.date_operation||'')) || NaN;
+          const t2 = Date.parse(String(nxt.date_operation||'')) || NaN;
+          if(isFinite(t1) && isFinite(t2) && t2 >= t1){
+            const m = Math.round((t2 - t1)/60000);
+            // Filtre anti-absurde (ex: oubli badgeage) : > 12h => on masque
+            dur = (m > 0 && m <= 12*60) ? m : null;
+          }
+        }
+        cur.duree_min = dur;
+      }
+    });
+    return rows;
+  }
+ 
+  // ── Tri ──────────────────────────────────────────────────────
+  let rows=addDurations(d.rows||[]);
+  if(S.sortState.col) rows=sortRows(rows,S.sortState.col,S.sortState.asc);
+
+  // ── Calcul métrage dossier (Fin dossier = compteur fin - compteur début) ──
+  // Priorité aux colonnes dédiées metrage_total_debut / metrage_total_fin.
+  // Fallback sur metrage_prevu / metrage_reel pour les anciennes lignes sans compteurs.
+  (function(){
+    const debutByDossier = {}; // no_dossier → compteur début (metrage_total_debut ?? metrage_prevu)
+    const chrono = [...rows].sort((a,b)=>(a.date_operation||'').localeCompare(b.date_operation||''));
+    chrono.forEach(r=>{
+      if(r.operation_code==='01' && r.no_dossier){
+        const ctr = r.metrage_total_debut ?? r.metrage_prevu;
+        if(ctr!=null) debutByDossier[r.no_dossier] = parseFloat(ctr);
+      }
+      if(r.operation_code==='89' && r.no_dossier){
+        const finCtr  = r.metrage_total_fin ?? null;   // compteur fin uniquement
+        const debutCtr = debutByDossier[r.no_dossier] ?? null;
+        if(finCtr!=null && debutCtr!=null){
+          r._metrage_dossier = parseFloat(finCtr) - debutCtr;  // fin_counter − debut_counter
+        } else if(r.metrage_reel!=null && debutCtr!=null && !r.metrage_total_fin){
+          // Ancien format : metrage_reel était le compteur fin (avant introduction des nouvelles colonnes)
+          r._metrage_dossier = parseFloat(r.metrage_reel) - debutCtr;
+        }
+        // Si metrage_total_fin absent et metrage_reel = valeur directe produite : pas de calcul
+      }
+    });
+  })();
+
+  const COLS=[
+    {key:'date_operation',  label:'Date'},
+    {key:'operation',       label:'Opération'},
+    {key:'duree_min',       label:'Durée'},
+    {key:'operateur',       label:'Opérateur'},
+    {key:'machine',         label:'Machine'},
+    {key:'no_dossier',      label:'Dossier'},
+    {key:'quantite_traitee',   label:'Qté traitée'},
+    {key:'metrage_reel',    label:'Métrage (m)'},
+    {key:'commentaire',     label:'Commentaire'},
+    {key:'_badge',          label:''},
+  ];
+ 
+  // ── Header avec tri ──────────────────────────────────────────
+  const ths=COLS.map(col=>{
+    if(col.key==='_badge') return h('th',null,'');
+    const isSorted=S.sortState.col===col.key;
+    const arrow=isSorted?(S.sortState.asc?' ↑':' ↓'):'';
+    const th=h('th',{style:{cursor:'pointer',userSelect:'none',whiteSpace:'nowrap'}},col.label+arrow);
+    th.addEventListener('click',()=>{
+      if(S.sortState.col===col.key){S.sortState.asc=!S.sortState.asc;}
+      else{S.sortState={col:col.key,asc:true};}
+      render();
+    });
+    return th;
+  });
+ 
+  // ── Checkbox "tout sélectionner" ─────────────────────────────
+  const allIds=rows.map(r=>r.id);
+  const allChecked=allIds.length>0&&allIds.every(id=>S.selectedRows.has(id));
+  const chkAll=h('input',{type:'checkbox'});
+  chkAll.checked=allChecked;
+  chkAll.addEventListener('change',()=>{
+    if(chkAll.checked) allIds.forEach(id=>S.selectedRows.add(id));
+    else S.selectedRows.clear();
+    render();
+  });
+  const thChk=h('th',null,chkAll);
+  ths.unshift(thChk);
+ 
+  const tbody=h('tbody',null);
+ 
+  rows.forEach(row=>{
+    const fictifRow = isFictifSaisieRow(row);
+    const tr=h('tr',{className:'data-row'+(fictifRow?' saisie-row-fictif':''),style:{cursor:readOnly?'default':'pointer'}});
+    // PAR — contrastes plus forts + catégorie production en vert
+    const opCode = row.operation_code || '';
+    const cat    = row.operation_category || '';
+
+    let rowBg = '';
+    if (fictifRow) {
+      rowBg = 'rgba(167,139,250,.10)';          // dossier fictif (FICTIF:)
+    } else if (row.operation_severity === 'critique') {
+      rowBg = 'rgba(248,113,113,.18)';          // rouge soutenu
+    } else if (row.operation_severity === 'attention') {
+      rowBg = 'rgba(251,191,36,.18)';           // jaune soutenu
+    } else if (cat === 'production' || opCode === '03' || opCode === '88') {
+      rowBg = 'rgba(52,211,153,.12)';           // vert production
+    } else if (cat === 'personnel' || opCode === '86' || opCode === '87') {
+      rowBg = 'rgba(167,139,250,.10)';          // violet discret arrivée/départ
+    } else if (cat === 'calage' || opCode === '02') {
+      rowBg = 'rgba(251,191,36,.08)';           // jaune doux calage
+    }
+    if (rowBg) tr.style.background = rowBg;
+    if (S.selectedRows.has(row.id)) tr.style.background = 'rgba(34,211,238,.12)';
+ 
+    if(!readOnly) tr.addEventListener('click',()=>openEditModal(row));
+ 
+    // Checkbox ligne
+    const chk=h('input',{type:'checkbox'});
+    chk.checked=S.selectedRows.has(row.id);
+    chk.addEventListener('click',e=>e.stopPropagation());
+    chk.addEventListener('change',()=>{
+      if(chk.checked) S.selectedRows.add(row.id);
+      else S.selectedRows.delete(row.id);
+      render();
+    });
+    const tdChk=h('td',null,chk);
+    tdChk.addEventListener('click',e=>e.stopPropagation());
+    tr.appendChild(tdChk);
+ 
+    let badge=null;
+    if(row.est_manuel) badge=h('span',{className:'badge-manuel'},'+ Manuel');
+    else if(row.modifie_par) badge=h('span',{className:'badge-modif',title:'Modifié par '+row.modifie_par+' le '+fD(row.modifie_le)},'✏ Corrigé');
+ 
+    tr.appendChild(h('td',{style:{fontSize:'11px',color:'var(--muted)',whiteSpace:'nowrap',fontFamily:'monospace'}},fDSecs(row.date_operation)));
+    tr.appendChild(h('td',null,row.operation||'-'));
+    tr.appendChild(h('td',{style:{whiteSpace:'nowrap',color:'var(--muted)'}},fmtDurMin(row.duree_min)));
+    tr.appendChild(h('td',null,opName(row.operateur)));
+    tr.appendChild(h('td',null,row.machine||'-'));
+    tr.appendChild(h('td',null,row.no_dossier||'-'));
+    tr.appendChild(h('td',null,fN(row.quantite_traitee)));
+    tr.appendChild(h('td',{style:{color:'var(--c3)'}},
+      row._metrage_dossier!=null
+        ? (()=>{
+            const finCtr   = row.metrage_total_fin   ?? row.metrage_reel;
+            const debutCtr = row.metrage_total_debut != null
+              ? row.metrage_total_debut
+              : (finCtr!=null ? finCtr - row._metrage_dossier : null);
+            const tip = 'Métrage produit = compteur fin − compteur début'
+              + (finCtr!=null   ? '\nFin : '+fN(finCtr)+' m'   : '')
+              + (debutCtr!=null ? '\nDébut : '+fN(debutCtr)+' m' : '');
+            return h('span',{title:tip},'⇒ '+fN(row._metrage_dossier)+' m');
+          })()
+        : row.metrage_total_fin!=null   ? fN(row.metrage_total_fin)+' m (cpt fin)'
+        : row.metrage_reel!=null        ? fN(row.metrage_reel)+' m'
+        : row.metrage_total_debut!=null ? h('span',{style:{color:'var(--muted)',fontSize:'11px'}},fN(row.metrage_total_debut)+' m (déb.)')
+        : row.metrage_prevu!=null       ? h('span',{style:{color:'var(--muted)',fontSize:'11px'}},fN(row.metrage_prevu)+' m (déb.)')
+        : '-'));
+    if(readOnly){
+      tr.appendChild(h('td',{style:{maxWidth:'200px',overflow:'hidden',textOverflow:'ellipsis'}},row.commentaire||''));
+    }else{
+      tr.appendChild(makeEditableComment(row));
+    }
+    tr.appendChild(h('td',null,badge));
+ 
+    if(!readOnly){
+      const addBtn=h('button',{className:'add-row-btn',title:'Insérer une ligne après',onClick:e=>{e.stopPropagation();openAddModal(row);}},'+');
+      const delBtn=h('button',{className:'add-row-btn',title:'Supprimer cette ligne',
+        style:{left:'calc(50% + 18px)',background:'var(--danger)',borderColor:'var(--bg)'},
+        onClick:async e=>{
+          e.stopPropagation();
+          if(!confirm('Supprimer cette saisie ?'))return;
+          pushUndo('delete',row);
+          try{
+            await api('/api/saisies/'+row.id,{method:'DELETE'});
+            toast('Saisie supprimée');await loadSaisies();
+          }catch(err){undoStack.pop();toast(err.message,'error');}
+        }
+      },'−');
+      const firstTd=tr.querySelector('td:nth-child(2)');
+      if(firstTd){firstTd.style.position='relative';firstTd.appendChild(addBtn);firstTd.appendChild(delBtn);}
+    }
+    tbody.appendChild(tr);
+  });
+ 
+  // ── Barre d'actions ──────────────────────────────────────────
+  const selCount=S.selectedRows.size;
+  const headerRight=h('div',{style:{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap'}});
+
+  // Pagination (offset/limit) : évite de scroller toute la page
+  const total = Number(d.total||0);
+  const off = Number(S.saisiesOffset||0);
+  const lim = Number(S.saisiesLimit||200);
+  const from = total ? Math.min(total, off+1) : 0;
+  const to = total ? Math.min(total, off + (rows||[]).length) : 0;
+  const pager = h('div',{style:{display:'inline-flex',alignItems:'center',gap:'6px'}},
+    h('button',{className:'btn-ghost',title:'Page précédente',disabled:off<=0,onClick:async()=>{
+      const n = Math.max(0, off - lim);
+      await loadSaisies({offset:n,limit:lim});
+      render();
+    }},'‹'),
+    h('span',{style:{fontSize:'11px',color:'var(--muted)',fontFamily:'monospace'}}, total?(`${from}-${to}/${total}`):'0'),
+    h('button',{className:'btn-ghost',title:'Page suivante',disabled:(off+lim)>=total,onClick:async()=>{
+      const n = Math.min(Math.max(0,total-lim), off + lim);
+      await loadSaisies({offset:n,limit:lim});
+      render();
+    }},'›'),
+  );
+  headerRight.appendChild(pager);
+ 
+  if(readOnly){
+    headerRight.appendChild(h('span',{className:'readonly-notice'},iconEl('eye',13),' Lecture seule'));
+  }else{
+    const btnUndo=h('button',{id:'btn-undo',className:'btn-ghost',title:'Annuler ('+undoStack.length+')',onClick:doUndo},iconEl('rotate-ccw',13),' Annuler ('+undoStack.length+')');
+    if(undoStack.length===0) btnUndo.setAttribute('disabled','true');
+    const btnRedo=h('button',{id:'btn-redo',className:'btn-ghost',title:'Rétablir ('+redoStack.length+')',onClick:doRedo},iconEl('rotate-cw',13),' Rétablir ('+redoStack.length+')');
+    if(redoStack.length===0) btnRedo.setAttribute('disabled','true');
+ 
+    headerRight.appendChild(btnUndo);
+    headerRight.appendChild(btnRedo);
+ 
+    if(selCount>0){
+      headerRight.appendChild(h('button',{className:'btn-danger',onClick:bulkDelete},iconEl('trash',13),' Supprimer ('+selCount+')'));
+    }
+    headerRight.appendChild(h('button',{className:'btn-sm',onClick:()=>openAddModal(rows[rows.length-1]||null)},iconEl('plus',13),' Ajouter'));
+    headerRight.appendChild(h('button',{className:'btn-fictif-sm',onClick:()=>openFictifReassignModal()},iconEl('file-text',13),' Dossier fictif'));
+    headerRight.appendChild(h('button',{className:'btn-ghost',onClick:()=>exportBlob('/api/saisies/export?'+buildParams(),'saisies.xlsx')},iconEl('download',13),' Export'));
+  }
+ 
+  return h('div',null,
+    h('div',{className:'card'},
+      h('div',{className:'card-header'},
+        h('h3',null,'Saisies'),
+        h('div',{style:{display:'flex',gap:'12px',alignItems:'center'}},
+          headerRight
+        )
+      ),
+      // Wrapper synchronisé : scrollbar miroir en haut ↔ bas
+      (() => {
+        const tableEl = h('table',null,
+          h('thead',null,h('tr',null,...ths)),
+          tbody
+        );
+        const bot = h('div',{className:'saisies-bot'},h('div',{style:{overflowX:'auto',paddingBottom:'4px'}},tableEl));
+        const topInner = h('div',{style:{height:'1px',width:tableEl.scrollWidth+'px'}});
+        const top = h('div',{style:{overflowX:'auto',height:'10px',marginBottom:'0'}},topInner);
+        // Synchronisation scroll
+        const botX = bot.firstChild;
+        top.addEventListener('scroll',()=>{ botX.scrollLeft = top.scrollLeft; });
+        botX.addEventListener('scroll',()=>{ top.scrollLeft = botX.scrollLeft; });
+        // Mettre à jour la largeur fantôme après rendu
+        requestAnimationFrame(()=>{
+          topInner.style.width = tableEl.offsetWidth+'px';
+        });
+        return h('div',{className:'saisies-table-wrap'},top,bot);
+      })()
+    )
+  );
+}
+
+function renderSaisiesWithImport(){
+  const admin = isAdmin(S.user);
+  const parts = [];
+
+  if(admin){
+    const isOpen = !!S.importOpen;
+    const header = h('div',{
+      className:'card-header',
+      style:{cursor:'pointer'},
+      onClick:()=>{S.importOpen=!S.importOpen;render();}
+    },
+      h('h3',null,'⬆ Importer des saisies (CSV / Excel)'),
+      h('span',{style:{fontSize:'12px',color:'var(--muted)'}},isOpen?'▲ Masquer':'▼ Afficher')
+    );
+
+    if(isOpen){
+      const zone=h('div',{className:'drop-zone'},
+        h('div',{className:'dz-icon'},iconEl('cloud-upload',36)),
+        h('div',{className:'dz-title'},'Glisser un fichier ici'),
+        h('div',{className:'dz-sub'},'CSV, Excel (.xlsx, .xls, .xlsm) — ou cliquer pour parcourir')
+      );
+      const inp=h('input',{type:'file',accept:'.csv,.xlsx,.xls,.xlsm',style:{display:'none'}});
+      inp.addEventListener('change',e=>{if(e.target.files[0])upload(e.target.files[0]);});
+      zone.addEventListener('click',()=>inp.click());
+      zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('drag');});
+      zone.addEventListener('dragleave',()=>zone.classList.remove('drag'));
+      zone.addEventListener('drop',e=>{
+        e.preventDefault();zone.classList.remove('drag');
+        const f=e.dataTransfer.files[0];if(f)upload(f);
+      });
+      parts.push(h('div',{className:'card',style:{marginBottom:'16px'}},
+        header,
+        h('div',{style:{padding:'0 20px 20px'}}, zone, inp)
+      ));
+    } else {
+      parts.push(h('div',{className:'card',style:{marginBottom:'16px'}}, header));
+    }
+  }
+
+  parts.push(renderSaisies());
+  return h('div',null,...parts);
+}
+
+function renderImport(){
+  const zone=h('div',{className:'drop-zone'},h('div',{className:'dz-icon'},iconEl('cloud-upload',36)),h('div',{className:'dz-title'},'Glisser un fichier ici'),h('div',{className:'dz-sub'},'CSV, Excel (.xlsx, .xls, .xlsm) — ou cliquer pour parcourir'));
+  const inp=h('input',{type:'file',accept:'.csv,.xlsx,.xls,.xlsm',style:{display:'none'}});
+  inp.addEventListener('change',e=>{if(e.target.files[0])upload(e.target.files[0]);});
+  zone.addEventListener('click',()=>inp.click());zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('drag');});zone.addEventListener('dragleave',()=>zone.classList.remove('drag'));
+  zone.addEventListener('drop',e=>{e.preventDefault();zone.classList.remove('drag');if(e.dataTransfer.files[0])upload(e.dataTransfer.files[0]);});
+  zone.appendChild(inp);
+  const list=h('div',{className:'card'},h('div',{className:'card-header'},h('h3',null,'Historique des imports ('+S.imports.length+')')),
+    S.imports.length===0?h('div',{className:'card-empty'},'Aucun import encore'):
+    h('div',null,...S.imports.map(i=>h('div',{className:'import-row'},
+      h('div',{style:{flex:1}},h('div',{style:{fontSize:'14px',fontWeight:'500',color:'var(--text)'}},i.filename),h('div',{style:{fontSize:'11px',color:'var(--muted)',fontFamily:'monospace',marginTop:'2px'}},(i.imported_at||'').slice(0,16).replace('T',' ')+'  —  '+i.row_count+' lignes')),
+      h('div',{style:{display:'flex',gap:'8px'}},h('button',{className:'btn-ghost',onClick:()=>exportBlob('/api/imports/'+i.id+'/export',i.filename.replace(/\.[^.]+$/,'')+'_export.xlsx')},iconEl('download',13),' Export'),h('button',{className:'btn-danger',onClick:()=>deleteImport(i.id,i.filename)},iconEl('trash',13),' Supprimer'))
+    )))
+  );
+  return h('div',null,zone,list);
+}
+
   // ────────────────────────────────────────────────────────────────────
   // ÉTAPE 2h — Filtres + Sanity + Statut machines (page Production complète)
   //
@@ -1001,15 +2241,6 @@ function renderMachineStatusCards(){
   // ────────────────────────────────────────────────────────────────────
 
   // ── Stubs renvoyant un placeholder visuel ──────────────────────────
-  function renderHist(){
-    return h('div', {className: 'card-empty', style: {padding: '24px'}},
-      'Historique & Erreurs — sera ajouté à l\u0027étape 2i.');
-  }
-  function renderSaisiesWithImport(){
-    return h('div', {className: 'card-empty', style: {padding: '24px'}},
-      'Saisies — sera ajouté à l\u0027étape 2i.');
-  }
-  function renderSaisies(){ return renderSaisiesWithImport(); }
 
 async function loadFilters(){
   try{
@@ -1607,12 +2838,22 @@ function renderProdKpis(){
       if(S.page === 'production'){
         if(S.subPage === 'kpis' || !S.subPage){
           await loadProd();
-          if(!S.historique) await loadHist();  // pour sanity
+          if(!S.historique) await loadHist();
           await loadMachineStatus();
+        }else if(S.subPage === 'saisies'){
+          await loadSaisies();
+        }else if(S.subPage === 'erreurs'){
+          await loadHist();
         }
-        // Sous-onglets saisies/erreurs : stubs en 2g, étoffés en 2i
       }
-      // Autres pages (suivi/historique/saisies/etc.) : chargements ajoutés en 2i+
+      // Sous-pages "héritées" (compat ?page=xxx)
+      else if(S.page === 'historique'){
+        await loadHist();
+      }else if(S.page === 'saisies'){
+        await loadSaisies();
+      }else if(S.page === 'import'){
+        await loadImports();
+      }
     }catch(e){
       console.warn('[mysifa_prod_core] nav() erreur:', e && e.message);
     }
@@ -1813,8 +3054,8 @@ function renderProdKpis(){
   // les compléter / les utiliser. À la fin du refactor (étape 2n), ces
   // exports pourront être retirés si plus nécessaire.
   window.__MYSIFA_PROD_STANDALONE__ = {
-    stage: '2h',
-    description: 'Filtres + Sanity + Statut machines',
+    stage: '2i',
+    description: 'Onglets Historique + Saisies + Import',
     loadedAt: new Date().toISOString(),
   };
   window.__prodCore = {
@@ -1841,9 +3082,14 @@ function renderProdKpis(){
     renderDossierFilterChipsRow, makeMultiSelect, syncDossierFilterSuggest,
     pickDossierFilter, removeDossierFilter, makeDossierFilterSearch,
     renderSanity, renderSanityEventsBlock,
+    saveSaisie, addSaisie, upload, deleteImport, exportBlob,
+    renderHist, renderSaisies, renderSaisiesWithImport, renderImport,
+    pushUndo, doUndo, doRedo, applyUndo,
+    buildSaisieForm, openAddModal, openEditModal,
+    bulkDelete, openFictifReassignModal,
   };
 
-  console.info('[mysifa_prod_core] page Production complete - etape 2h', {
+  console.info('[mysifa_prod_core] saisies / hist / import charges - etape 2i', {
     helpers: Object.keys(window.__prodCore).length,
     stateFields: Object.keys(S).length,
   });
