@@ -3613,48 +3613,25 @@ async function openOfPreview(entryId){
     return;
   }
 
-  // ── Contenu de l'onglet OF ────────────────────────────────────────
-  const ofId = data.linked && data.of ? data.of.id : null;
-  const hasPdf = data.of && data.of.pdf_filename;
-
-  let ofTabContent;
-  if(ofId){
-    ofTabContent=`<iframe class="of-preview-iframe" src="/api/of/${ofId}/pdf-preview"></iframe>`;
-  }else{
-    const importBtn=(typeof IS_OF_ADMIN!=='undefined' && IS_OF_ADMIN)
-      ?`<button type="button" onclick="openOfImportFromPlanning(${entryId})"
-           style="display:flex;align-items:center;gap:8px;padding:9px 18px;border-radius:8px;
-                  border:1.5px solid var(--accent);background:var(--accent-bg);color:var(--accent);
-                  font-size:13px;font-weight:700;cursor:pointer;font-family:inherit"
-           onmouseenter="this.style.opacity='.75'" onmouseleave="this.style.opacity='1'">
-           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-             <polyline points="17 8 12 3 7 8"/>
-             <line x1="12" y1="3" x2="12" y2="15"/>
-           </svg>
-           Importer OF
-         </button>`
-      :'';
-    ofTabContent=`<div class="of-empty-state">
-      <div class="of-empty-state-icon">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-          <polyline points="14 2 14 8 20 8"/>
-          <line x1="9" y1="13" x2="15" y2="13"/>
-        </svg>
-      </div>
-      <div class="of-empty-state-msg">
-        Aucun OF relié à ce dossier de production.<br>
-        <span style="font-size:12px;color:var(--muted)">
-          Le numéro d'OF attendu est
-          <strong style="color:var(--text)">${escHtml(data.entry_numero_of||'non renseigné')}</strong>.
-        </span>
-      </div>
-      ${importBtn}
-    </div>`;
+  // ── Stocker l'état pour le multi-OF (sous-onglets, picker, etc.)
+  window._ofPlanningState = {
+    entryId: entryId,
+    ofs: Array.isArray(data.ofs) ? data.ofs.slice() : [],
+    activeOfId: null,
+    pickerOpen: false,
+    pickerSearch: '',
+    pickerResults: [],
+    pickerLoading: false,
+    fiche_id: data.fiche_id || null,
+    ref_produit: data.ref_produit || null,
+    entry_numero_of: data.entry_numero_of || null,
+  };
+  if(window._ofPlanningState.ofs.length > 0){
+    window._ofPlanningState.activeOfId = window._ofPlanningState.ofs[0].id;
   }
+
+  // ── Contenu de l'onglet OF (multi-OF) ─────────────────────────────
+  const ofTabContent = renderPlanningOfPaneInner();
 
   // ── Contenu de l'onglet Fiche technique ──────────────────────────
   const ficheId = data.fiche_id || null;
@@ -3680,27 +3657,12 @@ async function openOfPreview(entryId){
     </div>`;
   }
 
-  // ── Titre header selon onglet actif ──────────────────────────────
-  const ofNum  = data.of ? escHtml(data.of.of_numero||'—') : (data.entry_numero_of ? escHtml(data.entry_numero_of) : '—');
-  const ofRef  = data.of && data.of.reference ? ` — ${escHtml(data.of.reference)}` : '';
-  const titleOf    = `OF ${ofNum}${ofRef}`;
+  // ── Titres header (titre OF = OF actif courant) ─────────────────
+  const titleOf    = computePlanningOfTitle();
   const titleFiche = refProduit ? `Fiche technique — ${escHtml(refProduit)}` : 'Fiche technique';
 
-  // ── Bouton téléchargement PDF OF ──────────────────────────────────
-  const dlBtn = (ofId && hasPdf)
-    ? `<a href="/api/of/${ofId}/pdf" target="_blank" download
-          style="display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;
-                 border:1.5px solid var(--accent);background:var(--accent-bg);color:var(--accent);
-                 font-size:12px;font-weight:700;text-decoration:none;white-space:nowrap">
-         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-           <polyline points="7 10 12 15 17 10"/>
-           <line x1="12" y1="15" x2="12" y2="3"/>
-         </svg>
-         Télécharger
-       </a>`
-    : '';
+  // ── Bouton téléchargement PDF de l'OF actif ─────────────────────
+  const dlBtn = computePlanningOfDlBtn();
 
   // ── Barre d'onglets (masquée si pas de ref_produit) ───────────────
   const showTabs = !!refProduit;
@@ -3759,6 +3721,294 @@ function switchOfPreviewTab(tab){
 function closeOfPreview(){
   const ov=document.getElementById('of-preview-overlay');
   if(ov) ov.remove();
+  window._ofPlanningState = null;
+}
+
+function _ofPlanningActiveOf(){
+  const st = window._ofPlanningState; if(!st) return null;
+  const id = st.activeOfId;
+  return (st.ofs || []).find(o => o.id === id) || null;
+}
+
+function computePlanningOfTitle(){
+  const st = window._ofPlanningState;
+  if(!st) return 'Ordre de fabrication';
+  const a = _ofPlanningActiveOf();
+  if(a){
+    const num = escHtml(a.of_numero || '—');
+    const ref = a.reference ? ' — '+escHtml(a.reference) : '';
+    return `OF ${num}${ref}`;
+  }
+  const exp = st.entry_numero_of ? escHtml(st.entry_numero_of) : '—';
+  return `OF ${exp}`;
+}
+
+function computePlanningOfDlBtn(){
+  const a = _ofPlanningActiveOf();
+  if(!a || !a.pdf_filename) return '';
+  return `<a href="/api/of/${a.id}/pdf" target="_blank" download
+          style="display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;
+                 border:1.5px solid var(--accent);background:var(--accent-bg);color:var(--accent);
+                 font-size:12px;font-weight:700;text-decoration:none;white-space:nowrap">
+         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+           <polyline points="7 10 12 15 17 10"/>
+           <line x1="12" y1="15" x2="12" y2="3"/>
+         </svg>
+         Télécharger
+       </a>`;
+}
+
+function renderPlanningOfPaneInner(){
+  const st = window._ofPlanningState;
+  if(!st) return '';
+  const isAdmin = (typeof IS_OF_ADMIN !== 'undefined' && IS_OF_ADMIN);
+  const ofs = st.ofs || [];
+
+  // Si pas d'OF du tout : empty state avec boutons admin
+  if(ofs.length === 0){
+    const importBtn = isAdmin
+      ?`<button type="button" onclick="openOfImportFromPlanning(${st.entryId})"
+           style="display:flex;align-items:center;gap:8px;padding:9px 18px;border-radius:8px;
+                  border:1.5px solid var(--accent);background:var(--accent-bg);color:var(--accent);
+                  font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">
+           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+             <polyline points="17 8 12 3 7 8"/>
+             <line x1="12" y1="3" x2="12" y2="15"/>
+           </svg>
+           Importer un OF PDF
+         </button>`
+      :'';
+    const searchBtn = isAdmin
+      ?`<button type="button" onclick="togglePlanningOfPicker()"
+           style="display:flex;align-items:center;gap:8px;padding:9px 18px;border-radius:8px;
+                  border:1.5px solid var(--border);background:var(--bg);color:var(--text);
+                  font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">
+           Chercher un OF existant
+         </button>`
+      :'';
+    const pickerHtml = st.pickerOpen ? renderPlanningOfPickerHtml() : '';
+    return `<div class="of-empty-state">
+      <div class="of-empty-state-icon">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="9" y1="13" x2="15" y2="13"/>
+        </svg>
+      </div>
+      <div class="of-empty-state-msg">
+        Aucun OF relié à ce dossier de production.<br>
+        <span style="font-size:12px;color:var(--muted)">
+          Le numéro d'OF attendu est
+          <strong style="color:var(--text)">${escHtml(st.entry_numero_of||'non renseigné')}</strong>.
+        </span>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">${importBtn}${searchBtn}</div>
+      ${pickerHtml}
+    </div>`;
+  }
+
+  // Au moins 1 OF : barre de sous-onglets + iframe + (admin) picker
+  const subTabs = ofs.map(o => {
+    const isActive = (o.id === st.activeOfId);
+    const closeBtn = isAdmin
+      ? `<span onclick="event.stopPropagation();removeOfFromCurrentPlanning(${o.id})"
+             style="margin-left:6px;padding:1px 5px;border-radius:50%;color:var(--muted);cursor:pointer;font-size:13px;line-height:1"
+             onmouseenter="this.style.background='var(--danger)';this.style.color='#fff'"
+             onmouseleave="this.style.background='';this.style.color='var(--muted)'"
+             title="Retirer cet OF du dossier">×</span>`
+      : '';
+    return `<button type="button" onclick="switchPlanningOfSubtab(${o.id})"
+        style="display:inline-flex;align-items:center;padding:6px 12px;border-radius:8px;
+               border:1px solid var(--border);background:${isActive?'var(--accent-bg)':'var(--bg)'};
+               color:${isActive?'var(--accent)':'var(--text2)'};
+               font-size:12px;font-weight:${isActive?'700':'600'};cursor:pointer;font-family:inherit;white-space:nowrap">
+        ${escHtml(o.of_numero||'OF #'+o.id)}${closeBtn}</button>`;
+  }).join('');
+
+  const addBtn = isAdmin
+    ? `<button type="button" onclick="togglePlanningOfPicker()"
+          style="display:inline-flex;align-items:center;gap:4px;padding:6px 12px;border-radius:8px;
+                 border:1px dashed var(--accent);background:transparent;color:var(--accent);
+                 font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">
+         ${st.pickerOpen ? 'Fermer' : '+ OF'}
+       </button>`
+    : '';
+
+  const activeOf = _ofPlanningActiveOf();
+  const iframeHtml = activeOf
+    ? `<iframe class="of-preview-iframe" src="/api/of/${activeOf.id}/pdf-preview"></iframe>`
+    : '<div style="padding:24px;color:var(--muted);text-align:center">Sélectionne un OF</div>';
+
+  const pickerHtml = st.pickerOpen ? renderPlanningOfPickerHtml() : '';
+
+  return `<div style="display:flex;flex-direction:column;height:100%">
+    <div style="display:flex;gap:6px;padding:8px 12px;border-bottom:1px solid var(--border);
+                background:var(--card);flex-wrap:wrap;align-items:center">
+      ${subTabs}${addBtn}
+    </div>
+    ${pickerHtml}
+    <div style="flex:1;min-height:0">${iframeHtml}</div>
+  </div>`;
+}
+
+function renderPlanningOfPickerHtml(){
+  const st = window._ofPlanningState;
+  if(!st) return '';
+  const results = st.pickerResults || [];
+  let resultsHtml;
+  if(st.pickerLoading){
+    resultsHtml = '<div style="padding:12px;text-align:center;color:var(--muted);font-size:13px">Recherche…</div>';
+  }else if(results.length === 0){
+    resultsHtml = '<div style="padding:12px;text-align:center;color:var(--muted);font-size:13px">Aucun résultat</div>';
+  }else{
+    const linkedIds = new Set((st.ofs||[]).map(o => o.id));
+    resultsHtml = results.map(c => {
+      const already = linkedIds.has(c.id);
+      const dateImp = (c.date_import||'').slice(0,10) || '—';
+      const disabledAttr = already ? 'disabled' : '';
+      const opacityStyle = already ? 'opacity:.5;cursor:not-allowed' : 'cursor:pointer';
+      const labelSuffix = already ? ' <em style="color:var(--muted);font-style:normal">(déjà lié)</em>' : '';
+      return `<label style="display:flex;align-items:center;gap:10px;padding:6px 8px;border:1px solid var(--border);
+               border-radius:6px;margin-bottom:4px;background:var(--bg);${opacityStyle}">
+        <input type="checkbox" data-of-picker="1" value="${c.id}" ${disabledAttr}
+               style="margin:0;flex-shrink:0">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;color:var(--text);font-size:12px">${escHtml(c.of_numero||'—')}${labelSuffix}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:1px">
+            Réf : ${escHtml(c.reference||'—')}${c.machine?' · '+escHtml(c.machine):''} · importé ${dateImp}
+          </div>
+        </div>
+      </label>`;
+    }).join('');
+  }
+  return `<div style="padding:10px 14px;border-bottom:1px solid var(--border);background:var(--bg)">
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+      <input id="planning-of-picker-search" type="text" value="${escAttr(st.pickerSearch||'')}"
+        placeholder="Rechercher par OF n°, référence, machine…"
+        oninput="onPlanningOfPickerSearchInput(this.value)"
+        style="flex:1;background:var(--card);border:1px solid var(--border);border-radius:6px;
+               padding:7px 10px;color:var(--text);font-size:12px;font-family:inherit;outline:none">
+      <button type="button" onclick="submitAttachOfsToPlanning()"
+        style="padding:7px 14px;border-radius:6px;border:none;background:var(--accent);color:#fff;
+               cursor:pointer;font-size:12px;font-weight:700">Attacher</button>
+    </div>
+    <div style="max-height:200px;overflow-y:auto">${resultsHtml}</div>
+  </div>`;
+}
+
+function _rerenderPlanningOfPane(){
+  const pane = document.getElementById('of-tab-pane-of');
+  if(pane) pane.innerHTML = renderPlanningOfPaneInner();
+  const titleEl = document.getElementById('of-preview-title-txt');
+  if(titleEl) titleEl.innerHTML = computePlanningOfTitle();
+  const dlWrap = document.getElementById('of-dl-btn-wrap');
+  if(dlWrap) dlWrap.innerHTML = computePlanningOfDlBtn();
+}
+
+function switchPlanningOfSubtab(ofId){
+  const st = window._ofPlanningState; if(!st) return;
+  st.activeOfId = ofId;
+  _rerenderPlanningOfPane();
+}
+
+function togglePlanningOfPicker(){
+  const st = window._ofPlanningState; if(!st) return;
+  st.pickerOpen = !st.pickerOpen;
+  if(st.pickerOpen && (st.pickerResults||[]).length === 0){
+    searchOfsForPlanningPicker('');
+    return;
+  }
+  _rerenderPlanningOfPane();
+}
+
+let _planningOfPickerDeb = null;
+function onPlanningOfPickerSearchInput(value){
+  const st = window._ofPlanningState; if(!st) return;
+  st.pickerSearch = value;
+  clearTimeout(_planningOfPickerDeb);
+  _planningOfPickerDeb = setTimeout(() => searchOfsForPlanningPicker(value), 200);
+}
+
+async function searchOfsForPlanningPicker(term){
+  const st = window._ofPlanningState; if(!st) return;
+  st.pickerLoading = true; _rerenderPlanningOfPane();
+  try{
+    const q = encodeURIComponent(term||'');
+    const r = await fetch('/api/of/search?limit=20'+(q?'&q='+q:''), {credentials:'include'});
+    const data = await r.json();
+    st.pickerResults = Array.isArray(data && data.items) ? data.items : [];
+  }catch(e){
+    st.pickerResults = [];
+  }
+  st.pickerLoading = false; _rerenderPlanningOfPane();
+  // Restore focus + caret
+  requestAnimationFrame(() => {
+    const el = document.getElementById('planning-of-picker-search');
+    if(el){ try{ el.focus(); el.setSelectionRange(el.value.length, el.value.length); }catch(e){} }
+  });
+}
+
+async function submitAttachOfsToPlanning(){
+  const st = window._ofPlanningState; if(!st) return;
+  const boxes = document.querySelectorAll('[data-of-picker="1"]:checked');
+  const ofIds = Array.from(boxes).map(b => parseInt(b.value, 10)).filter(x => !isNaN(x));
+  if(!ofIds.length){ alert('Coche au moins un OF.'); return; }
+  try{
+    const r = await fetch('/api/admin/planning-of-links', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({planning_id: st.entryId, of_ids: ofIds}),
+    });
+    if(!r.ok){ const j = await r.json().catch(()=>({})); throw new Error(j.detail||'Erreur'); }
+    // Re-fetch data complète pour avoir la nouvelle liste
+    await refreshPlanningOfData();
+  }catch(e){
+    alert((e && e.message) || 'Erreur enregistrement');
+  }
+}
+
+async function removeOfFromCurrentPlanning(ofId){
+  const st = window._ofPlanningState; if(!st) return;
+  if(!confirm('Retirer cet OF du dossier ?')) return;
+  try{
+    const r = await fetch('/api/admin/planning-of-links', {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({planning_id: st.entryId, of_id: ofId}),
+    });
+    if(!r.ok){ const j = await r.json().catch(()=>({})); throw new Error(j.detail||'Erreur'); }
+    await refreshPlanningOfData();
+  }catch(e){
+    alert((e && e.message) || 'Erreur enregistrement');
+  }
+}
+
+async function refreshPlanningOfData(){
+  const st = window._ofPlanningState; if(!st) return;
+  try{
+    const r = await fetch('/api/of/planning/' + st.entryId, {credentials:'include'});
+    const data = await r.json();
+    st.ofs = Array.isArray(data.ofs) ? data.ofs.slice() : [];
+    st.fiche_id = data.fiche_id || null;
+    // Si l'OF actif n'est plus dans la liste, prendre le premier
+    const stillExists = st.ofs.some(o => o.id === st.activeOfId);
+    if(!stillExists){
+      st.activeOfId = st.ofs.length > 0 ? st.ofs[0].id : null;
+    }
+    st.pickerOpen = false;
+    st.pickerSearch = '';
+    st.pickerResults = [];
+    _rerenderPlanningOfPane();
+    // Refresh aussi le badge si la fonction existe
+    try{ if(typeof loadPendingOfCount === 'function') loadPendingOfCount(); }catch(e){}
+  }catch(e){}
 }
 
 let _ofPlanningFile=null, _ofPlanningParsed=null, _ofPlanningEntryId=null;

@@ -984,7 +984,7 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
   border:1px solid var(--border);border-radius:10px;padding:0 12px}
 .mon-page .mon-search-wrap input{flex:1;border:none;background:transparent;padding:12px 0;color:var(--text);font-size:14px;outline:none}
 .mon-page .mon-search-wrap:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
-.content.mon-page.hist-page{padding:16px 20px 24px 24px;max-width:none}
+.content.mon-page.hist-page,.content:has(> .hist-page){padding:16px 20px 24px 24px;max-width:none;width:100%}
 .mon-statut{display:inline-flex;align-items:center;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:3px 10px;border-radius:20px}
 .mon-statut-ok{background:rgba(52,211,153,.12);color:var(--success)}
 .mon-statut-ecart{background:rgba(248,113,113,.12);color:var(--danger)}
