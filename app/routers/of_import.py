@@ -1195,8 +1195,7 @@ _DOSSIERS_SANS_OF_COUNT_SQL = (
     "SELECT COUNT(*) FROM planning_entries pe "
     "WHERE NOT EXISTS (SELECT 1 FROM planning_of_links pl "
     "                  WHERE pl.planning_entry_id = pe.id) "
-    "AND COALESCE(pe.statut, '') != 'termine' "
-    "AND COALESCE(pe.fin_dossier, 0) = 0"
+    "AND COALESCE(pe.statut, '') != 'termine'"
 )
 
 
@@ -1225,7 +1224,6 @@ def admin_dossiers_sans_of(request: Request):
                   WHERE pl.planning_entry_id = pe.id
                )
                AND COALESCE(pe.statut, '') != 'termine'
-               AND COALESCE(pe.fin_dossier, 0) = 0
                ORDER BY pe.created_at DESC, pe.id DESC"""
         ).fetchall()
     items = [{
