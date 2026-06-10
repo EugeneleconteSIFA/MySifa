@@ -1,26 +1,4 @@
-/* MySifa — incitation / verrouillage paysage sur mobile */
-body.mysifa-landscape-required.mysifa-portrait::before {
-  content: "Tournez l'appareil en mode paysage pour utiliser cette vue.";
-  position: fixed;
-  inset: 0;
-  z-index: 99999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 24px;
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.5;
-  color: var(--text);
-  background: var(--bg);
-}
-
-body.mysifa-landscape-required.mysifa-portrait #root,
-body.mysifa-landscape-required.mysifa-portrait #app,
-body.mysifa-landscape-required.mysifa-portrait .layout,
-body.mysifa-landscape-required.mysifa-portrait .rh-main,
-body.mysifa-landscape-required.mysifa-portrait .planning-container {
-  pointer-events: none;
-  user-select: none;
-}
+/* MySifa — Paysage désactivé : affichage vertical forcé.
+   Ce fichier est conservé pour compatibilité ; aucun message de rotation
+   n'est affiché et aucun blocage de pointer-events n'est appliqué.
+   Tout est rendu en portrait, peu importe l'orientation du téléphone. */
