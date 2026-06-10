@@ -77,7 +77,11 @@ body.light{
 }
 html,body{height:100%}
 #root{display:flex;flex:1;flex-direction:column;min-height:0}
-body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;min-height:100%}::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;min-height:100%;position:relative}
+/* Fond petits points (cohérence visuelle avec MyProd + portail) */
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Ccircle cx='1.5' cy='1.5' r='1.2' fill='rgba(255,255,255,0.07)'/%3E%3C/svg%3E");background-size:28px 28px;background-repeat:repeat}
+body.light::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Ccircle cx='1.5' cy='1.5' r='1.2' fill='rgba(0,0,0,0.055)'/%3E%3C/svg%3E")}
+#root{position:relative;z-index:1}::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
 button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 button:focus:not(:focus-visible){outline:none}
 input,select{font-family:inherit}
@@ -980,7 +984,7 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
   border:1px solid var(--border);border-radius:10px;padding:0 12px}
 .mon-page .mon-search-wrap input{flex:1;border:none;background:transparent;padding:12px 0;color:var(--text);font-size:14px;outline:none}
 .mon-page .mon-search-wrap:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
-.content.mon-page.hist-page{padding:16px 20px 24px 24px;max-width:1100px}
+.content.mon-page.hist-page{padding:16px 20px 24px 24px;max-width:none}
 .mon-statut{display:inline-flex;align-items:center;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:3px 10px;border-radius:20px}
 .mon-statut-ok{background:rgba(52,211,153,.12);color:var(--success)}
 .mon-statut-ecart{background:rgba(248,113,113,.12);color:var(--danger)}
@@ -1364,6 +1368,9 @@ body:not(.light) .plan-pill-tip-jours.plan-pill-c-rouge{color:#f87171}
 .modal-field{margin-bottom:14px}
 .empl-suggestions{background:var(--bg);border:1px solid var(--border);border-radius:8px;
   margin-top:4px;overflow:hidden;max-height:140px;overflow-y:auto}
+.empl-sugg-item-with-unit{display:flex;align-items:center;gap:10px;justify-content:space-between}
+.empl-sugg-item-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.empl-sugg-item-unit-badge{flex-shrink:0;font-family:'Segoe UI',system-ui,sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:3px 8px;border-radius:999px;background:var(--accent-bg);color:var(--accent);border:1px solid var(--border)}
 .empl-sugg-item{padding:10px 14px;cursor:pointer;font-family:monospace;font-size:13px;
   font-weight:700;border-bottom:1px solid var(--border);transition:background .1s}
 .empl-sugg-item:last-child{border-bottom:none}
@@ -3661,10 +3668,15 @@ function wireStockProduitSearch(refInp, suggWrap, onSelect) {
       }
       list.forEach(p => {
         const label = (p.reference || '') + (p.designation ? ' — ' + p.designation : '');
-        suggWrap.appendChild(el('div', {
-          cls: 'empl-sugg-item',
+        const unite = String(p.unite || '').trim();
+        const row = el('div', {
+          cls: 'empl-sugg-item empl-sugg-item-with-unit',
           on: { mousedown: (e) => { e.preventDefault(); onSelect(p); } },
-        }, label));
+        },
+          el('span', { cls: 'empl-sugg-item-label' }, label),
+          unite ? el('span', { cls: 'empl-sugg-item-unit-badge' }, unite) : null,
+        );
+        suggWrap.appendChild(row);
       });
       suggWrap.style.display = 'block';
     } catch (e) {
