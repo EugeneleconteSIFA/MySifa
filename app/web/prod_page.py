@@ -10,8 +10,8 @@ Stratégie de migration (Phase 2 — extraction du monolithe html.py) :
 
 Découpage par étapes :
 - 2c : coquille minimale (placeholder) ✓
-- 2d : coquille avec <link>/<script> vers /static/mysifa_prod_core.{css,js} ← ICI
-- 2e : socle JS (helpers + state S filtré) dans mysifa_prod_core.js
+- 2d : coquille avec <link>/<script> vers /static/mysifa_prod_core.{css,js} ✓
+- 2e : socle JS (helpers + state S filtré) dans mysifa_prod_core.js ← ICI
 - 2f : auth + sidebar + render() squelette
 - 2g/h : page Production (KPIs + statut machines + sanity + filtres)
 - 2i/j/k/l : onglets Historique/Saisies/Import, Dossiers/Suivi/Rentabilité,
@@ -81,20 +81,18 @@ PROD_HTML = r"""<!DOCTYPE html>
 <body>
 <div id="root">
   <div class="prod-migration-placeholder">
-    <div class="stage-badge">Étape 2d</div>
+    <div class="stage-badge">Étape 2e</div>
     <h1>My<span>Prod</span> — page standalone en migration</h1>
     <p>
-      Cette page est servie par <code>app/web/prod_page.py</code> parce que
-      <code>PROD_STANDALONE=1</code> est actif dans le <code>.env</code>.
+      Le socle JS (helpers, état, rôles) est chargé depuis
+      <code>/static/mysifa_prod_core.js</code>. Ouvre la console pour vérifier
+      les marqueurs <code>window.__MYSIFA_PROD_STANDALONE__</code> et
+      <code>window.__prodCore</code> (utiles pour le debug aux étapes
+      suivantes).
     </p>
     <p>
-      Les feuilles <code>/static/mysifa_prod_core.css</code> et
-      <code>/static/mysifa_prod_core.js</code> sont chargées (vérifie la console
-      du navigateur pour confirmation).
-    </p>
-    <p>
-      Le contenu réel de MyProd sera ajouté progressivement par les étapes
-      <strong>2e à 2l</strong>. Pour revenir au rendu via le monolithe, mets
+      Le rendu de la sidebar et des sous-pages MyProd arrive aux étapes
+      <strong>2f à 2l</strong>. Pour revenir au rendu via le monolithe, mets
       <code>PROD_STANDALONE=0</code> dans le <code>.env</code> puis redémarre l'app.
     </p>
     <p style="margin-top:8px"><a href="/">← Retour au portail</a></p>
