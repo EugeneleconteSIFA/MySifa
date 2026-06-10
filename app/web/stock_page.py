@@ -674,6 +674,37 @@ body.light .mp-search-wrap:focus-within{
   border-radius:10px;padding:6px;min-width:140px;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,.25)}
 .mp-menu-drop button{display:block;width:100%;text-align:left;margin-bottom:4px}
 .mp-empty{text-align:center;color:var(--muted);font-size:13px;padding:32px 16px}
+/* ── Convertir une unité de vente (référentiel) ── */
+.ref-convert-unite-card .cu-sugg-empty{padding:14px;color:var(--muted);font-size:13px;text-align:center}
+.cu-sugg-list{margin-top:8px;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.cu-sugg-row{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:10px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);transition:background .15s}
+.cu-sugg-row:last-child{border-bottom:none}
+.cu-sugg-row:hover{background:var(--accent-bg)}
+.cu-sugg-main{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cu-sugg-ref{font-family:monospace;font-weight:700;color:var(--text)}
+.cu-sugg-des{color:var(--text2);font-size:12px}
+.cu-sugg-unit{flex-shrink:0;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
+  padding:3px 9px;border-radius:999px;background:var(--accent-bg);color:var(--accent);border:1px solid var(--border)}
+.cu-prod-card{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;
+  padding:14px 16px;background:var(--bg);border:1px solid var(--border);border-radius:10px;margin-top:8px}
+.cu-prod-info{flex:1;min-width:0}
+.cu-prod-ref{font-family:monospace;font-weight:800;font-size:15px;color:var(--text)}
+.cu-prod-des{font-size:12px;color:var(--text2);margin:2px 0 6px}
+.cu-prod-stock{font-size:12px;color:var(--muted)}
+.cu-prod-stock strong{color:var(--text)}
+.cu-prod-reset{flex-shrink:0}
+.cu-row{margin-top:14px;display:flex;flex-direction:column;gap:6px}
+.cu-row .cu-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.cu-row select,.cu-row input{background:var(--bg);border:1px solid var(--border);border-radius:10px;
+  padding:10px 14px;color:var(--text);font-size:14px;font-family:inherit;outline:none;width:100%}
+.cu-row select:focus,.cu-row input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.cu-input-row{display:flex;gap:8px;align-items:center}
+.cu-input-row input{flex:1}
+.cu-reverse{flex-shrink:0;white-space:nowrap}
+.cu-preview{margin-top:12px;padding:10px 14px;background:var(--accent-bg);border:1px solid var(--border);
+  border-radius:8px;font-size:13px;color:var(--text);display:flex;align-items:center;gap:6px}
+.cu-actions{margin-top:16px;display:flex;justify-content:flex-end;gap:8px}
 /* ── Vue Production (fabrication) ── */
 .prod-view{padding:16px 16px 24px 10px}
 .prod-head{margin-bottom:18px}
@@ -4214,6 +4245,7 @@ function buildReferentielPage() {
     ),
     buildReferentielClientSearchCard(),
     buildReferentielCard(),
+    (!S.stockReadOnly) ? buildConvertUniteCard() : null,
     (!S.stockReadOnly) ? el('div', { cls: 'ref-card ref-units-card' },
       el('div', { cls: 'ref-card-header' },
         el('div', { cls: 'card-title' }, 'Unités de vente personnalisées')
@@ -4228,6 +4260,260 @@ function buildReferentielPage() {
         }, iconEl('plus-circle', 14), ' Créer une unité de vente')
       )
     ) : null
+  );
+}
+
+// ── Modifier une unité de vente (référentiel) ────────────────────────
+function _cuEnsureState() {
+  if (!S.convUnit) {
+    S.convUnit = {
+      produit: null,         // {id, reference, designation, unite, stock_total}
+      query: '',
+      suggestions: [],
+      suggLoading: false,
+      newUnite: '',
+      direction: 'origin_per_new', // 'origin_per_new' (N origine = 1 nouveau) ou 'new_per_origin'
+      valeur: '',
+      busy: false,
+    };
+  }
+  return S.convUnit;
+}
+
+let _convUnitTimer = null;
+async function _cuSearchProduit(q) {
+  const st = _cuEnsureState();
+  st.query = q;
+  st.suggestions = [];
+  if (!q || !q.trim()) {
+    renderReferentielView();
+    return;
+  }
+  st.suggLoading = true;
+  renderReferentielView();
+  try {
+    const r = await api('/api/stock/search?q=' + encodeURIComponent(q.trim()) + '&limit=8');
+    st.suggestions = (r && r.produits) ? r.produits : [];
+  } catch (e) {
+    st.suggestions = [];
+  }
+  st.suggLoading = false;
+  renderReferentielView();
+}
+
+async function _cuSelectProduit(p) {
+  const st = _cuEnsureState();
+  // Récupérer le stock total via /api/stock/produits/{id}
+  let stockTotal = 0;
+  try {
+    const d = await api('/api/stock/produits/' + p.id);
+    stockTotal = Number(d.stock_total) || 0;
+  } catch (e) {
+    stockTotal = Number(p.stock_total) || 0;
+  }
+  st.produit = {
+    id: p.id,
+    reference: p.reference,
+    designation: p.designation || '',
+    unite: p.unite || '',
+    stock_total: stockTotal,
+  };
+  st.query = '';
+  st.suggestions = [];
+  st.newUnite = '';
+  st.valeur = '';
+  st.direction = 'origin_per_new';
+  renderReferentielView();
+}
+
+function _cuReset() {
+  S.convUnit = null;
+  renderReferentielView();
+}
+
+function _cuComputeFactor() {
+  const st = _cuEnsureState();
+  const v = parseFloat(String(st.valeur || '').replace(',', '.'));
+  if (!isFinite(v) || v <= 0) return null;
+  // direction = origin_per_new : N origine dans 1 nouveau → facteur = 1/N
+  // direction = new_per_origin : M nouveau dans 1 origine → facteur = M
+  return st.direction === 'origin_per_new' ? (1 / v) : v;
+}
+
+function _cuPreviewLine() {
+  const st = _cuEnsureState();
+  if (!st.produit || !st.newUnite) return '';
+  const factor = _cuComputeFactor();
+  if (factor == null) return '';
+  const newStock = (st.produit.stock_total || 0) * factor;
+  const oldUnite = st.produit.unite || '';
+  return 'Stock actuel : ' + fU(st.produit.stock_total || 0, oldUnite)
+    + '  →  ' + fU(newStock, st.newUnite);
+}
+
+async function _cuSubmit() {
+  const st = _cuEnsureState();
+  if (st.busy) return;
+  if (!st.produit) { showToast('Sélectionnez un produit.', 'error'); return; }
+  if (!st.newUnite || !String(st.newUnite).trim()) {
+    showToast('Choisissez la nouvelle unité.', 'error'); return;
+  }
+  if ((st.newUnite || '').trim().toLowerCase() === (st.produit.unite || '').trim().toLowerCase()) {
+    showToast('La nouvelle unité doit être différente de l\'actuelle.', 'error'); return;
+  }
+  const factor = _cuComputeFactor();
+  if (factor == null) { showToast('Valeur invalide.', 'error'); return; }
+  st.busy = true;
+  renderReferentielView();
+  try {
+    const r = await api('/api/stock/produits/' + st.produit.id + '/convertir-unite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nouvelle_unite: String(st.newUnite).trim(),
+        facteur: factor,
+      }),
+    });
+    showToast('Unité changée : ' + (r.ancienne_unite || '?') + ' → '
+      + (r.nouvelle_unite || '?') + ' (stock ' + fN(r.stock_total_avant || 0)
+      + ' → ' + fN(r.stock_total_apres || 0) + ')', 'success');
+    _cuReset();
+  } catch (e) {
+    st.busy = false;
+    showToast(e.message || 'Échec de la conversion.', 'error');
+    renderReferentielView();
+  }
+}
+
+function buildConvertUniteCard() {
+  const st = _cuEnsureState();
+  const body = el('div', { cls: 'ref-card-body' });
+  body.appendChild(el('p', { cls: 'ref-card-desc' },
+    'Changez l\'unité de vente d\'une référence et appliquez la conversion '
+    + 'sur toutes les quantités en stock. Les mouvements historiques sont préservés.',
+  ));
+
+  // Picker produit
+  if (!st.produit) {
+    const inp = el('input', {
+      cls: 'ref-client-search',
+      id: 'cu-produit-search',
+      attrs: { type: 'text', placeholder: 'Rechercher une référence produit…', autocomplete: 'off' },
+    });
+    inp.value = st.query || '';
+    inp.addEventListener('input', (e) => {
+      st.query = e.target.value;
+      clearTimeout(_convUnitTimer);
+      _convUnitTimer = setTimeout(() => _cuSearchProduit(st.query), 220);
+    });
+    body.appendChild(el('div', { cls: 'ref-client-search-wrap' }, inp));
+
+    if (st.suggLoading) {
+      body.appendChild(el('div', { cls: 'cu-sugg-empty' }, 'Recherche…'));
+    } else if (st.query && !st.suggestions.length) {
+      body.appendChild(el('div', { cls: 'cu-sugg-empty' }, 'Aucun résultat pour « ' + st.query + ' »'));
+    } else if (st.suggestions.length) {
+      const sw = el('div', { cls: 'cu-sugg-list' });
+      st.suggestions.forEach(p => {
+        sw.appendChild(el('div', {
+          cls: 'cu-sugg-row',
+          on: { click: () => _cuSelectProduit(p) },
+        },
+          el('div', { cls: 'cu-sugg-main' },
+            el('span', { cls: 'cu-sugg-ref' }, p.reference || '—'),
+            p.designation ? el('span', { cls: 'cu-sugg-des' }, ' — ' + p.designation) : null,
+          ),
+          el('span', { cls: 'cu-sugg-unit' }, p.unite || '—'),
+        ));
+      });
+      body.appendChild(sw);
+    }
+  } else {
+    // Produit sélectionné
+    body.appendChild(el('div', { cls: 'cu-prod-card' },
+      el('div', { cls: 'cu-prod-info' },
+        el('div', { cls: 'cu-prod-ref' }, st.produit.reference || '—'),
+        el('div', { cls: 'cu-prod-des' }, st.produit.designation || ''),
+        el('div', { cls: 'cu-prod-stock' },
+          'Unité actuelle : ', el('strong', null, st.produit.unite || '—'),
+          ' · Stock total : ', el('strong', null, fU(st.produit.stock_total || 0, st.produit.unite || '')),
+        ),
+      ),
+      el('button', {
+        cls: 'btn-ghost-sm cu-prod-reset', type: 'button',
+        on: { click: () => { st.produit = null; st.newUnite = ''; st.valeur = ''; renderReferentielView(); } },
+      }, '× Changer'),
+    ));
+
+    // Sélecteur nouvelle unité
+    const allUnites = [...new Set([...PF_UNITES, ...STOCK_UNITS_BASE])].filter(u => u && u.toLowerCase() !== (st.produit.unite || '').toLowerCase());
+    const unitSel = el('select', { id: 'cu-new-unite' });
+    unitSel.appendChild(el('option', { value: '' }, '— Nouvelle unité —'));
+    allUnites.forEach(u => {
+      unitSel.appendChild(el('option', { value: u, selected: st.newUnite === u ? true : null }, u));
+    });
+    unitSel.addEventListener('change', () => { st.newUnite = unitSel.value; renderReferentielView(); });
+    body.appendChild(el('div', { cls: 'cu-row' },
+      el('label', { cls: 'cu-label' }, 'Nouvelle unité de vente'),
+      unitSel,
+    ));
+
+    // Direction + valeur
+    if (st.newUnite) {
+      const oldU = st.produit.unite || 'origine';
+      const newU = st.newUnite || 'nouvelle';
+      const labelTxt = st.direction === 'origin_per_new'
+        ? 'Combien de [' + oldU + '] dans 1 [' + newU + '] ?'
+        : 'Combien de [' + newU + '] dans 1 [' + oldU + '] ?';
+
+      const qInp = el('input', {
+        id: 'cu-valeur',
+        attrs: { type: 'number', min: '0', step: 'any', inputmode: 'decimal', placeholder: 'ex. 500' },
+      });
+      qInp.value = String(st.valeur || '');
+      qInp.addEventListener('input', () => { st.valeur = qInp.value; renderReferentielView(); });
+
+      const reverseBtn = el('button', {
+        cls: 'btn-ghost-sm cu-reverse', type: 'button',
+        attrs: { title: 'Inverser le sens de calcul' },
+        on: { click: () => {
+          st.direction = st.direction === 'origin_per_new' ? 'new_per_origin' : 'origin_per_new';
+          renderReferentielView();
+        } },
+      }, iconEl('refresh-ccw', 12), ' Inverser');
+
+      body.appendChild(el('div', { cls: 'cu-row' },
+        el('label', { cls: 'cu-label' }, labelTxt),
+        el('div', { cls: 'cu-input-row' }, qInp, reverseBtn),
+      ));
+
+      const preview = _cuPreviewLine();
+      if (preview) {
+        body.appendChild(el('div', { cls: 'cu-preview' },
+          iconEl('refresh-ccw', 12),
+          ' ' + preview,
+        ));
+      }
+
+      body.appendChild(el('div', { cls: 'cu-actions' },
+        el('button', {
+          cls: 'btn-ghost-sm', type: 'button',
+          on: { click: () => _cuReset() },
+        }, 'Annuler'),
+        el('button', {
+          cls: 'btn btn-accent', type: 'button',
+          attrs: { disabled: st.busy ? 'disabled' : null },
+          on: { click: () => _cuSubmit() },
+        }, st.busy ? 'Conversion…' : 'Valider la conversion'),
+      ));
+    }
+  }
+
+  return el('div', { cls: 'ref-card ref-convert-unite-card' },
+    el('div', { cls: 'ref-card-header' },
+      el('div', { cls: 'card-title' }, 'Modifier une unité de vente'),
+    ),
+    body,
   );
 }
 

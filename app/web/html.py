@@ -10581,19 +10581,46 @@ async function loadDossiersSansOf(){
 
 async function searchOfsForAttach(planningId, term){
   const key='attach-'+planningId;
+  const inputId='attach-search-'+planningId;
+  // Helpers focus : capture la position du caret avant chaque render,
+  // restaure après. Évite l'inversion des caractères en saisie rapide.
+  function captureFocus(){
+    const ae=document.activeElement;
+    if(ae && ae.id===inputId){
+      return {focused:true, start:ae.selectionStart, end:ae.selectionEnd, value:ae.value};
+    }
+    return null;
+  }
+  function restoreFocus(snap){
+    if(!snap||!snap.focused) return;
+    requestAnimationFrame(()=>{
+      const el=document.getElementById(inputId);
+      if(!el) return;
+      try{
+        el.focus();
+        if(snap.start!=null){
+          const end=snap.end!=null?snap.end:snap.start;
+          el.setSelectionRange(snap.start, end);
+        }
+      }catch(e){}
+    });
+  }
+  let snap=captureFocus();
   S[key+'-loading']=true; render();
+  restoreFocus(snap);
   try{
     const q=encodeURIComponent(term||'');
     const data=await api('/api/of/search?limit=20'+(q?'&q='+q:''));
+    // Recapture juste avant le 2e render (l'utilisateur a pu taper pendant le fetch)
+    snap=captureFocus()||snap;
     S[key+'-results']=Array.isArray(data&&data.items)?data.items:[];
     S[key+'-loading']=false;
     render();
-    requestAnimationFrame(()=>{
-      const el=document.getElementById('attach-search-'+planningId);
-      if(el){ try{ el.focus(); }catch(e){} }
-    });
+    restoreFocus(snap);
   }catch(e){
+    snap=captureFocus()||snap;
     S[key+'-loading']=false; render();
+    restoreFocus(snap);
     toast(e.message||'Erreur de recherche','error');
   }
 }

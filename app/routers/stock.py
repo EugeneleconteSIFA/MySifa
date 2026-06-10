@@ -834,6 +834,114 @@ async def update_produit(produit_id: int, request: Request):
     return {"success": True}
 
 
+@router.post("/api/stock/produits/{produit_id}/convertir-unite")
+async def convertir_unite_produit(produit_id: int, request: Request):
+    """Change l'unité de vente d'un produit et applique un facteur de conversion
+    à toutes les quantités en stock (lots_stock + stock_emplacements).
+    Les mouvements historiques (mouvements_stock) ne sont pas modifiés."""
+    user = require_stock_write(request)
+    body = await request.json()
+    nouvelle_unite = (body.get("nouvelle_unite") or "").strip()
+    if not nouvelle_unite:
+        raise HTTPException(400, "Nouvelle unité obligatoire.")
+    try:
+        facteur = float(body.get("facteur", 0))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Facteur invalide.") from None
+    if facteur <= 0:
+        raise HTTPException(400, "Facteur doit être strictement positif.")
+    now = datetime.now().isoformat()
+
+    with get_db() as conn:
+        prow = conn.execute(
+            "SELECT id, reference, designation, unite FROM produits WHERE id=?",
+            (produit_id,),
+        ).fetchone()
+        if not prow:
+            raise HTTPException(404, "Produit non trouvé.")
+        ancienne_unite = prow["unite"] or "—"
+
+        old_total_row = conn.execute(
+            "SELECT COALESCE(SUM(quantite_restante), 0) AS s FROM lots_stock WHERE produit_id=?",
+            (produit_id,),
+        ).fetchone()
+        old_total = float(old_total_row["s"]) if old_total_row else 0.0
+
+        # 1. Unité du produit
+        conn.execute(
+            "UPDATE produits SET unite=?, updated_at=? WHERE id=?",
+            (nouvelle_unite, now, produit_id),
+        )
+        # 2. Lots actifs et historiques (quantite_initiale + quantite_restante)
+        conn.execute(
+            "UPDATE lots_stock SET quantite_restante=quantite_restante*?, "
+            "quantite_initiale=quantite_initiale*? WHERE produit_id=?",
+            (facteur, facteur, produit_id),
+        )
+        # 3. Résumé dénormalisé par emplacement
+        conn.execute(
+            "UPDATE stock_emplacements SET quantite=quantite*?, updated_at=? WHERE produit_id=?",
+            (facteur, now, produit_id),
+        )
+        # 4. Trace dans mouvements_stock (type 'inventaire') par emplacement actif
+        empls_actifs = conn.execute(
+            "SELECT emplacement, SUM(quantite_restante) AS qte FROM lots_stock "
+            "WHERE produit_id=? AND quantite_restante>0 GROUP BY emplacement",
+            (produit_id,),
+        ).fetchall()
+        created_by_name = (user.get("nom") or "").strip() or None
+        note_ajust = (
+            f"Changement d'unité de vente : {ancienne_unite} → {nouvelle_unite} "
+            f"(facteur ×{facteur:g})"
+        )
+        for r in empls_actifs:
+            qte_apres = float(r["qte"] or 0)
+            qte_avant = qte_apres / facteur if facteur else qte_apres
+            conn.execute(
+                """INSERT INTO mouvements_stock
+                   (produit_id, emplacement, type_mouvement, quantite,
+                    quantite_avant, quantite_apres, note, created_at,
+                    created_by, created_by_name)
+                   VALUES (?, ?, 'inventaire', ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    produit_id, r["emplacement"], qte_apres - qte_avant,
+                    qte_avant, qte_apres, note_ajust, now,
+                    user.get("email"), created_by_name,
+                ),
+            )
+
+        new_total_row = conn.execute(
+            "SELECT COALESCE(SUM(quantite_restante), 0) AS s FROM lots_stock WHERE produit_id=?",
+            (produit_id,),
+        ).fetchone()
+        new_total = float(new_total_row["s"]) if new_total_row else 0.0
+        conn.commit()
+
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="stock",
+        objet=f"Conversion unité {prow['reference']} : {ancienne_unite} → {nouvelle_unite} (x{facteur:g})",
+        detail={
+            "ancienne_unite": ancienne_unite,
+            "nouvelle_unite": nouvelle_unite,
+            "facteur": facteur,
+            "stock_total_avant": old_total,
+            "stock_total_apres": new_total,
+        },
+        ip=request.client.host if request.client else None,
+    )
+    return {
+        "success": True,
+        "reference": prow["reference"],
+        "ancienne_unite": ancienne_unite,
+        "nouvelle_unite": nouvelle_unite,
+        "facteur": facteur,
+        "stock_total_avant": old_total,
+        "stock_total_apres": new_total,
+    }
+
+
 @router.delete("/api/stock/produits/{produit_id}")
 def delete_produit(produit_id: int, request: Request):
     user = require_stock_write(request)

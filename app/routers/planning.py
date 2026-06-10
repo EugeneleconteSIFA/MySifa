@@ -1242,11 +1242,37 @@ def list_entries(machine_id: int, request: Request):
         _auto_complete_en_cours(conn, machine_id)
         _enforce_single_en_cours(conn, machine_id)
         conn.commit()
+        # Nom de la machine pour désambiguïser la fiche technique (multi-variantes par ref_produit_norm)
+        m_row = conn.execute("SELECT nom FROM machines WHERE id=?", (machine_id,)).fetchone()
+        machine_nom = (m_row["nom"] if m_row else "") or ""
         rows = conn.execute("""
-            SELECT * FROM planning_entries
-            WHERE machine_id = ?
-            ORDER BY position ASC
-        """, (machine_id,)).fetchall()
+            SELECT pe.*,
+                   (SELECT ft.support FROM fiches_techniques ft
+                    WHERE ft.ref_produit_norm IS NOT NULL
+                      AND ft.ref_produit_norm = pe.ref_produit_norm
+                    ORDER BY
+                      CASE
+                        WHEN LOWER(TRIM(COALESCE(ft.machine,''))) = LOWER(TRIM(COALESCE(?,''))) AND TRIM(COALESCE(ft.machine,'')) != '' THEN 0
+                        WHEN TRIM(COALESCE(ft.machine,'')) = '' THEN 1
+                        ELSE 2
+                      END,
+                      ft.id
+                    LIMIT 1) AS ft_support,
+                   (SELECT ft.adhesif FROM fiches_techniques ft
+                    WHERE ft.ref_produit_norm IS NOT NULL
+                      AND ft.ref_produit_norm = pe.ref_produit_norm
+                    ORDER BY
+                      CASE
+                        WHEN LOWER(TRIM(COALESCE(ft.machine,''))) = LOWER(TRIM(COALESCE(?,''))) AND TRIM(COALESCE(ft.machine,'')) != '' THEN 0
+                        WHEN TRIM(COALESCE(ft.machine,'')) = '' THEN 1
+                        ELSE 2
+                      END,
+                      ft.id
+                    LIMIT 1) AS ft_adhesif
+            FROM planning_entries pe
+            WHERE pe.machine_id = ?
+            ORDER BY pe.position ASC
+        """, (machine_nom, machine_nom, machine_id)).fetchall()
     entries = []
     for r in rows:
         e = dict(r)
