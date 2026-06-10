@@ -696,6 +696,7 @@ body.light .mp-search-wrap:focus-within{
 .cu-prod-reset{flex-shrink:0}
 .cu-row{margin-top:14px;display:flex;flex-direction:column;gap:6px}
 .cu-row .cu-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.cu-row .cu-label .cu-label-unit{color:var(--text);font-weight:800;text-transform:none;letter-spacing:0}
 .cu-row select,.cu-row input{background:var(--bg);border:1px solid var(--border);border-radius:10px;
   padding:10px 14px;color:var(--text);font-size:14px;font-family:inherit;outline:none;width:100%}
 .cu-row select:focus,.cu-row input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
@@ -4462,9 +4463,15 @@ function buildConvertUniteCard() {
     if (st.newUnite) {
       const oldU = st.produit.unite || 'origine';
       const newU = st.newUnite || 'nouvelle';
-      const labelTxt = st.direction === 'origin_per_new'
-        ? 'Combien de [' + oldU + '] dans 1 [' + newU + '] ?'
-        : 'Combien de [' + newU + '] dans 1 [' + oldU + '] ?';
+      const firstU = st.direction === 'origin_per_new' ? oldU : newU;
+      const secondU = st.direction === 'origin_per_new' ? newU : oldU;
+      const labelNode = el('label', { cls: 'cu-label' },
+        'Combien de ',
+        el('strong', { cls: 'cu-label-unit' }, firstU),
+        ' dans 1 ',
+        el('strong', { cls: 'cu-label-unit' }, secondU),
+        ' ?',
+      );
 
       const qInp = el('input', {
         id: 'cu-valeur',
@@ -4483,7 +4490,7 @@ function buildConvertUniteCard() {
       }, iconEl('refresh-ccw', 12), ' Inverser');
 
       body.appendChild(el('div', { cls: 'cu-row' },
-        el('label', { cls: 'cu-label' }, labelTxt),
+        labelNode,
         el('div', { cls: 'cu-input-row' }, qInp, reverseBtn),
       ));
 

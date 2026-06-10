@@ -105,7 +105,7 @@ body.sb-open .sidebar-overlay{display:block}
 .nav-btn{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:13px;font-weight:500;width:100%;text-align:left;font-family:inherit;transition:all .15s;margin-bottom:2px}
 .nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
 .tip-cols{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:8px}
-.tip-col-hdr{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--border)}
+.tip-col-hdr{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--accent);margin-bottom:8px;padding-bottom:5px;border-bottom:1.5px solid var(--accent)}
 @media (max-width:540px){.tip-cols{grid-template-columns:1fr}}
 .nav-btn--mysifa-portal{align-items:baseline;flex-wrap:wrap;gap:4px 8px;line-height:1.35}
 .nav-btn--mysifa-portal:hover{background:var(--accent-bg)}
