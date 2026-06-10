@@ -487,6 +487,503 @@
   }
 
 
+
+  // ────────────────────────────────────────────────────────────────────
+  // ÉTAPE 2h — Filtres + Sanity + Statut machines (page Production complète)
+  //
+  // Code extrait littéralement de app/web/html.py :
+  //   - applyF : lignes 7156-7166
+  //   - makeDateSelect / makeDateInput : 7596-7660
+  //   - renderFilters : 7662-7701
+  //   - renderDossierFilterChipsRow : 7703-7713
+  //   - makeMultiSelect : 7716-7804
+  //   - syncDossierFilterSuggest : 7805-7840
+  //   - pickDossierFilter / removeDossierFilter : 7842-7857
+  //   - makeDossierFilterSearch : 7858-7932
+  //   - renderSanity : 7933-7950
+  //   - renderSanityEventsBlock : 7962-7985
+  //   - renderMachineStatusCards : 8905-8986
+  // ────────────────────────────────────────────────────────────────────
+
+async function applyF(){
+  const needSais=S.page==='saisies' || (S.page==='production' && (S.subPage||'kpis')==='saisies');
+  // Quand on change les filtres, repartir en haut (offset 0)
+  S.saisiesOffset = 0;
+  await Promise.all([
+    loadHist(),
+    loadProd(),
+    needSais?loadSaisies({noRender:true}):Promise.resolve()
+  ]);
+  render();
+}
+
+function makeDateSelect(value, onChange){
+  const parts=(value||'').split('-');
+  const yyyy=parts[0]||'', mm=parts[1]||'', dd=parts[2]||'';
+
+  const jSel=h('select',{style:{background:'var(--bg)',border:'1px solid var(--border)',borderRadius:'6px',padding:'7px 6px',color:'var(--text)',fontSize:'12px',fontFamily:'inherit'}});
+  const mSel=h('select',{style:{background:'var(--bg)',border:'1px solid var(--border)',borderRadius:'6px',padding:'7px 6px',color:'var(--text)',fontSize:'12px',fontFamily:'inherit'}});
+  const aSel=h('select',{style:{background:'var(--bg)',border:'1px solid var(--border)',borderRadius:'6px',padding:'7px 6px',color:'var(--text)',fontSize:'12px',fontFamily:'inherit'}});
+
+  jSel.appendChild(h('option',{value:''},'JJ'));
+  for(let i=1;i<=31;i++){
+    const v=String(i).padStart(2,'0');
+    const opt=h('option',{value:v},v);
+    if(v===dd)opt.selected=true;
+    jSel.appendChild(opt);
+  }
+
+  const mois=['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+  mSel.appendChild(h('option',{value:''},'MM'));
+  mois.forEach((m,i)=>{
+    const v=String(i+1).padStart(2,'0');
+    const opt=h('option',{value:v},m);
+    if(v===mm)opt.selected=true;
+    mSel.appendChild(opt);
+  });
+
+  const y=new Date().getFullYear();
+  aSel.appendChild(h('option',{value:''},'AAAA'));
+  for(let i=y-1;i<=y+1;i++){
+    const opt=h('option',{value:String(i)},String(i));
+    if(String(i)===yyyy)opt.selected=true;
+    aSel.appendChild(opt);
+  }
+
+  const update=()=>{
+    const v=(aSel.value&&mSel.value&&jSel.value)
+      ? aSel.value+'-'+mSel.value+'-'+jSel.value : '';
+    onChange(v);
+  };
+  jSel.addEventListener('change',update);
+  mSel.addEventListener('change',update);
+  aSel.addEventListener('change',update);
+
+  return h('div',{style:{display:'flex',gap:'4px',alignItems:'center'}},jSel,mSel,aSel);
+}
+
+function makeDateInput(value, onChange, ariaLabel){
+  const inp = h('input',{
+    type:'date',
+    className:'filter-input',
+    value: value || '',
+    ...(ariaLabel ? {'aria-label': ariaLabel, title: ariaLabel} : {}),
+  });
+  inp.addEventListener('change',()=>onChange(inp.value||''));
+  // Ouvrir le calendrier au clic (Chrome/Safari supportent showPicker).
+  const openPicker = ()=>{
+    try{
+      if(typeof inp.showPicker === 'function') inp.showPicker();
+      else inp.focus();
+    }catch(e){ try{inp.focus();}catch(_){} }
+  };
+  inp.addEventListener('click',openPicker);
+  // Sur certains navigateurs, click ouvre déjà; mousedown améliore la réactivité.
+  inp.addEventListener('mousedown',()=>{ /* user gesture */ });
+  return inp;
+}
+
+function renderFilters(){
+  const viewAll=canViewAllProd(S.user);
+  const ops=S.filters.operators||[];
+  const dos=S.filters.dossiers||[];
+  const MACHINE_FILTER_ORDER=['Cohésio 1','Cohésio 2','DSI','Repiquage'];
+  const machList=(S.filters.machines&&S.filters.machines.length)?S.filters.machines:MACHINE_FILTER_ORDER;
+  const machs=machList.map(m=>({value:m,label:m}));
+  const parts=[];
+ 
+  if(viewAll){
+    // ── Multi-select opérateurs ──────────────────────────────────
+    parts.push(makeMultiSelect(
+      'Opérateurs',
+      ops.map(o=>({value:o,label:opName(o)})),
+      ()=>S.fv.operateurs,
+      (sel)=>{ S.fv.operateurs=sel; }
+    ));
+
+    parts.push(makeDossierFilterSearch(dos));
+  }
+
+  if(machs.length){
+    parts.push(makeMultiSelect(
+      'Machines',
+      machs,
+      ()=>S.fv.machines,
+      (sel)=>{ S.fv.machines=sel; }
+    ));
+  }
+ 
+  const df=makeDateInput(S.fv.date_from, v=>{S.fv.date_from=v;}, 'Du');
+  const dt=makeDateInput(S.fv.date_to,   v=>{S.fv.date_to=v;}, 'Au');
+  parts.push(h('div',{className:'filter-group'},h('label',null,'Du'),df));
+  parts.push(h('div',{className:'filter-group'},h('label',null,'Au'),dt));
+  parts.push(h('button',{className:'filters-apply-btn',onClick:applyF},'Filtrer'));
+
+  const row = h('div',{className:'filters'},...parts);
+  const chipsRow = viewAll ? renderDossierFilterChipsRow() : null;
+  return h('div',{className:'filters-panel'},row,chipsRow||null);
+}
+
+function renderDossierFilterChipsRow(){
+  const sel = S.fv.dossiers || [];
+  if(!sel.length) return null;
+  const chips = h('div',{className:'prod-dossier-chips',id:'prod-filter-dossier-chips'});
+  sel.forEach(ref=>{
+    const rm = h('button',{type:'button',className:'prod-dossier-chip-remove',title:'Retirer','aria-label':'Retirer '+ref,
+      onClick:()=>removeDossierFilter(ref)},'×');
+    chips.appendChild(h('span',{className:'prod-dossier-chip'},ref,rm));
+  });
+  return h('div',{className:'filters-chips-row',id:'prod-filter-dossier-chips-row'},chips);
+}
+
+function makeMultiSelect(label, options, selected, onChange){
+  // NOTE: `selected` peut être un getter () => array ou un array direct.
+  // On utilise toujours le getter pour lire la valeur courante après chaque onChange,
+  // sinon la closure capturait l'ancienne référence de tableau.
+  const getSelected = typeof selected === 'function'
+    ? ()=>{ const v=selected(); return Array.isArray(v)?v:[]; }
+    : ()=> Array.isArray(selected) ? selected : [];
+  const isSelected = v => getSelected().includes(v);
+  const count = getSelected().length;
+ 
+  const triggerLabel = h('span',null, count>0 ? label+' ('+count+')' : label);
+  const trigger = h('button',{
+    type:'button',
+    className:'filter-input multisel-trigger',
+  },
+    triggerLabel,
+    h('span',{className:'multisel-trigger-caret'},'▾')
+  );
+ 
+  // Dropdown
+  const dropdown = h('div',{
+    className:'multisel-dropdown',
+    style:{
+      position:'absolute',top:'100%',left:'0',zIndex:'50',
+      background:'var(--card)',border:'1px solid var(--border)',borderRadius:'10px',
+      padding:'8px 0',minWidth:'200px',maxHeight:'220px',overflowY:'auto',
+      boxShadow:'0 8px 24px rgba(0,0,0,.3)',display:'none'
+    }
+  });
+ 
+  // Option "Tout sélectionner / Désélectionner"
+  const allChk = h('label',{style:{display:'flex',alignItems:'center',gap:'8px',padding:'6px 14px',cursor:'pointer',fontSize:'12px',color:'var(--muted)',fontWeight:'600'}},
+    h('input',{type:'checkbox'}),
+    'Tout sélectionner'
+  );
+  allChk.querySelector('input').checked = count === options.length;
+  allChk.querySelector('input').addEventListener('change',e=>{
+    const newSel = e.target.checked ? options.map(o=>o.value) : [];
+    onChange(newSel);
+    // Mettre à jour les checkboxes enfants
+    dropdown.querySelectorAll('input[type=checkbox]').forEach((cb,i)=>{if(i>0)cb.checked=e.target.checked;});
+    triggerLabel.textContent = newSel.length>0?label+' ('+newSel.length+')':label;
+  });
+  dropdown.appendChild(allChk);
+ 
+  options.forEach(opt=>{
+    const lbl = h('label',{style:{display:'flex',alignItems:'center',gap:'8px',padding:'6px 14px',cursor:'pointer',fontSize:'12px',color:'var(--text2)'}},
+      h('input',{type:'checkbox'}),
+      h('span',null,opt.label)
+    );
+    const chk = lbl.querySelector('input');
+    chk.checked = isSelected(opt.value);
+    chk.addEventListener('change',()=>{
+      const curSel = getSelected();
+      let newSel = curSel.filter(v=>v!==opt.value);
+      if(chk.checked) newSel.push(opt.value);
+      onChange(newSel);
+      triggerLabel.textContent = newSel.length>0?label+' ('+newSel.length+')':label;
+      allChk.querySelector('input').checked = newSel.length===options.length;
+    });
+    dropdown.appendChild(lbl);
+  });
+ 
+  // Toggle dropdown au clic
+  let open=false;
+  trigger.addEventListener('click',e=>{
+    e.stopPropagation();
+    open=!open;
+    dropdown.style.display=open?'block':'none';
+  });
+  // Fermer uniquement si le clic est en dehors du composant (trigger + dropdown).
+  // Important: on garde `capture:true` car l'app a d'autres listeners globaux,
+  // donc on doit filtrer correctement plutôt que compter sur stopPropagation().
+  const onDocClick = (e)=>{
+    try{
+      if(!open) return;
+      if(rel && rel.contains && rel.contains(e.target)) return;
+      open=false;
+      dropdown.style.display='none';
+    }catch(_){}
+  };
+  document.addEventListener('click', onDocClick, {once:false,capture:true,passive:true});
+ 
+  const wrapper=h('div',{className:'filter-group'},h('label',null,label));
+  const rel=h('div',{style:{position:'relative'}},trigger,dropdown);
+  wrapper.appendChild(rel);
+  return wrapper;
+}
+
+
+function syncDossierFilterSuggest(){
+  const dd = document.getElementById('prod-filter-dossier-suggest');
+  const inp = document.getElementById('prod-filter-dossier-search');
+  if(!dd || !inp) return;
+  const all = (S.filters && S.filters.dossiers) ? S.filters.dossiers : [];
+  const q = (inp.value || '').trim().toLowerCase();
+  const selected = new Set((S.fv.dossiers || []).map(d=>String(d)));
+  let matches = all;
+  if(q) matches = all.filter(d=>String(d).toLowerCase().includes(q));
+  matches = matches.filter(d=>!selected.has(String(d))).slice(0, 24);
+  dd.innerHTML = '';
+  if(!q){
+    dd.classList.remove('open');
+    return;
+  }
+  if(!matches.length){
+    const empty = document.createElement('div');
+    empty.className = 'prod-dossier-suggest-empty';
+    empty.textContent = 'Aucun résultat pour « ' + (inp.value || '').trim() + ' »';
+    dd.appendChild(empty);
+    dd.classList.add('open');
+    return;
+  }
+  const hi = Number(S.dossierFilterHi);
+  matches.forEach((ref, i)=>{
+    const row = document.createElement('div');
+    row.className = 'prod-dossier-suggest-item' + (i === hi ? ' prod-dossier-suggest-item--hi' : '');
+    row.textContent = ref;
+    row.addEventListener('mousedown', e=>{
+      e.preventDefault();
+      pickDossierFilter(ref);
+    });
+    dd.appendChild(row);
+  });
+  dd.classList.add('open');
+}
+
+function pickDossierFilter(ref){
+  const v = String(ref || '').trim();
+  if(!v) return;
+  const cur = (S.fv.dossiers || []).slice();
+  if(!cur.includes(v)) cur.push(v);
+  S.fv.dossiers = cur;
+  S.fv.dossierSearchQ = '';
+  S.dossierFilterHi = -1;
+  applyF();
+}
+
+
+function removeDossierFilter(ref){
+  S.fv.dossiers = (S.fv.dossiers || []).filter(d=>d !== ref);
+  applyF();
+}
+
+
+function makeDossierFilterSearch(allDossiers){
+  const wrap = h('div', { className: 'filter-group filter-group--dossier', id: 'prod-filter-dossier-wrap' });
+  wrap.appendChild(h('label', null, 'Dossier'));
+
+  const rel = h('div', { className: 'prod-dossier-filter' });
+
+  const inp = h('input', {
+    type: 'text',
+    id: 'prod-filter-dossier-search',
+    className: 'search-bar',
+    placeholder: 'Rechercher (n° dossier…)',
+    autocomplete: 'off',
+    value: S.fv.dossierSearchQ || '',
+  });
+  const dd = h('div', { id: 'prod-filter-dossier-suggest', className: 'prod-dossier-suggest' });
+
+  inp.addEventListener('input', ()=>{
+    S.fv.dossierSearchQ = inp.value;
+    S.dossierFilterHi = -1;
+    syncDossierFilterSuggest();
+  });
+  inp.addEventListener('focus', ()=>{
+    if((inp.value || '').trim()) syncDossierFilterSuggest();
+  });
+  inp.addEventListener('keydown', e=>{
+    const ddEl = document.getElementById('prod-filter-dossier-suggest');
+    const items = ddEl ? [...ddEl.querySelectorAll('.prod-dossier-suggest-item')] : [];
+    if(e.key === 'Escape'){
+      e.preventDefault();
+      inp.value = '';
+      S.fv.dossierSearchQ = '';
+      S.dossierFilterHi = -1;
+      if(ddEl){ ddEl.classList.remove('open'); ddEl.innerHTML = ''; }
+      return;
+    }
+    if(!items.length) return;
+    if(e.key === 'ArrowDown'){
+      e.preventDefault();
+      S.dossierFilterHi = Math.min(items.length - 1, (S.dossierFilterHi < 0 ? 0 : S.dossierFilterHi + 1));
+      syncDossierFilterSuggest();
+    } else if(e.key === 'ArrowUp'){
+      e.preventDefault();
+      S.dossierFilterHi = Math.max(0, (S.dossierFilterHi < 0 ? 0 : S.dossierFilterHi - 1));
+      syncDossierFilterSuggest();
+    } else if(e.key === 'Enter'){
+      e.preventDefault();
+      const i = S.dossierFilterHi >= 0 ? S.dossierFilterHi : 0;
+      const ref = items[i] ? items[i].textContent : '';
+      if(ref) pickDossierFilter(ref);
+    }
+  });
+
+  rel.appendChild(inp);
+  rel.appendChild(dd);
+  wrap.appendChild(rel);
+
+  if(!window._mysifaDossierFilterDocClick){
+    window._mysifaDossierFilterDocClick = true;
+    document.addEventListener('click', e=>{
+      const w = document.getElementById('prod-filter-dossier-wrap');
+      if(w && !w.contains(e.target)){
+        const dds = document.getElementById('prod-filter-dossier-suggest');
+        if(dds) dds.classList.remove('open');
+      }
+    }, { capture: true, passive: true });
+  }
+
+  requestAnimationFrame(()=>{
+    if((S.fv.dossierSearchQ || '').trim()) syncDossierFilterSuggest();
+  });
+
+  return wrap;
+}
+
+// ── Sanity ──────────────────────────────────────────────────────
+
+function renderSanity(sanity, title){
+  if(!sanity)return null;
+  const score=sanity.score||0;
+  const colorMap={success:'var(--success)',warn:'var(--warn)',danger:'var(--danger)'};
+  const col=colorMap[sanity.color]||'var(--muted)';
+  const r=34,circ=2*Math.PI*r,offset=circ-(score/100)*circ;
+  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svg.setAttribute('width','80');svg.setAttribute('height','80');svg.setAttribute('viewBox','0 0 80 80');svg.style.transform='rotate(-90deg)';
+  const bg=document.createElementNS('http://www.w3.org/2000/svg','circle');bg.setAttribute('cx','40');bg.setAttribute('cy','40');bg.setAttribute('r',String(r));bg.setAttribute('fill','none');bg.setAttribute('stroke','var(--border)');bg.setAttribute('stroke-width','8');svg.appendChild(bg);
+  const fill=document.createElementNS('http://www.w3.org/2000/svg','circle');fill.setAttribute('cx','40');fill.setAttribute('cy','40');fill.setAttribute('r',String(r));fill.setAttribute('fill','none');fill.setAttribute('stroke',col);fill.setAttribute('stroke-width','8');fill.setAttribute('stroke-linecap','round');fill.setAttribute('stroke-dasharray',String(circ));fill.setAttribute('stroke-dashoffset',String(offset));svg.appendChild(fill);
+  return h('div',{className:'sanity-banner'},
+    h('div',{className:'sanity-circle'},svg,h('div',{className:'sanity-num',style:{color:col}},String(score))),
+    h('div',null,
+      h('div',{className:'si-mention',style:{color:col}},(title?title+' — ':'')+(sanity.mention||'')),
+      h('div',{className:'si-label'},sanity.weighted?'Qualité de saisie — moyenne pondérée (temps d\'activité)':'Qualité de saisie — Sanity Score')
+    )
+  );
+}
+
+function renderSanityEventsBlock(sanity){
+  const events=sanity&&sanity.events?sanity.events:{};
+  const keys=Object.keys(events||{}).filter(k=>(events[k]||[]).length>0);
+  if(!keys.length){
+    return h('div',{className:'card-empty',style:{display:'flex',alignItems:'center',gap:'8px',justifyContent:'center'}},iconEl('check-circle',18),'Aucune anomalie détectée');
+  }
+  const blocks=keys.map(k=>{
+    const lbl=(SANITY_LABELS[k]&&SANITY_LABELS[k].label)?SANITY_LABELS[k].label:k;
+    const rows=(events[k]||[]).slice(0,120);
+    const items=rows.map(e=>{
+      const dos=(e.no_dossier||"").trim();
+      return h('div',{style:{display:'flex',gap:'10px',flexWrap:'wrap',alignItems:'center',padding:'6px 0',borderBottom:'1px solid var(--border)'}},
+        h('span',{style:{fontFamily:'monospace',fontSize:'11px',color:'var(--muted)'}},e.jour||''),
+        h('span',{style:{fontWeight:'700'}},opName(e.operateur||'')),
+        dos?h('span',{style:{fontFamily:'monospace',color:'var(--text2)'}},'Dos. '+dos):null
+      );
+    });
+    return h('div',{style:{padding:'14px 20px',borderBottom:'1px solid var(--border)'}},
+      h('div',{style:{fontSize:'12px',fontWeight:'800',color:'var(--danger)',marginBottom:'8px'}},lbl+' ('+rows.length+')'),
+      h('div',null,...items)
+    );
+  });
+  return h('div',null,...blocks);
+}
+
+function renderMachineStatusCards(){
+  const ms = S.machineStatus;
+  const ICONS = {
+    production:  '▶',
+    calage:      '⚙',
+    arret:       '⛔',
+    changement:  '↻',
+    nettoyage:   '🧹',
+    eteinte:     '○',
+    autre:       '·',
+  };
+  function fmtDuree(min){
+    if(min==null||min<0) return null;
+    if(min<1) return 'à l\'instant';
+    const h=Math.floor(min/60), m=min%60;
+    if(h===0) return `${m} min`;
+    return m===0?`${h}h`:`${h}h ${m}min`;
+  }
+  const DUREE_LABEL = {
+    production:  'En production depuis',
+    calage:      'En calage depuis',
+    arret:       'En arrêt depuis',
+    changement:  'En changement depuis',
+    nettoyage:   'En nettoyage depuis',
+    eteinte:     'Éteinte depuis',
+    autre:       'Depuis',
+  };
+  function mkCard(mkey){
+    const m = ms && ms[mkey];
+    const sk = m ? (m.statut_key||'eteinte') : 'eteinte';
+    const label = m ? (m.statut_label||'Éteinte') : 'Éteinte';
+    const nom   = m ? m.nom : (mkey==='C1'?'Cohésio 1':'Cohésio 2');
+    const op    = m ? (m.operateur||'') : '';
+    const dos   = m ? m.dossier : null;
+    const icon  = ICONS[sk]||'·';
+    const isOn  = sk!=='eteinte';
+    const dureeStr = m ? fmtDuree(m.duree_min) : null;
+    const dureeLabel = DUREE_LABEL[sk]||'Depuis';
+    return h('div',{className:`mst-card mst-${sk}`},
+      h('div',{className:'mst-head'},
+        h('span',{className:'mst-nom'},nom),
+        h('div',{style:{display:'flex',alignItems:'center',gap:'6px'}},
+          isOn?h('span',{style:{fontSize:'8px',color:'#22c55e',animation:'pulse 2s infinite',display:'inline-block',borderRadius:'50%',width:'8px',height:'8px',background:'#22c55e'}}):null,
+          h('span',{className:'mst-dot'})
+        )
+      ),
+      h('div',{className:'mst-body'},
+        h('div',{className:'mst-statut'},icon,' ',label),
+        dureeStr?h('div',{className:'mst-duree'},dureeLabel,' ',h('span',{className:'mst-duree-val'},dureeStr)):null,
+        op?h('div',{className:'mst-op'},'👤 ',op):null,
+        dos?h('div',{className:'mst-dos',style:sk==='changement'?{opacity:'.6',filter:'grayscale(.4)'}:null},
+          h('div',{className:'mst-dos-ref'},sk==='changement'?'dossier précédent : #':(h('span',null,'Dossier #')),dos.no_dossier),
+          dos.client?h('div',{className:'mst-dos-cli'},dos.client):null,
+          dos.designation?h('div',{className:'mst-dos-des'},dos.designation):null
+        ):null,
+        !ms?h('div',{style:{fontSize:'11px',color:'var(--muted)'}},'Chargement…'):null
+      )
+    );
+  }
+  return h('div',null,
+    h('div',{className:'section-title',style:{display:'flex',alignItems:'center',justifyContent:'space-between'}},
+      h('span',null,iconEl('cpu',13),' Statut machines'),
+      h('div',{style:{display:'flex',gap:'8px'}},
+        h('button',{
+          type:'button',
+          id:'mst-refresh-btn',
+          style:{fontSize:'10px',color:'var(--accent)',background:'none',border:'none',cursor:'pointer',padding:'2px 6px',fontFamily:'inherit'},
+          onClick:async()=>{
+            const btn=document.getElementById('mst-refresh-btn');
+            if(btn){btn.textContent='↺ Actualisation…';btn.disabled=true;}
+            await loadMachineStatus();
+            if(btn){btn.textContent='↺ Actualiser';btn.disabled=false;}
+          }
+        },'↺ Actualiser')
+      )
+    ),
+    h('div',{className:'mst-grid'},
+      mkCard('C1'),
+      mkCard('C2')
+    )
+  );
+}
+
   // ────────────────────────────────────────────────────────────────────
   // ÉTAPE 2g — Loads + Page Production (KPIs)
   //
@@ -504,13 +1001,6 @@
   // ────────────────────────────────────────────────────────────────────
 
   // ── Stubs renvoyant un placeholder visuel ──────────────────────────
-  function renderMachineStatusCards(){
-    return h('div', {className: 'card-empty', style: {padding: '16px', fontStyle: 'italic'}},
-      'Statut machines — sera ajouté à l\u0027étape 2h.');
-  }
-  function renderSanity(sanity, title){
-    return null;  // Sanity reviendra en 2h via renderSanityEventsBlock
-  }
   function renderHist(){
     return h('div', {className: 'card-empty', style: {padding: '24px'}},
       'Historique & Erreurs — sera ajouté à l\u0027étape 2i.');
@@ -1294,8 +1784,12 @@ function renderProdKpis(){
       topbar,
       h('h1', null, pageTitle),
       h('div', {className: 'subtitle'}, pageSubtitle),
-      pageContent,
     ];
+    // Filtres haut de page pour les sous-onglets Production qui consomment fv.*
+    if(S.page === 'production'){
+      containerKids.push(renderFilters());
+    }
+    containerKids.push(pageContent);
     root.appendChild(h('div', null,
       S.sidebarOpen ? h('div', {className: 'sidebar-overlay', onClick: closeSidebar}) : null,
       h('div', {className: 'app'},
@@ -1319,8 +1813,8 @@ function renderProdKpis(){
   // les compléter / les utiliser. À la fin du refactor (étape 2n), ces
   // exports pourront être retirés si plus nécessaire.
   window.__MYSIFA_PROD_STANDALONE__ = {
-    stage: '2g',
-    description: 'Loads + Page Production (KPIs)',
+    stage: '2h',
+    description: 'Filtres + Sanity + Statut machines',
     loadedAt: new Date().toISOString(),
   };
   window.__prodCore = {
@@ -1343,9 +1837,13 @@ function renderProdKpis(){
     formatJourLabel, prodSynthPeriodLabel, prodSynthDisplayKey,
     prodSynthFilterSessions, prodSynthTotals, prodSynthCleanClient,
     closeProdSynthModal, openProdSynthDetail, makeProdSynthKeyCell,
+    applyF, makeDateSelect, makeDateInput, renderFilters,
+    renderDossierFilterChipsRow, makeMultiSelect, syncDossierFilterSuggest,
+    pickDossierFilter, removeDossierFilter, makeDossierFilterSearch,
+    renderSanity, renderSanityEventsBlock,
   };
 
-  console.info('[mysifa_prod_core] page Production chargee - etape 2g', {
+  console.info('[mysifa_prod_core] page Production complete - etape 2h', {
     helpers: Object.keys(window.__prodCore).length,
     stateFields: Object.keys(S).length,
   });
