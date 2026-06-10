@@ -2442,6 +2442,54 @@ const ROLE_LABELS={direction:'Direction',administration:'Administration',fabrica
 const isCommercial=u=>u&&u.role==='commercial';
 const ROLE_BADGE={direction:'badge-direction',administration:'badge-administration',fabrication:'badge-fabrication',logistique:'badge-fabrication',comptabilite:'badge-administration',expedition:'badge-administration',superadmin:'badge-direction'};
 
+// ── Helpers d'initialisation post-auth (factorisés entre checkAuth et doLogin) ──
+// Chacun renvoie true si une redirection (window.location.href=…) a été déclenchée
+// — l'appelant doit alors return immédiatement pour ne pas continuer à exécuter.
+function _handleNextRedirect(){
+  try{
+    const sp=new URLSearchParams(window.location.search||'');
+    const nxt=(sp.get('next')||'').trim();
+    if(nxt && nxt.startsWith('/')){
+      window.location.href=nxt;
+      return true;
+    }
+  }catch(e){}
+  return false;
+}
+function _handleProdQueryRouting(){
+  if(S.app==='prod' && isComptaPlanning(S.user)){window.location.href='/planning';return true;}
+  try{
+    const sp=new URLSearchParams(window.location.search||'');
+    const p=(sp.get('page')||'').trim();
+    if(S.app==='prod' && p==='users'){window.location.href='/settings';return true;}
+    if(S.app==='prod' && p==='matiere_prix'){window.location.href='/pricing';return true;}
+    if(S.app==='prod' && p==='profil'){window.location.href='/profil';return true;}
+    const allowed=new Set(['production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite','of']);
+    if(S.app==='prod' && allowed.has(p)) S.page=p;
+  }catch(e){}
+  return false;
+}
+async function _loadInitialAppData(){
+  if(S.app==='prod'){
+    if(isComptaPlanning(S.user)){window.location.href='/planning';return true;}
+    await loadFilters();
+    await loadProd();
+    await loadHist();
+    await loadMachineStatus();
+    if(S.page==='of' && canAccessOfTab()){
+      await loadOfImports();
+      if(S.ofSubTab==='fiche') await loadFiches();
+    }
+  }else if(S.app==='devis'){
+    window.location.href='/pricing';
+    return true;
+  }else if(S.app==='stock'){
+    await loadStockGlobale();
+    await loadStockProduits();
+  }
+  return false;
+}
+
 // ── Auth ────────────────────────────────────────────────────────
 async function checkAuth(){
   const epoch=authEpoch;
@@ -2458,41 +2506,9 @@ async function checkAuth(){
     // Badge 'Mappings OF à valider' dans la sidebar (admin/direction/superadmin)
     try{ if(canAccessOfTab()) loadPendingOfCount(); }catch(e){}
     // Support : redirection post-login (ex: /?next=/planning)
-    try{
-      const sp=new URLSearchParams(window.location.search||'');
-      const nxt=(sp.get('next')||'').trim();
-      if(nxt && nxt.startsWith('/')){
-        window.location.href=nxt;
-        return;
-      }
-    }catch(e){}
-    if(S.app==='prod' && isComptaPlanning(S.user)){window.location.href='/planning';return;}
-    try{
-      const sp=new URLSearchParams(window.location.search||'');
-      const p=(sp.get('page')||'').trim();
-      if(S.app==='prod' && p==='users'){window.location.href='/settings';return;}
-      if(S.app==='prod' && p==='matiere_prix'){window.location.href='/pricing';return;}
-      if(S.app==='prod' && p==='profil'){window.location.href='/profil';return;}
-      const allowed=new Set(['production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite','of']);
-      if(S.app==='prod' && allowed.has(p)) S.page=p;
-    }catch(e){}
-    if(S.app==='prod'){
-      if(isComptaPlanning(S.user)){window.location.href='/planning';return;}
-      await loadFilters();
-      await loadProd();
-      await loadHist();
-      await loadMachineStatus();
-      if(S.page==='of' && canAccessOfTab()){
-        await loadOfImports();
-        if(S.ofSubTab==='fiche') await loadFiches();
-      }
-    }else if(S.app==='devis'){
-      window.location.href='/pricing';
-      return;
-    }else if(S.app==='stock'){
-      await loadStockGlobale();
-      await loadStockProduits();
-    }
+    if(_handleNextRedirect()) return;
+    if(_handleProdQueryRouting()) return;
+    if(await _loadInitialAppData()) return;
   }
   else{S.user=null;S.app='login';}
   render();
@@ -2620,25 +2636,8 @@ async function doLogin(email,password){
     }
     S.app=HAS_INITIAL_APP ? INITIAL_APP : 'portal';
     // Support : redirection post-login (ex: /?next=/planning)
-    try{
-      const sp=new URLSearchParams(window.location.search||'');
-      const nxt=(sp.get('next')||'').trim();
-      if(nxt && nxt.startsWith('/')){
-        window.location.href=nxt;
-        return;
-      }
-    }catch(e){}
-    if(S.app==='prod' && isComptaPlanning(S.user)){window.location.href='/planning';return;}
-    // Support /prod?page=xxx après login
-    try{
-      const sp=new URLSearchParams(window.location.search||'');
-      const p=(sp.get('page')||'').trim();
-      if(S.app==='prod' && p==='users'){window.location.href='/settings';return;}
-      if(S.app==='prod' && p==='matiere_prix'){window.location.href='/pricing';return;}
-      if(S.app==='prod' && p==='profil'){window.location.href='/profil';return;}
-      const allowed=new Set(['production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite','of']);
-      if(S.app==='prod' && allowed.has(p)) S.page=p;
-    }catch(e){}
+    if(_handleNextRedirect()) return;
+    if(_handleProdQueryRouting()) return;
     S.loginError=null;
     S.fv={
       operateurs:[],
@@ -2657,23 +2656,7 @@ async function doLogin(email,password){
     S.loginSubmitting=false;
     render();
     checkGlobalUpdates().catch(()=>{});
-    if(S.app==='prod'){
-      if(isComptaPlanning(S.user)){window.location.href='/planning';return;}
-      await loadFilters();
-      await loadProd();
-      await loadHist();
-      await loadMachineStatus();
-      if(S.page==='of' && canAccessOfTab()){
-        await loadOfImports();
-        if(S.ofSubTab==='fiche') await loadFiches();
-      }
-    }else if(S.app==='devis'){
-      window.location.href='/pricing';
-      return;
-    }else if(S.app==='stock'){
-      await loadStockGlobale();
-      await loadStockProduits();
-    }
+    if(await _loadInitialAppData()) return;
     render();
   }catch(e){
     S.loginError=e.message||'Erreur de connexion';
