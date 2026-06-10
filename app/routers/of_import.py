@@ -363,12 +363,14 @@ def get_of_for_planning_entry(entry_id: int, request: Request):
     if not row and numero_of:
         row = _lookup_of_by_numero(numero_of, _ref_produit_norm_for_of_lookup)
         if row:
-            # Persister le lien pour les prochains appels
+            # Persister le lien via planning_of_links (trigger sync of_import_id)
             try:
                 with get_db() as c2:
                     c2.execute(
-                        "UPDATE planning_entries SET of_import_id=? WHERE id=?",
-                        (row["id"], entry_id),
+                        "INSERT OR IGNORE INTO planning_of_links "
+                        "(planning_entry_id, of_import_id, position, created_by, created_at) "
+                        "VALUES (?, ?, 0, 'auto_lookup', ?)",
+                        (entry_id, row["id"], _now_paris_iso()),
                     )
                     c2.commit()
             except Exception:
@@ -418,7 +420,26 @@ def get_of_for_planning_entry(entry_id: int, request: Request):
                 if fiche:
                     fiche_id = fiche["id"]
 
-    base = {"entry_numero_of": numero_of, "ref_produit": ref_produit, "fiche_id": fiche_id}
+    # Récupère la liste complète des OF liés (multi via planning_of_links).
+    # `of` (singular) reste = premier lien (rétrocompat panneau planning).
+    ofs_list: list = []
+    try:
+        with get_db() as c3:
+            ofs_rows = c3.execute(
+                """SELECT o.id, o.of_numero, o.reference, o.machine, o.pdf_filename,
+                          o.date_import, o.imported_by, o.delai_client, o.qte_etiquettes, o.metrage
+                    FROM planning_of_links pl
+                    JOIN of_imports o ON o.id = pl.of_import_id
+                    WHERE pl.planning_entry_id = ?
+                    ORDER BY pl.position ASC, pl.id ASC""",
+                (entry_id,),
+            ).fetchall()
+            ofs_list = [_row_dict(r) for r in ofs_rows]
+    except Exception:
+        ofs_list = []
+
+    base = {"entry_numero_of": numero_of, "ref_produit": ref_produit,
+            "fiche_id": fiche_id, "ofs": ofs_list}
 
     if not row:
         return {"linked": False, **base}
@@ -994,8 +1015,10 @@ def admin_relink_of(request: Request):
                     })
                 if not dry_run:
                     conn.execute(
-                        "UPDATE planning_entries SET of_import_id=? WHERE id=?",
-                        (certain["id"], row["id"]),
+                        "INSERT OR IGNORE INTO planning_of_links "
+                        "(planning_entry_id, of_import_id, position, created_by, created_at) "
+                        "VALUES (?, ?, 0, 'admin_relink', ?)",
+                        (row["id"], certain["id"], _now_paris_iso()),
                     )
                 continue
 
@@ -1086,12 +1109,15 @@ def _iter_pending_planning_rows(conn):
 
 @router.get("/api/admin/of-link-pending/count")
 def admin_of_link_pending_count(request: Request):
+    """Badge unifié : ambigus (à arbitrer) + dossiers sans aucun OF (à associer)."""
     _require_of_access(request)
-    count = 0
+    ambigus = 0
+    sans_of = 0
     with get_db() as conn:
         for _ in _iter_pending_planning_rows(conn):
-            count += 1
-    return {"count": count}
+            ambigus += 1
+        sans_of = conn.execute(_DOSSIERS_SANS_OF_COUNT_SQL).fetchone()[0]
+    return {"count": ambigus + sans_of, "ambigus": ambigus, "sans_of": sans_of}
 
 
 @router.get("/api/admin/of-link-pending")
@@ -1141,10 +1167,203 @@ async def admin_link_planning_of(request: Request):
             if not oi:
                 raise HTTPException(status_code=404, detail="OF introuvable.")
 
-        conn.execute(
-            "UPDATE planning_entries SET of_import_id=? WHERE id=?",
-            (of_id, planning_id),
-        )
+        if of_id is None:
+            # "délier" = retirer TOUS les liens pour ce planning
+            conn.execute(
+                "DELETE FROM planning_of_links WHERE planning_entry_id=?",
+                (planning_id,),
+            )
+        else:
+            user = get_current_user(request)
+            who = (user.get("nom") or user.get("email") or str(user.get("id", ""))) if user else ""
+            conn.execute(
+                "INSERT OR IGNORE INTO planning_of_links "
+                "(planning_entry_id, of_import_id, position, created_by, created_at) "
+                "VALUES (?, ?, 0, ?, ?)",
+                (planning_id, of_id, who, _now_paris_iso()),
+            )
         conn.commit()
 
     return {"linked": True, "planning_id": planning_id, "of_id": of_id}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Dossiers sans aucun OF lié (planning_of_links vide)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_DOSSIERS_SANS_OF_COUNT_SQL = (
+    "SELECT COUNT(*) FROM planning_entries pe "
+    "WHERE NOT EXISTS (SELECT 1 FROM planning_of_links pl "
+    "                  WHERE pl.planning_entry_id = pe.id) "
+    "AND COALESCE(pe.statut, '') != 'termine' "
+    "AND COALESCE(pe.fin_dossier, 0) = 0"
+)
+
+
+@router.get("/api/admin/dossiers-sans-of/count")
+def admin_dossiers_sans_of_count(request: Request):
+    _require_of_access(request)
+    with get_db() as conn:
+        n = conn.execute(_DOSSIERS_SANS_OF_COUNT_SQL).fetchone()[0]
+    return {"count": int(n)}
+
+
+@router.get("/api/admin/dossiers-sans-of")
+def admin_dossiers_sans_of(request: Request):
+    _require_of_access(request)
+    rows = []
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT pe.id, pe.numero_of, pe.ref_produit, pe.ref_produit_norm,
+                       pe.machine_id, m.nom AS machine_nom,
+                       pe.created_at AS planning_created_at,
+                       pe.statut, pe.duree_heures, pe.format_l, pe.format_h
+               FROM planning_entries pe
+               LEFT JOIN machines m ON m.id = pe.machine_id
+               WHERE NOT EXISTS (
+                  SELECT 1 FROM planning_of_links pl
+                  WHERE pl.planning_entry_id = pe.id
+               )
+               AND COALESCE(pe.statut, '') != 'termine'
+               AND COALESCE(pe.fin_dossier, 0) = 0
+               ORDER BY pe.created_at DESC, pe.id DESC"""
+        ).fetchall()
+    items = [{
+        "planning_id": r["id"],
+        "numero_of": r["numero_of"],
+        "ref_produit": r["ref_produit"],
+        "ref_produit_norm": r["ref_produit_norm"],
+        "machine": r["machine_nom"],
+        "statut": r["statut"],
+        "duree_heures": r["duree_heures"],
+        "created_at": r["planning_created_at"],
+    } for r in rows]
+    return {"total": len(items), "items": items}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Liens multi-OF par planning_entry (POST = ajoute, DELETE = retire)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@router.post("/api/admin/planning-of-links")
+async def admin_add_planning_of_links(request: Request):
+    user = _require_of_access(request)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Body JSON requis.")
+
+    planning_id = body.get("planning_id")
+    of_ids = body.get("of_ids")
+    if not isinstance(planning_id, int):
+        raise HTTPException(status_code=400, detail="planning_id (int) requis.")
+    if not isinstance(of_ids, list) or not of_ids:
+        raise HTTPException(status_code=400, detail="of_ids (liste non vide) requis.")
+    of_ids = [int(x) for x in of_ids if isinstance(x, int) or (isinstance(x, str) and x.isdigit())]
+    of_ids = list(dict.fromkeys(of_ids))  # dedup, garde ordre
+    if not of_ids:
+        raise HTTPException(status_code=400, detail="of_ids invalides.")
+
+    who = (user.get("nom") or user.get("email") or str(user.get("id", ""))) if user else ""
+    now = _now_paris_iso()
+    added = 0
+    skipped_existing = 0
+    not_found: list = []
+    with get_db() as conn:
+        pe = conn.execute("SELECT id FROM planning_entries WHERE id=?", (planning_id,)).fetchone()
+        if not pe:
+            raise HTTPException(status_code=404, detail="Planning introuvable.")
+        # Récupère la position max actuelle pour append à la fin
+        cur_max = conn.execute(
+            "SELECT COALESCE(MAX(position), -1) FROM planning_of_links WHERE planning_entry_id=?",
+            (planning_id,),
+        ).fetchone()[0]
+        next_pos = int(cur_max) + 1
+        for of_id in of_ids:
+            oi = conn.execute("SELECT id FROM of_imports WHERE id=?", (of_id,)).fetchone()
+            if not oi:
+                not_found.append(of_id)
+                continue
+            cur = conn.execute(
+                "SELECT id FROM planning_of_links WHERE planning_entry_id=? AND of_import_id=?",
+                (planning_id, of_id),
+            ).fetchone()
+            if cur:
+                skipped_existing += 1
+                continue
+            conn.execute(
+                "INSERT INTO planning_of_links "
+                "(planning_entry_id, of_import_id, position, created_by, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (planning_id, of_id, next_pos, who, now),
+            )
+            next_pos += 1
+            added += 1
+        conn.commit()
+    return {
+        "planning_id": planning_id,
+        "added": added,
+        "skipped_existing": skipped_existing,
+        "not_found": not_found,
+    }
+
+
+@router.delete("/api/admin/planning-of-links")
+async def admin_remove_planning_of_link(request: Request):
+    _require_of_access(request)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Body JSON requis.")
+    planning_id = body.get("planning_id")
+    of_id = body.get("of_id")
+    if not isinstance(planning_id, int) or not isinstance(of_id, int):
+        raise HTTPException(status_code=400, detail="planning_id et of_id (int) requis.")
+    with get_db() as conn:
+        cur = conn.execute(
+            "DELETE FROM planning_of_links WHERE planning_entry_id=? AND of_import_id=?",
+            (planning_id, of_id),
+        )
+        conn.commit()
+        deleted = cur.rowcount or 0
+    return {"deleted": int(deleted), "planning_id": planning_id, "of_id": of_id}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Recherche d'OF (picker dans l'UI "Dossiers sans OF" et panneau planning)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@router.get("/api/of/search")
+def of_search(request: Request):
+    _require_of_access(request)
+    q = (request.query_params.get("q") or "").strip()
+    try:
+        limit = int(request.query_params.get("limit") or 20)
+    except Exception:
+        limit = 20
+    limit = max(1, min(limit, 50))
+    rows = []
+    with get_db() as conn:
+        if q:
+            like = f"%{q}%"
+            rows = conn.execute(
+                f"""SELECT {_OF_SELECT_COLS}
+                    FROM of_imports
+                    WHERE LOWER(COALESCE(of_numero,''))    LIKE LOWER(?)
+                       OR LOWER(COALESCE(reference,''))   LIKE LOWER(?)
+                       OR LOWER(COALESCE(machine,''))     LIKE LOWER(?)
+                    ORDER BY date_import DESC, id DESC
+                    LIMIT ?""",
+                (like, like, like, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                f"""SELECT {_OF_SELECT_COLS}
+                    FROM of_imports
+                    ORDER BY date_import DESC, id DESC
+                    LIMIT ?""",
+                (limit,),
+            ).fetchall()
+    return {"items": [_row_dict(r) for r in rows]}

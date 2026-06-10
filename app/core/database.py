@@ -3418,6 +3418,81 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 107, "planning_entries_date_livraison_imposee")
 
+    # v108 — multi-OF par planning_entry : table de jonction planning_of_links
+    # Un dossier de production peut être lié à plusieurs OF (lots, plages,
+    # reliquats). La colonne planning_entries.of_import_id reste maintenue
+    # par triggers (= premier lien FIFO) pour la rétrocompat du code existant ;
+    # les nouvelles écritures passent par planning_of_links.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=108 LIMIT 1").fetchone():
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS planning_of_links (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                planning_entry_id   INTEGER NOT NULL,
+                of_import_id        INTEGER NOT NULL,
+                position            INTEGER DEFAULT 0,
+                created_by          TEXT,
+                created_at          TEXT,
+                UNIQUE(planning_entry_id, of_import_id),
+                FOREIGN KEY (planning_entry_id) REFERENCES planning_entries(id) ON DELETE CASCADE,
+                FOREIGN KEY (of_import_id)      REFERENCES of_imports(id)      ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_planning_of_links_planning
+              ON planning_of_links(planning_entry_id);
+            CREATE INDEX IF NOT EXISTS idx_planning_of_links_of
+              ON planning_of_links(of_import_id);
+            """
+        )
+
+        # Backfill : reprend les liens existants dans planning_entries.of_import_id
+        now_iso = datetime.now().isoformat(timespec="seconds")
+        conn.execute(
+            """INSERT OR IGNORE INTO planning_of_links
+               (planning_entry_id, of_import_id, position, created_by, created_at)
+               SELECT id, of_import_id, 0, 'migration_v108', ?
+               FROM planning_entries
+               WHERE of_import_id IS NOT NULL""",
+            (now_iso,),
+        )
+
+        # Triggers de synchronisation : la colonne of_import_id reflète
+        # automatiquement le premier lien (ordre position ASC, id ASC).
+        # Permet au code legacy (page planning, traceabilité, saisie) de
+        # continuer à lire of_import_id sans rien savoir du multi.
+        conn.executescript(
+            """
+            DROP TRIGGER IF EXISTS trg_planning_of_links_after_insert;
+            CREATE TRIGGER trg_planning_of_links_after_insert
+            AFTER INSERT ON planning_of_links
+            BEGIN
+                UPDATE planning_entries
+                   SET of_import_id = (
+                     SELECT of_import_id FROM planning_of_links
+                     WHERE planning_entry_id = NEW.planning_entry_id
+                     ORDER BY position ASC, id ASC
+                     LIMIT 1
+                   )
+                 WHERE id = NEW.planning_entry_id;
+            END;
+
+            DROP TRIGGER IF EXISTS trg_planning_of_links_after_delete;
+            CREATE TRIGGER trg_planning_of_links_after_delete
+            AFTER DELETE ON planning_of_links
+            BEGIN
+                UPDATE planning_entries
+                   SET of_import_id = (
+                     SELECT of_import_id FROM planning_of_links
+                     WHERE planning_entry_id = OLD.planning_entry_id
+                     ORDER BY position ASC, id ASC
+                     LIMIT 1
+                   )
+                 WHERE id = OLD.planning_entry_id;
+            END;
+            """
+        )
+        conn.commit()
+        _record_schema_migration(conn, 108, "planning_of_links_multi")
+
 
 def create_default_admin():
     import bcrypt
