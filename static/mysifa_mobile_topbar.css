@@ -78,6 +78,17 @@
     z-index:9400!important;
   }
 
+  /*
+   * .app a z-index:1 (cf html.py) qui crée un stacking context piégeant
+   * la sidebar (z:9500) en dessous de .sidebar-overlay (z:9400, sibling
+   * de .app). Conséquence : un voile sombre recouvrait la sidebar et
+   * bloquait les clics sur les onglets en mobile. On annule le stacking
+   * context de .app uniquement quand la sidebar est ouverte.
+   */
+  body.sb-open .app{
+    z-index:auto!important;
+  }
+
   .mobile-topbar{
     display:flex;
     position:fixed;
