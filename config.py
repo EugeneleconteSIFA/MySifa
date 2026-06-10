@@ -56,6 +56,13 @@ IS_STAGING = (ENV_NAME == "v1")
 _migrations_default = "1" if IS_STAGING else "0"
 MIGRATIONS_DISABLED = os.getenv("MIGRATIONS_DISABLED", _migrations_default) in {"1", "true", "True", "yes", "YES"}
 
+# ─── Feature flags ────────────────────────────────────────────────
+# PROD_STANDALONE : sert /prod depuis app/web/prod_page.py (page standalone) plutôt
+# que depuis le monolithe html.py via render_frontend_html("prod"). Permet de
+# migrer progressivement le code de /prod en isolant l'impact. Désactivé par
+# défaut (= comportement actuel). Activer via PROD_STANDALONE=1 dans .env.
+PROD_STANDALONE = os.getenv("PROD_STANDALONE", "0") in {"1", "true", "True", "yes", "YES"}
+
 # ─── Support (email) ───────────────────────────────────────────────
 # Objectif: permettre au front d’envoyer un message au support via un endpoint FastAPI.
 # Configuration SMTP via variables d’environnement (prod).

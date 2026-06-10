@@ -3386,9 +3386,10 @@ async function submitAdd(){
   const d=getFormData(false);
   if(!d.numero_of){ showToast("Numéro d'OF requis.","danger"); return; }
   try{
-    await api(`/machines/${MID}/entries`,{method:"POST",body:JSON.stringify({reference:d.numero_of,...d})});
+    const res=await api(`/machines/${MID}/entries`,{method:"POST",body:JSON.stringify({reference:d.numero_of,...d})});
     closeM();load();
-    showToast("Dossier ajouté.","success");
+    if(res&&res.warning&&res.warning.message){ showToast(res.warning.message,"danger"); }
+    else { showToast("Dossier ajouté.","success"); }
   }catch(e){
     showToast(apiErrorMessage(e,"Ajout impossible."),"danger");
   }

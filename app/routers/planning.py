@@ -953,6 +953,179 @@ def _compute_timeline_slots(
 
 
 # ═══════════════════════════════════════════════════════════════
+# PLACEMENT AUTOMATIQUE PAR DÉLAI CLIENT (à l'ajout d'un dossier)
+# ═══════════════════════════════════════════════════════════════
+
+def _parse_liv_date(raw: Any) -> Optional[datetime]:
+    """Date de livraison 'YYYY-MM-DD' → datetime fin de journée (échéance). None si invalide/vide."""
+    s = str(raw or "").strip()
+    if not s:
+        return None
+    try:
+        d = datetime.strptime(s[:10], "%Y-%m-%d")
+        return d.replace(hour=23, minute=59, second=59, microsecond=0)
+    except (ValueError, TypeError):
+        return None
+
+
+def _entry_tardiness_h(entry: dict, end_dt: Optional[datetime]) -> float:
+    """Retard d'un dossier en heures : max(0, fin_prod − échéance). 0 si pas d'échéance ou fin inconnue."""
+    if not end_dt:
+        return 0.0
+    dl = _parse_liv_date(entry.get("date_livraison"))
+    if dl is None:
+        return 0.0
+    return max(0.0, (end_dt - dl).total_seconds() / 3600.0)
+
+
+def _simulate_planned_ends(
+    m: dict, configs: dict, off_days: dict, day_worked_map: Dict[str, int],
+    day_horaires_map: Dict[str, Tuple[float, float]], ordered_entries: List[dict],
+) -> List[Optional[datetime]]:
+    """Simule (sans persister) les dates de fin de prod d'une séquence ordonnée.
+
+    Miroir de _compute_timeline_slots : terminé/en_cours figés conservent leurs dates et avancent
+    le curseur ; les dossiers en attente consomment leur durée depuis le curseur.
+    """
+    advance_to_work, consume_duration_from = _make_work_duration_consumer(
+        m, configs, off_days, day_worked_map, day_horaires_map
+    )
+    cursor = advance_to_work(datetime.now().replace(minute=0, second=0, microsecond=0))
+    ends: List[Optional[datetime]] = []
+    for e in ordered_entries:
+        st = e.get("statut") or "attente"
+        frozen = st in ("termine", "en_cours") and bool(e.get("planned_start")) and bool(e.get("planned_end"))
+        if frozen:
+            pe_dt = _parse_planned_dt(e.get("planned_end"))
+            ends.append(pe_dt)
+            if pe_dt:
+                cand = advance_to_work(pe_dt)
+                if cand and cand > cursor:
+                    cursor = cand
+            continue
+        if st == "termine":
+            # Terminé sans dates : neutre, on ne consomme pas.
+            ends.append(None)
+            continue
+        slot_start, slot_end, cursor = consume_duration_from(cursor, float(e.get("duree_heures") or 8.0))
+        ends.append(slot_end)
+    return ends
+
+
+def _compute_smart_position(
+    conn, machine_id: int, new_duree: float, new_date_liv: Any, new_ref: str
+) -> Optional[Tuple[int, Optional[dict]]]:
+    """Position d'insertion par délai client.
+
+    Règle : on retient la position la plus tardive où personne ne rate son délai (ni le nouveau
+    dossier, ni les dossiers décalés en aval). Si aucune position n'est tenable (planning saturé),
+    on minimise le retard total et on renvoie un avertissement.
+
+    Retourne (position, warning|None), ou None si le calcul n'est pas applicable
+    (machine introuvable, délai illisible) → le caller retombe sur le fond de planning.
+    """
+    new_deadline = _parse_liv_date(new_date_liv)
+    if new_deadline is None:
+        return None
+    mac = conn.execute("SELECT * FROM machines WHERE id=?", (machine_id,)).fetchone()
+    if not mac:
+        return None
+    m = dict(mac)
+
+    rows = conn.execute(
+        """SELECT id, position, statut, planned_start, planned_end, duree_heures,
+                  date_livraison, numero_of, reference
+           FROM planning_entries WHERE machine_id=? ORDER BY position ASC""",
+        (machine_id,),
+    ).fetchall()
+    ordered = [dict(r) for r in rows]
+    max_pos = max((int(e["position"]) for e in ordered), default=0)
+
+    # Index du premier créneau déplaçable : juste après le dernier dossier figé (terminé/en_cours).
+    first_movable = 0
+    for i, e in enumerate(ordered):
+        if (e.get("statut") or "") in ("termine", "en_cours"):
+            first_movable = i + 1
+
+    try:
+        cfgs, off, dw, dh = _load_planning_calendar_maps(conn, machine_id)
+    except Exception:
+        return None
+
+    new_entry = {"statut": "attente", "duree_heures": float(new_duree), "date_livraison": None}
+
+    def pos_for_idx(idx: int) -> int:
+        return int(ordered[idx]["position"]) if idx < len(ordered) else max_pos + 1
+
+    def ref_of(e: dict) -> str:
+        return str(e.get("numero_of") or e.get("reference") or "?").strip()
+
+    def liv_str(e: dict) -> str:
+        return str(e.get("date_livraison") or "").strip()
+
+    # Retards de référence (sans le nouveau dossier).
+    base_ends = _simulate_planned_ends(m, cfgs, off, dw, dh, ordered)
+    base_tard = [_entry_tardiness_h(ordered[i], base_ends[i]) for i in range(len(ordered))]
+
+    feasible_pos: Optional[int] = None
+    sat_best: Optional[tuple] = None  # (cost, idx, position, c_at_risk, c_deadline_str, risks)
+
+    for idx in range(first_movable, len(ordered) + 1):
+        trial = ordered[:idx] + [new_entry] + ordered[idx:]
+        ends = _simulate_planned_ends(m, cfgs, off, dw, dh, trial)
+        c_end = ends[idx]
+        c_tard = (
+            max(0.0, (c_end - new_deadline).total_seconds() / 3600.0) if c_end else 1e9
+        )
+        # Retard ajouté aux dossiers en aval (décalés par l'insertion).
+        added = 0.0
+        risks: List[dict] = []
+        for j in range(idx, len(ordered)):
+            tt = _entry_tardiness_h(ordered[j], ends[j + 1])
+            delta = tt - base_tard[j]
+            if delta > 1e-6:
+                added += delta
+                risks.append({"ref": ref_of(ordered[j]), "date": liv_str(ordered[j])})
+        c_on_time = c_tard <= 1e-6
+        if c_on_time and added <= 1e-6:
+            feasible_pos = pos_for_idx(idx)  # garde la dernière (= la plus tardive) tenable
+        else:
+            cost = added + c_tard
+            cand = (cost, idx, pos_for_idx(idx), c_tard > 1e-6, str(new_date_liv or "").strip()[:10], risks)
+            if (
+                sat_best is None
+                or cost < sat_best[0] - 1e-9
+                or (abs(cost - sat_best[0]) <= 1e-9 and idx > sat_best[1])
+            ):
+                sat_best = cand
+
+    if feasible_pos is not None:
+        return (feasible_pos, None)
+
+    if sat_best is None:
+        return None
+
+    _, _, position, c_at_risk, c_deadline_str, risks = sat_best
+    # Déduplique les dossiers aval à risque.
+    seen = set()
+    risk_list = []
+    for r in risks:
+        key = r["ref"]
+        if key not in seen:
+            seen.add(key)
+            risk_list.append(r)
+
+    bits: List[str] = []
+    if c_at_risk:
+        bits.append(f"le dossier {new_ref or '?'} risque de dépasser son délai client ({c_deadline_str})")
+    for r in risk_list:
+        d = f" (délai {r['date']})" if r["date"] else ""
+        bits.append(f"le dossier {r['ref']}{d} passe en risque de retard")
+    message = "Planning tendu — " + " ; ".join(bits) + ". Merci de prévenir le responsable industriel."
+    return (position, {"message": message})
+
+
+# ═══════════════════════════════════════════════════════════════
 # MACHINES
 # ═══════════════════════════════════════════════════════════════
 
@@ -1433,6 +1606,7 @@ async def add_entry(machine_id: int, request: Request):
 
     position: int
     machine_nom = ""
+    placement_warning = None
     try:
         with get_db() as conn:
             pe_cols = _ensure_planning_entry_columns(conn)
@@ -1442,6 +1616,15 @@ async def add_entry(machine_id: int, request: Request):
             machine_nom = mac["nom"] or ""
 
             position = body.get("position")
+            if position is None:
+                # Placement automatique par délai client (uniquement pour un dossier à venir
+                # avec une date de livraison renseignée). Sinon : fond de planning.
+                if (row_data["statut"] or "attente") == "attente" and date_liv:
+                    smart = _compute_smart_position(
+                        conn, machine_id, duree, date_liv, reference
+                    )
+                    if smart is not None:
+                        position, placement_warning = smart
             if position is None:
                 max_pos = conn.execute(
                     "SELECT COALESCE(MAX(position),0) FROM planning_entries WHERE machine_id=?",
@@ -1479,7 +1662,7 @@ async def add_entry(machine_id: int, request: Request):
         detail={"reference": reference, "duree_heures": duree},
         ip=request.client.host if request.client else None,
     )
-    return {"success": True, "position": position}
+    return {"success": True, "position": position, "warning": placement_warning}
 
 
 @router.put("/machines/{machine_id}/entries/{entry_id}")
