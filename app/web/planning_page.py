@@ -3362,8 +3362,9 @@ async function submitAddFromOf(){
   if(!_addOfFile || !_addOfParsed) return;
   const d=getFormData(false);
   if(!d.numero_of){ showToast("Numéro d'OF requis.","danger"); return; }
+  let addRes=null;
   try{
-    await api(`/machines/${MID}/entries`,{method:"POST",body:JSON.stringify({reference:d.numero_of,...d})});
+    addRes=await api(`/machines/${MID}/entries`,{method:"POST",body:JSON.stringify({reference:d.numero_of,...d})});
   }catch(e){
     showToast(apiErrorMessage(e,"Ajout impossible."),"danger");
     return;
@@ -3375,7 +3376,8 @@ async function submitAddFromOf(){
     const r=await fetch('/api/of/validate',{method:'POST',credentials:'include',body:fd});
     if(!r.ok) throw new Error('validate');
     closeM();load();
-    showToast('Dossier ajouté.','success');
+    if(addRes&&addRes.warning&&addRes.warning.message){ showToast(addRes.warning.message,"danger"); }
+    else { showToast('Dossier ajouté.','success'); }
   }catch(e){
     closeM();load();
     showToast('Dossier créé — liaison OF impossible. Vérifiez le numéro d\'OF.','info');

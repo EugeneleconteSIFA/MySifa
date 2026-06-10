@@ -1,0 +1,108 @@
+/* ────────────────────────────────────────────────────────────────────
+ * MySifa — Page /prod (standalone) — feuille de style boilerplate
+ *
+ * Ce fichier sera rempli progressivement par les étapes 2e à 2l du
+ * refactor. Pour l'instant : seulement le reset + variables thème +
+ * layout body de base, repris des conventions du monolithe html.py.
+ *
+ * Activation : via le flag PROD_STANDALONE dans .env (par défaut OFF).
+ * ──────────────────────────────────────────────────────────────────── */
+
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+
+:root{
+  --bg:#0a0e17;
+  --card:#111827;
+  --border:#1e293b;
+  --text:#f1f5f9;
+  --text2:#cbd5e1;
+  --muted:#94a3b8;
+  --accent:#22d3ee;
+  --accent-bg:rgba(34,211,238,.12);
+  --filter-input-bg:#1c2838;
+  --success:#34d399;
+  --warn:#fbbf24;
+  --danger:#f87171;
+  --pf-entree:#059669;
+  --pf-sortie:#dc2626;
+  --c1:#22d3ee;--c2:#a78bfa;--c3:#34d399;--c4:#fbbf24;--c5:#f87171;
+}
+
+body.light{
+  --bg:#f1f5f9;
+  --card:#ffffff;
+  --border:#e2e8f0;
+  --text:#0f172a;
+  --text2:#475569;
+  --muted:#94a3b8;
+  --accent:#0891b2;
+  --accent-bg:rgba(8,145,178,.10);
+  --filter-input-bg:#ffffff;
+  --success:#059669;
+  --warn:#d97706;
+  --danger:#dc2626;
+  --pf-entree:#047857;
+  --pf-sortie:#b91c1c;
+  --c1:#0891b2;--c2:#7c3aed;--c3:#059669;--c4:#d97706;--c5:#dc2626;
+}
+
+body{
+  font-family:'Segoe UI',system-ui,sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  min-height:100vh;
+  overflow-x:hidden;
+}
+
+/* Placeholder pour l'étape 2d — page en cours de migration */
+.prod-migration-placeholder{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  min-height:100vh;
+  padding:40px;
+  text-align:center;
+  gap:20px;
+}
+.prod-migration-placeholder h1{
+  font-size:24px;
+  font-weight:700;
+  color:var(--text);
+  letter-spacing:-.5px;
+}
+.prod-migration-placeholder h1 span{color:var(--accent)}
+.prod-migration-placeholder p{
+  font-size:14px;
+  color:var(--text2);
+  max-width:560px;
+  line-height:1.7;
+}
+.prod-migration-placeholder code{
+  font-family:monospace;
+  background:var(--card);
+  border:1px solid var(--border);
+  padding:3px 10px;
+  border-radius:6px;
+  color:var(--accent);
+  font-size:12px;
+}
+.prod-migration-placeholder .stage-badge{
+  display:inline-block;
+  background:var(--accent-bg);
+  color:var(--accent);
+  font-size:11px;
+  font-weight:700;
+  padding:5px 14px;
+  border-radius:20px;
+  text-transform:uppercase;
+  letter-spacing:.8px;
+  border:1px solid var(--accent);
+}
+.prod-migration-placeholder a{
+  color:var(--accent);
+  text-decoration:none;
+  font-weight:600;
+  font-size:13px;
+}
+.prod-migration-placeholder a:hover{text-decoration:underline}

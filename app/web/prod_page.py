@@ -7,6 +7,17 @@ Stratégie de migration (Phase 2 — extraction du monolithe html.py) :
   par render_frontend_html("prod") — comportement historique inchangé.
 - Si PROD_STANDALONE=1 : sert PROD_HTML (coquille standalone, en cours de
   construction). Permet de tester la nouvelle page sur v1 sans impacter v2.
+
+Découpage par étapes :
+- 2c : coquille minimale (placeholder) ✓
+- 2d : coquille avec <link>/<script> vers /static/mysifa_prod_core.{css,js} ← ICI
+- 2e : socle JS (helpers + state S filtré) dans mysifa_prod_core.js
+- 2f : auth + sidebar + render() squelette
+- 2g/h : page Production (KPIs + statut machines + sanity + filtres)
+- 2i/j/k/l : onglets Historique/Saisies/Import, Dossiers/Suivi/Rentabilité,
+             Traçabilité, OF
+- 2m : activation par défaut sur v1, tests croisés
+- 2n : retrait du code prod du monolithe + suppression du flag
 """
 
 from fastapi import APIRouter, HTTPException, Request
@@ -41,17 +52,17 @@ def prod_page(request: Request):
                 "Expires": "0",
             },
         )
-    # Fallback : ancien rendu via le monolithe html.py
+    # Fallback : rendu via le monolithe html.py (comportement historique)
     return HTMLResponse(content=render_frontend_html("prod"))
 
 
 # ──────────────────────────────────────────────────────────────────────
-# PROD_HTML — coquille standalone (étape 2c)
+# PROD_HTML — coquille standalone (étape 2d)
 #
-# Pour l'instant : minimal — sidebar absente, contenu vide. Les étapes 2d-2h
-# rempliront le CSS, le state S filtré "/prod", les helpers JS et les fonctions
-# render*/load* propres à MyProd. Tant que le flag PROD_STANDALONE n'est pas
-# activé, cette coquille n'est jamais servie en production.
+# Inclut les feuilles de style et le JS de boilerplate situés dans
+# /static/mysifa_prod_core.{css,js}. Les étapes suivantes rempliront
+# progressivement ces fichiers tout en gardant le flag PROD_STANDALONE
+# désactivé en prod (= aucun impact tant qu'on n'a pas terminé).
 # ──────────────────────────────────────────────────────────────────────
 PROD_HTML = r"""<!DOCTYPE html>
 <html lang="fr">
@@ -65,51 +76,30 @@ PROD_HTML = r"""<!DOCTYPE html>
 <link rel="apple-touch-icon" href="/static/mys_icon_180.png">
 <link rel="stylesheet" href="/static/mysifa_theme.css">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
-<style>
-*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-:root{
-  --bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;
-  --muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,.12);
-  --success:#34d399;--warn:#fbbf24;--danger:#f87171;
-}
-body.light{
-  --bg:#f1f5f9;--card:#ffffff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;
-  --muted:#94a3b8;--accent:#0891b2;--accent-bg:rgba(8,145,178,.10);
-  --success:#059669;--warn:#d97706;--danger:#dc2626;
-}
-body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
-.placeholder{
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  min-height:100vh;padding:40px;text-align:center;gap:16px;
-}
-.placeholder h1{font-size:22px;font-weight:700;color:var(--text)}
-.placeholder p{font-size:13px;color:var(--text2);max-width:480px;line-height:1.6}
-.placeholder code{
-  font-family:monospace;background:var(--card);border:1px solid var(--border);
-  padding:2px 8px;border-radius:6px;color:var(--accent);font-size:12px;
-}
-.placeholder a{color:var(--accent);text-decoration:none;font-weight:600}
-.placeholder a:hover{text-decoration:underline}
-</style>
+<link rel="stylesheet" href="/static/mysifa_prod_core.css">
 </head>
 <body>
 <div id="root">
-  <div class="placeholder">
-    <h1>MyProd — coquille standalone</h1>
+  <div class="prod-migration-placeholder">
+    <div class="stage-badge">Étape 2d</div>
+    <h1>My<span>Prod</span> — page standalone en migration</h1>
     <p>
       Cette page est servie par <code>app/web/prod_page.py</code> parce que
       <code>PROD_STANDALONE=1</code> est actif dans le <code>.env</code>.
-      Le contenu réel de MyProd sera migré progressivement depuis
-      <code>app/web/html.py</code> dans les étapes 2d à 2h du refactor.
     </p>
     <p>
-      Désactive le flag (<code>PROD_STANDALONE=0</code>) puis redémarre l'app
-      pour revenir au rendu actuel via le monolithe.
+      Les feuilles <code>/static/mysifa_prod_core.css</code> et
+      <code>/static/mysifa_prod_core.js</code> sont chargées (vérifie la console
+      du navigateur pour confirmation).
     </p>
     <p>
-      <a href="/">← Retour au portail</a>
+      Le contenu réel de MyProd sera ajouté progressivement par les étapes
+      <strong>2e à 2l</strong>. Pour revenir au rendu via le monolithe, mets
+      <code>PROD_STANDALONE=0</code> dans le <code>.env</code> puis redémarre l'app.
     </p>
+    <p style="margin-top:8px"><a href="/">← Retour au portail</a></p>
   </div>
 </div>
+<script src="/static/mysifa_prod_core.js"></script>
 </body>
 </html>"""
