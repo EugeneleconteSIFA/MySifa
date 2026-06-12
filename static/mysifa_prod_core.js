@@ -490,6 +490,817 @@
 
 
 
+
+  // ────────────────────────────────────────────────────────────────────
+  // ÉTAPE 2k — Onglet Traçabilité (matières + FSC)
+  //
+  // Code extrait littéralement de app/web/html.py (lignes 7989-8785) :
+  //   - loadTracabilite / loadTracabiliteDossier
+  //   - openFscRapportModal (rapport FSC dossier)
+  //   - renderTracabilite (liste par machine)
+  //   - closeTracMatieresEditModal / tracResolveMachineId
+  //   - openTracMatieresEditModal (édition bobines matières)
+  //   - renderTracabiliteDossierDetail (détail dossier)
+  // ────────────────────────────────────────────────────────────────────
+
+async function loadTracabilite(machineId){
+  S.traceabilite = null; S.tracShowAttente = false; render();
+  try{
+    let url = '/api/fabrication/traceability';
+    const params = [];
+    if(machineId) params.push('machine_id='+machineId);
+    if(params.length) url += '?'+params.join('&');
+    const d = await api(url);
+    S.traceabilite = d;
+  }catch(e){ S.traceabilite = {error:e.message}; }
+  render();
+}
+
+async function loadTracabiliteDossier(ref){
+  S.traceabiliteDossier = null; render();
+  try{
+    // Charger les deux en parallèle : vue production + vue FSC
+    const [d, fsc] = await Promise.all([
+      api('/api/fabrication/traceability?no_dossier='+encodeURIComponent(ref)),
+      api('/api/fabrication/tracabilite/'+encodeURIComponent(ref)),
+    ]);
+    const fscMap = {};
+    (fsc && fsc.bobines ? fsc.bobines : []).forEach(b => {
+      const key = String(b.code_barre||'').trim();
+      if(key) fscMap[key] = b;
+    });
+    (d && d.matieres ? d.matieres : []).forEach(m => {
+      const key = String(m.code_barre||'').trim();
+      const b = fscMap[key];
+      if(!b) return;
+      if(b.fsc_conforme !== undefined) m.fsc_conforme = b.fsc_conforme;
+      if(b.fsc_type_claim != null) m.fsc_type_claim = b.fsc_type_claim;
+      if(b.fournisseur != null) m.fournisseur = b.fournisseur;
+      if(b.certificat_fsc != null) m.certificat_fsc = b.certificat_fsc;
+      if(b.fournisseur_licence != null) m.fournisseur_licence = b.fournisseur_licence;
+      if(b.fournisseur_certificat != null) m.fournisseur_certificat = b.fournisseur_certificat;
+    });
+    d.fsc_synthese = (fsc && fsc.synthese) ? fsc.synthese : null;
+    S.traceabiliteDossier = d;
+  }catch(e){ S.traceabiliteDossier = {error:e.message}; }
+  render();
+}
+
+function openFscRapportModal(data, ref){
+  try{
+    const syn = (data && data.synthese) ? data.synthese : {};
+    const bobines = (data && data.bobines) ? data.bobines : [];
+    const dos = (data && data.dossier) ? data.dossier : {};
+
+    const sg = syn.statut_global || 'non_applicable';
+    const statutColor = sg === 'conforme' ? 'var(--success)'
+      : sg === 'non_conforme' ? 'var(--danger)' : 'var(--muted)';
+    const statutBg = sg === 'conforme' ? 'rgba(52,211,153,.12)'
+      : sg === 'non_conforme' ? 'rgba(248,113,113,.12)' : 'rgba(148,163,184,.12)';
+    let statutText = 'Non applicable';
+    if(sg === 'conforme'){
+      statutText = 'Conforme FSC — ' + (syn.nb_bobines_fsc_conformes ?? 0) + '/' + (syn.nb_bobines_total ?? 0) + ' bobine(s)';
+    }else if(sg === 'non_conforme'){
+      statutText = 'Non conforme — ' + (syn.nb_bobines_non_conformes ?? 0) + ' bobine(s) en écart';
+    }else if(sg === 'en_attente'){
+      statutText = 'En attente — aucune bobine scannée';
+    }else if((syn.nb_bobines_total ?? 0) === 0){
+      statutText = 'Aucune bobine scannée';
+    }
+
+    const typeReq = dos.fsc_type_requis ? String(dos.fsc_type_requis) : '';
+    const genAt = syn.genere_a ? String(syn.genere_a).replace('T',' ').slice(0,16) : '';
+
+    const overlay = h('div',{className:'contact-modal-overlay',onClick:(e)=>{ if(e.target===e.currentTarget) overlay.remove(); }},
+      h('div',{className:'contact-modal',onClick:(e)=>e.stopPropagation(),style:{maxWidth:'760px'}},
+        h('div',{className:'contact-modal-head'},
+          h('h3',null,'Rapport traçabilité FSC'),
+          h('div',{style:{display:'flex',gap:'8px',flexShrink:0,flexWrap:'wrap'}},
+            h('button',{className:'btn btn-sm btn-ghost',style:{fontSize:'12px'},onClick:()=>window.print()},'Exporter PDF'),
+            h('button',{className:'btn btn-sm btn-ghost',style:{fontSize:'12px'},onClick:()=>overlay.remove()},'Fermer')
+          )
+        ),
+        h('div',{style:{fontSize:'12px',color:'var(--muted)',marginTop:'-6px',marginBottom:'12px'}},
+          (ref||'') + (dos.client ? (' — ' + dos.client) : '') + (typeReq ? (' · Requis : ' + typeReq) : '')
+        ),
+        h('div',{style:{padding:'10px 14px',borderRadius:'8px',marginBottom:'14px',fontWeight:'800',fontSize:'13px',
+          background:statutBg,border:'1px solid '+statutColor,color:statutColor}}, statutText),
+        h('div',{className:'table-wrap',style:{border:'1px solid var(--border)',borderRadius:'12px'}},
+          h('table',{className:'table-std',style:{fontSize:'13px'}},
+            h('thead',null,h('tr',null,
+              h('th',null,'Code barre'),
+              h('th',null,'Fournisseur'),
+              h('th',null,'Claim FSC'),
+              h('th',null,'Statut FSC'),
+              h('th',null,'Scanné le')
+            )),
+            h('tbody',null,
+              ...(bobines.length ? bobines.map(b=>{
+                const claim = b.fsc_type_claim || 'Non FSC';
+                const conf = b.fsc_conforme;
+                const confCell = conf === true
+                  ? h('span',{style:{color:'var(--success)',fontWeight:'800'}},'\u2713')
+                  : conf === false
+                    ? h('span',{style:{color:'var(--danger)',fontWeight:'800'}},'\u2717'+(b.fsc_warning?' (confirmé)':''))
+                    : h('span',{style:{color:'var(--muted)'}},'\u2014');
+                const scan = (b.scanned_at||'').slice(0,16).replace('T',' ');
+                return h('tr',null,
+                  h('td',null,h('span',{style:{fontFamily:'ui-monospace,monospace',fontWeight:'800'}},b.code_barre||'')),
+                  h('td',null,b.fournisseur||'—'),
+                  h('td',null,claim),
+                  h('td',null,confCell),
+                  h('td',{style:{fontSize:'11px',color:'var(--muted)'}},scan||'—'),
+                );
+              }) : [
+                h('tr',null,h('td',{colSpan:'5',style:{padding:'20px',textAlign:'center',color:'var(--muted)',fontSize:'12px'}},
+                  'Aucune bobine scannée sur ce dossier.'
+                ))
+              ])
+            )
+          )
+        ),
+        h('div',{style:{marginTop:'14px',paddingTop:'10px',borderTop:'1px solid var(--border)',fontSize:'11px',color:'var(--muted)'}},
+          'Généré le ', genAt, ' · MySifa · SIFA'
+        )
+      )
+    );
+    document.body.appendChild(overlay);
+  }catch(e){
+    showToast('Rapport FSC indisponible.','danger');
+  }
+}
+
+function renderTracabilite(){
+  // Si on a un dossier sélectionné, afficher son détail
+  if(S.traceabiliteDossier !== undefined && S.traceabiliteDossier !== null){
+    return renderTracabiliteDossierDetail();
+  }
+
+  const d = S.traceabilite;
+  if(!d) return h('div',{className:'card-empty'},'Chargement de la traçabilité…');
+  if(d.error) return h('div',{className:'card'},h('div',{style:{padding:'20px',color:'var(--danger)'}},d.error));
+
+  const allDossiers = d.dossiers||[];
+
+  // ── Valeurs uniques pour les selects ───────────────────────────
+  const machinesUniq = [...new Set(allDossiers.map(x=>x.machine_nom).filter(Boolean))].sort();
+  const statuts = [
+    {val:'',label:'Tous statuts'},
+    {val:'attente',label:'En attente'},
+    {val:'en_cours',label:'En cours'},
+    {val:'termine',label:'Terminé'},
+  ];
+
+  // ── État filtres ────────────────────────────────────────────────
+  if(!S.tracFilters) S.tracFilters={ref:'',client:'',machine:'',statut:''};
+  if(!S.tracSort)    S.tracSort={col:null,dir:'asc'};
+  const F = S.tracFilters;
+  const Srt = S.tracSort;
+
+  // ── Filtre ──────────────────────────────────────────────────────
+  let dossiers = allDossiers.filter(dos=>{
+    if(F.ref    && !(dos.reference||'').toLowerCase().includes(F.ref.toLowerCase()))    return false;
+    if(F.client && !(dos.client||'').toLowerCase().includes(F.client.toLowerCase()))    return false;
+    if(F.machine && dos.machine_nom !== F.machine) return false;
+    if(F.statut  && dos.statut !== F.statut)       return false;
+    return true;
+  });
+
+  // ── Tri / visibilité en attente ─────────────────────────────────
+  const _tracPos = d=>{
+    const p = Number(d && d.position);
+    if(!isNaN(p)) return p;
+    return Number(d && d.id) || 0;
+  };
+  const attenteDossiers = dossiers.filter(dos=>dos.statut==='attente');
+  const mainDossiers = dossiers.filter(dos=>dos.statut!=='attente');
+  const forceShowAttente = F.statut==='attente';
+  const showAttente = forceShowAttente || !!S.tracShowAttente;
+  const hiddenAttenteCount = (!showAttente && !F.statut) ? attenteDossiers.length : 0;
+
+  const COL_KEY = {ref:'reference',client:'client',designation:'designation',machine:'machine_nom',statut:'statut',matieres:'nb_matieres'};
+  if(Srt.col){
+    const key = COL_KEY[Srt.col]||Srt.col;
+    dossiers = [...dossiers].sort((a,b)=>{
+      let av=a[key]||'', bv=b[key]||'';
+      if(typeof av==='number'||typeof bv==='number'){av=Number(av)||0;bv=Number(bv)||0;}
+      else{av=String(av).toLowerCase();bv=String(bv).toLowerCase();}
+      return Srt.dir==='asc'?(av>bv?1:av<bv?-1:0):(av<bv?1:av>bv?-1:0);
+    });
+    if(!showAttente && !F.statut){
+      dossiers = dossiers.filter(dos=>dos.statut!=='attente');
+    }
+  } else {
+    const sortDescPos = (a,b)=>_tracPos(b)-_tracPos(a);
+    const sortedAttente = [...attenteDossiers].sort(sortDescPos);
+    const sortedMain = [...mainDossiers].sort(sortDescPos);
+    dossiers = showAttente ? [...sortedAttente, ...sortedMain] : sortedMain;
+  }
+
+  // ── Pagination (sur la liste filtrée/triée) ─────────────────────
+  const PAGE_SIZE = 50;
+  if(S.tracPage == null) S.tracPage = 0;
+  const totalFiltered = dossiers.length;
+  const maxPage = Math.max(0, Math.ceil(totalFiltered / PAGE_SIZE) - 1);
+  if(S.tracPage > maxPage) S.tracPage = maxPage;
+  if(S.tracPage < 0) S.tracPage = 0;
+  const pageStart = S.tracPage * PAGE_SIZE;
+  const pageEnd = Math.min(pageStart + PAGE_SIZE, totalFiltered);
+  const dossiersPage = dossiers.slice(pageStart, pageEnd);
+
+  // ── Helper : badge statut ───────────────────────────────────────
+  function statutBadge(st){
+    if(st==='en_cours')  return h('span',{className:'badge',style:{color:'var(--success)',background:'rgba(52,211,153,.12)',display:'inline-flex',alignItems:'center',gap:'5px'}},
+      h('span',{style:{width:'6px',height:'6px',borderRadius:'50%',background:'var(--success)',display:'inline-block',animation:'pulse 2s infinite'}}),
+      'En cours');
+    if(st==='termine')   return h('span',{className:'badge badge-ok'},'Terminé');
+    return h('span',{className:'badge badge-warn'},'En attente');
+  }
+
+  // ── Header cliquable (tri) ──────────────────────────────────────
+  function thSort(colKey, label){
+    const active = Srt.col===colKey;
+    const arrow  = active ? (Srt.dir==='asc'?'↑':'↓') : '';
+    return h('th',{
+      style:{cursor:'pointer',userSelect:'none',whiteSpace:'nowrap',color:active?'var(--accent)':''},
+      onClick:()=>{
+        S.tracPage = 0;
+        if(Srt.col===colKey) S.tracSort={col:colKey,dir:Srt.dir==='asc'?'desc':'asc'};
+        else S.tracSort={col:colKey,dir:'asc'};
+        render();
+      }
+    }, label+(arrow?' '+arrow:''));
+  }
+
+  // ── Barre de filtres ────────────────────────────────────────────
+  // Helper : input texte avec conservation du focus et position du curseur
+  const filterInput = (inputId, label, val, onChange)=>{
+    const inp = h('input',{
+      type:'text', id:inputId, value:val, placeholder:'Rechercher…', className:'filter-input',
+      autocomplete:'off', spellcheck:'false'
+    });
+    inp.addEventListener('input', e=>{
+      const selStart = e.target.selectionStart;
+      S.tracPage = 0;
+      onChange(e.target.value);
+      render();
+      // Restaurer le focus et la position du curseur après le re-render
+      const restored = document.getElementById(inputId);
+      if(restored){ restored.focus(); try{restored.setSelectionRange(selStart,selStart);}catch(ex){} }
+    });
+    return h('div',{className:'filter-group'},
+      h('label',null,label),
+      inp
+    );
+  };
+  const filterSelect = (inputId, label, options, val, onChange)=>{
+    const sel = h('select',{id:inputId, className:'filter-input'},
+      ...options.map(o=>h('option',{value:o.val,selected:val===o.val},o.label)));
+    sel.addEventListener('change', e=>{ S.tracPage = 0; onChange(e.target.value); render(); });
+    return h('div',{className:'filter-group'},
+      h('label',null,label),
+      sel
+    );
+  };
+  const hasActiveFilter = !!(F.ref||F.client||F.machine||F.statut);
+
+  const filterBar = h('div',{className:'filters-panel',style:{padding:'14px 20px',borderBottom:'1px solid var(--border)'}},
+    h('div',{className:'filters'},
+      filterInput('trac-f-ref',    'Référence',  F.ref,    v=>{S.tracFilters.ref=v;}),
+      filterInput('trac-f-client', 'Client',     F.client, v=>{S.tracFilters.client=v;}),
+      filterSelect('trac-f-machine','Machine',
+        [{val:'',label:'Toutes machines'},...machinesUniq.map(m=>({val:m,label:m}))],
+        F.machine, v=>{S.tracFilters.machine=v;}
+      ),
+      filterSelect('trac-f-statut','Statut', statuts, F.statut, v=>{S.tracFilters.statut=v;}),
+      hasActiveFilter ? h('button',{
+        className:'btn btn-sm btn-ghost',
+        style:{alignSelf:'flex-end',marginTop:'0'},
+        onClick:()=>{ S.tracFilters={ref:'',client:'',machine:'',statut:''}; S.tracShowAttente=false; S.tracPage=0; render(); }
+      }, iconEl('x',14),' Effacer') : null
+    )
+  );
+
+  // ── Lignes tableau ──────────────────────────────────────────────
+  const rows = dossiersPage.map(dos=>{
+    const hasMatieres = (dos.nb_matieres||0)>0;
+    return h('tr',{style:{cursor:'pointer'},
+      onClick:async()=>{
+        S.traceabiliteDossier = null;
+        render();
+        await loadTracabiliteDossier(dos.reference);
+      }
+    },
+      h('td',null, h('span',{style:{fontWeight:'800',color:'var(--accent)'}}, dos.reference||'—')),
+      h('td',null, dos.client||'—'),
+      h('td',null, dos.designation||'—'),
+      h('td',null, dos.machine_nom||'—'),
+      h('td', null,
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' } },
+          statutBadge(dos.statut || 'attente'),
+          (dos.fsc_requis === 1 || dos.fsc_requis === true)
+            ? h('span', {
+                title: 'Certification FSC requise — ' + (dos.fsc_type_requis || ''),
+                style: {
+                  background: 'var(--accent-bg)', color: 'var(--accent)',
+                  fontSize: '10px', fontWeight: '700',
+                  padding: '1px 6px', borderRadius: '4px',
+                }
+              }, 'FSC')
+            : null
+        )
+      ),
+      h('td',null,
+        hasMatieres
+          ? h('span',{className:'badge badge-ok'}, (dos.nb_matieres||0)+' bobine'+(dos.nb_matieres>1?'s':''))
+          : h('span',{className:'badge',style:{opacity:.5}},'Aucune')
+      )
+    );
+  });
+
+  const attenteToggleBar = hiddenAttenteCount > 0
+    ? h('div',{
+        className:'show-trac-attente-btn',
+        onClick:()=>{ S.tracPage=0; S.tracShowAttente=true; render(); }
+      }, '▲ '+hiddenAttenteCount+' dossier'+(hiddenAttenteCount>1?'s':'')+' en attente masqué'+(hiddenAttenteCount>1?'s':'')+' — cliquer pour afficher')
+    : (showAttente && !forceShowAttente && attenteDossiers.length > 0
+      ? h('div',{
+          className:'show-trac-attente-btn',
+          onClick:()=>{ S.tracPage=0; S.tracShowAttente=false; render(); }
+        }, '▼ Masquer les dossiers en attente')
+      : null);
+
+  const table = rows.length
+    ? h('table',{className:'table-std'},
+        h('thead',null,h('tr',null,
+          thSort('ref','Référence'),
+          thSort('client','Client'),
+          thSort('designation','Désignation'),
+          thSort('machine','Machine'),
+          thSort('statut','Statut'),
+          thSort('matieres','Matières')
+        )),
+        h('tbody',null,...rows)
+      )
+    : h('div',{className:'card-empty'},allDossiers.length?'Aucun résultat pour ces filtres':'Aucun dossier dans le planning');
+
+  const matchingCount = attenteDossiers.length + mainDossiers.length;
+  let badgeSuffix = '';
+  if(hiddenAttenteCount > 0 && matchingCount !== totalFiltered){
+    badgeSuffix = '/'+matchingCount;
+  } else if(matchingCount !== allDossiers.length){
+    badgeSuffix = '/'+allDossiers.length;
+  }
+
+  return h('div',{className:'card'},
+    h('div',{className:'card-header'},
+      h('h3',null,'Traçabilité par dossier'),
+      h('div',{style:{display:'flex',alignItems:'center',gap:'10px',flexWrap:'wrap'}},
+        h('span',{className:'badge'},
+          totalFiltered + badgeSuffix + ' dossier' + (totalFiltered!==1?'s':'')
+        ),
+        totalFiltered > PAGE_SIZE
+          ? h('div',{style:{display:'flex',alignItems:'center',gap:'8px'}},
+              h('span',{style:{fontSize:'11px',color:'var(--muted)',fontFamily:'monospace'}},
+                (pageStart+1)+'–'+pageEnd+' / '+totalFiltered
+              ),
+              h('button',{
+                className:'btn btn-sm btn-ghost',
+                disabled:S.tracPage<=0,
+                style:{marginTop:'0',padding:'6px 10px'},
+                onClick:()=>{ if(S.tracPage>0){ S.tracPage--; render(); } },
+                title:'Précédent'
+              }, '<'),
+              h('button',{
+                className:'btn btn-sm btn-ghost',
+                disabled:S.tracPage>=maxPage,
+                style:{marginTop:'0',padding:'6px 10px'},
+                onClick:()=>{ if(S.tracPage<maxPage){ S.tracPage++; render(); } },
+                title:'Suivant'
+              }, '>')
+            )
+          : null
+      )
+    ),
+    filterBar,
+    attenteToggleBar,
+    h('div',{style:{overflowX:'auto',padding:'0 0 8px'}}, table)
+  );
+}
+
+function closeTracMatieresEditModal(){
+  document.getElementById('trac-mat-edit-modal')?.remove();
+}
+
+function tracResolveMachineId(dos, matieres){
+  const dmid = dos && dos.machine_id;
+  if(dmid!=null && dmid!==''){
+    const n = Number(dmid);
+    return Number.isFinite(n) && n>0 ? n : null;
+  }
+  const m0 = (matieres||[]).find(x=>x.machine_id!=null && x.machine_id!=='');
+  if(m0){
+    const n = Number(m0.machine_id);
+    return Number.isFinite(n) && n>0 ? n : null;
+  }
+  return null;
+}
+
+async function openTracMatieresEditModal(dos, matieres){
+  closeTracMatieresEditModal();
+  const ref = (dos.reference||'').trim();
+  if(!ref){ showToast('Référence dossier manquante.','danger'); return; }
+
+  let fournisseurs = [];
+  try{
+    const fd = await api('/api/fabrication/fournisseurs-fsc');
+    fournisseurs = Array.isArray(fd) ? fd : (fd.fournisseurs||[]);
+  }catch(e){ /* liste optionnelle */ }
+
+  const rows = (matieres||[]).map(m=>{
+    const mid = Number(m.id);
+    const code = String(m.code_barre||'').trim();
+    return {id: (Number.isFinite(mid) && mid > 0) ? mid : null, code, origCode: code, deleted:false};
+  });
+  const newRows = [];
+
+  const overlay = document.createElement('div');
+  overlay.id = 'trac-mat-edit-modal';
+  overlay.className = 'contact-modal-overlay';
+  overlay.style.zIndex = '9200';
+
+  const box = document.createElement('div');
+  box.className = 'contact-modal';
+  box.style.maxWidth = '520px';
+  box.onclick = (e)=> e.stopPropagation();
+
+  const head = document.createElement('div');
+  head.className = 'contact-modal-head';
+  const title = document.createElement('h3');
+  title.textContent = 'Bobines — '+ref;
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'contact-close-btn';
+  closeBtn.textContent = '\u2715';
+  closeBtn.onclick = closeTracMatieresEditModal;
+  head.append(title, closeBtn);
+
+  const body = document.createElement('div');
+  body.className = 'contact-modal-body';
+  body.style.display = 'grid';
+  body.style.gap = '10px';
+
+  const hint = document.createElement('p');
+  hint.style.cssText = 'margin:0;font-size:12px;color:var(--muted);line-height:1.5';
+  hint.textContent = 'Modifiez les codes barres ou ajoutez une bobine. Les lignes supprimées seront retirées du dossier.';
+  body.appendChild(hint);
+
+  const listWrap = document.createElement('div');
+  listWrap.style.display = 'grid';
+  listWrap.style.gap = '8px';
+
+  const fournWrap = document.createElement('div');
+  fournWrap.style.display = 'none';
+  const fournLbl = document.createElement('label');
+  fournLbl.style.cssText = 'font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.4px;text-transform:uppercase;display:block;margin-bottom:6px';
+  fournLbl.textContent = 'Fournisseur (liaison manuelle)';
+  const fournSel = document.createElement('select');
+  fournSel.className = 'form-sel';
+  fournSel.style.width = '100%';
+  fournSel.innerHTML = '<option value="">— Choisir —</option>' +
+    fournisseurs.map(f=>'<option value="'+Number(f.id)+'">'+escapeHtml(f.nom||'')+'</option>').join('');
+  fournWrap.append(fournLbl, fournSel);
+
+  function mkCodeInput(val, placeholder){
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.value = val||'';
+    inp.placeholder = placeholder||'Code barre';
+    inp.style.cssText = 'flex:1;min-width:0;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:monospace;font-size:13px';
+    return inp;
+  }
+
+  function renderRows(){
+    listWrap.innerHTML = '';
+    rows.forEach((row, idx)=>{
+      if(row.deleted) return;
+      const line = document.createElement('div');
+      line.style.cssText = 'display:flex;gap:8px;align-items:center';
+      const inp = mkCodeInput(row.code, 'Code barre bobine');
+      inp.addEventListener('input', ()=>{ row.code = inp.value; });
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'btn btn-sm btn-ghost';
+      del.title = 'Supprimer';
+      del.style.padding = '8px 10px';
+      del.innerHTML = '';
+      del.appendChild(iconEl('trash',14));
+      del.onclick = ()=>{
+        if(!confirm('Supprimer cette bobine du dossier ?')) return;
+        row.deleted = true;
+        renderRows();
+      };
+      line.append(inp, del);
+      listWrap.appendChild(line);
+    });
+    newRows.forEach((row)=>{
+      const line = document.createElement('div');
+      line.style.cssText = 'display:flex;gap:8px;align-items:center';
+      const inp = mkCodeInput(row.code, 'Nouveau code barre');
+      inp.addEventListener('input', ()=>{ row.code = inp.value; });
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'btn btn-sm btn-ghost';
+      del.title = 'Retirer';
+      del.style.padding = '8px 10px';
+      del.appendChild(iconEl('trash',14));
+      del.onclick = ()=>{
+        const i = newRows.indexOf(row);
+        if(i>=0) newRows.splice(i,1);
+        renderRows();
+      };
+      line.append(inp, del);
+      listWrap.appendChild(line);
+    });
+    if(!rows.some(r=>!r.deleted) && !newRows.length){
+      const empty = document.createElement('div');
+      empty.style.cssText = 'font-size:12px;color:var(--muted);font-style:italic;padding:4px 0';
+      empty.textContent = 'Aucune bobine — ajoutez-en une ci-dessous.';
+      listWrap.appendChild(empty);
+    }
+  }
+  renderRows();
+  body.appendChild(listWrap);
+
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'btn btn-sm btn-ghost';
+  addBtn.style.justifySelf = 'start';
+  addBtn.appendChild(iconEl('plus',14));
+  addBtn.appendChild(document.createTextNode(' Ajouter une bobine'));
+  addBtn.onclick = ()=>{ newRows.push({code:''}); renderRows(); };
+  body.appendChild(addBtn);
+  body.appendChild(fournWrap);
+
+  const actions = document.createElement('div');
+  actions.className = 'contact-modal-actions';
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'btn-ghost';
+  cancelBtn.textContent = 'Annuler';
+  cancelBtn.onclick = closeTracMatieresEditModal;
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'btn-sm';
+  saveBtn.textContent = 'Enregistrer';
+  saveBtn.onclick = async ()=>{
+    const machineId = tracResolveMachineId(dos, matieres);
+
+    const toDelete = rows.filter(r=>r.deleted && r.id).map(r=>r.id);
+    const toPatch = rows.filter(r=>{
+      if(r.deleted || !r.id) return false;
+      const code = String(r.code||'').trim();
+      if(!code) return false;
+      return code !== String(r.origCode||'').trim();
+    });
+    const toAdd = [
+      ...rows.filter(r=>!r.deleted && !r.id && (r.code||'').trim()).map(r=>(r.code||'').trim()),
+      ...newRows.map(r=>(r.code||'').trim()).filter(Boolean),
+    ];
+
+    if(!toDelete.length && !toPatch.length && !toAdd.length){
+      showToast('Aucune modification.','info');
+      closeTracMatieresEditModal();
+      return;
+    }
+    if(toAdd.length && !machineId){
+      showToast('Machine du dossier introuvable — impossible d\'ajouter une bobine. Utilisez la saisie sur la machine ou renseignez la machine au planning.','danger');
+      return;
+    }
+
+    const fid = fournSel.value ? Number(fournSel.value) : null;
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Enregistrement…';
+    fournWrap.style.display = 'none';
+
+    const postMatiere = async (code)=>{
+      const body = {code_barre: code, no_dossier: ref, machine_id: machineId, tracabilite: true};
+      if(fid) body.fournisseur_fsc_id = fid;
+      try{
+        await api('/api/fabrication/matieres', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(body),
+        });
+      }catch(e){
+        const msg = String((e && e.message) || '');
+        if(msg.toLowerCase().includes('fournisseur requis')){
+          fournWrap.style.display = 'block';
+          showToast('Sélectionnez un fournisseur pour les codes non liés à une réception.','danger');
+        }
+        throw e;
+      }
+    };
+
+    const patchMatiere = async (row)=>{
+      const body = {code_barre: String(row.code||'').trim(), tracabilite: true};
+      if(fid) body.fournisseur_fsc_id = fid;
+      try{
+        await api('/api/fabrication/matieres/'+row.id, {
+          method:'PATCH',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(body),
+        });
+      }catch(e){
+        const msg = String((e && e.message) || '');
+        if(msg.toLowerCase().includes('fournisseur requis')){
+          fournWrap.style.display = 'block';
+          showToast('Sélectionnez un fournisseur pour les codes non liés à une réception.','danger');
+        }
+        throw e;
+      }
+    };
+
+    try{
+      for(const id of toDelete){
+        await api('/api/fabrication/matieres/'+id+'?tracabilite=1', {method:'DELETE'});
+      }
+      for(const row of toPatch){
+        await patchMatiere(row);
+      }
+      for(const code of toAdd){
+        await postMatiere(code);
+      }
+      closeTracMatieresEditModal();
+      showToast('Bobines enregistrées.','success');
+      await loadTracabiliteDossier(ref);
+    }catch(e){
+      if(!String((e&&e.message)||'').toLowerCase().includes('fournisseur requis')){
+        showToast((e&&e.message)||'Enregistrement impossible.','danger');
+      }
+    }finally{
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Enregistrer';
+    }
+  };
+  actions.append(cancelBtn, saveBtn);
+
+  box.append(head, body, actions);
+  overlay.appendChild(box);
+  overlay.addEventListener('click', (e)=>{ if(e.target===overlay) closeTracMatieresEditModal(); });
+  document.body.appendChild(overlay);
+  requestAnimationFrame(()=>{
+    const first = listWrap.querySelector('input');
+    if(first) first.focus();
+  });
+}
+
+function renderTracabiliteDossierDetail(){
+  const d = S.traceabiliteDossier;
+
+  const backBtn = h('button',{
+    className:'btn btn-sm btn-ghost',
+    style:{marginBottom:'12px'},
+    onClick:()=>{ S.traceabiliteDossier=undefined; render(); }
+  }, iconEl('arrow-left',14),' Retour');
+
+  if(!d) return h('div',null, backBtn, h('div',{className:'card-empty'},'Chargement…'));
+  if(d.error) return h('div',null, backBtn, h('div',{style:{color:'var(--danger)',padding:'20px'}},d.error));
+
+  const dos = d.dossier||{};
+  const matieres = d.matieres||[];
+  const prod = d.production||[];
+  const fscSyn = d.fsc_synthese || null;
+
+  // Production summary
+  const debutRow = prod.find(r=>r.operation_code==='01');
+  const finRow   = prod.filter(r=>r.operation_code==='89').pop();
+  const operateurs = [...new Set(prod.map(r=>r.operateur).filter(Boolean))];
+
+  const metrageDebut = debutRow ? debutRow.metrage_prevu : null;
+  const metrageFin   = finRow   ? finRow.metrage_reel : null;
+  const metrageCalc  = (metrageDebut!=null&&metrageFin!=null) ? Math.max(0,metrageFin-metrageDebut) : null;
+  const etiquettes   = finRow   ? finRow.quantite_traitee : null;
+
+  const infoGrid = h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:'8px',margin:'12px 0'}},
+    ...[
+      {label:'Référence',  val:dos.reference||'—'},
+      {label:'Client',     val:dos.client||'—'},
+      {label:'Machine',    val:dos.machine_nom||dos.machine||'—'},
+      {label:'Opérateur(s)', val:operateurs.join(', ')||'—'},
+      {label:'Métrage produit', val:metrageCalc!=null ? fN(metrageCalc)+' m' : '—'},
+      {label:'Étiquettes', val:etiquettes!=null ? fN(etiquettes) : '—'},
+    ].map(item=>h('div',{style:{background:'var(--bg2)',borderRadius:'8px',padding:'10px 12px'}},
+      h('div',{style:{fontSize:'10px',color:'var(--muted)',fontWeight:'700',textTransform:'uppercase',letterSpacing:'.4px',marginBottom:'3px'}},item.label),
+      h('div',{style:{fontSize:'13px',fontWeight:'800',color:'var(--text)'}},item.val)
+    ))
+  );
+
+  // Matières table
+  const matiereRows = matieres.map(m=>{
+    const dt = m.scanned_at ? new Date(m.scanned_at) : null;
+    const dateStr = dt&&!isNaN(dt) ? dt.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
+    const claim = m.fsc_type_claim || 'Non FSC';
+    const conf = m.fsc_conforme;
+    const confCell = conf === true
+      ? h('span',{style:{color:'var(--success)',fontWeight:'800'}},'\u2713')
+      : conf === false
+        ? h('span',{style:{color:'var(--danger)',fontWeight:'800'}},'\u2717'+(m.fsc_warning?' (confirmé)':''))
+        : h('span',{style:{color:'var(--muted)'}},'\u2014');
+    return h('tr',null,
+      h('td',null,h('span',{style:{fontFamily:'monospace',fontWeight:'700',color:'var(--accent)'}},m.code_barre)),
+      h('td',null,m.machine_nom||'—'),
+      h('td',null,m.operateur||'—'),
+      h('td',null,m.fournisseur||'—'),
+      h('td',null,claim),
+      h('td',null,confCell),
+      h('td',null,dateStr)
+    );
+  });
+
+  const matiereTable = matieres.length
+    ? h('table',{className:'table-std'},
+        h('thead',null,h('tr',null,
+          h('th',null,'Code barre'),
+          h('th',null,'Machine'),
+          h('th',null,'Opérateur'),
+          h('th',null,'Fournisseur'),
+          h('th',null,'Claim FSC'),
+          h('th',null,'Statut FSC'),
+          h('th',null,'Heure scan')
+        )),
+        h('tbody',null,...matiereRows)
+      )
+    : h('div',{className:'card-empty',style:{padding:'16px'}},'Aucune bobine matière scannée pour ce dossier');
+
+  const fscBanner = fscSyn ? (()=>{
+    const sg = fscSyn.statut_global || 'non_applicable';
+    const statutColor = sg === 'conforme' ? 'var(--success)'
+      : sg === 'non_conforme' ? 'var(--danger)' : 'var(--muted)';
+    const statutBg = sg === 'conforme' ? 'rgba(52,211,153,.12)'
+      : sg === 'non_conforme' ? 'rgba(248,113,113,.12)' : 'rgba(148,163,184,.12)';
+    let txt = 'Non applicable';
+    if(sg === 'conforme'){
+      txt = 'Conforme FSC — ' + (fscSyn.nb_bobines_fsc_conformes ?? 0) + '/' + (fscSyn.nb_bobines_total ?? 0) + ' bobine(s)';
+    }else if(sg === 'non_conforme'){
+      txt = 'Non conforme — ' + (fscSyn.nb_bobines_non_conformes ?? 0) + ' bobine(s) en écart';
+    }else if(sg === 'en_attente'){
+      txt = 'En attente — aucune bobine scannée';
+    }else if((fscSyn.nb_bobines_total ?? 0) === 0){
+      txt = 'Aucune bobine scannée';
+    }
+    return h('div',{style:{margin:'10px 0 0',padding:'10px 14px',borderRadius:'10px',
+      background:statutBg,border:'1px solid '+statutColor,color:statutColor,fontWeight:'800',fontSize:'13px'}}, txt);
+  })() : null;
+
+  return h('div',null,
+    backBtn,
+    h('div',{className:'card'},
+      h('div',{className:'card-header'},
+        h('h3',null,dos.reference||'Dossier'),
+        h('div',{style:{display:'flex',alignItems:'center',gap:'8px'}},
+          h('span',{className:'badge badge-ok'},finRow?'Terminé':'En cours'),
+          (dos.fsc_requis === 1 || dos.fsc_requis === true)
+            ? h('button', {
+                className: 'btn btn-sm',
+                style: {
+                  background: 'var(--accent-bg)', color: 'var(--accent)',
+                  border: '1px solid var(--accent)', borderRadius: '6px',
+                  fontSize: '12px', fontWeight: '700', padding: '4px 10px',
+                  cursor: 'pointer',
+                },
+                onClick: async () => {
+                  try {
+                    const ref = dos.reference || '';
+                    const data = await api('/api/fabrication/tracabilite/' + encodeURIComponent(ref));
+                    if (!data) return;
+                    openFscRapportModal(data, ref);
+                  } catch(e) { showToast('Rapport FSC indisponible.', 'danger'); }
+                }
+              }, iconEl('file-text', 13), ' Rapport FSC')
+            : null
+        )
+      ),
+      infoGrid,
+      h('div',{style:{padding:'0 20px 16px'}},
+        h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'10px',marginBottom:'10px'}},
+          h('div',{style:{fontWeight:'800',fontSize:'12px',color:'var(--text2)',
+            textTransform:'uppercase',letterSpacing:'.4px',display:'flex',alignItems:'center',gap:'6px'}},
+            iconEl('box',12),' Bobines matières utilisées ('+matieres.length+')'
+          ),
+          h('button',{
+            type:'button',
+            className:'btn btn-sm btn-ghost',
+            title:'Modifier les bobines',
+            'aria-label':'Modifier les bobines',
+            style:{display:'inline-flex',alignItems:'center',gap:'6px',flexShrink:0},
+            onClick:()=>openTracMatieresEditModal(dos, matieres)
+          }, iconEl('sliders',14), ' Modifier')
+        ),
+        fscBanner,
+        h('div',{style:{overflowX:'auto'}}, matiereTable)
+      )
+    )
+  );
+}
+
   // ────────────────────────────────────────────────────────────────────
   // ÉTAPE 2j — Onglets Dossiers + Suivi + Rentabilité
   //
@@ -3546,6 +4357,8 @@ function renderProdKpis(){
           await loadSaisies();
         }else if(S.page === 'import'){
           await loadImports();
+        }else if(S.page === 'traceabilite'){
+          await loadTracabilite();
         }
       }catch(e){
         console.warn('[mysifa_prod_core] checkAuth load erreur:', e && e.message);
@@ -3628,6 +4441,8 @@ function renderProdKpis(){
           await loadSaisies();
         }else if(S.page === 'import'){
           await loadImports();
+        }else if(S.page === 'traceabilite'){
+          await loadTracabilite();
         }
         render();
       }catch(e){
@@ -3685,6 +4500,11 @@ function renderProdKpis(){
       }else if(S.page === 'rentabilite'){
         await loadDevis();
         await loadRentPlanning();
+      }else if(S.page === 'traceabilite'){
+        S.traceabilite = null;
+        S.traceabiliteDossier = undefined;
+        S.tracShowAttente = false;
+        await loadTracabilite();
       }
     }catch(e){
       console.warn('[mysifa_prod_core] nav() erreur:', e && e.message);
@@ -3844,6 +4664,10 @@ function renderProdKpis(){
                       S.subPage === 'erreurs' ? 'Sanity Score, incidents et erreurs de saisie' :
                       'KPIs, temps, quantit\u00e9s et qualit\u00e9 de saisie');
       pageContent = renderProdPage();
+    }else if(S.page === 'traceabilite'){
+      pageTitle = 'Traçabilité';
+      pageSubtitle = 'Matières utilisées par dossier';
+      pageContent = renderTracabilite();
     }else if(S.page === 'suivi'){
       pageTitle = 'Rentabilité & Dossiers';
       pageSubtitle = 'Dossiers de production et comparaison devis / réel';
@@ -3898,8 +4722,8 @@ function renderProdKpis(){
   // les compléter / les utiliser. À la fin du refactor (étape 2n), ces
   // exports pourront être retirés si plus nécessaire.
   window.__MYSIFA_PROD_STANDALONE__ = {
-    stage: '2j',
-    description: 'Onglets Dossiers + Suivi + Rentabilite',
+    stage: '2k',
+    description: 'Onglet Tracabilite + FSC',
     loadedAt: new Date().toISOString(),
   };
   window.__prodCore = {
@@ -3935,9 +4759,13 @@ function renderProdKpis(){
     loadComparaison, uploadDevis, saveDevis, linkDossiers, deleteDevis,
     renderDos, renderDevisForm, renderComparaison, renderLiaisonDossiers,
     renderRentabilite, renderSuivi,
+    loadTracabilite, loadTracabiliteDossier,
+    renderTracabilite, renderTracabiliteDossierDetail,
+    openFscRapportModal, openTracMatieresEditModal, closeTracMatieresEditModal,
+    tracResolveMachineId,
   };
 
-  console.info('[mysifa_prod_core] dossiers / suivi / rentabilite charges - etape 2j', {
+  console.info('[mysifa_prod_core] tracabilite chargee - etape 2k', {
     helpers: Object.keys(window.__prodCore).length,
     stateFields: Object.keys(S).length,
   });
