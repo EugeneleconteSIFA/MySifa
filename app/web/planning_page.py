@@ -1,6 +1,5 @@
 """SIFA — Page Planning v1.1 (standalone)
 
-
 Ajouter dans main.py :
     from frontend.planning_page import router as planning_page_router
     app.include_router(planning_page_router)
