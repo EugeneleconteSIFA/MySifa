@@ -774,26 +774,66 @@ def _planned_end_iso_for_machine(
         return None
 
 
+def _is_palette_sized_box(label) -> bool:
+    """Détecte si le format de carton/conteneur a une taille proche d'une
+    palette standard (1200x800 mm). Dans ce cas, 1 carton = 1 palette.
+    Détection :
+      - mots-clés explicites : 'conteneur', 'container', 'box', 'palette box'
+      - dimensions parsées (XXXX x YYY) proches de 1200x800 avec tolérance ±150 mm
+    """
+    if not label:
+        return False
+    s = str(label).lower()
+    for kw in ("conteneur", "container", " box", "box ", "palette box"):
+        if kw in s:
+            return True
+    if s.strip().startswith("box"):
+        return True
+    m = re.search(r"(\d{3,4})\s*[x\u00d7]\s*(\d{3,4})", s)
+    if m:
+        try:
+            a, b = int(m.group(1)), int(m.group(2))
+            lo, hi = min(a, b), max(a, b)
+            # Format palette standard EUR : 1200x800 (tolérance ±150)
+            if 1050 <= hi <= 1350 and 650 <= lo <= 950:
+                return True
+        except Exception:
+            pass
+    return False
+
+
 def _compute_nb_palettes(e: dict) -> Optional[int]:
     """Calcule le nombre de palettes nécessaires.
-    Formule : nb_cartons  = ceil(qte_bobines / nb_bobines_carton)
-              nb_palettes = ceil(nb_cartons / (palette_nb_cartons_sol * palette_nb_cartons_hauteur))
-    Retourne None si une des données est manquante ou invalide.
+    Formule classique :
+      nb_cartons  = ceil(qte_bobines / nb_bobines_carton)
+      nb_palettes = ceil(nb_cartons / (palette_nb_cartons_sol * palette_nb_cartons_hauteur))
+    Cas particulier : si le carton est en réalité un conteneur/box de taille palette
+    (détecté via le libellé du carton ou du type de palette), alors 1 carton = 1 palette.
+    Retourne None si données insuffisantes.
     """
     try:
         qte_bobines       = e.get("_of_qte_bobines")
         nb_bobines_carton = e.get("_ft_nb_bobines_carton")
-        cartons_sol       = e.get("_ft_palette_nb_cartons_sol")
-        cartons_haut      = e.get("_ft_palette_nb_cartons_hauteur")
-        if any(v is None for v in (qte_bobines, nb_bobines_carton, cartons_sol, cartons_haut)):
+        if qte_bobines is None or nb_bobines_carton is None:
             return None
         qb  = float(qte_bobines)
         nbc = float(nb_bobines_carton)
+        if nbc <= 0 or qb <= 0:
+            return None
+        nb_cartons = math.ceil(qb / nbc)
+        # Cas conteneur/box de taille palette → 1 carton = 1 palette
+        if (_is_palette_sized_box(e.get("_ft_cartons"))
+            or _is_palette_sized_box(e.get("_ft_palette_type"))):
+            return int(nb_cartons)
+        # Formule classique : nécessite cartons_sol et cartons_haut
+        cartons_sol  = e.get("_ft_palette_nb_cartons_sol")
+        cartons_haut = e.get("_ft_palette_nb_cartons_hauteur")
+        if cartons_sol is None or cartons_haut is None:
+            return None
         cso = float(cartons_sol)
         cha = float(cartons_haut)
-        if nbc <= 0 or cso <= 0 or cha <= 0 or qb <= 0:
+        if cso <= 0 or cha <= 0:
             return None
-        nb_cartons  = math.ceil(qb / nbc)
         nb_palettes = math.ceil(nb_cartons / (cso * cha))
         return int(nb_palettes)
     except Exception:
@@ -858,6 +898,7 @@ def _slot_payload(e: dict, start_iso: str, end_iso: str) -> dict:
         "departement_livraison": (e.get("departement_livraison") or "").strip(),
         "ft_support": (e.get("_ft_support") or "").strip() or None,
         "ft_adhesif": (e.get("_ft_adhesif") or "").strip() or None,
+        "ft_palette_type": (e.get("_ft_palette_type") or "").strip() or None,
     }
 
 
@@ -2939,7 +2980,9 @@ def get_timeline(machine_id: int, request: Request, semaine: Optional[str] = Non
                    ft.palette_nb_cartons_sol     AS _ft_palette_nb_cartons_sol,
                    ft.palette_nb_cartons_hauteur AS _ft_palette_nb_cartons_hauteur,
                    ft.support                    AS _ft_support,
-                   ft.adhesif                    AS _ft_adhesif
+                   ft.adhesif                    AS _ft_adhesif,
+                   ft.palette_type               AS _ft_palette_type,
+                   ft.cartons                    AS _ft_cartons
             FROM planning_entries pe
             LEFT JOIN of_imports oi
                 ON oi.id = pe.of_import_id
