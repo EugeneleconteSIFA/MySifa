@@ -58,10 +58,12 @@ MIGRATIONS_DISABLED = os.getenv("MIGRATIONS_DISABLED", _migrations_default) in {
 
 # ─── Feature flags ────────────────────────────────────────────────
 # PROD_STANDALONE : sert /prod depuis app/web/prod_page.py (page standalone) plutôt
-# que depuis le monolithe html.py via render_frontend_html("prod"). Permet de
-# migrer progressivement le code de /prod en isolant l'impact. Désactivé par
-# défaut (= comportement actuel). Activer via PROD_STANDALONE=1 dans .env.
-PROD_STANDALONE = os.getenv("PROD_STANDALONE", "0") in {"1", "true", "True", "yes", "YES"}
+# que depuis le monolithe html.py via render_frontend_html("prod"). La migration
+# Phase 2 a sorti tout le code MyProd vers static/mysifa_prod_core.{js,css}.
+# Activé par défaut depuis la phase 2m (juin 2026). Pour repasser temporairement
+# au rendu via le monolithe (rollback debug), mettre PROD_STANDALONE=0 dans .env.
+# Sera retiré complètement en phase 2n (suppression du code Prod du monolithe).
+PROD_STANDALONE = os.getenv("PROD_STANDALONE", "1") in {"1", "true", "True", "yes", "YES"}
 
 # ─── Support (email) ───────────────────────────────────────────────
 # Objectif: permettre au front d’envoyer un message au support via un endpoint FastAPI.
