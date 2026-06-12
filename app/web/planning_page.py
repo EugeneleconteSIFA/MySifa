@@ -877,6 +877,7 @@ async function packTerminesBeforeEnCoursAll(){
   window.__mysifaPlanResize=true;
   let resizing=null;
   const MIN_DUREE_H=0.75; // aligné avec la validation backend (planning.update_entry)
+  const MAX_DUREE_H=720;
   document.addEventListener("mousedown",function(e){
     if(!CAN_EDIT||!MID) return;
     const handle=e.target&&e.target.closest&&e.target.closest("[data-resize='1']");
@@ -892,17 +893,28 @@ async function packTerminesBeforeEnCoursAll(){
       if(ent) entry={entry_id:ent.id,duree_heures:ent.duree_heures};
     }
     if(!entry) return;
+    // Modèle semaine : sert à convertir les pixels en heures OUVRÉES.
+    // Le delta de durée est ainsi correct même si le slot est tronqué
+    // (dossier à cheval sur 2 semaines) — on ajoute des heures, on ne
+    // fait plus de règle de trois sur la largeur visible.
+    const tlWrap=slot.closest(".tl-wrap");
+    const mon=tlWrap?new Date(+tlWrap.dataset.mon):null;
+    let weekTot=null;
+    if(mon&&!isNaN(mon.getTime())){
+      const wm=computeTlWeekModel(mon);
+      if(!wm.err&&wm.tot>0) weekTot=wm.tot;
+    }
+    if(weekTot==null) return;
     e.preventDefault();
     e.stopPropagation();
     const tlRect=tlBar.getBoundingClientRect();
     const pxPerPct=tlRect.width/100||1;
     const startWpct=parseFloat(slot.style.width)||1;
-    const startLeftpct=parseFloat(slot.style.left)||0;
     const startDuree=Math.max(MIN_DUREE_H,parseFloat(entry.duree_heures)||MIN_DUREE_H);
     const _prevCursor=slot.style.cursor||"";
     const preview=document.createElement("div");
     preview.className="slot-resize-preview";
-    preview.textContent=startDuree.toFixed(1)+" h";
+    preview.textContent=fmtDur(startDuree);
     slot.appendChild(preview);
     slot.style.cursor="ew-resize";
     resizing={
@@ -910,27 +922,30 @@ async function packTerminesBeforeEnCoursAll(){
       eid:eidStr,
       startX:e.clientX,
       startWpct,
-      startLeftpct,
       pxPerPct,
       startDuree,
+      weekTot,
       preview,
-      maxRightPct:Math.max(0.55,100-startLeftpct-0.08),
       _prevCursor
     };
   },true);
   document.addEventListener("mousemove",function(e){
     if(!resizing) return;
     const dx=e.clientX-resizing.startX;
-    const deltaPct=dx/resizing.pxPerPct;
-    const newWpct=Math.min(resizing.maxRightPct,Math.max(0.5,resizing.startWpct+deltaPct));
-    const newDuree=Math.max(MIN_DUREE_H,resizing.startDuree*(newWpct/resizing.startWpct));
-    resizing.slot.style.width=newWpct+"%";
-    resizing.preview.textContent=newDuree.toFixed(1)+" h";
+    // px → % de la barre semaine → heures ouvrées de la semaine
+    const deltaH=(dx/resizing.pxPerPct)/100*resizing.weekTot;
+    const newDuree=Math.min(MAX_DUREE_H,Math.max(MIN_DUREE_H,resizing.startDuree+deltaH));
+    const snapped=Math.round(newDuree*4)/4; // aperçu = valeur qui sera enregistrée (pas de quart d'heure fantôme)
+    const effDeltaPct=((newDuree-resizing.startDuree)/resizing.weekTot)*100;
+    // La largeur peut dépasser la fin de semaine pendant le drag : au relâchement,
+    // le rechargement redécoupe le slot sur la/les semaine(s) suivante(s).
+    resizing.slot.style.width=Math.max(0.5,resizing.startWpct+effDeltaPct)+"%";
+    resizing.preview.textContent=fmtDur(snapped);
     resizing._liveNewDuree=newDuree;
   });
   document.addEventListener("mouseup",async function(){
     if(!resizing) return;
-    const{slot,eid,preview,startDuree,startWpct,startLeftpct,_prevCursor}=resizing;
+    const{slot,eid,preview,startDuree,startWpct,_prevCursor}=resizing;
     preview.remove();
     slot.style.cursor=_prevCursor||"";
     const live=resizing._liveNewDuree;
@@ -939,28 +954,15 @@ async function packTerminesBeforeEnCoursAll(){
       slot.style.width=startWpct+"%";
       return;
     }
-    const rounded=Math.max(MIN_DUREE_H,Math.round(live*4)/4);
+    const rounded=Math.min(MAX_DUREE_H,Math.max(MIN_DUREE_H,Math.round(live*4)/4));
     if(Math.abs(rounded-startDuree)<1e-6){
       slot.style.width=startWpct+"%";
       return;
     }
-    const tlWrap=slot.closest(".tl-wrap");
-    const mon=tlWrap?new Date(+tlWrap.dataset.mon):null;
-    let payload={duree_heures:rounded,planned_end_manual:true};
-    if(mon&&!isNaN(mon.getTime())){
-      const wm=computeTlWeekModel(mon);
-      if(!wm.err){
-        const{tot,cols}=wm;
-        const sp0=(startLeftpct/100)*tot;
-        const ep0=((startLeftpct+startWpct)/100)*tot;
-        const dWork=ep0-sp0;
-        const newWpct=parseFloat(slot.style.width)||startWpct;
-        const ep1=Math.min(tot,sp0+dWork*(newWpct/startWpct));
-        const ne=invCumulativeWorkH(ep1,cols,tot);
-        const pe=fmtPlanningIso(ne);
-        if(pe) payload.planned_end=pe;
-      }
-    }
+    // Durée seule : le backend recalcule planned_end en heures ouvrées machine
+    // (il traverse les semaines, dimanches et jours non travaillés exclus).
+    // planned_end_manual:false purge aussi un éventuel ancien override manuel.
+    const payload={duree_heures:rounded,planned_end_manual:false};
     let ok=false;
     try{
       const res=await fetch(`/api/planning/machines/${MID}/entries/${eid}`,{
@@ -975,7 +977,7 @@ async function packTerminesBeforeEnCoursAll(){
         const msg=typeof d==="string"?d:(Array.isArray(d)?d.map(x=>x.msg||JSON.stringify(x)).join(" "):"Erreur mise à jour durée.");
         showToast(msg,"danger");
       }else{
-        showToast("Durée mise à jour : "+rounded.toFixed(1)+" h","success");
+        showToast("Durée mise à jour : "+fmtDur(rounded),"success");
         ok=true;
       }
     }catch(_){
