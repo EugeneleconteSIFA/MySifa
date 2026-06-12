@@ -375,9 +375,14 @@ def _body_flag_true(val) -> bool:
 
 
 def _invalidate_attente_plans(conn, machine_id: int) -> None:
-    """Recalcule les créneaux « en attente » au prochain GET (réordre, ajout, durée, etc.)."""
+    """Recalcule les créneaux « en attente » au prochain GET (réordre, ajout, durée, etc.).
+
+    Réinitialise aussi planned_end_manual : une fin « manuelle » n'a pas de sens pour un
+    dossier en attente (créneau recalculé dynamiquement). Sans ce reset, le flag fuyait
+    jusqu'au passage en_cours et figeait un planned_end obsolète (durée visuelle fausse).
+    """
     conn.execute(
-        """UPDATE planning_entries SET planned_start=NULL, planned_end=NULL
+        """UPDATE planning_entries SET planned_start=NULL, planned_end=NULL, planned_end_manual=0
            WHERE machine_id=? AND statut='attente'""",
         (machine_id,),
     )
@@ -2464,8 +2469,8 @@ async def insert_after(machine_id: int, after_entry_id: int, request: Request):
         raise HTTPException(400, "Référence requise")
 
     duree = _parse_duree_heures(body.get("duree_heures", 8))
-    if duree < 2 or duree > 720:
-        raise HTTPException(400, "Durée entre 2 et 720 heures")
+    if duree < 0.75 or duree > 720:
+        raise HTTPException(400, "Durée entre 0,75 et 720 heures")
 
     now = datetime.now().isoformat()
     date_liv = body.get("date_livraison")

@@ -1,5 +1,6 @@
 """SIFA — Page Planning v1.1 (standalone)
 
+
 Ajouter dans main.py :
     from frontend.planning_page import router as planning_page_router
     app.include_router(planning_page_router)
@@ -1590,8 +1591,11 @@ function getWhForDate(di,dateObj,ds,forEdit){
     return S.dayHoraires[ds];
   }
   const mk=machineKey();
-  // Priorité 2 : Cohésio 2 — horaires paire/impaire depuis la base (horaires_parity)
-  if(mk==="C2"){
+  const mrec=S.machine;
+  // Priorité 2 : horaires paire/impaire — toute machine ayant horaires_parity en base
+  // (+ Cohésio 2 via ses défauts), lun–ven uniquement : aligné backend
+  // (_hours_for_date_factory applique la parité avant les horaires hebdo, jamais le samedi).
+  if(di>=1&&di<=5&&(mk==="C2"||(mrec&&mrec.horaires_parity))){
     const defs=getMachineDefaults();
     const par=isWeekPair(dateObj)?"pair":"impair";
     const isFri=(di===5);
@@ -1604,7 +1608,9 @@ function getWhForDate(di,dateObj,ds,forEdit){
   if(raw&&raw.trim()){
     return parseHorairesPair(raw,di);
   }
-  // Repli : défauts paire/impair (localStorage ou constantes)
+  // Repli samedi : défaut backend (_parse_horaires_val "6,18")
+  if(di===6) return {s:6,e:18};
+  // Repli lun–ven : défauts paire/impair (localStorage ou constantes)
   const defs=getMachineDefaults();
   const par=isWeekPair(dateObj)?"pair":"impair";
   const isFri=(di===5);

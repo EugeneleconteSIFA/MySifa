@@ -408,3 +408,63 @@ Le message (`message` field) doit être en **HTML** et respecter les codes visue
 - `frontend/` et `routers/` à la racine sont des **shims** — ne pas y ajouter de logique
 - Tout nouveau router doit être créé dans `app/routers/` et enregistré dans `main.py`
 - Toute nouvelle page doit être créée dans `app/web/` et enregistrée dans `main.py`
+
+---
+
+## Outils — écriture de fichiers (drive réseau Windows)
+
+Le dépôt local Windows (`C:\Users\eleconte\Documents\GitHub\MySifa`) et l'ancien backup
+(`U:\ELECONTE\production-saas`, à ignorer) sont accessibles depuis l'IA mais via
+un drive réseau qui **tronque silencieusement les écritures de gros fichiers**.
+
+Observé concrètement (juin 2026, phase 2 du refactor MyProd) :
+- Outil `Edit` (search/replace ciblé) : 3 cas de troncature constatés
+  (`prod_page.py` tronqué à 818/4755 octets, `mysifa_prod_core.css` tronqué à
+  `var(--bor`, idem sur d'autres fichiers > 50 Ko). Le `Read` postérieur affiche
+  pourtant le contenu attendu — c'est le disque qui ne l'a pas.
+- Outil `Write` (réécriture complète) : même symptôme sur les fichiers > ~2 Ko.
+- Padding `\x00` parfois ajouté en fin de fichier après une réduction de taille
+  (837 octets nuls observés sur `app/web/html.py`).
+
+**Règle pratique** : pour toute modification de fichier > ~1 Ko (CSS, JS, gros
+modules Python), **utiliser le shell sandbox bash** plutôt que `Edit` / `Write` :
+
+```bash
+# Réécriture complète (préférée pour les gros fichiers / refactor)
+cat > /sessions/<session>/mnt/MySifa/static/foo.css << 'CSSEOF'
+...contenu...
+CSSEOF
+
+# Append (très fiable, pas de troncature possible)
+cat >> /sessions/<session>/mnt/MySifa/static/foo.css << 'CSSEOF'
+/* nouveau bloc */
+.foo { ... }
+CSSEOF
+
+# Modification chirurgicale via Python (sed reste OK aussi)
+python3 << 'PYEOF'
+p = '/sessions/<session>/mnt/MySifa/foo.py'
+src = open(p, encoding='utf-8').read()
+src = src.replace('ancien', 'nouveau')
+open(p, 'w', encoding='utf-8', newline='\n').write(src)
+PYEOF
+```
+
+`Edit` et `Write` restent acceptables pour les **petits fichiers de config**
+(< 1 Ko : `.env`, snippets dans `config.py`, etc.).
+
+**Vérification systématique après toute modif** :
+- `python3 -c "import ast; ast.parse(open('<path>').read())"` pour le Python
+- `node --check <path>` pour le JS
+- `python3 -c "print(open('<path>','rb').read().count(b'\x00'))"` doit renvoyer 0
+- Pour les CSS, compter la balance des `{` / `}` :
+  ```python
+  import re
+  css = open(p).read()
+  no_c = re.sub(r'/\*.*?\*/', '', css, flags=re.DOTALL)
+  print(no_c.count('{'), no_c.count('}'))
+  ```
+
+Une troncature passe les vérifs Python `ast` si elle coupe entre deux blocs,
+donc **toujours** afficher `tail -5 <path>` pour confirmer que le fichier se
+termine bien par ce qu'on attend.
