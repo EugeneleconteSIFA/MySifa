@@ -755,6 +755,30 @@ def _make_work_duration_consumer(
     return advance_to_work, consume_duration_from
 
 
+def _work_hours_between(get_hours_for_date, start_dt: datetime, end_dt: datetime) -> float:
+    """Heures ouvrées machine entre deux instants : somme des intersections avec les
+    fenêtres journalières (jours off / dimanches exclus via get_hours_for_date)."""
+    if not start_dt or not end_dt or end_dt <= start_dt:
+        return 0.0
+    total = 0.0
+    day = datetime(start_dt.year, start_dt.month, start_dt.day)
+    end_day = datetime(end_dt.year, end_dt.month, end_dt.day)
+    guard = 0
+    while day <= end_day and guard < 400:
+        guard += 1
+        win = get_hours_for_date(day)
+        if win:
+            s, e = win
+            ws = day + timedelta(hours=float(s))
+            we = day + timedelta(hours=float(e))
+            seg_s = start_dt if start_dt > ws else ws
+            seg_e = end_dt if end_dt < we else we
+            if seg_e > seg_s:
+                total += (seg_e - seg_s).total_seconds() / 3600.0
+        day += timedelta(days=1)
+    return total
+
+
 def _planned_end_iso_for_machine(
     conn, machine_id: int, planned_start_iso: str, duree_h: float
 ) -> Optional[str]:
@@ -3601,14 +3625,25 @@ def live_refresh_en_cours(machine_id: int, request: Request):
             return {"updated": False}
 
         now = datetime.now(_TZ_PARIS).replace(tzinfo=None)
-        elapsed = (now - dt_start).total_seconds() / 3600
-        elapsed = round(elapsed, 2)
+        # Temps écoulé en heures OUVRÉES machine (même calendrier que la timeline) :
+        # les nuits, dimanches et jours non travaillés ne gonflent plus la durée.
+        try:
+            cfgs, off, dw, dh = _load_planning_calendar_maps(conn, machine_id)
+        except Exception:
+            return {"updated": False}
+        get_hours_for_date = _hours_for_date_factory(dict(mac), cfgs, off, dw, dh)
+        elapsed = _work_hours_between(get_hours_for_date, dt_start, now)
+        # Quart d'heure supérieur : granularité UI, et évite un UPDATE par minute.
+        elapsed = math.ceil(elapsed * 4 - 1e-9) / 4
 
         if elapsed <= current_dur or elapsed <= 0:
             return {"updated": False}
 
         planned_start = _fmt_ts(dt_start)
-        planned_end = _fmt_ts(dt_start + timedelta(hours=elapsed))
+        # Fin de créneau cohérente : consommation de la durée en heures ouvrées.
+        _, consume_from = _make_work_duration_consumer(dict(mac), cfgs, off, dw, dh)
+        _, pe_dt, _ = consume_from(dt_start.replace(microsecond=0), float(elapsed))
+        planned_end = _fmt_ts(pe_dt)
         conn.execute(
             """UPDATE planning_entries
                SET duree_heures=?, planned_start=?, planned_end=?, updated_at=?, updated_by=?
