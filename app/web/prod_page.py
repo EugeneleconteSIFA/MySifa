@@ -3,21 +3,8 @@
 Acces : /prod
 
 Strategie de migration (Phase 2 - extraction du monolithe html.py) :
-- Par defaut (PROD_STANDALONE=0 dans .env, ou variable absente) : le rendu passe
-  par render_frontend_html("prod") - comportement historique inchange.
-- Si PROD_STANDALONE=1 : sert PROD_HTML (coquille standalone, en cours de
-  construction). Permet de tester la nouvelle page sur v1 sans impacter v2.
-
-Decoupage par etapes :
-- 2c : coquille minimale (placeholder) OK
-- 2d : coquille avec <link>/<script> vers /static/mysifa_prod_core.{css,js} OK
-- 2e : socle JS (helpers + state S filtre) dans mysifa_prod_core.js OK
-- 2f : auth + sidebar + render squelette <- ICI
-- 2g/h : page Production (KPIs + statut machines + sanity + filtres)
-- 2i/j/k/l : onglets Historique/Saisies/Import, Dossiers/Suivi/Rentabilite,
-             Tracabilite, OF
-- 2m : activation par defaut sur v1, tests croises
-- 2n : retrait du code prod du monolithe + suppression du flag
+- Par defaut depuis 2m : PROD_STANDALONE=True dans config.py - sert PROD_HTML.
+- PROD_STANDALONE=0 dans .env force un rollback vers le monolithe (debug).
 """
 
 from fastapi import APIRouter, HTTPException, Request
@@ -78,8 +65,9 @@ def prod_page(request: Request):
     return HTMLResponse(content=render_frontend_html("prod"))
 
 
-# Template HTML brut, avec placeholders __V_LABEL__, __STAGING_BANDEAU_HTML__,
-# __STAGING_BODY_CLASS__ resolus par _build_prod_html().
+# Template HTML brut, avec placeholders resolus par _build_prod_html().
+# Cache-buster ?v=__V_LABEL__ sur tous les assets statiques : APP_VERSION
+# change a chaque release, le browser recharge automatiquement le CSS/JS.
 _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -90,9 +78,9 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <link rel="icon" href="/static/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
 <link rel="apple-touch-icon" href="/static/mys_icon_180.png">
-<link rel="stylesheet" href="/static/mysifa_theme.css">
-<link rel="stylesheet" href="/static/mysifa_user_chip.css">
-<link rel="stylesheet" href="/static/mysifa_prod_core.css">
+<link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
+<link rel="stylesheet" href="/static/mysifa_user_chip.css?v=__V_LABEL__">
+<link rel="stylesheet" href="/static/mysifa_prod_core.css?v=__V_LABEL__">
 </head>
 <body class="__STAGING_BODY_CLASS__">
 __STAGING_BANDEAU_HTML__
@@ -102,8 +90,8 @@ __STAGING_BANDEAU_HTML__
   </div>
 </div>
 <script>window.__APP_VERSION__ = "__V_LABEL__";</script>
-<script src="/static/mysifa_theme.js"></script>
-<script src="/static/mysifa_user_chip.js"></script>
-<script src="/static/mysifa_prod_core.js"></script>
+<script src="/static/mysifa_theme.js?v=__V_LABEL__"></script>
+<script src="/static/mysifa_user_chip.js?v=__V_LABEL__"></script>
+<script src="/static/mysifa_prod_core.js?v=__V_LABEL__"></script>
 </body>
 </html>"""
