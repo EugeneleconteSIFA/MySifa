@@ -176,6 +176,15 @@
     ficheSelected: new Set(),
     ficheEditModal: null,
 
+    // Mappings OF en attente / dossiers sans OF (étape 2l)
+    pendingOfCount: 0,
+    pendingOfMappings: [],
+    pendingOfAmbigus: [],
+    pendingOfSansOf: [],
+    pendingOfLoading: false,
+    dossiersSansOf: [],
+    dossiersSansOfLoading: false,
+
     // Devis / Rentabilité
     devisList: [],
     selDevis: null,
@@ -489,6 +498,1399 @@
 
 
 
+
+
+
+  // ────────────────────────────────────────────────────────────────────
+  // ÉTAPE 2l — Onglet Fiches + OF (le dernier !)
+  //
+  // Code extrait littéralement de app/web/html.py (lignes 10425-11790) :
+  //   - Helpers OF : prodOfFmtDate, prodOfStatutLabel, prodOfStatutClass
+  //   - Loaders : loadOfImports, loadFiches, loadPendingOfCount,
+  //     loadPendingOfMappings, loadDossiersSansOf
+  //   - Mapping OF : submitOfMapping, submitOfMappingMulti
+  //   - Liaison OF -> dossiers : searchOfsForAttach, attachOfsToDossier,
+  //     toggleAttachOfPicker
+  //   - Sous-onglets : renderDossiersSansOfTab, renderPendingOfMappingsTab
+  //   - Export CSV : _csvEscape, _downloadCsv, exportFichesCsv, exportOfCsv
+  //   - Modals OF : openOfEditModal, closeOfEditModal, saveOfEdit,
+  //     renderOfEditModal
+  //   - Modals fiches : openFicheEditModal, closeFicheEditModal,
+  //     saveFicheEdit, renderFicheEditModal
+  //   - Modal import PDF : openOfImportModal, closeOfImportModal,
+  //     ofHandlePdfFile, ofValidateImport, ofDeleteImport, renderOfImportModal
+  //   - Renders : renderPaginationBar, renderOfTab, renderFichesTab,
+  //     renderOfPage
+  //
+  // Note : canAccessOfTab est déjà défini dans le socle 2e — ici on
+  // s'appuie dessus.
+  // ────────────────────────────────────────────────────────────────────
+
+function prodOfFmtDate(iso){
+  if(!iso) return '—';
+  const d=String(iso).slice(0,10);
+  const m=d.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? m[3]+'/'+m[2]+'/'+m[1] : d;
+}
+const OF_FIELD_LABELS={
+  of_numero:'OF n°',date_creation:'Date création',delai_client:'Délai client',
+  reference:'Référence',machine:'Machine',laize:'Laize',format:'Format',
+  matiere:'Matière',ref_matiere:'Réf. matière',glassine:'Glassine',
+  ref_adhesif:'Réf. adhésif',qte_adhesif_g:'Qté adhésif (g)',qte_adhesif_kg:'Qté adhésif (kg)',
+  adhesif_label:'Adhésif',qte_au_mille:'Quantité au mille',nb_levees:'Nb levées',
+  qte_etiquettes:'Qté étiquettes',qte_bobines:'Qté bobines',metrage:'Métrage',
+  conditionnement:'Conditionnement',tolerance:'Tolérance',cartons_type:'Type cartons',
+  nb_cartons:'Nb cartons',mandrins_dia:'Mandrins dia.',mandrin_longueur:'Mandrin long.',
+  nb_mandrins:'Nb mandrins',nb_tubes:'Nb tubes',bobinettes_completes:'Bobinettes complètes',
+  outil_1_forme:'Outil 1 — forme',outil_1_numero:'Outil 1 — n°',outil_1_angle:'Outil 1 — angle',
+  outil_1_mag:'Outil 1 — mag.',outil_1_cp:'Outil 1 — CP',outil_1_hauteur:'Outil 1 — hauteur',
+  outil_1_fournisseur:'Outil 1 — fournisseur',outil_2_forme:'Outil 2 — forme',
+  outil_2_numero:'Outil 2 — n°',outil_2_angle:'Outil 2 — angle',outil_2_cp:'Outil 2 — CP',
+  outil_alt_forme:'Outil alt. — forme',outil_alt_numero:'Outil alt. — n°',
+  outil_alt_angle:'Outil alt. — angle',outil_alt_fournisseur:'Outil alt. — fournisseur',
+};
+function prodOfStatutLabel(st){
+  const m={en_attente:'En attente',valide:'Validé',rejete:'Rejeté'};
+  return m[st]||st||'—';
+}
+function prodOfStatutClass(st){
+  if(st==='valide') return 'prod-of-statut prod-of-statut--valide';
+  if(st==='rejete') return 'prod-of-statut prod-of-statut--rejete';
+  return 'prod-of-statut prod-of-statut--attente';
+}
+async function loadOfImports(){
+  set({ofImportsLoading:true});
+  try{
+    const q=encodeURIComponent(S.ofSearch||'');
+    const offset=(S.ofPage||0)*50;
+    const url='/api/of/list?limit=50&offset='+offset+(q?'&q='+q:'');
+    const data=await api(url);
+    set({
+      ofImports: Array.isArray(data.rows)?data.rows:[],
+      ofTotal:   data.total||0,
+      ofImportsLoading:false,
+    });
+  }catch(e){
+    set({ofImportsLoading:false});
+    toast(e.message||'Erreur chargement des OF','error');
+  }
+}
+
+async function loadFiches(){
+  set({fichesLoading:true});
+  try{
+    const q=encodeURIComponent(S.ficheSearch||'');
+    const offset=(S.fichePage||0)*50;
+    const url='/api/fiches-techniques/list?limit=50&offset='+offset+(q?'&q='+q:'');
+    const data=await api(url);
+    set({fiches:Array.isArray(data.rows)?data.rows:[],ficheTotal:data.total||0,fichesLoading:false});
+  }catch(e){
+    set({fichesLoading:false});
+    toast(e.message||'Erreur chargement fiches techniques','error');
+  }
+}
+async function loadPendingOfCount(){
+  try{
+    const data=await api('/api/admin/of-link-pending/count');
+    set({
+      pendingOfCount:Number(data&&data.count||0),
+      pendingOfAmbigus:Number(data&&data.ambigus||0),
+      pendingOfSansOf:Number(data&&data.sans_of||0),
+    });
+  }catch(e){
+    set({pendingOfCount:0,pendingOfAmbigus:0,pendingOfSansOf:0});
+  }
+}
+
+async function loadPendingOfMappings(){
+  set({pendingOfLoading:true});
+  try{
+    const data=await api('/api/admin/of-link-pending');
+    set({
+      pendingOfMappings:Array.isArray(data&&data.items)?data.items:[],
+      pendingOfCount:Number(data&&data.total||0),
+      pendingOfLoading:false,
+    });
+  }catch(e){
+    set({pendingOfLoading:false});
+    toast(e.message||'Erreur chargement mappings à valider','error');
+  }
+}
+
+async function submitOfMapping(planningId, ofId){
+  try{
+    await api('/api/admin/link-planning-of',{
+      method:'POST',
+      body:JSON.stringify({planning_id:planningId, of_id:ofId}),
+    });
+    toast(ofId==null?'Planning délié.':'OF lié.');
+    await loadPendingOfMappings();
+    render();
+  }catch(e){
+    toast(e.message||'Erreur enregistrement','error');
+  }
+}
+async function submitOfMappingMulti(planningId, ofIds){
+  if(!ofIds || !ofIds.length){ toast('Aucun OF sélectionné.','error'); return; }
+  try{
+    const data=await api('/api/admin/planning-of-links',{
+      method:'POST',
+      body:JSON.stringify({planning_id:planningId, of_ids:ofIds}),
+    });
+    const added=Number(data&&data.added||0);
+    const skip=Number(data&&data.skipped_existing||0);
+    let msg='';
+    if(added) msg=added+' OF lié'+(added>1?'s':'')+'.';
+    if(skip)  msg+=(msg?' ':'')+skip+' déjà liés ignorés.';
+    toast(msg||'Aucun changement.');
+    await loadPendingOfMappings();
+    await loadDossiersSansOf();
+    loadPendingOfCount();
+    render();
+  }catch(e){
+    toast(e.message||'Erreur enregistrement','error');
+  }
+}
+
+async function loadDossiersSansOf(){
+  set({dossiersSansOfLoading:true});
+  try{
+    const data=await api('/api/admin/dossiers-sans-of');
+    set({
+      dossiersSansOf:Array.isArray(data&&data.items)?data.items:[],
+      dossiersSansOfLoading:false,
+    });
+  }catch(e){
+    set({dossiersSansOfLoading:false});
+    toast(e.message||'Erreur chargement dossiers sans OF','error');
+  }
+}
+
+async function searchOfsForAttach(planningId, term){
+  const key='attach-'+planningId;
+  const inputId='attach-search-'+planningId;
+  // Helpers focus : capture la position du caret avant chaque render,
+  // restaure après. Évite l'inversion des caractères en saisie rapide.
+  function captureFocus(){
+    const ae=document.activeElement;
+    if(ae && ae.id===inputId){
+      return {focused:true, start:ae.selectionStart, end:ae.selectionEnd, value:ae.value};
+    }
+    return null;
+  }
+  function restoreFocus(snap){
+    if(!snap||!snap.focused) return;
+    requestAnimationFrame(()=>{
+      const el=document.getElementById(inputId);
+      if(!el) return;
+      try{
+        el.focus();
+        if(snap.start!=null){
+          const end=snap.end!=null?snap.end:snap.start;
+          el.setSelectionRange(snap.start, end);
+        }
+      }catch(e){}
+    });
+  }
+  let snap=captureFocus();
+  S[key+'-loading']=true; render();
+  restoreFocus(snap);
+  try{
+    const q=encodeURIComponent(term||'');
+    const data=await api('/api/of/search?limit=20'+(q?'&q='+q:''));
+    // Recapture juste avant le 2e render (l'utilisateur a pu taper pendant le fetch)
+    snap=captureFocus()||snap;
+    S[key+'-results']=Array.isArray(data&&data.items)?data.items:[];
+    S[key+'-loading']=false;
+    render();
+    restoreFocus(snap);
+  }catch(e){
+    snap=captureFocus()||snap;
+    S[key+'-loading']=false; render();
+    restoreFocus(snap);
+    toast(e.message||'Erreur de recherche','error');
+  }
+}
+
+async function attachOfsToDossier(planningId, ofIds){
+  if(!ofIds || !ofIds.length){ toast('Coche au moins un OF.','error'); return; }
+  try{
+    const data=await api('/api/admin/planning-of-links',{
+      method:'POST',
+      body:JSON.stringify({planning_id:planningId, of_ids:ofIds}),
+    });
+    const added=Number(data&&data.added||0);
+    toast(added+' OF attaché'+(added>1?'s':'')+' au dossier.');
+    // Reset l'état du picker pour ce dossier
+    delete S['attach-'+planningId];
+    delete S['attach-'+planningId+'-results'];
+    delete S['attach-'+planningId+'-search'];
+    delete S['attach-'+planningId+'-loading'];
+    await loadDossiersSansOf();
+    loadPendingOfCount();
+    render();
+  }catch(e){
+    toast(e.message||'Erreur enregistrement','error');
+  }
+}
+
+function toggleAttachOfPicker(planningId){
+  const key='attach-'+planningId;
+  if(S[key]){
+    delete S[key];
+    delete S[key+'-results'];
+    delete S[key+'-search'];
+    delete S[key+'-loading'];
+    render();
+    return;
+  }
+  S[key]=true;
+  S[key+'-search']='';
+  // search initiale (vide → 20 plus récents)
+  searchOfsForAttach(planningId, '');
+}
+
+function renderDossiersSansOfTab(){
+  if(S.dossiersSansOfLoading){
+    return h('div',{className:'card',style:{padding:'24px',textAlign:'center',color:'var(--muted)'}},'Chargement…');
+  }
+  const items=S.dossiersSansOf||[];
+  if(items.length===0){
+    return h('div',{className:'card',style:{padding:'24px',textAlign:'center',color:'var(--muted)'}},
+      h('div',{style:{fontSize:'15px',fontWeight:600,color:'var(--text2)',marginBottom:'6px'}},'Aucun dossier sans OF'),
+      h('div',null,'Tous les dossiers actifs ont au moins un OF lié.')
+    );
+  }
+  const intro=h('div',{style:{marginBottom:'16px',padding:'12px 16px',background:'var(--accent-bg)',border:'1px solid var(--border)',borderRadius:'10px',fontSize:'13px',color:'var(--text2)',lineHeight:1.6}},
+    h('div',{style:{fontWeight:600,color:'var(--text)',marginBottom:'4px'}},
+      items.length+' dossier'+(items.length>1?'s':'')+' actif'+(items.length>1?'s':'')+' sans OF lié'),
+    'Recherche dans tous les OF existants pour en attacher un (ou plusieurs), ou importe un nouvel OF PDF.'
+  );
+
+  const cards=items.map(it=>{
+    const key='attach-'+it.planning_id;
+    const pickerOpen=!!S[key];
+    const results=S[key+'-results']||[];
+    const isLoading=!!S[key+'-loading'];
+    const searchVal=S[key+'-search']||'';
+
+    const head=h('div',{style:'display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap'},
+      h('div',{style:'min-width:0'},
+        h('div',{style:'font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px'},'Planning #'+it.planning_id),
+        h('div',{style:'font-size:14px;font-weight:600;color:var(--text)'},'OF attendu : '+escHtml(it.numero_of||'—')),
+        h('div',{style:'font-size:12px;color:var(--muted);margin-top:2px'},
+          'Réf produit : ',escHtml(it.ref_produit||'—'),
+          it.machine?' · Machine : '+escHtml(it.machine):'',
+          it.statut?' · '+escHtml(it.statut):''
+        )
+      ),
+      h('div',{style:'display:flex;gap:8px;align-items:center;flex-wrap:wrap'},
+        h('button',{
+          style:'padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap',
+          onClick:openOfImportModal,
+          title:'Importer un nouvel OF PDF (la liaison sera à faire ensuite)'
+        },iconEl('upload',12),' Importer OF PDF'),
+        h('button',{
+          style:'padding:8px 14px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-size:12px;font-weight:700;white-space:nowrap',
+          onClick:()=>toggleAttachOfPicker(it.planning_id)
+        },pickerOpen?'Fermer la recherche':'Chercher un OF')
+      )
+    );
+
+    if(!pickerOpen){
+      return h('div',{className:'card',style:{padding:'14px 18px',marginBottom:'12px'}}, head);
+    }
+
+    const searchInput=h('input',{
+      id:'attach-search-'+it.planning_id,
+      type:'text',
+      placeholder:'Rechercher par OF n°, référence, machine…',
+      value:searchVal,
+      style:'width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;margin-bottom:10px',
+      oninput:function(e){
+        const v=e.target.value;
+        S[key+'-search']=v;
+        clearTimeout(window['__attachDeb-'+it.planning_id]);
+        window['__attachDeb-'+it.planning_id]=setTimeout(()=>searchOfsForAttach(it.planning_id, v), 180);
+      },
+    });
+
+    const resultRows=isLoading
+      ? [h('div',{style:'padding:14px;color:var(--muted);font-size:13px;text-align:center'},'Recherche en cours…')]
+      : (results.length===0
+          ? [h('div',{style:'padding:14px;color:var(--muted);font-size:13px;text-align:center'},'Aucun résultat')]
+          : results.map(c=>{
+              const dateImp=(c.date_import||'').slice(0,10)||'—';
+              return h('label',{
+                style:'display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:5px;cursor:pointer;background:var(--bg)',
+              },
+                h('input',{type:'checkbox','data-attach-plan':String(it.planning_id),value:String(c.id),style:'margin:0;flex-shrink:0;cursor:pointer'}),
+                h('div',{style:'flex:1;min-width:0'},
+                  h('div',{style:'font-weight:600;color:var(--text);font-size:13px'},escHtml(c.of_numero||'—')),
+                  h('div',{style:'font-size:12px;color:var(--muted);margin-top:2px'},
+                    'Réf : ',escHtml(c.reference||'—'),
+                    c.machine?' · '+escHtml(c.machine):'',
+                    ' · importé ',dateImp
+                  )
+                )
+              );
+            })
+        );
+
+    const attachBtn=h('button',{
+      style:'margin-top:10px;padding:9px 14px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-size:12px;font-weight:700',
+      onClick:()=>{
+        const boxes=document.querySelectorAll('[data-attach-plan="'+it.planning_id+'"]:checked');
+        const ofIds=Array.from(boxes).map(b=>parseInt(b.value,10)).filter(x=>!isNaN(x));
+        attachOfsToDossier(it.planning_id, ofIds);
+      }
+    },'Attacher les OF sélectionnés au dossier');
+
+    return h('div',{className:'card',style:{padding:'14px 18px',marginBottom:'12px'}},
+      head,
+      h('div',{style:'margin-top:14px;padding-top:12px;border-top:1px dashed var(--border)'},
+        searchInput,
+        h('div',null, ...resultRows),
+        attachBtn
+      )
+    );
+  });
+
+  return h('div',null, intro, ...cards);
+}
+
+function renderPendingOfMappingsTab(){
+  if(S.pendingOfLoading){
+    return h('div',{className:'card',style:{padding:'24px',textAlign:'center',color:'var(--muted)'}},'Chargement…');
+  }
+  const items=S.pendingOfMappings||[];
+  if(items.length===0){
+    return h('div',{className:'card',style:{padding:'24px',textAlign:'center',color:'var(--muted)'}},
+      h('div',{style:{fontSize:'15px',fontWeight:600,color:'var(--text2)',marginBottom:'6px'}},'Aucun mapping à valider'),
+      h('div',null,'Tous les plannings avec un numero_of sont liés automatiquement à un OF, ou n\'ont aucun OF candidat.')
+    );
+  }
+  const intro=h('div',{style:{marginBottom:'16px',padding:'12px 16px',background:'var(--accent-bg)',border:'1px solid var(--border)',borderRadius:'10px',fontSize:'13px',color:'var(--text2)',lineHeight:1.6}},
+    h('div',{style:{fontWeight:600,color:'var(--text)',marginBottom:'4px'}},
+      items.length+' planning'+(items.length>1?'s':'')+' à associer manuellement'),
+    'Le moteur a trouvé plusieurs OF candidats sans pouvoir choisir. Sélectionne le bon OF pour chaque ligne.'
+  );
+
+  const cards=items.map(it=>{
+    const candRows=(it.candidates||[]).map(c=>{
+      const dateImp=(c.date_import||'').slice(0,10)||'—';
+      return h('label',{
+        style:'display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;background:var(--bg)',
+      },
+        h('input',{type:'checkbox','data-pending-plan':String(it.planning_id),value:String(c.id),style:'margin:0;flex-shrink:0;cursor:pointer'}),
+        h('div',{style:'flex:1;min-width:0'},
+          h('div',{style:'font-weight:600;color:var(--text);font-size:13px'},escHtml(c.of_numero||'—')),
+          h('div',{style:'font-size:12px;color:var(--muted);margin-top:2px'},
+            'Réf : ',escHtml(c.reference||'—'),
+            c.machine?' · '+escHtml(c.machine):'',
+            ' · importé ',dateImp,
+            c.imported_by?' par '+escHtml(c.imported_by):''
+          )
+        )
+      );
+    });
+
+    return h('div',{className:'card',style:{padding:'16px 18px',marginBottom:'14px'}},
+      h('div',{style:'display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px;flex-wrap:wrap'},
+        h('div',null,
+          h('div',{style:'font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px'},'Planning #'+it.planning_id),
+          h('div',{style:'font-size:14px;font-weight:600;color:var(--text)'},escHtml(it.numero_of||'—')),
+          h('div',{style:'font-size:12px;color:var(--muted);margin-top:2px'},
+            'Réf produit : ',escHtml(it.ref_produit||'—'),
+            it.machine?' · Machine : '+escHtml(it.machine):''
+          )
+        ),
+        h('div',{style:'display:flex;gap:8px;align-items:center;flex-wrap:wrap'},
+          h('button',{
+            style:'padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:12px;font-weight:600',
+            title:'Ignorer (laisse non lié, sera reproposé au prochain chargement)',
+            onClick:()=>submitOfMapping(it.planning_id, null)
+          },'Ignorer'),
+          h('button',{
+            style:'padding:8px 14px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-size:12px;font-weight:700',
+            onClick:()=>{
+              const boxes=document.querySelectorAll('[data-pending-plan="'+it.planning_id+'"]:checked');
+              const ofIds=Array.from(boxes).map(b=>parseInt(b.value,10)).filter(x=>!isNaN(x));
+              if(!ofIds.length){ toast('Coche au moins un OF.','error'); return; }
+              submitOfMappingMulti(it.planning_id, ofIds);
+            }
+          },'Lier les OF sélectionnés')
+        )
+      ),
+      h('div',{style:'font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px'},
+        (it.candidates||[]).length+' candidat'+((it.candidates||[]).length>1?'s':'')+' trouvé'+((it.candidates||[]).length>1?'s':'')),
+      ...candRows
+    );
+  });
+
+  return h('div',null, intro, ...cards);
+}
+function _csvEscape(v){
+  if(v==null) return '';
+  const s=String(v);
+  if(s.includes(';')||s.includes('"')||s.includes('\n')||s.includes('\r'))
+    return '"'+s.replace(/"/g,'""')+'"';
+  return s;
+}
+function _downloadCsv(filename, headers, cols, rows){
+  const lines=[headers.join(';')];
+  for(const r of rows){
+    lines.push(cols.map(c=>_csvEscape(r[c])).join(';'));
+  }
+  const csv='\ufeff'+lines.join('\r\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},800);
+}
+async function exportFichesCsv(){
+  try{
+    const q=encodeURIComponent(S.ficheSearch||'');
+    const all=[];
+    let offset=0;
+    const limit=200;
+    while(true){
+      const url='/api/fiches-techniques/list?limit='+limit+'&offset='+offset+(q?'&q='+q:'');
+      const data=await api(url);
+      const rows=Array.isArray(data.rows)?data.rows:[];
+      all.push(...rows);
+      if(rows.length<limit||all.length>=(data.total||0)) break;
+      offset+=limit;
+    }
+    if(!all.length){toast('Aucune fiche à exporter.','info');return;}
+    const cols=['id','reference','designation','client','format','eti_laize','eti_longueur','support','matiere','machine','nb_couleurs','source','date_import'];
+    const headers=['ID','Référence','Désignation','Client','Format','Laize eti. (mm)','Longueur eti.','Support','Matière','Machine','Nb couleurs','Source','Date import'];
+    const ymd=new Date().toISOString().slice(0,10);
+    _downloadCsv('fiches_techniques_'+ymd+'.csv',headers,cols,all);
+    toast(all.length+' fiche'+(all.length>1?'s':'')+' exportée'+(all.length>1?'s':'')+'.');
+  }catch(e){
+    toast(e.message||'Erreur export.','error');
+  }
+}
+async function exportOfCsv(){
+  try{
+    const q=encodeURIComponent(S.ofSearch||'');
+    const all=[];
+    let offset=0;
+    const limit=200;
+    while(true){
+      const url='/api/of/list?limit='+limit+'&offset='+offset+(q?'&q='+q:'');
+      const data=await api(url);
+      const rows=Array.isArray(data.rows)?data.rows:[];
+      all.push(...rows);
+      if(rows.length<limit||all.length>=(data.total||0)) break;
+      offset+=limit;
+    }
+    if(!all.length){toast('Aucun OF à exporter.','info');return;}
+    const cols=['id','of_numero','reference','machine','delai_client','format','date_creation','qte_etiquettes','qte_bobines','metrage','matiere','conditionnement','outil_1_numero','nb_mandrins','nb_cartons','nb_tubes','statut','date_import','imported_by'];
+    const headers=['ID','OF n°','Référence','Machine','Délai client','Format','Date création','Qté étiquettes','Qté bobines','Métrage','Matière','Conditionnement','Outil 1','Nb mandrins','Nb cartons','Nb tubes','Statut','Date import','Importé par'];
+    const ymd=new Date().toISOString().slice(0,10);
+    _downloadCsv('of_imports_'+ymd+'.csv',headers,cols,all);
+    toast(all.length+' OF exporté'+(all.length>1?'s':'')+'.');
+  }catch(e){
+    toast(e.message||'Erreur export.','error');
+  }
+}
+function openOfEditModal(row){
+  set({ofEditModal:{...row}});
+  renderOfEditModal();
+}
+function closeOfEditModal(){
+  const existing=document.getElementById('of-edit-overlay');
+  if(existing) existing.remove();
+  set({ofEditModal:null});
+  render();
+}
+window.closeOfEditModal = closeOfEditModal;
+
+async function saveOfEdit(){
+  const m=S.ofEditModal;
+  if(!m) return;
+  const tv=id=>{const el=document.getElementById(id);return el?el.value.trim()||null:null;};
+  const nv=id=>{const el=document.getElementById(id);return el&&el.value!==''?parseFloat(el.value)||null:null;};
+  const iv=id=>{const el=document.getElementById(id);return el&&el.value!==''?parseInt(el.value)||null:null;};
+  const payload={
+    of_numero:            tv('ofe-numero'),
+    reference:            tv('ofe-reference'),
+    date_creation:        tv('ofe-date'),
+    delai_client:         tv('ofe-delai'),
+    machine:              tv('ofe-machine'),
+    laize:                nv('ofe-laize'),
+    format:               tv('ofe-format'),
+    matiere:              tv('ofe-matiere'),
+    ref_matiere:          tv('ofe-ref-matiere'),
+    glassine:             tv('ofe-glassine'),
+    ref_adhesif:          tv('ofe-ref-adhesif'),
+    qte_adhesif_g:        nv('ofe-qte-adhesif-g'),
+    qte_adhesif_kg:       nv('ofe-qte-adhesif-kg'),
+    adhesif_label:        tv('ofe-adhesif-label'),
+    qte_au_mille:         nv('ofe-qte-mille'),
+    nb_levees:            iv('ofe-nb-levees'),
+    qte_etiquettes:       iv('ofe-qte'),
+    qte_bobines:          nv('ofe-bobines'),
+    metrage:              iv('ofe-metrage'),
+    tolerance:            tv('ofe-tolerance'),
+    bobinettes_completes: tv('ofe-bobinettes'),
+    conditionnement:      tv('ofe-cond'),
+    cartons_type:         tv('ofe-cartons-type'),
+    nb_cartons:           iv('ofe-cartons'),
+    mandrins_dia:         tv('ofe-mandrins-dia'),
+    mandrin_longueur:     nv('ofe-mandrin-longueur'),
+    nb_mandrins:          iv('ofe-mandrins'),
+    nb_tubes:             iv('ofe-tubes'),
+    outil_1_forme:        tv('ofe-outil1-forme'),
+    outil_1_numero:       tv('ofe-outil1-numero'),
+    outil_1_angle:        tv('ofe-outil1-angle'),
+    outil_1_mag:          tv('ofe-outil1-mag'),
+    outil_1_cp:           tv('ofe-outil1-cp'),
+    outil_1_hauteur:      nv('ofe-outil1-hauteur'),
+    outil_1_fournisseur:  tv('ofe-outil1-fournisseur'),
+    outil_2_forme:        tv('ofe-outil2-forme'),
+    outil_2_numero:       tv('ofe-outil2-numero'),
+    outil_2_angle:        tv('ofe-outil2-angle'),
+    outil_2_cp:           tv('ofe-outil2-cp'),
+    outil_alt_forme:      tv('ofe-outa-forme'),
+    outil_alt_numero:     tv('ofe-outa-numero'),
+    outil_alt_angle:      tv('ofe-outa-angle'),
+    outil_alt_fournisseur:tv('ofe-outa-fournisseur'),
+  };
+  try{
+    await api('/api/of/'+m.id,{method:'PATCH',body:JSON.stringify(payload)});
+    toast('OF mis à jour.');
+    closeOfEditModal();
+    await loadOfImports();
+    render();
+  }catch(e){
+    toast(e.message||'Erreur mise à jour.','error');
+  }
+}
+window.saveOfEdit = saveOfEdit;
+function renderOfEditModal(){
+  const existing=document.getElementById('of-edit-overlay');
+  if(existing) existing.remove();
+  const m=S.ofEditModal;
+  if(!m) return;
+  const _f=(id,lbl,val,type='text')=>`<div>
+    <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">${lbl}</label>
+    <input id="${id}" type="${type}" value="${String(val==null?'':val).replace(/"/g,'&quot;')}"
+      style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 11px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
+  </div>`;
+  const _sec=(title,fields,open=true)=>`
+    <div class="ofe-sec" style="border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden">
+      <div class="ofe-sec-hd" style="display:flex;justify-content:space-between;align-items:center;padding:11px 16px;cursor:pointer;background:var(--accent-bg);border-bottom:1px solid var(--border);user-select:none">
+        <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--accent)">${title}</span>
+        <svg class="sec-chev" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" style="color:var(--accent);transition:transform .18s;flex-shrink:0;${open?'transform:rotate(180deg)':''}"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div class="ofe-sec-body" style="display:${open?'grid':'none'};grid-template-columns:1fr 1fr 1fr;gap:10px 14px;padding:14px;background:var(--card)">
+        ${fields}
+      </div>
+    </div>`;
+  const overlay=document.createElement('div');
+  overlay.id='of-edit-overlay';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box';
+  overlay.onclick=e=>{if(e.target===overlay)closeOfEditModal();};
+  overlay.innerHTML=`
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px 24px 18px;max-width:900px;width:100%;max-height:92vh;overflow-y:auto;box-sizing:border-box">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <div style="font-size:15px;font-weight:700;color:var(--text)">Modifier l'OF</div>
+        <button onclick="closeOfEditModal()" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;font-size:20px;line-height:1;font-family:inherit">×</button>
+      </div>
+      ${_sec('Identification',[
+        _f('ofe-numero','OF n°',m.of_numero),
+        _f('ofe-reference','Référence',m.reference),
+        _f('ofe-date','Date création',(m.date_creation||'').slice(0,10),'date'),
+        _f('ofe-delai','Délai client',m.delai_client),
+        _f('ofe-machine','Machine',m.machine),
+      ].join(''),true)}
+      ${_sec('Matière / Support',[
+        _f('ofe-laize','Laize',m.laize,'number'),
+        _f('ofe-format','Format',m.format),
+        _f('ofe-matiere','Matière',m.matiere),
+        _f('ofe-ref-matiere','Réf. matière',m.ref_matiere),
+        _f('ofe-glassine','Glassine',m.glassine),
+      ].join(''))}
+      ${_sec('Adhésif',[
+        _f('ofe-ref-adhesif','Réf. adhésif',m.ref_adhesif),
+        _f('ofe-qte-adhesif-g','Qté adhésif (g)',m.qte_adhesif_g,'number'),
+        _f('ofe-qte-adhesif-kg','Qté adhésif (kg)',m.qte_adhesif_kg,'number'),
+        _f('ofe-adhesif-label','Label adhésif',m.adhesif_label),
+      ].join(''))}
+      ${_sec('Quantités',[
+        _f('ofe-qte-mille','Qté au mille',m.qte_au_mille,'number'),
+        _f('ofe-nb-levees','Nb levées',m.nb_levees,'number'),
+        _f('ofe-qte','Qté étiquettes',m.qte_etiquettes,'number'),
+        _f('ofe-bobines','Qté bobines',m.qte_bobines,'number'),
+        _f('ofe-metrage','Métrage',m.metrage,'number'),
+        _f('ofe-tolerance','Tolérance',m.tolerance),
+        _f('ofe-bobinettes','Bobinettes complètes',m.bobinettes_completes),
+      ].join(''))}
+      ${_sec('Conditionnement',[
+        _f('ofe-cond','Conditionnement',m.conditionnement),
+        _f('ofe-cartons-type','Type cartons',m.cartons_type),
+        _f('ofe-cartons','Nb cartons',m.nb_cartons,'number'),
+        _f('ofe-mandrins-dia','Mandrins dia.',m.mandrins_dia),
+        _f('ofe-mandrin-longueur','Mandrin long.',m.mandrin_longueur,'number'),
+        _f('ofe-mandrins','Nb mandrins',m.nb_mandrins,'number'),
+        _f('ofe-tubes','Nb tubes',m.nb_tubes,'number'),
+      ].join(''))}
+      ${_sec('Outillage',[
+        _f('ofe-outil1-forme','Outil 1 — forme',m.outil_1_forme),
+        _f('ofe-outil1-numero','Outil 1 — n°',m.outil_1_numero),
+        _f('ofe-outil1-angle','Outil 1 — angle',m.outil_1_angle),
+        _f('ofe-outil1-mag','Outil 1 — mag.',m.outil_1_mag),
+        _f('ofe-outil1-cp','Outil 1 — CP',m.outil_1_cp),
+        _f('ofe-outil1-hauteur','Outil 1 — hauteur',m.outil_1_hauteur,'number'),
+        _f('ofe-outil1-fournisseur','Outil 1 — fournisseur',m.outil_1_fournisseur),
+        _f('ofe-outil2-forme','Outil 2 — forme',m.outil_2_forme),
+        _f('ofe-outil2-numero','Outil 2 — n°',m.outil_2_numero),
+        _f('ofe-outil2-angle','Outil 2 — angle',m.outil_2_angle),
+        _f('ofe-outil2-cp','Outil 2 — CP',m.outil_2_cp),
+        _f('ofe-outa-forme','Outil alt. — forme',m.outil_alt_forme),
+        _f('ofe-outa-numero','Outil alt. — n°',m.outil_alt_numero),
+        _f('ofe-outa-angle','Outil alt. — angle',m.outil_alt_angle),
+        _f('ofe-outa-fournisseur','Outil alt. — fournisseur',m.outil_alt_fournisseur),
+      ].join(''))}
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <button id="ofe-cancel-btn" style="padding:9px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit;font-size:13px">Annuler</button>
+        <button id="ofe-save-btn" style="padding:9px 16px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700">Enregistrer</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelectorAll('.ofe-sec-hd').forEach(hd=>{
+    hd.addEventListener('click',()=>{
+      const body=hd.nextElementSibling;
+      const chev=hd.querySelector('.sec-chev');
+      const open=body.style.display!=='none';
+      body.style.display=open?'none':'grid';
+      chev.style.transform=open?'':'rotate(180deg)';
+    });
+  });
+  overlay.querySelector('#ofe-cancel-btn').onclick=closeOfEditModal;
+  overlay.querySelector('#ofe-save-btn').onclick=saveOfEdit;
+}
+
+function openFicheEditModal(row){
+  set({ficheEditModal:{...row}});
+  renderFicheEditModal();
+}
+function closeFicheEditModal(){
+  const existing=document.getElementById('fiche-edit-overlay');
+  if(existing) existing.remove();
+  set({ficheEditModal:null});
+  render();
+}
+async function saveFicheEdit(){
+  const m=S.ficheEditModal;
+  if(!m) return;
+  const tv=id=>{const el=document.getElementById(id);return el?el.value.trim()||null:null;};
+  const nv=id=>{const el=document.getElementById(id);return el&&el.value!==''?parseFloat(el.value)||null:null;};
+  const iv=id=>{const el=document.getElementById(id);return el&&el.value!==''?parseInt(el.value)||null:null;};
+  const bv=id=>{const el=document.getElementById(id);return el?parseInt(el.value)||0:0;};
+  const payload={
+    reference:                  tv('fce-ref'),
+    designation:                tv('fce-desig'),
+    client:                     tv('fce-client'),
+    machine:                    tv('fce-machine'),
+    date_modif:                 tv('fce-date-modif'),
+    format:                     tv('fce-format'),
+    eti_laize:                  nv('fce-eti-laize'),
+    eti_longueur:               nv('fce-eti-longueur'),
+    eti_rayons:                 nv('fce-eti-rayons'),
+    eti_perforations:           tv('fce-eti-perforations'),
+    mod_laize:                  nv('fce-mod-laize'),
+    mod_longueur:               nv('fce-mod-longueur'),
+    mod_nb_front:               iv('fce-mod-front'),
+    lateral_ext:                nv('fce-lat-ext'),
+    horizontal:                 nv('fce-horizontal'),
+    lateral_int:                nv('fce-lat-int'),
+    support:                    tv('fce-support'),
+    matiere:                    tv('fce-matiere'),
+    adhesif:                    tv('fce-adhesif'),
+    glassine:                   tv('fce-glassine'),
+    laize_optimale:             nv('fce-laize-opt'),
+    laize_optionnelle:          nv('fce-laize-optn'),
+    epaisseur:                  nv('fce-epaisseur'),
+    qte_au_mille:               nv('fce-qte-mille'),
+    outil1_forme:               tv('fce-o1-forme'),
+    outil1_numero_sifa:         tv('fce-o1-numero'),
+    outil1_laize:               nv('fce-o1-laize'),
+    outil1_epaisseur:           nv('fce-o1-epaisseur'),
+    outil1_nb_dents:            iv('fce-o1-dents'),
+    outil1_nb_front:            iv('fce-o1-front'),
+    outil1_nb_avance:           iv('fce-o1-avance'),
+    outil2_forme:               tv('fce-o2-forme'),
+    outil2_numero_sifa:         tv('fce-o2-numero'),
+    outil2_epaisseur:           nv('fce-o2-epaisseur'),
+    outil2_nb_dents:            iv('fce-o2-dents'),
+    outil2_nb_front:            iv('fce-o2-front'),
+    outil2_nb_avance:           iv('fce-o2-avance'),
+    outil3_forme:               tv('fce-o3-forme'),
+    outil3_numero_sifa:         tv('fce-o3-numero'),
+    outil3_epaisseur:           nv('fce-o3-epaisseur'),
+    outil3_nb_dents:            iv('fce-o3-dents'),
+    outil3_nb_front:            iv('fce-o3-front'),
+    outil3_nb_avance:           iv('fce-o3-avance'),
+    nb_couleurs:                iv('fce-nb-couleurs'),
+    recto:                      bv('fce-recto'),
+    verso:                      bv('fce-verso'),
+    tete1_pantone:              tv('fce-t1-pantone'),
+    tete1_couleur:              tv('fce-t1-couleur'),
+    tete1_anilox:               tv('fce-t1-anilox'),
+    tete1_composition:          tv('fce-t1-compo'),
+    tete2_pantone:              tv('fce-t2-pantone'),
+    tete2_couleur:              tv('fce-t2-couleur'),
+    tete2_anilox:               tv('fce-t2-anilox'),
+    tete2_composition:          tv('fce-t2-compo'),
+    tete3_pantone:              tv('fce-t3-pantone'),
+    tete3_couleur:              tv('fce-t3-couleur'),
+    tete3_anilox:               tv('fce-t3-anilox'),
+    tete3_composition:          tv('fce-t3-compo'),
+    remarque:                   tv('fce-remarque'),
+    conditionnement:            tv('fce-cond'),
+    mandrin_dia:                tv('fce-mandrin-dia'),
+    mandrin_longueur:           nv('fce-mandrin-longueur'),
+    enroulement:                tv('fce-enroulement'),
+    nb_etiq_bobin:              iv('fce-nb-etiq-bobin'),
+    dia_ext:                    nv('fce-dia-ext'),
+    poids:                      nv('fce-poids'),
+    cales_sachets:              tv('fce-cales-sachets'),
+    cartons:                    tv('fce-cartons'),
+    nb_au_sol:                  iv('fce-nb-sol'),
+    nb_etage:                   iv('fce-nb-etage'),
+    nb_bobines_carton:          iv('fce-nb-bob-carton'),
+    palette_type:               tv('fce-palette-type'),
+    palette_nb_cartons_sol:     iv('fce-palette-sol'),
+    palette_nb_cartons_hauteur: iv('fce-palette-hauteur'),
+    palette_hauteur_max:        nv('fce-palette-hmax'),
+    particularite:              tv('fce-particularite'),
+    notes:                      tv('fce-notes'),
+  };
+  try{
+    await api('/api/fiches-techniques/'+m.id,{method:'PATCH',body:JSON.stringify(payload)});
+    toast('Fiche mise à jour.');
+    closeFicheEditModal();
+    await loadFiches();
+    render();
+  }catch(e){
+    toast(e.message||'Erreur mise à jour.','error');
+  }
+}
+function renderFicheEditModal(){
+  const existing=document.getElementById('fiche-edit-overlay');
+  if(existing) existing.remove();
+  const m=S.ficheEditModal;
+  if(!m) return;
+  const _f=(id,lbl,val,type='text')=>`<div>
+    <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">${lbl}</label>
+    <input id="${id}" type="${type}" value="${String(val==null?'':val).replace(/"/g,'&quot;')}"
+      style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 11px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
+  </div>`;
+  const _cb=(id,lbl,val)=>`<div>
+    <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">${lbl}</label>
+    <select id="${id}" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 11px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
+      <option value="0" ${!val||val==0?'selected':''}>Non</option>
+      <option value="1" ${val==1?'selected':''}>Oui</option>
+    </select>
+  </div>`;
+  const _sec=(title,fields,open=true)=>`
+    <div class="fce-sec" style="border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden">
+      <div class="fce-sec-hd" style="display:flex;justify-content:space-between;align-items:center;padding:11px 16px;cursor:pointer;background:var(--accent-bg);border-bottom:1px solid var(--border);user-select:none">
+        <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--accent)">${title}</span>
+        <svg class="sec-chev" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" style="color:var(--accent);transition:transform .18s;flex-shrink:0;${open?'transform:rotate(180deg)':''}"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div class="fce-sec-body" style="display:${open?'grid':'none'};grid-template-columns:1fr 1fr 1fr;gap:10px 14px;padding:14px;background:var(--card)">
+        ${fields}
+      </div>
+    </div>`;
+  const overlay=document.createElement('div');
+  overlay.id='fiche-edit-overlay';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box';
+  overlay.onclick=e=>{if(e.target===overlay)closeFicheEditModal();};
+  overlay.innerHTML=`
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px 24px 18px;max-width:900px;width:100%;max-height:92vh;overflow-y:auto;box-sizing:border-box">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <div style="font-size:15px;font-weight:700;color:var(--text)">Modifier la fiche technique</div>
+        <button onclick="closeFicheEditModal()" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;font-size:20px;line-height:1;font-family:inherit">×</button>
+      </div>
+      ${_sec('Identification',[
+        _f('fce-ref','Référence',m.reference),
+        _f('fce-desig','Désignation',m.designation),
+        _f('fce-client','Client',m.client),
+        _f('fce-machine','Machine',m.machine),
+        _f('fce-date-modif','Date modif.',m.date_modif),
+      ].join(''),true)}
+      ${_sec('Étiquette',[
+        _f('fce-format','Format',m.format),
+        _f('fce-eti-laize','Laize eti. (mm)',m.eti_laize,'number'),
+        _f('fce-eti-longueur','Longueur eti. (mm)',m.eti_longueur,'number'),
+        _f('fce-eti-rayons','Rayons (mm)',m.eti_rayons,'number'),
+        _f('fce-eti-perforations','Perforations',m.eti_perforations),
+      ].join(''))}
+      ${_sec('Module',[
+        _f('fce-mod-laize','Laize module',m.mod_laize,'number'),
+        _f('fce-mod-longueur','Longueur module',m.mod_longueur,'number'),
+        _f('fce-mod-front','Nb front',m.mod_nb_front,'number'),
+      ].join(''))}
+      ${_sec('Échenillage',[
+        _f('fce-lat-ext','Latéral ext.',m.lateral_ext,'number'),
+        _f('fce-horizontal','Horizontal',m.horizontal,'number'),
+        _f('fce-lat-int','Latéral int.',m.lateral_int,'number'),
+      ].join(''))}
+      ${_sec('Matière',[
+        _f('fce-support','Support',m.support||m.matiere),
+        _f('fce-matiere','Matière',m.matiere),
+        _f('fce-adhesif','Adhésif',m.adhesif),
+        _f('fce-glassine','Glassine',m.glassine),
+        _f('fce-laize-opt','Laize optimale',m.laize_optimale,'number'),
+        _f('fce-laize-optn','Laize optionnelle',m.laize_optionnelle,'number'),
+        _f('fce-epaisseur','Épaisseur',m.epaisseur,'number'),
+        _f('fce-qte-mille','Qté au mille',m.qte_au_mille,'number'),
+      ].join(''))}
+      ${_sec('Outil 1',[
+        _f('fce-o1-forme','Forme',m.outil1_forme),
+        _f('fce-o1-numero','N° SIFA',m.outil1_numero_sifa),
+        _f('fce-o1-laize','Laize',m.outil1_laize,'number'),
+        _f('fce-o1-epaisseur','Épaisseur',m.outil1_epaisseur,'number'),
+        _f('fce-o1-dents','Nb dents',m.outil1_nb_dents,'number'),
+        _f('fce-o1-front','Nb front',m.outil1_nb_front,'number'),
+        _f('fce-o1-avance','Nb avance',m.outil1_nb_avance,'number'),
+      ].join(''))}
+      ${_sec('Outil 2',[
+        _f('fce-o2-forme','Forme',m.outil2_forme),
+        _f('fce-o2-numero','N° SIFA',m.outil2_numero_sifa),
+        _f('fce-o2-epaisseur','Épaisseur',m.outil2_epaisseur,'number'),
+        _f('fce-o2-dents','Nb dents',m.outil2_nb_dents,'number'),
+        _f('fce-o2-front','Nb front',m.outil2_nb_front,'number'),
+        _f('fce-o2-avance','Nb avance',m.outil2_nb_avance,'number'),
+      ].join(''))}
+      ${_sec('Outil 3',[
+        _f('fce-o3-forme','Forme',m.outil3_forme),
+        _f('fce-o3-numero','N° SIFA',m.outil3_numero_sifa),
+        _f('fce-o3-epaisseur','Épaisseur',m.outil3_epaisseur,'number'),
+        _f('fce-o3-dents','Nb dents',m.outil3_nb_dents,'number'),
+        _f('fce-o3-front','Nb front',m.outil3_nb_front,'number'),
+        _f('fce-o3-avance','Nb avance',m.outil3_nb_avance,'number'),
+      ].join(''))}
+      ${_sec('Impression',[
+        _f('fce-nb-couleurs','Nb couleurs',m.nb_couleurs,'number'),
+        _cb('fce-recto','Recto',m.recto),
+        _cb('fce-verso','Verso',m.verso),
+        _f('fce-t1-pantone','Tête 1 — Pantone',m.tete1_pantone),
+        _f('fce-t1-couleur','Tête 1 — Couleur',m.tete1_couleur),
+        _f('fce-t1-anilox','Tête 1 — Anilox',m.tete1_anilox),
+        _f('fce-t1-compo','Tête 1 — Composition',m.tete1_composition),
+        _f('fce-t2-pantone','Tête 2 — Pantone',m.tete2_pantone),
+        _f('fce-t2-couleur','Tête 2 — Couleur',m.tete2_couleur),
+        _f('fce-t2-anilox','Tête 2 — Anilox',m.tete2_anilox),
+        _f('fce-t2-compo','Tête 2 — Composition',m.tete2_composition),
+        _f('fce-t3-pantone','Tête 3 — Pantone',m.tete3_pantone),
+        _f('fce-t3-couleur','Tête 3 — Couleur',m.tete3_couleur),
+        _f('fce-t3-anilox','Tête 3 — Anilox',m.tete3_anilox),
+        _f('fce-t3-compo','Tête 3 — Composition',m.tete3_composition),
+        _f('fce-remarque','Remarque',m.remarque),
+      ].join(''))}
+      ${_sec('Conditionnement',[
+        _f('fce-cond','Conditionnement',m.conditionnement),
+        _f('fce-mandrin-dia','Mandrin dia.',m.mandrin_dia),
+        _f('fce-mandrin-longueur','Mandrin long.',m.mandrin_longueur,'number'),
+        _f('fce-enroulement','Enroulement',m.enroulement),
+        _f('fce-nb-etiq-bobin','Nb étiq./bobine',m.nb_etiq_bobin,'number'),
+        _f('fce-dia-ext','Dia. ext.',m.dia_ext,'number'),
+        _f('fce-poids','Poids',m.poids,'number'),
+        _f('fce-cales-sachets','Cales / sachets',m.cales_sachets),
+        _f('fce-cartons','Cartons',m.cartons),
+        _f('fce-nb-sol','Nb au sol',m.nb_au_sol,'number'),
+        _f('fce-nb-etage','Nb étages',m.nb_etage,'number'),
+        _f('fce-nb-bob-carton','Nb bob./carton',m.nb_bobines_carton,'number'),
+      ].join(''))}
+      ${_sec('Palettisation',[
+        _f('fce-palette-type','Type palette',m.palette_type),
+        _f('fce-palette-sol','Nb cartons/sol',m.palette_nb_cartons_sol,'number'),
+        _f('fce-palette-hauteur','Nb cartons/hauteur',m.palette_nb_cartons_hauteur,'number'),
+        _f('fce-palette-hmax','Hauteur max. (cm)',m.palette_hauteur_max,'number'),
+        _f('fce-particularite','Particularité',m.particularite),
+      ].join(''))}
+      ${_sec('Notes',[
+        `<div style="grid-column:1/-1"><label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Notes</label>
+        <textarea id="fce-notes" rows="3" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 11px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;resize:vertical">${String(m.notes||'').replace(/</g,'&lt;')}</textarea></div>`,
+      ].join(''))}
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <button id="fce-cancel-btn" style="padding:9px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit;font-size:13px">Annuler</button>
+        <button id="fce-save-btn" style="padding:9px 16px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700">Enregistrer</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelectorAll('.fce-sec-hd').forEach(hd=>{
+    hd.addEventListener('click',()=>{
+      const body=hd.nextElementSibling;
+      const chev=hd.querySelector('.sec-chev');
+      const open=body.style.display!=='none';
+      body.style.display=open?'none':'grid';
+      chev.style.transform=open?'':'rotate(180deg)';
+    });
+  });
+  overlay.querySelector('#fce-cancel-btn').onclick=closeFicheEditModal;
+  overlay.querySelector('#fce-save-btn').onclick=saveFicheEdit;
+}
+function openOfImportModal(){
+  set({ofImportModal:{step:1,file:null,parsed:null,parsing:false}});
+  render();
+}
+function closeOfImportModal(){
+  set({ofImportModal:null});
+  render();
+}
+async function ofHandlePdfFile(file){
+  if(!file||!/\.pdf$/i.test(file.name||'')){toast('Fichier PDF requis.','error');return;}
+  set({ofImportModal:{step:1,file,parsed:null,parsing:true}});
+  render();
+  const fd=new FormData();
+  fd.append('file',file);
+  try{
+    const parsed=await fetch('/api/of/parse',{method:'POST',credentials:'include',body:fd})
+      .then(async r=>{
+        if(r.status===401){window.location.href='/';return null;}
+        if(!r.ok){
+          const err=await r.json().catch(()=>({}));
+          throw new Error(err.detail||('Erreur '+r.status));
+        }
+        return r.json();
+      });
+    if(!parsed) return;
+    set({ofImportModal:{step:2,file,parsed,parsing:false}});
+    render();
+  }catch(e){
+    set({ofImportModal:{step:1,file:null,parsed:null,parsing:false}});
+    toast(e.message||'Analyse PDF impossible.','error');
+    render();
+  }
+}
+async function ofValidateImport(){
+  const m=S.ofImportModal;
+  if(!m||!m.file) return;
+  const data={};
+  Object.keys(OF_FIELD_LABELS).forEach(k=>{
+    const el=document.getElementById('of-f-'+k);
+    if(el) data[k]=el.value;
+  });
+  const fd=new FormData();
+  fd.append('file',m.file);
+  fd.append('data',JSON.stringify(data));
+  try{
+    const r=await fetch('/api/of/validate',{method:'POST',credentials:'include',body:fd});
+    if(!r.ok){
+      const err=await r.json().catch(()=>({}));
+      throw new Error(err.detail||('Erreur '+r.status));
+    }
+    toast('OF importé.');
+    set({ofImportModal:null});
+    await loadOfImports();
+    render();
+  }catch(e){
+    toast(e.message||'Import impossible.','error');
+  }
+}
+async function ofDeleteImport(id){
+  if(!confirm('Supprimer cet import OF de la base ?')) return;
+  try{
+    await api('/api/of/'+id,{method:'DELETE'});
+    toast('Import supprimé.');
+    await loadOfImports();
+    render();
+  }catch(e){
+    toast(e.message||'Suppression impossible.','error');
+  }
+}
+function renderPaginationBar(page, total, pageSize, onPrev, onNext){
+  const totalPages=Math.max(1,Math.ceil(total/pageSize));
+  const start=total===0?0:page*pageSize+1;
+  const end=Math.min((page+1)*pageSize,total);
+  return h('div',{style:{display:'flex',alignItems:'center',gap:'10px',padding:'12px 0',fontSize:'12px',color:'var(--muted)'}},
+    h('button',{
+      style:'padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-size:12px',
+      disabled:page===0, onClick:onPrev
+    },'← Préc.'),
+    h('span',null,total===0?'Aucun résultat':`${start}–${end} sur ${total}`),
+    h('button',{
+      style:'padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-size:12px',
+      disabled:page>=totalPages-1, onClick:onNext
+    },'Suiv. →'),
+  );
+}
+
+function renderOfTab(){
+  const PAGE_SIZE=50;
+  const total=S.ofTotal||0;
+  const page=S.ofPage||0;
+
+  const toolbar=h('div',{style:{display:'flex',alignItems:'center',gap:'10px',marginBottom:'16px',flexWrap:'wrap'}},
+    h('input',{
+      id:'of-search-html',
+      type:'text',
+      placeholder:'Rechercher (OF n°, référence, machine…)',
+      value:S.ofSearch||'',
+      style:'flex:1;min-width:200px;max-width:320px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none',
+      oninput:async function(e){
+        const v=e.target.value;
+        const ss=e.target.selectionStart, se=e.target.selectionEnd;
+        set({ofSearch:v,ofPage:0});
+        await loadOfImports();
+        render();
+        requestAnimationFrame(()=>{
+          const el=document.getElementById('of-search-html');
+          if(el){el.focus();try{el.setSelectionRange(ss,se);}catch(x){}}
+        });
+      },
+      onkeydown:function(e){
+        if(e.key==='Escape'){set({ofSearch:'',ofPage:0});loadOfImports().then(()=>render());e.target.value='';}
+      },
+    }),
+    h('button',{
+      style:'padding:9px 14px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-size:13px;font-weight:700;white-space:nowrap',
+      onClick:openOfImportModal
+    },iconEl('upload',13),' Importer un OF'),
+    h('button',{
+      style:'padding:9px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-size:13px;font-weight:600;white-space:nowrap',
+      title:'Exporter tous les OF (filtre appliqué) en CSV',
+      onClick:exportOfCsv
+    },iconEl('download',13),' Exporter CSV'),
+    S.user&&S.user.role==='superadmin'&&S.ofSelected.size>0
+      ? h('button',{
+          style:'padding:9px 14px;border-radius:8px;border:none;background:var(--danger);color:#fff;cursor:pointer;font-size:13px;font-weight:700;white-space:nowrap',
+          onClick:async()=>{
+            const n=S.ofSelected.size;
+            if(!confirm(`Supprimer ${n} OF${n>1?'s':''} ?`)) return;
+            try{
+              await api('/api/of/bulk',{method:'DELETE',body:JSON.stringify({ids:[...S.ofSelected]})});
+              toast(`${n} OF${n>1?'s':''} supprimé${n>1?'s':''}.`);
+              set({ofSelected:new Set()});
+              await loadOfImports();
+              render();
+            }catch(e){toast(e.message||'Erreur.','error');}
+          }
+        },iconEl('trash',13),` Supprimer (${S.ofSelected.size})`)
+      : null
+  );
+
+  const rows=(S.ofImports||[]).map(row=>{
+    const stCls=prodOfStatutClass(row.statut);
+    const dateCrea=(row.date_creation||'').slice(0,10)||'—';
+    const acts=[
+      h('button',{
+        style:'padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer',
+        title:'Modifier', onClick:()=>openOfEditModal(row)
+      },iconEl('edit',13)),
+    ];
+    acts.push(h('button',{
+      style:'padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer',
+      title:'Aperçu OF', onClick:()=>{window.open('/api/of/'+row.id+'/pdf-preview','_blank');}
+    },iconEl('eye',13)));
+    if(row.pdf_filename){
+      acts.push(h('button',{
+        style:'padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer',
+        title:'Télécharger PDF', onClick:()=>{window.open('/api/of/'+row.id+'/pdf','_blank');}
+      },iconEl('download',13)));
+    }
+    if(S.user&&S.user.role==='superadmin'){
+      acts.push(h('button',{
+        style:'padding:4px 8px;border-radius:6px;border:1px solid rgba(248,113,113,.3);background:transparent;cursor:pointer;color:var(--danger)',
+        title:'Supprimer', onClick:()=>ofDeleteImport(row.id)
+      },iconEl('trash',13)));
+    }
+    return h('tr',null,
+      h('td',{style:{width:'36px'}},
+        h('input',{type:'checkbox',checked:S.ofSelected.has(row.id),style:'cursor:pointer',
+          onChange:function(e){
+            const sel=new Set(S.ofSelected);
+            if(e.target.checked)sel.add(row.id);else sel.delete(row.id);
+            set({ofSelected:sel});render();
+          }
+        })
+      ),
+      h('td',null,
+        h('div',null,escHtml(row.of_numero||'—')),
+        row.imported_by?h('div',{style:{fontSize:'11px',color:'var(--muted)'}},escHtml(row.imported_by)):null,
+      ),
+      h('td',null,escHtml(row.reference||'—')),
+      h('td',null,escHtml(row.machine||'—')),
+      h('td',null,escHtml(row.delai_client||'—')),
+      h('td',null,row.qte_etiquettes!=null?escHtml(String(row.qte_etiquettes)):'—'),
+      h('td',null,escHtml(dateCrea)),
+      h('td',null,h('span',{className:stCls},prodOfStatutLabel(row.statut))),
+      h('td',null,h('div',{style:{display:'flex',gap:'4px'}},...acts)),
+    );
+  });
+
+  const empty=h('tr',null,
+    h('td',{colSpan:'9',style:{textAlign:'center',color:'var(--muted)',padding:'24px'}},
+      S.ofImportsLoading?'Chargement…':(S.ofSearch?`Aucun résultat pour « ${escHtml(S.ofSearch)} »`:'Aucun OF importé')
+    )
+  );
+
+  return h('div',{className:'card',style:{padding:'18px 20px'}},
+    toolbar,
+    renderPaginationBar(page,total,50,
+      async()=>{if(page>0){set({ofPage:page-1});await loadOfImports();render();}},
+      async()=>{if(page<Math.ceil(total/50)-1){set({ofPage:page+1});await loadOfImports();render();}}
+    ),
+    h('div',{style:{overflowX:'auto'}},
+      h('table',{className:'table-std'},
+        h('thead',null,h('tr',null,
+          h('th',{style:{width:'36px'}},
+            h('input',{type:'checkbox',style:'cursor:pointer',
+              checked:(S.ofImports||[]).length>0&&(S.ofImports||[]).every(r=>S.ofSelected.has(r.id)),
+              onChange:function(e){
+                const ids=(S.ofImports||[]).map(r=>r.id);
+                set({ofSelected:e.target.checked?new Set(ids):new Set()});render();
+              }
+            })
+          ),
+          h('th',null,'OF n°'),h('th',null,'Référence'),h('th',null,'Machine'),
+          h('th',null,'Délai client'),h('th',null,'Qté étiquettes'),h('th',null,'Date création'),
+          h('th',null,'Statut'),h('th',null,'Actions')
+        )),
+        h('tbody',null,...(rows.length?rows:[empty]))
+      )
+    ),
+  );
+}
+
+function renderFichesTab(){
+  const PAGE_SIZE=50;
+  const total=S.ficheTotal||0;
+  const page=S.fichePage||0;
+
+  const toolbar=h('div',{style:{display:'flex',alignItems:'center',gap:'10px',marginBottom:'16px',flexWrap:'wrap'}},
+    h('input',{
+      id:'fiche-search-html',
+      type:'text',
+      placeholder:'Rechercher (référence, désignation, client…)',
+      value:S.ficheSearch||'',
+      style:'flex:1;min-width:200px;max-width:320px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none',
+      oninput:async function(e){
+        const v=e.target.value;
+        const ss=e.target.selectionStart,se=e.target.selectionEnd;
+        set({ficheSearch:v,fichePage:0});
+        await loadFiches();render();
+        requestAnimationFrame(()=>{
+          const el=document.getElementById('fiche-search-html');
+          if(el){el.focus();try{el.setSelectionRange(ss,se);}catch(x){}}
+        });
+      },
+      onkeydown:function(e){
+        if(e.key==='Escape'){set({ficheSearch:'',fichePage:0});loadFiches().then(()=>render());e.target.value='';}
+      },
+    }),
+    h('button',{
+      style:'padding:9px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-size:13px;font-weight:600;white-space:nowrap',
+      title:'Exporter toutes les fiches (filtre appliqué) en CSV',
+      onClick:exportFichesCsv
+    },iconEl('download',13),' Exporter CSV'),
+    S.user&&S.user.role==='superadmin'&&S.ficheSelected.size>0
+      ? h('button',{
+          style:'padding:9px 14px;border-radius:8px;border:none;background:var(--danger);color:#fff;cursor:pointer;font-size:13px;font-weight:700;white-space:nowrap',
+          onClick:async()=>{
+            const n=S.ficheSelected.size;
+            if(!confirm(`Supprimer ${n} fiche${n>1?'s':''} ?`)) return;
+            try{
+              await api('/api/fiches-techniques/bulk',{method:'DELETE',body:JSON.stringify({ids:[...S.ficheSelected]})});
+              toast(`${n} fiche${n>1?'s':''} supprimée${n>1?'s':''}.`);
+              set({ficheSelected:new Set()});
+              await loadFiches();render();
+            }catch(e){toast(e.message||'Erreur.','error');}
+          }
+        },iconEl('trash',13),` Supprimer (${S.ficheSelected.size})`)
+      : null
+  );
+
+  const rows=(S.fiches||[]).map(row=>{
+    const acts=[
+      h('button',{
+        style:'padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer',
+        title:'Prévisualiser PDF',onClick:()=>window.open('/api/fiches-techniques/'+row.id+'/pdf-preview','_blank')
+      },iconEl('file',13)),
+      h('button',{
+        style:'padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer',
+        title:'Modifier',onClick:()=>openFicheEditModal(row)
+      },iconEl('edit',13)),
+    ];
+    if(S.user&&S.user.role==='superadmin'){
+      acts.push(h('button',{
+        style:'padding:4px 8px;border-radius:6px;border:1px solid rgba(248,113,113,.3);background:transparent;cursor:pointer;color:var(--danger)',
+        title:'Supprimer',
+        onClick:async()=>{
+          if(!confirm('Supprimer cette fiche ?')) return;
+          try{await api('/api/fiches-techniques/'+row.id,{method:'DELETE'});toast('Fiche supprimée.');await loadFiches();render();}
+          catch(e){toast(e.message||'Erreur.','error');}
+        }
+      },iconEl('trash',13)));
+    }
+    return h('tr',null,
+      h('td',{style:{width:'36px'}},
+        h('input',{type:'checkbox',checked:S.ficheSelected.has(row.id),style:'cursor:pointer',
+          onChange:function(e){
+            const sel=new Set(S.ficheSelected);
+            if(e.target.checked)sel.add(row.id);else sel.delete(row.id);
+            set({ficheSelected:sel});render();
+          }
+        })
+      ),
+      h('td',null,escHtml(row.reference||'—')),
+      h('td',null,escHtml(row.format||'—')),
+      h('td',null,row.eti_laize!=null?escHtml(String(row.eti_laize)+' mm'):'—'),
+      h('td',null,escHtml(row.support||row.matiere||'—')),
+      h('td',null,escHtml(row.machine||'—')),
+      h('td',null,row.nb_couleurs!=null?escHtml(String(row.nb_couleurs)):'—'),
+      h('td',null,escHtml(row.source||'—')),
+      h('td',null,h('div',{style:{display:'flex',gap:'4px'}},...acts)),
+    );
+  });
+
+  const empty=h('tr',null,
+    h('td',{colSpan:'9',style:{textAlign:'center',color:'var(--muted)',padding:'24px'}},
+      S.fichesLoading?'Chargement…':(S.ficheSearch?`Aucun résultat pour « ${escHtml(S.ficheSearch)} »`:'Aucune fiche technique importée')
+    )
+  );
+
+  return h('div',{className:'card',style:{padding:'18px 20px'}},
+    toolbar,
+    renderPaginationBar(page,total,50,
+      async()=>{if(page>0){set({fichePage:page-1});await loadFiches();render();}},
+      async()=>{if(page<Math.ceil(total/50)-1){set({fichePage:page+1});await loadFiches();render();}}
+    ),
+    h('div',{style:{overflowX:'auto'}},
+      h('table',{className:'table-std'},
+        h('thead',null,h('tr',null,
+          h('th',{style:{width:'36px'}},
+            h('input',{type:'checkbox',style:'cursor:pointer',
+              checked:(S.fiches||[]).length>0&&(S.fiches||[]).every(r=>S.ficheSelected.has(r.id)),
+              onChange:function(e){
+                const ids=(S.fiches||[]).map(r=>r.id);
+                set({ficheSelected:e.target.checked?new Set(ids):new Set()});render();
+              }
+            })
+          ),
+          h('th',null,'Référence'),h('th',null,'Format'),h('th',null,'Laize eti.'),
+          h('th',null,'Support'),h('th',null,'Machine'),h('th',null,'Nb coul.'),
+          h('th',null,'Source'),h('th',null,'Actions')
+        )),
+        h('tbody',null,...(rows.length?rows:[empty]))
+      )
+    ),
+  );
+}
+
+function renderOfPage(){
+  const ambigusN = Number(S.pendingOfAmbigus || 0);
+  const sansOfN  = Number(S.pendingOfSansOf  || 0);
+  const pendingBadge = ambigusN > 0
+    ? h('span',{style:'display:inline-block;margin-left:8px;padding:2px 8px;border-radius:10px;background:var(--danger);color:#fff;font-size:11px;font-weight:700;line-height:1.4'}, String(ambigusN))
+    : null;
+  const sansOfBadge = sansOfN > 0
+    ? h('span',{style:'display:inline-block;margin-left:8px;padding:2px 8px;border-radius:10px;background:var(--danger);color:#fff;font-size:11px;font-weight:700;line-height:1.4'}, String(sansOfN))
+    : null;
+  const subNav=h('div',{style:{display:'flex',gap:'0',borderBottom:'1px solid var(--border)',marginBottom:'20px',flexWrap:'wrap'}},
+    h('button',{
+      style:`padding:10px 18px;font-size:13px;font-weight:600;border:none;background:transparent;cursor:pointer;border-bottom:2px solid ${S.ofSubTab==='of'?'var(--accent)':'transparent'};color:${S.ofSubTab==='of'?'var(--accent)':'var(--muted)'};font-family:inherit`,
+      onClick:()=>{set({ofSubTab:'of'});render();}
+    },'Ordres de fabrication'),
+    h('button',{
+      style:`padding:10px 18px;font-size:13px;font-weight:600;border:none;background:transparent;cursor:pointer;border-bottom:2px solid ${S.ofSubTab==='fiche'?'var(--accent)':'transparent'};color:${S.ofSubTab==='fiche'?'var(--accent)':'var(--muted)'};font-family:inherit`,
+      onClick:async()=>{set({ofSubTab:'fiche'});await loadFiches();render();}
+    },'Fiches techniques'),
+    h('button',{
+      style:`padding:10px 18px;font-size:13px;font-weight:600;border:none;background:transparent;cursor:pointer;border-bottom:2px solid ${S.ofSubTab==='pending'?'var(--accent)':'transparent'};color:${S.ofSubTab==='pending'?'var(--accent)':'var(--muted)'};font-family:inherit;display:inline-flex;align-items:center`,
+      onClick:async()=>{set({ofSubTab:'pending'});await loadPendingOfMappings();render();}
+    },'Mappings à valider', pendingBadge),
+    h('button',{
+      style:`padding:10px 18px;font-size:13px;font-weight:600;border:none;background:transparent;cursor:pointer;border-bottom:2px solid ${S.ofSubTab==='sansof'?'var(--accent)':'transparent'};color:${S.ofSubTab==='sansof'?'var(--accent)':'var(--muted)'};font-family:inherit;display:inline-flex;align-items:center`,
+      onClick:async()=>{set({ofSubTab:'sansof'});await loadDossiersSansOf();render();}
+    },'Dossiers sans OF', sansOfBadge),
+  );
+  return h('div',{style:{paddingLeft:'12px',paddingRight:'4px'}},
+    subNav,
+    S.ofSubTab==='fiche'   ? renderFichesTab()
+      : S.ofSubTab==='pending' ? renderPendingOfMappingsTab()
+      : S.ofSubTab==='sansof'  ? renderDossiersSansOfTab()
+      : renderOfTab()
+  );
+}
+function renderOfImportModal(){
+  const m=S.ofImportModal;
+  if(!m) return null;
+  let body;
+  if(m.parsing){
+    body=h('div',{style:{display:'flex',alignItems:'center',justifyContent:'center',gap:10,padding:'40px',color:'var(--muted)'}},
+      'Analyse du PDF…');
+  }else if(m.step===1){
+    const fileInput=h('input',{type:'file',accept:'.pdf,application/pdf',style:{display:'none'},id:'of-file-input'});
+    const pickFile=()=>fileInput.click();
+    fileInput.onchange=()=>{
+      const f=fileInput.files&&fileInput.files[0];
+      if(f) ofHandlePdfFile(f);
+    };
+    const dropzone=h('div',{className:'prod-of-dropzone',onClick:pickFile,
+      onDragover:e=>{e.preventDefault();e.currentTarget.classList.add('prod-of-dropzone--active');},
+      onDragleave:e=>{e.currentTarget.classList.remove('prod-of-dropzone--active');},
+      onDrop:e=>{
+        e.preventDefault();
+        e.currentTarget.classList.remove('prod-of-dropzone--active');
+        const f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0];
+        if(f) ofHandlePdfFile(f);
+      }},
+      iconEl('file',28),
+      h('div',{className:'prod-of-dropzone-title'},'Déposer un PDF ici'),
+      h('div',{className:'prod-of-dropzone-sub'},'ou cliquer pour sélectionner — .pdf uniquement')
+    );
+    body=h('div',null,fileInput,dropzone,
+      h('div',{style:{marginTop:'14px',textAlign:'center'}},
+        h('button',{className:'btn-ghost',onClick:pickFile},'Sélectionner un fichier')
+      )
+    );
+  }else{
+    const parsed=m.parsed||{};
+    const previewRows=Object.keys(OF_FIELD_LABELS).map(k=>{
+      const val=parsed[k];
+      const missing=val==null||val==='';
+      const display=val==null?'':String(val);
+      return h('tr',{className:missing?'prod-of-missing':''},
+        h('th',null,OF_FIELD_LABELS[k]),
+        h('td',null,h('input',{type:'text',id:'of-f-'+k,value:display}))
+      );
+    });
+    body=h('div',null,
+      h('p',{className:'subtitle',style:{marginBottom:'8px'}},
+        'Vérifiez les champs extraits. Les lignes surlignées indiquent une extraction manquante.'),
+      h('table',{className:'prod-of-preview-table'},
+        h('tbody',null,...previewRows)
+      ),
+      h('div',{className:'contact-modal-actions',style:{marginTop:'12px'}},
+        h('button',{className:'btn-ghost',onClick:closeOfImportModal},'Annuler'),
+        h('button',{className:'btn-sm',onClick:()=>ofValidateImport()},'Valider l\'import')
+      )
+    );
+  }
+  const overlay=h('div',{className:'contact-modal-overlay',onClick:e=>{
+    if(e.target===e.currentTarget) closeOfImportModal();
+  }});
+  const box=h('div',{className:'contact-modal',style:{maxWidth:'720px',maxHeight:'88vh',overflowY:'auto'}},
+    h('div',{className:'contact-modal-head'},
+      h('h3',null,m.step===2?'Prévisualisation OF':'Importer un OF PDF'),
+      h('button',{className:'contact-close-btn',onClick:closeOfImportModal},'×')
+    ),
+    h('div',{className:'contact-modal-body'},body)
+  );
+  overlay.appendChild(box);
+  return overlay;
+}
 
 
   // ────────────────────────────────────────────────────────────────────
@@ -4359,7 +5761,12 @@ function renderProdKpis(){
           await loadImports();
         }else if(S.page === 'traceabilite'){
           await loadTracabilite();
+        }else if(S.page === 'of' && canAccessOfTab()){
+          await loadOfImports();
+          if(S.ofSubTab === 'fiche') await loadFiches();
         }
+        // Badge "Mappings OF à valider" dans la sidebar
+        try{ if(canAccessOfTab()) loadPendingOfCount(); }catch(e){}
       }catch(e){
         console.warn('[mysifa_prod_core] checkAuth load erreur:', e && e.message);
       }
@@ -4443,7 +5850,12 @@ function renderProdKpis(){
           await loadImports();
         }else if(S.page === 'traceabilite'){
           await loadTracabilite();
+        }else if(S.page === 'of' && canAccessOfTab()){
+          await loadOfImports();
+          if(S.ofSubTab === 'fiche') await loadFiches();
         }
+        // Badge "Mappings OF à valider" dans la sidebar
+        try{ if(canAccessOfTab()) loadPendingOfCount(); }catch(e){}
         render();
       }catch(e){
         console.warn('[mysifa_prod_core] doLogin load erreur:', e && e.message);
@@ -4505,6 +5917,11 @@ function renderProdKpis(){
         S.traceabiliteDossier = undefined;
         S.tracShowAttente = false;
         await loadTracabilite();
+      }else if(S.page === 'of' && canAccessOfTab()){
+        await loadOfImports();
+        if(S.ofSubTab === 'fiche') await loadFiches();
+        else if(S.ofSubTab === 'sans_of') await loadDossiersSansOf();
+        else if(S.ofSubTab === 'mappings') await loadPendingOfMappings();
       }
     }catch(e){
       console.warn('[mysifa_prod_core] nav() erreur:', e && e.message);
@@ -4664,6 +6081,12 @@ function renderProdKpis(){
                       S.subPage === 'erreurs' ? 'Sanity Score, incidents et erreurs de saisie' :
                       'KPIs, temps, quantit\u00e9s et qualit\u00e9 de saisie');
       pageContent = renderProdPage();
+    }else if(S.page === 'of'){
+      pageTitle = 'Ordres de fabrication';
+      pageSubtitle = 'Import PDF et consultation des OF';
+      pageContent = canAccessOfTab()
+        ? renderOfPage()
+        : h('div', {className: 'card-empty'}, 'Accès réservé à l\u0027administration.');
     }else if(S.page === 'traceabilite'){
       pageTitle = 'Traçabilité';
       pageSubtitle = 'Matières utilisées par dossier';
@@ -4715,6 +6138,12 @@ function renderProdKpis(){
         style: {borderLeft: '3px solid ' + (c[S.toast.type] || 'var(--accent)')},
       }, h('span', {style: {fontSize: '14px', color: c[S.toast.type] || 'var(--accent)'}}, S.toast.message)));
     }
+
+    // Modal d'import OF (mounted hors du flow, à la racine de #root)
+    if(S.ofImportModal){
+      const m = renderOfImportModal();
+      if(m) root.appendChild(m);
+    }
   }
 
   // ── Exposition globale pour debugging et étapes suivantes ──────────
@@ -4722,8 +6151,8 @@ function renderProdKpis(){
   // les compléter / les utiliser. À la fin du refactor (étape 2n), ces
   // exports pourront être retirés si plus nécessaire.
   window.__MYSIFA_PROD_STANDALONE__ = {
-    stage: '2k',
-    description: 'Onglet Tracabilite + FSC',
+    stage: '2l',
+    description: 'Onglet Fiches + OF (final)',
     loadedAt: new Date().toISOString(),
   };
   window.__prodCore = {
@@ -4763,9 +6192,20 @@ function renderProdKpis(){
     renderTracabilite, renderTracabiliteDossierDetail,
     openFscRapportModal, openTracMatieresEditModal, closeTracMatieresEditModal,
     tracResolveMachineId,
+    prodOfFmtDate, prodOfStatutLabel, prodOfStatutClass,
+    loadOfImports, loadFiches, loadPendingOfCount, loadPendingOfMappings,
+    submitOfMapping, submitOfMappingMulti, loadDossiersSansOf,
+    searchOfsForAttach, attachOfsToDossier, toggleAttachOfPicker,
+    renderDossiersSansOfTab, renderPendingOfMappingsTab,
+    exportFichesCsv, exportOfCsv,
+    openOfEditModal, closeOfEditModal, saveOfEdit, renderOfEditModal,
+    openFicheEditModal, closeFicheEditModal, saveFicheEdit, renderFicheEditModal,
+    openOfImportModal, closeOfImportModal, ofHandlePdfFile,
+    ofValidateImport, ofDeleteImport, renderOfImportModal,
+    renderPaginationBar, renderOfTab, renderFichesTab, renderOfPage,
   };
 
-  console.info('[mysifa_prod_core] tracabilite chargee - etape 2k', {
+  console.info('[mysifa_prod_core] fiches + OF charges - etape 2l (final)', {
     helpers: Object.keys(window.__prodCore).length,
     stateFields: Object.keys(S).length,
   });
