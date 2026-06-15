@@ -1812,6 +1812,20 @@ body.light .stock-empl-suggest-add:hover{background:rgba(124,58,237,.2);color:#1
 .expe-picker-warn{background:rgba(248,113,113,.15);color:var(--danger);padding:2px 8px;border-radius:10px;font-weight:600;font-size:9px;text-transform:uppercase;letter-spacing:.3px}
 .expe-picker-empty{padding:24px 12px;text-align:center;color:var(--muted);font-size:13px}
 
+/* MyExpé — sidebar sections collapsibles */
+.expe-sidebar-sections{display:flex;flex-direction:column;gap:2px}
+.expe-sec-header{display:flex;align-items:center;gap:8px;background:transparent;border:none;
+  padding:14px 16px 6px 12px;cursor:pointer;color:var(--muted);
+  font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.7px;
+  width:100%;text-align:left;transition:color .15s}
+.expe-sec-header:hover{color:var(--text2)}
+.expe-sec-header.has-active{color:var(--text2)}
+.expe-sec-header .expe-sec-chev{display:inline-flex;transition:transform .15s;flex-shrink:0;color:var(--muted)}
+.expe-sec-header.collapsed .expe-sec-chev{opacity:.6}
+.expe-sec-header.has-active .expe-sec-chev{color:var(--accent)}
+.expe-sec-label{flex:1}
+.expe-sec-body{display:flex;flex-direction:column;gap:2px;padding-bottom:4px}
+
 /* MyExpé — Palettes Europe */
 .expe-pal-eur-totaux{display:grid;grid-template-columns:repeat(4,minmax(140px,1fr));gap:12px;margin-bottom:14px}
 @media(max-width:760px){.expe-pal-eur-totaux{grid-template-columns:repeat(2,1fr)}}
@@ -2199,6 +2213,7 @@ let S={
   // Onglet Gestion palettes Europe
   expePalettesEuropeData:null,
   expePalettesEuropeLoading:false,
+  expePalEurSubTab:'suivi',                // 'suivi' | 'recap'
   expePalettesEuropeStatutFilter:'',     // '' | 'en_attente' | 'retournee' | 'perdue'
   expePalettesEuropeClientFilter:'',
   expePalettesEuropeQuery:'',
@@ -2457,6 +2472,10 @@ function icon(name,size=16){
     'users': '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
     'palette': '<circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>',
     'shield-check': '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/>',
+    // Palette bois — vue de côté : deck supérieur + traverse + 3 pieds
+    'pallet': '<rect x="2" y="7" width="20" height="3" rx="0.5"/><rect x="2" y="14" width="20" height="3" rx="0.5"/><line x1="5" y1="10" x2="5" y2="14"/><line x1="12" y1="10" x2="12" y2="14"/><line x1="19" y1="10" x2="19" y2="14"/><line x1="5" y1="17" x2="5" y2="20"/><line x1="12" y1="17" x2="12" y2="20"/><line x1="19" y1="17" x2="19" y2="20"/>',
+    'chevron-down': '<polyline points="6 9 12 15 18 9"/>',
+    'chevron-right': '<polyline points="9 6 15 12 9 18"/>',
   };
   return `<svg ${a} aria-hidden="true" style="display:inline-block;vertical-align:middle;flex-shrink:0">${p[name]||p['alert-circle']}</svg>`;
 }
@@ -6929,6 +6948,40 @@ function renderExpePalettesEurope(){
   const departs = data.departs || [];
   const recap = data.recap_clients || [];
   const tot = data.totaux || {};
+  const subTab = S.expePalEurSubTab || 'suivi';
+
+  // Sous-onglets
+  const subTabs = [
+    {key:'suivi', label:'Suivi', icon:'clipboard'},
+    {key:'recap', label:'Récap clients', icon:'users'},
+  ];
+  const subNav = h('div',{className:'nav-tabs',style:{marginBottom:'16px'}},
+    ...subTabs.map(t=>h('button',{
+      type:'button',
+      className:'nav-tab'+(subTab===t.key?' active':''),
+      onClick:()=>set({expePalEurSubTab:t.key})
+    },iconEl(t.icon,14),' ',t.label))
+  );
+
+  // Bandeau totaux (commun aux deux sous-onglets)
+  const totauxBlock = h('div',{className:'expe-pal-eur-totaux'},
+    h('div',{className:'expe-pal-eur-tot-card'},
+      h('div',{className:'expe-pal-eur-tot-lbl'},'Total envoyées'),
+      h('div',{className:'expe-pal-eur-tot-val'},String(tot.nb_pal_envoyees||0))
+    ),
+    h('div',{className:'expe-pal-eur-tot-card expe-pal-eur-tot-card--ok'},
+      h('div',{className:'expe-pal-eur-tot-lbl'},'Retournées'),
+      h('div',{className:'expe-pal-eur-tot-val'},String(tot.nb_pal_retournees||0))
+    ),
+    h('div',{className:'expe-pal-eur-tot-card expe-pal-eur-tot-card--warn'},
+      h('div',{className:'expe-pal-eur-tot-lbl'},'En attente'),
+      h('div',{className:'expe-pal-eur-tot-val'},String(tot.nb_pal_en_attente||0))
+    ),
+    h('div',{className:'expe-pal-eur-tot-card expe-pal-eur-tot-card--bad'},
+      h('div',{className:'expe-pal-eur-tot-lbl'},'Perdues'),
+      h('div',{className:'expe-pal-eur-tot-val'},String(tot.nb_pal_perdues||0))
+    )
+  );
 
   // Filtres
   const statutSel = h('select',{
@@ -7066,53 +7119,41 @@ function renderExpePalettesEurope(){
   }) : [h('tr',null,h('td',{colSpan:9,style:{color:'var(--muted)',padding:'18px',textAlign:'center'}},
     S.expePalettesEuropeLoading?'Chargement…':'Aucun départ palette Europe pour ces filtres'))];
 
-  return h('div',null,
-    // Bandeau totaux
-    h('div',{className:'expe-pal-eur-totaux'},
-      h('div',{className:'expe-pal-eur-tot-card'},
-        h('div',{className:'expe-pal-eur-tot-lbl'},'Total envoyées'),
-        h('div',{className:'expe-pal-eur-tot-val'},String(tot.nb_pal_envoyees||0))
-      ),
-      h('div',{className:'expe-pal-eur-tot-card expe-pal-eur-tot-card--ok'},
-        h('div',{className:'expe-pal-eur-tot-lbl'},'Retournées'),
-        h('div',{className:'expe-pal-eur-tot-val'},String(tot.nb_pal_retournees||0))
-      ),
-      h('div',{className:'expe-pal-eur-tot-card expe-pal-eur-tot-card--warn'},
-        h('div',{className:'expe-pal-eur-tot-lbl'},'En attente'),
-        h('div',{className:'expe-pal-eur-tot-val'},String(tot.nb_pal_en_attente||0))
-      ),
-      h('div',{className:'expe-pal-eur-tot-card expe-pal-eur-tot-card--bad'},
-        h('div',{className:'expe-pal-eur-tot-lbl'},'Perdues'),
-        h('div',{className:'expe-pal-eur-tot-val'},String(tot.nb_pal_perdues||0))
+  // Bloc Suivi : filtre + tableau détaillé
+  const suiviBlock = h('div',{className:'card'},
+    h('div',{className:'card-header',style:{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}},
+      h('h3',{className:'expe-mobile-hide-head'},'Départs détaillés'),
+      h('div',{style:{display:'flex',gap:'10px',alignItems:'center',marginLeft:'auto',flexWrap:'wrap'}},
+        statutSel,
+        searchInp,
+        S.expePalettesEuropeClientFilter ? h('button',{type:'button',className:'btn-ghost',
+          style:{fontSize:'12px',padding:'4px 10px'},
+          onClick:()=>{S.expePalettesEuropeClientFilter=''; void loadExpePalettesEurope();}
+        },'× Filtre : '+S.expePalettesEuropeClientFilter) : null
       )
     ),
-    // Récap par client
-    h('div',{className:'card',style:{marginBottom:'14px'}},
-      h('div',{className:'card-header'},
-        h('h3',null,'Récap par client'),
-        S.expePalettesEuropeClientFilter ? h('button',{type:'button',className:'btn-ghost',
-          style:{fontSize:'12px',padding:'4px 10px',marginLeft:'auto'},
-          onClick:()=>{S.expePalettesEuropeClientFilter=''; void loadExpePalettesEurope();}
-        },'× Filtre client : '+S.expePalettesEuropeClientFilter) : null
-      ),
-      h('div',{style:{padding:'14px 18px'}}, recapCards)
-    ),
-    // Filtres + tableau détaillé
-    h('div',{className:'card'},
-      h('div',{className:'card-header',style:{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}},
-        h('h3',null,'Départs détaillés'),
-        h('div',{style:{display:'flex',gap:'10px',alignItems:'center',marginLeft:'auto',flexWrap:'wrap'}},
-          statutSel,
-          searchInp
-        )
-      ),
-      h('div',{style:{overflowX:'auto'}},
-        h('table',{className:'table-std expe-departs-table'},
-          h('thead',null,head),
-          h('tbody',null,...bodyRows)
-        )
+    h('div',{style:{overflowX:'auto'}},
+      h('table',{className:'table-std expe-departs-table'},
+        h('thead',null,head),
+        h('tbody',null,...bodyRows)
       )
     )
+  );
+
+  // Bloc Récap : cards par client
+  const recapBlock = h('div',{className:'card'},
+    h('div',{className:'card-header'},
+      h('h3',{className:'expe-mobile-hide-head'},'Récap par client'),
+      h('div',{style:{fontSize:'11px',color:'var(--muted)',marginLeft:'auto'}},
+        recap.length+' client'+(recap.length>1?'s':'')+' avec palette Europe')
+    ),
+    h('div',{style:{padding:'14px 18px'}}, recapCards)
+  );
+
+  return h('div',null,
+    subNav,
+    totauxBlock,
+    subTab==='recap' ? recapBlock : suiviBlock
   );
 }
 
@@ -7334,20 +7375,63 @@ function renderExpe(){
       h('div',{className:'logo-brand'},'My',h('span',null,'Expé')),
       h('div',{className:'logo-sub'},'by SIFA')
     ),
-    h('button',{className:'nav-btn'+(tab==='suivi_departs'?' active':''),onClick:()=>set({expeTab:'suivi_departs'})},
-      iconEl('clipboard',15),'  Suivi départs'),
-    h('button',{className:'nav-btn'+(tab==='palettes_europe'?' active':''),onClick:()=>set({expeTab:'palettes_europe'})},
-      iconEl('package',15),'  Palettes Europe'),
-    h('button',{className:'nav-btn'+(tab==='comparateur'?' active':''),onClick:()=>set({expeTab:'comparateur'})},
-      iconEl('package',15),'  Comparateur'),
-    h('button',{className:'nav-btn'+(tab==='devis'?' active':''),onClick:()=>set({expeTab:'devis'})},
-      iconEl('mail',15),'  Devis'),
-    h('button',{className:'nav-btn'+(tab==='prospects'?' active':''),onClick:()=>set({expeTab:'prospects'})},
-      iconEl('users',15),'  Prospects'),
-    h('button',{className:'nav-btn'+(tab==='transporteurs'?' active':''),onClick:()=>set({expeTab:'transporteurs'})},
-      iconEl('truck',15),'  Transporteurs'),
-    h('button',{className:'nav-btn'+(tab==='poids'?' active':''),onClick:()=>set({expeTab:'poids'})},
-      iconEl('calculator',15),'  Poids envoi'),
+    // Sections collapsibles
+    (()=>{
+      const SECTIONS = [
+        { key:'ops', label:'Opérations', items:[
+          {tab:'suivi_departs',  ico:'clipboard', label:'Départs'},
+          {tab:'palettes_europe',ico:'pallet',    label:'Palettes Europe'},
+        ]},
+        { key:'prep', label:'Préparation envoi', items:[
+          {tab:'comparateur',ico:'sliders',   label:'Comparateur tarifs'},
+          {tab:'devis',      ico:'mail',      label:'Devis transporteurs'},
+          {tab:'poids',      ico:'calculator',label:'Calcul poids'},
+        ]},
+        { key:'ref', label:'Référentiel', items:[
+          {tab:'transporteurs',ico:'truck',label:'Transporteurs'},
+          {tab:'prospects',    ico:'users',label:'Prospects'},
+        ]},
+      ];
+      const lsKey = (k)=>'mysifa.expe.section.'+k;
+      const isCollapsed = (k)=>{
+        try{ return localStorage.getItem(lsKey(k)) === 'collapsed'; }catch(e){ return false; }
+      };
+      const toggleSection = (k)=>{
+        try{
+          const cur = isCollapsed(k);
+          localStorage.setItem(lsKey(k), cur?'expanded':'collapsed');
+        }catch(e){}
+        render();
+      };
+      const wrap = h('div',{className:'expe-sidebar-sections'});
+      SECTIONS.forEach(sec=>{
+        const collapsed = isCollapsed(sec.key);
+        const hasActive = sec.items.some(it=>it.tab===tab);
+        const header = h('button',{
+          type:'button',
+          className:'expe-sec-header'+(collapsed?' collapsed':'')+(hasActive?' has-active':''),
+          onClick:()=>toggleSection(sec.key),
+          'aria-expanded': String(!collapsed)
+        },
+          h('span',{className:'expe-sec-chev'},iconEl(collapsed?'chevron-right':'chevron-down',12)),
+          h('span',{className:'expe-sec-label'},sec.label)
+        );
+        wrap.appendChild(header);
+        if(!collapsed){
+          const body = h('div',{className:'expe-sec-body'});
+          sec.items.forEach(it=>{
+            body.appendChild(
+              h('button',{
+                className:'nav-btn'+(tab===it.tab?' active':''),
+                onClick:()=>set({expeTab:it.tab})
+              }, iconEl(it.ico,15), '  ', it.label)
+            );
+          });
+          wrap.appendChild(body);
+        }
+      });
+      return wrap;
+    })(),
     renderExpePlanningNav(),
     h('div',{className:'sidebar-bottom'},
       h('button',{className:'nav-btn back-mysifa',onClick:()=>{window.location.href='/'}},
@@ -7374,7 +7458,7 @@ function renderExpe(){
       h('div',{className:'mobile-topbar-sub'},
         tab==='suivi_departs'?(sub==='historique'?'Historique départs':'Départs programmés'):
         tab==='palettes_europe'?'Suivi des palettes Europe consignées':
-        tab==='transporteurs'?'Transporteurs':tab==='devis'?'Demandes de devis':tab==='prospects'?'Prospects transporteurs':tab==='poids'?'Poids envoi':'Comparateur tarifs')
+        tab==='transporteurs'?'Transporteurs':tab==='devis'?'Demandes de devis':tab==='prospects'?'Prospects transporteurs':tab==='poids'?'Calcul poids':'Comparateur tarifs')
     ),
     h('button',{type:'button',className:'mobile-home-btn',onClick:()=>{window.location.href='/'},'aria-label':'Accueil'},iconEl('home',20))
   );
@@ -7397,7 +7481,7 @@ function renderExpe(){
           h('div',{className:'subtitle'},
             tab==='suivi_departs'?(sub==='historique'?'Recherche multi-critères sur les départs validés'
               :'Enregistrement des enlèvements et validation vers l\'historique')
-            :tab==='palettes_europe'?'Quels clients ont reçu nos palettes Europe et lesquelles sont revenues'
+            :tab==='palettes_europe'?'Suivi des palettes Europe consignées — quels clients, combien, et combien sont revenues'
             :tab==='comparateur'?'Comparaison des transporteurs selon les grilles tarifaires actives en base'
             :tab==='devis'?'Prospection parallèle — demandes de tarif aux transporteurs'
             :tab==='prospects'?'Transporteurs hors référentiel — suivi de démarchage'

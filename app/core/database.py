@@ -3591,6 +3591,35 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 112, "matieres_premieres_is_europe")
 
+    # ── Migration 113 : DSI + Repiquage passent en matin/aprem ──────────
+    # Les affectations existantes etaient en creneau='journee' ; on les deplace
+    # par defaut sur 'matin' (l'utilisateur ajustera vers 'aprem' au cas par cas).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=113 LIMIT 1").fetchone():
+        rows = conn.execute(
+            "SELECT id, nom FROM machines WHERE actif = 1"
+        ).fetchall()
+        targets = []
+        for r in rows:
+            n = (r["nom"] or "").lower().strip()
+            n = (n.replace("é", "e").replace("è", "e").replace("ê", "e")
+                  .replace("à", "a").replace("â", "a")
+                  .replace("î", "i").replace("ô", "o"))
+            if n == "dsi" or n.startswith("dsi ") or n.endswith(" dsi"):
+                targets.append(r["id"])
+            elif "repiquage" in n or n == "rep" or n.startswith("rep "):
+                targets.append(r["id"])
+        if targets:
+            placeholders = ",".join(["?"] * len(targets))
+            sql = (
+                "UPDATE rh_planning_postes "
+                "SET creneau = 'matin' "
+                "WHERE machine_id IN (" + placeholders + ") "
+                "AND creneau = 'journee'"
+            )
+            conn.execute(sql, targets)
+            conn.commit()
+        _record_schema_migration(conn, 113, "dsi_repiquage_creneau_matin")
+
 
 def create_default_admin():
     import bcrypt
