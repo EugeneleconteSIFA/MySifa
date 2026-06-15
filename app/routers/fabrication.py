@@ -1499,14 +1499,26 @@ async def update_commentaire(saisie_id: int, request: Request):
     )
     return {"success": True}
 
+# ─── Endpoints repiquage (code 03 sur machine Repiquage) ──────────────────────
 
-# ─── Endpoints repiquage (code opération 92) ──────────────────────────────────
+
+def _is_machine_repiquage(name) -> bool:
+    n = (str(name or "")).lower().strip()
+    n = (n.replace("é", "e").replace("è", "e").replace("ê", "e")
+          .replace("à", "a").replace("â", "a")
+          .replace("î", "i").replace("ô", "o"))
+    # Forme NFC simple (les accents passent aussi via chars composes)
+    n = n.replace("é", "e").replace("è", "e").replace("ê", "e")
+    n = n.replace("à", "a").replace("â", "a")
+    n = n.replace("î", "i").replace("ô", "o")
+    return n == "repiquage" or n == "rep" or n.startswith("rep ")
+
 
 @router.patch("/api/fabrication/saisie/{saisie_id}/repiquage")
 async def update_saisie_repiquage(saisie_id: int, request: Request):
-    """Modifie qté étiquettes + commentaire d'une saisie repiquage (code 92).
+    """Modifie qte etiquettes + commentaire d'une saisie repiquage (code 03 sur machine Repiquage).
 
-    Réservé à l'auteur de la saisie (ou admin). Refuse les opérations autres que 92.
+    Reserve a l'auteur de la saisie (ou admin). Refuse les autres saisies.
     """
     user = get_current_user(request)
     _check_fab_access(user)
@@ -1518,25 +1530,26 @@ async def update_saisie_repiquage(saisie_id: int, request: Request):
     try:
         qte = float(str(qte_raw).replace(",", ".")) if qte_raw not in (None, "", "null") else None
     except Exception:
-        raise HTTPException(status_code=400, detail="Quantité d'étiquettes invalide")
+        raise HTTPException(status_code=400, detail="Quantite d'etiquettes invalide")
     if qte is None or qte < 0:
-        raise HTTPException(status_code=400, detail="Quantité d'étiquettes invalide")
+        raise HTTPException(status_code=400, detail="Quantite d'etiquettes invalide")
 
     with get_db() as conn:
         ex = conn.execute(
             "SELECT * FROM production_data WHERE id=?", (saisie_id,)
         ).fetchone()
         if not ex:
-            raise HTTPException(status_code=404, detail="Saisie non trouvée")
-        if (ex["operation_code"] or "").strip() != "92":
+            raise HTTPException(status_code=404, detail="Saisie non trouvee")
+        op_code = (ex["operation_code"] or "").strip()
+        if op_code != "03" or not _is_machine_repiquage(ex["machine"]):
             raise HTTPException(
                 status_code=400,
-                detail="Cet endpoint est réservé aux saisies repiquage (code 92)",
+                detail="Cet endpoint est reserve aux saisies repiquage (code 03 sur machine Repiquage)",
             )
 
         user_operateur = user.get("operateur_lie") or user.get("nom") or ""
         if not is_admin(user) and ex["operateur"] != user_operateur:
-            raise HTTPException(status_code=403, detail="Non autorisé")
+            raise HTTPException(status_code=403, detail="Non autorise")
 
         now_iso = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
         conn.execute(
@@ -1559,7 +1572,7 @@ async def update_saisie_repiquage(saisie_id: int, request: Request):
         user=user,
         action="UPDATE",
         module="fabrication",
-        objet=f"Saisie repiquage #{saisie_id} modifiée",
+        objet=f"Saisie repiquage #{saisie_id} modifiee",
         detail={"no_dossier": ex["no_dossier"], "qte_etiquettes": qte},
         ip=request.client.host if request.client else None,
     )
@@ -1568,9 +1581,9 @@ async def update_saisie_repiquage(saisie_id: int, request: Request):
 
 @router.delete("/api/fabrication/saisie/{saisie_id}/repiquage")
 def delete_saisie_repiquage(saisie_id: int, request: Request):
-    """Supprime une saisie repiquage (code 92).
+    """Supprime une saisie repiquage (code 03 sur machine Repiquage).
 
-    Réservé à l'auteur de la saisie (ou admin). Refuse les opérations autres que 92.
+    Reserve a l'auteur de la saisie (ou admin). Refuse les autres saisies.
     """
     user = get_current_user(request)
     _check_fab_access(user)
@@ -1580,16 +1593,17 @@ def delete_saisie_repiquage(saisie_id: int, request: Request):
             "SELECT * FROM production_data WHERE id=?", (saisie_id,)
         ).fetchone()
         if not ex:
-            raise HTTPException(status_code=404, detail="Saisie non trouvée")
-        if (ex["operation_code"] or "").strip() != "92":
+            raise HTTPException(status_code=404, detail="Saisie non trouvee")
+        op_code = (ex["operation_code"] or "").strip()
+        if op_code != "03" or not _is_machine_repiquage(ex["machine"]):
             raise HTTPException(
                 status_code=400,
-                detail="Cet endpoint est réservé aux saisies repiquage (code 92)",
+                detail="Cet endpoint est reserve aux saisies repiquage (code 03 sur machine Repiquage)",
             )
 
         user_operateur = user.get("operateur_lie") or user.get("nom") or ""
         if not is_admin(user) and ex["operateur"] != user_operateur:
-            raise HTTPException(status_code=403, detail="Non autorisé")
+            raise HTTPException(status_code=403, detail="Non autorise")
 
         conn.execute("DELETE FROM production_data WHERE id=?", (saisie_id,))
         conn.commit()
@@ -1598,7 +1612,7 @@ def delete_saisie_repiquage(saisie_id: int, request: Request):
         user=user,
         action="DELETE",
         module="fabrication",
-        objet=f"Saisie repiquage #{saisie_id} supprimée",
+        objet=f"Saisie repiquage #{saisie_id} supprimee",
         detail={"no_dossier": ex["no_dossier"]},
         ip=request.client.host if request.client else None,
     )

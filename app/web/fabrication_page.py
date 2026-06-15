@@ -3413,8 +3413,31 @@ function renderFooter(){
     );
   }
 
+  // ── Mode Repiquage : footer simplifié, ne dépend plus de l'état dossier ─
+  // Les codes 01/89 (début/fin de production cohesio) n'ont pas de sens en repiquage,
+  // donc on ignore en_cours_production / en_arret / fin_dossier hérités d'une autre
+  // machine ou d'un ancien cycle.
+  if(isRepiquageMode()){
+    if(e==='sans_session'||e==='loading'){
+      btns.push(h('button',{
+        className:'fab-btn fab-btn-primary',
+        disabled: e==='loading' || !hasMachine,
+        title: !hasMachine ? 'Sélectionnez une machine avant de commencer' : '',
+        onClick:()=>triggerOp('86','Arrivée personnel')
+      }, svgIcon('user',16),' Arrivée personnel'));
+    } else {
+      btns.push(h('button',{
+        className:'fab-btn fab-btn-success',
+        onClick:()=>openRepiquageModal(null)
+      }, svgIcon('plus-circle',16),' Saisir production'));
+      btns.push(h('button',{
+        className:'fab-btn fab-btn-muted fab-btn-sm',
+        onClick:()=>triggerOp('87','Départ personnel')
+      }, svgIcon('log-out',14),' Départ personnel'));
+    }
+  }
   // ── État : pas encore arrivé (ou après départ) ──
-  if(e==='sans_session'||e==='loading'){
+  else if(e==='sans_session'||e==='loading'){
     btns.push(h('button',{
       className:'fab-btn fab-btn-primary',
       disabled: e==='loading' || !hasMachine,
@@ -3425,17 +3448,10 @@ function renderFooter(){
 
   // ── État : arrivé, pas de dossier actif ──
   else if(e==='arrive'){
-    if(isRepiquageMode()){
-      btns.push(h('button',{
-        className:'fab-btn fab-btn-success',
-        onClick:()=>openRepiquageModal(null)
-      }, svgIcon('plus-circle',16),' Saisir production'));
-    } else {
-      btns.push(h('button',{
-        className:'fab-btn fab-btn-success',
-        onClick:()=>handleOpTrigger('01','Début de production','personnel')
-      }, svgIcon('plus-circle',16),' Début de production'));
-    }
+    btns.push(h('button',{
+      className:'fab-btn fab-btn-success',
+      onClick:()=>handleOpTrigger('01','Début de production','personnel')
+    }, svgIcon('plus-circle',16),' Début de production'));
     btns.push(h('button',{
       className:'fab-btn fab-btn-muted fab-btn-sm',
       onClick:()=>triggerOp('87','Départ personnel')
@@ -4294,7 +4310,7 @@ async function submitRepiquageSaisie(){
     } else {
       // Création (réutilise POST /api/fabrication/saisie avec operation=92)
       const body = {
-        operation: '92',
+        operation: '03',
         no_dossier: noDossier,
         qte_etiquettes: qte,
         commentaire: commentaire,
@@ -4342,7 +4358,7 @@ function renderRepiquageMain(){
   const hasMachine = !!(S.user && S.user.machine_id) || !!(isAdminUserMain && S.adminMachineId);
 
   // Filtrer les saisies code 92 du jour pour l'opérateur
-  const saisiesRep = (S.saisies||[]).filter(s => (s.operation_code||'').trim() === '92');
+  const saisiesRep = (S.saisies||[]).filter(s => (s.operation_code||'').trim() === '03');
 
   let alert = null;
   if(S.operateur && !hasMachine && !isAdminUserMain){
