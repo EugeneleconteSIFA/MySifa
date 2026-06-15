@@ -461,15 +461,106 @@ def get_of_for_planning_entry(entry_id: int, request: Request):
     return {"linked": True, "of": _row_dict(row), **base}
 
 
+def _enrich_of_row_from_fiche(of_row: dict) -> dict:
+    """Enrichit un OF row (dict) à partir de la fiche technique liée.
+
+    Politique :
+      - `reference` est TOUJOURS remplacée par le ref_produit_norm (option B),
+        extrait via le parser. Si l'extraction échoue, on garde la valeur
+        d'origine.
+      - Les autres champs (matiere, adhesif_label, ref_adhesif, glassine,
+        qte_au_mille) ne sont remplis QUE s'ils sont vides côté OF (option α).
+      - Désambiguïsation par machine : si plusieurs fiches partagent le
+        même ref_produit_norm, on prend celle dont la machine correspond à
+        l'OF (ou la première sans machine, sinon la première par id).
+
+    Lecture seule. Retourne un nouveau dict, ne modifie pas l'original.
+    """
+    enriched = dict(of_row) if of_row else {}
+
+    try:
+        from app.services.fiche_ref_parser import normalize_ref_produit
+    except Exception:
+        return enriched
+
+    # 1. Extraire ref_produit_norm depuis reference originale
+    ref_norm = normalize_ref_produit(enriched.get("reference") or "")
+    if ref_norm:
+        enriched["reference"] = ref_norm
+
+    if not ref_norm:
+        # Pas de ref normalisée → on ne peut pas chercher la fiche
+        return enriched
+
+    # 2. Chercher la fiche technique correspondante
+    machine_of = (enriched.get("machine") or "").strip()
+    try:
+        with get_db() as conn:
+            fiche = conn.execute(
+                """SELECT support, matiere, adhesif, glassine, qte_au_mille
+                   FROM fiches_techniques
+                   WHERE ref_produit_norm = ?
+                   ORDER BY
+                     CASE
+                       WHEN LOWER(TRIM(COALESCE(machine,''))) = LOWER(TRIM(?))
+                            AND TRIM(COALESCE(machine,'')) != '' THEN 0
+                       WHEN TRIM(COALESCE(machine,'')) = '' THEN 1
+                       ELSE 2
+                     END,
+                     id
+                   LIMIT 1""",
+                (ref_norm, machine_of),
+            ).fetchone()
+    except Exception:
+        fiche = None
+
+    if not fiche:
+        return enriched
+
+    f = dict(fiche)
+
+    def _empty(v):
+        return v is None or (isinstance(v, str) and not v.strip())
+
+    # 3. Mapping fiche → OF (uniquement si OF vide)
+    if _empty(enriched.get("matiere")):
+        ft_mat = (f.get("support") or "").strip() or (f.get("matiere") or "").strip()
+        if ft_mat:
+            enriched["matiere"] = ft_mat
+
+    ft_adh = (f.get("adhesif") or "").strip()
+    if _empty(enriched.get("adhesif_label")) and ft_adh:
+        enriched["adhesif_label"] = ft_adh
+    if _empty(enriched.get("ref_adhesif")) and ft_adh:
+        # Tente d'extraire un numéro propre (ex: "Permanent 2028Y - 19" → "2028")
+        m_ref = re.search(r"\b(\d{3,5})\b", ft_adh)
+        if m_ref:
+            enriched["ref_adhesif"] = m_ref.group(1)
+
+    if _empty(enriched.get("glassine")):
+        ft_gl = (f.get("glassine") or "").strip()
+        if ft_gl:
+            enriched["glassine"] = ft_gl
+
+    if enriched.get("qte_au_mille") in (None, "", 0, 0.0):
+        ft_qam = f.get("qte_au_mille")
+        if ft_qam is not None:
+            enriched["qte_au_mille"] = ft_qam
+
+    return enriched
+
+
 @router.get("/api/of/{of_id}/pdf-preview")
 def preview_of_pdf(of_id: int, request: Request):
     get_current_user(request)
     with get_db() as conn:
         row = conn.execute(
             """SELECT id, of_numero, reference, date_creation, delai_client,
-                      machine, format, matiere, laize, qte_etiquettes, qte_bobines,
+                      machine, format, matiere, ref_matiere, laize, qte_etiquettes, qte_bobines,
                       metrage, conditionnement, nb_cartons, nb_mandrins, nb_tubes,
-                      mandrins_dia, outil_1_numero, pdf_filename
+                      mandrins_dia, outil_1_numero, pdf_filename,
+                      ref_adhesif, adhesif_label, qte_adhesif_g, qte_adhesif_kg,
+                      glassine, qte_au_mille
                FROM of_imports WHERE id=?""",
             (of_id,),
         ).fetchone()
@@ -489,9 +580,12 @@ def preview_of_pdf(of_id: int, request: Request):
         )
 
     # OF importé via API (pas de PDF) → générer depuis le template vierge
+    # Enrichissement à la volée depuis la fiche technique liée
+    # (reference, matiere, adhesif, glassine, qte_au_mille).
     try:
         from app.services.of_pdf_generator import generate_of_pdf
-        pdf_bytes = generate_of_pdf(dict(row))
+        enriched = _enrich_of_row_from_fiche(dict(row))
+        pdf_bytes = generate_of_pdf(enriched)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:

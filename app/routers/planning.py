@@ -798,6 +798,27 @@ def _planned_end_iso_for_machine(
         return None
 
 
+def _normalize_palette_type(value) -> Optional[str]:
+    """Normalise la valeur palette_type pour l'affichage utilisateur.
+    Antibactérienne, perdue, jetable → 'Perdue'.
+    Europe (toutes variantes) → 'Europe'.
+    Sinon : valeur d'origine en Capitalize (pas de perte d'info)."""
+    if not value:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+    s = raw.lower()
+    if "antibac" in s or "anti-bac" in s or "anti bac" in s:
+        return "Perdue"
+    if "perdu" in s or "jetab" in s:
+        return "Perdue"
+    if "europe" in s or s == "eur" or s.startswith("eur "):
+        return "Europe"
+    # Cas non reconnu : garde la valeur mais en mise en forme propre
+    return raw[:1].upper() + raw[1:].lower() if len(raw) > 1 else raw.upper()
+
+
 def _is_palette_sized_box(label) -> bool:
     """Détecte si le format de carton/conteneur a une taille proche d'une
     palette standard (1200x800 mm). Dans ce cas, 1 carton = 1 palette.
@@ -922,7 +943,7 @@ def _slot_payload(e: dict, start_iso: str, end_iso: str) -> dict:
         "departement_livraison": (e.get("departement_livraison") or "").strip(),
         "ft_support": (e.get("_ft_support") or "").strip() or None,
         "ft_adhesif": (e.get("_ft_adhesif") or "").strip() or None,
-        "ft_palette_type": (e.get("_ft_palette_type") or "").strip() or None,
+        "ft_palette_type": _normalize_palette_type(e.get("_ft_palette_type")),
     }
 
 
