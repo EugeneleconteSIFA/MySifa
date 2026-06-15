@@ -5125,6 +5125,16 @@ function renderSanity(sanity, title){
   );
 }
 
+// ── Détails sanity (liste par type) ──────────────────────────────
+const SANITY_LABELS={
+  jour_first_last:{label:"Arrivée personnel / Départ personnel"},
+  jour_second_penult:{label:"Début de dossier / Fin de dossier"},
+  jour_need_prod_cal_tech:{label:"Saisie vide"},
+  jour_short_shift:{label:"Arrivée → Départ < 5h"},
+  jour_arret_50:{label:"Arrêt machine (code 50)"},
+  jour_missing_metrage:{label:"Métrage manquant (fin dossier)"},
+  jour_missing_etiquettes:{label:"Nombre d’étiquettes manquant (fin dossier)"},
+};
 function renderSanityEventsBlock(sanity){
   const events=sanity&&sanity.events?sanity.events:{};
   const keys=Object.keys(events||{}).filter(k=>(events[k]||[]).length>0);
