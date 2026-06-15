@@ -27,7 +27,7 @@ _PARIS = ZoneInfo("Europe/Paris")
 _MAX_BODY = 4000
 _PAGE_SIZE = 50
 _MAX_ATTACHMENT = 10 * 1024 * 1024
-_ALLOWED_EMOJIS = {"👍", "✅", "👀", "⚠️", "🔧", "❌"}
+_REACTION_MAX_BYTES = 32  # un emoji peut faire plusieurs bytes (ex. flag, ZWJ sequence)
 _MSG_SELECT = """m.id, m.user_id, m.user_nom, m.body, m.created_at, m.edited_at,
                    m.pinned_at, m.pinned_by, m.deleted_at,
                    m.reply_to_id, m.is_forwarded, m.forwarded_from_nom,
@@ -1201,8 +1201,13 @@ async def toggle_reaction(channel_id: int, msg_id: int, request: Request):
     user = _require(request)
     data = await request.json()
     emoji = (data.get("emoji") or "").strip()
-    if emoji not in _ALLOWED_EMOJIS:
-        raise HTTPException(status_code=400, detail="Emoji non autorisé")
+    if not emoji:
+        raise HTTPException(status_code=400, detail="Emoji manquant")
+    # Validation permissive : longueur en bytes raisonnable, pas d'espaces / contrôles
+    if len(emoji.encode("utf-8")) > _REACTION_MAX_BYTES:
+        raise HTTPException(status_code=400, detail="Emoji invalide")
+    if any(ch.isspace() or ord(ch) < 0x20 for ch in emoji):
+        raise HTTPException(status_code=400, detail="Emoji invalide")
 
     now = _now_iso()
     with get_db() as conn:
