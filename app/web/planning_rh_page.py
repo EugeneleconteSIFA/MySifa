@@ -715,10 +715,16 @@ const GRID_DEF = [
     ]
   },
   { code:'DSI', label:'DSI',                   color:'var(--c3)',
-    creneaux:[ { key:'journee', label:'Journée', hours:null, postes:['conducteur'] } ]
+    creneaux:[
+      { key:'matin', label:'Matin',       hours:null, postes:['conducteur'] },
+      { key:'aprem', label:'Après-midi',  hours:null, postes:['conducteur'] }
+    ]
   },
   { code:'REP', label:'Repiquage',             color:'var(--c4)',
-    creneaux:[ { key:'journee', label:'Journée', hours:null, postes:['conducteur'] } ]
+    creneaux:[
+      { key:'matin', label:'Matin',       hours:null, postes:['conducteur'] },
+      { key:'aprem', label:'Après-midi',  hours:null, postes:['conducteur'] }
+    ]
   },
 ];
 const POSTE_LABELS = {
@@ -2394,8 +2400,8 @@ function buildPrintPivotLayout(){
   header.innerHTML='Planning du personnel — '+weekLabel1+(weeks.length>1?' au '+weekLabel2:'');
   wrap.appendChild(header);
   
-  // Group 1: LOG, RESP, REP (all have journee only)
-  const group1Machines=GRID_DEF.filter(m=>['LOG','RESP','REP'].includes(m.code));
+  // Group 1: LOG, RESP (journee only)
+  const group1Machines=GRID_DEF.filter(m=>['LOG','RESP'].includes(m.code));
   if(group1Machines.length){
     wrap.appendChild(buildPivotTable(group1Machines,weeks,false));
   }
@@ -2405,8 +2411,8 @@ function buildPrintPivotLayout(){
   spacer.style.cssText='height:20px';
   wrap.appendChild(spacer);
   
-  // Group 2: C1, C2, DSI (C1/C2 have matin/aprem, DSI has journee only)
-  const group2Machines=GRID_DEF.filter(m=>['C1','C2','DSI'].includes(m.code));
+  // Group 2: C1, C2, REP, DSI — tous en matin/après-midi
+  const group2Machines=GRID_DEF.filter(m=>['C1','C2','REP','DSI'].includes(m.code));
   if(group2Machines.length){
     wrap.appendChild(buildPivotTable(group2Machines,weeks,true));
   }

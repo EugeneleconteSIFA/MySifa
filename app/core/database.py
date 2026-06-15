@@ -3524,6 +3524,73 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 110, "planning_entries_valide")
 
+    # v111 — MyExpé : lien départ ↔ dossier planning + suivi palettes Europe
+    # - planning_entry_id : trace le dossier de production source quand un départ
+    #   est créé via le picker "Depuis un dossier" dans Ajouter départ.
+    # - palette_europe (0/1) : marque ce départ comme expédition de palettes Europe
+    #   (consignées). Auto à 1 si la réf MyStock palette a is_europe=1.
+    # - palette_europe_statut : 'en_attente' (par défaut), 'retournee' ou 'perdue'.
+    # - palette_europe_date_retour : YYYY-MM-DD, optionnelle.
+    # - palette_europe_note : commentaire libre (raison de perte, n° BL retour…).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=111 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(expe_departs)").fetchall()}
+        if "planning_entry_id" not in cols:
+            conn.execute(
+                "ALTER TABLE expe_departs ADD COLUMN planning_entry_id INTEGER "
+                "REFERENCES planning_entries(id)"
+            )
+        if "palette_europe" not in cols:
+            conn.execute(
+                "ALTER TABLE expe_departs ADD COLUMN palette_europe INTEGER NOT NULL DEFAULT 0"
+            )
+        if "palette_europe_statut" not in cols:
+            conn.execute(
+                "ALTER TABLE expe_departs ADD COLUMN palette_europe_statut TEXT "
+                "NOT NULL DEFAULT 'en_attente'"
+            )
+        if "palette_europe_date_retour" not in cols:
+            conn.execute(
+                "ALTER TABLE expe_departs ADD COLUMN palette_europe_date_retour TEXT"
+            )
+        if "palette_europe_note" not in cols:
+            conn.execute(
+                "ALTER TABLE expe_departs ADD COLUMN palette_europe_note TEXT"
+            )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_expe_departs_planning_entry "
+            "ON expe_departs(planning_entry_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_expe_departs_palette_europe "
+            "ON expe_departs(palette_europe, palette_europe_statut)"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 111, "expe_departs_planning_link_palette_europe")
+
+    # v112 — MyStock : flag is_europe sur matières premières catégorie palette
+    # Marque les références palette consignées (Europe) pour détection auto dans MyExpé.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=112 LIMIT 1").fetchone():
+        mp_cols = {r["name"] for r in conn.execute("PRAGMA table_info(matieres_premieres)").fetchall()}
+        if "is_europe" not in mp_cols:
+            conn.execute(
+                "ALTER TABLE matieres_premieres ADD COLUMN is_europe INTEGER NOT NULL DEFAULT 0"
+            )
+        # Détection auto initiale : références dont la désignation ou la réf contient "europe"
+        conn.execute(
+            """UPDATE matieres_premieres
+               SET is_europe = 1
+               WHERE categorie = 'palette'
+                 AND COALESCE(is_europe, 0) = 0
+                 AND (
+                   LOWER(COALESCE(reference, '')) LIKE '%europe%'
+                   OR LOWER(COALESCE(designation, '')) LIKE '%europe%'
+                   OR LOWER(COALESCE(reference, '')) LIKE '%eur%pal%'
+                   OR LOWER(COALESCE(reference, '')) LIKE '%pal%eur%'
+                 )"""
+        )
+        conn.commit()
+        _record_schema_migration(conn, 112, "matieres_premieres_is_europe")
+
 
 def create_default_admin():
     import bcrypt

@@ -132,10 +132,14 @@ _DEPARTS_SELECT = """
     SELECT d.*,
            mp.reference AS type_palette_reference,
            mp.designation AS type_palette_designation,
-           t.couleur AS transporteur_couleur
+           COALESCE(mp.is_europe, 0) AS palette_ref_is_europe,
+           t.couleur AS transporteur_couleur,
+           pe.reference AS planning_dossier_ref,
+           pe.numero_of AS planning_numero_of
     FROM expe_departs d
     LEFT JOIN matieres_premieres mp ON mp.id = d.type_palette_matiere_id
     LEFT JOIN expe_transporteurs t ON t.id = d.transporteur_id
+    LEFT JOIN planning_entries pe ON pe.id = d.planning_entry_id
 """
 
 
@@ -264,12 +268,139 @@ def list_matieres_palettes_expe(request: Request):
     _require_expe(request)
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT id, reference, designation, palettes_par_pile
+            """SELECT id, reference, designation, palettes_par_pile,
+                      COALESCE(is_europe, 0) AS is_europe
                FROM matieres_premieres
                WHERE actif=1 AND categorie='palette'
                ORDER BY reference COLLATE NOCASE"""
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+def _resolve_palette_europe_flag(conn, type_palette_matiere_id, body) -> int:
+    """Détermine si un départ correspond à une expédition palette Europe.
+
+    Règle :
+      1. Si l'utilisateur a forcé `palette_europe` à 0 ou 1 dans le body, on respecte.
+      2. Sinon auto-détection via le flag `is_europe` sur la référence palette MyStock.
+    """
+    raw = body.get("palette_europe")
+    if raw in (1, True, "1", "true", "True"):
+        return 1
+    if raw in (0, False, "0", "false", "False"):
+        return 0
+    if type_palette_matiere_id:
+        row = conn.execute(
+            "SELECT COALESCE(is_europe, 0) AS is_europe FROM matieres_premieres WHERE id=?",
+            (type_palette_matiere_id,),
+        ).fetchone()
+        if row and int(row["is_europe"]) == 1:
+            return 1
+    return 0
+
+
+_PAL_EUROPE_STATUTS = ("en_attente", "retournee", "perdue")
+
+
+def _validate_palette_europe_statut(value) -> str:
+    s = (str(value or "").strip().lower() or "en_attente")
+    if s not in _PAL_EUROPE_STATUTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Statut palette Europe invalide ({', '.join(_PAL_EUROPE_STATUTS)}).",
+        )
+    return s
+
+
+def _validate_planning_entry_id(conn, value) -> Optional[int]:
+    if value is None or value == "":
+        return None
+    try:
+        pid = int(value)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="ID dossier planning invalide.")
+    row = conn.execute(
+        "SELECT id FROM planning_entries WHERE id=?", (pid,)
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=400, detail="Dossier planning introuvable.")
+    return pid
+
+
+@router.get("/dossiers-disponibles")
+def list_dossiers_disponibles_expe(request: Request):
+    """Picker dossier pour l'écran Ajouter départ (MyExpé).
+
+    Renvoie :
+      - les 4 derniers dossiers terminés (les plus récemment mis à jour),
+      - tous les dossiers en cours,
+      - le prochain dossier en attente (premier par position),
+      - puis le reste des dossiers (attente et terminés) pour la recherche.
+
+    Champ `displayed_section` ('en_cours' | 'prochain' | 'termine_recent' | 'autre')
+    permet de styler la liste. Champ `departs_count` indique combien de départs
+    sont déjà liés à ce dossier (anti-doublon visuel).
+    """
+    _require_expe(request)
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT pe.id, pe.reference, pe.client, pe.description,
+                      pe.ref_produit, pe.numero_of, pe.date_livraison,
+                      pe.format_l, pe.format_h, pe.statut, pe.position,
+                      pe.duree_heures, pe.updated_at,
+                      m.nom AS machine_nom, m.code AS machine_code,
+                      (SELECT COUNT(*) FROM expe_departs ed
+                         WHERE ed.planning_entry_id = pe.id) AS departs_count,
+                      ft.palette_type AS ft_palette_type,
+                      ft.palette_nb_cartons_sol AS ft_palette_nb_cartons_sol,
+                      ft.palette_nb_cartons_hauteur AS ft_palette_nb_cartons_hauteur,
+                      ft.nb_au_sol AS ft_nb_au_sol,
+                      ft.nb_etage AS ft_nb_etage
+               FROM planning_entries pe
+               JOIN machines m ON m.id = pe.machine_id
+               LEFT JOIN fiches_techniques ft
+                      ON LOWER(TRIM(COALESCE(ft.reference, ''))) =
+                         LOWER(TRIM(COALESCE(pe.ref_produit, '')))
+                      AND COALESCE(pe.ref_produit, '') != ''
+               ORDER BY pe.position ASC, pe.id ASC"""
+        ).fetchall()
+
+    en_cours: list = []
+    attente: list = []
+    termine: list = []
+    for r in rows:
+        d = dict(r)
+        st = (d.get("statut") or "").strip().lower()
+        if st == "en_cours":
+            en_cours.append(d)
+        elif st == "attente":
+            attente.append(d)
+        elif st == "termine":
+            termine.append(d)
+
+    termine.sort(key=lambda d: (d.get("updated_at") or ""), reverse=True)
+    termine_recents = termine[:4]
+    termine_autres = termine[4:]
+    prochain = attente[0] if attente else None
+    attente_autres = attente[1:]
+
+    out: list = []
+    for d in termine_recents:
+        d["displayed_section"] = "termine_recent"
+        out.append(d)
+    for d in en_cours:
+        d["displayed_section"] = "en_cours"
+        out.append(d)
+    if prochain:
+        prochain["displayed_section"] = "prochain"
+        out.append(prochain)
+    for d in attente_autres:
+        d["displayed_section"] = "autre"
+        out.append(d)
+    for d in termine_autres:
+        d["displayed_section"] = "autre"
+        out.append(d)
+    return {"dossiers": out}
 
 
 @router.get("/departs/jour")
@@ -318,14 +449,28 @@ def create_depart(request: Request, body: dict = Body(...)):
         type_colis_val = (str(body.get("type_colis") or "").strip().lower() or None)
         if type_colis_val == "vrac":
             type_palette_id = None  # pas de matière première pour vrac
+        planning_entry_id = _validate_planning_entry_id(
+            conn, body.get("planning_entry_id")
+        )
+        palette_europe = _resolve_palette_europe_flag(conn, type_palette_id, body)
+        palette_europe_statut = _validate_palette_europe_statut(
+            body.get("palette_europe_statut") if palette_europe else "en_attente"
+        )
+        palette_europe_date_retour = (
+            _date_prefix(str(body.get("palette_europe_date_retour") or "").strip())
+            if palette_europe else None
+        ) or None
+        palette_europe_note = _f("palette_europe_note") if palette_europe else None
         cur = conn.execute(
             """INSERT INTO expe_departs (
                 date_enlevement, affreteurs, transporteur, transporteur_id, client,
                 code_postal_destination,
                 ref_sifa, arc, no_cde_transport, no_bl, type_palette_matiere_id,
                 type_colis, nb_palette, poids_total_kg, date_livraison,
+                planning_entry_id, palette_europe, palette_europe_statut,
+                palette_europe_date_retour, palette_europe_note,
                 statut, created_at, created_by_email
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'en_attente', ?, ?)""",
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'en_attente', ?, ?)""",
             (
                 date_enl,
                 _f("affreteurs"),
@@ -342,6 +487,11 @@ def create_depart(request: Request, body: dict = Body(...)):
                 _float_opt("nb_palette"),
                 _float_opt("poids_total_kg"),
                 _f("date_livraison"),
+                planning_entry_id,
+                palette_europe,
+                palette_europe_statut,
+                palette_europe_date_retour,
+                palette_europe_note,
                 now,
                 email,
             ),
@@ -499,6 +649,26 @@ async def update_depart(request: Request, depart_id: int, body: dict = Body(...)
             sets.append(f"{k}=?")
             args.append(_float_opt(k))
 
+    if "planning_entry_id" in body:
+        sets.append("planning_entry_id=?")
+        args.append(None)
+
+    if "palette_europe" in body:
+        raw = body.get("palette_europe")
+        flag = 1 if raw in (1, True, "1", "true", "True") else 0
+        sets.append("palette_europe=?")
+        args.append(flag)
+    if "palette_europe_statut" in body:
+        sets.append("palette_europe_statut=?")
+        args.append(_validate_palette_europe_statut(body.get("palette_europe_statut")))
+    if "palette_europe_date_retour" in body:
+        v = (body.get("palette_europe_date_retour") or "").strip()
+        sets.append("palette_europe_date_retour=?")
+        args.append(_date_prefix(v) or None)
+    if "palette_europe_note" in body:
+        sets.append("palette_europe_note=?")
+        args.append(body.get("palette_europe_note") or None)
+
     if not sets:
         raise HTTPException(status_code=400, detail="Aucun champ à mettre à jour")
 
@@ -513,6 +683,9 @@ async def update_depart(request: Request, depart_id: int, body: dict = Body(...)
                 args[idx] = _validate_type_palette_matiere_id(
                     conn, body.get("type_palette_matiere_id")
                 )
+        if "planning_entry_id" in body:
+            idx = next(i for i, s in enumerate(sets) if s.startswith("planning_entry_id"))
+            args[idx] = _validate_planning_entry_id(conn, body.get("planning_entry_id"))
         ex = conn.execute("SELECT id, statut FROM expe_departs WHERE id=?", (depart_id,)).fetchone()
         if not ex:
             raise HTTPException(status_code=404, detail="Départ introuvable")
@@ -533,6 +706,159 @@ async def update_depart(request: Request, depart_id: int, body: dict = Body(...)
         ip=request.client.host if request.client else None,
     )
     return _depart_dict(row)
+
+
+@router.patch("/departs/{depart_id}/palette-europe")
+def update_depart_palette_europe(request: Request, depart_id: int, body: dict = Body(...)):
+    """Met à jour le statut palette Europe d'un départ.
+
+    Body : { palette_europe?: 0|1, statut?: 'en_attente'|'retournee'|'perdue',
+             date_retour?: 'YYYY-MM-DD', note?: 'texte libre' }
+    Seuls les champs présents sont modifiés. La date_retour est mise à NULL
+    si le statut repasse à 'en_attente' et qu'aucune date n'est fournie.
+    """
+    user = _require_expe_write(request)
+
+    sets: list = []
+    args: list = []
+
+    if "palette_europe" in body:
+        raw = body.get("palette_europe")
+        flag = 1 if raw in (1, True, "1", "true", "True") else 0
+        sets.append("palette_europe=?")
+        args.append(flag)
+
+    new_statut = None
+    if "statut" in body:
+        new_statut = _validate_palette_europe_statut(body.get("statut"))
+        sets.append("palette_europe_statut=?")
+        args.append(new_statut)
+
+    if "date_retour" in body:
+        raw = (body.get("date_retour") or "").strip()
+        sets.append("palette_europe_date_retour=?")
+        args.append(_date_prefix(raw) or None)
+    elif new_statut == "en_attente":
+        sets.append("palette_europe_date_retour=?")
+        args.append(None)
+
+    if "note" in body:
+        sets.append("palette_europe_note=?")
+        args.append((body.get("note") or "").strip() or None)
+
+    if not sets:
+        raise HTTPException(status_code=400, detail="Aucun champ à mettre à jour")
+
+    with get_db() as conn:
+        ex = conn.execute(
+            "SELECT id, client FROM expe_departs WHERE id=?", (depart_id,)
+        ).fetchone()
+        if not ex:
+            raise HTTPException(status_code=404, detail="Départ introuvable")
+        conn.execute(
+            f"UPDATE expe_departs SET {', '.join(sets)} WHERE id=?",
+            (*args, depart_id),
+        )
+        conn.commit()
+        row = conn.execute(f"{_DEPARTS_SELECT} WHERE d.id=?", (depart_id,)).fetchone()
+    client_nom = (row["client"] or "").strip() if row else "—"
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="expe",
+        objet=f"Départ #{depart_id} · palette Europe · {client_nom}",
+        ip=request.client.host if request.client else None,
+    )
+    return _depart_dict(row)
+
+
+@router.get("/palettes-europe")
+def list_palettes_europe(
+    request: Request,
+    statut: Optional[str] = Query(None, description="en_attente | retournee | perdue"),
+    client: Optional[str] = Query(None, description="Filtre client (LIKE insensible casse)"),
+    q: Optional[str] = Query(None, description="Recherche libre (client, ARC, BL…)"),
+):
+    """Suivi des palettes Europe — liste détaillée + récap par client."""
+    _require_expe(request)
+
+    where = ["d.palette_europe = 1"]
+    params: list = []
+
+    if statut:
+        st = _validate_palette_europe_statut(statut)
+        where.append("d.palette_europe_statut = ?")
+        params.append(st)
+    if client:
+        where.append("LOWER(COALESCE(d.client, '')) LIKE LOWER(?)")
+        params.append(f"%{client.strip()}%")
+    if q:
+        search_sql, search_params = _historique_search_clause(q)
+        if search_sql:
+            where.append(f"({search_sql})")
+            params.extend(search_params)
+
+    where_sql = " AND ".join(where)
+
+    with get_db() as conn:
+        rows = conn.execute(
+            f"""{_DEPARTS_SELECT}
+                WHERE {where_sql}
+                ORDER BY d.date_enlevement DESC, d.id DESC""",
+            params,
+        ).fetchall()
+
+        recap_rows = conn.execute(
+            """SELECT COALESCE(NULLIF(TRIM(client), ''), '— Sans client —') AS client,
+                      COUNT(*) AS nb_departs,
+                      COALESCE(SUM(CASE WHEN nb_palette IS NOT NULL THEN nb_palette ELSE 0 END), 0) AS nb_pal_envoyees,
+                      COALESCE(SUM(CASE WHEN palette_europe_statut='retournee' AND nb_palette IS NOT NULL THEN nb_palette ELSE 0 END), 0) AS nb_pal_retournees,
+                      COALESCE(SUM(CASE WHEN palette_europe_statut='perdue' AND nb_palette IS NOT NULL THEN nb_palette ELSE 0 END), 0) AS nb_pal_perdues,
+                      COALESCE(SUM(CASE WHEN palette_europe_statut='en_attente' AND nb_palette IS NOT NULL THEN nb_palette ELSE 0 END), 0) AS nb_pal_en_attente
+               FROM expe_departs
+               WHERE palette_europe = 1
+               GROUP BY client
+               ORDER BY nb_pal_en_attente DESC, client COLLATE NOCASE ASC"""
+        ).fetchall()
+
+    departs = [_depart_dict(r) for r in rows]
+    recap = [dict(r) for r in recap_rows]
+    totaux = {
+        "nb_departs": sum(int(r["nb_departs"]) for r in recap),
+        "nb_pal_envoyees": sum(float(r["nb_pal_envoyees"] or 0) for r in recap),
+        "nb_pal_retournees": sum(float(r["nb_pal_retournees"] or 0) for r in recap),
+        "nb_pal_perdues": sum(float(r["nb_pal_perdues"] or 0) for r in recap),
+        "nb_pal_en_attente": sum(float(r["nb_pal_en_attente"] or 0) for r in recap),
+    }
+    return {"departs": departs, "recap_clients": recap, "totaux": totaux}
+
+
+@router.patch("/matieres-palettes/{matiere_id}/europe")
+def set_matiere_palette_europe(request: Request, matiere_id: int, body: dict = Body(...)):
+    """Active / désactive le flag Europe sur une référence palette MyStock."""
+    user = _require_expe_write(request)
+    raw = body.get("is_europe")
+    flag = 1 if raw in (1, True, "1", "true", "True") else 0
+    with get_db() as conn:
+        ex = conn.execute(
+            "SELECT id, reference FROM matieres_premieres WHERE id=? AND categorie='palette'",
+            (matiere_id,),
+        ).fetchone()
+        if not ex:
+            raise HTTPException(status_code=404, detail="Référence palette introuvable")
+        conn.execute(
+            "UPDATE matieres_premieres SET is_europe=? WHERE id=?",
+            (flag, matiere_id),
+        )
+        conn.commit()
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="expe",
+        objet=f"Réf palette {ex['reference']} · is_europe={flag}",
+        ip=request.client.host if request.client else None,
+    )
+    return {"ok": True, "is_europe": flag}
 
 
 @router.delete("/departs/{depart_id}")

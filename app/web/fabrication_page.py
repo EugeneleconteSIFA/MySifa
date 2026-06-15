@@ -879,7 +879,49 @@ let S = {
 
   // Pending op from picker
   _pendingPickerOp: null,
+
+  // Repiquage — saisie production journalière (code 92)
+  showRepiquageModal: false,
+  repiquageEditId: null,        // id de saisie à modifier (null = nouvelle saisie)
+  repiquageNoDossier: '',
+  repiquageQte: '',
+  repiquageCommentaire: '',
+  repiquageDossiers: [],        // dossiers planning Repiquage
+  repiquageDossiersLoaded: false,
 };
+
+// ── Helpers Repiquage ──────────────────────────────────────────
+function _normMachineName(raw){
+  if(!raw) return '';
+  return String(raw).toLowerCase()
+    .replace(/[éèêë]/g,'e')
+    .replace(/[àâä]/g,'a')
+    .replace(/[ôö]/g,'o')
+    .replace(/[ùûü]/g,'u')
+    .replace(/[îï]/g,'i')
+    .replace(/[ç]/g,'c')
+    .trim();
+}
+function isMachineRepiquage(nom){
+  const n = _normMachineName(nom);
+  return n === 'repiquage' || n === 'rep' || n.startsWith('rep ');
+}
+function resolveEffectiveMachine(){
+  // Renvoie la machine effective (objet) en fonction du contexte user/admin
+  if(S.machine) return S.machine;
+  const mid = (S.user && S.user.machine_id) || S.adminMachineId;
+  if(mid && Array.isArray(S.machines)){
+    return S.machines.find(m => m.id === mid) || null;
+  }
+  return null;
+}
+function isRepiquageMode(){
+  const m = resolveEffectiveMachine();
+  if(m && isMachineRepiquage(m.nom)) return true;
+  // Fallback : user a un machine_nom et c'est Repiquage
+  if(S.user && isMachineRepiquage(S.user.machine_nom)) return true;
+  return false;
+}
 
 let FOURNISSEURS_FSC = [];
 async function loadFournisseursFSC(){
@@ -922,7 +964,7 @@ function fscTypeRequisLabel(t){
 }
 
 function fabIsModalOpen(){
-  if(S.showDossierPicker || S.showFictifModal || S.showDebutModal || S.showFinModal || S.showCommentModal || S.showArret50Modal) return true;
+  if(S.showDossierPicker || S.showFictifModal || S.showDebutModal || S.showFinModal || S.showCommentModal || S.showArret50Modal || S.showRepiquageModal) return true;
   try{
     const mr = document.getElementById('mroot');
     if(mr && mr.firstElementChild) return true;
@@ -1184,13 +1226,27 @@ async function loadSession(opts){
   };
   if(opts?.noRender){
     Object.assign(S, patch);
+    _loadRepiquageDossiersIfNeeded();
     return;
   }
   if(opts?.preserveUi){
     fabRenderPreserveUi(patch);
+    _loadRepiquageDossiersIfNeeded();
     return;
   }
   set(patch);
+  _loadRepiquageDossiersIfNeeded();
+}
+
+// Charge les dossiers Repiquage en arrière-plan si la machine effective est Repiquage.
+// Idempotent : ne recharge pas si déjà chargé pour la machine courante.
+function _loadRepiquageDossiersIfNeeded(){
+  if(!isRepiquageMode()) return;
+  if(S.repiquageDossiersLoaded) return;
+  loadRepiquageDossiers().then(()=>{
+    // Re-render uniquement si l'utilisateur n'est pas en train de manipuler une modal.
+    if(!fabIsModalOpen || !fabIsModalOpen()) render();
+  });
 }
 
 async function loadAdminSaisiesJour(opts){
@@ -1319,6 +1375,46 @@ function showToast(msg, type='success'){
 
 /* ── Sidebar ─────────────────────────────────────────────────── */
 function renderSidebar(){
+  // Mode Repiquage : pas de liste de codes opérations (les codes Cohésio sont sans objet
+  // dans l'atelier Repiquage). On garde la structure visuelle de la sidebar pour préserver
+  // l'harmonie avec la vue standard, et on affiche un message contextuel à la place.
+  if(isRepiquageMode()){
+    const machineName = S.machine ? S.machine.nom : 'Repiquage';
+    const userName = S.user ? S.user.nom : '';
+    return h('nav',{className:'fab-sidebar'},
+      h('div',{className:'fab-sidebar-head'},
+        h('div',{className:'fab-sidebar-brand'},'Saisie',h('span',null,' Prod')),
+        h('div',{className:'fab-sidebar-sub'},'Atelier Repiquage')
+      ),
+      h('div',{className:'fab-sidebar-list'},
+        h('div',{style:{padding:'14px 10px',fontSize:'12px',color:'var(--text2)',
+          background:'var(--accent-bg)',borderRadius:'8px',margin:'6px 4px',
+          borderLeft:'2px solid var(--accent)',lineHeight:'1.6'}},
+          h('div',{style:{fontWeight:'700',color:'var(--text)',marginBottom:'4px'}},
+            'Mode Repiquage'),
+          S.etat==='sans_session'
+            ? 'Commencez par enregistrer votre arrivée pour saisir une production.'
+            : 'Cliquez sur « Saisir production » dans le footer pour ajouter une ligne.'
+        )
+      ),
+      h('div',{className:'fab-sidebar-bottom'},
+        (window.MySifaUserChip
+          ? MySifaUserChip.element(
+              Object.assign({}, S.user||{}, { nom:userName, ucSubtext:machineName }),
+              h, svgIcon, { chipClass:'fab-user-chip', title:'Mon profil' }
+            )
+          : h('div',{className:'fab-user-chip'},
+              h('div',{className:'fab-user-name'},userName||'—'),
+              h('div',{className:'fab-user-machine'},machineName)
+            )
+        ),
+        h('button',{className:'fab-back-btn',onClick:()=>{window.location.href='/';},title:'Retour au portail'},
+          svgIcon('home',14),' Retour au portail'
+        )
+      )
+    );
+  }
+
   const grouped = {};
   CAT_ORDER.forEach(c=>{ grouped[c]=[]; });
   Object.entries(OPS).forEach(([code,op])=>{
@@ -2953,6 +3049,9 @@ function renderMain(){
   if(S.fabTab==='print') return renderPrintPanel();
   if(S.fabTab==='traca') return renderTracaPanel();
 
+  // Vue Repiquage : machine effective = Repiquage → vue simplifiée (saisies code 92)
+  if(isRepiquageMode()) return renderRepiquageMain();
+
   const hasAlert = S.etat==='en_arret' && S.saisies.length>0;
   const arrLen = S.saisies.filter(s=>s.operation_category==='arret').length;
 
@@ -3326,10 +3425,17 @@ function renderFooter(){
 
   // ── État : arrivé, pas de dossier actif ──
   else if(e==='arrive'){
-    btns.push(h('button',{
-      className:'fab-btn fab-btn-success',
-      onClick:()=>handleOpTrigger('01','Début de production','personnel')
-    }, svgIcon('plus-circle',16),' Début de production'));
+    if(isRepiquageMode()){
+      btns.push(h('button',{
+        className:'fab-btn fab-btn-success',
+        onClick:()=>openRepiquageModal(null)
+      }, svgIcon('plus-circle',16),' Saisir production'));
+    } else {
+      btns.push(h('button',{
+        className:'fab-btn fab-btn-success',
+        onClick:()=>handleOpTrigger('01','Début de production','personnel')
+      }, svgIcon('plus-circle',16),' Début de production'));
+    }
     btns.push(h('button',{
       className:'fab-btn fab-btn-muted fab-btn-sm',
       onClick:()=>triggerOp('87','Départ personnel')
@@ -4111,6 +4217,309 @@ function renderLoading(){
   );
 }
 
+/* ── Repiquage : data fetch + actions ───────────────────────── */
+async function loadRepiquageDossiers(){
+  const mid = (S.user && S.user.machine_id) || S.adminMachineId;
+  if(!mid){
+    S.repiquageDossiers = [];
+    S.repiquageDossiersLoaded = true;
+    return;
+  }
+  try{
+    const data = await apiFetch('/api/fabrication/dossiers?machine_id='+mid);
+    S.repiquageDossiers = (data && data.dossiers) ? data.dossiers : [];
+  }catch(e){
+    S.repiquageDossiers = [];
+  }
+  S.repiquageDossiersLoaded = true;
+}
+
+function openRepiquageModal(editSaisie){
+  if(editSaisie){
+    set({
+      showRepiquageModal: true,
+      repiquageEditId: editSaisie.id,
+      repiquageNoDossier: editSaisie.no_dossier || '',
+      repiquageQte: String(editSaisie.quantite_traitee || ''),
+      repiquageCommentaire: editSaisie.commentaire || '',
+    });
+  } else {
+    set({
+      showRepiquageModal: true,
+      repiquageEditId: null,
+      repiquageNoDossier: '',
+      repiquageQte: '',
+      repiquageCommentaire: '',
+    });
+  }
+  if(!S.repiquageDossiersLoaded){
+    loadRepiquageDossiers().then(()=>render());
+  }
+}
+
+function closeRepiquageModal(){
+  set({
+    showRepiquageModal: false,
+    repiquageEditId: null,
+    repiquageNoDossier: '',
+    repiquageQte: '',
+    repiquageCommentaire: '',
+  });
+}
+
+async function submitRepiquageSaisie(){
+  const noDossier = (S.repiquageNoDossier||'').trim();
+  const qteRaw = (S.repiquageQte||'').toString().replace(',', '.').trim();
+  const commentaire = (S.repiquageCommentaire||'').trim();
+
+  if(!noDossier){
+    showToast('Sélectionnez un dossier', 'danger');
+    return;
+  }
+  const qte = parseFloat(qteRaw);
+  if(!Number.isFinite(qte) || qte < 0){
+    showToast('Quantité d’étiquettes invalide', 'danger');
+    return;
+  }
+
+  set({loading:true});
+  try{
+    if(S.repiquageEditId){
+      // Modification
+      await apiFetch('/api/fabrication/saisie/'+S.repiquageEditId+'/repiquage', {
+        method:'PATCH',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({qte_etiquettes: qte, commentaire: commentaire}),
+      });
+    } else {
+      // Création (réutilise POST /api/fabrication/saisie avec operation=92)
+      const body = {
+        operation: '92',
+        no_dossier: noDossier,
+        qte_etiquettes: qte,
+        commentaire: commentaire,
+      };
+      if(S.adminMachineId) body.machine_id = S.adminMachineId;
+      const dos = (S.repiquageDossiers||[]).find(d => d.reference === noDossier);
+      if(dos){
+        if(dos.client) body.client = dos.client;
+        if(dos.description) body.designation = dos.description;
+      }
+      await apiFetch('/api/fabrication/saisie', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(body),
+      });
+    }
+    closeRepiquageModal();
+    await loadSession({noRender:true, silent:true});
+    showToast(S.repiquageEditId ? 'Saisie modifiée' : 'Saisie enregistrée', 'success');
+  }catch(e){
+    showToast((e && e.message) || 'Erreur lors de l’enregistrement', 'danger');
+  }finally{
+    set({loading:false});
+  }
+}
+
+async function deleteRepiquageSaisie(saisieId){
+  if(!saisieId) return;
+  if(!confirm('Supprimer cette saisie ?')) return;
+  set({loading:true});
+  try{
+    await apiFetch('/api/fabrication/saisie/'+saisieId+'/repiquage', {method:'DELETE'});
+    await loadSession({noRender:true, silent:true});
+    showToast('Saisie supprimée', 'success');
+  }catch(e){
+    showToast((e && e.message) || 'Erreur lors de la suppression', 'danger');
+  }finally{
+    set({loading:false});
+  }
+}
+
+/* ── Repiquage : vue principale (remplace renderMain pour l'onglet saisie) ─ */
+function renderRepiquageMain(){
+  const isAdminUserMain = S.user && (S.user.role==='superadmin'||S.user.role==='administration'||S.user.role==='direction');
+  const hasMachine = !!(S.user && S.user.machine_id) || !!(isAdminUserMain && S.adminMachineId);
+
+  // Filtrer les saisies code 92 du jour pour l'opérateur
+  const saisiesRep = (S.saisies||[]).filter(s => (s.operation_code||'').trim() === '92');
+
+  let alert = null;
+  if(S.operateur && !hasMachine && !isAdminUserMain){
+    alert = h('div',{className:'fab-alert fab-alert-warn'},
+      svgIcon('alert',14),
+      'Aucune machine liée à votre compte — contactez un administrateur'
+    );
+  }
+
+  const tableHead = h('tr',null,
+    h('th',null,'Heure'),
+    h('th',null,'Dossier'),
+    h('th',null,'Client'),
+    h('th',null,'Étiquettes'),
+    h('th',null,'Commentaire'),
+    h('th',null,'')
+  );
+
+  const fmtNum = n => Number(n||0).toLocaleString('fr-FR');
+
+  const tableBody = saisiesRep.length
+    ? saisiesRep.map((s,i)=>{
+        const isLast = i === saisiesRep.length-1;
+        let clientNom = (s.client||'').trim();
+        if(!clientNom){
+          const ref = String(s.no_dossier||'').trim();
+          const dos = (S.repiquageDossiers||[]).find(d => d.reference === ref);
+          if(dos) clientNom = (dos.client||'').trim();
+        }
+        return h('tr',{className:'fab-table-row'+(isLast?' fab-row-last':'')},
+          h('td',null, h('span',{className:'fab-time'}, fmtTime(s.date_operation))),
+          h('td',null, h('span',{style:{fontWeight:'700',color:'var(--accent)'}}, s.no_dossier||'—')),
+          h('td',null, clientNom
+            ? h('span',{className:'fab-client-cell',title:clientNom}, clientNom)
+            : h('span',{style:{color:'var(--muted)',fontSize:'11px'}},'—')),
+          h('td',null, h('span',{style:{fontFamily:'monospace',fontWeight:'700',color:'var(--text)'}},
+            fmtNum(s.quantite_traitee)+' étiq.')),
+          h('td',null, s.commentaire
+            ? h('span',{className:'fab-comment-cell',title:s.commentaire}, s.commentaire)
+            : h('span',{style:{color:'var(--muted)',fontSize:'11px'}},'—')
+          ),
+          h('td',null,
+            h('div',{style:{display:'flex',gap:'4px',justifyContent:'flex-end'}},
+              h('button',{className:'fab-comment-btn',title:'Modifier',
+                onClick:()=>openRepiquageModal(s)}, svgIcon('edit',13)),
+              h('button',{className:'fab-comment-btn',title:'Supprimer',
+                onClick:()=>deleteRepiquageSaisie(s.id),
+                style:{color:'var(--danger)'}}, svgIcon('trash',13))
+            )
+          )
+        );
+      })
+    : [h('tr',null,
+        h('td',{colspan:'6'},
+          h('div',{className:'fab-empty'},
+            h('div',{className:'fab-empty-icon'},'📋'),
+            S.etat==='sans_session'
+              ? 'Commencez par enregistrer votre arrivée'
+              : 'Aucune saisie aujourd’hui — cliquez sur « Saisir production » pour commencer'
+          )
+        )
+      )];
+
+  return h('div',{className:'fab-main'},
+    h('div',{className:'fab-main-head'},
+      h('span',{className:'fab-main-title'}, 'Saisie de production — Repiquage'),
+      h('span',{className:'fab-etat-badge '+etatClass(S.etat)}, etatLabel(S.etat)),
+      h('span',{className:'fab-main-sub'},
+        saisiesRep.length+' saisie'+(saisiesRep.length!==1?'s':'')+' aujourd’hui'
+      )
+    ),
+    alert,
+    h('div',{className:'fab-table-wrap'},
+      h('table',{className:'fab-table'},
+        h('thead',null, tableHead),
+        h('tbody',null, ...tableBody)
+      )
+    )
+  );
+}
+
+/* ── Repiquage : modal saisie ───────────────────────────────── */
+function renderRepiquageModal(){
+  const dossiers = S.repiquageDossiers || [];
+  const isEdit = !!S.repiquageEditId;
+
+  // Sélecteur dossier
+  const sel = h('select',{
+    style:{
+      background:'var(--bg)',border:'1.5px solid var(--border)',borderRadius:'8px',
+      padding:'10px 12px',fontSize:'13px',color:'var(--text)',fontFamily:'inherit',
+      outline:'none',cursor:'pointer',width:'100%',
+    }
+  },
+    h('option',{value:''},'— Sélectionner un dossier —'),
+    ...dossiers.map(d=>{
+      const lbl = (d.reference||'') + (d.client ? ' · '+d.client : '');
+      return h('option',{value:d.reference, selected: S.repiquageNoDossier===d.reference}, lbl);
+    })
+  );
+  sel.addEventListener('change', e=>{
+    S.repiquageNoDossier = e.target.value;
+  });
+
+  // Quantité étiquettes
+  const qteInput = h('input',{
+    type:'number',min:'0',step:'1',
+    placeholder:'Nombre d’étiquettes produites',
+    style:{
+      background:'var(--bg)',border:'1.5px solid var(--border)',borderRadius:'8px',
+      padding:'10px 12px',fontSize:'13px',color:'var(--text)',fontFamily:'inherit',
+      outline:'none',width:'100%',
+    },
+  });
+  qteInput.value = S.repiquageQte || '';
+  qteInput.addEventListener('input', e=>{ S.repiquageQte = e.target.value; });
+
+  // Commentaire
+  const ta = h('textarea',{
+    placeholder:'Commentaire libre (incident, note…)',
+    rows:'3',
+    style:{
+      background:'var(--bg)',border:'1.5px solid var(--border)',borderRadius:'8px',
+      padding:'10px 12px',fontSize:'13px',color:'var(--text)',fontFamily:'inherit',
+      outline:'none',width:'100%',resize:'vertical',
+    },
+  });
+  ta.value = S.repiquageCommentaire || '';
+  ta.addEventListener('input', e=>{ S.repiquageCommentaire = e.target.value; });
+
+  setTimeout(()=>{
+    if(!isEdit && !S.repiquageNoDossier) sel.focus();
+    else qteInput.focus();
+  }, 50);
+
+  const emptyState = (!dossiers.length && S.repiquageDossiersLoaded)
+    ? h('div',{style:{fontSize:'12px',color:'var(--muted)',padding:'8px 0'}},
+        'Aucun dossier planifié sur la machine Repiquage.')
+    : null;
+
+  return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)closeRepiquageModal();}},
+    h('div',{className:'fab-modal'},
+      h('div',{className:'fab-modal-title'},
+        svgIcon(isEdit?'edit':'plus-circle',18),' ',
+        isEdit ? 'Modifier la saisie' : 'Saisir une production'
+      ),
+      h('div',{className:'fab-modal-sub'},
+        isEdit
+          ? 'Modifiez la quantité d’étiquettes ou le commentaire.'
+          : 'Renseignez le dossier travaillé et la quantité d’étiquettes produites.'
+      ),
+      h('div',{className:'fab-field',style:{marginBottom:'12px'}},
+        h('label',{style:{textTransform:'uppercase',fontSize:'10px',fontWeight:'700',color:'var(--muted)',letterSpacing:'.5px',display:'block',marginBottom:'6px'}},'Dossier'),
+        isEdit
+          ? h('div',{style:{padding:'10px 12px',background:'var(--bg)',border:'1.5px solid var(--border)',borderRadius:'8px',fontSize:'13px',fontWeight:'700',color:'var(--accent)'}}, S.repiquageNoDossier||'—')
+          : sel,
+        emptyState
+      ),
+      h('div',{className:'fab-field',style:{marginBottom:'12px'}},
+        h('label',{style:{textTransform:'uppercase',fontSize:'10px',fontWeight:'700',color:'var(--muted)',letterSpacing:'.5px',display:'block',marginBottom:'6px'}},'Quantité d’étiquettes'),
+        qteInput
+      ),
+      h('div',{className:'fab-field',style:{marginBottom:'16px'}},
+        h('label',{style:{textTransform:'uppercase',fontSize:'10px',fontWeight:'700',color:'var(--muted)',letterSpacing:'.5px',display:'block',marginBottom:'6px'}},'Commentaire'),
+        ta
+      ),
+      h('div',{className:'fab-modal-btns'},
+        h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',
+          onClick:closeRepiquageModal},'Annuler'),
+        h('button',{className:'fab-btn fab-btn-primary',
+          onClick:submitRepiquageSaisie},
+          svgIcon('check',15),' ', isEdit ? 'Enregistrer' : 'Ajouter la saisie')
+      )
+    )
+  );
+}
+
 /* ── Main render ─────────────────────────────────────────────── */
 function render(){
   const ui = _fabCaptureUiState();
@@ -4147,6 +4556,7 @@ function render(){
   if(S.showDebutModal)    root.appendChild(renderDebutModal());
   if(S.showFinModal)      root.appendChild(renderFinModal());
   if(S.showCommentModal)  root.appendChild(renderCommentModal());
+  if(S.showRepiquageModal) root.appendChild(renderRepiquageModal());
 
   renderOfImportModal();
   renderArret50Modal();

@@ -1498,3 +1498,108 @@ async def update_commentaire(saisie_id: int, request: Request):
         ip=request.client.host if request.client else None,
     )
     return {"success": True}
+
+
+# ─── Endpoints repiquage (code opération 92) ──────────────────────────────────
+
+@router.patch("/api/fabrication/saisie/{saisie_id}/repiquage")
+async def update_saisie_repiquage(saisie_id: int, request: Request):
+    """Modifie qté étiquettes + commentaire d'une saisie repiquage (code 92).
+
+    Réservé à l'auteur de la saisie (ou admin). Refuse les opérations autres que 92.
+    """
+    user = get_current_user(request)
+    _check_fab_access(user)
+
+    body = await request.json()
+    qte_raw = body.get("qte_etiquettes")
+    commentaire = (body.get("commentaire") or "").strip() or None
+
+    try:
+        qte = float(str(qte_raw).replace(",", ".")) if qte_raw not in (None, "", "null") else None
+    except Exception:
+        raise HTTPException(status_code=400, detail="Quantité d'étiquettes invalide")
+    if qte is None or qte < 0:
+        raise HTTPException(status_code=400, detail="Quantité d'étiquettes invalide")
+
+    with get_db() as conn:
+        ex = conn.execute(
+            "SELECT * FROM production_data WHERE id=?", (saisie_id,)
+        ).fetchone()
+        if not ex:
+            raise HTTPException(status_code=404, detail="Saisie non trouvée")
+        if (ex["operation_code"] or "").strip() != "92":
+            raise HTTPException(
+                status_code=400,
+                detail="Cet endpoint est réservé aux saisies repiquage (code 92)",
+            )
+
+        user_operateur = user.get("operateur_lie") or user.get("nom") or ""
+        if not is_admin(user) and ex["operateur"] != user_operateur:
+            raise HTTPException(status_code=403, detail="Non autorisé")
+
+        now_iso = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
+        conn.execute(
+            """UPDATE production_data
+               SET quantite_traitee=?, commentaire=?,
+                   modifie_par=?, modifie_le=?, modifie_note=?
+               WHERE id=?""",
+            (
+                qte,
+                commentaire,
+                user.get("nom") or user.get("email") or "",
+                now_iso,
+                "Modification saisie repiquage",
+                saisie_id,
+            ),
+        )
+        conn.commit()
+
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="fabrication",
+        objet=f"Saisie repiquage #{saisie_id} modifiée",
+        detail={"no_dossier": ex["no_dossier"], "qte_etiquettes": qte},
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True}
+
+
+@router.delete("/api/fabrication/saisie/{saisie_id}/repiquage")
+def delete_saisie_repiquage(saisie_id: int, request: Request):
+    """Supprime une saisie repiquage (code 92).
+
+    Réservé à l'auteur de la saisie (ou admin). Refuse les opérations autres que 92.
+    """
+    user = get_current_user(request)
+    _check_fab_access(user)
+
+    with get_db() as conn:
+        ex = conn.execute(
+            "SELECT * FROM production_data WHERE id=?", (saisie_id,)
+        ).fetchone()
+        if not ex:
+            raise HTTPException(status_code=404, detail="Saisie non trouvée")
+        if (ex["operation_code"] or "").strip() != "92":
+            raise HTTPException(
+                status_code=400,
+                detail="Cet endpoint est réservé aux saisies repiquage (code 92)",
+            )
+
+        user_operateur = user.get("operateur_lie") or user.get("nom") or ""
+        if not is_admin(user) and ex["operateur"] != user_operateur:
+            raise HTTPException(status_code=403, detail="Non autorisé")
+
+        conn.execute("DELETE FROM production_data WHERE id=?", (saisie_id,))
+        conn.commit()
+
+    log_action(
+        user=user,
+        action="DELETE",
+        module="fabrication",
+        objet=f"Saisie repiquage #{saisie_id} supprimée",
+        detail={"no_dossier": ex["no_dossier"]},
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True}
