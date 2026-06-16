@@ -11,6 +11,7 @@ Ajouter dans main.py :
 import json
 import logging
 import math
+import re
 import sqlite3
 import unicodedata
 from datetime import datetime, timedelta
