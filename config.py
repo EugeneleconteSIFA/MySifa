@@ -23,12 +23,19 @@ DATA_DIR   = os.path.join(BASE_DIR, "data")
 # Sauvegarde : copier ce fichier + data/uploads/ ; optionnel : operations.json, data/emplacements_plan.csv
 DB_PATH    = os.getenv("DB_PATH", os.path.join(DATA_DIR, "production.db"))
 UPLOAD_DIR = os.path.join(DATA_DIR, "uploads")
+# Racine des assets uploadés et servis via /uploads/* (chat, avatars, traca).
+# Distincte de UPLOAD_DIR (qui reste sur data/uploads/ pour les imports métier).
+# Surcharge via UPLOADS_ROOT : permet à v1 (staging) de partager le même dossier
+# que v2 (prod), comme c'est déjà le cas pour la DB. Évite les 404 sur les pièces
+# jointes du chat quand un message est envoyé depuis l'autre instance.
+UPLOADS_ROOT = os.getenv("UPLOADS_ROOT", os.path.join(BASE_DIR, "uploads"))
 
 os.makedirs(DATA_DIR,   exist_ok=True)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+os.makedirs(UPLOADS_ROOT, exist_ok=True)
 
 # ─── App ──────────────────────────────────────────────────────────
-APP_VERSION = "0.7.6"
+APP_VERSION = "0.7.7"
 # Titre API / OpenAPI
 APP_TITLE = "MySifa"
 # Onglet navigateur & SEO (injecté dans frontend/html.py)

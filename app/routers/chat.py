@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 
-from config import BASE_DIR, ROLE_SUPERADMIN
+from config import BASE_DIR, ROLE_SUPERADMIN, UPLOADS_ROOT
 from database import get_db
 from services.auth_service import get_current_user
 
@@ -317,7 +317,7 @@ async def _save_chat_attachment(channel_id: int, upload: UploadFile) -> tuple[st
         raise HTTPException(status_code=400, detail="Fichier vide.")
     if len(content) > _MAX_ATTACHMENT:
         raise HTTPException(status_code=400, detail="Fichier trop volumineux (max 10 Mo).")
-    dest_dir = Path(BASE_DIR) / "uploads" / "chat" / str(channel_id)
+    dest_dir = Path(UPLOADS_ROOT) / "chat" / str(channel_id)
     dest_dir.mkdir(parents=True, exist_ok=True)
     stored = f"{uuid.uuid4().hex[:12]}{ext}"
     dest = dest_dir / stored

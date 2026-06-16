@@ -10,7 +10,7 @@ from typing import List, Optional
 from fastapi import APIRouter, File, HTTPException, Request, Response, UploadFile
 from fastapi.responses import JSONResponse, Response as PlainResponse
 
-from config import BASE_DIR
+from config import BASE_DIR, UPLOADS_ROOT
 from database import get_db
 from services.audit_service import log_action
 from services.auth_service import (
@@ -296,9 +296,10 @@ def _avatar_file_from_url(url: str) -> Optional[Path]:
         return None
     if not rel.startswith("uploads/avatars/"):
         return None
-    p = (Path(BASE_DIR) / rel).resolve()
+    # rel = "uploads/avatars/<file>" ; UPLOADS_ROOT pointe déjà sur le dossier "uploads".
+    p = (Path(UPLOADS_ROOT) / rel[len("uploads/"):]).resolve()
     try:
-        p.relative_to((Path(BASE_DIR) / "uploads" / "avatars").resolve())
+        p.relative_to((Path(UPLOADS_ROOT) / "avatars").resolve())
     except ValueError:
         return None
     return p
@@ -413,7 +414,7 @@ async def upload_my_avatar(request: Request, photo: UploadFile = File(...)):
         )
     ext_map = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif"}
     ext = ext_map.get(photo.content_type or "", "jpg")
-    dest_dir = Path(BASE_DIR) / "uploads" / "avatars"
+    dest_dir = Path(UPLOADS_ROOT) / "avatars"
     dest_dir.mkdir(parents=True, exist_ok=True)
     filename = f"user_{user['id']}_{uuid.uuid4().hex[:8]}.{ext}"
     dest = dest_dir / filename

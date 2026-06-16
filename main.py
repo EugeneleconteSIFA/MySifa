@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from config import APP_TITLE, APP_VERSION, HOST, PORT, BASE_DIR, ENV_NAME, IS_STAGING
+from config import APP_TITLE, APP_VERSION, HOST, PORT, BASE_DIR, ENV_NAME, IS_STAGING, UPLOADS_ROOT
 from app.web.html import render_frontend_html
 
 from routers.auth       import router as auth_router
@@ -112,7 +112,7 @@ app = FastAPI(title=APP_TITLE, version=APP_VERSION, lifespan=lifespan)
 # Static assets (chat widget, etc.)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-_uploads_root = os.path.join(BASE_DIR, "uploads")
+_uploads_root = UPLOADS_ROOT
 os.makedirs(os.path.join(_uploads_root, "traca"), exist_ok=True)
 os.makedirs(os.path.join(_uploads_root, "avatars"), exist_ok=True)
 os.makedirs(os.path.join(_uploads_root, "chat"), exist_ok=True)

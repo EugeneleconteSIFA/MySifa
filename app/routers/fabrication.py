@@ -1617,3 +1617,399 @@ def delete_saisie_repiquage(saisie_id: int, request: Request):
         ip=request.client.host if request.client else None,
     )
     return {"success": True}
+
+
+# -- Helpers compteur cartons repiquage --------------------------------------
+
+def _rep_today_isoformat() -> str:
+    return datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def _rep_get_carton_courant(conn, no_dossier: str, operateur: str) -> int:
+    row = conn.execute(
+        "SELECT nb_etiquettes FROM repiquage_carton_courant "
+        "WHERE no_dossier=? AND operateur=?",
+        (no_dossier, operateur),
+    ).fetchone()
+    return int(row["nb_etiquettes"]) if row else 0
+
+
+def _rep_set_carton_courant(conn, no_dossier: str, operateur: str, nb: int) -> None:
+    now = _rep_today_isoformat()
+    if nb <= 0:
+        conn.execute(
+            "DELETE FROM repiquage_carton_courant "
+            "WHERE no_dossier=? AND operateur=?",
+            (no_dossier, operateur),
+        )
+        return
+    conn.execute(
+        """INSERT INTO repiquage_carton_courant
+              (no_dossier, operateur, nb_etiquettes, updated_at)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(no_dossier, operateur) DO UPDATE SET
+              nb_etiquettes=excluded.nb_etiquettes,
+              updated_at=excluded.updated_at""",
+        (no_dossier, operateur, int(nb), now),
+    )
+
+
+def _rep_get_etiq_par_carton(conn, no_dossier: str):
+    row = conn.execute(
+        "SELECT etiquettes_par_carton FROM planning_entries "
+        "WHERE trim(reference) = trim(?) LIMIT 1",
+        (no_dossier,),
+    ).fetchone()
+    if not row or row["etiquettes_par_carton"] is None:
+        return None
+    try:
+        v = int(row["etiquettes_par_carton"])
+    except (TypeError, ValueError):
+        return None
+    return v if v > 0 else None
+
+
+def _rep_get_or_create_saisie_03(conn, operateur: str, no_dossier: str, machine_name: str):
+    today = _today_prefix()
+    today_fr = date.today().strftime("%d/%m/%Y")
+    row = conn.execute(
+        """SELECT * FROM production_data
+           WHERE operateur=? AND no_dossier=? AND operation_code='03'
+             AND (date_operation LIKE ? OR date_operation LIKE ?)
+           ORDER BY id DESC LIMIT 1""",
+        (operateur, no_dossier, today + "%", today_fr + "%"),
+    ).fetchone()
+    if row:
+        return dict(row)
+
+    pe_row = conn.execute(
+        "SELECT client, description FROM planning_entries "
+        "WHERE trim(reference)=trim(?) LIMIT 1",
+        (no_dossier,),
+    ).fetchone()
+    client = (pe_row["client"] if pe_row else None) or None
+    designation = (pe_row["description"] if pe_row else None) or None
+
+    now_iso = _rep_today_isoformat()
+    cur = conn.execute(
+        """INSERT INTO production_data
+           (operateur, date_operation, operation, operation_code,
+            operation_severity, operation_category, machine,
+            no_dossier, client, designation,
+            quantite_a_traiter, quantite_traitee, nb_cartons,
+            service, data, est_manuel)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)""",
+        (
+            operateur, now_iso, "03 - Production", "03",
+            "info", "production", machine_name,
+            no_dossier, client, designation,
+            0, 0, 0,
+            "fabrication",
+            json.dumps(
+                {"operateur": operateur, "no_dossier": no_dossier,
+                 "machine": machine_name, "source": "repiquage"},
+                default=str,
+            ),
+        ),
+    )
+    new_id = cur.lastrowid
+    return {
+        "id": new_id,
+        "operateur": operateur,
+        "no_dossier": no_dossier,
+        "machine": machine_name,
+        "quantite_traitee": 0,
+        "nb_cartons": 0,
+    }
+
+
+def _rep_increment_saisie_03(conn, saisie_id: int, delta_etiq: int, delta_cartons: int) -> None:
+    if delta_etiq == 0 and delta_cartons == 0:
+        return
+    now_iso = _rep_today_isoformat()
+    conn.execute(
+        """UPDATE production_data
+           SET quantite_traitee = COALESCE(quantite_traitee, 0) + ?,
+               nb_cartons = COALESCE(nb_cartons, 0) + ?,
+               modifie_le = ?
+           WHERE id=?""",
+        (delta_etiq, delta_cartons, now_iso, saisie_id),
+    )
+
+
+def _rep_aggregate(conn, no_dossier: str, operateur: str, today_only: bool):
+    """Renvoie (nb_cartons, qte_etiq) sur le dossier pour cet operateur."""
+    today = _today_prefix()
+    today_fr = date.today().strftime("%d/%m/%Y")
+    if today_only:
+        row = conn.execute(
+            """SELECT COALESCE(SUM(nb_cartons),0) AS c,
+                      COALESCE(SUM(quantite_traitee),0) AS e
+               FROM production_data
+               WHERE operateur=? AND no_dossier=? AND operation_code='03'
+                 AND (date_operation LIKE ? OR date_operation LIKE ?)""",
+            (operateur, no_dossier, today + "%", today_fr + "%"),
+        ).fetchone()
+    else:
+        # Cumul dossier toutes dates (uniquement code 03) - tous operateurs
+        row = conn.execute(
+            """SELECT COALESCE(SUM(nb_cartons),0) AS c,
+                      COALESCE(SUM(quantite_traitee),0) AS e
+               FROM production_data
+               WHERE no_dossier=? AND operation_code='03'""",
+            (no_dossier,),
+        ).fetchone()
+    return int(row["c"] or 0), int(row["e"] or 0)
+
+
+def _rep_operateur(user: dict) -> str:
+    op = (user.get("operateur_lie") or "").strip()
+    if not op:
+        op = (user.get("nom") or "").strip()
+    if not op:
+        raise HTTPException(
+            status_code=400,
+            detail="Compte sans nom — contactez un administrateur",
+        )
+    return op
+
+
+# -- Endpoints compteur cartons repiquage ------------------------------------
+
+@router.get("/api/fabrication/repiquage/carton-courant")
+def get_carton_courant(request: Request, no_dossier: str):
+    """Renvoie l'etat du carton courant + agregats jour/cumul pour ce dossier."""
+    user = get_current_user(request)
+    _check_fab_access(user)
+    no_dossier = (no_dossier or "").strip()
+    if not no_dossier:
+        raise HTTPException(400, "no_dossier requis")
+
+    operateur = _rep_operateur(user)
+    with get_db() as conn:
+        nb_courant = _rep_get_carton_courant(conn, no_dossier, operateur)
+        etiq_par_carton = _rep_get_etiq_par_carton(conn, no_dossier)
+        jour_c, jour_e = _rep_aggregate(conn, no_dossier, operateur, today_only=True)
+        cum_c, cum_e = _rep_aggregate(conn, no_dossier, operateur, today_only=False)
+        pe = conn.execute(
+            "SELECT reference, client, description "
+            "FROM planning_entries WHERE trim(reference)=trim(?) LIMIT 1",
+            (no_dossier,),
+        ).fetchone()
+        dossier_info = dict(pe) if pe else None
+
+    return {
+        "no_dossier": no_dossier,
+        "operateur": operateur,
+        "nb_etiquettes_courant": nb_courant,
+        "etiquettes_par_carton": etiq_par_carton,
+        "jour": {"nb_cartons": jour_c, "qte_etiq": jour_e},
+        "cumul": {"nb_cartons": cum_c, "qte_etiq": cum_e},
+        "dossier": dossier_info,
+    }
+
+
+@router.post("/api/fabrication/repiquage/incrementer-carton-courant")
+async def incrementer_carton_courant(request: Request):
+    """Ajoute N etiquettes dans le carton courant.
+
+    Si le total atteint/depasse `etiquettes_par_carton`, ferme automatiquement
+    les cartons complets et reporte le reliquat dans le nouveau carton courant.
+    """
+    user = get_current_user(request)
+    _check_fab_access(user)
+    body = await request.json()
+
+    no_dossier = (body.get("no_dossier") or "").strip()
+    if not no_dossier:
+        raise HTTPException(400, "no_dossier requis")
+    try:
+        delta = int(body.get("delta") or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "delta invalide")
+    if delta <= 0:
+        raise HTTPException(400, "delta doit etre positif")
+
+    operateur = _rep_operateur(user)
+    with get_db() as conn:
+        machine_obj = _resolve_machine(user, body, conn)
+        etiq_par_carton = _rep_get_etiq_par_carton(conn, no_dossier)
+        nb_courant = _rep_get_carton_courant(conn, no_dossier, operateur)
+        new_total = nb_courant + delta
+
+        if etiq_par_carton and etiq_par_carton > 0:
+            nb_cartons_fermes = new_total // etiq_par_carton
+            reliquat = new_total % etiq_par_carton
+        else:
+            # Pas de parametrage : on accumule sans jamais fermer auto
+            nb_cartons_fermes = 0
+            reliquat = new_total
+
+        if nb_cartons_fermes > 0:
+            saisie = _rep_get_or_create_saisie_03(
+                conn, operateur, no_dossier, machine_obj["nom"]
+            )
+            _rep_increment_saisie_03(
+                conn,
+                saisie["id"],
+                nb_cartons_fermes * (etiq_par_carton or 0),
+                nb_cartons_fermes,
+            )
+
+        _rep_set_carton_courant(conn, no_dossier, operateur, reliquat)
+        conn.commit()
+
+        jour_c, jour_e = _rep_aggregate(conn, no_dossier, operateur, today_only=True)
+        cum_c, cum_e = _rep_aggregate(conn, no_dossier, operateur, today_only=False)
+
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="fabrication",
+        objet=f"Repiquage +{delta} etiq dossier {no_dossier}",
+        detail={
+            "delta_etiq": delta,
+            "cartons_fermes_auto": nb_cartons_fermes,
+            "reliquat": reliquat,
+        },
+        ip=request.client.host if request.client else None,
+    )
+    return {
+        "success": True,
+        "nb_etiquettes_courant": reliquat,
+        "cartons_fermes_auto": nb_cartons_fermes,
+        "etiquettes_par_carton": etiq_par_carton,
+        "jour": {"nb_cartons": jour_c, "qte_etiq": jour_e},
+        "cumul": {"nb_cartons": cum_c, "qte_etiq": cum_e},
+    }
+
+
+@router.post("/api/fabrication/repiquage/ajouter-cartons-complets")
+async def ajouter_cartons_complets(request: Request):
+    """Ajoute N cartons complets a la saisie du jour sans toucher au carton courant.
+
+    Correspond au geste "+1 carton" choisi "Continuer quand meme" dans le modal.
+    Necessite que etiquettes_par_carton soit defini.
+    """
+    user = get_current_user(request)
+    _check_fab_access(user)
+    body = await request.json()
+
+    no_dossier = (body.get("no_dossier") or "").strip()
+    if not no_dossier:
+        raise HTTPException(400, "no_dossier requis")
+    try:
+        nb = int(body.get("nb") or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "nb invalide")
+    if nb <= 0:
+        raise HTTPException(400, "nb doit etre positif")
+
+    operateur = _rep_operateur(user)
+    with get_db() as conn:
+        machine_obj = _resolve_machine(user, body, conn)
+        etiq_par_carton = _rep_get_etiq_par_carton(conn, no_dossier)
+        if not etiq_par_carton or etiq_par_carton <= 0:
+            raise HTTPException(
+                400,
+                "Parametrage 'etiquettes par carton' manquant pour ce dossier. "
+                "Definissez-le avant d'utiliser ce mode.",
+            )
+
+        saisie = _rep_get_or_create_saisie_03(
+            conn, operateur, no_dossier, machine_obj["nom"]
+        )
+        _rep_increment_saisie_03(
+            conn, saisie["id"], nb * etiq_par_carton, nb,
+        )
+        conn.commit()
+
+        nb_courant = _rep_get_carton_courant(conn, no_dossier, operateur)
+        jour_c, jour_e = _rep_aggregate(conn, no_dossier, operateur, today_only=True)
+        cum_c, cum_e = _rep_aggregate(conn, no_dossier, operateur, today_only=False)
+
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="fabrication",
+        objet=f"Repiquage +{nb} cartons dossier {no_dossier}",
+        detail={"nb_cartons": nb, "etiq_par_carton": etiq_par_carton},
+        ip=request.client.host if request.client else None,
+    )
+    return {
+        "success": True,
+        "nb_etiquettes_courant": nb_courant,
+        "etiquettes_par_carton": etiq_par_carton,
+        "jour": {"nb_cartons": jour_c, "qte_etiq": jour_e},
+        "cumul": {"nb_cartons": cum_c, "qte_etiq": cum_e},
+    }
+
+
+@router.post("/api/fabrication/repiquage/fermer-carton-courant")
+async def fermer_carton_courant(request: Request):
+    """Ferme le carton courant en le considerant comme plein.
+
+    Geste "+1 carton" choisi "Fermer le carton" dans le modal : l'operateur
+    declare qu'il vient de finir les etiquettes manquantes. On ajoute le
+    complement (etiquettes_par_carton - nb_courant) puis +1 carton ferme.
+    Necessite que etiquettes_par_carton soit defini.
+    """
+    user = get_current_user(request)
+    _check_fab_access(user)
+    body = await request.json()
+
+    no_dossier = (body.get("no_dossier") or "").strip()
+    if not no_dossier:
+        raise HTTPException(400, "no_dossier requis")
+
+    operateur = _rep_operateur(user)
+    with get_db() as conn:
+        machine_obj = _resolve_machine(user, body, conn)
+        etiq_par_carton = _rep_get_etiq_par_carton(conn, no_dossier)
+        if not etiq_par_carton or etiq_par_carton <= 0:
+            raise HTTPException(
+                400,
+                "Parametrage 'etiquettes par carton' manquant pour ce dossier.",
+            )
+
+        nb_courant = _rep_get_carton_courant(conn, no_dossier, operateur)
+        if nb_courant >= etiq_par_carton:
+            # Pathologique : courant >= seuil. On clipote a etiq_par_carton.
+            nb_courant = etiq_par_carton
+
+        delta_etiq_a_ajouter = etiq_par_carton  # total du carton ferme
+        # Note : les nb_courant etiq deja "presentes" dans le courant viennent
+        # uniquement d'incrementer-carton-courant qui ne les a PAS encore
+        # comptees dans production_data. On les ajoute donc maintenant.
+
+        saisie = _rep_get_or_create_saisie_03(
+            conn, operateur, no_dossier, machine_obj["nom"]
+        )
+        _rep_increment_saisie_03(
+            conn, saisie["id"], delta_etiq_a_ajouter, 1,
+        )
+        _rep_set_carton_courant(conn, no_dossier, operateur, 0)
+        conn.commit()
+
+        jour_c, jour_e = _rep_aggregate(conn, no_dossier, operateur, today_only=True)
+        cum_c, cum_e = _rep_aggregate(conn, no_dossier, operateur, today_only=False)
+
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="fabrication",
+        objet=f"Repiquage fermeture carton dossier {no_dossier}",
+        detail={
+            "etiq_completees": etiq_par_carton - nb_courant,
+            "nb_courant_avant": nb_courant,
+            "etiq_par_carton": etiq_par_carton,
+        },
+        ip=request.client.host if request.client else None,
+    )
+    return {
+        "success": True,
+        "nb_etiquettes_courant": 0,
+        "etiquettes_par_carton": etiq_par_carton,
+        "jour": {"nb_cartons": jour_c, "qte_etiq": jour_e},
+        "cumul": {"nb_cartons": cum_c, "qte_etiq": cum_e},
+    }

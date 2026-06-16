@@ -3004,7 +3004,7 @@ function duplicateEntry(id){
   if(!e) return;
   document.getElementById("mroot").innerHTML=modalHTML(
     "Dupliquer le dossier",
-    dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.exigences_production||"",e.format_l||"",e.format_h||"",e.duree_heures,"attente",false,1,e.fsc_requis||0,e.fsc_type_requis||"",e.departement_livraison||"",e.prise_rdv||0,e.date_livraison_imposee||0,0),
+    dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.exigences_production||"",e.format_l||"",e.format_h||"",e.duree_heures,"attente",false,1,e.fsc_requis||0,e.fsc_type_requis||"",e.departement_livraison||"",e.prise_rdv||0,e.date_livraison_imposee||0,0,e.etiquettes_par_carton??null),
     "Ajouter","submitDuplicate()"
   ,"","",false,"md--dossier");
 }
@@ -3164,7 +3164,7 @@ function fscTypeRequisLabel(t){
   return typ;
 }
 
-function dossierFields(numero_of,client,ref_produit,laize,date_livraison,commentaire,exigences_production,fl,fh,dur,statut,showStatut,aPlacer=1,fscRequis=0,fscType="",deptLivraison="",priseRdv=0,dlImposee=0,valide=0){
+function dossierFields(numero_of,client,ref_produit,laize,date_livraison,commentaire,exigences_production,fl,fh,dur,statut,showStatut,aPlacer=1,fscRequis=0,fscType="",deptLivraison="",priseRdv=0,dlImposee=0,valide=0,etiqParCarton=null){
   const fscOn=fscRequis===1||fscRequis===true;
   const fscTyp=(fscType&&["fsc_100","fsc_mix","fsc_recycled"].includes(fscType))?fscType:"fsc_mix";
   const rdvOn=priseRdv===1||priseRdv===true;
@@ -3206,6 +3206,11 @@ function dossierFields(numero_of,client,ref_produit,laize,date_livraison,comment
           <div class="fd"><label>Laize (mm)</label><input type="number" id="f-laize" value="${escAttr(laize)}" placeholder="510"></div>
           <div class="fd"><label>Largeur (mm)</label><input type="number" id="f-fl" value="${escAttr(fl)}" placeholder="100"></div>
           <div class="fd"><label>Hauteur (mm)</label><input type="number" id="f-fh" value="${escAttr(fh)}" placeholder="70"></div>
+          <div class="fd fd--full">
+            <label>Étiquettes par carton (Repiquage)</label>
+            <input type="number" id="f-epc" min="1" step="1" value="${etiqParCarton!=null?escAttr(String(etiqParCarton)):''}" placeholder="Ex : 240">
+            <span style="font-size:11px;color:var(--muted);display:block;margin-top:4px">Paramétrage utilisé par la saisie de production Repiquage pour compter les cartons. Laisser vide si non concerné.</span>
+          </div>
           <div class="fd fd--full">
             <span class="dossier-sub-lbl">Certification FSC</span>
             <div style="display:flex;align-items:center;gap:12px">
@@ -3267,6 +3272,12 @@ function getFormData(withStatut){
     departement_livraison:(document.getElementById("f-dept")?.value||"").trim(),
     prise_rdv:document.getElementById("f-rdv")?.checked?1:0,
     date_livraison_imposee:document.getElementById("f-dl-imp")?.checked?1:0,
+    etiquettes_par_carton:(()=>{
+      const v=document.getElementById("f-epc")?.value;
+      if(v==null||String(v).trim()==='')return null;
+      const n=parseInt(String(v).trim(),10);
+      return (Number.isFinite(n)&&n>0)?n:null;
+    })(),
   };
   const fscChk=document.getElementById("fsc-requis-chk");
   const fscOn=!!(fscChk&&fscChk.checked);
@@ -3550,7 +3561,7 @@ function openEdit(id){
   const statLabel=isTermine?"Terminé":e.statut==="en_cours"?"En cours":"";
   const statColor=isTermine?"var(--danger)":"var(--accent)";
 
-  const fieldsHtml=dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.exigences_production||"",e.format_l||"",e.format_h||"",e.duree_heures,e.statut,true,e.a_placer??1,e.fsc_requis||0,e.fsc_type_requis||"",e.departement_livraison||"",e.prise_rdv||0,e.date_livraison_imposee||0,e.valide??0);
+  const fieldsHtml=dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.exigences_production||"",e.format_l||"",e.format_h||"",e.duree_heures,e.statut,true,e.a_placer??1,e.fsc_requis||0,e.fsc_type_requis||"",e.departement_livraison||"",e.prise_rdv||0,e.date_livraison_imposee||0,e.valide??0,e.etiquettes_par_carton??null);
 
   // Bouton déstockage compact en en-tête
   const destockDone=e.destockage==="done";
