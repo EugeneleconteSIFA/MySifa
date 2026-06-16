@@ -292,15 +292,21 @@ body.light .slot .line-exig{background:#fef9c3;color:#713f12;border-color:#ca8a0
 .now-d{position:absolute;top:-4px;left:-4px;width:10px;height:10px;border-radius:50%;background:var(--red)}
 
 .tip{position:absolute;z-index:100;background:var(--card);border:1px solid var(--border2);border-radius:12px;padding:14px 18px;
-  min-width:240px;max-width:320px;pointer-events:none;animation:tipIn .15s ease;
+  min-width:240px;max-width:520px;pointer-events:none;animation:tipIn .15s ease;
   box-shadow:0 12px 40px rgba(0,0,0,.6)}
+.tip:has(.tip-cols){max-width:600px}
 .tip-hdr{display:flex;align-items:center;gap:10px;margin-bottom:10px}
 .tip-bar{width:6px;height:32px;border-radius:3px;flex-shrink:0}
 .tip-ref{font-size:13px;font-weight:700;color:var(--text);font-family:var(--mono)}
 .tip-lbl{font-size:12px;color:var(--tip-lbl);margin-top:2px;font-weight:500}
 .tip-grid{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:11px;
-  border-top:1px solid var(--border2);padding-top:10px}
-.tip-grid .k{color:var(--tip-k);font-weight:600}.tip-grid .v{color:var(--tip-v);font-family:var(--mono);font-weight:500}
+  border-top:1px solid var(--border2);padding-top:10px;align-items:start}
+.tip-grid .k{color:var(--tip-k);font-weight:600;white-space:nowrap;padding-top:1px}
+.tip-grid .v{color:var(--tip-v);font-family:var(--mono);font-weight:500;
+  word-wrap:break-word;overflow-wrap:anywhere;line-height:1.45}
+/* Vue 2 colonnes : font standard pour les phrases longues (Conditionnement…) */
+.tip-cols .tip-grid .v{font-family:inherit;font-weight:600}
+.tip-cols .tip-grid{padding-top:0;border-top:none}
 .tip-livraison{margin-top:8px;padding:4px 0 2px;font-size:12px;color:var(--text);font-weight:600;line-height:1.35}
 .tip-livraison+.tip-grid{border-top:none;padding-top:6px}
 
