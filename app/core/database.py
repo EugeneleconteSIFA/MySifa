@@ -3620,6 +3620,40 @@ def _migrate(conn):
             conn.commit()
         _record_schema_migration(conn, 113, "dsi_repiquage_creneau_matin")
 
+    # -- Migration 114 : repiquage - parametrage carton + compteur ----------
+    # - etiquettes_par_carton sur planning_entries (parametrage dossier)
+    # - nb_cartons sur production_data (compte des cartons complets)
+    # - table repiquage_carton_courant (etat carton en cours par dossier+operateur)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=114 LIMIT 1").fetchone():
+        pe_cols = {r[1] for r in conn.execute("PRAGMA table_info(planning_entries)").fetchall()}
+        if "etiquettes_par_carton" not in pe_cols:
+            conn.execute(
+                "ALTER TABLE planning_entries ADD COLUMN etiquettes_par_carton INTEGER"
+            )
+        pd_cols = {r[1] for r in conn.execute("PRAGMA table_info(production_data)").fetchall()}
+        if "nb_cartons" not in pd_cols:
+            conn.execute(
+                "ALTER TABLE production_data ADD COLUMN nb_cartons INTEGER DEFAULT 0"
+            )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS repiquage_carton_courant (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                no_dossier TEXT NOT NULL,
+                operateur TEXT NOT NULL,
+                nb_etiquettes INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL,
+                UNIQUE(no_dossier, operateur)
+            )"""
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_rcc_dossier ON repiquage_carton_courant(no_dossier)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_rcc_operateur ON repiquage_carton_courant(operateur)"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 114, "repiquage_carton_parametrage_compteur")
+
 
 def create_default_admin():
     import bcrypt

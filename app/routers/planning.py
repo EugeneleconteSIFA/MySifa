@@ -1704,6 +1704,17 @@ async def force_statut(machine_id: int, entry_id: int, request: Request):
     return {"ok": True, "saisie_found": saisie_found}
 
 
+def _parse_etiq_par_carton(raw):
+    """Parse etiquettes_par_carton: entier positif ou None."""
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return None
+    try:
+        v = int(float(str(raw).replace(",", ".").strip()))
+    except (TypeError, ValueError):
+        return None
+    return v if v > 0 else None
+
+
 @router.post("/machines/{machine_id}/entries")
 async def add_entry(machine_id: int, request: Request):
     """Ajouter un dossier manuellement au planning."""
@@ -1752,6 +1763,7 @@ async def add_entry(machine_id: int, request: Request):
         "departement_livraison": (body.get("departement_livraison") or "").strip() or "",
         "prise_rdv": _parse_a_placer(body.get("prise_rdv"), default=0),
         "date_livraison_imposee": _parse_a_placer(body.get("date_livraison_imposee"), default=0),
+        "etiquettes_par_carton": _parse_etiq_par_carton(body.get("etiquettes_par_carton")),
         "created_by": user_name,
         "updated_by": user_name,
     }
@@ -1986,7 +1998,7 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
                 dos_rvgi=?, numero_of=?, ref_produit=?, laize=?, date_livraison=?, commentaire=?,
                 exigences_production=?, planned_start=?, planned_end=?, planned_end_manual=?, a_placer=?,
                 fsc_requis=?, fsc_type_requis=?, departement_livraison=?, prise_rdv=?, date_livraison_imposee=?,
-                valide=?
+                valide=?, etiquettes_par_carton=?
             WHERE id=?
         """, (
             body.get("reference", ex["reference"]),
@@ -2029,6 +2041,9 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
             _parse_a_placer(body.get("valide"), default=int(exd.get("valide") or 0))
             if "valide" in body
             else int(exd.get("valide") or 0),
+            _parse_etiq_par_carton(body.get("etiquettes_par_carton"))
+            if "etiquettes_par_carton" in body
+            else (exd.get("etiquettes_par_carton") if "etiquettes_par_carton" in ex.keys() else None),
             entry_id
         ))
 
@@ -3733,3 +3748,104 @@ def live_refresh_en_cours(machine_id: int, request: Request):
         )
         conn.commit()
         return {"updated": True, "entry_id": entry_id, "duree_heures": elapsed}
+
+
+@router.patch("/machines/{machine_id}/entries/{entry_id}/etiquettes-par-carton")
+async def update_etiquettes_par_carton(machine_id: int, entry_id: int, request: Request):
+    """Modifie le parametrage etiquettes_par_carton d'un dossier.
+
+    Endpoint specifique pour permettre aux operateurs Repiquage de modifier la
+    valeur (le PUT global est reserve aux admins). Si l'auteur n'est pas admin,
+    un message est cree dans la messagerie a destination du superadmin pour
+    qu'il puisse valider/auditer la modification.
+    """
+    from config import SUPERADMIN_EMAIL
+    from services.auth_service import is_admin, is_fabrication
+
+    user = get_current_user(request)
+    if not (is_admin(user) or is_fabrication(user)):
+        raise HTTPException(403, "Acces non autorise")
+
+    body = await request.json()
+    new_val = _parse_etiq_par_carton(body.get("etiquettes_par_carton"))
+    # new_val peut etre None : signifie "effacer le parametrage"
+
+    user_name = user.get("nom") or user.get("email") or "Operateur"
+    now = datetime.now().isoformat()
+
+    with get_db() as conn:
+        ex = conn.execute(
+            "SELECT * FROM planning_entries WHERE id=? AND machine_id=?",
+            (entry_id, machine_id),
+        ).fetchone()
+        if not ex:
+            raise HTTPException(404, "Entree non trouvee")
+
+        exd = dict(ex)
+        old_val = exd.get("etiquettes_par_carton")
+        try:
+            old_val = int(old_val) if old_val is not None else None
+        except (TypeError, ValueError):
+            old_val = None
+        if old_val == new_val:
+            return {"success": True, "unchanged": True, "etiquettes_par_carton": new_val}
+
+        conn.execute(
+            "UPDATE planning_entries SET etiquettes_par_carton=?, updated_at=?, updated_by=? WHERE id=?",
+            (new_val, now, user_name, entry_id),
+        )
+        conn.commit()
+
+        ref = (exd.get("reference") or "").strip() or f"#{entry_id}"
+        client = (exd.get("client") or "").strip()
+        machine_row = conn.execute(
+            "SELECT nom FROM machines WHERE id=?", (machine_id,)
+        ).fetchone()
+        machine_nom = (machine_row["nom"] if machine_row else "?") or "?"
+
+        # Notification superadmin uniquement si modificateur != admin
+        if not is_admin(user):
+            old_label = str(old_val) if old_val is not None else "(non defini)"
+            new_label = str(new_val) if new_val is not None else "(efface)"
+            from_email = (user.get("email") or "").strip().lower()
+            from_user_id = int(user.get("id")) if user.get("id") is not None else None
+            from_name = f"[Repiquage] {user_name}"
+            subject = f"[Repiquage] Parametrage carton modifie - OF {ref}"
+            body_msg = (
+                f"L'operateur {user_name} a modifie le parametrage "
+                f"'etiquettes par carton' du dossier {ref}"
+                + (f" ({client})" if client else "")
+                + f" sur la machine {machine_nom}.\n\n"
+                f"Ancienne valeur : {old_label}\n"
+                f"Nouvelle valeur : {new_label}\n\n"
+                f"A valider/auditer dans le planning machine."
+            )
+            try:
+                conn.execute(
+                    """INSERT INTO messages
+                       (from_user_id, from_email, from_name, to_email, subject, body, created_at)
+                       VALUES (?,?,?,?,?,?,?)""",
+                    (
+                        from_user_id,
+                        from_email,
+                        from_name,
+                        (SUPERADMIN_EMAIL or "").strip().lower(),
+                        subject,
+                        body_msg,
+                        now,
+                    ),
+                )
+                conn.commit()
+            except Exception:
+                # Ne jamais bloquer la modification metier pour un echec de notif
+                pass
+
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="planning",
+        objet=f"Parametrage carton dossier {ref}",
+        detail={"old": old_val, "new": new_val, "notif_admin": not is_admin(user)},
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True, "etiquettes_par_carton": new_val}
