@@ -8,9 +8,11 @@
  *     écran mobile, on tourne tout l'affichage de 90° via CSS (voir
  *     mysifa_landscape.css). L'utilisateur voit toujours du paysage, peu
  *     importe qu'il tienne son téléphone en portrait ou en paysage.
- *
- * Aucun message "Tournez l'appareil" n'est affiché : la rotation est faite
- * pour l'utilisateur.
+ *  3) Touch handler : dans le body rotaté, un swipe vertical visuel se
+ *     mappe naturellement sur l'axe X du body (bloqué par overflow-x:hidden).
+ *     On intercepte le geste et on convertit le delta Y visuel en scroll
+ *     body-Y manuel — ce qui équivaut, après rotation, à un scroll
+ *     vertical visuel pour l'utilisateur.
  */
 (function () {
   'use strict';
@@ -43,10 +45,100 @@
     }
   }
 
+  /* ── Conversion swipe vertical visuel → scroll body-Y ──────────────
+     Le body est tourné 90° clockwise. Le browser mappe naturellement
+     un swipe visuel HORIZONTAL vers l'axe Y du body (overflow-y:auto)
+     — donc swipe horizontal = scroll. Pour autoriser AUSSI un swipe
+     visuel VERTICAL à scroller, on intercepte touchmove et on applique
+     manuellement le delta visuel-Y sur scrollTop du conteneur
+     scrollable (body, .main, ou un parent scrollable).
+  */
+  var touchState = null;
+
+  function findScrollable(target) {
+    var el = target;
+    while (el && el !== document.body && el !== document.documentElement) {
+      try {
+        var cs = window.getComputedStyle(el);
+        var oy = cs.overflowY;
+        if ((oy === 'auto' || oy === 'scroll') &&
+            el.scrollHeight > el.clientHeight + 1) {
+          return el;
+        }
+      } catch (e) {}
+      el = el.parentElement;
+    }
+    // Fallback : body (qui a overflow-y:auto en mode rotaté)
+    return document.body;
+  }
+
+  function isLandscaped() {
+    return document.body.classList.contains('mysifa-force-landscape');
+  }
+
+  function onTouchStart(e) {
+    if (!isLandscaped()) { touchState = null; return; }
+    if (!e.touches || e.touches.length !== 1) { touchState = null; return; }
+    var t = e.touches[0];
+    var el = findScrollable(e.target);
+    touchState = {
+      startX: t.clientX,
+      startY: t.clientY,
+      lastX: t.clientX,
+      lastY: t.clientY,
+      el: el,
+      scrollStart: el.scrollTop,
+      decided: false,
+      vertical: false
+    };
+  }
+
+  function onTouchMove(e) {
+    if (!touchState) return;
+    if (!isLandscaped()) { touchState = null; return; }
+    if (!e.touches || e.touches.length !== 1) return;
+    var t = e.touches[0];
+    var dx = t.clientX - touchState.startX;
+    var dy = t.clientY - touchState.startY;
+    if (!touchState.decided) {
+      if (Math.abs(dx) + Math.abs(dy) < 6) return; // pas encore décidé
+      touchState.decided = true;
+      touchState.vertical = Math.abs(dy) > Math.abs(dx);
+    }
+    if (touchState.vertical) {
+      // Swipe visuel vertical : on scroll manuellement le conteneur en Y.
+      // Convention : swipe vers le haut (dy < 0) → scrollTop augmente
+      // (on découvre du contenu plus bas).
+      var el = touchState.el;
+      var maxScroll = el.scrollHeight - el.clientHeight;
+      var next = touchState.scrollStart - dy;
+      if (next < 0) next = 0;
+      if (next > maxScroll) next = maxScroll;
+      el.scrollTop = next;
+      try { e.preventDefault(); } catch (err) {}
+    }
+    // Si swipe horizontal visuel : on laisse le browser gérer
+    // (le scroll natif body-Y se déclenche tout seul).
+  }
+
+  function onTouchEnd() {
+    touchState = null;
+  }
+
+  function wireTouchHandlers() {
+    if (wireTouchHandlers._done) return;
+    wireTouchHandlers._done = true;
+    document.addEventListener('touchstart', onTouchStart, { passive: true });
+    document.addEventListener('touchmove', onTouchMove, { passive: false });
+    document.addEventListener('touchend', onTouchEnd, { passive: true });
+    document.addEventListener('touchcancel', onTouchEnd, { passive: true });
+  }
+
   function enable() {
     document.body.classList.add('mysifa-landscape-required');
     syncClasses();
     tryLockLandscape();
+    wireTouchHandlers();
     if (!enable._wired) {
       enable._wired = true;
       window.addEventListener('orientationchange', syncClasses);

@@ -652,15 +652,7 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 <script src="/static/chat_widget.js?v=5"></script>
 <script src="/static/chat_widget_v2.js"></script>
 <script src="/static/mysifa_landscape.js"></script>
-<script>
-// Planning : on ne force PAS le paysage. La rotation CSS (transform:rotate(90deg)
-// sur body) casse le scroll vertical en portrait mobile, car le browser mappe le
-// swipe vertical visuel vers l'axe X du body (overflow-x:hidden). Les utilisateurs
-// qui veulent voir la timeline en pleine largeur tournent leur telephone manuellement.
-if(window.MySifaLandscape&&typeof window.MySifaLandscape.disable==='function'){
-  window.MySifaLandscape.disable();
-}
-</script>
+<script>window.MySifaLandscape&&MySifaLandscape.enable();</script>
 <script>
 // Handler d'erreurs installé *avant* le script principal (capte aussi les erreurs de parsing).
 function showFatal(message, lineno, colno, extra){

@@ -1850,6 +1850,14 @@ body.light .stock-empl-suggest-add:hover{background:rgba(124,58,237,.2);color:#1
 .expe-pal-eur-badge--en_attente{background:rgba(251,191,36,.18);color:var(--warn)}
 .expe-pal-eur-badge--retournee{background:rgba(52,211,153,.18);color:var(--success,#34d399)}
 .expe-pal-eur-badge--perdue{background:rgba(248,113,113,.18);color:var(--danger)}
+.expe-pal-eur-acts-cell{white-space:nowrap;text-align:right}
+.expe-pal-eur-acts{display:inline-flex;gap:4px;justify-content:flex-end}
+.expe-pal-eur-act{width:30px;height:30px;padding:0;display:inline-flex;align-items:center;justify-content:center;
+  background:transparent;border:1px solid var(--border);border-radius:7px;cursor:pointer;color:var(--text2);
+  transition:border-color .15s,color .15s,background .15s}
+.expe-pal-eur-act:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.expe-pal-eur-act--ok:hover{border-color:var(--success,#34d399);color:var(--success,#34d399);background:rgba(52,211,153,.12)}
+.expe-pal-eur-act--bad:hover{border-color:var(--danger);color:var(--danger);background:rgba(248,113,113,.12)}
 .expe-hist-table td{padding:6px 10px;max-width:140px}
 .expe-hist-table td:nth-child(1){max-width:110px} /* Validé le */
 .expe-hist-table td:nth-child(2){max-width:120px} /* Par */
@@ -7099,22 +7107,24 @@ function renderExpePalettesEurope(){
       h('td',null,_expePalEuropeStatutBadge(statut)),
       h('td',null,dateInp),
       h('td',{style:{minWidth:'140px'}},noteInp),
-      h('td',{style:{whiteSpace:'nowrap'}},
-        statut!=='retournee' ? h('button',{type:'button',className:'btn-ghost',
-          style:{fontSize:'11px',padding:'4px 8px',marginRight:'4px'},
-          onClick:()=>expeChangePaletteEuropeStatut(r.id,'retournee',expeParisDayISO())
-        },'Marquer retournée') : null,
-        statut!=='perdue' ? h('button',{type:'button',className:'btn-ghost',
-          style:{fontSize:'11px',padding:'4px 8px',marginRight:'4px',color:'var(--danger)'},
-          onClick:()=>{
-            if(!confirm('Marquer cette palette comme perdue ?')) return;
-            expeChangePaletteEuropeStatut(r.id,'perdue', null);
-          }
-        },'Perdue') : null,
-        statut!=='en_attente' ? h('button',{type:'button',className:'btn-ghost',
-          style:{fontSize:'11px',padding:'4px 8px'},
-          onClick:()=>expeChangePaletteEuropeStatut(r.id,'en_attente', '')
-        },'Réinitialiser') : null
+      h('td',{className:'expe-pal-eur-acts-cell'},
+        h('div',{className:'expe-pal-eur-acts'},
+          statut!=='retournee' ? h('button',{type:'button',className:'expe-pal-eur-act expe-pal-eur-act--ok',
+            title:'Marquer comme retournée (date du jour)',
+            onClick:()=>expeChangePaletteEuropeStatut(r.id,'retournee',expeParisDayISO())
+          },iconEl('check-circle',14)) : null,
+          statut!=='perdue' ? h('button',{type:'button',className:'expe-pal-eur-act expe-pal-eur-act--bad',
+            title:'Marquer comme perdue',
+            onClick:()=>{
+              if(!confirm('Marquer cette palette comme perdue ?')) return;
+              expeChangePaletteEuropeStatut(r.id,'perdue', null);
+            }
+          },iconEl('x',14)) : null,
+          statut!=='en_attente' ? h('button',{type:'button',className:'expe-pal-eur-act',
+            title:'Réinitialiser le statut (en attente)',
+            onClick:()=>expeChangePaletteEuropeStatut(r.id,'en_attente', '')
+          },iconEl('rotate-ccw',13)) : null
+        )
       )
     );
   }) : [h('tr',null,h('td',{colSpan:10,style:{color:'var(--muted)',padding:'18px',textAlign:'center'}},
@@ -7475,7 +7485,7 @@ function renderExpe(){
     h('div',{className:'app'},
       sidebar,
       h('main',{className:'main'},
-        h('div',{className:'container',style:(tab==='suivi_departs'?{maxWidth:'1600px'}:null)},
+        h('div',{className:'container',style:((tab==='suivi_departs'||tab==='palettes_europe')?{maxWidth:'1600px'}:null)},
           topbar,
           h('h1',null,'MyExpé'),
           !expeCanWrite()?h('div',{className:'readonly-notice',style:{marginBottom:'12px'}},iconEl('eye',13),' Lecture seule — consultation des départs, transporteurs et délais'):null,
