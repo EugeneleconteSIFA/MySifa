@@ -2458,7 +2458,7 @@ function mkTL(mon,slots){
       onmouseenter="showTip(event,this)" onmousemove="moveTip(event)" onmouseleave="hideTip()"
       ondblclick="hideTip();openEdit(${s.entry_id||idx});event.stopPropagation()"
       data-livraison="${escAttr(fmtLivraisonLong(s.date_livraison||""))}" data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-rfp="${escAttr(s.ref_produit||"")}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(fmtDur(durAff))}" data-exigences="${escAttr(exig)}" data-qte-etiq="${escAttr(qteEtiq!=null?fmtQty(qteEtiq):"")}" data-nb-palettes="${escAttr(nbPalettes!=null?String(nbPalettes):"")}"`+
-      ` data-prise-rdv="${s.prise_rdv?'1':'0'}" data-dept="${escAttr(s.departement_livraison||"")}" data-dl-imp="${dlImp?'1':'0'}" data-support="${escAttr(s.ft_support||"")}" data-adhesif="${escAttr(s.ft_adhesif||"")}" data-palette-type="${escAttr(s.ft_palette_type||"")}"`+
+      ` data-prise-rdv="${s.prise_rdv?'1':'0'}" data-dept="${escAttr(s.departement_livraison||"")}" data-dl-imp="${dlImp?'1':'0'}" data-support="${escAttr(s.ft_support||"")}" data-adhesif="${escAttr(s.ft_adhesif||"")}" data-palette-type="${escAttr(s.ft_palette_type||"")}" data-mandrin="${escAttr(s.ft_mandrin_dia||"")}"`+
       ` data-planned-start="${escAttr(String(s.start||""))}" data-planned-end="${escAttr(String(s.end||""))}"
       data-deb="${escAttr(fdt(ss))}" data-fin="${escAttr(fdt(se))}" data-st="${escAttr(st)}" data-co="${escAttr(co)}"${termineTitle?` title="${escAttr(termineTitle)}"`:""}>
       ${destock?`<div style="position:absolute;top:4px;right:4px;width:10px;height:10px;border-radius:50%;background:rgba(71,85,105,.9);pointer-events:none;z-index:5;flex-shrink:0"></div>`:""}
@@ -2623,12 +2623,14 @@ function showTip(ev,el){hideTip();const d=el.dataset;_hoveredSlotEid=d.eid?+d.ei
   const supTxt=(d.support||"").trim();
   const adhTxt=(d.adhesif||"").trim();
   const palTxt=(d.paletteType||"").trim();
+  const manTxt=(d.mandrin||"").trim();
   const qteTxt=(d.qteEtiq||"").trim();
   const colTech = `${supTxt?`<span class="k">Frontal</span><span class="v">${escHtml(supTxt)}</span>`:""}
     ${adhTxt?`<span class="k">Adhésif</span><span class="v">${escHtml(adhTxt)}</span>`:""}
+    ${manTxt?`<span class="k">Ø mandrin</span><span class="v">${escHtml(manTxt)}</span>`:""}
     ${palTxt?`<span class="k">Type palette</span><span class="v">${escHtml(palTxt)}</span>`:""}
     ${qteTxt?`<span class="k">Qté étiquettes</span><span class="v" style="color:var(--accent);font-weight:600">${escHtml(qteTxt)}</span>`:""}`;
-  const hasTech = !!(supTxt || adhTxt || palTxt || qteTxt);
+  const hasTech = !!(supTxt || adhTxt || palTxt || manTxt || qteTxt);
   // Si infos techniques présentes : 2 colonnes ; sinon : grid simple (comportement actuel)
   const bodyHtml = hasTech
     ? `<div class="tip-cols">

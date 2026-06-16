@@ -944,6 +944,7 @@ def _slot_payload(e: dict, start_iso: str, end_iso: str) -> dict:
         "ft_support": (e.get("_ft_support") or "").strip() or None,
         "ft_adhesif": (e.get("_ft_adhesif") or "").strip() or None,
         "ft_palette_type": _normalize_palette_type(e.get("_ft_palette_type")),
+        "ft_mandrin_dia": (e.get("_ft_mandrin_dia") or "").strip() or None,
     }
 
 
@@ -3027,7 +3028,8 @@ def get_timeline(machine_id: int, request: Request, semaine: Optional[str] = Non
                    ft.support                    AS _ft_support,
                    ft.adhesif                    AS _ft_adhesif,
                    ft.palette_type               AS _ft_palette_type,
-                   ft.cartons                    AS _ft_cartons
+                   ft.cartons                    AS _ft_cartons,
+                   ft.mandrin_dia                AS _ft_mandrin_dia
             FROM planning_entries pe
             LEFT JOIN of_imports oi
                 ON oi.id = pe.of_import_id

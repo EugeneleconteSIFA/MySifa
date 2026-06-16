@@ -413,7 +413,10 @@ def list_departs_jour(
         rows = conn.execute(
             f"""{_DEPARTS_SELECT}
                WHERE d.statut = 'en_attente'
-               ORDER BY d.date_enlevement ASC, d.id ASC""",
+               ORDER BY d.date_enlevement ASC,
+                        CASE WHEN COALESCE(NULLIF(TRIM(d.transporteur), ''), '') = '' THEN 1 ELSE 0 END,
+                        LOWER(COALESCE(d.transporteur, '')) ASC,
+                        d.id ASC""",
         ).fetchall()
     return [_depart_dict(r) for r in rows]
 
