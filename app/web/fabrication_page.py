@@ -895,9 +895,13 @@ let S = {
   repiquageAdjustScope: 'jour',     // 'jour' | 'cumul'
   repiquageAdjustValue: '',
   repiquageAdjustDate: '',          // date YYYY-MM-DD pour scope=cumul
-  repiquageDossierTab: 'saisie',    // 'saisie' | 'historique'
+  repiquageDossierTab: 'saisie',    // 'saisie' | 'historique' | 'discussion'
   repiquageHistorique: [],
   repiquageHistoriqueLoading: false,
+  repiquageDiscussion: [],
+  repiquageDiscussionLoading: false,
+  repiquageDiscussionType: 'commentaire', // 'observation' | 'dysfonctionnement' | 'commentaire'
+  repiquageDiscussionDraft: '',
   // Compat (anciens états — gardés pour ne pas casser d'éventuelles refs)
   showRepiquageModal: false,
 };
@@ -4301,10 +4305,75 @@ async function deleteRepiquageHistoriqueSaisie(saisieId){
   }
 }
 
+async function loadRepiquageDiscussion(no_dossier){
+  if(!no_dossier){
+    S.repiquageDiscussion = [];
+    return;
+  }
+  S.repiquageDiscussionLoading = true;
+  try{
+    const url = '/api/fabrication/repiquage/discussion?no_dossier='+encodeURIComponent(no_dossier);
+    const data = await apiFetch(url);
+    S.repiquageDiscussion = (data && data.messages) ? data.messages : [];
+  }catch(e){
+    S.repiquageDiscussion = [];
+    showToast(e?.message||'Erreur chargement discussion','danger');
+  }finally{
+    S.repiquageDiscussionLoading = false;
+  }
+}
+
+async function postRepiquageDiscussion(){
+  if(!S.repiquageDossierActif) return;
+  const message = (S.repiquageDiscussionDraft||'').trim();
+  if(!message){
+    showToast('Saisissez un message','danger');
+    return;
+  }
+  set({loading:true});
+  try{
+    await apiFetch('/api/fabrication/repiquage/discussion', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        no_dossier: S.repiquageDossierActif,
+        type: S.repiquageDiscussionType,
+        message,
+      }),
+    });
+    S.repiquageDiscussionDraft = '';
+    await loadRepiquageDiscussion(S.repiquageDossierActif);
+    showToast('Message ajouté', 'success');
+  }catch(e){
+    showToast(e?.message||'Erreur','danger');
+  }finally{
+    set({loading:false});
+  }
+}
+
+async function deleteRepiquageDiscussion(msgId){
+  if(!msgId) return;
+  if(!confirm('Supprimer ce message ?')) return;
+  set({loading:true});
+  try{
+    await apiFetch('/api/fabrication/repiquage/discussion/'+msgId, {method:'DELETE'});
+    if(S.repiquageDossierActif){
+      await loadRepiquageDiscussion(S.repiquageDossierActif);
+    }
+    showToast('Message supprimé', 'success');
+  }catch(e){
+    showToast(e?.message||'Erreur','danger');
+  }finally{
+    set({loading:false});
+  }
+}
+
 function repiquageSwitchDossierTab(tab){
   set({repiquageDossierTab: tab});
   if(tab === 'historique' && S.repiquageDossierActif){
     loadRepiquageHistorique(S.repiquageDossierActif).then(()=>render());
+  }
+  if(tab === 'discussion' && S.repiquageDossierActif){
+    loadRepiquageDiscussion(S.repiquageDossierActif).then(()=>render());
   }
 }
 
@@ -4561,6 +4630,7 @@ async function repiquageSubmitEditParam(){
 function renderRepiquageMain(){
   if(S.repiquageView === 'dossier' && S.repiquageDossierActif){
     if(S.repiquageDossierTab === 'historique') return renderRepiquageHistoriqueView();
+    if(S.repiquageDossierTab === 'discussion') return renderRepiquageDiscussionView();
     return renderRepiquageDossierView();
   }
   return renderRepiquageGrid();
@@ -4930,6 +5000,157 @@ function renderRepiquageHistoriqueView(){
   );
 }
 
+/* ── Repiquage : vue Discussion d'un dossier ────────────────── */
+function renderRepiquageDiscussionView(){
+  const ref = S.repiquageDossierActif || '—';
+  const e = S.repiquageEtat || {};
+  const dossierInfo = e.dossier || {};
+  const isAdminUser = S.user && (S.user.role==='superadmin'||S.user.role==='administration'||S.user.role==='direction');
+  const currentUserId = S.user?.id;
+  const headBanner = renderRepiquageHeadBanner(ref, dossierInfo, e.etiquettes_par_carton);
+  const tabsRow = renderRepiquageTabs();
+
+  const fmtDateLong = iso => {
+    if(!iso) return '—';
+    const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+    if(m) return `${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]}`;
+    return iso;
+  };
+
+  const typeMeta = {
+    observation:       {label:'Observation',       icon:'eye',           color:'var(--accent)'},
+    dysfonctionnement: {label:'Dysfonctionnement', icon:'alert',         color:'var(--danger)'},
+    commentaire:       {label:'Commentaire',       icon:'message-square',color:'var(--muted)'},
+  };
+
+  const msgs = S.repiquageDiscussion || [];
+
+  // Liste des messages
+  let messageList;
+  if(S.repiquageDiscussionLoading){
+    messageList = h('div',{className:'fab-empty'},
+      h('div',{className:'fab-spinner'}),
+      'Chargement…'
+    );
+  } else if(!msgs.length){
+    messageList = h('div',{className:'fab-empty'},
+      h('div',{className:'fab-empty-icon'},'💬'),
+      'Aucun message pour ce dossier — soyez le premier à en poster un.'
+    );
+  } else {
+    messageList = h('div',{style:{display:'flex',flexDirection:'column',gap:'10px'}},
+      ...msgs.map(m => {
+        const meta = typeMeta[m.type] || typeMeta.commentaire;
+        const canDelete = isAdminUser || (currentUserId && m.user_id && currentUserId === m.user_id);
+        return h('div',{style:{
+          background:'var(--card)', border:'1px solid var(--border)', borderRadius:'10px',
+          padding:'12px 14px', borderLeft:'4px solid '+meta.color,
+        }},
+          h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'10px',marginBottom:'6px',flexWrap:'wrap'}},
+            h('div',{style:{display:'flex',alignItems:'center',gap:'8px',flexWrap:'wrap'}},
+              h('span',{style:{fontWeight:'800',color:'var(--text)',fontSize:'13px'}}, m.user_nom||'—'),
+              h('span',{style:{
+                fontSize:'10px',padding:'2px 8px',borderRadius:'10px',
+                background:meta.color+'22', color:meta.color, fontWeight:'700',
+                textTransform:'uppercase', letterSpacing:'.3px',
+                display:'inline-flex',alignItems:'center',gap:'4px',
+              }}, svgIcon(meta.icon,10), meta.label),
+              h('span',{style:{fontSize:'11px',color:'var(--muted)',fontFamily:'monospace'}},
+                fmtDateLong(m.created_at)),
+            ),
+            canDelete ? h('button',{
+              className:'fab-comment-btn',
+              title:'Supprimer ce message',
+              onClick:()=>deleteRepiquageDiscussion(m.id),
+              style:{color:'var(--danger)'},
+            }, svgIcon('trash',12)) : null
+          ),
+          h('div',{style:{fontSize:'13px',color:'var(--text2)',whiteSpace:'pre-wrap',lineHeight:'1.5'}},
+            m.message||''),
+        );
+      })
+    );
+  }
+
+  // Composer
+  const typeBtnStyle = (active, color) => ({
+    border:'1.5px solid '+(active?color:'var(--border)'),
+    background: active ? (color+'22') : 'transparent',
+    color: active ? color : 'var(--muted)',
+    borderRadius:'8px', padding:'6px 12px', fontFamily:'inherit',
+    fontSize:'12px', fontWeight:'700', cursor:'pointer',
+    display:'inline-flex', alignItems:'center', gap:'5px',
+  });
+
+  const typePickerRow = h('div',{style:{display:'flex',gap:'6px',flexWrap:'wrap'}},
+    h('button',{
+      style: typeBtnStyle(S.repiquageDiscussionType==='commentaire', typeMeta.commentaire.color),
+      onClick:()=>{ S.repiquageDiscussionType='commentaire'; render(); },
+    }, svgIcon('message-square',12),' Commentaire'),
+    h('button',{
+      style: typeBtnStyle(S.repiquageDiscussionType==='observation', typeMeta.observation.color),
+      onClick:()=>{ S.repiquageDiscussionType='observation'; render(); },
+    }, svgIcon('eye',12),' Observation'),
+    h('button',{
+      style: typeBtnStyle(S.repiquageDiscussionType==='dysfonctionnement', typeMeta.dysfonctionnement.color),
+      onClick:()=>{ S.repiquageDiscussionType='dysfonctionnement'; render(); },
+    }, svgIcon('alert',12),' Dysfonctionnement'),
+  );
+
+  const ta = h('textarea',{
+    placeholder:'Votre message…',
+    rows:'3',
+    style:{
+      background:'var(--bg)', border:'1.5px solid var(--border)', borderRadius:'8px',
+      padding:'10px 12px', fontSize:'13px', color:'var(--text)', fontFamily:'inherit',
+      outline:'none', width:'100%', resize:'vertical', minHeight:'70px',
+    },
+  });
+  ta.value = S.repiquageDiscussionDraft || '';
+  ta.addEventListener('input', ev=>{ S.repiquageDiscussionDraft = ev.target.value; });
+  ta.addEventListener('keydown', ev=>{
+    if(ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)){
+      ev.preventDefault();
+      postRepiquageDiscussion();
+    }
+  });
+
+  const composer = h('div',{style:{
+    background:'var(--card)', borderTop:'1px solid var(--border)',
+    padding:'14px 22px', display:'flex', flexDirection:'column', gap:'10px',
+    flexShrink:0,
+  }},
+    typePickerRow,
+    ta,
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'10px'}},
+      h('span',{style:{fontSize:'11px',color:'var(--muted)'}},
+        S.repiquageDiscussionType === 'dysfonctionnement'
+          ? 'L\u2019administrateur sera notifié dans sa messagerie.'
+          : 'Ctrl/⌘ + Entrée pour envoyer.'),
+      h('button',{
+        className:'fab-btn fab-btn-primary fab-btn-sm',
+        onClick:postRepiquageDiscussion,
+      }, svgIcon('check',13),' Envoyer'),
+    ),
+  );
+
+  return h('div',{className:'fab-main'},
+    h('div',{className:'fab-main-head'},
+      h('span',{className:'fab-main-title'}, 'Saisie production — Repiquage'),
+      h('span',{className:'fab-etat-badge '+etatClass(S.etat)}, etatLabel(S.etat)),
+      h('span',{className:'fab-main-sub'},
+        msgs.length+' message'+(msgs.length!==1?'s':'')
+      )
+    ),
+    headBanner,
+    tabsRow,
+    h('div',{style:{flex:'1',overflowY:'auto',padding:'18px 22px'}},
+      messageList
+    ),
+    composer
+  );
+}
+
 /* Composants reutilises entre la vue saisie et la vue historique */
 function renderRepiquageTabs(){
   const tabBtn = (key, label) => h('button',{
@@ -4947,6 +5168,7 @@ function renderRepiquageTabs(){
   }},
     tabBtn('saisie', 'Saisie'),
     tabBtn('historique', 'Historique'),
+    tabBtn('discussion', 'Discussion'),
   );
 }
 

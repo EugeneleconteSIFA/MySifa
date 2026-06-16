@@ -3654,6 +3654,29 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 114, "repiquage_carton_parametrage_compteur")
 
+    # -- Migration 115 : fil de discussion par dossier (Repiquage) ------
+    # Table partagee par opera, dysfonctionnement, observation, commentaire.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=115 LIMIT 1").fetchone():
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS repiquage_discussion (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                no_dossier TEXT NOT NULL,
+                user_id INTEGER,
+                user_nom TEXT NOT NULL,
+                type TEXT NOT NULL CHECK(type IN ('observation','dysfonctionnement','commentaire')),
+                message TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )"""
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_rep_disc_dossier ON repiquage_discussion(no_dossier)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_rep_disc_date ON repiquage_discussion(created_at)"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 115, "repiquage_discussion")
+
 
 def create_default_admin():
     import bcrypt

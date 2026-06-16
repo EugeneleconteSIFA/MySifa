@@ -1621,6 +1621,78 @@ def delete_saisie_repiquage(saisie_id: int, request: Request):
 
 # -- Helpers compteur cartons repiquage --------------------------------------
 
+# Filtre SQL pour ne considerer que les saisies repiquage (toutes variantes
+# de nom de machine "Repiquage" / "rep" / etc.) Evite que des saisies code 03
+# d'autres machines polluent les compteurs.
+_REP_MACHINE_FILTER = (
+    "(lower(trim(COALESCE(machine,''))) LIKE 'repiquage%' "
+    "OR lower(trim(COALESCE(machine,''))) = 'rep' "
+    "OR lower(trim(COALESCE(machine,''))) LIKE 'rep %')"
+)
+
+
+def _rep_get_equipe_members(conn, operateur: str):
+    """Renvoie la liste des noms d'operateurs de l'equipe matin/aprem
+    a laquelle appartient `operateur` aujourd'hui sur la machine Repiquage.
+
+    Lit rh_planning_postes pour la semaine ISO en cours, machine 'Repiquage',
+    et retourne la liste des user_nom du meme creneau (matin ou aprem) que
+    l'operateur, le jour de la semaine etant inclus dans le bitmask `jours`.
+
+    Renvoie None si l'operateur n'est pas trouve dans le planning (fallback).
+    """
+    if not operateur:
+        return None
+    today = date.today()
+    try:
+        iso_year, iso_week, iso_weekday = today.isocalendar()
+    except (ValueError, AttributeError):
+        return None
+    semaine = f"{iso_year}-W{iso_week:02d}"
+    day_bit = 1 << (iso_weekday - 1)  # 1..7, Lun=bit0
+
+    # Trouver le machine_id Repiquage
+    mach = conn.execute(
+        "SELECT id FROM machines WHERE actif=1 AND ("
+        "lower(trim(COALESCE(nom,''))) LIKE 'repiquage%' "
+        "OR lower(trim(COALESCE(nom,''))) = 'rep')"
+    ).fetchone()
+    if not mach:
+        return None
+    repiquage_machine_id = int(mach["id"])
+
+    # 1) Trouver le creneau de l'operateur courant
+    row = conn.execute(
+        """SELECT p.creneau, p.jours
+           FROM rh_planning_postes p
+           JOIN users u ON u.id = p.user_id
+           WHERE p.semaine = ? AND p.machine_id = ?
+             AND trim(lower(u.nom)) = trim(lower(?))""",
+        (semaine, repiquage_machine_id, operateur),
+    ).fetchone()
+    if not row:
+        return None
+    creneau = (row["creneau"] or "").strip()
+    jours = int(row["jours"] or 0)
+    if not (jours & day_bit):
+        return None  # operateur present cette semaine mais pas ce jour
+
+    # 2) Lister les operateurs sur le meme creneau ce jour-la
+    members = conn.execute(
+        """SELECT DISTINCT u.nom
+           FROM rh_planning_postes p
+           JOIN users u ON u.id = p.user_id
+           WHERE p.semaine = ? AND p.machine_id = ?
+             AND p.creneau = ?
+             AND (p.jours & ?) != 0""",
+        (semaine, repiquage_machine_id, creneau, day_bit),
+    ).fetchall()
+    noms = [m["nom"] for m in members if m["nom"]]
+    if not noms:
+        return None
+    return noms
+
+
 def _rep_today_isoformat() -> str:
     return datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
 
@@ -1672,13 +1744,14 @@ def _rep_get_etiq_par_carton(conn, no_dossier: str):
 def _rep_get_or_create_saisie_03(conn, operateur: str, no_dossier: str, machine_name: str):
     today = _today_prefix()
     today_fr = date.today().strftime("%d/%m/%Y")
-    row = conn.execute(
-        """SELECT * FROM production_data
-           WHERE operateur=? AND no_dossier=? AND operation_code='03'
-             AND (date_operation LIKE ? OR date_operation LIKE ?)
-           ORDER BY id DESC LIMIT 1""",
-        (operateur, no_dossier, today + "%", today_fr + "%"),
-    ).fetchone()
+    sql = (
+        "SELECT * FROM production_data "
+        "WHERE trim(operateur)=trim(?) AND trim(no_dossier)=trim(?) "
+        "  AND operation_code='03' AND " + _REP_MACHINE_FILTER + " "
+        "  AND (date_operation LIKE ? OR date_operation LIKE ?) "
+        "ORDER BY id DESC LIMIT 1"
+    )
+    row = conn.execute(sql, (operateur, no_dossier, today + "%", today_fr + "%")).fetchone()
     if row:
         return dict(row)
 
@@ -1738,27 +1811,52 @@ def _rep_increment_saisie_03(conn, saisie_id: int, delta_etiq: int, delta_carton
 
 
 def _rep_aggregate(conn, no_dossier: str, operateur: str, today_only: bool):
-    """Renvoie (nb_cartons, qte_etiq) sur le dossier pour cet operateur."""
+    """Renvoie (nb_cartons, qte_etiq) sur le dossier - machine Repiquage.
+
+    Compteur "jour" : limite a l'equipe (matin/aprem) de l'operateur courant
+    via le planning_rh. Fallback : tous operateurs si l'operateur n'est pas
+    trouve dans le planning ce jour-la.
+    Compteur "cumul" : toutes dates, tous operateurs.
+    Garanti par construction : Jour <= Cumul.
+    """
     today = _today_prefix()
     today_fr = date.today().strftime("%d/%m/%Y")
     if today_only:
-        row = conn.execute(
-            """SELECT COALESCE(SUM(nb_cartons),0) AS c,
-                      COALESCE(SUM(quantite_traitee),0) AS e
-               FROM production_data
-               WHERE operateur=? AND no_dossier=? AND operation_code='03'
-                 AND (date_operation LIKE ? OR date_operation LIKE ?)""",
-            (operateur, no_dossier, today + "%", today_fr + "%"),
-        ).fetchone()
+        equipe = _rep_get_equipe_members(conn, operateur)
+        if equipe:
+            placeholders = ",".join(["?"] * len(equipe))
+            sql = (
+                "SELECT COALESCE(SUM(nb_cartons),0) AS c, "
+                "       COALESCE(SUM(quantite_traitee),0) AS e "
+                "FROM production_data "
+                "WHERE trim(no_dossier)=trim(?) AND operation_code='03' "
+                "  AND " + _REP_MACHINE_FILTER + " "
+                "  AND (date_operation LIKE ? OR date_operation LIKE ?) "
+                "  AND trim(lower(operateur)) IN (" + placeholders + ")"
+            )
+            params = [no_dossier, today + "%", today_fr + "%"]
+            params.extend([str(n).strip().lower() for n in equipe])
+            row = conn.execute(sql, params).fetchone()
+        else:
+            # Fallback : pas d'equipe identifiee, on prend tout le jour
+            sql = (
+                "SELECT COALESCE(SUM(nb_cartons),0) AS c, "
+                "       COALESCE(SUM(quantite_traitee),0) AS e "
+                "FROM production_data "
+                "WHERE trim(no_dossier)=trim(?) AND operation_code='03' "
+                "  AND " + _REP_MACHINE_FILTER + " "
+                "  AND (date_operation LIKE ? OR date_operation LIKE ?)"
+            )
+            row = conn.execute(sql, (no_dossier, today + "%", today_fr + "%")).fetchone()
     else:
-        # Cumul dossier toutes dates (uniquement code 03) - tous operateurs
-        row = conn.execute(
-            """SELECT COALESCE(SUM(nb_cartons),0) AS c,
-                      COALESCE(SUM(quantite_traitee),0) AS e
-               FROM production_data
-               WHERE no_dossier=? AND operation_code='03'""",
-            (no_dossier,),
-        ).fetchone()
+        sql = (
+            "SELECT COALESCE(SUM(nb_cartons),0) AS c, "
+            "       COALESCE(SUM(quantite_traitee),0) AS e "
+            "FROM production_data "
+            "WHERE trim(no_dossier)=trim(?) AND operation_code='03' "
+            "  AND " + _REP_MACHINE_FILTER
+        )
+        row = conn.execute(sql, (no_dossier,)).fetchone()
     return int(row["c"] or 0), int(row["e"] or 0)
 
 
@@ -2042,12 +2140,15 @@ async def retirer_carton_complet(request: Request):
 
         today = _today_prefix()
         today_fr = date.today().strftime("%d/%m/%Y")
+        sql_ret = (
+            "SELECT id, nb_cartons, quantite_traitee FROM production_data "
+            "WHERE trim(operateur)=trim(?) AND trim(no_dossier)=trim(?) "
+            "  AND operation_code='03' AND " + _REP_MACHINE_FILTER + " "
+            "  AND (date_operation LIKE ? OR date_operation LIKE ?) "
+            "ORDER BY id DESC LIMIT 1"
+        )
         row = conn.execute(
-            """SELECT id, nb_cartons, quantite_traitee FROM production_data
-               WHERE operateur=? AND no_dossier=? AND operation_code='03'
-                 AND (date_operation LIKE ? OR date_operation LIKE ?)
-               ORDER BY id DESC LIMIT 1""",
-            (operateur, no_dossier, today + "%", today_fr + "%"),
+            sql_ret, (operateur, no_dossier, today + "%", today_fr + "%")
         ).fetchone()
         if not row or int(row["nb_cartons"] or 0) <= 0:
             raise HTTPException(
@@ -2269,3 +2370,151 @@ def get_repiquage_historique(request: Request, no_dossier: str):
         )
         out.append(d)
     return {"no_dossier": no_dossier, "saisies": out}
+
+
+# -- Endpoints fil de discussion repiquage ----------------------------------
+
+_REP_DISCUSSION_TYPES = ("observation", "dysfonctionnement", "commentaire")
+
+
+@router.get("/api/fabrication/repiquage/discussion")
+def get_repiquage_discussion(request: Request, no_dossier: str):
+    """Liste les messages du fil pour un dossier (tri chronologique croissant)."""
+    user = get_current_user(request)
+    _check_fab_access(user)
+    no_dossier = (no_dossier or "").strip()
+    if not no_dossier:
+        raise HTTPException(400, "no_dossier requis")
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT id, no_dossier, user_id, user_nom, type, message, created_at
+               FROM repiquage_discussion
+               WHERE trim(no_dossier) = trim(?)
+               ORDER BY created_at ASC, id ASC""",
+            (no_dossier,),
+        ).fetchall()
+    return {"no_dossier": no_dossier, "messages": [dict(r) for r in rows]}
+
+
+@router.post("/api/fabrication/repiquage/discussion")
+async def post_repiquage_discussion(request: Request):
+    """Poste un message dans le fil. Si type=dysfonctionnement, notif superadmin."""
+    user = get_current_user(request)
+    _check_fab_access(user)
+    body = await request.json()
+
+    no_dossier = (body.get("no_dossier") or "").strip()
+    if not no_dossier:
+        raise HTTPException(400, "no_dossier requis")
+
+    type_msg = (body.get("type") or "commentaire").strip().lower()
+    if type_msg not in _REP_DISCUSSION_TYPES:
+        raise HTTPException(400, f"type invalide (attendu : {', '.join(_REP_DISCUSSION_TYPES)})")
+
+    message = (body.get("message") or "").strip()
+    if not message:
+        raise HTTPException(400, "Message requis")
+    if len(message) > 4000:
+        raise HTTPException(400, "Message trop long (max 4000 caracteres)")
+
+    user_nom = (user.get("nom") or user.get("email") or "Operateur").strip()
+    user_id = int(user.get("id")) if user.get("id") is not None else None
+    now = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
+
+    with get_db() as conn:
+        cur = conn.execute(
+            """INSERT INTO repiquage_discussion
+               (no_dossier, user_id, user_nom, type, message, created_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (no_dossier, user_id, user_nom, type_msg, message, now),
+        )
+        new_id = cur.lastrowid
+
+        # Notif superadmin pour les dysfonctionnements
+        if type_msg == "dysfonctionnement":
+            from config import SUPERADMIN_EMAIL
+            try:
+                pe = conn.execute(
+                    "SELECT client FROM planning_entries "
+                    "WHERE trim(reference)=trim(?) LIMIT 1",
+                    (no_dossier,),
+                ).fetchone()
+                client_label = (pe["client"] if pe else "") or ""
+                subject = f"[Repiquage] Dysfonctionnement signale - OF {no_dossier}"
+                if client_label:
+                    subject += f" ({client_label})"
+                body_msg = (
+                    f"L'operateur {user_nom} a signale un dysfonctionnement "
+                    f"sur le dossier {no_dossier}"
+                    + (f" ({client_label})" if client_label else "")
+                    + f".\n\nMessage :\n{message}\n\n"
+                    f"A consulter dans le fil de discussion du dossier."
+                )
+                conn.execute(
+                    """INSERT INTO messages
+                       (from_user_id, from_email, from_name, to_email, subject, body, created_at)
+                       VALUES (?,?,?,?,?,?,?)""",
+                    (
+                        user_id,
+                        (user.get("email") or "").strip().lower(),
+                        f"[Repiquage] {user_nom}",
+                        (SUPERADMIN_EMAIL or "").strip().lower(),
+                        subject,
+                        body_msg,
+                        now,
+                    ),
+                )
+            except Exception:
+                # Ne jamais bloquer le post pour un echec de notif
+                pass
+        conn.commit()
+
+        row = conn.execute(
+            "SELECT id, no_dossier, user_id, user_nom, type, message, created_at "
+            "FROM repiquage_discussion WHERE id=?",
+            (new_id,),
+        ).fetchone()
+
+    log_action(
+        user=user,
+        action="CREATE",
+        module="fabrication",
+        objet=f"Discussion repiquage dossier {no_dossier}",
+        detail={"type": type_msg, "len": len(message)},
+        ip=request.client.host if request.client else None,
+    )
+    return dict(row) if row else {"success": True, "id": new_id}
+
+
+@router.delete("/api/fabrication/repiquage/discussion/{msg_id}")
+def delete_repiquage_discussion(msg_id: int, request: Request):
+    """Supprime un message du fil. Reserve a l'auteur ou aux admins."""
+    user = get_current_user(request)
+    _check_fab_access(user)
+    with get_db() as conn:
+        ex = conn.execute(
+            "SELECT id, user_id, user_nom FROM repiquage_discussion WHERE id=?",
+            (msg_id,),
+        ).fetchone()
+        if not ex:
+            raise HTTPException(404, "Message introuvable")
+
+        is_author = (
+            user.get("id") is not None
+            and ex["user_id"] is not None
+            and int(user["id"]) == int(ex["user_id"])
+        )
+        if not (is_admin(user) or is_author):
+            raise HTTPException(403, "Non autorise")
+
+        conn.execute("DELETE FROM repiquage_discussion WHERE id=?", (msg_id,))
+        conn.commit()
+
+    log_action(
+        user=user,
+        action="DELETE",
+        module="fabrication",
+        objet=f"Discussion repiquage message #{msg_id}",
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True}
