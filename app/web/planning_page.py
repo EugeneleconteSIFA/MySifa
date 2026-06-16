@@ -285,6 +285,9 @@ body.light .slot:hover .line1,body.light .slot:hover .line2,body.light .slot:hov
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border:1.5px solid #eab308;
   box-shadow:0 1px 4px rgba(0,0,0,.35);letter-spacing:.2px}
 body.light .slot .line-exig{background:#fef9c3;color:#713f12;border-color:#ca8a04}
+.slot .line-no-of{display:block;width:calc(100% - 4px);max-width:100%;margin-top:4px;padding:3px 5px;border-radius:5px;
+  font-size:10px;font-style:italic;color:var(--muted);background:rgba(148,163,184,.12);
+  border:1px solid rgba(148,163,184,.25);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
 .tip-exig{margin-top:10px;padding:8px 10px;border-radius:8px;background:rgba(251,191,36,.18);border:1.5px solid var(--warn);
   font-size:12px;font-weight:700;color:var(--warn);line-height:1.4}
 .tip-exig .k{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:4px;font-weight:600}
@@ -2469,7 +2472,7 @@ function mkTL(mon,slots){
       data-deb="${escAttr(fdt(ss))}" data-fin="${escAttr(fdt(se))}" data-st="${escAttr(st)}" data-co="${escAttr(co)}"${termineTitle?` title="${escAttr(termineTitle)}"`:""}>
       ${destock?`<div style="position:absolute;top:4px;right:4px;width:10px;height:10px;border-radius:50%;background:rgba(71,85,105,.9);pointer-events:none;z-index:5;flex-shrink:0"></div>`:""}
       ${resizeHandle}
-      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}${fscBadgeHtml(s)}</span>${line2SlotHtml?`<span class="line2">${line2SlotHtml}</span>`:""}${line3SlotHtml?`<span class="line3">${line3SlotHtml}</span>`:""}${exig?`<span class="line-exig" title="${escAttr(exig)}">${escAttr(exig)}</span>`:""}</div>`:w>1.8?`<div style="overflow:hidden;height:100%;display:flex;align-items:center;justify-content:center"><div class="slot-vert-txt" style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg)">${escAttr((cli.slice(0,6)+(cli.length>6?".":"")).toUpperCase())}</div></div>`:""}</div>`;
+      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}${fscBadgeHtml(s)}</span>${line2SlotHtml?`<span class="line2">${line2SlotHtml}</span>`:""}${line3SlotHtml?`<span class="line3">${line3SlotHtml}</span>`:""}${(()=>{const _isExpe=(S.planningVue==="expe"||S.planningVue==="prod_expe");if(_isExpe){return qteEtiq==null?`<span class="line-no-of">pas d'OF lié</span>`:"";}return exig?`<span class="line-exig" title="${escAttr(exig)}">${escAttr(exig)}</span>`:"";})()}</div>`:w>1.8?`<div style="overflow:hidden;height:100%;display:flex;align-items:center;justify-content:center"><div class="slot-vert-txt" style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg)">${escAttr((cli.slice(0,6)+(cli.length>6?".":"")).toUpperCase())}</div></div>`:""}</div>`;
   });
 
   const np=gp(now);
