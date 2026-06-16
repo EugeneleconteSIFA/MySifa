@@ -2153,10 +2153,30 @@ async def ajuster_compteur(request: Request):
             client = (pe_row["client"] if pe_row else None) or None
             designation = (pe_row["description"] if pe_row else None) or None
             now_iso = _rep_today_isoformat()
+            # Date d'operation : par defaut maintenant, sinon la date fournie
+            # (utilisee pour reporter de la production sur une date passee).
+            date_raw = (body.get("date_operation") or "").strip()
+            if date_raw:
+                # Accepte YYYY-MM-DD ou YYYY-MM-DDTHH:MM:SS
+                try:
+                    if "T" in date_raw:
+                        dt_op = datetime.fromisoformat(date_raw[:19])
+                    else:
+                        # Date pure : on attache l'heure courante locale pour le tri
+                        d_only = date.fromisoformat(date_raw[:10])
+                        now_t = datetime.now(_PARIS).time()
+                        dt_op = datetime.combine(d_only, now_t.replace(microsecond=0))
+                    date_op_val = dt_op.strftime("%Y-%m-%dT%H:%M:%S")
+                except ValueError:
+                    raise HTTPException(400, "date_operation invalide")
+            else:
+                date_op_val = now_iso
             commentaire = (
                 f"Ajustement manuel cumul par {user.get('nom') or user.get('email')} "
                 f"(delta {delta_cartons:+d} cartons, {delta_etiq:+d} etiq.)"
             )
+            if date_raw:
+                commentaire += f" - date reportee : {date_raw[:10]}"
             conn.execute(
                 """INSERT INTO production_data
                    (operateur, date_operation, operation, operation_code,
@@ -2167,7 +2187,7 @@ async def ajuster_compteur(request: Request):
                     modifie_par, modifie_le, modifie_note)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)""",
                 (
-                    operateur, now_iso, "03 - Production", "03",
+                    operateur, date_op_val, "03 - Production", "03",
                     "info", "production", machine_obj["nom"],
                     no_dossier, client, designation,
                     0, delta_etiq, delta_cartons,
@@ -2178,6 +2198,7 @@ async def ajuster_compteur(request: Request):
                             "machine": machine_obj["nom"],
                             "source": "repiquage_ajustement_cumul",
                             "delta_cartons": delta_cartons, "delta_etiq": delta_etiq,
+                            "date_reportee": date_raw[:10] if date_raw else None,
                         },
                         default=str,
                     ),
@@ -2208,3 +2229,43 @@ async def ajuster_compteur(request: Request):
         "jour": {"nb_cartons": jour_c, "qte_etiq": jour_e},
         "cumul": {"nb_cartons": cum_c2, "qte_etiq": cum_e2},
     }
+
+
+@router.get("/api/fabrication/repiquage/historique")
+def get_repiquage_historique(request: Request, no_dossier: str):
+    """Historique des saisies code 03 (Repiquage) pour un dossier.
+
+    Renvoie toutes les lignes, tous operateurs, triees par date desc.
+    Inclut un flag is_ajustement deduit du commentaire et de est_manuel.
+    """
+    user = get_current_user(request)
+    _check_fab_access(user)
+    no_dossier = (no_dossier or "").strip()
+    if not no_dossier:
+        raise HTTPException(400, "no_dossier requis")
+
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT pd.id, pd.operateur, pd.date_operation, pd.machine,
+                      pd.quantite_traitee, pd.nb_cartons, pd.commentaire,
+                      pd.est_manuel, pd.modifie_par, pd.modifie_le, pd.modifie_note,
+                      pd.data
+               FROM production_data pd
+               WHERE pd.no_dossier = ? AND pd.operation_code = '03'
+                 AND (lower(trim(pd.machine)) LIKE 'repiquage%'
+                      OR lower(trim(pd.machine)) = 'rep'
+                      OR lower(trim(pd.machine)) LIKE 'rep %')
+               ORDER BY pd.date_operation DESC, pd.id DESC""",
+            (no_dossier,),
+        ).fetchall()
+
+    out = []
+    for r in rows:
+        d = dict(r)
+        comm = (d.get("commentaire") or "").lower()
+        d["is_ajustement"] = (
+            int(d.get("est_manuel") or 0) == 1
+            or "ajustement" in comm
+        )
+        out.append(d)
+    return {"no_dossier": no_dossier, "saisies": out}
