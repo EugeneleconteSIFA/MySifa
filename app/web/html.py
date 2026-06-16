@@ -7046,7 +7046,7 @@ function renderExpePalettesEurope(){
 
   // Tableau des départs palette Europe
   const head = h('tr',null,
-    ...['Date enl.','Client','ARC','N° BL','Pal.','Statut','Date retour','Note','Actions'].map(t=>h('th',null,t))
+    ...['Date enl.','Client','Transp.','ARC','N° BL','Pal.','Statut','Date retour','Note','Actions'].map(t=>h('th',null,t))
   );
   const bodyRows = departs.length ? departs.map(r=>{
     const statut = r.palette_europe_statut || 'en_attente';
@@ -7092,6 +7092,7 @@ function renderExpePalettesEurope(){
     return h('tr',null,
       h('td',null,(r.date_enlevement||'').slice(0,10)),
       h('td',null,r.client||'—'),
+      h('td',null,(c=>c?trpTag(r.transporteur||'—',c):(r.transporteur||'—'))(trpColorFromRow(r))),
       h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.arc||'—'),
       h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.no_bl||'—'),
       h('td',{style:{textAlign:'right',fontWeight:'700'}},r.nb_palette!=null?String(r.nb_palette):'—'),
@@ -7116,7 +7117,7 @@ function renderExpePalettesEurope(){
         },'Réinitialiser') : null
       )
     );
-  }) : [h('tr',null,h('td',{colSpan:9,style:{color:'var(--muted)',padding:'18px',textAlign:'center'}},
+  }) : [h('tr',null,h('td',{colSpan:10,style:{color:'var(--muted)',padding:'18px',textAlign:'center'}},
     S.expePalettesEuropeLoading?'Chargement…':'Aucun départ palette Europe pour ces filtres'))];
 
   // Bloc Suivi : filtre + tableau détaillé
