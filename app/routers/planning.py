@@ -847,6 +847,61 @@ def _is_palette_sized_box(label) -> bool:
     return False
 
 
+def _build_conditionnement_phrase(e: dict) -> Optional[str]:
+    """Phrase descriptive du conditionnement pour la vue expé.
+    Cas classique : 'Palettes de 30 cartons de 6 bobines de 1000 étiquettes'
+    Cas conteneur/box : 'Conteneurs de 6 bobines de 1000 étiquettes' (1 carton = 1 palette)
+    Retourne None si données insuffisantes."""
+    try:
+        nb_bob_carton = e.get("_ft_nb_bobines_carton")
+        nb_etiq_bobin = e.get("_ft_nb_etiq_bobin")
+        sol  = e.get("_ft_palette_nb_cartons_sol")
+        haut = e.get("_ft_palette_nb_cartons_hauteur")
+    except Exception:
+        return None
+
+    is_box = (_is_palette_sized_box(e.get("_ft_cartons"))
+              or _is_palette_sized_box(e.get("_ft_palette_type")))
+
+    parts: list = []
+
+    if is_box:
+        parts.append("Conteneurs")
+    else:
+        try:
+            n_cartons = int(sol) * int(haut)
+            if n_cartons <= 0:
+                return None
+            label = "cartons" if n_cartons > 1 else "carton"
+            parts.append(f"Palettes de {n_cartons} {label}")
+        except (TypeError, ValueError):
+            return None
+
+    if nb_bob_carton is not None:
+        try:
+            n = int(nb_bob_carton)
+            if n > 0:
+                label = "bobines" if n > 1 else "bobine"
+                parts.append(f"de {n} {label}")
+        except (TypeError, ValueError):
+            pass
+
+    if nb_etiq_bobin is not None:
+        try:
+            n = int(nb_etiq_bobin)
+            if n > 0:
+                # Espace insécable comme séparateur de milliers (lecture humaine)
+                s = f"{n:,}".replace(",", "\u202F")
+                label = "étiquettes" if n > 1 else "étiquette"
+                parts.append(f"de {s} {label}")
+        except (TypeError, ValueError):
+            pass
+
+    if not parts:
+        return None
+    return " ".join(parts)
+
+
 def _compute_nb_palettes(e: dict) -> Optional[int]:
     """Calcule le nombre de palettes nécessaires.
     Formule classique :
@@ -944,6 +999,7 @@ def _slot_payload(e: dict, start_iso: str, end_iso: str) -> dict:
         "ft_support": (e.get("_ft_support") or "").strip() or None,
         "ft_adhesif": (e.get("_ft_adhesif") or "").strip() or None,
         "ft_palette_type": _normalize_palette_type(e.get("_ft_palette_type")),
+        "ft_conditionnement_phrase": _build_conditionnement_phrase(e),
         "ft_mandrin_dia": (e.get("_ft_mandrin_dia") or "").strip() or None,
     }
 
@@ -3029,7 +3085,8 @@ def get_timeline(machine_id: int, request: Request, semaine: Optional[str] = Non
                    ft.adhesif                    AS _ft_adhesif,
                    ft.palette_type               AS _ft_palette_type,
                    ft.cartons                    AS _ft_cartons,
-                   ft.mandrin_dia                AS _ft_mandrin_dia
+                   ft.mandrin_dia                AS _ft_mandrin_dia,
+                   ft.nb_etiq_bobin              AS _ft_nb_etiq_bobin
             FROM planning_entries pe
             LEFT JOIN of_imports oi
                 ON oi.id = pe.of_import_id

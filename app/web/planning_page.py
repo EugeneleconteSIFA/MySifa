@@ -2458,7 +2458,7 @@ function mkTL(mon,slots){
       onmouseenter="showTip(event,this)" onmousemove="moveTip(event)" onmouseleave="hideTip()"
       ondblclick="hideTip();openEdit(${s.entry_id||idx});event.stopPropagation()"
       data-livraison="${escAttr(fmtLivraisonLong(s.date_livraison||""))}" data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-rfp="${escAttr(s.ref_produit||"")}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(fmtDur(durAff))}" data-exigences="${escAttr(exig)}" data-qte-etiq="${escAttr(qteEtiq!=null?fmtQty(qteEtiq):"")}" data-nb-palettes="${escAttr(nbPalettes!=null?String(nbPalettes):"")}"`+
-      ` data-prise-rdv="${s.prise_rdv?'1':'0'}" data-dept="${escAttr(s.departement_livraison||"")}" data-dl-imp="${dlImp?'1':'0'}" data-support="${escAttr(s.ft_support||"")}" data-adhesif="${escAttr(s.ft_adhesif||"")}" data-palette-type="${escAttr(s.ft_palette_type||"")}" data-mandrin="${escAttr(s.ft_mandrin_dia||"")}"`+
+      ` data-prise-rdv="${s.prise_rdv?'1':'0'}" data-dept="${escAttr(s.departement_livraison||"")}" data-dl-imp="${dlImp?'1':'0'}" data-support="${escAttr(s.ft_support||"")}" data-adhesif="${escAttr(s.ft_adhesif||"")}" data-palette-type="${escAttr(s.ft_palette_type||"")}" data-mandrin="${escAttr(s.ft_mandrin_dia||"")}" data-cond="${escAttr(s.ft_conditionnement_phrase||"")}"`+
       ` data-planned-start="${escAttr(String(s.start||""))}" data-planned-end="${escAttr(String(s.end||""))}"
       data-deb="${escAttr(fdt(ss))}" data-fin="${escAttr(fdt(se))}" data-st="${escAttr(st)}" data-co="${escAttr(co)}"${termineTitle?` title="${escAttr(termineTitle)}"`:""}>
       ${destock?`<div style="position:absolute;top:4px;right:4px;width:10px;height:10px;border-radius:50%;background:rgba(71,85,105,.9);pointer-events:none;z-index:5;flex-shrink:0"></div>`:""}
@@ -2607,7 +2607,8 @@ function showTip(ev,el){hideTip();const d=el.dataset;_hoveredSlotEid=d.eid?+d.ei
   const deptTip=(d.dept||"").trim();
   const rdvTip=d.priseRdv==="1";
   const dlImpTip=d.dlImp==="1";
-  const expeTipRows=isExpeVueTip?`${deptTip?`<span class="k">Département</span><span class="v">${escHtml(deptTip)}</span>`:""}${rdvTip?`<span class="k">RDV</span><span class="v" style="color:var(--warn);font-weight:600">À prendre</span>`:""}${nbPalTip?`<span class="k">Palettes prévues</span><span class="v" style="color:${+nbPalTip>=6?"var(--success)":"var(--muted)"};font-weight:700">${escHtml(nbPalTip)}</span>`:""}`:"" ;
+  // Vue expé : on retire 'Palettes prévues' de la colonne générale (déplacé dans Infos expéditions)
+  const expeTipRows=isExpeVueTip?`${deptTip?`<span class="k">Département</span><span class="v">${escHtml(deptTip)}</span>`:""}${rdvTip?`<span class="k">RDV</span><span class="v" style="color:var(--warn);font-weight:600">À prendre</span>`:""}`:"" ;
   const livStyle=dlImpTip?"color:var(--danger);font-weight:700":"";
   const livSuffix=dlImpTip?' <span style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px">(imposée)</span>':"";
   // Colonne gauche : infos générales (réf produit, format, dates, statut)
@@ -2625,17 +2626,29 @@ function showTip(ev,el){hideTip();const d=el.dataset;_hoveredSlotEid=d.eid?+d.ei
   const palTxt=(d.paletteType||"").trim();
   const manTxt=(d.mandrin||"").trim();
   const qteTxt=(d.qteEtiq||"").trim();
+  const condTxt=(d.cond||"").trim();
+  // Colonne technique (vue prod)
   const colTech = `${supTxt?`<span class="k">Frontal</span><span class="v">${escHtml(supTxt)}</span>`:""}
     ${adhTxt?`<span class="k">Adhésif</span><span class="v">${escHtml(adhTxt)}</span>`:""}
     ${manTxt?`<span class="k">Ø mandrin</span><span class="v">${escHtml(manTxt)}</span>`:""}
     ${palTxt?`<span class="k">Type palette</span><span class="v">${escHtml(palTxt)}</span>`:""}
     ${qteTxt?`<span class="k">Qté étiquettes</span><span class="v" style="color:var(--accent);font-weight:600">${escHtml(qteTxt)}</span>`:""}`;
+  // Colonne expédition (vue expé)
+  const colExpe = `${nbPalTip?`<span class="k">Nb palettes</span><span class="v" style="color:${+nbPalTip>=6?'var(--success)':'var(--muted)'};font-weight:700">${escHtml(nbPalTip)}</span>`:""}
+    ${palTxt?`<span class="k">Type palette</span><span class="v">${escHtml(palTxt)}</span>`:""}
+    ${qteTxt?`<span class="k">Qté étiquettes</span><span class="v" style="color:var(--accent);font-weight:600">${escHtml(qteTxt)}</span>`:""}
+    ${condTxt?`<span class="k">Conditionnement</span><span class="v">${escHtml(condTxt)}</span>`:""}`;
   const hasTech = !!(supTxt || adhTxt || palTxt || manTxt || qteTxt);
-  // Si infos techniques présentes : 2 colonnes ; sinon : grid simple (comportement actuel)
-  const bodyHtml = hasTech
+  const hasExpe = !!(nbPalTip || palTxt || qteTxt || condTxt);
+  // Branchement selon la vue : expé → 'Infos expéditions', sinon → 'Infos techniques'
+  const showExpeCol = isExpeVueTip && hasExpe;
+  const showTechCol = !isExpeVueTip && hasTech;
+  const colSide = showExpeCol ? colExpe : (showTechCol ? colTech : null);
+  const colTitle = showExpeCol ? 'Infos expéditions' : 'Infos techniques';
+  const bodyHtml = colSide
     ? `<div class="tip-cols">
          <div><div class="tip-col-hdr">Infos générales</div><div class="tip-grid">${colGen}</div></div>
-         <div><div class="tip-col-hdr">Infos techniques</div><div class="tip-grid">${colTech}</div></div>
+         <div><div class="tip-col-hdr">${colTitle}</div><div class="tip-grid">${colSide}</div></div>
        </div>`
     : `<div class="tip-grid">${colGen}${qteTxt?`<span class="k">Qté étiquettes</span><span class="v" style="color:var(--accent);font-weight:600">${escHtml(qteTxt)}</span>`:""}</div>`;
   tipEl.innerHTML=`<div class="tip-hdr"><div class="tip-bar" style="background:${d.co||"#888"}"></div><div><div class="tip-ref">${d.ref||"—"}</div>${sub}</div></div>
