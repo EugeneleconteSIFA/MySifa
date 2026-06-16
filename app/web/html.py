@@ -2070,7 +2070,7 @@ __STAGING_BANDEAU_HTML__
 <script src="/static/mysifa_humeur.js"></script>
 <script src="/static/chat_widget_v2.js?v=2"></script>
 <script src="/static/mysifa_ai_chat.js"></script>
-<script src="/static/mysifa_landscape.js"></script>
+<script src="/static/mysifa_landscape.js?v=2"></script>
 <script>
 const API=window.location.origin;
 const INITIAL_APP="__INITIAL_APP_VALUE__";

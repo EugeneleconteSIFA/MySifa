@@ -2013,3 +2013,198 @@ async def fermer_carton_courant(request: Request):
         "jour": {"nb_cartons": jour_c, "qte_etiq": jour_e},
         "cumul": {"nb_cartons": cum_c, "qte_etiq": cum_e},
     }
+
+
+@router.post("/api/fabrication/repiquage/retirer-carton-complet")
+async def retirer_carton_complet(request: Request):
+    """Retire 1 carton complet de la saisie du jour (geste -1 carton).
+
+    Refuse si la saisie du jour est a 0 carton (rien a retirer).
+    Decremente quantite_traitee et nb_cartons de la ligne 03 du jour.
+    """
+    user = get_current_user(request)
+    _check_fab_access(user)
+    body = await request.json()
+
+    no_dossier = (body.get("no_dossier") or "").strip()
+    if not no_dossier:
+        raise HTTPException(400, "no_dossier requis")
+
+    operateur = _rep_operateur(user)
+    with get_db() as conn:
+        machine_obj = _resolve_machine(user, body, conn)
+        etiq_par_carton = _rep_get_etiq_par_carton(conn, no_dossier)
+        if not etiq_par_carton or etiq_par_carton <= 0:
+            raise HTTPException(
+                400,
+                "Parametrage 'etiquettes par carton' manquant pour ce dossier.",
+            )
+
+        today = _today_prefix()
+        today_fr = date.today().strftime("%d/%m/%Y")
+        row = conn.execute(
+            """SELECT id, nb_cartons, quantite_traitee FROM production_data
+               WHERE operateur=? AND no_dossier=? AND operation_code='03'
+                 AND (date_operation LIKE ? OR date_operation LIKE ?)
+               ORDER BY id DESC LIMIT 1""",
+            (operateur, no_dossier, today + "%", today_fr + "%"),
+        ).fetchone()
+        if not row or int(row["nb_cartons"] or 0) <= 0:
+            raise HTTPException(
+                400,
+                "Aucun carton a retirer aujourd'hui pour ce dossier.",
+            )
+
+        _rep_increment_saisie_03(
+            conn, int(row["id"]), -etiq_par_carton, -1,
+        )
+        conn.commit()
+
+        nb_courant = _rep_get_carton_courant(conn, no_dossier, operateur)
+        jour_c, jour_e = _rep_aggregate(conn, no_dossier, operateur, today_only=True)
+        cum_c, cum_e = _rep_aggregate(conn, no_dossier, operateur, today_only=False)
+
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="fabrication",
+        objet=f"Repiquage -1 carton dossier {no_dossier}",
+        detail={"etiq_retirees": etiq_par_carton},
+        ip=request.client.host if request.client else None,
+    )
+    return {
+        "success": True,
+        "nb_etiquettes_courant": nb_courant,
+        "etiquettes_par_carton": etiq_par_carton,
+        "jour": {"nb_cartons": jour_c, "qte_etiq": jour_e},
+        "cumul": {"nb_cartons": cum_c, "qte_etiq": cum_e},
+    }
+
+
+@router.post("/api/fabrication/repiquage/ajuster-compteur")
+async def ajuster_compteur(request: Request):
+    """Ajuste manuellement le compteur jour ou cumul (admin uniquement).
+
+    Body : {no_dossier, scope: 'jour'|'cumul', nb_cartons_cible: int}
+    - scope='jour'  : ajuste la saisie 03 du jour de l'operateur (modifie ses cartons)
+    - scope='cumul' : cree une ligne d'ajustement (positif ou negatif) datee
+                       d'aujourd'hui pour atteindre la valeur cible sur le dossier.
+
+    L'ajustement est trace via une saisie 03 marquee dans le commentaire.
+    """
+    user = get_current_user(request)
+    if not is_admin(user):
+        raise HTTPException(403, "Reserve aux administrateurs")
+    body = await request.json()
+
+    no_dossier = (body.get("no_dossier") or "").strip()
+    if not no_dossier:
+        raise HTTPException(400, "no_dossier requis")
+    scope = (body.get("scope") or "").strip().lower()
+    if scope not in ("jour", "cumul"):
+        raise HTTPException(400, "scope doit etre 'jour' ou 'cumul'")
+    try:
+        cible = int(body.get("nb_cartons_cible"))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "nb_cartons_cible invalide")
+    if cible < 0:
+        raise HTTPException(400, "nb_cartons_cible doit etre >= 0")
+
+    operateur = _rep_operateur(user)
+    with get_db() as conn:
+        machine_obj = _resolve_machine(user, body, conn)
+        etiq_par_carton = _rep_get_etiq_par_carton(conn, no_dossier) or 0
+
+        if scope == "jour":
+            # Ajuste la saisie 03 du jour de l'operateur courant
+            saisie = _rep_get_or_create_saisie_03(
+                conn, operateur, no_dossier, machine_obj["nom"]
+            )
+            actuel_cartons = int(saisie.get("nb_cartons") or 0)
+            actuel_etiq = int(saisie.get("quantite_traitee") or 0)
+            delta_cartons = cible - actuel_cartons
+            # Recalcul cible etiquettes : cartons * epc (si defini) sinon proportionnel
+            if etiq_par_carton > 0:
+                cible_etiq = cible * etiq_par_carton
+            else:
+                cible_etiq = actuel_etiq + delta_cartons  # fallback
+            delta_etiq = cible_etiq - actuel_etiq
+            _rep_increment_saisie_03(
+                conn, saisie["id"], delta_etiq, delta_cartons,
+            )
+        else:
+            # scope == 'cumul' : on ajoute une ligne d'ajustement aujourd'hui
+            cum_c, _cum_e = _rep_aggregate(
+                conn, no_dossier, operateur, today_only=False,
+            )
+            delta_cartons = cible - cum_c
+            if etiq_par_carton > 0:
+                delta_etiq = delta_cartons * etiq_par_carton
+            else:
+                delta_etiq = delta_cartons
+            if delta_cartons == 0 and delta_etiq == 0:
+                return {"success": True, "unchanged": True}
+            # Une ligne d'ajustement dediee (commentaire identifiant)
+            pe_row = conn.execute(
+                "SELECT client, description FROM planning_entries "
+                "WHERE trim(reference)=trim(?) LIMIT 1",
+                (no_dossier,),
+            ).fetchone()
+            client = (pe_row["client"] if pe_row else None) or None
+            designation = (pe_row["description"] if pe_row else None) or None
+            now_iso = _rep_today_isoformat()
+            commentaire = (
+                f"Ajustement manuel cumul par {user.get('nom') or user.get('email')} "
+                f"(delta {delta_cartons:+d} cartons, {delta_etiq:+d} etiq.)"
+            )
+            conn.execute(
+                """INSERT INTO production_data
+                   (operateur, date_operation, operation, operation_code,
+                    operation_severity, operation_category, machine,
+                    no_dossier, client, designation,
+                    quantite_a_traiter, quantite_traitee, nb_cartons,
+                    service, data, est_manuel, commentaire,
+                    modifie_par, modifie_le, modifie_note)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)""",
+                (
+                    operateur, now_iso, "03 - Production", "03",
+                    "info", "production", machine_obj["nom"],
+                    no_dossier, client, designation,
+                    0, delta_etiq, delta_cartons,
+                    "fabrication",
+                    json.dumps(
+                        {
+                            "operateur": operateur, "no_dossier": no_dossier,
+                            "machine": machine_obj["nom"],
+                            "source": "repiquage_ajustement_cumul",
+                            "delta_cartons": delta_cartons, "delta_etiq": delta_etiq,
+                        },
+                        default=str,
+                    ),
+                    commentaire,
+                    user.get("nom") or user.get("email") or "",
+                    now_iso,
+                    "Ajustement manuel cumul (admin)",
+                ),
+            )
+
+        conn.commit()
+        nb_courant = _rep_get_carton_courant(conn, no_dossier, operateur)
+        jour_c, jour_e = _rep_aggregate(conn, no_dossier, operateur, today_only=True)
+        cum_c2, cum_e2 = _rep_aggregate(conn, no_dossier, operateur, today_only=False)
+
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="fabrication",
+        objet=f"Repiquage ajustement {scope} dossier {no_dossier}",
+        detail={"scope": scope, "nb_cartons_cible": cible},
+        ip=request.client.host if request.client else None,
+    )
+    return {
+        "success": True,
+        "nb_etiquettes_courant": nb_courant,
+        "etiquettes_par_carton": etiq_par_carton or None,
+        "jour": {"nb_cartons": jour_c, "qte_etiq": jour_e},
+        "cumul": {"nb_cartons": cum_c2, "qte_etiq": cum_e2},
+    }

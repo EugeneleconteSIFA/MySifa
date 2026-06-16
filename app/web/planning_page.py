@@ -651,7 +651,7 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=5"></script>
 <script src="/static/chat_widget_v2.js"></script>
-<script src="/static/mysifa_landscape.js"></script>
+<script src="/static/mysifa_landscape.js?v=2"></script>
 <script>window.MySifaLandscape&&MySifaLandscape.enable();</script>
 <script>
 // Handler d'erreurs installé *avant* le script principal (capte aussi les erreurs de parsing).

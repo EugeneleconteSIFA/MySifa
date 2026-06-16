@@ -763,7 +763,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=5"></script>
 <script src="/static/chat_widget_v2.js"></script>
-<script src="/static/mysifa_landscape.js"></script>
+<script src="/static/mysifa_landscape.js?v=2"></script>
 <script>window.MySifaLandscape&&MySifaLandscape.enable();</script>
 <script>
 'use strict';
@@ -891,6 +891,9 @@ let S = {
   repiquageEditParamOpen: false,    // modal édition paramétrage
   repiquageEditParamValue: '',
   repiquageAddEtiqValue: '',        // valeur de l'input "+ N étiq"
+  repiquageAdjustOpen: false,       // modal ajustement admin
+  repiquageAdjustScope: 'jour',     // 'jour' | 'cumul'
+  repiquageAdjustValue: '',
   // Compat (anciens états — gardés pour ne pas casser d'éventuelles refs)
   showRepiquageModal: false,
 };
@@ -969,7 +972,7 @@ function fscTypeRequisLabel(t){
 }
 
 function fabIsModalOpen(){
-  if(S.showDossierPicker || S.showFictifModal || S.showDebutModal || S.showFinModal || S.showCommentModal || S.showArret50Modal || S.repiquageAttentionOpen || S.repiquageEditParamOpen) return true;
+  if(S.showDossierPicker || S.showFictifModal || S.showDebutModal || S.showFinModal || S.showCommentModal || S.showArret50Modal || S.repiquageAttentionOpen || S.repiquageEditParamOpen || S.repiquageAdjustOpen) return true;
   try{
     const mr = document.getElementById('mroot');
     if(mr && mr.firstElementChild) return true;
@@ -4332,6 +4335,76 @@ async function _repiquageAjouterCartonsComplets(nb){
   }
 }
 
+async function repiquageRetirerCarton(){
+  if(!S.repiquageDossierActif) return;
+  if(!S.repiquageEtat?.etiquettes_par_carton){
+    showToast('Paramétrage manquant','danger');
+    return;
+  }
+  const jourCartons = S.repiquageEtat?.jour?.nb_cartons || 0;
+  if(jourCartons <= 0){
+    showToast('Aucun carton à retirer aujourd\u2019hui','danger');
+    return;
+  }
+  if(!confirm('Retirer 1 carton ?')) return;
+  set({loading:true});
+  try{
+    const body = {no_dossier:S.repiquageDossierActif};
+    if(S.adminMachineId) body.machine_id = S.adminMachineId;
+    await apiFetch('/api/fabrication/repiquage/retirer-carton-complet', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body),
+    });
+    await loadRepiquageEtat(S.repiquageDossierActif);
+    showToast('-1 carton', 'success');
+  }catch(e){
+    showToast(e?.message||'Erreur','danger');
+  }finally{
+    set({loading:false});
+  }
+}
+
+function repiquageOpenAdjust(scope){
+  const e = S.repiquageEtat;
+  if(!e) return;
+  const cur = scope === 'jour' ? (e.jour?.nb_cartons||0) : (e.cumul?.nb_cartons||0);
+  set({
+    repiquageAdjustOpen: true,
+    repiquageAdjustScope: scope,
+    repiquageAdjustValue: String(cur),
+  });
+}
+
+async function repiquageSubmitAdjust(){
+  if(!S.repiquageDossierActif) return;
+  const raw = (S.repiquageAdjustValue||'').toString().trim();
+  const n = parseInt(raw, 10);
+  if(!Number.isFinite(n) || n < 0){
+    showToast('Valeur invalide (entier >= 0)','danger');
+    return;
+  }
+  set({loading:true});
+  try{
+    const body = {
+      no_dossier: S.repiquageDossierActif,
+      scope: S.repiquageAdjustScope,
+      nb_cartons_cible: n,
+    };
+    if(S.adminMachineId) body.machine_id = S.adminMachineId;
+    await apiFetch('/api/fabrication/repiquage/ajuster-compteur', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body),
+    });
+    set({repiquageAdjustOpen:false});
+    await loadRepiquageEtat(S.repiquageDossierActif);
+    showToast('Compteur ajusté', 'success');
+  }catch(e){
+    showToast(e?.message||'Erreur','danger');
+  }finally{
+    set({loading:false});
+  }
+}
+
 async function repiquageFermerCarton(){
   if(!S.repiquageDossierActif) return;
   if(!S.repiquageEtat?.etiquettes_par_carton){
@@ -4600,7 +4673,7 @@ function renderRepiquageDossierView(){
     ),
   );
 
-  // Boutons rapides +10 / +50 / +100 + input libre
+  // Input libre "+ N étiq" + bouton Ajouter
   const quickBtnStyle = {
     background:'var(--accent-bg)', color:'var(--accent)', border:'1px solid var(--accent)',
     borderRadius:'8px', padding:'10px 16px', fontFamily:'inherit', fontWeight:'700',
@@ -4610,17 +4683,14 @@ function renderRepiquageDossierView(){
     display:'flex', gap:'8px', flexWrap:'wrap', alignItems:'center', justifyContent:'center',
     width:'100%', maxWidth:'520px',
   }},
-    h('button',{style:quickBtnStyle, onClick:()=>repiquageIncrementerCourant(10)},'+10'),
-    h('button',{style:quickBtnStyle, onClick:()=>repiquageIncrementerCourant(50)},'+50'),
-    h('button',{style:quickBtnStyle, onClick:()=>repiquageIncrementerCourant(100)},'+100'),
     (function(){
       const inp = h('input',{
         type:'number', min:'1', step:'1',
-        placeholder:'N étiq.',
+        placeholder:'N étiquettes',
         style:{
           background:'var(--bg)', border:'1px solid var(--border)', borderRadius:'8px',
           padding:'10px 12px', fontSize:'13px', color:'var(--text)', fontFamily:'inherit',
-          width:'110px', outline:'none',
+          flex:'1', minWidth:'140px', outline:'none',
         },
       });
       inp.value = S.repiquageAddEtiqValue || '';
@@ -4640,6 +4710,23 @@ function renderRepiquageDossierView(){
     }},'Ajouter'),
   );
 
+  // Bouton -1 carton (rouge, plus petit que le +1 carton)
+  const moinsUnCartonBtn = h('button',{
+    onClick:repiquageRetirerCarton,
+    style:{
+      background:'transparent', color:'var(--danger)', border:'2px solid var(--danger)',
+      borderRadius:'10px', padding:'12px 22px', fontFamily:'inherit', fontWeight:'800',
+      fontSize:'14px', cursor:'pointer', letterSpacing:'.3px',
+      transition:'all .12s', display:'inline-flex', alignItems:'center', gap:'8px',
+      maxWidth:'520px',
+    },
+    onMouseEnter:(ev)=>{ ev.currentTarget.style.background='rgba(248,113,113,.10)'; },
+    onMouseLeave:(ev)=>{ ev.currentTarget.style.background='transparent'; },
+  },
+    h('span',{style:{fontSize:'18px',lineHeight:'1'}},'-1'),
+    h('span',null,'carton (annuler)')
+  );
+
   // Compteurs jour / cumul
   const jour = e.jour || {nb_cartons:0, qte_etiq:0};
   const cumul = e.cumul || {nb_cartons:0, qte_etiq:0};
@@ -4647,17 +4734,33 @@ function renderRepiquageDossierView(){
     padding:'14px 18px', background:'var(--card)', border:'1px solid var(--border)',
     borderRadius:'10px', display:'flex', flexDirection:'column', gap:'4px', minWidth:'200px',
   };
+  const _isAdminCp = S.user && (S.user.role==='superadmin'||S.user.role==='administration'||S.user.role==='direction');
+  const _adjustBtn = (scope) => _isAdminCp ? h('button',{
+    title:'Ajuster manuellement',
+    style:{
+      border:'1px solid var(--border)', background:'transparent', color:'var(--muted)',
+      borderRadius:'6px', padding:'2px 6px', fontFamily:'inherit', fontSize:'11px',
+      cursor:'pointer', display:'inline-flex', alignItems:'center', gap:'3px',
+      marginLeft:'8px',
+    },
+    onClick:(ev)=>{ ev.stopPropagation(); repiquageOpenAdjust(scope); },
+    onMouseEnter:(ev)=>{ ev.currentTarget.style.color='var(--accent)'; ev.currentTarget.style.borderColor='var(--accent)'; },
+    onMouseLeave:(ev)=>{ ev.currentTarget.style.color='var(--muted)'; ev.currentTarget.style.borderColor='var(--border)'; },
+  }, svgIcon('edit',11),' Ajuster') : null;
+
   const compteurs = h('div',{style:{
     display:'flex', gap:'14px', flexWrap:'wrap', justifyContent:'center',
     marginTop:'8px', width:'100%', maxWidth:'520px',
   }},
     h('div',{style:compteurStyle},
-      h('div',{style:{fontSize:'10px',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',fontWeight:'700'}},'Aujourd’hui'),
+      h('div',{style:{fontSize:'10px',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',fontWeight:'700',display:'flex',alignItems:'center'}},
+        'Aujourd’hui', _adjustBtn('jour')),
       h('div',{style:{fontSize:'15px',fontWeight:'800',color:'var(--text)'}},
         fmtNum(jour.nb_cartons)+' carton'+(jour.nb_cartons>1?'s':'')+' · '+fmtNum(jour.qte_etiq)+' étiq.')
     ),
     h('div',{style:compteurStyle},
-      h('div',{style:{fontSize:'10px',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',fontWeight:'700'}},'Cumul dossier'),
+      h('div',{style:{fontSize:'10px',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',fontWeight:'700',display:'flex',alignItems:'center'}},
+        'Cumul dossier', _adjustBtn('cumul')),
       h('div',{style:{fontSize:'15px',fontWeight:'800',color:'var(--text)'}},
         fmtNum(cumul.nb_cartons)+' carton'+(cumul.nb_cartons>1?'s':'')+' · '+fmtNum(cumul.qte_etiq)+' étiq.')
     ),
@@ -4685,6 +4788,7 @@ function renderRepiquageDossierView(){
       gap:'18px', padding:'24px 20px',
     }},
       plusCartonBtn,
+      moinsUnCartonBtn,
       cartonCourantBar,
       quickAdd,
       compteurs,
@@ -4795,6 +4899,63 @@ function renderRepiquageEditParamModal(){
   );
 }
 
+/* ── Repiquage : modal "Ajuster compteur" (admin) ───────────── */
+function renderRepiquageAdjustModal(){
+  const scope = S.repiquageAdjustScope || 'jour';
+  const labelScope = scope === 'jour' ? 'd\u2019aujourd\u2019hui' : 'cumulé sur le dossier';
+  const titreScope = scope === 'jour' ? 'Compteur du jour' : 'Compteur cumulé';
+  const e = S.repiquageEtat || {};
+  const cur = scope === 'jour' ? (e.jour?.nb_cartons||0) : (e.cumul?.nb_cartons||0);
+
+  const inp = h('input',{
+    type:'number', min:'0', step:'1',
+    style:{
+      background:'var(--bg)', border:'1.5px solid var(--border)', borderRadius:'8px',
+      padding:'12px 14px', fontSize:'15px', color:'var(--text)', fontFamily:'inherit',
+      outline:'none', width:'100%',
+    },
+  });
+  inp.value = S.repiquageAdjustValue || '';
+  inp.addEventListener('input', ev=>{ S.repiquageAdjustValue = ev.target.value; });
+  inp.addEventListener('keydown', ev=>{
+    if(ev.key === 'Enter'){ ev.preventDefault(); repiquageSubmitAdjust(); }
+  });
+  setTimeout(()=>{ inp.focus(); inp.select?.(); }, 50);
+
+  return h('div',{className:'fab-modal-overlay',onClick:(ev)=>{if(ev.target===ev.currentTarget)set({repiquageAdjustOpen:false});}},
+    h('div',{className:'fab-modal'},
+      h('div',{className:'fab-modal-title'},
+        svgIcon('edit',18),' Ajuster — '+titreScope),
+      h('div',{className:'fab-modal-sub'},
+        'Saisissez la valeur cible du nombre de cartons '+labelScope+'. '
+        + 'Valeur actuelle : '+Number(cur).toLocaleString('fr-FR')+'.'
+      ),
+      h('div',{className:'fab-field',style:{marginBottom:'14px'}},
+        h('label',{style:{textTransform:'uppercase',fontSize:'10px',fontWeight:'700',color:'var(--muted)',letterSpacing:'.5px',display:'block',marginBottom:'6px'}},
+          'Nombre de cartons cible'),
+        inp,
+      ),
+      h('div',{style:{
+        background:'rgba(251,191,36,.10)', border:'1px solid var(--warn)',
+        borderRadius:'8px', padding:'10px 12px', fontSize:'12px', color:'var(--text2)',
+        marginBottom:'14px', lineHeight:'1.5',
+      }},
+        svgIcon('alert',12),
+        scope === 'jour'
+          ? ' Modifie directement votre saisie du jour pour ce dossier.'
+          : ' Une ligne d\u2019ajustement sera tracée à votre nom dans la production.'
+      ),
+      h('div',{className:'fab-modal-btns'},
+        h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',
+          onClick:()=>set({repiquageAdjustOpen:false})},'Annuler'),
+        h('button',{className:'fab-btn fab-btn-primary',
+          onClick:repiquageSubmitAdjust},
+          svgIcon('check',15),' Enregistrer')
+      )
+    )
+  );
+}
+
 /* ── Main render ─────────────────────────────────────────────── */
 function render(){
   const ui = _fabCaptureUiState();
@@ -4833,6 +4994,7 @@ function render(){
   if(S.showCommentModal)  root.appendChild(renderCommentModal());
   if(S.repiquageAttentionOpen) root.appendChild(renderRepiquageAttentionModal());
   if(S.repiquageEditParamOpen) root.appendChild(renderRepiquageEditParamModal());
+  if(S.repiquageAdjustOpen) root.appendChild(renderRepiquageAdjustModal());
 
   renderOfImportModal();
   renderArret50Modal();
