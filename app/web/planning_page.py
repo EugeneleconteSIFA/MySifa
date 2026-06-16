@@ -2642,7 +2642,7 @@ function showTip(ev,el){hideTip();const d=el.dataset;_hoveredSlotEid=d.eid?+d.ei
   // Colonne expédition (vue expé)
   const colExpe = `${nbPalTip?`<span class="k">Nb palettes</span><span class="v" style="color:${+nbPalTip>=6?'var(--success)':'var(--muted)'};font-weight:700">${escHtml(nbPalTip)}</span>`:""}
     ${palTxt?`<span class="k">Type palette</span><span class="v">${escHtml(palTxt)}</span>`:""}
-    ${qteTxt?`<span class="k">Qté étiquettes</span><span class="v" style="color:var(--accent);font-weight:600">${escHtml(qteTxt)}</span>`:""}
+    <span class="k">Qté étiquettes</span><span class="v" style="color:${qteTxt?'var(--accent)':'var(--muted)'};font-weight:${qteTxt?600:500};font-style:${qteTxt?'normal':'italic'}">${qteTxt?escHtml(qteTxt):"pas d'OF relié"}</span>
     ${condTxt?`<span class="k">Conditionnement</span><span class="v">${escHtml(condTxt)}</span>`:""}`;
   const hasTech = !!(supTxt || adhTxt || palTxt || manTxt || qteTxt);
   const hasExpe = !!(nbPalTip || palTxt || qteTxt || condTxt);
@@ -2659,7 +2659,7 @@ function showTip(ev,el){hideTip();const d=el.dataset;_hoveredSlotEid=d.eid?+d.ei
     : `<div class="tip-grid">${colGen}${qteTxt?`<span class="k">Qté étiquettes</span><span class="v" style="color:var(--accent);font-weight:600">${escHtml(qteTxt)}</span>`:""}</div>`;
   tipEl.innerHTML=`<div class="tip-hdr"><div class="tip-bar" style="background:${d.co||"#888"}"></div><div><div class="tip-ref">${d.ref||"—"}</div>${sub}</div></div>
     ${liv?`<div class="tip-livraison" style="${livStyle}">Livraison : ${escHtml(liv)}${livSuffix}</div>`:""}
-    ${exigTip?`<div class="tip-exig"><span class="k">Exigences de production</span>${escHtml(exigTip)}</div>`:""}
+    ${(exigTip && !isExpeVueTip)?`<div class="tip-exig"><span class="k">Exigences de production</span>${escHtml(exigTip)}</div>`:""}
     ${bodyHtml}
     ${CAN_EDIT&&d.st!=="Terminé"?`<div style="margin-top:10px;font-size:10px;color:var(--muted);text-align:center;letter-spacing:.5px">↵ Entrée · double-clic pour modifier</div>`:""}`
   el.closest(".tl-wrap").appendChild(tipEl);moveTip(ev)}
