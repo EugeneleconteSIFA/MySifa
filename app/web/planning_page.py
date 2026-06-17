@@ -2467,7 +2467,7 @@ function mkTL(mon,slots){
       onmouseenter="showTip(event,this)" onmousemove="moveTip(event)" onmouseleave="hideTip()"
       ondblclick="hideTip();openEdit(${s.entry_id||idx});event.stopPropagation()"
       data-livraison="${escAttr(fmtLivraisonLong(s.date_livraison||""))}" data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-rfp="${escAttr(s.ref_produit||"")}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(fmtDur(durAff))}" data-exigences="${escAttr(exig)}" data-qte-etiq="${escAttr(qteEtiq!=null?fmtQty(qteEtiq):"")}" data-nb-palettes="${escAttr(nbPalettes!=null?String(nbPalettes):"")}"`+
-      ` data-prise-rdv="${s.prise_rdv?'1':'0'}" data-dept="${escAttr(s.departement_livraison||"")}" data-dl-imp="${dlImp?'1':'0'}" data-support="${escAttr(s.ft_support||"")}" data-adhesif="${escAttr(s.ft_adhesif||"")}" data-palette-type="${escAttr(s.ft_palette_type||"")}" data-mandrin="${escAttr(s.ft_mandrin_dia||"")}" data-cond="${escAttr(s.ft_conditionnement_phrase||"")}"`+
+      ` data-prise-rdv="${s.prise_rdv?'1':'0'}" data-dept="${escAttr(s.departement_livraison||"")}" data-dl-imp="${dlImp?'1':'0'}" data-support="${escAttr(s.ft_support||"")}" data-adhesif="${escAttr(s.ft_adhesif||"")}" data-palette-type="${escAttr(s.ft_palette_type||"")}" data-mandrin="${escAttr(s.ft_mandrin_dia||"")}" data-cond="${escAttr(s.ft_conditionnement_phrase||"")}" data-laize="${escAttr(s.laize?String(s.laize)+' mm':"")}"`+
       ` data-planned-start="${escAttr(String(s.start||""))}" data-planned-end="${escAttr(String(s.end||""))}"
       data-deb="${escAttr(fdt(ss))}" data-fin="${escAttr(fdt(se))}" data-st="${escAttr(st)}" data-co="${escAttr(co)}"${termineTitle?` title="${escAttr(termineTitle)}"`:""}>
       ${destock?`<div style="position:absolute;top:4px;right:4px;width:10px;height:10px;border-radius:50%;background:rgba(71,85,105,.9);pointer-events:none;z-index:5;flex-shrink:0"></div>`:""}
@@ -2637,7 +2637,9 @@ function showTip(ev,el){hideTip();const d=el.dataset;_hoveredSlotEid=d.eid?+d.ei
   const qteTxt=(d.qteEtiq||"").trim();
   const condTxt=(d.cond||"").trim();
   // Colonne technique (vue prod)
-  const colTech = `${supTxt?`<span class="k">Frontal</span><span class="v">${escHtml(supTxt)}</span>`:""}
+  const lzTxt=(d.laize||"").trim();
+  const colTech = `${lzTxt?`<span class="k">Laize</span><span class="v">${escHtml(lzTxt)}</span>`:""}
+    ${supTxt?`<span class="k">Frontal</span><span class="v">${escHtml(supTxt)}</span>`:""}
     ${adhTxt?`<span class="k">Adhésif</span><span class="v">${escHtml(adhTxt)}</span>`:""}
     ${manTxt?`<span class="k">Ø mandrin</span><span class="v">${escHtml(manTxt)}</span>`:""}
     ${palTxt?`<span class="k">Type palette</span><span class="v">${escHtml(palTxt)}</span>`:""}
@@ -2647,7 +2649,7 @@ function showTip(ev,el){hideTip();const d=el.dataset;_hoveredSlotEid=d.eid?+d.ei
     ${palTxt?`<span class="k">Type palette</span><span class="v">${escHtml(palTxt)}</span>`:""}
     <span class="k">Qté étiquettes</span><span class="v" style="color:${qteTxt?'var(--accent)':'var(--muted)'};font-weight:${qteTxt?600:500};font-style:${qteTxt?'normal':'italic'}">${qteTxt?escHtml(qteTxt):"pas d'OF relié"}</span>
     ${condTxt?`<span class="k">Conditionnement</span><span class="v">${escHtml(condTxt)}</span>`:""}`;
-  const hasTech = !!(supTxt || adhTxt || palTxt || manTxt || qteTxt);
+  const hasTech = !!(lzTxt || supTxt || adhTxt || palTxt || manTxt || qteTxt);
   const hasExpe = !!(nbPalTip || palTxt || qteTxt || condTxt);
   // Branchement selon la vue : expé → 'Infos expéditions', sinon → 'Infos techniques'
   const showExpeCol = isExpeVueTip && hasExpe;
