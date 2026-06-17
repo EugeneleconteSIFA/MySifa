@@ -7,7 +7,7 @@ from fastapi import APIRouter, Request, Query
 from database import get_db, parse_datetime
 from services.analyse import analyse_saisie_errors
 from services.auth_service import get_current_user, is_admin, can_view_all_prod
-from services.prod_machine_filter import append_machine_filter
+from services.prod_machine_filter import append_machine_filter, norm_machine_canonical
 from config import CODE_ARRIVEE, CODE_DEPART, CODE_DEBUT_DOS, CODE_FIN_DOS, CODE_CALAGE, CODES_CALAGE, CODE_PRODUCTION, CODE_REPRISE
 
 router = APIRouter()
@@ -362,10 +362,17 @@ def dashboard_historique(
             FROM production_data WHERE {wc} AND operation_severity IN ('critique','attention')
               AND machine IS NOT NULL AND machine != ''
             GROUP BY machine,operation_severity ORDER BY c DESC""", params).fetchall()
+        # Exclure les saisies machine Repiquage du calcul "Qualite de saisie".
+        # Le score n'a pas de sens pour l'atelier Repiquage qui utilise un comptage carton.
+        san_machine_excl = (
+            "AND NOT (lower(trim(COALESCE(machine,''))) LIKE 'repiquage%' "
+            " OR lower(trim(COALESCE(machine,''))) = 'rep' "
+            " OR lower(trim(COALESCE(machine,''))) LIKE 'rep %')"
+        )
         san_rows  = conn.execute(f"""
             SELECT operateur,date_operation,operation_code,operation_category,machine,no_dossier,
                    quantite_a_traiter,quantite_traitee,metrage_prevu,metrage_reel
-            FROM production_data WHERE {wc_san}
+            FROM production_data WHERE {wc_san} {san_machine_excl}
             ORDER BY operateur,date_operation""", ps).fetchall()
 
     duree_by_id = compute_duree_minutes_by_id([dict(r) for r in dur_rows])
@@ -399,8 +406,17 @@ def dashboard_historique(
     saisie_errors = analyse_saisie_errors(san_list)
     sanity        = compute_sanity_score_v2(san_list)
 
+    # Si le filtre machine ne contient QUE Repiquage, neutraliser le sanity score
+    # (sinon il vaudrait 100 par defaut sur 0 evenement, ce qui est trompeur).
+    repiquage_only = bool(machines) and all(
+        (norm_machine_canonical(m) == "Repiquage") for m in machines
+    )
+    if repiquage_only:
+        sanity = None
+        saisie_errors = []
+
     sanity_by_operateur = None
-    if can_view_all_prod(user):
+    if can_view_all_prod(user) and not repiquage_only:
         # Si multi-sélection opérateurs => score par opérateur + moyenne pondérée globale
         sel_ops = operateurs
         if sel_ops and len(sel_ops) > 1:

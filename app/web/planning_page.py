@@ -3200,11 +3200,11 @@ function dossierFields(numero_of,client,ref_produit,laize,date_livraison,comment
           <div class="fd"><label>Laize (mm)</label><input type="number" id="f-laize" value="${escAttr(laize)}" placeholder="510"></div>
           <div class="fd"><label>Largeur (mm)</label><input type="number" id="f-fl" value="${escAttr(fl)}" placeholder="100"></div>
           <div class="fd"><label>Hauteur (mm)</label><input type="number" id="f-fh" value="${escAttr(fh)}" placeholder="70"></div>
-          <div class="fd fd--full">
+          ${machineKey()==="REP"?`<div class="fd fd--full">
             <label>Étiquettes par carton (Repiquage)</label>
             <input type="number" id="f-epc" min="1" step="1" value="${etiqParCarton!=null?escAttr(String(etiqParCarton)):''}" placeholder="Ex : 240">
             <span style="font-size:11px;color:var(--muted);display:block;margin-top:4px">Paramétrage utilisé par la saisie de production Repiquage pour compter les cartons. Laisser vide si non concerné.</span>
-          </div>
+          </div>`:""}
           <div class="fd fd--full">
             <span class="dossier-sub-lbl">Certification FSC</span>
             <div style="display:flex;align-items:center;gap:12px">

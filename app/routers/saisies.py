@@ -83,6 +83,18 @@ def _resolve_target_dossier_meta(conn, to_ref: str) -> dict:
     return {"no_dossier": ref, "client": "", "designation": "", "planning_reference": None, "planning_statut": None}
 
 
+# Filtre SQL : exclure les saisies "personnelles/dossier" (01 Début, 89 Fin,
+# 86 Arrivée, 87 Départ) quand la machine est Repiquage. Ces saisies n'ont pas
+# de sens pour l'atelier Repiquage qui utilise un comptage par cartons.
+_REPIQUAGE_HIDE_CODES = ("01", "89", "86", "87")
+_REPIQUAGE_HIDE_FILTER = (
+    "NOT (operation_code IN ('01','89','86','87') AND "
+    "(lower(trim(COALESCE(machine,''))) LIKE 'repiquage%' "
+    " OR lower(trim(COALESCE(machine,''))) = 'rep' "
+    " OR lower(trim(COALESCE(machine,''))) LIKE 'rep %'))"
+)
+
+
 def normalize_date_operation(val):
     dt = parse_datetime(val)
     return dt.strftime('%Y-%m-%dT%H:%M:%S') if dt else val
@@ -106,6 +118,9 @@ def list_saisies(
     machines   = [m for m in (machine or []) if m]
 
     where, params = ["1=1"], []
+    # Toujours masquer les saisies obsoletes sur la machine Repiquage
+    # (Debut/Fin de production, Arrivee/Depart personnel).
+    where.append(_REPIQUAGE_HIDE_FILTER)
     if can_view_all_prod(user):
         if operateurs:
             where.append(f"operateur IN ({','.join('?'*len(operateurs))})")
@@ -594,6 +609,9 @@ def export_saisies(
     machines   = [m for m in (machine or []) if m]
 
     where, params = ["1=1"], []
+    # Toujours masquer les saisies obsoletes sur la machine Repiquage
+    # (Debut/Fin de production, Arrivee/Depart personnel).
+    where.append(_REPIQUAGE_HIDE_FILTER)
     if can_view_all_prod(user):
         if operateurs:
             where.append(f"operateur IN ({','.join('?'*len(operateurs))})")
