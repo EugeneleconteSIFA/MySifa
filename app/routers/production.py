@@ -9,6 +9,8 @@ from services.timings import compute_dossier_times
 from services.auth_service import get_current_user, is_admin, can_view_all_prod, require_admin
 from services.prod_machine_filter import append_machine_filter
 from config import OPERATION_SEVERITY
+import logging
+_log = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -550,10 +552,14 @@ def dashboard_production(
         ).fetchall()
 
         # Toutes les lignes pour calculs temps + métrages (+ nb_cartons pour Repiquage)
+        # Tolerance : si la colonne nb_cartons n'existe pas encore (migration 114
+        # non jouee sur le serveur), on utilise 0 par defaut.
+        pd_cols = {r[1] for r in conn.execute('PRAGMA table_info(production_data)').fetchall()}
+        nb_cartons_col = 'COALESCE(nb_cartons, 0) AS nb_cartons' if 'nb_cartons' in pd_cols else '0 AS nb_cartons'
         all_rows = conn.execute(
             f"""SELECT operateur,date_operation,operation_code,operation_category,
                        machine,no_dossier,client,designation,quantite_traitee,
-                       COALESCE(nb_cartons, 0) AS nb_cartons,
+                       {nb_cartons_col},
                        COALESCE(metrage_total_debut, metrage_prevu) AS metrage_prevu,
                        COALESCE(metrage_total_fin,   metrage_reel)  AS metrage_reel
                 FROM production_data
@@ -698,29 +704,41 @@ def dashboard_production(
     by_dossier_no_rep = [d for d in by_dossier if not _is_machine_repiquage_name(d.get('machine') or '')]
 
     # Sessions virtuelles Repiquage construites depuis les saisies code 03.
-    # (Repiquage n'a pas de cycle 01/89). Ces sessions enrichissent la synthese
-    # 'Par numero de dossier' + le detail modal.
-    rep_dossier_sessions = _build_repiquage_dossier_rows(all_list)
+    # Robuste : on log et continue avec des listes vides si quelque chose plante
+    # (ex. table rh_planning_postes pas encore migree, etc.)
+    try:
+        rep_dossier_sessions = _build_repiquage_dossier_rows(all_list)
+    except Exception as _exc:
+        _log.exception('_build_repiquage_dossier_rows failed: %s', _exc)
+        rep_dossier_sessions = []
     by_dossier_with_rep = by_dossier_no_rep + rep_dossier_sessions
 
     by_operator = agg_key(by_dossier_no_rep, "operateur")
-    # Synthese par operateur : ajouter les equipes Repiquage si on a des saisies code 03
-    rep_team_rows = _build_repiquage_team_rows(
-        all_list, dossier_times, no_dossier_filter=dossiers
-    )
+    try:
+        rep_team_rows = _build_repiquage_team_rows(
+            all_list, dossier_times, no_dossier_filter=dossiers
+        )
+    except Exception as _exc:
+        _log.exception('_build_repiquage_team_rows failed: %s', _exc)
+        rep_team_rows = []
     by_operator.extend(rep_team_rows)
 
     by_machine  = agg_key(by_dossier, "machine")
-    # Pour by_machine, agreger Repiquage via saisies 03 (etiquettes)
-    rep_machine_row = _build_repiquage_machine_row(all_list)
+    try:
+        rep_machine_row = _build_repiquage_machine_row(all_list)
+    except Exception as _exc:
+        _log.exception('_build_repiquage_machine_row failed: %s', _exc)
+        rep_machine_row = None
     if rep_machine_row:
         by_machine = [m for m in by_machine if not _is_machine_repiquage_name(m.get('key'))]
         by_machine.append(rep_machine_row)
         by_machine = sorted(by_machine, key=lambda x: x.get('metrage_m', 0) + x.get('etiquettes', 0), reverse=True)
 
     by_day      = agg_key(by_dossier, "jour")
-    # Enrichir by_day avec les etiquettes des saisies Repiquage (jointes)
-    _augment_by_day_with_repiquage(by_day, all_list)
+    try:
+        _augment_by_day_with_repiquage(by_day, all_list)
+    except Exception as _exc:
+        _log.exception('_augment_by_day_with_repiquage failed: %s', _exc)
 
     return {
         "blocked": False,
