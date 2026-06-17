@@ -3074,37 +3074,35 @@ async function confirmSwitch(targetMachineId,afterEntryId){
   try{
     const e=S.entries.find(x=>x.id===_switchEntryId);
     if(!e) throw new Error("Dossier introuvable");
+    // Report fidèle de tous les attributs du dossier source, sinon la cible
+    // repart sur les défauts (a_placer=1 → relégué en fin de timeline, perte FSC/RDV/etc.).
+    const payload={
+      reference:e.numero_of||e.reference||"",
+      numero_of:e.numero_of||e.reference||"",
+      client:e.client||"",
+      ref_produit:e.ref_produit||"",
+      laize:e.laize||null,
+      date_livraison:e.date_livraison||"",
+      commentaire:e.commentaire||"",
+      exigences_production:e.exigences_production||"",
+      format_l:e.format_l||null,
+      format_h:e.format_h||null,
+      duree_heures:e.duree_heures||8,
+      statut:"attente",
+      dos_rvgi:e.dos_rvgi||"",
+      a_placer:Number(e.a_placer||0),
+      valide:Number(e.valide||0),
+      fsc_requis:Number(e.fsc_requis||0),
+      fsc_type_requis:e.fsc_type_requis||"",
+      departement_livraison:e.departement_livraison||"",
+      prise_rdv:Number(e.prise_rdv||0),
+      date_livraison_imposee:Number(e.date_livraison_imposee||0)
+    };
     await api(`/machines/${MID}/entries/${_switchEntryId}`,{method:"DELETE"});
     if(afterEntryId){
-      await api(`/machines/${targetMachineId}/insert-after/${afterEntryId}`,{method:"POST",body:JSON.stringify({
-        reference:e.numero_of||e.reference||"",
-        numero_of:e.numero_of||e.reference||"",
-        client:e.client||"",
-        ref_produit:e.ref_produit||"",
-        laize:e.laize||null,
-        date_livraison:e.date_livraison||"",
-        commentaire:e.commentaire||"",
-        exigences_production:e.exigences_production||"",
-        format_l:e.format_l||null,
-        format_h:e.format_h||null,
-        duree_heures:e.duree_heures||8,
-        statut:"attente"
-      })});
+      await api(`/machines/${targetMachineId}/insert-after/${afterEntryId}`,{method:"POST",body:JSON.stringify(payload)});
     }else{
-      await api(`/machines/${targetMachineId}/entries`,{method:"POST",body:JSON.stringify({
-        reference:e.numero_of||e.reference||"",
-        numero_of:e.numero_of||e.reference||"",
-        client:e.client||"",
-        ref_produit:e.ref_produit||"",
-        laize:e.laize||null,
-        date_livraison:e.date_livraison||"",
-        commentaire:e.commentaire||"",
-        exigences_production:e.exigences_production||"",
-        format_l:e.format_l||null,
-        format_h:e.format_h||null,
-        duree_heures:e.duree_heures||8,
-        statut:"attente"
-      })});
+      await api(`/machines/${targetMachineId}/entries`,{method:"POST",body:JSON.stringify({...payload,position:1})});
     }
     closeM();
     _switchEntryId=null;
