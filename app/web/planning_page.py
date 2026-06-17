@@ -515,7 +515,7 @@ body.light .btn-p{color:#fff}
   .dossier-section:nth-child(3){border-top:1px solid var(--border);padding-top:14px;margin-top:14px}
   .dossier-section:nth-child(4){border-top:1px solid var(--border);padding-top:14px;margin-top:14px}
 }
-.md.md--dossier{width:min(860px,95vw);max-height:calc(100vh - 56px);overflow-y:hidden;padding:22px 24px}
+.md.md--dossier{width:min(860px,95vw);max-height:calc(100vh - 56px);overflow-y:auto;padding:22px 24px}
 .md--dossier .dossier-section-label{
   font-family:var(--sans);font-size:15px;font-weight:700;text-transform:none;letter-spacing:0;
   color:var(--text);margin-bottom:14px;padding-left:11px;border-left:3px solid var(--accent);line-height:1.3}

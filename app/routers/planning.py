@@ -1030,6 +1030,20 @@ def _compute_timeline_slots(
     cursor = advance_to_work(datetime.now().replace(minute=0, second=0, microsecond=0))
     now_u = _fmt_ts(datetime.now())
 
+    # Un dossier "en cours" est produit MAINTENANT : aucun dossier "en attente" ne peut
+    # démarrer avant sa fin, même s'il le précède dans la liste (cas d'un démarrage
+    # opérateur hors séquence — saisie sur un dossier placé après un dossier en attente).
+    # Sans ce garde-fou, le dossier en attente positionné avant l'en-cours était planifié
+    # à "maintenant" et se superposait visuellement au dossier réellement en production.
+    for e in entries:
+        if (e.get("statut") or "") == "en_cours" and _is_frozen_entry(e):
+            pend = _parse_planned_dt(e.get("planned_end"))
+            if pend:
+                cand = advance_to_work(pend)
+                if cand and cand > cursor:
+                    cursor = cand
+            break
+
     for e in entries:
         st = e.get("statut") or "attente"
 
@@ -1142,6 +1156,15 @@ def _simulate_planned_ends(
         m, configs, off_days, day_worked_map, day_horaires_map
     )
     cursor = advance_to_work(datetime.now().replace(minute=0, second=0, microsecond=0))
+    # Cf. _compute_timeline_slots : ne jamais placer un "en attente" avant la fin du dossier en cours.
+    for e in ordered_entries:
+        if (e.get("statut") or "") == "en_cours" and bool(e.get("planned_start")) and bool(e.get("planned_end")):
+            pend = _parse_planned_dt(e.get("planned_end"))
+            if pend:
+                cand = advance_to_work(pend)
+                if cand and cand > cursor:
+                    cursor = cand
+            break
     ends: List[Optional[datetime]] = []
     for e in ordered_entries:
         st = e.get("statut") or "attente"
