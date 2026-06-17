@@ -694,8 +694,14 @@ def dashboard_production(
         return sorted(res, key=lambda x: x["metrage_m"], reverse=True)
 
     # Variante by_dossier sans les saisies machine Repiquage
-    # (utilisee pour 'Par dossier', les totaux haut de page et by_operator)
+    # (utilisee pour by_operator non-Repiquage et les totaux haut de page)
     by_dossier_no_rep = [d for d in by_dossier if not _is_machine_repiquage_name(d.get('machine') or '')]
+
+    # Sessions virtuelles Repiquage construites depuis les saisies code 03.
+    # (Repiquage n'a pas de cycle 01/89). Ces sessions enrichissent la synthese
+    # 'Par numero de dossier' + le detail modal.
+    rep_dossier_sessions = _build_repiquage_dossier_rows(all_list)
+    by_dossier_with_rep = by_dossier_no_rep + rep_dossier_sessions
 
     by_operator = agg_key(by_dossier_no_rep, "operateur")
     # Synthese par operateur : ajouter les equipes Repiquage si on a des saisies code 03

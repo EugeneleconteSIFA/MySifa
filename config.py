@@ -35,7 +35,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(UPLOADS_ROOT, exist_ok=True)
 
 # ─── App ──────────────────────────────────────────────────────────
-APP_VERSION = "0.8.9"
+APP_VERSION = "0.9.0"
 # Titre API / OpenAPI
 APP_TITLE = "MySifa"
 # Onglet navigateur & SEO (injecté dans frontend/html.py)

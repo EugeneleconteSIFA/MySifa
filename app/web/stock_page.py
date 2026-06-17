@@ -1001,12 +1001,12 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
   border:1px solid var(--border);border-radius:12px;line-height:1.5}
 .hist-results-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
 .hist-results-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;
-  border-bottom:1px solid var(--border);background:#fff;color:#0f172a;flex-wrap:wrap}
+  border-bottom:1px solid var(--border);background:var(--bg);color:var(--text);flex-wrap:wrap}
 .hist-results-head-left{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
 .hist-results-head-nav{display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap}
-.hist-results-head .hist-results-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:#64748b}
-.hist-results-head .hist-count{font-size:12px;font-weight:600;color:#475569}
-.hist-results-head .hist-pagination-info{font-size:12px;color:#475569;font-weight:600;min-width:88px;text-align:center;white-space:nowrap}
+.hist-results-head .hist-results-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.hist-results-head .hist-count{font-size:12px;font-weight:600;color:var(--text2)}
+.hist-results-head .hist-pagination-info{font-size:12px;color:var(--text2);font-weight:600;min-width:88px;text-align:center;white-space:nowrap}
 .hist-results-head-nav .btn{min-width:96px}
 .hist-results-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
 .hist-count{font-size:12px;font-weight:600;color:var(--text2)}
