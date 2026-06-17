@@ -3677,6 +3677,130 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 115, "repiquage_discussion")
 
+    # -- Migration 116 : module Qualite - Audits client ----------------
+    # 6 tables : audit_dossiers, audit_auditeurs, audit_folders (arborescence
+    # recursive via parent_id), audit_fichiers (folder_id NULL = racine),
+    # audit_messages, audit_message_reads.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=116 LIMIT 1").fetchone():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS audit_dossiers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                numero TEXT NOT NULL UNIQUE,
+                client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL,
+                client_nom TEXT NOT NULL,
+                date_audit TEXT NOT NULL,
+                description TEXT NOT NULL,
+                statut TEXT NOT NULL DEFAULT 'ouvert',
+                date_cloture TEXT,
+                created_at TEXT NOT NULL,
+                created_by INTEGER REFERENCES users(id),
+                updated_at TEXT NOT NULL,
+                updated_by INTEGER REFERENCES users(id)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_statut ON audit_dossiers(statut)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_client ON audit_dossiers(client_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_date ON audit_dossiers(date_audit)")
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS audit_auditeurs (
+                audit_id INTEGER NOT NULL REFERENCES audit_dossiers(id) ON DELETE CASCADE,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                assigned_at TEXT NOT NULL,
+                assigned_by INTEGER REFERENCES users(id),
+                notified INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (audit_id, user_id)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_auditeurs_user ON audit_auditeurs(user_id)")
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS audit_folders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                audit_id INTEGER NOT NULL REFERENCES audit_dossiers(id) ON DELETE CASCADE,
+                parent_id INTEGER REFERENCES audit_folders(id) ON DELETE CASCADE,
+                nom TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                created_by INTEGER REFERENCES users(id)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_folders_audit ON audit_folders(audit_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_folders_parent ON audit_folders(parent_id)")
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS audit_fichiers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                audit_id INTEGER NOT NULL REFERENCES audit_dossiers(id) ON DELETE CASCADE,
+                folder_id INTEGER REFERENCES audit_folders(id) ON DELETE SET NULL,
+                filename TEXT NOT NULL,
+                original_name TEXT NOT NULL,
+                mime_type TEXT,
+                size_bytes INTEGER,
+                uploaded_at TEXT NOT NULL,
+                uploaded_by INTEGER REFERENCES users(id)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_fichiers_audit ON audit_fichiers(audit_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_fichiers_folder ON audit_fichiers(folder_id)")
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS audit_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                audit_id INTEGER NOT NULL REFERENCES audit_dossiers(id) ON DELETE CASCADE,
+                author_id INTEGER REFERENCES users(id),
+                body TEXT NOT NULL,
+                attachment_id INTEGER REFERENCES audit_fichiers(id) ON DELETE SET NULL,
+                created_at TEXT NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_messages_audit ON audit_messages(audit_id, created_at)")
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS audit_message_reads (
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                audit_id INTEGER NOT NULL REFERENCES audit_dossiers(id) ON DELETE CASCADE,
+                last_read_message_id INTEGER,
+                last_read_at TEXT NOT NULL,
+                PRIMARY KEY (user_id, audit_id)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_reads_user ON audit_message_reads(user_id)")
+
+        conn.commit()
+        _record_schema_migration(conn, 116, "qualite_audits_client")
+
+    # v117 - Z1 sortie de prod : lien dossier de production + suivi palettes
+    # - mouvements_stock.no_dossier : trace le dossier de prod a l'origine de
+    #   l'entree Z1 (pre-rempli pour fabrication, libre sinon).
+    # - mouvement_palettes : journal des palettes utilisees a chaque mouvement
+    #   Z1 (compteur par reference MP categorie 'palette'). Ne deduit PAS du
+    #   stock MP : usage purement informatif/tracabilite.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=117 LIMIT 1").fetchone():
+        ms_cols = {row[1] for row in conn.execute("PRAGMA table_info(mouvements_stock)").fetchall()}
+        if "no_dossier" not in ms_cols:
+            conn.execute("ALTER TABLE mouvements_stock ADD COLUMN no_dossier TEXT")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mvt_stock_dossier ON mouvements_stock(no_dossier)"
+        )
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS mouvement_palettes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                mouvement_id INTEGER NOT NULL REFERENCES mouvements_stock(id) ON DELETE CASCADE,
+                matiere_id INTEGER NOT NULL REFERENCES matieres_premieres(id),
+                nombre INTEGER NOT NULL CHECK(nombre > 0),
+                created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime'))
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mvt_palettes_mvt ON mouvement_palettes(mouvement_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mvt_palettes_mat ON mouvement_palettes(matiere_id)"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 117, "z1_dossier_link_and_palettes")
+
+
 
 def create_default_admin():
     import bcrypt

@@ -557,36 +557,43 @@ body.has-topbar .fab-main{padding-top:74px}
   display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:190;
 }
 
-/* ── Responsive vue Repiquage (mobile : layout vertical, lisible au pouce) ── */
+/* ── Responsive vue Repiquage (mobile : tout visible sans scroll) ── */
 @media(max-width:700px){
-  .fab-main--repiquage-dossier .fab-main-head{padding:10px 14px 8px}
-  .fab-main--repiquage-dossier .fab-main-title{font-size:13px}
-  /* Bandeau dossier : empile vertical, prend toute la largeur */
+  .fab-main--repiquage-dossier .fab-main-head{padding:6px 12px 4px;min-height:auto}
+  .fab-main--repiquage-dossier .fab-main-title{font-size:12px}
+  .fab-main--repiquage-dossier .fab-etat-badge{font-size:9px!important;padding:2px 6px!important}
+  /* Bandeau dossier : compact, padding réduit */
   .fab-main--repiquage-dossier > div[style*="background:var(--card)"]:nth-of-type(1){
-    flex-direction:column;align-items:stretch;padding:12px 14px;gap:10px
+    flex-direction:column;align-items:stretch;padding:8px 12px;gap:6px
   }
-  /* Bouton +1 carton géant : un peu plus compact mais reste lisible */
+  /* Bouton +1 carton : compact mais reste tactile (min-height:88px = bouton confortable) */
   .rep-btn-plus-un{
-    min-height:130px!important;padding:24px 18px!important;
-    font-size:20px!important;border-radius:14px!important
+    min-height:88px!important;padding:14px 18px!important;
+    font-size:15px!important;border-radius:12px!important;gap:2px!important
   }
-  .rep-btn-plus-un span:first-child{font-size:36px!important}
-  /* -1 carton : moins large */
-  .rep-btn-moins-un{padding:10px 18px!important;font-size:13px!important}
-  /* Carton courant : prend toute la largeur, padding latéral */
-  .rep-carton-courant{max-width:none!important;padding:0 4px}
-  /* Quick-add (input + bouton) : tout pleine largeur, empile en vertical par ligne */
-  .rep-quick-add{max-width:none!important;padding:0 4px}
-  .rep-quick-add > div{flex-direction:column!important;gap:6px!important}
-  .rep-quick-add > div input{width:100%!important;min-width:0!important;padding:12px 14px!important;font-size:14px!important}
-  .rep-quick-add > div button{width:100%!important;padding:12px 16px!important;font-size:14px!important;min-height:44px}
-  /* Compteurs Aujourd'hui + Cumul : empile en vertical, lisible */
-  .rep-compteurs{max-width:none!important;flex-direction:column!important;gap:8px!important;padding:0 4px}
-  .rep-compteurs > div{min-width:0!important;padding:12px 16px!important}
-  .rep-compteurs > div > div:last-child{font-size:16px!important}
-  /* Padding global du contenu central */
+  .rep-btn-plus-un span:first-child{font-size:26px!important;line-height:1!important}
+  /* -1 carton : compact */
+  .rep-btn-moins-un{padding:7px 16px!important;font-size:12px!important;gap:6px!important}
+  .rep-btn-moins-un span:first-child{font-size:14px!important}
+  /* Carton courant : compact */
+  .rep-carton-courant{max-width:none!important;padding:0 4px;gap:4px!important}
+  /* Quick-add : input + bouton sur une seule ligne horizontale (gain de hauteur) */
+  .rep-quick-add{max-width:none!important;padding:0 4px;gap:6px!important}
+  .rep-quick-add > div{flex-direction:row!important;gap:6px!important}
+  .rep-quick-add > div input{flex:1!important;min-width:0!important;padding:9px 10px!important;font-size:13px!important}
+  .rep-quick-add > div button{padding:9px 10px!important;font-size:12px!important;min-width:84px!important;white-space:nowrap}
+  /* Compteurs : ligne horizontale partagée, compacte */
+  .rep-compteurs{max-width:none!important;flex-direction:row!important;gap:6px!important;padding:0 4px}
+  .rep-compteurs > div{flex:1!important;min-width:0!important;padding:8px 10px!important}
+  .rep-compteurs > div > div:first-child{font-size:9px!important}
+  .rep-compteurs > div > div:last-child{font-size:11px!important;line-height:1.25!important}
+  /* Padding global du contenu central : minimal */
   .fab-main--repiquage-dossier > div[style*="overflowY:auto"]{
-    padding:16px 8px!important;gap:14px!important
+    padding:8px 8px 12px!important;gap:8px!important
+  }
+  /* Tabs : padding réduit */
+  .fab-main--repiquage-dossier > div[style*="border-bottom:1px solid var(--border)"] button{
+    padding:7px 12px!important;font-size:11px!important
   }
 }
 

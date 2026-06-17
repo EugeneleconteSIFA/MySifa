@@ -842,3 +842,890 @@ def list_users(request: Request):
             "SELECT id, nom, role FROM users WHERE actif=1 ORDER BY nom"
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+# ════════════════════════════════════════════════════════════════════
+# MODULE AUDITS CLIENT
+# ════════════════════════════════════════════════════════════════════
+
+AUDIT_STATUTS = ("ouvert", "cloture")
+AUDIT_UPLOAD_DIR = QUALITE_UPLOAD_DIR  # même dossier physique, préfixe "audit_" dans le nom
+
+
+def _generate_audit_numero(conn) -> str:
+    """Génère un numéro audit type AUD-YYYY-NNN."""
+    year = datetime.now().year
+    rows = conn.execute(
+        "SELECT numero FROM audit_dossiers WHERE numero LIKE ? ORDER BY id DESC",
+        (f"AUD-{year}-%",),
+    ).fetchall()
+    used = set()
+    for r in rows:
+        m = re.match(rf"AUD-{year}-(\d+)$", r["numero"] or "")
+        if m:
+            used.add(int(m.group(1)))
+    n = 1
+    while n in used:
+        n += 1
+    return f"AUD-{year}-{n:03d}"
+
+
+def _audit_row_to_dict(row) -> dict:
+    return dict(row)
+
+
+def _enrich_audit(conn, audits: List[dict]) -> List[dict]:
+    if not audits:
+        return audits
+    ids = [a["id"] for a in audits]
+    ph = ",".join("?" * len(ids))
+
+    files = conn.execute(
+        f"SELECT audit_id, COUNT(*) AS n FROM audit_fichiers WHERE audit_id IN ({ph}) GROUP BY audit_id", ids
+    ).fetchall()
+    fcount = {r["audit_id"]: r["n"] for r in files}
+
+    msgs = conn.execute(
+        f"""SELECT audit_id, COUNT(*) AS n, MAX(created_at) AS last_at, MAX(id) AS last_id
+            FROM audit_messages WHERE audit_id IN ({ph}) GROUP BY audit_id""", ids
+    ).fetchall()
+    mmap = {r["audit_id"]: r for r in msgs}
+
+    auditeurs = conn.execute(
+        f"""SELECT a.audit_id, a.user_id, u.nom AS user_nom, u.role AS user_role
+            FROM audit_auditeurs a
+            LEFT JOIN users u ON u.id=a.user_id
+            WHERE a.audit_id IN ({ph})
+            ORDER BY u.nom""", ids
+    ).fetchall()
+    amap: dict = {}
+    for r in auditeurs:
+        amap.setdefault(r["audit_id"], []).append({
+            "user_id": r["user_id"], "nom": r["user_nom"], "role": r["user_role"]
+        })
+
+    for a in audits:
+        a["files_count"] = fcount.get(a["id"], 0)
+        m = mmap.get(a["id"])
+        a["messages_count"] = m["n"] if m else 0
+        a["last_message_at"] = m["last_at"] if m else None
+        a["last_message_id"] = m["last_id"] if m else None
+        a["auditeurs"] = amap.get(a["id"], [])
+    return audits
+
+
+def _enrich_audit_unread(conn, user_id: int, audits: List[dict]) -> List[dict]:
+    if not audits:
+        return audits
+    ids = [a["id"] for a in audits]
+    ph = ",".join("?" * len(ids))
+    reads = conn.execute(
+        f"SELECT audit_id, last_read_message_id FROM audit_message_reads WHERE user_id=? AND audit_id IN ({ph})",
+        [user_id] + ids,
+    ).fetchall()
+    rmap = {r["audit_id"]: (r["last_read_message_id"] or 0) for r in reads}
+    for a in audits:
+        last_seen = rmap.get(a["id"], 0)
+        last_msg = a.get("last_message_id") or 0
+        if last_msg > last_seen:
+            cnt = conn.execute(
+                "SELECT COUNT(*) FROM audit_messages WHERE audit_id=? AND id > ?",
+                (a["id"], last_seen),
+            ).fetchone()[0]
+            a["unread_count"] = cnt
+        else:
+            a["unread_count"] = 0
+    return audits
+
+
+def _notify_auditeur(audit_id: int, audit_numero: str, audit_client: str, user_id: int) -> None:
+    """Envoie une notification push à un auditeur nouvellement affecté.
+    Ne lève jamais — silencieux si push non configuré."""
+    try:
+        from app.routers.push import send_push_safe
+        send_push_safe(
+            user_id,
+            title=f"Audit client — {audit_numero}",
+            body=f"Vous avez été affecté(e) à un audit chez {audit_client}.",
+            url=f"/qualite?audit={audit_id}",
+            tag=f"audit-{audit_id}",
+        )
+    except Exception:
+        pass
+
+
+# ─── Liste audits ────────────────────────────────────────────────────
+
+@router.get("/api/qualite/audits")
+def list_audits(request: Request, statut: Optional[str] = None, q: Optional[str] = None):
+    user = _require_qualite_access(request)
+    with get_db() as conn:
+        sql = """SELECT a.*,
+                        uc.nom AS created_by_nom,
+                        cl.raison_sociale AS client_raison_sociale
+                 FROM audit_dossiers a
+                 LEFT JOIN users uc ON a.created_by = uc.id
+                 LEFT JOIN clients cl ON a.client_id = cl.id
+                 WHERE 1=1"""
+        params: list = []
+        if statut and statut in AUDIT_STATUTS:
+            sql += " AND a.statut=?"
+            params.append(statut)
+        if q:
+            sql += " AND (a.client_nom LIKE ? OR a.description LIKE ? OR a.numero LIKE ?)"
+            like = f"%{q.strip()}%"
+            params.extend([like, like, like])
+        sql += " ORDER BY a.date_audit DESC, a.id DESC"
+        rows = conn.execute(sql, params).fetchall()
+        audits = [_audit_row_to_dict(r) for r in rows]
+        audits = _enrich_audit(conn, audits)
+        audits = _enrich_audit_unread(conn, user["id"], audits)
+    return audits
+
+
+# ─── Détail audit ────────────────────────────────────────────────────
+
+@router.get("/api/qualite/audits/{audit_id}")
+def get_audit(audit_id: int, request: Request):
+    user = _require_qualite_access(request)
+    with get_db() as conn:
+        row = conn.execute(
+            """SELECT a.*,
+                      uc.nom AS created_by_nom,
+                      uu.nom AS updated_by_nom,
+                      cl.raison_sociale AS client_raison_sociale
+               FROM audit_dossiers a
+               LEFT JOIN users uc ON a.created_by = uc.id
+               LEFT JOIN users uu ON a.updated_by = uu.id
+               LEFT JOIN clients cl ON a.client_id = cl.id
+               WHERE a.id=?""",
+            (audit_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Audit introuvable")
+        a = _audit_row_to_dict(row)
+        a = _enrich_audit(conn, [a])[0]
+        a = _enrich_audit_unread(conn, user["id"], [a])[0]
+    return a
+
+
+# ─── Création audit ──────────────────────────────────────────────────
+
+class AuditCreate(BaseModel):
+    client_nom: str
+    client_id: Optional[int] = None
+    date_audit: str
+    description: str
+    auditeur_ids: List[int]
+
+
+@router.post("/api/qualite/audits")
+def create_audit(body: AuditCreate, request: Request):
+    user = _require_qualite_access(request)
+    client_nom = (body.client_nom or "").strip()
+    description = (body.description or "").strip()
+    date_audit = (body.date_audit or "").strip()
+    if not client_nom:
+        raise HTTPException(status_code=400, detail="Nom du client obligatoire")
+    if not date_audit:
+        raise HTTPException(status_code=400, detail="Date obligatoire")
+    if not description:
+        raise HTTPException(status_code=400, detail="Description obligatoire")
+    if not body.auditeur_ids:
+        raise HTTPException(status_code=400, detail="Au moins un auditeur obligatoire")
+
+    now = _now()
+    notif_ids: List[int] = []
+    with get_db() as conn:
+        # Vérifier que les auditeurs ont bien un rôle Qualité
+        ph = ",".join("?" * len(body.auditeur_ids))
+        valid = conn.execute(
+            f"SELECT id FROM users WHERE id IN ({ph}) AND actif=1 AND role IN ('superadmin','direction','administration')",
+            body.auditeur_ids,
+        ).fetchall()
+        valid_ids = [v["id"] for v in valid]
+        if not valid_ids:
+            raise HTTPException(status_code=400, detail="Aucun auditeur valide")
+
+        # Vérifier client_id si fourni
+        client_id = body.client_id
+        if client_id:
+            if not conn.execute("SELECT 1 FROM clients WHERE id=?", (client_id,)).fetchone():
+                client_id = None
+
+        numero = _generate_audit_numero(conn)
+        cur = conn.execute(
+            """INSERT INTO audit_dossiers
+               (numero, client_id, client_nom, date_audit, description, statut,
+                created_at, created_by, updated_at, updated_by)
+               VALUES (?,?,?,?,?, 'ouvert', ?,?,?,?)""",
+            (numero, client_id, client_nom, date_audit, description,
+             now, user["id"], now, user["id"]),
+        )
+        audit_id = cur.lastrowid
+
+        for uid in valid_ids:
+            conn.execute(
+                """INSERT INTO audit_auditeurs (audit_id, user_id, assigned_at, assigned_by, notified)
+                   VALUES (?,?,?,?,0)""",
+                (audit_id, uid, now, user["id"]),
+            )
+            if uid != user["id"]:
+                notif_ids.append(uid)
+        conn.commit()
+
+    # Notifications push hors transaction (silencieux)
+    for uid in notif_ids:
+        _notify_auditeur(audit_id, numero, client_nom, uid)
+    # Marquer notifié
+    if notif_ids:
+        with get_db() as conn:
+            ph2 = ",".join("?" * len(notif_ids))
+            conn.execute(
+                f"UPDATE audit_auditeurs SET notified=1 WHERE audit_id=? AND user_id IN ({ph2})",
+                [audit_id] + notif_ids,
+            )
+            conn.commit()
+
+    return get_audit(audit_id, request)
+
+
+# ─── Mise à jour audit ───────────────────────────────────────────────
+
+class AuditUpdate(BaseModel):
+    client_nom: Optional[str] = None
+    client_id: Optional[int] = None
+    date_audit: Optional[str] = None
+    description: Optional[str] = None
+
+
+@router.put("/api/qualite/audits/{audit_id}")
+def update_audit(audit_id: int, body: AuditUpdate, request: Request):
+    user = _require_qualite_access(request)
+    with get_db() as conn:
+        if not conn.execute("SELECT 1 FROM audit_dossiers WHERE id=?", (audit_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="Audit introuvable")
+        data = body.dict(exclude_unset=True)
+        fields = []
+        params: list = []
+        for col in ("client_nom", "client_id", "date_audit", "description"):
+            if col in data:
+                val = data[col]
+                if col in ("client_nom", "date_audit", "description") and isinstance(val, str):
+                    val = val.strip()
+                    if not val:
+                        raise HTTPException(status_code=400, detail=f"{col} ne peut pas être vide")
+                if col == "client_id" and val:
+                    if not conn.execute("SELECT 1 FROM clients WHERE id=?", (val,)).fetchone():
+                        val = None
+                fields.append(f"{col}=?")
+                params.append(val)
+        if fields:
+            now = _now()
+            fields.extend(["updated_at=?", "updated_by=?"])
+            params.extend([now, user["id"]])
+            params.append(audit_id)
+            conn.execute(f"UPDATE audit_dossiers SET {', '.join(fields)} WHERE id=?", params)
+            conn.commit()
+    return get_audit(audit_id, request)
+
+
+# ─── Clôture / réouverture ───────────────────────────────────────────
+
+@router.post("/api/qualite/audits/{audit_id}/cloturer")
+def cloturer_audit(audit_id: int, request: Request):
+    user = _require_qualite_access(request)
+    with get_db() as conn:
+        row = conn.execute("SELECT statut FROM audit_dossiers WHERE id=?", (audit_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Audit introuvable")
+        if row["statut"] == "cloture":
+            return get_audit(audit_id, request)
+        now = _now()
+        conn.execute(
+            "UPDATE audit_dossiers SET statut='cloture', date_cloture=?, updated_at=?, updated_by=? WHERE id=?",
+            (_today(), now, user["id"], audit_id),
+        )
+        conn.commit()
+    return get_audit(audit_id, request)
+
+
+@router.post("/api/qualite/audits/{audit_id}/rouvrir")
+def rouvrir_audit(audit_id: int, request: Request):
+    user = _require_qualite_access(request)
+    with get_db() as conn:
+        row = conn.execute("SELECT statut FROM audit_dossiers WHERE id=?", (audit_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Audit introuvable")
+        if row["statut"] == "ouvert":
+            return get_audit(audit_id, request)
+        now = _now()
+        conn.execute(
+            "UPDATE audit_dossiers SET statut='ouvert', date_cloture=NULL, updated_at=?, updated_by=? WHERE id=?",
+            (now, user["id"], audit_id),
+        )
+        conn.commit()
+    return get_audit(audit_id, request)
+
+
+# ─── Suppression audit ───────────────────────────────────────────────
+
+@router.delete("/api/qualite/audits/{audit_id}")
+def delete_audit(audit_id: int, request: Request):
+    _require_qualite_access(request)
+    with get_db() as conn:
+        if not conn.execute("SELECT 1 FROM audit_dossiers WHERE id=?", (audit_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="Audit introuvable")
+        files = conn.execute("SELECT filename FROM audit_fichiers WHERE audit_id=?", (audit_id,)).fetchall()
+        for f in files:
+            path = os.path.join(AUDIT_UPLOAD_DIR, f["filename"])
+            if os.path.exists(path):
+                try: os.remove(path)
+                except Exception: pass
+        # Suppressions explicites (PRAGMA foreign_keys=OFF par défaut sur MySifa)
+        conn.execute("DELETE FROM audit_message_reads WHERE audit_id=?", (audit_id,))
+        conn.execute("DELETE FROM audit_messages WHERE audit_id=?", (audit_id,))
+        conn.execute("DELETE FROM audit_fichiers WHERE audit_id=?", (audit_id,))
+        conn.execute("DELETE FROM audit_folders WHERE audit_id=?", (audit_id,))
+        conn.execute("DELETE FROM audit_auditeurs WHERE audit_id=?", (audit_id,))
+        conn.execute("DELETE FROM audit_dossiers WHERE id=?", (audit_id,))
+        conn.commit()
+    return {"ok": True}
+
+
+# ─── Auditeurs ───────────────────────────────────────────────────────
+
+class AuditeurAdd(BaseModel):
+    user_id: int
+
+
+@router.post("/api/qualite/audits/{audit_id}/auditeurs")
+def add_auditeur(audit_id: int, body: AuditeurAdd, request: Request):
+    user = _require_qualite_access(request)
+    with get_db() as conn:
+        a_row = conn.execute(
+            "SELECT id, numero, client_nom FROM audit_dossiers WHERE id=?", (audit_id,)
+        ).fetchone()
+        if not a_row:
+            raise HTTPException(status_code=404, detail="Audit introuvable")
+        u_row = conn.execute(
+            "SELECT id FROM users WHERE id=? AND actif=1 AND role IN ('superadmin','direction','administration')",
+            (body.user_id,),
+        ).fetchone()
+        if not u_row:
+            raise HTTPException(status_code=400, detail="Utilisateur invalide pour ce rôle")
+        if conn.execute(
+            "SELECT 1 FROM audit_auditeurs WHERE audit_id=? AND user_id=?",
+            (audit_id, body.user_id),
+        ).fetchone():
+            return get_audit(audit_id, request)
+        now = _now()
+        conn.execute(
+            """INSERT INTO audit_auditeurs (audit_id, user_id, assigned_at, assigned_by, notified)
+               VALUES (?,?,?,?,0)""",
+            (audit_id, body.user_id, now, user["id"]),
+        )
+        conn.execute("UPDATE audit_dossiers SET updated_at=?, updated_by=? WHERE id=?",
+                     (now, user["id"], audit_id))
+        conn.commit()
+    # Notif push
+    if body.user_id != user["id"]:
+        _notify_auditeur(audit_id, a_row["numero"], a_row["client_nom"], body.user_id)
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE audit_auditeurs SET notified=1 WHERE audit_id=? AND user_id=?",
+                (audit_id, body.user_id),
+            )
+            conn.commit()
+    return get_audit(audit_id, request)
+
+
+@router.delete("/api/qualite/audits/{audit_id}/auditeurs/{user_id}")
+def remove_auditeur(audit_id: int, user_id: int, request: Request):
+    user = _require_qualite_access(request)
+    with get_db() as conn:
+        if not conn.execute("SELECT 1 FROM audit_dossiers WHERE id=?", (audit_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="Audit introuvable")
+        conn.execute(
+            "DELETE FROM audit_auditeurs WHERE audit_id=? AND user_id=?",
+            (audit_id, user_id),
+        )
+        conn.execute("UPDATE audit_dossiers SET updated_at=?, updated_by=? WHERE id=?",
+                     (_now(), user["id"], audit_id))
+        conn.commit()
+    return get_audit(audit_id, request)
+
+
+# ─── Sous-dossiers (arborescence) ────────────────────────────────────
+
+@router.get("/api/qualite/audits/{audit_id}/folders")
+def list_folders(audit_id: int, request: Request):
+    _require_qualite_access(request)
+    with get_db() as conn:
+        if not conn.execute("SELECT 1 FROM audit_dossiers WHERE id=?", (audit_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="Audit introuvable")
+        rows = conn.execute(
+            """SELECT f.*, u.nom AS created_by_nom
+               FROM audit_folders f
+               LEFT JOIN users u ON f.created_by=u.id
+               WHERE f.audit_id=?
+               ORDER BY f.parent_id IS NOT NULL, f.parent_id, LOWER(f.nom)""",
+            (audit_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+class FolderCreate(BaseModel):
+    nom: str
+    parent_id: Optional[int] = None
+
+
+@router.post("/api/qualite/audits/{audit_id}/folders")
+def create_folder(audit_id: int, body: FolderCreate, request: Request):
+    user = _require_qualite_access(request)
+    nom = (body.nom or "").strip()
+    if not nom:
+        raise HTTPException(status_code=400, detail="Nom du sous-dossier obligatoire")
+    if len(nom) > 120:
+        nom = nom[:120]
+    with get_db() as conn:
+        if not conn.execute("SELECT 1 FROM audit_dossiers WHERE id=?", (audit_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="Audit introuvable")
+        if body.parent_id is not None:
+            if not conn.execute(
+                "SELECT 1 FROM audit_folders WHERE id=? AND audit_id=?",
+                (body.parent_id, audit_id),
+            ).fetchone():
+                raise HTTPException(status_code=400, detail="Dossier parent invalide")
+        now = _now()
+        cur = conn.execute(
+            """INSERT INTO audit_folders (audit_id, parent_id, nom, created_at, created_by)
+               VALUES (?,?,?,?,?)""",
+            (audit_id, body.parent_id, nom, now, user["id"]),
+        )
+        conn.execute("UPDATE audit_dossiers SET updated_at=?, updated_by=? WHERE id=?",
+                     (now, user["id"], audit_id))
+        folder_id = cur.lastrowid
+        conn.commit()
+        row = conn.execute(
+            """SELECT f.*, u.nom AS created_by_nom
+               FROM audit_folders f LEFT JOIN users u ON f.created_by=u.id
+               WHERE f.id=?""", (folder_id,)
+        ).fetchone()
+    return dict(row)
+
+
+class FolderUpdate(BaseModel):
+    nom: Optional[str] = None
+    parent_id: Optional[int] = None
+    parent_id_set: bool = False  # True pour permettre parent_id=None explicite
+
+
+@router.put("/api/qualite/audits/{audit_id}/folders/{folder_id}")
+def update_folder(audit_id: int, folder_id: int, body: FolderUpdate, request: Request):
+    user = _require_qualite_access(request)
+    with get_db() as conn:
+        f_row = conn.execute(
+            "SELECT * FROM audit_folders WHERE id=? AND audit_id=?",
+            (folder_id, audit_id),
+        ).fetchone()
+        if not f_row:
+            raise HTTPException(status_code=404, detail="Sous-dossier introuvable")
+        data = body.dict(exclude_unset=True)
+        fields = []
+        params: list = []
+        if "nom" in data and data["nom"] is not None:
+            nom = (data["nom"] or "").strip()
+            if not nom:
+                raise HTTPException(status_code=400, detail="Nom obligatoire")
+            fields.append("nom=?"); params.append(nom[:120])
+        if data.get("parent_id_set"):
+            new_parent = data.get("parent_id")
+            if new_parent is not None:
+                # Pas de boucle : new_parent ne doit pas être un descendant
+                if new_parent == folder_id:
+                    raise HTTPException(status_code=400, detail="Impossible de déplacer dans lui-même")
+                if not conn.execute(
+                    "SELECT 1 FROM audit_folders WHERE id=? AND audit_id=?",
+                    (new_parent, audit_id),
+                ).fetchone():
+                    raise HTTPException(status_code=400, detail="Dossier parent invalide")
+                # vérif cycles
+                cur_pid = new_parent
+                visited = set()
+                while cur_pid is not None and cur_pid not in visited:
+                    visited.add(cur_pid)
+                    if cur_pid == folder_id:
+                        raise HTTPException(status_code=400, detail="Déplacement créerait une boucle")
+                    parent_row = conn.execute(
+                        "SELECT parent_id FROM audit_folders WHERE id=?", (cur_pid,)
+                    ).fetchone()
+                    cur_pid = parent_row["parent_id"] if parent_row else None
+            fields.append("parent_id=?"); params.append(new_parent)
+        if fields:
+            params.append(folder_id)
+            conn.execute(f"UPDATE audit_folders SET {', '.join(fields)} WHERE id=?", params)
+            conn.execute("UPDATE audit_dossiers SET updated_at=?, updated_by=? WHERE id=?",
+                         (_now(), user["id"], audit_id))
+            conn.commit()
+        row = conn.execute(
+            """SELECT f.*, u.nom AS created_by_nom
+               FROM audit_folders f LEFT JOIN users u ON f.created_by=u.id
+               WHERE f.id=?""", (folder_id,)
+        ).fetchone()
+    return dict(row)
+
+
+@router.delete("/api/qualite/audits/{audit_id}/folders/{folder_id}")
+def delete_folder(audit_id: int, folder_id: int, request: Request):
+    user = _require_qualite_access(request)
+    with get_db() as conn:
+        if not conn.execute(
+            "SELECT 1 FROM audit_folders WHERE id=? AND audit_id=?",
+            (folder_id, audit_id),
+        ).fetchone():
+            raise HTTPException(status_code=404, detail="Sous-dossier introuvable")
+        # Récupérer tous les descendants pour supprimer les fichiers du disque
+        all_ids = [folder_id]
+        cur_layer = [folder_id]
+        while cur_layer:
+            ph = ",".join("?" * len(cur_layer))
+            children = conn.execute(
+                f"SELECT id FROM audit_folders WHERE parent_id IN ({ph})", cur_layer
+            ).fetchall()
+            cur_layer = [c["id"] for c in children]
+            all_ids.extend(cur_layer)
+        ph = ",".join("?" * len(all_ids))
+        files = conn.execute(
+            f"SELECT filename FROM audit_fichiers WHERE folder_id IN ({ph})", all_ids
+        ).fetchall()
+        for f in files:
+            path = os.path.join(AUDIT_UPLOAD_DIR, f["filename"])
+            if os.path.exists(path):
+                try: os.remove(path)
+                except Exception: pass
+        # Suppressions explicites (PRAGMA foreign_keys=OFF par défaut sur MySifa)
+        conn.execute(f"DELETE FROM audit_fichiers WHERE folder_id IN ({ph})", all_ids)
+        conn.execute(f"DELETE FROM audit_folders WHERE id IN ({ph})", all_ids)
+        conn.execute("UPDATE audit_dossiers SET updated_at=?, updated_by=? WHERE id=?",
+                     (_now(), user["id"], audit_id))
+        conn.commit()
+    return {"ok": True}
+
+
+# ─── Fichiers ────────────────────────────────────────────────────────
+
+@router.get("/api/qualite/audits/{audit_id}/fichiers")
+def list_audit_fichiers(audit_id: int, request: Request):
+    _require_qualite_access(request)
+    with get_db() as conn:
+        if not conn.execute("SELECT 1 FROM audit_dossiers WHERE id=?", (audit_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="Audit introuvable")
+        rows = conn.execute(
+            """SELECT f.*, u.nom AS uploaded_by_nom
+               FROM audit_fichiers f
+               LEFT JOIN users u ON f.uploaded_by=u.id
+               WHERE f.audit_id=? ORDER BY f.uploaded_at DESC""",
+            (audit_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+@router.post("/api/qualite/audits/{audit_id}/fichiers")
+async def upload_audit_fichier(
+    audit_id: int,
+    request: Request,
+    file: UploadFile = File(...),
+    folder_id: Optional[int] = None,
+):
+    user = _require_qualite_access(request)
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Aucun fichier")
+    original = _sanitize_filename(file.filename)
+    with get_db() as conn:
+        if not conn.execute("SELECT 1 FROM audit_dossiers WHERE id=?", (audit_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="Audit introuvable")
+        if folder_id is not None:
+            if not conn.execute(
+                "SELECT 1 FROM audit_folders WHERE id=? AND audit_id=?",
+                (folder_id, audit_id),
+            ).fetchone():
+                raise HTTPException(status_code=400, detail="Sous-dossier invalide")
+        ts = datetime.now().strftime("%Y%m%d%H%M%S%f")[:18]
+        ext = ""
+        if "." in original:
+            ext = "." + original.rsplit(".", 1)[1].lower()
+        filename = f"audit_{audit_id}_{ts}{ext}"
+        dest = os.path.join(AUDIT_UPLOAD_DIR, filename)
+        with open(dest, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+        size = os.path.getsize(dest)
+        conn.execute(
+            """INSERT INTO audit_fichiers
+               (audit_id, folder_id, filename, original_name, mime_type, size_bytes, uploaded_at, uploaded_by)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            (audit_id, folder_id, filename, original, file.content_type or None, size, _now(), user["id"]),
+        )
+        conn.execute("UPDATE audit_dossiers SET updated_at=?, updated_by=? WHERE id=?",
+                     (_now(), user["id"], audit_id))
+        conn.commit()
+    return list_audit_fichiers(audit_id, request)
+
+
+@router.get("/api/qualite/audits/{audit_id}/fichiers/{file_id}")
+def download_audit_fichier(audit_id: int, file_id: int, request: Request):
+    _require_qualite_access(request)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM audit_fichiers WHERE id=? AND audit_id=?", (file_id, audit_id)
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Fichier introuvable")
+    d = dict(row)
+    path = os.path.join(AUDIT_UPLOAD_DIR, d["filename"])
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Fichier absent du serveur")
+    media = d.get("mime_type") or "application/octet-stream"
+    return FileResponse(path, media_type=media, filename=d["original_name"],
+                        headers={"Content-Disposition": f'inline; filename="{d["original_name"]}"'})
+
+
+@router.delete("/api/qualite/audits/{audit_id}/fichiers/{file_id}")
+def delete_audit_fichier(audit_id: int, file_id: int, request: Request):
+    user = _require_qualite_access(request)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM audit_fichiers WHERE id=? AND audit_id=?", (file_id, audit_id)
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Fichier introuvable")
+        path = os.path.join(AUDIT_UPLOAD_DIR, row["filename"])
+        if os.path.exists(path):
+            try: os.remove(path)
+            except Exception: pass
+        conn.execute("DELETE FROM audit_fichiers WHERE id=?", (file_id,))
+        conn.execute("UPDATE audit_dossiers SET updated_at=?, updated_by=? WHERE id=?",
+                     (_now(), user["id"], audit_id))
+        conn.commit()
+    return {"ok": True}
+
+
+class AuditFichierMove(BaseModel):
+    folder_id: Optional[int] = None
+
+
+@router.put("/api/qualite/audits/{audit_id}/fichiers/{file_id}")
+def move_audit_fichier(audit_id: int, file_id: int, body: AuditFichierMove, request: Request):
+    user = _require_qualite_access(request)
+    with get_db() as conn:
+        if not conn.execute(
+            "SELECT 1 FROM audit_fichiers WHERE id=? AND audit_id=?",
+            (file_id, audit_id),
+        ).fetchone():
+            raise HTTPException(status_code=404, detail="Fichier introuvable")
+        if body.folder_id is not None:
+            if not conn.execute(
+                "SELECT 1 FROM audit_folders WHERE id=? AND audit_id=?",
+                (body.folder_id, audit_id),
+            ).fetchone():
+                raise HTTPException(status_code=400, detail="Sous-dossier invalide")
+        conn.execute(
+            "UPDATE audit_fichiers SET folder_id=? WHERE id=?",
+            (body.folder_id, file_id),
+        )
+        conn.execute("UPDATE audit_dossiers SET updated_at=?, updated_by=? WHERE id=?",
+                     (_now(), user["id"], audit_id))
+        conn.commit()
+    return {"ok": True}
+
+
+# ─── Discussion ──────────────────────────────────────────────────────
+
+@router.get("/api/qualite/audits/{audit_id}/messages")
+def list_audit_messages(audit_id: int, request: Request):
+    user = _require_qualite_access(request)
+    with get_db() as conn:
+        if not conn.execute("SELECT 1 FROM audit_dossiers WHERE id=?", (audit_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="Audit introuvable")
+        rows = conn.execute(
+            """SELECT m.*, u.nom AS author_nom, u.role AS author_role,
+                      f.original_name AS attachment_name, f.mime_type AS attachment_mime
+               FROM audit_messages m
+               LEFT JOIN users u ON m.author_id=u.id
+               LEFT JOIN audit_fichiers f ON m.attachment_id=f.id
+               WHERE m.audit_id=? ORDER BY m.created_at ASC, m.id ASC""",
+            (audit_id,),
+        ).fetchall()
+        msgs = [dict(r) for r in rows]
+        if msgs:
+            last_id = max(m["id"] for m in msgs)
+            conn.execute(
+                """INSERT INTO audit_message_reads (user_id, audit_id, last_read_message_id, last_read_at)
+                   VALUES (?,?,?,?)
+                   ON CONFLICT(user_id, audit_id) DO UPDATE SET
+                     last_read_message_id=excluded.last_read_message_id,
+                     last_read_at=excluded.last_read_at""",
+                (user["id"], audit_id, last_id, _now()),
+            )
+            conn.commit()
+    return msgs
+
+
+class AuditMessageCreate(BaseModel):
+    body: str
+    attachment_id: Optional[int] = None
+
+
+@router.post("/api/qualite/audits/{audit_id}/messages")
+def post_audit_message(audit_id: int, body: AuditMessageCreate, request: Request):
+    user = _require_qualite_access(request)
+    text = (body.body or "").strip()
+    if not text and not body.attachment_id:
+        raise HTTPException(status_code=400, detail="Message vide")
+    with get_db() as conn:
+        if not conn.execute("SELECT 1 FROM audit_dossiers WHERE id=?", (audit_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="Audit introuvable")
+        if body.attachment_id:
+            if not conn.execute(
+                "SELECT 1 FROM audit_fichiers WHERE id=? AND audit_id=?", (body.attachment_id, audit_id)
+            ).fetchone():
+                raise HTTPException(status_code=400, detail="Pièce jointe invalide")
+        now = _now()
+        cur = conn.execute(
+            "INSERT INTO audit_messages (audit_id, author_id, body, attachment_id, created_at) VALUES (?,?,?,?,?)",
+            (audit_id, user["id"], text, body.attachment_id, now),
+        )
+        msg_id = cur.lastrowid
+        conn.execute("UPDATE audit_dossiers SET updated_at=?, updated_by=? WHERE id=?",
+                     (now, user["id"], audit_id))
+        conn.execute(
+            """INSERT INTO audit_message_reads (user_id, audit_id, last_read_message_id, last_read_at)
+               VALUES (?,?,?,?)
+               ON CONFLICT(user_id, audit_id) DO UPDATE SET
+                 last_read_message_id=excluded.last_read_message_id,
+                 last_read_at=excluded.last_read_at""",
+            (user["id"], audit_id, msg_id, now),
+        )
+        conn.commit()
+        row = conn.execute(
+            """SELECT m.*, u.nom AS author_nom, u.role AS author_role,
+                      f.original_name AS attachment_name, f.mime_type AS attachment_mime
+               FROM audit_messages m
+               LEFT JOIN users u ON m.author_id=u.id
+               LEFT JOIN audit_fichiers f ON m.attachment_id=f.id
+               WHERE m.id=?""",
+            (msg_id,),
+        ).fetchone()
+    return dict(row)
+
+
+# ─── Picker clients (recherche pour création audit) ──────────────────
+
+@router.get("/api/qualite/clients-search")
+def search_clients_qualite(request: Request, q: str = ""):
+    _require_qualite_access(request)
+    q = (q or "").strip()
+    with get_db() as conn:
+        if q:
+            rows = conn.execute(
+                """SELECT id, raison_sociale, code, ville
+                   FROM clients
+                   WHERE raison_sociale LIKE ? OR code LIKE ? OR ville LIKE ?
+                   ORDER BY raison_sociale COLLATE NOCASE ASC LIMIT 30""",
+                (f"%{q}%", f"%{q}%", f"%{q}%"),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT id, raison_sociale, code, ville
+                   FROM clients
+                   ORDER BY raison_sociale COLLATE NOCASE ASC LIMIT 30"""
+            ).fetchall()
+    return [dict(r) for r in rows]
+
+
+# ─── Liste auditeurs candidats ───────────────────────────────────────
+
+@router.get("/api/qualite/auditeurs")
+def list_auditeurs(request: Request):
+    _require_qualite_access(request)
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT id, nom, role FROM users
+               WHERE actif=1 AND role IN ('superadmin','direction','administration')
+               ORDER BY nom"""
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+# ─── Compteur global Qualité (NC + audits) pour badge sidebar/portail ─
+
+@router.get("/api/qualite/badges")
+def qualite_badges(request: Request):
+    """Compteur agrégé pour badges sidebar Qualité + tuile portail.
+
+    Retourne :
+        nc_unread : messages non lus sur NC ouvertes
+        audits_unread : messages non lus sur audits ouverts
+        audits_assigned_open : nb d'audits ouverts où l'utilisateur est affecté
+        total : somme à afficher dans le badge
+    """
+    user = _require_qualite_access(request)
+    uid = user["id"]
+    with get_db() as conn:
+        # NC unread
+        nc_rows = conn.execute(
+            """SELECT nc.id,
+                      (SELECT MAX(id) FROM nc_messages WHERE nc_id=nc.id) AS last_id,
+                      r.last_read_message_id AS last_read
+               FROM nc_dossiers nc
+               LEFT JOIN nc_message_reads r ON r.nc_id=nc.id AND r.user_id=?
+               WHERE nc.statut != 'cloturee'""",
+            (uid,),
+        ).fetchall()
+        nc_unread = 0
+        for r in nc_rows:
+            last = r["last_id"] or 0
+            seen = r["last_read"] or 0
+            if last > seen:
+                cnt = conn.execute(
+                    "SELECT COUNT(*) FROM nc_messages WHERE nc_id=? AND id>?",
+                    (r["id"], seen),
+                ).fetchone()[0]
+                nc_unread += cnt
+
+        # Audits unread
+        a_rows = conn.execute(
+            """SELECT a.id,
+                      (SELECT MAX(id) FROM audit_messages WHERE audit_id=a.id) AS last_id,
+                      r.last_read_message_id AS last_read
+               FROM audit_dossiers a
+               LEFT JOIN audit_message_reads r ON r.audit_id=a.id AND r.user_id=?
+               WHERE a.statut='ouvert'""",
+            (uid,),
+        ).fetchall()
+        audits_unread = 0
+        for r in a_rows:
+            last = r["last_id"] or 0
+            seen = r["last_read"] or 0
+            if last > seen:
+                cnt = conn.execute(
+                    "SELECT COUNT(*) FROM audit_messages WHERE audit_id=? AND id>?",
+                    (r["id"], seen),
+                ).fetchone()[0]
+                audits_unread += cnt
+
+        # Audits où je suis affecté et ouverts
+        audits_assigned_open = conn.execute(
+            """SELECT COUNT(*) FROM audit_auditeurs aa
+               JOIN audit_dossiers a ON a.id=aa.audit_id
+               WHERE aa.user_id=? AND a.statut='ouvert'""",
+            (uid,),
+        ).fetchone()[0]
+
+    total = nc_unread + audits_unread
+    return {
+        "nc_unread": nc_unread,
+        "audits_unread": audits_unread,
+        "audits_assigned_open": audits_assigned_open,
+        "total": total,
+    }

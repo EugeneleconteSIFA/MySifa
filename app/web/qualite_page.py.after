@@ -1,0 +1,12 @@
+
+async function init(){
+  updateThemeBtn();
+  await Promise.all([loadMe(),loadUsers()]);
+  await Promise.all([loadNCs(),loadCanaux(),loadUnread()]);
+  setInterval(()=>{loadUnread();if(document.getElementById('canaux-panel').classList.contains('open'))loadCanaux();},30000);
+}
+init();
+</script>
+</body>
+</html>
+"""

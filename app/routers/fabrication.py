@@ -471,6 +471,167 @@ def get_session(request: Request, machine_id: int = None):
         }
 
 
+@router.get("/api/fabrication/dossier-en-cours")
+def get_dossier_en_cours(request: Request):
+    """Renvoie le dossier de prod actuellement en saisie pour l'utilisateur courant.
+
+    Utilise par MyStock (modal Entree Z1) pour pre-remplir le lien dossier.
+    Accessible a tout utilisateur authentifie : si le profil n'a pas
+    d'`operateur_lie`/nom ou aucune saisie 01 ouverte du jour, on renvoie
+    {"dossier": null} sans lever d'erreur.
+    """
+    user = get_current_user(request)
+
+    operateur = (user.get("operateur_lie") or user.get("nom") or "").strip()
+    if not operateur:
+        return {"dossier": None}
+
+    today = _today_prefix()
+    today_fr = date.today().strftime("%d/%m/%Y")
+
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT * FROM production_data
+               WHERE (operateur = ? OR operateur = ?) AND (
+                 date_operation LIKE ? OR date_operation LIKE ?
+               )
+               ORDER BY date_operation ASC, id ASC""",
+            (operateur, user.get("nom") or operateur, today + "%", today_fr + "%"),
+        ).fetchall()
+        saisies = [dict(r) for r in rows]
+        active_ref = _get_active_dossier(saisies)
+        if not active_ref:
+            return {"dossier": None}
+
+        row = conn.execute(
+            """SELECT pe.reference AS no_dossier,
+                      pe.client,
+                      pe.description,
+                      pe.ref_produit,
+                      pe.numero_of,
+                      m.nom AS machine_nom
+               FROM planning_entries pe
+               LEFT JOIN machines m ON m.id = pe.machine_id
+               WHERE pe.reference = ?""",
+            (active_ref,),
+        ).fetchone()
+
+        if row:
+            dossier = dict(row)
+            dossier["fictif"] = False
+        else:
+            dossier = {
+                "no_dossier": active_ref,
+                "client": None,
+                "description": None,
+                "ref_produit": None,
+                "numero_of": _fictif_of_display(active_ref) if _is_fictif_dossier(active_ref) else None,
+                "machine_nom": None,
+                "fictif": _is_fictif_dossier(active_ref),
+            }
+
+    return {"dossier": dossier}
+
+
+@router.get("/api/fabrication/dossier/{no_dossier}/stats")
+def get_dossier_stats(no_dossier: str, request: Request):
+    """Statistiques d'un dossier de production pour la fiche dossier.
+
+    Agrege : entrees Z1 (qte / palettes utilisees) + matieres scannees.
+    Lecture seule, accessible a fabrication et admin (vue interne).
+    """
+    user = get_current_user(request)
+    _check_fab_access(user)
+
+    no_dossier = (no_dossier or "").strip()
+    if not no_dossier:
+        raise HTTPException(status_code=400, detail="no_dossier requis")
+
+    with get_db() as conn:
+        # Entrees Z1 liees au dossier (mouvements_stock.no_dossier renseigne)
+        z1_rows = conn.execute(
+            """SELECT ms.id              AS mouvement_id,
+                      ms.emplacement,
+                      ms.type_mouvement,
+                      ms.quantite,
+                      ms.created_at,
+                      ms.created_by_name,
+                      p.reference        AS produit_reference,
+                      p.designation      AS produit_designation,
+                      p.unite            AS produit_unite
+               FROM mouvements_stock ms
+               JOIN produits p ON p.id = ms.produit_id
+               WHERE ms.no_dossier = ?
+               ORDER BY ms.created_at ASC, ms.id ASC""",
+            (no_dossier,),
+        ).fetchall()
+        z1_mouvements = [dict(r) for r in z1_rows]
+        z1_mvt_ids = [r["mouvement_id"] for r in z1_mouvements]
+
+        # Total PF entre en Z1 pour ce dossier (entree uniquement, agrege par produit)
+        pf_totals = [
+            r for r in z1_mouvements
+            if (r.get("emplacement") or "").upper() == "Z1"
+            and (r.get("type_mouvement") or "") == "entree"
+        ]
+
+        # Palettes utilisees (jointes via mouvement_palettes -> matieres_premieres)
+        palettes_agg: list[dict] = []
+        if z1_mvt_ids:
+            placeholders = ",".join("?" * len(z1_mvt_ids))
+            pal_rows = conn.execute(
+                f"""SELECT mp.matiere_id,
+                           mat.reference   AS palette_reference,
+                           mat.designation AS palette_designation,
+                           mat.is_europe,
+                           SUM(mp.nombre) AS nombre_total
+                    FROM mouvement_palettes mp
+                    JOIN mouvements_stock ms ON ms.id = mp.mouvement_id
+                    JOIN matieres_premieres mat ON mat.id = mp.matiere_id
+                    WHERE mp.mouvement_id IN ({placeholders})
+                      AND ms.type_mouvement = 'entree'
+                    GROUP BY mp.matiere_id, mat.reference, mat.designation, mat.is_europe
+                    ORDER BY mat.is_europe DESC, mat.reference""",
+                z1_mvt_ids,
+            ).fetchall()
+            palettes_agg = [dict(r) for r in pal_rows]
+
+        # Matieres premieres scannees pour ce dossier (table existante fab_matieres_utilisees)
+        mp_rows = conn.execute(
+            """SELECT fmu.id,
+                      fmu.code_barre,
+                      fmu.scanned_at,
+                      fmu.operateur,
+                      fmu.machine_nom,
+                      sr.fournisseur     AS fournisseur,
+                      sr.certificat_fsc  AS certificat_fsc
+               FROM fab_matieres_utilisees fmu
+               LEFT JOIN stock_receptions sr
+                 ON sr.id = (
+                   SELECT i.reception_id
+                   FROM stock_reception_items i
+                   WHERE trim(i.code_barre) = trim(fmu.code_barre)
+                   ORDER BY i.scanned_at DESC, i.id DESC
+                   LIMIT 1
+                 )
+               WHERE fmu.no_dossier = ?
+               ORDER BY fmu.scanned_at ASC, fmu.id ASC""",
+            (no_dossier,),
+        ).fetchall()
+        mp_scannees = [dict(r) for r in mp_rows]
+
+    return {
+        "no_dossier": no_dossier,
+        "z1_mouvements": z1_mouvements,
+        "pf_totaux": pf_totals,
+        "palettes": palettes_agg,
+        "mp_scannees": mp_scannees,
+        "nb_z1_entrees": sum(1 for r in pf_totals),
+        "nb_palettes_total": sum(int(p.get("nombre_total") or 0) for p in palettes_agg),
+        "nb_mp_scans": len(mp_scannees),
+    }
+
+
 @router.get("/api/fabrication/saisies-jour")
 def list_saisies_jour_all(request: Request):
     """Vue admin (lecture seule) : toutes les saisies du jour, triées par machine puis heure."""

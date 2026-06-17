@@ -1187,7 +1187,8 @@ body.light .portal-apps--reorderable .portal-app--placeholder:hover{background:r
   content:'Chargement…';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
   background:rgba(10,14,23,.72);border-radius:16px;font-size:12px;font-weight:700;color:var(--accent);letter-spacing:.02em}
 body.light .portal-app--busy::after{background:rgba(255,255,255,.88);color:var(--accent)}
-.portal-app-icon{display:flex;align-items:center;justify-content:center;line-height:1;flex-shrink:0}
+.portal-app-icon{display:flex;align-items:center;justify-content:center;line-height:1;flex-shrink:0;position:relative}
+.portal-app-badge{position:absolute;top:-6px;right:-12px;min-width:22px;height:20px;padding:0 7px;border-radius:999px;background:var(--danger);color:#fff;font-size:11px;font-weight:800;font-family:ui-monospace,monospace;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px var(--card);line-height:1;letter-spacing:.5px}
 .portal-app-name{font-size:14px;font-weight:800;color:var(--text);flex-shrink:0;text-align:center;line-height:1.2}
 .portal-app-desc{font-size:11px;color:var(--muted);text-align:center;max-width:152px;line-height:1.3;
   display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
@@ -4129,16 +4130,33 @@ function renderPortal(){
 
   if(isQualite){
     const id='qualite';
+    const qIcoEl=h('div',{className:'portal-app-icon'},iconEl('shield-check',28));
+    const qBadge=h('span',{className:'portal-app-badge','id':'portal-qualite-badge',style:{display:'none'}},'0');
+    qIcoEl.appendChild(qBadge);
     tileSpecs.push({id,el:h('div',{
       className:'portal-app',
       'data-portal-id':id,
       draggable:'true',
       onClick:()=>{if(_portalDragSuppressClick)return;window.location.href='/qualite';}
     },
-      h('div',{className:'portal-app-icon'},iconEl('shield-check',28)),
+      qIcoEl,
       h('div',{className:'portal-app-name'},'MyQualité'),
-      h('div',{className:'portal-app-desc'},'Non-conformités & suivi qualité')
+      h('div',{className:'portal-app-desc'},'Non-conformités & audits client')
     )});
+    // Charger le compteur des badges Qualité (NC + audits + affectations)
+    setTimeout(()=>{
+      fetch('/api/qualite/badges',{credentials:'include'})
+        .then(r=>r.ok?r.json():null)
+        .then(d=>{
+          if(!d) return;
+          const el=document.getElementById('portal-qualite-badge');
+          if(!el) return;
+          const total=(d.nc_unread||0)+(d.audits_unread||0)+(d.audits_assigned_open||0);
+          if(total>0){el.style.display='inline-flex';el.textContent=total>99?'99+':String(total);}
+          else el.style.display='none';
+        })
+        .catch(()=>{});
+    },0);
   }
 
   const orderedTiles=portalOrderTileSpecs(tileSpecs,order);

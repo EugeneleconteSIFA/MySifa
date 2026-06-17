@@ -312,6 +312,7 @@ def apply_fifo_sortie(
     user_email: str,
     user_name: Optional[str] = None,
     note: str = "",
+    no_dossier: Optional[str] = None,
 ) -> dict:
     """
     Consomme les lots FIFO pour un emplacement donné.
@@ -355,13 +356,13 @@ def apply_fifo_sortie(
     )
 
     # Historique
-    conn.execute(
+    cur = conn.execute(
         """INSERT INTO mouvements_stock
-           (produit_id,emplacement,type_mouvement,quantite,quantite_avant,quantite_apres,note,created_at,created_by,created_by_name)
-           VALUES (?,?,?,?,?,?,?,?,?,?)""",
-        (produit_id, emplacement, "sortie", quantite, quantite_avant, quantite_apres, note, now, user_email, user_name),
+           (produit_id,emplacement,type_mouvement,quantite,quantite_avant,quantite_apres,note,created_at,created_by,created_by_name,no_dossier)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+        (produit_id, emplacement, "sortie", quantite, quantite_avant, quantite_apres, note, now, user_email, user_name, no_dossier),
     )
-    return {"quantite_avant": quantite_avant, "quantite_apres": quantite_apres}
+    return {"quantite_avant": quantite_avant, "quantite_apres": quantite_apres, "mouvement_id": cur.lastrowid}
 
 
 def sortir_lot_fifo(
@@ -1236,6 +1237,7 @@ def _apply_stock_mouvement(
     quantite: float,
     note: str,
     date_entree: Optional[str] = None,
+    no_dossier: Optional[str] = None,
 ) -> tuple[dict, str, str]:
     """Applique un mouvement PF (entree / sortie / inventaire) sur la base existante."""
     now = datetime.now().isoformat()
@@ -1283,10 +1285,10 @@ def _apply_stock_mouvement(
                    VALUES (?,?,?,?,?,?,?)""",
                 (produit_id, emplacement, qte_apres, now, user["email"], now, note or None),
             )
-        conn.execute(
+        cur = conn.execute(
             """INSERT INTO mouvements_stock
-               (produit_id,emplacement,type_mouvement,quantite,quantite_avant,quantite_apres,note,created_at,created_by,created_by_name)
-               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+               (produit_id,emplacement,type_mouvement,quantite,quantite_avant,quantite_apres,note,created_at,created_by,created_by_name,no_dossier)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 produit_id,
                 emplacement,
@@ -1298,13 +1300,15 @@ def _apply_stock_mouvement(
                 now,
                 user["email"],
                 created_by_name,
+                no_dossier,
             ),
         )
-        result = {"quantite_avant": qte_avant, "quantite_apres": qte_apres}
+        result = {"quantite_avant": qte_avant, "quantite_apres": qte_apres, "mouvement_id": cur.lastrowid}
 
     elif type_mvt == "sortie":
         result = apply_fifo_sortie(
-            conn, produit_id, emplacement, quantite, user["email"], created_by_name, note
+            conn, produit_id, emplacement, quantite, user["email"], created_by_name, note,
+            no_dossier=no_dossier,
         )
 
     elif type_mvt == "inventaire":
@@ -1341,10 +1345,10 @@ def _apply_stock_mouvement(
                    VALUES (?,?,?,?,?,?,?)""",
                 (produit_id, emplacement, quantite, now, user["email"], now, note or None),
             )
-        conn.execute(
+        cur = conn.execute(
             """INSERT INTO mouvements_stock
-               (produit_id,emplacement,type_mouvement,quantite,quantite_avant,quantite_apres,note,created_at,created_by,created_by_name)
-               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+               (produit_id,emplacement,type_mouvement,quantite,quantite_avant,quantite_apres,note,created_at,created_by,created_by_name,no_dossier)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 produit_id,
                 emplacement,
@@ -1356,9 +1360,10 @@ def _apply_stock_mouvement(
                 now,
                 user["email"],
                 created_by_name,
+                no_dossier,
             ),
         )
-        result = {"quantite_avant": qte_avant, "quantite_apres": quantite}
+        result = {"quantite_avant": qte_avant, "quantite_apres": quantite, "mouvement_id": cur.lastrowid}
     else:
         raise HTTPException(400, "Type de mouvement invalide.")
 
@@ -1377,6 +1382,8 @@ async def mouvement_stock(request: Request):
     quantite = float(body.get("quantite", 0))
     note = (body.get("note") or "").strip()
     date_entree = (body.get("date_entree") or datetime.now().strftime("%Y-%m-%d"))
+    no_dossier = (body.get("no_dossier") or "").strip() or None
+    palettes_in = body.get("palettes") or []
 
     if not produit_id or not emplacement:
         raise HTTPException(400, "produit_id et emplacement obligatoires")
@@ -1385,7 +1392,43 @@ async def mouvement_stock(request: Request):
     if quantite <= 0:
         raise HTTPException(400, "Quantité doit être positive")
 
+    # Validation palettes : liste d'objets {matiere_id:int, nombre:int>0}.
+    # Refusee si type != entree ET no_dossier vide (cas peu utile, on bloque pour clarte).
+    palettes_clean: list[tuple[int, int]] = []
+    if palettes_in:
+        if not isinstance(palettes_in, list):
+            raise HTTPException(400, "palettes doit etre une liste")
+        for it in palettes_in:
+            if not isinstance(it, dict):
+                continue
+            try:
+                mid = int(it.get("matiere_id"))
+                nb = int(it.get("nombre"))
+            except (TypeError, ValueError):
+                raise HTTPException(400, "palette : matiere_id et nombre numeriques requis")
+            if nb <= 0:
+                continue
+            palettes_clean.append((mid, nb))
+
     with get_db() as conn:
+        # Verifier que les matieres palettes existent et sont bien de categorie palette
+        if palettes_clean:
+            ids = list({mid for mid, _ in palettes_clean})
+            placeholders = ",".join("?" * len(ids))
+            rows = conn.execute(
+                f"SELECT id, categorie FROM matieres_premieres WHERE id IN ({placeholders})",
+                ids,
+            ).fetchall()
+            found = {r["id"]: (r["categorie"] or "") for r in rows}
+            for mid, _ in palettes_clean:
+                if mid not in found:
+                    raise HTTPException(400, f"Reference palette inconnue (matiere_id={mid})")
+                if (found[mid] or "").strip().lower() != "palette":
+                    raise HTTPException(
+                        400,
+                        f"Reference {mid} n'est pas une palette (categorie={found[mid]!r})",
+                    )
+
         result, ref_audit, audit_action = _apply_stock_mouvement(
             conn,
             user,
@@ -1395,15 +1438,33 @@ async def mouvement_stock(request: Request):
             quantite,
             note,
             date_entree,
+            no_dossier=no_dossier,
         )
+
+        # Insertion des palettes (meme transaction)
+        mvt_id = result.get("mouvement_id")
+        if palettes_clean and mvt_id:
+            now = datetime.now().isoformat()
+            conn.executemany(
+                """INSERT INTO mouvement_palettes (mouvement_id, matiere_id, nombre, created_at)
+                   VALUES (?,?,?,?)""",
+                [(mvt_id, mid, nb, now) for mid, nb in palettes_clean],
+            )
         conn.commit()
 
     log_action(
         user=user,
         action=audit_action,
         module="stock",
-        objet=f"{type_mvt} · {ref_audit} · {emplacement} · {quantite}",
-        detail={"type_mouvement": type_mvt, "quantite": quantite},
+        objet=f"{type_mvt} · {ref_audit} · {emplacement} · {quantite}"
+              + (f" · dossier {no_dossier}" if no_dossier else "")
+              + (f" · {sum(n for _, n in palettes_clean)} palette(s)" if palettes_clean else ""),
+        detail={
+            "type_mouvement": type_mvt,
+            "quantite": quantite,
+            "no_dossier": no_dossier,
+            "palettes": [{"matiere_id": m, "nombre": n} for m, n in palettes_clean],
+        },
         ip=request.client.host if request.client else None,
     )
     return {"success": True, **result}
