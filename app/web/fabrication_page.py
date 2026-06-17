@@ -557,44 +557,73 @@ body.has-topbar .fab-main{padding-top:74px}
   display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:190;
 }
 
-/* ── Responsive vue Repiquage (mobile : tout visible sans scroll) ── */
+/* ── Responsive vue Repiquage (mobile : layout compact + header/footer) ── */
 @media(max-width:700px){
-  .fab-main--repiquage-dossier .fab-main-head{padding:6px 12px 4px;min-height:auto}
-  .fab-main--repiquage-dossier .fab-main-title{font-size:12px}
-  .fab-main--repiquage-dossier .fab-etat-badge{font-size:9px!important;padding:2px 6px!important}
-  /* Bandeau dossier : compact, padding réduit */
+  /* HEADER MAIN : masquer le titre redondant (info déjà dans bandeau dossier) */
+  .fab-main--repiquage-dossier .fab-main-head{display:none!important}
+  /* Bandeau dossier : compact */
   .fab-main--repiquage-dossier > div[style*="background:var(--card)"]:nth-of-type(1){
-    flex-direction:column;align-items:stretch;padding:8px 12px;gap:6px
+    flex-direction:column;align-items:stretch;padding:6px 10px;gap:5px
   }
-  /* Bouton +1 carton : compact mais reste tactile (min-height:88px = bouton confortable) */
+  /* Bouton +1 carton : compact, cible tactile 62px+ */
   .rep-btn-plus-un{
-    min-height:88px!important;padding:14px 18px!important;
-    font-size:15px!important;border-radius:12px!important;gap:2px!important
+    min-height:62px!important;padding:8px 16px!important;
+    font-size:13px!important;border-radius:10px!important;gap:2px!important
   }
-  .rep-btn-plus-un span:first-child{font-size:26px!important;line-height:1!important}
-  /* -1 carton : compact */
-  .rep-btn-moins-un{padding:7px 16px!important;font-size:12px!important;gap:6px!important}
-  .rep-btn-moins-un span:first-child{font-size:14px!important}
-  /* Carton courant : compact */
-  .rep-carton-courant{max-width:none!important;padding:0 4px;gap:4px!important}
-  /* Quick-add : input + bouton sur une seule ligne horizontale (gain de hauteur) */
-  .rep-quick-add{max-width:none!important;padding:0 4px;gap:6px!important}
-  .rep-quick-add > div{flex-direction:row!important;gap:6px!important}
-  .rep-quick-add > div input{flex:1!important;min-width:0!important;padding:9px 10px!important;font-size:13px!important}
-  .rep-quick-add > div button{padding:9px 10px!important;font-size:12px!important;min-width:84px!important;white-space:nowrap}
-  /* Compteurs : ligne horizontale partagée, compacte */
-  .rep-compteurs{max-width:none!important;flex-direction:row!important;gap:6px!important;padding:0 4px}
-  .rep-compteurs > div{flex:1!important;min-width:0!important;padding:8px 10px!important}
-  .rep-compteurs > div > div:first-child{font-size:9px!important}
-  .rep-compteurs > div > div:last-child{font-size:11px!important;line-height:1.25!important}
-  /* Padding global du contenu central : minimal */
+  .rep-btn-plus-un span:first-child{font-size:22px!important;line-height:1!important}
+  /* -1 carton : très compact */
+  .rep-btn-moins-un{padding:5px 14px!important;font-size:11px!important;gap:4px!important}
+  .rep-btn-moins-un span:first-child{font-size:12px!important}
+  /* Carton courant : barre fine */
+  .rep-carton-courant{max-width:none!important;padding:0 4px;gap:3px!important}
+  .rep-carton-courant > div:first-child span:first-child{font-size:9px!important}
+  .rep-carton-courant > div:first-child span:last-child{font-size:11px!important}
+  .rep-carton-courant > div:last-child{height:6px!important;border-radius:3px!important}
+  /* Quick-add : input + bouton inline */
+  .rep-quick-add{max-width:none!important;padding:0 4px;gap:5px!important}
+  .rep-quick-add > div{flex-direction:row!important;gap:5px!important}
+  .rep-quick-add > div input{flex:1!important;min-width:0!important;padding:7px 9px!important;font-size:12px!important}
+  .rep-quick-add > div button{padding:7px 10px!important;font-size:11px!important;min-width:80px!important;white-space:nowrap}
+  /* Compteurs : horizontal partagé, gros et lisibles */
+  .rep-compteurs{max-width:none!important;flex-direction:row!important;gap:6px!important;padding:0 4px;margin-top:0!important}
+  .rep-compteurs > div{flex:1!important;min-width:0!important;padding:7px 9px!important}
+  .rep-compteurs > div > div:first-child{font-size:9px!important;margin-bottom:1px!important}
+  .rep-compteurs > div > div:last-child{font-size:12px!important;line-height:1.2!important}
+  /* RÉORGANISATION verticale via flex order */
   .fab-main--repiquage-dossier > div[style*="overflowY:auto"]{
-    padding:8px 8px 12px!important;gap:8px!important
+    padding:6px 6px 8px!important;gap:6px!important;
+    display:flex!important;flex-direction:column!important;
   }
+  .rep-btn-plus-un{order:1}
+  .rep-btn-moins-un{order:2}
+  .rep-compteurs{order:3}
+  .rep-carton-courant{order:4}
+  .rep-quick-add{order:5}
   /* Tabs : padding réduit */
   .fab-main--repiquage-dossier > div[style*="border-bottom:1px solid var(--border)"] button{
-    padding:7px 12px!important;font-size:11px!important
+    padding:6px 10px!important;font-size:11px!important
   }
+  /* ── FOOTER en mode Repiquage : masquer tout ce qui n'est pas pertinent ── */
+  /* Masquer la searchbar et le bouton Commenter (réservés Cohésio) */
+  body.fab-repiquage-mode .fab-footer-tools{display:none!important}
+  /* Padding footer réduit */
+  body.fab-repiquage-mode .fab-footer{
+    padding:4px 8px max(4px, env(safe-area-inset-bottom, 0px))!important;
+    gap:4px!important
+  }
+  /* Boutons footer plus compacts */
+  body.fab-repiquage-mode .fab-footer-btns .fab-btn{
+    padding:6px 12px!important;font-size:11px!important;border-radius:8px!important;gap:5px!important
+  }
+  body.fab-repiquage-mode .fab-footer-btns .fab-btn svg{width:13px!important;height:13px!important}
+  /* Row2 (tabs print/traca/of + thème) : compactée */
+  body.fab-repiquage-mode .fab-footer-row2{gap:4px!important;padding:0!important}
+  body.fab-repiquage-mode .fab-footer-row2 .fab-tab-btn{padding:4px 8px!important;font-size:10px!important}
+  body.fab-repiquage-mode .fab-theme-btn{padding:4px 8px!important;font-size:10px!important}
+  body.fab-repiquage-mode .fab-footer-row2 svg{width:13px!important;height:13px!important}
+  /* Sélecteur Machine admin : masqué (machine déjà fixée) */
+  body.fab-repiquage-mode .fab-footer-actions > div:first-child > svg + span + select,
+  body.fab-repiquage-mode .fab-footer-actions > div:first-child{display:none!important}
 }
 
 /* Responsive */
@@ -909,6 +938,10 @@ let S = {
   tracaStream: null,
   tracaManual: '',
   tracaAutoSaving: false,
+
+  // Stats dossier (PF Z1 + palettes + MP scannees)
+  dossierStats: null,
+  dossierStatsLoading: false,
   tracaLastCode: null,  // anti-dup
 
   // UI
@@ -1682,6 +1715,24 @@ async function switchFabTab(tab){
     await loadOfImports();
     // Pré-charger les fiches si sous-onglet actif
     if(S.ofSubTab==='fiche') await loadFiches();
+  }
+  if(tab==='stats'){
+    await loadDossierStats();
+  }
+}
+
+async function loadDossierStats(){
+  const ref = S.dossier && (S.dossier.reference || S.dossier.no_dossier);
+  if(!ref){
+    set({dossierStats:null, dossierStatsLoading:false});
+    return;
+  }
+  set({dossierStatsLoading:true});
+  try{
+    const d = await apiFetch('/api/fabrication/dossier/'+encodeURIComponent(ref)+'/stats');
+    set({dossierStats:d, dossierStatsLoading:false});
+  }catch(e){
+    set({dossierStats:{_err: e.message || 'Erreur de chargement'}, dossierStatsLoading:false});
   }
 }
 
@@ -3145,6 +3196,154 @@ function renderTracaPanel(){
   );
 }
 
+function renderStatsPanel(){
+  const machineName = (S.machine&&S.machine.nom)||(S.user&&S.user.machine_nom)||'-';
+  const ref = S.dossier && (S.dossier.reference || S.dossier.no_dossier);
+  if(!ref){
+    return h('div',{className:'fab-main'},
+      h('div',{className:'fab-main-head'},
+        h('span',{className:'fab-main-title'}, svgIcon('bar-chart-2',16),' Stats dossier'),
+        h('span',{className:'fab-main-sub'},machineName)
+      ),
+      h('div',{style:{padding:'40px 24px',textAlign:'center',color:'var(--muted)'}},
+        'Aucun dossier actif. Demarrez un dossier (op 01) pour voir ses stats.'
+      )
+    );
+  }
+  const st = S.dossierStats;
+  if(S.dossierStatsLoading || !st){
+    return h('div',{className:'fab-main'},
+      h('div',{className:'fab-main-head'},
+        h('span',{className:'fab-main-title'}, svgIcon('bar-chart-2',16),' Stats dossier'),
+        h('span',{style:{fontSize:'12px',fontWeight:'700',color:'var(--accent)'}}, ref),
+        h('span',{className:'fab-main-sub'},machineName)
+      ),
+      h('div',{style:{padding:'40px 24px',textAlign:'center',color:'var(--muted)'}},'Chargement...')
+    );
+  }
+  if(st._err){
+    return h('div',{className:'fab-main'},
+      h('div',{className:'fab-main-head'},
+        h('span',{className:'fab-main-title'}, svgIcon('bar-chart-2',16),' Stats dossier')
+      ),
+      h('div',{style:{padding:'24px',color:'var(--danger)'}}, st._err)
+    );
+  }
+
+  // Section Produits finis (Z1)
+  const pfRows = (st.pf_totaux || []).map(r => {
+    const dt = r.created_at ? new Date(r.created_at) : null;
+    const dateStr = dt && !isNaN(dt)
+      ? dt.toLocaleDateString('fr-FR') + ' ' + dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})
+      : '-';
+    return h('tr',null,
+      h('td',null, r.produit_reference || '-'),
+      h('td',{style:{color:'var(--text2)'}}, r.produit_designation || ''),
+      h('td',{style:{textAlign:'right',fontWeight:'700'}},
+        Number(r.quantite).toLocaleString('fr-FR') + ' ' + (r.produit_unite || '')),
+      h('td',{style:{color:'var(--muted)',fontSize:'11px'}}, dateStr),
+      h('td',{style:{color:'var(--muted)',fontSize:'11px'}}, r.created_by_name || '-'),
+    );
+  });
+  const pfTotalQte = (st.pf_totaux || []).reduce((s, r) => s + Number(r.quantite || 0), 0);
+
+  // Section Palettes
+  const palRows = (st.palettes || []).map(p => h('div',{
+    style:{display:'flex',alignItems:'center',gap:'12px',padding:'10px 14px',
+           background:'var(--bg)',borderRadius:'8px',marginBottom:'6px',
+           border:'1px solid var(--border)'}
+  },
+    h('div',{style:{flex:'1'}},
+      h('div',{style:{fontWeight:'600',fontSize:'13px',color:'var(--text)'}},
+        (p.palette_reference || '-') + (p.is_europe ? ' · EUROPE' : ' · perdue')),
+      h('div',{style:{fontSize:'11px',color:'var(--muted)'}}, p.palette_designation || '')
+    ),
+    h('div',{style:{fontSize:'20px',fontWeight:'800',color:'var(--accent)'}},
+      String(p.nombre_total) + ' pal.')
+  ));
+
+  // Section MP scannees
+  const mpCount = (st.mp_scannees || []).length;
+
+  return h('div',{className:'fab-main', style:{overflow:'auto'}},
+    h('div',{className:'fab-main-head'},
+      h('span',{className:'fab-main-title'}, svgIcon('bar-chart-2',16),' Stats dossier'),
+      h('span',{style:{fontSize:'12px',fontWeight:'700',color:'var(--accent)'}}, ref),
+      h('span',{className:'fab-main-sub'},machineName)
+    ),
+    h('div',{style:{padding:'16px 20px',display:'flex',flexDirection:'column',gap:'20px'}},
+      // Resume en tetes de cartes
+      h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:'10px'}},
+        h('div',{style:{padding:'12px',background:'var(--card)',border:'1px solid var(--border)',borderRadius:'10px'}},
+          h('div',{style:{fontSize:'11px',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'4px'}},'Entrees Z1'),
+          h('div',{style:{fontSize:'22px',fontWeight:'800',color:'var(--text)'}},
+            String(st.nb_z1_entrees || 0)),
+          h('div',{style:{fontSize:'11px',color:'var(--text2)',marginTop:'2px'}},
+            Number(pfTotalQte).toLocaleString('fr-FR') + ' unites')
+        ),
+        h('div',{style:{padding:'12px',background:'var(--card)',border:'1px solid var(--border)',borderRadius:'10px'}},
+          h('div',{style:{fontSize:'11px',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'4px'}},'Palettes'),
+          h('div',{style:{fontSize:'22px',fontWeight:'800',color:'var(--text)'}},
+            String(st.nb_palettes_total || 0))
+        ),
+        h('div',{style:{padding:'12px',background:'var(--card)',border:'1px solid var(--border)',borderRadius:'10px'}},
+          h('div',{style:{fontSize:'11px',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'4px'}},'MP scannees'),
+          h('div',{style:{fontSize:'22px',fontWeight:'800',color:'var(--text)'}}, String(mpCount))
+        )
+      ),
+
+      // Section PF Z1
+      h('div',{className:'card',style:{padding:'14px 16px',background:'var(--card)',border:'1px solid var(--border)',borderRadius:'12px'}},
+        h('div',{style:{fontSize:'13px',fontWeight:'700',marginBottom:'10px',display:'flex',alignItems:'center',gap:'8px'}},
+          svgIcon('package',14),' Produits finis en Z1'),
+        pfRows.length
+          ? h('table',{style:{width:'100%',borderCollapse:'collapse',fontSize:'12px'}},
+              h('thead',null, h('tr',null,
+                h('th',{style:{textAlign:'left',padding:'6px 8px',fontSize:'10px',color:'var(--muted)',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}},'Reference'),
+                h('th',{style:{textAlign:'left',padding:'6px 8px',fontSize:'10px',color:'var(--muted)',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}},'Designation'),
+                h('th',{style:{textAlign:'right',padding:'6px 8px',fontSize:'10px',color:'var(--muted)',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}},'Quantite'),
+                h('th',{style:{textAlign:'left',padding:'6px 8px',fontSize:'10px',color:'var(--muted)',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}},'Date'),
+                h('th',{style:{textAlign:'left',padding:'6px 8px',fontSize:'10px',color:'var(--muted)',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}},'Operateur'),
+              )),
+              h('tbody',null, ...pfRows.map(r => {
+                // patch les styles des cellules
+                r.querySelectorAll && r.querySelectorAll('td').forEach(td => { td.style.padding = '8px'; td.style.borderBottom = '1px solid var(--border)'; });
+                return r;
+              }))
+            )
+          : h('div',{style:{padding:'12px',color:'var(--muted)',fontSize:'12px',textAlign:'center'}},
+              'Aucune entree Z1 pour ce dossier.')
+      ),
+
+      // Section Palettes
+      h('div',{className:'card',style:{padding:'14px 16px',background:'var(--card)',border:'1px solid var(--border)',borderRadius:'12px'}},
+        h('div',{style:{fontSize:'13px',fontWeight:'700',marginBottom:'10px',display:'flex',alignItems:'center',gap:'8px'}},
+          svgIcon('layers',14),' Palettes utilisees'),
+        palRows.length
+          ? h('div',null, ...palRows)
+          : h('div',{style:{padding:'12px',color:'var(--muted)',fontSize:'12px',textAlign:'center'}},
+              'Aucune palette enregistree pour ce dossier.')
+      ),
+
+      // Section MP scannees (renvoi vers Traca pour le detail)
+      h('div',{className:'card',style:{padding:'14px 16px',background:'var(--card)',border:'1px solid var(--border)',borderRadius:'12px'}},
+        h('div',{style:{fontSize:'13px',fontWeight:'700',marginBottom:'10px',display:'flex',alignItems:'center',gap:'8px'}},
+          svgIcon('scan',14),' Matieres premieres scannees'),
+        mpCount > 0
+          ? h('div',null,
+              h('div',{style:{fontSize:'12px',color:'var(--text2)',marginBottom:'10px'}},
+                String(mpCount) + ' bobine' + (mpCount > 1 ? 's' : '') + ' scannee' + (mpCount > 1 ? 's' : '') + ' liee' + (mpCount > 1 ? 's' : '') + ' a ce dossier.'),
+              h('button',{className:'fab-btn fab-btn-ghost fab-btn-sm',
+                onClick: () => { void switchFabTab('traca'); }},
+                svgIcon('arrow-right',12),' Voir le detail dans Traca')
+            )
+          : h('div',{style:{padding:'12px',color:'var(--muted)',fontSize:'12px',textAlign:'center'}},
+              'Aucune matiere scannee pour ce dossier.')
+      )
+    )
+  );
+}
+
 function renderMain(){
   if(S.fabTab==='of'){
     return h('div',{className:'fab-of-panel',style:{display:'flex',flexDirection:'column',flex:'1',minHeight:0}},
@@ -3167,6 +3366,7 @@ function renderMain(){
   }
   if(S.fabTab==='print') return renderPrintPanel();
   if(S.fabTab==='traca') return renderTracaPanel();
+  if(S.fabTab==='stats') return renderStatsPanel();
 
   // Vue Repiquage : machine effective = Repiquage → vue simplifiée (saisies code 92)
   if(isRepiquageMode()) return renderRepiquageMain();
@@ -3440,6 +3640,8 @@ function renderFooter(){
         svgIcon('printer',16),'Imprimer'),
       h('button',{className:'fab-tab-btn'+(S.fabTab==='traca'?' active':''),onClick:()=>{ void switchFabTab('traca'); }},
         svgIcon('scan',16),'Traça'),
+      h('button',{className:'fab-tab-btn'+(S.fabTab==='stats'?' active':''),onClick:()=>{ void switchFabTab('stats'); }},
+        svgIcon('bar-chart-2',16),'Stats'),
     ];
     if(canAccessOfTab()){
       adminTabBtns.push(
@@ -3656,6 +3858,8 @@ function renderFooter(){
       svgIcon('printer',16),'Imprimer'),
     h('button',{className:'fab-tab-btn'+(S.fabTab==='traca'?' active':''),onClick:()=>{ void switchFabTab('traca'); }},
       svgIcon('scan',16),'Traça'),
+    h('button',{className:'fab-tab-btn'+(S.fabTab==='stats'?' active':''),onClick:()=>{ void switchFabTab('stats'); }},
+      svgIcon('bar-chart-2',16),'Stats'),
   ];
   if(canAccessOfTab()){
     tabBtns.push(

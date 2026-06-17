@@ -7787,6 +7787,162 @@ function openModalPfMouvement(type, produit) {
   renderPfMouvementModal(type, produit || null);
 }
 
+// Z1 enrichi : dossier de prod + palettes
+function _fmtDateFRz1(d) {
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  return dd + '/' + mm + '/' + d.getFullYear();
+}
+
+async function _fetchDossierEnCours() {
+  try {
+    const r = await api('/api/fabrication/dossier-en-cours');
+    return (r && r.dossier) || null;
+  } catch (e) { return null; }
+}
+
+async function _fetchPaletteTypes() {
+  try {
+    const r = await api('/api/stock/matieres');
+    if (!Array.isArray(r)) return [];
+    return r.filter(m => (m.categorie || '').toLowerCase() === 'palette')
+            .sort((a, b) => {
+              const ea = a.is_europe ? 0 : 1;
+              const eb = b.is_europe ? 0 : 1;
+              if (ea !== eb) return ea - eb;
+              return String(a.reference || '').localeCompare(String(b.reference || ''));
+            });
+  } catch (e) { return []; }
+}
+
+function _renderZ1PalettesBlock(container) {
+  if (!container) return;
+  container.innerHTML = '';
+  const types = (S.pfModal && S.pfModal._paletteTypes) || [];
+  const lines = (S.pfModal && S.pfModal.palettesLines) || [];
+
+  const head = el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } },
+    el('label', { style: { margin: 0, flex: '1' } }, 'Palettes utilisees'),
+    el('button', {
+      cls: 'btn btn-ghost',
+      type: 'button',
+      style: { padding: '4px 10px', fontSize: '12px' },
+      on: { click: () => {
+        S.pfModal.palettesLines.push({ matiere_id: null, nombre: 1 });
+        _renderZ1PalettesBlock(container);
+      } },
+    }, '+ Ajouter'),
+  );
+  container.appendChild(head);
+
+  if (!types.length) {
+    container.appendChild(el('div', { cls: 'mp-hint' },
+      'Aucune palette referencee dans matieres premieres.'));
+    return;
+  }
+  if (!lines.length) {
+    container.appendChild(el('div', { cls: 'mp-hint' },
+      'Aucune palette. Cliquez sur + Ajouter pour en saisir.'));
+    return;
+  }
+
+  lines.forEach((line, idx) => {
+    const row = el('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '6px' } });
+    const sel = el('select', { style: { flex: '1', padding: '8px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)' } });
+    sel.appendChild(el('option', { attrs: { value: '' } }, 'Choisir une palette'));
+    types.forEach(t => {
+      const opt = el('option', { attrs: { value: String(t.id) } },
+        (t.reference || '') + ' ' + (t.designation || '') + (t.is_europe ? ' (EUROPE)' : ''));
+      if (line.matiere_id != null && Number(line.matiere_id) === Number(t.id)) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.addEventListener('change', () => {
+      const v = sel.value;
+      S.pfModal.palettesLines[idx].matiere_id = v ? Number(v) : null;
+    });
+
+    const nbInp = el('input', {
+      attrs: { type: 'number', min: '1', step: '1', value: String(line.nombre || 1) },
+      style: { width: '80px', padding: '8px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)' },
+    });
+    nbInp.addEventListener('input', () => {
+      const v = parseInt(nbInp.value, 10);
+      S.pfModal.palettesLines[idx].nombre = Number.isFinite(v) && v > 0 ? v : 1;
+    });
+
+    const del = el('button', {
+      cls: 'btn btn-ghost',
+      type: 'button',
+      style: { padding: '4px 10px', fontSize: '12px', color: 'var(--danger)' },
+      attrs: { title: 'Supprimer cette palette', 'aria-label': 'Supprimer' },
+      on: { click: () => {
+        S.pfModal.palettesLines.splice(idx, 1);
+        _renderZ1PalettesBlock(container);
+      } },
+    }, 'X');
+
+    row.appendChild(sel);
+    row.appendChild(nbInp);
+    row.appendChild(del);
+    container.appendChild(row);
+  });
+}
+
+function _renderZ1DossierBanner(container, dossier) {
+  if (!container) return;
+  container.innerHTML = '';
+  if (!dossier) {
+    const inp = el('input', {
+      cls: 'field-input',
+      attrs: { type: 'text', placeholder: 'No de dossier (optionnel)', autocomplete: 'off' },
+      style: { textTransform: 'uppercase' },
+    });
+    inp.addEventListener('input', () => {
+      inp.value = inp.value.toUpperCase();
+      S.pfModal._noDossierManual = inp.value.trim();
+    });
+    container.appendChild(el('div', { cls: 'mp-field' },
+      el('label', null, 'Dossier de production (libre)'),
+      inp,
+      el('div', { cls: 'mp-hint' },
+        'Aucun dossier en cours detecte sur votre profil. Vous pouvez saisir le no manuellement.'),
+    ));
+    container.style.display = '';
+    return;
+  }
+  const refLine = (dossier.ref_produit || '') + (dossier.description ? ' - ' + dossier.description : '');
+  container.appendChild(el('div', { cls: 'mp-field' },
+    el('label', null, 'Dossier de production en cours'),
+    el('div', {
+      cls: 'mp-readonly',
+      style: { background: 'var(--accent-bg)', borderColor: 'var(--accent)', color: 'var(--text)' },
+    },
+      el('div', { style: { fontWeight: '700', fontSize: '14px' } },
+        (dossier.fictif ? '(hors planning) ' : '') + (dossier.no_dossier || '')),
+      dossier.client ? el('div', { style: { fontSize: '12px', color: 'var(--text2)', marginTop: '2px' } },
+        'Client : ' + dossier.client) : null,
+      refLine ? el('div', { style: { fontSize: '12px', color: 'var(--text2)', marginTop: '2px' } },
+        'Reference : ' + refLine) : null,
+      dossier.machine_nom ? el('div', { style: { fontSize: '11px', color: 'var(--muted)', marginTop: '2px' } },
+        'Machine : ' + dossier.machine_nom) : null,
+    ),
+  ));
+  container.style.display = '';
+}
+
+async function _initZ1Enrichment(dossierBanner, palettesBlock, noteTa) {
+  const [dossier, types] = await Promise.all([_fetchDossierEnCours(), _fetchPaletteTypes()]);
+  if (!S.pfModal) return;
+  S.pfModal.dossier = dossier;
+  S.pfModal._paletteTypes = types || [];
+  _renderZ1DossierBanner(dossierBanner, dossier);
+  _renderZ1PalettesBlock(palettesBlock);
+  if (dossier && dossier.no_dossier && noteTa && !((noteTa.value || '').trim())) {
+    const today = _fmtDateFRz1(new Date());
+    noteTa.value = 'Production dossier ' + dossier.no_dossier + ' - ' + today;
+  }
+}
+
 function renderPfMouvementModal(type, produit, defaultEmpl) {
   const typeMvt = (type || 'entree').toLowerCase();
   if (!['entree', 'sortie'].includes(typeMvt)) return;
@@ -7800,7 +7956,13 @@ function renderPfMouvementModal(type, produit, defaultEmpl) {
     produitId: prod ? prod.id : null,
     refInp: null,
     defaultEmpl: defaultEmpl || null,
+    dossier: null,
+    palettesLines: [],
+    _paletteTypes: [],
+    _noDossierManual: '',
   };
+  const _isZ1Entree = typeMvt === 'entree'
+    && String(defaultEmpl || '').toUpperCase() === 'Z1';
 
   const overlay = el('div', {
     cls: 'mp-modal-overlay',
@@ -7820,6 +7982,8 @@ function renderPfMouvementModal(type, produit, defaultEmpl) {
   const body = el('div', { cls: 'mp-modal-mvt-body' });
   const hintEl = el('div', { cls: 'mp-hint' }, '');
   const errEl = el('div', { cls: 'mp-hint err', style: { display: 'none' } }, '');
+  const dossierBanner = el('div', { cls: 'z1-dossier-banner', style: { display: 'none' } });
+  if (_isZ1Entree) body.appendChild(dossierBanner);
 
   if (prod) {
     const unit = (prod.unite || '').trim();
@@ -7948,12 +8112,26 @@ function renderPfMouvementModal(type, produit, defaultEmpl) {
     });
   }
 
+  const palettesBlock = el('div', { cls: 'z1-palettes-block' });
+  if (_isZ1Entree) {
+    body.appendChild(el('div', { cls: 'mp-field' }, palettesBlock));
+  }
   const noteTa = el('textarea', { attrs: { placeholder: 'Commentaire (optionnel)' } });
   body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Note'), noteTa));
   const prevGetBody = S.pfModal.getBody;
   S.pfModal.getBody = () => {
     const b = prevGetBody();
     b.note = (noteTa.value || '').trim() || null;
+    if (_isZ1Entree) {
+      const noDos = (S.pfModal.dossier && S.pfModal.dossier.no_dossier)
+        || S.pfModal._noDossierManual
+        || null;
+      b.no_dossier = noDos ? (String(noDos).trim() || null) : null;
+      const cleanPalettes = (S.pfModal.palettesLines || [])
+        .filter(l => l && l.matiere_id && Number(l.nombre) > 0)
+        .map(l => ({ matiere_id: Number(l.matiere_id), nombre: Number(l.nombre) }));
+      if (cleanPalettes.length) b.palettes = cleanPalettes;
+    }
     return b;
   };
 
@@ -7965,6 +8143,12 @@ function renderPfMouvementModal(type, produit, defaultEmpl) {
   box.appendChild(body);
   overlay.appendChild(box);
   mroot.appendChild(overlay);
+
+  if (_isZ1Entree) {
+    requestAnimationFrame(() => {
+      _initZ1Enrichment(dossierBanner, palettesBlock, noteTa);
+    });
+  }
 }
 
 async function submitPfMouvement() {
