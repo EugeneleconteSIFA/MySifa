@@ -5219,6 +5219,56 @@ function renderMachineStatusCards(){
       )
     );
   }
+  function mkCardDsi(){
+    const m = ms && ms.DSI;
+    const label = (m && m.statut_label) || 'En cours de développement';
+    return h('div',{className:'mst-card mst-en_dev',style:{opacity:.7}},
+      h('div',{className:'mst-head'},
+        h('span',{className:'mst-nom'},'DSI'),
+      ),
+      h('div',{className:'mst-body'},
+        h('div',{className:'mst-statut',style:{color:'var(--muted)',fontStyle:'italic'}},
+          '\u2699 ', label)
+      )
+    );
+  }
+  function mkCardRepiquage(){
+    const m = ms && ms.REP;
+    const dossiers = (m && m.dossiers_du_jour) || [];
+    const total = m ? Number(m.total_cartons||0) : 0;
+    const isOn = dossiers.length > 0;
+    const sk = isOn ? 'production' : 'eteinte';
+    const fmtNumR = n => Number(n||0).toLocaleString('fr-FR');
+    const lines = dossiers.length
+      ? dossiers.slice(0,10).map(d => h('div',{
+          style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'8px',padding:'4px 0',borderTop:'1px solid var(--border)',fontSize:'11px'}
+        },
+          h('div',{style:{display:'flex',flexDirection:'column',gap:'1px',minWidth:'0',flex:'1'}},
+            h('div',{style:{fontWeight:'700',color:'var(--accent)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, d.no_dossier||'—'),
+            d.client ? h('div',{style:{fontSize:'10px',color:'var(--text2)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, d.client) : null,
+          ),
+          h('div',{style:{fontFamily:'monospace',fontWeight:'800',color:'var(--text)',whiteSpace:'nowrap'}},
+            fmtNumR(d.cartons)+' carton'+(Math.abs(d.cartons)>1?'s':'')),
+        ))
+      : [h('div',{style:{padding:'8px 0',fontSize:'11px',color:'var(--muted)',fontStyle:'italic'}}, 'Aucune saisie aujourd\u2019hui')];
+    return h('div',{className:`mst-card mst-${sk}`},
+      h('div',{className:'mst-head'},
+        h('span',{className:'mst-nom'},'Repiquage'),
+        h('div',{style:{display:'flex',alignItems:'center',gap:'6px'}},
+          isOn?h('span',{style:{fontSize:'8px',color:'#22c55e',animation:'pulse 2s infinite',display:'inline-block',borderRadius:'50%',width:'8px',height:'8px',background:'#22c55e'}}):null,
+          h('span',{className:'mst-dot'})
+        )
+      ),
+      h('div',{className:'mst-body'},
+        h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:'4px'}},
+          h('span',{style:{fontSize:'11px',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',fontWeight:'700'}}, 'Aujourd\u2019hui'),
+          h('span',{style:{fontFamily:'monospace',fontWeight:'800',color:'var(--accent)'}}, fmtNumR(total)+' cartons')
+        ),
+        ...lines,
+        !ms?h('div',{style:{fontSize:'11px',color:'var(--muted)'}},'Chargement…'):null
+      )
+    );
+  }
   return h('div',null,
     h('div',{className:'section-title',style:{display:'flex',alignItems:'center',justifyContent:'space-between'}},
       h('span',null,iconEl('cpu',13),' Statut machines'),
@@ -5239,6 +5289,10 @@ function renderMachineStatusCards(){
     h('div',{className:'mst-grid'},
       mkCard('C1'),
       mkCard('C2')
+    ),
+    h('div',{className:'mst-grid',style:{marginTop:'12px'}},
+      mkCardDsi(),
+      mkCardRepiquage()
     )
   );
 }
@@ -5592,6 +5646,45 @@ function makeProdSynthKeyCell(label,type,keys,index){
   },label);
 }
 
+// Helper : section repliable avec chevron + persistance localStorage
+function _prodSectionState(key, defOpen){
+  try{
+    const v = localStorage.getItem('mysifa.prod.section.'+key);
+    if(v === '0') return false;
+    if(v === '1') return true;
+  }catch(e){}
+  return defOpen!==false;
+}
+function _prodSetSectionState(key, open){
+  try{ localStorage.setItem('mysifa.prod.section.'+key, open?'1':'0'); }catch(e){}
+}
+function makeCollapsibleSection(titleNode, contentNode, storageKey, defaultOpen){
+  const isOpen = _prodSectionState(storageKey, defaultOpen!==false);
+  return h('div',{className:'prod-section-wrap',style:{marginBottom:'14px'}},
+    h('div',{
+      className:'prod-section-header',
+      style:{display:'flex',alignItems:'center',gap:'8px',cursor:'pointer',userSelect:'none',padding:'2px 0'},
+      onClick:(ev)=>{
+        const root = ev.currentTarget.parentNode;
+        const ct = root.querySelector('.prod-section-content');
+        const cv = root.querySelector('.prod-section-chev');
+        const isVisible = ct.style.display !== 'none';
+        const next = !isVisible;
+        ct.style.display = next ? '' : 'none';
+        if(cv) cv.style.transform = next ? 'rotate(90deg)' : 'rotate(0deg)';
+        _prodSetSectionState(storageKey, next);
+      },
+    },
+      h('span',{
+        className:'prod-section-chev',
+        style:{display:'inline-block',width:'14px',textAlign:'center',color:'var(--muted)',fontSize:'11px',transition:'transform .15s',transform: isOpen?'rotate(90deg)':'rotate(0deg)'}
+      },'\u25B6'),
+      titleNode,
+    ),
+    h('div',{className:'prod-section-content',style:{display: isOpen ? '' : 'none', marginTop:'6px'}}, contentNode),
+  );
+}
+
 function renderProdKpis(){
   const d=S.production;
   if(!d)return h('div',{className:'card-empty'},'Chargement des données de production…');
@@ -5617,19 +5710,25 @@ function renderProdKpis(){
       parts.push(sc);
     }
   }
-  parts.push(h('div',{className:'section-title'},iconEl('box',13),' Quantités'));
-  parts.push(h('div',{className:'stats'},
-    h('div',{className:'stat'},h('div',{className:'stat-label'},'Dossiers produits'),h('div',{className:'stat-value'},fN(prod.dossiers||0))),
-    h('div',{className:'stat'},h('div',{className:'stat-label'},'Qté étiquettes'),h('div',{className:'stat-value'},fN(prod.etiquettes||0))),
-    h('div',{className:'stat'},h('div',{className:'stat-label'},'Métrage'),h('div',{className:'stat-value'},fN(prod.metrage_m||0)+' m')),
-    h('div',{className:'stat'},h('div',{className:'stat-label'},'Vitesse'),h('div',{className:'stat-value'},((d.vitesse_m_min!=null)?Number(d.vitesse_m_min).toFixed(2):'0.00')+' m/min')),
+  parts.push(makeCollapsibleSection(
+    h('span',{className:'section-title',style:{display:'inline-flex',alignItems:'center',gap:'4px',margin:0,padding:0,border:'none'}},iconEl('box',13),' Quantités'),
+    h('div',{className:'stats'},
+      h('div',{className:'stat'},h('div',{className:'stat-label'},'Dossiers produits'),h('div',{className:'stat-value'},fN(prod.dossiers||0))),
+      h('div',{className:'stat'},h('div',{className:'stat-label'},'Qté étiquettes'),h('div',{className:'stat-value'},fN(prod.etiquettes||0))),
+      h('div',{className:'stat'},h('div',{className:'stat-label'},'Métrage'),h('div',{className:'stat-value'},fN(prod.metrage_m||0)+' m')),
+      h('div',{className:'stat'},h('div',{className:'stat-label'},'Vitesse'),h('div',{className:'stat-value'},((d.vitesse_m_min!=null)?Number(d.vitesse_m_min).toFixed(2):'0.00')+' m/min')),
+    ),
+    'quantites'
   ));
-  parts.push(h('div',{className:'section-title'},iconEl('clock',13),' Temps'));
   const prodInclArrets = (Number(tt.production_min||0) + Number(tt.arret_min||0));
-  parts.push(h('div',{className:'time-kpi'},
-    h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('wrench',12),' Calage'),h('div',{className:'tc-value'},fMin(tt.calage_min))),
-    h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('play',12),' Production'),h('div',{className:'tc-value'},fMin(prodInclArrets))),
-    h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('alert-triangle',12),' Arrêts'),h('div',{className:'tc-value'},fMin(tt.arret_min))),
+  parts.push(makeCollapsibleSection(
+    h('span',{className:'section-title',style:{display:'inline-flex',alignItems:'center',gap:'4px',margin:0,padding:0,border:'none'}},iconEl('clock',13),' Temps'),
+    h('div',{className:'time-kpi'},
+      h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('wrench',12),' Calage'),h('div',{className:'tc-value'},fMin(tt.calage_min))),
+      h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('play',12),' Production'),h('div',{className:'tc-value'},fMin(prodInclArrets))),
+      h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('alert-triangle',12),' Arrêts'),h('div',{className:'tc-value'},fMin(tt.arret_min))),
+    ),
+    'temps'
   ));
   const byDos = d.by_dossier || d.dossier_times || [];
 
@@ -5642,8 +5741,8 @@ function renderProdKpis(){
       h('div',{className:'card-header'},h('h3',null,title),h('span',{style:{fontSize:'11px',color:'var(--muted)'}},rows.length+' items')),
       h('div',{style:{overflowX:'auto'}},h('table',null,
         h('thead',null,h('tr',null,h('th',null,keyLabel),h('th',null,'Dossiers'),h('th',null,'Étiquettes'),h('th',null,'Métrage'),h('th',null,'Calage'),h('th',null,'Prod'),h('th',null,'Arrêts'),h('th',null,'Vitesse'))),
-        h('tbody',null,...rows.map((r,i)=>h('tr',null,
-          makeProdSynthKeyCell(keyLabel==='Opérateur'?opName(r.key):(keyLabel==='Jour'?formatJourLabel(r.key):r.key),st,keys,i),
+        h('tbody',null,...rows.map((r,i)=>h('tr',{className: r.is_repiquage_team?'rep-team-row':''},
+          makeProdSynthKeyCell(keyLabel==='Opérateur'?(r.is_repiquage_team?r.key:opName(r.key)):(keyLabel==='Jour'?formatJourLabel(r.key):r.key),st,keys,i),
           h('td',{style:{fontFamily:'monospace'}},fN(r.dossiers||0)),
           h('td',{style:{fontFamily:'monospace'}},fN(r.etiquettes||0)),
           h('td',{style:{fontFamily:'monospace'}},fN(r.metrage_m||0)+' m'),
@@ -5656,7 +5755,8 @@ function renderProdKpis(){
     );
   }
 
-  parts.push(h('div',{className:'section-title'},'📌 Synthèse détaillée'));
+  // Synthese detaillee : section repliable globale
+  const synthParts = [];
   // Détail par dossier en premier
   if(byDos&&byDos.length){
     // Agrégation par no_dossier
@@ -5683,7 +5783,7 @@ function renderProdKpis(){
     const rowsAgg = Object.values(byRef).sort((a,b)=>String(a.no_dossier).localeCompare(String(b.no_dossier), 'fr', {numeric:true,sensitivity:'base'}));
     const dossierKeys=rowsAgg.map(r=>String(r.no_dossier));
 
-    parts.push(h('div',{className:'card'},h('div',{className:'card-header'},h('h3',null,'Par numéro de dossier'),h('span',{style:{fontSize:'11px',color:'var(--muted)'}},rowsAgg.length+' dossiers')),
+    synthParts.push(h('div',{className:'card'},h('div',{className:'card-header'},h('h3',null,'Par numéro de dossier'),h('span',{style:{fontSize:'11px',color:'var(--muted)'}},rowsAgg.length+' dossiers')),
       h('div',{style:{overflowX:'auto'}},h('table',null,
         h('thead',null,h('tr',null,
           h('th',null,'Dossier'),
@@ -5709,9 +5809,15 @@ function renderProdKpis(){
   const byOp=d.by_operator||[];
   const byMach=d.by_machine||[];
   const byDay=d.by_day||[];
-  parts.push(renderAggCard('Par opérateur',byOp,'Opérateur'));
-  parts.push(renderAggCard('Par machine',byMach,'Machine'));
-  parts.push(renderAggCard('Par jour',byDay,'Jour'));
+  synthParts.push(renderAggCard('Par opérateur',byOp,'Opérateur'));
+  synthParts.push(renderAggCard('Par machine',byMach,'Machine'));
+  synthParts.push(renderAggCard('Par jour',byDay,'Jour'));
+
+  parts.push(makeCollapsibleSection(
+    h('span',{className:'section-title',style:{margin:0,padding:0,border:'none'}},'\uD83D\uDCCC Synthèse détaillée'),
+    h('div',null,...synthParts.filter(Boolean)),
+    'synthese'
+  ));
 
   return h('div',null,...parts);
 }
