@@ -5554,6 +5554,7 @@ function render(){
   const ui = _fabCaptureUiState();
   document.body.classList.toggle('fab-mode-operator', S.saisieViewMode === 'operator');
   document.body.classList.toggle('fab-mode-admin', S.saisieViewMode === 'admin');
+  document.body.classList.toggle('fab-repiquage-mode', isRepiquageMode());
   document.body.classList.toggle('has-topbar', window.innerWidth <= 900);
   document.body.classList.toggle('sb-open', !!S.sidebarOpen);
   document.body.classList.add('mysifa-app-fabrication');

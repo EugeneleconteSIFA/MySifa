@@ -44,3 +44,27 @@
     user-select: auto !important;
   }
 }
+
+/* Vue Repiquage : on N'A PAS BESOIN du rotate forcé en portrait.
+   La vue Repiquage est conçue pour être utilisée VERTICALEMENT sur mobile
+   (gros bouton +1 carton, compteurs empilés, etc. - cf. fab-main--repiquage-dossier).
+   On annule donc la rotation et on rétablit l'overflow vertical natif. */
+@media (max-width: 900px) and (orientation: portrait) {
+  body.mysifa-force-landscape.fab-repiquage-mode,
+  body.mysifa-portrait.fab-repiquage-mode {
+    position: static !important;
+    top: auto !important;
+    left: auto !important;
+    width: 100% !important;
+    height: 100% !important;
+    -webkit-transform-origin: 0 0 !important;
+    transform-origin: 0 0 !important;
+    -webkit-transform: none !important;
+    transform: none !important;
+    overflow-x: hidden !important;
+    overflow-y: hidden !important;
+  }
+  html:has(body.fab-repiquage-mode) {
+    overflow: auto !important;
+  }
+}
