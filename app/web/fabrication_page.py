@@ -557,6 +557,39 @@ body.has-topbar .fab-main{padding-top:74px}
   display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:190;
 }
 
+/* ── Responsive vue Repiquage (mobile : layout vertical, lisible au pouce) ── */
+@media(max-width:700px){
+  .fab-main--repiquage-dossier .fab-main-head{padding:10px 14px 8px}
+  .fab-main--repiquage-dossier .fab-main-title{font-size:13px}
+  /* Bandeau dossier : empile vertical, prend toute la largeur */
+  .fab-main--repiquage-dossier > div[style*="background:var(--card)"]:nth-of-type(1){
+    flex-direction:column;align-items:stretch;padding:12px 14px;gap:10px
+  }
+  /* Bouton +1 carton géant : un peu plus compact mais reste lisible */
+  .rep-btn-plus-un{
+    min-height:130px!important;padding:24px 18px!important;
+    font-size:20px!important;border-radius:14px!important
+  }
+  .rep-btn-plus-un span:first-child{font-size:36px!important}
+  /* -1 carton : moins large */
+  .rep-btn-moins-un{padding:10px 18px!important;font-size:13px!important}
+  /* Carton courant : prend toute la largeur, padding latéral */
+  .rep-carton-courant{max-width:none!important;padding:0 4px}
+  /* Quick-add (input + bouton) : tout pleine largeur, empile en vertical par ligne */
+  .rep-quick-add{max-width:none!important;padding:0 4px}
+  .rep-quick-add > div{flex-direction:column!important;gap:6px!important}
+  .rep-quick-add > div input{width:100%!important;min-width:0!important;padding:12px 14px!important;font-size:14px!important}
+  .rep-quick-add > div button{width:100%!important;padding:12px 16px!important;font-size:14px!important;min-height:44px}
+  /* Compteurs Aujourd'hui + Cumul : empile en vertical, lisible */
+  .rep-compteurs{max-width:none!important;flex-direction:column!important;gap:8px!important;padding:0 4px}
+  .rep-compteurs > div{min-width:0!important;padding:12px 16px!important}
+  .rep-compteurs > div > div:last-child{font-size:16px!important}
+  /* Padding global du contenu central */
+  .fab-main--repiquage-dossier > div[style*="overflowY:auto"]{
+    padding:16px 8px!important;gap:14px!important
+  }
+}
+
 /* Responsive */
 @media(max-width:900px){
   :root{--footer-h:auto}
@@ -4825,6 +4858,7 @@ function renderRepiquageDossierView(){
 
   // Bouton +1 carton géant (centre)
   const plusCartonBtn = h('button',{
+    className:'rep-btn-plus-un',
     onClick:repiquagePlusUnCarton,
     style:{
       background:'var(--success)', color:'var(--bg)', border:'none',
@@ -4843,7 +4877,7 @@ function renderRepiquageDossierView(){
   );
 
   // Carton courant
-  const cartonCourantBar = h('div',{style:{
+  const cartonCourantBar = h('div',{className:'rep-carton-courant',style:{
     width:'100%', maxWidth:'520px', display:'flex', flexDirection:'column', gap:'8px',
   }},
     h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:'12px'}},
@@ -4868,7 +4902,7 @@ function renderRepiquageDossierView(){
     borderRadius:'8px', padding:'10px 16px', fontFamily:'inherit', fontWeight:'700',
     fontSize:'13px', cursor:'pointer', minWidth:'72px',
   };
-  const quickAdd = h('div',{style:{
+  const quickAdd = h('div',{className:'rep-quick-add',style:{
     display:'flex', flexDirection:'column', gap:'8px', alignItems:'stretch',
     width:'100%', maxWidth:'520px',
   }},
@@ -4940,6 +4974,7 @@ function renderRepiquageDossierView(){
 
   // Bouton -1 carton (rouge, plus petit que le +1 carton)
   const moinsUnCartonBtn = h('button',{
+    className:'rep-btn-moins-un',
     onClick:repiquageRetirerCarton,
     style:{
       background:'transparent', color:'var(--danger)', border:'2px solid var(--danger)',
@@ -4976,7 +5011,7 @@ function renderRepiquageDossierView(){
     onMouseLeave:(ev)=>{ ev.currentTarget.style.color='var(--muted)'; ev.currentTarget.style.borderColor='var(--border)'; },
   }, svgIcon('edit',11),' Ajuster') : null;
 
-  const compteurs = h('div',{style:{
+  const compteurs = h('div',{className:'rep-compteurs',style:{
     display:'flex', gap:'14px', flexWrap:'wrap', justifyContent:'center',
     marginTop:'8px', width:'100%', maxWidth:'520px',
   }},
@@ -5004,7 +5039,7 @@ function renderRepiquageDossierView(){
     }, svgIcon('arrow-left',14),' Changer de dossier')
   );
 
-  return h('div',{className:'fab-main'},
+  return h('div',{className:'fab-main fab-main--repiquage-dossier'},
     h('div',{className:'fab-main-head'},
       h('span',{className:'fab-main-title'}, 'Saisie production — Repiquage'),
       h('span',{className:'fab-etat-badge '+etatClass(S.etat)}, etatLabel(S.etat)),

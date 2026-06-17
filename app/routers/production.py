@@ -170,13 +170,73 @@ def _rep_team_for_operator(conn, operateur_nom: str, jour_iso: str):
     return None
 
 
+def _format_team_label(team_members):
+    """Format 'Repiquage (Prenom1 & Prenom2)' a partir d'une iterable de noms."""
+    prenoms = []
+    for nom in sorted({(n or '').strip() for n in (team_members or []) if n}):
+        first = nom.split()[0] if nom else ''
+        if first:
+            prenoms.append(first)
+    if not prenoms:
+        return 'Repiquage'
+    return 'Repiquage (' + ' & '.join(prenoms) + ')'
+
+
+def _rep_get_full_team_for_date(conn, operateur_nom: str, jour_iso: str):
+    """Renvoie (creneau, [tous_les_membres_de_l_equipe]) pour cet operateur ce jour.
+    Tous les membres planning_rh sur ce creneau (matin ou aprem), pas seulement
+    ceux qui ont saisi. Renvoie (None, []) si non trouve.
+    """
+    if not operateur_nom or not jour_iso:
+        return (None, [])
+    try:
+        d = _dt_cls.fromisoformat(jour_iso[:10]).date()
+        iso_year, iso_week, iso_weekday = d.isocalendar()
+    except Exception:
+        return (None, [])
+    semaine = '{0}-W{1:02d}'.format(iso_year, iso_week)
+    day_bit = 1 << (iso_weekday - 1)
+    mach = conn.execute(
+        "SELECT id FROM machines WHERE actif=1 AND ("
+        "lower(trim(COALESCE(nom,''))) LIKE 'repiquage%' "
+        "OR lower(trim(COALESCE(nom,''))) = 'rep')"
+    ).fetchone()
+    if not mach:
+        return (None, [])
+    repiquage_machine_id = int(mach[0])
+    row = conn.execute(
+        "SELECT p.creneau, p.jours "
+        "FROM rh_planning_postes p JOIN users u ON u.id = p.user_id "
+        "WHERE p.semaine = ? AND p.machine_id = ? "
+        "AND trim(lower(u.nom)) = trim(lower(?))",
+        (semaine, repiquage_machine_id, operateur_nom),
+    ).fetchone()
+    if not row:
+        return (None, [])
+    creneau = (row[0] or '').strip()
+    jours = int(row[1] or 0)
+    if not (jours & day_bit):
+        return (None, [])
+    if creneau not in ('matin', 'aprem'):
+        return (None, [])
+    members = conn.execute(
+        "SELECT DISTINCT u.nom "
+        "FROM rh_planning_postes p JOIN users u ON u.id = p.user_id "
+        "WHERE p.semaine = ? AND p.machine_id = ? AND p.creneau = ? "
+        "AND (p.jours & ?) != 0",
+        (semaine, repiquage_machine_id, creneau, day_bit),
+    ).fetchall()
+    noms = sorted({(m[0] or '').strip() for m in members if m and m[0]})
+    return (creneau, noms)
+
+
 def _build_repiquage_team_rows(all_list, dossier_times, no_dossier_filter=None):
-    """Pour chaque saisie Repiquage (code 03), regrouper par equipe (matin/aprem)
-    de la date concernee via planning_rh. Renvoie des lignes au format agg_key().
+    """Pour chaque saisie Repiquage (code 03), identifier l'equipe complete
+    de la date concernee via planning_rh, et agreger.
+    Le label utilise TOUS les membres planifies sur le creneau (pas que ceux
+    qui ont saisi), au format 'Repiquage (Prenom1 & Prenom2)'.
     """
     nd_filter = set(d for d in (no_dossier_filter or []) if d)
-    aggreg = {}  # (creneau, jour_iso) -> {totaux + membres}
-    # 1) Collecter les lignes 03 Repiquage
     rep_lines = []
     for r in all_list:
         code = str(r.get('operation_code') or '')
@@ -189,52 +249,35 @@ def _build_repiquage_team_rows(all_list, dossier_times, no_dossier_filter=None):
         rep_lines.append(r)
     if not rep_lines:
         return []
+    # Pour chaque saisie : identifier l'equipe (creneau + membres complets)
+    # et accumuler les totaux par equipe (regroupes par cle membres-tuple)
+    by_team = {}  # tuple(sorted(noms_complets)) -> agg
     with get_db() as conn:
         for r in rep_lines:
             op_nom = str(r.get('operateur') or '').strip()
-            jour_raw = str(r.get('date_operation') or '')
-            jour_iso = jour_raw[:10]
+            jour_iso = str(r.get('date_operation') or '')[:10]
             if not op_nom or not jour_iso:
                 continue
-            creneau = _rep_team_for_operator(conn, op_nom, jour_iso)
-            if not creneau:
+            _creneau, full_team = _rep_get_full_team_for_date(conn, op_nom, jour_iso)
+            if not full_team:
                 continue
-            key = (creneau, jour_iso)
-            acc = aggreg.setdefault(key, {
-                'creneau': creneau, 'jour': jour_iso,
-                'membres': set(), 'dossiers': set(),
-                'etiquettes': 0.0, 'cartons': 0,
+            key = tuple(full_team)
+            acc = by_team.setdefault(key, {
+                'membres': list(full_team),
+                'dossiers': set(),
+                'etiquettes': 0.0,
+                'cartons': 0,
             })
-            acc['membres'].add(op_nom)
             dos = str(r.get('no_dossier') or '').strip()
             if dos:
                 acc['dossiers'].add(dos)
             acc['etiquettes'] += float(r.get('quantite_traitee') or 0)
             acc['cartons'] += int(r.get('nb_cartons') or 0) if r.get('nb_cartons') is not None else 0
-    # 2) Regrouper par equipe (membres) toutes dates confondues -> une ligne par equipe
-    by_team = {}  # tuple(sorted(membres)) -> agg
-    for (creneau, _jour), v in aggreg.items():
-        membres_key = (creneau, tuple(sorted(v['membres'])))
-        if membres_key not in by_team:
-            by_team[membres_key] = {
-                'creneau': creneau,
-                'membres': set(v['membres']),
-                'dossiers': set(v['dossiers']),
-                'etiquettes': v['etiquettes'],
-                'cartons': v['cartons'],
-            }
-        else:
-            t = by_team[membres_key]
-            t['dossiers'] |= v['dossiers']
-            t['etiquettes'] += v['etiquettes']
-            t['cartons'] += v['cartons']
     out = []
-    for (creneau, _membres_t), t in by_team.items():
-        creneau_label = 'Matin' if creneau == 'matin' else 'Apres-midi'
-        membres_label = ', '.join(sorted(t['membres']))
-        key = 'Repiquage - ' + creneau_label + ' (' + membres_label + ')'
+    for _team_key, t in by_team.items():
+        label = _format_team_label(t['membres'])
         out.append({
-            'key': key,
+            'key': label,
             'dossiers': len(t['dossiers']),
             'etiquettes': round(t['etiquettes'], 1),
             'metrage_m': 0.0,
@@ -244,6 +287,7 @@ def _build_repiquage_team_rows(all_list, dossier_times, no_dossier_filter=None):
             'vitesse_m_min': 0.0,
             'cartons': t['cartons'],
             'is_repiquage_team': True,
+            'team_members': list(t['membres']),
         })
     return sorted(out, key=lambda x: x['etiquettes'], reverse=True)
 
@@ -688,7 +732,7 @@ def dashboard_production(
         "vitesse_m_min": vitesse_m_min,
         "by_machine":  by_machine,
         "by_operator": by_operator,
-        "by_dossier":  sorted([d for d in by_dossier if d.get("no_dossier")],
+        "by_dossier":  sorted([d for d in by_dossier_with_rep if d.get("no_dossier")],
                                key=lambda x: x.get("temps_total_calage_min") or 0, reverse=True),
         "by_day": by_day,
     }

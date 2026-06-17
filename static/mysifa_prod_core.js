@@ -5239,18 +5239,25 @@ function renderMachineStatusCards(){
     const isOn = dossiers.length > 0;
     const sk = isOn ? 'production' : 'eteinte';
     const fmtNumR = n => Number(n||0).toLocaleString('fr-FR');
-    const lines = dossiers.length
-      ? dossiers.slice(0,10).map(d => h('div',{
-          style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'8px',padding:'4px 0',borderTop:'1px solid var(--border)',fontSize:'11px'}
-        },
-          h('div',{style:{display:'flex',flexDirection:'column',gap:'1px',minWidth:'0',flex:'1'}},
-            h('div',{style:{fontWeight:'700',color:'var(--accent)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, d.no_dossier||'—'),
-            d.client ? h('div',{style:{fontSize:'10px',color:'var(--text2)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, d.client) : null,
-          ),
-          h('div',{style:{fontFamily:'monospace',fontWeight:'800',color:'var(--text)',whiteSpace:'nowrap'}},
-            fmtNumR(d.cartons)+' carton'+(Math.abs(d.cartons)>1?'s':'')),
+    // Reutilise les classes CSS mst-dos / mst-dos-ref / mst-dos-cli / mst-dos-des
+    // pour rester coherent avec Cohesio 1 et 2.
+    const dossierBlocks = dossiers.length
+      ? dossiers.slice(0,10).map(d => h('div',{className:'mst-dos',style:{position:'relative',paddingRight:'90px'}},
+          h('div',{className:'mst-dos-ref'},
+            h('span',null,'Dossier #'), d.no_dossier||'—'),
+          d.client ? h('div',{className:'mst-dos-cli'}, d.client) : null,
+          d.designation ? h('div',{className:'mst-dos-des'}, d.designation) : null,
+          h('div',{
+            style:{
+              position:'absolute', top:'10px', right:'12px',
+              fontFamily:'monospace', fontWeight:'800',
+              color:'var(--accent)', fontSize:'13px', whiteSpace:'nowrap',
+            }
+          }, fmtNumR(d.cartons)+' carton'+(Math.abs(d.cartons)>1?'s':'')),
         ))
-      : [h('div',{style:{padding:'8px 0',fontSize:'11px',color:'var(--muted)',fontStyle:'italic'}}, 'Aucune saisie aujourd\u2019hui')];
+      : [h('div',{style:{padding:'8px 0',fontSize:'11px',color:'var(--muted)',fontStyle:'italic'}}, 'Aucune saisie aujourd’hui')];
+    // Masquer la ligne 'Aujourd’hui' si un seul dossier (redondant)
+    const showTotalRow = dossiers.length > 1;
     return h('div',{className:`mst-card mst-${sk}`},
       h('div',{className:'mst-head'},
         h('span',{className:'mst-nom'},'Repiquage'),
@@ -5259,12 +5266,12 @@ function renderMachineStatusCards(){
           h('span',{className:'mst-dot'})
         )
       ),
-      h('div',{className:'mst-body'},
-        h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:'4px'}},
-          h('span',{style:{fontSize:'11px',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',fontWeight:'700'}}, 'Aujourd\u2019hui'),
+      h('div',{className:'mst-body',style:{display:'flex',flexDirection:'column',gap:'8px'}},
+        showTotalRow ? h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'baseline'}},
+          h('span',{style:{fontSize:'11px',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',fontWeight:'700'}}, 'Aujourd’hui'),
           h('span',{style:{fontFamily:'monospace',fontWeight:'800',color:'var(--accent)'}}, fmtNumR(total)+' cartons')
-        ),
-        ...lines,
+        ) : null,
+        ...dossierBlocks,
         !ms?h('div',{style:{fontSize:'11px',color:'var(--muted)'}},'Chargement…'):null
       )
     );
