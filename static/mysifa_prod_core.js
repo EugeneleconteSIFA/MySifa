@@ -4832,6 +4832,69 @@ function makeDateInput(value, onChange, ariaLabel){
   return inp;
 }
 
+function _datePresets(){
+  const now = new Date();
+  const fmt = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,'0');
+    const dd = String(d.getDate()).padStart(2,'0');
+    return y + '-' + m + '-' + dd;
+  };
+  const today = new Date(now);
+  const yesterday = new Date(now); yesterday.setDate(now.getDate()-1);
+  const last7Start = new Date(now); last7Start.setDate(now.getDate()-6);
+  const last30Start = new Date(now); last30Start.setDate(now.getDate()-29);
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+  const prevMonthStart = new Date(now.getFullYear(), now.getMonth()-1, 1);
+  return [
+    {key:'today',     label:"Aujourd'hui",       from:fmt(today),         to:fmt(today)},
+    {key:'yesterday', label:'Hier',              from:fmt(yesterday),     to:fmt(yesterday)},
+    {key:'last7',     label:'7 derniers jours',  from:fmt(last7Start),    to:fmt(today)},
+    {key:'last30',    label:'30 derniers jours', from:fmt(last30Start),   to:fmt(today)},
+    {key:'thisMonth', label:'Mois en cours',     from:fmt(monthStart),    to:fmt(today)},
+    {key:'prevMonth', label:'Mois dernier',      from:fmt(prevMonthStart),to:fmt(prevMonthEnd)},
+  ];
+}
+
+function renderDatePresets(){
+  const presets = _datePresets();
+  const curFrom = S.fv.date_from || '';
+  const curTo = S.fv.date_to || '';
+  const presetChip = (p) => {
+    const isActive = curFrom === p.from && curTo === p.to;
+    return h('button',{
+      type:'button',
+      title:'Du '+p.from+' au '+p.to,
+      style:{
+        padding:'4px 10px',
+        fontSize:'11px',
+        fontWeight: isActive ? '700' : '600',
+        borderRadius:'14px',
+        border:'1px solid '+(isActive ? 'var(--accent)' : 'var(--border)'),
+        background: isActive ? 'var(--accent-bg)' : 'transparent',
+        color: isActive ? 'var(--accent)' : 'var(--text2)',
+        cursor:'pointer',
+        fontFamily:'inherit',
+        whiteSpace:'nowrap',
+        transition:'all 120ms',
+      },
+      onClick:()=>{
+        S.fv.date_from = p.from;
+        S.fv.date_to = p.to;
+        applyF();
+      },
+    }, p.label);
+  };
+  return h('div',{
+    className:'filters-date-presets',
+    style:{display:'flex',gap:'6px',flexWrap:'wrap',alignItems:'center',padding:'8px 20px 4px',borderTop:'1px dashed var(--border)',marginTop:'4px'},
+  },
+    h('span',{style:{color:'var(--muted)',fontSize:'10px',textTransform:'uppercase',letterSpacing:'.6px',fontWeight:'700',marginRight:'4px'}},'Période :'),
+    ...presets.map(presetChip),
+  );
+}
+
 function renderFilters(){
   const viewAll=canViewAllProd(S.user);
   const ops=S.filters.operators||[];
@@ -4869,8 +4932,9 @@ function renderFilters(){
   parts.push(h('button',{className:'filters-apply-btn',onClick:applyF},'Filtrer'));
 
   const row = h('div',{className:'filters'},...parts);
+  const presetsRow = renderDatePresets();
   const chipsRow = viewAll ? renderDossierFilterChipsRow() : null;
-  return h('div',{className:'filters-panel'},row,chipsRow||null);
+  return h('div',{className:'filters-panel'},row,presetsRow,chipsRow||null);
 }
 
 function renderDossierFilterChipsRow(){

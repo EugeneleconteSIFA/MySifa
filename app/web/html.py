@@ -7499,16 +7499,12 @@ function renderExpe(){
     tab==='transporteurs'?renderExpeTransporteurs():tab==='poids'?renderExpePoids():
     tab==='devis'?renderExpeDevisSection():tab==='prospects'?renderExpeProspectsSection():
     renderExpeComparateur();
-  // Motion : cascade d'entree au changement d'onglet uniquement (sinon les
-  // re-renders intra-tab — filtre, saisie, etc. — relanceraient l'animation).
-  // On pose data-page-enter directement sur l'element retourne par le renderer
-  // du tab, pour que TOUS ses enfants directs cascadent.
+  // Motion : cascade d'entree au changement d'onglet uniquement. On pose
+  // data-page-enter sur la .container (topbar, h1, sous-titre, contenu
+  // cascadent ensemble) — effet plus visible que sur le seul wrapper du tab.
   const _moExpeKey=tab+'|'+(tab==='suivi_departs'?sub:'');
   const _moExpeEnter=(window._moExpeLastKey!==_moExpeKey);
   window._moExpeLastKey=_moExpeKey;
-  if(_moExpeEnter && content && content.nodeType===1){
-    try{ content.setAttribute('data-page-enter',''); }catch(_){}
-  }
   const contentWrap=content;
 
   return h('div',null,
@@ -7516,7 +7512,7 @@ function renderExpe(){
     h('div',{className:'app'},
       sidebar,
       h('main',{className:'main'},
-        h('div',{className:'container',style:((tab==='suivi_departs'||tab==='palettes_europe')?{maxWidth:'1600px'}:null)},
+        h('div',Object.assign({className:'container'},_moExpeEnter?{'data-page-enter':''}:{},(tab==='suivi_departs'||tab==='palettes_europe')?{style:{maxWidth:'1600px'}}:{}),
           topbar,
           h('h1',null,'MyExpé'),
           !expeCanWrite()?h('div',{className:'readonly-notice',style:{marginBottom:'12px'}},iconEl('eye',13),' Lecture seule — consultation des départs, transporteurs et délais'):null,
@@ -13412,7 +13408,8 @@ function render(){
     if(typeof initPostitDock === 'function') initPostitDock();
     if(typeof initPostitsApp === 'function') initPostitsApp();
   }
-  if(S.app!=='expe'){_expeLastRenderedInnerTab=null;}
+  if(S.app!=='expe'){_expeLastRenderedInnerTab=null;window._moExpeLastKey=null;}
+  if(S.app!=='prod'){window._moProdLastKey=null;}
 
   // Nettoyage polling machine quand on quitte MyProd
   if(S.app!=='prod'){stopMachineStatusPolling();}
@@ -13480,10 +13477,16 @@ function render(){
     } else {
       containerKids.push(...prodPageContent);
     }
+    // Motion : cascade d'entree au changement d'onglet uniquement (le re-render
+    // intra-tab ne doit pas relancer l'animation, sinon perte de focus inputs).
+    const _moProdKey=(S.page||'')+'|'+(S.subPage||'');
+    const _moProdEnter=(window._moProdLastKey!==_moProdKey);
+    window._moProdLastKey=_moProdKey;
+    const _prodContainerProps=Object.assign({className:'container'},_moProdEnter?{'data-page-enter':''}:{});
     root.appendChild(h('div',null,
       S.sidebarOpen?h('div',{className:'sidebar-overlay',onClick:closeSidebar}):null,
       h('div',{className:'app'},renderSidebar(),
-        h('main',{className:'main'},h('div',{className:'container'},...containerKids))
+        h('main',{className:'main'},h('div',_prodContainerProps,...containerKids))
       )
     ));
   }
