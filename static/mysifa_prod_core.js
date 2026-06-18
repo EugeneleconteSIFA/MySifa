@@ -6129,6 +6129,165 @@ function renderProdKpis(){
       etiquettes: acc.etiquettes + Number(d.total.etiquettes||0),
     }), {cartons:0, etiquettes:0});
 
+    // ── Cartons par jour x dossier (pour le graphe) ──────────────────
+    const byDayDosMap = {};
+    byDosRep.forEach(r => {
+      const j = String(r.jour||'').trim(); if(!j) return;
+      const d = String(r.no_dossier||'').trim(); if(!d) return;
+      if(!byDayDosMap[j]) byDayDosMap[j] = {};
+      byDayDosMap[j][d] = (byDayDosMap[j][d]||0) + Number(r.cartons||0);
+    });
+    const allDossierKeys = dossierEntries.map(e => e.no_dossier);
+    const allJours = Object.keys(byDayDosMap).sort();
+
+    // Set de chips actives — reset auto si le scope (liste des dossiers) change
+    const activeKey = allDossierKeys.join('|');
+    if(!(window._repChartActive instanceof Set) || window._repChartActiveScope !== activeKey){
+      window._repChartActive = new Set(allDossierKeys);
+      window._repChartActiveScope = activeKey;
+    }
+    const activeSet = window._repChartActive;
+
+    function buildChartSide(){
+      // Palette : couleurs cohérentes avec le thème
+      const palette = ['#22d3ee','#fbbf24','#a78bfa','#f472b6','#34d399','#f87171','#60a5fa','#fb923c','#ec4899','#14b8a6'];
+      const dosColors = {};
+      allDossierKeys.forEach((k,i) => { dosColors[k] = palette[i % palette.length]; });
+
+      // ── Chips toggleables ──
+      const chipsContainer = h('div',{style:{display:'flex',flexWrap:'wrap',gap:'6px',marginBottom:'14px',alignItems:'center'}});
+      allDossierKeys.forEach(dosKey => {
+        const isActive = activeSet.has(dosKey);
+        const dosEntry = hier[dosKey];
+        const cli = prodSynthCleanClient(dosEntry.client || '');
+        const lbl = dosKey + (cli ? ' — ' + cli : '');
+        const chip = h('button',{
+          type:'button',
+          title: 'Cliquer pour ' + (isActive?'masquer':'afficher'),
+          style:{
+            padding:'4px 10px',fontSize:'11px',fontWeight:'600',borderRadius:'14px',
+            border:'1px solid ' + (isActive ? dosColors[dosKey] : 'var(--border)'),
+            background: isActive ? (dosColors[dosKey] + '22') : 'transparent',
+            color: isActive ? dosColors[dosKey] : 'var(--muted)',
+            cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap',
+            opacity: isActive ? 1 : 0.7,
+          },
+          onClick:(e)=>{
+            e.stopPropagation();
+            if(activeSet.has(dosKey)) activeSet.delete(dosKey); else activeSet.add(dosKey);
+            render();
+          },
+        });
+        chip.innerHTML = '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:' + (isActive?dosColors[dosKey]:'var(--muted)') + ';margin-right:6px;vertical-align:middle"></span>' + escHtml(lbl);
+        chipsContainer.appendChild(chip);
+      });
+      chipsContainer.appendChild(h('span',{style:{flex:'1'}}));
+      chipsContainer.appendChild(h('button',{
+        type:'button',
+        style:{padding:'4px 8px',fontSize:'10px',border:'1px solid var(--border)',background:'transparent',color:'var(--text2)',cursor:'pointer',borderRadius:'6px',fontFamily:'inherit'},
+        onClick:(e)=>{e.stopPropagation(); window._repChartActive = new Set(allDossierKeys); render();},
+      },'Tout'));
+      chipsContainer.appendChild(h('button',{
+        type:'button',
+        style:{padding:'4px 8px',fontSize:'10px',border:'1px solid var(--border)',background:'transparent',color:'var(--text2)',cursor:'pointer',borderRadius:'6px',fontFamily:'inherit',marginLeft:'4px'},
+        onClick:(e)=>{e.stopPropagation(); window._repChartActive = new Set(); render();},
+      },'Aucun'));
+
+      // ── États vides ──
+      const wrap = h('div',null);
+      wrap.appendChild(chipsContainer);
+      if(!allJours.length){
+        const empty = h('div',{style:{padding:'40px 20px',textAlign:'center',color:'var(--muted)',fontSize:'12px',fontStyle:'italic',background:'var(--bg)',borderRadius:'8px',border:'1px dashed var(--border)'}});
+        empty.textContent = 'Aucune donnée pour le graphique.';
+        wrap.appendChild(empty);
+        return wrap;
+      }
+      if(activeSet.size === 0){
+        const empty = h('div',{style:{padding:'40px 20px',textAlign:'center',color:'var(--muted)',fontSize:'12px',fontStyle:'italic',background:'var(--bg)',borderRadius:'8px',border:'1px dashed var(--border)'}});
+        empty.textContent = 'Sélectionne au moins un dossier pour voir le graphique.';
+        wrap.appendChild(empty);
+        return wrap;
+      }
+
+      // ── Construction des piles (stacked bars) ──
+      const stacks = allJours.map(j => {
+        const segments = [];
+        let total = 0;
+        allDossierKeys.forEach(d => {
+          if(!activeSet.has(d)) return;
+          const v = Number((byDayDosMap[j] && byDayDosMap[j][d]) || 0);
+          if(v > 0){ segments.push({dos:d, value:v, color:dosColors[d]}); total += v; }
+        });
+        return {jour:j, total, segments};
+      });
+      const maxVal = Math.max(1, ...stacks.map(s=>s.total));
+      function niceRound(v){
+        if(v <= 0) return 10;
+        const pow = Math.pow(10, Math.floor(Math.log10(v)));
+        const norm = v / pow;
+        let nice;
+        if(norm <= 1) nice = 1;
+        else if(norm <= 2) nice = 2;
+        else if(norm <= 5) nice = 5;
+        else nice = 10;
+        return nice * pow;
+      }
+      const niceMax = niceRound(maxVal);
+
+      // SVG dimensions (viewBox responsive)
+      const W = 600, H = 240;
+      const mL = 44, mR = 12, mT = 18, mB = 46;
+      const innerW = W - mL - mR;
+      const innerH = H - mT - mB;
+      const barCount = stacks.length;
+      const gap = Math.max(3, Math.min(10, innerW / Math.max(1,barCount) * 0.18));
+      const barW = Math.max(6, (innerW - gap*(barCount-1)) / barCount);
+
+      const yTicks = [0, niceMax/4, niceMax/2, niceMax*3/4, niceMax];
+
+      let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:240px;display:block;font-family:inherit" preserveAspectRatio="xMidYMid meet">';
+
+      // Y grid + labels
+      yTicks.forEach(t => {
+        const y = mT + innerH - (t/niceMax)*innerH;
+        svg += '<line x1="' + mL + '" x2="' + (W-mR) + '" y1="' + y + '" y2="' + y + '" stroke="var(--border)" stroke-width="1" stroke-dasharray="2,3" opacity="0.6"/>';
+        svg += '<text x="' + (mL-6) + '" y="' + (y+3) + '" text-anchor="end" font-size="9" fill="var(--muted)">' + escHtml(fN(Math.round(t))) + '</text>';
+      });
+      svg += '<line x1="' + mL + '" x2="' + (W-mR) + '" y1="' + (mT+innerH) + '" y2="' + (mT+innerH) + '" stroke="var(--border)" stroke-width="1.5"/>';
+
+      // Bars
+      stacks.forEach((s, i) => {
+        const x = mL + i*(barW+gap);
+        let yCursor = mT + innerH;
+        s.segments.forEach(seg => {
+          const segH = (seg.value/niceMax)*innerH;
+          yCursor -= segH;
+          const tooltip = formatJourLabel(s.jour) + ' — ' + seg.dos + ' : ' + fN(seg.value) + ' cartons';
+          svg += '<rect x="' + x + '" y="' + yCursor + '" width="' + barW + '" height="' + segH + '" fill="' + seg.color + '" rx="1" opacity="0.92"><title>' + escHtml(tooltip) + '</title></rect>';
+        });
+        if(s.total > 0){
+          const totY = mT + innerH - (s.total/niceMax)*innerH - 5;
+          svg += '<text x="' + (x+barW/2) + '" y="' + totY + '" text-anchor="middle" font-size="10" font-weight="700" fill="var(--text)">' + escHtml(fN(s.total)) + '</text>';
+        }
+        const lbl = formatJourLabel(s.jour);
+        const lblShort = lbl.length > 5 ? lbl.slice(0,5) : lbl;
+        svg += '<text x="' + (x+barW/2) + '" y="' + (H-mB+16) + '" text-anchor="middle" font-size="10" fill="var(--text2)">' + escHtml(lblShort) + '</text>';
+      });
+      svg += '</svg>';
+
+      const chartCard = h('div',{style:{background:'var(--bg)',padding:'10px 6px 4px',borderRadius:'8px',border:'1px solid var(--border)'}});
+      chartCard.innerHTML = svg;
+      wrap.appendChild(chartCard);
+
+      // Sous-titre
+      const sub = h('div',{style:{marginTop:'6px',fontSize:'11px',color:'var(--muted)',textAlign:'center'}});
+      sub.textContent = 'Cartons par jour · ' + activeSet.size + ' dossier' + (activeSet.size>1?'s':'') + ' sélectionné' + (activeSet.size>1?'s':'');
+      wrap.appendChild(sub);
+
+      return wrap;
+    }
+
+    // ── Layout 50/50 : table à gauche, graphique à droite ──
     return h('div',{className:'card'},
       h('div',{className:'card-header'},
         h('h3',null,'Repiquage — synthèse détaillée'),
@@ -6140,15 +6299,18 @@ function renderProdKpis(){
           dossierEntries.length+' dossier'+(dossierEntries.length>1?'s':'')
         )
       ),
-      h('div',{style:{overflowX:'auto'}},
-        h('table',{className:'rep-synth-table',style:{width:'100%',borderCollapse:'collapse'}},
-          h('thead',null,h('tr',null,
-            h('th',{style:{textAlign:'left',paddingLeft:'12px'}},'Détail'),
-            h('th',{style:{textAlign:'right'}},'Cartons'),
-            h('th',{style:{textAlign:'right'}},'Étiquettes')
-          )),
-          h('tbody',null,...tbodyKids)
-        )
+      h('div',{style:{display:'flex',gap:'16px',flexWrap:'wrap',alignItems:'flex-start'}},
+        h('div',{style:{flex:'1 1 calc(50% - 8px)',minWidth:'320px',overflowX:'auto'}},
+          h('table',{className:'rep-synth-table',style:{width:'100%',borderCollapse:'collapse',fontSize:'12px'}},
+            h('thead',null,h('tr',null,
+              h('th',{style:{textAlign:'left',paddingLeft:'12px'}},'Détail'),
+              h('th',{style:{textAlign:'right',paddingRight:'10px'}},'Cartons'),
+              h('th',{style:{textAlign:'right',paddingRight:'10px'}},'Étiquettes')
+            )),
+            h('tbody',null,...tbodyKids)
+          )
+        ),
+        h('div',{style:{flex:'1 1 calc(50% - 8px)',minWidth:'320px'}}, buildChartSide())
       )
     );
   }
