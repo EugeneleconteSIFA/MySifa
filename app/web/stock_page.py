@@ -2032,6 +2032,7 @@ function el(tag, attrs, ...children) {
     if (cn) e.className = cn;
     if (on) Object.entries(on).forEach(([ev,fn]) => e.addEventListener(ev, fn));
     if (s && typeof s === 'object') Object.assign(e.style, s);
+    else if (typeof s === 'string') e.style.cssText = s;
     if (html) { e.innerHTML = html; }
     Object.entries(rest).forEach(([k,v]) => {
       if (v === null || v === undefined || v === false) return;
@@ -7966,6 +7967,23 @@ async function _initZ1Enrichment(dossierBanner, palettesBlock, noteTa) {
     const today = _fmtDateFRz1(new Date());
     noteTa.value = 'Production dossier ' + dossier.no_dossier + ' - ' + today;
   }
+  // Pre-remplit la reference produit depuis le dossier en cours.
+  // Si le produit existe deja en base, on re-rend la modale avec ses infos
+  // (designation, unite). Sinon on laisse le texte ; le submit Z1 auto-cree
+  // la reference au besoin.
+  if (dossier && dossier.ref_produit && S.pfModal.refInp
+      && !((S.pfModal.refInp.value || '').trim())) {
+    const refDossier = String(dossier.ref_produit).trim();
+    S.pfModal.refInp.value = refDossier;
+    try {
+      const p = await resolvePfProduitByRef(refDossier);
+      if (p && S.pfModal && S.pfModal.refInp
+          && String(S.pfModal.refInp.value || '').trim().toUpperCase()
+              === refDossier.toUpperCase()) {
+        renderPfMouvementModal('entree', p, 'Z1');
+      }
+    } catch (e) {}
+  }
 }
 
 function renderPfMouvementModal(type, produit, defaultEmpl) {
@@ -10691,6 +10709,20 @@ function invV2BuildProductRow(r) {
 function renderContent() {
   const area = document.getElementById('scroll-area');
   if (!area) return;
+
+  // Détail produit / emplacement / matière : prioritaire sur l'onglet courant
+  // (sinon un clic depuis la searchbar globale sur les onglets produits-finis,
+  // negoce, referentiel... ne basculerait jamais vers le détail).
+  if (S.selProduit || S.selEmpl || S.selMatiere) {
+    area.innerHTML = '';
+    let content;
+    if (S.selProduit) content = buildProduitDetail();
+    else if (S.selEmpl) content = buildEmplacementDetail();
+    else if (S.selMatiere) content = buildMatiereDetail();
+    if (content) area.appendChild(content);
+    return;
+  }
+
   if (S.tab === 'produits-finis') {
     renderProduitsFinisView();
     return;
@@ -10714,10 +10746,7 @@ function renderContent() {
   area.innerHTML = '';
 
   let content;
-  if (S.selProduit) content = buildProduitDetail();
-  else if (S.selEmpl) content = buildEmplacementDetail();
-  else if (S.selMatiere) content = buildMatiereDetail();
-  else if (S.tab === 'production') content = buildProductionView();
+  if (S.tab === 'production') content = buildProductionView();
   else if (S.tab === 'dashboard') content = buildDashboard();
   else if (S.tab === 'matieres') {
     content = buildMatieres();
@@ -12018,8 +12047,7 @@ function valEnsureState() {
       sortDirection: 'asc',
       historique: null,    // { matiere, historique }
       historiqueLoading: false,
-      exporting: false,
-    };
+      exporting: false };
   }
   return S.valorisation;
 }
@@ -12114,29 +12142,29 @@ function valToggleSort(column) {
 function buildValorisationKpis() {
   const v = valEnsureState();
   const s = v.summary || { total_mp: 0, total_pf: 0, total_global: 0, nb_refs: 0, nb_refs_valorisees: 0 };
-  const wrap = el('div', { cls: 'val-kpis', attrs: { style:
-    'display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:16px;' } });
+  const wrap = el('div', { cls: 'val-kpis', style:
+    'display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:16px;' });
 
-  const kpiTotal = el('div', { attrs: { style:
-    'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;' } },
-    el('div', { attrs: { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px' } }, 'Stock valorisé — Total'),
-    el('div', { attrs: { style: 'font-size:24px;font-weight:800;color:var(--accent)' } }, valFormatEuro(s.total_global)),
-    el('div', { attrs: { style: 'font-size:11px;color:var(--muted);margin-top:6px' } }, `MP + PF (PF à venir)`)
+  const kpiTotal = el('div', { style:
+    'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;' },
+    el('div', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px' }, 'Stock valorisé — Total'),
+    el('div', { style: 'font-size:24px;font-weight:800;color:var(--accent)' }, valFormatEuro(s.total_global)),
+    el('div', { style: 'font-size:11px;color:var(--muted);margin-top:6px' }, `MP + PF (PF à venir)`)
   );
 
-  const kpiMP = el('div', { attrs: { style:
-    'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;' } },
-    el('div', { attrs: { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px' } }, 'Matières premières'),
-    el('div', { attrs: { style: 'font-size:24px;font-weight:800;color:var(--text)' } }, valFormatEuro(s.total_mp)),
-    el('div', { attrs: { style: 'font-size:11px;color:var(--muted);margin-top:6px' } },
+  const kpiMP = el('div', { style:
+    'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;' },
+    el('div', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px' }, 'Matières premières'),
+    el('div', { style: 'font-size:24px;font-weight:800;color:var(--text)' }, valFormatEuro(s.total_mp)),
+    el('div', { style: 'font-size:11px;color:var(--muted);margin-top:6px' },
       `${s.nb_refs_valorisees || 0} / ${s.nb_refs || 0} références valorisées`)
   );
 
-  const kpiPF = el('div', { attrs: { style:
-    'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;opacity:.55' } },
-    el('div', { attrs: { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px' } }, 'Produits finis'),
-    el('div', { attrs: { style: 'font-size:24px;font-weight:800;color:var(--text)' } }, '—'),
-    el('div', { attrs: { style: 'font-size:11px;color:var(--muted);margin-top:6px' } }, 'Import Excel — à venir')
+  const kpiPF = el('div', { style:
+    'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;opacity:.55' },
+    el('div', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px' }, 'Produits finis'),
+    el('div', { style: 'font-size:24px;font-weight:800;color:var(--text)' }, '—'),
+    el('div', { style: 'font-size:11px;color:var(--muted);margin-top:6px' }, 'Import Excel — à venir')
   );
 
   wrap.append(kpiTotal, kpiMP, kpiPF);
@@ -12147,27 +12175,25 @@ function buildValorisationCategoriePills() {
   const v = valEnsureState();
   const s = v.summary || { categories: [] };
   const cats = s.categories || [];
-  const wrap = el('div', { attrs: { style:
-    'display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;align-items:center' } });
+  const wrap = el('div', { style:
+    'display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;align-items:center' });
 
   const base = 'padding:7px 14px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:6px';
   const active = 'padding:7px 14px;border-radius:999px;border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px';
 
   const allBtn = el('button', {
-    attrs: { type: 'button', style: v.filterCategorie === null ? active : base },
-    on: { click: () => { v.filterCategorie = null; renderValorisationView(true); } },
-  }, 'Toutes catégories',
-    el('span', { attrs: { style: 'opacity:.7;font-weight:600' } }, '· ' + valFormatEuro(s.total_mp))
+    type: 'button', style: v.filterCategorie === null ? active : base,
+    on: { click: () => { v.filterCategorie = null; renderValorisationView(true); } } }, 'Toutes catégories',
+    el('span', { style: 'opacity:.7;font-weight:600' }, '· ' + valFormatEuro(s.total_mp))
   );
   wrap.appendChild(allBtn);
 
   cats.forEach(c => {
     const isActive = v.filterCategorie === c.categorie;
     const btn = el('button', {
-      attrs: { type: 'button', style: isActive ? active : base },
-      on: { click: () => { v.filterCategorie = isActive ? null : c.categorie; renderValorisationView(true); } },
-    }, c.categorie_label,
-      el('span', { attrs: { style: 'opacity:.7;font-weight:600' } }, '· ' + valFormatEuro(c.total))
+      type: 'button', style: isActive ? active : base,
+      on: { click: () => { v.filterCategorie = isActive ? null : c.categorie; renderValorisationView(true); } } }, c.categorie_label,
+      el('span', { style: 'opacity:.7;font-weight:600' }, '· ' + valFormatEuro(c.total))
     );
     wrap.appendChild(btn);
   });
@@ -12180,8 +12206,7 @@ async function saveValorisationPrice(matiereId, newPrice, inputEl) {
     const data = await api('/api/stock/valorisation/' + matiereId, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prix_unitaire: newPrice }),
-    });
+      body: JSON.stringify({ prix_unitaire: newPrice }) });
     // Mise à jour locale silencieuse (pas de full re-render pour préserver le focus)
     if (data?.item) {
       const idx = v.items.findIndex(x => x.id === matiereId);
@@ -12202,28 +12227,25 @@ async function saveValorisationPrice(matiereId, newPrice, inputEl) {
 }
 
 function buildValorisationTableRow(item) {
-  const tr = el('tr', { attrs: { 'data-matiere-id': String(item.id), style: 'border-bottom:1px solid var(--border)' } });
+  const tr = el('tr', { 'data-matiere-id': String(item.id), style: 'border-bottom:1px solid var(--border)' });
 
-  const tdCat = el('td', { attrs: { style: 'padding:10px 12px;font-size:12px;color:var(--text2)' } });
-  const badge = el('span', { attrs: { style:
-    'display:inline-block;padding:2px 9px;border-radius:999px;background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700;letter-spacing:.2px' } }, item.categorie_label || '');
+  const tdCat = el('td', { style: 'padding:10px 12px;font-size:12px;color:var(--text2)' });
+  const badge = el('span', { style:
+    'display:inline-block;padding:2px 9px;border-radius:999px;background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700;letter-spacing:.2px' }, item.categorie_label || '');
   tdCat.appendChild(badge);
 
-  const tdRef = el('td', { attrs: { style: 'padding:10px 12px;font-size:13px;font-weight:700;color:var(--text);font-family:monospace' } }, item.reference || '');
-  const tdDes = el('td', { attrs: { style: 'padding:10px 12px;font-size:13px;color:var(--text2)' } }, item.designation || '');
-  const tdQte = el('td', { attrs: { style: 'padding:10px 12px;font-size:13px;color:var(--text);text-align:right;font-variant-numeric:tabular-nums' } },
+  const tdRef = el('td', { style: 'padding:10px 12px;font-size:13px;font-weight:700;color:var(--text);font-family:monospace' }, item.reference || '');
+  const tdDes = el('td', { style: 'padding:10px 12px;font-size:13px;color:var(--text2)' }, item.designation || '');
+  const tdQte = el('td', { style: 'padding:10px 12px;font-size:13px;color:var(--text);text-align:right;font-variant-numeric:tabular-nums' },
     valFormatQte(item.quantite),
-    el('span', { attrs: { style: 'margin-left:5px;font-size:11px;color:var(--muted);font-weight:500' } }, item.unite || '')
+    el('span', { style: 'margin-left:5px;font-size:11px;color:var(--muted);font-weight:500' }, item.unite || '')
   );
 
   const inpId = 'val-price-' + item.id;
   const inp = el('input', {
-    attrs: {
-      type: 'text', id: inpId, value: (Number(item.prix_unitaire) || 0).toString().replace('.', ','),
+    type: 'text', id: inpId, value: (Number(item.prix_unitaire) || 0).toString().replace('.', ','),
       inputmode: 'decimal',
-      style: 'width:110px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:13px;font-variant-numeric:tabular-nums;text-align:right;transition:border-color .15s',
-    },
-  });
+      style: 'width:110px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:13px;font-variant-numeric:tabular-nums;text-align:right;transition:border-color .15s' });
   const commit = async () => {
     const raw = (inp.value || '').trim().replace(/\s/g, '').replace(',', '.');
     const num = parseFloat(raw);
@@ -12246,23 +12268,22 @@ function buildValorisationTableRow(item) {
   });
   inp.addEventListener('focus', () => inp.select());
 
-  const tdPrix = el('td', { attrs: { style: 'padding:10px 12px;text-align:right' } },
+  const tdPrix = el('td', { style: 'padding:10px 12px;text-align:right' },
     inp,
-    el('span', { attrs: { style: 'margin-left:6px;font-size:11px;color:var(--muted)' } }, '€/' + (item.unite || ''))
+    el('span', { style: 'margin-left:6px;font-size:11px;color:var(--muted)' }, '€/' + (item.unite || ''))
   );
 
   const valColor = item.prix_unitaire > 0 ? 'var(--text)' : 'var(--muted)';
-  const tdVal = el('td', { attrs: { style: 'padding:10px 12px;font-size:13px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums;color:' + valColor } },
+  const tdVal = el('td', { style: 'padding:10px 12px;font-size:13px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums;color:' + valColor },
     item.prix_unitaire > 0 ? valFormatEuro(item.valorisation) : '—'
   );
 
   const histBtn = el('button', {
-    attrs: { type: 'button', title: 'Voir l\'historique des prix',
-      style: 'background:transparent;border:1px solid var(--border);border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2)' },
-    on: { click: () => openValorisationHistorique(item.id) },
-  });
+    type: 'button', title: 'Voir l\'historique des prix',
+      style: 'background:transparent;border:1px solid var(--border);border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2)',
+    on: { click: () => openValorisationHistorique(item.id) } });
   histBtn.appendChild(iconEl('clock', 14));
-  const tdHist = el('td', { attrs: { style: 'padding:10px 12px;text-align:center' } }, histBtn);
+  const tdHist = el('td', { style: 'padding:10px 12px;text-align:center' }, histBtn);
 
   tr.append(tdCat, tdRef, tdDes, tdQte, tdPrix, tdVal, tdHist);
   return tr;
@@ -12272,11 +12293,11 @@ function buildValorisationTable() {
   const v = valEnsureState();
   const rows = valFilteredItems();
 
-  const wrap = el('div', { attrs: { style:
-    'background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden' } });
+  const wrap = el('div', { style:
+    'background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden' });
 
-  const tableWrap = el('div', { attrs: { style: 'overflow-x:auto' } });
-  const table = el('table', { attrs: { style: 'width:100%;border-collapse:collapse;min-width:880px' } });
+  const tableWrap = el('div', { style: 'overflow-x:auto' });
+  const table = el('table', { style: 'width:100%;border-collapse:collapse;min-width:880px' });
 
   const arrow = (col) => {
     if (v.sortColumn !== col) return '';
@@ -12288,13 +12309,13 @@ function buildValorisationTable() {
 
   const thead = el('thead', null,
     el('tr', null,
-      el('th', { attrs: { style: thStyle }, on: { click: () => valToggleSort('categorie') } }, 'Catégorie' + arrow('categorie')),
-      el('th', { attrs: { style: thStyle }, on: { click: () => valToggleSort('reference') } }, 'Référence' + arrow('reference')),
-      el('th', { attrs: { style: thStyle }, on: { click: () => valToggleSort('designation') } }, 'Désignation' + arrow('designation')),
-      el('th', { attrs: { style: thStyleR }, on: { click: () => valToggleSort('quantite') } }, 'Quantité' + arrow('quantite')),
-      el('th', { attrs: { style: thStyleR }, on: { click: () => valToggleSort('prix_unitaire') } }, 'Prix unitaire' + arrow('prix_unitaire')),
-      el('th', { attrs: { style: thStyleR }, on: { click: () => valToggleSort('valorisation') } }, 'Valorisation' + arrow('valorisation')),
-      el('th', { attrs: { style: thStyleC } }, 'Historique')
+      el('th', { style: thStyle, on: { click: () => valToggleSort('categorie') } }, 'Catégorie' + arrow('categorie')),
+      el('th', { style: thStyle, on: { click: () => valToggleSort('reference') } }, 'Référence' + arrow('reference')),
+      el('th', { style: thStyle, on: { click: () => valToggleSort('designation') } }, 'Désignation' + arrow('designation')),
+      el('th', { style: thStyleR, on: { click: () => valToggleSort('quantite') } }, 'Quantité' + arrow('quantite')),
+      el('th', { style: thStyleR, on: { click: () => valToggleSort('prix_unitaire') } }, 'Prix unitaire' + arrow('prix_unitaire')),
+      el('th', { style: thStyleR, on: { click: () => valToggleSort('valorisation') } }, 'Valorisation' + arrow('valorisation')),
+      el('th', { style: thStyleC }, 'Historique')
     )
   );
 
@@ -12302,7 +12323,7 @@ function buildValorisationTable() {
   if (!rows.length) {
     const msg = (v.query ? 'Aucun résultat pour « ' + v.query + ' »' : 'Aucune matière à valoriser.');
     tbody.appendChild(el('tr', null,
-      el('td', { attrs: { colspan: '7', style: 'padding:30px 20px;text-align:center;color:var(--muted);font-size:13px' } }, msg)
+      el('td', { colspan: '7', style: 'padding:30px 20px;text-align:center;color:var(--muted);font-size:13px' }, msg)
     ));
   } else {
     rows.forEach(item => tbody.appendChild(buildValorisationTableRow(item)));
@@ -12346,47 +12367,45 @@ function renderValorisationHistoriqueModal() {
   if (!v.historique && !v.historiqueLoading) return;
 
   const overlay = el('div', {
-    attrs: { style: 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px' },
-    on: { click: (e) => { if (e.target === overlay) closeValorisationHistorique(); } },
-  });
+    style: 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px',
+    on: { click: (e) => { if (e.target === overlay) closeValorisationHistorique(); } } });
 
-  const box = el('div', { attrs: { style:
-    'background:var(--card);border:1px solid var(--border);border-radius:14px;width:100%;max-width:640px;max-height:80vh;display:flex;flex-direction:column' } });
+  const box = el('div', { style:
+    'background:var(--card);border:1px solid var(--border);border-radius:14px;width:100%;max-width:640px;max-height:80vh;display:flex;flex-direction:column' });
 
-  const head = el('div', { attrs: { style: 'padding:18px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:14px' } });
+  const head = el('div', { style: 'padding:18px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:14px' });
   const mat = (v.historique && v.historique.matiere) || null;
   const headTitles = el('div', null,
-    el('div', { attrs: { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px' } }, 'Historique des prix'),
-    el('div', { attrs: { style: 'font-size:15px;font-weight:700;color:var(--text)' } },
+    el('div', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px' }, 'Historique des prix'),
+    el('div', { style: 'font-size:15px;font-weight:700;color:var(--text)' },
       mat ? (mat.reference + ' — ' + (mat.designation || '')) : 'Chargement…')
   );
   const closeBtn = el('button', {
-    attrs: { type: 'button', style: 'background:transparent;border:1px solid var(--border);border-radius:8px;width:32px;height:32px;color:var(--text2);cursor:pointer;font-size:18px;line-height:1' },
-    on: { click: closeValorisationHistorique },
-  }, '×');
+    type: 'button', style: 'background:transparent;border:1px solid var(--border);border-radius:8px;width:32px;height:32px;color:var(--text2);cursor:pointer;font-size:18px;line-height:1',
+    on: { click: closeValorisationHistorique } }, '×');
   head.append(headTitles, closeBtn);
 
-  const body = el('div', { attrs: { style: 'padding:16px 20px;overflow-y:auto' } });
+  const body = el('div', { style: 'padding:16px 20px;overflow-y:auto' });
   if (v.historiqueLoading) {
-    body.appendChild(el('div', { attrs: { style: 'padding:30px;text-align:center;color:var(--muted);font-size:13px' } }, 'Chargement…'));
+    body.appendChild(el('div', { style: 'padding:30px;text-align:center;color:var(--muted);font-size:13px' }, 'Chargement…'));
   } else if (!v.historique || !v.historique.historique || !v.historique.historique.length) {
-    body.appendChild(el('div', { attrs: { style: 'padding:30px;text-align:center;color:var(--muted);font-size:13px' } },
+    body.appendChild(el('div', { style: 'padding:30px;text-align:center;color:var(--muted);font-size:13px' },
       'Aucun changement de prix enregistré.'));
   } else {
-    const list = el('div', { attrs: { style: 'display:flex;flex-direction:column;gap:10px' } });
+    const list = el('div', { style: 'display:flex;flex-direction:column;gap:10px' });
     v.historique.historique.forEach(h => {
-      const item = el('div', { attrs: { style:
-        'border:1px solid var(--border);border-radius:10px;padding:12px 14px;background:var(--bg)' } });
-      const ligne1 = el('div', { attrs: { style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px' } },
-        el('div', { attrs: { style: 'font-size:13px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums' } },
+      const item = el('div', { style:
+        'border:1px solid var(--border);border-radius:10px;padding:12px 14px;background:var(--bg)' });
+      const ligne1 = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px' },
+        el('div', { style: 'font-size:13px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums' },
           (h.prix_avant != null ? valFormatEuroDetail(h.prix_avant) : '—') + '  →  ' + valFormatEuroDetail(h.prix_apres)
         ),
-        el('div', { attrs: { style: 'font-size:11px;color:var(--muted)' } }, valFormatDate(h.created_at))
+        el('div', { style: 'font-size:11px;color:var(--muted)' }, valFormatDate(h.created_at))
       );
-      const ligne2 = el('div', { attrs: { style: 'font-size:11px;color:var(--text2)' } }, 'Par ' + (h.created_by_name || '—'));
+      const ligne2 = el('div', { style: 'font-size:11px;color:var(--text2)' }, 'Par ' + (h.created_by_name || '—'));
       item.append(ligne1, ligne2);
       if (h.note) {
-        item.appendChild(el('div', { attrs: { style: 'font-size:11px;color:var(--text2);margin-top:6px;font-style:italic' } }, h.note));
+        item.appendChild(el('div', { style: 'font-size:11px;color:var(--text2);margin-top:6px;font-style:italic' }, h.note));
       }
       list.appendChild(item);
     });
@@ -12429,17 +12448,17 @@ async function exportValorisationExcel() {
 }
 
 function buildValorisationPFSection() {
-  const wrap = el('div', { attrs: { style:
-    'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-top:20px;opacity:.85' } });
-  wrap.appendChild(el('div', { attrs: { style: 'display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap' } },
+  const wrap = el('div', { style:
+    'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-top:20px;opacity:.85' });
+  wrap.appendChild(el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap' },
     el('div', null,
-      el('div', { attrs: { style: 'font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px' } }, 'Produits finis'),
-      el('div', { attrs: { style: 'font-size:12px;color:var(--text2);max-width:560px;line-height:1.55' } },
+      el('div', { style: 'font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px' }, 'Produits finis'),
+      el('div', { style: 'font-size:12px;color:var(--text2);max-width:560px;line-height:1.55' },
         'Valorisation des produits finis disponible bientôt. Vous pourrez importer un fichier Excel (référence + prix unitaire) issu de votre ERP — calcul attendu : prix de vente − marge 40% − amortissement stock 3%.')
     ),
     el('button', {
-      attrs: { type: 'button', disabled: true,
-        style: 'padding:9px 16px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--muted);font-weight:700;font-size:13px;cursor:not-allowed' } },
+      type: 'button', disabled: true,
+        style: 'padding:9px 16px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--muted);font-weight:700;font-size:13px;cursor:not-allowed' },
       'Importer Excel — bientôt disponible'
     )
   ));
@@ -12448,13 +12467,12 @@ function buildValorisationPFSection() {
 
 function buildValorisationToolbar() {
   const v = valEnsureState();
-  const wrap = el('div', { attrs: { style:
-    'display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px' } });
+  const wrap = el('div', { style:
+    'display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px' });
 
   const inp = el('input', {
-    attrs: { type: 'search', id: 'val-search', placeholder: 'Rechercher (référence, désignation, catégorie…)',
-      style: 'flex:1;min-width:240px;padding:10px 14px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);font-size:13px;transition:border-color .15s' },
-  });
+    type: 'search', id: 'val-search', placeholder: 'Rechercher (référence, désignation, catégorie…)',
+      style: 'flex:1;min-width:240px;padding:10px 14px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);font-size:13px;transition:border-color .15s' });
   inp.value = v.query || '';
   inp.addEventListener('input', () => {
     v.query = inp.value;
@@ -12467,18 +12485,16 @@ function buildValorisationToolbar() {
   });
 
   const exportBtn = el('button', {
-    attrs: { type: 'button', disabled: v.exporting ? true : null,
-      style: 'padding:10px 16px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:8px;' + (v.exporting ? 'opacity:.6;cursor:wait' : '') },
-    on: { click: exportValorisationExcel },
-  });
+    type: 'button', disabled: v.exporting ? true : null,
+      style: 'padding:10px 16px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:8px;' + (v.exporting ? 'opacity:.6;cursor:wait' : ''),
+    on: { click: exportValorisationExcel } });
   exportBtn.appendChild(iconEl('download', 14));
   exportBtn.appendChild(el('span', null, v.exporting ? 'Export en cours…' : 'Exporter Excel'));
 
   const refreshBtn = el('button', {
-    attrs: { type: 'button', title: 'Recharger',
-      style: 'padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;display:inline-flex;align-items:center' },
-    on: { click: () => loadValorisation() },
-  });
+    type: 'button', title: 'Recharger',
+      style: 'padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;display:inline-flex;align-items:center',
+    on: { click: () => loadValorisation() } });
   refreshBtn.appendChild(iconEl('refresh-ccw', 14));
 
   wrap.append(inp, exportBtn, refreshBtn);
@@ -12487,24 +12503,24 @@ function buildValorisationToolbar() {
 
 function buildValorisation() {
   const v = valEnsureState();
-  const root = el('div', { attrs: { style: 'padding:18px 20px;max-width:1400px;margin:0 auto' } });
+  const root = el('div', { style: 'padding:18px 20px;max-width:1400px;margin:0 auto' });
 
-  const head = el('div', { attrs: { style: 'margin-bottom:18px' } },
-    el('h2', { attrs: { style: 'font-size:20px;font-weight:800;color:var(--text);margin-bottom:4px' } }, 'Valorisation du stock'),
-    el('p', { attrs: { style: 'font-size:12px;color:var(--muted)' } },
+  const head = el('div', { style: 'margin-bottom:18px' },
+    el('h2', { style: 'font-size:20px;font-weight:800;color:var(--text);margin-bottom:4px' }, 'Valorisation du stock'),
+    el('p', { style: 'font-size:12px;color:var(--muted)' },
       'Saisie des prix unitaires (€/unité de gestion) et consolidation par catégorie. Direction · Administration · Super admin.')
   );
   root.appendChild(head);
 
   if (v.loading && !v.items.length) {
-    root.appendChild(el('div', { attrs: { style: 'padding:60px;text-align:center;color:var(--muted);font-size:13px' } }, 'Chargement…'));
+    root.appendChild(el('div', { style: 'padding:60px;text-align:center;color:var(--muted);font-size:13px' }, 'Chargement…'));
     return root;
   }
 
   root.appendChild(buildValorisationKpis());
   root.appendChild(buildValorisationCategoriePills());
   root.appendChild(buildValorisationToolbar());
-  const tableWrap = el('div', { attrs: { id: 'val-table-wrap' } });
+  const tableWrap = el('div', { id: 'val-table-wrap' });
   tableWrap.appendChild(buildValorisationTable());
   root.appendChild(tableWrap);
   root.appendChild(buildValorisationPFSection());
