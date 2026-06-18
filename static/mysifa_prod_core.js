@@ -6103,13 +6103,18 @@ function renderProdKpis(){
         numCell(dosEntry.total.cartons, 0),
         numCell(dosEntry.total.etiquettes, 0),
       ));
-      // Equipes ordonnees
+      // Equipes ordonnees (border-top entre 2 equipes d'un meme dossier)
       const teamEntries = Object.entries(dosEntry.teams).sort((a,b)=>a[0].localeCompare(b[0],'fr'));
-      teamEntries.forEach(([teamLabel, teamData]) => {
+      teamEntries.forEach(([teamLabel, teamData], teamIdx) => {
+        const teamSep = teamIdx > 0 ? '1px solid var(--border)' : 'none';
+        const teamCell = detailCell(teamLabel, 1, () => repOpenTeam(dosLabel, teamLabel));
+        teamCell.style.borderTop = teamSep;
+        const teamCartonsCell = numCell(teamData.total.cartons, 1);
+        teamCartonsCell.style.borderTop = teamSep;
+        const teamEtiqCell = numCell(teamData.total.etiquettes, 1);
+        teamEtiqCell.style.borderTop = teamSep;
         tbodyKids.push(h('tr',{className:'rep-hier-team'},
-          detailCell(teamLabel, 1, () => repOpenTeam(dosLabel, teamLabel)),
-          numCell(teamData.total.cartons, 1),
-          numCell(teamData.total.etiquettes, 1),
+          teamCell, teamCartonsCell, teamEtiqCell,
         ));
         // Jours ordonnes desc
         const dayEntries = Object.entries(teamData.days).sort((a,b)=>String(b[0]).localeCompare(String(a[0])));
@@ -6209,18 +6214,41 @@ function renderProdKpis(){
         return wrap;
       }
 
-      // ── Construction des piles (stacked bars) ──
-      const stacks = allJours.map(j => {
-        const segments = [];
-        let total = 0;
-        allDossierKeys.forEach(d => {
-          if(!activeSet.has(d)) return;
-          const v = Number((byDayDosMap[j] && byDayDosMap[j][d]) || 0);
-          if(v > 0){ segments.push({dos:d, value:v, color:dosColors[d]}); total += v; }
-        });
-        return {jour:j, total, segments};
+      // ── Line chart : 1 ligne par équipe, X = jours, Y = cartons ──
+      // Filtre par chips dossier : ne compte que les dossiers actifs.
+      const teamSet = new Set();
+      const byTeamDayMap = {};  // team -> { jour -> cartons }
+      byDosRep.forEach(r => {
+        const dos = String(r.no_dossier||'').trim();
+        if(!activeSet.has(dos)) return;
+        const team = (String(r.team_label || 'Repiquage').trim()) || 'Repiquage';
+        const jour = String(r.jour||'').trim();
+        if(!jour) return;
+        teamSet.add(team);
+        if(!byTeamDayMap[team]) byTeamDayMap[team] = {};
+        byTeamDayMap[team][jour] = (byTeamDayMap[team][jour]||0) + Number(r.cartons||0);
       });
-      const maxVal = Math.max(1, ...stacks.map(s=>s.total));
+      const teamArr = Array.from(teamSet).sort((a,b)=>a.localeCompare(b,'fr'));
+      // Jours actifs : ceux ou au moins une equipe a une saisie
+      const activeJours = allJours.filter(j => teamArr.some(t => byTeamDayMap[t] && byTeamDayMap[t][j] != null));
+      if(!teamArr.length || !activeJours.length){
+        const empty = h('div',{style:{padding:'40px 20px',textAlign:'center',color:'var(--muted)',fontSize:'12px',fontStyle:'italic',background:'var(--bg)',borderRadius:'8px',border:'1px dashed var(--border)'}});
+        empty.textContent = 'Aucune équipe à afficher pour les dossiers sélectionnés.';
+        wrap.appendChild(empty);
+        return wrap;
+      }
+
+      // Couleurs par equipe (palette stable)
+      const teamPalette = ['#22d3ee','#fbbf24','#a78bfa','#f472b6','#34d399','#f87171','#60a5fa','#fb923c','#ec4899','#14b8a6'];
+      const teamColors = {};
+      teamArr.forEach((t,i) => { teamColors[t] = teamPalette[i % teamPalette.length]; });
+
+      // Max Y
+      let maxVal = 0;
+      teamArr.forEach(t => activeJours.forEach(j => {
+        const v = (byTeamDayMap[t] && byTeamDayMap[t][j]) || 0;
+        if(v > maxVal) maxVal = v;
+      }));
       function niceRound(v){
         if(v <= 0) return 10;
         const pow = Math.pow(10, Math.floor(Math.log10(v)));
@@ -6232,63 +6260,75 @@ function renderProdKpis(){
         else nice = 10;
         return nice * pow;
       }
-      const niceMax = niceRound(maxVal);
+      const niceMax = niceRound(Math.max(1, maxVal));
 
-      // SVG dimensions (viewBox responsive)
+      // SVG
       const W = 600, H = 240;
       const mL = 44, mR = 12, mT = 18, mB = 46;
       const innerW = W - mL - mR;
       const innerH = H - mT - mB;
-      const barCount = stacks.length;
-      const gap = Math.max(3, Math.min(10, innerW / Math.max(1,barCount) * 0.18));
-      const barW = Math.max(6, (innerW - gap*(barCount-1)) / barCount);
-
+      const n = activeJours.length;
+      // Position X : centre des "slots"
+      const xAt = (idx) => n === 1 ? mL + innerW/2 : mL + idx * (innerW / (n-1));
+      const yAt = (v) => mT + innerH - (v/niceMax)*innerH;
       const yTicks = [0, niceMax/4, niceMax/2, niceMax*3/4, niceMax];
 
       let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:240px;display:block;font-family:inherit" preserveAspectRatio="xMidYMid meet">';
-
-      // Y grid + labels
+      // Grille Y
       yTicks.forEach(t => {
-        const y = mT + innerH - (t/niceMax)*innerH;
+        const y = yAt(t);
         svg += '<line x1="' + mL + '" x2="' + (W-mR) + '" y1="' + y + '" y2="' + y + '" stroke="var(--border)" stroke-width="1" stroke-dasharray="2,3" opacity="0.6"/>';
         svg += '<text x="' + (mL-6) + '" y="' + (y+3) + '" text-anchor="end" font-size="9" fill="var(--muted)">' + escHtml(fN(Math.round(t))) + '</text>';
       });
       svg += '<line x1="' + mL + '" x2="' + (W-mR) + '" y1="' + (mT+innerH) + '" y2="' + (mT+innerH) + '" stroke="var(--border)" stroke-width="1.5"/>';
 
-      // Bars
-      stacks.forEach((s, i) => {
-        const x = mL + i*(barW+gap);
-        let yCursor = mT + innerH;
-        s.segments.forEach(seg => {
-          const segH = (seg.value/niceMax)*innerH;
-          yCursor -= segH;
-          const tooltip = formatJourLabel(s.jour) + ' — ' + seg.dos + ' : ' + fN(seg.value) + ' cartons';
-          svg += '<rect x="' + x + '" y="' + yCursor + '" width="' + barW + '" height="' + segH + '" fill="' + seg.color + '" rx="1" opacity="0.92"><title>' + escHtml(tooltip) + '</title></rect>';
-        });
-        if(s.total > 0){
-          const totY = mT + innerH - (s.total/niceMax)*innerH - 5;
-          svg += '<text x="' + (x+barW/2) + '" y="' + totY + '" text-anchor="middle" font-size="10" font-weight="700" fill="var(--text)">' + escHtml(fN(s.total)) + '</text>';
-        }
-        const lbl = formatJourLabel(s.jour);
+      // X labels
+      activeJours.forEach((j, i) => {
+        const x = xAt(i);
+        const lbl = formatJourLabel(j);
         const lblShort = lbl.length > 5 ? lbl.slice(0,5) : lbl;
-        svg += '<text x="' + (x+barW/2) + '" y="' + (H-mB+16) + '" text-anchor="middle" font-size="10" fill="var(--text2)">' + escHtml(lblShort) + '</text>';
+        svg += '<text x="' + x + '" y="' + (H-mB+16) + '" text-anchor="middle" font-size="10" fill="var(--text2)">' + escHtml(lblShort) + '</text>';
+      });
+
+      // Une polyline par equipe
+      teamArr.forEach(team => {
+        const pts = [];
+        activeJours.forEach((j, i) => {
+          const raw = (byTeamDayMap[team] && byTeamDayMap[team][j]);
+          if(raw == null) return;  // pas de saisie ce jour → break visuel
+          pts.push({x:xAt(i), y:yAt(raw), v:raw, j});
+        });
+        if(!pts.length) return;
+        // Si un seul point → marker seul. Sinon polyline.
+        if(pts.length > 1){
+          const polyD = pts.map(p => p.x.toFixed(2)+','+p.y.toFixed(2)).join(' ');
+          svg += '<polyline points="' + polyD + '" fill="none" stroke="' + teamColors[team] + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/>';
+        }
+        pts.forEach(p => {
+          const tt = formatJourLabel(p.j) + ' — ' + team + ' : ' + fN(p.v) + ' cartons';
+          svg += '<circle cx="' + p.x.toFixed(2) + '" cy="' + p.y.toFixed(2) + '" r="3.5" fill="' + teamColors[team] + '" stroke="var(--card)" stroke-width="1.5"><title>' + escHtml(tt) + '</title></circle>';
+        });
       });
       svg += '</svg>';
 
-      const chartCard = h('div',{style:{background:'var(--bg)',padding:'10px 6px 4px',borderRadius:'8px',border:'1px solid var(--border)'}});
-      chartCard.innerHTML = svg;
-      wrap.appendChild(chartCard);
+      const chartBox = h('div',{style:{background:'var(--bg)',padding:'10px 6px 4px',borderRadius:'8px',border:'1px solid var(--border)'}});
+      chartBox.innerHTML = svg;
+      wrap.appendChild(chartBox);
 
-      // Sous-titre
-      const sub = h('div',{style:{marginTop:'6px',fontSize:'11px',color:'var(--muted)',textAlign:'center'}});
-      sub.textContent = 'Cartons par jour · ' + activeSet.size + ' dossier' + (activeSet.size>1?'s':'') + ' sélectionné' + (activeSet.size>1?'s':'');
-      wrap.appendChild(sub);
+      // Légende équipes (sous le graphe)
+      const legend = h('div',{style:{display:'flex',flexWrap:'wrap',gap:'10px',justifyContent:'center',marginTop:'8px',fontSize:'11px'}});
+      teamArr.forEach(team => {
+        const item = h('span',{style:{display:'inline-flex',alignItems:'center',gap:'5px',color:'var(--text2)'}});
+        item.innerHTML = '<span style="display:inline-block;width:10px;height:2px;background:' + teamColors[team] + ';border-radius:1px"></span> <span>' + escHtml(team) + '</span>';
+        legend.appendChild(item);
+      });
+      wrap.appendChild(legend);
 
       return wrap;
     }
 
-    // ── Layout 50/50 : table à gauche, graphique à droite ──
-    return h('div',{className:'card'},
+    // ── Layout : 2 cards séparées côte à côte (table | chart) ──
+    const tableCard = h('div',{className:'card',style:{flex:'1 1 calc(50% - 8px)',minWidth:'320px'}},
       h('div',{className:'card-header'},
         h('h3',null,'Repiquage — synthèse détaillée'),
         h('span',{style:{fontSize:'11px',color:'var(--muted)'}},
@@ -6299,19 +6339,29 @@ function renderProdKpis(){
           dossierEntries.length+' dossier'+(dossierEntries.length>1?'s':'')
         )
       ),
-      h('div',{style:{display:'flex',gap:'16px',flexWrap:'wrap',alignItems:'flex-start'}},
-        h('div',{style:{flex:'1 1 calc(50% - 8px)',minWidth:'320px',overflowX:'auto'}},
-          h('table',{className:'rep-synth-table',style:{width:'100%',borderCollapse:'collapse',fontSize:'12px'}},
-            h('thead',null,h('tr',null,
-              h('th',{style:{textAlign:'left',paddingLeft:'12px'}},'Détail'),
-              h('th',{style:{textAlign:'right',paddingRight:'10px'}},'Cartons'),
-              h('th',{style:{textAlign:'right',paddingRight:'10px'}},'Étiquettes')
-            )),
-            h('tbody',null,...tbodyKids)
-          )
-        ),
-        h('div',{style:{flex:'1 1 calc(50% - 8px)',minWidth:'320px'}}, buildChartSide())
+      h('div',{style:{overflowX:'auto'}},
+        h('table',{className:'rep-synth-table',style:{width:'100%',borderCollapse:'collapse',fontSize:'12px'}},
+          h('thead',null,h('tr',null,
+            h('th',{style:{textAlign:'left',paddingLeft:'12px'}},'Détail'),
+            h('th',{style:{textAlign:'right',paddingRight:'10px'}},'Cartons'),
+            h('th',{style:{textAlign:'right',paddingRight:'10px'}},'Étiquettes')
+          )),
+          h('tbody',null,...tbodyKids)
+        )
       )
+    );
+    const chartCard = h('div',{className:'card',style:{flex:'1 1 calc(50% - 8px)',minWidth:'320px'}},
+      h('div',{className:'card-header'},
+        h('h3',null,'Cartons par jour et par équipe'),
+        h('span',{style:{fontSize:'11px',color:'var(--muted)'}},
+          activeSet.size + ' / ' + allDossierKeys.length + ' dossier' + (allDossierKeys.length>1?'s':'') + ' actif' + (activeSet.size>1?'s':'')
+        )
+      ),
+      h('div',{style:{padding:'4px 4px 8px'}}, buildChartSide())
+    );
+    return h('div',{style:{display:'flex',gap:'16px',flexWrap:'wrap',alignItems:'flex-start'}},
+      tableCard,
+      chartCard
     );
   }
 
