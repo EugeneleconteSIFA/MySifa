@@ -7322,15 +7322,15 @@ function appendMatiereRefEditFields(parent, item) {
   const prixM2Inp = el('input', { attrs: { type: 'number', min: '0', step: '0.0001', placeholder: 'Ex. 0,0550' } });
   prixM2Inp.value = String(item.prix_eur_m2 != null ? item.prix_eur_m2 : '');
   const laizeChecks = el('div', { cls: 'mp-laize-grid',
-    style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-top:6px' });
+    style: 'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px' });
   const currentLaizeIds = new Set((item.stock_par_laize || []).map(s => s.laize_id));
   (S.laizes || []).filter(l => l.actif || currentLaizeIds.has(l.id)).forEach(l => {
     const lid = 'editmat-laize-' + item.id + '-' + l.id;
-    const inp = el('input', { attrs: { type: 'checkbox', id: lid, value: String(l.id) } });
+    const inp = el('input', { type: 'checkbox', id: lid, value: String(l.id) });
     if (currentLaizeIds.has(l.id)) inp.checked = true;
     const lbl = el('label', {
-      attrs: { 'for': lid },
-      style: 'display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid ' + (inp.checked ? 'var(--accent)' : 'var(--border)') + ';border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;background:' + (inp.checked ? 'var(--accent-bg)' : 'var(--bg)') + ';color:var(--text);user-select:none;transition:border-color .15s,background .15s' },
+      'for': lid,
+      style: 'display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid ' + (inp.checked ? 'var(--accent)' : 'var(--border)') + ';border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;background:' + (inp.checked ? 'var(--accent-bg)' : 'var(--bg)') + ';color:var(--text);user-select:none;transition:border-color .15s,background .15s;line-height:1' },
       inp, el('span', null, l.label),
     );
     inp.addEventListener('change', () => {
@@ -8626,15 +8626,15 @@ function buildMatieresAdminAddForm() {
   const metresInp = el('input', { attrs: { type: 'number', min: '0', step: '1', placeholder: 'Ex. 5000' } });
   const prixM2Inp = el('input', { attrs: { type: 'number', min: '0', step: '0.0001', placeholder: 'Ex. 0,0550' } });
   const laizeChecks = el('div', { cls: 'mp-laize-grid',
-    style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-top:6px' });
+    style: 'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px' });
   function rebuildLaizeChecks() {
     laizeChecks.innerHTML = '';
     (S.laizes || []).filter(l => l.actif).forEach(l => {
       const id = 'addmat-laize-' + l.id;
-      const inp = el('input', { attrs: { type: 'checkbox', id: id, value: String(l.id) } });
+      const inp = el('input', { type: 'checkbox', id: id, value: String(l.id) });
       const lbl = el('label', {
-        attrs: { 'for': id },
-        style: 'display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;background:var(--bg);color:var(--text);user-select:none;transition:border-color .15s,background .15s' },
+        'for': id,
+        style: 'display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;background:var(--bg);color:var(--text);user-select:none;transition:border-color .15s,background .15s;line-height:1' },
         inp,
         el('span', null, l.label),
       );
