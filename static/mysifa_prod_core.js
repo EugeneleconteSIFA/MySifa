@@ -5669,7 +5669,8 @@ function openProdSynthDetail(type,keys,index,opts){
     h('div',{className:'lbl'},lbl),
     h('div',{className:'val'},val)
   );
-  const showDossierCol=type!=='dossier';
+  // En mode repiquage on masque toujours la colonne Dossier (demande utilisateur).
+  const showDossierCol = isRep ? false : (type!=='dossier');
 
   let sessionRows, headerCells, colSpan;
   if(isRep){
@@ -5984,34 +5985,38 @@ function renderProdKpis(){
       return h('div',{style:{padding:'18px 6px',fontSize:'13px',color:'var(--muted)',fontStyle:'italic'}},
         'Pas de repiquage avec les filtres actuels.');
     }
-    const synthParts = [];
     const REP_OPTS = {isRep:true};
+    const sections = [];  // [{key, label, count, rows, totals}]
 
-    // Par jour
-    const byDayRep = _prodAggBy(byDosRep, 'jour').sort((a,b)=>String(b.key).localeCompare(String(a.key)));
-    if(byDayRep.length){
-      const keys = byDayRep.map(r=>String(r.key));
-      synthParts.push(h('div',{className:'card'},
-        h('div',{className:'card-header'},h('h3',null,'Par jour'),h('span',{style:{fontSize:'11px',color:'var(--muted)'}},byDayRep.length+' jours')),
-        h('div',{style:{overflowX:'auto'}},h('table',null,
-          h('thead',null,h('tr',null,h('th',null,'Jour'),h('th',null,'Dossiers'),h('th',null,'Cartons'),h('th',null,'Étiquettes'))),
-          h('tbody',null,...byDayRep.map((r,i)=>h('tr',null,
-            makeProdSynthKeyCell(formatJourLabel(r.key),'day',keys,i,REP_OPTS),
-            h('td',{style:{fontFamily:'monospace'}},fN(r.dossiers||0)),
-            h('td',{style:{fontFamily:'monospace',fontWeight:'700'}},fN(r.cartons||0)),
-            h('td',{style:{fontFamily:'monospace'}},fN(r.etiquettes||0)),
-          )))
-        ))
-      ));
+    // ── Section 1 : Par numéro de dossier (clé = n° + client en sous-ligne) ─
+    const dosAgg = _prodAggDossier(byDosRep);
+    if(dosAgg.length){
+      const keys = dosAgg.map(r=>String(r.no_dossier));
+      const totals = dosAgg.reduce((acc,r)=>({cartons:acc.cartons+Number(r.cartons||0),etiquettes:acc.etiquettes+Number(r.etiquettes||0)}),{cartons:0,etiquettes:0});
+      const rows = dosAgg.map((r,i)=>{
+        const cli = prodSynthCleanClient(r.client)||'';
+        const cell = h('td',{
+          className:'prod-synth-key',
+          title:'Voir le détail — flèches pour naviguer',
+          onClick:e=>{e.stopPropagation();openProdSynthDetail('dossier',keys,i,REP_OPTS);}
+        },
+          h('span',{style:{fontFamily:'monospace',fontWeight:'700'}}, r.no_dossier||'—'),
+          cli ? h('span',{style:{fontWeight:'400',color:'var(--text2)',marginLeft:'8px'}}, '— ' + cli) : null
+        );
+        return h('tr',null,
+          cell,
+          h('td',{style:{fontFamily:'monospace',fontWeight:'700',textAlign:'right'}},fN(r.cartons||0)),
+          h('td',{style:{fontFamily:'monospace',textAlign:'right'}},fN(r.etiquettes||0)),
+        );
+      });
+      sections.push({label:'Par numéro de dossier', count:dosAgg.length+' dossier'+(dosAgg.length>1?'s':''), rows, totals});
     }
 
-    // Par équipe — depuis S.production.by_operator (rep_team_rows)
+    // ── Section 2 : Par équipe ─────────────────────────────────────────
     const byOpAll = (d.by_operator)||[];
     const repTeams = byOpAll.filter(r => r && r.is_repiquage_team);
     if(repTeams.length){
-      const keys = repTeams.map(r=>String(r.key));
-      // Filtre dynamique : pour n'importe quel key (incluant navigation flèches),
-      // retrouve l'équipe correspondante et ses membres dans by_operator.
+      const teamKeys = repTeams.map(r=>String(r.key));
       const teamFilter = (key) => {
         const team = (d.by_operator||[]).find(r => r && r.is_repiquage_team && r.key === key);
         const members = team && Array.isArray(team.team_members)
@@ -6022,45 +6027,108 @@ function renderProdKpis(){
           .filter(s => members.includes(String(s.operateur||'').trim()))
           .sort((a,b)=>String(b.jour||'').localeCompare(String(a.jour||'')));
       };
-      synthParts.push(h('div',{className:'card'},
-        h('div',{className:'card-header'},h('h3',null,'Par équipe'),h('span',{style:{fontSize:'11px',color:'var(--muted)'}},repTeams.length+' équipe'+(repTeams.length>1?'s':''))),
-        h('div',{style:{overflowX:'auto'}},h('table',null,
-          h('thead',null,h('tr',null,h('th',null,'Équipe'),h('th',null,'Dossiers'),h('th',null,'Cartons'),h('th',null,'Étiquettes'))),
-          h('tbody',null,...repTeams.map((r,i)=>{
-            return h('tr',{className:'rep-team-row'},
-              makeProdSynthKeyCell(r.key, 'team', keys, i, {isRep:true, customSessionsFn:teamFilter}),
-              h('td',{style:{fontFamily:'monospace'}},fN(r.dossiers||0)),
-              h('td',{style:{fontFamily:'monospace',fontWeight:'700'}},fN(r.cartons||0)),
-              h('td',{style:{fontFamily:'monospace'}},fN(r.etiquettes||0)),
-            );
-          }))
-        ))
-      ));
+      const totals = repTeams.reduce((acc,r)=>({cartons:acc.cartons+Number(r.cartons||0),etiquettes:acc.etiquettes+Number(r.etiquettes||0)}),{cartons:0,etiquettes:0});
+      const rows = repTeams.map((r,i)=>{
+        const cell = h('td',{
+          className:'prod-synth-key',
+          title:'Voir le détail — flèches pour naviguer',
+          onClick:e=>{e.stopPropagation();openProdSynthDetail('team',teamKeys,i,{isRep:true,customSessionsFn:teamFilter});}
+        },
+          h('span',{style:{fontWeight:'700'}}, r.key)
+        );
+        return h('tr',{className:'rep-team-row'},
+          cell,
+          h('td',{style:{fontFamily:'monospace',fontWeight:'700',textAlign:'right'}},fN(r.cartons||0)),
+          h('td',{style:{fontFamily:'monospace',textAlign:'right'}},fN(r.etiquettes||0)),
+        );
+      });
+      sections.push({label:'Par équipe', count:repTeams.length+' équipe'+(repTeams.length>1?'s':''), rows, totals});
     }
 
-    // Par numéro de dossier (+ Client)
-    const dosAgg = _prodAggDossier(byDosRep);
-    if(dosAgg.length){
-      const keys = dosAgg.map(r=>String(r.no_dossier));
-      synthParts.push(h('div',{className:'card'},
-        h('div',{className:'card-header'},h('h3',null,'Par numéro de dossier'),h('span',{style:{fontSize:'11px',color:'var(--muted)'}},dosAgg.length+' dossiers')),
-        h('div',{style:{overflowX:'auto'}},h('table',null,
-          h('thead',null,h('tr',null,h('th',null,'Dossier'),h('th',null,'Client'),h('th',null,'Cartons'),h('th',null,'Étiquettes'))),
-          h('tbody',null,...dosAgg.map((r,i)=>h('tr',null,
-            makeProdSynthKeyCell(r.no_dossier||'','dossier',keys,i,REP_OPTS),
-            h('td',{className:'prod-synth-detail-td-text'}, prodSynthCleanClient(r.client)||'—'),
-            h('td',{style:{fontFamily:'monospace',fontWeight:'700'}},fN(r.cartons||0)),
-            h('td',{style:{fontFamily:'monospace'}},fN(r.etiquettes||0)),
-          )))
-        ))
-      ));
+    // ── Section 3 : Par jour ───────────────────────────────────────────
+    const byDayRep = _prodAggBy(byDosRep, 'jour').sort((a,b)=>String(b.key).localeCompare(String(a.key)));
+    if(byDayRep.length){
+      const dayKeys = byDayRep.map(r=>String(r.key));
+      const totals = byDayRep.reduce((acc,r)=>({cartons:acc.cartons+Number(r.cartons||0),etiquettes:acc.etiquettes+Number(r.etiquettes||0)}),{cartons:0,etiquettes:0});
+      const rows = byDayRep.map((r,i)=>{
+        const cell = h('td',{
+          className:'prod-synth-key',
+          title:'Voir le détail — flèches pour naviguer',
+          onClick:e=>{e.stopPropagation();openProdSynthDetail('day',dayKeys,i,REP_OPTS);}
+        },
+          h('span',{style:{fontFamily:'monospace',fontWeight:'700'}}, formatJourLabel(r.key))
+        );
+        return h('tr',null,
+          cell,
+          h('td',{style:{fontFamily:'monospace',fontWeight:'700',textAlign:'right'}},fN(r.cartons||0)),
+          h('td',{style:{fontFamily:'monospace',textAlign:'right'}},fN(r.etiquettes||0)),
+        );
+      });
+      sections.push({label:'Par jour', count:byDayRep.length+' jour'+(byDayRep.length>1?'s':''), rows, totals});
     }
 
-    if(!synthParts.length){
+    if(!sections.length){
       return h('div',{style:{padding:'18px 6px',fontSize:'13px',color:'var(--muted)',fontStyle:'italic'}},
         'Aucune donnée repiquage pour cette période.');
     }
-    return h('div',null,...synthParts);
+
+    // ── Construction du tableau unique avec sections + sous-totaux ─────
+    const headerRow = (label, count) => h('tr',{className:'rep-section-head'},
+      h('td',{
+        colSpan:3,
+        style:{
+          background:'var(--accent-bg)',
+          color:'var(--accent)',
+          fontWeight:'700',
+          textTransform:'uppercase',
+          letterSpacing:'.6px',
+          fontSize:'11px',
+          padding:'10px 12px',
+          borderTop:'2px solid var(--accent)',
+          borderBottom:'1px solid var(--border)',
+        }
+      },
+        label,
+        h('span',{style:{marginLeft:'10px',color:'var(--muted)',fontWeight:'400',textTransform:'none',letterSpacing:0,fontSize:'11px'}}, '· '+count)
+      )
+    );
+    const subtotalRow = (totals) => h('tr',{className:'rep-section-subtotal'},
+      h('td',{style:{textAlign:'right',fontWeight:'700',color:'var(--text2)',padding:'8px 12px',borderTop:'1px solid var(--border)',background:'rgba(148,163,184,0.06)',fontStyle:'italic'}}, 'Sous-total'),
+      h('td',{style:{fontFamily:'monospace',fontWeight:'800',color:'var(--accent)',textAlign:'right',padding:'8px 12px',borderTop:'1px solid var(--border)',background:'rgba(148,163,184,0.06)'}}, fN(totals.cartons||0)),
+      h('td',{style:{fontFamily:'monospace',fontWeight:'800',color:'var(--accent)',textAlign:'right',padding:'8px 12px',borderTop:'1px solid var(--border)',background:'rgba(148,163,184,0.06)'}}, fN(totals.etiquettes||0)),
+    );
+    const tbodyKids = [];
+    sections.forEach((sec, idx) => {
+      tbodyKids.push(headerRow(sec.label, sec.count));
+      sec.rows.forEach(r => tbodyKids.push(r));
+      tbodyKids.push(subtotalRow(sec.totals));
+    });
+
+    const grandTot = sections.reduce((acc,s)=>({
+      cartons:acc.cartons+Number(s.totals.cartons||0),
+      etiquettes:acc.etiquettes+Number(s.totals.etiquettes||0)
+    }), {cartons:0, etiquettes:0});
+
+    return h('div',{className:'card'},
+      h('div',{className:'card-header'},
+        h('h3',null,'Repiquage — synthèse détaillée'),
+        h('span',{style:{fontSize:'11px',color:'var(--muted)'}},
+          'Total : ', h('strong',{style:{color:'var(--accent)',fontFamily:'monospace'}}, fN(grandTot.cartons)+' cartons'),
+          ' · ',
+          h('strong',{style:{color:'var(--accent)',fontFamily:'monospace'}}, fN(grandTot.etiquettes)+' étiquettes')
+        )
+      ),
+      h('div',{style:{overflowX:'auto'}},
+        h('table',{className:'rep-synth-table',style:{width:'100%',borderCollapse:'collapse'}},
+          h('thead',null,h('tr',null,
+            h('th',{style:{textAlign:'left'}},'Détail'),
+            h('th',{style:{textAlign:'right'}},'Cartons'),
+            h('th',{style:{textAlign:'right'}},'Étiquettes')
+          )),
+          h('tbody',null,...tbodyKids)
+        )
+      )
+    );
   }
 
   // Barre de sous-onglets [Machines] [Repiquage]

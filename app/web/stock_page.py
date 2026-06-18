@@ -12493,8 +12493,17 @@ function buildValorisationTableRow(item) {
   tdCat.appendChild(badge);
 
   const refLabel = item.reference || '';
-  const tdRef = el('td', { style: 'padding:10px 12px;font-size:13px;font-weight:700;color:var(--text);font-family:monospace' }, refLabel);
-  // Désignation enrichie de la laize pour les laizées
+  const refChildren = [el('span', null, refLabel)];
+  if (item.laizee && item.laize_label) {
+    refChildren.push(el('span', { style:
+      'display:inline-block;margin-left:8px;padding:2px 8px;border-radius:6px;background:rgba(34,211,238,0.10);color:var(--accent);font-size:11px;font-weight:600;letter-spacing:.2px;font-family:inherit' },
+      item.laize_label));
+  } else if (item.laizee && item.incomplete) {
+    refChildren.push(el('span', { style:
+      'display:inline-block;margin-left:8px;padding:2px 8px;border-radius:6px;background:rgba(251,146,60,0.15);color:#fb923c;font-size:11px;font-weight:700;font-family:inherit' },
+      'Aucune laize'));
+  }
+  const tdRef = el('td', { style: 'padding:10px 12px;font-size:13px;font-weight:700;color:var(--text);font-family:monospace' }, ...refChildren);
   const desText = item.designation || '';
   const tdDes = el('td', { style: 'padding:10px 12px;font-size:13px;color:var(--text2)' }, desText);
   const tdQte = el('td', { style: 'padding:10px 12px;font-size:13px;color:var(--text);text-align:right;font-variant-numeric:tabular-nums' },
@@ -12506,9 +12515,14 @@ function buildValorisationTableRow(item) {
   if (item.laizee) {
     // Pour les matières laizées : prix unitaire = valorisation_bobine (lecture seule)
     // + bouton "Paramètres" pour éditer prix m² + métrage au niveau matière
-    const display = (item.prix_unitaire || 0) > 0
-      ? valFormatEuroDetail(item.prix_unitaire) + ' /bob.'
-      : el('span', { style: 'color:var(--muted)' }, 'non valorisé');
+    let display;
+    if (item.incomplete) {
+      display = el('span', { style: 'color:#fb923c;font-size:12px;font-weight:700' }, 'À configurer');
+    } else if ((item.prix_unitaire || 0) > 0) {
+      display = valFormatEuroDetail(item.prix_unitaire) + ' /bob.';
+    } else {
+      display = el('span', { style: 'color:var(--muted)' }, 'non valorisé');
+    }
     const params = el('div', { style: 'font-size:10px;color:var(--muted);margin-top:2px' },
       (item.prix_eur_m2 || 0) > 0 ? (item.prix_eur_m2.toLocaleString('fr-FR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + ' €/m²') : 'prix m² ?',
       ' · ',
@@ -12813,21 +12827,48 @@ async function exportValorisationExcel() {
 }
 
 function buildValorisationPFSection() {
-  const wrap = el('div', { style:
-    'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-top:20px;opacity:.85' });
-  wrap.appendChild(el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap' },
+  const wrap = el('div', { style: 'margin-top:28px' });
+  // Bandeau de titre cohérent avec la section MP
+  const head = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px' },
     el('div', null,
-      el('div', { style: 'font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px' }, 'Produits finis'),
-      el('div', { style: 'font-size:12px;color:var(--text2);max-width:560px;line-height:1.55' },
-        'Valorisation des produits finis disponible bientôt. Vous pourrez importer un fichier Excel (référence + prix unitaire) issu de votre ERP — calcul attendu : prix de vente − marge 40% − amortissement stock 3%.')
+      el('h3', { style: 'font-size:16px;font-weight:800;color:var(--text);margin:0' }, 'Produits finis'),
+      el('div', { style: 'font-size:12px;color:var(--muted);margin-top:2px' }, 'Valorisation par import Excel — à venir'),
     ),
-    el('button', {
-      type: 'button', disabled: true,
-        style: 'padding:9px 16px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--muted);font-weight:700;font-size:13px;cursor:not-allowed' },
-      'Importer Excel — bientôt disponible'
-    )
+    el('span', { style:
+      'padding:5px 12px;border-radius:999px;background:rgba(251,146,60,0.15);color:#fb923c;font-size:11px;font-weight:700;letter-spacing:.3px' },
+      'BIENTÔT')
+  );
+  wrap.appendChild(head);
+  const card = el('div', { style:
+    'background:var(--card);border:1px dashed var(--border);border-radius:12px;padding:24px;display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center' });
+  card.appendChild(iconEl('upload', 28));
+  card.appendChild(el('div', { style: 'font-size:13px;color:var(--text2);max-width:540px;line-height:1.6' },
+    'Vous pourrez importer ici un fichier Excel exporté depuis votre ERP (référence + prix de vente) ',
+    'pour calculer la valorisation des produits finis : ',
+    el('strong', null, 'prix de vente − 40% (marge) − 3% (amortissement stock)'),
+    '.'));
+  card.appendChild(el('button', {
+    type: 'button', disabled: true,
+    style: 'padding:9px 16px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--muted);font-weight:700;font-size:13px;cursor:not-allowed' },
+    'Importer le fichier Excel — bientôt disponible'
   ));
+  wrap.appendChild(card);
   return wrap;
+}
+
+function buildValorisationMPHeader() {
+  const v = valEnsureState();
+  const s = v.summary || { total_mp: 0, nb_refs: 0, nb_refs_valorisees: 0 };
+  return el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px' },
+    el('div', null,
+      el('h3', { style: 'font-size:16px;font-weight:800;color:var(--text);margin:0' }, 'Matières premières'),
+      el('div', { style: 'font-size:12px;color:var(--muted);margin-top:2px' },
+        `${s.nb_refs_valorisees || 0} / ${s.nb_refs || 0} références valorisées · Mandrins, palettes, adhésifs, cartons, frontaux, glassines, complexes`)
+    ),
+    el('span', { style:
+      'padding:5px 12px;border-radius:999px;background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700;letter-spacing:.3px' },
+      valFormatEuro(s.total_mp))
+  );
 }
 
 function buildValorisationToolbar() {
@@ -12883,11 +12924,16 @@ function buildValorisation() {
   }
 
   root.appendChild(buildValorisationKpis());
+
+  // ── Section Matières premières ──
+  root.appendChild(buildValorisationMPHeader());
   root.appendChild(buildValorisationCategoriePills());
   root.appendChild(buildValorisationToolbar());
   const tableWrap = el('div', { id: 'val-table-wrap' });
   tableWrap.appendChild(buildValorisationTable());
   root.appendChild(tableWrap);
+
+  // ── Section Produits finis (placeholder) ──
   root.appendChild(buildValorisationPFSection());
 
   return root;

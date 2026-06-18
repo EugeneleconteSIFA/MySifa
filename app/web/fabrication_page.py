@@ -5526,6 +5526,7 @@ function renderRepiquageDiscussionView(){
 
 /* Composants reutilises entre la vue saisie et la vue historique */
 function renderRepiquageTabs(){
+  const isAdminUser = S.user && (S.user.role==='superadmin'||S.user.role==='administration'||S.user.role==='direction');
   const tabBtn = (key, label) => h('button',{
     style:{
       border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit',
@@ -5540,7 +5541,7 @@ function renderRepiquageTabs(){
     gap:'4px', flexShrink:0, background:'var(--card)',
   }},
     tabBtn('saisie', 'Saisie'),
-    tabBtn('historique', 'Historique'),
+    isAdminUser ? tabBtn('historique', 'Historique') : null,
     tabBtn('discussion', 'Discussion'),
   );
 }

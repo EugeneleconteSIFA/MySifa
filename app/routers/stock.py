@@ -3601,6 +3601,20 @@ def _valorisation_query(conn) -> list[dict]:
         ORDER BY mp.categorie ASC, mp.reference ASC, l.ordre ASC, l.valeur_mm ASC
         """
     ).fetchall()
+    # Matières laizées SANS aucune laize associée (à configurer)
+    rows_laizees_vides = conn.execute(
+        """
+        SELECT mp.id AS matiere_id, mp.categorie, mp.reference, mp.designation,
+               COALESCE(mp.metres_lineaires_par_bobine, 0) AS metres,
+               COALESCE(mp.prix_eur_m2, 0) AS prix_eur_m2
+        FROM matieres_premieres mp
+        WHERE mp.actif = 1 AND mp.categorie IN ('frontal','glassine','complexe')
+          AND NOT EXISTS (
+            SELECT 1 FROM mp_matiere_laizes ml WHERE ml.matiere_id = mp.id
+          )
+        ORDER BY mp.categorie ASC, mp.reference ASC
+        """
+    ).fetchall()
     out: list[dict] = []
     for r in rows_simple:
         cat = r["categorie"]
@@ -3621,6 +3635,7 @@ def _valorisation_query(conn) -> list[dict]:
             "prix_unitaire": prix,
             "valorisation": round(qte * prix, 2),
             "laizee": False,
+            "incomplete": False,
             "metres_lineaires_par_bobine": None,
             "prix_eur_m2": None,
             "valorisation_bobine": None,
@@ -3649,9 +3664,35 @@ def _valorisation_query(conn) -> list[dict]:
             "prix_unitaire": round(valo_bobine, 4),  # prix unitaire calculé par bobine (lecture seule)
             "valorisation": round(qte * valo_bobine, 2),
             "laizee": True,
+            "incomplete": False,
             "metres_lineaires_par_bobine": metres,
             "prix_eur_m2": prix_m2,
             "valorisation_bobine": round(valo_bobine, 4),
+            "prix_updated_at": None,
+            "prix_updated_by_name": None,
+        })
+    # Matières laizées sans laizes : affichées avec un placeholder "À configurer"
+    for r in rows_laizees_vides:
+        cat = r["categorie"]
+        out.append({
+            "id": r["matiere_id"],
+            "row_key": f"m{r['matiere_id']}_empty",
+            "matiere_id": r["matiere_id"],
+            "laize_id": None,
+            "laize_label": None,
+            "categorie": cat,
+            "categorie_label": _MP_CATEGORIE_LABELS.get(cat, cat or ""),
+            "reference": r["reference"],
+            "designation": r["designation"],
+            "quantite": 0.0,
+            "unite": _mp_unite_gestion(cat),
+            "prix_unitaire": 0.0,
+            "valorisation": 0.0,
+            "laizee": True,
+            "incomplete": True,
+            "metres_lineaires_par_bobine": float(r["metres"] or 0),
+            "prix_eur_m2": float(r["prix_eur_m2"] or 0),
+            "valorisation_bobine": 0.0,
             "prix_updated_at": None,
             "prix_updated_by_name": None,
         })
