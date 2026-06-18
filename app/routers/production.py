@@ -298,11 +298,15 @@ def _build_repiquage_dossier_rows(all_list):
     """Construit des sessions virtuelles 'Repiquage' agregees par
     (operateur, no_dossier, jour) depuis les saisies code 03 sur machine Repiquage.
 
+    Chaque ligne est enrichie d'un champ team_label resolu via planning_rh
+    (cache (op, jour) -> label pour limiter les requetes).
+
     Format identique a by_dossier (issu de compute_dossier_times) pour pouvoir
     etre concatene proprement dans by_dossier_with_rep. Les champs temps sont
     a 0 (le repiquage ne tracke pas calage/prod/arret par session).
     """
-    agg = {}
+    # 1) Filtrer les saisies repiquage utiles
+    rep_lines = []
     for r in all_list:
         if str(r.get('operation_code') or '') != '03':
             continue
@@ -310,17 +314,38 @@ def _build_repiquage_dossier_rows(all_list):
             continue
         op = str(r.get('operateur') or '').strip()
         dos = str(r.get('no_dossier') or '').strip()
-        if not op or not dos:
-            continue
         jour = str(r.get('date_operation') or '')[:10]
-        if not jour:
+        if not op or not dos or not jour:
             continue
+        rep_lines.append((r, op, dos, jour))
+    if not rep_lines:
+        return []
+    # 2) Resoudre team_label par (op_lc, jour) en cache pour limiter le DB hit
+    team_cache = {}  # (op_lc, jour) -> team_label
+    try:
+        with get_db() as conn:
+            for _r, op, _dos, jour in rep_lines:
+                ck = (op.lower(), jour)
+                if ck in team_cache:
+                    continue
+                try:
+                    _creneau, full_team = _rep_get_full_team_for_date(conn, op, jour)
+                except Exception:
+                    full_team = []
+                team_cache[ck] = _format_team_label(full_team) if full_team else 'Repiquage'
+    except Exception as _exc:
+        _log.exception('team_cache build failed: %s', _exc)
+    # 3) Agreger par (operateur, no_dossier, jour)
+    agg = {}
+    for r, op, dos, jour in rep_lines:
+        team_label = team_cache.get((op.lower(), jour)) or 'Repiquage'
         key = (op, dos, jour)
         x = agg.setdefault(key, {
             'operateur': op,
             'no_dossier': dos,
             'jour': jour,
             'machine': 'Repiquage',
+            'team_label': team_label,
             'client': str(r.get('client') or '').strip(),
             'designation': str(r.get('designation') or '').strip().strip(',').strip(),
             'etiquettes': 0.0,
@@ -335,7 +360,6 @@ def _build_repiquage_dossier_rows(all_list):
             x['cartons'] += int(r.get('nb_cartons') or 0)
         except Exception:
             pass
-        # On garde client/designation du premier non-vide rencontre
         if not x.get('client') and r.get('client'):
             x['client'] = str(r.get('client') or '').strip()
         if not x.get('designation') and r.get('designation'):

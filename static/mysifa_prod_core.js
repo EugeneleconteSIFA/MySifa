@@ -5985,128 +5985,148 @@ function renderProdKpis(){
       return h('div',{style:{padding:'18px 6px',fontSize:'13px',color:'var(--muted)',fontStyle:'italic'}},
         'Pas de repiquage avec les filtres actuels.');
     }
-    const REP_OPTS = {isRep:true};
-    const sections = [];  // [{key, label, count, rows, totals}]
-
-    // ── Section 1 : Par numéro de dossier (clé = n° + client en sous-ligne) ─
-    const dosAgg = _prodAggDossier(byDosRep);
-    if(dosAgg.length){
-      const keys = dosAgg.map(r=>String(r.no_dossier));
-      const totals = dosAgg.reduce((acc,r)=>({cartons:acc.cartons+Number(r.cartons||0),etiquettes:acc.etiquettes+Number(r.etiquettes||0)}),{cartons:0,etiquettes:0});
-      const rows = dosAgg.map((r,i)=>{
-        const cli = prodSynthCleanClient(r.client)||'';
-        const cell = h('td',{
-          className:'prod-synth-key',
-          title:'Voir le détail — flèches pour naviguer',
-          onClick:e=>{e.stopPropagation();openProdSynthDetail('dossier',keys,i,REP_OPTS);}
-        },
-          h('span',{style:{fontFamily:'monospace',fontWeight:'700'}}, r.no_dossier||'—'),
-          cli ? h('span',{style:{fontWeight:'400',color:'var(--text2)',marginLeft:'8px'}}, '— ' + cli) : null
-        );
-        return h('tr',null,
-          cell,
-          h('td',{style:{fontFamily:'monospace',fontWeight:'700',textAlign:'right'}},fN(r.cartons||0)),
-          h('td',{style:{fontFamily:'monospace',textAlign:'right'}},fN(r.etiquettes||0)),
-        );
-      });
-      sections.push({label:'Par numéro de dossier', count:dosAgg.length+' dossier'+(dosAgg.length>1?'s':''), rows, totals});
-    }
-
-    // ── Section 2 : Par équipe ─────────────────────────────────────────
-    const byOpAll = (d.by_operator)||[];
-    const repTeams = byOpAll.filter(r => r && r.is_repiquage_team);
-    if(repTeams.length){
-      const teamKeys = repTeams.map(r=>String(r.key));
-      const teamFilter = (key) => {
-        const team = (d.by_operator||[]).find(r => r && r.is_repiquage_team && r.key === key);
-        const members = team && Array.isArray(team.team_members)
-          ? team.team_members.map(s=>String(s||'').trim()).filter(Boolean)
-          : [];
-        if(!members.length) return [];
-        return byDosRep
-          .filter(s => members.includes(String(s.operateur||'').trim()))
-          .sort((a,b)=>String(b.jour||'').localeCompare(String(a.jour||'')));
-      };
-      const totals = repTeams.reduce((acc,r)=>({cartons:acc.cartons+Number(r.cartons||0),etiquettes:acc.etiquettes+Number(r.etiquettes||0)}),{cartons:0,etiquettes:0});
-      const rows = repTeams.map((r,i)=>{
-        const cell = h('td',{
-          className:'prod-synth-key',
-          title:'Voir le détail — flèches pour naviguer',
-          onClick:e=>{e.stopPropagation();openProdSynthDetail('team',teamKeys,i,{isRep:true,customSessionsFn:teamFilter});}
-        },
-          h('span',{style:{fontWeight:'700'}}, r.key)
-        );
-        return h('tr',{className:'rep-team-row'},
-          cell,
-          h('td',{style:{fontFamily:'monospace',fontWeight:'700',textAlign:'right'}},fN(r.cartons||0)),
-          h('td',{style:{fontFamily:'monospace',textAlign:'right'}},fN(r.etiquettes||0)),
-        );
-      });
-      sections.push({label:'Par équipe', count:repTeams.length+' équipe'+(repTeams.length>1?'s':''), rows, totals});
-    }
-
-    // ── Section 3 : Par jour ───────────────────────────────────────────
-    const byDayRep = _prodAggBy(byDosRep, 'jour').sort((a,b)=>String(b.key).localeCompare(String(a.key)));
-    if(byDayRep.length){
-      const dayKeys = byDayRep.map(r=>String(r.key));
-      const totals = byDayRep.reduce((acc,r)=>({cartons:acc.cartons+Number(r.cartons||0),etiquettes:acc.etiquettes+Number(r.etiquettes||0)}),{cartons:0,etiquettes:0});
-      const rows = byDayRep.map((r,i)=>{
-        const cell = h('td',{
-          className:'prod-synth-key',
-          title:'Voir le détail — flèches pour naviguer',
-          onClick:e=>{e.stopPropagation();openProdSynthDetail('day',dayKeys,i,REP_OPTS);}
-        },
-          h('span',{style:{fontFamily:'monospace',fontWeight:'700'}}, formatJourLabel(r.key))
-        );
-        return h('tr',null,
-          cell,
-          h('td',{style:{fontFamily:'monospace',fontWeight:'700',textAlign:'right'}},fN(r.cartons||0)),
-          h('td',{style:{fontFamily:'monospace',textAlign:'right'}},fN(r.etiquettes||0)),
-        );
-      });
-      sections.push({label:'Par jour', count:byDayRep.length+' jour'+(byDayRep.length>1?'s':''), rows, totals});
-    }
-
-    if(!sections.length){
+    if(!byDosRep.length){
       return h('div',{style:{padding:'18px 6px',fontSize:'13px',color:'var(--muted)',fontStyle:'italic'}},
         'Aucune donnée repiquage pour cette période.');
     }
 
-    // ── Construction du tableau unique avec sections + sous-totaux ─────
-    const headerRow = (label, count) => h('tr',{className:'rep-section-head'},
-      h('td',{
-        colSpan:3,
-        style:{
-          background:'var(--accent-bg)',
-          color:'var(--accent)',
-          fontWeight:'700',
-          textTransform:'uppercase',
-          letterSpacing:'.6px',
-          fontSize:'11px',
-          padding:'10px 12px',
-          borderTop:'2px solid var(--accent)',
-          borderBottom:'1px solid var(--border)',
-        }
-      },
-        label,
-        h('span',{style:{marginLeft:'10px',color:'var(--muted)',fontWeight:'400',textTransform:'none',letterSpacing:0,fontSize:'11px'}}, '· '+count)
-      )
-    );
-    const subtotalRow = (totals) => h('tr',{className:'rep-section-subtotal'},
-      h('td',{style:{textAlign:'right',fontWeight:'700',color:'var(--text2)',padding:'8px 12px',borderTop:'1px solid var(--border)',background:'rgba(148,163,184,0.06)',fontStyle:'italic'}}, 'Sous-total'),
-      h('td',{style:{fontFamily:'monospace',fontWeight:'800',color:'var(--accent)',textAlign:'right',padding:'8px 12px',borderTop:'1px solid var(--border)',background:'rgba(148,163,184,0.06)'}}, fN(totals.cartons||0)),
-      h('td',{style:{fontFamily:'monospace',fontWeight:'800',color:'var(--accent)',textAlign:'right',padding:'8px 12px',borderTop:'1px solid var(--border)',background:'rgba(148,163,184,0.06)'}}, fN(totals.etiquettes||0)),
-    );
-    const tbodyKids = [];
-    sections.forEach((sec, idx) => {
-      tbodyKids.push(headerRow(sec.label, sec.count));
-      sec.rows.forEach(r => tbodyKids.push(r));
-      tbodyKids.push(subtotalRow(sec.totals));
+    // ── Hiérarchie : Dossier → Équipe → Jour ────────────────────────
+    const hier = {};  // dosKey -> { no_dossier, client, total, teams:{} }
+    byDosRep.forEach(r => {
+      const dos = String(r.no_dossier||'').trim();
+      if(!dos) return;
+      const team = String(r.team_label || 'Repiquage').trim() || 'Repiquage';
+      const jour = String(r.jour||'').trim();
+      if(!hier[dos]){
+        hier[dos] = {
+          no_dossier: dos,
+          client: '',
+          total: {cartons:0, etiquettes:0},
+          teams: {},
+        };
+      }
+      if(!hier[dos].client && r.client) hier[dos].client = r.client;
+      hier[dos].total.cartons += Number(r.cartons||0);
+      hier[dos].total.etiquettes += Number(r.etiquettes||0);
+      if(!hier[dos].teams[team]){
+        hier[dos].teams[team] = { total:{cartons:0,etiquettes:0}, days:{} };
+      }
+      hier[dos].teams[team].total.cartons += Number(r.cartons||0);
+      hier[dos].teams[team].total.etiquettes += Number(r.etiquettes||0);
+      if(!hier[dos].teams[team].days[jour]){
+        hier[dos].teams[team].days[jour] = { cartons:0, etiquettes:0 };
+      }
+      hier[dos].teams[team].days[jour].cartons += Number(r.cartons||0);
+      hier[dos].teams[team].days[jour].etiquettes += Number(r.etiquettes||0);
     });
 
-    const grandTot = sections.reduce((acc,s)=>({
-      cartons:acc.cartons+Number(s.totals.cartons||0),
-      etiquettes:acc.etiquettes+Number(s.totals.etiquettes||0)
+    // ── Ordres de tri ─────────────────────────────────────────────────
+    const dossierEntries = Object.values(hier).sort((a,b)=>String(a.no_dossier).localeCompare(
+      String(b.no_dossier),'fr',{numeric:true,sensitivity:'base'}));
+
+    // ── Helpers de filtrage pour les modales (lookup par ligne cliquee) ─
+    const filterByDossier = (key) => byDosRep
+      .filter(s => String(s.no_dossier||'').trim() === String(key||'').trim())
+      .sort((a,b)=>String(b.jour||'').localeCompare(String(a.jour||'')));
+    const filterByDossierTeam = (dos, team) => byDosRep
+      .filter(s => String(s.no_dossier||'').trim() === dos
+        && String(s.team_label||'Repiquage').trim() === team)
+      .sort((a,b)=>String(b.jour||'').localeCompare(String(a.jour||'')));
+    const filterByDossierTeamDay = (dos, team, jour) => byDosRep
+      .filter(s => String(s.no_dossier||'').trim() === dos
+        && String(s.team_label||'Repiquage').trim() === team
+        && String(s.jour||'').trim() === jour);
+
+    // ── Cellules de ligne (indented + clickable) ──────────────────────
+    function detailCell(label, level, onClick, secondary){
+      // level 0 = dossier (bold, accent), 1 = team, 2 = jour (mono, muted)
+      const pad = 12 + level * 22;
+      const style = {paddingLeft: pad+'px', cursor: onClick ? 'pointer' : 'default'};
+      if(level === 0){
+        style.fontWeight = '700';
+        style.color = 'var(--text)';
+        style.fontSize = '13px';
+      }else if(level === 1){
+        style.fontWeight = '600';
+        style.color = 'var(--text2)';
+        style.fontSize = '12.5px';
+      }else{
+        style.fontFamily = 'monospace';
+        style.color = 'var(--muted)';
+        style.fontSize = '12px';
+      }
+      const props = {style};
+      if(onClick){
+        props.className = 'prod-synth-key';
+        props.title = 'Voir le détail';
+        props.onClick = (e)=>{e.stopPropagation(); onClick();};
+      }
+      return h('td', props,
+        h('span', null, label),
+        secondary ? h('span',{style:{fontWeight:'400',color:'var(--text2)',marginLeft:'8px',fontSize:'12px'}}, '— ' + secondary) : null
+      );
+    }
+    function numCell(val, level){
+      const style = {textAlign:'right', fontFamily:'monospace'};
+      if(level === 0){ style.fontWeight='800'; style.color='var(--accent)'; style.fontSize='13px'; }
+      else if(level === 1){ style.fontWeight='700'; style.color='var(--text2)'; style.fontSize='12.5px'; }
+      else { style.color='var(--muted)'; style.fontSize='12px'; }
+      return h('td',{style}, fN(val||0));
+    }
+
+    const tbodyKids = [];
+    const repOpenDos = (dos) => {
+      const keys = dossierEntries.map(e => e.no_dossier);
+      const idx = keys.indexOf(dos);
+      openProdSynthDetail('dossier', keys, Math.max(0,idx), {isRep:true, customSessionsFn:filterByDossier});
+    };
+    const repOpenTeam = (dos, team) => {
+      // Modal centree sur ce dossier+team
+      openProdSynthDetail('team', [team], 0, {
+        isRep:true,
+        customSessionsFn: (k) => filterByDossierTeam(dos, k),
+      });
+    };
+    const repOpenDay = (dos, team, jour) => {
+      openProdSynthDetail('day', [jour], 0, {
+        isRep:true,
+        customSessionsFn: (k) => filterByDossierTeamDay(dos, team, k),
+      });
+    };
+
+    dossierEntries.forEach((dosEntry, dosIdx) => {
+      const dosLabel = dosEntry.no_dossier;
+      const cli = prodSynthCleanClient(dosEntry.client) || '';
+      // Ligne dossier — separateur fort en haut
+      tbodyKids.push(h('tr',{className:'rep-hier-dossier', style:{borderTop:(dosIdx>0?'2px solid var(--border)':'none'), background:'var(--accent-bg)'}},
+        detailCell(dosLabel, 0, () => repOpenDos(dosLabel), cli),
+        numCell(dosEntry.total.cartons, 0),
+        numCell(dosEntry.total.etiquettes, 0),
+      ));
+      // Equipes ordonnees
+      const teamEntries = Object.entries(dosEntry.teams).sort((a,b)=>a[0].localeCompare(b[0],'fr'));
+      teamEntries.forEach(([teamLabel, teamData]) => {
+        tbodyKids.push(h('tr',{className:'rep-hier-team'},
+          detailCell(teamLabel, 1, () => repOpenTeam(dosLabel, teamLabel)),
+          numCell(teamData.total.cartons, 1),
+          numCell(teamData.total.etiquettes, 1),
+        ));
+        // Jours ordonnes desc
+        const dayEntries = Object.entries(teamData.days).sort((a,b)=>String(b[0]).localeCompare(String(a[0])));
+        dayEntries.forEach(([jour, dayData]) => {
+          tbodyKids.push(h('tr',{className:'rep-hier-day'},
+            detailCell(formatJourLabel(jour), 2, () => repOpenDay(dosLabel, teamLabel, jour)),
+            numCell(dayData.cartons, 2),
+            numCell(dayData.etiquettes, 2),
+          ));
+        });
+      });
+    });
+
+    // Total general
+    const grandTot = dossierEntries.reduce((acc,d) => ({
+      cartons: acc.cartons + Number(d.total.cartons||0),
+      etiquettes: acc.etiquettes + Number(d.total.etiquettes||0),
     }), {cartons:0, etiquettes:0});
 
     return h('div',{className:'card'},
@@ -6115,13 +6135,15 @@ function renderProdKpis(){
         h('span',{style:{fontSize:'11px',color:'var(--muted)'}},
           'Total : ', h('strong',{style:{color:'var(--accent)',fontFamily:'monospace'}}, fN(grandTot.cartons)+' cartons'),
           ' · ',
-          h('strong',{style:{color:'var(--accent)',fontFamily:'monospace'}}, fN(grandTot.etiquettes)+' étiquettes')
+          h('strong',{style:{color:'var(--accent)',fontFamily:'monospace'}}, fN(grandTot.etiquettes)+' étiquettes'),
+          ' · ',
+          dossierEntries.length+' dossier'+(dossierEntries.length>1?'s':'')
         )
       ),
       h('div',{style:{overflowX:'auto'}},
         h('table',{className:'rep-synth-table',style:{width:'100%',borderCollapse:'collapse'}},
           h('thead',null,h('tr',null,
-            h('th',{style:{textAlign:'left'}},'Détail'),
+            h('th',{style:{textAlign:'left',paddingLeft:'12px'}},'Détail'),
             h('th',{style:{textAlign:'right'}},'Cartons'),
             h('th',{style:{textAlign:'right'}},'Étiquettes')
           )),
