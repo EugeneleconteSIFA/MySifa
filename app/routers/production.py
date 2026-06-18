@@ -294,6 +294,59 @@ def _build_repiquage_team_rows(all_list, dossier_times, no_dossier_filter=None):
     return sorted(out, key=lambda x: x['etiquettes'], reverse=True)
 
 
+def _build_repiquage_dossier_rows(all_list):
+    """Construit des sessions virtuelles 'Repiquage' agregees par
+    (operateur, no_dossier, jour) depuis les saisies code 03 sur machine Repiquage.
+
+    Format identique a by_dossier (issu de compute_dossier_times) pour pouvoir
+    etre concatene proprement dans by_dossier_with_rep. Les champs temps sont
+    a 0 (le repiquage ne tracke pas calage/prod/arret par session).
+    """
+    agg = {}
+    for r in all_list:
+        if str(r.get('operation_code') or '') != '03':
+            continue
+        if not _is_machine_repiquage_name(r.get('machine')):
+            continue
+        op = str(r.get('operateur') or '').strip()
+        dos = str(r.get('no_dossier') or '').strip()
+        if not op or not dos:
+            continue
+        jour = str(r.get('date_operation') or '')[:10]
+        if not jour:
+            continue
+        key = (op, dos, jour)
+        x = agg.setdefault(key, {
+            'operateur': op,
+            'no_dossier': dos,
+            'jour': jour,
+            'machine': 'Repiquage',
+            'client': str(r.get('client') or '').strip(),
+            'designation': str(r.get('designation') or '').strip().strip(',').strip(),
+            'etiquettes': 0.0,
+            'metrage_m': 0.0,
+            'temps_calage_min': 0.0,
+            'temps_prod_min': 0.0,
+            'temps_arret_min': 0.0,
+            'cartons': 0,
+        })
+        x['etiquettes'] += float(r.get('quantite_traitee') or 0)
+        try:
+            x['cartons'] += int(r.get('nb_cartons') or 0)
+        except Exception:
+            pass
+        # On garde client/designation du premier non-vide rencontre
+        if not x.get('client') and r.get('client'):
+            x['client'] = str(r.get('client') or '').strip()
+        if not x.get('designation') and r.get('designation'):
+            x['designation'] = str(r.get('designation') or '').strip().strip(',').strip()
+    out = []
+    for v in agg.values():
+        v['etiquettes'] = round(v['etiquettes'], 1)
+        out.append(v)
+    return sorted(out, key=lambda x: (x.get('jour') or '', x.get('operateur') or ''), reverse=True)
+
+
 def _build_repiquage_machine_row(all_list):
     """Une seule ligne 'Repiquage' agregeant cartons + etiq de toutes les saisies 03."""
     total_cartons = 0

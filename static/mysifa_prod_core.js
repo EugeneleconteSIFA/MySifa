@@ -5160,6 +5160,77 @@ function renderSanityEventsBlock(sanity){
   return h('div',null,...blocks);
 }
 
+
+// ── Helpers Repiquage / agregations Vue d'ensemble Production ────────
+function _isRepMachine(m){
+  if(!m) return false;
+  let n = String(m).toLowerCase()
+    .replace(/é/g,'e').replace(/è/g,'e').replace(/ê/g,'e').trim();
+  return n === 'repiquage' || n === 'rep' || n.startsWith('rep ') || n.startsWith('repiquage');
+}
+function _prodAggBy(rows, keyName){
+  const m = {};
+  rows.forEach(r => {
+    const k = String(r[keyName]==null?'':r[keyName]).trim();
+    if(!k || k==='?') return;
+    const x = m[k] = m[k] || {
+      key: k, _dosSet: new Set(),
+      etiquettes: 0, metrage_m: 0, cartons: 0,
+      calage_min: 0, prod_min: 0, arret_min: 0,
+    };
+    const dos = String(r.no_dossier||'').trim();
+    if(dos) x._dosSet.add(dos);
+    x.etiquettes += Number(r.etiquettes||0);
+    x.metrage_m += Number(r.metrage_m||0);
+    x.cartons += Number(r.cartons||0);
+    x.calage_min += Number(r.temps_calage_min||0);
+    x.prod_min += Number(r.temps_prod_min||0);
+    x.arret_min += Number(r.temps_arret_min||0);
+  });
+  return Object.values(m).map(v => {
+    v.dossiers = v._dosSet.size; delete v._dosSet;
+    const den = v.prod_min + v.arret_min;
+    v.vitesse_m_min = den>0 ? Number((v.metrage_m/den).toFixed(2)) : 0;
+    v.etiquettes = Math.round(v.etiquettes*10)/10;
+    v.metrage_m = Math.round(v.metrage_m*10)/10;
+    return v;
+  });
+}
+function _prodAggDossier(rows){
+  const m = {};
+  rows.forEach(r => {
+    const k = String(r.no_dossier||'').trim();
+    if(!k) return;
+    const x = m[k] = m[k] || {
+      no_dossier: k,
+      client: '',
+      etiquettes: 0, metrage_m: 0, cartons: 0,
+      temps_calage_min: 0, temps_prod_min: 0, temps_arret_min: 0,
+    };
+    if(!x.client && r.client) x.client = r.client;
+    x.etiquettes += Number(r.etiquettes||0);
+    x.metrage_m += Number(r.metrage_m||0);
+    x.cartons += Number(r.cartons||0);
+    x.temps_calage_min += Number(r.temps_calage_min||0);
+    x.temps_prod_min += Number(r.temps_prod_min||0);
+    x.temps_arret_min += Number(r.temps_arret_min||0);
+  });
+  return Object.values(m).sort((a,b)=>String(a.no_dossier).localeCompare(
+    String(b.no_dossier),'fr',{numeric:true,sensitivity:'base'}));
+}
+function _prodSynthTabGet(hasRep, onlyRep){
+  if(onlyRep) return 'repiquage';
+  if(!hasRep) return 'machines';
+  try{
+    const v = localStorage.getItem('mysifa.prod.synthtab');
+    if(v === 'repiquage' || v === 'machines') return v;
+  }catch(e){}
+  return 'machines';
+}
+function _prodSynthTabSet(v){
+  try{ localStorage.setItem('mysifa.prod.synthtab', v); }catch(e){}
+}
+
 function renderMachineStatusCards(){
   const ms = S.machineStatus;
   const ICONS = {
@@ -5239,10 +5310,18 @@ function renderMachineStatusCards(){
     const isOn = dossiers.length > 0;
     const sk = isOn ? 'production' : 'eteinte';
     const fmtNumR = n => Number(n||0).toLocaleString('fr-FR');
+    // Repliage mobile : >6 dossiers → on en cache une partie derriere
+    // un bouton "+ N autres" (etat memorise par carte le temps de la session).
+    const isMobileRep = window.innerWidth <= 700;
+    const FOLD_LIMIT = 6;
+    if(typeof window._repCardExpanded === 'undefined') window._repCardExpanded = false;
+    const expanded = !isMobileRep || !!window._repCardExpanded;
+    const visible = (!isMobileRep || expanded) ? dossiers.slice(0,10) : dossiers.slice(0, FOLD_LIMIT);
+    const hidden = (!isMobileRep || expanded) ? 0 : Math.max(0, dossiers.slice(0,10).length - FOLD_LIMIT);
     // Reutilise les classes CSS mst-dos / mst-dos-ref / mst-dos-cli / mst-dos-des
     // pour rester coherent avec Cohesio 1 et 2.
     const dossierBlocks = dossiers.length
-      ? dossiers.slice(0,10).map(d => h('div',{className:'mst-dos',style:{position:'relative',paddingRight:'90px'}},
+      ? visible.map(d => h('div',{className:'mst-dos',style:{position:'relative',paddingRight:'90px'}},
           h('div',{className:'mst-dos-ref'},
             h('span',null,'Dossier #'), d.no_dossier||'—'),
           d.client ? h('div',{className:'mst-dos-cli'}, d.client) : null,
@@ -5256,11 +5335,19 @@ function renderMachineStatusCards(){
           }, fmtNumR(d.cartons)+' carton'+(Math.abs(d.cartons)>1?'s':'')),
         ))
       : [h('div',{style:{padding:'8px 0',fontSize:'11px',color:'var(--muted)',fontStyle:'italic'}}, 'Aucune saisie aujourd’hui')];
+    if(hidden > 0){
+      dossierBlocks.push(h('button',{
+        type:'button',
+        className:'btn-ghost',
+        style:{marginTop:'4px',fontSize:'11px',padding:'4px 10px',alignSelf:'flex-start'},
+        onClick:(e)=>{e.stopPropagation(); window._repCardExpanded=true; render();},
+      }, '+ '+hidden+' autre'+(hidden>1?'s':'')));
+    }
     // Masquer la ligne 'Aujourd’hui' si un seul dossier (redondant)
     const showTotalRow = dossiers.length > 1;
     return h('div',{className:`mst-card mst-${sk}`},
       h('div',{className:'mst-head'},
-        h('span',{className:'mst-nom'},'Repiquage'),
+        h('span',{className:'mst-nom'},'Atelier Repiquage — aujourd’hui'),
         h('div',{style:{display:'flex',alignItems:'center',gap:'6px'}},
           isOn?h('span',{style:{fontSize:'8px',color:'#22c55e',animation:'pulse 2s infinite',display:'inline-block',borderRadius:'50%',width:'8px',height:'8px',background:'#22c55e'}}):null,
           h('span',{className:'mst-dot'})
@@ -5276,23 +5363,26 @@ function renderMachineStatusCards(){
       )
     );
   }
-  return h('div',null,
-    h('div',{className:'section-title',style:{display:'flex',alignItems:'center',justifyContent:'space-between'}},
-      h('span',null,iconEl('cpu',13),' Statut machines'),
-      h('div',{style:{display:'flex',gap:'8px'}},
-        h('button',{
-          type:'button',
-          id:'mst-refresh-btn',
-          style:{fontSize:'10px',color:'var(--accent)',background:'none',border:'none',cursor:'pointer',padding:'2px 6px',fontFamily:'inherit'},
-          onClick:async()=>{
-            const btn=document.getElementById('mst-refresh-btn');
-            if(btn){btn.textContent='↺ Actualisation…';btn.disabled=true;}
-            await loadMachineStatus();
-            if(btn){btn.textContent='↺ Actualiser';btn.disabled=false;}
-          }
-        },'↺ Actualiser')
-      )
-    ),
+  const titleNode = h('span',{className:'section-title',style:{display:'inline-flex',alignItems:'center',gap:'4px',margin:0,padding:0,border:'none',flex:'1'}},
+    iconEl('cpu',13),' Statut machines',
+    h('span',{
+      style:{marginLeft:'auto',display:'inline-flex',gap:'8px'},
+    },
+      h('button',{
+        type:'button',
+        id:'mst-refresh-btn',
+        style:{fontSize:'10px',color:'var(--accent)',background:'none',border:'none',cursor:'pointer',padding:'2px 6px',fontFamily:'inherit'},
+        onClick:async(e)=>{
+          e.stopPropagation();
+          const btn=document.getElementById('mst-refresh-btn');
+          if(btn){btn.textContent='↺ Actualisation…';btn.disabled=true;}
+          await loadMachineStatus();
+          if(btn){btn.textContent='↺ Actualiser';btn.disabled=false;}
+        }
+      },'↺ Actualiser')
+    )
+  );
+  const contentNode = h('div',null,
     h('div',{className:'mst-grid'},
       mkCard('C1'),
       mkCard('C2')
@@ -5302,6 +5392,7 @@ function renderMachineStatusCards(){
       mkCardRepiquage()
     )
   );
+  return makeCollapsibleSection(titleNode, contentNode, 'machines', true);
 }
 
   // ────────────────────────────────────────────────────────────────────
@@ -5487,10 +5578,15 @@ function prodSynthDisplayKey(type,key){
   if(type==='day')return formatJourLabel(key);
   return String(key||'—');
 }
-function prodSynthFilterSessions(type,key){
+function prodSynthFilterSessions(type,key,opts){
+  opts = opts || {};
+  const wantRep = !!opts.isRep;
   const rows=(S.production&&S.production.by_dossier)||[];
   const k=String(key||'').trim();
   return rows.filter(r=>{
+    const rIsRep = _isRepMachine(r.machine);
+    if(wantRep && !rIsRep) return false;
+    if(!wantRep && rIsRep) return false;
     if(type==='dossier')return String(r.no_dossier||'').trim()===k;
     if(type==='operator')return String(r.operateur||'?').trim()===k;
     if(type==='machine')return String(r.machine||'?').trim()===k;
@@ -5531,7 +5627,9 @@ function closeProdSynthModal(){
     if(m)m.remove();
   }catch(e){}
 }
-function openProdSynthDetail(type,keys,index){
+function openProdSynthDetail(type,keys,index,opts){
+  opts = opts || {};
+  const isRep = !!opts.isRep;
   const list=(keys||[]).map(k=>String(k));
   if(!list.length)return;
   let idx=Number(index);
@@ -5539,12 +5637,19 @@ function openProdSynthDetail(type,keys,index){
   if(idx>=list.length)idx=list.length-1;
   const key=list[idx];
   closeProdSynthModal();
-  const TYPE_TITLES={dossier:'Dossier',operator:'Opérateur',machine:'Machine',day:'Jour'};
-  const sessions=prodSynthFilterSessions(type,key);
+  const TYPE_TITLES={dossier:'Dossier',operator:'Opérateur',machine:'Machine',day:'Jour',team:'Équipe'};
+  // Sessions : custom (par equipe repiquage) OU filtre standard
+  let sessions;
+  if(typeof opts.customSessionsFn === 'function'){
+    sessions = opts.customSessionsFn(key) || [];
+  }else{
+    sessions = prodSynthFilterSessions(type,key,{isRep:isRep});
+  }
   const tot=prodSynthTotals(sessions);
+  const totCartons = sessions.reduce((s,r)=>s+Number(r.cartons||0),0);
   const total=list.length;
-  const goPrev=()=>{if(total>1)openProdSynthDetail(type,list,(idx-1+total)%total);};
-  const goNext=()=>{if(total>1)openProdSynthDetail(type,list,(idx+1)%total);};
+  const goPrev=()=>{if(total>1)openProdSynthDetail(type,list,(idx-1+total)%total,opts);};
+  const goNext=()=>{if(total>1)openProdSynthDetail(type,list,(idx+1)%total,opts);};
   const overlay=h('div',{className:'add-row-modal prod-synth-modal'});
   overlay.addEventListener('click',e=>{if(e.target===overlay)closeProdSynthModal();});
   const counter=h('span',{className:'add-row-counter',title:'← → pour naviguer'},
@@ -5552,10 +5657,11 @@ function openProdSynthDetail(type,keys,index){
     h('span',null,String(idx+1)+'/'+String(total)),
     h('button',{type:'button',className:'add-row-nav-btn',title:'Suivant (→)',disabled:total<=1,onClick:e=>{e.stopPropagation();goNext();}},'>')
   );
+  const displayKey = (type==='team' || isRep && type==='operator') ? String(key||'—') : prodSynthDisplayKey(type,key);
   const titleRow=h('div',{className:'prod-synth-detail-head'},
     h('div',{className:'prod-synth-detail-title-main'},
-      h('span',{className:'prod-synth-detail-eyebrow'}, TYPE_TITLES[type]||'Synthèse'),
-      h('h3',{className:'prod-synth-detail-h3'}, prodSynthDisplayKey(type,key))
+      h('span',{className:'prod-synth-detail-eyebrow'}, (isRep?'Repiquage · ':'') + (TYPE_TITLES[type]||'Synthèse')),
+      h('h3',{className:'prod-synth-detail-h3'}, displayKey)
     ),
     counter
   );
@@ -5564,52 +5670,93 @@ function openProdSynthDetail(type,keys,index){
     h('div',{className:'val'},val)
   );
   const showDossierCol=type!=='dossier';
-  const sessionRows=sessions.length?sessions.map(s=>{
-    const den=Number(s.temps_prod_min||0)+Number(s.temps_arret_min||0);
-    const vit=den>0?(Number(s.metrage_m||0)/den).toFixed(2):'0.00';
-    const cli=prodSynthCleanClient(s.client);
-    const des=(s.designation||'').replace(/^,\s*/,'').trim();
-    return h('tr',null,
-      h('td',{className:'prod-synth-detail-td-text'},formatJourLabel(s.jour)),
-      h('td',{className:'prod-synth-detail-td-text'},opName(s.operateur)),
-      h('td',{className:'prod-synth-detail-td-text'},s.machine||'—'),
-      showDossierCol?h('td',{className:'prod-synth-detail-td-mono'},s.no_dossier||'—'):null,
-      h('td',{className:'prod-synth-detail-td-text'},cli||'—'),
-      h('td',{className:'prod-synth-detail-td-wrap'},des||'—'),
-      h('td',{className:'prod-synth-detail-td-num'},fN(s.etiquettes||0)),
-      h('td',{className:'prod-synth-detail-td-num'},fN(s.metrage_m||0)+' m'),
-      h('td',{className:'prod-synth-detail-td-num'},fMin(s.temps_calage_min)),
-      h('td',{className:'prod-synth-detail-td-num'},fMin(s.temps_prod_min)),
-      h('td',{className:'prod-synth-detail-td-num'},fMin(s.temps_arret_min)),
-      h('td',{className:'prod-synth-detail-td-vit'},vit+' m/min')
-    );
-  }):[h('tr',null,h('td',{colSpan:showDossierCol?11:10,className:'prod-synth-detail-empty'},'Aucune session sur la période filtrée.'))];
+
+  let sessionRows, headerCells, colSpan;
+  if(isRep){
+    // Cols : Jour, Opérateur, [Dossier], Client, Désignation, Cartons, Étiquettes
+    headerCells = [
+      h('th',null,'Jour'),
+      h('th',null,'Opérateur'),
+      showDossierCol?h('th',null,'Dossier'):null,
+      h('th',null,'Client'),
+      h('th',null,'Désignation'),
+      h('th',{style:{textAlign:'right'}},'Cartons'),
+      h('th',{style:{textAlign:'right'}},'Étiquettes'),
+    ];
+    colSpan = showDossierCol?7:6;
+    sessionRows = sessions.length ? sessions.map(s=>{
+      const cli=prodSynthCleanClient(s.client);
+      const des=(s.designation||'').replace(/^,\s*/,'').trim();
+      return h('tr',null,
+        h('td',{className:'prod-synth-detail-td-text'},formatJourLabel(s.jour)),
+        h('td',{className:'prod-synth-detail-td-text'},opName(s.operateur)),
+        showDossierCol?h('td',{className:'prod-synth-detail-td-mono'},s.no_dossier||'—'):null,
+        h('td',{className:'prod-synth-detail-td-text'},cli||'—'),
+        h('td',{className:'prod-synth-detail-td-wrap'},des||'—'),
+        h('td',{className:'prod-synth-detail-td-num'},fN(s.cartons||0)),
+        h('td',{className:'prod-synth-detail-td-num'},fN(s.etiquettes||0)),
+      );
+    }) : [h('tr',null,h('td',{colSpan:colSpan,className:'prod-synth-detail-empty'},'Aucune saisie repiquage sur la période filtrée.'))];
+  } else {
+    // Cols : Jour, Opérateur, Machine, [Dossier], Client, Désignation, Métrage, Calage, Prod, Arrêts, Vitesse
+    // (Étiquettes retirées)
+    headerCells = [
+      h('th',null,'Jour'),h('th',null,'Opérateur'),h('th',null,'Machine'),
+      showDossierCol?h('th',null,'Dossier'):null,
+      h('th',null,'Client'),h('th',null,'Désignation'),
+      h('th',{style:{textAlign:'right'}},'Métrage'),
+      h('th',{style:{textAlign:'right'}},'Calage'),
+      h('th',{style:{textAlign:'right'}},'Prod'),
+      h('th',{style:{textAlign:'right'}},'Arrêts'),
+      h('th',{style:{textAlign:'right'}},'Vitesse'),
+    ];
+    colSpan = showDossierCol?11:10;
+    sessionRows = sessions.length ? sessions.map(s=>{
+      const den=Number(s.temps_prod_min||0)+Number(s.temps_arret_min||0);
+      const vit=den>0?(Number(s.metrage_m||0)/den).toFixed(2):'0.00';
+      const cli=prodSynthCleanClient(s.client);
+      const des=(s.designation||'').replace(/^,\s*/,'').trim();
+      return h('tr',null,
+        h('td',{className:'prod-synth-detail-td-text'},formatJourLabel(s.jour)),
+        h('td',{className:'prod-synth-detail-td-text'},opName(s.operateur)),
+        h('td',{className:'prod-synth-detail-td-text'},s.machine||'—'),
+        showDossierCol?h('td',{className:'prod-synth-detail-td-mono'},s.no_dossier||'—'):null,
+        h('td',{className:'prod-synth-detail-td-text'},cli||'—'),
+        h('td',{className:'prod-synth-detail-td-wrap'},des||'—'),
+        h('td',{className:'prod-synth-detail-td-num'},fN(s.metrage_m||0)+' m'),
+        h('td',{className:'prod-synth-detail-td-num'},fMin(s.temps_calage_min)),
+        h('td',{className:'prod-synth-detail-td-num'},fMin(s.temps_prod_min)),
+        h('td',{className:'prod-synth-detail-td-num'},fMin(s.temps_arret_min)),
+        h('td',{className:'prod-synth-detail-td-vit'},vit+' m/min')
+      );
+    }) : [h('tr',null,h('td',{colSpan:colSpan,className:'prod-synth-detail-empty'},'Aucune session sur la période filtrée.'))];
+  }
+
   const isMobileSynth=window.innerWidth<=900;
   if(isMobileSynth) overlay.classList.add('prod-synth-modal--compact');
   const sessionsBlock=h('div',{className:'prod-synth-detail-sessions'},
     h('div',{className:'prod-synth-detail-section-h'},'Détail par session'),
     h('div',{className:'prod-synth-detail-table-wrap'},
       h('table',{className:'table-std prod-synth-detail-table'},
-        h('thead',null,h('tr',null,
-          h('th',null,'Jour'),h('th',null,'Opérateur'),h('th',null,'Machine'),
-          showDossierCol?h('th',null,'Dossier'):null,
-          h('th',null,'Client'),h('th',null,'Désignation'),
-          h('th',{style:{textAlign:'right'}},'Étiquettes'),h('th',{style:{textAlign:'right'}},'Métrage'),h('th',{style:{textAlign:'right'}},'Calage'),
-          h('th',{style:{textAlign:'right'}},'Prod'),h('th',{style:{textAlign:'right'}},'Arrêts'),h('th',{style:{textAlign:'right'}},'Vitesse')
-        )),
+        h('thead',null,h('tr',null,...headerCells)),
         h('tbody',null,...sessionRows)
       )
     )
   );
-  const kpisBlock=h('div',{className:'prod-synth-kpis'},
-    kpi('Sessions',String(tot.sessions)),
-    kpi('Étiquettes',fN(tot.etiquettes)),
-    kpi('Métrage',fN(tot.metrage_m)+' m'),
-    kpi('Calage',fMin(tot.calage_min)),
-    kpi('Production',fMin(tot.prod_min)),
-    kpi('Arrêts',fMin(tot.arret_min)),
-    kpi('Vitesse',tot.vitesse+' m/min')
-  );
+  const kpisBlock=isRep
+    ? h('div',{className:'prod-synth-kpis'},
+        kpi('Sessions',String(tot.sessions)),
+        kpi('Cartons',fN(totCartons)),
+        kpi('Étiquettes',fN(tot.etiquettes)),
+      )
+    : h('div',{className:'prod-synth-kpis'},
+        kpi('Sessions',String(tot.sessions)),
+        kpi('Métrage',fN(tot.metrage_m)+' m'),
+        kpi('Calage',fMin(tot.calage_min)),
+        kpi('Production',fMin(tot.prod_min)),
+        kpi('Arrêts',fMin(tot.arret_min)),
+        kpi('Vitesse',tot.vitesse+' m/min')
+      );
   const formKids=[
     h('button',{type:'button',className:'add-row-close',title:'Fermer (Échap)',onClick:e=>{e.stopPropagation();closeProdSynthModal();}},'×'),
     titleRow,
@@ -5645,11 +5792,11 @@ function openProdSynthDetail(type,keys,index){
   overlay._navKeyHandler=handler;
   document.getElementById('root').appendChild(overlay);
 }
-function makeProdSynthKeyCell(label,type,keys,index){
+function makeProdSynthKeyCell(label,type,keys,index,opts){
   return h('td',{
     className:'prod-synth-key',
     title:'Voir le détail — flèches pour naviguer',
-    onClick:e=>{e.stopPropagation();openProdSynthDetail(type,keys,index);}
+    onClick:e=>{e.stopPropagation();openProdSynthDetail(type,keys,index,opts);}
   },label);
 }
 
@@ -5697,12 +5844,22 @@ function renderProdKpis(){
   if(!d)return h('div',{className:'card-empty'},'Chargement des données de production…');
   if(d.blocked)return h('div',{className:'card'},h('div',{className:'card-blocked'},h('div',{className:'cb-icon'},iconEl('lock',32)),h('div',{className:'cb-msg'},d.message)));
   const prod = d.produit||{};
-  const tt=d.temps_totaux||{};const parts=[];
+  const tt = d.temps_totaux||{};
+  const parts = [];
+
+  // ── Split rep / non-rep depuis by_dossier ────────────────────────
+  const byDosAll   = d.by_dossier || d.dossier_times || [];
+  const byDosRep   = byDosAll.filter(r => _isRepMachine(r.machine));
+  const byDosNoRep = byDosAll.filter(r => !_isRepMachine(r.machine));
+  const hasRep     = byDosRep.length > 0;
+  const onlyRep    = hasRep && byDosNoRep.length === 0;
+
+  // ── STATUT MACHINES (collapsible avec chevron) ───────────────────
   if(canViewAllProd(S.user)){
     parts.push(renderMachineStatusCards());
   }
 
-  // ── Sanity score cliquable ─────────────────────────────────────
+  // ── Sanity score cliquable ───────────────────────────────────────
   if(S.historique&&S.historique.sanity){
     const sc=renderSanity(S.historique.sanity);
     if(sc){
@@ -5717,112 +5874,229 @@ function renderProdKpis(){
       parts.push(sc);
     }
   }
-  parts.push(makeCollapsibleSection(
-    h('span',{className:'section-title',style:{display:'inline-flex',alignItems:'center',gap:'4px',margin:0,padding:0,border:'none'}},iconEl('box',13),' Quantités'),
-    h('div',{className:'stats'},
-      h('div',{className:'stat'},h('div',{className:'stat-label'},'Dossiers produits'),h('div',{className:'stat-value'},fN(prod.dossiers||0))),
-      h('div',{className:'stat'},h('div',{className:'stat-label'},'Qté étiquettes'),h('div',{className:'stat-value'},fN(prod.etiquettes||0))),
-      h('div',{className:'stat'},h('div',{className:'stat-label'},'Métrage'),h('div',{className:'stat-value'},fN(prod.metrage_m||0)+' m')),
-      h('div',{className:'stat'},h('div',{className:'stat-label'},'Vitesse'),h('div',{className:'stat-value'},((d.vitesse_m_min!=null)?Number(d.vitesse_m_min).toFixed(2):'0.00')+' m/min')),
-    ),
-    'quantites'
-  ));
-  const prodInclArrets = (Number(tt.production_min||0) + Number(tt.arret_min||0));
-  parts.push(makeCollapsibleSection(
-    h('span',{className:'section-title',style:{display:'inline-flex',alignItems:'center',gap:'4px',margin:0,padding:0,border:'none'}},iconEl('clock',13),' Temps'),
-    h('div',{className:'time-kpi'},
-      h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('wrench',12),' Calage'),h('div',{className:'tc-value'},fMin(tt.calage_min))),
-      h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('play',12),' Production'),h('div',{className:'tc-value'},fMin(prodInclArrets))),
-      h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('alert-triangle',12),' Arrêts'),h('div',{className:'tc-value'},fMin(tt.arret_min))),
-    ),
-    'temps'
-  ));
-  const byDos = d.by_dossier || d.dossier_times || [];
 
-  function renderAggCard(title, rows, keyLabel, synthType){
-    if(!rows||!rows.length) return null;
-    const keys=rows.map(r=>String(r.key));
-    const typeMap={'Opérateur':'operator','Machine':'machine','Jour':'day'};
-    const st=synthType||(typeMap[keyLabel]||'');
-    return h('div',{className:'card'},
-      h('div',{className:'card-header'},h('h3',null,title),h('span',{style:{fontSize:'11px',color:'var(--muted)'}},rows.length+' items')),
-      h('div',{style:{overflowX:'auto'}},h('table',null,
-        h('thead',null,h('tr',null,h('th',null,keyLabel),h('th',null,'Dossiers'),h('th',null,'Étiquettes'),h('th',null,'Métrage'),h('th',null,'Calage'),h('th',null,'Prod'),h('th',null,'Arrêts'),h('th',null,'Vitesse'))),
-        h('tbody',null,...rows.map((r,i)=>h('tr',{className: r.is_repiquage_team?'rep-team-row':''},
-          makeProdSynthKeyCell(keyLabel==='Opérateur'?(r.is_repiquage_team?r.key:opName(r.key)):(keyLabel==='Jour'?formatJourLabel(r.key):r.key),st,keys,i),
-          h('td',{style:{fontFamily:'monospace'}},fN(r.dossiers||0)),
-          h('td',{style:{fontFamily:'monospace'}},fN(r.etiquettes||0)),
-          h('td',{style:{fontFamily:'monospace'}},fN(r.metrage_m||0)+' m'),
-          h('td',{style:{fontFamily:'monospace'}},fMin(r.calage_min)),
-          h('td',{style:{fontFamily:'monospace'}},fMin(r.prod_min)),
-          h('td',{style:{fontFamily:'monospace'}},fMin(r.arret_min)),
-          h('td',{style:{fontFamily:'monospace',fontWeight:'800',color:'var(--warn)'}},String(r.vitesse_m_min||0)+' m/min')
-        )))
-      ))
-    );
-  }
+  // Helper mention italique "(hors repiquage)" — affichee uniquement
+  // si donnees mixtes (rep + autres machines).
+  const horsRepMention = () => hasRep && !onlyRep
+    ? h('span',{style:{fontStyle:'italic',color:'var(--muted)',fontSize:'11px',marginLeft:'8px',fontWeight:'400'}},'(hors repiquage)')
+    : null;
 
-  // Synthese detaillee : section repliable globale
-  const synthParts = [];
-  // Détail par dossier en premier
-  if(byDos&&byDos.length){
-    // Agrégation par no_dossier
-    const byRef = {};
-    byDos.forEach(r=>{
-      const k = String(r.no_dossier||'').trim();
-      if(!k) return;
-      if(!byRef[k]){
-        byRef[k] = {
-          no_dossier: k,
-          etiquettes: 0,
-          metrage_m: 0,
-          temps_calage_min: 0,
-          temps_prod_min: 0,
-          temps_arret_min: 0,
-        };
-      }
-      byRef[k].etiquettes += Number(r.etiquettes||0);
-      byRef[k].metrage_m += Number(r.metrage_m||0);
-      byRef[k].temps_calage_min += Number(r.temps_calage_min||0);
-      byRef[k].temps_prod_min += Number(r.temps_prod_min||0);
-      byRef[k].temps_arret_min += Number(r.temps_arret_min||0);
-    });
-    const rowsAgg = Object.values(byRef).sort((a,b)=>String(a.no_dossier).localeCompare(String(b.no_dossier), 'fr', {numeric:true,sensitivity:'base'}));
-    const dossierKeys=rowsAgg.map(r=>String(r.no_dossier));
-
-    synthParts.push(h('div',{className:'card'},h('div',{className:'card-header'},h('h3',null,'Par numéro de dossier'),h('span',{style:{fontSize:'11px',color:'var(--muted)'}},rowsAgg.length+' dossiers')),
-      h('div',{style:{overflowX:'auto'}},h('table',null,
-        h('thead',null,h('tr',null,
-          h('th',null,'Dossier'),
-          h('th',null,'Étiquettes'),
-          h('th',null,'Métrage'),
-          h('th',null,'Calage'),
-          h('th',null,'Prod'),
-          h('th',null,'Arrêts'),
-          h('th',null,'Vitesse')
-        )),
-        h('tbody',null,...rowsAgg.map((r,i)=>h('tr',null,
-          makeProdSynthKeyCell(r.no_dossier||'','dossier',dossierKeys,i),
-          h('td',{style:{fontFamily:'monospace'}},fN(r.etiquettes||0)),
-          h('td',{style:{fontFamily:'monospace'}},fN(r.metrage_m||0)+' m'),
-          h('td',{style:{fontFamily:'monospace',color:'var(--text2)'}},fMin(r.temps_calage_min)),
-          h('td',{style:{fontFamily:'monospace',color:'var(--text2)'}},fMin(r.temps_prod_min)),
-          h('td',{style:{fontFamily:'monospace',color:'var(--text2)'}},fMin(r.temps_arret_min)),
-          h('td',{style:{fontFamily:'monospace',fontWeight:'800',color:'var(--warn)'}},(()=>{const den=Number(r.temps_prod_min||0)+Number(r.temps_arret_min||0);return (den>0?(Number(r.metrage_m||0)/den).toFixed(2):'0.00')+' m/min';})())
-        )))
-      ))
+  // ── QUANTITÉS — masque si seulement repiquage ────────────────────
+  if(!onlyRep){
+    parts.push(makeCollapsibleSection(
+      h('span',{className:'section-title',style:{display:'inline-flex',alignItems:'center',gap:'4px',margin:0,padding:0,border:'none'}},
+        iconEl('box',13),' Quantités', horsRepMention()
+      ),
+      h('div',{className:'stats'},
+        h('div',{className:'stat'},h('div',{className:'stat-label'},'Dossiers produits'),h('div',{className:'stat-value'},fN(prod.dossiers||0))),
+        h('div',{className:'stat'},h('div',{className:'stat-label'},'Métrage'),h('div',{className:'stat-value'},fN(prod.metrage_m||0)+' m')),
+        h('div',{className:'stat'},h('div',{className:'stat-label'},'Vitesse'),h('div',{className:'stat-value'},((d.vitesse_m_min!=null)?Number(d.vitesse_m_min).toFixed(2):'0.00')+' m/min')),
+      ),
+      'quantites'
     ));
   }
-  const byOp=d.by_operator||[];
-  const byMach=d.by_machine||[];
-  const byDay=d.by_day||[];
-  synthParts.push(renderAggCard('Par opérateur',byOp,'Opérateur'));
-  synthParts.push(renderAggCard('Par machine',byMach,'Machine'));
-  synthParts.push(renderAggCard('Par jour',byDay,'Jour'));
+
+  // ── TEMPS — masque si seulement repiquage ────────────────────────
+  if(!onlyRep){
+    const prodInclArrets = (Number(tt.production_min||0) + Number(tt.arret_min||0));
+    parts.push(makeCollapsibleSection(
+      h('span',{className:'section-title',style:{display:'inline-flex',alignItems:'center',gap:'4px',margin:0,padding:0,border:'none'}},
+        iconEl('clock',13),' Temps', horsRepMention()
+      ),
+      h('div',{className:'time-kpi'},
+        h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('wrench',12),' Calage'),h('div',{className:'tc-value'},fMin(tt.calage_min))),
+        h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('play',12),' Production'),h('div',{className:'tc-value'},fMin(prodInclArrets))),
+        h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('alert-triangle',12),' Arrêts'),h('div',{className:'tc-value'},fMin(tt.arret_min))),
+      ),
+      'temps'
+    ));
+  }
+
+  // ── SYNTHÈSE DÉTAILLÉE — sous-onglets Machines / Repiquage ───────
+  const activeSubTab = _prodSynthTabGet(hasRep, onlyRep);
+  // Builders pour chaque sous-onglet
+  function buildMachinesPart(){
+    const synthParts = [];
+    // Par numéro de dossier (+ Client, − Étiquettes)
+    const rowsAgg = _prodAggDossier(byDosNoRep);
+    if(rowsAgg.length){
+      const dossierKeys = rowsAgg.map(r=>String(r.no_dossier));
+      synthParts.push(h('div',{className:'card'},
+        h('div',{className:'card-header'},h('h3',null,'Par numéro de dossier'),h('span',{style:{fontSize:'11px',color:'var(--muted)'}},rowsAgg.length+' dossiers')),
+        h('div',{style:{overflowX:'auto'}},h('table',null,
+          h('thead',null,h('tr',null,
+            h('th',null,'Dossier'),
+            h('th',null,'Client'),
+            h('th',null,'Métrage'),
+            h('th',null,'Calage'),
+            h('th',null,'Prod'),
+            h('th',null,'Arrêts'),
+            h('th',null,'Vitesse')
+          )),
+          h('tbody',null,...rowsAgg.map((r,i)=>h('tr',null,
+            makeProdSynthKeyCell(r.no_dossier||'','dossier',dossierKeys,i),
+            h('td',{className:'prod-synth-detail-td-text'}, prodSynthCleanClient(r.client) || '—'),
+            h('td',{style:{fontFamily:'monospace'}},fN(r.metrage_m||0)+' m'),
+            h('td',{style:{fontFamily:'monospace',color:'var(--text2)'}},fMin(r.temps_calage_min)),
+            h('td',{style:{fontFamily:'monospace',color:'var(--text2)'}},fMin(r.temps_prod_min)),
+            h('td',{style:{fontFamily:'monospace',color:'var(--text2)'}},fMin(r.temps_arret_min)),
+            h('td',{style:{fontFamily:'monospace',fontWeight:'800',color:'var(--warn)'}},(()=>{const den=Number(r.temps_prod_min||0)+Number(r.temps_arret_min||0);return (den>0?(Number(r.metrage_m||0)/den).toFixed(2):'0.00')+' m/min';})())
+          )))
+        ))
+      ));
+    }
+    // Helper card agrégation (Par opérateur / Par machine / Par jour) — sans Étiquettes
+    function renderAggCard(title, rows, keyLabel, synthType){
+      if(!rows||!rows.length) return null;
+      const keys=rows.map(r=>String(r.key));
+      const typeMap={'Opérateur':'operator','Machine':'machine','Jour':'day'};
+      const st=synthType||(typeMap[keyLabel]||'');
+      return h('div',{className:'card'},
+        h('div',{className:'card-header'},h('h3',null,title),h('span',{style:{fontSize:'11px',color:'var(--muted)'}},rows.length+' items')),
+        h('div',{style:{overflowX:'auto'}},h('table',null,
+          h('thead',null,h('tr',null,
+            h('th',null,keyLabel),h('th',null,'Dossiers'),
+            h('th',null,'Métrage'),h('th',null,'Calage'),h('th',null,'Prod'),h('th',null,'Arrêts'),h('th',null,'Vitesse')
+          )),
+          h('tbody',null,...rows.map((r,i)=>h('tr',null,
+            makeProdSynthKeyCell(keyLabel==='Opérateur'?opName(r.key):(keyLabel==='Jour'?formatJourLabel(r.key):r.key),st,keys,i),
+            h('td',{style:{fontFamily:'monospace'}},fN(r.dossiers||0)),
+            h('td',{style:{fontFamily:'monospace'}},fN(r.metrage_m||0)+' m'),
+            h('td',{style:{fontFamily:'monospace'}},fMin(r.calage_min)),
+            h('td',{style:{fontFamily:'monospace'}},fMin(r.prod_min)),
+            h('td',{style:{fontFamily:'monospace'}},fMin(r.arret_min)),
+            h('td',{style:{fontFamily:'monospace',fontWeight:'800',color:'var(--warn)'}},(Number(r.vitesse_m_min)||0).toFixed(2)+' m/min')
+          )))
+        ))
+      );
+    }
+    const byOp   = _prodAggBy(byDosNoRep, 'operateur').sort((a,b)=>(b.metrage_m||0)-(a.metrage_m||0));
+    const byMach = _prodAggBy(byDosNoRep, 'machine').sort((a,b)=>(b.metrage_m||0)-(a.metrage_m||0));
+    const byDay  = _prodAggBy(byDosNoRep, 'jour').sort((a,b)=>String(b.key).localeCompare(String(a.key)));
+    synthParts.push(renderAggCard('Par opérateur', byOp, 'Opérateur'));
+    synthParts.push(renderAggCard('Par machine',   byMach, 'Machine'));
+    synthParts.push(renderAggCard('Par jour',      byDay, 'Jour'));
+    return h('div',null,...synthParts.filter(Boolean));
+  }
+
+  function buildRepiquagePart(){
+    if(!hasRep){
+      return h('div',{style:{padding:'18px 6px',fontSize:'13px',color:'var(--muted)',fontStyle:'italic'}},
+        'Pas de repiquage avec les filtres actuels.');
+    }
+    const synthParts = [];
+    const REP_OPTS = {isRep:true};
+
+    // Par jour
+    const byDayRep = _prodAggBy(byDosRep, 'jour').sort((a,b)=>String(b.key).localeCompare(String(a.key)));
+    if(byDayRep.length){
+      const keys = byDayRep.map(r=>String(r.key));
+      synthParts.push(h('div',{className:'card'},
+        h('div',{className:'card-header'},h('h3',null,'Par jour'),h('span',{style:{fontSize:'11px',color:'var(--muted)'}},byDayRep.length+' jours')),
+        h('div',{style:{overflowX:'auto'}},h('table',null,
+          h('thead',null,h('tr',null,h('th',null,'Jour'),h('th',null,'Dossiers'),h('th',null,'Cartons'),h('th',null,'Étiquettes'))),
+          h('tbody',null,...byDayRep.map((r,i)=>h('tr',null,
+            makeProdSynthKeyCell(formatJourLabel(r.key),'day',keys,i,REP_OPTS),
+            h('td',{style:{fontFamily:'monospace'}},fN(r.dossiers||0)),
+            h('td',{style:{fontFamily:'monospace',fontWeight:'700'}},fN(r.cartons||0)),
+            h('td',{style:{fontFamily:'monospace'}},fN(r.etiquettes||0)),
+          )))
+        ))
+      ));
+    }
+
+    // Par équipe — depuis S.production.by_operator (rep_team_rows)
+    const byOpAll = (d.by_operator)||[];
+    const repTeams = byOpAll.filter(r => r && r.is_repiquage_team);
+    if(repTeams.length){
+      const keys = repTeams.map(r=>String(r.key));
+      // Filtre dynamique : pour n'importe quel key (incluant navigation flèches),
+      // retrouve l'équipe correspondante et ses membres dans by_operator.
+      const teamFilter = (key) => {
+        const team = (d.by_operator||[]).find(r => r && r.is_repiquage_team && r.key === key);
+        const members = team && Array.isArray(team.team_members)
+          ? team.team_members.map(s=>String(s||'').trim()).filter(Boolean)
+          : [];
+        if(!members.length) return [];
+        return byDosRep
+          .filter(s => members.includes(String(s.operateur||'').trim()))
+          .sort((a,b)=>String(b.jour||'').localeCompare(String(a.jour||'')));
+      };
+      synthParts.push(h('div',{className:'card'},
+        h('div',{className:'card-header'},h('h3',null,'Par équipe'),h('span',{style:{fontSize:'11px',color:'var(--muted)'}},repTeams.length+' équipe'+(repTeams.length>1?'s':''))),
+        h('div',{style:{overflowX:'auto'}},h('table',null,
+          h('thead',null,h('tr',null,h('th',null,'Équipe'),h('th',null,'Dossiers'),h('th',null,'Cartons'),h('th',null,'Étiquettes'))),
+          h('tbody',null,...repTeams.map((r,i)=>{
+            return h('tr',{className:'rep-team-row'},
+              makeProdSynthKeyCell(r.key, 'team', keys, i, {isRep:true, customSessionsFn:teamFilter}),
+              h('td',{style:{fontFamily:'monospace'}},fN(r.dossiers||0)),
+              h('td',{style:{fontFamily:'monospace',fontWeight:'700'}},fN(r.cartons||0)),
+              h('td',{style:{fontFamily:'monospace'}},fN(r.etiquettes||0)),
+            );
+          }))
+        ))
+      ));
+    }
+
+    // Par numéro de dossier (+ Client)
+    const dosAgg = _prodAggDossier(byDosRep);
+    if(dosAgg.length){
+      const keys = dosAgg.map(r=>String(r.no_dossier));
+      synthParts.push(h('div',{className:'card'},
+        h('div',{className:'card-header'},h('h3',null,'Par numéro de dossier'),h('span',{style:{fontSize:'11px',color:'var(--muted)'}},dosAgg.length+' dossiers')),
+        h('div',{style:{overflowX:'auto'}},h('table',null,
+          h('thead',null,h('tr',null,h('th',null,'Dossier'),h('th',null,'Client'),h('th',null,'Cartons'),h('th',null,'Étiquettes'))),
+          h('tbody',null,...dosAgg.map((r,i)=>h('tr',null,
+            makeProdSynthKeyCell(r.no_dossier||'','dossier',keys,i,REP_OPTS),
+            h('td',{className:'prod-synth-detail-td-text'}, prodSynthCleanClient(r.client)||'—'),
+            h('td',{style:{fontFamily:'monospace',fontWeight:'700'}},fN(r.cartons||0)),
+            h('td',{style:{fontFamily:'monospace'}},fN(r.etiquettes||0)),
+          )))
+        ))
+      ));
+    }
+
+    if(!synthParts.length){
+      return h('div',{style:{padding:'18px 6px',fontSize:'13px',color:'var(--muted)',fontStyle:'italic'}},
+        'Aucune donnée repiquage pour cette période.');
+    }
+    return h('div',null,...synthParts);
+  }
+
+  // Barre de sous-onglets [Machines] [Repiquage]
+  const tabBtn = (key, label, disabled) => h('button',{
+    type:'button',
+    className: 'synth-subtab' + (activeSubTab===key?' active':'') + (disabled?' disabled':''),
+    disabled: !!disabled,
+    title: disabled ? 'Pas de repiquage avec les filtres actuels' : '',
+    style: {
+      padding:'6px 14px', background:'transparent',
+      border:'1px solid var(--border)', borderRadius:'8px',
+      color: disabled ? 'var(--muted)' : (activeSubTab===key ? 'var(--accent)' : 'var(--text2)'),
+      fontWeight: activeSubTab===key ? 700 : 500,
+      cursor: disabled ? 'not-allowed' : 'pointer',
+      opacity: disabled ? 0.55 : 1,
+      fontSize:'12px',
+      background: activeSubTab===key && !disabled ? 'var(--accent-bg)' : 'transparent',
+      borderColor: activeSubTab===key && !disabled ? 'var(--accent)' : 'var(--border)',
+    },
+    onClick: disabled ? null : (e)=>{
+      e.stopPropagation();
+      _prodSynthTabSet(key);
+      render();
+    },
+  }, label);
+
+  const subTabsBar = h('div',{style:{display:'flex',gap:'8px',marginBottom:'10px',alignItems:'center'}},
+    tabBtn('machines','Machines',false),
+    tabBtn('repiquage','Repiquage', !hasRep),
+  );
+
+  const synthContent = activeSubTab === 'repiquage' ? buildRepiquagePart() : buildMachinesPart();
 
   parts.push(makeCollapsibleSection(
-    h('span',{className:'section-title',style:{margin:0,padding:0,border:'none'}},'\uD83D\uDCCC Synthèse détaillée'),
-    h('div',null,...synthParts.filter(Boolean)),
+    h('span',{className:'section-title',style:{margin:0,padding:0,border:'none'}},'📌 Synthèse détaillée'),
+    h('div',null, subTabsBar, synthContent),
     'synthese'
   ));
 

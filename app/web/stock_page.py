@@ -887,8 +887,7 @@ body.light .mp-search-wrap:focus-within{
 body.sb-open #mroot{pointer-events:none!important;z-index:50!important}
 body.sb-open #mroot>*{pointer-events:none!important}
 .mp-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:18px}
-.mp-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;width:100%;max-width:560px;max-height:90vh;overflow-y:auto}
-.mp-modal:has(.mp-laize-grid){max-width:760px}
+.mp-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto}
 .mp-modal > h3{margin:0 0 16px;font-size:16px;font-weight:700;color:var(--text)}
 .mp-modal.mp-modal-mvt{padding:0;overflow:visible;display:flex;flex-direction:column}
 .mp-modal-mvt-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px 20px;flex-shrink:0}
