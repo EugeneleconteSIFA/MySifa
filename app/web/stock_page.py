@@ -1790,6 +1790,10 @@ let S = {
   monitoring: null,
   // Valorisation stock (Contrôle)
   valorisation: null,
+  // Référentiel laizes (chargé une fois au boot)
+  laizes: null,
+  // Compteur matières incomplètes (frontal/glassine/complexe sans laize/prix/métrage)
+  matieresIncompleteCount: 0,
 };
 
 const HIST_PAGE_SIZE = 50;
@@ -2012,6 +2016,7 @@ function icon(name, size=16){
     'shopping-cart': '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>',
     'trash': '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
     'euro': '<path d="M4 10h12"/><path d="M4 14h9"/><path d="M19 6a7.7 7.7 0 0 0-5.2-2A7.9 7.9 0 0 0 6 12c0 4.4 3.5 8 7.8 8 2 0 3.8-.8 5.2-2"/>',
+    'alert-triangle': '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
     'file-text': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>',
   };
   return `<svg ${a} aria-hidden="true" style="display:inline-block;vertical-align:middle;flex-shrink:0">${p[name]||p['grid']}</svg>`;
@@ -2275,6 +2280,21 @@ async function loadInvAlertCountBackground() {
       render(); // refresh sidebar badge
     }
   } catch(e) {}
+}
+
+// ── Référentiel laizes (chargé une fois au boot) ─────────────────
+async function loadLaizesReferentiel() {
+  try {
+    const d = await api('/api/admin/mp_laizes');
+    if (Array.isArray(d)) S.laizes = d;
+  } catch(e) { S.laizes = []; }
+}
+
+async function loadMatieresIncompleteCount() {
+  try {
+    const d = await api('/api/stock/matieres/incompletes');
+    S.matieresIncompleteCount = d?.count || 0;
+  } catch(e) { S.matieresIncompleteCount = 0; }
 }
 
 async function loadInventaireEmpl(code) {
@@ -4834,7 +4854,13 @@ const MP_PILL_CATS = [
   { id: 'carton', label: 'Cartons' },
   { id: 'frontal', label: 'Frontaux' },
   { id: 'glassine', label: 'Glassines' },
+  { id: 'complexe', label: 'Complexes' },
 ];
+
+const MP_CATEGORIES_LAIZEES = new Set(['frontal', 'glassine', 'complexe']);
+function mpIsLaizeeCategory(cat) {
+  return MP_CATEGORIES_LAIZEES.has((cat || '').toLowerCase());
+}
 
 function isMatieresAdmin() {
   return S.user && ['superadmin', 'direction', 'administration'].includes(S.user.role);
@@ -5053,6 +5079,56 @@ function buildMatiereDetail() {
   }
   if (seuil > 0) meta.push('Seuil min. ' + mpStockLine(seuil, m));
 
+  // Détail laizes pour les matières frontal/glassine/complexe
+  let laizeDetail = null;
+  if (m.laizee && Array.isArray(m.stock_par_laize)) {
+    if (m.stock_par_laize.length === 0) {
+      laizeDetail = el('div', {
+        style: 'background:rgba(251,146,60,0.10);border:1px solid rgba(251,146,60,0.40);border-radius:10px;padding:12px 14px;margin-top:14px;font-size:13px;color:var(--text)',
+      },
+        el('strong', null, 'Référence à compléter — '),
+        'aucune laize associée. Édite la matière pour ajouter les laizes, le prix au m² et le métrage de la bobine.'
+      );
+    } else {
+      const tbl = el('table', {
+        style: 'width:100%;border-collapse:collapse;margin-top:6px',
+      });
+      tbl.appendChild(el('thead', null,
+        el('tr', null,
+          el('th', { style: 'text-align:left;padding:8px 10px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)' }, 'Laize'),
+          el('th', { style: 'text-align:right;padding:8px 10px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)' }, 'Stock'),
+          el('th', { style: 'text-align:right;padding:8px 10px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)' }, 'Valorisation'),
+        )
+      ));
+      const tbody = el('tbody');
+      const prix_m2 = parseFloat(m.prix_eur_m2 || 0);
+      const metres = parseFloat(m.metres_lineaires_par_bobine || 0);
+      m.stock_par_laize.forEach(spl => {
+        const valoBobine = (parseFloat(spl.valeur_mm || 0) / 1000) * metres * prix_m2;
+        const valo = valoBobine * parseFloat(spl.quantite || 0);
+        tbody.appendChild(el('tr', { style: 'border-bottom:1px solid var(--border)' },
+          el('td', { style: 'padding:8px 10px;font-size:13px;color:var(--text);font-weight:600' }, spl.label || (spl.valeur_mm + ' mm')),
+          el('td', { style: 'padding:8px 10px;font-size:13px;text-align:right;font-variant-numeric:tabular-nums' },
+            fN(spl.quantite) + ' bob.'),
+          el('td', { style: 'padding:8px 10px;font-size:13px;text-align:right;font-variant-numeric:tabular-nums;color:' + (valo > 0 ? 'var(--text)' : 'var(--muted)') },
+            valo > 0 ? valo.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €' : '—'),
+        ));
+      });
+      tbl.appendChild(tbody);
+      const paramsLine = el('div', { style: 'font-size:12px;color:var(--text2);margin-top:8px' },
+        'Prix m² : ', el('strong', null, prix_m2 > 0 ? prix_m2.toLocaleString('fr-FR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + ' €' : 'non défini'),
+        ' · Métrage bobine : ', el('strong', null, metres > 0 ? metres.toLocaleString('fr-FR') + ' m' : 'non défini'),
+      );
+      laizeDetail = el('div', {
+        style: 'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-top:14px',
+      },
+        el('div', { style: 'font-size:13px;font-weight:700;color:var(--text);margin-bottom:8px' }, 'Stocks par laize'),
+        tbl,
+        paramsLine,
+      );
+    }
+  }
+
   return el('div', { cls: 'content' },
     back,
     el('div', { cls: 'scorecard' },
@@ -5077,6 +5153,7 @@ function buildMatiereDetail() {
       ),
     ),
     actions,
+    laizeDetail,
     buildMpMvtHistory(mouvements, m),
   );
 }
@@ -7235,6 +7312,31 @@ function appendMatiereRefEditFields(parent, item) {
   const couleurInp = el('input', { attrs: { type: 'text', placeholder: 'Ex. Blanc, Kraft…' } });
   couleurInp.value = item.couleur || '';
   couleurWrap.append(el('label', null, 'Couleur'), couleurInp);
+  // Bloc laizes (frontal/glassine/complexe)
+  const isLaizee = mpIsLaizeeCategory(item.categorie);
+  const laizeWrap = el('div', { style: 'display:' + (isLaizee ? '' : 'none') + ';border-top:1px dashed var(--border);padding-top:10px;margin-top:6px' });
+  const metresInp = el('input', { attrs: { type: 'number', min: '0', step: '1', placeholder: 'Ex. 5000' } });
+  metresInp.value = String(item.metres_lineaires_par_bobine != null ? item.metres_lineaires_par_bobine : '');
+  const prixM2Inp = el('input', { attrs: { type: 'number', min: '0', step: '0.0001', placeholder: 'Ex. 0,0550' } });
+  prixM2Inp.value = String(item.prix_eur_m2 != null ? item.prix_eur_m2 : '');
+  const laizeChecks = el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px' });
+  const currentLaizeIds = new Set((item.stock_par_laize || []).map(s => s.laize_id));
+  (S.laizes || []).filter(l => l.actif || currentLaizeIds.has(l.id)).forEach(l => {
+    const inp = el('input', { attrs: { type: 'checkbox', value: String(l.id) }, style: 'margin:0' });
+    if (currentLaizeIds.has(l.id)) inp.checked = true;
+    const lbl = el('label', { style: 'display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border:1px solid var(--border);border-radius:999px;cursor:pointer;font-size:12px;background:var(--bg)' },
+      inp, el('span', null, l.label),
+    );
+    laizeChecks.appendChild(lbl);
+  });
+  laizeWrap.append(
+    el('div', { cls: 'mp-field' }, el('label', null, 'Mètres linéaires par bobine'), metresInp),
+    el('div', { cls: 'mp-field' }, el('label', null, 'Prix au m² (€)'), prixM2Inp),
+    el('div', { cls: 'mp-field' },
+      el('label', null, 'Laizes disponibles'),
+      laizeChecks,
+    ),
+  );
   parent.append(
     el('div', { cls: 'mp-field' },
       el('label', null, 'Catégorie'),
@@ -7245,9 +7347,10 @@ function appendMatiereRefEditFields(parent, item) {
     couleurWrap,
     pppWrap,
     el('div', { cls: 'mp-field' }, el('label', null, mpSeuilFieldLabel(item)), seuilInp),
+    laizeWrap,
     el('div', { cls: 'mp-hint' }, '0 = pas d\'alerte stock bas.'),
   );
-  return { refInp, desInp, seuilInp, pppInp, couleurInp };
+  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee };
 }
 
 async function submitMatiereRefEdit(item, fields, onSaved) {
@@ -7258,6 +7361,23 @@ async function submitMatiereRefEdit(item, fields, onSaved) {
   }
   try {
     await saveMatiereRef(item, parsed.payload);
+    // Si matière laizée, mettre aussi à jour la liste des laizes + métrage + prix m²
+    if (fields.isLaizee && fields.laizeChecks) {
+      const selectedLaizeIds = Array.from(fields.laizeChecks.querySelectorAll('input[type=checkbox]:checked'))
+        .map(i => parseInt(i.value, 10)).filter(x => x > 0);
+      const metres = parseFloat((fields.metresInp.value || '').replace(',', '.')) || 0;
+      const prix = parseFloat((fields.prixM2Inp.value || '').replace(',', '.')) || 0;
+      await api('/api/stock/matieres/' + item.id + '/laizes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          laize_ids: selectedLaizeIds,
+          metres_lineaires_par_bobine: metres,
+          prix_eur_m2: prix,
+        }),
+      });
+      await loadMatieresIncompleteCount();
+    }
     showToast('Référence mise à jour.', 'success');
     if (onSaved) await onSaved();
   } catch (e) {
@@ -7467,8 +7587,20 @@ function buildMatieres() {
       ));
     });
   }
+  // Bandeau orange si des matières frontal/glassine/complexe sont incomplètes
+  const banner = (S.matieresIncompleteCount > 0)
+    ? el('div', {
+        style: 'background:rgba(251,146,60,0.12);border:1px solid rgba(251,146,60,0.45);border-radius:10px;padding:10px 14px;margin-bottom:12px;color:var(--text);font-size:13px;display:flex;align-items:center;gap:10px',
+      },
+        iconEl('alert-triangle', 16),
+        el('span', null,
+          el('strong', null, S.matieresIncompleteCount + (S.matieresIncompleteCount > 1 ? ' matières' : ' matière')),
+          ' à compléter (laizes / prix m² / métrage manquant).'
+        ),
+      )
+    : null;
   return el('div', { cls: 'content' },
-    el('div', { cls: 'hist-page' }, head, searchWrap, pills, list));
+    el('div', { cls: 'hist-page' }, head, banner, searchWrap, pills, list));
 }
 
 function buildMpEmplacementField() {
@@ -7538,6 +7670,7 @@ function renderMpMouvementModal(type, matiere, categorieFilter) {
   S.mpModal = {
     type: typeMvt, matiere: mat, matiereId: mat ? mat.id : null,
     categorie: cat || (mat ? mpCategorieKey(mat.categorie) : ''),
+    laizeId: null,
   };
   const stockActuel = mat ? (parseFloat(mat.quantite) || 0) : 0;
   const mpCat = mat || list.find(x => x.id === S.mpModal.matiereId) || null;
@@ -7591,24 +7724,67 @@ function renderMpMouvementModal(type, matiere, categorieFilter) {
         }, '× Changer de matière'),
       ),
     ));
+    // Sélecteur de laize pour les matières laizées
+    if (mpIsLaizeeCategory(mat.categorie) && Array.isArray(mat.stock_par_laize) && mat.stock_par_laize.length > 0) {
+      const laizeSel = el('select', { id: 'mp-modal-laize-select' });
+      laizeSel.appendChild(el('option', { value: '' }, '— Choisir la laize —'));
+      mat.stock_par_laize.forEach(spl => {
+        laizeSel.appendChild(el('option', {
+          value: String(spl.laize_id),
+          selected: S.mpModal.laizeId === spl.laize_id ? true : null,
+        }, (spl.label || (spl.valeur_mm + ' mm')) + ' (stock ' + fN(spl.quantite) + ' bob.)'));
+      });
+      laizeSel.addEventListener('change', () => {
+        const v = parseInt(laizeSel.value, 10);
+        S.mpModal.laizeId = v || null;
+      });
+      body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Laize'), laizeSel));
+    } else if (mpIsLaizeeCategory(mat.categorie)) {
+      body.appendChild(el('div', {
+        cls: 'mp-hint err',
+        style: 'background:rgba(251,146,60,0.10);border:1px solid rgba(251,146,60,0.4);padding:8px 10px;border-radius:8px;color:var(--text)' },
+        'Aucune laize associée à cette matière. Édite-la pour ajouter ses laizes avant de saisir un mouvement.'));
+    }
   } else {
     const sel = el('select', { id: 'mp-modal-matiere-select' });
     const placeholder = list.length
       ? '— Choisir une matière —'
       : (cat ? 'Aucune matière dans cette catégorie' : '— Choisir une matière —');
     sel.appendChild(el('option', { value: '' }, placeholder));
+    // Pour les matières laizées, on déplie chaque référence par laize associée
     list.forEach(item => {
-      sel.appendChild(el('option', {
-        value: String(item.id),
-        selected: S.mpModal.matiereId === item.id ? true : null,
-      }, item.reference + ' — ' + item.designation));
+      if (item.laizee && Array.isArray(item.stock_par_laize) && item.stock_par_laize.length > 0) {
+        item.stock_par_laize.forEach(spl => {
+          const val = String(item.id) + ':' + String(spl.laize_id);
+          const isSel = (S.mpModal.matiereId === item.id && S.mpModal.laizeId === spl.laize_id);
+          sel.appendChild(el('option', { value: val, selected: isSel ? true : null },
+            item.reference + ' — ' + (spl.label || (spl.valeur_mm + ' mm')) + ' (' + fN(spl.quantite) + ' bob.)',
+          ));
+        });
+      } else {
+        sel.appendChild(el('option', {
+          value: String(item.id),
+          selected: S.mpModal.matiereId === item.id ? true : null,
+        }, item.reference + ' — ' + item.designation));
+      }
     });
     sel.addEventListener('change', () => {
-      const id = parseInt(sel.value, 10);
+      const raw = sel.value;
+      if (!raw) { renderMpMouvementModal(typeMvt, null, S.mpModal.categorie || ''); return; }
+      const parts = raw.split(':');
+      const id = parseInt(parts[0], 10);
+      const laizeId = parts.length > 1 ? parseInt(parts[1], 10) : null;
       const found = list.find(x => x.id === id);
-      renderMpMouvementModal(typeMvt, found || null, S.mpModal.categorie || '');
+      if (found && laizeId) {
+        S.mpModal.laizeId = laizeId;
+        renderMpMouvementModal(typeMvt, found || null, S.mpModal.categorie || '');
+        if (S.mpModal) S.mpModal.laizeId = laizeId;
+      } else {
+        S.mpModal.laizeId = null;
+        renderMpMouvementModal(typeMvt, found || null, S.mpModal.categorie || '');
+      }
     });
-    body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Matière'), sel));
+    body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Matière / laize'), sel));
   }
 
   const hintEl = el('div', { cls: 'mp-hint' }, '');
@@ -7773,6 +7949,15 @@ async function submitMpMouvement() {
   const err = S.mpModal.validate ? S.mpModal.validate() : null;
   if (err) { showToast(err, 'error'); return; }
   const body = S.mpModal.getBody();
+  // Injecte la laize pour les matières laizées (frontal/glassine/complexe)
+  const mat = S.mpModal.matiere;
+  if (mat && mpIsLaizeeCategory(mat.categorie)) {
+    if (!S.mpModal.laizeId) {
+      showToast('Laize obligatoire pour cette catégorie.', 'error');
+      return;
+    }
+    body.laize_id = S.mpModal.laizeId;
+  }
   try {
     const res = await api('/api/stock/matieres/mouvement', {
       method: 'POST',
@@ -8411,7 +8596,7 @@ function buildMatieresAdminAddForm() {
   const foot = el('div', { cls: 'mp-drawer-foot' });
   foot.appendChild(el('div', { style: { fontSize: '12px', fontWeight: '600', marginBottom: '12px', color: 'var(--text)' } }, 'Ajouter une référence'));
   const catSel = el('select');
-  [['mandrin', 'Mandrin'], ['palette', 'Palette'], ['adhesif', 'Adhésif'], ['carton', 'Carton'], ['frontal', 'Frontal'], ['glassine', 'Glassine']].forEach(([v, l]) => {
+  [['mandrin', 'Mandrin'], ['palette', 'Palette'], ['adhesif', 'Adhésif'], ['carton', 'Carton'], ['frontal', 'Frontal'], ['glassine', 'Glassine'], ['complexe', 'Complexe']].forEach(([v, l]) => {
     catSel.appendChild(el('option', { value: v }, l));
   });
   const refInp = el('input', { attrs: { type: 'text', placeholder: '76MM-3P' } });
@@ -8426,13 +8611,40 @@ function buildMatieresAdminAddForm() {
   const seuilLbl = el('label', null, 'Seuil d\'alerte (0 = pas d\'alerte)');
   const hintEl = el('div', { cls: 'mp-hint' }, '');
   const errEl = el('div', { cls: 'mp-admin-err' }, S.matieresAdminAddError || '');
+  // Champs spécifiques aux catégories laizées (frontal, glassine, complexe)
+  const laizeWrap = el('div', { style: 'display:none;border-top:1px dashed var(--border);padding-top:10px;margin-top:6px' });
+  const metresInp = el('input', { attrs: { type: 'number', min: '0', step: '1', placeholder: 'Ex. 5000' } });
+  const prixM2Inp = el('input', { attrs: { type: 'number', min: '0', step: '0.0001', placeholder: 'Ex. 0,0550' } });
+  const laizeChecks = el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px' });
+  function rebuildLaizeChecks() {
+    laizeChecks.innerHTML = '';
+    (S.laizes || []).filter(l => l.actif).forEach(l => {
+      const id = 'addmat-laize-' + l.id;
+      const lbl = el('label', { style: 'display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border:1px solid var(--border);border-radius:999px;cursor:pointer;font-size:12px;background:var(--bg)' },
+        el('input', { attrs: { type: 'checkbox', id: id, value: String(l.id) }, style: 'margin:0' }),
+        el('span', null, l.label),
+      );
+      laizeChecks.appendChild(lbl);
+    });
+  }
+  rebuildLaizeChecks();
+  laizeWrap.append(
+    el('div', { cls: 'mp-field' }, el('label', null, 'Mètres linéaires par bobine'), metresInp),
+    el('div', { cls: 'mp-field' }, el('label', null, 'Prix au m² (€)'), prixM2Inp),
+    el('div', { cls: 'mp-field' },
+      el('label', null, 'Laizes disponibles'),
+      laizeChecks,
+    ),
+  );
   function syncAdminAddFields() {
     const cat = catSel.value;
     const isPal = cat === 'palette';
     const isCarton = cat === 'carton';
     const isGlass = cat === 'glassine';
+    const isLaizee = mpIsLaizeeCategory(cat);
     pppWrap.style.display = isPal ? '' : 'none';
     couleurWrap.style.display = isGlass ? '' : 'none';
+    laizeWrap.style.display = isLaizee ? '' : 'none';
     pppLbl.textContent = 'Palettes par pile';
     seuilLbl.textContent = mpSeuilFieldLabel(cat);
     seuilInp.step = isPal || isCarton || cat === 'mandrin' || mpIsBobineCategory(cat) ? '1' : '0.5';
@@ -8449,6 +8661,7 @@ function buildMatieresAdminAddForm() {
     couleurWrap,
     pppWrap,
     el('div', { cls: 'mp-field' }, seuilLbl, seuilInp),
+    laizeWrap,
     hintEl,
     errEl,
     el('button', {
@@ -8487,17 +8700,43 @@ function buildMatieresAdminAddForm() {
           if (cat === 'glassine') {
             payload.couleur = couleurInp.value.trim() || des;
           }
-          await api('/api/stock/matieres', {
+          const created = await api('/api/stock/matieres', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
           });
+          // Si matière laizée : envoyer laizes + métrage + prix m² sur l'endpoint dédié
+          if (mpIsLaizeeCategory(cat) && created && created.id) {
+            const selectedLaizeIds = Array.from(laizeChecks.querySelectorAll('input[type=checkbox]:checked'))
+              .map(i => parseInt(i.value, 10)).filter(x => x > 0);
+            const metres = parseFloat((metresInp.value || '').replace(',', '.')) || 0;
+            const prix = parseFloat((prixM2Inp.value || '').replace(',', '.')) || 0;
+            if (selectedLaizeIds.length > 0 || metres > 0 || prix > 0) {
+              try {
+                await api('/api/stock/matieres/' + created.id + '/laizes', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    laize_ids: selectedLaizeIds,
+                    metres_lineaires_par_bobine: metres,
+                    prix_eur_m2: prix,
+                  }),
+                });
+              } catch (e) {
+                showToast('Référence créée mais erreur sur les laizes : ' + e.message, 'danger');
+              }
+            }
+            await loadMatieresIncompleteCount();
+          }
           showToast('Référence ajoutée.', 'success');
           refInp.value = '';
           desInp.value = '';
           pppInp.value = '';
           couleurInp.value = '';
           seuilInp.value = '0';
+          metresInp.value = '';
+          prixM2Inp.value = '';
+          laizeChecks.querySelectorAll('input[type=checkbox]').forEach(i => { i.checked = false; });
           await loadMatieresAdminList();
           await loadMatieres();
           renderMatieresAdminDrawer();
@@ -12227,66 +12466,174 @@ async function saveValorisationPrice(matiereId, newPrice, inputEl) {
 }
 
 function buildValorisationTableRow(item) {
-  const tr = el('tr', { 'data-matiere-id': String(item.id), style: 'border-bottom:1px solid var(--border)' });
+  const rowKey = item.row_key || ('m' + item.id);
+  const tr = el('tr', { 'data-row-key': rowKey, style: 'border-bottom:1px solid var(--border)' });
 
   const tdCat = el('td', { style: 'padding:10px 12px;font-size:12px;color:var(--text2)' });
   const badge = el('span', { style:
     'display:inline-block;padding:2px 9px;border-radius:999px;background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700;letter-spacing:.2px' }, item.categorie_label || '');
   tdCat.appendChild(badge);
 
-  const tdRef = el('td', { style: 'padding:10px 12px;font-size:13px;font-weight:700;color:var(--text);font-family:monospace' }, item.reference || '');
-  const tdDes = el('td', { style: 'padding:10px 12px;font-size:13px;color:var(--text2)' }, item.designation || '');
+  const refLabel = item.reference || '';
+  const tdRef = el('td', { style: 'padding:10px 12px;font-size:13px;font-weight:700;color:var(--text);font-family:monospace' }, refLabel);
+  // Désignation enrichie de la laize pour les laizées
+  const desText = item.designation || '';
+  const tdDes = el('td', { style: 'padding:10px 12px;font-size:13px;color:var(--text2)' }, desText);
   const tdQte = el('td', { style: 'padding:10px 12px;font-size:13px;color:var(--text);text-align:right;font-variant-numeric:tabular-nums' },
     valFormatQte(item.quantite),
     el('span', { style: 'margin-left:5px;font-size:11px;color:var(--muted);font-weight:500' }, item.unite || '')
   );
 
-  const inpId = 'val-price-' + item.id;
-  const inp = el('input', {
-    type: 'text', id: inpId, value: (Number(item.prix_unitaire) || 0).toString().replace('.', ','),
-      inputmode: 'decimal',
-      style: 'width:110px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:13px;font-variant-numeric:tabular-nums;text-align:right;transition:border-color .15s' });
-  const commit = async () => {
-    const raw = (inp.value || '').trim().replace(/\s/g, '').replace(',', '.');
-    const num = parseFloat(raw);
-    const current = Number(item.prix_unitaire) || 0;
-    if (isNaN(num) || num < 0) {
-      inp.value = current.toString().replace('.', ',');
-      showToast('Prix invalide.', 'danger');
-      return;
-    }
-    if (Math.abs(num - current) < 0.00001) return; // pas de changement
-    await saveValorisationPrice(item.id, num, inp);
-  };
-  inp.addEventListener('blur', commit);
-  inp.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); inp.blur(); }
-    if (e.key === 'Escape') {
-      inp.value = (Number(item.prix_unitaire) || 0).toString().replace('.', ',');
-      inp.blur();
-    }
-  });
-  inp.addEventListener('focus', () => inp.select());
+  let tdPrix;
+  if (item.laizee) {
+    // Pour les matières laizées : prix unitaire = valorisation_bobine (lecture seule)
+    // + bouton "Paramètres" pour éditer prix m² + métrage au niveau matière
+    const display = (item.prix_unitaire || 0) > 0
+      ? valFormatEuroDetail(item.prix_unitaire) + ' /bob.'
+      : el('span', { style: 'color:var(--muted)' }, 'non valorisé');
+    const params = el('div', { style: 'font-size:10px;color:var(--muted);margin-top:2px' },
+      (item.prix_eur_m2 || 0) > 0 ? (item.prix_eur_m2.toLocaleString('fr-FR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + ' €/m²') : 'prix m² ?',
+      ' · ',
+      (item.metres_lineaires_par_bobine || 0) > 0 ? (item.metres_lineaires_par_bobine.toLocaleString('fr-FR') + ' m') : 'métrage ?',
+    );
+    const editBtn = el('button', {
+      type: 'button', title: 'Éditer prix m² et métrage',
+      style: 'background:transparent;border:1px solid var(--border);border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--text2);font-size:11px;margin-top:4px;display:inline-flex;align-items:center;gap:4px',
+      on: { click: () => openValorisationParamsModal(item.matiere_id) },
+    });
+    editBtn.appendChild(iconEl('edit', 11));
+    editBtn.appendChild(el('span', null, 'Modifier'));
+    tdPrix = el('td', { style: 'padding:10px 12px;text-align:right' },
+      el('div', { style: 'display:flex;flex-direction:column;align-items:flex-end' },
+        el('div', { style: 'font-size:13px;font-weight:600;color:var(--text);font-variant-numeric:tabular-nums' }, display),
+        params,
+        editBtn,
+      )
+    );
+  } else {
+    const inpId = 'val-price-' + rowKey;
+    const inp = el('input', {
+      type: 'text', id: inpId, value: (Number(item.prix_unitaire) || 0).toString().replace('.', ','),
+        inputmode: 'decimal',
+        style: 'width:110px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:13px;font-variant-numeric:tabular-nums;text-align:right;transition:border-color .15s' });
+    const commit = async () => {
+      const raw = (inp.value || '').trim().replace(/\s/g, '').replace(',', '.');
+      const num = parseFloat(raw);
+      const current = Number(item.prix_unitaire) || 0;
+      if (isNaN(num) || num < 0) {
+        inp.value = current.toString().replace('.', ',');
+        showToast('Prix invalide.', 'danger');
+        return;
+      }
+      if (Math.abs(num - current) < 0.00001) return;
+      await saveValorisationPrice(item.matiere_id || item.id, num, inp);
+    };
+    inp.addEventListener('blur', commit);
+    inp.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); inp.blur(); }
+      if (e.key === 'Escape') {
+        inp.value = (Number(item.prix_unitaire) || 0).toString().replace('.', ',');
+        inp.blur();
+      }
+    });
+    inp.addEventListener('focus', () => inp.select());
+    tdPrix = el('td', { style: 'padding:10px 12px;text-align:right' },
+      inp,
+      el('span', { style: 'margin-left:6px;font-size:11px;color:var(--muted)' }, '€/' + (item.unite || ''))
+    );
+  }
 
-  const tdPrix = el('td', { style: 'padding:10px 12px;text-align:right' },
-    inp,
-    el('span', { style: 'margin-left:6px;font-size:11px;color:var(--muted)' }, '€/' + (item.unite || ''))
-  );
-
-  const valColor = item.prix_unitaire > 0 ? 'var(--text)' : 'var(--muted)';
+  const valColor = (item.prix_unitaire || 0) > 0 ? 'var(--text)' : 'var(--muted)';
   const tdVal = el('td', { style: 'padding:10px 12px;font-size:13px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums;color:' + valColor },
-    item.prix_unitaire > 0 ? valFormatEuro(item.valorisation) : '—'
+    (item.prix_unitaire || 0) > 0 ? valFormatEuro(item.valorisation) : '—'
   );
 
   const histBtn = el('button', {
     type: 'button', title: 'Voir l\'historique des prix',
       style: 'background:transparent;border:1px solid var(--border);border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2)',
-    on: { click: () => openValorisationHistorique(item.id) } });
+    on: { click: () => openValorisationHistorique(item.matiere_id || item.id) } });
   histBtn.appendChild(iconEl('clock', 14));
   const tdHist = el('td', { style: 'padding:10px 12px;text-align:center' }, histBtn);
 
   tr.append(tdCat, tdRef, tdDes, tdQte, tdPrix, tdVal, tdHist);
   return tr;
+}
+
+async function openValorisationParamsModal(matiereId) {
+  // Charge l'état courant (prix m² + métrage) et ouvre un modal d'édition
+  let info = null;
+  try {
+    info = await api('/api/stock/matieres/' + matiereId + '/laizes');
+  } catch (e) {
+    showToast('Erreur chargement : ' + (e?.message || ''), 'danger');
+    return;
+  }
+  const root = document.getElementById('mroot');
+  if (!root) return;
+  root.innerHTML = '';
+  const overlay = el('div', {
+    style: 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px',
+    on: { click: (e) => { if (e.target === overlay) { root.innerHTML = ''; } } },
+  });
+  const box = el('div', { style: 'background:var(--card);border:1px solid var(--border);border-radius:14px;width:100%;max-width:480px;padding:22px' });
+  box.appendChild(el('div', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px' }, 'Paramètres valorisation'));
+  box.appendChild(el('div', { style: 'font-size:15px;font-weight:700;color:var(--text);margin-bottom:18px' },
+    (info.reference || '') + ' — ' + (info.designation || '')));
+
+  const prixInp = el('input', { type: 'number', step: '0.0001', min: '0',
+    style: 'width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;font-variant-numeric:tabular-nums' });
+  prixInp.value = String(info.prix_eur_m2 || '');
+  const metresInp = el('input', { type: 'number', step: '1', min: '0',
+    style: 'width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;font-variant-numeric:tabular-nums' });
+  metresInp.value = String(info.metres_lineaires_par_bobine || '');
+
+  box.appendChild(el('label', { style: 'display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px' }, 'Prix au m² (€)'));
+  box.appendChild(prixInp);
+  box.appendChild(el('div', { style: 'height:14px' }));
+  box.appendChild(el('label', { style: 'display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px' }, 'Mètres linéaires par bobine'));
+  box.appendChild(metresInp);
+
+  const noteInp = el('input', { type: 'text', placeholder: 'Note optionnelle (motif du changement)',
+    style: 'width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:13px;margin-top:14px' });
+  box.appendChild(noteInp);
+
+  const actions = el('div', { style: 'display:flex;justify-content:flex-end;gap:8px;margin-top:18px' });
+  actions.appendChild(el('button', {
+    type: 'button',
+    style: 'padding:9px 16px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);font-weight:600;cursor:pointer',
+    on: { click: () => { root.innerHTML = ''; } },
+  }, 'Annuler'));
+  const saveBtn = el('button', {
+    type: 'button',
+    style: 'padding:9px 16px;border-radius:10px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:700;cursor:pointer',
+    on: { click: async () => {
+      const prix = parseFloat((prixInp.value || '').replace(',', '.')) || 0;
+      const metres = parseFloat((metresInp.value || '').replace(',', '.')) || 0;
+      try {
+        await api('/api/stock/valorisation/' + matiereId, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prix_eur_m2: prix,
+            metres_lineaires_par_bobine: metres,
+            note: noteInp.value.trim() || null,
+          }),
+        });
+        showToast('Paramètres enregistrés.', 'success');
+        root.innerHTML = '';
+        await loadValorisation();
+        loadMatieresIncompleteCount();
+      } catch (e) {
+        showToast('Erreur : ' + (e?.message || 'enregistrement impossible'), 'danger');
+      }
+    } },
+  }, 'Enregistrer');
+  actions.appendChild(saveBtn);
+  box.appendChild(actions);
+
+  overlay.appendChild(box);
+  root.appendChild(overlay);
+  setTimeout(() => prixInp.focus(), 50);
 }
 
 function buildValorisationTable() {
@@ -12922,6 +13269,10 @@ async function init() {
   S.fabStockMode = (user.role === 'fabrication');
   // Charger les fournisseurs FSC
   await loadFournisseursFSC();
+  // Charger le référentiel des laizes (utilisé dans modal matière + valorisation)
+  await loadLaizesReferentiel();
+  // Compteur matières incomplètes (frontal/glassine/complexe)
+  loadMatieresIncompleteCount();
   // Charger la liste complète des emplacements depuis la base de données
   await fetchEmplacementsFromDB();
   // Onglet initial via URL param ?tab=...

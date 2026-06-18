@@ -291,6 +291,10 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
         Emplacements
       </button>
+      <button type="button" class="nav-btn" data-tab="laizes">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="2 12 22 12"/><line x1="6" y1="9" x2="6" y2="15"/><line x1="10" y1="7" x2="10" y2="17"/><line x1="14" y1="9" x2="14" y2="15"/><line x1="18" y1="7" x2="18" y2="17"/></svg>
+        Laizes matières
+      </button>
       <div class="nav-subgroup-label"><span>Contacts</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
       <button type="button" class="nav-btn active" data-tab="users">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -792,6 +796,37 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
       </div>
     </section>
 
+    <section id="panel-laizes" class="hidden">
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+          <div>
+            <h2 style="margin:0 0 4px">Laizes matières</h2>
+            <p class="sub" style="margin:0;font-size:12px">Référentiel des laizes (en mm) utilisé pour les frontaux, glassines et complexes dans MyStock.</p>
+          </div>
+        </div>
+        <form id="laizes-add-form" style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin-bottom:18px;padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--bg)">
+          <div style="flex:1;min-width:140px">
+            <label style="display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Valeur (mm)</label>
+            <input type="number" id="laizes-add-mm" min="1" step="1" required placeholder="Ex. 600"
+              style="width:100%;padding:9px 12px;border-radius:8px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:14px;outline:none;transition:border-color .15s">
+          </div>
+          <div style="flex:1;min-width:140px">
+            <label style="display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Label (optionnel)</label>
+            <input type="text" id="laizes-add-label" placeholder="Auto : « 600 mm »"
+              style="width:100%;padding:9px 12px;border-radius:8px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:14px;outline:none">
+          </div>
+          <div style="width:90px">
+            <label style="display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Ordre</label>
+            <input type="number" id="laizes-add-ordre" step="10" value="0"
+              style="width:100%;padding:9px 12px;border-radius:8px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:14px;outline:none">
+          </div>
+          <button type="submit" class="btn">Ajouter</button>
+        </form>
+        <div id="laizes-list" style="display:flex;flex-direction:column;gap:8px"></div>
+        <p id="laizes-empty" class="sub" style="display:none;margin:16px 0 4px;font-size:13px">Aucune laize définie.</p>
+      </div>
+    </section>
+
     <section id="panel-operations" class="hidden">
       <div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
@@ -1199,7 +1234,7 @@ function setTab(id) {
   document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === id);
   });
-  ['users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'machines', 'emplacements', 'updates', 'audit', 'fsc', 'dashboards', 'api', 'promote'].forEach(p => {
+  ['users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'machines', 'emplacements', 'laizes', 'updates', 'audit', 'fsc', 'dashboards', 'api', 'promote'].forEach(p => {
     const el = document.getElementById('panel-' + p);
     if (el) el.classList.toggle('hidden', p !== id);
   });
@@ -1209,6 +1244,7 @@ function setTab(id) {
   if (id === 'operations') loadOperationCodes();
   if (id === 'machines') initMachinesPanel();
   if (id === 'emplacements') initEmplacementsPanel();
+  if (id === 'laizes') initLaizesPanel();
   if (id === 'updates') loadUpdates();
   if (id === 'audit') loadAuditLogs();
   if (id === 'fsc') initFscPanel();
@@ -3543,6 +3579,115 @@ async function deleteApiKey(id) {
 // ──────────────────────────────────────────────────
 let _emplData = [];
 let _emplReady = false;
+
+// ── Laizes matières ────────────────────────────────────────────
+let _laizesReady = false;
+let _laizesList = [];
+
+async function initLaizesPanel() {
+  if (!_laizesReady) {
+    _laizesReady = true;
+    const form = document.getElementById('laizes-add-form');
+    if (form) {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const mm = parseFloat(document.getElementById('laizes-add-mm').value);
+        const label = document.getElementById('laizes-add-label').value.trim();
+        const ordre = parseInt(document.getElementById('laizes-add-ordre').value, 10) || 0;
+        if (!mm || mm <= 0) { alert('Valeur (mm) invalide.'); return; }
+        try {
+          const r = await fetch('/api/admin/mp_laizes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ valeur_mm: mm, label: label || null, ordre }),
+          });
+          if (!r.ok) {
+            const err = await r.json().catch(() => ({ detail: 'erreur' }));
+            alert('Erreur : ' + (err.detail || r.statusText));
+            return;
+          }
+          document.getElementById('laizes-add-mm').value = '';
+          document.getElementById('laizes-add-label').value = '';
+          document.getElementById('laizes-add-ordre').value = '0';
+          await loadLaizesList();
+        } catch (e) { alert('Erreur : ' + e.message); }
+      });
+    }
+  }
+  await loadLaizesList();
+}
+
+async function loadLaizesList() {
+  try {
+    const r = await fetch('/api/admin/mp_laizes?all=1', { credentials: 'include' });
+    if (!r.ok) throw new Error('chargement impossible');
+    _laizesList = await r.json();
+  } catch (e) {
+    _laizesList = [];
+  }
+  renderLaizesList();
+}
+
+function renderLaizesList() {
+  const wrap = document.getElementById('laizes-list');
+  const empty = document.getElementById('laizes-empty');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  if (!_laizesList.length) {
+    if (empty) empty.style.display = '';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+  _laizesList.forEach(l => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px solid var(--border);border-radius:10px;background:var(--card)';
+    if (!l.actif) row.style.opacity = '0.5';
+    const main = document.createElement('div');
+    main.style.cssText = 'flex:1;display:flex;align-items:center;gap:10px';
+    const lab = document.createElement('div');
+    lab.style.cssText = 'font-size:14px;font-weight:700;color:var(--text);min-width:80px';
+    lab.textContent = l.label;
+    const val = document.createElement('div');
+    val.style.cssText = 'font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums';
+    val.textContent = l.valeur_mm + ' mm · ordre ' + l.ordre;
+    main.append(lab, val);
+    row.appendChild(main);
+    const actions = document.createElement('div');
+    actions.style.cssText = 'display:flex;gap:6px';
+    const toggleBtn = document.createElement('button');
+    toggleBtn.type = 'button';
+    toggleBtn.className = 'btn btn-sec btn-sm';
+    toggleBtn.textContent = l.actif ? 'Désactiver' : 'Réactiver';
+    toggleBtn.addEventListener('click', async () => {
+      try {
+        const r = await fetch('/api/admin/mp_laizes/' + l.id, {
+          method: 'PUT', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ actif: l.actif ? false : true }),
+        });
+        if (!r.ok) { const err = await r.json().catch(() => ({})); alert(err.detail || 'erreur'); return; }
+        await loadLaizesList();
+      } catch (e) { alert(e.message); }
+    });
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'btn btn-sec btn-sm';
+    delBtn.style.color = 'var(--danger)';
+    delBtn.textContent = 'Supprimer';
+    delBtn.addEventListener('click', async () => {
+      if (!confirm('Supprimer la laize ' + l.label + ' ?')) return;
+      try {
+        const r = await fetch('/api/admin/mp_laizes/' + l.id, { method: 'DELETE', credentials: 'include' });
+        if (!r.ok) { const err = await r.json().catch(() => ({})); alert(err.detail || 'erreur'); return; }
+        await loadLaizesList();
+      } catch (e) { alert(e.message); }
+    });
+    actions.append(toggleBtn, delBtn);
+    row.appendChild(actions);
+    wrap.appendChild(row);
+  });
+}
 
 async function initEmplacementsPanel() {
   if (!_emplReady) {

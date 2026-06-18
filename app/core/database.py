@@ -3834,6 +3834,89 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 118, "mp_valorisation")
 
+    # v119 - MyStock : matieres laizees (frontal / glassine / complexe)
+    # - mp_laizes : referentiel des laizes (valeur_mm + label + ordre + actif),
+    #   editable depuis /settings (super admin).
+    # - matieres_premieres : nouvelles colonnes metres_lineaires_par_bobine
+    #   et prix_eur_m2 (renseignees uniquement pour ces 3 categories).
+    # - mp_matiere_laizes : liaison reference -> laizes valables.
+    # - mp_stock_laize : stock par (matiere, laize). Le mp_stock global reste
+    #   utilise pour les autres categories (mandrin / palette / adhesif /
+    #   carton). Pour les matieres laizees, mp_stock.quantite est tenu a jour
+    #   comme somme(mp_stock_laize) pour compatibilite avec les vues qui ne
+    #   filtrent pas par laize.
+    # - mp_mouvements : ajout laize_id (nullable pour les categories non laizees).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=119 LIMIT 1").fetchone():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS mp_laizes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                valeur_mm REAL NOT NULL UNIQUE,
+                label TEXT NOT NULL,
+                ordre INTEGER NOT NULL DEFAULT 0,
+                actif INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime'))
+            )
+        """)
+        # Seed des 7 laizes par defaut
+        default_laizes = [
+            (333.0, "333 mm", 10),
+            (430.0, "430 mm", 20),
+            (470.0, "470 mm", 30),
+            (510.0, "510 mm", 40),
+            (530.0, "530 mm", 50),
+            (550.0, "550 mm", 60),
+            (570.0, "570 mm", 70),
+        ]
+        for val, lab, ordre in default_laizes:
+            conn.execute(
+                "INSERT OR IGNORE INTO mp_laizes (valeur_mm, label, ordre) VALUES (?, ?, ?)",
+                (val, lab, ordre),
+            )
+        # Colonnes sur matieres_premieres
+        mp_cols = {row[1] for row in conn.execute("PRAGMA table_info(matieres_premieres)").fetchall()}
+        if "metres_lineaires_par_bobine" not in mp_cols:
+            conn.execute(
+                "ALTER TABLE matieres_premieres ADD COLUMN metres_lineaires_par_bobine REAL"
+            )
+        if "prix_eur_m2" not in mp_cols:
+            conn.execute(
+                "ALTER TABLE matieres_premieres ADD COLUMN prix_eur_m2 REAL"
+            )
+        # Liaison reference <-> laizes
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS mp_matiere_laizes (
+                matiere_id INTEGER NOT NULL REFERENCES matieres_premieres(id) ON DELETE CASCADE,
+                laize_id INTEGER NOT NULL REFERENCES mp_laizes(id) ON DELETE RESTRICT,
+                PRIMARY KEY (matiere_id, laize_id)
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mp_mat_laizes_lai ON mp_matiere_laizes(laize_id)"
+        )
+        # Stock par (matiere, laize)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS mp_stock_laize (
+                matiere_id INTEGER NOT NULL REFERENCES matieres_premieres(id) ON DELETE CASCADE,
+                laize_id INTEGER NOT NULL REFERENCES mp_laizes(id) ON DELETE RESTRICT,
+                quantite REAL NOT NULL DEFAULT 0,
+                updated_at TEXT,
+                updated_by_name TEXT,
+                PRIMARY KEY (matiere_id, laize_id)
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mp_stock_laize_lai ON mp_stock_laize(laize_id)"
+        )
+        # Colonne laize_id sur mouvements
+        mvt_cols = {row[1] for row in conn.execute("PRAGMA table_info(mp_mouvements)").fetchall()}
+        if "laize_id" not in mvt_cols:
+            conn.execute("ALTER TABLE mp_mouvements ADD COLUMN laize_id INTEGER REFERENCES mp_laizes(id)")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mp_mvt_laize ON mp_mouvements(laize_id)"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 119, "mp_laizes_matieres_laizees")
+
 
 
 def create_default_admin():

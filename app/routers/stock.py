@@ -109,7 +109,14 @@ def require_stock_write(request: Request) -> dict:
     return user
 
 
-_MP_CATEGORIES = frozenset({"mandrin", "palette", "adhesif", "carton", "frontal", "glassine"})
+_MP_CATEGORIES = frozenset({"mandrin", "palette", "adhesif", "carton", "frontal", "glassine", "complexe"})
+_MP_CATEGORIES_LAIZEES = frozenset({"frontal", "glassine", "complexe"})
+
+
+def _mp_is_laizee(categorie: str) -> bool:
+    return (categorie or "").strip().lower() in _MP_CATEGORIES_LAIZEES
+
+
 _MP_TYPES_MVT = frozenset({"entree", "sortie", "ajustement", "transfert"})
 _STOCK_MATIERES_ADMIN_ROLES = frozenset({"superadmin", "direction", "administration"})
 
@@ -117,7 +124,7 @@ _STOCK_MATIERES_ADMIN_ROLES = frozenset({"superadmin", "direction", "administrat
 def _mp_unite_gestion(categorie: str) -> str:
     """Unité de gestion du stock selon la catégorie matière première."""
     cat = (categorie or "").strip().lower()
-    if cat in ("frontal", "glassine"):
+    if cat in ("frontal", "glassine", "complexe"):
         return "bobine"
     if cat == "palette":
         return "palette"
@@ -126,13 +133,34 @@ def _mp_unite_gestion(categorie: str) -> str:
     return "palette"
 
 
-def _mp_row_dict(r) -> dict:
+def _mp_row_dict(r, stock_par_laize: Optional[list[dict]] = None) -> dict:
     """Normalise une ligne matieres_premieres + stock pour l'API."""
     seuil = float(r["seuil_alerte"] or 0)
     qte = float(r["quantite"] or 0)
     cat = r["categorie"]
     ppp = r["palettes_par_pile"] if "palettes_par_pile" in r.keys() else None
     palettes_par_pile = float(ppp) if ppp is not None and float(ppp) > 0 else None
+    keys = set(r.keys())
+    metres = None
+    prix_m2 = None
+    if "metres_lineaires_par_bobine" in keys and r["metres_lineaires_par_bobine"] is not None:
+        try:
+            metres = float(r["metres_lineaires_par_bobine"])
+        except (TypeError, ValueError):
+            metres = None
+    if "prix_eur_m2" in keys and r["prix_eur_m2"] is not None:
+        try:
+            prix_m2 = float(r["prix_eur_m2"])
+        except (TypeError, ValueError):
+            prix_m2 = None
+    laizee = _mp_is_laizee(cat)
+    # Pour les matières laizées, la quantité totale = somme des stocks par laize
+    if laizee and stock_par_laize is not None:
+        qte = sum(float(x.get("quantite") or 0) for x in stock_par_laize)
+    complete = True
+    if laizee:
+        has_laizes = bool(stock_par_laize) and len(stock_par_laize) > 0
+        complete = has_laizes and (prix_m2 or 0) > 0 and (metres or 0) > 0
     return {
         "id": r["id"],
         "categorie": cat,
@@ -145,6 +173,11 @@ def _mp_row_dict(r) -> dict:
         "unite": _mp_unite_gestion(cat),
         "palettes_par_pile": palettes_par_pile,
         "couleur": (r["couleur"] or "").strip() if "couleur" in r.keys() and r["couleur"] else None,
+        "laizee": laizee,
+        "metres_lineaires_par_bobine": metres,
+        "prix_eur_m2": prix_m2,
+        "stock_par_laize": stock_par_laize if laizee else None,
+        "complete": complete,
     }
 
 
@@ -2424,6 +2457,7 @@ def list_matieres_premieres(request: Request, all: int = 0):
             f"""
             SELECT mp.id, mp.categorie, mp.reference, mp.designation,
                    mp.seuil_alerte, mp.actif, mp.palettes_par_pile, mp.couleur,
+                   mp.metres_lineaires_par_bobine, mp.prix_eur_m2,
                    COALESCE(s.quantite, 0) AS quantite
             FROM matieres_premieres mp
             LEFT JOIN mp_stock s ON s.matiere_id = mp.id
@@ -2431,7 +2465,31 @@ def list_matieres_premieres(request: Request, all: int = 0):
             ORDER BY mp.categorie ASC, mp.reference ASC
             """
         ).fetchall()
-    return [_mp_row_dict(r) for r in rows]
+        # Récupère stocks par laize pour toutes les matières laizées en un coup
+        laize_rows = conn.execute(
+            """
+            SELECT ml.matiere_id, l.id AS laize_id, l.valeur_mm, l.label, l.ordre, l.actif,
+                   COALESCE(sl.quantite, 0) AS quantite
+            FROM mp_matiere_laizes ml
+            JOIN mp_laizes l ON l.id = ml.laize_id
+            LEFT JOIN mp_stock_laize sl ON sl.matiere_id = ml.matiere_id AND sl.laize_id = ml.laize_id
+            ORDER BY l.ordre ASC, l.valeur_mm ASC
+            """
+        ).fetchall()
+    by_mat: dict[int, list[dict]] = {}
+    for r in laize_rows:
+        by_mat.setdefault(r["matiere_id"], []).append({
+            "laize_id": r["laize_id"],
+            "valeur_mm": float(r["valeur_mm"] or 0),
+            "label": r["label"],
+            "actif": int(r["actif"] or 0),
+            "quantite": float(r["quantite"] or 0),
+        })
+    out = []
+    for r in rows:
+        spl = by_mat.get(r["id"]) if _mp_is_laizee(r["categorie"]) else None
+        out.append(_mp_row_dict(r, spl))
+    return out
 
 
 @router.post("/api/stock/matieres")
@@ -2521,6 +2579,26 @@ async def update_matiere_premiere(matiere_id: int, request: Request):
     if "couleur" in body:
         sets.append("couleur=?")
         params.append((body.get("couleur") or "").strip() or None)
+    if "metres_lineaires_par_bobine" in body:
+        v = body.get("metres_lineaires_par_bobine")
+        try:
+            v = float(v) if v not in (None, "") else None
+        except (TypeError, ValueError):
+            raise HTTPException(400, "Métrage invalide.") from None
+        if v is not None and v < 0:
+            raise HTTPException(400, "Métrage négatif.")
+        sets.append("metres_lineaires_par_bobine=?")
+        params.append(v)
+    if "prix_eur_m2" in body:
+        v = body.get("prix_eur_m2")
+        try:
+            v = float(v) if v not in (None, "") else None
+        except (TypeError, ValueError):
+            raise HTTPException(400, "Prix m² invalide.") from None
+        if v is not None and v < 0:
+            raise HTTPException(400, "Prix m² négatif.")
+        sets.append("prix_eur_m2=?")
+        params.append(v)
 
     if not sets:
         raise HTTPException(400, "Aucun champ à mettre à jour.")
@@ -2655,6 +2733,15 @@ async def mouvement_matiere_premiere(request: Request):
     created_by = user.get("id")
     created_by_name = (user.get("nom") or "").strip() or None
 
+    # Laize (obligatoire pour les matières laizées)
+    laize_id_raw = body.get("laize_id")
+    laize_id: Optional[int] = None
+    if laize_id_raw not in (None, ""):
+        try:
+            laize_id = int(laize_id_raw)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "laize_id invalide.") from None
+
     with get_db() as conn:
         mp = conn.execute(
             "SELECT id, categorie FROM matieres_premieres WHERE id=? AND actif=1",
@@ -2663,11 +2750,27 @@ async def mouvement_matiere_premiere(request: Request):
         if not mp:
             raise HTTPException(404, "Matière non trouvée.")
         unite_mp = _mp_unite_gestion(mp["categorie"])
+        laizee = _mp_is_laizee(mp["categorie"])
 
-        stock = conn.execute(
-            "SELECT quantite FROM mp_stock WHERE matiere_id=?",
-            (matiere_id,),
-        ).fetchone()
+        if laizee:
+            if laize_id is None:
+                raise HTTPException(400, "Laize obligatoire pour cette catégorie.")
+            # Vérifier que la laize est bien associée à la matière
+            assoc = conn.execute(
+                "SELECT 1 FROM mp_matiere_laizes WHERE matiere_id=? AND laize_id=?",
+                (matiere_id, laize_id),
+            ).fetchone()
+            if not assoc:
+                raise HTTPException(400, "Cette laize n'est pas associée à cette matière.")
+            stock = conn.execute(
+                "SELECT quantite FROM mp_stock_laize WHERE matiere_id=? AND laize_id=?",
+                (matiere_id, laize_id),
+            ).fetchone()
+        else:
+            stock = conn.execute(
+                "SELECT quantite FROM mp_stock WHERE matiere_id=?",
+                (matiere_id,),
+            ).fetchone()
         quantite_avant = float(stock["quantite"]) if stock else 0.0
         mvt_quantite = quantite
 
@@ -2686,26 +2789,53 @@ async def mouvement_matiere_premiere(request: Request):
         else:  # transfert
             quantite_apres = quantite_avant
 
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO mp_stock(matiere_id, quantite, updated_at, updated_by_name)
-            VALUES (
-                ?,
-                ?,
-                strftime('%Y-%m-%dT%H:%M:%S','now','localtime'),
-                ?
+        if laizee:
+            # Met à jour mp_stock_laize
+            conn.execute(
+                """
+                INSERT INTO mp_stock_laize (matiere_id, laize_id, quantite, updated_at, updated_by_name)
+                VALUES (?,?,?,strftime('%Y-%m-%dT%H:%M:%S','now','localtime'),?)
+                ON CONFLICT(matiere_id, laize_id) DO UPDATE SET
+                    quantite=excluded.quantite,
+                    updated_at=excluded.updated_at,
+                    updated_by_name=excluded.updated_by_name
+                """,
+                (matiere_id, laize_id, quantite_apres, created_by_name),
             )
-            """,
-            (matiere_id, quantite_apres, created_by_name),
-        )
+            # Met à jour mp_stock global comme somme des stocks par laize
+            total = conn.execute(
+                "SELECT COALESCE(SUM(quantite), 0) AS s FROM mp_stock_laize WHERE matiere_id=?",
+                (matiere_id,),
+            ).fetchone()
+            total_q = float(total["s"] or 0)
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO mp_stock(matiere_id, quantite, updated_at, updated_by_name)
+                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%S','now','localtime'), ?)
+                """,
+                (matiere_id, total_q, created_by_name),
+            )
+        else:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO mp_stock(matiere_id, quantite, updated_at, updated_by_name)
+                VALUES (
+                    ?,
+                    ?,
+                    strftime('%Y-%m-%dT%H:%M:%S','now','localtime'),
+                    ?
+                )
+                """,
+                (matiere_id, quantite_apres, created_by_name),
+            )
         conn.execute(
             """
             INSERT INTO mp_mouvements (
                 matiere_id, type_mouvement, quantite,
                 quantite_avant, quantite_apres,
                 ref_bl, note, emplacement_source, emplacement_dest,
-                created_by, created_by_name
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                created_by, created_by_name, laize_id
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 matiere_id,
@@ -2719,11 +2849,12 @@ async def mouvement_matiere_premiere(request: Request):
                 emplacement_dest,
                 created_by,
                 created_by_name,
+                laize_id,
             ),
         )
         conn.commit()
 
-    return {"ok": True, "quantite_apres": quantite_apres}
+    return {"ok": True, "quantite_apres": quantite_apres, "laize_id": laize_id}
 
 
 @router.get("/api/stock/matieres/{matiere_id}/mouvements")
@@ -3432,7 +3563,15 @@ def _mp_categorie_order(cat: str) -> int:
 
 
 def _valorisation_query(conn) -> list[dict]:
-    rows = conn.execute(
+    """Retourne la liste des lignes de valorisation.
+
+    - Catégories non laizées : 1 ligne par matière, valorisation = qté × prix_unitaire.
+    - Catégories laizées (frontal/glassine/complexe) : 1 ligne par (matière × laize),
+      valorisation_bobine = (laize_mm/1000) × metres_lineaires × prix_eur_m2,
+      valorisation = qté_bobines × valorisation_bobine.
+    """
+    # Lignes "classiques" (non laizées)
+    rows_simple = conn.execute(
         """
         SELECT mp.id, mp.categorie, mp.reference, mp.designation, mp.actif,
                COALESCE(s.quantite, 0) AS quantite,
@@ -3442,17 +3581,37 @@ def _valorisation_query(conn) -> list[dict]:
         FROM matieres_premieres mp
         LEFT JOIN mp_stock s ON s.matiere_id = mp.id
         LEFT JOIN mp_valorisation v ON v.matiere_id = mp.id
-        WHERE mp.actif = 1
+        WHERE mp.actif = 1 AND mp.categorie NOT IN ('frontal','glassine','complexe')
         ORDER BY mp.categorie ASC, mp.reference ASC
         """
     ).fetchall()
+    # Lignes laizées (une par couple matière × laize associée)
+    rows_laizees = conn.execute(
+        """
+        SELECT mp.id AS matiere_id, mp.categorie, mp.reference, mp.designation,
+               COALESCE(mp.metres_lineaires_par_bobine, 0) AS metres,
+               COALESCE(mp.prix_eur_m2, 0) AS prix_eur_m2,
+               l.id AS laize_id, l.valeur_mm, l.label AS laize_label, l.ordre AS laize_ordre,
+               COALESCE(sl.quantite, 0) AS quantite
+        FROM matieres_premieres mp
+        JOIN mp_matiere_laizes ml ON ml.matiere_id = mp.id
+        JOIN mp_laizes l ON l.id = ml.laize_id
+        LEFT JOIN mp_stock_laize sl ON sl.matiere_id = mp.id AND sl.laize_id = l.id
+        WHERE mp.actif = 1 AND mp.categorie IN ('frontal','glassine','complexe')
+        ORDER BY mp.categorie ASC, mp.reference ASC, l.ordre ASC, l.valeur_mm ASC
+        """
+    ).fetchall()
     out: list[dict] = []
-    for r in rows:
+    for r in rows_simple:
         cat = r["categorie"]
         qte = float(r["quantite"] or 0)
         prix = float(r["prix_unitaire"] or 0)
         out.append({
             "id": r["id"],
+            "row_key": f"m{r['id']}",
+            "matiere_id": r["id"],
+            "laize_id": None,
+            "laize_label": None,
             "categorie": cat,
             "categorie_label": _MP_CATEGORIE_LABELS.get(cat, cat or ""),
             "reference": r["reference"],
@@ -3461,8 +3620,40 @@ def _valorisation_query(conn) -> list[dict]:
             "unite": _mp_unite_gestion(cat),
             "prix_unitaire": prix,
             "valorisation": round(qte * prix, 2),
+            "laizee": False,
+            "metres_lineaires_par_bobine": None,
+            "prix_eur_m2": None,
+            "valorisation_bobine": None,
             "prix_updated_at": r["prix_updated_at"],
             "prix_updated_by_name": r["prix_updated_by_name"],
+        })
+    for r in rows_laizees:
+        cat = r["categorie"]
+        qte = float(r["quantite"] or 0)
+        metres = float(r["metres"] or 0)
+        prix_m2 = float(r["prix_eur_m2"] or 0)
+        laize_mm = float(r["valeur_mm"] or 0)
+        valo_bobine = (laize_mm / 1000.0) * metres * prix_m2
+        out.append({
+            "id": r["matiere_id"],
+            "row_key": f"m{r['matiere_id']}_l{r['laize_id']}",
+            "matiere_id": r["matiere_id"],
+            "laize_id": r["laize_id"],
+            "laize_label": r["laize_label"],
+            "categorie": cat,
+            "categorie_label": _MP_CATEGORIE_LABELS.get(cat, cat or ""),
+            "reference": r["reference"],
+            "designation": r["designation"] + (f" — {r['laize_label']}" if r["laize_label"] else ""),
+            "quantite": qte,
+            "unite": _mp_unite_gestion(cat),
+            "prix_unitaire": round(valo_bobine, 4),  # prix unitaire calculé par bobine (lecture seule)
+            "valorisation": round(qte * valo_bobine, 2),
+            "laizee": True,
+            "metres_lineaires_par_bobine": metres,
+            "prix_eur_m2": prix_m2,
+            "valorisation_bobine": round(valo_bobine, 4),
+            "prix_updated_at": None,
+            "prix_updated_by_name": None,
         })
     return out
 
@@ -3483,7 +3674,9 @@ def _valorisation_summary(items: list[dict]) -> dict:
         bucket = totals_by_cat[cat]
         bucket["total"] += it["valorisation"]
         bucket["nb_refs"] += 1
-        if it["prix_unitaire"] > 0:
+        # "Valorisée" si le prix unitaire (ou valorisation_bobine pour laizée) est > 0
+        is_valued = (it.get("prix_unitaire") or 0) > 0
+        if is_valued:
             bucket["nb_refs_valorisees"] += 1
         total += it["valorisation"]
     cats = sorted(totals_by_cat.values(), key=lambda c: _mp_categorie_order(c["categorie"]))
@@ -3514,54 +3707,118 @@ def get_valorisation(request: Request):
 async def update_valorisation(matiere_id: int, request: Request):
     user = require_stock_matieres_admin(request)
     body = await request.json()
-    try:
-        prix = float(body.get("prix_unitaire") or 0)
-    except (TypeError, ValueError):
-        raise HTTPException(400, "Prix unitaire invalide.") from None
-    if prix < 0:
-        raise HTTPException(400, "Prix unitaire négatif interdit.")
-    if prix > 1_000_000:
-        raise HTTPException(400, "Prix unitaire hors limites (max 1 000 000).")
-    note = (body.get("note") or "").strip() or None
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     user_name = (user.get("nom") or user.get("email") or "").strip() or None
     user_id = user.get("id")
     with get_db() as conn:
         mat = conn.execute(
-            "SELECT id FROM matieres_premieres WHERE id=?", (matiere_id,)
+            "SELECT id, categorie, prix_eur_m2, metres_lineaires_par_bobine FROM matieres_premieres WHERE id=?",
+            (matiere_id,),
         ).fetchone()
         if not mat:
             raise HTTPException(404, "Matière introuvable.")
-        prev = conn.execute(
-            "SELECT prix_unitaire FROM mp_valorisation WHERE matiere_id=?", (matiere_id,)
-        ).fetchone()
-        prix_avant = float(prev["prix_unitaire"]) if prev else None
-        if prev:
+        cat = (mat["categorie"] or "").lower()
+        if _mp_is_laizee(cat):
+            # Matière laizée → on met à jour prix_eur_m2 et/ou metres_lineaires_par_bobine
+            sets: list[str] = []
+            args: list[Any] = []
+            note_parts: list[str] = []
+            prev_prix_m2 = float(mat["prix_eur_m2"] or 0) if mat["prix_eur_m2"] is not None else None
+            prev_metres = float(mat["metres_lineaires_par_bobine"] or 0) if mat["metres_lineaires_par_bobine"] is not None else None
+            new_prix_m2 = prev_prix_m2
+            new_metres = prev_metres
+            if "prix_eur_m2" in body:
+                v = body.get("prix_eur_m2")
+                try:
+                    v = float(v) if v not in (None, "") else 0.0
+                except (TypeError, ValueError):
+                    raise HTTPException(400, "Prix m² invalide.") from None
+                if v < 0:
+                    raise HTTPException(400, "Prix m² négatif.")
+                if v > 1_000_000:
+                    raise HTTPException(400, "Prix m² hors limites.")
+                sets.append("prix_eur_m2=?"); args.append(v)
+                new_prix_m2 = v
+                if (prev_prix_m2 or 0) != v:
+                    note_parts.append(
+                        f"Prix m²: {prev_prix_m2 if prev_prix_m2 is not None else '—'} → {v}"
+                    )
+            if "metres_lineaires_par_bobine" in body:
+                v = body.get("metres_lineaires_par_bobine")
+                try:
+                    v = float(v) if v not in (None, "") else 0.0
+                except (TypeError, ValueError):
+                    raise HTTPException(400, "Métrage invalide.") from None
+                if v < 0:
+                    raise HTTPException(400, "Métrage négatif.")
+                sets.append("metres_lineaires_par_bobine=?"); args.append(v)
+                new_metres = v
+                if (prev_metres or 0) != v:
+                    note_parts.append(
+                        f"Métrage: {prev_metres if prev_metres is not None else '—'} → {v}"
+                    )
+            if not sets:
+                raise HTTPException(400, "Aucun champ à mettre à jour.")
+            args.append(matiere_id)
             conn.execute(
-                """UPDATE mp_valorisation
-                   SET prix_unitaire=?, updated_at=?, updated_by_name=?
-                   WHERE matiere_id=?""",
-                (prix, now, user_name, matiere_id),
+                f"UPDATE matieres_premieres SET {', '.join(sets)} WHERE id=?", args
             )
+            # Historique : log si le prix_eur_m2 a changé
+            if (prev_prix_m2 or 0) != (new_prix_m2 or 0) or (prev_metres or 0) != (new_metres or 0):
+                user_note = (body.get("note") or "").strip()
+                note_full = " · ".join(note_parts) + (f" — {user_note}" if user_note else "")
+                conn.execute(
+                    """INSERT INTO mp_valorisation_historique
+                       (matiere_id, prix_avant, prix_apres, note, created_at, created_by, created_by_name)
+                       VALUES (?,?,?,?,?,?,?)""",
+                    (matiere_id, prev_prix_m2, new_prix_m2, note_full, now, user_id, user_name),
+                )
+            conn.commit()
         else:
-            conn.execute(
-                """INSERT INTO mp_valorisation (matiere_id, prix_unitaire, updated_at, updated_by_name)
-                   VALUES (?,?,?,?)""",
-                (matiere_id, prix, now, user_name),
-            )
-        # Pas de ligne d'historique si le prix ne change pas
-        if prix_avant != prix:
-            conn.execute(
-                """INSERT INTO mp_valorisation_historique
-                   (matiere_id, prix_avant, prix_apres, note, created_at, created_by, created_by_name)
-                   VALUES (?,?,?,?,?,?,?)""",
-                (matiere_id, prix_avant, prix, note, now, user_id, user_name),
-            )
-        conn.commit()
-        # Récupération de la ligne valorisée pour réponse
+            # Matière non laizée → comportement classique avec prix_unitaire
+            try:
+                prix = float(body.get("prix_unitaire") or 0)
+            except (TypeError, ValueError):
+                raise HTTPException(400, "Prix unitaire invalide.") from None
+            if prix < 0:
+                raise HTTPException(400, "Prix unitaire négatif interdit.")
+            if prix > 1_000_000:
+                raise HTTPException(400, "Prix unitaire hors limites (max 1 000 000).")
+            note = (body.get("note") or "").strip() or None
+            prev = conn.execute(
+                "SELECT prix_unitaire FROM mp_valorisation WHERE matiere_id=?", (matiere_id,)
+            ).fetchone()
+            prix_avant = float(prev["prix_unitaire"]) if prev else None
+            if prev:
+                conn.execute(
+                    """UPDATE mp_valorisation
+                       SET prix_unitaire=?, updated_at=?, updated_by_name=?
+                       WHERE matiere_id=?""",
+                    (prix, now, user_name, matiere_id),
+                )
+            else:
+                conn.execute(
+                    """INSERT INTO mp_valorisation (matiere_id, prix_unitaire, updated_at, updated_by_name)
+                       VALUES (?,?,?,?)""",
+                    (matiere_id, prix, now, user_name),
+                )
+            if prix_avant != prix:
+                conn.execute(
+                    """INSERT INTO mp_valorisation_historique
+                       (matiere_id, prix_avant, prix_apres, note, created_at, created_by, created_by_name)
+                       VALUES (?,?,?,?,?,?,?)""",
+                    (matiere_id, prix_avant, prix, note, now, user_id, user_name),
+                )
+            conn.commit()
         items = _valorisation_query(conn)
-    item = next((x for x in items if x["id"] == matiere_id), None)
-    return {"ok": True, "item": item, "summary": _valorisation_summary(items)}
+    # Pour les matières laizées, plusieurs lignes ont le même matiere_id → on renvoie toutes
+    matching = [x for x in items if x["matiere_id"] == matiere_id]
+    return {
+        "ok": True,
+        "item": matching[0] if matching else None,
+        "items_matiere": matching,
+        "summary": _valorisation_summary(items),
+    }
 
 
 @router.get("/api/stock/valorisation/{matiere_id}/historique")
@@ -3622,7 +3879,12 @@ def export_valorisation(request: Request):
     head_fill = PatternFill("solid", fgColor="1E293B")
     head_font = Font(bold=True, color="FFFFFF")
     total_font = Font(bold=True)
-    headers = ["Catégorie", "Référence", "Désignation", "Quantité", "Unité", "Prix unitaire (€)", "Valorisation (€)"]
+    headers = [
+        "Catégorie", "Référence", "Désignation", "Laize",
+        "Quantité", "Unité",
+        "Prix m² (€)", "Métrage (m)",
+        "Prix unitaire (€)", "Valorisation (€)",
+    ]
     ws.append(headers)
     for col_idx, _ in enumerate(headers, start=1):
         c = ws.cell(row=1, column=col_idx)
@@ -3633,13 +3895,15 @@ def export_valorisation(request: Request):
     cur_cat: Optional[str] = None
     cat_total = 0.0
     cat_count = 0
+    n_cols = len(headers)
 
     def _write_cat_total(label: str, tot: float) -> None:
-        ws.append([f"Sous-total {label}", "", "", "", "", "", round(tot, 2)])
+        row = [f"Sous-total {label}"] + [""] * (n_cols - 2) + [round(tot, 2)]
+        ws.append(row)
         r = ws.max_row
-        for col_idx in range(1, 8):
+        for col_idx in range(1, n_cols + 1):
             ws.cell(row=r, column=col_idx).font = total_font
-        ws.cell(row=r, column=7).number_format = "#,##0.00 €"
+        ws.cell(row=r, column=n_cols).number_format = "#,##0.00 €"
 
     for it in items:
         if cur_cat is not None and it["categorie"] != cur_cat and cat_count > 0:
@@ -3651,14 +3915,20 @@ def export_valorisation(request: Request):
             it["categorie_label"],
             it["reference"],
             it["designation"],
+            it.get("laize_label") or "",
             it["quantite"],
             it["unite"],
+            it.get("prix_eur_m2") if it.get("laizee") else "",
+            it.get("metres_lineaires_par_bobine") if it.get("laizee") else "",
             it["prix_unitaire"],
             it["valorisation"],
         ])
         r = ws.max_row
-        ws.cell(row=r, column=6).number_format = "#,##0.0000 €"
-        ws.cell(row=r, column=7).number_format = "#,##0.00 €"
+        if it.get("laizee"):
+            ws.cell(row=r, column=7).number_format = "#,##0.0000 €"
+            ws.cell(row=r, column=8).number_format = "#,##0.0 m"
+        ws.cell(row=r, column=9).number_format = "#,##0.0000 €"
+        ws.cell(row=r, column=10).number_format = "#,##0.00 €"
         cat_total += it["valorisation"]
         cat_count += 1
         grand_total += it["valorisation"]
@@ -3666,15 +3936,15 @@ def export_valorisation(request: Request):
         _write_cat_total(_MP_CATEGORIE_LABELS.get(cur_cat, cur_cat), cat_total)
     # Ligne grand total
     ws.append([])
-    ws.append(["TOTAL MATIÈRES PREMIÈRES", "", "", "", "", "", round(grand_total, 2)])
+    ws.append(["TOTAL MATIÈRES PREMIÈRES"] + [""] * (n_cols - 2) + [round(grand_total, 2)])
     r = ws.max_row
-    for col_idx in range(1, 8):
+    for col_idx in range(1, n_cols + 1):
         cell = ws.cell(row=r, column=col_idx)
         cell.font = Font(bold=True, size=12)
         cell.fill = PatternFill("solid", fgColor="DBEAFE")
-    ws.cell(row=r, column=7).number_format = "#,##0.00 €"
+    ws.cell(row=r, column=n_cols).number_format = "#,##0.00 €"
     # Largeurs colonnes
-    widths = [14, 22, 40, 12, 10, 18, 18]
+    widths = [14, 22, 40, 10, 12, 10, 14, 14, 18, 18]
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[chr(64 + i)].width = w
     ws.freeze_panes = "A2"
@@ -3712,3 +3982,320 @@ def export_valorisation(request: Request):
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Référentiel mp_laizes (admin /settings)
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def _require_laizes_admin(request: Request) -> dict:
+    user = get_current_user(request)
+    if user.get("role") != "superadmin":
+        raise HTTPException(403, "Accès super admin requis.")
+    return user
+
+
+@router.get("/api/admin/mp_laizes")
+def list_mp_laizes(request: Request, all: int = 0):
+    # Lecture autorisée pour tous les utilisateurs ayant accès au stock
+    require_stock(request)
+    include_inactive = bool(all)
+    with get_db() as conn:
+        where = "" if include_inactive else "WHERE actif = 1"
+        rows = conn.execute(
+            f"SELECT id, valeur_mm, label, ordre, actif FROM mp_laizes {where} "
+            "ORDER BY ordre ASC, valeur_mm ASC"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+@router.post("/api/admin/mp_laizes")
+async def create_mp_laize(request: Request):
+    _require_laizes_admin(request)
+    body = await request.json()
+    try:
+        valeur = float(body.get("valeur_mm") or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Valeur (mm) invalide.") from None
+    if valeur <= 0 or valeur > 5000:
+        raise HTTPException(400, "Valeur (mm) hors limites (1 à 5000).")
+    label = (body.get("label") or "").strip()
+    if not label:
+        # Auto : "333 mm"
+        if abs(valeur - int(valeur)) < 1e-9:
+            label = f"{int(valeur)} mm"
+        else:
+            label = f"{valeur:g} mm"
+    try:
+        ordre = int(body.get("ordre") or 0)
+    except (TypeError, ValueError):
+        ordre = 0
+    with get_db() as conn:
+        try:
+            cur = conn.execute(
+                "INSERT INTO mp_laizes (valeur_mm, label, ordre, actif) VALUES (?,?,?,1)",
+                (valeur, label, ordre),
+            )
+            conn.commit()
+            row = conn.execute(
+                "SELECT id, valeur_mm, label, ordre, actif FROM mp_laizes WHERE id=?",
+                (cur.lastrowid,),
+            ).fetchone()
+        except sqlite3.IntegrityError:
+            raise HTTPException(400, "Cette laize existe déjà.") from None
+    return dict(row)
+
+
+@router.put("/api/admin/mp_laizes/{laize_id}")
+async def update_mp_laize(laize_id: int, request: Request):
+    _require_laizes_admin(request)
+    body = await request.json()
+    sets: list[str] = []
+    args: list[Any] = []
+    if "valeur_mm" in body:
+        try:
+            v = float(body["valeur_mm"])
+        except (TypeError, ValueError):
+            raise HTTPException(400, "Valeur (mm) invalide.") from None
+        if v <= 0 or v > 5000:
+            raise HTTPException(400, "Valeur (mm) hors limites.")
+        sets.append("valeur_mm=?"); args.append(v)
+    if "label" in body:
+        lab = (body.get("label") or "").strip()
+        if not lab:
+            raise HTTPException(400, "Label obligatoire.")
+        sets.append("label=?"); args.append(lab)
+    if "ordre" in body:
+        try:
+            sets.append("ordre=?"); args.append(int(body["ordre"]))
+        except (TypeError, ValueError):
+            pass
+    if "actif" in body:
+        sets.append("actif=?"); args.append(1 if body["actif"] else 0)
+    if not sets:
+        raise HTTPException(400, "Aucun champ à mettre à jour.")
+    args.append(laize_id)
+    with get_db() as conn:
+        try:
+            conn.execute(f"UPDATE mp_laizes SET {', '.join(sets)} WHERE id=?", args)
+            conn.commit()
+            row = conn.execute(
+                "SELECT id, valeur_mm, label, ordre, actif FROM mp_laizes WHERE id=?",
+                (laize_id,),
+            ).fetchone()
+        except sqlite3.IntegrityError:
+            raise HTTPException(400, "Cette laize existe déjà.") from None
+    if not row:
+        raise HTTPException(404, "Laize introuvable.")
+    return dict(row)
+
+
+@router.delete("/api/admin/mp_laizes/{laize_id}")
+def delete_mp_laize(laize_id: int, request: Request):
+    _require_laizes_admin(request)
+    with get_db() as conn:
+        # Si cette laize est référencée, on refuse la suppression (on permet la désactivation)
+        used_mat = conn.execute(
+            "SELECT COUNT(*) AS n FROM mp_matiere_laizes WHERE laize_id=?", (laize_id,)
+        ).fetchone()
+        used_mvt = conn.execute(
+            "SELECT COUNT(*) AS n FROM mp_mouvements WHERE laize_id=?", (laize_id,)
+        ).fetchone()
+        if (used_mat["n"] or 0) > 0 or (used_mvt["n"] or 0) > 0:
+            raise HTTPException(
+                400,
+                "Laize utilisée par des matières ou mouvements — désactivez-la plutôt que de la supprimer.",
+            )
+        conn.execute("DELETE FROM mp_laizes WHERE id=?", (laize_id,))
+        conn.commit()
+    return {"ok": True}
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Helpers matières laizées
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def _mp_laizes_for_matiere(conn, matiere_id: int) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT l.id, l.valeur_mm, l.label, l.ordre, l.actif,
+               COALESCE(s.quantite, 0) AS quantite
+        FROM mp_matiere_laizes ml
+        JOIN mp_laizes l ON l.id = ml.laize_id
+        LEFT JOIN mp_stock_laize s ON s.matiere_id = ml.matiere_id AND s.laize_id = ml.laize_id
+        WHERE ml.matiere_id = ?
+        ORDER BY l.ordre ASC, l.valeur_mm ASC
+        """,
+        (matiere_id,),
+    ).fetchall()
+    return [
+        {
+            "laize_id": r["id"],
+            "valeur_mm": float(r["valeur_mm"] or 0),
+            "label": r["label"],
+            "actif": int(r["actif"] or 0),
+            "quantite": float(r["quantite"] or 0),
+        }
+        for r in rows
+    ]
+
+
+def _mp_is_complete(mp_row, has_laizes: bool) -> bool:
+    """Une matière laizée est 'complète' si elle a >=1 laize, prix_eur_m2 > 0
+    et metres_lineaires_par_bobine > 0."""
+    cat = (mp_row["categorie"] or "").lower()
+    if cat not in _MP_CATEGORIES_LAIZEES:
+        return True
+    if not has_laizes:
+        return False
+    try:
+        prix = float(mp_row["prix_eur_m2"] or 0)
+        metres = float(mp_row["metres_lineaires_par_bobine"] or 0)
+    except (TypeError, ValueError):
+        return False
+    return prix > 0 and metres > 0
+
+
+@router.get("/api/stock/matieres/incompletes")
+def count_matieres_incompletes(request: Request):
+    require_stock(request)
+    with get_db() as conn:
+        rows = conn.execute(
+            """
+            SELECT mp.id, mp.categorie, mp.reference, mp.designation,
+                   mp.prix_eur_m2, mp.metres_lineaires_par_bobine,
+                   (SELECT COUNT(*) FROM mp_matiere_laizes ml WHERE ml.matiere_id = mp.id) AS nb_laizes
+            FROM matieres_premieres mp
+            WHERE mp.actif = 1 AND mp.categorie IN ('frontal','glassine','complexe')
+            """
+        ).fetchall()
+    incomplete = []
+    for r in rows:
+        if not _mp_is_complete(r, (r["nb_laizes"] or 0) > 0):
+            incomplete.append({
+                "id": r["id"],
+                "categorie": r["categorie"],
+                "reference": r["reference"],
+                "designation": r["designation"],
+            })
+    return {"count": len(incomplete), "items": incomplete}
+
+
+@router.post("/api/stock/matieres/{matiere_id}/laizes")
+async def set_matiere_laizes(matiere_id: int, request: Request):
+    """Définit la liste des laizes valables pour une matière laizée + métrage + prix m²."""
+    require_stock_matieres_admin(request)
+    body = await request.json()
+    laize_ids_raw = body.get("laize_ids") or []
+    if not isinstance(laize_ids_raw, list):
+        raise HTTPException(400, "laize_ids doit être une liste.")
+    try:
+        laize_ids = [int(x) for x in laize_ids_raw]
+    except (TypeError, ValueError):
+        raise HTTPException(400, "laize_ids invalides.") from None
+    metres = body.get("metres_lineaires_par_bobine")
+    prix = body.get("prix_eur_m2")
+    try:
+        metres = float(metres) if metres not in (None, "") else None
+        prix = float(prix) if prix not in (None, "") else None
+    except (TypeError, ValueError):
+        raise HTTPException(400, "métrage ou prix invalide.") from None
+    if metres is not None and metres < 0:
+        raise HTTPException(400, "métrage négatif.")
+    if prix is not None and prix < 0:
+        raise HTTPException(400, "prix négatif.")
+    with get_db() as conn:
+        mat = conn.execute(
+            "SELECT id, categorie FROM matieres_premieres WHERE id=?", (matiere_id,)
+        ).fetchone()
+        if not mat:
+            raise HTTPException(404, "Matière introuvable.")
+        if not _mp_is_laizee(mat["categorie"]):
+            raise HTTPException(400, "Cette catégorie n'est pas laizée.")
+        if laize_ids:
+            placeholders = ",".join("?" * len(laize_ids))
+            valid_rows = conn.execute(
+                f"SELECT id FROM mp_laizes WHERE id IN ({placeholders})", laize_ids
+            ).fetchall()
+            valid_ids = {r["id"] for r in valid_rows}
+            invalid = [lid for lid in laize_ids if lid not in valid_ids]
+            if invalid:
+                raise HTTPException(400, f"Laizes inconnues : {invalid}")
+        # Suppression des laizes retirées (et de leur stock — protégé si quantité > 0)
+        current = conn.execute(
+            "SELECT laize_id FROM mp_matiere_laizes WHERE matiere_id=?", (matiere_id,)
+        ).fetchall()
+        current_ids = {r["laize_id"] for r in current}
+        new_ids = set(laize_ids)
+        removed = current_ids - new_ids
+        for rid in removed:
+            stock = conn.execute(
+                "SELECT quantite FROM mp_stock_laize WHERE matiere_id=? AND laize_id=?",
+                (matiere_id, rid),
+            ).fetchone()
+            if stock and float(stock["quantite"] or 0) > 0:
+                raise HTTPException(
+                    400,
+                    "Impossible de retirer une laize avec du stock > 0.",
+                )
+            conn.execute(
+                "DELETE FROM mp_matiere_laizes WHERE matiere_id=? AND laize_id=?",
+                (matiere_id, rid),
+            )
+            conn.execute(
+                "DELETE FROM mp_stock_laize WHERE matiere_id=? AND laize_id=?",
+                (matiere_id, rid),
+            )
+        # Ajout des nouvelles
+        added = new_ids - current_ids
+        for aid in added:
+            conn.execute(
+                "INSERT OR IGNORE INTO mp_matiere_laizes (matiere_id, laize_id) VALUES (?, ?)",
+                (matiere_id, aid),
+            )
+            conn.execute(
+                "INSERT OR IGNORE INTO mp_stock_laize (matiere_id, laize_id, quantite) VALUES (?, ?, 0)",
+                (matiere_id, aid),
+            )
+        # Mise à jour métrage / prix
+        sets: list[str] = []
+        args: list[Any] = []
+        if metres is not None:
+            sets.append("metres_lineaires_par_bobine=?"); args.append(metres)
+        if prix is not None:
+            sets.append("prix_eur_m2=?"); args.append(prix)
+        if sets:
+            args.append(matiere_id)
+            conn.execute(
+                f"UPDATE matieres_premieres SET {', '.join(sets)} WHERE id=?", args
+            )
+        conn.commit()
+        laizes = _mp_laizes_for_matiere(conn, matiere_id)
+    return {"ok": True, "laizes": laizes}
+
+
+@router.get("/api/stock/matieres/{matiere_id}/laizes")
+def get_matiere_laizes(matiere_id: int, request: Request):
+    require_stock(request)
+    with get_db() as conn:
+        mat = conn.execute(
+            """SELECT id, categorie, reference, designation,
+                      COALESCE(prix_eur_m2, 0) AS prix_eur_m2,
+                      COALESCE(metres_lineaires_par_bobine, 0) AS metres_lineaires_par_bobine
+               FROM matieres_premieres WHERE id=?""",
+            (matiere_id,),
+        ).fetchone()
+        if not mat:
+            raise HTTPException(404, "Matière introuvable.")
+        laizes = _mp_laizes_for_matiere(conn, matiere_id)
+    return {
+        "matiere_id": mat["id"],
+        "categorie": mat["categorie"],
+        "reference": mat["reference"],
+        "designation": mat["designation"],
+        "prix_eur_m2": float(mat["prix_eur_m2"] or 0),
+        "metres_lineaires_par_bobine": float(mat["metres_lineaires_par_bobine"] or 0),
+        "laizes": laizes,
+    }
