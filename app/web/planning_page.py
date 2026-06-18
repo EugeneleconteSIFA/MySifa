@@ -65,6 +65,7 @@ PLANNING_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/support_widget.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
+<link rel="stylesheet" href="/static/motion.css">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -637,6 +638,7 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_favicon_badge.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
+<script src="/static/motion.js" defer></script>
 <div class="sidebar-overlay" id="sb-ov"></div>
 <div id="app"></div>
 <script src="/static/support_widget.js"></script>
@@ -1760,7 +1762,7 @@ function renderContactModal(){
 function render(){
   const a=document.getElementById("app");
   if(S.loading){
-    a.innerHTML=`<div class="app">${renderSidebar()}<main class="main">${renderPlanningMobileTopbar()}<div class="planning-container" style="display:flex;align-items:center;justify-content:center;min-height:50vh;color:var(--muted)">Chargement…</div>${renderContactModal()}</main></div><div id="mroot"></div>`;
+    a.innerHTML=`<div class="app">${renderSidebar()}<main class="main">${renderPlanningMobileTopbar()}<div class="planning-container" data-page-enter style="display:flex;align-items:center;justify-content:center;min-height:50vh;color:var(--muted)">Chargement…</div>${renderContactModal()}</main></div><div id="mroot"></div>`;
     return;
   }
   const m=S.machine||{nom:"?"};
@@ -1808,14 +1810,19 @@ function render(){
     const fabMsg=`<p style="color:var(--muted);line-height:1.5;margin:0">Aucune machine n’est associée à votre compte pour l’instant. Les machines s’affichent lorsque le champ <strong>machine</strong> de vos <strong>saisies de production</strong> correspond au nom ou au code d’une machine du planning, ou lorsqu’une machine par défaut est renseignée sur votre fiche utilisateur.</p>`;
     const admMsg=`<p style="color:var(--muted);line-height:1.5;margin:0">Aucune machine active n’est disponible dans l’application.</p>`;
     const isFab=ME&&ME.role==="fabrication";
-    a.innerHTML=`<div class="app">${renderSidebar()}<main class="main">${renderPlanningMobileTopbar()}<div class="planning-container" style="max-width:560px;margin:40px auto;padding:0 16px;color:var(--text)">
+    a.innerHTML=`<div class="app">${renderSidebar()}<main class="main">${renderPlanningMobileTopbar()}<div class="planning-container" data-page-enter style="max-width:560px;margin:40px auto;padding:0 16px;color:var(--text)">
       <h1 style="font-size:18px;margin:0 0 12px">Planning</h1>
       ${isFab?fabMsg:admMsg}
     </div>${renderContactModal()}</main></div><div id="mroot"></div>`;
     return;
   }
 
-  a.innerHTML=`<div class="app">${renderSidebar()}<main class="main">${renderPlanningMobileTopbar()}<div class="planning-container">
+  // Motion : cascade d'entree au changement d'onglet / vue uniquement.
+  const _moPlanKey=(S.planningTab||'')+'|'+(S.view||'')+'|'+(S.planningVue||'');
+  const _moPlanEnter=(window._moPlanLastKey!==_moPlanKey);
+  window._moPlanLastKey=_moPlanKey;
+  const _moPlanAttr=_moPlanEnter?' data-page-enter':'';
+  a.innerHTML=`<div class="app">${renderSidebar()}<main class="main">${renderPlanningMobileTopbar()}<div class="planning-container"${_moPlanAttr}>
   <header class="header">
     <div class="h-left">
       <div>
@@ -1841,7 +1848,7 @@ function render(){
       <button type="button" class="planning-tab-btn ${S.planningTab==='timeline'?' active':''}" onclick="setPlanningTab('timeline')">${icon('calendar',16)} Timeline</button>
     </div>
   </div>
-    <section class="sec">
+    <section class="sec"${_moPlanAttr}>
       <div class="sec-hdr">
         ${renderPlanningVueSelect()}
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
@@ -1888,7 +1895,7 @@ function render(){
       <div id="tl-blocks-container">${tlBlocks}</div>
       <div class="legend" id="tl-legend"></div>
     </section>
-    ${SHOW_DOSSIERS?`<section class="sec">
+    ${SHOW_DOSSIERS?`<section class="sec"${_moPlanAttr}>
       <div class="sec-hdr">
         <div class="sec-title">Dossiers de production</div>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
@@ -1914,6 +1921,9 @@ function render(){
   _tlDDContainerBound=false;
   // Réappliquer la recherche timeline + DnD après re-render complet
   requestAnimationFrame(()=>{computeAllTlMatches();updateTlMatchInfo();setupTlDD();});
+  // Motion : (re)scan apres chaque render — pose --i pour les cascades et
+  // arme les Observers. No-op si window.Motion absent (defer non charge).
+  try{ if(window.Motion) window.Motion.scan(document); }catch(_){}
 }
 
 // ── Timeline search — scan ALL slots (across all week offsets) ──────────────

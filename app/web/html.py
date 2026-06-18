@@ -5226,9 +5226,21 @@ function renderStock(){
     ),
     h('button',{type:'button',className:'mobile-home-btn',onClick:()=>{window.location.href='/'},'aria-label':'Accueil'},iconEl('home',20))
   );
+  // Motion : cascade au changement de vue MyStock uniquement (le re-render
+  // intra-vue ne doit pas relancer l'animation, sinon perte de focus inputs).
+  const _moStockKey=(S.stockView||'')+'|'+(S.stockSelProduit||'')+'|'+(S.stockSelEmpl||'');
+  const _moStockEnter=(window._moStockLastKey!==_moStockKey);
+  window._moStockLastKey=_moStockKey;
+  // Niveau 2 : pose data-page-enter sur le 1er element du content pour
+  // cascader ses propres enfants (stats, mouvements, grille, etc.).
+  if(_moStockEnter && content && content.nodeType===1){
+    try{ content.setAttribute('data-page-enter',''); }catch(_){}
+  }
+  const _stockContainerProps={className:'container',style:{padding:'24px 28px'}};
+  if(_moStockEnter) _stockContainerProps['data-page-enter']='';
   const mainEl=h('main',{className:'main'},
     topbar,
-    h('div',{className:'container',style:{padding:'24px 28px'}},
+    h('div',_stockContainerProps,
       h('h1',null,S.stockView==='grille'?'Tableau de bord':S.stockView==='produit'?'Par référence':'Par emplacement'),
       h('div',{className:'subtitle'},
         S.stockView==='grille'?(S.stockGrilleFilter&&String(S.stockGrilleFilter).trim().length>=2
@@ -7505,6 +7517,11 @@ function renderExpe(){
   const _moExpeKey=tab+'|'+(tab==='suivi_departs'?sub:'');
   const _moExpeEnter=(window._moExpeLastKey!==_moExpeKey);
   window._moExpeLastKey=_moExpeKey;
+  // 2e niveau : data-page-enter sur le contenu du tab — les sous-onglets et
+  // les cartes internes cascadent en parallele de la cascade .container.
+  if(_moExpeEnter && content && content.nodeType===1){
+    try{ content.setAttribute('data-page-enter',''); }catch(_){}
+  }
   const contentWrap=content;
 
   return h('div',null,
@@ -13410,6 +13427,7 @@ function render(){
   }
   if(S.app!=='expe'){_expeLastRenderedInnerTab=null;window._moExpeLastKey=null;}
   if(S.app!=='prod'){window._moProdLastKey=null;}
+  if(S.app!=='stock'){window._moStockLastKey=null;}
 
   // Nettoyage polling machine quand on quitte MyProd
   if(S.app!=='prod'){stopMachineStatusPolling();}
@@ -13471,17 +13489,24 @@ function render(){
       h('h1',null,titles[S.page]||''),
       h('div',{className:'subtitle'},subs[S.page]||''),
     ];
-    if(hasProdFilters) containerKids.push(renderFilters());
-    if(hasProdFilters){
-      containerKids.push(h('div',{className:'prod-main-scroll'},...prodPageContent));
-    } else {
-      containerKids.push(...prodPageContent);
-    }
     // Motion : cascade d'entree au changement d'onglet uniquement (le re-render
     // intra-tab ne doit pas relancer l'animation, sinon perte de focus inputs).
     const _moProdKey=(S.page||'')+'|'+(S.subPage||'');
     const _moProdEnter=(window._moProdLastKey!==_moProdKey);
     window._moProdLastKey=_moProdKey;
+    if(hasProdFilters) containerKids.push(renderFilters());
+    if(hasProdFilters){
+      // Wrapper scroll : 2e niveau de cascade sur les cartes top-level.
+      const _scrollProps=Object.assign({className:'prod-main-scroll'},_moProdEnter?{'data-page-enter':''}:{});
+      containerKids.push(h('div',_scrollProps,...prodPageContent));
+    } else {
+      // Pas de wrapper : on pose data-page-enter directement sur le 1er
+      // element retourne par le renderer du tab pour cascader ses enfants.
+      if(_moProdEnter && prodPageContent[0] && prodPageContent[0].nodeType===1){
+        try{ prodPageContent[0].setAttribute('data-page-enter',''); }catch(_){}
+      }
+      containerKids.push(...prodPageContent);
+    }
     const _prodContainerProps=Object.assign({className:'container'},_moProdEnter?{'data-page-enter':''}:{});
     root.appendChild(h('div',null,
       S.sidebarOpen?h('div',{className:'sidebar-overlay',onClick:closeSidebar}):null,
