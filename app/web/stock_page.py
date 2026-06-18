@@ -887,7 +887,8 @@ body.light .mp-search-wrap:focus-within{
 body.sb-open #mroot{pointer-events:none!important;z-index:50!important}
 body.sb-open #mroot>*{pointer-events:none!important}
 .mp-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:18px}
-.mp-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;width:100%;max-width:420px;max-height:90vh;overflow-y:auto}
+.mp-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;width:100%;max-width:560px;max-height:90vh;overflow-y:auto}
+.mp-modal:has(.mp-laize-grid){max-width:760px}
 .mp-modal > h3{margin:0 0 16px;font-size:16px;font-weight:700;color:var(--text)}
 .mp-modal.mp-modal-mvt{padding:0;overflow:visible;display:flex;flex-direction:column}
 .mp-modal-mvt-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px 20px;flex-shrink:0}
@@ -936,9 +937,10 @@ body.light .empl-combo-wrap .empl-suggestions{box-shadow:0 8px 20px rgba(15,23,4
 .mp-modal-sub{font-size:12px;color:var(--muted);margin:-8px 0 14px;line-height:1.5}
 .mp-field{margin-bottom:12px}
 .mp-field label{display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px}
-.mp-field input,.mp-field select,.mp-field textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-size:14px;font-family:inherit;transition:border-color .15s,box-shadow .15s}
-.mp-field input:focus,.mp-field select:focus,.mp-field textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
-body.light .mp-field input:focus,body.light .mp-field select:focus,body.light .mp-field textarea:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
+.mp-field input:not([type=checkbox]):not([type=radio]),.mp-field select,.mp-field textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-size:14px;font-family:inherit;transition:border-color .15s,box-shadow .15s}
+.mp-field input:focus:not([type=checkbox]):not([type=radio]),.mp-field select:focus,.mp-field textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+body.light .mp-field input:focus:not([type=checkbox]):not([type=radio]),body.light .mp-field select:focus,body.light .mp-field textarea:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
+.mp-field input[type=checkbox],.mp-field input[type=radio]{width:auto;padding:0;margin:0;flex-shrink:0;accent-color:var(--accent)}
 .mp-field textarea{min-height:72px;resize:vertical}
 .mp-readonly{padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:10px;font-size:13px;color:var(--text2)}
 .mp-hint{font-size:12px;color:var(--muted);margin-top:4px}
@@ -7319,14 +7321,22 @@ function appendMatiereRefEditFields(parent, item) {
   metresInp.value = String(item.metres_lineaires_par_bobine != null ? item.metres_lineaires_par_bobine : '');
   const prixM2Inp = el('input', { attrs: { type: 'number', min: '0', step: '0.0001', placeholder: 'Ex. 0,0550' } });
   prixM2Inp.value = String(item.prix_eur_m2 != null ? item.prix_eur_m2 : '');
-  const laizeChecks = el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px' });
+  const laizeChecks = el('div', { cls: 'mp-laize-grid',
+    style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-top:6px' });
   const currentLaizeIds = new Set((item.stock_par_laize || []).map(s => s.laize_id));
   (S.laizes || []).filter(l => l.actif || currentLaizeIds.has(l.id)).forEach(l => {
-    const inp = el('input', { attrs: { type: 'checkbox', value: String(l.id) }, style: 'margin:0' });
+    const lid = 'editmat-laize-' + item.id + '-' + l.id;
+    const inp = el('input', { attrs: { type: 'checkbox', id: lid, value: String(l.id) } });
     if (currentLaizeIds.has(l.id)) inp.checked = true;
-    const lbl = el('label', { style: 'display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border:1px solid var(--border);border-radius:999px;cursor:pointer;font-size:12px;background:var(--bg)' },
+    const lbl = el('label', {
+      attrs: { 'for': lid },
+      style: 'display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid ' + (inp.checked ? 'var(--accent)' : 'var(--border)') + ';border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;background:' + (inp.checked ? 'var(--accent-bg)' : 'var(--bg)') + ';color:var(--text);user-select:none;transition:border-color .15s,background .15s' },
       inp, el('span', null, l.label),
     );
+    inp.addEventListener('change', () => {
+      lbl.style.borderColor = inp.checked ? 'var(--accent)' : 'var(--border)';
+      lbl.style.background = inp.checked ? 'var(--accent-bg)' : 'var(--bg)';
+    });
     laizeChecks.appendChild(lbl);
   });
   laizeWrap.append(
@@ -8615,15 +8625,24 @@ function buildMatieresAdminAddForm() {
   const laizeWrap = el('div', { style: 'display:none;border-top:1px dashed var(--border);padding-top:10px;margin-top:6px' });
   const metresInp = el('input', { attrs: { type: 'number', min: '0', step: '1', placeholder: 'Ex. 5000' } });
   const prixM2Inp = el('input', { attrs: { type: 'number', min: '0', step: '0.0001', placeholder: 'Ex. 0,0550' } });
-  const laizeChecks = el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px' });
+  const laizeChecks = el('div', { cls: 'mp-laize-grid',
+    style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-top:6px' });
   function rebuildLaizeChecks() {
     laizeChecks.innerHTML = '';
     (S.laizes || []).filter(l => l.actif).forEach(l => {
       const id = 'addmat-laize-' + l.id;
-      const lbl = el('label', { style: 'display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border:1px solid var(--border);border-radius:999px;cursor:pointer;font-size:12px;background:var(--bg)' },
-        el('input', { attrs: { type: 'checkbox', id: id, value: String(l.id) }, style: 'margin:0' }),
+      const inp = el('input', { attrs: { type: 'checkbox', id: id, value: String(l.id) } });
+      const lbl = el('label', {
+        attrs: { 'for': id },
+        style: 'display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;background:var(--bg);color:var(--text);user-select:none;transition:border-color .15s,background .15s' },
+        inp,
         el('span', null, l.label),
       );
+      // Effet visuel sur sélection
+      inp.addEventListener('change', () => {
+        lbl.style.borderColor = inp.checked ? 'var(--accent)' : 'var(--border)';
+        lbl.style.background = inp.checked ? 'var(--accent-bg)' : 'var(--bg)';
+      });
       laizeChecks.appendChild(lbl);
     });
   }
