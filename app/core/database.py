@@ -3800,6 +3800,40 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 117, "z1_dossier_link_and_palettes")
 
+    # v118 - MyStock : valorisation des matieres premieres
+    # - mp_valorisation : prix unitaire courant par matiere (EUR / unite de gestion)
+    # - mp_valorisation_historique : journal des changements de prix (qui, quand,
+    #   avant/apres, note optionnelle). Pas de snapshot fige de valorisation.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=118 LIMIT 1").fetchone():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS mp_valorisation (
+                matiere_id INTEGER PRIMARY KEY REFERENCES matieres_premieres(id) ON DELETE CASCADE,
+                prix_unitaire REAL NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+                updated_by_name TEXT
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS mp_valorisation_historique (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                matiere_id INTEGER NOT NULL REFERENCES matieres_premieres(id) ON DELETE CASCADE,
+                prix_avant REAL,
+                prix_apres REAL NOT NULL,
+                note TEXT,
+                created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+                created_by INTEGER,
+                created_by_name TEXT
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mp_valo_hist_mat ON mp_valorisation_historique(matiere_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mp_valo_hist_date ON mp_valorisation_historique(created_at DESC)"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 118, "mp_valorisation")
+
 
 
 def create_default_admin():

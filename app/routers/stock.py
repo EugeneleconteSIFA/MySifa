@@ -3407,3 +3407,308 @@ async def confirm_produits_import(request: Request):
                 applied["error"] += 1
         conn.commit()
     return {"success": True, "applied": applied}
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Valorisation matières premières (Contrôle → Valorisation)
+# ─────────────────────────────────────────────────────────────────────────
+
+_MP_CATEGORIE_LABELS = {
+    "frontal": "Frontal",
+    "glassine": "Glassine",
+    "adhesif": "Adhésif",
+    "mandrin": "Mandrin",
+    "carton": "Carton",
+    "palette": "Palette",
+}
+
+
+def _mp_categorie_order(cat: str) -> int:
+    order = ["frontal", "glassine", "adhesif", "mandrin", "carton", "palette"]
+    try:
+        return order.index((cat or "").lower())
+    except ValueError:
+        return len(order)
+
+
+def _valorisation_query(conn) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT mp.id, mp.categorie, mp.reference, mp.designation, mp.actif,
+               COALESCE(s.quantite, 0) AS quantite,
+               COALESCE(v.prix_unitaire, 0) AS prix_unitaire,
+               v.updated_at AS prix_updated_at,
+               v.updated_by_name AS prix_updated_by_name
+        FROM matieres_premieres mp
+        LEFT JOIN mp_stock s ON s.matiere_id = mp.id
+        LEFT JOIN mp_valorisation v ON v.matiere_id = mp.id
+        WHERE mp.actif = 1
+        ORDER BY mp.categorie ASC, mp.reference ASC
+        """
+    ).fetchall()
+    out: list[dict] = []
+    for r in rows:
+        cat = r["categorie"]
+        qte = float(r["quantite"] or 0)
+        prix = float(r["prix_unitaire"] or 0)
+        out.append({
+            "id": r["id"],
+            "categorie": cat,
+            "categorie_label": _MP_CATEGORIE_LABELS.get(cat, cat or ""),
+            "reference": r["reference"],
+            "designation": r["designation"],
+            "quantite": qte,
+            "unite": _mp_unite_gestion(cat),
+            "prix_unitaire": prix,
+            "valorisation": round(qte * prix, 2),
+            "prix_updated_at": r["prix_updated_at"],
+            "prix_updated_by_name": r["prix_updated_by_name"],
+        })
+    return out
+
+
+def _valorisation_summary(items: list[dict]) -> dict:
+    totals_by_cat: dict[str, dict] = {}
+    total = 0.0
+    for it in items:
+        cat = it["categorie"]
+        if cat not in totals_by_cat:
+            totals_by_cat[cat] = {
+                "categorie": cat,
+                "categorie_label": it["categorie_label"],
+                "total": 0.0,
+                "nb_refs": 0,
+                "nb_refs_valorisees": 0,
+            }
+        bucket = totals_by_cat[cat]
+        bucket["total"] += it["valorisation"]
+        bucket["nb_refs"] += 1
+        if it["prix_unitaire"] > 0:
+            bucket["nb_refs_valorisees"] += 1
+        total += it["valorisation"]
+    cats = sorted(totals_by_cat.values(), key=lambda c: _mp_categorie_order(c["categorie"]))
+    for c in cats:
+        c["total"] = round(c["total"], 2)
+    return {
+        "total_mp": round(total, 2),
+        "total_pf": 0.0,
+        "total_global": round(total, 2),
+        "categories": cats,
+        "nb_refs": sum(c["nb_refs"] for c in cats),
+        "nb_refs_valorisees": sum(c["nb_refs_valorisees"] for c in cats),
+    }
+
+
+@router.get("/api/stock/valorisation")
+def get_valorisation(request: Request):
+    require_stock_matieres_admin(request)
+    with get_db() as conn:
+        items = _valorisation_query(conn)
+    return {
+        "items": items,
+        "summary": _valorisation_summary(items),
+    }
+
+
+@router.put("/api/stock/valorisation/{matiere_id}")
+async def update_valorisation(matiere_id: int, request: Request):
+    user = require_stock_matieres_admin(request)
+    body = await request.json()
+    try:
+        prix = float(body.get("prix_unitaire") or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Prix unitaire invalide.") from None
+    if prix < 0:
+        raise HTTPException(400, "Prix unitaire négatif interdit.")
+    if prix > 1_000_000:
+        raise HTTPException(400, "Prix unitaire hors limites (max 1 000 000).")
+    note = (body.get("note") or "").strip() or None
+    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    user_name = (user.get("nom") or user.get("email") or "").strip() or None
+    user_id = user.get("id")
+    with get_db() as conn:
+        mat = conn.execute(
+            "SELECT id FROM matieres_premieres WHERE id=?", (matiere_id,)
+        ).fetchone()
+        if not mat:
+            raise HTTPException(404, "Matière introuvable.")
+        prev = conn.execute(
+            "SELECT prix_unitaire FROM mp_valorisation WHERE matiere_id=?", (matiere_id,)
+        ).fetchone()
+        prix_avant = float(prev["prix_unitaire"]) if prev else None
+        if prev:
+            conn.execute(
+                """UPDATE mp_valorisation
+                   SET prix_unitaire=?, updated_at=?, updated_by_name=?
+                   WHERE matiere_id=?""",
+                (prix, now, user_name, matiere_id),
+            )
+        else:
+            conn.execute(
+                """INSERT INTO mp_valorisation (matiere_id, prix_unitaire, updated_at, updated_by_name)
+                   VALUES (?,?,?,?)""",
+                (matiere_id, prix, now, user_name),
+            )
+        # Pas de ligne d'historique si le prix ne change pas
+        if prix_avant != prix:
+            conn.execute(
+                """INSERT INTO mp_valorisation_historique
+                   (matiere_id, prix_avant, prix_apres, note, created_at, created_by, created_by_name)
+                   VALUES (?,?,?,?,?,?,?)""",
+                (matiere_id, prix_avant, prix, note, now, user_id, user_name),
+            )
+        conn.commit()
+        # Récupération de la ligne valorisée pour réponse
+        items = _valorisation_query(conn)
+    item = next((x for x in items if x["id"] == matiere_id), None)
+    return {"ok": True, "item": item, "summary": _valorisation_summary(items)}
+
+
+@router.get("/api/stock/valorisation/{matiere_id}/historique")
+def get_valorisation_historique(matiere_id: int, request: Request):
+    require_stock_matieres_admin(request)
+    with get_db() as conn:
+        mat = conn.execute(
+            """SELECT mp.id, mp.categorie, mp.reference, mp.designation
+               FROM matieres_premieres mp WHERE mp.id=?""",
+            (matiere_id,),
+        ).fetchone()
+        if not mat:
+            raise HTTPException(404, "Matière introuvable.")
+        rows = conn.execute(
+            """SELECT id, prix_avant, prix_apres, note, created_at, created_by_name
+               FROM mp_valorisation_historique
+               WHERE matiere_id=?
+               ORDER BY datetime(created_at) DESC, id DESC""",
+            (matiere_id,),
+        ).fetchall()
+    return {
+        "matiere": {
+            "id": mat["id"],
+            "categorie": mat["categorie"],
+            "categorie_label": _MP_CATEGORIE_LABELS.get(mat["categorie"], mat["categorie"] or ""),
+            "reference": mat["reference"],
+            "designation": mat["designation"],
+        },
+        "historique": [
+            {
+                "id": r["id"],
+                "prix_avant": float(r["prix_avant"]) if r["prix_avant"] is not None else None,
+                "prix_apres": float(r["prix_apres"]) if r["prix_apres"] is not None else 0.0,
+                "note": r["note"],
+                "created_at": r["created_at"],
+                "created_by_name": r["created_by_name"],
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.get("/api/stock/valorisation/export")
+def export_valorisation(request: Request):
+    require_stock_matieres_admin(request)
+    with get_db() as conn:
+        items = _valorisation_query(conn)
+    summary = _valorisation_summary(items)
+    # Construction d'un classeur Excel avec une feuille de détail + une feuille récap
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Alignment, Font, PatternFill
+    except ImportError as e:
+        raise HTTPException(500, f"openpyxl indisponible : {e}") from None
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Matières premières"
+    head_fill = PatternFill("solid", fgColor="1E293B")
+    head_font = Font(bold=True, color="FFFFFF")
+    total_font = Font(bold=True)
+    headers = ["Catégorie", "Référence", "Désignation", "Quantité", "Unité", "Prix unitaire (€)", "Valorisation (€)"]
+    ws.append(headers)
+    for col_idx, _ in enumerate(headers, start=1):
+        c = ws.cell(row=1, column=col_idx)
+        c.fill = head_fill
+        c.font = head_font
+        c.alignment = Alignment(horizontal="center", vertical="center")
+    grand_total = 0.0
+    cur_cat: Optional[str] = None
+    cat_total = 0.0
+    cat_count = 0
+
+    def _write_cat_total(label: str, tot: float) -> None:
+        ws.append([f"Sous-total {label}", "", "", "", "", "", round(tot, 2)])
+        r = ws.max_row
+        for col_idx in range(1, 8):
+            ws.cell(row=r, column=col_idx).font = total_font
+        ws.cell(row=r, column=7).number_format = "#,##0.00 €"
+
+    for it in items:
+        if cur_cat is not None and it["categorie"] != cur_cat and cat_count > 0:
+            _write_cat_total(_MP_CATEGORIE_LABELS.get(cur_cat, cur_cat), cat_total)
+            cat_total = 0.0
+            cat_count = 0
+        cur_cat = it["categorie"]
+        ws.append([
+            it["categorie_label"],
+            it["reference"],
+            it["designation"],
+            it["quantite"],
+            it["unite"],
+            it["prix_unitaire"],
+            it["valorisation"],
+        ])
+        r = ws.max_row
+        ws.cell(row=r, column=6).number_format = "#,##0.0000 €"
+        ws.cell(row=r, column=7).number_format = "#,##0.00 €"
+        cat_total += it["valorisation"]
+        cat_count += 1
+        grand_total += it["valorisation"]
+    if cur_cat is not None and cat_count > 0:
+        _write_cat_total(_MP_CATEGORIE_LABELS.get(cur_cat, cur_cat), cat_total)
+    # Ligne grand total
+    ws.append([])
+    ws.append(["TOTAL MATIÈRES PREMIÈRES", "", "", "", "", "", round(grand_total, 2)])
+    r = ws.max_row
+    for col_idx in range(1, 8):
+        cell = ws.cell(row=r, column=col_idx)
+        cell.font = Font(bold=True, size=12)
+        cell.fill = PatternFill("solid", fgColor="DBEAFE")
+    ws.cell(row=r, column=7).number_format = "#,##0.00 €"
+    # Largeurs colonnes
+    widths = [14, 22, 40, 12, 10, 18, 18]
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[chr(64 + i)].width = w
+    ws.freeze_panes = "A2"
+
+    # Feuille récap par catégorie
+    ws2 = wb.create_sheet("Récapitulatif")
+    ws2.append(["Catégorie", "Nb références", "Nb références valorisées", "Total (€)"])
+    for col_idx in range(1, 5):
+        c = ws2.cell(row=1, column=col_idx)
+        c.fill = head_fill
+        c.font = head_font
+        c.alignment = Alignment(horizontal="center", vertical="center")
+    for c in summary["categories"]:
+        ws2.append([c["categorie_label"], c["nb_refs"], c["nb_refs_valorisees"], c["total"]])
+        ws2.cell(row=ws2.max_row, column=4).number_format = "#,##0.00 €"
+    ws2.append([])
+    ws2.append(["TOTAL", summary["nb_refs"], summary["nb_refs_valorisees"], summary["total_mp"]])
+    r = ws2.max_row
+    for col_idx in range(1, 5):
+        cell = ws2.cell(row=r, column=col_idx)
+        cell.font = Font(bold=True, size=12)
+        cell.fill = PatternFill("solid", fgColor="DBEAFE")
+    ws2.cell(row=r, column=4).number_format = "#,##0.00 €"
+    for i, w in enumerate([20, 16, 24, 18], start=1):
+        ws2.column_dimensions[chr(64 + i)].width = w
+    ws2.freeze_panes = "A2"
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    filename = f"valorisation-stock-{date_str}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
