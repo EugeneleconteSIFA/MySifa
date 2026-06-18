@@ -1,0 +1,81 @@
+/* ============================================================
+   MySifa — Motion tokens & utilities
+   Animation que l'on veut rapide, decelere (ease-out), discrete
+   (montee 14 px), jamais rebondie. Tout est neutralise sous
+   `prefers-reduced-motion: reduce` ou `body.reduce-anim`.
+   ============================================================ */
+
+:root {
+  /* Durations */
+  --mo-instant: 0.08s;
+  --mo-fast:    0.15s;
+  --mo-base:    0.28s;
+  --mo-slow:    0.45s;
+  --mo-count:   0.9s;
+
+  /* Easings */
+  --ease-out:   cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out:cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring:cubic-bezier(0.34, 1.4, 0.64, 1);
+
+  /* Stagger */
+  --mo-stagger: 60ms;
+
+  /* Reveal travel */
+  --mo-rise:    14px;
+}
+
+/* Keyframes */
+@keyframes mo-fade-up   { from { opacity: 0; transform: translateY(var(--mo-rise)); } to { opacity: 1; transform: none; } }
+@keyframes mo-fade-in   { from { opacity: 0; } to { opacity: 1; } }
+@keyframes mo-scale-in  { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
+@keyframes mo-slide-left{ from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: none; } }
+@keyframes mo-pulse     { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
+@keyframes mo-pulse-ring{ 0% { box-shadow: 0 0 0 0 var(--ring-c, rgba(34,211,238,.45)); } 70%,100% { box-shadow: 0 0 0 7px transparent; } }
+@keyframes mo-shimmer   { 0% { background-position: -160% 0; } 100% { background-position: 260% 0; } }
+@keyframes mo-spin      { to { transform: rotate(360deg); } }
+
+/* Page-enter cascade : enfants directs animes, --i pose par motion.js */
+[data-page-enter] > *,
+.mo-entered > * {
+  animation: mo-fade-up var(--mo-slow) var(--ease-out) backwards;
+  animation-delay: calc(var(--i, 0) * var(--mo-stagger));
+}
+
+/* Skeleton row layout */
+.mo-sk-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.mo-sk-row .mo-skeleton:last-child { margin-left: auto; }
+
+/* Scroll-reveal */
+.mo-reveal { opacity: 0; transform: translateY(var(--mo-rise)); transition: opacity var(--mo-base) var(--ease-out), transform var(--mo-base) var(--ease-out); }
+.mo-reveal.is-in { opacity: 1; transform: none; }
+
+/* Skeleton shimmer */
+.mo-skeleton {
+  background: linear-gradient(100deg, var(--border) 30%, rgba(255,255,255,0.10) 50%, var(--border) 70%);
+  background-size: 220% 100%;
+  animation: mo-shimmer 1.3s linear infinite;
+  border-radius: 6px;
+}
+
+/* Live status dot pulse */
+.mo-live { animation: mo-pulse 1.8s var(--ease-in-out) infinite; }
+
+/* Reduced motion : OS et opt-out */
+@media (prefers-reduced-motion: reduce) {
+  [data-page-enter] > *,
+  .mo-entered > *,
+  .mo-reveal { animation: none !important; transition: none !important; opacity: 1 !important; transform: none !important; }
+  .mo-skeleton, .mo-live { animation: none !important; }
+}
+body.reduce-anim [data-page-enter] > *,
+body.reduce-anim .mo-entered > *,
+body.reduce-anim .mo-reveal { animation: none !important; transition: none !important; opacity: 1 !important; transform: none !important; }
+body.reduce-anim .mo-skeleton,
+body.reduce-anim .mo-live { animation: none !important; }

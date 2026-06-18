@@ -36,6 +36,7 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_dock.css">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_landscape.css">
+<link rel="stylesheet" href="/static/motion.css">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -2072,6 +2073,7 @@ __STAGING_BANDEAU_HTML__
 <script src="/static/chat_widget_v2.js?v=2"></script>
 <script src="/static/mysifa_ai_chat.js"></script>
 <script src="/static/mysifa_landscape.js?v=2"></script>
+<script src="/static/motion.js" defer></script>
 <script>
 const API=window.location.origin;
 const INITIAL_APP="__INITIAL_APP_VALUE__";
@@ -7497,6 +7499,17 @@ function renderExpe(){
     tab==='transporteurs'?renderExpeTransporteurs():tab==='poids'?renderExpePoids():
     tab==='devis'?renderExpeDevisSection():tab==='prospects'?renderExpeProspectsSection():
     renderExpeComparateur();
+  // Motion : cascade d'entree au changement d'onglet uniquement (sinon les
+  // re-renders intra-tab — filtre, saisie, etc. — relanceraient l'animation).
+  // On pose data-page-enter directement sur l'element retourne par le renderer
+  // du tab, pour que TOUS ses enfants directs cascadent.
+  const _moExpeKey=tab+'|'+(tab==='suivi_departs'?sub:'');
+  const _moExpeEnter=(window._moExpeLastKey!==_moExpeKey);
+  window._moExpeLastKey=_moExpeKey;
+  if(_moExpeEnter && content && content.nodeType===1){
+    try{ content.setAttribute('data-page-enter',''); }catch(_){}
+  }
+  const contentWrap=content;
 
   return h('div',null,
     S.sidebarOpen?h('div',{className:'sidebar-overlay',onClick:closeSidebar}):null,
@@ -7516,7 +7529,7 @@ function renderExpe(){
             :tab==='prospects'?'Transporteurs hors référentiel — suivi de démarchage'
             :tab==='poids'?'Estimation du poids d\'un envoi d\'étiquettes'
             :'Référentiel transporteurs, zones et tarifs'),
-          content
+          contentWrap
         )
       )
     ),
@@ -13528,6 +13541,10 @@ function render(){
       syncDossierFilterSuggest();
     });
   }
+  // Motion : (re)scan apres chaque render — pose --i pour les cascades,
+  // arme les IntersectionObserver pour mo-reveal et data-count-to, et place
+  // l'indicateur de navigation glissant. No-op si window.Motion absent.
+  try{ if(window.Motion) window.Motion.scan(document); }catch(_){}
 }
 
 async function nav(){

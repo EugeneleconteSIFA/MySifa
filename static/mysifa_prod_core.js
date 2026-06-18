@@ -5218,6 +5218,48 @@ function _prodAggDossier(rows){
   return Object.values(m).sort((a,b)=>String(a.no_dossier).localeCompare(
     String(b.no_dossier),'fr',{numeric:true,sensitivity:'base'}));
 }
+function _repHighlightDay(key, on){
+  if(!key) return;
+  document.querySelectorAll('tr.rep-hier-day').forEach(el => {
+    if(el.getAttribute('data-team-jour') === key){
+      el.style.background = on ? 'var(--accent-bg)' : '';
+      el.querySelectorAll('td').forEach(td => {
+        td.style.color = on ? 'var(--accent)' : '';
+      });
+    }
+  });
+  document.querySelectorAll('circle.rep-chart-point').forEach(el => {
+    if(el.getAttribute('data-team-jour') === key){
+      if(on){
+        el.setAttribute('r', '6');
+        el.setAttribute('stroke-width', '2.5');
+      }else{
+        el.setAttribute('r', '3.5');
+        el.setAttribute('stroke-width', '1.5');
+      }
+    }
+  });
+}
+function _repHighlightTeam(team, on){
+  if(!team) return;
+  document.querySelectorAll('tr.rep-hier-team').forEach(el => {
+    if(el.getAttribute('data-team') === team){
+      el.style.background = on ? 'var(--accent-bg)' : '';
+    }
+  });
+  document.querySelectorAll('polyline.rep-chart-line').forEach(el => {
+    if(el.getAttribute('data-team') === team){
+      el.setAttribute('stroke-width', on ? '3.5' : '2');
+      el.setAttribute('opacity', on ? '1' : '0.95');
+    }
+  });
+  document.querySelectorAll('circle.rep-chart-point').forEach(el => {
+    if(el.getAttribute('data-team') === team){
+      el.setAttribute('r', on ? '5' : '3.5');
+    }
+  });
+}
+
 function _prodSynthTabGet(hasRep, onlyRep){
   if(onlyRep) return 'repiquage';
   if(!hasRep) return 'machines';
@@ -6113,13 +6155,26 @@ function renderProdKpis(){
         teamCartonsCell.style.borderTop = teamSep;
         const teamEtiqCell = numCell(teamData.total.etiquettes, 1);
         teamEtiqCell.style.borderTop = teamSep;
-        tbodyKids.push(h('tr',{className:'rep-hier-team'},
+        tbodyKids.push(h('tr',{
+          className:'rep-hier-team',
+          'data-team': teamLabel,
+          onmouseenter: () => _repHighlightTeam(teamLabel, true),
+          onmouseleave: () => _repHighlightTeam(teamLabel, false),
+          style:{transition:'background 120ms'},
+        },
           teamCell, teamCartonsCell, teamEtiqCell,
         ));
         // Jours ordonnes desc
         const dayEntries = Object.entries(teamData.days).sort((a,b)=>String(b[0]).localeCompare(String(a[0])));
         dayEntries.forEach(([jour, dayData]) => {
-          tbodyKids.push(h('tr',{className:'rep-hier-day'},
+          const dayKey = teamLabel + '|' + jour;
+          tbodyKids.push(h('tr',{
+            className:'rep-hier-day',
+            'data-team-jour': dayKey,
+            onmouseenter: () => _repHighlightDay(dayKey, true),
+            onmouseleave: () => _repHighlightDay(dayKey, false),
+            style:{transition:'background 120ms,color 120ms'},
+          },
             detailCell(formatJourLabel(jour), 2, () => repOpenDay(dosLabel, teamLabel, jour)),
             numCell(dayData.cartons, 2),
             numCell(dayData.etiquettes, 2),
@@ -6290,29 +6345,46 @@ function renderProdKpis(){
         svg += '<text x="' + x + '" y="' + (H-mB+16) + '" text-anchor="middle" font-size="10" fill="var(--text2)">' + escHtml(lblShort) + '</text>';
       });
 
-      // Une polyline par equipe
+      // Une polyline par equipe (avec classes + data-attrs pour l'interactivite)
       teamArr.forEach(team => {
         const pts = [];
         activeJours.forEach((j, i) => {
           const raw = (byTeamDayMap[team] && byTeamDayMap[team][j]);
-          if(raw == null) return;  // pas de saisie ce jour → break visuel
+          if(raw == null) return;
           pts.push({x:xAt(i), y:yAt(raw), v:raw, j});
         });
         if(!pts.length) return;
-        // Si un seul point → marker seul. Sinon polyline.
+        const teamAttr = escHtml(team);
         if(pts.length > 1){
           const polyD = pts.map(p => p.x.toFixed(2)+','+p.y.toFixed(2)).join(' ');
-          svg += '<polyline points="' + polyD + '" fill="none" stroke="' + teamColors[team] + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/>';
+          svg += '<polyline class="rep-chart-line" data-team="' + teamAttr + '" points="' + polyD + '" fill="none" stroke="' + teamColors[team] + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity="0.95" style="pointer-events:none"/>';
         }
         pts.forEach(p => {
           const tt = formatJourLabel(p.j) + ' — ' + team + ' : ' + fN(p.v) + ' cartons';
-          svg += '<circle cx="' + p.x.toFixed(2) + '" cy="' + p.y.toFixed(2) + '" r="3.5" fill="' + teamColors[team] + '" stroke="var(--card)" stroke-width="1.5"><title>' + escHtml(tt) + '</title></circle>';
+          const dayKey = team + '|' + p.j;
+          svg += '<circle class="rep-chart-point" data-team="' + teamAttr + '" data-team-jour="' + escHtml(dayKey) + '" cx="' + p.x.toFixed(2) + '" cy="' + p.y.toFixed(2) + '" r="3.5" fill="' + teamColors[team] + '" stroke="var(--card)" stroke-width="1.5" style="cursor:pointer;transition:r 120ms,stroke-width 120ms"><title>' + escHtml(tt) + '</title></circle>';
         });
       });
       svg += '</svg>';
 
-      const chartBox = h('div',{style:{background:'var(--bg)',padding:'10px 6px 4px',borderRadius:'8px',border:'1px solid var(--border)'}});
+      // Fond transparent : le card parent fournit deja le conteneur.
+      const chartBox = h('div',{style:{padding:'8px 4px 4px',borderRadius:'8px'}});
       chartBox.innerHTML = svg;
+      // Delegation : hover d'un point chart -> highlight ligne table correspondante
+      chartBox.addEventListener('mouseover', (e) => {
+        const t = e.target;
+        if(t && t.classList && t.classList.contains('rep-chart-point')){
+          const key = t.getAttribute('data-team-jour');
+          if(key) _repHighlightDay(key, true);
+        }
+      });
+      chartBox.addEventListener('mouseout', (e) => {
+        const t = e.target;
+        if(t && t.classList && t.classList.contains('rep-chart-point')){
+          const key = t.getAttribute('data-team-jour');
+          if(key) _repHighlightDay(key, false);
+        }
+      });
       wrap.appendChild(chartBox);
 
       // Légende équipes (sous le graphe)
