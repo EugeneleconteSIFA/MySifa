@@ -3982,6 +3982,8 @@ function renderPortal(){
   const isAo = isSuper || urole === 'direction';
   const isBAT = isSuper || !!(urole && ['direction','administration'].includes(urole));
   const isQualite = isSuper || !!(urole && ['direction','administration'].includes(urole));
+  const _uident = (S.user && S.user.identifiant) ? String(S.user.identifiant).trim().toLowerCase() : '';
+  const isMaintenance = isSuper || _uident === 'loic.gognau';
   const isLight=document.body.classList.contains('light');
 
   const order=(S.user&&Array.isArray(S.user.portal_apps_order))?S.user.portal_apps_order:[];
@@ -4159,6 +4161,20 @@ function renderPortal(){
         })
         .catch(()=>{});
     },0);
+  }
+
+  if(isMaintenance){
+    const id='maintenance';
+    tileSpecs.push({id,el:h('div',{
+      className:'portal-app',
+      'data-portal-id':id,
+      draggable:'true',
+      onClick:()=>{if(_portalDragSuppressClick)return;window.location.href='/maintenance';}
+    },
+      h('div',{className:'portal-app-icon'},iconEl('tool',28)),
+      h('div',{className:'portal-app-name'},'Maintenance'),
+      h('div',{className:'portal-app-desc'},'Suivi et planification (en cours)')
+    )});
   }
 
   const orderedTiles=portalOrderTileSpecs(tileSpecs,order);
