@@ -6979,6 +6979,68 @@ function renderProdKpis(){
       const m = renderOfImportModal();
       if(m) root.appendChild(m);
     }
+
+    // ── Couche d'animation (motion.css / motion.js) ──────────────────
+    // Détecte les changements d'onglet et applique :
+    //   pattern 1 (data-page-enter) sur le container,
+    //   pattern 2 (.mo-reveal) sur les cards / stats,
+    //   pattern 3 (count-up) sur les valeurs chiffrées.
+    // Sur les re-renders intra-onglet (filtres, pagination), aucun
+    // élément n'est animé : on évite les replays parasites.
+    try { __moApplyPostRender(root); } catch(e){}
+  }
+
+  // État de nav pour détecter les transitions d'onglet
+  let __moNavKey = null;
+  function __moApplyPostRender(root){
+    if(!root) return;
+    if(typeof window === 'undefined' || !window.Motion) return;
+    const container = root.querySelector('.app .container');
+    if(!container) return;
+    const navKey = (S.page || '') + '|' + (S.subPage || '') + '|' + (S.ofSubTab || '');
+    const navChanged = navKey !== __moNavKey;
+    __moNavKey = navKey;
+
+    if(navChanged){
+      // Pattern 1 : cascade d'entrée sur les enfants directs du container
+      container.setAttribute('data-page-enter', '');
+      // Pattern 2 : reveal au scroll sur cards et stats hors cascade directe
+      const reveals = container.querySelectorAll('.card, .stat, .machine-card');
+      for(let i=0; i<reveals.length; i++){
+        const el = reveals[i];
+        // Évite double-anim : si l'élément est déjà un enfant direct du container
+        // il sera animé par data-page-enter.
+        if(el.parentElement === container) continue;
+        el.classList.add('mo-reveal');
+      }
+      // Pattern 3 : count-up sur les valeurs chiffrées (stat-value)
+      const stats = container.querySelectorAll('.stat-value');
+      for(let j=0; j<stats.length; j++){
+        const el = stats[j];
+        if(el.dataset.countTo) continue;
+        // Skip si contenu HTML non purement texte (icônes, badges…)
+        if(el.children && el.children.length > 0) continue;
+        const txt = (el.textContent || '').trim();
+        if(!txt || txt === '—' || txt === '-' || txt === '…') continue;
+        // Match « 1 234,56 » ou « 1234.56 » ou « 92 » avec un suffixe non chiffre optionnel
+        const m = txt.match(/^(-?[\d   ]+(?:[\.,]\d+)?)([^\d]*)$/);
+        if(!m) continue;
+        const raw = m[1].replace(/[   ]/g, '').replace(',', '.');
+        const num = parseFloat(raw);
+        if(!isFinite(num)) continue;
+        const decimals = (raw.split('.')[1] || '').length;
+        const suffix = m[2] || '';
+        el.dataset.countTo = String(num);
+        if(decimals) el.dataset.decimals = String(decimals);
+        if(suffix) el.dataset.suffix = suffix;
+        el.textContent = decimals ? '0,' + '0'.repeat(decimals) : '0';
+      }
+    } else {
+      // Pas de changement d'onglet : on retire data-page-enter pour qu'aucune
+      // cascade ne se rejoue sur ce re-render (filtres, pagination, etc.).
+      container.removeAttribute('data-page-enter');
+    }
+    try { window.Motion.scan(root); } catch(e){}
   }
 
   // ── Exposition globale pour debugging et étapes suivantes ──────────
@@ -7048,6 +7110,11 @@ function renderProdKpis(){
   // ── Bootstrap : declenche checkAuth au chargement ──────────────────
   if(document.readyState === 'loading'){
     document.addEventListener('DOMContentLoaded', () => { checkAuth().catch(() => {}); });
+  }else{
+    checkAuth().catch(() => {});
+  }
+})();
+);
   }else{
     checkAuth().catch(() => {});
   }
