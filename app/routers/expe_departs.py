@@ -2371,18 +2371,39 @@ def comparateur(request: Request, body: dict = Body(...)):
 EXPE_DEVIS_CC = "expeditions@sifa.pro"
 
 
+def _next_demande_reference(conn, year: str) -> str:
+    """Renvoie la prochaine référence YYYY-N pour l'année donnée."""
+    rows = conn.execute(
+        "SELECT reference FROM expe_demandes_devis "
+        "WHERE reference LIKE ?",
+        (f"{year}-%",),
+    ).fetchall()
+    n_max = 0
+    for r in rows:
+        ref = (r[0] or "").strip()
+        if "-" in ref:
+            _, num_str = ref.split("-", 1)
+            try:
+                n_max = max(n_max, int(num_str))
+            except ValueError:
+                continue
+    return f"{year}-{n_max + 1}"
+
+
 @router.post("/devis/demandes")
 def creer_demande_devis(request: Request, body: dict = Body(...)):
     user = _require_expe_write(request)
     now = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
     email = (user.get("email") or user.get("identifiant") or "").strip() or None
+    year = now[:4]
     with get_db() as conn:
+        reference = _next_demande_reference(conn, year)
         cur = conn.execute(
             """
             INSERT INTO expe_demandes_devis
             (depart_id, poids_total_kg, nb_palette, code_postal_destination,
-             type_envoi, contraintes, statut, created_at, created_by_email)
-            VALUES (?,?,?,?,?,?,'ouverte',?,?)
+             type_envoi, contraintes, statut, created_at, created_by_email, reference)
+            VALUES (?,?,?,?,?,?,'ouverte',?,?,?)
             """,
             (
                 body.get("depart_id"),
@@ -2393,6 +2414,7 @@ def creer_demande_devis(request: Request, body: dict = Body(...)):
                 (body.get("contraintes") or "").strip() or None,
                 now,
                 email,
+                reference,
             ),
         )
         conn.commit()
@@ -2409,6 +2431,12 @@ def list_demandes_devis(request: Request, statut: str = "ouverte"):
         if statut == "toutes":
             rows = conn.execute(
                 "SELECT * FROM expe_demandes_devis ORDER BY created_at DESC LIMIT 100"
+            ).fetchall()
+        elif statut == "historique":
+            # Toutes les demandes clôturées (manuellement ou via retenue).
+            rows = conn.execute(
+                "SELECT * FROM expe_demandes_devis WHERE statut='cloturee' "
+                "ORDER BY created_at DESC LIMIT 100"
             ).fetchall()
         else:
             rows = conn.execute(
@@ -2672,6 +2700,23 @@ def retenir_reponse_devis(request: Request, reponse_id: int):
         )
         conn.commit()
     return {"statut": "cloturee", "retenu": reponse_id}
+
+
+@router.post("/devis/demandes/{demande_id}/cloturer")
+def cloturer_demande_devis(request: Request, demande_id: int):
+    """Clôture manuelle d'une demande : passe en statut 'cloturee' (archive)."""
+    _require_expe_write(request)
+    with get_db() as conn:
+        if not conn.execute(
+            "SELECT 1 FROM expe_demandes_devis WHERE id=?", (demande_id,)
+        ).fetchone():
+            raise HTTPException(status_code=404, detail="Demande introuvable")
+        conn.execute(
+            "UPDATE expe_demandes_devis SET statut='cloturee' WHERE id=?",
+            (demande_id,),
+        )
+        conn.commit()
+    return {"statut": "cloturee", "id": demande_id}
 
 
 @router.delete("/devis/demandes/{demande_id}")

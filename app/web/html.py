@@ -7293,7 +7293,7 @@ function renderExpeSuiviDeparts(){
     h('div',{className:'card-header'},h('h3',{className:'expe-mobile-hide-head'},'Départs programmés (en attente de validation)')),
     h('div',{style:{overflowX:'auto'}},h('table',{className:'table-std expe-departs-table'},h('thead',null,head),h('tbody',null,...body)))
   );
-  return h('div',null,topBar,listCard,renderExpeDepartModal());
+  return h('div',null,topBar,listCard);
 }
 
 function renderExpeHistoriqueDeparts(){
@@ -7387,7 +7387,9 @@ function renderExpeSuiviDepartsWithSubtabs(){
     },iconEl(t.icon,14),' ',t.label))
   );
   const body=sub==='historique'?renderExpeHistoriqueDeparts():renderExpeSuiviDeparts();
-  return h('div',null,subNav,body);
+  // Modal monté au niveau parent : reste accessible quel que soit le sous-onglet
+  // (sinon, modifier une ligne depuis l'Historique forçait à revenir sur "Départs du jour").
+  return h('div',null,subNav,body,renderExpeDepartModal());
 }
 
 function renderExpe(){

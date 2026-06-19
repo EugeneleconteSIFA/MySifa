@@ -3917,6 +3917,58 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 119, "mp_laizes_matieres_laizees")
 
+    # v120 — MyExpé : référence "YYYY-N" pour les demandes de devis
+    if not conn.execute(
+        "SELECT 1 FROM schema_migrations WHERE version=120 LIMIT 1"
+    ).fetchone():
+        cols = {
+            row[1]
+            for row in conn.execute(
+                "PRAGMA table_info(expe_demandes_devis)"
+            ).fetchall()
+        }
+        if "reference" not in cols:
+            conn.execute(
+                "ALTER TABLE expe_demandes_devis ADD COLUMN reference TEXT"
+            )
+        # Backfill : numéros séquentiels par année (ordre chronologique).
+        rows = conn.execute(
+            "SELECT id, created_at FROM expe_demandes_devis "
+            "WHERE reference IS NULL OR reference='' "
+            "ORDER BY COALESCE(created_at,''), id"
+        ).fetchall()
+        # Compteurs initialisés à partir des références déjà présentes.
+        counters: dict[str, int] = {}
+        existing = conn.execute(
+            "SELECT reference FROM expe_demandes_devis WHERE reference IS NOT NULL"
+        ).fetchall()
+        for r in existing:
+            ref = (r[0] or "").strip()
+            if "-" in ref:
+                year_str, num_str = ref.split("-", 1)
+                try:
+                    n = int(num_str)
+                    counters[year_str] = max(counters.get(year_str, 0), n)
+                except ValueError:
+                    pass
+        for r in rows:
+            created = r[1] or ""
+            year = created[:4] if len(created) >= 4 else "1970"
+            counters[year] = counters.get(year, 0) + 1
+            ref = f"{year}-{counters[year]}"
+            conn.execute(
+                "UPDATE expe_demandes_devis SET reference=? WHERE id=?",
+                (ref, r[0]),
+            )
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS "
+            "idx_expe_demandes_devis_reference "
+            "ON expe_demandes_devis(reference) "
+            "WHERE reference IS NOT NULL"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 120, "expe_demandes_devis_reference")
+
 
 
 def create_default_admin():

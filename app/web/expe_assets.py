@@ -1393,6 +1393,24 @@ async function retenirReponse(reponseId,demandeId){
   }
 }
 
+async function cloturerDemande(demandeId,ev){
+  if(ev&&ev.stopPropagation)ev.stopPropagation();
+  if(!confirm('Clôturer cette demande ? Elle sera déplacée dans l’historique.'))return;
+  try{
+    await api('/api/expe/devis/demandes/'+demandeId+'/cloturer',{method:'POST'});
+    showToast('Demande clôturée.','success');
+    fermerExpeDevisModal();
+    await chargerDemandes();
+  }catch(e){
+    showToast(e.message||'Erreur','danger');
+  }
+}
+
+function devisRefLabel(d){
+  if(!d)return '';
+  return d.reference?('Demande '+d.reference):('Demande #'+d.id);
+}
+
 function ouvrirModalProspect(prospectId){
   const p=prospectId?(S.prospects||[]).find(x=>Number(x.id)===Number(prospectId)):null;
   set({expeDevisModal:{type:'prospect',prospectId:prospectId||null,form:p?{
@@ -1527,7 +1545,7 @@ function renderExpeDevisModal(){
     const d=m.demande||{};
     const reps=m.reponses||[];
     box.appendChild(h('div',{className:'expe-devis-modal-head'},
-      h('span',{style:{fontWeight:'700',fontSize:'15px'}},'Demande #'+d.id+' — '+escHtml(d.code_postal_destination||'')),
+      h('span',{style:{fontWeight:'700',fontSize:'15px'}},devisRefLabel(d)+' — '+escHtml(d.code_postal_destination||'')),
       closeBtn));
     box.appendChild(h('div',{style:{fontSize:'12px',color:'var(--muted)',marginBottom:'16px'}},
       (d.poids_total_kg?d.poids_total_kg+' kg · ':'')+
@@ -1536,8 +1554,11 @@ function renderExpeDevisModal(){
       (d.contraintes?' · '+escHtml(d.contraintes):'')
     ));
     if(d.statut==='ouverte'&&expeCanWrite()){
-      box.appendChild(h('div',{style:{marginBottom:'16px'}},
-        h('button',{type:'button',className:'btn btn-accent',onClick:()=>void ouvrirModalEnvoi(d.id)},'Envoyer les demandes')
+      box.appendChild(h('div',{style:{marginBottom:'16px',display:'flex',gap:'8px',flexWrap:'wrap'}},
+        h('button',{type:'button',className:'btn btn-accent',onClick:()=>void ouvrirModalEnvoi(d.id)},'Envoyer les demandes'),
+        h('button',{type:'button',className:'btn',style:{color:'var(--danger)',borderColor:'var(--danger)'},
+          title:'Clôturer cette demande (déplace dans l’historique)',
+          onClick:()=>void cloturerDemande(d.id)},iconEl('check-circle',12),' Clôturer')
       ));
     }
     const {bestPrix,bestDelai}=expeDevisMeilleursReponses(reps);
@@ -1684,16 +1705,20 @@ function renderExpeDevisModal(){
 function renderExpeDevisSection(){
   const demandes=S.devis_demandes||[];
   const filtre=S.devis_filtre||'ouverte';
+  const emptyMsg=filtre==='historique'
+    ? 'Aucune demande clôturée.'
+    : (filtre==='toutes' ? 'Aucune demande enregistrée.' : 'Aucune demande en cours.');
   const head=h('div',{className:'expe-devis-page-head'},
     expeCanWrite()?h('button',{type:'button',className:'btn btn-accent',onClick:()=>ouvrirModalNouvelleDemande(null)},iconEl('plus',14),' Nouvelle demande'):null,
     h('div',{className:'expe-devis-filtre'},
       h('button',{type:'button',className:'btn-ghost'+(filtre==='ouverte'?' active-filtre':''),onClick:()=>{S.devis_filtre='ouverte';void chargerDemandes();}},'Ouvertes'),
+      h('button',{type:'button',className:'btn-ghost'+(filtre==='historique'?' active-filtre':''),onClick:()=>{S.devis_filtre='historique';void chargerDemandes();}},'Historique'),
       h('button',{type:'button',className:'btn-ghost'+(filtre==='toutes'?' active-filtre':''),onClick:()=>{S.devis_filtre='toutes';void chargerDemandes();}},'Toutes')
     )
   );
   let list;
   if(!demandes.length){
-    list=h('p',{style:{color:'var(--muted)',fontSize:'13px',margin:'24px 0'}},'Aucune demande en cours.');
+    list=h('p',{style:{color:'var(--muted)',fontSize:'13px',margin:'24px 0'}},emptyMsg);
   }else{
     list=h('div',{className:'expe-devis-cards'},
       ...demandes.map(d=>{
@@ -1701,18 +1726,28 @@ function renderExpeDevisSection(){
         const suivi=expeDevisSuiviTag(d);
         if(suivi)pills.push(suivi);
         if(d.statut==='cloturee')pills.push(h('span',{className:'expe-devis-pill muted'},'Clôturée'));
+        const actions=[];
+        if(d.statut==='ouverte'&&expeCanWrite()){
+          actions.push(h('button',{
+            type:'button',
+            className:'btn-ghost',
+            style:{fontSize:'12px',color:'var(--danger)',padding:'4px 8px'},
+            title:'Clôturer cette demande (déplace dans l’historique)',
+            onClick:e=>void cloturerDemande(d.id,e)
+          },iconEl('check-circle',12),' Clôturer'));
+        }
         const card=h('div',{className:'expe-devis-card',onClick:()=>void ouvrirDetailDemande(d.id)},
           h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:'12px'}},
             h('div',null,
               h('div',{style:{fontSize:'13px',fontWeight:'700',color:'var(--text)',marginBottom:'4px'}},
-                'Demande #'+d.id+' — '+escHtml(d.code_postal_destination||'CP inconnu')+' — '+escHtml(d.type_envoi||'')),
+                devisRefLabel(d)+' — '+escHtml(d.code_postal_destination||'CP inconnu')+' — '+escHtml(d.type_envoi||'')),
               h('div',{style:{fontSize:'12px',color:'var(--muted)'}},
                 (d.poids_total_kg?d.poids_total_kg+' kg ':'')+
                 (d.nb_palette?d.nb_palette+' pal. ':'')+
                 '· '+(d.created_at||'').slice(0,10)
               )
             ),
-            h('div',{style:{display:'flex',gap:'6px',flexWrap:'wrap'}},...pills)
+            h('div',{style:{display:'flex',gap:'6px',flexWrap:'wrap',alignItems:'center'}},...pills,...actions)
           ),
           d.contraintes?h('div',{style:{marginTop:'8px',fontSize:'12px',color:'var(--text2)'}},escHtml(d.contraintes)):null
         );

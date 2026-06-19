@@ -1888,11 +1888,28 @@ def _rep_set_carton_courant(conn, no_dossier: str, operateur: str, nb: int) -> N
 
 
 def _rep_get_etiq_par_carton(conn, no_dossier: str):
+    # Priorite : l'entry sur la machine Repiquage (joint sur machines.nom).
+    # Si pas trouve sur Repiquage, fallback sur n'importe quel entry du dossier
+    # ayant le param defini (utile si Repiquage n'a pas l'entry mais que
+    # l'admin a saisi le param ailleurs).
     row = conn.execute(
-        "SELECT etiquettes_par_carton FROM planning_entries "
-        "WHERE trim(reference) = trim(?) LIMIT 1",
+        "SELECT pe.etiquettes_par_carton FROM planning_entries pe "
+        "LEFT JOIN machines m ON m.id = pe.machine_id "
+        "WHERE trim(pe.reference) = trim(?) "
+        "AND (lower(trim(COALESCE(m.nom,''))) LIKE 'repiquage%' "
+        "     OR lower(trim(COALESCE(m.nom,''))) = 'rep') "
+        "AND pe.etiquettes_par_carton IS NOT NULL "
+        "ORDER BY pe.id DESC LIMIT 1",
         (no_dossier,),
     ).fetchone()
+    if not row or row["etiquettes_par_carton"] is None:
+        # Fallback : n'importe quel entry avec param defini
+        row = conn.execute(
+            "SELECT etiquettes_par_carton FROM planning_entries "
+            "WHERE trim(reference) = trim(?) AND etiquettes_par_carton IS NOT NULL "
+            "ORDER BY id DESC LIMIT 1",
+            (no_dossier,),
+        ).fetchone()
     if not row or row["etiquettes_par_carton"] is None:
         return None
     try:

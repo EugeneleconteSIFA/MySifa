@@ -4177,29 +4177,37 @@ async function ofPlanningHandleFile(file){
 
   const pdfNoOf=(parsed.of_numero||'').trim();
 
+  // Stocker dès maintenant pour que 'C'est correct' puisse enchaîner directement
+  _ofPlanningParsed=parsed;
+
   if(entryNoOf && pdfNoOf && entryNoOf.toLowerCase()!==pdfNoOf.toLowerCase()){
-    closeOfPlanningImport();
     const ov2=document.createElement('div');
     ov2.className='of-preview-overlay';
     ov2.id='of-mismatch-overlay';
     ov2.innerHTML=`<div class="of-mismatch-modal">
-      <div style="font-size:15px;font-weight:700;color:var(--text)">
-        Numéros d'OF incompatibles
+      <div style="font-size:15px;font-weight:700;color:var(--warn)">
+        ⚠ Numéros d'OF différents
       </div>
       <div style="font-size:13px;color:var(--text2);line-height:1.6">
         Le PDF importé correspond à l'OF
-        <strong style="color:var(--danger)">${escHtml(pdfNoOf||'inconnu')}</strong>,
+        <strong style="color:var(--warn)">${escHtml(pdfNoOf||'inconnu')}</strong>,
         mais ce dossier est associé à l'OF
         <strong style="color:var(--text)">${escHtml(entryNoOf)}</strong>.
         <br><br>
-        L'import est bloqué. Vérifiez que vous avez sélectionné le bon fichier PDF.
+        Si c'est volontaire (correction de référence, OF reliquat, etc.) tu peux continuer.
+        Sinon, annule et vérifie le fichier.
       </div>
-      <div style="display:flex;justify-content:flex-end">
-        <button onclick="document.getElementById('of-mismatch-overlay').remove()"
+      <div style="display:flex;justify-content:flex-end;gap:10px">
+        <button onclick="(function(){const o=document.getElementById('of-mismatch-overlay');if(o)o.remove();closeOfPlanningImport();})()"
           style="padding:9px 20px;border-radius:8px;border:1.5px solid var(--border);
                  background:transparent;color:var(--text);font-size:13px;font-weight:600;
                  cursor:pointer;font-family:inherit">
           Annuler
+        </button>
+        <button onclick="(function(){const o=document.getElementById('of-mismatch-overlay');if(o)o.remove();ofPlanningShowValidationForm();})()"
+          style="padding:9px 20px;border-radius:8px;border:none;background:var(--accent);
+                 color:#000;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">
+          C'est correct
         </button>
       </div>
     </div>`;
@@ -4207,7 +4215,6 @@ async function ofPlanningHandleFile(file){
     return;
   }
 
-  _ofPlanningParsed=parsed;
   ofPlanningShowValidationForm();
 }
 
