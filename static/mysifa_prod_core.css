@@ -965,3 +965,24 @@ select.form-sel:focus{border-color:var(--accent)}
 /* Card sans bordure haute (utilisé dans liste Rentabilité quand items collés) */
 .card .dossier-row{border-bottom:1px solid var(--border)}
 .card .dossier-row:last-child{border-bottom:none}
+
+/* ── Overrides motion pour MyProd ─────────────────────────────────────
+   Rend les animations plus visibles que les valeurs par défaut de
+   motion.css (qui sont volontairement très discrètes). Ces overrides
+   ne touchent QUE la page /prod parce que mysifa_prod_core.css n'est
+   chargé que là. */
+:root {
+  --mo-slow:    0.70s;   /* cascade d'entrée — 0.45 par défaut */
+  --mo-base:    0.45s;   /* reveal scroll — 0.28 par défaut */
+  --mo-count:   1.20s;   /* count-up — 0.9 par défaut */
+  --mo-stagger: 90ms;    /* écart cascade — 60 par défaut */
+  --mo-rise:    22px;    /* distance montée — 14 par défaut */
+}
+
+/* Le scroll reveal des cards est plus marqué */
+.mo-reveal { transform: translateY(28px); }
+
+/* Cascade d'entrée plus marquée : on amplifie le mouvement initial */
+[data-page-enter] > * {
+  animation-fill-mode: backwards;
+}
