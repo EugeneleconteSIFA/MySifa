@@ -3969,6 +3969,45 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 120, "expe_demandes_devis_reference")
 
+    # v121 - MyStock : valorisation des produits finis (et negoce)
+    # - pf_valorisation : prix unitaire HT courant par produit + meta import Excel
+    # - pf_valorisation_historique : journal des changements (qui, quand,
+    #   avant/apres, source : edition manuelle | import xlsx).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=121 LIMIT 1").fetchone():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS pf_valorisation (
+                produit_id INTEGER PRIMARY KEY REFERENCES produits(id) ON DELETE CASCADE,
+                prix_unitaire_ht REAL NOT NULL DEFAULT 0,
+                source_prix TEXT,
+                statut TEXT,
+                date_derniere_cmd TEXT,
+                updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+                updated_by INTEGER,
+                updated_by_name TEXT
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS pf_valorisation_historique (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                produit_id INTEGER NOT NULL REFERENCES produits(id) ON DELETE CASCADE,
+                prix_avant REAL,
+                prix_apres REAL NOT NULL,
+                source TEXT,
+                note TEXT,
+                created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+                created_by INTEGER,
+                created_by_name TEXT
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_pf_valo_hist_prod ON pf_valorisation_historique(produit_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_pf_valo_hist_date ON pf_valorisation_historique(created_at DESC)"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 121, "pf_valorisation")
+
 
 
 def create_default_admin():

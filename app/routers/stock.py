@@ -4025,6 +4025,483 @@ def export_valorisation(request: Request):
     )
 
 
+# ═════════════════════════════════════════════════════════════════════════
+# Valorisation Produits Finis (PF + Négoce) — Contrôle → Valorisation
+# Source d'import : feuille "Valorisation" de Lignes_de_facturation.xlsx
+# ═════════════════════════════════════════════════════════════════════════
+
+
+def _pf_valo_normalize_ref(ref: str) -> str:
+    return (ref or "").strip().upper()
+
+
+def _pf_valo_pick_stock(conn: sqlite3.Connection, produit_type: str) -> dict[int, float]:
+    """Quantité totale par produit_id (somme lots_stock + fallback stock_emplacements)."""
+    out: dict[int, float] = {}
+    rows = conn.execute(
+        """
+        SELECT p.id AS produit_id, COALESCE(SUM(l.quantite_restante),0) AS q
+        FROM produits p
+        LEFT JOIN lots_stock l ON l.produit_id = p.id AND l.quantite_restante > 0.0001
+        WHERE COALESCE(p.type, 'fabrique') = ?
+        GROUP BY p.id
+        """,
+        (produit_type,),
+    ).fetchall()
+    for r in rows:
+        out[int(r["produit_id"])] = float(r["q"] or 0)
+    # Compléter avec stock_emplacements pour les refs sans lots (legacy)
+    rows2 = conn.execute(
+        """
+        SELECT p.id AS produit_id, COALESCE(SUM(s.quantite),0) AS q
+        FROM produits p
+        JOIN stock_emplacements s ON s.produit_id = p.id AND s.quantite > 0.0001
+        WHERE COALESCE(p.type, 'fabrique') = ?
+        GROUP BY p.id
+        """,
+        (produit_type,),
+    ).fetchall()
+    for r in rows2:
+        pid = int(r["produit_id"])
+        if out.get(pid, 0) <= 0:
+            out[pid] = float(r["q"] or 0)
+    return out
+
+
+def _pf_valo_query(conn: sqlite3.Connection) -> list[dict]:
+    """Liste de toutes les références (fabrique + négoce) avec leur prix HT courant + stock."""
+    rows = conn.execute(
+        """
+        SELECT p.id, p.reference, p.designation, p.unite,
+               COALESCE(p.type, 'fabrique') AS type,
+               v.prix_unitaire_ht, v.source_prix, v.statut, v.date_derniere_cmd,
+               v.updated_at, v.updated_by_name
+        FROM produits p
+        LEFT JOIN pf_valorisation v ON v.produit_id = p.id
+        ORDER BY p.reference ASC
+        """
+    ).fetchall()
+    stock_fab = _pf_valo_pick_stock(conn, "fabrique")
+    stock_neg = _pf_valo_pick_stock(conn, "negoce")
+    out: list[dict] = []
+    for r in rows:
+        ptype = r["type"]
+        pid = int(r["id"])
+        stock = stock_fab.get(pid, 0.0) if ptype == "fabrique" else stock_neg.get(pid, 0.0)
+        prix = float(r["prix_unitaire_ht"] or 0) if r["prix_unitaire_ht"] is not None else 0.0
+        out.append({
+            "id": pid,
+            "reference": r["reference"],
+            "designation": r["designation"],
+            "unite": r["unite"] or "",
+            "type": ptype,  # 'fabrique' ou 'negoce'
+            "type_label": "Négoce" if ptype == "negoce" else "Fabriqué",
+            "quantite": round(stock, 4),
+            "prix_unitaire_ht": prix,
+            "valorisation": round(stock * prix, 2),
+            "source_prix": r["source_prix"],
+            "statut": r["statut"],
+            "date_derniere_cmd": r["date_derniere_cmd"],
+            "updated_at": r["updated_at"],
+            "updated_by_name": r["updated_by_name"],
+            "has_price": prix > 0,
+        })
+    return out
+
+
+def _pf_valo_summary(items: list[dict]) -> dict:
+    total_fab = 0.0
+    total_neg = 0.0
+    nb_fab = 0
+    nb_fab_valued = 0
+    nb_neg = 0
+    nb_neg_valued = 0
+    nb_sans_prix = 0
+    for it in items:
+        if it["type"] == "negoce":
+            nb_neg += 1
+            total_neg += it["valorisation"]
+            if it["has_price"]:
+                nb_neg_valued += 1
+            else:
+                nb_sans_prix += 1
+        else:
+            nb_fab += 1
+            total_fab += it["valorisation"]
+            if it["has_price"]:
+                nb_fab_valued += 1
+            else:
+                nb_sans_prix += 1
+    return {
+        "total_pf": round(total_fab + total_neg, 2),
+        "total_fabrique": round(total_fab, 2),
+        "total_negoce": round(total_neg, 2),
+        "nb_refs": nb_fab + nb_neg,
+        "nb_refs_fabrique": nb_fab,
+        "nb_refs_negoce": nb_neg,
+        "nb_refs_valorisees": nb_fab_valued + nb_neg_valued,
+        "nb_refs_sans_prix": nb_sans_prix,
+    }
+
+
+@router.get("/api/stock/valorisation/pf")
+def list_valorisation_pf(request: Request):
+    """Liste tous les produits finis (fabrique + négoce) avec prix HT courant et stock."""
+    require_stock_matieres_admin(request)
+    with get_db() as conn:
+        items = _pf_valo_query(conn)
+    return {
+        "items": items,
+        "summary": _pf_valo_summary(items),
+    }
+
+
+@router.put("/api/stock/valorisation/pf/{produit_id}")
+async def update_valorisation_pf(produit_id: int, request: Request):
+    """Met à jour le prix unitaire HT d'un produit fini (ou négoce). Trace l'historique."""
+    user = require_stock_matieres_admin(request)
+    body = await request.json()
+    raw = body.get("prix_unitaire_ht", body.get("prix_unitaire"))
+    try:
+        new_price = float(raw) if raw not in (None, "") else 0.0
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Prix invalide.") from None
+    if new_price < 0:
+        raise HTTPException(400, "Prix négatif.")
+    if new_price > 1_000_000:
+        raise HTTPException(400, "Prix hors limites.")
+    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    user_name = (user.get("nom") or user.get("email") or "").strip() or None
+    user_id = user.get("id")
+    with get_db() as conn:
+        prod = conn.execute(
+            "SELECT id, reference, designation, unite, type FROM produits WHERE id=?",
+            (produit_id,),
+        ).fetchone()
+        if not prod:
+            raise HTTPException(404, "Produit introuvable.")
+        prev = conn.execute(
+            "SELECT prix_unitaire_ht FROM pf_valorisation WHERE produit_id=?",
+            (produit_id,),
+        ).fetchone()
+        prev_price = float(prev["prix_unitaire_ht"]) if prev and prev["prix_unitaire_ht"] is not None else None
+        if (prev_price or 0) == new_price:
+            # Pas de changement réel : on rafraîchit juste l'item sans logger
+            pass
+        else:
+            conn.execute(
+                """
+                INSERT INTO pf_valorisation (produit_id, prix_unitaire_ht, updated_at, updated_by, updated_by_name)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(produit_id) DO UPDATE SET
+                    prix_unitaire_ht = excluded.prix_unitaire_ht,
+                    updated_at = excluded.updated_at,
+                    updated_by = excluded.updated_by,
+                    updated_by_name = excluded.updated_by_name
+                """,
+                (produit_id, new_price, now, user_id, user_name),
+            )
+            conn.execute(
+                """
+                INSERT INTO pf_valorisation_historique
+                  (produit_id, prix_avant, prix_apres, source, note, created_at, created_by, created_by_name)
+                VALUES (?, ?, ?, 'edition', ?, ?, ?, ?)
+                """,
+                (produit_id, prev_price, new_price, None, now, user_id, user_name),
+            )
+            conn.commit()
+        items = _pf_valo_query(conn)
+    item = next((x for x in items if x["id"] == produit_id), None)
+    return {
+        "item": item,
+        "summary": _pf_valo_summary(items),
+    }
+
+
+@router.get("/api/stock/valorisation/pf/{produit_id}/historique")
+def get_valorisation_pf_historique(produit_id: int, request: Request):
+    require_stock_matieres_admin(request)
+    with get_db() as conn:
+        prod = conn.execute(
+            "SELECT id, reference, designation FROM produits WHERE id=?",
+            (produit_id,),
+        ).fetchone()
+        if not prod:
+            raise HTTPException(404, "Produit introuvable.")
+        rows = conn.execute(
+            """SELECT id, prix_avant, prix_apres, source, note, created_at, created_by_name
+               FROM pf_valorisation_historique WHERE produit_id=?
+               ORDER BY datetime(created_at) DESC, id DESC""",
+            (produit_id,),
+        ).fetchall()
+    return {
+        "produit": {
+            "id": prod["id"],
+            "reference": prod["reference"],
+            "designation": prod["designation"],
+        },
+        "historique": [
+            {
+                "id": r["id"],
+                "prix_avant": float(r["prix_avant"]) if r["prix_avant"] is not None else None,
+                "prix_apres": float(r["prix_apres"]) if r["prix_apres"] is not None else 0.0,
+                "source": r["source"],
+                "note": r["note"],
+                "created_at": r["created_at"],
+                "created_by_name": r["created_by_name"],
+            }
+            for r in rows
+        ],
+    }
+
+
+# ─────────── Import Excel (feuille "Valorisation") ───────────
+
+def _pf_valo_parse_excel(file_bytes: bytes) -> tuple[list[dict], list[str]]:
+    """Parse la feuille Valorisation. Retourne (rows, warnings).
+    Format attendu : Référence, Désignation, Unité (MySIFA), …, Prix unitaire HT, …, Statut, Source prix.
+    Recherche la feuille 'Valorisation' (insensible à la casse) ou prend la 1re feuille en fallback.
+    """
+    try:
+        from openpyxl import load_workbook
+    except ImportError as e:
+        raise HTTPException(500, f"openpyxl indisponible : {e}") from None
+    try:
+        wb = load_workbook(io.BytesIO(file_bytes), data_only=True, read_only=True)
+    except Exception as e:
+        raise HTTPException(400, f"Fichier Excel illisible : {e}") from None
+    sheet_name = None
+    for sn in wb.sheetnames:
+        if sn.strip().lower() == "valorisation":
+            sheet_name = sn
+            break
+    if not sheet_name:
+        sheet_name = wb.sheetnames[0]
+    ws = wb[sheet_name]
+    # En-têtes (ligne 1)
+    headers_raw = []
+    for cell in next(ws.iter_rows(min_row=1, max_row=1, values_only=True)):
+        headers_raw.append(str(cell).strip() if cell is not None else "")
+    def find_col(*candidates: str) -> int | None:
+        norm = lambda s: re.sub(r"\s+", " ", (s or "").strip().lower())
+        targets = {norm(c) for c in candidates}
+        for i, h in enumerate(headers_raw):
+            if norm(h) in targets:
+                return i
+        return None
+    idx_ref = find_col("Référence", "Reference", "Ref", "Référence produit")
+    idx_des = find_col("Désignation", "Designation")
+    idx_unite = find_col("Unité (MySIFA)", "Unité MySIFA", "Unite (MySIFA)", "Unité")
+    idx_qte = find_col("Quantité stock", "Quantite stock", "Quantité")
+    idx_date = find_col("Date dernière cmd", "Date derniere cmd", "Date dernière commande")
+    idx_ht = find_col("Prix unitaire HT", "Prix HT", "PU HT")
+    idx_statut = find_col("Statut")
+    idx_source = find_col("Source prix", "Source")
+    warnings: list[str] = []
+    if idx_ref is None:
+        raise HTTPException(400, "Colonne 'Référence' introuvable dans la feuille Valorisation.")
+    if idx_ht is None:
+        raise HTTPException(400, "Colonne 'Prix unitaire HT' introuvable dans la feuille Valorisation.")
+    rows_out: list[dict] = []
+    for r_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+        if not row:
+            continue
+        ref = row[idx_ref] if idx_ref < len(row) else None
+        if ref is None:
+            continue
+        ref_s = _pf_valo_normalize_ref(str(ref))
+        if not ref_s:
+            continue
+        prix_raw = row[idx_ht] if (idx_ht is not None and idx_ht < len(row)) else None
+        try:
+            prix = float(prix_raw) if prix_raw not in (None, "") else 0.0
+        except (TypeError, ValueError):
+            warnings.append(f"Ligne {r_idx}: prix HT illisible « {prix_raw} » — ignoré (mis à 0)")
+            prix = 0.0
+        des = row[idx_des] if (idx_des is not None and idx_des < len(row)) else None
+        unite = row[idx_unite] if (idx_unite is not None and idx_unite < len(row)) else None
+        date_cmd = row[idx_date] if (idx_date is not None and idx_date < len(row)) else None
+        statut = row[idx_statut] if (idx_statut is not None and idx_statut < len(row)) else None
+        source = row[idx_source] if (idx_source is not None and idx_source < len(row)) else None
+        # Normaliser la date
+        date_s = None
+        if date_cmd is not None and date_cmd != "":
+            if isinstance(date_cmd, datetime):
+                date_s = date_cmd.strftime("%Y-%m-%d")
+            else:
+                date_s = str(date_cmd).strip() or None
+        rows_out.append({
+            "reference": ref_s,
+            "designation": (str(des).strip() if des is not None else ""),
+            "unite": (str(unite).strip() if unite is not None else ""),
+            "prix_unitaire_ht": prix,
+            "date_derniere_cmd": date_s,
+            "statut": (str(statut).strip() if statut is not None else None),
+            "source_prix": (str(source).strip() if source is not None else None),
+        })
+    return rows_out, warnings
+
+
+@router.post("/api/stock/valorisation/pf/import")
+async def import_valorisation_pf(request: Request, file: UploadFile = File(...)):
+    """Import du fichier Excel — onglet 'Valorisation'.
+    - Crée les références fabrique manquantes (produits.type='fabrique').
+    - Met à jour le prix HT pour toutes les refs trouvées.
+    - Log un historique avec source='import'.
+    """
+    user = require_stock_matieres_admin(request)
+    if not file or not file.filename:
+        raise HTTPException(400, "Aucun fichier reçu.")
+    fname = (file.filename or "").lower()
+    if not (fname.endswith(".xlsx") or fname.endswith(".xlsm")):
+        raise HTTPException(400, "Format attendu : .xlsx ou .xlsm")
+    content = await file.read()
+    rows, warnings = _pf_valo_parse_excel(content)
+    if not rows:
+        raise HTTPException(400, "Aucune ligne exploitable dans la feuille Valorisation.")
+    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    user_name = (user.get("nom") or user.get("email") or "").strip() or None
+    user_id = user.get("id")
+    created = 0
+    updated = 0
+    unchanged = 0
+    skipped: list[dict] = []
+    with get_db() as conn:
+        for row in rows:
+            ref = row["reference"]
+            des = row["designation"] or ref
+            unite = row["unite"] or "étiquette"
+            prix = float(row["prix_unitaire_ht"] or 0)
+            statut = row["statut"]
+            source_prix = row["source_prix"] or "Import Excel"
+            date_cmd = row["date_derniere_cmd"]
+            existing = conn.execute(
+                "SELECT id, designation, unite, type FROM produits WHERE reference=?",
+                (ref,),
+            ).fetchone()
+            if not existing:
+                # Création comme produit fabriqué
+                cur = conn.execute(
+                    "INSERT INTO produits (reference, designation, description, unite, type, created_at, updated_at) "
+                    "VALUES (?,?,?,?,?,?,?)",
+                    (ref, des, "", unite, "fabrique", now, now),
+                )
+                pid = int(cur.lastrowid)
+                created += 1
+            else:
+                pid = int(existing["id"])
+                # Si le type est negoce, on ne touche pas — l'utilisateur l'a marqué exprès
+                # Sinon, on met à jour designation / unité si vides
+                if (not existing["designation"]) and des:
+                    conn.execute("UPDATE produits SET designation=?, updated_at=? WHERE id=?", (des, now, pid))
+                if (not existing["unite"]) and unite:
+                    conn.execute("UPDATE produits SET unite=?, updated_at=? WHERE id=?", (unite, now, pid))
+            prev = conn.execute(
+                "SELECT prix_unitaire_ht FROM pf_valorisation WHERE produit_id=?",
+                (pid,),
+            ).fetchone()
+            prev_price = float(prev["prix_unitaire_ht"]) if prev and prev["prix_unitaire_ht"] is not None else None
+            conn.execute(
+                """
+                INSERT INTO pf_valorisation
+                  (produit_id, prix_unitaire_ht, source_prix, statut, date_derniere_cmd, updated_at, updated_by, updated_by_name)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(produit_id) DO UPDATE SET
+                  prix_unitaire_ht = excluded.prix_unitaire_ht,
+                  source_prix = excluded.source_prix,
+                  statut = excluded.statut,
+                  date_derniere_cmd = excluded.date_derniere_cmd,
+                  updated_at = excluded.updated_at,
+                  updated_by = excluded.updated_by,
+                  updated_by_name = excluded.updated_by_name
+                """,
+                (pid, prix, source_prix, statut, date_cmd, now, user_id, user_name),
+            )
+            if (prev_price or 0) == prix:
+                unchanged += 1
+            else:
+                updated += 1
+                conn.execute(
+                    """
+                    INSERT INTO pf_valorisation_historique
+                      (produit_id, prix_avant, prix_apres, source, note, created_at, created_by, created_by_name)
+                    VALUES (?, ?, ?, 'import', ?, ?, ?, ?)
+                    """,
+                    (pid, prev_price, prix, source_prix, now, user_id, user_name),
+                )
+        conn.commit()
+        items = _pf_valo_query(conn)
+    return {
+        "success": True,
+        "stats": {
+            "lignes_lues": len(rows),
+            "refs_creees": created,
+            "refs_mises_a_jour": updated,
+            "refs_inchangees": unchanged,
+            "avertissements": warnings[:50],
+        },
+        "summary": _pf_valo_summary(items),
+    }
+
+
+@router.get("/api/stock/valorisation/pf/export")
+def export_valorisation_pf(request: Request):
+    """Export Excel des prix unitaires PF actuels (format ré-importable)."""
+    require_stock_matieres_admin(request)
+    with get_db() as conn:
+        items = _pf_valo_query(conn)
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Alignment, Font, PatternFill
+    except ImportError as e:
+        raise HTTPException(500, f"openpyxl indisponible : {e}") from None
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Valorisation"
+    headers = [
+        "Référence", "Désignation", "Unité (MySIFA)", "Type",
+        "Quantité stock", "Prix unitaire HT", "Valorisation",
+        "Date dernière cmd", "Statut", "Source prix",
+        "Dernière maj", "Modifié par",
+    ]
+    head_fill = PatternFill("solid", fgColor="1E293B")
+    head_font = Font(color="FFFFFF", bold=True, size=11)
+    for c_idx, h in enumerate(headers, start=1):
+        cell = ws.cell(row=1, column=c_idx, value=h)
+        cell.fill = head_fill
+        cell.font = head_font
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+    ws.freeze_panes = "A2"
+    for i, it in enumerate(items, start=2):
+        ws.cell(row=i, column=1, value=it["reference"])
+        ws.cell(row=i, column=2, value=it["designation"])
+        ws.cell(row=i, column=3, value=it["unite"])
+        ws.cell(row=i, column=4, value=it["type_label"])
+        ws.cell(row=i, column=5, value=it["quantite"])
+        ws.cell(row=i, column=6, value=it["prix_unitaire_ht"])
+        ws.cell(row=i, column=7, value=it["valorisation"])
+        ws.cell(row=i, column=8, value=it.get("date_derniere_cmd") or "")
+        ws.cell(row=i, column=9, value=it.get("statut") or "")
+        ws.cell(row=i, column=10, value=it.get("source_prix") or "")
+        ws.cell(row=i, column=11, value=it.get("updated_at") or "")
+        ws.cell(row=i, column=12, value=it.get("updated_by_name") or "")
+    widths = [16, 60, 14, 12, 14, 16, 16, 16, 22, 22, 22, 22]
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[chr(64 + i) if i <= 26 else f"A{chr(64 + i - 26)}"].width = w
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    filename = f"valorisation-pf-{date_str}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+
+
 # ─────────────────────────────────────────────────────────────────────────
 # Référentiel mp_laizes (admin /settings)
 # ─────────────────────────────────────────────────────────────────────────

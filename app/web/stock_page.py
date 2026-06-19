@@ -12826,35 +12826,555 @@ async function exportValorisationExcel() {
   }
 }
 
-function buildValorisationPFSection() {
-  const wrap = el('div', { style: 'margin-top:28px' });
-  // Bandeau de titre cohérent avec la section MP
-  const head = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px' },
+
+// ── Valorisation Produits Finis (PF + Négoce) ─────────────────────
+
+function valPFEnsureState() {
+  const v = valEnsureState();
+  if (!v.pf) {
+    v.pf = {
+      items: [],
+      summary: null,
+      loading: false,
+      query: '',
+      filterSansPrix: false,
+      filterNegoce: false,
+      sortColumn: null,
+      sortDirection: 'asc',
+      importing: false,
+      exporting: false,
+      historique: null,
+      historiqueLoading: false,
+    };
+  }
+  return v.pf;
+}
+
+async function loadValorisationPF() {
+  const pf = valPFEnsureState();
+  pf.loading = true;
+  renderValorisationView(true);
+  try {
+    const data = await api('/api/stock/valorisation/pf');
+    pf.items = Array.isArray(data?.items) ? data.items : [];
+    pf.summary = data?.summary || null;
+  } catch (e) {
+    pf.items = [];
+    pf.summary = null;
+    showToast('Erreur de chargement PF : ' + (e?.message || 'inconnue'), 'danger');
+  } finally {
+    pf.loading = false;
+    renderValorisationView(true);
+  }
+}
+
+function pfFilteredItems() {
+  const pf = valPFEnsureState();
+  let rows = pf.items || [];
+  if (pf.filterNegoce) {
+    rows = rows.filter(r => r.type === 'negoce');
+  }
+  if (pf.filterSansPrix) {
+    rows = rows.filter(r => !r.has_price);
+  }
+  const q = (pf.query || '').trim().toLowerCase();
+  if (q) {
+    // Recherche tolérante : on enlève -, /, espace pour matcher la référence
+    const qNorm = q.replace(/[-/\s]/g, '');
+    rows = rows.filter(r => {
+      const refRaw = (r.reference || '').toLowerCase();
+      const refNorm = refRaw.replace(/[-/\s]/g, '');
+      const des = (r.designation || '').toLowerCase();
+      return refRaw.includes(q) || refNorm.includes(qNorm) || des.includes(q);
+    });
+  }
+  if (pf.sortColumn) {
+    rows = rows.slice().sort((a, b) => {
+      let va, vb;
+      switch (pf.sortColumn) {
+        case 'reference': va = (a.reference || '').toLowerCase(); vb = (b.reference || '').toLowerCase(); break;
+        case 'designation': va = (a.designation || '').toLowerCase(); vb = (b.designation || '').toLowerCase(); break;
+        case 'type': va = (a.type_label || '').toLowerCase(); vb = (b.type_label || '').toLowerCase(); break;
+        case 'quantite': va = Number(a.quantite || 0); vb = Number(b.quantite || 0); break;
+        case 'prix_unitaire_ht': va = Number(a.prix_unitaire_ht || 0); vb = Number(b.prix_unitaire_ht || 0); break;
+        case 'valorisation': va = Number(a.valorisation || 0); vb = Number(b.valorisation || 0); break;
+        default: va = 0; vb = 0;
+      }
+      if (va < vb) return pf.sortDirection === 'asc' ? -1 : 1;
+      if (va > vb) return pf.sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }
+  return rows;
+}
+
+function valTogglePFSort(column) {
+  const pf = valPFEnsureState();
+  if (pf.sortColumn === column) {
+    pf.sortDirection = pf.sortDirection === 'asc' ? 'desc' : 'asc';
+  } else {
+    pf.sortColumn = column;
+    pf.sortDirection = 'asc';
+  }
+  renderValorisationPFTableOnly();
+}
+
+async function savePFPrice(produitId, newPrice, inputEl) {
+  const pf = valPFEnsureState();
+  try {
+    const data = await api('/api/stock/valorisation/pf/' + produitId, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prix_unitaire_ht: newPrice }),
+    });
+    if (data?.item) {
+      const idx = pf.items.findIndex(x => x.id === produitId);
+      if (idx >= 0) pf.items[idx] = data.item;
+    }
+    if (data?.summary) pf.summary = data.summary;
+    renderValorisationView(true);
+    showToast('Prix enregistré.', 'success');
+  } catch (e) {
+    showToast('Erreur : ' + (e?.message || 'enregistrement impossible'), 'danger');
+    if (inputEl) {
+      const item = pf.items.find(x => x.id === produitId);
+      if (item) inputEl.value = (Number(item.prix_unitaire_ht) || 0).toString().replace('.', ',');
+    }
+  }
+}
+
+async function openPFHistorique(produitId) {
+  const pf = valPFEnsureState();
+  pf.historiqueLoading = true;
+  pf.historique = { produit: null, historique: [] };
+  renderPFHistoriqueModal();
+  try {
+    const data = await api('/api/stock/valorisation/pf/' + produitId + '/historique');
+    pf.historique = data;
+  } catch (e) {
+    pf.historique = null;
+    showToast('Erreur : ' + (e?.message || 'historique indisponible'), 'danger');
+  } finally {
+    pf.historiqueLoading = false;
+    renderPFHistoriqueModal();
+  }
+}
+
+function closePFHistorique() {
+  const pf = valPFEnsureState();
+  pf.historique = null;
+  pf.historiqueLoading = false;
+  renderPFHistoriqueModal();
+}
+
+function renderPFHistoriqueModal() {
+  const root = document.getElementById('mroot');
+  if (!root) return;
+  const pf = valPFEnsureState();
+  // On ne ré-écrit le mroot que si on doit afficher ce modal
+  if (!pf.historique && !pf.historiqueLoading) {
+    // Si un autre modal (MP historique) est ouvert, ne pas l'écraser
+    const existing = root.firstElementChild;
+    if (existing && existing.getAttribute && existing.getAttribute('data-modal') === 'pf-historique') {
+      root.innerHTML = '';
+    }
+    return;
+  }
+  root.innerHTML = '';
+
+  const overlay = el('div', {
+    'data-modal': 'pf-historique',
+    style: 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px',
+    on: { click: (e) => { if (e.target === overlay) closePFHistorique(); } },
+  });
+  const box = el('div', { style:
+    'background:var(--card);border:1px solid var(--border);border-radius:14px;width:100%;max-width:640px;max-height:80vh;display:flex;flex-direction:column' });
+  const head = el('div', { style: 'padding:18px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:14px' });
+  const prod = (pf.historique && pf.historique.produit) || null;
+  head.append(
     el('div', null,
-      el('h3', { style: 'font-size:16px;font-weight:800;color:var(--text);margin:0' }, 'Produits finis'),
-      el('div', { style: 'font-size:12px;color:var(--muted);margin-top:2px' }, 'Valorisation par import Excel — à venir'),
+      el('div', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px' }, 'Historique des prix'),
+      el('div', { style: 'font-size:15px;font-weight:700;color:var(--text)' },
+        prod ? (prod.reference + ' — ' + (prod.designation || '')) : 'Chargement…')
     ),
-    el('span', { style:
-      'padding:5px 12px;border-radius:999px;background:rgba(251,146,60,0.15);color:#fb923c;font-size:11px;font-weight:700;letter-spacing:.3px' },
-      'BIENTÔT')
+    el('button', {
+      type: 'button',
+      style: 'background:transparent;border:1px solid var(--border);border-radius:8px;width:32px;height:32px;color:var(--text2);cursor:pointer;font-size:18px;line-height:1',
+      on: { click: closePFHistorique },
+    }, '×'),
   );
-  wrap.appendChild(head);
-  const card = el('div', { style:
-    'background:var(--card);border:1px dashed var(--border);border-radius:12px;padding:24px;display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center' });
-  card.appendChild(iconEl('upload', 28));
-  card.appendChild(el('div', { style: 'font-size:13px;color:var(--text2);max-width:540px;line-height:1.6' },
-    'Vous pourrez importer ici un fichier Excel exporté depuis votre ERP (référence + prix de vente) ',
-    'pour calculer la valorisation des produits finis : ',
-    el('strong', null, 'prix de vente − 40% (marge) − 3% (amortissement stock)'),
-    '.'));
-  card.appendChild(el('button', {
-    type: 'button', disabled: true,
-    style: 'padding:9px 16px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--muted);font-weight:700;font-size:13px;cursor:not-allowed' },
-    'Importer le fichier Excel — bientôt disponible'
-  ));
-  wrap.appendChild(card);
+  const body = el('div', { style: 'padding:16px 20px;overflow-y:auto' });
+  if (pf.historiqueLoading) {
+    body.appendChild(el('div', { style: 'padding:30px;text-align:center;color:var(--muted);font-size:13px' }, 'Chargement…'));
+  } else if (!pf.historique || !pf.historique.historique || !pf.historique.historique.length) {
+    body.appendChild(el('div', { style: 'padding:30px;text-align:center;color:var(--muted);font-size:13px' },
+      'Aucun changement de prix enregistré.'));
+  } else {
+    const list = el('div', { style: 'display:flex;flex-direction:column;gap:10px' });
+    pf.historique.historique.forEach(h => {
+      const item = el('div', { style:
+        'border:1px solid var(--border);border-radius:10px;padding:12px 14px;background:var(--bg)' });
+      const ligne1 = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px' },
+        el('div', { style: 'font-size:13px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums' },
+          (h.prix_avant != null ? valFormatEuroDetail(h.prix_avant) : '—') + '  →  ' + valFormatEuroDetail(h.prix_apres)
+        ),
+        el('div', { style: 'font-size:11px;color:var(--muted)' }, valFormatDate(h.created_at)),
+      );
+      const sourceLabel = h.source === 'import' ? 'Import Excel' : (h.source === 'edition' ? 'Édition manuelle' : (h.source || ''));
+      const ligne2 = el('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:11px;color:var(--text2)' },
+        el('span', null, 'Par ' + (h.created_by_name || '—')),
+        sourceLabel ? el('span', { style:
+          'padding:2px 8px;border-radius:6px;background:var(--accent-bg);color:var(--accent);font-size:10px;font-weight:700' }, sourceLabel) : el('span'),
+      );
+      item.append(ligne1, ligne2);
+      if (h.note) {
+        item.appendChild(el('div', { style: 'font-size:11px;color:var(--text2);margin-top:6px;font-style:italic' }, h.note));
+      }
+      list.appendChild(item);
+    });
+    body.appendChild(list);
+  }
+  box.append(head, body);
+  overlay.appendChild(box);
+  root.appendChild(overlay);
+}
+
+async function importPFExcel(fileInput) {
+  const pf = valPFEnsureState();
+  const f = fileInput.files && fileInput.files[0];
+  if (!f) return;
+  if (!/\.(xlsx|xlsm)$/i.test(f.name)) {
+    showToast('Format attendu : .xlsx', 'danger');
+    fileInput.value = '';
+    return;
+  }
+  pf.importing = true;
+  renderValorisationView(true);
+  try {
+    const form = new FormData();
+    form.append('file', f);
+    const resp = await fetch('/api/stock/valorisation/pf/import', {
+      method: 'POST',
+      credentials: 'include',
+      body: form,
+    });
+    if (!resp.ok) {
+      const txt = await resp.text();
+      let msg = txt;
+      try { msg = JSON.parse(txt).detail || msg; } catch (e) {}
+      throw new Error(msg || ('HTTP ' + resp.status));
+    }
+    const data = await resp.json();
+    const s = data.stats || {};
+    showToast(
+      `Import terminé : ${s.lignes_lues || 0} lignes lues, ${s.refs_creees || 0} créées, ${s.refs_mises_a_jour || 0} mises à jour.`,
+      'success'
+    );
+    if (s.avertissements && s.avertissements.length) {
+      console.warn('[Valorisation PF] Avertissements import :', s.avertissements);
+    }
+    await loadValorisationPF();
+  } catch (e) {
+    showToast('Erreur import : ' + (e?.message || 'échec'), 'danger');
+  } finally {
+    pf.importing = false;
+    fileInput.value = '';
+    renderValorisationView(true);
+  }
+}
+
+async function exportPFExcel() {
+  const pf = valPFEnsureState();
+  pf.exporting = true;
+  renderValorisationView(true);
+  try {
+    const resp = await fetch('/api/stock/valorisation/pf/export', { credentials: 'include' });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const d = new Date();
+    const pad = (n) => (n < 10 ? '0' + n : '' + n);
+    a.download = `valorisation-pf-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+  } catch (e) {
+    showToast('Erreur export : ' + (e?.message || 'échec'), 'danger');
+  } finally {
+    pf.exporting = false;
+    renderValorisationView(true);
+  }
+}
+
+function buildValorisationPFToolbar() {
+  const pf = valPFEnsureState();
+  const wrap = el('div', { style:
+    'display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px' });
+
+  // Recherche
+  const inp = el('input', {
+    type: 'search', id: 'val-pf-search', placeholder: 'Rechercher une référence (1004/0053, 1077-0017…)',
+    style: 'flex:1;min-width:240px;padding:10px 14px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);font-size:13px;transition:border-color .15s',
+  });
+  inp.value = pf.query || '';
+  inp.addEventListener('input', () => {
+    pf.query = inp.value;
+    renderValorisationPFTableOnly();
+  });
+  inp.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { inp.value = ''; pf.query = ''; renderValorisationPFTableOnly(); }
+  });
+  wrap.appendChild(inp);
+
+  // Bouton import (cache un input file)
+  const fileInput = el('input', { type: 'file', accept: '.xlsx,.xlsm', style: 'display:none' });
+  fileInput.addEventListener('change', () => importPFExcel(fileInput));
+  const importBtn = el('button', {
+    type: 'button', disabled: pf.importing ? true : null, title: 'Importer la feuille Valorisation depuis un fichier Excel',
+    style: 'padding:10px 16px;border-radius:10px;border:1px solid var(--accent);background:var(--accent);color:#0a0e17;font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:8px;' + (pf.importing ? 'opacity:.6;cursor:wait' : ''),
+    on: { click: () => { if (!pf.importing) fileInput.click(); } },
+  });
+  importBtn.appendChild(iconEl('upload', 14));
+  importBtn.appendChild(el('span', null, pf.importing ? 'Import…' : 'Importer Excel'));
+  wrap.appendChild(importBtn);
+  wrap.appendChild(fileInput);
+
+  // Bouton export
+  const exportBtn = el('button', {
+    type: 'button', disabled: pf.exporting ? true : null, title: 'Exporter en Excel les prix actuels',
+    style: 'padding:10px 16px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:8px;' + (pf.exporting ? 'opacity:.6;cursor:wait' : ''),
+    on: { click: () => { if (!pf.exporting) exportPFExcel(); } },
+  });
+  exportBtn.appendChild(iconEl('download', 14));
+  exportBtn.appendChild(el('span', null, pf.exporting ? 'Export…' : 'Exporter Excel'));
+  wrap.appendChild(exportBtn);
+
+  // Refresh
+  const refreshBtn = el('button', {
+    type: 'button', title: 'Recharger',
+    style: 'padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;display:inline-flex;align-items:center',
+    on: { click: () => loadValorisationPF() },
+  });
+  refreshBtn.appendChild(iconEl('refresh-ccw', 14));
+  wrap.appendChild(refreshBtn);
+
   return wrap;
 }
+
+function buildValorisationPFFilterPills() {
+  const pf = valPFEnsureState();
+  const s = pf.summary || { nb_refs: 0, nb_refs_sans_prix: 0, nb_refs_negoce: 0, total_pf: 0 };
+  const wrap = el('div', { style:
+    'display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;align-items:center' });
+
+  const base = 'padding:7px 14px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:6px';
+  const active = 'padding:7px 14px;border-radius:999px;border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px';
+  const warn = 'padding:7px 14px;border-radius:999px;border:1px solid #fb923c;background:rgba(251,146,60,0.15);color:#fb923c;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px';
+
+  const allBtn = el('button', {
+    type: 'button', style: (!pf.filterSansPrix && !pf.filterNegoce) ? active : base,
+    on: { click: () => { pf.filterSansPrix = false; pf.filterNegoce = false; renderValorisationPFTableOnly(); } },
+  }, 'Toutes les références',
+    el('span', { style: 'opacity:.7;font-weight:600' }, '· ' + (s.nb_refs || 0)),
+  );
+
+  const sansPrixBtn = el('button', {
+    type: 'button', style: pf.filterSansPrix ? warn : base,
+    on: { click: () => { pf.filterSansPrix = !pf.filterSansPrix; renderValorisationPFTableOnly(); } },
+  }, 'Sans prix',
+    el('span', { style: 'opacity:.8;font-weight:700' }, '· ' + (s.nb_refs_sans_prix || 0)),
+  );
+
+  const negoceBtn = el('button', {
+    type: 'button', style: pf.filterNegoce ? active : base,
+    on: { click: () => { pf.filterNegoce = !pf.filterNegoce; renderValorisationPFTableOnly(); } },
+  }, 'Produits de négoce',
+    el('span', { style: 'opacity:.7;font-weight:600' }, '· ' + (s.nb_refs_negoce || 0)),
+  );
+
+  wrap.append(allBtn, sansPrixBtn, negoceBtn);
+  return wrap;
+}
+
+function buildValorisationPFTableRow(item) {
+  const tr = el('tr', { 'data-row-key': 'pf' + item.id, style: 'border-bottom:1px solid var(--border)' });
+
+  // Type (badge)
+  const isNegoce = item.type === 'negoce';
+  const badgeStyle = isNegoce
+    ? 'display:inline-block;padding:2px 9px;border-radius:999px;background:rgba(251,191,36,0.15);color:#fbbf24;font-size:11px;font-weight:700;letter-spacing:.2px'
+    : 'display:inline-block;padding:2px 9px;border-radius:999px;background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700;letter-spacing:.2px';
+  const tdType = el('td', { style: 'padding:10px 12px;font-size:12px' },
+    el('span', { style: badgeStyle }, item.type_label || (isNegoce ? 'Négoce' : 'Fabriqué')),
+  );
+
+  // Référence
+  const tdRef = el('td', { style: 'padding:10px 12px;font-size:13px;font-weight:700;color:var(--text);font-family:monospace' }, item.reference || '');
+
+  // Désignation
+  const tdDes = el('td', { style: 'padding:10px 12px;font-size:13px;color:var(--text2);max-width:380px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', title: item.designation || '' }, item.designation || '');
+
+  // Quantité stock
+  const tdQte = el('td', { style: 'padding:10px 12px;font-size:13px;color:var(--text);text-align:right;font-variant-numeric:tabular-nums' },
+    valFormatQte(item.quantite),
+    el('span', { style: 'margin-left:5px;font-size:11px;color:var(--muted);font-weight:500' }, item.unite || ''),
+  );
+
+  // Prix unitaire HT — éditable inline
+  const inpId = 'val-pf-price-' + item.id;
+  const inp = el('input', {
+    type: 'text', id: inpId,
+    value: (Number(item.prix_unitaire_ht) || 0).toString().replace('.', ','),
+    inputmode: 'decimal',
+    style: 'width:120px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:13px;font-variant-numeric:tabular-nums;text-align:right;transition:border-color .15s',
+  });
+  const commit = async () => {
+    const raw = (inp.value || '').trim().replace(/\s/g, '').replace(',', '.');
+    const num = parseFloat(raw);
+    const current = Number(item.prix_unitaire_ht) || 0;
+    if (isNaN(num) || num < 0) {
+      inp.value = current.toString().replace('.', ',');
+      showToast('Prix invalide.', 'danger');
+      return;
+    }
+    if (Math.abs(num - current) < 0.00001) return;
+    await savePFPrice(item.id, num, inp);
+  };
+  inp.addEventListener('blur', commit);
+  inp.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); inp.blur(); }
+    if (e.key === 'Escape') {
+      inp.value = (Number(item.prix_unitaire_ht) || 0).toString().replace('.', ',');
+      inp.blur();
+    }
+  });
+  inp.addEventListener('focus', () => inp.select());
+  const tdPrix = el('td', { style: 'padding:10px 12px;text-align:right' },
+    inp,
+    el('span', { style: 'margin-left:6px;font-size:11px;color:var(--muted)' }, '€ HT/' + (item.unite || '')),
+  );
+
+  // Statut "Sans prix" si pas de prix
+  if (!item.has_price) {
+    tdPrix.appendChild(el('div', { style: 'font-size:10px;color:#fb923c;font-weight:700;margin-top:3px' }, 'Sans prix'));
+  } else if (item.source_prix) {
+    tdPrix.appendChild(el('div', { style: 'font-size:10px;color:var(--muted);margin-top:3px' }, item.source_prix));
+  }
+
+  // Valorisation
+  const valColor = item.has_price ? 'var(--text)' : 'var(--muted)';
+  const tdVal = el('td', { style: 'padding:10px 12px;font-size:13px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums;color:' + valColor },
+    item.has_price ? valFormatEuro(item.valorisation) : '—',
+  );
+
+  // Historique
+  const histBtn = el('button', {
+    type: 'button', title: 'Voir l\'historique des prix',
+    style: 'background:transparent;border:1px solid var(--border);border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2)',
+    on: { click: () => openPFHistorique(item.id) },
+  });
+  histBtn.appendChild(iconEl('clock', 14));
+  const tdHist = el('td', { style: 'padding:10px 12px;text-align:center' }, histBtn);
+
+  tr.append(tdType, tdRef, tdDes, tdQte, tdPrix, tdVal, tdHist);
+  return tr;
+}
+
+function buildValorisationPFTable() {
+  const pf = valPFEnsureState();
+  const rows = pfFilteredItems();
+  const wrap = el('div', { style:
+    'background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden' });
+
+  const tableWrap = el('div', { style: 'overflow-x:auto' });
+  const table = el('table', { style: 'width:100%;border-collapse:collapse;min-width:980px' });
+
+  const arrow = (col) => {
+    if (pf.sortColumn !== col) return '';
+    return pf.sortDirection === 'asc' ? ' ▲' : ' ▼';
+  };
+  const thStyle = 'padding:12px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;text-align:left;background:var(--bg);cursor:pointer;user-select:none;border-bottom:1px solid var(--border);white-space:nowrap';
+  const thStyleR = thStyle + ';text-align:right';
+  const thStyleC = thStyle + ';text-align:center;cursor:default';
+
+  const thead = el('thead', null,
+    el('tr', null,
+      el('th', { style: thStyle, on: { click: () => valTogglePFSort('type') } }, 'Type' + arrow('type')),
+      el('th', { style: thStyle, on: { click: () => valTogglePFSort('reference') } }, 'Référence' + arrow('reference')),
+      el('th', { style: thStyle, on: { click: () => valTogglePFSort('designation') } }, 'Désignation' + arrow('designation')),
+      el('th', { style: thStyleR, on: { click: () => valTogglePFSort('quantite') } }, 'Quantité' + arrow('quantite')),
+      el('th', { style: thStyleR, on: { click: () => valTogglePFSort('prix_unitaire_ht') } }, 'Prix HT' + arrow('prix_unitaire_ht')),
+      el('th', { style: thStyleR, on: { click: () => valTogglePFSort('valorisation') } }, 'Valorisation' + arrow('valorisation')),
+      el('th', { style: thStyleC }, 'Historique'),
+    ),
+  );
+
+  const tbody = el('tbody');
+  if (pf.loading && !rows.length) {
+    tbody.appendChild(el('tr', null,
+      el('td', { colspan: '7', style: 'padding:30px 20px;text-align:center;color:var(--muted);font-size:13px' }, 'Chargement…'),
+    ));
+  } else if (!rows.length) {
+    let msg;
+    if (pf.query) msg = 'Aucun résultat pour « ' + pf.query + ' »';
+    else if (pf.filterSansPrix && pf.filterNegoce) msg = 'Aucun produit de négoce sans prix.';
+    else if (pf.filterSansPrix) msg = 'Toutes les références ont un prix renseigné.';
+    else if (pf.filterNegoce) msg = 'Aucun produit de négoce enregistré.';
+    else msg = 'Aucune référence à valoriser. Importez un fichier Excel pour commencer.';
+    tbody.appendChild(el('tr', null,
+      el('td', { colspan: '7', style: 'padding:30px 20px;text-align:center;color:var(--muted);font-size:13px' }, msg),
+    ));
+  } else {
+    rows.forEach(item => tbody.appendChild(buildValorisationPFTableRow(item)));
+  }
+
+  table.append(thead, tbody);
+  tableWrap.appendChild(table);
+  wrap.appendChild(tableWrap);
+  return wrap;
+}
+
+function buildValorisationPFHeader() {
+  const pf = valPFEnsureState();
+  const s = pf.summary || { total_pf: 0, total_fabrique: 0, total_negoce: 0, nb_refs: 0, nb_refs_valorisees: 0, nb_refs_sans_prix: 0 };
+  return el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px' },
+    el('div', null,
+      el('h3', { style: 'font-size:16px;font-weight:800;color:var(--text);margin:0' }, 'Produits finis'),
+      el('div', { style: 'font-size:12px;color:var(--muted);margin-top:2px' },
+        `${s.nb_refs_valorisees || 0} / ${s.nb_refs || 0} références valorisées · Import Excel → onglet « Valorisation »`),
+    ),
+    el('span', { style:
+      'padding:5px 12px;border-radius:999px;background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700;letter-spacing:.3px' },
+      valFormatEuro(s.total_pf)),
+  );
+}
+
+function renderValorisationPFTableOnly() {
+  const area = document.getElementById('val-pf-table-wrap');
+  if (!area) { renderValorisationView(true); return; }
+  area.innerHTML = '';
+  area.appendChild(buildValorisationPFTable());
+}
+
+// Remplacement du placeholder par la vraie section PF
+function buildValorisationPFSection() {
+  const pf = valPFEnsureState();
+  const wrap = el('div', { style: 'margin-top:28px' });
+  wrap.appendChild(buildValorisationPFHeader());
+  wrap.appendChild(buildValorisationPFToolbar());
+  wrap.appendChild(buildValorisationPFFilterPills());
+  const tableWrap = el('div', { id: 'val-pf-table-wrap' });
+  tableWrap.appendChild(buildValorisationPFTable());
+  wrap.appendChild(tableWrap);
+  // Auto-chargement à la 1re affichage
+  if (!pf.loading && pf.summary === null && (pf.items || []).length === 0) {
+    setTimeout(() => loadValorisationPF(), 10);
+  }
+  return wrap;
+}
+
 
 function buildValorisationMPHeader() {
   const v = valEnsureState();
