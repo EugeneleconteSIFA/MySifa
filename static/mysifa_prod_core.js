@@ -7114,8 +7114,4 @@ function renderProdKpis(){
     checkAuth().catch(() => {});
   }
 })();
-);
-  }else{
-    checkAuth().catch(() => {});
-  }
-})();
+
