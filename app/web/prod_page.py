@@ -80,8 +80,8 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <link rel="apple-touch-icon" href="/static/mys_icon_180.png">
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css?v=__V_LABEL__">
-<link rel="stylesheet" href="/static/mysifa_prod_core.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/motion.css?v=__V_LABEL__">
+<link rel="stylesheet" href="/static/mysifa_prod_core.css?v=__V_LABEL__">
 <script src="/static/motion.js?v=__V_LABEL__" defer></script>
 </head>
 <body class="__STAGING_BODY_CLASS__">
