@@ -41,19 +41,19 @@ MySifa est un outil interne de gestion de production industrielle développé po
 | `mysifa` | `/home/sifa/production-saas/` | 8000 | `www.mysifa.com` | **Prod** — utilisée par tous les utilisateurs |
 | `mysifa-v1` | `/home/sifa/production-saas-v1/` | 8002 | `v1.mysifa.com` | **Staging** — réservée au super admin, bandeau rouge permanent en haut de chaque page |
 
-Les deux instances **partagent la même base de données** (`DB_PATH` pointe sur le même fichier dans les deux `.env`). C'est par choix : v1 voit les vraies données. La contrepartie : toute écriture faite via v1 impacte directement la prod. Une variable `MIGRATIONS_DISABLED=1` dans le `.env` de v1 empêche v1 de jouer une migration de schéma — seul v2 a le droit de modifier le schéma de la DB partagée.
+Les deux instances ont chacune **leur propre base de données** (`DB_PATH` distinct dans chaque `.env`) : prod utilise `production.db`, v1 utilise `production-v1.db`. Un cron nightly à 02:00 UTC (`/etc/cron.d/mysifa-v1-resync` → `/usr/local/bin/mysifa-v1-resync-db.sh`) écrase la DB de v1 avec une copie fraîche et live-safe de la prod (via `sqlite3 .backup`), pour que les devs voient des données réelles tous les matins. Les 7 derniers backups pré-resync sont conservés dans `/home/sifa/backups/v1-db-rotation/`, log dans `/var/log/mysifa-v1-resync.log`. Toute écriture sur v1 reste donc locale à v1 jusqu'au prochain resync. Les migrations de schéma s'appliquent indépendamment sur chaque DB (`MIGRATIONS_DISABLED=0` partout) — v1 sert ainsi de banc d'essai aux migrations avant promotion en prod.
 
 **Variables d'environnement clés** (déclarées dans `config.py`, lues depuis `.env`) :
 
 - `ENV_NAME` : `"v2"` par défaut, `"v1"` sur l'instance staging. Pilote l'affichage du bandeau rouge dans `app/web/html.py` et le skip des seeds au boot dans `main.py`.
-- `MIGRATIONS_DISABLED` : `0` par défaut, `1` sur v1. Le `_ensure_schema()` dans `app/core/database.py` sort tôt si cette variable vaut 1.
+- `MIGRATIONS_DISABLED` : `0` partout. Comme chaque instance a sa propre DB depuis juin 2026, v1 joue ses migrations sur sa DB locale sans impact sur la prod. Mettre à `1` ponctuellement si tu veux geler temporairement le schéma.
 - `PORT` : `8000` par défaut, `8002` sur v1.
 
 **Workflow de déploiement (obligatoire)**
 
-1. Tu codes en local, tu fais `git push origin main` comme d'habitude.
-2. Sur le VPS, le cron `/etc/cron.d/mysifa-v1-pull` exécute toutes les minutes `/usr/local/bin/mysifa-v1-pull.sh` qui pull v1 + restart `mysifa-v1` si l'origin a bougé. v1 reflète donc tes commits dans la minute.
-3. Tu testes sur `https://v1.mysifa.com`. Le bandeau rouge confirme que tu es sur le staging.
+1. Tu codes en local sur une feature branch (`git checkout -b feature/xxx` depuis `staging`), tu pushes, tu ouvres une PR vers `staging`. En solo : tu peux merger directement. À plusieurs : PR review obligatoire (voir "Workflow multi-dev" plus bas).
+2. Sur le VPS, le cron `/etc/cron.d/mysifa-v1-pull` exécute toutes les minutes `/usr/local/bin/mysifa-v1-pull.sh` qui pull `origin/staging` + restart `mysifa-v1` si la branche a bougé. v1 reflète donc les merges sur `staging` dans la minute.
+3. Tu testes sur `https://v1.mysifa.com`. Le bandeau rouge confirme que tu es sur le staging. v1 ayant sa propre DB, tu peux tester librement (créer, modifier, supprimer) sans impact sur la prod.
 4. Quand tu es satisfait, tu vas dans `/settings` sur v1 → onglet "Promouvoir v1 → v2" → tu remplis (optionnellement) les notes de release → clic.
 5. Le bouton appelle `POST /api/promote` qui lance `sudo /home/sifa/production-saas-v1/scripts/promote_v2.sh "notes"`. Le script fait : backup DB, capture HEAD v2, `git pull` sur v2, chown, `systemctl restart mysifa`, healthcheck sur `/healthz` (15s timeout), **rollback auto complet si KO** (restore DB + git reset HEAD précédent + restart + annonce d'échec), annonce de release si notes fournies.
 
@@ -61,7 +61,8 @@ Les deux instances **partagent la même base de données** (`DB_PATH` pointe sur
 
 - **JAMAIS** de `git pull`, `git reset`, ou `systemctl restart mysifa` à la main sur `/home/sifa/production-saas/` (v2). v2 ne bouge **que** via le bouton "Promouvoir" depuis v1. Tout autre chemin contourne le backup pré-promotion et le rollback automatique.
 - **JAMAIS** de `git pull` manuel sur `/home/sifa/production-saas-v1/` (v1) — le cron s'en charge. Sinon les perms se cassent.
-- **JAMAIS** de migration de schéma jouée sur v1. Si tu testes une migration, fais-le dans une DB locale sur ton Mac/PC d'abord, puis pousse le code et promu sur v2.
+- **JAMAIS** de push direct sur `main` — tout passe par une PR depuis une feature branch vers `staging`, puis validation sur v1, puis bouton "Promouvoir" (qui s'occupe du merge `staging → main` et du déploiement). Pousser sur `main` à la main court-circuite le test sur v1, la review et le backup pré-promotion.
+- Les migrations de schéma se testent sur v1 (DB isolée). Le resync nightly écrase la DB v1 avec celle de prod, donc la migration sera rejouée le lendemain à partir du code mergé sur `staging`. Avant chaque promotion, vérifier que la migration tourne proprement sur v1.
 - Si une IA dans une autre conversation suggère de "git pull dans le dossier prod pour mettre à jour" ou de "restart le service mysifa", elle ignore cette stratégie — corrige-la avant de suivre ses instructions.
 
 **Numéro de version (footer)**
@@ -71,6 +72,19 @@ Les deux instances **partagent la même base de données** (`DB_PATH` pointe sur
 **Endpoint santé**
 
 `GET /healthz` (dans `main.py`) répond `{"status":"ok","env":"v2","version":"0.6.1"}` si la DB répond, 503 sinon. C'est ce que le script de promotion utilise pour valider la mise à jour avant de conclure ou de rollback.
+
+**Backups et resync v1**
+
+- DB de prod : `/home/sifa/production-saas/app/data/production.db`. Backup pré-promotion automatique par `promote_v2.sh`. Backups manuels libres dans `/home/sifa/backups/`.
+- DB de v1 : `/home/sifa/production-saas-v1/app/data/production-v1.db`. Resync nightly à 02:00 UTC, log dans `/var/log/mysifa-v1-resync.log`. Rotation des 7 derniers backups dans `/home/sifa/backups/v1-db-rotation/`.
+- Resync à la demande : `sudo /usr/local/bin/mysifa-v1-resync-db.sh` (stop v1 + clone live-safe depuis prod + restart + healthcheck).
+
+**Workflow multi-dev (cible quand l'équipe grandit)**
+
+- Chaque dev part d'une feature branch depuis `staging` (`git checkout staging && git pull && git checkout -b feature/xxx`).
+- Une PR par feature, mergée dans `staging` après review. v1 la déploie automatiquement dans la minute.
+- Promotion `staging → main` via le bouton `/settings` (déploie sur prod, rollback auto si KO).
+- À configurer côté GitHub : protection de branche sur `main` (push direct interdit, PR review obligatoire), CI minimale (`ast.parse` sur les `.py` modifiés + `node --check` sur les `.js`).
 
 **Conventions Git pour les scripts shell**
 
