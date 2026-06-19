@@ -3734,26 +3734,24 @@ function renderFooter(){
     );
   }
 
-  // ── Mode Repiquage : footer simplifié, ne dépend plus de l'état dossier ─
-  // Les codes 01/89 (début/fin de production cohesio) n'ont pas de sens en repiquage,
-  // donc on ignore en_cours_production / en_arret / fin_dossier hérités d'une autre
-  // machine ou d'un ancien cycle.
+  // ── Mode Repiquage : footer simplifié sans bouton Arrivée personnel ─
+  // En Repiquage, la notion d'arrivée/départ explicite n'est pas pertinente.
+  // Le bouton "+Saisir production" déclenche l'arrivée silencieuse si l'état
+  // est sans_session, puis amène à la grille.
   if(isRepiquageMode()){
-    if(e==='sans_session'||e==='loading'){
-      btns.push(h('button',{
-        className:'fab-btn fab-btn-primary',
-        disabled: e==='loading' || !hasMachine,
-        title: !hasMachine ? 'Sélectionnez une machine avant de commencer' : '',
-        onClick:()=>triggerOp('86','Arrivée personnel')
-      }, svgIcon('user',16),' Arrivée personnel'));
-    } else {
-      btns.push(h('button',{
-        className:'fab-btn fab-btn-success',
-        onClick:()=>{
-          // Si déjà sur un dossier, on y reste, sinon on amène à la grille
-          if(S.repiquageView !== 'dossier' || !S.repiquageDossierActif) openRepiquageGrid();
+    btns.push(h('button',{
+      className:'fab-btn fab-btn-success',
+      disabled: e==='loading' || !hasMachine,
+      title: !hasMachine ? 'Sélectionnez une machine avant de commencer' : '',
+      onClick:async()=>{
+        if(e==='sans_session' && hasMachine){
+          // Arrivée personnel implicite (silencieuse)
+          try{ await triggerOp('86','Arrivée personnel'); }catch(err){}
         }
-      }, svgIcon('plus-circle',16),' Saisir production'));
+        if(S.repiquageView !== 'dossier' || !S.repiquageDossierActif) openRepiquageGrid();
+      }
+    }, svgIcon('plus-circle',16),' Saisir production'));
+    if(e !== 'sans_session' && e !== 'loading'){
       btns.push(h('button',{
         className:'fab-btn fab-btn-muted fab-btn-sm',
         onClick:()=>triggerOp('87','Départ personnel')
@@ -4918,28 +4916,34 @@ async function repiquageSubmitEditParam(){
     }
     value = n;
   }
-  const mid = (S.user && S.user.machine_id) || S.adminMachineId;
-  if(!mid){
-    showToast('Machine introuvable','danger');
-    return;
-  }
-  const dos = (S.repiquageDossiers||[]).find(d => d.reference === S.repiquageDossierActif);
-  if(!dos){
-    showToast('Dossier introuvable dans le planning','danger');
-    return;
-  }
+  // Recharge les dossiers AVANT le find : evite le cache obsolete (2e dossier
+  // ajoute apres le chargement, etc.)
   set({loading:true});
   try{
-    await apiFetch('/api/planning/machines/'+mid+'/entries/'+dos.id+'/etiquettes-par-carton', {
+    await loadRepiquageDossiers();
+    let dos = (S.repiquageDossiers||[]).find(d => d.reference === S.repiquageDossierActif);
+    let mid = (dos && dos.machine_id) || (S.user && S.user.machine_id) || S.adminMachineId;
+    if(!mid){
+      showToast('Machine introuvable','danger');
+      return;
+    }
+    if(!dos || !dos.id){
+      showToast('Dossier introuvable dans le planning','danger');
+      return;
+    }
+    const r = await apiFetch('/api/planning/machines/'+mid+'/entries/'+dos.id+'/etiquettes-par-carton', {
       method:'PATCH', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({etiquettes_par_carton: value}),
     });
+    if(!r || r.success !== true){
+      throw new Error('Réponse inattendue du serveur');
+    }
     set({repiquageEditParamOpen:false});
     await loadRepiquageDossiers();
     await loadRepiquageEtat(S.repiquageDossierActif);
     showToast('Paramétrage enregistré', 'success');
   }catch(e){
-    showToast(e?.message||'Erreur','danger');
+    showToast(e?.message||'Erreur lors de l\u2019enregistrement','danger');
   }finally{
     set({loading:false});
   }
