@@ -3734,29 +3734,12 @@ function renderFooter(){
     );
   }
 
-  // ── Mode Repiquage : footer simplifié sans bouton Arrivée personnel ─
-  // En Repiquage, la notion d'arrivée/départ explicite n'est pas pertinente.
-  // Le bouton "+Saisir production" déclenche l'arrivée silencieuse si l'état
-  // est sans_session, puis amène à la grille.
+  // ── Mode Repiquage : aucun bouton d'action dans le footer ─────
+  // La navigation se fait via la sidebar (grille + autres dossiers) et
+  // le bouton Retour du bandeau dossier. L'arrivée personnel est implicite
+  // lors de la 1re saisie 03 (etat passe en en_cours_production cote backend).
   if(isRepiquageMode()){
-    btns.push(h('button',{
-      className:'fab-btn fab-btn-success',
-      disabled: e==='loading' || !hasMachine,
-      title: !hasMachine ? 'Sélectionnez une machine avant de commencer' : '',
-      onClick:async()=>{
-        if(e==='sans_session' && hasMachine){
-          // Arrivée personnel implicite (silencieuse)
-          try{ await triggerOp('86','Arrivée personnel'); }catch(err){}
-        }
-        if(S.repiquageView !== 'dossier' || !S.repiquageDossierActif) openRepiquageGrid();
-      }
-    }, svgIcon('plus-circle',16),' Saisir production'));
-    if(e !== 'sans_session' && e !== 'loading'){
-      btns.push(h('button',{
-        className:'fab-btn fab-btn-muted fab-btn-sm',
-        onClick:()=>triggerOp('87','Départ personnel')
-      }, svgIcon('log-out',14),' Départ personnel'));
-    }
+    // Aucun bouton pousse dans btns -> zone action vide en mode Repiquage
   }
   // ── État : pas encore arrivé (ou après départ) ──
   else if(e==='sans_session'||e==='loading'){
