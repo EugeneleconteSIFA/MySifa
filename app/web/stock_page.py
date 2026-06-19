@@ -12839,6 +12839,7 @@ function valPFEnsureState() {
       query: '',
       filterSansPrix: false,
       filterNegoce: false,
+      filterAvecStock: false,
       sortColumn: null,
       sortDirection: 'asc',
       importing: false,
@@ -12876,6 +12877,9 @@ function pfFilteredItems() {
   }
   if (pf.filterSansPrix) {
     rows = rows.filter(r => !r.has_price);
+  }
+  if (pf.filterAvecStock) {
+    rows = rows.filter(r => Number(r.quantite || 0) > 0);
   }
   const q = (pf.query || '').trim().toLowerCase();
   if (q) {
@@ -13173,9 +13177,11 @@ function buildValorisationPFFilterPills() {
   const active = 'padding:7px 14px;border-radius:999px;border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px';
   const warn = 'padding:7px 14px;border-radius:999px;border:1px solid #fb923c;background:rgba(251,146,60,0.15);color:#fb923c;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px';
 
+  const nbAvecStock = (pf.items || []).reduce((n, r) => n + (Number(r.quantite || 0) > 0 ? 1 : 0), 0);
+
   const allBtn = el('button', {
-    type: 'button', style: (!pf.filterSansPrix && !pf.filterNegoce) ? active : base,
-    on: { click: () => { pf.filterSansPrix = false; pf.filterNegoce = false; renderValorisationPFTableOnly(); } },
+    type: 'button', style: (!pf.filterSansPrix && !pf.filterNegoce && !pf.filterAvecStock) ? active : base,
+    on: { click: () => { pf.filterSansPrix = false; pf.filterNegoce = false; pf.filterAvecStock = false; renderValorisationPFTableOnly(); } },
   }, 'Toutes les références',
     el('span', { style: 'opacity:.7;font-weight:600' }, '· ' + (s.nb_refs || 0)),
   );
@@ -13194,7 +13200,14 @@ function buildValorisationPFFilterPills() {
     el('span', { style: 'opacity:.7;font-weight:600' }, '· ' + (s.nb_refs_negoce || 0)),
   );
 
-  wrap.append(allBtn, sansPrixBtn, negoceBtn);
+  const stockBtn = el('button', {
+    type: 'button', style: pf.filterAvecStock ? active : base,
+    on: { click: () => { pf.filterAvecStock = !pf.filterAvecStock; renderValorisationPFTableOnly(); } },
+  }, 'Quantité > 0',
+    el('span', { style: 'opacity:.7;font-weight:600' }, '· ' + nbAvecStock),
+  );
+
+  wrap.append(allBtn, sansPrixBtn, negoceBtn, stockBtn);
   return wrap;
 }
 
@@ -13319,6 +13332,9 @@ function buildValorisationPFTable() {
   } else if (!rows.length) {
     let msg;
     if (pf.query) msg = 'Aucun résultat pour « ' + pf.query + ' »';
+    else if (pf.filterAvecStock && pf.filterSansPrix) msg = 'Aucune référence sans prix avec du stock.';
+    else if (pf.filterAvecStock && pf.filterNegoce) msg = 'Aucun produit de négoce en stock.';
+    else if (pf.filterAvecStock) msg = 'Aucune référence en stock.';
     else if (pf.filterSansPrix && pf.filterNegoce) msg = 'Aucun produit de négoce sans prix.';
     else if (pf.filterSansPrix) msg = 'Toutes les références ont un prix renseigné.';
     else if (pf.filterNegoce) msg = 'Aucun produit de négoce enregistré.';
