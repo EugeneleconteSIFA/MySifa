@@ -12647,7 +12647,14 @@ function buildValorisationTableRow(item) {
   tdCat.appendChild(badge);
 
   const refLabel = item.reference || '';
-  const refChildren = [el('span', null, refLabel)];
+  const matiereId = item.matiere_id || item.id;
+  const refBtn = el('button', {
+    cls: 'mvt-ref-link', type: 'button',
+    title: 'Ouvrir la matière',
+    style: 'background:none;border:none;padding:0;margin:0;color:var(--text);cursor:pointer;font-weight:800;font-family:monospace;font-size:13px;text-align:left',
+    on: { click: (e) => { e.stopPropagation(); if (matiereId) loadMatiere(matiereId); } },
+  }, refLabel);
+  const refChildren = [refBtn];
   if (item.laizee && item.laize_label) {
     refChildren.push(el('span', { style:
       'display:inline-block;margin-left:8px;padding:2px 8px;border-radius:6px;background:rgba(34,211,238,0.10);color:var(--accent);font-size:11px;font-weight:600;letter-spacing:.2px;font-family:inherit' },
@@ -13386,8 +13393,14 @@ function buildValorisationPFTableRow(item) {
     el('span', { style: badgeStyle }, item.type_label || (isNegoce ? 'Négoce' : 'Fabriqué')),
   );
 
-  // Référence
-  const tdRef = el('td', { style: 'padding:10px 12px;font-size:13px;font-weight:700;color:var(--text);font-family:monospace' }, item.reference || '');
+  // Référence (cliquable → ouvre le produit fini)
+  const refBtn = el('button', {
+    cls: 'mvt-ref-link', type: 'button',
+    title: 'Ouvrir le produit',
+    style: 'background:none;border:none;padding:0;margin:0;color:var(--text);cursor:pointer;font-weight:700;font-family:monospace;font-size:13px;text-align:left',
+    on: { click: (e) => { e.stopPropagation(); openPfProduitPage(item.reference, item.id); } },
+  }, item.reference || '');
+  const tdRef = el('td', { style: 'padding:10px 12px;font-size:13px;font-weight:700;color:var(--text);font-family:monospace' }, refBtn);
 
   // Désignation
   const tdDes = el('td', { style: 'padding:10px 12px;font-size:13px;color:var(--text2);max-width:380px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', title: item.designation || '' }, item.designation || '');
