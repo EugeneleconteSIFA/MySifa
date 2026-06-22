@@ -177,6 +177,8 @@ body.sb-open .sidebar-overlay{display:block}
 .ops-input:disabled,.ops-select:disabled{opacity:.55;cursor:not-allowed}
 .ops-select{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
 .ops-field-hint{font-size:11px;color:var(--muted);line-height:1.45}
+.ops-saisi-par{display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px dashed var(--border);border-radius:10px;color:var(--muted);font-size:12px;margin-bottom:14px}
+.ops-saisi-par strong{color:var(--text);font-weight:600}
 .ops-form-actions{display:flex;justify-content:flex-end;gap:8px}
 .ops-btn-add{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:10px;border:none;background:var(--accent);color:#0a0e17;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;transition:filter .15s;white-space:nowrap}
 .ops-btn-add:hover{filter:brightness(1.08)}
@@ -450,7 +452,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
           </div>
         </div>
 
-        <!-- Liste d'opérations de maintenance -->
+        <!-- Liste d'opérations de maintenance (catalogue) -->
         <div class="ops-list">
           <div class="ops-list-head">
             <div class="ops-list-title">Liste d'opérations de maintenance</div>
@@ -493,6 +495,10 @@ body.light .toast.info{background:#fff;color:var(--text)}
     </div>
     <form id="ops-form" onsubmit="addOperation(event)">
       <div class="modal-body">
+        <div class="ops-saisi-par" id="ops-saisi-par">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <span>Saisi par : <strong id="ops-saisi-par-name">…</strong></span>
+        </div>
         <div class="ops-form-grid">
           <div class="ops-field">
             <label class="ops-field-label" for="ops-machine">Machine<span class="req">*</span></label>
@@ -503,15 +509,6 @@ body.light .toast.info{background:#fff;color:var(--text)}
               <option value="DSI">DSI</option>
               <option value="Repiquage">Repiquage</option>
             </select>
-          </div>
-          <div class="ops-field">
-            <label class="ops-field-label" for="ops-operateur">Opérateur<span class="req">*</span></label>
-            <select id="ops-operateur" class="ops-select" required>
-              <option value="">Chargement…</option>
-            </select>
-            <div class="ops-field-hint" id="ops-operateur-hint" style="display:none">
-              Aucun opérateur trouvé dans MyProd. Vérifiez les saisies de production.
-            </div>
           </div>
           <div class="ops-field">
             <label class="ops-field-label" for="ops-type">Type d'opération<span class="req">*</span></label>
@@ -658,43 +655,10 @@ function showToast(msg, type){
   setTimeout(() => { try{ t.remove(); }catch(e){} }, 2800);
 }
 
-// --- Opérateurs MyProd (chargé via /api/filters) ---
-const OPERATEURS_STATE = { list: [], loaded: false };
-async function loadOperateurs(){
-  try{
-    const r = await fetch('/api/filters', {credentials:'include'});
-    if(!r.ok) throw new Error('HTTP ' + r.status);
-    const d = await r.json();
-    OPERATEURS_STATE.list = Array.isArray(d.operators) ? d.operators.filter(Boolean) : [];
-  }catch(e){
-    OPERATEURS_STATE.list = [];
-  }
-  OPERATEURS_STATE.loaded = true;
-  refreshOpsOperateurSelect();
-}
-function refreshOpsOperateurSelect(){
-  const sel = document.getElementById('ops-operateur');
-  const hint = document.getElementById('ops-operateur-hint');
-  if(!sel) return;
-  const cur = sel.value;
-  if(!OPERATEURS_STATE.loaded){
-    sel.innerHTML = '<option value="">Chargement…</option>';
-    sel.disabled = true;
-    if(hint) hint.style.display = 'none';
-    return;
-  }
-  if(!OPERATEURS_STATE.list.length){
-    sel.innerHTML = '<option value="">Aucun opérateur trouvé</option>';
-    sel.disabled = true;
-    if(hint) hint.style.display = 'block';
-    return;
-  }
-  sel.disabled = false;
-  if(hint) hint.style.display = 'none';
-  const sorted = OPERATEURS_STATE.list.slice().sort((a,b) => a.localeCompare(b, 'fr'));
-  sel.innerHTML = '<option value="">Sélectionner un opérateur…</option>' +
-    sorted.map(n => '<option value="' + escAttr(n) + '">' + escHtml(n) + '</option>').join('');
-  if(cur && sorted.includes(cur)) sel.value = cur;
+// --- Helper : nom de l'utilisateur courant ---
+function currentUserName(){
+  if(!S.me) return '';
+  return (S.me.nom || S.me.identifiant || S.me.email || '').trim();
 }
 
 // --- Modales ---
@@ -705,11 +669,16 @@ function openOpsModal(){
     showToast('Définissez d\'abord au moins un type dans « Liste d\'opérations de maintenance ».', 'danger');
     return;
   }
+  if(!currentUserName()){
+    showToast('Identité non chargée. Réessayez dans un instant.', 'danger');
+    return;
+  }
   m.classList.add('open');
   m.setAttribute('aria-hidden', 'false');
   document.body.style.overflow = 'hidden';
   refreshOpsTypeSelect();
-  refreshOpsOperateurSelect();
+  const nameEl = document.getElementById('ops-saisi-par-name');
+  if(nameEl) nameEl.textContent = currentUserName();
   setTimeout(() => { const f = document.getElementById('ops-machine'); if(f) f.focus(); }, 50);
 }
 function closeOpsModal(){
@@ -722,7 +691,6 @@ function closeOpsModal(){
   if(f) f.reset();
 }
 
-// Catalogue : openCatModal(idToEdit?) — sans id = création, avec id = édition
 let CAT_EDITING_ID = null;
 function openCatModal(idToEdit){
   const m = document.getElementById('cat-modal');
@@ -762,6 +730,7 @@ function closeCatModal(){
   if(f) f.reset();
   CAT_EDITING_ID = null;
 }
+
 function closeAnyOpenModal(){
   ['ops-modal', 'cat-modal'].forEach(id => {
     const m = document.getElementById(id);
@@ -799,11 +768,15 @@ function fmtDate(iso){
 function addOperation(e){
   e.preventDefault();
   const machine = (document.getElementById('ops-machine').value || '').trim();
-  const operateur = (document.getElementById('ops-operateur').value || '').trim();
   const type = (document.getElementById('ops-type').value || '').trim();
   const commentaire = (document.getElementById('ops-comment').value || '').trim();
-  if(!machine || !operateur || !type){
-    showToast('Machine, opérateur et type sont requis.', 'danger');
+  const operateur = currentUserName();
+  if(!operateur){
+    showToast('Identité non chargée. Réessayez dans un instant.', 'danger');
+    return;
+  }
+  if(!machine || !type){
+    showToast('Machine et type sont requis.', 'danger');
     return;
   }
   OPS_STATE.list.push({
@@ -903,7 +876,6 @@ function submitOpsType(e){
     showToast('Niveau doit être entre 1 et 3.', 'danger');
     return;
   }
-  // Doublon : on ignore l'entrée en cours d'édition
   const dup = OPS_TYPES_STATE.list.find(t =>
     (t.nom || '').toLowerCase() === nom.toLowerCase() && t.id !== CAT_EDITING_ID
   );
@@ -911,7 +883,6 @@ function submitOpsType(e){
     showToast('Un autre type avec ce nom existe déjà.', 'danger');
     return;
   }
-  // Renommage : prévenir des opérations enregistrées portant l'ancien nom
   let oldName = null;
   if(CAT_EDITING_ID){
     const cur = OPS_TYPES_STATE.list.find(t => t.id === CAT_EDITING_ID);
@@ -931,7 +902,6 @@ function submitOpsType(e){
     });
   }
   saveOpsTypes();
-  // Si renommage, optionnellement répercuter sur les opérations existantes
   let renameApplied = false;
   if(oldName){
     const affected = OPS_STATE.list.filter(o => o.type === oldName).length;
@@ -956,9 +926,7 @@ function deleteOpsType(id){
   saveOpsTypes();
   renderOpsTypes();
 }
-function editOpsType(id){
-  openCatModal(id);
-}
+function editOpsType(id){ openCatModal(id); }
 function sortOpsTypes(field){
   if(OPS_TYPES_STATE.sortBy === field){
     OPS_TYPES_STATE.sortDir = OPS_TYPES_STATE.sortDir === 'asc' ? 'desc' : 'asc';
@@ -1088,7 +1056,6 @@ async function loadMe(){
   loadOpsTypes();
   renderOpsTypes();
   renderOps();
-  loadOperateurs();
   try{
     const h = (location.hash || '').replace('#','').trim();
     if(h && VIEW_META[h]) switchView(h);

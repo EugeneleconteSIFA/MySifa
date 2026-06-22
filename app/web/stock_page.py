@@ -2015,6 +2015,7 @@ function icon(name, size=16){
     'upload': '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
     'download': '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
     'edit': '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
+    'copy': '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
     'trash-2': '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>',
     'search': '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
     'plus-circle': '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>',
@@ -7340,6 +7341,40 @@ function mpCardEditBtn(m) {
   }, iconEl('edit', 16));
 }
 
+function mpCardCopyBtn(m) {
+  if (!isMatieresAdmin()) return null;
+  return el('button', {
+    cls: 'mp-act-icon',
+    type: 'button',
+    attrs: { title: 'Copier vers une nouvelle référence', 'aria-label': 'Copier la référence' },
+    on: { click: (e) => { e.stopPropagation(); openMatiereCopyFromCard(m); } },
+  }, iconEl('copy', 16));
+}
+
+// Ouvre le drawer admin avec le formulaire d'ajout pré-rempli à partir de cette matière
+async function openMatiereCopyFromCard(m) {
+  if (!isMatieresAdmin() || !m) return;
+  S.matieresAdminOpen = true;
+  S.matieresAdminEditId = null;
+  S.matieresAdminAddError = '';
+  // Pré-remplit la graine avant de charger la liste pour que le rendu initial l'utilise
+  S.matieresAdminAddSeed = {
+    categorie: m.categorie,
+    reference: '',
+    designation: m.designation || '',
+    seuil_alerte: m.seuil_alerte || 0,
+    palettes_par_pile: m.palettes_par_pile || null,
+    couleur: m.couleur || '',
+    sous_section: m.sous_section || '',
+    metres_lineaires_par_bobine: m.metres_lineaires_par_bobine || null,
+    prix_eur_m2: m.prix_eur_m2 || null,
+    stock_par_laize: Array.isArray(m.stock_par_laize) ? m.stock_par_laize.slice() : [],
+  };
+  await Promise.all([loadMatieresAdminList(), loadMpSousSections()]);
+  renderMatieresAdminDrawer();
+  showToast('Référence copiée — saisis la nouvelle référence.', 'info');
+}
+
 function matieresCardActions(m) {
   if (S.stockReadOnly) return null;
   return el('div', {
@@ -7448,9 +7483,11 @@ function appendMatiereRefEditFields(parent, item) {
       laizeChecks,
     ),
   );
-  // Sous-section (catégories autre + frontal)
+  // Sous-section (catégories autre + frontal) — cloisonnée par catégorie
   const hasSousSection = mpCategorieHasSousSection(item.categorie);
-  const sousSectionSel = hasSousSection ? buildMpSousSectionSelector(item.sous_section || '') : null;
+  const sousSectionSel = hasSousSection
+    ? buildMpSousSectionSelector(item.sous_section || '', item.categorie)
+    : null;
   const sousSectionWrap = hasSousSection
     ? sousSectionSel.el
     : el('div', { style: { display: 'none' } });
@@ -7713,6 +7750,8 @@ function buildMatieres() {
         attrs: { title: mpStockTotalLabel(m) },
       }, mpStockLine(m.quantite, m)),
     ];
+    const copyBtn = mpCardCopyBtn(m);
+    if (copyBtn) topEnd.push(copyBtn);
     const editBtn = mpCardEditBtn(m);
     if (editBtn) topEnd.push(editBtn);
     list.appendChild(el('div', {
@@ -8633,12 +8672,32 @@ async function submitPfMouvement() {
 }
 
 async function loadMpSousSections() {
+  // Charge les sous-sections en isolant par catégorie pour éviter tout mélange
+  // (les "autre" et les "frontal" ont leurs propres listes).
   try {
-    const d = await api('/api/stock/matieres/sous-sections?categorie=all');
-    S.mpSousSections = Array.isArray(d) ? d : [];
+    const [autreD, frontalD] = await Promise.all([
+      api('/api/stock/matieres/sous-sections?categorie=autre').catch(() => []),
+      api('/api/stock/matieres/sous-sections?categorie=frontal').catch(() => []),
+    ]);
+    S.mpSousSectionsByCat = {
+      autre: Array.isArray(autreD) ? autreD : [],
+      frontal: Array.isArray(frontalD) ? frontalD : [],
+    };
+    // Rétrocompat : conserve une liste plate (rare usage en lecture seule éventuelle)
+    S.mpSousSections = [
+      ...S.mpSousSectionsByCat.autre,
+      ...S.mpSousSectionsByCat.frontal,
+    ];
   } catch (e) {
+    S.mpSousSectionsByCat = { autre: [], frontal: [] };
     S.mpSousSections = [];
   }
+}
+
+function mpSousSectionsForCat(cat) {
+  const key = mpCategorieKey(cat);
+  const byCat = S.mpSousSectionsByCat || {};
+  return Array.isArray(byCat[key]) ? byCat[key] : [];
 }
 
 async function loadMatieresAdminList() {
@@ -8696,9 +8755,7 @@ function renderMatieresAdminDrawer() {
       on: { click: () => { S.matieresAdminFilterCat = c; renderMatieresAdminDrawer(); } },
     }, c === 'tout' ? 'Toutes' : (MP_CAT_LABELS[c] || c)));
   });
-  drawer.appendChild(pillsWrap);
   const searchInp = el('input', {
-    cls: 'mp-search',
     id: 'mp-admin-search',
     attrs: {
       type: 'search',
@@ -8706,7 +8763,9 @@ function renderMatieresAdminDrawer() {
       autocomplete: 'off',
       spellcheck: 'false',
     },
-    style: 'margin:6px 14px 8px;width:calc(100% - 28px)',
+    style: 'background:var(--bg);border:1px solid var(--border);border-radius:10px;'
+      + 'padding:8px 12px;color:var(--text);font-size:13px;font-family:inherit;'
+      + 'width:100%;outline:none;transition:border-color .15s',
   });
   searchInp.value = S.matieresAdminFilterQ || '';
   searchInp.addEventListener('input', (e) => {
@@ -8716,7 +8775,9 @@ function renderMatieresAdminDrawer() {
   searchInp.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { S.matieresAdminFilterQ = ''; renderMatieresAdminDrawer(); }
   });
-  drawer.appendChild(searchInp);
+  pillsWrap.style.padding = '8px 14px 4px';
+  drawer.appendChild(pillsWrap);
+  drawer.appendChild(el('div', { style: 'padding:0 14px 8px' }, searchInp));
 
   const body = el('div', { cls: 'mp-drawer-body' });
   const list = (S.matieresAdminList || []).filter(item => {
@@ -8899,19 +8960,22 @@ async function toggleMatieresActif(item) {
   }
 }
 
-function buildMpSousSectionSelector(initialValue) {
-  // Selecteur de sous-section pour la categorie "autre".
-  // Contient toutes les sous-sections existantes + une option speciale
-  // "+ Nouvelle sous-section..." qui ouvre un champ texte de saisie libre.
+function buildMpSousSectionSelector(initialValue, categorie) {
+  // Selecteur de sous-section, cloisonné par catégorie : 'autre' et 'frontal'
+  // ont leurs propres listes, on ne mélange jamais.
   const wrap = el('div', { cls: 'mp-field' });
   const sel = el('select');
   const newInp = el('input', { attrs: { type: 'text', placeholder: 'Nom de la sous-section' } });
   const newWrap = el('div', { style: { display: 'none', marginTop: '6px' } }, newInp);
+  // Catégorie courante du selecteur (peut être changée via setCategorie)
+  let currentCat = mpCategorieKey(categorie || 'autre');
 
   function buildOptions(current) {
     sel.innerHTML = '';
     sel.appendChild(el('option', { value: '' }, '— Aucune —'));
-    const list = (S.mpSousSections || []).slice().sort((a, b) => String(a).localeCompare(String(b), 'fr'));
+    const list = mpSousSectionsForCat(currentCat)
+      .slice()
+      .sort((a, b) => String(a).localeCompare(String(b), 'fr'));
     // Si la valeur initiale n'est pas dans la liste, on l'ajoute pour l'afficher
     if (current && !list.some(s => String(s).toLowerCase() === String(current).toLowerCase())) {
       list.unshift(current);
@@ -8957,6 +9021,12 @@ function buildMpSousSectionSelector(initialValue) {
       sel.value = '';
       newWrap.style.display = 'none';
       newInp.value = '';
+    },
+    setCategorie(cat) {
+      const key = mpCategorieKey(cat || 'autre');
+      if (key === currentCat) return;
+      currentCat = key;
+      buildOptions('');
     },
   };
 }
@@ -9014,9 +9084,10 @@ function buildMatieresAdminAddForm() {
       laizeChecks,
     ),
   );
-  // Sous-section (visible pour "autre" et "frontal")
+  // Sous-section (visible pour "autre" et "frontal") — cloisonnée par catégorie
   const seed = S.matieresAdminAddSeed || null;
-  const sousSectionSel = buildMpSousSectionSelector((seed && seed.sous_section) || '');
+  const initialCat = (seed && seed.categorie) || catSel.value || 'mandrin';
+  const sousSectionSel = buildMpSousSectionSelector((seed && seed.sous_section) || '', initialCat);
   const sousSectionWrap = el('div', { style: { display: 'none' } }, sousSectionSel.el);
   function syncAdminAddFields() {
     const cat = catSel.value;
@@ -9033,6 +9104,8 @@ function buildMatieresAdminAddForm() {
     seuilLbl.textContent = mpSeuilFieldLabel(cat);
     seuilInp.step = isPal || isCarton || cat === 'mandrin' || mpIsBobineCategory(cat) ? '1' : '0.5';
     hintEl.textContent = mpAdminHint(cat);
+    // Bascule la liste de sous-sections vers la bonne catégorie (jamais de mélange)
+    if (hasSousSection && sousSectionSel) sousSectionSel.setCategorie(cat);
   }
   catSel.addEventListener('change', syncAdminAddFields);
   pppWrap.append(pppLbl, pppInp);
