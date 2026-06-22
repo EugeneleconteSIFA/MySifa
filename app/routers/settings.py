@@ -1247,10 +1247,11 @@ def _read_v2_app_version() -> Optional[str]:
 
 
 def _read_origin_app_version() -> Optional[str]:
-    """Lit APP_VERSION dans config.py côté origin/main (via git show, sans pull)."""
+    """Lit APP_VERSION dans config.py côté origin/staging (ce qui sera promu).
+    Le script promote_v2.sh merge staging → main automatiquement avant le reset v2."""
     try:
         out = _subprocess.check_output(
-            [_GIT_BIN, "-C", V2_REPO_PATH, "show", "origin/main:config.py"],
+            [_GIT_BIN, "-C", V2_REPO_PATH, "show", "origin/staging:config.py"],
             text=True, timeout=10,
         )
         return _parse_version_from_text(out)
@@ -1276,8 +1277,10 @@ def promote_status(request: Request):
             [_GIT_BIN, "-C", V2_REPO_PATH, "rev-parse", "HEAD"],
             text=True, timeout=5,
         ).strip()
-        origin_main = _subprocess.check_output(
-            [_GIT_BIN, "-C", V2_REPO_PATH, "rev-parse", "origin/main"],
+        # On compare contre origin/staging : c'est ce qui sera réellement promu
+        # (le script promote_v2.sh merge staging → main avant le reset v2).
+        origin_ref = _subprocess.check_output(
+            [_GIT_BIN, "-C", V2_REPO_PATH, "rev-parse", "origin/staging"],
             text=True, timeout=5,
         ).strip()
     except Exception as exc:
@@ -1287,11 +1290,11 @@ def promote_status(request: Request):
     next_version = _read_origin_app_version() or v2_version
 
     commits_ahead = []
-    if v2_head != origin_main:
+    if v2_head != origin_ref:
         try:
             log_out = _subprocess.check_output(
                 [_GIT_BIN, "-C", V2_REPO_PATH, "log",
-                 f"{v2_head}..{origin_main}",
+                 f"{v2_head}..{origin_ref}",
                  "--pretty=format:%h|%an|%ad|%s",
                  "--date=format:%Y-%m-%d %H:%M"],
                 text=True, timeout=10,
@@ -1323,7 +1326,7 @@ def promote_status(request: Request):
         "v2_version": v2_version,
         "next_version": next_version,
         "v2_head": v2_head[:7],
-        "origin_head": origin_main[:7],
+        "origin_head": origin_ref[:7],
         "commits_ahead": commits_ahead,
         "can_promote": can_promote,
         "reason": reason,
