@@ -2084,6 +2084,7 @@ async function loadProduit(id) {
       S.searchResults = null;
       clearSearch();
       closeSidebar();
+      if (typeof stockSyncUrl === 'function') stockSyncUrl();
       render();
     }
   } catch(e) { showToast(e.message, 'error'); }
@@ -2105,19 +2106,72 @@ async function openPfProduitPage(reference, produitId) {
   } catch (e) { showToast(e.message, 'error'); }
 }
 
+// Renvoie true si l'événement clic doit laisser le navigateur ouvrir l'URL
+// (nouvel onglet/fenêtre) au lieu d'exécuter la navigation interne JS.
+function stockClickOpensNewTab(e) {
+  if (!e) return false;
+  // Cmd (macOS), Ctrl (Win/Linux), Shift, Alt, ou clic milieu
+  return !!(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button === 1);
+}
+
+function stockDeepLinkUrl(params) {
+  const sp = new URLSearchParams();
+  Object.keys(params || {}).forEach(k => {
+    if (params[k] != null && params[k] !== '') sp.set(k, String(params[k]));
+  });
+  return '/stock?' + sp.toString();
+}
+
 function stockPfRefLink(reference, produitId, label) {
   const txt = label != null ? label : (reference || '—');
   if (!reference || txt === '—') return el('span', null, txt);
-  return el('button', {
-    cls: 'mvt-ref-link', type: 'button',
-    on: { click: (e) => { e.stopPropagation(); openPfProduitPage(reference, produitId); } },
+  const pid = parseInt(produitId, 10);
+  const href = stockDeepLinkUrl(pid > 0
+    ? { tab: 'produits-finis', produit: pid }
+    : { tab: 'produits-finis', ref: reference });
+  return el('a', {
+    cls: 'mvt-ref-link',
+    href: href,
+    style: 'text-decoration:none',
+    on: { click: (e) => {
+      if (stockClickOpensNewTab(e)) return; // laisse le navigateur ouvrir en nouvel onglet
+      e.preventDefault();
+      e.stopPropagation();
+      openPfProduitPage(reference, produitId);
+    } },
+  }, txt);
+}
+
+function stockMpRefLink(matiereId, label, options) {
+  const mid = parseInt(matiereId, 10);
+  const opts = options || {};
+  const txt = label != null ? label : '';
+  if (!mid) return el('span', null, txt);
+  const href = stockDeepLinkUrl({ tab: 'matieres', matiere: mid });
+  const baseStyle = opts.style || 'text-decoration:none';
+  return el('a', {
+    cls: 'mvt-ref-link',
+    href: href,
+    style: baseStyle,
+    title: opts.title || null,
+    on: { click: (e) => {
+      if (stockClickOpensNewTab(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      loadMatiere(mid);
+    } },
   }, txt);
 }
 
 async function loadEmplacement(empl) {
   try {
     const d = await api('/api/stock/emplacements/' + encodeURIComponent(empl));
-    if (d) { S.selEmpl = d; S.selProduit = null; S.searchResults = null; clearSearch(); render(); }
+    if (d) {
+      S.selEmpl = d; S.selProduit = null; S.searchResults = null;
+      clearSearch();
+      if (typeof stockSyncUrl === 'function') stockSyncUrl();
+      render();
+    }
   } catch(e) { showToast(e.message, 'error'); }
 }
 
@@ -3285,6 +3339,7 @@ function goToTab(tab) {
   clearSearch(); closeSidebar();
   if (tab === 'historique') S.historiqueLoading = true;
   updateNavActive();
+  stockSyncUrl();
   renderContent();
   if (tab === 'dashboard') loadDashboard();
   else if (tab === 'referentiel') loadDashboard();
@@ -3304,6 +3359,27 @@ function updateNavActive() {
   document.querySelectorAll('.nav-btn[data-tab]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.tab === S.tab && !S.selProduit && !S.selEmpl && !S.selMatiere);
   });
+}
+
+// Synchronise l'URL avec l'état courant (onglet + sélection) sans recharger la page.
+// Permet de revenir au même endroit après un refresh ou un Cmd+clic.
+function stockSyncUrl() {
+  try {
+    const sp = new URLSearchParams();
+    if (S.tab && S.tab !== 'dashboard') sp.set('tab', S.tab);
+    if (S.selMatiere && S.selMatiere.matiere && S.selMatiere.matiere.id) {
+      sp.set('matiere', String(S.selMatiere.matiere.id));
+    } else if (S.selProduit && S.selProduit.id) {
+      sp.set('produit', String(S.selProduit.id));
+    } else if (S.selEmpl && S.selEmpl.code) {
+      sp.set('empl', S.selEmpl.code);
+    }
+    const qs = sp.toString();
+    const url = '/stock' + (qs ? ('?' + qs) : '');
+    if (window.location.pathname + window.location.search !== url) {
+      history.replaceState(null, '', url);
+    }
+  } catch (e) { /* silencieux — l'URL est juste un confort */ }
 }
 
 function clearSearch() {
@@ -4950,6 +5026,7 @@ async function loadMatiere(id) {
     clearSearch();
     if (S.tab !== 'matieres') S.tab = 'matieres';
     closeSidebar();
+    if (typeof stockSyncUrl === 'function') stockSyncUrl();
     render();
   } catch (e) {
     showToast(e.message, 'error');
@@ -4977,6 +5054,7 @@ async function refreshSelMatiere() {
 
 function clearMatiereSel() {
   S.selMatiere = null;
+  if (typeof stockSyncUrl === 'function') stockSyncUrl();
   renderContent();
   updateNavActive();
 }
@@ -10213,6 +10291,7 @@ function clearSel() {
   S.selProduit = null;
   S.selEmpl = null;
   S.selMatiere = null;
+  if (typeof stockSyncUrl === 'function') stockSyncUrl();
   renderContent();
   updateNavActive();
   if (S.tab === 'produits-finis') loadProduitsFinis();
@@ -12648,13 +12727,11 @@ function buildValorisationTableRow(item) {
 
   const refLabel = item.reference || '';
   const matiereId = item.matiere_id || item.id;
-  const refBtn = el('button', {
-    cls: 'mvt-ref-link', type: 'button',
+  const refLink = stockMpRefLink(matiereId, refLabel, {
     title: 'Ouvrir la matière',
-    style: 'background:none;border:none;padding:0;margin:0;color:var(--text);cursor:pointer;font-weight:800;font-family:monospace;font-size:13px;text-align:left',
-    on: { click: (e) => { e.stopPropagation(); if (matiereId) loadMatiere(matiereId); } },
-  }, refLabel);
-  const refChildren = [refBtn];
+    style: 'text-decoration:none;color:var(--text);font-weight:800;font-family:monospace;font-size:13px',
+  });
+  const refChildren = [refLink];
   if (item.laizee && item.laize_label) {
     refChildren.push(el('span', { style:
       'display:inline-block;margin-left:8px;padding:2px 8px;border-radius:6px;background:rgba(34,211,238,0.10);color:var(--accent);font-size:11px;font-weight:600;letter-spacing:.2px;font-family:inherit' },
@@ -13393,14 +13470,16 @@ function buildValorisationPFTableRow(item) {
     el('span', { style: badgeStyle }, item.type_label || (isNegoce ? 'Négoce' : 'Fabriqué')),
   );
 
-  // Référence (cliquable → ouvre le produit fini)
-  const refBtn = el('button', {
-    cls: 'mvt-ref-link', type: 'button',
-    title: 'Ouvrir le produit',
-    style: 'background:none;border:none;padding:0;margin:0;color:var(--text);cursor:pointer;font-weight:700;font-family:monospace;font-size:13px;text-align:left',
-    on: { click: (e) => { e.stopPropagation(); openPfProduitPage(item.reference, item.id); } },
-  }, item.reference || '');
-  const tdRef = el('td', { style: 'padding:10px 12px;font-size:13px;font-weight:700;color:var(--text);font-family:monospace' }, refBtn);
+  // Référence (cliquable → ouvre le produit fini ; Cmd/Ctrl+clic = nouvel onglet)
+  const refLink = stockPfRefLink(item.reference, item.id);
+  if (refLink && refLink.tagName === 'A') {
+    refLink.title = 'Ouvrir le produit';
+    refLink.style.color = 'var(--text)';
+    refLink.style.fontWeight = '700';
+    refLink.style.fontFamily = 'monospace';
+    refLink.style.fontSize = '13px';
+  }
+  const tdRef = el('td', { style: 'padding:10px 12px;font-size:13px;font-weight:700;color:var(--text);font-family:monospace' }, refLink);
 
   // Désignation
   const tdDes = el('td', { style: 'padding:10px 12px;font-size:13px;color:var(--text2);max-width:380px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', title: item.designation || '' }, item.designation || '');
@@ -14086,9 +14165,19 @@ async function init() {
   // Charger la liste complète des emplacements depuis la base de données
   await fetchEmplacementsFromDB();
   // Onglet initial via URL param ?tab=...
-  const urlTab = new URLSearchParams(window.location.search).get('tab');
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlTab = urlParams.get('tab');
   if (urlTab && ['dashboard','matieres','produits-finis','negoce','referentiel','stock','inventaire','reception','historique','traca','monitoring','valorisation','production','plan-entrepot'].includes(urlTab)) {
     S.tab = urlTab;
+  }
+  // Deep-link sur une matière ou un produit (ouvre directement le détail)
+  const urlMatiereId = parseInt(urlParams.get('matiere') || '', 10);
+  const urlProduitId = parseInt(urlParams.get('produit') || '', 10);
+  const urlProduitRef = (urlParams.get('ref') || '').trim();
+  if (urlMatiereId > 0 && !S.tracaOnly) {
+    S.tab = 'matieres';
+  } else if ((urlProduitId > 0 || urlProduitRef) && !S.tracaOnly) {
+    S.tab = 'produits-finis';
   }
   if (S.tab === 'monitoring' && S.user
       && !['superadmin', 'direction', 'administration'].includes(S.user.role)) {
@@ -14117,6 +14206,14 @@ async function init() {
   else if (S.tab === 'plan-entrepot') { await loadPlanEntrepot(); }
   else if (S.tab === 'production') { await loadProduction(); }
   else { await loadDashboard(); }
+  // Deep-link : ouvrir la matière ou le produit demandé après le chargement
+  if (urlMatiereId > 0 && !S.tracaOnly) {
+    try { await loadMatiere(urlMatiereId); } catch (e) { /* silencieux */ }
+  } else if (urlProduitId > 0 && !S.tracaOnly) {
+    try { await loadProduit(urlProduitId); } catch (e) { /* silencieux */ }
+  } else if (urlProduitRef && !S.tracaOnly) {
+    try { await openPfProduitPage(urlProduitRef, null); } catch (e) { /* silencieux */ }
+  }
   // Charger le compteur d'alertes inventaire en arrière-plan (badge sidebar)
   if (!S.tracaOnly && !S.fabStockMode) loadInvAlertCountBackground();
 }
