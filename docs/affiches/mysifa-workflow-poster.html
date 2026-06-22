@@ -4,22 +4,22 @@
 <meta charset="UTF-8">
 <title>MySifa — Workflow équipe (poster)</title>
 <style>
-  @page { size: A4 portrait; margin: 8mm; }
+  @page { size: A4 portrait; margin: 6mm; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     color: #0f172a; background: #ffffff;
-    font-size: 13px; line-height: 1.4;
+    font-size: 12px; line-height: 1.35;
   }
-  .page { width: 194mm; margin: 0 auto; padding: 4mm 0; }
+  .page { width: 198mm; margin: 0 auto; padding: 0; }
 
-  .header { text-align: center; margin-bottom: 6mm; }
-  .header h1 { font-size: 30px; font-weight: 800; letter-spacing: -0.5px; color: #0f172a; }
-  .header .sub { font-size: 13px; color: #64748b; margin-top: 2px; font-weight: 500; }
+  .header { text-align: center; margin-bottom: 4mm; }
+  .header h1 { font-size: 24px; font-weight: 800; letter-spacing: -0.5px; color: #0f172a; }
+  .header .sub { font-size: 11px; color: #64748b; margin-top: 1px; font-weight: 500; }
 
   .section-title {
-    font-size: 16px; font-weight: 800; color: #0e7490;
-    text-align: center; margin: 0 0 5mm 0;
+    font-size: 13px; font-weight: 800; color: #0e7490;
+    text-align: center; margin: 0 0 3mm 0;
     text-transform: uppercase; letter-spacing: 2px;
   }
 
@@ -28,8 +28,8 @@
     background: #f8fafc;
     border: 2px solid #e2e8f0;
     border-radius: 14px;
-    padding: 7mm 5mm 8mm 5mm;
-    margin-bottom: 7mm;
+    padding: 4mm 4mm 5mm 4mm;
+    margin-bottom: 4mm;
   }
   .flow-row {
     display: flex;
@@ -45,36 +45,37 @@
     gap: 4mm;
   }
   .flow-col.pair { flex: 1; }
+  .flow-col.pair { gap: 3mm; }
   .flow-col.arrow-col { flex: 0 0 22px; }
   .flow-col.center { flex: 1.1; }
 
   .node {
-    padding: 10px 8px;
-    border-radius: 12px;
+    padding: 7px 7px;
+    border-radius: 10px;
     text-align: center;
-    border: 3px solid;
+    border: 2px solid;
     font-weight: 800;
-    font-size: 13px;
-    min-height: 78px;
+    font-size: 12px;
+    min-height: 62px;
     display: flex;
     flex-direction: column;
     justify-content: center;
   }
-  .node .ico { display: block; font-size: 20px; line-height: 1; margin-bottom: 3px; }
-  .node .sub { display: block; font-size: 9.5px; font-weight: 600; color: #64748b; margin-top: 2px; }
+  .node .ico { display: block; font-size: 17px; line-height: 1; margin-bottom: 2px; }
+  .node .sub { display: block; font-size: 9px; font-weight: 600; color: #64748b; margin-top: 1px; }
   .node code {
     display: inline-block;
     background: rgba(255,255,255,0.75);
     padding: 1px 6px;
     border-radius: 4px;
     font-family: 'Consolas', ui-monospace, Menlo, monospace;
-    font-size: 10.5px;
+    font-size: 10px;
     font-weight: 700;
-    margin-top: 4px;
+    margin-top: 3px;
   }
-  .node-big { min-height: 168px; font-size: 15px; }
-  .node-big .ico { font-size: 26px; margin-bottom: 6px; }
-  .node-big .sub { font-size: 10.5px; margin-top: 5px; }
+  .node-big { min-height: 132px; font-size: 13px; }
+  .node-big .ico { font-size: 22px; margin-bottom: 4px; }
+  .node-big .sub { font-size: 9.5px; margin-top: 3px; }
 
   .n-devA   { background: #ecfeff; border-color: #06b6d4; color: #0e7490; }
   .n-devB   { background: #fce7f3; border-color: #db2777; color: #9d174d; }
@@ -84,14 +85,14 @@
 
   .arrow {
     text-align: center;
-    font-size: 24px;
+    font-size: 20px;
     color: #94a3b8;
     font-weight: 800;
     line-height: 1;
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 78px;
+    min-height: 62px;
   }
   .arrow-col.diag .arrow:first-child { align-items: flex-end; padding-bottom: 4px; }
   .arrow-col.diag .arrow:last-child  { align-items: flex-start; padding-top: 4px; }
@@ -101,8 +102,8 @@
     display: flex;
     justify-content: space-between;
     gap: 2mm;
-    margin-bottom: 3mm;
-    font-size: 10px;
+    margin-bottom: 2mm;
+    font-size: 9px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 1.5px;
@@ -115,44 +116,44 @@
 
   /* bloc PROD final */
   .prod-row {
-    margin-top: 5mm;
+    margin-top: 3mm;
     text-align: center;
     font-size: 12px;
     color: #475569;
   }
   .prod-row .promote {
     display: inline-block;
-    padding: 5px 14px;
+    padding: 3px 12px;
     background: #fff;
     border: 2px dashed #0e7490;
-    border-radius: 8px;
+    border-radius: 7px;
     color: #0e7490;
     font-weight: 800;
-    font-size: 11.5px;
-    margin: 0 8px;
+    font-size: 10.5px;
+    margin: 0 6px;
   }
   .prod-box {
-    margin-top: 4mm;
+    margin-top: 2mm;
     display: inline-block;
-    padding: 9px 28px;
+    padding: 6px 22px;
     background: #d1fae5;
-    border: 3px solid #059669;
-    border-radius: 14px;
+    border: 2px solid #059669;
+    border-radius: 10px;
     color: #065f46;
     font-weight: 800;
-    font-size: 16px;
+    font-size: 14px;
   }
 
   /* ===== CHEATSHEET 2 colonnes : début vs continu ===== */
   .cheat-grid {
     display: grid;
-    grid-template-columns: 1fr 1.4fr;
-    gap: 4mm;
-    margin-bottom: 6mm;
+    grid-template-columns: 1fr 1.5fr;
+    gap: 3mm;
+    margin-bottom: 4mm;
   }
   .cheat-card {
-    padding: 5mm 5mm;
-    border-radius: 12px;
+    padding: 3mm 4mm 4mm 4mm;
+    border-radius: 10px;
     border: 2px solid;
     position: relative;
   }
@@ -161,53 +162,53 @@
 
   .phase-badge {
     display: inline-block;
-    padding: 4px 12px;
+    padding: 3px 10px;
     border-radius: 999px;
-    font-size: 10px;
+    font-size: 9px;
     font-weight: 800;
     letter-spacing: 1.5px;
     text-transform: uppercase;
     color: #fff;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
   }
   .phase-badge.start { background: #d97706; }
   .phase-badge.cont  { background: #0e7490; }
 
   .cheat-card h2 {
-    font-size: 13px; font-weight: 800;
-    margin-bottom: 4px; letter-spacing: 0.5px;
+    font-size: 11.5px; font-weight: 800;
+    margin-bottom: 3px; letter-spacing: 0.5px;
   }
   .cheat-card.start h2 { color: #92400e; }
   .cheat-card.cont  h2 { color: #0e7490; }
 
   .cheat-card .label {
-    font-size: 10.5px; color: #475569;
-    margin-top: 7px; margin-bottom: 3px; font-weight: 700;
+    font-size: 10px; color: #475569;
+    margin-top: 5px; margin-bottom: 2px; font-weight: 700;
   }
   .cheat-card .label:first-of-type { margin-top: 2px; }
   .cheat-card pre {
     display: block; background: #ffffff;
     font-family: 'Consolas', ui-monospace, Menlo, monospace;
-    font-size: 10.5px; padding: 6px 9px; border-radius: 6px;
+    font-size: 9.5px; padding: 4px 8px; border-radius: 5px;
     border: 1px solid #cbd5e1; font-weight: 600;
-    line-height: 1.5;
+    line-height: 1.45;
     white-space: pre-wrap; word-break: break-all;
   }
   .cheat-card .hint {
-    font-size: 9.5px; color: #64748b; font-style: italic;
-    margin-top: 3px; padding-left: 2px;
+    font-size: 9px; color: #64748b; font-style: italic;
+    margin-top: 2px; padding-left: 2px;
   }
 
   /* ===== REGLES ===== */
-  .rules { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; }
-  .rule-card { padding: 4mm 5mm; border-radius: 12px; }
+  .rules { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; }
+  .rule-card { padding: 3mm 4mm; border-radius: 10px; }
   .rule-card.ok { background: #f0fdf4; border-left: 6px solid #059669; }
   .rule-card.no { background: #fef2f2; border-left: 6px solid #dc2626; }
-  .rule-card h3 { font-size: 13px; font-weight: 800; margin-bottom: 5px; }
+  .rule-card h3 { font-size: 11.5px; font-weight: 800; margin-bottom: 3px; }
   .rule-card.ok h3 { color: #065f46; }
   .rule-card.no h3 { color: #991b1b; }
   .rule-card ul { list-style: none; }
-  .rule-card li { font-size: 11px; padding: 2px 0; color: #1e293b; }
+  .rule-card li { font-size: 10px; padding: 1px 0; color: #1e293b; }
   .rule-card li::before { content: "▸ "; font-weight: 800; }
   .rule-card.ok li::before { color: #059669; }
   .rule-card.no li::before { color: #dc2626; }
@@ -222,7 +223,6 @@
   </div>
 
   <!-- ===== SCHEMA WORKFLOW 2 DEVS ===== -->
-  <div class="section-title">Du clavier à la prod</div>
   <div class="flow">
 
     <!-- étiquettes de colonnes -->
@@ -290,7 +290,7 @@
 
       <!-- Col 6 : flèche → centrée -->
       <div class="flow-col arrow-col">
-        <div class="arrow" style="min-height:168px">→</div>
+        <div class="arrow" style="min-height:132px">→</div>
       </div>
 
       <!-- Col 7 : v1 (cible test) -->
@@ -334,7 +334,7 @@ git checkout -b feature/maintenance</pre>
 
       <div class="label">1. Sauvegarder et pousser ton travail sur GitHub</div>
 <pre>git add .
-git commit -m "maintenance: bouton 'Créer une alerte' (placeholder en developpement)"
+git commit -m "maintenance: bouton 'Créer une alerte'"
 git push -u origin feature/maintenance</pre>
       <div class="hint">À ce stade la branche est sur GitHub — pas encore sur v1.</div>
 
