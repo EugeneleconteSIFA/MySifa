@@ -109,7 +109,7 @@ def require_stock_write(request: Request) -> dict:
     return user
 
 
-_MP_CATEGORIES = frozenset({"mandrin", "palette", "adhesif", "carton", "frontal", "glassine", "complexe"})
+_MP_CATEGORIES = frozenset({"mandrin", "palette", "adhesif", "carton", "frontal", "glassine", "complexe", "autre"})
 _MP_CATEGORIES_LAIZEES = frozenset({"frontal", "glassine", "complexe"})
 
 
@@ -130,6 +130,8 @@ def _mp_unite_gestion(categorie: str) -> str:
         return "palette"
     if cat == "carton":
         return "palette"
+    if cat == "autre":
+        return "unite"
     return "palette"
 
 
@@ -161,6 +163,9 @@ def _mp_row_dict(r, stock_par_laize: Optional[list[dict]] = None) -> dict:
     if laizee:
         has_laizes = bool(stock_par_laize) and len(stock_par_laize) > 0
         complete = has_laizes and (prix_m2 or 0) > 0 and (metres or 0) > 0
+    sous_section = None
+    if "sous_section" in r.keys() and r["sous_section"]:
+        sous_section = str(r["sous_section"]).strip() or None
     return {
         "id": r["id"],
         "categorie": cat,
@@ -177,6 +182,7 @@ def _mp_row_dict(r, stock_par_laize: Optional[list[dict]] = None) -> dict:
         "metres_lineaires_par_bobine": metres,
         "prix_eur_m2": prix_m2,
         "stock_par_laize": stock_par_laize if laizee else None,
+        "sous_section": sous_section,
         "complete": complete,
     }
 
@@ -2458,6 +2464,7 @@ def list_matieres_premieres(request: Request, all: int = 0):
             SELECT mp.id, mp.categorie, mp.reference, mp.designation,
                    mp.seuil_alerte, mp.actif, mp.palettes_par_pile, mp.couleur,
                    mp.metres_lineaires_par_bobine, mp.prix_eur_m2,
+                   mp.sous_section,
                    COALESCE(s.quantite, 0) AS quantite
             FROM matieres_premieres mp
             LEFT JOIN mp_stock s ON s.matiere_id = mp.id
@@ -2492,6 +2499,24 @@ def list_matieres_premieres(request: Request, all: int = 0):
     return out
 
 
+@router.get("/api/stock/matieres/sous-sections")
+def list_sous_sections(request: Request):
+    """Liste des sous-sections distinctes utilisees pour la categorie 'autre'."""
+    require_stock(request)
+    with get_db() as conn:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT TRIM(sous_section) AS sous_section
+            FROM matieres_premieres
+            WHERE categorie = 'autre'
+              AND sous_section IS NOT NULL
+              AND TRIM(sous_section) != ''
+            ORDER BY sous_section COLLATE NOCASE ASC
+            """
+        ).fetchall()
+    return [r["sous_section"] for r in rows]
+
+
 @router.post("/api/stock/matieres")
 async def create_matiere_premiere(request: Request):
     require_stock_matieres_admin(request)
@@ -2522,16 +2547,20 @@ async def create_matiere_premiere(request: Request):
     if categorie == "glassine" and not couleur:
         couleur = designation
 
+    sous_section = (body.get("sous_section") or "").strip() or None
+    if categorie != "autre":
+        sous_section = None
+
     with get_db() as conn:
         try:
             cur = conn.execute(
                 """
                 INSERT INTO matieres_premieres (
-                    categorie, reference, designation, seuil_alerte, palettes_par_pile, couleur
+                    categorie, reference, designation, seuil_alerte, palettes_par_pile, couleur, sous_section
                 )
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                (categorie, reference, designation, seuil_alerte, palettes_par_pile, couleur),
+                (categorie, reference, designation, seuil_alerte, palettes_par_pile, couleur, sous_section),
             )
             matiere_id = cur.lastrowid
             conn.execute(
@@ -2599,6 +2628,10 @@ async def update_matiere_premiere(matiere_id: int, request: Request):
             raise HTTPException(400, "Prix m² négatif.")
         sets.append("prix_eur_m2=?")
         params.append(v)
+    if "sous_section" in body:
+        sv = (body.get("sous_section") or "").strip() or None
+        sets.append("sous_section=?")
+        params.append(sv)
 
     if not sets:
         raise HTTPException(400, "Aucun champ à mettre à jour.")
@@ -3551,11 +3584,12 @@ _MP_CATEGORIE_LABELS = {
     "mandrin": "Mandrin",
     "carton": "Carton",
     "palette": "Palette",
+    "autre": "Autre",
 }
 
 
 def _mp_categorie_order(cat: str) -> int:
-    order = ["frontal", "glassine", "adhesif", "mandrin", "carton", "palette"]
+    order = ["frontal", "glassine", "adhesif", "mandrin", "carton", "palette", "autre"]
     try:
         return order.index((cat or "").lower())
     except ValueError:
