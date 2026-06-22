@@ -956,7 +956,7 @@ const PALETTE_DEF=[
       <div style="width:9px;height:9px;border-radius:50%;background:#c8a86a;opacity:.85"></div>
       <div style="width:9px;height:9px;border-radius:50%;background:#8fa898;opacity:.6"></div>
     </div>`},
-  {id:'cendre', name:'Cendre',  sub:'Bleu acier · nuit froide',
+  {id:'cendre', name:'Pétrole', sub:'Bleu acier · nuit froide',
     prev:`<div style="background:#080a0f;width:100%;height:100%;border-radius:6px;display:flex;align-items:center;justify-content:center;gap:5px">
       <div style="width:9px;height:9px;border-radius:50%;background:#6496c8"></div>
       <div style="width:9px;height:9px;border-radius:50%;background:#c8a070;opacity:.85"></div>

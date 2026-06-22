@@ -1754,6 +1754,9 @@ let S = {
   matieresAdminEditId: null,
   matieresAdminAddError: '',
   matieresAdminSaving: false,
+  matieresAdminFilterCat: 'tout',
+  matieresAdminFilterQ: '',
+  matieresAdminAddSeed: null,
   mpSousSections: null,
   // Produits finis (onglet dédié)
   pfStock: null,
@@ -2084,6 +2087,7 @@ async function loadProduit(id) {
       S.searchResults = null;
       clearSearch();
       closeSidebar();
+      if (typeof stockSyncUrl === 'function') stockSyncUrl();
       render();
     }
   } catch(e) { showToast(e.message, 'error'); }
@@ -2105,19 +2109,72 @@ async function openPfProduitPage(reference, produitId) {
   } catch (e) { showToast(e.message, 'error'); }
 }
 
+// Renvoie true si l'événement clic doit laisser le navigateur ouvrir l'URL
+// (nouvel onglet/fenêtre) au lieu d'exécuter la navigation interne JS.
+function stockClickOpensNewTab(e) {
+  if (!e) return false;
+  // Cmd (macOS), Ctrl (Win/Linux), Shift, Alt, ou clic milieu
+  return !!(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button === 1);
+}
+
+function stockDeepLinkUrl(params) {
+  const sp = new URLSearchParams();
+  Object.keys(params || {}).forEach(k => {
+    if (params[k] != null && params[k] !== '') sp.set(k, String(params[k]));
+  });
+  return '/stock?' + sp.toString();
+}
+
 function stockPfRefLink(reference, produitId, label) {
   const txt = label != null ? label : (reference || '—');
   if (!reference || txt === '—') return el('span', null, txt);
-  return el('button', {
-    cls: 'mvt-ref-link', type: 'button',
-    on: { click: (e) => { e.stopPropagation(); openPfProduitPage(reference, produitId); } },
+  const pid = parseInt(produitId, 10);
+  const href = stockDeepLinkUrl(pid > 0
+    ? { tab: 'produits-finis', produit: pid }
+    : { tab: 'produits-finis', ref: reference });
+  return el('a', {
+    cls: 'mvt-ref-link',
+    href: href,
+    style: 'text-decoration:none',
+    on: { click: (e) => {
+      if (stockClickOpensNewTab(e)) return; // laisse le navigateur ouvrir en nouvel onglet
+      e.preventDefault();
+      e.stopPropagation();
+      openPfProduitPage(reference, produitId);
+    } },
+  }, txt);
+}
+
+function stockMpRefLink(matiereId, label, options) {
+  const mid = parseInt(matiereId, 10);
+  const opts = options || {};
+  const txt = label != null ? label : '';
+  if (!mid) return el('span', null, txt);
+  const href = stockDeepLinkUrl({ tab: 'matieres', matiere: mid });
+  const baseStyle = opts.style || 'text-decoration:none';
+  return el('a', {
+    cls: 'mvt-ref-link',
+    href: href,
+    style: baseStyle,
+    title: opts.title || null,
+    on: { click: (e) => {
+      if (stockClickOpensNewTab(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      loadMatiere(mid);
+    } },
   }, txt);
 }
 
 async function loadEmplacement(empl) {
   try {
     const d = await api('/api/stock/emplacements/' + encodeURIComponent(empl));
-    if (d) { S.selEmpl = d; S.selProduit = null; S.searchResults = null; clearSearch(); render(); }
+    if (d) {
+      S.selEmpl = d; S.selProduit = null; S.searchResults = null;
+      clearSearch();
+      if (typeof stockSyncUrl === 'function') stockSyncUrl();
+      render();
+    }
   } catch(e) { showToast(e.message, 'error'); }
 }
 
@@ -3285,6 +3342,7 @@ function goToTab(tab) {
   clearSearch(); closeSidebar();
   if (tab === 'historique') S.historiqueLoading = true;
   updateNavActive();
+  stockSyncUrl();
   renderContent();
   if (tab === 'dashboard') loadDashboard();
   else if (tab === 'referentiel') loadDashboard();
@@ -3304,6 +3362,27 @@ function updateNavActive() {
   document.querySelectorAll('.nav-btn[data-tab]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.tab === S.tab && !S.selProduit && !S.selEmpl && !S.selMatiere);
   });
+}
+
+// Synchronise l'URL avec l'état courant (onglet + sélection) sans recharger la page.
+// Permet de revenir au même endroit après un refresh ou un Cmd+clic.
+function stockSyncUrl() {
+  try {
+    const sp = new URLSearchParams();
+    if (S.tab && S.tab !== 'dashboard') sp.set('tab', S.tab);
+    if (S.selMatiere && S.selMatiere.matiere && S.selMatiere.matiere.id) {
+      sp.set('matiere', String(S.selMatiere.matiere.id));
+    } else if (S.selProduit && S.selProduit.id) {
+      sp.set('produit', String(S.selProduit.id));
+    } else if (S.selEmpl && S.selEmpl.code) {
+      sp.set('empl', S.selEmpl.code);
+    }
+    const qs = sp.toString();
+    const url = '/stock' + (qs ? ('?' + qs) : '');
+    if (window.location.pathname + window.location.search !== url) {
+      history.replaceState(null, '', url);
+    }
+  } catch (e) { /* silencieux — l'URL est juste un confort */ }
 }
 
 function clearSearch() {
@@ -4816,6 +4895,7 @@ function mpQuantiteInputAttrs(catOrMatiere) {
 function mpAdminHint(cat) {
   if (cat === 'palette') return 'Stock géré en palettes. Quantité minimale par saisie : 40.';
   if (cat === 'carton') return 'Stock géré en palettes.';
+  if (cat === 'frontal') return 'Stock géré en bobines (réception par scan possible). Une sous-section permet de regrouper les frontaux par usage.';
   if (mpIsBobineCategory(cat)) return 'Stock géré en bobines (réception par scan possible).';
   if (cat === 'autre') return 'Stock géré en unités. Une sous-section permet de regrouper des références par usage.';
   return 'Stock géré en palettes (pal.).';
@@ -4950,6 +5030,7 @@ async function loadMatiere(id) {
     clearSearch();
     if (S.tab !== 'matieres') S.tab = 'matieres';
     closeSidebar();
+    if (typeof stockSyncUrl === 'function') stockSyncUrl();
     render();
   } catch (e) {
     showToast(e.message, 'error');
@@ -4977,6 +5058,7 @@ async function refreshSelMatiere() {
 
 function clearMatiereSel() {
   S.selMatiere = null;
+  if (typeof stockSyncUrl === 'function') stockSyncUrl();
   renderContent();
   updateNavActive();
 }
@@ -7303,11 +7385,17 @@ function matiereRefEditPayload(item, fields) {
   if (mpIsGlassineCategory(item) && fields.couleurInp) {
     payload.couleur = fields.couleurInp.value.trim() || des;
   }
-  if (fields.isAutre && fields.sousSectionSel) {
-    // sous_section toujours envoye pour la categorie "autre" (autorise vidage)
+  if (fields.hasSousSection && fields.sousSectionSel) {
+    // sous_section toujours envoye pour les categories qui la supportent (autorise vidage)
     payload.sous_section = fields.sousSectionSel.getValue();
   }
   return { payload };
+}
+
+// Catégories dont la sous-section est gérée (cohérent avec backend _MP_CATEGORIES_WITH_SOUS_SECTION).
+const MP_CATEGORIES_WITH_SOUS_SECTION = new Set(['autre', 'frontal']);
+function mpCategorieHasSousSection(cat) {
+  return MP_CATEGORIES_WITH_SOUS_SECTION.has(mpCategorieKey(cat));
 }
 
 function appendMatiereRefEditFields(parent, item) {
@@ -7360,10 +7448,10 @@ function appendMatiereRefEditFields(parent, item) {
       laizeChecks,
     ),
   );
-  // Sous-section (uniquement pour la categorie "autre")
-  const isAutre = mpCategorieKey(item.categorie) === 'autre';
-  const sousSectionSel = isAutre ? buildMpSousSectionSelector(item.sous_section || '') : null;
-  const sousSectionWrap = isAutre
+  // Sous-section (catégories autre + frontal)
+  const hasSousSection = mpCategorieHasSousSection(item.categorie);
+  const sousSectionSel = hasSousSection ? buildMpSousSectionSelector(item.sous_section || '') : null;
+  const sousSectionWrap = hasSousSection
     ? sousSectionSel.el
     : el('div', { style: { display: 'none' } });
   parent.append(
@@ -7380,7 +7468,7 @@ function appendMatiereRefEditFields(parent, item) {
     laizeWrap,
     el('div', { cls: 'mp-hint' }, '0 = pas d\'alerte stock bas.'),
   );
-  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, isAutre };
+  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection };
 }
 
 async function submitMatiereRefEdit(item, fields, onSaved) {
@@ -7408,7 +7496,7 @@ async function submitMatiereRefEdit(item, fields, onSaved) {
       });
       await loadMatieresIncompleteCount();
     }
-    if (fields.isAutre) {
+    if (fields.hasSousSection) {
       await loadMpSousSections();
     }
     showToast('Référence mise à jour.', 'success');
@@ -7585,6 +7673,36 @@ function buildMatieres() {
     if (mpIsGlassineCategory(m) && m.couleur) {
       infoChildren.push(el('div', { cls: 'mp-card-meta' }, 'Couleur : ' + m.couleur));
     }
+    // Laizes disponibles (frontal / glassine / complexe)
+    if (mpIsLaizeeCategory(m.categorie)) {
+      const spl = Array.isArray(m.stock_par_laize) ? m.stock_par_laize : [];
+      if (spl.length > 0) {
+        // Trie par valeur_mm croissant pour un affichage stable
+        const sorted = spl.slice().sort((a, b) => (a.valeur_mm || 0) - (b.valeur_mm || 0));
+        const chips = sorted.map(s => {
+          const label = s.label || ((s.valeur_mm || 0) + ' mm');
+          const qty = Number(s.quantite || 0);
+          const isEmpty = qty <= 0;
+          return el('span', {
+            style: 'display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;'
+              + (isEmpty
+                  ? 'background:transparent;color:var(--muted);border:1px solid var(--border)'
+                  : 'background:var(--accent-bg);color:var(--accent);border:1px solid transparent')
+              + ';font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.4',
+            title: label + ' — ' + fN(qty) + ' bob.',
+          },
+            el('span', null, label),
+            el('span', { style: 'opacity:.7;font-weight:500' }, fN(qty) + ' bob.'),
+          );
+        });
+        infoChildren.push(el('div', {
+          style: 'display:flex;flex-wrap:wrap;gap:4px;margin-top:4px',
+        }, ...chips));
+      } else {
+        infoChildren.push(el('div', { cls: 'mp-card-meta',
+          style: 'color:#fb923c;font-weight:600' }, 'Aucune laize configurée'));
+      }
+    }
     if (m.en_alerte) {
       infoChildren.push(el('div', { cls: 'mp-card-warn' },
         'Sous le seuil (min. ' + mpStockLine(seuil, m) + ')'));
@@ -7622,26 +7740,34 @@ function buildMatieres() {
     ));
   } else {
     const curCat = S.matieresCat || 'tout';
-    const autresItems = filtered.filter(m => mpCategorieKey(m.categorie) === 'autre');
-    const otherItems = filtered.filter(m => mpCategorieKey(m.categorie) !== 'autre');
-    // Catégories autres que "autre" : rendu plat dans l'ordre du tri serveur
-    otherItems.forEach(renderMpCard);
-    // Catégorie "autre" : groupée par sous-section
-    if (autresItems.length) {
-      if (curCat === 'tout' && otherItems.length) {
-        list.appendChild(el('div', { style: mpSectionHeadStyle }, 'Autres'));
-      }
-      const bySs = {};
-      autresItems.forEach(m => {
-        const ss = (m.sous_section || '').trim() || '— Sans sous-section —';
-        if (!bySs[ss]) bySs[ss] = [];
-        bySs[ss].push(m);
+    const ssItems = filtered.filter(m => mpCategorieHasSousSection(m.categorie));
+    const flatItems = filtered.filter(m => !mpCategorieHasSousSection(m.categorie));
+    // Catégories sans sous-section : rendu plat dans l'ordre du tri serveur
+    flatItems.forEach(renderMpCard);
+    // Catégories avec sous-section (autre + frontal) : groupées
+    if (ssItems.length) {
+      // Sépare par catégorie pour conserver un en-tête de section
+      const byCat = {};
+      ssItems.forEach(m => {
+        const c = mpCategorieKey(m.categorie);
+        if (!byCat[c]) byCat[c] = [];
+        byCat[c].push(m);
       });
-      const ssOrder = Object.keys(bySs).sort((a, b) => a.localeCompare(b, 'fr'));
-      ssOrder.forEach(ss => {
-        list.appendChild(el('div', { style: mpSubsectionHeadStyle },
-          ss + ' · ' + bySs[ss].length));
-        bySs[ss].forEach(renderMpCard);
+      Object.keys(byCat).sort((a, b) => a.localeCompare(b, 'fr')).forEach(cat => {
+        if (curCat === 'tout' && flatItems.length) {
+          list.appendChild(el('div', { style: mpSectionHeadStyle }, MP_CAT_LABELS[cat] || cat));
+        }
+        const bySs = {};
+        byCat[cat].forEach(m => {
+          const ss = (m.sous_section || '').trim() || '— Sans sous-section —';
+          if (!bySs[ss]) bySs[ss] = [];
+          bySs[ss].push(m);
+        });
+        Object.keys(bySs).sort((a, b) => a.localeCompare(b, 'fr')).forEach(ss => {
+          list.appendChild(el('div', { style: mpSubsectionHeadStyle },
+            ss + ' · ' + bySs[ss].length));
+          bySs[ss].forEach(renderMpCard);
+        });
       });
     }
   }
@@ -8508,7 +8634,7 @@ async function submitPfMouvement() {
 
 async function loadMpSousSections() {
   try {
-    const d = await api('/api/stock/matieres/sous-sections');
+    const d = await api('/api/stock/matieres/sous-sections?categorie=all');
     S.mpSousSections = Array.isArray(d) ? d : [];
   } catch (e) {
     S.mpSousSections = [];
@@ -8554,20 +8680,68 @@ function renderMatieresAdminDrawer() {
     el('h3', { style: { margin: 0, fontSize: '16px' } }, 'Références matières premières'),
     el('button', { cls: 'btn-cancel', type: 'button', on: { click: closeMatieresAdminDrawer } }, '×'),
   ));
+
+  // Barre filtre — catégorie + recherche libre
+  const filterCat = S.matieresAdminFilterCat || 'tout';
+  const filterQ = (S.matieresAdminFilterQ || '').trim().toLowerCase();
+  const pillBase = 'padding:5px 12px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s';
+  const pillActive = 'padding:5px 12px;border-radius:999px;border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700;cursor:pointer';
+  const pillsWrap = el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;padding:10px 14px 4px' });
+  const CATS_ORDER = ['tout', 'mandrin', 'frontal', 'glassine', 'palette', 'adhesif', 'carton', 'complexe', 'autre'];
+  CATS_ORDER.forEach(c => {
+    const isAct = filterCat === c;
+    pillsWrap.appendChild(el('button', {
+      type: 'button',
+      style: isAct ? pillActive : pillBase,
+      on: { click: () => { S.matieresAdminFilterCat = c; renderMatieresAdminDrawer(); } },
+    }, c === 'tout' ? 'Toutes' : (MP_CAT_LABELS[c] || c)));
+  });
+  drawer.appendChild(pillsWrap);
+  const searchInp = el('input', {
+    cls: 'mp-search',
+    id: 'mp-admin-search',
+    attrs: {
+      type: 'search',
+      placeholder: 'Rechercher (référence, désignation, sous-section…)',
+      autocomplete: 'off',
+      spellcheck: 'false',
+    },
+    style: 'margin:6px 14px 8px;width:calc(100% - 28px)',
+  });
+  searchInp.value = S.matieresAdminFilterQ || '';
+  searchInp.addEventListener('input', (e) => {
+    S.matieresAdminFilterQ = e.target.value;
+    renderMatieresAdminDrawer();
+  });
+  searchInp.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { S.matieresAdminFilterQ = ''; renderMatieresAdminDrawer(); }
+  });
+  drawer.appendChild(searchInp);
+
   const body = el('div', { cls: 'mp-drawer-body' });
-  const list = S.matieresAdminList || [];
+  const list = (S.matieresAdminList || []).filter(item => {
+    if (filterCat !== 'tout' && mpCategorieKey(item.categorie) !== filterCat) return false;
+    if (!filterQ) return true;
+    const hay = [item.reference, item.designation, item.sous_section, item.couleur]
+      .map(x => String(x || '').toLowerCase()).join(' ');
+    return hay.includes(filterQ);
+  });
   const byCat = {};
   list.forEach(item => {
     const c = item.categorie || 'autre';
     if (!byCat[c]) byCat[c] = [];
     byCat[c].push(item);
   });
+  if (!list.length) {
+    body.appendChild(el('div', { style: 'padding:30px;text-align:center;color:var(--muted);font-size:13px' },
+      filterQ ? ('Aucune référence pour « ' + filterQ + ' ».') : 'Aucune référence dans cette catégorie.'));
+  }
   ['mandrin', 'frontal', 'glassine', 'palette', 'adhesif', 'carton', 'complexe', 'autre'].forEach(cat => {
     if (!byCat[cat] || !byCat[cat].length) return;
     body.appendChild(el('div', { style: { fontSize: '11px', fontWeight: '600', color: 'var(--muted)', margin: '12px 0 8px', textTransform: 'uppercase' } },
       MP_CAT_LABELS[cat] || cat));
-    if (cat === 'autre') {
-      // Regroupement par sous-section
+    if (mpCategorieHasSousSection(cat)) {
+      // Regroupement par sous-section (autre + frontal)
       const bySs = {};
       byCat[cat].forEach(item => {
         const ss = (item.sous_section || '').trim() || '— Sans sous-section —';
@@ -8586,8 +8760,51 @@ function renderMatieresAdminDrawer() {
   });
   drawer.appendChild(body);
   drawer.appendChild(buildMatieresAdminAddForm());
+  // Restore focus on search box if it was active before the re-render
+  if (document.activeElement && document.activeElement.id === 'mp-admin-search') {
+    requestAnimationFrame(() => {
+      const inp = document.getElementById('mp-admin-search');
+      if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+    });
+  }
   overlay.appendChild(drawer);
   mroot.appendChild(overlay);
+  // Si on a une graine d'ajout, faire défiler le footer en vue
+  if (S.matieresAdminAddSeed) {
+    requestAnimationFrame(() => {
+      const foot = drawer.querySelector('.mp-drawer-foot');
+      if (foot) foot.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }
+}
+
+// Lance "Copier" sur une référence : pré-remplit le formulaire d'ajout
+function copyMatiereRefToAddForm(item) {
+  if (!item) return;
+  S.matieresAdminAddSeed = {
+    categorie: item.categorie,
+    reference: '',                       // l'utilisateur doit saisir une nouvelle référence
+    designation: item.designation || '',
+    seuil_alerte: item.seuil_alerte || 0,
+    palettes_par_pile: item.palettes_par_pile || null,
+    couleur: item.couleur || '',
+    sous_section: item.sous_section || '',
+    metres_lineaires_par_bobine: item.metres_lineaires_par_bobine || null,
+    prix_eur_m2: item.prix_eur_m2 || null,
+    stock_par_laize: Array.isArray(item.stock_par_laize) ? item.stock_par_laize.slice() : [],
+  };
+  S.matieresAdminEditId = null;
+  renderMatieresAdminDrawer();
+  // Focus sur le champ référence pour saisie immédiate
+  requestAnimationFrame(() => {
+    const drawer = document.querySelector('.mp-drawer');
+    if (!drawer) return;
+    const foot = drawer.querySelector('.mp-drawer-foot');
+    if (!foot) return;
+    const refInp = foot.querySelector('input[type=text]');
+    if (refInp) refInp.focus();
+  });
+  showToast('Référence copiée — saisis la nouvelle référence.', 'info');
 }
 
 function buildMatieresAdminRow(item) {
@@ -8600,7 +8817,7 @@ function buildMatieresAdminRow(item) {
     mpIsGlassineCategory(item) && item.couleur
       ? el('span', { style: { fontSize: '12px', color: 'var(--muted)' } }, ' · ' + item.couleur)
       : null,
-    (mpCategorieKey(item.categorie) === 'autre' && item.sous_section)
+    (mpCategorieHasSousSection(item.categorie) && item.sous_section)
       ? el('span', { style: 'display:inline-block;padding:2px 8px;border-radius:999px;background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:600' }, item.sous_section)
       : null,
     el('span', { style: { fontSize: '12px', color: 'var(--muted)' } }, 'Seuil ' + mpStockLine(item.seuil_alerte, item)),
@@ -8632,6 +8849,12 @@ function buildMatieresAdminRow(item) {
       renderMatieresAdminDrawer();
     } },
   }, S.matieresAdminEditId === item.id ? 'Fermer' : 'Modifier'));
+  actions.appendChild(el('button', {
+    cls: 'btn-ghost',
+    type: 'button',
+    title: 'Dupliquer cette référence dans le formulaire d\'ajout',
+    on: { click: (e) => { e.stopPropagation(); copyMatiereRefToAddForm(item); } },
+  }, 'Copier'));
   actions.appendChild(el('button', {
     cls: 'btn-ghost',
     type: 'button',
@@ -8791,20 +9014,21 @@ function buildMatieresAdminAddForm() {
       laizeChecks,
     ),
   );
-  // Sous-section (visible uniquement pour la categorie "autre")
-  const sousSectionSel = buildMpSousSectionSelector('');
+  // Sous-section (visible pour "autre" et "frontal")
+  const seed = S.matieresAdminAddSeed || null;
+  const sousSectionSel = buildMpSousSectionSelector((seed && seed.sous_section) || '');
   const sousSectionWrap = el('div', { style: { display: 'none' } }, sousSectionSel.el);
   function syncAdminAddFields() {
     const cat = catSel.value;
     const isPal = cat === 'palette';
     const isCarton = cat === 'carton';
     const isGlass = cat === 'glassine';
-    const isAutre = cat === 'autre';
+    const hasSousSection = mpCategorieHasSousSection(cat);
     const isLaizee = mpIsLaizeeCategory(cat);
     pppWrap.style.display = isPal ? '' : 'none';
     couleurWrap.style.display = isGlass ? '' : 'none';
     laizeWrap.style.display = isLaizee ? '' : 'none';
-    sousSectionWrap.style.display = isAutre ? '' : 'none';
+    sousSectionWrap.style.display = hasSousSection ? '' : 'none';
     pppLbl.textContent = 'Palettes par pile';
     seuilLbl.textContent = mpSeuilFieldLabel(cat);
     seuilInp.step = isPal || isCarton || cat === 'mandrin' || mpIsBobineCategory(cat) ? '1' : '0.5';
@@ -8813,6 +9037,30 @@ function buildMatieresAdminAddForm() {
   catSel.addEventListener('change', syncAdminAddFields);
   pppWrap.append(pppLbl, pppInp);
   couleurWrap.append(couleurLbl, couleurInp);
+  // Pré-remplissage si l'utilisateur a cliqué "Copier" sur une référence
+  if (seed) {
+    catSel.value = seed.categorie || catSel.value;
+    refInp.value = seed.reference || '';
+    desInp.value = seed.designation || '';
+    seuilInp.value = String(seed.seuil_alerte != null ? seed.seuil_alerte : 0);
+    if (seed.palettes_par_pile) pppInp.value = String(seed.palettes_par_pile);
+    if (seed.couleur) couleurInp.value = seed.couleur;
+    if (seed.metres_lineaires_par_bobine) metresInp.value = String(seed.metres_lineaires_par_bobine);
+    if (seed.prix_eur_m2) prixM2Inp.value = String(seed.prix_eur_m2);
+    if (Array.isArray(seed.stock_par_laize)) {
+      const seedLaizeIds = new Set(seed.stock_par_laize.map(s => s.laize_id));
+      laizeChecks.querySelectorAll('input[type=checkbox]').forEach(inp => {
+        const lid = parseInt(inp.value, 10);
+        if (seedLaizeIds.has(lid)) {
+          inp.checked = true;
+          const lbl = inp.parentElement;
+          if (lbl) { lbl.style.borderColor = 'var(--accent)'; lbl.style.background = 'var(--accent-bg)'; }
+        }
+      });
+    }
+    // Consomme la graine après usage
+    S.matieresAdminAddSeed = null;
+  }
   syncAdminAddFields();
   foot.append(
     el('div', { cls: 'mp-field' }, el('label', null, 'Catégorie'), catSel),
@@ -8861,7 +9109,7 @@ function buildMatieresAdminAddForm() {
           if (cat === 'glassine') {
             payload.couleur = couleurInp.value.trim() || des;
           }
-          if (cat === 'autre') {
+          if (mpCategorieHasSousSection(cat)) {
             const ss = sousSectionSel.getValue();
             if (ss) payload.sous_section = ss;
           }
@@ -8902,7 +9150,7 @@ function buildMatieresAdminAddForm() {
           metresInp.value = '';
           prixM2Inp.value = '';
           laizeChecks.querySelectorAll('input[type=checkbox]').forEach(i => { i.checked = false; });
-          if (cat === 'autre' && payload.sous_section) {
+          if (mpCategorieHasSousSection(cat) && payload.sous_section) {
             // Rafraichit la liste pour que la nouvelle sous-section soit selectionnable
             await loadMpSousSections();
           }
@@ -10213,6 +10461,7 @@ function clearSel() {
   S.selProduit = null;
   S.selEmpl = null;
   S.selMatiere = null;
+  if (typeof stockSyncUrl === 'function') stockSyncUrl();
   renderContent();
   updateNavActive();
   if (S.tab === 'produits-finis') loadProduitsFinis();
@@ -12647,7 +12896,12 @@ function buildValorisationTableRow(item) {
   tdCat.appendChild(badge);
 
   const refLabel = item.reference || '';
-  const refChildren = [el('span', null, refLabel)];
+  const matiereId = item.matiere_id || item.id;
+  const refLink = stockMpRefLink(matiereId, refLabel, {
+    title: 'Ouvrir la matière',
+    style: 'text-decoration:none;color:var(--text);font-weight:800;font-family:monospace;font-size:13px',
+  });
+  const refChildren = [refLink];
   if (item.laizee && item.laize_label) {
     refChildren.push(el('span', { style:
       'display:inline-block;margin-left:8px;padding:2px 8px;border-radius:6px;background:rgba(34,211,238,0.10);color:var(--accent);font-size:11px;font-weight:600;letter-spacing:.2px;font-family:inherit' },
@@ -13386,8 +13640,16 @@ function buildValorisationPFTableRow(item) {
     el('span', { style: badgeStyle }, item.type_label || (isNegoce ? 'Négoce' : 'Fabriqué')),
   );
 
-  // Référence
-  const tdRef = el('td', { style: 'padding:10px 12px;font-size:13px;font-weight:700;color:var(--text);font-family:monospace' }, item.reference || '');
+  // Référence (cliquable → ouvre le produit fini ; Cmd/Ctrl+clic = nouvel onglet)
+  const refLink = stockPfRefLink(item.reference, item.id);
+  if (refLink && refLink.tagName === 'A') {
+    refLink.title = 'Ouvrir le produit';
+    refLink.style.color = 'var(--text)';
+    refLink.style.fontWeight = '700';
+    refLink.style.fontFamily = 'monospace';
+    refLink.style.fontSize = '13px';
+  }
+  const tdRef = el('td', { style: 'padding:10px 12px;font-size:13px;font-weight:700;color:var(--text);font-family:monospace' }, refLink);
 
   // Désignation
   const tdDes = el('td', { style: 'padding:10px 12px;font-size:13px;color:var(--text2);max-width:380px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', title: item.designation || '' }, item.designation || '');
@@ -14073,9 +14335,19 @@ async function init() {
   // Charger la liste complète des emplacements depuis la base de données
   await fetchEmplacementsFromDB();
   // Onglet initial via URL param ?tab=...
-  const urlTab = new URLSearchParams(window.location.search).get('tab');
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlTab = urlParams.get('tab');
   if (urlTab && ['dashboard','matieres','produits-finis','negoce','referentiel','stock','inventaire','reception','historique','traca','monitoring','valorisation','production','plan-entrepot'].includes(urlTab)) {
     S.tab = urlTab;
+  }
+  // Deep-link sur une matière ou un produit (ouvre directement le détail)
+  const urlMatiereId = parseInt(urlParams.get('matiere') || '', 10);
+  const urlProduitId = parseInt(urlParams.get('produit') || '', 10);
+  const urlProduitRef = (urlParams.get('ref') || '').trim();
+  if (urlMatiereId > 0 && !S.tracaOnly) {
+    S.tab = 'matieres';
+  } else if ((urlProduitId > 0 || urlProduitRef) && !S.tracaOnly) {
+    S.tab = 'produits-finis';
   }
   if (S.tab === 'monitoring' && S.user
       && !['superadmin', 'direction', 'administration'].includes(S.user.role)) {
@@ -14104,6 +14376,14 @@ async function init() {
   else if (S.tab === 'plan-entrepot') { await loadPlanEntrepot(); }
   else if (S.tab === 'production') { await loadProduction(); }
   else { await loadDashboard(); }
+  // Deep-link : ouvrir la matière ou le produit demandé après le chargement
+  if (urlMatiereId > 0 && !S.tracaOnly) {
+    try { await loadMatiere(urlMatiereId); } catch (e) { /* silencieux */ }
+  } else if (urlProduitId > 0 && !S.tracaOnly) {
+    try { await loadProduit(urlProduitId); } catch (e) { /* silencieux */ }
+  } else if (urlProduitRef && !S.tracaOnly) {
+    try { await openPfProduitPage(urlProduitRef, null); } catch (e) { /* silencieux */ }
+  }
   // Charger le compteur d'alertes inventaire en arrière-plan (badge sidebar)
   if (!S.tracaOnly && !S.fabStockMode) loadInvAlertCountBackground();
 }
