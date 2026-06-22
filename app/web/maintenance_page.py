@@ -68,12 +68,14 @@ MAINTENANCE_HTML = r"""<!DOCTYPE html>
 :root{
   --bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;
   --muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,.10);
+  --accent-fg:#0a0e17;
   --ok:#34d399;--danger:#f87171;--warn:#fbbf24;--success:#34d399;
   --sidebar-w:220px;
 }
 html.light-pre body,body.light{
   --bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;
   --muted:#64748b;--accent:#0891b2;--accent-bg:rgba(8,145,178,.08);
+  --accent-fg:#ffffff;
   --ok:#059669;--danger:#dc2626;--warn:#d97706;
 }
 html,body{height:100%;overflow:hidden}
@@ -180,7 +182,7 @@ body.sb-open .sidebar-overlay{display:block}
 .ops-saisi-par{display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px dashed var(--border);border-radius:10px;color:var(--muted);font-size:12px;margin-bottom:14px}
 .ops-saisi-par strong{color:var(--text);font-weight:600}
 .ops-form-actions{display:flex;justify-content:flex-end;gap:8px}
-.ops-btn-add{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:10px;border:none;background:var(--accent);color:#0a0e17;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;transition:filter .15s;white-space:nowrap}
+.ops-btn-add{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:10px;border:none;background:var(--accent);color:var(--accent-fg);font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;transition:filter .15s,background .15s,color .15s;white-space:nowrap}
 .ops-btn-add:hover{filter:brightness(1.08)}
 .ops-list{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:18px}
 .ops-list-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 22px;border-bottom:1px solid var(--border);flex-wrap:wrap}
@@ -230,8 +232,8 @@ body.light .niv-badge[data-niv="3"]{background:rgba(220,38,38,.14)}
 .toast-wrap{position:fixed;bottom:24px;right:24px;display:flex;flex-direction:column;gap:8px;z-index:2000}
 .toast{padding:12px 18px;border-radius:10px;font-size:13px;font-weight:600;box-shadow:0 4px 24px rgba(0,0,0,.4);max-width:340px;transition:opacity .3s}
 .toast.info{background:var(--card);color:var(--text2);border:1px solid var(--border)}
-.toast.success{background:var(--success);color:#0a0e17;border:1px solid var(--success)}
-.toast.danger{background:var(--danger);color:#0a0e17;border:1px solid var(--danger)}
+.toast.success{background:var(--success);color:var(--accent-fg);border:1px solid var(--success)}
+.toast.danger{background:var(--danger);color:var(--accent-fg);border:1px solid var(--danger)}
 body.light .toast.info{background:#fff;color:var(--text)}
 </style>
 </head>
@@ -248,9 +250,9 @@ body.light .toast.info{background:#fff;color:var(--text)}
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
       Maintenance
     </button>
-    <button type="button" class="nav-btn" data-view="historique" onclick="switchView('historique')">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-      Historique
+    <button type="button" class="nav-btn" data-view="controles" onclick="switchView('controles')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      Contrôles
     </button>
     <button type="button" class="nav-btn" data-view="operations" onclick="switchView('operations')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
@@ -314,12 +316,12 @@ body.light .toast.info{background:#fff;color:var(--text)}
         </div>
       </div>
 
-      <!-- View : Historique -->
-      <div class="view" id="view-historique" style="display:none">
+      <!-- View : Contrôles -->
+      <div class="view" id="view-controles" style="display:none">
         <div class="page-header">
           <div>
-            <div class="page-title">Historique</div>
-            <div class="page-subtitle">Contrôles et interventions de maintenance</div>
+            <div class="page-title">Contrôles</div>
+            <div class="page-subtitle">Historique des contrôles de maintenance</div>
           </div>
         </div>
         <section class="hist-section" data-hist="controles">
@@ -367,51 +369,6 @@ body.light .toast.info{background:#fff;color:var(--text)}
             <div>Aucun contrôle enregistré pour l'instant.</div>
           </div>
         </section>
-        <section class="hist-section" data-hist="interventions">
-          <div class="hist-section-head">
-            <div class="hist-section-title">Historique des interventions</div>
-            <button type="button" class="hist-filters-reset" onclick="resetHistFilters('interventions')">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-              Réinitialiser
-            </button>
-          </div>
-          <div class="hist-filters">
-            <div class="hist-field">
-              <label class="hist-field-label" for="filt-interventions-type">Type d'opération</label>
-              <select id="filt-interventions-type" class="hist-select" onchange="applyHistFilters('interventions')">
-                <option value="">Tous les types</option>
-              </select>
-            </div>
-            <div class="hist-field">
-              <label class="hist-field-label" for="filt-interventions-operateur">Opérateur</label>
-              <select id="filt-interventions-operateur" class="hist-select" onchange="applyHistFilters('interventions')">
-                <option value="">Tous les opérateurs</option>
-              </select>
-            </div>
-            <div class="hist-field">
-              <label class="hist-field-label" for="filt-interventions-machine">Machine</label>
-              <select id="filt-interventions-machine" class="hist-select" onchange="applyHistFilters('interventions')">
-                <option value="">Toutes les machines</option>
-                <option value="cohesio-1">Cohésio 1</option>
-                <option value="cohesio-2">Cohésio 2</option>
-                <option value="dsi">DSI</option>
-                <option value="repiquage">Repiquage</option>
-              </select>
-            </div>
-            <div class="hist-field">
-              <label class="hist-field-label">Date d'opération</label>
-              <div class="hist-daterange">
-                <input type="date" id="filt-interventions-date-from" class="hist-input" aria-label="Du" onchange="applyHistFilters('interventions')">
-                <span class="hist-daterange-sep">au</span>
-                <input type="date" id="filt-interventions-date-to" class="hist-input" aria-label="Au" onchange="applyHistFilters('interventions')">
-              </div>
-            </div>
-          </div>
-          <div class="hist-empty" id="empty-interventions">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
-            <div>Aucune intervention enregistrée pour l'instant.</div>
-          </div>
-        </section>
       </div>
 
       <!-- View : Opérations de maintenance -->
@@ -423,10 +380,10 @@ body.light .toast.info{background:#fff;color:var(--text)}
           </div>
         </div>
 
-        <!-- Opérations enregistrées -->
+        <!-- Historique des opérations -->
         <div class="ops-list">
           <div class="ops-list-head">
-            <div class="ops-list-title">Opérations enregistrées</div>
+            <div class="ops-list-title">Historique des opérations</div>
             <div class="ops-list-head-right">
               <div class="ops-list-count" id="ops-count">0 opération</div>
               <button type="button" class="ops-btn-add" onclick="openOpsModal()">
@@ -594,7 +551,7 @@ function closeSidebar(){document.body.classList.remove('sb-open');}
 
 const VIEW_META = {
   maintenance: { title: 'Maintenance', sub: 'En cours de développement' },
-  historique:  { title: 'Historique',  sub: 'Contrôles et interventions' },
+  controles:   { title: 'Contrôles',   sub: 'Historique des contrôles' },
   operations:  { title: 'Opérations de maintenance', sub: 'Saisie et suivi' }
 };
 function switchView(name){
@@ -614,7 +571,7 @@ function switchView(name){
   closeSidebar();
 }
 
-// --- Filtres Historique ---
+// --- Filtres Contrôles ---
 function getHistFilters(section){
   const $ = id => document.getElementById(id);
   const v = el => (el && el.value || '').trim();
@@ -744,7 +701,7 @@ document.addEventListener('keydown', function(e){
   if(e.key === 'Escape') closeAnyOpenModal();
 });
 
-// --- Opérations enregistrées ---
+// --- Historique des opérations ---
 const OPS_STORAGE_KEY = 'mysifa_maint_operations_v1';
 const OPS_STATE = { sortBy: 'date_saisie', sortDir: 'desc', list: [] };
 
@@ -1058,7 +1015,9 @@ async function loadMe(){
   renderOps();
   try{
     const h = (location.hash || '').replace('#','').trim();
-    if(h && VIEW_META[h]) switchView(h);
+    // Compat : ancien hash #historique -> nouveau #controles
+    const target = (h === 'historique') ? 'controles' : h;
+    if(target && VIEW_META[target]) switchView(target);
   }catch(e){}
 })();
 </script>
