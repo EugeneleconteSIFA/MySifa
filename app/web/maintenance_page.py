@@ -188,9 +188,9 @@ body.sb-open .sidebar-overlay{display:block}
 .ops-table-wrap{overflow-x:auto}
 .ops-table{width:100%;border-collapse:collapse;font-size:13px;color:var(--text2)}
 .ops-table th{text-align:left;padding:12px 18px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border);background:var(--bg);user-select:none;white-space:nowrap}
-.ops-table th[data-sort],.ops-table th[data-sort-cat]{cursor:pointer;transition:color .15s}
-.ops-table th[data-sort]:hover,.ops-table th[data-sort-cat]:hover{color:var(--accent)}
-.ops-table th[data-sort].active,.ops-table th[data-sort-cat].active{color:var(--accent)}
+.ops-table th[data-sort],.ops-table th[data-sort-cat],.ops-table th[data-sort-ope]{cursor:pointer;transition:color .15s}
+.ops-table th[data-sort]:hover,.ops-table th[data-sort-cat]:hover,.ops-table th[data-sort-ope]:hover{color:var(--accent)}
+.ops-table th[data-sort].active,.ops-table th[data-sort-cat].active,.ops-table th[data-sort-ope].active{color:var(--accent)}
 .ops-table th .sort-ico{display:inline-block;margin-left:5px;opacity:.55;font-size:11px}
 .ops-table th.active .sort-ico{opacity:1}
 .ops-table td{padding:12px 18px;border-bottom:1px solid var(--border);vertical-align:top}
@@ -216,6 +216,7 @@ body.light .niv-badge[data-niv="3"]{background:rgba(220,38,38,.14)}
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1500;display:none;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(2px)}
 .modal-overlay.open{display:flex}
 .modal-card{background:var(--card);border:1px solid var(--border);border-radius:14px;width:100%;max-width:640px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.45);overflow:hidden}
+.modal-card--narrow{max-width:460px}
 .modal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 22px;border-bottom:1px solid var(--border)}
 .modal-title{font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
 .modal-close{background:transparent;border:none;color:var(--muted);cursor:pointer;padding:6px;border-radius:8px;display:inline-flex;align-items:center;transition:.15s}
@@ -450,7 +451,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
           </div>
         </div>
 
-        <!-- Liste d'opérations de maintenance -->
+        <!-- Liste d'opérations de maintenance (catalogue) -->
         <div class="ops-list">
           <div class="ops-list-head">
             <div class="ops-list-title">Liste d'opérations de maintenance</div>
@@ -474,6 +475,31 @@ body.light .toast.info{background:#fff;color:var(--text)}
                 </tr>
               </thead>
               <tbody id="cat-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Opérateurs maintenance -->
+        <div class="ops-list">
+          <div class="ops-list-head">
+            <div class="ops-list-title">Opérateurs maintenance</div>
+            <div class="ops-list-head-right">
+              <div class="ops-list-count" id="ope-count">0 opérateur</div>
+              <button type="button" class="ops-btn-add" onclick="openOpeModal()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Ajouter un opérateur
+              </button>
+            </div>
+          </div>
+          <div class="ops-table-wrap">
+            <table class="ops-table">
+              <thead>
+                <tr>
+                  <th data-sort-ope="nom" onclick="sortOpe('nom')">Nom<span class="sort-ico">↕</span></th>
+                  <th aria-label="Actions"></th>
+                </tr>
+              </thead>
+              <tbody id="ope-tbody"></tbody>
             </table>
           </div>
         </div>
@@ -507,10 +533,10 @@ body.light .toast.info{background:#fff;color:var(--text)}
           <div class="ops-field">
             <label class="ops-field-label" for="ops-operateur">Opérateur<span class="req">*</span></label>
             <select id="ops-operateur" class="ops-select" required>
-              <option value="">Chargement…</option>
+              <option value="">Aucun opérateur défini…</option>
             </select>
             <div class="ops-field-hint" id="ops-operateur-hint" style="display:none">
-              Aucun opérateur trouvé dans MyProd. Vérifiez les saisies de production.
+              Aucun opérateur défini. Ajoutez-en dans « Opérateurs maintenance ».
             </div>
           </div>
           <div class="ops-field">
@@ -579,6 +605,35 @@ body.light .toast.info{background:#fff;color:var(--text)}
         <button type="submit" class="ops-btn-add" id="cat-submit-btn">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           <span id="cat-submit-label">Ajouter à la liste</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal : Opérateur (ajout / modification) -->
+<div class="modal-overlay" id="ope-modal" onclick="if(event.target===this) closeOpeModal()" aria-hidden="true">
+  <div class="modal-card modal-card--narrow" role="dialog" aria-modal="true" aria-labelledby="ope-modal-title">
+    <div class="modal-head">
+      <div class="modal-title" id="ope-modal-title">Ajouter un opérateur</div>
+      <button type="button" class="modal-close" onclick="closeOpeModal()" aria-label="Fermer">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <form id="ope-form" onsubmit="submitOperateur(event)">
+      <div class="modal-body">
+        <div class="ops-form-grid">
+          <div class="ops-field ops-field--full">
+            <label class="ops-field-label" for="ope-nom">Nom de l'opérateur<span class="req">*</span></label>
+            <input type="text" id="ope-nom" class="ops-input" placeholder="Ex : DENIS ALAN" required autocomplete="off">
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="modal-btn-ghost" onclick="closeOpeModal()">Annuler</button>
+        <button type="submit" class="ops-btn-add" id="ope-submit-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <span id="ope-submit-label">Ajouter</span>
         </button>
       </div>
     </form>
@@ -658,51 +713,16 @@ function showToast(msg, type){
   setTimeout(() => { try{ t.remove(); }catch(e){} }, 2800);
 }
 
-// --- Opérateurs MyProd (chargé via /api/filters) ---
-const OPERATEURS_STATE = { list: [], loaded: false };
-async function loadOperateurs(){
-  try{
-    const r = await fetch('/api/filters', {credentials:'include'});
-    if(!r.ok) throw new Error('HTTP ' + r.status);
-    const d = await r.json();
-    OPERATEURS_STATE.list = Array.isArray(d.operators) ? d.operators.filter(Boolean) : [];
-  }catch(e){
-    OPERATEURS_STATE.list = [];
-  }
-  OPERATEURS_STATE.loaded = true;
-  refreshOpsOperateurSelect();
-}
-function refreshOpsOperateurSelect(){
-  const sel = document.getElementById('ops-operateur');
-  const hint = document.getElementById('ops-operateur-hint');
-  if(!sel) return;
-  const cur = sel.value;
-  if(!OPERATEURS_STATE.loaded){
-    sel.innerHTML = '<option value="">Chargement…</option>';
-    sel.disabled = true;
-    if(hint) hint.style.display = 'none';
-    return;
-  }
-  if(!OPERATEURS_STATE.list.length){
-    sel.innerHTML = '<option value="">Aucun opérateur trouvé</option>';
-    sel.disabled = true;
-    if(hint) hint.style.display = 'block';
-    return;
-  }
-  sel.disabled = false;
-  if(hint) hint.style.display = 'none';
-  const sorted = OPERATEURS_STATE.list.slice().sort((a,b) => a.localeCompare(b, 'fr'));
-  sel.innerHTML = '<option value="">Sélectionner un opérateur…</option>' +
-    sorted.map(n => '<option value="' + escAttr(n) + '">' + escHtml(n) + '</option>').join('');
-  if(cur && sorted.includes(cur)) sel.value = cur;
-}
-
 // --- Modales ---
 function openOpsModal(){
   const m = document.getElementById('ops-modal');
   if(!m) return;
   if(!OPS_TYPES_STATE.list.length){
     showToast('Définissez d\'abord au moins un type dans « Liste d\'opérations de maintenance ».', 'danger');
+    return;
+  }
+  if(!OPE_STATE.list.length){
+    showToast('Définissez d\'abord au moins un opérateur dans « Opérateurs maintenance ».', 'danger');
     return;
   }
   m.classList.add('open');
@@ -722,7 +742,6 @@ function closeOpsModal(){
   if(f) f.reset();
 }
 
-// Catalogue : openCatModal(idToEdit?) — sans id = création, avec id = édition
 let CAT_EDITING_ID = null;
 function openCatModal(idToEdit){
   const m = document.getElementById('cat-modal');
@@ -762,12 +781,51 @@ function closeCatModal(){
   if(f) f.reset();
   CAT_EDITING_ID = null;
 }
+
+let OPE_EDITING_ID = null;
+function openOpeModal(idToEdit){
+  const m = document.getElementById('ope-modal');
+  if(!m) return;
+  const titleEl = document.getElementById('ope-modal-title');
+  const lblEl = document.getElementById('ope-submit-label');
+  const form = document.getElementById('ope-form');
+  if(form) form.reset();
+  OPE_EDITING_ID = null;
+  if(idToEdit){
+    const o = OPE_STATE.list.find(x => x.id === idToEdit);
+    if(o){
+      OPE_EDITING_ID = idToEdit;
+      document.getElementById('ope-nom').value = o.nom || '';
+      if(titleEl) titleEl.textContent = 'Modifier l\'opérateur';
+      if(lblEl) lblEl.textContent = 'Enregistrer les modifications';
+    }
+  } else {
+    if(titleEl) titleEl.textContent = 'Ajouter un opérateur';
+    if(lblEl) lblEl.textContent = 'Ajouter';
+  }
+  m.classList.add('open');
+  m.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+  setTimeout(() => { const f = document.getElementById('ope-nom'); if(f) f.focus(); }, 50);
+}
+function closeOpeModal(){
+  const m = document.getElementById('ope-modal');
+  if(!m) return;
+  m.classList.remove('open');
+  m.setAttribute('aria-hidden', 'true');
+  document.body.style.overflow = '';
+  const f = document.getElementById('ope-form');
+  if(f) f.reset();
+  OPE_EDITING_ID = null;
+}
+
 function closeAnyOpenModal(){
-  ['ops-modal', 'cat-modal'].forEach(id => {
+  ['ops-modal', 'cat-modal', 'ope-modal'].forEach(id => {
     const m = document.getElementById(id);
     if(m && m.classList.contains('open')){
       if(id === 'ops-modal') closeOpsModal();
-      else closeCatModal();
+      else if(id === 'cat-modal') closeCatModal();
+      else closeOpeModal();
     }
   });
 }
@@ -903,7 +961,6 @@ function submitOpsType(e){
     showToast('Niveau doit être entre 1 et 3.', 'danger');
     return;
   }
-  // Doublon : on ignore l'entrée en cours d'édition
   const dup = OPS_TYPES_STATE.list.find(t =>
     (t.nom || '').toLowerCase() === nom.toLowerCase() && t.id !== CAT_EDITING_ID
   );
@@ -911,7 +968,6 @@ function submitOpsType(e){
     showToast('Un autre type avec ce nom existe déjà.', 'danger');
     return;
   }
-  // Renommage : prévenir des opérations enregistrées portant l'ancien nom
   let oldName = null;
   if(CAT_EDITING_ID){
     const cur = OPS_TYPES_STATE.list.find(t => t.id === CAT_EDITING_ID);
@@ -931,7 +987,6 @@ function submitOpsType(e){
     });
   }
   saveOpsTypes();
-  // Si renommage, optionnellement répercuter sur les opérations existantes
   let renameApplied = false;
   if(oldName){
     const affected = OPS_STATE.list.filter(o => o.type === oldName).length;
@@ -956,9 +1011,7 @@ function deleteOpsType(id){
   saveOpsTypes();
   renderOpsTypes();
 }
-function editOpsType(id){
-  openCatModal(id);
-}
+function editOpsType(id){ openCatModal(id); }
 function sortOpsTypes(field){
   if(OPS_TYPES_STATE.sortBy === field){
     OPS_TYPES_STATE.sortDir = OPS_TYPES_STATE.sortDir === 'asc' ? 'desc' : 'asc';
@@ -1036,6 +1089,151 @@ function renderOpsTypes(){
   }
 }
 
+// --- Opérateurs maintenance ---
+const OPE_STORAGE_KEY = 'mysifa_maint_operateurs_v1';
+const OPE_STATE = { sortBy: 'nom', sortDir: 'asc', list: [] };
+
+function loadOperateurs(){
+  try{
+    const raw = localStorage.getItem(OPE_STORAGE_KEY);
+    OPE_STATE.list = raw ? JSON.parse(raw) : [];
+    if(!Array.isArray(OPE_STATE.list)) OPE_STATE.list = [];
+  }catch(e){ OPE_STATE.list = []; }
+}
+function saveOperateurs(){
+  try{ localStorage.setItem(OPE_STORAGE_KEY, JSON.stringify(OPE_STATE.list)); }catch(e){}
+}
+function submitOperateur(e){
+  e.preventDefault();
+  const nom = (document.getElementById('ope-nom').value || '').trim();
+  if(!nom){
+    showToast('Le nom est requis.', 'danger');
+    return;
+  }
+  const dup = OPE_STATE.list.find(o =>
+    (o.nom || '').toLowerCase() === nom.toLowerCase() && o.id !== OPE_EDITING_ID
+  );
+  if(dup){
+    showToast('Un opérateur avec ce nom existe déjà.', 'danger');
+    return;
+  }
+  let oldName = null;
+  if(OPE_EDITING_ID){
+    const cur = OPE_STATE.list.find(o => o.id === OPE_EDITING_ID);
+    if(cur && cur.nom !== nom) oldName = cur.nom;
+  }
+  if(OPE_EDITING_ID){
+    OPE_STATE.list = OPE_STATE.list.map(o =>
+      o.id === OPE_EDITING_ID
+        ? Object.assign({}, o, {nom, date_modification: new Date().toISOString()})
+        : o
+    );
+  } else {
+    OPE_STATE.list.push({
+      id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8),
+      nom: nom,
+      date_creation: new Date().toISOString()
+    });
+  }
+  saveOperateurs();
+  let renameApplied = false;
+  if(oldName){
+    const affected = OPS_STATE.list.filter(o => o.operateur === oldName).length;
+    if(affected > 0 && confirm(affected + ' opération' + (affected>1?'s':'') + ' enregistrée' + (affected>1?'s':'') + ' référence' + (affected>1?'nt':'') + ' encore « ' + oldName + ' ».\n\nMettre à jour ces opérations vers « ' + nom + ' » ?')){
+      OPS_STATE.list = OPS_STATE.list.map(o =>
+        o.operateur === oldName ? Object.assign({}, o, {operateur: nom}) : o
+      );
+      saveOps();
+      renameApplied = true;
+    }
+  }
+  renderOpe();
+  refreshOpsOperateurSelect();
+  if(renameApplied) renderOps();
+  closeOpeModal();
+  showToast(OPE_EDITING_ID ? 'Modifications enregistrées.' : 'Opérateur ajouté.', 'info');
+}
+function deleteOperateur(id){
+  const o = OPE_STATE.list.find(x => x.id === id);
+  if(!o) return;
+  if(!confirm('Supprimer l\'opérateur « ' + o.nom + ' » ?\n\nLes opérations enregistrées avec ce nom restent inchangées.')) return;
+  OPE_STATE.list = OPE_STATE.list.filter(x => x.id !== id);
+  saveOperateurs();
+  renderOpe();
+  refreshOpsOperateurSelect();
+}
+function editOperateur(id){ openOpeModal(id); }
+function sortOpe(field){
+  if(OPE_STATE.sortBy === field){
+    OPE_STATE.sortDir = OPE_STATE.sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    OPE_STATE.sortBy = field;
+    OPE_STATE.sortDir = 'asc';
+  }
+  renderOpe();
+}
+function refreshOpsOperateurSelect(){
+  const sel = document.getElementById('ops-operateur');
+  const hint = document.getElementById('ops-operateur-hint');
+  if(!sel) return;
+  const cur = sel.value;
+  if(!OPE_STATE.list.length){
+    sel.innerHTML = '<option value="">Aucun opérateur défini…</option>';
+    sel.disabled = true;
+    if(hint) hint.style.display = 'block';
+    return;
+  }
+  sel.disabled = false;
+  if(hint) hint.style.display = 'none';
+  const sorted = OPE_STATE.list.slice().sort((a,b) => (a.nom || '').localeCompare(b.nom || '', 'fr'));
+  sel.innerHTML = '<option value="">Sélectionner un opérateur…</option>' +
+    sorted.map(o => '<option value="' + escAttr(o.nom) + '">' + escHtml(o.nom) + '</option>').join('');
+  if(cur && sorted.some(o => o.nom === cur)) sel.value = cur;
+}
+function renderOpe(){
+  refreshOpsOperateurSelect();
+  const tbody = document.getElementById('ope-tbody');
+  const count = document.getElementById('ope-count');
+  if(!tbody) return;
+  const dir = OPE_STATE.sortDir === 'asc' ? 1 : -1;
+  const f = OPE_STATE.sortBy;
+  const sorted = OPE_STATE.list.slice().sort((a,b) => {
+    const av = (a[f] != null ? a[f] : '').toString().toLowerCase();
+    const bv = (b[f] != null ? b[f] : '').toString().toLowerCase();
+    if(av < bv) return -1 * dir;
+    if(av > bv) return  1 * dir;
+    return 0;
+  });
+  document.querySelectorAll('.ops-table th[data-sort-ope]').forEach(th => {
+    const isActive = th.getAttribute('data-sort-ope') === f;
+    th.classList.toggle('active', isActive);
+    const ico = th.querySelector('.sort-ico');
+    if(ico) ico.textContent = isActive ? (OPE_STATE.sortDir === 'asc' ? '↑' : '↓') : '↕';
+  });
+  if(!sorted.length){
+    tbody.innerHTML = '<tr><td colspan="2" class="ops-empty">Aucun opérateur défini. Cliquez sur « Ajouter un opérateur » pour en créer un.</td></tr>';
+  } else {
+    const rows = sorted.map(o =>
+      '<tr>' +
+        '<td><strong style="color:var(--text)">' + escHtml(o.nom) + '</strong></td>' +
+        '<td class="col-actions">' +
+          '<button type="button" class="ops-row-btn edit" onclick="editOperateur(\'' + escAttr(o.id) + '\')" title="Modifier">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
+          '</button>' +
+          '<button type="button" class="ops-row-btn del" onclick="deleteOperateur(\'' + escAttr(o.id) + '\')" title="Supprimer">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
+          '</button>' +
+        '</td>' +
+      '</tr>'
+    );
+    tbody.innerHTML = rows.join('');
+  }
+  if(count){
+    const n = OPE_STATE.list.length;
+    count.textContent = n + ' opérateur' + (n > 1 ? 's' : '');
+  }
+}
+
 function toggleTheme(){
   const l=document.body.classList.toggle('light');
   document.documentElement.classList.toggle('light-pre', l);
@@ -1086,9 +1284,10 @@ async function loadMe(){
   loadMe();
   loadOps();
   loadOpsTypes();
-  renderOpsTypes();
-  renderOps();
   loadOperateurs();
+  renderOpsTypes();
+  renderOpe();
+  renderOps();
   try{
     const h = (location.hash || '').replace('#','').trim();
     if(h && VIEW_META[h]) switchView(h);
