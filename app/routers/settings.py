@@ -1212,12 +1212,17 @@ async def import_emplacements_csv(request: Request, file: UploadFile = File(...)
 # liste les commits en avance, et exécute scripts/promote_v2.sh quand demandé.
 
 import asyncio
+import shutil as _shutil
 import subprocess as _subprocess
 from fastapi.responses import StreamingResponse
 from config import ENV_NAME, APP_VERSION
 
 V2_REPO_PATH = "/home/sifa/production-saas"
 V1_REPO_PATH = "/home/sifa/production-saas-v1"
+
+# systemd lance le service avec un PATH minimal qui ne contient pas /usr/bin.
+# On résout git une fois au boot avec un PATH explicite, fallback /usr/bin/git.
+_GIT_BIN = _shutil.which("git", path="/usr/local/bin:/usr/bin:/bin") or "/usr/bin/git"
 # Le script est exécuté depuis v1 (la version la plus récente est toujours là)
 # mais opère sur le dépôt v2.
 PROMOTE_SCRIPT = f"{V1_REPO_PATH}/scripts/promote_v2.sh"
@@ -1245,7 +1250,7 @@ def _read_origin_app_version() -> Optional[str]:
     """Lit APP_VERSION dans config.py côté origin/main (via git show, sans pull)."""
     try:
         out = _subprocess.check_output(
-            ["git", "-C", V2_REPO_PATH, "show", "origin/main:config.py"],
+            [_GIT_BIN, "-C", V2_REPO_PATH, "show", "origin/main:config.py"],
             text=True, timeout=10,
         )
         return _parse_version_from_text(out)
@@ -1260,7 +1265,7 @@ def promote_status(request: Request):
     # 1. Fetch silencieux pour avoir l'état à jour d'origin/main
     try:
         _subprocess.run(
-            ["git", "-C", V2_REPO_PATH, "fetch", "--quiet"],
+            [_GIT_BIN, "-C", V2_REPO_PATH, "fetch", "--quiet"],
             check=False, capture_output=True, timeout=15,
         )
     except Exception:
@@ -1268,11 +1273,11 @@ def promote_status(request: Request):
 
     try:
         v2_head = _subprocess.check_output(
-            ["git", "-C", V2_REPO_PATH, "rev-parse", "HEAD"],
+            [_GIT_BIN, "-C", V2_REPO_PATH, "rev-parse", "HEAD"],
             text=True, timeout=5,
         ).strip()
         origin_main = _subprocess.check_output(
-            ["git", "-C", V2_REPO_PATH, "rev-parse", "origin/main"],
+            [_GIT_BIN, "-C", V2_REPO_PATH, "rev-parse", "origin/main"],
             text=True, timeout=5,
         ).strip()
     except Exception as exc:
@@ -1285,7 +1290,7 @@ def promote_status(request: Request):
     if v2_head != origin_main:
         try:
             log_out = _subprocess.check_output(
-                ["git", "-C", V2_REPO_PATH, "log",
+                [_GIT_BIN, "-C", V2_REPO_PATH, "log",
                  f"{v2_head}..{origin_main}",
                  "--pretty=format:%h|%an|%ad|%s",
                  "--date=format:%Y-%m-%d %H:%M"],

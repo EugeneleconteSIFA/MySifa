@@ -52,9 +52,38 @@ log "2/7 Capture HEAD v2 actuel"
 PREV_HEAD=$(git rev-parse HEAD) || fail "git rev-parse HEAD KO"
 log "    HEAD avant : ${PREV_HEAD:0:7}"
 
-# ─── 3. git pull origin main ─────────────────────────────────────────
-log "3/7 git fetch + reset --hard origin/main"
+# ─── 3. Merge staging → main puis reset v2 sur origin/main ───────────
+log "3/7 git fetch + merge staging→main + reset v2"
 git fetch --all --quiet || fail "git fetch KO"
+
+# 3a. Si staging contient des commits non présents sur main, on merge sur origin
+DIFF_COUNT=$(git rev-list --count origin/main..origin/staging 2>/dev/null || echo "0")
+if [[ "$DIFF_COUNT" -gt 0 ]]; then
+    log "    $DIFF_COUNT commit(s) sur staging à intégrer dans main"
+
+    # Aligner main local sur origin/main, puis merger origin/staging
+    git checkout main --quiet 2>/dev/null || git checkout -B main origin/main --quiet
+    git reset --hard origin/main --quiet || fail "reset main local KO"
+
+    if ! git merge origin/staging --no-ff -m "promote: merge staging into main" --quiet; then
+        log "    CONFLIT — git merge --abort"
+        git merge --abort 2>/dev/null
+        git reset --hard "$PREV_HEAD" --quiet
+        fail "Conflit de merge staging → main. À résoudre en local."
+    fi
+
+    if ! git push origin main --quiet; then
+        log "    git push origin main KO — rollback"
+        git reset --hard origin/main --quiet
+        fail "Push origin/main refusé (droits ?)."
+    fi
+
+    log "    origin/main aligné avec origin/staging"
+else
+    log "    Rien à merger (staging déjà inclus dans main)"
+fi
+
+# 3b. Reset v2 sur origin/main (qui contient maintenant staging)
 git reset --hard origin/main --quiet || fail "git reset KO"
 NEW_HEAD=$(git rev-parse HEAD)
 log "    HEAD après : ${NEW_HEAD:0:7}"
