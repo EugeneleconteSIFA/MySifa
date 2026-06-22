@@ -198,8 +198,11 @@ body.sb-open .sidebar-overlay{display:block}
 .ops-table tr:hover td{background:var(--bg)}
 .ops-table .col-comment{max-width:340px;white-space:pre-wrap;color:var(--text2);font-size:12.5px;word-break:break-word}
 .ops-table .col-date{color:var(--muted);font-size:12px;white-space:nowrap}
-.ops-row-del{background:transparent;border:none;color:var(--muted);cursor:pointer;padding:4px;border-radius:6px;transition:.15s;display:inline-flex;align-items:center}
-.ops-row-del:hover{color:var(--danger);background:var(--bg)}
+.ops-table .col-actions{white-space:nowrap;text-align:right}
+.ops-row-btn{background:transparent;border:none;color:var(--muted);cursor:pointer;padding:4px;border-radius:6px;transition:.15s;display:inline-flex;align-items:center;margin-left:2px}
+.ops-row-btn:hover{background:var(--bg)}
+.ops-row-btn.edit:hover{color:var(--accent)}
+.ops-row-btn.del:hover{color:var(--danger)}
 .ops-empty{padding:32px 22px;text-align:center;color:var(--muted);font-size:13px}
 .niv-badge{display:inline-flex;align-items:center;justify-content:center;min-width:32px;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;background:var(--accent-bg);color:var(--accent);letter-spacing:.3px}
 .niv-badge[data-niv="1"]{background:rgba(52,211,153,.15);color:var(--ok)}
@@ -418,7 +421,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
           </div>
         </div>
 
-        <!-- Opérations enregistrées (avec bouton "Nouvelle opération") -->
+        <!-- Opérations enregistrées -->
         <div class="ops-list">
           <div class="ops-list-head">
             <div class="ops-list-title">Opérations enregistrées</div>
@@ -447,7 +450,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
           </div>
         </div>
 
-        <!-- Liste d'opérations de maintenance (catalogue + bouton "Ajouter") -->
+        <!-- Liste d'opérations de maintenance -->
         <div class="ops-list">
           <div class="ops-list-head">
             <div class="ops-list-title">Liste d'opérations de maintenance</div>
@@ -503,7 +506,12 @@ body.light .toast.info{background:#fff;color:var(--text)}
           </div>
           <div class="ops-field">
             <label class="ops-field-label" for="ops-operateur">Opérateur<span class="req">*</span></label>
-            <input type="text" id="ops-operateur" class="ops-input" placeholder="Nom de l'opérateur" required autocomplete="off">
+            <select id="ops-operateur" class="ops-select" required>
+              <option value="">Chargement…</option>
+            </select>
+            <div class="ops-field-hint" id="ops-operateur-hint" style="display:none">
+              Aucun opérateur trouvé dans MyProd. Vérifiez les saisies de production.
+            </div>
           </div>
           <div class="ops-field">
             <label class="ops-field-label" for="ops-type">Type d'opération<span class="req">*</span></label>
@@ -531,7 +539,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
   </div>
 </div>
 
-<!-- Modal : Ajouter une opération à la liste (catalogue) -->
+<!-- Modal : Catalogue (ajout / modification) -->
 <div class="modal-overlay" id="cat-modal" onclick="if(event.target===this) closeCatModal()" aria-hidden="true">
   <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="cat-modal-title">
     <div class="modal-head">
@@ -540,7 +548,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
-    <form id="cat-form" onsubmit="addOpsType(event)">
+    <form id="cat-form" onsubmit="submitOpsType(event)">
       <div class="modal-body">
         <div class="ops-form-grid">
           <div class="ops-field">
@@ -568,9 +576,9 @@ body.light .toast.info{background:#fff;color:var(--text)}
       </div>
       <div class="modal-foot">
         <button type="button" class="modal-btn-ghost" onclick="closeCatModal()">Annuler</button>
-        <button type="submit" class="ops-btn-add">
+        <button type="submit" class="ops-btn-add" id="cat-submit-btn">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Ajouter à la liste
+          <span id="cat-submit-label">Ajouter à la liste</span>
         </button>
       </div>
     </form>
@@ -650,6 +658,45 @@ function showToast(msg, type){
   setTimeout(() => { try{ t.remove(); }catch(e){} }, 2800);
 }
 
+// --- Opérateurs MyProd (chargé via /api/filters) ---
+const OPERATEURS_STATE = { list: [], loaded: false };
+async function loadOperateurs(){
+  try{
+    const r = await fetch('/api/filters', {credentials:'include'});
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    OPERATEURS_STATE.list = Array.isArray(d.operators) ? d.operators.filter(Boolean) : [];
+  }catch(e){
+    OPERATEURS_STATE.list = [];
+  }
+  OPERATEURS_STATE.loaded = true;
+  refreshOpsOperateurSelect();
+}
+function refreshOpsOperateurSelect(){
+  const sel = document.getElementById('ops-operateur');
+  const hint = document.getElementById('ops-operateur-hint');
+  if(!sel) return;
+  const cur = sel.value;
+  if(!OPERATEURS_STATE.loaded){
+    sel.innerHTML = '<option value="">Chargement…</option>';
+    sel.disabled = true;
+    if(hint) hint.style.display = 'none';
+    return;
+  }
+  if(!OPERATEURS_STATE.list.length){
+    sel.innerHTML = '<option value="">Aucun opérateur trouvé</option>';
+    sel.disabled = true;
+    if(hint) hint.style.display = 'block';
+    return;
+  }
+  sel.disabled = false;
+  if(hint) hint.style.display = 'none';
+  const sorted = OPERATEURS_STATE.list.slice().sort((a,b) => a.localeCompare(b, 'fr'));
+  sel.innerHTML = '<option value="">Sélectionner un opérateur…</option>' +
+    sorted.map(n => '<option value="' + escAttr(n) + '">' + escHtml(n) + '</option>').join('');
+  if(cur && sorted.includes(cur)) sel.value = cur;
+}
+
 // --- Modales ---
 function openOpsModal(){
   const m = document.getElementById('ops-modal');
@@ -662,6 +709,7 @@ function openOpsModal(){
   m.setAttribute('aria-hidden', 'false');
   document.body.style.overflow = 'hidden';
   refreshOpsTypeSelect();
+  refreshOpsOperateurSelect();
   setTimeout(() => { const f = document.getElementById('ops-machine'); if(f) f.focus(); }, 50);
 }
 function closeOpsModal(){
@@ -673,9 +721,32 @@ function closeOpsModal(){
   const f = document.getElementById('ops-form');
   if(f) f.reset();
 }
-function openCatModal(){
+
+// Catalogue : openCatModal(idToEdit?) — sans id = création, avec id = édition
+let CAT_EDITING_ID = null;
+function openCatModal(idToEdit){
   const m = document.getElementById('cat-modal');
   if(!m) return;
+  const titleEl = document.getElementById('cat-modal-title');
+  const lblEl = document.getElementById('cat-submit-label');
+  const form = document.getElementById('cat-form');
+  if(form) form.reset();
+  CAT_EDITING_ID = null;
+  if(idToEdit){
+    const t = OPS_TYPES_STATE.list.find(x => x.id === idToEdit);
+    if(t){
+      CAT_EDITING_ID = idToEdit;
+      document.getElementById('cat-nom').value = t.nom || '';
+      document.getElementById('cat-niveau').value = String(t.niveau || '');
+      document.getElementById('cat-frequence').value = t.frequence || '';
+      document.getElementById('cat-detail').value = t.detail || '';
+      if(titleEl) titleEl.textContent = 'Modifier l\'opération';
+      if(lblEl) lblEl.textContent = 'Enregistrer les modifications';
+    }
+  } else {
+    if(titleEl) titleEl.textContent = 'Ajouter une opération à la liste';
+    if(lblEl) lblEl.textContent = 'Ajouter à la liste';
+  }
   m.classList.add('open');
   m.setAttribute('aria-hidden', 'false');
   document.body.style.overflow = 'hidden';
@@ -689,6 +760,7 @@ function closeCatModal(){
   document.body.style.overflow = '';
   const f = document.getElementById('cat-form');
   if(f) f.reset();
+  CAT_EDITING_ID = null;
 }
 function closeAnyOpenModal(){
   ['ops-modal', 'cat-modal'].forEach(id => {
@@ -788,9 +860,11 @@ function renderOps(){
         '<td>' + escHtml(o.operateur) + '</td>' +
         '<td>' + escHtml(o.type) + '</td>' +
         '<td class="col-comment">' + escHtml(o.commentaire || '') + '</td>' +
-        '<td><button type="button" class="ops-row-del" onclick="deleteOp(\'' + escAttr(o.id) + '\')" title="Supprimer">' +
-          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
-        '</button></td>' +
+        '<td class="col-actions">' +
+          '<button type="button" class="ops-row-btn del" onclick="deleteOp(\'' + escAttr(o.id) + '\')" title="Supprimer">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
+          '</button>' +
+        '</td>' +
       '</tr>'
     );
     tbody.innerHTML = rows.join('');
@@ -815,7 +889,7 @@ function loadOpsTypes(){
 function saveOpsTypes(){
   try{ localStorage.setItem(OPS_TYPES_STORAGE_KEY, JSON.stringify(OPS_TYPES_STATE.list)); }catch(e){}
 }
-function addOpsType(e){
+function submitOpsType(e){
   e.preventDefault();
   const nom = (document.getElementById('cat-nom').value || '').trim();
   const niveau = parseInt(document.getElementById('cat-niveau').value, 10);
@@ -829,19 +903,50 @@ function addOpsType(e){
     showToast('Niveau doit être entre 1 et 3.', 'danger');
     return;
   }
-  if(OPS_TYPES_STATE.list.some(t => (t.nom || '').toLowerCase() === nom.toLowerCase())){
-    showToast('Un type avec ce nom existe déjà.', 'danger');
+  // Doublon : on ignore l'entrée en cours d'édition
+  const dup = OPS_TYPES_STATE.list.find(t =>
+    (t.nom || '').toLowerCase() === nom.toLowerCase() && t.id !== CAT_EDITING_ID
+  );
+  if(dup){
+    showToast('Un autre type avec ce nom existe déjà.', 'danger');
     return;
   }
-  OPS_TYPES_STATE.list.push({
-    id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8),
-    nom: nom, niveau: niveau, frequence: frequence, detail: detail,
-    date_creation: new Date().toISOString()
-  });
+  // Renommage : prévenir des opérations enregistrées portant l'ancien nom
+  let oldName = null;
+  if(CAT_EDITING_ID){
+    const cur = OPS_TYPES_STATE.list.find(t => t.id === CAT_EDITING_ID);
+    if(cur && cur.nom !== nom) oldName = cur.nom;
+  }
+  if(CAT_EDITING_ID){
+    OPS_TYPES_STATE.list = OPS_TYPES_STATE.list.map(t =>
+      t.id === CAT_EDITING_ID
+        ? Object.assign({}, t, {nom, niveau, frequence, detail, date_modification: new Date().toISOString()})
+        : t
+    );
+  } else {
+    OPS_TYPES_STATE.list.push({
+      id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8),
+      nom: nom, niveau: niveau, frequence: frequence, detail: detail,
+      date_creation: new Date().toISOString()
+    });
+  }
   saveOpsTypes();
+  // Si renommage, optionnellement répercuter sur les opérations existantes
+  let renameApplied = false;
+  if(oldName){
+    const affected = OPS_STATE.list.filter(o => o.type === oldName).length;
+    if(affected > 0 && confirm(affected + ' opération' + (affected>1?'s':'') + ' enregistrée' + (affected>1?'s':'') + ' utilise' + (affected>1?'nt':'') + ' encore le nom « ' + oldName + ' ».\n\nMettre à jour ces opérations vers « ' + nom + ' » ?')){
+      OPS_STATE.list = OPS_STATE.list.map(o =>
+        o.type === oldName ? Object.assign({}, o, {type: nom}) : o
+      );
+      saveOps();
+      renameApplied = true;
+    }
+  }
   renderOpsTypes();
+  if(renameApplied) renderOps();
   closeCatModal();
-  showToast('Type ajouté à la liste.', 'info');
+  showToast(CAT_EDITING_ID ? 'Modifications enregistrées.' : 'Type ajouté à la liste.', 'info');
 }
 function deleteOpsType(id){
   const t = OPS_TYPES_STATE.list.find(x => x.id === id);
@@ -850,6 +955,9 @@ function deleteOpsType(id){
   OPS_TYPES_STATE.list = OPS_TYPES_STATE.list.filter(x => x.id !== id);
   saveOpsTypes();
   renderOpsTypes();
+}
+function editOpsType(id){
+  openCatModal(id);
 }
 function sortOpsTypes(field){
   if(OPS_TYPES_STATE.sortBy === field){
@@ -910,9 +1018,14 @@ function renderOpsTypes(){
         '<td><span class="niv-badge" data-niv="' + t.niveau + '">N' + t.niveau + '</span></td>' +
         '<td>' + escHtml(t.frequence) + '</td>' +
         '<td class="col-comment">' + escHtml(t.detail || '') + '</td>' +
-        '<td><button type="button" class="ops-row-del" onclick="deleteOpsType(\'' + escAttr(t.id) + '\')" title="Supprimer">' +
-          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
-        '</button></td>' +
+        '<td class="col-actions">' +
+          '<button type="button" class="ops-row-btn edit" onclick="editOpsType(\'' + escAttr(t.id) + '\')" title="Modifier">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
+          '</button>' +
+          '<button type="button" class="ops-row-btn del" onclick="deleteOpsType(\'' + escAttr(t.id) + '\')" title="Supprimer">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
+          '</button>' +
+        '</td>' +
       '</tr>'
     );
     tbody.innerHTML = rows.join('');
@@ -975,6 +1088,7 @@ async function loadMe(){
   loadOpsTypes();
   renderOpsTypes();
   renderOps();
+  loadOperateurs();
   try{
     const h = (location.hash || '').replace('#','').trim();
     if(h && VIEW_META[h]) switchView(h);
