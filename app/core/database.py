@@ -4008,6 +4008,17 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 121, "pf_valorisation")
 
+    # v122 — Matières premières : catégorie "autre" + sous-section libre
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=122 LIMIT 1").fetchone():
+        mp_cols = {row[1] for row in conn.execute("PRAGMA table_info(matieres_premieres)").fetchall()}
+        if "sous_section" not in mp_cols:
+            conn.execute("ALTER TABLE matieres_premieres ADD COLUMN sous_section TEXT")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mp_sous_section ON matieres_premieres(sous_section)"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 122, "matieres_premieres_autre_sous_section")
+
 
 
 def create_default_admin():

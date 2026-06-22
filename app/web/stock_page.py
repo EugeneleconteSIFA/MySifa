@@ -574,6 +574,8 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .dash-mp-cat-palette{background:rgba(8,145,178,.15);color:#0891b2}
 .dash-mp-cat-adhesif{background:rgba(217,119,6,.15);color:#d97706}
 .dash-mp-cat-carton{background:rgba(5,150,105,.15);color:#059669}
+.dash-mp-cat-complexe{background:rgba(99,102,241,.15);color:#6366f1}
+.dash-mp-cat-autre{background:rgba(244,114,182,.18);color:#db2777}
 .dash-act-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
 .dash-act-list{display:flex;flex-direction:column}
 .dash-act-row{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);font-size:13px;color:var(--text)}
@@ -1752,6 +1754,7 @@ let S = {
   matieresAdminEditId: null,
   matieresAdminAddError: '',
   matieresAdminSaving: false,
+  mpSousSections: null,
   // Produits finis (onglet dédié)
   pfStock: null,
   pfMouvements: null,
@@ -4740,7 +4743,7 @@ function renderImportRefsModal() {
   document.body.appendChild(ov);
 }
 
-const MP_CAT_LABELS = { mandrin: 'Mandrin', palette: 'Palette', adhesif: 'Adhésif', carton: 'Carton', frontal: 'Frontal', glassine: 'Glassine' };
+const MP_CAT_LABELS = { mandrin: 'Mandrin', palette: 'Palette', adhesif: 'Adhésif', carton: 'Carton', frontal: 'Frontal', glassine: 'Glassine', complexe: 'Complexe', autre: 'Autre' };
 
 function mpCategorieKey(cat) {
   return String(cat || '').trim().toLowerCase();
@@ -4767,24 +4770,28 @@ function mpUniteNom(catOrMatiere) {
   if (mpIsBobineCategory(c)) return 'bobine';
   if (c === 'carton') return 'palette';
   if (c === 'palette') return 'palette';
+  if (c === 'autre') return 'unite';
   return 'palette';
 }
 function mpUniteShort(catOrMatiere) {
   const u = mpUniteNom(catOrMatiere);
   if (u === 'bobine') return 'bob.';
   if (u === 'palette') return 'pal.';
+  if (u === 'unite') return 'u.';
   return 'pal.';
 }
 function mpQuantiteFieldLabel(catOrMatiere) {
   const u = mpUniteNom(catOrMatiere);
   if (u === 'bobine') return 'Quantité (bobines)';
   if (u === 'palette') return 'Quantité (palettes)';
+  if (u === 'unite') return 'Quantité (unités)';
   return 'Quantité (palettes)';
 }
 function mpSeuilFieldLabel(catOrMatiere) {
   const u = mpUniteNom(catOrMatiere);
   if (u === 'bobine') return 'Seuil d\'alerte (bobines)';
   if (u === 'palette') return 'Seuil d\'alerte (pal.)';
+  if (u === 'unite') return 'Seuil d\'alerte (u.)';
   return 'Seuil d\'alerte (pal.)';
 }
 function mpStockMini(qty, catOrMatiere) {
@@ -4803,12 +4810,14 @@ function mpQuantiteInputAttrs(catOrMatiere) {
   if (mpIsBobineCategory(c) || c === 'mandrin' || c === 'carton') {
     return { type: 'number', min: '1', step: '1' };
   }
+  if (c === 'autre') return { type: 'number', min: '0', step: '1' };
   return { type: 'number', min: '0.5', step: '0.5' };
 }
 function mpAdminHint(cat) {
   if (cat === 'palette') return 'Stock géré en palettes. Quantité minimale par saisie : 40.';
   if (cat === 'carton') return 'Stock géré en palettes.';
   if (mpIsBobineCategory(cat)) return 'Stock géré en bobines (réception par scan possible).';
+  if (cat === 'autre') return 'Stock géré en unités. Une sous-section permet de regrouper des références par usage.';
   return 'Stock géré en palettes (pal.).';
 }
 function mpIsPaletteCategory(catOrMatiere) {
@@ -4856,6 +4865,7 @@ const MP_PILL_CATS = [
   { id: 'frontal', label: 'Frontaux' },
   { id: 'glassine', label: 'Glassines' },
   { id: 'complexe', label: 'Complexes' },
+  { id: 'autre', label: 'Autre' },
 ];
 
 const MP_CATEGORIES_LAIZEES = new Set(['frontal', 'glassine', 'complexe']);
@@ -7293,6 +7303,10 @@ function matiereRefEditPayload(item, fields) {
   if (mpIsGlassineCategory(item) && fields.couleurInp) {
     payload.couleur = fields.couleurInp.value.trim() || des;
   }
+  if (fields.isAutre && fields.sousSectionSel) {
+    // sous_section toujours envoye pour la categorie "autre" (autorise vidage)
+    payload.sous_section = fields.sousSectionSel.getValue();
+  }
   return { payload };
 }
 
@@ -7346,6 +7360,12 @@ function appendMatiereRefEditFields(parent, item) {
       laizeChecks,
     ),
   );
+  // Sous-section (uniquement pour la categorie "autre")
+  const isAutre = mpCategorieKey(item.categorie) === 'autre';
+  const sousSectionSel = isAutre ? buildMpSousSectionSelector(item.sous_section || '') : null;
+  const sousSectionWrap = isAutre
+    ? sousSectionSel.el
+    : el('div', { style: { display: 'none' } });
   parent.append(
     el('div', { cls: 'mp-field' },
       el('label', null, 'Catégorie'),
@@ -7355,11 +7375,12 @@ function appendMatiereRefEditFields(parent, item) {
     el('div', { cls: 'mp-field' }, el('label', null, 'Description'), desInp),
     couleurWrap,
     pppWrap,
+    sousSectionWrap,
     el('div', { cls: 'mp-field' }, el('label', null, mpSeuilFieldLabel(item)), seuilInp),
     laizeWrap,
     el('div', { cls: 'mp-hint' }, '0 = pas d\'alerte stock bas.'),
   );
-  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee };
+  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, isAutre };
 }
 
 async function submitMatiereRefEdit(item, fields, onSaved) {
@@ -7386,6 +7407,9 @@ async function submitMatiereRefEdit(item, fields, onSaved) {
         }),
       });
       await loadMatieresIncompleteCount();
+    }
+    if (fields.isAutre) {
+      await loadMpSousSections();
     }
     showToast('Référence mise à jour.', 'success');
     if (onSaved) await onSaved();
@@ -8457,6 +8481,15 @@ async function submitPfMouvement() {
   await submitMouvement(body);
 }
 
+async function loadMpSousSections() {
+  try {
+    const d = await api('/api/stock/matieres/sous-sections');
+    S.mpSousSections = Array.isArray(d) ? d : [];
+  } catch (e) {
+    S.mpSousSections = [];
+  }
+}
+
 async function loadMatieresAdminList() {
   try {
     const d = await api('/api/stock/matieres?all=1');
@@ -8472,7 +8505,7 @@ async function openMatieresAdminDrawer() {
   S.matieresAdminOpen = true;
   S.matieresAdminEditId = null;
   S.matieresAdminAddError = '';
-  await loadMatieresAdminList();
+  await Promise.all([loadMatieresAdminList(), loadMpSousSections()]);
   renderMatieresAdminDrawer();
 }
 
@@ -8504,13 +8537,27 @@ function renderMatieresAdminDrawer() {
     if (!byCat[c]) byCat[c] = [];
     byCat[c].push(item);
   });
-  ['mandrin', 'frontal', 'glassine', 'palette', 'adhesif', 'carton'].forEach(cat => {
+  ['mandrin', 'frontal', 'glassine', 'palette', 'adhesif', 'carton', 'complexe', 'autre'].forEach(cat => {
     if (!byCat[cat] || !byCat[cat].length) return;
     body.appendChild(el('div', { style: { fontSize: '11px', fontWeight: '600', color: 'var(--muted)', margin: '12px 0 8px', textTransform: 'uppercase' } },
       MP_CAT_LABELS[cat] || cat));
-    byCat[cat].forEach(item => {
-      body.appendChild(buildMatieresAdminRow(item));
-    });
+    if (cat === 'autre') {
+      // Regroupement par sous-section
+      const bySs = {};
+      byCat[cat].forEach(item => {
+        const ss = (item.sous_section || '').trim() || '— Sans sous-section —';
+        if (!bySs[ss]) bySs[ss] = [];
+        bySs[ss].push(item);
+      });
+      Object.keys(bySs).sort((a, b) => a.localeCompare(b, 'fr')).forEach(ss => {
+        body.appendChild(el('div', { style: { fontSize: '11px', fontWeight: '600', color: 'var(--text2)', margin: '6px 0 4px 10px' } }, ss));
+        bySs[ss].forEach(item => body.appendChild(buildMatieresAdminRow(item)));
+      });
+    } else {
+      byCat[cat].forEach(item => {
+        body.appendChild(buildMatieresAdminRow(item));
+      });
+    }
   });
   drawer.appendChild(body);
   drawer.appendChild(buildMatieresAdminAddForm());
@@ -8527,6 +8574,9 @@ function buildMatieresAdminRow(item) {
     el('span', { style: { color: 'var(--text2)', fontSize: '13px' } }, item.designation || ''),
     mpIsGlassineCategory(item) && item.couleur
       ? el('span', { style: { fontSize: '12px', color: 'var(--muted)' } }, ' · ' + item.couleur)
+      : null,
+    (mpCategorieKey(item.categorie) === 'autre' && item.sous_section)
+      ? el('span', { style: 'display:inline-block;padding:2px 8px;border-radius:999px;background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:600' }, item.sous_section)
       : null,
     el('span', { style: { fontSize: '12px', color: 'var(--muted)' } }, 'Seuil ' + mpStockLine(item.seuil_alerte, item)),
     mpIsPaletteCategory(item) && item.palettes_par_pile > 0
@@ -8601,11 +8651,73 @@ async function toggleMatieresActif(item) {
   }
 }
 
+function buildMpSousSectionSelector(initialValue) {
+  // Selecteur de sous-section pour la categorie "autre".
+  // Contient toutes les sous-sections existantes + une option speciale
+  // "+ Nouvelle sous-section..." qui ouvre un champ texte de saisie libre.
+  const wrap = el('div', { cls: 'mp-field' });
+  const sel = el('select');
+  const newInp = el('input', { attrs: { type: 'text', placeholder: 'Nom de la sous-section' } });
+  const newWrap = el('div', { style: { display: 'none', marginTop: '6px' } }, newInp);
+
+  function buildOptions(current) {
+    sel.innerHTML = '';
+    sel.appendChild(el('option', { value: '' }, '— Aucune —'));
+    const list = (S.mpSousSections || []).slice().sort((a, b) => String(a).localeCompare(String(b), 'fr'));
+    // Si la valeur initiale n'est pas dans la liste, on l'ajoute pour l'afficher
+    if (current && !list.some(s => String(s).toLowerCase() === String(current).toLowerCase())) {
+      list.unshift(current);
+    }
+    list.forEach(s => {
+      sel.appendChild(el('option', { value: s, selected: (s === current ? true : null) }, s));
+    });
+    sel.appendChild(el('option', { value: '__new__' }, '+ Créer une nouvelle sous-section…'));
+  }
+  buildOptions(initialValue || '');
+
+  sel.addEventListener('change', () => {
+    if (sel.value === '__new__') {
+      newWrap.style.display = '';
+      requestAnimationFrame(() => newInp.focus());
+    } else {
+      newWrap.style.display = 'none';
+      newInp.value = '';
+    }
+  });
+
+  wrap.append(
+    el('label', null, 'Sous-section'),
+    sel,
+    newWrap,
+  );
+
+  // API publique du composant
+  return {
+    el: wrap,
+    getValue() {
+      if (sel.value === '__new__') {
+        return (newInp.value || '').trim();
+      }
+      return (sel.value || '').trim();
+    },
+    refresh(current) {
+      buildOptions(current || '');
+      newWrap.style.display = 'none';
+      newInp.value = '';
+    },
+    reset() {
+      sel.value = '';
+      newWrap.style.display = 'none';
+      newInp.value = '';
+    },
+  };
+}
+
 function buildMatieresAdminAddForm() {
   const foot = el('div', { cls: 'mp-drawer-foot' });
   foot.appendChild(el('div', { style: { fontSize: '12px', fontWeight: '600', marginBottom: '12px', color: 'var(--text)' } }, 'Ajouter une référence'));
   const catSel = el('select');
-  [['mandrin', 'Mandrin'], ['palette', 'Palette'], ['adhesif', 'Adhésif'], ['carton', 'Carton'], ['frontal', 'Frontal'], ['glassine', 'Glassine'], ['complexe', 'Complexe']].forEach(([v, l]) => {
+  [['mandrin', 'Mandrin'], ['palette', 'Palette'], ['adhesif', 'Adhésif'], ['carton', 'Carton'], ['frontal', 'Frontal'], ['glassine', 'Glassine'], ['complexe', 'Complexe'], ['autre', 'Autre']].forEach(([v, l]) => {
     catSel.appendChild(el('option', { value: v }, l));
   });
   const refInp = el('input', { attrs: { type: 'text', placeholder: '76MM-3P' } });
@@ -8654,15 +8766,20 @@ function buildMatieresAdminAddForm() {
       laizeChecks,
     ),
   );
+  // Sous-section (visible uniquement pour la categorie "autre")
+  const sousSectionSel = buildMpSousSectionSelector('');
+  const sousSectionWrap = el('div', { style: { display: 'none' } }, sousSectionSel.el);
   function syncAdminAddFields() {
     const cat = catSel.value;
     const isPal = cat === 'palette';
     const isCarton = cat === 'carton';
     const isGlass = cat === 'glassine';
+    const isAutre = cat === 'autre';
     const isLaizee = mpIsLaizeeCategory(cat);
     pppWrap.style.display = isPal ? '' : 'none';
     couleurWrap.style.display = isGlass ? '' : 'none';
     laizeWrap.style.display = isLaizee ? '' : 'none';
+    sousSectionWrap.style.display = isAutre ? '' : 'none';
     pppLbl.textContent = 'Palettes par pile';
     seuilLbl.textContent = mpSeuilFieldLabel(cat);
     seuilInp.step = isPal || isCarton || cat === 'mandrin' || mpIsBobineCategory(cat) ? '1' : '0.5';
@@ -8678,6 +8795,7 @@ function buildMatieresAdminAddForm() {
     el('div', { cls: 'mp-field' }, el('label', null, 'Désignation'), desInp),
     couleurWrap,
     pppWrap,
+    sousSectionWrap,
     el('div', { cls: 'mp-field' }, seuilLbl, seuilInp),
     laizeWrap,
     hintEl,
@@ -8718,6 +8836,10 @@ function buildMatieresAdminAddForm() {
           if (cat === 'glassine') {
             payload.couleur = couleurInp.value.trim() || des;
           }
+          if (cat === 'autre') {
+            const ss = sousSectionSel.getValue();
+            if (ss) payload.sous_section = ss;
+          }
           const created = await api('/api/stock/matieres', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -8755,6 +8877,11 @@ function buildMatieresAdminAddForm() {
           metresInp.value = '';
           prixM2Inp.value = '';
           laizeChecks.querySelectorAll('input[type=checkbox]').forEach(i => { i.checked = false; });
+          if (cat === 'autre' && payload.sous_section) {
+            // Rafraichit la liste pour que la nouvelle sous-section soit selectionnable
+            await loadMpSousSections();
+          }
+          sousSectionSel.reset();
           await loadMatieresAdminList();
           await loadMatieres();
           renderMatieresAdminDrawer();
