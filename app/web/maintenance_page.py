@@ -147,15 +147,13 @@ body.sb-open .sidebar-overlay{display:block}
 .badge-dev{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;background:var(--accent-bg);color:var(--accent);font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase}
 
 .view{display:flex;flex-direction:column;flex:1}
-.hist-section{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px 22px;margin-bottom:18px}
-.hist-section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)}
-.hist-section-title{font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
-.hist-empty{display:flex;align-items:center;gap:12px;padding:18px 4px;color:var(--muted);font-size:13px}
-.hist-empty svg{color:var(--muted);flex-shrink:0}
-.hist-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px;align-items:end}
+
+/* Filtres en bandeau (pour cartes ops-list) */
+.ops-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;padding:16px 22px;border-bottom:1px solid var(--border);background:var(--bg);align-items:end}
+.ops-filters-row{display:flex;align-items:center;justify-content:flex-end;padding:8px 22px;border-bottom:1px solid var(--border);background:var(--bg)}
 .hist-field{display:flex;flex-direction:column;gap:5px;min-width:0}
 .hist-field-label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
-.hist-input,.hist-select{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-size:13px;font-family:inherit;transition:border-color .15s;width:100%;min-width:0}
+.hist-input,.hist-select{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-size:13px;font-family:inherit;transition:border-color .15s;width:100%;min-width:0}
 .hist-input:focus,.hist-select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
 .hist-select{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
 .hist-daterange{display:flex;align-items:center;gap:6px}
@@ -163,11 +161,8 @@ body.sb-open .sidebar-overlay{display:block}
 .hist-daterange-sep{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.4px;flex-shrink:0}
 .hist-filters-reset{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:12px;font-family:inherit;font-weight:600;transition:.15s;height:fit-content}
 .hist-filters-reset:hover{border-color:var(--accent);color:var(--accent)}
-@media(max-width:560px){.hist-filters{grid-template-columns:1fr}}
+@media(max-width:560px){.ops-filters{grid-template-columns:1fr}}
 
-.ops-form{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px 22px;margin-bottom:18px}
-.ops-form-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)}
-.ops-form-title{font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
 .ops-form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:14px}
 .ops-field{display:flex;flex-direction:column;gap:5px;min-width:0}
 .ops-field--full{grid-column:1/-1}
@@ -181,7 +176,6 @@ body.sb-open .sidebar-overlay{display:block}
 .ops-field-hint{font-size:11px;color:var(--muted);line-height:1.45}
 .ops-saisi-par{display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px dashed var(--border);border-radius:10px;color:var(--muted);font-size:12px;margin-bottom:14px}
 .ops-saisi-par strong{color:var(--text);font-weight:600}
-.ops-form-actions{display:flex;justify-content:flex-end;gap:8px}
 .ops-btn-add{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:10px;border:none;background:var(--accent);color:var(--accent-fg);font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;transition:filter .15s,background .15s,color .15s;white-space:nowrap}
 .ops-btn-add:hover{filter:brightness(1.08)}
 .ops-list{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:18px}
@@ -192,9 +186,9 @@ body.sb-open .sidebar-overlay{display:block}
 .ops-table-wrap{overflow-x:auto}
 .ops-table{width:100%;border-collapse:collapse;font-size:13px;color:var(--text2)}
 .ops-table th{text-align:left;padding:12px 18px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border);background:var(--bg);user-select:none;white-space:nowrap}
-.ops-table th[data-sort],.ops-table th[data-sort-cat]{cursor:pointer;transition:color .15s}
-.ops-table th[data-sort]:hover,.ops-table th[data-sort-cat]:hover{color:var(--accent)}
-.ops-table th[data-sort].active,.ops-table th[data-sort-cat].active{color:var(--accent)}
+.ops-table th[data-sort],.ops-table th[data-sort-cat],.ops-table th[data-sort-ctrl],.ops-table th[data-sort-ctrl-cat]{cursor:pointer;transition:color .15s}
+.ops-table th[data-sort]:hover,.ops-table th[data-sort-cat]:hover,.ops-table th[data-sort-ctrl]:hover,.ops-table th[data-sort-ctrl-cat]:hover{color:var(--accent)}
+.ops-table th[data-sort].active,.ops-table th[data-sort-cat].active,.ops-table th[data-sort-ctrl].active,.ops-table th[data-sort-ctrl-cat].active{color:var(--accent)}
 .ops-table th .sort-ico{display:inline-block;margin-left:5px;opacity:.55;font-size:11px}
 .ops-table th.active .sort-ico{opacity:1}
 .ops-table td{padding:12px 18px;border-bottom:1px solid var(--border);vertical-align:top}
@@ -321,54 +315,102 @@ body.light .toast.info{background:#fff;color:var(--text)}
         <div class="page-header">
           <div>
             <div class="page-title">Contrôles</div>
-            <div class="page-subtitle">Historique des contrôles de maintenance</div>
+            <div class="page-subtitle">Saisie et suivi des contrôles de maintenance</div>
           </div>
         </div>
-        <section class="hist-section" data-hist="controles">
-          <div class="hist-section-head">
-            <div class="hist-section-title">Historique des contrôles</div>
-            <button type="button" class="hist-filters-reset" onclick="resetHistFilters('controles')">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-              Réinitialiser
-            </button>
+
+        <!-- Historique des contrôles -->
+        <div class="ops-list">
+          <div class="ops-list-head">
+            <div class="ops-list-title">Historique des contrôles</div>
+            <div class="ops-list-head-right">
+              <div class="ops-list-count" id="ctrl-count">0 contrôle</div>
+              <button type="button" class="ops-btn-add" onclick="openCtrlModal()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Nouveau contrôle
+              </button>
+            </div>
           </div>
-          <div class="hist-filters">
+          <div class="ops-filters">
             <div class="hist-field">
-              <label class="hist-field-label" for="filt-controles-type">Type d'opération</label>
-              <select id="filt-controles-type" class="hist-select" onchange="applyHistFilters('controles')">
+              <label class="hist-field-label" for="filt-controles-type">Type de contrôle</label>
+              <select id="filt-controles-type" class="hist-select" onchange="renderCtrl()">
                 <option value="">Tous les types</option>
               </select>
             </div>
             <div class="hist-field">
               <label class="hist-field-label" for="filt-controles-operateur">Opérateur</label>
-              <select id="filt-controles-operateur" class="hist-select" onchange="applyHistFilters('controles')">
+              <select id="filt-controles-operateur" class="hist-select" onchange="renderCtrl()">
                 <option value="">Tous les opérateurs</option>
               </select>
             </div>
             <div class="hist-field">
               <label class="hist-field-label" for="filt-controles-machine">Machine</label>
-              <select id="filt-controles-machine" class="hist-select" onchange="applyHistFilters('controles')">
+              <select id="filt-controles-machine" class="hist-select" onchange="renderCtrl()">
                 <option value="">Toutes les machines</option>
-                <option value="cohesio-1">Cohésio 1</option>
-                <option value="cohesio-2">Cohésio 2</option>
-                <option value="dsi">DSI</option>
-                <option value="repiquage">Repiquage</option>
+                <option value="Cohésio 1">Cohésio 1</option>
+                <option value="Cohésio 2">Cohésio 2</option>
+                <option value="DSI">DSI</option>
+                <option value="Repiquage">Repiquage</option>
               </select>
             </div>
             <div class="hist-field">
               <label class="hist-field-label">Date d'opération</label>
               <div class="hist-daterange">
-                <input type="date" id="filt-controles-date-from" class="hist-input" aria-label="Du" onchange="applyHistFilters('controles')">
+                <input type="date" id="filt-controles-date-from" class="hist-input" aria-label="Du" onchange="renderCtrl()">
                 <span class="hist-daterange-sep">au</span>
-                <input type="date" id="filt-controles-date-to" class="hist-input" aria-label="Au" onchange="applyHistFilters('controles')">
+                <input type="date" id="filt-controles-date-to" class="hist-input" aria-label="Au" onchange="renderCtrl()">
               </div>
             </div>
           </div>
-          <div class="hist-empty" id="empty-controles">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-            <div>Aucun contrôle enregistré pour l'instant.</div>
+          <div class="ops-filters-row">
+            <button type="button" class="hist-filters-reset" onclick="resetCtrlFilters()">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+              Réinitialiser les filtres
+            </button>
           </div>
-        </section>
+          <div class="ops-table-wrap">
+            <table class="ops-table">
+              <thead>
+                <tr>
+                  <th data-sort-ctrl="date_saisie" onclick="sortCtrl('date_saisie')">Date saisie<span class="sort-ico">↕</span></th>
+                  <th data-sort-ctrl="machine" onclick="sortCtrl('machine')">Machine<span class="sort-ico">↕</span></th>
+                  <th data-sort-ctrl="operateur" onclick="sortCtrl('operateur')">Opérateur<span class="sort-ico">↕</span></th>
+                  <th data-sort-ctrl="type" onclick="sortCtrl('type')">Type<span class="sort-ico">↕</span></th>
+                  <th>Commentaires</th>
+                  <th aria-label="Actions"></th>
+                </tr>
+              </thead>
+              <tbody id="ctrl-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Liste de contrôles (catalogue) -->
+        <div class="ops-list">
+          <div class="ops-list-head">
+            <div class="ops-list-title">Liste de contrôles</div>
+            <div class="ops-list-head-right">
+              <div class="ops-list-count" id="ctrl-cat-count">0 contrôle</div>
+              <button type="button" class="ops-btn-add" onclick="openCtrlCatModal()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Ajouter un contrôle à la liste
+              </button>
+            </div>
+          </div>
+          <div class="ops-table-wrap">
+            <table class="ops-table">
+              <thead>
+                <tr>
+                  <th data-sort-ctrl-cat="nom" onclick="sortCtrlTypes('nom')">Nom<span class="sort-ico">↕</span></th>
+                  <th>Détail</th>
+                  <th aria-label="Actions"></th>
+                </tr>
+              </thead>
+              <tbody id="ctrl-cat-tbody"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <!-- View : Opérations de maintenance -->
@@ -452,7 +494,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
     </div>
     <form id="ops-form" onsubmit="addOperation(event)">
       <div class="modal-body">
-        <div class="ops-saisi-par" id="ops-saisi-par">
+        <div class="ops-saisi-par">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
           <span>Saisi par : <strong id="ops-saisi-par-name">…</strong></span>
         </div>
@@ -493,7 +535,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
   </div>
 </div>
 
-<!-- Modal : Catalogue (ajout / modification) -->
+<!-- Modal : Catalogue opérations -->
 <div class="modal-overlay" id="cat-modal" onclick="if(event.target===this) closeCatModal()" aria-hidden="true">
   <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="cat-modal-title">
     <div class="modal-head">
@@ -539,6 +581,91 @@ body.light .toast.info{background:#fff;color:var(--text)}
   </div>
 </div>
 
+<!-- Modal : Nouveau contrôle -->
+<div class="modal-overlay" id="ctrl-modal" onclick="if(event.target===this) closeCtrlModal()" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="ctrl-modal-title">
+    <div class="modal-head">
+      <div class="modal-title" id="ctrl-modal-title">Nouveau contrôle</div>
+      <button type="button" class="modal-close" onclick="closeCtrlModal()" aria-label="Fermer">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <form id="ctrl-form" onsubmit="addControle(event)">
+      <div class="modal-body">
+        <div class="ops-saisi-par">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <span>Saisi par : <strong id="ctrl-saisi-par-name">…</strong></span>
+        </div>
+        <div class="ops-form-grid">
+          <div class="ops-field">
+            <label class="ops-field-label" for="ctrl-machine">Machine<span class="req">*</span></label>
+            <select id="ctrl-machine" class="ops-select" required>
+              <option value="">Sélectionner…</option>
+              <option value="Cohésio 1">Cohésio 1</option>
+              <option value="Cohésio 2">Cohésio 2</option>
+              <option value="DSI">DSI</option>
+              <option value="Repiquage">Repiquage</option>
+            </select>
+          </div>
+          <div class="ops-field">
+            <label class="ops-field-label" for="ctrl-type">Type de contrôle<span class="req">*</span></label>
+            <select id="ctrl-type" class="ops-select" required>
+              <option value="">Aucun type défini…</option>
+            </select>
+            <div class="ops-field-hint" id="ctrl-type-hint" style="display:none">
+              Aucun type défini. Ajoutez-en dans « Liste de contrôles ».
+            </div>
+          </div>
+          <div class="ops-field ops-field--full">
+            <label class="ops-field-label" for="ctrl-comment">Commentaires</label>
+            <textarea id="ctrl-comment" class="ops-textarea" placeholder="Constatations, anomalies, mesures…"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="modal-btn-ghost" onclick="closeCtrlModal()">Annuler</button>
+        <button type="submit" class="ops-btn-add">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Enregistrer le contrôle
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal : Catalogue contrôles -->
+<div class="modal-overlay" id="ctrl-cat-modal" onclick="if(event.target===this) closeCtrlCatModal()" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="ctrl-cat-modal-title">
+    <div class="modal-head">
+      <div class="modal-title" id="ctrl-cat-modal-title">Ajouter un contrôle à la liste</div>
+      <button type="button" class="modal-close" onclick="closeCtrlCatModal()" aria-label="Fermer">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <form id="ctrl-cat-form" onsubmit="submitCtrlType(event)">
+      <div class="modal-body">
+        <div class="ops-form-grid">
+          <div class="ops-field ops-field--full">
+            <label class="ops-field-label" for="ctrl-cat-nom">Nom du contrôle<span class="req">*</span></label>
+            <input type="text" id="ctrl-cat-nom" class="ops-input" placeholder="Ex : Vérification niveau d'huile" required autocomplete="off">
+          </div>
+          <div class="ops-field ops-field--full">
+            <label class="ops-field-label" for="ctrl-cat-detail">Détail</label>
+            <textarea id="ctrl-cat-detail" class="ops-textarea" placeholder="Description, méthode, critères d'acceptation…"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="modal-btn-ghost" onclick="closeCtrlCatModal()">Annuler</button>
+        <button type="submit" class="ops-btn-add" id="ctrl-cat-submit-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <span id="ctrl-cat-submit-label">Ajouter à la liste</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <div class="toast-wrap" id="toast-wrap"></div>
 
 <script>
@@ -551,7 +678,7 @@ function closeSidebar(){document.body.classList.remove('sb-open');}
 
 const VIEW_META = {
   maintenance: { title: 'Maintenance', sub: 'En cours de développement' },
-  controles:   { title: 'Contrôles',   sub: 'Historique des contrôles' },
+  controles:   { title: 'Contrôles',   sub: 'Saisie et suivi des contrôles' },
   operations:  { title: 'Opérations de maintenance', sub: 'Saisie et suivi' }
 };
 function switchView(name){
@@ -571,35 +698,6 @@ function switchView(name){
   closeSidebar();
 }
 
-// --- Filtres Contrôles ---
-function getHistFilters(section){
-  const $ = id => document.getElementById(id);
-  const v = el => (el && el.value || '').trim();
-  return {
-    type: v($('filt-' + section + '-type')),
-    operateur: v($('filt-' + section + '-operateur')),
-    machine: v($('filt-' + section + '-machine')),
-    dateFrom: v($('filt-' + section + '-date-from')),
-    dateTo: v($('filt-' + section + '-date-to')),
-  };
-}
-function applyHistFilters(section){
-  const f = getHistFilters(section);
-  if(f.dateFrom && f.dateTo && f.dateFrom > f.dateTo){
-    const to = document.getElementById('filt-' + section + '-date-to');
-    if(to){ to.value = f.dateFrom; f.dateTo = f.dateFrom; }
-  }
-  window.__HIST_FILTERS__ = window.__HIST_FILTERS__ || {};
-  window.__HIST_FILTERS__[section] = f;
-}
-function resetHistFilters(section){
-  ['type','operateur','machine','date-from','date-to'].forEach(k => {
-    const el = document.getElementById('filt-' + section + '-' + k);
-    if(el) el.value = '';
-  });
-  applyHistFilters(section);
-}
-
 // --- Toast ---
 function showToast(msg, type){
   const wrap = document.getElementById('toast-wrap');
@@ -616,6 +714,17 @@ function showToast(msg, type){
 function currentUserName(){
   if(!S.me) return '';
   return (S.me.nom || S.me.identifiant || S.me.email || '').trim();
+}
+
+function escHtml(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function escAttr(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+
+function fmtDate(iso){
+  if(!iso) return '';
+  try{
+    const d = new Date(iso);
+    return d.toLocaleString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
+  }catch(e){ return String(iso); }
 }
 
 // --- Modales ---
@@ -688,12 +797,81 @@ function closeCatModal(){
   CAT_EDITING_ID = null;
 }
 
+function openCtrlModal(){
+  const m = document.getElementById('ctrl-modal');
+  if(!m) return;
+  if(!CTRL_TYPES_STATE.list.length){
+    showToast('Définissez d\'abord au moins un type dans « Liste de contrôles ».', 'danger');
+    return;
+  }
+  if(!currentUserName()){
+    showToast('Identité non chargée. Réessayez dans un instant.', 'danger');
+    return;
+  }
+  m.classList.add('open');
+  m.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+  refreshCtrlTypeSelect();
+  const nameEl = document.getElementById('ctrl-saisi-par-name');
+  if(nameEl) nameEl.textContent = currentUserName();
+  setTimeout(() => { const f = document.getElementById('ctrl-machine'); if(f) f.focus(); }, 50);
+}
+function closeCtrlModal(){
+  const m = document.getElementById('ctrl-modal');
+  if(!m) return;
+  m.classList.remove('open');
+  m.setAttribute('aria-hidden', 'true');
+  document.body.style.overflow = '';
+  const f = document.getElementById('ctrl-form');
+  if(f) f.reset();
+}
+
+let CTRL_CAT_EDITING_ID = null;
+function openCtrlCatModal(idToEdit){
+  const m = document.getElementById('ctrl-cat-modal');
+  if(!m) return;
+  const titleEl = document.getElementById('ctrl-cat-modal-title');
+  const lblEl = document.getElementById('ctrl-cat-submit-label');
+  const form = document.getElementById('ctrl-cat-form');
+  if(form) form.reset();
+  CTRL_CAT_EDITING_ID = null;
+  if(idToEdit){
+    const t = CTRL_TYPES_STATE.list.find(x => x.id === idToEdit);
+    if(t){
+      CTRL_CAT_EDITING_ID = idToEdit;
+      document.getElementById('ctrl-cat-nom').value = t.nom || '';
+      document.getElementById('ctrl-cat-detail').value = t.detail || '';
+      if(titleEl) titleEl.textContent = 'Modifier le contrôle';
+      if(lblEl) lblEl.textContent = 'Enregistrer les modifications';
+    }
+  } else {
+    if(titleEl) titleEl.textContent = 'Ajouter un contrôle à la liste';
+    if(lblEl) lblEl.textContent = 'Ajouter à la liste';
+  }
+  m.classList.add('open');
+  m.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+  setTimeout(() => { const f = document.getElementById('ctrl-cat-nom'); if(f) f.focus(); }, 50);
+}
+function closeCtrlCatModal(){
+  const m = document.getElementById('ctrl-cat-modal');
+  if(!m) return;
+  m.classList.remove('open');
+  m.setAttribute('aria-hidden', 'true');
+  document.body.style.overflow = '';
+  const f = document.getElementById('ctrl-cat-form');
+  if(f) f.reset();
+  CTRL_CAT_EDITING_ID = null;
+}
+
 function closeAnyOpenModal(){
-  ['ops-modal', 'cat-modal'].forEach(id => {
+  ['ops-modal', 'cat-modal', 'ctrl-modal', 'ctrl-cat-modal'].forEach(id => {
     const m = document.getElementById(id);
     if(m && m.classList.contains('open')){
       if(id === 'ops-modal') closeOpsModal();
-      else closeCatModal();
+      else if(id === 'cat-modal') closeCatModal();
+      else if(id === 'ctrl-modal') closeCtrlModal();
+      else closeCtrlCatModal();
     }
   });
 }
@@ -701,7 +879,9 @@ document.addEventListener('keydown', function(e){
   if(e.key === 'Escape') closeAnyOpenModal();
 });
 
-// --- Historique des opérations ---
+// =========================================================================
+// Historique des opérations
+// =========================================================================
 const OPS_STORAGE_KEY = 'mysifa_maint_operations_v1';
 const OPS_STATE = { sortBy: 'date_saisie', sortDir: 'desc', list: [] };
 
@@ -715,30 +895,17 @@ function loadOps(){
 function saveOps(){
   try{ localStorage.setItem(OPS_STORAGE_KEY, JSON.stringify(OPS_STATE.list)); }catch(e){}
 }
-function fmtDate(iso){
-  if(!iso) return '';
-  try{
-    const d = new Date(iso);
-    return d.toLocaleString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
-  }catch(e){ return String(iso); }
-}
 function addOperation(e){
   e.preventDefault();
   const machine = (document.getElementById('ops-machine').value || '').trim();
   const type = (document.getElementById('ops-type').value || '').trim();
   const commentaire = (document.getElementById('ops-comment').value || '').trim();
   const operateur = currentUserName();
-  if(!operateur){
-    showToast('Identité non chargée. Réessayez dans un instant.', 'danger');
-    return;
-  }
-  if(!machine || !type){
-    showToast('Machine et type sont requis.', 'danger');
-    return;
-  }
+  if(!operateur){ showToast('Identité non chargée. Réessayez dans un instant.', 'danger'); return; }
+  if(!machine || !type){ showToast('Machine et type sont requis.', 'danger'); return; }
   OPS_STATE.list.push({
     id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8),
-    machine: machine, operateur: operateur, type: type, commentaire: commentaire,
+    machine, operateur, type, commentaire,
     date_saisie: new Date().toISOString()
   });
   saveOps();
@@ -805,7 +972,9 @@ function renderOps(){
   }
 }
 
-// --- Catalogue des types d'opérations ---
+// =========================================================================
+// Catalogue des types d'opérations
+// =========================================================================
 const OPS_TYPES_STORAGE_KEY = 'mysifa_maint_optypes_v1';
 const OPS_TYPES_STATE = { sortBy: 'nom', sortDir: 'asc', list: [] };
 
@@ -825,21 +994,12 @@ function submitOpsType(e){
   const niveau = parseInt(document.getElementById('cat-niveau').value, 10);
   const frequence = (document.getElementById('cat-frequence').value || '').trim();
   const detail = (document.getElementById('cat-detail').value || '').trim();
-  if(!nom || !niveau || !frequence){
-    showToast('Nom, niveau et fréquence sont requis.', 'danger');
-    return;
-  }
-  if(niveau < 1 || niveau > 3){
-    showToast('Niveau doit être entre 1 et 3.', 'danger');
-    return;
-  }
+  if(!nom || !niveau || !frequence){ showToast('Nom, niveau et fréquence sont requis.', 'danger'); return; }
+  if(niveau < 1 || niveau > 3){ showToast('Niveau doit être entre 1 et 3.', 'danger'); return; }
   const dup = OPS_TYPES_STATE.list.find(t =>
     (t.nom || '').toLowerCase() === nom.toLowerCase() && t.id !== CAT_EDITING_ID
   );
-  if(dup){
-    showToast('Un autre type avec ce nom existe déjà.', 'danger');
-    return;
-  }
+  if(dup){ showToast('Un autre type avec ce nom existe déjà.', 'danger'); return; }
   let oldName = null;
   if(CAT_EDITING_ID){
     const cur = OPS_TYPES_STATE.list.find(t => t.id === CAT_EDITING_ID);
@@ -854,7 +1014,7 @@ function submitOpsType(e){
   } else {
     OPS_TYPES_STATE.list.push({
       id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8),
-      nom: nom, niveau: niveau, frequence: frequence, detail: detail,
+      nom, niveau, frequence, detail,
       date_creation: new Date().toISOString()
     });
   }
@@ -961,6 +1121,305 @@ function renderOpsTypes(){
   }
 }
 
+// =========================================================================
+// Historique des contrôles
+// =========================================================================
+const CTRL_STORAGE_KEY = 'mysifa_maint_controles_v1';
+const CTRL_STATE = { sortBy: 'date_saisie', sortDir: 'desc', list: [] };
+
+function loadCtrl(){
+  try{
+    const raw = localStorage.getItem(CTRL_STORAGE_KEY);
+    CTRL_STATE.list = raw ? JSON.parse(raw) : [];
+    if(!Array.isArray(CTRL_STATE.list)) CTRL_STATE.list = [];
+  }catch(e){ CTRL_STATE.list = []; }
+}
+function saveCtrl(){
+  try{ localStorage.setItem(CTRL_STORAGE_KEY, JSON.stringify(CTRL_STATE.list)); }catch(e){}
+}
+function addControle(e){
+  e.preventDefault();
+  const machine = (document.getElementById('ctrl-machine').value || '').trim();
+  const type = (document.getElementById('ctrl-type').value || '').trim();
+  const commentaire = (document.getElementById('ctrl-comment').value || '').trim();
+  const operateur = currentUserName();
+  if(!operateur){ showToast('Identité non chargée. Réessayez dans un instant.', 'danger'); return; }
+  if(!machine || !type){ showToast('Machine et type sont requis.', 'danger'); return; }
+  CTRL_STATE.list.push({
+    id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8),
+    machine, operateur, type, commentaire,
+    date_saisie: new Date().toISOString()
+  });
+  saveCtrl();
+  renderCtrl();
+  closeCtrlModal();
+  showToast('Contrôle enregistré.', 'info');
+}
+function deleteCtrl(id){
+  if(!confirm('Supprimer ce contrôle ?')) return;
+  CTRL_STATE.list = CTRL_STATE.list.filter(c => c.id !== id);
+  saveCtrl();
+  renderCtrl();
+}
+function sortCtrl(field){
+  if(CTRL_STATE.sortBy === field){
+    CTRL_STATE.sortDir = CTRL_STATE.sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    CTRL_STATE.sortBy = field;
+    CTRL_STATE.sortDir = field === 'date_saisie' ? 'desc' : 'asc';
+  }
+  renderCtrl();
+}
+function getCtrlFilters(){
+  const v = id => (document.getElementById(id)?.value || '').trim();
+  return {
+    type:     v('filt-controles-type'),
+    operateur:v('filt-controles-operateur'),
+    machine:  v('filt-controles-machine'),
+    dateFrom: v('filt-controles-date-from'),
+    dateTo:   v('filt-controles-date-to'),
+  };
+}
+function resetCtrlFilters(){
+  ['type','operateur','machine','date-from','date-to'].forEach(k => {
+    const el = document.getElementById('filt-controles-' + k);
+    if(el) el.value = '';
+  });
+  renderCtrl();
+}
+function refreshCtrlFiltersOptions(){
+  const typeSel = document.getElementById('filt-controles-type');
+  const opeSel  = document.getElementById('filt-controles-operateur');
+  if(typeSel){
+    const cur = typeSel.value;
+    const types = CTRL_TYPES_STATE.list.map(t => t.nom).filter(Boolean).sort((a,b) => a.localeCompare(b, 'fr'));
+    typeSel.innerHTML = '<option value="">Tous les types</option>' +
+      types.map(n => '<option value="' + escAttr(n) + '">' + escHtml(n) + '</option>').join('');
+    if(cur && types.includes(cur)) typeSel.value = cur;
+  }
+  if(opeSel){
+    const cur = opeSel.value;
+    const opes = Array.from(new Set(CTRL_STATE.list.map(c => c.operateur).filter(Boolean))).sort((a,b) => a.localeCompare(b, 'fr'));
+    opeSel.innerHTML = '<option value="">Tous les opérateurs</option>' +
+      opes.map(n => '<option value="' + escAttr(n) + '">' + escHtml(n) + '</option>').join('');
+    if(cur && opes.includes(cur)) opeSel.value = cur;
+  }
+}
+function renderCtrl(){
+  refreshCtrlFiltersOptions();
+  const tbody = document.getElementById('ctrl-tbody');
+  const count = document.getElementById('ctrl-count');
+  if(!tbody) return;
+  const f = getCtrlFilters();
+  // Auto-correction si dateFrom > dateTo
+  if(f.dateFrom && f.dateTo && f.dateFrom > f.dateTo){
+    const to = document.getElementById('filt-controles-date-to');
+    if(to){ to.value = f.dateFrom; f.dateTo = f.dateFrom; }
+  }
+  // Filter
+  let filtered = CTRL_STATE.list.filter(c => {
+    if(f.type && c.type !== f.type) return false;
+    if(f.operateur && c.operateur !== f.operateur) return false;
+    if(f.machine && c.machine !== f.machine) return false;
+    if(f.dateFrom || f.dateTo){
+      const d = (c.date_saisie || '').slice(0,10);
+      if(f.dateFrom && d < f.dateFrom) return false;
+      if(f.dateTo && d > f.dateTo) return false;
+    }
+    return true;
+  });
+  // Sort
+  const dir = CTRL_STATE.sortDir === 'asc' ? 1 : -1;
+  const sf = CTRL_STATE.sortBy;
+  filtered.sort((a,b) => {
+    const av = (a[sf] != null ? a[sf] : '').toString().toLowerCase();
+    const bv = (b[sf] != null ? b[sf] : '').toString().toLowerCase();
+    if(av < bv) return -1 * dir;
+    if(av > bv) return  1 * dir;
+    return 0;
+  });
+  document.querySelectorAll('.ops-table th[data-sort-ctrl]').forEach(th => {
+    const isActive = th.getAttribute('data-sort-ctrl') === sf;
+    th.classList.toggle('active', isActive);
+    const ico = th.querySelector('.sort-ico');
+    if(ico) ico.textContent = isActive ? (CTRL_STATE.sortDir === 'asc' ? '↑' : '↓') : '↕';
+  });
+  if(!filtered.length){
+    const isFiltered = f.type || f.operateur || f.machine || f.dateFrom || f.dateTo;
+    const msg = isFiltered
+      ? 'Aucun contrôle ne correspond aux filtres.'
+      : 'Aucun contrôle enregistré. Cliquez sur « Nouveau contrôle » pour commencer.';
+    tbody.innerHTML = '<tr><td colspan="6" class="ops-empty">' + escHtml(msg) + '</td></tr>';
+  } else {
+    const rows = filtered.map(c =>
+      '<tr>' +
+        '<td class="col-date">' + escHtml(fmtDate(c.date_saisie)) + '</td>' +
+        '<td>' + escHtml(c.machine) + '</td>' +
+        '<td>' + escHtml(c.operateur) + '</td>' +
+        '<td>' + escHtml(c.type) + '</td>' +
+        '<td class="col-comment">' + escHtml(c.commentaire || '') + '</td>' +
+        '<td class="col-actions">' +
+          '<button type="button" class="ops-row-btn del" onclick="deleteCtrl(\'' + escAttr(c.id) + '\')" title="Supprimer">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
+          '</button>' +
+        '</td>' +
+      '</tr>'
+    );
+    tbody.innerHTML = rows.join('');
+  }
+  if(count){
+    const n = CTRL_STATE.list.length;
+    const visible = filtered.length;
+    if(visible !== n){
+      count.textContent = visible + ' / ' + n + ' contrôle' + (n > 1 ? 's' : '');
+    } else {
+      count.textContent = n + ' contrôle' + (n > 1 ? 's' : '');
+    }
+  }
+}
+
+// =========================================================================
+// Catalogue des types de contrôles (Liste de contrôles)
+// =========================================================================
+const CTRL_TYPES_STORAGE_KEY = 'mysifa_maint_ctrltypes_v1';
+const CTRL_TYPES_STATE = { sortBy: 'nom', sortDir: 'asc', list: [] };
+
+function loadCtrlTypes(){
+  try{
+    const raw = localStorage.getItem(CTRL_TYPES_STORAGE_KEY);
+    CTRL_TYPES_STATE.list = raw ? JSON.parse(raw) : [];
+    if(!Array.isArray(CTRL_TYPES_STATE.list)) CTRL_TYPES_STATE.list = [];
+  }catch(e){ CTRL_TYPES_STATE.list = []; }
+}
+function saveCtrlTypes(){
+  try{ localStorage.setItem(CTRL_TYPES_STORAGE_KEY, JSON.stringify(CTRL_TYPES_STATE.list)); }catch(e){}
+}
+function submitCtrlType(e){
+  e.preventDefault();
+  const nom = (document.getElementById('ctrl-cat-nom').value || '').trim();
+  const detail = (document.getElementById('ctrl-cat-detail').value || '').trim();
+  if(!nom){ showToast('Le nom est requis.', 'danger'); return; }
+  const dup = CTRL_TYPES_STATE.list.find(t =>
+    (t.nom || '').toLowerCase() === nom.toLowerCase() && t.id !== CTRL_CAT_EDITING_ID
+  );
+  if(dup){ showToast('Un autre contrôle avec ce nom existe déjà.', 'danger'); return; }
+  let oldName = null;
+  if(CTRL_CAT_EDITING_ID){
+    const cur = CTRL_TYPES_STATE.list.find(t => t.id === CTRL_CAT_EDITING_ID);
+    if(cur && cur.nom !== nom) oldName = cur.nom;
+  }
+  if(CTRL_CAT_EDITING_ID){
+    CTRL_TYPES_STATE.list = CTRL_TYPES_STATE.list.map(t =>
+      t.id === CTRL_CAT_EDITING_ID
+        ? Object.assign({}, t, {nom, detail, date_modification: new Date().toISOString()})
+        : t
+    );
+  } else {
+    CTRL_TYPES_STATE.list.push({
+      id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8),
+      nom, detail,
+      date_creation: new Date().toISOString()
+    });
+  }
+  saveCtrlTypes();
+  let renameApplied = false;
+  if(oldName){
+    const affected = CTRL_STATE.list.filter(c => c.type === oldName).length;
+    if(affected > 0 && confirm(affected + ' contrôle' + (affected>1?'s':'') + ' enregistré' + (affected>1?'s':'') + ' utilise' + (affected>1?'nt':'') + ' encore le nom « ' + oldName + ' ».\n\nMettre à jour ces contrôles vers « ' + nom + ' » ?')){
+      CTRL_STATE.list = CTRL_STATE.list.map(c =>
+        c.type === oldName ? Object.assign({}, c, {type: nom}) : c
+      );
+      saveCtrl();
+      renameApplied = true;
+    }
+  }
+  renderCtrlTypes();
+  if(renameApplied) renderCtrl();
+  closeCtrlCatModal();
+  showToast(CTRL_CAT_EDITING_ID ? 'Modifications enregistrées.' : 'Contrôle ajouté à la liste.', 'info');
+}
+function deleteCtrlType(id){
+  const t = CTRL_TYPES_STATE.list.find(x => x.id === id);
+  if(!t) return;
+  if(!confirm('Supprimer le contrôle « ' + t.nom + ' » de la liste ?\n\nLes contrôles déjà enregistrés avec ce nom restent inchangés.')) return;
+  CTRL_TYPES_STATE.list = CTRL_TYPES_STATE.list.filter(x => x.id !== id);
+  saveCtrlTypes();
+  renderCtrlTypes();
+}
+function editCtrlType(id){ openCtrlCatModal(id); }
+function sortCtrlTypes(field){
+  if(CTRL_TYPES_STATE.sortBy === field){
+    CTRL_TYPES_STATE.sortDir = CTRL_TYPES_STATE.sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    CTRL_TYPES_STATE.sortBy = field;
+    CTRL_TYPES_STATE.sortDir = 'asc';
+  }
+  renderCtrlTypes();
+}
+function refreshCtrlTypeSelect(){
+  const sel = document.getElementById('ctrl-type');
+  const hint = document.getElementById('ctrl-type-hint');
+  if(!sel) return;
+  const cur = sel.value;
+  if(!CTRL_TYPES_STATE.list.length){
+    sel.innerHTML = '<option value="">Aucun type défini…</option>';
+    sel.disabled = true;
+    if(hint) hint.style.display = 'block';
+    return;
+  }
+  sel.disabled = false;
+  if(hint) hint.style.display = 'none';
+  const sorted = CTRL_TYPES_STATE.list.slice().sort((a,b) => (a.nom || '').localeCompare(b.nom || '', 'fr'));
+  sel.innerHTML = '<option value="">Sélectionner un type…</option>' +
+    sorted.map(t => '<option value="' + escAttr(t.nom) + '">' + escHtml(t.nom) + '</option>').join('');
+  if(cur && sorted.some(t => t.nom === cur)) sel.value = cur;
+}
+function renderCtrlTypes(){
+  refreshCtrlTypeSelect();
+  refreshCtrlFiltersOptions();
+  const tbody = document.getElementById('ctrl-cat-tbody');
+  const count = document.getElementById('ctrl-cat-count');
+  if(!tbody) return;
+  const dir = CTRL_TYPES_STATE.sortDir === 'asc' ? 1 : -1;
+  const f = CTRL_TYPES_STATE.sortBy;
+  const sorted = CTRL_TYPES_STATE.list.slice().sort((a,b) => {
+    const av = (a[f] != null ? a[f] : '').toString().toLowerCase();
+    const bv = (b[f] != null ? b[f] : '').toString().toLowerCase();
+    if(av < bv) return -1 * dir;
+    if(av > bv) return  1 * dir;
+    return 0;
+  });
+  document.querySelectorAll('.ops-table th[data-sort-ctrl-cat]').forEach(th => {
+    const isActive = th.getAttribute('data-sort-ctrl-cat') === f;
+    th.classList.toggle('active', isActive);
+    const ico = th.querySelector('.sort-ico');
+    if(ico) ico.textContent = isActive ? (CTRL_TYPES_STATE.sortDir === 'asc' ? '↑' : '↓') : '↕';
+  });
+  if(!sorted.length){
+    tbody.innerHTML = '<tr><td colspan="3" class="ops-empty">Aucun contrôle dans la liste. Cliquez sur « Ajouter un contrôle à la liste » pour en créer un.</td></tr>';
+  } else {
+    const rows = sorted.map(t =>
+      '<tr>' +
+        '<td><strong style="color:var(--text)">' + escHtml(t.nom) + '</strong></td>' +
+        '<td class="col-comment">' + escHtml(t.detail || '') + '</td>' +
+        '<td class="col-actions">' +
+          '<button type="button" class="ops-row-btn edit" onclick="editCtrlType(\'' + escAttr(t.id) + '\')" title="Modifier">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
+          '</button>' +
+          '<button type="button" class="ops-row-btn del" onclick="deleteCtrlType(\'' + escAttr(t.id) + '\')" title="Supprimer">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
+          '</button>' +
+        '</td>' +
+      '</tr>'
+    );
+    tbody.innerHTML = rows.join('');
+  }
+  if(count){
+    const n = CTRL_TYPES_STATE.list.length;
+    count.textContent = n + ' contrôle' + (n > 1 ? 's' : '');
+  }
+}
+
 function toggleTheme(){
   const l=document.body.classList.toggle('light');
   document.documentElement.classList.toggle('light-pre', l);
@@ -983,9 +1442,6 @@ async function doLogout(){
   try{await fetch('/api/auth/logout',{method:'POST',credentials:'include'});}catch(e){}
   location.href='/';
 }
-
-function escHtml(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
-function escAttr(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 
 async function loadMe(){
   try{
@@ -1011,11 +1467,14 @@ async function loadMe(){
   loadMe();
   loadOps();
   loadOpsTypes();
+  loadCtrl();
+  loadCtrlTypes();
   renderOpsTypes();
   renderOps();
+  renderCtrlTypes();
+  renderCtrl();
   try{
     const h = (location.hash || '').replace('#','').trim();
-    // Compat : ancien hash #historique -> nouveau #controles
     const target = (h === 'historique') ? 'controles' : h;
     if(target && VIEW_META[target]) switchView(target);
   }catch(e){}
