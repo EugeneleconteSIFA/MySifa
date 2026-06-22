@@ -179,11 +179,50 @@ body.sb-open .sidebar-overlay{display:block}
   .hist-filters{grid-template-columns:1fr}
 }
 
+/* Opérations de maintenance - form & list */
+.ops-form{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px 22px;margin-bottom:18px}
+.ops-form-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.ops-form-title{font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
+.ops-form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:14px}
+.ops-field{display:flex;flex-direction:column;gap:5px;min-width:0}
+.ops-field--full{grid-column:1/-1}
+.ops-field-label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.ops-field-label .req{color:var(--danger);margin-left:3px}
+.ops-input,.ops-select,.ops-textarea{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-size:13px;font-family:inherit;transition:border-color .15s;width:100%}
+.ops-textarea{resize:vertical;min-height:70px;font-family:inherit}
+.ops-input:focus,.ops-select:focus,.ops-textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.ops-select{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
+.ops-form-actions{display:flex;justify-content:flex-end;gap:8px}
+.ops-btn-add{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:10px;border:none;background:var(--accent);color:#0a0e17;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;transition:filter .15s}
+.ops-btn-add:hover{filter:brightness(1.08)}
+.ops-list{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.ops-list-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 22px;border-bottom:1px solid var(--border)}
+.ops-list-title{font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
+.ops-list-count{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.ops-table-wrap{overflow-x:auto}
+.ops-table{width:100%;border-collapse:collapse;font-size:13px;color:var(--text2)}
+.ops-table th{text-align:left;padding:12px 18px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border);background:var(--bg);user-select:none;white-space:nowrap}
+.ops-table th[data-sort]{cursor:pointer;transition:color .15s}
+.ops-table th[data-sort]:hover{color:var(--accent)}
+.ops-table th[data-sort].active{color:var(--accent)}
+.ops-table th .sort-ico{display:inline-block;margin-left:5px;opacity:.55;font-size:11px}
+.ops-table th.active .sort-ico{opacity:1}
+.ops-table td{padding:12px 18px;border-bottom:1px solid var(--border);vertical-align:top}
+.ops-table tr:last-child td{border-bottom:none}
+.ops-table tr:hover td{background:var(--bg)}
+.ops-table .col-comment{max-width:340px;white-space:pre-wrap;color:var(--text2);font-size:12.5px;word-break:break-word}
+.ops-table .col-date{color:var(--muted);font-size:12px;white-space:nowrap}
+.ops-row-del{background:transparent;border:none;color:var(--muted);cursor:pointer;padding:4px;border-radius:6px;transition:.15s;display:inline-flex;align-items:center}
+.ops-row-del:hover{color:var(--danger);background:var(--bg)}
+.ops-empty{padding:32px 22px;text-align:center;color:var(--muted);font-size:13px}
+
 /* Toast */
 .toast-wrap{position:fixed;bottom:24px;right:24px;display:flex;flex-direction:column;gap:8px;z-index:2000}
-.toast{padding:12px 18px;border-radius:10px;font-size:13px;font-weight:600;box-shadow:0 4px 24px rgba(0,0,0,.4);max-width:340px}
+.toast{padding:12px 18px;border-radius:10px;font-size:13px;font-weight:600;box-shadow:0 4px 24px rgba(0,0,0,.4);max-width:340px;transition:opacity .3s}
 .toast.info{background:var(--card);color:var(--text2);border:1px solid var(--border)}
-body.light .toast.info{background:#f1f5f9;color:var(--text)}
+.toast.success{background:var(--success);color:#0a0e17;border:1px solid var(--success)}
+.toast.danger{background:var(--danger);color:#0a0e17;border:1px solid var(--danger)}
+body.light .toast.info{background:#fff;color:var(--text)}
 </style>
 </head>
 <body>
@@ -204,6 +243,10 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
     <button type="button" class="nav-btn" data-view="historique" onclick="switchView('historique')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
       Historique
+    </button>
+    <button type="button" class="nav-btn" data-view="operations" onclick="switchView('operations')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
+      Opérations de maintenance
     </button>
     <div class="sidebar-bottom">
       <button type="button" class="nav-btn nav-btn--mysifa-portal" onclick="location.href='/'">
@@ -367,6 +410,78 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
           </div>
         </section>
       </div>
+
+      <!-- View : Opérations de maintenance -->
+      <div class="view" id="view-operations" style="display:none">
+        <div class="page-header">
+          <div>
+            <div class="page-title">Opérations de maintenance</div>
+            <div class="page-subtitle">Saisie et suivi des opérations effectuées</div>
+          </div>
+        </div>
+
+        <!-- Formulaire d'ajout -->
+        <div class="ops-form">
+          <div class="ops-form-head">
+            <div class="ops-form-title">Nouvelle opération</div>
+          </div>
+          <form id="ops-form" onsubmit="addOperation(event)">
+            <div class="ops-form-grid">
+              <div class="ops-field">
+                <label class="ops-field-label" for="ops-machine">Machine<span class="req">*</span></label>
+                <select id="ops-machine" class="ops-select" required>
+                  <option value="">Sélectionner…</option>
+                  <option value="Cohésio 1">Cohésio 1</option>
+                  <option value="Cohésio 2">Cohésio 2</option>
+                  <option value="DSI">DSI</option>
+                  <option value="Repiquage">Repiquage</option>
+                </select>
+              </div>
+              <div class="ops-field">
+                <label class="ops-field-label" for="ops-operateur">Opérateur<span class="req">*</span></label>
+                <input type="text" id="ops-operateur" class="ops-input" placeholder="Nom de l'opérateur" required autocomplete="off">
+              </div>
+              <div class="ops-field">
+                <label class="ops-field-label" for="ops-type">Type d'opération<span class="req">*</span></label>
+                <input type="text" id="ops-type" class="ops-input" placeholder="Type (catégories à définir)" required autocomplete="off">
+              </div>
+              <div class="ops-field ops-field--full">
+                <label class="ops-field-label" for="ops-comment">Commentaires</label>
+                <textarea id="ops-comment" class="ops-textarea" placeholder="Notes, anomalies, durée, pièces remplacées…"></textarea>
+              </div>
+            </div>
+            <div class="ops-form-actions">
+              <button type="submit" class="ops-btn-add">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Enregistrer l'opération
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Liste -->
+        <div class="ops-list">
+          <div class="ops-list-head">
+            <div class="ops-list-title">Opérations enregistrées</div>
+            <div class="ops-list-count" id="ops-count">0 opération</div>
+          </div>
+          <div class="ops-table-wrap">
+            <table class="ops-table">
+              <thead>
+                <tr>
+                  <th data-sort="date_saisie" onclick="sortOps('date_saisie')">Date saisie<span class="sort-ico">↕</span></th>
+                  <th data-sort="machine" onclick="sortOps('machine')">Machine<span class="sort-ico">↕</span></th>
+                  <th data-sort="operateur" onclick="sortOps('operateur')">Opérateur<span class="sort-ico">↕</span></th>
+                  <th data-sort="type" onclick="sortOps('type')">Type<span class="sort-ico">↕</span></th>
+                  <th>Commentaires</th>
+                  <th aria-label="Actions"></th>
+                </tr>
+              </thead>
+              <tbody id="ops-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
   </main>
 </div>
@@ -383,7 +498,8 @@ function closeSidebar(){document.body.classList.remove('sb-open');}
 
 const VIEW_META = {
   maintenance: { title: 'Maintenance', sub: 'En cours de développement' },
-  historique:  { title: 'Historique',  sub: 'Contrôles et interventions' }
+  historique:  { title: 'Historique',  sub: 'Contrôles et interventions' },
+  operations:  { title: 'Opérations de maintenance', sub: 'Saisie et suivi' }
 };
 function switchView(name){
   if(!VIEW_META[name]) return;
@@ -402,10 +518,7 @@ function switchView(name){
   closeSidebar();
 }
 
-// --- Filtres Historique ---------------------------------------------------
-// Sections supportées : 'controles', 'interventions'. La liste de données
-// n'est pas encore branchée — ces helpers exposent l'état des filtres et
-// appliqueront le filtrage dès que la source de données sera disponible.
+// --- Filtres Historique ---
 function getHistFilters(section){
   const $ = id => document.getElementById(id);
   const v = el => (el && el.value || '').trim();
@@ -423,8 +536,6 @@ function applyHistFilters(section){
     const to = document.getElementById('filt-' + section + '-date-to');
     if(to){ to.value = f.dateFrom; f.dateTo = f.dateFrom; }
   }
-  // Pas de données pour l'instant — le filtrage prendra effet quand la
-  // liste sera branchée. On expose les filtres pour le futur renderer.
   window.__HIST_FILTERS__ = window.__HIST_FILTERS__ || {};
   window.__HIST_FILTERS__[section] = f;
 }
@@ -434,6 +545,121 @@ function resetHistFilters(section){
     if(el) el.value = '';
   });
   applyHistFilters(section);
+}
+
+// --- Toast ---
+function showToast(msg, type){
+  const wrap = document.getElementById('toast-wrap');
+  if(!wrap){ return; }
+  const t = document.createElement('div');
+  t.className = 'toast ' + (type || 'info');
+  t.textContent = msg;
+  wrap.appendChild(t);
+  setTimeout(() => { t.style.opacity = '0'; }, 2200);
+  setTimeout(() => { try{ t.remove(); }catch(e){} }, 2600);
+}
+
+// --- Opérations de maintenance ---
+// Stockage local en attendant le backend dédié. Quand l'API sera prête,
+// remplacer loadOps / saveOps / addOperation / deleteOp par des appels fetch.
+const OPS_STORAGE_KEY = 'mysifa_maint_operations_v1';
+const OPS_STATE = { sortBy: 'date_saisie', sortDir: 'desc', list: [] };
+
+function loadOps(){
+  try{
+    const raw = localStorage.getItem(OPS_STORAGE_KEY);
+    OPS_STATE.list = raw ? JSON.parse(raw) : [];
+    if(!Array.isArray(OPS_STATE.list)) OPS_STATE.list = [];
+  }catch(e){ OPS_STATE.list = []; }
+}
+function saveOps(){
+  try{ localStorage.setItem(OPS_STORAGE_KEY, JSON.stringify(OPS_STATE.list)); }catch(e){}
+}
+function fmtDate(iso){
+  if(!iso) return '';
+  try{
+    const d = new Date(iso);
+    return d.toLocaleString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
+  }catch(e){ return String(iso); }
+}
+function addOperation(e){
+  e.preventDefault();
+  const machine = (document.getElementById('ops-machine').value || '').trim();
+  const operateur = (document.getElementById('ops-operateur').value || '').trim();
+  const type = (document.getElementById('ops-type').value || '').trim();
+  const commentaire = (document.getElementById('ops-comment').value || '').trim();
+  if(!machine || !operateur || !type){
+    showToast('Machine, opérateur et type sont requis.', 'danger');
+    return;
+  }
+  OPS_STATE.list.push({
+    id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8),
+    machine: machine,
+    operateur: operateur,
+    type: type,
+    commentaire: commentaire,
+    date_saisie: new Date().toISOString()
+  });
+  saveOps();
+  renderOps();
+  e.target.reset();
+  showToast('Opération enregistrée.', 'info');
+}
+function deleteOp(id){
+  if(!confirm('Supprimer cette opération ?')) return;
+  OPS_STATE.list = OPS_STATE.list.filter(o => o.id !== id);
+  saveOps();
+  renderOps();
+}
+function sortOps(field){
+  if(OPS_STATE.sortBy === field){
+    OPS_STATE.sortDir = OPS_STATE.sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    OPS_STATE.sortBy = field;
+    OPS_STATE.sortDir = field === 'date_saisie' ? 'desc' : 'asc';
+  }
+  renderOps();
+}
+function renderOps(){
+  const tbody = document.getElementById('ops-tbody');
+  const count = document.getElementById('ops-count');
+  if(!tbody) return;
+  const dir = OPS_STATE.sortDir === 'asc' ? 1 : -1;
+  const f = OPS_STATE.sortBy;
+  const sorted = OPS_STATE.list.slice().sort((a,b) => {
+    const av = (a[f] != null ? a[f] : '').toString().toLowerCase();
+    const bv = (b[f] != null ? b[f] : '').toString().toLowerCase();
+    if(av < bv) return -1*dir;
+    if(av > bv) return  1*dir;
+    return 0;
+  });
+  document.querySelectorAll('.ops-table th[data-sort]').forEach(th => {
+    const isActive = th.getAttribute('data-sort') === f;
+    th.classList.toggle('active', isActive);
+    const ico = th.querySelector('.sort-ico');
+    if(ico) ico.textContent = isActive ? (OPS_STATE.sortDir === 'asc' ? '↑' : '↓') : '↕';
+  });
+  if(!sorted.length){
+    tbody.innerHTML = '<tr><td colspan="6" class="ops-empty">Aucune opération enregistrée pour l&apos;instant.</td></tr>';
+  } else {
+    const rows = sorted.map(o => {
+      return '<tr>' +
+        '<td class="col-date">' + escHtml(fmtDate(o.date_saisie)) + '</td>' +
+        '<td>' + escHtml(o.machine) + '</td>' +
+        '<td>' + escHtml(o.operateur) + '</td>' +
+        '<td>' + escHtml(o.type) + '</td>' +
+        '<td class="col-comment">' + escHtml(o.commentaire || '') + '</td>' +
+        '<td><button type="button" class="ops-row-del" onclick="deleteOp(\'' + escAttr(o.id) + '\')" title="Supprimer">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
+        '</button></td>' +
+      '</tr>';
+    });
+    tbody.innerHTML = rows.join('');
+  }
+  if(count){
+    const n = OPS_STATE.list.length;
+    count.textContent = n + ' opération' + (n > 1 ? 's' : '');
+  }
 }
 
 function toggleTheme(){
@@ -459,7 +685,8 @@ async function doLogout(){
   location.href='/';
 }
 
-function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function escHtml(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function escAttr(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 
 async function loadMe(){
   try{
@@ -470,7 +697,7 @@ async function loadMe(){
     const chip=document.getElementById('user-chip');
     if(chip&&S.me){
       const roles={direction:'Direction',administration:'Administration',superadmin:'Super admin',fabrication:'Fabrication',logistique:'Logistique',comptabilite:'Comptabilité',expedition:'Expédition',commercial:'Commercial'};
-      chip.innerHTML=`<div class="uc-name">${escHtml(S.me.nom||'')}</div><div class="uc-role">${escHtml(roles[S.me.role]||S.me.role||'')}</div>`;
+      chip.innerHTML='<div class="uc-name">'+escHtml(S.me.nom||'')+'</div><div class="uc-role">'+escHtml(roles[S.me.role]||S.me.role||'')+'</div>';
     }
   }catch(e){}
 }
@@ -483,6 +710,8 @@ async function loadMe(){
     updateThemeBtn();
   }catch(e){}
   loadMe();
+  loadOps();
+  renderOps();
   try{
     const h = (location.hash || '').replace('#','').trim();
     if(h && VIEW_META[h]) switchView(h);
