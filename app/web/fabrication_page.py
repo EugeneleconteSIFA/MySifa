@@ -5284,7 +5284,8 @@ function renderRepiquageDossierView(){
   const cumul = e.cumul || {nb_cartons:0, qte_etiq:0};
   const compteurStyle = {
     padding:'14px 18px', background:'var(--card)', border:'1px solid var(--border)',
-    borderRadius:'10px', display:'flex', flexDirection:'column', gap:'4px', minWidth:'200px',
+    borderRadius:'10px', display:'flex', flexDirection:'column', gap:'4px',
+    flex:'1 1 200px', minWidth:'200px',
   };
   const _isAdminCp = S.user && (S.user.role==='superadmin'||S.user.role==='administration'||S.user.role==='direction');
   const _adjustBtn = (scope) => _isAdminCp ? h('button',{
@@ -5301,8 +5302,8 @@ function renderRepiquageDossierView(){
   }, svgIcon('edit',11),' Ajuster') : null;
 
   const compteurs = h('div',{className:'rep-compteurs',style:{
-    display:'flex', gap:'14px', flexWrap:'wrap', justifyContent:'center',
-    marginTop:'8px', width:'100%', maxWidth:'520px',
+    display:'flex', gap:'14px', flexWrap:'wrap', justifyContent:'stretch',
+    width:'100%',
   }},
     h('div',{style:compteurStyle},
       h('div',{style:{fontSize:'10px',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',fontWeight:'700',display:'flex',alignItems:'center'}},
@@ -5332,10 +5333,10 @@ function renderRepiquageDossierView(){
   const teteSortieBtn = h('button',{
     style:{
       background:'transparent', color:'var(--accent)', border:'1.5px solid var(--accent)',
-      borderRadius:'10px', padding:'10px 18px', fontFamily:'inherit', fontWeight:'700',
+      borderRadius:'10px', padding:'12px 18px', fontFamily:'inherit', fontWeight:'700',
       fontSize:'12px', cursor:'pointer', letterSpacing:'.3px', textTransform:'uppercase',
-      display:'inline-flex', alignItems:'center', gap:'8px', maxWidth:'520px',
-      transition:'all .12s',
+      display:'inline-flex', alignItems:'center', justifyContent:'center', gap:'8px',
+      width:'100%', transition:'all .12s',
     },
     onClick: openRepiquageTeteSortie,
     onMouseEnter:(ev)=>{ ev.currentTarget.style.background='var(--accent-bg)'; },
@@ -5344,6 +5345,24 @@ function renderRepiquageDossierView(){
     svgIcon('box',13),' Sortie tête d’impression'
   );
 
+  // Colonne gauche : saisie cartons (bouton +1, -1, carton en cours, quick add)
+  const colSaisie = h('div',{className:'rep-col-saisie', style:{
+    flex:'1 1 520px', minWidth:'0', maxWidth:'560px',
+    display:'flex', flexDirection:'column', alignItems:'center', gap:'18px',
+  }},
+    plusCartonBtn,
+    moinsUnCartonBtn,
+    cartonCourantBar,
+    quickAdd,
+  );
+  // Colonne droite : compteurs + bouton sortie tête d'impression
+  const colSide = h('div',{className:'rep-col-side', style:{
+    flex:'0 1 320px', minWidth:'260px',
+    display:'flex', flexDirection:'column', alignItems:'stretch', gap:'14px',
+  }},
+    compteurs,
+    teteSortieBtn,
+  );
   return h('div',{className:'fab-main fab-main--repiquage-dossier'},
     h('div',{className:'fab-main-head'},
       h('span',{className:'fab-main-title'}, 'Saisie production — Repiquage'),
@@ -5351,17 +5370,13 @@ function renderRepiquageDossierView(){
     ),
     headBanner,
     renderRepiquageTabs(),
-    h('div',{style:{
-      flex:'1', overflowY:'auto',
-      display:'flex', flexDirection:'column', alignItems:'center',
-      gap:'18px', padding:'24px 20px',
+    h('div',{className:'rep-layout-wrap', style:{
+      flex:'1', overflowY:'auto', padding:'24px 20px',
+      display:'flex', flexDirection:'row', gap:'24px',
+      alignItems:'flex-start', justifyContent:'center', flexWrap:'wrap',
     }},
-      plusCartonBtn,
-      moinsUnCartonBtn,
-      cartonCourantBar,
-      quickAdd,
-      compteurs,
-      teteSortieBtn,
+      colSaisie,
+      colSide,
     )
   );
 }

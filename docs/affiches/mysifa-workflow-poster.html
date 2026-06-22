@@ -143,34 +143,59 @@
     font-size: 16px;
   }
 
-  /* ===== CHEATSHEET ===== */
+  /* ===== CHEATSHEET 2 colonnes : début vs continu ===== */
+  .cheat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1.4fr;
+    gap: 4mm;
+    margin-bottom: 6mm;
+  }
   .cheat-card {
     padding: 5mm 5mm;
     border-radius: 12px;
-    border: 2px solid #06b6d4;
-    background: #ecfeff;
-    margin-bottom: 6mm;
+    border: 2px solid;
+    position: relative;
   }
+  .cheat-card.start  { background: #fef3c7; border-color: #f59e0b; }
+  .cheat-card.cont   { background: #ecfeff; border-color: #06b6d4; }
+
+  .phase-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #fff;
+    margin-bottom: 6px;
+  }
+  .phase-badge.start { background: #d97706; }
+  .phase-badge.cont  { background: #0e7490; }
+
   .cheat-card h2 {
-    font-size: 13px; font-weight: 800; color: #0e7490;
-    margin-bottom: 6px; letter-spacing: 1px; text-transform: uppercase;
+    font-size: 13px; font-weight: 800;
+    margin-bottom: 4px; letter-spacing: 0.5px;
   }
+  .cheat-card.start h2 { color: #92400e; }
+  .cheat-card.cont  h2 { color: #0e7490; }
+
   .cheat-card .label {
     font-size: 10.5px; color: #475569;
-    margin-top: 8px; margin-bottom: 3px; font-weight: 700;
+    margin-top: 7px; margin-bottom: 3px; font-weight: 700;
   }
   .cheat-card .label:first-of-type { margin-top: 2px; }
   .cheat-card pre {
     display: block; background: #ffffff;
     font-family: 'Consolas', ui-monospace, Menlo, monospace;
-    font-size: 11px; padding: 6px 10px; border-radius: 6px;
+    font-size: 10.5px; padding: 6px 9px; border-radius: 6px;
     border: 1px solid #cbd5e1; font-weight: 600;
-    line-height: 1.55;
+    line-height: 1.5;
     white-space: pre-wrap; word-break: break-all;
   }
   .cheat-card .hint {
-    font-size: 10px; color: #64748b; font-style: italic;
-    margin-top: 2px; padding-left: 2px;
+    font-size: 9.5px; color: #64748b; font-style: italic;
+    margin-top: 3px; padding-left: 2px;
   }
 
   /* ===== REGLES ===== */
@@ -290,25 +315,36 @@
 
   <!-- ===== CHEATSHEET ===== -->
   <div class="section-title">Mémo PC local — exemple feature/maintenance</div>
-  <div class="cheat-card">
-    <h2>◆ Commandes git à coller dans le terminal Windows</h2>
+  <div class="cheat-grid">
 
-    <div class="label">1. Démarrer la feature (à partir de staging à jour)</div>
+    <div class="cheat-card start">
+      <span class="phase-badge start">À faire au début</span>
+      <h2>◆ Une seule fois, quand tu démarres la feature</h2>
+
+      <div class="label">Créer la branche à partir de staging à jour</div>
 <pre>git checkout staging
 git pull origin staging
 git checkout -b feature/maintenance</pre>
+      <div class="hint">Tu es maintenant sur ta branche perso, isolée de l'autre dev.</div>
+    </div>
 
-    <div class="label">2. Sauvegarder et pousser le travail sur GitHub</div>
+    <div class="cheat-card cont">
+      <span class="phase-badge cont">À faire en continu</span>
+      <h2>◆ À répéter à chaque cycle de travail</h2>
+
+      <div class="label">1. Sauvegarder et pousser ton travail sur GitHub</div>
 <pre>git add .
 git commit -m "maintenance: bouton 'Créer une alerte' (placeholder en developpement)"
 git push -u origin feature/maintenance</pre>
-    <div class="hint">À ce stade la branche est sur GitHub — pas encore sur v1.</div>
+      <div class="hint">À ce stade la branche est sur GitHub — pas encore sur v1.</div>
 
-    <div class="label">3. Déployer sur v1 (merge dans staging)</div>
+      <div class="label">2. Déployer sur v1 (merge dans staging)</div>
 <pre>git checkout staging
 git merge feature/maintenance
 git push origin staging</pre>
-    <div class="hint">Le VPS pull staging chaque minute → v1.mysifa.com se met à jour automatiquement.</div>
+      <div class="hint">Le VPS pull staging chaque minute → v1.mysifa.com se met à jour. Pour retravailler ensuite, <code>git checkout feature/maintenance</code>.</div>
+    </div>
+
   </div>
 
   <!-- ===== REGLES ===== -->
