@@ -575,7 +575,7 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .dash-mp-cat-adhesif{background:rgba(217,119,6,.15);color:#d97706}
 .dash-mp-cat-carton{background:rgba(5,150,105,.15);color:#059669}
 .dash-mp-cat-complexe{background:rgba(99,102,241,.15);color:#6366f1}
-.dash-mp-cat-autre{background:rgba(244,114,182,.18);color:#db2777}
+.dash-mp-cat-autre{background:rgba(148,163,184,.18);color:#64748b}
 .dash-act-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
 .dash-act-list{display:flex;flex-direction:column}
 .dash-act-row{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);font-size:13px;color:var(--text)}
@@ -7571,6 +7571,49 @@ function buildMatieres() {
     searchInp,
   );
   const list = el('div', { cls: 'mp-list' });
+  const renderMpCard = (m) => {
+    const seuil = parseFloat(m.seuil_alerte) || 0;
+    const alertCls = m.en_alerte ? ' alert' : '';
+    const infoChildren = [
+      el('div', { cls: 'mp-card-des' }, m.designation || '—'),
+      el('span', { cls: 'mp-card-stock-mini' + alertCls }, mpStockMini(m.quantite, m)),
+    ];
+    if (mpIsPaletteCategory(m) && m.palettes_par_pile > 0) {
+      infoChildren.push(el('div', { cls: 'mp-card-meta' },
+        fN(m.palettes_par_pile) + ' pal. / pile'));
+    }
+    if (mpIsGlassineCategory(m) && m.couleur) {
+      infoChildren.push(el('div', { cls: 'mp-card-meta' }, 'Couleur : ' + m.couleur));
+    }
+    if (m.en_alerte) {
+      infoChildren.push(el('div', { cls: 'mp-card-warn' },
+        'Sous le seuil (min. ' + mpStockLine(seuil, m) + ')'));
+    }
+    const topEnd = [
+      el('span', {
+        cls: 'mp-card-stock-total' + alertCls,
+        attrs: { title: mpStockTotalLabel(m) },
+      }, mpStockLine(m.quantite, m)),
+    ];
+    const editBtn = mpCardEditBtn(m);
+    if (editBtn) topEnd.push(editBtn);
+    list.appendChild(el('div', {
+      cls: 'mp-card',
+      on: { click: () => loadMatiere(m.id) },
+    },
+      el('div', { cls: 'mp-card-top' },
+        dashMpCatBadge(m.categorie),
+        el('span', { cls: 'mp-card-ref' }, m.reference || ''),
+        el('div', { cls: 'mp-card-top-end' }, ...topEnd),
+      ),
+      el('div', { cls: 'mp-card-mid' },
+        el('div', { cls: 'mp-card-info' }, ...infoChildren),
+        el('div', { cls: 'mp-card-side' }, matieresCardActions(m)),
+      ),
+    ));
+  };
+  const mpSectionHeadStyle = 'margin:14px 4px 4px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px';
+  const mpSubsectionHeadStyle = 'margin:10px 4px 4px;padding:6px 12px;font-size:12px;font-weight:700;color:var(--accent);background:var(--accent-bg);border-radius:8px;display:inline-block';
   if (!filtered.length) {
     list.appendChild(el('div', { cls: 'mp-empty' },
       q
@@ -7578,47 +7621,29 @@ function buildMatieres() {
         : 'Aucune matière dans cette catégorie.',
     ));
   } else {
-    filtered.forEach(m => {
-      const seuil = parseFloat(m.seuil_alerte) || 0;
-      const alertCls = m.en_alerte ? ' alert' : '';
-      const infoChildren = [
-        el('div', { cls: 'mp-card-des' }, m.designation || '—'),
-        el('span', { cls: 'mp-card-stock-mini' + alertCls }, mpStockMini(m.quantite, m)),
-      ];
-      if (mpIsPaletteCategory(m) && m.palettes_par_pile > 0) {
-        infoChildren.push(el('div', { cls: 'mp-card-meta' },
-          fN(m.palettes_par_pile) + ' pal. / pile'));
+    const curCat = S.matieresCat || 'tout';
+    const autresItems = filtered.filter(m => mpCategorieKey(m.categorie) === 'autre');
+    const otherItems = filtered.filter(m => mpCategorieKey(m.categorie) !== 'autre');
+    // Catégories autres que "autre" : rendu plat dans l'ordre du tri serveur
+    otherItems.forEach(renderMpCard);
+    // Catégorie "autre" : groupée par sous-section
+    if (autresItems.length) {
+      if (curCat === 'tout' && otherItems.length) {
+        list.appendChild(el('div', { style: mpSectionHeadStyle }, 'Autres'));
       }
-      if (mpIsGlassineCategory(m) && m.couleur) {
-        infoChildren.push(el('div', { cls: 'mp-card-meta' }, 'Couleur : ' + m.couleur));
-      }
-      if (m.en_alerte) {
-        infoChildren.push(el('div', { cls: 'mp-card-warn' },
-          'Sous le seuil (min. ' + mpStockLine(seuil, m) + ')'));
-      }
-      const topEnd = [
-        el('span', {
-          cls: 'mp-card-stock-total' + alertCls,
-          attrs: { title: mpStockTotalLabel(m) },
-        }, mpStockLine(m.quantite, m)),
-      ];
-      const editBtn = mpCardEditBtn(m);
-      if (editBtn) topEnd.push(editBtn);
-      list.appendChild(el('div', {
-        cls: 'mp-card',
-        on: { click: () => loadMatiere(m.id) },
-      },
-        el('div', { cls: 'mp-card-top' },
-          dashMpCatBadge(m.categorie),
-          el('span', { cls: 'mp-card-ref' }, m.reference || ''),
-          el('div', { cls: 'mp-card-top-end' }, ...topEnd),
-        ),
-        el('div', { cls: 'mp-card-mid' },
-          el('div', { cls: 'mp-card-info' }, ...infoChildren),
-          el('div', { cls: 'mp-card-side' }, matieresCardActions(m)),
-        ),
-      ));
-    });
+      const bySs = {};
+      autresItems.forEach(m => {
+        const ss = (m.sous_section || '').trim() || '— Sans sous-section —';
+        if (!bySs[ss]) bySs[ss] = [];
+        bySs[ss].push(m);
+      });
+      const ssOrder = Object.keys(bySs).sort((a, b) => a.localeCompare(b, 'fr'));
+      ssOrder.forEach(ss => {
+        list.appendChild(el('div', { style: mpSubsectionHeadStyle },
+          ss + ' · ' + bySs[ss].length));
+        bySs[ss].forEach(renderMpCard);
+      });
+    }
   }
   // Bandeau orange si des matières frontal/glassine/complexe sont incomplètes
   const banner = (S.matieresIncompleteCount > 0)

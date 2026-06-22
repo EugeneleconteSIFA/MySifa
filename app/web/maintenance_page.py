@@ -146,6 +146,15 @@ body.sb-open .sidebar-overlay{display:block}
 .wip-sub{font-size:13px;color:var(--text2);line-height:1.65;margin-bottom:6px}
 .wip-meta{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-top:18px}
 
+/* Page actions */
+.page-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:10px;padding:10px 16px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;transition:filter .15s,border-color .15s}
+.btn:hover{filter:brightness(1.05);border-color:var(--accent)}
+.btn[disabled]{cursor:not-allowed;opacity:.7;color:var(--text2)}
+.btn[disabled]:hover{filter:none;border-color:var(--border)}
+.btn .btn-ico{display:inline-flex;align-items:center;color:var(--accent)}
+.badge-dev{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;background:var(--accent-bg);color:var(--accent);font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase}
+
 /* Toast */
 .toast-wrap{position:fixed;bottom:24px;right:24px;display:flex;flex-direction:column;gap:8px;z-index:2000}
 .toast{padding:12px 18px;border-radius:10px;font-size:13px;font-weight:600;box-shadow:0 4px 24px rgba(0,0,0,.4);max-width:340px}
@@ -205,6 +214,13 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
         <div>
           <div class="page-title">My<span>Maintenance</span></div>
           <div class="page-subtitle">Suivi et planification de la maintenance</div>
+        </div>
+        <div class="page-actions">
+          <button type="button" class="btn" disabled aria-disabled="true" title="Fonctionnalité en cours de développement">
+            <span class="btn-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+            Créer une alerte
+            <span class="badge-dev">En développement</span>
+          </button>
         </div>
       </div>
 
