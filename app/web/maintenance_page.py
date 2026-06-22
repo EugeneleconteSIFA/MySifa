@@ -155,6 +155,14 @@ body.sb-open .sidebar-overlay{display:block}
 .btn .btn-ico{display:inline-flex;align-items:center;color:var(--accent)}
 .badge-dev{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;background:var(--accent-bg);color:var(--accent);font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase}
 
+/* Historique sections */
+.view{display:flex;flex-direction:column;flex:1}
+.hist-section{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px 22px;margin-bottom:18px}
+.hist-section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.hist-section-title{font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
+.hist-empty{display:flex;align-items:center;gap:12px;padding:18px 4px;color:var(--muted);font-size:13px}
+.hist-empty svg{color:var(--muted);flex-shrink:0}
+
 /* Toast */
 .toast-wrap{position:fixed;bottom:24px;right:24px;display:flex;flex-direction:column;gap:8px;z-index:2000}
 .toast{padding:12px 18px;border-radius:10px;font-size:13px;font-weight:600;box-shadow:0 4px 24px rgba(0,0,0,.4);max-width:340px}
@@ -173,9 +181,13 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
       <div class="logo-brand">My<span>Maintenance</span></div>
       <div class="logo-sub">by SIFA</div>
     </div>
-    <button type="button" class="nav-btn active">
+    <button type="button" class="nav-btn active" data-view="maintenance" onclick="switchView('maintenance')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
       Maintenance
+    </button>
+    <button type="button" class="nav-btn" data-view="historique" onclick="switchView('historique')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      Historique
     </button>
     <div class="sidebar-bottom">
       <button type="button" class="nav-btn nav-btn--mysifa-portal" onclick="location.href='/'">
@@ -210,29 +222,62 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
     </div>
 
     <div class="content">
-      <div class="page-header">
-        <div>
-          <div class="page-title">My<span>Maintenance</span></div>
-          <div class="page-subtitle">Suivi et planification de la maintenance</div>
+      <!-- View : Maintenance -->
+      <div class="view" id="view-maintenance">
+        <div class="page-header">
+          <div>
+            <div class="page-title">My<span>Maintenance</span></div>
+            <div class="page-subtitle">Suivi et planification de la maintenance</div>
+          </div>
+          <div class="page-actions">
+            <button type="button" class="btn" disabled aria-disabled="true" title="Fonctionnalité en cours de développement">
+              <span class="btn-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+              Créer une alerte
+              <span class="badge-dev">En développement</span>
+            </button>
+          </div>
         </div>
-        <div class="page-actions">
-          <button type="button" class="btn" disabled aria-disabled="true" title="Fonctionnalité en cours de développement">
-            <span class="btn-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
-            Créer une alerte
-            <span class="badge-dev">En développement</span>
-          </button>
+
+        <div class="wip-wrap">
+          <div class="wip-card">
+            <div class="wip-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+            </div>
+            <div class="wip-title">Application en cours de développement</div>
+            <div class="wip-sub">Le module Maintenance arrive prochainement. Les fonctionnalités seront ajoutées progressivement.</div>
+            <div class="wip-meta">Accès restreint — version préliminaire</div>
+          </div>
         </div>
       </div>
 
-      <div class="wip-wrap">
-        <div class="wip-card">
-          <div class="wip-icon">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+      <!-- View : Historique -->
+      <div class="view" id="view-historique" style="display:none">
+        <div class="page-header">
+          <div>
+            <div class="page-title">Historique</div>
+            <div class="page-subtitle">Contrôles et interventions de maintenance</div>
           </div>
-          <div class="wip-title">Application en cours de développement</div>
-          <div class="wip-sub">Le module Maintenance arrive prochainement. Les fonctionnalités seront ajoutées progressivement.</div>
-          <div class="wip-meta">Accès restreint — version préliminaire</div>
         </div>
+
+        <section class="hist-section">
+          <div class="hist-section-head">
+            <div class="hist-section-title">Historique des contrôles</div>
+          </div>
+          <div class="hist-empty">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            <div>Aucun contrôle enregistré pour l'instant.</div>
+          </div>
+        </section>
+
+        <section class="hist-section">
+          <div class="hist-section-head">
+            <div class="hist-section-title">Historique des interventions</div>
+          </div>
+          <div class="hist-empty">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+            <div>Aucune intervention enregistrée pour l'instant.</div>
+          </div>
+        </section>
       </div>
     </div>
   </main>
@@ -247,6 +292,27 @@ const S = { me: null };
 
 function toggleSidebar(){document.body.classList.toggle('sb-open');}
 function closeSidebar(){document.body.classList.remove('sb-open');}
+
+const VIEW_META = {
+  maintenance: { title: 'Maintenance', sub: 'En cours de développement' },
+  historique:  { title: 'Historique',  sub: 'Contrôles et interventions' }
+};
+function switchView(name){
+  if(!VIEW_META[name]) return;
+  document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
+  const target = document.getElementById('view-' + name);
+  if(target) target.style.display = 'flex';
+  document.querySelectorAll('.nav-btn[data-view]').forEach(b => {
+    b.classList.toggle('active', b.getAttribute('data-view') === name);
+  });
+  const meta = VIEW_META[name];
+  const t = document.querySelector('.mobile-topbar-title');
+  const s = document.querySelector('.mobile-topbar-sub');
+  if(t) t.textContent = meta.title;
+  if(s) s.textContent = meta.sub;
+  try{ history.replaceState(null, '', '#' + name); }catch(e){}
+  closeSidebar();
+}
 
 function toggleTheme(){
   const l=document.body.classList.toggle('light');
@@ -295,6 +361,10 @@ async function loadMe(){
     updateThemeBtn();
   }catch(e){}
   loadMe();
+  try{
+    const h = (location.hash || '').replace('#','').trim();
+    if(h && VIEW_META[h]) switchView(h);
+  }catch(e){}
 })();
 </script>
 <script>window.__MYSIFA_APP__='maintenance';</script>
