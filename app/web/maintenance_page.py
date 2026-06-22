@@ -205,6 +205,10 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
       Historique
     </button>
+    <button type="button" class="nav-btn" data-view="operations" onclick="switchView('operations')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
+      Opérations de maintenance
+    </button>
     <div class="sidebar-bottom">
       <button type="button" class="nav-btn nav-btn--mysifa-portal" onclick="location.href='/'">
         <span class="mysifa-back-preamble">← Retour </span>
@@ -367,6 +371,25 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
           </div>
         </section>
       </div>
+
+      <!-- View : Opérations de maintenance -->
+      <div class="view" id="view-operations" style="display:none">
+        <div class="page-header">
+          <div>
+            <div class="page-title">Opérations de maintenance</div>
+            <div class="page-subtitle">Définition et planification des opérations</div>
+          </div>
+        </div>
+        <div class="wip-wrap">
+          <div class="wip-card">
+            <div class="wip-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
+            </div>
+            <div class="wip-title">Section en cours de développement</div>
+            <div class="wip-sub">Les opérations de maintenance seront définies ici. Cette section est volontairement vide pour l'instant.</div>
+          </div>
+        </div>
+      </div>
     </div>
   </main>
 </div>
@@ -383,7 +406,8 @@ function closeSidebar(){document.body.classList.remove('sb-open');}
 
 const VIEW_META = {
   maintenance: { title: 'Maintenance', sub: 'En cours de développement' },
-  historique:  { title: 'Historique',  sub: 'Contrôles et interventions' }
+  historique:  { title: 'Historique',  sub: 'Contrôles et interventions' },
+  operations:  { title: 'Opérations de maintenance', sub: 'Définition et planification' }
 };
 function switchView(name){
   if(!VIEW_META[name]) return;
@@ -403,9 +427,6 @@ function switchView(name){
 }
 
 // --- Filtres Historique ---------------------------------------------------
-// Sections supportées : 'controles', 'interventions'. La liste de données
-// n'est pas encore branchée — ces helpers exposent l'état des filtres et
-// appliqueront le filtrage dès que la source de données sera disponible.
 function getHistFilters(section){
   const $ = id => document.getElementById(id);
   const v = el => (el && el.value || '').trim();
@@ -423,8 +444,6 @@ function applyHistFilters(section){
     const to = document.getElementById('filt-' + section + '-date-to');
     if(to){ to.value = f.dateFrom; f.dateTo = f.dateFrom; }
   }
-  // Pas de données pour l'instant — le filtrage prendra effet quand la
-  // liste sera branchée. On expose les filtres pour le futur renderer.
   window.__HIST_FILTERS__ = window.__HIST_FILTERS__ || {};
   window.__HIST_FILTERS__[section] = f;
 }
