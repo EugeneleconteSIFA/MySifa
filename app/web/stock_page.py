@@ -574,6 +574,8 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .dash-mp-cat-palette{background:rgba(8,145,178,.15);color:#0891b2}
 .dash-mp-cat-adhesif{background:rgba(217,119,6,.15);color:#d97706}
 .dash-mp-cat-carton{background:rgba(5,150,105,.15);color:#059669}
+.dash-mp-cat-complexe{background:rgba(99,102,241,.15);color:#6366f1}
+.dash-mp-cat-autre{background:rgba(244,114,182,.18);color:#db2777}
 .dash-act-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
 .dash-act-list{display:flex;flex-direction:column}
 .dash-act-row{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);font-size:13px;color:var(--text)}
