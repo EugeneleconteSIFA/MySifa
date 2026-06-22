@@ -960,8 +960,8 @@ body.light .mp-field input:focus:not([type=checkbox]):not([type=radio]),body.lig
 .mp-drawer-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;justify-content:flex-end}
 .mp-drawer{background:var(--card);border-left:1px solid var(--border);width:100%;max-width:480px;height:100%;display:flex;flex-direction:column}
 .mp-drawer-head{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--border);flex-shrink:0}
-.mp-drawer-body{flex:1;overflow-y:auto;padding:16px 18px}
-.mp-drawer-foot{padding:16px 18px;border-top:1px solid var(--border);flex-shrink:0}
+.mp-drawer-body{flex:1 1 0;min-height:80px;overflow-y:auto;padding:16px 18px}
+.mp-drawer-foot{padding:16px 18px;border-top:1px solid var(--border);flex:0 1 auto;max-height:70vh;overflow-y:auto}
 .mp-admin-row{padding:12px 0;border-bottom:1px solid var(--border)}
 .mp-admin-row:last-child{border-bottom:none}
 .mp-admin-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
