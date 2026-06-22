@@ -4975,12 +4975,25 @@ function openDashboardAddPfModal() {
   renderDashboardAddPfModal();
 }
 
+// Sentinelle pour "Sans sous-section" (string vide ou null en DB)
+const MP_SOUS_SECTION_NONE = '__none__';
+
 function filterMatieresList() {
   const list = S.matieres || [];
   const cat = S.matieresCat || 'tout';
+  const ss = S.matieresSousSection || null;
   const q = (S.matieresQ || '').trim().toLowerCase();
   return list.filter(m => {
     if (cat !== 'tout' && m.categorie !== cat) return false;
+    // Filtre sous-section (uniquement quand la catégorie courante en supporte une)
+    if (ss && mpCategorieHasSousSection(cat)) {
+      const matSs = (m.sous_section || '').trim();
+      if (ss === MP_SOUS_SECTION_NONE) {
+        if (matSs) return false;
+      } else {
+        if (matSs.toLowerCase() !== ss.toLowerCase()) return false;
+      }
+    }
     if (!q) return true;
     const ref = (m.reference || '').toLowerCase();
     const des = (m.designation || '').toLowerCase();
@@ -7667,9 +7680,64 @@ function buildMatieres() {
     ...MP_PILL_CATS.map(p => el('button', {
       cls: 'mp-pill' + (S.matieresCat === p.id ? ' active' : ''),
       type: 'button',
-      on: { click: () => { S.matieresCat = p.id; renderMatieresView(); } },
+      on: { click: () => {
+        if (S.matieresCat !== p.id) {
+          S.matieresCat = p.id;
+          S.matieresSousSection = null; // reset sous-section au changement de catégorie
+        }
+        renderMatieresView();
+      } },
     }, p.label)),
   );
+  // 2e ligne : pills de sous-section, visible uniquement quand la catégorie
+  // active supporte les sous-sections (autre / frontal).
+  const curCat = S.matieresCat || 'tout';
+  let subPills = null;
+  if (mpCategorieHasSousSection(curCat)) {
+    // Compte les matières par sous-section dans la catégorie active
+    const matsInCat = (S.matieres || []).filter(m => mpCategorieKey(m.categorie) === curCat);
+    const counts = {};
+    let noneCount = 0;
+    matsInCat.forEach(m => {
+      const ss = (m.sous_section || '').trim();
+      if (!ss) { noneCount += 1; return; }
+      counts[ss] = (counts[ss] || 0) + 1;
+    });
+    const ssNames = Object.keys(counts).sort((a, b) => a.localeCompare(b, 'fr'));
+    // Construit la rangée seulement s'il y a au moins une sous-section ou des "sans"
+    if (ssNames.length > 0 || noneCount > 0) {
+      const activeSs = S.matieresSousSection || null;
+      const makeSubPill = (id, label, count) => el('button', {
+        cls: 'mp-pill' + (activeSs === id ? ' active' : ''),
+        type: 'button',
+        style: 'font-size:11px;padding:5px 12px',
+        on: { click: () => {
+          S.matieresSousSection = (activeSs === id) ? null : id;
+          renderMatieresView();
+        } },
+      }, label + ' · ' + count);
+      const totalCat = matsInCat.length;
+      const subChildren = [];
+      // "Toutes" — désactive le filtre sous-section
+      subChildren.push(el('button', {
+        cls: 'mp-pill' + (!activeSs ? ' active' : ''),
+        type: 'button',
+        style: 'font-size:11px;padding:5px 12px',
+        on: { click: () => { S.matieresSousSection = null; renderMatieresView(); } },
+      }, 'Toutes · ' + totalCat));
+      ssNames.forEach(ss => subChildren.push(makeSubPill(ss, ss, counts[ss])));
+      if (noneCount > 0) {
+        subChildren.push(makeSubPill(MP_SOUS_SECTION_NONE, 'Sans sous-section', noneCount));
+      }
+      subPills = el('div', {
+        cls: 'mp-pills mp-pills-sub',
+        style: 'margin-top:-4px;margin-bottom:8px;display:flex;flex-wrap:wrap;gap:6px',
+      }, ...subChildren);
+    }
+  } else if (S.matieresSousSection) {
+    // Sécurité : si on change pour une catégorie sans sous-section, reset
+    S.matieresSousSection = null;
+  }
   const searchInp = el('input', {
     cls: 'mp-search',
     id: 'matieres-search',
@@ -7792,6 +7860,7 @@ function buildMatieres() {
         if (!byCat[c]) byCat[c] = [];
         byCat[c].push(m);
       });
+      const activeSs = S.matieresSousSection || null;
       Object.keys(byCat).sort((a, b) => a.localeCompare(b, 'fr')).forEach(cat => {
         if (curCat === 'tout' && flatItems.length) {
           list.appendChild(el('div', { style: mpSectionHeadStyle }, MP_CAT_LABELS[cat] || cat));
@@ -7803,8 +7872,12 @@ function buildMatieres() {
           bySs[ss].push(m);
         });
         Object.keys(bySs).sort((a, b) => a.localeCompare(b, 'fr')).forEach(ss => {
-          list.appendChild(el('div', { style: mpSubsectionHeadStyle },
-            ss + ' · ' + bySs[ss].length));
+          // Quand un filtre sous-section précis est actif, le header est redondant
+          // avec la pill active : on l'omet pour une vue plus aérée.
+          if (!activeSs) {
+            list.appendChild(el('div', { style: mpSubsectionHeadStyle },
+              ss + ' · ' + bySs[ss].length));
+          }
           bySs[ss].forEach(renderMpCard);
         });
       });
@@ -7823,7 +7896,7 @@ function buildMatieres() {
       )
     : null;
   return el('div', { cls: 'content' },
-    el('div', { cls: 'hist-page' }, head, banner, searchWrap, pills, list));
+    el('div', { cls: 'hist-page' }, head, banner, searchWrap, pills, subPills, list));
 }
 
 function buildMpEmplacementField() {
