@@ -12456,7 +12456,9 @@ function valEnsureState() {
       sortDirection: 'asc',
       historique: null,    // { matiere, historique }
       historiqueLoading: false,
-      exporting: false };
+      exporting: false,
+      mpCollapsed: false,
+      pfCollapsed: false };
   }
   return S.valorisation;
 }
@@ -13322,7 +13324,7 @@ function buildValorisationPFToolbar() {
 function buildValorisationPFFilterPills() {
   const pf = valPFEnsureState();
   const s = pf.summary || { nb_refs: 0, nb_refs_sans_prix: 0, nb_refs_negoce: 0, total_pf: 0 };
-  const wrap = el('div', { style:
+  const wrap = el('div', { id: 'val-pf-pills-wrap', style:
     'display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;align-items:center' });
 
   const base = 'padding:7px 14px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:6px';
@@ -13331,36 +13333,45 @@ function buildValorisationPFFilterPills() {
 
   const nbAvecStock = (pf.items || []).reduce((n, r) => n + (Number(r.quantite || 0) > 0 ? 1 : 0), 0);
 
+  const refresh = () => { renderValorisationPFPillsOnly(); renderValorisationPFTableOnly(); };
+
   const allBtn = el('button', {
     type: 'button', style: (!pf.filterSansPrix && !pf.filterNegoce && !pf.filterAvecStock) ? active : base,
-    on: { click: () => { pf.filterSansPrix = false; pf.filterNegoce = false; pf.filterAvecStock = false; renderValorisationPFTableOnly(); } },
+    on: { click: () => { pf.filterSansPrix = false; pf.filterNegoce = false; pf.filterAvecStock = false; refresh(); } },
   }, 'Toutes les références',
     el('span', { style: 'opacity:.7;font-weight:600' }, '· ' + (s.nb_refs || 0)),
   );
 
   const sansPrixBtn = el('button', {
     type: 'button', style: pf.filterSansPrix ? warn : base,
-    on: { click: () => { pf.filterSansPrix = !pf.filterSansPrix; renderValorisationPFTableOnly(); } },
+    on: { click: () => { pf.filterSansPrix = !pf.filterSansPrix; refresh(); } },
   }, 'Sans prix',
     el('span', { style: 'opacity:.8;font-weight:700' }, '· ' + (s.nb_refs_sans_prix || 0)),
   );
 
   const negoceBtn = el('button', {
     type: 'button', style: pf.filterNegoce ? active : base,
-    on: { click: () => { pf.filterNegoce = !pf.filterNegoce; renderValorisationPFTableOnly(); } },
+    on: { click: () => { pf.filterNegoce = !pf.filterNegoce; refresh(); } },
   }, 'Produits de négoce',
     el('span', { style: 'opacity:.7;font-weight:600' }, '· ' + (s.nb_refs_negoce || 0)),
   );
 
   const stockBtn = el('button', {
     type: 'button', style: pf.filterAvecStock ? active : base,
-    on: { click: () => { pf.filterAvecStock = !pf.filterAvecStock; renderValorisationPFTableOnly(); } },
+    on: { click: () => { pf.filterAvecStock = !pf.filterAvecStock; refresh(); } },
   }, 'Quantité > 0',
     el('span', { style: 'opacity:.7;font-weight:600' }, '· ' + nbAvecStock),
   );
 
   wrap.append(allBtn, sansPrixBtn, negoceBtn, stockBtn);
   return wrap;
+}
+
+function renderValorisationPFPillsOnly() {
+  const old = document.getElementById('val-pf-pills-wrap');
+  if (!old) return;
+  const fresh = buildValorisationPFFilterPills();
+  old.replaceWith(fresh);
 }
 
 function buildValorisationPFTableRow(item) {
@@ -13416,9 +13427,13 @@ function buildValorisationPFTableRow(item) {
     }
   });
   inp.addEventListener('focus', () => inp.select());
+  const uniteLow = (item.unite || '').toLowerCase()
+    .replace(/é/g, 'e').replace(/è/g, 'e').replace(/ê/g, 'e');
+  const parMille = item.par_mille || uniteLow === 'etiquette' || uniteLow === 'etiquettes';
+  const prixUniteLabel = parMille ? 'Mille' : (item.unite || '');
   const tdPrix = el('td', { style: 'padding:10px 12px;text-align:right' },
     inp,
-    el('span', { style: 'margin-left:6px;font-size:11px;color:var(--muted)' }, '€ HT/' + (item.unite || '')),
+    el('span', { style: 'margin-left:6px;font-size:11px;color:var(--muted)' }, '€ HT/' + prixUniteLabel),
   );
 
   // Statut "Sans prix" si pas de prix
@@ -13504,14 +13519,33 @@ function buildValorisationPFTable() {
   return wrap;
 }
 
+function buildValorisationSectionChevron(collapsed, onToggle) {
+  const btn = el('button', {
+    type: 'button',
+    title: collapsed ? 'Afficher la section' : 'Masquer la section',
+    style: 'background:transparent;border:1px solid var(--border);border-radius:8px;width:28px;height:28px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);transition:transform .15s, background .15s;' + (collapsed ? '' : 'transform:rotate(90deg)'),
+    on: { click: onToggle },
+  });
+  // chevron-right inline SVG (le bouton tourne pour pointer vers le bas)
+  btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>';
+  return btn;
+}
+
 function buildValorisationPFHeader() {
+  const v = valEnsureState();
   const pf = valPFEnsureState();
   const s = pf.summary || { total_pf: 0, total_fabrique: 0, total_negoce: 0, nb_refs: 0, nb_refs_valorisees: 0, nb_refs_sans_prix: 0 };
   return el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px' },
-    el('div', null,
-      el('h3', { style: 'font-size:16px;font-weight:800;color:var(--text);margin:0' }, 'Produits finis'),
-      el('div', { style: 'font-size:12px;color:var(--muted);margin-top:2px' },
-        `${s.nb_refs_valorisees || 0} / ${s.nb_refs || 0} références valorisées · Import Excel → onglet « Valorisation »`),
+    el('div', { style: 'display:flex;align-items:center;gap:10px;min-width:0' },
+      buildValorisationSectionChevron(!!v.pfCollapsed, () => {
+        v.pfCollapsed = !v.pfCollapsed;
+        renderValorisationView(true);
+      }),
+      el('div', null,
+        el('h3', { style: 'font-size:16px;font-weight:800;color:var(--text);margin:0;cursor:pointer', on: { click: () => { v.pfCollapsed = !v.pfCollapsed; renderValorisationView(true); } } }, 'Produits finis'),
+        el('div', { style: 'font-size:12px;color:var(--muted);margin-top:2px' },
+          `${s.nb_refs_valorisees || 0} / ${s.nb_refs || 0} références valorisées · Import Excel → onglet « Valorisation »`),
+      ),
     ),
     el('span', { style:
       'padding:5px 12px;border-radius:999px;background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700;letter-spacing:.3px' },
@@ -13528,15 +13562,18 @@ function renderValorisationPFTableOnly() {
 
 // Remplacement du placeholder par la vraie section PF
 function buildValorisationPFSection() {
+  const v = valEnsureState();
   const pf = valPFEnsureState();
   const wrap = el('div', { style: 'margin-top:28px' });
   wrap.appendChild(buildValorisationPFHeader());
-  wrap.appendChild(buildValorisationPFToolbar());
-  wrap.appendChild(buildValorisationPFFilterPills());
-  const tableWrap = el('div', { id: 'val-pf-table-wrap' });
-  tableWrap.appendChild(buildValorisationPFTable());
-  wrap.appendChild(tableWrap);
-  // Auto-chargement à la 1re affichage
+  if (!v.pfCollapsed) {
+    wrap.appendChild(buildValorisationPFToolbar());
+    wrap.appendChild(buildValorisationPFFilterPills());
+    const tableWrap = el('div', { id: 'val-pf-table-wrap' });
+    tableWrap.appendChild(buildValorisationPFTable());
+    wrap.appendChild(tableWrap);
+  }
+  // Auto-chargement à la 1re affichage (même si collapsée pour avoir les KPIs à jour)
   if (!pf.loading && pf.summary === null && (pf.items || []).length === 0) {
     setTimeout(() => loadValorisationPF(), 10);
   }
@@ -13548,10 +13585,16 @@ function buildValorisationMPHeader() {
   const v = valEnsureState();
   const s = v.summary || { total_mp: 0, nb_refs: 0, nb_refs_valorisees: 0 };
   return el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px' },
-    el('div', null,
-      el('h3', { style: 'font-size:16px;font-weight:800;color:var(--text);margin:0' }, 'Matières premières'),
-      el('div', { style: 'font-size:12px;color:var(--muted);margin-top:2px' },
-        `${s.nb_refs_valorisees || 0} / ${s.nb_refs || 0} références valorisées · Mandrins, palettes, adhésifs, cartons, frontaux, glassines, complexes`)
+    el('div', { style: 'display:flex;align-items:center;gap:10px;min-width:0' },
+      buildValorisationSectionChevron(!!v.mpCollapsed, () => {
+        v.mpCollapsed = !v.mpCollapsed;
+        renderValorisationView(true);
+      }),
+      el('div', null,
+        el('h3', { style: 'font-size:16px;font-weight:800;color:var(--text);margin:0;cursor:pointer', on: { click: () => { v.mpCollapsed = !v.mpCollapsed; renderValorisationView(true); } } }, 'Matières premières'),
+        el('div', { style: 'font-size:12px;color:var(--muted);margin-top:2px' },
+          `${s.nb_refs_valorisees || 0} / ${s.nb_refs || 0} références valorisées · Mandrins, palettes, adhésifs, cartons, frontaux, glassines, complexes`)
+      ),
     ),
     el('span', { style:
       'padding:5px 12px;border-radius:999px;background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700;letter-spacing:.3px' },
@@ -13615,13 +13658,15 @@ function buildValorisation() {
 
   // ── Section Matières premières ──
   root.appendChild(buildValorisationMPHeader());
-  root.appendChild(buildValorisationCategoriePills());
-  root.appendChild(buildValorisationToolbar());
-  const tableWrap = el('div', { id: 'val-table-wrap' });
-  tableWrap.appendChild(buildValorisationTable());
-  root.appendChild(tableWrap);
+  if (!v.mpCollapsed) {
+    root.appendChild(buildValorisationCategoriePills());
+    root.appendChild(buildValorisationToolbar());
+    const tableWrap = el('div', { id: 'val-table-wrap' });
+    tableWrap.appendChild(buildValorisationTable());
+    root.appendChild(tableWrap);
+  }
 
-  // ── Section Produits finis (placeholder) ──
+  // ── Section Produits finis ──
   root.appendChild(buildValorisationPFSection());
 
   return root;
