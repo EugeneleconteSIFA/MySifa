@@ -178,10 +178,11 @@ body.sb-open .sidebar-overlay{display:block}
 .ops-select{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
 .ops-field-hint{font-size:11px;color:var(--muted);line-height:1.45}
 .ops-form-actions{display:flex;justify-content:flex-end;gap:8px}
-.ops-btn-add{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:10px;border:none;background:var(--accent);color:#0a0e17;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;transition:filter .15s}
+.ops-btn-add{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:10px;border:none;background:var(--accent);color:#0a0e17;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;transition:filter .15s;white-space:nowrap}
 .ops-btn-add:hover{filter:brightness(1.08)}
 .ops-list{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:18px}
-.ops-list-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 22px;border-bottom:1px solid var(--border)}
+.ops-list-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 22px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.ops-list-head-right{display:flex;align-items:center;gap:14px}
 .ops-list-title{font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
 .ops-list-count{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
 .ops-table-wrap{overflow-x:auto}
@@ -207,6 +208,19 @@ body.sb-open .sidebar-overlay{display:block}
 body.light .niv-badge[data-niv="1"]{background:rgba(5,150,105,.14)}
 body.light .niv-badge[data-niv="2"]{background:rgba(217,119,6,.14)}
 body.light .niv-badge[data-niv="3"]{background:rgba(220,38,38,.14)}
+
+/* Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1500;display:none;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(2px)}
+.modal-overlay.open{display:flex}
+.modal-card{background:var(--card);border:1px solid var(--border);border-radius:14px;width:100%;max-width:640px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.45);overflow:hidden}
+.modal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 22px;border-bottom:1px solid var(--border)}
+.modal-title{font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
+.modal-close{background:transparent;border:none;color:var(--muted);cursor:pointer;padding:6px;border-radius:8px;display:inline-flex;align-items:center;transition:.15s}
+.modal-close:hover{color:var(--danger);background:var(--bg)}
+.modal-body{padding:20px 22px;overflow-y:auto;flex:1}
+.modal-foot{display:flex;justify-content:flex-end;gap:8px;padding:14px 22px;border-top:1px solid var(--border);background:var(--bg)}
+.modal-btn-ghost{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;transition:.15s}
+.modal-btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
 
 .toast-wrap{position:fixed;bottom:24px;right:24px;display:flex;flex-direction:column;gap:8px;z-index:2000}
 .toast{padding:12px 18px;border-radius:10px;font-size:13px;font-weight:600;box-shadow:0 4px 24px rgba(0,0,0,.4);max-width:340px;transition:opacity .3s}
@@ -404,55 +418,17 @@ body.light .toast.info{background:#fff;color:var(--text)}
           </div>
         </div>
 
-        <!-- Formulaire nouvelle opération -->
-        <div class="ops-form">
-          <div class="ops-form-head">
-            <div class="ops-form-title">Nouvelle opération</div>
-          </div>
-          <form id="ops-form" onsubmit="addOperation(event)">
-            <div class="ops-form-grid">
-              <div class="ops-field">
-                <label class="ops-field-label" for="ops-machine">Machine<span class="req">*</span></label>
-                <select id="ops-machine" class="ops-select" required>
-                  <option value="">Sélectionner…</option>
-                  <option value="Cohésio 1">Cohésio 1</option>
-                  <option value="Cohésio 2">Cohésio 2</option>
-                  <option value="DSI">DSI</option>
-                  <option value="Repiquage">Repiquage</option>
-                </select>
-              </div>
-              <div class="ops-field">
-                <label class="ops-field-label" for="ops-operateur">Opérateur<span class="req">*</span></label>
-                <input type="text" id="ops-operateur" class="ops-input" placeholder="Nom de l'opérateur" required autocomplete="off">
-              </div>
-              <div class="ops-field">
-                <label class="ops-field-label" for="ops-type">Type d'opération<span class="req">*</span></label>
-                <select id="ops-type" class="ops-select" required>
-                  <option value="">Aucun type défini…</option>
-                </select>
-                <div class="ops-field-hint" id="ops-type-hint" style="display:none">
-                  Aucun type défini. Ajoutez-en dans « Liste d'opérations de maintenance » ci-dessous.
-                </div>
-              </div>
-              <div class="ops-field ops-field--full">
-                <label class="ops-field-label" for="ops-comment">Commentaires</label>
-                <textarea id="ops-comment" class="ops-textarea" placeholder="Notes, anomalies, durée, pièces remplacées…"></textarea>
-              </div>
-            </div>
-            <div class="ops-form-actions">
-              <button type="submit" class="ops-btn-add">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                Enregistrer l'opération
-              </button>
-            </div>
-          </form>
-        </div>
-
-        <!-- Liste opérations enregistrées -->
+        <!-- Opérations enregistrées (avec bouton "Nouvelle opération") -->
         <div class="ops-list">
           <div class="ops-list-head">
             <div class="ops-list-title">Opérations enregistrées</div>
-            <div class="ops-list-count" id="ops-count">0 opération</div>
+            <div class="ops-list-head-right">
+              <div class="ops-list-count" id="ops-count">0 opération</div>
+              <button type="button" class="ops-btn-add" onclick="openOpsModal()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Nouvelle opération
+              </button>
+            </div>
           </div>
           <div class="ops-table-wrap">
             <table class="ops-table">
@@ -534,6 +510,58 @@ body.light .toast.info{background:#fff;color:var(--text)}
   </main>
 </div>
 
+<!-- Modal : Nouvelle opération -->
+<div class="modal-overlay" id="ops-modal" onclick="if(event.target===this) closeOpsModal()" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="ops-modal-title">
+    <div class="modal-head">
+      <div class="modal-title" id="ops-modal-title">Nouvelle opération</div>
+      <button type="button" class="modal-close" onclick="closeOpsModal()" aria-label="Fermer">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <form id="ops-form" onsubmit="addOperation(event)">
+      <div class="modal-body">
+        <div class="ops-form-grid">
+          <div class="ops-field">
+            <label class="ops-field-label" for="ops-machine">Machine<span class="req">*</span></label>
+            <select id="ops-machine" class="ops-select" required>
+              <option value="">Sélectionner…</option>
+              <option value="Cohésio 1">Cohésio 1</option>
+              <option value="Cohésio 2">Cohésio 2</option>
+              <option value="DSI">DSI</option>
+              <option value="Repiquage">Repiquage</option>
+            </select>
+          </div>
+          <div class="ops-field">
+            <label class="ops-field-label" for="ops-operateur">Opérateur<span class="req">*</span></label>
+            <input type="text" id="ops-operateur" class="ops-input" placeholder="Nom de l'opérateur" required autocomplete="off">
+          </div>
+          <div class="ops-field">
+            <label class="ops-field-label" for="ops-type">Type d'opération<span class="req">*</span></label>
+            <select id="ops-type" class="ops-select" required>
+              <option value="">Aucun type défini…</option>
+            </select>
+            <div class="ops-field-hint" id="ops-type-hint" style="display:none">
+              Aucun type défini. Ajoutez-en dans « Liste d'opérations de maintenance ».
+            </div>
+          </div>
+          <div class="ops-field ops-field--full">
+            <label class="ops-field-label" for="ops-comment">Commentaires</label>
+            <textarea id="ops-comment" class="ops-textarea" placeholder="Notes, anomalies, durée, pièces remplacées…"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="modal-btn-ghost" onclick="closeOpsModal()">Annuler</button>
+        <button type="submit" class="ops-btn-add">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Enregistrer l'opération
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <div class="toast-wrap" id="toast-wrap"></div>
 
 <script>
@@ -607,6 +635,36 @@ function showToast(msg, type){
   setTimeout(() => { try{ t.remove(); }catch(e){} }, 2800);
 }
 
+// --- Modal ---
+function openOpsModal(){
+  const m = document.getElementById('ops-modal');
+  if(!m) return;
+  if(!OPS_TYPES_STATE.list.length){
+    showToast('Définissez d\'abord au moins un type dans « Liste d\'opérations de maintenance ».', 'danger');
+    return;
+  }
+  m.classList.add('open');
+  m.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+  refreshOpsTypeSelect();
+  setTimeout(() => { const f = document.getElementById('ops-machine'); if(f) f.focus(); }, 50);
+}
+function closeOpsModal(){
+  const m = document.getElementById('ops-modal');
+  if(!m) return;
+  m.classList.remove('open');
+  m.setAttribute('aria-hidden', 'true');
+  document.body.style.overflow = '';
+  const f = document.getElementById('ops-form');
+  if(f) f.reset();
+}
+document.addEventListener('keydown', function(e){
+  if(e.key === 'Escape'){
+    const m = document.getElementById('ops-modal');
+    if(m && m.classList.contains('open')) closeOpsModal();
+  }
+});
+
 // --- Opérations enregistrées ---
 const OPS_STORAGE_KEY = 'mysifa_maint_operations_v1';
 const OPS_STATE = { sortBy: 'date_saisie', sortDir: 'desc', list: [] };
@@ -645,7 +703,7 @@ function addOperation(e){
   });
   saveOps();
   renderOps();
-  e.target.reset();
+  closeOpsModal();
   showToast('Opération enregistrée.', 'info');
 }
 function deleteOp(id){
@@ -683,7 +741,7 @@ function renderOps(){
     if(ico) ico.textContent = isActive ? (OPS_STATE.sortDir === 'asc' ? '↑' : '↓') : '↕';
   });
   if(!sorted.length){
-    tbody.innerHTML = '<tr><td colspan="6" class="ops-empty">Aucune opération enregistrée pour l&apos;instant.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="ops-empty">Aucune opération enregistrée. Cliquez sur « Nouvelle opération » pour commencer.</td></tr>';
   } else {
     const rows = sorted.map(o =>
       '<tr>' +
