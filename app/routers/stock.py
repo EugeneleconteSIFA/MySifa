@@ -4102,8 +4102,23 @@ def _pf_valo_pick_stock(conn: sqlite3.Connection, produit_type: str) -> dict[int
     return out
 
 
+_PF_UNITE_PER_MILLE = frozenset({"etiquette", "etiquettes"})
+
+
+def _pf_is_unite_par_mille(unite: str) -> bool:
+    """Vrai si l'unité est facturée au mille (le prix HT stocké est /1000 unités)."""
+    u = (unite or "").strip().lower()
+    # Normalise les accents pour matcher "étiquette" / "étiquettes"
+    u = u.replace("é", "e").replace("è", "e").replace("ê", "e")
+    return u in _PF_UNITE_PER_MILLE
+
+
 def _pf_valo_query(conn: sqlite3.Connection) -> list[dict]:
-    """Liste de toutes les références (fabrique + négoce) avec leur prix HT courant + stock."""
+    """Liste de toutes les références (fabrique + négoce) avec leur prix HT courant + stock.
+
+    Pour les produits facturés au mille (unité = étiquette[s]), le prix HT stocké
+    correspond au prix pour 1000 unités. La valorisation = qte * prix / 1000.
+    """
     rows = conn.execute(
         """
         SELECT p.id, p.reference, p.designation, p.unite,
@@ -4123,16 +4138,21 @@ def _pf_valo_query(conn: sqlite3.Connection) -> list[dict]:
         pid = int(r["id"])
         stock = stock_fab.get(pid, 0.0) if ptype == "fabrique" else stock_neg.get(pid, 0.0)
         prix = float(r["prix_unitaire_ht"] or 0) if r["prix_unitaire_ht"] is not None else 0.0
+        unite = r["unite"] or ""
+        par_mille = _pf_is_unite_par_mille(unite)
+        divisor = 1000.0 if par_mille else 1.0
+        valorisation = round(stock * prix / divisor, 2)
         out.append({
             "id": pid,
             "reference": r["reference"],
             "designation": r["designation"],
-            "unite": r["unite"] or "",
+            "unite": unite,
+            "par_mille": par_mille,
             "type": ptype,  # 'fabrique' ou 'negoce'
             "type_label": "Négoce" if ptype == "negoce" else "Fabriqué",
             "quantite": round(stock, 4),
             "prix_unitaire_ht": prix,
-            "valorisation": round(stock * prix, 2),
+            "valorisation": valorisation,
             "source_prix": r["source_prix"],
             "statut": r["statut"],
             "date_derniere_cmd": r["date_derniere_cmd"],

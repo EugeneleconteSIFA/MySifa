@@ -332,17 +332,22 @@ git checkout -b feature/maintenance</pre>
       <span class="phase-badge cont">À faire en continu</span>
       <h2>◆ À répéter à chaque cycle de travail</h2>
 
-      <div class="label">1. Sauvegarder et pousser ton travail sur GitHub</div>
+      <div class="label">1. Sauvegarder ton travail sur GitHub</div>
 <pre>git add .
-git commit -m "maintenance: bouton 'Créer une alerte' (placeholder en developpement)"
+git commit -m "maintenance: bouton 'Créer une alerte'"
 git push -u origin feature/maintenance</pre>
       <div class="hint">À ce stade la branche est sur GitHub — pas encore sur v1.</div>
 
       <div class="label">2. Déployer sur v1 (merge dans staging)</div>
 <pre>git checkout staging
+git pull origin staging
 git merge feature/maintenance
-git push origin staging</pre>
-      <div class="hint">Le VPS pull staging chaque minute → v1.mysifa.com se met à jour. Pour retravailler ensuite, <code>git checkout feature/maintenance</code>.</div>
+git push origin staging
+git checkout feature/maintenance</pre>
+      <div class="hint">Le <code>pull</code> récupère le travail du collègue. Le VPS pull staging chaque minute → v1.mysifa.com se met à jour. La dernière ligne te ramène sur ta branche pour continuer à coder.</div>
+
+      <div class="label">3. Promouvoir v1 → v2 (prod)</div>
+      <div class="hint" style="font-style:normal;color:#1e293b;font-weight:600;font-size:10px">Va sur <code>https://v1.mysifa.com/settings</code> → bouton <strong>« Promouvoir »</strong>. Le script merge staging dans main, déploie sur v2, healthcheck, rollback auto si KO.</div>
     </div>
 
   </div>
