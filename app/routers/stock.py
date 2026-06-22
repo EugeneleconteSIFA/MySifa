@@ -2499,21 +2499,43 @@ def list_matieres_premieres(request: Request, all: int = 0):
     return out
 
 
+_MP_CATEGORIES_WITH_SOUS_SECTION = frozenset({"autre", "frontal"})
+
+
 @router.get("/api/stock/matieres/sous-sections")
-def list_sous_sections(request: Request):
-    """Liste des sous-sections distinctes utilisees pour la categorie 'autre'."""
+def list_sous_sections(request: Request, categorie: Optional[str] = None):
+    """Liste des sous-sections distinctes utilisees pour 'autre' (par defaut) ou 'frontal'.
+
+    Param query `categorie` accepte: 'autre', 'frontal', ou 'all' pour les deux.
+    """
     require_stock(request)
+    cat = (categorie or "autre").strip().lower()
+    if cat == "all":
+        cats = tuple(_MP_CATEGORIES_WITH_SOUS_SECTION)
+        placeholders = ",".join("?" * len(cats))
+        sql = (
+            f"SELECT DISTINCT TRIM(sous_section) AS sous_section "
+            f"FROM matieres_premieres "
+            f"WHERE categorie IN ({placeholders}) "
+            f"  AND sous_section IS NOT NULL "
+            f"  AND TRIM(sous_section) != '' "
+            f"ORDER BY sous_section COLLATE NOCASE ASC"
+        )
+        params: tuple = cats
+    else:
+        if cat not in _MP_CATEGORIES_WITH_SOUS_SECTION:
+            cat = "autre"
+        sql = (
+            "SELECT DISTINCT TRIM(sous_section) AS sous_section "
+            "FROM matieres_premieres "
+            "WHERE categorie = ? "
+            "  AND sous_section IS NOT NULL "
+            "  AND TRIM(sous_section) != '' "
+            "ORDER BY sous_section COLLATE NOCASE ASC"
+        )
+        params = (cat,)
     with get_db() as conn:
-        rows = conn.execute(
-            """
-            SELECT DISTINCT TRIM(sous_section) AS sous_section
-            FROM matieres_premieres
-            WHERE categorie = 'autre'
-              AND sous_section IS NOT NULL
-              AND TRIM(sous_section) != ''
-            ORDER BY sous_section COLLATE NOCASE ASC
-            """
-        ).fetchall()
+        rows = conn.execute(sql, params).fetchall()
     return [r["sous_section"] for r in rows]
 
 
@@ -2548,7 +2570,7 @@ async def create_matiere_premiere(request: Request):
         couleur = designation
 
     sous_section = (body.get("sous_section") or "").strip() or None
-    if categorie != "autre":
+    if categorie not in _MP_CATEGORIES_WITH_SOUS_SECTION:
         sous_section = None
 
     with get_db() as conn:
