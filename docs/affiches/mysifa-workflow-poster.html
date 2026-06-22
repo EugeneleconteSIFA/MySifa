@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>MySifa — Workflow équipe (poster)</title>
+<style>
+  @page { size: A4 portrait; margin: 8mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    color: #0f172a; background: #ffffff;
+    font-size: 13px; line-height: 1.4;
+  }
+  .page { width: 194mm; margin: 0 auto; padding: 4mm 0; }
+
+  .header { text-align: center; margin-bottom: 6mm; }
+  .header h1 { font-size: 30px; font-weight: 800; letter-spacing: -0.5px; color: #0f172a; }
+  .header .sub { font-size: 13px; color: #64748b; margin-top: 2px; font-weight: 500; }
+
+  .section-title {
+    font-size: 16px; font-weight: 800; color: #0e7490;
+    text-align: center; margin: 0 0 5mm 0;
+    text-transform: uppercase; letter-spacing: 2px;
+  }
+
+  /* ===== SCHEMA WORKFLOW 2 DEVS ===== */
+  .flow {
+    background: #f8fafc;
+    border: 2px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 7mm 5mm 8mm 5mm;
+    margin-bottom: 7mm;
+  }
+  .flow-row {
+    display: flex;
+    align-items: stretch;
+    justify-content: space-between;
+    gap: 2mm;
+  }
+  .flow-col {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: stretch;
+    gap: 4mm;
+  }
+  .flow-col.pair { flex: 1; }
+  .flow-col.arrow-col { flex: 0 0 22px; }
+  .flow-col.center { flex: 1.1; }
+
+  .node {
+    padding: 10px 8px;
+    border-radius: 12px;
+    text-align: center;
+    border: 3px solid;
+    font-weight: 800;
+    font-size: 13px;
+    min-height: 78px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .node .ico { display: block; font-size: 20px; line-height: 1; margin-bottom: 3px; }
+  .node .sub { display: block; font-size: 9.5px; font-weight: 600; color: #64748b; margin-top: 2px; }
+  .node code {
+    display: inline-block;
+    background: rgba(255,255,255,0.75);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: 'Consolas', ui-monospace, Menlo, monospace;
+    font-size: 10.5px;
+    font-weight: 700;
+    margin-top: 4px;
+  }
+  .node-big { min-height: 168px; font-size: 15px; }
+  .node-big .ico { font-size: 26px; margin-bottom: 6px; }
+  .node-big .sub { font-size: 10.5px; margin-top: 5px; }
+
+  .n-devA   { background: #ecfeff; border-color: #06b6d4; color: #0e7490; }
+  .n-devB   { background: #fce7f3; border-color: #db2777; color: #9d174d; }
+  .n-github { background: #f1f5f9; border-color: #475569; color: #1e293b; }
+  .n-stag   { background: #ede9fe; border-color: #7c3aed; color: #5b21b6; }
+  .n-test   { background: #fef9c3; border-color: #ca8a04; color: #713f12; }
+
+  .arrow {
+    text-align: center;
+    font-size: 24px;
+    color: #94a3b8;
+    font-weight: 800;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 78px;
+  }
+  .arrow-col.diag .arrow:first-child { align-items: flex-end; padding-bottom: 4px; }
+  .arrow-col.diag .arrow:last-child  { align-items: flex-start; padding-top: 4px; }
+
+  /* étiquettes au-dessus des colonnes */
+  .flow-labels {
+    display: flex;
+    justify-content: space-between;
+    gap: 2mm;
+    margin-bottom: 3mm;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: #64748b;
+  }
+  .flow-labels > div { text-align: center; }
+  .lbl-pair { flex: 1; }
+  .lbl-arrow { flex: 0 0 22px; }
+  .lbl-center { flex: 1.1; }
+
+  /* bloc PROD final */
+  .prod-row {
+    margin-top: 5mm;
+    text-align: center;
+    font-size: 12px;
+    color: #475569;
+  }
+  .prod-row .promote {
+    display: inline-block;
+    padding: 5px 14px;
+    background: #fff;
+    border: 2px dashed #0e7490;
+    border-radius: 8px;
+    color: #0e7490;
+    font-weight: 800;
+    font-size: 11.5px;
+    margin: 0 8px;
+  }
+  .prod-box {
+    margin-top: 4mm;
+    display: inline-block;
+    padding: 9px 28px;
+    background: #d1fae5;
+    border: 3px solid #059669;
+    border-radius: 14px;
+    color: #065f46;
+    font-weight: 800;
+    font-size: 16px;
+  }
+
+  /* ===== CHEATSHEET ===== */
+  .cheat-card {
+    padding: 5mm 5mm;
+    border-radius: 12px;
+    border: 2px solid #06b6d4;
+    background: #ecfeff;
+    margin-bottom: 6mm;
+  }
+  .cheat-card h2 {
+    font-size: 13px; font-weight: 800; color: #0e7490;
+    margin-bottom: 6px; letter-spacing: 1px; text-transform: uppercase;
+  }
+  .cheat-card .label {
+    font-size: 10.5px; color: #475569;
+    margin-top: 8px; margin-bottom: 3px; font-weight: 700;
+  }
+  .cheat-card .label:first-of-type { margin-top: 2px; }
+  .cheat-card pre {
+    display: block; background: #ffffff;
+    font-family: 'Consolas', ui-monospace, Menlo, monospace;
+    font-size: 11px; padding: 6px 10px; border-radius: 6px;
+    border: 1px solid #cbd5e1; font-weight: 600;
+    line-height: 1.55;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  .cheat-card .hint {
+    font-size: 10px; color: #64748b; font-style: italic;
+    margin-top: 2px; padding-left: 2px;
+  }
+
+  /* ===== REGLES ===== */
+  .rules { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; }
+  .rule-card { padding: 4mm 5mm; border-radius: 12px; }
+  .rule-card.ok { background: #f0fdf4; border-left: 6px solid #059669; }
+  .rule-card.no { background: #fef2f2; border-left: 6px solid #dc2626; }
+  .rule-card h3 { font-size: 13px; font-weight: 800; margin-bottom: 5px; }
+  .rule-card.ok h3 { color: #065f46; }
+  .rule-card.no h3 { color: #991b1b; }
+  .rule-card ul { list-style: none; }
+  .rule-card li { font-size: 11px; padding: 2px 0; color: #1e293b; }
+  .rule-card li::before { content: "▸ "; font-weight: 800; }
+  .rule-card.ok li::before { color: #059669; }
+  .rule-card.no li::before { color: #dc2626; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="header">
+    <h1>MySifa &nbsp;·&nbsp; Workflow équipe</h1>
+    <div class="sub">Deux devs, deux features en parallèle, une seule prod</div>
+  </div>
+
+  <!-- ===== SCHEMA WORKFLOW 2 DEVS ===== -->
+  <div class="section-title">Du clavier à la prod</div>
+  <div class="flow">
+
+    <!-- étiquettes de colonnes -->
+    <div class="flow-labels">
+      <div class="lbl-pair">PC local</div>
+      <div class="lbl-arrow"></div>
+      <div class="lbl-pair">Push branche (GitHub)</div>
+      <div class="lbl-arrow"></div>
+      <div class="lbl-center">Staging (GitHub)</div>
+      <div class="lbl-arrow"></div>
+      <div class="lbl-pair">Test sur v1</div>
+    </div>
+
+    <div class="flow-row">
+
+      <!-- Col 1 : devs -->
+      <div class="flow-col pair">
+        <div class="node n-devA">
+          <span class="ico">▣</span>Dev A
+          <span class="sub">PC local · Windows</span>
+          <code>feature/stockmatiere</code>
+        </div>
+        <div class="node n-devB">
+          <span class="ico">▣</span>Dev B
+          <span class="sub">PC local · Windows</span>
+          <code>feature/maintenance</code>
+        </div>
+      </div>
+
+      <!-- Col 2 : flèches horizontales -->
+      <div class="flow-col arrow-col">
+        <div class="arrow">→</div>
+        <div class="arrow">→</div>
+      </div>
+
+      <!-- Col 3 : branches sur GitHub -->
+      <div class="flow-col pair">
+        <div class="node n-github">
+          <span class="ico">●</span>GitHub
+          <span class="sub">git push -u origin</span>
+          <code>feature/stockmatiere</code>
+        </div>
+        <div class="node n-github">
+          <span class="ico">●</span>GitHub
+          <span class="sub">git push -u origin</span>
+          <code>feature/maintenance</code>
+        </div>
+      </div>
+
+      <!-- Col 4 : flèches diagonales -->
+      <div class="flow-col arrow-col diag">
+        <div class="arrow">↘</div>
+        <div class="arrow">↗</div>
+      </div>
+
+      <!-- Col 5 : staging fusion (gros bloc centré) -->
+      <div class="flow-col center">
+        <div class="node n-stag node-big">
+          <span class="ico">⇄</span>staging
+          <span class="sub">branche commune sur GitHub</span>
+          <code>git merge feature/...</code>
+          <span class="sub" style="margin-top:6px">les 2 features cohabitent ici</span>
+        </div>
+      </div>
+
+      <!-- Col 6 : flèche → centrée -->
+      <div class="flow-col arrow-col">
+        <div class="arrow" style="min-height:168px">→</div>
+      </div>
+
+      <!-- Col 7 : v1 (cible test) -->
+      <div class="flow-col pair">
+        <div class="node n-test node-big">
+          <span class="ico">◐</span>v1.mysifa.com
+          <span class="sub">cron VPS · pull /min</span>
+          <span class="sub" style="margin-top:4px">DB isolée, libre de casser</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- promotion vers prod -->
+    <div class="prod-row">
+      <span style="font-size:20px;color:#94a3b8;">↓</span>
+      <span class="promote">/settings → bouton « Promouvoir v1 → v2 »</span>
+      <span style="font-size:20px;color:#94a3b8;">↓</span>
+      <div class="prod-box">◉ &nbsp;www.mysifa.com &nbsp;·&nbsp; PROD</div>
+    </div>
+  </div>
+
+  <!-- ===== CHEATSHEET ===== -->
+  <div class="section-title">Mémo PC local — exemple feature/maintenance</div>
+  <div class="cheat-card">
+    <h2>◆ Commandes git à coller dans le terminal Windows</h2>
+
+    <div class="label">1. Démarrer la feature (à partir de staging à jour)</div>
+<pre>git checkout staging
+git pull origin staging
+git checkout -b feature/maintenance</pre>
+
+    <div class="label">2. Sauvegarder et pousser le travail sur GitHub</div>
+<pre>git add .
+git commit -m "maintenance: bouton 'Créer une alerte' (placeholder en developpement)"
+git push -u origin feature/maintenance</pre>
+    <div class="hint">À ce stade la branche est sur GitHub — pas encore sur v1.</div>
+
+    <div class="label">3. Déployer sur v1 (merge dans staging)</div>
+<pre>git checkout staging
+git merge feature/maintenance
+git push origin staging</pre>
+    <div class="hint">Le VPS pull staging chaque minute → v1.mysifa.com se met à jour automatiquement.</div>
+  </div>
+
+  <!-- ===== REGLES ===== -->
+  <div class="rules">
+    <div class="rule-card ok">
+      <h3>✓ TOUJOURS</h3>
+      <ul>
+        <li>Une branche par feature, partir de staging à jour</li>
+        <li>Pull staging avant de merger sa propre branche</li>
+        <li>Tester sur v1.mysifa.com avant la prod</li>
+        <li>Promouvoir uniquement via le bouton dans /settings</li>
+      </ul>
+    </div>
+    <div class="rule-card no">
+      <h3>✗ JAMAIS</h3>
+      <ul>
+        <li>Push direct sur <code>main</code></li>
+        <li>Git pull manuel sur le VPS (v1 ou prod)</li>
+        <li>Restart à la main du service <code>mysifa</code></li>
+        <li>Promouvoir une feature non testée sur v1</li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

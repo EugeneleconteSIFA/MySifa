@@ -976,6 +976,14 @@ let S = {
   repiquageDiscussionLoading: false,
   repiquageDiscussionType: 'commentaire', // 'observation' | 'dysfonctionnement' | 'commentaire'
   repiquageDiscussionDraft: '',
+  // Sortie tête d'impression (cat. autre / sous-section "tête d'impression")
+  repiquageTetesList: [],           // matières premières disponibles
+  repiquageTetesLoading: false,
+  repiquageTeteSortieOpen: false,   // modal ouverte ?
+  repiquageTeteSortieId: null,      // matière_id sélectionnée
+  repiquageTeteSortieQty: '1',      // quantité (string)
+  repiquageTeteSortieNote: '',
+  repiquageTeteSortieBusy: false,
   // Compat (anciens états — gardés pour ne pas casser d'éventuelles refs)
   showRepiquageModal: false,
 };
@@ -1054,7 +1062,7 @@ function fscTypeRequisLabel(t){
 }
 
 function fabIsModalOpen(){
-  if(S.showDossierPicker || S.showFictifModal || S.showDebutModal || S.showFinModal || S.showCommentModal || S.showArret50Modal || S.repiquageAttentionOpen || S.repiquageEditParamOpen || S.repiquageAdjustOpen) return true;
+  if(S.showDossierPicker || S.showFictifModal || S.showDebutModal || S.showFinModal || S.showCommentModal || S.showArret50Modal || S.repiquageAttentionOpen || S.repiquageEditParamOpen || S.repiquageAdjustOpen || S.repiquageTeteSortieOpen) return true;
   try{
     const mr = document.getElementById('mroot');
     if(mr && mr.firstElementChild) return true;
@@ -4683,6 +4691,89 @@ async function loadRepiquageEtat(no_dossier){
   }
 }
 
+// ── Sortie de stock — Têtes d'impression (catégorie "autre") ──────────
+function _repTeteIsImpression(m){
+  if(!m) return false;
+  if(String(m.categorie||'').trim().toLowerCase() !== 'autre') return false;
+  if(m.actif === 0) return false;
+  const ss = String(m.sous_section||'').toLowerCase()
+    .replace(/[éèêë]/g,'e').replace(/[àâä]/g,'a').replace(/[îï]/g,'i').replace(/[ôö]/g,'o');
+  return ss.includes('tete') || ss.includes('impression') || ss.includes('head');
+}
+
+async function loadRepiquageTetes(){
+  S.repiquageTetesLoading = true;
+  try{
+    const data = await apiFetch('/api/stock/matieres');
+    const list = Array.isArray(data) ? data : [];
+    S.repiquageTetesList = list.filter(_repTeteIsImpression);
+  }catch(e){
+    S.repiquageTetesList = [];
+    showToast(e?.message||'Erreur chargement têtes d’impression','danger');
+  }finally{
+    S.repiquageTetesLoading = false;
+  }
+}
+
+function openRepiquageTeteSortie(){
+  set({
+    repiquageTeteSortieOpen: true,
+    repiquageTeteSortieId: null,
+    repiquageTeteSortieQty: '1',
+    repiquageTeteSortieNote: '',
+    repiquageTeteSortieBusy: false,
+  });
+  loadRepiquageTetes().then(()=>{
+    // Si une seule tête disponible, pré-sélection
+    const lst = S.repiquageTetesList || [];
+    if(lst.length === 1){ S.repiquageTeteSortieId = lst[0].id; }
+    render();
+  });
+}
+
+function closeRepiquageTeteSortie(){
+  set({repiquageTeteSortieOpen:false, repiquageTeteSortieBusy:false});
+}
+
+async function submitRepiquageTeteSortie(){
+  if(S.repiquageTeteSortieBusy) return;
+  const id = S.repiquageTeteSortieId;
+  const qty = parseFloat(String(S.repiquageTeteSortieQty||'').replace(',', '.'));
+  if(!id){ showToast('Sélectionnez une tête d’impression','danger'); return; }
+  if(!Number.isFinite(qty) || qty <= 0){ showToast('Quantité invalide','danger'); return; }
+  const mat = (S.repiquageTetesList||[]).find(m => m.id === id);
+  const stockActuel = mat ? (parseFloat(mat.quantite)||0) : 0;
+  if(qty > stockActuel){
+    showToast('Stock insuffisant — actuel : '+stockActuel+' u.','danger');
+    return;
+  }
+  const noteParts = [];
+  if(S.repiquageDossierActif) noteParts.push('Repiquage · '+S.repiquageDossierActif);
+  const extra = String(S.repiquageTeteSortieNote||'').trim();
+  if(extra) noteParts.push(extra);
+  set({repiquageTeteSortieBusy:true});
+  try{
+    await apiFetch('/api/stock/matieres/mouvement', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        matiere_id: id,
+        type_mouvement: 'sortie',
+        quantite: qty,
+        note: noteParts.join(' — ') || null,
+        emplacement_source: null,
+      }),
+    });
+    showToast('Sortie enregistrée : '+qty+' u.', 'success');
+    set({repiquageTeteSortieOpen:false, repiquageTeteSortieBusy:false});
+    // Rafraîchit le stock disponible en arrière-plan
+    loadRepiquageTetes();
+  }catch(e){
+    showToast(e?.message||'Erreur sortie de stock','danger');
+    set({repiquageTeteSortieBusy:false});
+  }
+}
+
 function openRepiquageGrid(){
   set({repiquageView:'grid', repiquageDossierActif:null, repiquageEtat:null});
   if(!S.repiquageDossiersLoaded){
@@ -5237,6 +5328,22 @@ function renderRepiquageDossierView(){
     }, svgIcon('arrow-left',14),' Changer de dossier')
   );
 
+  // Bouton "Sortie tête d'impression" (catégorie autre)
+  const teteSortieBtn = h('button',{
+    style:{
+      background:'transparent', color:'var(--accent)', border:'1.5px solid var(--accent)',
+      borderRadius:'10px', padding:'10px 18px', fontFamily:'inherit', fontWeight:'700',
+      fontSize:'12px', cursor:'pointer', letterSpacing:'.3px', textTransform:'uppercase',
+      display:'inline-flex', alignItems:'center', gap:'8px', maxWidth:'520px',
+      transition:'all .12s',
+    },
+    onClick: openRepiquageTeteSortie,
+    onMouseEnter:(ev)=>{ ev.currentTarget.style.background='var(--accent-bg)'; },
+    onMouseLeave:(ev)=>{ ev.currentTarget.style.background='transparent'; },
+  },
+    svgIcon('box',13),' Sortie tête d’impression'
+  );
+
   return h('div',{className:'fab-main fab-main--repiquage-dossier'},
     h('div',{className:'fab-main-head'},
       h('span',{className:'fab-main-title'}, 'Saisie production — Repiquage'),
@@ -5254,7 +5361,137 @@ function renderRepiquageDossierView(){
       cartonCourantBar,
       quickAdd,
       compteurs,
+      teteSortieBtn,
     )
+  );
+}
+
+/* ── Repiquage : modal "Sortie tête d'impression" ─────────────── */
+function renderRepiquageTeteSortieModal(){
+  if(!S.repiquageTeteSortieOpen) return null;
+  const loading = !!S.repiquageTetesLoading;
+  const list = S.repiquageTetesList || [];
+  const busy = !!S.repiquageTeteSortieBusy;
+  const fmtNum = n => Number(n||0).toLocaleString('fr-FR');
+  const selectedId = S.repiquageTeteSortieId;
+  const selected = list.find(m => m.id === selectedId) || null;
+  const stockActuel = selected ? (parseFloat(selected.quantite)||0) : null;
+
+  // Sélecteur de tête
+  const sel = h('select',{
+    style:{
+      background:'var(--bg)', border:'1.5px solid var(--border)', borderRadius:'8px',
+      padding:'10px 12px', fontSize:'13px', color:'var(--text)', fontFamily:'inherit',
+      width:'100%', outline:'none',
+    },
+    onChange:(ev)=>{
+      const v = parseInt(ev.target.value, 10);
+      S.repiquageTeteSortieId = Number.isFinite(v) ? v : null;
+      render();
+    },
+  },
+    h('option',{value:''}, list.length ? '— Choisir une tête —' : 'Aucune tête d’impression disponible'),
+    ...list.map(m => h('option',{
+      value:String(m.id),
+      selected: m.id === selectedId ? true : null,
+    }, (m.reference||'') + ' — ' + (m.designation||'') + ' (stock '+fmtNum(parseFloat(m.quantite)||0)+' u.)'))
+  );
+
+  // Quantité
+  const qtyInp = h('input',{
+    type:'number', min:'1', step:'1',
+    placeholder:'Quantité (unités)',
+    style:{
+      background:'var(--bg)', border:'1.5px solid var(--border)', borderRadius:'8px',
+      padding:'10px 12px', fontSize:'13px', color:'var(--text)', fontFamily:'inherit',
+      width:'100%', outline:'none',
+    },
+  });
+  qtyInp.value = S.repiquageTeteSortieQty || '';
+  qtyInp.addEventListener('input', ev=>{ S.repiquageTeteSortieQty = ev.target.value; });
+
+  // Note (optionnelle)
+  const noteInp = h('input',{
+    type:'text',
+    placeholder:'Note (optionnel)',
+    style:{
+      background:'var(--bg)', border:'1.5px solid var(--border)', borderRadius:'8px',
+      padding:'10px 12px', fontSize:'13px', color:'var(--text)', fontFamily:'inherit',
+      width:'100%', outline:'none',
+    },
+  });
+  noteInp.value = S.repiquageTeteSortieNote || '';
+  noteInp.addEventListener('input', ev=>{ S.repiquageTeteSortieNote = ev.target.value; });
+
+  const labelStyle = {
+    fontSize:'11px', fontWeight:'700', color:'var(--muted)',
+    textTransform:'uppercase', letterSpacing:'.5px', marginBottom:'4px', display:'block',
+  };
+
+  let body;
+  if(loading){
+    body = h('div',{className:'fab-empty', style:{padding:'30px 0'}},
+      h('div',{className:'fab-spinner'}),
+      'Chargement des têtes d’impression…'
+    );
+  } else if(!list.length){
+    body = h('div',{style:{
+      padding:'16px', background:'rgba(251,146,60,0.10)',
+      border:'1px solid rgba(251,146,60,0.45)', borderRadius:'10px',
+      color:'var(--text2)', fontSize:'13px', lineHeight:'1.5',
+    }},
+      h('strong',{style:{color:'var(--text)'}},'Aucune tête d’impression référencée.'),
+      h('br'),
+      'Ajoute la référence dans MyStock > Matières premières (catégorie « Autre », sous-section « Tête d’impression »).'
+    );
+  } else {
+    body = h('div',{style:{display:'flex', flexDirection:'column', gap:'12px'}},
+      h('div',null,
+        h('label',{style:labelStyle},'Tête d’impression'),
+        sel,
+      ),
+      h('div',null,
+        h('label',{style:labelStyle},'Quantité à sortir'),
+        qtyInp,
+        selected && stockActuel != null
+          ? h('div',{style:{fontSize:'11px', color:'var(--muted)', marginTop:'4px'}},
+              'Stock actuel : '+fmtNum(stockActuel)+' u.')
+          : null,
+      ),
+      h('div',null,
+        h('label',{style:labelStyle},'Note (optionnel)'),
+        noteInp,
+      ),
+      S.repiquageDossierActif ? h('div',{style:{fontSize:'11px', color:'var(--muted)'}},
+        'Dossier associé : '+S.repiquageDossierActif) : null,
+    );
+  }
+
+  return h('div',{
+    className:'fab-modal-overlay',
+    onClick:(ev)=>{ if(ev.target===ev.currentTarget) closeRepiquageTeteSortie(); },
+  },
+    h('div',{className:'fab-modal', style:{maxWidth:'480px'}},
+      h('div',{className:'fab-modal-title'},
+        svgIcon('box',16),' Sortie tête d’impression'),
+      h('div',{className:'fab-modal-sub'},
+        'Décrémente le stock de la tête d’impression utilisée pour ce dossier.'),
+      h('div',{style:{marginTop:'14px'}}, body),
+      h('div',{style:{
+        display:'flex', justifyContent:'flex-end', gap:'8px', marginTop:'18px',
+      }},
+        h('button',{
+          className:'fab-btn fab-btn-muted fab-btn-sm',
+          onClick:closeRepiquageTeteSortie,
+          disabled: busy ? true : null,
+        }, 'Annuler'),
+        h('button',{
+          className:'fab-btn fab-btn-primary fab-btn-sm',
+          onClick:submitRepiquageTeteSortie,
+          disabled: (busy || !list.length || !selectedId) ? true : null,
+        }, busy ? 'Enregistrement…' : 'Valider la sortie'),
+      ),
+    ),
   );
 }
 
@@ -5788,6 +6025,10 @@ function render(){
   if(S.repiquageAttentionOpen) root.appendChild(renderRepiquageAttentionModal());
   if(S.repiquageEditParamOpen) root.appendChild(renderRepiquageEditParamModal());
   if(S.repiquageAdjustOpen) root.appendChild(renderRepiquageAdjustModal());
+  if(S.repiquageTeteSortieOpen){
+    const m = renderRepiquageTeteSortieModal();
+    if(m) root.appendChild(m);
+  }
 
   renderOfImportModal();
   renderArret50Modal();
