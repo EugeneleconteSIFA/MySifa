@@ -182,7 +182,7 @@ body.sb-open .sidebar-overlay{display:block}
 .ops-btn-add:hover{filter:brightness(1.08)}
 .ops-list{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:18px}
 .ops-list-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 22px;border-bottom:1px solid var(--border);flex-wrap:wrap}
-.ops-list-head-right{display:flex;align-items:center;gap:14px}
+.ops-list-head-right{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .ops-list-title{font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
 .ops-list-count{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
 .ops-table-wrap{overflow-x:auto}
@@ -447,48 +447,17 @@ body.light .toast.info{background:#fff;color:var(--text)}
           </div>
         </div>
 
-        <!-- Liste d'opérations de maintenance (catalogue) -->
-        <div class="ops-form">
-          <div class="ops-form-head">
-            <div class="ops-form-title">Liste d'opérations de maintenance</div>
-          </div>
-          <form id="cat-form" onsubmit="addOpsType(event)">
-            <div class="ops-form-grid">
-              <div class="ops-field">
-                <label class="ops-field-label" for="cat-nom">Nom de l'opération<span class="req">*</span></label>
-                <input type="text" id="cat-nom" class="ops-input" placeholder="Ex : Vidange hydraulique" required autocomplete="off">
-              </div>
-              <div class="ops-field">
-                <label class="ops-field-label" for="cat-niveau">Niveau de maintenance<span class="req">*</span></label>
-                <select id="cat-niveau" class="ops-select" required>
-                  <option value="">Sélectionner…</option>
-                  <option value="1">Niveau 1</option>
-                  <option value="2">Niveau 2</option>
-                  <option value="3">Niveau 3</option>
-                </select>
-              </div>
-              <div class="ops-field">
-                <label class="ops-field-label" for="cat-frequence">Fréquence conseillée<span class="req">*</span></label>
-                <input type="text" id="cat-frequence" class="ops-input" placeholder="Ex : Tous les 6 mois, 500h, Hebdomadaire" required autocomplete="off">
-              </div>
-              <div class="ops-field ops-field--full">
-                <label class="ops-field-label" for="cat-detail">Détail</label>
-                <textarea id="cat-detail" class="ops-textarea" placeholder="Description, étapes clés, points d'attention…"></textarea>
-              </div>
-            </div>
-            <div class="ops-form-actions">
-              <button type="submit" class="ops-btn-add">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                Ajouter à la liste
-              </button>
-            </div>
-          </form>
-        </div>
-
+        <!-- Liste d'opérations de maintenance (catalogue + bouton "Ajouter") -->
         <div class="ops-list">
           <div class="ops-list-head">
-            <div class="ops-list-title">Catalogue des opérations</div>
-            <div class="ops-list-count" id="cat-count">0 opération</div>
+            <div class="ops-list-title">Liste d'opérations de maintenance</div>
+            <div class="ops-list-head-right">
+              <div class="ops-list-count" id="cat-count">0 opération</div>
+              <button type="button" class="ops-btn-add" onclick="openCatModal()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Ajouter une opération à la liste
+              </button>
+            </div>
           </div>
           <div class="ops-table-wrap">
             <table class="ops-table">
@@ -556,6 +525,52 @@ body.light .toast.info{background:#fff;color:var(--text)}
         <button type="submit" class="ops-btn-add">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Enregistrer l'opération
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal : Ajouter une opération à la liste (catalogue) -->
+<div class="modal-overlay" id="cat-modal" onclick="if(event.target===this) closeCatModal()" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="cat-modal-title">
+    <div class="modal-head">
+      <div class="modal-title" id="cat-modal-title">Ajouter une opération à la liste</div>
+      <button type="button" class="modal-close" onclick="closeCatModal()" aria-label="Fermer">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <form id="cat-form" onsubmit="addOpsType(event)">
+      <div class="modal-body">
+        <div class="ops-form-grid">
+          <div class="ops-field">
+            <label class="ops-field-label" for="cat-nom">Nom de l'opération<span class="req">*</span></label>
+            <input type="text" id="cat-nom" class="ops-input" placeholder="Ex : Vidange hydraulique" required autocomplete="off">
+          </div>
+          <div class="ops-field">
+            <label class="ops-field-label" for="cat-niveau">Niveau de maintenance<span class="req">*</span></label>
+            <select id="cat-niveau" class="ops-select" required>
+              <option value="">Sélectionner…</option>
+              <option value="1">Niveau 1</option>
+              <option value="2">Niveau 2</option>
+              <option value="3">Niveau 3</option>
+            </select>
+          </div>
+          <div class="ops-field">
+            <label class="ops-field-label" for="cat-frequence">Fréquence conseillée<span class="req">*</span></label>
+            <input type="text" id="cat-frequence" class="ops-input" placeholder="Ex : Tous les 6 mois, 500h, Hebdomadaire" required autocomplete="off">
+          </div>
+          <div class="ops-field ops-field--full">
+            <label class="ops-field-label" for="cat-detail">Détail</label>
+            <textarea id="cat-detail" class="ops-textarea" placeholder="Description, étapes clés, points d'attention…"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="modal-btn-ghost" onclick="closeCatModal()">Annuler</button>
+        <button type="submit" class="ops-btn-add">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Ajouter à la liste
         </button>
       </div>
     </form>
@@ -635,7 +650,7 @@ function showToast(msg, type){
   setTimeout(() => { try{ t.remove(); }catch(e){} }, 2800);
 }
 
-// --- Modal ---
+// --- Modales ---
 function openOpsModal(){
   const m = document.getElementById('ops-modal');
   if(!m) return;
@@ -658,11 +673,34 @@ function closeOpsModal(){
   const f = document.getElementById('ops-form');
   if(f) f.reset();
 }
+function openCatModal(){
+  const m = document.getElementById('cat-modal');
+  if(!m) return;
+  m.classList.add('open');
+  m.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+  setTimeout(() => { const f = document.getElementById('cat-nom'); if(f) f.focus(); }, 50);
+}
+function closeCatModal(){
+  const m = document.getElementById('cat-modal');
+  if(!m) return;
+  m.classList.remove('open');
+  m.setAttribute('aria-hidden', 'true');
+  document.body.style.overflow = '';
+  const f = document.getElementById('cat-form');
+  if(f) f.reset();
+}
+function closeAnyOpenModal(){
+  ['ops-modal', 'cat-modal'].forEach(id => {
+    const m = document.getElementById(id);
+    if(m && m.classList.contains('open')){
+      if(id === 'ops-modal') closeOpsModal();
+      else closeCatModal();
+    }
+  });
+}
 document.addEventListener('keydown', function(e){
-  if(e.key === 'Escape'){
-    const m = document.getElementById('ops-modal');
-    if(m && m.classList.contains('open')) closeOpsModal();
-  }
+  if(e.key === 'Escape') closeAnyOpenModal();
 });
 
 // --- Opérations enregistrées ---
@@ -802,7 +840,7 @@ function addOpsType(e){
   });
   saveOpsTypes();
   renderOpsTypes();
-  e.target.reset();
+  closeCatModal();
   showToast('Type ajouté à la liste.', 'info');
 }
 function deleteOpsType(id){
@@ -864,7 +902,7 @@ function renderOpsTypes(){
     if(ico) ico.textContent = isActive ? (OPS_TYPES_STATE.sortDir === 'asc' ? '↑' : '↓') : '↕';
   });
   if(!sorted.length){
-    tbody.innerHTML = '<tr><td colspan="5" class="ops-empty">Aucun type défini. Utilisez le formulaire ci-dessus pour en ajouter.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="ops-empty">Aucune opération dans la liste. Cliquez sur « Ajouter une opération à la liste » pour en créer une.</td></tr>';
   } else {
     const rows = sorted.map(t =>
       '<tr>' +
