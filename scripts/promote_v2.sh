@@ -33,6 +33,17 @@ NOTES="${1:-}"
 log()  { printf "[%s] %s\n" "$(date '+%H:%M:%S')" "$*"; }
 fail() { log "ERREUR: $*"; exit 1; }
 
+# Le script est lancé par l'API en root (sudo -n). Les opérations git doivent
+# tourner sous le user sifa qui détient la clé SSH GitHub
+# (/home/sifa/.ssh/id_ed25519). On force aussi HOME via -H : sinon sudo garde
+# HOME=/root et ssh ne trouve pas la clé.
+gits() {
+    sudo -u "${APP_USER}" -H git \
+        -c user.name="promote-bot" \
+        -c user.email="promote-bot@mysifa.com" \
+        "$@"
+}
+
 cd "$V2_PATH" || fail "V2_PATH introuvable : $V2_PATH"
 mkdir -p "$BACKUP_DIR"
 
@@ -49,32 +60,32 @@ log "    OK : $(basename "$BACKUP_FILE")"
 
 # ─── 2. Capture HEAD pour rollback ───────────────────────────────────
 log "2/7 Capture HEAD v2 actuel"
-PREV_HEAD=$(git rev-parse HEAD) || fail "git rev-parse HEAD KO"
+PREV_HEAD=$(gits rev-parse HEAD) || fail "git rev-parse HEAD KO"
 log "    HEAD avant : ${PREV_HEAD:0:7}"
 
 # ─── 3. Merge staging → main puis reset v2 sur origin/main ───────────
 log "3/7 git fetch + merge staging→main + reset v2"
-git fetch --all --quiet || fail "git fetch KO"
+gits fetch --all --quiet || fail "git fetch KO"
 
 # 3a. Si staging contient des commits non présents sur main, on merge sur origin
-DIFF_COUNT=$(git rev-list --count origin/main..origin/staging 2>/dev/null || echo "0")
+DIFF_COUNT=$(gits rev-list --count origin/main..origin/staging 2>/dev/null || echo "0")
 if [[ "$DIFF_COUNT" -gt 0 ]]; then
     log "    $DIFF_COUNT commit(s) sur staging à intégrer dans main"
 
     # Aligner main local sur origin/main, puis merger origin/staging
-    git checkout main --quiet 2>/dev/null || git checkout -B main origin/main --quiet
-    git reset --hard origin/main --quiet || fail "reset main local KO"
+    gits checkout main --quiet 2>/dev/null || gits checkout -B main origin/main --quiet
+    gits reset --hard origin/main --quiet || fail "reset main local KO"
 
-    if ! git merge origin/staging --no-ff -m "promote: merge staging into main" --quiet; then
+    if ! gits merge origin/staging --no-ff -m "promote: merge staging into main" --quiet; then
         log "    CONFLIT — git merge --abort"
-        git merge --abort 2>/dev/null
-        git reset --hard "$PREV_HEAD" --quiet
+        gits merge --abort 2>/dev/null
+        gits reset --hard "$PREV_HEAD" --quiet
         fail "Conflit de merge staging → main. À résoudre en local."
     fi
 
-    if ! git push origin main --quiet; then
+    if ! gits push origin main --quiet; then
         log "    git push origin main KO — rollback"
-        git reset --hard origin/main --quiet
+        gits reset --hard origin/main --quiet
         fail "Push origin/main refusé (droits ?)."
     fi
 
@@ -84,8 +95,8 @@ else
 fi
 
 # 3b. Reset v2 sur origin/main (qui contient maintenant staging)
-git reset --hard origin/main --quiet || fail "git reset KO"
-NEW_HEAD=$(git rev-parse HEAD)
+gits reset --hard origin/main --quiet || fail "git reset KO"
+NEW_HEAD=$(gits rev-parse HEAD)
 log "    HEAD après : ${NEW_HEAD:0:7}"
 
 if [[ "$PREV_HEAD" == "$NEW_HEAD" ]]; then
@@ -122,7 +133,7 @@ if [[ "$HEALTHZ_OK" != "1" ]]; then
     cp "$BACKUP_FILE" "$DB_PATH"
     chown "${APP_USER}:${APP_USER}" "$DB_PATH"
     log "    git reset --hard ${PREV_HEAD:0:7}"
-    git reset --hard "$PREV_HEAD" --quiet
+    gits reset --hard "$PREV_HEAD" --quiet
     chown -R "${APP_USER}:${APP_USER}" "$V2_PATH"
     log "    Restart ${SERVICE_NAME}"
     systemctl restart "$SERVICE_NAME"

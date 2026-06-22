@@ -163,6 +163,22 @@ body.sb-open .sidebar-overlay{display:block}
 .hist-empty{display:flex;align-items:center;gap:12px;padding:18px 4px;color:var(--muted);font-size:13px}
 .hist-empty svg{color:var(--muted);flex-shrink:0}
 
+/* Filtres historique */
+.hist-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px;align-items:end}
+.hist-field{display:flex;flex-direction:column;gap:5px;min-width:0}
+.hist-field-label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.hist-input,.hist-select{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-size:13px;font-family:inherit;transition:border-color .15s;width:100%;min-width:0}
+.hist-input:focus,.hist-select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.hist-select{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
+.hist-daterange{display:flex;align-items:center;gap:6px}
+.hist-daterange .hist-input{flex:1;padding:9px 10px}
+.hist-daterange-sep{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.4px;flex-shrink:0}
+.hist-filters-reset{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:12px;font-family:inherit;font-weight:600;transition:.15s;height:fit-content}
+.hist-filters-reset:hover{border-color:var(--accent);color:var(--accent)}
+@media(max-width:560px){
+  .hist-filters{grid-template-columns:1fr}
+}
+
 /* Toast */
 .toast-wrap{position:fixed;bottom:24px;right:24px;display:flex;flex-direction:column;gap:8px;z-index:2000}
 .toast{padding:12px 18px;border-radius:10px;font-size:13px;font-weight:600;box-shadow:0 4px 24px rgba(0,0,0,.4);max-width:340px}
@@ -259,21 +275,93 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
           </div>
         </div>
 
-        <section class="hist-section">
+        <section class="hist-section" data-hist="controles">
           <div class="hist-section-head">
             <div class="hist-section-title">Historique des contrôles</div>
+            <button type="button" class="hist-filters-reset" onclick="resetHistFilters('controles')">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+              Réinitialiser
+            </button>
           </div>
-          <div class="hist-empty">
+          <div class="hist-filters">
+            <div class="hist-field">
+              <label class="hist-field-label" for="filt-controles-type">Type d'opération</label>
+              <select id="filt-controles-type" class="hist-select" onchange="applyHistFilters('controles')">
+                <option value="">Tous les types</option>
+              </select>
+            </div>
+            <div class="hist-field">
+              <label class="hist-field-label" for="filt-controles-operateur">Opérateur</label>
+              <select id="filt-controles-operateur" class="hist-select" onchange="applyHistFilters('controles')">
+                <option value="">Tous les opérateurs</option>
+              </select>
+            </div>
+            <div class="hist-field">
+              <label class="hist-field-label" for="filt-controles-machine">Machine</label>
+              <select id="filt-controles-machine" class="hist-select" onchange="applyHistFilters('controles')">
+                <option value="">Toutes les machines</option>
+                <option value="cohesio-1">Cohésio 1</option>
+                <option value="cohesio-2">Cohésio 2</option>
+                <option value="dsi">DSI</option>
+                <option value="repiquage">Repiquage</option>
+              </select>
+            </div>
+            <div class="hist-field">
+              <label class="hist-field-label">Date d'opération</label>
+              <div class="hist-daterange">
+                <input type="date" id="filt-controles-date-from" class="hist-input" aria-label="Du" onchange="applyHistFilters('controles')">
+                <span class="hist-daterange-sep">au</span>
+                <input type="date" id="filt-controles-date-to" class="hist-input" aria-label="Au" onchange="applyHistFilters('controles')">
+              </div>
+            </div>
+          </div>
+          <div class="hist-empty" id="empty-controles">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
             <div>Aucun contrôle enregistré pour l'instant.</div>
           </div>
         </section>
 
-        <section class="hist-section">
+        <section class="hist-section" data-hist="interventions">
           <div class="hist-section-head">
             <div class="hist-section-title">Historique des interventions</div>
+            <button type="button" class="hist-filters-reset" onclick="resetHistFilters('interventions')">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+              Réinitialiser
+            </button>
           </div>
-          <div class="hist-empty">
+          <div class="hist-filters">
+            <div class="hist-field">
+              <label class="hist-field-label" for="filt-interventions-type">Type d'opération</label>
+              <select id="filt-interventions-type" class="hist-select" onchange="applyHistFilters('interventions')">
+                <option value="">Tous les types</option>
+              </select>
+            </div>
+            <div class="hist-field">
+              <label class="hist-field-label" for="filt-interventions-operateur">Opérateur</label>
+              <select id="filt-interventions-operateur" class="hist-select" onchange="applyHistFilters('interventions')">
+                <option value="">Tous les opérateurs</option>
+              </select>
+            </div>
+            <div class="hist-field">
+              <label class="hist-field-label" for="filt-interventions-machine">Machine</label>
+              <select id="filt-interventions-machine" class="hist-select" onchange="applyHistFilters('interventions')">
+                <option value="">Toutes les machines</option>
+                <option value="cohesio-1">Cohésio 1</option>
+                <option value="cohesio-2">Cohésio 2</option>
+                <option value="dsi">DSI</option>
+                <option value="repiquage">Repiquage</option>
+              </select>
+            </div>
+            <div class="hist-field">
+              <label class="hist-field-label">Date d'opération</label>
+              <div class="hist-daterange">
+                <input type="date" id="filt-interventions-date-from" class="hist-input" aria-label="Du" onchange="applyHistFilters('interventions')">
+                <span class="hist-daterange-sep">au</span>
+                <input type="date" id="filt-interventions-date-to" class="hist-input" aria-label="Au" onchange="applyHistFilters('interventions')">
+              </div>
+            </div>
+          </div>
+          <div class="hist-empty" id="empty-interventions">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
             <div>Aucune intervention enregistrée pour l'instant.</div>
           </div>
@@ -312,6 +400,40 @@ function switchView(name){
   if(s) s.textContent = meta.sub;
   try{ history.replaceState(null, '', '#' + name); }catch(e){}
   closeSidebar();
+}
+
+// --- Filtres Historique ---------------------------------------------------
+// Sections supportées : 'controles', 'interventions'. La liste de données
+// n'est pas encore branchée — ces helpers exposent l'état des filtres et
+// appliqueront le filtrage dès que la source de données sera disponible.
+function getHistFilters(section){
+  const $ = id => document.getElementById(id);
+  const v = el => (el && el.value || '').trim();
+  return {
+    type:       v($('filt-' + section + '-type')),
+    operateur:  v($('filt-' + section + '-operateur')),
+    machine:    v($('filt-' + section + '-machine')),
+    dateFrom:   v($('filt-' + section + '-date-from')),
+    dateTo:     v($('filt-' + section + '-date-to')),
+  };
+}
+function applyHistFilters(section){
+  const f = getHistFilters(section);
+  if(f.dateFrom && f.dateTo && f.dateFrom > f.dateTo){
+    const to = document.getElementById('filt-' + section + '-date-to');
+    if(to){ to.value = f.dateFrom; f.dateTo = f.dateFrom; }
+  }
+  // Pas de données pour l'instant — le filtrage prendra effet quand la
+  // liste sera branchée. On expose les filtres pour le futur renderer.
+  window.__HIST_FILTERS__ = window.__HIST_FILTERS__ || {};
+  window.__HIST_FILTERS__[section] = f;
+}
+function resetHistFilters(section){
+  ['type','operateur','machine','date-from','date-to'].forEach(k => {
+    const el = document.getElementById('filt-' + section + '-' + k);
+    if(el) el.value = '';
+  });
+  applyHistFilters(section);
 }
 
 function toggleTheme(){
