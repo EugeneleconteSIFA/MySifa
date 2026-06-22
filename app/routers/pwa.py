@@ -8,6 +8,8 @@ import json
 from fastapi import APIRouter
 from fastapi.responses import Response
 
+from config import APP_VERSION
+
 
 router = APIRouter()
 
@@ -96,10 +98,26 @@ def manifest_planning_rh():
 def service_worker():
     # SW minimal + handlers Web Push (notifications).
     # Pas de cache agressif côté fetch pour ne pas bloquer les mises à jour.
-    js = r"""/* MySifa service worker — installabilité PWA + notifications push */
-self.addEventListener('install', (event) => { self.skipWaiting(); });
-self.addEventListener('activate', (event) => { event.waitUntil(self.clients.claim()); });
-self.addEventListener('fetch', (event) => { /* passthrough */ });
+    # IMPORTANT : on injecte APP_VERSION dans le source du SW (commentaire en haut)
+    # pour que chaque release modifie le byte-content servi par /service-worker.js.
+    # Sans ça, le navigateur ne détecte aucun changement et garde l'ancien SW —
+    # qui à son tour peut servir des assets cachés (anciens JS/CSS) à l'app.
+    js = (
+        f"/* MySifa service worker v{APP_VERSION} — bust:{APP_VERSION} */\n"
+        r"""self.addEventListener('install', (event) => { self.skipWaiting(); });
+self.addEventListener('activate', (event) => {
+  event.waitUntil((async () => {
+    // Nettoie d'éventuels anciens caches d'une version précédente du SW
+    try {
+      const names = await caches.keys();
+      await Promise.all(names.map(n => caches.delete(n)));
+    } catch (e) {}
+    await self.clients.claim();
+  })());
+});
+self.addEventListener('fetch', (event) => { /* passthrough */ });"""
+    )
+    js_tail = r"""
 
 // ─── Notifications push ───────────────────────────────────────────
 self.addEventListener('push', (event) => {
@@ -143,6 +161,7 @@ self.addEventListener('notificationclick', (event) => {
   })());
 });
 """
+    js = js + js_tail
     return Response(
         content=js,
         media_type="application/javascript",
