@@ -2752,7 +2752,9 @@ async function doLogin(email,password){
     S.sortState={col:null,asc:true};
     // Déverrouiller tout de suite — avant loadFilters/loadHist (sinon bouton « Connexion… » bloqué le temps des APIs)
     S.loginSubmitting=false;
+    try{ MySifaTheme.mergeFromUser(S.user); }catch(e){}
     render();
+    if(S.user&&window.MySifaHumeur)requestAnimationFrame(()=>MySifaHumeur.maybeShow(S.user));
     checkGlobalUpdates().catch(()=>{});
     if(await _loadInitialAppData()) return;
     render();
@@ -2765,6 +2767,8 @@ async function doLogin(email,password){
 async function doLogout(){
   authEpoch++;
   await api('/api/auth/logout',{method:'POST'});
+  try{ if(typeof clearPostitsUi==='function') clearPostitsUi(); }catch(e){}
+  try{ MySifaTheme.applyDefault(); }catch(e){}
   S.user=null;S.app='login';S.historique=null;S.production=null;S.traceabilite=null;
   S.tracFilters={ref:'',client:'',machine:'',statut:''};S.tracSort={col:null,dir:'asc'};
   S.stockGlobale=null;S.stockInvPriorites=[];S.stockProduits=[];S.stockSelProduit=null;S.stockSelEmpl=null;
@@ -13434,9 +13438,11 @@ function render(){
     window.__MYSIFA_NOM__ = S.user.nom || '';
     window.__MYSIFA_ROLE__ = S.user.role || '';
     if(window._CW && typeof window._CW.syncUser === 'function') window._CW.syncUser();
-  } else if(window._CW && typeof window._CW.destroy === 'function'){
-    window._CW.destroy();
+  } else {
+    if(window._CW && typeof window._CW.destroy === 'function') window._CW.destroy();
     window.__MYSIFA_UID__ = 0;
+    window.__MYSIFA_NOM__ = '';
+    window.__MYSIFA_ROLE__ = '';
   }
   if(window.MySifaDock&&typeof window.MySifaDock.bootPageWidgets==='function') window.MySifaDock.bootPageWidgets();
   else{
@@ -13451,7 +13457,10 @@ function render(){
   // Nettoyage polling machine quand on quitte MyProd
   if(S.app!=='prod'){stopMachineStatusPolling();}
 
-  if(!S.user||S.app==='login'){root.appendChild(renderLogin());}
+  if(!S.user||S.app==='login'){
+    try{ MySifaTheme.applyDefault(); }catch(e){}
+    root.appendChild(renderLogin());
+  }
   else if(S.app==='portal'){
     root.appendChild(renderPortal());
     if(window._postitDragCleanup) window._postitDragCleanup();

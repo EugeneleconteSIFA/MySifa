@@ -65,6 +65,14 @@
     });
   }
 
+  function applyDefault() {
+    var targets = [document.documentElement];
+    if (document.body) targets.push(document.body);
+    targets.forEach(function (el) {
+      clearThemeClasses(el);
+    });
+  }
+
   function applyPrefs(prefs) {
     prefs = prefs || loadPrefs();
     prefs = {
@@ -180,6 +188,7 @@
     savePrefs: savePrefs,
     applyPrefs: applyPrefs,
     applyTheme: applyPrefs,       // alias rétrocompat
+    applyDefault: applyDefault,
     initFromStorage: initFromStorage,
     isLight: isLight,
     toggleMode: toggleMode,
