@@ -220,37 +220,42 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 }
 
 /* ── Vue Semaine (emploi du temps) ──────────────────────────────────── */
-.cal-wv-hint{font-size:11px;color:var(--muted);background:var(--accent-bg);border:1px dashed var(--accent);border-radius:8px;padding:8px 12px;margin-bottom:14px;text-align:center}
-.cal-wv-header{display:grid;grid-template-columns:70px repeat(7,1fr);gap:0;margin-bottom:0;border-bottom:1px solid var(--border)}
+.cal-week-view{overflow-x:auto}
+.cal-wv-hint{font-size:13px;color:var(--text2);background:var(--accent-bg);border:1px dashed var(--accent);border-radius:8px;padding:10px 14px;margin-bottom:14px;text-align:center;font-weight:600}
+.cal-wv-header{display:grid;grid-template-columns:78px repeat(7,minmax(170px,1fr));gap:0;margin-bottom:0;border-bottom:1px solid var(--border);min-width:max-content}
 .cal-wv-corner{}
-.cal-wv-dayhead{padding:10px 8px;text-align:center;border-left:1px solid var(--border);display:flex;flex-direction:column;align-items:center;gap:2px;background:var(--card)}
+.cal-wv-dayhead{padding:11px 10px;text-align:center;border-left:1px solid var(--border);display:flex;flex-direction:column;align-items:center;gap:3px;background:var(--card)}
 .cal-wv-dayhead.weekend{background:rgba(167,139,250,.06)}
 .cal-wv-dayhead.today{background:var(--accent-bg)}
-.cal-wv-dayname{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-family:"SFMono-Regular",ui-monospace,Consolas,monospace}
+.cal-wv-dayname{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:"SFMono-Regular",ui-monospace,Consolas,monospace}
 .cal-wv-dayhead.weekend .cal-wv-dayname{color:#a78bfa}
 .cal-wv-dayhead.today .cal-wv-dayname{color:var(--accent)}
-.cal-wv-daydate{font-size:14px;font-weight:700;color:var(--text);font-family:"SFMono-Regular",ui-monospace,Consolas,monospace}
+.cal-wv-daydate{font-size:17px;font-weight:800;color:var(--text);font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;letter-spacing:.3px}
 .cal-wv-dayhead.today .cal-wv-daydate{color:var(--accent)}
-.cal-wv-body{display:grid;grid-template-columns:70px repeat(7,1fr);gap:0;position:relative;overflow:auto;max-height:70vh}
+.cal-wv-body{display:grid;grid-template-columns:78px repeat(7,minmax(170px,1fr));gap:0;position:relative;overflow:auto;max-height:75vh;min-width:max-content}
 .cal-wv-times-col{display:flex;flex-direction:column}
-.cal-wv-time{height:56px;display:flex;align-items:flex-start;justify-content:flex-end;padding:2px 8px 0 0;font-size:10px;font-weight:600;color:var(--muted);font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;border-right:1px solid var(--border);border-top:1px solid var(--border)}
+.cal-wv-time{height:62px;display:flex;align-items:flex-start;justify-content:flex-end;padding:3px 10px 0 0;font-size:12px;font-weight:700;color:var(--muted);font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;border-right:1px solid var(--border);border-top:1px solid var(--border)}
 .cal-wv-time:first-child{border-top:none}
 .cal-wv-day-col{position:relative;display:flex;flex-direction:column;border-left:1px solid var(--border);min-height:100%}
 .cal-wv-day-col.weekend{background:rgba(167,139,250,.04)}
 .cal-wv-day-col.today{background:var(--accent-bg)}
-.cal-wv-hour-row{height:56px;border-top:1px solid var(--border);transition:background .12s}
+.cal-wv-hour-row{height:62px;border-top:1px solid var(--border);transition:background .12s}
 .cal-wv-hour-row:first-child{border-top:none}
 .cal-wv-day-col.drag-over{background:var(--accent-bg);outline:2px dashed var(--accent);outline-offset:-2px;z-index:1}
-.cal-event{position:absolute;background:var(--cal-ev-bg,var(--accent));color:var(--cal-ev-fg,#fff);border-radius:7px;padding:5px 7px;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;font-size:11px;font-weight:600;line-height:1.25;cursor:pointer;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.20);z-index:2;display:flex;flex-direction:column;gap:2px;transition:filter .12s,box-shadow .12s,transform .08s}
-.cal-event:hover{filter:brightness(1.10);box-shadow:0 4px 12px rgba(0,0,0,.34);z-index:4}
+.cal-event{position:absolute;background:var(--cal-ev-bg,var(--accent));color:var(--cal-ev-fg,#fff);border-radius:8px;padding:8px 11px;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;font-size:13px;font-weight:600;line-height:1.3;cursor:pointer;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.20);z-index:2;display:flex;flex-direction:column;gap:4px;transition:filter .12s,box-shadow .12s,transform .08s}
+.cal-event:hover{filter:brightness(1.10);box-shadow:0 4px 14px rgba(0,0,0,.36);z-index:4}
 .cal-event:active{transform:scale(.99)}
-.cal-event-title{font-weight:700;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.1px;color:inherit}
-.cal-event-machine{font-size:10.5px;font-weight:600;opacity:.94;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:inline-flex;align-items:center;gap:3px}
-.cal-event-time{font-size:10px;font-weight:600;opacity:.88;font-family:'SFMono-Regular',ui-monospace,Consolas,monospace;letter-spacing:.1px}
-.cal-event[data-mini="1"]{padding:3px 5px;border-radius:5px;gap:1px}
-.cal-event[data-mini="1"] .cal-event-title{font-size:11px}
-.cal-event[data-mini="1"] .cal-event-machine{font-size:9.5px}
-.cal-event[data-mini="1"] .cal-event-time{font-size:9.5px}
+.cal-event-title{font-weight:800;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.2px;color:inherit}
+.cal-event-machine{font-size:12.5px;font-weight:700;opacity:.96;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:inline-flex;align-items:center;gap:4px}
+.cal-event-time{font-size:12px;font-weight:700;opacity:.92;font-family:'SFMono-Regular',ui-monospace,Consolas,monospace;letter-spacing:.2px;margin-top:auto}
+.cal-event-ops{display:flex;flex-direction:column;gap:2px;flex:1;min-height:0;overflow:hidden}
+.cal-event-op{font-size:12.5px;font-weight:600;line-height:1.3;color:inherit;opacity:.96;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.1px}
+.cal-event-op-more{font-size:11.5px;font-style:italic;opacity:.78;font-weight:600}
+.cal-event[data-mini="1"]{padding:5px 7px;border-radius:6px;gap:2px}
+.cal-event[data-mini="1"] .cal-event-title{font-size:12.5px;letter-spacing:.1px}
+.cal-event[data-mini="1"] .cal-event-machine{font-size:11px}
+.cal-event[data-mini="1"] .cal-event-time{font-size:11px}
+.cal-event[data-mini="1"] .cal-event-op{font-size:11px;line-height:1.25}
 .cal-event[data-niveau="1"]{background:#22d3ee;color:#062430}
 .cal-event[data-niveau="2"]{background:#fbbf24;color:#3b2300}
 .cal-event[data-niveau="3"]{background:#f87171;color:#3b0a0a}
@@ -275,14 +280,18 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 /* Mode vue Jour : 1 colonne large */
 .cal-week-view.cal-wv-mode-day .cal-wv-header,
 .cal-week-view.cal-wv-mode-day .cal-wv-body{grid-template-columns:70px 1fr}
-.cal-week-view.cal-wv-mode-day .cal-event{font-size:13px;padding:7px 10px}
-.cal-week-view.cal-wv-mode-day .cal-event-title{font-size:14px}
-.cal-week-view.cal-wv-mode-day .cal-event-machine{font-size:12px}
-.cal-week-view.cal-wv-mode-day .cal-event-time{font-size:12px}
-.cal-week-view.cal-wv-mode-day .cal-wv-daydate{font-size:18px}
+.cal-week-view.cal-wv-mode-day .cal-event{font-size:14.5px;padding:10px 14px}
+.cal-week-view.cal-wv-mode-day .cal-event-title{font-size:16px}
+.cal-week-view.cal-wv-mode-day .cal-event-machine{font-size:13.5px}
+.cal-week-view.cal-wv-mode-day .cal-event-time{font-size:13.5px}
+.cal-week-view.cal-wv-mode-day .cal-event-op{font-size:13.5px}
+.cal-week-view.cal-wv-mode-day .cal-wv-daydate{font-size:20px}
+.cal-week-view.cal-wv-mode-day .cal-wv-dayname{font-size:13px}
 /* Hauteur d'heure plus aérée en vue Jour */
 .cal-week-view.cal-wv-mode-day .cal-wv-time,
-.cal-week-view.cal-wv-mode-day .cal-wv-hour-row{height:64px}
+.cal-week-view.cal-wv-mode-day .cal-wv-hour-row{height:72px}
+.cal-week-view.cal-wv-mode-day .cal-wv-header,
+.cal-week-view.cal-wv-mode-day .cal-wv-body{grid-template-columns:90px 1fr;min-width:0}
 /* Modale Créneau : section liste d'opérations */
 .case-modal-card{max-width:640px;width:92vw}
 .case-ops-section{margin-top:16px;border-top:1px solid var(--border);padding-top:14px}
@@ -1097,7 +1106,7 @@ function switchView(name){
 // =========================================================================
 const CAL_HOUR_START = 6;
 const CAL_HOUR_END   = 21;   // exclusif (affiche 6h → 20h)
-const CAL_HOUR_PX    = 56;
+const CAL_HOUR_PX    = 62;
 function _calWeekMondayOf(d){
   const r = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const off = (r.getDay() + 6) % 7;
@@ -1463,14 +1472,14 @@ function _makeEventBlock(item){
   const palette = _machinePalette(ev.machine);
   div.style.background = palette.bg;
   div.style.color = palette.fg;
-  if(height < 44) div.setAttribute('data-mini', '1');
+  if(height < 50) div.setAttribute('data-mini', '1');
   div.setAttribute('data-event-id', ev.id);
   const ops = Array.isArray(ev.operations) ? ev.operations.filter(o => o && (o.opName || o.opTypeId)) : [];
   const opsCount = ops.length;
   // Lignes affichables selon hauteur disponible
-  const showTitle   = height >= 22;
-  const showOpsList = height >= 50 && opsCount > 0;
-  const showTime    = height >= 64;
+  const showTitle   = height >= 26;
+  const showOpsList = height >= 64 && opsCount > 0;
+  const showTime    = height >= 80;
   let inner = '';
   if(showTitle){
     const sub = (opsCount > 0) ? ' · ' + opsCount + ' op.' : '';
@@ -1478,10 +1487,10 @@ function _makeEventBlock(item){
   }
   if(showOpsList){
     // Lignes disponibles ≈ (height - 24px titre - 12px time) / 14px
-    const lineH = 14;
-    const reservedTitle = 22;
-    const reservedTime = showTime ? 14 : 0;
-    const available = Math.max(1, Math.floor((height - reservedTitle - reservedTime - 4) / lineH));
+    const lineH = 17;
+    const reservedTitle = 28;
+    const reservedTime = showTime ? 18 : 0;
+    const available = Math.max(1, Math.floor((height - reservedTitle - reservedTime - 6) / lineH));
     const visible = ops.slice(0, available);
     inner += '<div class="cal-event-ops">';
     visible.forEach(op => {
