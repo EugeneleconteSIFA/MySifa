@@ -148,20 +148,24 @@ body.sb-open .sidebar-overlay{display:block}
 
 .view{display:flex;flex-direction:column;flex:1}
 
-/* Filtres en bandeau (pour cartes ops-list) */
-.ops-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;padding:16px 22px;border-bottom:1px solid var(--border);background:var(--bg);align-items:end}
-.ops-filters-row{display:flex;align-items:center;justify-content:flex-end;padding:8px 22px;border-bottom:1px solid var(--border);background:var(--bg)}
-.hist-field{display:flex;flex-direction:column;gap:5px;min-width:0}
-.hist-field-label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
-.hist-input,.hist-select{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-size:13px;font-family:inherit;transition:border-color .15s;width:100%;min-width:0}
-.hist-input:focus,.hist-select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
-.hist-select{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
-.hist-daterange{display:flex;align-items:center;gap:6px}
-.hist-daterange .hist-input{flex:1;padding:9px 10px}
-.hist-daterange-sep{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.4px;flex-shrink:0}
-.hist-filters-reset{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:12px;font-family:inherit;font-weight:600;transition:.15s;height:fit-content}
-.hist-filters-reset:hover{border-color:var(--accent);color:var(--accent)}
-@media(max-width:560px){.ops-filters{grid-template-columns:1fr}}
+/* Filtres en bandeau — style aligné sur MyProd / Production */
+.filters-panel{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px 20px 14px;margin-bottom:18px}
+.filters{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+.filter-group{display:flex;flex-direction:column;gap:6px;min-width:0}
+.filter-group label{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.filter-input{background:var(--bg);border:1.5px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;min-height:40px;box-sizing:border-box;transition:border-color .15s,box-shadow .15s;min-width:168px}
+.filter-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.filters .filter-input[type=date]{min-width:148px;padding:9px 12px;font-size:12px}
+select.filter-input{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px;cursor:pointer}
+.filters-apply-btn{background:var(--accent);color:var(--accent-fg,var(--bg));border:none;border-radius:10px;padding:10px 22px;font-size:13px;font-weight:700;min-height:40px;cursor:pointer;font-family:inherit;align-self:flex-end;transition:filter .15s,box-shadow .15s,transform .05s}
+.filters-apply-btn:hover{filter:brightness(1.05);box-shadow:0 0 0 4px var(--accent-bg)}
+.filters-apply-btn:active{transform:translateY(1px)}
+.filters-date-presets{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:10px 0 0;margin-top:12px;border-top:1px dashed var(--border)}
+.filters-date-presets-label{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.6px;font-weight:700;margin-right:4px;padding-top:8px}
+.date-preset-chip{padding:5px 12px;font-size:11px;font-weight:600;border-radius:14px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit;white-space:nowrap;transition:all 120ms;margin-top:6px}
+.date-preset-chip:hover{border-color:var(--accent);color:var(--accent)}
+.date-preset-chip.active{font-weight:700;border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
+@media(max-width:560px){.filter-group{flex:1 1 100%}.filter-input,select.filter-input{min-width:0;width:100%}.filters-apply-btn{width:100%}}
 
 .ops-form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:14px}
 .ops-field{display:flex;flex-direction:column;gap:5px;min-width:0}
@@ -319,6 +323,52 @@ body.light .toast.info{background:#fff;color:var(--text)}
           </div>
         </div>
 
+        <!-- Filtres Historique des contrôles -->
+        <div class="filters-panel">
+          <div class="filters">
+            <div class="filter-group">
+              <label for="filt-controles-type">Type de contrôle</label>
+              <select id="filt-controles-type" class="filter-input">
+                <option value="">Tous les types</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="filt-controles-operateur">Opérateur</label>
+              <select id="filt-controles-operateur" class="filter-input">
+                <option value="">Tous les opérateurs</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="filt-controles-machine">Machine</label>
+              <select id="filt-controles-machine" class="filter-input">
+                <option value="">Toutes les machines</option>
+                <option value="Cohésio 1">Cohésio 1</option>
+                <option value="Cohésio 2">Cohésio 2</option>
+                <option value="DSI">DSI</option>
+                <option value="Repiquage">Repiquage</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="filt-controles-date-from">Du</label>
+              <input type="date" id="filt-controles-date-from" class="filter-input" aria-label="Du">
+            </div>
+            <div class="filter-group">
+              <label for="filt-controles-date-to">Au</label>
+              <input type="date" id="filt-controles-date-to" class="filter-input" aria-label="Au">
+            </div>
+            <button type="button" class="filters-apply-btn" onclick="renderCtrl()">Filtrer</button>
+          </div>
+          <div class="filters-date-presets" id="ctrl-date-presets">
+            <span class="filters-date-presets-label">Période :</span>
+            <button type="button" class="date-preset-chip" data-preset="today" onclick="applyCtrlDatePreset('today')">Aujourd'hui</button>
+            <button type="button" class="date-preset-chip" data-preset="yesterday" onclick="applyCtrlDatePreset('yesterday')">Hier</button>
+            <button type="button" class="date-preset-chip" data-preset="last7" onclick="applyCtrlDatePreset('last7')">7 derniers jours</button>
+            <button type="button" class="date-preset-chip" data-preset="last30" onclick="applyCtrlDatePreset('last30')">30 derniers jours</button>
+            <button type="button" class="date-preset-chip" data-preset="thisMonth" onclick="applyCtrlDatePreset('thisMonth')">Mois en cours</button>
+            <button type="button" class="date-preset-chip" data-preset="prevMonth" onclick="applyCtrlDatePreset('prevMonth')">Mois dernier</button>
+          </div>
+        </div>
+
         <!-- Historique des contrôles -->
         <div class="ops-list">
           <div class="ops-list-head">
@@ -330,44 +380,6 @@ body.light .toast.info{background:#fff;color:var(--text)}
                 Nouveau contrôle
               </button>
             </div>
-          </div>
-          <div class="ops-filters">
-            <div class="hist-field">
-              <label class="hist-field-label" for="filt-controles-type">Type de contrôle</label>
-              <select id="filt-controles-type" class="hist-select" onchange="renderCtrl()">
-                <option value="">Tous les types</option>
-              </select>
-            </div>
-            <div class="hist-field">
-              <label class="hist-field-label" for="filt-controles-operateur">Opérateur</label>
-              <select id="filt-controles-operateur" class="hist-select" onchange="renderCtrl()">
-                <option value="">Tous les opérateurs</option>
-              </select>
-            </div>
-            <div class="hist-field">
-              <label class="hist-field-label" for="filt-controles-machine">Machine</label>
-              <select id="filt-controles-machine" class="hist-select" onchange="renderCtrl()">
-                <option value="">Toutes les machines</option>
-                <option value="Cohésio 1">Cohésio 1</option>
-                <option value="Cohésio 2">Cohésio 2</option>
-                <option value="DSI">DSI</option>
-                <option value="Repiquage">Repiquage</option>
-              </select>
-            </div>
-            <div class="hist-field">
-              <label class="hist-field-label">Date d'opération</label>
-              <div class="hist-daterange">
-                <input type="date" id="filt-controles-date-from" class="hist-input" aria-label="Du" onchange="renderCtrl()">
-                <span class="hist-daterange-sep">au</span>
-                <input type="date" id="filt-controles-date-to" class="hist-input" aria-label="Au" onchange="renderCtrl()">
-              </div>
-            </div>
-          </div>
-          <div class="ops-filters-row">
-            <button type="button" class="hist-filters-reset" onclick="resetCtrlFilters()">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-              Réinitialiser les filtres
-            </button>
           </div>
           <div class="ops-table-wrap">
             <table class="ops-table">
@@ -422,6 +434,52 @@ body.light .toast.info{background:#fff;color:var(--text)}
           </div>
         </div>
 
+        <!-- Filtres Historique des opérations -->
+        <div class="filters-panel">
+          <div class="filters">
+            <div class="filter-group">
+              <label for="filt-operations-type">Type d'opération</label>
+              <select id="filt-operations-type" class="filter-input">
+                <option value="">Tous les types</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="filt-operations-operateur">Opérateur</label>
+              <select id="filt-operations-operateur" class="filter-input">
+                <option value="">Tous les opérateurs</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="filt-operations-machine">Machine</label>
+              <select id="filt-operations-machine" class="filter-input">
+                <option value="">Toutes les machines</option>
+                <option value="Cohésio 1">Cohésio 1</option>
+                <option value="Cohésio 2">Cohésio 2</option>
+                <option value="DSI">DSI</option>
+                <option value="Repiquage">Repiquage</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="filt-operations-date-from">Du</label>
+              <input type="date" id="filt-operations-date-from" class="filter-input" aria-label="Du">
+            </div>
+            <div class="filter-group">
+              <label for="filt-operations-date-to">Au</label>
+              <input type="date" id="filt-operations-date-to" class="filter-input" aria-label="Au">
+            </div>
+            <button type="button" class="filters-apply-btn" onclick="renderOps()">Filtrer</button>
+          </div>
+          <div class="filters-date-presets" id="ops-date-presets">
+            <span class="filters-date-presets-label">Période :</span>
+            <button type="button" class="date-preset-chip" data-preset="today" onclick="applyOpsDatePreset('today')">Aujourd'hui</button>
+            <button type="button" class="date-preset-chip" data-preset="yesterday" onclick="applyOpsDatePreset('yesterday')">Hier</button>
+            <button type="button" class="date-preset-chip" data-preset="last7" onclick="applyOpsDatePreset('last7')">7 derniers jours</button>
+            <button type="button" class="date-preset-chip" data-preset="last30" onclick="applyOpsDatePreset('last30')">30 derniers jours</button>
+            <button type="button" class="date-preset-chip" data-preset="thisMonth" onclick="applyOpsDatePreset('thisMonth')">Mois en cours</button>
+            <button type="button" class="date-preset-chip" data-preset="prevMonth" onclick="applyOpsDatePreset('prevMonth')">Mois dernier</button>
+          </div>
+        </div>
+
         <!-- Historique des opérations -->
         <div class="ops-list">
           <div class="ops-list-head">
@@ -433,44 +491,6 @@ body.light .toast.info{background:#fff;color:var(--text)}
                 Nouvelle opération
               </button>
             </div>
-          </div>
-          <div class="ops-filters">
-            <div class="hist-field">
-              <label class="hist-field-label" for="filt-operations-type">Type d'opération</label>
-              <select id="filt-operations-type" class="hist-select" onchange="renderOps()">
-                <option value="">Tous les types</option>
-              </select>
-            </div>
-            <div class="hist-field">
-              <label class="hist-field-label" for="filt-operations-operateur">Opérateur</label>
-              <select id="filt-operations-operateur" class="hist-select" onchange="renderOps()">
-                <option value="">Tous les opérateurs</option>
-              </select>
-            </div>
-            <div class="hist-field">
-              <label class="hist-field-label" for="filt-operations-machine">Machine</label>
-              <select id="filt-operations-machine" class="hist-select" onchange="renderOps()">
-                <option value="">Toutes les machines</option>
-                <option value="Cohésio 1">Cohésio 1</option>
-                <option value="Cohésio 2">Cohésio 2</option>
-                <option value="DSI">DSI</option>
-                <option value="Repiquage">Repiquage</option>
-              </select>
-            </div>
-            <div class="hist-field">
-              <label class="hist-field-label">Date d'opération</label>
-              <div class="hist-daterange">
-                <input type="date" id="filt-operations-date-from" class="hist-input" aria-label="Du" onchange="renderOps()">
-                <span class="hist-daterange-sep">au</span>
-                <input type="date" id="filt-operations-date-to" class="hist-input" aria-label="Au" onchange="renderOps()">
-              </div>
-            </div>
-          </div>
-          <div class="ops-filters-row">
-            <button type="button" class="hist-filters-reset" onclick="resetOpsFilters()">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-              Réinitialiser les filtres
-            </button>
           </div>
           <div class="ops-table-wrap">
             <table class="ops-table">
@@ -983,6 +1003,45 @@ function resetOpsFilters(){
   });
   renderOps();
 }
+// ── Date presets partagés ─────────────────────────────────────────────
+function maintDatePresets(){
+  const now = new Date();
+  const fmt = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  const today = new Date(now);
+  const yesterday = new Date(now); yesterday.setDate(now.getDate()-1);
+  const last7Start = new Date(now); last7Start.setDate(now.getDate()-6);
+  const last30Start = new Date(now); last30Start.setDate(now.getDate()-29);
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+  const prevMonthStart = new Date(now.getFullYear(), now.getMonth()-1, 1);
+  return {
+    today:     {from:fmt(today),         to:fmt(today)},
+    yesterday: {from:fmt(yesterday),     to:fmt(yesterday)},
+    last7:     {from:fmt(last7Start),    to:fmt(today)},
+    last30:    {from:fmt(last30Start),   to:fmt(today)},
+    thisMonth: {from:fmt(monthStart),    to:fmt(today)},
+    prevMonth: {from:fmt(prevMonthStart),to:fmt(prevMonthEnd)},
+  };
+}
+function applyOpsDatePreset(key){
+  const p = maintDatePresets()[key];
+  if(!p) return;
+  const from = document.getElementById('filt-operations-date-from');
+  const to   = document.getElementById('filt-operations-date-to');
+  if(from) from.value = p.from;
+  if(to)   to.value   = p.to;
+  renderOps();
+}
+function updateOpsDatePresetChips(){
+  const presets = maintDatePresets();
+  const from = (document.getElementById('filt-operations-date-from')?.value || '').trim();
+  const to   = (document.getElementById('filt-operations-date-to')?.value   || '').trim();
+  document.querySelectorAll('#ops-date-presets .date-preset-chip').forEach(chip => {
+    const key = chip.getAttribute('data-preset');
+    const p = presets[key];
+    chip.classList.toggle('active', !!(p && p.from === from && p.to === to));
+  });
+}
 function refreshOpsFiltersOptions(){
   const typeSel = document.getElementById('filt-operations-type');
   const opeSel  = document.getElementById('filt-operations-operateur');
@@ -1003,6 +1062,7 @@ function refreshOpsFiltersOptions(){
 }
 function renderOps(){
   refreshOpsFiltersOptions();
+  updateOpsDatePresetChips();
   const tbody = document.getElementById('ops-tbody');
   const count = document.getElementById('ops-count');
   if(!tbody) return;
@@ -1290,6 +1350,25 @@ function resetCtrlFilters(){
   });
   renderCtrl();
 }
+function applyCtrlDatePreset(key){
+  const p = maintDatePresets()[key];
+  if(!p) return;
+  const from = document.getElementById('filt-controles-date-from');
+  const to   = document.getElementById('filt-controles-date-to');
+  if(from) from.value = p.from;
+  if(to)   to.value   = p.to;
+  renderCtrl();
+}
+function updateCtrlDatePresetChips(){
+  const presets = maintDatePresets();
+  const from = (document.getElementById('filt-controles-date-from')?.value || '').trim();
+  const to   = (document.getElementById('filt-controles-date-to')?.value   || '').trim();
+  document.querySelectorAll('#ctrl-date-presets .date-preset-chip').forEach(chip => {
+    const key = chip.getAttribute('data-preset');
+    const p = presets[key];
+    chip.classList.toggle('active', !!(p && p.from === from && p.to === to));
+  });
+}
 function refreshCtrlFiltersOptions(){
   const typeSel = document.getElementById('filt-controles-type');
   const opeSel  = document.getElementById('filt-controles-operateur');
@@ -1310,6 +1389,7 @@ function refreshCtrlFiltersOptions(){
 }
 function renderCtrl(){
   refreshCtrlFiltersOptions();
+  updateCtrlDatePresetChips();
   const tbody = document.getElementById('ctrl-tbody');
   const count = document.getElementById('ctrl-count');
   if(!tbody) return;
