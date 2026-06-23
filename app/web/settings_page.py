@@ -178,6 +178,7 @@ body.settings-tab-fsc .fsc-kpi-grid{margin-bottom:14px}
 tr.fsc-row-alert td{background:rgba(248,113,113,.08)}
 body.light tr.fsc-row-alert td{background:rgba(220,38,38,.06)}
 .op-req.yes{color:var(--ok)}
+.op-req.no{color:var(--muted)}
 .op-table th:last-child,.op-table td:last-child{text-align:right}
 .op-act{display:inline-flex;gap:6px;justify-content:flex-end;flex-wrap:nowrap}
 .btn-sm{padding:6px 12px;font-size:11px;font-weight:700;border-radius:8px}
@@ -887,6 +888,10 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
               <option value="controles">Contrôles</option>
               <option value="interventions">Interventions</option>
             </select>
+            <select id="maint-periodique">
+              <option value="oui">Périodique : OUI</option>
+              <option value="non">Périodique : NON</option>
+            </select>
           </div>
           <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
             <button type="button" class="btn" onclick="saveMaintForm()">Enregistrer</button>
@@ -894,7 +899,7 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
           </div>
         </div>
         <div class="op-toolbar">
-          <input type="search" id="maint-filter" class="op-filter" placeholder="Filtrer (code, libellé, niveau, catégorie…)" oninput="renderMaintList()">
+          <input type="search" id="maint-filter" class="op-filter" placeholder="Filtrer (code, libellé, niveau, catégorie, périodique…)" oninput="renderMaintList()">
         </div>
         <div id="maint-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
       </div>
@@ -2970,12 +2975,14 @@ function renderMaintList() {
   // Normaliser la catégorie sur les anciens enregistrements
   items.forEach(o => { if (!o.categorie) o.categorie = 'controles'; });
   if (q) {
-    items = items.filter(o =>
-      String(o.code || '').toLowerCase().includes(q) ||
-      String(o.label || '').toLowerCase().includes(q) ||
-      ('n' + (o.niveau || '')).toLowerCase().includes(q) ||
-      _maintCatLabel(o.categorie).toLowerCase().includes(q)
-    );
+    items = items.filter(o => {
+      const periodLbl = (o.periodique ? 'oui' : 'non');
+      return String(o.code || '').toLowerCase().includes(q) ||
+        String(o.label || '').toLowerCase().includes(q) ||
+        ('n' + (o.niveau || '')).toLowerCase().includes(q) ||
+        _maintCatLabel(o.categorie).toLowerCase().includes(q) ||
+        ('periodique ' + periodLbl).includes(q);
+    });
   }
   // Tri : catégorie d'abord (Contrôles avant Interventions), puis code
   items.sort((a, b) => {
@@ -2999,16 +3006,20 @@ function renderMaintList() {
   let body = '';
   ['controles', 'interventions'].forEach(cat => {
     if (!byCat[cat].length) return;
-    body += '<tr class="op-cat-row"><td colspan="5">' + esc(_maintCatLabel(cat)) + '</td></tr>';
+    body += '<tr class="op-cat-row"><td colspan="6">' + esc(_maintCatLabel(cat)) + '</td></tr>';
     byCat[cat].forEach(o => {
       const c = esc(String(o.code));
       const niv = parseInt(o.niveau, 10) || 1;
       const catCls = cat;
+      const periodOn = !!o.periodique;
+      const periodCls = periodOn ? 'op-req yes' : 'op-req no';
+      const periodLbl = periodOn ? 'OUI' : 'NON';
       body += '<tr>'
         + '<td class="op-code-cell">' + c + '</td>'
         + '<td class="op-lbl-cell">' + esc(o.label || '') + '</td>'
         + '<td><span class="niv-badge" data-niv="' + niv + '">N' + niv + '</span></td>'
         + '<td><span class="op-pill ' + catCls + '">' + esc(_maintCatLabel(cat)) + '</span></td>'
+        + '<td><span class="' + periodCls + '">' + periodLbl + '</span></td>'
         + '<td><div class="op-act">'
         + '<button type="button" class="btn-sm btn-ghost" data-maint-edit="' + c + '">Modifier</button>'
         + '<button type="button" class="btn-sm btn-ghost danger" data-maint-del="' + c + '">Supprimer</button>'
@@ -3016,7 +3027,7 @@ function renderMaintList() {
     });
   });
   el.innerHTML = '<div class="table-wrap op-table-wrap"><table class="op-table"><thead><tr>'
-    + '<th>Code</th><th>Libellé</th><th>Niveau</th><th>Catégorie</th><th>Actions</th>'
+    + '<th>Code</th><th>Libellé</th><th>Niveau</th><th>Catégorie</th><th>Périodique</th><th>Actions</th>'
     + '</tr></thead><tbody>' + body + '</tbody></table></div>';
   el.querySelectorAll('[data-maint-edit]').forEach(btn => {
     btn.addEventListener('click', () => openMaintForm(btn.getAttribute('data-maint-edit')));
@@ -3033,6 +3044,7 @@ function openMaintForm(code) {
   if (!wrap) return;
   wrap.classList.remove('hidden');
   const catSel = document.getElementById('maint-categorie');
+  const perSel = document.getElementById('maint-periodique');
   if (code) {
     const o = _maintItems.find(x => String(x.code) === String(code));
     if (!o) return;
@@ -3042,6 +3054,7 @@ function openMaintForm(code) {
     document.getElementById('maint-label').value = o.label || '';
     document.getElementById('maint-niveau').value = String(o.niveau || 1);
     if (catSel) catSel.value = (o.categorie === 'interventions') ? 'interventions' : 'controles';
+    if (perSel) perSel.value = o.periodique ? 'oui' : 'non';
   } else {
     title.textContent = 'Nouveau code';
     codeInp.value = '';
@@ -3049,6 +3062,7 @@ function openMaintForm(code) {
     document.getElementById('maint-label').value = '';
     document.getElementById('maint-niveau').value = '1';
     if (catSel) catSel.value = 'controles';
+    if (perSel) perSel.value = 'oui';
   }
   codeInp.focus();
 }
@@ -3063,18 +3077,20 @@ function saveMaintForm() {
   const niveau = parseInt(document.getElementById('maint-niveau').value, 10) || 1;
   const rawCat = (document.getElementById('maint-categorie')?.value || '').trim();
   const categorie = (rawCat === 'interventions') ? 'interventions' : 'controles';
+  const rawPer = (document.getElementById('maint-periodique')?.value || '').trim();
+  const periodique = (rawPer === 'oui');
   if (!code) { toast('Code obligatoire', true); return; }
   if (!label) { toast('Libellé obligatoire', true); return; }
   if (niveau < 1 || niveau > 3) { toast('Niveau invalide (1-3)', true); return; }
   if (_maintEditCode) {
     const idx = _maintItems.findIndex(x => String(x.code) === String(_maintEditCode));
     if (idx === -1) { toast('Code introuvable', true); return; }
-    _maintItems[idx] = Object.assign({}, _maintItems[idx], { label, niveau, categorie, updated_at: new Date().toISOString() });
+    _maintItems[idx] = Object.assign({}, _maintItems[idx], { label, niveau, categorie, periodique, updated_at: new Date().toISOString() });
     toast('Code mis à jour');
   } else {
     const dup = _maintItems.find(x => String(x.code) === code);
     if (dup) { toast('Ce code existe déjà', true); return; }
-    _maintItems.push({ code, label, niveau, categorie, created_at: new Date().toISOString() });
+    _maintItems.push({ code, label, niveau, categorie, periodique, created_at: new Date().toISOString() });
     toast('Code ajouté');
   }
   saveMaintCodes();
