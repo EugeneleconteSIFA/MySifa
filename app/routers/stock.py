@@ -119,6 +119,7 @@ def _mp_is_laizee(categorie: str) -> bool:
 
 _MP_TYPES_MVT = frozenset({"entree", "sortie", "ajustement", "transfert"})
 _STOCK_MATIERES_ADMIN_ROLES = frozenset({"superadmin", "direction", "administration"})
+_STOCK_VALORISATION_USD_ROLES = frozenset({"superadmin", "direction"})
 
 
 def _mp_unite_gestion(categorie: str) -> str:
@@ -231,6 +232,33 @@ def require_stock_matieres_admin(request: Request) -> dict:
     if user.get("role") not in _STOCK_MATIERES_ADMIN_ROLES:
         raise HTTPException(403, "Accès réservé à la Direction et Administration")
     return user
+
+
+def _user_can_see_valorisation_usd(user: dict | None) -> bool:
+    """Direction + superadmin uniquement voient la colonne « Prix unit. réel »
+    et le KPI dédoublé en €/USD sur la page Valorisation."""
+    return bool(user) and (user.get("role") in _STOCK_VALORISATION_USD_ROLES)
+
+
+def require_valorisation_usd_admin(request: Request) -> dict:
+    user = require_stock(request)
+    if not _user_can_see_valorisation_usd(user):
+        raise HTTPException(403, "Conversion EUR/USD réservée à la Direction.")
+    return user
+
+
+def _get_taux_eur_usd(conn) -> float:
+    """Lit le paramètre Taux EUR / USD configuré dans MyCouts (mc_setting.eur_usd_rate).
+    Retourne 0.0 si le paramètre n'est pas configuré — l'UI affichera alors « — »."""
+    try:
+        row = conn.execute(
+            "SELECT value_decimal FROM mc_setting WHERE key='eur_usd_rate' LIMIT 1"
+        ).fetchone()
+        if not row:
+            return 0.0
+        return float(row["value_decimal"] or 0)
+    except Exception:
+        return 0.0
 
 
 _HISTORIQUE_TYPES_MVT = frozenset({"entree", "sortie", "ajustement", "inventaire", "transfert"})
@@ -3697,6 +3725,7 @@ def _valorisation_query(conn) -> list[dict]:
                mp.unites_par_palette,
                COALESCE(s.quantite, 0) AS quantite,
                COALESCE(v.prix_unitaire, 0) AS prix_unitaire,
+               COALESCE(v.prix_en_usd, 0) AS prix_en_usd,
                v.updated_at AS prix_updated_at,
                v.updated_by_name AS prix_updated_by_name
         FROM matieres_premieres mp
@@ -3712,12 +3741,14 @@ def _valorisation_query(conn) -> list[dict]:
         SELECT mp.id AS matiere_id, mp.categorie, mp.reference, mp.designation,
                COALESCE(mp.metres_lineaires_par_bobine, 0) AS metres,
                COALESCE(mp.prix_eur_m2, 0) AS prix_eur_m2,
+               COALESCE(v.prix_en_usd, 0) AS prix_en_usd,
                l.id AS laize_id, l.valeur_mm, l.label AS laize_label, l.ordre AS laize_ordre,
                COALESCE(sl.quantite, 0) AS quantite
         FROM matieres_premieres mp
         JOIN mp_matiere_laizes ml ON ml.matiere_id = mp.id
         JOIN mp_laizes l ON l.id = ml.laize_id
         LEFT JOIN mp_stock_laize sl ON sl.matiere_id = mp.id AND sl.laize_id = l.id
+        LEFT JOIN mp_valorisation v ON v.matiere_id = mp.id
         WHERE mp.actif = 1 AND mp.categorie IN ('frontal','glassine','complexe')
         ORDER BY mp.categorie ASC, mp.reference ASC, l.ordre ASC, l.valeur_mm ASC
         """
@@ -3727,8 +3758,10 @@ def _valorisation_query(conn) -> list[dict]:
         """
         SELECT mp.id AS matiere_id, mp.categorie, mp.reference, mp.designation,
                COALESCE(mp.metres_lineaires_par_bobine, 0) AS metres,
-               COALESCE(mp.prix_eur_m2, 0) AS prix_eur_m2
+               COALESCE(mp.prix_eur_m2, 0) AS prix_eur_m2,
+               COALESCE(v.prix_en_usd, 0) AS prix_en_usd
         FROM matieres_premieres mp
+        LEFT JOIN mp_valorisation v ON v.matiere_id = mp.id
         WHERE mp.actif = 1 AND mp.categorie IN ('frontal','glassine','complexe')
           AND NOT EXISTS (
             SELECT 1 FROM mp_matiere_laizes ml WHERE ml.matiere_id = mp.id
@@ -3788,6 +3821,7 @@ def _valorisation_query(conn) -> list[dict]:
             "prix_palette": round(prix_palette, 4),
             "prix_updated_at": r["prix_updated_at"],
             "prix_updated_by_name": r["prix_updated_by_name"],
+            "prix_en_usd": bool(r["prix_en_usd"] or 0),
         })
     for r in rows_laizees:
         cat = r["categorie"]
@@ -3821,6 +3855,7 @@ def _valorisation_query(conn) -> list[dict]:
             "prix_palette": None,
             "prix_updated_at": None,
             "prix_updated_by_name": None,
+            "prix_en_usd": bool(r["prix_en_usd"] or 0),
         })
     # Matières laizées sans laizes : affichées avec un placeholder "À configurer"
     for r in rows_laizees_vides:
@@ -3850,13 +3885,18 @@ def _valorisation_query(conn) -> list[dict]:
             "prix_palette": None,
             "prix_updated_at": None,
             "prix_updated_by_name": None,
+            "prix_en_usd": bool(r["prix_en_usd"] or 0),
         })
     return out
 
 
-def _valorisation_summary(items: list[dict]) -> dict:
+def _valorisation_summary(items: list[dict], taux_eur_usd: float = 0.0) -> dict:
     totals_by_cat: dict[str, dict] = {}
     total = 0.0
+    total_reel = 0.0
+    nb_refs_usd = 0
+    # Pour éviter de compter plusieurs fois une matière laizée multi-bobines
+    matieres_usd_seen: set[int] = set()
     for it in items:
         cat = it["categorie"]
         if cat not in totals_by_cat:
@@ -3878,27 +3918,65 @@ def _valorisation_summary(items: list[dict]) -> dict:
         if is_valued:
             bucket["nb_refs_valorisees"] += 1
         total += it["valorisation"]
+        # Valorisation "réelle" (avec conversion EUR/USD pour les lignes cochées)
+        if it.get("prix_en_usd") and taux_eur_usd > 0:
+            total_reel += it["valorisation"] * taux_eur_usd
+            mid = it.get("matiere_id")
+            if isinstance(mid, int) and mid not in matieres_usd_seen:
+                matieres_usd_seen.add(mid)
+                nb_refs_usd += 1
+        else:
+            total_reel += it["valorisation"]
     cats = sorted(totals_by_cat.values(), key=lambda c: _mp_categorie_order(c["categorie"]))
     for c in cats:
         c["total"] = round(c["total"], 2)
     return {
         "total_mp": round(total, 2),
+        "total_mp_reel": round(total_reel, 2),
         "total_pf": 0.0,
         "total_global": round(total, 2),
         "categories": cats,
         "nb_refs": sum(c["nb_refs"] for c in cats),
         "nb_refs_valorisees": sum(c["nb_refs_valorisees"] for c in cats),
+        "nb_refs_usd": nb_refs_usd,
+        "taux_eur_usd": round(taux_eur_usd, 6) if taux_eur_usd > 0 else 0,
     }
+
+
+def _enrich_items_with_usd(items: list[dict], taux_eur_usd: float) -> None:
+    """Ajoute prix_unitaire_reel / valorisation_reelle in-place pour chaque item.
+    Si la ligne est marquée prix_en_usd ET que le taux est valide, on convertit ;
+    sinon la valeur réelle = valeur affichée (l'UI sait ne rien afficher dans ce cas)."""
+    has_taux = taux_eur_usd > 0
+    for it in items:
+        is_usd = bool(it.get("prix_en_usd"))
+        if is_usd and has_taux:
+            it["prix_unitaire_reel"] = round((it.get("prix_unitaire") or 0) * taux_eur_usd, 4)
+            it["valorisation_reelle"] = round((it.get("valorisation") or 0) * taux_eur_usd, 2)
+            it["prix_eur_m2_reel"] = (
+                round((it.get("prix_eur_m2") or 0) * taux_eur_usd, 4)
+                if it.get("prix_eur_m2") is not None
+                else None
+            )
+        else:
+            it["prix_unitaire_reel"] = it.get("prix_unitaire") or 0
+            it["valorisation_reelle"] = it.get("valorisation") or 0
+            it["prix_eur_m2_reel"] = it.get("prix_eur_m2")
 
 
 @router.get("/api/stock/valorisation")
 def get_valorisation(request: Request):
-    require_stock_matieres_admin(request)
+    user = require_stock_matieres_admin(request)
+    can_see_usd = _user_can_see_valorisation_usd(user)
     with get_db() as conn:
         items = _valorisation_query(conn)
+        taux = _get_taux_eur_usd(conn) if can_see_usd else 0.0
+    _enrich_items_with_usd(items, taux if can_see_usd else 0.0)
+    summary = _valorisation_summary(items, taux if can_see_usd else 0.0)
+    summary["can_see_usd"] = can_see_usd
     return {
         "items": items,
-        "summary": _valorisation_summary(items),
+        "summary": summary,
     }
 
 
@@ -4010,13 +4088,71 @@ async def update_valorisation(matiere_id: int, request: Request):
                 )
             conn.commit()
         items = _valorisation_query(conn)
+        can_see_usd = _user_can_see_valorisation_usd(user)
+        taux = _get_taux_eur_usd(conn) if can_see_usd else 0.0
+    _enrich_items_with_usd(items, taux)
+    summary = _valorisation_summary(items, taux)
+    summary["can_see_usd"] = can_see_usd
     # Pour les matières laizées, plusieurs lignes ont le même matiere_id → on renvoie toutes
     matching = [x for x in items if x["matiere_id"] == matiere_id]
     return {
         "ok": True,
         "item": matching[0] if matching else None,
         "items_matiere": matching,
-        "summary": _valorisation_summary(items),
+        "summary": summary,
+    }
+
+
+@router.put("/api/stock/valorisation/{matiere_id}/prix-en-usd")
+async def toggle_valorisation_prix_en_usd(matiere_id: int, request: Request):
+    """Bascule le flag prix_en_usd pour une matière. Réservé Direction / superadmin.
+    Crée la ligne mp_valorisation si elle n'existe pas (utile pour les matières laizées
+    qui n'ont pas forcément de prix_unitaire stocké)."""
+    user = require_valorisation_usd_admin(request)
+    body = await request.json() if request.headers.get("content-length") else {}
+    requested = body.get("prix_en_usd") if isinstance(body, dict) else None
+    user_name = (user.get("nom") or user.get("email") or "").strip() or None
+    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    with get_db() as conn:
+        mat = conn.execute(
+            "SELECT id FROM matieres_premieres WHERE id=?", (matiere_id,)
+        ).fetchone()
+        if not mat:
+            raise HTTPException(404, "Matière introuvable.")
+        prev = conn.execute(
+            "SELECT prix_unitaire, prix_en_usd FROM mp_valorisation WHERE matiere_id=?",
+            (matiere_id,),
+        ).fetchone()
+        if requested is None:
+            # Toggle si pas de valeur explicite
+            current = bool(prev["prix_en_usd"]) if prev else False
+            new_val = not current
+        else:
+            new_val = bool(requested)
+        if prev:
+            conn.execute(
+                "UPDATE mp_valorisation SET prix_en_usd=?, updated_at=?, updated_by_name=? WHERE matiere_id=?",
+                (1 if new_val else 0, now, user_name, matiere_id),
+            )
+        else:
+            conn.execute(
+                """INSERT INTO mp_valorisation (matiere_id, prix_unitaire, prix_en_usd, updated_at, updated_by_name)
+                   VALUES (?,0,?,?,?)""",
+                (matiere_id, 1 if new_val else 0, now, user_name),
+            )
+        conn.commit()
+        items = _valorisation_query(conn)
+        taux = _get_taux_eur_usd(conn)
+    _enrich_items_with_usd(items, taux)
+    summary = _valorisation_summary(items, taux)
+    summary["can_see_usd"] = True
+    matching = [x for x in items if x["matiere_id"] == matiere_id]
+    return {
+        "ok": True,
+        "prix_en_usd": new_val,
+        "item": matching[0] if matching else None,
+        "items_matiere": matching,
+        "summary": summary,
     }
 
 

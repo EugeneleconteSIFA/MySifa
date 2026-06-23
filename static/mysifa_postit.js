@@ -611,9 +611,26 @@
     }
   }
 
+  function clearPostitsUi() {
+    closePostitColorPalette();
+    closePostitDockMenu();
+    PostitState.items = [];
+    var layer = document.getElementById('postitLayer');
+    if (layer) {
+      layer.querySelectorAll('.postit').forEach(function (el) { el.remove(); });
+      layer.style.display = 'none';
+    }
+    var dockRoot = document.getElementById('postit-dock-root');
+    if (dockRoot) dockRoot.style.display = 'none';
+  }
+
   function initPostitsApp() {
     bindPostitColorPaletteDocClose();
-    if (!postitUserLoggedIn() || postitCurrentApp() === 'login') return;
+    if (!postitUserLoggedIn() || postitCurrentApp() === 'login') {
+      // Après déconnexion ou sur l'écran de connexion : on purge les post-its résiduels.
+      clearPostitsUi();
+      return;
+    }
     ensurePostitLayer();
     if (!postitDesktopEnabled()) return;
     loadPostits().catch(function () {});
@@ -974,6 +991,7 @@
   }
 
   window.PostitState = PostitState;
+  window.clearPostitsUi = clearPostitsUi;
   window.initPostitsApp = initPostitsApp;
   window.initPostitDock = initPostitDock;
   window.loadPostits = loadPostits;
