@@ -30,6 +30,7 @@ MC_SETTING_KEYS = frozenset(
         "default_container_cost_usd",
         "default_container_kg",
         "default_margin_eur_m2",
+        "import_tax_pct",
     }
 )
 
@@ -38,6 +39,7 @@ MC_SETTING_DEFAULTS: dict[str, Decimal] = {
     "default_container_cost_usd": Decimal("4000"),
     "default_container_kg": Decimal("26000"),
     "default_margin_eur_m2": Decimal("0.06"),
+    "import_tax_pct": Decimal("0"),
 }
 
 

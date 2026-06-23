@@ -18,6 +18,7 @@ class PricingSettingsOut(BaseModel):
     default_container_cost_usd: Decimal
     default_container_kg: Decimal
     default_margin_eur_m2: Decimal
+    import_tax_pct: Decimal = Decimal("0")
     eur_usd_rate_updated_at: Optional[str] = None
     eur_usd_rate_source: Optional[str] = None
 
@@ -27,6 +28,7 @@ class PricingSettingsPatch(BaseModel):
     default_container_cost_usd: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     default_container_kg: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     default_margin_eur_m2: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
+    import_tax_pct: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
 
 
 class PricingFxRefreshOut(BaseModel):

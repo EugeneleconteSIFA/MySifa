@@ -18,6 +18,9 @@ class PricingSettings:
     default_container_cost_usd: Decimal
     default_container_kg: Decimal
     default_margin_eur_m2: Decimal
+    # Taxe d'importation appliquée à la valorisation MP quand le flag est coché sur
+    # une référence (multiplicatif : prix × (1 + import_tax_pct / 100)). 0 par défaut.
+    import_tax_pct: Decimal = Decimal("0")
 
 
 @dataclass(frozen=True)

@@ -612,6 +612,15 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
   font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;font-family:inherit;transition:all .15s}
 .mp-pill:hover{border-color:var(--accent);color:var(--accent)}
 .mp-pill.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+/* Pills frontal éclatées par sous-section — teintes bleues distinctes */
+.mp-pill-frontal-couche:hover{border-color:#0284c7;color:#0284c7}
+.mp-pill-frontal-couche.active{background:rgba(125,211,252,.22);border-color:#0284c7;color:#0284c7}
+.mp-pill-frontal-synthetique:hover{border-color:#0891b2;color:#0891b2}
+.mp-pill-frontal-synthetique.active{background:rgba(34,211,238,.18);border-color:#0891b2;color:#0891b2}
+.mp-pill-frontal-thermiques:hover{border-color:#4f46e5;color:#4f46e5}
+.mp-pill-frontal-thermiques.active{background:rgba(99,102,241,.20);border-color:#4f46e5;color:#4f46e5}
+.mp-pill-frontal-velin:hover{border-color:#1e3a8a;color:#1e3a8a}
+.mp-pill-frontal-velin.active{background:rgba(30,58,138,.22);border-color:#1e3a8a;color:#1e3a8a}
 .mp-search-wrap{
   margin-bottom:18px;position:relative;display:flex;align-items:center;
   background:var(--card);border:1.5px solid var(--accent);border-radius:12px;
@@ -3345,6 +3354,7 @@ function goToTab(tab) {
     if (S.valorisation) {
       S.valorisation.query = '';
       S.valorisation.filterCategorie = null;
+      S.valorisation.filterSousSection = null;
       S.valorisation.sortColumn = null;
       S.valorisation.sortDirection = 'asc';
     }
@@ -4957,6 +4967,43 @@ const MP_PILL_CATS = [
   { id: 'complexe', label: 'Complexes' },
   { id: 'autre', label: 'Autre' },
 ];
+
+// Slug normalisé (sans accents, lowercase, alphanumérique) pour clé pill / classe CSS
+function mpSousSectionSlug(ss) {
+  return String(ss || '').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '');
+}
+
+// Préfixe d'identifiant pour les pills de sous-section frontal promues en catégorie de 1er niveau.
+// Exemple : 'frontal:couche' (slug normalisé).
+const MP_FRONTAL_SS_PREFIX = 'frontal:';
+
+function mpParseFrontalSsPillId(id) {
+  // Renvoie { categorie:'frontal', sousSection:'<label>' } si l'id est une pill SS frontal, sinon null
+  if (typeof id !== 'string' || id.indexOf(MP_FRONTAL_SS_PREFIX) !== 0) return null;
+  return { categorie: 'frontal', sousSectionSlug: id.slice(MP_FRONTAL_SS_PREFIX.length) };
+}
+
+// Donne la liste des sous-sections frontal présentes dans une liste de matières.
+// Renvoie [{ slug, label, count }] triés alpha. count peut inclure les "sans sous-section"
+// sous une entrée slug='' / label='Sans sous-section' si certains items n'ont pas de SS.
+function mpFrontalSousSections(matieres) {
+  const map = new Map();
+  let noneCount = 0;
+  (matieres || []).forEach(m => {
+    if (String(m.categorie || '').toLowerCase() !== 'frontal') return;
+    const ss = (m.sous_section || '').trim();
+    if (!ss) { noneCount += 1; return; }
+    const slug = mpSousSectionSlug(ss);
+    if (!slug) { noneCount += 1; return; }
+    if (!map.has(slug)) map.set(slug, { slug, label: ss, count: 0 });
+    map.get(slug).count += 1;
+  });
+  const out = Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label, 'fr'));
+  if (noneCount > 0) out.push({ slug: '', label: 'Sans sous-section', count: noneCount });
+  return out;
+}
 
 const MP_CATEGORIES_LAIZEES = new Set(['frontal', 'glassine', 'complexe']);
 function mpIsLaizeeCategory(cat) {
@@ -7712,68 +7759,69 @@ function buildMatieres() {
         )
       : null,
   );
+  // Construit la liste réelle des pills : on remplace la pill "frontal" par
+  // une pill par sous-section frontale présente. La sélection actuelle est
+  // matérialisée par S.matieresCat + S.matieresSousSection.
+  const frontalSousSections = mpFrontalSousSections(S.matieres);
+  const expandFrontal = frontalSousSections.length > 0;
+  const pillDefs = [];
+  MP_PILL_CATS.forEach(p => {
+    if (p.id === 'frontal' && expandFrontal) {
+      // Une pill par sous-section (chaque pill = un (categorie, sous_section))
+      frontalSousSections.forEach(ss => {
+        pillDefs.push({
+          id: MP_FRONTAL_SS_PREFIX + ss.slug,
+          label: ss.label,
+          cat: 'frontal',
+          // Pour la sentinelle "sans sous-section", on conserve slug='' qui sert d'indicateur
+          sousSection: ss.slug ? ss.label : null,
+          isFrontalSs: true,
+          ssSlug: ss.slug,
+        });
+      });
+    } else {
+      pillDefs.push({ id: p.id, label: p.label, cat: p.id, sousSection: null });
+    }
+  });
+
+  // Détermine la pill active à partir de l'état
+  const activePillId = (() => {
+    const cat = S.matieresCat || 'tout';
+    const ss = S.matieresSousSection || null;
+    if (cat === 'frontal' && expandFrontal) {
+      // Si une sous-section est active, on retrouve son slug. Sinon, on prend la 1re par défaut.
+      if (ss) {
+        const slug = (ss === MP_SOUS_SECTION_NONE) ? '' : mpSousSectionSlug(ss);
+        return MP_FRONTAL_SS_PREFIX + slug;
+      }
+      // Si pas de sous-section précise mais cat=frontal : on retombe sur la 1re pill ss frontale
+      return MP_FRONTAL_SS_PREFIX + (frontalSousSections[0]?.slug || '');
+    }
+    return cat;
+  })();
+
   const pills = el('div', { cls: 'mp-pills' },
-    ...MP_PILL_CATS.map(p => el('button', {
-      cls: 'mp-pill' + (S.matieresCat === p.id ? ' active' : ''),
+    ...pillDefs.map(d => el('button', {
+      cls: 'mp-pill mp-pill-' + d.id.replace(/[^a-z0-9]/g, '-')
+        + (activePillId === d.id ? ' active' : ''),
       type: 'button',
       on: { click: () => {
-        if (S.matieresCat !== p.id) {
-          S.matieresCat = p.id;
-          S.matieresSousSection = null; // reset sous-section au changement de catégorie
+        if (d.isFrontalSs) {
+          S.matieresCat = 'frontal';
+          // Pas de label de sous-section → sentinelle "sans sous-section"
+          S.matieresSousSection = d.sousSection ? d.sousSection : MP_SOUS_SECTION_NONE;
+        } else {
+          if (S.matieresCat !== d.cat) {
+            S.matieresCat = d.cat;
+            S.matieresSousSection = null;
+          }
         }
         renderMatieresView();
       } },
-    }, p.label)),
+    }, d.label)),
   );
-  // 2e ligne : pills de sous-section, visible uniquement quand la catégorie
-  // active supporte les sous-sections (autre / frontal).
-  const curCat = S.matieresCat || 'tout';
-  let subPills = null;
-  if (mpCategorieHasSousSection(curCat)) {
-    // Compte les matières par sous-section dans la catégorie active
-    const matsInCat = (S.matieres || []).filter(m => mpCategorieKey(m.categorie) === curCat);
-    const counts = {};
-    let noneCount = 0;
-    matsInCat.forEach(m => {
-      const ss = (m.sous_section || '').trim();
-      if (!ss) { noneCount += 1; return; }
-      counts[ss] = (counts[ss] || 0) + 1;
-    });
-    const ssNames = Object.keys(counts).sort((a, b) => a.localeCompare(b, 'fr'));
-    // Construit la rangée seulement s'il y a au moins une sous-section ou des "sans"
-    if (ssNames.length > 0 || noneCount > 0) {
-      const activeSs = S.matieresSousSection || null;
-      const makeSubPill = (id, label, count) => el('button', {
-        cls: 'mp-pill' + (activeSs === id ? ' active' : ''),
-        type: 'button',
-        style: 'font-size:11px;padding:5px 12px',
-        on: { click: () => {
-          S.matieresSousSection = (activeSs === id) ? null : id;
-          renderMatieresView();
-        } },
-      }, label + ' · ' + count);
-      const totalCat = matsInCat.length;
-      const subChildren = [];
-      // "Toutes" — désactive le filtre sous-section
-      subChildren.push(el('button', {
-        cls: 'mp-pill' + (!activeSs ? ' active' : ''),
-        type: 'button',
-        style: 'font-size:11px;padding:5px 12px',
-        on: { click: () => { S.matieresSousSection = null; renderMatieresView(); } },
-      }, 'Toutes · ' + totalCat));
-      ssNames.forEach(ss => subChildren.push(makeSubPill(ss, ss, counts[ss])));
-      if (noneCount > 0) {
-        subChildren.push(makeSubPill(MP_SOUS_SECTION_NONE, 'Sans sous-section', noneCount));
-      }
-      subPills = el('div', {
-        cls: 'mp-pills mp-pills-sub',
-        style: 'margin-top:-4px;margin-bottom:8px;display:flex;flex-wrap:wrap;gap:6px',
-      }, ...subChildren);
-    }
-  } else if (S.matieresSousSection) {
-    // Sécurité : si on change pour une catégorie sans sous-section, reset
-    S.matieresSousSection = null;
-  }
+  // Plus de 2e ligne de sub-pills : les sous-sections frontal sont promues au 1er niveau
+  const subPills = null;
   const searchInp = el('input', {
     cls: 'mp-search',
     id: 'matieres-search',
@@ -7874,7 +7922,7 @@ function buildMatieres() {
     ));
   };
   const mpSectionHeadStyle = 'margin:14px 4px 4px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px';
-  const mpSubsectionHeadStyle = 'margin:24px 0 12px;padding:14px 18px;font-size:15px;font-weight:700;color:var(--text);background:linear-gradient(90deg,var(--accent-bg),transparent);border-left:4px solid var(--accent);border-radius:10px;letter-spacing:.2px;display:block';
+  const mpSubsectionHeadStyle = 'margin:10px 4px 4px;padding:6px 12px;font-size:12px;font-weight:700;color:var(--accent);background:var(--accent-bg);border-radius:8px;display:inline-block';
   if (!filtered.length) {
     list.appendChild(el('div', { cls: 'mp-empty' },
       q
@@ -7882,40 +7930,46 @@ function buildMatieres() {
         : 'Aucune matière dans cette catégorie.',
     ));
   } else {
+    // Plus de bandeau sous-section : les sous-sections frontal sont promues au niveau pill.
+    // Cas 1 : pill spécifique (Couché, Mandrins, etc.) → rendu plat, pas de header.
+    // Cas 2 : pill "Tout" → on regroupe par "catégorie virtuelle" où les frontaux
+    //         sont éclatés par sous_section, exactement comme dans la barre de pills.
     const curCat = S.matieresCat || 'tout';
-    const ssItems = filtered.filter(m => mpCategorieHasSousSection(m.categorie));
-    const flatItems = filtered.filter(m => !mpCategorieHasSousSection(m.categorie));
-    // Catégories sans sous-section : rendu plat dans l'ordre du tri serveur
-    flatItems.forEach(renderMpCard);
-    // Catégories avec sous-section (autre + frontal) : groupées
-    if (ssItems.length) {
-      // Sépare par catégorie pour conserver un en-tête de section
-      const byCat = {};
-      ssItems.forEach(m => {
+    if (curCat !== 'tout') {
+      filtered.forEach(renderMpCard);
+    } else {
+      // Construit des buckets par catégorie virtuelle
+      const buckets = new Map();
+      const keyFor = (m) => {
         const c = mpCategorieKey(m.categorie);
-        if (!byCat[c]) byCat[c] = [];
-        byCat[c].push(m);
-      });
-      const activeSs = S.matieresSousSection || null;
-      Object.keys(byCat).sort((a, b) => a.localeCompare(b, 'fr')).forEach(cat => {
-        if (curCat === 'tout' && flatItems.length) {
-          list.appendChild(el('div', { cls: 'mp-section-head', style: mpSectionHeadStyle }, MP_CAT_LABELS[cat] || cat));
+        if (c === 'frontal') {
+          const ss = (m.sous_section || '').trim();
+          return ss ? ('frontal:' + ss) : 'frontal:';
         }
-        const bySs = {};
-        byCat[cat].forEach(m => {
-          const ss = (m.sous_section || '').trim() || '— Sans sous-section —';
-          if (!bySs[ss]) bySs[ss] = [];
-          bySs[ss].push(m);
-        });
-        Object.keys(bySs).sort((a, b) => a.localeCompare(b, 'fr')).forEach(ss => {
-          // Quand un filtre sous-section précis est actif, le header est redondant
-          // avec la pill active : on l'omet pour une vue plus aérée.
-          if (!activeSs) {
-            list.appendChild(el('div', { cls: 'mp-subsection-head', style: mpSubsectionHeadStyle },
-              ss + ' · ' + bySs[ss].length));
-          }
-          bySs[ss].forEach(renderMpCard);
-        });
+        return c;
+      };
+      const labelFor = (m) => {
+        const c = mpCategorieKey(m.categorie);
+        if (c === 'frontal') {
+          const ss = (m.sous_section || '').trim();
+          return ss || 'Frontal (sans sous-section)';
+        }
+        return MP_CAT_LABELS[c] || c;
+      };
+      filtered.forEach(m => {
+        const k = keyFor(m);
+        if (!buckets.has(k)) buckets.set(k, { label: labelFor(m), items: [] });
+        buckets.get(k).items.push(m);
+      });
+      const keys = Array.from(buckets.keys()).sort((a, b) => {
+        const la = buckets.get(a).label, lb = buckets.get(b).label;
+        return la.localeCompare(lb, 'fr');
+      });
+      keys.forEach(k => {
+        const b = buckets.get(k);
+        list.appendChild(el('div', { cls: 'mp-section-head', style: mpSectionHeadStyle },
+          b.label + ' · ' + b.items.length));
+        b.items.forEach(renderMpCard);
       });
     }
   }
@@ -12911,6 +12965,7 @@ function valEnsureState() {
       loading: false,
       query: '',
       filterCategorie: null,
+      filterSousSection: null,
       sortColumn: null,
       sortDirection: 'asc',
       historique: null,    // { matiere, historique }
@@ -12992,6 +13047,17 @@ function valFilteredItems() {
   if (v.filterCategorie) {
     rows = rows.filter(r => r.categorie === v.filterCategorie);
   }
+  // Filtre sous_section (seulement pour frontal). v.filterSousSection peut être :
+  // - une string non vide → match exact (case-insensitive)
+  // - '' (string vide) → frontaux sans sous_section
+  // - null → pas de filtre
+  if (v.filterCategorie === 'frontal' && v.filterSousSection !== null) {
+    const fss = String(v.filterSousSection).toLowerCase();
+    rows = rows.filter(r => {
+      const ss = (r.sous_section || '').trim().toLowerCase();
+      return ss === fss;
+    });
+  }
   const q = (v.query || '').trim().toLowerCase();
   if (q) {
     rows = rows.filter(r =>
@@ -13042,23 +13108,38 @@ function buildValorisationKpis() {
   const totalPF = pfLoaded ? Number(pfS.total_pf || 0) : 0;
   const totalGlobal = totalMP + totalPF;
 
-  // USD dédoublement (Direction / superadmin uniquement, et seulement si au moins une réf cochée)
+  // Dédoublement (Direction / superadmin), affiché si au moins une ligne USD ou taxe.
   const canSeeUSD = valCanSeeUSD();
-  const nbRefsUSD = Number(s.nb_refs_usd || 0);
+  const nbUsdOnly = Number(s.nb_refs_usd_only || 0);
+  const nbTaxOnly = Number(s.nb_refs_tax_only || 0);
+  const nbBoth = Number(s.nb_refs_usd_and_tax || 0);
   const tauxRaw = Number(s.taux_eur_usd || 0);
-  const showUsdBreakdown = canSeeUSD && nbRefsUSD > 0 && tauxRaw > 0;
+  const taxPctRaw = Number(s.import_tax_pct || 0);
+  const showReelBreakdown = canSeeUSD && (nbUsdOnly + nbTaxOnly + nbBoth) > 0
+    && (tauxRaw > 0 || taxPctRaw > 0);
   const totalMPReel = Number(s.total_mp_reel || s.total_mp || 0);
   const totalGlobalReel = totalMPReel + totalPF;
 
   const wrap = el('div', { cls: 'val-kpis', style:
     'display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:16px;' });
 
+  // Helpers d'affichage des sous-totaux d'un KPI
+  const tauxTxt = tauxRaw > 0 ? '1 USD = ' + tauxRaw.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 4 }) + ' €' : null;
+  const taxTxt = taxPctRaw > 0 ? 'Taxe import. ' + taxPctRaw.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' %' : null;
+  const buildBreakdownLabel = () => {
+    const parts = [];
+    if (nbUsdOnly > 0) parts.push(nbUsdOnly + ' USD');
+    if (nbTaxOnly > 0) parts.push(nbTaxOnly + ' taxées');
+    if (nbBoth > 0) parts.push(nbBoth + ' USD+taxe');
+    return parts.join(' · ');
+  };
+
   // ── Total global ──────────────────────────────────────────────
   const kpiTotalChildren = [
     el('div', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px' }, 'Stock valorisé — Total'),
     el('div', { style: 'font-size:24px;font-weight:800;color:var(--accent)' }, valFormatEuro(totalGlobal)),
   ];
-  if (showUsdBreakdown) {
+  if (showReelBreakdown) {
     kpiTotalChildren.push(
       el('div', { style: 'font-size:15px;font-weight:800;color:#16a34a;margin-top:4px' },
         valFormatEuro(totalGlobalReel),
@@ -13075,31 +13156,37 @@ function buildValorisationKpis() {
     ...kpiTotalChildren
   );
 
-  // ── Matières premières — dédoublé EUR / réel si réfs USD ──────
+  // ── Matières premières — dédoublé EUR / réel si réfs USD ou taxe ──
   const kpiMPChildren = [
     el('div', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px' }, 'Matières premières'),
     el('div', { style: 'font-size:24px;font-weight:800;color:var(--text)' }, valFormatEuro(totalMP)),
   ];
-  if (showUsdBreakdown) {
+  if (showReelBreakdown) {
     kpiMPChildren.push(
       el('div', { style: 'font-size:15px;font-weight:800;color:#16a34a;margin-top:4px;display:flex;align-items:baseline;gap:6px' },
         el('span', null, valFormatEuro(totalMPReel)),
         el('span', { style: 'font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px' }, 'réel')
       )
     );
+    const refsLabel = buildBreakdownLabel();
+    const subPieces = [
+      `${s.nb_refs_valorisees || 0} / ${s.nb_refs || 0} références valorisées`,
+    ];
+    if (refsLabel) subPieces.push(refsLabel);
+    if (tauxTxt) subPieces.push(tauxTxt);
+    if (taxTxt) subPieces.push(taxTxt);
     kpiMPChildren.push(
-      el('div', { style: 'font-size:11px;color:var(--muted);margin-top:6px' },
-        `${s.nb_refs_valorisees || 0} / ${s.nb_refs || 0} références valorisées · `,
-        el('span', { style: 'color:#16a34a;font-weight:700' },
-          `${nbRefsUSD} en USD`),
-        ` · 1 USD = ${tauxRaw.toLocaleString('fr-FR', { minimumFractionDigits: 4, maximumFractionDigits: 4 })} €`
+      el('div', { style: 'font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5' },
+        subPieces.join(' · ')
       )
     );
   } else {
+    const subPieces = [`${s.nb_refs_valorisees || 0} / ${s.nb_refs || 0} références valorisées`];
+    if (canSeeUSD && tauxTxt) subPieces.push(tauxTxt);
+    if (canSeeUSD && taxTxt) subPieces.push(taxTxt);
     kpiMPChildren.push(
       el('div', { style: 'font-size:11px;color:var(--muted);margin-top:6px' },
-        `${s.nb_refs_valorisees || 0} / ${s.nb_refs || 0} références valorisées`
-        + (canSeeUSD && tauxRaw > 0 ? ` · Taux EUR/USD : ${tauxRaw.toLocaleString('fr-FR', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}` : '')
+        subPieces.join(' · ')
       )
     );
   }
@@ -13126,27 +13213,111 @@ function buildValorisationCategoriePills() {
   const v = valEnsureState();
   const s = v.summary || { categories: [] };
   const cats = s.categories || [];
+  const items = v.items || [];
   const wrap = el('div', { style:
     'display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;align-items:center' });
 
   const base = 'padding:7px 14px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:6px';
   const active = 'padding:7px 14px;border-radius:999px;border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px';
 
+  // Précalcule les totaux par sous-section frontal (à partir des items)
+  const frontalBySs = new Map(); // ss(lowercase) → { label, total }
+  let frontalSansSsTotal = 0;
+  let hasFrontalSansSs = false;
+  items.forEach(it => {
+    if (String(it.categorie || '').toLowerCase() !== 'frontal') return;
+    const ssRaw = (it.sous_section || '').trim();
+    if (!ssRaw) {
+      frontalSansSsTotal += Number(it.valorisation || 0);
+      hasFrontalSansSs = true;
+      return;
+    }
+    const k = ssRaw.toLowerCase();
+    if (!frontalBySs.has(k)) frontalBySs.set(k, { label: ssRaw, total: 0 });
+    frontalBySs.get(k).total += Number(it.valorisation || 0);
+  });
+  const frontalSsList = Array.from(frontalBySs.values())
+    .sort((a, b) => a.label.localeCompare(b.label, 'fr'));
+
+  // Couleurs frontales par slug
+  const frontalAccent = (slug) => (
+    slug === 'couche' ? '#0284c7'
+    : slug === 'synthetique' ? '#0891b2'
+    : slug === 'thermiques' ? '#4f46e5'
+    : slug === 'velin' ? '#1e3a8a'
+    : 'var(--accent)'
+  );
+  const frontalActiveStyle = (color) =>
+    'padding:7px 14px;border-radius:999px;border:1px solid ' + color
+    + ';background:' + color + '14;color:' + color
+    + ';font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px';
+
   const allBtn = el('button', {
-    type: 'button', style: v.filterCategorie === null ? active : base,
-    on: { click: () => { v.filterCategorie = null; renderValorisationView(true); } } }, 'Toutes catégories',
+    type: 'button', style: (v.filterCategorie === null) ? active : base,
+    on: { click: () => {
+      v.filterCategorie = null; v.filterSousSection = null; renderValorisationView(true);
+    } } }, 'Toutes catégories',
     el('span', { style: 'opacity:.7;font-weight:600' }, '· ' + valFormatEuro(s.total_mp))
   );
   wrap.appendChild(allBtn);
 
   cats.forEach(c => {
-    const isActive = v.filterCategorie === c.categorie;
-    const btn = el('button', {
-      type: 'button', style: isActive ? active : base,
-      on: { click: () => { v.filterCategorie = isActive ? null : c.categorie; renderValorisationView(true); } } }, c.categorie_label,
-      el('span', { style: 'opacity:.7;font-weight:600' }, '· ' + valFormatEuro(c.total))
-    );
-    wrap.appendChild(btn);
+    if (c.categorie === 'frontal' && frontalSsList.length > 0) {
+      // Eclatement par sous-section
+      frontalSsList.forEach(ss => {
+        const slug = mpSousSectionSlug(ss.label);
+        const color = frontalAccent(slug);
+        const isActive = v.filterCategorie === 'frontal'
+          && v.filterSousSection !== null
+          && String(v.filterSousSection).toLowerCase() === ss.label.toLowerCase();
+        const styleStr = isActive ? frontalActiveStyle(color) : base;
+        const btn = el('button', {
+          type: 'button', style: styleStr,
+          on: { click: () => {
+            if (isActive) {
+              v.filterCategorie = null; v.filterSousSection = null;
+            } else {
+              v.filterCategorie = 'frontal'; v.filterSousSection = ss.label;
+            }
+            renderValorisationView(true);
+          } } }, ss.label,
+          el('span', { style: 'opacity:.7;font-weight:600' }, '· ' + valFormatEuro(ss.total))
+        );
+        wrap.appendChild(btn);
+      });
+      // Pill "Sans sous-section" seulement s'il existe des frontaux sans SS
+      if (hasFrontalSansSs) {
+        const isActive = v.filterCategorie === 'frontal' && v.filterSousSection === '';
+        const btn = el('button', {
+          type: 'button', style: isActive ? active : base,
+          on: { click: () => {
+            if (isActive) {
+              v.filterCategorie = null; v.filterSousSection = null;
+            } else {
+              v.filterCategorie = 'frontal'; v.filterSousSection = '';
+            }
+            renderValorisationView(true);
+          } } }, 'Frontal (sans sous-section)',
+          el('span', { style: 'opacity:.7;font-weight:600' }, '· ' + valFormatEuro(frontalSansSsTotal))
+        );
+        wrap.appendChild(btn);
+      }
+    } else {
+      const isActive = v.filterCategorie === c.categorie && v.filterSousSection === null;
+      const btn = el('button', {
+        type: 'button', style: isActive ? active : base,
+        on: { click: () => {
+          if (isActive) {
+            v.filterCategorie = null; v.filterSousSection = null;
+          } else {
+            v.filterCategorie = c.categorie; v.filterSousSection = null;
+          }
+          renderValorisationView(true);
+        } } }, c.categorie_label,
+        el('span', { style: 'opacity:.7;font-weight:600' }, '· ' + valFormatEuro(c.total))
+      );
+      wrap.appendChild(btn);
+    }
   });
   return wrap;
 }
@@ -13167,6 +13338,26 @@ async function toggleValorisationUSD(matiereId) {
     if (data?.summary) v.summary = data.summary;
     renderValorisationView(true);
     showToast(data.prix_en_usd ? 'Référence marquée USD.' : 'Conversion USD retirée.', 'success');
+  } catch (e) {
+    showToast('Erreur : ' + (e?.message || 'changement impossible'), 'danger');
+  }
+}
+
+async function toggleValorisationTaxe(matiereId) {
+  const v = valEnsureState();
+  try {
+    const data = await api('/api/stock/valorisation/' + matiereId + '/taxe-importation', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    if (data?.items_matiere && Array.isArray(data.items_matiere)) {
+      const newByKey = new Map(data.items_matiere.map(x => [x.row_key, x]));
+      v.items = (v.items || []).map(x => newByKey.has(x.row_key) ? newByKey.get(x.row_key) : x);
+    }
+    if (data?.summary) v.summary = data.summary;
+    renderValorisationView(true);
+    showToast(data.taxe_importation ? 'Taxe d\'importation appliquée.' : 'Taxe d\'importation retirée.', 'success');
   } catch (e) {
     showToast('Erreur : ' + (e?.message || 'changement impossible'), 'danger');
   }
@@ -13334,10 +13525,15 @@ function buildValorisationTableRow(item) {
   const valored = (item.prix_unitaire || 0) > 0
     && (!item.avec_conditionnement || (item.unites_par_palette || 0) > 0);
   const valColor = valored ? 'var(--text)' : 'var(--muted)';
+  // Une ligne est « réelle » dès qu'au moins un flag (USD ou taxe d'importation) est actif
+  // ET produit un multiplicateur ≠ 1 (donc taux/taxe paramètres > 0 côté API).
+  const hasReel = valored
+    && (item.prix_en_usd || item.taxe_importation)
+    && Number(item.valorisation_reelle || 0) > 0
+    && Math.abs(Number(item.valorisation_reelle) - Number(item.valorisation)) > 0.005;
   let tdVal;
-  if (valored && item.prix_en_usd && Number(item.valorisation_reelle || 0) > 0
-      && Math.abs(Number(item.valorisation_reelle) - Number(item.valorisation)) > 0.005) {
-    // Ligne USD : on empile l'ancien (barré, petit, muted) au-dessus du réel (vert, gras).
+  if (hasReel) {
+    // Empilement : ancienne valorisation barrée (petite, muted) + valorisation réelle (vert gras).
     tdVal = el('td', { style: 'padding:10px 12px;text-align:right;font-variant-numeric:tabular-nums' },
       el('div', { style: 'display:flex;flex-direction:column;align-items:flex-end;line-height:1.2' },
         el('div', {
@@ -13355,11 +13551,13 @@ function buildValorisationTableRow(item) {
 
   // ── Colonne « Prix unit. réel » : visible uniquement Direction / superadmin ──
   // Mêmes proportions que Prix unitaire (main /pal. + sous-titre €/kg · kg/pal.) mais
-  // en vert et sans bouton Modifier. Affichée pour les références cochées USD.
+  // en vert et sans bouton Modifier. Affichée pour les références USD OU taxe.
   const canSeeUSD = valCanSeeUSD();
   let tdPrixReel = null;
   if (canSeeUSD) {
-    if (item.prix_en_usd && valored) {
+    if ((item.prix_en_usd || item.taxe_importation) && valored
+        && Number(item.prix_unitaire_reel || 0) > 0
+        && Math.abs(Number(item.prix_unitaire_reel) - Number(item.prix_unitaire)) > 0.00005) {
       const uniteAbbr = valAbbrUnite(item.unite);
       let mainTxt;
       const subPieces = [];
@@ -13405,11 +13603,12 @@ function buildValorisationTableRow(item) {
     }
   }
 
-  // ── Colonne « Actions » (anciennement « Historique ») ──
-  // Action 1 : icône horloge → ouvre l'historique des prix (comportement actuel)
-  // Action 2 : badge $⇄€ cliquable → toggle prix_en_usd (vert si actif)
+  // ── Colonne « Actions » ──
+  // Action 1 : horloge → historique des prix
+  // Action 2 : $ → toggle prix_en_usd (vert si actif)
+  // Action 3 : package → toggle taxe_importation (vert si actif)
   const histBtn = el('button', {
-    type: 'button', title: 'Voir l\'historique des prix',
+    type: 'button', title: 'Voir l\'historique des prix de cette référence',
     style: 'background:transparent;border:1px solid var(--border);border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);transition:all .15s',
     on: {
       click: () => openValorisationHistorique(item.matiere_id || item.id),
@@ -13421,10 +13620,17 @@ function buildValorisationTableRow(item) {
 
   const actionsChildren = [histBtn];
   if (canSeeUSD) {
+    // -- Action USD --
     const usdOn = !!item.prix_en_usd;
+    const tauxRaw = Number((S.valorisation && S.valorisation.summary && S.valorisation.summary.taux_eur_usd) || 0);
+    const tauxTxt = tauxRaw > 0 ? tauxRaw.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 4 }) : null;
+    const usdTitle = usdOn
+      ? 'Référence USD — cliquer pour repasser en saisie EUR'
+      + (tauxTxt ? ' (taux courant 1 USD = ' + tauxTxt + ' €)' : '')
+      : 'Marquer cette référence comme saisie en USD'
+      + (tauxTxt ? ' — le prix réel sera multiplié par 1 USD = ' + tauxTxt + ' €' : ' — taux EUR/USD à configurer dans Paramètres');
     const usdBtn = el('button', {
-      type: 'button',
-      title: usdOn ? 'Référence en USD — cliquer pour repasser en EUR' : 'Marquer la référence en USD (conversion via Taux EUR/USD de MyCouts)',
+      type: 'button', title: usdTitle,
       style:
         'border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;'
         + (usdOn
@@ -13442,6 +13648,35 @@ function buildValorisationTableRow(item) {
     });
     usdBtn.appendChild(iconEl('dollar-sign', 14));
     actionsChildren.push(usdBtn);
+
+    // -- Action Taxe d'importation --
+    const taxOn = !!item.taxe_importation;
+    const taxRaw = Number((S.valorisation && S.valorisation.summary && S.valorisation.summary.import_tax_pct) || 0);
+    const taxTxt = taxRaw > 0 ? taxRaw.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' %' : null;
+    const taxTitle = taxOn
+      ? 'Taxe d\'importation appliquée — cliquer pour la retirer'
+      + (taxTxt ? ' (taux courant ' + taxTxt + ')' : '')
+      : 'Appliquer la taxe d\'importation à cette référence'
+      + (taxTxt ? ' (' + taxTxt + ')' : ' — taux à configurer dans Paramètres');
+    const taxBtn = el('button', {
+      type: 'button', title: taxTitle,
+      style:
+        'border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;'
+        + (taxOn
+            ? 'background:rgba(34,197,94,0.12);border:1px solid #16a34a;color:#16a34a'
+            : 'background:transparent;border:1px solid var(--border);color:var(--text2)'),
+      on: {
+        click: () => toggleValorisationTaxe(item.matiere_id || item.id),
+        mouseenter: (e) => {
+          if (!taxOn) { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.color = 'var(--text)'; }
+        },
+        mouseleave: (e) => {
+          if (!taxOn) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text2)'; }
+        },
+      },
+    });
+    taxBtn.appendChild(iconEl('package', 14));
+    actionsChildren.push(taxBtn);
   }
   const tdHist = el('td', {
     style: 'padding:10px 12px;text-align:center;white-space:nowrap'
@@ -13684,62 +13919,8 @@ function buildValorisationTable() {
       el('td', { colspan: colspan, style: 'padding:30px 20px;text-align:center;color:var(--muted);font-size:13px' }, msg)
     ));
   } else {
-    // Tri auto : on injecte une bannière full-width entre les sous-sections frontal
-    // Actif quand l'utilisateur ne sort pas par une colonne arbitraire (sinon ça
-    // fragmenterait les groupes). On considère sortColumn null OU 'categorie' comme « tri naturel ».
-    const groupable = !v.sortColumn || v.sortColumn === 'categorie';
-    let lastFrontalSs = null;
-    let inFrontal = false;
-    const SS_LABELS = { '': 'Sans sous-section' };
-    rows.forEach(item => {
-      const cat = String(item.categorie || '').toLowerCase();
-      if (groupable && cat === 'frontal') {
-        const ssRaw = (item.sous_section || '').trim();
-        if (!inFrontal || ssRaw !== lastFrontalSs) {
-          // Compte les bobines dans cette sous-section (somme des quantités)
-          const sameSs = rows.filter(r => String(r.categorie || '').toLowerCase() === 'frontal'
-            && (r.sous_section || '').trim() === ssRaw);
-          const label = ssRaw || 'Sans sous-section';
-          const k = ssRaw.toLowerCase()
-            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-            .replace(/[^a-z0-9]+/g, '');
-          const colorMap = {
-            couche: '#0284c7',
-            synthetique: '#0891b2',
-            thermiques: '#4f46e5',
-            velin: '#1e3a8a',
-          };
-          const bgMap = {
-            couche: 'rgba(125,211,252,.18)',
-            synthetique: 'rgba(34,211,238,.14)',
-            thermiques: 'rgba(99,102,241,.14)',
-            velin: 'rgba(30,58,138,.16)',
-          };
-          const accent = colorMap[k] || 'var(--accent)';
-          const bg = bgMap[k] || 'var(--accent-bg)';
-          const headerTr = el('tr', null,
-            el('td', {
-              attrs: { colspan: colspan },
-              style:
-                'padding:14px 18px;background:linear-gradient(90deg,' + bg + ',transparent);'
-                + 'border-top:1px solid var(--border);border-bottom:1px solid var(--border);'
-                + 'border-left:4px solid ' + accent + ';'
-                + 'font-size:14px;font-weight:700;color:var(--text);letter-spacing:.2px',
-            },
-              el('span', { style: 'color:' + accent }, 'Frontal · '),
-              el('span', null, label + ' · ' + sameSs.length + ' réf.'),
-            )
-          );
-          tbody.appendChild(headerTr);
-          lastFrontalSs = ssRaw;
-          inFrontal = true;
-        }
-      } else {
-        inFrontal = false;
-        lastFrontalSs = null;
-      }
-      tbody.appendChild(buildValorisationTableRow(item));
-    });
+    // Rendu plat : la pill active (Couché, Synthétique...) suffit à identifier le groupe.
+    rows.forEach(item => tbody.appendChild(buildValorisationTableRow(item)));
   }
 
   table.append(thead, tbody);
@@ -14517,13 +14698,176 @@ function buildValorisationToolbar() {
   exportBtn.appendChild(el('span', null, v.exporting ? 'Export en cours…' : 'Exporter Excel'));
 
   const refreshBtn = el('button', {
-    type: 'button', title: 'Recharger',
+    type: 'button', title: 'Recharger les données de valorisation',
       style: 'padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;display:inline-flex;align-items:center',
     on: { click: () => loadValorisation() } });
   refreshBtn.appendChild(iconEl('refresh-ccw', 14));
 
   wrap.append(inp, exportBtn, refreshBtn);
+
+  // ── Icône Paramètres MyCouts (Direction / superadmin uniquement) ──
+  // Ouvre les paramètres en modal superposé (pas de redirection MyCouts).
+  if (valCanSeeUSD()) {
+    const settingsBtn = el('button', {
+      type: 'button',
+      title: 'Paramètres MyCouts — Taux EUR/USD, taxe d\'importation, marge, container',
+      style: 'padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;display:inline-flex;align-items:center;transition:all .15s',
+      on: {
+        click: () => openValorisationSettingsModal(),
+        mouseenter: (e) => { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.color = 'var(--text)'; },
+        mouseleave: (e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text2)'; },
+      },
+    });
+    settingsBtn.appendChild(iconEl('settings', 14));
+    wrap.append(settingsBtn);
+  }
   return wrap;
+}
+
+// ── Modal Paramètres MyCouts (superposé, pas de redirection) ──
+async function openValorisationSettingsModal() {
+  const v = valEnsureState();
+  const root = document.getElementById('mroot');
+  if (!root) return;
+  root.innerHTML = '';
+  const overlay = el('div', {
+    style: 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px',
+    on: { click: (e) => { if (e.target === overlay) { root.innerHTML = ''; } } },
+  });
+  const box = el('div', { style: 'background:var(--card);border:1px solid var(--border);border-radius:14px;width:100%;max-width:540px;max-height:90vh;overflow-y:auto;padding:22px' });
+  box.appendChild(el('div', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px' }, 'MyCouts'));
+  box.appendChild(el('div', { style: 'font-size:17px;font-weight:800;color:var(--text);margin-bottom:14px' }, 'Paramètres globaux'));
+
+  const loadingMsg = el('div', { style: 'padding:18px 0;color:var(--muted);font-size:13px;text-align:center' }, 'Chargement…');
+  box.appendChild(loadingMsg);
+  overlay.appendChild(box);
+  root.appendChild(overlay);
+
+  let settings;
+  try {
+    settings = await api('/api/pricing/settings');
+  } catch (e) {
+    loadingMsg.remove();
+    box.appendChild(el('div', { style: 'color:var(--danger);font-size:13px' }, 'Erreur : ' + (e?.message || 'chargement impossible')));
+    return;
+  }
+  loadingMsg.remove();
+
+  // Form fields
+  const mkInput = (id, value, step, hint) => {
+    const inp = el('input', {
+      type: 'number', id: id, step: step, min: '0',
+      style: 'width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;font-variant-numeric:tabular-nums' });
+    inp.value = String(value ?? '');
+    return inp;
+  };
+  const mkLabel = (text, hint) => {
+    const wrap = el('div', { style: 'margin-bottom:6px;display:flex;align-items:baseline;justify-content:space-between;gap:8px' },
+      el('label', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px' }, text)
+    );
+    if (hint) wrap.appendChild(el('span', { style: 'font-size:10px;color:var(--muted);font-style:italic' }, hint));
+    return wrap;
+  };
+
+  const rateInp = mkInput('vsm-rate', settings.eur_usd_rate, '0.0001');
+  const taxInp = mkInput('vsm-tax', settings.import_tax_pct || 0, '0.01');
+  const contCostInp = mkInput('vsm-cont-cost', settings.default_container_cost_usd, '1');
+  const contKgInp = mkInput('vsm-cont-kg', settings.default_container_kg, '1');
+  const marginInp = mkInput('vsm-margin', settings.default_margin_eur_m2, '0.0001');
+
+  const fxDate = settings.eur_usd_rate_updated_at
+    ? String(settings.eur_usd_rate_updated_at).replace('T', ' ').slice(0, 16)
+    : '—';
+  const fxSrc = settings.eur_usd_rate_source || '—';
+
+  // -- Taux EUR/USD --
+  box.appendChild(mkLabel('Taux EUR / USD', '1 USD vaut N €'));
+  const rateRow = el('div', { style: 'display:flex;gap:8px;align-items:center' });
+  rateRow.appendChild(rateInp);
+  const refreshFxBtn = el('button', {
+    type: 'button', title: 'Récupérer le taux courant depuis exchangerate.host',
+    style: 'padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text2);cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600',
+  });
+  refreshFxBtn.appendChild(iconEl('refresh-ccw', 12));
+  refreshFxBtn.appendChild(el('span', null, 'Rafraîchir'));
+  refreshFxBtn.addEventListener('click', async () => {
+    refreshFxBtn.disabled = true;
+    try {
+      const r = await api('/api/pricing/settings/refresh-fx', { method: 'POST' });
+      rateInp.value = String(r.eur_usd_rate);
+      showToast('Taux rafraîchi : 1 USD = ' + Number(r.eur_usd_rate).toLocaleString('fr-FR', { maximumFractionDigits: 4 }) + ' €', 'success');
+    } catch (e) {
+      showToast('Erreur : ' + (e?.message || 'rafraîchissement impossible'), 'danger');
+    } finally {
+      refreshFxBtn.disabled = false;
+    }
+  });
+  rateRow.appendChild(refreshFxBtn);
+  box.appendChild(rateRow);
+  box.appendChild(el('div', { style: 'font-size:10px;color:var(--muted);margin-top:4px;margin-bottom:14px' },
+    'Source : ' + fxSrc + ' · MAJ : ' + fxDate));
+
+  // -- Taxe d'importation --
+  box.appendChild(mkLabel('Taxe d\'importation (%)', 'Appliquée aux lignes cochées « package »'));
+  box.appendChild(taxInp);
+  box.appendChild(el('div', { style: 'height:14px' }));
+
+  // -- Default container cost --
+  box.appendChild(mkLabel('Container — coût par défaut (USD)'));
+  box.appendChild(contCostInp);
+  box.appendChild(el('div', { style: 'height:14px' }));
+
+  // -- Default container kg --
+  box.appendChild(mkLabel('Container — capacité par défaut (kg)'));
+  box.appendChild(contKgInp);
+  box.appendChild(el('div', { style: 'height:14px' }));
+
+  // -- Default margin --
+  box.appendChild(mkLabel('Marge par défaut (€ / m²)'));
+  box.appendChild(marginInp);
+
+  // -- Actions --
+  const actions = el('div', { style: 'display:flex;gap:8px;justify-content:flex-end;margin-top:22px;border-top:1px solid var(--border);padding-top:16px' });
+  const cancelBtn = el('button', {
+    type: 'button',
+    style: 'padding:10px 18px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-weight:600',
+    on: { click: () => { root.innerHTML = ''; } },
+  }, 'Annuler');
+  const saveBtn = el('button', {
+    type: 'button',
+    style: 'padding:10px 18px;border-radius:10px;border:none;background:var(--accent);color:#0a0e17;cursor:pointer;font-weight:800',
+  }, 'Enregistrer');
+  saveBtn.addEventListener('click', async () => {
+    saveBtn.disabled = true;
+    try {
+      const payload = {
+        eur_usd_rate: parseFloat(rateInp.value),
+        import_tax_pct: parseFloat(taxInp.value || '0'),
+        default_container_cost_usd: parseFloat(contCostInp.value),
+        default_container_kg: parseFloat(contKgInp.value),
+        default_margin_eur_m2: parseFloat(marginInp.value),
+      };
+      for (const k of Object.keys(payload)) {
+        if (isNaN(payload[k])) {
+          throw new Error('Valeur invalide pour « ' + k + ' ».');
+        }
+      }
+      await api('/api/pricing/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      root.innerHTML = '';
+      showToast('Paramètres enregistrés.', 'success');
+      await loadValorisation();  // Recharge avec les nouveaux taux/taxe
+    } catch (e) {
+      showToast('Erreur : ' + (e?.message || 'enregistrement impossible'), 'danger');
+      saveBtn.disabled = false;
+    }
+  });
+  actions.appendChild(cancelBtn);
+  actions.appendChild(saveBtn);
+  box.appendChild(actions);
 }
 
 function buildValorisation() {
