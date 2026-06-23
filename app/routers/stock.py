@@ -3722,7 +3722,7 @@ def _valorisation_query(conn) -> list[dict]:
     rows_simple = conn.execute(
         """
         SELECT mp.id, mp.categorie, mp.reference, mp.designation, mp.actif,
-               mp.unites_par_palette,
+               mp.unites_par_palette, mp.sous_section,
                COALESCE(s.quantite, 0) AS quantite,
                COALESCE(v.prix_unitaire, 0) AS prix_unitaire,
                COALESCE(v.prix_en_usd, 0) AS prix_en_usd,
@@ -3739,6 +3739,7 @@ def _valorisation_query(conn) -> list[dict]:
     rows_laizees = conn.execute(
         """
         SELECT mp.id AS matiere_id, mp.categorie, mp.reference, mp.designation,
+               mp.sous_section,
                COALESCE(mp.metres_lineaires_par_bobine, 0) AS metres,
                COALESCE(mp.prix_eur_m2, 0) AS prix_eur_m2,
                COALESCE(v.prix_en_usd, 0) AS prix_en_usd,
@@ -3757,6 +3758,7 @@ def _valorisation_query(conn) -> list[dict]:
     rows_laizees_vides = conn.execute(
         """
         SELECT mp.id AS matiere_id, mp.categorie, mp.reference, mp.designation,
+               mp.sous_section,
                COALESCE(mp.metres_lineaires_par_bobine, 0) AS metres,
                COALESCE(mp.prix_eur_m2, 0) AS prix_eur_m2,
                COALESCE(v.prix_en_usd, 0) AS prix_en_usd
@@ -3804,6 +3806,7 @@ def _valorisation_query(conn) -> list[dict]:
             "laize_label": None,
             "categorie": cat,
             "categorie_label": _MP_CATEGORIE_LABELS.get(cat, cat or ""),
+            "sous_section": (r["sous_section"] if "sous_section" in r.keys() else None),
             "reference": r["reference"],
             "designation": r["designation"],
             "quantite": qte,
@@ -3838,6 +3841,7 @@ def _valorisation_query(conn) -> list[dict]:
             "laize_label": r["laize_label"],
             "categorie": cat,
             "categorie_label": _MP_CATEGORIE_LABELS.get(cat, cat or ""),
+            "sous_section": (r["sous_section"] if "sous_section" in r.keys() else None),
             "reference": r["reference"],
             "designation": r["designation"] + (f" — {r['laize_label']}" if r["laize_label"] else ""),
             "quantite": qte,
@@ -3868,6 +3872,7 @@ def _valorisation_query(conn) -> list[dict]:
             "laize_label": None,
             "categorie": cat,
             "categorie_label": _MP_CATEGORIE_LABELS.get(cat, cat or ""),
+            "sous_section": (r["sous_section"] if "sous_section" in r.keys() else None),
             "reference": r["reference"],
             "designation": r["designation"],
             "quantite": 0.0,
