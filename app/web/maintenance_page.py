@@ -219,6 +219,47 @@ select.filter-input option{background:#ffffff;color:#0f172a}
   .cal-wday{font-size:10px;padding:6px 0}
 }
 
+/* ── Vue Semaine (emploi du temps) ──────────────────────────────────── */
+.cal-wv-hint{font-size:11px;color:var(--muted);background:var(--accent-bg);border:1px dashed var(--accent);border-radius:8px;padding:8px 12px;margin-bottom:14px;text-align:center}
+.cal-wv-header{display:grid;grid-template-columns:70px repeat(7,1fr);gap:0;margin-bottom:0;border-bottom:1px solid var(--border)}
+.cal-wv-corner{}
+.cal-wv-dayhead{padding:10px 8px;text-align:center;border-left:1px solid var(--border);display:flex;flex-direction:column;align-items:center;gap:2px;background:var(--card)}
+.cal-wv-dayhead.weekend{background:rgba(167,139,250,.06)}
+.cal-wv-dayhead.today{background:var(--accent-bg)}
+.cal-wv-dayname{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-family:"SFMono-Regular",ui-monospace,Consolas,monospace}
+.cal-wv-dayhead.weekend .cal-wv-dayname{color:#a78bfa}
+.cal-wv-dayhead.today .cal-wv-dayname{color:var(--accent)}
+.cal-wv-daydate{font-size:14px;font-weight:700;color:var(--text);font-family:"SFMono-Regular",ui-monospace,Consolas,monospace}
+.cal-wv-dayhead.today .cal-wv-daydate{color:var(--accent)}
+.cal-wv-body{display:grid;grid-template-columns:70px repeat(7,1fr);gap:0;position:relative;overflow:auto;max-height:70vh}
+.cal-wv-times-col{display:flex;flex-direction:column}
+.cal-wv-time{height:56px;display:flex;align-items:flex-start;justify-content:flex-end;padding:2px 8px 0 0;font-size:10px;font-weight:600;color:var(--muted);font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;border-right:1px solid var(--border);border-top:1px solid var(--border)}
+.cal-wv-time:first-child{border-top:none}
+.cal-wv-day-col{position:relative;display:flex;flex-direction:column;border-left:1px solid var(--border);min-height:100%}
+.cal-wv-day-col.weekend{background:rgba(167,139,250,.04)}
+.cal-wv-day-col.today{background:var(--accent-bg)}
+.cal-wv-hour-row{height:56px;border-top:1px solid var(--border);transition:background .12s}
+.cal-wv-hour-row:first-child{border-top:none}
+.cal-wv-day-col.drag-over{background:var(--accent-bg);outline:2px dashed var(--accent);outline-offset:-2px;z-index:1}
+.cal-event{position:absolute;left:4px;right:4px;background:var(--accent);color:var(--accent-fg,#fff);border-radius:6px;padding:4px 6px;font-size:11px;font-weight:600;line-height:1.3;cursor:pointer;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.18);z-index:2;display:flex;flex-direction:column;gap:1px;transition:filter .12s,transform .08s}
+.cal-event:hover{filter:brightness(1.08)}
+.cal-event:active{transform:scale(.98)}
+.cal-event-title{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cal-event-time{font-size:10px;font-weight:500;opacity:.85;font-family:"SFMono-Regular",ui-monospace,Consolas,monospace}
+.cal-event[data-niveau="1"]{background:#22d3ee;color:#062430}
+.cal-event[data-niveau="2"]{background:#fbbf24;color:#3b2300}
+.cal-event[data-niveau="3"]{background:#f87171;color:#3b0a0a}
+/* Lignes du catalogue rendues draggable */
+.js-cat-tbody tr[draggable="true"]{cursor:grab}
+.js-cat-tbody tr[draggable="true"]:active{cursor:grabbing}
+.js-cat-tbody tr[draggable="true"].drag-source{opacity:.55}
+@media(max-width:720px){
+  .cal-wv-body{max-height:60vh}
+  .cal-wv-time{font-size:9px;padding-right:5px}
+  .cal-wv-header,.cal-wv-body{grid-template-columns:54px repeat(7,1fr)}
+  .cal-wv-daydate{font-size:12px}
+}
+
 .ops-form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:14px}
 .ops-field{display:flex;flex-direction:column;gap:5px;min-width:0}
 .ops-field--full{grid-column:1/-1}
@@ -387,7 +428,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
             <div class="cal-controls">
               <div class="cal-view-tabs">
                 <button type="button" class="cal-view-tab active" data-cal-view="month" onclick="setCalView('month')">Mois</button>
-                <button type="button" class="cal-view-tab" data-cal-view="week" onclick="setCalView('week')" disabled title="Bientôt disponible">Semaine</button>
+                <button type="button" class="cal-view-tab" data-cal-view="week" onclick="setCalView('week')">Semaine</button>
               </div>
               <div class="cal-nav">
                 <button type="button" onclick="calPrev()" aria-label="Précédent">◀</button>
@@ -396,8 +437,17 @@ body.light .toast.info{background:#fff;color:var(--text)}
               </div>
             </div>
           </div>
-          <div class="cal-week-head" id="cal-week-head"></div>
-          <div class="cal-grid" id="cal-grid"></div>
+          <!-- Vue Mois -->
+          <div class="cal-month-view" id="cal-month-view">
+            <div class="cal-week-head" id="cal-week-head"></div>
+            <div class="cal-grid" id="cal-grid"></div>
+          </div>
+          <!-- Vue Semaine (emploi du temps) -->
+          <div class="cal-week-view" id="cal-week-view" style="display:none">
+            <div class="cal-wv-hint">Glissez une opération depuis la liste ci-dessous pour la placer sur le créneau souhaité.</div>
+            <div class="cal-wv-header" id="cal-wv-header"></div>
+            <div class="cal-wv-body" id="cal-wv-body"></div>
+          </div>
           <div class="cal-legend">
             <span class="cal-legend-item"><span class="cal-legend-dot today"></span> Aujourd'hui</span>
             <span class="cal-legend-item"><span class="cal-legend-dot off"></span> Hors mois</span>
@@ -844,6 +894,47 @@ body.light .toast.info{background:#fff;color:var(--text)}
   </div>
 </div>
 
+<!-- Modal : Planifier une opération (créneau horaire) -->
+<div class="modal-overlay" id="planning-time-modal" onclick="if(event.target===this) closePlanningTimeModal()" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="plan-mod-title">
+    <div class="modal-head">
+      <div class="modal-title" id="plan-mod-title">Planifier une opération</div>
+      <button type="button" class="modal-close" onclick="closePlanningTimeModal()" aria-label="Fermer">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <form id="planning-time-form" onsubmit="submitPlanningTime(event)">
+      <div class="modal-body">
+        <div class="ops-saisi-par">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <span>Opération : <strong id="plan-mod-op">—</strong></span>
+        </div>
+        <div class="ops-saisi-par" style="margin-top:0">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span>Date : <strong id="plan-mod-date">—</strong></span>
+        </div>
+        <div class="ops-form-grid">
+          <div class="ops-field">
+            <label class="ops-field-label" for="plan-mod-start">Heure de début<span class="req">*</span></label>
+            <input type="time" id="plan-mod-start" class="ops-input" required>
+          </div>
+          <div class="ops-field">
+            <label class="ops-field-label" for="plan-mod-end">Heure de fin<span class="req">*</span></label>
+            <input type="time" id="plan-mod-end" class="ops-input" required>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="modal-btn-ghost" onclick="closePlanningTimeModal()">Annuler</button>
+        <button type="submit" class="ops-btn-add">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          Planifier
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <div class="toast-wrap" id="toast-wrap"></div>
 
 <script>
@@ -879,29 +970,59 @@ function switchView(name){
 }
 
 // =========================================================================
-// Planning — calendrier mensuel (style MyProd)
+// Planning — calendrier mensuel + vue Semaine (style MyProd)
 // =========================================================================
+const CAL_HOUR_START = 6;
+const CAL_HOUR_END   = 21;   // exclusif (affiche 6h → 20h)
+const CAL_HOUR_PX    = 56;
+function _calWeekMondayOf(d){
+  const r = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const off = (r.getDay() + 6) % 7;
+  r.setDate(r.getDate() - off);
+  return r;
+}
 const CAL_STATE = {
   view: 'month',
   year:  new Date().getFullYear(),
   month: new Date().getMonth(),
+  weekStart: _calWeekMondayOf(new Date()),
 };
+// État des opérations planifiées (drag & drop sur la vue Semaine).
+const PLANNING_STORAGE_KEY = 'mysifa_maint_planning_v1';
+const PLANNING_STATE = { list: [] };
+function loadPlanning(){
+  try{
+    const raw = localStorage.getItem(PLANNING_STORAGE_KEY);
+    PLANNING_STATE.list = raw ? JSON.parse(raw) : [];
+    if(!Array.isArray(PLANNING_STATE.list)) PLANNING_STATE.list = [];
+  }catch(e){ PLANNING_STATE.list = []; }
+}
+function savePlanning(){
+  try{ localStorage.setItem(PLANNING_STORAGE_KEY, JSON.stringify(PLANNING_STATE.list)); }catch(e){}
+}
 const CAL_WDAYS_FULL = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'];
 const CAL_WDAYS_SHORT = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
 const CAL_MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 
 function setCalView(v){
-  if(v !== 'month') return;
+  if(v !== 'month' && v !== 'week') return;
   CAL_STATE.view = v;
   document.querySelectorAll('[data-cal-view]').forEach(b => {
     b.classList.toggle('active', b.getAttribute('data-cal-view') === v);
   });
+  const mv = document.getElementById('cal-month-view');
+  const wv = document.getElementById('cal-week-view');
+  if(mv) mv.style.display = (v === 'month') ? '' : 'none';
+  if(wv) wv.style.display = (v === 'week') ? '' : 'none';
   renderCal();
 }
 function calPrev(){
   if(CAL_STATE.view === 'month'){
     CAL_STATE.month -= 1;
     if(CAL_STATE.month < 0){ CAL_STATE.month = 11; CAL_STATE.year -= 1; }
+  } else if(CAL_STATE.view === 'week'){
+    const ws = CAL_STATE.weekStart;
+    CAL_STATE.weekStart = new Date(ws.getFullYear(), ws.getMonth(), ws.getDate() - 7);
   }
   renderCal();
 }
@@ -909,19 +1030,30 @@ function calNext(){
   if(CAL_STATE.view === 'month'){
     CAL_STATE.month += 1;
     if(CAL_STATE.month > 11){ CAL_STATE.month = 0; CAL_STATE.year += 1; }
+  } else if(CAL_STATE.view === 'week'){
+    const ws = CAL_STATE.weekStart;
+    CAL_STATE.weekStart = new Date(ws.getFullYear(), ws.getMonth(), ws.getDate() + 7);
   }
   renderCal();
 }
 function calToday(){
   const now = new Date();
-  CAL_STATE.year = now.getFullYear();
-  CAL_STATE.month = now.getMonth();
+  if(CAL_STATE.view === 'month'){
+    CAL_STATE.year = now.getFullYear();
+    CAL_STATE.month = now.getMonth();
+  } else if(CAL_STATE.view === 'week'){
+    CAL_STATE.weekStart = _calWeekMondayOf(now);
+  }
   renderCal();
 }
 function _calIsoYMD(d){
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
 function renderCal(){
+  if(CAL_STATE.view === 'week') return renderCalWeek();
+  return renderCalMonth();
+}
+function renderCalMonth(){
   const lbl = document.getElementById('cal-month-label');
   if(lbl){
     lbl.textContent = CAL_MONTHS[CAL_STATE.month] + ' ' + CAL_STATE.year;
@@ -951,14 +1083,233 @@ function renderCal(){
     if(isOff) classes.push('cal-off');
     if(isWeekend) classes.push('cal-weekend');
     if(isToday) classes.push('cal-today');
+    // Compter les opérations planifiées sur ce jour
+    const eventsCount = PLANNING_STATE.list.filter(ev => ev.date === iso).length;
+    let badge = '';
+    if(eventsCount > 0){
+      badge = '<div class="cal-event-empty" style="font-style:normal;opacity:1;color:var(--accent);font-weight:700">' + eventsCount + ' op.' + '</div>';
+    }
     cells.push(
       '<div class="' + classes.join(' ') + '" data-date="' + iso + '">' +
         '<div class="cal-day-num">' + d.getDate() + '</div>' +
-        '<div class="cal-day-events"></div>' +
+        '<div class="cal-day-events">' + badge + '</div>' +
       '</div>'
     );
   }
   grid.innerHTML = cells.join('');
+}
+function renderCalWeek(){
+  const ws = CAL_STATE.weekStart;
+  const we = new Date(ws.getFullYear(), ws.getMonth(), ws.getDate() + 6);
+  // Libellé
+  const lbl = document.getElementById('cal-month-label');
+  if(lbl){
+    const fmtD = d => String(d.getDate()).padStart(2,'0') + ' ' + CAL_MONTHS[d.getMonth()].toLowerCase();
+    let s;
+    if(ws.getFullYear() === we.getFullYear()){
+      s = 'Semaine du ' + fmtD(ws) + ' au ' + fmtD(we) + ' ' + we.getFullYear();
+    } else {
+      s = 'Semaine du ' + fmtD(ws) + ' ' + ws.getFullYear() + ' au ' + fmtD(we) + ' ' + we.getFullYear();
+    }
+    lbl.textContent = s;
+  }
+  // En-tête : corner + 7 jours
+  const head = document.getElementById('cal-wv-header');
+  if(head){
+    const todayIso = _calIsoYMD(new Date());
+    const cells = ['<div class="cal-wv-corner"></div>'];
+    for(let i=0;i<7;i++){
+      const d = new Date(ws.getFullYear(), ws.getMonth(), ws.getDate()+i);
+      const iso = _calIsoYMD(d);
+      const isWeekend = (i >= 5);
+      const isToday = (iso === todayIso);
+      const cls = 'cal-wv-dayhead' + (isWeekend?' weekend':'') + (isToday?' today':'');
+      cells.push('<div class="' + cls + '" data-date="' + iso + '">' +
+        '<div class="cal-wv-dayname">' + escHtml(CAL_WDAYS_SHORT[i]) + '</div>' +
+        '<div class="cal-wv-daydate">' + String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '</div>' +
+      '</div>');
+    }
+    head.innerHTML = cells.join('');
+  }
+  // Corps : colonne heures + 7 colonnes jours
+  const body = document.getElementById('cal-wv-body');
+  if(!body) return;
+  const todayIso = _calIsoYMD(new Date());
+  let html = '<div class="cal-wv-times-col">';
+  for(let h=CAL_HOUR_START; h<CAL_HOUR_END; h++){
+    html += '<div class="cal-wv-time">' + String(h).padStart(2,'0') + ':00</div>';
+  }
+  html += '</div>';
+  for(let i=0;i<7;i++){
+    const d = new Date(ws.getFullYear(), ws.getMonth(), ws.getDate()+i);
+    const iso = _calIsoYMD(d);
+    const isWeekend = (i >= 5);
+    const isToday = (iso === todayIso);
+    const colCls = 'cal-wv-day-col' + (isWeekend?' weekend':'') + (isToday?' today':'');
+    html += '<div class="' + colCls + '" data-date="' + iso + '" ondragover="onCalDragOver(event)" ondragleave="onCalDragLeave(event)" ondrop="onCalDrop(event)">';
+    for(let h=CAL_HOUR_START; h<CAL_HOUR_END; h++){
+      html += '<div class="cal-wv-hour-row" data-hour="' + h + '"></div>';
+    }
+    html += '</div>';
+  }
+  body.innerHTML = html;
+  // Placer les événements dans chaque colonne
+  document.querySelectorAll('.cal-wv-day-col').forEach(col => {
+    const iso = col.getAttribute('data-date');
+    const events = PLANNING_STATE.list.filter(ev => ev.date === iso);
+    events.forEach(ev => {
+      const block = _makeCalEventBlock(ev);
+      if(block) col.appendChild(block);
+    });
+  });
+}
+function _hmToMins(s){
+  const m = String(s||'').match(/^(\d{1,2}):(\d{2})$/);
+  if(!m) return null;
+  return parseInt(m[1],10)*60 + parseInt(m[2],10);
+}
+function _makeCalEventBlock(ev){
+  const startMin = _hmToMins(ev.start);
+  const endMin = _hmToMins(ev.end);
+  if(startMin == null || endMin == null || endMin <= startMin) return null;
+  const startOffsetMin = startMin - CAL_HOUR_START*60;
+  const top = (startOffsetMin / 60) * CAL_HOUR_PX;
+  const height = Math.max(22, ((endMin - startMin) / 60) * CAL_HOUR_PX - 2);
+  const div = document.createElement('div');
+  div.className = 'cal-event';
+  div.style.top = top + 'px';
+  div.style.height = height + 'px';
+  if(ev.opNiveau) div.setAttribute('data-niveau', String(ev.opNiveau));
+  div.setAttribute('data-event-id', ev.id);
+  div.innerHTML = '<div class="cal-event-title">' + escHtml(ev.opName || '—') + '</div>' +
+                  '<div class="cal-event-time">' + escHtml(ev.start) + ' – ' + escHtml(ev.end) + '</div>';
+  div.title = 'Cliquer pour supprimer cette opération planifiée';
+  div.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if(confirm('Supprimer cette opération planifiée ?\n\n' + (ev.opName || '') + '\n' + ev.date + ' · ' + ev.start + ' – ' + ev.end)){
+      deletePlanningEvent(ev.id);
+    }
+  });
+  return div;
+}
+function deletePlanningEvent(id){
+  PLANNING_STATE.list = PLANNING_STATE.list.filter(e => e.id !== id);
+  savePlanning();
+  renderCal();
+}
+
+// ── Drag & drop : catalogue → semaine ─────────────────────────────────
+let _CAL_DRAG_OP_ID = null;
+function onCatRowDragStart(e, opTypeId){
+  _CAL_DRAG_OP_ID = opTypeId;
+  try{
+    e.dataTransfer.effectAllowed = 'copy';
+    e.dataTransfer.setData('text/plain', opTypeId);
+  }catch(_){}
+  if(e.currentTarget && e.currentTarget.classList) e.currentTarget.classList.add('drag-source');
+}
+function onCatRowDragEnd(e){
+  _CAL_DRAG_OP_ID = null;
+  if(e.currentTarget && e.currentTarget.classList) e.currentTarget.classList.remove('drag-source');
+  document.querySelectorAll('.cal-wv-day-col.drag-over').forEach(c => c.classList.remove('drag-over'));
+}
+function onCalDragOver(e){
+  if(!_CAL_DRAG_OP_ID && !(e.dataTransfer && e.dataTransfer.types && Array.from(e.dataTransfer.types).includes('text/plain'))) return;
+  e.preventDefault();
+  try{ e.dataTransfer.dropEffect = 'copy'; }catch(_){}
+  const col = e.currentTarget;
+  if(col && col.classList) col.classList.add('drag-over');
+}
+function onCalDragLeave(e){
+  const col = e.currentTarget;
+  if(!col) return;
+  // Ignorer dragleave si on entre dans un enfant
+  const rt = e.relatedTarget;
+  if(rt && col.contains(rt)) return;
+  col.classList.remove('drag-over');
+}
+function onCalDrop(e){
+  e.preventDefault();
+  const col = e.currentTarget;
+  if(col) col.classList.remove('drag-over');
+  let opTypeId = _CAL_DRAG_OP_ID;
+  if(!opTypeId){
+    try{ opTypeId = e.dataTransfer.getData('text/plain'); }catch(_){}
+  }
+  _CAL_DRAG_OP_ID = null;
+  if(!opTypeId) return;
+  const iso = col.getAttribute('data-date');
+  if(!iso) return;
+  // Calculer l'heure cible à partir de la position Y du drop
+  const rect = col.getBoundingClientRect();
+  const y = e.clientY - rect.top;
+  const hourFloat = CAL_HOUR_START + (y / CAL_HOUR_PX);
+  let h = Math.floor(hourFloat);
+  if(h < CAL_HOUR_START) h = CAL_HOUR_START;
+  if(h > CAL_HOUR_END - 1) h = CAL_HOUR_END - 1;
+  openPlanningTimeModal(opTypeId, iso, h);
+}
+
+// ── Modal créneau horaire ─────────────────────────────────────────────
+let _PENDING_PLAN_DROP = null;
+function _fmtIsoDateFr(iso){
+  if(!iso) return '';
+  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(!m) return iso;
+  const d = new Date(parseInt(m[1],10), parseInt(m[2],10)-1, parseInt(m[3],10));
+  return d.toLocaleDateString('fr-FR', {weekday:'long', day:'2-digit', month:'long', year:'numeric'});
+}
+function openPlanningTimeModal(opTypeId, iso, defaultHour){
+  const op = OPS_TYPES_STATE.list.find(t => t.id === opTypeId);
+  if(!op){ showToast('Type d\'opération introuvable.', 'danger'); return; }
+  _PENDING_PLAN_DROP = { opTypeId, iso };
+  const m = document.getElementById('planning-time-modal');
+  if(!m) return;
+  const opEl = document.getElementById('plan-mod-op');
+  const dtEl = document.getElementById('plan-mod-date');
+  const sEl = document.getElementById('plan-mod-start');
+  const eEl = document.getElementById('plan-mod-end');
+  if(opEl) opEl.textContent = op.nom;
+  if(dtEl) dtEl.textContent = _fmtIsoDateFr(iso);
+  const h = Math.max(0, Math.min(23, defaultHour || 8));
+  if(sEl) sEl.value = String(h).padStart(2,'0') + ':00';
+  if(eEl) eEl.value = String(Math.min(h+1, 23)).padStart(2,'0') + ':00';
+  m.classList.add('open');
+  m.setAttribute('aria-hidden','false');
+  document.body.style.overflow = 'hidden';
+  setTimeout(()=>{ if(sEl) sEl.focus(); }, 50);
+}
+function closePlanningTimeModal(){
+  const m = document.getElementById('planning-time-modal');
+  if(m){ m.classList.remove('open'); m.setAttribute('aria-hidden','true'); }
+  document.body.style.overflow = '';
+  _PENDING_PLAN_DROP = null;
+}
+function submitPlanningTime(e){
+  e.preventDefault();
+  if(!_PENDING_PLAN_DROP){ closePlanningTimeModal(); return; }
+  const start = (document.getElementById('plan-mod-start')?.value || '').trim();
+  const end = (document.getElementById('plan-mod-end')?.value || '').trim();
+  if(!start || !end){ showToast('Indiquez les heures.', 'danger'); return; }
+  const sm = _hmToMins(start), em = _hmToMins(end);
+  if(sm == null || em == null){ showToast('Format heure invalide (HH:MM).', 'danger'); return; }
+  if(em <= sm){ showToast('L\'heure de fin doit être après l\'heure de début.', 'danger'); return; }
+  const op = OPS_TYPES_STATE.list.find(t => t.id === _PENDING_PLAN_DROP.opTypeId);
+  if(!op){ showToast('Type d\'opération introuvable.', 'danger'); closePlanningTimeModal(); return; }
+  PLANNING_STATE.list.push({
+    id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8),
+    opTypeId: op.id,
+    opName: op.nom,
+    opNiveau: op.niveau,
+    opFreq: op.frequence,
+    date: _PENDING_PLAN_DROP.iso,
+    start, end,
+    created_at: new Date().toISOString(),
+  });
+  savePlanning();
+  closePlanningTimeModal();
+  renderCal();
+  showToast('Opération planifiée.', 'info');
 }
 
 // --- Toast ---
@@ -1466,7 +1817,7 @@ function renderOpsTypes(){
     html = '<tr><td colspan="5" class="ops-empty">Aucune opération dans la liste. Cliquez sur « Ajouter une opération à la liste » pour en créer une.</td></tr>';
   } else {
     html = sorted.map(t =>
-      '<tr>' +
+      '<tr draggable="true" ondragstart="onCatRowDragStart(event,\'' + escAttr(t.id) + '\')" ondragend="onCatRowDragEnd(event)" title="Glisser pour planifier sur le calendrier (vue Semaine)">' +
         '<td><strong style="color:var(--text)">' + escHtml(t.nom) + '</strong></td>' +
         '<td><span class="niv-badge" data-niv="' + t.niveau + '">N' + t.niveau + '</span></td>' +
         '<td>' + escHtml(t.frequence) + '</td>' +
@@ -1856,6 +2207,7 @@ async function loadMe(){
   loadOpsTypes();
   loadCtrl();
   loadCtrlTypes();
+  loadPlanning();
   renderOpsTypes();
   renderOps();
   renderCtrlTypes();
