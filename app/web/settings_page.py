@@ -1260,7 +1260,12 @@ function syncSettingsPageHead(tabId) {
       subEl.textContent = '';
       subEl.style.display = 'none';
     } else {
-      if (id === 'maintenance') { titleEl.textContent = 'Codes maintenance'; subEl.textContent = 'Référentiel des opérations de maintenance'; return; }
+      if (tabId === 'maintenance') {
+        if (titleEl) titleEl.textContent = 'Codes maintenance';
+        subEl.textContent = 'Référentiel des opérations de maintenance';
+        subEl.style.display = '';
+        return;
+      }
       subEl.textContent = 'Gestion des comptes et des accès';
       subEl.style.display = '';
     }
