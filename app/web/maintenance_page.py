@@ -194,7 +194,7 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 .cal-wday{text-align:center;padding:8px 0;font-size:11px;font-weight:700;font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;border-bottom:1px solid var(--border)}
 .cal-wday.sat,.cal-wday.sun{color:#a78bfa}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:minmax(110px,1fr);gap:6px}
-.cal-cell{position:relative;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 10px;min-height:110px;display:flex;flex-direction:column;gap:6px;transition:background .15s,border-color .15s,box-shadow .15s;overflow:hidden}
+.cal-cell{position:relative;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 10px 8px 14px;min-height:120px;display:flex;flex-direction:column;gap:6px;transition:background .15s,border-color .15s,box-shadow .15s;overflow:hidden}
 .cal-cell:hover{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-bg)}
 .cal-cell.cal-off{background:transparent;opacity:.55}
 .cal-cell.cal-off .cal-day-num{color:var(--muted)}
@@ -202,7 +202,17 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 .cal-cell.cal-today{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-bg)}
 .cal-day-num{font-size:13px;font-weight:700;color:var(--text);font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;line-height:1}
 .cal-cell.cal-today .cal-day-num{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:var(--accent);color:var(--accent-fg,#fff);font-size:12px}
-.cal-day-events{display:flex;flex-direction:column;gap:3px;flex:1;overflow:hidden}
+.cal-day-events{display:flex;flex-direction:column;gap:4px;flex:1;overflow:hidden}
+.cal-cell-clickable{cursor:copy}
+.cal-cell-has-events{position:relative}
+.cal-cell-has-events::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--cal-cell-accent,var(--accent));border-radius:10px 0 0 10px;pointer-events:none}
+.cal-day-event{display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:6px;font-size:11.5px;font-weight:700;line-height:1.2;cursor:pointer;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.18);transition:filter .12s,transform .08s}
+.cal-day-event:hover{filter:brightness(1.10);transform:translateX(1px)}
+.cal-day-event:active{transform:scale(.98)}
+.cal-day-event-time{font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;font-size:10.5px;font-weight:800;opacity:.92;flex-shrink:0;letter-spacing:.2px}
+.cal-day-event-machine{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700;letter-spacing:.1px}
+.cal-day-event-more{font-size:11px;color:var(--muted);font-weight:700;font-style:italic;padding:3px 8px;border-radius:5px;background:transparent;cursor:pointer;border:1px dashed var(--border);text-align:center;transition:all .12s}
+.cal-day-event-more:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-bg)}
 .cal-event-empty{font-size:10px;color:var(--muted);font-style:italic;opacity:.6}
 .cal-legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:18px;padding-top:14px;border-top:1px solid var(--border)}
 .cal-legend-item{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);font-weight:600}
@@ -520,8 +530,8 @@ body.light .toast.info{background:#fff;color:var(--text)}
             </div>
             <div class="cal-controls">
               <div class="cal-view-tabs">
-                <button type="button" class="cal-view-tab active" data-cal-view="month" onclick="setCalView('month')">Mois</button>
-                <button type="button" class="cal-view-tab" data-cal-view="week" onclick="setCalView('week')">Semaine</button>
+                <button type="button" class="cal-view-tab" data-cal-view="month" onclick="setCalView('month')">Mois</button>
+                <button type="button" class="cal-view-tab active" data-cal-view="week" onclick="setCalView('week')">Semaine</button>
                 <button type="button" class="cal-view-tab" data-cal-view="day" onclick="setCalView('day')">Jour</button>
               </div>
               <div class="cal-nav">
@@ -532,12 +542,12 @@ body.light .toast.info{background:#fff;color:var(--text)}
             </div>
           </div>
           <!-- Vue Mois -->
-          <div class="cal-month-view" id="cal-month-view">
+          <div class="cal-month-view" id="cal-month-view" style="display:none">
             <div class="cal-week-head" id="cal-week-head"></div>
             <div class="cal-grid" id="cal-grid"></div>
           </div>
           <!-- Vue Semaine (emploi du temps) -->
-          <div class="cal-week-view" id="cal-week-view" style="display:none">
+          <div class="cal-week-view cal-wv-mode-week" id="cal-week-view">
             <div class="cal-wv-hint">Cliquez sur une plage horaire libre pour créer un créneau de maintenance.</div>
             <div class="cal-wv-header" id="cal-wv-header"></div>
             <div class="cal-wv-body" id="cal-wv-body"></div>
@@ -1091,7 +1101,11 @@ function switchView(name){
   document.querySelectorAll('.nav-btn[data-view]').forEach(b => {
     b.classList.toggle('active', b.getAttribute('data-view') === name);
   });
-  if(name === 'planning') renderCal();
+  if(name === 'planning'){
+    // Toujours afficher la vue Semaine en arrivant dans Planning
+    if(typeof setCalView === 'function') setCalView('week');
+    else renderCal();
+  }
   const meta = VIEW_META[name];
   const t = document.querySelector('.mobile-topbar-title');
   const s = document.querySelector('.mobile-topbar-sub');
@@ -1114,7 +1128,7 @@ function _calWeekMondayOf(d){
   return r;
 }
 const CAL_STATE = {
-  view: 'month',
+  view: 'week',
   year:  new Date().getFullYear(),
   month: new Date().getMonth(),
   weekStart: _calWeekMondayOf(new Date()),
@@ -1267,24 +1281,64 @@ function renderCalMonth(){
     const isWeekend = (wd === 5 || wd === 6);
     const iso = _calIsoYMD(d);
     const isToday = (iso === todayIso);
-    const classes = ['cal-cell'];
+    const classes = ['cal-cell','cal-cell-clickable'];
     if(isOff) classes.push('cal-off');
     if(isWeekend) classes.push('cal-weekend');
     if(isToday) classes.push('cal-today');
-    // Compter les opérations planifiées sur ce jour
-    const eventsCount = PLANNING_STATE.list.filter(ev => ev.date === iso).length;
-    let badge = '';
-    if(eventsCount > 0){
-      badge = '<div class="cal-event-empty" style="font-style:normal;opacity:1;color:var(--accent);font-weight:700">' + eventsCount + ' op.' + '</div>';
+    // Récupérer les créneaux planifiés pour ce jour (triés par heure de début)
+    const dayEvents = PLANNING_STATE.list
+      .filter(ev => ev.date === iso)
+      .slice()
+      .sort((a,b) => (_hmToMins(a.start)||0) - (_hmToMins(b.start)||0));
+    // Teinter discrètement la case si elle contient des opérations
+    let cellStyle = '';
+    if(dayEvents.length > 0){
+      classes.push('cal-cell-has-events');
+      // Bande latérale = couleur du premier événement (par machine)
+      const firstPalette = _machinePalette(dayEvents[0].machine);
+      cellStyle = ' style="--cal-cell-accent:' + firstPalette.bg + '"';
+    }
+    // Chips : couleur de la machine + heure + nom
+    const MAX_CHIPS = 3;
+    const shown = dayEvents.slice(0, MAX_CHIPS);
+    const overflow = dayEvents.length - shown.length;
+    let chips = '';
+    shown.forEach(ev => {
+      const palette = _machinePalette(ev.machine);
+      const tip = (ev.machine || '') + ' · ' + ev.start + '–' + ev.end;
+      chips += '<div class="cal-day-event" style="background:' + palette.bg + ';color:' + palette.fg + '" ' +
+               'data-event-id="' + escAttr(ev.id) + '" ' +
+               'onclick="onCalMonthEventClick(event,\'' + escAttr(ev.id) + '\')" ' +
+               'title="' + escAttr(tip) + '">' +
+               '<span class="cal-day-event-time">' + escHtml(ev.start) + '</span>' +
+               '<span class="cal-day-event-machine">' + escHtml(ev.machine || '—') + '</span>' +
+               '</div>';
+    });
+    if(overflow > 0){
+      chips += '<div class="cal-day-event-more" onclick="onCalMonthCellClick(event)" title="Voir le jour en vue Semaine">+ ' + overflow + ' autre' + (overflow > 1 ? 's' : '') + '</div>';
     }
     cells.push(
-      '<div class="' + classes.join(' ') + '" data-date="' + iso + '">' +
+      '<div class="' + classes.join(' ') + '" data-date="' + iso + '"' + cellStyle + ' onclick="onCalMonthCellClick(event)">' +
         '<div class="cal-day-num">' + d.getDate() + '</div>' +
-        '<div class="cal-day-events">' + badge + '</div>' +
+        '<div class="cal-day-events">' + chips + '</div>' +
       '</div>'
     );
   }
   grid.innerHTML = cells.join('');
+}
+function onCalMonthCellClick(e){
+  // Si le clic vient d'une chip-événement, son propre handler gère
+  if(e.target.closest('.cal-day-event')) return;
+  const cell = e.currentTarget && e.currentTarget.closest ? e.currentTarget.closest('.cal-cell') : null;
+  const iso = (cell && cell.getAttribute('data-date')) || (e.currentTarget && e.currentTarget.getAttribute && e.currentTarget.getAttribute('data-date'));
+  if(!iso) return;
+  openCaseModal({ iso: iso, defaultHour: 8 });
+}
+function onCalMonthEventClick(e, id){
+  if(e && e.stopPropagation) e.stopPropagation();
+  const ev = PLANNING_STATE.list.find(x => x.id === id);
+  if(!ev) return;
+  openPlanningDetailsModal([ev]);
 }
 function renderCalWeek(){
   const ws = CAL_STATE.weekStart;
