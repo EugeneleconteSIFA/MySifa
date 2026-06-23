@@ -149,7 +149,7 @@ body.sb-open .sidebar-overlay{display:block}
 .view{display:flex;flex-direction:column;flex:1}
 
 /* Filtres en bandeau — style aligné sur MyProd / Production */
-.filters-panel{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px 20px 14px;margin-bottom:18px}
+.filters-panel{margin-bottom:18px}
 .filters{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
 .filter-group{display:flex;flex-direction:column;gap:6px;min-width:0}
 .filter-group label{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
