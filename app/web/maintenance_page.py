@@ -250,16 +250,24 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 .cal-event[data-niveau="2"]{background:#fbbf24;color:#3b2300}
 .cal-event[data-niveau="3"]{background:#f87171;color:#3b0a0a}
 /* Bloc fusionné (plusieurs opérations chevauchantes sur la même case) */
-.cal-event.cal-event-merged{background:var(--card);color:var(--text);border:1px solid var(--accent);box-shadow:0 1px 4px rgba(0,0,0,.22);padding:5px 6px;overflow:hidden;display:flex;flex-direction:column;gap:3px}
-.cal-event-merged-head{font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.4px;padding-bottom:3px;border-bottom:1px solid var(--border);font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;flex-shrink:0}
-.cal-event-list{display:flex;flex-direction:column;gap:2px;overflow:auto;flex:1;min-height:0}
-.cal-event-item{display:flex;align-items:baseline;gap:5px;padding:2px 5px;border-radius:4px;font-size:10px;line-height:1.25;background:var(--accent-bg);border-left:3px solid var(--accent);cursor:pointer;transition:filter .12s}
-.cal-event-item:hover{filter:brightness(.95)}
-.cal-event-item-time{font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;font-weight:700;color:var(--text2);flex-shrink:0;font-size:9px}
-.cal-event-item-name{flex:1;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.cal-event-item-niv-1{border-left-color:#22d3ee;background:rgba(34,211,238,.14)}
-.cal-event-item-niv-2{border-left-color:#fbbf24;background:rgba(251,191,36,.16)}
-.cal-event-item-niv-3{border-left-color:#f87171;background:rgba(248,113,113,.14)}
+.cal-event.cal-event-merged{background:linear-gradient(180deg,var(--accent-bg) 0%,rgba(255,255,255,0) 100%),var(--card);color:var(--text);border:2px solid var(--accent);border-radius:10px;box-shadow:0 4px 14px rgba(0,0,0,.18);padding:8px 10px 10px;overflow:hidden;display:flex;flex-direction:column;gap:8px}
+.cal-event-merged-head{display:flex;align-items:center;justify-content:center;gap:6px;font-size:11px;font-weight:800;color:var(--accent-fg,#fff);background:var(--accent);font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;padding:4px 9px;border-radius:6px;letter-spacing:.3px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:0 1px 3px rgba(0,0,0,.15)}
+.cal-event-list{display:flex;flex-direction:column;gap:5px;overflow:auto;flex:1;min-height:0;padding-right:2px}
+.cal-event-item{display:flex;flex-direction:column;gap:4px;padding:6px 9px;border-radius:7px;font-size:12px;line-height:1.3;background:var(--card);border:1px solid var(--border);border-left:4px solid var(--accent);cursor:pointer;transition:filter .12s,border-color .12s,transform .08s}
+.cal-event-item:hover{filter:brightness(.97);border-color:var(--accent)}
+.cal-event-item:active{transform:scale(.99)}
+.cal-event-item-time{display:inline-flex;align-items:center;gap:4px;font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;font-weight:700;font-size:11px;color:var(--accent);background:var(--accent-bg);padding:2px 7px;border-radius:5px;width:fit-content;letter-spacing:.2px}
+.cal-event-item-name{font-weight:700;font-size:12px;color:var(--text);white-space:normal;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word;line-height:1.3}
+.cal-event-item-niv-1{border-left-color:#22d3ee;background:linear-gradient(90deg,rgba(34,211,238,.08) 0%,var(--card) 60%)}
+.cal-event-item-niv-1 .cal-event-item-time{background:rgba(34,211,238,.22);color:#0891b2}
+.cal-event-item-niv-2{border-left-color:#fbbf24;background:linear-gradient(90deg,rgba(251,191,36,.10) 0%,var(--card) 60%)}
+.cal-event-item-niv-2 .cal-event-item-time{background:rgba(251,191,36,.25);color:#b45309}
+.cal-event-item-niv-3{border-left-color:#f87171;background:linear-gradient(90deg,rgba(248,113,113,.10) 0%,var(--card) 60%)}
+.cal-event-item-niv-3 .cal-event-item-time{background:rgba(248,113,113,.22);color:#b91c1c}
+body:not(.light) .cal-event-item-niv-1 .cal-event-item-time{color:#67e8f9}
+body:not(.light) .cal-event-item-niv-2 .cal-event-item-time{color:#fcd34d}
+body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
+.cal-event-item-machine{font-weight:600;color:var(--accent);opacity:.95;white-space:nowrap}
 /* Modale Détails */
 .plan-det-list{display:flex;flex-direction:column;gap:8px;margin-top:14px}
 .plan-det-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--bg);transition:border-color .15s,box-shadow .15s}
@@ -1278,13 +1286,15 @@ function _makeClusterBlock(cluster){
     let listHtml = '<div class="cal-event-list">';
     cluster.items.forEach(ev => {
       const nivCls = ev.opNiveau ? (' cal-event-item-niv-' + ev.opNiveau) : '';
+      const machine = ev.machine ? '<span class="cal-event-item-machine"> · ' + escHtml(ev.machine) + '</span>' : '';
       listHtml += '<div class="cal-event-item' + nivCls + '" data-event-id="' + escAttr(ev.id) + '">' +
-                  '<span class="cal-event-item-time">' + escHtml(ev.start) + '–' + escHtml(ev.end) + '</span>' +
-                  '<span class="cal-event-item-name">' + escHtml((ev.opName || '—') + (ev.machine?(' · ' + ev.machine):'')) + '</span>' +
+                  '<span class="cal-event-item-time">' + escHtml(ev.start) + ' – ' + escHtml(ev.end) + '</span>' +
+                  '<span class="cal-event-item-name">' + escHtml(ev.opName || '—') + machine + '</span>' +
                   '</div>';
     });
     listHtml += '</div>';
-    div.innerHTML = '<div class="cal-event-merged-head">' + escHtml(fmtHM(startMin)) + ' – ' + escHtml(fmtHM(endMin)) + ' · ' + cluster.items.length + ' opérations</div>' + listHtml;
+    const headTxt = escHtml(fmtHM(startMin)) + ' → ' + escHtml(fmtHM(endMin)) + ' · ' + cluster.items.length + ' op.';
+    div.innerHTML = '<div class="cal-event-merged-head">' + headTxt + '</div>' + listHtml;
     div.title = 'Cliquer pour afficher les détails';
     div.style.cursor = 'pointer';
     div.addEventListener('click', e => {
