@@ -21,6 +21,9 @@ class PricingSettings:
     # Taxe d'importation appliquée à la valorisation MP quand le flag est coché sur
     # une référence (multiplicatif : prix × (1 + import_tax_pct / 100)). 0 par défaut.
     import_tax_pct: Decimal = Decimal("0")
+    # Forfait transport (€) ajouté UNE SEULE FOIS à la valorisation d'une référence
+    # quand le flag cout_transport_inclus est coché, APRÈS les multiplicateurs USD/taxe.
+    transport_cost_fixed_eur: Decimal = Decimal("0")
 
 
 @dataclass(frozen=True)

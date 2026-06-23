@@ -17,6 +17,7 @@ _REQUIRED_KEYS = (
 # Clés optionnelles (présentes mais non bloquantes — default appliqué si absent).
 _OPTIONAL_KEYS = (
     "import_tax_pct",
+    "transport_cost_fixed_eur",
 )
 
 
@@ -54,6 +55,7 @@ def validate_pricing_settings(
                 + "."
             )
         tax_raw = settings.get("import_tax_pct")
+        transp_raw = settings.get("transport_cost_fixed_eur")
         s = PricingSettings(
             eur_usd_rate=_to_decimal(settings["eur_usd_rate"], "eur_usd_rate"),
             default_container_cost_usd=_to_decimal(
@@ -64,6 +66,7 @@ def validate_pricing_settings(
                 settings["default_margin_eur_m2"], "default_margin_eur_m2"
             ),
             import_tax_pct=_to_decimal(tax_raw, "import_tax_pct") if tax_raw is not None else Decimal("0"),
+            transport_cost_fixed_eur=_to_decimal(transp_raw, "transport_cost_fixed_eur") if transp_raw is not None else Decimal("0"),
         )
     else:
         raise PricingError("Paramètres de calcul : type non supporté.")
@@ -80,5 +83,7 @@ def validate_pricing_settings(
         raise PricingError("import_tax_pct ne peut pas être négatif.")
     if s.import_tax_pct > 1000:
         raise PricingError("import_tax_pct doit être inférieur à 1000 %.")
+    if s.transport_cost_fixed_eur < 0:
+        raise PricingError("transport_cost_fixed_eur ne peut pas être négatif.")
 
     return s
