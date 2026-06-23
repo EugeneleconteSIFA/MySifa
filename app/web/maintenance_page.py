@@ -249,6 +249,17 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 .cal-event[data-niveau="1"]{background:#22d3ee;color:#062430}
 .cal-event[data-niveau="2"]{background:#fbbf24;color:#3b2300}
 .cal-event[data-niveau="3"]{background:#f87171;color:#3b0a0a}
+/* Bloc fusionné (plusieurs opérations chevauchantes sur la même case) */
+.cal-event.cal-event-merged{background:var(--card);color:var(--text);border:1px solid var(--accent);box-shadow:0 1px 4px rgba(0,0,0,.22);padding:5px 6px;overflow:hidden;display:flex;flex-direction:column;gap:3px}
+.cal-event-merged-head{font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.4px;padding-bottom:3px;border-bottom:1px solid var(--border);font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;flex-shrink:0}
+.cal-event-list{display:flex;flex-direction:column;gap:2px;overflow:auto;flex:1;min-height:0}
+.cal-event-item{display:flex;align-items:baseline;gap:5px;padding:2px 5px;border-radius:4px;font-size:10px;line-height:1.25;background:var(--accent-bg);border-left:3px solid var(--accent);cursor:pointer;transition:filter .12s}
+.cal-event-item:hover{filter:brightness(.95)}
+.cal-event-item-time{font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;font-weight:700;color:var(--text2);flex-shrink:0;font-size:9px}
+.cal-event-item-name{flex:1;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cal-event-item-niv-1{border-left-color:#22d3ee;background:rgba(34,211,238,.14)}
+.cal-event-item-niv-2{border-left-color:#fbbf24;background:rgba(251,191,36,.16)}
+.cal-event-item-niv-3{border-left-color:#f87171;background:rgba(248,113,113,.14)}
 /* Lignes du catalogue rendues draggable */
 .js-cat-tbody tr[draggable="true"]{cursor:grab}
 .js-cat-tbody tr[draggable="true"]:active{cursor:grabbing}
@@ -914,6 +925,16 @@ body.light .toast.info{background:#fff;color:var(--text)}
           <span>Date : <strong id="plan-mod-date">—</strong></span>
         </div>
         <div class="ops-form-grid">
+          <div class="ops-field ops-field--full">
+            <label class="ops-field-label" for="plan-mod-machine">Machine<span class="req">*</span></label>
+            <select id="plan-mod-machine" class="ops-select" required>
+              <option value="">Sélectionner une machine…</option>
+              <option value="Cohésio 1">Cohésio 1</option>
+              <option value="Cohésio 2">Cohésio 2</option>
+              <option value="DSI">DSI</option>
+              <option value="Repiquage">Repiquage</option>
+            </select>
+          </div>
           <div class="ops-field">
             <label class="ops-field-label" for="plan-mod-start">Heure de début<span class="req">*</span></label>
             <input type="time" id="plan-mod-start" class="ops-input" required>
@@ -1153,44 +1174,102 @@ function renderCalWeek(){
     html += '</div>';
   }
   body.innerHTML = html;
-  // Placer les événements dans chaque colonne
+  // Regrouper les événements qui se chevauchent par jour, puis afficher un bloc par cluster
   document.querySelectorAll('.cal-wv-day-col').forEach(col => {
     const iso = col.getAttribute('data-date');
     const events = PLANNING_STATE.list.filter(ev => ev.date === iso);
-    events.forEach(ev => {
-      const block = _makeCalEventBlock(ev);
+    const clusters = _clusterDayEvents(events);
+    clusters.forEach(cluster => {
+      const block = _makeClusterBlock(cluster);
       if(block) col.appendChild(block);
     });
   });
+}
+function _clusterDayEvents(events){
+  if(!events.length) return [];
+  const sorted = events.slice()
+    .map(ev => ({ ev, s: _hmToMins(ev.start), e: _hmToMins(ev.end) }))
+    .filter(o => o.s != null && o.e != null && o.e > o.s)
+    .sort((a,b) => a.s - b.s);
+  const clusters = [];
+  let cur = null;
+  sorted.forEach(o => {
+    if(!cur){
+      cur = { startMin: o.s, endMin: o.e, items: [o.ev] };
+    } else if(o.s < cur.endMin){
+      cur.endMin = Math.max(cur.endMin, o.e);
+      cur.items.push(o.ev);
+    } else {
+      clusters.push(cur);
+      cur = { startMin: o.s, endMin: o.e, items: [o.ev] };
+    }
+  });
+  if(cur) clusters.push(cur);
+  // Trier les items à l'intérieur du cluster pour un affichage stable
+  clusters.forEach(c => {
+    c.items.sort((a,b) => (_hmToMins(a.start)||0) - (_hmToMins(b.start)||0));
+  });
+  return clusters;
+}
+function _makeClusterBlock(cluster){
+  if(!cluster || !cluster.items.length) return null;
+  const startMin = cluster.startMin;
+  const endMin = cluster.endMin;
+  const top = ((startMin - CAL_HOUR_START*60) / 60) * CAL_HOUR_PX;
+  const height = Math.max(28, ((endMin - startMin) / 60) * CAL_HOUR_PX - 2);
+  const div = document.createElement('div');
+  const single = (cluster.items.length === 1);
+  div.className = 'cal-event' + (single ? '' : ' cal-event-merged');
+  div.style.top = top + 'px';
+  div.style.height = height + 'px';
+  if(single && cluster.items[0].opNiveau){
+    div.setAttribute('data-niveau', String(cluster.items[0].opNiveau));
+  }
+  const fmtHM = mins => {
+    const h = Math.floor(mins/60), m = mins%60;
+    return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+  };
+  if(single){
+    const ev = cluster.items[0];
+    const machineSuffix = ev.machine ? ' · ' + ev.machine : '';
+    div.innerHTML = '<div class="cal-event-title">' + escHtml((ev.opName || '—') + machineSuffix) + '</div>' +
+                    '<div class="cal-event-time">' + escHtml(ev.start) + ' – ' + escHtml(ev.end) + '</div>';
+    div.title = 'Cliquer pour supprimer cette opération planifiée';
+    div.addEventListener('click', e => {
+      e.stopPropagation();
+      if(confirm('Supprimer cette opération planifiée ?\n\n' + (ev.opName || '') + (ev.machine?(' · ' + ev.machine):'') + '\n' + ev.date + ' · ' + ev.start + ' – ' + ev.end)){
+        deletePlanningEvent(ev.id);
+      }
+    });
+  } else {
+    let listHtml = '<div class="cal-event-list">';
+    cluster.items.forEach(ev => {
+      const nivCls = ev.opNiveau ? (' cal-event-item-niv-' + ev.opNiveau) : '';
+      listHtml += '<div class="cal-event-item' + nivCls + '" data-event-id="' + escAttr(ev.id) + '" title="Cliquer pour supprimer">' +
+                  '<span class="cal-event-item-time">' + escHtml(ev.start) + '–' + escHtml(ev.end) + '</span>' +
+                  '<span class="cal-event-item-name">' + escHtml((ev.opName || '—') + (ev.machine?(' · ' + ev.machine):'')) + '</span>' +
+                  '</div>';
+    });
+    listHtml += '</div>';
+    div.innerHTML = '<div class="cal-event-merged-head">' + escHtml(fmtHM(startMin)) + ' – ' + escHtml(fmtHM(endMin)) + ' · ' + cluster.items.length + ' opérations</div>' + listHtml;
+    div.addEventListener('click', e => {
+      const item = e.target.closest('.cal-event-item');
+      if(!item) return;
+      e.stopPropagation();
+      const id = item.getAttribute('data-event-id');
+      const ev = PLANNING_STATE.list.find(x => x.id === id);
+      if(!ev) return;
+      if(confirm('Supprimer cette opération planifiée ?\n\n' + (ev.opName || '') + (ev.machine?(' · ' + ev.machine):'') + '\n' + ev.date + ' · ' + ev.start + ' – ' + ev.end)){
+        deletePlanningEvent(ev.id);
+      }
+    });
+  }
+  return div;
 }
 function _hmToMins(s){
   const m = String(s||'').match(/^(\d{1,2}):(\d{2})$/);
   if(!m) return null;
   return parseInt(m[1],10)*60 + parseInt(m[2],10);
-}
-function _makeCalEventBlock(ev){
-  const startMin = _hmToMins(ev.start);
-  const endMin = _hmToMins(ev.end);
-  if(startMin == null || endMin == null || endMin <= startMin) return null;
-  const startOffsetMin = startMin - CAL_HOUR_START*60;
-  const top = (startOffsetMin / 60) * CAL_HOUR_PX;
-  const height = Math.max(22, ((endMin - startMin) / 60) * CAL_HOUR_PX - 2);
-  const div = document.createElement('div');
-  div.className = 'cal-event';
-  div.style.top = top + 'px';
-  div.style.height = height + 'px';
-  if(ev.opNiveau) div.setAttribute('data-niveau', String(ev.opNiveau));
-  div.setAttribute('data-event-id', ev.id);
-  div.innerHTML = '<div class="cal-event-title">' + escHtml(ev.opName || '—') + '</div>' +
-                  '<div class="cal-event-time">' + escHtml(ev.start) + ' – ' + escHtml(ev.end) + '</div>';
-  div.title = 'Cliquer pour supprimer cette opération planifiée';
-  div.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if(confirm('Supprimer cette opération planifiée ?\n\n' + (ev.opName || '') + '\n' + ev.date + ' · ' + ev.start + ' – ' + ev.end)){
-      deletePlanningEvent(ev.id);
-    }
-  });
-  return div;
 }
 function deletePlanningEvent(id){
   PLANNING_STATE.list = PLANNING_STATE.list.filter(e => e.id !== id);
@@ -1267,17 +1346,19 @@ function openPlanningTimeModal(opTypeId, iso, defaultHour){
   if(!m) return;
   const opEl = document.getElementById('plan-mod-op');
   const dtEl = document.getElementById('plan-mod-date');
+  const mEl = document.getElementById('plan-mod-machine');
   const sEl = document.getElementById('plan-mod-start');
   const eEl = document.getElementById('plan-mod-end');
   if(opEl) opEl.textContent = op.nom;
   if(dtEl) dtEl.textContent = _fmtIsoDateFr(iso);
+  if(mEl) mEl.value = '';
   const h = Math.max(0, Math.min(23, defaultHour || 8));
   if(sEl) sEl.value = String(h).padStart(2,'0') + ':00';
   if(eEl) eEl.value = String(Math.min(h+1, 23)).padStart(2,'0') + ':00';
   m.classList.add('open');
   m.setAttribute('aria-hidden','false');
   document.body.style.overflow = 'hidden';
-  setTimeout(()=>{ if(sEl) sEl.focus(); }, 50);
+  setTimeout(()=>{ if(mEl) mEl.focus(); }, 50);
 }
 function closePlanningTimeModal(){
   const m = document.getElementById('planning-time-modal');
@@ -1288,8 +1369,10 @@ function closePlanningTimeModal(){
 function submitPlanningTime(e){
   e.preventDefault();
   if(!_PENDING_PLAN_DROP){ closePlanningTimeModal(); return; }
+  const machine = (document.getElementById('plan-mod-machine')?.value || '').trim();
   const start = (document.getElementById('plan-mod-start')?.value || '').trim();
   const end = (document.getElementById('plan-mod-end')?.value || '').trim();
+  if(!machine){ showToast('Sélectionnez une machine.', 'danger'); return; }
   if(!start || !end){ showToast('Indiquez les heures.', 'danger'); return; }
   const sm = _hmToMins(start), em = _hmToMins(end);
   if(sm == null || em == null){ showToast('Format heure invalide (HH:MM).', 'danger'); return; }
@@ -1302,6 +1385,7 @@ function submitPlanningTime(e){
     opName: op.nom,
     opNiveau: op.niveau,
     opFreq: op.frequence,
+    machine,
     date: _PENDING_PLAN_DROP.iso,
     start, end,
     created_at: new Date().toISOString(),
