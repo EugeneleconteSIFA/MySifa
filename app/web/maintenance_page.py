@@ -404,6 +404,34 @@ body.light .toast.info{background:#fff;color:var(--text)}
             <span class="cal-legend-item"><span class="cal-legend-dot weekend"></span> Week-end</span>
           </div>
         </section>
+
+        <!-- Liste d'opérations de maintenance (catalogue) — copie synchronisée avec l'onglet Opérations -->
+        <div class="ops-list">
+          <div class="ops-list-head">
+            <div class="ops-list-title">Liste d'opérations de maintenance</div>
+            <div class="ops-list-head-right">
+              <div class="ops-list-count js-cat-count">0 opération</div>
+              <button type="button" class="ops-btn-add" onclick="openCatModal()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Ajouter une opération à la liste
+              </button>
+            </div>
+          </div>
+          <div class="ops-table-wrap">
+            <table class="ops-table">
+              <thead>
+                <tr>
+                  <th data-sort-cat="nom" onclick="sortOpsTypes('nom')">Nom<span class="sort-ico">↕</span></th>
+                  <th data-sort-cat="niveau" onclick="sortOpsTypes('niveau')">Niveau<span class="sort-ico">↕</span></th>
+                  <th data-sort-cat="frequence" onclick="sortOpsTypes('frequence')">Fréquence<span class="sort-ico">↕</span></th>
+                  <th>Détail</th>
+                  <th aria-label="Actions"></th>
+                </tr>
+              </thead>
+              <tbody class="js-cat-tbody"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <!-- View : Contrôles -->
@@ -606,7 +634,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
           <div class="ops-list-head">
             <div class="ops-list-title">Liste d'opérations de maintenance</div>
             <div class="ops-list-head-right">
-              <div class="ops-list-count" id="cat-count">0 opération</div>
+              <div class="ops-list-count js-cat-count" id="cat-count">0 opération</div>
               <button type="button" class="ops-btn-add" onclick="openCatModal()">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 Ajouter une opération à la liste
@@ -624,7 +652,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
                   <th aria-label="Actions"></th>
                 </tr>
               </thead>
-              <tbody id="cat-tbody"></tbody>
+              <tbody id="cat-tbody" class="js-cat-tbody"></tbody>
             </table>
           </div>
         </div>
@@ -1413,9 +1441,8 @@ function refreshOpsTypeSelect(){
 function renderOpsTypes(){
   refreshOpsTypeSelect();
   refreshOpsFiltersOptions();
-  const tbody = document.getElementById('cat-tbody');
-  const count = document.getElementById('cat-count');
-  if(!tbody) return;
+  const tbodies = document.querySelectorAll('.js-cat-tbody');
+  if(!tbodies.length) return;
   const dir = OPS_TYPES_STATE.sortDir === 'asc' ? 1 : -1;
   const f = OPS_TYPES_STATE.sortBy;
   const sorted = OPS_TYPES_STATE.list.slice().sort((a,b) => {
@@ -1434,10 +1461,11 @@ function renderOpsTypes(){
     const ico = th.querySelector('.sort-ico');
     if(ico) ico.textContent = isActive ? (OPS_TYPES_STATE.sortDir === 'asc' ? '↑' : '↓') : '↕';
   });
+  let html;
   if(!sorted.length){
-    tbody.innerHTML = '<tr><td colspan="5" class="ops-empty">Aucune opération dans la liste. Cliquez sur « Ajouter une opération à la liste » pour en créer une.</td></tr>';
+    html = '<tr><td colspan="5" class="ops-empty">Aucune opération dans la liste. Cliquez sur « Ajouter une opération à la liste » pour en créer une.</td></tr>';
   } else {
-    const rows = sorted.map(t =>
+    html = sorted.map(t =>
       '<tr>' +
         '<td><strong style="color:var(--text)">' + escHtml(t.nom) + '</strong></td>' +
         '<td><span class="niv-badge" data-niv="' + t.niveau + '">N' + t.niveau + '</span></td>' +
@@ -1452,13 +1480,12 @@ function renderOpsTypes(){
           '</button>' +
         '</td>' +
       '</tr>'
-    );
-    tbody.innerHTML = rows.join('');
+    ).join('');
   }
-  if(count){
-    const n = OPS_TYPES_STATE.list.length;
-    count.textContent = n + ' opération' + (n > 1 ? 's' : '');
-  }
+  tbodies.forEach(tb => { tb.innerHTML = html; });
+  const n = OPS_TYPES_STATE.list.length;
+  const lbl = n + ' opération' + (n > 1 ? 's' : '');
+  document.querySelectorAll('.js-cat-count').forEach(c => { c.textContent = lbl; });
 }
 
 // =========================================================================
