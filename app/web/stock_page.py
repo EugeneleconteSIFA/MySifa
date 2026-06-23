@@ -631,7 +631,9 @@ body.light .mp-search-wrap:focus-within{
 }
 .mp-search::placeholder{color:var(--muted);font-weight:500;opacity:1}
 .mp-search:focus{outline:none}
-.mp-list{display:flex;flex-direction:column;gap:12px}
+.mp-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px;align-items:start}
+.mp-list > .mp-section-head,.mp-list > .mp-subsection-head,.mp-list > .mp-empty{grid-column:1/-1}
+@media (max-width:780px){.mp-list{grid-template-columns:1fr}}
 .mp-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;cursor:pointer;transition:border-color .15s}
 .mp-card:hover{border-color:var(--accent)}
 .mp-card-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
@@ -2025,6 +2027,8 @@ function icon(name, size=16){
     'shopping-cart': '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>',
     'trash': '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
     'euro': '<path d="M4 10h12"/><path d="M4 14h9"/><path d="M19 6a7.7 7.7 0 0 0-5.2-2A7.9 7.9 0 0 0 6 12c0 4.4 3.5 8 7.8 8 2 0 3.8-.8 5.2-2"/>',
+    // dollar-sign (Lucide) — utilisé pour le toggle « prix en USD » de la valorisation
+    'dollar-sign': '<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
     'alert-triangle': '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
     'file-text': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>',
   };
@@ -7891,7 +7895,7 @@ function buildMatieres() {
       const activeSs = S.matieresSousSection || null;
       Object.keys(byCat).sort((a, b) => a.localeCompare(b, 'fr')).forEach(cat => {
         if (curCat === 'tout' && flatItems.length) {
-          list.appendChild(el('div', { style: mpSectionHeadStyle }, MP_CAT_LABELS[cat] || cat));
+          list.appendChild(el('div', { cls: 'mp-section-head', style: mpSectionHeadStyle }, MP_CAT_LABELS[cat] || cat));
         }
         const bySs = {};
         byCat[cat].forEach(m => {
@@ -7903,7 +7907,7 @@ function buildMatieres() {
           // Quand un filtre sous-section précis est actif, le header est redondant
           // avec la pill active : on l'omet pour une vue plus aérée.
           if (!activeSs) {
-            list.appendChild(el('div', { style: mpSubsectionHeadStyle },
+            list.appendChild(el('div', { cls: 'mp-subsection-head', style: mpSubsectionHeadStyle },
               ss + ' · ' + bySs[ss].length));
           }
           bySs[ss].forEach(renderMpCard);
@@ -12925,6 +12929,11 @@ async function loadValorisation() {
   }
 }
 
+function valCanSeeUSD() {
+  // Direction + superadmin uniquement voient la colonne « Prix unit. réel » et le KPI dédoublé.
+  return !!(S.user && (S.user.role === 'superadmin' || S.user.role === 'direction'));
+}
+
 function valFormatEuro(n) {
   const num = Number(n || 0);
   return num.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
@@ -12972,6 +12981,7 @@ function valFilteredItems() {
         case 'categorie': va = (a.categorie_label || '').toLowerCase(); vb = (b.categorie_label || '').toLowerCase(); break;
         case 'quantite': va = Number(a.quantite || 0); vb = Number(b.quantite || 0); break;
         case 'prix_unitaire': va = Number(a.prix_unitaire || 0); vb = Number(b.prix_unitaire || 0); break;
+        case 'prix_unitaire_reel': va = Number(a.prix_unitaire_reel || a.prix_unitaire || 0); vb = Number(b.prix_unitaire_reel || b.prix_unitaire || 0); break;
         case 'valorisation': va = Number(a.valorisation || 0); vb = Number(b.valorisation || 0); break;
         default: va = 0; vb = 0;
       }
@@ -13004,23 +13014,70 @@ function buildValorisationKpis() {
   const totalPF = pfLoaded ? Number(pfS.total_pf || 0) : 0;
   const totalGlobal = totalMP + totalPF;
 
+  // USD dédoublement (Direction / superadmin uniquement, et seulement si au moins une réf cochée)
+  const canSeeUSD = valCanSeeUSD();
+  const nbRefsUSD = Number(s.nb_refs_usd || 0);
+  const tauxRaw = Number(s.taux_eur_usd || 0);
+  const showUsdBreakdown = canSeeUSD && nbRefsUSD > 0 && tauxRaw > 0;
+  const totalMPReel = Number(s.total_mp_reel || s.total_mp || 0);
+  const totalGlobalReel = totalMPReel + totalPF;
+
   const wrap = el('div', { cls: 'val-kpis', style:
     'display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:16px;' });
 
-  const kpiTotal = el('div', { style:
-    'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;' },
+  // ── Total global ──────────────────────────────────────────────
+  const kpiTotalChildren = [
     el('div', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px' }, 'Stock valorisé — Total'),
     el('div', { style: 'font-size:24px;font-weight:800;color:var(--accent)' }, valFormatEuro(totalGlobal)),
+  ];
+  if (showUsdBreakdown) {
+    kpiTotalChildren.push(
+      el('div', { style: 'font-size:15px;font-weight:800;color:#16a34a;margin-top:4px' },
+        valFormatEuro(totalGlobalReel),
+        el('span', { style: 'font-size:10px;font-weight:600;margin-left:6px;text-transform:uppercase;letter-spacing:.3px' }, 'réel')
+      )
+    );
+  }
+  kpiTotalChildren.push(
     el('div', { style: 'font-size:11px;color:var(--muted);margin-top:6px' },
       pfLoaded ? 'MP + PF' : 'MP + PF (chargement PF…)')
   );
-
-  const kpiMP = el('div', { style:
+  const kpiTotal = el('div', { style:
     'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;' },
+    ...kpiTotalChildren
+  );
+
+  // ── Matières premières — dédoublé EUR / réel si réfs USD ──────
+  const kpiMPChildren = [
     el('div', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px' }, 'Matières premières'),
     el('div', { style: 'font-size:24px;font-weight:800;color:var(--text)' }, valFormatEuro(totalMP)),
-    el('div', { style: 'font-size:11px;color:var(--muted);margin-top:6px' },
-      `${s.nb_refs_valorisees || 0} / ${s.nb_refs || 0} références valorisées`)
+  ];
+  if (showUsdBreakdown) {
+    kpiMPChildren.push(
+      el('div', { style: 'font-size:15px;font-weight:800;color:#16a34a;margin-top:4px;display:flex;align-items:baseline;gap:6px' },
+        el('span', null, valFormatEuro(totalMPReel)),
+        el('span', { style: 'font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px' }, 'réel')
+      )
+    );
+    kpiMPChildren.push(
+      el('div', { style: 'font-size:11px;color:var(--muted);margin-top:6px' },
+        `${s.nb_refs_valorisees || 0} / ${s.nb_refs || 0} références valorisées · `,
+        el('span', { style: 'color:#16a34a;font-weight:700' },
+          `${nbRefsUSD} en USD`),
+        ` · 1 USD = ${tauxRaw.toLocaleString('fr-FR', { minimumFractionDigits: 4, maximumFractionDigits: 4 })} €`
+      )
+    );
+  } else {
+    kpiMPChildren.push(
+      el('div', { style: 'font-size:11px;color:var(--muted);margin-top:6px' },
+        `${s.nb_refs_valorisees || 0} / ${s.nb_refs || 0} références valorisées`
+        + (canSeeUSD && tauxRaw > 0 ? ` · Taux EUR/USD : ${tauxRaw.toLocaleString('fr-FR', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}` : '')
+      )
+    );
+  }
+  const kpiMP = el('div', { style:
+    'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;' },
+    ...kpiMPChildren
   );
 
   const kpiPF = el('div', { style:
@@ -13064,6 +13121,27 @@ function buildValorisationCategoriePills() {
     wrap.appendChild(btn);
   });
   return wrap;
+}
+
+async function toggleValorisationUSD(matiereId) {
+  const v = valEnsureState();
+  try {
+    const data = await api('/api/stock/valorisation/' + matiereId + '/prix-en-usd', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    // Mise à jour locale : toutes les lignes (matières laizées : plusieurs lignes par matière)
+    if (data?.items_matiere && Array.isArray(data.items_matiere)) {
+      const newByKey = new Map(data.items_matiere.map(x => [x.row_key, x]));
+      v.items = (v.items || []).map(x => newByKey.has(x.row_key) ? newByKey.get(x.row_key) : x);
+    }
+    if (data?.summary) v.summary = data.summary;
+    renderValorisationView(true);
+    showToast(data.prix_en_usd ? 'Référence marquée USD.' : 'Conversion USD retirée.', 'success');
+  } catch (e) {
+    showToast('Erreur : ' + (e?.message || 'changement impossible'), 'danger');
+  }
 }
 
 async function saveValorisationPrice(matiereId, newPrice, inputEl) {
@@ -13228,18 +13306,91 @@ function buildValorisationTableRow(item) {
   const valored = (item.prix_unitaire || 0) > 0
     && (!item.avec_conditionnement || (item.unites_par_palette || 0) > 0);
   const valColor = valored ? 'var(--text)' : 'var(--muted)';
-  const tdVal = el('td', { style: 'padding:10px 12px;font-size:13px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums;color:' + valColor },
-    valored ? valFormatEuro(item.valorisation) : '—'
-  );
+  let tdVal;
+  if (valored && item.prix_en_usd && Number(item.valorisation_reelle || 0) > 0
+      && Math.abs(Number(item.valorisation_reelle) - Number(item.valorisation)) > 0.005) {
+    // Ligne USD : on empile l'ancien (barré, petit, muted) au-dessus du réel (vert, gras).
+    tdVal = el('td', { style: 'padding:10px 12px;text-align:right;font-variant-numeric:tabular-nums' },
+      el('div', { style: 'display:flex;flex-direction:column;align-items:flex-end;line-height:1.2' },
+        el('div', {
+          style: 'font-size:11px;font-weight:500;color:var(--muted);text-decoration:line-through;text-decoration-color:var(--muted)'
+        }, valFormatEuro(item.valorisation)),
+        el('div', { style: 'font-size:13px;font-weight:800;color:#16a34a;margin-top:1px' },
+          valFormatEuro(item.valorisation_reelle))
+      )
+    );
+  } else {
+    tdVal = el('td', { style: 'padding:10px 12px;font-size:13px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums;color:' + valColor },
+      valored ? valFormatEuro(item.valorisation) : '—'
+    );
+  }
 
+  // ── Colonne « Prix unit. réel » : visible uniquement Direction / superadmin ──
+  // Affiche le prix converti avec le Taux EUR/USD de MyCouts uniquement pour les
+  // références dont la case USD est cochée (mises en avant en vert).
+  const canSeeUSD = valCanSeeUSD();
+  let tdPrixReel = null;
+  if (canSeeUSD) {
+    if (item.prix_en_usd) {
+      const reel = Number(item.prix_unitaire_reel || 0);
+      const txt = valored ? (valFormatEuroDetail(reel) + ' /' + (item.unite || '')) : '—';
+      tdPrixReel = el('td', {
+        style: 'padding:10px 12px;text-align:right;font-size:13px;font-weight:700;color:#16a34a;font-variant-numeric:tabular-nums'
+      }, txt);
+    } else {
+      tdPrixReel = el('td', {
+        style: 'padding:10px 12px;text-align:right;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums'
+      }, '—');
+    }
+  }
+
+  // ── Colonne « Actions » (anciennement « Historique ») ──
+  // Action 1 : icône horloge → ouvre l'historique des prix (comportement actuel)
+  // Action 2 : badge $⇄€ cliquable → toggle prix_en_usd (vert si actif)
   const histBtn = el('button', {
     type: 'button', title: 'Voir l\'historique des prix',
-      style: 'background:transparent;border:1px solid var(--border);border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2)',
-    on: { click: () => openValorisationHistorique(item.matiere_id || item.id) } });
+    style: 'background:transparent;border:1px solid var(--border);border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);transition:all .15s',
+    on: {
+      click: () => openValorisationHistorique(item.matiere_id || item.id),
+      mouseenter: (e) => { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.color = 'var(--text)'; },
+      mouseleave: (e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text2)'; },
+    },
+  });
   histBtn.appendChild(iconEl('clock', 14));
-  const tdHist = el('td', { style: 'padding:10px 12px;text-align:center' }, histBtn);
 
-  tr.append(tdCat, tdRef, tdDes, tdQte, tdPrix, tdVal, tdHist);
+  const actionsChildren = [histBtn];
+  if (canSeeUSD) {
+    const usdOn = !!item.prix_en_usd;
+    const usdBtn = el('button', {
+      type: 'button',
+      title: usdOn ? 'Référence en USD — cliquer pour repasser en EUR' : 'Marquer la référence en USD (conversion via Taux EUR/USD de MyCouts)',
+      style:
+        'border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;'
+        + (usdOn
+            ? 'background:rgba(34,197,94,0.12);border:1px solid #16a34a;color:#16a34a'
+            : 'background:transparent;border:1px solid var(--border);color:var(--text2)'),
+      on: {
+        click: () => toggleValorisationUSD(item.matiere_id || item.id),
+        mouseenter: (e) => {
+          if (!usdOn) { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.color = 'var(--text)'; }
+        },
+        mouseleave: (e) => {
+          if (!usdOn) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text2)'; }
+        },
+      },
+    });
+    usdBtn.appendChild(iconEl('dollar-sign', 14));
+    actionsChildren.push(usdBtn);
+  }
+  const tdHist = el('td', {
+    style: 'padding:10px 12px;text-align:center;white-space:nowrap'
+  }, el('div', { style: 'display:inline-flex;gap:6px;align-items:center' }, ...actionsChildren));
+
+  if (canSeeUSD) {
+    tr.append(tdCat, tdRef, tdDes, tdQte, tdPrix, tdPrixReel, tdVal, tdHist);
+  } else {
+    tr.append(tdCat, tdRef, tdDes, tdQte, tdPrix, tdVal, tdHist);
+  }
   return tr;
 }
 
@@ -13442,23 +13593,34 @@ function buildValorisationTable() {
   const thStyleR = thStyle + ';text-align:right';
   const thStyleC = thStyle + ';text-align:center;cursor:default';
 
-  const thead = el('thead', null,
-    el('tr', null,
-      el('th', { style: thStyle, on: { click: () => valToggleSort('categorie') } }, 'Catégorie' + arrow('categorie')),
-      el('th', { style: thStyle, on: { click: () => valToggleSort('reference') } }, 'Référence' + arrow('reference')),
-      el('th', { style: thStyle, on: { click: () => valToggleSort('designation') } }, 'Désignation' + arrow('designation')),
-      el('th', { style: thStyleR, on: { click: () => valToggleSort('quantite') } }, 'Quantité' + arrow('quantite')),
-      el('th', { style: thStyleR, on: { click: () => valToggleSort('prix_unitaire') } }, 'Prix unitaire' + arrow('prix_unitaire')),
-      el('th', { style: thStyleR, on: { click: () => valToggleSort('valorisation') } }, 'Valorisation' + arrow('valorisation')),
-      el('th', { style: thStyleC }, 'Historique')
-    )
+  const canSeeUSD = valCanSeeUSD();
+  const thChildren = [
+    el('th', { style: thStyle, on: { click: () => valToggleSort('categorie') } }, 'Catégorie' + arrow('categorie')),
+    el('th', { style: thStyle, on: { click: () => valToggleSort('reference') } }, 'Référence' + arrow('reference')),
+    el('th', { style: thStyle, on: { click: () => valToggleSort('designation') } }, 'Désignation' + arrow('designation')),
+    el('th', { style: thStyleR, on: { click: () => valToggleSort('quantite') } }, 'Quantité' + arrow('quantite')),
+    el('th', { style: thStyleR, on: { click: () => valToggleSort('prix_unitaire') } }, 'Prix unitaire' + arrow('prix_unitaire')),
+  ];
+  if (canSeeUSD) {
+    thChildren.push(
+      el('th', { style: thStyleR + ';color:#16a34a',
+        on: { click: () => valToggleSort('prix_unitaire_reel') },
+        title: 'Prix unitaire converti via le Taux EUR/USD (MyCouts > Paramètres). Affiché pour les références cochées USD.'
+      }, 'Prix unit. réel' + arrow('prix_unitaire_reel'))
+    );
+  }
+  thChildren.push(
+    el('th', { style: thStyleR, on: { click: () => valToggleSort('valorisation') } }, 'Valorisation' + arrow('valorisation')),
+    el('th', { style: thStyleC }, 'Actions'),
   );
+  const thead = el('thead', null, el('tr', null, ...thChildren));
 
+  const colspan = String(thChildren.length);
   const tbody = el('tbody');
   if (!rows.length) {
     const msg = (v.query ? 'Aucun résultat pour « ' + v.query + ' »' : 'Aucune matière à valoriser.');
     tbody.appendChild(el('tr', null,
-      el('td', { colspan: '7', style: 'padding:30px 20px;text-align:center;color:var(--muted);font-size:13px' }, msg)
+      el('td', { colspan: colspan, style: 'padding:30px 20px;text-align:center;color:var(--muted);font-size:13px' }, msg)
     ));
   } else {
     rows.forEach(item => tbody.appendChild(buildValorisationTableRow(item)));

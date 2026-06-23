@@ -4030,6 +4030,19 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 123, "matieres_premieres_unites_par_palette")
 
+    # v124 — Valorisation MP : flag « prix saisi numériquement assimilé USD ».
+    # Lorsque prix_en_usd = 1, le prix_unitaire stocké est considéré comme une valeur
+    # exprimée en USD (mais portée par le champ EUR pour compatibilité). Le « prix réel »
+    # affiché côté direction/superadmin = prix_unitaire × taux_eur_usd (paramètre MyCouts).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=124 LIMIT 1").fetchone():
+        valo_cols = {row[1] for row in conn.execute("PRAGMA table_info(mp_valorisation)").fetchall()}
+        if "prix_en_usd" not in valo_cols:
+            conn.execute(
+                "ALTER TABLE mp_valorisation ADD COLUMN prix_en_usd INTEGER NOT NULL DEFAULT 0"
+            )
+        conn.commit()
+        _record_schema_migration(conn, 124, "mp_valorisation_prix_en_usd")
+
 
 
 def create_default_admin():

@@ -379,6 +379,12 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 .ops-btn-add{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:10px;border:none;background:var(--accent);color:var(--accent-fg);font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;transition:filter .15s,background .15s,color .15s;white-space:nowrap}
 .ops-btn-add:hover{filter:brightness(1.08)}
 .ops-list{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:18px}
+/* Cadres Maintenance : Couteaux / Contre-couteaux (vides pour l'instant) */
+.maint-frames-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px;margin-top:8px}
+.maint-frame{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;min-height:280px}
+.maint-frame-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 22px;border-bottom:1px solid var(--border)}
+.maint-frame-title{font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
+.maint-frame-body{flex:1;display:flex;align-items:center;justify-content:center;padding:24px;color:var(--muted);font-size:12px}
 .ops-list-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 22px;border-bottom:1px solid var(--border);flex-wrap:wrap}
 .ops-list-head-right{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .ops-list-title{font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
@@ -389,6 +395,22 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 .ops-table th[data-sort],.ops-table th[data-sort-cat],.ops-table th[data-sort-ctrl],.ops-table th[data-sort-ctrl-cat]{cursor:pointer;transition:color .15s}
 .ops-table th[data-sort]:hover,.ops-table th[data-sort-cat]:hover,.ops-table th[data-sort-ctrl]:hover,.ops-table th[data-sort-ctrl-cat]:hover{color:var(--accent)}
 .ops-table th[data-sort].active,.ops-table th[data-sort-cat].active,.ops-table th[data-sort-ctrl].active,.ops-table th[data-sort-ctrl-cat].active{color:var(--accent)}
+/* Colonne Dernière intervention */
+.ops-table .col-last-intervention{min-width:170px;white-space:nowrap}
+.last-intervention-wrap{display:flex;flex-direction:column;gap:4px}
+.last-intervention-input{padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:12px;font-family:inherit;width:148px;transition:border-color .12s,box-shadow .12s}
+.last-intervention-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-bg)}
+.last-intervention-status{font-size:10.5px;font-weight:700;letter-spacing:.2px;display:inline-flex;align-items:center;gap:4px}
+.last-intervention-status.ok{color:#16a34a}
+body:not(.light) .last-intervention-status.ok{color:#4ade80}
+.last-intervention-status.overdue{color:var(--danger,#dc2626)}
+.last-intervention-status.unknown{color:var(--muted)}
+/* Mise en valeur des lignes en retard */
+.ops-table tr.row-overdue td{background:rgba(248,113,113,.10)}
+.ops-table tr.row-overdue:hover td{background:rgba(248,113,113,.16)}
+.ops-table tr.row-overdue td:first-child{position:relative;box-shadow:inset 4px 0 0 var(--danger,#dc2626)}
+.ops-table tr.row-overdue td:first-child strong{color:var(--danger,#dc2626) !important}
+.row-overdue-badge{display:inline-flex;align-items:center;gap:4px;margin-left:8px;padding:2px 7px;border-radius:5px;background:var(--danger,#dc2626);color:#fff;font-size:10px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;vertical-align:middle}
 .ops-table th .sort-ico{display:inline-block;margin-left:5px;opacity:.55;font-size:11px}
 .ops-table th.active .sort-ico{opacity:1}
 .ops-table td{padding:12px 18px;border-bottom:1px solid var(--border);vertical-align:top}
@@ -494,23 +516,21 @@ body.light .toast.info{background:#fff;color:var(--text)}
             <div class="page-title">My<span>Maintenance</span></div>
             <div class="page-subtitle">Suivi et planification de la maintenance</div>
           </div>
-          <div class="page-actions">
-            <button type="button" class="btn" disabled aria-disabled="true" title="Fonctionnalité en cours de développement">
-              <span class="btn-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
-              Créer une alerte
-              <span class="badge-dev">En développement</span>
-            </button>
-          </div>
         </div>
-        <div class="wip-wrap">
-          <div class="wip-card">
-            <div class="wip-icon">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+
+        <div class="maint-frames-grid">
+          <section class="maint-frame">
+            <div class="maint-frame-head">
+              <div class="maint-frame-title">Couteaux</div>
             </div>
-            <div class="wip-title">Application en cours de développement</div>
-            <div class="wip-sub">Le module Maintenance arrive prochainement. Les fonctionnalités seront ajoutées progressivement.</div>
-            <div class="wip-meta">Accès restreint — version préliminaire</div>
-          </div>
+            <div class="maint-frame-body"></div>
+          </section>
+          <section class="maint-frame">
+            <div class="maint-frame-head">
+              <div class="maint-frame-title">Contre-couteaux</div>
+            </div>
+            <div class="maint-frame-body"></div>
+          </section>
         </div>
       </div>
 
@@ -578,6 +598,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
                   <th data-sort-cat="nom" onclick="sortOpsTypes('nom')">Nom<span class="sort-ico">↕</span></th>
                   <th data-sort-cat="niveau" onclick="sortOpsTypes('niveau')">Niveau<span class="sort-ico">↕</span></th>
                   <th data-sort-cat="frequence" onclick="sortOpsTypes('frequence')">Fréquence<span class="sort-ico">↕</span></th>
+                  <th data-sort-cat="derniere_intervention" onclick="sortOpsTypes('derniere_intervention')">Dernière intervention<span class="sort-ico">↕</span></th>
                   <th>Détail</th>
                   <th aria-label="Actions"></th>
                 </tr>
@@ -802,6 +823,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
                   <th data-sort-cat="nom" onclick="sortOpsTypes('nom')">Nom<span class="sort-ico">↕</span></th>
                   <th data-sort-cat="niveau" onclick="sortOpsTypes('niveau')">Niveau<span class="sort-ico">↕</span></th>
                   <th data-sort-cat="frequence" onclick="sortOpsTypes('frequence')">Fréquence<span class="sort-ico">↕</span></th>
+                  <th data-sort-cat="derniere_intervention" onclick="sortOpsTypes('derniere_intervention')">Dernière intervention<span class="sort-ico">↕</span></th>
                   <th>Détail</th>
                   <th aria-label="Actions"></th>
                 </tr>
@@ -2391,6 +2413,64 @@ function refreshOpsTypeSelect(){
     sorted.map(t => '<option value="' + escAttr(t.nom) + '">' + escHtml(t.nom) + '</option>').join('');
   if(cur && sorted.some(t => t.nom === cur)) sel.value = cur;
 }
+// ── Maintenance préventive : fréquence → jours, retard d'intervention ──
+function _normalizeFreqStr(s){
+  return String(s || '').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .trim();
+}
+function _parseFrequenceDays(freq){
+  const s = _normalizeFreqStr(freq);
+  if(!s) return null;
+  // Patterns mots-clés courants
+  if(/quotid|journal|daily/.test(s)) return 1;
+  if(/(bi[\s-]?hebdo|14\s*j|2\s*sem)/.test(s)) return 14;
+  if(/hebdo|weekly|7\s*j/.test(s)) return 7;
+  if(/(bi[\s-]?mensuel|2\s*mois)/.test(s)) return 60;
+  if(/(trimestr|quarter|3\s*mois|90\s*j)/.test(s)) return 90;
+  if(/(semestr|6\s*mois|180\s*j)/.test(s)) return 180;
+  if(/(bi[\s-]?annuel|biennal|2\s*ans?|730\s*j)/.test(s)) return 730;
+  if(/(annuel|annual|yearly|365\s*j|1\s*an)/.test(s)) return 365;
+  if(/mensuel|monthly|30\s*j/.test(s)) return 30;
+  // Patterns numériques explicites
+  const m1 = s.match(/(\d+)\s*j(?:our)?/);
+  if(m1) return parseInt(m1[1], 10);
+  const m2 = s.match(/(\d+)\s*sem/);
+  if(m2) return parseInt(m2[1], 10) * 7;
+  const m3 = s.match(/(\d+)\s*mois/);
+  if(m3) return parseInt(m3[1], 10) * 30;
+  const m4 = s.match(/(\d+)\s*an/);
+  if(m4) return parseInt(m4[1], 10) * 365;
+  return null; // fréquence non interprétable
+}
+function _opOverdueInfo(opType){
+  // → { overdue: bool, daysOverdue: number|null, daysSince: number|null, freqDays: number|null }
+  const freqDays = _parseFrequenceDays(opType && opType.frequence);
+  const dt = opType && opType.derniere_intervention;
+  if(!dt) return { overdue:false, daysOverdue:null, daysSince:null, freqDays };
+  const last = new Date(dt + 'T00:00:00');
+  if(isNaN(last.getTime())) return { overdue:false, daysOverdue:null, daysSince:null, freqDays };
+  const today = new Date();
+  const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const daysSince = Math.floor((todayMid - last) / (1000 * 60 * 60 * 24));
+  if(freqDays == null) return { overdue:false, daysOverdue:null, daysSince, freqDays };
+  const daysOverdue = daysSince - freqDays;
+  return { overdue: daysOverdue > 0, daysOverdue, daysSince, freqDays };
+}
+function _fmtDateFr(iso){
+  if(!iso) return '';
+  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(!m) return iso;
+  return m[3] + '/' + m[2] + '/' + m[1];
+}
+function updateLastIntervention(id, val){
+  const t = OPS_TYPES_STATE.list.find(x => x.id === id);
+  if(!t) return;
+  t.derniere_intervention = (val || null);
+  t.date_modification = new Date().toISOString();
+  saveOpsTypes();
+  renderOpsTypes();
+}
 function renderOpsTypes(){
   refreshOpsTypeSelect();
   refreshOpsFiltersOptions();
@@ -2414,15 +2494,43 @@ function renderOpsTypes(){
     const ico = th.querySelector('.sort-ico');
     if(ico) ico.textContent = isActive ? (OPS_TYPES_STATE.sortDir === 'asc' ? '↑' : '↓') : '↕';
   });
+  // Partitionner : retards d'abord (les plus en retard en premier), puis le reste selon le tri courant
+  const withInfo = sorted.map(t => ({ t, info: _opOverdueInfo(t) }));
+  const overdueRows = withInfo.filter(x => x.info.overdue)
+    .sort((a,b) => (b.info.daysOverdue||0) - (a.info.daysOverdue||0));
+  const normalRows = withInfo.filter(x => !x.info.overdue);
+  const finalRows = overdueRows.concat(normalRows);
   let html;
-  if(!sorted.length){
-    html = '<tr><td colspan="5" class="ops-empty">Aucune opération dans la liste. Cliquez sur « Ajouter une opération à la liste » pour en créer une.</td></tr>';
+  if(!finalRows.length){
+    html = '<tr><td colspan="6" class="ops-empty">Aucune opération dans la liste. Cliquez sur « Ajouter une opération à la liste » pour en créer une.</td></tr>';
   } else {
-    html = sorted.map(t =>
-      '<tr>' +
-        '<td><strong style="color:var(--text)">' + escHtml(t.nom) + '</strong></td>' +
+    html = finalRows.map(({t, info}) => {
+      const rowCls = info.overdue ? ' class="row-overdue"' : '';
+      const dt = t.derniere_intervention || '';
+      let statusHtml = '';
+      if(info.overdue){
+        statusHtml = '<span class="last-intervention-status overdue" title="' + escAttr('Retard de ' + info.daysOverdue + ' jour' + (info.daysOverdue>1?'s':'') + ' (' + info.daysSince + 'j depuis la dernière, fréquence ' + info.freqDays + 'j)') + '">⚠ Retard ' + info.daysOverdue + ' j</span>';
+      } else if(info.daysSince != null && info.freqDays != null){
+        const remaining = info.freqDays - info.daysSince;
+        statusHtml = '<span class="last-intervention-status ok" title="Prochaine intervention recommandée dans ' + remaining + ' jour' + (remaining>1?'s':'') + '">✓ OK (J-' + Math.max(0, remaining) + ')</span>';
+      } else if(info.daysSince != null){
+        statusHtml = '<span class="last-intervention-status unknown">Fréquence non reconnue</span>';
+      } else if(!dt){
+        statusHtml = '<span class="last-intervention-status unknown">Jamais enregistré</span>';
+      }
+      const overdueBadge = info.overdue
+        ? '<span class="row-overdue-badge" title="Intervention en retard">⚠ En retard</span>'
+        : '';
+      return '<tr' + rowCls + '>' +
+        '<td><strong style="color:var(--text)">' + escHtml(t.nom) + '</strong>' + overdueBadge + '</td>' +
         '<td><span class="niv-badge" data-niv="' + t.niveau + '">N' + t.niveau + '</span></td>' +
         '<td>' + escHtml(t.frequence) + '</td>' +
+        '<td class="col-last-intervention">' +
+          '<div class="last-intervention-wrap">' +
+            '<input type="date" class="last-intervention-input" value="' + escAttr(dt) + '" onchange="updateLastIntervention(\'' + escAttr(t.id) + '\', this.value)" aria-label="Dernière intervention">' +
+            statusHtml +
+          '</div>' +
+        '</td>' +
         '<td class="col-comment">' + escHtml(t.detail || '') + '</td>' +
         '<td class="col-actions">' +
           '<button type="button" class="ops-row-btn edit" onclick="editOpsType(\'' + escAttr(t.id) + '\')" title="Modifier">' +
@@ -2432,8 +2540,8 @@ function renderOpsTypes(){
             '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
           '</button>' +
         '</td>' +
-      '</tr>'
-    ).join('');
+      '</tr>';
+    }).join('');
   }
   tbodies.forEach(tb => { tb.innerHTML = html; });
   const n = OPS_TYPES_STATE.list.length;
