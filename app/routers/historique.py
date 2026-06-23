@@ -40,6 +40,8 @@ def compute_sanity_score_v2(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     - -2  si arrêt machine (code 50) présent
     - -7  si fin dossier (89) sans métrage réel
     - -7  si fin dossier (89) sans quantité traitée (nb étiquettes)
+    - -7  si début dossier (01) directement suivi d'une fin dossier (89)
+           sans saisie intermédiaire (calage / production / nettoyage / technique)
     """
     if not rows:
         return {"score": 0, "mention": "Aucune saisie", "color": "warn", "penalites": [], "events": {}}
@@ -77,6 +79,7 @@ def compute_sanity_score_v2(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     c_short_shift = 0
     c_arret_50 = 0
     c_missing_metrage = 0
+    c_empty_dossier = 0
 
     prod_codes = {CODE_PRODUCTION, CODE_REPRISE}
     calage_codes = CODES_CALAGE
@@ -139,12 +142,46 @@ def compute_sanity_score_v2(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         if miss_m:
             c_missing_metrage += 1
 
+        # -7 : début dossier (01) directement suivi de fin dossier (89)
+        # sans saisie intermédiaire (calage/production/nettoyage/technique).
+        # On considère comme "non productifs" les codes qui ne représentent
+        # pas du travail réel sur le dossier: 01, 89, 86 (arrivée), 87 (départ).
+        non_work_codes = {CODE_DEBUT_DOS, CODE_FIN_DOS, CODE_ARRIVEE, CODE_DEPART}
+        idx_walk = 0
+        while idx_walk < len(codes):
+            if codes[idx_walk] == CODE_DEBUT_DOS:
+                # Chercher la prochaine fin dossier (89) après ce 01
+                end_idx = idx_walk + 1
+                has_work = False
+                while end_idx < len(codes) and codes[end_idx] != CODE_FIN_DOS:
+                    if codes[end_idx] not in non_work_codes:
+                        has_work = True
+                    end_idx += 1
+                if (
+                    end_idx < len(codes)
+                    and codes[end_idx] == CODE_FIN_DOS
+                    and not has_work
+                ):
+                    c_empty_dossier += 1
+                    dossier_no = lignes_sorted[end_idx].get("no_dossier") or \
+                                 lignes_sorted[idx_walk].get("no_dossier") or ""
+                    add_event("jour_empty_dossier", op, jour, str(dossier_no))
+                idx_walk = end_idx + 1
+            else:
+                idx_walk += 1
+
     add_pen("jour_first_last", "Journée: arrivée 1ère étape / départ dernière étape", -5, c_first_last)
     add_pen("jour_second_penult", "Journée: début dossier 2e étape / fin dossier avant-dernière", -5, c_second_penult)
     add_pen("jour_need_prod_cal_tech", "Journée: au moins une production/calage/technique", -5, c_need_prod_cal_tech)
     add_pen("jour_short_shift", "Journée: arrivée→départ < 5h", -5, c_short_shift)
     add_pen("jour_arret_50", "Arrêt machine (code 50)", -2, c_arret_50)
     add_pen("jour_missing_metrage", "Fin dossier: métrage manquant", -7, c_missing_metrage)
+    add_pen(
+        "jour_empty_dossier",
+        "Dossier vide: début → fin sans saisie intermédiaire (calage/prod/nettoyage)",
+        -7,
+        c_empty_dossier,
+    )
 
     # pts négatifs => total_pen négatif : on soustrait via addition
     score = 100 + total_pen

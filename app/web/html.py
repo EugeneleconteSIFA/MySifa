@@ -8662,6 +8662,7 @@ const SANITY_LABELS={
   jour_arret_50:{label:"Arrêt machine (code 50)"},
   jour_missing_metrage:{label:"Métrage manquant (fin dossier)"},
   jour_missing_etiquettes:{label:"Nombre d’étiquettes manquant (fin dossier)"},
+  jour_empty_dossier:{label:"Dossier vide (début → fin sans saisie)"},
 };
 function renderSanityEventsBlock(sanity){
   const events=sanity&&sanity.events?sanity.events:{};

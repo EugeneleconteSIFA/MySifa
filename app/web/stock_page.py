@@ -4954,6 +4954,19 @@ function mpIsLaizeeCategory(cat) {
   return MP_CATEGORIES_LAIZEES.has((cat || '').toLowerCase());
 }
 
+// Catégories qui ont la notion d'unité d'achat + conditionnement (unités/palette)
+const MP_CATEGORIES_AVEC_CONDITIONNEMENT = new Set(['carton', 'adhesif', 'mandrin']);
+function mpHasConditionnement(cat) {
+  return MP_CATEGORIES_AVEC_CONDITIONNEMENT.has((cat || '').toLowerCase());
+}
+function mpUniteAchat(cat) {
+  const c = (cat || '').toLowerCase();
+  if (c === 'carton') return 'carton';
+  if (c === 'adhesif') return 'kg';
+  if (c === 'mandrin') return 'tube';
+  return 'unité';
+}
+
 function isMatieresAdmin() {
   return S.user && ['superadmin', 'direction', 'administration'].includes(S.user.role);
 }
@@ -5183,6 +5196,10 @@ function buildMatiereDetail() {
   const meta = [];
   if (mpIsGlassineCategory(m) && m.couleur) {
     meta.push('Couleur : ' + m.couleur);
+  }
+  if (mpHasConditionnement(m.categorie) && m.unites_par_palette > 0) {
+    const u = mpUniteAchat(m.categorie);
+    meta.push('Conditionnement : ' + Number(m.unites_par_palette).toLocaleString('fr-FR') + ' ' + u + '/palette');
   }
   if (seuil > 0) meta.push('Seuil min. ' + mpStockLine(seuil, m));
 
@@ -7381,6 +7398,7 @@ async function openMatiereCopyFromCard(m) {
     sous_section: m.sous_section || '',
     metres_lineaires_par_bobine: m.metres_lineaires_par_bobine || null,
     prix_eur_m2: m.prix_eur_m2 || null,
+    unites_par_palette: m.unites_par_palette || null,
     stock_par_laize: Array.isArray(m.stock_par_laize) ? m.stock_par_laize.slice() : [],
   };
   await Promise.all([loadMatieresAdminList(), loadMpSousSections()]);
@@ -7436,6 +7454,18 @@ function matiereRefEditPayload(item, fields) {
   if (fields.hasSousSection && fields.sousSectionSel) {
     // sous_section toujours envoye pour les categories qui la supportent (autorise vidage)
     payload.sous_section = fields.sousSectionSel.getValue();
+  }
+  if (fields.hasCond && fields.uppInp) {
+    const raw = (fields.uppInp.value || '').replace(',', '.').trim();
+    if (raw === '') {
+      payload.unites_par_palette = null;
+    } else {
+      const upp = parseFloat(raw);
+      if (isNaN(upp) || upp <= 0) {
+        return { error: 'Unités par palette : valeur > 0 obligatoire.' };
+      }
+      payload.unites_par_palette = upp;
+    }
   }
   return { payload };
 }
@@ -7496,6 +7526,13 @@ function appendMatiereRefEditFields(parent, item) {
       laizeChecks,
     ),
   );
+  // Bloc conditionnement (carton / adhésif / mandrin) — unités par palette
+  const hasCond = mpHasConditionnement(item.categorie);
+  const uppWrap = el('div', { cls: 'mp-field', style: { display: hasCond ? '' : 'none' } });
+  const uniteAchat = mpUniteAchat(item.categorie);
+  const uppInp = el('input', { attrs: { type: 'number', min: '0', step: '1', placeholder: 'Ex. 260' } });
+  uppInp.value = String(item.unites_par_palette != null && item.unites_par_palette > 0 ? item.unites_par_palette : '');
+  uppWrap.append(el('label', null, uniteAchat.charAt(0).toUpperCase() + uniteAchat.slice(1) + ' par palette'), uppInp);
   // Sous-section (catégories autre + frontal) — cloisonnée par catégorie
   const hasSousSection = mpCategorieHasSousSection(item.categorie);
   const sousSectionSel = hasSousSection
@@ -7513,12 +7550,13 @@ function appendMatiereRefEditFields(parent, item) {
     el('div', { cls: 'mp-field' }, el('label', null, 'Description'), desInp),
     couleurWrap,
     pppWrap,
+    uppWrap,
     sousSectionWrap,
     el('div', { cls: 'mp-field' }, el('label', null, mpSeuilFieldLabel(item)), seuilInp),
     laizeWrap,
     el('div', { cls: 'mp-hint' }, '0 = pas d\'alerte stock bas.'),
   );
-  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection };
+  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond };
 }
 
 async function submitMatiereRefEdit(item, fields, onSaved) {
@@ -9120,6 +9158,9 @@ function buildMatieresAdminAddForm() {
   const couleurWrap = el('div', { cls: 'mp-field' });
   const couleurInp = el('input', { attrs: { type: 'text', placeholder: 'Ex. Blanc, Kraft…' } });
   const couleurLbl = el('label', null, 'Couleur');
+  const uppWrap = el('div', { cls: 'mp-field' });
+  const uppInp = el('input', { attrs: { type: 'number', min: '1', step: '1', placeholder: 'Ex. 260' } });
+  const uppLbl = el('label', null, 'Unités par palette');
   const seuilLbl = el('label', null, 'Seuil d\'alerte (0 = pas d\'alerte)');
   const hintEl = el('div', { cls: 'mp-hint' }, '');
   const errEl = el('div', { cls: 'mp-admin-err' }, S.matieresAdminAddError || '');
@@ -9169,11 +9210,17 @@ function buildMatieresAdminAddForm() {
     const isGlass = cat === 'glassine';
     const hasSousSection = mpCategorieHasSousSection(cat);
     const isLaizee = mpIsLaizeeCategory(cat);
+    const hasCond = mpHasConditionnement(cat);
     pppWrap.style.display = isPal ? '' : 'none';
     couleurWrap.style.display = isGlass ? '' : 'none';
+    uppWrap.style.display = hasCond ? '' : 'none';
     laizeWrap.style.display = isLaizee ? '' : 'none';
     sousSectionWrap.style.display = hasSousSection ? '' : 'none';
     pppLbl.textContent = 'Palettes par pile';
+    if (hasCond) {
+      const u = mpUniteAchat(cat);
+      uppLbl.textContent = u.charAt(0).toUpperCase() + u.slice(1) + ' par palette';
+    }
     seuilLbl.textContent = mpSeuilFieldLabel(cat);
     seuilInp.step = isPal || isCarton || cat === 'mandrin' || mpIsBobineCategory(cat) ? '1' : '0.5';
     hintEl.textContent = mpAdminHint(cat);
@@ -9183,6 +9230,7 @@ function buildMatieresAdminAddForm() {
   catSel.addEventListener('change', syncAdminAddFields);
   pppWrap.append(pppLbl, pppInp);
   couleurWrap.append(couleurLbl, couleurInp);
+  uppWrap.append(uppLbl, uppInp);
   // Pré-remplissage si l'utilisateur a cliqué "Copier" sur une référence
   if (seed) {
     catSel.value = seed.categorie || catSel.value;
@@ -9193,6 +9241,7 @@ function buildMatieresAdminAddForm() {
     if (seed.couleur) couleurInp.value = seed.couleur;
     if (seed.metres_lineaires_par_bobine) metresInp.value = String(seed.metres_lineaires_par_bobine);
     if (seed.prix_eur_m2) prixM2Inp.value = String(seed.prix_eur_m2);
+    if (seed.unites_par_palette) uppInp.value = String(seed.unites_par_palette);
     if (Array.isArray(seed.stock_par_laize)) {
       const seedLaizeIds = new Set(seed.stock_par_laize.map(s => s.laize_id));
       laizeChecks.querySelectorAll('input[type=checkbox]').forEach(inp => {
@@ -9214,6 +9263,7 @@ function buildMatieresAdminAddForm() {
     el('div', { cls: 'mp-field' }, el('label', null, 'Désignation'), desInp),
     couleurWrap,
     pppWrap,
+    uppWrap,
     sousSectionWrap,
     el('div', { cls: 'mp-field' }, seuilLbl, seuilInp),
     laizeWrap,
@@ -9254,6 +9304,15 @@ function buildMatieresAdminAddForm() {
           }
           if (cat === 'glassine') {
             payload.couleur = couleurInp.value.trim() || des;
+          }
+          if (mpHasConditionnement(cat)) {
+            const raw = (uppInp.value || '').replace(',', '.').trim();
+            if (raw !== '') {
+              const upp = parseFloat(raw);
+              if (!isNaN(upp) && upp > 0) {
+                payload.unites_par_palette = upp;
+              }
+            }
           }
           if (mpCategorieHasSousSection(cat)) {
             const ss = sousSectionSel.getValue();
@@ -12947,30 +13006,41 @@ function valToggleSort(column) {
 
 function buildValorisationKpis() {
   const v = valEnsureState();
+  const pf = (S.valorisation && S.valorisation.pf) ? S.valorisation.pf : null;
   const s = v.summary || { total_mp: 0, total_pf: 0, total_global: 0, nb_refs: 0, nb_refs_valorisees: 0 };
+  const pfS = (pf && pf.summary) ? pf.summary : null;
+  const pfLoaded = !!pfS;
+  const totalMP = Number(s.total_mp || 0);
+  const totalPF = pfLoaded ? Number(pfS.total_pf || 0) : 0;
+  const totalGlobal = totalMP + totalPF;
+
   const wrap = el('div', { cls: 'val-kpis', style:
     'display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:16px;' });
 
   const kpiTotal = el('div', { style:
     'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;' },
     el('div', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px' }, 'Stock valorisé — Total'),
-    el('div', { style: 'font-size:24px;font-weight:800;color:var(--accent)' }, valFormatEuro(s.total_global)),
-    el('div', { style: 'font-size:11px;color:var(--muted);margin-top:6px' }, `MP + PF (PF à venir)`)
+    el('div', { style: 'font-size:24px;font-weight:800;color:var(--accent)' }, valFormatEuro(totalGlobal)),
+    el('div', { style: 'font-size:11px;color:var(--muted);margin-top:6px' },
+      pfLoaded ? 'MP + PF' : 'MP + PF (chargement PF…)')
   );
 
   const kpiMP = el('div', { style:
     'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;' },
     el('div', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px' }, 'Matières premières'),
-    el('div', { style: 'font-size:24px;font-weight:800;color:var(--text)' }, valFormatEuro(s.total_mp)),
+    el('div', { style: 'font-size:24px;font-weight:800;color:var(--text)' }, valFormatEuro(totalMP)),
     el('div', { style: 'font-size:11px;color:var(--muted);margin-top:6px' },
       `${s.nb_refs_valorisees || 0} / ${s.nb_refs || 0} références valorisées`)
   );
 
   const kpiPF = el('div', { style:
-    'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;opacity:.55' },
+    'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;' + (pfLoaded ? '' : 'opacity:.55') },
     el('div', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px' }, 'Produits finis'),
-    el('div', { style: 'font-size:24px;font-weight:800;color:var(--text)' }, '—'),
-    el('div', { style: 'font-size:11px;color:var(--muted);margin-top:6px' }, 'Import Excel — à venir')
+    el('div', { style: 'font-size:24px;font-weight:800;color:var(--text)' }, pfLoaded ? valFormatEuro(totalPF) : '—'),
+    el('div', { style: 'font-size:11px;color:var(--muted);margin-top:6px' },
+      pfLoaded
+        ? `${pfS.nb_refs_valorisees || 0} / ${pfS.nb_refs || 0} références valorisées`
+        : 'Chargement…')
   );
 
   wrap.append(kpiTotal, kpiMP, kpiPF);
@@ -13096,6 +13166,41 @@ function buildValorisationTableRow(item) {
         editBtn,
       )
     );
+  } else if (item.avec_conditionnement) {
+    // Cartons / Adhésifs / Mandrins : prix saisi = prix à l'unité d'achat,
+    // affichage style frontal (prix palette calculé + sous-titre + bouton Modifier).
+    const upp = Number(item.unites_par_palette || 0);
+    const prixUnit = Number(item.prix_unitaire || 0);
+    const prixPal = Number(item.prix_palette || (upp * prixUnit));
+    const uniteAchat = item.unite_achat || 'unité';
+    let display;
+    if (item.incomplete || upp <= 0 || prixUnit <= 0) {
+      display = el('span', { style: 'color:#fb923c;font-size:12px;font-weight:700' }, 'À configurer');
+    } else {
+      display = valFormatEuroDetail(prixPal) + ' /pal.';
+    }
+    const prixUnitTxt = prixUnit > 0
+      ? (prixUnit.toLocaleString('fr-FR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + ' €/' + uniteAchat)
+      : 'prix unité ?';
+    const upTxt = upp > 0
+      ? (upp.toLocaleString('fr-FR') + ' ' + uniteAchat + '/pal.')
+      : 'conditionnement ?';
+    const params = el('div', { style: 'font-size:10px;color:var(--muted);margin-top:2px' },
+      prixUnitTxt, ' · ', upTxt);
+    const editBtn = el('button', {
+      type: 'button', title: 'Éditer prix unitaire et conditionnement',
+      style: 'background:transparent;border:1px solid var(--border);border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--text2);font-size:11px;margin-top:4px;display:inline-flex;align-items:center;gap:4px',
+      on: { click: () => openValorisationConditionnementModal(item.matiere_id || item.id) },
+    });
+    editBtn.appendChild(iconEl('edit', 11));
+    editBtn.appendChild(el('span', null, 'Modifier'));
+    tdPrix = el('td', { style: 'padding:10px 12px;text-align:right' },
+      el('div', { style: 'display:flex;flex-direction:column;align-items:flex-end' },
+        el('div', { style: 'font-size:13px;font-weight:600;color:var(--text);font-variant-numeric:tabular-nums' }, display),
+        params,
+        editBtn,
+      )
+    );
   } else {
     const inpId = 'val-price-' + rowKey;
     const inp = el('input', {
@@ -13129,9 +13234,12 @@ function buildValorisationTableRow(item) {
     );
   }
 
-  const valColor = (item.prix_unitaire || 0) > 0 ? 'var(--text)' : 'var(--muted)';
+  // "Valorisée" = prix > 0 ET (si conditionnement requis) unites_par_palette > 0
+  const valored = (item.prix_unitaire || 0) > 0
+    && (!item.avec_conditionnement || (item.unites_par_palette || 0) > 0);
+  const valColor = valored ? 'var(--text)' : 'var(--muted)';
   const tdVal = el('td', { style: 'padding:10px 12px;font-size:13px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums;color:' + valColor },
-    (item.prix_unitaire || 0) > 0 ? valFormatEuro(item.valorisation) : '—'
+    valored ? valFormatEuro(item.valorisation) : '—'
   );
 
   const histBtn = el('button', {
@@ -13143,6 +13251,110 @@ function buildValorisationTableRow(item) {
 
   tr.append(tdCat, tdRef, tdDes, tdQte, tdPrix, tdVal, tdHist);
   return tr;
+}
+
+async function openValorisationConditionnementModal(matiereId) {
+  // Modal d'édition prix unitaire d'achat + unités par palette.
+  // Pour les catégories carton / adhésif / mandrin.
+  const v = valEnsureState();
+  const item = (v.items || []).find(x => (x.matiere_id || x.id) === matiereId);
+  if (!item) { showToast('Référence introuvable.', 'danger'); return; }
+  const root = document.getElementById('mroot');
+  if (!root) return;
+  root.innerHTML = '';
+  const overlay = el('div', {
+    style: 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px',
+    on: { click: (e) => { if (e.target === overlay) { root.innerHTML = ''; } } },
+  });
+  const box = el('div', { style: 'background:var(--card);border:1px solid var(--border);border-radius:14px;width:100%;max-width:480px;padding:22px' });
+  box.appendChild(el('div', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px' }, 'Prix & conditionnement'));
+  box.appendChild(el('div', { style: 'font-size:15px;font-weight:700;color:var(--text);margin-bottom:18px' },
+    (item.reference || '') + ' — ' + (item.designation || '')));
+
+  const uniteAchat = item.unite_achat || 'unité';
+  const prixInp = el('input', { type: 'number', step: '0.0001', min: '0',
+    style: 'width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;font-variant-numeric:tabular-nums' });
+  prixInp.value = String(Number(item.prix_unitaire || 0) || '');
+  const uppInp = el('input', { type: 'number', step: '1', min: '0',
+    style: 'width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;font-variant-numeric:tabular-nums' });
+  uppInp.value = String(Number(item.unites_par_palette || 0) || '');
+
+  box.appendChild(el('label', { style: 'display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px' }, 'Prix unitaire (€ / ' + uniteAchat + ')'));
+  box.appendChild(prixInp);
+  box.appendChild(el('div', { style: 'height:14px' }));
+  box.appendChild(el('label', { style: 'display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px' }, uniteAchat + ' par palette'));
+  box.appendChild(uppInp);
+
+  // Aperçu prix palette calculé
+  const preview = el('div', { style: 'margin-top:12px;font-size:12px;color:var(--text2);background:var(--bg);border:1px dashed var(--border);border-radius:8px;padding:10px 12px' });
+  const updatePreview = () => {
+    const p = parseFloat((prixInp.value || '').replace(',', '.')) || 0;
+    const u = parseFloat((uppInp.value || '').replace(',', '.')) || 0;
+    if (p > 0 && u > 0) {
+      const total = p * u;
+      preview.innerHTML = '';
+      preview.append(
+        el('span', { style: 'color:var(--muted)' }, 'Prix palette calculé : '),
+        el('span', { style: 'font-weight:700;color:var(--text);font-variant-numeric:tabular-nums' },
+          total.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) + ' €/pal.'),
+      );
+    } else {
+      preview.textContent = 'Prix palette : —';
+    }
+  };
+  prixInp.addEventListener('input', updatePreview);
+  uppInp.addEventListener('input', updatePreview);
+  updatePreview();
+  box.appendChild(preview);
+
+  const noteInp = el('input', { type: 'text', placeholder: 'Note optionnelle (motif du changement)',
+    style: 'width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:13px;margin-top:14px' });
+  box.appendChild(noteInp);
+
+  const actions = el('div', { style: 'display:flex;justify-content:flex-end;gap:8px;margin-top:18px' });
+  actions.appendChild(el('button', {
+    type: 'button',
+    style: 'padding:9px 16px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);font-weight:600;cursor:pointer',
+    on: { click: () => { root.innerHTML = ''; } },
+  }, 'Annuler'));
+  const saveBtn = el('button', {
+    type: 'button',
+    style: 'padding:9px 16px;border-radius:10px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:700;cursor:pointer',
+    on: { click: async () => {
+      const prix = parseFloat((prixInp.value || '').replace(',', '.'));
+      const upp = parseFloat((uppInp.value || '').replace(',', '.'));
+      if (isNaN(prix) || prix < 0) { showToast('Prix invalide.', 'danger'); return; }
+      if (isNaN(upp) || upp <= 0) { showToast('Conditionnement (> 0) obligatoire.', 'danger'); return; }
+      try {
+        // 1) Conditionnement
+        await api('/api/stock/matieres/' + matiereId, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ unites_par_palette: upp }),
+        });
+        // 2) Prix unitaire d'achat (avec historique)
+        await api('/api/stock/valorisation/' + matiereId, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prix_unitaire: prix,
+            note: noteInp.value.trim() || null,
+          }),
+        });
+        showToast('Enregistré.', 'success');
+        root.innerHTML = '';
+        await loadValorisation();
+      } catch (e) {
+        showToast('Erreur : ' + (e?.message || 'enregistrement impossible'), 'danger');
+      }
+    } },
+  }, 'Enregistrer');
+  actions.appendChild(saveBtn);
+  box.appendChild(actions);
+
+  overlay.appendChild(box);
+  root.appendChild(overlay);
+  setTimeout(() => prixInp.focus(), 50);
 }
 
 async function openValorisationParamsModal(matiereId) {

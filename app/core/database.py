@@ -4019,6 +4019,17 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 122, "matieres_premieres_autre_sous_section")
 
+    # v123 — Matières premières : conditionnement unitaire pour cartons / adhésifs / mandrins
+    # Analogue à metres_lineaires_par_bobine pour les frontaux : permet de saisir le prix
+    # à l'unité d'achat (€/carton, €/tube, €/kg) tout en gardant le stock en palettes.
+    # Valorisation = stock_palettes × unites_par_palette × prix_unitaire.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=123 LIMIT 1").fetchone():
+        mp_cols = {row[1] for row in conn.execute("PRAGMA table_info(matieres_premieres)").fetchall()}
+        if "unites_par_palette" not in mp_cols:
+            conn.execute("ALTER TABLE matieres_premieres ADD COLUMN unites_par_palette REAL")
+        conn.commit()
+        _record_schema_migration(conn, 123, "matieres_premieres_unites_par_palette")
+
 
 
 def create_default_admin():
