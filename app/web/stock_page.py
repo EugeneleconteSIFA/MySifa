@@ -570,6 +570,10 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .dash-mp-cat{font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;text-transform:uppercase;flex-shrink:0}
 .dash-mp-cat-mandrin{background:rgba(124,58,237,.15);color:#7c3aed}
 .dash-mp-cat-frontal{background:rgba(14,165,233,.15);color:#0ea5e9}
+.dash-mp-cat-frontal-couche{background:rgba(125,211,252,.22);color:#0284c7}
+.dash-mp-cat-frontal-synthetique{background:rgba(34,211,238,.18);color:#0891b2}
+.dash-mp-cat-frontal-thermiques{background:rgba(99,102,241,.20);color:#4f46e5}
+.dash-mp-cat-frontal-velin{background:rgba(30,58,138,.22);color:#1e3a8a}
 .dash-mp-cat-glassine{background:rgba(236,72,153,.15);color:#ec4899}
 .dash-mp-cat-palette{background:rgba(8,145,178,.15);color:#0891b2}
 .dash-mp-cat-adhesif{background:rgba(217,119,6,.15);color:#d97706}
@@ -5262,7 +5266,7 @@ function buildMatiereDetail() {
     back,
     el('div', { cls: 'scorecard' },
       el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' } },
-        dashMpCatBadge(m.categorie),
+        dashMpCatBadge(m.categorie, m.sous_section),
         m.en_alerte ? el('span', { style: { fontSize: '12px', color: 'var(--warn)', fontWeight: '600' } }, 'Sous le seuil') : null,
       ),
       el('div', { cls: 'sc-ref' }, m.reference || ''),
@@ -7859,7 +7863,7 @@ function buildMatieres() {
       on: { click: () => loadMatiere(m.id) },
     },
       el('div', { cls: 'mp-card-top' },
-        dashMpCatBadge(m.categorie),
+        dashMpCatBadge(m.categorie, m.sous_section),
         el('span', { cls: 'mp-card-ref' }, m.reference || ''),
         el('div', { cls: 'mp-card-top-end' }, ...topEnd),
       ),
@@ -7870,7 +7874,7 @@ function buildMatieres() {
     ));
   };
   const mpSectionHeadStyle = 'margin:14px 4px 4px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px';
-  const mpSubsectionHeadStyle = 'margin:10px 4px 4px;padding:6px 12px;font-size:12px;font-weight:700;color:var(--accent);background:var(--accent-bg);border-radius:8px;display:inline-block';
+  const mpSubsectionHeadStyle = 'margin:24px 0 12px;padding:14px 18px;font-size:15px;font-weight:700;color:var(--text);background:linear-gradient(90deg,var(--accent-bg),transparent);border-left:4px solid var(--accent);border-radius:10px;letter-spacing:.2px;display:block';
   if (!filtered.length) {
     list.appendChild(el('div', { cls: 'mp-empty' },
       q
@@ -9925,10 +9929,17 @@ function openReceptionQuick() {
   });
 }
 
-function dashMpCatBadge(categorie) {
+function dashMpCatBadge(categorie, sousSection) {
   const c = (categorie || '').toLowerCase();
   const lbl = MP_CAT_LABELS[c] || categorie || '—';
-  return el('span', { cls: 'dash-mp-cat dash-mp-cat-' + c }, lbl);
+  let extra = '';
+  if (c === 'frontal' && sousSection) {
+    const k = String(sousSection).toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '');
+    if (k) extra = ' dash-mp-cat-frontal-' + k;
+  }
+  return el('span', { cls: 'dash-mp-cat dash-mp-cat-' + c + extra }, lbl);
 }
 
 function dashMvtBadge(type) {
@@ -13192,8 +13203,8 @@ function buildValorisationTableRow(item) {
   const tr = el('tr', { 'data-row-key': rowKey, style: 'border-bottom:1px solid var(--border)' });
 
   const tdCat = el('td', { style: 'padding:10px 12px;font-size:12px;color:var(--text2)' });
-  const badge = el('span', { style:
-    'display:inline-block;padding:2px 9px;border-radius:999px;background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700;letter-spacing:.2px' }, item.categorie_label || '');
+  // Badge catégorie avec teinte bleue selon la sous-section pour les frontaux
+  const badge = dashMpCatBadge(item.categorie, item.sous_section);
   tdCat.appendChild(badge);
 
   const refLabel = item.reference || '';
@@ -13673,7 +13684,62 @@ function buildValorisationTable() {
       el('td', { colspan: colspan, style: 'padding:30px 20px;text-align:center;color:var(--muted);font-size:13px' }, msg)
     ));
   } else {
-    rows.forEach(item => tbody.appendChild(buildValorisationTableRow(item)));
+    // Tri auto : on injecte une bannière full-width entre les sous-sections frontal
+    // Actif quand l'utilisateur ne sort pas par une colonne arbitraire (sinon ça
+    // fragmenterait les groupes). On considère sortColumn null OU 'categorie' comme « tri naturel ».
+    const groupable = !v.sortColumn || v.sortColumn === 'categorie';
+    let lastFrontalSs = null;
+    let inFrontal = false;
+    const SS_LABELS = { '': 'Sans sous-section' };
+    rows.forEach(item => {
+      const cat = String(item.categorie || '').toLowerCase();
+      if (groupable && cat === 'frontal') {
+        const ssRaw = (item.sous_section || '').trim();
+        if (!inFrontal || ssRaw !== lastFrontalSs) {
+          // Compte les bobines dans cette sous-section (somme des quantités)
+          const sameSs = rows.filter(r => String(r.categorie || '').toLowerCase() === 'frontal'
+            && (r.sous_section || '').trim() === ssRaw);
+          const label = ssRaw || 'Sans sous-section';
+          const k = ssRaw.toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9]+/g, '');
+          const colorMap = {
+            couche: '#0284c7',
+            synthetique: '#0891b2',
+            thermiques: '#4f46e5',
+            velin: '#1e3a8a',
+          };
+          const bgMap = {
+            couche: 'rgba(125,211,252,.18)',
+            synthetique: 'rgba(34,211,238,.14)',
+            thermiques: 'rgba(99,102,241,.14)',
+            velin: 'rgba(30,58,138,.16)',
+          };
+          const accent = colorMap[k] || 'var(--accent)';
+          const bg = bgMap[k] || 'var(--accent-bg)';
+          const headerTr = el('tr', null,
+            el('td', {
+              attrs: { colspan: colspan },
+              style:
+                'padding:14px 18px;background:linear-gradient(90deg,' + bg + ',transparent);'
+                + 'border-top:1px solid var(--border);border-bottom:1px solid var(--border);'
+                + 'border-left:4px solid ' + accent + ';'
+                + 'font-size:14px;font-weight:700;color:var(--text);letter-spacing:.2px',
+            },
+              el('span', { style: 'color:' + accent }, 'Frontal · '),
+              el('span', null, label + ' · ' + sameSs.length + ' réf.'),
+            )
+          );
+          tbody.appendChild(headerTr);
+          lastFrontalSs = ssRaw;
+          inFrontal = true;
+        }
+      } else {
+        inFrontal = false;
+        lastFrontalSs = null;
+      }
+      tbody.appendChild(buildValorisationTableRow(item));
+    });
   }
 
   table.append(thead, tbody);
