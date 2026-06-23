@@ -576,6 +576,7 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .dash-mp-cat-carton{background:rgba(5,150,105,.15);color:#059669}
 .dash-mp-cat-complexe{background:rgba(99,102,241,.15);color:#6366f1}
 .dash-mp-cat-autre{background:rgba(148,163,184,.18);color:#64748b}
+.dash-mp-cat-negoce{background:rgba(34,211,238,.15);color:var(--accent)}
 .dash-act-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
 .dash-act-list{display:flex;flex-direction:column}
 .dash-act-row{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);font-size:13px;color:var(--text)}
@@ -6648,182 +6649,154 @@ function buildNgEmplPickerField(emplInp) {
   return { suggWrap, emplCombo, emplInp };
 }
 
-function buildNegoceTab() {
-  const wrap = el('div', { cls: 'content pf-tab', id: 'tab-negoce' });
+function dashNegoceBadge() {
+  return el('span', { cls: 'dash-mp-cat dash-mp-cat-negoce' }, 'NÉGOCE');
+}
 
-  const kpis = S.ngKpis || {};
-  wrap.appendChild(el('div', { cls: 'pf-kpis' },
-    el('div', { cls: 'card pf-kpi', style: { padding: '16px 20px' } },
-      el('div', { cls: 'pf-kpi-label' }, 'Références en stock'),
-      el('div', { cls: 'pf-kpi-value' }, S.ngLoading && S.ngStock === null ? '—' : String(kpis.references ?? 0)),
-    ),
-    el('div', { cls: 'card pf-kpi', style: { padding: '16px 20px' } },
-      el('div', { cls: 'pf-kpi-label' }, 'Mouvements aujourd\'hui'),
-      el('div', { cls: 'pf-kpi-value' }, S.ngLoading && S.ngStock === null ? '—' : String(kpis.mouvements_aujourdhui ?? 0)),
-    ),
-    el('div', { cls: 'card pf-kpi', style: { padding: '16px 20px' } },
-      el('div', { cls: 'pf-kpi-label' }, 'Emplacements occupés'),
-      el('div', { cls: 'pf-kpi-value' }, S.ngLoading && S.ngStock === null ? '—' : String(kpis.emplacements_occupes ?? 0)),
-    ),
-  ));
-
-  const toolbar = el('div', { cls: 'pf-toolbar' },
-    buildNgUnifiedSearch(),
-    el('div', { cls: 'pf-toolbar-actions' },
-      S.stockReadOnly ? null : el('button', {
-        cls: 'btn btn-soft btn-soft-entree',
-        type: 'button',
-        on: { click: () => openNgMvtModal('entree') },
-      }, iconEl('upload', 14), ' Entrée'),
-      S.stockReadOnly ? null : el('button', {
-        cls: 'btn btn-soft btn-soft-sortie',
-        type: 'button',
-        on: { click: () => openNgMvtModal('sortie') },
-      }, iconEl('download', 14), ' Sortie'),
-      S.stockReadOnly ? null : el('button', {
-        cls: 'btn-ghost',
-        type: 'button',
-        on: { click: () => openNgCatalogueModal() },
-        style: { padding: '10px 14px' },
-      }, iconEl('tag', 16), ' Catalogue'),
-    ),
+function negoceCardActions(row) {
+  if (S.stockReadOnly) return null;
+  const hasStock = (parseFloat(row.quantite) || 0) > 0;
+  return el('div', {
+    cls: 'mp-card-actions-inline',
+    on: { click: (e) => e.stopPropagation() },
+  },
+    el('button', {
+      cls: 'mp-act-btn mp-act-entree',
+      type: 'button',
+      on: { click: (e) => {
+        e.stopPropagation();
+        openNgMvtModal('entree', { reference: row.reference, designation: row.designation, unite: row.unite });
+      } },
+    }, '↓ Entrée'),
+    el('button', {
+      cls: 'mp-act-btn mp-act-sortie',
+      type: 'button',
+      attrs: hasStock ? {} : { disabled: 'disabled' },
+      style: hasStock ? {} : { opacity: '0.5', cursor: 'not-allowed' },
+      on: { click: (e) => {
+        e.stopPropagation();
+        openNgMvtModal('sortie', { reference: row.reference, designation: row.designation, unite: row.unite });
+      } },
+    }, '↑ Sortie'),
   );
-  wrap.appendChild(toolbar);
+}
 
-  // Chips de tri + toggle ruptures
-  const fsSort = (S.ngFilters && S.ngFilters.sort) || 'ref';
-  const fsHideRupture = !!(S.ngFilters && S.ngFilters.hideRupture);
-  const sortChip = (key, label) => el('button', {
-    cls: 'ng-chip' + (fsSort === key ? ' active' : ''),
+function negoceCardEditBtn(row) {
+  if (S.stockReadOnly) return null;
+  return el('button', {
+    cls: 'mp-act-icon',
     type: 'button',
-    on: { click: () => { if (!S.ngFilters) S.ngFilters = { refs: [], empls: [], q: '', sort: 'ref', hideRupture: false }; S.ngFilters.sort = key; renderNegoceView(); } },
-  }, label);
-  wrap.appendChild(el('div', { cls: 'ng-controls' },
-    el('div', { cls: 'ng-controls-group' },
-      el('span', { cls: 'ng-controls-label' }, 'Tri'),
-      sortChip('ref', 'Réf.'),
-      sortChip('qte', 'Qté ↓'),
-      sortChip('recent', 'Dernière entrée ↓'),
-    ),
-    (() => {
-      const cbAttrs = { type: 'checkbox', cls: 'ng-toggle-input' };
-      if (fsHideRupture) cbAttrs.checked = 'checked';
-      const cb = el('input', cbAttrs);
-      cb.addEventListener('change', (e) => {
-        if (!S.ngFilters) S.ngFilters = { refs: [], empls: [], q: '', sort: 'ref', hideRupture: false };
-        S.ngFilters.hideRupture = !!e.target.checked;
-        renderNegoceView();
-      });
-      return el('label', { cls: 'ng-toggle' + (fsHideRupture ? ' is-on' : '') },
-        cb,
-        el('span', { cls: 'ng-toggle-switch' }, el('span', { cls: 'ng-toggle-thumb' })),
-        el('span', { cls: 'ng-toggle-label' }, 'Masquer ruptures'),
-      );
-    })(),
-  ));
+    attrs: { title: 'Modifier la référence', 'aria-label': 'Modifier la référence' },
+    on: { click: (e) => { e.stopPropagation(); openNgCatalogueModal(row.reference); } },
+  }, iconEl('edit', 16));
+}
 
-  const stockList = el('div', { cls: 'pf-stock-list', id: 'ng-stock-list' });
-  const mvtList = el('div', { cls: 'pf-mvt-list', id: 'ng-mvt-list' });
-
+function buildNegoceTab() {
   if (S.ngLoading && S.ngStock === null) {
-    stockList.appendChild(el('div', { cls: 'pf-empty', style: { padding: '32px', textAlign: 'center', fontSize: '13px' } }, 'Chargement…'));
-    mvtList.appendChild(el('div', { cls: 'pf-empty', style: { padding: '32px', textAlign: 'center', fontSize: '13px' } }, 'Chargement…'));
-  } else {
-    const filtered = filterNgStockList();
-    const fs = S.ngFilters || { refs: [], empls: [], q: '' };
-    const tagsTxt = []
-      .concat((fs.refs || []).map(r => 'Réf: ' + r))
-      .concat((fs.empls || []).map(e => 'Empl: ' + e));
-    const hasFilter = !!((fs.refs || []).length || (fs.empls || []).length || String(fs.q || '').trim() || fs.hideRupture);
-    const neverHadMvt = !S.ngTotalMouvements;
-
-    if (!filtered.length) {
-      if (hasFilter) {
-        stockList.appendChild(el('div', { cls: 'pf-empty', style: { padding: '32px', textAlign: 'center', fontSize: '13px' } },
-          'Aucun résultat pour ' + (tagsTxt.length ? tagsTxt.join(' · ') : 'ce filtre') + '.',
-        ));
-      } else {
-        stockList.appendChild(buildPfEmptyState(
-          'Catalogue vide',
-          'Ajoutez un produit via le bouton « Catalogue », puis enregistrez une entrée.',
-        ));
-      }
-    } else {
-      filtered.forEach(row => {
-        const hasStock = row.quantite > 0;
-        const emplBadges = (row.emplacements || []).slice(0, 4).map(empl => el('span', {
-          cls: 'pf-empl-badge' + (isStockEmplacementAuSol(empl) ? ' pf-empl-au-sol' : isStockEmplacementSortieProd(empl) ? ' pf-empl-sortie-prod' : ''),
-        }, stockEmplLabel(empl) || empl));
-        const extraCount = Math.max(0, (row.emplacements || []).length - 4);
-        const item = el('div', {
-          cls: 'pf-stock-item' + (hasStock ? '' : ' ng-rupture'),
-          on: { click: () => loadNgDetail(row.reference) },
-        },
-          el('div', { cls: 'pf-stock-item-main' },
-            el('div', { cls: 'pf-stock-ref' }, String(row.reference || '—')),
-            el('div', { cls: 'pf-stock-des' }, row.designation || '—'),
-            el('div', { cls: 'pf-stock-row', style: { marginTop: '6px', gap: '8px', flexWrap: 'wrap' } },
-              hasStock
-                ? el('span', { cls: 'pf-stock-qte' }, fU(row.quantite, row.unite))
-                : el('span', { cls: 'ng-rupture-badge' }, 'Rupture'),
-              ...emplBadges,
-              extraCount > 0 ? el('span', { cls: 'pf-empl-badge', style: { opacity: '0.7' } }, '+' + extraCount) : null,
-              !S.stockReadOnly && !hasStock
-                ? el('button', {
-                    cls: 'btn-ghost',
-                    style: { marginLeft: 'auto', padding: '3px 10px', fontSize: '12px', color: 'var(--success)', borderColor: 'var(--success)' },
-                    on: { click: (e) => {
-                      e.stopPropagation();
-                      openNgMvtModal('entree', { reference: row.reference, designation: row.designation, unite: row.unite });
-                    } },
-                  }, '+ Entrée')
-                : null,
-            ),
-            hasStock
-              ? el('div', { cls: 'pf-stock-meta' }, 'Dernière entrée : ' + fD(row.derniere_entree))
-              : el('div', { cls: 'pf-stock-meta', style: { color: 'var(--muted)' } }, 'Aucun mouvement'),
-          ),
-        );
-        stockList.appendChild(item);
-      });
-    }
-
-    const mvts = filterNgMouvementsList();
-    if (!mvts.length) {
-      mvtList.appendChild(el('div', { cls: 'pf-empty', style: { padding: '24px', textAlign: 'center', fontSize: '13px' } },
-        hasFilter ? 'Aucun mouvement pour ce filtre.' : (neverHadMvt ? 'Aucun mouvement enregistré.' : 'Aucun mouvement récent.'),
-      ));
-    } else {
-      mvts.forEach(m => {
-        const isEntree = m.type === 'entree';
-        mvtList.appendChild(el('div', { cls: 'pf-mvt-item' },
-          el('span', { cls: 'pf-mvt-icon ' + (isEntree ? 'entree' : 'sortie') }, isEntree ? '↑' : '↓'),
-          el('div', { cls: 'pf-mvt-main' },
-            el('div', { cls: 'pf-mvt-line' },
-              el('span', { cls: 'pf-mvt-ref' }, String(m.reference || '—')),
-              el('span', { cls: 'pf-mvt-qte' }, fU(m.quantite, m.unite)),
-            ),
-            el('div', { cls: 'pf-mvt-sub' },
-              (m.emplacement || '—') + ' · ' + pfFmtShortDateTime(m.date_mouvement),
-            ),
-          ),
-          el('div', { cls: 'pf-mvt-user' }, m.user_login || '—'),
-        ));
-      });
-    }
+    return el('div', { cls: 'content' }, el('div', { cls: 'hist-page' },
+      el('div', { cls: 'card-empty' }, 'Chargement…')));
   }
 
-  wrap.appendChild(el('div', { cls: 'pf-grid' },
-    el('div', { cls: 'pf-col-stock' },
-      el('div', { cls: 'pf-col-title' }, 'Stock actuel'),
-      stockList,
+  if (!S.ngFilters) S.ngFilters = { refs: [], empls: [], q: '', sort: 'ref', hideRupture: false };
+  const fs = S.ngFilters;
+  const q = String(fs.q || '').trim();
+  const filtered = filterNgStockList();
+
+  const head = el('div', { cls: 'hist-head' },
+    el('div', null,
+      el('h2', { cls: 'hist-title' }, 'Produits de négoce'),
+      el('p', { cls: 'hist-subtitle' },
+        'Produits revendus en l\'état (sans transformation)'),
     ),
-    el('div', { cls: 'pf-col-mvts' },
-      el('div', { cls: 'pf-col-title' }, 'Derniers mouvements'),
-      mvtList,
+    S.stockReadOnly ? null : el('div', { cls: 'hist-head-actions' },
+      el('button', {
+        cls: 'btn',
+        type: 'button',
+        on: { click: () => openNgCatalogueModal() },
+      }, 'Gérer les références'),
     ),
-  ));
-  return wrap;
+  );
+
+  const searchInp = el('input', {
+    cls: 'mp-search',
+    id: 'negoce-search',
+    attrs: {
+      type: 'search',
+      placeholder: 'Rechercher un produit (référence, désignation…)',
+      autocomplete: 'off',
+      spellcheck: 'false',
+    },
+  });
+  searchInp.value = q;
+  searchInp.addEventListener('input', (e) => {
+    fs.q = e.target.value;
+    renderNegoceView();
+  });
+  searchInp.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      fs.q = '';
+      renderNegoceView();
+    }
+  });
+  const searchWrap = el('div', { cls: 'mp-search-wrap' },
+    el('span', { cls: 'mp-search-icon', attrs: { 'aria-hidden': 'true' } }, iconEl('search', 18)),
+    searchInp,
+  );
+
+  const list = el('div', { cls: 'mp-list' });
+
+  if (!filtered.length) {
+    list.appendChild(el('div', { cls: 'mp-empty' },
+      q
+        ? 'Aucun produit correspondant à « ' + q + ' ».'
+        : 'Aucun produit de négoce enregistré.',
+    ));
+  } else {
+    filtered.forEach(row => {
+      const hasStock = (parseFloat(row.quantite) || 0) > 0;
+      const stockCls = hasStock ? '' : ' alert';
+      const topEnd = [
+        el('span', { cls: 'mp-card-stock-total' + stockCls },
+          hasStock ? fU(row.quantite, row.unite) : 'Rupture'),
+      ];
+      const editBtn = negoceCardEditBtn(row);
+      if (editBtn) topEnd.push(editBtn);
+
+      const infoChildren = [
+        el('div', { cls: 'mp-card-des' }, row.designation || '—'),
+        el('span', { cls: 'mp-card-stock-mini' + stockCls },
+          hasStock ? 'Stock : ' + fU(row.quantite, row.unite) : 'Aucun stock'),
+      ];
+      if (row.derniere_entree) {
+        infoChildren.push(el('div', { cls: 'mp-card-meta' },
+          'Dernière entrée : ' + fD(row.derniere_entree)));
+      }
+      const empls = (row.emplacements || []);
+      if (empls.length) {
+        const emplLabel = empls.slice(0, 3).join(', ') + (empls.length > 3 ? ' +' + (empls.length - 3) : '');
+        infoChildren.push(el('div', { cls: 'mp-card-meta' },
+          (empls.length > 1 ? 'Emplacements : ' : 'Emplacement : ') + emplLabel));
+      }
+
+      list.appendChild(el('div', {
+        cls: 'mp-card',
+        on: { click: () => loadNgDetail(row.reference) },
+      },
+        el('div', { cls: 'mp-card-top' },
+          dashNegoceBadge(),
+          el('span', { cls: 'mp-card-ref' }, row.reference || ''),
+          el('div', { cls: 'mp-card-top-end' }, ...topEnd),
+        ),
+        el('div', { cls: 'mp-card-mid' },
+          el('div', { cls: 'mp-card-info' }, ...infoChildren),
+          el('div', { cls: 'mp-card-side' }, negoceCardActions(row)),
+        ),
+      ));
+    });
+  }
+
+  return el('div', { cls: 'content' },
+    el('div', { cls: 'hist-page' }, head, searchWrap, list));
 }
 
 function closeNgModals() {
@@ -7041,22 +7014,56 @@ function closeNgDetail() {
   renderNegoceView();
 }
 
-function buildNegoceDetail() {
-  const wrap = el('div', { cls: 'content ng-detail' });
-  const backBtn = el('button', { cls: 'btn-ghost', type: 'button', style: { alignSelf: 'flex-start' }, on: { click: closeNgDetail } },
-    '← Retour au catalogue négoce',
+function buildNegoceMvtHistory(mouvements, unite) {
+  return el('div', { cls: 'card' },
+    el('div', { cls: 'card-header' }, el('div', { cls: 'card-title' }, 'Historique des mouvements')),
+    !mouvements.length
+      ? el('div', { cls: 'card-empty' }, 'Aucun mouvement')
+      : el('div', null, ...mouvements.slice(0, 30).map(raw => {
+          const m = normalizePfMvt(raw);
+          const t = (m.type || '').toLowerCase();
+          const icons = { entree: '↓', sortie: '↑', ajustement: '=', transfert: '↔' };
+          const signe = t === 'entree' ? '+' : t === 'sortie' ? '−' : t === 'ajustement' ? '=' : '';
+          const actor = (m.user_login || '').trim();
+          const empl = m.emplacement || '';
+          const note = (m.commentaire || m.motif_destinataire || '').trim();
+          return el('div', { cls: 'mvt-row' },
+            el('div', { cls: 'mvt-icon ' + t }, icons[t] || '·'),
+            el('div', { cls: 'mvt-body' },
+              el('div', { cls: 'mvt-line1' },
+                el('span', null, t === 'entree' ? 'Entrée' : (t === 'sortie' ? 'Sortie' : (t || '—'))),
+                el('span', { cls: 'mvt-qte-' + t }, signe + fU(m.quantite, m.unite || unite)),
+              ),
+              el('div', { cls: 'mvt-line2' },
+                fD(m.date_mouvement),
+                empl ? el('span', null, ' · ' + (stockEmplLabel(empl) || empl)) : null,
+                actor ? el('span', null, ' · ' + actor) : null,
+              ),
+              note ? el('div', { cls: 'mvt-note' }, note) : null,
+            ),
+          );
+        })),
   );
-  wrap.appendChild(backBtn);
+}
+
+function buildNegoceDetail() {
+  const back = el('button', {
+    cls: 'btn-ghost',
+    style: { marginBottom: '14px' },
+    type: 'button',
+    on: { click: closeNgDetail },
+  }, '← Retour aux produits de négoce');
 
   if (S.ngSelDetailLoading && !S.ngSelDetail) {
-    wrap.appendChild(el('div', { cls: 'pf-empty', style: { padding: '60px 24px', textAlign: 'center' } }, 'Chargement…'));
-    return wrap;
+    return el('div', { cls: 'content' }, back,
+      el('div', { cls: 'card-empty' }, 'Chargement…'));
   }
   const d = S.ngSelDetail || {};
   if (d.error) {
-    wrap.appendChild(el('div', { cls: 'pf-empty', style: { padding: '60px 24px', textAlign: 'center' } }, d.error));
-    return wrap;
+    return el('div', { cls: 'content' }, back,
+      el('div', { cls: 'card-empty' }, d.error));
   }
+
   const ref = String(d.reference || '').toUpperCase();
   const unite = d.unite || 'rouleau';
   const stockTotal = parseFloat(d.stock_total) || 0;
@@ -7064,91 +7071,74 @@ function buildNegoceDetail() {
   const empls = Array.isArray(d.emplacements) ? d.emplacements : [];
   const hist = Array.isArray(d.historique) ? d.historique : [];
 
-  // Header : ref + designation + stock total + actions
-  const header = el('div', { cls: 'ng-detail-header' },
-    el('div', { cls: 'ng-detail-header-main' },
-      el('div', { cls: 'ng-detail-ref' }, ref || '—'),
-      el('div', { cls: 'ng-detail-des' }, d.designation || '—'),
-      el('div', { cls: 'ng-detail-unite' }, 'Unité : ' + unite),
-    ),
-    el('div', { cls: 'ng-detail-stock' },
-      el('div', { cls: 'ng-detail-stock-label' }, 'Stock total'),
-      el('div', { cls: 'ng-detail-stock-value' + (hasStock ? '' : ' rupture') }, fU(stockTotal, unite)),
-    ),
-  );
-  wrap.appendChild(header);
-
-  // Actions rapides
+  const actionBtns = [];
   if (!S.stockReadOnly) {
-    const actions = el('div', { cls: 'ng-detail-actions' },
+    actionBtns.push(
       el('button', {
-        cls: 'btn btn-soft btn-soft-entree',
+        cls: 'mp-act-btn mp-act-entree',
         type: 'button',
         on: { click: () => openNgMvtModal('entree', { reference: ref, designation: d.designation, unite }) },
-      }, iconEl('upload', 14), ' Entrée'),
+      }, '↓ Entrée'),
       el('button', {
-        cls: 'btn btn-soft btn-soft-sortie',
+        cls: 'mp-act-btn mp-act-sortie',
         type: 'button',
-        on: { click: () => openNgMvtModal('sortie', { reference: ref, designation: d.designation, unite }) },
         attrs: hasStock ? {} : { disabled: 'disabled' },
         style: hasStock ? {} : { opacity: '0.5', cursor: 'not-allowed' },
-      }, iconEl('download', 14), ' Sortie'),
+        on: { click: () => openNgMvtModal('sortie', { reference: ref, designation: d.designation, unite }) },
+      }, '↑ Sortie'),
       el('button', {
-        cls: 'btn-ghost',
+        cls: 'mp-act-icon',
         type: 'button',
+        style: { flex: '0 0 auto', minWidth: '44px' },
+        attrs: { title: 'Modifier la référence', 'aria-label': 'Modifier la référence' },
         on: { click: () => openNgCatalogueModal(ref) },
-        style: { padding: '10px 14px' },
-      }, iconEl('tag', 16), ' Modifier catalogue'),
+      }, iconEl('edit', 16)),
     );
-    wrap.appendChild(actions);
   }
+  const actions = actionBtns.length
+    ? el('div', { cls: 'action-bar', style: { marginTop: '14px' } }, ...actionBtns)
+    : null;
 
-  // Grille : emplacements (à gauche) + historique (à droite)
-  const emplCard = el('div', { cls: 'ng-detail-card' },
-    el('div', { cls: 'ng-detail-card-title' }, 'Répartition par emplacement'),
+  const emplCard = empls.length
+    ? el('div', { cls: 'card', style: { marginTop: '16px' } },
+        el('div', { cls: 'card-header' },
+          el('div', { cls: 'card-title' }, 'Répartition par emplacement'),
+        ),
+        el('div', null, ...empls.map(e => {
+          const code = String(e.emplacement || '').toUpperCase();
+          return el('div', { cls: 'empl-row' },
+            el('span', { cls: 'empl-code' }, stockEmplLabel(code) || code || '—'),
+            el('span', { cls: 'empl-qte' }, fU(e.quantite, e.unite || unite)),
+          );
+        })),
+      )
+    : null;
+
+  return el('div', { cls: 'content' },
+    back,
+    el('div', { cls: 'scorecard' },
+      el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' } },
+        dashNegoceBadge(),
+        hasStock ? null : el('span', { style: { fontSize: '12px', color: 'var(--warn)', fontWeight: '600' } }, 'Rupture'),
+      ),
+      el('div', { cls: 'sc-ref' }, ref || ''),
+      el('div', { cls: 'sc-des' }, d.designation || '—'),
+      el('div', { style: { fontSize: '12px', color: 'var(--muted)', marginTop: '6px' } }, 'Unité : ' + unite),
+      el('div', { cls: 'sc-stats' },
+        el('div', { cls: 'sc-stat' },
+          el('div', { cls: 'sc-stat-label' }, 'Stock actuel'),
+          el('div', { cls: 'sc-stat-value' }, fU(stockTotal, unite)),
+        ),
+        el('div', { cls: 'sc-stat' },
+          el('div', { cls: 'sc-stat-label' }, 'Mouvements'),
+          el('div', { cls: 'sc-stat-value' }, String(hist.length)),
+        ),
+      ),
+    ),
+    actions,
+    emplCard,
+    buildNegoceMvtHistory(hist, unite),
   );
-  if (!empls.length) {
-    emplCard.appendChild(el('div', { cls: 'pf-empty', style: { padding: '16px 0' } }, 'Aucun stock.'));
-  } else {
-    empls.forEach(e => {
-      const code = String(e.emplacement || '').toUpperCase();
-      emplCard.appendChild(el('div', { cls: 'ng-empl-row' },
-        el('span', { cls: 'ng-empl-code' }, stockEmplLabel(code) || code || '—'),
-        el('span', { cls: 'ng-empl-qte' }, fU(e.quantite, e.unite || unite)),
-      ));
-    });
-  }
-
-  const histCard = el('div', { cls: 'ng-detail-card' },
-    el('div', { cls: 'ng-detail-card-title' }, 'Historique des mouvements'),
-  );
-  if (!hist.length) {
-    histCard.appendChild(el('div', { cls: 'pf-empty', style: { padding: '16px 0' } }, 'Aucun mouvement enregistré.'));
-  } else {
-    const table = el('table', { cls: 'pf-detail-table' });
-    table.appendChild(el('thead', null, el('tr', null,
-      el('th', null, 'Date'), el('th', null, 'Type'), el('th', null, 'Qté'),
-      el('th', null, 'Empl.'), el('th', null, 'Utilisateur'),
-    )));
-    const tbody = el('tbody', null);
-    hist.forEach(raw => {
-      const m = normalizePfMvt(raw);
-      const typeLbl = m.type === 'entree' ? 'Entrée' : (m.type === 'sortie' ? 'Sortie' : (m.type || '—'));
-      const typeColor = m.type === 'entree' ? 'var(--success)' : (m.type === 'sortie' ? 'var(--danger)' : 'var(--text2)');
-      tbody.appendChild(el('tr', null,
-        el('td', null, fDateTime(m.date_mouvement)),
-        el('td', { style: { color: typeColor, fontWeight: '600' } }, typeLbl),
-        el('td', { style: { fontFamily: 'ui-monospace,monospace' } }, fU(m.quantite, m.unite || unite)),
-        el('td', null, m.emplacement || '—'),
-        el('td', null, m.user_login || '—'),
-      ));
-    });
-    table.appendChild(tbody);
-    histCard.appendChild(el('div', { style: { maxHeight: '420px', overflowY: 'auto' } }, table));
-  }
-
-  wrap.appendChild(el('div', { cls: 'ng-detail-grid' }, emplCard, histCard));
-  return wrap;
 }
 
 function openNgCatalogueModal(focusRef) {

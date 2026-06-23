@@ -194,7 +194,7 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 .cal-wday{text-align:center;padding:8px 0;font-size:11px;font-weight:700;font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;border-bottom:1px solid var(--border)}
 .cal-wday.sat,.cal-wday.sun{color:#a78bfa}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:minmax(110px,1fr);gap:6px}
-.cal-cell{position:relative;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 10px;min-height:110px;display:flex;flex-direction:column;gap:6px;transition:background .15s,border-color .15s,box-shadow .15s;overflow:hidden}
+.cal-cell{position:relative;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 10px 8px 14px;min-height:120px;display:flex;flex-direction:column;gap:6px;transition:background .15s,border-color .15s,box-shadow .15s;overflow:hidden}
 .cal-cell:hover{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-bg)}
 .cal-cell.cal-off{background:transparent;opacity:.55}
 .cal-cell.cal-off .cal-day-num{color:var(--muted)}
@@ -202,7 +202,17 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 .cal-cell.cal-today{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-bg)}
 .cal-day-num{font-size:13px;font-weight:700;color:var(--text);font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;line-height:1}
 .cal-cell.cal-today .cal-day-num{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:var(--accent);color:var(--accent-fg,#fff);font-size:12px}
-.cal-day-events{display:flex;flex-direction:column;gap:3px;flex:1;overflow:hidden}
+.cal-day-events{display:flex;flex-direction:column;gap:4px;flex:1;overflow:hidden}
+.cal-cell-clickable{cursor:copy}
+.cal-cell-has-events{position:relative}
+.cal-cell-has-events::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--cal-cell-accent,var(--accent));border-radius:10px 0 0 10px;pointer-events:none}
+.cal-day-event{display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:6px;font-size:11.5px;font-weight:700;line-height:1.2;cursor:pointer;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.18);transition:filter .12s,transform .08s}
+.cal-day-event:hover{filter:brightness(1.10);transform:translateX(1px)}
+.cal-day-event:active{transform:scale(.98)}
+.cal-day-event-time{font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;font-size:10.5px;font-weight:800;opacity:.92;flex-shrink:0;letter-spacing:.2px}
+.cal-day-event-machine{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700;letter-spacing:.1px}
+.cal-day-event-more{font-size:11px;color:var(--muted);font-weight:700;font-style:italic;padding:3px 8px;border-radius:5px;background:transparent;cursor:pointer;border:1px dashed var(--border);text-align:center;transition:all .12s}
+.cal-day-event-more:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-bg)}
 .cal-event-empty{font-size:10px;color:var(--muted);font-style:italic;opacity:.6}
 .cal-legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:18px;padding-top:14px;border-top:1px solid var(--border)}
 .cal-legend-item{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);font-weight:600}
@@ -220,37 +230,42 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 }
 
 /* ── Vue Semaine (emploi du temps) ──────────────────────────────────── */
-.cal-wv-hint{font-size:11px;color:var(--muted);background:var(--accent-bg);border:1px dashed var(--accent);border-radius:8px;padding:8px 12px;margin-bottom:14px;text-align:center}
-.cal-wv-header{display:grid;grid-template-columns:70px repeat(7,1fr);gap:0;margin-bottom:0;border-bottom:1px solid var(--border)}
+.cal-week-view{overflow-x:auto}
+.cal-wv-hint{font-size:13px;color:var(--text2);background:var(--accent-bg);border:1px dashed var(--accent);border-radius:8px;padding:10px 14px;margin-bottom:14px;text-align:center;font-weight:600}
+.cal-wv-header{display:grid;grid-template-columns:78px repeat(7,minmax(170px,1fr));gap:0;margin-bottom:0;border-bottom:1px solid var(--border);min-width:max-content}
 .cal-wv-corner{}
-.cal-wv-dayhead{padding:10px 8px;text-align:center;border-left:1px solid var(--border);display:flex;flex-direction:column;align-items:center;gap:2px;background:var(--card)}
+.cal-wv-dayhead{padding:11px 10px;text-align:center;border-left:1px solid var(--border);display:flex;flex-direction:column;align-items:center;gap:3px;background:var(--card)}
 .cal-wv-dayhead.weekend{background:rgba(167,139,250,.06)}
 .cal-wv-dayhead.today{background:var(--accent-bg)}
-.cal-wv-dayname{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-family:"SFMono-Regular",ui-monospace,Consolas,monospace}
+.cal-wv-dayname{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:"SFMono-Regular",ui-monospace,Consolas,monospace}
 .cal-wv-dayhead.weekend .cal-wv-dayname{color:#a78bfa}
 .cal-wv-dayhead.today .cal-wv-dayname{color:var(--accent)}
-.cal-wv-daydate{font-size:14px;font-weight:700;color:var(--text);font-family:"SFMono-Regular",ui-monospace,Consolas,monospace}
+.cal-wv-daydate{font-size:17px;font-weight:800;color:var(--text);font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;letter-spacing:.3px}
 .cal-wv-dayhead.today .cal-wv-daydate{color:var(--accent)}
-.cal-wv-body{display:grid;grid-template-columns:70px repeat(7,1fr);gap:0;position:relative;overflow:auto;max-height:70vh}
+.cal-wv-body{display:grid;grid-template-columns:78px repeat(7,minmax(170px,1fr));gap:0;position:relative;overflow:auto;max-height:75vh;min-width:max-content}
 .cal-wv-times-col{display:flex;flex-direction:column}
-.cal-wv-time{height:56px;display:flex;align-items:flex-start;justify-content:flex-end;padding:2px 8px 0 0;font-size:10px;font-weight:600;color:var(--muted);font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;border-right:1px solid var(--border);border-top:1px solid var(--border)}
+.cal-wv-time{height:62px;display:flex;align-items:flex-start;justify-content:flex-end;padding:3px 10px 0 0;font-size:12px;font-weight:700;color:var(--muted);font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;border-right:1px solid var(--border);border-top:1px solid var(--border)}
 .cal-wv-time:first-child{border-top:none}
 .cal-wv-day-col{position:relative;display:flex;flex-direction:column;border-left:1px solid var(--border);min-height:100%}
 .cal-wv-day-col.weekend{background:rgba(167,139,250,.04)}
 .cal-wv-day-col.today{background:var(--accent-bg)}
-.cal-wv-hour-row{height:56px;border-top:1px solid var(--border);transition:background .12s}
+.cal-wv-hour-row{height:62px;border-top:1px solid var(--border);transition:background .12s}
 .cal-wv-hour-row:first-child{border-top:none}
 .cal-wv-day-col.drag-over{background:var(--accent-bg);outline:2px dashed var(--accent);outline-offset:-2px;z-index:1}
-.cal-event{position:absolute;background:var(--cal-ev-bg,var(--accent));color:var(--cal-ev-fg,#fff);border-radius:7px;padding:5px 7px;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;font-size:11px;font-weight:600;line-height:1.25;cursor:pointer;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.20);z-index:2;display:flex;flex-direction:column;gap:2px;transition:filter .12s,box-shadow .12s,transform .08s}
-.cal-event:hover{filter:brightness(1.10);box-shadow:0 4px 12px rgba(0,0,0,.34);z-index:4}
+.cal-event{position:absolute;background:var(--cal-ev-bg,var(--accent));color:var(--cal-ev-fg,#fff);border-radius:8px;padding:8px 11px;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;font-size:13px;font-weight:600;line-height:1.3;cursor:pointer;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.20);z-index:2;display:flex;flex-direction:column;gap:4px;transition:filter .12s,box-shadow .12s,transform .08s}
+.cal-event:hover{filter:brightness(1.10);box-shadow:0 4px 14px rgba(0,0,0,.36);z-index:4}
 .cal-event:active{transform:scale(.99)}
-.cal-event-title{font-weight:700;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.1px;color:inherit}
-.cal-event-machine{font-size:10.5px;font-weight:600;opacity:.94;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:inline-flex;align-items:center;gap:3px}
-.cal-event-time{font-size:10px;font-weight:600;opacity:.88;font-family:'SFMono-Regular',ui-monospace,Consolas,monospace;letter-spacing:.1px}
-.cal-event[data-mini="1"]{padding:3px 5px;border-radius:5px;gap:1px}
-.cal-event[data-mini="1"] .cal-event-title{font-size:11px}
-.cal-event[data-mini="1"] .cal-event-machine{font-size:9.5px}
-.cal-event[data-mini="1"] .cal-event-time{font-size:9.5px}
+.cal-event-title{font-weight:800;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.2px;color:inherit}
+.cal-event-machine{font-size:12.5px;font-weight:700;opacity:.96;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:inline-flex;align-items:center;gap:4px}
+.cal-event-time{font-size:12px;font-weight:700;opacity:.92;font-family:'SFMono-Regular',ui-monospace,Consolas,monospace;letter-spacing:.2px;margin-top:auto}
+.cal-event-ops{display:flex;flex-direction:column;gap:2px;flex:1;min-height:0;overflow:hidden}
+.cal-event-op{font-size:12.5px;font-weight:600;line-height:1.3;color:inherit;opacity:.96;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.1px}
+.cal-event-op-more{font-size:11.5px;font-style:italic;opacity:.78;font-weight:600}
+.cal-event[data-mini="1"]{padding:5px 7px;border-radius:6px;gap:2px}
+.cal-event[data-mini="1"] .cal-event-title{font-size:12.5px;letter-spacing:.1px}
+.cal-event[data-mini="1"] .cal-event-machine{font-size:11px}
+.cal-event[data-mini="1"] .cal-event-time{font-size:11px}
+.cal-event[data-mini="1"] .cal-event-op{font-size:11px;line-height:1.25}
 .cal-event[data-niveau="1"]{background:#22d3ee;color:#062430}
 .cal-event[data-niveau="2"]{background:#fbbf24;color:#3b2300}
 .cal-event[data-niveau="3"]{background:#f87171;color:#3b0a0a}
@@ -275,14 +290,54 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 /* Mode vue Jour : 1 colonne large */
 .cal-week-view.cal-wv-mode-day .cal-wv-header,
 .cal-week-view.cal-wv-mode-day .cal-wv-body{grid-template-columns:70px 1fr}
-.cal-week-view.cal-wv-mode-day .cal-event{font-size:13px;padding:7px 10px}
-.cal-week-view.cal-wv-mode-day .cal-event-title{font-size:14px}
-.cal-week-view.cal-wv-mode-day .cal-event-machine{font-size:12px}
-.cal-week-view.cal-wv-mode-day .cal-event-time{font-size:12px}
-.cal-week-view.cal-wv-mode-day .cal-wv-daydate{font-size:18px}
+.cal-week-view.cal-wv-mode-day .cal-event{font-size:14.5px;padding:10px 14px}
+.cal-week-view.cal-wv-mode-day .cal-event-title{font-size:16px}
+.cal-week-view.cal-wv-mode-day .cal-event-machine{font-size:13.5px}
+.cal-week-view.cal-wv-mode-day .cal-event-time{font-size:13.5px}
+.cal-week-view.cal-wv-mode-day .cal-event-op{font-size:13.5px}
+.cal-week-view.cal-wv-mode-day .cal-wv-daydate{font-size:20px}
+.cal-week-view.cal-wv-mode-day .cal-wv-dayname{font-size:13px}
 /* Hauteur d'heure plus aérée en vue Jour */
 .cal-week-view.cal-wv-mode-day .cal-wv-time,
-.cal-week-view.cal-wv-mode-day .cal-wv-hour-row{height:64px}
+.cal-week-view.cal-wv-mode-day .cal-wv-hour-row{height:72px}
+.cal-week-view.cal-wv-mode-day .cal-wv-header,
+.cal-week-view.cal-wv-mode-day .cal-wv-body{grid-template-columns:90px 1fr;min-width:0}
+/* Modale Créneau : section liste d'opérations */
+.case-modal-card{max-width:640px;width:92vw}
+.case-ops-section{margin-top:16px;border-top:1px solid var(--border);padding-top:14px}
+.case-ops-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.case-ops-add-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 13px;border-radius:8px;border:1.5px solid var(--accent);background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;transition:all .12s;letter-spacing:.2px}
+.case-ops-add-btn:hover{background:var(--accent);color:var(--accent-fg,#fff)}
+.case-ops-list{display:flex;flex-direction:column;gap:8px;max-height:280px;overflow:auto;padding:2px}
+.case-ops-empty{padding:18px 14px;border:1px dashed var(--border);border-radius:8px;color:var(--muted);font-size:12px;text-align:center;font-style:italic;background:var(--bg)}
+.case-ops-row{display:flex;align-items:center;gap:8px}
+.case-ops-row .ops-select{flex:1;min-width:0}
+.case-ops-row-del{flex-shrink:0;width:38px;height:38px;display:inline-flex;align-items:center;justify-content:center;padding:0;border:1px solid var(--border);background:var(--card);border-radius:8px;cursor:pointer;color:var(--muted);transition:all .12s}
+.case-ops-row-del:hover{border-color:var(--danger);color:var(--danger);background:rgba(248,113,113,.10)}
+/* Détails créneau */
+.plan-det-case-head{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;margin-top:14px}
+.plan-det-case-machine{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:8px;background:var(--accent);color:var(--accent-fg,#fff);font-size:13px;font-weight:800;letter-spacing:.2px}
+.plan-det-case-time{display:inline-flex;align-items:center;gap:5px;font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;font-weight:700;font-size:13px;color:var(--text)}
+.plan-det-case-ops-label{margin-top:14px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700}
+.plan-det-case-ops-list{margin-top:8px;display:flex;flex-direction:column;gap:6px}
+.plan-det-case-op{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);transition:border-color .12s}
+.plan-det-case-op:hover{border-color:var(--accent)}
+.plan-det-case-op-bullet{flex-shrink:0;width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.plan-det-case-op-name{flex:1;min-width:0;font-size:13px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plan-det-case-op-freq{font-size:11px;color:var(--muted);font-weight:600}
+.plan-det-case-op-empty{padding:14px;border:1px dashed var(--border);border-radius:8px;color:var(--muted);font-style:italic;text-align:center;font-size:12px}
+.plan-det-case-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap}
+.plan-det-case-actions .case-action-btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;transition:all .12s;border:1px solid var(--border);background:var(--card);color:var(--text)}
+.plan-det-case-actions .case-action-btn.edit{border-color:var(--accent);color:var(--accent)}
+.plan-det-case-actions .case-action-btn.edit:hover{background:var(--accent);color:var(--accent-fg,#fff)}
+.plan-det-case-actions .case-action-btn.del{border-color:var(--danger);color:var(--danger)}
+.plan-det-case-actions .case-action-btn.del:hover{background:var(--danger);color:#fff}
+/* Indicateur survol des colonnes (clic crée un créneau) */
+.cal-wv-day-col{cursor:copy}
+.cal-wv-day-col:hover .cal-wv-hour-row:hover{background:rgba(34,211,238,.08)}
+.cal-wv-day-col.cal-wv-clickable-hint .cal-wv-hour-row:hover{background:var(--accent-bg)}
+/* Listes du catalogue : retirer indices de drag (clic only) */
+.js-cat-tbody tr{cursor:default}
 .cal-event-item-machine{font-weight:600;color:var(--accent);opacity:.95;white-space:nowrap}
 /* Modale Détails */
 .plan-det-list{display:flex;flex-direction:column;gap:8px;margin-top:14px}
@@ -475,8 +530,8 @@ body.light .toast.info{background:#fff;color:var(--text)}
             </div>
             <div class="cal-controls">
               <div class="cal-view-tabs">
-                <button type="button" class="cal-view-tab active" data-cal-view="month" onclick="setCalView('month')">Mois</button>
-                <button type="button" class="cal-view-tab" data-cal-view="week" onclick="setCalView('week')">Semaine</button>
+                <button type="button" class="cal-view-tab" data-cal-view="month" onclick="setCalView('month')">Mois</button>
+                <button type="button" class="cal-view-tab active" data-cal-view="week" onclick="setCalView('week')">Semaine</button>
                 <button type="button" class="cal-view-tab" data-cal-view="day" onclick="setCalView('day')">Jour</button>
               </div>
               <div class="cal-nav">
@@ -487,13 +542,13 @@ body.light .toast.info{background:#fff;color:var(--text)}
             </div>
           </div>
           <!-- Vue Mois -->
-          <div class="cal-month-view" id="cal-month-view">
+          <div class="cal-month-view" id="cal-month-view" style="display:none">
             <div class="cal-week-head" id="cal-week-head"></div>
             <div class="cal-grid" id="cal-grid"></div>
           </div>
           <!-- Vue Semaine (emploi du temps) -->
-          <div class="cal-week-view" id="cal-week-view" style="display:none">
-            <div class="cal-wv-hint">Glissez une opération depuis la liste ci-dessous pour la placer sur le créneau souhaité.</div>
+          <div class="cal-week-view cal-wv-mode-week" id="cal-week-view">
+            <div class="cal-wv-hint">Cliquez sur une plage horaire libre pour créer un créneau de maintenance.</div>
             <div class="cal-wv-header" id="cal-wv-header"></div>
             <div class="cal-wv-body" id="cal-wv-body"></div>
           </div>
@@ -965,29 +1020,25 @@ body.light .toast.info{background:#fff;color:var(--text)}
   </div>
 </div>
 
-<!-- Modal : Planifier une opération (créneau horaire) -->
-<div class="modal-overlay" id="planning-time-modal" onclick="if(event.target===this) closePlanningTimeModal()" aria-hidden="true">
-  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="plan-mod-title">
+<!-- Modal : Créneau de maintenance (création / édition) -->
+<div class="modal-overlay" id="planning-case-modal" onclick="if(event.target===this) closeCaseModal()" aria-hidden="true">
+  <div class="modal-card case-modal-card" role="dialog" aria-modal="true" aria-labelledby="case-mod-title">
     <div class="modal-head">
-      <div class="modal-title" id="plan-mod-title">Planifier une opération</div>
-      <button type="button" class="modal-close" onclick="closePlanningTimeModal()" aria-label="Fermer">
+      <div class="modal-title" id="case-mod-title">Nouveau créneau de maintenance</div>
+      <button type="button" class="modal-close" onclick="closeCaseModal()" aria-label="Fermer">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
-    <form id="planning-time-form" onsubmit="submitPlanningTime(event)">
+    <form id="case-mod-form" onsubmit="submitCaseModal(event)">
       <div class="modal-body">
         <div class="ops-saisi-par">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-          <span>Opération : <strong id="plan-mod-op">—</strong></span>
-        </div>
-        <div class="ops-saisi-par" style="margin-top:0">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          <span>Date : <strong id="plan-mod-date">—</strong></span>
+          <span>Date : <strong id="case-mod-date">—</strong></span>
         </div>
         <div class="ops-form-grid">
           <div class="ops-field ops-field--full">
-            <label class="ops-field-label" for="plan-mod-machine">Machine<span class="req">*</span></label>
-            <select id="plan-mod-machine" class="ops-select" required>
+            <label class="ops-field-label" for="case-mod-machine">Machine<span class="req">*</span></label>
+            <select id="case-mod-machine" class="ops-select" required>
               <option value="">Sélectionner une machine…</option>
               <option value="Cohésio 1">Cohésio 1</option>
               <option value="Cohésio 2">Cohésio 2</option>
@@ -996,20 +1047,30 @@ body.light .toast.info{background:#fff;color:var(--text)}
             </select>
           </div>
           <div class="ops-field">
-            <label class="ops-field-label" for="plan-mod-start">Heure de début<span class="req">*</span></label>
-            <input type="time" id="plan-mod-start" class="ops-input" required>
+            <label class="ops-field-label" for="case-mod-start">Heure de début<span class="req">*</span></label>
+            <input type="time" id="case-mod-start" class="ops-input" required>
           </div>
           <div class="ops-field">
-            <label class="ops-field-label" for="plan-mod-end">Heure de fin<span class="req">*</span></label>
-            <input type="time" id="plan-mod-end" class="ops-input" required>
+            <label class="ops-field-label" for="case-mod-end">Heure de fin<span class="req">*</span></label>
+            <input type="time" id="case-mod-end" class="ops-input" required>
           </div>
+        </div>
+        <div class="case-ops-section">
+          <div class="case-ops-head">
+            <label class="ops-field-label">Opérations à effectuer<span class="req">*</span></label>
+            <button type="button" class="case-ops-add-btn" onclick="addCaseOp()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Ajouter une opération
+            </button>
+          </div>
+          <div class="case-ops-list" id="case-mod-ops-list"></div>
         </div>
       </div>
       <div class="modal-foot">
-        <button type="button" class="modal-btn-ghost" onclick="closePlanningTimeModal()">Annuler</button>
+        <button type="button" class="modal-btn-ghost" onclick="closeCaseModal()">Annuler</button>
         <button type="submit" class="ops-btn-add">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          <span id="plan-mod-submit-label">Planifier</span>
+          <span id="case-mod-submit-label">Créer</span>
         </button>
       </div>
     </form>
@@ -1040,7 +1101,11 @@ function switchView(name){
   document.querySelectorAll('.nav-btn[data-view]').forEach(b => {
     b.classList.toggle('active', b.getAttribute('data-view') === name);
   });
-  if(name === 'planning') renderCal();
+  if(name === 'planning'){
+    // Toujours afficher la vue Semaine en arrivant dans Planning
+    if(typeof setCalView === 'function') setCalView('week');
+    else renderCal();
+  }
   const meta = VIEW_META[name];
   const t = document.querySelector('.mobile-topbar-title');
   const s = document.querySelector('.mobile-topbar-sub');
@@ -1055,7 +1120,7 @@ function switchView(name){
 // =========================================================================
 const CAL_HOUR_START = 6;
 const CAL_HOUR_END   = 21;   // exclusif (affiche 6h → 20h)
-const CAL_HOUR_PX    = 56;
+const CAL_HOUR_PX    = 62;
 function _calWeekMondayOf(d){
   const r = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const off = (r.getDay() + 6) % 7;
@@ -1063,7 +1128,7 @@ function _calWeekMondayOf(d){
   return r;
 }
 const CAL_STATE = {
-  view: 'month',
+  view: 'week',
   year:  new Date().getFullYear(),
   month: new Date().getMonth(),
   weekStart: _calWeekMondayOf(new Date()),
@@ -1099,8 +1164,26 @@ const PLANNING_STATE = { list: [] };
 function loadPlanning(){
   try{
     const raw = localStorage.getItem(PLANNING_STORAGE_KEY);
-    PLANNING_STATE.list = raw ? JSON.parse(raw) : [];
-    if(!Array.isArray(PLANNING_STATE.list)) PLANNING_STATE.list = [];
+    const arr = raw ? JSON.parse(raw) : [];
+    PLANNING_STATE.list = (Array.isArray(arr) ? arr : []).map(ev => {
+      if(ev && ev.operations && Array.isArray(ev.operations)) return ev;
+      // Migration : ancien format single-op (opTypeId/opName/...) → nouveau format multi-op
+      const op = {
+        opTypeId: (ev && ev.opTypeId) || '',
+        opName:   (ev && ev.opName)   || '',
+        opNiveau: (ev && ev.opNiveau) || null,
+        opFreq:   (ev && ev.opFreq)   || '',
+      };
+      return {
+        id: ev.id || (Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8)),
+        machine: ev.machine || '',
+        date: ev.date,
+        start: ev.start,
+        end: ev.end,
+        operations: op.opTypeId ? [op] : [],
+        created_at: ev.created_at || new Date().toISOString(),
+      };
+    });
   }catch(e){ PLANNING_STATE.list = []; }
 }
 function savePlanning(){
@@ -1198,24 +1281,64 @@ function renderCalMonth(){
     const isWeekend = (wd === 5 || wd === 6);
     const iso = _calIsoYMD(d);
     const isToday = (iso === todayIso);
-    const classes = ['cal-cell'];
+    const classes = ['cal-cell','cal-cell-clickable'];
     if(isOff) classes.push('cal-off');
     if(isWeekend) classes.push('cal-weekend');
     if(isToday) classes.push('cal-today');
-    // Compter les opérations planifiées sur ce jour
-    const eventsCount = PLANNING_STATE.list.filter(ev => ev.date === iso).length;
-    let badge = '';
-    if(eventsCount > 0){
-      badge = '<div class="cal-event-empty" style="font-style:normal;opacity:1;color:var(--accent);font-weight:700">' + eventsCount + ' op.' + '</div>';
+    // Récupérer les créneaux planifiés pour ce jour (triés par heure de début)
+    const dayEvents = PLANNING_STATE.list
+      .filter(ev => ev.date === iso)
+      .slice()
+      .sort((a,b) => (_hmToMins(a.start)||0) - (_hmToMins(b.start)||0));
+    // Teinter discrètement la case si elle contient des opérations
+    let cellStyle = '';
+    if(dayEvents.length > 0){
+      classes.push('cal-cell-has-events');
+      // Bande latérale = couleur du premier événement (par machine)
+      const firstPalette = _machinePalette(dayEvents[0].machine);
+      cellStyle = ' style="--cal-cell-accent:' + firstPalette.bg + '"';
+    }
+    // Chips : couleur de la machine + heure + nom
+    const MAX_CHIPS = 3;
+    const shown = dayEvents.slice(0, MAX_CHIPS);
+    const overflow = dayEvents.length - shown.length;
+    let chips = '';
+    shown.forEach(ev => {
+      const palette = _machinePalette(ev.machine);
+      const tip = (ev.machine || '') + ' · ' + ev.start + '–' + ev.end;
+      chips += '<div class="cal-day-event" style="background:' + palette.bg + ';color:' + palette.fg + '" ' +
+               'data-event-id="' + escAttr(ev.id) + '" ' +
+               'onclick="onCalMonthEventClick(event,\'' + escAttr(ev.id) + '\')" ' +
+               'title="' + escAttr(tip) + '">' +
+               '<span class="cal-day-event-time">' + escHtml(ev.start) + '</span>' +
+               '<span class="cal-day-event-machine">' + escHtml(ev.machine || '—') + '</span>' +
+               '</div>';
+    });
+    if(overflow > 0){
+      chips += '<div class="cal-day-event-more" onclick="onCalMonthCellClick(event)" title="Voir le jour en vue Semaine">+ ' + overflow + ' autre' + (overflow > 1 ? 's' : '') + '</div>';
     }
     cells.push(
-      '<div class="' + classes.join(' ') + '" data-date="' + iso + '">' +
+      '<div class="' + classes.join(' ') + '" data-date="' + iso + '"' + cellStyle + ' onclick="onCalMonthCellClick(event)">' +
         '<div class="cal-day-num">' + d.getDate() + '</div>' +
-        '<div class="cal-day-events">' + badge + '</div>' +
+        '<div class="cal-day-events">' + chips + '</div>' +
       '</div>'
     );
   }
   grid.innerHTML = cells.join('');
+}
+function onCalMonthCellClick(e){
+  // Si le clic vient d'une chip-événement, son propre handler gère
+  if(e.target.closest('.cal-day-event')) return;
+  const cell = e.currentTarget && e.currentTarget.closest ? e.currentTarget.closest('.cal-cell') : null;
+  const iso = (cell && cell.getAttribute('data-date')) || (e.currentTarget && e.currentTarget.getAttribute && e.currentTarget.getAttribute('data-date'));
+  if(!iso) return;
+  openCaseModal({ iso: iso, defaultHour: 8 });
+}
+function onCalMonthEventClick(e, id){
+  if(e && e.stopPropagation) e.stopPropagation();
+  const ev = PLANNING_STATE.list.find(x => x.id === id);
+  if(!ev) return;
+  openPlanningDetailsModal([ev]);
 }
 function renderCalWeek(){
   const ws = CAL_STATE.weekStart;
@@ -1265,7 +1388,7 @@ function renderCalWeek(){
     const isWeekend = (i >= 5);
     const isToday = (iso === todayIso);
     const colCls = 'cal-wv-day-col' + (isWeekend?' weekend':'') + (isToday?' today':'');
-    html += '<div class="' + colCls + '" data-date="' + iso + '" ondragover="onCalDragOver(event)" ondragleave="onCalDragLeave(event)" ondrop="onCalDrop(event)">';
+    html += '<div class="' + colCls + '" data-date="' + iso + '" onclick="onCalCellClick(event)">';
     for(let h=CAL_HOUR_START; h<CAL_HOUR_END; h++){
       html += '<div class="cal-wv-hour-row" data-hour="' + h + '"></div>';
     }
@@ -1315,7 +1438,7 @@ function renderCalDay(){
   }
   html += '</div>';
   const colCls = 'cal-wv-day-col' + (isWeekend?' weekend':'') + (isToday?' today':'');
-  html += '<div class="' + colCls + '" data-date="' + iso + '" ondragover="onCalDragOver(event)" ondragleave="onCalDragLeave(event)" ondrop="onCalDrop(event)">';
+  html += '<div class="' + colCls + '" data-date="' + iso + '" onclick="onCalCellClick(event)">';
   for(let h=CAL_HOUR_START; h<CAL_HOUR_END; h++){
     html += '<div class="cal-wv-hour-row" data-hour="' + h + '"></div>';
   }
@@ -1375,6 +1498,16 @@ function _packDayEvents(events){
   });
   return sorted;
 }
+// Palette par machine (couleur unie par équipement)
+const CAL_MACHINE_PALETTE = {
+  'Cohésio 1': { bg:'#0891b2', fg:'#ffffff' },
+  'Cohésio 2': { bg:'#7c3aed', fg:'#ffffff' },
+  'DSI':       { bg:'#ea580c', fg:'#ffffff' },
+  'Repiquage': { bg:'#059669', fg:'#ffffff' },
+};
+function _machinePalette(machine){
+  return CAL_MACHINE_PALETTE[machine] || { bg:'#475569', fg:'#ffffff' };
+}
 function _makeEventBlock(item){
   const ev = item.ev;
   const startMin = item.s, endMin = item.e;
@@ -1389,24 +1522,51 @@ function _makeEventBlock(item){
   div.style.height = height + 'px';
   div.style.left = 'calc(' + (lane * (100 / lanesCount)) + '% + 3px)';
   div.style.width = 'calc(' + (100 / lanesCount) + '% - 6px)';
-  // Couleur unie déterministe par type d'opération (palette fixe).
-  // En fallback, on garde l'éventuel data-niveau (rétro-compat).
-  const palette = _opTypePalette(ev.opTypeId || ev.opName || ev.id);
-  if(palette){
-    div.style.background = palette.bg;
-    div.style.color = palette.fg;
-  } else if(ev.opNiveau){
-    div.setAttribute('data-niveau', String(ev.opNiveau));
-  }
-  if(height < 44) div.setAttribute('data-mini', '1');
+  // Couleur unie par machine
+  const palette = _machinePalette(ev.machine);
+  div.style.background = palette.bg;
+  div.style.color = palette.fg;
+  if(height < 50) div.setAttribute('data-mini', '1');
   div.setAttribute('data-event-id', ev.id);
-  const showMachine = ev.machine && height >= 32;
-  const showTime    = height >= 50;
-  let inner = '<div class="cal-event-title">' + escHtml(ev.opName || '—') + '</div>';
-  if(showMachine) inner += '<div class="cal-event-machine">' + escHtml(ev.machine) + '</div>';
-  if(showTime)    inner += '<div class="cal-event-time">' + escHtml(ev.start) + ' – ' + escHtml(ev.end) + '</div>';
+  const ops = Array.isArray(ev.operations) ? ev.operations.filter(o => o && (o.opName || o.opTypeId)) : [];
+  const opsCount = ops.length;
+  // Lignes affichables selon hauteur disponible
+  const showTitle   = height >= 26;
+  const showOpsList = height >= 64 && opsCount > 0;
+  const showTime    = height >= 80;
+  let inner = '';
+  if(showTitle){
+    const sub = (opsCount > 0) ? ' · ' + opsCount + ' op.' : '';
+    inner += '<div class="cal-event-title">' + escHtml(ev.machine || '—') + sub + '</div>';
+  }
+  if(showOpsList){
+    // Lignes disponibles ≈ (height - 24px titre - 12px time) / 14px
+    const lineH = 17;
+    const reservedTitle = 28;
+    const reservedTime = showTime ? 18 : 0;
+    const available = Math.max(1, Math.floor((height - reservedTitle - reservedTime - 6) / lineH));
+    const visible = ops.slice(0, available);
+    inner += '<div class="cal-event-ops">';
+    visible.forEach(op => {
+      inner += '<div class="cal-event-op">• ' + escHtml(op.opName || '—') + '</div>';
+    });
+    if(opsCount > visible.length){
+      inner += '<div class="cal-event-op cal-event-op-more">+ ' + (opsCount - visible.length) + ' autre' + ((opsCount - visible.length) > 1 ? 's' : '') + '</div>';
+    }
+    inner += '</div>';
+  } else if(opsCount > 0 && height >= 32 && !showOpsList){
+    // Trop court pour une liste : afficher la 1re op + "(+N)"
+    const first = ops[0];
+    const extra = opsCount > 1 ? ' (+' + (opsCount-1) + ')' : '';
+    inner += '<div class="cal-event-machine">' + escHtml(first.opName || '') + extra + '</div>';
+  }
+  if(showTime){
+    inner += '<div class="cal-event-time">' + escHtml(ev.start) + ' – ' + escHtml(ev.end) + '</div>';
+  }
   div.innerHTML = inner;
-  div.title = (ev.opName || '') + (ev.machine?(' · '+ev.machine):'') + '\n' + ev.start + ' – ' + ev.end + '\nCliquer pour afficher les détails';
+  div.title = (ev.machine || '') + '\n' + ev.start + ' – ' + ev.end +
+    (ops.length ? '\n\n' + ops.map(o => '• ' + (o.opName||'—')).join('\n') : '') +
+    '\n\nCliquer pour afficher les détails';
   div.addEventListener('click', e => {
     e.stopPropagation();
     openPlanningDetailsModal([ev]);
@@ -1500,57 +1660,61 @@ function deletePlanningEvent(id){
   renderCal();
 }
 
-// ── Modale Détails ────────────────────────────────────────────────────
-let _PLAN_DET_EVENT_IDS = [];
+// ── Modale Détails (créneau) ──────────────────────────────────────────
+let _PLAN_DET_CASE_ID = null;
+function _fmtIsoDateFr(iso){
+  if(!iso) return '';
+  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(!m) return iso;
+  const d = new Date(parseInt(m[1],10), parseInt(m[2],10)-1, parseInt(m[3],10));
+  return d.toLocaleDateString('fr-FR', {weekday:'long', day:'2-digit', month:'long', year:'numeric'});
+}
 function openPlanningDetailsModal(events){
   if(!events || !events.length) return;
-  _PLAN_DET_EVENT_IDS = events.map(e => e.id);
+  const ev = events[0]; // une case par clic
+  _PLAN_DET_CASE_ID = ev.id;
   const m = document.getElementById('planning-details-modal');
   if(!m) return;
   const titleEl = document.getElementById('plan-det-title');
   const dtEl = document.getElementById('plan-det-date');
   const listEl = document.getElementById('plan-det-list');
-  if(titleEl){
-    titleEl.textContent = (events.length === 1)
-      ? 'Détails de l\'opération'
-      : (events.length + ' opérations planifiées');
-  }
-  if(dtEl) dtEl.textContent = _fmtIsoDateFr(events[0].date);
+  if(titleEl) titleEl.textContent = 'Détails du créneau';
+  if(dtEl) dtEl.textContent = _fmtIsoDateFr(ev.date);
   if(listEl){
-    listEl.innerHTML = events.map(ev => {
-      const niv = ev.opNiveau || '';
-      const freq = ev.opFreq || '';
-      const machineHtml = ev.machine
-        ? '<span class="plan-det-row-machine">' +
-            '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>' +
-            escHtml(ev.machine) +
-          '</span>'
-        : '';
-      const freqHtml = freq ? '<span class="plan-det-row-freq">Fréquence : ' + escHtml(freq) + '</span>' : '';
-      return '<div class="plan-det-row" data-event-id="' + escAttr(ev.id) + '">' +
-        '<div class="plan-det-row-main">' +
-          '<div class="plan-det-row-name">' + escHtml(ev.opName || '—') +
-            (niv ? '<span class="niv-badge" data-niv="' + escAttr(String(niv)) + '">N' + escHtml(String(niv)) + '</span>' : '') +
-          '</div>' +
-          '<div class="plan-det-row-meta">' +
-            '<span class="plan-det-row-time">' +
-              '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' +
-              escHtml(ev.start) + ' – ' + escHtml(ev.end) +
-            '</span>' +
-            machineHtml +
-            freqHtml +
-          '</div>' +
+    const ops = Array.isArray(ev.operations) ? ev.operations : [];
+    const opsHtml = ops.length
+      ? ops.map(op =>
+          '<div class="plan-det-case-op">' +
+            '<span class="plan-det-case-op-bullet"></span>' +
+            '<span class="plan-det-case-op-name">' + escHtml(op.opName || '—') + '</span>' +
+            (op.opNiveau ? '<span class="niv-badge" data-niv="' + escAttr(String(op.opNiveau)) + '">N' + escHtml(String(op.opNiveau)) + '</span>' : '') +
+            (op.opFreq ? '<span class="plan-det-case-op-freq">Fréquence : ' + escHtml(op.opFreq) + '</span>' : '') +
+          '</div>'
+        ).join('')
+      : '<div class="plan-det-case-op-empty">Aucune opération définie.</div>';
+    listEl.innerHTML =
+      '<div class="plan-det-case-head">' +
+        '<div class="plan-det-case-machine">' +
+          '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>' +
+          escHtml(ev.machine || '—') +
         '</div>' +
-        '<div class="plan-det-row-actions">' +
-          '<button type="button" class="ops-row-btn edit" onclick="editPlanningEvent(\'' + escAttr(ev.id) + '\')" title="Modifier">' +
-            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
-          '</button>' +
-          '<button type="button" class="ops-row-btn del" onclick="confirmDeletePlanningEvent(\'' + escAttr(ev.id) + '\')" title="Supprimer">' +
-            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
-          '</button>' +
+        '<div class="plan-det-case-time">' +
+          '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' +
+          escHtml(ev.start) + ' – ' + escHtml(ev.end) +
         '</div>' +
+      '</div>' +
+      '<div class="plan-det-case-ops-label">Opérations à effectuer (' + ops.length + ')</div>' +
+      '<div class="plan-det-case-ops-list">' + opsHtml + '</div>' +
+      '<div class="plan-det-case-actions">' +
+        '<button type="button" class="case-action-btn edit" onclick="editCase(\'' + escAttr(ev.id) + '\')">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
+          ' Modifier' +
+        '</button>' +
+        '<button type="button" class="case-action-btn del" onclick="confirmDeleteCase(\'' + escAttr(ev.id) + '\')">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
+          ' Supprimer' +
+        '</button>' +
       '</div>';
-    }).join('');
   }
   m.classList.add('open');
   m.setAttribute('aria-hidden','false');
@@ -1560,187 +1724,195 @@ function closePlanningDetailsModal(){
   const m = document.getElementById('planning-details-modal');
   if(m){ m.classList.remove('open'); m.setAttribute('aria-hidden','true'); }
   document.body.style.overflow = '';
-  _PLAN_DET_EVENT_IDS = [];
+  _PLAN_DET_CASE_ID = null;
 }
-function _refreshPlanningDetailsModal(){
-  const evs = _PLAN_DET_EVENT_IDS
-    .map(id => PLANNING_STATE.list.find(e => e.id === id))
-    .filter(Boolean);
-  if(!evs.length){ closePlanningDetailsModal(); return; }
-  openPlanningDetailsModal(evs);
-}
-function confirmDeletePlanningEvent(id){
-  const ev = PLANNING_STATE.list.find(e => e.id === id);
-  if(!ev) return;
-  if(!confirm('Supprimer cette opération planifiée ?\n\n' + (ev.opName || '') + (ev.machine?(' · ' + ev.machine):'') + '\n' + ev.date + ' · ' + ev.start + ' – ' + ev.end)) return;
+function deletePlanningEvent(id){
   PLANNING_STATE.list = PLANNING_STATE.list.filter(e => e.id !== id);
   savePlanning();
-  _refreshPlanningDetailsModal();
   renderCal();
-  showToast('Opération supprimée.', 'info');
 }
-function editPlanningEvent(id){
+function confirmDeleteCase(id){
+  const ev = PLANNING_STATE.list.find(e => e.id === id);
+  if(!ev) return;
+  const opsTxt = (ev.operations || []).map(o => '• ' + (o.opName||'—')).join('\n');
+  if(!confirm('Supprimer ce créneau ?\n\n' + (ev.machine || '') + ' · ' + ev.date + '\n' + ev.start + ' – ' + ev.end + (opsTxt ? '\n\n' + opsTxt : ''))) return;
+  PLANNING_STATE.list = PLANNING_STATE.list.filter(e => e.id !== id);
+  savePlanning();
+  closePlanningDetailsModal();
+  renderCal();
+  showToast('Créneau supprimé.', 'info');
+}
+function editCase(id){
   const ev = PLANNING_STATE.list.find(e => e.id === id);
   if(!ev) return;
   closePlanningDetailsModal();
-  const sm = _hmToMins(ev.start);
-  const defaultHour = (sm != null) ? Math.floor(sm/60) : 8;
-  openPlanningTimeModal(ev.opTypeId, ev.date, defaultHour, {
+  openCaseModal({
     editId: ev.id,
+    iso: ev.date,
     machine: ev.machine || '',
     start: ev.start,
     end: ev.end,
+    operations: ev.operations || [],
   });
 }
 
-// ── Drag & drop : catalogue → semaine ─────────────────────────────────
-let _CAL_DRAG_OP_ID = null;
-function onCatRowDragStart(e, opTypeId){
-  _CAL_DRAG_OP_ID = opTypeId;
-  try{
-    e.dataTransfer.effectAllowed = 'copy';
-    e.dataTransfer.setData('text/plain', opTypeId);
-  }catch(_){}
-  if(e.currentTarget && e.currentTarget.classList) e.currentTarget.classList.add('drag-source');
-}
-function onCatRowDragEnd(e){
-  _CAL_DRAG_OP_ID = null;
-  if(e.currentTarget && e.currentTarget.classList) e.currentTarget.classList.remove('drag-source');
-  document.querySelectorAll('.cal-wv-day-col.drag-over').forEach(c => c.classList.remove('drag-over'));
-}
-function onCalDragOver(e){
-  if(!_CAL_DRAG_OP_ID && !(e.dataTransfer && e.dataTransfer.types && Array.from(e.dataTransfer.types).includes('text/plain'))) return;
-  e.preventDefault();
-  try{ e.dataTransfer.dropEffect = 'copy'; }catch(_){}
-  const col = e.currentTarget;
-  if(col && col.classList) col.classList.add('drag-over');
-}
-function onCalDragLeave(e){
+// ── Clic sur calendrier → ouverture modale "Nouveau créneau" ──────────
+function onCalCellClick(e){
+  // Ignore clicks on existing events (their own click handler ouvre les détails)
+  if(e.target.closest('.cal-event')) return;
   const col = e.currentTarget;
   if(!col) return;
-  // Ignorer dragleave si on entre dans un enfant
-  const rt = e.relatedTarget;
-  if(rt && col.contains(rt)) return;
-  col.classList.remove('drag-over');
-}
-function onCalDrop(e){
-  e.preventDefault();
-  const col = e.currentTarget;
-  if(col) col.classList.remove('drag-over');
-  let opTypeId = _CAL_DRAG_OP_ID;
-  if(!opTypeId){
-    try{ opTypeId = e.dataTransfer.getData('text/plain'); }catch(_){}
-  }
-  _CAL_DRAG_OP_ID = null;
-  if(!opTypeId) return;
   const iso = col.getAttribute('data-date');
   if(!iso) return;
-  // Calculer l'heure cible à partir de la position Y du drop
   const rect = col.getBoundingClientRect();
   const y = e.clientY - rect.top;
   const hourFloat = CAL_HOUR_START + (y / CAL_HOUR_PX);
   let h = Math.floor(hourFloat);
   if(h < CAL_HOUR_START) h = CAL_HOUR_START;
   if(h > CAL_HOUR_END - 1) h = CAL_HOUR_END - 1;
-  openPlanningTimeModal(opTypeId, iso, h);
+  openCaseModal({ iso, defaultHour: h });
 }
 
-// ── Modal créneau horaire ─────────────────────────────────────────────
-let _PENDING_PLAN_DROP = null;
-function _fmtIsoDateFr(iso){
-  if(!iso) return '';
-  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if(!m) return iso;
-  const d = new Date(parseInt(m[1],10), parseInt(m[2],10)-1, parseInt(m[3],10));
-  return d.toLocaleDateString('fr-FR', {weekday:'long', day:'2-digit', month:'long', year:'numeric'});
-}
-function openPlanningTimeModal(opTypeId, iso, defaultHour, editOpts){
-  const op = OPS_TYPES_STATE.list.find(t => t.id === opTypeId);
-  if(!op){ showToast('Type d\'opération introuvable.', 'danger'); return; }
-  _PENDING_PLAN_DROP = { opTypeId, iso, editId: editOpts ? editOpts.editId : null };
-  const m = document.getElementById('planning-time-modal');
+// ── Modale Créneau (création + édition) ──────────────────────────────
+let _PENDING_CASE = null;
+let _CASE_OPS = [];
+function openCaseModal(opts){
+  opts = opts || {};
+  if(!opts.iso){ showToast('Date manquante.', 'danger'); return; }
+  _PENDING_CASE = { editId: opts.editId || null, iso: opts.iso };
+  _CASE_OPS = (opts.operations || []).map(o => ({
+    opTypeId: o.opTypeId || '',
+    opName:   o.opName   || '',
+    opNiveau: o.opNiveau || null,
+    opFreq:   o.opFreq   || '',
+  }));
+  const m = document.getElementById('planning-case-modal');
   if(!m) return;
-  const opEl = document.getElementById('plan-mod-op');
-  const dtEl = document.getElementById('plan-mod-date');
-  const mEl = document.getElementById('plan-mod-machine');
-  const sEl = document.getElementById('plan-mod-start');
-  const eEl = document.getElementById('plan-mod-end');
-  const titleEl = document.getElementById('plan-mod-title');
-  const submitLblEl = document.getElementById('plan-mod-submit-label');
-  const isEdit = !!editOpts;
-  if(titleEl) titleEl.textContent = isEdit ? 'Modifier l\'opération' : 'Planifier une opération';
-  if(submitLblEl) submitLblEl.textContent = isEdit ? 'Enregistrer' : 'Planifier';
-  if(opEl) opEl.textContent = op.nom;
-  if(dtEl) dtEl.textContent = _fmtIsoDateFr(iso);
-  if(isEdit){
-    if(mEl) mEl.value = editOpts.machine || '';
-    if(sEl) sEl.value = editOpts.start || '';
-    if(eEl) eEl.value = editOpts.end || '';
-  } else {
-    if(mEl) mEl.value = '';
-    const h = Math.max(0, Math.min(23, defaultHour || 8));
-    if(sEl) sEl.value = String(h).padStart(2,'0') + ':00';
-    if(eEl) eEl.value = String(Math.min(h+1, 23)).padStart(2,'0') + ':00';
-  }
+  const dtEl = document.getElementById('case-mod-date');
+  const mEl  = document.getElementById('case-mod-machine');
+  const sEl  = document.getElementById('case-mod-start');
+  const eEl  = document.getElementById('case-mod-end');
+  const ttlEl = document.getElementById('case-mod-title');
+  const lblEl = document.getElementById('case-mod-submit-label');
+  const isEdit = !!opts.editId;
+  if(ttlEl) ttlEl.textContent = isEdit ? 'Modifier le créneau' : 'Nouveau créneau de maintenance';
+  if(lblEl) lblEl.textContent = isEdit ? 'Enregistrer' : 'Créer';
+  if(dtEl) dtEl.textContent = _fmtIsoDateFr(opts.iso);
+  if(mEl) mEl.value = opts.machine || '';
+  const h = Math.max(0, Math.min(23, opts.defaultHour || 8));
+  if(sEl) sEl.value = opts.start || (String(h).padStart(2,'0') + ':00');
+  if(eEl) eEl.value = opts.end   || (String(Math.min(h+1, 23)).padStart(2,'0') + ':00');
+  renderCaseOpsList();
   m.classList.add('open');
   m.setAttribute('aria-hidden','false');
   document.body.style.overflow = 'hidden';
-  setTimeout(()=>{ if(mEl && !mEl.value) mEl.focus(); else if(sEl) sEl.focus(); }, 50);
+  setTimeout(() => { (mEl && !mEl.value ? mEl : sEl)?.focus(); }, 60);
 }
-function closePlanningTimeModal(){
-  const m = document.getElementById('planning-time-modal');
+function closeCaseModal(){
+  const m = document.getElementById('planning-case-modal');
   if(m){ m.classList.remove('open'); m.setAttribute('aria-hidden','true'); }
   document.body.style.overflow = '';
-  _PENDING_PLAN_DROP = null;
+  _PENDING_CASE = null;
+  _CASE_OPS = [];
 }
-function submitPlanningTime(e){
+function addCaseOp(){
+  if(!OPS_TYPES_STATE.list.length){
+    showToast('Aucune opération dans la liste. Ajoutez-en d\'abord dans "Liste d\'opérations de maintenance".', 'danger');
+    return;
+  }
+  _CASE_OPS.push({ opTypeId: '', opName: '', opNiveau: null, opFreq: '' });
+  renderCaseOpsList();
+  // Focus le dernier select
+  setTimeout(() => {
+    const list = document.getElementById('case-mod-ops-list');
+    if(list){
+      const selects = list.querySelectorAll('select');
+      if(selects.length) selects[selects.length - 1].focus();
+    }
+  }, 50);
+}
+function updateCaseOp(idx, opTypeId){
+  if(idx < 0 || idx >= _CASE_OPS.length) return;
+  const op = OPS_TYPES_STATE.list.find(t => t.id === opTypeId);
+  if(op){
+    _CASE_OPS[idx] = { opTypeId: op.id, opName: op.nom, opNiveau: op.niveau || null, opFreq: op.frequence || '' };
+  } else {
+    _CASE_OPS[idx] = { opTypeId: '', opName: '', opNiveau: null, opFreq: '' };
+  }
+}
+function removeCaseOp(idx){
+  if(idx < 0 || idx >= _CASE_OPS.length) return;
+  _CASE_OPS.splice(idx, 1);
+  renderCaseOpsList();
+}
+function renderCaseOpsList(){
+  const list = document.getElementById('case-mod-ops-list');
+  if(!list) return;
+  if(!_CASE_OPS.length){
+    list.innerHTML = '<div class="case-ops-empty">Aucune opération ajoutée. Cliquez sur « Ajouter une opération » pour piocher dans la liste.</div>';
+    return;
+  }
+  list.innerHTML = _CASE_OPS.map((op, idx) => {
+    const options = '<option value="">Sélectionner une opération…</option>' +
+      OPS_TYPES_STATE.list.map(t =>
+        '<option value="' + escAttr(t.id) + '"' + (t.id === op.opTypeId ? ' selected' : '') + '>' +
+          escHtml(t.nom) + (t.niveau ? ' (N' + t.niveau + ')' : '') +
+          (t.frequence ? ' · ' + escHtml(t.frequence) : '') +
+        '</option>'
+      ).join('');
+    return '<div class="case-ops-row" data-idx="' + idx + '">' +
+      '<select class="ops-select" onchange="updateCaseOp(' + idx + ', this.value)">' + options + '</select>' +
+      '<button type="button" class="case-ops-row-del" onclick="removeCaseOp(' + idx + ')" title="Retirer cette opération" aria-label="Retirer">' +
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
+      '</button>' +
+    '</div>';
+  }).join('');
+}
+function submitCaseModal(e){
   e.preventDefault();
-  if(!_PENDING_PLAN_DROP){ closePlanningTimeModal(); return; }
-  const machine = (document.getElementById('plan-mod-machine')?.value || '').trim();
-  const start = (document.getElementById('plan-mod-start')?.value || '').trim();
-  const end = (document.getElementById('plan-mod-end')?.value || '').trim();
+  if(!_PENDING_CASE){ closeCaseModal(); return; }
+  const machine = (document.getElementById('case-mod-machine')?.value || '').trim();
+  const start = (document.getElementById('case-mod-start')?.value || '').trim();
+  const end = (document.getElementById('case-mod-end')?.value || '').trim();
   if(!machine){ showToast('Sélectionnez une machine.', 'danger'); return; }
   if(!start || !end){ showToast('Indiquez les heures.', 'danger'); return; }
   const sm = _hmToMins(start), em = _hmToMins(end);
   if(sm == null || em == null){ showToast('Format heure invalide (HH:MM).', 'danger'); return; }
   if(em <= sm){ showToast('L\'heure de fin doit être après l\'heure de début.', 'danger'); return; }
-  const op = OPS_TYPES_STATE.list.find(t => t.id === _PENDING_PLAN_DROP.opTypeId);
-  if(!op){ showToast('Type d\'opération introuvable.', 'danger'); closePlanningTimeModal(); return; }
-  const editId = _PENDING_PLAN_DROP.editId;
+  const validOps = _CASE_OPS.filter(o => o.opTypeId);
+  if(!validOps.length){ showToast('Ajoutez au moins une opération.', 'danger'); return; }
+  // Synchroniser les noms/niveaux/fréquences depuis le catalogue courant
+  const synced = validOps.map(o => {
+    const t = OPS_TYPES_STATE.list.find(x => x.id === o.opTypeId);
+    if(!t) return o;
+    return { opTypeId: t.id, opName: t.nom, opNiveau: t.niveau || null, opFreq: t.frequence || '' };
+  });
+  const editId = _PENDING_CASE.editId;
   if(editId){
     const idx = PLANNING_STATE.list.findIndex(x => x.id === editId);
-    if(idx === -1){
-      showToast('Opération introuvable.', 'danger');
-      closePlanningTimeModal();
-      return;
-    }
+    if(idx === -1){ showToast('Créneau introuvable.', 'danger'); closeCaseModal(); return; }
     PLANNING_STATE.list[idx] = Object.assign({}, PLANNING_STATE.list[idx], {
       machine, start, end,
-      opName: op.nom, opNiveau: op.niveau, opFreq: op.frequence,
+      operations: synced,
       updated_at: new Date().toISOString(),
     });
-    savePlanning();
-    closePlanningTimeModal();
-    renderCal();
-    showToast('Opération mise à jour.', 'info');
+    showToast('Créneau mis à jour.', 'info');
   } else {
     PLANNING_STATE.list.push({
       id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8),
-      opTypeId: op.id,
-      opName: op.nom,
-      opNiveau: op.niveau,
-      opFreq: op.frequence,
       machine,
-      date: _PENDING_PLAN_DROP.iso,
+      date: _PENDING_CASE.iso,
       start, end,
+      operations: synced,
       created_at: new Date().toISOString(),
     });
-    savePlanning();
-    closePlanningTimeModal();
-    renderCal();
-    showToast('Opération planifiée.', 'info');
+    showToast('Créneau créé.', 'info');
   }
+  savePlanning();
+  closeCaseModal();
+  renderCal();
 }
+
 
 // --- Toast ---
 function showToast(msg, type){
@@ -2247,7 +2419,7 @@ function renderOpsTypes(){
     html = '<tr><td colspan="5" class="ops-empty">Aucune opération dans la liste. Cliquez sur « Ajouter une opération à la liste » pour en créer une.</td></tr>';
   } else {
     html = sorted.map(t =>
-      '<tr draggable="true" ondragstart="onCatRowDragStart(event,\'' + escAttr(t.id) + '\')" ondragend="onCatRowDragEnd(event)" title="Glisser pour planifier sur le calendrier (vue Semaine)">' +
+      '<tr>' +
         '<td><strong style="color:var(--text)">' + escHtml(t.nom) + '</strong></td>' +
         '<td><span class="niv-badge" data-niv="' + t.niveau + '">N' + t.niveau + '</span></td>' +
         '<td>' + escHtml(t.frequence) + '</td>' +
