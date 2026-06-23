@@ -170,6 +170,55 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 .date-preset-chip.active{font-weight:700;border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
 @media(max-width:560px){.filter-group{flex:1 1 100%}.filter-input,select.filter-input{min-width:0;width:100%}.filters-apply-btn{width:100%}}
 
+/* ── Calendrier Planning (style MyProd) ──────────────────────────────── */
+.cal-sec{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:28px}
+.cal-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px}
+.cal-title{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:700;color:var(--text);letter-spacing:.2px;text-transform:capitalize;font-family:"SFMono-Regular",ui-monospace,"Cascadia Mono",Menlo,Consolas,monospace}
+.cal-controls{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.cal-view-tabs{display:flex;gap:0;align-items:center}
+.cal-view-tab{padding:6px 14px;background:var(--card);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-size:12px;font-family:inherit;font-weight:600;transition:all .15s}
+.cal-view-tab:first-child{border-radius:8px 0 0 8px}
+.cal-view-tab:last-child{border-radius:0 8px 8px 0}
+.cal-view-tab:not(:first-child){margin-left:-1px}
+.cal-view-tab.active{background:var(--accent-bg);color:var(--accent);border-color:var(--accent);z-index:1;position:relative}
+.cal-view-tab:hover:not(.active):not([disabled]){background:var(--border);color:var(--text2)}
+.cal-view-tab[disabled]{opacity:.4;cursor:not-allowed}
+.cal-nav{display:flex;gap:0;align-items:center}
+.cal-nav button{padding:6px 12px;background:var(--card);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-size:14px;font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;transition:background .15s,color .15s}
+.cal-nav button:first-child{border-radius:8px 0 0 8px}
+.cal-nav button:last-child{border-radius:0 8px 8px 0}
+.cal-nav button:not(:first-child){margin-left:-1px}
+.cal-nav button:hover{background:var(--accent-bg);color:var(--accent)}
+.cal-nav .today{padding:6px 16px;font-size:12px;font-weight:600;font-family:inherit;color:var(--text2)}
+.cal-week-head{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:8px}
+.cal-wday{text-align:center;padding:8px 0;font-size:11px;font-weight:700;font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;border-bottom:1px solid var(--border)}
+.cal-wday.sat,.cal-wday.sun{color:#a78bfa}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:minmax(110px,1fr);gap:6px}
+.cal-cell{position:relative;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 10px;min-height:110px;display:flex;flex-direction:column;gap:6px;transition:background .15s,border-color .15s,box-shadow .15s;overflow:hidden}
+.cal-cell:hover{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-bg)}
+.cal-cell.cal-off{background:transparent;opacity:.55}
+.cal-cell.cal-off .cal-day-num{color:var(--muted)}
+.cal-cell.cal-weekend{background:rgba(167,139,250,.04)}
+.cal-cell.cal-today{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-bg)}
+.cal-day-num{font-size:13px;font-weight:700;color:var(--text);font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;line-height:1}
+.cal-cell.cal-today .cal-day-num{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:var(--accent);color:var(--accent-fg,#fff);font-size:12px}
+.cal-day-events{display:flex;flex-direction:column;gap:3px;flex:1;overflow:hidden}
+.cal-event-empty{font-size:10px;color:var(--muted);font-style:italic;opacity:.6}
+.cal-legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:18px;padding-top:14px;border-top:1px solid var(--border)}
+.cal-legend-item{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);font-weight:600}
+.cal-legend-dot{display:inline-block;width:10px;height:10px;border-radius:3px;border:1px solid var(--border);background:var(--bg)}
+.cal-legend-dot.today{background:var(--accent);border-color:var(--accent)}
+.cal-legend-dot.off{opacity:.4}
+.cal-legend-dot.weekend{background:rgba(167,139,250,.18);border-color:rgba(167,139,250,.4)}
+@media(max-width:720px){
+  .cal-grid{grid-auto-rows:minmax(78px,1fr);gap:4px}
+  .cal-cell{min-height:78px;padding:6px 7px}
+  .cal-day-num{font-size:11px}
+  .cal-title{font-size:15px}
+  .cal-week-head{gap:4px}
+  .cal-wday{font-size:10px;padding:6px 0}
+}
+
 .ops-form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:14px}
 .ops-field{display:flex;flex-direction:column;gap:5px;min-width:0}
 .ops-field--full{grid-column:1/-1}
@@ -251,6 +300,10 @@ body.light .toast.info{background:#fff;color:var(--text)}
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
       Maintenance
     </button>
+    <button type="button" class="nav-btn" data-view="planning" onclick="switchView('planning')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      Planning
+    </button>
     <button type="button" class="nav-btn" data-view="controles" onclick="switchView('controles')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
       Contrôles
@@ -315,6 +368,42 @@ body.light .toast.info{background:#fff;color:var(--text)}
             <div class="wip-meta">Accès restreint — version préliminaire</div>
           </div>
         </div>
+      </div>
+
+      <!-- View : Planning -->
+      <div class="view" id="view-planning" style="display:none">
+        <div class="page-header">
+          <div>
+            <div class="page-title">Planning</div>
+            <div class="page-subtitle">Calendrier de maintenance</div>
+          </div>
+        </div>
+
+        <section class="cal-sec">
+          <div class="cal-hdr">
+            <div class="cal-title">
+              <span id="cal-month-label">—</span>
+            </div>
+            <div class="cal-controls">
+              <div class="cal-view-tabs">
+                <button type="button" class="cal-view-tab active" data-cal-view="month" onclick="setCalView('month')">Mois</button>
+                <button type="button" class="cal-view-tab" data-cal-view="week" onclick="setCalView('week')" disabled title="Bientôt disponible">Semaine</button>
+              </div>
+              <div class="cal-nav">
+                <button type="button" onclick="calPrev()" aria-label="Précédent">◀</button>
+                <button type="button" class="today" onclick="calToday()">Aujourd'hui</button>
+                <button type="button" onclick="calNext()" aria-label="Suivant">▶</button>
+              </div>
+            </div>
+          </div>
+          <div class="cal-week-head" id="cal-week-head"></div>
+          <div class="cal-grid" id="cal-grid"></div>
+          <div class="cal-legend">
+            <span class="cal-legend-item"><span class="cal-legend-dot today"></span> Aujourd'hui</span>
+            <span class="cal-legend-item"><span class="cal-legend-dot off"></span> Hors mois</span>
+            <span class="cal-legend-item"><span class="cal-legend-dot weekend"></span> Week-end</span>
+          </div>
+        </section>
       </div>
 
       <!-- View : Contrôles -->
@@ -739,6 +828,7 @@ function closeSidebar(){document.body.classList.remove('sb-open');}
 
 const VIEW_META = {
   maintenance: { title: 'Maintenance', sub: 'En cours de développement' },
+  planning:    { title: 'Planning',    sub: 'Calendrier de maintenance' },
   controles:   { title: 'Contrôles',   sub: 'Saisie et suivi des contrôles' },
   operations:  { title: 'Opérations de maintenance', sub: 'Saisie et suivi' }
 };
@@ -750,6 +840,7 @@ function switchView(name){
   document.querySelectorAll('.nav-btn[data-view]').forEach(b => {
     b.classList.toggle('active', b.getAttribute('data-view') === name);
   });
+  if(name === 'planning') renderCal();
   const meta = VIEW_META[name];
   const t = document.querySelector('.mobile-topbar-title');
   const s = document.querySelector('.mobile-topbar-sub');
@@ -757,6 +848,89 @@ function switchView(name){
   if(s) s.textContent = meta.sub;
   try{ history.replaceState(null, '', '#' + name); }catch(e){}
   closeSidebar();
+}
+
+// =========================================================================
+// Planning — calendrier mensuel (style MyProd)
+// =========================================================================
+const CAL_STATE = {
+  view: 'month',
+  year:  new Date().getFullYear(),
+  month: new Date().getMonth(),
+};
+const CAL_WDAYS_FULL = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'];
+const CAL_WDAYS_SHORT = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+const CAL_MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+
+function setCalView(v){
+  if(v !== 'month') return;
+  CAL_STATE.view = v;
+  document.querySelectorAll('[data-cal-view]').forEach(b => {
+    b.classList.toggle('active', b.getAttribute('data-cal-view') === v);
+  });
+  renderCal();
+}
+function calPrev(){
+  if(CAL_STATE.view === 'month'){
+    CAL_STATE.month -= 1;
+    if(CAL_STATE.month < 0){ CAL_STATE.month = 11; CAL_STATE.year -= 1; }
+  }
+  renderCal();
+}
+function calNext(){
+  if(CAL_STATE.view === 'month'){
+    CAL_STATE.month += 1;
+    if(CAL_STATE.month > 11){ CAL_STATE.month = 0; CAL_STATE.year += 1; }
+  }
+  renderCal();
+}
+function calToday(){
+  const now = new Date();
+  CAL_STATE.year = now.getFullYear();
+  CAL_STATE.month = now.getMonth();
+  renderCal();
+}
+function _calIsoYMD(d){
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function renderCal(){
+  const lbl = document.getElementById('cal-month-label');
+  if(lbl){
+    lbl.textContent = CAL_MONTHS[CAL_STATE.month] + ' ' + CAL_STATE.year;
+  }
+  const wh = document.getElementById('cal-week-head');
+  if(wh){
+    wh.innerHTML = CAL_WDAYS_SHORT.map((d,i) => {
+      const cls = 'cal-wday' + (i===5?' sat':'') + (i===6?' sun':'');
+      return '<div class="' + cls + '" title="' + escAttr(CAL_WDAYS_FULL[i]) + '">' + escHtml(d) + '</div>';
+    }).join('');
+  }
+  const grid = document.getElementById('cal-grid');
+  if(!grid) return;
+  const firstOfMonth = new Date(CAL_STATE.year, CAL_STATE.month, 1);
+  const startOffset = (firstOfMonth.getDay() + 6) % 7;
+  const gridStart = new Date(CAL_STATE.year, CAL_STATE.month, 1 - startOffset);
+  const todayIso = _calIsoYMD(new Date());
+  const cells = [];
+  for(let i = 0; i < 42; i++){
+    const d = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + i);
+    const isOff = (d.getMonth() !== CAL_STATE.month);
+    const wd = (d.getDay() + 6) % 7;
+    const isWeekend = (wd === 5 || wd === 6);
+    const iso = _calIsoYMD(d);
+    const isToday = (iso === todayIso);
+    const classes = ['cal-cell'];
+    if(isOff) classes.push('cal-off');
+    if(isWeekend) classes.push('cal-weekend');
+    if(isToday) classes.push('cal-today');
+    cells.push(
+      '<div class="' + classes.join(' ') + '" data-date="' + iso + '">' +
+        '<div class="cal-day-num">' + d.getDate() + '</div>' +
+        '<div class="cal-day-events"></div>' +
+      '</div>'
+    );
+  }
+  grid.innerHTML = cells.join('');
 }
 
 // --- Toast ---
