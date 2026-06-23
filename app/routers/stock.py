@@ -135,6 +135,35 @@ def _mp_unite_gestion(categorie: str) -> str:
     return "palette"
 
 
+# Catégories qui ont une notion d'« unité d'achat » distincte de l'unité de gestion (palette).
+# Le prix saisi est à l'unité d'achat ; le conditionnement (unites_par_palette) permet
+# de calculer la valorisation = stock_palettes × unites_par_palette × prix_unitaire.
+_MP_CATEGORIES_AVEC_CONDITIONNEMENT = frozenset({"carton", "adhesif", "mandrin"})
+
+
+def _mp_unite_achat(categorie: str) -> str:
+    """Unité d'achat (élément acheté à l'unité dans une palette).
+
+    Renvoie la chaîne singulier — pluraliser au besoin côté UI.
+    """
+    cat = (categorie or "").strip().lower()
+    if cat == "carton":
+        return "carton"
+    if cat == "adhesif":
+        return "kg"
+    if cat == "mandrin":
+        return "tube"
+    if cat == "palette":
+        return "palette"
+    if cat == "autre":
+        return "unite"
+    return ""
+
+
+def _mp_a_conditionnement(categorie: str) -> bool:
+    return (categorie or "").strip().lower() in _MP_CATEGORIES_AVEC_CONDITIONNEMENT
+
+
 def _mp_row_dict(r, stock_par_laize: Optional[list[dict]] = None) -> dict:
     """Normalise une ligne matieres_premieres + stock pour l'API."""
     seuil = float(r["seuil_alerte"] or 0)
@@ -155,6 +184,13 @@ def _mp_row_dict(r, stock_par_laize: Optional[list[dict]] = None) -> dict:
             prix_m2 = float(r["prix_eur_m2"])
         except (TypeError, ValueError):
             prix_m2 = None
+    unites_par_palette = None
+    if "unites_par_palette" in keys and r["unites_par_palette"] is not None:
+        try:
+            v = float(r["unites_par_palette"])
+            unites_par_palette = v if v > 0 else None
+        except (TypeError, ValueError):
+            unites_par_palette = None
     laizee = _mp_is_laizee(cat)
     # Pour les matières laizées, la quantité totale = somme des stocks par laize
     if laizee and stock_par_laize is not None:
@@ -183,6 +219,9 @@ def _mp_row_dict(r, stock_par_laize: Optional[list[dict]] = None) -> dict:
         "prix_eur_m2": prix_m2,
         "stock_par_laize": stock_par_laize if laizee else None,
         "sous_section": sous_section,
+        "avec_conditionnement": _mp_a_conditionnement(cat),
+        "unites_par_palette": unites_par_palette,
+        "unite_achat": _mp_unite_achat(cat) if _mp_a_conditionnement(cat) else None,
         "complete": complete,
     }
 
@@ -2464,6 +2503,7 @@ def list_matieres_premieres(request: Request, all: int = 0):
             SELECT mp.id, mp.categorie, mp.reference, mp.designation,
                    mp.seuil_alerte, mp.actif, mp.palettes_par_pile, mp.couleur,
                    mp.metres_lineaires_par_bobine, mp.prix_eur_m2,
+                   mp.unites_par_palette,
                    mp.sous_section,
                    COALESCE(s.quantite, 0) AS quantite
             FROM matieres_premieres mp
@@ -2573,16 +2613,25 @@ async def create_matiere_premiere(request: Request):
     if categorie not in _MP_CATEGORIES_WITH_SOUS_SECTION:
         sous_section = None
 
+    unites_par_palette = None
+    if _mp_a_conditionnement(categorie) and body.get("unites_par_palette") not in (None, ""):
+        try:
+            unites_par_palette = float(body.get("unites_par_palette"))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "Unités par palette invalide.") from None
+        if unites_par_palette <= 0:
+            raise HTTPException(400, "Unités par palette doit être > 0.")
+
     with get_db() as conn:
         try:
             cur = conn.execute(
                 """
                 INSERT INTO matieres_premieres (
-                    categorie, reference, designation, seuil_alerte, palettes_par_pile, couleur, sous_section
+                    categorie, reference, designation, seuil_alerte, palettes_par_pile, couleur, sous_section, unites_par_palette
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (categorie, reference, designation, seuil_alerte, palettes_par_pile, couleur, sous_section),
+                (categorie, reference, designation, seuil_alerte, palettes_par_pile, couleur, sous_section, unites_par_palette),
             )
             matiere_id = cur.lastrowid
             conn.execute(
@@ -2650,6 +2699,16 @@ async def update_matiere_premiere(matiere_id: int, request: Request):
             raise HTTPException(400, "Prix m² négatif.")
         sets.append("prix_eur_m2=?")
         params.append(v)
+    if "unites_par_palette" in body:
+        v = body.get("unites_par_palette")
+        try:
+            v = float(v) if v not in (None, "") else None
+        except (TypeError, ValueError):
+            raise HTTPException(400, "Unités par palette invalide.") from None
+        if v is not None and v < 0:
+            raise HTTPException(400, "Unités par palette négatif.")
+        sets.append("unites_par_palette=?")
+        params.append(v)
     if "sous_section" in body:
         sv = (body.get("sous_section") or "").strip() or None
         sets.append("sous_section=?")
@@ -2682,6 +2741,11 @@ async def update_matiere_premiere(matiere_id: int, request: Request):
                     400,
                     "Palettes par pile doit être une valeur positive.",
                 )
+        if "unites_par_palette" in body and not _mp_a_conditionnement(row["categorie"]):
+            raise HTTPException(
+                400,
+                "Unités par palette uniquement pour cartons, adhésifs et mandrins.",
+            )
         try:
             conn.execute(
                 f"UPDATE matieres_premieres SET {', '.join(sets)} WHERE id=?",
@@ -3630,6 +3694,7 @@ def _valorisation_query(conn) -> list[dict]:
     rows_simple = conn.execute(
         """
         SELECT mp.id, mp.categorie, mp.reference, mp.designation, mp.actif,
+               mp.unites_par_palette,
                COALESCE(s.quantite, 0) AS quantite,
                COALESCE(v.prix_unitaire, 0) AS prix_unitaire,
                v.updated_at AS prix_updated_at,
@@ -3676,6 +3741,28 @@ def _valorisation_query(conn) -> list[dict]:
         cat = r["categorie"]
         qte = float(r["quantite"] or 0)
         prix = float(r["prix_unitaire"] or 0)
+        avec_cond = _mp_a_conditionnement(cat)
+        upp_raw = r["unites_par_palette"] if "unites_par_palette" in r.keys() else None
+        try:
+            unites_par_palette = float(upp_raw) if upp_raw is not None else None
+        except (TypeError, ValueError):
+            unites_par_palette = None
+        if avec_cond and unites_par_palette and unites_par_palette > 0:
+            # Prix saisi = prix à l'unité d'achat (€/carton, €/tube, €/kg)
+            # Prix palette calculé pour l'affichage
+            prix_palette = prix * unites_par_palette
+            valorisation = round(qte * prix_palette, 2)
+            incomplete = False
+        elif avec_cond:
+            # Cat avec conditionnement mais unites_par_palette pas encore saisi : valorisation neutralisée
+            prix_palette = 0.0
+            valorisation = 0.0
+            incomplete = True
+        else:
+            # Cat sans conditionnement (palette, autre) : prix_unitaire = prix par unité de gestion
+            prix_palette = prix
+            valorisation = round(qte * prix, 2)
+            incomplete = False
         out.append({
             "id": r["id"],
             "row_key": f"m{r['id']}",
@@ -3689,12 +3776,16 @@ def _valorisation_query(conn) -> list[dict]:
             "quantite": qte,
             "unite": _mp_unite_gestion(cat),
             "prix_unitaire": prix,
-            "valorisation": round(qte * prix, 2),
+            "valorisation": valorisation,
             "laizee": False,
-            "incomplete": False,
+            "incomplete": incomplete,
             "metres_lineaires_par_bobine": None,
             "prix_eur_m2": None,
             "valorisation_bobine": None,
+            "avec_conditionnement": avec_cond,
+            "unites_par_palette": unites_par_palette,
+            "unite_achat": _mp_unite_achat(cat) if avec_cond else None,
+            "prix_palette": round(prix_palette, 4),
             "prix_updated_at": r["prix_updated_at"],
             "prix_updated_by_name": r["prix_updated_by_name"],
         })
@@ -3724,6 +3815,10 @@ def _valorisation_query(conn) -> list[dict]:
             "metres_lineaires_par_bobine": metres,
             "prix_eur_m2": prix_m2,
             "valorisation_bobine": round(valo_bobine, 4),
+            "avec_conditionnement": False,
+            "unites_par_palette": None,
+            "unite_achat": None,
+            "prix_palette": None,
             "prix_updated_at": None,
             "prix_updated_by_name": None,
         })
@@ -3749,6 +3844,10 @@ def _valorisation_query(conn) -> list[dict]:
             "metres_lineaires_par_bobine": float(r["metres"] or 0),
             "prix_eur_m2": float(r["prix_eur_m2"] or 0),
             "valorisation_bobine": 0.0,
+            "avec_conditionnement": False,
+            "unites_par_palette": None,
+            "unite_achat": None,
+            "prix_palette": None,
             "prix_updated_at": None,
             "prix_updated_by_name": None,
         })
@@ -3772,7 +3871,10 @@ def _valorisation_summary(items: list[dict]) -> dict:
         bucket["total"] += it["valorisation"]
         bucket["nb_refs"] += 1
         # "Valorisée" si le prix unitaire (ou valorisation_bobine pour laizée) est > 0
+        # ET si la catégorie a un conditionnement, qu'il est aussi renseigné.
         is_valued = (it.get("prix_unitaire") or 0) > 0
+        if it.get("avec_conditionnement"):
+            is_valued = is_valued and (it.get("unites_par_palette") or 0) > 0
         if is_valued:
             bucket["nb_refs_valorisees"] += 1
         total += it["valorisation"]

@@ -147,27 +147,167 @@ body.sb-open .sidebar-overlay{display:block}
 .badge-dev{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;background:var(--accent-bg);color:var(--accent);font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase}
 
 .view{display:flex;flex-direction:column;flex:1}
-.hist-section{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px 22px;margin-bottom:18px}
-.hist-section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)}
-.hist-section-title{font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
-.hist-empty{display:flex;align-items:center;gap:12px;padding:18px 4px;color:var(--muted);font-size:13px}
-.hist-empty svg{color:var(--muted);flex-shrink:0}
-.hist-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px;align-items:end}
-.hist-field{display:flex;flex-direction:column;gap:5px;min-width:0}
-.hist-field-label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
-.hist-input,.hist-select{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-size:13px;font-family:inherit;transition:border-color .15s;width:100%;min-width:0}
-.hist-input:focus,.hist-select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
-.hist-select{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
-.hist-daterange{display:flex;align-items:center;gap:6px}
-.hist-daterange .hist-input{flex:1;padding:9px 10px}
-.hist-daterange-sep{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.4px;flex-shrink:0}
-.hist-filters-reset{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:12px;font-family:inherit;font-weight:600;transition:.15s;height:fit-content}
-.hist-filters-reset:hover{border-color:var(--accent);color:var(--accent)}
-@media(max-width:560px){.hist-filters{grid-template-columns:1fr}}
 
-.ops-form{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px 22px;margin-bottom:18px}
-.ops-form-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)}
-.ops-form-title{font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
+/* Filtres en bandeau — style aligné sur MyProd / Production */
+.filters-panel{margin-bottom:18px}
+.filters{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+.filter-group{display:flex;flex-direction:column;gap:6px;min-width:0}
+.filter-group label{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.filter-input{background:#ffffff;border:1.5px solid var(--border);border-radius:10px;padding:10px 14px;color:#0f172a;font-size:13px;font-family:inherit;outline:none;min-height:40px;box-sizing:border-box;transition:border-color .15s,box-shadow .15s;min-width:168px}
+.filter-input::placeholder{color:#64748b}
+.filter-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.filters .filter-input[type=date]{min-width:148px;padding:9px 12px;font-size:12px;color:#0f172a}
+.filters .filter-input[type=date]::-webkit-calendar-picker-indicator{filter:none;opacity:.6}
+select.filter-input{appearance:none;background-color:#ffffff;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px;cursor:pointer;color:#0f172a}
+select.filter-input option{background:#ffffff;color:#0f172a}
+.filters-apply-btn{background:var(--accent);color:var(--accent-fg,var(--bg));border:none;border-radius:10px;padding:10px 22px;font-size:13px;font-weight:700;min-height:40px;cursor:pointer;font-family:inherit;align-self:flex-end;transition:filter .15s,box-shadow .15s,transform .05s}
+.filters-apply-btn:hover{filter:brightness(1.05);box-shadow:0 0 0 4px var(--accent-bg)}
+.filters-apply-btn:active{transform:translateY(1px)}
+.filters-date-presets{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:10px 0 0;margin-top:12px;border-top:1px dashed var(--border)}
+.filters-date-presets-label{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.6px;font-weight:700;margin-right:4px;padding-top:8px}
+.date-preset-chip{padding:5px 12px;font-size:11px;font-weight:600;border-radius:14px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit;white-space:nowrap;transition:all 120ms;margin-top:6px}
+.date-preset-chip:hover{border-color:var(--accent);color:var(--accent)}
+.date-preset-chip.active{font-weight:700;border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
+@media(max-width:560px){.filter-group{flex:1 1 100%}.filter-input,select.filter-input{min-width:0;width:100%}.filters-apply-btn{width:100%}}
+
+/* ── Calendrier Planning (style MyProd) ──────────────────────────────── */
+.cal-sec{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:28px}
+.cal-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px}
+.cal-title{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:700;color:var(--text);letter-spacing:.2px;text-transform:capitalize;font-family:"SFMono-Regular",ui-monospace,"Cascadia Mono",Menlo,Consolas,monospace}
+.cal-controls{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.cal-view-tabs{display:flex;gap:0;align-items:center}
+.cal-view-tab{padding:6px 14px;background:var(--card);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-size:12px;font-family:inherit;font-weight:600;transition:all .15s}
+.cal-view-tab:first-child{border-radius:8px 0 0 8px}
+.cal-view-tab:last-child{border-radius:0 8px 8px 0}
+.cal-view-tab:not(:first-child){margin-left:-1px}
+.cal-view-tab.active{background:var(--accent-bg);color:var(--accent);border-color:var(--accent);z-index:1;position:relative}
+.cal-view-tab:hover:not(.active):not([disabled]){background:var(--border);color:var(--text2)}
+.cal-view-tab[disabled]{opacity:.4;cursor:not-allowed}
+.cal-nav{display:flex;gap:0;align-items:center}
+.cal-nav button{padding:6px 12px;background:var(--card);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-size:14px;font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;transition:background .15s,color .15s}
+.cal-nav button:first-child{border-radius:8px 0 0 8px}
+.cal-nav button:last-child{border-radius:0 8px 8px 0}
+.cal-nav button:not(:first-child){margin-left:-1px}
+.cal-nav button:hover{background:var(--accent-bg);color:var(--accent)}
+.cal-nav .today{padding:6px 16px;font-size:12px;font-weight:600;font-family:inherit;color:var(--text2)}
+.cal-week-head{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:8px}
+.cal-wday{text-align:center;padding:8px 0;font-size:11px;font-weight:700;font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;border-bottom:1px solid var(--border)}
+.cal-wday.sat,.cal-wday.sun{color:#a78bfa}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:minmax(110px,1fr);gap:6px}
+.cal-cell{position:relative;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 10px;min-height:110px;display:flex;flex-direction:column;gap:6px;transition:background .15s,border-color .15s,box-shadow .15s;overflow:hidden}
+.cal-cell:hover{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-bg)}
+.cal-cell.cal-off{background:transparent;opacity:.55}
+.cal-cell.cal-off .cal-day-num{color:var(--muted)}
+.cal-cell.cal-weekend{background:rgba(167,139,250,.04)}
+.cal-cell.cal-today{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-bg)}
+.cal-day-num{font-size:13px;font-weight:700;color:var(--text);font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;line-height:1}
+.cal-cell.cal-today .cal-day-num{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:var(--accent);color:var(--accent-fg,#fff);font-size:12px}
+.cal-day-events{display:flex;flex-direction:column;gap:3px;flex:1;overflow:hidden}
+.cal-event-empty{font-size:10px;color:var(--muted);font-style:italic;opacity:.6}
+.cal-legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:18px;padding-top:14px;border-top:1px solid var(--border)}
+.cal-legend-item{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);font-weight:600}
+.cal-legend-dot{display:inline-block;width:10px;height:10px;border-radius:3px;border:1px solid var(--border);background:var(--bg)}
+.cal-legend-dot.today{background:var(--accent);border-color:var(--accent)}
+.cal-legend-dot.off{opacity:.4}
+.cal-legend-dot.weekend{background:rgba(167,139,250,.18);border-color:rgba(167,139,250,.4)}
+@media(max-width:720px){
+  .cal-grid{grid-auto-rows:minmax(78px,1fr);gap:4px}
+  .cal-cell{min-height:78px;padding:6px 7px}
+  .cal-day-num{font-size:11px}
+  .cal-title{font-size:15px}
+  .cal-week-head{gap:4px}
+  .cal-wday{font-size:10px;padding:6px 0}
+}
+
+/* ── Vue Semaine (emploi du temps) ──────────────────────────────────── */
+.cal-wv-hint{font-size:11px;color:var(--muted);background:var(--accent-bg);border:1px dashed var(--accent);border-radius:8px;padding:8px 12px;margin-bottom:14px;text-align:center}
+.cal-wv-header{display:grid;grid-template-columns:70px repeat(7,1fr);gap:0;margin-bottom:0;border-bottom:1px solid var(--border)}
+.cal-wv-corner{}
+.cal-wv-dayhead{padding:10px 8px;text-align:center;border-left:1px solid var(--border);display:flex;flex-direction:column;align-items:center;gap:2px;background:var(--card)}
+.cal-wv-dayhead.weekend{background:rgba(167,139,250,.06)}
+.cal-wv-dayhead.today{background:var(--accent-bg)}
+.cal-wv-dayname{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-family:"SFMono-Regular",ui-monospace,Consolas,monospace}
+.cal-wv-dayhead.weekend .cal-wv-dayname{color:#a78bfa}
+.cal-wv-dayhead.today .cal-wv-dayname{color:var(--accent)}
+.cal-wv-daydate{font-size:14px;font-weight:700;color:var(--text);font-family:"SFMono-Regular",ui-monospace,Consolas,monospace}
+.cal-wv-dayhead.today .cal-wv-daydate{color:var(--accent)}
+.cal-wv-body{display:grid;grid-template-columns:70px repeat(7,1fr);gap:0;position:relative;overflow:auto;max-height:70vh}
+.cal-wv-times-col{display:flex;flex-direction:column}
+.cal-wv-time{height:56px;display:flex;align-items:flex-start;justify-content:flex-end;padding:2px 8px 0 0;font-size:10px;font-weight:600;color:var(--muted);font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;border-right:1px solid var(--border);border-top:1px solid var(--border)}
+.cal-wv-time:first-child{border-top:none}
+.cal-wv-day-col{position:relative;display:flex;flex-direction:column;border-left:1px solid var(--border);min-height:100%}
+.cal-wv-day-col.weekend{background:rgba(167,139,250,.04)}
+.cal-wv-day-col.today{background:var(--accent-bg)}
+.cal-wv-hour-row{height:56px;border-top:1px solid var(--border);transition:background .12s}
+.cal-wv-hour-row:first-child{border-top:none}
+.cal-wv-day-col.drag-over{background:var(--accent-bg);outline:2px dashed var(--accent);outline-offset:-2px;z-index:1}
+.cal-event{position:absolute;background:var(--cal-ev-bg,var(--accent));color:var(--cal-ev-fg,#fff);border-radius:7px;padding:5px 7px;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;font-size:11px;font-weight:600;line-height:1.25;cursor:pointer;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.20);z-index:2;display:flex;flex-direction:column;gap:2px;transition:filter .12s,box-shadow .12s,transform .08s}
+.cal-event:hover{filter:brightness(1.10);box-shadow:0 4px 12px rgba(0,0,0,.34);z-index:4}
+.cal-event:active{transform:scale(.99)}
+.cal-event-title{font-weight:700;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.1px;color:inherit}
+.cal-event-machine{font-size:10.5px;font-weight:600;opacity:.94;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:inline-flex;align-items:center;gap:3px}
+.cal-event-time{font-size:10px;font-weight:600;opacity:.88;font-family:'SFMono-Regular',ui-monospace,Consolas,monospace;letter-spacing:.1px}
+.cal-event[data-mini="1"]{padding:3px 5px;border-radius:5px;gap:1px}
+.cal-event[data-mini="1"] .cal-event-title{font-size:11px}
+.cal-event[data-mini="1"] .cal-event-machine{font-size:9.5px}
+.cal-event[data-mini="1"] .cal-event-time{font-size:9.5px}
+.cal-event[data-niveau="1"]{background:#22d3ee;color:#062430}
+.cal-event[data-niveau="2"]{background:#fbbf24;color:#3b2300}
+.cal-event[data-niveau="3"]{background:#f87171;color:#3b0a0a}
+/* Bloc fusionné (plusieurs opérations chevauchantes sur la même case) */
+.cal-event.cal-event-merged{background:linear-gradient(180deg,var(--accent-bg) 0%,rgba(255,255,255,0) 100%),var(--card);color:var(--text);border:2px solid var(--accent);border-radius:10px;box-shadow:0 4px 14px rgba(0,0,0,.18);padding:8px 10px 10px;overflow:hidden;display:flex;flex-direction:column;gap:8px}
+.cal-event-merged-head{display:flex;align-items:center;justify-content:center;gap:6px;font-size:11px;font-weight:800;color:var(--accent-fg,#fff);background:var(--accent);font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;padding:4px 9px;border-radius:6px;letter-spacing:.3px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:0 1px 3px rgba(0,0,0,.15)}
+.cal-event-list{display:flex;flex-direction:column;gap:5px;overflow:auto;flex:1;min-height:0;padding-right:2px}
+.cal-event-item{display:flex;flex-direction:column;gap:4px;padding:6px 9px;border-radius:7px;font-size:12px;line-height:1.3;background:var(--card);border:1px solid var(--border);border-left:4px solid var(--accent);cursor:pointer;transition:filter .12s,border-color .12s,transform .08s}
+.cal-event-item:hover{filter:brightness(.97);border-color:var(--accent)}
+.cal-event-item:active{transform:scale(.99)}
+.cal-event-item-time{display:inline-flex;align-items:center;gap:4px;font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;font-weight:700;font-size:11px;color:var(--accent);background:var(--accent-bg);padding:2px 7px;border-radius:5px;width:fit-content;letter-spacing:.2px}
+.cal-event-item-name{font-weight:700;font-size:12px;color:var(--text);white-space:normal;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word;line-height:1.3}
+.cal-event-item-niv-1{border-left-color:#22d3ee;background:linear-gradient(90deg,rgba(34,211,238,.08) 0%,var(--card) 60%)}
+.cal-event-item-niv-1 .cal-event-item-time{background:rgba(34,211,238,.22);color:#0891b2}
+.cal-event-item-niv-2{border-left-color:#fbbf24;background:linear-gradient(90deg,rgba(251,191,36,.10) 0%,var(--card) 60%)}
+.cal-event-item-niv-2 .cal-event-item-time{background:rgba(251,191,36,.25);color:#b45309}
+.cal-event-item-niv-3{border-left-color:#f87171;background:linear-gradient(90deg,rgba(248,113,113,.10) 0%,var(--card) 60%)}
+.cal-event-item-niv-3 .cal-event-item-time{background:rgba(248,113,113,.22);color:#b91c1c}
+body:not(.light) .cal-event-item-niv-1 .cal-event-item-time{color:#67e8f9}
+body:not(.light) .cal-event-item-niv-2 .cal-event-item-time{color:#fcd34d}
+body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
+/* Mode vue Jour : 1 colonne large */
+.cal-week-view.cal-wv-mode-day .cal-wv-header,
+.cal-week-view.cal-wv-mode-day .cal-wv-body{grid-template-columns:70px 1fr}
+.cal-week-view.cal-wv-mode-day .cal-event{font-size:13px;padding:7px 10px}
+.cal-week-view.cal-wv-mode-day .cal-event-title{font-size:14px}
+.cal-week-view.cal-wv-mode-day .cal-event-machine{font-size:12px}
+.cal-week-view.cal-wv-mode-day .cal-event-time{font-size:12px}
+.cal-week-view.cal-wv-mode-day .cal-wv-daydate{font-size:18px}
+/* Hauteur d'heure plus aérée en vue Jour */
+.cal-week-view.cal-wv-mode-day .cal-wv-time,
+.cal-week-view.cal-wv-mode-day .cal-wv-hour-row{height:64px}
+.cal-event-item-machine{font-weight:600;color:var(--accent);opacity:.95;white-space:nowrap}
+/* Modale Détails */
+.plan-det-list{display:flex;flex-direction:column;gap:8px;margin-top:14px}
+.plan-det-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--bg);transition:border-color .15s,box-shadow .15s}
+.plan-det-row:hover{border-color:var(--accent)}
+.plan-det-row-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:7px}
+.plan-det-row-name{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:700;color:var(--text);line-height:1.25}
+.plan-det-row-name .niv-badge{flex-shrink:0}
+.plan-det-row-meta{display:flex;flex-wrap:wrap;gap:8px 14px;font-size:12px;color:var(--text2);align-items:center}
+.plan-det-row-time{display:inline-flex;align-items:center;gap:5px;font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;font-weight:700;color:var(--accent)}
+.plan-det-row-time svg{opacity:.85}
+.plan-det-row-machine{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:6px;background:var(--accent-bg);color:var(--accent);font-weight:700;font-size:11px;letter-spacing:.2px}
+.plan-det-row-freq{color:var(--muted);font-weight:600;font-size:11px}
+.plan-det-row-actions{display:flex;gap:6px;flex-shrink:0;align-items:flex-start}
+/* Lignes du catalogue rendues draggable */
+.js-cat-tbody tr[draggable="true"]{cursor:grab}
+.js-cat-tbody tr[draggable="true"]:active{cursor:grabbing}
+.js-cat-tbody tr[draggable="true"].drag-source{opacity:.55}
+@media(max-width:720px){
+  .cal-wv-body{max-height:60vh}
+  .cal-wv-time{font-size:9px;padding-right:5px}
+  .cal-wv-header,.cal-wv-body{grid-template-columns:54px repeat(7,1fr)}
+  .cal-wv-daydate{font-size:12px}
+}
+
 .ops-form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:14px}
 .ops-field{display:flex;flex-direction:column;gap:5px;min-width:0}
 .ops-field--full{grid-column:1/-1}
@@ -181,7 +321,6 @@ body.sb-open .sidebar-overlay{display:block}
 .ops-field-hint{font-size:11px;color:var(--muted);line-height:1.45}
 .ops-saisi-par{display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px dashed var(--border);border-radius:10px;color:var(--muted);font-size:12px;margin-bottom:14px}
 .ops-saisi-par strong{color:var(--text);font-weight:600}
-.ops-form-actions{display:flex;justify-content:flex-end;gap:8px}
 .ops-btn-add{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:10px;border:none;background:var(--accent);color:var(--accent-fg);font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;transition:filter .15s,background .15s,color .15s;white-space:nowrap}
 .ops-btn-add:hover{filter:brightness(1.08)}
 .ops-list{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:18px}
@@ -192,9 +331,9 @@ body.sb-open .sidebar-overlay{display:block}
 .ops-table-wrap{overflow-x:auto}
 .ops-table{width:100%;border-collapse:collapse;font-size:13px;color:var(--text2)}
 .ops-table th{text-align:left;padding:12px 18px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border);background:var(--bg);user-select:none;white-space:nowrap}
-.ops-table th[data-sort],.ops-table th[data-sort-cat]{cursor:pointer;transition:color .15s}
-.ops-table th[data-sort]:hover,.ops-table th[data-sort-cat]:hover{color:var(--accent)}
-.ops-table th[data-sort].active,.ops-table th[data-sort-cat].active{color:var(--accent)}
+.ops-table th[data-sort],.ops-table th[data-sort-cat],.ops-table th[data-sort-ctrl],.ops-table th[data-sort-ctrl-cat]{cursor:pointer;transition:color .15s}
+.ops-table th[data-sort]:hover,.ops-table th[data-sort-cat]:hover,.ops-table th[data-sort-ctrl]:hover,.ops-table th[data-sort-ctrl-cat]:hover{color:var(--accent)}
+.ops-table th[data-sort].active,.ops-table th[data-sort-cat].active,.ops-table th[data-sort-ctrl].active,.ops-table th[data-sort-ctrl-cat].active{color:var(--accent)}
 .ops-table th .sort-ico{display:inline-block;margin-left:5px;opacity:.55;font-size:11px}
 .ops-table th.active .sort-ico{opacity:1}
 .ops-table td{padding:12px 18px;border-bottom:1px solid var(--border);vertical-align:top}
@@ -249,6 +388,10 @@ body.light .toast.info{background:#fff;color:var(--text)}
     <button type="button" class="nav-btn active" data-view="maintenance" onclick="switchView('maintenance')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
       Maintenance
+    </button>
+    <button type="button" class="nav-btn" data-view="planning" onclick="switchView('planning')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      Planning
     </button>
     <button type="button" class="nav-btn" data-view="controles" onclick="switchView('controles')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
@@ -316,59 +459,189 @@ body.light .toast.info{background:#fff;color:var(--text)}
         </div>
       </div>
 
+      <!-- View : Planning -->
+      <div class="view" id="view-planning" style="display:none">
+        <div class="page-header">
+          <div>
+            <div class="page-title">Planning</div>
+            <div class="page-subtitle">Calendrier de maintenance</div>
+          </div>
+        </div>
+
+        <section class="cal-sec">
+          <div class="cal-hdr">
+            <div class="cal-title">
+              <span id="cal-month-label">—</span>
+            </div>
+            <div class="cal-controls">
+              <div class="cal-view-tabs">
+                <button type="button" class="cal-view-tab active" data-cal-view="month" onclick="setCalView('month')">Mois</button>
+                <button type="button" class="cal-view-tab" data-cal-view="week" onclick="setCalView('week')">Semaine</button>
+                <button type="button" class="cal-view-tab" data-cal-view="day" onclick="setCalView('day')">Jour</button>
+              </div>
+              <div class="cal-nav">
+                <button type="button" onclick="calPrev()" aria-label="Précédent">◀</button>
+                <button type="button" class="today" onclick="calToday()">Aujourd'hui</button>
+                <button type="button" onclick="calNext()" aria-label="Suivant">▶</button>
+              </div>
+            </div>
+          </div>
+          <!-- Vue Mois -->
+          <div class="cal-month-view" id="cal-month-view">
+            <div class="cal-week-head" id="cal-week-head"></div>
+            <div class="cal-grid" id="cal-grid"></div>
+          </div>
+          <!-- Vue Semaine (emploi du temps) -->
+          <div class="cal-week-view" id="cal-week-view" style="display:none">
+            <div class="cal-wv-hint">Glissez une opération depuis la liste ci-dessous pour la placer sur le créneau souhaité.</div>
+            <div class="cal-wv-header" id="cal-wv-header"></div>
+            <div class="cal-wv-body" id="cal-wv-body"></div>
+          </div>
+          <div class="cal-legend">
+            <span class="cal-legend-item"><span class="cal-legend-dot today"></span> Aujourd'hui</span>
+            <span class="cal-legend-item"><span class="cal-legend-dot off"></span> Hors mois</span>
+            <span class="cal-legend-item"><span class="cal-legend-dot weekend"></span> Week-end</span>
+          </div>
+        </section>
+
+        <!-- Liste d'opérations de maintenance (catalogue) — copie synchronisée avec l'onglet Opérations -->
+        <div class="ops-list">
+          <div class="ops-list-head">
+            <div class="ops-list-title">Liste d'opérations de maintenance</div>
+            <div class="ops-list-head-right">
+              <div class="ops-list-count js-cat-count">0 opération</div>
+              <button type="button" class="ops-btn-add" onclick="openCatModal()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Ajouter une opération à la liste
+              </button>
+            </div>
+          </div>
+          <div class="ops-table-wrap">
+            <table class="ops-table">
+              <thead>
+                <tr>
+                  <th data-sort-cat="nom" onclick="sortOpsTypes('nom')">Nom<span class="sort-ico">↕</span></th>
+                  <th data-sort-cat="niveau" onclick="sortOpsTypes('niveau')">Niveau<span class="sort-ico">↕</span></th>
+                  <th data-sort-cat="frequence" onclick="sortOpsTypes('frequence')">Fréquence<span class="sort-ico">↕</span></th>
+                  <th>Détail</th>
+                  <th aria-label="Actions"></th>
+                </tr>
+              </thead>
+              <tbody class="js-cat-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
       <!-- View : Contrôles -->
       <div class="view" id="view-controles" style="display:none">
         <div class="page-header">
           <div>
             <div class="page-title">Contrôles</div>
-            <div class="page-subtitle">Historique des contrôles de maintenance</div>
+            <div class="page-subtitle">Saisie et suivi des contrôles de maintenance</div>
           </div>
         </div>
-        <section class="hist-section" data-hist="controles">
-          <div class="hist-section-head">
-            <div class="hist-section-title">Historique des contrôles</div>
-            <button type="button" class="hist-filters-reset" onclick="resetHistFilters('controles')">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-              Réinitialiser
-            </button>
-          </div>
-          <div class="hist-filters">
-            <div class="hist-field">
-              <label class="hist-field-label" for="filt-controles-type">Type d'opération</label>
-              <select id="filt-controles-type" class="hist-select" onchange="applyHistFilters('controles')">
+
+        <!-- Filtres Historique des contrôles -->
+        <div class="filters-panel">
+          <div class="filters">
+            <div class="filter-group">
+              <label for="filt-controles-type">Type de contrôle</label>
+              <select id="filt-controles-type" class="filter-input">
                 <option value="">Tous les types</option>
               </select>
             </div>
-            <div class="hist-field">
-              <label class="hist-field-label" for="filt-controles-operateur">Opérateur</label>
-              <select id="filt-controles-operateur" class="hist-select" onchange="applyHistFilters('controles')">
+            <div class="filter-group">
+              <label for="filt-controles-operateur">Opérateur</label>
+              <select id="filt-controles-operateur" class="filter-input">
                 <option value="">Tous les opérateurs</option>
               </select>
             </div>
-            <div class="hist-field">
-              <label class="hist-field-label" for="filt-controles-machine">Machine</label>
-              <select id="filt-controles-machine" class="hist-select" onchange="applyHistFilters('controles')">
+            <div class="filter-group">
+              <label for="filt-controles-machine">Machine</label>
+              <select id="filt-controles-machine" class="filter-input">
                 <option value="">Toutes les machines</option>
-                <option value="cohesio-1">Cohésio 1</option>
-                <option value="cohesio-2">Cohésio 2</option>
-                <option value="dsi">DSI</option>
-                <option value="repiquage">Repiquage</option>
+                <option value="Cohésio 1">Cohésio 1</option>
+                <option value="Cohésio 2">Cohésio 2</option>
+                <option value="DSI">DSI</option>
+                <option value="Repiquage">Repiquage</option>
               </select>
             </div>
-            <div class="hist-field">
-              <label class="hist-field-label">Date d'opération</label>
-              <div class="hist-daterange">
-                <input type="date" id="filt-controles-date-from" class="hist-input" aria-label="Du" onchange="applyHistFilters('controles')">
-                <span class="hist-daterange-sep">au</span>
-                <input type="date" id="filt-controles-date-to" class="hist-input" aria-label="Au" onchange="applyHistFilters('controles')">
-              </div>
+            <div class="filter-group">
+              <label for="filt-controles-date-from">Du</label>
+              <input type="date" id="filt-controles-date-from" class="filter-input" aria-label="Du">
+            </div>
+            <div class="filter-group">
+              <label for="filt-controles-date-to">Au</label>
+              <input type="date" id="filt-controles-date-to" class="filter-input" aria-label="Au">
+            </div>
+            <button type="button" class="filters-apply-btn" onclick="renderCtrl()">Filtrer</button>
+          </div>
+          <div class="filters-date-presets" id="ctrl-date-presets">
+            <span class="filters-date-presets-label">Période :</span>
+            <button type="button" class="date-preset-chip" data-preset="today" onclick="applyCtrlDatePreset('today')">Aujourd'hui</button>
+            <button type="button" class="date-preset-chip" data-preset="yesterday" onclick="applyCtrlDatePreset('yesterday')">Hier</button>
+            <button type="button" class="date-preset-chip" data-preset="last7" onclick="applyCtrlDatePreset('last7')">7 derniers jours</button>
+            <button type="button" class="date-preset-chip" data-preset="last30" onclick="applyCtrlDatePreset('last30')">30 derniers jours</button>
+            <button type="button" class="date-preset-chip" data-preset="thisMonth" onclick="applyCtrlDatePreset('thisMonth')">Mois en cours</button>
+            <button type="button" class="date-preset-chip" data-preset="prevMonth" onclick="applyCtrlDatePreset('prevMonth')">Mois dernier</button>
+          </div>
+        </div>
+
+        <!-- Historique des contrôles -->
+        <div class="ops-list">
+          <div class="ops-list-head">
+            <div class="ops-list-title">Historique des contrôles</div>
+            <div class="ops-list-head-right">
+              <div class="ops-list-count" id="ctrl-count">0 contrôle</div>
+              <button type="button" class="ops-btn-add" onclick="openCtrlModal()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Nouveau contrôle
+              </button>
             </div>
           </div>
-          <div class="hist-empty" id="empty-controles">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-            <div>Aucun contrôle enregistré pour l'instant.</div>
+          <div class="ops-table-wrap">
+            <table class="ops-table">
+              <thead>
+                <tr>
+                  <th data-sort-ctrl="date_saisie" onclick="sortCtrl('date_saisie')">Date saisie<span class="sort-ico">↕</span></th>
+                  <th data-sort-ctrl="machine" onclick="sortCtrl('machine')">Machine<span class="sort-ico">↕</span></th>
+                  <th data-sort-ctrl="operateur" onclick="sortCtrl('operateur')">Opérateur<span class="sort-ico">↕</span></th>
+                  <th data-sort-ctrl="type" onclick="sortCtrl('type')">Type<span class="sort-ico">↕</span></th>
+                  <th>Commentaires</th>
+                  <th aria-label="Actions"></th>
+                </tr>
+              </thead>
+              <tbody id="ctrl-tbody"></tbody>
+            </table>
           </div>
-        </section>
+        </div>
+
+        <!-- Liste de contrôles (catalogue) -->
+        <div class="ops-list">
+          <div class="ops-list-head">
+            <div class="ops-list-title">Liste de contrôles</div>
+            <div class="ops-list-head-right">
+              <div class="ops-list-count" id="ctrl-cat-count">0 contrôle</div>
+              <button type="button" class="ops-btn-add" onclick="openCtrlCatModal()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Ajouter un contrôle à la liste
+              </button>
+            </div>
+          </div>
+          <div class="ops-table-wrap">
+            <table class="ops-table">
+              <thead>
+                <tr>
+                  <th data-sort-ctrl-cat="nom" onclick="sortCtrlTypes('nom')">Nom<span class="sort-ico">↕</span></th>
+                  <th>Détail</th>
+                  <th aria-label="Actions"></th>
+                </tr>
+              </thead>
+              <tbody id="ctrl-cat-tbody"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <!-- View : Opérations de maintenance -->
@@ -377,6 +650,52 @@ body.light .toast.info{background:#fff;color:var(--text)}
           <div>
             <div class="page-title">Opérations de maintenance</div>
             <div class="page-subtitle">Saisie et suivi des opérations effectuées</div>
+          </div>
+        </div>
+
+        <!-- Filtres Historique des opérations -->
+        <div class="filters-panel">
+          <div class="filters">
+            <div class="filter-group">
+              <label for="filt-operations-type">Type d'opération</label>
+              <select id="filt-operations-type" class="filter-input">
+                <option value="">Tous les types</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="filt-operations-operateur">Opérateur</label>
+              <select id="filt-operations-operateur" class="filter-input">
+                <option value="">Tous les opérateurs</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="filt-operations-machine">Machine</label>
+              <select id="filt-operations-machine" class="filter-input">
+                <option value="">Toutes les machines</option>
+                <option value="Cohésio 1">Cohésio 1</option>
+                <option value="Cohésio 2">Cohésio 2</option>
+                <option value="DSI">DSI</option>
+                <option value="Repiquage">Repiquage</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="filt-operations-date-from">Du</label>
+              <input type="date" id="filt-operations-date-from" class="filter-input" aria-label="Du">
+            </div>
+            <div class="filter-group">
+              <label for="filt-operations-date-to">Au</label>
+              <input type="date" id="filt-operations-date-to" class="filter-input" aria-label="Au">
+            </div>
+            <button type="button" class="filters-apply-btn" onclick="renderOps()">Filtrer</button>
+          </div>
+          <div class="filters-date-presets" id="ops-date-presets">
+            <span class="filters-date-presets-label">Période :</span>
+            <button type="button" class="date-preset-chip" data-preset="today" onclick="applyOpsDatePreset('today')">Aujourd'hui</button>
+            <button type="button" class="date-preset-chip" data-preset="yesterday" onclick="applyOpsDatePreset('yesterday')">Hier</button>
+            <button type="button" class="date-preset-chip" data-preset="last7" onclick="applyOpsDatePreset('last7')">7 derniers jours</button>
+            <button type="button" class="date-preset-chip" data-preset="last30" onclick="applyOpsDatePreset('last30')">30 derniers jours</button>
+            <button type="button" class="date-preset-chip" data-preset="thisMonth" onclick="applyOpsDatePreset('thisMonth')">Mois en cours</button>
+            <button type="button" class="date-preset-chip" data-preset="prevMonth" onclick="applyOpsDatePreset('prevMonth')">Mois dernier</button>
           </div>
         </div>
 
@@ -414,7 +733,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
           <div class="ops-list-head">
             <div class="ops-list-title">Liste d'opérations de maintenance</div>
             <div class="ops-list-head-right">
-              <div class="ops-list-count" id="cat-count">0 opération</div>
+              <div class="ops-list-count js-cat-count" id="cat-count">0 opération</div>
               <button type="button" class="ops-btn-add" onclick="openCatModal()">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 Ajouter une opération à la liste
@@ -432,7 +751,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
                   <th aria-label="Actions"></th>
                 </tr>
               </thead>
-              <tbody id="cat-tbody"></tbody>
+              <tbody id="cat-tbody" class="js-cat-tbody"></tbody>
             </table>
           </div>
         </div>
@@ -452,7 +771,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
     </div>
     <form id="ops-form" onsubmit="addOperation(event)">
       <div class="modal-body">
-        <div class="ops-saisi-par" id="ops-saisi-par">
+        <div class="ops-saisi-par">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
           <span>Saisi par : <strong id="ops-saisi-par-name">…</strong></span>
         </div>
@@ -493,7 +812,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
   </div>
 </div>
 
-<!-- Modal : Catalogue (ajout / modification) -->
+<!-- Modal : Catalogue opérations -->
 <div class="modal-overlay" id="cat-modal" onclick="if(event.target===this) closeCatModal()" aria-hidden="true">
   <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="cat-modal-title">
     <div class="modal-head">
@@ -539,6 +858,164 @@ body.light .toast.info{background:#fff;color:var(--text)}
   </div>
 </div>
 
+<!-- Modal : Nouveau contrôle -->
+<div class="modal-overlay" id="ctrl-modal" onclick="if(event.target===this) closeCtrlModal()" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="ctrl-modal-title">
+    <div class="modal-head">
+      <div class="modal-title" id="ctrl-modal-title">Nouveau contrôle</div>
+      <button type="button" class="modal-close" onclick="closeCtrlModal()" aria-label="Fermer">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <form id="ctrl-form" onsubmit="addControle(event)">
+      <div class="modal-body">
+        <div class="ops-saisi-par">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <span>Saisi par : <strong id="ctrl-saisi-par-name">…</strong></span>
+        </div>
+        <div class="ops-form-grid">
+          <div class="ops-field">
+            <label class="ops-field-label" for="ctrl-machine">Machine<span class="req">*</span></label>
+            <select id="ctrl-machine" class="ops-select" required>
+              <option value="">Sélectionner…</option>
+              <option value="Cohésio 1">Cohésio 1</option>
+              <option value="Cohésio 2">Cohésio 2</option>
+              <option value="DSI">DSI</option>
+              <option value="Repiquage">Repiquage</option>
+            </select>
+          </div>
+          <div class="ops-field">
+            <label class="ops-field-label" for="ctrl-type">Type de contrôle<span class="req">*</span></label>
+            <select id="ctrl-type" class="ops-select" required>
+              <option value="">Aucun type défini…</option>
+            </select>
+            <div class="ops-field-hint" id="ctrl-type-hint" style="display:none">
+              Aucun type défini. Ajoutez-en dans « Liste de contrôles ».
+            </div>
+          </div>
+          <div class="ops-field ops-field--full">
+            <label class="ops-field-label" for="ctrl-comment">Commentaires</label>
+            <textarea id="ctrl-comment" class="ops-textarea" placeholder="Constatations, anomalies, mesures…"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="modal-btn-ghost" onclick="closeCtrlModal()">Annuler</button>
+        <button type="submit" class="ops-btn-add">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Enregistrer le contrôle
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal : Catalogue contrôles -->
+<div class="modal-overlay" id="ctrl-cat-modal" onclick="if(event.target===this) closeCtrlCatModal()" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="ctrl-cat-modal-title">
+    <div class="modal-head">
+      <div class="modal-title" id="ctrl-cat-modal-title">Ajouter un contrôle à la liste</div>
+      <button type="button" class="modal-close" onclick="closeCtrlCatModal()" aria-label="Fermer">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <form id="ctrl-cat-form" onsubmit="submitCtrlType(event)">
+      <div class="modal-body">
+        <div class="ops-form-grid">
+          <div class="ops-field ops-field--full">
+            <label class="ops-field-label" for="ctrl-cat-nom">Nom du contrôle<span class="req">*</span></label>
+            <input type="text" id="ctrl-cat-nom" class="ops-input" placeholder="Ex : Vérification niveau d'huile" required autocomplete="off">
+          </div>
+          <div class="ops-field ops-field--full">
+            <label class="ops-field-label" for="ctrl-cat-detail">Détail</label>
+            <textarea id="ctrl-cat-detail" class="ops-textarea" placeholder="Description, méthode, critères d'acceptation…"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="modal-btn-ghost" onclick="closeCtrlCatModal()">Annuler</button>
+        <button type="submit" class="ops-btn-add" id="ctrl-cat-submit-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <span id="ctrl-cat-submit-label">Ajouter à la liste</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal : Détails du créneau (lecture + actions Modifier/Supprimer) -->
+<div class="modal-overlay" id="planning-details-modal" onclick="if(event.target===this) closePlanningDetailsModal()" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="plan-det-title">
+    <div class="modal-head">
+      <div class="modal-title" id="plan-det-title">Détails</div>
+      <button type="button" class="modal-close" onclick="closePlanningDetailsModal()" aria-label="Fermer">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="ops-saisi-par">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span>Date : <strong id="plan-det-date">—</strong></span>
+      </div>
+      <div class="plan-det-list" id="plan-det-list"></div>
+    </div>
+    <div class="modal-foot">
+      <button type="button" class="modal-btn-ghost" onclick="closePlanningDetailsModal()">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal : Planifier une opération (créneau horaire) -->
+<div class="modal-overlay" id="planning-time-modal" onclick="if(event.target===this) closePlanningTimeModal()" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="plan-mod-title">
+    <div class="modal-head">
+      <div class="modal-title" id="plan-mod-title">Planifier une opération</div>
+      <button type="button" class="modal-close" onclick="closePlanningTimeModal()" aria-label="Fermer">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <form id="planning-time-form" onsubmit="submitPlanningTime(event)">
+      <div class="modal-body">
+        <div class="ops-saisi-par">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <span>Opération : <strong id="plan-mod-op">—</strong></span>
+        </div>
+        <div class="ops-saisi-par" style="margin-top:0">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span>Date : <strong id="plan-mod-date">—</strong></span>
+        </div>
+        <div class="ops-form-grid">
+          <div class="ops-field ops-field--full">
+            <label class="ops-field-label" for="plan-mod-machine">Machine<span class="req">*</span></label>
+            <select id="plan-mod-machine" class="ops-select" required>
+              <option value="">Sélectionner une machine…</option>
+              <option value="Cohésio 1">Cohésio 1</option>
+              <option value="Cohésio 2">Cohésio 2</option>
+              <option value="DSI">DSI</option>
+              <option value="Repiquage">Repiquage</option>
+            </select>
+          </div>
+          <div class="ops-field">
+            <label class="ops-field-label" for="plan-mod-start">Heure de début<span class="req">*</span></label>
+            <input type="time" id="plan-mod-start" class="ops-input" required>
+          </div>
+          <div class="ops-field">
+            <label class="ops-field-label" for="plan-mod-end">Heure de fin<span class="req">*</span></label>
+            <input type="time" id="plan-mod-end" class="ops-input" required>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="modal-btn-ghost" onclick="closePlanningTimeModal()">Annuler</button>
+        <button type="submit" class="ops-btn-add">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          <span id="plan-mod-submit-label">Planifier</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <div class="toast-wrap" id="toast-wrap"></div>
 
 <script>
@@ -551,7 +1028,8 @@ function closeSidebar(){document.body.classList.remove('sb-open');}
 
 const VIEW_META = {
   maintenance: { title: 'Maintenance', sub: 'En cours de développement' },
-  controles:   { title: 'Contrôles',   sub: 'Historique des contrôles' },
+  planning:    { title: 'Planning',    sub: 'Calendrier de maintenance' },
+  controles:   { title: 'Contrôles',   sub: 'Saisie et suivi des contrôles' },
   operations:  { title: 'Opérations de maintenance', sub: 'Saisie et suivi' }
 };
 function switchView(name){
@@ -562,6 +1040,7 @@ function switchView(name){
   document.querySelectorAll('.nav-btn[data-view]').forEach(b => {
     b.classList.toggle('active', b.getAttribute('data-view') === name);
   });
+  if(name === 'planning') renderCal();
   const meta = VIEW_META[name];
   const t = document.querySelector('.mobile-topbar-title');
   const s = document.querySelector('.mobile-topbar-sub');
@@ -571,33 +1050,696 @@ function switchView(name){
   closeSidebar();
 }
 
-// --- Filtres Contrôles ---
-function getHistFilters(section){
-  const $ = id => document.getElementById(id);
-  const v = el => (el && el.value || '').trim();
-  return {
-    type: v($('filt-' + section + '-type')),
-    operateur: v($('filt-' + section + '-operateur')),
-    machine: v($('filt-' + section + '-machine')),
-    dateFrom: v($('filt-' + section + '-date-from')),
-    dateTo: v($('filt-' + section + '-date-to')),
-  };
+// =========================================================================
+// Planning — calendrier mensuel + vue Semaine (style MyProd)
+// =========================================================================
+const CAL_HOUR_START = 6;
+const CAL_HOUR_END   = 21;   // exclusif (affiche 6h → 20h)
+const CAL_HOUR_PX    = 56;
+function _calWeekMondayOf(d){
+  const r = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const off = (r.getDay() + 6) % 7;
+  r.setDate(r.getDate() - off);
+  return r;
 }
-function applyHistFilters(section){
-  const f = getHistFilters(section);
-  if(f.dateFrom && f.dateTo && f.dateFrom > f.dateTo){
-    const to = document.getElementById('filt-' + section + '-date-to');
-    if(to){ to.value = f.dateFrom; f.dateTo = f.dateFrom; }
+const CAL_STATE = {
+  view: 'month',
+  year:  new Date().getFullYear(),
+  month: new Date().getMonth(),
+  weekStart: _calWeekMondayOf(new Date()),
+  dayDate:   new Date(),
+};
+// Palette de couleurs unies pour différencier les types d'opérations
+const CAL_EVENT_PALETTE = [
+  { bg:'#0891b2', fg:'#ffffff' }, // cyan
+  { bg:'#7c3aed', fg:'#ffffff' }, // violet
+  { bg:'#db2777', fg:'#ffffff' }, // rose
+  { bg:'#dc2626', fg:'#ffffff' }, // red
+  { bg:'#ea580c', fg:'#ffffff' }, // orange
+  { bg:'#ca8a04', fg:'#1a1207' }, // amber
+  { bg:'#65a30d', fg:'#0e1a04' }, // lime
+  { bg:'#059669', fg:'#ffffff' }, // emerald
+  { bg:'#0d9488', fg:'#ffffff' }, // teal
+  { bg:'#0284c7', fg:'#ffffff' }, // sky
+  { bg:'#4f46e5', fg:'#ffffff' }, // indigo
+  { bg:'#9333ea', fg:'#ffffff' }, // purple
+];
+function _opTypePalette(opTypeId){
+  let hash = 0;
+  const s = String(opTypeId || '');
+  for(let i = 0; i < s.length; i++){
+    hash = ((hash << 5) - hash) + s.charCodeAt(i);
+    hash |= 0;
   }
-  window.__HIST_FILTERS__ = window.__HIST_FILTERS__ || {};
-  window.__HIST_FILTERS__[section] = f;
+  return CAL_EVENT_PALETTE[Math.abs(hash) % CAL_EVENT_PALETTE.length];
 }
-function resetHistFilters(section){
-  ['type','operateur','machine','date-from','date-to'].forEach(k => {
-    const el = document.getElementById('filt-' + section + '-' + k);
-    if(el) el.value = '';
+// État des opérations planifiées (drag & drop sur la vue Semaine).
+const PLANNING_STORAGE_KEY = 'mysifa_maint_planning_v1';
+const PLANNING_STATE = { list: [] };
+function loadPlanning(){
+  try{
+    const raw = localStorage.getItem(PLANNING_STORAGE_KEY);
+    PLANNING_STATE.list = raw ? JSON.parse(raw) : [];
+    if(!Array.isArray(PLANNING_STATE.list)) PLANNING_STATE.list = [];
+  }catch(e){ PLANNING_STATE.list = []; }
+}
+function savePlanning(){
+  try{ localStorage.setItem(PLANNING_STORAGE_KEY, JSON.stringify(PLANNING_STATE.list)); }catch(e){}
+}
+const CAL_WDAYS_FULL = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'];
+const CAL_WDAYS_SHORT = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+const CAL_MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+
+function setCalView(v){
+  if(v !== 'month' && v !== 'week' && v !== 'day') return;
+  CAL_STATE.view = v;
+  document.querySelectorAll('[data-cal-view]').forEach(b => {
+    b.classList.toggle('active', b.getAttribute('data-cal-view') === v);
   });
-  applyHistFilters(section);
+  const mv = document.getElementById('cal-month-view');
+  const wv = document.getElementById('cal-week-view');
+  if(mv) mv.style.display = (v === 'month') ? '' : 'none';
+  if(wv){
+    wv.style.display = (v === 'month') ? 'none' : '';
+    wv.classList.toggle('cal-wv-mode-week', v === 'week');
+    wv.classList.toggle('cal-wv-mode-day',  v === 'day');
+  }
+  renderCal();
+}
+function calPrev(){
+  if(CAL_STATE.view === 'month'){
+    CAL_STATE.month -= 1;
+    if(CAL_STATE.month < 0){ CAL_STATE.month = 11; CAL_STATE.year -= 1; }
+  } else if(CAL_STATE.view === 'week'){
+    const ws = CAL_STATE.weekStart;
+    CAL_STATE.weekStart = new Date(ws.getFullYear(), ws.getMonth(), ws.getDate() - 7);
+  } else if(CAL_STATE.view === 'day'){
+    const d = CAL_STATE.dayDate;
+    CAL_STATE.dayDate = new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1);
+  }
+  renderCal();
+}
+function calNext(){
+  if(CAL_STATE.view === 'month'){
+    CAL_STATE.month += 1;
+    if(CAL_STATE.month > 11){ CAL_STATE.month = 0; CAL_STATE.year += 1; }
+  } else if(CAL_STATE.view === 'week'){
+    const ws = CAL_STATE.weekStart;
+    CAL_STATE.weekStart = new Date(ws.getFullYear(), ws.getMonth(), ws.getDate() + 7);
+  } else if(CAL_STATE.view === 'day'){
+    const d = CAL_STATE.dayDate;
+    CAL_STATE.dayDate = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+  }
+  renderCal();
+}
+function calToday(){
+  const now = new Date();
+  if(CAL_STATE.view === 'month'){
+    CAL_STATE.year = now.getFullYear();
+    CAL_STATE.month = now.getMonth();
+  } else if(CAL_STATE.view === 'week'){
+    CAL_STATE.weekStart = _calWeekMondayOf(now);
+  } else if(CAL_STATE.view === 'day'){
+    CAL_STATE.dayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  }
+  renderCal();
+}
+function _calIsoYMD(d){
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function renderCal(){
+  if(CAL_STATE.view === 'week') return renderCalWeek();
+  if(CAL_STATE.view === 'day')  return renderCalDay();
+  return renderCalMonth();
+}
+function renderCalMonth(){
+  const lbl = document.getElementById('cal-month-label');
+  if(lbl){
+    lbl.textContent = CAL_MONTHS[CAL_STATE.month] + ' ' + CAL_STATE.year;
+  }
+  const wh = document.getElementById('cal-week-head');
+  if(wh){
+    wh.innerHTML = CAL_WDAYS_SHORT.map((d,i) => {
+      const cls = 'cal-wday' + (i===5?' sat':'') + (i===6?' sun':'');
+      return '<div class="' + cls + '" title="' + escAttr(CAL_WDAYS_FULL[i]) + '">' + escHtml(d) + '</div>';
+    }).join('');
+  }
+  const grid = document.getElementById('cal-grid');
+  if(!grid) return;
+  const firstOfMonth = new Date(CAL_STATE.year, CAL_STATE.month, 1);
+  const startOffset = (firstOfMonth.getDay() + 6) % 7;
+  const gridStart = new Date(CAL_STATE.year, CAL_STATE.month, 1 - startOffset);
+  const todayIso = _calIsoYMD(new Date());
+  const cells = [];
+  for(let i = 0; i < 42; i++){
+    const d = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + i);
+    const isOff = (d.getMonth() !== CAL_STATE.month);
+    const wd = (d.getDay() + 6) % 7;
+    const isWeekend = (wd === 5 || wd === 6);
+    const iso = _calIsoYMD(d);
+    const isToday = (iso === todayIso);
+    const classes = ['cal-cell'];
+    if(isOff) classes.push('cal-off');
+    if(isWeekend) classes.push('cal-weekend');
+    if(isToday) classes.push('cal-today');
+    // Compter les opérations planifiées sur ce jour
+    const eventsCount = PLANNING_STATE.list.filter(ev => ev.date === iso).length;
+    let badge = '';
+    if(eventsCount > 0){
+      badge = '<div class="cal-event-empty" style="font-style:normal;opacity:1;color:var(--accent);font-weight:700">' + eventsCount + ' op.' + '</div>';
+    }
+    cells.push(
+      '<div class="' + classes.join(' ') + '" data-date="' + iso + '">' +
+        '<div class="cal-day-num">' + d.getDate() + '</div>' +
+        '<div class="cal-day-events">' + badge + '</div>' +
+      '</div>'
+    );
+  }
+  grid.innerHTML = cells.join('');
+}
+function renderCalWeek(){
+  const ws = CAL_STATE.weekStart;
+  const we = new Date(ws.getFullYear(), ws.getMonth(), ws.getDate() + 6);
+  // Libellé
+  const lbl = document.getElementById('cal-month-label');
+  if(lbl){
+    const fmtD = d => String(d.getDate()).padStart(2,'0') + ' ' + CAL_MONTHS[d.getMonth()].toLowerCase();
+    let s;
+    if(ws.getFullYear() === we.getFullYear()){
+      s = 'Semaine du ' + fmtD(ws) + ' au ' + fmtD(we) + ' ' + we.getFullYear();
+    } else {
+      s = 'Semaine du ' + fmtD(ws) + ' ' + ws.getFullYear() + ' au ' + fmtD(we) + ' ' + we.getFullYear();
+    }
+    lbl.textContent = s;
+  }
+  // En-tête : corner + 7 jours
+  const head = document.getElementById('cal-wv-header');
+  if(head){
+    const todayIso = _calIsoYMD(new Date());
+    const cells = ['<div class="cal-wv-corner"></div>'];
+    for(let i=0;i<7;i++){
+      const d = new Date(ws.getFullYear(), ws.getMonth(), ws.getDate()+i);
+      const iso = _calIsoYMD(d);
+      const isWeekend = (i >= 5);
+      const isToday = (iso === todayIso);
+      const cls = 'cal-wv-dayhead' + (isWeekend?' weekend':'') + (isToday?' today':'');
+      cells.push('<div class="' + cls + '" data-date="' + iso + '">' +
+        '<div class="cal-wv-dayname">' + escHtml(CAL_WDAYS_SHORT[i]) + '</div>' +
+        '<div class="cal-wv-daydate">' + String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '</div>' +
+      '</div>');
+    }
+    head.innerHTML = cells.join('');
+  }
+  // Corps : colonne heures + 7 colonnes jours
+  const body = document.getElementById('cal-wv-body');
+  if(!body) return;
+  const todayIso = _calIsoYMD(new Date());
+  let html = '<div class="cal-wv-times-col">';
+  for(let h=CAL_HOUR_START; h<CAL_HOUR_END; h++){
+    html += '<div class="cal-wv-time">' + String(h).padStart(2,'0') + ':00</div>';
+  }
+  html += '</div>';
+  for(let i=0;i<7;i++){
+    const d = new Date(ws.getFullYear(), ws.getMonth(), ws.getDate()+i);
+    const iso = _calIsoYMD(d);
+    const isWeekend = (i >= 5);
+    const isToday = (iso === todayIso);
+    const colCls = 'cal-wv-day-col' + (isWeekend?' weekend':'') + (isToday?' today':'');
+    html += '<div class="' + colCls + '" data-date="' + iso + '" ondragover="onCalDragOver(event)" ondragleave="onCalDragLeave(event)" ondrop="onCalDrop(event)">';
+    for(let h=CAL_HOUR_START; h<CAL_HOUR_END; h++){
+      html += '<div class="cal-wv-hour-row" data-hour="' + h + '"></div>';
+    }
+    html += '</div>';
+  }
+  body.innerHTML = html;
+  // Lane-packing : un bloc par opération, placé côte à côte lorsqu'il y a chevauchement
+  document.querySelectorAll('.cal-wv-day-col').forEach(col => {
+    const iso = col.getAttribute('data-date');
+    const events = PLANNING_STATE.list.filter(ev => ev.date === iso);
+    const packed = _packDayEvents(events);
+    packed.forEach(item => {
+      const block = _makeEventBlock(item);
+      if(block) col.appendChild(block);
+    });
+  });
+}
+function renderCalDay(){
+  const d = CAL_STATE.dayDate || new Date();
+  // Libellé
+  const lbl = document.getElementById('cal-month-label');
+  if(lbl){
+    const s = d.toLocaleDateString('fr-FR', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+    lbl.textContent = s.charAt(0).toUpperCase() + s.slice(1);
+  }
+  const wdIdx = (d.getDay() + 6) % 7;
+  const isWeekend = (wdIdx >= 5);
+  const iso = _calIsoYMD(d);
+  const todayIso = _calIsoYMD(new Date());
+  const isToday = (iso === todayIso);
+  // En-tête : corner + 1 jour
+  const head = document.getElementById('cal-wv-header');
+  if(head){
+    const cls = 'cal-wv-dayhead' + (isWeekend?' weekend':'') + (isToday?' today':'');
+    head.innerHTML = '<div class="cal-wv-corner"></div>' +
+      '<div class="' + cls + '" data-date="' + iso + '">' +
+        '<div class="cal-wv-dayname">' + escHtml(CAL_WDAYS_FULL[wdIdx]) + '</div>' +
+        '<div class="cal-wv-daydate">' + String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + d.getFullYear() + '</div>' +
+      '</div>';
+  }
+  // Corps : colonne heures + 1 colonne jour
+  const body = document.getElementById('cal-wv-body');
+  if(!body) return;
+  let html = '<div class="cal-wv-times-col">';
+  for(let h=CAL_HOUR_START; h<CAL_HOUR_END; h++){
+    html += '<div class="cal-wv-time">' + String(h).padStart(2,'0') + ':00</div>';
+  }
+  html += '</div>';
+  const colCls = 'cal-wv-day-col' + (isWeekend?' weekend':'') + (isToday?' today':'');
+  html += '<div class="' + colCls + '" data-date="' + iso + '" ondragover="onCalDragOver(event)" ondragleave="onCalDragLeave(event)" ondrop="onCalDrop(event)">';
+  for(let h=CAL_HOUR_START; h<CAL_HOUR_END; h++){
+    html += '<div class="cal-wv-hour-row" data-hour="' + h + '"></div>';
+  }
+  html += '</div>';
+  body.innerHTML = html;
+  // Lane-packing
+  document.querySelectorAll('.cal-wv-day-col').forEach(col => {
+    const cIso = col.getAttribute('data-date');
+    const events = PLANNING_STATE.list.filter(ev => ev.date === cIso);
+    const packed = _packDayEvents(events);
+    packed.forEach(item => {
+      const block = _makeEventBlock(item);
+      if(block) col.appendChild(block);
+    });
+  });
+}
+// ── Lane packing (Google-Calendar style) ──────────────────────────────
+function _packDayEvents(events){
+  const sorted = events.slice()
+    .map(ev => ({ ev, s: _hmToMins(ev.start), e: _hmToMins(ev.end) }))
+    .filter(o => o.s != null && o.e != null && o.e > o.s)
+    .sort((a,b) => (a.s - b.s) || (b.e - a.e));
+  if(!sorted.length) return [];
+  // 1. Groupes transitivement chevauchants
+  const groups = [];
+  let cur = null;
+  sorted.forEach(o => {
+    if(!cur || o.s >= cur.maxEnd){
+      cur = { maxEnd: o.e, items: [o] };
+      groups.push(cur);
+    } else {
+      cur.maxEnd = Math.max(cur.maxEnd, o.e);
+      cur.items.push(o);
+    }
+  });
+  // 2. Dans chaque groupe, packer en lanes (greedy)
+  groups.forEach(g => {
+    const lanes = [];
+    g.items.forEach(o => {
+      let placed = false;
+      for(let i = 0; i < lanes.length; i++){
+        const last = lanes[i][lanes[i].length - 1];
+        if(o.s >= last.e){
+          lanes[i].push(o);
+          o.lane = i;
+          placed = true;
+          break;
+        }
+      }
+      if(!placed){
+        lanes.push([o]);
+        o.lane = lanes.length - 1;
+      }
+    });
+    g.lanesCount = lanes.length;
+    g.items.forEach(o => { o.lanesCount = lanes.length; });
+  });
+  return sorted;
+}
+function _makeEventBlock(item){
+  const ev = item.ev;
+  const startMin = item.s, endMin = item.e;
+  if(startMin == null || endMin == null || endMin <= startMin) return null;
+  const top = ((startMin - CAL_HOUR_START*60) / 60) * CAL_HOUR_PX;
+  const height = Math.max(22, ((endMin - startMin) / 60) * CAL_HOUR_PX - 2);
+  const lanesCount = item.lanesCount || 1;
+  const lane = item.lane || 0;
+  const div = document.createElement('div');
+  div.className = 'cal-event';
+  div.style.top = top + 'px';
+  div.style.height = height + 'px';
+  div.style.left = 'calc(' + (lane * (100 / lanesCount)) + '% + 3px)';
+  div.style.width = 'calc(' + (100 / lanesCount) + '% - 6px)';
+  // Couleur unie déterministe par type d'opération (palette fixe).
+  // En fallback, on garde l'éventuel data-niveau (rétro-compat).
+  const palette = _opTypePalette(ev.opTypeId || ev.opName || ev.id);
+  if(palette){
+    div.style.background = palette.bg;
+    div.style.color = palette.fg;
+  } else if(ev.opNiveau){
+    div.setAttribute('data-niveau', String(ev.opNiveau));
+  }
+  if(height < 44) div.setAttribute('data-mini', '1');
+  div.setAttribute('data-event-id', ev.id);
+  const showMachine = ev.machine && height >= 32;
+  const showTime    = height >= 50;
+  let inner = '<div class="cal-event-title">' + escHtml(ev.opName || '—') + '</div>';
+  if(showMachine) inner += '<div class="cal-event-machine">' + escHtml(ev.machine) + '</div>';
+  if(showTime)    inner += '<div class="cal-event-time">' + escHtml(ev.start) + ' – ' + escHtml(ev.end) + '</div>';
+  div.innerHTML = inner;
+  div.title = (ev.opName || '') + (ev.machine?(' · '+ev.machine):'') + '\n' + ev.start + ' – ' + ev.end + '\nCliquer pour afficher les détails';
+  div.addEventListener('click', e => {
+    e.stopPropagation();
+    openPlanningDetailsModal([ev]);
+  });
+  return div;
+}
+function _clusterDayEvents(events){
+  if(!events.length) return [];
+  const sorted = events.slice()
+    .map(ev => ({ ev, s: _hmToMins(ev.start), e: _hmToMins(ev.end) }))
+    .filter(o => o.s != null && o.e != null && o.e > o.s)
+    .sort((a,b) => a.s - b.s);
+  const clusters = [];
+  let cur = null;
+  sorted.forEach(o => {
+    if(!cur){
+      cur = { startMin: o.s, endMin: o.e, items: [o.ev] };
+    } else if(o.s < cur.endMin){
+      cur.endMin = Math.max(cur.endMin, o.e);
+      cur.items.push(o.ev);
+    } else {
+      clusters.push(cur);
+      cur = { startMin: o.s, endMin: o.e, items: [o.ev] };
+    }
+  });
+  if(cur) clusters.push(cur);
+  // Trier les items à l'intérieur du cluster pour un affichage stable
+  clusters.forEach(c => {
+    c.items.sort((a,b) => (_hmToMins(a.start)||0) - (_hmToMins(b.start)||0));
+  });
+  return clusters;
+}
+function _makeClusterBlock(cluster){
+  if(!cluster || !cluster.items.length) return null;
+  const startMin = cluster.startMin;
+  const endMin = cluster.endMin;
+  const top = ((startMin - CAL_HOUR_START*60) / 60) * CAL_HOUR_PX;
+  const height = Math.max(28, ((endMin - startMin) / 60) * CAL_HOUR_PX - 2);
+  const div = document.createElement('div');
+  const single = (cluster.items.length === 1);
+  div.className = 'cal-event' + (single ? '' : ' cal-event-merged');
+  div.style.top = top + 'px';
+  div.style.height = height + 'px';
+  if(single && cluster.items[0].opNiveau){
+    div.setAttribute('data-niveau', String(cluster.items[0].opNiveau));
+  }
+  const fmtHM = mins => {
+    const h = Math.floor(mins/60), m = mins%60;
+    return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+  };
+  if(single){
+    const ev = cluster.items[0];
+    const machineSuffix = ev.machine ? ' · ' + ev.machine : '';
+    div.innerHTML = '<div class="cal-event-title">' + escHtml((ev.opName || '—') + machineSuffix) + '</div>' +
+                    '<div class="cal-event-time">' + escHtml(ev.start) + ' – ' + escHtml(ev.end) + '</div>';
+    div.title = 'Cliquer pour afficher les détails';
+    div.addEventListener('click', e => {
+      e.stopPropagation();
+      openPlanningDetailsModal([ev]);
+    });
+  } else {
+    let listHtml = '<div class="cal-event-list">';
+    cluster.items.forEach(ev => {
+      const nivCls = ev.opNiveau ? (' cal-event-item-niv-' + ev.opNiveau) : '';
+      const machine = ev.machine ? '<span class="cal-event-item-machine"> · ' + escHtml(ev.machine) + '</span>' : '';
+      listHtml += '<div class="cal-event-item' + nivCls + '" data-event-id="' + escAttr(ev.id) + '">' +
+                  '<span class="cal-event-item-time">' + escHtml(ev.start) + ' – ' + escHtml(ev.end) + '</span>' +
+                  '<span class="cal-event-item-name">' + escHtml(ev.opName || '—') + machine + '</span>' +
+                  '</div>';
+    });
+    listHtml += '</div>';
+    const headTxt = escHtml(fmtHM(startMin)) + ' → ' + escHtml(fmtHM(endMin)) + ' · ' + cluster.items.length + ' op.';
+    div.innerHTML = '<div class="cal-event-merged-head">' + headTxt + '</div>' + listHtml;
+    div.title = 'Cliquer pour afficher les détails';
+    div.style.cursor = 'pointer';
+    div.addEventListener('click', e => {
+      e.stopPropagation();
+      openPlanningDetailsModal(cluster.items);
+    });
+  }
+  return div;
+}
+function _hmToMins(s){
+  const m = String(s||'').match(/^(\d{1,2}):(\d{2})$/);
+  if(!m) return null;
+  return parseInt(m[1],10)*60 + parseInt(m[2],10);
+}
+function deletePlanningEvent(id){
+  PLANNING_STATE.list = PLANNING_STATE.list.filter(e => e.id !== id);
+  savePlanning();
+  renderCal();
+}
+
+// ── Modale Détails ────────────────────────────────────────────────────
+let _PLAN_DET_EVENT_IDS = [];
+function openPlanningDetailsModal(events){
+  if(!events || !events.length) return;
+  _PLAN_DET_EVENT_IDS = events.map(e => e.id);
+  const m = document.getElementById('planning-details-modal');
+  if(!m) return;
+  const titleEl = document.getElementById('plan-det-title');
+  const dtEl = document.getElementById('plan-det-date');
+  const listEl = document.getElementById('plan-det-list');
+  if(titleEl){
+    titleEl.textContent = (events.length === 1)
+      ? 'Détails de l\'opération'
+      : (events.length + ' opérations planifiées');
+  }
+  if(dtEl) dtEl.textContent = _fmtIsoDateFr(events[0].date);
+  if(listEl){
+    listEl.innerHTML = events.map(ev => {
+      const niv = ev.opNiveau || '';
+      const freq = ev.opFreq || '';
+      const machineHtml = ev.machine
+        ? '<span class="plan-det-row-machine">' +
+            '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>' +
+            escHtml(ev.machine) +
+          '</span>'
+        : '';
+      const freqHtml = freq ? '<span class="plan-det-row-freq">Fréquence : ' + escHtml(freq) + '</span>' : '';
+      return '<div class="plan-det-row" data-event-id="' + escAttr(ev.id) + '">' +
+        '<div class="plan-det-row-main">' +
+          '<div class="plan-det-row-name">' + escHtml(ev.opName || '—') +
+            (niv ? '<span class="niv-badge" data-niv="' + escAttr(String(niv)) + '">N' + escHtml(String(niv)) + '</span>' : '') +
+          '</div>' +
+          '<div class="plan-det-row-meta">' +
+            '<span class="plan-det-row-time">' +
+              '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' +
+              escHtml(ev.start) + ' – ' + escHtml(ev.end) +
+            '</span>' +
+            machineHtml +
+            freqHtml +
+          '</div>' +
+        '</div>' +
+        '<div class="plan-det-row-actions">' +
+          '<button type="button" class="ops-row-btn edit" onclick="editPlanningEvent(\'' + escAttr(ev.id) + '\')" title="Modifier">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
+          '</button>' +
+          '<button type="button" class="ops-row-btn del" onclick="confirmDeletePlanningEvent(\'' + escAttr(ev.id) + '\')" title="Supprimer">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
+          '</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+  m.classList.add('open');
+  m.setAttribute('aria-hidden','false');
+  document.body.style.overflow = 'hidden';
+}
+function closePlanningDetailsModal(){
+  const m = document.getElementById('planning-details-modal');
+  if(m){ m.classList.remove('open'); m.setAttribute('aria-hidden','true'); }
+  document.body.style.overflow = '';
+  _PLAN_DET_EVENT_IDS = [];
+}
+function _refreshPlanningDetailsModal(){
+  const evs = _PLAN_DET_EVENT_IDS
+    .map(id => PLANNING_STATE.list.find(e => e.id === id))
+    .filter(Boolean);
+  if(!evs.length){ closePlanningDetailsModal(); return; }
+  openPlanningDetailsModal(evs);
+}
+function confirmDeletePlanningEvent(id){
+  const ev = PLANNING_STATE.list.find(e => e.id === id);
+  if(!ev) return;
+  if(!confirm('Supprimer cette opération planifiée ?\n\n' + (ev.opName || '') + (ev.machine?(' · ' + ev.machine):'') + '\n' + ev.date + ' · ' + ev.start + ' – ' + ev.end)) return;
+  PLANNING_STATE.list = PLANNING_STATE.list.filter(e => e.id !== id);
+  savePlanning();
+  _refreshPlanningDetailsModal();
+  renderCal();
+  showToast('Opération supprimée.', 'info');
+}
+function editPlanningEvent(id){
+  const ev = PLANNING_STATE.list.find(e => e.id === id);
+  if(!ev) return;
+  closePlanningDetailsModal();
+  const sm = _hmToMins(ev.start);
+  const defaultHour = (sm != null) ? Math.floor(sm/60) : 8;
+  openPlanningTimeModal(ev.opTypeId, ev.date, defaultHour, {
+    editId: ev.id,
+    machine: ev.machine || '',
+    start: ev.start,
+    end: ev.end,
+  });
+}
+
+// ── Drag & drop : catalogue → semaine ─────────────────────────────────
+let _CAL_DRAG_OP_ID = null;
+function onCatRowDragStart(e, opTypeId){
+  _CAL_DRAG_OP_ID = opTypeId;
+  try{
+    e.dataTransfer.effectAllowed = 'copy';
+    e.dataTransfer.setData('text/plain', opTypeId);
+  }catch(_){}
+  if(e.currentTarget && e.currentTarget.classList) e.currentTarget.classList.add('drag-source');
+}
+function onCatRowDragEnd(e){
+  _CAL_DRAG_OP_ID = null;
+  if(e.currentTarget && e.currentTarget.classList) e.currentTarget.classList.remove('drag-source');
+  document.querySelectorAll('.cal-wv-day-col.drag-over').forEach(c => c.classList.remove('drag-over'));
+}
+function onCalDragOver(e){
+  if(!_CAL_DRAG_OP_ID && !(e.dataTransfer && e.dataTransfer.types && Array.from(e.dataTransfer.types).includes('text/plain'))) return;
+  e.preventDefault();
+  try{ e.dataTransfer.dropEffect = 'copy'; }catch(_){}
+  const col = e.currentTarget;
+  if(col && col.classList) col.classList.add('drag-over');
+}
+function onCalDragLeave(e){
+  const col = e.currentTarget;
+  if(!col) return;
+  // Ignorer dragleave si on entre dans un enfant
+  const rt = e.relatedTarget;
+  if(rt && col.contains(rt)) return;
+  col.classList.remove('drag-over');
+}
+function onCalDrop(e){
+  e.preventDefault();
+  const col = e.currentTarget;
+  if(col) col.classList.remove('drag-over');
+  let opTypeId = _CAL_DRAG_OP_ID;
+  if(!opTypeId){
+    try{ opTypeId = e.dataTransfer.getData('text/plain'); }catch(_){}
+  }
+  _CAL_DRAG_OP_ID = null;
+  if(!opTypeId) return;
+  const iso = col.getAttribute('data-date');
+  if(!iso) return;
+  // Calculer l'heure cible à partir de la position Y du drop
+  const rect = col.getBoundingClientRect();
+  const y = e.clientY - rect.top;
+  const hourFloat = CAL_HOUR_START + (y / CAL_HOUR_PX);
+  let h = Math.floor(hourFloat);
+  if(h < CAL_HOUR_START) h = CAL_HOUR_START;
+  if(h > CAL_HOUR_END - 1) h = CAL_HOUR_END - 1;
+  openPlanningTimeModal(opTypeId, iso, h);
+}
+
+// ── Modal créneau horaire ─────────────────────────────────────────────
+let _PENDING_PLAN_DROP = null;
+function _fmtIsoDateFr(iso){
+  if(!iso) return '';
+  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(!m) return iso;
+  const d = new Date(parseInt(m[1],10), parseInt(m[2],10)-1, parseInt(m[3],10));
+  return d.toLocaleDateString('fr-FR', {weekday:'long', day:'2-digit', month:'long', year:'numeric'});
+}
+function openPlanningTimeModal(opTypeId, iso, defaultHour, editOpts){
+  const op = OPS_TYPES_STATE.list.find(t => t.id === opTypeId);
+  if(!op){ showToast('Type d\'opération introuvable.', 'danger'); return; }
+  _PENDING_PLAN_DROP = { opTypeId, iso, editId: editOpts ? editOpts.editId : null };
+  const m = document.getElementById('planning-time-modal');
+  if(!m) return;
+  const opEl = document.getElementById('plan-mod-op');
+  const dtEl = document.getElementById('plan-mod-date');
+  const mEl = document.getElementById('plan-mod-machine');
+  const sEl = document.getElementById('plan-mod-start');
+  const eEl = document.getElementById('plan-mod-end');
+  const titleEl = document.getElementById('plan-mod-title');
+  const submitLblEl = document.getElementById('plan-mod-submit-label');
+  const isEdit = !!editOpts;
+  if(titleEl) titleEl.textContent = isEdit ? 'Modifier l\'opération' : 'Planifier une opération';
+  if(submitLblEl) submitLblEl.textContent = isEdit ? 'Enregistrer' : 'Planifier';
+  if(opEl) opEl.textContent = op.nom;
+  if(dtEl) dtEl.textContent = _fmtIsoDateFr(iso);
+  if(isEdit){
+    if(mEl) mEl.value = editOpts.machine || '';
+    if(sEl) sEl.value = editOpts.start || '';
+    if(eEl) eEl.value = editOpts.end || '';
+  } else {
+    if(mEl) mEl.value = '';
+    const h = Math.max(0, Math.min(23, defaultHour || 8));
+    if(sEl) sEl.value = String(h).padStart(2,'0') + ':00';
+    if(eEl) eEl.value = String(Math.min(h+1, 23)).padStart(2,'0') + ':00';
+  }
+  m.classList.add('open');
+  m.setAttribute('aria-hidden','false');
+  document.body.style.overflow = 'hidden';
+  setTimeout(()=>{ if(mEl && !mEl.value) mEl.focus(); else if(sEl) sEl.focus(); }, 50);
+}
+function closePlanningTimeModal(){
+  const m = document.getElementById('planning-time-modal');
+  if(m){ m.classList.remove('open'); m.setAttribute('aria-hidden','true'); }
+  document.body.style.overflow = '';
+  _PENDING_PLAN_DROP = null;
+}
+function submitPlanningTime(e){
+  e.preventDefault();
+  if(!_PENDING_PLAN_DROP){ closePlanningTimeModal(); return; }
+  const machine = (document.getElementById('plan-mod-machine')?.value || '').trim();
+  const start = (document.getElementById('plan-mod-start')?.value || '').trim();
+  const end = (document.getElementById('plan-mod-end')?.value || '').trim();
+  if(!machine){ showToast('Sélectionnez une machine.', 'danger'); return; }
+  if(!start || !end){ showToast('Indiquez les heures.', 'danger'); return; }
+  const sm = _hmToMins(start), em = _hmToMins(end);
+  if(sm == null || em == null){ showToast('Format heure invalide (HH:MM).', 'danger'); return; }
+  if(em <= sm){ showToast('L\'heure de fin doit être après l\'heure de début.', 'danger'); return; }
+  const op = OPS_TYPES_STATE.list.find(t => t.id === _PENDING_PLAN_DROP.opTypeId);
+  if(!op){ showToast('Type d\'opération introuvable.', 'danger'); closePlanningTimeModal(); return; }
+  const editId = _PENDING_PLAN_DROP.editId;
+  if(editId){
+    const idx = PLANNING_STATE.list.findIndex(x => x.id === editId);
+    if(idx === -1){
+      showToast('Opération introuvable.', 'danger');
+      closePlanningTimeModal();
+      return;
+    }
+    PLANNING_STATE.list[idx] = Object.assign({}, PLANNING_STATE.list[idx], {
+      machine, start, end,
+      opName: op.nom, opNiveau: op.niveau, opFreq: op.frequence,
+      updated_at: new Date().toISOString(),
+    });
+    savePlanning();
+    closePlanningTimeModal();
+    renderCal();
+    showToast('Opération mise à jour.', 'info');
+  } else {
+    PLANNING_STATE.list.push({
+      id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8),
+      opTypeId: op.id,
+      opName: op.nom,
+      opNiveau: op.niveau,
+      opFreq: op.frequence,
+      machine,
+      date: _PENDING_PLAN_DROP.iso,
+      start, end,
+      created_at: new Date().toISOString(),
+    });
+    savePlanning();
+    closePlanningTimeModal();
+    renderCal();
+    showToast('Opération planifiée.', 'info');
+  }
 }
 
 // --- Toast ---
@@ -616,6 +1758,17 @@ function showToast(msg, type){
 function currentUserName(){
   if(!S.me) return '';
   return (S.me.nom || S.me.identifiant || S.me.email || '').trim();
+}
+
+function escHtml(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function escAttr(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+
+function fmtDate(iso){
+  if(!iso) return '';
+  try{
+    const d = new Date(iso);
+    return d.toLocaleString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
+  }catch(e){ return String(iso); }
 }
 
 // --- Modales ---
@@ -688,12 +1841,81 @@ function closeCatModal(){
   CAT_EDITING_ID = null;
 }
 
+function openCtrlModal(){
+  const m = document.getElementById('ctrl-modal');
+  if(!m) return;
+  if(!CTRL_TYPES_STATE.list.length){
+    showToast('Définissez d\'abord au moins un type dans « Liste de contrôles ».', 'danger');
+    return;
+  }
+  if(!currentUserName()){
+    showToast('Identité non chargée. Réessayez dans un instant.', 'danger');
+    return;
+  }
+  m.classList.add('open');
+  m.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+  refreshCtrlTypeSelect();
+  const nameEl = document.getElementById('ctrl-saisi-par-name');
+  if(nameEl) nameEl.textContent = currentUserName();
+  setTimeout(() => { const f = document.getElementById('ctrl-machine'); if(f) f.focus(); }, 50);
+}
+function closeCtrlModal(){
+  const m = document.getElementById('ctrl-modal');
+  if(!m) return;
+  m.classList.remove('open');
+  m.setAttribute('aria-hidden', 'true');
+  document.body.style.overflow = '';
+  const f = document.getElementById('ctrl-form');
+  if(f) f.reset();
+}
+
+let CTRL_CAT_EDITING_ID = null;
+function openCtrlCatModal(idToEdit){
+  const m = document.getElementById('ctrl-cat-modal');
+  if(!m) return;
+  const titleEl = document.getElementById('ctrl-cat-modal-title');
+  const lblEl = document.getElementById('ctrl-cat-submit-label');
+  const form = document.getElementById('ctrl-cat-form');
+  if(form) form.reset();
+  CTRL_CAT_EDITING_ID = null;
+  if(idToEdit){
+    const t = CTRL_TYPES_STATE.list.find(x => x.id === idToEdit);
+    if(t){
+      CTRL_CAT_EDITING_ID = idToEdit;
+      document.getElementById('ctrl-cat-nom').value = t.nom || '';
+      document.getElementById('ctrl-cat-detail').value = t.detail || '';
+      if(titleEl) titleEl.textContent = 'Modifier le contrôle';
+      if(lblEl) lblEl.textContent = 'Enregistrer les modifications';
+    }
+  } else {
+    if(titleEl) titleEl.textContent = 'Ajouter un contrôle à la liste';
+    if(lblEl) lblEl.textContent = 'Ajouter à la liste';
+  }
+  m.classList.add('open');
+  m.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+  setTimeout(() => { const f = document.getElementById('ctrl-cat-nom'); if(f) f.focus(); }, 50);
+}
+function closeCtrlCatModal(){
+  const m = document.getElementById('ctrl-cat-modal');
+  if(!m) return;
+  m.classList.remove('open');
+  m.setAttribute('aria-hidden', 'true');
+  document.body.style.overflow = '';
+  const f = document.getElementById('ctrl-cat-form');
+  if(f) f.reset();
+  CTRL_CAT_EDITING_ID = null;
+}
+
 function closeAnyOpenModal(){
-  ['ops-modal', 'cat-modal'].forEach(id => {
+  ['ops-modal', 'cat-modal', 'ctrl-modal', 'ctrl-cat-modal'].forEach(id => {
     const m = document.getElementById(id);
     if(m && m.classList.contains('open')){
       if(id === 'ops-modal') closeOpsModal();
-      else closeCatModal();
+      else if(id === 'cat-modal') closeCatModal();
+      else if(id === 'ctrl-modal') closeCtrlModal();
+      else closeCtrlCatModal();
     }
   });
 }
@@ -701,7 +1923,9 @@ document.addEventListener('keydown', function(e){
   if(e.key === 'Escape') closeAnyOpenModal();
 });
 
-// --- Historique des opérations ---
+// =========================================================================
+// Historique des opérations
+// =========================================================================
 const OPS_STORAGE_KEY = 'mysifa_maint_operations_v1';
 const OPS_STATE = { sortBy: 'date_saisie', sortDir: 'desc', list: [] };
 
@@ -715,30 +1939,17 @@ function loadOps(){
 function saveOps(){
   try{ localStorage.setItem(OPS_STORAGE_KEY, JSON.stringify(OPS_STATE.list)); }catch(e){}
 }
-function fmtDate(iso){
-  if(!iso) return '';
-  try{
-    const d = new Date(iso);
-    return d.toLocaleString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
-  }catch(e){ return String(iso); }
-}
 function addOperation(e){
   e.preventDefault();
   const machine = (document.getElementById('ops-machine').value || '').trim();
   const type = (document.getElementById('ops-type').value || '').trim();
   const commentaire = (document.getElementById('ops-comment').value || '').trim();
   const operateur = currentUserName();
-  if(!operateur){
-    showToast('Identité non chargée. Réessayez dans un instant.', 'danger');
-    return;
-  }
-  if(!machine || !type){
-    showToast('Machine et type sont requis.', 'danger');
-    return;
-  }
+  if(!operateur){ showToast('Identité non chargée. Réessayez dans un instant.', 'danger'); return; }
+  if(!machine || !type){ showToast('Machine et type sont requis.', 'danger'); return; }
   OPS_STATE.list.push({
     id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8),
-    machine: machine, operateur: operateur, type: type, commentaire: commentaire,
+    machine, operateur, type, commentaire,
     date_saisie: new Date().toISOString()
   });
   saveOps();
@@ -761,29 +1972,128 @@ function sortOps(field){
   }
   renderOps();
 }
+function getOpsFilters(){
+  const v = id => (document.getElementById(id)?.value || '').trim();
+  return {
+    type:     v('filt-operations-type'),
+    operateur:v('filt-operations-operateur'),
+    machine:  v('filt-operations-machine'),
+    dateFrom: v('filt-operations-date-from'),
+    dateTo:   v('filt-operations-date-to'),
+  };
+}
+function resetOpsFilters(){
+  ['type','operateur','machine','date-from','date-to'].forEach(k => {
+    const el = document.getElementById('filt-operations-' + k);
+    if(el) el.value = '';
+  });
+  renderOps();
+}
+// ── Date presets partagés ─────────────────────────────────────────────
+function maintDatePresets(){
+  const now = new Date();
+  const fmt = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  const today = new Date(now);
+  const yesterday = new Date(now); yesterday.setDate(now.getDate()-1);
+  const last7Start = new Date(now); last7Start.setDate(now.getDate()-6);
+  const last30Start = new Date(now); last30Start.setDate(now.getDate()-29);
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+  const prevMonthStart = new Date(now.getFullYear(), now.getMonth()-1, 1);
+  return {
+    today:     {from:fmt(today),         to:fmt(today)},
+    yesterday: {from:fmt(yesterday),     to:fmt(yesterday)},
+    last7:     {from:fmt(last7Start),    to:fmt(today)},
+    last30:    {from:fmt(last30Start),   to:fmt(today)},
+    thisMonth: {from:fmt(monthStart),    to:fmt(today)},
+    prevMonth: {from:fmt(prevMonthStart),to:fmt(prevMonthEnd)},
+  };
+}
+function applyOpsDatePreset(key){
+  const p = maintDatePresets()[key];
+  if(!p) return;
+  const from = document.getElementById('filt-operations-date-from');
+  const to   = document.getElementById('filt-operations-date-to');
+  if(from) from.value = p.from;
+  if(to)   to.value   = p.to;
+  renderOps();
+}
+function updateOpsDatePresetChips(){
+  const presets = maintDatePresets();
+  const from = (document.getElementById('filt-operations-date-from')?.value || '').trim();
+  const to   = (document.getElementById('filt-operations-date-to')?.value   || '').trim();
+  document.querySelectorAll('#ops-date-presets .date-preset-chip').forEach(chip => {
+    const key = chip.getAttribute('data-preset');
+    const p = presets[key];
+    chip.classList.toggle('active', !!(p && p.from === from && p.to === to));
+  });
+}
+function refreshOpsFiltersOptions(){
+  const typeSel = document.getElementById('filt-operations-type');
+  const opeSel  = document.getElementById('filt-operations-operateur');
+  if(typeSel){
+    const cur = typeSel.value;
+    const types = OPS_TYPES_STATE.list.map(t => t.nom).filter(Boolean).sort((a,b) => a.localeCompare(b, 'fr'));
+    typeSel.innerHTML = '<option value="">Tous les types</option>' +
+      types.map(n => '<option value="' + escAttr(n) + '">' + escHtml(n) + '</option>').join('');
+    if(cur && types.includes(cur)) typeSel.value = cur;
+  }
+  if(opeSel){
+    const cur = opeSel.value;
+    const opes = Array.from(new Set(OPS_STATE.list.map(o => o.operateur).filter(Boolean))).sort((a,b) => a.localeCompare(b, 'fr'));
+    opeSel.innerHTML = '<option value="">Tous les opérateurs</option>' +
+      opes.map(n => '<option value="' + escAttr(n) + '">' + escHtml(n) + '</option>').join('');
+    if(cur && opes.includes(cur)) opeSel.value = cur;
+  }
+}
 function renderOps(){
+  refreshOpsFiltersOptions();
+  updateOpsDatePresetChips();
   const tbody = document.getElementById('ops-tbody');
   const count = document.getElementById('ops-count');
   if(!tbody) return;
+  const f = getOpsFilters();
+  // Auto-correction si dateFrom > dateTo
+  if(f.dateFrom && f.dateTo && f.dateFrom > f.dateTo){
+    const to = document.getElementById('filt-operations-date-to');
+    if(to){ to.value = f.dateFrom; f.dateTo = f.dateFrom; }
+  }
+  // Filter
+  let filtered = OPS_STATE.list.filter(o => {
+    if(f.type && o.type !== f.type) return false;
+    if(f.operateur && o.operateur !== f.operateur) return false;
+    if(f.machine && o.machine !== f.machine) return false;
+    if(f.dateFrom || f.dateTo){
+      const d = (o.date_saisie || '').slice(0,10);
+      if(f.dateFrom && d < f.dateFrom) return false;
+      if(f.dateTo && d > f.dateTo) return false;
+    }
+    return true;
+  });
+  // Sort
   const dir = OPS_STATE.sortDir === 'asc' ? 1 : -1;
-  const f = OPS_STATE.sortBy;
-  const sorted = OPS_STATE.list.slice().sort((a,b) => {
-    const av = (a[f] != null ? a[f] : '').toString().toLowerCase();
-    const bv = (b[f] != null ? b[f] : '').toString().toLowerCase();
+  const sf = OPS_STATE.sortBy;
+  filtered.sort((a,b) => {
+    const av = (a[sf] != null ? a[sf] : '').toString().toLowerCase();
+    const bv = (b[sf] != null ? b[sf] : '').toString().toLowerCase();
     if(av < bv) return -1*dir;
     if(av > bv) return  1*dir;
     return 0;
   });
   document.querySelectorAll('.ops-table th[data-sort]').forEach(th => {
-    const isActive = th.getAttribute('data-sort') === f;
+    const isActive = th.getAttribute('data-sort') === sf;
     th.classList.toggle('active', isActive);
     const ico = th.querySelector('.sort-ico');
     if(ico) ico.textContent = isActive ? (OPS_STATE.sortDir === 'asc' ? '↑' : '↓') : '↕';
   });
-  if(!sorted.length){
-    tbody.innerHTML = '<tr><td colspan="6" class="ops-empty">Aucune opération enregistrée. Cliquez sur « Nouvelle opération » pour commencer.</td></tr>';
+  if(!filtered.length){
+    const isFiltered = f.type || f.operateur || f.machine || f.dateFrom || f.dateTo;
+    const msg = isFiltered
+      ? 'Aucune opération ne correspond aux filtres.'
+      : 'Aucune opération enregistrée. Cliquez sur « Nouvelle opération » pour commencer.';
+    tbody.innerHTML = '<tr><td colspan="6" class="ops-empty">' + escHtml(msg) + '</td></tr>';
   } else {
-    const rows = sorted.map(o =>
+    const rows = filtered.map(o =>
       '<tr>' +
         '<td class="col-date">' + escHtml(fmtDate(o.date_saisie)) + '</td>' +
         '<td>' + escHtml(o.machine) + '</td>' +
@@ -801,11 +2111,18 @@ function renderOps(){
   }
   if(count){
     const n = OPS_STATE.list.length;
-    count.textContent = n + ' opération' + (n > 1 ? 's' : '');
+    const visible = filtered.length;
+    if(visible !== n){
+      count.textContent = visible + ' / ' + n + ' opération' + (n > 1 ? 's' : '');
+    } else {
+      count.textContent = n + ' opération' + (n > 1 ? 's' : '');
+    }
   }
 }
 
-// --- Catalogue des types d'opérations ---
+// =========================================================================
+// Catalogue des types d'opérations
+// =========================================================================
 const OPS_TYPES_STORAGE_KEY = 'mysifa_maint_optypes_v1';
 const OPS_TYPES_STATE = { sortBy: 'nom', sortDir: 'asc', list: [] };
 
@@ -825,21 +2142,12 @@ function submitOpsType(e){
   const niveau = parseInt(document.getElementById('cat-niveau').value, 10);
   const frequence = (document.getElementById('cat-frequence').value || '').trim();
   const detail = (document.getElementById('cat-detail').value || '').trim();
-  if(!nom || !niveau || !frequence){
-    showToast('Nom, niveau et fréquence sont requis.', 'danger');
-    return;
-  }
-  if(niveau < 1 || niveau > 3){
-    showToast('Niveau doit être entre 1 et 3.', 'danger');
-    return;
-  }
+  if(!nom || !niveau || !frequence){ showToast('Nom, niveau et fréquence sont requis.', 'danger'); return; }
+  if(niveau < 1 || niveau > 3){ showToast('Niveau doit être entre 1 et 3.', 'danger'); return; }
   const dup = OPS_TYPES_STATE.list.find(t =>
     (t.nom || '').toLowerCase() === nom.toLowerCase() && t.id !== CAT_EDITING_ID
   );
-  if(dup){
-    showToast('Un autre type avec ce nom existe déjà.', 'danger');
-    return;
-  }
+  if(dup){ showToast('Un autre type avec ce nom existe déjà.', 'danger'); return; }
   let oldName = null;
   if(CAT_EDITING_ID){
     const cur = OPS_TYPES_STATE.list.find(t => t.id === CAT_EDITING_ID);
@@ -854,7 +2162,7 @@ function submitOpsType(e){
   } else {
     OPS_TYPES_STATE.list.push({
       id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8),
-      nom: nom, niveau: niveau, frequence: frequence, detail: detail,
+      nom, niveau, frequence, detail,
       date_creation: new Date().toISOString()
     });
   }
@@ -913,9 +2221,9 @@ function refreshOpsTypeSelect(){
 }
 function renderOpsTypes(){
   refreshOpsTypeSelect();
-  const tbody = document.getElementById('cat-tbody');
-  const count = document.getElementById('cat-count');
-  if(!tbody) return;
+  refreshOpsFiltersOptions();
+  const tbodies = document.querySelectorAll('.js-cat-tbody');
+  if(!tbodies.length) return;
   const dir = OPS_TYPES_STATE.sortDir === 'asc' ? 1 : -1;
   const f = OPS_TYPES_STATE.sortBy;
   const sorted = OPS_TYPES_STATE.list.slice().sort((a,b) => {
@@ -934,11 +2242,12 @@ function renderOpsTypes(){
     const ico = th.querySelector('.sort-ico');
     if(ico) ico.textContent = isActive ? (OPS_TYPES_STATE.sortDir === 'asc' ? '↑' : '↓') : '↕';
   });
+  let html;
   if(!sorted.length){
-    tbody.innerHTML = '<tr><td colspan="5" class="ops-empty">Aucune opération dans la liste. Cliquez sur « Ajouter une opération à la liste » pour en créer une.</td></tr>';
+    html = '<tr><td colspan="5" class="ops-empty">Aucune opération dans la liste. Cliquez sur « Ajouter une opération à la liste » pour en créer une.</td></tr>';
   } else {
-    const rows = sorted.map(t =>
-      '<tr>' +
+    html = sorted.map(t =>
+      '<tr draggable="true" ondragstart="onCatRowDragStart(event,\'' + escAttr(t.id) + '\')" ondragend="onCatRowDragEnd(event)" title="Glisser pour planifier sur le calendrier (vue Semaine)">' +
         '<td><strong style="color:var(--text)">' + escHtml(t.nom) + '</strong></td>' +
         '<td><span class="niv-badge" data-niv="' + t.niveau + '">N' + t.niveau + '</span></td>' +
         '<td>' + escHtml(t.frequence) + '</td>' +
@@ -952,12 +2261,330 @@ function renderOpsTypes(){
           '</button>' +
         '</td>' +
       '</tr>'
+    ).join('');
+  }
+  tbodies.forEach(tb => { tb.innerHTML = html; });
+  const n = OPS_TYPES_STATE.list.length;
+  const lbl = n + ' opération' + (n > 1 ? 's' : '');
+  document.querySelectorAll('.js-cat-count').forEach(c => { c.textContent = lbl; });
+}
+
+// =========================================================================
+// Historique des contrôles
+// =========================================================================
+const CTRL_STORAGE_KEY = 'mysifa_maint_controles_v1';
+const CTRL_STATE = { sortBy: 'date_saisie', sortDir: 'desc', list: [] };
+
+function loadCtrl(){
+  try{
+    const raw = localStorage.getItem(CTRL_STORAGE_KEY);
+    CTRL_STATE.list = raw ? JSON.parse(raw) : [];
+    if(!Array.isArray(CTRL_STATE.list)) CTRL_STATE.list = [];
+  }catch(e){ CTRL_STATE.list = []; }
+}
+function saveCtrl(){
+  try{ localStorage.setItem(CTRL_STORAGE_KEY, JSON.stringify(CTRL_STATE.list)); }catch(e){}
+}
+function addControle(e){
+  e.preventDefault();
+  const machine = (document.getElementById('ctrl-machine').value || '').trim();
+  const type = (document.getElementById('ctrl-type').value || '').trim();
+  const commentaire = (document.getElementById('ctrl-comment').value || '').trim();
+  const operateur = currentUserName();
+  if(!operateur){ showToast('Identité non chargée. Réessayez dans un instant.', 'danger'); return; }
+  if(!machine || !type){ showToast('Machine et type sont requis.', 'danger'); return; }
+  CTRL_STATE.list.push({
+    id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8),
+    machine, operateur, type, commentaire,
+    date_saisie: new Date().toISOString()
+  });
+  saveCtrl();
+  renderCtrl();
+  closeCtrlModal();
+  showToast('Contrôle enregistré.', 'info');
+}
+function deleteCtrl(id){
+  if(!confirm('Supprimer ce contrôle ?')) return;
+  CTRL_STATE.list = CTRL_STATE.list.filter(c => c.id !== id);
+  saveCtrl();
+  renderCtrl();
+}
+function sortCtrl(field){
+  if(CTRL_STATE.sortBy === field){
+    CTRL_STATE.sortDir = CTRL_STATE.sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    CTRL_STATE.sortBy = field;
+    CTRL_STATE.sortDir = field === 'date_saisie' ? 'desc' : 'asc';
+  }
+  renderCtrl();
+}
+function getCtrlFilters(){
+  const v = id => (document.getElementById(id)?.value || '').trim();
+  return {
+    type:     v('filt-controles-type'),
+    operateur:v('filt-controles-operateur'),
+    machine:  v('filt-controles-machine'),
+    dateFrom: v('filt-controles-date-from'),
+    dateTo:   v('filt-controles-date-to'),
+  };
+}
+function resetCtrlFilters(){
+  ['type','operateur','machine','date-from','date-to'].forEach(k => {
+    const el = document.getElementById('filt-controles-' + k);
+    if(el) el.value = '';
+  });
+  renderCtrl();
+}
+function applyCtrlDatePreset(key){
+  const p = maintDatePresets()[key];
+  if(!p) return;
+  const from = document.getElementById('filt-controles-date-from');
+  const to   = document.getElementById('filt-controles-date-to');
+  if(from) from.value = p.from;
+  if(to)   to.value   = p.to;
+  renderCtrl();
+}
+function updateCtrlDatePresetChips(){
+  const presets = maintDatePresets();
+  const from = (document.getElementById('filt-controles-date-from')?.value || '').trim();
+  const to   = (document.getElementById('filt-controles-date-to')?.value   || '').trim();
+  document.querySelectorAll('#ctrl-date-presets .date-preset-chip').forEach(chip => {
+    const key = chip.getAttribute('data-preset');
+    const p = presets[key];
+    chip.classList.toggle('active', !!(p && p.from === from && p.to === to));
+  });
+}
+function refreshCtrlFiltersOptions(){
+  const typeSel = document.getElementById('filt-controles-type');
+  const opeSel  = document.getElementById('filt-controles-operateur');
+  if(typeSel){
+    const cur = typeSel.value;
+    const types = CTRL_TYPES_STATE.list.map(t => t.nom).filter(Boolean).sort((a,b) => a.localeCompare(b, 'fr'));
+    typeSel.innerHTML = '<option value="">Tous les types</option>' +
+      types.map(n => '<option value="' + escAttr(n) + '">' + escHtml(n) + '</option>').join('');
+    if(cur && types.includes(cur)) typeSel.value = cur;
+  }
+  if(opeSel){
+    const cur = opeSel.value;
+    const opes = Array.from(new Set(CTRL_STATE.list.map(c => c.operateur).filter(Boolean))).sort((a,b) => a.localeCompare(b, 'fr'));
+    opeSel.innerHTML = '<option value="">Tous les opérateurs</option>' +
+      opes.map(n => '<option value="' + escAttr(n) + '">' + escHtml(n) + '</option>').join('');
+    if(cur && opes.includes(cur)) opeSel.value = cur;
+  }
+}
+function renderCtrl(){
+  refreshCtrlFiltersOptions();
+  updateCtrlDatePresetChips();
+  const tbody = document.getElementById('ctrl-tbody');
+  const count = document.getElementById('ctrl-count');
+  if(!tbody) return;
+  const f = getCtrlFilters();
+  // Auto-correction si dateFrom > dateTo
+  if(f.dateFrom && f.dateTo && f.dateFrom > f.dateTo){
+    const to = document.getElementById('filt-controles-date-to');
+    if(to){ to.value = f.dateFrom; f.dateTo = f.dateFrom; }
+  }
+  // Filter
+  let filtered = CTRL_STATE.list.filter(c => {
+    if(f.type && c.type !== f.type) return false;
+    if(f.operateur && c.operateur !== f.operateur) return false;
+    if(f.machine && c.machine !== f.machine) return false;
+    if(f.dateFrom || f.dateTo){
+      const d = (c.date_saisie || '').slice(0,10);
+      if(f.dateFrom && d < f.dateFrom) return false;
+      if(f.dateTo && d > f.dateTo) return false;
+    }
+    return true;
+  });
+  // Sort
+  const dir = CTRL_STATE.sortDir === 'asc' ? 1 : -1;
+  const sf = CTRL_STATE.sortBy;
+  filtered.sort((a,b) => {
+    const av = (a[sf] != null ? a[sf] : '').toString().toLowerCase();
+    const bv = (b[sf] != null ? b[sf] : '').toString().toLowerCase();
+    if(av < bv) return -1 * dir;
+    if(av > bv) return  1 * dir;
+    return 0;
+  });
+  document.querySelectorAll('.ops-table th[data-sort-ctrl]').forEach(th => {
+    const isActive = th.getAttribute('data-sort-ctrl') === sf;
+    th.classList.toggle('active', isActive);
+    const ico = th.querySelector('.sort-ico');
+    if(ico) ico.textContent = isActive ? (CTRL_STATE.sortDir === 'asc' ? '↑' : '↓') : '↕';
+  });
+  if(!filtered.length){
+    const isFiltered = f.type || f.operateur || f.machine || f.dateFrom || f.dateTo;
+    const msg = isFiltered
+      ? 'Aucun contrôle ne correspond aux filtres.'
+      : 'Aucun contrôle enregistré. Cliquez sur « Nouveau contrôle » pour commencer.';
+    tbody.innerHTML = '<tr><td colspan="6" class="ops-empty">' + escHtml(msg) + '</td></tr>';
+  } else {
+    const rows = filtered.map(c =>
+      '<tr>' +
+        '<td class="col-date">' + escHtml(fmtDate(c.date_saisie)) + '</td>' +
+        '<td>' + escHtml(c.machine) + '</td>' +
+        '<td>' + escHtml(c.operateur) + '</td>' +
+        '<td>' + escHtml(c.type) + '</td>' +
+        '<td class="col-comment">' + escHtml(c.commentaire || '') + '</td>' +
+        '<td class="col-actions">' +
+          '<button type="button" class="ops-row-btn del" onclick="deleteCtrl(\'' + escAttr(c.id) + '\')" title="Supprimer">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
+          '</button>' +
+        '</td>' +
+      '</tr>'
     );
     tbody.innerHTML = rows.join('');
   }
   if(count){
-    const n = OPS_TYPES_STATE.list.length;
-    count.textContent = n + ' opération' + (n > 1 ? 's' : '');
+    const n = CTRL_STATE.list.length;
+    const visible = filtered.length;
+    if(visible !== n){
+      count.textContent = visible + ' / ' + n + ' contrôle' + (n > 1 ? 's' : '');
+    } else {
+      count.textContent = n + ' contrôle' + (n > 1 ? 's' : '');
+    }
+  }
+}
+
+// =========================================================================
+// Catalogue des types de contrôles (Liste de contrôles)
+// =========================================================================
+const CTRL_TYPES_STORAGE_KEY = 'mysifa_maint_ctrltypes_v1';
+const CTRL_TYPES_STATE = { sortBy: 'nom', sortDir: 'asc', list: [] };
+
+function loadCtrlTypes(){
+  try{
+    const raw = localStorage.getItem(CTRL_TYPES_STORAGE_KEY);
+    CTRL_TYPES_STATE.list = raw ? JSON.parse(raw) : [];
+    if(!Array.isArray(CTRL_TYPES_STATE.list)) CTRL_TYPES_STATE.list = [];
+  }catch(e){ CTRL_TYPES_STATE.list = []; }
+}
+function saveCtrlTypes(){
+  try{ localStorage.setItem(CTRL_TYPES_STORAGE_KEY, JSON.stringify(CTRL_TYPES_STATE.list)); }catch(e){}
+}
+function submitCtrlType(e){
+  e.preventDefault();
+  const nom = (document.getElementById('ctrl-cat-nom').value || '').trim();
+  const detail = (document.getElementById('ctrl-cat-detail').value || '').trim();
+  if(!nom){ showToast('Le nom est requis.', 'danger'); return; }
+  const dup = CTRL_TYPES_STATE.list.find(t =>
+    (t.nom || '').toLowerCase() === nom.toLowerCase() && t.id !== CTRL_CAT_EDITING_ID
+  );
+  if(dup){ showToast('Un autre contrôle avec ce nom existe déjà.', 'danger'); return; }
+  let oldName = null;
+  if(CTRL_CAT_EDITING_ID){
+    const cur = CTRL_TYPES_STATE.list.find(t => t.id === CTRL_CAT_EDITING_ID);
+    if(cur && cur.nom !== nom) oldName = cur.nom;
+  }
+  if(CTRL_CAT_EDITING_ID){
+    CTRL_TYPES_STATE.list = CTRL_TYPES_STATE.list.map(t =>
+      t.id === CTRL_CAT_EDITING_ID
+        ? Object.assign({}, t, {nom, detail, date_modification: new Date().toISOString()})
+        : t
+    );
+  } else {
+    CTRL_TYPES_STATE.list.push({
+      id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8),
+      nom, detail,
+      date_creation: new Date().toISOString()
+    });
+  }
+  saveCtrlTypes();
+  let renameApplied = false;
+  if(oldName){
+    const affected = CTRL_STATE.list.filter(c => c.type === oldName).length;
+    if(affected > 0 && confirm(affected + ' contrôle' + (affected>1?'s':'') + ' enregistré' + (affected>1?'s':'') + ' utilise' + (affected>1?'nt':'') + ' encore le nom « ' + oldName + ' ».\n\nMettre à jour ces contrôles vers « ' + nom + ' » ?')){
+      CTRL_STATE.list = CTRL_STATE.list.map(c =>
+        c.type === oldName ? Object.assign({}, c, {type: nom}) : c
+      );
+      saveCtrl();
+      renameApplied = true;
+    }
+  }
+  renderCtrlTypes();
+  if(renameApplied) renderCtrl();
+  closeCtrlCatModal();
+  showToast(CTRL_CAT_EDITING_ID ? 'Modifications enregistrées.' : 'Contrôle ajouté à la liste.', 'info');
+}
+function deleteCtrlType(id){
+  const t = CTRL_TYPES_STATE.list.find(x => x.id === id);
+  if(!t) return;
+  if(!confirm('Supprimer le contrôle « ' + t.nom + ' » de la liste ?\n\nLes contrôles déjà enregistrés avec ce nom restent inchangés.')) return;
+  CTRL_TYPES_STATE.list = CTRL_TYPES_STATE.list.filter(x => x.id !== id);
+  saveCtrlTypes();
+  renderCtrlTypes();
+}
+function editCtrlType(id){ openCtrlCatModal(id); }
+function sortCtrlTypes(field){
+  if(CTRL_TYPES_STATE.sortBy === field){
+    CTRL_TYPES_STATE.sortDir = CTRL_TYPES_STATE.sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    CTRL_TYPES_STATE.sortBy = field;
+    CTRL_TYPES_STATE.sortDir = 'asc';
+  }
+  renderCtrlTypes();
+}
+function refreshCtrlTypeSelect(){
+  const sel = document.getElementById('ctrl-type');
+  const hint = document.getElementById('ctrl-type-hint');
+  if(!sel) return;
+  const cur = sel.value;
+  if(!CTRL_TYPES_STATE.list.length){
+    sel.innerHTML = '<option value="">Aucun type défini…</option>';
+    sel.disabled = true;
+    if(hint) hint.style.display = 'block';
+    return;
+  }
+  sel.disabled = false;
+  if(hint) hint.style.display = 'none';
+  const sorted = CTRL_TYPES_STATE.list.slice().sort((a,b) => (a.nom || '').localeCompare(b.nom || '', 'fr'));
+  sel.innerHTML = '<option value="">Sélectionner un type…</option>' +
+    sorted.map(t => '<option value="' + escAttr(t.nom) + '">' + escHtml(t.nom) + '</option>').join('');
+  if(cur && sorted.some(t => t.nom === cur)) sel.value = cur;
+}
+function renderCtrlTypes(){
+  refreshCtrlTypeSelect();
+  refreshCtrlFiltersOptions();
+  const tbody = document.getElementById('ctrl-cat-tbody');
+  const count = document.getElementById('ctrl-cat-count');
+  if(!tbody) return;
+  const dir = CTRL_TYPES_STATE.sortDir === 'asc' ? 1 : -1;
+  const f = CTRL_TYPES_STATE.sortBy;
+  const sorted = CTRL_TYPES_STATE.list.slice().sort((a,b) => {
+    const av = (a[f] != null ? a[f] : '').toString().toLowerCase();
+    const bv = (b[f] != null ? b[f] : '').toString().toLowerCase();
+    if(av < bv) return -1 * dir;
+    if(av > bv) return  1 * dir;
+    return 0;
+  });
+  document.querySelectorAll('.ops-table th[data-sort-ctrl-cat]').forEach(th => {
+    const isActive = th.getAttribute('data-sort-ctrl-cat') === f;
+    th.classList.toggle('active', isActive);
+    const ico = th.querySelector('.sort-ico');
+    if(ico) ico.textContent = isActive ? (CTRL_TYPES_STATE.sortDir === 'asc' ? '↑' : '↓') : '↕';
+  });
+  if(!sorted.length){
+    tbody.innerHTML = '<tr><td colspan="3" class="ops-empty">Aucun contrôle dans la liste. Cliquez sur « Ajouter un contrôle à la liste » pour en créer un.</td></tr>';
+  } else {
+    const rows = sorted.map(t =>
+      '<tr>' +
+        '<td><strong style="color:var(--text)">' + escHtml(t.nom) + '</strong></td>' +
+        '<td class="col-comment">' + escHtml(t.detail || '') + '</td>' +
+        '<td class="col-actions">' +
+          '<button type="button" class="ops-row-btn edit" onclick="editCtrlType(\'' + escAttr(t.id) + '\')" title="Modifier">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
+          '</button>' +
+          '<button type="button" class="ops-row-btn del" onclick="deleteCtrlType(\'' + escAttr(t.id) + '\')" title="Supprimer">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
+          '</button>' +
+        '</td>' +
+      '</tr>'
+    );
+    tbody.innerHTML = rows.join('');
+  }
+  if(count){
+    const n = CTRL_TYPES_STATE.list.length;
+    count.textContent = n + ' contrôle' + (n > 1 ? 's' : '');
   }
 }
 
@@ -984,9 +2611,6 @@ async function doLogout(){
   location.href='/';
 }
 
-function escHtml(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
-function escAttr(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
-
 async function loadMe(){
   try{
     const r=await fetch('/api/auth/me',{credentials:'include'});
@@ -1011,11 +2635,15 @@ async function loadMe(){
   loadMe();
   loadOps();
   loadOpsTypes();
+  loadCtrl();
+  loadCtrlTypes();
+  loadPlanning();
   renderOpsTypes();
   renderOps();
+  renderCtrlTypes();
+  renderCtrl();
   try{
     const h = (location.hash || '').replace('#','').trim();
-    // Compat : ancien hash #historique -> nouveau #controles
     const target = (h === 'historique') ? 'controles' : h;
     if(target && VIEW_META[target]) switchView(target);
   }catch(e){}
