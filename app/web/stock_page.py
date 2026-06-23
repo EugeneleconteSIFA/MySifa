@@ -2027,6 +2027,8 @@ function icon(name, size=16){
     'shopping-cart': '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>',
     'trash': '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
     'euro': '<path d="M4 10h12"/><path d="M4 14h9"/><path d="M19 6a7.7 7.7 0 0 0-5.2-2A7.9 7.9 0 0 0 6 12c0 4.4 3.5 8 7.8 8 2 0 3.8-.8 5.2-2"/>',
+    // dollar-sign (Lucide) — utilisé pour le toggle « prix en USD » de la valorisation
+    'dollar-sign': '<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
     'alert-triangle': '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
     'file-text': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>',
   };
@@ -13304,9 +13306,24 @@ function buildValorisationTableRow(item) {
   const valored = (item.prix_unitaire || 0) > 0
     && (!item.avec_conditionnement || (item.unites_par_palette || 0) > 0);
   const valColor = valored ? 'var(--text)' : 'var(--muted)';
-  const tdVal = el('td', { style: 'padding:10px 12px;font-size:13px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums;color:' + valColor },
-    valored ? valFormatEuro(item.valorisation) : '—'
-  );
+  let tdVal;
+  if (valored && item.prix_en_usd && Number(item.valorisation_reelle || 0) > 0
+      && Math.abs(Number(item.valorisation_reelle) - Number(item.valorisation)) > 0.005) {
+    // Ligne USD : on empile l'ancien (barré, petit, muted) au-dessus du réel (vert, gras).
+    tdVal = el('td', { style: 'padding:10px 12px;text-align:right;font-variant-numeric:tabular-nums' },
+      el('div', { style: 'display:flex;flex-direction:column;align-items:flex-end;line-height:1.2' },
+        el('div', {
+          style: 'font-size:11px;font-weight:500;color:var(--muted);text-decoration:line-through;text-decoration-color:var(--muted)'
+        }, valFormatEuro(item.valorisation)),
+        el('div', { style: 'font-size:13px;font-weight:800;color:#16a34a;margin-top:1px' },
+          valFormatEuro(item.valorisation_reelle))
+      )
+    );
+  } else {
+    tdVal = el('td', { style: 'padding:10px 12px;font-size:13px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums;color:' + valColor },
+      valored ? valFormatEuro(item.valorisation) : '—'
+    );
+  }
 
   // ── Colonne « Prix unit. réel » : visible uniquement Direction / superadmin ──
   // Affiche le prix converti avec le Taux EUR/USD de MyCouts uniquement pour les
@@ -13346,9 +13363,9 @@ function buildValorisationTableRow(item) {
     const usdOn = !!item.prix_en_usd;
     const usdBtn = el('button', {
       type: 'button',
-      title: usdOn ? 'Référence USD — cliquer pour repasser en EUR' : 'Marquer la référence en USD (conversion via Taux EUR/USD de MyCouts)',
+      title: usdOn ? 'Référence en USD — cliquer pour repasser en EUR' : 'Marquer la référence en USD (conversion via Taux EUR/USD de MyCouts)',
       style:
-        'border-radius:8px;width:36px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-weight:800;font-size:10px;letter-spacing:.5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;transition:all .15s;'
+        'border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;'
         + (usdOn
             ? 'background:rgba(34,197,94,0.12);border:1px solid #16a34a;color:#16a34a'
             : 'background:transparent;border:1px solid var(--border);color:var(--text2)'),
@@ -13361,7 +13378,8 @@ function buildValorisationTableRow(item) {
           if (!usdOn) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text2)'; }
         },
       },
-    }, '$⇄€');
+    });
+    usdBtn.appendChild(iconEl('dollar-sign', 14));
     actionsChildren.push(usdBtn);
   }
   const tdHist = el('td', {
