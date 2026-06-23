@@ -241,11 +241,16 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 .cal-wv-hour-row{height:56px;border-top:1px solid var(--border);transition:background .12s}
 .cal-wv-hour-row:first-child{border-top:none}
 .cal-wv-day-col.drag-over{background:var(--accent-bg);outline:2px dashed var(--accent);outline-offset:-2px;z-index:1}
-.cal-event{position:absolute;left:4px;right:4px;background:var(--accent);color:var(--accent-fg,#fff);border-radius:6px;padding:4px 6px;font-size:11px;font-weight:600;line-height:1.3;cursor:pointer;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.18);z-index:2;display:flex;flex-direction:column;gap:1px;transition:filter .12s,transform .08s}
-.cal-event:hover{filter:brightness(1.08)}
-.cal-event:active{transform:scale(.98)}
-.cal-event-title{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cal-event-time{font-size:10px;font-weight:500;opacity:.85;font-family:"SFMono-Regular",ui-monospace,Consolas,monospace}
+.cal-event{position:absolute;background:var(--cal-ev-bg,var(--accent));color:var(--cal-ev-fg,#fff);border-radius:7px;padding:5px 7px;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;font-size:11px;font-weight:600;line-height:1.25;cursor:pointer;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.20);z-index:2;display:flex;flex-direction:column;gap:2px;transition:filter .12s,box-shadow .12s,transform .08s}
+.cal-event:hover{filter:brightness(1.10);box-shadow:0 4px 12px rgba(0,0,0,.34);z-index:4}
+.cal-event:active{transform:scale(.99)}
+.cal-event-title{font-weight:700;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.1px;color:inherit}
+.cal-event-machine{font-size:10.5px;font-weight:600;opacity:.94;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:inline-flex;align-items:center;gap:3px}
+.cal-event-time{font-size:10px;font-weight:600;opacity:.88;font-family:'SFMono-Regular',ui-monospace,Consolas,monospace;letter-spacing:.1px}
+.cal-event[data-mini="1"]{padding:3px 5px;border-radius:5px;gap:1px}
+.cal-event[data-mini="1"] .cal-event-title{font-size:11px}
+.cal-event[data-mini="1"] .cal-event-machine{font-size:9.5px}
+.cal-event[data-mini="1"] .cal-event-time{font-size:9.5px}
 .cal-event[data-niveau="1"]{background:#22d3ee;color:#062430}
 .cal-event[data-niveau="2"]{background:#fbbf24;color:#3b2300}
 .cal-event[data-niveau="3"]{background:#f87171;color:#3b0a0a}
@@ -267,6 +272,17 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 body:not(.light) .cal-event-item-niv-1 .cal-event-item-time{color:#67e8f9}
 body:not(.light) .cal-event-item-niv-2 .cal-event-item-time{color:#fcd34d}
 body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
+/* Mode vue Jour : 1 colonne large */
+.cal-week-view.cal-wv-mode-day .cal-wv-header,
+.cal-week-view.cal-wv-mode-day .cal-wv-body{grid-template-columns:70px 1fr}
+.cal-week-view.cal-wv-mode-day .cal-event{font-size:13px;padding:7px 10px}
+.cal-week-view.cal-wv-mode-day .cal-event-title{font-size:14px}
+.cal-week-view.cal-wv-mode-day .cal-event-machine{font-size:12px}
+.cal-week-view.cal-wv-mode-day .cal-event-time{font-size:12px}
+.cal-week-view.cal-wv-mode-day .cal-wv-daydate{font-size:18px}
+/* Hauteur d'heure plus aérée en vue Jour */
+.cal-week-view.cal-wv-mode-day .cal-wv-time,
+.cal-week-view.cal-wv-mode-day .cal-wv-hour-row{height:64px}
 .cal-event-item-machine{font-weight:600;color:var(--accent);opacity:.95;white-space:nowrap}
 /* Modale Détails */
 .plan-det-list{display:flex;flex-direction:column;gap:8px;margin-top:14px}
@@ -461,6 +477,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
               <div class="cal-view-tabs">
                 <button type="button" class="cal-view-tab active" data-cal-view="month" onclick="setCalView('month')">Mois</button>
                 <button type="button" class="cal-view-tab" data-cal-view="week" onclick="setCalView('week')">Semaine</button>
+                <button type="button" class="cal-view-tab" data-cal-view="day" onclick="setCalView('day')">Jour</button>
               </div>
               <div class="cal-nav">
                 <button type="button" onclick="calPrev()" aria-label="Précédent">◀</button>
@@ -1050,7 +1067,32 @@ const CAL_STATE = {
   year:  new Date().getFullYear(),
   month: new Date().getMonth(),
   weekStart: _calWeekMondayOf(new Date()),
+  dayDate:   new Date(),
 };
+// Palette de couleurs unies pour différencier les types d'opérations
+const CAL_EVENT_PALETTE = [
+  { bg:'#0891b2', fg:'#ffffff' }, // cyan
+  { bg:'#7c3aed', fg:'#ffffff' }, // violet
+  { bg:'#db2777', fg:'#ffffff' }, // rose
+  { bg:'#dc2626', fg:'#ffffff' }, // red
+  { bg:'#ea580c', fg:'#ffffff' }, // orange
+  { bg:'#ca8a04', fg:'#1a1207' }, // amber
+  { bg:'#65a30d', fg:'#0e1a04' }, // lime
+  { bg:'#059669', fg:'#ffffff' }, // emerald
+  { bg:'#0d9488', fg:'#ffffff' }, // teal
+  { bg:'#0284c7', fg:'#ffffff' }, // sky
+  { bg:'#4f46e5', fg:'#ffffff' }, // indigo
+  { bg:'#9333ea', fg:'#ffffff' }, // purple
+];
+function _opTypePalette(opTypeId){
+  let hash = 0;
+  const s = String(opTypeId || '');
+  for(let i = 0; i < s.length; i++){
+    hash = ((hash << 5) - hash) + s.charCodeAt(i);
+    hash |= 0;
+  }
+  return CAL_EVENT_PALETTE[Math.abs(hash) % CAL_EVENT_PALETTE.length];
+}
 // État des opérations planifiées (drag & drop sur la vue Semaine).
 const PLANNING_STORAGE_KEY = 'mysifa_maint_planning_v1';
 const PLANNING_STATE = { list: [] };
@@ -1069,7 +1111,7 @@ const CAL_WDAYS_SHORT = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
 const CAL_MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 
 function setCalView(v){
-  if(v !== 'month' && v !== 'week') return;
+  if(v !== 'month' && v !== 'week' && v !== 'day') return;
   CAL_STATE.view = v;
   document.querySelectorAll('[data-cal-view]').forEach(b => {
     b.classList.toggle('active', b.getAttribute('data-cal-view') === v);
@@ -1077,7 +1119,11 @@ function setCalView(v){
   const mv = document.getElementById('cal-month-view');
   const wv = document.getElementById('cal-week-view');
   if(mv) mv.style.display = (v === 'month') ? '' : 'none';
-  if(wv) wv.style.display = (v === 'week') ? '' : 'none';
+  if(wv){
+    wv.style.display = (v === 'month') ? 'none' : '';
+    wv.classList.toggle('cal-wv-mode-week', v === 'week');
+    wv.classList.toggle('cal-wv-mode-day',  v === 'day');
+  }
   renderCal();
 }
 function calPrev(){
@@ -1087,6 +1133,9 @@ function calPrev(){
   } else if(CAL_STATE.view === 'week'){
     const ws = CAL_STATE.weekStart;
     CAL_STATE.weekStart = new Date(ws.getFullYear(), ws.getMonth(), ws.getDate() - 7);
+  } else if(CAL_STATE.view === 'day'){
+    const d = CAL_STATE.dayDate;
+    CAL_STATE.dayDate = new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1);
   }
   renderCal();
 }
@@ -1097,6 +1146,9 @@ function calNext(){
   } else if(CAL_STATE.view === 'week'){
     const ws = CAL_STATE.weekStart;
     CAL_STATE.weekStart = new Date(ws.getFullYear(), ws.getMonth(), ws.getDate() + 7);
+  } else if(CAL_STATE.view === 'day'){
+    const d = CAL_STATE.dayDate;
+    CAL_STATE.dayDate = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
   }
   renderCal();
 }
@@ -1107,6 +1159,8 @@ function calToday(){
     CAL_STATE.month = now.getMonth();
   } else if(CAL_STATE.view === 'week'){
     CAL_STATE.weekStart = _calWeekMondayOf(now);
+  } else if(CAL_STATE.view === 'day'){
+    CAL_STATE.dayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   }
   renderCal();
 }
@@ -1115,6 +1169,7 @@ function _calIsoYMD(d){
 }
 function renderCal(){
   if(CAL_STATE.view === 'week') return renderCalWeek();
+  if(CAL_STATE.view === 'day')  return renderCalDay();
   return renderCalMonth();
 }
 function renderCalMonth(){
@@ -1217,16 +1272,146 @@ function renderCalWeek(){
     html += '</div>';
   }
   body.innerHTML = html;
-  // Regrouper les événements qui se chevauchent par jour, puis afficher un bloc par cluster
+  // Lane-packing : un bloc par opération, placé côte à côte lorsqu'il y a chevauchement
   document.querySelectorAll('.cal-wv-day-col').forEach(col => {
     const iso = col.getAttribute('data-date');
     const events = PLANNING_STATE.list.filter(ev => ev.date === iso);
-    const clusters = _clusterDayEvents(events);
-    clusters.forEach(cluster => {
-      const block = _makeClusterBlock(cluster);
+    const packed = _packDayEvents(events);
+    packed.forEach(item => {
+      const block = _makeEventBlock(item);
       if(block) col.appendChild(block);
     });
   });
+}
+function renderCalDay(){
+  const d = CAL_STATE.dayDate || new Date();
+  // Libellé
+  const lbl = document.getElementById('cal-month-label');
+  if(lbl){
+    const s = d.toLocaleDateString('fr-FR', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+    lbl.textContent = s.charAt(0).toUpperCase() + s.slice(1);
+  }
+  const wdIdx = (d.getDay() + 6) % 7;
+  const isWeekend = (wdIdx >= 5);
+  const iso = _calIsoYMD(d);
+  const todayIso = _calIsoYMD(new Date());
+  const isToday = (iso === todayIso);
+  // En-tête : corner + 1 jour
+  const head = document.getElementById('cal-wv-header');
+  if(head){
+    const cls = 'cal-wv-dayhead' + (isWeekend?' weekend':'') + (isToday?' today':'');
+    head.innerHTML = '<div class="cal-wv-corner"></div>' +
+      '<div class="' + cls + '" data-date="' + iso + '">' +
+        '<div class="cal-wv-dayname">' + escHtml(CAL_WDAYS_FULL[wdIdx]) + '</div>' +
+        '<div class="cal-wv-daydate">' + String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + d.getFullYear() + '</div>' +
+      '</div>';
+  }
+  // Corps : colonne heures + 1 colonne jour
+  const body = document.getElementById('cal-wv-body');
+  if(!body) return;
+  let html = '<div class="cal-wv-times-col">';
+  for(let h=CAL_HOUR_START; h<CAL_HOUR_END; h++){
+    html += '<div class="cal-wv-time">' + String(h).padStart(2,'0') + ':00</div>';
+  }
+  html += '</div>';
+  const colCls = 'cal-wv-day-col' + (isWeekend?' weekend':'') + (isToday?' today':'');
+  html += '<div class="' + colCls + '" data-date="' + iso + '" ondragover="onCalDragOver(event)" ondragleave="onCalDragLeave(event)" ondrop="onCalDrop(event)">';
+  for(let h=CAL_HOUR_START; h<CAL_HOUR_END; h++){
+    html += '<div class="cal-wv-hour-row" data-hour="' + h + '"></div>';
+  }
+  html += '</div>';
+  body.innerHTML = html;
+  // Lane-packing
+  document.querySelectorAll('.cal-wv-day-col').forEach(col => {
+    const cIso = col.getAttribute('data-date');
+    const events = PLANNING_STATE.list.filter(ev => ev.date === cIso);
+    const packed = _packDayEvents(events);
+    packed.forEach(item => {
+      const block = _makeEventBlock(item);
+      if(block) col.appendChild(block);
+    });
+  });
+}
+// ── Lane packing (Google-Calendar style) ──────────────────────────────
+function _packDayEvents(events){
+  const sorted = events.slice()
+    .map(ev => ({ ev, s: _hmToMins(ev.start), e: _hmToMins(ev.end) }))
+    .filter(o => o.s != null && o.e != null && o.e > o.s)
+    .sort((a,b) => (a.s - b.s) || (b.e - a.e));
+  if(!sorted.length) return [];
+  // 1. Groupes transitivement chevauchants
+  const groups = [];
+  let cur = null;
+  sorted.forEach(o => {
+    if(!cur || o.s >= cur.maxEnd){
+      cur = { maxEnd: o.e, items: [o] };
+      groups.push(cur);
+    } else {
+      cur.maxEnd = Math.max(cur.maxEnd, o.e);
+      cur.items.push(o);
+    }
+  });
+  // 2. Dans chaque groupe, packer en lanes (greedy)
+  groups.forEach(g => {
+    const lanes = [];
+    g.items.forEach(o => {
+      let placed = false;
+      for(let i = 0; i < lanes.length; i++){
+        const last = lanes[i][lanes[i].length - 1];
+        if(o.s >= last.e){
+          lanes[i].push(o);
+          o.lane = i;
+          placed = true;
+          break;
+        }
+      }
+      if(!placed){
+        lanes.push([o]);
+        o.lane = lanes.length - 1;
+      }
+    });
+    g.lanesCount = lanes.length;
+    g.items.forEach(o => { o.lanesCount = lanes.length; });
+  });
+  return sorted;
+}
+function _makeEventBlock(item){
+  const ev = item.ev;
+  const startMin = item.s, endMin = item.e;
+  if(startMin == null || endMin == null || endMin <= startMin) return null;
+  const top = ((startMin - CAL_HOUR_START*60) / 60) * CAL_HOUR_PX;
+  const height = Math.max(22, ((endMin - startMin) / 60) * CAL_HOUR_PX - 2);
+  const lanesCount = item.lanesCount || 1;
+  const lane = item.lane || 0;
+  const div = document.createElement('div');
+  div.className = 'cal-event';
+  div.style.top = top + 'px';
+  div.style.height = height + 'px';
+  div.style.left = 'calc(' + (lane * (100 / lanesCount)) + '% + 3px)';
+  div.style.width = 'calc(' + (100 / lanesCount) + '% - 6px)';
+  // Couleur unie déterministe par type d'opération (palette fixe).
+  // En fallback, on garde l'éventuel data-niveau (rétro-compat).
+  const palette = _opTypePalette(ev.opTypeId || ev.opName || ev.id);
+  if(palette){
+    div.style.background = palette.bg;
+    div.style.color = palette.fg;
+  } else if(ev.opNiveau){
+    div.setAttribute('data-niveau', String(ev.opNiveau));
+  }
+  if(height < 44) div.setAttribute('data-mini', '1');
+  div.setAttribute('data-event-id', ev.id);
+  const showMachine = ev.machine && height >= 32;
+  const showTime    = height >= 50;
+  let inner = '<div class="cal-event-title">' + escHtml(ev.opName || '—') + '</div>';
+  if(showMachine) inner += '<div class="cal-event-machine">' + escHtml(ev.machine) + '</div>';
+  if(showTime)    inner += '<div class="cal-event-time">' + escHtml(ev.start) + ' – ' + escHtml(ev.end) + '</div>';
+  div.innerHTML = inner;
+  div.title = (ev.opName || '') + (ev.machine?(' · '+ev.machine):'') + '\n' + ev.start + ' – ' + ev.end + '\nCliquer pour afficher les détails';
+  div.addEventListener('click', e => {
+    e.stopPropagation();
+    openPlanningDetailsModal([ev]);
+  });
+  return div;
 }
 function _clusterDayEvents(events){
   if(!events.length) return [];
