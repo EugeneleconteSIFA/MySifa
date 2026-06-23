@@ -275,6 +275,20 @@ def _get_import_tax_pct(conn) -> float:
         return 0.0
 
 
+def _get_transport_cost_fixed_eur(conn) -> float:
+    """Lit le paramètre Coût transport forfaitaire (mc_setting.transport_cost_fixed_eur), en €.
+    Retourne 0.0 si non configuré."""
+    try:
+        row = conn.execute(
+            "SELECT value_decimal FROM mc_setting WHERE key='transport_cost_fixed_eur' LIMIT 1"
+        ).fetchone()
+        if not row:
+            return 0.0
+        return float(row["value_decimal"] or 0)
+    except Exception:
+        return 0.0
+
+
 _HISTORIQUE_TYPES_MVT = frozenset({"entree", "sortie", "ajustement", "inventaire", "transfert"})
 _HISTORIQUE_TYPE_STOCK = frozenset({"tout", "mp", "produits"})
 
@@ -3741,6 +3755,7 @@ def _valorisation_query(conn) -> list[dict]:
                COALESCE(v.prix_unitaire, 0) AS prix_unitaire,
                COALESCE(v.prix_en_usd, 0) AS prix_en_usd,
                COALESCE(v.taxe_importation, 0) AS taxe_importation,
+               COALESCE(v.cout_transport_inclus, 0) AS cout_transport_inclus,
                v.updated_at AS prix_updated_at,
                v.updated_by_name AS prix_updated_by_name
         FROM matieres_premieres mp
@@ -3759,6 +3774,7 @@ def _valorisation_query(conn) -> list[dict]:
                COALESCE(mp.prix_eur_m2, 0) AS prix_eur_m2,
                COALESCE(v.prix_en_usd, 0) AS prix_en_usd,
                COALESCE(v.taxe_importation, 0) AS taxe_importation,
+               COALESCE(v.cout_transport_inclus, 0) AS cout_transport_inclus,
                l.id AS laize_id, l.valeur_mm, l.label AS laize_label, l.ordre AS laize_ordre,
                COALESCE(sl.quantite, 0) AS quantite
         FROM matieres_premieres mp
@@ -3778,7 +3794,8 @@ def _valorisation_query(conn) -> list[dict]:
                COALESCE(mp.metres_lineaires_par_bobine, 0) AS metres,
                COALESCE(mp.prix_eur_m2, 0) AS prix_eur_m2,
                COALESCE(v.prix_en_usd, 0) AS prix_en_usd,
-               COALESCE(v.taxe_importation, 0) AS taxe_importation
+               COALESCE(v.taxe_importation, 0) AS taxe_importation,
+               COALESCE(v.cout_transport_inclus, 0) AS cout_transport_inclus
         FROM matieres_premieres mp
         LEFT JOIN mp_valorisation v ON v.matiere_id = mp.id
         WHERE mp.actif = 1 AND mp.categorie IN ('frontal','glassine','complexe')
@@ -3843,6 +3860,7 @@ def _valorisation_query(conn) -> list[dict]:
             "prix_updated_by_name": r["prix_updated_by_name"],
             "prix_en_usd": bool(r["prix_en_usd"] or 0),
             "taxe_importation": bool(r["taxe_importation"] or 0),
+            "cout_transport_inclus": bool(r["cout_transport_inclus"] or 0),
         })
     for r in rows_laizees:
         cat = r["categorie"]
@@ -3879,6 +3897,7 @@ def _valorisation_query(conn) -> list[dict]:
             "prix_updated_by_name": None,
             "prix_en_usd": bool(r["prix_en_usd"] or 0),
             "taxe_importation": bool(r["taxe_importation"] or 0),
+            "cout_transport_inclus": bool(r["cout_transport_inclus"] or 0),
         })
     # Matières laizées sans laizes : affichées avec un placeholder "À configurer"
     for r in rows_laizees_vides:
@@ -3911,6 +3930,7 @@ def _valorisation_query(conn) -> list[dict]:
             "prix_updated_by_name": None,
             "prix_en_usd": bool(r["prix_en_usd"] or 0),
             "taxe_importation": bool(r["taxe_importation"] or 0),
+            "cout_transport_inclus": bool(r["cout_transport_inclus"] or 0),
         })
     return out
 
@@ -3927,10 +3947,21 @@ def _row_multiplier(item: dict, taux_eur_usd: float, import_tax_pct: float) -> f
     return m
 
 
+def _row_transport_addon(item: dict, transport_fixed_eur: float) -> float:
+    """Forfait transport (€) à ajouter à la valorisation de la matière si le flag
+    cout_transport_inclus est actif et que le paramètre transport_cost_fixed_eur > 0.
+    Pour les matières laizées (plusieurs lignes par matiere_id), on n'ajoute le forfait
+    qu'une seule fois — c'est géré au niveau du summary via un set."""
+    if item.get("cout_transport_inclus") and transport_fixed_eur > 0:
+        return float(transport_fixed_eur)
+    return 0.0
+
+
 def _valorisation_summary(
     items: list[dict],
     taux_eur_usd: float = 0.0,
     import_tax_pct: float = 0.0,
+    transport_fixed_eur: float = 0.0,
 ) -> dict:
     totals_by_cat: dict[str, dict] = {}
     total = 0.0
@@ -3939,6 +3970,9 @@ def _valorisation_summary(
     seen_usd: set[int] = set()
     seen_tax: set[int] = set()
     seen_both: set[int] = set()
+    seen_transport: set[int] = set()
+    # Forfait transport appliqué une fois par matière (jamais par ligne laizée)
+    transport_applied: set[int] = set()
     for it in items:
         cat = it["categorie"]
         if cat not in totals_by_cat:
@@ -3958,14 +3992,20 @@ def _valorisation_summary(
         if is_valued:
             bucket["nb_refs_valorisees"] += 1
         total += it["valorisation"]
-        # Valorisation « réelle » = valorisation × multiplicateur de ligne.
+        # Valorisation « réelle » = (valorisation × multiplicateur) + forfait transport
+        # (le forfait n'est ajouté qu'une fois par matière, pas par ligne laizée).
         mult = _row_multiplier(it, taux_eur_usd, import_tax_pct)
         total_reel += it["valorisation"] * mult
-        # Comptage des matières (dédupliqué) selon les flags actifs.
         mid = it.get("matiere_id")
         is_usd = bool(it.get("prix_en_usd")) and taux_eur_usd > 0
         is_tax = bool(it.get("taxe_importation")) and import_tax_pct > 0
+        is_transport = bool(it.get("cout_transport_inclus")) and transport_fixed_eur > 0
         if isinstance(mid, int):
+            if is_transport and mid not in transport_applied:
+                transport_applied.add(mid)
+                total_reel += transport_fixed_eur
+            if is_transport and mid not in seen_transport:
+                seen_transport.add(mid)
             if is_usd and is_tax and mid not in seen_both:
                 seen_both.add(mid)
             elif is_usd and not is_tax and mid not in seen_usd:
@@ -3978,6 +4018,7 @@ def _valorisation_summary(
     nb_usd_only = len(seen_usd)
     nb_tax_only = len(seen_tax)
     nb_both = len(seen_both)
+    nb_transport = len(seen_transport)
     return {
         "total_mp": round(total, 2),
         "total_mp_reel": round(total_reel, 2),
@@ -3986,14 +4027,15 @@ def _valorisation_summary(
         "categories": cats,
         "nb_refs": sum(c["nb_refs"] for c in cats),
         "nb_refs_valorisees": sum(c["nb_refs_valorisees"] for c in cats),
-        # USD-only + matières combinées (rétrocompat avec le frontend USD initial)
         "nb_refs_usd": nb_usd_only + nb_both,
         "nb_refs_tax": nb_tax_only + nb_both,
         "nb_refs_usd_only": nb_usd_only,
         "nb_refs_tax_only": nb_tax_only,
         "nb_refs_usd_and_tax": nb_both,
+        "nb_refs_transport": nb_transport,
         "taux_eur_usd": round(taux_eur_usd, 6) if taux_eur_usd > 0 else 0,
         "import_tax_pct": round(import_tax_pct, 4) if import_tax_pct > 0 else 0,
+        "transport_cost_fixed_eur": round(transport_fixed_eur, 4) if transport_fixed_eur > 0 else 0,
     }
 
 
@@ -4001,14 +4043,28 @@ def _enrich_items_with_usd(
     items: list[dict],
     taux_eur_usd: float,
     import_tax_pct: float = 0.0,
+    transport_fixed_eur: float = 0.0,
 ) -> None:
-    """Ajoute prix_unitaire_reel / valorisation_reelle / prix_eur_m2_reel in-place pour
-    chaque item. Le multiplicateur de ligne combine USD et taxe d'importation."""
+    """Ajoute prix_unitaire_reel / valorisation_reelle / prix_eur_m2_reel / transport_addon
+    in-place pour chaque item. Multiplicateur USD × taxe puis forfait transport ajouté
+    UNE SEULE FOIS par matière (jamais par ligne laizée multi-bobines)."""
+    transport_applied: set[int] = set()
     for it in items:
         mult = _row_multiplier(it, taux_eur_usd, import_tax_pct)
+        addon = 0.0
+        mid = it.get("matiere_id")
+        if (
+            it.get("cout_transport_inclus")
+            and transport_fixed_eur > 0
+            and isinstance(mid, int)
+            and mid not in transport_applied
+        ):
+            addon = float(transport_fixed_eur)
+            transport_applied.add(mid)
+        # Le prix unitaire « réel » ne reçoit QUE les multiplicateurs (USD × taxe),
+        # pas le forfait transport (qui est une enveloppe par matière, pas par unité).
         if mult != 1.0:
             it["prix_unitaire_reel"] = round((it.get("prix_unitaire") or 0) * mult, 4)
-            it["valorisation_reelle"] = round((it.get("valorisation") or 0) * mult, 2)
             it["prix_eur_m2_reel"] = (
                 round((it.get("prix_eur_m2") or 0) * mult, 4)
                 if it.get("prix_eur_m2") is not None
@@ -4016,10 +4072,11 @@ def _enrich_items_with_usd(
             )
         else:
             it["prix_unitaire_reel"] = it.get("prix_unitaire") or 0
-            it["valorisation_reelle"] = it.get("valorisation") or 0
             it["prix_eur_m2_reel"] = it.get("prix_eur_m2")
-        # Multiplicateur exposé pour faciliter le debug côté front
+        # La valorisation réelle inclut le forfait transport.
+        it["valorisation_reelle"] = round((it.get("valorisation") or 0) * mult + addon, 2)
         it["reel_multiplier"] = round(mult, 6)
+        it["transport_addon_eur"] = round(addon, 2)
 
 
 @router.get("/api/stock/valorisation")
@@ -4030,8 +4087,9 @@ def get_valorisation(request: Request):
         items = _valorisation_query(conn)
         taux = _get_taux_eur_usd(conn) if can_see_usd else 0.0
         tax_pct = _get_import_tax_pct(conn) if can_see_usd else 0.0
-    _enrich_items_with_usd(items, taux, tax_pct)
-    summary = _valorisation_summary(items, taux, tax_pct)
+        transport_eur = _get_transport_cost_fixed_eur(conn) if can_see_usd else 0.0
+    _enrich_items_with_usd(items, taux, tax_pct, transport_eur)
+    summary = _valorisation_summary(items, taux, tax_pct, transport_eur)
     summary["can_see_usd"] = can_see_usd
     return {
         "items": items,
@@ -4150,13 +4208,68 @@ async def update_valorisation(matiere_id: int, request: Request):
         can_see_usd = _user_can_see_valorisation_usd(user)
         taux = _get_taux_eur_usd(conn) if can_see_usd else 0.0
         tax_pct = _get_import_tax_pct(conn) if can_see_usd else 0.0
-    _enrich_items_with_usd(items, taux, tax_pct)
-    summary = _valorisation_summary(items, taux, tax_pct)
+        transport_eur = _get_transport_cost_fixed_eur(conn) if can_see_usd else 0.0
+    _enrich_items_with_usd(items, taux, tax_pct, transport_eur)
+    summary = _valorisation_summary(items, taux, tax_pct, transport_eur)
     summary["can_see_usd"] = can_see_usd
     # Pour les matières laizées, plusieurs lignes ont le même matiere_id → on renvoie toutes
     matching = [x for x in items if x["matiere_id"] == matiere_id]
     return {
         "ok": True,
+        "item": matching[0] if matching else None,
+        "items_matiere": matching,
+        "summary": summary,
+    }
+
+
+@router.put("/api/stock/valorisation/{matiere_id}/cout-transport")
+async def toggle_valorisation_cout_transport(matiere_id: int, request: Request):
+    """Bascule le flag cout_transport_inclus pour une matière. Réservé Direction / superadmin.
+    Le forfait transport_cost_fixed_eur sera ajouté à la valorisation de cette référence
+    (une seule fois, peu importe la quantité)."""
+    user = require_valorisation_usd_admin(request)
+    body = await request.json() if request.headers.get("content-length") else {}
+    requested = body.get("cout_transport_inclus") if isinstance(body, dict) else None
+    user_name = (user.get("nom") or user.get("email") or "").strip() or None
+    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    with get_db() as conn:
+        mat = conn.execute(
+            "SELECT id FROM matieres_premieres WHERE id=?", (matiere_id,)
+        ).fetchone()
+        if not mat:
+            raise HTTPException(404, "Matière introuvable.")
+        prev = conn.execute(
+            "SELECT cout_transport_inclus FROM mp_valorisation WHERE matiere_id=?",
+            (matiere_id,),
+        ).fetchone()
+        if requested is None:
+            current = bool(prev["cout_transport_inclus"]) if prev else False
+            new_val = not current
+        else:
+            new_val = bool(requested)
+        if prev:
+            conn.execute(
+                "UPDATE mp_valorisation SET cout_transport_inclus=?, updated_at=?, updated_by_name=? WHERE matiere_id=?",
+                (1 if new_val else 0, now, user_name, matiere_id),
+            )
+        else:
+            conn.execute(
+                """INSERT INTO mp_valorisation (matiere_id, prix_unitaire, cout_transport_inclus, updated_at, updated_by_name)
+                   VALUES (?,0,?,?,?)""",
+                (matiere_id, 1 if new_val else 0, now, user_name),
+            )
+        conn.commit()
+        items = _valorisation_query(conn)
+        taux = _get_taux_eur_usd(conn)
+        tax_pct = _get_import_tax_pct(conn)
+        transport_eur = _get_transport_cost_fixed_eur(conn)
+    _enrich_items_with_usd(items, taux, tax_pct, transport_eur)
+    summary = _valorisation_summary(items, taux, tax_pct, transport_eur)
+    summary["can_see_usd"] = True
+    matching = [x for x in items if x["matiere_id"] == matiere_id]
+    return {
+        "ok": True,
+        "cout_transport_inclus": new_val,
         "item": matching[0] if matching else None,
         "items_matiere": matching,
         "summary": summary,
@@ -4202,8 +4315,9 @@ async def toggle_valorisation_taxe_importation(matiere_id: int, request: Request
         items = _valorisation_query(conn)
         taux = _get_taux_eur_usd(conn)
         tax_pct = _get_import_tax_pct(conn)
-    _enrich_items_with_usd(items, taux, tax_pct)
-    summary = _valorisation_summary(items, taux, tax_pct)
+        transport_eur = _get_transport_cost_fixed_eur(conn)
+    _enrich_items_with_usd(items, taux, tax_pct, transport_eur)
+    summary = _valorisation_summary(items, taux, tax_pct, transport_eur)
     summary["can_see_usd"] = True
     matching = [x for x in items if x["matiere_id"] == matiere_id]
     return {
@@ -4256,8 +4370,9 @@ async def toggle_valorisation_prix_en_usd(matiere_id: int, request: Request):
         items = _valorisation_query(conn)
         taux = _get_taux_eur_usd(conn)
         tax_pct = _get_import_tax_pct(conn)
-    _enrich_items_with_usd(items, taux, tax_pct)
-    summary = _valorisation_summary(items, taux, tax_pct)
+        transport_eur = _get_transport_cost_fixed_eur(conn)
+    _enrich_items_with_usd(items, taux, tax_pct, transport_eur)
+    summary = _valorisation_summary(items, taux, tax_pct, transport_eur)
     summary["can_see_usd"] = True
     matching = [x for x in items if x["matiere_id"] == matiere_id]
     return {
