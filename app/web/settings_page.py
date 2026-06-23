@@ -283,6 +283,10 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         Opérations
       </button>
+      <button type="button" class="nav-btn" data-tab="maintenance">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        Maintenance
+      </button>
       <button type="button" class="nav-btn" data-tab="machines">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
         Machines
@@ -858,6 +862,38 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
       </div>
     </section>
 
+    <section id="panel-maintenance" class="hidden">
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+          <h2 style="margin:0">Codes maintenance</h2>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button type="button" class="btn" onclick="openMaintForm()">+ Ajouter un code</button>
+          </div>
+        </div>
+        <p class="sub" style="margin-top:-4px;margin-bottom:14px">Référentiel des codes d'opérations de maintenance. Trois colonnes : code, libellé, niveau.</p>
+        <div id="maint-form-wrap" class="hidden op-form-panel">
+          <h3 id="maint-form-title">Nouveau code</h3>
+          <div class="form-grid" style="grid-template-columns:repeat(auto-fill,minmax(140px,1fr))">
+            <input type="text" id="maint-code" placeholder="Code (ex. 10)" inputmode="numeric" maxlength="4">
+            <input type="text" id="maint-label" placeholder="Libellé">
+            <select id="maint-niveau">
+              <option value="1">N1</option>
+              <option value="2">N2</option>
+              <option value="3">N3</option>
+            </select>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+            <button type="button" class="btn" onclick="saveMaintForm()">Enregistrer</button>
+            <button type="button" class="btn btn-sec" onclick="closeMaintForm()">Annuler</button>
+          </div>
+        </div>
+        <div class="op-toolbar">
+          <input type="search" id="maint-filter" class="op-filter" placeholder="Filtrer (code, libellé, niveau…)" oninput="renderMaintList()">
+        </div>
+        <div id="maint-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
+      </div>
+    </section>
+
     <section id="panel-updates" class="hidden">
       <div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
@@ -1224,6 +1260,7 @@ function syncSettingsPageHead(tabId) {
       subEl.textContent = '';
       subEl.style.display = 'none';
     } else {
+      if (id === 'maintenance') { titleEl.textContent = 'Codes maintenance'; subEl.textContent = 'Référentiel des opérations de maintenance'; return; }
       subEl.textContent = 'Gestion des comptes et des accès';
       subEl.style.display = '';
     }
@@ -1234,7 +1271,7 @@ function setTab(id) {
   document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === id);
   });
-  ['users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'machines', 'emplacements', 'laizes', 'updates', 'audit', 'fsc', 'dashboards', 'api', 'promote'].forEach(p => {
+  ['users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'maintenance', 'machines', 'emplacements', 'laizes', 'updates', 'audit', 'fsc', 'dashboards', 'api', 'promote'].forEach(p => {
     const el = document.getElementById('panel-' + p);
     if (el) el.classList.toggle('hidden', p !== id);
   });
@@ -1242,6 +1279,7 @@ function setTab(id) {
   if (id === 'fournisseurs') loadFournisseurs();
   if (id === 'clients') initClientsPanel();
   if (id === 'operations') loadOperationCodes();
+  if (id === 'maintenance') loadMaintCodes();
   if (id === 'machines') initMachinesPanel();
   if (id === 'emplacements') initEmplacementsPanel();
   if (id === 'laizes') initLaizesPanel();
@@ -2893,6 +2931,124 @@ async function importOpsJson() {
     toast('Sync. OK (' + (r.upserted || 0) + ' codes)');
     await loadOperationCodes();
   } catch (e) { toast(e.message, true); }
+}
+
+// ── Codes maintenance (stockage client localStorage) ─────────────────
+const MAINT_CODES_STORAGE_KEY = 'mysifa_settings_maint_codes_v1';
+let _maintItems = [];
+let _maintEditCode = null;
+function loadMaintCodes() {
+  try {
+    const raw = localStorage.getItem(MAINT_CODES_STORAGE_KEY);
+    _maintItems = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(_maintItems)) _maintItems = [];
+  } catch (e) { _maintItems = []; }
+  renderMaintList();
+}
+function saveMaintCodes() {
+  try { localStorage.setItem(MAINT_CODES_STORAGE_KEY, JSON.stringify(_maintItems)); } catch (e) {}
+}
+function renderMaintList() {
+  const el = document.getElementById('maint-list');
+  if (!el) return;
+  const q = (document.getElementById('maint-filter')?.value || '').trim().toLowerCase();
+  let items = _maintItems.slice();
+  if (q) {
+    items = items.filter(o =>
+      String(o.code || '').toLowerCase().includes(q) ||
+      String(o.label || '').toLowerCase().includes(q) ||
+      ('n' + (o.niveau || '')).toLowerCase().includes(q)
+    );
+  }
+  items.sort((a, b) => {
+    const ac = String(a.code || '').padStart(6, '0');
+    const bc = String(b.code || '').padStart(6, '0');
+    return ac.localeCompare(bc, 'fr');
+  });
+  if (!items.length) {
+    el.innerHTML = '<p style="color:var(--muted);font-size:13px">Aucun code' + (q ? ' pour ce filtre' : '') + '.</p>';
+    return;
+  }
+  let body = '';
+  items.forEach(o => {
+    const c = esc(String(o.code));
+    const niv = parseInt(o.niveau, 10) || 1;
+    body += '<tr>'
+      + '<td class="op-code-cell">' + c + '</td>'
+      + '<td class="op-lbl-cell">' + esc(o.label || '') + '</td>'
+      + '<td><span class="niv-badge" data-niv="' + niv + '">N' + niv + '</span></td>'
+      + '<td><div class="op-act">'
+      + '<button type="button" class="btn-sm btn-ghost" data-maint-edit="' + c + '">Modifier</button>'
+      + '<button type="button" class="btn-sm btn-ghost danger" data-maint-del="' + c + '">Supprimer</button>'
+      + '</div></td></tr>';
+  });
+  el.innerHTML = '<div class="table-wrap op-table-wrap"><table class="op-table"><thead><tr>'
+    + '<th>Code</th><th>Libellé</th><th>Niveau</th><th>Actions</th>'
+    + '</tr></thead><tbody>' + body + '</tbody></table></div>';
+  el.querySelectorAll('[data-maint-edit]').forEach(btn => {
+    btn.addEventListener('click', () => openMaintForm(btn.getAttribute('data-maint-edit')));
+  });
+  el.querySelectorAll('[data-maint-del]').forEach(btn => {
+    btn.addEventListener('click', () => deleteMaintCode(btn.getAttribute('data-maint-del')));
+  });
+}
+function openMaintForm(code) {
+  _maintEditCode = code || null;
+  const wrap = document.getElementById('maint-form-wrap');
+  const title = document.getElementById('maint-form-title');
+  const codeInp = document.getElementById('maint-code');
+  if (!wrap) return;
+  wrap.classList.remove('hidden');
+  if (code) {
+    const o = _maintItems.find(x => String(x.code) === String(code));
+    if (!o) return;
+    title.textContent = 'Modifier le code ' + code;
+    codeInp.value = o.code;
+    codeInp.disabled = true;
+    document.getElementById('maint-label').value = o.label || '';
+    document.getElementById('maint-niveau').value = String(o.niveau || 1);
+  } else {
+    title.textContent = 'Nouveau code';
+    codeInp.value = '';
+    codeInp.disabled = false;
+    document.getElementById('maint-label').value = '';
+    document.getElementById('maint-niveau').value = '1';
+  }
+  codeInp.focus();
+}
+function closeMaintForm() {
+  _maintEditCode = null;
+  const wrap = document.getElementById('maint-form-wrap');
+  if (wrap) wrap.classList.add('hidden');
+}
+function saveMaintForm() {
+  const code = (document.getElementById('maint-code').value || '').trim();
+  const label = (document.getElementById('maint-label').value || '').trim();
+  const niveau = parseInt(document.getElementById('maint-niveau').value, 10) || 1;
+  if (!code) { toast('Code obligatoire', true); return; }
+  if (!label) { toast('Libellé obligatoire', true); return; }
+  if (niveau < 1 || niveau > 3) { toast('Niveau invalide (1-3)', true); return; }
+  if (_maintEditCode) {
+    const idx = _maintItems.findIndex(x => String(x.code) === String(_maintEditCode));
+    if (idx === -1) { toast('Code introuvable', true); return; }
+    _maintItems[idx] = Object.assign({}, _maintItems[idx], { label, niveau, updated_at: new Date().toISOString() });
+    toast('Code mis à jour');
+  } else {
+    const dup = _maintItems.find(x => String(x.code) === code);
+    if (dup) { toast('Ce code existe déjà', true); return; }
+    _maintItems.push({ code, label, niveau, created_at: new Date().toISOString() });
+    toast('Code ajouté');
+  }
+  saveMaintCodes();
+  closeMaintForm();
+  renderMaintList();
+}
+function deleteMaintCode(code) {
+  if (!confirm('Supprimer le code ' + code + ' ?')) return;
+  _maintItems = _maintItems.filter(x => String(x.code) !== String(code));
+  saveMaintCodes();
+  renderMaintList();
+  toast('Code supprimé');
 }
 
 async function deleteUpdate(id) {
