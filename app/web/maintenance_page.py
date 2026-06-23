@@ -434,6 +434,44 @@ body.light .toast.info{background:#fff;color:var(--text)}
               </button>
             </div>
           </div>
+          <div class="ops-filters">
+            <div class="hist-field">
+              <label class="hist-field-label" for="filt-operations-type">Type d'opération</label>
+              <select id="filt-operations-type" class="hist-select" onchange="renderOps()">
+                <option value="">Tous les types</option>
+              </select>
+            </div>
+            <div class="hist-field">
+              <label class="hist-field-label" for="filt-operations-operateur">Opérateur</label>
+              <select id="filt-operations-operateur" class="hist-select" onchange="renderOps()">
+                <option value="">Tous les opérateurs</option>
+              </select>
+            </div>
+            <div class="hist-field">
+              <label class="hist-field-label" for="filt-operations-machine">Machine</label>
+              <select id="filt-operations-machine" class="hist-select" onchange="renderOps()">
+                <option value="">Toutes les machines</option>
+                <option value="Cohésio 1">Cohésio 1</option>
+                <option value="Cohésio 2">Cohésio 2</option>
+                <option value="DSI">DSI</option>
+                <option value="Repiquage">Repiquage</option>
+              </select>
+            </div>
+            <div class="hist-field">
+              <label class="hist-field-label">Date d'opération</label>
+              <div class="hist-daterange">
+                <input type="date" id="filt-operations-date-from" class="hist-input" aria-label="Du" onchange="renderOps()">
+                <span class="hist-daterange-sep">au</span>
+                <input type="date" id="filt-operations-date-to" class="hist-input" aria-label="Au" onchange="renderOps()">
+              </div>
+            </div>
+          </div>
+          <div class="ops-filters-row">
+            <button type="button" class="hist-filters-reset" onclick="resetOpsFilters()">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+              Réinitialiser les filtres
+            </button>
+          </div>
           <div class="ops-table-wrap">
             <table class="ops-table">
               <thead>
@@ -928,29 +966,88 @@ function sortOps(field){
   }
   renderOps();
 }
+function getOpsFilters(){
+  const v = id => (document.getElementById(id)?.value || '').trim();
+  return {
+    type:     v('filt-operations-type'),
+    operateur:v('filt-operations-operateur'),
+    machine:  v('filt-operations-machine'),
+    dateFrom: v('filt-operations-date-from'),
+    dateTo:   v('filt-operations-date-to'),
+  };
+}
+function resetOpsFilters(){
+  ['type','operateur','machine','date-from','date-to'].forEach(k => {
+    const el = document.getElementById('filt-operations-' + k);
+    if(el) el.value = '';
+  });
+  renderOps();
+}
+function refreshOpsFiltersOptions(){
+  const typeSel = document.getElementById('filt-operations-type');
+  const opeSel  = document.getElementById('filt-operations-operateur');
+  if(typeSel){
+    const cur = typeSel.value;
+    const types = OPS_TYPES_STATE.list.map(t => t.nom).filter(Boolean).sort((a,b) => a.localeCompare(b, 'fr'));
+    typeSel.innerHTML = '<option value="">Tous les types</option>' +
+      types.map(n => '<option value="' + escAttr(n) + '">' + escHtml(n) + '</option>').join('');
+    if(cur && types.includes(cur)) typeSel.value = cur;
+  }
+  if(opeSel){
+    const cur = opeSel.value;
+    const opes = Array.from(new Set(OPS_STATE.list.map(o => o.operateur).filter(Boolean))).sort((a,b) => a.localeCompare(b, 'fr'));
+    opeSel.innerHTML = '<option value="">Tous les opérateurs</option>' +
+      opes.map(n => '<option value="' + escAttr(n) + '">' + escHtml(n) + '</option>').join('');
+    if(cur && opes.includes(cur)) opeSel.value = cur;
+  }
+}
 function renderOps(){
+  refreshOpsFiltersOptions();
   const tbody = document.getElementById('ops-tbody');
   const count = document.getElementById('ops-count');
   if(!tbody) return;
+  const f = getOpsFilters();
+  // Auto-correction si dateFrom > dateTo
+  if(f.dateFrom && f.dateTo && f.dateFrom > f.dateTo){
+    const to = document.getElementById('filt-operations-date-to');
+    if(to){ to.value = f.dateFrom; f.dateTo = f.dateFrom; }
+  }
+  // Filter
+  let filtered = OPS_STATE.list.filter(o => {
+    if(f.type && o.type !== f.type) return false;
+    if(f.operateur && o.operateur !== f.operateur) return false;
+    if(f.machine && o.machine !== f.machine) return false;
+    if(f.dateFrom || f.dateTo){
+      const d = (o.date_saisie || '').slice(0,10);
+      if(f.dateFrom && d < f.dateFrom) return false;
+      if(f.dateTo && d > f.dateTo) return false;
+    }
+    return true;
+  });
+  // Sort
   const dir = OPS_STATE.sortDir === 'asc' ? 1 : -1;
-  const f = OPS_STATE.sortBy;
-  const sorted = OPS_STATE.list.slice().sort((a,b) => {
-    const av = (a[f] != null ? a[f] : '').toString().toLowerCase();
-    const bv = (b[f] != null ? b[f] : '').toString().toLowerCase();
+  const sf = OPS_STATE.sortBy;
+  filtered.sort((a,b) => {
+    const av = (a[sf] != null ? a[sf] : '').toString().toLowerCase();
+    const bv = (b[sf] != null ? b[sf] : '').toString().toLowerCase();
     if(av < bv) return -1*dir;
     if(av > bv) return  1*dir;
     return 0;
   });
   document.querySelectorAll('.ops-table th[data-sort]').forEach(th => {
-    const isActive = th.getAttribute('data-sort') === f;
+    const isActive = th.getAttribute('data-sort') === sf;
     th.classList.toggle('active', isActive);
     const ico = th.querySelector('.sort-ico');
     if(ico) ico.textContent = isActive ? (OPS_STATE.sortDir === 'asc' ? '↑' : '↓') : '↕';
   });
-  if(!sorted.length){
-    tbody.innerHTML = '<tr><td colspan="6" class="ops-empty">Aucune opération enregistrée. Cliquez sur « Nouvelle opération » pour commencer.</td></tr>';
+  if(!filtered.length){
+    const isFiltered = f.type || f.operateur || f.machine || f.dateFrom || f.dateTo;
+    const msg = isFiltered
+      ? 'Aucune opération ne correspond aux filtres.'
+      : 'Aucune opération enregistrée. Cliquez sur « Nouvelle opération » pour commencer.';
+    tbody.innerHTML = '<tr><td colspan="6" class="ops-empty">' + escHtml(msg) + '</td></tr>';
   } else {
-    const rows = sorted.map(o =>
+    const rows = filtered.map(o =>
       '<tr>' +
         '<td class="col-date">' + escHtml(fmtDate(o.date_saisie)) + '</td>' +
         '<td>' + escHtml(o.machine) + '</td>' +
@@ -968,7 +1065,12 @@ function renderOps(){
   }
   if(count){
     const n = OPS_STATE.list.length;
-    count.textContent = n + ' opération' + (n > 1 ? 's' : '');
+    const visible = filtered.length;
+    if(visible !== n){
+      count.textContent = visible + ' / ' + n + ' opération' + (n > 1 ? 's' : '');
+    } else {
+      count.textContent = n + ' opération' + (n > 1 ? 's' : '');
+    }
   }
 }
 
@@ -1073,6 +1175,7 @@ function refreshOpsTypeSelect(){
 }
 function renderOpsTypes(){
   refreshOpsTypeSelect();
+  refreshOpsFiltersOptions();
   const tbody = document.getElementById('cat-tbody');
   const count = document.getElementById('cat-count');
   if(!tbody) return;
