@@ -36,12 +36,17 @@ def ensure_settings_rows(conn: sqlite3.Connection) -> None:
 
 def load_pricing_settings(conn: sqlite3.Connection) -> PricingSettings:
     ensure_settings_rows(conn)
+    # Construction dynamique des placeholders (MC_SETTING_KEYS peut évoluer).
+    keys = tuple(MC_SETTING_KEYS)
+    placeholders = ",".join("?" for _ in keys)
     rows = conn.execute(
-        "SELECT key, value_decimal FROM mc_setting WHERE key IN (?,?,?,?)",
-        tuple(MC_SETTING_KEYS),
+        f"SELECT key, value_decimal FROM mc_setting WHERE key IN ({placeholders})",
+        keys,
     ).fetchall()
     data = {r["key"]: _dec(r["value_decimal"]) for r in rows}
-    missing = [k for k in MC_SETTING_KEYS if k not in data]
+    # import_tax_pct est optionnel (default 0 si absent), les autres clés sont obligatoires.
+    required = {k for k in MC_SETTING_KEYS if k != "import_tax_pct"}
+    missing = [k for k in required if k not in data]
     if missing:
         raise PricingError(f"Paramètres incomplets en base : {', '.join(missing)}.")
     return PricingSettings(
@@ -49,6 +54,7 @@ def load_pricing_settings(conn: sqlite3.Connection) -> PricingSettings:
         default_container_cost_usd=data["default_container_cost_usd"],
         default_container_kg=data["default_container_kg"],
         default_margin_eur_m2=data["default_margin_eur_m2"],
+        import_tax_pct=data.get("import_tax_pct", Decimal("0")),
     )
 
 

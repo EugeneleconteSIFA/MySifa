@@ -4043,6 +4043,26 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 124, "mp_valorisation_prix_en_usd")
 
+    # v125 — Valorisation MP : flag « taxe d'importation » (multiplicatif avec USD).
+    # Lorsque taxe_importation = 1, on applique au prix_unitaire le multiplicateur
+    # (1 + import_tax_pct / 100), où import_tax_pct est le paramètre MyCouts.
+    # Combiné avec prix_en_usd : prix_reel = prix × taux_eur_usd × (1 + taxe%).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=125 LIMIT 1").fetchone():
+        valo_cols = {row[1] for row in conn.execute("PRAGMA table_info(mp_valorisation)").fetchall()}
+        if "taxe_importation" not in valo_cols:
+            conn.execute(
+                "ALTER TABLE mp_valorisation ADD COLUMN taxe_importation INTEGER NOT NULL DEFAULT 0"
+            )
+        # Seed la nouvelle clé mc_setting si la table existe (idempotent).
+        try:
+            conn.execute(
+                "INSERT OR IGNORE INTO mc_setting (key, value_decimal) VALUES ('import_tax_pct', 0)"
+            )
+        except Exception:
+            pass  # mc_setting peut ne pas exister sur les DB très anciennes
+        conn.commit()
+        _record_schema_migration(conn, 125, "mp_valorisation_taxe_importation")
+
 
 
 def create_default_admin():

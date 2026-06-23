@@ -14,6 +14,10 @@ _REQUIRED_KEYS = (
     "default_container_kg",
     "default_margin_eur_m2",
 )
+# Clés optionnelles (présentes mais non bloquantes — default appliqué si absent).
+_OPTIONAL_KEYS = (
+    "import_tax_pct",
+)
 
 
 def _to_decimal(value: Any, field: str) -> Decimal:
@@ -49,6 +53,7 @@ def validate_pricing_settings(
                 + ", ".join(missing)
                 + "."
             )
+        tax_raw = settings.get("import_tax_pct")
         s = PricingSettings(
             eur_usd_rate=_to_decimal(settings["eur_usd_rate"], "eur_usd_rate"),
             default_container_cost_usd=_to_decimal(
@@ -58,6 +63,7 @@ def validate_pricing_settings(
             default_margin_eur_m2=_to_decimal(
                 settings["default_margin_eur_m2"], "default_margin_eur_m2"
             ),
+            import_tax_pct=_to_decimal(tax_raw, "import_tax_pct") if tax_raw is not None else Decimal("0"),
         )
     else:
         raise PricingError("Paramètres de calcul : type non supporté.")
@@ -70,5 +76,9 @@ def validate_pricing_settings(
         raise PricingError("default_container_kg doit être strictement positif.")
     if s.default_margin_eur_m2 < 0:
         raise PricingError("default_margin_eur_m2 ne peut pas être négatif.")
+    if s.import_tax_pct < 0:
+        raise PricingError("import_tax_pct ne peut pas être négatif.")
+    if s.import_tax_pct > 1000:
+        raise PricingError("import_tax_pct doit être inférieur à 1000 %.")
 
     return s
