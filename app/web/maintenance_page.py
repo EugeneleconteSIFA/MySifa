@@ -379,6 +379,12 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 .ops-btn-add{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:10px;border:none;background:var(--accent);color:var(--accent-fg);font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;transition:filter .15s,background .15s,color .15s;white-space:nowrap}
 .ops-btn-add:hover{filter:brightness(1.08)}
 .ops-list{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:18px}
+/* Cadres Maintenance : Couteaux / Contre-couteaux (vides pour l'instant) */
+.maint-frames-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px;margin-top:8px}
+.maint-frame{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;min-height:280px}
+.maint-frame-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 22px;border-bottom:1px solid var(--border)}
+.maint-frame-title{font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
+.maint-frame-body{flex:1;display:flex;align-items:center;justify-content:center;padding:24px;color:var(--muted);font-size:12px}
 .ops-list-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 22px;border-bottom:1px solid var(--border);flex-wrap:wrap}
 .ops-list-head-right{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .ops-list-title{font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
@@ -494,6 +500,21 @@ body.light .toast.info{background:#fff;color:var(--text)}
             <div class="page-title">My<span>Maintenance</span></div>
             <div class="page-subtitle">Suivi et planification de la maintenance</div>
           </div>
+        </div>
+
+        <div class="maint-frames-grid">
+          <section class="maint-frame">
+            <div class="maint-frame-head">
+              <div class="maint-frame-title">Couteaux</div>
+            </div>
+            <div class="maint-frame-body"></div>
+          </section>
+          <section class="maint-frame">
+            <div class="maint-frame-head">
+              <div class="maint-frame-title">Contre-couteaux</div>
+            </div>
+            <div class="maint-frame-body"></div>
+          </section>
         </div>
       </div>
 
