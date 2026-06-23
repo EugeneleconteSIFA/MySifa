@@ -147,6 +147,8 @@ body.light .op-table tr.op-cat-row td{background:rgba(8,145,178,.06)}
 .op-pill.changement{color:#a78bfa;border-color:rgba(167,139,250,.4);background:rgba(167,139,250,.1)}
 .op-pill.nettoyage{color:#c084fc;border-color:rgba(192,132,252,.4);background:rgba(192,132,252,.1)}
 .op-pill.autre{color:var(--muted);border-color:var(--border);background:rgba(148,163,184,.08)}
+.op-pill.controles{color:var(--ok,#34d399);border-color:rgba(52,211,153,.4);background:rgba(52,211,153,.12)}
+.op-pill.interventions{color:#a78bfa;border-color:rgba(167,139,250,.4);background:rgba(167,139,250,.12)}
 .op-req{font-size:11px;font-weight:600;color:var(--muted)}
 .fsc-kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
 @media(max-width:1000px){.fsc-kpi-grid{grid-template-columns:repeat(2,1fr)}}
@@ -870,7 +872,7 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
             <button type="button" class="btn" onclick="openMaintForm()">+ Ajouter un code</button>
           </div>
         </div>
-        <p class="sub" style="margin-top:-4px;margin-bottom:14px">Référentiel des codes d'opérations de maintenance. Trois colonnes : code, libellé, niveau.</p>
+        <p class="sub" style="margin-top:-4px;margin-bottom:14px">Référentiel des codes d'opérations de maintenance regroupés en deux catégories : Contrôles et Interventions.</p>
         <div id="maint-form-wrap" class="hidden op-form-panel">
           <h3 id="maint-form-title">Nouveau code</h3>
           <div class="form-grid" style="grid-template-columns:repeat(auto-fill,minmax(140px,1fr))">
@@ -881,6 +883,10 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
               <option value="2">N2</option>
               <option value="3">N3</option>
             </select>
+            <select id="maint-categorie">
+              <option value="controles">Contrôles</option>
+              <option value="interventions">Interventions</option>
+            </select>
           </div>
           <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
             <button type="button" class="btn" onclick="saveMaintForm()">Enregistrer</button>
@@ -888,7 +894,7 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
           </div>
         </div>
         <div class="op-toolbar">
-          <input type="search" id="maint-filter" class="op-filter" placeholder="Filtrer (code, libellé, niveau…)" oninput="renderMaintList()">
+          <input type="search" id="maint-filter" class="op-filter" placeholder="Filtrer (code, libellé, niveau, catégorie…)" oninput="renderMaintList()">
         </div>
         <div id="maint-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
       </div>
@@ -2953,19 +2959,29 @@ function loadMaintCodes() {
 function saveMaintCodes() {
   try { localStorage.setItem(MAINT_CODES_STORAGE_KEY, JSON.stringify(_maintItems)); } catch (e) {}
 }
+function _maintCatLabel(cat) {
+  return cat === 'interventions' ? 'Interventions' : 'Contrôles';
+}
 function renderMaintList() {
   const el = document.getElementById('maint-list');
   if (!el) return;
   const q = (document.getElementById('maint-filter')?.value || '').trim().toLowerCase();
   let items = _maintItems.slice();
+  // Normaliser la catégorie sur les anciens enregistrements
+  items.forEach(o => { if (!o.categorie) o.categorie = 'controles'; });
   if (q) {
     items = items.filter(o =>
       String(o.code || '').toLowerCase().includes(q) ||
       String(o.label || '').toLowerCase().includes(q) ||
-      ('n' + (o.niveau || '')).toLowerCase().includes(q)
+      ('n' + (o.niveau || '')).toLowerCase().includes(q) ||
+      _maintCatLabel(o.categorie).toLowerCase().includes(q)
     );
   }
+  // Tri : catégorie d'abord (Contrôles avant Interventions), puis code
   items.sort((a, b) => {
+    const ca = (a.categorie || 'controles');
+    const cb = (b.categorie || 'controles');
+    if (ca !== cb) return ca === 'controles' ? -1 : 1;
     const ac = String(a.code || '').padStart(6, '0');
     const bc = String(b.code || '').padStart(6, '0');
     return ac.localeCompare(bc, 'fr');
@@ -2974,21 +2990,33 @@ function renderMaintList() {
     el.innerHTML = '<p style="color:var(--muted);font-size:13px">Aucun code' + (q ? ' pour ce filtre' : '') + '.</p>';
     return;
   }
-  let body = '';
+  // Group by catégorie pour insérer les lignes-titres (style Opérations)
+  const byCat = { controles: [], interventions: [] };
   items.forEach(o => {
-    const c = esc(String(o.code));
-    const niv = parseInt(o.niveau, 10) || 1;
-    body += '<tr>'
-      + '<td class="op-code-cell">' + c + '</td>'
-      + '<td class="op-lbl-cell">' + esc(o.label || '') + '</td>'
-      + '<td><span class="niv-badge" data-niv="' + niv + '">N' + niv + '</span></td>'
-      + '<td><div class="op-act">'
-      + '<button type="button" class="btn-sm btn-ghost" data-maint-edit="' + c + '">Modifier</button>'
-      + '<button type="button" class="btn-sm btn-ghost danger" data-maint-del="' + c + '">Supprimer</button>'
-      + '</div></td></tr>';
+    const c = (o.categorie === 'interventions') ? 'interventions' : 'controles';
+    byCat[c].push(o);
+  });
+  let body = '';
+  ['controles', 'interventions'].forEach(cat => {
+    if (!byCat[cat].length) return;
+    body += '<tr class="op-cat-row"><td colspan="5">' + esc(_maintCatLabel(cat)) + '</td></tr>';
+    byCat[cat].forEach(o => {
+      const c = esc(String(o.code));
+      const niv = parseInt(o.niveau, 10) || 1;
+      const catCls = cat;
+      body += '<tr>'
+        + '<td class="op-code-cell">' + c + '</td>'
+        + '<td class="op-lbl-cell">' + esc(o.label || '') + '</td>'
+        + '<td><span class="niv-badge" data-niv="' + niv + '">N' + niv + '</span></td>'
+        + '<td><span class="op-pill ' + catCls + '">' + esc(_maintCatLabel(cat)) + '</span></td>'
+        + '<td><div class="op-act">'
+        + '<button type="button" class="btn-sm btn-ghost" data-maint-edit="' + c + '">Modifier</button>'
+        + '<button type="button" class="btn-sm btn-ghost danger" data-maint-del="' + c + '">Supprimer</button>'
+        + '</div></td></tr>';
+    });
   });
   el.innerHTML = '<div class="table-wrap op-table-wrap"><table class="op-table"><thead><tr>'
-    + '<th>Code</th><th>Libellé</th><th>Niveau</th><th>Actions</th>'
+    + '<th>Code</th><th>Libellé</th><th>Niveau</th><th>Catégorie</th><th>Actions</th>'
     + '</tr></thead><tbody>' + body + '</tbody></table></div>';
   el.querySelectorAll('[data-maint-edit]').forEach(btn => {
     btn.addEventListener('click', () => openMaintForm(btn.getAttribute('data-maint-edit')));
@@ -3004,6 +3032,7 @@ function openMaintForm(code) {
   const codeInp = document.getElementById('maint-code');
   if (!wrap) return;
   wrap.classList.remove('hidden');
+  const catSel = document.getElementById('maint-categorie');
   if (code) {
     const o = _maintItems.find(x => String(x.code) === String(code));
     if (!o) return;
@@ -3012,12 +3041,14 @@ function openMaintForm(code) {
     codeInp.disabled = true;
     document.getElementById('maint-label').value = o.label || '';
     document.getElementById('maint-niveau').value = String(o.niveau || 1);
+    if (catSel) catSel.value = (o.categorie === 'interventions') ? 'interventions' : 'controles';
   } else {
     title.textContent = 'Nouveau code';
     codeInp.value = '';
     codeInp.disabled = false;
     document.getElementById('maint-label').value = '';
     document.getElementById('maint-niveau').value = '1';
+    if (catSel) catSel.value = 'controles';
   }
   codeInp.focus();
 }
@@ -3030,18 +3061,20 @@ function saveMaintForm() {
   const code = (document.getElementById('maint-code').value || '').trim();
   const label = (document.getElementById('maint-label').value || '').trim();
   const niveau = parseInt(document.getElementById('maint-niveau').value, 10) || 1;
+  const rawCat = (document.getElementById('maint-categorie')?.value || '').trim();
+  const categorie = (rawCat === 'interventions') ? 'interventions' : 'controles';
   if (!code) { toast('Code obligatoire', true); return; }
   if (!label) { toast('Libellé obligatoire', true); return; }
   if (niveau < 1 || niveau > 3) { toast('Niveau invalide (1-3)', true); return; }
   if (_maintEditCode) {
     const idx = _maintItems.findIndex(x => String(x.code) === String(_maintEditCode));
     if (idx === -1) { toast('Code introuvable', true); return; }
-    _maintItems[idx] = Object.assign({}, _maintItems[idx], { label, niveau, updated_at: new Date().toISOString() });
+    _maintItems[idx] = Object.assign({}, _maintItems[idx], { label, niveau, categorie, updated_at: new Date().toISOString() });
     toast('Code mis à jour');
   } else {
     const dup = _maintItems.find(x => String(x.code) === code);
     if (dup) { toast('Ce code existe déjà', true); return; }
-    _maintItems.push({ code, label, niveau, created_at: new Date().toISOString() });
+    _maintItems.push({ code, label, niveau, categorie, created_at: new Date().toISOString() });
     toast('Code ajouté');
   }
   saveMaintCodes();
