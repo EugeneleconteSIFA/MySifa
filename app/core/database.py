@@ -4063,6 +4063,25 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 125, "mp_valorisation_taxe_importation")
 
+    # v126 — Valorisation MP : flag « coût transport » (forfait additif).
+    # Lorsque cout_transport_inclus = 1, on ajoute le forfait transport_cost_fixed_eur
+    # (paramètre MyCouts) UNE SEULE FOIS à la valorisation de la référence, APRÈS les
+    # multiplicateurs USD et taxe. Forfait peu importe la quantité en stock.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=126 LIMIT 1").fetchone():
+        valo_cols = {row[1] for row in conn.execute("PRAGMA table_info(mp_valorisation)").fetchall()}
+        if "cout_transport_inclus" not in valo_cols:
+            conn.execute(
+                "ALTER TABLE mp_valorisation ADD COLUMN cout_transport_inclus INTEGER NOT NULL DEFAULT 0"
+            )
+        try:
+            conn.execute(
+                "INSERT OR IGNORE INTO mc_setting (key, value_decimal) VALUES ('transport_cost_fixed_eur', 0)"
+            )
+        except Exception:
+            pass
+        conn.commit()
+        _record_schema_migration(conn, 126, "mp_valorisation_cout_transport")
+
 
 
 def create_default_admin():
