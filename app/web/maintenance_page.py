@@ -494,23 +494,6 @@ body.light .toast.info{background:#fff;color:var(--text)}
             <div class="page-title">My<span>Maintenance</span></div>
             <div class="page-subtitle">Suivi et planification de la maintenance</div>
           </div>
-          <div class="page-actions">
-            <button type="button" class="btn" disabled aria-disabled="true" title="Fonctionnalité en cours de développement">
-              <span class="btn-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
-              Créer une alerte
-              <span class="badge-dev">En développement</span>
-            </button>
-          </div>
-        </div>
-        <div class="wip-wrap">
-          <div class="wip-card">
-            <div class="wip-icon">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
-            </div>
-            <div class="wip-title">Application en cours de développement</div>
-            <div class="wip-sub">Le module Maintenance arrive prochainement. Les fonctionnalités seront ajoutées progressivement.</div>
-            <div class="wip-meta">Accès restreint — version préliminaire</div>
-          </div>
         </div>
       </div>
 
