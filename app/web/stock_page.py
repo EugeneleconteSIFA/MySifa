@@ -12934,14 +12934,31 @@ function valCanSeeUSD() {
   return !!(S.user && (S.user.role === 'superadmin' || S.user.role === 'direction'));
 }
 
-function valFormatEuro(n) {
+function valAbbrUnite(u) {
+  // Abréviations pour gagner de la place dans la table (palette → pal., bobine → bob.).
+  const s = (u || '').toLowerCase();
+  if (s === 'palette') return 'pal.';
+  if (s === 'bobine') return 'bob.';
+  if (s === 'unite' || s === 'unité') return 'u.';
+  return s || '';
+}
+
+function valFormatPrixDetail(n) {
+  // Comme valFormatEuroDetail mais sans unité (pour composer le sous-titre).
   const num = Number(n || 0);
-  return num.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+  return num.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 4 });
+}
+
+function valFormatEuro(n) {
+  // Pas de décimales inutiles : 3 840,00 → 3 840 ; 3 840,50 → 3 840,5 ; 2,72 → 2,72.
+  const num = Number(n || 0);
+  return num.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' €';
 }
 
 function valFormatEuroDetail(n) {
+  // Idem pour les prix unitaires fins : 3,2000 → 3,2 ; 3,2500 → 3,25 ; 0,8945 → 0,8945.
   const num = Number(n || 0);
-  return num.toLocaleString('fr-FR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + ' €';
+  return num.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 4 }) + ' €';
 }
 
 function valFormatQte(n) {
@@ -13216,7 +13233,7 @@ function buildValorisationTableRow(item) {
       display = el('span', { style: 'color:var(--muted)' }, 'non valorisé');
     }
     const params = el('div', { style: 'font-size:10px;color:var(--muted);margin-top:2px' },
-      (item.prix_eur_m2 || 0) > 0 ? (item.prix_eur_m2.toLocaleString('fr-FR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + ' €/m²') : 'prix m² ?',
+      (item.prix_eur_m2 || 0) > 0 ? (item.prix_eur_m2.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 4 }) + ' €/m²') : 'prix m² ?',
       ' · ',
       (item.metres_lineaires_par_bobine || 0) > 0 ? (item.metres_lineaires_par_bobine.toLocaleString('fr-FR') + ' m') : 'métrage ?',
     );
@@ -13248,7 +13265,7 @@ function buildValorisationTableRow(item) {
       display = valFormatEuroDetail(prixPal) + ' /pal.';
     }
     const prixUnitTxt = prixUnit > 0
-      ? (prixUnit.toLocaleString('fr-FR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + ' €/' + uniteAchat)
+      ? (prixUnit.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 4 }) + ' €/' + uniteAchat)
       : 'prix unité ?';
     const upTxt = upp > 0
       ? (upp.toLocaleString('fr-FR') + ' ' + uniteAchat + '/pal.')
@@ -13326,17 +13343,50 @@ function buildValorisationTableRow(item) {
   }
 
   // ── Colonne « Prix unit. réel » : visible uniquement Direction / superadmin ──
-  // Affiche le prix converti avec le Taux EUR/USD de MyCouts uniquement pour les
-  // références dont la case USD est cochée (mises en avant en vert).
+  // Mêmes proportions que Prix unitaire (main /pal. + sous-titre €/kg · kg/pal.) mais
+  // en vert et sans bouton Modifier. Affichée pour les références cochées USD.
   const canSeeUSD = valCanSeeUSD();
   let tdPrixReel = null;
   if (canSeeUSD) {
-    if (item.prix_en_usd) {
-      const reel = Number(item.prix_unitaire_reel || 0);
-      const txt = valored ? (valFormatEuroDetail(reel) + ' /' + (item.unite || '')) : '—';
-      tdPrixReel = el('td', {
-        style: 'padding:10px 12px;text-align:right;font-size:13px;font-weight:700;color:#16a34a;font-variant-numeric:tabular-nums'
-      }, txt);
+    if (item.prix_en_usd && valored) {
+      const uniteAbbr = valAbbrUnite(item.unite);
+      let mainTxt;
+      const subPieces = [];
+
+      if (item.laizee) {
+        // Frontal / glassine / complexe : prix réel /bob. + €/m² · m
+        const reelBob = Number(item.prix_unitaire_reel || 0);
+        const p_m2_reel = Number(item.prix_eur_m2_reel || 0);
+        const metres = Number(item.metres_lineaires_par_bobine || 0);
+        mainTxt = valFormatEuroDetail(reelBob) + ' /bob.';
+        if (p_m2_reel > 0) subPieces.push(valFormatPrixDetail(p_m2_reel) + ' €/m²');
+        if (metres > 0) subPieces.push(metres.toLocaleString('fr-FR') + ' m');
+      } else if (item.avec_conditionnement) {
+        // Cartons / adhésifs / mandrins : prix réel /pal. + €/unité_achat · unités/pal.
+        const upp = Number(item.unites_par_palette || 0);
+        const prixUnitReel = Number(item.prix_unitaire_reel || 0);
+        const prixPalReel = prixUnitReel * upp;
+        const uniteAchat = item.unite_achat || 'unité';
+        mainTxt = valFormatEuroDetail(prixPalReel) + ' /pal.';
+        if (prixUnitReel > 0) subPieces.push(valFormatPrixDetail(prixUnitReel) + ' €/' + uniteAchat);
+        if (upp > 0) subPieces.push(upp.toLocaleString('fr-FR') + ' ' + uniteAchat + '/pal.');
+      } else {
+        // Palette / autre : prix réel /unité de gestion (abrégée)
+        const reel = Number(item.prix_unitaire_reel || 0);
+        mainTxt = valFormatEuroDetail(reel) + (uniteAbbr ? ' /' + uniteAbbr : '');
+      }
+
+      const reelChildren = [
+        el('div', { style: 'font-size:13px;font-weight:700;color:#16a34a;font-variant-numeric:tabular-nums;white-space:nowrap' }, mainTxt),
+      ];
+      if (subPieces.length) {
+        reelChildren.push(el('div', {
+          style: 'font-size:10px;color:#16a34a;opacity:.75;margin-top:2px;white-space:nowrap'
+        }, subPieces.join(' · ')));
+      }
+      tdPrixReel = el('td', { style: 'padding:10px 12px;text-align:right' },
+        el('div', { style: 'display:flex;flex-direction:column;align-items:flex-end' }, ...reelChildren)
+      );
     } else {
       tdPrixReel = el('td', {
         style: 'padding:10px 12px;text-align:right;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums'
