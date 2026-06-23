@@ -260,6 +260,19 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 .cal-event-item-niv-1{border-left-color:#22d3ee;background:rgba(34,211,238,.14)}
 .cal-event-item-niv-2{border-left-color:#fbbf24;background:rgba(251,191,36,.16)}
 .cal-event-item-niv-3{border-left-color:#f87171;background:rgba(248,113,113,.14)}
+/* Modale Détails */
+.plan-det-list{display:flex;flex-direction:column;gap:8px;margin-top:14px}
+.plan-det-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--bg);transition:border-color .15s,box-shadow .15s}
+.plan-det-row:hover{border-color:var(--accent)}
+.plan-det-row-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:7px}
+.plan-det-row-name{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:700;color:var(--text);line-height:1.25}
+.plan-det-row-name .niv-badge{flex-shrink:0}
+.plan-det-row-meta{display:flex;flex-wrap:wrap;gap:8px 14px;font-size:12px;color:var(--text2);align-items:center}
+.plan-det-row-time{display:inline-flex;align-items:center;gap:5px;font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;font-weight:700;color:var(--accent)}
+.plan-det-row-time svg{opacity:.85}
+.plan-det-row-machine{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:6px;background:var(--accent-bg);color:var(--accent);font-weight:700;font-size:11px;letter-spacing:.2px}
+.plan-det-row-freq{color:var(--muted);font-weight:600;font-size:11px}
+.plan-det-row-actions{display:flex;gap:6px;flex-shrink:0;align-items:flex-start}
 /* Lignes du catalogue rendues draggable */
 .js-cat-tbody tr[draggable="true"]{cursor:grab}
 .js-cat-tbody tr[draggable="true"]:active{cursor:grabbing}
@@ -905,6 +918,28 @@ body.light .toast.info{background:#fff;color:var(--text)}
   </div>
 </div>
 
+<!-- Modal : Détails du créneau (lecture + actions Modifier/Supprimer) -->
+<div class="modal-overlay" id="planning-details-modal" onclick="if(event.target===this) closePlanningDetailsModal()" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="plan-det-title">
+    <div class="modal-head">
+      <div class="modal-title" id="plan-det-title">Détails</div>
+      <button type="button" class="modal-close" onclick="closePlanningDetailsModal()" aria-label="Fermer">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="ops-saisi-par">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span>Date : <strong id="plan-det-date">—</strong></span>
+      </div>
+      <div class="plan-det-list" id="plan-det-list"></div>
+    </div>
+    <div class="modal-foot">
+      <button type="button" class="modal-btn-ghost" onclick="closePlanningDetailsModal()">Fermer</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal : Planifier une opération (créneau horaire) -->
 <div class="modal-overlay" id="planning-time-modal" onclick="if(event.target===this) closePlanningTimeModal()" aria-hidden="true">
   <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="plan-mod-title">
@@ -949,7 +984,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
         <button type="button" class="modal-btn-ghost" onclick="closePlanningTimeModal()">Annuler</button>
         <button type="submit" class="ops-btn-add">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          Planifier
+          <span id="plan-mod-submit-label">Planifier</span>
         </button>
       </div>
     </form>
@@ -1234,34 +1269,27 @@ function _makeClusterBlock(cluster){
     const machineSuffix = ev.machine ? ' · ' + ev.machine : '';
     div.innerHTML = '<div class="cal-event-title">' + escHtml((ev.opName || '—') + machineSuffix) + '</div>' +
                     '<div class="cal-event-time">' + escHtml(ev.start) + ' – ' + escHtml(ev.end) + '</div>';
-    div.title = 'Cliquer pour supprimer cette opération planifiée';
+    div.title = 'Cliquer pour afficher les détails';
     div.addEventListener('click', e => {
       e.stopPropagation();
-      if(confirm('Supprimer cette opération planifiée ?\n\n' + (ev.opName || '') + (ev.machine?(' · ' + ev.machine):'') + '\n' + ev.date + ' · ' + ev.start + ' – ' + ev.end)){
-        deletePlanningEvent(ev.id);
-      }
+      openPlanningDetailsModal([ev]);
     });
   } else {
     let listHtml = '<div class="cal-event-list">';
     cluster.items.forEach(ev => {
       const nivCls = ev.opNiveau ? (' cal-event-item-niv-' + ev.opNiveau) : '';
-      listHtml += '<div class="cal-event-item' + nivCls + '" data-event-id="' + escAttr(ev.id) + '" title="Cliquer pour supprimer">' +
+      listHtml += '<div class="cal-event-item' + nivCls + '" data-event-id="' + escAttr(ev.id) + '">' +
                   '<span class="cal-event-item-time">' + escHtml(ev.start) + '–' + escHtml(ev.end) + '</span>' +
                   '<span class="cal-event-item-name">' + escHtml((ev.opName || '—') + (ev.machine?(' · ' + ev.machine):'')) + '</span>' +
                   '</div>';
     });
     listHtml += '</div>';
     div.innerHTML = '<div class="cal-event-merged-head">' + escHtml(fmtHM(startMin)) + ' – ' + escHtml(fmtHM(endMin)) + ' · ' + cluster.items.length + ' opérations</div>' + listHtml;
+    div.title = 'Cliquer pour afficher les détails';
+    div.style.cursor = 'pointer';
     div.addEventListener('click', e => {
-      const item = e.target.closest('.cal-event-item');
-      if(!item) return;
       e.stopPropagation();
-      const id = item.getAttribute('data-event-id');
-      const ev = PLANNING_STATE.list.find(x => x.id === id);
-      if(!ev) return;
-      if(confirm('Supprimer cette opération planifiée ?\n\n' + (ev.opName || '') + (ev.machine?(' · ' + ev.machine):'') + '\n' + ev.date + ' · ' + ev.start + ' – ' + ev.end)){
-        deletePlanningEvent(ev.id);
-      }
+      openPlanningDetailsModal(cluster.items);
     });
   }
   return div;
@@ -1275,6 +1303,99 @@ function deletePlanningEvent(id){
   PLANNING_STATE.list = PLANNING_STATE.list.filter(e => e.id !== id);
   savePlanning();
   renderCal();
+}
+
+// ── Modale Détails ────────────────────────────────────────────────────
+let _PLAN_DET_EVENT_IDS = [];
+function openPlanningDetailsModal(events){
+  if(!events || !events.length) return;
+  _PLAN_DET_EVENT_IDS = events.map(e => e.id);
+  const m = document.getElementById('planning-details-modal');
+  if(!m) return;
+  const titleEl = document.getElementById('plan-det-title');
+  const dtEl = document.getElementById('plan-det-date');
+  const listEl = document.getElementById('plan-det-list');
+  if(titleEl){
+    titleEl.textContent = (events.length === 1)
+      ? 'Détails de l\'opération'
+      : (events.length + ' opérations planifiées');
+  }
+  if(dtEl) dtEl.textContent = _fmtIsoDateFr(events[0].date);
+  if(listEl){
+    listEl.innerHTML = events.map(ev => {
+      const niv = ev.opNiveau || '';
+      const freq = ev.opFreq || '';
+      const machineHtml = ev.machine
+        ? '<span class="plan-det-row-machine">' +
+            '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>' +
+            escHtml(ev.machine) +
+          '</span>'
+        : '';
+      const freqHtml = freq ? '<span class="plan-det-row-freq">Fréquence : ' + escHtml(freq) + '</span>' : '';
+      return '<div class="plan-det-row" data-event-id="' + escAttr(ev.id) + '">' +
+        '<div class="plan-det-row-main">' +
+          '<div class="plan-det-row-name">' + escHtml(ev.opName || '—') +
+            (niv ? '<span class="niv-badge" data-niv="' + escAttr(String(niv)) + '">N' + escHtml(String(niv)) + '</span>' : '') +
+          '</div>' +
+          '<div class="plan-det-row-meta">' +
+            '<span class="plan-det-row-time">' +
+              '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' +
+              escHtml(ev.start) + ' – ' + escHtml(ev.end) +
+            '</span>' +
+            machineHtml +
+            freqHtml +
+          '</div>' +
+        '</div>' +
+        '<div class="plan-det-row-actions">' +
+          '<button type="button" class="ops-row-btn edit" onclick="editPlanningEvent(\'' + escAttr(ev.id) + '\')" title="Modifier">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
+          '</button>' +
+          '<button type="button" class="ops-row-btn del" onclick="confirmDeletePlanningEvent(\'' + escAttr(ev.id) + '\')" title="Supprimer">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
+          '</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+  m.classList.add('open');
+  m.setAttribute('aria-hidden','false');
+  document.body.style.overflow = 'hidden';
+}
+function closePlanningDetailsModal(){
+  const m = document.getElementById('planning-details-modal');
+  if(m){ m.classList.remove('open'); m.setAttribute('aria-hidden','true'); }
+  document.body.style.overflow = '';
+  _PLAN_DET_EVENT_IDS = [];
+}
+function _refreshPlanningDetailsModal(){
+  const evs = _PLAN_DET_EVENT_IDS
+    .map(id => PLANNING_STATE.list.find(e => e.id === id))
+    .filter(Boolean);
+  if(!evs.length){ closePlanningDetailsModal(); return; }
+  openPlanningDetailsModal(evs);
+}
+function confirmDeletePlanningEvent(id){
+  const ev = PLANNING_STATE.list.find(e => e.id === id);
+  if(!ev) return;
+  if(!confirm('Supprimer cette opération planifiée ?\n\n' + (ev.opName || '') + (ev.machine?(' · ' + ev.machine):'') + '\n' + ev.date + ' · ' + ev.start + ' – ' + ev.end)) return;
+  PLANNING_STATE.list = PLANNING_STATE.list.filter(e => e.id !== id);
+  savePlanning();
+  _refreshPlanningDetailsModal();
+  renderCal();
+  showToast('Opération supprimée.', 'info');
+}
+function editPlanningEvent(id){
+  const ev = PLANNING_STATE.list.find(e => e.id === id);
+  if(!ev) return;
+  closePlanningDetailsModal();
+  const sm = _hmToMins(ev.start);
+  const defaultHour = (sm != null) ? Math.floor(sm/60) : 8;
+  openPlanningTimeModal(ev.opTypeId, ev.date, defaultHour, {
+    editId: ev.id,
+    machine: ev.machine || '',
+    start: ev.start,
+    end: ev.end,
+  });
 }
 
 // ── Drag & drop : catalogue → semaine ─────────────────────────────────
@@ -1338,10 +1459,10 @@ function _fmtIsoDateFr(iso){
   const d = new Date(parseInt(m[1],10), parseInt(m[2],10)-1, parseInt(m[3],10));
   return d.toLocaleDateString('fr-FR', {weekday:'long', day:'2-digit', month:'long', year:'numeric'});
 }
-function openPlanningTimeModal(opTypeId, iso, defaultHour){
+function openPlanningTimeModal(opTypeId, iso, defaultHour, editOpts){
   const op = OPS_TYPES_STATE.list.find(t => t.id === opTypeId);
   if(!op){ showToast('Type d\'opération introuvable.', 'danger'); return; }
-  _PENDING_PLAN_DROP = { opTypeId, iso };
+  _PENDING_PLAN_DROP = { opTypeId, iso, editId: editOpts ? editOpts.editId : null };
   const m = document.getElementById('planning-time-modal');
   if(!m) return;
   const opEl = document.getElementById('plan-mod-op');
@@ -1349,16 +1470,27 @@ function openPlanningTimeModal(opTypeId, iso, defaultHour){
   const mEl = document.getElementById('plan-mod-machine');
   const sEl = document.getElementById('plan-mod-start');
   const eEl = document.getElementById('plan-mod-end');
+  const titleEl = document.getElementById('plan-mod-title');
+  const submitLblEl = document.getElementById('plan-mod-submit-label');
+  const isEdit = !!editOpts;
+  if(titleEl) titleEl.textContent = isEdit ? 'Modifier l\'opération' : 'Planifier une opération';
+  if(submitLblEl) submitLblEl.textContent = isEdit ? 'Enregistrer' : 'Planifier';
   if(opEl) opEl.textContent = op.nom;
   if(dtEl) dtEl.textContent = _fmtIsoDateFr(iso);
-  if(mEl) mEl.value = '';
-  const h = Math.max(0, Math.min(23, defaultHour || 8));
-  if(sEl) sEl.value = String(h).padStart(2,'0') + ':00';
-  if(eEl) eEl.value = String(Math.min(h+1, 23)).padStart(2,'0') + ':00';
+  if(isEdit){
+    if(mEl) mEl.value = editOpts.machine || '';
+    if(sEl) sEl.value = editOpts.start || '';
+    if(eEl) eEl.value = editOpts.end || '';
+  } else {
+    if(mEl) mEl.value = '';
+    const h = Math.max(0, Math.min(23, defaultHour || 8));
+    if(sEl) sEl.value = String(h).padStart(2,'0') + ':00';
+    if(eEl) eEl.value = String(Math.min(h+1, 23)).padStart(2,'0') + ':00';
+  }
   m.classList.add('open');
   m.setAttribute('aria-hidden','false');
   document.body.style.overflow = 'hidden';
-  setTimeout(()=>{ if(mEl) mEl.focus(); }, 50);
+  setTimeout(()=>{ if(mEl && !mEl.value) mEl.focus(); else if(sEl) sEl.focus(); }, 50);
 }
 function closePlanningTimeModal(){
   const m = document.getElementById('planning-time-modal');
@@ -1379,21 +1511,40 @@ function submitPlanningTime(e){
   if(em <= sm){ showToast('L\'heure de fin doit être après l\'heure de début.', 'danger'); return; }
   const op = OPS_TYPES_STATE.list.find(t => t.id === _PENDING_PLAN_DROP.opTypeId);
   if(!op){ showToast('Type d\'opération introuvable.', 'danger'); closePlanningTimeModal(); return; }
-  PLANNING_STATE.list.push({
-    id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8),
-    opTypeId: op.id,
-    opName: op.nom,
-    opNiveau: op.niveau,
-    opFreq: op.frequence,
-    machine,
-    date: _PENDING_PLAN_DROP.iso,
-    start, end,
-    created_at: new Date().toISOString(),
-  });
-  savePlanning();
-  closePlanningTimeModal();
-  renderCal();
-  showToast('Opération planifiée.', 'info');
+  const editId = _PENDING_PLAN_DROP.editId;
+  if(editId){
+    const idx = PLANNING_STATE.list.findIndex(x => x.id === editId);
+    if(idx === -1){
+      showToast('Opération introuvable.', 'danger');
+      closePlanningTimeModal();
+      return;
+    }
+    PLANNING_STATE.list[idx] = Object.assign({}, PLANNING_STATE.list[idx], {
+      machine, start, end,
+      opName: op.nom, opNiveau: op.niveau, opFreq: op.frequence,
+      updated_at: new Date().toISOString(),
+    });
+    savePlanning();
+    closePlanningTimeModal();
+    renderCal();
+    showToast('Opération mise à jour.', 'info');
+  } else {
+    PLANNING_STATE.list.push({
+      id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8),
+      opTypeId: op.id,
+      opName: op.nom,
+      opNiveau: op.niveau,
+      opFreq: op.frequence,
+      machine,
+      date: _PENDING_PLAN_DROP.iso,
+      start, end,
+      created_at: new Date().toISOString(),
+    });
+    savePlanning();
+    closePlanningTimeModal();
+    renderCal();
+    showToast('Opération planifiée.', 'info');
+  }
 }
 
 // --- Toast ---
