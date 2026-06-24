@@ -1485,6 +1485,7 @@ def maintenance_codes_list(request: Request):
 @router.post("/api/maintenance/codes")
 async def maintenance_codes_create(request: Request):
     require_superadmin(request)
+    user = get_current_user(request)
     body = await request.json()
     data = _normalize_maint_payload(body)
     from database import get_db
@@ -1503,13 +1504,15 @@ async def maintenance_codes_create(request: Request):
              data["periodique"], now, now),
         )
         conn.commit()
-    log_action(request, "CREATE", "maintenance_codes", data["code"], data["label"])
+    log_action(user=user, action="CREATE", module="maintenance_codes",
+               objet=data["code"], detail=data["label"])
     return {"ok": True, "code": data["code"]}
 
 
 @router.put("/api/maintenance/codes/{code}")
 async def maintenance_codes_update(code: str, request: Request):
     require_superadmin(request)
+    user = get_current_user(request)
     body = await request.json()
     # On force le code de l'URL (immuable apres creation)
     body["code"] = code
@@ -1527,20 +1530,23 @@ async def maintenance_codes_update(code: str, request: Request):
         conn.commit()
         if cur.rowcount == 0:
             raise HTTPException(404, f"Code {code} introuvable.")
-    log_action(request, "UPDATE", "maintenance_codes", data["code"], data["label"])
+    log_action(user=user, action="UPDATE", module="maintenance_codes",
+               objet=data["code"], detail=data["label"])
     return {"ok": True, "code": data["code"]}
 
 
 @router.delete("/api/maintenance/codes/{code}")
 def maintenance_codes_delete(code: str, request: Request):
     require_superadmin(request)
+    user = get_current_user(request)
     from database import get_db
     with get_db() as conn:
         cur = conn.execute("DELETE FROM maintenance_codes WHERE code=?", (code,))
         conn.commit()
         if cur.rowcount == 0:
             raise HTTPException(404, f"Code {code} introuvable.")
-    log_action(request, "DELETE", "maintenance_codes", code, "")
+    log_action(user=user, action="DELETE", module="maintenance_codes",
+               objet=code, detail="")
     return {"ok": True}
 
 
@@ -1554,6 +1560,7 @@ async def maintenance_codes_bulk_import(request: Request):
     N'ecrase pas les codes existants : INSERT OR IGNORE.
     """
     require_superadmin(request)
+    user = get_current_user(request)
     body = await request.json()
     items = body.get("items") or []
     if not isinstance(items, list):
@@ -1579,5 +1586,6 @@ async def maintenance_codes_bulk_import(request: Request):
             if cur.rowcount:
                 imported += 1
         conn.commit()
-    log_action(request, "IMPORT", "maintenance_codes", "bulk", f"{imported} codes")
+    log_action(user=user, action="IMPORT", module="maintenance_codes",
+               objet="bulk", detail=f"{imported} codes")
     return {"ok": True, "imported": imported, "received": len(items)}
