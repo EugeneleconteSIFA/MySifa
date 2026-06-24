@@ -100,6 +100,26 @@ button:focus:not(:focus-visible){outline:none}
 .saisies-table-wrap .saisies-bot{max-height:68vh;overflow:auto}
 .saisies-table-wrap table thead th{position:sticky;top:0;z-index:5;background:var(--card)}
 .login-page{position:relative;z-index:1;min-height:100vh;display:flex;align-items:center;justify-content:center}
+.login-theme-btn{position:fixed;top:18px;right:18px;z-index:10;
+  display:inline-flex;align-items:center;gap:8px;
+  padding:9px 14px;border-radius:10px;border:1px solid var(--border);
+  background:var(--card);color:var(--text2);cursor:pointer;
+  font-size:12px;font-family:inherit;font-weight:600;
+  transition:background .15s,color .15s,border-color .15s,box-shadow .2s}
+.login-theme-btn:hover{color:var(--accent);border-color:var(--accent);
+  box-shadow:0 0 0 1px rgba(34,211,238,.22),0 0 18px rgba(34,211,238,.14)}
+body.light .login-theme-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 18px rgba(8,145,178,.12)}
+.login-theme-btn .theme-ico{display:inline-flex;align-items:center;line-height:1}
+@media (max-width:480px){.login-theme-btn .theme-label{display:none}}
+.pwd-wrap{position:relative}
+.pwd-wrap input{padding-right:44px}
+.pwd-toggle{position:absolute;top:50%;right:8px;transform:translateY(-50%);
+  display:inline-flex;align-items:center;justify-content:center;
+  width:32px;height:32px;border:none;background:transparent;cursor:pointer;
+  color:var(--muted);border-radius:8px;padding:0;font-family:inherit;
+  transition:color .15s,background .15s}
+.pwd-toggle:hover{color:var(--accent);background:var(--accent-bg)}
+.pwd-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .login-box{width:100%;max-width:420px;padding:24px}
 .login-logo{text-align:center;margin-bottom:40px}
 .brand{font-size:32px;font-weight:800;letter-spacing:-1px}.brand span{color:var(--accent)}
@@ -1193,7 +1213,7 @@ body.light .portal-app--busy::after{background:rgba(255,255,255,.88);color:var(-
 .portal-app-name{font-size:14px;font-weight:800;color:var(--text);flex-shrink:0;text-align:center;line-height:1.2}
 .portal-app-desc{font-size:11px;color:var(--muted);text-align:center;max-width:152px;line-height:1.3;
   display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
-  flex:0 0 auto;margin:0}
+  flex:0 0 auto;margin:0;min-height:calc(11px * 1.3 * 3)}
 .portal-user{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px}
 .portal-logout{background:none;border:none;color:var(--muted);cursor:pointer;
   font-size:12px;font-family:inherit;text-decoration:underline;
@@ -1203,6 +1223,13 @@ body.light .portal-app--busy::after{background:rgba(255,255,255,.88);color:var(-
 .portal-logout:hover:last-of-type{color:var(--danger);text-shadow:0 0 12px rgba(248,113,113,.4);background:rgba(248,113,113,.08)}
 body.light .portal-logout:hover{text-shadow:0 0 12px rgba(8,145,178,.35)}
 body.light .portal-logout:hover:last-of-type{text-shadow:0 0 12px rgba(220,38,38,.35)}
+
+/* ── Hover tuiles d'application — pastille icône qui passe du fond accent translucide au plein accent ── */
+.portal-app{transition:transform .34s cubic-bezier(.22,.61,.36,1),box-shadow .34s cubic-bezier(.22,.61,.36,1),border-color .34s cubic-bezier(.22,.61,.36,1),background-color .34s cubic-bezier(.22,.61,.36,1)}
+.portal-app:hover{transform:translateY(-3px);box-shadow:0 12px 26px rgba(27,37,71,.10);border-color:color-mix(in srgb,var(--accent) 30%,var(--border))}
+.portal-app-icon{background:var(--accent-bg);color:var(--accent);width:50px;height:50px;border-radius:13px;transition:background .34s cubic-bezier(.22,.61,.36,1),color .34s cubic-bezier(.22,.61,.36,1)}
+.portal-app:hover .portal-app-icon{background:var(--accent);color:#fff}
+.portal-app--disabled:hover .portal-app-icon{background:var(--accent-bg);color:var(--accent)}
 
 @media (max-width:900px){
   /* Portail mobile / tablette : layout vertical, tuiles compactes */
@@ -2447,6 +2474,7 @@ function icon(name,size=16){
     'copy': '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
     'save': '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>',
     'eye': '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+    'eye-off': '<path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a19.78 19.78 0 0 1 5.06-5.94"/><path d="M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a19.74 19.74 0 0 1-3.17 4.19"/><path d="M14.12 14.12A3 3 0 1 1 9.88 9.88"/><line x1="1" y1="1" x2="23" y2="23"/>',
     'clock': '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
     'folder': '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>',
     'file': '<path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/>',
@@ -2483,6 +2511,8 @@ function icon(name,size=16){
     'users': '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
     'palette': '<circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>',
     'shield-check': '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/>',
+    // Lucide sticky-note — pastille post-it avec coin replié
+    'sticky-note': '<path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"/><path d="M15 3v6h6"/>',
     // Palette bois — vue de côté : deck supérieur + traverse + 3 pieds
     'pallet': '<rect x="2" y="7" width="20" height="3" rx="0.5"/><rect x="2" y="14" width="20" height="3" rx="0.5"/><line x1="5" y1="10" x2="5" y2="14"/><line x1="12" y1="10" x2="12" y2="14"/><line x1="19" y1="10" x2="19" y2="14"/><line x1="5" y1="17" x2="5" y2="20"/><line x1="12" y1="17" x2="12" y2="20"/><line x1="19" y1="17" x2="19" y2="20"/>',
     'chevron-down': '<polyline points="6 9 12 15 18 9"/>',
@@ -7878,15 +7908,45 @@ async function applyF(){
 
 // ── Login ───────────────────────────────────────────────────────
 function renderLogin(){
+  const isLight=document.body.classList.contains('light');
   const errEl=h('div',{className:'login-error'+(S.loginError?' show':''),id:'login-error'},S.loginError||'');
   const emailI=h('input',{type:'text',id:'login-email',name:'email',autocomplete:'username',placeholder:'identifiant ou email'});
   const pwdI=h('input',{type:'password',id:'login-password',name:'password',autocomplete:'current-password',placeholder:'••••••••'});
+  const pwdToggle=h('button',{type:'button',className:'pwd-toggle','aria-label':'Afficher le mot de passe','aria-pressed':'false',
+    onClick:()=>{
+      const shown=pwdI.type==='text';
+      pwdI.type=shown?'password':'text';
+      pwdToggle.setAttribute('aria-pressed',shown?'false':'true');
+      pwdToggle.setAttribute('aria-label',shown?'Afficher le mot de passe':'Masquer le mot de passe');
+      pwdToggle.innerHTML='';
+      pwdToggle.appendChild(iconEl(shown?'eye':'eye-off',18));
+      try{pwdI.focus();const v=pwdI.value;pwdI.value='';pwdI.value=v;}catch(e){}
+    }
+  });
+  pwdToggle.appendChild(iconEl('eye',18));
+  const pwdWrap=h('div',{className:'pwd-wrap'},pwdI,pwdToggle);
   const submit=e=>{
     e.preventDefault();
     if(S.loginSubmitting)return;
     doLogin(emailI.value,pwdI.value);
   };
+  const themeBtn=h('button',{type:'button',className:'login-theme-btn','aria-label':'Basculer thème clair/sombre',
+    onClick:()=>{
+      try{
+        const _p=MySifaTheme.loadPrefs();
+        const _nm=_p.mode==='light'?'dark':'light';
+        // Sauver UNIQUEMENT le mode (la palette/style restent ceux du user pour le post-login),
+        // puis ré-appliquer le rendu neutre pétrole sur la page de login.
+        MySifaTheme.setPrefs({mode:_nm});
+        MySifaTheme.applyPrefs({mode:_nm,palette:'mysifa',style:'defaut',bgAnim:_p.bgAnim});
+      }catch(e){}
+      render();
+    }},
+    h('span',{className:'theme-ico'},iconEl(isLight?'sun':'moon',16)),
+    h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')
+  );
   return h('div',{className:'login-page'},
+    themeBtn,
     h('div',{className:'login-box'},
       h('div',{className:'login-logo'},
         h('div',{className:'brand'},'My',h('span',null,'Sifa')),
@@ -7898,7 +7958,7 @@ function renderLogin(){
         errEl,
         h('form',{onSubmit:submit},
           h('div',{className:'field'},h('label',{'for':'login-email'},'Identifiant ou email'),emailI),
-          h('div',{className:'field'},h('label',{'for':'login-password'},'Mot de passe'),pwdI),
+          h('div',{className:'field'},h('label',{'for':'login-password'},'Mot de passe'),pwdWrap),
           h('button',{type:'submit',className:'login-btn',disabled:!!S.loginSubmitting},S.loginSubmitting?'Connexion…':'Se connecter')
         )
       ),
@@ -13461,7 +13521,12 @@ function render(){
   if(S.app!=='prod'){stopMachineStatusPolling();}
 
   if(!S.user||S.app==='login'){
-    try{ MySifaTheme.applyDefault(); }catch(e){}
+    // Sur le login : forcer la palette pétrole (mysifa) + style défaut, ne garder que le mode.
+    // Évite que la palette/style d'un compte précédemment loggé persiste sur l'écran de connexion.
+    try{
+      const _lp=MySifaTheme.loadPrefs();
+      MySifaTheme.applyPrefs({mode:_lp.mode,palette:'mysifa',style:'defaut',bgAnim:_lp.bgAnim});
+    }catch(e){}
     root.appendChild(renderLogin());
   }
   else if(S.app==='portal'){

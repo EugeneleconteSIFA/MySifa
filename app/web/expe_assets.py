@@ -38,11 +38,38 @@ EXPE_TRANSPORTEURS_CSS = r"""
 .expe-trp-cell-badges{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
 .expe-trp-zone{font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;background:var(--accent-bg);
   color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);letter-spacing:.2px;white-space:nowrap}
-.expe-trp-contact-col{font-size:12px;color:var(--text2);line-height:1.45;min-width:140px}
-.expe-trp-contact-line{display:inline-flex;align-items:center;gap:5px;max-width:220px}
+.expe-trp-contact-col{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--text2);
+  line-height:1.4;min-width:200px;max-width:280px}
+.expe-trp-contact-line{display:flex;align-items:center;gap:6px;min-width:0;color:var(--text2);
+  text-decoration:none}
 .expe-trp-contact-line svg{flex-shrink:0;color:var(--muted)}
-.expe-trp-contact-line a{color:var(--accent);text-decoration:none;font-weight:600}
-.expe-trp-contact-line a:hover{text-decoration:underline}
+.expe-trp-contact-line .lbl{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  color:inherit}
+.expe-trp-contact-line.tel-link{color:var(--text2)}
+.expe-trp-contact-line.tel-link:hover{color:var(--accent)}
+.expe-trp-contact-line.tel-link:hover svg{color:var(--accent)}
+.expe-trp-contact-line .lbl.tel{font-variant-numeric:tabular-nums;font-family:ui-monospace,SFMono-Regular,monospace;
+  font-size:11.5px;color:var(--text)}
+.expe-trp-contact-line a.lbl{color:var(--accent);font-weight:600}
+.expe-trp-contact-line a.lbl:hover{text-decoration:underline}
+.expe-trp-contact-email-row{align-items:center}
+.expe-trp-emails-badge{flex-shrink:0;font-size:10px;font-weight:700;padding:1px 6px;border-radius:5px;
+  background:var(--accent-bg);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);
+  letter-spacing:.2px}
+.expe-trp-portail-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:6px;
+  background:color-mix(in srgb,var(--accent) 14%,transparent);
+  border:1px solid color-mix(in srgb,var(--accent) 38%,transparent);
+  color:var(--accent);font-size:11px;font-weight:700;text-decoration:none;letter-spacing:.2px;
+  max-width:100%;overflow:hidden}
+.expe-trp-portail-chip:hover{background:color-mix(in srgb,var(--accent) 22%,transparent);text-decoration:none}
+.expe-trp-portail-chip svg{flex-shrink:0}
+.expe-trp-portail-chip .lbl{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.expe-trp-contact-acts{display:flex;gap:4px;margin-top:2px;flex-wrap:wrap}
+.expe-trp-act{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;
+  border:1px solid var(--border);background:var(--card);color:var(--muted);border-radius:6px;
+  cursor:pointer;padding:0;text-decoration:none;transition:border-color .12s,color .12s,background .12s}
+.expe-trp-act:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg);text-decoration:none}
+.expe-trp-act svg{display:block}
 .expe-trp-tarif a{color:var(--accent);font-weight:600;text-decoration:none;font-size:12px;display:inline-flex;align-items:center;gap:5px}
 .expe-trp-tarif a:hover{text-decoration:underline}
 .expe-trp-badge-inactif{font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;background:color-mix(in srgb,var(--muted) 18%,transparent);
@@ -769,41 +796,119 @@ function expeTrpBadgesCell(badges,cls){
   return h('div',{className:'expe-trp-cell-badges'},...badges.map(b=>h('span',{className:cls||'expe-trp-zone'},b)));
 }
 
+function expeFormatPhoneFR(s){
+  const raw=String(s||'').trim();
+  if(!raw)return '';
+  const digits=raw.replace(/[^0-9+]/g,'');
+  // Numéro français à 10 chiffres commençant par 0 → "06 19 76 54 32"
+  if(/^0\d{9}$/.test(digits)){
+    return digits.match(/.{1,2}/g).join(' ');
+  }
+  // Format international +33 6 19 76 54 32
+  if(/^\+33\d{9}$/.test(digits)){
+    const rest=digits.slice(3);
+    return '+33 '+rest[0]+' '+rest.slice(1).match(/.{1,2}/g).join(' ');
+  }
+  return raw;
+}
+
+function expeTelHref(s){
+  const digits=String(s||'').replace(/[^0-9+]/g,'');
+  return digits?'tel:'+digits:null;
+}
+
+function expeTrpCopyText(text,label){
+  if(!text)return;
+  const done=()=>showToast((label||'Copié')+' : '+text,'success');
+  try{
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(done,()=>{});
+      return;
+    }
+  }catch(e){}
+  const ta=document.createElement('textarea');
+  ta.value=text;ta.style.position='fixed';ta.style.opacity='0';
+  document.body.appendChild(ta);ta.select();
+  try{document.execCommand('copy');done();}catch(e){}
+  document.body.removeChild(ta);
+}
+
 function expeTrpContactCell(tr){
   const emails=expeTrpReadEmails(tr);
   const portail=expeTrpReadPortail(tr);
-  const lines=[];
+  const nom=(tr.contact_nom||'').trim();
+  const tel=(tr.contact_tel||'').trim();
+  if(!portail&&!nom&&!tel&&!emails.length)return h('span',{style:{color:'var(--muted)'}},'—');
+
+  const cell=h('div',{className:'expe-trp-contact-col'});
+
+  // 1. Portail en chip distinctif (toujours en haut quand présent)
   if(portail){
-    const label=(tr.contact_nom||'').trim()||'Portail';
-    lines.push(h('a',{className:'expe-trp-portail',href:portail,target:'_blank',rel:'noopener',onClick:e=>e.stopPropagation()},
-      iconEl('external',12),' ',escHtml(label)));
+    const label=nom||'Portail transporteur';
+    const chip=h('a',{className:'expe-trp-portail-chip',href:portail,target:'_blank',rel:'noopener',
+      title:portail,onClick:e=>e.stopPropagation()},
+      iconEl('external',11),h('span',{className:'lbl'},escHtml(label)));
+    cell.appendChild(chip);
   }
-  if(!portail&&tr.contact_nom){
-    lines.push(h('div',{className:'expe-trp-contact-line'},iconEl('user',12),' ',escHtml(tr.contact_nom)));
+
+  // 2. Nom du contact (uniquement si pas déjà affiché dans le chip portail)
+  if(nom&&!portail){
+    cell.appendChild(h('div',{className:'expe-trp-contact-line',title:nom},
+      iconEl('user',12),h('span',{className:'lbl'},escHtml(nom))));
   }
-  if(tr.contact_tel){
-    lines.push(h('div',{className:'expe-trp-contact-line'},expeTrpIconPhone(12),' ',escHtml(tr.contact_tel)));
+
+  // 3. Téléphone formaté
+  if(tel){
+    const formatted=expeFormatPhoneFR(tel);
+    const href=expeTelHref(tel);
+    const telKids=[expeTrpIconPhone(12),h('span',{className:'lbl tel'},escHtml(formatted))];
+    if(href){
+      cell.appendChild(h('a',{className:'expe-trp-contact-line tel-link',href:href,
+        title:formatted,onClick:e=>e.stopPropagation()},...telKids));
+    }else{
+      cell.appendChild(h('div',{className:'expe-trp-contact-line',title:formatted},...telKids));
+    }
   }
+
+  // 4. Email — première adresse + badge +N (tooltip = liste complète)
   if(emails.length){
     const first=emails[0];
     const more=emails.length-1;
-    const emailLine=h('a',{className:'expe-trp-contact-line',href:'mailto:'+encodeURIComponent(first),
-      title:emails.join(', '),onClick:e=>e.stopPropagation()},
-      iconEl('mail',12),' ',escHtml(first));
-    lines.push(emailLine);
+    const tipText=emails.join(', ');
+    const row=h('div',{className:'expe-trp-contact-line expe-trp-contact-email-row',title:tipText});
+    row.appendChild(iconEl('mail',12));
+    row.appendChild(h('a',{className:'lbl',href:'mailto:'+encodeURIComponent(emails.join(',')),
+      title:tipText,onClick:e=>e.stopPropagation()},escHtml(first)));
     if(more>0){
-      lines.push(h('div',{className:'expe-trp-contact-line',style:{color:'var(--muted)',fontSize:'11px'},
-        title:emails.join(', ')},'+ '+more+' autre'+(more>1?'s':'')));
+      row.appendChild(h('span',{className:'expe-trp-emails-badge',title:tipText},'+'+more));
     }
+    cell.appendChild(row);
   }
-  if(!lines.length)return h('span',{style:{color:'var(--muted)'}},'—');
-  const kids=[...lines];
-  if(emails.length){
-    kids.push(h('button',{type:'button',className:'btn-ghost',style:{marginTop:'4px',padding:'4px 8px',fontSize:'11px'},
-      onClick:()=>expeTrpOpenContact(tr)},
-      iconEl('mail',12),' Contacter'));
+
+  // 5. Mini-actions (icônes) — toujours visibles si on a tel ou emails
+  const actionable=tel||emails.length;
+  if(actionable){
+    const acts=h('div',{className:'expe-trp-contact-acts'});
+    if(emails.length){
+      acts.appendChild(h('button',{type:'button',className:'expe-trp-act',title:'Écrire à '+(emails.length>1?'tous':emails[0]),
+        onClick:e=>{e.stopPropagation();expeTrpOpenContact(tr);}},iconEl('mail',12)));
+      acts.appendChild(h('button',{type:'button',className:'expe-trp-act',title:'Copier '+(emails.length>1?'les emails':'l’email'),
+        onClick:e=>{e.stopPropagation();expeTrpCopyText(emails.join(', '),emails.length>1?'Emails copiés':'Email copié');}},
+        iconEl('copy',12)));
+    }
+    if(tel){
+      const href=expeTelHref(tel);
+      if(href){
+        acts.appendChild(h('a',{className:'expe-trp-act',href:href,title:'Appeler',
+          onClick:e=>e.stopPropagation()},expeTrpIconPhone(12)));
+      }
+      acts.appendChild(h('button',{type:'button',className:'expe-trp-act',title:'Copier le téléphone',
+        onClick:e=>{e.stopPropagation();expeTrpCopyText(expeFormatPhoneFR(tel),'Téléphone copié');}},
+        iconEl('copy',12)));
+    }
+    cell.appendChild(acts);
   }
-  return h('div',{className:'expe-trp-contact-col'},...kids);
+  return cell;
 }
 
 function renderExpeTranspList(){
