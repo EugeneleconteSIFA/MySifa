@@ -3,7 +3,11 @@
  * Modal global accessible depuis n'importe quelle page :
  *   - changement d'application (filtré par rôle)
  *   - actions rapides (thème, profil, paramètres, déconnexion, retour portail)
- *   - recherche de dossier (n° dossier dans /api/filters)
+ *   - recherche dossier de production (n° dossier)
+ *   - recherche référence produit (stock, fiche technique, dossier de fabrication)
+ *   - recherche emplacement de stock
+ *   - recherche client (raison sociale, code, ville…)
+ *   - filtre machine et date au planning
  * Auto-init au DOMContentLoaded ; injection paresseuse du DOM à la première ouverture.
  */
 (function () {
@@ -15,6 +19,7 @@
   var MAC = /Mac|iPod|iPhone|iPad/.test(navigator.platform || '');
   var KBD_LABEL = MAC ? '⌘ K' : 'Ctrl K';
   var KBD_SHORT = MAC ? '⌘K' : 'Ctrl K';
+  var DEBOUNCE_MS = 180;
 
   var state = {
     user: null,
@@ -23,16 +28,18 @@
     list: null,
     input: null,
     items: [],
+    asyncItems: [],
     filtered: [],
     activeIdx: 0,
     open: false,
     fetchingUser: null,
     fetchingDossiers: null,
+    searchTimer: null,
+    searchToken: 0,
+    clientsAllowed: true,
   };
 
-  // ────────────────────────────────────────────────────────
-  // ICONS — petite map locale (subset Lucide) pour pas dépendre de html.py
-  // ────────────────────────────────────────────────────────
+  // ───── Icônes (subset Lucide) ─────────────────────────────────────
   var ICONS = {
     'edit': '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
     'wrench': '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
@@ -57,6 +64,10 @@
     'home': '<path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/><path d="M10 21v-6h4v6"/>',
     'search': '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
     'folder': '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>',
+    'map-pin': '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>',
+    'building': '<rect x="4" y="2" width="16" height="20" rx="2"/><line x1="9" y1="22" x2="9" y2="18"/><line x1="15" y1="22" x2="15" y2="18"/><line x1="8" y1="6" x2="10" y2="6"/><line x1="14" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="10" y2="14"/><line x1="14" y1="14" x2="16" y2="14"/>',
+    'box': '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>',
+    'layers': '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
   };
   function svgIcon(name, size) {
     size = size || 16;
@@ -66,9 +77,7 @@
       inner + '</svg>';
   }
 
-  // ────────────────────────────────────────────────────────
-  // ROLE LOGIC
-  // ────────────────────────────────────────────────────────
+  // ───── Rôles ─────────────────────────────────────────────────────
   function hasRole(user, allowed) {
     if (!allowed || allowed === '*') return true;
     if (!user) return false;
@@ -77,15 +86,13 @@
     return allowed.split(',').indexOf(role) !== -1;
   }
 
+  // ───── Cache fetches ─────────────────────────────────────────────
   function fetchUser() {
     if (state.user) return Promise.resolve(state.user);
     if (state.fetchingUser) return state.fetchingUser;
     state.fetchingUser = fetch('/api/auth/me', { credentials: 'include' })
       .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (u) {
-        state.user = u || { role: '' };
-        return state.user;
-      })
+      .then(function (u) { state.user = u || { role: '' }; return state.user; })
       .catch(function () { state.user = { role: '' }; return state.user; });
     return state.fetchingUser;
   }
@@ -103,45 +110,50 @@
     return state.fetchingDossiers;
   }
 
-  // ────────────────────────────────────────────────────────
-  // ITEMS — apps, actions, recherche dossier
-  // ────────────────────────────────────────────────────────
+  // ───── Items statiques (apps + actions + machines) ───────────────
   function buildBaseItems(user) {
     var role = (user && user.role) || '';
     var isSuper = role === 'superadmin';
     var isDirection = role === 'direction';
-    var canPlanning = isSuper || isDirection || role === 'administration';
 
     var apps = [
-      { type: 'app', title: 'Saisie Prod',   sub: 'Saisie opérateur — machine',           keywords: 'prod saisie operateur machine',     url: '/prod',          icon: 'edit',         roles: '*' },
-      { type: 'app', title: 'MyProd',        sub: 'Suivi de production & planning',                 keywords: 'production suivi planning',         url: '/planning',      icon: 'wrench',       roles: '*' },
-      { type: 'app', title: 'MyStock',       sub: 'Gestion des stocks produits',                    keywords: 'stock entrees sorties',             url: '/stock',         icon: 'package',      roles: '*' },
-      { type: 'app', title: 'MyPrint',       sub: 'Étiquettes de traçabilité',       keywords: 'print impression etiquette',        url: '/print',         icon: 'printer',      roles: '*' },
-      { type: 'app', title: 'MyCompta',      sub: 'Comptabilité',                              keywords: 'compta comptabilite finance',       url: '/compta',        icon: 'calculator',   roles: 'direction,comptabilite' },
-      { type: 'app', title: 'MyExpé',   sub: 'Expédition & suivi',                        keywords: 'expedition livraison transporteur', url: '/expe',          icon: 'truck',        roles: '*' },
-      { type: 'app', title: 'Planning RH',   sub: 'Planning personnel & congés',               keywords: 'rh personnel conges',               url: '/planning-rh',   icon: 'users',        roles: 'direction,administration' },
-      { type: 'app', title: 'Coûts matières', sub: 'Matières, produits, €/m²', keywords: 'couts matieres prix pricing',     url: '/pricing',       icon: 'file-text',    roles: 'direction,commercial' },
-      { type: 'app', title: 'MyAO',          sub: 'Appels d’offre fournisseurs',               keywords: 'ao appel offre fournisseur',        url: '/ao',            icon: 'clipboard',    roles: '*' },
-      { type: 'app', title: 'MyBAT',         sub: 'Bons À Tirer — suivi client',          keywords: 'bat bon a tirer client',            url: '/bat',           icon: 'palette',      roles: '*' },
-      { type: 'app', title: 'MyQualité', sub: 'Non-conformités & audits',                 keywords: 'qualite nc non conformite audit',   url: '/qualite',       icon: 'shield-check', roles: '*' },
-      { type: 'app', title: 'Maintenance',   sub: 'Suivi et planification',                         keywords: 'maintenance interventions',         url: '/maintenance',   icon: 'tool',         roles: '*' },
+      { type: 'app', title: 'Saisie Prod',     sub: 'Saisie opérateur — machine',     keywords: 'prod saisie operateur machine',       url: '/prod',        icon: 'edit',         roles: '*' },
+      { type: 'app', title: 'MyProd',          sub: 'Suivi de production & planning',           keywords: 'production suivi planning',           url: '/planning',    icon: 'wrench',       roles: '*' },
+      { type: 'app', title: 'MyStock',         sub: 'Gestion des stocks produits',              keywords: 'stock entrees sorties',               url: '/stock',       icon: 'package',      roles: '*' },
+      { type: 'app', title: 'MyPrint',         sub: 'Étiquettes de traçabilité', keywords: 'print impression etiquette',          url: '/print',       icon: 'printer',      roles: '*' },
+      { type: 'app', title: 'MyCompta',        sub: 'Comptabilité',                        keywords: 'compta comptabilite finance',         url: '/compta',      icon: 'calculator',   roles: 'direction,comptabilite' },
+      { type: 'app', title: 'MyExpé',     sub: 'Expédition & suivi',                  keywords: 'expedition livraison transporteur',   url: '/expe',        icon: 'truck',        roles: '*' },
+      { type: 'app', title: 'Planning RH',     sub: 'Planning personnel & congés',         keywords: 'rh personnel conges',                 url: '/planning-rh', icon: 'users',        roles: 'direction,administration' },
+      { type: 'app', title: 'Coûts matières', sub: 'Matières, produits, €/m²', keywords: 'couts matieres prix pricing',         url: '/pricing',     icon: 'file-text',    roles: 'direction,commercial' },
+      { type: 'app', title: 'MyAO',            sub: 'Appels d’offre fournisseurs',         keywords: 'ao appel offre fournisseur',          url: '/ao',          icon: 'clipboard',    roles: '*' },
+      { type: 'app', title: 'MyBAT',           sub: 'Bons À Tirer — suivi client',    keywords: 'bat bon a tirer client',              url: '/bat',         icon: 'palette',      roles: '*' },
+      { type: 'app', title: 'MyQualité',   sub: 'Non-conformités & audits',           keywords: 'qualite nc non conformite audit',     url: '/qualite',     icon: 'shield-check', roles: '*' },
+      { type: 'app', title: 'Maintenance',     sub: 'Suivi et planification',                   keywords: 'maintenance interventions',           url: '/maintenance', icon: 'tool',         roles: '*' },
     ];
 
     var actions = [
-      { type: 'action', title: 'Retour au portail',    sub: 'Page d’accueil',                  keywords: 'portail accueil home',     url: '/',          icon: 'home',     roles: '*' },
-      { type: 'action', title: 'Mon profil',           sub: 'Préférences, mot de passe',  keywords: 'profil compte preferences', url: '/profil',    icon: 'user',     roles: '*' },
-      { type: 'action', title: 'Paramètres',      sub: 'Comptes, rôles, annonces',        keywords: 'settings parametres reglages', url: '/settings', icon: 'sliders', roles: 'direction' },
-      { type: 'action', title: 'Messagerie',           sub: 'Discussions et notifications',         keywords: 'messages chat',            url: '/messages',  icon: 'mail',     roles: 'superadmin' },
-      { type: 'action', title: 'Calendrier',           sub: 'Agenda partagé',                  keywords: 'calendrier agenda',        url: '/calendrier', icon: 'calendar', roles: 'direction,administration' },
-      { type: 'action', title: 'Base de données', sub: 'Visualisation des tables',             keywords: 'db database sqlite tables', url: '/db',       icon: 'database', roles: 'direction' },
-      { type: 'action', title: 'Basculer le thème clair/sombre', sub: 'Inverser le mode visuel', keywords: 'theme dark light sombre clair mode', action: 'toggle-theme', icon: 'moon', roles: '*' },
-      { type: 'action', title: 'Déconnexion',     sub: 'Fermer la session en cours',           keywords: 'logout deconnexion',       action: 'logout',  icon: 'log-out',  roles: '*' },
+      { type: 'action', title: 'Retour au portail',                  sub: 'Page d’accueil',              keywords: 'portail accueil home',       url: '/',          icon: 'home',     roles: '*' },
+      { type: 'action', title: 'Mon profil',                         sub: 'Préférences, mot de passe', keywords: 'profil compte preferences',  url: '/profil',    icon: 'user',     roles: '*' },
+      { type: 'action', title: 'Paramètres',                    sub: 'Comptes, rôles, annonces',    keywords: 'settings parametres reglages',url: '/settings',  icon: 'sliders',  roles: 'direction' },
+      { type: 'action', title: 'Messagerie',                         sub: 'Discussions et notifications',     keywords: 'messages chat',              url: '/messages',  icon: 'mail',     roles: 'superadmin' },
+      { type: 'action', title: 'Calendrier',                         sub: 'Agenda partagé',              keywords: 'calendrier agenda',          url: '/calendrier',icon: 'calendar', roles: 'direction,administration' },
+      { type: 'action', title: 'Base de données',               sub: 'Visualisation des tables',         keywords: 'db database sqlite tables',  url: '/db',        icon: 'database', roles: 'direction' },
+      { type: 'action', title: 'Basculer le thème clair/sombre', sub: 'Inverser le mode visuel',     keywords: 'theme dark light sombre clair mode', action: 'toggle-theme', icon: 'moon', roles: '*' },
+      { type: 'action', title: 'Déconnexion',                   sub: 'Fermer la session en cours',       keywords: 'logout deconnexion',         action: 'logout',  icon: 'log-out',  roles: '*' },
     ];
 
-    var visible = [];
-    apps.forEach(function (a) { if (hasRole(user, a.roles)) visible.push(a); });
-    actions.forEach(function (a) { if (hasRole(user, a.roles)) visible.push(a); });
-    return visible;
+    var machines = [
+      { type: 'machine', title: 'Cohésio 1', sub: 'Planning machine — Cohésio 1', keywords: 'cohesio 1 machine planning', url: '/planning?machine=1', icon: 'layers', roles: '*' },
+      { type: 'machine', title: 'Cohésio 2', sub: 'Planning machine — Cohésio 2', keywords: 'cohesio 2 machine planning', url: '/planning?machine=2', icon: 'layers', roles: '*' },
+      { type: 'machine', title: 'DSI',           sub: 'Planning machine — DSI',           keywords: 'dsi machine planning',           url: '/planning?machine=3', icon: 'layers', roles: '*' },
+      { type: 'machine', title: 'Repiquage',     sub: 'Planning machine — Repiquage',     keywords: 'repiquage machine planning',     url: '/planning?machine=4', icon: 'layers', roles: '*' },
+    ];
+
+    var out = [];
+    apps.forEach(function (a) { if (hasRole(user, a.roles)) out.push(a); });
+    actions.forEach(function (a) { if (hasRole(user, a.roles)) out.push(a); });
+    machines.forEach(function (m) { if (hasRole(user, m.roles)) out.push(m); });
+    return out;
   }
 
   function dossierItems(qRaw) {
@@ -149,7 +161,7 @@
     var q = normalize(qRaw).trim();
     if (!q) return [];
     var out = [];
-    for (var i = 0; i < state.dossiers.length && out.length < 8; i++) {
+    for (var i = 0; i < state.dossiers.length && out.length < 6; i++) {
       var no = String(state.dossiers[i] || '');
       if (!no) continue;
       if (normalize(no).indexOf(q) !== -1) {
@@ -166,55 +178,189 @@
     return out;
   }
 
-  // ────────────────────────────────────────────────────────
-  // FILTER (fuzzy subsequence + score)
-  // ────────────────────────────────────────────────────────
+  // ───── Async items : produits, emplacements, clients ─────────────
+  function searchAsync(qRaw) {
+    var token = ++state.searchToken;
+    var q = (qRaw || '').trim();
+    state.asyncItems = [];
+    if (q.length < 2) { renderIfActive(token); return; }
+    var encQ = encodeURIComponent(q);
+
+    var pStock = fetch('/api/stock/search?q=' + encQ + '&limit=6', { credentials: 'include' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .catch(function () { return null; });
+    var pClients = state.clientsAllowed
+      ? fetch('/api/clients?search=' + encQ + '&limit=6', { credentials: 'include' })
+        .then(function (r) {
+          if (r.status === 403 || r.status === 401) { state.clientsAllowed = false; return null; }
+          return r.ok ? r.json() : null;
+        })
+        .catch(function () { return null; })
+      : Promise.resolve(null);
+
+    Promise.all([pStock, pClients]).then(function (results) {
+      if (token !== state.searchToken) return;
+      var stock = results[0] || {};
+      var clients = results[1] || {};
+      var items = [];
+
+      var produits = Array.isArray(stock.produits) ? stock.produits : [];
+      produits.forEach(function (p) {
+        var ref = (p.reference || '').trim();
+        if (!ref) return;
+        var desig = (p.designation || '').trim();
+        var stockTxt = (p.stock_total != null && p.stock_total !== '') ? (p.stock_total + ' ' + (p.unite || 'u')) : '';
+        var subBase = desig || '—';
+        // 1) Article sur MyStock
+        items.push({
+          type: 'ref-stock',
+          title: 'Stock — ' + ref,
+          sub: subBase + (stockTxt ? ' · ' + stockTxt + ' en stock' : ''),
+          keywords: ref + ' ' + desig + ' stock',
+          url: '/stock?tab=produits-finis' + (p.id ? '&produit=' + p.id : '&ref=' + encodeURIComponent(ref)),
+          icon: 'package',
+        });
+        // 2) Fiche technique
+        items.push({
+          type: 'ref-fiche',
+          title: 'Fiche technique — ' + ref,
+          sub: subBase,
+          keywords: ref + ' ' + desig + ' fiche technique',
+          url: '/planning?q=' + encodeURIComponent(ref) + '&fiche=1',
+          icon: 'file-text',
+        });
+        // 3) Dossier de fabrication
+        items.push({
+          type: 'ref-dossier',
+          title: 'Dossier de fabrication — ' + ref,
+          sub: subBase + ' · Planning de production',
+          keywords: ref + ' ' + desig + ' dossier fabrication',
+          url: '/planning?q=' + encodeURIComponent(ref),
+          icon: 'wrench',
+        });
+      });
+
+      var empls = Array.isArray(stock.emplacements) ? stock.emplacements : [];
+      empls.forEach(function (e) {
+        var code = (e.emplacement || '').trim();
+        if (!code) return;
+        var sub = (e.nb_refs != null && e.nb_refs !== '')
+          ? (e.nb_refs + ' réf · ' + (e.total_unites || 0) + ' u')
+          : 'Plan d’entrepôt';
+        items.push({
+          type: 'emplacement',
+          title: 'Emplacement ' + code,
+          sub: sub,
+          keywords: code + ' emplacement zone',
+          url: '/stock?tab=plan-entrepot&emplacement=' + encodeURIComponent(code),
+          icon: 'map-pin',
+        });
+      });
+
+      var clientItems = Array.isArray(clients.items) ? clients.items : [];
+      clientItems.forEach(function (c) {
+        var name = (c.raison_sociale || c.code || '').trim();
+        if (!name) return;
+        var sub = [];
+        if (c.code) sub.push(c.code);
+        if (c.ville) sub.push(c.ville);
+        items.push({
+          type: 'client',
+          title: name,
+          sub: 'Client · ' + (sub.length ? sub.join(' — ') : 'Dossiers de production'),
+          keywords: name + ' ' + (c.code || '') + ' ' + (c.ville || '') + ' client',
+          url: '/planning?q=' + encodeURIComponent(name),
+          icon: 'building',
+        });
+      });
+
+      // Date parsing : JJ/MM, JJ/MM/AAAA, ou aujourd'hui/demain/hier
+      var dateItem = parseDateQuery(q);
+      if (dateItem) items.unshift(dateItem);
+
+      state.asyncItems = items;
+      renderIfActive(token);
+    });
+  }
+
+  function parseDateQuery(q) {
+    var qn = (q || '').toLowerCase().trim();
+    var today = new Date(); today.setHours(0,0,0,0);
+    function fmtIso(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
+    function pad(n){return n<10?('0'+n):(''+n);}
+    var d = null, label = null;
+    if (qn === 'aujourd’hui' || qn === "aujourd'hui" || qn === 'today' || qn === 'auj') {
+      d = today; label = 'Aujourd’hui';
+    } else if (qn === 'demain' || qn === 'tomorrow') {
+      d = new Date(today.getTime()+86400000); label = 'Demain';
+    } else if (qn === 'hier' || qn === 'yesterday') {
+      d = new Date(today.getTime()-86400000); label = 'Hier';
+    } else {
+      // JJ/MM ou JJ/MM/AAAA, JJ-MM, JJ.MM
+      var m = qn.match(/^(\d{1,2})[\/.\-](\d{1,2})(?:[\/.\-](\d{2,4}))?$/);
+      if (m) {
+        var day = parseInt(m[1],10), mon = parseInt(m[2],10), yr = m[3]?parseInt(m[3],10):today.getFullYear();
+        if (yr < 100) yr += 2000;
+        if (day>=1 && day<=31 && mon>=1 && mon<=12) {
+          d = new Date(yr, mon-1, day);
+          if (!isNaN(d.getTime())) label = pad(day)+'/'+pad(mon)+'/'+yr;
+        }
+      }
+    }
+    if (!d) return null;
+    return {
+      type: 'date',
+      title: 'Planning du ' + label,
+      sub: 'Sauter à cette date dans MyProd',
+      keywords: 'date jour planning ' + label,
+      url: '/planning?date=' + fmtIso(d),
+      icon: 'calendar',
+    };
+  }
+
+  // ───── Normalisation + score ─────────────────────────────────────
   function normalize(s) {
-    return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    return (s || '').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   }
   function scoreItem(item, qNorm) {
     if (!qNorm) return 1;
     var hay = normalize(item.title + ' ' + (item.sub || '') + ' ' + (item.keywords || ''));
-    if (hay.indexOf(qNorm) !== -1) {
-      // direct substring → high score, boost if matches title prefix
-      var titleNorm = normalize(item.title);
-      if (titleNorm.indexOf(qNorm) === 0) return 100;
-      if (titleNorm.indexOf(qNorm) !== -1) return 60;
-      return 30;
-    }
-    // subsequence match
-    var i = 0, count = 0;
+    var titleNorm = normalize(item.title);
+    if (titleNorm.indexOf(qNorm) === 0) return 100;
+    if (titleNorm.indexOf(qNorm) !== -1) return 80;
+    if (hay.indexOf(qNorm) !== -1) return 40;
+    // subsequence
+    var i = 0;
     for (var k = 0; k < qNorm.length; k++) {
-      var ch = qNorm[k];
-      var p = hay.indexOf(ch, i);
+      var p = hay.indexOf(qNorm[k], i);
       if (p === -1) return 0;
       i = p + 1;
-      count++;
     }
-    return count >= qNorm.length ? 8 : 0;
+    return 8;
   }
+
   function filterItems(q) {
     var qNorm = normalize(q).trim();
     var base = state.items.slice();
-    // recherche dossier si le query contient au moins un chiffre
-    if (/\d/.test(qNorm)) {
-      var doss = dossierItems(q);
-      // mettre les dossiers en haut
-      base = doss.concat(base);
-    }
+    var prepend = [];
+
+    // dossiers numeric match
+    if (/\d/.test(qNorm)) prepend = prepend.concat(dossierItems(q));
+    // async (refs/emplacements/clients) already computed
+    if (state.asyncItems && state.asyncItems.length) prepend = prepend.concat(state.asyncItems);
+
     if (!qNorm) return base;
     var scored = [];
-    for (var i = 0; i < base.length; i++) {
-      var s = scoreItem(base[i], qNorm);
-      if (s > 0) scored.push({ item: base[i], score: s, idx: i });
+    var combined = prepend.concat(base);
+    for (var i = 0; i < combined.length; i++) {
+      var s = scoreItem(combined[i], qNorm);
+      if (s > 0) scored.push({ item: combined[i], score: s, idx: i });
     }
     scored.sort(function (a, b) { return b.score - a.score || a.idx - b.idx; });
     return scored.map(function (s) { return s.item; });
   }
 
-  // ────────────────────────────────────────────────────────
-  // DOM
-  // ────────────────────────────────────────────────────────
+  // ───── DOM ───────────────────────────────────────────────────────
   function buildDom() {
     if (state.overlay) return;
     var ov = document.createElement('div');
@@ -226,7 +372,7 @@
       '<div class="cmdk-modal" role="document">' +
       '  <div class="cmdk-search">' +
       '    <span class="cmdk-search-ico">' + svgIcon('search', 18) + '</span>' +
-      '    <input type="text" autocomplete="off" spellcheck="false" placeholder="Naviguer, rechercher un dossier, agir…">' +
+      '    <input type="text" autocomplete="off" spellcheck="false" placeholder="Référence, emplacement, client, dossier, date…">' +
       '    <span class="cmdk-search-kbd">Esc</span>' +
       '  </div>' +
       '  <div class="cmdk-list" role="listbox"></div>' +
@@ -243,20 +389,28 @@
     state.list = ov.querySelector('.cmdk-list');
     state.input = ov.querySelector('.cmdk-search input');
 
-    ov.addEventListener('click', function (e) {
-      if (e.target === ov) close();
-    });
+    ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
     state.input.addEventListener('input', function () {
-      state.filtered = filterItems(state.input.value);
+      var q = state.input.value;
+      state.filtered = filterItems(q);
       state.activeIdx = 0;
       render();
+      if (state.searchTimer) clearTimeout(state.searchTimer);
+      state.searchTimer = setTimeout(function () { searchAsync(q); }, DEBOUNCE_MS);
     });
     state.input.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') { e.preventDefault(); close(); }
+      if (e.key === 'Escape')      { e.preventDefault(); close(); }
       else if (e.key === 'ArrowDown') { e.preventDefault(); moveActive(1); }
       else if (e.key === 'ArrowUp')   { e.preventDefault(); moveActive(-1); }
       else if (e.key === 'Enter')     { e.preventDefault(); executeActive(); }
     });
+  }
+
+  function renderIfActive(token) {
+    if (token !== state.searchToken) return;
+    state.filtered = filterItems(state.input ? state.input.value : '');
+    if (state.activeIdx >= state.filtered.length) state.activeIdx = 0;
+    render();
   }
 
   function render() {
@@ -275,8 +429,6 @@
         html += '<div class="cmdk-section">' + section + '</div>';
         lastSection = section;
       }
-      var shortcut = '';
-      if (idx === 0 && state.activeIdx === 0 && !state.input.value) shortcut = '';
       html += '<button type="button" class="cmdk-row' +
         (idx === state.activeIdx ? ' cmdk-active' : '') +
         '" data-idx="' + idx + '" role="option" aria-selected="' +
@@ -286,7 +438,6 @@
         '<span class="cmdk-row-title">' + escapeHtml(item.title) + '</span>' +
         (item.sub ? '<span class="cmdk-row-sub">' + escapeHtml(item.sub) + '</span>' : '') +
         '</span>' +
-        (shortcut ? '<span class="cmdk-row-shortcut">' + shortcut + '</span>' : '') +
         '</button>';
     });
     state.list.innerHTML = html;
@@ -314,24 +465,29 @@
     });
     scrollActiveIntoView();
   }
-
   function scrollActiveIntoView() {
     var row = state.list.querySelector('.cmdk-row.cmdk-active');
     if (row && row.scrollIntoView) row.scrollIntoView({ block: 'nearest' });
   }
-
   function sectionFor(item) {
-    if (item.type === 'dossier') return 'Dossiers';
-    if (item.type === 'app')     return 'Applications';
-    return 'Actions rapides';
+    switch (item.type) {
+      case 'ref-stock':
+      case 'ref-fiche':
+      case 'ref-dossier': return 'Références produit';
+      case 'emplacement': return 'Emplacements';
+      case 'client':      return 'Clients';
+      case 'dossier':     return 'Dossiers';
+      case 'date':        return 'Dates';
+      case 'machine':     return 'Machines';
+      case 'app':         return 'Applications';
+      default:            return 'Actions rapides';
+    }
   }
-
   function moveActive(delta) {
     if (!state.filtered.length) return;
     state.activeIdx = (state.activeIdx + delta + state.filtered.length) % state.filtered.length;
     updateActiveClasses();
   }
-
   function executeActive() {
     var item = state.filtered[state.activeIdx];
     if (!item) return;
@@ -342,7 +498,7 @@
           window.MySifaTheme.toggleMode();
           if (typeof window.render === 'function') window.render();
         }
-      } catch (e) { /* noop */ }
+      } catch (e) {}
       return;
     }
     if (item.action === 'logout') {
@@ -351,20 +507,15 @@
         .then(function () { window.location.href = '/'; });
       return;
     }
-    if (item.url) {
-      window.location.href = item.url;
-    }
+    if (item.url) window.location.href = item.url;
   }
-
   function escapeHtml(s) {
     return String(s == null ? '' : s)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
-  // ────────────────────────────────────────────────────────
-  // OPEN / CLOSE
-  // ────────────────────────────────────────────────────────
+  // ───── Open / Close ──────────────────────────────────────────────
   function open(prefill) {
     if (state.open) return;
     buildDom();
@@ -374,13 +525,14 @@
     Promise.all([fetchUser(), fetchDossiers()]).then(function () {
       state.items = buildBaseItems(state.user);
       state.input.value = prefill || '';
+      state.asyncItems = [];
       state.filtered = filterItems(state.input.value);
       state.activeIdx = 0;
       render();
       setTimeout(function () { state.input && state.input.focus(); }, 0);
+      if (state.input.value) searchAsync(state.input.value);
     });
   }
-
   function close() {
     if (!state.open || !state.overlay) return;
     state.open = false;
@@ -388,9 +540,7 @@
     document.body.classList.remove('cmdk-locked');
   }
 
-  // ────────────────────────────────────────────────────────
-  // GLOBAL HOOKS
-  // ────────────────────────────────────────────────────────
+  // ───── Hooks globaux ─────────────────────────────────────────────
   function isEditableTarget(t) {
     if (!t) return false;
     var tag = (t.tagName || '').toUpperCase();
@@ -398,50 +548,33 @@
     if (t.isContentEditable) return true;
     return false;
   }
-
   function onKeydown(e) {
     var key = (e.key || '').toLowerCase();
     var modCmd = MAC ? e.metaKey : e.ctrlKey;
     var modOther = MAC ? e.ctrlKey : e.metaKey;
     if (key === 'k' && modCmd && !modOther && !e.altKey) {
       e.preventDefault();
-      if (state.open) close();
-      else open(isEditableTarget(e.target) ? '' : '');
+      if (state.open) close(); else open('');
       return;
     }
-    if (key === 'escape' && state.open) {
-      e.preventDefault();
-      close();
-    }
+    if (key === 'escape' && state.open) { e.preventDefault(); close(); }
   }
-
   document.addEventListener('keydown', onKeydown, true);
 
-  // expose
   window.MysifaCmdK = { open: open, close: close, label: KBD_LABEL, shortLabel: KBD_SHORT };
 
-  // Optional badge wiring : tag a un bouton/lien avec data-cmdk-open et il déclenche l'ouverture
   function wireBadges() {
     document.querySelectorAll('[data-cmdk-open]').forEach(function (el) {
       if (el.__cmdkBound) return;
       el.__cmdkBound = true;
-      el.addEventListener('click', function (e) {
-        e.preventDefault();
-        open('');
-      });
+      el.addEventListener('click', function (e) { e.preventDefault(); open(''); });
     });
-    // remplir le texte ⌘K / Ctrl+K sur les éléments [data-cmdk-label]
     document.querySelectorAll('[data-cmdk-label]').forEach(function (el) {
       if (!el.textContent.trim()) el.textContent = KBD_LABEL;
     });
   }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', wireBadges);
-  } else {
-    wireBadges();
-  }
-  // Re-wire à chaque render SPA (au cas où le portail reconstruit son DOM)
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wireBadges);
+  else wireBadges();
   if (window.MutationObserver) {
     var mo = new MutationObserver(function () { wireBadges(); });
     mo.observe(document.documentElement, { childList: true, subtree: true });

@@ -1250,12 +1250,12 @@ body.light .portal-corner-stack{box-shadow:0 8px 32px rgba(15,23,42,.10)}
 /* ── ⌘K badge in the Google search input ── */
 .portal-search-cmdk-badge{
   position:absolute;right:14px;top:50%;transform:translateY(-50%);
-  display:inline-flex;align-items:center;gap:3px;padding:4px 9px;border-radius:8px;
-  background:var(--bg);border:1px solid var(--border);color:var(--muted);
+  display:inline-flex;align-items:center;gap:3px;padding:4px 9px;
+  background:transparent;border:none;color:var(--muted);
   font-family:ui-monospace,'Cascadia Code',monospace;font-size:11px;font-weight:700;
   letter-spacing:.04em;line-height:1;cursor:pointer;user-select:none;
-  transition:border-color .15s,color .15s,background .15s;pointer-events:auto;z-index:2}
-.portal-search-cmdk-badge:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+  transition:color .15s;pointer-events:auto;z-index:2}
+.portal-search-cmdk-badge:hover{color:var(--accent)}
 .portal-search .portal-search-input-wrap input{padding-right:80px}
 
 @media (max-width:900px){
