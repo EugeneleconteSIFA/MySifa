@@ -1224,23 +1224,6 @@ body.light .portal-app--busy::after{background:rgba(255,255,255,.88);color:var(-
 body.light .portal-logout:hover{text-shadow:0 0 12px rgba(8,145,178,.35)}
 body.light .portal-logout:hover:last-of-type{text-shadow:0 0 12px rgba(220,38,38,.35)}
 
-/* ── Cockpit post-it (haut gauche) — couleurs jaunes littérales, identiques aux deux thèmes ── */
-.cockpit-postit{position:fixed;top:22px;left:22px;z-index:120;width:256px;background:#fff6cf;border:1px solid #f0dd92;border-radius:14px;box-shadow:0 10px 28px rgba(120,100,20,.18);text-align:left;overflow:hidden;font-family:'Segoe UI',system-ui,sans-serif}
-.cockpit-postit.cockpit-postit--hidden{display:none}
-.cockpit-postit-h{display:flex;align-items:center;gap:8px;padding:12px 14px 8px}
-.cockpit-postit-h .cockpit-postit-dot{width:12px;height:12px;border-radius:50%;background:#f5c531;flex-shrink:0}
-.cockpit-postit-h b{font-size:13px;color:#6b5618;flex:1;font-weight:700}
-.cockpit-postit-close{background:none;border:none;color:#b29a4e;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:2px;line-height:0;border-radius:6px}
-.cockpit-postit-close:hover{color:#8a7330;background:rgba(120,100,20,.08)}
-.cockpit-postit-body{padding:4px 14px 12px}
-.cockpit-postit-item{display:flex;gap:9px;font-size:11.5px;color:#6b5618;line-height:1.5;cursor:pointer}
-.cockpit-postit-item input{margin-top:3px;accent-color:#c79a16;cursor:pointer;flex-shrink:0}
-.cockpit-postit-foot{display:flex;align-items:center;justify-content:space-between;padding:9px 14px;border-top:1px solid #ecd87f}
-.cockpit-postit-foot .cockpit-postit-add{font-size:12px;font-weight:700;color:#b8860b;cursor:pointer;background:none;border:none;padding:0;font-family:inherit}
-.cockpit-postit-foot .cockpit-postit-add:hover{text-decoration:underline}
-.cockpit-postit-foot .cockpit-postit-multi{font-size:11px;color:#8a7330}
-.cockpit-postit-foot .cockpit-postit-multi b{color:#b8860b}
-
 /* ── Hover tuiles d'application — pastille icône qui passe du fond accent translucide au plein accent ── */
 .portal-app{transition:transform .34s cubic-bezier(.22,.61,.36,1),box-shadow .34s cubic-bezier(.22,.61,.36,1),border-color .34s cubic-bezier(.22,.61,.36,1),background-color .34s cubic-bezier(.22,.61,.36,1)}
 .portal-app:hover{transform:translateY(-3px);box-shadow:0 12px 26px rgba(27,37,71,.10);border-color:color-mix(in srgb,var(--accent) 30%,var(--border))}
@@ -4294,41 +4277,7 @@ function renderPortal(){
   const _humeurVal=(S.user&&S.user.humeur_active&&S.user.humeur_valeur&&S.user.humeur_date===_todayIso)?S.user.humeur_valeur:null;
   const profHumeurBadge=_humeurVal?(()=>{const sp=document.createElement('span');sp.className='portal-humeur-badge';sp.textContent=_humeurVal;return sp;})():null;
 
-  // Post-it (haut gauche) — visible par défaut, persisté via localStorage 'mysifa-cockpit-postit'
-  const _postitHidden=(()=>{try{return localStorage.getItem('mysifa-cockpit-postit')==='0';}catch(e){return false;}})();
-  const postitCard=h('div',{
-    id:'cockpit-postit-card',
-    className:'cockpit-postit'+(_postitHidden?' cockpit-postit--hidden':'')
-  },
-    h('div',{className:'cockpit-postit-h'},
-      h('span',{className:'cockpit-postit-dot'}),
-      h('b',null,'Post-it à faire'),
-      h('button',{
-        type:'button',
-        className:'cockpit-postit-close',
-        'aria-label':'Fermer le post-it',
-        title:'Fermer',
-        onClick:()=>{
-          const el=document.getElementById('cockpit-postit-card');
-          if(el)el.classList.add('cockpit-postit--hidden');
-          try{localStorage.setItem('mysifa-cockpit-postit','0');}catch(e){}
-        }
-      },iconEl('x',14))
-    ),
-    h('div',{className:'cockpit-postit-body'},
-      h('label',{className:'cockpit-postit-item'},
-        h('input',{type:'checkbox'}),
-        h('span',null,"Tester l'entrée Z1 sur MyStock → Production, vérifier le pré-remplissage + bloc palettes, puis l'onglet Stats sur MyProd.")
-      )
-    ),
-    h('div',{className:'cockpit-postit-foot'},
-      h('button',{type:'button',className:'cockpit-postit-add'},'+ Ajouter'),
-      h('span',{className:'cockpit-postit-multi'},h('b',null,'Activer'),' (multi-page)')
-    )
-  );
-
   const portalEl=h('div',{className:'portal-page'},
-    postitCard,
     h('div',{className:'portal-corner-stack'},
       h('button',{
         type:'button',
@@ -4371,20 +4320,7 @@ function renderPortal(){
         'aria-label':'Base de données',
         title:'Base de données',
         onClick:()=>{window.location.href='/db';}
-      },iconEl('database',24)):null,
-      h('button',{
-        type:'button',
-        className:'portal-settings-corner',
-        'aria-label':'Post-it à faire',
-        title:'Post-it à faire',
-        onClick:()=>{
-          const el=document.getElementById('cockpit-postit-card');
-          if(!el)return;
-          const willHide=!el.classList.contains('cockpit-postit--hidden');
-          el.classList.toggle('cockpit-postit--hidden',willHide);
-          try{localStorage.setItem('mysifa-cockpit-postit',willHide?'0':'1');}catch(e){}
-        }
-      },iconEl('sticky-note',24))
+      },iconEl('database',24)):null
     ),
     h('div',{className:'portal-logo'},
       h('div',{className:'brand'},'My',h('span',null,'Sifa')),
