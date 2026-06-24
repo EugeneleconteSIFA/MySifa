@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Optional, List, Any, Dict
 from fastapi import APIRouter, Request, Query
 from database import get_db, parse_datetime
-from services.analyse import analyse_saisie_errors
+from services.analyse import analyse_saisie_errors, assign_shift_keys
 from services.auth_service import get_current_user, is_admin, can_view_all_prod
 from services.prod_machine_filter import append_machine_filter, norm_machine_canonical
 from config import CODE_ARRIVEE, CODE_DEPART, CODE_DEBUT_DOS, CODE_FIN_DOS, CODE_CALAGE, CODES_CALAGE, CODE_PRODUCTION, CODE_REPRISE
@@ -46,15 +46,15 @@ def compute_sanity_score_v2(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     if not rows:
         return {"score": 0, "mention": "Aucune saisie", "color": "warn", "penalites": [], "events": {}}
 
-    # Group by opérateur + jour
+    # Group by opérateur + shift ("journée opérateur" : 86 → 87, peut
+    # traverser minuit). assign_shift_keys mute les lignes en y ajoutant
+    # ``_shift_key`` et renvoie le cache de datetimes parsés.
+    dt_cache: Dict[int, Optional[datetime]] = assign_shift_keys(rows)
     by_op_day: Dict[tuple[str, str], list[dict]] = {}
-    dt_cache: Dict[int, Optional[datetime]] = {}
     for r in rows:
         op = str(r.get("operateur") or "?")
-        dt = parse_datetime(r.get("date_operation"))
-        dt_cache[id(r)] = dt
-        dk = _day_key(dt, r.get("date_operation"))
-        by_op_day.setdefault((op, dk), []).append(r)
+        sk = r.get("_shift_key") or _day_key(dt_cache.get(id(r)), r.get("date_operation"))
+        by_op_day.setdefault((op, sk), []).append(r)
 
     penalites: list[dict] = []
     total_pen = 0
