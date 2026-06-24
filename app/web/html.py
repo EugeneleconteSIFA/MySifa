@@ -1196,8 +1196,8 @@ body.light .portal-apps--reorderable .portal-app--placeholder:hover{background:r
 .portal-app{display:flex;flex-direction:column;align-items:center;gap:8px;
   background-color:var(--card);border:1px solid var(--border);border-radius:16px;
   padding:18px 12px;cursor:pointer;transition:all .2s;text-decoration:none;
-  width:148px;min-height:172px;flex:0 0 148px;box-sizing:border-box;
-  justify-content:flex-start}
+  width:172px;height:172px;flex:0 0 172px;box-sizing:border-box;
+  justify-content:flex-start;aspect-ratio:1/1}
 .portal-app--disabled{cursor:default;opacity:.6;position:relative}
 .portal-app--disabled:hover{border-color:var(--border);background-color:var(--card)}
 .badge-dev{position:absolute;top:8px;right:8px;font-size:9px;font-weight:700;padding:2px 8px;border-radius:20px;background:var(--warn);color:#0a0e17;text-transform:uppercase;letter-spacing:.5px}
