@@ -35,6 +35,7 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_ai_chat.css">
 <link rel="stylesheet" href="/static/mysifa_dock.css">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
+<link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <link rel="stylesheet" href="/static/mysifa_landscape.css">
 <link rel="stylesheet" href="/static/motion.css">
 <style>
@@ -1193,10 +1194,10 @@ body.light .portal-apps--reorderable .portal-app--placeholder:hover{background:r
 }
 .portal-apps--reorderable .portal-app--disabled{cursor:grab}
 .portal-apps-hint{font-size:11px;color:var(--muted);text-align:center;margin:8px 0 0;width:100%;line-height:1.35}
-.portal-app{display:flex;flex-direction:column;align-items:center;gap:8px;
-  background-color:var(--card);border:1px solid var(--border);border-radius:16px;
-  padding:18px 12px;cursor:pointer;transition:all .2s;text-decoration:none;
-  width:172px;height:172px;flex:0 0 172px;box-sizing:border-box;
+.portal-app{display:flex;flex-direction:column;align-items:center;gap:6px;
+  background-color:var(--card);border:1px solid var(--border);border-radius:14px;
+  padding:14px 10px;cursor:pointer;transition:all .2s;text-decoration:none;
+  width:140px;height:140px;flex:0 0 140px;box-sizing:border-box;
   justify-content:flex-start;aspect-ratio:1/1}
 .portal-app--disabled{cursor:default;opacity:.6;position:relative}
 .portal-app--disabled:hover{border-color:var(--border);background-color:var(--card)}
@@ -1211,9 +1212,9 @@ body.light .portal-app--busy::after{background:rgba(255,255,255,.88);color:var(-
 .portal-app-icon{display:flex;align-items:center;justify-content:center;line-height:1;flex-shrink:0;position:relative}
 .portal-app-badge{position:absolute;top:-6px;right:-12px;min-width:22px;height:20px;padding:0 7px;border-radius:999px;background:var(--danger);color:#fff;font-size:11px;font-weight:800;font-family:ui-monospace,monospace;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px var(--card);line-height:1;letter-spacing:.5px}
 .portal-app-name{font-size:14px;font-weight:800;color:var(--text);flex-shrink:0;text-align:center;line-height:1.2}
-.portal-app-desc{font-size:11px;color:var(--muted);text-align:center;max-width:152px;line-height:1.3;
-  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
-  flex:0 0 auto;margin:0;min-height:calc(11px * 1.3 * 3)}
+.portal-app-desc{font-size:10px;color:var(--muted);text-align:center;max-width:100%;line-height:1.3;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  flex:0 0 auto;margin:0;width:100%}
 .portal-user{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px}
 .portal-logout{background:none;border:none;color:var(--muted);cursor:pointer;
   font-size:12px;font-family:inherit;text-decoration:underline;
@@ -1230,6 +1231,32 @@ body.light .portal-logout:hover:last-of-type{text-shadow:0 0 12px rgba(220,38,38
 .portal-app-icon{background:var(--accent-bg);color:var(--accent);width:50px;height:50px;border-radius:13px;transition:background .34s cubic-bezier(.22,.61,.36,1),color .34s cubic-bezier(.22,.61,.36,1)}
 .portal-app:hover .portal-app-icon{background:var(--accent);color:#fff}
 .portal-app--disabled:hover .portal-app-icon{background:var(--accent-bg);color:var(--accent)}
+
+/* ── Pill bar (haut droite) — fusion des 5 cartes corner en un seul cylindre ── */
+.portal-corner-stack{padding:8px 6px;background:var(--card);border:1px solid var(--border);border-radius:999px;
+  box-shadow:0 8px 32px rgba(0,0,0,.18),inset 0 1px 0 rgba(255,255,255,.04);gap:2px}
+body.light .portal-corner-stack{box-shadow:0 8px 32px rgba(15,23,42,.10)}
+.portal-corner-stack .portal-settings-corner{
+  width:44px;height:44px;border-radius:50%;background:transparent;border:1px solid transparent;
+  color:var(--muted);box-shadow:none;transition:background .15s,color .15s,border-color .15s}
+.portal-corner-stack .portal-settings-corner:hover{
+  background:var(--accent-bg);color:var(--accent);border-color:transparent;box-shadow:none}
+.portal-corner-stack .portal-settings-corner:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(34,211,238,.25);background:var(--accent-bg);color:var(--accent)}
+.portal-corner-stack .portal-corner-badge{top:4px;left:4px;box-shadow:0 0 0 2px var(--card)}
+.portal-corner-stack .portal-prof-ring.prof-ring{top:-2px;left:-2px;width:24px;height:24px}
+.portal-corner-stack .portal-prof-ring.prof-ring svg{width:24px;height:24px}
+.portal-corner-stack .portal-humeur-badge{bottom:-2px;left:-2px}
+
+/* ── ⌘K badge in the Google search input ── */
+.portal-search-cmdk-badge{
+  position:absolute;right:14px;top:50%;transform:translateY(-50%);
+  display:inline-flex;align-items:center;gap:3px;padding:4px 9px;border-radius:8px;
+  background:var(--bg);border:1px solid var(--border);color:var(--muted);
+  font-family:ui-monospace,'Cascadia Code',monospace;font-size:11px;font-weight:700;
+  letter-spacing:.04em;line-height:1;cursor:pointer;user-select:none;
+  transition:border-color .15s,color .15s,background .15s;pointer-events:auto;z-index:2}
+.portal-search-cmdk-badge:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.portal-search .portal-search-input-wrap input{padding-right:80px}
 
 @media (max-width:900px){
   /* Portail mobile / tablette : layout vertical, tuiles compactes */
@@ -2092,6 +2119,7 @@ __STAGING_BANDEAU_HTML__
 <script>window.__MYSIFA_APP__="__INITIAL_APP_VALUE__";</script>
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/mysifa_postit.js"></script>
+<script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/mysifa_expe_carte.js"></script>
 <script src="/static/chat_mentions.js"></script>
@@ -4261,6 +4289,16 @@ function renderPortal(){
   const gInputWrap = h('div',{className:'portal-search-input-wrap'});
   gInputWrap.appendChild(gLogoEl);
   gInputWrap.appendChild(gInp);
+  // ⌘K / Ctrl+K shortcut hint — clicking opens the command palette
+  const _cmdkBadge=h('button',{
+    type:'button',
+    className:'portal-search-cmdk-badge',
+    'aria-label':'Ouvrir la palette de commandes',
+    title:'Palette de commandes',
+    'data-cmdk-open':'1',
+    onClick:(ev)=>{ev.preventDefault();if(window.MysifaCmdK)window.MysifaCmdK.open();}
+  },document.createTextNode(/Mac|iPod|iPhone|iPad/.test(navigator.platform||'')?'⌘ K':'Ctrl K'));
+  gInputWrap.appendChild(_cmdkBadge);
   gForm.appendChild(gInputWrap);
   // Bouton invisible pour conserver le submit natif du form (Entrée)
   gForm.appendChild(h('input',{type:'submit',className:'portal-search-submit',value:'Rechercher'}));

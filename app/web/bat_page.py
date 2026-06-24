@@ -50,6 +50,7 @@ BAT_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_dock.css">
 <link rel="stylesheet" href="/static/mysifa_ai_chat.css">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
+<link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <script>try{if(localStorage.getItem('mysifa_theme')==='light')document.documentElement.classList.add('light-pre');}catch(e){}</script>
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
@@ -979,6 +980,7 @@ async function submitPdfDelete(){
 </script>
 <script>window.__MYSIFA_APP__='bat';</script>
 <script src="/static/mysifa_dock.js"></script>
+<script src="/static/mysifa_cmdk.js"></script>
 <script>
 if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPageWidgets === 'function'){
   window.MySifaDock.bootPageWidgets();

@@ -185,10 +185,12 @@ label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bot
 <script src="/static/support_widget.js"></script>
 <link rel="stylesheet" href="/static/mysifa_dock.css">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
+<link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <link rel="stylesheet" href="/static/mysifa_ai_chat.css">
 <script>window.__MYSIFA_APP__='ao';</script>
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/mysifa_postit.js"></script>
+<script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_ai_chat.js"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js"></script>
