@@ -2071,7 +2071,10 @@ function fmtDate(iso){
 }
 
 // --- Modales ---
-function openOpsModal(){
+// État d'édition : id de l'opération en cours de modification, sinon null.
+let _opsEditingId = null;
+
+function openOpsModal(editId){
   const m = document.getElementById('ops-modal');
   if(!m) return;
   if(!OPS_TYPES_STATE.list.length){
@@ -2082,25 +2085,62 @@ function openOpsModal(){
     showToast('Identité non chargée. Réessayez dans un instant.', 'danger');
     return;
   }
+  // Si on est en mode édition, récupère l'opération existante.
+  let editing = null;
+  if(editId){
+    editing = OPS_STATE.list.find(o => String(o.id) === String(editId));
+    if(!editing){
+      showToast('Opération introuvable.', 'danger');
+      return;
+    }
+  }
+  _opsEditingId = editing ? editing.id : null;
+
   m.classList.add('open');
   m.setAttribute('aria-hidden', 'false');
   document.body.style.overflow = 'hidden';
   refreshOpsTypeSelect();
+  // Titre & label bouton selon le mode (édition vs création)
+  const titleEl = document.getElementById('ops-modal-title');
+  if(titleEl) titleEl.textContent = editing ? 'Modifier l\'opération' : 'Nouvelle opération';
+  const submitBtn = document.querySelector('#ops-form button[type="submit"]');
+  if(submitBtn){
+    const labelSpan = submitBtn.querySelector('span') || submitBtn;
+    // Préserve l'icône SVG : on cible juste le texte
+    submitBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' +
+      (editing ? ' Enregistrer les modifications' : ' Enregistrer l\'opération');
+  }
   const nameEl = document.getElementById('ops-saisi-par-name');
-  if(nameEl) nameEl.textContent = currentUserName();
-  // Pré-remplit la date avec maintenant (format datetime-local : YYYY-MM-DDTHH:MM)
+  if(nameEl) nameEl.textContent = editing ? (editing.operateur || currentUserName()) : currentUserName();
+  // Pré-remplit la date (mode édition = date saisie ; mode création = maintenant)
   const dateEl = document.getElementById('ops-date');
   if(dateEl){
-    const now = new Date();
     const pad = n => (n < 10 ? '0' + n : '' + n);
-    dateEl.value = now.getFullYear() + '-' + pad(now.getMonth()+1) + '-' + pad(now.getDate())
-                 + 'T' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+    const sourceDate = editing && editing.date_saisie ? new Date(editing.date_saisie) : new Date();
+    if(!isNaN(sourceDate.getTime())){
+      dateEl.value = sourceDate.getFullYear() + '-' + pad(sourceDate.getMonth()+1) + '-' + pad(sourceDate.getDate())
+                   + 'T' + pad(sourceDate.getHours()) + ':' + pad(sourceDate.getMinutes());
+    }
+  }
+  // Pré-remplit machine / type / commentaire en mode édition
+  const machineEl = document.getElementById('ops-machine');
+  const typeEl = document.getElementById('ops-type');
+  const commentEl = document.getElementById('ops-comment');
+  if(editing){
+    if(machineEl) machineEl.value = editing.machine || '';
+    if(typeEl) typeEl.value = editing.type || '';
+    if(commentEl) commentEl.value = editing.commentaire || '';
+  } else {
+    if(machineEl) machineEl.value = '';
+    if(typeEl) typeEl.value = '';
+    if(commentEl) commentEl.value = '';
   }
   setTimeout(() => { const f = document.getElementById('ops-machine'); if(f) f.focus(); }, 50);
 }
 function closeOpsModal(){
   const m = document.getElementById('ops-modal');
   if(!m) return;
+  _opsEditingId = null;
   m.classList.remove('open');
   m.setAttribute('aria-hidden', 'true');
   document.body.style.overflow = '';
@@ -2261,22 +2301,41 @@ function addOperation(e){
     const parsed = new Date(dateInput);
     if(!isNaN(parsed.getTime())) dateSaisie = parsed.toISOString();
   }
-  OPS_STATE.list.push({
-    id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8),
-    machine, operateur, type, commentaire,
-    date_saisie: dateSaisie
-  });
+  // Mode édition : remplace l'opération existante en conservant son id et son
+  // opérateur d'origine (date_modification est ajoutée pour traçabilité locale).
+  // Mode création : push une nouvelle opération.
+  const isEdit = !!_opsEditingId;
+  if(isEdit){
+    const idx = OPS_STATE.list.findIndex(o => String(o.id) === String(_opsEditingId));
+    if(idx === -1){
+      showToast('Opération introuvable — peut-être supprimée entre-temps.', 'danger');
+      return;
+    }
+    const original = OPS_STATE.list[idx];
+    OPS_STATE.list[idx] = Object.assign({}, original, {
+      machine, type, commentaire,
+      date_saisie: dateSaisie,
+      date_modification: new Date().toISOString(),
+      modifie_par: operateur,
+    });
+  } else {
+    OPS_STATE.list.push({
+      id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8),
+      machine, operateur, type, commentaire,
+      date_saisie: dateSaisie
+    });
+  }
   saveOps();
   renderOps();
   // Aligne le sélecteur du catalogue sur la machine de la saisie et re-render
-  // pour que la "Dernière intervention" reflète immédiatement la nouvelle saisie.
+  // pour que la "Dernière intervention" reflète immédiatement la modification.
   try{ localStorage.setItem(OPS_CAT_MACHINE_KEY, machine); }catch(e){}
   // Aligne aussi la vue Maintenance (cartes) sur la machine de la saisie.
   try{ localStorage.setItem(MAINT_MACHINE_KEY, machine); }catch(e){}
   if(typeof renderOpsTypes === 'function') renderOpsTypes();
   if(typeof renderMaintCards === 'function') renderMaintCards();
   closeOpsModal();
-  showToast('Opération enregistrée.', 'info');
+  showToast(isEdit ? 'Opération mise à jour.' : 'Opération enregistrée.', 'info');
 }
 function deleteOp(id){
   if(!confirm('Supprimer cette opération ?')) return;
@@ -2422,6 +2481,9 @@ function renderOps(){
         '<td>' + escHtml(o.type) + '</td>' +
         '<td class="col-comment">' + escHtml(o.commentaire || '') + '</td>' +
         '<td class="col-actions">' +
+          '<button type="button" class="ops-row-btn edit" onclick="openOpsModal(\'' + escAttr(o.id) + '\')" title="Modifier">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
+          '</button>' +
           '<button type="button" class="ops-row-btn del" onclick="deleteOp(\'' + escAttr(o.id) + '\')" title="Supprimer">' +
             '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
           '</button>' +
