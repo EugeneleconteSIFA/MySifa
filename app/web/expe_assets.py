@@ -89,6 +89,29 @@ EXPE_TRANSPORTEURS_CSS = r"""
 .expe-trp-tarif-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:10px}
 .expe-trp-tarif-table-wrap table.table-std{margin:0;font-size:12px}
 .expe-trp-tarif-table-wrap table.table-std th,.expe-trp-tarif-table-wrap table.table-std td{padding:8px 10px}
+
+/* ── Portail séparé + multi-emails (modal transporteur) ── */
+.expe-trp-portail-inp-wrap{display:flex;gap:8px;align-items:stretch;width:100%}
+.expe-trp-portail-inp-wrap input[type="url"]{flex:1;padding:12px 16px;background:var(--bg);border:1px solid var(--border);
+  border-radius:10px;color:var(--text);font-size:14px;font-family:inherit;outline:none}
+.expe-trp-portail-inp-wrap input[type="url"]:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 12%,transparent)}
+.expe-trp-portail-open{display:inline-flex;align-items:center;gap:5px;padding:10px 14px !important;border:1px solid var(--border);
+  border-radius:10px;background:var(--card);color:var(--text2);font-size:12px;font-weight:600;text-decoration:none;
+  white-space:nowrap}
+.expe-trp-portail-open:hover{border-color:var(--accent);color:var(--accent);text-decoration:none}
+.expe-trp-emails-list{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
+.expe-trp-email-row{display:flex;gap:6px;align-items:center}
+.expe-trp-email-row input[type="email"]{flex:1;padding:12px 16px;background:var(--bg);border:1px solid var(--border);
+  border-radius:10px;color:var(--text);font-size:14px;font-family:inherit;outline:none}
+.expe-trp-email-row input[type="email"]:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 12%,transparent)}
+.expe-trp-email-rm{flex-shrink:0;width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;
+  border:1px solid var(--border);background:var(--card);color:var(--muted);border-radius:10px;cursor:pointer;
+  transition:border-color .15s,color .15s}
+.expe-trp-email-rm:hover{border-color:var(--danger);color:var(--danger)}
+.expe-trp-email-add{font-size:12px;padding:6px 12px !important;border:1px dashed var(--border) !important;
+  background:transparent !important;color:var(--text2) !important;border-radius:10px;display:inline-flex;
+  align-items:center;gap:6px;cursor:pointer}
+.expe-trp-email-add:hover{border-color:var(--accent) !important;color:var(--accent) !important}
 @media(max-width:640px){
   .expe-trp-panel{width:100%}
   .expe-trp-head{padding:12px 14px}
@@ -241,16 +264,17 @@ function expeTrpIsPortailUrl(v){
 }
 
 function expeTrpOpenContact(tr){
-  const email=(tr&&tr.contact_email||'').trim();
-  if(expeTrpIsPortailUrl(email)){
-    window.open(email,'_blank','noopener');
-    return;
-  }
-  if(email){
+  const emails=expeTrpReadEmails(tr);
+  const portail=expeTrpReadPortail(tr);
+  if(emails.length){
     const nom=(tr&&tr.nom)||'';
     const s=encodeURIComponent('Demande de tarif SIFA - '+nom);
     const b=encodeURIComponent('Bonjour,\n\nNous souhaitons obtenir un tarif pour un départ.\n\nCordialement,\nSIFA Roubaix');
-    window.location.href='mailto:'+email+'?subject='+s+'&body='+b;
+    window.location.href='mailto:'+emails.join(',')+'?subject='+s+'&body='+b;
+    return;
+  }
+  if(portail){
+    window.open(portail,'_blank','noopener');
     return;
   }
   if(typeof expeOpenContact==='function'&&tr&&tr.nom)expeOpenContact(tr.nom);
@@ -320,17 +344,44 @@ function closeExpeTranspPanel(){
   render();
 }
 
+function expeTrpReadEmails(tr){
+  if(!tr)return [];
+  if(Array.isArray(tr.contact_emails))return tr.contact_emails.filter(e=>e&&String(e).includes('@'));
+  if(typeof tr.contact_emails==='string'&&tr.contact_emails.trim()){
+    const s=tr.contact_emails.trim();
+    if(s.startsWith('[')){
+      try{const arr=JSON.parse(s);return Array.isArray(arr)?arr.filter(e=>e&&String(e).includes('@')):[];}catch(e){}
+    }
+    return s.split(/[,;\n\r\t]+/).map(v=>v.trim()).filter(v=>v.includes('@'));
+  }
+  // Fallback ancien champ
+  const legacy=(tr.contact_email||'').trim();
+  if(legacy&&legacy.includes('@')&&!/^https?:\/\//i.test(legacy))return [legacy];
+  return [];
+}
+
+function expeTrpReadPortail(tr){
+  if(!tr)return '';
+  const p=(tr.contact_portail_url||'').trim();
+  if(p)return p;
+  const legacy=(tr.contact_email||'').trim();
+  if(/^https?:\/\//i.test(legacy))return legacy;
+  return '';
+}
+
 function openTransporteurModal(id){
   const isEdit=id!=null&&id!=='';
   if(isEdit){
     const tr=(T.list||[]).find(x=>Number(x.id)===Number(id));
     if(!tr){showToast('Transporteur introuvable','danger');return;}
     T.editId=tr.id;
+    const emails=expeTrpReadEmails(tr);
     T.form={
       nom:tr.nom||'',
       taxe_carburant_pct:tr.taxe_carburant_pct!=null?String(tr.taxe_carburant_pct):'0',
       contact_nom:tr.contact_nom||'',
-      contact_email:tr.contact_email||'',
+      contact_portail_url:expeTrpReadPortail(tr),
+      contact_emails:emails.length?emails:[''],
       contact_tel:tr.contact_tel||'',
       zone_france:!!Number(tr.zone_france),
       zone_france_hors_paris:!!Number(tr.zone_france_hors_paris),
@@ -344,7 +395,8 @@ function openTransporteurModal(id){
   }else{
     T.editId=null;
     T.form={
-      nom:'',taxe_carburant_pct:'0',contact_nom:'',contact_email:'',contact_tel:'',
+      nom:'',taxe_carburant_pct:'0',contact_nom:'',
+      contact_portail_url:'',contact_emails:[''],contact_tel:'',
       zone_france:true,zone_france_hors_paris:false,zone_affretement:false,zone_messagerie:false,
       actif:true,tarif_filename:'',tarif_url:'',couleur:''
     };
@@ -593,11 +645,15 @@ function renderTarifsOnglet(){
 }
 
 function expeTrpBodyFromForm(){
+  const emails=(T.form.contact_emails||[])
+    .map(e=>(e||'').trim())
+    .filter(e=>e&&e.includes('@'));
   return {
     nom:(T.form.nom||'').trim(),
     taxe_carburant_pct:(T.form.taxe_carburant_pct||'').trim()||'0',
     contact_nom:(T.form.contact_nom||'').trim()||null,
-    contact_email:(T.form.contact_email||'').trim()||null,
+    contact_portail_url:(T.form.contact_portail_url||'').trim()||null,
+    contact_emails:emails,
     contact_tel:(T.form.contact_tel||'').trim()||null,
     zone_france:T.form.zone_france?1:0,
     zone_france_hors_paris:T.form.zone_france_hors_paris?1:0,
@@ -714,31 +770,35 @@ function expeTrpBadgesCell(badges,cls){
 }
 
 function expeTrpContactCell(tr){
-  const emailRaw=(tr.contact_email||'').trim();
-  const isPortail=expeTrpIsPortailUrl(emailRaw);
+  const emails=expeTrpReadEmails(tr);
+  const portail=expeTrpReadPortail(tr);
   const lines=[];
-  if(isPortail){
+  if(portail){
     const label=(tr.contact_nom||'').trim()||'Portail';
-    lines.push(h('a',{className:'expe-trp-portail',href:emailRaw,target:'_blank',rel:'noopener',onClick:e=>e.stopPropagation()},
-      escHtml(label)));
-    if(tr.contact_tel){
-      lines.push(h('div',{className:'expe-trp-contact-line'},expeTrpIconPhone(12),' ',escHtml(tr.contact_tel)));
-    }
-  }else{
-    if(tr.contact_nom){
-      lines.push(h('div',{className:'expe-trp-contact-line'},iconEl('user',12),' ',escHtml(tr.contact_nom)));
-    }
-    if(tr.contact_tel){
-      lines.push(h('div',{className:'expe-trp-contact-line'},expeTrpIconPhone(12),' ',escHtml(tr.contact_tel)));
-    }
-    if(emailRaw){
-      lines.push(h('a',{className:'expe-trp-contact-line',href:'mailto:'+encodeURIComponent(emailRaw),onClick:e=>e.stopPropagation()},
-        iconEl('mail',12),' ',escHtml(emailRaw)));
+    lines.push(h('a',{className:'expe-trp-portail',href:portail,target:'_blank',rel:'noopener',onClick:e=>e.stopPropagation()},
+      iconEl('external',12),' ',escHtml(label)));
+  }
+  if(!portail&&tr.contact_nom){
+    lines.push(h('div',{className:'expe-trp-contact-line'},iconEl('user',12),' ',escHtml(tr.contact_nom)));
+  }
+  if(tr.contact_tel){
+    lines.push(h('div',{className:'expe-trp-contact-line'},expeTrpIconPhone(12),' ',escHtml(tr.contact_tel)));
+  }
+  if(emails.length){
+    const first=emails[0];
+    const more=emails.length-1;
+    const emailLine=h('a',{className:'expe-trp-contact-line',href:'mailto:'+encodeURIComponent(first),
+      title:emails.join(', '),onClick:e=>e.stopPropagation()},
+      iconEl('mail',12),' ',escHtml(first));
+    lines.push(emailLine);
+    if(more>0){
+      lines.push(h('div',{className:'expe-trp-contact-line',style:{color:'var(--muted)',fontSize:'11px'},
+        title:emails.join(', ')},'+ '+more+' autre'+(more>1?'s':'')));
     }
   }
   if(!lines.length)return h('span',{style:{color:'var(--muted)'}},'—');
   const kids=[...lines];
-  if(!isPortail&&(emailRaw||tr.contact_tel)){
+  if(emails.length){
     kids.push(h('button',{type:'button',className:'btn-ghost',style:{marginTop:'4px',padding:'4px 8px',fontSize:'11px'},
       onClick:()=>expeTrpOpenContact(tr)},
       iconEl('mail',12),' Contacter'));
@@ -903,10 +963,57 @@ function renderExpeTransporteurModal(){
       h('div',{style:{marginTop:'8px'}},preview)
     );
     ident.appendChild(colorSec);
+    // Portail (URL séparée)
+    const portailVal=T.form.contact_portail_url||'';
+    const portailInp=h('input',{type:'url',value:portailVal,placeholder:'https://…'});
+    portailInp.addEventListener('input',e=>{T.form.contact_portail_url=e.target.value;});
+    const portailRow=h('div',{className:'expe-trp-field expe-trp-portail-row'},
+      h('label',null,'Portail transporteur (URL)'),
+      h('div',{className:'expe-trp-portail-inp-wrap'},
+        portailInp,
+        portailVal?h('a',{className:'btn btn-ghost expe-trp-portail-open',href:portailVal,target:'_blank',rel:'noopener'},
+          iconEl('external',14),' Ouvrir'):null
+      )
+    );
+
+    // Liste d'emails dynamique
+    if(!Array.isArray(T.form.contact_emails))T.form.contact_emails=[''];
+    if(!T.form.contact_emails.length)T.form.contact_emails=[''];
+    const emailsList=h('div',{className:'expe-trp-emails-list'});
+    T.form.contact_emails.forEach((val,idx)=>{
+      const inp=h('input',{type:'email',value:val||'',placeholder:'nom@domaine.fr'});
+      inp.addEventListener('input',e=>{
+        const arr=(T.form.contact_emails||[]).slice();
+        arr[idx]=e.target.value;
+        T.form.contact_emails=arr;
+      });
+      const removeBtn=h('button',{type:'button',className:'expe-trp-email-rm',title:'Retirer cette adresse',
+        onClick:()=>{
+          const arr=(T.form.contact_emails||[]).slice();
+          arr.splice(idx,1);
+          T.form.contact_emails=arr.length?arr:[''];
+          render();
+        }},iconEl('x',12));
+      emailsList.appendChild(h('div',{className:'expe-trp-email-row'},inp,removeBtn));
+    });
+    const addEmailBtn=h('button',{type:'button',className:'btn btn-ghost expe-trp-email-add',
+      onClick:()=>{
+        const arr=(T.form.contact_emails||[]).slice();
+        arr.push('');
+        T.form.contact_emails=arr;
+        render();
+      }},iconEl('plus',12),' Ajouter une adresse');
+    const emailsField=h('div',{className:'expe-trp-field'},
+      h('label',null,'Adresses email'),
+      emailsList,
+      addEmailBtn
+    );
+
     const contact=h('div',{className:'expe-trp-sec'},
       h('div',{className:'expe-trp-sec-title'},'Contact'),
       mkText('Nom du contact','contact_nom'),
-      mkText('Email','contact_email',{type:'email'}),
+      portailRow,
+      emailsField,
       mkText('Téléphone','contact_tel',{type:'tel'})
     );
     const zones=h('div',{className:'expe-trp-sec'},
@@ -1588,7 +1695,11 @@ function renderExpeDevisModal(){
       h('table',{className:'table-std'},h('thead',null,head),h('tbody',null,...body))
     ));
   }else if(m.type==='envoi'){
-    const trps=(T.list||[]).filter(t=>Number(t.actif)&&t.contact_email&&String(t.contact_email).includes('@'));
+    const trps=(T.list||[]).filter(t=>{
+      if(!Number(t.actif))return false;
+      const ems=expeTrpReadEmails(t);
+      return ems.length>0;
+    });
     const prospects=(S.prospects||[]).filter(p=>p.statut_demarchage!=='ecarte'&&p.contact_email&&String(p.contact_email).includes('@'));
     if(!m.checks)m.checks={};
     box.appendChild(h('div',{className:'expe-devis-modal-head'},
@@ -1604,10 +1715,12 @@ function renderExpeDevisModal(){
       const cb=h('input',{type:'checkbox'});
       cb.checked=!!m.checks[key].checked;
       cb.addEventListener('change',e=>{m.checks[key].checked=e.target.checked;});
-      list.appendChild(h('label',{className:'expe-devis-envoi-row'},
+      const ems=expeTrpReadEmails(t);
+      const emailsLabel=ems.length<=1?ems[0]:ems[0]+' (+'+(ems.length-1)+')';
+      list.appendChild(h('label',{className:'expe-devis-envoi-row',title:ems.join(', ')},
         cb,
         h('span',{style:{fontWeight:'600',fontSize:'13px'}},escHtml(t.nom)),
-        h('span',{style:{fontSize:'12px',color:'var(--muted)'}},escHtml(t.contact_email))
+        h('span',{style:{fontSize:'12px',color:'var(--muted)'}},escHtml(emailsLabel))
       ));
     });
     if(prospects.length){

@@ -4082,6 +4082,48 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 126, "mp_valorisation_cout_transport")
 
+    # v127 — MyExpé : transporteurs avec portail séparé et emails multiples
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=127 LIMIT 1").fetchone():
+        import json as _json
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(expe_transporteurs)").fetchall()}
+        if "contact_portail_url" not in cols:
+            conn.execute("ALTER TABLE expe_transporteurs ADD COLUMN contact_portail_url TEXT")
+        if "contact_emails" not in cols:
+            conn.execute("ALTER TABLE expe_transporteurs ADD COLUMN contact_emails TEXT")
+        # Backfill : contact_email = URL → contact_portail_url ; sinon → contact_emails JSON
+        rows = conn.execute(
+            "SELECT id, contact_email, contact_portail_url, contact_emails FROM expe_transporteurs"
+        ).fetchall()
+        for r in rows:
+            old = (r["contact_email"] or "").strip()
+            has_portail = bool((r["contact_portail_url"] or "").strip())
+            has_emails = bool((r["contact_emails"] or "").strip())
+            if not old or (has_portail and has_emails):
+                continue
+            new_portail = r["contact_portail_url"]
+            new_emails = r["contact_emails"]
+            low = old.lower()
+            if low.startswith("http://") or low.startswith("https://"):
+                if not has_portail:
+                    new_portail = old
+                if not has_emails:
+                    new_emails = "[]"
+            else:
+                # Peut contenir plusieurs adresses séparées par , ou ;
+                if not has_emails:
+                    parts = []
+                    for chunk in old.replace(";", ",").split(","):
+                        v = chunk.strip()
+                        if v and "@" in v:
+                            parts.append(v)
+                    new_emails = _json.dumps(parts, ensure_ascii=False)
+            conn.execute(
+                "UPDATE expe_transporteurs SET contact_portail_url=?, contact_emails=? WHERE id=?",
+                (new_portail, new_emails, r["id"]),
+            )
+        conn.commit()
+        _record_schema_migration(conn, 127, "expe_transporteurs_portail_emails")
+
 
 
 def create_default_admin():

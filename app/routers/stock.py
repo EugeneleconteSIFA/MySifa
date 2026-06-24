@@ -3935,16 +3935,25 @@ def _valorisation_query(conn) -> list[dict]:
     return out
 
 
-def _row_multiplier(item: dict, taux_eur_usd: float, import_tax_pct: float) -> float:
-    """Multiplicateur appliqué au prix d'une ligne pour obtenir le « réel ».
-    Modèle multiplicatif : USD × (1 + taxe%/100). Si un flag n'est pas activé ou
-    que le paramètre est manquant, son multiplicateur est neutre (=1)."""
-    m = 1.0
-    if item.get("prix_en_usd") and taux_eur_usd > 0:
-        m *= taux_eur_usd
+def _row_tax_multiplier(item: dict, import_tax_pct: float) -> float:
+    """Multiplicateur Taxe d'importation seul (1 + taxe%/100). Neutre si le flag est off."""
     if item.get("taxe_importation") and import_tax_pct > 0:
-        m *= 1.0 + (import_tax_pct / 100.0)
-    return m
+        return 1.0 + (import_tax_pct / 100.0)
+    return 1.0
+
+
+def _row_usd_multiplier(item: dict, taux_eur_usd: float) -> float:
+    """Multiplicateur USD seul (taux EUR/USD). Neutre si le flag est off."""
+    if item.get("prix_en_usd") and taux_eur_usd > 0:
+        return float(taux_eur_usd)
+    return 1.0
+
+
+def _row_multiplier(item: dict, taux_eur_usd: float, import_tax_pct: float) -> float:
+    """Multiplicateur composé hors transport : taxe puis USD.
+    Formule : ((prix × (1+taxe%)) × taux_USD). Le transport étant un forfait additif,
+    il n'est pas inclus ici (voir _enrich_items_with_usd pour le détail de la formule)."""
+    return _row_tax_multiplier(item, import_tax_pct) * _row_usd_multiplier(item, taux_eur_usd)
 
 
 def _row_transport_addon(item: dict, transport_fixed_eur: float) -> float:
@@ -3963,6 +3972,10 @@ def _valorisation_summary(
     import_tax_pct: float = 0.0,
     transport_fixed_eur: float = 0.0,
 ) -> dict:
+    """Calcule les totaux. Formule par ligne :
+        val_reel = ((valorisation × (1 + taxe%/100)) + transport_forfait) × taux_USD
+    avec chaque facteur neutralisé si son flag n'est pas actif. Le forfait transport est
+    appliqué une seule fois par matière (jamais par ligne laizée multi-bobines)."""
     totals_by_cat: dict[str, dict] = {}
     total = 0.0
     total_reel = 0.0
@@ -3971,7 +3984,6 @@ def _valorisation_summary(
     seen_tax: set[int] = set()
     seen_both: set[int] = set()
     seen_transport: set[int] = set()
-    # Forfait transport appliqué une fois par matière (jamais par ligne laizée)
     transport_applied: set[int] = set()
     for it in items:
         cat = it["categorie"]
@@ -3992,18 +4004,22 @@ def _valorisation_summary(
         if is_valued:
             bucket["nb_refs_valorisees"] += 1
         total += it["valorisation"]
-        # Valorisation « réelle » = (valorisation × multiplicateur) + forfait transport
-        # (le forfait n'est ajouté qu'une fois par matière, pas par ligne laizée).
-        mult = _row_multiplier(it, taux_eur_usd, import_tax_pct)
-        total_reel += it["valorisation"] * mult
+        # ── Nouvelle formule : taxe d'abord, puis transport, puis USD ────
+        tax_mult = _row_tax_multiplier(it, import_tax_pct)
+        usd_mult = _row_usd_multiplier(it, taux_eur_usd)
         mid = it.get("matiere_id")
         is_usd = bool(it.get("prix_en_usd")) and taux_eur_usd > 0
         is_tax = bool(it.get("taxe_importation")) and import_tax_pct > 0
         is_transport = bool(it.get("cout_transport_inclus")) and transport_fixed_eur > 0
+        # Transport : ajouté une seule fois par matière, AVANT la conversion USD
+        transport_for_this_row = 0.0
+        if isinstance(mid, int) and is_transport and mid not in transport_applied:
+            transport_applied.add(mid)
+            transport_for_this_row = transport_fixed_eur
+        # val_reel = ((val × tax_mult) + transport_pour_cette_ligne) × usd_mult
+        val_reel = (it["valorisation"] * tax_mult + transport_for_this_row) * usd_mult
+        total_reel += val_reel
         if isinstance(mid, int):
-            if is_transport and mid not in transport_applied:
-                transport_applied.add(mid)
-                total_reel += transport_fixed_eur
             if is_transport and mid not in seen_transport:
                 seen_transport.add(mid)
             if is_usd and is_tax and mid not in seen_both:
@@ -4045,13 +4061,20 @@ def _enrich_items_with_usd(
     import_tax_pct: float = 0.0,
     transport_fixed_eur: float = 0.0,
 ) -> None:
-    """Ajoute prix_unitaire_reel / valorisation_reelle / prix_eur_m2_reel / transport_addon
-    in-place pour chaque item. Multiplicateur USD × taxe puis forfait transport ajouté
-    UNE SEULE FOIS par matière (jamais par ligne laizée multi-bobines)."""
+    """Ajoute prix_unitaire_reel / valorisation_reelle / prix_eur_m2_reel /
+    transport_addon_eur in-place pour chaque item.
+
+    Formule par ligne :
+        prix_reel = prix × (1 + taxe%/100) × taux_USD
+        val_reel  = ((val × (1 + taxe%/100)) + transport_pour_cette_ligne) × taux_USD
+    Le forfait transport n'est appliqué qu'une seule fois par matière (jamais par
+    ligne laizée multi-bobines)."""
     transport_applied: set[int] = set()
     for it in items:
-        mult = _row_multiplier(it, taux_eur_usd, import_tax_pct)
-        addon = 0.0
+        tax_mult = _row_tax_multiplier(it, import_tax_pct)
+        usd_mult = _row_usd_multiplier(it, taux_eur_usd)
+        mult = tax_mult * usd_mult
+        addon_raw = 0.0
         mid = it.get("matiere_id")
         if (
             it.get("cout_transport_inclus")
@@ -4059,10 +4082,9 @@ def _enrich_items_with_usd(
             and isinstance(mid, int)
             and mid not in transport_applied
         ):
-            addon = float(transport_fixed_eur)
+            addon_raw = float(transport_fixed_eur)
             transport_applied.add(mid)
-        # Le prix unitaire « réel » ne reçoit QUE les multiplicateurs (USD × taxe),
-        # pas le forfait transport (qui est une enveloppe par matière, pas par unité).
+        # Prix unitaire « réel » : la taxe puis l'USD, sans transport (forfait par matière).
         if mult != 1.0:
             it["prix_unitaire_reel"] = round((it.get("prix_unitaire") or 0) * mult, 4)
             it["prix_eur_m2_reel"] = (
@@ -4073,10 +4095,13 @@ def _enrich_items_with_usd(
         else:
             it["prix_unitaire_reel"] = it.get("prix_unitaire") or 0
             it["prix_eur_m2_reel"] = it.get("prix_eur_m2")
-        # La valorisation réelle inclut le forfait transport.
-        it["valorisation_reelle"] = round((it.get("valorisation") or 0) * mult + addon, 2)
+        # Valorisation réelle : ((val × tax) + transport) × usd.
+        # On expose aussi le transport_addon converti en EUR (post-USD) pour l'affichage.
+        val_reel = ((it.get("valorisation") or 0) * tax_mult + addon_raw) * usd_mult
+        it["valorisation_reelle"] = round(val_reel, 2)
         it["reel_multiplier"] = round(mult, 6)
-        it["transport_addon_eur"] = round(addon, 2)
+        it["transport_addon_eur"] = round(addon_raw * usd_mult, 2)
+        it["transport_addon_raw"] = round(addon_raw, 2)
 
 
 @router.get("/api/stock/valorisation")
