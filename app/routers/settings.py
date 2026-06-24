@@ -1379,18 +1379,31 @@ async def promote_run(request: Request):
 # /usr/local/bin/mysifa-v1-resync-db.sh (déjà installé pour le cron nightly).
 # Le script fait : stop v1, sqlite3 .backup (live-safe) v2 → v1, restart v1,
 # healthcheck. Backups pré-resync tournés dans /home/sifa/backups/v1-db-rotation/.
+#
+# IMPORTANT : le script stoppe v1 au début. S'il est lancé directement depuis
+# le process v1 (via subprocess), systemd tue toute la cgroup du service et le
+# script se fait tuer avant d'atteindre le restart. On le lance donc en détaché
+# via `systemd-run --no-block` qui crée une nouvelle cgroup indépendante.
 RESYNC_SCRIPT = "/usr/local/bin/mysifa-v1-resync-db.sh"
 # systemd lance le service avec un PATH minimal qui ne contient pas /usr/bin :
-# on résout sudo une fois au boot avec un PATH explicite, fallback /usr/bin/sudo.
+# on résout sudo et systemd-run une fois au boot avec un PATH explicite.
 _SUDO_BIN = _shutil.which("sudo", path="/usr/bin:/bin:/usr/local/bin") or "/usr/bin/sudo"
+_SYSTEMD_RUN_BIN = _shutil.which("systemd-run", path="/usr/bin:/bin:/usr/local/bin") or "/usr/bin/systemd-run"
 
 
 @router.post("/api/sync-db-v1")
 async def sync_db_v1(request: Request):
     require_superadmin(request)
     try:
+        # systemd-run --no-block lance le script dans une unite transitoire
+        # detachee qui survit a l'arret de mysifa-v1. Retour quasi-instantane.
         proc = await asyncio.create_subprocess_exec(
-            _SUDO_BIN, "-n", RESYNC_SCRIPT,
+            _SUDO_BIN, "-n",
+            _SYSTEMD_RUN_BIN,
+            "--unit=mysifa-v1-resync-oneshot",
+            "--collect",
+            "--no-block",
+            RESYNC_SCRIPT,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
         )
@@ -1399,9 +1412,13 @@ async def sync_db_v1(request: Request):
         if proc.returncode != 0:
             raise HTTPException(
                 500,
-                f"Script de resync en erreur (code {proc.returncode}).\n\n{out[-2000:]}",
+                f"Impossible de lancer la resync (code {proc.returncode}).\n\n{out[-2000:]}",
             )
-        return {"ok": True, "output": out[-2000:]}
+        return {
+            "ok": True,
+            "output": out[-2000:],
+            "message": "Resync lancee. v1 sera indisponible 10-20s puis redemarrera automatiquement.",
+        }
     except HTTPException:
         raise
     except Exception as exc:

@@ -1,7 +1,95 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections import defaultdict
 from database import parse_datetime
 from config import CODE_ARRIVEE, CODE_DEPART, CODE_DEBUT_DOS, CODE_FIN_DOS
+
+
+# ─── Regroupement par "shift" (équipe / journée opérateur) ────────────
+#
+# Une journée d'opérateur n'est pas toujours calée sur le calendrier :
+# l'équipe de nuit commence en soirée et termine le lendemain matin. Si on
+# groupe par date civile, l'arrivée (86) et le départ (87) tombent sur deux
+# dates différentes et déclenchent de faux positifs ("arrivée manquante",
+# "départ manquant", "dossier sans fin", "arrivée→départ < 5h", etc.).
+#
+# Règle de regroupement (par opérateur, lignes triées chronologiquement) :
+#  - Chaque ``CODE_ARRIVEE`` (86) ouvre un nouveau shift dont la clé est la
+#    date civile du 86.
+#  - Toutes les lignes suivantes — y compris celles qui passent minuit —
+#    appartiennent à ce shift jusqu'au prochain ``CODE_DEPART`` (87) inclus,
+#    ou jusqu'au prochain 86 (qui implicitement clôt le précédent), ou
+#    jusqu'à un trou ≥ 12 h entre deux lignes (forfait pour ne pas étirer
+#    indéfiniment un shift en cas d'oubli de 87).
+#  - Les lignes orphelines (avant tout 86) retombent sur leur date civile.
+#  - La "date" affichée pour un shift est toujours la date du 86 (ou de la
+#    première ligne quand le shift est ouvert par défaut).
+
+_SHIFT_GAP_MAX = timedelta(hours=12)
+
+
+def assign_shift_keys(rows):
+    """Annote chaque ligne d'une clé ``_shift_key`` (= date de début du
+    shift, ISO ``YYYY-MM-DD``) et renvoie un cache ``{id(row): dt}``.
+
+    Mute en place : ajoute ``_shift_key`` sur chaque ligne.
+    """
+    dt_cache = {}
+    by_op = defaultdict(list)
+    for r in rows:
+        op = str(r.get("operateur") or "?")
+        dt = parse_datetime(r.get("date_operation"))
+        dt_cache[id(r)] = dt
+        by_op[op].append(r)
+
+    for op, lignes in by_op.items():
+        lignes.sort(key=lambda x: dt_cache.get(id(x)) or datetime.min)
+
+        current_key = None         # clé du shift en cours (ISO date) ou None
+        last_dt = None             # dt de la ligne précédente
+        shift_closed = False       # True après un 87, jusqu'au prochain 86
+
+        for r in lignes:
+            dt = dt_cache.get(id(r))
+            code = str(r.get("operation_code") or "")
+
+            # Trou > _SHIFT_GAP_MAX => on coupe le shift en cours
+            if current_key and dt and last_dt and (dt - last_dt) > _SHIFT_GAP_MAX:
+                current_key = None
+                shift_closed = False
+
+            if code == CODE_ARRIVEE:
+                # Nouveau shift : la clé est la date du 86 (sinon fallback)
+                if dt:
+                    current_key = dt.date().isoformat()
+                else:
+                    current_key = (r.get("date_operation") or "")[:10]
+                shift_closed = False
+            elif shift_closed:
+                # Un 87 a déjà fermé le shift précédent : la ligne suivante
+                # qui n'est pas un 86 retombe sur sa date civile.
+                current_key = None
+                shift_closed = False
+
+            if current_key:
+                r["_shift_key"] = current_key
+            else:
+                # Aucun shift ouvert : fallback date civile
+                if dt:
+                    r["_shift_key"] = dt.date().isoformat()
+                else:
+                    r["_shift_key"] = (r.get("date_operation") or "")[:10]
+
+            if code == CODE_DEPART and current_key:
+                # Le 87 fait partie du shift ; on le ferme APRÈS l'avoir
+                # rattaché. Les lignes suivantes (sans nouveau 86) sortiront
+                # du shift.
+                shift_closed = True
+
+            if dt:
+                last_dt = dt
+
+    return dt_cache
+
 
 # ─── Analyse erreurs de saisie ────────────────────────────────────
 def analyse_saisie_errors(rows):
@@ -11,24 +99,21 @@ def analyse_saisie_errors(rows):
     - Absence de départ personnel en fin de journée
     - Dossier sans début ou sans fin
     Retourne une liste d'erreurs enrichies.
+
+    Regroupement par "shift opérateur" (86 → 87) plutôt que par date civile,
+    pour ne pas casser les équipes de nuit qui traversent minuit.
     """
     errors = []
+    dt_cache = assign_shift_keys(rows)
 
-    # Grouper par opérateur + jour
-    # (on met en cache parse_datetime pour éviter de le recalculer plusieurs fois)
-    dt_cache = {}
-    by_op_day = defaultdict(list)
+    # Grouper par opérateur + shift_key
+    by_op_shift = defaultdict(list)
     for r in rows:
         op = r["operateur"] or "?"
-        dt = parse_datetime(r["date_operation"])
-        dt_cache[id(r)] = dt
-        if dt:
-            day_key = dt.date().isoformat()
-        else:
-            day_key = (r["date_operation"] or "")[:10]
-        by_op_day[(op, day_key)].append(r)
+        shift_key = r.get("_shift_key") or ((r.get("date_operation") or "")[:10])
+        by_op_shift[(op, shift_key)].append(r)
 
-    for (operateur, jour), lignes in by_op_day.items():
+    for (operateur, jour), lignes in by_op_shift.items():
         # Trier par heure
         lignes_sorted = sorted(
             lignes,

@@ -4591,7 +4591,7 @@ async function syncDbV1() {
         status.textContent = 'OK · ' + new Date().toLocaleTimeString();
         status.style.color = 'var(--success, var(--ok))';
       }
-      if (typeof showToast === 'function') showToast('Base v1 resynchronisee depuis v2.', 'success');
+      if (typeof showToast === 'function') showToast('Resync lancee. v1 redemarrera dans ~15s.', 'success');
     }
   } catch (e) {
     if (status) {

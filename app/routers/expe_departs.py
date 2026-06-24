@@ -230,6 +230,79 @@ def _safe_tarif_filename(name: str) -> str:
     return base[:120]
 
 
+_EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+
+
+def _normalize_emails(value: Any) -> list[str]:
+    """Accepte list[str], str JSON, str séparée par , / ; / saut de ligne. Renvoie une liste dédupliquée."""
+    if value is None:
+        return []
+    items: list[str] = []
+    if isinstance(value, str):
+        s = value.strip()
+        if not s:
+            return []
+        # Tente JSON d'abord
+        if s.startswith("["):
+            try:
+                arr = json.loads(s)
+                if isinstance(arr, list):
+                    items = [str(x).strip() for x in arr if x]
+            except (json.JSONDecodeError, ValueError):
+                items = []
+        if not items:
+            for chunk in re.split(r"[,;\n\r\t]+", s):
+                v = chunk.strip()
+                if v:
+                    items.append(v)
+    elif isinstance(value, (list, tuple)):
+        for v in value:
+            if v is None:
+                continue
+            items.append(str(v).strip())
+    # filtre + dédup en conservant l'ordre
+    seen: set[str] = set()
+    out: list[str] = []
+    for v in items:
+        if not v:
+            continue
+        if not _EMAIL_RE.match(v):
+            continue
+        low = v.lower()
+        if low in seen:
+            continue
+        seen.add(low)
+        out.append(v)
+    return out
+
+
+def _normalize_portail(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    s = str(value).strip()
+    if not s:
+        return None
+    low = s.lower()
+    # Tolère qu'on saute le scheme
+    if not (low.startswith("http://") or low.startswith("https://")):
+        s = "https://" + s
+    return s[:512]
+
+
+def _serialize_transporteur_row(row: Any) -> dict:
+    d = dict(row)
+    raw_emails = d.get("contact_emails")
+    if isinstance(raw_emails, str) and raw_emails.strip():
+        try:
+            arr = json.loads(raw_emails)
+            d["contact_emails"] = arr if isinstance(arr, list) else []
+        except (json.JSONDecodeError, ValueError):
+            d["contact_emails"] = _normalize_emails(raw_emails)
+    else:
+        d["contact_emails"] = []
+    return d
+
+
 def _tarif_abs_root() -> str:
     from config import BASE_DIR
 
@@ -943,7 +1016,7 @@ def list_transporteurs(request: Request):
             """SELECT * FROM expe_transporteurs
                ORDER BY actif DESC, nom ASC"""
         ).fetchall()
-    return [dict(r) for r in rows]
+    return [_serialize_transporteur_row(r) for r in rows]
 
 
 @router.post("/transporteurs")
@@ -956,20 +1029,27 @@ def create_transporteur(request: Request, body: dict = Body(...)):
     taxe = _float_opt(body, "taxe_carburant_pct")
     if taxe is None:
         taxe = 0.0
+    emails = _normalize_emails(body.get("contact_emails", body.get("contact_email")))
+    portail = _normalize_portail(body.get("contact_portail_url"))
+    # contact_email legacy = première adresse mail, sinon URL portail (back-compat lecture seule)
+    legacy_email = emails[0] if emails else portail
     with get_db() as conn:
         cur = conn.execute(
             """INSERT INTO expe_transporteurs (
                 nom, taxe_carburant_pct, contact_nom, contact_email, contact_tel,
+                contact_portail_url, contact_emails,
                 zone_france, zone_france_hors_paris, zone_affretement, zone_messagerie,
                 palette_max, poids_max_kg, accepte_poids, accepte_palette,
                 couleur, actif, created_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 nom,
                 taxe,
                 _f(body, "contact_nom"),
-                _f(body, "contact_email"),
+                legacy_email,
                 _f(body, "contact_tel"),
+                portail,
+                json.dumps(emails, ensure_ascii=False),
                 _int_flag(body, "zone_france", 1),
                 _int_flag(body, "zone_france_hors_paris", 0),
                 _int_flag(body, "zone_affretement", 0),
@@ -995,7 +1075,7 @@ def create_transporteur(request: Request, body: dict = Body(...)):
         objet=f"Transporteur {nom}",
         ip=request.client.host if request.client else None,
     )
-    return dict(row)
+    return _serialize_transporteur_row(row)
 
 
 @router.put("/transporteurs/{transporteur_id}")
@@ -1018,10 +1098,37 @@ def update_transporteur(
         sets.append("taxe_carburant_pct=?")
         args.append(0.0 if taxe is None else taxe)
 
-    for k in ("contact_nom", "contact_email", "contact_tel", "couleur"):
+    for k in ("contact_nom", "contact_tel", "couleur"):
         if k in body:
             sets.append(f"{k}=?")
             args.append(_f(body, k))
+
+    # Portail (URL séparée du / des emails)
+    if "contact_portail_url" in body:
+        sets.append("contact_portail_url=?")
+        args.append(_normalize_portail(body.get("contact_portail_url")))
+
+    # Emails : nouveau champ (liste) — recalcule aussi contact_email legacy
+    new_emails: Optional[list[str]] = None
+    if "contact_emails" in body:
+        new_emails = _normalize_emails(body.get("contact_emails"))
+        sets.append("contact_emails=?")
+        args.append(json.dumps(new_emails, ensure_ascii=False))
+    elif "contact_email" in body:
+        # Compat ancien client : on accepte une string et on convertit
+        new_emails = _normalize_emails(body.get("contact_email"))
+        sets.append("contact_emails=?")
+        args.append(json.dumps(new_emails, ensure_ascii=False))
+
+    if new_emails is not None:
+        # Recalcule contact_email legacy = 1ʳᵉ adresse, sinon URL portail si fournie
+        sets.append("contact_email=?")
+        if new_emails:
+            args.append(new_emails[0])
+        elif "contact_portail_url" in body:
+            args.append(_normalize_portail(body.get("contact_portail_url")))
+        else:
+            args.append(None)
 
     for k in (
         "zone_france",
@@ -1073,7 +1180,7 @@ def update_transporteur(
         objet=f"Transporteur {nom_log}",
         ip=request.client.host if request.client else None,
     )
-    return dict(row)
+    return _serialize_transporteur_row(row)
 
 
 @router.delete("/transporteurs/{transporteur_id}")
@@ -2501,13 +2608,17 @@ def envoyer_rfq(request: Request, demande_id: int, body: dict = Body(...)):
         if trp_ids:
             placeholders = ",".join("?" * len(trp_ids))
             trps = conn.execute(
-                f"""SELECT id, nom, contact_email FROM expe_transporteurs
+                f"""SELECT id, nom, contact_email, contact_emails FROM expe_transporteurs
                     WHERE id IN ({placeholders}) AND actif=1""",
                 trp_ids,
             ).fetchall()
             for t in trps:
-                email_addr = (t["contact_email"] or "").strip()
-                if email_addr and "@" in email_addr:
+                addrs = _normalize_emails(t["contact_emails"])
+                if not addrs:
+                    fallback = (t["contact_email"] or "").strip()
+                    if fallback and "@" in fallback:
+                        addrs = [fallback]
+                for email_addr in addrs:
                     destinataires.append(
                         {
                             "transporteur_id": t["id"],
