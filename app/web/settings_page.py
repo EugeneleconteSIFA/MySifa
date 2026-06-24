@@ -869,7 +869,9 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
       <div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
           <h2 style="margin:0">Codes maintenance</h2>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <span id="db-sync-status" style="font-size:11px;color:var(--muted)"></span>
+            <button type="button" class="btn btn-sec" onclick="syncDbV1()" id="db-sync-btn" title="Recopie la base de production (v2) vers v1. Écrase la DB de v1.">Synchroniser DB v2 → v1</button>
             <button type="button" class="btn" onclick="openMaintForm()">+ Ajouter un code</button>
           </div>
         </div>
@@ -4557,6 +4559,49 @@ async function runPromote() {
     goBtn.textContent = 'Promouvoir maintenant';
     // Recharger le statut (commits zéro après succès, ou inchangé après rollback)
     setTimeout(() => loadPromoteStatus(), 500);
+  }
+}
+
+// ─── Sync DB v2 → v1 ──────────────────────────────────────────────
+async function syncDbV1() {
+  const btn = document.getElementById('db-sync-btn');
+  const status = document.getElementById('db-sync-status');
+  if (!btn) return;
+  if (!confirm('Synchroniser la base de données v2 vers v1 ?\\n\\nLa base de v1 sera ECRASEE par une copie live de la prod (v2).\\nUn backup pre-resync est conserve automatiquement.\\nv1 sera redemarre.')) return;
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Synchronisation…';
+  if (status) status.textContent = '';
+  try {
+    const r = await fetch(API + '/api/sync-db-v1', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const text = await r.text().catch(() => '');
+    if (!r.ok) {
+      if (status) {
+        status.textContent = 'Echec (HTTP ' + r.status + ')';
+        status.style.color = 'var(--danger)';
+      }
+      if (typeof showToast === 'function') showToast('Sync DB echouee : ' + (text || r.status), 'danger');
+      else alert('Sync DB echouee : ' + (text || r.status));
+    } else {
+      if (status) {
+        status.textContent = 'OK · ' + new Date().toLocaleTimeString();
+        status.style.color = 'var(--success, var(--ok))';
+      }
+      if (typeof showToast === 'function') showToast('Base v1 resynchronisee depuis v2.', 'success');
+    }
+  } catch (e) {
+    if (status) {
+      status.textContent = 'Erreur reseau';
+      status.style.color = 'var(--danger)';
+    }
+    if (typeof showToast === 'function') showToast('Erreur reseau : ' + (e && e.message ? e.message : String(e)), 'danger');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
   }
 }
 </script>
