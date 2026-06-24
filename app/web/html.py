@@ -111,6 +111,15 @@ button:focus:not(:focus-visible){outline:none}
 body.light .login-theme-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 18px rgba(8,145,178,.12)}
 .login-theme-btn .theme-ico{display:inline-flex;align-items:center;line-height:1}
 @media (max-width:480px){.login-theme-btn .theme-label{display:none}}
+.pwd-wrap{position:relative}
+.pwd-wrap input{padding-right:44px}
+.pwd-toggle{position:absolute;top:50%;right:8px;transform:translateY(-50%);
+  display:inline-flex;align-items:center;justify-content:center;
+  width:32px;height:32px;border:none;background:transparent;cursor:pointer;
+  color:var(--muted);border-radius:8px;padding:0;font-family:inherit;
+  transition:color .15s,background .15s}
+.pwd-toggle:hover{color:var(--accent);background:var(--accent-bg)}
+.pwd-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .login-box{width:100%;max-width:420px;padding:24px}
 .login-logo{text-align:center;margin-bottom:40px}
 .brand{font-size:32px;font-weight:800;letter-spacing:-1px}.brand span{color:var(--accent)}
@@ -2458,6 +2467,7 @@ function icon(name,size=16){
     'copy': '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
     'save': '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>',
     'eye': '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+    'eye-off': '<path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a19.78 19.78 0 0 1 5.06-5.94"/><path d="M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a19.74 19.74 0 0 1-3.17 4.19"/><path d="M14.12 14.12A3 3 0 1 1 9.88 9.88"/><line x1="1" y1="1" x2="23" y2="23"/>',
     'clock': '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
     'folder': '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>',
     'file': '<path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/>',
@@ -7893,6 +7903,19 @@ function renderLogin(){
   const errEl=h('div',{className:'login-error'+(S.loginError?' show':''),id:'login-error'},S.loginError||'');
   const emailI=h('input',{type:'text',id:'login-email',name:'email',autocomplete:'username',placeholder:'identifiant ou email'});
   const pwdI=h('input',{type:'password',id:'login-password',name:'password',autocomplete:'current-password',placeholder:'••••••••'});
+  const pwdToggle=h('button',{type:'button',className:'pwd-toggle','aria-label':'Afficher le mot de passe','aria-pressed':'false',
+    onClick:()=>{
+      const shown=pwdI.type==='text';
+      pwdI.type=shown?'password':'text';
+      pwdToggle.setAttribute('aria-pressed',shown?'false':'true');
+      pwdToggle.setAttribute('aria-label',shown?'Afficher le mot de passe':'Masquer le mot de passe');
+      pwdToggle.innerHTML='';
+      pwdToggle.appendChild(iconEl(shown?'eye':'eye-off',18));
+      try{pwdI.focus();const v=pwdI.value;pwdI.value='';pwdI.value=v;}catch(e){}
+    }
+  });
+  pwdToggle.appendChild(iconEl('eye',18));
+  const pwdWrap=h('div',{className:'pwd-wrap'},pwdI,pwdToggle);
   const submit=e=>{
     e.preventDefault();
     if(S.loginSubmitting)return;
@@ -7916,7 +7939,7 @@ function renderLogin(){
         errEl,
         h('form',{onSubmit:submit},
           h('div',{className:'field'},h('label',{'for':'login-email'},'Identifiant ou email'),emailI),
-          h('div',{className:'field'},h('label',{'for':'login-password'},'Mot de passe'),pwdI),
+          h('div',{className:'field'},h('label',{'for':'login-password'},'Mot de passe'),pwdWrap),
           h('button',{type:'submit',className:'login-btn',disabled:!!S.loginSubmitting},S.loginSubmitting?'Connexion…':'Se connecter')
         )
       ),
@@ -13479,7 +13502,8 @@ function render(){
   if(S.app!=='prod'){stopMachineStatusPolling();}
 
   if(!S.user||S.app==='login'){
-    try{ MySifaTheme.applyDefault(); }catch(e){}
+    // Sur le login : respecter la pref stockée (défaut = light, cf. mysifa_theme.js)
+    try{ MySifaTheme.initFromStorage(); }catch(e){}
     root.appendChild(renderLogin());
   }
   else if(S.app==='portal'){
