@@ -697,10 +697,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
             <div class="ops-list-title">Liste de contrôles</div>
             <div class="ops-list-head-right">
               <div class="ops-list-count" id="ctrl-cat-count">0 contrôle</div>
-              <button type="button" class="ops-btn-add" onclick="openCtrlCatModal()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                Ajouter un contrôle à la liste
-              </button>
+              <span class="ops-list-hint" style="font-size:12px;color:var(--muted)">Gestion : Paramètres → Maintenance</span>
             </div>
           </div>
           <div class="ops-table-wrap">
@@ -1129,6 +1126,11 @@ function switchView(name){
   if(name === 'maintenance' || name === 'operations'){
     if(typeof loadOpsTypes === 'function' && typeof renderOpsTypes === 'function'){
       loadOpsTypes().then(() => renderOpsTypes()).catch(() => {});
+    }
+  }
+  if(name === 'controles'){
+    if(typeof loadCtrlTypes === 'function' && typeof renderCtrlTypes === 'function'){
+      loadCtrlTypes().then(() => renderCtrlTypes()).catch(() => {});
     }
   }
   const meta = VIEW_META[name];
@@ -2348,8 +2350,10 @@ async function loadOpsTypes(){
     const data = await res.json();
     const items = Array.isArray(data && data.items) ? data.items : [];
     const lastMap = _loadLastInterventionMap();
+    // Filtre demandé : toutes les "Interventions" (peu importe periodique)
+    // + tous les "Contrôles" avec periodique=OUI.
     OPS_TYPES_STATE.list = items
-      .filter(it => !!it.periodique)
+      .filter(it => (it.categorie === 'interventions') || (it.categorie === 'controles' && !!it.periodique))
       .map(it => ({
         id: it.code,
         nom: it.label,
@@ -2762,19 +2766,34 @@ function renderCtrl(){
 // =========================================================================
 // Catalogue des types de contrôles (Liste de contrôles)
 // =========================================================================
-const CTRL_TYPES_STORAGE_KEY = 'mysifa_maint_ctrltypes_v1';
+// Source : table maintenance_codes (Paramètres → Maintenance).
+// Filtre demandé : seuls les codes avec categorie="controles" et periodique=NON.
 const CTRL_TYPES_STATE = { sortBy: 'nom', sortDir: 'asc', list: [] };
 
-function loadCtrlTypes(){
+async function loadCtrlTypes(){
   try{
-    const raw = localStorage.getItem(CTRL_TYPES_STORAGE_KEY);
-    CTRL_TYPES_STATE.list = raw ? JSON.parse(raw) : [];
-    if(!Array.isArray(CTRL_TYPES_STATE.list)) CTRL_TYPES_STATE.list = [];
-  }catch(e){ CTRL_TYPES_STATE.list = []; }
+    const res = await fetch('/api/maintenance/codes', { credentials: 'include' });
+    if(!res.ok){
+      CTRL_TYPES_STATE.list = [];
+      return;
+    }
+    const data = await res.json();
+    const items = Array.isArray(data && data.items) ? data.items : [];
+    CTRL_TYPES_STATE.list = items
+      .filter(it => it.categorie === 'controles' && !it.periodique)
+      .map(it => ({
+        id: it.code,
+        nom: it.label,
+        niveau: parseInt(it.niveau, 10) || 1,
+        detail: '',
+        _readonly: true,
+      }));
+  }catch(e){
+    CTRL_TYPES_STATE.list = [];
+  }
 }
-function saveCtrlTypes(){
-  try{ localStorage.setItem(CTRL_TYPES_STORAGE_KEY, JSON.stringify(CTRL_TYPES_STATE.list)); }catch(e){}
-}
+// Conservé pour compat (no-op : gestion centralisée dans Paramètres → Maintenance).
+function saveCtrlTypes(){ /* géré côté serveur via /api/maintenance/codes */ }
 function submitCtrlType(e){
   e.preventDefault();
   const nom = (document.getElementById('ctrl-cat-nom').value || '').trim();
@@ -2877,20 +2896,13 @@ function renderCtrlTypes(){
     if(ico) ico.textContent = isActive ? (CTRL_TYPES_STATE.sortDir === 'asc' ? '↑' : '↓') : '↕';
   });
   if(!sorted.length){
-    tbody.innerHTML = '<tr><td colspan="3" class="ops-empty">Aucun contrôle dans la liste. Cliquez sur « Ajouter un contrôle à la liste » pour en créer un.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="3" class="ops-empty">Aucun contrôle non périodique. Ajoutez des codes avec catégorie=Contrôles et Périodique=NON dans Paramètres → Maintenance.</td></tr>';
   } else {
     const rows = sorted.map(t =>
       '<tr>' +
         '<td><strong style="color:var(--text)">' + escHtml(t.nom) + '</strong></td>' +
         '<td class="col-comment">' + escHtml(t.detail || '') + '</td>' +
-        '<td class="col-actions">' +
-          '<button type="button" class="ops-row-btn edit" onclick="editCtrlType(\'' + escAttr(t.id) + '\')" title="Modifier">' +
-            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
-          '</button>' +
-          '<button type="button" class="ops-row-btn del" onclick="deleteCtrlType(\'' + escAttr(t.id) + '\')" title="Supprimer">' +
-            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
-          '</button>' +
-        '</td>' +
+        '<td class="col-actions"></td>' +
       '</tr>'
     );
     tbody.innerHTML = rows.join('');
@@ -2947,13 +2959,12 @@ async function loadMe(){
   }catch(e){}
   loadMe();
   loadOps();
-  // loadOpsTypes() est async (fetch /api/maintenance/codes) — on re-render quand prêt.
+  // loadOpsTypes() et loadCtrlTypes() sont async (fetch /api/maintenance/codes).
   loadOpsTypes().then(() => renderOpsTypes()).catch(() => renderOpsTypes());
   loadCtrl();
-  loadCtrlTypes();
+  loadCtrlTypes().then(() => renderCtrlTypes()).catch(() => renderCtrlTypes());
   loadPlanning();
   renderOps();
-  renderCtrlTypes();
   renderCtrl();
   try{
     const h = (location.hash || '').replace('#','').trim();
