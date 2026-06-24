@@ -890,10 +890,11 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
               <option value="controles">Contrôles</option>
               <option value="interventions">Interventions</option>
             </select>
-            <select id="maint-periodique">
+            <select id="maint-periodique" onchange="_maintTogglePeriodiqueUI()">
               <option value="oui">Périodique : OUI</option>
               <option value="non">Périodique : NON</option>
             </select>
+            <input type="text" id="maint-intervalle" placeholder="Intervalle (ex. Hebdo, 30 jours, 6 mois)" maxlength="80">
           </div>
           <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
             <button type="button" class="btn" onclick="saveMaintForm()">Enregistrer</button>
@@ -3010,7 +3011,8 @@ function renderMaintList() {
         String(o.label || '').toLowerCase().includes(q) ||
         ('n' + (o.niveau || '')).toLowerCase().includes(q) ||
         _maintCatLabel(o.categorie).toLowerCase().includes(q) ||
-        ('periodique ' + periodLbl).includes(q);
+        ('periodique ' + periodLbl).includes(q) ||
+        String(o.intervalle || '').toLowerCase().includes(q);
     });
   }
   // Tri : catégorie d'abord (Contrôles avant Interventions), puis code
@@ -3035,7 +3037,7 @@ function renderMaintList() {
   let body = '';
   ['controles', 'interventions'].forEach(cat => {
     if (!byCat[cat].length) return;
-    body += '<tr class="op-cat-row"><td colspan="6">' + esc(_maintCatLabel(cat)) + '</td></tr>';
+    body += '<tr class="op-cat-row"><td colspan="7">' + esc(_maintCatLabel(cat)) + '</td></tr>';
     byCat[cat].forEach(o => {
       const c = esc(String(o.code));
       const niv = parseInt(o.niveau, 10) || 1;
@@ -3043,12 +3045,16 @@ function renderMaintList() {
       const periodOn = !!o.periodique;
       const periodCls = periodOn ? 'op-req yes' : 'op-req no';
       const periodLbl = periodOn ? 'OUI' : 'NON';
+      const intervalleDisplay = periodOn
+        ? (o.intervalle ? esc(o.intervalle) : '<span style="color:var(--muted);font-style:italic">À compléter</span>')
+        : '<span style="color:var(--muted)">—</span>';
       body += '<tr>'
         + '<td class="op-code-cell">' + c + '</td>'
         + '<td class="op-lbl-cell">' + esc(o.label || '') + '</td>'
         + '<td><span class="niv-badge" data-niv="' + niv + '">N' + niv + '</span></td>'
         + '<td><span class="op-pill ' + catCls + '">' + esc(_maintCatLabel(cat)) + '</span></td>'
         + '<td><span class="' + periodCls + '">' + periodLbl + '</span></td>'
+        + '<td>' + intervalleDisplay + '</td>'
         + '<td><div class="op-act">'
         + '<button type="button" class="btn-sm btn-ghost" data-maint-edit="' + c + '">Modifier</button>'
         + '<button type="button" class="btn-sm btn-ghost danger" data-maint-del="' + c + '">Supprimer</button>'
@@ -3056,7 +3062,7 @@ function renderMaintList() {
     });
   });
   el.innerHTML = '<div class="table-wrap op-table-wrap"><table class="op-table"><thead><tr>'
-    + '<th>Code</th><th>Libellé</th><th>Niveau</th><th>Catégorie</th><th>Périodique</th><th>Actions</th>'
+    + '<th>Code</th><th>Libellé</th><th>Niveau</th><th>Catégorie</th><th>Périodique</th><th>Intervalle de temps</th><th>Actions</th>'
     + '</tr></thead><tbody>' + body + '</tbody></table></div>';
   el.querySelectorAll('[data-maint-edit]').forEach(btn => {
     btn.addEventListener('click', () => openMaintForm(btn.getAttribute('data-maint-edit')));
@@ -3074,6 +3080,7 @@ function openMaintForm(code) {
   wrap.classList.remove('hidden');
   const catSel = document.getElementById('maint-categorie');
   const perSel = document.getElementById('maint-periodique');
+  const intInp = document.getElementById('maint-intervalle');
   if (code) {
     const o = _maintItems.find(x => String(x.code) === String(code));
     if (!o) return;
@@ -3084,6 +3091,7 @@ function openMaintForm(code) {
     document.getElementById('maint-niveau').value = String(o.niveau || 1);
     if (catSel) catSel.value = (o.categorie === 'interventions') ? 'interventions' : 'controles';
     if (perSel) perSel.value = o.periodique ? 'oui' : 'non';
+    if (intInp) intInp.value = o.intervalle || '';
   } else {
     title.textContent = 'Nouveau code';
     codeInp.value = '';
@@ -3092,8 +3100,21 @@ function openMaintForm(code) {
     document.getElementById('maint-niveau').value = '1';
     if (catSel) catSel.value = 'controles';
     if (perSel) perSel.value = 'oui';
+    if (intInp) intInp.value = '';
   }
+  _maintTogglePeriodiqueUI();
   codeInp.focus();
+}
+// Active/desactive le champ "Intervalle" selon la valeur de "Periodique".
+// NON => champ vide + grise + disabled. OUI => editable.
+function _maintTogglePeriodiqueUI(){
+  const perSel = document.getElementById('maint-periodique');
+  const intInp = document.getElementById('maint-intervalle');
+  if (!perSel || !intInp) return;
+  const isPeriodic = (perSel.value === 'oui');
+  intInp.disabled = !isPeriodic;
+  intInp.style.opacity = isPeriodic ? '1' : '0.5';
+  if (!isPeriodic) intInp.value = '';
 }
 function closeMaintForm() {
   _maintEditCode = null;
@@ -3108,10 +3129,11 @@ async function saveMaintForm() {
   const categorie = (rawCat === 'interventions') ? 'interventions' : 'controles';
   const rawPer = (document.getElementById('maint-periodique')?.value || '').trim();
   const periodique = (rawPer === 'oui');
+  const intervalle = periodique ? (document.getElementById('maint-intervalle')?.value || '').trim() : '';
   if (!code) { toast('Code obligatoire', true); return; }
   if (!label) { toast('Libellé obligatoire', true); return; }
   if (niveau < 1 || niveau > 3) { toast('Niveau invalide (1-3)', true); return; }
-  const payload = { code, label, niveau, categorie, periodique };
+  const payload = { code, label, niveau, categorie, periodique, intervalle };
   try {
     if (_maintEditCode) {
       await api('/api/maintenance/codes/' + encodeURIComponent(_maintEditCode), {

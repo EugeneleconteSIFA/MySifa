@@ -1432,12 +1432,19 @@ async def sync_db_v1(request: Request):
 
 
 def _maint_row_to_dict(r) -> dict:
+    # PRAGMA table_info dynamique : intervalle peut etre absent sur les vieilles
+    # DB qui n'ont pas encore joue la migration v129 (defensif).
+    try:
+        intervalle = r["intervalle"]
+    except (IndexError, KeyError):
+        intervalle = None
     return {
         "code": r["code"],
         "label": r["label"],
         "niveau": int(r["niveau"] or 1),
         "categorie": r["categorie"] or "controles",
         "periodique": bool(r["periodique"]),
+        "intervalle": intervalle or "",
         "created_at": r["created_at"],
         "updated_at": r["updated_at"],
     }
@@ -1456,6 +1463,12 @@ def _normalize_maint_payload(body: dict) -> dict:
     if categorie not in ("controles", "interventions"):
         categorie = "controles"
     periodique = 1 if body.get("periodique") else 0
+    # Intervalle de temps : texte libre, ignore si non periodique
+    intervalle = (body.get("intervalle") or "").strip()
+    if not periodique:
+        intervalle = ""
+    if len(intervalle) > 80:
+        intervalle = intervalle[:80]
     if not code:
         raise HTTPException(422, "Code obligatoire.")
     if not label:
@@ -1466,6 +1479,7 @@ def _normalize_maint_payload(body: dict) -> dict:
         "niveau": niveau,
         "categorie": categorie,
         "periodique": periodique,
+        "intervalle": intervalle,
     }
 
 
@@ -1475,7 +1489,7 @@ def maintenance_codes_list(request: Request):
     from database import get_db
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT code,label,niveau,categorie,periodique,created_at,updated_at
+            """SELECT code,label,niveau,categorie,periodique,intervalle,created_at,updated_at
                FROM maintenance_codes
                ORDER BY categorie ASC, code ASC"""
         ).fetchall()
@@ -1498,10 +1512,10 @@ async def maintenance_codes_create(request: Request):
             raise HTTPException(409, f"Le code {data['code']} existe deja.")
         conn.execute(
             """INSERT INTO maintenance_codes
-               (code,label,niveau,categorie,periodique,created_at,updated_at)
-               VALUES (?,?,?,?,?,?,?)""",
+               (code,label,niveau,categorie,periodique,intervalle,created_at,updated_at)
+               VALUES (?,?,?,?,?,?,?,?)""",
             (data["code"], data["label"], data["niveau"], data["categorie"],
-             data["periodique"], now, now),
+             data["periodique"], data["intervalle"], now, now),
         )
         conn.commit()
     log_action(user=user, action="CREATE", module="maintenance_codes",
@@ -1522,10 +1536,10 @@ async def maintenance_codes_update(code: str, request: Request):
     with get_db() as conn:
         cur = conn.execute(
             """UPDATE maintenance_codes
-               SET label=?, niveau=?, categorie=?, periodique=?, updated_at=?
+               SET label=?, niveau=?, categorie=?, periodique=?, intervalle=?, updated_at=?
                WHERE code=?""",
             (data["label"], data["niveau"], data["categorie"],
-             data["periodique"], now, data["code"]),
+             data["periodique"], data["intervalle"], now, data["code"]),
         )
         conn.commit()
         if cur.rowcount == 0:
@@ -1578,10 +1592,10 @@ async def maintenance_codes_bulk_import(request: Request):
                 continue
             cur = conn.execute(
                 """INSERT OR IGNORE INTO maintenance_codes
-                   (code,label,niveau,categorie,periodique,created_at,updated_at)
-                   VALUES (?,?,?,?,?,?,?)""",
+                   (code,label,niveau,categorie,periodique,intervalle,created_at,updated_at)
+                   VALUES (?,?,?,?,?,?,?,?)""",
                 (data["code"], data["label"], data["niveau"], data["categorie"],
-                 data["periodique"], raw.get("created_at") or now, now),
+                 data["periodique"], data["intervalle"], raw.get("created_at") or now, now),
             )
             if cur.rowcount:
                 imported += 1

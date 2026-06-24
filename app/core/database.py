@@ -4141,6 +4141,16 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 128, "maintenance_codes_table")
 
+    # v129 — Codes maintenance : intervalle de temps pour les codes périodiques.
+    # Texte libre (ex. "Quotidien", "Hebdo", "30 jours", "1 mois", "6 mois").
+    # Ignoré côté UI quand periodique=0.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=129 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_codes)").fetchall()}
+        if "intervalle" not in cols:
+            conn.execute("ALTER TABLE maintenance_codes ADD COLUMN intervalle TEXT")
+        conn.commit()
+        _record_schema_migration(conn, 129, "maintenance_codes_intervalle")
+
 
 
 def create_default_admin():
